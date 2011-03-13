@@ -1,16 +1,17 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
-from nltk import FeatStruct, FeatList, WeightedGrammar, WeightedProduction, Nonterminal, UnsortedChartParser, FreqDist, Tree, featstruct
+from nltk import FeatStruct, FeatList, featstruct, FreqDist, Tree
 from math import log, e
-from itertools import chain, islice, product
-from pprint import pprint
+from itertools import chain, product
 import re
 try:
 	import psyco
 	psyco.full()
 except: pass
 
-def parse(sent, grammar, start="S"):
+def parse(sent, grammar, start="S", viterbi=False):
+	""" parse sentence, a list of tokens, using grammar, a dictionary
+	mapping rules to probabilities. """
 	unary = [(r,w) for r,w in grammar.items() if len(r) == 2]
 	binary = [(r,w) for r,w in grammar.items() if len(r) == 3]
 	goal = fs([start, FeatList(range(len(sent)))])
@@ -51,7 +52,7 @@ def parse(sent, grammar, start="S"):
 		del A[I]
 		C[I] = x
 		if I[0] == goal:
-			pass #return C
+			if viterbi: return C
 		else:
 			for I1, y in deduced_from((I[0], x), C):
 				if I1 not in C and I1 not in A:
