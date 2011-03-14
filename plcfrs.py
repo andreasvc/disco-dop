@@ -3,6 +3,7 @@
 from nltk import FeatStruct, FeatList, featstruct, FreqDist, Tree
 from math import log, e
 from itertools import chain, product
+from pprint import pprint
 import re
 try:
 	import psyco
@@ -18,6 +19,8 @@ def parse(sent, grammar, start="S", viterbi=False):
 	#goal = fs([start, FeatList([FeatList(sent)])])
 	epsilon = fs("[Epsilon]")
 	lhs = fs("[?LHS]")[0]
+	def contiguous(s):
+		return all(a==b for a,b in zip(s, range(s[0], s[0]+len(s))))
 	def concat(node):
 		val = [FeatList(chain(*x)) for x in node[0][1:]]
 		return fs([FeatList([node[0,0]] + val)] + node[1:])
@@ -39,11 +42,11 @@ def parse(sent, grammar, start="S", viterbi=False):
 			if any(any(x in b for x in a) for a,b in product(I1[1:], I[1:])): continue
 			for rule, z in binary:
 				if rule[1,0] == I[0] and rule[2,0] == I1[0]:
-					left = FeatList([lhs, I, I1])
-					yield concat(rule.unify(left)), z
+					left = concat(rule.unify(FeatList([lhs, I, I1])))
+					if all(map(contiguous, left[0][1:])): yield left, z
 				elif rule[1,0] == I1[0] and rule[2,0] == I[0]:
-					right = FeatList([lhs, I1, I])
-					yield concat(rule.unify(right)), z
+					right = concat(rule.unify(FeatList([lhs, I1, I])))
+					if all(map(contiguous, right[0][1:])): yield right, z
 			
 	A, C = {}, {}
 	A.update(scan(sent))
@@ -52,7 +55,7 @@ def parse(sent, grammar, start="S", viterbi=False):
 		del A[I]
 		C[I] = x
 		if I[0] == goal:
-			if viterbi: return C
+			if viterbi: return C, goal
 		else:
 			for I1, y in deduced_from((I[0], x), C):
 				if I1 not in C and I1 not in A:
@@ -60,7 +63,7 @@ def parse(sent, grammar, start="S", viterbi=False):
 				elif I1 in A:
 					A[I1] = max(y, A[I1])
 	if any(I[0] == goal for I in C): return C, goal
-	else: return {}, []
+	else: pprint(C); return {}, []
 
 def enumchart(chart, start):
 	"""enumerate trees in chart headed by start in top down fashion. chart is
@@ -68,7 +71,7 @@ def enumchart(chart, start):
 	for a,p in chart.items():
 		if a[0] == start:
 			if len(a) == 2 and isinstance(a[1], int):
-				yield Tree(str(a[0,0]).replace(' ','_'), map(str, a[1:])), p
+				yield Tree(str(a[0,0]).replace(' ','_'), a[1:]), p
 				continue
 			for x in product(*map(lambda y: enumchart(chart, y), a[1:])):
 				yield Tree(str(start[0]).replace(' ','_'), [z[0] for z in x]), p+x[0][1]+x[1][1]
@@ -131,7 +134,8 @@ grammar =  {
 	fs("[['VAINF@7',[werden]], [Epsilon]]"): 0
 	}
 
-do("Daruber muss nachgedacht werden")
-do("Daruber muss nachgedacht werden werden")
-#do("Daruber muss nachgedacht werden werden werden")
-do("muss Daruber nachgedacht werden")
+if __name__ == '__main__':
+	do("Daruber muss nachgedacht werden")
+	do("Daruber muss nachgedacht werden werden")
+	#do("Daruber muss nachgedacht werden werden werden")
+	do("muss Daruber nachgedacht werden")
