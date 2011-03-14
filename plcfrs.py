@@ -2,7 +2,8 @@
 # (equivalent to Linear Context-Free Rewriting Systems)
 from nltk import FeatStruct, FeatList, featstruct, FreqDist, Tree
 from math import log, e
-from itertools import chain, product
+from random import choice
+from itertools import chain, product, islice
 from pprint import pprint
 from collections import defaultdict
 import re
@@ -64,28 +65,53 @@ def parse(sent, grammar, start="S", viterbi=False):
 				elif I1 in A:
 					A[I1] = max(y, A[I1])
 	if any(I[0] == goal for I in C): return C, goal
-	else: pprint(sorted(C)); return {}, []
+	else: return {}, []
+
+def cartpi(seq):
+	""" itertools.product doesn't support infinite sequences! """
+	if seq: return ((a,) + b for b in cartpi(seq[1:]) for a in seq[0])
+	return ((), )
 
 def enumchart(chart, start):
 	"""enumerate trees in chart headed by start in top down fashion. chart is
 		a dictionary of FeatStructs and logprobs"""
-	for a,p in chart.items():
-		if a[0] == start:
-			if len(a) == 2 and isinstance(a[1], int):
-				yield Tree(str(a[0,0]).replace(' ','_'), a[1:]), p
+	def enumchart1(chart, start):
+		for a,p in chart[start]:
+			if len(a) == 1 and isinstance(a[0], int):
+				yield Tree(start[0], a), p
 				continue
-			for x in product(*map(lambda y: enumchart(chart, y), a[1:])):
-				yield Tree(str(start[0]).replace(' ','_'), [z[0] for z in x]), p+x[0][1]+x[1][1]
+			for x in cartpi(map(lambda y: enumchart1(chart, y), a)):
+				yield Tree(start[0], [z[0] for z in x]), p+x[0][1]+x[1][1]
+	chart1 = defaultdict(list)
+	for a,p in chart.items(): chart1[a[0]].append((a[1:],p))
+	return enumchart1(chart1, start)
+
+def samplechart(chart, start):
+	def samplechart1(chart, start):
+		entry, p = choice(chart[start])
+		if len(entry) == 1 and isinstance(entry[0], int):
+			return Tree(str(start[0]), entry), p
+		children = [samplechart1(chart, a) for a in entry]
+		tree = Tree(start[0], [a for a,b in children]) 
+		return tree, p+sum(b for a,b in children)
+	chart1 = defaultdict(list)
+	for a,p in chart.items(): chart1[a[0]].append((a[1:],p))
+	while True: yield samplechart1(chart1, start)
+	
+def mostprobableparse(chart, start, n=100):
+		""" sum over n random derivations from chart, 
+			return a FreqDist of parse trees, with .max() being the MPP"""
+		l = FreqDist()
+		for a,prob in islice(samplechart(chart, start), n):
+			l.inc(re.sub(r"@[0-9]+", "", a.pprint(margin=999)), e**prob)
+		return l
 
 def do(sent):
 	print "sentence", sent
-	p, start = parse(sent.split(), grammar)
-	if p:
-		l = FreqDist()
-		for n,(a,prob) in enumerate(enumchart(p, start)):
-			#print n, prob, a
-			l.inc(re.sub(r"@[0-9]+", "", Tree.convert(a).pprint(margin=99999)), e**prob)
-		for a in l: print l[a], Tree(a)
+	chart, start = parse(sent.split(), grammar)
+	if chart:
+		for a, p in mostprobableparse(chart, start).items(): 
+			print p, Tree(a)
 	else: print "no parse"
 	print
 

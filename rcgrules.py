@@ -54,6 +54,8 @@ def srcg_productions(tree, sent, arity_marks=True):
 	return rules
 
 def dop_srcg_rules(trees, sents):
+	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
+	reduces DOP1 to a PCFG """
 	ids, rules = count(1), []
 	fd,ntfd = FreqDist(), FreqDist()
 	for t, sent in zip(trees, sents):
@@ -69,6 +71,15 @@ def dop_srcg_rules(trees, sents):
 		map((lambda z: '@' in z[0] and fd[z[0]] or 1),
 		rule[1:])) / float(fd[rule[0][0]])))
 		for rule, freq in rules.items())
+
+def induce_srcg(trees, sents):
+	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
+	grammar = []
+	for tree, sent in zip(trees, sents):
+		tree.chomsky_normal_form()
+		grammar.extend(map(fs, srcg_productions(tree, sent)))
+	fd = FreqDist(a[0][0] for a in grammar)
+	return dict((rule, log(1./fd[rule[0][0]])) for rule in grammar)
 
 def do(sent, grammar):
         print "sentence", sent
