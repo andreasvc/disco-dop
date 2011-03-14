@@ -7,11 +7,13 @@ from pprint import pprint
 import re
 
 def rangeheads(s):
-	""" iterate over a sequence of numbers and yield first element of each contiguous range """
+	""" iterate over a sequence of numbers and yield first element of each
+	contiguous range """
 	return [a[0] for a in ranges(s)]
 
 def ranges(s):
-	""" partition s into a sequence of lists corresponding to contiguous ranges """
+	""" partition s into a sequence of lists corresponding to contiguous ranges
+	""" 
 	rng = []
 	for a in s:
 		if not rng or a == rng[-1]+1:
@@ -33,6 +35,14 @@ def node_arity(n, vars, inplace=False):
 		return n.node
 	else: return n.node
 
+def alpha_normalize(s):
+	""" In a string containing n variables, variables are renamed to
+		X1 .. Xn, in order of first appearance """
+	vars = []
+	for a in re.findall("\?X[0-9]+", s):
+		if a not in vars: vars.append(a)
+	return re.sub("\?X[0-9]+", lambda v: "?X%d" % (vars.index(v.group())+1), s)
+
 def srcg_productions(tree, sent, arity_marks=True):
 	""" given a tree with indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a set
@@ -50,7 +60,7 @@ def srcg_productions(tree, sent, arity_marks=True):
 			lvars = map(subst, lvars)
 			lhs = "['%s', %s]" % (node_arity(st, lvars, True) if arity_marks else st.node, repr(lvars)[1:-1].replace("'",""))
 			rhs = ", ".join("['%s', %s]" % (node_arity(a, b) if arity_marks else a.node, repr(subst(b))[1:-1].replace("'","")) for a,b in zip(st, vars))
-		rules.append("[%s, %s]" % (lhs, rhs))
+		rules.append(alpha_normalize("[%s, %s]" % (lhs, rhs)))
 	return rules
 
 def dop_srcg_rules(trees, sents):
