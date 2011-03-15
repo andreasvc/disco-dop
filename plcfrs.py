@@ -7,6 +7,7 @@ from random import choice
 from itertools import chain, product, islice
 from pprint import pprint
 from collections import defaultdict
+from operator import or_
 import re
 try:
 	import psyco
@@ -35,6 +36,14 @@ def parse(sent, grammar, start="S", viterbi=False):
 			for rule, z in unary[epsilon]:
 				if w in rule[0][1][0]:
 					yield freeze([[rule[0][0], 2**i], i]), z
+	def foldor(s):
+		# unrolled version of reduce(or, s) for speed
+		if len(s) == 1: return s[0]
+		if len(s) == 2: return s[0] | s[1]
+		if len(s) == 3: return s[0] | s[1] | s[2]
+		if len(s) == 4: return s[0] | s[1] | s[2] | s[3]
+		return reduce(or_, s)
+
 	def deduced_from(I, x, C):
 		for rule, z in unary[I[0]]:
 			r = deepcopy(rule)
@@ -45,7 +54,7 @@ def parse(sent, grammar, start="S", viterbi=False):
 			if r: yield freeze(r), z
 		for I1 in C:
 			#detect overlap in ranges
-			if any(a & b for a,b in product(I1[1:], I[1:])): continue
+			if foldor(I1[1:]) & foldor(I[1:]): continue
 			for rule, z in binary[(I[0], I1[0])]:
 				r = deepcopy(rule)
 				for a,b in zip(r[1][1:], I[1:]): a.append(b)
@@ -68,8 +77,10 @@ def parse(sent, grammar, start="S", viterbi=False):
 	A, C, Cx = {}, defaultdict(list), defaultdict(list)
 	A.update(scan(sent))
 	while A:	
-		I, x = max(A.items(), key=lambda x: x[1])
-		del A[I]
+		if viterbi:
+			I, x = max(A.items(), key=lambda x: x[1])
+			del A[I]
+		else: I, x = A.popitem()
 		if I not in C[I[0]]:
 			C[I[0]].append(I)
 			Cx[I[0]].append(x)
@@ -86,7 +97,8 @@ def parse(sent, grammar, start="S", viterbi=False):
 	else: return {}, ()
 
 def cartpi(seq):
-	""" itertools.product doesn't support infinite sequences! """
+	""" itertools.product doesn't support infinite sequences!
+	todo: order like 000 001 010 100 011 110 111 002 etc. """
 	if seq: return ((a,) + b for b in cartpi(seq[1:]) for a in seq[0])
 	return ((), )
 
@@ -101,7 +113,6 @@ def bitmin(int_type):
 		low >>= 1
 		lowBit += 1
 	return(lowBit)
-
 
 def enumchart(chart, start):
 	"""exhaustively enumerate trees in chart headed by start in top down fashion. 
@@ -125,7 +136,7 @@ def mostprobableparse(chart, start, n=100):
 		""" sum over n random derivations from chart, 
 			return a FreqDist of parse trees, with .max() being the MPP"""
 		l = FreqDist()
-		for a,prob in set(map(lambda x: samplechart(chart, start), range(n))):
+		for a,prob in set(samplechart(chart, start) for n in range(n)):
 			l.inc(re.sub(r"@[0-9]+", "", a.pprint(margin=999)), e**prob)
 		return l
 
@@ -146,49 +157,49 @@ def fs(rule):
 		exec("%s = []" % a[1:])	
 	return eval(re.sub(r"\?([XYZ][0-9]*)", r"\1", rule))
 
-grammar =  [
-	(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  0),
-	(fs("[['VP2',[?X],[?Y,?Z]],['VP2',?X,?Y], ['VAINF',?Z]]"),  log(0.5)),
-	(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(0.5)),
-	(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
-	(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
-	(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
-	(fs("[['VAINF',['werden']], [Epsilon]]"), 0)
-	]
-
-# a DOP reduction according to Goodman (1996)
-grammar =  [
-	(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN@2',?Y]]"),  log(10/22.)),
-	(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN',?Y]]"),  log(10/22.)),
-	(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN@2',?Y]]"),  log(1/22.)),
-	(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  log(1/22.)),
-	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/14.)),
-	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/14.)),
-	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/14.)),
-	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/14.)),
-	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/10.)),
-	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/10.)),
-	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/10.)),
-	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/10.)),
-	(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
-	(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/14.)),
-	(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
-	(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/14.)),
-	(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
-	(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/4.)),
-	(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
-	(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/4.)),
-	(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
-	(fs("[['PROAV@5',['Daruber']], [Epsilon]]"),  0),
-	(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
-	(fs("[['VVPP@6',['nachgedacht']], [Epsilon]]"),  0),
-	(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
-	(fs("[['VMFIN@2',['muss']], [Epsilon]]"),  0),
-	(fs("[['VAINF',['werden']], [Epsilon]]"),  0),
-	(fs("[['VAINF@7',['werden']], [Epsilon]]"), 0)
-	]
-
 if __name__ == '__main__':
+	grammar =  [
+		(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  0),
+		(fs("[['VP2',[?X],[?Y,?Z]],['VP2',?X,?Y], ['VAINF',?Z]]"),  log(0.5)),
+		(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(0.5)),
+		(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
+		(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
+		(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
+		(fs("[['VAINF',['werden']], [Epsilon]]"), 0)
+		]
+
+	# a DOP reduction according to Goodman (1996)
+	grammar =  [
+		(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN@2',?Y]]"),  log(10/22.)),
+		(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN',?Y]]"),  log(10/22.)),
+		(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN@2',?Y]]"),  log(1/22.)),
+		(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  log(1/22.)),
+		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/14.)),
+		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/14.)),
+		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/14.)),
+		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/14.)),
+		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/10.)),
+		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/10.)),
+		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/10.)),
+		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/10.)),
+		(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
+		(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/14.)),
+		(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
+		(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/14.)),
+		(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
+		(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/4.)),
+		(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
+		(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/4.)),
+		(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
+		(fs("[['PROAV@5',['Daruber']], [Epsilon]]"),  0),
+		(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
+		(fs("[['VVPP@6',['nachgedacht']], [Epsilon]]"),  0),
+		(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
+		(fs("[['VMFIN@2',['muss']], [Epsilon]]"),  0),
+		(fs("[['VAINF',['werden']], [Epsilon]]"),  0),
+		(fs("[['VAINF@7',['werden']], [Epsilon]]"), 0)
+		]
+
 	do("Daruber muss nachgedacht werden")
 	do("Daruber muss nachgedacht werden werden")
 	#do("Daruber muss nachgedacht werden werden werden")
