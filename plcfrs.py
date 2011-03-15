@@ -23,11 +23,11 @@ def parse(sent, grammar, start="S", viterbi=False):
 	#goal = fs([start, FeatList([FeatList(sent)])])
 	epsilon = fs("[Epsilon]")
 	lhs = fs("[?LHS]")[0]
-	def contiguous(s):
-		return all(a==b for a,b in zip(s, range(s[0], s[0]+len(s))))
 	def concat(node):
-		val = [FeatList(chain(*x)) for x in node[0][1:]]
-		return fs([FeatList([node[0,0]] + val)] + node[1:])
+		# only concatenate when result will be contiguous
+		if all(a[-1] + 1 == b[0] for x in node[0][1:] for a,b in zip(x, x[1:])):
+			val = [FeatList(chain(*x)) for x in node[0][1:]]
+			return fs([FeatList([node[0,0]] + val)] + node[1:])
 	def scan(sent):
 		for i,w in enumerate(sent):
 			for rule, z in unary[epsilon[0]]:
@@ -38,16 +38,16 @@ def parse(sent, grammar, start="S", viterbi=False):
 	def deduced_from(I, x, C):
 		for rule, z in unary[I[0]]:
 			r = concat(rule.unify(FeatList([lhs, I])))
-			if all(map(contiguous, r[0][1:])): yield r, z
+			if r: yield r, z
 		for I1 in C:
 			#detect overlap in ranges
 			if any(a & b for a,b in product(map(set, I1[1:]), map(set, I[1:]))): continue
 			for rule, z in binary[(I[0], I1[0])]:
 				left = concat(rule.unify(FeatList([lhs, I, I1])))
-				if all(map(contiguous, left[0][1:])): yield left, z
+				if left: yield left, z
 			for rule, z in binary[(I1[0], I[0])]:
 				right = concat(rule.unify(FeatList([lhs, I1, I])))
-				if all(map(contiguous, right[0][1:])): yield right, z
+				if right: yield right, z
 			
 	A, C, Cx = {}, defaultdict(list), defaultdict(list)
 	A.update(scan(sent))
