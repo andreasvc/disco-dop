@@ -1,10 +1,14 @@
-from plcfrs import fs, parse, enumchart
+from plcfrs import parse, enumchart, fs
 from dopg import nodefreq, frequencies, decorate_with_ids
-from nltk import Tree, Nonterminal, FreqDist
+from nltk import Tree, Nonterminal, FreqDist, SExprTokenizer
 from math import log, e
 from itertools import chain, count, product
 from pprint import pprint
 import re
+sexp=SExprTokenizer("[]")
+
+def fs1(rule):
+	return [a.strip() for a in sexp.tokenize(rule[1:-1]) if a != ',']
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
@@ -68,28 +72,31 @@ def dop_srcg_rules(trees, sents):
 	reduces DOP1 to a PCFG """
 	ids, rules = count(1), []
 	fd,ntfd = FreqDist(), FreqDist()
-	for t, sent in zip(trees, sents):
+	for tree, sent in zip(trees, sents):
+		t = tree.copy(True)
 		t.chomsky_normal_form()
-		prods = map(fs, srcg_productions(t, sent))
+		prods = map(fs1, srcg_productions(t, sent))
 		ut = decorate_with_ids(t, ids)
 		ut.chomsky_normal_form()
-		uprods = map(fs, srcg_productions(ut, sent, False))
+		uprods = map(fs1, srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
-		rules.extend(set(chain(*(product(*zip(*a)) for a in zip(prods, uprods)))))
-	rules = FreqDist(rules)
-	return dict((fs(rule), log(freq * reduce((lambda x,y: x*y),
+		rules.extend(chain(*(product(*((x,) if x==y else (x,y) for x,y in zip(a,b))) for a,b in zip(prods, uprods))))
+	rules = FreqDist("[%s]" % ", ".join(a) for a in rules)
+	return [(fs(rule), log(freq * reduce((lambda x,y: x*y),
 		map((lambda z: '@' in z[0] and fd[z[0]] or 1),
-		rule[1:])) / float(fd[rule[0][0]])))
-		for rule, freq in rules.items())
+		fs(rule)[1:])) / float(fd[fs(rule)[0][0]])))
+		for rule, freq in rules.items()]
 
 def induce_srcg(trees, sents):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
-		tree.chomsky_normal_form()
-		grammar.extend(map(fs, srcg_productions(tree, sent)))
-	fd = FreqDist(a[0][0] for a in grammar)
-	return dict((rule, log(1./fd[rule[0][0]])) for rule in grammar)
+		t = tree.copy(True)
+		t.chomsky_normal_form()
+		grammar.extend(srcg_productions(t, sent))
+	grammar = FreqDist(grammar)
+	fd = FreqDist(fs(a)[0][0] for a in grammar)
+	return [(fs(rule), log(freq*1./fd[fs(rule)[0][0]])) for rule,freq in grammar.items()]
 
 def do(sent, grammar):
         print "sentence", sent

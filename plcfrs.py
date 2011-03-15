@@ -2,6 +2,7 @@
 # (equivalent to Linear Context-Free Rewriting Systems)
 from nltk import FeatStruct, FeatList, featstruct, FreqDist, Tree, ImmutableTree
 from math import log, e
+from copy import deepcopy
 from random import choice
 from itertools import chain, product, islice
 from pprint import pprint
@@ -12,42 +13,54 @@ try:
 	psyco.full()
 except: pass
 
+def freeze(l):
+	if isinstance(l, list): return tuple(map(freeze, l))
+	else: return l
 def parse(sent, grammar, start="S", viterbi=False):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
 	unary, binary = defaultdict(list), defaultdict(list)
-	for r,w in grammar.items():
+	for r,w in grammar:
 		if len(r) == 2: unary[r[1][0]].append((r, w))
 		elif len(r) == 3: binary[(r[1][0], r[2][0])].append((r, w))
-	goal = fs([start, FeatList(range(len(sent)))])
-	#goal = fs([start, FeatList([FeatList(sent)])])
-	epsilon = fs("[Epsilon]")
-	lhs = fs("[?LHS]")[0]
+	goal = freeze([start, frozenset(range(len(sent)))])
+	epsilon = "Epsilon"
 	def concat(node):
 		# only concatenate when result will be contiguous
-		if all(a[-1] + 1 == b[0] for x in node[0][1:] for a,b in zip(x, x[1:])):
-			val = [FeatList(chain(*x)) for x in node[0][1:]]
-			return fs([FeatList([node[0,0]] + val)] + node[1:])
+		if all(max(a) + 1 == min(b) for x in node[0][1:] for a,b in zip(x, x[1:])):
+			node[0][1:] = [frozenset(chain(*x)) for x in node[0][1:]]
+			return node
 	def scan(sent):
 		for i,w in enumerate(sent):
-			for rule, z in unary[epsilon[0]]:
+			for rule, z in unary[epsilon]:
 				if w in rule[0][1][0]:
-					word = fs("[[%s, [%d]], %d]" % (repr(rule[0][0]), i, i))
-					yield word, z
+					yield freeze([[rule[0][0], frozenset([i])], i]), z
 					#yield rule, z
 	def deduced_from(I, x, C):
 		for rule, z in unary[I[0]]:
-			r = concat(rule.unify(FeatList([lhs, I])))
-			if r: yield r, z
+			r = deepcopy(rule)
+			for a,b in zip(r[1][1:], I[1:]): a.extend(b)
+			r = concat(r)
+			if r: yield freeze(r), z
 		for I1 in C:
 			#detect overlap in ranges
-			if any(a & b for a,b in product(map(set, I1[1:]), map(set, I[1:]))): continue
+			if any(a & b for a,b in product(I1[1:], I[1:])): continue
 			for rule, z in binary[(I[0], I1[0])]:
-				left = concat(rule.unify(FeatList([lhs, I, I1])))
-				if left: yield left, z
+				r = deepcopy(rule)
+				for a,b in zip(r[1][1:], I[1:]): a.extend(b)
+				for a,b in zip(r[2][1:], I1[1:]): a.extend(b)
+				r[1][1:] = [frozenset(a) for a in r[1][1:]]
+				r[2][1:] = [frozenset(a) for a in r[2][1:]]
+				left = concat(r)
+				if left: yield freeze(left), z
 			for rule, z in binary[(I1[0], I[0])]:
-				right = concat(rule.unify(FeatList([lhs, I1, I])))
-				if right: yield right, z
+				r = deepcopy(rule)
+				for a,b in zip(r[1][1:], I1[1:]): a.extend(b)
+				for a,b in zip(r[2][1:], I[1:]): a.extend(b)
+				r[1][1:] = [frozenset(a) for a in r[1][1:]]
+				r[2][1:] = [frozenset(a) for a in r[2][1:]]
+				right = concat(r)
+				if right: yield freeze(right), z
 			
 	A, C, Cx = {}, defaultdict(list), defaultdict(list)
 	A.update(scan(sent))
@@ -67,7 +80,7 @@ def parse(sent, grammar, start="S", viterbi=False):
 					A[I1] = max(y, A[I1])
 	for a in C.keys(): C[a] = [(b[1:],p) for b,p in zip(C[a], Cx[a])]
 	if goal in C: return C, goal
-	else: return {}, []
+	else: return {}, ()
 
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences! """
@@ -109,52 +122,55 @@ def do(sent):
 	else: print "no parse"
 	print
 
-def fs(a):
-	x = FeatStruct(a)
-	x.freeze()
-	return x
+def fs(rule):
+	vars = []
+	Epsilon = "Epsilon"
+	for a in re.findall("\?[XYZ][0-9]*", rule):
+		if a not in vars: vars.append(a)
+		exec("%s = []" % a[1:])	
+	return eval(re.sub(r"\?([XYZ][0-9]*)", r"\1", rule))
 
-grammar =  {
-	fs("[[S,[?X,?Y,?Z]], [VP2,?X,?Z], [VMFIN,?Y]]"): 0,
-	fs("[[VP2,[?X],[?Y,?Z]],[VP2,?X,?Y], [VAINF,?Z]]"): log(0.5),
-	fs("[[VP2,[?X],[?Y]], [PROAV,?X], [VVPP,?Y]]"): log(0.5),
-	fs("[[PROAV,[Daruber]], [Epsilon]]"): 0,
-	fs("[[VVPP,[nachgedacht]], [Epsilon]]"): 0,
-	fs("[[VMFIN,[muss]], [Epsilon]]"): 0,
-	fs("[[VAINF,[werden]], [Epsilon]]"): 0
-	}
+grammar =  [
+	(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  0),
+	(fs("[['VP2',[?X],[?Y,?Z]],['VP2',?X,?Y], ['VAINF',?Z]]"),  log(0.5)),
+	(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(0.5)),
+	(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
+	(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
+	(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
+	(fs("[['VAINF',['werden']], [Epsilon]]"), 0)
+	]
 
 # a DOP reduction according to Goodman (1996)
-grammar =  {
-	fs("[[S,[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN@2',?Y]]"): log(10/22.),
-	fs("[[S,[?X,?Y,?Z]], ['VP2@3',?X,?Z], [VMFIN,?Y]]"): log(10/22.),
-	fs("[[S,[?X,?Y,?Z]], [VP2,?X,?Z], ['VMFIN@2',?Y]]"): log(1/22.),
-	fs("[[S,[?X,?Y,?Z]], [VP2,?X,?Z], [VMFIN,?Y]]"): log(1/22.),
-	fs("[[VP2,[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"): log(4/14.),
-	fs("[[VP2,[?X],[?Y,?Z]], ['VP2@4',?X,?Y], [VAINF,?Z]]"): log(4/14.),
-	fs("[[VP2,[?X],[?Y,?Z]], [VP2,?X,?Y], ['VAINF@7',?Z]]"): log(1/14.),
-	fs("[[VP2,[?X],[?Y,?Z]], [VP2,?X,?Y], [VAINF,?Z]]"): log(1/14.),
-	fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"): log(4/10.),
-	fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], [VAINF,?Z]]"): log(4/10.),
-	fs("[['VP2@3',[?X],[?Y,?Z]], [VP2,?X,?Y], ['VAINF@7',?Z]]"): log(1/10.),
-	fs("[['VP2@3',[?X],[?Y,?Z]], [VP2,?X,?Y], [VAINF,?Z]]"): log(1/10.),
-	fs("[[VP2,[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"): log(1/14.),
-	fs("[[VP2,[?X],[?Y]], ['PROAV@5',?X], [VVPP,?Y]]"): log(1/14.),
-	fs("[[VP2,[?X],[?Y]], [PROAV,?X], ['VVPP@6',?Y]]"): log(1/14.),
-	fs("[[VP2,[?X],[?Y]], [PROAV,?X], [VVPP,?Y]]"): log(1/14.),
-	fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"): log(1/4.),
-	fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], [VVPP,?Y]]"): log(1/4.),
-	fs("[['VP2@4',[?X],[?Y]], [PROAV,?X], ['VVPP@6',?Y]]"): log(1/4.),
-	fs("[['VP2@4',[?X],[?Y]], [PROAV,?X], [VVPP,?Y]]"): log(1/4.),
-	fs("[[PROAV,[Daruber]], [Epsilon]]"): 0,
-	fs("[['PROAV@5',[Daruber]], [Epsilon]]"): 0,
-	fs("[[VVPP,[nachgedacht]], [Epsilon]]"): 0,
-	fs("[['VVPP@6',[nachgedacht]], [Epsilon]]"): 0,
-	fs("[[VMFIN,[muss]], [Epsilon]]"): 0,
-	fs("[['VMFIN@2',[muss]], [Epsilon]]"): 0,
-	fs("[[VAINF,[werden]], [Epsilon]]"): 0,
-	fs("[['VAINF@7',[werden]], [Epsilon]]"): 0
-	}
+grammar =  [
+	(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN@2',?Y]]"),  log(10/22.)),
+	(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN',?Y]]"),  log(10/22.)),
+	(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN@2',?Y]]"),  log(1/22.)),
+	(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  log(1/22.)),
+	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/14.)),
+	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/14.)),
+	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/14.)),
+	(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/14.)),
+	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/10.)),
+	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/10.)),
+	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/10.)),
+	(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/10.)),
+	(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
+	(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/14.)),
+	(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
+	(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/14.)),
+	(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
+	(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/4.)),
+	(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
+	(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/4.)),
+	(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
+	(fs("[['PROAV@5',['Daruber']], [Epsilon]]"),  0),
+	(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
+	(fs("[['VVPP@6',['nachgedacht']], [Epsilon]]"),  0),
+	(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
+	(fs("[['VMFIN@2',['muss']], [Epsilon]]"),  0),
+	(fs("[['VAINF',['werden']], [Epsilon]]"),  0),
+	(fs("[['VAINF@7',['werden']], [Epsilon]]"), 0)
+	]
 
 if __name__ == '__main__':
 	do("Daruber muss nachgedacht werden")
