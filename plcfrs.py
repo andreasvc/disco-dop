@@ -1,6 +1,7 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
 from nltk import FeatStruct, FeatList, featstruct, FreqDist, Tree, ImmutableTree
+from heapdict import heapdict
 from math import log, e, floor
 from copy import deepcopy
 from random import choice
@@ -22,8 +23,8 @@ def parse(sent, grammar, start="S", viterbi=False):
 	mapping rules to probabilities. """
 	unary, binary = defaultdict(list), defaultdict(list)
 	for r,w in grammar:
-		if len(r) == 2: unary[r[1][0]].append((r, w))
-		elif len(r) == 3: binary[(r[1][0], r[2][0])].append((r, w))
+		if len(r) == 2: unary[r[1][0]].append((r, -w))
+		elif len(r) == 3: binary[(r[1][0], r[2][0])].append((r, -w))
 	goal = freeze([start, 2**len(sent) - 1])
 	epsilon = "Epsilon"
 	def concat(node):
@@ -74,13 +75,10 @@ def parse(sent, grammar, start="S", viterbi=False):
 				right = concat(r)
 				if right: yield freeze(right), z
 			
-	A, C, Cx = {}, defaultdict(list), defaultdict(list)
+	A, C, Cx = heapdict(), defaultdict(list), defaultdict(list)
 	A.update(scan(sent))
 	while A:	
-		if viterbi:
-			I, x = max(A.items(), key=lambda x: x[1])
-			del A[I]
-		else: I, x = A.popitem()
+		I, x = A.popitem()
 		if I not in C[I[0]]:
 			C[I[0]].append(I)
 			Cx[I[0]].append(x)
@@ -92,7 +90,7 @@ def parse(sent, grammar, start="S", viterbi=False):
 					A[I1] = y
 				elif I1 in A:
 					A[I1] = max(y, A[I1])
-	for a in C.keys(): C[a] = [(b[1:],p) for b,p in zip(C[a], Cx[a])]
+	for a in C.keys(): C[a] = [(b[1:],-p) for b,p in zip(C[a], Cx[a])]
 	if goal in C: return C, goal
 	else: return {}, ()
 
@@ -144,7 +142,7 @@ def do(sent):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar)
 	if chart:
-		for a, p in mostprobableparse(chart, start).items(): 
+		for a, p in mostprobableparse(chart, start, n=1000).items(): 
 			print p, Tree(a)
 	else: print "no parse"
 	print
@@ -202,5 +200,5 @@ if __name__ == '__main__':
 
 	do("Daruber muss nachgedacht werden")
 	do("Daruber muss nachgedacht werden werden")
-	#do("Daruber muss nachgedacht werden werden werden")
+	do("Daruber muss nachgedacht werden werden werden")
 	do("muss Daruber nachgedacht werden")
