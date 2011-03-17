@@ -21,8 +21,8 @@ def parse(sent, grammar, start="S", viterbi=False):
 	mapping rules to probabilities. """
 	unary, binary = defaultdict(list), defaultdict(list)
 	for r,w in grammar:
-		if len(r) == 2: unary[r[1][0]].append((r, w))
-		elif len(r) == 3: binary[(r[1][0], r[2][0])].append((r, w))
+		if len(r) == 2: unary[r[1][0]].append((r, -w))
+		elif len(r) == 3: binary[(r[1][0], r[2][0])].append((r, -w))
 	goal = freeze([start, 2**len(sent) - 1])
 	epsilon = "Epsilon"
 	A, C, Cx = {}, defaultdict(list), defaultdict(list)
@@ -158,7 +158,7 @@ def do(sent):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar)
 	if chart:
-		for a, p in mostprobableparse(chart, start).items(): 
+		for a, p in mostprobableparse(chart, start, n=1000).items(): 
 			print p, Tree(a)
 	else: print "no parse"
 	print
@@ -208,5 +208,5 @@ if __name__ == '__main__':
 
 	do("Daruber muss nachgedacht werden")
 	do("Daruber muss nachgedacht werden werden")
-	#do("Daruber muss nachgedacht werden werden werden")
+	do("Daruber muss nachgedacht werden werden werden")
 	do("muss Daruber nachgedacht werden")
