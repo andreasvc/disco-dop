@@ -1,11 +1,18 @@
-from plcfrs import parse, enumchart, fs
 from dopg import nodefreq, frequencies, decorate_with_ids
 from nltk import Tree, Nonterminal, FreqDist, SExprTokenizer
 from math import log, e
-from itertools import chain, count, product
+from itertools import chain, count, product 
 from pprint import pprint
 import re
 sexp=SExprTokenizer("[]")
+
+def fs(rule):
+	vars = []
+	Epsilon = "Epsilon"
+	for a in re.findall("\?[XYZ][0-9]*", rule):
+		if a not in vars: vars.append(a)
+		exec("%s = []" % a[1:])	
+	return eval(re.sub(r"\?([XYZ][0-9]*)", r"\1", rule))
 
 def fs1(rule):
 	return [a.strip() for a in sexp.tokenize(rule[1:-1]) if a != ',']
@@ -98,17 +105,53 @@ def induce_srcg(trees, sents):
 	fd = FreqDist(fs(a)[0][0] for a in grammar)
 	return [(fs(rule), log(freq*1./fd[fs(rule)[0][0]])) for rule,freq in grammar.items()]
 
+def cartpi(seq):
+	""" itertools.product doesn't support infinite sequences!"""
+	if seq: return ((a,) + b for b in cartpi(seq[1:]) for a in seq[0])
+	return ((), )
+
+def bfcartpi(seq):
+	"""breadth-first (diagonal) cartesian product
+	>>> list(bfcartpi([[0,1,2], [0,1,2]]))
+	[(0, 0), (1, 0), (0, 1), (1, 1), (2, 0), (2, 1), (0, 2), (1, 2), (2, 2)]"""
+	#wrap items of seq in iterators
+	seqit = [(x for x in a) for a in seq]
+	#fetch initial values
+	try: seqlist = [[a.next()] for a in seqit]	
+	except StopIteration: return
+	yield tuple(a[0] for a in seqlist)
+	left = len(seqlist) * [True]
+	while any(left):
+		for n,a,b in ((n,seqlist[n], seqit[n]) for n,y in enumerate(left) if y):
+			try: a.append(b.next())
+			except: left[n] = False; continue
+			for result in cartpi(seqlist[:n] + [a[-1:]] + seqlist[n+1:]): yield result
+
+def enumchart(chart, start):
+	"""exhaustively enumerate trees in chart headed by start in top down 
+		fashion. chart is a dictionary with lhs -> (rhs, logprob) """
+	for a,p in chart[start]:
+		if len(a) == 1 and isinstance(a[0], int):	#terminal
+			#yield Tree(start[0], a), p
+			yield "(%s %d)" % (start[0], a[0]), p
+			continue
+		for x in bfcartpi(map(lambda y: enumchart(chart, y), a)):
+			#yield Tree(start[0], [z[0] for z in x]), p+x[0][1]+x[1][1]
+			tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
+			yield tree, p+sum(z[1] for z in x)
+
 def do(sent, grammar):
-        print "sentence", sent
-        p, start = parse(sent, grammar)
-        if p:
-                l = FreqDist()
-                for n,(a,prob) in enumerate(enumchart(p, start)):
-                        #print n, prob, a
-                        l.inc(re.sub(r"@[0-9]+", "", Tree.convert(a).pprint(margin=99999)), e**prob)
-                for a in l: print l[a], Tree(a)
-        else: print "no parse"
-        print
+	from plcfrs import parse
+	print "sentence", sent
+	p, start = parse(sent, grammar)
+	if p:
+		l = FreqDist()
+		for n,(a,prob) in enumerate(enumchart(p, start)):
+			#print n, prob, a
+			l.inc(re.sub(r"@[0-9]+", "", a), e**prob)
+		for a in l: print l[a], Tree(a)
+	else: print "no parse"
+	print
 
 def main():
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")

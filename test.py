@@ -1,6 +1,6 @@
 from negra import NegraCorpusReader
-from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg
-from plcfrs import parse, enumchart, mostprobableparse, fs
+from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, fs
+from plcfrs import parse, mostprobableparse
 from nltk import FreqDist, Tree
 from nltk.metrics import precision
 from itertools import islice, chain
@@ -22,7 +22,7 @@ corpus = NegraCorpusReader(".", "sample2.export")
 grammar = []
 trees, sents = corpus.parsed_sents(), corpus.sents()
 
-n = 1
+n = 9
 grammar = induce_srcg(list(trees), sents)
 dopgrammar = dop_srcg_rules(chain(*(list(trees) for a in range(n))), n*list(sents))
 
@@ -32,6 +32,7 @@ for tree, sent in zip(trees, sents):
 	chart, start = parse(sent, grammar, start='ROOT', viterbi=True)
 	if not chart: print "no parse"
 	for result, prob in enumchart(chart, start):
+		result = Tree(result)
 		result.un_chomsky_normal_form()
 		print "p =", e**prob,
 		if rem_marks(result) == tree: print "exact match"
@@ -39,9 +40,11 @@ for tree, sent in zip(trees, sents):
 			print "labeled precision", precision(set(map(s, result.productions())), set(map(s,tree.productions())))
 
 	print "DOP:",
-	chart, start = parse(sent, dopgrammar, start='ROOT', viterbi=False)
+	viterbi = False
+	chart, start = parse(sent, dopgrammar, start='ROOT', viterbi=viterbi)
 	if not chart: print "no parse"
-	for result, prob in mostprobableparse(chart, start, 100).items():
+	print "viterbi", viterbi, 
+	for result, prob in mostprobableparse(chart, start, n=1000,sample=False).items():
 		print "p =", prob,
 		result = rem_marks(Tree(result))
 		result.un_chomsky_normal_form()
