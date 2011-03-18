@@ -16,7 +16,7 @@ def rem_marks(tree):
 def s(a):
 	return (a.lhs(), tuple(sorted(a.rhs())))
 
-# Negra treebank version 2 sample:
+# Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 corpus = NegraCorpusReader(".", "sample2.export")
 grammar = []
@@ -40,11 +40,11 @@ for tree, sent in zip(trees, sents):
 			print "labeled precision", precision(set(map(s, result.productions())), set(map(s,tree.productions())))
 
 	print "DOP:",
-	viterbi = False
-	chart, start = parse(sent, dopgrammar, start='ROOT', viterbi=viterbi)
+	viterbi = True
+	chart, start = parse(sent, dopgrammar, start='ROOT', viterbi=viterbi, n=10)
 	if not chart: print "no parse"
 	print "viterbi", viterbi, 
-	for result, prob in mostprobableparse(chart, start, n=1000,sample=False).items():
+	for result, prob in mostprobableparse(chart, start, n=10,sample=True).items():
 		print "p =", prob,
 		result = rem_marks(Tree(result))
 		result.un_chomsky_normal_form()
