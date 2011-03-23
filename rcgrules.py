@@ -1,7 +1,7 @@
 from dopg import nodefreq, frequencies, decorate_with_ids
 from nltk import ImmutableTree, Tree, Nonterminal, FreqDist, SExprTokenizer
 from math import log, e
-from itertools import chain, count, product, islice
+from itertools import chain, count, islice
 from pprint import pprint
 import re
 sexp=SExprTokenizer("()")
@@ -88,7 +88,7 @@ def dop_srcg_rules(trees, sents):
 		ut.chomsky_normal_form()
 		uprods = map(fs1, srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
-		rules.extend(chain(*(product(*((x,) if x==y else (x,y) for x,y in zip(a,b))) for a,b in zip(prods, uprods))))
+		rules.extend(chain(*(cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b))) for a,b in zip(prods, uprods))))
 	rules = FreqDist("(%s)" % ", ".join(a) for a in rules)
 	return [(fs(rule), log(freq * reduce((lambda x,y: x*y),
 		map((lambda z: '@' in z and fd[z] or 1),
@@ -274,14 +274,15 @@ def do(sent, grammar):
 	print
 
 def main():
-	"""
+	#"""
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
 	tree.chomsky_normal_form()
 	pprint(srcg_productions(tree.copy(True), sent))
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
 	do(sent, dop_srcg_rules([tree], [sent]))
-	"""
+	exit()
+	#"""
 	treebank = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))

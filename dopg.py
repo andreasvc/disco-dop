@@ -5,10 +5,17 @@ TODOs: unicode support (replace str and repr calls)"""
 #psyco.full()
 
 from collections import defaultdict
-from itertools import chain, count, product
+from itertools import chain, count
 #from math import log #do something with logprobs instead?
 from nltk import Production, WeightedProduction, WeightedGrammar, FreqDist
 from nltk import Tree, ImmutableTree, Nonterminal, InsideChartParser, UnsortedChartParser, ProbabilisticTree
+try:
+	from itertools import product
+except:
+	def product(*seq):
+	    if seq: return (b + (a,) for b in product(*seq[:-1]) for a in seq[-1])
+	    return ((), )
+
 
 class GoodmanDOP:
 	def __init__(self, treebank, rootsymbol='S', wrap=False, cnf=True, cleanup=True, normalize=False, parser=InsideChartParser, **parseroptions):
@@ -361,8 +368,8 @@ def main():
 			print
 			print 'best', p.max(), p[p.max()]
 			#print d.parse(w)
-		except Exception as e:
-			print "error", e
+		except Exception: # as e:
+			print "error", #e
 
 if __name__ == '__main__': 
 	import doctest

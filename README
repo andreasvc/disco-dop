@@ -1,0 +1,8 @@
+
+Requirements: 
+
+	- python 2.6
+	- NLTK
+	- heapdict https://github.com/dangra/heapdict/tarball/cheapdict
+	- dopg.py from my eodop repository
+	- cython / shedskin?
