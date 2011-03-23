@@ -184,14 +184,15 @@ def pprint_chart(chart, sent):
 	print "chart:"
 	def mybin(n):
 		return ("0"*len(sent) + bin(n)[2:])[-len(sent)::][::-1]
-	for a in sorted(chart, key=lambda x: bin(foldor(x[1:])).count("1")):
-		print a[0], " ".join(mybin(d) for d in a[1:]), "=>"
-		for b in chart[a]:
-			try:
-				for c in b[0]:
-					print "\t", c[0], " ".join(mybin(d) for d in c[1:]),
-				print
-			except:	print repr(sent[b[0][0]]), b[1]
+	for a in sorted(chart, key=lambda x: bin(foldor(x[1])).count("1")):
+		print "%s[%s]" % (a[0], ",".join(mybin(d) for d in a[1])), "=>"
+		for b,p in chart[a]:
+			for c in b:
+				if c[0] == "Epsilon":
+					print "\t", repr(sent[b[0][1][0]]),
+				else:
+					print "\t", "%s[%s]" % (c[0], ",".join(mybin(d) for d in c[1])),
+			print p
 		print
 
 def do(sent):
@@ -205,49 +206,18 @@ def do(sent):
 	print
 
 if __name__ == '__main__':
-	grammar =  [
-		(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  0),
-		(fs("[['VP2',[?X],[?Y,?Z]],['VP2',?X,?Y], ['VAINF',?Z]]"),  log(0.5)),
-		(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(0.5)),
-		(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
-		(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
-		(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
-		(fs("[['VAINF',['werden']], [Epsilon]]"), 0)
-		]
+	grammar = []
+	X,Y,Z=[],[],[]; grammar.append(((('S','VP2','VMFIN'),    (((X,Y,Z),),    (X,Z), (Y,))),  0))
+	X,Y,Z=[],[],[]; grammar.append(((('VP2','VP2','VAINF'),  (((X,),(Y,Z)), (X,Y), (Z,))),  log(0.5)))
+	X,Y,Z=[],[],[]; grammar.append(((('VP2','PROAV','VVPP'), (((X,),(Y,)),  (X,),  (Y,))),  log(0.5)))
+	grammar.extend([
+		((('PROAV', 'Epsilon'), (['Daruber'], [])), 0.0),
+		 ((('VAINF', 'Epsilon'), (['werden'], [])), 0.0),
+		 ((('VMFIN', 'Epsilon'), (['muss'], [])), 0.0),
+		 ((('VVPP', 'Epsilon'), (['nachgedacht'], [])), 0.0)
+		])
 
-	# a DOP reduction according to Goodman (1996)
-	grammar =  [
-		(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN@2',?Y]]"),  log(10/22.)),
-		(fs("[['S',[?X,?Y,?Z]], ['VP2@3',?X,?Z], ['VMFIN',?Y]]"),  log(10/22.)),
-		(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN@2',?Y]]"),  log(1/22.)),
-		(fs("[['S',[?X,?Y,?Z]], ['VP2',?X,?Z], ['VMFIN',?Y]]"),  log(1/22.)),
-		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/14.)),
-		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/14.)),
-		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/14.)),
-		(fs("[['VP2',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/14.)),
-		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF@7',?Z]]"),  log(4/10.)),
-		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2@4',?X,?Y], ['VAINF',?Z]]"),  log(4/10.)),
-		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF@7',?Z]]"),  log(1/10.)),
-		(fs("[['VP2@3',[?X],[?Y,?Z]], ['VP2',?X,?Y], ['VAINF',?Z]]"),  log(1/10.)),
-		(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
-		(fs("[['VP2',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/14.)),
-		(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/14.)),
-		(fs("[['VP2',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/14.)),
-		(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
-		(fs("[['VP2@4',[?X],[?Y]], ['PROAV@5',?X], ['VVPP',?Y]]"),  log(1/4.)),
-		(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP@6',?Y]]"),  log(1/4.)),
-		(fs("[['VP2@4',[?X],[?Y]], ['PROAV',?X], ['VVPP',?Y]]"),  log(1/4.)),
-		(fs("[['PROAV',['Daruber']], [Epsilon]]"),  0),
-		(fs("[['PROAV@5',['Daruber']], [Epsilon]]"),  0),
-		(fs("[['VVPP',['nachgedacht']], [Epsilon]]"),  0),
-		(fs("[['VVPP@6',['nachgedacht']], [Epsilon]]"),  0),
-		(fs("[['VMFIN',['muss']], [Epsilon]]"),  0),
-		(fs("[['VMFIN@2',['muss']], [Epsilon]]"),  0),
-		(fs("[['VAINF',['werden']], [Epsilon]]"),  0),
-		(fs("[['VAINF@7',['werden']], [Epsilon]]"), 0)
-		]
-
-	#do("Daruber muss nachgedacht werden")
+	do("Daruber muss nachgedacht werden")
 	do("Daruber muss nachgedacht werden werden")
-	#do("Daruber muss nachgedacht werden werden werden")
-	#do("muss Daruber nachgedacht werden")
+	do("Daruber muss nachgedacht werden werden werden")
+	do("muss Daruber nachgedacht werden")	#no parse
