@@ -95,31 +95,8 @@ def dop_srcg_rules(trees, sents):
 		fs(rule)[0][1:])) / float(fd[fs(rule)[0][0]])))
 		for rule, freq in rules.items()]
 
-def extractfragments(trees):
-	""" Seeks the largest fragments occurring at least twice in the corpus.
-	Algorithm from: Sangati et al., Efficiently extract recurring tree fragments from large treebanks"""
-	fraglist = FreqDist()
-	partfraglist = set()
-	for n,a in enumerate(trees):
-		for b in trees[n+1:]:
-			l = set()
-			for i in a.treepositions():
-				for j in b.treepositions():
-					x = extractmaxfragments(a,b,i,j)
-					if x in l: continue
-					for y in l:
-						if x < y: break
-						if x > y:
-							l.remove(y)
-							l.add(frozenset(x))
-							break
-					else: l.add(frozenset(x))
-					#partfraglist.update(extractmaxpartialfragments(a[i], b[j]))
-			fraglist.update(filter(None, (fragmentfromindices(a,x) for x in l)))
-			#fraglist.update(chain(*(filter(None, fragmentfromindices(a,x)) for x in l if not any(x < y for y in l))))
-	return fraglist #| partfraglist
-
 def allmax(seq, key):
+	""" return all x s.t. key(x)==max(seq, key)"""
 	if not seq: return []
 	m = max(map(key, seq))
 	return [a for a in seq if key(a) == m]
@@ -142,15 +119,44 @@ def fragmentfromindices(tree, indices):
 			del tree[a]
 	return tree[froot].freeze() if tree[froot].height() > 1 else None
 
-def extractmaxfragments(a, b, i, j):
+def extractfragments(trees):
+	""" Seeks the largest fragments occurring at least twice in the corpus.
+	Algorithm from: Sangati et al., Efficiently extract recurring tree fragments from large treebanks"""
+	fraglist = FreqDist()
+	partfraglist = set()
+	trees = [a.freeze() for a in trees]
+	for n,a in enumerate(trees):
+		for b in trees[n+1:]:
+			l = set()
+			mem = {}
+			for i in a.treepositions():
+				for j in b.treepositions():
+					x = extractmaxfragments(a,b,i,j, mem)
+					if x in l: continue
+					for y in l:
+						if x < y: break
+						if x > y:
+							l.remove(y)
+							l.add(frozenset(x))
+							break
+					else: l.add(frozenset(x))
+					#partfraglist.update(extractmaxpartialfragments(a[i], b[j]))
+			fraglist.update(filter(None, (fragmentfromindices(a,x) for x in l)))
+			#fraglist.update(chain(*(filter(None, fragmentfromindices(a,x)) for x in l if not any(x < y for y in l))))
+			del mem
+	return fraglist #| partfraglist
+
+def extractmaxfragments(a, b, i, j, mem):
 	""" a fragment is a connected subset of nodes where each node either has
 	zero children, or as much as in the original tree.""" 
+	if (a,b,i,j) in mem: return mem[(a,b,i,j)]
 	if not same((a[i],b[j])): return set()
 	nodeset = set([i])
 	if not isinstance(a[i], Tree) or not isinstance(b[j], Tree): return nodeset
 	if len(a[i])==len(b[j]) and all(map(same, zip(a[i],b[j]))):
 		for n,x in enumerate(a[i]):
-			nodeset.update(extractmaxfragments(a,b,i+(n,), j+(n,)))
+			nodeset.update(extractmaxfragments(a,b,i+(n,), j+(n,), mem))
+	mem[(a,b,i,j)] = nodeset
 	return nodeset
 
 def extractmaxpartialfragments(a, b):
@@ -274,15 +280,13 @@ def do(sent, grammar):
 	print
 
 def main():
-	#"""
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
 	tree.chomsky_normal_form()
 	pprint(srcg_productions(tree.copy(True), sent))
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
 	do(sent, dop_srcg_rules([tree], [sent]))
-	exit()
-	#"""
+
 	treebank = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))

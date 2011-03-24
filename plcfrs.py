@@ -81,9 +81,10 @@ def deduced_from(Ih, (x, foo), C, unary, binary):
 		left = concat(rule[1][0])
 		if left: result.append(((rule[0], interntuple(left, Ir)), (x+z,z)))
 	foldorIr = foldor(Ir)
-	for (I1, I1r), (bar, (y, zed)) in C.items():
+	for I1, I1r in C.keys():
 		#detect overlap in ranges
 		if foldorIr & foldor(I1r): continue
+		y = C[I1, I1r][1][0]
 		for rule, z in binary[(I, I1)]:
 			for a,b in zip(rule[1][1], Ir): a.append(b)
 			for a,b in zip(rule[1][2], I1r): a.append(b)
