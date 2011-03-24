@@ -3,6 +3,7 @@
 from rcgrules import fs, enumchart
 from nltk import FreqDist
 from heapdict import heapdict
+#from pyjudy import JudyLObjObj
 from math import log, e, floor
 from random import choice
 from itertools import chain, islice
@@ -31,20 +32,15 @@ def parse(sent, grammar, start="S", viterbi=False, n=1):
 	goal = freeze([start, (2**len(sent) - 1,)])
 	m = maxA = 0
 	A, C = heapdict(), {} #defaultdict(list)
-	#A, C, Cx = {}, defaultdict(list), defaultdict(list)
-	#preallocation: (seems to be only a waste of space/time)
-	#for a in range(len(sent)**6/(len(sent)*500)): C[("S",a)]=(("S%d"%a,"NP%d"%a,"VP%d"%a), (a,a+1,a+2)); Cx[("S",a)] = 0.1
-	#for a in range(len(sent)**6/(len(sent)*1000)): A[(("S%d"%a,"NP%d"%a,"VP%d"%a), (a,a+1,a+2))]=0.1
-	#for a in A.keys(): del A[a] #A.clear()
-	#C.clear(); Cx.clear()
+	#C = JudyLObjObj()
 	#from guppy import hpy; h = hpy(); hn = 0
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 	for i,w in enumerate(sent):
 		recognized = False
 		for rule, z in unary["Epsilon"]:
 			if w in rule[1][0][0]:
-				I = freeze(((rule[0][0], "Epsilon"), ((2**i,), (i,))))	
-				Ih = zip(*I)[0]
+				Ih = interntuple(rule[0][0], (2**i,))
+				I = (("Epsilon", (i,)),)
 				A[Ih] = ((z, z), I)
 				recognized = True
 		if not recognized: print "not covered:", w
@@ -55,48 +51,49 @@ def parse(sent, grammar, start="S", viterbi=False, n=1):
 		C[Ih] = I, x
 		if Ih == goal:
 			m += 1	#problem: this is not viterbi n-best.
+			goal = Ih
 			if viterbi and n==m: break
 		else:
-			for I1, y in deduced_from(Ih, x, C, unary, binary):
-				I1h = zip(*I1)[0]
+			for I1h, I1, y in deduced_from(Ih, x[0], C, unary, binary):
 				if I1h not in C and I1h not in A:
 					A[I1h] = (y, I1)
 				elif I1h in A:
 					if y > A[I1h][0]: A[I1h] = (y, I1)
 				#else: raise #?
 		maxA = max(maxA, len(A))
-		#if maxA == 1536:
-		#	pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
-		#	#print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
+		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
+		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart items", len(C)
 	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
-	for a in C: C[a] = [(zip(*b)[1:],-p) for b,(foo,p) in [C[a]]]
+	#for a in C: C[a] = [(b,-p) for b,(foo,p) in [C[a]]]
+	for a in C: C[a] = [(C[a][0], -C[a][1][1])] 
 	return (C, goal) if goal in C else ({}, ())
 
-def deduced_from(Ih, (x, foo), C, unary, binary):
+def deduced_from(Ih, x, C, unary, binary):
 	I, Ir = Ih
 	result = []
 	for rule, z in unary[I]:
 		for a,b in zip(rule[1][1], Ir): a.append(b)
 		left = concat(rule[1][0])
-		if left: result.append(((rule[0], interntuple(left, Ir)), (x+z,z)))
+		if left: result.append((interntuple(rule[0][0], left), (Ih,), (x+z,z,z)))
 	foldorIr = foldor(Ir)
-	for I1, I1r in C.keys():
+	for key in C.keys():
 		#detect overlap in ranges
+		I1, I1r = key
 		if foldorIr & foldor(I1r): continue
-		y = C[I1, I1r][1][0]
+		y = C[key][1][0]
 		for rule, z in binary[(I, I1)]:
 			for a,b in zip(rule[1][1], Ir): a.append(b)
 			for a,b in zip(rule[1][2], I1r): a.append(b)
 			left = concat(rule[1][0])
 			if left: 
-				result.append(((rule[0], (left, Ir, I1r)), (x+y+z,z)))
+				result.append((interntuple(rule[0][0], left), (Ih, key), (x+y+z,z)))
 		for rule, z in binary[(I1, I)]:
 			for a,b in zip(rule[1][1], I1r): a.append(b)
 			for a,b in zip(rule[1][2], Ir): a.append(b)
 			right = concat(rule[1][0])
 			if right: 
-				result.append(((rule[0], (right, I1r, Ir)), (x+y+z,z)))
+				result.append((interntuple(rule[0][0], right), (key, Ih), (x+y+z,z)))
 	return result
 
 def concat(node):
@@ -108,18 +105,18 @@ def concat(node):
 
 def foldor(s):
 	# unrolled version of reduce(or, s) for speed
-	if len(s) == 1: return s[0]
-	if len(s) == 2: return s[0] | s[1]
-	if len(s) == 3: return s[0] | s[1] | s[2]
-	if len(s) == 4: return s[0] | s[1] | s[2] | s[3]
+	l = len(s)
+	if l == 1: return s[0]
+	if l == 2: return s[0] | s[1]
+	if l == 3: return s[0] | s[1] | s[2]
+	if l == 4: return s[0] | s[1] | s[2] | s[3]
 	return reduce(or_, s)
 
 def interntuple(*a):
 	#like intern but for tuples: return a canonical reference so that tuples are never stored twice. 
 	#doesn't seem to make any difference, unfortunately.
 	# note the *. wrong: interntuple([0,1]) correct interntuple(0,1)
-    return myintern.setdefault(a, a)
-
+	return myintern.setdefault(a, a)
 
 # adapted from http://wiki.python.org/moin/BitManipulation
 def bitminmax(a, b):
@@ -150,8 +147,7 @@ def filterchart(chart, start):
 	return chart2
 
 def samplechart(chart, start):
-	if chart[start]: entry, p = choice(chart[start])
-	else: raise; return #shouldn't happen
+	entry, p = choice(chart[start])
 	if len(entry) == 1 and entry[0][0] == "Epsilon":
 		return "(%s %d)" % (start[0], entry[0][1][0]), p
 	children = [samplechart(chart, a) for a in entry]
@@ -171,7 +167,7 @@ def mostprobableparse(chart, start, n=100, sample=False):
 			#todo: calculate real parse probabilities
 		else:
 			#chart = filterchart(chart, start)
-			for a in chart: chart[a].sort(key=lambda (x,y): y, reverse=True)
+			for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
 			derivations = islice(enumchart(chart, start), n)
 		parsetrees = FreqDist()
 		m = 0
@@ -186,13 +182,13 @@ def pprint_chart(chart, sent):
 	def mybin(n):
 		return ("0"*len(sent) + bin(n)[2:])[-len(sent)::][::-1]
 	for a in sorted(chart, key=lambda x: bin(foldor(x[1])).count("1")):
-		print "%s[%s]" % (a[0], ",".join(mybin(d) for d in a[1])), "=>"
+		print "%s[%s]" % (a[0], ",".join(map(mybin, a[1]))), "=>"
 		for b,p in chart[a]:
 			for c in b:
 				if c[0] == "Epsilon":
 					print "\t", repr(sent[b[0][1][0]]),
 				else:
-					print "\t", "%s[%s]" % (c[0], ",".join(mybin(d) for d in c[1])),
+					print "\t", "%s[%s]" % (c[0], ",".join(map(mybin, c[1]))),
 			print p
 		print
 
