@@ -1,7 +1,8 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
-from rcgrules import fs, enumchart
+from rcgrules import enumchart
 from nltk import FreqDist
+from bitarray import bitarray
 from heapdict import heapdict
 #from pyjudy import JudyLObjObj
 from math import log, e, floor
@@ -21,6 +22,11 @@ import re
 #	psyco.full()
 #except: pass
 myintern = {}
+class MyBitArray(bitarray):
+	# this should go into a patch of bitarray
+	def __hash__(self):
+		return hash(self.tostring())
+
 def parse(sent, grammar, start="S", viterbi=False, n=1):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
@@ -29,44 +35,56 @@ def parse(sent, grammar, start="S", viterbi=False, n=1):
 	for r,w in grammar:
 		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
 		elif len(r[0]) == 3: binary[(r[0][1], r[0][2])].append((r, -w))
-	goal = freeze([start, (2**len(sent) - 1,)])
+	vec = bitarray(len(sent))
+	vec.setall(True)
+	goal = (start, vec)
 	m = maxA = 0
-	A, C = heapdict(), {} #defaultdict(list)
+	A, C, Cx = heapdict(), defaultdict(set), {}
 	#C = JudyLObjObj()
 	#from guppy import hpy; h = hpy(); hn = 0
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
+
+	# scan
 	for i,w in enumerate(sent):
 		recognized = False
 		for rule, z in unary["Epsilon"]:
-			if w in rule[1][0][0]:
-				Ih = interntuple(rule[0][0], (2**i,))
+			if w in rule[1]:
+				vec = MyBitArray(len(sent))
+				vec.setall(False)
+				vec[i] = True
+				Ih = interntuple(rule[0][0], vec)
 				I = (("Epsilon", (i,)),)
 				A[Ih] = ((z, z), I)
 				recognized = True
 		if not recognized: print "not covered:", w
+
+	# parsing
 	while A:
-		Ih, (x, I) = A.popitem()
+		Ih, xI = A.popitem()
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		C[Ih] = I, x
+		#C[Ih] = I, x
+		(foo, p), b = xI
+		C[Ih].add((b, -p))
+		Cx[Ih] = xI
 		if Ih == goal:
 			m += 1	#problem: this is not viterbi n-best.
 			goal = Ih
 			if viterbi and n==m: break
 		else:
-			for I1h, I1, y in deduced_from(Ih, x[0], C, unary, binary):
+			for I1h, yI1 in deduced_from(Ih, xI[0][0], Cx, unary, binary):
 				if I1h not in C and I1h not in A:
-					A[I1h] = (y, I1)
+					A[I1h] = yI1
 				elif I1h in A:
-					if y > A[I1h][0]: A[I1h] = (y, I1)
-				#else: raise #?
+					if yI1[0][0] > A[I1h][0][0]: A[I1h] = yI1
+				else:
+					(y, p), b = yI1
+					C[I1h].add((b, -p))
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart items", len(C)
 	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
-	#for a in C: C[a] = [(b,-p) for b,(foo,p) in [C[a]]]
-	for a in C: C[a] = [(C[a][0], -C[a][1][1])] 
 	return (C, goal) if goal in C else ({}, ())
 
 def deduced_from(Ih, x, C, unary, binary):
@@ -75,48 +93,71 @@ def deduced_from(Ih, x, C, unary, binary):
 	for rule, z in unary[I]:
 		for a,b in zip(rule[1][1], Ir): a.append(b)
 		left = concat(rule[1][0])
-		if left: result.append((interntuple(rule[0][0], left), (Ih,), (x+z,z,z)))
-	foldorIr = foldor(Ir)
+		if left: result.append((interntuple(rule[0][0], left), ((x+z,z,z), (Ih,))))
 	for key in C.keys():
 		#detect overlap in ranges
 		I1, I1r = key
-		if foldorIr & foldor(I1r): continue
-		y = C[key][1][0]
+		#if Ir & I1r: continue
+		y = C[key][0][0]
 		for rule, z in binary[(I, I1)]:
-			for a,b in zip(rule[1][1], Ir): a.append(b)
-			for a,b in zip(rule[1][2], I1r): a.append(b)
-			left = concat(rule[1][0])
+			left = concat(rule[1], Ir, I1r)
 			if left: 
-				result.append((interntuple(rule[0][0], left), (Ih, key), (x+y+z,z)))
+				result.append((interntuple(rule[0][0], left), ((x+y+z,z), (Ih, key))))
 		for rule, z in binary[(I1, I)]:
-			for a,b in zip(rule[1][1], I1r): a.append(b)
-			for a,b in zip(rule[1][2], Ir): a.append(b)
-			right = concat(rule[1][0])
+			right = concat(rule[1], I1r, Ir)
 			if right: 
-				result.append((interntuple(rule[0][0], right), (key, Ih), (x+y+z,z)))
+				result.append((interntuple(rule[0][0], right), ((x+y+z,z), (key, Ih))))
 	return result
 
-def concat(node):
-	# only concatenate when result will be contiguous
-	contiguous = all(bitminmax(a[0],b[0]) for x in node for a,b in zip(x,x[1:]))
-	#result = interntuple(*map(lambda s: reduce(lambda a,b: a|b.pop(), s, 0), node))
-	result = tuple(map(lambda s: reduce(lambda a,b: a|b.pop(), s, 0), node))
-	return result if contiguous else None
-
-def foldor(s):
-	# unrolled version of reduce(or, s) for speed
-	l = len(s)
-	if l == 1: return s[0]
-	if l == 2: return s[0] | s[1]
-	if l == 3: return s[0] | s[1] | s[2]
-	if l == 4: return s[0] | s[1] | s[2] | s[3]
-	return reduce(or_, s)
+def concat(yieldfunction, lvec, rvec):
+	#this algorithm taken from rparse FastYFComposer.
+	lpos = lvec.index(True)
+	rpos = rvec.index(True)
+	for arg in yieldfunction:
+		m = len(arg) - 1
+		for n,b in enumerate(arg):
+			if b == 0:
+				# check if there are any bits left, and
+				# if any bits on the right should have gone before
+				# ones on this side
+				if lpos == -1 or (rpos != -1 and rpos <= lpos):
+					return None
+				# jump to next gap
+				try: lpos += lvec[lpos:].index(False)
+				except: lpos = -1
+				# there should be a gap if and only if
+				# this is the last element of this argument
+				if rpos != -1 and rpos < lpos: return None
+				if n == m:
+					if rvec[lpos]: return None
+				elif not rvec[lpos]: return None
+				#jump to next argument
+				try: lpos += lvec[lpos:].index(True)
+				except: lpos = -1
+			elif b == 1:
+				# vice versa to the above
+				if rpos == -1 or (lpos != -1 and lpos <= rpos):
+					return None
+				try: rpos += rvec[rpos:].index(False)
+				except: rpos = -1
+				if lpos != -1 and lpos < rpos: return None
+				if n == m:
+					if lvec[rpos]: return None
+				elif not lvec[rpos]: return None
+				try: rpos += rvec[rpos:].index(True) 
+				except: rpos = -1
+			else: raise
+	if lpos != -1 or rpos != -1:
+		return None
+	# finally, return composed vector
+	return lvec | rvec
 
 def interntuple(*a):
 	#like intern but for tuples: return a canonical reference so that tuples are never stored twice. 
 	#doesn't seem to make any difference, unfortunately.
 	# note the *. wrong: interntuple([0,1]) correct interntuple(0,1)
-	return myintern.setdefault(a, a)
+	return a
+	#return myintern.setdefault(a, a)
 
 # adapted from http://wiki.python.org/moin/BitManipulation
 def bitminmax(a, b):
@@ -128,13 +169,6 @@ def bitminmax(a, b):
 		a >>= 1
 		b >>= 1
 	return b == 1
-	
-def bitmax1(int_type):
-	return int(log(int_type, 2))
-
-def freeze(l):
-	if isinstance(l, list): return tuple(map(freeze, l))
-	else: return l
 
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation
@@ -167,7 +201,7 @@ def mostprobableparse(chart, start, n=100, sample=False):
 			#todo: calculate real parse probabilities
 		else:
 			#chart = filterchart(chart, start)
-			for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
+			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
 			derivations = islice(enumchart(chart, start), n)
 		parsetrees = FreqDist()
 		m = 0
@@ -179,16 +213,14 @@ def mostprobableparse(chart, start, n=100, sample=False):
 
 def pprint_chart(chart, sent):
 	print "chart:"
-	def mybin(n):
-		return ("0"*len(sent) + bin(n)[2:])[-len(sent)::][::-1]
-	for a in sorted(chart, key=lambda x: bin(foldor(x[1])).count("1")):
-		print "%s[%s]" % (a[0], ",".join(map(mybin, a[1]))), "=>"
+	for a in sorted(chart, key=lambda x: x[1].count()):
+		print "%s[%s]" % (a[0], a[1].to01()), "=>"
 		for b,p in chart[a]:
 			for c in b:
 				if c[0] == "Epsilon":
 					print "\t", repr(sent[b[0][1][0]]),
 				else:
-					print "\t", "%s[%s]" % (c[0], ",".join(map(mybin, c[1]))),
+					print "\t", "%s[%s]" % (c[0], c[1].to01()),
 			print p
 		print
 
@@ -203,16 +235,13 @@ def do(sent):
 	print
 
 if __name__ == '__main__':
-	grammar = []
-	X,Y,Z=[],[],[]; grammar.append(((('S','VP2','VMFIN'),    (((X,Y,Z),),    (X,Z), (Y,))),  0))
-	X,Y,Z=[],[],[]; grammar.append(((('VP2','VP2','VAINF'),  (((X,),(Y,Z)), (X,Y), (Z,))),  log(0.5)))
-	X,Y,Z=[],[],[]; grammar.append(((('VP2','PROAV','VVPP'), (((X,),(Y,)),  (X,),  (Y,))),  log(0.5)))
-	grammar.extend([
-		((('PROAV', 'Epsilon'), (['Daruber'], [])), 0.0),
-		 ((('VAINF', 'Epsilon'), (['werden'], [])), 0.0),
-		 ((('VMFIN', 'Epsilon'), (['muss'], [])), 0.0),
-		 ((('VVPP', 'Epsilon'), (['nachgedacht'], [])), 0.0)
-		])
+	grammar = [((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
+		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
+		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
+		((('PROAV', 'Epsilon'), ('Daruber', ())), 0.0),
+		((('VAINF', 'Epsilon'), ('werden', ())), 0.0),
+		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
+		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)]
 
 	do("Daruber muss nachgedacht werden")
 	do("Daruber muss nachgedacht werden werden")

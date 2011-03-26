@@ -1,8 +1,9 @@
 
 Requirements: 
 
-	- python 2.6
-	- NLTK
-	- heapdict https://github.com/dangra/heapdict/tarball/cheapdict
-	- dopg.py from my eodop repository
-	- cython / shedskin?
+	- python 2.6	http://www.python.org
+	- NLTK 			http://www.nltk.org
+	- heapdict 		https://github.com/dangra/heapdict/tarball/cheapdict
+	- bitarray 		http://pypi.python.org/pypi/bitarray
+
+plcfrs.py, rcgrules.py and test.py can be run without arguments as a demonstration

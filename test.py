@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader
-from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, fs, extractfragments
+from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, extractfragments
 from nltk import FreqDist, Tree
 from nltk.metrics import precision
 from itertools import islice, chain
@@ -11,7 +11,7 @@ try: import pyximport
 except:
 	from plcfrs import parse, mostprobableparse
 else:
-	#pyximport.install()
+	#yximport.install()
 	#from plcfrs_cython import parse, mostprobableparse
 	from plcfrs import parse, mostprobableparse
 

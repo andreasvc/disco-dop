@@ -1,21 +1,10 @@
 from dopg import nodefreq, frequencies, decorate_with_ids
-from nltk import ImmutableTree, Tree, Nonterminal, FreqDist, SExprTokenizer
+from nltk import ImmutableTree, Tree, FreqDist 
 from math import log, e
 from itertools import chain, count, islice
 from pprint import pprint
+from copy import deepcopy
 import re
-sexp=SExprTokenizer("()")
-
-def fs(rule):
-	vars = []
-	Epsilon = "Epsilon"
-	for a in re.findall("\?[XYZ][0-9]*", rule):
-		if a not in vars: vars.append(a)
-		exec("%s = []" % a[1:])
-	return tuple(zip(*eval(re.sub(r"\?([XYZ][0-9]*)", r"\1", rule))))
-
-def fs1(rule):
-	return [a.strip() for a in sexp.tokenize(rule[1:-1]) if a != ',']
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
@@ -34,25 +23,29 @@ def ranges(s):
 			rng = [a]
 	if rng: yield rng
 
-def subst(s):
-	""" substitute variables for indices in a sequence """
-	return tuple("?X%d" % a for a in s)
-
 def node_arity(n, vars, inplace=False):
 	""" mark node with arity if necessary """
 	if len(vars) > 1:
 		if inplace: n.node = "%s_%d" % (n.node, len(vars))
 		else: return "%s_%d" % (n.node, len(vars))
-		return n.node
-	else: return n.node
+	return n.node
 
 def alpha_normalize(s):
-	""" In a string containing n variables, variables are renamed to
-		X1 .. Xn, in order of first appearance """
-	vars = []
-	for a in re.findall("\?X[0-9]+", s):
-		if a not in vars: vars.append(a)
-	return re.sub("\?X[0-9]+", lambda v: "?X%d" % (vars.index(v.group())+1), s)
+	""" Substitute variables so that the variables on the left-hand side appear consecutively.
+		E.g. [0,1], [2,3] instead of [0,1], [3,4]. Modifies s in-place."""
+	# flatten left hand side variables into a single list
+	lvars = list(chain(*s[1][0]))
+	for a,b in zip(lvars, range(len(lvars))):
+		if a==b: continue
+		for x in s[1][0]:  # left hand side
+			if a in x: x[x.index(a)] = b
+		for x in s[1][1:]: # right hand side
+			if a in x: x[x.index(a)] = b
+	return s
+
+def freeze(l):
+	if isinstance(l, (list, tuple)): return tuple(map(freeze, l))
+	else: return l
 
 def srcg_productions(tree, sent, arity_marks=True):
 	""" given a tree with indices as terminals, and a sentence
@@ -62,18 +55,34 @@ def srcg_productions(tree, sent, arity_marks=True):
 	rules = []
 	for st in tree.subtrees():
 		if st.height() == 2:
-			lhs = "['%s', ['%s']]" % (st.node, sent[int(st[0])])
-			rhs = "[Epsilon, []]"
+			nonterminals = (intern(st.node), 'Epsilon')
+			vars = (sent[int(st[0])],)
+			rule = (nonterminals, vars)
 		else:
-			vars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
+			rvars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
 			lvars = list(ranges(sorted(chain(*(map(int, a.leaves()) for a in st)))))
-			lvars = [[x for x in a if any(x in c for c in vars)] for a in lvars]
-			lvars = tuple(map(subst, lvars))
+			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
 			lhs = intern(node_arity(st, lvars, True) if arity_marks else st.node)
-			lhs = "('%s', %s)" % (lhs, repr(lvars).replace("'",""))
-			rhs = ", ".join("('%s', %s)" % (node_arity(a, b) if arity_marks else a.node, repr(subst(b)).replace("'","")) for a,b in zip(st, vars))
-		rules.append(alpha_normalize("(%s, %s)" % (lhs, rhs)))
+			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
+			vars = (lvars,) + tuple(rvars)
+			for x in vars[0]:
+				for n,y in enumerate(x):
+					for m,z in enumerate(vars[1:]):
+						if y in z: x[n] = m
+			rule = (nonterminals, freeze(vars[0]))
+		rules.append(rule)
 	return rules
+
+def induce_srcg(trees, sents):
+	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
+	grammar = []
+	for tree, sent in zip(trees, sents):
+		t = tree.copy(True)
+		t.chomsky_normal_form()
+		grammar.extend(srcg_productions(t, sent))
+	grammar = FreqDist(grammar)
+	fd = FreqDist(a[0][0] for a in grammar)
+	return [(rule, log(freq*1./fd[rule[0][0]])) for rule,freq in grammar.items()]
 
 def dop_srcg_rules(trees, sents):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
@@ -83,16 +92,16 @@ def dop_srcg_rules(trees, sents):
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
 		t.chomsky_normal_form()
-		prods = map(fs1, srcg_productions(t, sent))
+		prods = srcg_productions(t, sent)
 		ut = decorate_with_ids(t, ids)
 		ut.chomsky_normal_form()
-		uprods = map(fs1, srcg_productions(ut, sent, False))
+		uprods = srcg_productions(ut, sent, False)
 		nodefreq(t, ut, fd, ntfd)
-		rules.extend(chain(*(cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b))) for a,b in zip(prods, uprods))))
-	rules = FreqDist("(%s)" % ", ".join(a) for a in rules)
-	return [(fs(rule), log(freq * reduce((lambda x,y: x*y),
+		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b)))] for (a,avar),(b,bvar) in zip(prods, uprods))))
+	rules = FreqDist(rules)
+	return [(rule, log(freq * reduce((lambda x,y: x*y),
 		map((lambda z: '@' in z and fd[z] or 1),
-		fs(rule)[0][1:])) / float(fd[fs(rule)[0][0]])))
+		rule[0][1:])) / float(fd[rule[0][0]])))
 		for rule, freq in rules.items()]
 
 def allmax(seq, key):
@@ -215,17 +224,6 @@ def maxsetmappings(a,b,x,y,firstCall=False):
 		else: startyexists = False
 	return set(mappings)
 
-def induce_srcg(trees, sents):
-	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
-	grammar = []
-	for tree, sent in zip(trees, sents):
-		t = tree.copy(True)
-		t.chomsky_normal_form()
-		grammar.extend(srcg_productions(t, sent))
-	grammar = FreqDist(grammar)
-	fd = FreqDist(fs(a)[0][0] for a in grammar)
-	return [(fs(rule), log(freq*1./fd[fs(rule)[0][0]])) for rule,freq in grammar.items()]
-
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
 	>>> list(islice(cartpi([count(), count(0)]), 9))
@@ -258,7 +256,7 @@ def bfcartpi(seq):
 def enumchart(chart, start):
 	"""exhaustively enumerate trees in chart headed by start in top down 
 		fashion. chart is a dictionary with lhs -> (rhs, logprob) """
-	for a,p in chart[start]:
+	for a,p in sorted(chart[start], key=lambda x: -x[1]):
 		if len(a) == 1 and a[0][0] == "Epsilon":
 			yield "(%s %d)" % (start[0], a[0][1][0]), p
 			continue
@@ -284,6 +282,7 @@ def main():
 	sent = "Daruber muss nachgedacht werden".split()
 	tree.chomsky_normal_form()
 	pprint(srcg_productions(tree.copy(True), sent))
+	pprint(induce_srcg([tree.copy(True)], [sent]))
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
 	do(sent, dop_srcg_rules([tree], [sent]))
 
