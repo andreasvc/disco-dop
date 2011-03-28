@@ -253,27 +253,33 @@ def bfcartpi(seq):
 		for result in cartpi(seqlist[:n] + [seqlist[n][-1:]] + seqlist[n+1:]):
 			yield result
 
-def enumchart(chart, start):
+def enumchart(chart, start, depth=0):
 	"""exhaustively enumerate trees in chart headed by start in top down 
 		fashion. chart is a dictionary with lhs -> (rhs, logprob) """
-	for a,p in sorted(chart[start], key=lambda x: -x[1]):
-		if len(a) == 1 and a[0][0] == "Epsilon":
-			yield "(%s %d)" % (start[0], a[0][1][0]), p
-			continue
-		for x in bfcartpi(map(lambda y: enumchart(chart, y), a)):
-			tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
+	if depth >= 100: return
+	for a,p in chart[start][::-1]:
+		if len(a) == 1:
+			if a[0][0] == "Epsilon":
+				yield ImmutableTree(start[0], [a[0][1]]), p 
+				#yield "(%s %d)" % (start[0], a[0][1][0]), p
+				continue
+			elif start in a: continue	#shouldn't happen
+		for x in bfcartpi(map(lambda y: enumchart(chart, y, depth+1), a)):
+			#tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
+			tree = ImmutableTree(start[0], zip(*x)[0])
 			yield tree, p+sum(z[1] for z in x)
 
 def do(sent, grammar):
 	from plcfrs import parse
+	from dopg import removeids
 	print "sentence", sent
-	p, start = parse(sent, grammar)
+	p, start = parse(sent, grammar, viterbi=False, n=100)
 	if p:
 		l = FreqDist()
 		for n,(a,prob) in enumerate(enumchart(p, start)):
 			#print n, prob, a
-			l.inc(re.sub(r"@[0-9]+", "", a), e**prob)
-		for a in l: print l[a], Tree(a)
+			l.inc(removeids(a), e**prob)
+		for a in l: print l[a], a
 	else: print "no parse"
 	print
 

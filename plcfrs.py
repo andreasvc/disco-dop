@@ -1,10 +1,11 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
 from rcgrules import enumchart
+from dopg import removeids
 from nltk import FreqDist
-from bitarray import bitarray
 from heapdict import heapdict
 #from pyjudy import JudyLObjObj
+from bitarray import bitarray
 from math import log, e, floor
 from random import choice
 from itertools import chain, islice
@@ -21,25 +22,38 @@ import re
 #	import psyco
 #	psyco.full()
 #except: pass
-myintern = {}
-class MyBitArray(bitarray):
-	# this should go into a patch of bitarray
-	def __hash__(self):
-		return hash(self.tostring())
 
-def parse(sent, grammar, start="S", viterbi=False, n=1):
+class ChartItem:
+	__slots__ = ("label", "vec", "_hash")
+	def __init__(self, label, vec):
+		self.label = label
+		self.vec = vec
+		self._hash = hash((self.label, self.vec))
+	def __hash__(self):
+		return self._hash
+	def __eq__(self, other):
+		return self.label == other.label and self.vec == other.vec
+	def __getitem__(self, n):
+		if n == 0: return self.label
+		if n == 1: return self.vec
+	def __repr__(self):
+		#would need bitlen for proper padding
+		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
+
+def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary, binary = defaultdict(list), defaultdict(list)
+	unary, lbinary, rbinary = defaultdict(list), defaultdict(list), defaultdict(list)
 	# negate the log probabilities because the heap is a min-heap
 	for r,w in grammar:
 		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
-		elif len(r[0]) == 3: binary[(r[0][1], r[0][2])].append((r, -w))
-	vec = bitarray(len(sent))
-	vec.setall(True)
-	goal = (start, vec)
+		elif len(r[0]) == 3:
+			lbinary[r[0][1]].append((r, -w))
+			rbinary[r[0][2]].append((r, -w))
+		else: raise ValueError("grammar not binarized: %s" % repr(r))
+	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
-	A, C, Cx = heapdict(), defaultdict(set), {}
+	A, C, Cx = heapdict(), defaultdict(list), defaultdict(dict)
 	#C = JudyLObjObj()
 	#from guppy import hpy; h = hpy(); hn = 0
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
@@ -49,70 +63,75 @@ def parse(sent, grammar, start="S", viterbi=False, n=1):
 		recognized = False
 		for rule, z in unary["Epsilon"]:
 			if w in rule[1]:
-				vec = MyBitArray(len(sent))
-				vec.setall(False)
-				vec[i] = True
-				Ih = interntuple(rule[0][0], vec)
-				I = (("Epsilon", (i,)),)
+				Ih = ChartItem(rule[0][0], 1 << i)
+				I = (ChartItem("Epsilon", i),)
 				A[Ih] = ((z, z), I)
 				recognized = True
-		if not recognized: print "not covered:", w
-
+		if not recognized and tags:
+			Ih = ChartItem(tags[i], 1 << i)
+			I = (ChartItem("Epsilon", i),)
+			A[Ih] = ((0, 0), I)
+			recognized = True
+			continue
+		elif not recognized:
+			print "not covered:", w
+	lensent = len(sent)
 	# parsing
 	while A:
 		Ih, xI = A.popitem()
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		#C[Ih] = I, x
-		(foo, p), b = xI
-		C[Ih].add((b, -p))
-		Cx[Ih] = xI
+		(y, p), b = xI
+		C[Ih].append((b, -p))
+		Cx[Ih.label][Ih] = y
 		if Ih == goal:
 			m += 1	#problem: this is not viterbi n-best.
-			goal = Ih
+			#goal = Ih
 			if viterbi and n==m: break
 		else:
-			for I1h, yI1 in deduced_from(Ih, xI[0][0], Cx, unary, binary):
-				if I1h not in C and I1h not in A:
+			for I1h, yI1 in deduced_from(Ih, xI[0][0], Cx, unary, lbinary, rbinary, lensent):
+				# explicit get to avoid inserting spurious keys
+				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = yI1
 				elif I1h in A:
 					if yI1[0][0] > A[I1h][0][0]: A[I1h] = yI1
 				else:
 					(y, p), b = yI1
-					C[I1h].add((b, -p))
+					C[I1h].append((b, -p))
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
-	print "max agenda size", maxA, "/ chart items", len(C)
+	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
 	return (C, goal) if goal in C else ({}, ())
 
-def deduced_from(Ih, x, C, unary, binary):
-	I, Ir = Ih
+def deduced_from(Ih, x, Cx, unary, lbinary, rbinary, bitlen):
+	I, Ir = Ih.label, Ih.vec
 	result = []
 	for rule, z in unary[I]:
-		for a,b in zip(rule[1][1], Ir): a.append(b)
-		left = concat(rule[1][0])
-		if left: result.append((interntuple(rule[0][0], left), ((x+z,z,z), (Ih,))))
-	for key in C.keys():
-		#detect overlap in ranges
-		I1, I1r = key
-		#if Ir & I1r: continue
-		y = C[key][0][0]
-		for rule, z in binary[(I, I1)]:
-			left = concat(rule[1], Ir, I1r)
-			if left: 
-				result.append((interntuple(rule[0][0], left), ((x+y+z,z), (Ih, key))))
-		for rule, z in binary[(I1, I)]:
-			right = concat(rule[1], I1r, Ir)
-			if right: 
-				result.append((interntuple(rule[0][0], right), ((x+y+z,z), (key, Ih))))
+		result.append((ChartItem(rule[0][0], Ir), ((x+z,z), (Ih,))))
+	for rule, z in lbinary[I]:
+		for I1h, y in Cx[rule[0][2]].items():
+			if concat(rule[1], Ir, I1h.vec, bitlen):
+				result.append((ChartItem(rule[0][0], Ir ^ I1h.vec), ((x+y+z, z), (Ih, I1h))))
+	for rule, z in rbinary[I]:
+		for I1h, y in Cx[rule[0][1]].items():
+			if concat(rule[1], I1h.vec, Ir, bitlen):
+				result.append((ChartItem(rule[0][0], I1h.vec ^ Ir), ((x+y+z, z), (I1h, Ih))))
 	return result
 
-def concat(yieldfunction, lvec, rvec):
+def concat(yieldfunction, lvec, rvec, bitlen):
+	if lvec & rvec: return False
+	if len(yieldfunction) == 1 and len(yieldfunction[0]) == 2:
+		if yieldfunction[0] == (0, 1):
+			return bitminmax(lvec, rvec)
+		elif yieldfunction[0] == (1, 0):
+			return bitminmax(rvec, lvec)
+		else: raise ValueError("non-binary element in yieldfunction")
 	#this algorithm taken from rparse FastYFComposer.
-	lpos = lvec.index(True)
-	rpos = rvec.index(True)
+	lpos = nextset(lvec, 0, bitlen)
+	rpos = nextset(rvec, 0, bitlen)
 	for arg in yieldfunction:
 		m = len(arg) - 1
 		for n,b in enumerate(arg):
@@ -121,45 +140,74 @@ def concat(yieldfunction, lvec, rvec):
 				# if any bits on the right should have gone before
 				# ones on this side
 				if lpos == -1 or (rpos != -1 and rpos <= lpos):
-					return None
+					return False
 				# jump to next gap
-				try: lpos += lvec[lpos:].index(False)
-				except: lpos = -1
+				lpos = nextunset(lvec, lpos, bitlen)
 				# there should be a gap if and only if
 				# this is the last element of this argument
-				if rpos != -1 and rpos < lpos: return None
+				if rpos != -1 and rpos < lpos: return False
 				if n == m:
-					if rvec[lpos]: return None
-				elif not rvec[lpos]: return None
+					if testbit(rvec, lpos, bitlen): return False
+				elif not testbit(rvec, lpos, bitlen): return False
 				#jump to next argument
-				try: lpos += lvec[lpos:].index(True)
-				except: lpos = -1
+				lpos = nextset(lvec, lpos, bitlen)
 			elif b == 1:
 				# vice versa to the above
 				if rpos == -1 or (lpos != -1 and lpos <= rpos):
-					return None
-				try: rpos += rvec[rpos:].index(False)
-				except: rpos = -1
-				if lpos != -1 and lpos < rpos: return None
+					return False
+				rpos = nextunset(rvec, rpos, bitlen)
+				if lpos != -1 and lpos < rpos: return False
 				if n == m:
-					if lvec[rpos]: return None
-				elif not lvec[rpos]: return None
-				try: rpos += rvec[rpos:].index(True) 
-				except: rpos = -1
-			else: raise
+					if testbit(lvec, rpos, bitlen): return False
+				elif not testbit(lvec, rpos, bitlen): return False
+				rpos = nextset(rvec, rpos, bitlen)
+			else: raise ValueError("non-binary element in yieldfunction")
 	if lpos != -1 or rpos != -1:
-		return None
-	# finally, return composed vector
-	return lvec | rvec
+		return False
+	# everything looks all right
+	return True
 
-def interntuple(*a):
-	#like intern but for tuples: return a canonical reference so that tuples are never stored twice. 
-	#doesn't seem to make any difference, unfortunately.
-	# note the *. wrong: interntuple([0,1]) correct interntuple(0,1)
-	return a
-	#return myintern.setdefault(a, a)
+# bit operations adapted from http://wiki.python.org/moin/BitManipulation
+def nextset2(a, pos, bitlen):
+	result = 0
+	bitlen -= pos
+	a >>= pos
+	a = a & -a
+	while a >> result and result < bitlen:
+		result += 1
+	return pos + result - 1 if result < bitlen else -1
 
-# adapted from http://wiki.python.org/moin/BitManipulation
+def nextunset2(a, pos, bitlen):
+	result = 0
+	bitlen -= pos
+	a >>= pos
+	a = ~a & -~a
+	while a >> result and result < bitlen:
+		result += 1
+	return pos + result - 1
+
+def nextset(a, pos, bitlen):
+	result = pos
+	while (not (a >> result) & 1) and result < bitlen:
+		result += 1
+	return result if result < bitlen else -1
+
+def nextunset(a, pos, bitlen):
+	result = pos
+	while (a >> result) & 1 and result < bitlen:
+		result += 1
+	return result
+
+def testbit(a, offset, bitlen):
+	return a & (1 << offset)
+
+def bitcount(a):
+	count = 0
+	while a:
+		a &= a - 1
+		count += 1
+	return count
+
 def bitminmax(a, b):
 	"""test if the least and most significant bits of a and b are 
 	consecutive. we shift a and b until they meet in the middle (return true)
@@ -183,7 +231,7 @@ def filterchart(chart, start):
 def samplechart(chart, start):
 	entry, p = choice(chart[start])
 	if len(entry) == 1 and entry[0][0] == "Epsilon":
-		return "(%s %d)" % (start[0], entry[0][1][0]), p
+		return "(%s %d)" % (start[0], entry[0][1]), p
 	children = [samplechart(chart, a) for a in entry]
 	tree = "(%s %s)" % (start[0], " ".join([a for a,b in children]))
 	#tree = "(%s_%s %s)" % (start[0], "_".join(repr(a) for a in start[1:]), " ".join([a for a,b in children]))
@@ -206,21 +254,21 @@ def mostprobableparse(chart, start, n=100, sample=False):
 		parsetrees = FreqDist()
 		m = 0
 		for n,(a,prob) in enumerate(derivations):
-			parsetrees.inc(re.sub(r"@[0-9]+", "", a), e**prob)
-			m+=1
+			parsetrees.inc(removeids(a), e**prob)
+			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
 
 def pprint_chart(chart, sent):
 	print "chart:"
-	for a in sorted(chart, key=lambda x: x[1].count()):
-		print "%s[%s]" % (a[0], a[1].to01()), "=>"
+	for a in sorted(chart, key=lambda x: bitcount(x[1])):
+		print a, "=>"
 		for b,p in chart[a]:
 			for c in b:
 				if c[0] == "Epsilon":
-					print "\t", repr(sent[b[0][1][0]]),
+					print "\t", repr(sent[b[0][1]]),
 				else:
-					print "\t", "%s[%s]" % (c[0], c[1].to01()),
+					print "\t", c,
 			print p
 		print
 

@@ -138,14 +138,6 @@ class GoodmanDOP:
 				#	reduce(lambda x,y: x*y, map(lambda z: '@' in z and 
 				#	fd[z] or 1, r)) / float(fd[l])))
 	
-	def removeids(self, tree):
-		""" remove unique IDs introduced by the Goodman reduction """
-		result = Tree.convert(tree)
-		for a in tree.treepositions():
-			if '@' in str(tree[a]):
-				result[a].node = tree[a].node.split('@')[0]
-		return result
-
 	def parse(self, sent):
 		"""most probable derivation (not very good)."""
 		return self.parser.parse(sent)
@@ -307,6 +299,13 @@ def frequencies(cfg, fd, nonterminalfd, normalize=False):
 		rule.split('\t')[1:]))) 
 		for rule, freq in cfg.items())
 
+def removeids(tree):
+	""" remove unique IDs introduced by the Goodman reduction """
+	result = Tree.convert(tree)
+	for a in result.subtrees(lambda t: '@' in t.node):
+		a.node = a.node.rsplit('@', 1)[0]
+	if isinstance(tree, ImmutableTree): return result.freeze()
+	return result
 
 #NB: the following code is equivalent to nltk.Tree.productions, except for accepting unicode
 def productions(tree):
