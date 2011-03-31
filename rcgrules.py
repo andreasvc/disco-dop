@@ -73,7 +73,7 @@ def srcg_productions(tree, sent, arity_marks=True):
 		rules.append(rule)
 	return rules
 
-def induce_srcg(trees, sents, h=None, v=None):
+def induce_srcg(trees, sents, h=None, v=0):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
