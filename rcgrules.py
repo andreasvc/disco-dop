@@ -73,12 +73,12 @@ def srcg_productions(tree, sent, arity_marks=True):
 		rules.append(rule)
 	return rules
 
-def induce_srcg(trees, sents):
+def induce_srcg(trees, sents, h=None, v=None):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
-		t.chomsky_normal_form()
+		t.chomsky_normal_form(horzMarkov=h, vertMarkov=v)
 		grammar.extend(srcg_productions(t, sent))
 	grammar = FreqDist(grammar)
 	fd = FreqDist(a[0][0] for a in grammar)
@@ -151,7 +151,6 @@ def extractfragments(trees):
 					else: l.add(frozenset(x))
 					#partfraglist.update(extractmaxpartialfragments(a[i], b[j]))
 			fraglist.update(filter(None, (fragmentfromindices(a,x) for x in l)))
-			#fraglist.update(chain(*(filter(None, fragmentfromindices(a,x)) for x in l if not any(x < y for y in l))))
 			del mem
 	return fraglist #| partfraglist
 
@@ -260,13 +259,13 @@ def enumchart(chart, start, depth=0):
 	for a,p in chart[start][::-1]:
 		if len(a) == 1:
 			if a[0][0] == "Epsilon":
-				yield ImmutableTree(start[0], [a[0][1]]), p 
+				yield Tree(start[0], [a[0][1]]), p 
 				#yield "(%s %d)" % (start[0], a[0][1][0]), p
 				continue
 			elif start in a: continue	#shouldn't happen
 		for x in bfcartpi(map(lambda y: enumchart(chart, y, depth+1), a)):
 			#tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
-			tree = ImmutableTree(start[0], zip(*x)[0])
+			tree = Tree(start[0], zip(*x)[0])
 			yield tree, p+sum(z[1] for z in x)
 
 def do(sent, grammar):

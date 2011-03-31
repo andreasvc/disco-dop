@@ -91,14 +91,14 @@ def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 			if viterbi and n==m: break
 		else:
 			for I1h, yI1 in deduced_from(Ih, xI[0][0], Cx, unary, lbinary, rbinary, lensent):
-				# explicit get to avoid inserting spurious keys
+				# explicit get to avoid inserting spurious keys in defaultdict
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = yI1
-				elif I1h in A:
-					if yI1[0][0] > A[I1h][0][0]: A[I1h] = yI1
+				elif I1h in A and yI1[0][0] > A[I1h][0][0]: 
+					A[I1h] = yI1
 				else:
 					(y, p), b = yI1
-					C[I1h].append((b, -p))
+					C[I1h].insert(0, (b, -p))
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
@@ -124,9 +124,9 @@ def deduced_from(Ih, x, Cx, unary, lbinary, rbinary, bitlen):
 def concat(yieldfunction, lvec, rvec, bitlen):
 	if lvec & rvec: return False
 	if len(yieldfunction) == 1 and len(yieldfunction[0]) == 2:
-		if yieldfunction[0] == (0, 1):
+		if yieldfunction[0][0] == 0 and yieldfunction[0][1] == 1:
 			return bitminmax(lvec, rvec)
-		elif yieldfunction[0] == (1, 0):
+		elif yieldfunction[0][0] == 1 and yieldfunction[0][1] == 0:
 			return bitminmax(rvec, lvec)
 		else: raise ValueError("non-binary element in yieldfunction")
 	#this algorithm taken from rparse FastYFComposer.
@@ -134,7 +134,7 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 	rpos = nextset(rvec, 0, bitlen)
 	for arg in yieldfunction:
 		m = len(arg) - 1
-		for n,b in enumerate(arg):
+		for n, b in enumerate(arg):
 			if b == 0:
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
@@ -147,8 +147,8 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 				# this is the last element of this argument
 				if rpos != -1 and rpos < lpos: return False
 				if n == m:
-					if testbit(rvec, lpos, bitlen): return False
-				elif not testbit(rvec, lpos, bitlen): return False
+					if testbit(rvec, lpos): return False
+				elif not testbit(rvec, lpos): return False
 				#jump to next argument
 				lpos = nextset(lvec, lpos, bitlen)
 			elif b == 1:
@@ -158,8 +158,8 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 				rpos = nextunset(rvec, rpos, bitlen)
 				if lpos != -1 and lpos < rpos: return False
 				if n == m:
-					if testbit(lvec, rpos, bitlen): return False
-				elif not testbit(lvec, rpos, bitlen): return False
+					if testbit(lvec, rpos): return False
+				elif not testbit(lvec, rpos): return False
 				rpos = nextset(rvec, rpos, bitlen)
 			else: raise ValueError("non-binary element in yieldfunction")
 	if lpos != -1 or rpos != -1:
@@ -198,7 +198,7 @@ def nextunset(a, pos, bitlen):
 		result += 1
 	return result
 
-def testbit(a, offset, bitlen):
+def testbit(a, offset):
 	return a & (1 << offset)
 
 def bitcount(a):
@@ -254,7 +254,7 @@ def mostprobableparse(chart, start, n=100, sample=False):
 		parsetrees = FreqDist()
 		m = 0
 		for n,(a,prob) in enumerate(derivations):
-			parsetrees.inc(removeids(a), e**prob)
+			parsetrees.inc(removeids(a).freeze(), e**prob)
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
@@ -269,7 +269,7 @@ def pprint_chart(chart, sent):
 					print "\t", repr(sent[b[0][1]]),
 				else:
 					print "\t", c,
-			print p
+			print e**p
 		print
 
 def do(sent):

@@ -301,11 +301,9 @@ def frequencies(cfg, fd, nonterminalfd, normalize=False):
 
 def removeids(tree):
 	""" remove unique IDs introduced by the Goodman reduction """
-	result = Tree.convert(tree)
-	for a in result.subtrees(lambda t: '@' in t.node):
+	for a in tree.subtrees(lambda t: '@' in t.node):
 		a.node = a.node.rsplit('@', 1)[0]
-	if isinstance(tree, ImmutableTree): return result.freeze()
-	return result
+	return tree
 
 #NB: the following code is equivalent to nltk.Tree.productions, except for accepting unicode
 def productions(tree):

@@ -1,9 +1,9 @@
 from nltk.corpus.reader.api import CorpusReader, SyntaxCorpusReader
-from nltk.corpus.reader.util import read_regexp_block
+from nltk.corpus.reader.util import read_regexp_block, StreamBackedCorpusView, concat
 from nltk import Tree
 import re
 
-BOS = re.compile("^#BOS")
+BOS = re.compile("^#BOS.*\n")
 EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
@@ -26,12 +26,20 @@ class NegraCorpusReader(SyntaxCorpusReader):
 	def _tag(self, s, ignore):
 		return [(a[WORD], a[TAG-self.d]) for a in s if a[WORD][0] != "#"]
 	def _read_block(self, stream):
-		return [[line.split() for line in block.splitlines()[1:]] for block in read_regexp_block(stream, BOS, EOS)]
+		return [[line.split() for line in block.splitlines()[1:]] 
+				for block in read_regexp_block(stream, BOS, EOS)]
+	def blocks(self):
+		def reader(stream):
+			result = read_regexp_block(stream, BOS, EOS)
+			return [re.sub(BOS,"", result[0])] if result else []
+	        return concat([StreamBackedCorpusView(fileid, reader, encoding=enc)
+        	               for fileid, enc in self.abspaths(self._fileids, True)])
 
 def main():
 	n = NegraCorpusReader(".", "sample2\.export")
-	print n.parsed_sents()
-	print n.tagged_sents()
-	print n.sents()
+	for a in n.parsed_sents(): print a
+	for a in n.tagged_sents(): print a
+	for a in n.sents(): print a
+	for a in n.blocks(): print a
 
 if __name__ == '__main__': main()

@@ -27,31 +27,32 @@ cdef class ChartItem:
 	cdef public char *label
 	cdef public long vec
 	cdef int _hash
-	__slots__ = ("label", "vec", "_hash")
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
 		self._hash = hash((self.label, self.vec))
-	def __hash__(self):
+	def __hash__(ChartItem self):
 		return self._hash
-	def __richcmp__(self, other, op):
+	def __richcmp__(ChartItem self, ChartItem other, int op):
 		if op == 0: return self.label < other.label or self.vec < other.vec
-		if op == 1: return self.label <= other.label or self.vec <= other.vec
-		if op == 2: return self.label == other.label and self.vec == other.vec
-		if op == 3: return self.label != other.label or self.vec != other.vec
-		if op == 4: return self.label > other.label or self.vec > other.vec
-		if op == 5: return self.label >= other.label or self.vec >= other.vec
-	def __getitem__(self, n):
+		elif op == 1: return self.label <= other.label or self.vec <= other.vec
+		elif op == 2: return self.label == other.label and self.vec == other.vec
+		elif op == 3: return self.label != other.label or self.vec != other.vec
+		elif op == 4: return self.label > other.label or self.vec > other.vec
+		elif op == 5: return self.label >= other.label or self.vec >= other.vec
+	def __getitem__(ChartItem self, int n):
 		if n == 0: return self.label
-		if n == 1: return self.vec
-	def __repr__(self):
+		elif n == 1: return self.vec
+	def __repr__(ChartItem self):
 		#would need bitlen for proper padding
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
 
 def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary, lbinary, rbinary = defaultdict(list), defaultdict(list), defaultdict(list)
+	cdef dict unary = <dict>defaultdict(list)
+	cdef dict lbinary = <dict>defaultdict(list)
+	cdef dict rbinary = <dict>defaultdict(list)
 	# negate the log probabilities because the heap is a min-heap
 	for r,w in grammar:
 		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
@@ -59,9 +60,12 @@ def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 			lbinary[r[0][1]].append((r, -w))
 			rbinary[r[0][2]].append((r, -w))
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
+	cdef ChartItem Ih, I1h, goal
 	goal = ChartItem(start, (1 << len(sent)) - 1)
-	m = maxA = 0
-	A, C, Cx = heapdict(), defaultdict(list), defaultdict(dict)
+	cdef int m = 0, maxA = 0
+	A = heapdict() if viterbi else {}
+	cdef dict C = <dict>defaultdict(list)
+	cdef dict Cx = <dict>defaultdict(dict)
 	#C = JudyLObjObj()
 	#from guppy import hpy; h = hpy(); hn = 0
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
@@ -83,13 +87,13 @@ def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 			continue
 		elif not recognized:
 			print "not covered:", w
-	lensent = len(sent)
+	cdef int lensent = len(sent)
 	# parsing
+	cdef double y, p
 	while A:
 		Ih, xI = A.popitem()
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		#C[Ih] = I, x
 		(y, p), b = xI
 		C[Ih].append((b, -p))
 		Cx[Ih.label][Ih] = y
@@ -102,21 +106,25 @@ def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 				# explicit get to avoid inserting spurious keys
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = yI1
-				elif I1h in A:
-					if yI1[0][0] > A[I1h][0][0]: A[I1h] = yI1
+				elif I1h in A and yI1[0][0] > A[I1h][0][0]:
+					A[I1h] = yI1
 				else:
 					(y, p), b = yI1
-					C[I1h].append((b, -p))
+					C[I1h].insert(0, (b, -p))
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
+	#pprint_chart(C, sent)
 	return (C, goal) if goal in C else ({}, ())
 
-cdef inline deduced_from(ChartItem Ih, double x, Cx, unary, lbinary, rbinary, int bitlen):
-	I, Ir = Ih.label, Ih.vec
-	result = []
+cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, dict unary, dict lbinary, dict rbinary, int bitlen):
+	cdef double z, y
+	cdef str I = Ih.label
+	cdef long Ir = Ih.vec
+	cdef ChartItem I1h
+	cdef list result = []
 	for rule, z in unary[I]:
 		result.append((ChartItem(rule[0][0], Ir), ((x+z,z), (Ih,))))
 	for rule, z in lbinary[I]:
@@ -129,20 +137,22 @@ cdef inline deduced_from(ChartItem Ih, double x, Cx, unary, lbinary, rbinary, in
 				result.append((ChartItem(rule[0][0], I1h.vec ^ Ir), ((x+y+z, z), (I1h, Ih))))
 	return result
 
-cdef inline bint concat(yieldfunction, long lvec, long rvec, int bitlen):
+cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
 	if lvec & rvec: return False
 	if len(yieldfunction) == 1 and len(yieldfunction[0]) == 2:
-		if yieldfunction[0] == (0, 1):
+		if yieldfunction[0][0] == 0 and yieldfunction[0][1] == 1:
 			return bitminmax(lvec, rvec)
-		elif yieldfunction[0] == (1, 0):
+		elif yieldfunction[0][0] == 1 and yieldfunction[0][1] == 0:
 			return bitminmax(rvec, lvec)
 		else: raise ValueError("non-binary element in yieldfunction")
 	#this algorithm taken from rparse FastYFComposer.
-	lpos = nextset(lvec, 0, bitlen)
-	rpos = nextset(rvec, 0, bitlen)
+	cdef int lpos = nextset(lvec, 0, bitlen)
+	cdef int rpos = nextset(rvec, 0, bitlen)
+	cdef int n, m, b
+	cdef tuple arg
 	for arg in yieldfunction:
 		m = len(arg) - 1
-		for n,b in enumerate(arg):
+		for n, b in enumerate(arg):
 			if b == 0:
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
@@ -226,7 +236,7 @@ def samplechart(chart, start):
 	tree = "(%s %s)" % (start[0], " ".join([a for a,b in children]))
 	#tree = "(%s_%s %s)" % (start[0], "_".join(repr(a) for a in start[1:]), " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
-	
+
 def mostprobableparse(chart, start, n=100, sample=False):
 		""" sum over n random derivations from chart,
 			return a FreqDist of parse trees, with .max() being the MPP"""
@@ -242,9 +252,10 @@ def mostprobableparse(chart, start, n=100, sample=False):
 			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
 			derivations = islice(enumchart(chart, start), n)
 		parsetrees = FreqDist()
-		m = 0
+		cdef double prob
+		cdef int m = 0
 		for n,(a,prob) in enumerate(derivations):
-			parsetrees.inc(removeids(a), e**prob)
+			parsetrees.inc(removeids(a).freeze(), e**prob)
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
@@ -259,7 +270,7 @@ def pprint_chart(chart, sent):
 					print "\t", repr(sent[b[0][1]]),
 				else:
 					print "\t", c,
-			print p
+			print e**p
 		print
 
 def do(sent):
