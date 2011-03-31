@@ -2,7 +2,7 @@
 from negra import NegraCorpusReader
 from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, extractfragments
 from nltk import FreqDist, Tree
-from nltk.metrics import precision
+from nltk.metrics import precision, recall, f_measure, accuracy
 from itertools import islice, chain
 from math import log, e
 from pprint import pprint
@@ -11,9 +11,8 @@ try: import pyximport
 except:
 	from plcfrs import parse, mostprobableparse
 else:
-	#yximport.install()
-	#from plcfrs_cython import parse, mostprobableparse
-	from plcfrs import parse, mostprobableparse
+	pyximport.install()
+	from plcfrs_cython import parse, mostprobableparse
 
 def rem_marks(tree):
 	for a in tree.subtrees(lambda x: "_" in x.node):
@@ -21,55 +20,153 @@ def rem_marks(tree):
 	for a in tree.treepositions('leaves'):
 		tree[a] = int(tree[a])
 	return tree
-def s(a):
-	return (a.lhs(), tuple(sorted(a.rhs())))
+
+def bracketings(tree):
+	# sorted or not?
+	return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
+
+def harmean(seq):
+	try: return float(len([a for a in lps if a])) / sum(1/a if a else 0 for a in seq)
+	except: return "zerodiv"
+
+def mean(seq):
+	return sum(seq) / float(len(seq)) if seq else "zerodiv"
+
+def export(tree, sent, n):
+	result = ["#BOS %d" % n]
+	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
+	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
+	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
+	for i, word in enumerate(sent):
+		idx = wordids[i]
+		result.append("\t".join((word[0],
+				tree[idx[:-1]].node, 
+				"--", "--", 
+				str(500+nonpreterminals.index(idx[:-2]) if len(idx) > 2 else 0))))
+	for idx in nonpreterminals:
+		result.append("\t".join(("#%d" % (500 + nonpreterminals.index(idx)),
+				tree[idx].node,
+				"--", "--",
+				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
+	result.append("#EOS %d" % n)
+	return "\n".join(result)
 
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 corpus = NegraCorpusReader(".", "sample2.export")
-grammar = []
-trees, sents = corpus.parsed_sents(), corpus.sents()
+#corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
+trees, sents = corpus.parsed_sents()[:3600], corpus.sents()[:3600]
 
-n = 9
-grammar = induce_srcg(list(trees), sents)
-dopgrammar = dop_srcg_rules(chain(*(list(trees) for a in range(n))), n*list(sents))
+dop = True
+grammar = induce_srcg(list(trees), sents, h=1, v=1)
+if dop: dopgrammar = dop_srcg_rules(list(trees), list(sents))
 
-#cPickle.dump(dopgrammar, open("dopgrammar.pickle", "wb"))
-#import cPickle
-#dopgrammar = cPickle.load(open("dopgrammar.pickle","rb"))
-#from plcfrs import parse, mostprobableparse
-nodes = n * sum(len(list(a.subtrees())) for a in trees)
-print "DOP model based on", n*3, "sentences,", nodes, "nodes, max", nodes*8, "nonterminals"
-#sents = ["","","Wie am Samstag berichtet , mu\xdf das Institut seine Aktivit\xe4ten in den Vereinigten Staaten einstellen und eventuell Geldstrafen von mehr als einer Milliarde Dollar zahlen .".split()]
+nodes = sum(len(list(a.subtrees())) for a in trees)
+if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes, max", nodes*8, "nonterminals"
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
-for tree, sent in zip(trees, sents)[2:]:
-	print len(sent), " ".join(sent)
-	"""print "SRCG:",
-	chart, start = parse(sent, grammar, start='ROOT', viterbi=True)
-	if not chart: print "no parse"
-	for result, prob in enumchart(chart, start):
-		result = Tree(result)
+#trees, sents, blocks = corpus.parsed_sents()[3600:], corpus.tagged_sents()[3600:], corpus.blocks()[3600:]
+trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
+maxlen = 99
+maxsent = 360
+viterbi = True
+sample = False
+n = 1
+nsent = 0
+exact, exacts = 0, 0
+snoparse, dnoparse = 0, 0
+lp, lr, lf = [], [], []
+lps, lrs, lfs = [], [], []
+sresults = []
+dresults = []
+gold = []
+gsent = []
+for tree, sent, block in zip(trees, sents, blocks):
+	if len(sent) > maxlen: continue
+	nsent += 1
+	if nsent > maxsent: break
+	print "%d. [len=%d] %s" % (nsent, len(sent), " ".join(a[0]+"/"+a[1] for a in sent))
+	goldb = set(bracketings(tree))
+	gold.append(block)
+	gsent.append(sent)
+	print "SRCG:",
+	chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start='ROOT', viterbi=True)
+	for result, prob in enumchart(chart, start) if chart else ():
+		result = rem_marks(Tree.convert(result))
 		result.un_chomsky_normal_form()
 		print "p =", e**prob,
-		if rem_marks(result) == tree: print "exact match"
+		if result == tree:
+			print "exact match"
+			exacts += 1
+			prec, rec, f1 = 1.0, 1.0, 1.0
 		else: 
-			print "labeled precision", precision(set(map(s, result.productions())), set(map(s,tree.productions())))
-	"""
+			candb = set(bracketings(result))
+			prec = precision(goldb, candb)
+			rec = recall(goldb, candb)
+			f1 = f_measure(goldb, candb)
+			print "labeled precision", prec, "recall", rec, "f-measure", f1
+			print result.pprint(margin=1000)
+		sresults.append(result)
+		break
+	else:
+		print "no parse"
+		result = Tree("ROOT", [Tree("PN", [i]) for i in range(len(sent))])
+		candb = set(bracketings(result))
+		prec = precision(goldb, candb)
+		rec = recall(goldb, candb)
+		f1 = f_measure(goldb, candb)
+		snoparse += 1
+		sresults.append(result)
+	lps.append(prec)
+	lrs.append(rec)
+	lfs.append(f1)
+	if not dop: continue
 	print "DOP:",
-	viterbi = True
-	sample = False
-	n = 1
-	chart, start = parse(sent, dopgrammar, start='ROOT', viterbi=viterbi, n=n)
-	if not chart: print "no parse"
+	chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start='ROOT', viterbi=viterbi, n=n)
 	print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
-	for result, prob in mostprobableparse(chart, start,n=100,sample=sample).items():
+	for dresult, prob in mostprobableparse(chart, start,n=10000,sample=sample).items() if chart else ():
 		print "p =", prob,
-		result = rem_marks(Tree(result))
-		result.un_chomsky_normal_form()
-		if result == tree: print "exact match"
+		dresult = rem_marks(Tree.convert(dresult))
+		dresult.un_chomsky_normal_form()
+		if dresult == tree:
+			print "exact match"
+			exact += 1
+			prec, rec, f1 = 1.0, 1.0, 1.0
 		else: 
-			print "labeled precision", precision(set(map(s, result.productions())), set(map(s,tree.productions())))
-			print result
+			candb = set(bracketings(dresult))
+			prec = precision(goldb, candb)
+			rec = recall(goldb, candb)
+			f1 = f_measure(goldb, candb)
+			print "labeled precision", prec, "recall", rec, "f-measure", f1
+			print dresult.pprint(margin=1000)
+		dresults.append(dresult)
+		break
+	else:
+		print "no parse"
+		dresult = Tree("ROOT", [Tree("PN", [i]) for i in range(len(sent))])
+		candb = set(bracketings(dresult))
+		prec = precision(goldb, candb)
+		rec = recall(goldb, candb)
+		f1 = f_measure(goldb, candb)
+		dnoparse += 1
+		dresults.append(dresult)
+	lp.append(prec) 
+	lr.append(rec)
+	lf.append(f1)
 	print
+
+open("test.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(sresults, gsent)))
+open("test.dop", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
+open("test.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a,n) for n,a in enumerate(gold))
+print "SRCG:"
+print "exact match", lps.count(1.0), "/", nsent, "=", exacts / float(nsent)
+print "harm lp", harmean(lps), "lr", harmean(lrs), "lf1", harmean(lfs)
+print "mean lp", mean(lps), "lr", mean(lrs), "lf1", mean(lfs)
+print "coverage", (nsent - snoparse), "/", nsent, "=", (nsent - snoparse) / float(nsent)
+print
+print "DOP:"
+print "exact match", lp.count(1.0), "/", nsent, "=", exact / float(nsent)
+print "harm lp", harmean(lp), "lr", harmean(lr), "lf1", harmean(lf)
+print "mean lp", mean(lp), "lr", mean(lr), "lf1", mean(lf)
+print "coverage", (nsent - dnoparse), "/", nsent, "=", (nsent - dnoparse) / float(nsent)
