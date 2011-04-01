@@ -26,7 +26,7 @@ def bracketings(tree):
 	return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
 
 def harmean(seq):
-	try: return float(len([a for a in lps if a])) / sum(1/a if a else 0 for a in seq)
+	try: return float(len([a for a in seq if a])) / sum(1/a if a else 0 for a in seq)
 	except: return "zerodiv"
 
 def mean(seq):
@@ -82,29 +82,36 @@ sresults = []
 dresults = []
 gold = []
 gsent = []
+gconst = 0
+scorrect = 0
+dcorrect = 0
+sconst = 0
+dconst = 0
 for tree, sent, block in zip(trees, sents, blocks):
 	if len(sent) > maxlen: continue
+	if nsent >= maxsent: break
 	nsent += 1
-	if nsent > maxsent: break
 	print "%d. [len=%d] %s" % (nsent, len(sent), " ".join(a[0]+"/"+a[1] for a in sent))
 	goldb = set(bracketings(tree))
+	gconst += len(goldb)
 	gold.append(block)
 	gsent.append(sent)
 	print "SRCG:",
 	chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start='ROOT', viterbi=True)
 	for result, prob in enumchart(chart, start) if chart else ():
-		result = rem_marks(Tree.convert(result))
+		result = rem_marks(result)
 		result.un_chomsky_normal_form()
 		print "p =", e**prob,
+		candb = set(bracketings(result))
+		prec = precision(goldb, candb)
+		rec = recall(goldb, candb)
+		f1 = f_measure(goldb, candb)
+		scorrect += len(candb & goldb)
+		sconst += len(candb)
 		if result == tree:
 			print "exact match"
 			exacts += 1
-			prec, rec, f1 = 1.0, 1.0, 1.0
-		else: 
-			candb = set(bracketings(result))
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
+		else:
 			print "labeled precision", prec, "recall", rec, "f-measure", f1
 			print result.pprint(margin=1000)
 		sresults.append(result)
@@ -125,19 +132,20 @@ for tree, sent, block in zip(trees, sents, blocks):
 	print "DOP:",
 	chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start='ROOT', viterbi=viterbi, n=n)
 	print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
-	for dresult, prob in mostprobableparse(chart, start,n=10000,sample=sample).items() if chart else ():
+	for dresult, prob in mostprobableparse(chart, start,n=1000,sample=sample).items() if chart else ():
 		print "p =", prob,
 		dresult = rem_marks(Tree.convert(dresult))
 		dresult.un_chomsky_normal_form()
+		candb = set(bracketings(dresult))
+		prec = precision(goldb, candb)
+		rec = recall(goldb, candb)
+		f1 = f_measure(goldb, candb)
+		dcorrect += len(candb & goldb)
+		dconst += len(candb)
 		if dresult == tree:
 			print "exact match"
 			exact += 1
-			prec, rec, f1 = 1.0, 1.0, 1.0
 		else: 
-			candb = set(bracketings(dresult))
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
 			print "labeled precision", prec, "recall", rec, "f-measure", f1
 			print dresult.pprint(margin=1000)
 		dresults.append(dresult)
@@ -160,13 +168,13 @@ open("test.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerat
 open("test.dop", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
 open("test.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a,n) for n,a in enumerate(gold))
 print "SRCG:"
-print "exact match", lps.count(1.0), "/", nsent, "=", exacts / float(nsent)
-print "harm lp", harmean(lps), "lr", harmean(lrs), "lf1", harmean(lfs)
-print "mean lp", mean(lps), "lr", mean(lrs), "lf1", mean(lfs)
-print "coverage", (nsent - snoparse), "/", nsent, "=", (nsent - snoparse) / float(nsent)
+print "exact match", lps.count(1.0), "/", len(lps), "=", lps.count(1.0) / float(len(lps)) if lps else "zerodiv"
+print "lp", scorrect / float(sconst), "lr", scorrect / float(gconst), 
+print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
+print "coverage", (len(lps) - snoparse), "/", len(lps), "=", (len(lps) - snoparse) / float(len(lps)) if lps else "zerodiv"
 print
 print "DOP:"
-print "exact match", lp.count(1.0), "/", nsent, "=", exact / float(nsent)
-print "harm lp", harmean(lp), "lr", harmean(lr), "lf1", harmean(lf)
-print "mean lp", mean(lp), "lr", mean(lr), "lf1", mean(lf)
-print "coverage", (nsent - dnoparse), "/", nsent, "=", (nsent - dnoparse) / float(nsent)
+print "exact match", lp.count(1.0), "/", len(lp), "=", lp.count(1.0) / float(len(lp)) if lp else "zerodiv"
+print "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst), 
+print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
+print "coverage", (len(lp) - dnoparse), "/", len(lp), "=", (len(lp) - dnoparse) / float(len(lp)) if lp else "zerodiv"
