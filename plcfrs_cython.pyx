@@ -231,9 +231,11 @@ def filterchart(chart, start):
 def samplechart(chart, start):
 	entry, p = choice(chart[start])
 	if len(entry) == 1 and entry[0][0] == "Epsilon":
-		return "(%s %d)" % (start[0], entry[0][1]), p
+		return Tree(start[0], [entry[0][1]]), p
+		#return "(%s %d)" % (start[0], entry[0][1]), p
 	children = [samplechart(chart, a) for a in entry]
-	tree = "(%s %s)" % (start[0], " ".join([a for a,b in children]))
+	tree = Tree(start[0], [a for a,b in children])
+	#tree = "(%s %s)" % (start[0], " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 
 def mostprobableparse(chart, start, n=100, sample=False):
@@ -243,10 +245,12 @@ def mostprobableparse(chart, start, n=100, sample=False):
 		if sample:
 			for a,b in chart.items():
 				if not len(b): print "spurious chart entry", a
-			derivations = set(samplechart(chart, start) for x in range(n))
+			def freeze(x): return (x[0].freeze(), x[1])
+			def unfreeze(x): return (Tree.convert(x[0]), x[1])
+			derivations = set(freeze(samplechart(chart, start)) for x in range(n))
 			derivations.discard(None)
-			derivations = map(lambda x: (Tree(x[0]), x[1]), derivations)
-			#todo: calculate real parse probabilities
+			derivations = map(unfreeze, derivations)
+			#calculate real parse probabilities according to Goodman's claimed method?
 		else:
 			#chart = filterchart(chart, start)
 			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
