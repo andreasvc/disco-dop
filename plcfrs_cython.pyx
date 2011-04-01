@@ -2,7 +2,7 @@
 # (equivalent to Linear Context-Free Rewriting Systems)
 from rcgrules import enumchart
 from dopg import removeids
-from nltk import FreqDist
+from nltk import FreqDist, Tree
 from heapdict import heapdict
 #from pyjudy import JudyLObjObj
 from bitarray import bitarray
@@ -234,7 +234,6 @@ def samplechart(chart, start):
 		return "(%s %d)" % (start[0], entry[0][1]), p
 	children = [samplechart(chart, a) for a in entry]
 	tree = "(%s %s)" % (start[0], " ".join([a for a,b in children]))
-	#tree = "(%s_%s %s)" % (start[0], "_".join(repr(a) for a in start[1:]), " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 
 def mostprobableparse(chart, start, n=100, sample=False):
@@ -246,16 +245,18 @@ def mostprobableparse(chart, start, n=100, sample=False):
 				if not len(b): print "spurious chart entry", a
 			derivations = set(samplechart(chart, start) for x in range(n))
 			derivations.discard(None)
+			derivations = map(lambda x: (Tree(x[0]), x[1]), derivations)
 			#todo: calculate real parse probabilities
 		else:
 			#chart = filterchart(chart, start)
 			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
 			derivations = islice(enumchart(chart, start), n)
-		parsetrees = FreqDist()
+			#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
+		parsetrees = defaultdict(float)
 		cdef double prob
 		cdef int m = 0
-		for n,(a,prob) in enumerate(derivations):
-			parsetrees.inc(removeids(a).freeze(), e**prob)
+		for a,prob in derivations:
+			parsetrees[removeids(a).freeze()] += prob
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees

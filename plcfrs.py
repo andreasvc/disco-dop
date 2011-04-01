@@ -246,15 +246,16 @@ def mostprobableparse(chart, start, n=100, sample=False):
 				if not len(b): print "spurious chart entry", a
 			derivations = set(samplechart(chart, start) for x in range(n))
 			derivations.discard(None)
+			derivations = map(lambda x: (Tree(x[0]), x[1]), derivations)
 			#todo: calculate real parse probabilities
 		else:
 			#chart = filterchart(chart, start)
 			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
 			derivations = islice(enumchart(chart, start), n)
-		parsetrees = FreqDist()
+		parsetrees = defaultdict(float)
 		m = 0
-		for n,(a,prob) in enumerate(derivations):
-			parsetrees.inc(removeids(a).freeze(), e**prob)
+		for a,prob in derivations:
+			parsetrees[removeids(a).freeze()] += prob
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
