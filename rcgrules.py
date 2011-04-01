@@ -82,15 +82,16 @@ def induce_srcg(trees, sents, h=None, v=0):
 		grammar.extend(srcg_productions(t, sent))
 	grammar = FreqDist(grammar)
 	fd = FreqDist(a[0][0] for a in grammar)
-	return [(rule, log(freq*1./fd[rule[0][0]])) for rule,freq in grammar.items()]
+	return [(rule, log(float(freq)/fd[rule[0][0]])) for rule,freq in grammar.items()]
 
-def dop_srcg_rules(trees, sents):
+def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
-	reduces DOP1 to a PCFG """
+	reduces DOP1 to a PCFG.
+	Normalize means the application of the equal weights estimate """
 	ids, rules = count(1), []
 	fd,ntfd = FreqDist(), FreqDist()
 	for tree, sent in zip(trees, sents):
-		t = tree.copy(True)
+		t = canonicalize(tree.copy(True))
 		t.chomsky_normal_form()
 		prods = srcg_productions(t, sent)
 		ut = decorate_with_ids(t, ids)
@@ -99,10 +100,19 @@ def dop_srcg_rules(trees, sents):
 		nodefreq(t, ut, fd, ntfd)
 		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b)))] for (a,avar),(b,bvar) in zip(prods, uprods))))
 	rules = FreqDist(rules)
+	if shortestderiv:
+		return [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
+	# should we distinguish what kind of arguments a node takes in fd?
 	return [(rule, log(freq * reduce((lambda x,y: x*y),
-		map((lambda z: '@' in z and fd[z] or 1),
-		rule[0][1:])) / float(fd[rule[0][0]])))
+		map((lambda z: fd[z] if '@' in z else 1), rule[0][1:])) / 
+		(float(fd[rule[0][0]]) * ntfd[rule[0][0].rsplit('@',1)[0]] 
+		if '@' not in rule[0][0] and normalize else 1)))
 		for rule, freq in rules.items()]
+
+def canonicalize(tree):
+	for a in tree.subtrees():
+		a.sort()
+	return tree
 
 def allmax(seq, key):
 	""" return all x s.t. key(x)==max(seq, key)"""
