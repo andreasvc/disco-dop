@@ -18,10 +18,10 @@ import re
 #	pyximport.install()
 #except: pass
 #from bit import *
-#try:
-#	import psyco
-#	psyco.full()
-#except: pass
+
+cdef extern from "bit.h":
+	int nextset(long vec, int pos)
+	int nextunset(long vec, int pos)
 
 cdef class ChartItem:
 	cdef public char *label
@@ -146,8 +146,8 @@ cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
 			return bitminmax(rvec, lvec)
 		else: raise ValueError("non-binary element in yieldfunction")
 	#this algorithm taken from rparse FastYFComposer.
-	cdef int lpos = nextset(lvec, 0, bitlen)
-	cdef int rpos = nextset(rvec, 0, bitlen)
+	cdef int lpos = nextset(lvec, 0)
+	cdef int rpos = nextset(rvec, 0)
 	cdef int n, m, b
 	cdef tuple arg
 	for arg in yieldfunction:
@@ -160,7 +160,7 @@ cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
 				if lpos == -1 or (rpos != -1 and rpos <= lpos):
 					return False
 				# jump to next gap
-				lpos = nextunset(lvec, lpos, bitlen)
+				lpos = nextunset(lvec, lpos)
 				# there should be a gap if and only if
 				# this is the last element of this argument
 				if rpos != -1 and rpos < lpos: return False
@@ -168,17 +168,17 @@ cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
 					if testbit(rvec, lpos): return False
 				elif not testbit(rvec, lpos): return False
 				#jump to next argument
-				lpos = nextset(lvec, lpos, bitlen)
+				lpos = nextset(lvec, lpos)
 			elif b == 1:
 				# vice versa to the above
 				if rpos == -1 or (lpos != -1 and lpos <= rpos):
 					return False
-				rpos = nextunset(rvec, rpos, bitlen)
+				rpos = nextunset(rvec, rpos)
 				if lpos != -1 and lpos < rpos: return False
 				if n == m:
 					if testbit(lvec, rpos): return False
 				elif not testbit(lvec, rpos): return False
-				rpos = nextset(rvec, rpos, bitlen)
+				rpos = nextset(rvec, rpos)
 			else: raise ValueError("non-binary element in yieldfunction")
 	if lpos != -1 or rpos != -1:
 		return False
@@ -186,15 +186,15 @@ cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
 	return True
 
 # bit operations adapted from http://wiki.python.org/moin/BitManipulation
-cdef inline int nextset(long a, int pos, int bitlen):
+cdef inline int nextset1(long a, int pos):
 	cdef int result = pos
-	while (not (a >> result) & 1) and result < bitlen:
+	while (not (a >> result) & 1) and a >> result:
 		result += 1
-	return result if result < bitlen else -1
+	return result if a >> result else -1
 
-cdef inline int nextunset(long a, int pos, int bitlen):
+cdef inline int nextunset1(long a, int pos):
 	cdef int result = pos
-	while (a >> result) & 1 and result < bitlen:
+	while (a >> result) & 1:
 		result += 1
 	return result
 

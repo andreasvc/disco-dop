@@ -7,12 +7,11 @@ from itertools import islice, chain
 from math import log, e
 from pprint import pprint
 import cPickle
-try: import pyximport
+try: 
+	from plcfrs_cython import parse, mostprobableparse
 except:
 	from plcfrs import parse, mostprobableparse
-else:
-	pyximport.install()
-	from plcfrs_cython import parse, mostprobableparse
+	print "running non-cython code"
 
 def rem_marks(tree):
 	for a in tree.subtrees(lambda x: "_" in x.node):

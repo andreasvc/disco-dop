@@ -7,6 +7,7 @@ Requirements:
 	- python 2.6	http://www.python.org
 	- NLTK 		http://www.nltk.org
 	- heapdict 	https://github.com/dangra/heapdict/tarball/cheapdict
-	- cython (optional)
+	- cython (optional). compile with:
+		python setup.py build_ext --inplace
 
 plcfrs.py, rcgrules.py and test.py can be run without arguments as a demonstration.
