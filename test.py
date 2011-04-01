@@ -53,26 +53,29 @@ def export(tree, sent, n):
 
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
-corpus = NegraCorpusReader(".", "sample2.export")
+corpus = NegraCorpusReader(".", "sample2\.export")
 #corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
 trees, sents = corpus.parsed_sents()[:3600], corpus.sents()[:3600]
 
 dop = True
 grammar = induce_srcg(list(trees), sents, h=1, v=1)
-if dop: dopgrammar = dop_srcg_rules(list(trees), list(sents))
+#trees=list(trees)
+#for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
+if dop: dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False)
 
 nodes = sum(len(list(a.subtrees())) for a in trees)
-if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes, max", nodes*8, "nonterminals"
+if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", nodes*8-len(trees), "nonterminals"
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
-#trees, sents, blocks = corpus.parsed_sents()[3600:], corpus.tagged_sents()[3600:], corpus.blocks()[3600:]
+#trees, sents, blocks = corpus.parsed_sents()[3600:3700], corpus.tagged_sents()[3600:3700], corpus.blocks()[3600:3700]
 trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
 maxlen = 99
 maxsent = 360
-viterbi = True
+viterbi = False
 sample = False
-n = 1
+n = 1 #number of top-derivations to parse (should become n-best)
+m = 1000 #number of derivations to sample/enumerate
 nsent = 0
 exact, exacts = 0, 0
 snoparse, dnoparse = 0, 0
@@ -113,7 +116,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 			exacts += 1
 		else:
 			print "labeled precision", prec, "recall", rec, "f-measure", f1
-			print result.pprint(margin=1000)
+		print result.pprint(margin=1000)
 		sresults.append(result)
 		break
 	else:
@@ -132,7 +135,10 @@ for tree, sent, block in zip(trees, sents, blocks):
 	print "DOP:",
 	chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start='ROOT', viterbi=viterbi, n=n)
 	print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
-	for dresult, prob in mostprobableparse(chart, start,n=1000,sample=sample).items() if chart else ():
+	if chart:
+		mpp = mostprobableparse(chart, start,n=m,sample=sample).items()
+		for a,b in mpp: print a,b
+		dresult, prob = max(mpp, key=lambda x: x[1])
 		print "p =", prob,
 		dresult = rem_marks(Tree.convert(dresult))
 		dresult.un_chomsky_normal_form()
@@ -149,7 +155,6 @@ for tree, sent, block in zip(trees, sents, blocks):
 			print "labeled precision", prec, "recall", rec, "f-measure", f1
 			print dresult.pprint(margin=1000)
 		dresults.append(dresult)
-		break
 	else:
 		print "no parse"
 		dresult = Tree("ROOT", [Tree("PN", [i]) for i in range(len(sent))])
@@ -168,13 +173,13 @@ open("test.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerat
 open("test.dop", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
 open("test.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a,n) for n,a in enumerate(gold))
 print "SRCG:"
-print "exact match", lps.count(1.0), "/", len(lps), "=", lps.count(1.0) / float(len(lps)) if lps else "zerodiv"
+print "exact match", lfs.count(1.0), "/", len(lfs), "=", lfs.count(1.0) / float(len(lfs)) if lfs else "zerodiv"
 print "lp", scorrect / float(sconst), "lr", scorrect / float(gconst), 
 print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
 print "coverage", (len(lps) - snoparse), "/", len(lps), "=", (len(lps) - snoparse) / float(len(lps)) if lps else "zerodiv"
 print
 print "DOP:"
-print "exact match", lp.count(1.0), "/", len(lp), "=", lp.count(1.0) / float(len(lp)) if lp else "zerodiv"
+print "exact match", lf.count(1.0), "/", len(lf), "=", lf.count(1.0) / float(len(lf)) if lf else "zerodiv"
 print "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst), 
 print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
 print "coverage", (len(lp) - dnoparse), "/", len(lp), "=", (len(lp) - dnoparse) / float(len(lp)) if lp else "zerodiv"

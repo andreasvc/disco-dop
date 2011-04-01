@@ -255,7 +255,7 @@ def mostprobableparse(chart, start, n=100, sample=False):
 		parsetrees = defaultdict(float)
 		m = 0
 		for a,prob in derivations:
-			parsetrees[removeids(a).freeze()] += prob
+			parsetrees[removeids(a).freeze()] += e**prob
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
