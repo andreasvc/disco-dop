@@ -20,12 +20,12 @@ import re
 #from bit import *
 
 cdef extern from "bit.h":
-	int nextset(long vec, int pos)
-	int nextunset(long vec, int pos)
+	int nextset(unsigned long vec, int pos)
+	int nextunset(unsigned long vec, int pos)
 
 cdef class ChartItem:
 	cdef public char *label
-	cdef public long vec
+	cdef public unsigned long vec
 	cdef int _hash
 	def __init__(self, label, vec):
 		self.label = label
@@ -122,7 +122,7 @@ def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, dict unary, dict lbinary, dict rbinary, int bitlen):
 	cdef double z, y
 	cdef str I = Ih.label
-	cdef long Ir = Ih.vec
+	cdef unsigned long Ir = Ih.vec
 	cdef ChartItem I1h
 	cdef list result = []
 	for rule, z in unary[I]:
@@ -137,7 +137,7 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, dict unary, dict 
 				result.append((ChartItem(rule[0][0], I1h.vec ^ Ir), ((x+y+z, z), (I1h, Ih))))
 	return result
 
-cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
+cdef inline bint concat(tuple yieldfunction, unsigned long lvec, unsigned long rvec, int bitlen):
 	if lvec & rvec: return False
 	if len(yieldfunction) == 1 and len(yieldfunction[0]) == 2:
 		if yieldfunction[0][0] == 0 and yieldfunction[0][1] == 1:
@@ -186,19 +186,19 @@ cdef inline bint concat(tuple yieldfunction, long lvec, long rvec, int bitlen):
 	return True
 
 # bit operations adapted from http://wiki.python.org/moin/BitManipulation
-cdef inline int nextset1(long a, int pos):
+cdef inline int nextset1(unsigned long a, int pos):
 	cdef int result = pos
 	while (not (a >> result) & 1) and a >> result:
 		result += 1
 	return result if a >> result else -1
 
-cdef inline int nextunset1(long a, int pos):
+cdef inline int nextunset1(unsigned long a, int pos):
 	cdef int result = pos
 	while (a >> result) & 1:
 		result += 1
 	return result
 
-cdef inline bint testbit(long a, int offset):
+cdef inline bint testbit(unsigned long a, int offset):
 	return a & (1 << offset)
 
 def bitcount(a):
