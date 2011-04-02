@@ -43,14 +43,7 @@ class ChartItem:
 def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary, lbinary, rbinary = defaultdict(list), defaultdict(list), defaultdict(list)
-	# negate the log probabilities because the heap is a min-heap
-	for r,w in grammar:
-		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
-		elif len(r[0]) == 3:
-			lbinary[r[0][1]].append((r, -w))
-			rbinary[r[0][2]].append((r, -w))
-		else: raise ValueError("grammar not binarized: %s" % repr(r))
+	unary, lbinary, rbinary, bylhs = grammar
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
 	A, C, Cx = heapdict(), defaultdict(list), defaultdict(dict)
@@ -130,8 +123,8 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 			return bitminmax(rvec, lvec)
 		else: raise ValueError("non-binary element in yieldfunction")
 	#this algorithm taken from rparse FastYFComposer.
-	lpos = nextset(lvec, 0, bitlen)
-	rpos = nextset(rvec, 0, bitlen)
+	lpos = nextset(lvec, 0)
+	rpos = nextset(rvec, 0)
 	for arg in yieldfunction:
 		m = len(arg) - 1
 		for n, b in enumerate(arg):
@@ -142,7 +135,7 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 				if lpos == -1 or (rpos != -1 and rpos <= lpos):
 					return False
 				# jump to next gap
-				lpos = nextunset(lvec, lpos, bitlen)
+				lpos = nextunset(lvec, lpos)
 				# there should be a gap if and only if
 				# this is the last element of this argument
 				if rpos != -1 and rpos < lpos: return False
@@ -150,17 +143,17 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 					if testbit(rvec, lpos): return False
 				elif not testbit(rvec, lpos): return False
 				#jump to next argument
-				lpos = nextset(lvec, lpos, bitlen)
+				lpos = nextset(lvec, lpos)
 			elif b == 1:
 				# vice versa to the above
 				if rpos == -1 or (lpos != -1 and lpos <= rpos):
 					return False
-				rpos = nextunset(rvec, rpos, bitlen)
+				rpos = nextunset(rvec, rpos)
 				if lpos != -1 and lpos < rpos: return False
 				if n == m:
 					if testbit(lvec, rpos): return False
 				elif not testbit(lvec, rpos): return False
-				rpos = nextset(rvec, rpos, bitlen)
+				rpos = nextset(rvec, rpos)
 			else: raise ValueError("non-binary element in yieldfunction")
 	if lpos != -1 or rpos != -1:
 		return False
@@ -186,15 +179,15 @@ def nextunset2(a, pos, bitlen):
 		result += 1
 	return pos + result - 1
 
-def nextset(a, pos, bitlen):
+def nextset(a, pos):
 	result = pos
-	while (not (a >> result) & 1) and result < bitlen:
+	while (not (a >> result) & 1) and a >> result:
 		result += 1
-	return result if result < bitlen else -1
+	return result if a >> result else -1
 
-def nextunset(a, pos, bitlen):
+def nextunset(a, pos):
 	result = pos
-	while (a >> result) & 1 and result < bitlen:
+	while (a >> result) & 1:
 		result += 1
 	return result
 

@@ -3,7 +3,7 @@ from nltk import ImmutableTree, Tree, FreqDist
 from math import log, e
 from itertools import chain, count, islice
 from pprint import pprint
-from copy import deepcopy
+from collections import defaultdict
 import re
 
 def rangeheads(s):
@@ -108,6 +108,18 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 		(float(fd[rule[0][0]]) * ntfd[rule[0][0].rsplit('@',1)[0]] 
 		if '@' not in rule[0][0] and normalize else 1)))
 		for rule, freq in rules.items()]
+
+def splitgrammar(grammar):
+	unary, lbinary, rbinary, bylhs = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
+	# negate the log probabilities because the heap we use is a min-heap
+	for r,w in grammar:
+		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
+		elif len(r[0]) == 3:
+			lbinary[r[0][1]].append((r, -w))
+			rbinary[r[0][2]].append((r, -w))
+		else: raise ValueError("grammar not binarized: %s" % repr(r))
+		bylhs[r[0][0]].append((r, -w))
+	return unary, lbinary, rbinary, bylhs
 
 def canonicalize(tree):
 	for a in tree.subtrees():

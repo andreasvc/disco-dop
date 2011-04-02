@@ -1,6 +1,6 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader
-from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, extractfragments
+from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, extractfragments, splitgrammar
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
 from itertools import islice, chain
@@ -52,29 +52,29 @@ def export(tree, sent, n):
 
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
-corpus = NegraCorpusReader(".", "sample2\.export")
-#corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
+#corpus = NegraCorpusReader(".", "sample2\.export")
+corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
 trees, sents = corpus.parsed_sents()[:3600], corpus.sents()[:3600]
 
 dop = True
-grammar = induce_srcg(list(trees), sents, h=1, v=1)
+grammar = splitgrammar(induce_srcg(list(trees), sents, h=1, v=1))
 #trees=list(trees)
 #for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
-if dop: dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False)
+if dop: dopgrammar = splitgrammar(dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False))
 
 nodes = sum(len(list(a.subtrees())) for a in trees)
 if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", nodes*8-len(trees), "nonterminals"
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
-#trees, sents, blocks = corpus.parsed_sents()[3600:3700], corpus.tagged_sents()[3600:3700], corpus.blocks()[3600:3700]
-trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-maxlen = 99
-maxsent = 360
+trees, sents, blocks = corpus.parsed_sents()[3600:], corpus.tagged_sents()[3600:], corpus.blocks()[3600:]
+#trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
+maxlen = 10
+maxsent = 4
 viterbi = False
-sample = False
-n = 1 #number of top-derivations to parse (should become n-best)
-m = 1000 #number of derivations to sample/enumerate
+sample = True
+n = 1    #number of top-derivations to parse (should become n-best)
+m = 10000 #number of derivations to sample/enumerate
 nsent = 0
 exact, exacts = 0, 0
 snoparse, dnoparse = 0, 0
@@ -115,7 +115,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 			exacts += 1
 		else:
 			print "labeled precision", prec, "recall", rec, "f-measure", f1
-		print result.pprint(margin=1000)
+			print result.pprint(margin=1000)
 		sresults.append(result)
 		break
 	else:
@@ -136,8 +136,8 @@ for tree, sent, block in zip(trees, sents, blocks):
 	print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
 	if chart:
 		mpp = mostprobableparse(chart, start,n=m,sample=sample).items()
-		for a,b in mpp: print a,b
 		dresult, prob = max(mpp, key=lambda x: x[1])
+		#for a,b in mpp: print a,b
 		print "p =", prob,
 		dresult = rem_marks(Tree.convert(dresult))
 		dresult.un_chomsky_normal_form()
@@ -166,6 +166,10 @@ for tree, sent, block in zip(trees, sents, blocks):
 	lp.append(prec) 
 	lr.append(rec)
 	lf.append(f1)
+	print "srcg em", lfs.count(1.0) / float(len(lfs)), "lp", scorrect / float(sconst), "lr", scorrect / float(gconst), 
+	print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
+	print "dop  em", lf.count(1.0) / float(len(lf)), "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst), 
+	print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
 	print
 
 open("test.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(sresults, gsent)))

@@ -3,13 +3,18 @@ inline int nextunset(unsigned long vec, int pos);
 
 // with gcc builtins:(more portable than assembly)
 inline int nextset(unsigned long vec, int pos) {
+	return pos + __builtin_ffsl(vec >> pos) - 1;
 	// maybe this check is redundant?
-	return (vec >> pos) ? pos + __builtin_ffsl(vec >> pos) - 1 : -1;
+	//return (vec >> pos) ? pos + __builtin_ffsl(vec >> pos) - 1 : -1;
 }
 inline int nextunset(unsigned long vec, int pos) {
 	return pos + __builtin_ffsl(~(vec >> pos)) - 1;
 }
 
+inline int bitminmax(unsigned long a, unsigned long b) {
+	return nextset(b, 0) == nextunset(a, nextset(a, 0));
+	//return (64 - __builtin_clzl(a)) == __builtin_ffsl(b);
+}
 // [we can do it with unsigned long long to scale to 64 bits]:
 // __builtin_ffsll()
 

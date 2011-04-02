@@ -22,6 +22,7 @@ import re
 cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
 	int nextunset(unsigned long vec, int pos)
+	bint bitminmax(unsigned long a, unsigned long b)
 
 cdef class ChartItem:
 	cdef public char *label
@@ -50,16 +51,9 @@ cdef class ChartItem:
 def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	cdef dict unary = <dict>defaultdict(list)
-	cdef dict lbinary = <dict>defaultdict(list)
-	cdef dict rbinary = <dict>defaultdict(list)
-	# negate the log probabilities because the heap is a min-heap
-	for r,w in grammar:
-		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
-		elif len(r[0]) == 3:
-			lbinary[r[0][1]].append((r, -w))
-			rbinary[r[0][2]].append((r, -w))
-		else: raise ValueError("grammar not binarized: %s" % repr(r))
+	cdef dict unary = <dict>grammar[0]
+	cdef dict lbinary = <dict>grammar[1]
+	cdef dict rbinary = <dict>grammar[2]
 	cdef ChartItem Ih, I1h, goal
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	cdef int m = 0, maxA = 0
@@ -208,7 +202,7 @@ def bitcount(a):
 		count += 1
 	return count
 
-cdef inline bint bitminmax(long a, long b):
+cdef inline bint bitminmax1(unsigned long a, unsigned long b):
 	"""test if the least and most significant bits of a and b are 
 	consecutive. we shift a and b until they meet in the middle (return true)
 	or collide (return false)"""
