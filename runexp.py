@@ -7,6 +7,7 @@ from itertools import islice, chain
 from math import log, e
 from pprint import pprint
 import cPickle
+import re
 try: 
 	from plcfrs_cython import parse, mostprobableparse
 except:
@@ -20,6 +21,12 @@ def rem_marks(tree):
 		tree[a] = int(tree[a])
 	return tree
 
+def escapetree(tree):
+	result = Tree(re.sub("\$\(", "$[", tree))
+	for a in result.subtrees(lambda x: x.node == "$["):
+		a.node = "$("
+	return result
+	
 def bracketings(tree):
 	# sorted or not?
 	return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
@@ -32,6 +39,8 @@ def mean(seq):
 	return sum(seq) / float(len(seq)) if seq else "zerodiv"
 
 def export(tree, sent, n):
+	""" Convert a tree with indices as leafs and a sentence with the
+	corresponding non-terminals to a single string in Negra's export format """
 	result = ["#BOS %d" % n]
 	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
 	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
@@ -52,8 +61,8 @@ def export(tree, sent, n):
 
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
-#corpus = NegraCorpusReader(".", "sample2\.export")
-corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
+corpus = NegraCorpusReader(".", "sample2\.export")
+#corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
 trees, sents = corpus.parsed_sents()[:3600], corpus.sents()[:3600]
 
 dop = True
@@ -67,9 +76,9 @@ if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", n
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
-trees, sents, blocks = corpus.parsed_sents()[3600:], corpus.tagged_sents()[3600:], corpus.blocks()[3600:]
-#trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-maxlen = 10
+#trees, sents, blocks = corpus.parsed_sents()[3600:], corpus.tagged_sents()[3600:], corpus.blocks()[3600:]
+trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
+maxlen = 99
 maxsent = 4
 viterbi = False
 sample = True
@@ -101,7 +110,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 	print "SRCG:",
 	chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start='ROOT', viterbi=True)
 	for result, prob in enumchart(chart, start) if chart else ():
-		result = rem_marks(result)
+		result = rem_marks(escapetree(result))
 		result.un_chomsky_normal_form()
 		print "p =", e**prob,
 		candb = set(bracketings(result))
@@ -135,11 +144,11 @@ for tree, sent, block in zip(trees, sents, blocks):
 	chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start='ROOT', viterbi=viterbi, n=n)
 	print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
 	if chart:
-		mpp = mostprobableparse(chart, start,n=m,sample=sample).items()
+		mpp = mostprobableparse(chart, start, n=m, sample=sample).items()
 		dresult, prob = max(mpp, key=lambda x: x[1])
 		#for a,b in mpp: print a,b
 		print "p =", prob,
-		dresult = rem_marks(Tree.convert(dresult))
+		dresult = rem_marks(escapetree(dresult))
 		dresult.un_chomsky_normal_form()
 		candb = set(bracketings(dresult))
 		prec = precision(goldb, candb)
@@ -166,10 +175,12 @@ for tree, sent, block in zip(trees, sents, blocks):
 	lp.append(prec) 
 	lr.append(rec)
 	lf.append(f1)
-	print "srcg em", lfs.count(1.0) / float(len(lfs)), "lp", scorrect / float(sconst), "lr", scorrect / float(gconst), 
-	print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
-	print "dop  em", lf.count(1.0) / float(len(lf)), "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst), 
-	print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
+	try:
+		print "srcg em", lfs.count(1.0) / float(len(lfs)), "lp", scorrect / float(sconst), "lr", scorrect / float(gconst), 
+		print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
+		print "dop  em", lf.count(1.0) / float(len(lf)), "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst), 
+		print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
+	except ZeroDivisionError: print "zerodiv"
 	print
 
 open("test.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(sresults, gsent)))

@@ -6,9 +6,9 @@ from math import e
 
 class Item:
 	__slots__ = ("state", "len", "lr", "gaps", "_hash")
-	def __init__(self, *lotsofvariables):
-		self.state, self.len, self.lr, self.gaps = lotsofvariables
-		self._hash = hash(lotsofvariables)
+	def __init__(self, state, len, lr, gaps):
+		self.state, self.len, self.lr, self.gaps = state, len, lr, gaps
+		self._hash = hash((state, len, lr, gaps))
 	def __hash__(self):
 		return self._hash
 	def __repr__(self):
@@ -28,8 +28,9 @@ def getestimates(grammar, maxlen, goal):
 	print 
 	print x, len(insidescores) * sum(map(len, insidescores.values()))
 	outside = outsidelr(grammar, insidescores, maxlen, goal)
-	for a in outside:
-		print a, e**-outside[a]
+	#for a in outside:
+	#	print a, e**-outside[a]
+	print len(outside)
 	
 
 def simpleinside(grammar, maxlen):
@@ -92,102 +93,116 @@ def insideconcat(a, b, yieldfunction, maxlen):
 		result &= ~(1 << resultpos)
 	return result
 
+def getoutside(I):
+	if I.len+I.lr+I.gaps <= maxlen: return outside[I]
+	else: return 0.0
+
 def outsidelr(grammar, insidescores, maxlen, goal):
 	u,l,r,bylhs = grammar
 	agenda = heapdict()
 	outside = defaultdict(lambda: float('infinity'))
-	for a in range(1, maxlen):
-		agenda[Item(goal, a, 0, 0)] = 0.0
-		outside[Item(goal, a, 0, 0)] = 0.0
+	for a in range(1, maxlen+1):
+		newitem = Item(goal, a, 0, 0)
+		agenda[newitem] = 0.0
+		outside[newitem] = 0.0
 	while agenda:
 		I, x = agenda.popitem()
-		print len(agenda), I, e**-x
-		totlen = I.len + I.lr + I.gaps
-		for rule, y in bylhs[I.state]:
-			# X -> A
-			if len(rule[0]) == 2:
-				newitem = Item(rule[0][1], I.len, I.lr, I.gaps)
-				if I.len+I.lr+I.gaps <= maxlen and outside[newitem] > x + y:
-					agenda[newitem] = x + y
-			else:
-				# X -> A B
-				addgaps = addright = 0
-				stopaddright = False
-				for arg in rule[1][::-1]:
-					for x in arg[::-1]:
-						if x == 0 and not stopaddright:
-							stopaddright = True
-						elif x == 1:
-							if not stopaddright:
-								addright += 1
-							else:
-								addgaps += 1
-						else: raise ValueError("strange value in yield function")
-
-				leftarity = sum(arg.count(0) for arg in rule[1])
-				rightarity = sum(arg.count(1) for arg in rule[1])
-				# binary-left (A is left)
-				for lenA in range(leftarity, I.len - rightarity + 1):
-					lenB = I.len - lenA
-					insidescore = insidescores[rule[0][2]][lenB]
-					for lr in range(I.lr, I.lr + lenB + 1):
-						if addright == 0 and not lr == I.lr: continue
-						for ga in range(leftarity - 1, totlen+1):
-							if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
-								newitem = Item(rule[0][1], lenA, lr, ga)
-								score = x + insidescore + y
-								if score < float('infinity') and lenA + lr + ga <= maxlen and outside[newitem] > score:
-									agenda[newitem] = score
-									outside[newitem] = score
-
-				# X -> B A
-				addgaps = addleft = 0
-				stopaddleft = False
-				for arg in rule[1]:
-					for x in arg:
-						if x == 1:
-							if not stopaddleft:
-								stopaddleft = True
-						elif x == 0:
-							if stopaddleft:
-								addgaps += 1
-							else:
-								addleft += 1
-						else: raise ValueError("strange value in yield function")
-
-				addright = 0
-				stopaddright = False
-				for arg in rule[1][::-1]:
-					for x in arg[::-1]:
-						if x == 1:
-							if not stopaddright:
+		if x == outside[I]:
+			#print len(agenda), I, e**-x
+			totlen = I.len + I.lr + I.gaps
+			for rule, y in bylhs[I.state]:
+				# X -> A
+				if len(rule[0]) == 2:
+					if rule[0][1] != "Epsilon":
+						newitem = Item(rule[0][1], I.len, I.lr, I.gaps)
+						score = x + y
+						if outside[newitem] > score:
+							agenda[newitem] = score
+				else:
+					# X -> A B
+					addgaps = addright = 0
+					stopaddright = False
+					for arg in rule[1][::-1]:
+						for x in arg[::-1]:
+							if x == 0:
 								stopaddright = True
-						elif x == 0:
-							if not stopaddright:
-								addright += 1
-						else: raise ValueError("strange value in yield function")
-				addgaps -= addright
-				
-				# binary-right (A is right)
-				for lenA in range(rightarity, I.len - leftarity + 1):
-					lenB = I.len - lenA
-					insidescore = insidescores[rule[0][1]][lenB]
-					for lr in range(I.lr, I.lr + lenB + 1):
-						for ga in range(rightarity - 1, totlen+1):
-							if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
-								newitem = Item(rule[0][2], lenA, lr, ga)
-								score = x + insidescore + y
-								if score < float('infinity') and lenA + lr + ga <= maxlen and outside[newitem] > score:
-									agenda[newitem] = score
-									outside[newitem] = score
+							elif x == 1:
+								if not stopaddright:
+									addright += 1
+								else:
+									addgaps += 1
+							else: raise ValueError("strange value in yield function")
+
+					leftarity = sum(arg.count(0) for arg in rule[1])
+					rightarity = sum(arg.count(1) for arg in rule[1])
+					# binary-left (A is left)
+					for lenA in range(leftarity, I.len - rightarity + 1):
+						lenB = I.len - lenA
+						insidescore = insidescores[rule[0][2]][lenB]
+						if insidescore < float('infinity'):
+							for lr in range(I.lr, I.lr + lenB + 1):
+								if addright == 0 and not lr == I.lr: continue
+								for ga in range(leftarity - 1, totlen+1):
+									if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
+										newitem = Item(rule[0][1], lenA, lr, ga)
+										score = x + insidescore + y
+										if outside[newitem] > score:
+											agenda[newitem] = score
+											outside[newitem] = score
+
+					# X -> B A
+					addgaps = addleft = 0
+					stopaddleft = False
+					for arg in rule[1]:
+						for x in arg:
+							if x == 1:
+								stopaddleft = True
+							elif x == 0:
+								if stopaddleft:
+									addgaps += 1
+								else:
+									addleft += 1
+							else: raise ValueError("strange value in yield function")
+
+					addright = 0
+					stopaddright = False
+					for arg in rule[1][::-1]:
+						for x in arg[::-1]:
+							if x == 1:
+								stopaddright = True
+							elif x == 0:
+								if not stopaddright:
+									addright += 1
+							else: raise ValueError("strange value in yield function")
+					addgaps -= addright
+					
+					# binary-right (A is right)
+					for lenA in range(rightarity, I.len - leftarity + 1):
+						lenB = I.len - lenA
+						insidescore = insidescores[rule[0][1]][lenB]
+						if insidescore < float('infinity'):
+							for lr in range(I.lr, I.lr + lenB + 1):
+								for ga in range(rightarity - 1, totlen+1):
+									if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
+										newitem = Item(rule[0][2], lenA, lr, ga)
+										score = x + insidescore + y
+										if outside[newitem] > score:
+											agenda[newitem] = score
+											outside[newitem] = score
 
 	return outside
 
 def main():
 	from negra import NegraCorpusReader
 	from rcgrules import induce_srcg, dop_srcg_rules, splitgrammar
+	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2\.export")
-	grammar = splitgrammar(induce_srcg(corpus.parsed_sents(), corpus.sents()))
-	getestimates(grammar, 30, "ROOT")
+	#grammar = splitgrammar(induce_srcg(corpus.parsed_sents(), corpus.sents()))
+	#getestimates(grammar, 30, "ROOT")
+	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
+	tree.chomsky_normal_form()
+	sent = "Daruber muss nachgedacht werden".split()
+	grammar = splitgrammar(dop_srcg_rules([tree], [sent]))
+	getestimates(grammar, 6, "S")
 
 if __name__ == '__main__': main()

@@ -105,8 +105,8 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	# should we distinguish what kind of arguments a node takes in fd?
 	return [(rule, log(freq * reduce((lambda x,y: x*y),
 		map((lambda z: fd[z] if '@' in z else 1), rule[0][1:])) / 
-		(float(fd[rule[0][0]]) * ntfd[rule[0][0].rsplit('@',1)[0]] 
-		if '@' not in rule[0][0] and normalize else 1)))
+		(float(fd[rule[0][0]]) * (ntfd[rule[0][0].rsplit('@',1)[0]] 
+		if '@' not in rule[0][0] and normalize else 1))))
 		for rule, freq in rules.items()]
 
 def splitgrammar(grammar):
@@ -281,13 +281,13 @@ def enumchart(chart, start, depth=0):
 	for a,p in chart[start][::-1]:
 		if len(a) == 1:
 			if a[0][0] == "Epsilon":
-				yield Tree(start[0], [a[0][1]]), p 
-				#yield "(%s %d)" % (start[0], a[0][1][0]), p
+				#yield Tree(start[0], [a[0][1]]), p 
+				yield "(%s %d)" % (start[0], a[0][1]), p
 				continue
 			elif start in a: continue	#shouldn't happen
 		for x in bfcartpi(map(lambda y: enumchart(chart, y, depth+1), a)):
-			#tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
-			tree = Tree(start[0], zip(*x)[0])
+			tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
+			#tree = Tree(start[0], zip(*x)[0])
 			yield tree, p+sum(z[1] for z in x)
 
 def do(sent, grammar):
