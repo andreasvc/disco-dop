@@ -105,7 +105,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	# should we distinguish what kind of arguments a node takes in fd?
 	return [(rule, log(freq * reduce((lambda x,y: x*y),
 		map((lambda z: fd[z] if '@' in z else 1), rule[0][1:])) / 
-		(float(fd[rule[0][0]]) * (ntfd[rule[0][0].rsplit('@',1)[0]] 
+		(float(fd[rule[0][0]]) * (ntfd[rule[0][0]] 
 		if '@' not in rule[0][0] and normalize else 1))))
 		for rule, freq in rules.items()]
 

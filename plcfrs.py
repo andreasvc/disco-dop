@@ -239,7 +239,6 @@ def mostprobableparse(chart, start, n=100, sample=False):
 				if not len(b): print "spurious chart entry", a
 			derivations = set(samplechart(chart, start) for x in range(n))
 			derivations.discard(None)
-			derivations = map(lambda x: (Tree(x[0]), x[1]), derivations)
 			#todo: calculate real parse probabilities
 		else:
 			#chart = filterchart(chart, start)
@@ -248,7 +247,8 @@ def mostprobableparse(chart, start, n=100, sample=False):
 		parsetrees = defaultdict(float)
 		m = 0
 		for a,prob in derivations:
-			parsetrees[removeids(a).freeze()] += e**prob
+			# if necessary, we could do the addition in log space
+			parsetrees[re.sub("@[0-9]+","",a)] += e**prob
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
