@@ -286,7 +286,7 @@ def enumchart(chart, start, tolabel, depth=0):
 	if depth >= 100: return   # this should never happen
 	for a,p in chart[start][::-1]:
 		if len(a) == 1:
-			if a not in chart: #a[0][0] == "Epsilon":
+			if a[0] not in chart: #a[0][0] == "Epsilon":
 				#yield Tree(start[0], [a[0][1]]), p 
 				yield "(%s %d)" % (tolabel[start.label], a[0][1]), p
 				continue

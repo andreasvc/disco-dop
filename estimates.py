@@ -4,8 +4,6 @@ from plcfrs import ChartItem, bitcount, nextset, nextunset
 from collections import defaultdict
 from math import e
 import cython
-if cython.compiled: print "cython"
-else: print "not cython"
 
 class Item:
 	__slots__ = ("state", "len", "lr", "gaps", "_hash")
@@ -18,6 +16,13 @@ class Item:
 		return "%s len=%d lr=%d gaps=%d" % (self.state, self.len, self.lr, self.gaps)
 
 def getestimates(grammar, maxlen, goal):
+	print "getting inside"
+	insidescores = simpleinside(grammar, maxlen)
+	print "getting outside"
+	outside = outsidelr(grammar, insidescores, maxlen, goal)
+	return outside
+
+def testestimates(grammar, maxlen, goal):
 	#insidescores = inside(grammar, maxlen)
 	#for a in insidescores:
 	#	for b in insidescores[a]:
@@ -26,26 +31,21 @@ def getestimates(grammar, maxlen, goal):
 	#print
 	print "getting inside"
 	insidescores = simpleinside(grammar, maxlen)
-	#for a in insidescores:
-	#	for b in insidescores[a]:
-	#		print "%s[%d] =" % (a, b), e**-insidescores[a][b]
-	#print 
-	#print len(insidescores) * sum(map(len, insidescores.values()))
+	for a in insidescores:
+		for b in insidescores[a]:
+			print "%s[%d] =" % (grammar[5][a], b), e**-insidescores[a][b]
+	print 
+	print len(insidescores) * sum(map(len, insidescores.values()))
 	print "getting outside"
 	outside = outsidelr(grammar, insidescores, maxlen, goal)
-	#infinity = float('infinity')
-	#for a in sorted(outside):
-	#	if outside[a] < infinity: print a, e**-outside[a]
-	#
-	#print len(outside)
-	#return
-	#cnt = 0
-	#for a in outside:
-	#	for bn, b in enumerate(outside[a]):
-	#		for cn, c in enumerate(b):
-	#			for dn, d in enumerate(c):
-	#				if d < infinity: print a,bn,cn,dn, e**-d; cnt += 1
-	#print cnt
+	infinity = float('infinity')
+	cnt = 0
+	for an, a in enumerate(outside):
+		for bn, b in enumerate(a):
+			for cn, c in enumerate(b):
+				for dn, d in enumerate(c):
+					if d < infinity: print grammar[5][an],bn,cn,dn, e**-d; cnt += 1
+	print cnt
 	return outside
 
 def getoutside(outside, maxlen, slen, label, vec):
@@ -69,7 +69,6 @@ def doinside(grammar, maxlen, concat):
 	unary, lbinary, rbinary, bylhs, toid, tolabel = grammar
 	agenda = heapdict()
 	insidescores = defaultdict(lambda: defaultdict(lambda: float('infinity')))
-	#insidescores = defaultdict(dict)
 	for rule,z in unary[toid['Epsilon']]:
 		agenda[ChartItem(rule[0][0], 1)] = 0.0
 	while agenda:
@@ -119,16 +118,19 @@ def insideconcat(a, b, yieldfunction, maxlen):
 	return result
 
 def outsidelr(grammar, insidescores, maxlen, goal):
+	if cython.compiled: print "estimates: running cython"
+	else: print "estimates: not cython"
 	u,l,r,bylhs, toid, tolabel = grammar
 	Epsilon = toid["Epsilon"]
 	agenda = heapdict()
 	infinity = float('infinity')
-	#outside = dict((lhs, [[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)]) for lhs in bylhs)
+	# this could become a numpy array if that is advantageous:
 	outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for lhs in tolabel]
 	for a in range(1, maxlen+1):
 		newitem = Item(goal, a, 0, 0)
 		agenda[newitem] = 0.0
 		outside[goal][a][0][0] = 0.0
+	print "initialized"
 	while agenda:
 		I, x = agenda.popitem()
 		if x == outside[I.state][I.len][I.lr][I.gaps]:
@@ -222,13 +224,13 @@ def main():
 	from negra import NegraCorpusReader
 	from rcgrules import induce_srcg, dop_srcg_rules, splitgrammar
 	from nltk import Tree
-	#corpus = NegraCorpusReader(".", "sample2\.export")
-	#grammar = splitgrammar(dop_srcg_rules(corpus.parsed_sents(), corpus.sents()))
-	#getestimates(grammar, 30, grammar[3]["ROOT"])
-	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
-	tree.chomsky_normal_form()
-	sent = "Daruber muss nachgedacht werden".split()
-	grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
-	getestimates(grammar, 6, grammar[3]["S"])
+	corpus = NegraCorpusReader(".", "sample2\.export")
+	grammar = splitgrammar(dop_srcg_rules(corpus.parsed_sents(), corpus.sents()))
+	testestimates(grammar, 30, grammar[4]["ROOT"])
+	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
+	#tree.chomsky_normal_form()
+	#sent = "Daruber muss nachgedacht werden".split()
+	#grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
+	#testestimates(grammar, 6, grammar[4]["S"])
 
 if __name__ == '__main__': main()

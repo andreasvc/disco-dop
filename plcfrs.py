@@ -225,7 +225,7 @@ def filterchart(chart, start):
 
 def samplechart(chart, start, lolabel):
 	entry, p = choice(chart[start])
-	if len(entry) == 1 and entry[0][0] == "Epsilon":
+	if len(entry) == 1 and entry[0] not in chart: # entry[0][0] == "Epsilon":
 		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
 	children = [samplechart(chart, a, tolabel) for a in entry]
 	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))

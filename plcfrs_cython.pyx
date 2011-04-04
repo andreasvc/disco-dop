@@ -74,18 +74,22 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=lam
 		for rule, z in unary[Epsilon]:
 			if w in rule[1]:
 				# if we are given gold tags, make sure we only allow matching
-				# tags - modulo addresses introduced by the DOP reduction
-				if tags and tags[1] != tolabel[rule[0][0]].split("@")[0]: continue
+				# tags - after removing addresses introduced by the DOP reduction
+				if tags and tags[i] != tolabel[rule[0][0]].split("@")[0]: continue
 				Ih = ChartItem(rule[0][0], 1 << i)
 				I = (ChartItem(Epsilon, i),)
 				A[Ih] = (z, z, z, I)
 				recognized = True
 		if not recognized and tags:
-			Ih = ChartItem(toid[tags[i]], 1 << i)
-			I = (ChartItem(Epsilon, i),)
-			A[Ih] = (0, 0, 0, I)
-			recognized = True
-			continue
+			if tags[i] in toid:
+				Ih = ChartItem(toid[tags[i]], 1 << i)
+				I = (ChartItem(Epsilon, i),)
+				A[Ih] = (0, 0, 0, I)
+				recognized = True
+				continue
+			else:
+				print "tag not covered:", tags[i]
+				return {}, ()
 		elif not recognized:
 			print "not covered:", w
 	cdef int lensent = len(sent)
@@ -236,7 +240,7 @@ def filterchart(chart, start):
 
 def samplechart(chart, ChartItem start, dict tolabel):
 	entry, p = choice(chart[start])
-	if len(entry) == 1 and entry not in chart: #[0][0] == "Epsilon":
+	if len(entry) == 1 and entry[0] not in chart: #[0][0] == "Epsilon":
 		#return Tree(start[0], [entry[0][1]]), p
 		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
 	children = [samplechart(chart, a, tolabel) for a in entry]
