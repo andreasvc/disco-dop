@@ -111,15 +111,19 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 
 def splitgrammar(grammar):
 	unary, lbinary, rbinary, bylhs = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
+	nonterminals = list(enumerate(sorted(set(rule[0][0] for rule,weight in grammar) | set(["Epsilon"]))))
+	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
 	# negate the log probabilities because the heap we use is a min-heap
-	for r,w in grammar:
-		if len(r[0]) == 2: unary[r[0][1]].append((r, -w))
+	for (rule,yf),w in grammar:
+		r = tuple(toid[a] for a in rule), yf
+		if len(r[0]) == 2:
+			unary[r[0][1]].append((r, -w))
 		elif len(r[0]) == 3:
 			lbinary[r[0][1]].append((r, -w))
 			rbinary[r[0][2]].append((r, -w))
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 		bylhs[r[0][0]].append((r, -w))
-	return unary, lbinary, rbinary, bylhs
+	return unary, lbinary, rbinary, bylhs, toid, tolabel
 
 def canonicalize(tree):
 	for a in tree.subtrees():
@@ -274,19 +278,21 @@ def bfcartpi(seq):
 		for result in cartpi(seqlist[:n] + [seqlist[n][-1:]] + seqlist[n+1:]):
 			yield result
 
-def enumchart(chart, start, depth=0):
+def enumchart(chart, start, tolabel, depth=0):
 	"""exhaustively enumerate trees in chart headed by start in top down 
-		fashion. chart is a dictionary with lhs -> (rhs, logprob) """
-	if depth >= 100: return
+		fashion. chart is a dictionary with lhs -> [(rhs, logprob), (rhs, logprob) ... ]
+		this function doesn't really belong in this file but Cython doesn't
+		support generators so this function is "in exile" over here.  """
+	if depth >= 100: return   # this should never happen
 	for a,p in chart[start][::-1]:
 		if len(a) == 1:
-			if a[0][0] == "Epsilon":
+			if a not in chart: #a[0][0] == "Epsilon":
 				#yield Tree(start[0], [a[0][1]]), p 
-				yield "(%s %d)" % (start[0], a[0][1]), p
+				yield "(%s %d)" % (tolabel[start.label], a[0][1]), p
 				continue
 			elif start in a: continue	#shouldn't happen
-		for x in bfcartpi(map(lambda y: enumchart(chart, y, depth+1), a)):
-			tree = "(%s %s)" % (start[0], " ".join(z[0] for z in x))
+		for x in bfcartpi(map(lambda y: enumchart(chart, y, tolabel, depth+1), a)):
+			tree = "(%s %s)" % (tolabel[start.label], " ".join(z[0] for z in x))
 			#tree = Tree(start[0], zip(*x)[0])
 			yield tree, p+sum(z[1] for z in x)
 
@@ -294,10 +300,10 @@ def do(sent, grammar):
 	from plcfrs import parse
 	from dopg import removeids
 	print "sentence", sent
-	p, start = parse(sent, grammar, viterbi=False, n=100)
+	p, start = parse(sent, grammar, start=grammar[4]['S'], viterbi=False, n=100)
 	if p:
 		l = FreqDist()
-		for n,(a,prob) in enumerate(enumchart(p, start)):
+		for n,(a,prob) in enumerate(enumchart(p, start, grammar[5])):
 			#print n, prob, a
 			l.inc(removeids(a), e**prob)
 		for a in l: print l[a], a
@@ -311,7 +317,7 @@ def main():
 	pprint(srcg_productions(tree.copy(True), sent))
 	pprint(induce_srcg([tree.copy(True)], [sent]))
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
-	do(sent, dop_srcg_rules([tree], [sent]))
+	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
 
 	treebank = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))

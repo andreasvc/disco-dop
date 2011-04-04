@@ -40,10 +40,11 @@ class ChartItem:
 		#would need bitlen for proper padding
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
 
-def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
+def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary, lbinary, rbinary, bylhs = grammar
+	unary, lbinary, rbinary, bylhs, toid, tolabel = grammar
+	if start == None: start = toid['S']
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
 	A, C, Cx = heapdict(), defaultdict(list), defaultdict(dict)
@@ -52,17 +53,18 @@ def parse(sent, grammar, tags=None, start="S", viterbi=False, n=1):
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 
 	# scan
+	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for rule, z in unary["Epsilon"]:
+		for rule, z in unary[Epsilon]:
 			if w in rule[1]:
 				Ih = ChartItem(rule[0][0], 1 << i)
-				I = (ChartItem("Epsilon", i),)
+				I = (ChartItem(Epsilon, i),)
 				A[Ih] = ((z, z), I)
 				recognized = True
 		if not recognized and tags:
 			Ih = ChartItem(tags[i], 1 << i)
-			I = (ChartItem("Epsilon", i),)
+			I = (ChartItem(Epsilon, i),)
 			A[Ih] = ((0, 0), I)
 			recognized = True
 			continue
@@ -221,29 +223,29 @@ def filterchart(chart, start):
 	filter_subtree(start, chart, chart2)
 	return chart2
 
-def samplechart(chart, start):
+def samplechart(chart, start, lolabel):
 	entry, p = choice(chart[start])
 	if len(entry) == 1 and entry[0][0] == "Epsilon":
-		return "(%s %d)" % (start[0], entry[0][1]), p
-	children = [samplechart(chart, a) for a in entry]
-	tree = "(%s %s)" % (start[0], " ".join([a for a,b in children]))
+		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
+	children = [samplechart(chart, a, tolabel) for a in entry]
+	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))
 	#tree = "(%s_%s %s)" % (start[0], "_".join(repr(a) for a in start[1:]), " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 	
-def mostprobableparse(chart, start, n=100, sample=False):
+def mostprobableparse(chart, start, tolabel, n=100, sample=False):
 		""" sum over n random derivations from chart,
 			return a FreqDist of parse trees, with .max() being the MPP"""
 		print "sample =", sample,
 		if sample:
 			for a,b in chart.items():
 				if not len(b): print "spurious chart entry", a
-			derivations = set(samplechart(chart, start) for x in range(n))
+			derivations = set(samplechart(chart, start, tolabel) for x in range(n))
 			derivations.discard(None)
 			#todo: calculate real parse probabilities
 		else:
 			#chart = filterchart(chart, start)
 			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
-			derivations = islice(enumchart(chart, start), n)
+			derivations = islice(enumchart(chart, start, tolabel), n)
 		parsetrees = defaultdict(float)
 		m = 0
 		for a,prob in derivations:
@@ -253,38 +255,39 @@ def mostprobableparse(chart, start, n=100, sample=False):
 		print "(%d derivations)" % m
 		return parsetrees
 
-def pprint_chart(chart, sent):
+def pprint_chart(chart, sent, tolabel):
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
-		print a, "=>"
+		print tolabel[a[0]], bin(a[1]), "=>"
 		for b,p in chart[a]:
 			for c in b:
-				if c[0] == "Epsilon":
+				if tolabel[c[0]] == "Epsilon":
 					print "\t", repr(sent[b[0][1]]),
 				else:
-					print "\t", c,
+					print "\t", tolabel[c[0]], bin(c[1]),
 			print e**p
 		print
 
 def do(sent):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar)
-	pprint_chart(chart, sent.split())
+	pprint_chart(chart, sent.split(), grammar[5])
 	if chart:
-		for a, p in mostprobableparse(chart, start, n=1000).items():
+		for a, p in mostprobableparse(chart, start, grammar[5], n=1000).items():
 			print p, a
 	else: print "no parse"
 	print
 
 if __name__ == '__main__':
-	grammar = [((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
+	from rcgrules import splitgrammar
+	grammar = splitgrammar(
+		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
 		((('PROAV', 'Epsilon'), ('Daruber', ())), 0.0),
 		((('VAINF', 'Epsilon'), ('werden', ())), 0.0),
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
-		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)]
-
+		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
 	do("Daruber muss nachgedacht werden")
 	do("Daruber muss nachgedacht werden werden")
 	do("Daruber muss nachgedacht werden werden werden")

@@ -5,6 +5,7 @@ from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
 from itertools import islice, chain
 from math import log, e
+from functools import partial
 from pprint import pprint
 import cPickle
 import re
@@ -13,6 +14,8 @@ try:
 except:
 	from plcfrs import parse, mostprobableparse
 	print "running non-cython code"
+import pyximport; pyximport.install()
+from estimates import getestimates, getoutside
 
 def rem_marks(tree):
 	for a in tree.subtrees(lambda x: "_" in x.node):
@@ -62,7 +65,7 @@ def export(tree, sent, n):
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 corpus = NegraCorpusReader(".", "sample2\.export")
-#corpus = NegraCorpusReader("../rparse", ".*\.export", n=5)
+#corpus = NegraCorpusReader("../rparse", "tigerproc.export", n=5)
 trees, sents = corpus.parsed_sents()[:3600], corpus.sents()[:3600]
 
 dop = True
@@ -70,20 +73,25 @@ grammar = splitgrammar(induce_srcg(list(trees), sents, h=1, v=1))
 #trees=list(trees)
 #for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
 if dop: dopgrammar = splitgrammar(dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False))
+print "getting outside estimates"
+outside = getestimates(dopgrammar, 15, dopgrammar[4]["ROOT"])
+print "done"
 
+for a in trees: a.chomsky_normal_form()
 nodes = sum(len(list(a.subtrees())) for a in trees)
-if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", nodes*8-len(trees), "nonterminals"
+nts = nodes - len(trees) + len(set(b.node for a in trees for b in a.subtrees()))
+if dop: print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", nts, "nonterminals"
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
 #trees, sents, blocks = corpus.parsed_sents()[3600:], corpus.tagged_sents()[3600:], corpus.blocks()[3600:]
 trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-maxlen = 99
-maxsent = 4
-viterbi = False
-sample = True
+maxlen = 45
+maxsent = 360
+viterbi = True
+sample = False
 n = 1    #number of top-derivations to parse (should become n-best)
-m = 10000 #number of derivations to sample/enumerate
+m = 10000  #number of derivations to sample/enumerate
 nsent = 0
 exact, exacts = 0, 0
 snoparse, dnoparse = 0, 0
@@ -108,8 +116,8 @@ for tree, sent, block in zip(trees, sents, blocks):
 	gold.append(block)
 	gsent.append(sent)
 	print "SRCG:",
-	chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start='ROOT', viterbi=True)
-	for result, prob in enumchart(chart, start) if chart else ():
+	chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start=grammar[4]['ROOT'], viterbi=True)
+	for result, prob in enumchart(chart, start, grammar[5]) if chart else ():
 		result = rem_marks(escapetree(result))
 		result.un_chomsky_normal_form()
 		print "p =", e**prob,
@@ -141,10 +149,11 @@ for tree, sent, block in zip(trees, sents, blocks):
 	lfs.append(f1)
 	if not dop: continue
 	print "DOP:",
-	chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start='ROOT', viterbi=viterbi, n=n)
+	estimate = partial(getoutside, outside, 15, len(sent))
+	chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start=dopgrammar[4]['ROOT'], viterbi=viterbi, n=n, estimate=estimate)
 	print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
 	if chart:
-		mpp = mostprobableparse(chart, start, n=m, sample=sample).items()
+		mpp = mostprobableparse(chart, start, dopgrammar[5], n=m, sample=sample).items()
 		dresult, prob = max(mpp, key=lambda x: x[1])
 		#for a,b in mpp: print a,b
 		print "p =", prob,

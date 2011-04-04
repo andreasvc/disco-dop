@@ -6,8 +6,10 @@ ext_modules = [
 	Extension("plcfrs_cython", 
 			["plcfrs_cython.pyx"],
 			include_dirs=['.'],
-			library_dirs=['.'])]
-			#,libraries=['bit'])]
+			library_dirs=['.']),
+	Extension("estimates",
+		["estimates.py", "estimates.pxd"])
+	]
 
 setup(
 	name = 'plcfrs',

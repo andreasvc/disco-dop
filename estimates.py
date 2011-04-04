@@ -1,8 +1,11 @@
+# Implementation of LR estimate (Kallmeyer & Maier 2010). Ported almost directly from rparse.
 from heapdict import heapdict
 from plcfrs import ChartItem, bitcount, nextset, nextunset
 from collections import defaultdict
 from math import e
-# Implementation of LR estimate (Kallmeyer & Maier 2010). Ported almost directly from rparse.
+import cython
+if cython.compiled: print "cython"
+else: print "not cython"
 
 class Item:
 	__slots__ = ("state", "len", "lr", "gaps", "_hash")
@@ -21,26 +24,39 @@ def getestimates(grammar, maxlen, goal):
 	#		print "%s[%s] =" % (a, bin(b)[2:]), e**-insidescores[a][b]
 	#x=len(insidescores) * sum(map(len, insidescores.values()))
 	#print
+	print "getting inside"
 	insidescores = simpleinside(grammar, maxlen)
-	for a in insidescores:
-		for b in insidescores[a]:
-			print "%s[%d] =" % (a, b), e**-insidescores[a][b]
-	print 
-	print len(insidescores) * sum(map(len, insidescores.values()))
-	infinity = float('infinity')
+	#for a in insidescores:
+	#	for b in insidescores[a]:
+	#		print "%s[%d] =" % (a, b), e**-insidescores[a][b]
+	#print 
+	#print len(insidescores) * sum(map(len, insidescores.values()))
+	print "getting outside"
 	outside = outsidelr(grammar, insidescores, maxlen, goal)
+	#infinity = float('infinity')
 	#for a in sorted(outside):
 	#	if outside[a] < infinity: print a, e**-outside[a]
 	#
-	print len(outside)
+	#print len(outside)
 	#return
-	cnt = 0
-	for a in outside:
-		for bn, b in enumerate(outside[a]):
-			for cn, c in enumerate(b):
-				for dn, d in enumerate(c):
-					if d < infinity: print a,bn,cn,dn, e**-d; cnt += 1
-	print cnt
+	#cnt = 0
+	#for a in outside:
+	#	for bn, b in enumerate(outside[a]):
+	#		for cn, c in enumerate(b):
+	#			for dn, d in enumerate(c):
+	#				if d < infinity: print a,bn,cn,dn, e**-d; cnt += 1
+	#print cnt
+	return outside
+
+def getoutside(outside, maxlen, slen, label, vec):
+	if slen > maxlen: return 0.0
+	len = bitcount(vec)
+	left = nextset(vec, 0)
+	gaps = slen - len - left
+	right = slen - len - left - gaps
+	lr = left + right
+	if len+lr+gaps <= maxlen: return outside[label][len][lr][gaps]
+	else: return 0.0
 
 def inside(grammar, maxlen):
 	return doinside(grammar, maxlen, insideconcat)
@@ -50,11 +66,11 @@ def simpleinside(grammar, maxlen):
 	return doinside(grammar, maxlen, simpleconcat)
 
 def doinside(grammar, maxlen, concat):
-	unary, lbinary, rbinary, bylhs = grammar
+	unary, lbinary, rbinary, bylhs, toid, tolabel = grammar
 	agenda = heapdict()
 	insidescores = defaultdict(lambda: defaultdict(lambda: float('infinity')))
 	#insidescores = defaultdict(dict)
-	for rule,z in unary['Epsilon']:
+	for rule,z in unary[toid['Epsilon']]:
 		agenda[ChartItem(rule[0][0], 1)] = 0.0
 	while agenda:
 		I,x = agenda.popitem()
@@ -63,7 +79,7 @@ def doinside(grammar, maxlen, concat):
 		
 		results = []
 		for rule, y in unary[I.label]:
-			results.append((rule[0][0], I.vec, y+insidescores[rule[0][0]]))
+			results.append((rule[0][0], I.vec, y+insidescores[rule[0][1]][I.vec]))
 		for rule, y in lbinary[I.label]:
 			for vec in insidescores[rule[0][2]]:
 				left = concat(I.vec, vec, rule[1], maxlen)
@@ -102,15 +118,13 @@ def insideconcat(a, b, yieldfunction, maxlen):
 		result &= ~(1 << resultpos)
 	return result
 
-def getoutside(I, outside, maxlen):
-	if I.len+I.lr+I.gaps <= maxlen: return outside[I]
-	else: return 0.0
-
 def outsidelr(grammar, insidescores, maxlen, goal):
-	u,l,r,bylhs = grammar
+	u,l,r,bylhs, toid, tolabel = grammar
+	Epsilon = toid["Epsilon"]
 	agenda = heapdict()
 	infinity = float('infinity')
-	outside = dict((lhs, [[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)]) for lhs in bylhs)
+	#outside = dict((lhs, [[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)]) for lhs in bylhs)
+	outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for lhs in tolabel]
 	for a in range(1, maxlen+1):
 		newitem = Item(goal, a, 0, 0)
 		agenda[newitem] = 0.0
@@ -122,7 +136,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 			for rule, y in bylhs[I.state]:
 				# X -> A
 				if len(rule[0]) == 2:
-					if rule[0][1] != "Epsilon":
+					if rule[0][1] != Epsilon:
 						newitem = Item(rule[0][1], I.len, I.lr, I.gaps)
 						score = x + y
 						if outside[rule[0][1]][I.len][I.lr][I.gaps] > score:
@@ -208,13 +222,13 @@ def main():
 	from negra import NegraCorpusReader
 	from rcgrules import induce_srcg, dop_srcg_rules, splitgrammar
 	from nltk import Tree
-	corpus = NegraCorpusReader(".", "sample2\.export")
-	grammar = splitgrammar(dop_srcg_rules(corpus.parsed_sents(), corpus.sents()))
-	getestimates(grammar, 30, "ROOT")
-	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
-	#tree.chomsky_normal_form()
-	#sent = "Daruber muss nachgedacht werden".split()
-	#grammar = splitgrammar(dop_srcg_rules([tree], [sent]))
-	#getestimates(grammar, 6, "S")
+	#corpus = NegraCorpusReader(".", "sample2\.export")
+	#grammar = splitgrammar(dop_srcg_rules(corpus.parsed_sents(), corpus.sents()))
+	#getestimates(grammar, 30, grammar[3]["ROOT"])
+	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
+	tree.chomsky_normal_form()
+	sent = "Daruber muss nachgedacht werden".split()
+	grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
+	getestimates(grammar, 6, grammar[3]["S"])
 
 if __name__ == '__main__': main()
