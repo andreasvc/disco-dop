@@ -13,14 +13,25 @@ class NegraCorpusReader(SyntaxCorpusReader):
 		else: self.d = 0
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
-		def getchildren(parent):
-			for n,a in ((n,a) for n,a in enumerate(s) if a[PARENT-self.d] == parent):
+		d = self.d
+		def getchildren(parent, children):
+			results = []; head = None
+			for m, (n,a) in enumerate(children[parent]):
+				# m is the index in the current constituent, to record the head position
+				# n is the index in the block to record word indices
+				if head is None and "HD" in a[FUNC-d].split("-"): head = m
 				if a[WORD][0] == "#":
-					yield Tree(a[TAG-self.d], getchildren(a[WORD][1:]))
+					results.append(Tree(a[TAG-d], getchildren(a[WORD][1:], children)))
 				else:
-					#yield Tree(a[TAG], [a[WORD]])
-					yield Tree(a[TAG-self.d], [n])
-		return Tree("ROOT", getchildren("0"))
+					results.append(Tree(a[TAG-d], [n]))
+			if head is None: return results
+			# everything after the head is reversed and prepended, leaving
+			# the head as the last element
+			return results[head+1:][::-1] + results[:head+1]
+		children = {}
+		for n,a in enumerate(s):
+			children.setdefault(a[PARENT-d], []).append((n,a))
+		return Tree("ROOT", getchildren("0", children))
 	def _word(self, s):
 		return [a[WORD] for a in s if a[WORD][0] != "#"]
 	def _tag(self, s, ignore):
@@ -28,6 +39,8 @@ class NegraCorpusReader(SyntaxCorpusReader):
 	def _read_block(self, stream):
 		return [[line.split() for line in block.splitlines()[1:]] 
 				for block in read_regexp_block(stream, BOS, EOS)]
+			# didn't seem to help:
+			#for b in map(lambda x: read_regexp_block(stream, BOS, EOS), range(1000)) for block in b]
 	def blocks(self):
 		def reader(stream):
 			result = read_regexp_block(stream, BOS, EOS)
