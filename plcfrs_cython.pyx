@@ -6,7 +6,7 @@ from nltk import FreqDist, Tree
 from heapdict import heapdict
 #from pyjudy import JudyLObjObj
 from bitarray import bitarray
-from math import log, e, floor
+from math import log, e, exp, floor
 from random import choice
 from itertools import chain, islice
 from pprint import pprint
@@ -116,7 +116,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=lam
 				# explicit get to avoid inserting spurious keys
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = scores
-				elif I1h in A and scores[0] > A[I1h][0]:
+				elif I1h in A and scores[0] < A[I1h][0]:
 					A[I1h] = scores
 				else:
 					oscore, iscore, p, rhs = scores
@@ -240,7 +240,7 @@ def filterchart(chart, start):
 
 def samplechart(chart, ChartItem start, dict tolabel):
 	entry, p = choice(chart[start])
-	if len(entry) == 1 and entry[0] not in chart: #[0][0] == "Epsilon":
+	if len(entry) == 1 and entry[0][0] == 0: # == "Epsilon":
 		#return Tree(start[0], [entry[0][1]]), p
 		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
 	children = [samplechart(chart, a, tolabel) for a in entry]
@@ -264,12 +264,17 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False):
 			derivations = islice(enumchart(chart, start, tolabel), n)
 			#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
 		parsetrees = defaultdict(float)
-		cdef double prob
+		cdef double prob, prevprob
 		cdef int m = 0
 		for a,prob in derivations:
-			# if necessary, we could do the addition in log space
-			parsetrees[re.sub("@[0-9]+","",a)] += e**prob
 			m += 1
+			parsetrees[re.sub("@[0-9]+","",a)] += exp(prob)
+			#tree = re.sub("@[0-9]+","",a)
+			#prevprob = parsetrees[tree]
+			#if prob > prevprob:
+			#	prevprob, prob = prob, prevprob
+			# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+			#parsetrees[tree] = prevprob + log(1.0 + exp(prob - prevprob))
 		print "(%d derivations)" % m
 		return parsetrees
 

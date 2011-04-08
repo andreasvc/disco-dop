@@ -89,7 +89,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1):
 				# explicit get to avoid inserting spurious keys in defaultdict
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = yI1
-				elif I1h in A and yI1[0][0] > A[I1h][0][0]: 
+				elif I1h in A and yI1[0][0] < A[I1h][0][0]: 
 					A[I1h] = yI1
 				else:
 					(y, p), b = yI1
@@ -225,7 +225,7 @@ def filterchart(chart, start):
 
 def samplechart(chart, start, lolabel):
 	entry, p = choice(chart[start])
-	if len(entry) == 1 and entry[0] not in chart: # entry[0][0] == "Epsilon":
+	if len(entry) == 1 and entry[0][0] == 0: # entry[0][0] == "Epsilon":
 		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
 	children = [samplechart(chart, a, tolabel) for a in entry]
 	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))

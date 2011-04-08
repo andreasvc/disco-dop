@@ -65,6 +65,15 @@ def srcg_productions(tree, sent, arity_marks=True):
 			lhs = intern(node_arity(st, lvars, True) if arity_marks else st.node)
 			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
 			vars = (lvars,) + tuple(rvars)
+			if vars[0][0][0] != vars[1][0]:
+				# sort the right hand side so that the first argument comes from the first nonterminal
+				# A[0,1] -> B[1] C[0]  becomes A[0,1] -> C[0] B[1]
+				# although this boils down to a simple swap in a binarized grammar, for generality we do a sort instead
+				vars, nonterminals = zip((vars[0], lhs), *sorted(zip(vars[1:], nonterminals[1:]), key=lambda x: vars[0][0][0] != x[0][0]))
+			# replace the variable numbers by indices pointing to the
+			# nonterminal on the right hand side from which they take their
+			# value
+			# A[0,1,2] -> A[0,2] B[1]  becomes  A[0, 1, 0] -> B C
 			for x in vars[0]:
 				for n,y in enumerate(x):
 					for m,z in enumerate(vars[1:]):
@@ -73,15 +82,18 @@ def srcg_productions(tree, sent, arity_marks=True):
 		rules.append(rule)
 	return rules
 
-def induce_srcg(trees, sents, h=None, v=0):
+def induce_srcg(trees, sents):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
-		t.chomsky_normal_form(horzMarkov=h, vertMarkov=v)
 		grammar.extend(srcg_productions(t, sent))
 	grammar = FreqDist(grammar)
-	fd = FreqDist(a[0][0] for a in grammar)
+	fd = FreqDist()
+	#fd = FreqDist(a[0][0] for a in grammar)
+	for rule,freq in grammar.items(): fd.inc(rule[0][0], freq)
+	for rule in grammar:
+		assert(grammar[rule] <= fd[rule[0][0]])
 	return [(rule, log(float(freq)/fd[rule[0][0]])) for rule,freq in grammar.items()]
 
 def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
@@ -92,10 +104,8 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	fd,ntfd = FreqDist(), FreqDist()
 	for tree, sent in zip(trees, sents):
 		t = canonicalize(tree.copy(True))
-		t.chomsky_normal_form()
 		prods = srcg_productions(t, sent)
 		ut = decorate_with_ids(t, ids)
-		ut.chomsky_normal_form()
 		uprods = srcg_productions(ut, sent, False)
 		nodefreq(t, ut, fd, ntfd)
 		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b)))] for (a,avar),(b,bvar) in zip(prods, uprods))))
@@ -111,7 +121,8 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 
 def splitgrammar(grammar):
 	unary, lbinary, rbinary, bylhs = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
-	nonterminals = list(enumerate(sorted(set(rule[0][0] for rule,weight in grammar) | set(["Epsilon"]))))
+	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
+	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(rule[a] for (rule,yf),weight in grammar for a in range(3) if len(rule) > a) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
 	# negate the log probabilities because the heap we use is a min-heap
 	for (rule,yf),w in grammar:
@@ -284,9 +295,10 @@ def enumchart(chart, start, tolabel, depth=0):
 		this function doesn't really belong in this file but Cython doesn't
 		support generators so this function is "in exile" over here.  """
 	if depth >= 100: return   # this should never happen
+	Epsilon = 0
 	for a,p in chart[start][::-1]:
 		if len(a) == 1:
-			if a[0] not in chart: #a[0][0] == "Epsilon":
+			if a[0][0] == Epsilon:
 				#yield Tree(start[0], [a[0][1]]), p 
 				yield "(%s %d)" % (tolabel[start.label], a[0][1]), p
 				continue

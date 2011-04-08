@@ -16,18 +16,23 @@ class NegraCorpusReader(SyntaxCorpusReader):
 		d = self.d
 		def getchildren(parent, children):
 			results = []; head = None
-			for m, (n,a) in enumerate(children[parent]):
-				# m is the index in the current constituent, to record the head position
+			for n,a in children[parent]:
 				# n is the index in the block to record word indices
-				if head is None and "HD" in a[FUNC-d].split("-"): head = m
 				if a[WORD][0] == "#":
 					results.append(Tree(a[TAG-d], getchildren(a[WORD][1:], children)))
 				else:
 					results.append(Tree(a[TAG-d], [n]))
+				if head is None and "HD" in a[FUNC-d].split("-"): head = results[-1]
 			if head is None: return results
-			# everything after the head is reversed and prepended, leaving
-			# the head as the last element
+			# roughly order by order in sentence
+			results.sort(key=lambda a: a.leaves()[0])
+			head = results.index(head)
+			# everything until the head is reversed and prepended to the rest,
+			# leaving the head as the first element
+			# head final:
 			return results[head+1:][::-1] + results[:head+1]
+			#return (results[:head+1][::-1] + results[head+1:])[::-1]
+			#return results[:head] + results[head:][::-1]
 		children = {}
 		for n,a in enumerate(s):
 			children.setdefault(a[PARENT-d], []).append((n,a))
