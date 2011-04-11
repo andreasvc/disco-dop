@@ -33,7 +33,7 @@ def testestimates(grammar, maxlen, goal):
 	insidescores = simpleinside(grammar, maxlen)
 	for a in insidescores:
 		for b in insidescores[a]:
-			print "%s[%d] =" % (grammar[5][a], b), e**-insidescores[a][b]
+			print "%s[%d] =" % (grammar.tolabel[a], b), e**-insidescores[a][b]
 	print 
 	print len(insidescores) * sum(map(len, insidescores.values()))
 	print "getting outside"
@@ -44,7 +44,7 @@ def testestimates(grammar, maxlen, goal):
 		for bn, b in enumerate(a):
 			for cn, c in enumerate(b):
 				for dn, d in enumerate(c):
-					if d < infinity: print grammar[5][an],bn,cn,dn, e**-d; cnt += 1
+					if d < infinity: print grammar.tolabel[an],bn,cn,dn, e**-d; cnt += 1
 	print cnt
 	return outside
 
@@ -66,10 +66,10 @@ def simpleinside(grammar, maxlen):
 	return doinside(grammar, maxlen, simpleconcat)
 
 def doinside(grammar, maxlen, concat):
-	unary, lbinary, rbinary, bylhs, toid, tolabel = grammar
+	unary, lbinary, rbinary = grammar.unary, grammar.lbinary, grammar.rbinary
 	agenda = heapdict()
 	insidescores = defaultdict(lambda: defaultdict(lambda: float('infinity')))
-	for rule,z in unary[toid['Epsilon']]:
+	for rule,z in unary[0]: #Epsilon
 		agenda[ChartItem(rule[0][0], 1)] = 0.0
 	while agenda:
 		I,x = agenda.popitem()
@@ -77,16 +77,16 @@ def doinside(grammar, maxlen, concat):
 			insidescores[I.label][I.vec] = x
 		
 		results = []
-		for rule, y in unary[I.label]:
-			results.append((rule[0][0], I.vec, y+insidescores[rule[0][1]][I.vec]))
-		for rule, y in lbinary[I.label]:
-			for vec in insidescores[rule[0][2]]:
-				left = concat(I.vec, vec, rule[1], maxlen)
-				if left: results.append((rule[0][0], left, x+y+insidescores[rule[0][2]][vec]))
-		for rule, y in rbinary[I.label]:
-			for vec in insidescores[rule[0][1]]:
-				right = concat(vec, I.vec, rule[1], maxlen)
-				if right: results.append((rule[0][0], right, x+y+insidescores[rule[0][1]][vec]))
+		for (rule,yf), y in unary[I.label]:
+			results.append((rule[0], I.vec, y+insidescores[rule[1]][I.vec]))
+		for (rule,yf), y in lbinary[I.label]:
+			for vec in insidescores[rule[2]]:
+				left = concat(I.vec, vec, yf, maxlen)
+				if left: results.append((rule[0], left, x+y+insidescores[rule[2]][vec]))
+		for (rule,yf), y in rbinary[I.label]:
+			for vec in insidescores[rule[1]]:
+				right = concat(vec, I.vec, yf, maxlen)
+				if right: results.append((rule[0], right, x+y+insidescores[rule[1]][vec]))
 
 		for label, vec, score in results:
 			if label not in insidescores or vec not in insidescores[label]:
@@ -120,12 +120,11 @@ def insideconcat(a, b, yieldfunction, maxlen):
 def outsidelr(grammar, insidescores, maxlen, goal):
 	if cython.compiled: print "estimates: running cython"
 	else: print "estimates: not cython"
-	u,l,r,bylhs, toid, tolabel = grammar
-	Epsilon = toid["Epsilon"]
+	bylhs = grammar.bylhs
 	agenda = heapdict()
 	infinity = float('infinity')
-	# this could become a numpy array if that is advantageous:
-	outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for lhs in tolabel]
+	# this should become a numpy array if that is advantageous:
+	outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for lhs in bylhs]
 	for a in range(1, maxlen+1):
 		newitem = Item(goal, a, 0, 0)
 		agenda[newitem] = 0.0
@@ -135,19 +134,18 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 		I, x = agenda.popitem()
 		if x == outside[I.state][I.len][I.lr][I.gaps]:
 			totlen = I.len + I.lr + I.gaps
-			for rule, y in bylhs[I.state]:
+			for (rule, yieldfunction), y in bylhs[I.state]:
 				# X -> A
-				if len(rule[0]) == 2:
-					if rule[0][1] != Epsilon:
-						newitem = Item(rule[0][1], I.len, I.lr, I.gaps)
+				if len(rule) == 2:
+					if rule[1] != 0:
+						newitem = Item(rule[1], I.len, I.lr, I.gaps)
 						score = x + y
-						if outside[rule[0][1]][I.len][I.lr][I.gaps] > score:
+						if outside[rule[1]][I.len][I.lr][I.gaps] > score:
 							agenda[newitem] = score
-							outside[rule[0][1]][I.len][I.lr][I.gaps] = score
+							outside[rule[1]][I.len][I.lr][I.gaps] = score
 				else:
-					lstate = rule[0][1]
-					rstate = rule[0][2]
-					yieldfunction = rule[1]
+					lstate = rule[1]
+					rstate = rule[2]
 					# X -> A B
 					addgaps = addright = 0
 					stopaddright = False
@@ -226,11 +224,11 @@ def main():
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2\.export")
 	grammar = splitgrammar(dop_srcg_rules(corpus.parsed_sents(), corpus.sents()))
-	testestimates(grammar, 30, grammar[4]["ROOT"])
+	testestimates(grammar, 30, grammar.toid["ROOT"])
 	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	#tree.chomsky_normal_form()
 	#sent = "Daruber muss nachgedacht werden".split()
 	#grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
-	#testestimates(grammar, 6, grammar[4]["S"])
+	#testestimates(grammar, 6, grammar.toid["S"])
 
 if __name__ == '__main__': main()

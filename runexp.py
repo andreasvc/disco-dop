@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader
 from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, extractfragments, splitgrammar
-from treetransforms import chomsky_normal_form, un_chomsky_normal_form
+from treetransforms import collinize, un_collinize
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
 from itertools import islice, chain
@@ -10,7 +10,7 @@ from functools import partial
 from pprint import pprint
 import cPickle
 import re, time
-try: 
+try:
 	from plcfrs_cython import parse, mostprobableparse
 except:
 	from plcfrs import parse, mostprobableparse
@@ -42,6 +42,13 @@ def alterbinarization(tree):
 	tree = re.sub("VROOT", r"ROOT", tree)
 	assert "@" not in tree
 	return tree
+
+def testgrammar(grammar):
+	for a,b in grammar.bylhs.items():
+		if abs(sum(e**-w for rule,w in b) - 1.0) > 0.01:
+			print "Does not sum to 1:", grammar.tolabel[a], sum(e**-w for rule,w in b)
+			break
+	else: print "All left hand sides sum to 1"
 
 def bracketings(tree):
 	# sorted or not?
@@ -89,33 +96,25 @@ def read_rparse_grammar(file):
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 corpus = NegraCorpusReader(".", "sample2\.export")
-#corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", n=5)
+#corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", n=5, headfinal=True, reverse=False)
 trees, sents, blocks = corpus.parsed_sents()[:3600], corpus.sents()[:3600], corpus.blocks()[:3600]
-#print "read training corpus"
+print "read training corpus"
 
 srcg = True
 dop = True
-maxlen = 30
-trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent) <= maxlen])
-for a in trees:
-	#chomsky_normal_form(a, factor="left", vertMarkov=1, horzMarkov=1)
-	#chomsky_normal_form(a, factor="right", vertMarkov=1, horzMarkov=1)
-	#chomsky_normal_form(a, factor="left", vertMarkov=0, horzMarkov=1)
-	#chomsky_normal_form(a, factor="right", vertMarkov=0, horzMarkov=1)
-	a.chomsky_normal_form(factor="right", vertMarkov=1, horzMarkov=1)
-grammar = induce_srcg(list(trees), sents)
-#grammar = read_rparse_grammar("../rparse/bin3600")
-lhs = set(rule[0] for (rule,yf),w in grammar)
-print "clauses:", len(grammar)
-print "labels:", len(set(rule[a] for (rule,yf),w in grammar for a in range(3) if len(rule) > a)), "of which nonterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
-print "max arity:", max((len(yf), rule, yf, w) for (rule,yf),w in grammar)
-grammar = splitgrammar(grammar)
-
-for a,b in grammar[3].items():
-	if abs(sum(e**-w for rule,w in b) - 1.0) > 0.01:
-		print "Does not sum to 1:", grammar[5][a], sum(e**-w for rule,w in b)
+maxlen = 99
+trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent[1]) <= maxlen])
+factor = "right"
+v = 2
+h = 1
+for a,b in zip(trees, sents):
+	foo = srcg_productions(a, b)	#adds arity markers
+	collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h)
+	#a.chomsky_normal_form(factor="left")
+print "binarized corpus %s branching with v = %d, h = %d" % (factor, v, h)
 
 """
+trees = trees[:10]; sents = sents[:10]
 for (rule,yf),w in sorted(induce_srcg(list(trees), sents), key=lambda x:-x[1]):
 	if len(rule) == 2 and rule[1] != "Epsilon":
 		print e**w, rule[0], "-->", rule[1], "\t\t", [list(a) for a in yf]
@@ -125,18 +124,35 @@ for (rule,yf),w in sorted(induce_srcg(list(trees), sents), key=lambda x:-x[1]):
 exit()
 """
 
+if srcg:
+	grammar = induce_srcg(list(trees), sents)
+	#grammar = read_rparse_grammar("../rparse/bin3600")
+	lhs = set(rule[0] for (rule,yf),w in grammar)
+	print "SRCG based on", len(trees), "sentences"
+	l = len(grammar)
+	print "labels:", len(set(rule[a] for (rule,yf),w in grammar for a in range(3) if len(rule) > a)), "of which nonterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
+	print "max arity:", max((len(yf), rule, yf, w) for (rule,yf),w in grammar)
+	grammar = splitgrammar(grammar)
+	ll=sum(len(b) for a,b in grammar.lexical.items())
+	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
+	testgrammar(grammar)
+
 trees=list(trees)
 print "induced srcg grammar"
 if dop:
-	#for a in trees: a.chomsky_normal_form()
-	dopgrammar = splitgrammar(dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False))
+	dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False)
 	nodes = sum(len(list(a.subtrees())) for a in trees)
-	nts = len(dopgrammar[4])
-	print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", nts, "nonterminals"
-
+	l = len(dopgrammar)
+	print "labels:", len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(3) if len(rule) > a)), "of which nonterminals:", len(set(rule[0] for (rule,yf),w in dopgrammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
+	print "max arity:", max((len(yf), rule, yf, w) for (rule,yf),w in dopgrammar)
+	dopgrammar = splitgrammar(dopgrammar)
+	ll=sum(len(b) for a,b in dopgrammar.lexical.items())
+	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
+	testgrammar(dopgrammar)
+	print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", len(dopgrammar.toid), "nonterminals"
 #print "getting outside estimates"
 #begin = time.clock()
-#outside = getestimates(dopgrammar, maxlen, dopgrammar[4]["ROOT"])
+#outside = getestimates(dopgrammar, maxlen, dopgrammar.toid["ROOT"])
 #print "done. time elapsed: ", time.clock() - begin,
 #cPickle.dump(outside, open("outside.pickle", "wb"))
 #outside = cPickle.load(open("outside.pickle", "rb"))
@@ -147,13 +163,14 @@ if dop:
 #exit()
 #corpus = NegraCorpusReader("../rparse", "tigerproc.export", n=5)
 #trees, sents, blocks = corpus.parsed_sents()[3600:5000], corpus.tagged_sents()[3600:5000], corpus.blocks()[3600:5000]
-print "read test corpus"
 trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
+print "read test corpus"
 maxsent = 360
+maxlen = 99
 viterbi = False
 sample = True
-n = 1    #number of top-derivations to parse (should become n-best)
-m = 10000  #number of derivations to sample/enumerate
+n = 1      #number of top-derivations to parse (should become n-best)
+m = 100  #number of derivations to sample/enumerate
 nsent = 0
 exact, exacts = 0, 0
 snoparse, dnoparse = 0, 0
@@ -180,12 +197,13 @@ for tree, sent, block in zip(trees, sents, blocks):
 	gsent.append(sent)
 	if srcg:
 		print "SRCG:",
-		chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start=grammar[4]['ROOT'], viterbi=True)
+		chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start=grammar.toid['ROOT'], viterbi=True)
+		print
 	else: chart = ()
-	for result, prob in enumchart(chart, start, grammar[5]) if chart else ():
+	for result, prob in enumchart(chart, start, grammar.tolabel) if chart else ():
 		#result = rem_marks(escapetree(alterbinarization(result)))
 		result = rem_marks(escapetree(result))
-		un_chomsky_normal_form(result)
+		un_collinize(result)
 		print "p =", e**prob,
 		candb = set(bracketings(result))
 		prec = precision(goldb, candb)
@@ -216,16 +234,16 @@ for tree, sent, block in zip(trees, sents, blocks):
 	if dop:
 		print "DOP:",
 		#estimate = partial(getoutside, outside, maxlen, len(sent))
-		chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start=dopgrammar[4]['ROOT'], viterbi=viterbi, n=n, estimate=estimate)
-		print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
+		chart, start = parse([a[0] for a in sent], dopgrammar, tags=[a[1] for a in sent], start=dopgrammar.toid['ROOT'], viterbi=viterbi, n=n, estimate=estimate)
+		#print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
 	else: chart = ()
 	if chart:
-		mpp = mostprobableparse(chart, start, dopgrammar[5], n=m, sample=sample).items()
+		mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m, sample=sample, both=viterbi).items()
 		dresult, prob = max(mpp, key=lambda x: x[1])
 		#for a,b in mpp: print a,b
 		print "p =", prob, "(%d parsetrees)" % len(mpp)
 		dresult = rem_marks(escapetree(dresult))
-		un_chomsky_normal_form(dresult)
+		un_collinize(dresult)
 		candb = set(bracketings(dresult))
 		prec = precision(goldb, candb)
 		rec = recall(goldb, candb)

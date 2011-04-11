@@ -8,9 +8,14 @@ EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 class NegraCorpusReader(SyntaxCorpusReader):
-	def __init__(self, root, fileids, encoding=None, n=6):
+	def __init__(self, root, fileids, encoding=None, n=6, headfinal=True, reverse=True):
+		""" n=6 for files with 6 columns, n=5 for files with 5 columns (no lemmas)
+			headfinal: whether to put the head in final or in frontal position
+			reverse: the head is made final/frontal by reversing everything before or after the head. 
+				when true, the side on which the head is will be the reversed side"""
 		if n == 5: self.d = 1
 		else: self.d = 0
+		self.headfinal, self.reverse = headfinal, reverse
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
 		d = self.d
@@ -24,15 +29,27 @@ class NegraCorpusReader(SyntaxCorpusReader):
 					results.append(Tree(a[TAG-d], [n]))
 				if head is None and "HD" in a[FUNC-d].split("-"): head = results[-1]
 			if head is None: return results
-			# roughly order by order in sentence
+			# roughly order constituents by order in sentence
 			results.sort(key=lambda a: a.leaves()[0])
 			head = results.index(head)
 			# everything until the head is reversed and prepended to the rest,
 			# leaving the head as the first element
-			# head final:
-			return results[head+1:][::-1] + results[:head+1]
-			#return (results[:head+1][::-1] + results[head+1:])[::-1]
-			#return results[:head] + results[head:][::-1]
+			if self.headfinal:
+				if self.reverse:
+					# head final, reverse rhs: A B C^ D E => A B E D C^
+					return results[:head] + results[head:][::-1]
+				else:
+					# head final, no reverse:  A B C^ D E => D E A B C^
+					#return sorted(results[head+1:] + results[:head]) + results[head:head+1]
+					# head final, reverse lhs:  A B C^ D E => E D A B C^
+					return results[head+1:][::-1] + results[:head+1]
+			else:
+				if self.reverse:
+					# head first, reverse lhs: A B C^ D E => C^ B A D E
+					return results[:head+1][::-1] + results[head+1:]
+				else:
+					# head first, reverse rhs: A B C^ D E => C^ D E B A
+					return results[head:] + results[:head][::-1]
 		children = {}
 		for n,a in enumerate(s):
 			children.setdefault(a[PARENT-d], []).append((n,a))

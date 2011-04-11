@@ -5,12 +5,10 @@ from dopg import removeids
 from nltk import FreqDist
 from heapdict import heapdict
 #from pyjudy import JudyLObjObj
-from bitarray import bitarray
 from math import log, e, floor
 from random import choice
 from itertools import chain, islice
-from pprint import pprint
-from collections import defaultdict
+from collections import defaultdict, deque
 from operator import or_
 import re
 #try:
@@ -40,14 +38,14 @@ class ChartItem:
 		#would need bitlen for proper padding
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
 
-def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1):
+def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary, lbinary, rbinary, bylhs, toid, tolabel = grammar
+	unary, lbinary, rbinary, lexical, bylhs, toid, tolabel = grammar
 	if start == None: start = toid['S']
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
-	A, C, Cx = heapdict(), defaultdict(list), defaultdict(dict)
+	A, C, Cx = heapdict(), defaultdict(deque), defaultdict(dict)
 	#C = JudyLObjObj()
 	#from guppy import hpy; h = hpy(); hn = 0
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
@@ -56,20 +54,21 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1):
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for rule, z in unary[Epsilon]:
-			if w in rule[1]:
-				Ih = ChartItem(rule[0][0], 1 << i)
+		for (rule,yf), z in lexical[w]:
+			if not tags or tags[i] == rule[0].split("@")[0]:
+				Ih = ChartItem(rule[0], 1 << i)
 				I = (ChartItem(Epsilon, i),)
-				A[Ih] = ((z, z), I)
+				# if gold tags were provided, give them probability of 1
+				A[Ih] = ((0 if tags else z, 0 if tags else z), I)
 				recognized = True
-		if not recognized and tags:
-			Ih = ChartItem(tags[i], 1 << i)
+		if not recognized and tags and tags[i] in toid:
+			Ih = ChartItem(toid[tags[i]], 1 << i)
 			I = (ChartItem(Epsilon, i),)
 			A[Ih] = ((0, 0), I)
 			recognized = True
 			continue
 		elif not recognized:
-			print "not covered:", w
+			print "not covered:", tags[i] if tags else w
 	lensent = len(sent)
 	# parsing
 	while A:
@@ -93,12 +92,13 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1):
 					A[I1h] = yI1
 				else:
 					(y, p), b = yI1
-					C[I1h].insert(0, (b, -p))
+					C[I1h].appendleft((b, -p))
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
+	#pprint_chart(C, sent, tolabel); exit()
 	return (C, goal) if goal in C else ({}, ())
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary, bitlen):
@@ -223,7 +223,7 @@ def filterchart(chart, start):
 	filter_subtree(start, chart, chart2)
 	return chart2
 
-def samplechart(chart, start, lolabel):
+def samplechart(chart, start, tolabel):
 	entry, p = choice(chart[start])
 	if len(entry) == 1 and entry[0][0] == 0: # entry[0][0] == "Epsilon":
 		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
@@ -258,22 +258,22 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False):
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
-		print tolabel[a[0]], bin(a[1]), "=>"
+		print "%s[%s] =>" % (tolabel[a[0]], ("0" * len(sent) + bin(a[1])[2:])[::-1][:len(sent)])
 		for b,p in chart[a]:
 			for c in b:
 				if tolabel[c[0]] == "Epsilon":
 					print "\t", repr(sent[b[0][1]]),
 				else:
-					print "\t", tolabel[c[0]], bin(c[1]),
-			print e**p
+					print "\t%s[%s]" % (tolabel[c[0]], ("0" * len(sent) + bin(c[1])[2:])[::-1][:len(sent)]),
+			print "\t",e**p
 		print
 
 def do(sent):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar)
-	pprint_chart(chart, sent.split(), grammar[5])
+	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if chart:
-		for a, p in mostprobableparse(chart, start, grammar[5], n=1000).items():
+		for a, p in mostprobableparse(chart, start, grammar.tolabel, n=1000).items():
 			print p, a
 	else: print "no parse"
 	print
