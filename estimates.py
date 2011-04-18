@@ -1,9 +1,13 @@
 # Implementation of LR estimate (Kallmeyer & Maier 2010). Ported almost directly from rparse.
 from heapdict import heapdict
-from plcfrs import ChartItem, bitcount, nextset, nextunset
+from plcfrs import ChartItem
 from collections import defaultdict
 from math import e
-import cython
+try:
+	import cython
+	assert cython.compiled
+except:
+	exec "from bit import *" in globals()
 
 class Item:
 	__slots__ = ("state", "len", "lr", "gaps", "_hash")
@@ -31,6 +35,7 @@ def testestimates(grammar, maxlen, goal):
 	#print
 	print "getting inside"
 	insidescores = simpleinside(grammar, maxlen)
+	insidescores = inside(grammar, maxlen)
 	for a in insidescores:
 		for b in insidescores[a]:
 			print "%s[%d] =" % (grammar.tolabel[a], b), e**-insidescores[a][b]
@@ -66,24 +71,25 @@ def simpleinside(grammar, maxlen):
 	return doinside(grammar, maxlen, simpleconcat)
 
 def doinside(grammar, maxlen, concat):
-	unary, lbinary, rbinary = grammar.unary, grammar.lbinary, grammar.rbinary
+	lexical, unary, lbinary, rbinary = grammar.lexical, grammar.unary, grammar.lbinary, grammar.rbinary
 	agenda = heapdict()
 	insidescores = defaultdict(lambda: defaultdict(lambda: float('infinity')))
-	for rule,z in unary[0]: #Epsilon
-		agenda[ChartItem(rule[0][0], 1)] = 0.0
+	for tags in lexical.values():
+		for (rule, yf), z in tags:
+			agenda[ChartItem(rule[0], 1)] = 0.0
 	while agenda:
 		I,x = agenda.popitem()
 		if I.vec not in insidescores[I.label] or insidescores[I.label][I.vec] < x:
 			insidescores[I.label][I.vec] = x
 		
 		results = []
-		for (rule,yf), y in unary[I.label]:
+		for (rule,yf), y in unary.get(I.label, []):
 			results.append((rule[0], I.vec, y+insidescores[rule[1]][I.vec]))
-		for (rule,yf), y in lbinary[I.label]:
+		for (rule,yf), y in lbinary.get(I.label, []):
 			for vec in insidescores[rule[2]]:
 				left = concat(I.vec, vec, yf, maxlen)
 				if left: results.append((rule[0], left, x+y+insidescores[rule[2]][vec]))
-		for (rule,yf), y in rbinary[I.label]:
+		for (rule,yf), y in rbinary.get(I.label, []):
 			for vec in insidescores[rule[1]]:
 				right = concat(vec, I.vec, yf, maxlen)
 				if right: results.append((rule[0], right, x+y+insidescores[rule[1]][vec]))
@@ -134,7 +140,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 		I, x = agenda.popitem()
 		if x == outside[I.state][I.len][I.lr][I.gaps]:
 			totlen = I.len + I.lr + I.gaps
-			for (rule, yieldfunction), y in bylhs[I.state]:
+			for (rule, yieldfunction), y in bylhs.get(I.state, []):
 				# X -> A
 				if len(rule) == 2:
 					if rule[1] != 0:
@@ -172,6 +178,8 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 								if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
 									newitem = Item(lstate, lenA, lr, ga)
 									score = x + insidescore + y
+									#print lstate, lenA, lr, ga
+									#print len(outside), len(outside[0]), len(outside[0][0]), len(outside[0][0][0])
 									if outside[lstate][lenA][lr][ga] > score:
 										agenda[newitem] = score
 										outside[lstate][lenA][lr][ga] = score
@@ -223,7 +231,9 @@ def main():
 	from rcgrules import induce_srcg, dop_srcg_rules, splitgrammar
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2\.export")
-	grammar = splitgrammar(dop_srcg_rules(corpus.parsed_sents(), corpus.sents()))
+	trees = list(corpus.parsed_sents())
+	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
+	grammar = splitgrammar(dop_srcg_rules(trees, corpus.sents()))
 	testestimates(grammar, 30, grammar.toid["ROOT"])
 	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	#tree.chomsky_normal_form()

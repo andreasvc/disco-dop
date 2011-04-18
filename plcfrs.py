@@ -1,25 +1,24 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
+try:
+	import cython
+	assert cython.compiled
+except:
+	print "plcfrs in non-cython mode"
+	#exec "from bit import *" in globals()
+	from bit import *
+
 from rcgrules import enumchart
 from dopg import removeids
 from nltk import FreqDist
 from heapdict import heapdict
 #from pyjudy import JudyLObjObj
-from math import log, e, floor
+from math import log, exp, floor
 from random import choice
 from itertools import chain, islice
 from collections import defaultdict, deque
 from operator import or_
 import re
-#try:
-#	import pyximport
-#	pyximport.install()
-#except: pass
-#from bit import *
-#try:
-#	import psyco
-#	psyco.full()
-#except: pass
 
 class ChartItem:
 	__slots__ = ("label", "vec", "_hash")
@@ -29,11 +28,22 @@ class ChartItem:
 		self._hash = hash((self.label, self.vec))
 	def __hash__(self):
 		return self._hash
-	def __eq__(self, other):
-		return self.label == other.label and self.vec == other.vec
+	def __richcmp__(self, other, op):
+		if op == 0: return self.label < other.label or self.vec < other.vec
+		elif op == 1: return self.label <= other.label or self.vec <= other.vec
+		elif op == 2: return self.label == other.label and self.vec == other.vec
+		elif op == 3: return self.label != other.label or self.vec != other.vec
+		elif op == 4: return self.label > other.label or self.vec > other.vec
+		elif op == 5: return self.label >= other.label or self.vec >= other.vec
+	#def __eq__(self, other):
+	#	return self.label == other.label and self.vec == other.vec
+	def __cmp__(self, other):
+		if self.label == other.label and self.vec == other.vec: return 0
+		elif self.label < other.label or (self.label == other.label and self.vec < other.vec): return -1
+		return 1
 	def __getitem__(self, n):
 		if n == 0: return self.label
-		if n == 1: return self.vec
+		elif n == 1: return self.vec
 	def __repr__(self):
 		#would need bitlen for proper padding
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
@@ -42,10 +52,10 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
 	unary, lbinary, rbinary, lexical, bylhs, toid, tolabel = grammar
-	if start == None: start = toid['S']
+	if start is None: start = toid['S']
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
-	A, C, Cx = heapdict(), defaultdict(deque), defaultdict(dict)
+	A, C, Cx = heapdict(), {}, {} #defaultdict(deque), defaultdict(dict)
 	#C = JudyLObjObj()
 	#from guppy import hpy; h = hpy(); hn = 0
 	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
@@ -54,17 +64,17 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for (rule,yf), z in lexical[w]:
-			if not tags or tags[i] == rule[0].split("@")[0]:
+		for (rule,yf), z in lexical.get(w, []):
+			if not tags or tags[i] == tolabel[rule[0]].split("@")[0]:
 				Ih = ChartItem(rule[0], 1 << i)
-				I = (ChartItem(Epsilon, i),)
+				I = ChartItem(Epsilon, i)
 				# if gold tags were provided, give them probability of 1
-				A[Ih] = ((0 if tags else z, 0 if tags else z), I)
+				A[Ih] = (0.0 if tags else z, 0.0 if tags else z, (I,))
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 			Ih = ChartItem(toid[tags[i]], 1 << i)
-			I = (ChartItem(Epsilon, i),)
-			A[Ih] = ((0, 0), I)
+			I = ChartItem(Epsilon, i)
+			A[Ih] = (0.0, 0.0, (I,))
 			recognized = True
 			continue
 		elif not recognized:
@@ -76,57 +86,58 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		#C[Ih] = I, x
-		(y, p), b = xI
-		C[Ih].append((b, -p))
-		Cx[Ih.label][Ih] = y
+		iscore, p, rhs = xI
+		C.setdefault(Ih, deque()).append((rhs, p))
+		Cx.setdefault(Ih.label, {})[Ih] = iscore
 		if Ih == goal:
 			m += 1	#problem: this is not viterbi n-best.
 			#goal = Ih
 			if viterbi and n==m: break
 		else:
-			for I1h, yI1 in deduced_from(Ih, xI[0][0], Cx, unary, lbinary, rbinary, lensent):
+			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary):
 				# explicit get to avoid inserting spurious keys in defaultdict
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
-					A[I1h] = yI1
-				elif I1h in A and yI1[0][0] < A[I1h][0][0]: 
-					A[I1h] = yI1
+					A[I1h] = scores
+				elif I1h in A and scores[0] < A[I1h][0]: 
+					A[I1h] = scores
 				else:
-					(y, p), b = yI1
-					C[I1h].appendleft((b, -p))
+					iscore, p, rhs = scores
+					C.setdefault(I1h, deque()).appendleft((rhs, p))
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
-	#pprint_chart(C, sent, tolabel); exit()
+	#pprint_chart(C, sent, tolabel)
 	return (C, goal) if goal in C else ({}, ())
 
-def deduced_from(Ih, x, Cx, unary, lbinary, rbinary, bitlen):
+def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	I, Ir = Ih.label, Ih.vec
 	result = []
-	for rule, z in unary[I]:
-		result.append((ChartItem(rule[0][0], Ir), ((x+z,z), (Ih,))))
-	for rule, z in lbinary[I]:
-		for I1h, y in Cx[rule[0][2]].items():
-			if concat(rule[1], Ir, I1h.vec, bitlen):
-				result.append((ChartItem(rule[0][0], Ir ^ I1h.vec), ((x+y+z, z), (Ih, I1h))))
-	for rule, z in rbinary[I]:
-		for I1h, y in Cx[rule[0][1]].items():
-			if concat(rule[1], I1h.vec, Ir, bitlen):
-				result.append((ChartItem(rule[0][0], I1h.vec ^ Ir), ((x+y+z, z), (I1h, Ih))))
+	for (rule, yf), z in unary.get(I, ()):
+		result.append((ChartItem(rule[0], Ir), (x+z, z, (Ih,))))
+	for (rule, yf), z in lbinary.get(I, ()):
+		for I1h, y in Cx.get(rule[2], {}).items():
+			if concat(yf, Ir, I1h.vec):
+				result.append((ChartItem(rule[0], Ir ^ I1h.vec), (x+y+z, z, (Ih, I1h))))
+	for (rule, yf), z in rbinary.get(I, ()):
+		for I1h, y in Cx.get(rule[1], {}).items():
+			if concat(yf, I1h.vec, Ir):
+				result.append((ChartItem(rule[0], I1h.vec ^ Ir), (x+y+z, z, (I1h, Ih))))
 	return result
 
-def concat(yieldfunction, lvec, rvec, bitlen):
+def concat(yieldfunction, lvec, rvec):
 	if lvec & rvec: return False
-	if len(yieldfunction) == 1 and len(yieldfunction[0]) == 2:
-		if yieldfunction[0][0] == 0 and yieldfunction[0][1] == 1:
-			return bitminmax(lvec, rvec)
-		elif yieldfunction[0][0] == 1 and yieldfunction[0][1] == 0:
-			return bitminmax(rvec, lvec)
-		else: raise ValueError("non-binary element in yieldfunction")
-	#this algorithm taken from rparse FastYFComposer.
 	lpos = nextset(lvec, 0)
 	rpos = nextset(rvec, 0)
+	# if there are no gaps in lvec and rvec, and the yieldfunction is the
+	# concatenation of two elements, then this should be quicker
+	if (lvec >> nextunset(lvec, lpos) == 0 and rvec >> nextunset(rvec, rpos) == 0):
+		if yieldfunction == ((0, 1),):
+			return bitminmax(lvec, rvec)
+		elif yieldfunction == ((1, 0),):
+			return bitminmax(rvec, lvec)
+	#this algorithm taken from rparse FastYFComposer.
 	for arg in yieldfunction:
 		m = len(arg) - 1
 		for n, b in enumerate(arg):
@@ -161,57 +172,6 @@ def concat(yieldfunction, lvec, rvec, bitlen):
 		return False
 	# everything looks all right
 	return True
-
-# bit operations adapted from http://wiki.python.org/moin/BitManipulation
-def nextset2(a, pos, bitlen):
-	result = 0
-	bitlen -= pos
-	a >>= pos
-	a = a & -a
-	while a >> result and result < bitlen:
-		result += 1
-	return pos + result - 1 if result < bitlen else -1
-
-def nextunset2(a, pos, bitlen):
-	result = 0
-	bitlen -= pos
-	a >>= pos
-	a = ~a & -~a
-	while a >> result and result < bitlen:
-		result += 1
-	return pos + result - 1
-
-def nextset(a, pos):
-	result = pos
-	while (not (a >> result) & 1) and a >> result:
-		result += 1
-	return result if a >> result else -1
-
-def nextunset(a, pos):
-	result = pos
-	while (a >> result) & 1:
-		result += 1
-	return result
-
-def testbit(a, offset):
-	return a & (1 << offset)
-
-def bitcount(a):
-	count = 0
-	while a:
-		a &= a - 1
-		count += 1
-	return count
-
-def bitminmax(a, b):
-	"""test if the least and most significant bits of a and b are 
-	consecutive. we shift a and b until they meet in the middle (return true)
-	or collide (return false)"""
-	b = (b & -b)
-	while a and b:
-		a >>= 1
-		b >>= 1
-	return b == 1
 
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation
@@ -250,7 +210,7 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False):
 		m = 0
 		for a,prob in derivations:
 			# if necessary, we could do the addition in log space
-			parsetrees[re.sub("@[0-9]+","",a)] += e**prob
+			parsetrees[re.sub("@[0-9]+","",a)] += exp(-prob)
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees
@@ -265,10 +225,10 @@ def pprint_chart(chart, sent, tolabel):
 					print "\t", repr(sent[b[0][1]]),
 				else:
 					print "\t%s[%s]" % (tolabel[c[0]], ("0" * len(sent) + bin(c[1])[2:])[::-1][:len(sent)]),
-			print "\t",e**p
+			print "\t",exp(-p)
 		print
 
-def do(sent):
+def do(sent, grammar):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar)
 	pprint_chart(chart, sent.split(), grammar.tolabel)
@@ -278,8 +238,10 @@ def do(sent):
 	else: print "no parse"
 	print
 
-if __name__ == '__main__':
+import cython
+def main():
 	from rcgrules import splitgrammar
+	print "compiled", cython.compiled
 	grammar = splitgrammar(
 		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
@@ -288,7 +250,10 @@ if __name__ == '__main__':
 		((('VAINF', 'Epsilon'), ('werden', ())), 0.0),
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
-	do("Daruber muss nachgedacht werden")
-	do("Daruber muss nachgedacht werden werden")
-	do("Daruber muss nachgedacht werden werden werden")
-	do("muss Daruber nachgedacht werden")	#no parse
+
+	do("Daruber muss nachgedacht werden", grammar)
+	do("Daruber muss nachgedacht werden werden", grammar)
+	do("Daruber muss nachgedacht werden werden werden", grammar)
+	do("muss Daruber nachgedacht werden", grammar)	#no parse
+
+if __name__ == '__main__': main()

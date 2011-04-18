@@ -8,7 +8,9 @@ ext_modules = [
 			include_dirs=['.'],
 			library_dirs=['.']),
 	Extension("estimates",
-		["estimates.py", "estimates.pxd"])
+		["estimates.py", "estimates.pxd"]),
+	Extension("plcfrs",
+		["plcfrs.py", "plcfrs.pxd"])
 	]
 
 setup(

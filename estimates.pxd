@@ -6,6 +6,13 @@ if cython.compiled:
 else:
 	print "interpreted"
 
+cdef extern from "bit.h":
+	int nextset(unsigned long vec, int pos)
+	int nextunset(unsigned long vec, int pos)
+	int bitcount(unsigned long vec)
+	bint testbit(unsigned long vec, unsigned long pos)
+	bint bitminmax(unsigned long a, unsigned long b)
+
 cdef class Item:
 	cdef int state, len, lr, gaps
 	cdef long _hash
@@ -46,4 +53,4 @@ cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned 
 	stopaddleft=cython.bint,
 	#yieldfunction=cython.tuple
 	)
-cpdef list outsidelr(tuple grammar, insidescores, int maxlen, int goal)
+cpdef list outsidelr(grammar, insidescores, int maxlen, int goal)
