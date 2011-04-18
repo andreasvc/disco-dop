@@ -179,13 +179,13 @@ def collinize(tree, factor = "right", horzMarkov = None, vertMarkov = 0, childCh
 				if factor == "right":
 					newHead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
 					i += 1
-					lasthead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
+					lasthead = "%s%s$<%s>%s" % (originalNode, childChar, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
 					newNode = Tree(newHead, [nodeCopy.pop(1), Tree(lasthead, [nodeCopy.pop()])])
 					curNode[0:] = [nodeCopy.pop(), newNode]
 				else: # factor == "left":
 					newHead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[numChildren - i - 1:numChildren - i - 1 + horzMarkov]), parentString)
 					i += 1
-					lasthead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[:horzMarkov]), parentString)
+					lasthead = "%s%s$<%s>%s" % (originalNode, childChar, "-".join(childNodes[:horzMarkov]), parentString)
 					newNode = Tree(newHead, [Tree(lasthead, [nodeCopy.pop(0)]), nodeCopy.pop(0)])
 					curNode[0:] = [newNode, nodeCopy.pop()]
 		

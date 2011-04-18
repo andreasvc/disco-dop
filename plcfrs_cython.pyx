@@ -231,9 +231,10 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 			return a FreqDist of parse trees, with .max() being the MPP"""
 		print "sample =", sample,
 		if both:
-			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n*1000))
+			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n))
 			derivations.discard(None)
-			derivations.update(islice(enumchart(chart, start, tolabel, n), n))
+			derivations.update(lazykbest(chart, start, n, tolabel))
+			#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
 		elif sample:
 			for a,b in chart.items():
 				if not len(b): print "spurious chart entry", a
@@ -243,9 +244,9 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 			#calculate real parse probabilities according to Goodman's claimed method?
 		else:
 			#chart = filterchart(chart, start)
-			derivations = list(islice(enumchart(chart, start, tolabel, n), n))
-			print len(derivations)
-			#derivations = lazykbest(chart, start, n, tolabel)
+			#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
+			derivations = lazykbest(chart, start, n, tolabel)
+			#print len(derivations)
 			#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
 			#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
 		parsetrees = defaultdict(float)

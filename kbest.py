@@ -10,8 +10,7 @@ infinity = float('infinity')
 
 def getcandidates(chart, v, k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
-	temp = [(Edge(v, a, p), (1,) * len(a)) for a,p in chart[v]]
-	temp = [((e,j), getprob(chart, e, j)) for e,j in temp]
+	temp = [((Edge(v, a, p), (1,) * len(a)), ip) for ip,p,a in chart[v]]
 	return heapdict(nsmallest(k, [(a,p) for a,p in temp if p < infinity], key=lambda x: x[1]))
 
 def lazykthbest(chart, v, k, k1, D, cand):
@@ -54,10 +53,12 @@ def getprob(chart, e, j, visited=frozenset()):
 	#print "computing", e, j	
 	if e.tailnodes == []: dic[e,j] = 0.0
 	elif e.tailnodes[0] in visited: dic[e,j] = infinity
+	elif j == (1,) or j == (1, 1):
+		dic[e,j] = e.weight + sum(chart[tail][0][0] for tail in e.tailnodes if tail in chart)
 	else: 
-		dic[e,j] =e.weight + sum(getprob(chart, 
-							Edge(tail, chart[tail][-ji][0], chart[tail][-ji][1]), 
-							tuple(1 for x in chart[tail][-ji][0]), #!?! assume 1-best
+		dic[e,j] = e.weight + sum(getprob(chart, 
+							Edge(tail, chart[tail][ji-1][2], chart[tail][-ji][1]), 
+							tuple(1 for x in chart[tail][ji-1][2]), #!?! assume 1-best
 							visited | frozenset(e.tailnodes) if len(e.tailnodes) == 1 else frozenset())
 						for tail, ji in zip(e.tailnodes, j) if tail in chart)
 	return dic[e,j]
@@ -78,8 +79,6 @@ def lazykbest(chart, goal, k, tolabel):
 	cand = {}
 	fchart = frozendefaultdict(tuple)
 	fchart.update((a, tuple(b)) for a,b in chart.items())
-	# increase k by one because the last derivation
-	# is not always completely visited
 	lazykthbest(fchart, goal, k, k, D, cand)
 	print "derivations", len(D[goal])
 	return [(getderivation(chart, D, ej, tolabel), p) for ej, p in D[goal] if p < infinity]
@@ -93,11 +92,12 @@ def getderivation(chart, D, (e, j), tolabel):
 	# this perversely complicated expressions is necessary because D may
 	# contain backpointers to vertices which are not yet in D, so we fall back
 	# to the chart.
-	return "(%s %s)" % (tolabel[e.head.label], " ".join(
-								getderivation(chart, D, D[ei][i-1][0] if ei in D 
-									else (Edge(ei, chart[ei][-i][0], chart[ei][-i][1]), [1 for x in chart[ei][-i][0]]), 
-									tolabel) 
-								if ei in chart else str(ei.vec)
+	return "(%s %s)" % (tolabel[e.head.label],
+						" ".join(getderivation(chart, D, 
+								D[ei][i-1][0] if ei in D else 
+									(Edge(ei, chart[ei][i-1][2], chart[ei][i-1][1]), tuple(1 for x in chart[ei][i-1][2])),
+							tolabel) 
+						if ei in chart else str(ei.vec)
 				for ei,i in zip(e.tailnodes, j)))
 	#return Tree(tolabel[e.head.label], [getderivation(D, D[ei][i-1][0], tolabel) if ei in D else ei.label
 	#			for ei,i in zip(e.tailnodes, j)])
@@ -129,13 +129,14 @@ if __name__ == '__main__':
 	from plcfrs import ChartItem
 	chart1 = {
 			ChartItem("S", 0b111) : [
-				((ChartItem("NP", 0b100), ChartItem("V", 0b010), ChartItem("ADV", 0b001)), -log(0.4)),
-				((ChartItem("NP", 0b100), ChartItem("VP", 0b011)), -log(0.7))],
-			ChartItem("VP", 0b011) : [((ChartItem("V", 0b010), ChartItem("ADV", 0b001)), -log(0.5))],
-			ChartItem("NP", 0b100) : [((ChartItem("Mary", 0),), -log(0.5)), ((ChartItem("PN", 0b100),), -log(0.8))],
-			ChartItem("PN", 0b100) : [((ChartItem("Mary", 0),), -log(1.0))],
-			ChartItem("V", 0b010) : [((ChartItem("walks", 1),), -log(0.5))],
-			ChartItem("ADV", 0b001) : [((ChartItem("quickly", 2),), -log(0.5))]
+				(-log(0.25), -log(0.4), (ChartItem("NP", 0b100), ChartItem("V", 0b010), ChartItem("ADV", 0b001))),
+				(-log(0.4), -log(0.7), (ChartItem("NP", 0b100), ChartItem("VP", 0b011)))],
+			ChartItem("VP", 0b011) : [(-log(0.25), -log(0.5), (ChartItem("V", 0b010), ChartItem("ADV", 0b001)))],
+			ChartItem("NP", 0b100) : [(-log(0.25), -log(0.5), (ChartItem("Mary", 0),)), 
+										(-log(0.25), -log(0.5), (ChartItem("PN", 0b100),))],
+			ChartItem("PN", 0b100) : [(-log(1.0), -log(1.0), (ChartItem("Mary", 0),))],
+			ChartItem("V", 0b010) : [(-log(0.25), -log(0.5), (ChartItem("walks", 1),))],
+			ChartItem("ADV", 0b001) : [(-log(0.25), -log(0.5), (ChartItem("quickly", 2),))]
 			}
 	tolabel = dict((a, a) for a in "S NP V ADV VP PN".split())
 	chart = frozendefaultdict(tuple); chart.update((a, tuple(b)) for a,b in chart1.items())

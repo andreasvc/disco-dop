@@ -1,6 +1,7 @@
 from dopg import nodefreq, frequencies, decorate_with_ids
 from nltk import ImmutableTree, Tree, FreqDist 
 from math import log, e
+from heapq import nsmallest
 from itertools import chain, count, islice
 from pprint import pprint
 from collections import defaultdict, namedtuple
@@ -121,6 +122,7 @@ def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal labels to numeric identifiers"""
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
 	unary, lbinary, rbinary, lexical, bylhs = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
+	#unary, lbinary, rbinary, lexical, bylhs = {}, {}, {}, {}, {}
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	#nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(a for (rule,yf),weight in grammar for a in rule) - set(["Epsilon", "ROOT"]))))
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
@@ -131,14 +133,15 @@ def splitgrammar(grammar):
 		if len(rule) == 2:
 			if r[0][1] == 0: #Epsilon
 				# lexical productions (mis)use the field for the yield function to store the word
-				lexical[yf[0]].append((r, -w))
+				lexical.setdefault(yf[0], []).append((r, -w))
+				bylhs.setdefault(r[0][0], []).append((r, -w))
 			else:
-				unary[r[0][1]].append((r, -w))
-				bylhs[r[0][0]].append((r, -w))
+				unary.setdefault(r[0][1], []).append((r, -w))
+				bylhs.setdefault(r[0][0], []).append((r, -w))
 		elif len(rule) == 3:
-			lbinary[r[0][1]].append((r, -w))
-			rbinary[r[0][2]].append((r, -w))
-			bylhs[r[0][0]].append((r, -w))
+			lbinary.setdefault(r[0][1], []).append((r, -w))
+			rbinary.setdefault(r[0][2], []).append((r, -w))
+			bylhs.setdefault(r[0][0], []).append((r, -w))
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
@@ -295,19 +298,22 @@ def bfcartpi(seq):
 		for result in cartpi(seqlist[:n] + [seqlist[n][-1:]] + seqlist[n+1:]):
 			yield result
 
-def enumchart(chart, start, tolabel, depth=0):
+def enumchart(chart, start, tolabel, n=1, depth=0):
 	"""exhaustively enumerate trees in chart headed by start in top down 
 		fashion. chart is a dictionary with lhs -> [(rhs, logprob), (rhs, logprob) ... ]
 		this function doesn't really belong in this file but Cython doesn't
 		support generators so this function is "in exile" over here.  """
 	if depth >= 100: return
-	for a,p in reversed(chart[start]):
-		if a[0].label == 0: #Epsilon
-			yield "(%s %d)" % (tolabel[start.label], a[0].vec), p
+	for iscore,p,rhs in chart[start]:
+		if rhs[0].label == 0: #Epsilon
+			yield "(%s %d)" % (tolabel[start.label], rhs[0].vec), p
 		else:
-			for x in bfcartpi(map(lambda y: enumchart(chart, y, tolabel, depth+1), a)):
-				tree = "(%s %s)" % (tolabel[start.label], " ".join(z for z,p in x))
-				yield tree, p+sum(p for z,p in x)
+			# this doesn't seem to be a good idea:
+			#for x in nsmallest(n, cartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), key=lambda x: sum(p for z,p in x)):
+			#for x in sorted(islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), n), key=lambda x: sum(p for z,p in x)):
+			for x in islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, depth+1), rhs)), n):
+				tree = "(%s %s)" % (tolabel[start.label], " ".join(z for z,px in x))
+				yield tree, p+sum(px for z,px in x)
 
 def do(sent, grammar):
 	from plcfrs import parse
