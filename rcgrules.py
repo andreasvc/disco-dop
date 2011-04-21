@@ -1,7 +1,7 @@
 from dopg import nodefreq, frequencies, decorate_with_ids
 from nltk import ImmutableTree, Tree, FreqDist 
-from math import log, e
-from heapq import nsmallest
+from math import log, exp
+from heapq import nsmallest, heappush, heappop
 from itertools import chain, count, islice
 from pprint import pprint
 from collections import defaultdict, namedtuple
@@ -9,11 +9,16 @@ import re
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
-	contiguous range """
+	contiguous range
+	>>> rangeheads( (0, 1, 3, 4, 6) )
+	[0, 3, 6]
+	"""
 	return [a[0] for a in ranges(s)]
 
 def ranges(s):
 	""" partition s into a sequence of lists corresponding to contiguous ranges
+	>>> list(ranges( (0, 1, 3, 4, 6) ))
+	[[0, 1], [3, 4], [6]]
 	""" 
 	rng = []
 	for a in s:
@@ -57,8 +62,8 @@ def srcg_productions(tree, sent, arity_marks=True):
 	for st in tree.subtrees():
 		if st.height() == 2:
 			nonterminals = (intern(st.node), 'Epsilon')
-			vars = (sent[int(st[0])],)
-			rule = (nonterminals, vars)
+			vars = ((sent[int(st[0])],),())
+			rule = zip(nonterminals, vars)
 		else:
 			rvars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
 			lvars = list(ranges(sorted(chain(*(map(int, a.leaves()) for a in st)))))
@@ -71,24 +76,31 @@ def srcg_productions(tree, sent, arity_marks=True):
 				# A[0,1] -> B[1] C[0]  becomes A[0,1] -> C[0] B[1]
 				# although this boils down to a simple swap in a binarized grammar, for generality we do a sort instead
 				vars, nonterminals = zip((vars[0], lhs), *sorted(zip(vars[1:], nonterminals[1:]), key=lambda x: vars[0][0][0] != x[0][0]))
-			# replace the variable numbers by indices pointing to the
-			# nonterminal on the right hand side from which they take 
-			# their value.
-			# A[0,1,2] -> A[0,2] B[1]  becomes  A[0, 1, 0] -> B C
-			for x in vars[0]:
-				for n,y in enumerate(x):
-					for m,z in enumerate(vars[1:]):
-						if y in z: x[n] = m
-			rule = (nonterminals, freeze(vars[0]))
+			rule = zip(nonterminals, vars)
 		rules.append(rule)
 	return rules
+
+def varstoindices(rules):
+	newrules = []
+	for rule in rules:
+		nonterminals, vars = zip(*rule)
+		# replace the variable numbers by indices pointing to the
+		# nonterminal on the right hand side from which they take 
+		# their value.
+		# A[0,1,2] -> A[0,2] B[1]  becomes  A[0, 1, 0] -> B C
+		for x in vars[0]:
+			for n,y in enumerate(x):
+				for m,z in enumerate(vars[1:]):
+					if y in z: x[n] = m
+		newrules.append((nonterminals, freeze(vars[0])))
+	return newrules
 
 def induce_srcg(trees, sents):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
-		grammar.extend(srcg_productions(t, sent))
+		grammar.extend(varstoindices(srcg_productions(t, sent)))
 	grammar = FreqDist(grammar)
 	fd = FreqDist()
 	for rule,freq in grammar.items(): fd.inc(rule[0][0], freq)
@@ -103,9 +115,9 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	for tree, sent in zip(trees, sents):
 		#t = canonicalize(tree.copy(True))
 		t = tree.copy(True)
-		prods = srcg_productions(t, sent)
+		prods = varstoindices(srcg_productions(t, sent))
 		ut = decorate_with_ids(t, ids)
-		uprods = srcg_productions(ut, sent, False)
+		uprods = varstoindices(srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
 		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b)))] for (a,avar),(b,bvar) in zip(prods, uprods))))
 	rules = FreqDist(rules)
@@ -269,6 +281,58 @@ def maxsetmappings(a,b,x,y,firstCall=False):
 		else: startyexists = False
 	return set(mappings)
 
+def complexity(rule):
+	return len(rule[0][1]) + sum(len(a[1]) for a in rule[1:])
+
+def complexityfanout(rule):
+	return (len(rule[0][1]) + sum(len(a[1]) for a in rule[1:]), len(rule[0][1]))
+
+def minimalbinarization(rule, f):
+	""" Gildea (2009): Optimal parsing strategies for linear context-free rewriting systems
+	>>> minimalbinarization((("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,))), complexityfanout)
+	[(('NP', ((0, 1, 2),)), ('ART', (0,)), ('NP|<ADJ-NN>', (1, 2))), 
+	(('NP|<ADJ-NN>', ((1, 2),)), ('ADJ', (1,)), ('NN', (2,)))]
+	"""
+	def newproduction(a, b):
+		newlabel = "%s|<%s-%s>" % (rule[0][0], "-".join(x for x,y in nonterms[a]), "-".join(x for x,y in nonterms[b]))
+		vars = tuple(map(tuple, ranges(sorted(chain(*(a[0][1] + b[0][1])))))) 
+		rhs1 = (a[0][0], a[0][1][0])
+		rhs2 = (b[0][0], b[0][1][0])
+		return ((newlabel, vars), rhs1, rhs2)
+	def prods(p):
+		if len(p) == 1: return []
+		return list(chain([p], *[prods([x for y,x in workingset if x[0][0] == a[0] and set(chain(*x[0][1])) == set(a[1])][0]) for a in p[1:]])) 
+	if len(rule) <= 3: return [rule]
+	workingset = set()
+	agenda = []
+	nonterms = {}
+	for a in rule[1:]:
+		ax = ((a[0], (a[1],)),)
+		workingset.add((f(ax), ax))
+		heappush(agenda, (f(ax), ax))
+		nonterms[ax] = set((a,))
+	while agenda:
+		x, px = heappop(agenda)
+		if nonterms[px] == set(rule[1:]):
+			px = ((rule[0][0], px[0][1]),) + px[1:]
+			return prods(px)
+		for y, p1 in list(workingset):
+			if p1 == px or set(chain(*px[0][1])).intersection(chain(*p1[0][1])): continue
+			p2 = newproduction(px, p1)
+			nonterms[p2] = nonterms[px] | nonterms[p1]
+			x2 = f(p2)
+			competitors = [(y, p2x) for y, p2x in workingset if nonterms[p2x] == nonterms[p2]]
+			if not competitors:
+				workingset.add((x2, p2))
+				heappush(agenda, (x2, p2))
+			competitors = [(y, p2x) for y, p2x in competitors if x2 < y]
+			if competitors:
+				workingset.drop(competitors.pop())
+				assert competitors == []
+				workingset.add((x2, p2))
+				heappush(agenda, (x2, p2))
+	print workingset
+
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
 	>>> list(islice(cartpi([count(), count(0)]), 9))
@@ -316,23 +380,30 @@ def enumchart(chart, start, tolabel, n=1, depth=0):
 				yield tree, p+sum(px for z,px in x)
 
 def do(sent, grammar):
-	from plcfrs import parse
-	from dopg import removeids
+	from plcfrs import parse, mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
 	if p:
-		l = FreqDist()
-		for n,(a,prob) in enumerate(enumchart(p, start, grammar.tolabel)):
-			#print n, prob, a
-			l.inc(removeids(a), e**prob)
-		for a in l: print l[a], a
+		mpp = mostprobableparse(p, start, grammar.tolabel)
+		for t in mpp:
+			print exp(mpp[t]), t
 	else: print "no parse"
 	print
 
 def main():
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
-	tree.chomsky_normal_form()
+	#tree.chomsky_normal_form()
+	print (("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,)))
+	print
+	for a in minimalbinarization((("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,))), complexityfanout):
+		print a
+	print
+	for a in srcg_productions(tree.copy(True), sent):
+		print; print a
+		for b in minimalbinarization(freeze(a), complexityfanout):
+			print b
+	return
 	pprint(srcg_productions(tree.copy(True), sent))
 	pprint(induce_srcg([tree.copy(True)], [sent]))
 	print splitgrammar(induce_srcg([tree.copy(True)], [sent]))
@@ -352,4 +423,12 @@ def main():
 	fragments = extractfragments(treebank)
 	for a,b in sorted(fragments.items()):
 		print a,b
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	import doctest
+	# do doctests, but don't be pedantic about whitespace (I suspect it is the
+	# militant anti-tab faction who are behind this obnoxious default)
+	fail, attempted = doctest.testmod(verbose=False,
+	optionflags=doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS)
+	if attempted and not fail:
+		print "%d doctests succeeded!" % attempted 
+	main()

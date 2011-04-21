@@ -51,7 +51,12 @@ class ChartItem:
 def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary, lbinary, rbinary, lexical, bylhs, toid, tolabel = grammar
+	unary = dict(grammar.unary)
+	lbinary = dict(grammar.lbinary)
+	rbinary = dict(grammar.rbinary)
+	lexical = dict(grammar.lexical)
+	toid = dict(grammar.toid)
+	tolabel = dict(grammar.tolabel)
 	if start is None: start = toid['S']
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
@@ -87,7 +92,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		#C[Ih] = I, x
 		iscore, p, rhs = xI
-		C.setdefault(Ih, deque()).append((rhs, p))
+		C.setdefault(Ih, deque()).append(xI)
 		Cx.setdefault(Ih.label, {})[Ih] = iscore
 		if Ih == goal:
 			m += 1	#problem: this is not viterbi n-best.
@@ -101,8 +106,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 				elif I1h in A and scores[0] < A[I1h][0]: 
 					A[I1h] = scores
 				else:
-					iscore, p, rhs = scores
-					C.setdefault(I1h, deque()).appendleft((rhs, p))
+					C.setdefault(I1h, deque()).appendleft(scores)
 		maxA = max(maxA, len(A))
 		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)

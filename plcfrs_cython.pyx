@@ -2,7 +2,6 @@
 # (equivalent to Linear Context-Free Rewriting Systems)
 from rcgrules import enumchart
 from kbest import lazykbest
-from dopg import removeids
 from nltk import FreqDist, Tree
 from heapdict import heapdict
 from heapq import heappush
@@ -231,7 +230,7 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 			return a FreqDist of parse trees, with .max() being the MPP"""
 		print "sample =", sample,
 		if both:
-			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n))
+			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n*100))
 			derivations.discard(None)
 			derivations.update(lazykbest(chart, start, n, tolabel))
 			#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
@@ -249,18 +248,20 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 			#print len(derivations)
 			#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
 			#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
-		parsetrees = defaultdict(float)
-		cdef double prob, prevprob
+		#cdef dict parsetrees = <dict>defaultdict(float)
+		cdef dict parsetrees = <dict>defaultdict(list)
+		cdef double prob, maxprob
 		cdef int m = 0
-		for a,prob in derivations:
+		cdef str deriv, tree
+		removeids = re.compile("@[0-9]+")
+		for deriv, prob in derivations:
 			m += 1
-			parsetrees[re.sub("@[0-9]+","",a)] += exp(-prob)
-			#tree = re.sub("@[0-9]+","",a)
-			#prevprob = parsetrees[tree]
-			#if prob > prevprob:
-			#	prevprob, prob = prob, prevprob
+			#parsetrees[removeids.sub("", deriv)] += exp(-prob)
+			parsetrees[removeids.sub("", deriv)].append(-prob)
+		for tree in parsetrees:
 			# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-			#parsetrees[tree] = prevprob + log(1.0 + exp(prob - prevprob))
+			maxprob = max(parsetrees[tree])
+			parsetrees[tree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[tree])))
 		print "(%d derivations)" % m
 		return parsetrees
 
