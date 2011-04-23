@@ -8,14 +8,14 @@ EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 class NegraCorpusReader(SyntaxCorpusReader):
-	def __init__(self, root, fileids, encoding=None, n=6, headfinal=True, reverse=True):
+	def __init__(self, root, fileids, encoding=None, n=6, headorder=False, headfinal=False, reverse=False):
 		""" n=6 for files with 6 columns, n=5 for files with 5 columns (no lemmas)
 			headfinal: whether to put the head in final or in frontal position
 			reverse: the head is made final/frontal by reversing everything before or after the head. 
 				when true, the side on which the head is will be the reversed side"""
 		if n == 5: self.d = 1
 		else: self.d = 0
-		self.headfinal, self.reverse = headfinal, reverse
+		self.headorder, self.headfinal, self.reverse = headorder, headfinal, reverse
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
 		d = self.d
@@ -28,9 +28,9 @@ class NegraCorpusReader(SyntaxCorpusReader):
 				else:
 					results.append(Tree(a[TAG-d], [n]))
 				if head is None and "HD" in a[FUNC-d].split("-"): head = results[-1]
-			if head is None: return results
 			# roughly order constituents by order in sentence
 			results.sort(key=lambda a: a.leaves()[0])
+			if head is None or not self.headorder: return results
 			head = results.index(head)
 			# everything until the head is reversed and prepended to the rest,
 			# leaving the head as the first element
@@ -70,6 +70,13 @@ class NegraCorpusReader(SyntaxCorpusReader):
 	        return concat([StreamBackedCorpusView(fileid, reader, encoding=enc)
         	               for fileid, enc in self.abspaths(self._fileids, True)])
 
+tagtoconst = { 
+	"NN" : "NP",
+	"NE" : "NP",
+	#"VVFIN" : "VP"		
+	#"VAFIN" : "VP"		
+}
+
 def unfold(tree):
 	# un-flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
@@ -77,11 +84,9 @@ def unfold(tree):
 			np = Tree("NP", pp[1:])
 			pp[:] = [pp[0], np]
 	# introduce phrasal projections for single tokens
-	tagtoconst = { 
-		"NN" : "NP" }
 	for a in tree.treepositions("leaves"):
-		tag = tree[a[:-1]]   # NN
-		const = tree[a[:-2]] # PP
+		tag = tree[a[:-1]]   # e.g. NN
+		const = tree[a[:-2]] # e.g. S
 		if tag.node in tagtoconst and const.node != tagtoconst[tag.node]:
 			newconst = Tree(tagtoconst[tag.node], [tag])
 			const[a[-2]] = newconst
@@ -93,8 +98,6 @@ def fold(tree):
 		if len(pp) == 2 and pp[1].node == "NP":
 			pp[:] = pp[:1] + pp[1][:]
 	# remove phrasal projections for single tokens
-	tagtoconst = { 
-		"NN" : "NP" }
 	for a in tree.treepositions("leaves"):
 		tag = tree[a[:-1]]   # NN
 		const = tree[a[:-2]] # NP

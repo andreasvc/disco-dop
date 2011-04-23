@@ -1,11 +1,12 @@
 from dopg import nodefreq, frequencies, decorate_with_ids
-from nltk import ImmutableTree, Tree, FreqDist 
+from nltk import ImmutableTree, Tree, FreqDist, memoize
 from math import log, exp
 from heapq import nsmallest, heappush, heappop
 from itertools import chain, count, islice
 from pprint import pprint
 from collections import defaultdict, namedtuple
 import re
+from orderedset import OrderedSet
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
@@ -53,11 +54,15 @@ def freeze(l):
 	if isinstance(l, (list, tuple)): return tuple(map(freeze, l))
 	else: return l
 
+def unfreeze(l):
+	if isinstance(l, (list, tuple)): return list(map(unfreeze, l))
+	else: return l
+
 def srcg_productions(tree, sent, arity_marks=True):
 	""" given a tree with indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a set
 	of simple RCG rules. has the side-effect of adding arity
-	markers to node labels (so don't run twice with the same tree) """
+	markers to node labels """
 	rules = []
 	for st in tree.subtrees():
 		if st.height() == 2:
@@ -65,25 +70,30 @@ def srcg_productions(tree, sent, arity_marks=True):
 			vars = ((sent[int(st[0])],),())
 			rule = zip(nonterminals, vars)
 		else:
-			rvars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
+			rvars = [sorted(map(int, a.leaves())) for a in st]
 			lvars = list(ranges(sorted(chain(*(map(int, a.leaves()) for a in st)))))
-			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
-			lhs = intern(node_arity(st, lvars, True) if arity_marks else st.node)
-			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
+			#rvars1 = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
+			#lvars1 = [[x for x in a if any(x in c for c in rvars1)] for a in lvars]
+			#lhs = intern(node_arity(st, lvars1, True) if arity_marks else st.node)
+			#nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars1))
+			nonterminals = (st.node,) + tuple(a.node for a in st)
 			vars = (lvars,) + tuple(rvars)
 			if vars[0][0][0] != vars[1][0]:
 				# sort the right hand side so that the first argument comes from the first nonterminal
 				# A[0,1] -> B[1] C[0]  becomes A[0,1] -> C[0] B[1]
 				# although this boils down to a simple swap in a binarized grammar, for generality we do a sort instead
-				vars, nonterminals = zip((vars[0], lhs), *sorted(zip(vars[1:], nonterminals[1:]), key=lambda x: vars[0][0][0] != x[0][0]))
+				vars, nonterminals = zip((vars[0], nonterminals[0]), *sorted(zip(vars[1:], nonterminals[1:]), key=lambda x: vars[0][0][0] != x[0][0]))
 			rule = zip(nonterminals, vars)
 		rules.append(rule)
 	return rules
 
-def varstoindices(rules):
-	newrules = []
-	for rule in rules:
-		nonterminals, vars = zip(*rule)
+def varstoindices(rule):
+	nonterminals, vars = zip(*unfreeze(rule))
+	if rule[1][0] != 'Epsilon':
+		#nonterminals = [node_arity(a, b) for a,b in zip(nonterminals, vars)]
+		rvars = [rangeheads(a) for a in vars[1:]]
+		lvars = [[x for x in a if any(x in c for c in rvars)] for a in vars[0]]
+		vars = [lvars] + rvars
 		# replace the variable numbers by indices pointing to the
 		# nonterminal on the right hand side from which they take 
 		# their value.
@@ -92,15 +102,14 @@ def varstoindices(rules):
 			for n,y in enumerate(x):
 				for m,z in enumerate(vars[1:]):
 					if y in z: x[n] = m
-		newrules.append((nonterminals, freeze(vars[0])))
-	return newrules
+	return nonterminals, freeze(vars[0])
 
 def induce_srcg(trees, sents):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
-		grammar.extend(varstoindices(srcg_productions(t, sent)))
+		grammar.extend(map(varstoindices, srcg_productions(t, sent)))
 	grammar = FreqDist(grammar)
 	fd = FreqDist()
 	for rule,freq in grammar.items(): fd.inc(rule[0][0], freq)
@@ -115,9 +124,9 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	for tree, sent in zip(trees, sents):
 		#t = canonicalize(tree.copy(True))
 		t = tree.copy(True)
-		prods = varstoindices(srcg_productions(t, sent))
+		prods = map(varstoindices, srcg_productions(t, sent))
 		ut = decorate_with_ids(t, ids)
-		uprods = varstoindices(srcg_productions(ut, sent, False))
+		uprods = map(varstoindices, srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
 		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b)))] for (a,avar),(b,bvar) in zip(prods, uprods))))
 	rules = FreqDist(rules)
@@ -281,57 +290,62 @@ def maxsetmappings(a,b,x,y,firstCall=False):
 		else: startyexists = False
 	return set(mappings)
 
-def complexity(rule):
-	return len(rule[0][1]) + sum(len(a[1]) for a in rule[1:])
+@memoize
+def fanout(tree):
+	return len(rangeheads(sorted(tree.leaves()))) if isinstance(tree, Tree) else 1
 
-def complexityfanout(rule):
-	return (len(rule[0][1]) + sum(len(a[1]) for a in rule[1:]), len(rule[0][1]))
+def complexityfanout(tree):
+	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
 
-def minimalbinarization(rule, f):
+def minimalbinarization(tree, score):
 	""" Gildea (2009): Optimal parsing strategies for linear context-free rewriting systems
-	>>> minimalbinarization((("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,))), complexityfanout)
-	[(('NP', ((0, 1, 2),)), ('ART', (0,)), ('NP|<ADJ-NN>', (1, 2))), 
-	(('NP|<ADJ-NN>', ((1, 2),)), ('ADJ', (1,)), ('NN', (2,)))]
+	Expects an immutable tree where the terminals are integers corresponding to indices.
+
+	>>> minimalbinarization1(ImmutableTree("NP", [ImmutableTree("ART", [0]), ImmutableTree("ADJ", [1]), ImmutableTree("NN", [2])]), complexityfanout1)
+	ImmutableTree('NP', [ImmutableTree('NP|<ART-ADJ>', [ImmutableTree('ART', [0]), ImmutableTree('ADJ', [1])]), ImmutableTree('NN', [2])])
 	"""
 	def newproduction(a, b):
-		newlabel = "%s|<%s-%s>" % (rule[0][0], "-".join(x for x,y in nonterms[a]), "-".join(x for x,y in nonterms[b]))
-		vars = tuple(map(tuple, ranges(sorted(chain(*(a[0][1] + b[0][1])))))) 
-		rhs1 = (a[0][0], a[0][1][0])
-		rhs2 = (b[0][0], b[0][1][0])
-		return ((newlabel, vars), rhs1, rhs2)
-	def prods(p):
-		if len(p) == 1: return []
-		return list(chain([p], *[prods([x for y,x in workingset if x[0][0] == a[0] and set(chain(*x[0][1])) == set(a[1])][0]) for a in p[1:]])) 
-	if len(rule) <= 3: return [rule]
-	workingset = set()
+		if min(nonterms[a]) > min(nonterms[b]): a, b = b, a
+		newlabel = "%s|<%s>" % (tree.node, "-".join(x.node for x,y in sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])))
+		return ImmutableTree(newlabel, [a, b])
+	if len(tree) <= 2: return tree
+	# bypass algorithm when there are no discontinuities:
+	if len(rangeheads(tree.leaves())) == 1:
+		newtree = Tree.convert(tree)
+		newtree.chomsky_normal_form()
+		return newtree
+	workingset = OrderedSet()
 	agenda = []
 	nonterms = {}
-	for a in rule[1:]:
-		ax = ((a[0], (a[1],)),)
-		workingset.add((f(ax), ax))
-		heappush(agenda, (f(ax), ax))
-		nonterms[ax] = set((a,))
+	goal = set((a, tuple(a.leaves())) for a in tree)
+	for a in tree:
+		workingset.add((score(a), a))
+		heappush(agenda, (score(a), a))
+		nonterms[a] = set([(a, tuple(a.leaves()))])
 	while agenda:
 		x, px = heappop(agenda)
-		if nonterms[px] == set(rule[1:]):
-			px = ((rule[0][0], px[0][1]),) + px[1:]
-			return prods(px)
+		if (x, px) not in workingset: continue
+		if nonterms[px] == goal:
+			px = ImmutableTree(tree.node, px[:])
+			return px
 		for y, p1 in list(workingset):
-			if p1 == px or set(chain(*px[0][1])).intersection(chain(*p1[0][1])): continue
+			if (y, p1) not in workingset or nonterms[px] & nonterms[p1]: continue
 			p2 = newproduction(px, p1)
-			nonterms[p2] = nonterms[px] | nonterms[p1]
-			x2 = f(p2)
-			competitors = [(y, p2x) for y, p2x in workingset if nonterms[p2x] == nonterms[p2]]
-			if not competitors:
+			p2nonterms = nonterms[px] | nonterms[p1]
+			x2 = score(p2)
+			inferior = [(y, p2x) for y, p2x in workingset if nonterms[p2x] == p2nonterms and x2 < y]
+			if inferior or p2nonterms not in nonterms.values():
 				workingset.add((x2, p2))
 				heappush(agenda, (x2, p2))
-			competitors = [(y, p2x) for y, p2x in competitors if x2 < y]
-			if competitors:
-				workingset.drop(competitors.pop())
-				assert competitors == []
-				workingset.add((x2, p2))
-				heappush(agenda, (x2, p2))
-	print workingset
+			for a in inferior:
+				workingset.discard(a)
+				del nonterms[a[1]]
+			nonterms[p2] = p2nonterms
+
+def binarizetree(tree):
+	""" Recursively binarize a tree. Tree needs to be immutable."""
+	if not isinstance(tree, Tree): return tree
+	return Tree(tree.node, map(binarizetree, minimalbinarization(tree, complexityfanout)))
 
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
@@ -391,22 +405,31 @@ def do(sent, grammar):
 	print
 
 def main():
-	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
-	sent = "Daruber muss nachgedacht werden".split()
-	#tree.chomsky_normal_form()
+	from treetransforms import un_collinize
 	print (("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,)))
 	print
 	for a in minimalbinarization((("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,))), complexityfanout):
 		print a
 	print
-	for a in srcg_productions(tree.copy(True), sent):
-		print; print a
-		for b in minimalbinarization(freeze(a), complexityfanout):
-			print b
-	return
+	from negra import NegraCorpusReader
+	n = NegraCorpusReader(".", "sample2\.export")
+	for tree,sent in zip(n.parsed_sents(), n.sents()):
+		print tree
+		a = binarizetree(tree.freeze())
+		print a; print
+		un_collinize(a)
+		print a, a == tree
+		for a in srcg_productions(tree.copy(True), sent):
+			print; print a
+			for b in minimalbinarization(freeze(a), complexityfanout):
+				print b
+	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
+	sent = "Daruber muss nachgedacht werden".split()
+	tree.chomsky_normal_form()
 	pprint(srcg_productions(tree.copy(True), sent))
 	pprint(induce_srcg([tree.copy(True)], [sent]))
 	print splitgrammar(induce_srcg([tree.copy(True)], [sent]))
+	return
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
 	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
 

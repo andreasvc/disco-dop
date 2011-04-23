@@ -192,9 +192,9 @@ def collinize(tree, factor = "right", horzMarkov = None, vertMarkov = 0, childCh
 
 def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", unaryChar = "+"):
 	# Traverse the tree-depth first keeping a pointer to the parent for modification purposes.
-	nodeList = [(tree,[])]
-	while nodeList != []:
-		node,parent = nodeList.pop()
+	agenda = [(tree,[])]
+	while agenda:
+		node, parent = agenda.pop()
 		if isinstance(node,Tree):
 			# if the node contains the 'childChar' character it means that
 			# it is an artificial node and can be removed, although we still need
@@ -202,7 +202,7 @@ def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", un
 			childIndex = node.node.find(childChar)
 			if childIndex != -1:
 				nodeIndex = parent.index(node)
-				parent.remove(parent[nodeIndex])
+				parent.pop(nodeIndex)  #parent.remove(parent[nodeIndex])
 				# Generated node was on the left if the nodeIndex is 0 which
 				# means the grammar was left factored.  We must insert the children
 				# at the beginning of the parent's children
@@ -212,7 +212,8 @@ def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", un
 					parent.extend(node)
 				
 				# parent is now the current node so the children of parent will be added to the agenda
-				node = parent
+				#node = parent
+				# ?!? only the *new* children should be added, which are the ones in node; otherwise agenda will contain duplicates
 			else:
 				parentIndex = node.node.find(parentChar)
 				if parentIndex != -1:
@@ -226,9 +227,11 @@ def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", un
 						newNode = Tree(node.node[unaryIndex + 1:], [i for i in node])
 						node.node = node.node[:unaryIndex]
 						node[0:] = [newNode]
+				# non-binarized constituent, so move on to next parent
+				parent = node
 					  
 			for child in node:
-				nodeList.append((child,node))
+				agenda.append((child, parent))
 
 
 def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "+"):
