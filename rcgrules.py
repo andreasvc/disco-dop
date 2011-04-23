@@ -1,12 +1,10 @@
-from dopg import nodefreq, frequencies, decorate_with_ids
+from dopg import nodefreq, decorate_with_ids
 from nltk import ImmutableTree, Tree, FreqDist, memoize
 from math import log, exp
 from heapq import nsmallest, heappush, heappop
 from itertools import chain, count, islice
 from pprint import pprint
 from collections import defaultdict, namedtuple
-import re
-from orderedset import OrderedSet
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
@@ -301,7 +299,7 @@ def minimalbinarization(tree, score):
 	""" Gildea (2009): Optimal parsing strategies for linear context-free rewriting systems
 	Expects an immutable tree where the terminals are integers corresponding to indices.
 
-	>>> minimalbinarization1(ImmutableTree("NP", [ImmutableTree("ART", [0]), ImmutableTree("ADJ", [1]), ImmutableTree("NN", [2])]), complexityfanout1)
+	>>> minimalbinarization(ImmutableTree("NP", [ImmutableTree("ART", [0]), ImmutableTree("ADJ", [1]), ImmutableTree("NN", [2])]), complexityfanout)
 	ImmutableTree('NP', [ImmutableTree('NP|<ART-ADJ>', [ImmutableTree('ART', [0]), ImmutableTree('ADJ', [1])]), ImmutableTree('NN', [2])])
 	"""
 	def newproduction(a, b):
@@ -309,12 +307,7 @@ def minimalbinarization(tree, score):
 		newlabel = "%s|<%s>" % (tree.node, "-".join(x.node for x,y in sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])))
 		return ImmutableTree(newlabel, [a, b])
 	if len(tree) <= 2: return tree
-	# bypass algorithm when there are no discontinuities:
-	if len(rangeheads(tree.leaves())) == 1:
-		newtree = Tree.convert(tree)
-		newtree.chomsky_normal_form()
-		return newtree
-	workingset = OrderedSet()
+	workingset = set()
 	agenda = []
 	nonterms = {}
 	goal = set((a, tuple(a.leaves())) for a in tree)
@@ -345,6 +338,11 @@ def minimalbinarization(tree, score):
 def binarizetree(tree):
 	""" Recursively binarize a tree. Tree needs to be immutable."""
 	if not isinstance(tree, Tree): return tree
+	# bypass algorithm when there are no discontinuities:
+	elif len(rangeheads(tree.leaves())) == 1:
+		newtree = Tree(tree.node, map(binarizetree, tree))
+		newtree.chomsky_normal_form()
+		return newtree
 	return Tree(tree.node, map(binarizetree, minimalbinarization(tree, complexityfanout)))
 
 def cartpi(seq):
@@ -406,30 +404,20 @@ def do(sent, grammar):
 
 def main():
 	from treetransforms import un_collinize
-	print (("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,)))
-	print
-	for a in minimalbinarization((("NP", ((0,1,2),)), ("ART", (0,)), ("ADJ", (1,)), ("NN", (2,))), complexityfanout):
-		print a
-	print
 	from negra import NegraCorpusReader
 	n = NegraCorpusReader(".", "sample2\.export")
-	for tree,sent in zip(n.parsed_sents(), n.sents()):
+	for tree, sent in zip(n.parsed_sents(), n.sents()):
 		print tree
 		a = binarizetree(tree.freeze())
 		print a; print
 		un_collinize(a)
 		print a, a == tree
-		for a in srcg_productions(tree.copy(True), sent):
-			print; print a
-			for b in minimalbinarization(freeze(a), complexityfanout):
-				print b
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
 	tree.chomsky_normal_form()
 	pprint(srcg_productions(tree.copy(True), sent))
 	pprint(induce_srcg([tree.copy(True)], [sent]))
 	print splitgrammar(induce_srcg([tree.copy(True)], [sent]))
-	return
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
 	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
 
