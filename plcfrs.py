@@ -223,7 +223,7 @@ def pprint_chart(chart, sent, tolabel):
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
 		print "%s[%s] =>" % (tolabel[a[0]], ("0" * len(sent) + bin(a[1])[2:])[::-1][:len(sent)])
-		for b,p in chart[a]:
+		for ip,p,b in chart[a]:
 			for c in b:
 				if tolabel[c[0]] == "Epsilon":
 					print "\t", repr(sent[b[0][1]]),

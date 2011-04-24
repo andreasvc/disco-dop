@@ -49,12 +49,10 @@ def alpha_normalize(s):
 	return s
 
 def freeze(l):
-	if isinstance(l, (list, tuple)): return tuple(map(freeze, l))
-	else: return l
+	return tuple(map(freeze, l)) if isinstance(l, (list, tuple)) else l
 
 def unfreeze(l):
-	if isinstance(l, (list, tuple)): return list(map(unfreeze, l))
-	else: return l
+	return list(map(unfreeze, l)) if isinstance(l, (list, tuple)) else l
 
 def srcg_productions(tree, sent, arity_marks=True):
 	""" given a tree with indices as terminals, and a sentence
@@ -68,13 +66,11 @@ def srcg_productions(tree, sent, arity_marks=True):
 			vars = ((sent[int(st[0])],),())
 			rule = zip(nonterminals, vars)
 		else:
-			rvars = [sorted(map(int, a.leaves())) for a in st]
+			rvars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
 			lvars = list(ranges(sorted(chain(*(map(int, a.leaves()) for a in st)))))
-			#rvars1 = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
-			#lvars1 = [[x for x in a if any(x in c for c in rvars1)] for a in lvars]
-			#lhs = intern(node_arity(st, lvars1, True) if arity_marks else st.node)
-			#nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars1))
-			nonterminals = (st.node,) + tuple(a.node for a in st)
+			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
+			lhs = intern(node_arity(st, lvars, True) if arity_marks else st.node)
+			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
 			vars = (lvars,) + tuple(rvars)
 			if vars[0][0][0] != vars[1][0]:
 				# sort the right hand side so that the first argument comes from the first nonterminal
@@ -88,10 +84,6 @@ def srcg_productions(tree, sent, arity_marks=True):
 def varstoindices(rule):
 	nonterminals, vars = zip(*unfreeze(rule))
 	if rule[1][0] != 'Epsilon':
-		#nonterminals = [node_arity(a, b) for a,b in zip(nonterminals, vars)]
-		rvars = [rangeheads(a) for a in vars[1:]]
-		lvars = [[x for x in a if any(x in c for c in rvars)] for a in vars[0]]
-		vars = [lvars] + rvars
 		# replace the variable numbers by indices pointing to the
 		# nonterminal on the right hand side from which they take 
 		# their value.
