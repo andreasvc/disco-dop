@@ -34,8 +34,6 @@ def lazykthbest(chart, v, k, k1, D, cand):
 	if v not in cand:
 		# initialize the heap
 		cand[v] = getcandidates(chart, v, k1)
-		print "cand", v
-		for a,b in cand[v].items(): print a,b
 		# 1-best
 		if cand[v]: D.setdefault(v, []).append(cand[v].popitem())
 	# NB: there seems to be an error in the pseudocode of Huang & Chiang,
@@ -45,7 +43,6 @@ def lazykthbest(chart, v, k, k1, D, cand):
 	while len(D[v]) < k: # and len(cand[v]):
 		# last derivation
 		e, j = D[v][-1][0]
-		print "lazynext", v, e, j
 		# update the heap, adding the successors of last derivation
 		lazynext(cand, v, e, j, k1, D, chart)
 		# get the next best derivation and delete it from the heap
@@ -61,7 +58,6 @@ def lazynext(cand, v, e, j, k1, D, chart):
 		lazykthbest(chart, ei, j1[i], k1, D, cand)
 		# if it exists and is not in heap yet
 		#if len(chart[ei]) >= j1[i] <= len(D[ei]) and (e, j1) not in cand[v]:
-		print v, ei, j1
 		if j1[i] <= len(D[ei]) and (e, j1) not in cand[v]:
 			# add it to the heap
 			#cand[v][e,j1] = D[ei][j1[i] - 1][1]
@@ -123,10 +119,10 @@ def lazykbest(chart, goal, k, tolabel):
 	cand = {}
 	chart = dict(chart)
 	lazykthbest(chart, goal, k, k, D, cand)
-	for v,l in D.items():
-		print tolabel[v.label], bin(v.vec)
-		for a,b in l: print a,exp(-b)
-	print "derivations", len(D[goal])
+	#for v,l in D.items():
+	#	print tolabel[v.label], bin(v.vec)
+	#	for a,b in l: print a,exp(-b)
+	#print "derivations", len(D[goal])
 	return [(getderivation(chart, D, ej, tolabel), p) for ej, p in D[goal] if p < infinity]
 
 def main():
