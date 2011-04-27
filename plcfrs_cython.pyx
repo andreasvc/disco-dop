@@ -5,8 +5,7 @@ from kbest import lazykbest
 from nltk import FreqDist, Tree
 from heapdict import heapdict
 from heapq import heappush
-#from pyjudy import JudyLObjObj
-from math import log, exp, floor
+from math import log, exp
 from random import choice, randrange
 from itertools import chain, islice
 from collections import defaultdict, deque
@@ -57,12 +56,8 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	cdef int m = 0, maxA = 0
 	A = heapdict() if viterbi else {}
-	#cdef dict C = <dict>defaultdict(deque)
 	cdef dict C = <dict>defaultdict(list)
 	cdef dict Cx = <dict>defaultdict(dict)
-	#C = JudyLObjObj()
-	#from guppy import hpy; h = hpy(); hn = 0
-	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
 
 	# scan
 	Epsilon = toid["Epsilon"]
@@ -98,8 +93,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		heappush(C[Ih], (iscore, p, rhs))
 		Cx[Ih.label][Ih] = iscore
 		if Ih == goal:
-			m += 1	#problem: this is not viterbi n-best.
-			#goal = Ih
+			m += 1
 			if viterbi and n==m: break
 		else:
 			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary, estimate):
@@ -117,11 +111,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 					oscore, iscore, p, rhs = scores
 					heappush(C[I1h], (iscore, p, rhs))
 		maxA = max(maxA, len(A))
-		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
-		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
-	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
-	#pprint_chart(C, sent, tolabel)
 	return (C, goal) if goal in C else ({}, ())
 
 cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, dict unary, dict lbinary, dict rbinary, estimate):
@@ -228,7 +218,7 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel): #set visited
 def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 		""" sum over n random derivations from chart,
 			return a FreqDist of parse trees, with .max() being the MPP"""
-		print "sample =", sample,
+		print "sample =", sample or both, "kbest =", (not sample) or both,
 		if both:
 			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n*100))
 			derivations.discard(None)

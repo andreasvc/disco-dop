@@ -5,19 +5,16 @@ try:
 	assert cython.compiled
 except:
 	print "plcfrs in non-cython mode"
-	#exec "from bit import *" in globals()
 	from bit import *
 
 from rcgrules import enumchart
-from dopg import removeids
+from kbest import lazykbest
 from nltk import FreqDist
 from heapdict import heapdict
-#from pyjudy import JudyLObjObj
-from math import log, exp, floor
+from math import log, exp
 from random import choice
 from itertools import chain, islice
-from collections import defaultdict, deque
-from operator import or_
+from collections import defaultdict
 import re
 
 class ChartItem:
@@ -35,8 +32,6 @@ class ChartItem:
 		elif op == 3: return self.label != other.label or self.vec != other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
 		elif op == 5: return self.label >= other.label or self.vec >= other.vec
-	#def __eq__(self, other):
-	#	return self.label == other.label and self.vec == other.vec
 	def __cmp__(self, other):
 		if self.label == other.label and self.vec == other.vec: return 0
 		elif self.label < other.label or (self.label == other.label and self.vec < other.vec): return -1
@@ -60,10 +55,8 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 	if start is None: start = toid['S']
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
-	A, C, Cx = heapdict(), {}, {} #defaultdict(deque), defaultdict(dict)
-	#C = JudyLObjObj()
-	#from guppy import hpy; h = hpy(); hn = 0
-	#h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
+	C, Cx = {}, {}
+	A = heapdict() if viterbi else {}
 
 	# scan
 	Epsilon = toid["Epsilon"]
@@ -95,12 +88,10 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 		C.setdefault(Ih, deque()).append(xI)
 		Cx.setdefault(Ih.label, {})[Ih] = iscore
 		if Ih == goal:
-			m += 1	#problem: this is not viterbi n-best.
-			#goal = Ih
+			m += 1
 			if viterbi and n==m: break
 		else:
 			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary):
-				# explicit get to avoid inserting spurious keys in defaultdict
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = scores
 				elif I1h in A and scores[0] < A[I1h][0]: 
@@ -108,11 +99,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 				else:
 					C.setdefault(I1h, deque()).appendleft(scores)
 		maxA = max(maxA, len(A))
-		#pass #h.heap().stat.dump("/tmp/hstat%d" % hn); hn+=1
-		##print h.iso(A,C,Cx).referents | h.iso(A, C, Cx)
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
-	#h.pb(*("/tmp/hstat%d" % a for a in range(hn)))
-	#pprint_chart(C, sent, tolabel)
 	return (C, goal) if goal in C else ({}, ())
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
@@ -196,25 +183,29 @@ def samplechart(chart, start, tolabel):
 	#tree = "(%s_%s %s)" % (start[0], "_".join(repr(a) for a in start[1:]), " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 	
-def mostprobableparse(chart, start, tolabel, n=100, sample=False):
+def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 		""" sum over n random derivations from chart,
 			return a FreqDist of parse trees, with .max() being the MPP"""
-		print "sample =", sample,
-		if sample:
+		print "sample =", sample or both, "kbest =", (not sample) or both,
+		if both:
+			derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
+			derivations.discard(None)
+			derivations.update(lazykbest(chart, start, n, tolabel))
+		elif sample:
 			for a,b in chart.items():
 				if not len(b): print "spurious chart entry", a
 			derivations = set(samplechart(chart, start, tolabel) for x in range(n))
 			derivations.discard(None)
-			#todo: calculate real parse probabilities
+			#calculate real parse probabilities according to Goodman's claimed method?
 		else:
-			#chart = filterchart(chart, start)
-			#for a in chart: chart[a].sort(key=lambda x: x[1], reverse=True)
-			derivations = islice(enumchart(chart, start, tolabel), n)
+			#derivations = islice(enumchart(chart, start, tolabel), n)
+			derivations = lazykbest(chart, start, n, tolabel)
 		parsetrees = defaultdict(float)
 		m = 0
+		removeids = re.compile("@[0-9]+")
 		for a,prob in derivations:
 			# if necessary, we could do the addition in log space
-			parsetrees[re.sub("@[0-9]+","",a)] += exp(-prob)
+			parsetrees[removeids.sub("", a)] += exp(-prob)
 			m += 1
 		print "(%d derivations)" % m
 		return parsetrees

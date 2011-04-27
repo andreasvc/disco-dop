@@ -33,7 +33,7 @@ def node_arity(n, vars, inplace=False):
 	if len(vars) > 1 and not n.node.endswith("_%d" % len(vars)):
 		if inplace: n.node = "%s_%d" % (n.node, len(vars))
 		else: return "%s_%d" % (n.node, len(vars))
-	return n.node
+	return n.node if isinstance(n, Tree) else n
 
 def alpha_normalize(s):
 	""" Substitute variables so that the variables on the left-hand side appear consecutively.
@@ -62,19 +62,28 @@ def srcg_productions(tree, sent, arity_marks=True):
 	markers to node labels """
 	rules = []
 	for st in tree.subtrees():
-		if st.height() == 2 and len(st) == 1:
+		if len(st) == 1 and not isinstance(st[0], Tree):
 			nonterminals = (intern(st.node), 'Epsilon')
 			vars = ((sent[int(st[0])],),())
 			rule = zip(nonterminals, vars)
 		else:
 			leaves = map(int, st.leaves())
-			rleaves = [a.leaves() if len(a) 
+			cnt = count(len(leaves))
+			rleaves = [a.leaves() if isinstance(a, Tree) and len(a) 
 				else list(islice(
-					filter(lambda x: x not in leaves, count(len(leaves))), 
-					int(a.node[a.node.index("_")+1]))) 
-				for a in st]
-			rvars = [rangeheads(sorted(map(int, l))) for a,l in zip(st, rleaves)]
-			lvars = list(ranges(sorted(chain(*(map(int, l) for a,l in zip(st, rleaves))))))
+					(x for x in cnt if x not in leaves),
+					int(a.node[a.node.index("_")+1:] if "_" in a.node else 1)))
+				if isinstance(a, Tree) else [a] for a in st]
+			if len(st) == 0: 
+				rleaves = [list(islice((x for x in count(len(leaves)) 
+						if x not in leaves),
+					int(st.node[st.node.index("_")+1:] if "_" in st.node else 1)))]
+			if len(st):
+				rvars = [rangeheads(sorted(map(int, l))) for a,l in zip(st, rleaves)]
+				lvars = list(ranges(sorted(chain(*(map(int, l) for a,l in zip(st, rleaves))))))
+			else:
+				rvars = rleaves
+				lvars = rleaves
 			#rvars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
 			#lvars = list(ranges(sorted(chain(*(map(int, a.leaves()) for a in st)))))
 			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
@@ -224,6 +233,8 @@ def doubledop(trees, sents):
 	backtransform = {}
 	cnt = count()
 	newprods = []
+	trees = list(trees)
+	for t,s in zip(trees, sents): srcg_productions(t, s) 
 	fragments = extractfragments(trees, sents)
 	missing = missingproductions(trees, sents, fragments)
 	productions = map(flatten, fragments)
@@ -244,14 +255,18 @@ def doubledop(trees, sents):
 	ntfd = defaultdict(int)
 	for a,b in fragments.items():
 		ntfd[a.node] += b
-	grammar = [(srcg_productions(a, a.leaves())[0], float(b) / ntfd[f.node]) 
+	grammar = [(srcg_productions(terminalstoindices(a), a.leaves())[0], float(b) / ntfd[f.node]) 
 		for a, (f, b) in zip(productions, fragments.items()) 
 		if backtransform[a]]
-	grammar += [(srcg_productions(a, a.leaves())[0], 
-		log(float(fragments[backtransform[a]]) / (ntfd[backtransform[a].node])) 
-		if a in backtransform else log(1.0)) 
-		for a in newprods]
+	grammar += [(srcg_productions(terminalstoindices(a), a.leaves())[0], 
+		log(float(fragments[backtransform[a]] if a in backtransform else 1) / 
+		(ntfd[a.node] if a.node in ntfd else 1))) for a in newprods + missing]
 	return grammar, backtransform
+
+def terminalstoindices(tree):
+	tree = Tree.convert(tree)
+	for n, idx in enumerate(tree.treepositions('leaves')): tree[idx] = n
+	return tree
 
 def recoverfromfragments(derivation, backtransform):
 	result = Tree.convert(backtransform[top_production(derivation)])
@@ -308,11 +323,10 @@ def extractmaxfragments(a,b, i,j, aprod,bprod, amap,bmap, asent,bsent, mem):
 	if not same(a[i], b[j], asent, bsent): 
 		mem[i, j] = set(); return set()
 	nodeset = set([i])
-	if (not isinstance(a[i], Tree)) or (not isinstance(b[j], Tree)):
+	# compare arity (should be added to label)
+	if ((not isinstance(a[i], Tree)) or (not isinstance(b[j], Tree))
+		or len(aprod[amap[i]][0][1]) != len(bprod[bmap[j]][0][1])):
 		mem[i, j] = nodeset; return nodeset
-	# compare arity
-	if len(aprod[amap[i]][0][1]) != len(bprod[bmap[j]][0][1]):
-		mem[i, j] = set(); return set()
 	# TODO ignore rhs order, but compare yield functions
 	# construct mapping between variables of a[i] to those of b[j]
 	# loop over children of a[i], mapping the variables of each child
@@ -538,6 +552,9 @@ def main():
 	for a,b in sorted(fragments.items()): print a.pprint(margin=999),b
 	fragments = extractfragments(corpus.parsed_sents(), corpus.sents())
 	for a,b in sorted(fragments.items()): print a,b
+	grammar, backtransform = doubledop(corpus.parsed_sents(), corpus.sents())
+	pprint(grammar)
+	pprint(backtransform)
 
 if __name__ == '__main__':
 	import doctest

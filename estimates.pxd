@@ -1,5 +1,5 @@
-from plcfrs_cython import ChartItem
 import cython
+#from plcfrs cimport ChartItem
 
 if cython.compiled:
 	print "Yep, I'm compiled"
@@ -54,3 +54,5 @@ cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned 
 	#yieldfunction=cython.tuple
 	)
 cpdef list outsidelr(grammar, insidescores, int maxlen, int goal)
+
+
