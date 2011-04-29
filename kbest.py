@@ -2,6 +2,7 @@
 from heapq import nsmallest
 from heapdict import heapdict	# fixme: heapdict does not do stable sort
 from collections import defaultdict
+from operator import itemgetter
 from nltk import Tree
 from math import log, exp
 from plcfrs import ChartItem
@@ -20,11 +21,10 @@ class Edge:
 	def __repr__(self):
 		return "<%s, [%s], %f>" % (self.head, ", ".join(map(repr, self.tailnodes)), exp(-self.weight))
 
-def second(x): return x[1]
 def getcandidates(chart, v, k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
-	temp = [((Edge(v, a, p), (1,) * len(a)), ip) for ip,p,a in chart[v]]
-	return heapdict(nsmallest(k, [(a,ip) for a,ip in temp if ip < infinity], key=second))
+	temp = [((Edge(v, a, p), (1,) * len(a)), ip) for ip,p,a in chart[v][:k] if ip < infinity]
+	return heapdict(temp)
 
 def lazykthbest(chart, v, k, k1, D, cand):
 	# k1 is the global k
@@ -44,44 +44,38 @@ def lazykthbest(chart, v, k, k1, D, cand):
 		# last derivation
 		e, j = D[v][-1][0]
 		# update the heap, adding the successors of last derivation
-		lazynext(cand, v, e, j, k1, D, chart)
+		lazynext(cand, e, j, k1, D, chart)
 		# get the next best derivation and delete it from the heap
 		try: D[v].append(cand[v].popitem())
 		except IndexError: break
 	return D
 
-def lazynext(cand, v, e, j, k1, D, chart):
+def lazynext(cand, e, j, k1, D, chart):
 	# add the |e| neighbors
 	for i,ei in enumerate(e.tailnodes):
 		j1 = tuple([x+1 if xi == i else x for xi, x in enumerate(j)])
 		# recursively solve a subproblem
 		lazykthbest(chart, ei, j1[i], k1, D, cand)
 		# if it exists and is not in heap yet
-		#if len(chart[ei]) >= j1[i] <= len(D[ei]) and (e, j1) not in cand[v]:
-		if j1[i] <= len(D[ei]) and (e, j1) not in cand[v]:
+		if j1[i] <= len(D[ei]) and (e, j1) not in cand[e.head]:
 			# add it to the heap
-			#cand[v][e,j1] = D[ei][j1[i] - 1][1]
-			cand[v][e,j1] = getprob(chart, D, e, j1)
-			#except IndexError: pass	# kludge
+			cand[e.head][e,j1] = D[ei][j1[i] - 1][1]
+			#cand[e.head][e,j1] = getprob(chart, D, e, j1)
 
-def getprob(chart, D, e, j, memoize={}): #frozenset()):
-	#memoize = getprob.memoize
-	if (e,j) in memoize: return memoize[e,j]
-
-	if e.tailnodes == []: memoize[e,j] = 0.0
-	#elif e.tailnodes[0] in visited: memoize[e,j] = infinity
+def getprob(chart, D, e, j, memoize={}):
+	if (e,j) in memoize:
+		pass
+	elif e.tailnodes == []:
+		memoize[e,j] = 0.0
 	elif j == (1,) or j == (1, 1):
 		memoize[e,j] = e.weight + sum(chart[tail][0][0] for tail in e.tailnodes if tail in chart)
-	else: 
+	else:
+		for tail, ji in zip(e.tailnodes, j):
+			assert tail not in chart or tail in D or ji == 1
 		memoize[e,j] = e.weight + sum(
-						D[tail][ji - 1][1] if tail in D else chart[tail][ji - 1][0] 
-						#	getprob(chart, 
-						#		Edge(tail, chart[tail][ji-1][2], chart[tail][ji-1][1]), 
-						#		(1,) * len(chart[tail][ji-1][2]), #assume 1-best
-						#		visited | frozenset(e.tailnodes) if len(e.tailnodes) == 1 else frozenset())
+						D[tail][ji - 1][1] if tail in D else chart[tail][ji - 1][0]
 						for tail, ji in zip(e.tailnodes, j) if tail in chart)
 	return memoize[e,j]
-#getprob.memoize = {}
 
 def getderivation(chart, D, ej, tolabel):
 	""" Translate the (e, j) notation to an actual nltk Tree / string in bracket notation.
@@ -89,19 +83,21 @@ def getderivation(chart, D, ej, tolabel):
 	node. For example, given the edge <S, [NP, VP], 1.0> and vector [2, 1], this
 	points to the derivation headed by S and having the 2nd best NP and the 1st
 	best VP as children. """
-	e, j = ej
-	# this perversely complicated expressions is necessary because D may
-	# contain backpointers to vertices which are not yet in D, so we fall back
-	# to the chart.
-	return "(%s %s)" % (tolabel[e.head.label],
-						" ".join([getderivation(chart, D, 
-								D[ei][i-1][0] if ei in D else 
-									(Edge(ei, chart[ei][i-1][2], chart[ei][i-1][1]), (1,) * len(chart[ei][i-1][2])),
-							tolabel) 
-						if ei in chart else str(ei.vec)
-				for ei,i in zip(e.tailnodes, j)]))
-	#return Tree(tolabel[e.head.label], [getderivation(D, D[ei][i-1][0], tolabel) if ei in D else ei.label
-	#			for ei,i in zip(e.tailnodes, j)])
+	e, j = ej; children = []
+	for ei, i in zip(e.tailnodes, j):
+		if ei in chart:
+			if ei not in D:
+				if i == 1:
+					item = chart[ei][i-1]
+					# insert edge and backpointer. bogus probability because we're
+					# only after reconstructing the tree at this point.
+					D[ei] = [((Edge(ei, item[2], item[1]), (1,) * len(item[2])), 0.0)]
+				else: raise ValueError
+			children.append(getderivation(chart, D, D[ei][i-1][0], tolabel))
+		else:
+			# this must be a terminal
+			children.append(str(ei.vec))
+	return "(%s %s)" % (tolabel[e.head.label], " ".join(children))
 	
 def lazykbest(chart, goal, k, tolabel):
 	""" wrapper function to run lazykthbest and get the actual derivations.
@@ -118,6 +114,7 @@ def lazykbest(chart, goal, k, tolabel):
 	D = {} #defaultdict(list)
 	cand = {}
 	chart = dict(chart)
+	for a in chart: chart[a].sort(key=itemgetter(0))
 	lazykthbest(chart, goal, k, k, D, cand)
 	#for v,l in D.items():
 	#	print tolabel[v.label], bin(v.vec)
@@ -136,7 +133,7 @@ def main():
 				(-log(0.5*0.4), -log(0.4), (ci("NP", 0b100), ci("V", 0b010), ci("ADV", 0b001))),
 				(-log(0.25*0.7), -log(0.7), (ci("NP", 0b100), ci("VP", 0b011)))],
 			ci("VP", 0b011) : [(-log(0.5), -log(0.5), (ci("V", 0b010), ci("ADV", 0b001)))],
-			ci("NP", 0b100) : [(-log(0.5), -log(0.5), (ci("Mary", 0),)), 
+			ci("NP", 0b100) : [(-log(0.5), -log(0.5), (ci("Mary", 0),)),
 										(-log(0.5), -log(0.5), (ci("PN", 0b100),))],
 			ci("PN", 0b100) : [(-log(1.0), -log(1.0), (ci("Mary", 0),))],
 			ci("V", 0b010) : [(-log(1.0), -log(1.0), (ci("walks", 1),))],

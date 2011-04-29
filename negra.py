@@ -13,9 +13,10 @@ class NegraCorpusReader(SyntaxCorpusReader):
 			headfinal: whether to put the head in final or in frontal position
 			reverse: the head is made final/frontal by reversing everything before or after the head. 
 				when true, the side on which the head is will be the reversed side"""
-		if n == 5: self.d = 1	#fixme: autodetect this
+		#fixme: autodetect this, or put stuff in dictionaries instead of lists
+		if n == 5: self.d = 1	
 		else: self.d = 0
-		self.headorder = headorder; self.headfinal = headfinal; 
+		self.headorder = headorder; self.headfinal = headfinal
 		self.reverse = reverse; self.unfold = unfold
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
@@ -64,7 +65,7 @@ class NegraCorpusReader(SyntaxCorpusReader):
 	def _tag(self, s, ignore):
 		return [(a[WORD], a[TAG-self.d]) for a in s if a[WORD][0] != "#"]
 	def _read_block(self, stream):
-		return [[line.split() for line in block.splitlines()[1:]] 
+		return [[line.split() for line in block.splitlines()[1:]]
 				for block in read_regexp_block(stream, BOS, EOS)]
 			# didn't seem to help:
 			#for b in map(lambda x: read_regexp_block(stream, BOS, EOS), range(1000)) for block in b]
@@ -79,7 +80,7 @@ class NegraCorpusReader(SyntaxCorpusReader):
 # generalizations suggested by SyntaxGeneralizer of TigerAPI
 # however, instead of renaming, we introduce unary productions
 # POS tags
-tonp = "NN NE NNE PNC PRF PDS PIS PPER PPOS PRELS PWS".split()
+tonp = "NN NNE PNC PRF PDS PIS PPER PPOS PRELS PWS".split()
 topp = "PROAV PWAV".split()  # ??
 toap = "ADJA PDAT PIAT PPOSAT PRELAT PWAT PRELS".split()
 toavp = "ADJD ADV".split()
@@ -99,40 +100,63 @@ for a in tonp: unaryconst[a] = "NP"
 
 def unfold(tree):
 	""" Unfold redundancies and perform other transformations introducing
-	more hierarchy in the phrase-structure annotation. """
+	more hierarchy in the phrase-structure annotation.
+	(ROOT (S (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (NP (NE 0)) (VAFIN 1) (PROAV 2))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) (NP (ART 3) (NN 4) (PP (APPR 5) (PRF 6)))) ($. 7))
+
+	"""
+	global original, current
+	original = tree.copy(True)
+	current = tree
 	def function(tree):
-		if hasattr(tree, "source"): return tree.source[FUNC].split("-")[0]
-	# introduce DPs
-	for np in tree.subtrees(lambda n: n.node == "NP"):
-		if np[0].node == "ART":
-			np.node = "DP"
-			np[:] = [np[0], Tree("NP", np[1:])]
+			if hasattr(tree, "source"): return tree.source[FUNC - 1 if len(tree.source)==5 else 0].split("-")[0]
 	# un-flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
 		if (len(pp) == 2 and pp[1].node != "NP" or len(pp) > 2):
 			np = Tree("NP", pp[1:])
-			if np[0].node == "ART": 
-				np = Tree("DP", [np[0], Tree("NP", np[1:])])
 			pp[:] = [pp[0], np]
+	# introduce DPs
+	for np in list(tree.subtrees(lambda n: n.node == "NP")):
+		if np[0].node == "ART":
+			np.node = "DP"
+			np[:] = [np[0], Tree("NP", np[1:])]
 	# introduce finite VP at S level, collect objects and modifiers
-	addtovp = "HD AC DA MO NG OA OA2 OC OG PD VO".split()
-	s = tree[[a.node for a in tree].index("S")]
-	if "HD" in map(function, s):
-		vp = Tree("VP", [a for a in s if function(a) in addtovp])
-		s[:] = [a for a in s if function(a) not in addtovp] + [vp]
-	# introduce new S level for discourse markers and complementizers
-	newlevel = "DM CP".split()
-	if s[0].source[FUNC] in newlevel:
-		s[:] = [tree[0], Tree("S", tree[1:])]
+	# introduce new S level for discourse markers
+	newlevel = "DM".split()
+	addtovp = "HD AC DA MO NG OA OA2 OC OG PD VO SVP".split()
+	labels = [a.node for a in tree]
+	def finitevp(s):
+		if any(x.node.startswith("V") and x.node.endswith("FIN") for x in s if isinstance(x, Tree)):
+			vp = Tree("VP", [a for a in s if function(a) in addtovp])
+			if len(vp) != 1 or vp[0].node != "VP":
+				s[:] = [a for a in s if function(a) not in addtovp] + [vp]
+	toplevel_s = []
+	if "S" in labels:
+		# multiple S ?
+		s = tree[labels.index("S")]
+		toplevel_s = [s]
+		if function(s[0]) in newlevel:
+			s[:] = [s[0], Tree("S", s[1:])]
+			toplevel_s = [s[1]]
+	elif "CS" in labels:
+		cs = tree[labels.index("CS")]
+		toplevel_s = [a for a in cs if a.node == "S"]
+	map(finitevp, toplevel_s)
 	# introduce POS tag for particle verbs
 	for a in tree.subtrees(lambda n: "SVP" in map(function, n)):
-		hd = [x for x in a if function(x) == "HD"][0]
-		svp = [x for x in a if function(x) == "SVP"][0]
-		particleverb = Tree(hd.node, [hd, svp])
-		a[:] = [particleverb if function(x) == "HD" else x for x in a if function(x) != "SVP"]
+		svp = [x for x in a if function(x) == "SVP"].pop()
+		#apparently there can be a _verb_ particle without a verb. headlines? annotation mistake?
+		if "HD" in map(function, a):
+			hd = [x for x in a if function(x) == "HD"].pop()
+			if hd.node != a.node:
+				particleverb = Tree(hd.node, [hd, svp])
+				a[:] = [particleverb if function(x) == "HD" else x for x in a if function(x) != "SVP"]
 	# introduce SBAR level
-	# TODO
+	sbarfunc = "CP".split()
+	for s in list(tree.subtrees(lambda n: n.node == "S" and function(n[0]) in sbarfunc and n not in toplevel_s)):
+		s.node = "SBAR"
+		s[:] = [s[0], Tree("S", s[1:])]
 	# introduce phrasal projections for single tokens
+	return tree
 	for a in tree.treepositions("leaves"):
 		tag = tree[a[:-1]]   # e.g. NN
 		const = tree[a[:-2]] # e.g. S
@@ -149,24 +173,32 @@ def fold(tree):
 			dp[:] = dp[:1] + dp[1][:]
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
-		if len(pp) == 2 and pp[1].node == "NP":
+		if len(pp) == 2 and pp[1].node == "NP": # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
 			pp[:] = pp[:1] + pp[1][:]
 	# merge extra S level
-	s = tree[[a.node for a in tree].index("S")]
-	if len(s) == 2 and s[1].node == "S":
-		s = s[:1] + s[1][:]	
+	for sbar in list(tree.subtrees(lambda n: n.node == "SBAR" or (n.node == "S" and len(n) == 2 and n[0].node == "PTKANT" and n[1].node == "S"))):
+		sbar.node = "S"
+		sbar[:] = sbar[:1] + sbar[1][:]
 	# merge finite VP with S level
-	s = tree[[a.node for a in tree].index("S")]
-	vp = [a.node for a in s].index("VP")
-	s[:] = s[:vp] + s[vp][:] + s[vp+1:]
+	def mergevp(s):
+		labels = [a.node for a in s]
+		for vp in (n for n,a in enumerate(s) if a.node == "VP"):
+			if any(a.node.endswith("FIN") for a in s[vp]):
+				s[:] = s[:vp] + s[vp][:] + s[vp+1:]
+	labels = [a.node for a in tree]
+	if "S" in labels:
+		s = tree[labels.index("S")]
+		if len(s) == 2 and s[1].node == "S":
+			s = s[:1] + s[1][:]
+		mergevp(s)
+	elif "CS" in labels:
+		map(mergevp, [a for a in tree[labels.index("CS")] if a.node == "S"])
 	# remove constituents for particle verbs
-	for a in tree.subtrees(lambda n: any(isinstance(x, Tree) and x.node == "VP" for x in n)):
+	# get the grandfather of each verb particle
+	for a in list(tree.subtrees(lambda n: any("PTKVZ" in (x.node for x in m if isinstance(x, Tree)) for m in n if isinstance(m, Tree)))):
 		for n,b in enumerate(a):
-			if isinstance(b, Tree) and b.node == "VP" and "PTKVZ" in (c.node for c in b):
+			if len(b) == 2 and b.node.startswith("V") and "PTKVZ" in (c.node for c in b if isinstance(c, Tree)) and any(c.node == b.node for c in b):
 				a[n:n+1] = b[:]
-				# break out of the for loop because the list/tree was modified in-place
-				# assumes there is only one particle verb in a VP
-				break 
 	# remove phrasal projections for single tokens
 	for a in tree.treepositions("leaves"):
 		tag = tree[a[:-1]]    # NN
@@ -182,24 +214,37 @@ def bracketings(tree):
 
 def main():
 	from rcgrules import canonicalize
+	from itertools import count
 	print "normal"
-	n = NegraCorpusReader(".", "sample2\.export")
+	#n = NegraCorpusReader(".", "sample2\.export")
+	n = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5)
+	"""
 	for a in n.parsed_sents(): print a
 	for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
 	for a in n.sents(): print " ".join(a)
 	for a in n.blocks(): print a
 	print "\nunfolded"
-	nn = NegraCorpusReader(".", "sample2\.export", unfold=True)
-	for a,b,c in zip(n.parsed_sents(), nn.parsed_sents(), n.sents()):
-		print b
-		print " ".join(":".join((str(n),a)) for n,a in enumerate(c))
-		foldb = fold(b)
-		if bracketings(canonicalize(a)) == bracketings(canonicalize(foldb)): 
-			print "match"
-		else: 
+	"""
+	#nn = NegraCorpusReader(".", "sample2\.export", unfold=True)
+	nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5, unfold=True)
+	correct = 0
+	for a,b,c,d in zip(n.parsed_sents(), nn.parsed_sents(), n.sents(), count()):
+		foldb = fold(b.copy(True))
+		if bracketings(canonicalize(a)) == bracketings(canonicalize(foldb)):
+			correct += 1
+		else:
 			b1 = bracketings(canonicalize(a))
 			b2 = bracketings(canonicalize(foldb))
-			print "no match", len(set(b1) & set(b2)) / float(len(set(b1))), len(set(b1) & set(b2)) / float(len(set(b2)))
-			print len(b1), len(b2), set(b2) - set(b1), set(b1) - set(b2)
-
+			precision = len(set(b1) & set(b2)) / float(len(set(b1)))
+			recall = len(set(b1) & set(b2)) / float(len(set(b2)))
+			if precision != 1.0 or recall != 1.0:
+				print d, " ".join(":".join((str(n),a)) for n,a in enumerate(c))
+				print "no match", precision, recall
+				print len(b1), len(b2), set(b2) - set(b1), set(b1) - set(b2)
+				print a
+				print foldb
+				print b
+			else:
+				correct += 1
+	print "matches", correct, "/", len(n.sents()), d, 100 * float(correct) / len(n.sents()), "%"
 if __name__ == '__main__': main()
