@@ -4,7 +4,6 @@ from rcgrules import enumchart
 from kbest import lazykbest
 from nltk import FreqDist, Tree
 from heapdict import heapdict
-from heapq import heappush
 from math import log, exp
 from random import choice, randrange
 from itertools import chain, islice
@@ -90,7 +89,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		Ih, (oscore, iscore, p, rhs) = A.popitem()
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		heappush(C[Ih], (iscore, p, rhs))
+		C[Ih].append((iscore, p, rhs))
 		Cx[Ih.label][Ih] = iscore
 		if Ih == goal:
 			m += 1
@@ -109,7 +108,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 					A[I1h] = scores
 				else: #if not viterbi:
 					oscore, iscore, p, rhs = scores
-					heappush(C[I1h], (iscore, p, rhs))
+					C[I1h].append((iscore, p, rhs))
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	return (C, goal) if goal in C else ({}, ())

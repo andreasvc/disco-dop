@@ -104,21 +104,18 @@ def unfold(tree):
 	(ROOT (S (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (NP (NE 0)) (VAFIN 1) (PROAV 2))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) (NP (ART 3) (NN 4) (PP (APPR 5) (PRF 6)))) ($. 7))
 
 	"""
-	global original, current
-	original = tree.copy(True)
-	current = tree
 	def function(tree):
 			if hasattr(tree, "source"): return tree.source[FUNC - 1 if len(tree.source)==5 else 0].split("-")[0]
 	# un-flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
-		if (len(pp) == 2 and pp[1].node != "NP" or len(pp) > 2):
+		if (len(pp) == 2 and pp[1].node not in "NP PN".split() or len(pp) > 2):
 			np = Tree("NP", pp[1:])
 			pp[:] = [pp[0], np]
 	# introduce DPs
 	for np in list(tree.subtrees(lambda n: n.node == "NP")):
 		if np[0].node == "ART":
 			np.node = "DP"
-			np[:] = [np[0], Tree("NP", np[1:])]
+			if np[1].node != "PN": np[:] = [np[0], Tree("NP", np[1:])]
 	# introduce finite VP at S level, collect objects and modifiers
 	# introduce new S level for discourse markers
 	newlevel = "DM".split()
@@ -169,8 +166,8 @@ def fold(tree):
 	""" Undo the transformations performed by unfold. Do not apply twice (would remove VPs which shouldn't be). """
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
-			dp.node = dp[1].node
-			dp[:] = dp[:1] + dp[1][:]
+			dp.node = "NP"
+			if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
 		if len(pp) == 2 and pp[1].node == "NP": # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
@@ -227,17 +224,17 @@ def main():
 	"""
 	#nn = NegraCorpusReader(".", "sample2\.export", unfold=True)
 	nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5, unfold=True)
-	correct = 0
-	for a,b,c,d in zip(n.parsed_sents(), nn.parsed_sents(), n.sents(), count()):
+	correct = exact = d = 0
+	for a,b,c in zip(n.parsed_sents(), nn.parsed_sents(), n.sents()):
+		if len(c) > 15: continue
 		foldb = fold(b.copy(True))
-		if bracketings(canonicalize(a)) == bracketings(canonicalize(foldb)):
-			correct += 1
-		else:
-			b1 = bracketings(canonicalize(a))
-			b2 = bracketings(canonicalize(foldb))
+		b1 = bracketings(canonicalize(a))
+		b2 = bracketings(canonicalize(foldb))
+		z = 825
+		if b1 != b2 or d == z:
 			precision = len(set(b1) & set(b2)) / float(len(set(b1)))
 			recall = len(set(b1) & set(b2)) / float(len(set(b2)))
-			if precision != 1.0 or recall != 1.0:
+			if precision != 1.0 or recall != 1.0 or d == z:
 				print d, " ".join(":".join((str(n),a)) for n,a in enumerate(c))
 				print "no match", precision, recall
 				print len(b1), len(b2), set(b2) - set(b1), set(b1) - set(b2)
@@ -246,5 +243,10 @@ def main():
 				print b
 			else:
 				correct += 1
+		else:
+			exact += 1
+			correct += 1
+		d += 1
 	print "matches", correct, "/", len(n.sents()), d, 100 * float(correct) / len(n.sents()), "%"
+	print "exact", exact
 if __name__ == '__main__': main()

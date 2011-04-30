@@ -60,22 +60,6 @@ def lazynext(cand, e, j, k1, D, chart):
 		if j1[i] <= len(D[ei]) and (e, j1) not in cand[e.head]:
 			# add it to the heap
 			cand[e.head][e,j1] = D[ei][j1[i] - 1][1]
-			#cand[e.head][e,j1] = getprob(chart, D, e, j1)
-
-def getprob(chart, D, e, j, memoize={}):
-	if (e,j) in memoize:
-		pass
-	elif e.tailnodes == []:
-		memoize[e,j] = 0.0
-	elif j == (1,) or j == (1, 1):
-		memoize[e,j] = e.weight + sum(chart[tail][0][0] for tail in e.tailnodes if tail in chart)
-	else:
-		for tail, ji in zip(e.tailnodes, j):
-			assert tail not in chart or tail in D or ji == 1
-		memoize[e,j] = e.weight + sum(
-						D[tail][ji - 1][1] if tail in D else chart[tail][ji - 1][0]
-						for tail, ji in zip(e.tailnodes, j) if tail in chart)
-	return memoize[e,j]
 
 def getderivation(chart, D, ej, tolabel):
 	""" Translate the (e, j) notation to an actual nltk Tree / string in bracket notation.
