@@ -8,64 +8,79 @@ EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 class NegraCorpusReader(SyntaxCorpusReader):
-	def __init__(self, root, fileids, encoding=None, n=6, headorder=False, headfinal=False, reverse=False, unfold=False):
-		""" n=6 for files with 6 columns, n=5 for files with 5 columns (no lemmas)
+	def __init__(self, root, fileids, encoding=None, headorder=False, headfinal=False, headreverse=False, unfold=False):
+		""" headorder: whether to order constituents according to heads
 			headfinal: whether to put the head in final or in frontal position
-			reverse: the head is made final/frontal by reversing everything before or after the head. 
-				when true, the side on which the head is will be the reversed side"""
-		#fixme: autodetect this, or put stuff in dictionaries instead of lists
-		if n == 5: self.d = 1	
-		else: self.d = 0
-		self.headorder = headorder; self.headfinal = headfinal
-		self.reverse = reverse; self.unfold = unfold
+			headreverse: the head is made final/frontal by reversing everything before or after the head. 
+				when true, the side on which the head is will be the reversed side
+			unfold: whether to apply corpus transformations"""
+		self.headorder = headorder; self.reverse = headreverse
+		self.headfinal = headfinal;	self.unfold = unfold
+		self.headrules = {}
+		# this file containing head assignment rules is part of rparse, 
+		# under src/de/tuebingen/rparse/treebank/constituent/negra/
+		for a in open("negra.headrules"):
+			if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
+				label, lr, heads = a.upper().split(None, 2)
+				self.headrules.setdefault(label, []).append((lr, heads.split()))
+		self.headrules["ROOT"] = self.headrules["VROOT"]
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
-		d = self.d
 		def getchildren(parent, children):
-			results = []; head = None
+			results = []
 			for n,a in children[parent]:
 				# n is the index in the block to record word indices
-				if a[WORD][0] == "#": #nonterminal
-					results.append(Tree(a[TAG-d], getchildren(a[WORD][1:], children)))
+				if a[WORD].startswith("#"): #nonterminal
+					results.append(Tree(a[TAG], getchildren(a[WORD][1:], children)))
 					results[-1].source = a
 				else: #terminal
-					results.append(Tree(a[TAG-d], [n]))
+					results.append(Tree(a[TAG], [n]))
 					results[-1].source = a
-				if head is None and "HD" in a[FUNC-d].split("-"): head = results[-1]
 			# roughly order constituents by order in sentence
 			results.sort(key=lambda a: a.leaves()[0])
-			if head is None or not self.headorder: return results
-			head = results.index(head)
+			return results
+		def headorder(tree):
+			head = [n for n,a in enumerate(tree) if hasattr(a, "source") and "HD" in a.source[FUNC].split("-")]
+			if not head: return
+			headidx = head.pop()
 			# everything until the head is reversed and prepended to the rest,
 			# leaving the head as the first element
 			if self.headfinal:
 				if self.reverse:
 					# head final, reverse rhs: A B C^ D E => A B E D C^
-					return results[:head] + results[head:][::-1]
+					tree[:] = tree[:headidx] + tree[headidx:][::-1]
 				else:
 					# head final, no reverse:  A B C^ D E => D E A B C^
-					#return sorted(results[head+1:] + results[:head]) + results[head:head+1]
+					#return sorted(tree[head+1:] + tree[:head]) + tree[head:head+1]
 					# head final, reverse lhs:  A B C^ D E => E D A B C^
-					return results[head+1:][::-1] + results[:head+1]
+					tree[:] = tree[headidx+1:][::-1] + tree[:headidx+1]
 			else:
 				if self.reverse:
 					# head first, reverse lhs: A B C^ D E => C^ B A D E
-					return results[:head+1][::-1] + results[head+1:]
+					tree[:] = tree[:headidx+1][::-1] + tree[headidx+1:]
 				else:
 					# head first, reverse rhs: A B C^ D E => C^ D E B A
-					return results[head:] + results[:head][::-1]
+					tree[:] = tree[headidx:] + tree[:headidx][::-1]
 		children = {}
 		for n,a in enumerate(s):
-			children.setdefault(a[PARENT-d], []).append((n,a))
-		if self.unfold:
-			return unfold(Tree("ROOT", getchildren("0", children)))
-		return Tree("ROOT", getchildren("0", children))
+			children.setdefault(a[PARENT], []).append((n,a))
+		result = Tree("ROOT", getchildren("0", children))
+		if self.unfold: result = unfold(result)
+		if self.headorder:
+			map(lambda x: headfinder(x, self.headrules), result.subtrees())
+			map(headorder, result.subtrees())
+		return result
 	def _word(self, s):
 		return [a[WORD] for a in s if a[WORD][0] != "#"]
 	def _tag(self, s, ignore):
-		return [(a[WORD], a[TAG-self.d]) for a in s if a[WORD][0] != "#"]
+		return [(a[WORD], a[TAG]) for a in s if a[WORD][0] != "#"]
 	def _read_block(self, stream):
-		return [[line.split() for line in block.splitlines()[1:]]
+		def sixelements(a):
+			""" add dummy lemma if that field is not present """
+			if len(a) == 6: return a
+			elif len(a) == 5: return a[:1] + [''] + a[1:]
+			else: raise ValueError
+		return [[sixelements(line.split()) for line in block.splitlines()[1:]]
 				for block in read_regexp_block(stream, BOS, EOS)]
 			# didn't seem to help:
 			#for b in map(lambda x: read_regexp_block(stream, BOS, EOS), range(1000)) for block in b]
@@ -105,9 +120,9 @@ def unfold(tree):
 	"""
 	original = tree.copy(Tree); current = tree # for debugging
 	def function(tree):
-			if hasattr(tree, "source"): return tree.source[FUNC - 1 if len(tree.source)==5 else 0].split("-")[0]
+			if hasattr(tree, "source"): return tree.source[FUNC].split("-")[0]
 	# un-flatten PPs
-	addtopp = "AC MO".split()
+	addtopp = "AC MO".split() # could there be a MO which should be part of the NP?
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
 		ac = [a for a in pp if function(a) in addtopp]
 		nk = [a for a in pp if function(a) not in addtopp]
@@ -169,7 +184,7 @@ def unfold(tree):
 	return tree
 
 def fold(tree):
-	""" Undo the transformations performed by unfold. Do not apply twice (would remove VPs which shouldn't be). """
+	""" Undo the transformations performed by unfold. Do not apply twice (might remove VPs which shouldn't be). """
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
 			dp.node = "NP"
@@ -211,6 +226,18 @@ def fold(tree):
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
 	return tree
 
+def headfinder(tree, headrules):
+	for lr, heads in headrules.get(tree.node, []):
+		for child in tree if lr == "LEFT-TO-RIGHT" else reversed(tree):
+			if isinstance(child, Tree) and child.node in heads:
+				child.source = getattr(child, "source", 6 * [''])
+				if "-" in child.source[FUNC]: pass
+				elif child.source[FUNC]: child.source[FUNC] += "-HD"
+				else: child.source[FUNC] = "HD"
+				print "head", child
+				return
+	print "no head", tree
+	
 def bracketings(tree):
         return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
 
@@ -218,8 +245,8 @@ def main():
 	from rcgrules import canonicalize
 	from itertools import count
 	print "normal"
-	#n = NegraCorpusReader(".", "sample2\.export")
-	n = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5, headorder=False)
+	n = NegraCorpusReader(".", "sample2\.export", headorder=True)
+	#n = NegraCorpusReader("../rparse", "tiger3600proc\.export", headorder=False)
 	"""
 	for a in n.parsed_sents(): print a
 	for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
@@ -227,11 +254,12 @@ def main():
 	for a in n.blocks(): print a
 	print "\nunfolded"
 	"""
-	#nn = NegraCorpusReader(".", "sample2\.export", unfold=True)
-	nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5, unfold=True)
+	nn = NegraCorpusReader(".", "sample2\.export", headorder=True, unfold=True)
+	#nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", unfold=True)
 	correct = exact = d = 0
 	for a,b,c in zip(n.parsed_sents(), nn.parsed_sents(), n.sents()):
 		#if len(c) > 15: continue
+		print a; print b; print
 		foldb = fold(b.copy(True))
 		b1 = bracketings(canonicalize(a))
 		b2 = bracketings(canonicalize(foldb))
@@ -246,11 +274,8 @@ def main():
 				print a
 				print foldb
 				print b
-			else:
-				correct += 1
-		else:
-			exact += 1
-			correct += 1
+			else: correct += 1
+		else: exact += 1; correct += 1
 		d += 1
 	print "matches", correct, "/", d, 100 * correct / float(d), "%"
 	print "exact", exact
