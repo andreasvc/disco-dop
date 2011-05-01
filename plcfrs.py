@@ -233,10 +233,10 @@ def do(sent, grammar):
 	else: print "no parse"
 	print
 
-import cython
 def main():
 	from rcgrules import splitgrammar
-	print "compiled", cython.compiled
+	try: print "compiled", cython.compiled
+	except: print "compiled", False
 	grammar = splitgrammar(
 		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),

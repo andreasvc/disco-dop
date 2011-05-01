@@ -184,7 +184,7 @@ trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.bloc
 #trees, sents, blocks = corpus.parsed_sents()[7200:9000], corpus.tagged_sents()[7200:9000], corpus.blocks()[7200:9000]
 print "read test corpus"
 maxsent = 360
-maxlen = 15
+maxlen = 99
 viterbi = False
 sample = True
 n = 0      #number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)

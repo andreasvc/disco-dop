@@ -124,8 +124,8 @@ def insideconcat(a, b, yieldfunction, maxlen):
 	return result
 
 def outsidelr(grammar, insidescores, maxlen, goal):
-	if cython.compiled: print "estimates: running cython"
-	else: print "estimates: not cython"
+	try: assert cython.compiled; print "estimates: running cython"
+	except: print "estimates: not cython"
 	bylhs = grammar.bylhs
 	agenda = heapdict()
 	infinity = float('infinity')

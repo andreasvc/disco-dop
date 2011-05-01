@@ -100,17 +100,19 @@ for a in tonp: unaryconst[a] = "NP"
 
 def unfold(tree):
 	""" Unfold redundancies and perform other transformations introducing
-	more hierarchy in the phrase-structure annotation.
-	(ROOT (S (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (VP (NP (NE 0)) (VAFIN 1) (PROAV 2))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) (NP (ART 3) (NN 4) (PP (APPR 5) (PRF 6)))) ($. 7))
-
+	more hierarchy in the phrase-structure annotation based on 
+	grammatical functions.
 	"""
+	original = tree.copy(Tree); current = tree # for debugging
 	def function(tree):
 			if hasattr(tree, "source"): return tree.source[FUNC - 1 if len(tree.source)==5 else 0].split("-")[0]
 	# un-flatten PPs
+	addtopp = "AC MO".split()
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
-		if (len(pp) == 2 and pp[1].node not in "NP PN".split() or len(pp) > 2):
-			np = Tree("NP", pp[1:])
-			pp[:] = [pp[0], np]
+		ac = [a for a in pp if function(a) in addtopp]
+		nk = [a for a in pp if function(a) not in addtopp]
+		if ac and nk and (len(nk) > 1 or nk[0].node not in "NP PN".split()):
+			pp[:] = ac + [Tree("NP", nk)]
 	# introduce DPs
 	for np in list(tree.subtrees(lambda n: n.node == "NP")):
 		if np[0].node == "ART":
@@ -150,10 +152,14 @@ def unfold(tree):
 	# introduce SBAR level
 	sbarfunc = "CP".split()
 	for s in list(tree.subtrees(lambda n: n.node == "S" and function(n[0]) in sbarfunc and n not in toplevel_s)):
-		s.node = "SBAR"
-		s[:] = [s[0], Tree("S", s[1:])]
-	# introduce phrasal projections for single tokens
+		if len(s) > 1:
+			s.node = "SBAR"
+			s[:] = [s[0], Tree("S", s[1:])]
+	# restore linear precedence ordering
+	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
+	# do head order etc.
 	return tree
+	# introduce phrasal projections for single tokens
 	for a in tree.treepositions("leaves"):
 		tag = tree[a[:-1]]   # e.g. NN
 		const = tree[a[:-2]] # e.g. S
@@ -170,26 +176,23 @@ def fold(tree):
 			if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
-		if len(pp) == 2 and pp[1].node == "NP": # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
-			pp[:] = pp[:1] + pp[1][:]
+		if "NP" in (a.node for a in pp): # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
+			#ensure NP is in last position
+			pp.sort(key=lambda n: n.node == "NP")
+			pp[:] = pp[:-1] + pp[-1][:]
 	# merge extra S level
 	for sbar in list(tree.subtrees(lambda n: n.node == "SBAR" or (n.node == "S" and len(n) == 2 and n[0].node == "PTKANT" and n[1].node == "S"))):
 		sbar.node = "S"
 		sbar[:] = sbar[:1] + sbar[1][:]
 	# merge finite VP with S level
 	def mergevp(s):
-		labels = [a.node for a in s]
 		for vp in (n for n,a in enumerate(s) if a.node == "VP"):
 			if any(a.node.endswith("FIN") for a in s[vp]):
 				s[:] = s[:vp] + s[vp][:] + s[vp+1:]
-	labels = [a.node for a in tree]
-	if "S" in labels:
-		s = tree[labels.index("S")]
-		if len(s) == 2 and s[1].node == "S":
-			s = s[:1] + s[1][:]
-		mergevp(s)
-	elif "CS" in labels:
-		map(mergevp, [a for a in tree[labels.index("CS")] if a.node == "S"])
+	if any(a.node == "S" for a in tree):
+		map(mergevp, [a for a in tree if a.node == "S"])
+	elif any(a.node == "CS" for a in tree):
+		map(mergevp, [s for cs in tree for s in cs if cs.node == "CS" and s.node == "S"])
 	# remove constituents for particle verbs
 	# get the grandfather of each verb particle
 	for a in list(tree.subtrees(lambda n: any("PTKVZ" in (x.node for x in m if isinstance(x, Tree)) for m in n if isinstance(m, Tree)))):
@@ -204,6 +207,8 @@ def fold(tree):
 		if len(const) == 1 and tag.node in tagtoconst and const.node == tagtoconst[tag.node]:
 			parent[a[-3]] = tag
 			del const
+	# restore linear precedence ordering
+	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
 	return tree
 
 def bracketings(tree):
@@ -214,7 +219,7 @@ def main():
 	from itertools import count
 	print "normal"
 	#n = NegraCorpusReader(".", "sample2\.export")
-	n = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5)
+	n = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5, headorder=False)
 	"""
 	for a in n.parsed_sents(): print a
 	for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
@@ -226,11 +231,11 @@ def main():
 	nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", n=5, unfold=True)
 	correct = exact = d = 0
 	for a,b,c in zip(n.parsed_sents(), nn.parsed_sents(), n.sents()):
-		if len(c) > 15: continue
+		#if len(c) > 15: continue
 		foldb = fold(b.copy(True))
 		b1 = bracketings(canonicalize(a))
 		b2 = bracketings(canonicalize(foldb))
-		z = 825
+		z = -1
 		if b1 != b2 or d == z:
 			precision = len(set(b1) & set(b2)) / float(len(set(b1)))
 			recall = len(set(b1) & set(b2)) / float(len(set(b2)))
@@ -247,6 +252,6 @@ def main():
 			exact += 1
 			correct += 1
 		d += 1
-	print "matches", correct, "/", len(n.sents()), d, 100 * float(correct) / len(n.sents()), "%"
+	print "matches", correct, "/", d, 100 * correct / float(d), "%"
 	print "exact", exact
 if __name__ == '__main__': main()
