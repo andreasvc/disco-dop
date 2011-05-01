@@ -7,16 +7,6 @@ except:
 	print "plcfrs in non-cython mode"
 	from bit import *
 
-from rcgrules import enumchart
-from kbest import lazykbest
-from nltk import FreqDist
-from heapdict import heapdict
-from math import log, exp
-from random import choice
-from itertools import chain, islice
-from collections import defaultdict
-import re
-
 class ChartItem:
 	__slots__ = ("label", "vec", "_hash")
 	def __init__(self, label, vec):
@@ -41,7 +31,17 @@ class ChartItem:
 		elif n == 1: return self.vec
 	def __repr__(self):
 		#would need bitlen for proper padding
-		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
+		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
+
+from rcgrules import enumchart
+from kbest import lazykbest
+from nltk import FreqDist
+from heapdict import heapdict
+from math import log, exp
+from random import choice
+from itertools import chain, islice
+from collections import defaultdict
+import re
 
 def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
@@ -85,7 +85,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		#C[Ih] = I, x
 		iscore, p, rhs = xI
-		C.setdefault(Ih, deque()).append(xI)
+		C.setdefault(Ih, []).append(xI)
 		Cx.setdefault(Ih.label, {})[Ih] = iscore
 		if Ih == goal:
 			m += 1
@@ -94,10 +94,11 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary):
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
 					A[I1h] = scores
-				elif I1h in A and scores[0] < A[I1h][0]: 
+				elif I1h in A and scores[0] < A[I1h][0]:
 					A[I1h] = scores
 				else:
-					C.setdefault(I1h, deque()).appendleft(scores)
+					rhs = scores[2]
+					C.setdefault(I1h, []).append(scores)
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	return (C, goal) if goal in C else ({}, ())
@@ -175,12 +176,11 @@ def filterchart(chart, start):
 	return chart2
 
 def samplechart(chart, start, tolabel):
-	entry, p = choice(chart[start])
-	if len(entry) == 1 and entry[0][0] == 0: # entry[0][0] == "Epsilon":
+	iscore, p, entry = choice(chart[start])
+	if len(entry) == 1 and entry[0][0] == 0: # Epsilon
 		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
 	children = [samplechart(chart, a, tolabel) for a in entry]
 	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))
-	#tree = "(%s_%s %s)" % (start[0], "_".join(repr(a) for a in start[1:]), " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 	
 def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):

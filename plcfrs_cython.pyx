@@ -39,7 +39,7 @@ cdef class ChartItem:
 		elif n == 1: return self.vec
 	def __repr__(ChartItem self):
 		#would need bitlen for proper padding
-		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1]) 
+		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
 
 def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
