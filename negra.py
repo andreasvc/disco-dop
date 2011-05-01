@@ -143,6 +143,9 @@ def unfold(tree):
 			vp = Tree("VP", [a for a in s if function(a) in addtovp])
 			if len(vp) != 1 or vp[0].node != "VP":
 				s[:] = [a for a in s if function(a) not in addtovp] + [vp]
+	# relative clause => SRC
+	for s in tree.subtrees(lambda n: n.node == "S" and function(n) == "RC"):
+		s.node = "SRC"
 	toplevel_s = []
 	if "S" in labels:
 		# multiple S ?
@@ -195,6 +198,8 @@ def fold(tree):
 			#ensure NP is in last position
 			pp.sort(key=lambda n: n.node == "NP")
 			pp[:] = pp[:-1] + pp[-1][:]
+	# SRC => S
+	for s in tree.subtrees(lambda n: n.node == "SRC"): s.node = "S"
 	# merge extra S level
 	for sbar in list(tree.subtrees(lambda n: n.node == "SBAR" or (n.node == "S" and len(n) == 2 and n[0].node == "PTKANT" and n[1].node == "S"))):
 		sbar.node = "S"
@@ -234,9 +239,7 @@ def headfinder(tree, headrules):
 				if "-" in child.source[FUNC]: pass
 				elif child.source[FUNC]: child.source[FUNC] += "-HD"
 				else: child.source[FUNC] = "HD"
-				print "head", child
 				return
-	print "no head", tree
 	
 def bracketings(tree):
         return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]

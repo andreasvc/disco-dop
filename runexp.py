@@ -10,13 +10,8 @@ from functools import partial
 from pprint import pprint
 import cPickle
 import re, time
-#try:
-#from plcfrs_cython import parse, mostprobableparse
-#except Exception as e:
-#	print e
-from plcfrs import parse, mostprobableparse
-#try: import plcfrs.cython; assert plcfrs.cython
-#except: print "running non-cython code"
+try: from plcfrs_cython import parse, mostprobableparse
+except: from plcfrs import parse, mostprobableparse
 from estimates import getestimates, getoutside
 
 def rem_marks(tree):
@@ -72,8 +67,8 @@ def export(tree, sent, n):
 	for i, word in enumerate(sent):
 		idx = wordids[i]
 		result.append("\t".join((word[0],
-				tree[idx[:-1]].node, 
-				"--", "--", 
+				tree[idx[:-1]].node,
+				"--", "--",
 				str(500+nonpreterminals.index(idx[:-2]) if len(idx) > 2 else 0))))
 	for idx in nonpreterminals:
 		result.append("\t".join(("#%d" % (500 + nonpreterminals.index(idx)),
@@ -97,8 +92,8 @@ def read_rparse_grammar(file):
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 corpus = NegraCorpusReader(".", "sample2\.export")
-#corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", n=5, headfinal=True, reverse=False)
-#corpus = NegraCorpusReader("../rparse", "tigerproc.export", n=5, headorder=False)
+#corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", headfinal=True, reverse=False)
+#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False)
 trees, sents, blocks = corpus.parsed_sents()[:7200], corpus.sents()[:7200], corpus.blocks()[:7200]
 print "read training corpus"
 
@@ -180,15 +175,16 @@ if dop:
 #	print a,b
 #exit()
 trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-#corpus = NegraCorpusReader("../rparse", "tigerproc.export", n=5)
+#corpus = NegraCorpusReader("../rparse", "tigerproc.export")
 #trees, sents, blocks = corpus.parsed_sents()[7200:9000], corpus.tagged_sents()[7200:9000], corpus.blocks()[7200:9000]
 print "read test corpus"
 maxsent = 360
 maxlen = 99
 viterbi = False
-sample = True
+sample = False
+both = False
 n = 0      #number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
-m = 100000  #number of derivations to sample/enumerate
+m = 1000  #number of derivations to sample/enumerate
 nsent = 0
 exact, exacts = 0, 0
 snoparse, dnoparse = 0, 0
@@ -259,7 +255,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 		#print "viterbi =", viterbi, "n=%d" % n if viterbi else '',
 	else: chart = ()
 	if chart:
-		mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m, sample=sample, both=False).items()
+		mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m, sample=sample, both=both).items()
 		dresult, prob = max(mpp, key=lambda x: x[1])
 		#for a,b in mpp: print a,b
 		print "p =", prob, "(%d parsetrees)" % len(mpp)
