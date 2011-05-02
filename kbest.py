@@ -23,7 +23,7 @@ class Edge:
 
 def getcandidates(chart, v, k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
-	temp = [((Edge(v, a, p), (1,) * len(a)), ip) for ip,p,a in chart[v][:k] if ip < infinity]
+	temp = [((Edge(v, a, p), (0,) * len(a)), ip) for ip,p,a in chart[v][:k] if ip < infinity]
 	return heapdict(temp)
 
 def lazykthbest(chart, v, k, k1, D, cand):
@@ -40,7 +40,7 @@ def lazykthbest(chart, v, k, k1, D, cand):
 	# their while loop checks if cand[v] is nonempty, this check means
 	# that the successors of the last candidate will not be explored.
 	if not cand[v]: return D
-	while len(D[v]) < k: # and len(cand[v]):
+	while len(D[v]) <= k: # and len(cand[v]):
 		# last derivation
 		e, j = D[v][-1][0]
 		# update the heap, adding the successors of last derivation
@@ -57,9 +57,17 @@ def lazynext(cand, e, j, k1, D, chart):
 		# recursively solve a subproblem
 		lazykthbest(chart, ei, j1[i], k1, D, cand)
 		# if it exists and is not in heap yet
-		if j1[i] <= len(D[ei]) and (e, j1) not in cand[e.head]:
+		if j1[i] < len(D[ei]) and (e, j1) not in cand[e.head]:
 			# add it to the heap
-			cand[e.head][e,j1] = D[ei][j1[i] - 1][1]
+			cand[e.head][e,j1] = getprob(chart, D, e, j1)
+
+def getprob(chart, D, e, j):
+	result = e.weight
+	for ee, jj in zip(e.tailnodes, j):
+		if ee in D: result += D[ee][jj][1]
+		elif jj == 0: result += chart[ee][0][0]
+		else: raise ValueError
+	return result
 
 def getderivation(chart, D, ej, tolabel):
 	""" Translate the (e, j) notation to an actual nltk Tree / string in bracket notation.
@@ -71,13 +79,11 @@ def getderivation(chart, D, ej, tolabel):
 	for ei, i in zip(e.tailnodes, j):
 		if ei in chart:
 			if ei not in D:
-				if i == 1:
-					item = chart[ei][i-1]
-					# insert edge and backpointer. bogus probability because we're
-					# only after reconstructing the tree at this point.
-					D[ei] = [((Edge(ei, item[2], item[1]), (1,) * len(item[2])), 0.0)]
+				if i == 0:
+					ip, p, rhs = chart[ei][i]
+					D[ei] = [((Edge(ei, rhs, p), (0,) * len(rhs)), ip)]
 				else: raise ValueError
-			children.append(getderivation(chart, D, D[ei][i-1][0], tolabel))
+			children.append(getderivation(chart, D, D[ei][i][0], tolabel))
 		else:
 			# this must be a terminal
 			children.append(str(ei.vec))
@@ -123,12 +129,12 @@ def main():
 			ci("V", 0b010) : [(-log(1.0), -log(1.0), (ci("walks", 1),))],
 			ci("ADV", 0b001) : [(-log(1.0), -log(1.0), (ci("quickly", 2),))]
 			}
-	D = {} #defaultdict(list)
+	D = {}
 	cand = {}
 	k = 10
-	for a,b in lazykthbest(chart, goal, k+1, k+1, D, cand).items():
-		print a
-		for ((e,j),p) in b: print e, j, exp(-p)
+	for a,b in lazykthbest(chart, goal, k, k, D, cand).items():
+		print tolabel[a.label], bin(a.vec)[2:]
+		for ((e,j),p) in b: print tolabel[e.head.label], ":", " ".join([tolabel[a.label] for a in e.tailnodes]), exp(-e.weight), j, exp(-p)
 		print
 	for a,p in lazykbest(chart, goal, k, tolabel):
 		print exp(-p), a
