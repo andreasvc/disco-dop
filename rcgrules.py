@@ -69,7 +69,7 @@ def srcg_productions(tree, sent, arity_marks=True):
 		else:
 			leaves = map(int, st.leaves())
 			cnt = count(len(leaves))
-			rleaves = [a.leaves() if isinstance(a, Tree) and len(a) 
+			rleaves = [a.leaves() if isinstance(a, Tree) and len(a)
 				else list(islice(
 					(x for x in cnt if x not in leaves),
 					int(a.node[a.node.index("_")+1:] if "_" in a.node else 1)))
@@ -144,20 +144,21 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 		return [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
 	# should we distinguish what kind of arguments a node takes in fd?
 	return [(rule, log(freq * reduce((lambda x,y: x*y),
-		map((lambda z: fd[z] if '@' in z else 1), rule[0][1:])) / 
-		(float(fd[rule[0][0]]) * (ntfd[rule[0][0]] 
+		map((lambda z: fd[z] if '@' in z else 1), rule[0][1:])) /
+		(float(fd[rule[0][0]]) * (ntfd[rule[0][0]]
 		if '@' not in rule[0][0] and normalize else 1))))
 		for rule, freq in rules.items()]
 
 def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal labels to numeric identifiers"""
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
-	unary, lbinary, rbinary, lexical, bylhs = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(list)
 	#unary, lbinary, rbinary, lexical, bylhs = {}, {}, {}, {}, {}
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	#nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(a for (rule,yf),weight in grammar for a in rule) - set(["Epsilon", "ROOT"]))))
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
+	unary, lbinary, rbinary, bylhs = (tuple([] for a in nonterminals) for b in range(4))
+	lexical = defaultdict(list)
 	# negate the log probabilities because the heap we use is a min-heap
 	for (rule,yf),w in grammar:
 		r = tuple(toid[a] for a in rule), yf
@@ -165,14 +166,13 @@ def splitgrammar(grammar):
 			if r[0][1] == 0: #Epsilon
 				# lexical productions (mis)use the field for the yield function to store the word
 				lexical.setdefault(yf[0], []).append((r, -w))
-				bylhs.setdefault(r[0][0], []).append((r, -w))
 			else:
-				unary.setdefault(r[0][1], []).append((r, -w))
-				bylhs.setdefault(r[0][0], []).append((r, -w))
+				unary[r[0][1]].append((r, -w))
+			bylhs[r[0][0]].append((r, -w))
 		elif len(rule) == 3:
-			lbinary.setdefault(r[0][1], []).append((r, -w))
-			rbinary.setdefault(r[0][2], []).append((r, -w))
-			bylhs.setdefault(r[0][0], []).append((r, -w))
+			lbinary[r[0][1]].append((r, -w))
+			rbinary[r[0][2]].append((r, -w))
+			bylhs[r[0][0]].append((r, -w))
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
@@ -439,7 +439,7 @@ def minimalbinarization(tree, score):
 			p2 = newproduction(px, p1)
 			p2nonterms = nonterms[px] | nonterms[p1]
 			x2 = score(p2)
-			inferior = [(y, p2x) for y, p2x in workingset 
+			inferior = [(y, p2x) for y, p2x in workingset
 							if nonterms[p2x] == p2nonterms and x2 < y]
 			if inferior or p2nonterms not in nonterms.values():
 				workingset.add((x2, p2))
@@ -457,7 +457,7 @@ def binarizetree(tree):
 		newtree = Tree(tree.node, map(binarizetree, tree))
 		newtree.chomsky_normal_form()
 		return newtree
-	return Tree(tree.node, map(binarizetree, 
+	return Tree(tree.node, map(binarizetree,
 				minimalbinarization(tree, complexityfanout)))
 
 def cartpi(seq):
@@ -474,7 +474,7 @@ def bfcartpi(seq):
 	#wrap items of seq in generators
 	seqit = [(x for x in a) for a in seq]
 	#fetch initial values
-	try: seqlist = [[a.next()] for a in seqit]	
+	try: seqlist = [[a.next()] for a in seqit]
 	except StopIteration: return
 	yield tuple(a[0] for a in seqlist)
 	#bookkeeping of which iterators still have values
@@ -518,10 +518,31 @@ def do(sent, grammar):
 	else: print "no parse"
 	print
 
+def exportrparse(grammar):
+	""" Export an unsplitted grammar to rparse format. All frequencies are 1,
+	but probabilities are exported.  """
+	def repryf(yf):
+		return "[" + ", ".join("[" + ", ".join("true" if a == 1 else "false" for a in b) + "]" for b in yf) + "]"
+	def rewritelabel(a):
+		a = a.replace("ROOT", "VROOT")
+		if "|" in a:
+			arity = a.rsplit("_", 1)[-1] if "_" in a[a.rindex(">"):] else "1"
+			parent = a[a.index("^")+2:a.index(">",a.index("^"))] if "^" in a else ""
+			parent = "^"+"-".join(x.replace("_","") if "_" in x else x+"1" for x in parent.split("-"))
+			children = a[a.index("<")+1:a.index(">")].split("-")
+			children = "-".join(x.replace("_","") if "_" in x else x+"1" for x in children)
+			current = a.split("|")[0]
+			current = "".join(current.split("_")) if "_" in current else current+"1"
+			return "@^%s%s-%sX%s" % (current, parent, children, arity)
+		return "".join(a.split("_")) if "_" in a else a+"1"
+	for (r,yf),w in grammar:
+		if r[1] != 'Epsilon':
+			yield "1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]), " ".join(map(rewritelabel, r[1:])), repryf(yf))
+
 def main():
-	from treetransforms import un_collinize
+	from treetransforms import un_collinize, collinize
 	from negra import NegraCorpusReader
-	corpus = NegraCorpusReader(".", "sample2\.export")
+	corpus = NegraCorpusReader(".", "sample2\.export", headorder=True, headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents(), corpus.sents()):
 		print tree.pprint(margin=999)
 		a = binarizetree(tree.freeze())
@@ -531,9 +552,17 @@ def main():
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
 	tree.chomsky_normal_form()
-	pprint(srcg_productions(tree.copy(True), sent))
-	pprint(induce_srcg([tree.copy(True)], [sent]))
-	print splitgrammar(induce_srcg([tree.copy(True)], [sent]))
+	tree, sent = corpus.parsed_sents()[0], corpus.sents()[0]
+	pprint(srcg_productions(tree, sent))
+	collinize(tree, factor="right", horzMarkov=1, vertMarkov=1, tailMarker='')
+	#pprint(induce_srcg([tree.copy(True)], [sent]))
+	for r, w in induce_srcg([tree.copy(True)], [sent]): print exp(w), r
+	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
+	#return
+	#(('NP|<ART>', 'ART', 'NP|<NN>'), ((0, 1),)) 0.0
+	#1 1.0:@^S1^VROOT1-NP1X1 --> @^S1^VROOT1-ADV1X1 NP1 [[[false, true]]]
+
+	pprint(splitgrammar(induce_srcg([tree.copy(True)], [sent])))
 	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
 	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
 
@@ -557,11 +586,9 @@ def main():
 	pprint(backtransform)
 
 if __name__ == '__main__':
-	import doctest
+	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = doctest.testmod(verbose=False,
-	optionflags=doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS)
-	if attempted and not fail:
-		print "%d doctests succeeded!" % attempted 
+	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	if attempted and not fail: print "%d doctests succeeded!" % attempted
 	main()

@@ -44,9 +44,9 @@ cdef class ChartItem:
 def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	cdef dict unary = <dict>grammar.unary
-	cdef dict lbinary = <dict>grammar.lbinary
-	cdef dict rbinary = <dict>grammar.rbinary
+	cdef tuple unary = grammar.unary
+	cdef tuple lbinary = grammar.lbinary
+	cdef tuple rbinary = grammar.rbinary
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
@@ -110,10 +110,10 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 					oscore, iscore, p, rhs = scores
 					C[I1h].append((iscore, p, rhs))
 		maxA = max(maxA, len(A))
-	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
+	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values())),
 	return (C, goal) if goal in C else ({}, ())
 
-cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, dict unary, dict lbinary, dict rbinary, estimate):
+cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, tuple unary, tuple lbinary, tuple rbinary, estimate):
 	cdef double z, y
 	cdef int I = Ih.label
 	cdef unsigned long Ir = Ih.vec
@@ -251,7 +251,7 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 			# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
 			maxprob = max(parsetrees[tree])
 			parsetrees[tree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[tree])))
-		print "(%d derivations)" % m
+		print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
 		return parsetrees
 
 def pprint_chart(chart, sent, tolabel):

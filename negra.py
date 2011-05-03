@@ -232,14 +232,20 @@ def fold(tree):
 	return tree
 
 def headfinder(tree, headrules):
+	if any(a.source[FUNC].split("-")[-1] == "HD" for a in tree if hasattr(a, "source")):
+		return
 	for lr, heads in headrules.get(tree.node, []):
-		for child in tree if lr == "LEFT-TO-RIGHT" else reversed(tree):
-			if isinstance(child, Tree) and child.node in heads:
-				child.source = getattr(child, "source", 6 * [''])
-				if "-" in child.source[FUNC]: pass
-				elif child.source[FUNC]: child.source[FUNC] += "-HD"
-				else: child.source[FUNC] = "HD"
-				return
+		if lr == "LEFT-TO-RIGHT": children = tree
+		elif lr == "RIGHT-TO-LEFT": children = tree[::-1]
+		else: raise ValueError
+		for head in heads:
+			for child in children:
+				if isinstance(child, Tree) and child.node == head:
+					child.source = getattr(child, "source", 6 * [''])
+					if "-" in child.source[FUNC]: pass
+					elif child.source[FUNC]: child.source[FUNC] += "-HD"
+					else: child.source[FUNC] = "HD"
+					return
 	
 def bracketings(tree):
         return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
@@ -247,9 +253,10 @@ def bracketings(tree):
 def main():
 	from rcgrules import canonicalize
 	from itertools import count
-	print "normal"
-	n = NegraCorpusReader(".", "sample2\.export", headorder=True)
-	#n = NegraCorpusReader("../rparse", "tiger3600proc\.export", headorder=False)
+	#n = NegraCorpusReader(".", "sample2\.export", headorder=True)
+	#nn = NegraCorpusReader(".", "sample2\.export", headorder=True, unfold=True)
+	n = NegraCorpusReader("../rparse", "tiger3600proc\.export", headorder=False)
+	nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", unfold=True)
 	"""
 	for a in n.parsed_sents(): print a
 	for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
@@ -257,16 +264,13 @@ def main():
 	for a in n.blocks(): print a
 	print "\nunfolded"
 	"""
-	nn = NegraCorpusReader(".", "sample2\.export", headorder=True, unfold=True)
-	#nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", unfold=True)
 	correct = exact = d = 0
 	for a,b,c in zip(n.parsed_sents(), nn.parsed_sents(), n.sents()):
-		#if len(c) > 15: continue
-		print a; print b; print
+		if len(c) > 15: continue
 		foldb = fold(b.copy(True))
 		b1 = bracketings(canonicalize(a))
 		b2 = bracketings(canonicalize(foldb))
-		z = -1
+		z = 825
 		if b1 != b2 or d == z:
 			precision = len(set(b1) & set(b2)) / float(len(set(b1)))
 			recall = len(set(b1) & set(b2)) / float(len(set(b2)))

@@ -118,7 +118,7 @@ The following is a short tutorial on the available transformations.
 
 from nltk.tree import Tree
 
-def collinize(tree, factor = "right", horzMarkov = None, vertMarkov = 0, childChar = "|", parentChar = "^", headMark=False):
+def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|", parentChar="^", tailMarker="$", headMark=False):
 	# assume all subtrees have homogeneous children
 	# assume all terminals have no siblings
 	
@@ -148,7 +148,7 @@ def collinize(tree, factor = "right", horzMarkov = None, vertMarkov = 0, childCh
 			# add children to the agenda before we mess with them
 			for child in node:
 				nodeList.append((child, parent))
-		   
+
 			# chomsky normal form factorization
 			if len(node) > 2:
 				childNodes = [child.node for child in node]
@@ -181,7 +181,7 @@ def collinize(tree, factor = "right", horzMarkov = None, vertMarkov = 0, childCh
 					i += 1
 					# last node gets a last-node marker "$" to avoid cyclic
 					# unary productions
-					lasthead = "%s%s$<%s>%s" % (originalNode, childChar, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
+					lasthead = "%s%s%s<%s>%s" % (originalNode, childChar, tailMarker, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
 					newNode = Tree(newHead, [nodeCopy.pop(1), Tree(lasthead, [nodeCopy.pop()])])
 					curNode[0:] = [nodeCopy.pop(), newNode]
 				else: # factor == "left":
@@ -189,7 +189,7 @@ def collinize(tree, factor = "right", horzMarkov = None, vertMarkov = 0, childCh
 					i += 1
 					# last node gets a last-node marker "$" to avoid cyclic
 					# unary productions
-					lasthead = "%s%s$<%s>%s" % (originalNode, childChar, "-".join(childNodes[:horzMarkov]), parentString)
+					lasthead = "%s%s%s<%s>%s" % (originalNode, childChar, tailMarker, "-".join(childNodes[:horzMarkov]), parentString)
 					newNode = Tree(newHead, [Tree(lasthead, [nodeCopy.pop(0)]), nodeCopy.pop(0)])
 					curNode[0:] = [newNode, nodeCopy.pop()]
 		
@@ -223,7 +223,7 @@ def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", un
 				if parentIndex != -1:
 					# strip the node name of the parent annotation
 					node.node = node.node[:parentIndex]
-				  
+
 				# expand collapsed unary productions
 				if expandUnary == True:
 					unaryIndex = node.node.find(unaryChar)
@@ -233,7 +233,7 @@ def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", un
 						node[0:] = [newNode]
 				# non-binarized constituent, so move on to next parent
 				parent = node
-					  
+
 			for child in node:
 				agenda.append((child, parent))
 
@@ -268,17 +268,17 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 	# depth-first traversal of tree
 	while nodeList != []:
 		node = nodeList.pop()
-		if isinstance(node,Tree):  
+		if isinstance(node,Tree):
 			if len(node) == 1 and isinstance(node[0], Tree) and (collapsePOS == True or isinstance(node[0,0], Tree)):
 				node.node += joinChar + node[0].node
 				node[0:] = [child for child in node[0]]
 				# since we assigned the child's children to the current node, 
 				# evaluate the current node again
-				nodeList.append(node) 
+				nodeList.append(node)
 			else:
 				for child in node:
-					nodeList.append(child) 
-		  
+					nodeList.append(child)
+
 #################################################################
 # Demonstration
 #################################################################
@@ -287,7 +287,7 @@ def demo():
 	"""
 	A demonstration showing how each tree transform can be used.
 	"""  
-	  
+
 	from nltk.draw.tree import draw_trees
 	from nltk import treetransforms, bracket_parse
 	from copy import deepcopy

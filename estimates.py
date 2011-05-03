@@ -83,13 +83,13 @@ def doinside(grammar, maxlen, concat):
 			insidescores[I.label][I.vec] = x
 		
 		results = []
-		for (rule,yf), y in unary.get(I.label, []):
+		for (rule,yf), y in unary[I.label]:
 			results.append((rule[0], I.vec, y+insidescores[rule[1]][I.vec]))
-		for (rule,yf), y in lbinary.get(I.label, []):
+		for (rule,yf), y in lbinary[I.label]:
 			for vec in insidescores[rule[2]]:
 				left = concat(I.vec, vec, yf, maxlen)
 				if left: results.append((rule[0], left, x+y+insidescores[rule[2]][vec]))
-		for (rule,yf), y in rbinary.get(I.label, []):
+		for (rule,yf), y in rbinary[I.label]:
 			for vec in insidescores[rule[1]]:
 				right = concat(vec, I.vec, yf, maxlen)
 				if right: results.append((rule[0], right, x+y+insidescores[rule[1]][vec]))
@@ -140,7 +140,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 		I, x = agenda.popitem()
 		if x == outside[I.state][I.len][I.lr][I.gaps]:
 			totlen = I.len + I.lr + I.gaps
-			for (rule, yieldfunction), y in bylhs.get(I.state, []):
+			for (rule, yieldfunction), y in bylhs[I.state]:
 				# X -> A
 				if len(rule) == 2:
 					if rule[1] != 0:

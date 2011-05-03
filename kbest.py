@@ -40,7 +40,7 @@ def lazykthbest(chart, v, k, k1, D, cand):
 	# their while loop checks if cand[v] is nonempty, this check means
 	# that the successors of the last candidate will not be explored.
 	if not cand[v]: return D
-	while len(D[v]) <= k: # and len(cand[v]):
+	while len(D[v]) < k: # and len(cand[v]):
 		# last derivation
 		e, j = D[v][-1][0]
 		# update the heap, adding the successors of last derivation
@@ -55,7 +55,7 @@ def lazynext(cand, e, j, k1, D, chart):
 	for i,ei in enumerate(e.tailnodes):
 		j1 = tuple([x+1 if xi == i else x for xi, x in enumerate(j)])
 		# recursively solve a subproblem
-		lazykthbest(chart, ei, j1[i], k1, D, cand)
+		lazykthbest(chart, ei, j1[i]+1, k1, D, cand)
 		# if it exists and is not in heap yet
 		if j1[i] < len(D[ei]) and (e, j1) not in cand[e.head]:
 			# add it to the heap

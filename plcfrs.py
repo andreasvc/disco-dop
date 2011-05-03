@@ -46,9 +46,9 @@ import re
 def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	unary = dict(grammar.unary)
-	lbinary = dict(grammar.lbinary)
-	rbinary = dict(grammar.rbinary)
+	unary = grammar.unary
+	lbinary = grammar.lbinary
+	rbinary = grammar.rbinary
 	lexical = dict(grammar.lexical)
 	toid = dict(grammar.toid)
 	tolabel = dict(grammar.tolabel)
@@ -106,13 +106,13 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	I, Ir = Ih.label, Ih.vec
 	result = []
-	for (rule, yf), z in unary.get(I, ()):
+	for (rule, yf), z in unary[I]:
 		result.append((ChartItem(rule[0], Ir), (x+z, z, (Ih,))))
-	for (rule, yf), z in lbinary.get(I, ()):
+	for (rule, yf), z in lbinary[I]:
 		for I1h, y in Cx.get(rule[2], {}).items():
 			if concat(yf, Ir, I1h.vec):
 				result.append((ChartItem(rule[0], Ir ^ I1h.vec), (x+y+z, z, (Ih, I1h))))
-	for (rule, yf), z in rbinary.get(I, ()):
+	for (rule, yf), z in rbinary[I]:
 		for I1h, y in Cx.get(rule[1], {}).items():
 			if concat(yf, I1h.vec, Ir):
 				result.append((ChartItem(rule[0], I1h.vec ^ Ir), (x+y+z, z, (I1h, Ih))))
