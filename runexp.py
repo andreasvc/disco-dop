@@ -79,7 +79,7 @@ def export(tree, sent, n):
 				"--", "--",
 				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
 	result.append("#EOS %d" % n)
-	return "\n".join(result)
+	return ("\n".join(result)).encode("utf-8")
 
 def read_rparse_grammar(file):
 	result = []
@@ -94,23 +94,23 @@ def read_rparse_grammar(file):
 
 srcg = True
 dop = True
-unfolded = True
-maxlen = 15
+unfolded = False
+maxlen = 99 #15
 factor = "right"
 v = 2
 h = 1
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
-#corpus = NegraCorpusReader(".", "sample2\.export")
+corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
 #corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", headfinal=True, headreverse=False)
-corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, headfinal=True, headreverse=False, unfold=unfolded)
+#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False, headfinal=True, headreverse=False, unfold=unfolded)
 trees, sents, blocks = corpus.parsed_sents()[:7200], corpus.sents()[:7200], corpus.blocks()[:7200]
 trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent[1]) <= maxlen])
 print "read training corpus"
-for a, b in zip(trees, sents): srcg_productions(a, b)	#adds arity markers
-bintype = "collinize %s h=%d v=%d" % (factor, h, v); [collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="") for a in trees]
+#for a, b in zip(trees, sents): srcg_productions(a, b)	#adds arity markers
+#bintype = "collinize %s h=%d v=%d" % (factor, h, v); [collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="") for a in trees]
 #bintype = "nltk %s h=%d v=%d" % (factor, h, v); for a in trees: a.chomsky_normal_form(factor="left", vertMarkov=v-1, horzMarkov=1)
-#bintype = "optimal"; trees = [binarizetree(tree.freeze()) for tree in trees]
+bintype = "optimal"; trees = [binarizetree(tree.freeze()) for tree in trees]
 print "binarized", bintype
 
 #trees = trees[:10]; sents = sents[:10]
@@ -184,12 +184,12 @@ if dop:
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
-#trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-corpus = NegraCorpusReader("../rparse", "tigerproc.export")
-trees, sents, blocks = corpus.parsed_sents()[7200:9000], corpus.tagged_sents()[7200:9000], corpus.blocks()[7200:9000]
+trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
+#corpus = NegraCorpusReader("../rparse", "tigerproc.export")
+#trees, sents, blocks = corpus.parsed_sents()[7200:9000], corpus.tagged_sents()[7200:9000], corpus.blocks()[7200:9000]
 print "read test corpus"
 maxsent = 360
-maxlen = 15
+maxlen = 99 #15
 viterbi = True
 sample = False
 both = False
@@ -237,7 +237,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 		else:
 			print "LP", prec, "LR", rec, "LF", f1
 			print "cand-gold", printbrackets(candb - goldb), "gold-cand", printbrackets(goldb - candb)
-			print result.pprint(margin=1000)
+			print "     ", result.pprint(margin=1000)
 			serrors1.update(a[0] for a in candb - goldb)
 			serrors2.update(a[0] for a in goldb - candb)
 		sresults.append(result)
@@ -282,7 +282,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 		else:
 			print "LP", prec, "LR", rec, "LF", f1
 			print "cand-gold", printbrackets(candb - goldb), "gold-cand", printbrackets(goldb - candb)
-			print dresult.pprint(margin=1000)
+			print "     ", dresult.pprint(margin=1000)
 			derrors1.update(a[0] for a in candb - goldb)
 			derrors2.update(a[0] for a in goldb - candb)
 		dresults.append(dresult)
@@ -311,7 +311,7 @@ for tree, sent, block in zip(trees, sents, blocks):
 
 if srcg: open("test1.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(sresults, gsent)))
 if dop: open("test1.dop", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
-open("test1.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a,n) for n,a in enumerate(gold))
+open("test1.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a.encode("utf-8"),n) for n,a in enumerate(gold))
 print "maxlen", maxlen, "unfolded", unfolded, "binarized", bintype
 print "error breakdown, first 10 categories. SRCG (type 1, type 2), DOP (type 1, type 2)"
 for a,b,c,d in zip(serrors1.items(), serrors2.items(), derrors1.items(), derrors2.items())[:10]: print a,b,c,d

@@ -5,6 +5,7 @@ from heapq import nsmallest, heappush, heappop
 from itertools import chain, count, islice
 from pprint import pprint
 from collections import defaultdict, namedtuple
+from operator import mul
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
@@ -63,7 +64,7 @@ def srcg_productions(tree, sent, arity_marks=True):
 	rules = []
 	for st in tree.subtrees():
 		if len(st) == 1 and not isinstance(st[0], Tree):
-			nonterminals = (intern(st.node), 'Epsilon')
+			nonterminals = (intern(str(st.node)), 'Epsilon')
 			vars = ((sent[int(st[0])],),())
 			rule = zip(nonterminals, vars)
 		else:
@@ -74,8 +75,8 @@ def srcg_productions(tree, sent, arity_marks=True):
 					(x for x in cnt if x not in leaves),
 					int(a.node[a.node.index("_")+1:] if "_" in a.node else 1)))
 				if isinstance(a, Tree) else [a] for a in st]
-			if len(st) == 0: 
-				rleaves = [list(islice((x for x in count(len(leaves)) 
+			if len(st) == 0:
+				rleaves = [list(islice((x for x in count(len(leaves))
 						if x not in leaves),
 					int(st.node[st.node.index("_")+1:] if "_" in st.node else 1)))]
 			if len(st):
@@ -87,7 +88,7 @@ def srcg_productions(tree, sent, arity_marks=True):
 			#rvars = [rangeheads(sorted(map(int, a.leaves()))) for a in st]
 			#lvars = list(ranges(sorted(chain(*(map(int, a.leaves()) for a in st)))))
 			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
-			lhs = intern(node_arity(st, lvars, True) if arity_marks else st.node)
+			lhs = intern(str(node_arity(st, lvars, True) if arity_marks else st.node))
 			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
 			vars = (lvars,) + tuple(rvars)
 			if vars[0][0][0] != vars[1][0]:
@@ -132,21 +133,23 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	ids, rules = count(1), []
 	fd,ntfd = FreqDist(), FreqDist()
 	for tree, sent in zip(trees, sents):
-		#t = canonicalize(tree.copy(True))
+		t = canonicalize(tree.copy(True))
 		t = tree.copy(True)
 		prods = map(varstoindices, srcg_productions(t, sent))
 		ut = decorate_with_ids(t, ids)
 		uprods = map(varstoindices, srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
-		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,) if x==y else (x,y) for x,y in zip(a,b)))] for (a,avar),(b,bvar) in zip(prods, uprods))))
+		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,)
+								if x==y else (x,y)
+								for x,y in zip(a,b)))]
+							for (a,avar),(b,bvar) in zip(prods, uprods))))
 	rules = FreqDist(rules)
 	if shortestderiv:
 		return [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
 	# should we distinguish what kind of arguments a node takes in fd?
-	return [(rule, log(freq * reduce((lambda x,y: x*y),
-		map((lambda z: fd[z] if '@' in z else 1), rule[0][1:])) /
-		(float(fd[rule[0][0]]) * (ntfd[rule[0][0]]
-		if '@' not in rule[0][0] and normalize else 1))))
+	return [(rule, log(freq * reduce(mul, (fd[z] for z in rule[0][1:] if '@' in z), 1)
+		/ (float(fd[rule[0][0]]) * (ntfd[rule[0][0]]
+		if normalize and '@' not in rule[0][0] else 1))))
 		for rule, freq in rules.items()]
 
 def splitgrammar(grammar):
@@ -154,10 +157,9 @@ def splitgrammar(grammar):
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
 	#unary, lbinary, rbinary, lexical, bylhs = {}, {}, {}, {}, {}
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
-	#nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(a for (rule,yf),weight in grammar for a in rule) - set(["Epsilon", "ROOT"]))))
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
-	unary, lbinary, rbinary, bylhs = (tuple([] for a in nonterminals) for b in range(4))
+	unary, lbinary, rbinary, bylhs = ([[] for a in nonterminals] for b in range(4))
 	lexical = defaultdict(list)
 	# negate the log probabilities because the heap we use is a min-heap
 	for (rule,yf),w in grammar:
@@ -177,8 +179,8 @@ def splitgrammar(grammar):
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
 def canonicalize(tree):
-	for a in tree.subtrees():
-		a.sort()
+	for a in tree.subtrees(lambda n: len(n) > 1):
+		a.sort(key=lambda n: n.leaves())
 	return tree
 
 def allmax(seq, key):
@@ -213,7 +215,7 @@ def missingproductions(trees, sents, fragments):
 	covers the given treebank. Extracts all productions not part of any 
 	fragment"""
 	covered = set(prod for fragment in fragments for prod in map(top_production, fragment.subtrees()))
-	return [prod for tree in trees 
+	return [prod for tree in trees
 			for prod in map(top_production, tree.subtrees())
 		if prod.productions()[0] not in covered]
 
@@ -320,7 +322,7 @@ def extractmaxfragments(a,b, i,j, aprod,bprod, amap,bmap, asent,bsent, mem):
 	zero children, or as much as in the original tree.""" 
 	if (i, j) in mem: return mem[i, j]
 	# compare label / terminal
-	if not same(a[i], b[j], asent, bsent): 
+	if not same(a[i], b[j], asent, bsent):
 		mem[i, j] = set(); return set()
 	nodeset = set([i])
 	# compare arity (should be added to label)
@@ -333,7 +335,7 @@ def extractmaxfragments(a,b, i,j, aprod,bprod, amap,bmap, asent,bsent, mem):
 	# should lead to a child in b[j] with same label.
 	#for ax, (label, vars) in zip(a[1], aprod[amap[i]][1:]):
 	#	assert ax.node == label	
-	if (len(a[i]) == len(b[j]) and all(same(ax, bx, asent, bsent) 
+	if (len(a[i]) == len(b[j]) and all(same(ax, bx, asent, bsent)
 										for ax, bx in zip(a[i], b[j]))
 		and aprod[amap[i]][0][1] == bprod[bmap[j]][0][1]):
 		for n, x in enumerate(a[i]):
@@ -413,9 +415,9 @@ def minimalbinarization(tree, score):
 	"""
 	def newproduction(a, b):
 		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
-		if (min(chain(*(y for x,y in nonterms[a]))) > 
+		if (min(chain(*(y for x,y in nonterms[a]))) >
 				min(chain(*(y for x,y in nonterms[b])))): a, b = b, a
-		newlabel = "%s|<%s>" % (tree.node, "-".join(x.node for x,y 
+		newlabel = "%s|<%s>" % (tree.node, "-".join(x.node for x,y
 				in sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])))
 		return ImmutableTree(newlabel, [a, b])
 	if len(tree) <= 2: return tree
@@ -492,7 +494,7 @@ def bfcartpi(seq):
 def enumchart(chart, start, tolabel, n=1, depth=0):
 	"""exhaustively enumerate trees in chart headed by start in top down 
 		fashion. chart is a dictionary with 
-			lhs -> [(rhs, logprob), (rhs, logprob) ... ]
+			lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
 		this function doesn't really belong in this file but Cython doesn't
 		support generators so this function is "in exile" over here.  """
 	if depth >= 100: return
@@ -506,17 +508,6 @@ def enumchart(chart, start, tolabel, n=1, depth=0):
 			for x in islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, depth+1), rhs)), n):
 				tree = "(%s %s)" % (tolabel[start.label], " ".join(z for z,px in x))
 				yield tree, p+sum(px for z,px in x)
-
-def do(sent, grammar):
-	from plcfrs import parse, mostprobableparse
-	print "sentence", sent
-	p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
-	if p:
-		mpp = mostprobableparse(p, start, grammar.tolabel)
-		for t in mpp:
-			print exp(mpp[t]), t
-	else: print "no parse"
-	print
 
 def exportrparse(grammar):
 	""" Export an unsplitted grammar to rparse format. All frequencies are 1,
@@ -538,6 +529,17 @@ def exportrparse(grammar):
 	for (r,yf),w in grammar:
 		if r[1] != 'Epsilon':
 			yield "1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]), " ".join(map(rewritelabel, r[1:])), repryf(yf))
+
+def do(sent, grammar):
+	from plcfrs import parse, mostprobableparse
+	print "sentence", sent
+	p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
+	if p:
+		mpp = mostprobableparse(p, start, grammar.tolabel)
+		for t in mpp:
+			print exp(mpp[t]), t
+	else: print "no parse"
+	print
 
 def main():
 	from treetransforms import un_collinize, collinize

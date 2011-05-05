@@ -1,6 +1,7 @@
 from nltk.corpus.reader.api import CorpusReader, SyntaxCorpusReader
 from nltk.corpus.reader.util import read_regexp_block, StreamBackedCorpusView, concat
 from nltk import Tree
+from itertools import count
 import re
 
 BOS = re.compile("^#BOS.*\n")
@@ -8,10 +9,10 @@ EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 class NegraCorpusReader(SyntaxCorpusReader):
-	def __init__(self, root, fileids, encoding=None, headorder=False, headfinal=False, headreverse=False, unfold=False):
+	def __init__(self, root, fileids, encoding="utf-8", headorder=False, headfinal=False, headreverse=False, unfold=False):
 		""" headorder: whether to order constituents according to heads
 			headfinal: whether to put the head in final or in frontal position
-			headreverse: the head is made final/frontal by reversing everything before or after the head. 
+			headreverse: the head is made final/frontal by reversing everything before or after the head.
 				when true, the side on which the head is will be the reversed side
 			unfold: whether to apply corpus transformations"""
 		self.headorder = headorder; self.reverse = headreverse
@@ -113,24 +114,45 @@ toavp = "AA CAVP".split()
 unaryconst = {}
 for a in tonp: unaryconst[a] = "NP"
 
+def function(tree):
+	if hasattr(tree, "source"): return tree.source[FUNC].split("-")[0]
+	else: return ''
+
+def rindex(l, v):
+	for n, a in reversed(zip(count(), l)):
+		if a == v: return n
+	raise ValueError("rindex: x not in list")
+
 def unfold(tree):
 	""" Unfold redundancies and perform other transformations introducing
 	more hierarchy in the phrase-structure annotation based on 
 	grammatical functions.
 	"""
 	original = tree.copy(Tree); current = tree # for debugging
-	def function(tree):
-			if hasattr(tree, "source"): return tree.source[FUNC].split("-")[0]
 	# un-flatten PPs
-	addtopp = "AC MO".split() # could there be a MO which should be part of the NP?
+	addtopp = "AC".split()
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
 		ac = [a for a in pp if function(a) in addtopp]
-		nk = [a for a in pp if function(a) not in addtopp]
+		# anything before an initial preposition goes to the PP (modifiers,
+		# punctuation), otherwise it goes to the NP; mutatis mutandis for
+		# postpositions
+		functions = map(function, pp)
+		if "AC" in functions and "NK" in functions:
+			if functions.index("AC") < functions.index("NK"):
+				ac[:0] = pp[:functions.index("AC")]
+			if rindex(functions, "AC") > rindex(functions, "NK"):
+				ac += pp[rindex(functions, "AC")+1:]
+		else: print "PP but no AC or NK", " ".join(functions)
+		nk = [a for a in pp if a not in ac]
+		# introduce a PP unless there is already an NP in the PP (annotation
+		# mistake), or there is a PN and we want to avoid a cylic unary of 
+		# NP -> PN -> NP
 		if ac and nk and (len(nk) > 1 or nk[0].node not in "NP PN".split()):
 			pp[:] = ac + [Tree("NP", nk)]
 	# introduce DPs
+	determiners = set("ART".split()) #FIXME: other determiners?
 	for np in list(tree.subtrees(lambda n: n.node == "NP")):
-		if np[0].node == "ART":
+		if np[0].node in determiners:
 			np.node = "DP"
 			if np[1].node != "PN": np[:] = [np[0], Tree("NP", np[1:])]
 	# introduce finite VP at S level, collect objects and modifiers
@@ -141,19 +163,20 @@ def unfold(tree):
 	def finitevp(s):
 		if any(x.node.startswith("V") and x.node.endswith("FIN") for x in s if isinstance(x, Tree)):
 			vp = Tree("VP", [a for a in s if function(a) in addtovp])
+			# introduce a VP unless it would lead to a unary VP -> VP production
 			if len(vp) != 1 or vp[0].node != "VP":
 				s[:] = [a for a in s if function(a) not in addtovp] + [vp]
-	# relative clause => SRC
+	# relative clause => S becomes SRC
 	for s in tree.subtrees(lambda n: n.node == "S" and function(n) == "RC"):
 		s.node = "SRC"
 	toplevel_s = []
 	if "S" in labels:
-		# multiple S ?
-		s = tree[labels.index("S")]
-		toplevel_s = [s]
-		if function(s[0]) in newlevel:
-			s[:] = [s[0], Tree("S", s[1:])]
-			toplevel_s = [s[1]]
+		toplevel_s = [a for a in tree if a.node == "S"]
+		for s in toplevel_s:
+			while function(s[0]) in newlevel:
+				s[:] = [s[0], Tree("S", s[1:])]
+				s = s[1]
+				toplevel_s = [s]
 	elif "CS" in labels:
 		cs = tree[labels.index("CS")]
 		toplevel_s = [a for a in cs if a.node == "S"]
@@ -169,13 +192,24 @@ def unfold(tree):
 				a[:] = [particleverb if function(x) == "HD" else x for x in a if function(x) != "SVP"]
 	# introduce SBAR level
 	sbarfunc = "CP".split()
-	for s in list(tree.subtrees(lambda n: n.node == "S" and function(n[0]) in sbarfunc and n not in toplevel_s)):
-		if len(s) > 1:
-			s.node = "SBAR"
-			s[:] = [s[0], Tree("S", s[1:])]
+	# in the annotation, complementizers belong to the first S in S
+	# conjunctions, even when they appear to apply to the whole conjunction.
+	for s in list(tree.subtrees(lambda n: n.node == "S" and function(n[0]) in sbarfunc and len(n) > 1)):
+		s.node = "SBAR"
+		s[:] = [s[0], Tree("S", s[1:])]
+	# introduce nested structures for modifiers
+	# (iterated adjunction instead of sister adjunction)
+	adjunctable = set("NP".split()) # PP AP VP
+	for a in list(tree.subtrees(lambda n: n.node in adjunctable and any(function(x) == "MO" for x in n))):
+		modifiers = [x for x in a if function(x) == "MO"]
+		if min(n for n,x in enumerate(a) if function(x) =="MO") == 0:
+			modifiers[:] = modifiers[::-1]
+		while modifiers:
+			modifier = modifiers.pop()
+			a[:] = [Tree(a.node, [x for x in a if x != modifier]), modifier]
+			a = a[0]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
-	# do head order etc.
 	return tree
 	# introduce phrasal projections for single tokens
 	for a in tree.treepositions("leaves"):
@@ -187,23 +221,42 @@ def unfold(tree):
 	return tree
 
 def fold(tree):
-	""" Undo the transformations performed by unfold. Do not apply twice (might remove VPs which shouldn't be). """
+	""" Undo the transformations performed by unfold. Do not apply twice (might
+	remove VPs which shouldn't be). """
+	def labels(tree):
+		return [a.node for a in tree if isinstance(a, Tree)]
+	# restore linear precedence ordering
+	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
+	global original, current
+	original = tree.copy(True)
+	current = tree
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
 			dp.node = "NP"
 			if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
+	# flatten adjunctions
+	nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
+	probably_nk = set("AP PIS".split()) | nkonly
+	for np in tree.subtrees(lambda n: len(n) == 2 
+									and n.node == "NP" 
+									and [x.node for x in n].count("NP") == 1
+									and not set(labels(n)) & probably_nk):
+		np.sort(key=lambda n: n.node == "NP")
+		np[:] = np[:1] + np[1][:]
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
-		if "NP" in (a.node for a in pp): # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
+		if "NP" in labels(pp): # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
 			#ensure NP is in last position
 			pp.sort(key=lambda n: n.node == "NP")
 			pp[:] = pp[:-1] + pp[-1][:]
 	# SRC => S
 	for s in tree.subtrees(lambda n: n.node == "SRC"): s.node = "S"
 	# merge extra S level
-	for sbar in list(tree.subtrees(lambda n: n.node == "SBAR" or (n.node == "S" and len(n) == 2 and n[0].node == "PTKANT" and n[1].node == "S"))):
+	for sbar in list(tree.subtrees(lambda n: n.node == "SBAR" or (n.node == "S" and len(n) == 2 and labels(n) == ["PTKANT", "S"]))):
 		sbar.node = "S"
-		sbar[:] = sbar[:1] + sbar[1][:]
+		if sbar[0].node == "S":
+			sbar[:] = sbar[1:] + sbar[0][:]
+		else: sbar[:] = sbar[:1] + sbar[1][:]
 	# merge finite VP with S level
 	def mergevp(s):
 		for vp in (n for n,a in enumerate(s) if a.node == "VP"):
@@ -250,35 +303,50 @@ def headfinder(tree, headrules):
 def bracketings(tree):
         return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
 
+def labelfunc(tree):
+	for a in tree.subtrees(): a.node += "-" + function(a)
+	return tree
+
 def main():
 	from rcgrules import canonicalize
 	from itertools import count
-	#n = NegraCorpusReader(".", "sample2\.export", headorder=True)
-	#nn = NegraCorpusReader(".", "sample2\.export", headorder=True, unfold=True)
-	n = NegraCorpusReader("../rparse", "tiger3600proc\.export", headorder=False)
-	nn = NegraCorpusReader("../rparse", "tiger3600proc\.export", unfold=True)
-	"""
-	for a in n.parsed_sents(): print a
-	for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
-	for a in n.sents(): print " ".join(a)
-	for a in n.blocks(): print a
+	import sys, codecs
+	# this fixes utf-8 output when piped through e.g. less
+	# won't help if the locale is not actually utf-8, of course
+	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+
+	#n = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True)
+	#nn = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True, unfold=True)
+	#for a in n.parsed_sents(): print a
+	#for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
+	#for a in n.sents(): print " ".join(a)
+	#for a in n.blocks(): print a
+	n = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=False)
+	nn = NegraCorpusReader("../rparse", "tigerproc\.export", unfold=True)
 	print "\nunfolded"
-	"""
 	correct = exact = d = 0
-	for a,b,c in zip(n.parsed_sents(), nn.parsed_sents(), n.sents()):
-		if len(c) > 15: continue
+	nk = set(); mo = set()
+	from nltk import FreqDist
+	fnk = FreqDist(); fmo = FreqDist()
+	for a,b,c in zip(n.parsed_sents()[:3600], nn.parsed_sents()[:3600], n.sents()[:3600]):
+		#if len(c) > 15: continue
+		for x in a.subtrees(lambda n: n.node == "NP"):
+			nk.update(y.node for y in x if function(y) == "NK")
+			mo.update(y.node for y in x if function(y) == "MO")
+			fnk.update(y.node for y in x if function(y) == "NK")
+			fmo.update(y.node for y in x if function(y) == "MO")
 		foldb = fold(b.copy(True))
 		b1 = bracketings(canonicalize(a))
 		b2 = bracketings(canonicalize(foldb))
-		z = 825
+		z = -1 #825
 		if b1 != b2 or d == z:
 			precision = len(set(b1) & set(b2)) / float(len(set(b1)))
 			recall = len(set(b1) & set(b2)) / float(len(set(b2)))
 			if precision != 1.0 or recall != 1.0 or d == z:
-				print d, " ".join(":".join((str(n),a)) for n,a in enumerate(c))
+				print d, " ".join(":".join((str(n), a)) for n,a in enumerate(c))
 				print "no match", precision, recall
-				print len(b1), len(b2), set(b2) - set(b1), set(b1) - set(b2)
-				print a
+				print len(b1), len(b2), "gold-fold", set(b2) - set(b1), "fold-gold", set(b1) - set(b2)
+				print labelfunc(a)
 				print foldb
 				print b
 			else: correct += 1
@@ -286,4 +354,9 @@ def main():
 		d += 1
 	print "matches", correct, "/", d, 100 * correct / float(d), "%"
 	print "exact", exact
+	print
+	print "nk & mo", " ".join(nk & mo)
+	print "nk - mo", " ".join(nk - mo)
+	print "mo - nk", " ".join(mo - nk)
+	for x in nk & mo: print x, "as nk", fnk[x], "as mo", fmo[x]
 if __name__ == '__main__': main()

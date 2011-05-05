@@ -44,9 +44,9 @@ cdef class ChartItem:
 def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None):
 	""" parse sentence, a list of tokens, using grammar, a dictionary
 	mapping rules to probabilities. """
-	cdef tuple unary = grammar.unary
-	cdef tuple lbinary = grammar.lbinary
-	cdef tuple rbinary = grammar.rbinary
+	cdef list unary = grammar.unary
+	cdef list lbinary = grammar.lbinary
+	cdef list rbinary = grammar.rbinary
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
@@ -113,7 +113,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values())),
 	return (C, goal) if goal in C else ({}, ())
 
-cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, tuple unary, tuple lbinary, tuple rbinary, estimate):
+cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list lbinary, list rbinary, estimate):
 	cdef double z, y
 	cdef int I = Ih.label
 	cdef unsigned long Ir = Ih.vec
@@ -194,7 +194,7 @@ def filterchart(chart, start):
 def filterchart2(chart, start, visited):
 	chart[start] = [(a,b) for a,b in chart[start] if not visited & set(a)]
 	for a,p in chart[start]:
-		for b in a: 
+		for b in a:
 			filterchart2(chart, b, visited | set(a))
 
 cdef samplechart(dict chart, ChartItem start, dict tolabel): #set visited
@@ -241,16 +241,24 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 		cdef dict parsetrees = <dict>defaultdict(list)
 		cdef double prob, maxprob
 		cdef int m = 0
-		cdef str deriv, tree
+		#cdef str deriv, tree
 		removeids = re.compile("@[0-9]+")
+		parens = re.compile("\$\(")
 		for deriv, prob in derivations:
 			m += 1
 			#parsetrees[removeids.sub("", deriv)] += exp(-prob)
 			parsetrees[removeids.sub("", deriv)].append(-prob)
-		for tree in parsetrees:
-			# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-			maxprob = max(parsetrees[tree])
-			parsetrees[tree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[tree])))
+			#restore linear precedence (disabled, seems to make no difference)
+			#parsetree = Tree(parens.sub("$[", removeids.sub("", deriv)))
+			#for a in parsetree.subtrees():
+			#	if len(a) > 1: a.sort(key=lambda x: x.leaves())
+			#	elif a.node == "$[": a.node = "$("
+			#parsetrees[parsetree.pprint(margin=999)].append(-prob)
+		# Adding probabilities in log space
+		# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+		for parsetree in parsetrees:
+			maxprob = max(parsetrees[parsetree])
+			parsetrees[parsetree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[parsetree])))
 		print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
 		return parsetrees
 

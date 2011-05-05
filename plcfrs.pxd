@@ -23,9 +23,9 @@ cdef class ChartItem:
 	oscore=cython.double,
 	scores=tuple,
 	rhs=tuple,
-	unary=tuple,
-	lbinary=tuple,
-	rbinary=tuple,
+	unary=list,
+	lbinary=list,
+	rbinary=list,
 	lexical=dict,
 	toid=dict,
 	tolabel=dict,
@@ -46,7 +46,7 @@ cpdef tuple parse(list sent, grammar, list tags=*, start=*, bint viterbi=*, int 
 	result=list,
 	rule=tuple,
 	yf=tuple)
-cdef inline list deduced_from(ChartItem Ih, double x, Cx, tuple unary, tuple lbinary, tuple rbinary)
+cdef inline list deduced_from(ChartItem Ih, double x, Cx, list unary, list lbinary, list rbinary)
 
 @cython.locals(
 	lpos=cython.int,
