@@ -4,15 +4,15 @@ from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, e
 from treetransforms import collinize, un_collinize
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
-from itertools import islice, chain
+from itertools import islice, chain, count
 from math import log, exp
 from functools import partial
 from pprint import pprint
 import cPickle
 import re, time
+from estimates import getestimates, getoutside
 try: from plcfrs_cython import parse, mostprobableparse; print "running cython"
 except: from plcfrs import parse, mostprobableparse; print "running non-cython"
-from estimates import getestimates, getoutside
 
 def rem_marks(tree):
 	for a in tree.subtrees(lambda x: "_" in x.node):
@@ -47,8 +47,7 @@ def testgrammar(grammar):
 	else: print "All left hand sides sum to 1"
 
 def bracketings(tree):
-	# sorted or not?
-	return [(a.node, frozenset(tuple(sorted(a.leaves())))) for a in tree.subtrees(lambda t: t.height() > 2)]
+	return frozenset((a.node, frozenset(a.leaves())) for a in tree.subtrees() if a.height() > 2)
 
 def printbrackets(brackets):
 	return ", ".join("%s[%s]" % (a, ",".join(map(str, sorted(b)))) for a,b in brackets)
@@ -62,7 +61,8 @@ def mean(seq):
 
 def export(tree, sent, n):
 	""" Convert a tree with indices as leafs and a sentence with the
-	corresponding non-terminals to a single string in Negra's export format """
+	corresponding non-terminals to a single string in Negra's export format.
+	NB: IDs do not follow the convention that IDs of children are all lower. """
 	result = ["#BOS %d" % n]
 	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
 	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
@@ -101,10 +101,10 @@ v = 2
 h = 1
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
-corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
-#corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", headfinal=True, headreverse=False)
-#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False, headfinal=True, headreverse=False, unfold=unfolded)
-trees, sents, blocks = corpus.parsed_sents()[:7200], corpus.sents()[:7200], corpus.blocks()[:7200]
+train = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
+#train = NegraCorpusReader("../rparse", "tiger3600proc.export", headfinal=True, headreverse=False)
+#train = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, headfinal=True, headreverse=False, unfold=unfolded)
+trees, sents, blocks = train.parsed_sents()[:7200], train.sents()[:7200], train.blocks()[:7200]
 trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent[1]) <= maxlen])
 print "read training corpus"
 #for a, b in zip(trees, sents): srcg_productions(a, b)	#adds arity markers
@@ -118,7 +118,7 @@ seen = set()
 v = set(); e = {}; weights = {}
 for n, (tree, sent) in enumerate(zip(trees, sents)):
 	rules = [(a,b) for a,b in induce_srcg([tree], [sent]) if a not in seen]
-	seen.update(rules)
+	seen.update(map(lambda (a,b): a, rules))
 	match = False
 	for (rule,yf), w in rules:
 		if len(rule) == 2 and rule[1] != "Epsilon":
@@ -163,7 +163,7 @@ if srcg:
 trees=list(trees)
 print "induced srcg grammar"
 if dop:
-	dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=True, shortestderiv=False)
+	dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=False, shortestderiv=False)
 	nodes = sum(len(list(a.subtrees())) for a in trees)
 	l = len(dopgrammar)
 	print "labels:", len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(3) if len(rule) > a)), "of which preterminals:", len(set(rule[0] for (rule,yf),w in dopgrammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
@@ -173,6 +173,7 @@ if dop:
 	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
 	testgrammar(dopgrammar)
 	print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", len(dopgrammar.toid), "nonterminals"
+
 #print "getting outside estimates"
 #begin = time.clock()
 #outside = getestimates(dopgrammar, maxlen, dopgrammar.toid["ROOT"])
@@ -184,9 +185,11 @@ if dop:
 #for a,b in extractfragments(trees).items():
 #	print a,b
 #exit()
-trees, sents, blocks = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-#corpus = NegraCorpusReader("../rparse", "tigerproc.export")
-#trees, sents, blocks = corpus.parsed_sents()[7200:9000], corpus.tagged_sents()[7200:9000], corpus.blocks()[7200:9000]
+
+# parse training corpus as a "soundness check"
+trees, sents, blocks = train.parsed_sents(), train.tagged_sents(), train.blocks()
+#test = NegraCorpusReader("../rparse", "tigerproc.export")
+#trees, sents, blocks = test.parsed_sents()[7200:9000], test.tagged_sents()[7200:9000], test.blocks()[7200:9000]
 print "read test corpus"
 maxsent = 360
 maxlen = 99 #15
@@ -195,23 +198,22 @@ sample = False
 both = False
 n = 0     #number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
 m = 1000  #number of derivations to sample/enumerate
-lps, lrs, lfs = [], [], []
-lp, lr, lf = [], [], []
 sresults = []; dresults = []
 serrors1 = FreqDist(); serrors2 = FreqDist()
 derrors1 = FreqDist(); derrors2 = FreqDist()
 gold = []; gsent = []
-nsent = exact = exacts = snoparse = dnoparse = gconst = scorrect = dcorrect = sconst = dconst = 0
+scandb = set(); dcandb = set(); goldbrackets = set()
+nsent = exact = exacts = snoparse = dnoparse =  0
 estimate = lambda a,b: 0.0
 for tree, sent, block in zip(trees, sents, blocks):
 	if len(sent) > maxlen: continue
 	if nsent >= maxsent: break
 	nsent += 1
 	print "%d. [len=%d] %s" % (nsent, len(sent), " ".join(a[0]+"/"+a[1] for a in sent))
-	goldb = set(bracketings(tree))
-	gconst += len(goldb)
+	goldb = bracketings(tree)
 	gold.append(block)
 	gsent.append(sent)
+	goldbrackets.update((nsent, a) for a in goldb)
 	if srcg:
 		print "SRCG:",
 		chart, start = parse([a[0] for a in sent], grammar, tags=[a[1] for a in sent], start=grammar.toid['ROOT'], viterbi=True)
@@ -225,12 +227,10 @@ for tree, sent, block in zip(trees, sents, blocks):
 		rem_marks(result)
 		if unfolded: fold(result)
 		print "p =", exp(-prob),
-		candb = set(bracketings(result))
+		candb = bracketings(result)
 		prec = precision(goldb, candb)
 		rec = recall(goldb, candb)
 		f1 = f_measure(goldb, candb)
-		scorrect += len(candb & goldb)
-		sconst += len(candb)
 		if result == tree or f1 == 1.0:
 			print "exact match"
 			exacts += 1
@@ -245,13 +245,13 @@ for tree, sent, block in zip(trees, sents, blocks):
 	else:
 		if srcg: print "no parse"
 		result = Tree("ROOT", [Tree("PN", [i]) for i in range(len(sent))])
-		candb = set(bracketings(result))
+		candb = bracketings(result)
 		prec = precision(goldb, candb)
 		rec = recall(goldb, candb)
 		f1 = f_measure(goldb, candb)
 		snoparse += 1
 		sresults.append(result)
-	lps.append(prec); lrs.append(rec); lfs.append(f1)
+	scandb.update((nsent, a) for a in candb)
 	if dop:
 		print "DOP:",
 		#estimate = partial(getoutside, outside, maxlen, len(sent))
@@ -270,18 +270,17 @@ for tree, sent, block in zip(trees, sents, blocks):
 		un_collinize(dresult)
 		rem_marks(dresult)
 		if unfolded: fold(dresult)
-		candb = set(bracketings(dresult))
+		candb = bracketings(dresult)
 		prec = precision(goldb, candb)
 		rec = recall(goldb, candb)
 		f1 = f_measure(goldb, candb)
-		dcorrect += len(candb & goldb)
-		dconst += len(candb)
 		if dresult == tree or f1 == 1.0:
 			print "exact match"
 			exact += 1
 		else:
 			print "LP", prec, "LR", rec, "LF", f1
-			print "cand-gold", printbrackets(candb - goldb), "gold-cand", printbrackets(goldb - candb)
+			print "cand-gold", printbrackets(candb - goldb),
+			print "gold-cand", printbrackets(goldb - candb)
 			print "     ", dresult.pprint(margin=1000)
 			derrors1.update(a[0] for a in candb - goldb)
 			derrors2.update(a[0] for a in goldb - candb)
@@ -289,43 +288,40 @@ for tree, sent, block in zip(trees, sents, blocks):
 	else:
 		if dop: print "no parse"
 		dresult = Tree("ROOT", [Tree("PN", [i]) for i in range(len(sent))])
-		candb = set(bracketings(dresult))
+		candb = bracketings(dresult)
 		prec = precision(goldb, candb)
 		rec = recall(goldb, candb)
 		f1 = f_measure(goldb, candb)
 		dnoparse += 1
 		dresults.append(dresult)
 	print "GOLD:", tree.pprint(margin=1000)
-	lp.append(prec); lr.append(rec); lf.append(f1)
+	dcandb.update((nsent, a) for a in candb)
 	if srcg:
-		try:
-			print "srcg em", lfs.count(1.0) / float(len(lfs)), "lp", scorrect / float(sconst), "lr", scorrect / float(gconst),
-			print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
-		except ZeroDivisionError: print "zerodiv"
+		print "srcg em", 100 * exacts / float(nsent), "lp", 100 * precision(goldbrackets, scandb),
+		print "lr", 100 * precision(goldbrackets, scandb), "lf1", 100 * f_measure(goldbrackets, scandb)
 	if dop:
-		try:
-			print "dop  em", lf.count(1.0) / float(len(lf)), "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst),
-			print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
-		except ZeroDivisionError: print "zerodiv"
+		print "srcg em", 100 * exacts / float(nsent), "lp", 100 * precision(goldbrackets, dcandb),
+		print "lr", 100 * precision(goldbrackets, dcandb), "lf1", 100 * f_measure(goldbrackets, dcandb)
 	print
 
 if srcg: open("test1.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(sresults, gsent)))
 if dop: open("test1.dop", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
 open("test1.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a.encode("utf-8"),n) for n,a in enumerate(gold))
 print "maxlen", maxlen, "unfolded", unfolded, "binarized", bintype
-print "error breakdown, first 10 categories. SRCG (type 1, type 2), DOP (type 1, type 2)"
-for a,b,c,d in zip(serrors1.items(), serrors2.items(), derrors1.items(), derrors2.items())[:10]: print a,b,c,d
+print "error breakdown, first 10 categories. SRCG (not in gold, missing from candidate), DOP (idem)"
+for a,b,c,d in zip(serrors1.items(), serrors2.items(),
+					derrors1.items(), derrors2.items())[:10]:
+	print "\t".join(map(lambda x: ": ".join(map(str, x)), (a,b,c,d)))
 if srcg:
 	print "SRCG:"
-	print "exact match", lfs.count(1.0), "/", len(lfs), "=", lfs.count(1.0) / float(len(lfs)) if lfs else "zerodiv"
-	if sconst and gconst:
-		print "lp", scorrect / float(sconst), "lr", scorrect / float(gconst),
-		print "lf1", harmean((scorrect / float(sconst), scorrect / float(gconst)))
-	print "coverage", (len(lps) - snoparse), "/", len(lps), "=", (len(lps) - snoparse) / float(len(lps)) if lps else "zerodiv"
+	print "exact match", exacts, "/", nsent, "=", 100 * exacts / float(nsent) if nsent else "zerodiv"
+	print "srcg em", 100 * exacts / float(nsent), "lp", 100 * precision(goldbrackets, scandb),
+	print "lr", 100 * precision(goldbrackets, scandb), "lf1", 100 * f_measure(goldbrackets, scandb)
+	print "coverage", (nsent - snoparse), "/", nsent, "=", 100 * (nsent - snoparse) / float(nsent) if nsent else "zerodiv", "%"
 	print
 if dop:
 	print "DOP:"
-	print "exact match", lf.count(1.0), "/", len(lf), "=", lf.count(1.0) / float(len(lf)) if lf else "zerodiv"
-	print "lp", dcorrect / float(dconst), "lr", dcorrect / float(gconst),
-	print "lf1", harmean((dcorrect / float(dconst), dcorrect / float(gconst)))
-	print "coverage", (len(lp) - dnoparse), "/", len(lp), "=", (len(lp) - dnoparse) / float(len(lp)) if lp else "zerodiv"
+	print "exact match", exact, "/", nsent, "=", 100 * exact / float(nsent) if nsent else "zerodiv"
+	print "dop em", 100 * exacts / float(nsent), "lp", 100 * precision(goldbrackets, dcandb),
+	print "lr", 100 * precision(goldbrackets, dcandb), "lf1", 100 * f_measure(goldbrackets, dcandb)
+	print "coverage", (nsent - dnoparse), "/", nsent, "=", 100 * (nsent - dnoparse) / float(nsent) if nsent else "zerodiv", "%"
