@@ -230,7 +230,7 @@ def main():
 	from negra import NegraCorpusReader
 	from rcgrules import induce_srcg, dop_srcg_rules, splitgrammar
 	from nltk import Tree
-	corpus = NegraCorpusReader(".", "sample2\.export")
+	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
 	grammar = splitgrammar(dop_srcg_rules(trees, corpus.sents()))

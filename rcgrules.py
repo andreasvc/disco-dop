@@ -115,18 +115,18 @@ def varstoindices(rule):
 					if y in z: x[n] = m
 	return nonterminals, freeze(vars[0])
 
-def induce_srcg(trees, sents):
+def induce_srcg(trees, sents, arity_marks=True):
 	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
-		grammar.extend(map(varstoindices, srcg_productions(t, sent)))
+		grammar.extend(map(varstoindices, srcg_productions(t, sent, arity_marks)))
 	grammar = FreqDist(grammar)
 	fd = FreqDist()
 	for rule,freq in grammar.items(): fd.inc(rule[0][0], freq)
 	return [(rule, log(float(freq)/fd[rule[0][0]])) for rule,freq in grammar.items()]
 
-def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
+def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpolate=1.0, arity_marks=True):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 	Normalize means the application of the equal weights estimate """
@@ -135,22 +135,30 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False):
 	for tree, sent in zip(trees, sents):
 		t = canonicalize(tree.copy(True))
 		t = tree.copy(True)
-		prods = map(varstoindices, srcg_productions(t, sent))
+		prods = map(varstoindices, srcg_productions(t, sent, arity_marks))
 		ut = decorate_with_ids(t, ids)
 		uprods = map(varstoindices, srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
+		# fd: how many subtrees are headed by node X (e.g. NP or NP@12), 
+		# 	counts of NP@... should sum to count of NP
+		# ntfd: frequency of a node in corpus (only makes sense for NP, not NP@12, the latter is always one)
 		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,)
 								if x==y else (x,y)
 								for x,y in zip(a,b)))]
 							for (a,avar),(b,bvar) in zip(prods, uprods))))
 	rules = FreqDist(rules)
-	if shortestderiv:
-		return [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
 	# should we distinguish what kind of arguments a node takes in fd?
-	return [(rule, log(freq * reduce(mul, (fd[z] for z in rule[0][1:] if '@' in z), 1)
-		/ (float(fd[rule[0][0]]) * (ntfd[rule[0][0]]
-		if normalize and '@' not in rule[0][0] else 1))))
-		for rule, freq in rules.items()]
+	probmodel = [((rule, yf), log(freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
+		/ (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
+		* interpolate if '@' not in rule[0] else 1.0
+		+ (1 - interpolate) * ((freq / ntfd[rule[0]]) if not any('@' in z for z in rule) else 0)))
+		for (rule, yf), freq in rules.items()]
+	if shortestderiv:
+		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
+		return (nonprobmodel, dict(probmodel))
+	return probmodel
+	
+#freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)		/ (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))		* interpolate if '@' not in rule[0] else 1.0		+ (1 - interpolate) * (freq / ntfd[rule[0]]) if not any('@' in z for z in rule) else 0
 
 def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal labels to numeric identifiers"""
@@ -228,7 +236,7 @@ def flatten(tree):
 	return ImmutableTree(tree.node, leaves_and_frontier_nodes(tree))
 
 def top_production(tree):
-	return ImmutableTree(tree.node, [ImmutableTree(a.node, []) 
+	return ImmutableTree(tree.node, [ImmutableTree(a.node, [])
 				if isinstance(a, Tree) else a for a in tree])
 
 def doubledop(trees, sents):
@@ -236,7 +244,7 @@ def doubledop(trees, sents):
 	cnt = count()
 	newprods = []
 	trees = list(trees)
-	for t,s in zip(trees, sents): srcg_productions(t, s) 
+	for t,s in zip(trees, sents): srcg_productions(t, s)
 	fragments = extractfragments(trees, sents)
 	missing = missingproductions(trees, sents, fragments)
 	productions = map(flatten, fragments)
@@ -257,11 +265,11 @@ def doubledop(trees, sents):
 	ntfd = defaultdict(int)
 	for a,b in fragments.items():
 		ntfd[a.node] += b
-	grammar = [(srcg_productions(terminalstoindices(a), a.leaves())[0], float(b) / ntfd[f.node]) 
-		for a, (f, b) in zip(productions, fragments.items()) 
+	grammar = [(srcg_productions(terminalstoindices(a), a.leaves())[0], float(b) / ntfd[f.node])
+		for a, (f, b) in zip(productions, fragments.items())
 		if backtransform[a]]
-	grammar += [(srcg_productions(terminalstoindices(a), a.leaves())[0], 
-		log(float(fragments[backtransform[a]] if a in backtransform else 1) / 
+	grammar += [(srcg_productions(terminalstoindices(a), a.leaves())[0],
+		log(float(fragments[backtransform[a]] if a in backtransform else 1) /
 		(ntfd[a.node] if a.node in ntfd else 1))) for a in newprods + missing]
 	return grammar, backtransform
 
@@ -491,13 +499,12 @@ def bfcartpi(seq):
 		for result in cartpi(seqlist[:n] + [seqlist[n][-1:]] + seqlist[n+1:]):
 			yield result
 
-def enumchart(chart, start, tolabel, n=1, depth=0):
+def enumchart(chart, start, tolabel, n=1):
 	"""exhaustively enumerate trees in chart headed by start in top down 
 		fashion. chart is a dictionary with 
 			lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
 		this function doesn't really belong in this file but Cython doesn't
 		support generators so this function is "in exile" over here.  """
-	if depth >= 100: return
 	for iscore,p,rhs in chart[start]:
 		if rhs[0].label == 0: #Epsilon
 			yield "(%s %d)" % (tolabel[start.label], rhs[0].vec), p
@@ -505,7 +512,7 @@ def enumchart(chart, start, tolabel, n=1, depth=0):
 			# this doesn't seem to be a good idea:
 			#for x in nsmallest(n, cartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), key=lambda x: sum(p for z,p in x)):
 			#for x in sorted(islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), n), key=lambda x: sum(p for z,p in x)):
-			for x in islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, depth+1), rhs)), n):
+			for x in islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel), rhs)), n):
 				tree = "(%s %s)" % (tolabel[start.label], " ".join(z for z,px in x))
 				yield tree, p+sum(px for z,px in x)
 
@@ -544,7 +551,7 @@ def do(sent, grammar):
 def main():
 	from treetransforms import un_collinize, collinize
 	from negra import NegraCorpusReader
-	corpus = NegraCorpusReader(".", "sample2\.export", headorder=True, headfinal=True, headreverse=False)
+	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True, headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents(), corpus.sents()):
 		print tree.pprint(margin=999)
 		a = binarizetree(tree.freeze())

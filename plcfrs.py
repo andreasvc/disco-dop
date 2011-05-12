@@ -183,32 +183,36 @@ def samplechart(chart, start, tolabel):
 	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 	
+removeids = re.compile("@[0-9]+")
 def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
-		""" sum over n random derivations from chart,
-			return a FreqDist of parse trees, with .max() being the MPP"""
-		print "sample =", sample or both, "kbest =", (not sample) or both,
-		if both:
-			derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
-			derivations.discard(None)
-			derivations.update(lazykbest(chart, start, n, tolabel))
-		elif sample:
-			for a,b in chart.items():
-				if not len(b): print "spurious chart entry", a
-			derivations = set(samplechart(chart, start, tolabel) for x in range(n))
-			derivations.discard(None)
-			#calculate real parse probabilities according to Goodman's claimed method?
-		else:
-			#derivations = islice(enumchart(chart, start, tolabel), n)
-			derivations = lazykbest(chart, start, n, tolabel)
-		parsetrees = defaultdict(float)
-		m = 0
-		removeids = re.compile("@[0-9]+")
-		for a,prob in derivations:
-			# if necessary, we could do the addition in log space
-			parsetrees[removeids.sub("", a)] += exp(-prob)
-			m += 1
-		print "(%d derivations)" % m
-		return parsetrees
+	""" sum over n random derivations from chart,
+		return a FreqDist of parse trees, with .max() being the MPP"""
+	print "sample =", sample or both, "kbest =", (not sample) or both,
+	if both:
+		derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
+		derivations.discard(None)
+		derivations.update(lazykbest(chart, start, n, tolabel))
+	elif sample:
+		for a,b in chart.items():
+			if not len(b): print "spurious chart entry", a
+		derivations = set(samplechart(chart, start, tolabel) for x in range(n))
+		derivations.discard(None)
+		#calculate real parse probabilities according to Goodman's claimed method?
+	else:
+		#derivations = islice(enumchart(chart, start, tolabel), n)
+		derivations = lazykbest(chart, start, n, tolabel)
+	m = 0
+	parsetrees = defaultdict(list)
+	for deriv, prob in derivations:
+		m += 1
+		parsetrees[removeids.sub("", deriv)].append(-prob)
+	for parsetree in parsetrees:
+		maxprob = max(parsetrees[parsetree])
+		#foo = sum(map(exp, parsetrees[parsetree]))
+		parsetrees[parsetree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[parsetree])))
+		#assert foo == parsetrees[parsetree]
+	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
+	return parsetrees
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"

@@ -1,11 +1,12 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
-from rcgrules import enumchart
+from rcgrules import enumchart, induce_srcg
 from kbest import lazykbest
 from nltk import FreqDist, Tree
 from heapdict import heapdict
 from math import log, exp
 from random import choice, randrange
+from operator import itemgetter
 from itertools import chain, islice
 from collections import defaultdict, deque
 import re
@@ -109,6 +110,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				else: #if not viterbi:
 					oscore, iscore, p, rhs = scores
 					C[I1h].append((iscore, p, rhs))
+					#?? if iscore < Cx[Ih.label][I1h]: Cx[Ih.label][I1h] = iscore
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values())),
 	return (C, goal) if goal in C else ({}, ())
@@ -214,53 +216,66 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel): #set visited
 	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))
 	return tree, p+sum(b for a,b in children)
 
-def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
-		""" sum over n random derivations from chart,
-			return a FreqDist of parse trees, with .max() being the MPP"""
-		print "sample =", sample or both, "kbest =", (not sample) or both,
-		if both:
-			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n*100))
-			derivations.discard(None)
-			derivations.update(lazykbest(chart, start, n, tolabel))
-			#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
-		elif sample:
-			for a,b in chart.items():
-				if not len(b): print "spurious chart entry", a
-			#filterchart2(chart, start, set([]))
-			derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n))
-			derivations.discard(None)
-			#calculate real parse probabilities according to Goodman's claimed method?
-		else:
-			#chart = filterchart(chart, start)
-			#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
-			derivations = lazykbest(chart, start, n, tolabel)
-			#print len(derivations)
-			#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
-			#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
-		#cdef dict parsetrees = <dict>defaultdict(float)
-		cdef dict parsetrees = <dict>defaultdict(list)
-		cdef double prob, maxprob
-		cdef int m = 0
-		#cdef str deriv, tree
-		removeids = re.compile("@[0-9]+")
-		parens = re.compile("\$\(")
-		for deriv, prob in derivations:
-			m += 1
-			#parsetrees[removeids.sub("", deriv)] += exp(-prob)
-			parsetrees[removeids.sub("", deriv)].append(-prob)
-			#restore linear precedence (disabled, seems to make no difference)
-			#parsetree = Tree(parens.sub("$[", removeids.sub("", deriv)))
-			#for a in parsetree.subtrees():
-			#	if len(a) > 1: a.sort(key=lambda x: x.leaves())
-			#	elif a.node == "$[": a.node = "$("
-			#parsetrees[parsetree.pprint(margin=999)].append(-prob)
-		# Adding probabilities in log space
-		# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-		for parsetree in parsetrees:
-			maxprob = max(parsetrees[parsetree])
-			parsetrees[parsetree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[parsetree])))
-		print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
-		return parsetrees
+removeids = re.compile("@[0-9]+")
+parens = re.compile("\$\(")
+eparens = re.compile("\$\[")
+def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False, shortest=False, secondarymodel=None):
+	""" sum over n random/best derivations from chart,
+		return a list of (tree, prob) tuples"""
+	print "sample =", sample or both, "kbest =", (not sample) or both,
+	if both:
+		derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n*100))
+		derivations.discard(None)
+		derivations.update(lazykbest(chart, start, n, tolabel))
+		#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
+	elif sample:
+		for a,b in chart.items():
+			if not len(b): print "spurious chart entry", a
+		#filterchart2(chart, start, set([]))
+		derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n))
+		derivations.discard(None)
+		#calculate real parse probabilities according to Goodman's claimed method?
+	else:
+		#chart = filterchart(chart, start)
+		#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
+		derivations = lazykbest(chart, start, n, tolabel)
+		#print len(derivations)
+		#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
+		#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
+	if shortest:
+		derivations = [(a,b) for a, b in derivations if b == derivations[0][1]]
+	#cdef dict parsetrees = <dict>defaultdict(float)
+	cdef dict parsetrees = <dict>defaultdict(list)
+	cdef double prob, maxprob
+	cdef int m = 0
+	#cdef str deriv, tree
+	for deriv, prob in derivations:
+		m += 1
+		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
+		#restore linear precedence (disabled, seems to make no difference)
+		#parsetree = Tree(parens.sub("$[", removeids.sub("", deriv)))
+		#for a in parsetree.subtrees():
+		#	if len(a) > 1: a.sort(key=lambda x: x.leaves())
+		#	elif a.node == "$[": a.node = "$("
+		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
+		if shortest:
+			tree = Tree(parens.sub("$[", removeids.sub("", deriv)))
+			for c in tree.subtrees():
+				c.node = eparens.sub("$(", c.node)
+			sent = sorted(tree.leaves(), key=int)
+			rules = induce_srcg([tree], [sent], arity_marks=False)
+			prob = -sum(secondarymodel[r] for r, w in rules if r[0][1] != 'Epsilon')
+		parsetrees[removeids.sub("", deriv)].append(-prob)
+	# Adding probabilities in log space
+	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
+	for parsetree in parsetrees:
+		maxprob = max(parsetrees[parsetree])
+		#foo = sum(map(exp, parsetrees[parsetree]))
+		parsetrees[parsetree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[parsetree])))
+		#assert log(foo) == parsetrees[parsetree]
+	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
+	return parsetrees
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"

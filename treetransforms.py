@@ -194,30 +194,21 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 					curNode[0:] = [newNode, nodeCopy.pop()]
 		
 
-def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", unaryChar = "+"):
+def un_collinize(tree, expandUnary=True, childChar="|", parentChar="^", unaryChar="+"):
 	# Traverse the tree-depth first keeping a pointer to the parent for modification purposes.
-	agenda = [(tree,[])]
+	agenda = [(tree, [])]
 	while agenda:
 		node, parent = agenda.pop()
-		if isinstance(node,Tree):
+		if isinstance(node, Tree):
 			# if the node contains the 'childChar' character it means that
 			# it is an artificial node and can be removed, although we still need
 			# to move its children to its parent
 			childIndex = node.node.find(childChar)
 			if childIndex != -1:
 				nodeIndex = parent.index(node)
-				parent.pop(nodeIndex)  #parent.remove(parent[nodeIndex])
-				# Generated node was on the left if the nodeIndex is 0 which
-				# means the grammar was left factored.  We must insert the children
-				# at the beginning of the parent's children
-				if nodeIndex == 0:
-					parent[:] = node[:] + parent[:]
-				else:
-					parent.extend(node)
+				# replace node with children of node
+				parent[nodeIndex:nodeIndex+1] = node
 				
-				# parent is now the current node so the children of parent will be added to the agenda
-				#node = parent
-				# ?!? only the *new* children should be added, which are the ones in node; otherwise agenda will contain duplicates
 			else:
 				parentIndex = node.node.find(parentChar)
 				if parentIndex != -1:
@@ -225,12 +216,13 @@ def un_collinize(tree, expandUnary = True, childChar = "|", parentChar = "^", un
 					node.node = node.node[:parentIndex]
 
 				# expand collapsed unary productions
-				if expandUnary == True:
+				if expandUnary:
 					unaryIndex = node.node.find(unaryChar)
 					if unaryIndex != -1:
-						newNode = Tree(node.node[unaryIndex + 1:], [i for i in node])
+						newNode = Tree(node.node[unaryIndex + 1:], node[:])
 						node.node = node.node[:unaryIndex]
 						node[0:] = [newNode]
+
 				# non-binarized constituent, so move on to next parent
 				parent = node
 

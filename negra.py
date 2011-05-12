@@ -119,9 +119,7 @@ def function(tree):
 	else: return ''
 
 def rindex(l, v):
-	for n, a in reversed(zip(count(), l)):
-		if a == v: return n
-	raise ValueError("rindex: x not in list")
+	return len(l) - 1 - l[::-1].index(v)
 
 def unfold(tree):
 	""" Unfold redundancies and perform other transformations introducing
@@ -142,7 +140,7 @@ def unfold(tree):
 				ac[:0] = pp[:functions.index("AC")]
 			if rindex(functions, "AC") > rindex(functions, "NK"):
 				ac += pp[rindex(functions, "AC")+1:]
-		else: print "PP but no AC or NK", " ".join(functions)
+		#else: print "PP but no AC or NK", " ".join(functions)
 		nk = [a for a in pp if a not in ac]
 		# introduce a PP unless there is already an NP in the PP (annotation
 		# mistake), or there is a PN and we want to avoid a cylic unary of 
@@ -199,15 +197,15 @@ def unfold(tree):
 		s[:] = [s[0], Tree("S", s[1:])]
 	# introduce nested structures for modifiers
 	# (iterated adjunction instead of sister adjunction)
-	adjunctable = set("NP".split()) # PP AP VP
-	for a in list(tree.subtrees(lambda n: n.node in adjunctable and any(function(x) == "MO" for x in n))):
-		modifiers = [x for x in a if function(x) == "MO"]
-		if min(n for n,x in enumerate(a) if function(x) =="MO") == 0:
-			modifiers[:] = modifiers[::-1]
-		while modifiers:
-			modifier = modifiers.pop()
-			a[:] = [Tree(a.node, [x for x in a if x != modifier]), modifier]
-			a = a[0]
+	#adjunctable = set("NP".split()) # PP AP VP
+	#for a in list(tree.subtrees(lambda n: n.node in adjunctable and any(function(x) == "MO" for x in n))):
+	#	modifiers = [x for x in a if function(x) == "MO"]
+	#	if min(n for n,x in enumerate(a) if function(x) =="MO") == 0:
+	#		modifiers[:] = modifiers[::-1]
+	#	while modifiers:
+	#		modifier = modifiers.pop()
+	#		a[:] = [Tree(a.node, [x for x in a if x != modifier]), modifier]
+	#		a = a[0]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
 	return tree
@@ -235,20 +233,20 @@ def fold(tree):
 			dp.node = "NP"
 			if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
 	# flatten adjunctions
-	nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
-	probably_nk = set("AP PIS".split()) | nkonly
-	for np in tree.subtrees(lambda n: len(n) == 2 
-									and n.node == "NP" 
-									and [x.node for x in n].count("NP") == 1
-									and not set(labels(n)) & probably_nk):
-		np.sort(key=lambda n: n.node == "NP")
-		np[:] = np[:1] + np[1][:]
+	#nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
+	#probably_nk = set("AP PIS".split()) | nkonly
+	#for np in tree.subtrees(lambda n: len(n) == 2 
+	#								and n.node == "NP" 
+	#								and [x.node for x in n].count("NP") == 1
+	#								and not set(labels(n)) & probably_nk):
+	#	np.sort(key=lambda n: n.node == "NP")
+	#	np[:] = np[:1] + np[1][:]
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
 		if "NP" in labels(pp): # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
 			#ensure NP is in last position
 			pp.sort(key=lambda n: n.node == "NP")
-			pp[:] = pp[:-1] + pp[-1][:]
+			if len(pp) == 2: pp[:] = pp[:-1] + pp[-1][:]
 	# SRC => S
 	for s in tree.subtrees(lambda n: n.node == "SRC"): s.node = "S"
 	# merge extra S level
