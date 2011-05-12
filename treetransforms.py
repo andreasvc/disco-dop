@@ -118,7 +118,7 @@ The following is a short tutorial on the available transformations.
 
 from nltk.tree import Tree
 
-def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|", parentChar="^", tailMarker="$", headMark=False):
+def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|", parentChar="^", tailMarker="$", minMarkov=3):
 	# assume all subtrees have homogeneous children
 	# assume all terminals have no siblings
 	
@@ -135,7 +135,7 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 	nodeList = [(tree, [tree.node])]
 	while nodeList != []:
 		node, parent = nodeList.pop()
-		if isinstance(node,Tree):
+		if isinstance(node, Tree):
   
 			# parent annotation
 			parentString = ""
@@ -150,49 +150,34 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 				nodeList.append((child, parent))
 
 			# chomsky normal form factorization
-			if len(node) > 2:
+			if len(node) > (minMarkov - 1) and isinstance(node[0], Tree):
 				childNodes = [child.node for child in node]
 				nodeCopy = node.copy()
 				numChildren = len(nodeCopy)
 				# insert an initial artificial nonterminal
 				if factor == "right":
-					newNode = Tree("%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[:1]),parentString), [])
+					siblings = "-".join(childNodes[:1])
 				else: # factor == "left"
-					newNode = Tree("%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[-1:]),parentString), [])
-				node[0:] = [newNode]
+					siblings = "-".join(childNodes[-1:])
+				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar, siblings, parentString), [])
+				node[:] = [newNode]
 				node = newNode
 
 				curNode = node
-				for i in range(1,numChildren - 2):
+				for i in range(1, numChildren):
+					marktail = tailMarker if i+1 == numChildren else ''
+					newNode = Tree('', [])
 					if factor == "right":
-						newHead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
-						newNode = Tree(newHead, [])
-						curNode[0:] = [nodeCopy.pop(0), newNode]
+						siblings = "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1])
+						curNode[:] = [nodeCopy.pop(0), newNode]
 					else: # factor == "left":
-						newHead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[numChildren - i - 1:numChildren - i - 1 + horzMarkov]),parentString)
-						newNode = Tree(newHead, [])
-						curNode[0:] = [newNode, nodeCopy.pop()]
+						siblings = "-".join(childNodes[numChildren - i - 1:numChildren - i - 1 + horzMarkov])
+						curNode[:] = [newNode, nodeCopy.pop()]
+					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar, marktail, siblings, parentString)
 
 					curNode = newNode
-				# handle the last 3 nonterminals specifically so as to introduce a unary production for the last one:
-				i = numChildren - 2
-				if factor == "right":
-					newHead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
-					i += 1
-					# last node gets a last-node marker "$" to avoid cyclic
-					# unary productions
-					lasthead = "%s%s%s<%s>%s" % (originalNode, childChar, tailMarker, "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1]), parentString)
-					newNode = Tree(newHead, [nodeCopy.pop(1), Tree(lasthead, [nodeCopy.pop()])])
-					curNode[0:] = [nodeCopy.pop(), newNode]
-				else: # factor == "left":
-					newHead = "%s%s<%s>%s" % (originalNode, childChar, "-".join(childNodes[numChildren - i - 1:numChildren - i - 1 + horzMarkov]), parentString)
-					i += 1
-					# last node gets a last-node marker "$" to avoid cyclic
-					# unary productions
-					lasthead = "%s%s%s<%s>%s" % (originalNode, childChar, tailMarker, "-".join(childNodes[:horzMarkov]), parentString)
-					newNode = Tree(newHead, [Tree(lasthead, [nodeCopy.pop(0)]), nodeCopy.pop(0)])
-					curNode[0:] = [newNode, nodeCopy.pop()]
-		
+				curNode.append(nodeCopy.pop())
+	
 
 def un_collinize(tree, expandUnary=True, childChar="|", parentChar="^", unaryChar="+"):
 	# Traverse the tree-depth first keeping a pointer to the parent for modification purposes.
@@ -279,10 +264,6 @@ def demo():
 	"""
 	A demonstration showing how each tree transform can be used.
 	"""  
-
-	from nltk.draw.tree import draw_trees
-	from nltk import treetransforms, bracket_parse
-	from copy import deepcopy
 	
 	# original tree from WSJ bracketed text
 	sentence = """(TOP (S
@@ -300,33 +281,38 @@ def demo():
 	(NP (DT the) (NN yuppie) (NNS dealers))
 	(VP (AUX do) (NP (NP (RB little)) (ADJP (RB right))))
 	(. .)))"""
-	tree = bracket_parse(sentence)
-	
+	tree = Tree(sentence)
+	print "original", tree
+
 	# collapse subtrees with only one child
-	collapsedTree = deepcopy(tree)
-	treetransforms.collapse_unary(collapsedTree)
+	collapsedTree = tree.copy(True)
+	#collapse_unary(collapsedTree)
 	
 	# convert the tree to CNF
-	cnfTree = deepcopy(collapsedTree)
-	treetransforms.chomsky_normal_form(cnfTree)
+	cnfTree = collapsedTree.copy(True)
+	lcnfTree = collapsedTree.copy(True)
+	collinize(cnfTree, factor="right", horzMarkov=2, minMarkov=1)
+	collinize(lcnfTree, factor="left", horzMarkov=2, minMarkov=1)
 	
 	# convert the tree to CNF with parent annotation (one level) and horizontal smoothing of order two
-	parentTree = deepcopy(collapsedTree)
-	treetransforms.chomsky_normal_form(parentTree, horzMarkov=2, vertMarkov=1)
+	parentTree = collapsedTree.copy(True)
+	collinize(parentTree, horzMarkov=2, vertMarkov=1)
 	
 	# convert the tree back to its original form (used to make CYK results comparable)
-	original = deepcopy(parentTree)
-	treetransforms.un_chomsky_normal_form(original)
+	original = cnfTree.copy(True)
+	original2 = lcnfTree.copy(True)
+	un_collinize(original)
+	un_collinize(original2)
 	
 	# convert tree back to bracketed text
 	sentence2 = original.pprint()
-	print sentence
-	print sentence2
-	print "Sentences the same? ", sentence == sentence2
+	print "binarized", cnfTree
+	print "Sentences the same? ", tree == original, tree == original2
+	assert tree == original and tree == original2
 	
-	draw_trees(tree, collapsedTree, cnfTree, parentTree, original)
+	#draw_trees(tree, collapsedTree, cnfTree, parentTree, original)
 
 if __name__ == '__main__':
 	demo()
 
-__all__ = ["chomsky_normal_form", "un_chomsky_normal_form", "collapse_unary"]
+__all__ = ["collinize", "un_collinize", "collapse_unary"]
