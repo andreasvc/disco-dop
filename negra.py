@@ -246,7 +246,7 @@ def fold(tree):
 		if "NP" in labels(pp): # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
 			#ensure NP is in last position
 			pp.sort(key=lambda n: n.node == "NP")
-			if len(pp) == 2: pp[:] = pp[:-1] + pp[-1][:]
+			pp[:] = pp[:-1] + pp[-1][:]
 	# SRC => S
 	for s in tree.subtrees(lambda n: n.node == "SRC"): s.node = "S"
 	# merge extra S level
@@ -260,10 +260,11 @@ def fold(tree):
 		for vp in (n for n,a in enumerate(s) if a.node == "VP"):
 			if any(a.node.endswith("FIN") for a in s[vp]):
 				s[:] = s[:vp] + s[vp][:] + s[vp+1:]
-	if any(a.node == "S" for a in tree):
-		map(mergevp, [a for a in tree if a.node == "S"])
-	elif any(a.node == "CS" for a in tree):
-		map(mergevp, [s for cs in tree for s in cs if cs.node == "CS" and s.node == "S"])
+	#if any(a.node == "S" for a in tree):
+	#	map(mergevp, [a for a in tree if a.node == "S"])
+	#elif any(a.node == "CS" for a in tree):
+	#	map(mergevp, [s for cs in tree for s in cs if cs.node == "CS" and s.node == "S"])
+	for s in tree.subtrees(lambda n: n.node == "S"): mergevp(s)
 	# remove constituents for particle verbs
 	# get the grandfather of each verb particle
 	for a in list(tree.subtrees(lambda n: any("PTKVZ" in (x.node for x in m if isinstance(x, Tree)) for m in n if isinstance(m, Tree)))):

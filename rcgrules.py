@@ -150,8 +150,8 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 	# should we distinguish what kind of arguments a node takes in fd?
 	probmodel = [((rule, yf), log(freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
 		/ (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
-		* interpolate if '@' not in rule[0] else 1.0
-		+ (1 - interpolate) * ((freq / ntfd[rule[0]]) if not any('@' in z for z in rule) else 0)))
+		* (interpolate if '@' not in rule[0] else 1.0)
+		+ ((1 - interpolate) * (float(freq) / ntfd[rule[0]]) if not any('@' in z for z in rule) else 0)))
 		for (rule, yf), freq in rules.items()]
 	if shortestderiv:
 		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
@@ -564,15 +564,18 @@ def main():
 	tree, sent = corpus.parsed_sents()[0], corpus.sents()[0]
 	pprint(srcg_productions(tree, sent))
 	collinize(tree, factor="right", horzMarkov=1, vertMarkov=1, tailMarker='')
-	#pprint(induce_srcg([tree.copy(True)], [sent]))
+	pprint(induce_srcg([tree.copy(True)], [sent]))
 	for r, w in induce_srcg([tree.copy(True)], [sent]): print exp(w), r
+	print
+	for (r1, w1), (r2, w2) in zip(dop_srcg_rules([tree.copy(True)], [sent], interpolate=1.0),
+									dop_srcg_rules([tree.copy(True)], [sent], interpolate=0.5)):
+		assert r1 == r2
+		print exp(w1), exp(w2), r1
+
 	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
-	#return
-	#(('NP|<ART>', 'ART', 'NP|<NN>'), ((0, 1),)) 0.0
-	#1 1.0:@^S1^VROOT1-NP1X1 --> @^S1^VROOT1-ADV1X1 NP1 [[[false, true]]]
 
 	pprint(splitgrammar(induce_srcg([tree.copy(True)], [sent])))
-	pprint(dop_srcg_rules([tree.copy(True)], [sent]))
+	#pprint(dop_srcg_rules([tree.copy(True)], [sent], interpolate=0.5))
 	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
 
 	treebank = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
