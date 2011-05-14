@@ -126,10 +126,11 @@ def induce_srcg(trees, sents, arity_marks=True):
 	for rule,freq in grammar.items(): fd.inc(rule[0][0], freq)
 	return [(rule, log(float(freq)/fd[rule[0][0]])) for rule,freq in grammar.items()]
 
-def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpolate=1.0, arity_marks=True):
+def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpolate=1.0, wrong_interpolate=False, arity_marks=True):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
-	Normalize means the application of the equal weights estimate """
+	Normalize means the application of the equal weights estimate
+	interpolate 0.5 means 50% dop probabilities, 50% srcg (depth 1) probabilities"""
 	ids, rules = count(1), []
 	fd,ntfd = FreqDist(), FreqDist()
 	for tree, sent in zip(trees, sents):
@@ -151,7 +152,8 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 	probmodel = [((rule, yf), log(freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
 		/ (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
 		* (interpolate if '@' not in rule[0] else 1.0)
-		+ ((1 - interpolate) * (float(freq) / ntfd[rule[0]]) if not any('@' in z for z in rule) else 0)))
+		+ ((1 - interpolate) * (float(freq) / ntfd[rule[0]])
+				if not any('@' in z for z in rule) and not wrong_interpolate else 0)))
 		for (rule, yf), freq in rules.items()]
 	if shortestderiv:
 		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
@@ -202,84 +204,115 @@ def same(a, b, asent, bsent):
 	elif isinstance(a, Tree): return a.node == b.node
 	else: return asent[a] == bsent[b]
 
-def fragmentfromindices(tree, treepos, sent, indices):
+def fragmentfromindices(tree, sent, indices):
 	""" Given a tree and a set of connected indices, return the fragment
-	described by these indices. """
+	described by these indices.
+	>>> np = Tree('NP', [Tree('DET', [2]), Tree('NN', [3])])
+	>>> tree = Tree('S', [Tree('NP', [0]), Tree('VP', [Tree('V', [1]), np])])
+	>>> sent = "Mary sees a unicorn".split()
+	>>> indices = set([(1,), (1, 0), (1, 0, 0), (1, 1)])
+	>>> print "%s, %s" % fragmentfromindices(tree, sent, indices)
+	(VP (V 0) (NP )), ('sees',)
+	"""
 	if not indices: return
 	froot = min(indices, key=len)
 	if not isinstance(tree[froot], Tree): return
-	tree = Tree.convert(tree.copy(True))
-	for a in reversed(treepos + tree.treepositions('leaves')):
-		# iterate over indices from bottom to top, right to left,
-		# so that other indices remain valid after deleting each subtree
-		if a not in indices and len(a) > len(froot):
-			del tree[a]
-	for a in tree.treepositions('leaves'):
-		tree[a] = sent[tree[a]]
-	return tree[froot].freeze() if tree[froot].height() > 1 else None
+	result = Tree(tree[froot].node, [])
+	agenda = [(result, a, froot+(n,)) for n,a in enumerate(tree[froot])]
+	while agenda:
+		current, node, idx = agenda.pop(0)
+		if idx in indices:
+			if isinstance(node, Tree):
+				child = Tree(node.node, [])
+				current.append(child)
+				agenda += [(child, a, idx+(n,)) for n,a in enumerate(node)]
+			else:
+				current.append(node)
+	leaves = result.leaves()
+	sent = tuple(a for n,a in enumerate(sent) if n in leaves)
+	leafmap = dict(zip(leaves, count()))
+	for n, a in enumerate(result.treepositions('leaves')):
+		result[a] = leafmap[result[a]]
+	return (result.freeze(), sent) if len(result) else None
 
-def missingproductions(trees, sents, fragments):
+def hapaxproductions(trees, sents):
 	""" Return a set of productions p, such that p + fragments
 	covers the given treebank. Extracts all productions not part of any 
 	fragment"""
-	covered = set(prod for fragment in fragments for prod in map(top_production, fragment.subtrees()))
-	return [prod for tree in trees
-			for prod in map(top_production, tree.subtrees())
-		if prod.productions()[0] not in covered]
+	return FreqDist(freeze(rule) for tree, sent in zip(trees, sents)
+					for rule in srcg_productions(tree, sent, False)).hapaxes()
 
 def leaves_and_frontier_nodes(tree):
 	return chain(*(leaves_and_frontier_nodes(child)
 			if isinstance(child, Tree) and len(child)
 			else [child] for child in tree))
 
-def flatten(tree):
+def flatten((tree, sent)):
 	return ImmutableTree(tree.node, leaves_and_frontier_nodes(tree))
+
+def doubledop(trees, sents):
+	backtransform = {}
+	newprods = []
+	# to assign IDs to ambiguous fragments (same yield)
+	cnt = count()
+	trees = list(trees)
+	# adds arity markers
+	for t,s in zip(trees, sents): srcg_productions(t, s)
+	# most work happens here
+	fragments = extractfragments(trees, sents)
+	# everything below here is wrong
+	# (doesn't deal with discontinuties & frontier nodes properly)
+	productions = map(flatten, fragments)
+	for prod, (frag, terminals) in zip(productions, fragments):
+		if prod == frag: continue
+		if (prod, terminals) not in backtransform:
+			backtransform[prod, terminals] = frag
+		else:
+			if backtransform[prod, terminals]:
+				newprods.append((ImmutableTree("#%d" % cnt.next(),
+										prod[:]), ()))
+				newprods.append((ImmutableTree(prod.node,
+										[newprods[-1]]), terminals))
+				backtransform[newprods[-1]] = backtransform[prod]
+				backtransform[prod, terminals] = None
+			newprods.append((ImmutableTree("#%d" % cnt.next(), prod[:]), ()))
+			newprods.append((ImmutableTree(prod.node, [newprods[-1]]), terminals))
+			backtransform[newprods[-1]] = frag
+	#ntfd = defaultdict(float)
+	#for (a,asent),b in fragments.items(): ntfd[a.node] += b
+	ntfd = FreqDist(a.node for tree in trees for a in tree.subtrees())
+	# frontier nodes and variables?
+	# binarize productions here. terminals should get preterminals?
+	# 	binarization should not affect earlier binarization
+	grammar = [(srcg_productions(a, fsent)[0],
+				log(float(b) / ntfd[f.node]))
+		for a, ((f, fsent), b) in zip(productions, fragments.items())
+		if backtransform.get((a, fsent), False)]
+	grammar += [(srcg_productions(a, b)[0],
+		log((fragments[backtransform[a, b]] if (a, b) in backtransform else 1)
+			/ (ntfd[a.node] if a.node in ntfd else 1.0)))
+		for a, b in newprods]
+	# collect rules which occur once to complement the recurring fragments
+	grammar += [(a, log(1.0/ntfd[a[0][0]]))
+			for a in hapaxproductions(trees, sents)]
+	#grammar = [(varstoindices(a), b) for a,b in grammar]
+	return grammar, backtransform
 
 def top_production(tree):
 	return ImmutableTree(tree.node, [ImmutableTree(a.node, [])
 				if isinstance(a, Tree) else a for a in tree])
 
-def doubledop(trees, sents):
-	backtransform = {}
-	cnt = count()
-	newprods = []
-	trees = list(trees)
-	for t,s in zip(trees, sents): srcg_productions(t, s)
-	fragments = extractfragments(trees, sents)
-	missing = missingproductions(trees, sents, fragments)
-	productions = map(flatten, fragments)
-	for a, b in zip(productions, fragments):
-		if a not in b:
-			backtransform[a] = b
-		else:
-			if backtransform[a]:
-				newprod = ImmutableTree(a.node, ["#%d" % cnt()])
-				newprods.append(newprod)
-				newprods.append(ImmutableTree(newprod[0].node, a[:]))
-				backtransform[newprod] = backtransform[a]
-				backtransform[a] = None
-			newprod = ImmutableTree(a.node, ["#%d" % cnt()])
-			newprods.append(newprod)
-			newprods.append(ImmutableTree(newprod[0].node, a[:]))
-			backtransform[newprod] = b
-	ntfd = defaultdict(int)
-	for a,b in fragments.items():
-		ntfd[a.node] += b
-	grammar = [(srcg_productions(terminalstoindices(a), a.leaves())[0], float(b) / ntfd[f.node])
-		for a, (f, b) in zip(productions, fragments.items())
-		if backtransform[a]]
-	grammar += [(srcg_productions(terminalstoindices(a), a.leaves())[0],
-		log(float(fragments[backtransform[a]] if a in backtransform else 1) /
-		(ntfd[a.node] if a.node in ntfd else 1))) for a in newprods + missing]
-	return grammar, backtransform
-
-def terminalstoindices(tree):
-	tree = Tree.convert(tree)
-	for n, idx in enumerate(tree.treepositions('leaves')): tree[idx] = n
-	return tree
-
-def recoverfromfragments(derivation, backtransform):
-	result = Tree.convert(backtransform[top_production(derivation)])
+def recoverfromfragments(derivation, sent, backtransform):
+	prod = top_production(derivation)
+	terminals = tuple(a for n, a in enumerate(sent) if n in prod.leaves())
+	def renumber(tree):
+		result = Tree.convert(tree)
+		leaves = result.leaves()
+		leafmap = dict(zip(leaves, count()))
+		for a in result.treepositions('leaves'):
+			result[a] = leafmap[result[a]]
+		return result.freeze()
+	result = Tree.convert(backtransform.get((renumber(prod), terminals), prod))
 	if len(derivation) == 1 and derivation[0].node[0] == "#":
 		derivation = derivation[0]
 	for r, t in zip(leaves_and_frontier_nodes(result), derivation):
@@ -292,62 +325,78 @@ def recoverfromfragments(derivation, backtransform):
 			assert r == t
 	return result
 
-def subtreepositions(tree):
-	leaves = tree.treepositions('leaves')
-	return [a for a in tree.treepositions() if a not in leaves]
+def add_srcg_rules(tree, sent):
+	for a, b in zip(tree.subtrees(), srcg_productions(tree, sent, False)):
+		a.prod = alpha_normalize(zip(*b))
+		a.len = len(a)
+	return tree
 
 def extractfragments(trees, sents):
 	""" Seeks the largest fragments occurring at least twice in the corpus.
 	Algorithm from: Sangati et al., Efficiently extract recurring tree
 	fragments from large treebanks. """
-	fraglist = FreqDist()
+	fraglist = defaultdict(set) #FreqDist()
 	#partfraglist = set()
-	treepos = [(t, dict((a,b) for b,a in enumerate(t))) for t in map(subtreepositions, trees)]
-	trees = [(a.freeze(), map(lambda p: alpha_normalize(zip(*p)), srcg_productions(a, b))) for a,b in zip(trees, sents)]
+	trees = [add_srcg_rules(canonicalize(a).freeze(), b)
+				for a, b in zip(trees, sents)]
+	trees = [dict((idx, a[idx]) for idx in a.treepositions()) for a in trees]
+	
 	mem = {}; l = set()
-	for n,(a,aprod),(apos,amap),asent in zip(count(), trees, treepos, sents):
-		for (b,bprod),(bpos,bmap),bsent in zip(trees, treepos, sents)[n+1:]:
-			for i in apos:
-				for j in bpos:
-					x = frozenset(extractmaxfragments(a, b, i, j, aprod, bprod, amap, bmap, asent, bsent, mem))
+	for n,a,asent in zip(count(), trees, sents):
+		for b,bsent in zip(trees, sents)[n+1:]:
+			for i in a:
+				for j in b:
+					try: x = frozenset(mem[i, j])
+					except KeyError:
+						x = frozenset(extractmaxfragments(a, b, i, j, asent, bsent, mem))
 					if len(x) < 2 or x in l: continue
 					# disjoint-set datastructure here?
 					for y in l:
 						if x < y: break
 						elif x > y:
 							l.remove(y)
-							l.add(frozenset(x))
+							l.add(x)
 							break
-					else: l.add(frozenset(x))
+					else: l.add(x)
 					#partfraglist.update(extractmaxpartialfragments(a[i], b[j]))
-			fragments = (fragmentfromindices(a, apos, asent, x) for x in l)
-			fraglist.update(filter(None, fragments))
+			fragments = (fragmentfromindices(a, asent, x) for x in l)
+			#fraglist.update(set(fragments))
+			for x in set(fragments):
+				if x: fraglist[x].update((a[()], b[()]))
 			mem.clear(); l.clear()
-	return fraglist #| partfraglist
+	#fraglist.pop(None, None)
+	fragcounts = defaultdict(int)
+	fragcounts.update((a, len(b)) for a, b in fraglist.items())
+	return fragcounts #| partfraglist
 
-def extractmaxfragments(a,b, i,j, aprod,bprod, amap,bmap, asent,bsent, mem):
+def extractmaxfragments(a,b, i,j, asent,bsent, mem):
 	""" a fragment is a connected subset of nodes where each node either has
 	zero children, or as much as in the original tree.""" 
 	if (i, j) in mem: return mem[i, j]
-	# compare label / terminal
-	if not same(a[i], b[j], asent, bsent):
-		mem[i, j] = set(); return set()
+	# compare label & arity / terminal
+	if type(a[i]) != type(b[j]):
+		mem[i, j] = set()
+		return set()
+	elif isinstance(a[i], Tree):
+		#alhs = a[i].prod[0]
+		#blhs = b[j].prod[0]
+		#if alhs[0] != blhs[0] or len(alhs[1]) != len(blhs[1]):
+		# assume presence of arity markers
+		if a[i].node != b[j].node:
+			mem[i, j] = set()
+			return set()
+	elif asent[a[i]] != bsent[b[j]]:
+		mem[i, j] = set()
+		return set()
+
 	nodeset = set([i])
-	# compare arity (should be added to label)
-	if ((not isinstance(a[i], Tree)) or (not isinstance(b[j], Tree))
-		or len(aprod[amap[i]][0][1]) != len(bprod[bmap[j]][0][1])):
-		mem[i, j] = nodeset; return nodeset
-	# TODO ignore rhs order, but compare yield functions
-	# construct mapping between variables of a[i] to those of b[j]
-	# loop over children of a[i], mapping the variables of each child
-	# should lead to a child in b[j] with same label.
-	#for ax, (label, vars) in zip(a[1], aprod[amap[i]][1:]):
-	#	assert ax.node == label	
-	if (len(a[i]) == len(b[j]) and all(same(ax, bx, asent, bsent)
-										for ax, bx in zip(a[i], b[j]))
-		and aprod[amap[i]][0][1] == bprod[bmap[j]][0][1]):
+	if not isinstance(a[i], Tree):
+		mem[i, j] = nodeset
+		return nodeset
+	if a[i].prod == b[j].prod:
 		for n, x in enumerate(a[i]):
-			nodeset.update(extractmaxfragments(a, b, i+(n,), j+(n,), aprod,bprod, amap, bmap, asent, bsent, mem))
+			nodeset.update(extractmaxfragments(a, b, i+(n,), j+(n,),
+													asent, bsent, mem))
 	mem[i, j] = nodeset
 	return nodeset
 
@@ -552,25 +601,36 @@ def main():
 	from treetransforms import un_collinize, collinize
 	from negra import NegraCorpusReader
 	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True, headfinal=True, headreverse=False)
-	for tree, sent in zip(corpus.parsed_sents(), corpus.sents()):
+	corpus = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=True, headfinal=True, headreverse=False)
+	for tree, sent in zip(corpus.parsed_sents()[:3], corpus.sents()):
 		print tree.pprint(margin=999)
 		a = binarizetree(tree.freeze())
 		print a.pprint(margin=999); print
 		un_collinize(a)
 		print a.pprint(margin=999), a == tree
+	print
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
-	tree.chomsky_normal_form()
-	tree, sent = corpus.parsed_sents()[0], corpus.sents()[0]
-	pprint(srcg_productions(tree, sent))
-	collinize(tree, factor="right", horzMarkov=1, vertMarkov=1, tailMarker='')
-	pprint(induce_srcg([tree.copy(True)], [sent]))
-	for r, w in induce_srcg([tree.copy(True)], [sent]): print exp(w), r
+	tree = Tree("(S (NP 1) (VP (V 0) (ADV 2) (ADJ 3)))")
+	sent = "is Mary very sad".split()
+	tree = Tree("(S (NP 1) (VP (V 0) (ADJ 2)))")
+	sent = "is Mary sad".split()
+	tree2 = Tree("(S (NP 0) (VP (V 1) (ADV 2) (ADJ 3)))")
+	sent2 = "Mary is really happy".split()
+	#tree, sent = corpus.parsed_sents()[0], corpus.sents()[0]
+	#pprint(srcg_productions(tree, sent))
+	#tree.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
+	#tree2.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
+	collinize(tree, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='', minMarkov=1)
+	collinize(tree2, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='', minMarkov=1)
+	for (r, yf), w in sorted(induce_srcg([tree.copy(True), tree2], [sent, sent2]),
+								key=lambda x: (x[0][0][1] == 'Epsilon', x)):
+		print "%.2f %s --> %s\t%r" % (exp(w), r[0], " ".join(r[1:]), list(yf))
 	print
-	for (r1, w1), (r2, w2) in zip(dop_srcg_rules([tree.copy(True)], [sent], interpolate=1.0),
-									dop_srcg_rules([tree.copy(True)], [sent], interpolate=0.5)):
-		assert r1 == r2
-		print exp(w1), exp(w2), r1
+	for ((r, yf), w1), (r2, w2) in zip(dop_srcg_rules([tree.copy(True), tree2], [sent, sent2], interpolate=1.0),
+									dop_srcg_rules([tree.copy(True), tree2], [sent, sent2], interpolate=0.5)):
+		assert (r, yf) == r2
+		print "%.2f %.2f %s --> %s\t%r" % (exp(w1), exp(w2), r[0], " ".join(r[1:]), list(yf))
 
 	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
 
@@ -589,13 +649,21 @@ def main():
 	sents = [tree.leaves() for tree in treebank]
 	for tree, sent in zip(treebank, sents):
 		for n, idx in enumerate(tree.treepositions('leaves')): tree[idx] = n
-	fragments = extractfragments(treebank, sents)
-	for a,b in sorted(fragments.items()): print a.pprint(margin=999),b
-	fragments = extractfragments(corpus.parsed_sents(), corpus.sents())
-	for a,b in sorted(fragments.items()): print a,b
-	grammar, backtransform = doubledop(corpus.parsed_sents(), corpus.sents())
+	for (a,aa),b in sorted(extractfragments(treebank, sents).items()):
+		print a.pprint(margin=999), aa,b
+	print
+	trees = list(corpus.parsed_sents()[:10])
+	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
+	print "fragments",
+	for (a,aa),b in sorted(extractfragments(trees, corpus.sents()).items()):
+		print a.pprint(margin=999),aa,b
+	print
+	grammar, backtransform = doubledop(trees, corpus.sents())
+	print 'grammar',
 	pprint(grammar)
-	pprint(backtransform)
+	print "backtransform: {",
+	for (a,aa),b in backtransform.items(): print aa, a, ":", b
+	print "}"
 
 if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS

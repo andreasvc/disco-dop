@@ -156,9 +156,9 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 				numChildren = len(nodeCopy)
 				# insert an initial artificial nonterminal
 				if factor == "right":
-					siblings = "-".join(childNodes[:1])
+					siblings = "-".join(childNodes[:min(1, horzMarkov)])
 				else: # factor == "left"
-					siblings = "-".join(childNodes[-1:])
+					siblings = "-".join(childNodes[len(childNodes) - min(1, horzMarkov):])
 				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar, siblings, parentString), [])
 				node[:] = [newNode]
 				node = newNode

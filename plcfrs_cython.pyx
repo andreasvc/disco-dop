@@ -217,8 +217,6 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel): #set visited
 	return tree, p+sum(b for a,b in children)
 
 removeids = re.compile("@[0-9]+")
-parens = re.compile("\$\(")
-eparens = re.compile("\$\[")
 def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False, shortest=False, secondarymodel=None):
 	""" sum over n random/best derivations from chart,
 		return a list of (tree, prob) tuples"""
@@ -253,15 +251,13 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False, sh
 		m += 1
 		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
 		#restore linear precedence (disabled, seems to make no difference)
-		#parsetree = Tree(parens.sub("$[", removeids.sub("", deriv)))
+		#parsetree = Tree(removeids.sub("", deriv))
 		#for a in parsetree.subtrees():
 		#	if len(a) > 1: a.sort(key=lambda x: x.leaves())
 		#	elif a.node == "$[": a.node = "$("
 		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
 		if shortest:
-			tree = Tree(parens.sub("$[", removeids.sub("", deriv)))
-			for c in tree.subtrees():
-				c.node = eparens.sub("$(", c.node)
+			tree = Tree(removeids.sub("", deriv))
 			sent = sorted(tree.leaves(), key=int)
 			rules = induce_srcg([tree], [sent], arity_marks=False)
 			prob = -sum(secondarymodel[r] for r, w in rules if r[0][1] != 'Epsilon')

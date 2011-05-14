@@ -35,7 +35,7 @@ class NegraCorpusReader(SyntaxCorpusReader):
 					results.append(Tree(a[TAG], getchildren(a[WORD][1:], children)))
 					results[-1].source = a
 				else: #terminal
-					results.append(Tree(a[TAG], [n]))
+					results.append(Tree(a[TAG].replace("$(", "$["), [n]))
 					results[-1].source = a
 			# roughly order constituents by order in sentence
 			results.sort(key=lambda a: a.leaves()[0])
@@ -74,13 +74,13 @@ class NegraCorpusReader(SyntaxCorpusReader):
 	def _word(self, s):
 		return [a[WORD] for a in s if a[WORD][0] != "#"]
 	def _tag(self, s, ignore):
-		return [(a[WORD], a[TAG]) for a in s if a[WORD][0] != "#"]
+		return [(a[WORD], a[TAG].replace("$(", "$[")) for a in s if a[WORD][0] != "#"]
 	def _read_block(self, stream):
 		def sixelements(a):
 			""" add dummy lemma if that field is not present """
 			if len(a) == 6: return a
 			elif len(a) == 5: return a[:1] + [''] + a[1:]
-			else: raise ValueError
+			else: raise ValueError("expected 5 or 6 columns")
 		return [[sixelements(line.split()) for line in block.splitlines()[1:]]
 				for block in read_regexp_block(stream, BOS, EOS)]
 			# didn't seem to help:
@@ -243,7 +243,7 @@ def fold(tree):
 	#	np[:] = np[:1] + np[1][:]
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
-		if "NP" in labels(pp): # and (pp[1][0].node == "ART" or pp[0].node.endswith("ART")): # except when VP in NP
+		if "NP" in labels(pp) and "NN" not in labels(pp):
 			#ensure NP is in last position
 			pp.sort(key=lambda n: n.node == "NP")
 			pp[:] = pp[:-1] + pp[-1][:]
