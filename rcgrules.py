@@ -179,7 +179,7 @@ def splitgrammar(grammar):
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
 def canonicalize(tree):
-	for a in tree.subtrees(lambda n: len(n) > 1):
+	for a in reversed(list(tree.subtrees(lambda n: len(n) > 1))):
 		a.sort(key=lambda n: n.leaves())
 	return tree
 
@@ -252,7 +252,7 @@ def leaves_and_frontier_nodes(tree, sent):
 def leaves_and_frontier_nodes1(tree):
 	return chain(*(leaves_and_frontier_nodes1(child)
 		if isinstance(child, Tree) and len(child) else [child]
-		for child in tree))
+		for child in tree)) if isinstance(tree[0], Tree) else tree
 
 def flatten((tree, sent)):
 	return ImmutableTree(tree.node,
@@ -265,7 +265,7 @@ def doubledop(trees, sents):
 	backtransform = {}
 	newprods = []
 	# to assign IDs to ambiguous fragments (same yield)
-	cnt = count()
+	ids = ("#%d" % n for n in count())
 	trees = list(trees)
 	# adds arity markers
 	for t,s in zip(trees, sents): srcg_productions(t, s)
@@ -279,13 +279,12 @@ def doubledop(trees, sents):
 			backtransform[prod] = frag
 		else:
 			if backtransform[prod]:
-				newprods.append((ImmutableTree("#%d" % cnt.next(),
-										prod[:]), ()))
+				newprods.append((ImmutableTree(ids.next(), prod[:]), ()))
 				newprods.append((ImmutableTree(prod.node,
 						[ImmutableTree(newprods[-1][0].node, [])]), terminals))
 				backtransform[newprods[-1][0]] = backtransform[prod, terminals]
 				backtransform[prod] = None
-			newprods.append((ImmutableTree("#%d" % cnt.next(), prod[:]), ()))
+			newprods.append((ImmutableTree(ids.next(), prod[:]), ()))
 			newprods.append((ImmutableTree(prod.node,
 				[ImmutableTree(newprods[-1][0].node, [])]), terminals))
 			backtransform[newprods[-1][0]] = frag
@@ -294,29 +293,34 @@ def doubledop(trees, sents):
 	for (a,asent),b in fragments.items(): ntfd[a.node] += b
 	# collect rules which occur once to complement the recurring fragments
 	# fixme: missing productions. wrong probabilities.
-	hapax = hapaxproductions(trees, sents)
+	#hapax = hapaxproductions(trees, sents)
 	lexicon = FreqDist(varstoindices(srcg_productions(preterminal, sent).pop())
 				for tree, sent in zip(trees, sents)
 				for preterminal in tree.subtrees(
 					lambda n: len(n) == 1 and not isinstance(n[0], Tree)))
-	for a in hapax: ntfd[a[0][0]] += 1
+	#for a in hapax: ntfd[a[0][0]] += 1
 	for a in lexicon: ntfd[a[0][0]] += lexicon[a]
 	grammar = dict(rule
 		for a, ((f, fsent), b) in zip(productions, fragments.items())
 		if backtransform.get(a, False)
-		for rule in zip(map(varstoindices,
-				srcg_productions(minimalbinarization(a, complexityfanout, "}"), fsent, arity_marks=True, side_effect=False)),
-				chain((log(b / ntfd[f.node]),), repeat(0.0))))
+		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
+					minimalbinarization(a, complexityfanout, sep="}")),
+				fsent, arity_marks=True, side_effect=True)),
+			chain((log(b / ntfd[f.node]),), repeat(0.0))))
 	grammar.update(rule for a, b in newprods
-		for rule in zip(map(varstoindices,
-			srcg_productions(minimalbinarization(a, complexityfanout, "}"), b,
-				arity_marks=a in backtransform, side_effect=False)),
-			chain((log((fragments[backtransform[a], b]
-				if a in backtransform else 1)
-			/ (ntfd[a.node] if a.node in ntfd else 1.0)),), repeat(0.0))))
-	grammar.update((a, log(1.0/ntfd[a[0][0]])) for a in hapax)
+		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
+					minimalbinarization(a, complexityfanout, sep="}")),
+				b, arity_marks=a in backtransform, side_effect=True)),
+			chain((log(
+				(fragments[backtransform[a], b] if a in backtransform else 1)
+				/ (ntfd[a.node] if a.node in ntfd else 1.0)),),
+				repeat(0.0))))
+	#grammar.update((a, log(1.0/ntfd[a[0][0]])) for a in hapax)
 	grammar.update((a, log(b/ntfd[a[0][0]])) for a,b in lexicon.items()
 					if a not in grammar)
+	covered = dict(induce_srcg(*zip(*fragments)))
+	grammar.update((a,b) for a,b in induce_srcg(trees, sents)
+						if a not in covered or a not in grammar)
 	return grammar.items(), backtransform
 
 def top_production(tree):
@@ -327,28 +331,28 @@ def top_production(tree):
 def recoverfromfragments(derivation, backtransform):
 	prod = top_production(derivation)
 	def renumber(tree):
-		# this is wrong
 		result = Tree.convert(tree)
 		leaves = result.leaves()
 		leafmap = dict(zip(leaves, count()))
 		for a in result.treepositions('leaves'):
 			result[a] = leafmap[result[a]]
-		return result.freeze()
-	#if renumber(prod) in backtransform: print "yes", prod, renumber(prod)
-	#else: print "no", prod, renumber(prod)
-	result = Tree.convert(backtransform.get(renumber(prod), prod))
+		return result.freeze(), dict(zip(count(), leaves))
+	rprod, leafmap = renumber(prod)
+	result = Tree.convert(backtransform.get(rprod, prod))
+	# revert renumbering
+	for a in result.treepositions('leaves'):
+		result[a] = leafmap.get(result[a], result[a])
 	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
 		and derivation[0].node[0] == "#"):
 		derivation = derivation[0]
-	for r, t in zip(leaves_and_frontier_nodes1(result), derivation):
+	for r, t in zip(result.subtrees(lambda t: t.height() == 2), derivation):
 		if isinstance(r, Tree):
-			new = recoverfromfragments(t, backtransform)
-			assert r.node == new.node and len(new)
-			r[:] = new[:]
-		else:
+			if isinstance(t, Tree):
+				new = recoverfromfragments(t, backtransform)
+				#assert r.node == new.node and len(new)
+				r[:] = new[:]
 			# terminals should already match.
 			#assert r == t
-			pass
 	return result
 
 def add_srcg_rules(tree, sent):
@@ -374,7 +378,7 @@ def extractfragments(trees, sents):
 					try: x = frozenset(mem[i, j])
 					except KeyError:
 						x = frozenset(extractmaxfragments(a, b, i, j, asent, bsent, mem))
-					if x in l or len(x) < 2: continue
+					if x in l: continue # or len(x) < 2: continue
 					# disjoint-set datastructure here?
 					for y in l:
 						if x < y: break
@@ -390,8 +394,8 @@ def extractfragments(trees, sents):
 				if x: fraglist[x].update((a[()], b[()]))
 			mem.clear(); l.clear()
 	#fraglist.pop(None, None)
-	fragcounts = defaultdict(int)
-	fragcounts.update((a, len(b)) for a, b in fraglist.items())
+	#fragcounts = defaultdict(int)
+	fragcounts = dict((a, len(b)) for a, b in fraglist.items())
 	return fragcounts #| partfraglist
 
 def extractmaxfragments(a,b, i,j, asent,bsent, mem):
@@ -634,7 +638,7 @@ def alterbinarization(tree):
 def testgrammar(grammar):
 	for a,b in enumerate(grammar.bylhs):
 		if b and abs(sum(exp(-w) for rule,w in b) - 1.0) > 0.01:
-			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b)
+			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b), b
 			break
 	else: print "All left hand sides sum to 1"
 
@@ -757,8 +761,8 @@ def main():
 		print a.pprint(margin=999), aa,b
 	print
 	#trees = treebank
-	trees = list(corpus.parsed_sents()[:10])
-	sents = corpus.sents()[:10]
+	trees = list(corpus.parsed_sents()[:100])
+	sents = corpus.sents()[:100]
 	for tree in trees:
 		for idx in tree.treepositions('leaves'): tree[idx] = int(tree[idx])
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
@@ -768,7 +772,8 @@ def main():
 	print
 	grammar, backtransform = doubledop(trees, sents)
 	print 'grammar',
-	pprint(grammar)
+	for (r, yf), w in sorted(grammar):
+		print "%.2f %s --> %s\t%r" % (exp(w), r[0], " ".join(r[1:]), list(yf))
 	print "backtransform: {",
 	for a,b in backtransform.items():
 		try: print a,
@@ -778,17 +783,21 @@ def main():
 	grammar = splitgrammar(grammar)
 	testgrammar(grammar)
 	from plcfrs import parse, mostprobableparse
-	for sent in sents[:2]:
+	for tree, sent in zip(trees, sents[:10]):
 		print "sentence", sent
-		p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
+		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], viterbi=False, n=100)
 		if p:
 			mpp = mostprobableparse(p, start, grammar.tolabel)
 			for t in mpp:
 				t2 = Tree(t)
 				for idx in t2.treepositions('leaves'): t2[idx] = int(t2[idx])
 				un_collinize(t2, childChar="}")
-				print exp(mpp[t]), t2
-				print recoverfromfragments(canonicalize(t2), backtransform)
+				print exp(mpp[t]),
+				#try: print t2
+				#except: print repr(t2)
+				r = recoverfromfragments(canonicalize(t2), backtransform)
+				un_collinize(r)
+				print tree == r, r
 		else: print "no parse"
 		print
 
