@@ -56,7 +56,7 @@ def freeze(l):
 def unfreeze(l):
 	return list(map(unfreeze, l)) if isinstance(l, (list, tuple)) else l
 
-def srcg_productions(tree, sent, arity_marks=True):
+def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	""" given a tree with indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a set
 	of simple RCG rules. has the side-effect of adding arity
@@ -76,7 +76,8 @@ def srcg_productions(tree, sent, arity_marks=True):
 			rvars = [rangeheads(sorted(map(int, l))) for a,l in zip(st, rleaves)]
 			lvars = list(ranges(sorted(chain(*(map(int, l) for l in rleaves)))))
 			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
-			lhs = intern(str(node_arity(st, lvars, True) if arity_marks else st.node))
+			#lhs = intern(str(node_arity(st, lvars, True) if arity_marks else st.node))
+			lhs = node_arity(st, lvars, side_effect) if arity_marks else st.node
 			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
 			vars = (lvars,) + tuple(rvars)
 			if vars[0][0][0] != vars[1][0]:
@@ -240,13 +241,18 @@ def hapaxproductions(trees, sents):
 	covers the given treebank. Extracts all productions not part of any 
 	fragment"""
 	return FreqDist(varstoindices(rule) for tree, sent in zip(trees, sents)
-					for rule in srcg_productions(tree, sent, False)).hapaxes()
+					for rule in srcg_productions(tree, sent)).hapaxes()
 
 def leaves_and_frontier_nodes(tree, sent):
 	return chain(*(leaves_and_frontier_nodes(child, sent)
 			if isinstance(child, Tree) and len(child)
 			else ([tree] if sent[child] is None else [child])
 			for child in tree))
+
+def leaves_and_frontier_nodes1(tree):
+	return chain(*(leaves_and_frontier_nodes1(child)
+		if isinstance(child, Tree) and len(child) else [child]
+		for child in tree))
 
 def flatten((tree, sent)):
 	return ImmutableTree(tree.node,
@@ -265,9 +271,8 @@ def doubledop(trees, sents):
 	for t,s in zip(trees, sents): srcg_productions(t, s)
 	# most work happens here
 	fragments = extractfragments(trees, sents)
-	# everything below here is wrong
-	# (doesn't deal with discontinuties & frontier nodes properly)
 	productions = map(flatten, fragments)
+	# construct a mapping of productions to fragments
 	for prod, (frag, terminals) in zip(productions, fragments):
 		if prod == frag: continue
 		if prod not in backtransform:
@@ -277,67 +282,78 @@ def doubledop(trees, sents):
 				newprods.append((ImmutableTree("#%d" % cnt.next(),
 										prod[:]), ()))
 				newprods.append((ImmutableTree(prod.node,
-										[newprods[-1][0]]), terminals))
+						[ImmutableTree(newprods[-1][0].node, [])]), terminals))
 				backtransform[newprods[-1][0]] = backtransform[prod, terminals]
 				backtransform[prod] = None
 			newprods.append((ImmutableTree("#%d" % cnt.next(), prod[:]), ()))
-			newprods.append((ImmutableTree(prod.node, [newprods[-1][0]]),
-																terminals))
+			newprods.append((ImmutableTree(prod.node,
+				[ImmutableTree(newprods[-1][0].node, [])]), terminals))
 			backtransform[newprods[-1][0]] = frag
+	# collect frequencies
 	ntfd = defaultdict(float)
 	for (a,asent),b in fragments.items(): ntfd[a.node] += b
 	# collect rules which occur once to complement the recurring fragments
+	# fixme: missing productions. wrong probabilities.
 	hapax = hapaxproductions(trees, sents)
+	lexicon = FreqDist(varstoindices(srcg_productions(preterminal, sent).pop())
+				for tree, sent in zip(trees, sents)
+				for preterminal in tree.subtrees(
+					lambda n: len(n) == 1 and not isinstance(n[0], Tree)))
 	for a in hapax: ntfd[a[0][0]] += 1
-	#ntfd = FreqDist(a.node for tree in trees for a in tree.subtrees())
-	# frontier nodes and variables?
-	# binarize productions here.
-	# 	binarization should not affect earlier binarization --> different chars
-	grammar = [rule
+	for a in lexicon: ntfd[a[0][0]] += lexicon[a]
+	grammar = dict(rule
 		for a, ((f, fsent), b) in zip(productions, fragments.items())
 		if backtransform.get(a, False)
 		for rule in zip(map(varstoindices,
-				srcg_productions(binarizetree(a, "{}"), fsent)),
-				chain((log(float(b) / ntfd[f.node]),), repeat(0.0)))]
-	grammar += [rule for a, b in newprods
+				srcg_productions(minimalbinarization(a, complexityfanout, "}"), fsent, arity_marks=True, side_effect=False)),
+				chain((log(b / ntfd[f.node]),), repeat(0.0))))
+	grammar.update(rule for a, b in newprods
 		for rule in zip(map(varstoindices,
-			srcg_productions(binarizetree(a, "{}"), b)),
+			srcg_productions(minimalbinarization(a, complexityfanout, "}"), b,
+				arity_marks=a in backtransform, side_effect=False)),
 			chain((log((fragments[backtransform[a], b]
 				if a in backtransform else 1)
-			/ (ntfd[a.node] if a.node in ntfd else 1.0)),), repeat(0.0)))]
-	grammar += [(a, log(1.0/ntfd[a[0][0]])) for a in hapax]
-	return set(grammar), backtransform
+			/ (ntfd[a.node] if a.node in ntfd else 1.0)),), repeat(0.0))))
+	grammar.update((a, log(1.0/ntfd[a[0][0]])) for a in hapax)
+	grammar.update((a, log(b/ntfd[a[0][0]])) for a,b in lexicon.items()
+					if a not in grammar)
+	return grammar.items(), backtransform
 
 def top_production(tree):
-	return ImmutableTree(tree.node, [ImmutableTree(a.node, [])
+	return ImmutableTree(tree.node,
+		[ImmutableTree(a.node, rangeheads(sorted(a.leaves())))
 				if isinstance(a, Tree) else a for a in tree])
 
-def recoverfromfragments(derivation, sent, backtransform):
+def recoverfromfragments(derivation, backtransform):
 	prod = top_production(derivation)
 	def renumber(tree):
+		# this is wrong
 		result = Tree.convert(tree)
 		leaves = result.leaves()
 		leafmap = dict(zip(leaves, count()))
 		for a in result.treepositions('leaves'):
 			result[a] = leafmap[result[a]]
 		return result.freeze()
+	#if renumber(prod) in backtransform: print "yes", prod, renumber(prod)
+	#else: print "no", prod, renumber(prod)
 	result = Tree.convert(backtransform.get(renumber(prod), prod))
-	if len(derivation) == 1 and derivation[0].node[0] == "#":
+	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
+		and derivation[0].node[0] == "#"):
 		derivation = derivation[0]
-	for r, t in zip(leaves_and_frontier_nodes(result), derivation):
+	for r, t in zip(leaves_and_frontier_nodes1(result), derivation):
 		if isinstance(r, Tree):
 			new = recoverfromfragments(t, backtransform)
 			assert r.node == new.node and len(new)
 			r[:] = new[:]
 		else:
 			# terminals should already match.
-			assert r == t
+			#assert r == t
+			pass
 	return result
 
 def add_srcg_rules(tree, sent):
 	for a, b in zip(tree.subtrees(), srcg_productions(tree, sent, False)):
 		a.prod = alpha_normalize(zip(*b))
-		a.len = len(a)
 	return tree
 
 def extractfragments(trees, sents):
@@ -381,7 +397,7 @@ def extractfragments(trees, sents):
 def extractmaxfragments(a,b, i,j, asent,bsent, mem):
 	""" a fragment is a connected subset of nodes where each node either has
 	zero children, or as much as in the original tree.""" 
-	if (i, j) in mem: return mem[i, j]
+	#if (i, j) in mem: return mem[i, j]
 	# compare label & arity / terminal
 	if type(a[i]) != type(b[j]):
 		mem[i, j] = set()
@@ -404,8 +420,9 @@ def extractmaxfragments(a,b, i,j, asent,bsent, mem):
 		return nodeset
 	if a[i].prod == b[j].prod:
 		for n, x in enumerate(a[i]):
-			nodeset.update(extractmaxfragments(a, b, i+(n,), j+(n,),
-													asent, bsent, mem))
+			ii,  jj = i+(n,), j+(n,)
+			nodeset.update(mem[ii, jj] if (ii, jj) in mem
+					else extractmaxfragments(a, b, ii, jj, asent, bsent, mem))
 	mem[i, j] = nodeset
 	return nodeset
 
@@ -595,6 +612,80 @@ def exportrparse(grammar):
 		if r[1] != 'Epsilon':
 			yield "1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]), " ".join(map(rewritelabel, r[1:])), repryf(yf))
 
+def rem_marks(tree):
+	for a in tree.subtrees(lambda x: "_" in x.node):
+		a.node = a.node.rsplit("_", 1)[0]
+	for a in tree.treepositions('leaves'):
+		tree[a] = int(tree[a])
+	return tree
+
+def alterbinarization(tree):
+	# converts the binarization of rparse to the format that NLTK expects
+	# S1 is the constituent, CS1 the parent, CARD1 the current sibling/child
+	# @^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1
+	#how to optionally add \2 if nonempty?
+	tree = re.sub("@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+", r"\1|<\3>", tree)
+	# remove arity markers
+	tree = re.sub(r"([A-Z.,()$]+)\d+", r"\1", tree)
+	tree = re.sub("VROOT", r"ROOT", tree)
+	assert "@" not in tree
+	return tree
+
+def testgrammar(grammar):
+	for a,b in enumerate(grammar.bylhs):
+		if b and abs(sum(exp(-w) for rule,w in b) - 1.0) > 0.01:
+			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b)
+			break
+	else: print "All left hand sides sum to 1"
+
+def bracketings(tree):
+	return frozenset((a.node, frozenset(a.leaves())) for a in tree.subtrees() if a.height() > 2)
+
+def printbrackets(brackets):
+	#return ", ".join("%s[%s]" % (a, ",".join(map(str, sorted(b)))) for a,b in brackets)
+	return ", ".join("%s[%s]" % (a, ",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
+					if len(x) > 1 else str(x[0]), ranges(sorted(b))))) for a,b in brackets)
+
+def harmean(seq):
+	try: return float(len([a for a in seq if a])) / sum(1/a if a else 0 for a in seq)
+	except: return "zerodiv"
+
+def mean(seq):
+	return sum(seq) / float(len(seq)) if seq else "zerodiv"
+
+def export(tree, sent, n):
+	""" Convert a tree with indices as leafs and a sentence with the
+	corresponding non-terminals to a single string in Negra's export format.
+	NB: IDs do not follow the convention that IDs of children are all lower. """
+	result = ["#BOS %d" % n]
+	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
+	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
+	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
+	for i, word in enumerate(sent):
+		idx = wordids[i]
+		result.append("\t".join((word[0],
+				tree[idx[:-1]].node.replace("$[","$("),
+				"--", "--",
+				str(500+nonpreterminals.index(idx[:-2]) if len(idx) > 2 else 0))))
+	for idx in nonpreterminals:
+		result.append("\t".join(("#%d" % (500 + nonpreterminals.index(idx)),
+				tree[idx].node,
+				"--", "--",
+				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
+	result.append("#EOS %d" % n)
+	return ("\n".join(result)).encode("utf-8")
+
+def read_rparse_grammar(file):
+	result = []
+	for line in open(file):
+		yf = eval(line[line.index("[[["):].replace("false","0").replace("true","1"))[0]
+		line = line[:line.index("[[[")].split()
+		line.pop(0) #freq?
+		prob, lhs = line.pop(0).split(":")
+		line.pop(0) # -->
+		result.append(((tuple([lhs] + line), tuple(map(tuple, yf))), log(float(prob))))
+	return result
+
 def do(sent, grammar):
 	from plcfrs import parse, mostprobableparse
 	print "sentence", sent
@@ -665,19 +756,41 @@ def main():
 	for (a,aa),b in sorted(extractfragments(treebank, sents).items()):
 		print a.pprint(margin=999), aa,b
 	print
-	trees = list(corpus.parsed_sents()[:100])
+	#trees = treebank
+	trees = list(corpus.parsed_sents()[:10])
+	sents = corpus.sents()[:10]
+	for tree in trees:
+		for idx in tree.treepositions('leaves'): tree[idx] = int(tree[idx])
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	print "fragments",
-	for (a,aa),b in sorted(extractfragments(trees, corpus.sents()).items()):
+	for (a,aa),b in sorted(extractfragments(trees, sents).items()):
 		print a.pprint(margin=999),aa,b
 	print
-	grammar, backtransform = doubledop(trees, corpus.sents())
+	grammar, backtransform = doubledop(trees, sents)
 	print 'grammar',
 	pprint(grammar)
 	print "backtransform: {",
 	for a,b in backtransform.items():
-		print repr(a), ":", b
+		try: print a,
+		except: print repr(a),
+		print ":", b
 	print "}"
+	grammar = splitgrammar(grammar)
+	testgrammar(grammar)
+	from plcfrs import parse, mostprobableparse
+	for sent in sents[:2]:
+		print "sentence", sent
+		p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
+		if p:
+			mpp = mostprobableparse(p, start, grammar.tolabel)
+			for t in mpp:
+				t2 = Tree(t)
+				for idx in t2.treepositions('leaves'): t2[idx] = int(t2[idx])
+				un_collinize(t2, childChar="}")
+				print exp(mpp[t]), t2
+				print recoverfromfragments(canonicalize(t2), backtransform)
+		else: print "no parse"
+		print
 
 if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS

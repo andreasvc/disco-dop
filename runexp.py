@@ -1,6 +1,9 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader, fold, unfold
-from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart, extractfragments, splitgrammar, binarizetree, ranges
+from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
+		extractfragments, splitgrammar, binarizetree, ranges, export, \
+		read_rparse_grammar, mean, harmean, testgrammar, bracketings, \
+		printbrackets, rem_marks, alterbinarization
 from treetransforms import collinize, un_collinize
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
@@ -16,96 +19,17 @@ from kbest import lazykbest
 try: from plcfrs_cython import parse, mostprobableparse; print "running cython"
 except: from plcfrs import parse, mostprobableparse; print "running non-cython"
 
-def rem_marks(tree):
-	for a in tree.subtrees(lambda x: "_" in x.node):
-		a.node = a.node.rsplit("_", 1)[0]
-	for a in tree.treepositions('leaves'):
-		tree[a] = int(tree[a])
-	return tree
-
-def escapetree(tree):
-	result = Tree(re.sub("\$\(", "$[", tree))
-	for a in result.subtrees(lambda x: x.node == "$["):
-		a.node = "$("
-	return result
-
-def alterbinarization(tree):
-	# converts the binarization of rparse to the format that NLTK expects
-	# S1 is the constituent, CS1 the parent, CARD1 the current sibling/child
-	# @^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1
-	#how to optionally add \2 if nonempty?
-	tree = re.sub("@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+", r"\1|<\3>", tree)
-	# remove arity markers
-	tree = re.sub(r"([A-Z.,()$]+)\d+", r"\1", tree)
-	tree = re.sub("VROOT", r"ROOT", tree)
-	assert "@" not in tree
-	return tree
-
-def testgrammar(grammar):
-	for a,b in enumerate(grammar.bylhs):
-		if b and abs(sum(exp(-w) for rule,w in b) - 1.0) > 0.01:
-			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b)
-			break
-	else: print "All left hand sides sum to 1"
-
-def bracketings(tree):
-	return frozenset((a.node, frozenset(a.leaves())) for a in tree.subtrees() if a.height() > 2)
-
-def printbrackets(brackets):
-	#return ", ".join("%s[%s]" % (a, ",".join(map(str, sorted(b)))) for a,b in brackets)
-	return ", ".join("%s[%s]" % (a, ",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
-					if len(x) > 1 else str(x[0]), ranges(sorted(b))))) for a,b in brackets)
-
-def harmean(seq):
-	try: return float(len([a for a in seq if a])) / sum(1/a if a else 0 for a in seq)
-	except: return "zerodiv"
-
-def mean(seq):
-	return sum(seq) / float(len(seq)) if seq else "zerodiv"
-
-def export(tree, sent, n):
-	""" Convert a tree with indices as leafs and a sentence with the
-	corresponding non-terminals to a single string in Negra's export format.
-	NB: IDs do not follow the convention that IDs of children are all lower. """
-	result = ["#BOS %d" % n]
-	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
-	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
-	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
-	for i, word in enumerate(sent):
-		idx = wordids[i]
-		result.append("\t".join((word[0],
-				tree[idx[:-1]].node,
-				"--", "--",
-				str(500+nonpreterminals.index(idx[:-2]) if len(idx) > 2 else 0))))
-	for idx in nonpreterminals:
-		result.append("\t".join(("#%d" % (500 + nonpreterminals.index(idx)),
-				tree[idx].node,
-				"--", "--",
-				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
-	result.append("#EOS %d" % n)
-	return ("\n".join(result)).encode("utf-8")
-
-def read_rparse_grammar(file):
-	result = []
-	for line in open(file):
-		yf = eval(line[line.index("[[["):].replace("false","0").replace("true","1"))[0]
-		line = line[:line.index("[[[")].split()
-		line.pop(0) #freq?
-		prob, lhs = line.pop(0).split(":")
-		line.pop(0) # -->
-		result.append(((tuple([lhs] + line), tuple(map(tuple, yf))), log(float(prob))))
-	return result
-
 #parameters
 srcg = True
 dop = True
 unfolded = True
 maxlen = 15	# max number of words for sentences in training & test corpus
-bintype = "optimal" # choices: collinize, nltk, optimal
-estimator = "dop1" #"shortest" # choices: dop1, ewe, shortest, sl-dop
+bintype = "collinize" # choices: collinize, nltk, optimal
+estimator = "dop1" # choices: dop1, ewe, shortest, sl-dop
 factor = "right"
-v = 2
+v = 1
 h = 1
+minMarkov = 3
 tailmarker = "$"
 maxsent = 360	# number of sentences to parse
 viterbi = True
@@ -113,13 +37,17 @@ sample = False
 both = False
 arity_marks = True
 arity_marks_before_bin = False
+interpolate = 1.0
+wrong_interpolate = False
 n = 0     #number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
 m = 1000  #number of derivations to sample/enumerate
 # Tiger treebank version 2 sample:
 # http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1"); maxlen = 99
 #corpus = NegraCorpusReader("../rparse", "tiger3600proc.export", headfinal=True, headreverse=False)
-#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, headfinal=True, headreverse=False, unfold=unfolded)
+#corpus = NegraCorpusReader("../rparse", "tigerproc.export",
+#		headorder=(bintype=="collinize"), headfinal=True,
+#		headreverse=False, unfold=unfolded)
 
 assert bintype in ("optimal", "collinize", "nltk")
 assert estimator in ("dop1", "ewe", "shortest", "sl-dop")
@@ -132,8 +60,8 @@ test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
 print "read training & test corpus"
 if arity_marks_before_bin: [srcg_productions(a, b) for a, b in zip(trees, sents)]
 if bintype == "collinize":
-	bintype += " %s h=%d v=%d tailmarker=%r" % (factor, h, v, tailmarker)
-	[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker=tailmarker) for a in trees]
+	bintype += " %s h=%d v=%d %s markovize rank > %d" % (factor, h, v, "tailmarker" if tailmarker else '', minMarkov)
+	[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker=tailmarker, minMarkov=minMarkov) for a in trees]
 if bintype == "nltk":
 	bintype += " %s h=%d v=%d" % (factor, h, v)
 	for a in trees: a.chomsky_normal_form(factor="left", vertMarkov=v-1, horzMarkov=1)
@@ -196,7 +124,8 @@ if dop:
 						shortestderiv=True,	arity_marks=arity_marks)
 	else:
 		dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
-						shortestderiv=False, arity_marks=arity_marks, interpolate=0.5)
+						shortestderiv=False, arity_marks=arity_marks,
+						interpolate=interpolate, wrong_interpolate=wrong_interpolate)
 	nodes = sum(len(list(a.subtrees())) for a in trees)
 	l = len(dopgrammar)
 	print "labels:", len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(3) if len(rule) > a)), "of which preterminals:", len(set(rule[0] for (rule,yf),w in dopgrammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
@@ -243,9 +172,9 @@ for tree, sent, block in zip(*test):
 	else: chart = ()
 	for a in chart: chart[a].sort(key=lambda x: x[0])
 	for result, prob in enumchart(chart, start, grammar.tolabel) if chart else ():
-		#result = rem_marks(escapetree(alterbinarization(result)))
+		#result = rem_marks(Tree(alterbinarization(result)))
 		print result
-		result = escapetree(result)
+		result = Tree(result)
 		un_collinize(result)
 		rem_marks(result)
 		if unfolded: fold(result)
@@ -299,7 +228,7 @@ for tree, sent, block in zip(*test):
 		else:
 			mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m, sample=sample, both=both).items()
 		prob = max(b for a,b in mpp)
-		tieresults = [escapetree(a) for a,b in mpp if b == prob]
+		tieresults = [Tree(a) for a,b in mpp if b == prob]
 		tieresults.sort(key=lambda t: len(list(t.subtrees())))
 		dresult = tieresults[0]
 		if len(tieresults) > 1:
@@ -355,7 +284,9 @@ if srcg: open("test1.srcg", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) i
 if dop: open("test1.dop", "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
 open("test1.gold", "w").writelines("#BOS %d\n%s\n#EOS %d\n" % (n,a.encode("utf-8"),n) for n,a in enumerate(gold))
 print "maxlen", maxlen, "unfolded", unfolded, "arity marks", arity_marks, "binarized", bintype, "estimator", estimator
-print "error breakdown, first 10 categories. SRCG (not in gold, missing from candidate), DOP (idem)"
+if interpolate != 1.0: print "interpolate", interpolate, "wrong_interpolate", wrong_interpolate
+print "error breakdown, first 10 categories."
+print "SRCG (not in gold, missing from candidate), DOP (idem)"
 for a,b,c,d in zip(serrors1.items(), serrors2.items(),
 					derrors1.items(), derrors2.items())[:10]:
 	print "\t".join(map(lambda x: ": ".join(map(str, x)), (a,b,c,d)))
