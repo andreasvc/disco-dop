@@ -244,7 +244,14 @@ def hapaxproductions(trees, sents):
 					for rule in srcg_productions(tree, sent)).hapaxes()
 
 def leaves_and_frontier_nodes(tree, sent):
-	return chain(*(leaves_and_frontier_nodes(child, sent)
+	"""
+	>>> sent = [None, ',', None, '.']
+	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
+	>>> print list(leaves_and_frontier_nodes(tree, sent))
+	[ImmutableTree('S_2', [0, 2]), 1, 3]
+	"""
+	if all(not isinstance(child, Tree) for child in tree) and all(sent[child] is None for child in tree): return [tree]
+	return chain(*list(leaves_and_frontier_nodes(child, sent)
 			if isinstance(child, Tree) and len(child)
 			else ([tree] if sent[child] is None else [child])
 			for child in tree))
@@ -255,11 +262,17 @@ def leaves_and_frontier_nodes1(tree):
 		for child in tree)) if isinstance(tree[0], Tree) else tree
 
 def flatten((tree, sent)):
+	"""
+	>>> sent = [None, ',', None, '.']
+	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
+	>>> print flatten((tree, sent))
+	(ROOT (S_2 0 2) (#&, 1) (#&. 3))
+	"""
 	return ImmutableTree(tree.node,
 		[(a if isinstance(a, Tree) or sent[a] is None
 		else ImmutableTree("#&" + sent[a], [a]))
 		for a in leaves_and_frontier_nodes(tree, sent)]
-		if len(tree) > 1 else tree[:])
+		if all(isinstance(a, Tree) for a in tree) else tree[:])
 
 def doubledop(trees, sents):
 	backtransform = {}
@@ -315,19 +328,18 @@ def doubledop(trees, sents):
 	return grammar.items(), backtransform
 
 def top_production(tree):
-	return ImmutableTree(tree.node,
-		[ImmutableTree(a.node, rangeheads(sorted(a.leaves())))
+	return Tree(tree.node,
+		[Tree(a.node, rangeheads(sorted(a.leaves())))
 				if isinstance(a, Tree) else a for a in tree])
 
 def recoverfromfragments(derivation, backtransform):
 	prod = top_production(derivation)
 	def renumber(tree):
-		result = Tree.convert(tree)
-		leaves = result.leaves()
-		leafmap = dict(zip(leaves, count()))
-		for a in result.treepositions('leaves'):
-			result[a] = leafmap[result[a]]
-		return result.freeze(), dict(zip(count(), leaves))
+		leaves = tree.leaves()
+		leafmap = dict(zip(sorted(leaves), count()))
+		for a in tree.treepositions('leaves'):
+			tree[a] = leafmap[tree[a]]
+		return tree.freeze(), dict(zip(count(), leaves))
 	rprod, leafmap = renumber(prod)
 	result = Tree.convert(backtransform.get(rprod, prod))
 	# revert renumbering
@@ -342,6 +354,7 @@ def recoverfromfragments(derivation, backtransform):
 				new = recoverfromfragments(t, backtransform)
 				#assert r.node == new.node and len(new)
 				r[:] = new[:]
+			#else: print "?", r, t
 			# terminals should already match.
 			#assert r == t
 	return result
