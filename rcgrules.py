@@ -268,7 +268,8 @@ def doubledop(trees, sents):
 	ids = ("#%d" % n for n in count())
 	trees = list(trees)
 	# adds arity markers
-	for t,s in zip(trees, sents): srcg_productions(t, s)
+	srcg = FreqDist(rule for tree, sent in zip(trees, sents)
+			for rule in map(varstoindices, srcg_productions(tree, sent)))
 	# most work happens here
 	fragments = extractfragments(trees, sents)
 	productions = map(flatten, fragments)
@@ -288,39 +289,29 @@ def doubledop(trees, sents):
 			newprods.append((ImmutableTree(prod.node,
 				[ImmutableTree(newprods[-1][0].node, [])]), terminals))
 			backtransform[newprods[-1][0]] = frag
-	# collect frequencies
-	ntfd = defaultdict(float)
-	for (a,asent),b in fragments.items(): ntfd[a.node] += b
-	# collect rules which occur once to complement the recurring fragments
-	# fixme: missing productions. wrong probabilities.
-	#hapax = hapaxproductions(trees, sents)
-	lexicon = FreqDist(varstoindices(srcg_productions(preterminal, sent).pop())
-				for tree, sent in zip(trees, sents)
-				for preterminal in tree.subtrees(
-					lambda n: len(n) == 1 and not isinstance(n[0], Tree)))
-	#for a in hapax: ntfd[a[0][0]] += 1
-	for a in lexicon: ntfd[a[0][0]] += lexicon[a]
+	# collect rules
 	grammar = dict(rule
 		for a, ((f, fsent), b) in zip(productions, fragments.items())
 		if backtransform.get(a, False)
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 					minimalbinarization(a, complexityfanout, sep="}")),
 				fsent, arity_marks=True, side_effect=True)),
-			chain((log(b / ntfd[f.node]),), repeat(0.0))))
+			chain((b, ), repeat(1))))
+	# ambiguous fragments
 	grammar.update(rule for a, b in newprods
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 					minimalbinarization(a, complexityfanout, sep="}")),
 				b, arity_marks=a in backtransform, side_effect=True)),
-			chain((log(
-				(fragments[backtransform[a], b] if a in backtransform else 1)
-				/ (ntfd[a.node] if a.node in ntfd else 1.0)),),
-				repeat(0.0))))
-	#grammar.update((a, log(1.0/ntfd[a[0][0]])) for a in hapax)
-	grammar.update((a, log(b/ntfd[a[0][0]])) for a,b in lexicon.items()
-					if a not in grammar)
-	covered = dict(induce_srcg(*zip(*fragments)))
-	grammar.update((a,b) for a,b in induce_srcg(trees, sents)
-						if a not in covered or a not in grammar)
+			chain((fragments[backtransform[a], b] if a in backtransform else 1,),
+				repeat(1))))
+	# unseen srcg rules
+	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
+	# relative frequences as probabilities
+	ntfd = defaultdict(float)
+	for a, b in grammar.items():
+		ntfd[a[0][0]] += b
+	for a, b in grammar.items():
+		grammar[a] = log(b / ntfd.get(a[0][0], b))
 	return grammar.items(), backtransform
 
 def top_production(tree):
@@ -638,7 +629,7 @@ def alterbinarization(tree):
 def testgrammar(grammar):
 	for a,b in enumerate(grammar.bylhs):
 		if b and abs(sum(exp(-w) for rule,w in b) - 1.0) > 0.01:
-			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b), b
+			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b)
 			break
 	else: print "All left hand sides sum to 1"
 
@@ -709,7 +700,7 @@ def main():
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True, headfinal=True, headreverse=False)
-	corpus = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=True, headfinal=True, headreverse=False)
+	#corpus = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=True, headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents()[:3], corpus.sents()):
 		print tree.pprint(margin=999)
 		a = binarizetree(tree.freeze())
@@ -761,15 +752,15 @@ def main():
 		print a.pprint(margin=999), aa,b
 	print
 	#trees = treebank
-	trees = list(corpus.parsed_sents()[:100])
+	trees = list(corpus.parsed_sents()[:10])
 	sents = corpus.sents()[:100]
 	for tree in trees:
 		for idx in tree.treepositions('leaves'): tree[idx] = int(tree[idx])
-	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	print "fragments",
 	for (a,aa),b in sorted(extractfragments(trees, sents).items()):
 		print a.pprint(margin=999),aa,b
 	print
+	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	grammar, backtransform = doubledop(trees, sents)
 	print 'grammar',
 	for (r, yf), w in sorted(grammar):
@@ -777,27 +768,27 @@ def main():
 	print "backtransform: {",
 	for a,b in backtransform.items():
 		try: print a,
-		except: print repr(a),
+		except: print a.pprint(),
 		print ":", b
 	print "}"
 	grammar = splitgrammar(grammar)
 	testgrammar(grammar)
 	from plcfrs import parse, mostprobableparse
-	for tree, sent in zip(trees, sents[:10]):
+	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
-		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], viterbi=False, n=100)
+		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], viterbi=True, n=0)
+		print "gold", canonicalize(tree)
+		print "parsetrees:"
 		if p:
 			mpp = mostprobableparse(p, start, grammar.tolabel)
 			for t in mpp:
 				t2 = Tree(t)
 				for idx in t2.treepositions('leaves'): t2[idx] = int(t2[idx])
 				un_collinize(t2, childChar="}")
-				print exp(mpp[t]),
-				#try: print t2
-				#except: print repr(t2)
 				r = recoverfromfragments(canonicalize(t2), backtransform)
 				un_collinize(r)
-				print tree == r, r
+				r = rem_marks(r)
+				print mpp[t], rem_marks(tree) == r, r
 		else: print "no parse"
 		print
 
