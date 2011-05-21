@@ -5,8 +5,8 @@
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
 
-# andreasvc: modified to introduce a new nonterminal at the top, and to
-# introduce a unary production for the first/last element in the RHS.
+# andreasvc: modified to introduce a new unary production for the first/last
+# element in the RHS.
 # The markovization direction is changed:
 # (A (B ) (C ) (D )) becomes:
 #	left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
@@ -45,13 +45,13 @@ The following is a short tutorial on the available transformations.
 	factoring and right factoring.  The following example demonstrates
 	the difference between them.  Example::
   
-	 Original	   Right-Factored	 Left-Factored
-	
-		  A			  A					  A 
-		/ | \		  /   \				  /   \ 
-	   B  C  D   ==>  B	A|<C-D>   OR   A|<B-C>  D 
-							/  \		  /  \ 
-						   C	D		B	C
+      Original    Right-Factored       Left-Factored
+
+          A              A                      A 
+        / | \          /   \                  /   \ 
+       B  C  D   ==>  B    A|<C-D>   OR   A|<B-C>  D 
+                            /  \          /  \ 
+                           C    D        B    C
   
  2. Parent Annotation
   
@@ -65,15 +65,15 @@ The following is a short tutorial on the available transformations.
 	can improve from 74% to 79% accuracy.  A natural generalization from
 	parent annotation is to grandparent annotation and beyond.  The
 	tradeoff becomes accuracy gain vs. computational complexity.  We
-	must also keep in mind data sparcity issues.  Example::
+	must also keep in mind data sparsity issues.  Example:
   
-	 Original	   Parent Annotation 
-	
-		  A				A^<?>			
-		/ | \			 /   \			
-	   B  C  D   ==>  B^<A>	A|<C-D>^<?>	 where ? is the 
-								 /  \		  parent of A
-							 C^<A>   D^<A>   
+     Original       Parent Annotation 
+    
+          A                A^<?>            
+        / | \             /   \            
+       B  C  D   ==>  B^<A>    A|<C-D>^<?>     where ? is the 
+                                 /  \          parent of A
+                             C^<A>   D^<A>   
   
   
  3. Markov order-N smoothing
@@ -83,15 +83,15 @@ The following is a short tutorial on the available transformations.
 	included in artificial nodes.  In practice, most people use an order
 	2 grammar.  Example::
   
-	  Original	   No Smoothing	   Markov order 1   Markov order 2   etc.
-	  
-	   __A__			A					  A				A 
-	  / /|\ \		 /   \				  /   \			/   \  
-	 B C D E F  ==>  B	A|<C-D-E-F>  ==>  B   A|<C>  ==>   B  A|<C-D>
-							/   \			   /   \			/   \  
-						   C	...			C	...		 C	...
+      Original       No Smoothing       Markov order 1   Markov order 2   etc.
+      
+       __A__            A                      A                A 
+      / /|\ \         /   \                  /   \            /   \  
+     B C D E F  ==>  B    A|<C-D-E-F>  ==>  B   A|<C>  ==>   B  A|<C-D>
+                            /   \               /   \            /   \  
+                           C    ...            C    ...         C    ...
 
-		 
+
   
 	Annotation decisions can be thought about in the vertical direction
 	(parent, grandparent, etc) and the horizontal direction (number of
@@ -108,17 +108,35 @@ The following is a short tutorial on the available transformations.
 	algorithms that do not allow unary productions, yet you do not wish
 	to lose the parent information.  Example::
   
-	   A		 
-	   |
-	   B   ==>   A+B
-	  / \		/ \  
-	 C   D	  C   D	
+       A         
+       |
+       B   ==>   A+B
+      / \        / \  
+     C   D      C   D    
 
 """
 
 from nltk.tree import Tree
 
-def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|", parentChar="^", tailMarker="$", minMarkov=3):
+def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|", parentChar="^", tailMarker="$", headMarked=None, minMarkov=3):
+	"""
+	>>> sent = "das muss man jetzt machen".split()
+	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
+	>>> collinize(tree, horzMarkov=0, tailMarker=''); print tree.pprint(margin=999)
+	(S (S|<> (VP (VP|<> (PDS 0) (VP|<> (ADV 3) (VP|<> (VVINF 4))))) (S|<> (PIS 2) (S|<> (VMFIN 1)))))
+	>>> un_collinize(tree); print tree
+	(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
+	>>> collinize(tree, horzMarkov=1, tailMarker=''); print tree.pprint(margin=999)
+	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4))))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1)))))
+	>>> un_collinize(tree); collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VVINF> (VVINF 4))))) (S|<VP-PIS> (PIS 2) (S|<PIS-VMFIN> (VMFIN 1)))))
+	>>> un_collinize(tree); collinize(tree, factor="left", horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	(S (S|<VMFIN> (S|<PIS-VMFIN> (S|<VP-PIS> (VP (VP|<VVINF> (VP|<ADV-VVINF> (VP|<PDS-ADV> (PDS 0)) (ADV 3)) (VVINF 4)))) (PIS 2)) (VMFIN 1)))
+
+	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
+	>>> un_collinize(tree); collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
+	"""
 	# assume all subtrees have homogeneous children
 	# assume all terminals have no siblings
 	
@@ -156,10 +174,14 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 				numChildren = len(nodeCopy)
 				# insert an initial artificial nonterminal
 				if factor == "right":
-					siblings = "-".join(childNodes[:min(1, horzMarkov)])
+					start = 0
+					end = min(1, horzMarkov)
 				else: # factor == "left"
-					siblings = "-".join(childNodes[len(childNodes) - min(1, horzMarkov):])
-				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar, siblings, parentString), [])
+					start = len(childNodes) - min(1, horzMarkov)
+					end = len(childNodes)
+				siblings = "-".join(childNodes[start:end])
+				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar,
+												siblings, parentString), [])
 				node[:] = [newNode]
 				node = newNode
 
@@ -168,12 +190,17 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 					marktail = tailMarker if i+1 == numChildren else ''
 					newNode = Tree('', [])
 					if factor == "right":
-						siblings = "-".join(childNodes[max(i - horzMarkov + 1, 0):i + 1])
+						start = max(i - horzMarkov + 1, 0)
+						end = i + 1
+						siblings = "-".join(childNodes[start:end])
 						curNode[:] = [nodeCopy.pop(0), newNode]
 					else: # factor == "left":
-						siblings = "-".join(childNodes[numChildren - i - 1:numChildren - i - 1 + horzMarkov])
+						start = numChildren - i - 1
+						end = numChildren - i - 1 + horzMarkov
+						siblings = "-".join(childNodes[start:end])
 						curNode[:] = [newNode, nodeCopy.pop()]
-					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar, marktail, siblings, parentString)
+					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar,
+											marktail, siblings, parentString)
 
 					curNode = newNode
 				curNode.append(nodeCopy.pop())
@@ -313,6 +340,11 @@ def demo():
 	#draw_trees(tree, collapsedTree, cnfTree, parentTree, original)
 
 if __name__ == '__main__':
+	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
+	# do doctests, but don't be pedantic about whitespace (I suspect it is the
+	# militant anti-tab faction who are behind this obnoxious default)
+	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	if attempted and not fail: print "%d doctests succeeded!" % attempted
 	demo()
 
 __all__ = ["collinize", "un_collinize", "collapse_unary"]

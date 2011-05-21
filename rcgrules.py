@@ -120,38 +120,38 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 	Normalize means the application of the equal weights estimate
-	interpolate 0.5 means 50% dop probabilities, 50% srcg (depth 1) probabilities"""
-	ids, rules = count(1), []
-	fd,ntfd = FreqDist(), FreqDist()
+	interpolate 0.6 means 60% dop probabilities, 40% srcg rule relative frequencies"""
+	ids, rules = count(1), FreqDist()
+	fd, ntfd = FreqDist(), FreqDist()
 	for tree, sent in zip(trees, sents):
 		t = canonicalize(tree.copy(True))
-		t = tree.copy(True)
 		prods = map(varstoindices, srcg_productions(t, sent, arity_marks))
 		ut = decorate_with_ids(t, ids)
 		uprods = map(varstoindices, srcg_productions(ut, sent, False))
 		nodefreq(t, ut, fd, ntfd)
 		# fd: how many subtrees are headed by node X (e.g. NP or NP@12), 
 		# 	counts of NP@... should sum to count of NP
-		# ntfd: frequency of a node in corpus (only makes sense for NP, not NP@12, the latter is always one)
-		rules.extend(chain(*([(c,avar) for c in cartpi(list((x,)
-								if x==y else (x,y)
+		# ntfd: frequency of a node in corpus (only makes sense for exterior
+		#   nodes (NP), not interior nodes (NP@12), the latter are always one)
+		rules.update(chain(*([(c,avar) for c in cartpi(list(
+								(x,) if x==y else (x,y)
 								for x,y in zip(a,b)))]
 							for (a,avar),(b,bvar) in zip(prods, uprods))))
-	rules = FreqDist(rules)
+	if interpolate != 1.0:
+		srcg = dict(induce_srcg(trees, sents))
 	# should we distinguish what kind of arguments a node takes in fd?
-	probmodel = [((rule, yf), log(freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
-		/ (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
-		* (interpolate if '@' not in rule[0] else 1.0)
-		+ ((1 - interpolate) * (float(freq) / ntfd[rule[0]])
-				if not any('@' in z for z in rule) and not wrong_interpolate else 0)))
-		for (rule, yf), freq in rules.items()]
+	def prob(((rule, yf), freq)):
+		return (rule, yf), (freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
+        / (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
+        * interpolate #(interpolate if '@' not in rule[0] else 1.0)
+        + (exp(srcg[rule, yf]) #((1 - interpolate) * (float(freq) / ntfd[rule[0]])
+                if not any('@' in z for z in rule) and not wrong_interpolate else 0))
+	probmodel = [((rule, yf), log(p)) for (rule, yf), p in map(prob, rules.items()) if p]
 	if shortestderiv:
 		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
 	
-#freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)		/ (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))		* interpolate if '@' not in rule[0] else 1.0		+ (1 - interpolate) * (freq / ntfd[rule[0]]) if not any('@' in z for z in rule) else 0
-
 def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal labels to numeric identifiers"""
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
@@ -235,13 +235,6 @@ def fragmentfromindices(tree, sent, indices):
 	for n, a in enumerate(result.treepositions('leaves')):
 		result[a] = leafmap[result[a]]
 	return (result.freeze(), sent) if len(result) else None
-
-def hapaxproductions(trees, sents):
-	""" Return a set of productions p, such that p + fragments
-	covers the given treebank. Extracts all productions not part of any 
-	fragment"""
-	return FreqDist(varstoindices(rule) for tree, sent in zip(trees, sents)
-					for rule in srcg_productions(tree, sent)).hapaxes()
 
 def leaves_and_frontier_nodes(tree, sent):
 	"""
