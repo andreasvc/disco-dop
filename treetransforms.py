@@ -172,13 +172,15 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 				childNodes = [child.node for child in node]
 				nodeCopy = node.copy()
 				numChildren = len(nodeCopy)
+				headidx = 0
+
 				# insert an initial artificial nonterminal
 				if factor == "right":
 					start = 0
 					end = min(1, horzMarkov)
 				else: # factor == "left"
-					start = len(childNodes) - min(1, horzMarkov)
-					end = len(childNodes)
+					start = numChildren - min(1, horzMarkov)
+					end = numChildren
 				siblings = "-".join(childNodes[start:end])
 				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar,
 												siblings, parentString), [])
@@ -187,18 +189,24 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 
 				curNode = node
 				for i in range(1, numChildren):
-					marktail = tailMarker if i+1 == numChildren else ''
+					marktail = tailMarker if i + 1 == numChildren else ''
 					newNode = Tree('', [])
 					if factor == "right":
 						start = max(i - horzMarkov + 1, 0)
 						end = i + 1
-						siblings = "-".join(childNodes[start:end])
 						curNode[:] = [nodeCopy.pop(0), newNode]
 					else: # factor == "left":
-						start = numChildren - i - 1
-						end = numChildren - i - 1 + horzMarkov
-						siblings = "-".join(childNodes[start:end])
+						start = headidx + numChildren - i - 1
+						end = start + horzMarkov
 						curNode[:] = [newNode, nodeCopy.pop()]
+					# switch direction upon encountering the head
+					if (headMarked and headMarked in childNodes[i] 
+						and factor == "right"):
+						headidx = i
+						factor = "left"
+						start = headidx + numChildren - i - 1
+						end = start + horzMarkov
+					siblings = "-".join(childNodes[start:end])
 					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar,
 											marktail, siblings, parentString)
 
