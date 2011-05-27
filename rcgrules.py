@@ -1,11 +1,12 @@
-from dopg import nodefreq, decorate_with_ids
-from nltk import ImmutableTree, Tree, FreqDist, memoize
-from math import log, exp
-from heapq import nsmallest, heappush, heappop
-from itertools import chain, count, islice, repeat
-from pprint import pprint
-from collections import defaultdict, namedtuple
+import codecs, re
 from operator import mul
+from math import log, exp
+from pprint import pprint
+from heapq import nsmallest, heappush, heappop
+from collections import defaultdict, namedtuple
+from itertools import chain, count, islice, repeat
+from nltk import ImmutableTree, Tree, FreqDist, memoize
+from dopg import nodefreq, decorate_with_ids
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
@@ -60,7 +61,16 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	""" given a tree with indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a set
 	of simple RCG rules. has the side-effect of adding arity
-	markers to node labels """
+	markers to node labels.
+	>>> tree = Tree("(S (NP 1) (VP (V 0) (ADJ 2)))")
+	>>> sent = "is Mary happy".split()
+	>>> srcg_productions(tree, sent)
+	[[('S', [[0, 1, 2]]), ('VP_2', [0, 2]), ('NP', [1])],
+	[('NP', ('Mary',)), ('Epsilon', ())],
+	[('VP_2', [[0], [2]]), ('V', [0]), ('ADJ', [2])],
+	[('V', ('is',)), ('Epsilon', ())],
+	[('ADJ', ('happy',)), ('Epsilon', ())]]
+	"""
 	rules = []
 	for st in tree.subtrees():
 		if len(st) == 1 and not isinstance(st[0], Tree):
@@ -93,12 +103,17 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	return rules
 
 def varstoindices(rule):
+	"""
+	replace the variable numbers by indices pointing to the
+	nonterminal on the right hand side from which they take
+	their value.
+	A[0,1,2] -> A[0,2] B[1]  becomes  A[0, 1, 0] -> B C
+
+	>>> varstoindices([['S', [[0, 1, 2]]], ['NP', [1]], ['VP', [0, 2]]])
+	(('S', 'NP', 'VP'), ((1, 0, 1),))
+	"""
 	nonterminals, vars = zip(*unfreeze(rule))
 	if rule[1][0] != 'Epsilon':
-		# replace the variable numbers by indices pointing to the
-		# nonterminal on the right hand side from which they take 
-		# their value.
-		# A[0,1,2] -> A[0,2] B[1]  becomes  A[0, 1, 0] -> B C
 		for x in vars[0]:
 			for n,y in enumerate(x):
 				for m,z in enumerate(vars[1:]):
@@ -139,6 +154,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 							for (a,avar),(b,bvar) in zip(prods, uprods))))
 	if interpolate != 1.0:
 		srcg = dict(induce_srcg(trees, sents))
+	else: srcg = defaultdict(lambda: 1)
 	# should we distinguish what kind of arguments a node takes in fd?
 	def prob(((rule, yf), freq)):
 		return (rule, yf), (freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
@@ -153,7 +169,10 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 	return probmodel
 	
 def splitgrammar(grammar):
-	""" split the grammar into various lookup tables, mapping nonterminal labels to numeric identifiers"""
+	""" split the grammar into various lookup tables, mapping nonterminal
+	labels to numeric identifiers. Also negates log-probabilities to
+	accommodate min-heaps."""
+
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
 	#unary, lbinary, rbinary, lexical, bylhs = {}, {}, {}, {}, {}
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
@@ -161,20 +180,20 @@ def splitgrammar(grammar):
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
 	unary, lbinary, rbinary, bylhs = ([[] for a in nonterminals] for b in range(4))
 	lexical = defaultdict(list)
-	# negate the log probabilities because the heap we use is a min-heap
+	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule,yf),w in grammar:
 		r = tuple(toid[a] for a in rule), yf
 		if len(rule) == 2:
 			if r[0][1] == 0: #Epsilon
 				# lexical productions (mis)use the field for the yield function to store the word
-				lexical.setdefault(yf[0], []).append((r, -w))
+				lexical.setdefault(yf[0], []).append((r, abs(w)))
 			else:
-				unary[r[0][1]].append((r, -w))
-			bylhs[r[0][0]].append((r, -w))
+				unary[r[0][1]].append((r, abs(w)))
+			bylhs[r[0][0]].append((r, abs(w)))
 		elif len(rule) == 3:
-			lbinary[r[0][1]].append((r, -w))
-			rbinary[r[0][2]].append((r, -w))
-			bylhs[r[0][0]].append((r, -w))
+			lbinary[r[0][1]].append((r, abs(w)))
+			rbinary[r[0][2]].append((r, abs(w)))
+			bylhs[r[0][0]].append((r, abs(w)))
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
@@ -182,12 +201,6 @@ def canonicalize(tree):
 	for a in reversed(list(tree.subtrees(lambda n: len(n) > 1))):
 		a.sort(key=lambda n: n.leaves())
 	return tree
-
-def allmax(seq, key):
-	""" return all x s.t. key(x)==max(seq, key)"""
-	if not seq: return []
-	m = max(map(key, seq))
-	return [a for a in seq if key(a) == m]
 
 def same(a, b, asent, bsent):
 	if type(a) != type(b): return False
@@ -578,7 +591,7 @@ def bfcartpi(seq):
 def enumchart(chart, start, tolabel, n=1):
 	"""exhaustively enumerate trees in chart headed by start in top down 
 		fashion. chart is a dictionary with 
-			lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
+		lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
 		this function doesn't really belong in this file but Cython doesn't
 		support generators so this function is "in exile" over here.  """
 	for iscore,p,rhs in chart[start]:
@@ -612,6 +625,26 @@ def exportrparse(grammar):
 	for (r,yf),w in grammar:
 		if r[1] != 'Epsilon':
 			yield "1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]), " ".join(map(rewritelabel, r[1:])), repryf(yf))
+
+def read_bitpar_grammar(rules, lexicon, encoding='utf-8'):
+	grammar = []
+	ntfd = defaultdict(float)
+	for a in codecs.open(rules, encoding=encoding):
+		a = a.split()
+		p, rule = float(a[0]), a[1:]
+		if rule[0] == "VROOT": rule[0] = "ROOT"
+		ntfd[rule[0]] += p
+		grammar.append(([(rule[0], [range(len(rule) - 1)])]
+					+ [(a, [n]) for n, a in enumerate(rule[1:])], p))
+	for a in codecs.open(lexicon, encoding=encoding):
+		a = a.split()
+		word, tags = a[0], a[1:]
+		tags = zip(tags[::2], map(float, tags[1::2]))
+		for t,p in tags: ntfd[t] += p
+		grammar.extend((((t, (word,)), ('Epsilon', ())), p) for t, p in tags)
+	return splitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
+							for rule, p in grammar])
+
 
 def rem_marks(tree):
 	for a in tree.subtrees(lambda x: "_" in x.node):
@@ -674,7 +707,7 @@ def export(tree, sent, n):
 				"--", "--",
 				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
 	result.append("#EOS %d" % n)
-	return ("\n".join(result)).encode("utf-8")
+	return "\n".join(result) #.encode("utf-8")
 
 def read_rparse_grammar(file):
 	result = []

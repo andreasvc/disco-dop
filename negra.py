@@ -230,8 +230,8 @@ def fold(tree):
 	current = tree
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
-			dp.node = "NP"
-			if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
+		dp.node = "NP"
+		if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
 	# flatten adjunctions
 	#nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
 	#probably_nk = set("AP PIS".split()) | nkonly
@@ -300,7 +300,7 @@ def headfinder(tree, headrules):
 					return
 	
 def bracketings(tree):
-        return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
+	return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
 
 def labelfunc(tree):
 	for a in tree.subtrees(): a.node += "-" + function(a)
