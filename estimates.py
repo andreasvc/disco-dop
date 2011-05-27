@@ -1,23 +1,26 @@
-# Implementation of LR estimate (Kallmeyer & Maier 2010). Ported almost directly from rparse.
+"""
+Implementation of LR estimate (Kallmeyer & Maier 2010).
+Ported almost directly from rparse.
+"""
 from heapdict import heapdict
 from plcfrs import ChartItem
 from collections import defaultdict
-from math import e
+from math import exp
 try:
 	import cython
 	assert cython.compiled
 except:
 	exec "from bit import *" in globals()
 
-class Item:
-	__slots__ = ("state", "len", "lr", "gaps", "_hash")
-	def __init__(self, state, len, lr, gaps):
-		self.state, self.len, self.lr, self.gaps = state, len, lr, gaps
-		self._hash = hash((state, len, lr, gaps))
+class Item(object):
+	__slots__ = ("state", "length", "lr", "gaps", "_hash")
+	def __init__(self, state, length, lr, gaps):
+		self.state, self.length, self.lr, self.gaps = state, length, lr, gaps
+		self._hash = hash((state, length, lr, gaps))
 	def __hash__(self):
 		return self._hash
 	def __repr__(self):
-		return "%s len=%d lr=%d gaps=%d" % (self.state, self.len, self.lr, self.gaps)
+		return "%s len=%d lr=%d gaps=%d" % (self.state, self.length, self.lr, self.gaps)
 
 def getestimates(grammar, maxlen, goal):
 	print "getting inside"
@@ -30,7 +33,7 @@ def testestimates(grammar, maxlen, goal):
 	#insidescores = inside(grammar, maxlen)
 	#for a in insidescores:
 	#	for b in insidescores[a]:
-	#		print "%s[%s] =" % (a, bin(b)[2:]), e**-insidescores[a][b]
+	#		print "%s[%s] =" % (a, bin(b)[2:]), exp(insidescores[a][b])
 	#x=len(insidescores) * sum(map(len, insidescores.values()))
 	#print
 	print "getting inside"
@@ -38,7 +41,7 @@ def testestimates(grammar, maxlen, goal):
 	insidescores = inside(grammar, maxlen)
 	for a in insidescores:
 		for b in insidescores[a]:
-			print "%s[%d] =" % (grammar.tolabel[a], b), e**-insidescores[a][b]
+			print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print 
 	print len(insidescores) * sum(map(len, insidescores.values()))
 	print "getting outside"
@@ -49,7 +52,9 @@ def testestimates(grammar, maxlen, goal):
 		for bn, b in enumerate(a):
 			for cn, c in enumerate(b):
 				for dn, d in enumerate(c):
-					if d < infinity: print grammar.tolabel[an],bn,cn,dn, e**-d; cnt += 1
+					if d < infinity:
+						print grammar.tolabel[an], bn, cn, dn, exp(-d)
+						cnt += 1
 	print cnt
 	return outside
 
@@ -138,17 +143,17 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 	print "initialized"
 	while agenda:
 		I, x = agenda.popitem()
-		if x == outside[I.state][I.len][I.lr][I.gaps]:
-			totlen = I.len + I.lr + I.gaps
+		if x == outside[I.state][I.length][I.lr][I.gaps]:
+			totlen = I.length + I.lr + I.gaps
 			for (rule, yieldfunction), y in bylhs[I.state]:
 				# X -> A
 				if len(rule) == 2:
 					if rule[1] != 0:
-						newitem = Item(rule[1], I.len, I.lr, I.gaps)
+						newitem = Item(rule[1], I.length, I.lr, I.gaps)
 						score = x + y
-						if outside[rule[1]][I.len][I.lr][I.gaps] > score:
+						if outside[rule[1]][I.length][I.lr][I.gaps] > score:
 							agenda[newitem] = score
-							outside[rule[1]][I.len][I.lr][I.gaps] = score
+							outside[rule[1]][I.length][I.lr][I.gaps] = score
 				else:
 					lstate = rule[1]
 					rstate = rule[2]
@@ -169,13 +174,13 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 					leftarity = sum(arg.count(0) for arg in yieldfunction)
 					rightarity = sum(arg.count(1) for arg in yieldfunction)
 					# binary-left (A is left)
-					for lenA in range(leftarity, I.len - rightarity + 1):
-						lenB = I.len - lenA
+					for lenA in range(leftarity, I.length - rightarity + 1):
+						lenB = I.length - lenA
 						insidescore = insidescores[rstate][lenB]
 						for lr in range(I.lr, I.lr + lenB + 1):
 							if addright == 0 and lr != I.lr: continue
 							for ga in range(leftarity - 1, totlen+1):
-								if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
+								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
 									newitem = Item(lstate, lenA, lr, ga)
 									score = x + insidescore + y
 									#print lstate, lenA, lr, ga
@@ -211,18 +216,18 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 					addgaps -= addright
 					
 					# binary-right (A is right)
-					for lenA in range(rightarity, I.len - leftarity + 1):
-						lenB = I.len - lenA
+					for lenA in range(rightarity, I.length - leftarity + 1):
+						lenB = I.length - lenA
 						insidescore = insidescores[lstate][lenB]
 						for lr in range(I.lr, I.lr + lenB + 1):
 							for ga in range(rightarity - 1, totlen+1):
-								if lenA + lr + ga == I.len + I.lr + I.gaps and ga >= addgaps:
+								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
 									newitem = Item(rstate, lenA, lr, ga)
 									score = x + insidescore + y
 									if outside[rstate][lenA][lr][ga] > score:
 										agenda[newitem] = score
 										outside[rstate][lenA][lr][ga] = score
-		#else: print I,x, outside[I.state][I.len][I.lr][I.gaps]
+		#else: print I,x, outside[I.state][I.length][I.lr][I.gaps]
 
 	return outside
 

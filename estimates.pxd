@@ -14,7 +14,7 @@ cdef extern from "bit.h":
 	bint bitminmax(unsigned long a, unsigned long b)
 
 cdef class Item:
-	cdef int state, len, lr, gaps
+	cdef int state, length, lr, gaps
 	cdef long _hash
 	#def __init__(self, str state, int len, int lr, int gaps)
 
