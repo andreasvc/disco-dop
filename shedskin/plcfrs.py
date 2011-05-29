@@ -158,10 +158,12 @@ def concat(yieldfunction, lvec, rvec):
 	return True
 
 def mostprobablederivation(chart, start, tolabel):
+	""" produce a string representation of the viterbi parse in bracket
+	notation"""
 	if start not in chart: return 0.0, str(start.vec) if start else ''	
 	return chart[start][0][0][0], '(%s %s)' % (tolabel[start.label],
 			" ".join([mostprobablederivation(chart, child, tolabel)[1]
-				for child in chart[start][0][1] if start in chart]))
+				for child in chart[start][0][1] if child]))
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
@@ -229,8 +231,10 @@ def main():
 	daruber = ChartItem(toid['PROAV'], 0b0001)
 	nachgedacht = ChartItem(toid['VVPP'], 0b0100)
 	vp2 = ChartItem(toid['VP2'], 0b0101)
+	w1 = ((0.0, 0.0), (ChartItem(0, 0), None))
+	w3 = ((0.0, 0.0), (ChartItem(0, 2), None))
 	edge = (vp2, ((-log(0.5), -log(0.5)), (daruber, nachgedacht)))
-	C = { vp2 : [edge[1]] }
+	C = { vp2 : [edge[1]], daruber : [w1], nachgedacht : [w3] }
 	Cx = { toid['PROAV'] : { daruber : 0.0 } }
 	pprint_chart(C, "Daruber muss nachgedacht werden".split(), tolabel)
 	assert deduced_from(nachgedacht, 0.0, Cx, unary, lbinary, rbinary) == [edge]
@@ -238,6 +242,8 @@ def main():
 	assert concat(((0,), (1,)), lvec, rvec)
 	assert not concat(((0, 1),), lvec, rvec)
 	assert not concat(((1,), (0,)), lvec, rvec)
+	assert (mostprobablederivation(C, vp2, tolabel)
+				== (-log(0.5), '(VP2 (PROAV 0) (VVPP 2))'))
 
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
