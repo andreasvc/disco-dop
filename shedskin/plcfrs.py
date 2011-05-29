@@ -216,25 +216,24 @@ def main():
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
 	'''
 	# output of splitgrammar:
-	lexical = defaultdict(list)
-	lexical.update({'muss': [(((5, 0), ('muss', ())), 0.0)], 'werden': [(((4, 0), ('werden', ())), 0.0)], 'Daruber': [(((2, 0), ('Daruber', ())), 0.0)], 'nachgedacht': [(((7, 0), ('nachgedacht', ())), 0.0)]})
+	unary = [[], [], [], [], [], [], [], []]
+	lbinary = [[], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [], [], [], [(((3, 6, 5), ((0, 1, 0),)), 0.0), (((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], []]
+	rbinary = [[], [], [], [], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)]]
+	#bylhs = [[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]]
+	bylhs = [] #not needed here
+	lexical = {'muss': [(((5, 0), ('muss', ())), 0.0)], 'werden': [(((4, 0), ('werden', ())), 0.0)], 'Daruber': [(((2, 0), ('Daruber', ())), 0.0)], 'nachgedacht': [(((7, 0), ('nachgedacht', ())), 0.0)]}
+	toid = {'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4, 'ROOT': 1, 'PROAV': 2}
+	tolabel = {0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5: 'VMFIN', 6: 'VP2', 7: 'VVPP'}
+	grammar = Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
-	grammar = Grammar(
-		[[], [], [], [], [], [], [], []],
-		[[], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [], [], [], [(((3, 6, 5), ((0, 1, 0),)), 0.0), (((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], []],
-		[[], [], [], [], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)]],
-		lexical,
-		[[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]],
-		{'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4, 'ROOT': 1, 'PROAV': 2},
-		{0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5: 'VMFIN', 6: 'VP2', 7: 'VVPP'})
-
-	daruber = ChartItem(grammar.toid['PROAV'], 0b0001)
-	nachgedacht = ChartItem(grammar.toid['VVPP'], 0b0100)
-	Cx = { grammar.toid['PROAV'] : { daruber : 0.0 } }
-	vp2 = ChartItem(grammar.toid['VP2'], 0b0101)
+	daruber = ChartItem(toid['PROAV'], 0b0001)
+	nachgedacht = ChartItem(toid['VVPP'], 0b0100)
+	vp2 = ChartItem(toid['VP2'], 0b0101)
 	edge = (vp2, ((-log(0.5), -log(0.5)), (daruber, nachgedacht)))
-	assert deduced_from(nachgedacht, 0.0, Cx, grammar.unary,
-			grammar.lbinary, grammar.rbinary) == [edge]
+	C = { vp2 : [edge[1]] }
+	Cx = { toid['PROAV'] : { daruber : 0.0 } }
+	pprint_chart(C, "Daruber muss nachgedacht werden".split(), tolabel)
+	assert deduced_from(nachgedacht, 0.0, Cx, unary, lbinary, rbinary) == [edge]
 	lvec = 0b0011; rvec = 0b1000; yieldfunction = ((0,), (1,))
 	assert concat(((0,), (1,)), lvec, rvec)
 	assert not concat(((0, 1),), lvec, rvec)
