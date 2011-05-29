@@ -47,8 +47,23 @@ class NoChartItem(AOUOEUAEOUTHAOEAOEUT):
 		return ((not isinstance(other, ChartItem))
 			and isinstance(other, AOUOEUAEOUTHAOEAOEUT))
 
+class Edge(object):
+	__slots__ = ('inside', 'prob', 'left', 'right')
+	def __init__(self, inside, prob, left, right):
+		self.inside = inside
+		self.prob = prob
+		self.left = left
+		self.right = right
+	def __eq__(self, other):
+		return (self.inside == other.inside and self.prob == other.prob
+				and self.left == other.left and self.right == other.right)
+
 def main():
 	item = ChartItem(0, 0)
+	edge = Edge(0.0, 0.0, item, item)
+	edge = Edge(0.0, 0.0, item, NoChartItem())
+	assert edge.left == item
+	assert edge == edge
 	assert ChartItem(0, 0) < ChartItem(1, 0)
 	assert ChartItem(1, 0) > ChartItem(0, 0)
 	assert ChartItem(1, 0) >= ChartItem(0, 0)
@@ -58,6 +73,8 @@ def main():
 	assert ChartItem(0, 0) != ChartItem(1, 0)
 	assert ChartItem(0, 0)
 	assert ChartItem(0, 0) != NoChartItem()
+	assert NoChartItem() != ChartItem(0, 0)
+	assert NoChartItem() == NoChartItem()
 	print hash(item), repr(item), hash(NoChartItem())
 	#print item[0], item[1], item.__cmp__(ChartItem(1, 0))
 	print 'it worked'

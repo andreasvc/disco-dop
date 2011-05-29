@@ -4,8 +4,7 @@
 
 from heapq import heappush, heappop, heapify
 #from itertools import imap, izip
-from chartitem import ChartItem, NoChartItem, AOUOEUAEOUTHAOEAOEUT
-
+from items import Edge, ChartItem, NoChartItem, AOUOEUAEOUTHAOEAOEUT
 INVALID = 0
 
 class Entry(object):
@@ -14,15 +13,22 @@ class Entry(object):
 		self.key = key			#the `task'
 		self.value = value		#the priority
 		self.count = count		#unqiue identifier to resolve ties
+	'''
+	def __cmp__(self, other):
+		if isinstance(other, NoChartItem): return 1
+		if self.count == other.count: return 0
+		if self.value[0][0] < other.value[0][0] or (self.value[0][0] == other.value[0][0] and self.count < other.count): return -1
+		return 1
+	'''
 	def __eq__(self, other):
 		if isinstance(other, NoChartItem): return False
 		return self.count == other.count
 	def __lt__(self, other):
 		if isinstance(other, NoChartItem): return False
-		return self.value[0][0] < other.value[0][0] or (self.value[0][0] == other.value[0][0] and self.count < other.count)
+		return self.value.inside < other.value.inside or (self.value.inside == other.value.inside and self.count < other.count)
 	def __le__(self, other):
 		if isinstance(other, NoChartItem): return False
-		return self.value[0][0] < other.value[0][0] or (self.value[0][0] == other.value[0][0] and self.count <= other.count)
+		return self.value.inside < other.value.inside or (self.value.inside == other.value.inside and self.count <= other.count)
 	def __hash__(self):
 		return hash((self.key, (self.value, self.count)))
 
@@ -109,23 +115,23 @@ def main():
 	n = ChartItem(0, 0); n = NoChartItem()
 	assert isinstance(c, AOUOEUAEOUTHAOEAOEUT)
 	assert isinstance(n, AOUOEUAEOUTHAOEAOEUT)
-	h = heapdict([(ChartItem(0,0), ((0.0, 0.0), (c, n)))])
-	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (c, n)))
+	h = heapdict([(ChartItem(0,0), Edge(0.0, 0.0, c, n))])
+	assert h.popitem() == (ChartItem(0, 0), Edge(0.0, 0.0, c, n))
 	assert len(h) == 0
-	h[ChartItem(0, 0)] = ((0.0, 0.0), (c, n))
-	assert h.pop(ChartItem(0, 0)) == ((0.0, 0.0), (ChartItem(0, 0), n))
+	h[ChartItem(0, 0)] = Edge(0.0, 0.0, c, n)
+	assert h.pop(ChartItem(0, 0)) == Edge(0.0, 0.0, ChartItem(0, 0), n)
 	assert len(h) == 0
 	h = heapdict()
-	ee = Entry(ChartItem(0, 0), ((0.5, 0.0), (ChartItem(0, 0), ChartItem(0, 0))), 1)
-	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), n)), 1)
+	ee = Entry(ChartItem(0, 0), Edge(0.5, 0.0, ChartItem(0, 0), ChartItem(0, 0)), 1)
+	e = Entry(ChartItem(0, 0), Edge(0.0, 0.0, ChartItem(0, 0), n), 1)
 	assert e < ee
 	assert e == e
 	assert e <= e
 	assert e <= ee
 	assert hash(e) == hash((e.key, (e.value, e.count)))
-	h[ChartItem(0, 0)] = ((0.0, 0.0), (c, c))
-	h[ChartItem(0, 0)] = ((0.0, 0.0), (c, n))
-	h[ChartItem(2, 0)] = ((0.0, 0.0), (c, n))
+	h[ChartItem(0, 0)] = Edge(0.0, 0.0, c, c)
+	h[ChartItem(0, 0)] = Edge(0.0, 0.0, c, n)
+	h[ChartItem(2, 0)] = Edge(0.0, 0.0, c, n)
 	del h[ChartItem(2, 0)]
 	assert ChartItem(2, 0) not in h
 	assert ChartItem(2, 0) == ChartItem(2, 0)
@@ -135,10 +141,10 @@ def main():
 	v = h[ChartItem(0, 0)]
 	assert v in h.values()
 	assert h.keys() == [ChartItem(0, 0)]
-	assert h.values() == [((0.0, 0.0), (c, n))]
-	assert h.items() == [(ChartItem(0,0), ((0.0, 0.0), (c, n)))]
-	assert h.peekitem() == (ChartItem(0, 0), ((0.0, 0.0), (c, n)))
-	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (c, n)))
+	assert h.values() == [Edge(0.0, 0.0, c, n)]
+	assert h.items() == [(ChartItem(0,0), Edge(0.0, 0.0, c, n))]
+	assert h.peekitem() == (ChartItem(0, 0), Edge(0.0, 0.0, c, n))
+	assert h.popitem() == (ChartItem(0, 0), Edge(0.0, 0.0, c, n))
 	print 'it worked'
 
 if __name__ == '__main__': main()
