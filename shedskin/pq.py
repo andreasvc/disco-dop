@@ -50,6 +50,7 @@ class heapdict(object):
 			self.counter += 1
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
+		return None
 
 	def __getitem__(self, key):
 		return self.mapping[key].value
@@ -104,9 +105,15 @@ class heapdict(object):
 		return entry.value
 
 def main():
+	h = heapdict([(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0), None)))])
+	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
+	assert len(h) == 0
+	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
+	assert h.pop(ChartItem(0, 0)) == ((0.0, 0.0), (ChartItem(0, 0), None))
+	assert len(h) == 0
 	h = heapdict()
-	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)), 1)
 	ee = Entry(ChartItem(0, 0), ((0.5, 0.0), (ChartItem(0, 0), ChartItem(0, 0))), 1)
+	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)), 1)
 	assert e < ee
 	assert e == e
 	assert e <= e
@@ -121,17 +128,13 @@ def main():
 	assert ChartItem(2, 0) <= ChartItem(2, 0)
 	assert ChartItem(1, 0) <= ChartItem(2, 0)
 	assert ChartItem(1, 0) < ChartItem(2, 0)
-	assert h[ChartItem(0, 0)] == ((0.0, 0.0), (ChartItem(0, 0), None))
+	v = h[ChartItem(0, 0)]
+	assert v in h.values()
 	assert h.keys() == [ChartItem(0, 0)]
 	assert h.values() == [((0.0, 0.0), (ChartItem(0, 0), None))]
 	assert h.items() == [(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0), None)))]
 	assert h.peekitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
 	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
-	h = heapdict([(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0), None)))])
-	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
-	assert len(h) == 0
-	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
-	assert h.pop(ChartItem(0, 0)) == ((0.0, 0.0), (ChartItem(0, 0), None))
-	assert len(h) == 0
+	print 'it worked'
 
 if __name__ == '__main__': main()

@@ -167,14 +167,14 @@ def mostprobablederivation(chart, start, tolabel):
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
-	for a in sorted(chart, key=lambda x: bitcount(x[1])):
-		print "%s[%s] =>" % (tolabel[a[0]],
-					("0" * len(sent) + bin(a[1])[2:])[::-1][:len(sent)])
+	for a in sorted(chart, key=lambda x: bitcount(x.vec)):
+		print "%s[%s] =>" % (tolabel[a.label],
+					("0" * len(sent) + bin(a.vec)[2:])[::-1][:len(sent)])
 		for (ip, p), rhs in chart[a]:
 			for c in rhs:
 				if not c: continue
 				if tolabel[c.label] == "Epsilon":
-					print "\t", repr(sent[rhs[0][1]]),
+					print "\t", repr(sent[rhs[0].vec]),
 				else:
 					print "\t%s[%s]" % (tolabel[c.label],
 						("0" * len(sent) + bin(c.vec)[2:])[::-1][:len(sent)]),
@@ -190,9 +190,11 @@ def do(sent, grammar):
 		#													n=1000).items():
 		#	print p, a
 		p, a = mostprobablederivation(chart, start, grammar.tolabel)
-		print exp(-p), a
-	else: print "no parse"
-	print
+		print exp(-p), a, '\n'
+		return True
+	else:
+		print "no parse\n"
+		return False
 
 class Grammar(object):
 	__slots__ = ('unary', 'lbinary', 'rbinary', 'lexical',
@@ -260,9 +262,10 @@ def main():
 	assert (mostprobablederivation(chart, start, tolabel) ==
 		(-log(0.25), '(S (VP2 (VP2 (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))'))
 
-	do("Daruber muss nachgedacht werden", grammar)
-	do("Daruber muss nachgedacht werden werden", grammar)
-	do("Daruber muss nachgedacht werden werden werden", grammar)
-	do("muss Daruber nachgedacht werden", grammar)	#should print 'no parse'
-
+	assert do("Daruber muss nachgedacht werden", grammar)
+	assert do("Daruber muss nachgedacht werden werden", grammar)
+	assert do("Daruber muss nachgedacht werden werden werden", grammar)
+	#should print 'no parse':
+	assert not do("muss Daruber nachgedacht werden", grammar)
+	print 'it worked'
 if __name__ == '__main__': main()
