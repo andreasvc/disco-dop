@@ -1,5 +1,7 @@
 
-class ChartItem(object):
+class AOUOEUAEOUTHAOEAOEUT(object): pass
+
+class ChartItem(AOUOEUAEOUTHAOEAOEUT):
 	__slots__ = ("label", "vec", "_hash")
 	def __init__(self, label, vec):
 		self.label = label		#the category of this item (NP/PP/VP etc)
@@ -38,6 +40,13 @@ class ChartItem(object):
 		#would need sentence length to properly pad with trailing zeroes
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
 
+class NoChartItem(AOUOEUAEOUTHAOEAOEUT):
+	def __init__(self): pass
+	def __hash__(self): return hash(0)
+	def __eq__(self, other):
+		return ((not isinstance(other, ChartItem))
+			and isinstance(other, AOUOEUAEOUTHAOEAOEUT))
+
 def main():
 	item = ChartItem(0, 0)
 	assert ChartItem(0, 0) < ChartItem(1, 0)
@@ -48,7 +57,8 @@ def main():
 	assert ChartItem(0, 0) == ChartItem(0, 0)
 	assert ChartItem(0, 0) != ChartItem(1, 0)
 	assert ChartItem(0, 0)
-	print hash(item), repr(item)
+	assert ChartItem(0, 0) != NoChartItem()
+	print hash(item), repr(item), hash(NoChartItem())
 	#print item[0], item[1], item.__cmp__(ChartItem(1, 0))
 	print 'it worked'
 if __name__ == '__main__': main()

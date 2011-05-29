@@ -4,9 +4,10 @@
 from math import exp, log
 from collections import defaultdict
 from pq import heapdict
-from chartitem import ChartItem
+from chartitem import ChartItem, NoChartItem
 from bit import *
 print "plcfrs in shedskin mode"
+NONE = NoChartItem()
 
 def parse(sent, grammar, tags, start, viterbi, n, estimate):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -27,9 +28,9 @@ def parse(sent, grammar, tags, start, viterbi, n, estimate):
 
 	# type inference hints:
 	A[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))
-	A[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
+	A[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), NONE))
 	C[ChartItem(0, 0)] = [((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))]
-	C[ChartItem(0, 0)] = [((0.0, 0.0), (ChartItem(0, 0), None))]
+	C[ChartItem(0, 0)] = [((0.0, 0.0), (ChartItem(0, 0), NONE))]
 	Cx[0] = { ChartItem(0, 0) : 0.0 }
 	Cx.popitem(); C.popitem(); A.popitem()
 
@@ -42,12 +43,12 @@ def parse(sent, grammar, tags, start, viterbi, n, estimate):
 				Ih = ChartItem(rule[0], 1 << i)		# tag & bitvector
 				I = ChartItem(Epsilon, i)			# word index
 				# if gold tags were provided, give them probability of 1
-				A[Ih] = ((0.0 if tags else z, 0.0 if tags else z), (I, None))
+				A[Ih] = ((0.0 if tags else z, 0.0 if tags else z), (I, NONE))
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 			Ih = ChartItem(toid[tags[i]], 1 << i)
 			I = ChartItem(Epsilon, i)
-			A[Ih] = ((0.0, 0.0), (I, None))
+			A[Ih] = ((0.0, 0.0), (I, NONE))
 			recognized = True
 			continue
 		elif not recognized:
@@ -96,7 +97,7 @@ def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	result = []
 	for (rule, yf), z in unary[I]:
 		result.append((ChartItem(rule[0], Ir),
-								((x+z, z), (Ih, None))))
+								((x+z, z), (Ih, NONE))))
 	for (rule, yf), z in lbinary[I]:
 		for I1h, y in Cx.get(rule[2], {}).items():
 			if concat(yf, Ir, I1h.vec):
@@ -163,7 +164,8 @@ def mostprobablederivation(chart, start, tolabel):
 	if start not in chart: return 0.0, str(start.vec) if start else ''	
 	return chart[start][0][0][0], '(%s %s)' % (tolabel[start.label],
 			" ".join([mostprobablederivation(chart, child, tolabel)[1]
-				for child in chart[start][0][1] if child]))
+				for child in chart[start][0][1]
+				if not isinstance(child, NoChartItem)]))
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
@@ -172,7 +174,7 @@ def pprint_chart(chart, sent, tolabel):
 					("0" * len(sent) + bin(a.vec)[2:])[::-1][:len(sent)])
 		for (ip, p), rhs in chart[a]:
 			for c in rhs:
-				if not c: continue
+				if isinstance(c, NoChartItem): continue
 				if tolabel[c.label] == "Epsilon":
 					print "\t", repr(sent[rhs[0].vec]),
 				else:
@@ -244,8 +246,8 @@ def main():
 	daruber = ChartItem(toid['PROAV'], 0b0001)
 	nachgedacht = ChartItem(toid['VVPP'], 0b0100)
 	vp2 = ChartItem(toid['VP2'], 0b0101)
-	w1 = ((0.0, 0.0), (ChartItem(0, 0), None))
-	w3 = ((0.0, 0.0), (ChartItem(0, 2), None))
+	w1 = ((0.0, 0.0), (ChartItem(0, 0), NONE))
+	w3 = ((0.0, 0.0), (ChartItem(0, 2), NONE))
 	edge = (vp2, ((-log(0.5), -log(0.5)), (daruber, nachgedacht)))
 	C = { vp2 : [edge[1]], daruber : [w1], nachgedacht : [w3] }
 	Cx = { toid['PROAV'] : { daruber : 0.0 } }
