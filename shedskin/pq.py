@@ -15,6 +15,16 @@ class Entry(object):
 		self.key = key
 		self.value = value
 		self.count = count
+	def __eq__(self, other):
+		if other is None: return False
+		return self.count == other.count
+	def __lt__(self, other):
+		if other is None: return False
+		return self.value < other.value or (self.value == other.value and self.count < other.count)
+	def __le__(self, other):
+		if other is None: return False
+		return self.value < other.value or (self.value == other.value and self.count <= other.count)
+	
 
 class heapdict(object):
 	def __init__(self, iterable=None):
@@ -71,7 +81,8 @@ class heapdict(object):
 	def peekitem(self):
 		while self.heap[0].count is INVALID:
 			entry = heappop(self.heap)
-			del self.mapping[entry.key]
+			try: del self.mapping[entry.key]
+			except KeyError: pass
 		return self.heap[0].key, self.heap[0].value
 
 	def popitem(self):
@@ -98,6 +109,10 @@ def main():
 	h[ChartItem(2, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
 	del h[ChartItem(2, 0)]
 	assert ChartItem(2, 0) not in h
+	assert ChartItem(2, 0) == ChartItem(2, 0)
+	assert ChartItem(2, 0) <= ChartItem(2, 0)
+	assert ChartItem(1, 0) <= ChartItem(2, 0)
+	assert ChartItem(1, 0) < ChartItem(2, 0)
 	assert h[ChartItem(0, 0)] == ((0.0, 0.0), (ChartItem(0, 0), None))
 	assert h.keys() == [ChartItem(0, 0)]
 	assert h.values() == [((0.0, 0.0), (ChartItem(0, 0), None))]
