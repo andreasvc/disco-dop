@@ -1,17 +1,17 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
 # shedskin version^Wattempt
-from math import exp
+from math import exp, log
 from collections import defaultdict
 from pq import heapdict
 from chartitem import ChartItem
 from bit import *
 print "plcfrs in shedskin mode"
 
-def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1,
-															estimate=None):
+def parse(sent, grammar, tags, start, viterbi, n, estimate):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive (n=0) or up until the viterbi parse
+	NB: viterbi & estimate parameters are ignored in this version
 	"""
 	unary = grammar.unary
 	lbinary = grammar.lbinary
@@ -37,7 +37,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1,
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for (rule, yf), z in lexical.get(w, []):
+		for (rule, _), z in lexical.get(w, []):
 			if not tags or tags[i] == tolabel[rule[0]].split("@")[0]:
 				Ih = ChartItem(rule[0], 1 << i)		# tag & bitvector
 				I = ChartItem(Epsilon, i)			# word index
@@ -181,7 +181,7 @@ def pprint_chart(chart, sent, tolabel):
 
 def do(sent, grammar):
 	print "sentence", sent
-	chart, start = parse(sent.split(), grammar)
+	chart, start = parse(sent.split(), grammar, None, None, True, 1, None)
 	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if chart:
 		#for a, p in mostprobableparse(chart, start, grammar.tolabel,
@@ -227,6 +227,18 @@ def main():
 		[[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]],
 		{'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4, 'ROOT': 1, 'PROAV': 2},
 		{0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5: 'VMFIN', 6: 'VP2', 7: 'VVPP'})
+
+	daruber = ChartItem(grammar.toid['PROAV'], 0b0001)
+	nachgedacht = ChartItem(grammar.toid['VVPP'], 0b0100)
+	Cx = { grammar.toid['PROAV'] : { daruber : 0.0 } }
+	vp2 = ChartItem(grammar.toid['VP2'], 0b0101)
+	edge = (vp2, ((-log(0.5), -log(0.5)), (daruber, nachgedacht)))
+	assert deduced_from(nachgedacht, 0.0, Cx, grammar.unary,
+			grammar.lbinary, grammar.rbinary) == [edge]
+	lvec = 0b0011; rvec = 0b1000; yieldfunction = ((0,), (1,))
+	assert concat(((0,), (1,)), lvec, rvec)
+	assert not concat(((0, 1),), lvec, rvec)
+	assert not concat(((1,), (0,)), lvec, rvec)
 
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
