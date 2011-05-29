@@ -13,12 +13,14 @@ class ChartItem(object):
 									and self.vec < other.vec): return -1
 		return 1
 	def __eq__(self, other):
-		assert isinstance(other, ChartItem)
+		if other is None: return False
 		return self.label == other.label and self.vec == other.vec
 	def __lt__(self, other):
+		if other is None: return False
 		return self.label < other.label or (self.label == other.label
 									and self.vec < other.vec)
 	def __gt__(self, other):
+		if other is None: return False
 		return self.label > other.label or (self.label == other.label
 									and self.vec > other.vec)
 	def __getitem__(self, n):
