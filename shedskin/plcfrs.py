@@ -27,9 +27,9 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1,
 
 	# type inference hints:
 	A[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))
-	A[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0),))
+	A[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
 	C[ChartItem(0, 0)] = [((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))]
-	C[ChartItem(0, 0)] = [((0.0, 0.0), (ChartItem(0, 0),))]
+	C[ChartItem(0, 0)] = [((0.0, 0.0), (ChartItem(0, 0), None))]
 	Cx[0] = { ChartItem(0, 0) : 0.0 }
 	Cx.popitem(); C.popitem(); A.popitem()
 
