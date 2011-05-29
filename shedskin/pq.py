@@ -55,6 +55,7 @@ class heapdict(object):
 
 	def keys(self):
 		return self.mapping.keys()
+
 	def values(self):
 		return map(lambda x: x.value, self.mapping.values())
 
@@ -84,33 +85,30 @@ class heapdict(object):
 		return entry.key, entry.value
 
 	def pop(self, key):
-		if key is None:
-			entry = self.popitem()
-		else:
-			entry = self.mapping.pop(key)
+		entry = self.mapping.pop(key)
 		entry.count = INVALID
 		return entry.value
 
 def main():
 	h = heapdict()
-	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0),)), 1)
-	e = Entry(ChartItem(0, 0), (ChartItem(0, 0), ChartItem(0, 0)), 1)
+	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)), 1)
+	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0))), 1)
 	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))
-	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0),))
-	h[ChartItem(2, 0)] = ((0.0, 0.0), (ChartItem(0, 0),))
+	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
+	h[ChartItem(2, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
 	del h[ChartItem(2, 0)]
 	assert ChartItem(2, 0) not in h
-	assert h[ChartItem(0, 0)] == ((0.0, 0.0), (ChartItem(0, 0),))
+	assert h[ChartItem(0, 0)] == ((0.0, 0.0), (ChartItem(0, 0), None))
 	assert h.keys() == [ChartItem(0, 0)]
-	assert h.values() == [((0.0, 0.0), (ChartItem(0, 0),))]
-	assert h.items() == [(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0),)))]
-	assert h.peekitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0),)))
-	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0),)))
-	h = heapdict([(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0),)))])
-	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0),)))
+	assert h.values() == [((0.0, 0.0), (ChartItem(0, 0), None))]
+	assert h.items() == [(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0), None)))]
+	assert h.peekitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
+	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
+	h = heapdict([(ChartItem(0,0), ((0.0, 0.0), (ChartItem(0, 0), None)))])
+	assert h.popitem() == (ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)))
 	assert len(h) == 0
-	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0),))
-	assert h.pop(ChartItem(0, 0)) == ((0.0, 0.0), (ChartItem(0, 0),))
+	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
+	assert h.pop(ChartItem(0, 0)) == ((0.0, 0.0), (ChartItem(0, 0), None))
 	assert len(h) == 0
 
 if __name__ == '__main__': main()
