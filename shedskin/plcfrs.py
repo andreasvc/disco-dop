@@ -4,13 +4,14 @@
 from math import exp
 from collections import defaultdict
 from pq import heapdict
-from bit import *
 from chartitem import ChartItem
+from bit import *
 print "plcfrs in shedskin mode"
 
-def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
+def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1,
+															estimate=None):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
-	produce a chart, either exhaustive or up until the viterbi parse
+	produce a chart, either exhaustive (n=0) or up until the viterbi parse
 	"""
 	unary = grammar.unary
 	lbinary = grammar.lbinary
@@ -36,17 +37,17 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for (rule,yf), z in lexical.get(w, []):
+		for (rule, yf), z in lexical.get(w, []):
 			if not tags or tags[i] == tolabel[rule[0]].split("@")[0]:
-				Ih = ChartItem(rule[0], 1 << i)
-				I = ChartItem(Epsilon, i)
+				Ih = ChartItem(rule[0], 1 << i)		# tag & bitvector
+				I = ChartItem(Epsilon, i)			# word index
 				# if gold tags were provided, give them probability of 1
-				A[Ih] = ((0.0 if tags else z, 0.0 if tags else z), (I,))
+				A[Ih] = ((0.0 if tags else z, 0.0 if tags else z), (I, None))
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 			Ih = ChartItem(toid[tags[i]], 1 << i)
 			I = ChartItem(Epsilon, i)
-			A[Ih] = ((0.0, 0.0), (I,))
+			A[Ih] = ((0.0, 0.0), (I, None))
 			recognized = True
 			continue
 		elif not recognized:
@@ -60,9 +61,10 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 
 		if Ih == goal:
 			m += 1
-			if viterbi and n==m: break
+			if viterbi and n == m: break
 		else:
-			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary):
+			for I1h, scores in deduced_from(Ih, iscore, Cx,
+											unary, lbinary, rbinary):
 				# I1h = new ChartItem that has been derived.
 				# scores: oscore, iscore, p, rhs
 				# 	oscore = estimate of total score; NB not present here
@@ -85,7 +87,8 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 				else:
 					C[I1h].append(scores)
 		maxA = max(maxA, len(A))
-	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
+	print "max agenda size", maxA, "/ chart keys", len(C),
+	print "/ values", sum(map(len, C.values()))
 	return (C, goal) if goal in C else ({}, ())
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
@@ -93,7 +96,7 @@ def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	result = []
 	for (rule, yf), z in unary[I]:
 		result.append((ChartItem(rule[0], Ir),
-								((x+z, z), (Ih,))))
+								((x+z, z), (Ih, None))))
 	for (rule, yf), z in lbinary[I]:
 		for I1h, y in Cx.get(rule[2], {}).items():
 			if concat(yf, Ir, I1h.vec):
@@ -155,7 +158,7 @@ def concat(yieldfunction, lvec, rvec):
 	return True
 
 def mostprobablederivation(chart, start, tolabel):
-	if start not in chart: return 0, str(start.vec)
+	if start not in chart: return 0.0, str(start.vec) if start else ''	
 	return chart[start][0][0][0], '(%s %s)' % (tolabel[start.label],
 			" ".join([mostprobablederivation(chart, child, tolabel)[1]
 				for child in chart[start][0][1] if start in chart]))
@@ -163,13 +166,16 @@ def mostprobablederivation(chart, start, tolabel):
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
-		print "%s[%s] =>" % (tolabel[a[0]], ("0" * len(sent) + bin(a[1])[2:])[::-1][:len(sent)])
+		print "%s[%s] =>" % (tolabel[a[0]],
+					("0" * len(sent) + bin(a[1])[2:])[::-1][:len(sent)])
 		for (ip, p), rhs in chart[a]:
 			for c in rhs:
+				if not c: continue
 				if tolabel[c.label] == "Epsilon":
 					print "\t", repr(sent[rhs[0][1]]),
 				else:
-					print "\t%s[%s]" % (tolabel[c.label], ("0" * len(sent) + bin(c.vec)[2:])[::-1][:len(sent)]),
+					print "\t%s[%s]" % (tolabel[c.label],
+						("0" * len(sent) + bin(c.vec)[2:])[::-1][:len(sent)]),
 			print "\t",exp(-p)
 		print
 
@@ -178,7 +184,8 @@ def do(sent, grammar):
 	chart, start = parse(sent.split(), grammar)
 	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if chart:
-		#for a, p in mostprobableparse(chart, start, grammar.tolabel, n=1000).items():
+		#for a, p in mostprobableparse(chart, start, grammar.tolabel,
+		#													n=1000).items():
 		#	print p, a
 		p, a = mostprobablederivation(chart, start, grammar.tolabel)
 		print exp(-p), a
@@ -200,7 +207,7 @@ class Grammar(object):
 def main():
 	'''
 	grammar = splitgrammar(
-		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
+		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0.0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
 		((('PROAV', 'Epsilon'), ('Daruber', ())), 0.0),
@@ -208,21 +215,22 @@ def main():
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
 	'''
+	# output of splitgrammar:
 	lexical = defaultdict(list)
 	lexical.update({'muss': [(((5, 0), ('muss', ())), 0.0)], 'werden': [(((4, 0), ('werden', ())), 0.0)], 'Daruber': [(((2, 0), ('Daruber', ())), 0.0)], 'nachgedacht': [(((7, 0), ('nachgedacht', ())), 0.0)]})
 
 	grammar = Grammar(
 		[[], [], [], [], [], [], [], []],
-		[[], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [], [], [], [(((3, 6, 5), ((0, 1, 0),)), 0), (((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], []],
-		[[], [], [], [], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], [(((3, 6, 5), ((0, 1, 0),)), 0)], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)]],
+		[[], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [], [], [], [(((3, 6, 5), ((0, 1, 0),)), 0.0), (((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], []],
+		[[], [], [], [], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)]],
 		lexical,
-		[[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]],
+		[[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]],
 		{'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4, 'ROOT': 1, 'PROAV': 2},
 		{0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5: 'VMFIN', 6: 'VP2', 7: 'VVPP'})
 
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
 	do("Daruber muss nachgedacht werden werden werden", grammar)
-	do("muss Daruber nachgedacht werden", grammar)	#no parse
+	do("muss Daruber nachgedacht werden", grammar)	#should give no parse
 
 if __name__ == '__main__': main()

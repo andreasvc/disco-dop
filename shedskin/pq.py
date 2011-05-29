@@ -103,7 +103,11 @@ class heapdict(object):
 def main():
 	h = heapdict()
 	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), None)), 1)
-	e = Entry(ChartItem(0, 0), ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0))), 1)
+	ee = Entry(ChartItem(0, 0), ((0.5, 0.0), (ChartItem(0, 0), ChartItem(0, 0))), 1)
+	assert e < ee
+	assert e == e
+	assert e <= e
+	assert e <= ee
 	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))
 	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
 	h[ChartItem(2, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
