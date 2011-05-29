@@ -3,18 +3,17 @@
 # Based on notes in http://docs.python.org/library/heapq.html
 
 from heapq import heappush, heappop, heapify
-from itertools import count, imap, izip
+#from itertools import imap, izip
 from chartitem import ChartItem
 
 INVALID = 0
-VALUE, COUNT, KEY = range(3)
 
 class Entry(object):
 	__slots__ = ('key', 'value', 'count')
 	def __init__(self, key, value, count):
-		self.key = key
-		self.value = value
-		self.count = count
+		self.key = key			#the `task'
+		self.value = value		#the priority
+		self.count = count		#unqiue identifier to resolve ties
 	def __eq__(self, other):
 		if other is None: return False
 		return self.count == other.count
@@ -24,7 +23,8 @@ class Entry(object):
 	def __le__(self, other):
 		if other is None: return False
 		return self.value < other.value or (self.value == other.value and self.count <= other.count)
-	
+	def __hash__(self):
+		return hash((self.key, (self.value, self.count)))
 
 class heapdict(object):
 	def __init__(self, iterable=None):
@@ -57,8 +57,11 @@ class heapdict(object):
 	def __delitem__(self, key):
 		self.mapping.pop(key).count = INVALID
 
-	def __iter__(self):
-		return iter(self.mapping)
+	def __contains__(self, key):
+		return key in self.mapping
+
+	#def __iter__(self):
+	#	return iter(self.mapping)
 
 	def __len__(self):
 		return len(self.mapping)
@@ -69,14 +72,14 @@ class heapdict(object):
 	def values(self):
 		return map(lambda x: x.value, self.mapping.values())
 
-	def itervalues(self):
-		return imap(lambda x: x.value, self.mapping.values())
+	#def itervalues(self):
+	#	return imap(lambda x: x.value, self.mapping.values())
 
 	def items(self):
 		return zip(self.keys(), self.values())
 
-	def iteritems(self):
-		return izip(self.iterkeys(), self.itervalues())
+	#def iteritems(self):
+	#	return izip(self.iterkeys(), self.itervalues())
 
 	def peekitem(self):
 		while self.heap[0].count is INVALID:
@@ -108,6 +111,7 @@ def main():
 	assert e == e
 	assert e <= e
 	assert e <= ee
+	assert hash(e) == hash((e.key, (e.value, e.count)))
 	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), ChartItem(0, 0)))
 	h[ChartItem(0, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))
 	h[ChartItem(2, 0)] = ((0.0, 0.0), (ChartItem(0, 0), None))

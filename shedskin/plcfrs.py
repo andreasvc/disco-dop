@@ -35,7 +35,7 @@ def parse(sent, grammar, tags, start, viterbi, n, estimate):
 
 	# scan
 	Epsilon = toid["Epsilon"]
-	for i,w in enumerate(sent):
+	for i, w in enumerate(sent):
 		recognized = False
 		for (rule, _), z in lexical.get(w, []):
 			if not tags or tags[i] == tolabel[rule[0]].split("@")[0]:
@@ -219,13 +219,24 @@ def main():
 	'''
 	# output of splitgrammar:
 	unary = [[], [], [], [], [], [], [], []]
-	lbinary = [[], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [], [], [], [(((3, 6, 5), ((0, 1, 0),)), 0.0), (((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], []]
-	rbinary = [[], [], [], [], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [], [(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)]]
+	lbinary = [[], [],
+		[(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)],
+		[], [], [],
+		[(((3, 6, 5), ((0, 1, 0),)), 0.0),
+		(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)], []]
+	rbinary = [[], [], [], [],
+		[(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529)],
+		[(((3, 6, 5), ((0, 1, 0),)), 0.0)], [],
+		[(((6, 2, 7), ((0,), (1,))), 0.69314718055994529)]]
 	#bylhs = [[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]]
 	bylhs = [] #not needed here
-	lexical = {'muss': [(((5, 0), ('muss', ())), 0.0)], 'werden': [(((4, 0), ('werden', ())), 0.0)], 'Daruber': [(((2, 0), ('Daruber', ())), 0.0)], 'nachgedacht': [(((7, 0), ('nachgedacht', ())), 0.0)]}
-	toid = {'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4, 'ROOT': 1, 'PROAV': 2}
-	tolabel = {0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5: 'VMFIN', 6: 'VP2', 7: 'VVPP'}
+	lexical = { 'muss': [(((5, 0), ('muss', ())), 0.0)], 'werden': [(((4, 0),
+		('werden', ())), 0.0)], 'Daruber': [(((2, 0), ('Daruber', ())), 0.0)],
+		'nachgedacht': [(((7, 0), ('nachgedacht', ())), 0.0)] }
+	toid = {'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4,
+		'ROOT': 1, 'PROAV': 2 }
+	tolabel = {0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5:
+		'VMFIN', 6: 'VP2', 7: 'VVPP'}
 	grammar = Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
 	daruber = ChartItem(toid['PROAV'], 0b0001)
@@ -237,17 +248,21 @@ def main():
 	C = { vp2 : [edge[1]], daruber : [w1], nachgedacht : [w3] }
 	Cx = { toid['PROAV'] : { daruber : 0.0 } }
 	pprint_chart(C, "Daruber muss nachgedacht werden".split(), tolabel)
-	assert deduced_from(nachgedacht, 0.0, Cx, unary, lbinary, rbinary) == [edge]
+	assert deduced_from(nachgedacht, 0.0, Cx, unary,lbinary,rbinary) == [edge]
 	lvec = 0b0011; rvec = 0b1000; yieldfunction = ((0,), (1,))
 	assert concat(((0,), (1,)), lvec, rvec)
 	assert not concat(((0, 1),), lvec, rvec)
 	assert not concat(((1,), (0,)), lvec, rvec)
 	assert (mostprobablederivation(C, vp2, tolabel)
 				== (-log(0.5), '(VP2 (PROAV 0) (VVPP 2))'))
+	chart, start = parse("Daruber muss nachgedacht werden".split(), grammar,
+					"PROAV VMFIN VVPP VAINF".split(), toid['S'], True, 1, None)
+	assert (mostprobablederivation(chart, start, tolabel) ==
+		(-log(0.25), '(S (VP2 (VP2 (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))'))
 
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
 	do("Daruber muss nachgedacht werden werden werden", grammar)
-	do("muss Daruber nachgedacht werden", grammar)	#should give no parse
+	do("muss Daruber nachgedacht werden", grammar)	#should print 'no parse'
 
 if __name__ == '__main__': main()
