@@ -3,8 +3,7 @@
 # Based on notes in http://docs.python.org/library/heapq.html
 
 from heapq import heappush, heappop, heapify
-#from itertools import imap, izip
-from items import Edge, ChartItem, NoChartItem, AOUOEUAEOUTHAOEAOEUT
+from items import Edge, ChartItem
 INVALID = 0
 
 class Entry(object):
@@ -15,19 +14,15 @@ class Entry(object):
 		self.count = count		#unqiue identifier to resolve ties
 	'''
 	def __cmp__(self, other):
-		if isinstance(other, NoChartItem): return 1
 		if self.count == other.count: return 0
 		if self.value[0][0] < other.value[0][0] or (self.value[0][0] == other.value[0][0] and self.count < other.count): return -1
 		return 1
 	'''
 	def __eq__(self, other):
-		if isinstance(other, NoChartItem): return False
 		return self.count == other.count
 	def __lt__(self, other):
-		if isinstance(other, NoChartItem): return False
 		return self.value.inside < other.value.inside or (self.value.inside == other.value.inside and self.count < other.count)
 	def __le__(self, other):
-		if isinstance(other, NoChartItem): return False
 		return self.value.inside < other.value.inside or (self.value.inside == other.value.inside and self.count <= other.count)
 	def __hash__(self):
 		return hash((self.key, (self.value, self.count)))
@@ -67,9 +62,6 @@ class heapdict(object):
 	def __contains__(self, key):
 		return key in self.mapping
 
-	#def __iter__(self):
-	#	return iter(self.mapping)
-
 	def __len__(self):
 		return len(self.mapping)
 
@@ -79,14 +71,8 @@ class heapdict(object):
 	def values(self):
 		return map(lambda x: x.value, self.mapping.values())
 
-	#def itervalues(self):
-	#	return imap(lambda x: x.value, self.mapping.values())
-
 	def items(self):
 		return zip(self.keys(), self.values())
-
-	#def iteritems(self):
-	#	return izip(self.iterkeys(), self.itervalues())
 
 	def peekitem(self):
 		while self.heap[0].count is INVALID:
@@ -111,10 +97,8 @@ class heapdict(object):
 		return entry.value
 
 def main():
-	c = NoChartItem(); c = ChartItem(0, 0)
-	n = ChartItem(0, 0); n = NoChartItem()
-	assert isinstance(c, AOUOEUAEOUTHAOEAOEUT)
-	assert isinstance(n, AOUOEUAEOUTHAOEAOEUT)
+	c = ChartItem(0, 0)
+	n = ChartItem(0, 0)
 	h = heapdict([(ChartItem(0,0), Edge(0.0, 0.0, c, n))])
 	assert h.popitem() == (ChartItem(0, 0), Edge(0.0, 0.0, c, n))
 	assert len(h) == 0

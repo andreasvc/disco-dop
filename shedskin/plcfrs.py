@@ -4,44 +4,12 @@
 from math import exp, log
 from collections import defaultdict
 from pq import heapdict
-from items import ChartItem, NoChartItem, Edge
+from items import ChartItem, Edge, Terminal, Rule #NoChartItem
 from bit import *
-print "plcfrs in shedskin mode"
-NONE = NoChartItem()
+print "plcfrs in shedskin mode" #how to detect whether we're running compiled?
+NONE = ChartItem(0, 0) #NoChartItem()
 
-# ALL HAIL TO THE BOILER PLATE
-class Terminal(object):
-	__slots__ = ('sym', 'word', 'prob')
-	def __init__(self, sym, word, prob):
-		self.sym = sym
-		self.word = word
-		self.prob = prob
-
-class Rule(object):
-	__slots__ = ('sym', 'yf', 'prob')
-	def __init__(self, sym, yieldfunction, prob):
-		self.sym = sym
-		self.yf = yieldfunction
-		self.prob = prob
-
-class Sym(object):
-	__slots__ = ('lhs', 'rhs1', 'rhs2')
-	def __init__(self, lhs, rhs1, rhs2):
-		self.lhs = lhs
-		self.rhs1 = rhs1
-		self.rhs2 = rhs2
-	def __getitem__(self, n):
-		if n == 0: return self.lhs
-		elif n == 1: return self.rhs1
-		elif n == 2: return self.rhs2
-
-#class YieldFunction(object):
-#	__slots__ = ()
-#	def __init__(self, ):
-#		pass
-#		??? want 2D boolean array here
-
-def parse(sent, grammar, tags, start, viterbi, n, estimate):
+def parse(sent, grammar, tags, root, viterbi, n, estimate):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive (n=0) or up until the viterbi parse
 	NB: viterbi & estimate parameters are ignored in this version
@@ -52,8 +20,7 @@ def parse(sent, grammar, tags, start, viterbi, n, estimate):
 	lexical = dict(grammar.lexical)
 	toid = dict(grammar.toid)
 	tolabel = dict(grammar.tolabel)
-	#if start is None: start = toid['S']
-	goal = ChartItem(start, (1 << len(sent)) - 1)
+	goal = ChartItem(root, (1 << len(sent)) - 1)
 	m = maxA = 0
 	C, Cx = {}, {}
 	A = heapdict()
@@ -71,8 +38,8 @@ def parse(sent, grammar, tags, start, viterbi, n, estimate):
 	for i, w in enumerate(sent):
 		recognized = False
 		for rule in lexical.get(w, []):
-			if not tags or tags[i] == tolabel[rule.sym[0]].split("@")[0]:
-				Ih = ChartItem(rule.sym[0], 1 << i)		# tag & bitvector
+			if not tags or tags[i] == tolabel[rule.lhs].split("@")[0]:
+				Ih = ChartItem(rule.lhs, 1 << i)		# tag & bitvector
 				I = ChartItem(Epsilon, i)			# word index
 				# if gold tags were provided, give them probability of 1
 				A[Ih] = Edge(0.0 if tags else rule.prob,
@@ -122,23 +89,23 @@ def parse(sent, grammar, tags, start, viterbi, n, estimate):
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C),
 	print "/ values", sum(map(len, C.values()))
-	return (C, goal) if goal in C else ({}, NoChartItem())
+	return (C, goal) if goal in C else ({}, NONE)
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
-	I, Ir = Ih.label, Ih.vec
+	I = Ih.label; Ir = Ih.vec
 	result = []
 	for rule in unary[I]:
-		result.append((ChartItem(rule.sym[0], Ir),
+		result.append((ChartItem(rule.lhs, Ir),
 					Edge(x + rule.prob, rule.prob, Ih, NONE)))
 	for rule in lbinary[I]:
-		for I1h, y in Cx.get(rule.sym[2], {}).items():
+		for I1h, y in Cx.get(rule.rhs2, {}).items():
 			if concat(rule.yf, Ir, I1h.vec):
-				result.append((ChartItem(rule.sym[0], Ir ^ I1h.vec),
+				result.append((ChartItem(rule.lhs, Ir ^ I1h.vec),
 					Edge(x + y + rule.prob, rule.prob, Ih, I1h)))
 	for rule in rbinary[I]:
-		for I1h, y in Cx.get(rule.sym[1], {}).items():
+		for I1h, y in Cx.get(rule.rhs1, {}).items():
 			if concat(rule.yf, I1h.vec, Ir):
-				result.append((ChartItem(rule.sym[0], I1h.vec ^ Ir),
+				result.append((ChartItem(rule.lhs, I1h.vec ^ Ir),
 					Edge(x + y + rule.prob, rule.prob, I1h, Ih)))
 	return result
 
@@ -197,7 +164,7 @@ def mostprobablederivation(chart, start, tolabel):
 	return chart[start][0].inside, '(%s %s)' % (tolabel[start.label],
 		" ".join([mostprobablederivation(chart, child, tolabel)[1]
 			for child in (chart[start][0].left, chart[start][0].right)
-			if not isinstance(child, NoChartItem)]))
+			if not child is NONE]))
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
@@ -206,7 +173,7 @@ def pprint_chart(chart, sent, tolabel):
 					("0" * len(sent) + bin(a.vec)[2:])[::-1][:len(sent)])
 		for edge in chart[a]:
 			for c in (edge.left, edge.right):
-				if isinstance(c, NoChartItem): continue
+				if c is NONE: continue
 				if tolabel[c.label] == "Epsilon":
 					print "\t", repr(sent[edge.left.vec]),
 				else:
@@ -217,8 +184,8 @@ def pprint_chart(chart, sent, tolabel):
 
 def do(sent, grammar):
 	print "sentence", sent
-	start = grammar.toid['S']
-	chart, start = parse(sent.split(), grammar, None, start, True, 1, None)
+	root = grammar.toid['S']
+	chart, start = parse(sent.split(), grammar, None, root, True, 1, None)
 	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if chart:
 		#for a, p in mostprobableparse(chart, start, grammar.tolabel,
@@ -257,20 +224,20 @@ def main():
 	# output of splitgrammar:
 	unary = [[], [], [], [], [], [], [], []]
 	lbinary = [[], [],
-		[Rule(Sym(6, 2, 7), [[0], [1]], 0.69314718055994529)],
+		[Rule(6, 2, 7, [[0], [1]], 0.69314718055994529)],
 		[], [], [],
-		[Rule(Sym(3, 6, 5), [[0, 1, 0]], 0.0),
-		Rule(Sym(6, 6, 4), [[0], [0, 1]], 0.69314718055994529)], []]
+		[Rule(3, 6, 5, [[0, 1, 0]], 0.0),
+		Rule(6, 6, 4, [[0], [0, 1]], 0.69314718055994529)], []]
 	rbinary = [[], [], [], [],
-		[Rule(Sym(6, 6, 4), [[0], [0, 1]], 0.69314718055994529)],
-		[Rule(Sym(3, 6, 5), [[0, 1, 0]], 0.0)], [],
-		[Rule(Sym(6, 2, 7), [[0], [1]], 0.69314718055994529)]]
+		[Rule(6, 6, 4, [[0], [0, 1]], 0.69314718055994529)],
+		[Rule(3, 6, 5, [[0, 1, 0]], 0.0)], [],
+		[Rule(6, 2, 7, [[0], [1]], 0.69314718055994529)]]
 	#bylhs = [[], [], [(((2, 0), ('Daruber', ())), 0.0)], [(((3, 6, 5), ((0, 1, 0),)), 0.0)], [(((4, 0), ('werden', ())), 0.0)], [(((5, 0), ('muss', ())), 0.0)], [(((6, 6, 4), ((0,), (0, 1))), 0.69314718055994529), (((6, 2, 7), ((0,), (1,))), 0.69314718055994529)], [(((7, 0), ('nachgedacht', ())), 0.0)]]
 	bylhs = [] #not needed here
-	lexical = { 'muss': [Terminal(Sym(5, 0, 0), ['muss', []], 0.0)],
-				'werden': [Terminal(Sym(4, 0, 0), ['werden', []], 0.0)],
-				'Daruber': [Terminal(Sym(2, 0, 0), ['Daruber', []], 0.0)],
-				'nachgedacht': [Terminal(Sym(7, 0, 0), ['nachgedacht', []], 0.0)] }
+	lexical = { 'muss': [Terminal(5, 0, ['muss', []], 0.0)],
+				'werden': [Terminal(4, 0, ['werden', []], 0.0)],
+				'Daruber': [Terminal(2, 0, ['Daruber', []], 0.0)],
+				'nachgedacht': [Terminal(7, 0, ['nachgedacht', []], 0.0)] }
 	toid = {'VP2': 6, 'Epsilon': 0, 'VVPP': 7, 'S': 3, 'VMFIN': 5, 'VAINF': 4,
 		'ROOT': 1, 'PROAV': 2 }
 	tolabel = {0: 'Epsilon', 1: 'ROOT', 2: 'PROAV', 3: 'S', 4: 'VAINF', 5:
@@ -286,7 +253,7 @@ def main():
 	w3 = Edge(0.0, 0.0, ChartItem(0, 2), NONE)
 	edge = Edge(-log(0.5), -log(0.5), daruber, nachgedacht)
 	C = { vp2 : [edge], daruber : [w1], nachgedacht : [w3] }
-	Cx = { toid['PROAV'] : { daruber : 0.0 } }
+	Cx = {}; Cx[toid['PROAV']] = { daruber : 0.0 }
 	pprint_chart(C, "Daruber muss nachgedacht werden".split(), tolabel)
 	assert deduced_from(nachgedacht, 0.0, Cx, unary,lbinary,rbinary) == [(vp2, edge)]
 	lvec = 0b0011; rvec = 0b1000; yieldfunction = [[0], [1]]
