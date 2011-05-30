@@ -339,8 +339,6 @@ def demo():
 	un_collinize(original)
 	un_collinize(original2)
 	
-	# convert tree back to bracketed text
-	sentence2 = original.pprint()
 	print "binarized", cnfTree
 	print "Sentences the same? ", tree == original, tree == original2
 	assert tree == original and tree == original2

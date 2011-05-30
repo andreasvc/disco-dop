@@ -96,7 +96,12 @@ class heapdict(object):
 		entry.count = INVALID
 		return entry.value
 
-def main():
+	def clear(self):
+		self.counter = 1
+		del self.heap[:]
+		self.mapping.clear()
+
+def mainpq():
 	c = ChartItem(0, 0)
 	n = ChartItem(0, 0)
 	h = heapdict([(ChartItem(0,0), Edge(0.0, 0.0, c, n))])
@@ -131,4 +136,4 @@ def main():
 	assert h.popitem() == (ChartItem(0, 0), Edge(0.0, 0.0, c, n))
 	print 'it worked'
 
-if __name__ == '__main__': main()
+if __name__ == '__main__': mainpq()

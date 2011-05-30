@@ -69,7 +69,7 @@ class Rule(Production):
 		self.yf = yieldfunction		#??? want 2D boolean array here
 		self.prob = prob
 
-def main():
+def maini():
 	item = ChartItem(0, 0)
 	edge = Edge(0.0, 0.0, item, item)
 	t = Terminal(0, 0, ['spass', []], 0.0)
@@ -87,4 +87,4 @@ def main():
 	print hash(item), repr(item)
 	#print item[0], item[1], item.__cmp__(ChartItem(1, 0))
 	print 'it worked'
-if __name__ == '__main__': main()
+if __name__ == '__main__': maini()

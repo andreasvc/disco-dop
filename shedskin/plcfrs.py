@@ -31,7 +31,10 @@ def parse(sent, grammar, tags, root, viterbi, n, estimate):
 	C[ChartItem(0, 0)] = [Edge(0.0, 0.0, ChartItem(0, 0), ChartItem(0, 0))]
 	C[ChartItem(0, 0)] = [Edge(0.0, 0.0, ChartItem(0, 0), NONE)]
 	Cx[0] = { ChartItem(0, 0) : 0.0 }
-	Cx.popitem(); C.popitem(); A.popitem()
+	A.clear(); C.clear(); Cx.clear()
+	#assert Cx.popitem() == ( 0, { ChartItem(0, 0) : 0.0 } )
+	#assert C.popitem() == (ChartItem(0, 0), [Edge(0.0, 0.0, ChartItem(0, 0), NONE)])
+	#assert A.popitem() == (ChartItem(0, 0), Edge(0.0, 0.0, ChartItem(0, 0), NONE))
 
 	# scan
 	Epsilon = toid["Epsilon"]
@@ -89,7 +92,9 @@ def parse(sent, grammar, tags, root, viterbi, n, estimate):
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C),
 	print "/ values", sum(map(len, C.values()))
-	return (C, goal) if goal in C else ({}, NONE)
+	if goal not in C:
+		C.clear(); goal = NONE
+	return C, goal
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	I = Ih.label; Ir = Ih.vec
@@ -210,7 +215,7 @@ class Grammar(object):
 		self.toid = toid
 		self.tolabel = tolabel
 
-def main():
+def mainp():
 	'''
 	grammar = splitgrammar(
 		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0.0),
@@ -221,8 +226,8 @@ def main():
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
 	'''
-	# output of splitgrammar:
-	unary = [[], [], [], [], [], [], [], []]
+	# output of splitgrammar:  (plus example unary rule)
+	unary = [[], [], [], [], [Rule(4, 7, 0, [[0]], -log(0.01))], [], [], []]
 	lbinary = [[], [],
 		[Rule(6, 2, 7, [[0], [1]], 0.69314718055994529)],
 		[], [], [],
@@ -273,4 +278,4 @@ def main():
 	#should print 'no parse':
 	assert not do("muss Daruber nachgedacht werden", grammar)
 	print 'it worked'
-if __name__ == '__main__': main()
+if __name__ == '__main__': mainp()
