@@ -4,10 +4,12 @@ Range Concatenation grammar as the symbolic backbone.
 
 Requirements: 
 
-	- python 2.6	http://www.python.org
-	- NLTK 		http://www.nltk.org
-	- heapdict 	https://github.com/dangra/heapdict/tarball/cheapdict
-	- cython 	(optional) http://www.cython.org
+	- python 2.6    http://www.python.org
+	- NLTK          http://www.nltk.org
+	- heapdict      https://github.com/andreasvc/heapdict/tree/cheapdict
+	- cython        (optional) http://www.cython.org
 		compile with: "make"
 
-plcfrs.py, rcgrules.py, kbest.py and runexp.py can be run without arguments as a demonstration.
+plcfrs.py, rcgrules.py, kbest.py and runexp.py can be run without arguments as
+a demonstration.
+

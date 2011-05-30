@@ -3,7 +3,7 @@
 from rcgrules import enumchart, induce_srcg
 from kbest import lazykbest
 from nltk import FreqDist, Tree
-from heapdict cimport heapdict
+from cpq cimport heapdict
 from math import log, exp, fsum, isinf
 from random import choice, randrange
 from operator import itemgetter
@@ -43,8 +43,9 @@ cdef class ChartItem:
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
 
 def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None):
-	""" parse sentence, a list of tokens, using grammar, a dictionary
-	mapping rules to probabilities. """
+	""" parse sentence, a list of tokens, optionally with gold tags, and
+	produce a chart, either exhaustive or up until the viterbi parse
+	"""
 	cdef list unary = grammar.unary
 	cdef list lbinary = grammar.lbinary
 	cdef list rbinary = grammar.rbinary
@@ -71,12 +72,12 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				Ih = ChartItem(rule[0], 1 << i)
 				I = (ChartItem(Epsilon, i),)
 				z = 0 if tags else z
-				A[Ih] = (z, z, z, I)
+				A[Ih] = (1, z, z, z, I)
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 				Ih = ChartItem(toid[tags[i]], 1 << i)
 				I = (ChartItem(Epsilon, i),)
-				A[Ih] = (0, 0, 0, I)
+				A[Ih] = (-1, 0, 0, 0, I)
 				recognized = True
 				continue
 		elif not recognized:
@@ -87,7 +88,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef tuple scores, rhs
 	# parsing
 	while A:
-		Ih, (oscore, iscore, p, rhs) = A.popitem()
+		Ih, (length, oscore, iscore, p, rhs) = A.popitem()
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		C[Ih].append((iscore, p, rhs))
@@ -111,12 +112,12 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				elif I1h in A:
 					if scores[0] < A[I1h][0]:
 						# item has lower score, update agenda
-						C[I1h].append(A[I1h][1:])
+						C[I1h].append(A[I1h][2:])
 						A[I1h] = scores
 					else:
-						C[I1h].append(scores[1:])
+						C[I1h].append(scores[2:])
 				else: #if not viterbi:
-					C[I1h].append(scores[1:])
+					C[I1h].append(scores[2:])
 					if iscore < Cx[I1h.label][I1h]: Cx[I1h.label][I1h] = iscore
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values())),
@@ -132,8 +133,9 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list 
 	cdef list result = []
 	cdef tuple rule, yf
 	for (rule, yf), z in <list>unary[I]:
-		result.append((ChartItem(rule[0], Ir), ((estimate(rule[0], Ir)
-						if estimate else 0.0) + x + z, x + z, z, (Ih,))))
+		result.append((ChartItem(rule[0], Ir), (-bitcount(I1h.vec),
+				(estimate(rule[0], Ir) if estimate else 0.0) + x + z,
+				x + z, z, (Ih,))))
 	for (rule, yf), z in <list>lbinary[I]:
 		left = rule[0]
 		sibling = rule[2]
@@ -141,7 +143,8 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list 
 			if concat(yf, Ir, I1h.vec):
 				y = Cx[rule[2]][I1h]
 				result.append((ChartItem(left, Ir ^ I1h.vec),
-							((estimate(left, Ir ^ I1h.vec) if estimate
+							(-bitcount(Ir ^ I1h.vec),
+							(estimate(left, Ir ^ I1h.vec) if estimate
 							else 0.0) + x + y + z, x + y + z, z, (Ih, I1h))))
 	for (rule, yf), z in <list>rbinary[I]:
 		left = rule[0]
@@ -150,7 +153,8 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list 
 			if concat(yf, I1h.vec, Ir):
 				y = Cx[sibling][I1h]
 				result.append((ChartItem(left, I1h.vec ^ Ir),
-							((estimate(left, I1h.vec ^ Ir) if estimate
+							(-bitcount(Ir ^ I1h.vec),
+							(estimate(left, I1h.vec ^ Ir) if estimate
 							else 0.0) + x + y + z, x + y + z, z, (I1h, Ih))))
 	return result
 

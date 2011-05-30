@@ -1,6 +1,6 @@
 import cython
 from plcfrs cimport ChartItem
-from heapdict cimport heapdict
+from cpq cimport heapdict
 
 cdef class Edge:
 	# won't work with plcfrs_cython.ChartItem ...

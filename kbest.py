@@ -1,7 +1,7 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
 from math import log, exp, fsum
-from heapdict import heapdict
+from cpq import heapdict
 #from heapq import nsmallest
 
 class Edge(object):

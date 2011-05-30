@@ -3,7 +3,7 @@ from distutils.extension import Extension
 from Cython.Distutils import build_ext
 
 ext_modules = [
-	Extension("plcfrs_cython", 
+	Extension("plcfrs_cython",
 			["plcfrs_cython.pyx"],
 			include_dirs=['.'],
 			library_dirs=['.']),

@@ -7,7 +7,7 @@ except:
 	print "plcfrs in non-cython mode"
 	from bit import *
 
-class ChartItem:
+class ChartItem(object):
 	__slots__ = ("label", "vec", "_hash")
 	def __init__(self, label, vec):
 		self.label = label
@@ -15,6 +15,7 @@ class ChartItem:
 		self._hash = hash((self.label, self.vec))
 	def __hash__(self):
 		return self._hash
+	# this one is only for cython:
 	def __richcmp__(self, other, op):
 		if op == 0: return self.label < other.label or self.vec < other.vec
 		elif op == 1: return self.label <= other.label or self.vec <= other.vec
@@ -22,30 +23,34 @@ class ChartItem:
 		elif op == 3: return self.label != other.label or self.vec != other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
 		elif op == 5: return self.label >= other.label or self.vec >= other.vec
+	# this is for plain python (can't use __eq__ because cython would complain)
 	def __cmp__(self, other):
 		if self.label == other.label and self.vec == other.vec: return 0
-		elif self.label < other.label or (self.label == other.label and self.vec < other.vec): return -1
+		elif self.label < other.label or (self.label == other.label
+									and self.vec < other.vec): return -1
 		return 1
 	def __getitem__(self, n):
 		if n == 0: return self.label
 		elif n == 1: return self.vec
 	def __repr__(self):
-		#would need bitlen for proper padding
-		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
+		#would need sentence length to properly pad with trailing zeroes
+		return "%s[%s]" % (self.label, bin(self.vec)[:1:-1])
 
-from rcgrules import enumchart
-from kbest import lazykbest
-from nltk import FreqDist
-from heapdict import heapdict
 from math import log, exp
 from random import choice
-from itertools import chain, islice
+from itertools import chain, islice, count, groupby
+from operator import itemgetter
 from collections import defaultdict
 import re
+from nltk import FreqDist
+from cpq import heapdict
+from rcgrules import enumchart
+from kbest import lazykbest
 
 def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
-	""" parse sentence, a list of tokens, using grammar, a dictionary
-	mapping rules to probabilities. """
+	""" parse sentence, a list of tokens, optionally with gold tags, and
+	produce a chart, either exhaustive or up until the viterbi parse
+	"""
 	unary = grammar.unary
 	lbinary = grammar.lbinary
 	rbinary = grammar.rbinary
@@ -77,28 +82,39 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 			continue
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
-	lensent = len(sent)
 	# parsing
 	while A:
-		Ih, xI = A.popitem()
-		#when heapdict is not available:
-		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		#C[Ih] = I, x
-		iscore, p, rhs = xI
-		C.setdefault(Ih, []).append(xI)
+		Ih, scores = A.popitem()
+		iscore, p, rhs = scores
+		C.setdefault(Ih, []).append(scores)
 		Cx.setdefault(Ih.label, {})[Ih] = iscore
+
 		if Ih == goal:
 			m += 1
 			if viterbi and n==m: break
 		else:
 			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary):
+				# I1h = new ChartItem that has been derived.
+				# scores: oscore, iscore, p, rhs
+				# 	oscore = estimate of total score
+				#			(outside estimate + inside score up till now)
+				# 	iscore = inside score,
+				# 	p = rule probability,
+				# 	rhs = backpointers to 1 or 2 ChartItems that led here (I1h)
+				# explicit get to avoid inserting spurious keys
 				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
+					# haven't seen this item before, add to agenda
 					A[I1h] = scores
-				elif I1h in A and scores[0] < A[I1h][0]:
-					A[I1h] = scores
+				elif I1h in A:
+					# either item has lower score, update agenda,
+					# or extend chart
+					if scores[0] < A[I1h][0]:
+						C.setdefault(I1h, []).append(A[I1h])
+						A[I1h] = scores
+					else:
+						C.setdefault(I1h, []).append(scores)
 				else:
-					rhs = scores[2]
-					C.setdefault(I1h, []).append(scores)
+					C[I1h].append(scores)
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
 	return (C, goal) if goal in C else ({}, ())
@@ -111,11 +127,13 @@ def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	for (rule, yf), z in lbinary[I]:
 		for I1h, y in Cx.get(rule[2], {}).items():
 			if concat(yf, Ir, I1h.vec):
-				result.append((ChartItem(rule[0], Ir ^ I1h.vec), (x+y+z, z, (Ih, I1h))))
+				result.append((ChartItem(rule[0], Ir ^ I1h.vec),
+								(x + y + z, z, (Ih, I1h))))
 	for (rule, yf), z in rbinary[I]:
 		for I1h, y in Cx.get(rule[1], {}).items():
 			if concat(yf, I1h.vec, Ir):
-				result.append((ChartItem(rule[0], I1h.vec ^ Ir), (x+y+z, z, (I1h, Ih))))
+				result.append((ChartItem(rule[0], I1h.vec ^ Ir),
+								(x + y + z, z, (I1h, Ih))))
 	return result
 
 def concat(yieldfunction, lvec, rvec):
@@ -165,15 +183,79 @@ def concat(yieldfunction, lvec, rvec):
 	# everything looks all right
 	return True
 
+def filter_subtree(start, chart, newchart):
+	if isinstance(start, int) or newchart[start]:
+		return True
+	else:
+		temp = [(ip, p, rhs) for ip, p, rhs in chart[start]
+				if all(filter_subtree(a, chart, chart2) for a in rhs)]
+		if temp: newchart[start] = temp
+	return start in newchart
+
 def filterchart(chart, start):
-	# remove all entries that do not contribute to a complete derivation
-	def filter_subtree(start, chart, chart2):
-		if isinstance(start, int) or chart2[start]: return True
-		else: chart2[start] = [(x,p) for x,p in chart[start] if all(filter_subtree(a, chart, chart2) for a in x)]
-		return chart2[start] != []
-	chart2 = defaultdict(list)
-	filter_subtree(start, chart, chart2)
-	return chart2
+	# remove all entries that do not contribute to a complete derivation headed
+	# by "start"
+	newchart = {}
+	filter_subtree(start, chart, newchart)
+	return newchart
+
+def filtercycles(chart, start, visited, current):
+	""" remove @#$%! cycles from chart """
+	visited.add(start)
+	chart[start] = [(ip, p, rhs) for ip, p, rhs in chart[start]
+		if current.isdisjoint(rhs)]
+	for n, (ip, p, rhs) in zip(count(), chart[start])[::-1]:
+		for a in rhs:
+			if a in chart and a not in visited:
+				filtercycles(chart, a, visited, current.union([start, a]))
+			#if a not in chart:
+			#	del chart[start][n]
+			#	break
+	if not len(chart[start]): del chart[start]
+	#return not len(chart[start]):
+
+def filterduplicates(chart):
+	for a in chart:
+		chart[a] = [min(g, key=itemgetter(0)) for k, g
+			in groupby(sorted(chart[a], key=lambda x: hash(x[2])),
+				itemgetter(2))]
+
+def getviterbi(chart, start, mem):
+	""" recompute the proper viterbi probabilities in a top-down fashion,
+		and sort chart entries according to these probabilities
+		removes zero-probability edges (infinity with log-probabilities)
+		also tracks items visited, for pruning purposes (keys of mem).
+	"""
+	probs = []
+	bestprob = 999999 #float('infinity')
+	try: assert len(chart[start])
+	except: print "empty", start
+	# loop backwards because we want to remove items in-place without
+	# invalidating remaining indices.
+	for n, (ip, p, rhs) in zip(count(), chart[start])[::-1]:
+		probs[:] = [p]
+		for a in rhs:
+			# only recurse for nonterminals (=nonzero ids)
+			if a.label and a in chart:
+				if a in mem: result = mem[a]
+				else: result = getviterbi(chart, a, mem)
+				if not isinstance(result, list):
+					print "trouble", start, '->', a
+				probs.extend(result)
+		prob = fsum(probs)
+		if prob < bestprob:
+			bestprob = prob
+			bestprobs = probs[:]
+		# prune or update probability
+		if isinf(prob): del chart[start][n]
+		else: chart[start][n] = (prob, p, rhs)
+	if len(chart[start]):
+		chart[start].sort(key=itemgetter(0))
+		assert fsum(bestprobs) == chart[start][0][0]
+	else:
+		bestprobs = [float('infinity')]
+	mem[start] = bestprobs
+	return bestprobs
 
 def samplechart(chart, start, tolabel):
 	iscore, p, entry = choice(chart[start])
@@ -217,13 +299,15 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
-		print "%s[%s] =>" % (tolabel[a[0]], ("0" * len(sent) + bin(a[1])[2:])[::-1][:len(sent)])
+		print "%s[%s] =>" % (tolabel[a[0]],
+					(bin(a[1])[:1:-1] + "0" * len(sent))[:len(sent)])
 		for ip,p,b in chart[a]:
 			for c in b:
 				if tolabel[c[0]] == "Epsilon":
 					print "\t", repr(sent[b[0][1]]),
 				else:
-					print "\t%s[%s]" % (tolabel[c[0]], ("0" * len(sent) + bin(c[1])[2:])[::-1][:len(sent)]),
+					print "\t%s[%s]" % (tolabel[c[0]],
+						(bin(c[1])[:1:-1] + "0" * len(sent))[:len(sent)]),
 			print "\t",exp(-p)
 		print
 
@@ -249,7 +333,7 @@ def main():
 		((('VAINF', 'Epsilon'), ('werden', ())), 0.0),
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
-
+	print repr(grammar)
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
 	do("Daruber muss nachgedacht werden werden werden", grammar)
