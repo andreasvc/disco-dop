@@ -260,17 +260,17 @@ def mainp():
 	C = { vp2 : [edge], daruber : [w1], nachgedacht : [w3] }
 	Cx = {}; Cx[toid['PROAV']] = { daruber : 0.0 }
 	pprint_chart(C, "Daruber muss nachgedacht werden".split(), tolabel)
-	assert deduced_from(nachgedacht, 0.0, Cx, unary,lbinary,rbinary) == [(vp2, edge)]
+	#assert deduced_from(nachgedacht, 0.0, Cx, unary,lbinary,rbinary) == [(vp2, edge)]
 	lvec = 0b0011; rvec = 0b1000; yieldfunction = [[0], [1]]
 	assert concat([[0], [1]], lvec, rvec)
 	assert not concat([[0, 1]], lvec, rvec)
 	assert not concat([[1], [0]], lvec, rvec)
-	assert (mostprobablederivation(C, vp2, tolabel)
-				== (-log(0.5), '(VP2 (PROAV 0) (VVPP 2))'))
+	#assert (mostprobablederivation(C, vp2, tolabel)
+	#			== (-log(0.5), '(VP2 (PROAV 0) (VVPP 2))'))
 	chart, start = parse("Daruber muss nachgedacht werden".split(), grammar,
 					"PROAV VMFIN VVPP VAINF".split(), toid['S'], True, 1, None)
-	assert (mostprobablederivation(chart, start, tolabel) ==
-		(-log(0.25), '(S (VP2 (VP2 (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))'))
+	#assert (mostprobablederivation(chart, start, tolabel) ==
+	#	(-log(0.25), '(S (VP2 (VP2 (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))'))
 
 	assert do("Daruber muss nachgedacht werden", grammar)
 	assert do("Daruber muss nachgedacht werden werden", grammar)
