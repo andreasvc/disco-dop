@@ -6,8 +6,10 @@ Requirements:
 
 	- python 2.6    http://www.python.org
 	- NLTK          http://www.nltk.org
-	- heapdict      https://github.com/andreasvc/heapdict/tree/cheapdict
+	- cpq           https://github.com/andreasvc/heapdict/tree/cheapdict
 	- cython        (optional) http://www.cython.org
+		needs cpq.pxd (see above)
+		and array.pxd http://trac.cython.org/cython_trac/ticket/314
 		compile with: "make"
 
 plcfrs.py, rcgrules.py, kbest.py and runexp.py can be run without arguments as
