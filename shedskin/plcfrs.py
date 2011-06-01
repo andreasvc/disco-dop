@@ -2,10 +2,9 @@
 # (equivalent to Linear Context-Free Rewriting Systems)
 # shedskin version^Wattempt
 from math import exp, log
-from collections import defaultdict
 from pq import heapdict
 from items import ChartItem, Edge, Terminal, Rule #NoChartItem
-from bit import *
+from bit import nextset, nextunset, bitminmax, bitcount, testbit
 print "plcfrs in shedskin mode" #how to detect whether we're running compiled?
 NONE = ChartItem(0, 0) #NoChartItem()
 
@@ -262,9 +261,9 @@ def mainp():
 	pprint_chart(C, "Daruber muss nachgedacht werden".split(), tolabel)
 	#assert deduced_from(nachgedacht, 0.0, Cx, unary,lbinary,rbinary) == [(vp2, edge)]
 	lvec = 0b0011; rvec = 0b1000; yieldfunction = [[0], [1]]
-	assert concat([[0], [1]], lvec, rvec)
+	assert concat(yieldfunction, lvec, rvec)
 	assert not concat([[0, 1]], lvec, rvec)
-	assert not concat([[1], [0]], lvec, rvec)
+	assert not concat(yieldfunction[::-1], lvec, rvec)
 	#assert (mostprobablederivation(C, vp2, tolabel)
 	#			== (-log(0.5), '(VP2 (PROAV 0) (VVPP 2))'))
 	chart, start = parse("Daruber muss nachgedacht werden".split(), grammar,

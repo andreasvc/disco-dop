@@ -174,11 +174,10 @@ def splitgrammar(grammar):
 	accommodate min-heaps."""
 
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
-	#unary, lbinary, rbinary, lexical, bylhs = {}, {}, {}, {}, {}
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
-	unary, lbinary, rbinary, bylhs = ([[] for a in nonterminals] for b in range(4))
+	unary, lbinary, rbinary, bylhs = ([[] for _ in nonterminals] for _ in range(4))
 	lexical = defaultdict(list)
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule,yf),w in grammar:
@@ -194,6 +193,34 @@ def splitgrammar(grammar):
 			lbinary[r[0][1]].append((r, abs(w)))
 			rbinary[r[0][2]].append((r, abs(w)))
 			bylhs[r[0][0]].append((r, abs(w)))
+		else: raise ValueError("grammar not binarized: %s" % repr(r))
+	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
+
+def newsplitgrammar(grammar):
+	""" split the grammar into various lookup tables, mapping nonterminal
+	labels to numeric identifiers. Also negates log-probabilities to
+	accommodate min-heaps."""
+	from items import Grammar, Rule
+	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
+	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
+	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
+	unary, lbinary, rbinary, bylhs = ([[] for _ in nonterminals] for _ in range(4))
+	lexical = defaultdict(list)
+	# remove sign from log probabilities because the heap we use is a min-heap
+	for (rule, yf), w in grammar:
+		r = Rule(toid[rule[0]], toid[rule[1]],
+				toid[rule[2]] if len(rule) == 3 else 0, unfreeze(yf), abs(w))
+		if len(rule) == 2:
+			if r[0][1] == 0: #Epsilon
+				# lexical productions (mis)use the field for the yield function to store the word
+				lexical.setdefault(yf[0], []).append(r)
+			else:
+				unary[r[0][1]].append(r)
+			bylhs[r[0][0]].append(r)
+		elif len(rule) == 3:
+			lbinary[r[0][1]].append(r)
+			rbinary[r[0][2]].append(r)
+			bylhs[r[0][0]].append(r)
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
@@ -645,6 +672,21 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8'):
 	return splitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
 
+def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
+	""" Takes a bitpar grammar and converts it to the format of
+	Mark Jonhson's cky parser. """
+	grammar = []
+	for a in codecs.open(rules, encoding=encoding):
+		a = a.split()
+		p, rule = a[0], a[1:]
+		grammar.append("%s %s --> %s\n" % (p, rule[0], " ".join(rule[1:])))
+	for a in codecs.open(lexicon, encoding=encoding):
+		a = a.split()
+		word, tags = a[0], a[1:]
+		tags = zip(tags[::2], tags[1::2])
+		grammar.extend("%s %s --> %s\n" % (p, t, word) for t, p in tags)
+	assert "VROOT" in grammar[0]
+	codecs.open(out, "w", encoding=encoding).writelines(grammar)
 
 def rem_marks(tree):
 	for a in tree.subtrees(lambda x: "_" in x.node):

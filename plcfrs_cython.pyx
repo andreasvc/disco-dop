@@ -11,17 +11,7 @@ from itertools import islice, count
 from collections import defaultdict, deque
 import re
 
-cdef extern from "bit.h":
-	int nextset(unsigned long vec, int pos)
-	int nextunset(unsigned long vec, int pos)
-	int bitcount(unsigned long vec)
-	bint testbit(unsigned long vec, unsigned long pos)
-	bint bitminmax(unsigned long a, unsigned long b)
-
 cdef class ChartItem:
-	cdef public int label
-	cdef public unsigned long vec
-	cdef int _hash
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
@@ -72,12 +62,12 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				Ih = ChartItem(rule[0], 1 << i)
 				I = (ChartItem(Epsilon, i),)
 				z = 0 if tags else z
-				A[Ih] = (1, z, z, z, I)
+				A[Ih] = (z, z, z, I)
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 				Ih = ChartItem(toid[tags[i]], 1 << i)
 				I = (ChartItem(Epsilon, i),)
-				A[Ih] = (-1, 0, 0, 0, I)
+				A[Ih] = (0, 0, 0, I)
 				recognized = True
 				continue
 		elif not recognized:
@@ -88,7 +78,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef tuple scores, rhs
 	# parsing
 	while A:
-		Ih, (length, oscore, iscore, p, rhs) = A.popitem()
+		Ih, (oscore, iscore, p, rhs) = A.popitem()
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		C[Ih].append((iscore, p, rhs))
@@ -112,12 +102,12 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				elif I1h in A:
 					if scores[0] < A[I1h][0]:
 						# item has lower score, update agenda
-						C[I1h].append(A[I1h][2:])
+						C[I1h].append(A[I1h][1:])
 						A[I1h] = scores
 					else:
-						C[I1h].append(scores[2:])
+						C[I1h].append(scores[1:])
 				else: #if not viterbi:
-					C[I1h].append(scores[2:])
+					C[I1h].append(scores[1:])
 					if iscore < Cx[I1h.label][I1h]: Cx[I1h.label][I1h] = iscore
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values())),
@@ -133,8 +123,8 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list 
 	cdef list result = []
 	cdef tuple rule, yf
 	for (rule, yf), z in <list>unary[I]:
-		result.append((ChartItem(rule[0], Ir), (-bitcount(I1h.vec),
-				(estimate(rule[0], Ir) if estimate else 0.0) + x + z,
+		result.append((ChartItem(rule[0], Ir),
+				((estimate(rule[0], Ir) if estimate else 0.0) + x + z,
 				x + z, z, (Ih,))))
 	for (rule, yf), z in <list>lbinary[I]:
 		left = rule[0]
@@ -143,8 +133,7 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list 
 			if concat(yf, Ir, I1h.vec):
 				y = Cx[rule[2]][I1h]
 				result.append((ChartItem(left, Ir ^ I1h.vec),
-							(-bitcount(Ir ^ I1h.vec),
-							(estimate(left, Ir ^ I1h.vec) if estimate
+							((estimate(left, Ir ^ I1h.vec) if estimate
 							else 0.0) + x + y + z, x + y + z, z, (Ih, I1h))))
 	for (rule, yf), z in <list>rbinary[I]:
 		left = rule[0]
@@ -153,8 +142,7 @@ cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list 
 			if concat(yf, I1h.vec, Ir):
 				y = Cx[sibling][I1h]
 				result.append((ChartItem(left, I1h.vec ^ Ir),
-							(-bitcount(Ir ^ I1h.vec),
-							(estimate(left, I1h.vec ^ Ir) if estimate
+							((estimate(left, I1h.vec ^ Ir) if estimate
 							else 0.0) + x + y + z, x + y + z, z, (I1h, Ih))))
 	return result
 

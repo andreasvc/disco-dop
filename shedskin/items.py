@@ -15,22 +15,22 @@ class ChartItem(object):
 	def __eq__(self, other):
 		if other is None: return False
 		return self.label == other.label and self.vec == other.vec
-	def __lt__(self, other):
-		if other is None: return False
-		return self.label < other.label or (self.label == other.label
-									and self.vec < other.vec)
-	def __gt__(self, other):
-		if other is None: return False
-		return self.label > other.label or (self.label == other.label
-									and self.vec > other.vec)
-	def __ge__(self, other):
-		if other is None: return False
-		return self.label > other.label or (self.label == other.label
-									and self.vec >= other.vec)
-	def __le__(self, other):
-		if other is None: return False
-		return self.label < other.label or (self.label == other.label
-									and self.vec <= other.vec)
+	#def __lt__(self, other):
+	#	if other is None: return False
+	#	return self.label < other.label or (self.label == other.label
+	#								and self.vec < other.vec)
+	#def __gt__(self, other):
+	#	if other is None: return False
+	#	return self.label > other.label or (self.label == other.label
+	#								and self.vec > other.vec)
+	#def __ge__(self, other):
+	#	if other is None: return False
+	#	return self.label > other.label or (self.label == other.label
+	#								and self.vec >= other.vec)
+	#def __le__(self, other):
+	#	if other is None: return False
+	#	return self.label < other.label or (self.label == other.label
+	#								and self.vec <= other.vec)
 	#def __getitem__(self, n):
 	#	if n == 0: return self.label
 	#	elif n == 1: return self.vec

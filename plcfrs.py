@@ -38,13 +38,11 @@ class ChartItem(object):
 
 from math import log, exp
 from random import choice
-from itertools import chain, islice, count, groupby
+from itertools import count, groupby
 from operator import itemgetter
 from collections import defaultdict
 import re
-from nltk import FreqDist
 from cpq import heapdict
-from rcgrules import enumchart
 from kbest import lazykbest
 
 def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):

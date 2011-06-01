@@ -8,21 +8,20 @@ class Edge(object):
 	""" An edge is defined as an arc between a head node and zero or more tail
 	nodes, with a given weight. The case of zero tail nodes corresponds to a 
 	terminal (a source vertex). """
-	__slots__ = ("head", "tailnodes", "weight", "_hash")
-	def __init__(self, head, tailnodes, weight):
-		self.head = head; self.tailnodes = tailnodes; self.weight = weight
-		self._hash = hash((head, tailnodes, weight))
+	__slots__ = ("tailnodes", "weight", "_hash")
+	def __init__(self, tailnodes, weight):
+		self.tailnodes = tailnodes; self.weight = weight
+		self._hash = hash((tailnodes, weight))
 	def __hash__(self):
 		return self._hash
 	def __cmp__(self, other):
-		if (self.head == other.head
-			and self.tailnodes == other.tailnodes
+		if (self.tailnodes == other.tailnodes
 			and self.weight == other.weight):
 			return 0
 		else: return 1	# we only care about defining equality
 	def __repr__(self):
-		return "<%s, [%s], %f>" % (self.head,
-			", ".join(map(repr, self.tailnodes)), exp(-self.weight))
+		return "<%s, [%s], %f>" % (", ".join(map(repr, self.tailnodes)),
+									exp(-self.weight))
 
 def getcandidates(chart, v, k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
@@ -32,7 +31,7 @@ def getcandidates(chart, v, k):
 	# three probability y), in which case insertion order should count.
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
-	return heapdict([((Edge(v, rhs, p), (0,) * len(rhs)),
+	return heapdict([((Edge(rhs, p), (0,) * len(rhs)),
 						(ip, (0,) * len(rhs)))
 				for ip,p,rhs in chart.get(v, [])[:k]])
 
@@ -42,34 +41,31 @@ def lazykthbest(v, k, k1, D, cand, chart):
 	if v not in cand:
 		# initialize the heap
 		cand[v] = getcandidates(chart, v, k1)
-	while len(D.get(v, [])) < k:
+	while v not in D or len(D[v]) < k:
 		if v in D:
 			# last derivation
 			e, j = D[v][-1][0]
 			# update the heap, adding the successors of last derivation
-			lazynext(e, j, k1, D, cand, chart)
+			lazynext(v, e, j, k1, D, cand, chart)
 		# get the next best derivation and delete it from the heap
 		if cand[v]:
 			a, b = cand[v].popitem()
 			D.setdefault(v, []).append((a, b[0]))
-			#print "D[v] <=", D[v][-1]
 		else: break
 	return D
 
-def lazynext(e, j, k1, D, cand, chart):
+def lazynext(v, e, j, k1, D, cand, chart):
 	# add the |e| neighbors
 	for i, ei in enumerate(e.tailnodes):
 		# j1 is j but incremented at index i
 		j1 = j[:i] + (j[i] + 1,) + j[i + 1:]
-		assert j != j1
 		# recursively solve a subproblem
-		# NB: increment j1[i] again because j is zero-based and k isn't
+		# NB: increment j1[i] again because j is zero-based and k is not
 		lazykthbest(ei, j1[i] + 1, k1, D, cand, chart)
 		# if it exists and is not in heap yet
-		if j1[i] < len(D.get(ei, [])) and (e, j1) not in cand[e.head]:
+		if (ei in D and j1[i] < len(D[ei])) and (e, j1) not in cand[v]:
 			# add it to the heap
-			cand[e.head][e, j1] = (getprob(chart, D, e, j1), j1)
-			#print "cand[v] <=", e, j1
+			cand[v][e, j1] = (getprob(chart, D, e, j1), j1)
 
 def getprob(chart, D, e, j):
 	result = [e.weight]
@@ -79,7 +75,7 @@ def getprob(chart, D, e, j):
 		else: raise ValueError
 	return fsum(result)
 
-def getderivation(chart, D, ej, tolabel):
+def getderivation(v, ej, D, chart, tolabel):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
@@ -94,38 +90,36 @@ def getderivation(chart, D, ej, tolabel):
 					ip, p, rhs = chart[ei][i]
 					D[ei] = [((Edge(ei, rhs, p), (0,) * len(rhs)), ip)]
 				else: raise ValueError
-			children.append(getderivation(chart, D, D[ei][i][0], tolabel))
+			children.append(getderivation(ei, D[ei][i][0], D, chart, tolabel))
 		else:
 			# this must be a terminal
 			children.append(str(ei.vec))
-	"""
-	# debugging duplicates
-	s = "(%s %s)" % (tolabel[e.head.label], " ".join(children))
-	if s not in getderivation.mem:
-		getderivation.mem[s] = ej
-	elif getderivation.mem[s] != ej:
-		print 'DUPLICATE', ej[::-1], 'and', getderivation.mem[s][::-1],
-		print '=>\n', s
-		for ee, jj in (ej, getderivation.mem[s]):
-			print jj, ':', ee
-			agenda = zip(ee.tailnodes, jj)
-			while agenda:
-				ei, i = agenda.pop()
-				if ei in D:
-					((e, j), w) = D[ei][i]
-					agenda.extend(zip(e.tailnodes, j))
-					print tolabel[e.head.label],
-					print bin(e.head.vec)[2:][::-1], ":",
-					print " ".join(["%s[%s]" % (tolabel[a.label],
-								bin(a.vec)[2:][::-1]) for a in e.tailnodes]),
-					print j, exp(-w)
-				else:
-					print 'terminal', ei.vec
-			print
-		exit()
-	"""
+	## debugging duplicates
+	#s = "(%s %s)" % (tolabel[v.label], " ".join(children))
+	#if s not in getderivation.mem:
+	#	getderivation.mem[s] = ej
+	#elif getderivation.mem[s] != ej:
+	#	print 'DUPLICATE', ej[::-1], 'and', getderivation.mem[s][::-1],
+	#	print '=>\n', s
+	#	for ee, jj in (ej, getderivation.mem[s]):
+	#		print jj, ':', ee
+	#		agenda = zip(ee.tailnodes, jj)
+	#		while agenda:
+	#			ei, i = agenda.pop()
+	#			if ei in D:
+	#				((e, j), w) = D[ei][i]
+	#				agenda.extend(zip(e.tailnodes, j))
+	#				print tolabel[ei.label],
+	#				print bin(ei.vec)[2:][::-1], ":",
+	#				print " ".join(["%s[%s]" % (tolabel[a.label],
+	#							bin(a.vec)[2:][::-1]) for a in e.tailnodes]),
+	#				print j, exp(-w)
+	#			else:
+	#				print 'terminal', ei.vec
+	#		print
+	#	exit()
 			
-	return "(%s %s)" % (tolabel[e.head.label], " ".join(children))
+	return "(%s %s)" % (tolabel[v.label], " ".join(children))
 #getderivation.mem = {}
 	
 def lazykbest(chart, goal, k, tolabel):
@@ -143,10 +137,10 @@ def lazykbest(chart, goal, k, tolabel):
 	D = {}
 	cand = {}
 	lazykthbest(goal, k, k, D, cand, chart)
-	return [(getderivation(chart, D, ej, tolabel), p) for ej, p in D[goal]]
+	return [(getderivation(goal, ej, D, chart, tolabel), p) for ej, p in D[goal]]
 
 def main():
-	from plcfrs import ChartItem
+	from plcfrs_cython import ChartItem
 	toid = dict([a[::-1] for a in
 			enumerate("S NP V ADV VP PN Mary walks quickly".split())])
 	tolabel = dict([a[::-1] for a in toid.items()])
@@ -174,10 +168,10 @@ def main():
 	D = {}
 	cand = {}
 	k = 10
-	for a,b in lazykthbest(goal, k, k, D, cand, chart).items():
+	for v,b in lazykthbest(goal, k, k, D, cand, chart).items():
 		print tolabel[a.label], bin(a.vec)[2:]
 		for (e, j), p in b:
-			print tolabel[e.head.label], ":",
+			print tolabel[v.label], ":",
 			print " ".join([tolabel[a.label] for a in e.tailnodes]),
 			print exp(-e.weight), j, exp(-p)
 		print
