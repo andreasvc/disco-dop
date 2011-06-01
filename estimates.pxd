@@ -1,5 +1,5 @@
 import cython
-#from plcfrs cimport ChartItem
+from containers cimport ChartItem
 
 if cython.compiled:
 	print "Yep, I'm compiled"

@@ -1,36 +1,36 @@
+#cython: boundscheck=False
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
 from rcgrules import enumchart, induce_srcg
-from kbest import lazykbest
 from nltk import FreqDist, Tree
-from cpq cimport heapdict
 from math import log, exp, fsum, isinf
 from random import choice, randrange
 from operator import itemgetter
 from itertools import islice, count
 from collections import defaultdict, deque
+from array import array
 import re
 
-cdef class ChartItem:
-	def __init__(self, label, vec):
-		self.label = label
-		self.vec = vec
-		self._hash = hash((self.label, self.vec))
-	def __hash__(ChartItem self):
-		return self._hash
-	def __richcmp__(ChartItem self, ChartItem other, int op):
-		if op == 2: return self.label == other.label and self.vec == other.vec
-		elif op == 3: return self.label != other.label or self.vec != other.vec
-		elif op == 5: return self.label >= other.label or self.vec >= other.vec
-		elif op == 1: return self.label <= other.label or self.vec <= other.vec
-		elif op == 0: return self.label < other.label or self.vec < other.vec
-		elif op == 4: return self.label > other.label or self.vec > other.vec
-	def __getitem__(ChartItem self, int n):
-		if n == 0: return self.label
-		elif n == 1: return self.vec
-	def __repr__(ChartItem self):
-		#would need bitlen for proper padding
-		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
+# sentinel node to indicate unary productions and preterminals
+NONE = ChartItem(0, 0)
+
+# to avoid overhead of __init__ and __cinit__ constructors
+cdef inline Pair new_Pair(object a, object b):
+	cdef Pair pair = Pair.__new__(Pair)
+	pair.a = a; pair.b = b
+	return pair
+
+cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
+	cdef ChartItem item = ChartItem.__new__(ChartItem)
+	item.label = label; item.vec = vec
+	item._hash = hash((label, vec))
+	return item
+
+cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem right):
+	cdef Edge edge = Edge.__new__(Edge)
+	edge.inside = inside; edge.prob = prob
+	edge.left = left; edge.right = right
+	return edge
 
 def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -46,48 +46,57 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	if start == None: start = toid["ROOT"]
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	cdef int m = 0, maxA = 0
-	A = heapdict() if viterbi else {}
-	cdef dict C = <dict>defaultdict(list)
-	cdef dict Cx = <dict>defaultdict(dict)
+	#A = heapdict() #if viterbi else {}
+	cdef heapdict A = heapdict() 				#the agenda
+	cdef dict C = <dict>defaultdict(list)		#the full chart
+	cdef dict Cx = <dict>defaultdict(dict)		#the viterbi probabilities
 
 	# scan
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for (rule,yf), z in lexical.get(w, []):
+		for rule in lexical.get(w, []):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction, 
 			# and give probability of 1
-			if not tags or tags[i] == tolabel[rule[0]].split("@")[0]:
-				Ih = ChartItem(rule[0], 1 << i)
-				I = (ChartItem(Epsilon, i),)
-				z = 0 if tags else z
-				A[Ih] = (z, z, z, I)
+			if not tags or tags[i] == tolabel[rule.lhs].split("@")[0]:
+				Ih = ChartItem(rule.lhs, 1 << i)
+				I = ChartItem(Epsilon, i)
+				z = 0 if tags else rule.prob
+				A[Ih] = Edge(rule.prob, rule.prob, I, NONE)
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 				Ih = ChartItem(toid[tags[i]], 1 << i)
-				I = (ChartItem(Epsilon, i),)
-				A[Ih] = (0, 0, 0, I)
+				I = ChartItem(Epsilon, i)
+				A[Ih] = Edge(0, 0, I, NONE)
 				recognized = True
 				continue
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
 			return {}, ()
 	cdef int lensent = len(sent)
-	cdef double y, p, iscore, oscore
-	cdef tuple scores, rhs
+	cdef Entry entry
+	cdef Edge edge, newedge
 	# parsing
 	while A:
-		Ih, (oscore, iscore, p, rhs) = A.popitem()
+		entry = A.popentry()
+		Ih = <ChartItem>entry.key
+		edge = <Edge>entry.value
+		#Ihedge = A.popitem()
+		#Ih.label, Ih.vec = <ChartItem>Ihedge[0].label, <ChartItem>Ihedge[1].vec
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		C[Ih].append((iscore, p, rhs))
-		Cx[Ih.label][Ih] = iscore
-		if Ih == goal:
+		(<list>(C[Ih])).append(edge)
+		(<dict>(Cx[Ih.label]))[Ih] = edge.inside
+		if Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
-			if viterbi and n==m: break
+			if viterbi and n == m: break
+			#if viterbi and not exhaustive: break
 		else:
-			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary, estimate):
+			for pair in deduced_from(Ih, edge.inside, Cx,
+								unary, lbinary, rbinary, estimate):
+				I1h = <Edge>(<Pair>pair).a
+				newedge = <Edge>(<Pair>pair).b
 				# I1h = new ChartItem that has been derived.
 				# scores: oscore, iscore, p, rhs
 				# 	oscore = estimate of total score
@@ -96,57 +105,58 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				# 	p = rule probability,
 				# 	rhs = backpointers to 1 or 2 ChartItems that led here (I1h)
 				# explicit get to avoid inserting spurious keys
-				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
+				#if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
+				if I1h not in C and I1h not in A:
 					# haven't seen this item before, add to agenda
-					A[I1h] = scores
+					A[I1h] = newedge
 				elif I1h in A:
-					if scores[0] < A[I1h][0]:
+					if newedge.inside < (<Edge>A[I1h]).inside:
 						# item has lower score, update agenda
-						C[I1h].append(A[I1h][1:])
-						A[I1h] = scores
+						(<list>C[I1h]).append(A.replace(I1h, newedge))
 					else:
-						C[I1h].append(scores[1:])
-				else: #if not viterbi:
-					C[I1h].append(scores[1:])
-					if iscore < Cx[I1h.label][I1h]: Cx[I1h.label][I1h] = iscore
+						(<list>C[I1h]).append(newedge)
+				else: #if not viterbi: #item is not in agenda, but is in chart
+					(<list>C[I1h]).append(newedge)
+					#Cx[I1h.label][I1h] = min(Cx[I1h.label][I1h], newedge.inside)
+					if newedge.inside < <double>(<dict>Cx[I1h.label])[I1h]:
+						(<dict>Cx[I1h.label])[I1h] = newedge.inside
 		maxA = max(maxA, len(A))
-	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values())),
-	return (C, goal) if goal in C else ({}, ())
+	print "max agenda size %d / chart keys %d / values %d" % (
+								maxA, len(C), sum(map(len, C.values())))
+	if goal in C: return C, goal
+	else: return C, NONE
 
-cdef inline list deduced_from(ChartItem Ih, double x, dict Cx, list unary, list lbinary, list rbinary, estimate):
+cdef inline list deduced_from(ChartItem Ih, double x, dict Cx,
+					list unary, list lbinary, list rbinary, estimate):
 	""" Produce a list of all ChartItems that can be deduced using the
 	existing items in Cx and the grammar rules. """
-	cdef double z, y
-	cdef int I = Ih.label, left, sibling
-	cdef unsigned long Ir = Ih.vec
+	cdef double y
 	cdef ChartItem I1h
 	cdef list result = []
-	cdef tuple rule, yf
-	for (rule, yf), z in <list>unary[I]:
-		result.append((ChartItem(rule[0], Ir),
-				((estimate(rule[0], Ir) if estimate else 0.0) + x + z,
-				x + z, z, (Ih,))))
-	for (rule, yf), z in <list>lbinary[I]:
-		left = rule[0]
-		sibling = rule[2]
-		for I1h in Cx[rule[2]]:
-			if concat(yf, Ir, I1h.vec):
-				y = Cx[rule[2]][I1h]
-				result.append((ChartItem(left, Ir ^ I1h.vec),
-							((estimate(left, Ir ^ I1h.vec) if estimate
-							else 0.0) + x + y + z, x + y + z, z, (Ih, I1h))))
-	for (rule, yf), z in <list>rbinary[I]:
-		left = rule[0]
-		sibling = rule[1]
-		for I1h in Cx[sibling]:
-			if concat(yf, I1h.vec, Ir):
-				y = Cx[sibling][I1h]
-				result.append((ChartItem(left, I1h.vec ^ Ir),
-							((estimate(left, I1h.vec ^ Ir) if estimate
-							else 0.0) + x + y + z, x + y + z, z, (I1h, Ih))))
+	cdef Rule rule
+	for rule in <list>unary[Ih.label]:
+		result.append(new_Pair(new_ChartItem(rule.lhs, Ih.vec), new_Edge(
+			#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
+			x + rule.prob, rule.prob, Ih, NONE)))
+	for rule in <list>lbinary[Ih.label]:
+		for I1h in Cx[rule.rhs2]:
+			if concat(rule, Ih.vec, I1h.vec):
+				y = Cx[rule.rhs2][I1h]
+				result.append(new_Pair(new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec), new_Edge(
+					#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
+					#if estimate else 0.0) + x + y + rule.prob,
+					x + y + rule.prob, rule.prob, Ih, I1h)))
+	for rule in <list>rbinary[Ih.label]:
+		for I1h in Cx[rule.rhs1]:
+			if concat(rule, I1h.vec, Ih.vec):
+				y = Cx[rule.rhs1][I1h]
+				result.append(new_Pair(new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec), new_Edge(
+					#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
+					#if estimate else 0.0) + x + y + rule.prob,
+					x + y + rule.prob, rule.prob, I1h, Ih)))
 	return result
 
-cdef inline bint concat(tuple yieldfunction, unsigned long lvec, unsigned long rvec):
+cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	"""
 	Determine the compatibility of two bitvectors (tuples of spans / ranges)
 	according to the given yield function. Ranges should be non-overlapping,
@@ -165,50 +175,66 @@ cdef inline bint concat(tuple yieldfunction, unsigned long lvec, unsigned long r
 	False		#lvec and rvec are not contiguous
 	>>> concat(((1,), (0,)), lvec, rvec)
 	False		#rvec's span should come after lvec's span
+	
+	update: yield functions are now encoded in binary arrays:
+		( (0, 1, 0), (1, 0) ) ==> array('B', [0b010, 0b01])
+							and lengths: array('B', [3, 2])
+		NB: note reversal
 	"""
 	if lvec & rvec: return False
 	cdef int lpos = nextset(lvec, 0)
 	cdef int rpos = nextset(rvec, 0)
 	# if there are no gaps in lvec and rvec, and the yieldfunction is the
 	# concatenation of two elements, then this should be quicker
-	if (lvec >> nextunset(lvec, lpos) == 0 and rvec >> nextunset(rvec, rpos) == 0):
-		if yieldfunction == ((0, 1),):
-			return bitminmax(lvec, rvec)
-		elif yieldfunction == ((1, 0),):
-			return bitminmax(rvec, lvec)
+	if False and (lvec >> nextunset(lvec, lpos) == 0
+		and rvec >> nextunset(rvec, rpos) == 0):
+		if rule.lengths._B[0] == 2 and rule.args.length == 1:
+			if rule.args._B[0] == 0b10: #yieldfunction == ((0, 1),):
+				return bitminmax(lvec, rvec)
+			elif rule.args._B[0] == 0b01: #yieldfunction == ((1, 0),):
+				return bitminmax(rvec, lvec)
+		#else:
+		#	return False
 	#this algorithm taken from rparse, FastYFComposer.
-	cdef int n, m, b
-	cdef tuple arg
-	for arg in yieldfunction:
-		m = len(arg) - 1
-		for n, b in enumerate(arg):
-			if b == 0:
+	cdef int n, x
+	cdef unsigned char arg, m
+	for x in range(rule.args.length):
+		arg = rule.args._B[x]
+		m = rule.lengths._B[x] - 1 #len(arg) - 1
+		for n in range(m + 1): #enumerate(arg):
+			if testbitc(arg, n): #bit == 1:
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
 				# ones on this side
-				if lpos == -1 or (rpos != -1 and rpos <= lpos):
-					return False
-				# jump to next gap
-				lpos = nextunset(lvec, lpos)
-				# there should be a gap if and only if
-				# this is the last element of this argument
-				if rpos != -1 and rpos < lpos: return False
-				if n == m:
-					if testbit(rvec, lpos): return False
-				elif not testbit(rvec, lpos): return False
-				#jump to next argument
-				lpos = nextset(lvec, lpos)
-			elif b == 1:
-				# vice versa to the above
 				if rpos == -1 or (lpos != -1 and lpos <= rpos):
 					return False
+				# jump to next gap
 				rpos = nextunset(rvec, rpos)
-				if lpos != -1 and lpos < rpos: return False
+				if lpos != -1 and lpos < rpos:
+					return False
+				# there should be a gap if and only if
+				# this is the last element of this argument
 				if n == m:
-					if testbit(lvec, rpos): return False
-				elif not testbit(lvec, rpos): return False
+					if testbit(lvec, rpos):
+						return False
+				elif not testbit(lvec, rpos):
+					return False
+				#jump to next argument
 				rpos = nextset(rvec, rpos)
-			else: raise ValueError("non-binary element in yieldfunction")
+			else: #if bit == 0:
+				# vice versa to the above
+				if lpos == -1 or (rpos != -1 and rpos <= lpos):
+					return False
+				lpos = nextunset(lvec, lpos)
+				if rpos != -1 and rpos < lpos:
+					return False
+				if n == m:
+					if testbit(rvec, lpos):
+						return False
+				elif not testbit(rvec, lpos):
+					return False
+				lpos = nextset(lvec, lpos)
+			#else: raise ValueError("non-binary element in yieldfunction")
 	if lpos != -1 or rpos != -1:
 		return False
 	# everything looks all right
@@ -296,7 +322,7 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel):
 	return tree, fsum([p] + [b for a,b in children])
 
 removeids = re.compile("@[0-9]+")
-def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False, shortest=False, secondarymodel=None):
+def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None):
 	""" sum over n random/best derivations from chart,
 		return a dictionary mapping parsetrees to probabilities """
 	print "sample =", sample or both, "kbest =", (not sample) or both,
@@ -317,10 +343,10 @@ def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False, sh
 		#getviterbi(<dict>chart, start, mem)
 		#for a in set(chart.keys()) - set(mem.keys()): del chart[a]
 		#print "pruned chart keys", len(chart), "/ values", sum(map(len, chart.values()))
-		for a in chart: chart[a].sort(key=itemgetter(0))
+		#for a in chart: chart[a].sort(key=itemgetter(0))
 		#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
 		#fixme: set shouldn't be necessary
-		derivations = set(lazykbest(dict(chart), start, n, tolabel))
+		derivations = set(lazykbest(<dict>chart, start, n, tolabel))
 		#print len(derivations)
 		#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
 		#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
@@ -365,29 +391,34 @@ def pprint_chart(chart, sent, tolabel):
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
-		for ip,p,rhs in chart[a]:
-			for c in rhs:
-				if tolabel[c[0]] == "Epsilon":
-					print "\t", repr(sent[rhs[0][1]]),
-				else:
-					print "\t%s[%s]" % (tolabel[c.label], binrepr(c, sent)),
-			print "\t", exp(-p)
+		for edge in chart[a]:
+			print "%g\t%g" % (exp(-edge.inside), exp(-edge.prob)),
+			if edge.left.label:
+				print "\t%s[%s]" % (tolabel[edge.left.label],
+									binrepr(edge.left, sent)),
+			else:
+				print "\t", repr(sent[edge.left.vec]),
+			if edge.right:
+				print "\t%s[%s]" % (tolabel[edge.right.label],
+									binrepr(edge.right, sent)),
+			print
 		print
 
 def do(sent, grammar):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
-	if not chart:
-		print "no parse\n"
-		return
-	mpp = mostprobableparse(chart, start, grammar.tolabel)
 	pprint_chart(chart, sent.split(), grammar.tolabel)
-	for a, p in mpp.items():
-		print p, a, '\n'
+	if start == NONE:
+		print "no parse"
+	else:
+		print "10 best parse trees:"
+		mpp = mostprobableparse(chart, start, grammar.tolabel)
+		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))): print p,a
+		print
 
 def main():
-	from rcgrules import splitgrammar
-	grammar = splitgrammar([
+	from rcgrules import newsplitgrammar
+	grammar = newsplitgrammar([
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),

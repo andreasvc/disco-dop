@@ -3,7 +3,7 @@ Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse.
 """
 from heapdict import heapdict
-from plcfrs import ChartItem
+from containers import ChartItem
 from collections import defaultdict
 from math import exp
 try:

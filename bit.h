@@ -29,6 +29,10 @@ inline int testbit(unsigned long vec, int pos) {
 	return vec & (1 << pos);
 }
 
+inline int testbitc(unsigned char arg, int pos) {
+	return arg & (1 << pos);
+}
+
 // [we can do it with unsigned long long to scale to 64 bits]:
 // __builtin_ffsll()
 

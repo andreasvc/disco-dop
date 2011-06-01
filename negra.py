@@ -20,11 +20,15 @@ class NegraCorpusReader(SyntaxCorpusReader):
 		self.headrules = {}
 		# this file containing head assignment rules is part of rparse, 
 		# under src/de/tuebingen/rparse/treebank/constituent/negra/
-		for a in open("negra.headrules"):
-			if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
-				label, lr, heads = a.upper().split(None, 2)
-				self.headrules.setdefault(label, []).append((lr, heads.split()))
-		self.headrules["ROOT"] = self.headrules["VROOT"]
+		try: rulefile = open("negra.headrules")
+		except IOError:
+			print "WARNING: negra head rules not found! no head annotation will be performed."
+		else:
+			for a in rulefile:
+				if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
+					label, lr, heads = a.upper().split(None, 2)
+					self.headrules.setdefault(label, []).append((lr, heads.split()))
+			self.headrules["ROOT"] = self.headrules["VROOT"]
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
 		def getchildren(parent, children):

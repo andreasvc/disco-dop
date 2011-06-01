@@ -1,10 +1,11 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader, fold, unfold
 from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
-		extractfragments, splitgrammar, binarizetree, ranges, export, \
+		extractfragments, binarizetree, ranges, export, \
 		read_rparse_grammar, mean, harmean, testgrammar, bracketings, \
 		printbrackets, rem_marks, alterbinarization, varstoindices, \
 		read_bitpar_grammar
+from rcgrules import newsplitgrammar as splitgrammar
 from treetransforms import collinize, un_collinize
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
@@ -15,7 +16,7 @@ from functools import partial
 from pprint import pprint
 from math import log, exp
 import cPickle, re, time, codecs
-import plac
+#import plac
 #from estimates import getestimates, getoutside
 from kbest import lazykbest
 #from plcfrs_cython import mostprobableparse
@@ -202,8 +203,8 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 								grammar.toid[top], True, 1, None)
 			print
 		else: chart = ()
-		for a in chart: chart[a].sort(key=lambda x: x[0])
-		for result, prob in enumchart(chart, start, grammar.tolabel) if chart else ():
+		for a in chart: chart[a].sort(key=lambda x: x.inside)
+		for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
 			#result = rem_marks(Tree(alterbinarization(result)))
 			#print result
 			#derivout.write("vitprob=%.6g\n%s\n\n" % (
@@ -247,9 +248,8 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 								[a[1] for a in sent] if tags else [],
 								dopgrammar.toid[top], viterbi, n, None)
 		else: chart = ()
-		if chart:
+		if start:
 			if nsent == 1:
-				for a in chart: chart[a].sort(key=itemgetter(0))
 				codecs.open("dopderivations", "w",
 					encoding="utf-8").writelines(
 						"vitprob=%#.6g\n%s\n" % (exp(-p),
@@ -412,8 +412,5 @@ if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	#cftiger()
-	codecs.open("ckyparses", "w", encoding='utf-8').writelines(foo(a)
-		for a in codecs.open("../src/cky/pcfgparses",
-							encoding='utf-8').readlines())
 	#plac.call(main)
 	main()

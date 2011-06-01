@@ -1,39 +1,47 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
-from math import log, exp, fsum
+from math import exp, fsum
 from cpq import heapdict
-#from heapq import nsmallest
+from heapq import nsmallest
+from operator import itemgetter
+from containers import ChartItem
+#from plcfrs import ChartItem
 
-class Edge(object):
-	""" An edge is defined as an arc between a head node and zero or more tail
-	nodes, with a given weight. The case of zero tail nodes corresponds to a 
-	terminal (a source vertex). """
-	__slots__ = ("tailnodes", "weight", "_hash")
-	def __init__(self, tailnodes, weight):
-		self.tailnodes = tailnodes; self.weight = weight
-		self._hash = hash((tailnodes, weight))
-	def __hash__(self):
-		return self._hash
-	def __cmp__(self, other):
-		if (self.tailnodes == other.tailnodes
-			and self.weight == other.weight):
-			return 0
-		else: return 1	# we only care about defining equality
-	def __repr__(self):
-		return "<%s, [%s], %f>" % (", ".join(map(repr, self.tailnodes)),
-									exp(-self.weight))
+NONE = ChartItem(0, 0)		# sentinel node
+
+#class Edge(object):
+#	""" An edge is defined as an arc between a head node and zero or more tail
+#	nodes, with a given weight. The case of zero tail nodes corresponds to a 
+#	terminal (a source vertex). """
+#	__slots__ = ("tailnodes", "weight", "_hash")
+#	def __init__(self, tailnodes, weight):
+#		self.tailnodes = tailnodes; self.weight = weight
+#		self._hash = hash((tailnodes, weight))
+#	def __hash__(self):
+#		return self._hash
+#	def __cmp__(self, other):
+#		if (self.tailnodes == other.tailnodes
+#			and self.weight == other.weight):
+#			return 0
+#		else: return 1	# we only care about defining equality
+#	def __repr__(self):
+#		return "<[%s], %f>" % (", ".join(map(repr, self.tailnodes)),
+#									exp(-self.weight))
 
 def getcandidates(chart, v, k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
-	# sort on rank vector as well to have ties resolved in FIFO order
+	# NB: the priority queue should either do a stable sort, or should
+	# sort on rank vector as well to have ties resolved in FIFO order;
 	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)
 	# can occur (given that the first two have probability x and the latter
 	# three probability y), in which case insertion order should count.
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
-	return heapdict([((Edge(rhs, p), (0,) * len(rhs)),
-						(ip, (0,) * len(rhs)))
-				for ip,p,rhs in chart.get(v, [])[:k]])
+	return heapdict([((edge, (0,) * (1 if edge.right == NONE else 2)),
+				edge.inside) for edge in nsmallest(k, chart.get(v, []))])
+	#return heapdict([((Edge(rhs, p), (0,) * len(rhs)), (ip, (0,) * len(rhs)))
+	#			for ip,p,rhs in 
+	#			nsmallest(k, chart.get(v, []), key=itemgetter(0))])
 
 def lazykthbest(v, k, k1, D, cand, chart):
 	# k1 is the global k
@@ -49,30 +57,38 @@ def lazykthbest(v, k, k1, D, cand, chart):
 			lazynext(v, e, j, k1, D, cand, chart)
 		# get the next best derivation and delete it from the heap
 		if cand[v]:
-			a, b = cand[v].popitem()
-			D.setdefault(v, []).append((a, b[0]))
+			D.setdefault(v, []).append(cand[v].popitem())
 		else: break
 	return D
 
 def lazynext(v, e, j, k1, D, cand, chart):
+	unary = e.right == NONE
 	# add the |e| neighbors
-	for i, ei in enumerate(e.tailnodes):
-		# j1 is j but incremented at index i
-		j1 = j[:i] + (j[i] + 1,) + j[i + 1:]
+	for i in range(1 if unary else 2):
+		if i == 0:
+			ei = e.left
+			j1 = (j[0] + 1,) if unary else (j[0] + 1, j[1])
+		elif i == 1:
+			ei = e.right
+			j1 = (j[0], j[1] + 1)
 		# recursively solve a subproblem
 		# NB: increment j1[i] again because j is zero-based and k is not
 		lazykthbest(ei, j1[i] + 1, k1, D, cand, chart)
 		# if it exists and is not in heap yet
 		if (ei in D and j1[i] < len(D[ei])) and (e, j1) not in cand[v]:
 			# add it to the heap
-			cand[v][e, j1] = (getprob(chart, D, e, j1), j1)
+			cand[v][e, j1] = getprob(chart, D, e, j1)
 
 def getprob(chart, D, e, j):
-	result = [e.weight]
-	for ei, i in zip(e.tailnodes, j):
-		if ei in D: result.append(D[ei][i][1])
-		elif i == 0: result.append(chart[ei][0][0])
-		else: raise ValueError
+	result = [e.prob]
+	for ei, i in zip((e.left, e.right), j):	#zip will truncate according to j
+		if ei in D:
+			result.append(D[ei][i][1])
+		elif i == 0:
+			edge = chart[ei][0]
+			result.append(edge.inside)
+		else: raise ValueError("non-zero rank vector not part of explored derivations")
+	# it's probably pointless to use fsum for only 3 values, but well...
 	return fsum(result)
 
 def getderivation(v, ej, D, chart, tolabel):
@@ -83,12 +99,13 @@ def getderivation(v, ej, D, chart, tolabel):
 	best NP and the 1st best VP as children.
 	"""
 	e, j = ej; children = []
-	for ei, i in zip(e.tailnodes, j):
+	for ei, i in zip((e.left, e.right), j):
 		if ei in chart:
 			if ei not in D:
 				if i == 0:
-					ip, p, rhs = chart[ei][i]
-					D[ei] = [((Edge(ei, rhs, p), (0,) * len(rhs)), ip)]
+					edge = chart[ei][i]
+					D[ei] = [((edge, (0,) * (1 if edge.right == NONE else 2)),
+																edge.inside)]
 				else: raise ValueError
 			children.append(getderivation(ei, D[ei][i][0], D, chart, tolabel))
 		else:
@@ -140,40 +157,44 @@ def lazykbest(chart, goal, k, tolabel):
 	return [(getderivation(goal, ej, D, chart, tolabel), p) for ej, p in D[goal]]
 
 def main():
-	from plcfrs_cython import ChartItem
+	from math import log
+	from containers import Edge
 	toid = dict([a[::-1] for a in
-			enumerate("S NP V ADV VP PN Mary walks quickly".split())])
+			enumerate("S NP V ADV VP VP2 PN Mary walks quickly".split())])
 	tolabel = dict([a[::-1] for a in toid.items()])
 	def ci(label, vec):
 		return ChartItem(toid[label], vec)
+	def l(a): return -log(a)
 	goal = ci("S", 0b111)
 	chart = {
 			ci("S", 0b111) : [
-				(-log(0.5*0.4), -log(0.4),
-						(ci("NP", 0b100), ci("V", 0b010), ci("ADV", 0b001))),
-				(-log(0.25*0.7), -log(0.7),
-						(ci("NP", 0b100), ci("VP", 0b011)))],
+				Edge(l(0.5*0.4), l(0.4),
+						ci("NP", 0b100), ci("VP", 0b011)),
+				Edge(l(0.25*0.7), l(0.7),
+						ci("NP", 0b100), ci("VP2", 0b011))],
 			ci("VP", 0b011) : [
-					(-log(0.5), -log(0.5), (ci("V", 0b010), ci("ADV", 0b001))),
-					(-log(0.4), -log(0.4), (ci("walks", 1), ci("ADV", 0b001)))
-					],
-			ci("NP", 0b100) : [(-log(0.5), -log(0.5), (ci("Mary", 0),)),
-								(-log(0.5), -log(0.5), (ci("PN", 0b100),))],
-			ci("PN", 0b100) : [(-log(1.0), -log(1.0), (ci("Mary", 0),)),
-							],  # (-log(0.9), -log(0.9), (ci("NP", 0b100),))],
-			ci("V", 0b010) : [(-log(1.0), -log(1.0), (ci("walks", 1),))],
-			ci("ADV", 0b001) : [(-log(1.0), -log(1.0), (ci("quickly", 2),))]
-			}
+				Edge(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
+				Edge(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
+			ci("VP2", 0b011) : [
+				Edge(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
+				Edge(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
+			ci("NP", 0b100) : [Edge(l(0.5), l(0.5), ci("Mary", 0), NONE),
+							Edge(l(0.5), l(0.5), ci("PN", 0b100), NONE)],
+			ci("PN", 0b100) : [Edge(l(1.0), l(1.0), ci("Mary", 0), NONE),
+							Edge(l(0.9), l(0.9), ci("NP", 0b100), NONE)],
+			ci("V", 0b010) : [Edge(l(1.0), l(1.0), ci("walks", 1), NONE)],
+			ci("ADV", 0b001) : [Edge(l(1.0), l(1.0), ci("quickly", 2), NONE)]
+		}
 	assert ci("NP", 0b100) == ci("NP", 0b100)
-	D = {}
 	cand = {}
+	D = {}
 	k = 10
-	for v,b in lazykthbest(goal, k, k, D, cand, chart).items():
-		print tolabel[a.label], bin(a.vec)[2:]
-		for (e, j), p in b:
+	for v, b in lazykthbest(goal, k, k, D, cand, chart).items():
+		print tolabel[v.label], bin(v.vec)[2:]
+		for (e, j), ip in b:
 			print tolabel[v.label], ":",
-			print " ".join([tolabel[a.label] for a in e.tailnodes]),
-			print exp(-e.weight), j, exp(-p)
+			print " ".join([tolabel[a.label] for a, _ in zip((e.left, e.right), j)]),
+			print exp(-e.prob), j, exp(-ip)
 		print
 	from pprint import pprint
 	print "tolabel",

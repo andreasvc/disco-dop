@@ -1,5 +1,6 @@
 import codecs, re
 from operator import mul
+from array import array
 from math import log, exp
 from pprint import pprint
 from heapq import nsmallest, heappush, heappop
@@ -200,7 +201,8 @@ def newsplitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
 	accommodate min-heaps."""
-	from items import Grammar, Rule
+	from containers import Rule, Terminal
+	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
@@ -208,21 +210,37 @@ def newsplitgrammar(grammar):
 	lexical = defaultdict(list)
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule, yf), w in grammar:
-		r = Rule(toid[rule[0]], toid[rule[1]],
-				toid[rule[2]] if len(rule) == 3 else 0, unfreeze(yf), abs(w))
+		if len(rule) == 2 and toid[rule[1]] == 0:
+			r = Terminal(toid[rule[0]], toid[rule[1]], 0, unicode(yf[0]), abs(w))
+		else:
+			args, lengths = yfarray(yf)
+			yf1 = arraytoyf(args, lengths)
+			assert yf == yf1
+			r = Rule(toid[rule[0]], toid[rule[1]],
+				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
 		if len(rule) == 2:
-			if r[0][1] == 0: #Epsilon
+			if r.rhs1 == 0: #Epsilon
 				# lexical productions (mis)use the field for the yield function to store the word
 				lexical.setdefault(yf[0], []).append(r)
 			else:
-				unary[r[0][1]].append(r)
-			bylhs[r[0][0]].append(r)
+				unary[r.rhs1].append(r)
+			bylhs[r.lhs].append(r)
 		elif len(rule) == 3:
-			lbinary[r[0][1]].append(r)
-			rbinary[r[0][2]].append(r)
-			bylhs[r[0][0]].append(r)
+			lbinary[r.rhs1].append(r)
+			rbinary[r.rhs2].append(r)
+			bylhs[r.lhs].append(r)
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
+
+def yfarray(yf):
+	""" convert a yield function represented as a 2D sequence to an array
+	object. """
+	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
+	return array('B', initializer), array('B', map(len, yf)) # 'H' for 16 bits
+
+def arraytoyf(args, lengths):
+	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
+							for n, a in zip(lengths, args))
 
 def canonicalize(tree):
 	for a in reversed(list(tree.subtrees(lambda n: len(n) > 1))):
@@ -621,16 +639,18 @@ def enumchart(chart, start, tolabel, n=1):
 		lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
 		this function doesn't really belong in this file but Cython doesn't
 		support generators so this function is "in exile" over here.  """
-	for iscore,p,rhs in chart[start]:
-		if rhs[0].label == 0: #Epsilon
-			yield "(%s %d)" % (tolabel[start.label], rhs[0].vec), p
+	for edge in chart[start]:
+		if edge.left.label == 0: #Epsilon
+			yield "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
 		else:
 			# this doesn't seem to be a good idea:
 			#for x in nsmallest(n, cartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), key=lambda x: sum(p for z,p in x)):
 			#for x in sorted(islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), n), key=lambda x: sum(p for z,p in x)):
+			if edge.right: rhs = (edge.left, edge.right)
+			else: rhs = (edge.left, )
 			for x in islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel), rhs)), n):
 				tree = "(%s %s)" % (tolabel[start.label], " ".join(z for z,px in x))
-				yield tree, p+sum(px for z,px in x)
+				yield tree, edge.prob+sum(px for z,px in x)
 
 def exportrparse(grammar):
 	""" Export an unsplitted grammar to rparse format. All frequencies are 1,
@@ -709,8 +729,9 @@ def alterbinarization(tree):
 
 def testgrammar(grammar):
 	for a,b in enumerate(grammar.bylhs):
-		if b and abs(sum(exp(-w) for rule,w in b) - 1.0) > 0.01:
-			print "Does not sum to 1:", grammar.tolabel[a], sum(exp(-w) for rule,w in b)
+		if b and abs(sum(exp(-rule.prob) for rule in b) - 1.0) > 0.01:
+			print "Does not sum to 1:",
+			print grammar.tolabel[a], sum(exp(-rule.prob) for rule in b)
 			break
 	else: print "All left hand sides sum to 1"
 
@@ -763,6 +784,7 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
+	#from plcfrs_cython import parse, mostprobableparse
 	from plcfrs import parse, mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
@@ -817,7 +839,7 @@ def main():
 	pprint(splitgrammar(induce_srcg([tree.copy(True)], [sent])))
 	#pprint(dop_srcg_rules([tree.copy(True)], [sent], interpolate=0.5))
 	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
-
+	newsplitgrammar(dop_srcg_rules([tree], [sent]))
 	treebank = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
@@ -852,6 +874,7 @@ def main():
 		except: print a.pprint(),
 		print ":", b
 	print "}"
+	newsplitgrammar(grammar)
 	grammar = splitgrammar(grammar)
 	testgrammar(grammar)
 	from plcfrs import parse, mostprobableparse
