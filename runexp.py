@@ -377,10 +377,10 @@ def cftiger():
 	dopgrammar = read_bitpar_grammar('/tmp/gtiger.pcfg', '/tmp/gtiger.lex')
 	testgrammar(grammar)
 	testgrammar(dopgrammar)
-	dop = False; srcg = True; unfolded = False; bintype = "collinize h=1 v=1"
+	dop = True; srcg = True; unfolded = False; bintype = "collinize h=1 v=1"
 	viterbi = True; sample = False; both = False; arity_marks = True
 	arity_marks_before_bin = False; estimator = 'dop1'; interpolate = 1.0
-	wrong_interpolate = False; n = 0; m = 1000; maxlen = 15; maxsent = 360
+	wrong_interpolate = False; n = 0; m = 1000; maxlen = 15; maxsent = 1
 	top = "ROOT"; tags = False
 	trees = list(islice((a for a in islice((root(Tree(a))
 					for a in codecs.open(
@@ -411,6 +411,6 @@ def foo(a):
 if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-	#cftiger()
+	cftiger()
 	#plac.call(main)
-	main()
+	#main()

@@ -689,7 +689,7 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8'):
 		tags = zip(tags[::2], map(float, tags[1::2]))
 		for t,p in tags: ntfd[t] += p
 		grammar.extend((((t, (word,)), ('Epsilon', ())), p) for t, p in tags)
-	return splitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
+	return newsplitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
