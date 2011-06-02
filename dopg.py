@@ -197,7 +197,7 @@ class GoodmanDOP:
 		
 		return maxc[(1, len(sent) + 1)]
 
-def decorate_with_ids(tree, ids):
+def decorate_with_ids(tree, ids, include_preterminals=True):
 	""" add unique identifiers to each internal non-terminal of a tree.
 
 	>>> tree = Tree("(S (NP (DT the) (N dog)) (VP walks))")
@@ -208,10 +208,13 @@ def decorate_with_ids(tree, ids):
 		@param ids: an iterator yielding a stream of IDs"""
 	utree = tree.copy(True)
 	#skip root node
-	if utree.height() > 2:
-		#skip word boundary markers
-		for a in chain(*(a.subtrees(lambda a: a.node != "_") for a in utree)):
-			a.node = "%s@%d" % (a.node, ids.next())
+	for a in utree:
+		if not isinstance(a, Tree): continue
+		for b in a.subtrees():
+			#skip word boundary markers
+			if a.node == "_": continue
+			if include_preterminals or any(isinstance(c, Tree) for c in b):
+				b.node = "%s@%d" % (b.node, ids.next())
 	return utree
 
 def nodefreq(tree, utree, subtreefd, nonterminalfd):

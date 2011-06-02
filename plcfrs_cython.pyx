@@ -1,4 +1,6 @@
-#cython: boundscheck=False
+# cython: boundscheck=False
+# cython: profile=True
+
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
 from rcgrules import enumchart, induce_srcg
@@ -46,10 +48,14 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	if start == None: start = toid["ROOT"]
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	cdef int m = 0, maxA = 0
+	cdef int lensent = len(sent)
 	#A = heapdict() #if viterbi else {}
-	cdef heapdict A = heapdict() 				#the agenda
+	cdef heapdict A = heapdict()				#the agenda
 	cdef dict C = <dict>defaultdict(list)		#the full chart
-	cdef dict Cx = <dict>defaultdict(dict)		#the viterbi probabilities
+	#cdef dict Cx = <dict>defaultdict(dict)		#the viterbi probabilities
+	cdef list Cx = [{} for _ in range(len(toid))]	#the viterbi probabilities
+	cdef Entry entry
+	cdef Edge edge, newedge
 
 	# scan
 	Epsilon = toid["Epsilon"]
@@ -73,10 +79,8 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				continue
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
-			return {}, ()
-	cdef int lensent = len(sent)
-	cdef Entry entry
-	cdef Edge edge, newedge
+			return C, NONE
+
 	# parsing
 	while A:
 		entry = A.popentry()
@@ -87,7 +91,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		(<list>(C[Ih])).append(edge)
-		(<dict>(Cx[Ih.label]))[Ih] = edge.inside
+		(<dict>(Cx[Ih.label]))[Ih] = edge #.inside
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
 			if viterbi and n == m: break
@@ -110,7 +114,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 					# haven't seen this item before, add to agenda
 					A[I1h] = newedge
 				elif I1h in A:
-					if newedge.inside < (<Edge>A[I1h]).inside:
+					if newedge.inside < (<Edge>(A[I1h])).inside:
 						# item has lower score, update agenda
 						(<list>C[I1h]).append(A.replace(I1h, newedge))
 					else:
@@ -118,42 +122,53 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				else: #if not viterbi: #item is not in agenda, but is in chart
 					(<list>C[I1h]).append(newedge)
 					#Cx[I1h.label][I1h] = min(Cx[I1h.label][I1h], newedge.inside)
-					if newedge.inside < <double>(<dict>Cx[I1h.label])[I1h]:
-						(<dict>Cx[I1h.label])[I1h] = newedge.inside
+					#if newedge.inside < <double>(<dict>(Cx[I1h.label])[I1h]):
+					#	(<dict>Cx[I1h.label])[I1h] = newedge.inside
 		maxA = max(maxA, len(A))
 	print "max agenda size %d / chart keys %d / values %d" % (
-								maxA, len(C), sum(map(len, C.values())))
+								maxA, len(C), sum(map(len, C.values()))),
 	if goal in C: return C, goal
 	else: return C, NONE
 
-cdef inline list deduced_from(ChartItem Ih, double x, dict Cx,
+cdef inline list deduced_from(ChartItem Ih, double x, list Cx,
 					list unary, list lbinary, list rbinary, estimate):
 	""" Produce a list of all ChartItems that can be deduced using the
 	existing items in Cx and the grammar rules. """
 	cdef double y
 	cdef ChartItem I1h
-	cdef list result = []
+	cdef list result = [], rules
+	cdef dict items
 	cdef Rule rule
-	for rule in <list>unary[Ih.label]:
-		result.append(new_Pair(new_ChartItem(rule.lhs, Ih.vec), new_Edge(
-			#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
-			x + rule.prob, rule.prob, Ih, NONE)))
-	for rule in <list>lbinary[Ih.label]:
-		for I1h in Cx[rule.rhs2]:
+	rules = <list>unary[Ih.label]
+	for rule in rules:
+		#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
+		result.append(new_Pair(
+						new_ChartItem(rule.lhs, Ih.vec),
+						new_Edge(x + rule.prob, rule.prob, Ih, NONE)))
+	rules = <list>lbinary[Ih.label]
+	for rule in rules:
+		items =  <dict>(Cx[rule.rhs2])
+		for I1h in items:
 			if concat(rule, Ih.vec, I1h.vec):
-				y = Cx[rule.rhs2][I1h]
-				result.append(new_Pair(new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec), new_Edge(
-					#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
-					#if estimate else 0.0) + x + y + rule.prob,
-					x + y + rule.prob, rule.prob, Ih, I1h)))
-	for rule in <list>rbinary[Ih.label]:
-		for I1h in Cx[rule.rhs1]:
+				#y = <double>(<dict>(Cx[rule.rhs2])[I1h.vec])
+				y = (<Edge>(items[I1h])).inside
+				#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
+				#if estimate else 0.0) + x + y + rule.prob,
+				result.append(new_Pair(
+					new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec),
+					new_Edge(x + y + rule.prob, rule.prob, Ih, I1h)))
+	rules = <list>rbinary[Ih.label]
+	for rule in rules:
+		items = <dict>(Cx[rule.rhs1])
+		for I1h in items:
 			if concat(rule, I1h.vec, Ih.vec):
-				y = Cx[rule.rhs1][I1h]
-				result.append(new_Pair(new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec), new_Edge(
-					#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
-					#if estimate else 0.0) + x + y + rule.prob,
-					x + y + rule.prob, rule.prob, I1h, Ih)))
+				#y = <double>(<dict>(Cx[rule.rhs1])[I1h])
+				y = (<Edge>(items[I1h])).inside
+				#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
+				#if estimate else 0.0) + x + y + rule.prob,
+				result.append(new_Pair(
+					new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec),
+					new_Edge(x + y + rule.prob, rule.prob, I1h, Ih)))
 	return result
 
 cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
