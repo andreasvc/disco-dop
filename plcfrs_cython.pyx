@@ -1,17 +1,17 @@
 # cython: boundscheck=False
-# cython: profile=True
+# cython: profile=False
 
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
-from rcgrules import enumchart, induce_srcg
-from nltk import FreqDist, Tree
 from math import log, exp, fsum, isinf
 from random import choice, randrange
 from operator import itemgetter
 from itertools import islice, count
 from collections import defaultdict, deque
 from array import array
-import re
+import re, gc
+from nltk import FreqDist, Tree
+from rcgrules import enumchart, induce_srcg
 
 # sentinel node to indicate unary productions and preterminals
 NONE = ChartItem(0, 0)
@@ -34,7 +34,10 @@ cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem 
 	edge.left = left; edge.right = right
 	return edge
 
-def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None):
+#cdef inline tuple prune_rules(chart, unary, lbinary, rbinary):
+#	""" prune rules not used in chart """
+
+def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None, frozenset prune=frozenset(), dict prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -44,19 +47,29 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
-	cdef ChartItem Ih, I1h, goal
-	if start == None: start = toid["ROOT"]
-	goal = ChartItem(start, (1 << len(sent)) - 1)
-	cdef int m = 0, maxA = 0
-	cdef int lensent = len(sent)
+	cdef int m = 0, maxA = 0, x
+	cdef bint doprune = False
+	cdef int lensent = len(sent), label, newlabel
 	#A = heapdict() #if viterbi else {}
 	cdef heapdict A = heapdict()				#the agenda
 	cdef dict C = <dict>defaultdict(list)		#the full chart
-	#cdef dict Cx = <dict>defaultdict(dict)		#the viterbi probabilities
-	cdef list Cx = [{} for _ in range(len(toid))]	#the viterbi probabilities
+	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
+	cdef dict removeid = {}
+	#cdef list results = []						#temporary values
+	cdef object results = deque()				#temporary values
 	cdef Entry entry
 	cdef Edge edge, newedge
-
+	cdef ChartItem Ih, I1h, goal, newitem
+	if start == None: start = toid["ROOT"]
+	goal = ChartItem(start, (1 << len(sent)) - 1)
+	if prune:
+		doprune = True
+		for a, label in toid.items():
+			newlabel = prunetoid[a.split("@")[0]]
+			removeid[label] = newlabel
+		print 'pruning on with %d nonterminals and %d items with %d categories' % (
+					len(removeid), len(prune), len(set(removeid.values())))
+	gc.disable()
 	# scan
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
@@ -80,9 +93,9 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
 			return C, NONE
-
+	cdef set seen = set()
 	# parsing
-	while A:
+	while A.length:
 		entry = A.popentry()
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
@@ -92,29 +105,35 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
 		(<list>(C[Ih])).append(edge)
 		(<dict>(Cx[Ih.label]))[Ih] = edge #.inside
-		if Ih.label == goal.label and Ih.vec == goal.vec:
+		if Ih == goal: #Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
 			if viterbi and n == m: break
 			#if viterbi and not exhaustive: break
 		else:
-			for pair in deduced_from(Ih, edge.inside, Cx,
-								unary, lbinary, rbinary, estimate):
-				I1h = <Edge>(<Pair>pair).a
-				newedge = <Edge>(<Pair>pair).b
-				# I1h = new ChartItem that has been derived.
-				# scores: oscore, iscore, p, rhs
-				# 	oscore = estimate of total score
-				#			(outside estimate + inside score up till now)
-				# 	iscore = inside score,
-				# 	p = rule probability,
-				# 	rhs = backpointers to 1 or 2 ChartItems that led here (I1h)
-				# explicit get to avoid inserting spurious keys
-				#if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
-				if I1h not in C and I1h not in A:
+			#results = [] #del results[:]
+			#results.clear()
+			deduced_from(Ih, edge.inside, Cx, unary, lbinary, rbinary,
+															estimate, results)
+			#for pair in results:
+			popleft = results.popleft
+			x = len(results)
+			while x:
+				pair = popleft(); x -= 1
+				I1h = <ChartItem>((<Pair>pair).a)
+				newedge = <Edge>((<Pair>pair).b)
+				if not (A.contains(I1h) or I1h in C):
+					if doprune and I1h not in C:
+						newitem = new_ChartItem(removeid[I1h.label], I1h.vec)
+						if newitem not in prune:
+								#if newitem not in seen:
+								#	seen.add(newitem)
+								#	print "prune %s[%s]" % (tolabel[newitem.label],
+								#				binrepr(newitem, sent)) #continue
+								continue						
 					# haven't seen this item before, add to agenda
-					A[I1h] = newedge
-				elif I1h in A:
-					if newedge.inside < (<Edge>(A[I1h])).inside:
+					A.setitem(I1h, newedge)
+				elif A.contains(I1h):
+					if newedge.inside < (<Edge>(A.getitem(I1h))).inside:
 						# item has lower score, update agenda
 						(<list>C[I1h]).append(A.replace(I1h, newedge))
 					else:
@@ -127,22 +146,25 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		maxA = max(maxA, len(A))
 	print "max agenda size %d / chart keys %d / values %d" % (
 								maxA, len(C), sum(map(len, C.values()))),
+	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE
 
-cdef inline list deduced_from(ChartItem Ih, double x, list Cx,
-					list unary, list lbinary, list rbinary, estimate):
+cdef inline void deduced_from(ChartItem Ih, double x, list Cx,
+							list unary, list lbinary, list rbinary,
+							object estimate, object results):
 	""" Produce a list of all ChartItems that can be deduced using the
 	existing items in Cx and the grammar rules. """
 	cdef double y
 	cdef ChartItem I1h
-	cdef list result = [], rules
+	cdef list rules
 	cdef dict items
 	cdef Rule rule
 	rules = <list>unary[Ih.label]
+	resultsappend = results.append
 	for rule in rules:
 		#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
-		result.append(new_Pair(
+		resultsappend(new_Pair(
 						new_ChartItem(rule.lhs, Ih.vec),
 						new_Edge(x + rule.prob, rule.prob, Ih, NONE)))
 	rules = <list>lbinary[Ih.label]
@@ -150,11 +172,10 @@ cdef inline list deduced_from(ChartItem Ih, double x, list Cx,
 		items =  <dict>(Cx[rule.rhs2])
 		for I1h in items:
 			if concat(rule, Ih.vec, I1h.vec):
-				#y = <double>(<dict>(Cx[rule.rhs2])[I1h.vec])
 				y = (<Edge>(items[I1h])).inside
 				#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
 				#if estimate else 0.0) + x + y + rule.prob,
-				result.append(new_Pair(
+				resultsappend(new_Pair(
 					new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec),
 					new_Edge(x + y + rule.prob, rule.prob, Ih, I1h)))
 	rules = <list>rbinary[Ih.label]
@@ -162,14 +183,12 @@ cdef inline list deduced_from(ChartItem Ih, double x, list Cx,
 		items = <dict>(Cx[rule.rhs1])
 		for I1h in items:
 			if concat(rule, I1h.vec, Ih.vec):
-				#y = <double>(<dict>(Cx[rule.rhs1])[I1h])
 				y = (<Edge>(items[I1h])).inside
 				#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
 				#if estimate else 0.0) + x + y + rule.prob,
-				result.append(new_Pair(
+				resultsappend(new_Pair(
 					new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec),
 					new_Edge(x + y + rule.prob, rule.prob, I1h, Ih)))
-	return result
 
 cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	"""
@@ -258,13 +277,23 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation headed
 	# by "start"
-	def filter_subtree(start, chart, chart2):
-		if isinstance(start, int) or chart2[start]: return True
-		else: chart2[start] = [(x,p) for x,p in chart[start] if all(filter_subtree(a, chart, chart2) for a in x)]
-		return chart2[start] != []
-	chart2 = defaultdict(list)
-	filter_subtree(start, chart, chart2)
+	chart2 = {}
+	filter_subtree(start, <dict>chart, chart2)
+	assert start in chart2
 	return chart2
+
+cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
+	cdef Edge edge
+	if start in chart2:
+		assert chart2[start] == chart[start]
+		return
+	if start in chart: chart2[start] = chart[start]
+	else: chart2[start] = []
+	if start.label:
+		for edge in chart[start]:
+			filter_subtree((<Edge>edge).left, chart, chart2)
+			if edge.right.label:
+				filter_subtree(edge.right, chart, chart2)
 
 def filtercycles(chart, start, visited, current):
 	""" remove @#$%! cycles from chart

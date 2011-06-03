@@ -17,7 +17,7 @@ cdef class ChartItem:
 		if n == 0: return self.label
 		elif n == 1: return self.vec
 	def __nonzero__(ChartItem self):
-		return self.label and self.vec
+		return self.vec and self.label
 	def __repr__(ChartItem self):
 		#would need bitlen for proper padding
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
@@ -37,12 +37,12 @@ cdef class Edge:
 		elif op == 5: return self.inside >= other.inside
 		# (in)equality compares all elements
 		# boolean trick: equality and inequality in one expression
-		else: return (op == 2) == (	
+		else: return (op == 2) == (
 				(self.inside == other.inside and self.prob == other.prob
 				and self.left == other.right and self.right == other.right))
 	def __repr__(self):
 		return "<%g, %g, [%r, %r]>" % (self.inside, self.prob,
-							self.left, self.right if self.right else None)
+							self.left, self.right if self.right else 'None')
 
 cdef class Terminal:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):

@@ -22,7 +22,7 @@ from kbest import lazykbest
 #from plcfrs_cython import mostprobableparse
 #from plcfrs import parse
 try:
-	from plcfrs_cython import parse, mostprobableparse
+	from plcfrs_cython import parse, mostprobableparse, filterchart
 	print "running cython"
 except: from plcfrs import parse, mostprobableparse; print "running non-cython"
 
@@ -244,9 +244,13 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 		if dop:
 			print "DOP:",
 			#estimate = partial(getoutside, outside, maxlen, len(sent))
+			srcgchart = filterchart(chart, start)
+			print "srcgchart filtered", len(srcgchart)
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
-								dopgrammar.toid[top], viterbi, n, None)
+								dopgrammar.toid[top], viterbi, n, None,
+								prune=frozenset(srcgchart.keys()),
+								prunetoid=grammar.toid)
 		else: chart = ()
 		if start:
 			if nsent == 1:
