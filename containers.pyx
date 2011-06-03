@@ -49,6 +49,17 @@ cdef class Edge:
 		return "<%g, %g, [%r, %s]>" % (self.inside, self.prob,
 					self.left, repr(self.right) if self.right else 'None')
 
+cdef class RankedEdge(Edge):
+	def __cinint__(self, Edge edge, double ip, int j1, int j2):
+		self.inside = ip; self.prob = edge.prob
+		self.left = edge.left; self.right = edge.right
+		self.leftrank = j1; self.rightrank = j2
+		self._hash = hash((ip, edge.prob, edge.left, edge.right, j1, j2))
+	def __repr__(self):
+		return "<%g, %g, [%r[%d], %s[%d]]>" % (self.inside, self.prob,
+					self.left, self.leftrank,
+					repr(self.right) if self.right else 'None', self.rightrank)
+
 cdef class Terminal:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2

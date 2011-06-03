@@ -16,6 +16,10 @@ cdef class Edge:
 	cdef ChartItem right
 	cdef long _hash
 
+cdef class RankedEdge(Edge):
+	cdef int leftrank
+	cdef int rightrank
+
 cdef class Terminal:
 	cdef public int lhs
 	cdef public int rhs1

@@ -1,10 +1,12 @@
+# cython: profile=False
+# cython: boundscheck=False
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
 from math import exp, fsum
-from cpq import heapdict
-from heapq import nsmallest
+from cpq import heapdict #, nsmallest
+#from heapq import nsmallest
 from operator import itemgetter
-from containers import ChartItem
+from containers import ChartItem, Edge, RankedEdge
 #from plcfrs import ChartItem
 
 unarybest = (0, )
@@ -21,7 +23,9 @@ def getcandidates(chart, v, k):
 	# as a neighbor and puts it in cand[v] for a second time.
 	if v not in chart: return heapdict() #raise error?
 	return heapdict([((edge, binarybest if edge.right.label else unarybest),
-						edge.inside) for edge in nsmallest(k, chart[v])])
+						edge) for edge in nsmallest(k, chart[v])])
+	#return heapdict([(RankedEdge(edge, edge.inside, 0, 0), edge)
+	#					for edge in nsmallest(k, chart[v])])
 
 def lazykthbest(v, k, k1, D, cand, chart):
 	# k1 is the global k
@@ -57,17 +61,16 @@ def lazynext(v, e, j, k1, D, cand, chart):
 		# if it exists and is not in heap yet
 		if (ei in D and j1[i] < len(D[ei])) and (e, j1) not in cand[v]:
 			# add it to the heap
-			cand[v][e, j1] = getprob(chart, D, e, j1)
+			cand[v][e, j1] = Edge(getprob(chart, D, e, j1), e.prob,
+														e.left, e.right)
 
 def getprob(chart, D, e, j):
 	result = [e.prob]
 	for ei, i in zip((e.left, e.right), j):	#zip will truncate according to j
-		if ei in D:
-			result.append(D[ei][i][1])
-		elif i == 0:
-			edge = chart[ei][0]
-			result.append(edge.inside)
+		if ei in D: edge = D[ei][i][1]
+		elif i == 0: edge = chart[ei][0]
 		else: raise ValueError("non-zero rank vector not part of explored derivations")
+		result.append(edge.inside)
 	# it's probably pointless to use fsum for only 3 values, but well...
 	return fsum(result)
 
@@ -134,7 +137,7 @@ def lazykbest(chart, goal, k, tolabel):
 	D = {}
 	cand = {}
 	lazykthbest(goal, k, k, D, cand, chart)
-	return [(getderivation(goal, ej, D, chart, tolabel), p) for ej, p in D[goal]]
+	return [(getderivation(goal, ej, D, chart, tolabel), e.inside) for ej, e in D[goal]]
 
 def main():
 	from math import log

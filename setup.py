@@ -4,22 +4,29 @@ from Cython.Distutils import build_ext
 
 ext_modules = [
 	Extension("plcfrs_cython",
-			["plcfrs_cython.pyx"],
-	    	#extra_compile_args=["-g"],
-		    #extra_link_args=["-g"],
+			["plcfrs_cython.pyx", "plcfrs_cython.pxd"],
+			#extra_compile_args=["-g"],
+			#extra_link_args=["-g"],
 			include_dirs=['.'],
-			library_dirs=['.']),
+			library_dirs=['.'],
+		),
 	Extension("estimates",
-		["estimates.py", "estimates.pxd"]),
+			["estimates.py", "estimates.pxd"],
+		),
 	Extension("kbest",
 		["kbest.py", "kbest.pxd"],
-	    	#extra_compile_args=["-g"],
-		    #extra_link_args=["-g"]
-			),
+			#extra_compile_args=["-g"],
+			#extra_link_args=["-g"]
+		),
 	Extension("plcfrs",
-		["plcfrs.py", "plcfrs.pxd"]),
+			["plcfrs.py", "plcfrs.pxd"],
+		),
+	Extension("cpq",
+			["cpq.pyx", "cpq.pxd"],
+		),
 	Extension("containers",
-		["containers.pyx", "containers.pxd"])
+			["containers.pyx", "containers.pxd"],
+		)
 	]
 
 setup(

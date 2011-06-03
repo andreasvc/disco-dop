@@ -64,7 +64,8 @@ def main(
 	interpolate = 1.0,
 	wrong_interpolate = False,
 	n = 0,     #number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
-	m = 1000  #number of derivations to sample/enumerate
+	m = 1000,  #number of derivations to sample/enumerate
+	prune=False	#whether to use srcg chart to prune parsing of dop
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -175,9 +176,9 @@ def main(
 		#for a,b in extractfragments(trees).items():
 		#	print a,b
 		#exit(
-		doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent)
+		doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune)
 
-def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, top='ROOT', tags=True):
+def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, top='ROOT', tags=True):
 	sresults = []; dresults = []
 	serrors1 = FreqDist(); serrors2 = FreqDist()
 	derrors1 = FreqDist(); derrors2 = FreqDist()
@@ -246,9 +247,10 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 		if dop:
 			print "DOP:",
 			#estimate = partial(getoutside, outside, maxlen, len(sent))
-			if srcg: srcgchart = filterchart(chart, start)
+			if srcg and prune:
+				srcgchart = filterchart(chart, start)
+				print "srcgchart filtered", len(srcgchart)
 			else: srcgchart = {}
-			print "srcgchart filtered", len(srcgchart)
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
 								dopgrammar.toid[top], viterbi, n, None,
@@ -388,7 +390,7 @@ def cftiger():
 	viterbi = True; sample = False; both = False; arity_marks = True
 	arity_marks_before_bin = False; estimator = 'dop1'; interpolate = 1.0
 	wrong_interpolate = False; n = 0; m = 1000; maxlen = 15; maxsent = 1
-	top = "ROOT"; tags = False
+	prune = False; top = "ROOT"; tags = False
 	trees = list(islice((a for a in islice((root(Tree(a))
 					for a in codecs.open(
 							'../tiger/corpus/tiger_release_aug07.mrg',
@@ -406,7 +408,7 @@ def cftiger():
 			tree[a] = nn
 	blocks = [export(*a) for a in zip(trees, sents, count())]
 	test = trees, sents, blocks
-	doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, top, tags)
+	doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, top, tags)
 
 def foo(a):
 	result = Tree(a)
@@ -418,6 +420,6 @@ def foo(a):
 if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-	#cftiger()
+	cftiger()
 	#plac.call(main)
-	main()
+	#main()

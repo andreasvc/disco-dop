@@ -93,7 +93,6 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
 			return C, NONE
-	cdef set seen = set()
 	# parsing
 	while A.length:
 		entry = A.popentry()
@@ -113,7 +112,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 			#results = [] #del results[:]
 			#results.clear()
 			deduced_from(Ih, edge.inside, Cx, unary, lbinary, rbinary,
-															estimate, results)
+								estimate, results, doprune, prune, removeid)
 			#for pair in results:
 			popleft = results.popleft
 			x = len(results)
@@ -123,13 +122,9 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				newedge = <Edge>((<Pair>pair).b)
 				if not (A.contains(I1h) or I1h in C):
 					if doprune and I1h not in C:
-						newitem = new_ChartItem(removeid[I1h.label], I1h.vec)
-						if newitem not in prune:
-								#if newitem not in seen:
-								#	seen.add(newitem)
-								#	print "prune %s[%s]" % (tolabel[newitem.label],
-								#				binrepr(newitem, sent)) #continue
-								continue						
+						if new_ChartItem(removeid[I1h.label],
+							I1h.vec) not in prune:
+							continue
 					# haven't seen this item before, add to agenda
 					A.setitem(I1h, newedge)
 				elif A.contains(I1h):
@@ -151,8 +146,8 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	else: return C, NONE
 
 cdef inline void deduced_from(ChartItem Ih, double x, list Cx,
-							list unary, list lbinary, list rbinary,
-							object estimate, object results):
+				list unary, list lbinary, list rbinary, object estimate,
+				object results, bint doprune, frozenset prune, dict removeid):
 	""" Produce a list of all ChartItems that can be deduced using the
 	existing items in Cx and the grammar rules. """
 	cdef double y
@@ -164,6 +159,8 @@ cdef inline void deduced_from(ChartItem Ih, double x, list Cx,
 	resultsappend = results.append
 	for rule in rules:
 		#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
+		#if doprune and new_ChartItem(removeid[rule.lhs], Ih.vec) not in prune:
+		#	continue
 		resultsappend(new_Pair(
 						new_ChartItem(rule.lhs, Ih.vec),
 						new_Edge(x + rule.prob, rule.prob, Ih, NONE)))
@@ -172,6 +169,8 @@ cdef inline void deduced_from(ChartItem Ih, double x, list Cx,
 		items =  <dict>(Cx[rule.rhs2])
 		for I1h in items:
 			if concat(rule, Ih.vec, I1h.vec):
+				#if (doprune and new_ChartItem(removeid[rule.lhs],
+				#		I1h.vec ^ Ih.vec) not in prune): continue
 				y = (<Edge>(items[I1h])).inside
 				#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
 				#if estimate else 0.0) + x + y + rule.prob,
@@ -183,6 +182,8 @@ cdef inline void deduced_from(ChartItem Ih, double x, list Cx,
 		items = <dict>(Cx[rule.rhs1])
 		for I1h in items:
 			if concat(rule, I1h.vec, Ih.vec):
+				#if (doprune and new_ChartItem(removeid[rule.lhs],
+				#		I1h.vec ^ Ih.vec) not in prune): continue
 				y = (<Edge>(items[I1h])).inside
 				#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
 				#if estimate else 0.0) + x + y + rule.prob,
