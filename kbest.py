@@ -7,26 +7,8 @@ from operator import itemgetter
 from containers import ChartItem
 #from plcfrs import ChartItem
 
-NONE = ChartItem(0, 0)		# sentinel node
-
-#class Edge(object):
-#	""" An edge is defined as an arc between a head node and zero or more tail
-#	nodes, with a given weight. The case of zero tail nodes corresponds to a 
-#	terminal (a source vertex). """
-#	__slots__ = ("tailnodes", "weight", "_hash")
-#	def __init__(self, tailnodes, weight):
-#		self.tailnodes = tailnodes; self.weight = weight
-#		self._hash = hash((tailnodes, weight))
-#	def __hash__(self):
-#		return self._hash
-#	def __cmp__(self, other):
-#		if (self.tailnodes == other.tailnodes
-#			and self.weight == other.weight):
-#			return 0
-#		else: return 1	# we only care about defining equality
-#	def __repr__(self):
-#		return "<[%s], %f>" % (", ".join(map(repr, self.tailnodes)),
-#									exp(-self.weight))
+unarybest = (0, )
+binarybest = (0, 0)
 
 def getcandidates(chart, v, k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
@@ -37,11 +19,9 @@ def getcandidates(chart, v, k):
 	# three probability y), in which case insertion order should count.
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
-	return heapdict([((edge, (0,) * (1 if edge.right == NONE else 2)),
-				edge.inside) for edge in nsmallest(k, chart.get(v, []))])
-	#return heapdict([((Edge(rhs, p), (0,) * len(rhs)), (ip, (0,) * len(rhs)))
-	#			for ip,p,rhs in 
-	#			nsmallest(k, chart.get(v, []), key=itemgetter(0))])
+	if v not in chart: return heapdict() #raise error?
+	return heapdict([((edge, binarybest if edge.right.label else unarybest),
+						edge.inside) for edge in nsmallest(k, chart[v])])
 
 def lazykthbest(v, k, k1, D, cand, chart):
 	# k1 is the global k
@@ -62,7 +42,7 @@ def lazykthbest(v, k, k1, D, cand, chart):
 	return D
 
 def lazynext(v, e, j, k1, D, cand, chart):
-	unary = e.right == NONE
+	unary = e.right.label == 0
 	# add the |e| neighbors
 	for i in range(1 if unary else 2):
 		if i == 0:
@@ -103,10 +83,10 @@ def getderivation(v, ej, D, chart, tolabel):
 		if ei in chart:
 			if ei not in D:
 				if i == 0:
-					edge = chart[ei][i]
-					D[ei] = [((edge, (0,) * (1 if edge.right == NONE else 2)),
-																edge.inside)]
-				else: raise ValueError
+					edge = chart[ei][0]
+					D[ei] = [((edge, binarybest if edge.right.label
+								else unarybest), edge.inside)]
+				else: raise ValueError("non-best edge missing in derivations")
 			children.append(getderivation(ei, D[ei][i][0], D, chart, tolabel))
 		else:
 			# this must be a terminal
@@ -165,6 +145,7 @@ def main():
 	def ci(label, vec):
 		return ChartItem(toid[label], vec)
 	def l(a): return -log(a)
+	NONE = ci(0, 0)			# sentinel node
 	goal = ci("S", 0b111)
 	chart = {
 			ci("S", 0b111) : [

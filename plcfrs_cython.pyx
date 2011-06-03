@@ -32,6 +32,7 @@ cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem 
 	cdef Edge edge = Edge.__new__(Edge)
 	edge.inside = inside; edge.prob = prob
 	edge.left = left; edge.right = right
+	edge._hash = hash((inside, prob, left, right))
 	return edge
 
 #cdef inline tuple prune_rules(chart, unary, lbinary, rbinary):
@@ -386,6 +387,21 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel):
 	tree = "(%s %s)" % (tolabel[start.label],
 							" ".join([a for a,b in children]))
 	return tree, fsum([p] + [b for a,b in children])
+
+def mostprobablederivation(chart, start, tolabel):
+	return (getmpd(<dict>chart, start, tolabel),
+				(<Edge>(min(chart[start]))).inside)
+
+cdef getmpd(dict chart, ChartItem start, dict tolabel):
+	cdef Edge edge = <Edge>(min(chart[start]))
+	if edge.right.label: #binary
+		return "(%s %s %s)" % (tolabel[start.label],
+					getmpd(chart, edge.left, tolabel),
+					getmpd(chart, edge.right, tolabel))
+	else: #unary or terminal
+		return "(%s %s)" % (tolabel[start.label],
+					getmpd(chart, edge.left, tolabel) if edge.left.label
+									else str(edge.left.vec))
 
 removeids = re.compile("@[0-9]+")
 def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None):

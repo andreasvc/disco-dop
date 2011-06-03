@@ -22,7 +22,7 @@ from kbest import lazykbest
 #from plcfrs_cython import mostprobableparse
 #from plcfrs import parse
 try:
-	from plcfrs_cython import parse, mostprobableparse, filterchart
+	from plcfrs_cython import parse, mostprobableparse, mostprobablederivation, filterchart
 	print "running cython"
 except: from plcfrs import parse, mostprobableparse; print "running non-cython"
 
@@ -202,9 +202,11 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 								[t for w,t in sent] if tags else [],
 								grammar.toid[top], True, 1, None)
 			print
-		else: chart = ()
-		for a in chart: chart[a].sort(key=lambda x: x.inside)
-		for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
+		else: chart = {}; start = False
+		#for a in chart: chart[a].sort()
+		#for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
+		if start:
+			result, prob = mostprobablederivation(chart, start, grammar.tolabel)
 			#result = rem_marks(Tree(alterbinarization(result)))
 			#print result
 			#derivout.write("vitprob=%.6g\n%s\n\n" % (
@@ -219,6 +221,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
 			if result == tree or f1 == 1.0:
+				assert result != tree or f1 == 1.0
 				print "exact match"
 				exacts += 1
 			else:
@@ -229,7 +232,6 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 				serrors1.update(a[0] for a in candb - goldb)
 				serrors2.update(a[0] for a in goldb - candb)
 			sresults.append(result)
-			break
 		else:
 			if srcg: print "no parse"
 			#derivout.write("Failed to parse\nparse_failure.\n\n")
@@ -244,14 +246,15 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 		if dop:
 			print "DOP:",
 			#estimate = partial(getoutside, outside, maxlen, len(sent))
-			srcgchart = filterchart(chart, start)
+			if srcg: srcgchart = filterchart(chart, start)
+			else: srcgchart = {}
 			print "srcgchart filtered", len(srcgchart)
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
 								dopgrammar.toid[top], viterbi, n, None,
 								prune=frozenset(srcgchart.keys()),
 								prunetoid=grammar.toid)
-		else: chart = ()
+		else: chart = {}; start = False
 		if start:
 			if nsent == 1:
 				codecs.open("dopderivations", "w",
@@ -415,6 +418,6 @@ def foo(a):
 if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-	cftiger()
+	#cftiger()
 	#plac.call(main)
-	#main()
+	main()
