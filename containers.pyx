@@ -26,23 +26,28 @@ cdef class Edge:
 	def __init__(self, inside, prob, left, right):
 		self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
+		self._hash = hash((inside, prob, left, right))
 	def __hash__(self):
-		return  hash((self.inside, self.prob, self.left, self.right))
-	def __richcmp__(Edge self, Edge other, int op):
-		# the ordering, only depends on inside probobality
+		return self._hash
+	def __richcmp__(Edge self, other, int op):
+		# the ordering only depends on inside probobality
 		# (or only on estimate / outside score when added)
-		if op == 0: return self.inside < other.inside
-		elif op == 1: return self.inside <= other.inside
+		if op == 0: return self.inside < (<Edge>other).inside
+		elif op == 1: return self.inside <= (<Edge>other).inside
+		# (in)equality compares all elements
+		# boolean trick: equality and inequality in one expression i.e., the
+		# equality between the two boolean expressions acts as biconditional
+		elif op == 2 or op ==3:
+			return (op == 2) == (
+				(self.inside == (<Edge>other).inside
+				and self.prob == (<Edge>other).prob
+				and self.left == (<Edge>other).right
+				and self.right == (<Edge>other).right))
 		elif op == 4: return self.inside > other.inside
 		elif op == 5: return self.inside >= other.inside
-		# (in)equality compares all elements
-		# boolean trick: equality and inequality in one expression
-		else: return (op == 2) == (
-				(self.inside == other.inside and self.prob == other.prob
-				and self.left == other.right and self.right == other.right))
 	def __repr__(self):
-		return "<%g, %g, [%r, %r]>" % (self.inside, self.prob,
-							self.left, self.right if self.right else 'None')
+		return "<%g, %g, [%r, %s]>" % (self.inside, self.prob,
+					self.left, repr(self.right) if self.right else 'None')
 
 cdef class Terminal:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
