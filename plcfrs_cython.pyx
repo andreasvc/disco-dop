@@ -67,8 +67,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		for a, label in toid.items():
 			newlabel = prunetoid[a.split("@")[0]]
 			removeid[label] = newlabel
-		print 'pruning on with %d nonterminals and %d items with %d categories' % (
-					len(removeid), len(prune), len(set(removeid.values())))
+		print 'pruning on with %d nonterminals and %d items with %d categories' % (	len(removeid), len(prune), len(set(removeid.values())))
 	gc.disable()
 	# scan
 	Epsilon = toid["Epsilon"]
@@ -274,26 +273,49 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	# everything looks all right
 	return True
 
+cdef double logprobsum(list edges):
+	return abs(log(sum(exp(-edge.inside) for edge in edges)))
+
+def outsidecosts(chart, start):
+	# create lookup table of outside costs. or something like it.
+	outside = defaultdict(list)
+	outside_subtree(start, <dict>chart, outside, logprobsum(chart[start]), frozenset())
+	assert start in outside
+	return dict((a, abs(log(sum(map(exp, b))))) for a,b in outside.items())
+
+cdef void outside_subtree(ChartItem start, dict chart, dict outside, double total, frozenset path):
+	cdef Edge edge
+	cdef double newtotal
+	if start in path: return
+	if start in chart:
+		newtotal = logprobsum(chart[start])
+		outside[chart].append(total - newtotal)
+		path.add(start)
+		for edge in chart[start]:
+			if edge.left not in path:
+				outside_subtree((<Edge>edge).left, chart, outside, newtotal,
+								path if edge.right else path | set([start]))
+			if edge.right.label and edge.right not in path:
+				outside_subtree(edge.right, chart, outside, newtotal, path)
+
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation headed
 	# by "start"
 	chart2 = {}
 	filter_subtree(start, <dict>chart, chart2)
-	assert start in chart2
 	return chart2
 
 cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 	cdef Edge edge
-	if start in chart2:
-		assert chart2[start] == chart[start]
-		return
-	if start in chart: chart2[start] = chart[start]
-	else: chart2[start] = []
-	if start.label:
-		for edge in chart[start]:
+	cdef ChartItem item
+	chart2[start] = chart[start]
+	for edge in chart[start]:
+		item = (<Edge>edge).left
+		if item.label and item not in chart2:
 			filter_subtree((<Edge>edge).left, chart, chart2)
-			if edge.right.label:
-				filter_subtree(edge.right, chart, chart2)
+		item = (<Edge>edge).right
+		if item.label and item not in chart2:
+			filter_subtree(edge.right, chart, chart2)
 
 def filtercycles(chart, start, visited, current):
 	""" remove @#$%! cycles from chart
