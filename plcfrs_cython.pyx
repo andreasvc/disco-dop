@@ -12,27 +12,30 @@ from array import array
 import re, gc
 from nltk import FreqDist, Tree
 from rcgrules import enumchart, induce_srcg
-
-# sentinel node to indicate unary productions and preterminals
-NONE = ChartItem(0, 0)
+from containers import ChartItem, Edge, Rule, Terminal
+from cpq import heapdict, Entry
 
 # to avoid overhead of __init__ and __cinit__ constructors
-cdef inline Pair new_Pair(object a, object b):
-	cdef Pair pair = Pair.__new__(Pair)
-	pair.a = a; pair.b = b
-	return pair
-
 cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
 	cdef ChartItem item = ChartItem.__new__(ChartItem)
 	item.label = label; item.vec = vec
-	item._hash = hash((label, vec))
+	#item._hash = hash((label, vec))
+	# this is the hash function used for tuples, apparently
+	item._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
+	if item._hash == -1: item._hash = -2
 	return item
 
 cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem right):
 	cdef Edge edge = Edge.__new__(Edge)
 	edge.inside = inside; edge.prob = prob
 	edge.left = left; edge.right = right
-	edge._hash = hash((inside, prob, left, right))
+	#hash((inside, prob, left, right))
+	# this is the hash function used for tuples, apparently
+	edge._hash = (<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>inside
+	edge._hash = (<unsigned long>1000003 * edge._hash) ^ <long>prob
+	edge._hash = (<unsigned long>1000003 * edge._hash) ^ left._hash
+	edge._hash = (<unsigned long>1000003 * edge._hash) ^ right._hash
+	if edge._hash == -1: edge._hash = -2
 	return edge
 
 #cdef inline tuple prune_rules(chart, unary, lbinary, rbinary):
@@ -48,10 +51,9 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
-	cdef int m = 0, maxA = 0, x
-	cdef bint doprune = False
+	cdef int m = 0, maxA = 0, i
 	cdef int lensent = len(sent), label, newlabel
-	#A = heapdict() #if viterbi else {}
+	cdef bint doprune = False
 	cdef heapdict A = heapdict()				#the agenda
 	cdef dict C = <dict>defaultdict(list)		#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
@@ -60,9 +62,15 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef object results = deque()				#temporary values
 	cdef Entry entry
 	cdef Edge edge, newedge
-	cdef ChartItem Ih, I1h, goal, newitem
+	cdef ChartItem Ih, I1h, goal, newitem, NONE = new_ChartItem(0, 0)
+	cdef double x, y
+	cdef list rules
+	cdef dict items
+	cdef Rule rule
+	cdef Terminal terminal
+	cdef frozenset prune1 = prune
 	if start == None: start = toid["ROOT"]
-	goal = ChartItem(start, (1 << len(sent)) - 1)
+	goal = new_ChartItem(start, (1 << len(sent)) - 1)
 	if prune:
 		doprune = True
 		for a, label in toid.items():
@@ -74,25 +82,26 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
 		recognized = False
-		for rule in lexical.get(w, []):
+		for terminal in lexical.get(w, []):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction, 
 			# and give probability of 1
-			if not tags or tags[i] == tolabel[rule.lhs].split("@")[0]:
-				Ih = ChartItem(rule.lhs, 1 << i)
-				I = ChartItem(Epsilon, i)
-				z = 0 if tags else rule.prob
-				A[Ih] = Edge(rule.prob, rule.prob, I, NONE)
+			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
+				Ih = new_ChartItem(terminal.lhs, 1 << i)
+				I = new_ChartItem(Epsilon, i)
+				z = 0 if tags else terminal.prob
+				A[Ih] = Edge(terminal.prob, terminal.prob, I, NONE)
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
-				Ih = ChartItem(toid[tags[i]], 1 << i)
-				I = ChartItem(Epsilon, i)
+				Ih = new_ChartItem(toid[tags[i]], 1 << i)
+				I = new_ChartItem(Epsilon, i)
 				A[Ih] = Edge(0, 0, I, NONE)
 				recognized = True
 				continue
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
 			return C, NONE
+
 	# parsing
 	while A.length:
 		entry = A.popentry()
@@ -111,85 +120,68 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		else:
 			#results = [] #del results[:]
 			#results.clear()
-			deduced_from(Ih, edge.inside, Cx, unary, lbinary, rbinary,
-								estimate, results, doprune, prune, removeid)
-			#for pair in results:
-			popleft = results.popleft
-			x = len(results)
-			while x:
-				pair = popleft(); x -= 1
-				I1h = <ChartItem>((<Pair>pair).a)
-				newedge = <Edge>((<Pair>pair).b)
-				if not (A.contains(I1h) or I1h in C):
-					if doprune and I1h not in C:
-						if new_ChartItem(removeid[I1h.label],
-							I1h.vec) not in prune:
-							continue
-					# haven't seen this item before, add to agenda
-					A.setitem(I1h, newedge)
-				elif A.contains(I1h):
-					if newedge.inside < (<Edge>(A.getitem(I1h))).inside:
-						# item has lower score, update agenda
-						(<list>C[I1h]).append(A.replace(I1h, newedge))
-					else:
-						(<list>C[I1h]).append(newedge)
-				else: #if not viterbi: #item is not in agenda, but is in chart
-					(<list>C[I1h]).append(newedge)
-					#Cx[I1h.label][I1h] = min(Cx[I1h.label][I1h], newedge.inside)
-					#if newedge.inside < <double>(<dict>(Cx[I1h.label])[I1h]):
-					#	(<dict>Cx[I1h.label])[I1h] = newedge.inside
+			x = edge.inside
+			rules = <list>unary[Ih.label]
+			for i in range(len(rules)):
+				rule = <Rule>rules[i]
+				#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
+				process_edge(new_ChartItem(rule.lhs, Ih.vec),
+								new_Edge(x + rule.prob, rule.prob, Ih, NONE),
+								A, C, Cx, doprune, prune1, removeid)
+
+			rules = <list>lbinary[Ih.label]
+			for i in range(len(rules)):
+				rule = <Rule>rules[i]
+				items = <dict>(Cx[rule.rhs2])
+				for I1h in items:
+					if concat(rule, Ih.vec, I1h.vec):
+						y = (<Edge>(items[I1h])).inside
+						#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
+						#if estimate else 0.0) + x + y + rule.prob,
+						process_edge(new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec),
+								new_Edge(x+y+rule.prob, rule.prob, Ih, I1h),
+								A, C, Cx, doprune, prune1, removeid)
+			rules = <list>rbinary[Ih.label]
+			for i in range(len(rules)):
+				rule = <Rule>rules[i]
+				items = <dict>(Cx[rule.rhs1])
+				for I1h in items:
+					if concat(rule, I1h.vec, Ih.vec):
+						y = (<Edge>(items[I1h])).inside
+						#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
+						#if estimate else 0.0) + x + y + rule.prob,
+						process_edge(new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec),
+								new_Edge(x+y+rule.prob, rule.prob, I1h, Ih),
+								A, C, Cx, doprune, prune1, removeid)
 		maxA = max(maxA, len(A))
 	print "max agenda size %d / chart keys %d / values %d" % (
 								maxA, len(C), sum(map(len, C.values()))),
+	#queue_free(results)
 	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE
 
-cdef inline void deduced_from(ChartItem Ih, double x, list Cx,
-				list unary, list lbinary, list rbinary, object estimate,
-				object results, bint doprune, frozenset prune, dict removeid):
-	""" Produce a list of all ChartItems that can be deduced using the
-	existing items in Cx and the grammar rules. """
-	cdef double y
-	cdef ChartItem I1h
-	cdef list rules
-	cdef dict items
-	cdef Rule rule
-	rules = <list>unary[Ih.label]
-	resultsappend = results.append
-	for rule in rules:
-		#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
-		#if doprune and new_ChartItem(removeid[rule.lhs], Ih.vec) not in prune:
-		#	continue
-		resultsappend(new_Pair(
-						new_ChartItem(rule.lhs, Ih.vec),
-						new_Edge(x + rule.prob, rule.prob, Ih, NONE)))
-	rules = <list>lbinary[Ih.label]
-	for rule in rules:
-		items =  <dict>(Cx[rule.rhs2])
-		for I1h in items:
-			if concat(rule, Ih.vec, I1h.vec):
-				#if (doprune and new_ChartItem(removeid[rule.lhs],
-				#		I1h.vec ^ Ih.vec) not in prune): continue
-				y = (<Edge>(items[I1h])).inside
-				#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
-				#if estimate else 0.0) + x + y + rule.prob,
-				resultsappend(new_Pair(
-					new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec),
-					new_Edge(x + y + rule.prob, rule.prob, Ih, I1h)))
-	rules = <list>rbinary[Ih.label]
-	for rule in rules:
-		items = <dict>(Cx[rule.rhs1])
-		for I1h in items:
-			if concat(rule, I1h.vec, Ih.vec):
-				#if (doprune and new_ChartItem(removeid[rule.lhs],
-				#		I1h.vec ^ Ih.vec) not in prune): continue
-				y = (<Edge>(items[I1h])).inside
-				#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
-				#if estimate else 0.0) + x + y + rule.prob,
-				resultsappend(new_Pair(
-					new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec),
-					new_Edge(x + y + rule.prob, rule.prob, I1h, Ih)))
+cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A, dict C, list Cx, bint doprune, frozenset prune, dict removeid):
+	""" Decide what to do with a newly derived edge. """
+	#if newedge.inside + outsideestimate > 120.0: continue
+	if not (A.contains(newitem) or newitem in C):
+		if doprune and newitem not in C:
+			if new_ChartItem(removeid[newitem.label], newitem.vec) not in prune:
+				return #continue
+		# haven't seen this item before, won't prune, add to agenda
+		#A.setitem(newitem, newedge)
+		A[newitem] = newedge
+	elif A.contains(newitem):
+		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
+			# item has lower score, update agenda (and add old edge to chart)
+			(<list>C[newitem]).append(A.replace(newitem, newedge))
+		else: #worse score, only add to chart
+			(<list>C[newitem]).append(newedge)
+	else: #item is not in agenda, but is in chart
+		(<list>C[newitem]).append(newedge)
+		#Cx[newitem.label][newitem] = min(Cx[newitem.label][newitem], newedge.inside)
+		#if newedge.inside < <double>(<dict>(Cx[newitem.label])[newitem]):
+		#	(<dict>Cx[newitem.label])[newitem] = newedge.inside
 
 cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	"""
@@ -468,9 +460,11 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 	return parsetrees
 
 def binrepr(a, sent):
-	return bin(a.vec)[2:].rjust(len(sent), "0")[::-1]
+	return bin((<ChartItem>a).vec)[2:].rjust(len(sent), "0")[::-1]
 
 def pprint_chart(chart, sent, tolabel):
+	cdef ChartItem a
+	cdef Edge edge
 	print "chart:"
 	for a in sorted(chart, key=lambda x: bitcount(x[1])):
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
@@ -491,7 +485,7 @@ def do(sent, grammar):
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
 	pprint_chart(chart, sent.split(), grammar.tolabel)
-	if start == NONE:
+	if start == new_ChartItem(0, 0):
 		print "no parse"
 	else:
 		print "10 best parse trees:"

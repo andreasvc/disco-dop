@@ -214,8 +214,7 @@ def newsplitgrammar(grammar):
 			r = Terminal(toid[rule[0]], toid[rule[1]], 0, unicode(yf[0]), abs(w))
 		else:
 			args, lengths = yfarray(yf)
-			yf1 = arraytoyf(args, lengths)
-			assert yf == yf1
+			assert yf == arraytoyf(args, lengths)
 			r = Rule(toid[rule[0]], toid[rule[1]],
 				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
 		if len(rule) == 2:
@@ -235,6 +234,7 @@ def newsplitgrammar(grammar):
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
 	object. """
+	assert len(yf) <= 8 and all(len(a) <= 8 for a in yf)
 	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
 	return array('B', initializer), array('B', map(len, yf)) # 'H' for 16 bits
 

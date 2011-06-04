@@ -1,8 +1,10 @@
 from cpq cimport Entry
 from kbest cimport lazykbest
-from containers cimport ChartItem, Edge, Rule, Terminal, Pair
+from containers cimport ChartItem, Edge, Rule, Terminal
 from array cimport array
 from cpq cimport heapdict
+#from cqueue cimport Queue, QueueValue, queue_new, queue_free, \
+#				queue_push_tail, queue_pop_head, queue_is_empty
 
 cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)

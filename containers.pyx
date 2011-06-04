@@ -3,7 +3,9 @@ cdef class ChartItem:
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
-		self._hash = hash((self.label, self.vec))
+		#self._hash = hash((self.label, self.vec))
+		self._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
+		if self._hash == -1: self._hash = -2
 	def __hash__(ChartItem self):
 		return self._hash
 	def __richcmp__(ChartItem self, ChartItem other, int op):
@@ -24,9 +26,17 @@ cdef class ChartItem:
 
 cdef class Edge:
 	def __init__(self, inside, prob, left, right):
+		cdef long _hash
 		self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
-		self._hash = hash((inside, prob, left, right))
+		#self._hash = hash((inside, prob, left, right))
+		# this is the hash function used for tuples, apparently
+		_hash = (<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>inside
+		_hash = (<unsigned long>1000003 * _hash) ^ <long>prob
+		_hash = (<unsigned long>1000003 * _hash) ^ (<ChartItem>left)._hash
+		_hash = (<unsigned long>1000003 * _hash) ^ (<ChartItem>right)._hash
+		if _hash == -1: self._hash = -2
+		else: self._hash = _hash
 	def __hash__(self):
 		return self._hash
 	def __richcmp__(Edge self, other, int op):
