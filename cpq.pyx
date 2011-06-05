@@ -25,7 +25,7 @@ cdef class heapdict(dict):
 			order of equivalent values in this iterable is preserved, and
 			duplicate keys will be arbitrarily pruned (not necessarily keeping
 			the ones with best priorities), as we use a dict to make sure we
-			only have unique keys. 
+			only have unique keys.
 			if order needs to be preserved, insert them one by one. """
 		cdef Entry entry
 		cdef dict temp

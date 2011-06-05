@@ -8,7 +8,7 @@ Requirements:
 	- NLTK          http://www.nltk.org
 	- cython        (optional) http://www.cython.org
 		requires array support http://trac.cython.org/cython_trac/ticket/314
-		compile with: "make". NB: compilation uses CFLAGS use to compile
+		compile with: "make". NB: compilation uses CFLAGS used to compile
 		Python itself.
 
 plcfrs.py, rcgrules.py, kbest.py and runexp.py can be run without arguments as

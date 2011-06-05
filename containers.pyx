@@ -4,7 +4,7 @@ cdef class ChartItem:
 		self.label = label
 		self.vec = vec
 		#self._hash = hash((self.label, self.vec))
-		self._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
+		self._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
 		if self._hash == -1: self._hash = -2
 	def __hash__(ChartItem self):
 		return self._hash

@@ -1,9 +1,5 @@
 from array cimport array
 
-cdef class Pair:
-	cdef object a
-	cdef object b
-
 cdef class ChartItem:
 	cdef int label
 	cdef unsigned long vec
