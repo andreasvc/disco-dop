@@ -1,6 +1,6 @@
 import cython
 from cpq cimport heapdict, nsmallest
-from containers cimport ChartItem, Edge, RankedEdge
+from containers cimport ChartItem, Edge
 #from plcfrs cimport ChartItem
 
 #cdef class Edge:

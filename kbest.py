@@ -23,7 +23,7 @@ def getcandidates(chart, v, k):
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
 	if v not in chart: return heapdict() #raise error?
-	return heapdict([(binarybest if edge.right.label else unarybest, edge)
+	return heapdict([((edge, binarybest if edge.right.label else unarybest), edge)
 						for edge in nsmallest(k, chart[v])])
 	#return heapdict([(RankedEdge(edge, edge.inside, 0, 0), edge)
 	#					for edge in nsmallest(k, chart[v])])
@@ -37,7 +37,7 @@ def lazykthbest(v, k, k1, D, cand, chart, explored):
 	while v not in D or len(D[v]) < k:
 		if v in D:
 			# last derivation
-			j, e = D[v][-1]
+			e, j = D[v][-1][0]
 			# update the heap, adding the successors of last derivation
 			lazynext(v, e, j, k1, D, cand, chart, explored)
 		# get the next best derivation and delete it from the heap
@@ -62,7 +62,7 @@ def lazynext(v, e, j, k1, D, cand, chart, explored):
 		# if it exists and is not in heap yet
 		if (ei in D and j1[i] < len(D[ei])) and (v, e, j1) not in explored: #cand[v]:
 			# add it to the heap
-			cand[v][j1] = Edge(getprob(chart, D, e, j1),
+			cand[v][e, j1] = Edge(getprob(chart, D, e, j1),
 								e.prob, e.left, e.right)
 			explored.add((v, e, j1))
 
@@ -87,7 +87,7 @@ def getderivation(v, e, j, D, chart, tolabel):
 	for ei, i in zip((e.left, e.right), j):
 		if ei in chart:
 			if ei in D:
-				j, e = D[ei][i]
+				e, j = D[ei][i][0]
 				children.append(getderivation(ei, e, j, D, chart, tolabel))
 			else:
 				if i == 0:
@@ -117,7 +117,7 @@ def lazykbest(chart, goal, k, tolabel):
 	explored = set()
 	lazykthbest(goal, k, k, D, cand, chart, explored)
 	print len(explored), "(sub)derivations considered"
-	return [(getderivation(goal, e, j, D, chart, tolabel), e.inside) for j, e in D[goal]]
+	return [(getderivation(goal, e, j, D, chart, tolabel), e.inside) for (e,j),_ in D[goal]]
 
 def main():
 	from math import log
