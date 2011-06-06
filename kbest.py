@@ -23,8 +23,8 @@ def getcandidates(chart, v, k):
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
 	if v not in chart: return heapdict() #raise error?
-	return heapdict([((edge, binarybest if edge.right.label else unarybest),
-						edge) for edge in nsmallest(k, chart[v])])
+	return heapdict([(binarybest if edge.right.label else unarybest, edge)
+						for edge in nsmallest(k, chart[v])])
 	#return heapdict([(RankedEdge(edge, edge.inside, 0, 0), edge)
 	#					for edge in nsmallest(k, chart[v])])
 
@@ -37,7 +37,7 @@ def lazykthbest(v, k, k1, D, cand, chart, explored):
 	while v not in D or len(D[v]) < k:
 		if v in D:
 			# last derivation
-			e, j = D[v][-1][0]
+			j, e = D[v][-1]
 			# update the heap, adding the successors of last derivation
 			lazynext(v, e, j, k1, D, cand, chart, explored)
 		# get the next best derivation and delete it from the heap
@@ -62,8 +62,8 @@ def lazynext(v, e, j, k1, D, cand, chart, explored):
 		# if it exists and is not in heap yet
 		if (ei in D and j1[i] < len(D[ei])) and (v, e, j1) not in explored: #cand[v]:
 			# add it to the heap
-			cand[v][e, j1] = Edge(getprob(chart, D, e, j1), e.prob,
-														e.left, e.right)
+			cand[v][j1] = Edge(getprob(chart, D, e, j1),
+								e.prob, e.left, e.right)
 			explored.add((v, e, j1))
 
 def getprob(chart, D, e, j):
@@ -76,53 +76,29 @@ def getprob(chart, D, e, j):
 	# it's probably pointless to use fsum for only 3 values, but well...
 	return fsum(result)
 
-def getderivation(v, ej, D, chart, tolabel):
+def getderivation(v, e, j, D, chart, tolabel):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
 	vector [2, 1], this points to the derivation headed by S and having the 2nd
 	best NP and the 1st best VP as children.
 	"""
-	e, j = ej; children = []
+	children = []
 	for ei, i in zip((e.left, e.right), j):
 		if ei in chart:
-			if ei not in D:
+			if ei in D:
+				j, e = D[ei][i]
+				children.append(getderivation(ei, e, j, D, chart, tolabel))
+			else:
 				if i == 0:
 					edge = chart[ei][0]
-					D[ei] = [((edge, binarybest if edge.right.label
-								else unarybest), edge.inside)]
+					children.append(getderivation(ei, edge, binarybest if edge.right.label else unarybest, D, chart, tolabel))
 				else: raise ValueError("non-best edge missing in derivations")
-			children.append(getderivation(ei, D[ei][i][0], D, chart, tolabel))
 		else:
 			# this must be a terminal
 			children.append(str(ei.vec))
-	## debugging duplicates
-	#s = "(%s %s)" % (tolabel[v.label], " ".join(children))
-	#if s not in getderivation.mem:
-	#	getderivation.mem[s] = ej
-	#elif getderivation.mem[s] != ej:
-	#	print 'DUPLICATE', ej[::-1], 'and', getderivation.mem[s][::-1],
-	#	print '=>\n', s
-	#	for ee, jj in (ej, getderivation.mem[s]):
-	#		print jj, ':', ee
-	#		agenda = zip(ee.tailnodes, jj)
-	#		while agenda:
-	#			ei, i = agenda.pop()
-	#			if ei in D:
-	#				((e, j), w) = D[ei][i]
-	#				agenda.extend(zip(e.tailnodes, j))
-	#				print tolabel[ei.label],
-	#				print bin(ei.vec)[2:][::-1], ":",
-	#				print " ".join(["%s[%s]" % (tolabel[a.label],
-	#							bin(a.vec)[2:][::-1]) for a in e.tailnodes]),
-	#				print j, exp(-w)
-	#			else:
-	#				print 'terminal', ei.vec
-	#		print
-	#	exit()
 
 	return "(%s %s)" % (tolabel[v.label], " ".join(children))
-#getderivation.mem = {}
 
 def lazykbest(chart, goal, k, tolabel):
 	""" wrapper function to run lazykthbest and get the actual derivations.
@@ -140,8 +116,8 @@ def lazykbest(chart, goal, k, tolabel):
 	cand = {}
 	explored = set()
 	lazykthbest(goal, k, k, D, cand, chart, explored)
-	print len(explored), "candidate edges considered"
-	return [(getderivation(goal, ej, D, chart, tolabel), e.inside) for ej, e in D[goal]]
+	print len(explored), "(sub)derivations considered"
+	return [(getderivation(goal, e, j, D, chart, tolabel), e.inside) for j, e in D[goal]]
 
 def main():
 	from math import log

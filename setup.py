@@ -8,15 +8,13 @@ ext_modules = [
 			#extra_compile_args=["-g"],
 			#extra_link_args=["-g"],
 			include_dirs=['.'],
-			library_dirs=['.'],
+			library_dirs=['.']
 		),
 	Extension("estimates",
 			["estimates.py", "estimates.pxd"],
 		),
 	Extension("kbest",
-		["kbest.py", "kbest.pxd"],
-			#extra_compile_args=["-g"],
-			#extra_link_args=["-g"]
+		["kbest.py", "kbest.pxd"]
 		),
 	Extension("plcfrs",
 			["plcfrs.py", "plcfrs.pxd"],

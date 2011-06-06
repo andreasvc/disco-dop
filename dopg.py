@@ -71,7 +71,7 @@ class GoodmanDOP:
 		for tree, utree in utreebank:
 			nodefreq(tree, utree, subtreefd, nonterminalfd)
 
-		if isinstance(parser, BitParChartParser):
+		if issubclass(parser, BitParChartParser):
 			lexicon = set(x for a, b in utreebank for x in a.pos() + b.pos())
 			# this takes the most time, produce CFG rules:
 			cfg = FreqDist(chain(*(self.goodman(tree, utree)
@@ -266,7 +266,7 @@ def probabilities(cfg, fd, nonterminalfd):
 		without IDs)""" 
 	#return [a(nonterminalfd) for a in cfg)
 	def prob(l, r):
-		return reduce(mul, map((lambda z: '@' in str(z)
+		return reduce(mul, map((lambda z: '@' in unicode(z)
 			and fd[unicode(z)] or 1), r)) / float(fd[unicode(l)])
 	# format expected by mccparse()
 	#self.pcfg = dict((Production(l, r), (reduce(mul,

@@ -55,7 +55,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef int lensent = len(sent), label, newlabel
 	cdef bint doprune = False
 	cdef heapdict A = heapdict()				#the agenda
-	cdef dict C = <dict>defaultdict(list)		#the full chart
+	cdef dict C = {} #<dict>defaultdict(list)		#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
 	cdef dict removeid = {}
 	#cdef list results = []						#temporary values
@@ -111,7 +111,11 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		#Ih.label, Ih.vec = <ChartItem>Ihedge[0].label, <ChartItem>Ihedge[1].vec
 		#when heapdict is not available:
 		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		(<list>(C[Ih])).append(edge)
+		#try: #if Ih in C:
+		#(<list>(C[Ih])).append(edge)
+		(<list>(C.setdefault(Ih, []))).append(edge)
+		#except KeyError: #else:
+		#	C[Ih] = [edge]
 		(<dict>(Cx[Ih.label]))[Ih] = edge #.inside
 		if Ih == goal: #Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
@@ -164,20 +168,27 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A, dict C, list Cx, bint doprune, frozenset prune, dict removeid):
 	""" Decide what to do with a newly derived edge. """
 	#if newedge.inside + outsideestimate > 120.0: continue
-	if not (A.contains(newitem) or newitem in C):
+	if not (A.contains(newitem) or newitem in C): #not in A or C
 		if doprune and newitem not in C:
 			if new_ChartItem(removeid[newitem.label], newitem.vec) not in prune:
 				return #continue
 		# haven't seen this item before, won't prune, add to agenda
 		#A.setitem(newitem, newedge)
 		A[newitem] = newedge
-	elif A.contains(newitem):
+	elif A.contains(newitem): # in A (maybe in C)
 		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
 			# item has lower score, update agenda (and add old edge to chart)
-			(<list>C[newitem]).append(A.replace(newitem, newedge))
+			#try: #if newitem in C:
+			(<list>C.setdefault(newitem, [])).append(A.replace(newitem, newedge))
+			#(<list>C[newitem]).append(A.replace(newitem, newedge))
+			#except KeyError: #else:
+			#	C[newitem] = [A.replace(newitem, newedge)]
 		else: #worse score, only add to chart
-			(<list>C[newitem]).append(newedge)
-	else: #item is not in agenda, but is in chart
+			#try: #if newitem in C:
+			(<list>C.setdefault(newitem, [])).append(newedge)
+			#except KeyError: #else:
+			#	C[newitem] = [newedge]
+	else: # not in A, but is in C
 		(<list>C[newitem]).append(newedge)
 		#Cx[newitem.label][newitem] = min(Cx[newitem.label][newitem], newedge.inside)
 		#if newedge.inside < <double>(<dict>(Cx[newitem.label])[newitem]):

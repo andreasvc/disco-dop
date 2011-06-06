@@ -161,8 +161,8 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 		return (rule, yf), (freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
         / (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
         * interpolate #(interpolate if '@' not in rule[0] else 1.0)
-        + (exp(srcg[rule, yf]) #((1 - interpolate) * (float(freq) / ntfd[rule[0]])
-                if not any('@' in z for z in rule) and not wrong_interpolate else 0))
+        + ((1 - interpolate) * exp(srcg[rule, yf])
+            if not any('@' in z for z in rule) and not wrong_interpolate else 0))
 	probmodel = [((rule, yf), log(p)) for (rule, yf), p in map(prob, rules.items()) if p]
 	if shortestderiv:
 		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
@@ -673,24 +673,48 @@ def exportrparse(grammar):
 		if r[1] != 'Epsilon':
 			yield "1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]), " ".join(map(rewritelabel, r[1:])), repryf(yf))
 
-def read_bitpar_grammar(rules, lexicon, encoding='utf-8'):
+def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 	grammar = []
 	ntfd = defaultdict(float)
+	ntfd1 = defaultdict(set)
 	for a in codecs.open(rules, encoding=encoding):
 		a = a.split()
 		p, rule = float(a[0]), a[1:]
 		if rule[0] == "VROOT": rule[0] = "ROOT"
 		ntfd[rule[0]] += p
+		ntfd1[rule[0].split("@")[0]].add(rule[0])
 		grammar.append(([(rule[0], [range(len(rule) - 1)])]
 					+ [(a, [n]) for n, a in enumerate(rule[1:])], p))
 	for a in codecs.open(lexicon, encoding=encoding):
 		a = a.split()
 		word, tags = a[0], a[1:]
 		tags = zip(tags[::2], map(float, tags[1::2]))
-		for t,p in tags: ntfd[t] += p
+		for t,p in tags:
+			ntfd[t] += p
+			ntfd1[t.split("@")[0]].add(t)
 		grammar.extend((((t, (word,)), ('Epsilon', ())), p) for t, p in tags)
+	if ewe:
+		return newsplitgrammar([(varstoindices(rule),
+			log(p / (ntfd[rule[0][0]] * len(ntfd1[rule[0][0].split("@")[0]]))))
+			for rule, p in grammar])
 	return newsplitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
+
+def read_penn_format(corpus, maxlen=15, n=7200):
+	trees = [a for a in islice((Tree(a) for a in codecs.open(corpus, encoding='iso-8859-1')), n)
+				if len(a.leaves()) <= maxlen]
+	sents = [a.pos() for a in trees]
+	for tree in trees:
+		for n, a in enumerate(tree.treepositions('leaves')):
+			tree[a] = n
+	return trees, sents
+
+def terminals(tree, sent):
+	tree = Tree(tree)
+	tree.node = "VROOT"
+	for a, (w, t) in zip(tree.treepositions('leaves'), sent):
+		tree[a] = w
+	return tree.pprint(margin=999)
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	""" Takes a bitpar grammar and converts it to the format of

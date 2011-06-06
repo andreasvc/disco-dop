@@ -1,49 +1,20 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
-try:
-	import cython
-	assert cython.compiled
-except:
-	print "plcfrs in non-cython mode"
-	from bit import *
-
-class ChartItem(object):
-	__slots__ = ("label", "vec", "_hash")
-	def __init__(self, label, vec):
-		self.label = label
-		self.vec = vec
-		self._hash = hash((self.label, self.vec))
-	def __hash__(self):
-		return self._hash
-	# this one is only for cython:
-	def __richcmp__(self, other, op):
-		if op == 0: return self.label < other.label or self.vec < other.vec
-		elif op == 1: return self.label <= other.label or self.vec <= other.vec
-		elif op == 2: return self.label == other.label and self.vec == other.vec
-		elif op == 3: return self.label != other.label or self.vec != other.vec
-		elif op == 4: return self.label > other.label or self.vec > other.vec
-		elif op == 5: return self.label >= other.label or self.vec >= other.vec
-	# this is for plain python (can't use __eq__ because cython would complain)
-	def __cmp__(self, other):
-		if self.label == other.label and self.vec == other.vec: return 0
-		elif self.label < other.label or (self.label == other.label
-									and self.vec < other.vec): return -1
-		return 1
-	def __getitem__(self, n):
-		if n == 0: return self.label
-		elif n == 1: return self.vec
-	def __repr__(self):
-		#would need sentence length to properly pad with trailing zeroes
-		return "%s[%s]" % (self.label, bin(self.vec)[:1:-1])
-
 from math import log, exp
 from random import choice
 from itertools import count, groupby
 from operator import itemgetter
 from collections import defaultdict
 import re
-from cpq import heapdict
+from heapdict import heapdict
 from kbest import lazykbest
+from containers import ChartItem
+try:
+	import cython
+	assert cython.compiled
+except:
+	print "plcfrs in non-cython mode"
+	from bit import *
 
 def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -59,7 +30,7 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
 	C, Cx = {}, {}
-	A = heapdict() if viterbi else {}
+	A = heapdict()
 
 	# scan
 	Epsilon = toid["Epsilon"]

@@ -1,5 +1,5 @@
 import cython
-from containers cimport ChartItem
+from containers cimport ChartItem, Rule
 
 if cython.compiled:
 	print "Yep, I'm compiled"
@@ -10,8 +10,9 @@ cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
 	int nextunset(unsigned long vec, int pos)
 	int bitcount(unsigned long vec)
-	bint testbit(unsigned long vec, unsigned long pos)
 	bint bitminmax(unsigned long a, unsigned long b)
+	bint testbit(unsigned long vec, unsigned int pos)
+	bint testbitc(unsigned char c, unsigned int pos)
 
 cdef class Item:
 	cdef int state, length, lr, gaps
@@ -26,6 +27,9 @@ cdef class Item:
 	gaps=cython.int)
 cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned long vec)
 
+@cython.locals(I=ChartItem)
+cpdef doinside(grammar, int maxlen, concat, insidescores)
+
 @cython.locals(
 	newitem=Item,
 	I=Item,
@@ -34,6 +38,7 @@ cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned 
 	y=cython.double,
 	insidescore=cython.double,
 	score=cython.double,
+	n=cython.int,
 	a=cython.int,
 	b=cython.int,
 	c=cython.int,
@@ -51,6 +56,8 @@ cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned 
 	lstate=cython.int,
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint,
+	rule=Rule,
+	arg=cython.uchar,
 	#yieldfunction=cython.tuple
 	)
 cpdef list outsidelr(grammar, insidescores, int maxlen, int goal)

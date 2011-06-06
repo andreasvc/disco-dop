@@ -1,5 +1,6 @@
 import cython
-from heapdict import heapdict
+from containers cimport ChartItem
+from heapdict cimport heapdict
 
 cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
@@ -7,11 +8,6 @@ cdef extern from "bit.h":
 	int bitcount(unsigned long vec)
 	bint testbit(unsigned long vec, unsigned long pos)
 	bint bitminmax(unsigned long a, unsigned long b)
-
-cdef class ChartItem:
-	cdef public int label
-	cdef public unsigned long vec
-	cdef long _hash
 
 @cython.locals(
 	m=cython.int,
@@ -33,8 +29,8 @@ cdef class ChartItem:
 	Cx=dict,
 	Ih=ChartItem,
 	I1h=ChartItem,
-	goal=ChartItem)
-	#,A=heapdict)
+	goal=ChartItem,
+	A=heapdict)
 cpdef tuple parse(list sent, grammar, list tags=*, start=*, bint viterbi=*, int n=*, estimate=*)
 
 @cython.locals(

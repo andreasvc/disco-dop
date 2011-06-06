@@ -25,6 +25,8 @@ def testbit(a, offset):
 	""" Mask a particular bit, return nonzero if set """
 	return a & (1 << offset)
 
+testbitc = testbit
+
 def bitminmax(a, b):
 	"""test if the least and most significant bits of a and b are 
 	consecutive. we shift a and b until they meet in the middle (return true)
