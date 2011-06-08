@@ -3,11 +3,10 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
 from math import exp, fsum
-from cpq import heapdict #, nsmallest
+from cpq import heapdict
+from containers import ChartItem, Edge
 from operator import itemgetter
-from containers import ChartItem, Edge #, RankedEdge
-#from plcfrs import ChartItem
-try: nsmallest
+try: assert nsmallest(1, [1]) == [1]
 except NameError: from heapq import *
 
 unarybest = (0, )
@@ -47,15 +46,15 @@ def lazykthbest(v, k, k1, D, cand, chart, explored):
 	return D
 
 def lazynext(v, e, j, k1, D, cand, chart, explored):
-	unary = e.right.label == 0
 	# add the |e| neighbors
-	for i in range(1 if unary else 2):
+	for i in range(2):
 		if i == 0:
 			ei = e.left
-			j1 = (j[0] + 1,) if unary else (j[0] + 1, j[1])
-		elif i == 1:
+			j1 = (j[0] + 1, j[1]) if e.right.label else (j[0] + 1,)
+		elif i == 1 and e.right.label:
 			ei = e.right
 			j1 = (j[0], j[1] + 1)
+		else: break
 		# recursively solve a subproblem
 		# NB: increment j1[i] again because j is zero-based and k is not
 		lazykthbest(ei, j1[i] + 1, k1, D, cand, chart, explored)
@@ -76,28 +75,30 @@ def getprob(chart, D, e, j):
 	# it's probably pointless to use fsum for only 3 values, but well...
 	return fsum(result)
 
-def getderivation(v, e, j, D, chart, tolabel):
+def getderivation(v, e, j, D, chart, tolabel, n):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
 	vector [2, 1], this points to the derivation headed by S and having the 2nd
 	best NP and the 1st best VP as children.
 	"""
+	if n > 100: return ""
 	children = []
 	for ei, i in zip((e.left, e.right), j):
 		if ei in chart:
 			if ei in D:
 				e, j = D[ei][i][0]
-				children.append(getderivation(ei, e, j, D, chart, tolabel))
+				children.append(getderivation(ei, e, j, D, chart, tolabel, n + 1))
 			else:
 				if i == 0:
 					edge = chart[ei][0]
-					children.append(getderivation(ei, edge, binarybest if edge.right.label else unarybest, D, chart, tolabel))
+					children.append(getderivation(ei, edge, binarybest if edge.right.label else unarybest, D, chart, tolabel, n + 1))
 				else: raise ValueError("non-best edge missing in derivations")
 		else:
 			# this must be a terminal
 			children.append(str(ei.vec))
 
+	if "" in children: return ""
 	return "(%s %s)" % (tolabel[v.label], " ".join(children))
 
 def lazykbest(chart, goal, k, tolabel):
@@ -116,8 +117,8 @@ def lazykbest(chart, goal, k, tolabel):
 	cand = {}
 	explored = set()
 	lazykthbest(goal, k, k, D, cand, chart, explored)
-	print len(explored), "(sub)derivations considered"
-	return [(getderivation(goal, e, j, D, chart, tolabel), e.inside) for (e,j),_ in D[goal]]
+	print len(explored), "(sub)derivations considered",
+	return filter(itemgetter(0), [(getderivation(goal, e, j, D, chart, tolabel, 0), e.inside) for (e,j),_ in D[goal]])
 
 def main():
 	from math import log
