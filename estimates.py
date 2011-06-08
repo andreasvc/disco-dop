@@ -238,7 +238,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 
 def main():
 	from negra import NegraCorpusReader
-	from rcgrules import induce_srcg, dop_srcg_rules, newsplitgrammar
+	from grammar import induce_srcg, dop_srcg_rules, newsplitgrammar
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())

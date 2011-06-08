@@ -1,11 +1,11 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader, fold, unfold
-from rcgrules import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
+from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		extractfragments, binarizetree, ranges, export, \
 		read_rparse_grammar, mean, harmean, testgrammar, bracketings, \
 		printbrackets, rem_marks, alterbinarization, varstoindices, \
 		read_bitpar_grammar, read_penn_format, terminals
-from rcgrules import newsplitgrammar as splitgrammar
+from grammar import newsplitgrammar as splitgrammar
 from treetransforms import collinize, un_collinize
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
@@ -39,7 +39,7 @@ def main(
 	v = 1,
 	h = 1,
 	minMarkov = 3,
-	tailmarker = "$",
+	tailmarker = "",
 	maxsent = 360,	# number of sentences to parse
 	viterbi = True,
 	sample = False,
@@ -49,9 +49,9 @@ def main(
 	interpolate = 1.0,
 	wrong_interpolate = False,
 	n = 0,			#number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
-	m = 100000,		#number of derivations to sample/enumerate
-	prune=False,	#whether to use srcg chart to prune parsing of dop
-	sldop_n=5
+	m = 10000,		#number of derivations to sample/enumerate
+	prune=False,		#whether to use srcg chart to prune parsing of dop
+	sldop_n=13
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -138,7 +138,7 @@ def main(
 				dopgrammar, secondarymodel = dop_srcg_rules(list(trees), list(sents), normalize=False,
 								shortestderiv=True,	arity_marks=arity_marks)
 			else:
-				dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator=="ewe"),
+				dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
 								shortestderiv=False, arity_marks=arity_marks,
 								interpolate=interpolate, wrong_interpolate=wrong_interpolate)
 				#dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
@@ -190,12 +190,12 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 			print "SRCG:",
 			chart, start = parse([w for w,t in sent], grammar,
 								[t for w,t in sent] if tags else [],
-								grammar.toid[top], True, 1, None)
-			print
+								grammar.toid[top], True,
+								0 if prune else 1, None)
 		else: chart = {}; start = False
 		#for a in chart: chart[a].sort()
 		#for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
-		if start:
+		if repr(start) != "0[0]":
 			result, prob = mostprobablederivation(chart, start, grammar.tolabel)
 			#result = rem_marks(Tree(alterbinarization(result)))
 			#print result
@@ -215,7 +215,8 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 				print "exact match"
 				exacts += 1
 			else:
-				print "LP", round(100 * prec, 2), "LR", round(100 * rec, 2), "LF", round(100 * f1, 2)
+				print "LP %5.2f LR %5.2f LF %5.2f" % (
+								100 * prec, 100 * rec, 100 * f1)
 				print "cand-gold", printbrackets(candb - goldb),
 				print "gold-cand", printbrackets(goldb - candb)
 				print "     ", result.pprint(margin=1000)
@@ -236,9 +237,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 		if dop:
 			print "DOP:",
 			#estimate = partial(getoutside, outside, maxlen, len(sent))
-			if srcg and prune:
-				srcgchart = filterchart(chart, start)
-				print "srcgchart filtered", len(srcgchart)
+			if srcg and prune: srcgchart = filterchart(chart, start)
 			else: srcgchart = {}
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
@@ -246,7 +245,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 								prune=frozenset(srcgchart.keys()),
 								prunetoid=grammar.toid)
 		else: chart = {}; start = False
-		if start:
+		if dop and repr(start) != "0[0]":
 			if nsent == 1:
 				codecs.open("dopderivations", "w",
 					encoding="utf-8").writelines(
@@ -276,29 +275,11 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 				# (addressed) nodes.
 				mpp = [(tt, (-min((t.count("(") - t.count("@")) for t in idsremoved[tt]), mpp1[tt]))
 								for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t])]
-				#mpp = defaultdict(float)
-				#nfrag = defaultdict(set)
-				#for t, p in derivations.items():
-				#	tt = removeids.sub("", t)
-				#	mpp[tt] += exp(-p)
-				#	nfrag[tt].add(t.count("(") - t.count("@"))
-				# take the 14 likeliest parse trees, and take the shortest
-				# derivation from that
-				# add count fragment used (negative, because less is better and
-				# we use max() for the probabilities), use probabilities for
-				# tie breaking
-				#mpp = [(t, (-min(nfrag[t]), mpp[t])) for t in nlargest(sldop_n, mpp, key=lambda t: mpp[t])]
 				print "(%d derivations, %d of %d parsetrees)" % (len(derivations), len(mpp), len(mpp1))
 			else:
 				mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m, sample=sample, both=both).items()
-			prob = max(b for a,b in mpp)
-			tieresults = [Tree(a) for a,b in mpp if b == prob]
-			tieresults.sort(key=lambda t: len(list(t.subtrees())))
-			dresult = tieresults[0]
-			if len(tieresults) > 1:
-				if len(list(tieresults[0].subtrees())) < len(list(tieresults[1].subtrees())):
-					print "tie broken"
-				else: print "tie not broken"
+			dresult, prob = max(mpp, key=itemgetter(1))
+			dresult = Tree(dresult)
 			if isinstance(prob, tuple):
 				print "subtrees = %d, p = %.4e" % (abs(prob[0]), prob[1]),
 			else:
@@ -314,7 +295,8 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 				print "exact match"
 				exact += 1
 			else:
-				print "LP", round(100 * prec, 2), "LR", round(100 * rec, 2), "LF", round(100 * f1, 2)
+				print "LP %5.2f LR %5.2f LF %5.2f" % (
+								100 * prec, 100 * rec, 100 * f1)
 				print "cand-gold", printbrackets(candb - goldb),
 				print "gold-cand", printbrackets(goldb - candb)
 				print "     ", dresult.pprint(margin=1000)

@@ -291,7 +291,7 @@ def do(sent, grammar):
 	print
 
 def main():
-	from rcgrules import splitgrammar
+	from grammar import splitgrammar
 	try: print "compiled", cython.compiled
 	except: print "compiled", False
 	grammar = splitgrammar(

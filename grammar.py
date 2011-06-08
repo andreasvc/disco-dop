@@ -5,7 +5,7 @@ from math import log, exp
 from pprint import pprint
 from heapq import nsmallest, heappush, heappop
 from collections import defaultdict, namedtuple
-from itertools import chain, count, islice, repeat
+from itertools import chain, count, islice, imap, repeat
 from nltk import ImmutableTree, Tree, FreqDist, memoize
 from dopg import nodefreq, decorate_with_ids
 
@@ -122,15 +122,17 @@ def varstoindices(rule):
 	return nonterminals, freeze(vars[0])
 
 def induce_srcg(trees, sents, arity_marks=True):
-	""" Induce an SRCG, similar to how a PCFG is read off from a treebank """
+	""" Induce a probabilistic SRCG, similar to how a PCFG is read off 
+		from a treebank """
 	grammar = []
 	for tree, sent in zip(trees, sents):
 		t = tree.copy(True)
 		grammar.extend(map(varstoindices, srcg_productions(t, sent, arity_marks)))
 	grammar = FreqDist(grammar)
 	fd = FreqDist()
-	for rule,freq in grammar.items(): fd.inc(rule[0][0], freq)
-	return [(rule, log(float(freq)/fd[rule[0][0]])) for rule,freq in grammar.items()]
+	for rule,freq in grammar.iteritems(): fd.inc(rule[0][0], freq)
+	return [(rule, log(float(freq)/fd[rule[0][0]]))
+				for rule, freq in grammar.iteritems()]
 
 def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpolate=1.0, wrong_interpolate=False, arity_marks=True):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
@@ -163,7 +165,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
         * interpolate #(interpolate if '@' not in rule[0] else 1.0)
         + ((1 - interpolate) * exp(srcg[rule, yf])
             if not any('@' in z for z in rule) and not wrong_interpolate else 0))
-	probmodel = [((rule, yf), log(p)) for (rule, yf), p in map(prob, rules.items()) if p]
+	probmodel = [((rule, yf), log(p)) for (rule, yf), p in imap(prob, rules.iteritems()) if p]
 	if shortestderiv:
 		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
 		return (nonprobmodel, dict(probmodel))
@@ -355,7 +357,7 @@ def doubledop(trees, sents):
 			backtransform[newprods[-1][0]] = frag
 	# collect rules
 	grammar = dict(rule
-		for a, ((f, fsent), b) in zip(productions, fragments.items())
+		for a, ((f, fsent), b) in zip(productions, fragments.iteritems())
 		if backtransform.get(a, False)
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 					minimalbinarization(a, complexityfanout, sep="}")),
@@ -372,9 +374,9 @@ def doubledop(trees, sents):
 	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
 	# relative frequences as probabilities
 	ntfd = defaultdict(float)
-	for a, b in grammar.items():
+	for a, b in grammar.iteritems():
 		ntfd[a[0][0]] += b
-	for a, b in grammar.items():
+	for a, b in grammar.iteritems():
 		grammar[a] = log(b / ntfd.get(a[0][0], b))
 	return grammar.items(), backtransform
 
@@ -450,7 +452,7 @@ def extractfragments(trees, sents):
 			mem.clear(); l.clear()
 	#fraglist.pop(None, None)
 	#fragcounts = defaultdict(int)
-	fragcounts = dict((a, len(b)) for a, b in fraglist.items())
+	fragcounts = dict((a, len(b)) for a, b in fraglist.iteritems())
 	return fragcounts #| partfraglist
 
 def extractmaxfragments(a,b, i,j, asent,bsent, mem):

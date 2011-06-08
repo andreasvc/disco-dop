@@ -13,7 +13,7 @@ from collections import defaultdict, deque
 from array import array
 import re, gc
 from nltk import FreqDist, Tree
-from rcgrules import enumchart, induce_srcg
+from grammar import enumchart, induce_srcg
 from containers import ChartItem, Edge, Rule, Terminal
 from cpq import heapdict, Entry
 
@@ -489,7 +489,7 @@ def do(sent, grammar):
 		print
 
 def main():
-	from rcgrules import newsplitgrammar
+	from grammar import newsplitgrammar
 	grammar = newsplitgrammar([
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
