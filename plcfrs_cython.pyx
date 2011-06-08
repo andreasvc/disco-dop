@@ -1,8 +1,10 @@
 # cython: boundscheck=False
 # cython: profile=False
+# cython: nonecheck=False
 
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
+from cpython cimport PyList_Append as append
 from math import log, exp, fsum, isinf
 from random import choice, randrange
 from operator import itemgetter
@@ -31,15 +33,12 @@ cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem 
 	edge.left = left; edge.right = right
 	#hash((inside, prob, left, right))
 	# this is the hash function used for tuples, apparently
-	edge._hash = (<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>inside
-	edge._hash = (<unsigned long>1000003 * edge._hash) ^ <long>prob
-	edge._hash = (<unsigned long>1000003 * edge._hash) ^ left._hash
-	edge._hash = (<unsigned long>1000003 * edge._hash) ^ right._hash
+	edge._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 *
+				((<unsigned long>1000003 * ((<unsigned long>1000003 *
+											<unsigned long>0x345678)
+				^ <long>inside)) ^ <long>prob)) ^ left._hash)) ^ right._hash
 	if edge._hash == -1: edge._hash = -2
 	return edge
-
-#cdef inline tuple prune_rules(chart, unary, lbinary, rbinary):
-#	""" prune rules not used in chart """
 
 def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None, frozenset prune=frozenset(), dict prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -51,33 +50,34 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
+	cdef list rules, l, ll, prunelist = range(len(toid))
+	cdef dict C = {}							#the full chart
+	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
 	cdef int m = 0, maxA = 0, i
 	cdef int lensent = len(sent), label, newlabel
+	cdef double x, y
 	cdef bint doprune = False
 	cdef heapdict A = heapdict()				#the agenda
-	cdef dict C = {} #<dict>defaultdict(list)		#the full chart
-	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
-	cdef dict removeid = {}
-	#cdef list results = []						#temporary values
-	cdef object results = deque()				#temporary values
 	cdef Entry entry
 	cdef Edge edge, newedge
-	cdef ChartItem Ih, I1h, goal, newitem, NONE = new_ChartItem(0, 0)
-	cdef double x, y
-	cdef list rules
-	cdef dict items
-	cdef Rule rule
+	cdef ChartItem Ih, goal, newitem, NONE = new_ChartItem(0, 0)
 	cdef Terminal terminal
-	cdef frozenset prune1 = prune
+
 	if start == None: start = toid["ROOT"]
 	goal = new_ChartItem(start, (1 << len(sent)) - 1)
 	if prune:
 		doprune = True
-		for a, label in toid.items():
+		l = [set() for a in prunetoid]
+		for Ih in prune:
+			l[Ih.label].add(Ih.vec)
+		for a, label in toid.iteritems():
 			newlabel = prunetoid[a.split("@")[0]]
-			removeid[label] = newlabel
-		print 'pruning on with %d nonterminals and %d items with %d categories' % (	len(removeid), len(prune), len(set(removeid.values())))
+			prunelist[label] = l[newlabel]
+		
+		print 'pruning on with %d nonterminals and %d items with %d categories' % (
+				len(filter(None, prunelist)), len(prune), len(filter(None,l)))
 	gc.disable()
+
 	# scan
 	Epsilon = toid["Epsilon"]
 	for i,w in enumerate(sent):
@@ -91,11 +91,13 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				I = new_ChartItem(Epsilon, i)
 				z = 0 if tags else terminal.prob
 				A[Ih] = Edge(terminal.prob, terminal.prob, I, NONE)
+				C[Ih] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 				Ih = new_ChartItem(toid[tags[i]], 1 << i)
 				I = new_ChartItem(Epsilon, i)
 				A[Ih] = Edge(0, 0, I, NONE)
+				C[Ih] = []
 				recognized = True
 				continue
 		elif not recognized:
@@ -107,89 +109,71 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		entry = A.popentry()
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
-		#Ihedge = A.popitem()
-		#Ih.label, Ih.vec = <ChartItem>Ihedge[0].label, <ChartItem>Ihedge[1].vec
-		#when heapdict is not available:
-		#Ih, (x, I) = min(A.items(), key=lambda x:x[1]); del A[Ih]
-		#try: #if Ih in C:
-		#(<list>(C[Ih])).append(edge)
-		(<list>(C.setdefault(Ih, []))).append(edge)
-		#except KeyError: #else:
-		#	C[Ih] = [edge]
-		(<dict>(Cx[Ih.label]))[Ih] = edge #.inside
-		if Ih == goal: #Ih.label == goal.label and Ih.vec == goal.vec:
+		append(C[Ih], edge)
+		(<dict>(Cx[Ih.label]))[Ih] = edge
+		if Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
 			if viterbi and n == m: break
 			#if viterbi and not exhaustive: break
 		else:
-			#results = [] #del results[:]
-			#results.clear()
 			x = edge.inside
 			rules = <list>unary[Ih.label]
-			for i in range(len(rules)):
-				rule = <Rule>rules[i]
+			for rule in rules:
 				#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
-				process_edge(new_ChartItem(rule.lhs, Ih.vec),
-								new_Edge(x + rule.prob, rule.prob, Ih, NONE),
-								A, C, Cx, doprune, prune1, removeid)
+				process_edge(new_ChartItem((<Rule>rule).lhs, Ih.vec),
+								new_Edge(x + (<Rule>rule).prob,
+									(<Rule>rule).prob, Ih, NONE),
+								A, C, Cx, doprune, prunelist)
 
-			rules = <list>lbinary[Ih.label]
-			for i in range(len(rules)):
-				rule = <Rule>rules[i]
-				items = <dict>(Cx[rule.rhs2])
-				for I1h in items:
-					if concat(rule, Ih.vec, I1h.vec):
-						y = (<Edge>(items[I1h])).inside
+			for rule in <list>lbinary[Ih.label]:
+				for I1h, tmpedge in (<dict>(Cx[(<Rule>rule).rhs2])).iteritems():
+					if concat(<Rule>rule, Ih.vec, (<ChartItem>I1h).vec):
+						y = (<Edge>tmpedge).inside
 						#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
 						#if estimate else 0.0) + x + y + rule.prob,
-						process_edge(new_ChartItem(rule.lhs, Ih.vec ^ I1h.vec),
-								new_Edge(x+y+rule.prob, rule.prob, Ih, I1h),
-								A, C, Cx, doprune, prune1, removeid)
-			rules = <list>rbinary[Ih.label]
-			for i in range(len(rules)):
-				rule = <Rule>rules[i]
-				items = <dict>(Cx[rule.rhs1])
-				for I1h in items:
-					if concat(rule, I1h.vec, Ih.vec):
-						y = (<Edge>(items[I1h])).inside
+						process_edge(new_ChartItem((<Rule>rule).lhs,
+												Ih.vec ^ (<ChartItem>I1h).vec),
+								new_Edge(x+y+(<Rule>rule).prob,
+									(<Rule>rule).prob, Ih, <ChartItem>I1h),
+								A, C, Cx, doprune, prunelist)
+
+			for rule in <list>rbinary[Ih.label]:
+				for I1h, tmpedge in (<dict>(Cx[(<Rule>rule).rhs1])).iteritems():
+					if concat(<Rule>rule, (<ChartItem>I1h).vec, Ih.vec):
+						y = (<Edge>tmpedge).inside
 						#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
 						#if estimate else 0.0) + x + y + rule.prob,
-						process_edge(new_ChartItem(rule.lhs, I1h.vec ^ Ih.vec),
-								new_Edge(x+y+rule.prob, rule.prob, I1h, Ih),
-								A, C, Cx, doprune, prune1, removeid)
+						process_edge(new_ChartItem((<Rule>rule).lhs,
+											(<ChartItem>I1h).vec ^ Ih.vec),
+								new_Edge(x+y+(<Rule>rule).prob,
+										(<Rule>rule).prob, <ChartItem>I1h, Ih),
+								A, C, Cx, doprune, prunelist)
+
 		maxA = max(maxA, len(A))
-	print "max agenda size %d / chart keys %d / values %d" % (
-								maxA, len(C), sum(map(len, C.values()))),
-	#queue_free(results)
+	print "max agenda size %d / now %d / chart keys %d / values %d" % (
+						maxA, len(A), len(C), sum(map(len, C.values())))
 	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE
 
-cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A, dict C, list Cx, bint doprune, frozenset prune, dict removeid):
+cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
+		dict C, list Cx, bint doprune, list prunelist):
 	""" Decide what to do with a newly derived edge. """
+	cdef list l
 	#if newedge.inside + outsideestimate > 120.0: continue
 	if not (A.contains(newitem) or newitem in C): #not in A or C
-		if doprune and newitem not in C:
-			if new_ChartItem(removeid[newitem.label], newitem.vec) not in prune:
-				return #continue
-		# haven't seen this item before, won't prune, add to agenda
-		#A.setitem(newitem, newedge)
-		A[newitem] = newedge
+		if not doprune or newitem.vec in <set>(prunelist[newitem.label]):
+			# haven't seen this item before, won't prune, add to agenda
+			A.setitem(newitem, newedge)
+			C[newitem] = []
 	elif A.contains(newitem): # in A (maybe in C)
 		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
 			# item has lower score, update agenda (and add old edge to chart)
-			#try: #if newitem in C:
-			(<list>C.setdefault(newitem, [])).append(A.replace(newitem, newedge))
-			#(<list>C[newitem]).append(A.replace(newitem, newedge))
-			#except KeyError: #else:
-			#	C[newitem] = [A.replace(newitem, newedge)]
+			append(C[newitem], A.replace(newitem, newedge))
 		else: #worse score, only add to chart
-			#try: #if newitem in C:
-			(<list>C.setdefault(newitem, [])).append(newedge)
-			#except KeyError: #else:
-			#	C[newitem] = [newedge]
+			append(C[newitem], newedge)
 	else: # not in A, but is in C
-		(<list>C[newitem]).append(newedge)
+		append(C[newitem], newedge)
 		#Cx[newitem.label][newitem] = min(Cx[newitem.label][newitem], newedge.inside)
 		#if newedge.inside < <double>(<dict>(Cx[newitem.label])[newitem]):
 		#	(<dict>Cx[newitem.label])[newitem] = newedge.inside
@@ -217,7 +201,7 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	update: yield functions are now encoded in binary arrays:
 		( (0, 1, 0), (1, 0) ) ==> array('B', [0b010, 0b01])
 							and lengths: array('B', [3, 2])
-		NB: note reversal
+		NB: note reversal due to the way binary numbers are represented
 	"""
 	if lvec & rvec: return False
 	cdef int lpos = nextset(lvec, 0)
@@ -227,9 +211,9 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	if False and (lvec >> nextunset(lvec, lpos) == 0
 		and rvec >> nextunset(rvec, rpos) == 0):
 		if rule.lengths._B[0] == 2 and rule.args.length == 1:
-			if rule.args._B[0] == 0b10: #yieldfunction == ((0, 1),):
+			if rule.args._B[0] == 0b10:
 				return bitminmax(lvec, rvec)
-			elif rule.args._B[0] == 0b01: #yieldfunction == ((1, 0),):
+			elif rule.args._B[0] == 0b01:
 				return bitminmax(rvec, lvec)
 		#else:
 		#	return False
@@ -286,7 +270,7 @@ def outsidecosts(chart, start):
 	outside = defaultdict(list)
 	outside_subtree(start, <dict>chart, outside, logprobsum(chart[start]), frozenset())
 	assert start in outside
-	return dict((a, abs(log(sum(map(exp, b))))) for a,b in outside.items())
+	return dict((a, abs(log(sum(map(exp, b))))) for a,b in outside.iteritems())
 
 cdef void outside_subtree(ChartItem start, dict chart, dict outside, double total, frozenset path):
 	cdef Edge edge
@@ -477,7 +461,7 @@ def pprint_chart(chart, sent, tolabel):
 	cdef ChartItem a
 	cdef Edge edge
 	print "chart:"
-	for a in sorted(chart, key=lambda x: bitcount(x[1])):
+	for n, a in sorted((bitcount(a.vec), a) for a in chart):
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
 		for edge in chart[a]:
 			print "%g\t%g" % (exp(-edge.inside), exp(-edge.prob)),
