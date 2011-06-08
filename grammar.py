@@ -9,55 +9,6 @@ from itertools import chain, count, islice, imap, repeat
 from nltk import ImmutableTree, Tree, FreqDist, memoize
 from dopg import nodefreq, decorate_with_ids
 
-def rangeheads(s):
-	""" iterate over a sequence of numbers and yield first element of each
-	contiguous range
-	>>> rangeheads( (0, 1, 3, 4, 6) )
-	[0, 3, 6]
-	"""
-	return [a[0] for a in ranges(s)]
-
-def ranges(s):
-	""" partition s into a sequence of lists corresponding to contiguous ranges
-	>>> list(ranges( (0, 1, 3, 4, 6) ))
-	[[0, 1], [3, 4], [6]]
-	""" 
-	rng = []
-	for a in s:
-		if not rng or a == rng[-1]+1:
-			rng.append(a)
-		else:
-			yield rng
-			rng = [a]
-	if rng: yield rng
-
-def node_arity(n, vars, inplace=False):
-	""" mark node with arity if necessary """
-	if len(vars) > 1 and not n.node.endswith("_%d" % len(vars)):
-		if inplace: n.node = "%s_%d" % (n.node, len(vars))
-		else: return "%s_%d" % (n.node, len(vars))
-	return n.node if isinstance(n, Tree) else n
-
-def alpha_normalize(s):
-	""" Substitute variables so that the variables on the left-hand side appear consecutively.
-		E.g. [0,1], [2,3] instead of [0,1], [3,4]. Modifies s in-place."""
-	# flatten left hand side variables into a single list
-	if s[0][1] == 'Epsilon': return s
-	lvars = list(chain(*s[1][0]))
-	for a,b in zip(lvars, range(len(lvars))):
-		if a==b: continue
-		for x in s[1][0]:  # left hand side
-			if a in x: x[x.index(a)] = b
-		for x in s[1][1:]: # right hand side
-			if a in x: x[x.index(a)] = b
-	return s
-
-def freeze(l):
-	return tuple(map(freeze, l)) if isinstance(l, (list, tuple)) else l
-
-def unfreeze(l):
-	return list(map(unfreeze, l)) if isinstance(l, (list, tuple)) else l
-
 def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	""" given a tree with indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a set
@@ -87,7 +38,6 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 			rvars = [rangeheads(sorted(map(int, l))) for a,l in zip(st, rleaves)]
 			lvars = list(ranges(sorted(chain(*(map(int, l) for l in rleaves)))))
 			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
-			#lhs = intern(str(node_arity(st, lvars, True) if arity_marks else st.node))
 			lhs = node_arity(st, lvars, side_effect) if arity_marks else st.node
 			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
 			vars = (lvars,) + tuple(rvars)
@@ -171,6 +121,60 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
 	
+def doubledop(trees, sents):
+	from fragmentseeker import  extractfragments
+	backtransform = {}
+	newprods = []
+	# to assign IDs to ambiguous fragments (same yield)
+	ids = ("#%d" % n for n in count())
+	trees = list(trees)
+	# adds arity markers
+	srcg = FreqDist(rule for tree, sent in zip(trees, sents)
+			for rule in map(varstoindices, srcg_productions(tree, sent)))
+	# most work happens here
+	fragments = extractfragments(trees, sents)
+	productions = map(flatten, fragments)
+	# construct a mapping of productions to fragments
+	for prod, (frag, terminals) in zip(productions, fragments):
+		if prod == frag: continue
+		if prod not in backtransform:
+			backtransform[prod] = frag
+		else:
+			if backtransform[prod]:
+				newprods.append((ImmutableTree(ids.next(), prod[:]), ()))
+				newprods.append((ImmutableTree(prod.node,
+						[ImmutableTree(newprods[-1][0].node, [])]), terminals))
+				backtransform[newprods[-1][0]] = backtransform[prod, terminals]
+				backtransform[prod] = None
+			newprods.append((ImmutableTree(ids.next(), prod[:]), ()))
+			newprods.append((ImmutableTree(prod.node,
+				[ImmutableTree(newprods[-1][0].node, [])]), terminals))
+			backtransform[newprods[-1][0]] = frag
+	# collect rules
+	grammar = dict(rule
+		for a, ((f, fsent), b) in zip(productions, fragments.iteritems())
+		if backtransform.get(a, False)
+		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
+					minimalbinarization(a, complexityfanout, sep="}")),
+				fsent, arity_marks=True, side_effect=True)),
+			chain((b, ), repeat(1))))
+	# ambiguous fragments
+	grammar.update(rule for a, b in newprods
+		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
+					minimalbinarization(a, complexityfanout, sep="}")),
+				b, arity_marks=a in backtransform, side_effect=True)),
+			chain((fragments[backtransform[a], b] if a in backtransform else 1,),
+				repeat(1))))
+	# unseen srcg rules
+	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
+	# relative frequences as probabilities
+	ntfd = defaultdict(float)
+	for a, b in grammar.iteritems():
+		ntfd[a[0][0]] += b
+	for a, b in grammar.iteritems():
+		grammar[a] = log(b / ntfd.get(a[0][0], b))
+	return grammar.items(), backtransform
+
 def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
@@ -249,52 +253,54 @@ def canonicalize(tree):
 		a.sort(key=lambda n: n.leaves())
 	return tree
 
-def same(a, b, asent, bsent):
-	if type(a) != type(b): return False
-	elif isinstance(a, Tree): return a.node == b.node
-	else: return asent[a] == bsent[b]
-
-def fragmentfromindices(tree, sent, indices):
-	""" Given a tree and a set of connected indices, return the fragment
-	described by these indices.
-	>>> np = Tree('NP', [Tree('DET', [2]), Tree('NN', [3])])
-	>>> tree = Tree('S', [Tree('NP', [0]), Tree('VP', [Tree('V', [1]), np])])
-	>>> sent = "Mary sees a unicorn".split()
-	>>> indices = set([(1,), (1, 0), (1, 0, 0), (1, 1)])
-	>>> print "%s, %s" % fragmentfromindices(tree, sent, indices)
-	(VP (V 0) (NP 1)), ('sees', None)
+def rangeheads(s):
+	""" iterate over a sequence of numbers and yield first element of each
+	contiguous range
+	>>> rangeheads( (0, 1, 3, 4, 6) )
+	[0, 3, 6]
 	"""
-	if not indices: return
-	froot = min(indices, key=len)
-	if not isinstance(tree[froot], Tree): return
-	result = Tree(tree[froot].node, [])
-	sent = list(sent[:])
-	agenda = [(result, a, froot+(n,)) for n,a in enumerate(tree[froot])]
-	while agenda:
-		current, node, idx = agenda.pop(0)
-		if idx in indices:
-			if isinstance(node, Tree):
-				child = Tree(node.node, [])
-				current.append(child)
-				new = [(child, a, idx+(n,)) for n,a in enumerate(node)
-							if idx+(n,) in indices]
-				if new: agenda += new
-				else:
-					child[:] = rangeheads(sorted(node.leaves()))
-					for a in child: sent[a] = None
-			else:
-				current.append(node)
-	# frontier nodes and leaves should both receive index
-	# with frontier nodes pointing to None in sent
-	# discontinous frontier nodes get multiple indices (ranges)
-	# frontier nodes should get rangeheads(a.leaves())
-	# renumber
-	leaves = result.leaves()
-	sent = tuple(a for n,a in enumerate(sent) if n in leaves)
-	leafmap = dict(zip(sorted(leaves), count()))
-	for n, a in enumerate(result.treepositions('leaves')):
-		result[a] = leafmap[result[a]]
-	return (result.freeze(), sent) if len(result) else None
+	return [a[0] for a in ranges(s)]
+
+def ranges(s):
+	""" partition s into a sequence of lists corresponding to contiguous ranges
+	>>> list(ranges( (0, 1, 3, 4, 6) ))
+	[[0, 1], [3, 4], [6]]
+	""" 
+	rng = []
+	for a in s:
+		if not rng or a == rng[-1]+1:
+			rng.append(a)
+		else:
+			yield rng
+			rng = [a]
+	if rng: yield rng
+
+def node_arity(n, vars, inplace=False):
+	""" mark node with arity if necessary """
+	if len(vars) > 1 and not n.node.endswith("_%d" % len(vars)):
+		if inplace: n.node = "%s_%d" % (n.node, len(vars))
+		else: return "%s_%d" % (n.node, len(vars))
+	return n.node if isinstance(n, Tree) else n
+
+def alpha_normalize(s):
+	""" Substitute variables so that the variables on the left-hand side appear consecutively.
+		E.g. [0,1], [2,3] instead of [0,1], [3,4]. Modifies s in-place."""
+	# flatten left hand side variables into a single list
+	if s[0][1] == 'Epsilon': return s
+	lvars = list(chain(*s[1][0]))
+	for a,b in zip(lvars, range(len(lvars))):
+		if a==b: continue
+		for x in s[1][0]:  # left hand side
+			if a in x: x[x.index(a)] = b
+		for x in s[1][1:]: # right hand side
+			if a in x: x[x.index(a)] = b
+	return s
+
+def freeze(l):
+	return tuple(map(freeze, l)) if isinstance(l, (list, tuple)) else l
+
+def unfreeze(l):
+	return list(map(unfreeze, l)) if isinstance(l, (list, tuple)) else l
 
 def leaves_and_frontier_nodes(tree, sent):
 	"""
@@ -309,11 +315,6 @@ def leaves_and_frontier_nodes(tree, sent):
 			else ([tree] if sent[child] is None else [child])
 			for child in tree))
 
-def leaves_and_frontier_nodes1(tree):
-	return chain(*(leaves_and_frontier_nodes1(child)
-		if isinstance(child, Tree) and len(child) else [child]
-		for child in tree)) if isinstance(tree[0], Tree) else tree
-
 def flatten((tree, sent)):
 	"""
 	>>> sent = [None, ',', None, '.']
@@ -327,65 +328,14 @@ def flatten((tree, sent)):
 		for a in leaves_and_frontier_nodes(tree, sent)]
 		if all(isinstance(a, Tree) for a in tree) else tree[:])
 
-def doubledop(trees, sents):
-	backtransform = {}
-	newprods = []
-	# to assign IDs to ambiguous fragments (same yield)
-	ids = ("#%d" % n for n in count())
-	trees = list(trees)
-	# adds arity markers
-	srcg = FreqDist(rule for tree, sent in zip(trees, sents)
-			for rule in map(varstoindices, srcg_productions(tree, sent)))
-	# most work happens here
-	fragments = extractfragments(trees, sents)
-	productions = map(flatten, fragments)
-	# construct a mapping of productions to fragments
-	for prod, (frag, terminals) in zip(productions, fragments):
-		if prod == frag: continue
-		if prod not in backtransform:
-			backtransform[prod] = frag
-		else:
-			if backtransform[prod]:
-				newprods.append((ImmutableTree(ids.next(), prod[:]), ()))
-				newprods.append((ImmutableTree(prod.node,
-						[ImmutableTree(newprods[-1][0].node, [])]), terminals))
-				backtransform[newprods[-1][0]] = backtransform[prod, terminals]
-				backtransform[prod] = None
-			newprods.append((ImmutableTree(ids.next(), prod[:]), ()))
-			newprods.append((ImmutableTree(prod.node,
-				[ImmutableTree(newprods[-1][0].node, [])]), terminals))
-			backtransform[newprods[-1][0]] = frag
-	# collect rules
-	grammar = dict(rule
-		for a, ((f, fsent), b) in zip(productions, fragments.iteritems())
-		if backtransform.get(a, False)
-		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
-					minimalbinarization(a, complexityfanout, sep="}")),
-				fsent, arity_marks=True, side_effect=True)),
-			chain((b, ), repeat(1))))
-	# ambiguous fragments
-	grammar.update(rule for a, b in newprods
-		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
-					minimalbinarization(a, complexityfanout, sep="}")),
-				b, arity_marks=a in backtransform, side_effect=True)),
-			chain((fragments[backtransform[a], b] if a in backtransform else 1,),
-				repeat(1))))
-	# unseen srcg rules
-	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
-	# relative frequences as probabilities
-	ntfd = defaultdict(float)
-	for a, b in grammar.iteritems():
-		ntfd[a[0][0]] += b
-	for a, b in grammar.iteritems():
-		grammar[a] = log(b / ntfd.get(a[0][0], b))
-	return grammar.items(), backtransform
-
 def top_production(tree):
 	return Tree(tree.node,
 		[Tree(a.node, rangeheads(sorted(a.leaves())))
 				if isinstance(a, Tree) else a for a in tree])
 
 def recoverfromfragments(derivation, backtransform):
+	""" Reconstruct a DOP derivation from a double DOP derivation with
+	flattened fragments. """
 	prod = top_production(derivation)
 	def renumber(tree):
 		leaves = tree.leaves()
@@ -411,137 +361,6 @@ def recoverfromfragments(derivation, backtransform):
 			# terminals should already match.
 			#assert r == t
 	return result
-
-def add_srcg_rules(tree, sent):
-	for a, b in zip(tree.subtrees(), srcg_productions(tree, sent, False)):
-		a.prod = alpha_normalize(zip(*b))
-	return tree
-
-def extractfragments(trees, sents):
-	""" Seeks the largest fragments occurring at least twice in the corpus.
-	Algorithm from: Sangati et al., Efficiently extract recurring tree
-	fragments from large treebanks. """
-	fraglist = defaultdict(set) #FreqDist()
-	#partfraglist = set()
-	trees = [add_srcg_rules(canonicalize(a).freeze(), b)
-				for a, b in zip(trees, sents)]
-	trees = [dict((idx, a[idx]) for idx in a.treepositions()) for a in trees]
-	
-	mem = {}; l = set()
-	for n,a,asent in zip(count(), trees, sents):
-		for b,bsent in zip(trees, sents)[n+1:]:
-			for i in a:
-				for j in b:
-					try: x = frozenset(mem[i, j])
-					except KeyError:
-						x = frozenset(extractmaxfragments(a, b, i, j, asent, bsent, mem))
-					if x in l: continue # or len(x) < 2: continue
-					# disjoint-set datastructure here?
-					for y in l:
-						if x < y: break
-						elif x > y:
-							l.remove(y)
-							l.add(x)
-							break
-					else: l.add(x)
-					#partfraglist.update(extractmaxpartialfragments(a[i], b[j]))
-			fragments = (fragmentfromindices(a, asent, x) for x in l)
-			#fraglist.update(set(fragments))
-			for x in set(fragments):
-				if x: fraglist[x].update((a[()], b[()]))
-			mem.clear(); l.clear()
-	#fraglist.pop(None, None)
-	#fragcounts = defaultdict(int)
-	fragcounts = dict((a, len(b)) for a, b in fraglist.iteritems())
-	return fragcounts #| partfraglist
-
-def extractmaxfragments(a,b, i,j, asent,bsent, mem):
-	""" a fragment is a connected subset of nodes where each node either has
-	zero children, or as much as in the original tree.""" 
-	#if (i, j) in mem: return mem[i, j]
-	# compare label & arity / terminal
-	if type(a[i]) != type(b[j]):
-		mem[i, j] = set()
-		return set()
-	elif isinstance(a[i], Tree):
-		#alhs = a[i].prod[0]
-		#blhs = b[j].prod[0]
-		#if alhs[0] != blhs[0] or len(alhs[1]) != len(blhs[1]):
-		# assume presence of arity markers
-		if a[i].node != b[j].node:
-			mem[i, j] = set()
-			return set()
-	elif asent[a[i]] != bsent[b[j]]:
-		mem[i, j] = set()
-		return set()
-
-	nodeset = set([i])
-	if not isinstance(a[i], Tree):
-		mem[i, j] = nodeset
-		return nodeset
-	if a[i].prod == b[j].prod:
-		for n, x in enumerate(a[i]):
-			ii,  jj = i+(n,), j+(n,)
-			nodeset.update(mem[ii, jj] if (ii, jj) in mem
-					else extractmaxfragments(a, b, ii, jj, asent, bsent, mem))
-	mem[i, j] = nodeset
-	return nodeset
-
-def extractmaxpartialfragments(a, b):
-	""" partial fragments allow difference in number of children
-	not tested. """
-	if not same((a,b)): return set()
-	mappingsset = maxsetmappings(a,b,0,0,True)
-	if not mappingsset: return [ImmutableTree(a.node, [])]
-	partfragset = set()
-	for mapping in mappingsset:
-		maxpartialfragmentpairs = [set() for x in mapping]
-		for i, (n1, n2) in enumerate(mapping):
-			maxpartialfragments[i] = extractmaxpartialfragments(n1, n2)
-		for nodeset in cartpi(maxpartialfragmentpairs):
-			nodeset.union(a)
-			partfragset.add(nodeset)
-	return partfragset
-
-def maxsetmappings(a,b,x,y,firstCall=False):
-	mappings = []
-	startx = x if firstCall else x + 1
-	starty = y if firstCall else y + 1
-	endx = len(a) - 1
-	endy = len(b) - 1
-	startxexists = startx < len(a)
-	startyexists = starty < len(b)
-	while startxexists or startyexists:
-		if startxexists:
-			for celly in range(endy, starty + 1, -1):
-				if a[startx] == b[celly]:
-					endy = celly
-					submappings = maxsetmappings(a,b,startx,cely)
-					if not firstCall:
-						for mapping in submappings:
-							mapping.add((a[startx],b[celly]))
-					mappings.extend(submappings)
-		if startyexists:
-			for cellx in range(endx, startx + 1, -1):
-				if a[startx] == b[starty]:
-					endx = cellx
-					submappings = maxsetmappings(a,b,cellx,starty)
-					if not firstCall:
-						for mapping in submappings:
-							mapping.add((a[cellx],b[starty]))
-					mappings.extend(submappings)
-		if startxexists and startyexists and a[startx] == b[starty]:
-			submappings = maxsetmappings(a,b,startx,starty,False)
-			if not firstCall:
-				for mapping in submappings:
-					mapping.add((a[startx],b[starty]))
-			mappings.extend(submappings)
-			break
-		if startx+1 <= endx: startx += 1
-		else: startxexists = False
-		if starty+1 <= endy: starty += 1
-		else: startyexists = False
-	return set(mappings)
 
 @memoize
 def fanout(tree):
@@ -810,8 +629,8 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
-	#from plcfrs_cython import parse, mostprobableparse
-	from plcfrs import parse, mostprobableparse
+	from plcfrs_cython import parse, mostprobableparse
+	#from plcfrs import parse, mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
 	if p:
@@ -824,6 +643,7 @@ def do(sent, grammar):
 def main():
 	from treetransforms import un_collinize, collinize
 	from negra import NegraCorpusReader
+	from fragmentseeker import  extractfragments
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
@@ -864,31 +684,10 @@ def main():
 
 	pprint(splitgrammar(induce_srcg([tree.copy(True)], [sent])))
 	#pprint(dop_srcg_rules([tree.copy(True)], [sent], interpolate=0.5))
-	do(sent, splitgrammar(dop_srcg_rules([tree], [sent])))
+	do(sent, newsplitgrammar(dop_srcg_rules([tree], [sent])))
 	newsplitgrammar(dop_srcg_rules([tree], [sent]))
-	treebank = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
-(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
-(S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
-(S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (JJ yellow) (NN cat))))
-(S (NP (DT The) (JJ little) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
-(S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
-(S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))"""
-	treebank = map(Tree, treebank.splitlines())
-	sents = [tree.leaves() for tree in treebank]
-	for tree, sent in zip(treebank, sents):
-		for n, idx in enumerate(tree.treepositions('leaves')): tree[idx] = n
-	for (a,aa),b in sorted(extractfragments(treebank, sents).items()):
-		print a.pprint(margin=999), aa,b
-	print
-	#trees = treebank
 	trees = list(corpus.parsed_sents()[:10])
 	sents = corpus.sents()[:100]
-	for tree in trees:
-		for idx in tree.treepositions('leaves'): tree[idx] = int(tree[idx])
-	print "fragments",
-	for (a,aa),b in sorted(extractfragments(trees, sents).items()):
-		print a.pprint(margin=999),aa,b
-	print
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	grammar, backtransform = doubledop(trees, sents)
 	print 'grammar',
@@ -900,10 +699,9 @@ def main():
 		except: print a.pprint(),
 		print ":", b
 	print "}"
-	newsplitgrammar(grammar)
-	grammar = splitgrammar(grammar)
+	grammar = newsplitgrammar(grammar)
 	testgrammar(grammar)
-	from plcfrs import parse, mostprobableparse
+	from plcfrs_cython import parse, mostprobableparse
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
 		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], viterbi=True, n=0)
