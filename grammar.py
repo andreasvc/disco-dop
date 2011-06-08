@@ -123,6 +123,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 	
 def doubledop(trees, sents):
 	from fragmentseeker import  extractfragments
+	from treetransforms import minimalbinarization, complexityfanout
 	backtransform = {}
 	newprods = []
 	# to assign IDs to ambiguous fragments (same yield)
@@ -362,69 +363,6 @@ def recoverfromfragments(derivation, backtransform):
 			#assert r == t
 	return result
 
-@memoize
-def fanout(tree):
-	return len(rangeheads(sorted(tree.leaves()))) if isinstance(tree, Tree) else 1
-
-def complexityfanout(tree):
-	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
-
-def minimalbinarization(tree, score, sep="|"):
-	""" Gildea (2009): Optimal parsing strategies for linear context-free rewriting systems
-	Expects an immutable tree where the terminals are integers corresponding to indices.
-
-	>>> minimalbinarization(ImmutableTree("NP", [ImmutableTree("ART", [0]), ImmutableTree("ADJ", [1]), ImmutableTree("NN", [2])]), complexityfanout)
-	ImmutableTree('NP', [ImmutableTree('ART', [0]), ImmutableTree('NP|<ADJ-NN>', [ImmutableTree('ADJ', [1]), ImmutableTree('NN', [2])])])
-	"""
-	def newproduction(a, b):
-		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
-		if (min(chain(*(y for x,y in nonterms[a]))) >
-				min(chain(*(y for x,y in nonterms[b])))): a, b = b, a
-		newlabel = "%s%s<%s>" % (tree.node, sep, "-".join(x.node for x,y
-				in sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])))
-		return ImmutableTree(newlabel, [a, b])
-	if len(tree) <= 2: return tree
-	workingset = set()
-	agenda = []
-	nonterms = {}
-	goal = set((a, tuple(a.leaves())) for a in tree)
-	for a in tree:
-		workingset.add((score(a), a))
-		heappush(agenda, (score(a), a))
-		nonterms[a] = set([(a, tuple(a.leaves()))])
-	while agenda:
-		x, px = heappop(agenda)
-		if (x, px) not in workingset: continue
-		if nonterms[px] == goal:
-			px = ImmutableTree(tree.node, px[:])
-			return px
-		for y, p1 in list(workingset):
-			if (y, p1) not in workingset or nonterms[px] & nonterms[p1]:
-				continue
-			p2 = newproduction(px, p1)
-			p2nonterms = nonterms[px] | nonterms[p1]
-			x2 = score(p2)
-			inferior = [(y, p2x) for y, p2x in workingset
-							if nonterms[p2x] == p2nonterms and x2 < y]
-			if inferior or p2nonterms not in nonterms.values():
-				workingset.add((x2, p2))
-				heappush(agenda, (x2, p2))
-			for a in inferior:
-				workingset.discard(a)
-				del nonterms[a[1]]
-			nonterms[p2] = p2nonterms
-
-def binarizetree(tree, sep="|"):
-	""" Recursively binarize a tree. Tree needs to be immutable."""
-	if not isinstance(tree, Tree): return tree
-	# bypass algorithm when there are no discontinuities:
-	elif len(rangeheads(tree.leaves())) == 1:
-		newtree = Tree(tree.node, map(lambda t: binarizetree(t, sep), tree))
-		newtree.chomsky_normal_form(childChar=sep)
-		return newtree
-	return Tree(tree.node, map(lambda t: binarizetree(t, sep),
-				minimalbinarization(tree, complexityfanout, sep)))
-
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
 	>>> list(islice(cartpi([count(), count(0)]), 9))
@@ -641,7 +579,8 @@ def do(sent, grammar):
 	print
 
 def main():
-	from treetransforms import un_collinize, collinize
+	from treetransforms import un_collinize, collinize,\
+				binarizetree, minimalbinarization, complexityfanout
 	from negra import NegraCorpusReader
 	from fragmentseeker import  extractfragments
 	import sys, codecs
