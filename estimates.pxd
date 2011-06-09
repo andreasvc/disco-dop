@@ -1,4 +1,5 @@
 # cython: boundscheck: False
+# cython: wraparound: False
 # cython: nonecheck: False
 # cython: profile: False
 
@@ -6,6 +7,7 @@ import cython
 from containers cimport ChartItem, Edge, Rule, Terminal
 from plcfrs_cython cimport new_Edge, new_ChartItem
 from cpq cimport heapdict, Entry
+cimport numpy as np
 
 if cython.compiled:
 	print "Yep, I'm compiled"
@@ -35,7 +37,7 @@ cdef Item new_Item(int state, int length, int lr, int gaps)
 	right=cython.int,
 	lr=cython.int,
 	gaps=cython.int)
-cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned long vec)
+cpdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, int maxlen, int slen, int label, unsigned long vec)
 
 @cython.locals(
 	I=ChartItem,
@@ -45,16 +47,17 @@ cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned 
 cpdef doinside(grammar, int maxlen, concat, insidescores)
 
 @cython.locals(
+	score=np.double_t,
 	entry=Entry,
 	newitem=Item,
 	nil=ChartItem,
 	I=Item,
 	e=Edge,
+	bylhs=list,
 	infinity=cython.double,
 	x=cython.double,
 	y=cython.double,
 	insidescore=cython.double,
-	score=cython.double,
 	m=cython.int,
 	n=cython.int,
 	a=cython.int,
@@ -76,9 +79,8 @@ cpdef doinside(grammar, int maxlen, concat, insidescores)
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint,
 	rule=Rule,
-	arg=cython.ushort,
-	#yieldfunction=cython.tuple
+	arg=cython.ushort
 	)
-cpdef list outsidelr(grammar, insidescores, int maxlen, int goal)
+cdef void computeoutsidelr(grammar, insidescores, int maxlen, int goal, np.ndarray[np.double_t, ndim=4] outside)
 
 

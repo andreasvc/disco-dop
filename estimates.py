@@ -7,6 +7,7 @@ from cpq import heapdict
 from containers import ChartItem, Edge, Rule, Terminal
 from collections import defaultdict
 from math import exp
+import numpy as np
 try:
 	import cython
 	assert cython.compiled
@@ -15,13 +16,11 @@ except:
 
 class Item(object):
 	__slots__ = ("state", "length", "lr", "gaps", "_hash")
-	def __init__(self, state, length, lr, gaps):
-		self.state, self.length, self.lr, self.gaps = state, length, lr, gaps
-		self._hash = hash((state, length, lr, gaps))
 	def __hash__(self):
 		return self._hash
 	def __repr__(self):
-		return "%s len=%d lr=%d gaps=%d" % (self.state, self.length, self.lr, self.gaps)
+		return "%s len=%d lr=%d gaps=%d" % (self.state, self.length,
+												self.lr, self.gaps)
 
 def new_Item(state, length, lr, gaps):
 	item = Item.__new__(Item)
@@ -73,7 +72,7 @@ def getoutside(outside, maxlen, slen, label, vec):
 	gaps = slen - length - left
 	right = slen - length - left - gaps
 	lr = left + right
-	if length+lr+gaps <= maxlen: return outside[label][length][lr][gaps]
+	if length+lr+gaps <= maxlen: return outside[label, length, lr, gaps]
 	else: return 0.0
 
 def inside(grammar, maxlen):
@@ -153,22 +152,29 @@ def insideconcat(a, b, rule, maxlen):
 def outsidelr(grammar, insidescores, maxlen, goal):
 	try: assert cython.compiled; print "estimates: running cython"
 	except: print "estimates: not cython"
+	infinity = float('infinity')
+	#outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for _ in range(len(bylhs))]
+	outside = np.repeat(np.array([infinity], dtype='d'),
+				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1))
+	outside = np.reshape(outside,
+				(len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
+	computeoutsidelr(grammar, insidescores, maxlen, goal, outside)
+	return outside
+
+def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 	bylhs = grammar.bylhs
 	agenda = heapdict()
-	infinity = float('infinity')
 	nil = new_ChartItem(0, 0)
-	# this should become a numpy array if that is advantageous:
-	outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for _ in range(len(bylhs))]
 	for a in range(maxlen):
 		newitem = new_Item(goal, a + 1, 0, 0)
 		agenda[newitem] = new_Edge(0.0, 0.0, nil, nil)
-		outside[goal][a + 1][0][0] = 0.0
+		outside[goal, a + 1, 0, 0] = 0.0
 	print "initialized"
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value.inside
-		if x == outside[I.state][I.length][I.lr][I.gaps]:
+		if x == outside[I.state, I.length, I.lr, I.gaps]:
 			totlen = I.length + I.lr + I.gaps
 			for r in bylhs[I.state]:
 				if isinstance(r, Terminal): continue
@@ -178,9 +184,9 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 					if rule.rhs1 != 0:
 						newitem = new_Item(rule.rhs1, I.length, I.lr, I.gaps)
 						score = x + rule.prob
-						if outside[rule.rhs1][I.length][I.lr][I.gaps] > score:
+						if outside[rule.rhs1, I.length, I.lr, I.gaps] > score:
 							agenda.setitem(newitem, new_Edge(score, 0.0, nil, nil))
-							outside[rule.rhs1][I.length][I.lr][I.gaps] = score
+							outside[rule.rhs1, I.length, I.lr, I.gaps] = score
 				else:
 					lstate = rule.rhs1
 					rstate = rule.rhs2
@@ -200,7 +206,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 									addgaps += 1
 					rightarity = sum(bitcount(rule.args._H[n])
 											for n in range(fanout))
-					leftarity = sum(rule.lengths)
+					leftarity = sum(rule.lengths._B[n] for n in range(fanout))
 					leftarity -= rightarity
 					# binary-left (A is left)
 					for lenA in range(leftarity, I.length - rightarity + 1):
@@ -212,10 +218,10 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
 									newitem = new_Item(lstate, lenA, lr, ga)
 									score = x + insidescore + rule.prob
-									if outside[lstate][lenA][lr][ga] > score:
+									if outside[lstate, lenA, lr, ga] > score:
 										agenda.setitem(newitem,
 											new_Edge(score, 0.0, nil, nil))
-										outside[lstate][lenA][lr][ga] = score
+										outside[lstate, lenA, lr, ga] = score
 
 					# X -> B A
 					addgaps = addleft = 0
@@ -252,12 +258,10 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
 									newitem = new_Item(rstate, lenA, lr, ga)
 									score = x + insidescore + rule.prob
-									if outside[rstate][lenA][lr][ga] > score:
+									if outside[rstate, lenA, lr, ga] > score:
 										agenda.setitem(newitem,
 											new_Edge(score, 0.0, nil, nil))
-										outside[rstate][lenA][lr][ga] = score
-
-	return outside
+										outside[rstate, lenA, lr, ga] = score
 
 def main():
 	from negra import NegraCorpusReader
