@@ -7,8 +7,9 @@ Range Concatenation grammar as the symbolic backbone.
 
 - parser, estimates: Maier & Kallmeyer (2010), Data-driven parsing with
   probabilistic linear context-free rewriting systems.
-- DOP: Goodman (2002), Efficient parsing of DOP with PCFG-reductions
-       Sangati & Zuidema (to appear), Double DOP
+- data-oriented parsing: Goodman (2002), Efficient parsing of DOP with
+  PCFG-reductions
+  Sangati & Zuidema (to appear), Double DOP
 - k-best list: Huang & Chiang (2005), Better k-best parsing
 - optimal binarization: Gildea (2009), Optimal parsing strategies for linear
   context-free rewriting systems
