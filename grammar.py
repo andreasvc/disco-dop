@@ -241,9 +241,10 @@ def newsplitgrammar(grammar):
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
 	object. """
-	assert len(yf) <= 8 and all(len(a) <= 8 for a in yf)
+	assert len(yf) <= 8 and all(len(a) <= 16 for a in yf)
 	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
-	return array('B', initializer), array('B', map(len, yf)) # 'H' for 16 bits
+	# 'H' for 16 bits unsigned (short), 'B' for 8 bits unsigned (char)
+	return array('H', initializer), array('B', map(len, yf))
 
 def arraytoyf(args, lengths):
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))

@@ -91,7 +91,7 @@ def getderivation(v, e, j, D, chart, tolabel, n):
 				children.append(getderivation(ei, e, j, D, chart, tolabel, n + 1))
 			else:
 				if i == 0:
-					edge = chart[ei][0]
+					edge = nsmallest(1, chart[ei]).pop()
 					children.append(getderivation(ei, edge, binarybest if edge.right.label else unarybest, D, chart, tolabel, n + 1))
 				else: raise ValueError("non-best edge missing in derivations")
 		else:
@@ -120,15 +120,16 @@ def lazykbest(chart, goal, k, tolabel):
 	print len(explored), "(sub)derivations considered",
 	return filter(itemgetter(0), [(getderivation(goal, e, j, D, chart, tolabel, 0), e.inside) for (e,j),_ in D[goal]])
 
+toid = {}
+from math import log
+def ci(label, vec): return ChartItem(toid[label], vec)
+def l(a): return -log(a)
+
 def main():
-	from math import log
 	from containers import Edge
-	toid = dict([a[::-1] for a in
-			enumerate("Epsilon S NP V ADV VP VP2 PN Mary walks quickly".split())])
+	toid.update([a[::-1] for a in enumerate(
+			"Epsilon S NP V ADV VP VP2 PN Mary walks quickly".split())])
 	tolabel = dict([a[::-1] for a in toid.items()])
-	def ci(label, vec):
-		return ChartItem(toid[label], vec)
-	def l(a): return -log(a)
 	NONE = ci("Epsilon", 0)			# sentinel node
 	goal = ci("S", 0b111)
 	chart = {
@@ -159,7 +160,7 @@ def main():
 		print tolabel[v.label], bin(v.vec)[2:]
 		for (e, j), ip in b:
 			print tolabel[v.label], ":",
-			print " ".join([tolabel[a.label] for a, _ in zip((e.left, e.right), j)]),
+			print " ".join([tolabel[c.label] for c, _ in zip((e.left, e.right), j)]),
 			print exp(-e.prob), j, exp(-ip.inside)
 		print
 	from pprint import pprint

@@ -1,5 +1,10 @@
+# cython: boundscheck: False
+# cython: nonecheck: False
+# cython: profile: False
+
 import cython
-from containers cimport ChartItem, Rule
+from containers cimport ChartItem, Edge, Rule, Terminal
+from cpq cimport heapdict
 
 if cython.compiled:
 	print "Yep, I'm compiled"
@@ -13,35 +18,42 @@ cdef extern from "bit.h":
 	bint bitminmax(unsigned long a, unsigned long b)
 	bint testbit(unsigned long vec, unsigned int pos)
 	bint testbitc(unsigned char c, unsigned int pos)
+	bint testbitshort(unsigned short c, unsigned int pos)
 
 cdef class Item:
 	cdef int state, length, lr, gaps
 	cdef long _hash
-	#def __init__(self, str state, int len, int lr, int gaps)
+	#def __init__(self, len state, int length, int lr, int gaps)
+
+@cython.locals(item=Item)
+cdef Item new_Item(int state, int length, int lr, int gaps)
 
 @cython.locals(
-	len=cython.int,
+	length=cython.int,
 	left=cython.int,
 	right=cython.int,
 	lr=cython.int,
 	gaps=cython.int)
 cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned long vec)
 
-@cython.locals(I=ChartItem)
+@cython.locals(I=ChartItem, e=Edge)
 cpdef doinside(grammar, int maxlen, concat, insidescores)
 
 @cython.locals(
 	newitem=Item,
 	I=Item,
+	e=Edge,
 	infinity=cython.double,
 	x=cython.double,
 	y=cython.double,
 	insidescore=cython.double,
 	score=cython.double,
+	m=cython.int,
 	n=cython.int,
 	a=cython.int,
 	b=cython.int,
 	c=cython.int,
+	fanout=cython.int,
 	addgaps=cython.int,
 	addright=cython.int,
 	addleft=cython.int,
@@ -57,7 +69,7 @@ cpdef doinside(grammar, int maxlen, concat, insidescores)
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint,
 	rule=Rule,
-	arg=cython.uchar,
+	arg=cython.ushort,
 	#yieldfunction=cython.tuple
 	)
 cpdef list outsidelr(grammar, insidescores, int maxlen, int goal)

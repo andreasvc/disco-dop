@@ -118,7 +118,7 @@ cdef class heapdict(dict):
 		return self.mapping.keys()
 
 	def values(self):
-		return [e.value for e in self.mapping.values()]
+		return [(<Entry>e).value for e in self.mapping.values()]
 
 	def items(self):
 		return zip(self.keys(), self.values())

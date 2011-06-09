@@ -17,7 +17,11 @@ from grammar import enumchart, induce_srcg
 from containers import ChartItem, Edge, Rule, Terminal
 from cpq import heapdict, Entry
 
+DEF infinity = float('infinity')
+
 # to avoid overhead of __init__ and __cinit__ constructors
+# belongs in containers but putting it here gives a better chance of successful
+# inlining
 cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
 	cdef ChartItem item = ChartItem.__new__(ChartItem)
 	item.label = label; item.vec = vec
@@ -40,7 +44,7 @@ cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem 
 	if edge._hash == -1: edge._hash = -2
 	return edge
 
-def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None, frozenset prune=frozenset(), dict prunetoid={}):
+def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None, dict prune=None, dict prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -50,11 +54,12 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
-	cdef list rules, l, ll, prunelist = range(len(toid))
+	cdef list rules, l, prunelist = range(len(toid))
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
+	cdef dict outside
 	cdef int m = 0, maxA = 0, i
-	cdef int lensent = len(sent), label, newlabel
+	cdef int lensent = len(sent), label, newlabel, blocked = 0
 	cdef double x, y
 	cdef bint doprune = False
 	cdef heapdict A = heapdict()				#the agenda
@@ -67,15 +72,16 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	goal = new_ChartItem(start, (1 << len(sent)) - 1)
 	if prune:
 		doprune = True
-		l = [set() for a in prunetoid]
+		outside = kbest_outside(prune, goal, 100)
+		l = [{} for a in prunetoid]
 		for Ih in prune:
-			l[Ih.label].add(Ih.vec)
+			l[Ih.label][Ih.vec] = outside.get(Ih, infinity)
 		for a, label in toid.iteritems():
 			newlabel = prunetoid[a.split("@")[0]]
 			prunelist[label] = l[newlabel]
-		
-		print 'pruning on with %d nonterminals and %d items with %d categories' % (
-				len(filter(None, prunelist)), len(prune), len(filter(None,l)))
+		print 'pruning with %d nonterminals, %d items with %d categories' % (
+				len(filter(None, prunelist)), len(prune),
+					len(filter(lambda x: x < infinity,l)))
 	gc.disable()
 
 	# scan
@@ -117,13 +123,12 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 			#if viterbi and not exhaustive: break
 		else:
 			x = edge.inside
-			rules = <list>unary[Ih.label]
-			for rule in rules:
+			for rule in <list>(unary[Ih.label]):
 				#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
 				process_edge(new_ChartItem((<Rule>rule).lhs, Ih.vec),
 								new_Edge(x + (<Rule>rule).prob,
 									(<Rule>rule).prob, Ih, NONE),
-								A, C, Cx, doprune, prunelist)
+								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 			for rule in <list>lbinary[Ih.label]:
 				for I1h, tmpedge in (<dict>(Cx[(<Rule>rule).rhs2])).iteritems():
@@ -135,7 +140,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 												Ih.vec ^ (<ChartItem>I1h).vec),
 								new_Edge(x+y+(<Rule>rule).prob,
 									(<Rule>rule).prob, Ih, <ChartItem>I1h),
-								A, C, Cx, doprune, prunelist)
+								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 			for rule in <list>rbinary[Ih.label]:
 				for I1h, tmpedge in (<dict>(Cx[(<Rule>rule).rhs1])).iteritems():
@@ -147,25 +152,29 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 											(<ChartItem>I1h).vec ^ Ih.vec),
 								new_Edge(x+y+(<Rule>rule).prob,
 										(<Rule>rule).prob, <ChartItem>I1h, Ih),
-								A, C, Cx, doprune, prunelist)
+								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 		maxA = max(maxA, len(A))
-	print "max agenda size %d / now %d / chart keys %d / values %d" % (
-						maxA, len(A), len(C), sum(map(len, C.values())))
+	print "max agenda size %d / now %d / chart keys %d / values %d / blocked %d" % (
+				maxA, len(A), len(C), sum(map(len, C.values())), blocked)
 	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
-		dict C, list Cx, bint doprune, list prunelist):
+		dict C, list Cx, bint doprune, list prunelist, int lensent, int *blocked):
 	""" Decide what to do with a newly derived edge. """
-	cdef list l
-	#if newedge.inside + outsideestimate > 120.0: continue
 	if not (A.contains(newitem) or newitem in C): #not in A or C
-		if not doprune or newitem.vec in <set>(prunelist[newitem.label]):
+		#if not doprune or newitem.vec in <set>(prunelist[newitem.label]):
+		if doprune:
+			if (newedge.inside + (<double>(<dict>prunelist[newitem.label]
+				).get(newitem.vec,infinity))) > 300.0:
+					#print "blocking", newitem, "with inside cost", newedge.inside, "outside estimate", prunelist[newitem.label].get(newitem.vec, infinity)
+					blocked[0] += 1
+					return
 			# haven't seen this item before, won't prune, add to agenda
-			A.setitem(newitem, newedge)
-			C[newitem] = []
+		A.setitem(newitem, newedge)
+		C[newitem] = []
 	elif A.contains(newitem): # in A (maybe in C)
 		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
 			# item has lower score, update agenda (and add old edge to chart)
@@ -221,10 +230,9 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	cdef int n, x
 	cdef unsigned char arg, m
 	for x in range(rule.args.length):
-		arg = rule.args._B[x]
-		m = rule.lengths._B[x] - 1 #len(arg) - 1
-		for n in range(m + 1): #enumerate(arg):
-			if testbitc(arg, n): #bit == 1:
+		m = rule.lengths._B[x] - 1
+		for n in range(m + 1):
+			if testbitshort(rule.args._H[x], n):
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
 				# ones on this side
@@ -262,30 +270,31 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	# everything looks all right
 	return True
 
-cdef double logprobsum(list edges):
-	return abs(log(sum(exp(-edge.inside) for edge in edges)))
+cdef dict kbest_outside(dict chart, ChartItem start, int k):
+	D = {}
+	outside = { start : 0.0 }
+	lazykthbest(start, k, k, D, {}, chart, set())
+	for (e, j), rootedge in D[start]:
+		getoutside(e, j, rootedge, D, chart, outside)
+	return outside
 
-def outsidecosts(chart, start):
-	# create lookup table of outside costs. or something like it.
-	outside = defaultdict(list)
-	outside_subtree(start, <dict>chart, outside, logprobsum(chart[start]), frozenset())
-	assert start in outside
-	return dict((a, abs(log(sum(map(exp, b))))) for a,b in outside.iteritems())
-
-cdef void outside_subtree(ChartItem start, dict chart, dict outside, double total, frozenset path):
-	cdef Edge edge
-	cdef double newtotal
-	if start in path: return
-	if start in chart:
-		newtotal = logprobsum(chart[start])
-		outside[chart].append(total - newtotal)
-		path.add(start)
-		for edge in chart[start]:
-			if edge.left not in path:
-				outside_subtree((<Edge>edge).left, chart, outside, newtotal,
-								path if edge.right else path | set([start]))
-			if edge.right.label and edge.right not in path:
-				outside_subtree(edge.right, chart, outside, newtotal, path)
+cdef void getoutside(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outside):
+	""" Traverse a derivation e,j, noting outside costs relative to its root edge
+	"""
+	if e.left in chart:
+		if e.left in D: (ee, jj), ee2 = D[e.left][j[0]]
+		elif j[0] == 0: jj = (0, 0); ee = ee2 = min(chart[e.left])
+		else: raise ValueError
+		if e.left not in outside:
+			outside[e.left] = rootedge.inside - (<Edge>ee2).inside
+		getoutside(<Edge>ee, jj, rootedge, D, chart, outside)
+	if e.right.label:
+		if e.right in D: (ee, jj), ee2 = D[e.right][j[1]]
+		elif j[1] == 0: jj = (0, 0); ee = ee2 = min(chart[e.right])
+		else: raise ValueError
+		if e.right not in outside:
+			outside[e.right] = rootedge.inside - (<Edge>ee2).inside
+		getoutside(<Edge>ee, jj, rootedge, D, chart, outside)
 
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation headed
@@ -305,23 +314,6 @@ cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 		item = (<Edge>edge).right
 		if item.label and item not in chart2:
 			filter_subtree(edge.right, chart, chart2)
-
-def filtercycles(chart, start, visited, current):
-	""" remove @#$%! cycles from chart
-	FIXME: not working correctly yet. Only zero cost cycles seem to be a
-	problem, though. """
-	visited.add(start)
-	chart[start] = [(ip, p, rhs) for ip, p, rhs in chart[start]
-		if current.isdisjoint(rhs)]
-	for n, (ip, p, rhs) in zip(count(), chart[start])[::-1]:
-		for a in rhs:
-			if a in chart and a not in visited:
-				filtercycles(chart, a, visited, current.union([start, a]))
-			#if a not in chart:
-			#	del chart[start][n]
-			#	break
-	if not len(chart[start]): del chart[start]
-	#return not len(chart[start]):
 
 cpdef list getviterbi(dict chart, ChartItem start, dict mem):
 	""" recompute the proper viterbi probabilities in a top-down fashion,
@@ -368,16 +360,18 @@ cpdef list getviterbi(dict chart, ChartItem start, dict mem):
 	return bestprobs
 
 cdef samplechart(dict chart, ChartItem start, dict tolabel):
-	iscore, p, entry = choice(chart[start])
-	if entry[0].label == 0: # == "Epsilon":
-		return "(%s %d)" % (tolabel[start.label], entry[0].vec), p
-	children = [samplechart(chart, a, tolabel) for a in entry]
+	cdef ChartItem child
+	cdef Edge edge = choice(chart[start])
+	if edge.left.label == 0: # == "Epsilon":
+		return "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
+	children = [samplechart(chart, child, tolabel)
+				for child in (edge.left, edge.right) if child.label]
 	tree = "(%s %s)" % (tolabel[start.label],
 							" ".join([a for a,b in children]))
-	return tree, fsum([p] + [b for a,b in children])
+	return tree, fsum([edge.prob] + [b for a,b in children])
 
 def mostprobablederivation(chart, start, tolabel):
-	return (getmpd(<dict>chart, start, tolabel),
+	return (getmpd(chart, start, tolabel),
 				(<Edge>(min(chart[start]))).inside)
 
 cdef getmpd(dict chart, ChartItem start, dict tolabel):
@@ -397,26 +391,26 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 		return a dictionary mapping parsetrees to probabilities """
 	print "sample =", sample or both, "kbest =", (not sample) or both,
 	if both:
-		derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n*100))
+		derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
 		derivations.discard(None)
-		derivations.update(lazykbest(<dict>chart, start, n, tolabel))
+		derivations.update(lazykbest(chart, start, n, tolabel))
 		#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
 	elif sample:
 		#filtercycles(chart, start, set(), set())
-		derivations = set(samplechart(<dict>chart, start, tolabel) for x in range(n))
+		derivations = set(samplechart(chart, start, tolabel) for x in range(n))
 		derivations.discard(None)
 		#calculate real parse probabilities according to Goodman's claimed
 		#method?
 	else:
 		#mem = {}
 		#filtercycles(chart, start, set(), set())
-		#getviterbi(<dict>chart, start, mem)
+		#getviterbi(chart, start, mem)
 		#for a in set(chart.keys()) - set(mem.keys()): del chart[a]
 		#print "pruned chart keys", len(chart), "/ values", sum(map(len, chart.values()))
 		#for a in chart: chart[a].sort(key=itemgetter(0))
 		#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
 		#fixme: set shouldn't be necessary
-		derivations = set(lazykbest(<dict>chart, start, n, tolabel))
+		derivations = set(lazykbest(chart, start, n, tolabel))
 		#print len(derivations)
 		#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
 		#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
