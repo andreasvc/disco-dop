@@ -91,10 +91,11 @@ def doinside(grammar, maxlen, concat, insidescores):
 	nil = ChartItem(0, 0)
 	for tags in lexical.values():
 		for rule in tags:
-			agenda[ChartItem(rule.lhs, 1)] = Edge(0.0, 0.0, nil, nil)
-	while agenda:
-		I, e = agenda.popitem()
-		x = e.inside
+			agenda[new_ChartItem(rule.lhs, 1)] = new_Edge(0.0, 0.0, nil, nil)
+	while agenda.length:
+		entry = agenda.popentry()
+		I = entry.key
+		x = entry.value.inside
 		if (I.vec not in insidescores[I.label]
 			or insidescores[I.label][I.vec] < x):
 			insidescores[I.label][I.vec] = x
@@ -102,24 +103,26 @@ def doinside(grammar, maxlen, concat, insidescores):
 		for rule in unary[I.label]:
 			if (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):
-				agenda[ChartItem(rule.lhs, I.vec)] = Edge(rule.prob
-							+ insidescores[rule.rhs1][I.vec], 0.0, nil, nil)
+				agenda.setitem(new_ChartItem(rule.lhs, I.vec), new_Edge(rule.prob
+							+ insidescores[rule.rhs1][I.vec], 0.0, nil, nil))
 		for rule in lbinary[I.label]:
 			for vec in insidescores[rule.rhs2]:
 				left = concat(I.vec, vec, rule, maxlen)
 				if left:
 					if (rule.lhs not in insidescores
 						or left not in insidescores[rule.lhs]):
-						agenda[ChartItem(rule.lhs, left)] = Edge(x + rule.prob
-								+ insidescores[rule.rhs2][vec], 0.0, nil, nil)
+						agenda.setitem(new_ChartItem(rule.lhs, left),
+							new_Edge(x + rule.prob + insidescores[rule.rhs2][vec],
+								0.0, nil, nil))
 		for rule in rbinary[I.label]:
 			for vec in insidescores[rule.rhs1]:
 				right = concat(vec, I.vec, rule, maxlen)
 				if right:
 					if (rule.lhs not in insidescores
 						or right not in insidescores[rule.lhs]):
-						agenda[ChartItem(rule.lhs, left)] = Edge(x + rule.prob
-								+ insidescores[rule.rhs1][vec], 0.0, nil, nil)
+						agenda.setitem(new_ChartItem(rule.lhs, left),
+							new_Edge(x + rule.prob + insidescores[rule.rhs1][vec],
+								0.0, nil, nil))
 
 	return insidescores
 
@@ -153,17 +156,18 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 	bylhs = grammar.bylhs
 	agenda = heapdict()
 	infinity = float('infinity')
-	nil = ChartItem(0, 0)
+	nil = new_ChartItem(0, 0)
 	# this should become a numpy array if that is advantageous:
 	outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for _ in range(len(bylhs))]
 	for a in range(maxlen):
 		newitem = new_Item(goal, a + 1, 0, 0)
-		agenda[newitem] = Edge(0.0, 0.0, nil, nil)
+		agenda[newitem] = new_Edge(0.0, 0.0, nil, nil)
 		outside[goal][a + 1][0][0] = 0.0
 	print "initialized"
-	while agenda:
-		I, e = agenda.popitem()
-		x = e.inside
+	while agenda.length:
+		entry = agenda.popentry()
+		I = entry.key
+		x = entry.value.inside
 		if x == outside[I.state][I.length][I.lr][I.gaps]:
 			totlen = I.length + I.lr + I.gaps
 			for r in bylhs[I.state]:
@@ -175,7 +179,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 						newitem = new_Item(rule.rhs1, I.length, I.lr, I.gaps)
 						score = x + rule.prob
 						if outside[rule.rhs1][I.length][I.lr][I.gaps] > score:
-							agenda[newitem] = Edge(score, 0.0, nil, nil)
+							agenda.setitem(newitem, new_Edge(score, 0.0, nil, nil))
 							outside[rule.rhs1][I.length][I.lr][I.gaps] = score
 				else:
 					lstate = rule.rhs1
@@ -209,7 +213,8 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 									newitem = new_Item(lstate, lenA, lr, ga)
 									score = x + insidescore + rule.prob
 									if outside[lstate][lenA][lr][ga] > score:
-										agenda[newitem] = Edge(score, 0.0, nil, nil)
+										agenda.setitem(newitem,
+											new_Edge(score, 0.0, nil, nil))
 										outside[lstate][lenA][lr][ga] = score
 
 					# X -> B A
@@ -248,7 +253,8 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 									newitem = new_Item(rstate, lenA, lr, ga)
 									score = x + insidescore + rule.prob
 									if outside[rstate][lenA][lr][ga] > score:
-										agenda[newitem] = Edge(score, 0.0, nil, nil)
+										agenda.setitem(newitem,
+											new_Edge(score, 0.0, nil, nil))
 										outside[rstate][lenA][lr][ga] = score
 
 	return outside

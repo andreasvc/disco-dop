@@ -4,7 +4,8 @@
 
 import cython
 from containers cimport ChartItem, Edge, Rule, Terminal
-from cpq cimport heapdict
+from plcfrs_cython cimport new_Edge, new_ChartItem
+from cpq cimport heapdict, Entry
 
 if cython.compiled:
 	print "Yep, I'm compiled"
@@ -36,11 +37,17 @@ cdef Item new_Item(int state, int length, int lr, int gaps)
 	gaps=cython.int)
 cpdef double getoutside(list outside, int maxlen, int slen, int label, unsigned long vec)
 
-@cython.locals(I=ChartItem, e=Edge)
+@cython.locals(
+	I=ChartItem,
+	e=Edge,
+	nil=ChartItem,
+	entry=Entry)
 cpdef doinside(grammar, int maxlen, concat, insidescores)
 
 @cython.locals(
+	entry=Entry,
 	newitem=Item,
+	nil=ChartItem,
 	I=Item,
 	e=Edge,
 	infinity=cython.double,

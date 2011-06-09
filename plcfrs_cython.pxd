@@ -12,3 +12,6 @@ cdef extern from "bit.h":
 	bint testbitc(unsigned char arg, unsigned long pos)
 	bint testbitshort(unsigned short arg, unsigned long pos)
 	bint bitminmax(unsigned long a, unsigned long b)
+
+cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec)
+cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem right)
