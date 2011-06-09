@@ -1,12 +1,12 @@
 # -*- coding: UTF-8 -*-
 from negra import NegraCorpusReader, fold, unfold
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
-		extractfragments, binarizetree, ranges, export, \
-		read_rparse_grammar, mean, harmean, testgrammar, bracketings, \
-		printbrackets, rem_marks, alterbinarization, varstoindices, \
-		read_bitpar_grammar, read_penn_format, terminals
+		ranges, export, read_rparse_grammar, mean, harmean,\
+		testgrammar, bracketings, printbrackets, rem_marks, alterbinarization,\
+		varstoindices, read_bitpar_grammar, read_penn_format, terminals
+from fragmentseeker import extractfragments
 from grammar import newsplitgrammar as splitgrammar
-from treetransforms import collinize, un_collinize
+from treetransforms import collinize, un_collinize, binarizetree
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
 from collections import defaultdict
@@ -18,8 +18,8 @@ from math import log, exp, fsum
 from heapq import nlargest
 import cPickle, re, time, codecs
 #import plac
-#from estimates import getestimates, getoutside
 from kbest import lazykbest
+#from estimates import getestimates, getoutside
 #from plcfrs_cython import mostprobableparse
 #from plcfrs import parse
 try:
@@ -50,8 +50,8 @@ def main(
 	wrong_interpolate = False,
 	n = 0,			#number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
 	m = 10000,		#number of derivations to sample/enumerate
-	prune=False,		#whether to use srcg chart to prune parsing of dop
-	sldop_n=13
+	prune=True,		#whether to use srcg chart to prune parsing of dop
+	sldop_n=7
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -125,7 +125,8 @@ def main(
 			print "SRCG based on", len(trees), "sentences"
 			l = len(grammar)
 			print "labels:", len(set(rule[a] for (rule,yf),w in grammar for a in range(3) if len(rule) > a)), "of which preterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
-			print "max arity:", max((len(yf), rule, yf, w) for (rule,yf),w in grammar)
+			print "max arity:", max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
+			print "max vars:", max((max(map(len, yf)), rule, yf, w) for (rule, yf), w in grammar if rule[1] != "Epsilon")
 			grammar = splitgrammar(grammar)
 			ll=sum(len(b) for a,b in grammar.lexical.items())
 			print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
@@ -237,12 +238,13 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 		if dop:
 			print "DOP:",
 			#estimate = partial(getoutside, outside, maxlen, len(sent))
-			if srcg and prune: srcgchart = filterchart(chart, start)
+			if srcg and prune and repr(start) != "0[0]":
+				srcgchart = chart #filterchart(chart, start)
 			else: srcgchart = {}
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
 								dopgrammar.toid[top], viterbi, n, None,
-								prune=frozenset(srcgchart.keys()),
+								prune=srcgchart,
 								prunetoid=grammar.toid)
 		else: chart = {}; start = False
 		if dop and repr(start) != "0[0]":
@@ -321,7 +323,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 								100 * recall(goldbrackets, scandb),
 								100 * f_measure(goldbrackets, scandb))
 		if dop:
-			print "srcg ex %5.2f lp %5.2f lr %5.2f lf %5.2f (delta %5.2f)" % (
+			print "dop  ex %5.2f lp %5.2f lr %5.2f lf %5.2f (delta %5.2f)" % (
 								100 * (exact / float(nsent)),
 								100 * precision(goldbrackets, dcandb),
 								100 * recall(goldbrackets, dcandb),
@@ -332,19 +334,19 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 	if srcg:
 		#derivout.close()
 		codecs.open("test1.srcg", "w", encoding='utf-8').writelines(
-			"%s\n" % export(a,b,n)
+			"%s\n" % export(a,b,n + 1)
 			for n,(a,b) in enumerate(zip(sresults, gsent)))
 		codecs.open("test.cf.srcg", "w", encoding='utf-8').writelines(
 			a.pprint(margin=999)+'\n' for a in sresults)
 	if dop:
 		codecs.open("test1.dop", "w", encoding='utf-8').writelines(
-			"%s\n" % export(a, b, n)
+			"%s\n" % export(a, b, n + 1)
 			for n,(a, b) in enumerate(zip(dresults, gsent)))
 		codecs.open("test.cf.dop", "w", encoding='utf-8').writelines(
 			a.pprint(margin=999)+'\n' for a in dresults)
 	#if dop: open("interp%d.dop" % interp, "w").writelines("%s\n" % export(a,b,n) for n,(a,b) in enumerate(zip(dresults, gsent)))
 	codecs.open("test1.gold", "w", encoding='utf-8').write(''.join(
-		"#BOS %d\n%s\n#EOS %d\n" % (n, a, n) for n, a in enumerate(gold)))
+		"#BOS %d\n%s\n#EOS %d\n" % (n + 1, a, n + 1) for n, a in enumerate(gold)))
 	codecs.open("test.cf.gold", "w", encoding='utf-8').writelines(
 		a.pprint(margin=999)+'\n' for a in test[0])
 	print "maxlen", maxlen, "unfolded", unfolded, "arity marks", arity_marks, "binarized", bintype, "estimator", estimator, sldop_n if estimator == 'sl-dop' else ''

@@ -1,28 +1,31 @@
 """ Implementation of Sangati et al., Efficiently extract recurring tree
 fragments from large treebanks. """
 from collections import defaultdict
+from grammar import cartpi
 from itertools import count
 from nltk import Tree, ImmutableTree
 from grammar import srcg_productions, canonicalize, alpha_normalize, rangeheads
 
+def indices(tree):
+	return dict((idx, tree[idx]) for idx in tree.treepositions())
+
 def extractfragments(trees, sents):
 	""" Seeks the largest fragments occurring at least twice in the corpus.
 	"""
-	fraglist = defaultdict(set) #FreqDist()
-	#partfraglist = set()
-	trees = [add_srcg_rules(canonicalize(a).freeze(), b)
-				for a, b in zip(trees, sents)]
-	trees = [dict((idx, a[idx]) for idx in a.treepositions()) for a in trees]
-	
+	fraglist = defaultdict(set)
+	trees = [indices(add_srcg_rules(canonicalize(aa).freeze(), bb))
+				for aa, bb in zip(trees, sents)]
 	mem = {}; l = set()
-	for n, a, asent in zip(count(), trees, sents):
-		for b, bsent in zip(trees, sents)[n+1:]:
+	for n in range(len(trees)):
+		a = trees[n]; asent = sents[n]
+		for m in range(n + 1, len(trees)):
+			b = trees[m]; bsent = sents[m]
 			for i in a:
 				for j in b:
 					try: x = frozenset(mem[i, j])
 					except KeyError:
 						x = frozenset(extractmaxfragments(a, b, i, j,
-														asent, bsent, mem))
+											asent, bsent, mem))
 					if x in l: continue # or len(x) < 2: continue
 					# disjoint-set datastructure here?
 					for y in l:
@@ -32,12 +35,11 @@ def extractfragments(trees, sents):
 							l.add(x)
 							break
 					else: l.add(x)
-			fragments = (fragmentfromindices(a, asent, x) for x in l)
-			#fraglist.update(set(fragments))
-			for x in set(fragments):
-				if x: fraglist[x].update((a[()], b[()]))
+			fragments = set(fragmentfromindices(a, asent, x) for x in l)
+			for xx in fragments:
+				if xx: fraglist[xx].update((a[()], b[()]))
 			mem.clear(); l.clear()
-	fragcounts = dict((a, len(b)) for a, b in fraglist.iteritems())
+	fragcounts = dict((aa, len(bb)) for aa, bb in fraglist.iteritems())
 	return fragcounts
 
 def extractmaxfragments(a,b, i,j, asent,bsent, mem):
@@ -65,7 +67,7 @@ def extractmaxfragments(a,b, i,j, asent,bsent, mem):
 		mem[i, j] = nodeset
 		return nodeset
 	if a[i].prod == b[j].prod:
-		for n, x in enumerate(a[i]):
+		for n in range(len(a[i])):
 			ii,  jj = i+(n,), j+(n,)
 			nodeset.update(mem[ii, jj] if (ii, jj) in mem
 					else extractmaxfragments(a, b, ii, jj, asent, bsent, mem))
@@ -82,7 +84,7 @@ def extractmaxpartialfragments(a, b):
 	for mapping in mappingsset:
 		maxpartialfragmentpairs = [set() for x in mapping]
 		for i, (n1, n2) in enumerate(mapping):
-			maxpartialfragments[i] = extractmaxpartialfragments(n1, n2)
+			maxpartialfragmentpairs[i] = extractmaxpartialfragments(n1, n2)
 		for nodeset in cartpi(maxpartialfragmentpairs):
 			nodeset.union(a)
 			partfragset.add(nodeset)
@@ -101,7 +103,7 @@ def maxsetmappings(a,b,x,y,firstCall=False):
 			for celly in range(endy, starty + 1, -1):
 				if a[startx] == b[celly]:
 					endy = celly
-					submappings = maxsetmappings(a,b,startx,cely)
+					submappings = maxsetmappings(a,b,startx,celly)
 					if not firstCall:
 						for mapping in submappings:
 							mapping.add((a[startx],b[celly]))
@@ -164,7 +166,7 @@ def fragmentfromindices(tree, sent, indices):
 	# frontier nodes should get rangeheads(a.leaves())
 	# renumber
 	leaves = result.leaves()
-	sent = tuple(a for n,a in enumerate(sent) if n in leaves)
+	sent = tuple([a for n,a in enumerate(sent) if n in leaves])
 	leafmap = dict(zip(sorted(leaves), count()))
 	for n, a in enumerate(result.treepositions('leaves')):
 		result[a] = leafmap[result[a]]

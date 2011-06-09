@@ -119,7 +119,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
 		append(C[Ih], edge)
-		(<dict>(Cx[Ih.label]))[Ih] = edge
+		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
 			if viterbi and n == m: break
@@ -177,7 +177,7 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 		#if not doprune or newitem.vec in <set>(prunelist[newitem.label]):
 		if doprune:
 			estimate = dict_getitem(<object>list_getitem(prunelist, newitem.label), newitem.vec)
-			if estimate == NULL or newedge.inside + <double>estimate > 300.0:
+			if estimate == NULL or newedge.inside + <double><object>estimate > 300.0:
 					blocked[0] += 1
 					return
 		elif newedge.inside > 300.0:
