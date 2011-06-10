@@ -196,7 +196,7 @@ def splitgrammar(grammar):
 				lexical.setdefault(yf[0], []).append((r, abs(w)))
 			else:
 				unary[r[0][1]].append((r, abs(w)))
-			bylhs[r[0][0]].append((r, abs(w)))
+				bylhs[r[0][0]].append((r, abs(w)))
 		elif len(rule) == 3:
 			lbinary[r[0][1]].append((r, abs(w)))
 			rbinary[r[0][2]].append((r, abs(w)))
@@ -209,34 +209,41 @@ def newsplitgrammar(grammar):
 	labels to numeric identifiers. Also negates log-probabilities to
 	accommodate min-heaps."""
 	from containers import Rule, Terminal
-	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
+	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
 	unary, lbinary, rbinary, bylhs = ([[] for _ in nonterminals] for _ in range(4))
+	arity = array('B', [0] * len(nonterminals))
 	lexical = defaultdict(list)
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule, yf), w in grammar:
 		if len(rule) == 2 and toid[rule[1]] == 0:
 			r = Terminal(toid[rule[0]], toid[rule[1]], 0, unicode(yf[0]), abs(w))
+			assert arity[r.lhs] in (0, 1)
+			arity[r.lhs] = 1
 		else:
 			args, lengths = yfarray(yf)
 			assert yf == arraytoyf(args, lengths)
 			r = Rule(toid[rule[0]], toid[rule[1]],
 				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
+			if arity[r.lhs] == 0:
+				arity[r.lhs] = len(args)
+			assert arity[r.lhs] == len(args)
 		if len(rule) == 2:
 			if r.rhs1 == 0: #Epsilon
 				# lexical productions (mis)use the field for the yield function to store the word
 				lexical.setdefault(yf[0], []).append(r)
 			else:
 				unary[r.rhs1].append(r)
-			bylhs[r.lhs].append(r)
+				bylhs[r.lhs].append(r)
 		elif len(rule) == 3:
 			lbinary[r.rhs1].append(r)
 			rbinary[r.rhs2].append(r)
 			bylhs[r.lhs].append(r)
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
-	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
+	assert 0 not in arity[1:]
+	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel, arity)
 
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
@@ -516,6 +523,15 @@ def testgrammar(grammar):
 		if b and abs(sum(exp(-rule.prob) for rule in b) - 1.0) > 0.01:
 			print "Does not sum to 1:",
 			print grammar.tolabel[a], sum(exp(-rule.prob) for rule in b)
+			return
+	tmp = defaultdict(float)
+	for rr in grammar.lexical.itervalues():
+		for r in rr:
+			tmp[r.lhs] += exp(-r.prob)
+	for a,b in tmp.iteritems():
+		if abs(b - 1.0) > 0.01:
+			print "Does not sum to 1:",
+			print grammar.tolabel[a], b
 			break
 	else: print "All left hand sides sum to 1"
 

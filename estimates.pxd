@@ -69,6 +69,7 @@ cpdef np.ndarray outsidelr(grammar, dict insidescores, int maxlen, int goal)
 	nil=ChartItem,
 	I=Item,
 	e=Edge,
+	arity=array,
 	bylhs=list,
 	rules=list,
 	infinity=cython.double,
@@ -78,8 +79,6 @@ cpdef np.ndarray outsidelr(grammar, dict insidescores, int maxlen, int goal)
 	m=cython.int,
 	n=cython.int,
 	a=cython.int,
-	b=cython.int,
-	c=cython.int,
 	fanout=cython.int,
 	addgaps=cython.int,
 	addright=cython.int,
@@ -95,8 +94,7 @@ cpdef np.ndarray outsidelr(grammar, dict insidescores, int maxlen, int goal)
 	lstate=cython.int,
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint,
-	rule=Rule,
-	arg=cython.ushort
+	rule=Rule
 	)
 cdef void computeoutsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, int maxlen, int goal, np.ndarray[np.double_t, ndim=4] outside)
 

@@ -102,6 +102,7 @@ def simpleinside(grammar, maxlen):
 def doinside(grammar, maxlen, concat, insidescores):
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
+	infinity = float('infinity')
 	agenda = heapdict()
 	nil = ChartItem(0, 0)
 	for tags in lexical.values():
@@ -112,7 +113,7 @@ def doinside(grammar, maxlen, concat, insidescores):
 		I = entry.key
 		x = entry.value.score
 		if I.label not in insidescores: insidescores[I.label] =  {}
-		if insidescores[I.label].get(I.vec, 0.0) < x:
+		if insidescores[I.label].get(I.vec, infinity) > x:
 			insidescores[I.label][I.vec] = x
 		
 		for rule in unary[I.label]:
@@ -186,6 +187,7 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 
 def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 	bylhs = grammar.bylhs
+	arity = grammar.arity
 	agenda = heapdict()
 	nil = new_ChartItem(0, 0)
 	for a in range(maxlen):
@@ -200,9 +202,7 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 		if x != outside[I.state, I.length, I.lr, I.gaps]: continue
 		totlen = I.length + I.lr + I.gaps
 		rules = bylhs[I.state]
-		for r in rules:
-			if isinstance(r, Terminal): continue
-			rule = r
+		for rule in rules:
 			# X -> A
 			if rule.rhs2 == 0:
 				if rule.rhs1 != 0:
@@ -215,24 +215,23 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 			else:
 				lstate = rule.rhs1
 				rstate = rule.rhs2
-				fanout = len(rule.args)
+				fanout = arity._B[rule.lhs]
 				# X -> A B
 				addgaps = addright = 0
 				stopaddright = False
 				for m in range(fanout - 1, -1, -1):
-					arg = rule.args._H[m]
 					for a in range(rule.lengths._B[m] - 1, -1, -1):
-						if testbitshort(arg, a) == 0:
+						if (not stopaddright
+							and not testbitshort(rule.args._H[m], a)):
 							stopaddright = True
-						else:
+						if testbitshort(rule.args._H[m], a):
 							if not stopaddright:
 								addright += 1
 							else:
 								addgaps += 1
-				rightarity = sum(bitcount(rule.args._H[n])
-										for n in range(fanout))
-				leftarity = sum(rule.lengths._B[n] for n in range(fanout))
-				leftarity -= rightarity
+
+				leftarity = arity._B[lstate]
+				rightarity = arity._B[rstate]
 				# binary-left (A is left)
 				for lenA in range(leftarity, I.length - rightarity + 1):
 					lenB = I.length - lenA
@@ -250,27 +249,25 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 									outside[lstate, lenA, lr, ga] = score
 
 				# X -> B A
-				addgaps = addleft = 0
+				addgaps = addleft = addright = 0
 				stopaddleft = False
 				for m in range(fanout):
-					arg = rule.args._H[m]
 					for a in range(rule.lengths._B[m]):
-						if testbitshort(arg, a):
+						if not stopaddleft and testbitshort(rule.args._H[m], a):
 							stopaddleft = True
-						else:
+						if not testbitshort(rule.args._H[m], a):
 							if stopaddleft:
 								addgaps += 1
 							else:
 								addleft += 1
 
-				addright = 0
 				stopaddright = False
 				for m in range(fanout -1, -1, -1):
 					arg = rule.args._H[m]
 					for a in range(rule.lengths._B[m] - 1, -1, -1):
-						if testbitshort(arg, a):
+						if not stopaddright and testbitshort(arg, a):
 							stopaddright = True
-						else:
+						if not testbitshort(arg, a):
 							if not stopaddright:
 								addright += 1
 				addgaps -= addright

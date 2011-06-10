@@ -19,7 +19,7 @@ from heapq import nlargest
 import cPickle, re, time, codecs
 #import plac
 from kbest import lazykbest
-#from estimates import getestimates, getoutside
+from estimates import getestimates #, getoutside
 #from plcfrs_cython import mostprobableparse
 #from plcfrs import parse
 try:
@@ -30,9 +30,9 @@ except: from plcfrs import parse, mostprobableparse; print "running non-cython"
 def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
-	dop = True,
+	dop = False,
 	unfolded = False,
-	maxlen = 15,	# max number of words for sentences in training & test corpus
+	maxlen = 30,	# max number of words for sentences in training & test corpus
 	bintype = "collinize", # choices: collinize, nltk, optimal
 	estimator = "sl-dop", # choices: dop1, ewe, shortest, sl-dop
 	factor = "right",
@@ -50,8 +50,10 @@ def main(
 	wrong_interpolate = False,
 	n = 0,			#number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
 	m = 10000,		#number of derivations to sample/enumerate
-	prune=True,		#whether to use srcg chart to prune parsing of dop
-	sldop_n=7
+	prune=False,		#whether to use srcg chart to prune parsing of dop
+	sldop_n=7,
+	doestimates=True,
+	useestimates=True
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -155,20 +157,28 @@ def main(
 			testgrammar(dopgrammar)
 			print "DOP model based on", len(trees), "sentences,", nodes, "nodes,", len(dopgrammar.toid), "nonterminals"
 
-		#print "getting outside estimates"
-		#begin = time.clock()
-		#outside = getestimates(dopgrammar, maxlen, dopgrammar.toid["ROOT"])
-		#print "done. time elapsed: ", time.clock() - begin,
-		#cPickle.dump(outside, open("outside.pickle", "wb"))
-		#outside = cPickle.load(open("outside.pickle", "rb"))
-		#print "pickled"
+		if doestimates:
+			import numpy as np
+			print "computing estimates"
+			begin = time.clock()
+			outside = getestimates(grammar, maxlen, grammar.toid["ROOT"])
+			print "done. time elapsed: ", time.clock() - begin,
+			np.savez("outside.npz", outside=outside)
+			#cPickle.dump(outside, open("outside.pickle", "wb"))
+			print "saved estimates"
+		if useestimates:
+			import numpy as np
+			#outside = cPickle.load(open("outside.pickle", "rb"))
+			outside = np.load("outside.npz")['outside']
+			print "loaded estimates"
+		else: outside = None
 
 		#for a,b in extractfragments(trees).items():
 		#	print a,b
-		#exit(
-		doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n)
+		#exit()
+		doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n, useestimates, outside)
 
-def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n=14, top='ROOT', tags=True):
+def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n=14, useestimates=False, outside=None, top='ROOT', tags=True):
 	sresults = []; dresults = []
 	serrors1 = FreqDist(); serrors2 = FreqDist()
 	derrors1 = FreqDist(); derrors2 = FreqDist()
@@ -192,7 +202,8 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 			chart, start = parse([w for w,t in sent], grammar,
 								[t for w,t in sent] if tags else [],
 								grammar.toid[top], True,
-								0 if prune else 1, None)
+								0 if prune else 1, (outside, maxlen) if
+								useestimates else None)
 		else: chart = {}; start = False
 		#for a in chart: chart[a].sort()
 		#for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
