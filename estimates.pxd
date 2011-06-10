@@ -3,10 +3,11 @@
 # cython: nonecheck: False
 # cython: profile: False
 
-import cython
+cimport cython
 from containers cimport ChartItem, Edge, Rule, Terminal
 from plcfrs_cython cimport new_Edge, new_ChartItem
 from cpq cimport heapdict, Entry
+from array cimport array
 cimport numpy as np
 
 if cython.compiled:
@@ -37,14 +38,27 @@ cdef Item new_Item(int state, int length, int lr, int gaps)
 	right=cython.int,
 	lr=cython.int,
 	gaps=cython.int)
-cpdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, int maxlen, int slen, int label, unsigned long vec)
+cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, int maxlen, int slen, int label, unsigned long vec)
 
 @cython.locals(
 	I=ChartItem,
 	e=Edge,
 	nil=ChartItem,
 	entry=Entry)
-cpdef doinside(grammar, int maxlen, concat, insidescores)
+cpdef doinside(grammar, int maxlen, concat, dict insidescores)
+
+@cython.locals(
+	n=cython.uint,
+	m=cython.uint,
+	d2=dict,
+	val=np.double_t)
+cdef void twodim_dict_to_array(dict d, np.ndarray[np.double_t, ndim=2] a)
+
+@cython.locals(
+#	a=cython.int,
+#	b=cython.int
+	npinsidescores=np.ndarray)
+cpdef np.ndarray outsidelr(grammar, dict insidescores, int maxlen, int goal)
 
 @cython.locals(
 	score=np.double_t,
@@ -54,6 +68,7 @@ cpdef doinside(grammar, int maxlen, concat, insidescores)
 	I=Item,
 	e=Edge,
 	bylhs=list,
+	rules=list,
 	infinity=cython.double,
 	x=cython.double,
 	y=cython.double,
@@ -81,6 +96,5 @@ cpdef doinside(grammar, int maxlen, concat, insidescores)
 	rule=Rule,
 	arg=cython.ushort
 	)
-cdef void computeoutsidelr(grammar, insidescores, int maxlen, int goal, np.ndarray[np.double_t, ndim=4] outside)
-
+cdef void computeoutsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, int maxlen, int goal, np.ndarray[np.double_t, ndim=4] outside)
 

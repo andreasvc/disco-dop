@@ -13,6 +13,12 @@ try:
 	assert cython.compiled
 except:
 	from bit import *
+	# NB the array stuff for yield functions is not compatible with plain
+	# python, remove instances of '._B' and '._H' to make it work
+	# e.g., rule.args._H[n] => rule.args[n]
+	# also, replace new_ChartItem() and new_Edge with ChartItem() and Edge()
+else:
+	np.import_array()
 
 class Item(object):
 	__slots__ = ("state", "length", "lr", "gaps", "_hash")
@@ -36,17 +42,14 @@ def getestimates(grammar, maxlen, goal):
 	return outside
 
 def testestimates(grammar, maxlen, goal):
-	#insidescores = inside(grammar, maxlen)
-	#for a in insidescores:
-	#	for b in insidescores[a]:
-	#		print "%s[%s] =" % (a, bin(b)[2:]), exp(insidescores[a][b])
-	#x=len(insidescores) * sum(map(len, insidescores.values()))
-	#print
 	print "getting inside"
-	insidescores = simpleinside(grammar, maxlen)
 	insidescores = inside(grammar, maxlen)
+	insidescores = simpleinside(grammar, maxlen)
 	for a in insidescores:
 		for b in insidescores[a]:
+			print a,b
+			assert 0 <= a < len(grammar.bylhs)
+			assert 0 <= b <= maxlen
 			print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print 
 	print len(insidescores) * sum(map(len, insidescores.values()))
@@ -66,26 +69,36 @@ def testestimates(grammar, maxlen, goal):
 	return outside
 
 def getoutside(outside, maxlen, slen, label, vec):
-	if slen > maxlen: return 0.0
+	""" Used during parsing to query for outside estimates """
+	if slen > maxlen:
+		return 0.0
 	length = bitcount(vec)
 	left = nextset(vec, 0)
 	gaps = slen - length - left
 	right = slen - length - left - gaps
 	lr = left + right
-	if length+lr+gaps <= maxlen: return outside[label, length, lr, gaps]
-	else: return 0.0
+	if length+lr+gaps <= maxlen:
+		return outside[label, length, lr, gaps]
+	else:
+		return 0.0
 
 def inside(grammar, maxlen):
-	insidescores = defaultdict(lambda: defaultdict(lambda: float('infinity')))
+	#infinity = float('infinity')
+	#insidescores = defaultdict(lambda: defaultdict(lambda: infinity))
+	insidescores = {}
 	return doinside(grammar, maxlen, insideconcat, insidescores)
 
 def simpleinside(grammar, maxlen):
-	""" Here vec is actually the length (number of terminals in the yield of the constituent) """
-	insidescores = defaultdict(lambda: defaultdict(lambda: float('infinity')))
+	""" Here vec is actually the length (number of terminals in the yield of
+	the constituent) """
+	#infinity = float('infinity')
+	#insidescores = defaultdict(lambda: defaultdict(lambda: infinity))
+	insidescores = {}
 	return doinside(grammar, maxlen, simpleconcat, insidescores)
 
 def doinside(grammar, maxlen, concat, insidescores):
-	lexical, unary, lbinary, rbinary = grammar.lexical, grammar.unary, grammar.lbinary, grammar.rbinary
+	lexical, unary = grammar.lexical, grammar.unary
+	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	agenda = heapdict()
 	nil = ChartItem(0, 0)
 	for tags in lexical.values():
@@ -95,33 +108,33 @@ def doinside(grammar, maxlen, concat, insidescores):
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value.inside
-		if (I.vec not in insidescores[I.label]
-			or insidescores[I.label][I.vec] < x):
+		if I.label not in insidescores: insidescores[I.label] =  {}
+		if insidescores[I.label].get(I.vec, 0.0) < x:
 			insidescores[I.label][I.vec] = x
 		
 		for rule in unary[I.label]:
 			if (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):
-				agenda.setitem(new_ChartItem(rule.lhs, I.vec), new_Edge(rule.prob
-							+ insidescores[rule.rhs1][I.vec], 0.0, nil, nil))
+				agenda.setitem(new_ChartItem(rule.lhs, I.vec),
+						new_Edge(rule.prob + x, 0.0, nil, nil))
 		for rule in lbinary[I.label]:
+			if rule.rhs2 not in insidescores: continue
 			for vec in insidescores[rule.rhs2]:
 				left = concat(I.vec, vec, rule, maxlen)
-				if left:
-					if (rule.lhs not in insidescores
-						or left not in insidescores[rule.lhs]):
-						agenda.setitem(new_ChartItem(rule.lhs, left),
-							new_Edge(x + rule.prob + insidescores[rule.rhs2][vec],
-								0.0, nil, nil))
+				if left and (rule.lhs not in insidescores
+					or left not in insidescores[rule.lhs]):
+					agenda.setitem(new_ChartItem(rule.lhs, left),
+						new_Edge(x + rule.prob + insidescores[rule.rhs2][vec],
+									0.0, nil, nil))
 		for rule in rbinary[I.label]:
+			if rule.rhs1 not in insidescores: continue
 			for vec in insidescores[rule.rhs1]:
 				right = concat(vec, I.vec, rule, maxlen)
-				if right:
-					if (rule.lhs not in insidescores
-						or right not in insidescores[rule.lhs]):
-						agenda.setitem(new_ChartItem(rule.lhs, left),
-							new_Edge(x + rule.prob + insidescores[rule.rhs1][vec],
-								0.0, nil, nil))
+				if right and (rule.lhs not in insidescores
+					or right not in insidescores[rule.lhs]):
+					agenda.setitem(new_ChartItem(rule.lhs, right),
+						new_Edge(x + rule.prob + insidescores[rule.rhs1][vec],
+									0.0, nil, nil))
 
 	return insidescores
 
@@ -129,7 +142,6 @@ def simpleconcat(a, b, ignored, maxlen):
 	return a+b if a+b <= maxlen else 0
 
 def insideconcat(a, b, rule, maxlen):
-	#if not (a and b and yieldfunction)  ???
 	if len(rule.args) + bitcount(a) + bitcount(b) > maxlen + 1:
 		return
 	result = resultpos = l = r = 0
@@ -149,16 +161,24 @@ def insideconcat(a, b, rule, maxlen):
 		result &= ~(1 << resultpos)
 	return result
 
+def twodim_dict_to_array(d, a):
+	for n, d2 in d.iteritems():
+		for m, val in d2.iteritems():
+			a[n, m] = val
+	return
+		
 def outsidelr(grammar, insidescores, maxlen, goal):
 	try: assert cython.compiled; print "estimates: running cython"
 	except: print "estimates: not cython"
 	infinity = float('infinity')
-	#outside = [[[[infinity] * (maxlen+1) for b in range(maxlen - c + 1)] for c in range(maxlen+1)] for _ in range(len(bylhs))]
-	outside = np.repeat(np.array([infinity], dtype='d'),
-				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1))
-	outside = np.reshape(outside,
-				(len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
-	computeoutsidelr(grammar, insidescores, maxlen, goal, outside)
+	outside = np.array([infinity], dtype='d').repeat(
+				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
+				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
+	npinsidescores = np.array([infinity], dtype='d').repeat(
+				len(grammar.bylhs) * (maxlen+1)).reshape(
+				(len(grammar.bylhs), (maxlen+1)))
+	twodim_dict_to_array(insidescores, npinsidescores)
+	computeoutsidelr(grammar, npinsidescores, maxlen, goal, outside)
 	return outside
 
 def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
@@ -176,7 +196,8 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 		x = entry.value.inside
 		if x == outside[I.state, I.length, I.lr, I.gaps]:
 			totlen = I.length + I.lr + I.gaps
-			for r in bylhs[I.state]:
+			rules = bylhs[I.state]
+			for r in rules:
 				if isinstance(r, Terminal): continue
 				rule = r
 				# X -> A
@@ -211,7 +232,7 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 					# binary-left (A is left)
 					for lenA in range(leftarity, I.length - rightarity + 1):
 						lenB = I.length - lenA
-						insidescore = insidescores[rstate][lenB]
+						insidescore = insidescores[rstate, lenB]
 						for lr in range(I.lr, I.lr + lenB + 1):
 							if addright == 0 and lr != I.lr: continue
 							for ga in range(leftarity - 1, totlen+1):
@@ -252,7 +273,7 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 					# binary-right (A is right)
 					for lenA in range(rightarity, I.length - leftarity + 1):
 						lenB = I.length - lenA
-						insidescore = insidescores[lstate][lenB]
+						insidescore = insidescores[lstate, lenB]
 						for lr in range(I.lr, I.lr + lenB + 1):
 							for ga in range(rightarity - 1, totlen+1):
 								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
@@ -262,6 +283,7 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 										agenda.setitem(newitem,
 											new_Edge(score, 0.0, nil, nil))
 										outside[rstate, lenA, lr, ga] = score
+	pass
 
 def main():
 	from negra import NegraCorpusReader

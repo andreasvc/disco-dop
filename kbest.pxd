@@ -1,4 +1,4 @@
-import cython
+cimport cython
 from cpq cimport heapdict, nsmallest
 from containers cimport ChartItem, Edge
 

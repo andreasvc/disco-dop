@@ -1,4 +1,4 @@
-import cython
+cimport cython
 
 @cython.locals(
 	a=dict,
