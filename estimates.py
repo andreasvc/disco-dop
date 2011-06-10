@@ -1,7 +1,7 @@
 #cython: boundscheck=False
 """
 Implementation of LR estimate (Kallmeyer & Maier 2010).
-Ported almost directly from rparse.
+Ported almost directly from rparse (except for sign reversal of log probs).
 """
 from cpq import heapdict
 from containers import ChartItem, Edge, Rule, Terminal
@@ -74,7 +74,10 @@ def getoutside(outside, maxlen, slen, label, vec):
 		return 0.0
 	length = bitcount(vec)
 	left = nextset(vec, 0)
-	gaps = slen - length - left
+	foo = nextunset(vec, left); bar = nextset(vec, foo)
+	while bar != -1:
+		foo = nextunset(vec, bar); bar = nextset(vec, foo)
+	gaps = foo - length - left
 	right = slen - length - left - gaps
 	lr = left + right
 	if length+lr+gaps <= maxlen:
@@ -103,11 +106,11 @@ def doinside(grammar, maxlen, concat, insidescores):
 	nil = ChartItem(0, 0)
 	for tags in lexical.values():
 		for rule in tags:
-			agenda[new_ChartItem(rule.lhs, 1)] = new_Edge(0.0, 0.0, nil, nil)
+			agenda[new_ChartItem(rule.lhs, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
-		x = entry.value.inside
+		x = entry.value.score
 		if I.label not in insidescores: insidescores[I.label] =  {}
 		if insidescores[I.label].get(I.vec, 0.0) < x:
 			insidescores[I.label][I.vec] = x
@@ -116,7 +119,7 @@ def doinside(grammar, maxlen, concat, insidescores):
 			if (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):
 				agenda.setitem(new_ChartItem(rule.lhs, I.vec),
-						new_Edge(rule.prob + x, 0.0, nil, nil))
+						new_Edge(rule.prob + x, 0.0, 0.0, nil, nil))
 		for rule in lbinary[I.label]:
 			if rule.rhs2 not in insidescores: continue
 			for vec in insidescores[rule.rhs2]:
@@ -125,7 +128,7 @@ def doinside(grammar, maxlen, concat, insidescores):
 					or left not in insidescores[rule.lhs]):
 					agenda.setitem(new_ChartItem(rule.lhs, left),
 						new_Edge(x + rule.prob + insidescores[rule.rhs2][vec],
-									0.0, nil, nil))
+									0.0, 0.0, nil, nil))
 		for rule in rbinary[I.label]:
 			if rule.rhs1 not in insidescores: continue
 			for vec in insidescores[rule.rhs1]:
@@ -134,7 +137,7 @@ def doinside(grammar, maxlen, concat, insidescores):
 					or right not in insidescores[rule.lhs]):
 					agenda.setitem(new_ChartItem(rule.lhs, right),
 						new_Edge(x + rule.prob + insidescores[rule.rhs1][vec],
-									0.0, nil, nil))
+									0.0, 0.0, nil, nil))
 
 	return insidescores
 
@@ -187,103 +190,105 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 	nil = new_ChartItem(0, 0)
 	for a in range(maxlen):
 		newitem = new_Item(goal, a + 1, 0, 0)
-		agenda[newitem] = new_Edge(0.0, 0.0, nil, nil)
+		agenda[newitem] = new_Edge(0.0, 0.0, 0.0, nil, nil)
 		outside[goal, a + 1, 0, 0] = 0.0
 	print "initialized"
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
-		x = entry.value.inside
-		if x == outside[I.state, I.length, I.lr, I.gaps]:
-			totlen = I.length + I.lr + I.gaps
-			rules = bylhs[I.state]
-			for r in rules:
-				if isinstance(r, Terminal): continue
-				rule = r
-				# X -> A
-				if rule.rhs2 == 0:
-					if rule.rhs1 != 0:
-						newitem = new_Item(rule.rhs1, I.length, I.lr, I.gaps)
-						score = x + rule.prob
-						if outside[rule.rhs1, I.length, I.lr, I.gaps] > score:
-							agenda.setitem(newitem, new_Edge(score, 0.0, nil, nil))
-							outside[rule.rhs1, I.length, I.lr, I.gaps] = score
-				else:
-					lstate = rule.rhs1
-					rstate = rule.rhs2
-					fanout = len(rule.args)
-					# X -> A B
-					addgaps = addright = 0
-					stopaddright = False
-					for m in range(fanout - 1, -1, -1):
-						arg = rule.args._H[m]
-						for a in range(rule.lengths._B[m] - 1, -1, -1):
-							if testbitshort(arg, a) == 0:
-								stopaddright = True
+		x = entry.value.score
+		if x != outside[I.state, I.length, I.lr, I.gaps]: continue
+		totlen = I.length + I.lr + I.gaps
+		rules = bylhs[I.state]
+		for r in rules:
+			if isinstance(r, Terminal): continue
+			rule = r
+			# X -> A
+			if rule.rhs2 == 0:
+				if rule.rhs1 != 0:
+					score = x + rule.prob
+					if outside[rule.rhs1, I.length, I.lr, I.gaps] > score:
+						agenda.setitem(
+							new_Item(rule.rhs1, I.length, I.lr, I.gaps),
+							new_Edge(score, 0.0, 0.0, nil, nil))
+						outside[rule.rhs1, I.length, I.lr, I.gaps] = score
+			else:
+				lstate = rule.rhs1
+				rstate = rule.rhs2
+				fanout = len(rule.args)
+				# X -> A B
+				addgaps = addright = 0
+				stopaddright = False
+				for m in range(fanout - 1, -1, -1):
+					arg = rule.args._H[m]
+					for a in range(rule.lengths._B[m] - 1, -1, -1):
+						if testbitshort(arg, a) == 0:
+							stopaddright = True
+						else:
+							if not stopaddright:
+								addright += 1
 							else:
-								if not stopaddright:
-									addright += 1
-								else:
-									addgaps += 1
-					rightarity = sum(bitcount(rule.args._H[n])
-											for n in range(fanout))
-					leftarity = sum(rule.lengths._B[n] for n in range(fanout))
-					leftarity -= rightarity
-					# binary-left (A is left)
-					for lenA in range(leftarity, I.length - rightarity + 1):
-						lenB = I.length - lenA
-						insidescore = insidescores[rstate, lenB]
-						for lr in range(I.lr, I.lr + lenB + 1):
-							if addright == 0 and lr != I.lr: continue
-							for ga in range(leftarity - 1, totlen+1):
-								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
-									newitem = new_Item(lstate, lenA, lr, ga)
-									score = x + insidescore + rule.prob
-									if outside[lstate, lenA, lr, ga] > score:
-										agenda.setitem(newitem,
-											new_Edge(score, 0.0, nil, nil))
-										outside[lstate, lenA, lr, ga] = score
+								addgaps += 1
+				rightarity = sum(bitcount(rule.args._H[n])
+										for n in range(fanout))
+				leftarity = sum(rule.lengths._B[n] for n in range(fanout))
+				leftarity -= rightarity
+				# binary-left (A is left)
+				for lenA in range(leftarity, I.length - rightarity + 1):
+					lenB = I.length - lenA
+					insidescore = insidescores[rstate, lenB]
+					for lr in range(I.lr, I.lr + lenB + 1):
+						if addright == 0 and lr != I.lr: continue
+						for ga in range(leftarity - 1, totlen+1):
+							if (lenA + lr + ga == I.length + I.lr + I.gaps
+								and ga >= addgaps):
+								score = x + insidescore + rule.prob
+								if outside[lstate, lenA, lr, ga] > score:
+									agenda.setitem(
+										new_Item(lstate, lenA, lr, ga),
+										new_Edge(score, 0.0, 0.0, nil, nil))
+									outside[lstate, lenA, lr, ga] = score
 
-					# X -> B A
-					addgaps = addleft = 0
-					stopaddleft = False
-					for m in range(fanout):
-						arg = rule.args._H[m]
-						for a in range(rule.lengths._B[m]):
-							if testbitshort(arg, a):
-								stopaddleft = True
+				# X -> B A
+				addgaps = addleft = 0
+				stopaddleft = False
+				for m in range(fanout):
+					arg = rule.args._H[m]
+					for a in range(rule.lengths._B[m]):
+						if testbitshort(arg, a):
+							stopaddleft = True
+						else:
+							if stopaddleft:
+								addgaps += 1
 							else:
-								if stopaddleft:
-									addgaps += 1
-								else:
-									addleft += 1
+								addleft += 1
 
-					addright = 0
-					stopaddright = False
-					for m in range(fanout -1, -1, -1):
-						arg = rule.args._H[m]
-						for a in range(rule.lengths._B[m] - 1, -1, -1):
-							if testbitshort(arg, a):
-								stopaddright = True
-							else:
-								if not stopaddright:
-									addright += 1
-					addgaps -= addright
-					
-					# binary-right (A is right)
-					for lenA in range(rightarity, I.length - leftarity + 1):
-						lenB = I.length - lenA
-						insidescore = insidescores[lstate, lenB]
-						for lr in range(I.lr, I.lr + lenB + 1):
-							for ga in range(rightarity - 1, totlen+1):
-								if lenA + lr + ga == I.length + I.lr + I.gaps and ga >= addgaps:
-									newitem = new_Item(rstate, lenA, lr, ga)
-									score = x + insidescore + rule.prob
-									if outside[rstate, lenA, lr, ga] > score:
-										agenda.setitem(newitem,
-											new_Edge(score, 0.0, nil, nil))
-										outside[rstate, lenA, lr, ga] = score
-	pass
+				addright = 0
+				stopaddright = False
+				for m in range(fanout -1, -1, -1):
+					arg = rule.args._H[m]
+					for a in range(rule.lengths._B[m] - 1, -1, -1):
+						if testbitshort(arg, a):
+							stopaddright = True
+						else:
+							if not stopaddright:
+								addright += 1
+				addgaps -= addright
+				
+				# binary-right (A is right)
+				for lenA in range(rightarity, I.length - leftarity + 1):
+					lenB = I.length - lenA
+					insidescore = insidescores[lstate, lenB]
+					for lr in range(I.lr, I.lr + lenB + 1):
+						for ga in range(rightarity - 1, totlen+1):
+							if (lenA + lr + ga == I.length + I.lr + I.gaps
+								and ga >= addgaps):
+								score = x + insidescore + rule.prob
+								if outside[rstate, lenA, lr, ga] > score:
+									agenda.setitem(
+										new_Item(rstate, lenA, lr, ga),
+										new_Edge(score, 0.0, 0.0, nil, nil))
+									outside[rstate, lenA, lr, ga] = score
 
 def main():
 	from negra import NegraCorpusReader

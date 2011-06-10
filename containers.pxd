@@ -6,6 +6,7 @@ cdef class ChartItem:
 	cdef long _hash
 
 cdef class Edge:
+	cdef double score
 	cdef double inside
 	cdef double prob
 	cdef ChartItem left

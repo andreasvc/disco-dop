@@ -194,8 +194,8 @@ cdef class heapdict(dict):
 
 # this is _significantly_ faster than relying on __richcmp__
 cdef inline bint lessthan(Entry a, Entry b):
-	return (a.value.inside < b.value.inside
-				or (a.value.inside == b.value.inside and a.count < b.count))
+	return (a.value.score < b.value.score
+				or (a.value.score == b.value.score and a.count < b.count))
 
 # heap operations (without heapdict's reheapify, adapted from heapq)
 

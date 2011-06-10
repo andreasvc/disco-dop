@@ -17,6 +17,8 @@ from nltk import FreqDist, Tree
 from grammar import enumchart, induce_srcg
 from containers import ChartItem, Edge, Rule, Terminal
 from cpq import heapdict, Entry
+import numpy as np
+np.import_array()
 
 DEF infinity = float('infinity')
 
@@ -32,9 +34,9 @@ cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
 	if item._hash == -1: item._hash = -2
 	return item
 
-cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem right):
+cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right):
 	cdef Edge edge = Edge.__new__(Edge)
-	edge.inside = inside; edge.prob = prob
+	edge.score = score; edge.inside = inside; edge.prob = prob
 	edge.left = left; edge.right = right
 	#hash((inside, prob, left, right))
 	# this is the hash function used for tuples, apparently
@@ -58,27 +60,32 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef list rules, l, prunelist = range(len(toid))
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
-	cdef dict outside
+	cdef dict kbestoutside
 	cdef int m = 0, maxA = 0
 	cdef Py_ssize_t i
-	cdef int lensent = len(sent), label, newlabel, blocked = 0
+	cdef int lensent = len(sent), label, newlabel, blocked = 0, maxlen
 	cdef double x, y
-	cdef bint doprune = False
+	cdef bint doprune = False, doestimate = False
 	cdef heapdict A = heapdict()				#the agenda
 	cdef Entry entry
 	cdef Edge edge, newedge
-	cdef ChartItem Ih, goal, newitem, NONE = new_ChartItem(0, 0)
+	cdef ChartItem Ih, I1h, goal, newitem, NONE = new_ChartItem(0, 0)
 	cdef Terminal terminal
 	cdef Rule rule
+	cdef np.ndarray[np.double_t, ndim=4] outside
 
 	if start == None: start = toid["ROOT"]
+	if estimate:
+		outside, maxlen = estimate
+		doestimate = True
+
 	goal = new_ChartItem(start, (1 << len(sent)) - 1)
 	if prune:
 		doprune = True
-		outside = kbest_outside(prune, goal, 100)
+		kbestoutside = kbest_outside(prune, goal, 100)
 		l = [{} for a in prunetoid]
 		for Ih in prune:
-			l[Ih.label][Ih.vec] = outside.get(Ih, infinity)
+			l[Ih.label][Ih.vec] = kbestoutside.get(Ih, infinity)
 		for a, label in toid.iteritems():
 			newlabel = prunetoid[a.split("@")[0]]
 			prunelist[label] = l[newlabel]
@@ -99,13 +106,13 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				Ih = new_ChartItem(terminal.lhs, 1 << i)
 				I = new_ChartItem(Epsilon, i)
 				z = 0 if tags else terminal.prob
-				A[Ih] = Edge(terminal.prob, terminal.prob, I, NONE)
+				A[Ih] = new_Edge(0.0, terminal.prob, terminal.prob, I, NONE)
 				C[Ih] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 				Ih = new_ChartItem(toid[tags[i]], 1 << i)
 				I = new_ChartItem(Epsilon, i)
-				A[Ih] = Edge(0, 0, I, NONE)
+				A[Ih] = new_Edge(0., 0., 0., I, NONE)
 				C[Ih] = []
 				recognized = True
 				continue
@@ -118,7 +125,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		entry = A.popentry()
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
-		append(C[Ih], edge)
+		append(C[Ih], iscore(edge))
 		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			m += 1
@@ -129,10 +136,11 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 			l = <list>list_getitem(unary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
-				#(estimate(rule.lhs, Ih.vec) if estimate else 0.0) + x + rule.prob,
 				process_edge(new_ChartItem(rule.lhs, Ih.vec),
-								new_Edge(x + (rule).prob,
-									(rule).prob, Ih, NONE),
+								new_Edge((getoutside(outside, maxlen, lensent,
+									rule.lhs, Ih.vec) if doestimate
+									else 0.0) + x + rule.prob,
+								x + rule.prob, (rule).prob, Ih, NONE),
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 			l = <list>list_getitem(lbinary, Ih.label)
@@ -141,11 +149,11 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 				for I1h, e in (<dict>(list_getitem(Cx, rule.rhs2))).iteritems():
 					if concat(rule, Ih.vec, (<ChartItem>I1h).vec):
 						y = (<Edge>e).inside
-						#(estimate(rule.lhs, Ih.vec ^ I1h.vec)
-						#if estimate else 0.0) + x + y + rule.prob,
-						process_edge(new_ChartItem(rule.lhs,
-												Ih.vec ^ (<ChartItem>I1h).vec),
-								new_Edge(x+y+rule.prob,
+						process_edge(new_ChartItem(
+									rule.lhs, Ih.vec ^ (<ChartItem>I1h).vec),
+								new_Edge((getoutside(outside, maxlen, lensent,
+									rule.lhs, Ih.vec ^ I1h.vec) if doestimate
+									else 0.0) +x+y+rule.prob, x+y+rule.prob,
 									rule.prob, Ih, <ChartItem>I1h),
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
@@ -157,9 +165,11 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 						y = (<Edge>e).inside
 						#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
 						#if estimate else 0.0) + x + y + rule.prob,
-						process_edge(new_ChartItem(rule.lhs,
-											(<ChartItem>I1h).vec ^ Ih.vec),
-								new_Edge(x+y+rule.prob,
+						process_edge(new_ChartItem(
+									rule.lhs, (<ChartItem>I1h).vec ^ Ih.vec),
+								new_Edge((getoutside(outside, maxlen, lensent,
+									rule.lhs, I1h.vec ^ Ih.vec) if doestimate
+									else 0.0) +x+y+rule.prob, x+y+rule.prob,
 										rule.prob, <ChartItem>I1h, Ih),
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
@@ -180,20 +190,20 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 			if estimate == NULL or newedge.inside + <double><object>estimate > 300.0:
 					blocked[0] += 1
 					return
-		elif newedge.inside > 300.0:
+		elif newedge.score > 300.0:
 			blocked[0] += 1
 			return
 		# haven't seen this item before, won't prune, add to agenda
 		A.setitem(newitem, newedge)
 		C[newitem] = []
 	elif A.contains(newitem): # in A (maybe in C)
-		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
+		if newedge.score < (<Edge>(A.getitem(newitem))).score:
 			# item has lower score, update agenda (and add old edge to chart)
-			append(C[newitem], A.replace(newitem, newedge))
+			append(C[newitem], iscore(A.replace(newitem, newedge)))
 		else: #worse score, only add to chart
-			C[newitem].append(newedge)
+			C[newitem].append(iscore(newedge))
 	else: # not in A, but is in C
-		C[newitem].append(newedge)
+		C[newitem].append(iscore(newedge))
 		#Cx[newitem.label][newitem] = min(Cx[newitem.label][newitem], newedge.inside)
 		#if newedge.inside < <double>(<dict>(Cx[newitem.label])[newitem]):
 		#	(<dict>Cx[newitem.label])[newitem] = newedge.inside
@@ -286,10 +296,10 @@ cdef dict kbest_outside(dict chart, ChartItem start, int k):
 	outside = { start : 0.0 }
 	lazykthbest(start, k, k, D, {}, chart, set())
 	for (e, j), rootedge in D[start]:
-		getoutside(e, j, rootedge, D, chart, outside)
+		getitems(e, j, rootedge, D, chart, outside)
 	return outside
 
-cdef void getoutside(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outside):
+cdef void getitems(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outside):
 	""" Traverse a derivation e,j, noting outside costs relative to its root edge
 	"""
 	if e.left in chart:
@@ -298,14 +308,18 @@ cdef void getoutside(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict ou
 		else: raise ValueError
 		if e.left not in outside:
 			outside[e.left] = rootedge.inside - (<Edge>ee2).inside
-		getoutside(<Edge>ee, jj, rootedge, D, chart, outside)
+		getitems(<Edge>ee, jj, rootedge, D, chart, outside)
 	if e.right.label:
 		if e.right in D: (ee, jj), ee2 = D[e.right][j[1]]
 		elif j[1] == 0: jj = (0, 0); ee = ee2 = min(chart[e.right])
 		else: raise ValueError
 		if e.right not in outside:
 			outside[e.right] = rootedge.inside - (<Edge>ee2).inside
-		getoutside(<Edge>ee, jj, rootedge, D, chart, outside)
+		getitems(<Edge>ee, jj, rootedge, D, chart, outside)
+
+cdef Edge iscore(Edge e):
+	e.score = e.inside
+	return e
 
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation headed

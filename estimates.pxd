@@ -35,6 +35,8 @@ cdef Item new_Item(int state, int length, int lr, int gaps)
 @cython.locals(
 	length=cython.int,
 	left=cython.int,
+	foo=cython.int,
+	bar=cython.int,
 	right=cython.int,
 	lr=cython.int,
 	gaps=cython.int)

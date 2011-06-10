@@ -22,6 +22,7 @@ def getcandidates(chart, v, k):
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
 	if v not in chart: return heapdict() #raise error?
+	# todo: heapdict on edge.inside instead of edge.score
 	return heapdict([((edge, binarybest if edge.right.label else unarybest), edge)
 						for edge in nsmallest(k, chart[v])])
 	#return heapdict([(RankedEdge(edge, edge.inside, 0, 0), edge)

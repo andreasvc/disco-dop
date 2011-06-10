@@ -20,9 +20,9 @@ cdef class ChartItem:
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
 
 cdef class Edge:
-	def __init__(self, inside, prob, left, right):
+	def __init__(self, score, inside, prob, left, right):
 		cdef long _hash
-		self.inside = inside; self.prob = prob
+		self.score = score; self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
 		#self._hash = hash((inside, prob, left, right))
 		# this is the hash function used for tuples, apparently
@@ -35,23 +35,23 @@ cdef class Edge:
 	def __hash__(self):
 		return self._hash
 	def __richcmp__(Edge self, other, int op):
-		# the ordering only depends on inside probobality
-		# (or only on estimate / outside score when added)
-		if op == 0: return self.inside < (<Edge>other).inside
-		elif op == 1: return self.inside <= (<Edge>other).inside
+		# the ordering only depends on the estimate / inside score
+		if op == 0: return self.score < (<Edge>other).score
+		elif op == 1: return self.score <= (<Edge>other).score
 		# (in)equality compares all elements
 		# boolean trick: equality and inequality in one expression i.e., the
 		# equality between the two boolean expressions acts as biconditional
 		elif op == 2 or op ==3:
 			return (op == 2) == (
-				(self.inside == (<Edge>other).inside
+				(self.score == (<Edge>other).score
+				and self.inside == (<Edge>other).inside
 				and self.prob == (<Edge>other).prob
 				and self.left == (<Edge>other).right
 				and self.right == (<Edge>other).right))
-		elif op == 4: return self.inside > other.inside
-		elif op == 5: return self.inside >= other.inside
+		elif op == 4: return self.score > other.score
+		elif op == 5: return self.score >= other.score
 	def __repr__(self):
-		return "<%g, %g, [%r, %s]>" % (self.inside, self.prob,
+		return "<%g, %g, %g, [%r, %s]>" % (self.score, self.inside, self.prob,
 					self.left, repr(self.right) if self.right else 'None')
 
 #cdef class RankEdge(Edge):

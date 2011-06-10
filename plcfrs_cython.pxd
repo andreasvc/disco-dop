@@ -1,3 +1,4 @@
+cimport numpy as np
 from cpq cimport Entry
 from kbest cimport lazykbest, lazykthbest
 from containers cimport ChartItem, Edge, Rule, Terminal
@@ -14,4 +15,6 @@ cdef extern from "bit.h":
 	bint bitminmax(unsigned long a, unsigned long b)
 
 cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec)
-cdef inline Edge new_Edge(double inside, double prob, ChartItem left, ChartItem right)
+cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right)
+
+from estimates cimport * #getoutside
