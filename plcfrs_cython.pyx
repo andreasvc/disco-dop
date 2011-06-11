@@ -16,7 +16,7 @@ import re, gc
 from nltk import FreqDist, Tree
 from grammar import enumchart, induce_srcg
 from containers import ChartItem, Edge, Rule, Terminal
-from cpq import heapdict, Entry
+from agenda import heapdict, Entry
 import numpy as np
 np.import_array()
 
@@ -47,7 +47,7 @@ cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem le
 	if edge._hash == -1: edge._hash = -2
 	return edge
 
-def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, estimate=None, dict prune=None, dict prunetoid={}):
+def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=None, dict prune=None, dict prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -61,9 +61,9 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
 	cdef dict kbestoutside
-	cdef int m = 0, maxA = 0
+	cdef int m = 0, maxA = 0, length = 0, left = 0, right = 0, gaps = 0
 	cdef Py_ssize_t i
-	cdef int lensent = len(sent), label, newlabel, blocked = 0, maxlen
+	cdef int lensent = len(sent), label, newlabel, blocked = 0, maxlen = 0
 	cdef double x, y
 	cdef bint doprune = False, doestimate = False
 	cdef heapdict A = heapdict()				#the agenda
@@ -73,6 +73,7 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 	cdef Terminal terminal
 	cdef Rule rule
 	cdef np.ndarray[np.double_t, ndim=4] outside
+	cdef unsigned long vec
 
 	if start == None: start = toid["ROOT"]
 	if estimate:
@@ -89,14 +90,14 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		for a, label in toid.iteritems():
 			newlabel = prunetoid[a.split("@")[0]]
 			prunelist[label] = l[newlabel]
-		print 'pruning with %d nonterminals, %d items with %d categories' % (
-				len(filter(None, prunelist)), len(prune),
-					len(filter(lambda x: x < infinity,l)))
+		print 'pruning with %d nonterminals, %d items' % (
+				len(filter(None, prunelist)), len(prune))
+				# ?? len(filter(lambda x: x < infinity,l)))
 	gc.disable()
 
 	# scan
 	Epsilon = toid["Epsilon"]
-	for i,w in enumerate(sent):
+	for i, w in enumerate(sent):
 		recognized = False
 		for terminal in lexical.get(w, []):
 			# if we are given gold tags, make sure we only allow matching
@@ -105,14 +106,23 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
 				Ih = new_ChartItem(terminal.lhs, 1 << i)
 				I = new_ChartItem(Epsilon, i)
-				z = 0 if tags else terminal.prob
-				A[Ih] = new_Edge(0.0, terminal.prob, terminal.prob, I, NONE)
+				z = 0.0 if tags else terminal.prob
+				if doestimate:
+					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
+								terminal.lhs, 1 << i) + z, z, z, I, NONE)
+				else:
+					#A[Ih] = new_Edge(0.0, terminal.prob, terminal.prob, I, NONE)
+					A[Ih] = new_Edge(z, z, z, I, NONE)
 				C[Ih] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 				Ih = new_ChartItem(toid[tags[i]], 1 << i)
 				I = new_ChartItem(Epsilon, i)
-				A[Ih] = new_Edge(0., 0., 0., I, NONE)
+				if doestimate:
+					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
+								terminal.lhs, 1 << i), 0.0, 0.0, I, NONE)
+				else:
+					A[Ih] = new_Edge(0.0, 0.0, 0.0, I, NONE)
 				C[Ih] = []
 				recognized = True
 				continue
@@ -128,54 +138,79 @@ def parse(sent, grammar, tags=None, start=None, bint viterbi=False, int n=1, est
 		append(C[Ih], iscore(edge))
 		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
-			m += 1
-			if viterbi and n == m: break
-			#if viterbi and not exhaustive: break
+			if not exhaustive: break
 		else:
 			x = edge.inside
 			l = <list>list_getitem(unary, Ih.label)
+			if doestimate:
+				vec = Ih.vec; length = bitcount(vec); left = nextset(vec, 0)
+				gaps = bitlength(vec) - length - left
+				right = lensent - length - left - gaps; lr = left + right
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
-				process_edge(new_ChartItem(rule.lhs, Ih.vec),
-								new_Edge((getoutside(outside, maxlen, lensent,
-									rule.lhs, Ih.vec) if doestimate
-									else 0.0) + x + rule.prob,
-								x + rule.prob, (rule).prob, Ih, NONE),
+				if doestimate:
+					newedge = new_Edge(
+									#getoutside(outside, maxlen, lensent, 
+									#			rule.lhs, Ih.vec)
+									outside[rule.lhs, length, left+right, gaps]
+									+ x + rule.prob, x + rule.prob,
+									rule.prob, Ih, NONE)
+				else:
+					newedge = new_Edge(x + rule.prob, x + rule.prob,
+										rule.prob, Ih, NONE)
+				process_edge(new_ChartItem(rule.lhs, Ih.vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 			l = <list>list_getitem(lbinary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
 				for I1h, e in (<dict>(list_getitem(Cx, rule.rhs2))).iteritems():
-					if concat(rule, Ih.vec, (<ChartItem>I1h).vec):
+					if concat(rule, Ih.vec, I1h.vec):
 						y = (<Edge>e).inside
-						process_edge(new_ChartItem(
-									rule.lhs, Ih.vec ^ (<ChartItem>I1h).vec),
-								new_Edge((getoutside(outside, maxlen, lensent,
-									rule.lhs, Ih.vec ^ I1h.vec) if doestimate
-									else 0.0) +x+y+rule.prob, x+y+rule.prob,
-									rule.prob, Ih, <ChartItem>I1h),
+						vec = Ih.vec ^ I1h.vec
+						if doestimate:
+							length = bitcount(vec); left = nextset(vec, 0)
+							gaps = bitlength(vec) - length - left
+							right = lensent - length - left - gaps
+							newedge = new_Edge(
+									#(getoutside(outside, maxlen, lensent,
+									#		rule.lhs, vec)
+									outside[rule.lhs, length, left+right, gaps]
+									+x+y+rule.prob, x+y+rule.prob,
+									rule.prob, Ih, I1h)
+						else:
+							newedge = new_Edge(x+y+rule.prob, x+y+rule.prob,
+											rule.prob, Ih, I1h)
+						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
+
 
 			l = <list>list_getitem(rbinary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
 				for I1h, e in (<dict>(list_getitem(Cx, rule.rhs1))).iteritems():
-					if concat(rule, (<ChartItem>I1h).vec, Ih.vec):
+					if concat(rule, I1h.vec, Ih.vec):
 						y = (<Edge>e).inside
-						#((estimate(rule.lhs, I1h.vec ^ Ih.vec)
-						#if estimate else 0.0) + x + y + rule.prob,
-						process_edge(new_ChartItem(
-									rule.lhs, (<ChartItem>I1h).vec ^ Ih.vec),
-								new_Edge((getoutside(outside, maxlen, lensent,
-									rule.lhs, I1h.vec ^ Ih.vec) if doestimate
-									else 0.0) +x+y+rule.prob, x+y+rule.prob,
-										rule.prob, <ChartItem>I1h, Ih),
+						vec = I1h.vec ^ Ih.vec
+						if doestimate:
+							length = bitcount(vec); left = nextset(vec, 0)
+							gaps = bitlength(vec) - length - left
+							right = lensent - length - left - gaps
+							newedge = new_Edge(
+									#(getoutside(outside, maxlen, lensent,
+									#		rule.lhs, vec)
+									outside[rule.lhs, length, left+right, gaps]
+									+x+y+rule.prob, x+y+rule.prob,
+									rule.prob, I1h, Ih)
+						else:
+							newedge = new_Edge(x+y+rule.prob, x+y+rule.prob,
+											rule.prob, I1h, Ih)
+						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 		maxA = max(maxA, len(A))
-	print "max agenda size %d / now %d / chart keys %d / values %d / blocked %d" % (
-				maxA, len(A), len(C), sum(map(len, C.values())), blocked)
+	print "max agenda size %d, now %d, chart items %d (%d), edges %d, blocked %d" % (
+				maxA, len(A), len(C), len(Cx), sum(map(len, C.values())), blocked),
 	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE

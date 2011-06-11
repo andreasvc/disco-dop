@@ -198,6 +198,7 @@ def splitgrammar(grammar):
 				unary[r[0][1]].append((r, abs(w)))
 				bylhs[r[0][0]].append((r, abs(w)))
 		elif len(rule) == 3:
+			if w == 0.0: w += 0.01
 			lbinary[r[0][1]].append((r, abs(w)))
 			rbinary[r[0][2]].append((r, abs(w)))
 			bylhs[r[0][0]].append((r, abs(w)))
@@ -225,6 +226,7 @@ def newsplitgrammar(grammar):
 		else:
 			args, lengths = yfarray(yf)
 			assert yf == arraytoyf(args, lengths)
+			if len(rule) == 2 and w == 0.0: w += 0.01
 			r = Rule(toid[rule[0]], toid[rule[1]],
 				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
 			if arity[r.lhs] == 0:

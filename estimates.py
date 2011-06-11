@@ -3,7 +3,7 @@
 Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs).
 """
-from cpq import heapdict
+from agenda import heapdict
 from containers import ChartItem, Edge, Rule, Terminal
 from collections import defaultdict
 from math import exp
@@ -34,70 +34,16 @@ def new_Item(state, length, lr, gaps):
 	item._hash = state * 1021 + length * 571 + lr * 311 + gaps
 	return item
 
-def getestimates(grammar, maxlen, goal):
-	print "getting inside"
-	insidescores = simpleinside(grammar, maxlen)
-	print "getting outside"
-	outside = outsidelr(grammar, insidescores, maxlen, goal)
-	return outside
-
-def testestimates(grammar, maxlen, goal):
-	print "getting inside"
-	insidescores = inside(grammar, maxlen)
-	insidescores = simpleinside(grammar, maxlen)
-	for a in insidescores:
-		for b in insidescores[a]:
-			print a,b
-			assert 0 <= a < len(grammar.bylhs)
-			assert 0 <= b <= maxlen
-			print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
-	print 
-	print len(insidescores) * sum(map(len, insidescores.values()))
-	print "getting outside"
-	outside = outsidelr(grammar, insidescores, maxlen, goal)
-	infinity = float('infinity')
-	cnt = 0
-	for an, a in (): # enumerate(outside):
-		for bn, b in enumerate(a):
-			for cn, c in enumerate(b):
-				for dn, d in enumerate(c):
-					if d < infinity:
-						print grammar.tolabel[an], bn, cn, dn, exp(-d)
-						cnt += 1
-	#print cnt
-	print "done"
-	return outside
-
 def getoutside(outside, maxlen, slen, label, vec):
 	""" Used during parsing to query for outside estimates """
-	if slen > maxlen:
-		return 0.0
 	length = bitcount(vec)
 	left = nextset(vec, 0)
-	foo = nextunset(vec, left); bar = nextset(vec, foo)
-	while bar != -1:
-		foo = nextunset(vec, bar); bar = nextset(vec, foo)
-	gaps = foo - length - left
+	gaps = bitlength(vec) - length - left
 	right = slen - length - left - gaps
 	lr = left + right
-	if length+lr+gaps <= maxlen:
-		return outside[label, length, lr, gaps]
-	else:
+	if slen > maxlen or length + lr + gaps > maxlen:
 		return 0.0
-
-def inside(grammar, maxlen):
-	#infinity = float('infinity')
-	#insidescores = defaultdict(lambda: defaultdict(lambda: infinity))
-	insidescores = {}
-	return doinside(grammar, maxlen, insideconcat, insidescores)
-
-def simpleinside(grammar, maxlen):
-	""" Here vec is actually the length (number of terminals in the yield of
-	the constituent) """
-	#infinity = float('infinity')
-	#insidescores = defaultdict(lambda: defaultdict(lambda: infinity))
-	insidescores = {}
-	return doinside(grammar, maxlen, simpleconcat, insidescores)
+	return outside[label, length, lr, gaps]
 
 def doinside(grammar, maxlen, concat, insidescores):
 	lexical, unary = grammar.lexical, grammar.unary
@@ -105,15 +51,15 @@ def doinside(grammar, maxlen, concat, insidescores):
 	infinity = float('infinity')
 	agenda = heapdict()
 	nil = ChartItem(0, 0)
-	for tags in lexical.values():
-		for rule in tags:
-			agenda[new_ChartItem(rule.lhs, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+	for n, rules in enumerate(bylhs):
+		if rules == []:
+			agenda[new_ChartItem(n, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value.score
 		if I.label not in insidescores: insidescores[I.label] =  {}
-		if insidescores[I.label].get(I.vec, infinity) > x:
+		if x < insidescores[I.label].get(I.vec, infinity):
 			insidescores[I.label][I.vec] = x
 		
 		for rule in unary[I.label]:
@@ -141,49 +87,6 @@ def doinside(grammar, maxlen, concat, insidescores):
 									0.0, 0.0, nil, nil))
 
 	return insidescores
-
-def simpleconcat(a, b, ignored, maxlen):
-	return a+b if a+b <= maxlen else 0
-
-def insideconcat(a, b, rule, maxlen):
-	if len(rule.args) + bitcount(a) + bitcount(b) > maxlen + 1:
-		return
-	result = resultpos = l = r = 0
-	for n, arg in zip(rule.lengths, rule.args):
-		for x in range(n):
-			if testbitshort(arg, x) == 0:
-				subarg = nextunset(a, l) - l
-				result |= (1 << subarg) - 1 << resultpos
-				resultpos += subarg
-				l = subarg + 1
-			else:
-				subarg = nextunset(b, r) - r
-				result |= (1 << subarg) - 1 << resultpos
-				resultpos += subarg
-				r = subarg + 1
-		resultpos += 1
-		result &= ~(1 << resultpos)
-	return result
-
-def twodim_dict_to_array(d, a):
-	for n, d2 in d.iteritems():
-		for m, val in d2.iteritems():
-			a[n, m] = val
-	return
-		
-def outsidelr(grammar, insidescores, maxlen, goal):
-	try: assert cython.compiled; print "estimates: running cython"
-	except: print "estimates: not cython"
-	infinity = float('infinity')
-	outside = np.array([infinity], dtype='d').repeat(
-				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
-				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
-	npinsidescores = np.array([infinity], dtype='d').repeat(
-				len(grammar.bylhs) * (maxlen+1)).reshape(
-				(len(grammar.bylhs), (maxlen+1)))
-	twodim_dict_to_array(insidescores, npinsidescores)
-	computeoutsidelr(grammar, npinsidescores, maxlen, goal, outside)
-	return outside
 
 def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 	bylhs = grammar.bylhs
@@ -286,6 +189,97 @@ def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
 										new_Item(rstate, lenA, lr, ga),
 										new_Edge(score, 0.0, 0.0, nil, nil))
 									outside[rstate, lenA, lr, ga] = score
+
+def inside(grammar, maxlen):
+	#infinity = float('infinity')
+	#insidescores = defaultdict(lambda: defaultdict(lambda: infinity))
+	insidescores = {}
+	return doinside(grammar, maxlen, insideconcat, insidescores)
+
+def simpleinside(grammar, maxlen):
+	""" Here vec is actually the length (number of terminals in the yield of
+	the constituent) """
+	#infinity = float('infinity')
+	#insidescores = defaultdict(lambda: defaultdict(lambda: infinity))
+	insidescores = {}
+	return doinside(grammar, maxlen, simpleconcat, insidescores)
+
+def simpleconcat(a, b, ignored, maxlen):
+	return a+b if a+b <= maxlen else 0
+
+def insideconcat(a, b, rule, maxlen):
+	if len(rule.args) + bitcount(a) + bitcount(b) > maxlen + 1:
+		return 0
+	result = resultpos = l = r = 0
+	for n, arg in zip(rule.lengths, rule.args):
+		for x in range(n):
+			if testbitshort(arg, x) == 0:
+				subarg = nextunset(a, l) - l
+				result |= (1 << subarg) - 1 << resultpos
+				resultpos += subarg
+				l = subarg + 1
+			else:
+				subarg = nextunset(b, r) - r
+				result |= (1 << subarg) - 1 << resultpos
+				resultpos += subarg
+				r = subarg + 1
+		resultpos += 1
+		result &= ~(1 << resultpos)
+	return result
+
+def outsidelr(grammar, insidescores, maxlen, goal):
+	try: assert cython.compiled; print "estimates: running cython"
+	except: print "estimates: not cython"
+	infinity = float('infinity')
+	outside = np.array([infinity], dtype='d').repeat(
+				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
+				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
+	npinsidescores = np.array([infinity], dtype='d').repeat(
+				len(grammar.bylhs) * (maxlen+1)).reshape(
+				(len(grammar.bylhs), (maxlen+1)))
+	twodim_dict_to_array(insidescores, npinsidescores)
+	computeoutsidelr(grammar, npinsidescores, maxlen, goal, outside)
+	return outside
+
+def getestimates(grammar, maxlen, goal):
+	print "getting inside"
+	insidescores = simpleinside(grammar, maxlen)
+	print "getting outside"
+	outside = outsidelr(grammar, insidescores, maxlen, goal)
+	return outside
+
+def twodim_dict_to_array(d, a):
+	for n, d2 in d.iteritems():
+		for m, val in d2.iteritems():
+			a[n, m] = val
+	return
+		
+def testestimates(grammar, maxlen, goal):
+	print "getting inside"
+	insidescores = inside(grammar, maxlen)
+	insidescores = simpleinside(grammar, maxlen)
+	for a in insidescores:
+		for b in insidescores[a]:
+			print a,b
+			assert 0 <= a < len(grammar.bylhs)
+			assert 0 <= b <= maxlen
+			print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
+	print 
+	print len(insidescores) * sum(map(len, insidescores.values()))
+	print "getting outside"
+	outside = outsidelr(grammar, insidescores, maxlen, goal)
+	infinity = float('infinity')
+	cnt = 0
+	for an, a in (): # enumerate(outside):
+		for bn, b in enumerate(a):
+			for cn, c in enumerate(b):
+				for dn, d in enumerate(c):
+					if d < infinity:
+						print grammar.tolabel[an], bn, cn, dn, exp(-d)
+						cnt += 1
+	#print cnt
+	print "done"
+	return outside
 
 def main():
 	from negra import NegraCorpusReader

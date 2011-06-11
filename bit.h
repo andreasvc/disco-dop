@@ -1,5 +1,4 @@
-inline int nextset(unsigned long vec, int pos);
-inline int nextunset(unsigned long vec, int pos);
+/* See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html */
 
 // with gcc builtins:(more portable than assembly)
 inline int nextset(unsigned long vec, int pos) {
@@ -22,7 +21,14 @@ inline int bitminmax(unsigned long a, unsigned long b) {
 }
 
 inline int bitcount(unsigned long vec) {
+	/* number of set bits in vector */
 	return __builtin_popcountl(vec);
+}
+
+inline int bitlength(unsigned long vec) {
+	/* number of bits needed to represent vector
+	(equivalently: index of most significant set bit, plus one */
+	return sizeof (vec) * 8 - __builtin_clzl(vec);
 }
 
 inline int testbit(unsigned long vec, int pos) {

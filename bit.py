@@ -21,11 +21,20 @@ def bitcount(a):
 		count += 1
 	return count
 
+def bitlength(a):
+	""" number of bits required to represent a
+	alternatively: index of most significant set bit plus one. """
+	length = 0
+	while a:
+		a >>= 1
+		length += 1
+	return length
+
 def testbit(a, offset):
 	""" Mask a particular bit, return nonzero if set """
 	return a & (1 << offset)
 
-testbitc = testbit
+testbitshort = testbitc = testbit
 
 def bitminmax(a, b):
 	"""test if the least and most significant bits of a and b are 

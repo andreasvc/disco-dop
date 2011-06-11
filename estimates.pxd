@@ -6,7 +6,7 @@
 cimport cython
 from containers cimport ChartItem, Edge, Rule, Terminal
 from plcfrs_cython cimport new_Edge, new_ChartItem
-from cpq cimport heapdict, Entry
+from agenda cimport heapdict, Entry
 from array cimport array
 cimport numpy as np
 
@@ -19,6 +19,7 @@ cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
 	int nextunset(unsigned long vec, int pos)
 	int bitcount(unsigned long vec)
+	int bitlength(unsigned long vec)
 	bint bitminmax(unsigned long a, unsigned long b)
 	bint testbit(unsigned long vec, unsigned int pos)
 	bint testbitc(unsigned char c, unsigned int pos)

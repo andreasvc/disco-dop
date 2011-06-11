@@ -1,9 +1,7 @@
-# cython: profile=False
-# cython: boundscheck=False
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
 from math import exp, fsum
-from cpq import heapdict
+from agenda import heapdict
 from containers import ChartItem, Edge
 from operator import itemgetter
 try: assert nsmallest(1, [1]) == [1]
@@ -61,20 +59,22 @@ def lazynext(v, e, j, k1, D, cand, chart, explored):
 		lazykthbest(ei, j1[i] + 1, k1, D, cand, chart, explored)
 		# if it exists and is not in heap yet
 		if (ei in D and j1[i] < len(D[ei])) and (v, e, j1) not in explored: #cand[v]:
+			prob = getprob(chart, D, e, j1)
 			# add it to the heap
-			cand[v][e, j1] = Edge(getprob(chart, D, e, j1),
-								e.prob, e.left, e.right)
+			cand[v][e, j1] = Edge(prob, prob, e.prob, e.left, e.right)
 			explored.add((v, e, j1))
 
 def getprob(chart, D, e, j):
-	result = [e.prob]
-	for ei, i in zip((e.left, e.right), j):	#zip will truncate according to j
-		if ei in D: edge = D[ei][i][1]
-		elif i == 0: edge = chart[ei][0]
+	if e.left in D:	edge = D[e.left][j[0]][1]
+	elif j[0] == 0: edge = chart[e.left][0]
+	else: raise ValueError("non-zero rank vector not part of explored derivations")
+	result = e.prob + edge.inside
+	if e.right.label:
+		if e.right in D: edge = D[e.right][j[1]][1]
+		elif j[1] == 0: edge = chart[e.right][0]
 		else: raise ValueError("non-zero rank vector not part of explored derivations")
-		result.append(edge.inside)
-	# it's probably pointless to use fsum for only 3 values, but well...
-	return fsum(result)
+		result += edge.inside
+	return result
 
 def getderivation(v, e, j, D, chart, tolabel, n):
 	""" Translate the (e, j) notation to an actual tree string in

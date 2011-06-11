@@ -1,14 +1,4 @@
 # -*- coding: UTF-8 -*-
-from negra import NegraCorpusReader, fold, unfold
-from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
-		ranges, export, read_rparse_grammar, mean, harmean,\
-		testgrammar, bracketings, printbrackets, rem_marks, alterbinarization,\
-		varstoindices, read_bitpar_grammar, read_penn_format, terminals
-from fragmentseeker import extractfragments
-from grammar import newsplitgrammar as splitgrammar
-from treetransforms import collinize, un_collinize, binarizetree
-from nltk import FreqDist, Tree
-from nltk.metrics import precision, recall, f_measure, accuracy
 from collections import defaultdict
 from itertools import islice, chain, count
 from operator import itemgetter
@@ -17,22 +7,26 @@ from pprint import pprint
 from math import log, exp, fsum
 from heapq import nlargest
 import cPickle, re, time, codecs
+from nltk import FreqDist, Tree
+from nltk.metrics import precision, recall, f_measure, accuracy
 #import plac
 from kbest import lazykbest
-from estimates import getestimates #, getoutside
-#from plcfrs_cython import mostprobableparse
-#from plcfrs import parse
-try:
-	from plcfrs_cython import parse, mostprobableparse, mostprobablederivation, filterchart
-	print "running cython"
-except: from plcfrs import parse, mostprobableparse; print "running non-cython"
+from estimates import getestimates
+from negra import NegraCorpusReader, fold, unfold
+from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
+		export, read_rparse_grammar, mean, harmean, testgrammar,\
+		bracketings, printbrackets, rem_marks, alterbinarization, terminals,\
+		varstoindices, read_bitpar_grammar, read_penn_format, newsplitgrammar
+from fragmentseeker import extractfragments
+from treetransforms import collinize, un_collinize, binarizetree
+from plcfrs_cython import parse, mostprobableparse, mostprobablederivation
 
 def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
 	dop = False,
 	unfolded = False,
-	maxlen = 30,	# max number of words for sentences in training & test corpus
+	maxlen = 30,  # max number of words for sentences in training & test corpus
 	bintype = "collinize", # choices: collinize, nltk, optimal
 	estimator = "sl-dop", # choices: dop1, ewe, shortest, sl-dop
 	factor = "right",
@@ -41,18 +35,16 @@ def main(
 	minMarkov = 3,
 	tailmarker = "",
 	maxsent = 360,	# number of sentences to parse
-	viterbi = True,
 	sample = False,
 	both = False,
 	arity_marks = True,
 	arity_marks_before_bin = False,
 	interpolate = 1.0,
 	wrong_interpolate = False,
-	n = 0,			#number of top-derivations to parse (1 for 1-best, 0 to parse exhaustively)
 	m = 10000,		#number of derivations to sample/enumerate
-	prune=False,		#whether to use srcg chart to prune parsing of dop
+	prune=False,	#whether to use srcg chart to prune parsing of dop
 	sldop_n=7,
-	doestimates=True,
+	doestimates=False,
 	useestimates=True
 	):
 	# Tiger treebank version 2 sample:
@@ -129,7 +121,7 @@ def main(
 			print "labels:", len(set(rule[a] for (rule,yf),w in grammar for a in range(3) if len(rule) > a)), "of which preterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
 			print "max arity:", max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
 			print "max vars:", max((max(map(len, yf)), rule, yf, w) for (rule, yf), w in grammar if rule[1] != "Epsilon")
-			grammar = splitgrammar(grammar)
+			grammar = newsplitgrammar(grammar)
 			ll=sum(len(b) for a,b in grammar.lexical.items())
 			print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
 			testgrammar(grammar)
@@ -151,7 +143,7 @@ def main(
 			l = len(dopgrammar)
 			print "labels:", len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(3) if len(rule) > a)), "of which preterminals:", len(set(rule[0] for (rule,yf),w in dopgrammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in dopgrammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
 			print "max arity:", max((len(yf), rule, yf, w) for (rule,yf),w in dopgrammar)
-			dopgrammar = splitgrammar(dopgrammar)
+			dopgrammar = newsplitgrammar(dopgrammar)
 			ll=sum(len(b) for a,b in dopgrammar.lexical.items())
 			print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
 			testgrammar(dopgrammar)
@@ -176,9 +168,9 @@ def main(
 		#for a,b in extractfragments(trees).items():
 		#	print a,b
 		#exit()
-		doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n, useestimates, outside)
+		doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n, useestimates, outside)
 
-def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n=14, useestimates=False, outside=None, top='ROOT', tags=True):
+def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n=14, useestimates=False, outside=None, top='ROOT', tags=True):
 	sresults = []; dresults = []
 	serrors1 = FreqDist(); serrors2 = FreqDist()
 	derrors1 = FreqDist(); derrors2 = FreqDist()
@@ -199,11 +191,12 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 		goldbrackets.update((nsent, a) for a in goldb)
 		if srcg:
 			print "SRCG:",
+			begin = time.clock()
 			chart, start = parse([w for w,t in sent], grammar,
 								[t for w,t in sent] if tags else [],
-								grammar.toid[top], True,
-								0 if prune else 1, (outside, maxlen) if
-								useestimates else None)
+								grammar.toid[top], prune,
+								(outside, maxlen) if useestimates else None)
+			print time.clock() - begin, "s cpu time elapsed"
 		else: chart = {}; start = False
 		#for a in chart: chart[a].sort()
 		#for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
@@ -250,13 +243,15 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 			print "DOP:",
 			#estimate = partial(getoutside, outside, maxlen, len(sent))
 			if srcg and prune and repr(start) != "0[0]":
-				srcgchart = chart #filterchart(chart, start)
+				srcgchart = chart
 			else: srcgchart = {}
+			begin = time.clock()
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
-								dopgrammar.toid[top], viterbi, n, None,
+								dopgrammar.toid[top], True, None,
 								prune=srcgchart,
 								prunetoid=grammar.toid)
+			print time.clock() - begin, "s cpu time elapsed"
 		else: chart = {}; start = False
 		if dop and repr(start) != "0[0]":
 			if nsent == 1:
@@ -286,8 +281,10 @@ def doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arit
 				# the number of fragments used is the number of
 				# nodes (open parens), minus the number of interior
 				# (addressed) nodes.
-				mpp = [(tt, (-min((t.count("(") - t.count("@")) for t in idsremoved[tt]), mpp1[tt]))
-								for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t])]
+				mpp = [(tt, (-min((t.count("(") - t.count("@"))
+						for t in idsremoved[tt]), mpp1[tt]))
+							for tt in nlargest(sldop_n, mpp1,
+								key=lambda t: mpp1[t])]
 				print "(%d derivations, %d of %d parsetrees)" % (len(derivations), len(mpp), len(mpp1))
 			else:
 				mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m, sample=sample, both=both).items()
@@ -388,6 +385,13 @@ def root(tree):
 	else: tree = Tree("ROOT",[tree])
 	return tree
 
+def foo(a):
+	result = Tree(a)
+	un_collinize(result)
+	for n, a in enumerate(result.treepositions('leaves')):
+		result[a] = n
+	return result.pprint(margin=999) + '\n'
+
 def cftiger():
 	#read_penn_format('../tiger/corpus/tiger_release_aug07.mrg')
 	grammar = read_bitpar_grammar('/tmp/gtigerpcfg.pcfg', '/tmp/gtigerpcfg.lex')
@@ -416,14 +420,7 @@ def cftiger():
 			tree[a] = nn
 	blocks = [export(*a) for a in zip(trees, sents, count())]
 	test = trees, sents, blocks
-	doparse(srcg, dop, estimator, unfolded, bintype, viterbi, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, n, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n, top, tags)
-
-def foo(a):
-	result = Tree(a)
-	un_collinize(result)
-	for n, a in enumerate(result.treepositions('leaves')):
-		result[a] = n
-	return result.pprint(margin=999) + '\n'
+	doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n, top, tags)
 
 if __name__ == '__main__':
 	import sys

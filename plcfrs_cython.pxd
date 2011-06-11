@@ -1,9 +1,9 @@
 cimport numpy as np
-from cpq cimport Entry
+from agenda cimport Entry
 from kbest cimport lazykbest, lazykthbest
 from containers cimport ChartItem, Edge, Rule, Terminal
 from array cimport array
-from cpq cimport heapdict
+from agenda cimport heapdict
 
 cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
