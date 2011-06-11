@@ -1,4 +1,3 @@
-#cython: boundscheck=False
 """
 Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs).
@@ -24,8 +23,14 @@ class Item(object):
 	__slots__ = ("state", "length", "lr", "gaps", "_hash")
 	def __hash__(self):
 		return self._hash
+	def __cmp__(self, other):
+		if (isinstance(other, Item) and self._hash == other._hash
+			and self.state == other.state and self.length == other.length
+			and self.lr == other.lr and self.gaps == other.gaps):
+			return 0
+		return 1
 	def __repr__(self):
-		return "%s len=%d lr=%d gaps=%d" % (self.state, self.length,
+		return "label=%3d len=%2d lr=%2d gaps=%2d" % (self.state, self.length,
 												self.lr, self.gaps)
 
 def new_Item(state, length, lr, gaps):
@@ -46,14 +51,20 @@ def getoutside(outside, maxlen, slen, label, vec):
 	return outside[label, length, lr, gaps]
 
 def doinside(grammar, maxlen, concat, insidescores):
+	""" Compute inside estimate in bottom-up fashion.
+	This function could be optimized by using a numpy array and declaring
+	the concat function, but compared to the computation of the outside
+	estimates, the time spent in this function is insignificant. """
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = float('infinity')
 	agenda = heapdict()
 	nil = ChartItem(0, 0)
-	for n, rules in enumerate(bylhs):
+
+	for n, rules in enumerate(grammar.bylhs):
 		if rules == []:
 			agenda[new_ChartItem(n, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
@@ -67,6 +78,7 @@ def doinside(grammar, maxlen, concat, insidescores):
 				or I.vec not in insidescores[rule.lhs]):
 				agenda.setitem(new_ChartItem(rule.lhs, I.vec),
 						new_Edge(rule.prob + x, 0.0, 0.0, nil, nil))
+
 		for rule in lbinary[I.label]:
 			if rule.rhs2 not in insidescores: continue
 			for vec in insidescores[rule.rhs2]:
@@ -74,8 +86,9 @@ def doinside(grammar, maxlen, concat, insidescores):
 				if left and (rule.lhs not in insidescores
 					or left not in insidescores[rule.lhs]):
 					agenda.setitem(new_ChartItem(rule.lhs, left),
-						new_Edge(x + rule.prob + insidescores[rule.rhs2][vec],
+						new_Edge(rule.prob + x + insidescores[rule.rhs2][vec],
 									0.0, 0.0, nil, nil))
+
 		for rule in rbinary[I.label]:
 			if rule.rhs1 not in insidescores: continue
 			for vec in insidescores[rule.rhs1]:
@@ -83,112 +96,128 @@ def doinside(grammar, maxlen, concat, insidescores):
 				if right and (rule.lhs not in insidescores
 					or right not in insidescores[rule.lhs]):
 					agenda.setitem(new_ChartItem(rule.lhs, right),
-						new_Edge(x + rule.prob + insidescores[rule.rhs1][vec],
+						new_Edge(rule.prob + insidescores[rule.rhs1][vec] + x,
 									0.0, 0.0, nil, nil))
 
 	return insidescores
 
 def computeoutsidelr(grammar, insidescores, maxlen, goal, outside):
+	""" Compute the outside SX simple LR estimate in top down fashion. """
 	bylhs = grammar.bylhs
 	arity = grammar.arity
+	infinity = float('infinity')
 	agenda = heapdict()
 	nil = new_ChartItem(0, 0)
-	for a in range(maxlen):
-		newitem = new_Item(goal, a + 1, 0, 0)
-		agenda[newitem] = new_Edge(0.0, 0.0, 0.0, nil, nil)
-		outside[goal, a + 1, 0, 0] = 0.0
+	if not 0 <= goal <= len(grammar.bylhs): print "goal", goal
+	for n in range(1, maxlen + 1):
+		agenda[new_Item(goal, n, 0, 0)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+		outside[goal, n, 0, 0] = 0.0
 	print "initialized"
+
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value.score
+		if agenda.length % 1000 == 0:
+			print "agenda size: %dk top: %r %g %s" % (
+				agenda.length / 1000, I, x, grammar.tolabel[I.state])
 		if x != outside[I.state, I.length, I.lr, I.gaps]: continue
 		totlen = I.length + I.lr + I.gaps
 		rules = bylhs[I.state]
 		for rule in rules:
 			# X -> A
 			if rule.rhs2 == 0:
-				if rule.rhs1 != 0:
-					score = x + rule.prob
-					if outside[rule.rhs1, I.length, I.lr, I.gaps] > score:
-						agenda.setitem(
-							new_Item(rule.rhs1, I.length, I.lr, I.gaps),
-							new_Edge(score, 0.0, 0.0, nil, nil))
-						outside[rule.rhs1, I.length, I.lr, I.gaps] = score
+				score = x + rule.prob
+				if totlen > maxlen: current = 0.0
+				else: current = outside[rule.rhs1, I.length, I.lr, I.gaps]
+				if score < current:
+					agenda.setitem(
+						new_Item(rule.rhs1, I.length, I.lr, I.gaps),
+						new_Edge(score, 0.0, 0.0, nil, nil))
+					outside[rule.rhs1, I.length, I.lr, I.gaps] = score
 			else:
-				lstate = rule.rhs1
-				rstate = rule.rhs2
-				fanout = arity._B[rule.lhs]
 				# X -> A B
 				addgaps = addright = 0
 				stopaddright = False
-				for m in range(fanout - 1, -1, -1):
-					for a in range(rule.lengths._B[m] - 1, -1, -1):
+				for m in range(arity._B[rule.lhs] - 1, -1, -1):
+					for n in range(rule.lengths._B[m] - 1, -1, -1):
 						if (not stopaddright
-							and not testbitshort(rule.args._H[m], a)):
+							and not testbitshort(rule.args._H[m], n)):
 							stopaddright = True
-						if testbitshort(rule.args._H[m], a):
+						if testbitshort(rule.args._H[m], n):
 							if not stopaddright:
 								addright += 1
 							else:
 								addgaps += 1
 
-				leftarity = arity._B[lstate]
-				rightarity = arity._B[rstate]
+				leftarity = arity._B[rule.rhs1]
+				rightarity = arity._B[rule.rhs2]
 				# binary-left (A is left)
-				for lenA in range(leftarity, I.length - rightarity + 1):
-					lenB = I.length - lenA
-					insidescore = insidescores[rstate, lenB]
-					for lr in range(I.lr, I.lr + lenB + 1):
-						if addright == 0 and lr != I.lr: continue
-						for ga in range(leftarity - 1, totlen+1):
-							if (lenA + lr + ga == I.length + I.lr + I.gaps
-								and ga >= addgaps):
-								score = x + insidescore + rule.prob
-								if outside[lstate, lenA, lr, ga] > score:
-									agenda.setitem(
-										new_Item(lstate, lenA, lr, ga),
-										new_Edge(score, 0.0, 0.0, nil, nil))
-									outside[lstate, lenA, lr, ga] = score
+				if leftarity < I.length > rightarity:
+					for lenA in range(leftarity, I.length - rightarity + 1):
+						lenB = I.length - lenA
+						if 0 <= lenB <= maxlen:
+							insidescore = insidescores[rule.rhs2, lenB]
+						else:
+							insidescore = infinity
+						for lr in range(I.lr, I.lr + lenB + 1):
+							if addright == 0 and lr != I.lr: continue
+							for ga in range(leftarity - 1, totlen + 1):
+								if (lenA + lr + ga == I.length + I.lr + I.gaps
+									and ga >= addgaps):
+									score = x + insidescore + rule.prob
+									if lenA+lr+ga > maxlen: current = 0.0
+									else: current = outside[rule.rhs1, lenA, lr, ga]
+									if score < current:
+										agenda.setitem(
+											new_Item(rule.rhs1, lenA, lr, ga),
+											new_Edge(score, 0.0, 0.0, nil, nil))
+										outside[rule.rhs1, lenA, lr, ga] = score
 
 				# X -> B A
 				addgaps = addleft = addright = 0
 				stopaddleft = False
-				for m in range(fanout):
-					for a in range(rule.lengths._B[m]):
-						if not stopaddleft and testbitshort(rule.args._H[m], a):
+				for m in range(arity._B[rule.lhs]):
+					for n in range(rule.lengths._B[m]):
+						if not stopaddleft and testbitshort(rule.args._H[m], n):
 							stopaddleft = True
-						if not testbitshort(rule.args._H[m], a):
+						if not testbitshort(rule.args._H[m], n):
 							if stopaddleft:
 								addgaps += 1
 							else:
 								addleft += 1
 
 				stopaddright = False
-				for m in range(fanout -1, -1, -1):
-					arg = rule.args._H[m]
-					for a in range(rule.lengths._B[m] - 1, -1, -1):
-						if not stopaddright and testbitshort(arg, a):
+				for m in range(arity._B[rule.lhs] - 1, -1, -1):
+					for n in range(rule.lengths._B[m] - 1, -1, -1):
+						if (not stopaddright
+							and testbitshort(rule.args._H[m], n)):
 							stopaddright = True
-						if not testbitshort(arg, a):
+						if not testbitshort(rule.args._H[m], n):
 							if not stopaddright:
 								addright += 1
 				addgaps -= addright
 				
 				# binary-right (A is right)
-				for lenA in range(rightarity, I.length - leftarity + 1):
-					lenB = I.length - lenA
-					insidescore = insidescores[lstate, lenB]
-					for lr in range(I.lr, I.lr + lenB + 1):
-						for ga in range(rightarity - 1, totlen+1):
-							if (lenA + lr + ga == I.length + I.lr + I.gaps
-								and ga >= addgaps):
-								score = x + insidescore + rule.prob
-								if outside[rstate, lenA, lr, ga] > score:
-									agenda.setitem(
-										new_Item(rstate, lenA, lr, ga),
-										new_Edge(score, 0.0, 0.0, nil, nil))
-									outside[rstate, lenA, lr, ga] = score
+				if rightarity < I.length > leftarity:
+					for lenA in range(rightarity, I.length - leftarity + 1):
+						lenB = I.length - lenA
+						if 0 <= lenB <= maxlen:
+							insidescore = insidescores[rule.rhs1, lenB]
+						else:
+							insidescore = infinity
+						for lr in range(I.lr, I.lr + lenB + 1):
+							for ga in range(rightarity - 1, totlen + 1):
+								if (lenA + lr + ga == I.length + I.lr + I.gaps
+									and ga >= addgaps):
+									score = x + insidescore + rule.prob
+									if lenA+lr+ga > maxlen: current = 0.0
+									else: current = outside[rule.rhs2, lenA, lr, ga]
+									if score < current:
+										agenda.setitem(
+											new_Item(rule.rhs2, lenA, lr, ga),
+											new_Edge(score, 0.0, 0.0, nil, nil))
+										outside[rule.rhs2, lenA, lr, ga] = score
 
 def inside(grammar, maxlen):
 	#infinity = float('infinity')
@@ -237,6 +266,8 @@ def outsidelr(grammar, insidescores, maxlen, goal):
 	npinsidescores = np.array([infinity], dtype='d').repeat(
 				len(grammar.bylhs) * (maxlen+1)).reshape(
 				(len(grammar.bylhs), (maxlen+1)))
+	assert max(insidescores) <= len(grammar.bylhs)
+	assert all(max(scores) <= maxlen for scores in insidescores.values())
 	twodim_dict_to_array(insidescores, npinsidescores)
 	computeoutsidelr(grammar, npinsidescores, maxlen, goal, outside)
 	return outside
@@ -260,10 +291,10 @@ def testestimates(grammar, maxlen, goal):
 	insidescores = simpleinside(grammar, maxlen)
 	for a in insidescores:
 		for b in insidescores[a]:
-			print a,b
 			assert 0 <= a < len(grammar.bylhs)
 			assert 0 <= b <= maxlen
-			print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
+			#print a,b
+			#print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print 
 	print len(insidescores) * sum(map(len, insidescores.values()))
 	print "getting outside"

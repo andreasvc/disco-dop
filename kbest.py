@@ -125,6 +125,7 @@ toid = {}
 from math import log
 def ci(label, vec): return ChartItem(toid[label], vec)
 def l(a): return -log(a)
+def ed(i, p, l, r): return Edge(i, i, p, l, r)
 
 def main():
 	from containers import Edge
@@ -135,23 +136,23 @@ def main():
 	goal = ci("S", 0b111)
 	chart = {
 			ci("S", 0b111) : [
-				Edge(l(0.5*0.4), l(0.4),
+				ed(l(0.5*0.4), l(0.4),
 						ci("NP", 0b100), ci("VP", 0b011)),
-				Edge(l(0.25*0.7), l(0.7),
+				ed(l(0.25*0.7), l(0.7),
 						ci("NP", 0b100), ci("VP2", 0b011))],
 			ci("VP", 0b011) : [
-				Edge(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
-				Edge(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
+				ed(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
+				ed(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
 			ci("VP2", 0b011) : [
-				Edge(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
-				Edge(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
-			ci("NP", 0b100) : [Edge(l(0.5), l(0.5), ci("Mary", 0), NONE),
-							Edge(l(0.9), l(0.9), ci("PN", 0b100), NONE)],
-			ci("PN", 0b100) : [Edge(l(1.0), l(1.0), ci("Mary", 0), NONE),
-							Edge(l(0.9), l(0.9), ci("NP", 0b100), NONE)
+				ed(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
+				ed(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
+			ci("NP", 0b100) : [ed(l(0.5), l(0.5), ci("Mary", 0), NONE),
+							ed(l(0.9), l(0.9), ci("PN", 0b100), NONE)],
+			ci("PN", 0b100) : [ed(l(1.0), l(1.0), ci("Mary", 0), NONE),
+							ed(l(0.9), l(0.9), ci("NP", 0b100), NONE)
 							],
-			ci("V", 0b010) : [Edge(l(1.0), l(1.0), ci("walks", 1), NONE)],
-			ci("ADV", 0b001) : [Edge(l(1.0), l(1.0), ci("quickly", 2), NONE)]
+			ci("V", 0b010) : [ed(l(1.0), l(1.0), ci("walks", 1), NONE)],
+			ci("ADV", 0b001) : [ed(l(1.0), l(1.0), ci("quickly", 2), NONE)]
 		}
 	assert ci("NP", 0b100) == ci("NP", 0b100)
 	cand = {}

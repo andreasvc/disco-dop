@@ -61,11 +61,13 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
 	cdef dict kbestoutside
-	cdef int m = 0, maxA = 0, length = 0, left = 0, right = 0, gaps = 0
-	cdef Py_ssize_t i
-	cdef int lensent = len(sent), label, newlabel, blocked = 0, maxlen = 0
+	cdef unsigned int maxA = 0, length = 0, left = 0, right = 0, gaps = 0
+	cdef unsigned int lensent = len(sent), blocked = 0, maxlen = 0
+	cdef unsigned int label, newlabel
+	cdef unsigned long vec
 	cdef double x, y
-	cdef bint doprune = False, doestimate = False
+	cdef Py_ssize_t i
+	cdef bint doprune = False, doestimate = bool(estimate)
 	cdef heapdict A = heapdict()				#the agenda
 	cdef Entry entry
 	cdef Edge edge, newedge
@@ -73,14 +75,11 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 	cdef Terminal terminal
 	cdef Rule rule
 	cdef np.ndarray[np.double_t, ndim=4] outside
-	cdef unsigned long vec
 
 	if start == None: start = toid["ROOT"]
-	if estimate:
-		outside, maxlen = estimate
-		doestimate = True
-
+	if estimate: outside, maxlen = estimate
 	goal = new_ChartItem(start, (1 << len(sent)) - 1)
+
 	if prune:
 		doprune = True
 		kbestoutside = kbest_outside(prune, goal, 100)
@@ -92,7 +91,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 			prunelist[label] = l[newlabel]
 		print 'pruning with %d nonterminals, %d items' % (
 				len(filter(None, prunelist)), len(prune))
-				# ?? len(filter(lambda x: x < infinity,l)))
+				# ?? sum(len(filter(lambda x: x < infinity, ll.values()) for ll in l))
 	gc.disable()
 
 	# scan
@@ -136,11 +135,14 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
 		append(C[Ih], iscore(edge))
+		assert Ih not in Cx[Ih.label]
 		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			if not exhaustive: break
 		else:
 			x = edge.inside
+
+			# unary
 			l = <list>list_getitem(unary, Ih.label)
 			if doestimate:
 				vec = Ih.vec; length = bitcount(vec); left = nextset(vec, 0)
@@ -160,7 +162,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 										rule.prob, Ih, NONE)
 				process_edge(new_ChartItem(rule.lhs, Ih.vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
-
+			
+			# binary left
 			l = <list>list_getitem(lbinary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
@@ -184,7 +187,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
-
+			# binary right
 			l = <list>list_getitem(rbinary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
@@ -210,21 +213,24 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 
 		maxA = max(maxA, len(A))
 	print "max agenda size %d, now %d, chart items %d (%d), edges %d, blocked %d" % (
-				maxA, len(A), len(C), len(Cx), sum(map(len, C.values())), blocked),
+				maxA, len(A), len(C), len(filter(None, Cx)),
+					sum(map(len, C.values())), blocked),
 	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
-		dict C, list Cx, bint doprune, list prunelist, int lensent, int *blocked):
+		dict C, list Cx, bint doprune, list prunelist, unsigned int lensent, unsigned int *blocked):
 	""" Decide what to do with a newly derived edge. """
-	if not (A.contains(newitem) or dict_contains(C, newitem) == 1): #not in A or C
-		#if not doprune or newitem.vec in <set>(prunelist[newitem.label]):
+	cdef Edge e
+	#not in A or C
+	if not (A.contains(newitem) or dict_contains(C, newitem) == 1):
 		if doprune:
-			estimate = dict_getitem(<object>list_getitem(prunelist, newitem.label), newitem.vec)
-			if estimate == NULL or newedge.inside + <double><object>estimate > 300.0:
-					blocked[0] += 1
-					return
+			outside = dict_getitem(<object>list_getitem(prunelist,
+											newitem.label), newitem.vec)
+			if outside==NULL or newedge.inside+<double><object>outside > 300.0:
+				blocked[0] += 1
+				return
 		elif newedge.score > 300.0:
 			blocked[0] += 1
 			return
@@ -232,9 +238,15 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 		A.setitem(newitem, newedge)
 		C[newitem] = []
 	elif A.contains(newitem): # in A (maybe in C)
-		if newedge.score < (<Edge>(A.getitem(newitem))).score:
+		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
 			# item has lower score, update agenda (and add old edge to chart)
 			append(C[newitem], iscore(A.replace(newitem, newedge)))
+			#e = <Edge>A[newitem]
+			#append(C[newitem], new_Edge(e.inside, e.inside, e.prob, e.left, e.right))
+			#e.inside = newedge.inside
+			#e.prob = newedge.prob
+			#e.left = newedge.left
+			#e.right = newedge.right
 		else: #worse score, only add to chart
 			C[newitem].append(iscore(newedge))
 	else: # not in A, but is in C
@@ -283,7 +295,7 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 		#else:
 		#	return False
 	#this algorithm taken from rparse, FastYFComposer.
-	cdef int n, x
+	cdef unsigned int n, x
 	cdef unsigned char arg, m
 	for x in range(rule.args.length):
 		m = rule.lengths._B[x] - 1
@@ -352,7 +364,7 @@ cdef void getitems(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outs
 			outside[e.right] = rootedge.inside - (<Edge>ee2).inside
 		getitems(<Edge>ee, jj, rootedge, D, chart, outside)
 
-cdef Edge iscore(Edge e):
+cdef inline Edge iscore(Edge e):
 	e.score = e.inside
 	return e
 

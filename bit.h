@@ -1,13 +1,13 @@
 /* See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html */
 
 // with gcc builtins:(more portable than assembly)
-inline int nextset(unsigned long vec, int pos) {
+inline int nextset(unsigned long vec, unsigned int pos) {
 	// return next set bit starting from pos, -1 if there is none.
 	//return (vec >> pos) ? pos + __builtin_ctzl(vec >> pos) : -1;
 	return ((vec >> pos) > 0) * pos + __builtin_ffsl(vec >> pos) - 1;
 }
 
-inline int nextunset(unsigned long vec, int pos) {
+inline int nextunset(unsigned long vec, unsigned int pos) {
 	// return next unset bit starting from pos. there is always a next unset
 	// bit, so no bounds checking __builtin_ctzl is undefined when input is
 	// zero, in this case it means we should always leave the most significant
@@ -31,15 +31,15 @@ inline int bitlength(unsigned long vec) {
 	return sizeof (vec) * 8 - __builtin_clzl(vec);
 }
 
-inline int testbit(unsigned long vec, int pos) {
+inline int testbit(unsigned long vec, unsigned int pos) {
 	return vec & (1 << pos);
 }
 
-inline int testbitc(unsigned char arg, int pos) {
+inline int testbitc(unsigned char arg, unsigned int pos) {
 	return arg & (1 << pos);
 }
 
-inline int testbitshort(unsigned short arg, int pos) {
+inline int testbitshort(unsigned short arg, unsigned int pos) {
 	return arg & (1 << pos);
 }
 

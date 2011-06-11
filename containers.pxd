@@ -1,7 +1,7 @@
 from array cimport array
 
 cdef class ChartItem:
-	cdef int label
+	cdef unsigned int label
 	cdef unsigned long vec
 	cdef long _hash
 
@@ -14,16 +14,16 @@ cdef class Edge:
 	cdef long _hash
 
 cdef class Terminal:
-	cdef public int lhs
-	cdef public int rhs1
-	cdef public int rhs2
+	cdef public unsigned int lhs
+	cdef public unsigned int rhs1
+	cdef public unsigned int rhs2
 	cdef public unicode word
 	cdef public double prob
 
 cdef class Rule:
-	cdef public int lhs
-	cdef public int rhs1
-	cdef public int rhs2
-	cdef public array args
+	cdef public unsigned int lhs
+	cdef public unsigned int rhs1
+	cdef public unsigned int rhs2
+	cdef public array args		# specify type here?
 	cdef public array lengths
 	cdef public double prob

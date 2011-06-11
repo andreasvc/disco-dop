@@ -16,39 +16,38 @@ else:
 	print "interpreted"
 
 cdef extern from "bit.h":
-	int nextset(unsigned long vec, int pos)
-	int nextunset(unsigned long vec, int pos)
-	int bitcount(unsigned long vec)
-	int bitlength(unsigned long vec)
 	bint bitminmax(unsigned long a, unsigned long b)
 	bint testbit(unsigned long vec, unsigned int pos)
 	bint testbitc(unsigned char c, unsigned int pos)
 	bint testbitshort(unsigned short c, unsigned int pos)
+	int nextset(unsigned long vec, unsigned int pos)
+	int nextunset(unsigned long vec, unsigned int pos)
+	int bitcount(unsigned long vec)
+	int bitlength(unsigned long vec)
 
 cdef class Item:
-	cdef int state, length, lr, gaps
-	cdef long _hash
+	cdef public unsigned int state, length, lr, gaps
+	cdef public long _hash
 	#def __init__(self, len state, int length, int lr, int gaps)
 
 @cython.locals(item=Item)
-cdef Item new_Item(int state, int length, int lr, int gaps)
+cdef Item new_Item(unsigned int state, unsigned int length, unsigned int lr, unsigned int gaps)
 
 @cython.locals(
-	length=cython.int,
-	left=cython.int,
-	foo=cython.int,
-	bar=cython.int,
-	right=cython.int,
-	lr=cython.int,
-	gaps=cython.int)
-cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, int maxlen, int slen, int label, unsigned long vec)
+	length=cython.uint,
+	left=cython.uint,
+	right=cython.uint,
+	lr=cython.uint,
+	gaps=cython.uint)
+cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, unsigned int maxlen, unsigned int slen, unsigned int label, unsigned long vec)
 
+# can we specify signature of concat?
 @cython.locals(
 	I=ChartItem,
 	e=Edge,
 	nil=ChartItem,
 	entry=Entry)
-cpdef doinside(grammar, int maxlen, concat, dict insidescores)
+cpdef doinside(grammar, unsigned int maxlen, concat, dict insidescores)
 
 @cython.locals(
 	n=cython.uint,
@@ -61,41 +60,38 @@ cdef void twodim_dict_to_array(dict d, np.ndarray[np.double_t, ndim=2] a)
 #	a=cython.int,
 #	b=cython.int
 	npinsidescores=np.ndarray)
-cpdef np.ndarray outsidelr(grammar, dict insidescores, int maxlen, int goal)
+cpdef np.ndarray outsidelr(grammar, dict insidescores, unsigned int maxlen, unsigned int goal)
 
 @cython.locals(
+	current=np.double_t,
 	score=np.double_t,
 	entry=Entry,
 	newitem=Item,
 	nil=ChartItem,
 	I=Item,
 	e=Edge,
-	arity=array,
 	bylhs=list,
 	rules=list,
+	rule=Rule,
+	arity=array,
 	infinity=cython.double,
 	x=cython.double,
 	y=cython.double,
 	insidescore=cython.double,
-	m=cython.int,
-	n=cython.int,
-	a=cython.int,
-	fanout=cython.int,
-	addgaps=cython.int,
-	addright=cython.int,
-	addleft=cython.int,
+	m=cython.uint,
+	n=cython.uint,
+	addgaps=cython.uint,
+	addright=cython.uint,
+	addleft=cython.uint,
 	leftarity=cython.int,
 	rightarity=cython.int,
-	lenA=cython.int,
-	lenB=cython.int,
-	lr=cython.int,
-	ga=cython.int,
-	totlen=cython.int,
-	rstate=cython.int,
-	lstate=cython.int,
+	lenA=cython.uint,
+	lenB=cython.uint,
+	lr=cython.uint,
+	ga=cython.uint,
+	totlen=cython.uint,
 	stopaddright=cython.bint,
-	stopaddleft=cython.bint,
-	rule=Rule
+	stopaddleft=cython.bint
 	)
-cdef void computeoutsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, int maxlen, int goal, np.ndarray[np.double_t, ndim=4] outside)
+cdef void computeoutsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, unsigned int maxlen, unsigned int goal, np.ndarray[np.double_t, ndim=4] outside) except *
 

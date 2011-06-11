@@ -244,7 +244,7 @@ def newsplitgrammar(grammar):
 			rbinary[r.rhs2].append(r)
 			bylhs[r.lhs].append(r)
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
-	assert 0 not in arity[1:]
+	#assert 0 not in arity[1:]
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel, arity)
 
 def yfarray(yf):
@@ -589,7 +589,7 @@ def do(sent, grammar):
 	from plcfrs_cython import parse, mostprobableparse
 	#from plcfrs import parse, mostprobableparse
 	print "sentence", sent
-	p, start = parse(sent, grammar, start=grammar.toid['S'], viterbi=False, n=100)
+	p, start = parse(sent, grammar, start=grammar.toid['S'])
 	if p:
 		mpp = mostprobableparse(p, start, grammar.tolabel)
 		for t in mpp:
@@ -662,7 +662,7 @@ def main():
 	from plcfrs_cython import parse, mostprobableparse
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
-		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], viterbi=True, n=0)
+		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], exhaustive=True)
 		print "gold", canonicalize(tree)
 		print "parsetrees:"
 		if p:
