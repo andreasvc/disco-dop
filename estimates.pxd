@@ -1,8 +1,3 @@
-# cython: boundscheck: False
-# cython: wraparound: False
-# cython: nonecheck: False
-# cython: profile: False
-
 cimport cython
 from containers cimport ChartItem, Edge, Rule, Terminal
 from plcfrs_cython cimport new_Edge, new_ChartItem
@@ -25,8 +20,12 @@ cdef extern from "bit.h":
 	int bitcount(unsigned long vec)
 	int bitlength(unsigned long vec)
 
+cdef extern from "math.h":
+	bint isnan(double x)
+	bint isfinite(double x)
+
 cdef class Item:
-	cdef public unsigned int state, length, lr, gaps
+	cdef public int state, length, lr, gaps
 	cdef public long _hash
 	#def __init__(self, len state, int length, int lr, int gaps)
 
@@ -41,26 +40,28 @@ cdef Item new_Item(unsigned int state, unsigned int length, unsigned int lr, uns
 	gaps=cython.uint)
 cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, unsigned int maxlen, unsigned int slen, unsigned int label, unsigned long vec)
 
-# can we specify signature of concat?
 @cython.locals(
 	I=ChartItem,
 	e=Edge,
 	nil=ChartItem,
 	entry=Entry)
-cpdef doinside(grammar, unsigned int maxlen, concat, dict insidescores)
+cpdef dict inside(grammar, unsigned int maxlen, dict insidescores)
 
 @cython.locals(
-	n=cython.uint,
-	m=cython.uint,
-	d2=dict,
-	val=np.double_t)
-cdef void twodim_dict_to_array(dict d, np.ndarray[np.double_t, ndim=2] a)
-
-@cython.locals(
-#	a=cython.int,
-#	b=cython.int
-	npinsidescores=np.ndarray)
-cpdef np.ndarray outsidelr(grammar, dict insidescores, unsigned int maxlen, unsigned int goal)
+	I=ChartItem,
+	e=Edge,
+	rule=Rule,
+	nil=ChartItem,
+	entry=Entry,
+	agenda=heapdict,
+	infinity=np.double_t,
+	lbinary=list,
+	rbinary=list,
+	unary=list,
+	rules=list,
+	x=np.double_t,
+	vec=cython.ulong)
+cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2] insidescores)
 
 @cython.locals(
 	current=np.double_t,
@@ -85,13 +86,13 @@ cpdef np.ndarray outsidelr(grammar, dict insidescores, unsigned int maxlen, unsi
 	addleft=cython.uint,
 	leftarity=cython.int,
 	rightarity=cython.int,
-	lenA=cython.uint,
-	lenB=cython.uint,
+	lenA=cython.int,
+	lenB=cython.int,
 	lr=cython.uint,
 	ga=cython.uint,
 	totlen=cython.uint,
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint
 	)
-cdef void computeoutsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, unsigned int maxlen, unsigned int goal, np.ndarray[np.double_t, ndim=4] outside) except *
+cdef void outsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, unsigned int maxlen, unsigned int goal, np.ndarray[np.double_t, ndim=4] outside) except *
 

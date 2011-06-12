@@ -15,6 +15,7 @@ cdef class heapdict(dict):
 	cpdef inline Edge replace(heapdict self, object key, Edge value)
 	cdef inline Edge getitem(heapdict self, key)
 	cdef inline void setitem(heapdict self, key, Edge value)
+	cdef inline void setifbetter(heapdict self, key, Edge value)
 	cdef inline bint contains(heapdict self, key)
 
 cdef inline list nsmallest(int n, list items)

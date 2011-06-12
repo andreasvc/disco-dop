@@ -85,6 +85,25 @@ cdef class heapdict(dict):
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
 
+	cdef inline void setifbetter(self, key, Edge value):
+		""" sets an item, but only if item is new or has lower score """
+		cdef Entry oldentry, entry
+		if key in self.mapping:
+			oldentry = <Entry>self.mapping[key]
+			if value.score >= oldentry.value.score: return
+			entry = <Entry>Entry.__new__(Entry)
+			entry.key = key; entry.value = value; entry.count = oldentry.count
+			self.mapping[key] = entry
+			heappush(self.heap, entry)
+			oldentry.count = INVALID
+		else:
+			self.counter += 1
+			self.length += 1
+			entry = <Entry>Entry.__new__(Entry)
+			entry.key =  key; entry.value = value; entry.count = self.counter
+			self.mapping[key] = entry
+			heappush(self.heap, entry)
+
 	cdef inline Edge getitem(self, key):
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]

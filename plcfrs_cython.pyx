@@ -30,11 +30,14 @@ cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
 	item.label = label; item.vec = vec
 	#item._hash = hash((label, vec))
 	# this is the hash function used for tuples, apparently
-	item._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
+	item._hash = (<unsigned long>1000003 
+		* ((<unsigned long>1000003 * <unsigned long>0x345678)
+		^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
 	if item._hash == -1: item._hash = -2
 	return item
 
-cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right):
+cdef inline Edge new_Edge(double score, double inside, double prob,
+	ChartItem left, ChartItem right):
 	cdef Edge edge = Edge.__new__(Edge)
 	edge.score = score; edge.inside = inside; edge.prob = prob
 	edge.left = left; edge.right = right
@@ -47,7 +50,8 @@ cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem le
 	if edge._hash == -1: edge._hash = -2
 	return edge
 
-def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=None, dict prune=None, dict prunetoid={}):
+def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
+	estimate=None, dict prune=None, dict prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -77,7 +81,10 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 	cdef np.ndarray[np.double_t, ndim=4] outside
 
 	if start == None: start = toid["ROOT"]
-	if estimate: outside, maxlen = estimate
+	if doestimate:
+		outside, maxlen = estimate
+		assert len(grammar.bylhs) == len(outside)
+		assert lensent <= maxlen
 	goal = new_ChartItem(start, (1 << len(sent)) - 1)
 
 	if prune:
@@ -152,8 +159,6 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 				rule = <Rule>list_getitem(l, i)
 				if doestimate:
 					newedge = new_Edge(
-									#getoutside(outside, maxlen, lensent, 
-									#			rule.lhs, Ih.vec)
 									outside[rule.lhs, length, left+right, gaps]
 									+ x + rule.prob, x + rule.prob,
 									rule.prob, Ih, NONE)
@@ -176,8 +181,6 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 							gaps = bitlength(vec) - length - left
 							right = lensent - length - left - gaps
 							newedge = new_Edge(
-									#(getoutside(outside, maxlen, lensent,
-									#		rule.lhs, vec)
 									outside[rule.lhs, length, left+right, gaps]
 									+x+y+rule.prob, x+y+rule.prob,
 									rule.prob, Ih, I1h)
@@ -200,8 +203,6 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 							gaps = bitlength(vec) - length - left
 							right = lensent - length - left - gaps
 							newedge = new_Edge(
-									#(getoutside(outside, maxlen, lensent,
-									#		rule.lhs, vec)
 									outside[rule.lhs, length, left+right, gaps]
 									+x+y+rule.prob, x+y+rule.prob,
 									rule.prob, I1h, Ih)
@@ -220,7 +221,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False, estimate=
 	else: return C, NONE
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
-		dict C, list Cx, bint doprune, list prunelist, unsigned int lensent, unsigned int *blocked):
+		dict C, list Cx, bint doprune, list prunelist,
+		unsigned int lensent, unsigned int *blocked):
 	""" Decide what to do with a newly derived edge. """
 	cdef Edge e
 	#not in A or C
@@ -237,9 +239,10 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 		# haven't seen this item before, won't prune, add to agenda
 		A.setitem(newitem, newedge)
 		C[newitem] = []
-	elif A.contains(newitem): # in A (maybe in C)
+	# in A (maybe in C)
+	elif A.contains(newitem):
+		# item has lower score, update agenda (and add old edge to chart)
 		if newedge.inside < (<Edge>(A.getitem(newitem))).inside:
-			# item has lower score, update agenda (and add old edge to chart)
 			append(C[newitem], iscore(A.replace(newitem, newedge)))
 			#e = <Edge>A[newitem]
 			#append(C[newitem], new_Edge(e.inside, e.inside, e.prob, e.left, e.right))
@@ -247,9 +250,11 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 			#e.prob = newedge.prob
 			#e.left = newedge.left
 			#e.right = newedge.right
-		else: #worse score, only add to chart
+		#worse score, only add to chart
+		else:
 			C[newitem].append(iscore(newedge))
-	else: # not in A, but is in C
+	# not in A, but is in C
+	else:
 		C[newitem].append(iscore(newedge))
 		#Cx[newitem.label][newitem] = min(Cx[newitem.label][newitem], newedge.inside)
 		#if newedge.inside < <double>(<dict>(Cx[newitem.label])[newitem]):
