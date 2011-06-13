@@ -1,9 +1,10 @@
 Discontinuous DOP
------------------
+=================
 
 The aim of this project is to parse discontinuous constituents with
-Data-Oriented Parsing (DOP). Concretely, we build a DOP model with a Simple
-Range Concatenation grammar as the symbolic backbone.
+Data-Oriented Parsing (DOP), with a focus on global world domination.
+Concretely, we build a DOP model with a Simple Range Concatenation grammar as
+the symbolic backbone.
 
 - parser, estimates: Maier & Kallmeyer (2010), Data-driven parsing with
   probabilistic linear context-free rewriting systems.

@@ -10,12 +10,12 @@ cdef class heapdict(dict):
 	cdef dict mapping
 	cdef unsigned long counter
 	cdef unsigned long length
-	cpdef tuple popitem(heapdict self)
-	cpdef inline Entry popentry(heapdict self)
-	cpdef inline Edge replace(heapdict self, object key, Edge value)
+	cdef inline Entry popentry(heapdict self)
 	cdef inline Edge getitem(heapdict self, key)
 	cdef inline void setitem(heapdict self, key, Edge value)
 	cdef inline void setifbetter(heapdict self, key, Edge value)
 	cdef inline bint contains(heapdict self, key)
+	cpdef tuple popitem(heapdict self)
+	cpdef inline Edge replace(heapdict self, object key, Edge value)
 
 cdef inline list nsmallest(int n, list items)

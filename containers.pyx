@@ -73,4 +73,6 @@ cdef class Terminal:
 cdef class Rule:
 	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
-		self.args = args; self.lengths = lengths; self.prob = prob
+		self.args = args; self.lengths = lengths
+		self._args = self.args._H; self._lengths = self.lengths._B
+		self.prob = prob

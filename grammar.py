@@ -586,7 +586,8 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
-	from plcfrs_cython import parse, mostprobableparse
+	try: from plcfrs_cython import parse, mostprobableparse
+	except: from plcfrs import parse, mostprobableparse
 	#from plcfrs import parse, mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'])
@@ -659,7 +660,8 @@ def main():
 	print "}"
 	grammar = newsplitgrammar(grammar)
 	testgrammar(grammar)
-	from plcfrs_cython import parse, mostprobableparse
+	try: from plcfrs_cython import parse, mostprobableparse
+	except: from plcfrs import parse, mostprobableparse
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
 		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], exhaustive=True)

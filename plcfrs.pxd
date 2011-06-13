@@ -31,7 +31,7 @@ cdef extern from "bit.h":
 	I1h=ChartItem,
 	goal=ChartItem,
 	A=heapdict)
-cpdef tuple parse(list sent, grammar, list tags=*, start=*, exhaustive=*, estimate=*, prune=*, prunetoid=*)
+cpdef tuple parse(list sent, grammar, list tags=*, int start=*, bint exhaustive=*, estimate=*, prune=*, prunetoid=*)
 
 @cython.locals(
 	y=cython.double,

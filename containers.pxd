@@ -24,6 +24,8 @@ cdef class Rule:
 	cdef public unsigned int lhs
 	cdef public unsigned int rhs1
 	cdef public unsigned int rhs2
-	cdef public array args		# specify type here?
-	cdef public array lengths
 	cdef public double prob
+	cdef public array args
+	cdef public array lengths
+	cdef unsigned short * _args
+	cdef unsigned char * _lengths

@@ -74,7 +74,7 @@ cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2]
 	bylhs=list,
 	rules=list,
 	rule=Rule,
-	arity=array,
+	#arity=array,
 	infinity=cython.double,
 	x=cython.double,
 	y=cython.double,
@@ -94,5 +94,5 @@ cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2]
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint
 	)
-cdef void outsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, unsigned int maxlen, unsigned int goal, np.ndarray[np.double_t, ndim=4] outside) except *
+cdef void outsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, unsigned int maxlen, unsigned int goal, array[unsigned char] arity, np.ndarray[np.double_t, ndim=4] outside) except *
 

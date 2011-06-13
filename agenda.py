@@ -1,5 +1,3 @@
-# cython: profile=False
-# cython: boundscheck=False
 """
 Priority Queue based on binary heap which implements decrease-key and remove
 by marking entries as invalid. Provides dictionary-like interface.
@@ -12,14 +10,18 @@ This version is specialised to be used as agenda with edges.
 from itertools import count, imap, izip
 from operator import itemgetter
 
-DEF INVALID = 0
+INVALID = 0
 
-cdef Entry make_entry(object k, Edge v, unsigned long c):
-	cdef Entry entry = Entry.__new__(Entry)
+class Entry:
+	__slots__ = ('key', 'value', 'count')
+
+def make_entry(k, v, c):
+	#entry = Entry.__new__(Entry)
+	entry = Entry()
 	entry.key = k; entry.value = v; entry.count = c
 	return entry
 
-cdef class heapdict(dict):
+class heapdict(dict):
 	def __init__(self, iterable=None):
 		""" NB: when initialized with an iterable, we don't guarantee that
 			order of equivalent values in this iterable is preserved, and
@@ -27,8 +29,6 @@ cdef class heapdict(dict):
 			the ones with best priorities), as we use a dict to make sure we
 			only have unique keys.
 			if order needs to be preserved, insert them one by one. """
-		cdef Entry entry
-		cdef dict temp
 		self.counter = 1
 		self.length = 0
 		self.heap = []
@@ -47,10 +47,9 @@ cdef class heapdict(dict):
 			heapify(self.heap)
 
 	def __setitem__(self, key, value):
-		cdef Entry oldentry, entry
 		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
-			entry = <Entry>Entry.__new__(Entry)
+			oldentry = self.mapping[key]
+			entry = Entry() #Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = oldentry.count
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
@@ -58,21 +57,19 @@ cdef class heapdict(dict):
 		else:
 			self.counter += 1
 			self.length += 1
-			entry = <Entry>Entry.__new__(Entry)
+			entry = Entry() #Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = self.counter
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
 
 	def __getitem__(self, key):
-		cdef Entry entry
-		entry = <Entry>self.mapping[key]
+		entry = self.mapping[key]
 		return entry.value
 
-	cdef inline void setitem(self, key, Edge value):
-		cdef Entry oldentry, entry
+	def setitem(self, key, value):
 		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
-			entry = <Entry>Entry.__new__(Entry)
+			oldentry = self.mapping[key]
+			entry = Entry() #Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = oldentry.count
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
@@ -80,18 +77,17 @@ cdef class heapdict(dict):
 		else:
 			self.counter += 1
 			self.length += 1
-			entry = <Entry>Entry.__new__(Entry)
+			entry = Entry() #Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = self.counter
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
 
-	cdef inline void setifbetter(self, key, Edge value):
+	def setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
-		cdef Entry oldentry, entry
 		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
+			oldentry = self.mapping[key]
 			if value.score >= oldentry.value.score: return
-			entry = <Entry>Entry.__new__(Entry)
+			entry = Entry() #Entry.__new__(Entry)
 			entry.key = key; entry.value = value; entry.count = oldentry.count
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
@@ -99,21 +95,20 @@ cdef class heapdict(dict):
 		else:
 			self.counter += 1
 			self.length += 1
-			entry = <Entry>Entry.__new__(Entry)
+			entry = Entry() #Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = self.counter
 			self.mapping[key] = entry
 			heappush(self.heap, entry)
 
-	cdef inline Edge getitem(self, key):
-		cdef Entry entry
-		entry = <Entry>self.mapping[key]
-		return <Edge>entry.value
+	def getitem(self, key):
+		entry = self.mapping[key]
+		return entry.value
 
-	cdef inline bint contains(self, key):
+	def contains(self, key):
 		return key in self.mapping
 
 	def __delitem__(self, key):
-		(<Entry>self.mapping[key]).count = INVALID
+		(self.mapping[key]).count = INVALID
 		self.length -= 1
 		del self.mapping[key]
 
@@ -137,7 +132,7 @@ cdef class heapdict(dict):
 		return self.mapping.keys()
 
 	def values(self):
-		return [(<Entry>e).value for e in self.mapping.values()]
+		return [(e).value for e in self.mapping.values()]
 
 	def items(self):
 		return zip(self.keys(), self.values())
@@ -152,42 +147,40 @@ cdef class heapdict(dict):
 		return izip(self.iterkeys(), self.itervalues())
 
 	def peekitem(self):
-		cdef Entry entry
-		while not <Entry>(self.heap[0]).count:
-			entry = <Entry>heappop(self.heap)
-		return <Entry>(self.heap[0]).key, <Entry>(self.heap[0]).value
+		while not (self.heap[0]).count:
+			entry = heappop(self.heap)
+			try: del self.mapping[entry.key]
+			except KeyError: pass
+		return (self.heap[0]).key, (self.heap[0]).value
 
-	cpdef tuple popitem(self):
-		cdef Entry entry = self.popentry()
+	def popitem(self):
+		entry = self.popentry()
 		return entry.key, entry.value
 
-	cdef inline Entry popentry(self):
-		""" like popitem, but avoids tuple construction by returning an Entry
-		object """
-		cdef Entry entry
+	def popentry(self):
+		""" like popitem, but avoids tuple construction """
 		while True:
-			try: entry = <Entry>heappop(self.heap)
+			try: entry = heappop(self.heap)
 			except IndexError: raise KeyError("popitem(): heapdict is empty")
 			if entry.count: break
 		self.length -= 1
 		return entry
 
-	cpdef Edge replace(self, key, Edge value):
+	def replace(self, key, value):
 		""" return current value for key, and also change its value.
 		equivalent to vv = d[k]; d[k] = v; return vv """
-		oldentry = <Entry>self.mapping[key]
-		entry = <Entry>Entry.__new__(Entry)
+		oldentry = self.mapping[key]
+		entry = Entry() #Entry.__new__(Entry)
 		entry.key =  key; entry.value = value; entry.count = oldentry.count
 		self.mapping[key] = entry
 		heappush(self.heap, entry)
 		oldentry.count = INVALID
-		return <Edge>oldentry.value
+		return oldentry.value
 
 	def pop(self, key):
-		cdef Entry entry
 		if key is None:
 			return self.popentry().value
-		entry = <Entry>(self.mapping.pop(key))
+		entry = self.mapping.pop(key)
 		entry.count = INVALID
 		self.length -= 1
 		return entry.value
@@ -202,14 +195,14 @@ cdef class heapdict(dict):
 		self.mapping.clear()
 
 # this is _significantly_ faster than relying on __richcmp__
-cdef inline bint lessthan(Entry a, Entry b):
+def lessthan(a, b):
 	return (a.value.score < b.value.score
 				or (a.value.score == b.value.score and a.count < b.count))
 
 # heap operations (without heapdict's reheapify, adapted from heapq)
 
-cdef inline Entry heappop(list heap):
-	cdef Entry entry = <Entry>(heap[0])
+def heappop(heap):
+	entry = (heap[0])
 	if len(heap) == 1:
 		heap.pop()
 	else:
@@ -218,29 +211,28 @@ cdef inline Entry heappop(list heap):
 		siftup(heap, 0)
 	return entry
 
-cdef inline void heappush(list heap, Entry entry):
+def heappush(heap, entry):
 	# place at the end and swap with parents until heap invariant holds
 	heap.append(entry)
 	siftdown(heap, 0, len(heap) - 1)
 
-cdef inline void heapify(list heap):
+def heapify(heap):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
-	cdef int i
 	for i in range(len(heap) // 2, -1, -1):
 		siftup(heap, i)
 
-cdef inline list nsmallest(int n, list items):
+def nsmallest(n, items):
 	""" return an _unsorted_ list of the n best items in a list """
 	if len(items) > 1:
 		quickfindFirstK(items, 0, len(items) - 1, n)
 	return items[:n]
 
-cdef inline void quickfindFirstK(list items, int left, int right, int k):
+def quickfindFirstK(items, left, right, k):
 	""" quicksort k-best selection """
 	# select pivotIndex between left and right
 	# middle between left & right
-	cdef int pivot = left + (right - left) // 2
-	cdef int pivotNewIndex = partition(items, left, right, pivot)
+	pivot = left + (right - left) // 2
+	pivotNewIndex = partition(items, left, right, pivot)
 	if pivotNewIndex > k:
 		if pivotNewIndex - 1 > left:
 			# new condition
@@ -249,36 +241,36 @@ cdef inline void quickfindFirstK(list items, int left, int right, int k):
 		if right > pivotNewIndex + 1:
 			quickfindFirstK(items, pivotNewIndex + 1, right, k)
 
-cdef inline int partition(list items, int left, int right, int pivot):
-	cdef Edge pivotValue = <Edge>(items[pivot])
+def partition(items, left, right, pivot):
+	pivotValue = items[pivot]
 	# Move pivot to end
 	items[pivot], items[right] = items[right], items[pivot]
-	cdef int i, storeIndex = left
+	storeIndex = left
 	for i in range(left, right):
-		if (<Edge>items[i]).inside < pivotValue.inside:
+		if items[i].inside < pivotValue.inside:
 			items[i], items[storeIndex] = items[storeIndex], items[i]
 			storeIndex += 1
 	# Move pivot to its final place
 	items[storeIndex], items[right] = items[right], items[storeIndex]
 	return storeIndex
 
-cdef inline int _parent(int i):
+def _parent(i):
 	return (i - 1) >> 1
 
-cdef inline int _left(int i):
+def _left(i):
 	return (i << 1) + 1
 
-cdef inline int _right(int i):
+def _right(i):
 	return (i + 1) << 1
 
-cdef inline void siftup(list heap, int pos):
-	cdef int startpos = pos, childpos = _left(pos), rightpos
-	cdef int endpos = len(heap)
-	cdef Entry newitem = heap[pos]
+def siftup(heap, pos):
+	startpos = pos; childpos = _left(pos)
+	endpos = len(heap)
+	newitem = heap[pos]
 	while childpos < endpos:
 		rightpos = childpos + 1
-		if (rightpos < endpos and not lessthan(<Entry>(heap[childpos]),
-												<Entry>(heap[rightpos]))):
+		if (rightpos < endpos and not lessthan((heap[childpos]),
+												(heap[rightpos]))):
 			childpos = rightpos
 		heap[pos] = heap[childpos]
 		pos = childpos
@@ -286,12 +278,11 @@ cdef inline void siftup(list heap, int pos):
 	heap[pos] = newitem
 	siftdown(heap, startpos, pos)
 
-cdef inline void siftdown(list heap, int startpos, int pos):
-	cdef int parentpos
-	cdef Entry parent, newitem = heap[pos]
+def siftdown(heap, startpos, pos):
+	newitem = heap[pos]
 	while pos > startpos:
 		parentpos = _parent(pos)
-		parent = <Entry>(heap[parentpos])
+		parent = (heap[parentpos])
 		if lessthan(newitem, parent):
 			heap[pos] = parent
 			pos = parentpos

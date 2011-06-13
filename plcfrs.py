@@ -18,8 +18,8 @@ except:
 	from bit import *
 NONE = ChartItem(0, 0)
 
-def parse(sent, grammar, tags=None, start=None, exhaustive=False,
-	estimate=None, prune=None, prunetoid={}):
+def parse(sent, grammar, tags=[], start=1, exhaustive=False,
+		estimate=(), prune={}, prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -68,24 +68,21 @@ def parse(sent, grammar, tags=None, start=None, exhaustive=False,
 		Cx[Ih.label][Ih] = edge
 
 		if Ih == goal:
-			if not exhaustive: break
-		else:
-			for I1h, edge in deduced_from(Ih, edge.inside, Cx,
-										unary, lbinary, rbinary):
-				if I1h not in C and I1h not in A:
-					# haven't seen this item before, add to agenda
-					A[I1h] = edge
-					C[I1h] = []
-				elif I1h in A:
-					# either item has lower score, update agenda,
-					# or extend chart
-					if edge < A[I1h]:
-						C[I1h].append(A[I1h])
-						A[I1h] = edge
-					else:
-						C[I1h].append(edge)
-				else:
-					C[I1h].append(edge)
+			if exhaustive: continue
+			else: break
+		for I1h, edge in deduced_from(Ih, edge.inside, Cx,
+									unary, lbinary, rbinary):
+			if I1h not in C and I1h not in A:
+				# haven't seen this item before, add to agenda
+				A[I1h] = edge
+				C[I1h] = []
+			elif I1h in A and edge < A[I1h]:
+				# either item has lower score, update agenda,
+				# or extend chart
+				C[I1h].append(A[I1h])
+				A[I1h] = edge
+			else:
+				C[I1h].append(edge)
 
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
@@ -117,11 +114,15 @@ def concat(rule, lvec, rvec):
 	rpos = nextset(rvec, 0)
 	# if there are no gaps in lvec and rvec, and the yieldfunction is the
 	# concatenation of two elements, then this should be quicker
-	if False and (lvec >> nextunset(lvec, lpos) == 0 and rvec >> nextunset(rvec, rpos) == 0):
-		if rule == ((0, 1),):
-			return bitminmax(lvec, rvec)
-		elif rule == ((1, 0),):
-			return bitminmax(rvec, lvec)
+	if False and (lvec >> nextunset(lvec, lpos) == 0
+		and rvec >> nextunset(rvec, rpos) == 0):
+		if rule.lengths[0] == 2 and rule.args.length == 1:
+			if rule.args[0] == 0b10:
+				return bitminmax(lvec, rvec)
+			elif rule.args[0] == 0b01:
+				return bitminmax(rvec, lvec)
+		#else:
+		#	return False
 	#this algorithm taken from rparse FastYFComposer.
 	for x in range(len(rule.args)):
 		m = rule.lengths[x] - 1
@@ -310,7 +311,6 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 		derivations = [(a,b) for a, b in derivations if b == derivations[0][1]]
 	#parsetrees = defaultdict(float)
 	parsetrees = defaultdict(list)
-	prob, maxprob
 	m = 0
 	for deriv, prob in derivations:
 		m += 1
@@ -361,7 +361,7 @@ def pprint_chart(chart, sent, tolabel):
 
 def do(sent, grammar):
 	print "sentence", sent
-	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
+	chart, start = parse(sent.split(), grammar, [], grammar.toid['S'], False, None, None, None)
 	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if start == ChartItem(0, 0):
 		print "no parse"

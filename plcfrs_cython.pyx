@@ -294,10 +294,10 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	# concatenation of two elements, then this should be quicker
 	if False and (lvec >> nextunset(lvec, lpos) == 0
 		and rvec >> nextunset(rvec, rpos) == 0):
-		if rule.lengths._B[0] == 2 and rule.args.length == 1:
-			if rule.args._B[0] == 0b10:
+		if rule._lengths[0] == 2 and rule.args.length == 1:
+			if rule._args[0] == 0b10:
 				return bitminmax(lvec, rvec)
-			elif rule.args._B[0] == 0b01:
+			elif rule._args[0] == 0b01:
 				return bitminmax(rvec, lvec)
 		#else:
 		#	return False
@@ -305,9 +305,9 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	cdef unsigned int n, x
 	cdef unsigned char arg, m
 	for x in range(rule.args.length):
-		m = rule.lengths._B[x] - 1
+		m = rule._lengths[x] - 1
 		for n in range(m + 1):
-			if testbitshort(rule.args._H[x], n):
+			if testbitshort(rule._args[x], n):
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
 				# ones on this side

@@ -1,5 +1,6 @@
 
 class ChartItem:
+	__slots__ = ('label', 'vec', '_hash')
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
@@ -24,6 +25,7 @@ class ChartItem:
 		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
 
 class Edge:
+	__slots__ = ('score', 'inside', 'prob', 'left', 'right', '_hash')
 	def __init__(self, score, inside, prob, left, right):
 		self.score = score; self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
@@ -59,11 +61,15 @@ class Edge:
 					self.left, repr(self.right) if self.right else 'None')
 
 class Terminal:
+	__slots__ = ('lhs', 'rhs1', 'rhs2', 'word', 'prob')
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
 
 class Rule:
+	__slots__ = ('lhs', 'rhs1', 'rhs2', 'prob',
+				'args', 'lengths', '_args', 'lengths')
 	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.args = args; self.lengths = lengths; self.prob = prob
+		self._args = self.args; self._lengths = self.lengths

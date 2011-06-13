@@ -13,10 +13,7 @@ try:
 except:
 	from bit import *
 	from numpy import * # to import isfinite and isnan
-	# NB the array stuff for yield functions is not compatible with plain
-	# python, remove instances of '._B' and '._H' to make it work
-	# e.g., rule.args._H[n] => rule.args[n]
-	# also, replace new_ChartItem() and new_Edge with ChartItem() and Edge()
+	exec "new_ChartItem = ChartItem; new_Edge = Edge" in globals()
 else:
 	np.import_array()
 
@@ -104,10 +101,9 @@ def simpleinside(grammar, maxlen, insidescores):
 	# anything not reached so far gets probability zero:
 	insidescores[np.isnan(insidescores)] = infinity
 
-def outsidelr(grammar, insidescores, maxlen, goal, outside):
+def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 	""" Compute the outside SX simple LR estimate in top down fashion. """
 	bylhs = grammar.bylhs
-	arity = grammar.arity
 	infinity = np.inf
 	agenda = heapdict()
 	nil = new_ChartItem(0, 0)
@@ -139,19 +135,19 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 				# X -> A B
 				addgaps = addright = 0
 				stopaddright = False
-				for m in range(arity._B[rule.lhs] - 1, -1, -1):
-					for n in range(rule.lengths._B[m] - 1, -1, -1):
+				for m in range(arity[rule.lhs] - 1, -1, -1):
+					for n in range(rule._lengths[m] - 1, -1, -1):
 						if (not stopaddright
-							and not testbitshort(rule.args._H[m], n)):
+							and not testbitshort(rule._args[m], n)):
 							stopaddright = True
-						if testbitshort(rule.args._H[m], n):
+						if testbitshort(rule._args[m], n):
 							if not stopaddright:
 								addright += 1
 							else:
 								addgaps += 1
 
-				leftarity = arity._B[rule.rhs1]
-				rightarity = arity._B[rule.rhs2]
+				leftarity = arity[rule.rhs1]
+				rightarity = arity[rule.rhs2]
 				# binary-left (A is left)
 				for lenA in range(leftarity, I.length - rightarity + 1):
 					lenB = I.length - lenA
@@ -176,23 +172,23 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 				# X -> B A
 				addgaps = addleft = addright = 0
 				stopaddleft = False
-				for m in range(arity._B[rule.lhs]):
-					for n in range(rule.lengths._B[m]):
-						if not stopaddleft and testbitshort(rule.args._H[m], n):
+				for m in range(arity[rule.lhs]):
+					for n in range(rule._lengths[m]):
+						if not stopaddleft and testbitshort(rule._args[m], n):
 							stopaddleft = True
-						if not testbitshort(rule.args._H[m], n):
+						if not testbitshort(rule._args[m], n):
 							if stopaddleft:
 								addgaps += 1
 							else:
 								addleft += 1
 
 				stopaddright = False
-				for m in range(arity._B[rule.lhs] - 1, -1, -1):
-					for n in range(rule.lengths._B[m] - 1, -1, -1):
+				for m in range(arity[rule.lhs] - 1, -1, -1):
+					for n in range(rule._lengths[m] - 1, -1, -1):
 						if (not stopaddright
-							and testbitshort(rule.args._H[m], n)):
+							and testbitshort(rule._args[m], n)):
 							stopaddright = True
-						if not testbitshort(rule.args._H[m], n):
+						if not testbitshort(rule._args[m], n):
 							if not stopaddright:
 								addright += 1
 				addgaps -= addright
@@ -297,7 +293,7 @@ def getestimates(grammar, maxlen, goal):
 	print "getting inside"
 	simpleinside(grammar, maxlen, insidescores)
 	print "getting outside"
-	outsidelr(grammar, insidescores, maxlen, goal, outside)
+	outsidelr(grammar, insidescores, maxlen, goal, grammar.arity, outside)
 	return outside
 
 def testestimates(grammar, maxlen, goal):
@@ -328,7 +324,7 @@ def testestimates(grammar, maxlen, goal):
 	outside = np.array([np.inf], dtype='d').repeat(
 				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
 				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
-	outsidelr(grammar, insidescores, maxlen, goal, outside)
+	outsidelr(grammar, insidescores, maxlen, goal, grammar.arity, outside)
 	#print outside
 	cnt = 0
 	for an, a in enumerate(outside):
@@ -360,7 +356,8 @@ def main():
 	trees = [Tree("(ROOT (A (a 0) (b 1)))"), Tree("(ROOT (a 0) (B (b 1) (c 2)))")]
 	grammar = newsplitgrammar(induce_srcg(trees, [["a","b"], ["a","b","c"]]))
 	testestimates(grammar, 4, grammar.toid["ROOT"])
-	from plcfrs_cython import parse, pprint_chart
+	try: from plcfrs_cython import parse, pprint_chart
+	except: from plcfrs import parse, pprint_chart
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	chart, start = parse(["a","b","a"], grammar, estimate=None)
 	pprint_chart(chart,  ["a","b","a"], grammar.tolabel)
