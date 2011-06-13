@@ -122,8 +122,8 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 		x = entry.value.score
 		if agenda.length % 1000 == 0:
 			print "agenda size: %dk top: %r %g %s" % (
-				agenda.length / 1000, I, x, grammar.tolabel[I.state])
-		if x != outside[I.state, I.length, I.lr, I.gaps]: continue
+				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state])
+		assert x == outside[I.state, I.length, I.lr, I.gaps]
 		totlen = I.length + I.lr + I.gaps
 		rules = bylhs[I.state]
 		for rule in rules:
@@ -153,26 +153,25 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 				leftarity = arity._B[rule.rhs1]
 				rightarity = arity._B[rule.rhs2]
 				# binary-left (A is left)
-				if leftarity < I.length > rightarity:
-					for lenA in range(leftarity, I.length - rightarity + 1):
-						lenB = I.length - lenA
-						if 0 <= lenB <= maxlen:
-							insidescore = insidescores[rule.rhs2, lenB]
-						else:
-							insidescore = infinity
-						for lr in range(I.lr, I.lr + lenB + 1):
-							if addright == 0 and lr != I.lr: continue
-							for ga in range(leftarity - 1, totlen + 1):
-								if (lenA + lr + ga == I.length + I.lr + I.gaps
-									and ga >= addgaps):
-									score = x + insidescore + rule.prob
-									if lenA+lr+ga > maxlen: current = 0.0
-									else: current = outside[rule.rhs1, lenA, lr, ga]
-									if score < current:
-										agenda.setifbetter(
-											new_Item(rule.rhs1, lenA, lr, ga),
-											new_Edge(score, 0.0, 0.0, nil, nil))
-										outside[rule.rhs1, lenA, lr, ga] = score
+				for lenA in range(leftarity, I.length - rightarity + 1):
+					lenB = I.length - lenA
+					if 0 <= lenB <= maxlen:
+						insidescore = insidescores[rule.rhs2, lenB]
+					else:
+						insidescore = infinity
+					for lr in range(I.lr, I.lr + lenB + 1):
+						if addright == 0 and lr != I.lr: continue
+						for ga in range(leftarity - 1, totlen + 1):
+							if (lenA + lr + ga == I.length + I.lr + I.gaps
+								and ga >= addgaps):
+								score = x + insidescore + rule.prob
+								if lenA+lr+ga > maxlen: current = 0.0
+								else: current = outside[rule.rhs1, lenA, lr, ga]
+								if score < current:
+									agenda.setitem(
+										new_Item(rule.rhs1, lenA, lr, ga),
+										new_Edge(score, 0.0, 0.0, nil, nil))
+									outside[rule.rhs1, lenA, lr, ga] = score
 
 				# X -> B A
 				addgaps = addleft = addright = 0
@@ -199,25 +198,24 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 				addgaps -= addright
 				
 				# binary-right (A is right)
-				if rightarity < I.length > leftarity:
-					for lenA in range(rightarity, I.length - leftarity + 1):
-						lenB = I.length - lenA
-						if 0 <= lenB <= maxlen:
-							insidescore = insidescores[rule.rhs1, lenB]
-						else:
-							insidescore = infinity
-						for lr in range(I.lr, I.lr + lenB + 1):
-							for ga in range(rightarity - 1, totlen + 1):
-								if (lenA + lr + ga == I.length + I.lr + I.gaps
-									and ga >= addgaps):
-									score = x + insidescore + rule.prob
-									if lenA+lr+ga > maxlen: current = 0.0
-									else: current = outside[rule.rhs2, lenA, lr, ga]
-									if score < current:
-										agenda.setifbetter(
-											new_Item(rule.rhs2, lenA, lr, ga),
-											new_Edge(score, 0.0, 0.0, nil, nil))
-										outside[rule.rhs2, lenA, lr, ga] = score
+				for lenA in range(rightarity, I.length - leftarity + 1):
+					lenB = I.length - lenA
+					if 0 <= lenB <= maxlen:
+						insidescore = insidescores[rule.rhs1, lenB]
+					else:
+						insidescore = infinity
+					for lr in range(I.lr, I.lr + lenB + 1):
+						for ga in range(rightarity - 1, totlen + 1):
+							if (lenA + lr + ga == I.length + I.lr + I.gaps
+								and ga >= addgaps):
+								score = x + insidescore + rule.prob
+								if lenA+lr+ga > maxlen: current = 0.0
+								else: current = outside[rule.rhs2, lenA, lr, ga]
+								if score < current:
+									agenda.setitem(
+										new_Item(rule.rhs2, lenA, lr, ga),
+										new_Edge(score, 0.0, 0.0, nil, nil))
+									outside[rule.rhs2, lenA, lr, ga] = score
 
 def inside(grammar, maxlen, insidescores):
 	""" Compute inside estimate in bottom-up fashion (not used)."""
@@ -303,6 +301,7 @@ def getestimates(grammar, maxlen, goal):
 	return outside
 
 def testestimates(grammar, maxlen, goal):
+	infinity = np.inf
 	print "getting inside"
 	insidescores = inside(grammar, maxlen, {})
 	for a in insidescores:
@@ -312,31 +311,35 @@ def testestimates(grammar, maxlen, goal):
 			#print a,b
 			#print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print len(insidescores) * sum(map(len, insidescores.values())), '\n'
-	insidescores = np.array([infinity], dtype='d').repeat(
+	insidescores = np.array([np.NAN], dtype='d').repeat(
 				len(grammar.bylhs) * (maxlen+1)).reshape(
 				(len(grammar.bylhs), (maxlen+1)))
 	simpleinside(grammar, maxlen, insidescores)
-	print insidescores
-	for a in range(maxlen):
-		print grammar.tolabel[goal], "len", a, "=", exp(-insidescores[goal, a])
-	# what to test here?
+	print "inside"
+	for an, a in enumerate(insidescores):
+		for bn, b in enumerate(a):
+			if b < infinity:
+				print grammar.tolabel[an], "len", bn, "=", exp(-b)
+	#print insidescores
+	#for a in range(maxlen):
+	#	print grammar.tolabel[goal], "len", a, "=", exp(-insidescores[goal, a])
 
 	print "getting outside"
 	outside = np.array([np.inf], dtype='d').repeat(
 				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
 				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
-	infinity = np.inf
-	print outside
+	#print outside
 	cnt = 0
-	for an, a in (): # enumerate(outside):
+	for an, a in enumerate(outside):
 		for bn, b in enumerate(a):
 			for cn, c in enumerate(b):
 				for dn, d in enumerate(c):
 					if d < infinity:
-						print grammar.tolabel[an], bn, cn, dn, exp(-d)
+						print grammar.tolabel[an], "length", bn, "lr", cn,
+						print "gaps", dn, "=", exp(-d)
 						cnt += 1
-	#print cnt
+	print cnt
 	print "done"
 	return outside
 
@@ -349,11 +352,19 @@ def main():
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
 	#grammar = newsplitgrammar(dop_srcg_rules(trees, corpus.sents()))
 	grammar = newsplitgrammar(induce_srcg(trees, corpus.sents()))
-	testestimates(grammar, 30, grammar.toid["ROOT"])
+	#testestimates(grammar, 30, grammar.toid["ROOT"])
 	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	#tree.chomsky_normal_form()
 	#sent = "Daruber muss nachgedacht werden".split()
-	#grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
-	#testestimates(grammar, 6, grammar.toid["S"])
+	#grammar = newsplitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
+	trees = [Tree("(ROOT (A (a 0) (b 1)))"), Tree("(ROOT (a 0) (B (b 1) (c 2)))")]
+	grammar = newsplitgrammar(induce_srcg(trees, [["a","b"], ["a","b","c"]]))
+	testestimates(grammar, 4, grammar.toid["ROOT"])
+	from plcfrs_cython import parse, pprint_chart
+	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
+	chart, start = parse(["a","b","a"], grammar, estimate=None)
+	pprint_chart(chart,  ["a","b","a"], grammar.tolabel)
+	chart, start = parse(["a","b","a"], grammar, estimate=(outside, 4))
+	pprint_chart(chart,  ["a","b","a"], grammar.tolabel)
 
 if __name__ == '__main__': main()

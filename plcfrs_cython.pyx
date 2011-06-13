@@ -111,27 +111,27 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			# and give probability of 1
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
 				Ih = new_ChartItem(terminal.lhs, 1 << i)
-				I = new_ChartItem(Epsilon, i)
+				I1h = new_ChartItem(Epsilon, i)
 				z = 0.0 if tags else terminal.prob
 				if doestimate:
 					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
-								terminal.lhs, 1 << i) + z, z, z, I, NONE)
+								terminal.lhs, 1 << i) + z, z, z, I1h, NONE)
 				else:
 					#A[Ih] = new_Edge(0.0, terminal.prob, terminal.prob, I, NONE)
-					A[Ih] = new_Edge(z, z, z, I, NONE)
+					A[Ih] = new_Edge(z, z, z, I1h, NONE)
 				C[Ih] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
-				Ih = new_ChartItem(toid[tags[i]], 1 << i)
-				I = new_ChartItem(Epsilon, i)
-				if doestimate:
-					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
-								terminal.lhs, 1 << i), 0.0, 0.0, I, NONE)
-				else:
-					A[Ih] = new_Edge(0.0, 0.0, 0.0, I, NONE)
-				C[Ih] = []
-				recognized = True
-				continue
+			Ih = new_ChartItem(toid[tags[i]], 1 << i)
+			I1h = new_ChartItem(Epsilon, i)
+			if doestimate:
+				A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
+							terminal.lhs, 1 << i), 0.0, 0.0, I1h, NONE)
+			else:
+				A[Ih] = new_Edge(0.0, 0.0, 0.0, I1h, NONE)
+			C[Ih] = []
+			recognized = True
+			continue
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
 			return C, NONE
@@ -150,11 +150,11 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			x = edge.inside
 
 			# unary
-			l = <list>list_getitem(unary, Ih.label)
 			if doestimate:
 				vec = Ih.vec; length = bitcount(vec); left = nextset(vec, 0)
 				gaps = bitlength(vec) - length - left
-				right = lensent - length - left - gaps; lr = left + right
+				right = lensent - length - left - gaps
+			l = <list>list_getitem(unary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
 				if doestimate:
@@ -172,7 +172,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			l = <list>list_getitem(lbinary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
-				for I1h, e in (<dict>(list_getitem(Cx, rule.rhs2))).iteritems():
+				for I, e in (<dict>(list_getitem(Cx, rule.rhs2))).iteritems():
+					I1h = <ChartItem>I
 					if concat(rule, Ih.vec, I1h.vec):
 						y = (<Edge>e).inside
 						vec = Ih.vec ^ I1h.vec
@@ -194,7 +195,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			l = <list>list_getitem(rbinary, Ih.label)
 			for i in range(list_getsize(l)):
 				rule = <Rule>list_getitem(l, i)
-				for I1h, e in (<dict>(list_getitem(Cx, rule.rhs1))).iteritems():
+				for I, e in (<dict>(list_getitem(Cx, rule.rhs1))).iteritems():
+					I1h = <ChartItem>I
 					if concat(rule, I1h.vec, Ih.vec):
 						y = (<Edge>e).inside
 						vec = I1h.vec ^ Ih.vec

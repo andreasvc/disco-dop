@@ -1,12 +1,14 @@
-import cython
-from containers cimport ChartItem
-from heapdict cimport heapdict
+cimport cython
+from containers cimport ChartItem, Edge, Rule, Terminal
+from agenda cimport heapdict
 
 cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
 	int nextunset(unsigned long vec, int pos)
 	int bitcount(unsigned long vec)
-	bint testbit(unsigned long vec, unsigned long pos)
+	bint testbit(unsigned long vec, int pos)
+	bint testbitc(unsigned char vec, int pos)
+	bint testbitshort(unsigned short vec, int pos)
 	bint bitminmax(unsigned long a, unsigned long b)
 
 @cython.locals(
@@ -15,10 +17,6 @@ cdef extern from "bit.h":
 	lensent=cython.int,
 	y=cython.double,
 	p=cython.double,
-	iscore=cython.double,
-	oscore=cython.double,
-	scores=tuple,
-	rhs=tuple,
 	unary=list,
 	lbinary=list,
 	rbinary=list,
@@ -26,23 +24,24 @@ cdef extern from "bit.h":
 	toid=dict,
 	tolabel=dict,
 	C=dict,
-	Cx=dict,
+	Cx=list,
+	terminal=Terminal,
+	edge=Edge,
 	Ih=ChartItem,
 	I1h=ChartItem,
 	goal=ChartItem,
 	A=heapdict)
-cpdef tuple parse(list sent, grammar, list tags=*, start=*, bint viterbi=*, int n=*, estimate=*)
+cpdef tuple parse(list sent, grammar, list tags=*, start=*, exhaustive=*, estimate=*, prune=*, prunetoid=*)
 
 @cython.locals(
-	z=cython.double,
 	y=cython.double,
+	edge=Edge,
+	rule=Rule,
 	I=cython.int,
 	Ir=cython.ulong,
 	I1h=ChartItem,
-	result=list,
-	rule=tuple,
-	yf=tuple)
-cdef inline list deduced_from(ChartItem Ih, double x, Cx, list unary, list lbinary, list rbinary)
+	result=list)
+cdef inline list deduced_from(ChartItem Ih, double x, list Cx, list unary, list lbinary, list rbinary)
 
 @cython.locals(
 	lpos=cython.int,
@@ -50,10 +49,35 @@ cdef inline list deduced_from(ChartItem Ih, double x, Cx, list unary, list lbina
 	n=cython.int,
 	m=cython.int,
 	b=cython.int)
-cdef inline bint concat(tuple yieldfunction, unsigned long lvec, unsigned long rvec)
+cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec)
 
 @cython.locals(
-	entry=tuple,
-	p=cython.double)
-cpdef samplechart(chart, ChartItem start, dict tolabel)
+	ee=Edge,
+	ee2=Edge,
+	jj=tuple)
+cdef getitems(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outside)
 
+cdef Edge iscore(Edge e)
+
+@cython.locals(
+	edge=Edge,
+	item=ChartItem)
+cdef filter_subtree(start, chart, chart2)
+
+@cython.locals(
+	edge=Edge)
+cpdef mostprobablederivation(chart, start, tolabel)
+
+@cython.locals(
+	edge=Edge)
+cdef getmpd(chart, ChartItem start, tolabel)
+
+@cython.locals(edge=Edge)
+cpdef samplechart(dict chart, ChartItem start, dict tolabel)
+
+@cython.locals(
+	a=ChartItem,
+	edge=Edge)
+cpdef pprint_chart(dict chart, list sent, dict tolabel)
+
+cpdef binrepr(ChartItem a, list sent)

@@ -44,7 +44,7 @@ def main(
 	m = 10000,		#number of derivations to sample/enumerate
 	prune=False,	#whether to use srcg chart to prune parsing of dop
 	sldop_n=7,
-	doestimates=False,
+	doestimates=True,
 	useestimates=True
 	):
 	# Tiger treebank version 2 sample:
@@ -193,9 +193,9 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, 
 			print "SRCG:",
 			begin = time.clock()
 			chart, start = parse([w for w,t in sent], grammar,
-								[t for w,t in sent] if tags else [],
-								grammar.toid[top], prune,
-								(outside, maxlen) if useestimates else None)
+						tags=[t for w,t in sent] if tags else [],
+						start=grammar.toid[top], exhaustive=prune,
+						estimate=(outside, maxlen) if useestimates else None)
 			print time.clock() - begin, "s cpu time elapsed"
 		else: chart = {}; start = False
 		#for a in chart: chart[a].sort()

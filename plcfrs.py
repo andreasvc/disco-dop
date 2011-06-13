@@ -1,22 +1,25 @@
 # probabilistic CKY parser for Simple Range Concatenation Grammars
 # (equivalent to Linear Context-Free Rewriting Systems)
-from math import log, exp
+import re
+from math import log, exp, fsum
 from random import choice
 from itertools import count, groupby
 from operator import itemgetter
 from collections import defaultdict
-import re
-from heapdict import heapdict
 from kbest import lazykbest
-from containers import ChartItem
+from containers import ChartItem, Edge
+try: from agenda import heapdict
+except: exec "from heapdict import heapdict" in globals()
 try:
 	import cython
 	assert cython.compiled
 except:
 	print "plcfrs in non-cython mode"
 	from bit import *
+NONE = ChartItem(0, 0)
 
-def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=None):
+def parse(sent, grammar, tags=None, start=None, exhaustive=False,
+	estimate=None, prune=None, prunetoid={}):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -26,174 +29,197 @@ def parse(sent, grammar, tags=None, start=None, viterbi=False, n=1, estimate=Non
 	lexical = dict(grammar.lexical)
 	toid = dict(grammar.toid)
 	tolabel = dict(grammar.tolabel)
-	if start is None: start = toid['S']
+	if start is None: start = toid['ROOT']
 	goal = ChartItem(start, (1 << len(sent)) - 1)
 	m = maxA = 0
-	C, Cx = {}, {}
+	C = {}
+	Cx = [{} for _ in toid]
 	A = heapdict()
 
 	# scan
 	Epsilon = toid["Epsilon"]
-	for i,w in enumerate(sent):
+	for i, w in enumerate(sent):
 		recognized = False
-		for (rule,yf), z in lexical.get(w, []):
-			if not tags or tags[i] == tolabel[rule[0]].split("@")[0]:
-				Ih = ChartItem(rule[0], 1 << i)
+		for terminal in lexical.get(w, []):
+			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
+				Ih = ChartItem(terminal.lhs, 1 << i)
 				I = ChartItem(Epsilon, i)
+				z = 0.0 if tags else terminal.prob
 				# if gold tags were provided, give them probability of 1
-				A[Ih] = (0.0 if tags else z, 0.0 if tags else z, (I,))
+				A[Ih] = Edge(z, z, z, I, NONE)
+				C[Ih] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 			Ih = ChartItem(toid[tags[i]], 1 << i)
 			I = ChartItem(Epsilon, i)
-			A[Ih] = (0.0, 0.0, (I,))
+			A[Ih] = Edge(0.0, 0.0, 0.0, I, NONE)
+			C[Ih] = []
 			recognized = True
 			continue
 		elif not recognized:
 			print "not covered:", tags[i] if tags else w
+			return C, NONE
+	
 	# parsing
 	while A:
-		Ih, scores = A.popitem()
-		iscore, p, rhs = scores
-		C.setdefault(Ih, []).append(scores)
-		Cx.setdefault(Ih.label, {})[Ih] = iscore
+		Ih, edge = A.popitem()
+		C[Ih].append(edge)
+		assert Ih not in Cx[Ih.label]
+		Cx[Ih.label][Ih] = edge
 
 		if Ih == goal:
-			m += 1
-			if viterbi and n==m: break
+			if not exhaustive: break
 		else:
-			for I1h, scores in deduced_from(Ih, iscore, Cx, unary, lbinary, rbinary):
-				# I1h = new ChartItem that has been derived.
-				# scores: oscore, iscore, p, rhs
-				# 	oscore = estimate of total score
-				#			(outside estimate + inside score up till now)
-				# 	iscore = inside score,
-				# 	p = rule probability,
-				# 	rhs = backpointers to 1 or 2 ChartItems that led here (I1h)
-				# explicit get to avoid inserting spurious keys
-				if I1h not in Cx.get(I1h.label, {}) and I1h not in A:
+			for I1h, edge in deduced_from(Ih, edge.inside, Cx,
+										unary, lbinary, rbinary):
+				if I1h not in C and I1h not in A:
 					# haven't seen this item before, add to agenda
-					A[I1h] = scores
+					A[I1h] = edge
+					C[I1h] = []
 				elif I1h in A:
 					# either item has lower score, update agenda,
 					# or extend chart
-					if scores[0] < A[I1h][0]:
-						C.setdefault(I1h, []).append(A[I1h])
-						A[I1h] = scores
+					if edge < A[I1h]:
+						C[I1h].append(A[I1h])
+						A[I1h] = edge
 					else:
-						C.setdefault(I1h, []).append(scores)
+						C[I1h].append(edge)
 				else:
-					C[I1h].append(scores)
+					C[I1h].append(edge)
+
 		maxA = max(maxA, len(A))
 	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
-	return (C, goal) if goal in C else ({}, ())
+	return (C, goal) if goal in C else (C, NONE)
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
 	I, Ir = Ih.label, Ih.vec
 	result = []
-	for (rule, yf), z in unary[I]:
-		result.append((ChartItem(rule[0], Ir), (x+z, z, (Ih,))))
-	for (rule, yf), z in lbinary[I]:
-		for I1h, y in Cx.get(rule[2], {}).items():
-			if concat(yf, Ir, I1h.vec):
-				result.append((ChartItem(rule[0], Ir ^ I1h.vec),
-								(x + y + z, z, (Ih, I1h))))
-	for (rule, yf), z in rbinary[I]:
-		for I1h, y in Cx.get(rule[1], {}).items():
-			if concat(yf, I1h.vec, Ir):
-				result.append((ChartItem(rule[0], I1h.vec ^ Ir),
-								(x + y + z, z, (I1h, Ih))))
+	for rule in unary[I]:
+		result.append((ChartItem(rule.lhs, Ir),
+			Edge(x+rule.prob, x+rule.prob, rule.prob, Ih, NONE)))
+	for rule in lbinary[I]:
+		for I1h, edge in Cx[rule.rhs2].iteritems():
+			if concat(rule, Ir, I1h.vec):
+				result.append((ChartItem(rule.lhs, Ir ^ I1h.vec),
+					Edge(x+edge.inside+rule.prob, x+edge.inside+rule.prob,
+							rule.prob, Ih, I1h)))
+	for rule in rbinary[I]:
+		for I1h, edge in Cx[rule.rhs1].iteritems():
+			if concat(rule, I1h.vec, Ir):
+				result.append((ChartItem(rule.lhs, I1h.vec ^ Ir),
+					Edge(x+edge.inside+rule.prob, x+edge.inside+rule.prob,
+							rule.prob, I1h, Ih)))
 	return result
 
-def concat(yieldfunction, lvec, rvec):
+def concat(rule, lvec, rvec):
 	if lvec & rvec: return False
 	lpos = nextset(lvec, 0)
 	rpos = nextset(rvec, 0)
 	# if there are no gaps in lvec and rvec, and the yieldfunction is the
 	# concatenation of two elements, then this should be quicker
-	if (lvec >> nextunset(lvec, lpos) == 0 and rvec >> nextunset(rvec, rpos) == 0):
-		if yieldfunction == ((0, 1),):
+	if False and (lvec >> nextunset(lvec, lpos) == 0 and rvec >> nextunset(rvec, rpos) == 0):
+		if rule == ((0, 1),):
 			return bitminmax(lvec, rvec)
-		elif yieldfunction == ((1, 0),):
+		elif rule == ((1, 0),):
 			return bitminmax(rvec, lvec)
 	#this algorithm taken from rparse FastYFComposer.
-	for arg in yieldfunction:
-		m = len(arg) - 1
-		for n, b in enumerate(arg):
-			if b == 0:
+	for x in range(len(rule.args)):
+		m = rule.lengths[x] - 1
+		for n in range(m + 1):
+			if testbitshort(rule.args[x], n):
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
 				# ones on this side
-				if lpos == -1 or (rpos != -1 and rpos <= lpos):
-					return False
-				# jump to next gap
-				lpos = nextunset(lvec, lpos)
-				# there should be a gap if and only if
-				# this is the last element of this argument
-				if rpos != -1 and rpos < lpos: return False
-				if n == m:
-					if testbit(rvec, lpos): return False
-				elif not testbit(rvec, lpos): return False
-				#jump to next argument
-				lpos = nextset(lvec, lpos)
-			elif b == 1:
-				# vice versa to the above
 				if rpos == -1 or (lpos != -1 and lpos <= rpos):
 					return False
+				# jump to next gap
 				rpos = nextunset(rvec, rpos)
-				if lpos != -1 and lpos < rpos: return False
+				if lpos != -1 and lpos < rpos:
+					return False
+				# there should be a gap if and only if
+				# this is the last element of this argument
 				if n == m:
-					if testbit(lvec, rpos): return False
-				elif not testbit(lvec, rpos): return False
+					if testbit(lvec, rpos):
+						return False
+				elif not testbit(lvec, rpos):
+					return False
+				#jump to next argument
 				rpos = nextset(rvec, rpos)
-			else: raise ValueError("non-binary element in yieldfunction")
+			else: #if bit == 0:
+				# vice versa to the above
+				if lpos == -1 or (rpos != -1 and rpos <= lpos):
+					return False
+				lpos = nextunset(lvec, lpos)
+				if rpos != -1 and rpos < lpos:
+					return False
+				if n == m:
+					if testbit(rvec, lpos):
+						return False
+				elif not testbit(rvec, lpos):
+					return False
+				lpos = nextset(lvec, lpos)
+			#else: raise ValueError("non-binary element in yieldfunction")
 	if lpos != -1 or rpos != -1:
 		return False
 	# everything looks all right
 	return True
 
-def filter_subtree(start, chart, newchart):
-	if isinstance(start, int) or newchart[start]:
-		return True
-	else:
-		temp = [(ip, p, rhs) for ip, p, rhs in chart[start]
-				if all(filter_subtree(a, chart, chart2) for a in rhs)]
-		if temp: newchart[start] = temp
-	return start in newchart
+def kbest_outside(chart, start, k):
+	D = {}
+	outside = { start : 0.0 }
+	lazykthbest(start, k, k, D, {}, chart, set())
+	for (e, j), rootedge in D[start]:
+		getitems(e, j, rootedge, D, chart, outside)
+	return outside
+
+def getitems(e, j, rootedge, D, chart, outside):
+	""" Traverse a derivation e,j, noting outside costs relative to its root edge
+	"""
+	if e.left in chart:
+		if e.left in D: (ee, jj), ee2 = D[e.left][j[0]]
+		elif j[0] == 0: jj = (0, 0); ee = ee2 = min(chart[e.left])
+		else: raise ValueError
+		if e.left not in outside:
+			outside[e.left] = rootedge.inside - ee2.inside
+		getitems(ee, jj, rootedge, D, chart, outside)
+	if e.right.label:
+		if e.right in D: (ee, jj), ee2 = D[e.right][j[1]]
+		elif j[1] == 0: jj = (0, 0); ee = ee2 = min(chart[e.right])
+		else: raise ValueError
+		if e.right not in outside:
+			outside[e.right] = rootedge.inside - ee2.inside
+		getitems(ee, jj, rootedge, D, chart, outside)
+
+def iscore(e):
+	e.score = e.inside
+	return e
 
 def filterchart(chart, start):
 	# remove all entries that do not contribute to a complete derivation headed
 	# by "start"
-	newchart = {}
-	filter_subtree(start, chart, newchart)
-	return newchart
+	chart2 = {}
+	filter_subtree(start, chart, chart2)
+	return chart2
 
-def filtercycles(chart, start, visited, current):
-	""" remove @#$%! cycles from chart """
-	visited.add(start)
-	chart[start] = [(ip, p, rhs) for ip, p, rhs in chart[start]
-		if current.isdisjoint(rhs)]
-	for n, (ip, p, rhs) in zip(count(), chart[start])[::-1]:
-		for a in rhs:
-			if a in chart and a not in visited:
-				filtercycles(chart, a, visited, current.union([start, a]))
-			#if a not in chart:
-			#	del chart[start][n]
-			#	break
-	if not len(chart[start]): del chart[start]
-	#return not len(chart[start]):
-
-def filterduplicates(chart):
-	for a in chart:
-		chart[a] = [min(g, key=itemgetter(0)) for k, g
-			in groupby(sorted(chart[a], key=lambda x: hash(x[2])),
-				itemgetter(2))]
+def filter_subtree(start, chart, chart2):
+	chart2[start] = chart[start]
+	for edge in chart[start]:
+		item = edge.left
+		if item.label and item not in chart2:
+			filter_subtree(edge.left, chart, chart2)
+		item = edge.right
+		if item.label and item not in chart2:
+			filter_subtree(edge.right, chart, chart2)
 
 def getviterbi(chart, start, mem):
 	""" recompute the proper viterbi probabilities in a top-down fashion,
 		and sort chart entries according to these probabilities
 		removes zero-probability edges (infinity with log-probabilities)
 		also tracks items visited, for pruning purposes (keys of mem).
+
+		FIXME: not working yet. it seems to be more efficient to do
+		the viterbi thing during parsing -- the log n overhead of
+		the priority queue is small
 	"""
 	probs = []
 	bestprob = 999999 #float('infinity')
@@ -227,82 +253,136 @@ def getviterbi(chart, start, mem):
 	return bestprobs
 
 def samplechart(chart, start, tolabel):
-	iscore, p, entry = choice(chart[start])
-	if len(entry) == 1 and entry[0][0] == 0: # Epsilon
-		return "(%s %d)" % (tolabel[start.label], entry[0][1]), p
-	children = [samplechart(chart, a, tolabel) for a in entry]
-	tree = "(%s %s)" % (tolabel[start.label], " ".join([a for a,b in children]))
-	return tree, p+sum(b for a,b in children)
-	
+	edge = choice(chart[start])
+	if edge.left.label == 0: # == "Epsilon":
+		return "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
+	children = [samplechart(chart, child, tolabel)
+				for child in (edge.left, edge.right) if child.label]
+	tree = "(%s %s)" % (tolabel[start.label],
+							" ".join([a for a,b in children]))
+	return tree, fsum([edge.prob] + [b for a,b in children])
+
+def mostprobablederivation(chart, start, tolabel):
+	edge = min(chart[start])
+	return getmpd(chart, start, tolabel), edge.inside
+
+def getmpd(chart, start, tolabel):
+	edge = min(chart[start])
+	if edge.right.label: #binary
+		return "(%s %s %s)" % (tolabel[start.label],
+					getmpd(chart, edge.left, tolabel),
+					getmpd(chart, edge.right, tolabel))
+	else: #unary or terminal
+		return "(%s %s)" % (tolabel[start.label],
+					getmpd(chart, edge.left, tolabel) if edge.left.label
+									else str(edge.left.vec))
+
 removeids = re.compile("@[0-9]+")
-def mostprobableparse(chart, start, tolabel, n=100, sample=False, both=False):
-	""" sum over n random derivations from chart,
-		return a FreqDist of parse trees, with .max() being the MPP"""
+def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None):
+	""" sum over n random/best derivations from chart,
+		return a dictionary mapping parsetrees to probabilities """
 	print "sample =", sample or both, "kbest =", (not sample) or both,
 	if both:
 		derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
 		derivations.discard(None)
 		derivations.update(lazykbest(chart, start, n, tolabel))
+		#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
 	elif sample:
-		for a,b in chart.items():
-			if not len(b): print "spurious chart entry", a
+		#filtercycles(chart, start, set(), set())
 		derivations = set(samplechart(chart, start, tolabel) for x in range(n))
 		derivations.discard(None)
-		#calculate real parse probabilities according to Goodman's claimed method?
+		#calculate real parse probabilities according to Goodman's claimed
+		#method?
 	else:
-		#derivations = islice(enumchart(chart, start, tolabel), n)
-		derivations = lazykbest(chart, start, n, tolabel)
-	m = 0
+		#mem = {}
+		#filtercycles(chart, start, set(), set())
+		#getviterbi(chart, start, mem)
+		#for a in set(chart.keys()) - set(mem.keys()): del chart[a]
+		#print "pruned chart keys", len(chart), "/ values", sum(map(len, chart.values()))
+		#for a in chart: chart[a].sort(key=itemgetter(0))
+		#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
+		#fixme: set shouldn't be necessary
+		derivations = set(lazykbest(chart, start, n, tolabel))
+		#print len(derivations)
+		#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
+		#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
+	if shortest:
+		derivations = [(a,b) for a, b in derivations if b == derivations[0][1]]
+	#parsetrees = defaultdict(float)
 	parsetrees = defaultdict(list)
+	prob, maxprob
+	m = 0
 	for deriv, prob in derivations:
 		m += 1
+		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
+		#restore linear precedence (disabled, seems to make no difference)
+		#parsetree = Tree(removeids.sub("", deriv))
+		#for a in list(parsetree.subtrees())[::-1]:
+		#	a.sort(key=lambda x: x.leaves())
+		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
+		if shortest:
+			tree = Tree(removeids.sub("", deriv))
+			sent = sorted(tree.leaves(), key=int)
+			rules = induce_srcg([tree], [sent], arity_marks=False)
+			prob = -fsum([secondarymodel[r] for r, w in rules
+											if r[0][1] != 'Epsilon'])
 		parsetrees[removeids.sub("", deriv)].append(-prob)
+	# Adding probabilities in log space
+	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
 	for parsetree in parsetrees:
 		maxprob = max(parsetrees[parsetree])
 		#foo = sum(map(exp, parsetrees[parsetree]))
-		parsetrees[parsetree] = exp(maxprob + log(sum(exp(prob - maxprob) for prob in parsetrees[parsetree])))
-		#assert foo == parsetrees[parsetree]
+		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
+										for prob in parsetrees[parsetree]]))]))
+		#assert log(foo) == parsetrees[parsetree]
 	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
 	return parsetrees
 
+def binrepr(a, sent):
+	return bin(a.vec)[2:].rjust(len(sent), "0")[::-1]
+
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
-	for a in sorted(chart, key=lambda x: bitcount(x[1])):
-		print "%s[%s] =>" % (tolabel[a[0]],
-					(bin(a[1])[:1:-1] + "0" * len(sent))[:len(sent)])
-		for ip,p,b in chart[a]:
-			for c in b:
-				if tolabel[c[0]] == "Epsilon":
-					print "\t", repr(sent[b[0][1]]),
-				else:
-					print "\t%s[%s]" % (tolabel[c[0]],
-						(bin(c[1])[:1:-1] + "0" * len(sent))[:len(sent)]),
-			print "\t",exp(-p)
+	for n, a in sorted((bitcount(a.vec), a) for a in chart):
+		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
+		for edge in chart[a]:
+			print "%g\t%g" % (exp(-edge.inside), exp(-edge.prob)),
+			if edge.left.label:
+				print "\t%s[%s]" % (tolabel[edge.left.label],
+									binrepr(edge.left, sent)),
+			else:
+				print "\t", repr(sent[edge.left.vec]),
+			if edge.right:
+				print "\t%s[%s]" % (tolabel[edge.right.label],
+									binrepr(edge.right, sent)),
+			print
 		print
 
 def do(sent, grammar):
 	print "sentence", sent
-	chart, start = parse(sent.split(), grammar)
+	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
 	pprint_chart(chart, sent.split(), grammar.tolabel)
-	if chart:
-		for a, p in mostprobableparse(chart, start, grammar.tolabel, n=1000).items():
-			print p, a
-	else: print "no parse"
-	print
+	if start == ChartItem(0, 0):
+		print "no parse"
+	else:
+		print "10 best parse trees:"
+		mpp = mostprobableparse(chart, start, grammar.tolabel)
+		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))): print p,a
+		print
 
 def main():
-	from grammar import splitgrammar
-	try: print "compiled", cython.compiled
-	except: print "compiled", False
-	grammar = splitgrammar(
-		[((('S','VP2','VMFIN'),    ((0,1,0),)),  0),
+	from grammar import newsplitgrammar
+	grammar = newsplitgrammar([
+		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
+		((('VP2','VP2'), ((0,),(1,))), log(0.1)),
 		((('PROAV', 'Epsilon'), ('Daruber', ())), 0.0),
 		((('VAINF', 'Epsilon'), ('werden', ())), 0.0),
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
-	print repr(grammar)
+
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
 	do("Daruber muss nachgedacht werden werden werden", grammar)

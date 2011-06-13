@@ -1,6 +1,6 @@
 /* See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html */
 
-// with gcc builtins:(more portable than assembly)
+// with gcc builtins: (more portable than assembly)
 inline int nextset(unsigned long vec, unsigned int pos) {
 	// return next set bit starting from pos, -1 if there is none.
 	//return (vec >> pos) ? pos + __builtin_ctzl(vec >> pos) : -1;

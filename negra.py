@@ -127,8 +127,8 @@ def rindex(l, v):
 
 def unfold(tree):
 	""" Unfold redundancies and perform other transformations introducing
-	more hierarchy in the phrase-structure annotation based on 
-	grammatical functions.
+	more hierarchy in the phrase-structure annotation, based on
+	grammatical functions and syntactic categories.
 	"""
 	original = tree.copy(Tree); current = tree # for debugging
 	# un-flatten PPs
@@ -152,11 +152,13 @@ def unfold(tree):
 		if ac and nk and (len(nk) > 1 or nk[0].node not in "NP PN".split()):
 			pp[:] = ac + [Tree("NP", nk)]
 	# introduce DPs
-	determiners = set("ART".split()) #FIXME: other determiners?
+	#determiners = set("ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT PWS PWAT PWAV".split())
+	determiners = set("ART".split())
 	for np in list(tree.subtrees(lambda n: n.node == "NP")):
 		if np[0].node in determiners:
 			np.node = "DP"
-			if np[1].node != "PN": np[:] = [np[0], Tree("NP", np[1:])]
+			if len(np) > 1 and np[1].node != "PN":
+				np[:] = [np[0], Tree("NP", np[1:])]
 	# introduce finite VP at S level, collect objects and modifiers
 	# introduce new S level for discourse markers
 	newlevel = "DM".split()
@@ -235,7 +237,8 @@ def fold(tree):
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
 		dp.node = "NP"
-		if dp[1].node == "NP": dp[:] = dp[:1] + dp[1][:]
+		if len(dp) > 1 and dp[1].node == "NP":
+			dp[:] = dp[:1] + dp[1][:]
 	# flatten adjunctions
 	#nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
 	#probably_nk = set("AP PIS".split()) | nkonly
@@ -311,21 +314,21 @@ def labelfunc(tree):
 	return tree
 
 def main():
-	from rcgrules import canonicalize
+	from grammar import canonicalize
 	from itertools import count
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 
-	#n = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True)
-	#nn = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True, unfold=True)
+	n = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True)
+	nn = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1", headorder=True, unfold=True)
 	#for a in n.parsed_sents(): print a
 	#for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
 	#for a in n.sents(): print " ".join(a)
 	#for a in n.blocks(): print a
-	n = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=False)
-	nn = NegraCorpusReader("../rparse", "tigerproc\.export", unfold=True)
+	#n = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=False)
+	#nn = NegraCorpusReader("../rparse", "tigerproc\.export", unfold=True)
 	print "\nunfolded"
 	correct = exact = d = 0
 	nk = set(); mo = set()

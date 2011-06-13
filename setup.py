@@ -16,10 +16,9 @@ ext_modules = [
 			["plcfrs_cython.pyx", "plcfrs_cython.pxd"],
 			#extra_compile_args=["-g"],
 			#extra_link_args=["-g"],
-			include_dirs=['.']
 		),
-	Extension("cpq",
-			["cpq.pyx", "cpq.pxd"]
+	Extension("agenda",
+			["agenda.pyx", "agenda.pxd"]
 		),
 	Extension("containers",
 			["containers.pyx", "containers.pxd"]
@@ -44,6 +43,6 @@ for e in ext_modules:
 setup(
 	name = 'plcfrs',
 	cmdclass = {'build_ext': build_ext},
-	include_dirs = [np.get_include()],
+	include_dirs = [np.get_include(), '.'],
 	ext_modules = ext_modules
 )
