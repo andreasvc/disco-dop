@@ -8,8 +8,7 @@ from operator import itemgetter
 from collections import defaultdict
 from kbest import lazykbest
 from containers import ChartItem, Edge
-try: from agenda import heapdict
-except: exec "from heapdict import heapdict" in globals()
+from agenda import heapdict
 try:
 	import cython
 	assert cython.compiled
@@ -44,8 +43,8 @@ def parse(sent, grammar, tags=[], start=1, exhaustive=False,
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
 				Ih = ChartItem(terminal.lhs, 1 << i)
 				I = ChartItem(Epsilon, i)
-				z = 0.0 if tags else terminal.prob
-				# if gold tags were provided, give them probability of 1
+				#z = 0.0 if tags else terminal.prob
+				z = terminal.prob
 				A[Ih] = Edge(z, z, z, I, NONE)
 				C[Ih] = []
 				recognized = True
@@ -85,7 +84,7 @@ def parse(sent, grammar, tags=[], start=1, exhaustive=False,
 				C[I1h].append(edge)
 
 		maxA = max(maxA, len(A))
-	print "max agenda size", maxA, "/ chart keys", len(C), "/ values", sum(map(len, C.values()))
+	print "max agenda size", maxA, "/ chart items", len(C), "/ edges", sum(map(len, C.values())),
 	return (C, goal) if goal in C else (C, NONE)
 
 def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):

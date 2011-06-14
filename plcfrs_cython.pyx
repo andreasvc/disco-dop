@@ -69,7 +69,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef unsigned int lensent = len(sent), blocked = 0, maxlen = 0
 	cdef unsigned int label, newlabel
 	cdef unsigned long vec
-	cdef double x, y
+	cdef double x, y, z
 	cdef Py_ssize_t i
 	cdef bint doprune = False, doestimate = bool(estimate)
 	cdef heapdict A = heapdict()				#the agenda
@@ -112,12 +112,12 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
 				Ih = new_ChartItem(terminal.lhs, 1 << i)
 				I1h = new_ChartItem(Epsilon, i)
-				z = 0.0 if tags else terminal.prob
+				#z = 0.0 if tags else terminal.prob
+				z = terminal.prob
 				if doestimate:
 					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
 								terminal.lhs, 1 << i) + z, z, z, I1h, NONE)
 				else:
-					#A[Ih] = new_Edge(0.0, terminal.prob, terminal.prob, I, NONE)
 					A[Ih] = new_Edge(z, z, z, I1h, NONE)
 				C[Ih] = []
 				recognized = True
@@ -142,7 +142,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
 		append(C[Ih], iscore(edge))
-		assert Ih not in Cx[Ih.label]
+		#assert Ih not in Cx[Ih.label]
 		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			if not exhaustive: break
