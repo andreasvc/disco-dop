@@ -28,8 +28,8 @@ class Item(object):
 			return 0
 		return 1
 	def __repr__(self):
-		return "label=%3d len=%2d lr=%2d gaps=%2d" % (self.state, self.length,
-												self.lr, self.gaps)
+		return "label=%3d len=%2d lr=%2d gaps=%2d" % (
+			self.state, self.length, self.lr, self.gaps)
 
 def new_Item(state, length, lr, gaps):
 	item = Item.__new__(Item)
@@ -51,29 +51,34 @@ def getoutside(outside, maxlen, slen, label, vec):
 def simpleinside(grammar, maxlen, insidescores):
 	""" Compute simple inside estimate in bottom-up fashion.
 	Here vec is actually the length (number of terminals in the yield of
-	the constituent) """
+	the constituent)
+	insidescores is a 4-dimensional matrix initialized with NaN to indicate
+	values that have yet to be computed. """
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = np.inf
 	agenda = heapdict()
 	nil = ChartItem(0, 0)
 
-	for n, rules in enumerate(grammar.bylhs[1:]):
+	for n, rules in enumerate(grammar.bylhs):
+		if n == 0: continue
 		#this is supposed cover all and only preterminals
-		if rules == []:
-			print "preterminal", n+1, grammar.tolabel[n+1]
-			agenda[new_ChartItem(n+1, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+		elif rules == []:
+			print "preterminal", n, grammar.tolabel[n]
+			agenda[new_ChartItem(n, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
 
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value.score
-		# this will be true for NaN, and when x is smaller
-		#insidescores[I.label, I.vec] = min(x, insidescores[I.label, I.vec])
+
+		# This comparison catches the case when insidescores has a higher value
+		# than x, but also when it is NaN, because all comparisons against NaN
+		# are false. Mory explicitly it would be:
 		#if isnan(insidescores[I.label, I.vec]) or x < insidescores[I.label, I.vec]:
 		if not x >= insidescores[I.label, I.vec]:
 			insidescores[I.label, I.vec] = x
-		
+
 		rules = unary[I.label]
 		for rule in rules:
 			if isnan(insidescores[rule.lhs, I.vec]):
@@ -192,7 +197,7 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 							if not stopaddright:
 								addright += 1
 				addgaps -= addright
-				
+
 				# binary-right (A is right)
 				for lenA in range(rightarity, I.length - leftarity + 1):
 					lenB = I.length - lenA
@@ -214,7 +219,8 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 									outside[rule.rhs2, lenA, lr, ga] = score
 
 def inside(grammar, maxlen, insidescores):
-	""" Compute inside estimate in bottom-up fashion (not used)."""
+	""" Compute inside estimate in bottom-up fashion, with
+	full bit vectors (not used)."""
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = float('infinity')
@@ -232,7 +238,7 @@ def inside(grammar, maxlen, insidescores):
 		if I.label not in insidescores: insidescores[I.label] =  {}
 		if x < insidescores[I.label].get(I.vec, infinity):
 			insidescores[I.label][I.vec] = x
-		
+
 		for rule in unary[I.label]:
 			if (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):

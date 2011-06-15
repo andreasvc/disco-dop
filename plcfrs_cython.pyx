@@ -1,36 +1,31 @@
 """ Probabilistic CKY parser for Simple Range Concatenation Grammars
 (equivalent to Linear Context-Free Rewriting Systems)"""
-from cpython cimport PyObject,\
-					PyList_Append as append,\
-					PyList_GET_ITEM as list_getitem,\
-					PyList_GET_SIZE as list_getsize,\
-					PyDict_Contains as dict_contains,\
-					PyDict_GetItem as dict_getitem
 from math import log, exp, fsum, isinf
-from random import choice, randrange
+from array import array
+from random import choice
 from operator import itemgetter
 from itertools import islice, count
 from collections import defaultdict, deque
-from array import array
 import re, gc
-from nltk import FreqDist, Tree
-from grammar import enumchart, induce_srcg
-from containers import ChartItem, Edge, Rule, Terminal
-from agenda import heapdict, Entry
 import numpy as np
+from nltk import FreqDist, Tree
+from agenda import heapdict, Entry
+from grammar import enumchart, induce_srcg
+from estimates import getoutside
+from containers import ChartItem, Edge, Rule, Terminal
 np.import_array()
 
 DEF infinity = float('infinity')
 
 # to avoid overhead of __init__ and __cinit__ constructors
-# belongs in containers but putting it here gives a better chance of successful
-# inlining
+# belongs in containers but putting it here gives
+# a better chance of successful inlining
 cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
 	cdef ChartItem item = ChartItem.__new__(ChartItem)
 	item.label = label; item.vec = vec
 	#item._hash = hash((label, vec))
 	# this is the hash function used for tuples, apparently
-	item._hash = (<unsigned long>1000003 
+	item._hash = (<unsigned long>1000003
 		* ((<unsigned long>1000003 * <unsigned long>0x345678)
 		^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
 	if item._hash == -1: item._hash = -2
@@ -64,7 +59,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef list rules, l, prunelist = range(len(toid))
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
-	cdef dict kbestoutside
+	cdef dict k
 	cdef unsigned int maxA = 0, length = 0, left = 0, right = 0, gaps = 0
 	cdef unsigned int lensent = len(sent), blocked = 0, maxlen = 0
 	cdef unsigned int label, newlabel
@@ -89,16 +84,15 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 
 	if prune:
 		doprune = True
-		kbestoutside = kbest_outside(prune, goal, 100)
+		k = kbest_outside(prune, goal, 100)
 		l = [{} for a in prunetoid]
 		for Ih in prune:
-			l[Ih.label][Ih.vec] = kbestoutside.get(Ih, infinity)
+			l[Ih.label][Ih.vec] = k.get(Ih, infinity)
 		for a, label in toid.iteritems():
 			newlabel = prunetoid[a.split("@")[0]]
 			prunelist[label] = l[newlabel]
 		print 'pruning with %d nonterminals, %d items' % (
 				len(filter(None, prunelist)), len(prune))
-				# ?? sum(len(filter(lambda x: x < infinity, ll.values()) for ll in l))
 	gc.disable()
 
 	# scan
@@ -112,7 +106,6 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
 				Ih = new_ChartItem(terminal.lhs, 1 << i)
 				I1h = new_ChartItem(Epsilon, i)
-				#z = 0.0 if tags else terminal.prob
 				z = terminal.prob
 				if doestimate:
 					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
@@ -142,7 +135,6 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		Ih = <ChartItem>entry.key
 		edge = <Edge>entry.value
 		append(C[Ih], iscore(edge))
-		#assert Ih not in Cx[Ih.label]
 		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			if not exhaustive: break
@@ -167,7 +159,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 										rule.prob, Ih, NONE)
 				process_edge(new_ChartItem(rule.lhs, Ih.vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
-			
+
 			# binary left
 			l = <list>list_getitem(lbinary, Ih.label)
 			for i in range(list_getsize(l)):
@@ -281,26 +273,28 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 	False		#lvec and rvec are not contiguous
 	>>> concat(((1,), (0,)), lvec, rvec)
 	False		#rvec's span should come after lvec's span
-	
+
 	update: yield functions are now encoded in binary arrays:
-		( (0, 1, 0), (1, 0) ) ==> array('B', [0b010, 0b01])
+		( (0, 1, 0), (1, 0) ) ==> array('H', [0b010, 0b01])
 							and lengths: array('B', [3, 2])
 		NB: note reversal due to the way binary numbers are represented
+		the least significant bit (rightmost) corresponds to the lowest
+		index in the sentence / constituent (leftmost).
 	"""
 	if lvec & rvec: return False
 	cdef int lpos = nextset(lvec, 0)
 	cdef int rpos = nextset(rvec, 0)
+
 	# if there are no gaps in lvec and rvec, and the yieldfunction is the
 	# concatenation of two elements, then this should be quicker
-	if False and (lvec >> nextunset(lvec, lpos) == 0
-		and rvec >> nextunset(rvec, rpos) == 0):
-		if rule._lengths[0] == 2 and rule.args.length == 1:
+	if rule._lengths[0] == 2 and rule.args.length == 1:
+		if (lvec >> nextunset(lvec, lpos) == 0
+			and rvec >> nextunset(rvec, rpos) == 0):
 			if rule._args[0] == 0b10:
 				return bitminmax(lvec, rvec)
 			elif rule._args[0] == 0b01:
 				return bitminmax(rvec, lvec)
-		#else:
-		#	return False
+
 	#this algorithm taken from rparse, FastYFComposer.
 	cdef unsigned int n, x
 	cdef unsigned char arg, m
@@ -339,13 +333,12 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 				elif not testbit(rvec, lpos):
 					return False
 				lpos = nextset(lvec, lpos)
-			#else: raise ValueError("non-binary element in yieldfunction")
-	if lpos != -1 or rpos != -1:
-		return False
-	# everything looks all right
-	return True
+	# success if we've reached the end of both left and right vector
+	return lpos == rpos == -1
 
 cdef dict kbest_outside(dict chart, ChartItem start, int k):
+	""" produce a dictionary of ChartItems with the best outside score
+	according to the k-best derivations in a chart. """
 	D = {}
 	outside = { start : 0.0 }
 	lazykthbest(start, k, k, D, {}, chart, set())
@@ -372,12 +365,13 @@ cdef void getitems(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outs
 		getitems(<Edge>ee, jj, rootedge, D, chart, outside)
 
 cdef inline Edge iscore(Edge e):
+	""" Replace estimate with inside probability """
 	e.score = e.inside
 	return e
 
 def filterchart(chart, start):
-	# remove all entries that do not contribute to a complete derivation headed
-	# by "start"
+	""" remove all entries that do not contribute to a complete derivation headed
+	by "start" """
 	chart2 = {}
 	filter_subtree(start, <dict>chart, chart2)
 	return chart2
@@ -468,47 +462,31 @@ removeids = re.compile("@[0-9]+")
 def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None):
 	""" sum over n random/best derivations from chart,
 		return a dictionary mapping parsetrees to probabilities """
-	print "sample =", sample or both, "kbest =", (not sample) or both,
-	if both:
-		derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
-		derivations.discard(None)
-		derivations.update(lazykbest(chart, start, n, tolabel))
-		#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
-	elif sample:
-		#filtercycles(chart, start, set(), set())
-		derivations = set(samplechart(chart, start, tolabel) for x in range(n))
-		derivations.discard(None)
-		#calculate real parse probabilities according to Goodman's claimed
-		#method?
-	else:
-		#mem = {}
-		#filtercycles(chart, start, set(), set())
-		#getviterbi(chart, start, mem)
-		#for a in set(chart.keys()) - set(mem.keys()): del chart[a]
-		#print "pruned chart keys", len(chart), "/ values", sum(map(len, chart.values()))
-		#for a in chart: chart[a].sort(key=itemgetter(0))
-		#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
-		#fixme: set shouldn't be necessary
-		derivations = set(lazykbest(chart, start, n, tolabel))
-		#print len(derivations)
-		#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
-		#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
-	if shortest:
-		derivations = [(a,b) for a, b in derivations if b == derivations[0][1]]
-	#cdef dict parsetrees = <dict>defaultdict(float)
 	cdef dict parsetrees = <dict>defaultdict(list)
 	cdef double prob, maxprob
 	cdef int m = 0
-	#cdef str deriv, tree
+	print "sample =", sample or both, "kbest =", (not sample) or both,
+	derivations = set()
+	if sample or both:
+		derivations = set(samplechart(chart, start, tolabel) for x in range(n))
+		derivations.discard(None)
+	if not sample or both:
+		derivations.update(lazykbest(chart, start, n, tolabel))
+	if shortest:
+		derivations = [(a,b) for a, b in derivations if b == derivations[0][1]]
 	for deriv, prob in derivations:
 		m += 1
+		# simple way of adding probabilities (too easy):
 		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
-		#restore linear precedence (disabled, seems to make no difference)
+		# restore linear precedence (disabled, seems to make no difference):
 		#parsetree = Tree(removeids.sub("", deriv))
 		#for a in list(parsetree.subtrees())[::-1]:
 		#	a.sort(key=lambda x: x.leaves())
 		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
 		if shortest:
+			# calculate the derivation probability in a different model.
+			# because we don't keep track of which rules have been used,
+			# read off the rules from the derivation ...
 			tree = Tree(removeids.sub("", deriv))
 			sent = sorted(tree.leaves(), key=int)
 			rules = induce_srcg([tree], [sent], arity_marks=False)
@@ -520,10 +498,8 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
 	for parsetree in parsetrees:
 		maxprob = max(parsetrees[parsetree])
-		#foo = sum(map(exp, parsetrees[parsetree]))
 		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
 										for prob in parsetrees[parsetree]]))]))
-		#assert log(foo) == parsetrees[parsetree]
 	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
 	return parsetrees
 
