@@ -1,6 +1,6 @@
 """ Probabilistic CKY parser for Simple Range Concatenation Grammars
 (equivalent to Linear Context-Free Rewriting Systems)"""
-from math import log, exp, fsum, isinf
+from math import log, exp, fsum
 from array import array
 from random import choice
 from operator import itemgetter
@@ -11,7 +11,7 @@ import numpy as np
 from nltk import FreqDist, Tree
 from agenda import heapdict, Entry
 from grammar import enumchart, induce_srcg
-from estimates import getoutside
+from estimates cimport getoutside
 from containers import ChartItem, Edge, Rule, Terminal
 np.import_array()
 
@@ -60,10 +60,10 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
 	cdef dict k
-	cdef unsigned int maxA = 0, length = 0, left = 0, right = 0, gaps = 0
+	cdef unsigned int length = 0, left = 0, right = 0, gaps = 0
 	cdef unsigned int lensent = len(sent), blocked = 0, maxlen = 0
 	cdef unsigned int label, newlabel
-	cdef unsigned long vec
+	cdef unsigned long vec, maxA = 0
 	cdef double x, y, z
 	cdef Py_ssize_t i
 	cdef bint doprune = False, doestimate = bool(estimate)
@@ -76,21 +76,23 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef np.ndarray[np.double_t, ndim=4] outside
 
 	if start == None: start = toid["ROOT"]
+	goal = new_ChartItem(start, (1 << len(sent)) - 1)
+
 	if doestimate:
 		outside, maxlen = estimate
 		assert len(grammar.bylhs) == len(outside)
 		assert lensent <= maxlen
-	goal = new_ChartItem(start, (1 << len(sent)) - 1)
 
 	if prune:
 		doprune = True
-		k = kbest_outside(prune, goal, 100)
+		k = kbest_outside(prune, goal, 500)
 		l = [{} for a in prunetoid]
 		for Ih in prune:
 			l[Ih.label][Ih.vec] = k.get(Ih, infinity)
+		# construct a table mapping each nonterminal A or A@x
+		# to the outside score for A in the chart to prune with
 		for a, label in toid.iteritems():
-			newlabel = prunetoid[a.split("@")[0]]
-			prunelist[label] = l[newlabel]
+			prunelist[label] = l[prunetoid[a.split("@")[0]]]
 		print 'pruning with %d nonterminals, %d items' % (
 				len(filter(None, prunelist)), len(prune))
 	gc.disable()
@@ -101,27 +103,22 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		recognized = False
 		for terminal in lexical.get(w, []):
 			# if we are given gold tags, make sure we only allow matching
-			# tags - after removing addresses introduced by the DOP reduction, 
-			# and give probability of 1
+			# tags - after removing addresses introduced by the DOP reduction
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
 				Ih = new_ChartItem(terminal.lhs, 1 << i)
 				I1h = new_ChartItem(Epsilon, i)
 				z = terminal.prob
-				if doestimate:
-					A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
-								terminal.lhs, 1 << i) + z, z, z, I1h, NONE)
-				else:
-					A[Ih] = new_Edge(z, z, z, I1h, NONE)
+				y = getoutside(outside, maxlen, lensent,
+							Ih.label, Ih.vec) if doestimate else 0.0
+				A[Ih] = new_Edge(z + y, z, z, I1h, NONE)
 				C[Ih] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 			Ih = new_ChartItem(toid[tags[i]], 1 << i)
 			I1h = new_ChartItem(Epsilon, i)
-			if doestimate:
-				A[Ih] = new_Edge(getoutside(outside, maxlen, lensent,
-							terminal.lhs, 1 << i), 0.0, 0.0, I1h, NONE)
-			else:
-				A[Ih] = new_Edge(0.0, 0.0, 0.0, I1h, NONE)
+			y = getoutside(outside, maxlen, lensent,
+						Ih.label, Ih.vec) if doestimate else 0.0
+			A[Ih] = new_Edge(y, 0.0, 0.0, I1h, NONE)
 			C[Ih] = []
 			recognized = True
 			continue
@@ -206,7 +203,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 								A, C, Cx, doprune, prunelist, lensent, &blocked)
 
-		maxA = max(maxA, len(A))
+		if A.length > maxA: maxA = A.length
 	print "max agenda size %d, now %d, chart items %d (%d), edges %d, blocked %d" % (
 				maxA, len(A), len(C), len(filter(None, Cx)),
 					sum(map(len, C.values())), blocked),
@@ -224,7 +221,8 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 		if doprune:
 			outside = dict_getitem(<object>list_getitem(prunelist,
 											newitem.label), newitem.vec)
-			if outside==NULL or newedge.inside+<double><object>outside > 300.0:
+			if outside==NULL or isinf(<double><object>outside):
+				#or newedge.inside+<double><object>outside > 300.0:
 				blocked[0] += 1
 				return
 		elif newedge.score > 300.0:
@@ -287,7 +285,7 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 
 	# if there are no gaps in lvec and rvec, and the yieldfunction is the
 	# concatenation of two elements, then this should be quicker
-	if rule._lengths[0] == 2 and rule.args.length == 1:
+	if False and rule._lengths[0] == 2 and rule.args.length == 1:
 		if (lvec >> nextunset(lvec, lpos) == 0
 			and rvec >> nextunset(rvec, rpos) == 0):
 			if rule._args[0] == 0b10:

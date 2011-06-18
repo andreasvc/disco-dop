@@ -250,7 +250,8 @@ def newsplitgrammar(grammar):
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
 	object. """
-	assert len(yf) <= 8 and all(len(a) <= 16 for a in yf)
+	assert len(yf) <= 8
+	assert all(len(a) <= 16 for a in yf)
 	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
 	# 'H' for 16 bits unsigned (short), 'B' for 8 bits unsigned (char)
 	return array('H', initializer), array('B', map(len, yf))
@@ -538,15 +539,24 @@ def testgrammar(grammar):
 	else: print "All left hand sides sum to 1"
 
 def bracketings(tree):
-	return frozenset((a.node, frozenset(a.leaves())) for a in tree.subtrees() if a.height() > 2)
+	""" Return the labeled set of bracketings for a tree: 
+	for each nonterminal node, the set will contain a tuple with the label and
+	the set of terminals which it dominates.
+	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"))
+	frozenset([('VP', frozenset(['0', '2'])),
+				('S', frozenset(['1', '0', '2']))])
+	"""
+	return frozenset( (a.node, frozenset(a.leaves()) )
+				for a in tree.subtrees() if isinstance(a[0], Tree))
 
 def printbrackets(brackets):
-	#return ", ".join("%s[%s]" % (a, ",".join(map(str, sorted(b)))) for a,b in brackets)
-	return ", ".join("%s[%s]" % (a, ",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
-					if len(x) > 1 else str(x[0]), ranges(sorted(b))))) for a,b in brackets)
+	return ", ".join("%s[%s]" % (a,
+					",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
+					if len(x) > 1 else str(x[0]), ranges(sorted(b)))))
+					for a,b in brackets)
 
 def harmean(seq):
-	try: return float(len([a for a in seq if a])) / sum(1/a if a else 0 for a in seq)
+	try: return len([a for a in seq if a]) / sum(1./a if a else 0. for a in seq)
 	except: return "zerodiv"
 
 def mean(seq):
@@ -685,5 +695,5 @@ if __name__ == '__main__':
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	if attempted and not fail: print "%d doctests succeeded!" % attempted
 	main()
+	if attempted and not fail: print "%d doctests succeeded!" % attempted

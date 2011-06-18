@@ -1,4 +1,9 @@
 from containers cimport Edge
+from cpython cimport PyList_Append as append,\
+					PyList_GET_ITEM as list_getitem,\
+					PyList_GET_SIZE as list_getsize,\
+					PyDict_Contains as dict_contains,\
+					PyDict_GetItem as dict_getitem
 
 cdef class Entry:
 	cdef object key
@@ -15,7 +20,7 @@ cdef class heapdict(dict):
 	cdef inline void setitem(heapdict self, key, Edge value)
 	cdef inline void setifbetter(heapdict self, key, Edge value)
 	cdef inline bint contains(heapdict self, key)
+	cdef inline Edge replace(heapdict self, object key, Edge value)
 	cpdef tuple popitem(heapdict self)
-	cpdef inline Edge replace(heapdict self, object key, Edge value)
 
 cdef inline list nsmallest(int n, list items)

@@ -166,16 +166,16 @@ cdef class heapdict(dict):
 		object """
 		cdef Entry entry
 		while True:
-			try: entry = <Entry>heappop(self.heap)
-			except IndexError: raise KeyError("popitem(): heapdict is empty")
+			entry = <Entry>heappop(self.heap)
 			if entry.count: break
+		del self.mapping[entry.key]
 		self.length -= 1
 		return entry
 
-	cpdef Edge replace(self, key, Edge value):
+	cdef Edge replace(self, key, Edge value):
 		""" return current value for key, and also change its value.
 		equivalent to vv = d[k]; d[k] = v; return vv """
-		oldentry = <Entry>self.mapping[key]
+		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
 		entry.key =  key; entry.value = value; entry.count = oldentry.count
 		self.mapping[key] = entry
@@ -207,60 +207,63 @@ cdef inline bint lessthan(Entry a, Entry b):
 				or (a.value.score == b.value.score and a.count < b.count))
 
 # heap operations (without heapdict's reheapify, adapted from heapq)
-
 cdef inline Entry heappop(list heap):
-	cdef Entry entry = <Entry>(heap[0])
-	if len(heap) == 1:
-		heap.pop()
+	cdef Py_ssize_t n = list_getsize(heap)
+	cdef Entry entry
+	if n == 0:
+		raise IndexError("pop from empty heap")
+	elif n == 1:
+		entry = <Entry>heap.pop()
 	else:
 		#replace first element with last element and restore heap invariant
+		entry = <Entry>(list_getitem(heap, 0))
 		heap[0] = heap.pop()
 		siftup(heap, 0)
 	return entry
 
 cdef inline void heappush(list heap, Entry entry):
 	# place at the end and swap with parents until heap invariant holds
-	heap.append(entry)
-	siftdown(heap, 0, len(heap) - 1)
+	append(heap, entry)
+	siftdown(heap, 0, list_getsize(heap) - 1)
 
 cdef inline void heapify(list heap):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
 	cdef int i
-	for i in range(len(heap) // 2, -1, -1):
+	for i in range(list_getsize(heap) // 2, -1, -1):
 		siftup(heap, i)
 
 cdef inline list nsmallest(int n, list items):
 	""" return an _unsorted_ list of the n best items in a list """
 	if len(items) > 1:
-		quickfindFirstK(items, 0, len(items) - 1, n)
+		quickfindfirstk(items, 0, len(items) - 1, n)
 	return items[:n]
 
-cdef inline void quickfindFirstK(list items, int left, int right, int k):
+cdef inline void quickfindfirstk(list items, int left, int right, int k):
 	""" quicksort k-best selection """
 	# select pivotIndex between left and right
 	# middle between left & right
 	cdef int pivot = left + (right - left) // 2
-	cdef int pivotNewIndex = partition(items, left, right, pivot)
-	if pivotNewIndex > k:
-		if pivotNewIndex - 1 > left:
+	cdef int pivotnewindex = partition(items, left, right, pivot)
+	if pivotnewindex > k:
+		if pivotnewindex - 1 > left:
 			# new condition
-			quickfindFirstK(items, left, pivotNewIndex - 1, k)
-	elif pivotNewIndex < k:
-		if right > pivotNewIndex + 1:
-			quickfindFirstK(items, pivotNewIndex + 1, right, k)
+			quickfindfirstk(items, left, pivotnewindex - 1, k)
+	elif pivotnewindex < k:
+		if right > pivotnewindex + 1:
+			quickfindfirstk(items, pivotnewindex + 1, right, k)
 
 cdef inline int partition(list items, int left, int right, int pivot):
-	cdef Edge pivotValue = <Edge>(items[pivot])
+	cdef Edge pivotvalue = <Edge>(items[pivot])
 	# Move pivot to end
 	items[pivot], items[right] = items[right], items[pivot]
-	cdef int i, storeIndex = left
+	cdef int i, storeindex = left
 	for i in range(left, right):
-		if (<Edge>items[i]).inside < pivotValue.inside:
-			items[i], items[storeIndex] = items[storeIndex], items[i]
-			storeIndex += 1
+		if (<Edge>items[i]).inside < pivotvalue.inside:
+			items[i], items[storeindex] = items[storeindex], items[i]
+			storeindex += 1
 	# Move pivot to its final place
-	items[storeIndex], items[right] = items[right], items[storeIndex]
-	return storeIndex
+	items[storeindex], items[right] = items[right], items[storeindex]
+	return storeindex
 
 cdef inline int _parent(int i):
 	return (i - 1) >> 1
@@ -273,14 +276,15 @@ cdef inline int _right(int i):
 
 cdef inline void siftup(list heap, int pos):
 	cdef int startpos = pos, childpos = _left(pos), rightpos
-	cdef int endpos = len(heap)
-	cdef Entry newitem = heap[pos]
+	cdef int endpos = list_getsize(heap)
+	cdef Entry newitem = <Entry>list_getitem(heap, pos)
 	while childpos < endpos:
 		rightpos = childpos + 1
-		if (rightpos < endpos and not lessthan(<Entry>(heap[childpos]),
-												<Entry>(heap[rightpos]))):
+		if (rightpos < endpos and not
+			lessthan(<Entry>(list_getitem(heap, childpos)),
+					<Entry>(list_getitem(heap, rightpos)))):
 			childpos = rightpos
-		heap[pos] = heap[childpos]
+		heap[pos] = <Entry>list_getitem(heap, childpos)
 		pos = childpos
 		childpos = _left(pos)
 	heap[pos] = newitem
@@ -288,10 +292,10 @@ cdef inline void siftup(list heap, int pos):
 
 cdef inline void siftdown(list heap, int startpos, int pos):
 	cdef int parentpos
-	cdef Entry parent, newitem = heap[pos]
+	cdef Entry parent, newitem = <Entry>list_getitem(heap, pos)
 	while pos > startpos:
 		parentpos = _parent(pos)
-		parent = <Entry>(heap[parentpos])
+		parent = <Entry>list_getitem(heap, parentpos)
 		if lessthan(newitem, parent):
 			heap[pos] = parent
 			pos = parentpos

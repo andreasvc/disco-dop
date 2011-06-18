@@ -299,18 +299,40 @@ def fanout(tree):
 def complexityfanout(tree):
 	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
 
-def minimalbinarization(tree, score, sep="|"):
-	""" Gildea (2009): Optimal parsing strategies for linear context-free
-	rewriting systems Expects an immutable tree where the terminals are
-	integers corresponding to indices.
+def minimalbinarization(tree, score, sep="|", head=None):
+	"""
+	Implementation of Gildea (2009): Optimal parsing strategies for linear
+	context-free rewriting systems.
+	Expects an immutable tree where the terminals are integers corresponding to
+	indices.
 
-	>>> minimalbinarization(ImmutableTree("NP", [ImmutableTree("ART", [0]), ImmutableTree("ADJ", [1]), ImmutableTree("NN", [2])]), complexityfanout)
-	ImmutableTree('NP', [ImmutableTree('ART', [0]), ImmutableTree('NP|<ADJ-NN>', [ImmutableTree('ADJ', [1]), ImmutableTree('NN', [2])])])
+	tree is the tree for which the optimal binarization of its top production
+	will be searched. score is a function from binarized trees to some value,
+	where lower is better (the value can be numeric or a tuple or anything
+	else which supports comparisons)
+
+	>>> tree=ImmutableTree.parse("(NP (ART 0) (ADJ 2) (NN 1))", parse_leaf=int)
+	>>> print minimalbinarization(tree, complexityfanout)
+	(NP (NP|<ART-NN> (ART 0) (NN 1)) (ADJ 2))
+
+	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
+	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
+	>>> head = ImmutableTree("C", [2])
+	>>> print minimalbinarization(tree, complexityfanout, head=head)
+	(X (X|<A-B-C-D> (X|<A-B-C> (A 0) (X|<B-C> (B 1) (C 2))) (D 3)) (E 4))
+
+	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
+	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
+	>>> head = ImmutableTree("C", [5])
+	>>> print minimalbinarization(tree, complexityfanout, head=head)
+	(X (X|<A-B-C-D> (X|<A-B-C> (A 0) (X|<B-C> (B 1) (C 2))) (D 3)) (E 5))
 	"""
 	def newproduction(a, b):
+		""" return a new `production' (here a tree) combining a and b """
+		# swap a and b according to linear precedence
 		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
-		if (min(chain(*(y for x,y in nonterms[a]))) >
-				min(chain(*(y for x,y in nonterms[b])))): a, b = b, a
+		if (min(z for x, y in nonterms[a] for z in y) >
+			min(z for x, y in nonterms[b] for z in y)): a, b = b, a
 		newlabel = "%s%s<%s>" % (tree.node, sep, "-".join(x.node for x,y
 				in sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])))
 		return ImmutableTree(newlabel, [a, b])
@@ -318,31 +340,47 @@ def minimalbinarization(tree, score, sep="|"):
 	workingset = set()
 	agenda = []
 	nonterms = {}
-	goal = set((a, tuple(a.leaves())) for a in tree)
-	for a in tree:
-		workingset.add((score(a), a))
-		heappush(agenda, (score(a), a))
-		nonterms[a] = set([(a, tuple(a.leaves()))])
+	goal = frozenset((a, tuple(a.leaves())) for a in tree)
+	if head:
+		# head driven binarization:
+		# add all non-head nodes to the working set,
+		# add all combination of non-head nodes with head to agenda
+		# caveat: Gildea (2011) shows that this problem is NP hard.
+		for a in (a for a in tree if a != head):
+			workingset.add((score(a), a))
+			nonterms[a] = frozenset([(a, tuple(a.leaves()))])
+		nonterms[head] = frozenset([(head, tuple(head.leaves()))])
+		for a in (a for a in tree if a != head):
+			p = newproduction(a, head); x = score(p)
+			workingset.add((x, p))
+			heappush(agenda, (x, p))
+			nonterms[p] = nonterms[a] | nonterms[head]
+	else:
+		for a in tree:
+			workingset.add((score(a), a))
+			heappush(agenda, (score(a), a))
+			nonterms[a] = frozenset([(a, tuple(a.leaves()))])
 	while agenda:
-		x, px = heappop(agenda)
-		if (x, px) not in workingset: continue
-		if nonterms[px] == goal:
-			px = ImmutableTree(tree.node, px[:])
-			return px
+		x, p = item = heappop(agenda)
+		if item not in workingset: continue
+		if nonterms[p] == goal:
+			p = ImmutableTree(tree.node, p[:])
+			return p
 		for y, p1 in list(workingset):
-			if (y, p1) not in workingset or nonterms[px] & nonterms[p1]:
+			if (y, p1) not in workingset or nonterms[p] & nonterms[p1]:
 				continue
-			p2 = newproduction(px, p1)
-			p2nonterms = nonterms[px] | nonterms[p1]
+			p2 = newproduction(p, p1)
+			p2nonterms = nonterms[p] | nonterms[p1]
 			x2 = score(p2)
-			inferior = [(y, p2x) for y, p2x in workingset
-							if nonterms[p2x] == p2nonterms and x2 < y]
+			# enumerate binarizations which dominate the same subset 
+			# of the right hand side, but have a lower score
+			inferior = set((z, p3) for z, p3 in workingset
+							if nonterms[p3] == p2nonterms and x2 < z)
 			if inferior or p2nonterms not in nonterms.values():
 				workingset.add((x2, p2))
 				heappush(agenda, (x2, p2))
-			for a in inferior:
-				workingset.discard(a)
-				del nonterms[a[1]]
+			workingset -= inferior
+			for _, p3 in inferior: del nonterms[p3]
 			nonterms[p2] = p2nonterms
 
 def binarizetree(tree, sep="|"):
@@ -415,7 +453,7 @@ if __name__ == '__main__':
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	#demo()
 	if attempted and not fail: print "%d doctests succeeded!" % attempted
-	demo()
 
 __all__ = ["collinize", "un_collinize", "collapse_unary"]

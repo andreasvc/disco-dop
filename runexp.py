@@ -26,7 +26,7 @@ def main(
 	srcg = True,
 	dop = True,
 	unfolded = False,
-	maxlen = 15,  # max number of words for sentences in training & test corpus
+	maxlen = 25,  # max number of words for sentences in training & test corpus
 	bintype = "collinize", # choices: collinize, nltk, optimal
 	estimator = "sl-dop", # choices: dop1, ewe, shortest, sl-dop
 	factor = "right",
@@ -34,15 +34,15 @@ def main(
 	h = 1,
 	minMarkov = 3,
 	tailmarker = "",
-	train = 7200,
-	maxsent = 360,	# number of sentences to parse
+	#train = 7200, maxsent = 360,	# number of sentences to parse
+	train = 0.9, maxsent = 9999999,	# number of sentences to parse
 	sample = False,
 	both = False,
 	arity_marks = True,
 	arity_marks_before_bin = False,
 	interpolate = 1.0,
 	wrong_interpolate = False,
-	m = 1000,		#number of derivations to sample/enumerate
+	m = 10000,		#number of derivations to sample/enumerate
 	prune=True,	#whether to use srcg chart to prune parsing of dop
 	sldop_n=7,
 	doestimates=False,
@@ -55,21 +55,21 @@ def main(
 
 	assert bintype in ("optimal", "collinize", "nltk")
 	assert estimator in ("dop1", "ewe", "shortest", "sl-dop")
-	if isinstance(train, float):
-		train = int(train * len(corpus.sents()))
-	if train > 7200:
+	if isinstance(train, float) or train > 7200:
 		corpus = NegraCorpusReader("../rparse", "tigerprocfull.export",
 			headorder=(bintype=="collinize"), headfinal=True,
 			headreverse=False, unfold=unfolded)
 	else:
-		corpus = NegraCorpusReader("../rparse", "tigerprocfull.export",
+		corpus = NegraCorpusReader("../rparse", "tigerproc.export",
 			headorder=(bintype=="collinize"), headfinal=True,
 			headreverse=False, unfold=unfolded)
+	if isinstance(train, float):
+		train = int(train * len(corpus.sents()))
 	trees, sents, blocks = corpus.parsed_sents()[:train], corpus.sents()[:train], corpus.blocks()[:train]
 	trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent[1]) <= maxlen])
 	# parse training corpus as a "soundness check"
 	#test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-	if train > 7200:
+	if isinstance(train, float) or train > 7200:
 		test = NegraCorpusReader("../rparse", "tigerprocfull.export")
 	else:
 		test = NegraCorpusReader("../rparse", "tigerproc.export")
