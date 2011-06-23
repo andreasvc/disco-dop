@@ -294,14 +294,22 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 
 @memoize
 def fanout(tree):
-	return len(rangeheads(sorted(tree.leaves()))) if isinstance(tree, Tree) else 1
+	if not isinstance(tree, Tree): return 1
+	return len(rangeheads(sorted(tree.leaves())))
 
 def complexityfanout(tree):
 	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
 
+def fanoutcomplexity(tree):
+	return (fanout(tree), fanout(tree) + sum(map(fanout, tree)))
+
+def random(tree):
+	from random import randint
+	return randint(1, 25),
+
 def minimalbinarization(tree, score, sep="|", head=None):
 	"""
-	Implementation of Gildea (2009): Optimal parsing strategies for linear
+	Implementation of Gildea (2010): Optimal parsing strategies for linear
 	context-free rewriting systems.
 	Expects an immutable tree where the terminals are integers corresponding to
 	indices.
@@ -325,7 +333,16 @@ def minimalbinarization(tree, score, sep="|", head=None):
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
 	>>> head = ImmutableTree("C", [5])
 	>>> print minimalbinarization(tree, complexityfanout, head=head)
-	(X (X|<A-B-C-D> (X|<A-B-C> (A 0) (X|<B-C> (B 1) (C 2))) (D 3)) (E 5))
+	(X (X|<A-C-D-E> (A 0) (X|<C-D-E> (X|<C-D> (C 5) (D 7)) (E 8))) (B 3))
+
+	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))"
+	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
+	>>> a = minimalbinarization(tree, complexityfanout)
+	>>> b = minimalbinarization(tree, fanoutcomplexity)
+	>>> print max(map(complexityfanout, a.subtrees()))
+	(14, 6)
+	>>> print max(map(complexityfanout, b.subtrees()))
+	(15, 5)
 	"""
 	def newproduction(a, b):
 		""" return a new `production' (here a tree) combining a and b """
@@ -371,17 +388,17 @@ def minimalbinarization(tree, score, sep="|", head=None):
 				continue
 			p2 = newproduction(p, p1)
 			p2nonterms = nonterms[p] | nonterms[p1]
-			x2 = score(p2)
+			x2 = tuple(max(a) for a in zip(score(p2), y, x))
 			# enumerate binarizations which dominate the same subset 
 			# of the right hand side, but have a lower score
 			inferior = set((z, p3) for z, p3 in workingset
 							if nonterms[p3] == p2nonterms and x2 < z)
 			if inferior or p2nonterms not in nonterms.values():
+				workingset -= inferior
 				workingset.add((x2, p2))
 				heappush(agenda, (x2, p2))
-			workingset -= inferior
-			for _, p3 in inferior: del nonterms[p3]
-			nonterms[p2] = p2nonterms
+				nonterms[p2] = p2nonterms
+				for _, p3 in inferior: del nonterms[p3]
 
 def binarizetree(tree, sep="|"):
 	""" Recursively binarize a tree. Tree needs to be immutable."""
