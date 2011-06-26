@@ -12,7 +12,7 @@ the symbolic backbone.
   PCFG-reductions
   Sangati & Zuidema (to appear), Double DOP
 - k-best list: Huang & Chiang (2005), Better k-best parsing
-- optimal binarization: Gildea (2009), Optimal parsing strategies for linear
+- optimal binarization: Gildea (2010), Optimal parsing strategies for linear
   context-free rewriting systems
 
 
