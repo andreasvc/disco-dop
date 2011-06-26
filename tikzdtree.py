@@ -37,7 +37,7 @@ def tikzdtree(tree, sent):
 	# to the left and right alternately, until an empty cell is found.
 	for n in range(depth - 1, -1, -1):
 		nodes = sorted(a for a in positions if len(a) == n)
-		for m in nodes:
+		for m in reversed(nodes):
 			if isinstance(tree[m], Tree):
 				if len(tree[m]) == 1: continue
 				#l = [a*scale for a in tree[m].leaves()]
@@ -62,9 +62,12 @@ def tikzdtree(tree, sent):
 			shift = 0
 			if n+1 < len(matrix) and children[m]:
 				pivot = min(children[m])
-				if (set(a[:-1] for a in matrix[n+1][:pivot] if a) &
-				(set(a[:-1] for a in matrix[n+1][pivot:] if a and a[:-1] != i))):
+				print matrix[n+scale]
+				print set(a[:-1] for a in matrix[n+scale][:pivot] if a and a[:-1] != i), set(a[:-1] for a in matrix[n+scale][pivot:] if a and a[:-1] != i)
+				if (set(a[:-1] for a in matrix[n+scale][:pivot] if a and a[:-1] != i) &
+				(set(a[:-1] for a in matrix[n+scale][pivot:] if a and a[:-1] != i))):
 					shift = 1
+					print "shift"
 			matrix[n * scale + shift][i] = m
 			children[m[:-1]].append(i)
 
