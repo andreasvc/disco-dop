@@ -2,18 +2,18 @@ from nltk import Tree, ImmutableTree
 from collections import defaultdict
 def label(tree, sent):
 	if isinstance(tree, Tree): return tree.node.replace("$", r"\$").replace("[", "(")
-	else: return "\\waysmall %s" % sent[int(tree)]
+	else: return "\\fontsize{4}{5}\\selectfont %s" % sent[int(tree)]
 
 def tikzdtree(tree, sent):
 	for a in list(tree.subtrees(lambda n: isinstance(n[0], Tree)))[::-1]:
 		a.sort(key=lambda n: n.leaves())
-	result = [r"\font\waysmall=cmr10 at 4pt",
-	r"\begin{tikzpicture}[scale=0.5,"
+	result = [r"\begin{tikzpicture}[scale=0.5,"
 	r"	cross line/.style={preaction={draw=white, -, line width=6pt}}]",
 	r"\tiny", r"\path"]
 	scale = 2
 	count = 0
 	ids = {}
+	crossed = set()
 	zeroindex = 0 if 0 in tree.leaves() else 1
 	positions = tree.treepositions()
 	depth = max(map(len, positions)) + 1
@@ -37,7 +37,7 @@ def tikzdtree(tree, sent):
 	# to the left and right alternately, until an empty cell is found.
 	for n in range(depth - 1, -1, -1):
 		nodes = sorted(a for a in positions if len(a) == n)
-		for m in reversed(nodes):
+		for m in nodes[::-1]:
 			if isinstance(tree[m], Tree):
 				if len(tree[m]) == 1: continue
 				#l = [a*scale for a in tree[m].leaves()]
@@ -62,12 +62,12 @@ def tikzdtree(tree, sent):
 			shift = 0
 			if n+1 < len(matrix) and children[m]:
 				pivot = min(children[m])
-				print matrix[n+scale]
-				print set(a[:-1] for a in matrix[n+scale][:pivot] if a and a[:-1] != i), set(a[:-1] for a in matrix[n+scale][pivot:] if a and a[:-1] != i)
-				if (set(a[:-1] for a in matrix[n+scale][:pivot] if a and a[:-1] != i) &
-				(set(a[:-1] for a in matrix[n+scale][pivot:] if a and a[:-1] != i))):
+				#print m, tree[m].node, (n+1)*scale, children[m], matrix[(n+1)*scale]
+				print set(a[:-1] for a in matrix[(n+1)*scale][:pivot] if a and a[:-1] != i) & set(a[:-1] for a in matrix[(n+1)*scale][pivot:] if a and a[:-1] != i)
+				if (set(a[:-1] for a in matrix[(n+1)*scale][:pivot] if a and a[:-1] != i) &
+				(set(a[:-1] for a in matrix[(n+1)*scale][pivot:] if a and a[:-1] != i))):
 					shift = 1
-					print "shift"
+					crossed.add(m)
 			matrix[n * scale + shift][i] = m
 			children[m[:-1]].append(i)
 
@@ -97,16 +97,14 @@ def tikzdtree(tree, sent):
 	result += [";"]
 
 	# write branches from node to node
-	for i in positions:
+	for i in set(positions) - crossed:
 		if not isinstance(tree[i], Tree): continue
 		shift = -0.5
-		for n, x in enumerate(matrix):
-			try: m = x.index(i)
-			except: pass
-		if (n+1 < len(matrix) and
-			set(a[:-1] for a in matrix[n+1][:m] if a) &
-			(set(a[:-1] for a in matrix[n+1][m+1:] if a and a[:-1] != i))):
-			shift -= 0.25
+		for j, child in enumerate(tree[i]):
+			result.append("\draw (%s) -- +(0, %g) -| (%s);"
+				% (ids[i], shift, ids[i + (j,)]))
+	for i in crossed:
+		shift = -0.5
 		for j, child in enumerate(tree[i]):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s) -- +(0, %g) -| (%s);"
