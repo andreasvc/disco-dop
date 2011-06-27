@@ -62,8 +62,6 @@ def tikzdtree(tree, sent):
 			shift = 0
 			if n+1 < len(matrix) and children[m]:
 				pivot = min(children[m])
-				#print m, tree[m].node, (n+1)*scale, children[m], matrix[(n+1)*scale]
-				print set(a[:-1] for a in matrix[(n+1)*scale][:pivot] if a and a[:-1] != i) & set(a[:-1] for a in matrix[(n+1)*scale][pivot:] if a and a[:-1] != i)
 				if (set(a[:-1] for a in matrix[(n+1)*scale][:pivot] if a and a[:-1] != i) &
 				(set(a[:-1] for a in matrix[(n+1)*scale][pivot:] if a and a[:-1] != i))):
 					shift = 1
@@ -97,15 +95,11 @@ def tikzdtree(tree, sent):
 	result += [";"]
 
 	# write branches from node to node
-	for i in set(positions) - crossed:
+	for i in reversed(positions):
 		if not isinstance(tree[i], Tree): continue
+		iscrossed = any(a[:-1] == i for a in crossed)
 		shift = -0.5
-		for j, child in enumerate(tree[i]):
-			result.append("\draw (%s) -- +(0, %g) -| (%s);"
-				% (ids[i], shift, ids[i + (j,)]))
-	for i in crossed:
-		shift = -0.5
-		for j, child in enumerate(tree[i]):
+		for j, child in enumerate(tree[i] if iscrossed else ()):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s) -- +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
