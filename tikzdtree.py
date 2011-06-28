@@ -1,15 +1,20 @@
 from nltk import Tree, ImmutableTree
 from collections import defaultdict
+import codecs
 def label(tree, sent):
-	if isinstance(tree, Tree): return tree.node.replace("$", r"\$").replace("[", "(")
-	else: return "\\fontsize{4}{5}\\selectfont %s" % sent[int(tree)]
+	if isinstance(tree, Tree):
+		return tree.node.replace("$", r"\$").replace("[", "(").replace("<","{").replace(">","}").replace("-",",").replace("|","_")
+	else: return "%s" % sent[int(tree)]
+	#"\\fontsize{4}{5}\\selectfont"
 
 def tikzdtree(tree, sent):
+	#assert len(tree.leaves()) == len(sent)
+	#assert sorted(tree.leaves()) == range(len(sent))
 	for a in list(tree.subtrees(lambda n: isinstance(n[0], Tree)))[::-1]:
 		a.sort(key=lambda n: n.leaves())
 	result = [r"\begin{tikzpicture}[scale=0.5,"
 	r"	cross line/.style={preaction={draw=white, -, line width=6pt}}]",
-	r"\tiny", r"\path"]
+	r"\tiny\sffamily", r"\path"]
 	scale = 2
 	count = 0
 	ids = {}
@@ -25,12 +30,14 @@ def tikzdtree(tree, sent):
 		nodes = sorted(a for a in positions if len(a) == n)
 		for m in nodes:
 			if isinstance(tree[m], Tree) and len(tree[m]) == 1:
-				i = tree[m].leaves()[0] - zeroindex
+				#i = tree[m].leaves()[0] - zeroindex
+				l = [a*scale for a in tree[m].leaves()]
+				i = min(l) + (max(l) - min(l)) / 2
 				if not isinstance(tree[m][0], Tree):
-					matrix[(depth - 2) * scale][i * scale] = m
+					matrix[(depth - 2) * scale][i] = m
 				else:
-					matrix[n * scale][i * scale] = m
-				children[m[:-1]].append(i * scale)
+					matrix[n * scale][i] = m
+				children[m[:-1]].append(i)
 
 	# add other nodes centered on their children, 
 	# if the center is already taken, back off
@@ -40,8 +47,8 @@ def tikzdtree(tree, sent):
 		for m in nodes[::-1]:
 			if isinstance(tree[m], Tree):
 				if len(tree[m]) == 1: continue
-				#l = [a*scale for a in tree[m].leaves()]
-				l = [a for a in children[m]]
+				l = [a*scale for a in tree[m].leaves()]
+				#l = [a for a in children[m]]
 				center = min(l) + (max(l) - min(l)) / 2
 				i = j = center
 			else:
@@ -50,9 +57,13 @@ def tikzdtree(tree, sent):
 				children[m[:-1]].append(i)
 				continue
 			while i < scale * len(sent) or j > zeroindex:
-				if i < scale * len(sent) and not matrix[n*scale][i]:
+				if (i < scale * len(sent) and not matrix[n*scale][i]
+					and (not matrix[-scale][i]
+					or matrix[-scale][i][:len(m)] == m)):
 					break
-				if j > zeroindex and not matrix[n*scale][j]:
+				if (j > zeroindex and not matrix[n*scale][j]
+					and (not matrix[-scale][i]
+					or matrix[-scale][i][:len(m)] == m)):
 					i = j
 					break
 				i += 1
@@ -113,16 +124,17 @@ def main():
 	from itertools import count
 	trees = """(S (NP (NN 1) (EX 3)) (VP (VB 0) (JJ 2)))
 	(ROOT (S (ADV 0) (VVFIN 1) (VP (PP (APPR 2) (PIAT 3) (NN 4)) (NP (ART 8) (NN 9)) (VZ (PTKZU 10) (VVINF 11))) (NP (AP (PTKNEG 5) (ADJA 6)) (NN 7))) ($. 12))
+	(ROOT (S (S|<NP> (NP (AP (PTKNEG 5) (ADJA 6)) (NN 7)) (S|<VP> (VP (VP|<PP> (PP (PP|<NN> (NN 4) (PP|<PIAT> (PIAT 3) (PP|<APPR> (APPR 2))))) (VP|<NP> (NP (ART 8) (NN 9)) (VP|<VZ> (VZ (PTKZU 10) (VVINF 11)))))) (S|<ADV> (ADV 0) (S|<VVFIN> (VVFIN 1)))))) ($. 12))
 	(ROOT (S (ADV 0) (VVFIN 1) (NP (PDAT 2) (NN 3)) (PTKNEG 4) (PP (APPRART 5) (NN 6) (NP (ART 7) (ADJA 8) (NN 9)))) ($. 10))"""
 	sents = """is/VB Mary/PN happy/JJ there/EX
+	Vielmehr/ADV scheinen/VVFIN auf/APPR allen/PIAT Seiten/NN nicht/PTKNEG unerhebliche/ADJA Eigeninteressen/NN das/ART Handeln/NN zu/PTKZU bestimmen/VVINF ./$.
 	Vielmehr/ADV scheinen/VVFIN auf/APPR allen/PIAT Seiten/NN nicht/PTKNEG unerhebliche/ADJA Eigeninteressen/NN das/ART Handeln/NN zu/PTKZU bestimmen/VVINF ./$.
 	Leider/ADV stehen/VVFIN diese/PDAT Fragen/NN nicht/PTKNEG im/APPRART Vordergrund/NN der/ART augenblicklichen/ADJA Diskussion/NN ./$."""
 	trees = [Tree.parse(a, parse_leaf=int) for a in trees.splitlines()]
 	sents = [[w.split("/")[0] for w in a.split()] for a in sents.splitlines()]
-
 	for n, tree, sent in zip(count(1), trees, sents):
 		print "tree", tree
 		print "sent", sent, "\n"
-		open("/tmp/tree%d.tex" % n, "w").write(tikzdtree(tree, sent))
+		codecs.open("/tmp/tree%d.tex" % n, "w", encoding='utf-8').write(tikzdtree(tree, sent))
 
 if __name__ == '__main__': main()
