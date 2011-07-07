@@ -13,6 +13,7 @@ from agenda cimport heapdict
 cdef extern from "bit.h":
 	bint testbit(unsigned long vec, unsigned int pos)
 	bint testbitc(unsigned char arg, unsigned int pos)
+	bint testbitint(unsigned int arg, unsigned int pos)
 	bint testbitshort(unsigned short arg, unsigned int pos)
 	bint bitminmax(unsigned long a, unsigned long b)
 	int nextset(unsigned long vec, unsigned int pos)

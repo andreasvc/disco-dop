@@ -1,5 +1,6 @@
 """ Probabilistic CKY parser for Simple Range Concatenation Grammars
 (equivalent to Linear Context-Free Rewriting Systems)"""
+from time import clock
 from math import log, exp, fsum
 from array import array
 from random import choice
@@ -46,7 +47,7 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 	return edge
 
 def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
-	estimate=None, dict prune=None, dict prunetoid={}):
+	estimate=None, list prunelist=None, float timeout=0.0, int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -56,15 +57,17 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
-	cdef list rules, l, prunelist = range(len(toid))
+	cdef list rules
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
 	cdef dict k
-	cdef unsigned int length = 0, left = 0, right = 0, gaps = 0
-	cdef unsigned int lensent = len(sent), blocked = 0, maxlen = 0
-	cdef unsigned int label, newlabel
+	cdef dict beam = <dict>defaultdict(int)
+	cdef signed int length = 0, left = 0, right = 0, gaps = 0
+	cdef signed int lensent = len(sent), maxlen = 0
+	cdef unsigned int label, newlabel, blocked = 0
 	cdef unsigned long vec, maxA = 0
 	cdef double x, y, z
+	cdef float stime = clock()
 	cdef Py_ssize_t i
 	cdef bint doprune = False, doestimate = bool(estimate)
 	cdef heapdict A = heapdict()				#the agenda
@@ -83,18 +86,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		assert len(grammar.bylhs) == len(outside)
 		assert lensent <= maxlen
 
-	if prune:
-		doprune = True
-		k = kbest_outside(prune, goal, 500)
-		l = [{} for a in prunetoid]
-		for Ih in prune:
-			l[Ih.label][Ih.vec] = k.get(Ih, infinity)
-		# construct a table mapping each nonterminal A or A@x
-		# to the outside score for A in the chart to prune with
-		for a, label in toid.iteritems():
-			prunelist[label] = l[prunetoid[a.split("@")[0]]]
-		print 'pruning with %d nonterminals, %d items' % (
-				len(filter(None, prunelist)), len(prune))
+	if prunelist: doprune = True
 	gc.disable()
 
 	# scan
@@ -135,27 +127,30 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		(<dict>(list_getitem(Cx, Ih.label)))[Ih] = edge
 		if Ih.label == goal.label and Ih.vec == goal.vec:
 			if not exhaustive: break
+		elif timeout and clock() - stime > timeout:
+			exhaustive = False
 		else:
 			x = edge.inside
 
 			# unary
 			if doestimate:
-				vec = Ih.vec; length = bitcount(vec); left = nextset(vec, 0)
-				gaps = bitlength(vec) - length - left
+				length = bitcount(Ih.vec); left = nextset(Ih.vec, 0)
+				gaps = <int>bitlength(Ih.vec) - length - left
 				right = lensent - length - left - gaps
 			l = <list>list_getitem(unary, Ih.label)
-			for i in range(list_getsize(l)):
-				rule = <Rule>list_getitem(l, i)
-				if doestimate:
-					newedge = new_Edge(
-									outside[rule.lhs, length, left+right, gaps]
-									+ x + rule.prob, x + rule.prob,
-									rule.prob, Ih, NONE)
-				else:
-					newedge = new_Edge(x + rule.prob, x + rule.prob,
+			if not beamwidth or beam[Ih.vec] < beamwidth:
+				for i in range(list_getsize(l)):
+					rule = <Rule>list_getitem(l, i)
+					if doestimate:
+						newedge = new_Edge(
+										outside[rule.lhs, length, left+right, gaps]
+										+ x + rule.prob, x + rule.prob,
 										rule.prob, Ih, NONE)
-				process_edge(new_ChartItem(rule.lhs, Ih.vec), newedge,
-								A, C, Cx, doprune, prunelist, lensent, &blocked)
+					else:
+						newedge = new_Edge(x + rule.prob, x + rule.prob,
+											rule.prob, Ih, NONE)
+					process_edge(new_ChartItem(rule.lhs, Ih.vec), newedge,
+									A, C, Cx, doprune, prunelist, lensent, &blocked)
 
 			# binary left
 			l = <list>list_getitem(lbinary, Ih.label)
@@ -163,12 +158,14 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				rule = <Rule>list_getitem(l, i)
 				for I, e in (<dict>(list_getitem(Cx, rule.rhs2))).iteritems():
 					I1h = <ChartItem>I
-					if concat(rule, Ih.vec, I1h.vec):
+					if ((not beamwidth or beam[Ih.vec^I1h.vec] < beamwidth) and
+						concat(rule, Ih.vec, I1h.vec)):
+						beam[Ih.vec ^ I1h.vec] += 1
 						y = (<Edge>e).inside
 						vec = Ih.vec ^ I1h.vec
 						if doestimate:
 							length = bitcount(vec); left = nextset(vec, 0)
-							gaps = bitlength(vec) - length - left
+							gaps = <int>bitlength(vec) - length - left
 							right = lensent - length - left - gaps
 							newedge = new_Edge(
 									outside[rule.lhs, length, left+right, gaps]
@@ -186,12 +183,14 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				rule = <Rule>list_getitem(l, i)
 				for I, e in (<dict>(list_getitem(Cx, rule.rhs1))).iteritems():
 					I1h = <ChartItem>I
-					if concat(rule, I1h.vec, Ih.vec):
+					if ((not beamwidth or beam[I1h.vec^Ih.vec] < beamwidth) and
+						concat(rule, I1h.vec, Ih.vec)):
+						beam[I1h.vec ^ Ih.vec] += 1
 						y = (<Edge>e).inside
 						vec = I1h.vec ^ Ih.vec
 						if doestimate:
 							length = bitcount(vec); left = nextset(vec, 0)
-							gaps = bitlength(vec) - length - left
+							gaps = <int>bitlength(vec) - length - left
 							right = lensent - length - left - gaps
 							newedge = new_Edge(
 									outside[rule.lhs, length, left+right, gaps]
@@ -244,9 +243,11 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 			#e.right = newedge.right
 		#worse score, only add to chart
 		else:
+			#if len(C[newitem]) < k:
 			C[newitem].append(iscore(newedge))
 	# not in A, but is in C
 	else:
+		#if len(C[newitem]) < k:
 		C[newitem].append(iscore(newedge))
 		#Cx[newitem.label][newitem] = min(Cx[newitem.label][newitem], newedge.inside)
 		#if newedge.inside < <double>(<dict>(Cx[newitem.label])[newitem]):
@@ -295,11 +296,11 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 
 	#this algorithm taken from rparse, FastYFComposer.
 	cdef unsigned int n, x
-	cdef unsigned char arg, m
+	cdef unsigned short m
 	for x in range(rule.args.length):
 		m = rule._lengths[x] - 1
 		for n in range(m + 1):
-			if testbitshort(rule._args[x], n):
+			if testbitint(rule._args[x], n):
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
 				# ones on this side
@@ -333,6 +334,21 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 				lpos = nextset(lvec, lpos)
 	# success if we've reached the end of both left and right vector
 	return lpos == rpos == -1
+
+cpdef list prunelist_fromchart(dict chart, ChartItem goal, dict prunetoid, dict toid):
+	cdef dict k = kbest_outside(chart, goal, 50)
+	cdef list prunelist = [None] * len(toid)
+	cdef list l = [{} for a in prunetoid]
+	cdef ChartItem Ih
+	for Ih in chart:
+		l[Ih.label][Ih.vec] = k.get(Ih, infinity)
+	# construct a table mapping each nonterminal A or A@x
+	# to the outside score for A in the chart to prune with
+	for a, label in toid.iteritems():
+		prunelist[label] = l[prunetoid[a.split("@")[0]]]
+	print 'pruning with %d nonterminals, %d items' % (
+			len(filter(None, prunelist)), len(chart))
+	return prunelist
 
 cdef dict kbest_outside(dict chart, ChartItem start, int k):
 	""" produce a dictionary of ChartItems with the best outside score

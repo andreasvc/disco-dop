@@ -126,7 +126,7 @@ def concat(rule, lvec, rvec):
 	for x in range(len(rule.args)):
 		m = rule.lengths[x] - 1
 		for n in range(m + 1):
-			if testbitshort(rule.args[x], n):
+			if testbitint(rule.args[x], n):
 				# check if there are any bits left, and
 				# if any bits on the right should have gone before
 				# ones on this side

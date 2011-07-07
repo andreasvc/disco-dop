@@ -14,6 +14,7 @@ cdef extern from "bit.h":
 	bint bitminmax(unsigned long a, unsigned long b)
 	bint testbit(unsigned long vec, unsigned int pos)
 	bint testbitc(unsigned char c, unsigned int pos)
+	bint testbitint(unsigned int c, unsigned int pos)
 	bint testbitshort(unsigned short c, unsigned int pos)
 	int nextset(unsigned long vec, unsigned int pos)
 	int nextunset(unsigned long vec, unsigned int pos)
@@ -79,18 +80,18 @@ cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2]
 	x=cython.double,
 	y=cython.double,
 	insidescore=cython.double,
-	m=cython.uint,
-	n=cython.uint,
-	addgaps=cython.uint,
-	addright=cython.uint,
-	addleft=cython.uint,
+	m=cython.int,
+	n=cython.int,
+	totlen=cython.int,
+	addgaps=cython.int,
+	addright=cython.int,
+	addleft=cython.int,
 	leftarity=cython.int,
 	rightarity=cython.int,
 	lenA=cython.int,
 	lenB=cython.int,
-	lr=cython.uint,
-	ga=cython.uint,
-	totlen=cython.uint,
+	lr=cython.int,
+	ga=cython.int,
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint
 	)

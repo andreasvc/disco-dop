@@ -27,7 +27,6 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	for st in tree.subtrees():
 		if len(st) == 1 and not isinstance(st[0], Tree):
 			if sent[int(st[0])] is None: continue
-			#nonterminals = (intern(str(st.node)), 'Epsilon')
 			nonterminals = (st.node, 'Epsilon')
 			vars = ((sent[int(st[0])],),())
 			rule = zip(nonterminals, vars)
@@ -36,7 +35,8 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 			cnt = count(len(leaves))
 			rleaves = [a.leaves() if isinstance(a, Tree) else [a] for a in st]
 			rvars = [rangeheads(sorted(map(int, l))) for a,l in zip(st, rleaves)]
-			lvars = list(ranges(sorted(chain(*(map(int, l) for l in rleaves)))))
+			#lvars = list(ranges(sorted(chain(*(map(int, l) for l in rleaves)))))
+			lvars = ranges(sorted(a for rng in rleaves for a in map(int, rng)))
 			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
 			lhs = node_arity(st, lvars, side_effect) if arity_marks else st.node
 			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
@@ -70,6 +70,15 @@ def varstoindices(rule):
 				for m,z in enumerate(vars[1:]):
 					if y in z: x[n] = m
 	return nonterminals, freeze(vars[0])
+
+def coarse_grammar(trees, sents, arity_marks=True, level=0):
+	if level == 0: repl = lambda x: "X"
+	label = re.compile("[^^|<>-]+")
+	for tree in trees:
+		for subtree in tree.subtrees():
+			if subtree.node != "ROOT" and isinstance(subtree[0], Tree):
+				subtree.node = label.sub(repl, subtree.node)
+	return induce_srcg(trees, sents, arity_marks)
 
 def induce_srcg(trees, sents, arity_marks=True):
 	""" Induce a probabilistic SRCG, similar to how a PCFG is read off 
@@ -250,11 +259,14 @@ def newsplitgrammar(grammar):
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
 	object. """
-	assert len(yf) <= 8
-	assert all(len(a) <= 16 for a in yf)
+	# I for 32 bits (int), H for 16 bits (short), B for 8 bits (char)
+	# obviously, all related static declarations should match these types
+	lentype = 'H'; lensize = 8 * array(lentype).itemsize
+	vectype = 'I'; vecsize = 8 * array(vectype).itemsize
+	assert len(yf) <= lensize
+	assert all(len(a) <= vecsize for a in yf)
 	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
-	# 'H' for 16 bits unsigned (short), 'B' for 8 bits unsigned (char)
-	return array('H', initializer), array('B', map(len, yf))
+	return array(vectype, initializer), array(lentype, map(len, yf))
 
 def arraytoyf(args, lengths):
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
@@ -293,6 +305,23 @@ def node_arity(n, vars, inplace=False):
 		if inplace: n.node = "%s_%d" % (n.node, len(vars))
 		else: return "%s_%d" % (n.node, len(vars))
 	return n.node if isinstance(n, Tree) else n
+
+def printrule(r):
+	""" Print a rule in latex format"""
+	lhs = r[0]; rhs = r[1:]
+	if isinstance(lhs[1][0], tuple) or isinstance(lhs[1][0], list):
+		r = zip(*alpha_normalize(zip(*r)))
+		lhs = r[0]; rhs = r[1:]
+	if not isinstance(lhs[1][0], tuple) and not isinstance(lhs[1][0], list):
+		print "\\textrm{%s}(\\textrm{%s})" % (lhs[0].replace("$","\\$"), lhs[1][0]),
+	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$"), ",".join(r"\langle " + ",".join("x_{%r}" % a for a in x) + r" \rangle " for x in lhs[1])),
+	print r"\rightarrow",
+	for x in rhs:
+		if x[0] == 'Epsilon': print r'\epsilon',
+		else:
+			print "\\textrm{%s}(%s)" % (x[0].replace("$","\\$"), ",".join("x_{%r}" % a for a in x[1])),
+			if x != rhs[-1]: print '\\:',
+	print r'\\'
 
 def alpha_normalize(s):
 	""" Substitute variables so that the variables on the left-hand side appear consecutively.

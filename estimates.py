@@ -28,7 +28,7 @@ class Item(object):
 			return 0
 		return 1
 	def __repr__(self):
-		return "label=%3d len=%2d lr=%2d gaps=%2d" % (
+		return "state %4d, len %2d, lr %2d, gaps %2d" % (
 			self.state, self.length, self.lr, self.gaps)
 
 def new_Item(state, length, lr, gaps):
@@ -64,7 +64,6 @@ def simpleinside(grammar, maxlen, insidescores):
 		if n == 0: continue
 		#this is supposed cover all and only preterminals
 		elif rules == []:
-			print "preterminal", n, grammar.tolabel[n]
 			agenda[new_ChartItem(n, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
 
 	while agenda.length:
@@ -122,101 +121,94 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 		I = entry.key
 		x = entry.value.score
 		if agenda.length % 1000 == 0:
-			print "agenda size: %dk top: %r %g %s" % (
+			print "agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state])
-		assert x == outside[I.state, I.length, I.lr, I.gaps]
 		totlen = I.length + I.lr + I.gaps
 		rules = bylhs[I.state]
 		for rule in rules:
 			# X -> A
 			if rule.rhs2 == 0:
-				score = x + rule.prob
+				score = rule.prob + x
 				if score < outside[rule.rhs1, I.length, I.lr, I.gaps]:
 					agenda.setitem(
 						new_Item(rule.rhs1, I.length, I.lr, I.gaps),
 						new_Edge(score, 0.0, 0.0, nil, nil))
 					outside[rule.rhs1, I.length, I.lr, I.gaps] = score
-			else:
-				# X -> A B
-				addgaps = addright = 0
-				stopaddright = False
-				for m in range(arity[rule.lhs] - 1, -1, -1):
-					for n in range(rule._lengths[m] - 1, -1, -1):
-						if (not stopaddright
-							and not testbitshort(rule._args[m], n)):
-							stopaddright = True
-						if testbitshort(rule._args[m], n):
-							if not stopaddright:
-								addright += 1
-							else:
-								addgaps += 1
+				continue
+			# X -> A B
+			addgaps = addright = 0
+			stopaddright = False
+			for m in range(arity[rule.lhs] - 1, -1, -1):
+				for n in range(rule._lengths[m] - 1, -1, -1):
+					if (not stopaddright
+						and not testbitint(rule._args[m], n)):
+						stopaddright = True
+					if testbitint(rule._args[m], n):
+						if not stopaddright:
+							addright += 1
+						else:
+							addgaps += 1
 
-				leftarity = arity[rule.rhs1]
-				rightarity = arity[rule.rhs2]
-				# binary-left (A is left)
-				for lenA in range(leftarity, I.length - rightarity + 1):
-					lenB = I.length - lenA
-					if 0 <= lenB <= maxlen:
-						insidescore = insidescores[rule.rhs2, lenB]
-					else:
-						insidescore = infinity
-					for lr in range(I.lr, I.lr + lenB + 1):
-						if addright == 0 and lr != I.lr: continue
-						for ga in range(leftarity - 1, totlen + 1):
-							if (lenA + lr + ga == I.length + I.lr + I.gaps
-								and ga >= addgaps):
-								score = x + insidescore + rule.prob
-								if lenA+lr+ga > maxlen: current = 0.0
-								else: current = outside[rule.rhs1, lenA, lr, ga]
-								if score < current:
-									agenda.setitem(
-										new_Item(rule.rhs1, lenA, lr, ga),
-										new_Edge(score, 0.0, 0.0, nil, nil))
-									outside[rule.rhs1, lenA, lr, ga] = score
+			leftarity = arity[rule.rhs1]
+			rightarity = arity[rule.rhs2]
+			# binary-left (A is left)
+			for lenA in range(leftarity, I.length - rightarity + 1):
+				lenB = I.length - lenA
+				insidescore = insidescores[rule.rhs2, lenB]
+				for lr in range(I.lr, I.lr + lenB + 1):
+					if addright == 0 and lr != I.lr: continue
+					for ga in range(leftarity - 1, totlen + 1):
+						if (lenA + lr + ga == I.length + I.lr + I.gaps
+							and ga >= addgaps):
+							score = rule.prob + x + insidescore
+							if lenA+lr+ga > maxlen: current = 0.0
+							else: current = outside[rule.rhs1, lenA, lr, ga]
+							if score < current:
+								agenda.setitem(
+									new_Item(rule.rhs1, lenA, lr, ga),
+									new_Edge(score, 0.0, 0.0, nil, nil))
+								outside[rule.rhs1, lenA, lr, ga] = score
 
-				# X -> B A
-				addgaps = addleft = addright = 0
-				stopaddleft = False
-				for m in range(arity[rule.lhs]):
-					for n in range(rule._lengths[m]):
-						if not stopaddleft and testbitshort(rule._args[m], n):
-							stopaddleft = True
-						if not testbitshort(rule._args[m], n):
-							if stopaddleft:
-								addgaps += 1
-							else:
-								addleft += 1
+			# X -> B A
+			addgaps = addleft = addright = 0
+			stopaddleft = False
+			for m in range(arity[rule.lhs]):
+				for n in range(rule._lengths[m]):
+					if not stopaddleft and testbitint(rule._args[m], n):
+						stopaddleft = True
+					if not testbitint(rule._args[m], n):
+						if stopaddleft:
+							addgaps += 1
+						else:
+							addleft += 1
 
-				stopaddright = False
-				for m in range(arity[rule.lhs] - 1, -1, -1):
-					for n in range(rule._lengths[m] - 1, -1, -1):
-						if (not stopaddright
-							and testbitshort(rule._args[m], n)):
-							stopaddright = True
-						if not testbitshort(rule._args[m], n):
-							if not stopaddright:
-								addright += 1
-				addgaps -= addright
+			stopaddright = False
+			for m in range(arity[rule.lhs] - 1, -1, -1):
+				for n in range(rule._lengths[m] - 1, -1, -1):
+					if (not stopaddright
+						and testbitint(rule._args[m], n)):
+						stopaddright = True
+					if not testbitint(rule._args[m], n):
+						if not stopaddright:
+							addright += 1
+			addgaps -= addright
 
-				# binary-right (A is right)
-				for lenA in range(rightarity, I.length - leftarity + 1):
-					lenB = I.length - lenA
-					if 0 <= lenB <= maxlen:
-						insidescore = insidescores[rule.rhs1, lenB]
-					else:
-						insidescore = infinity
-					for lr in range(I.lr, I.lr + lenB + 1):
-						for ga in range(rightarity - 1, totlen + 1):
-							if (lenA + lr + ga == I.length + I.lr + I.gaps
-								and ga >= addgaps):
-								score = x + insidescore + rule.prob
-								if lenA+lr+ga > maxlen: current = 0.0
-								else: current = outside[rule.rhs2, lenA, lr, ga]
-								if score < current:
-									agenda.setitem(
-										new_Item(rule.rhs2, lenA, lr, ga),
-										new_Edge(score, 0.0, 0.0, nil, nil))
-									outside[rule.rhs2, lenA, lr, ga] = score
+			# binary-right (A is right)
+			for lenA in range(rightarity, I.length - leftarity + 1):
+				lenB = I.length - lenA
+				insidescore = insidescores[rule.rhs1, lenB]
+				for lr in range(I.lr, I.lr + lenB + 1):
+					for ga in range(rightarity - 1, totlen + 1):
+						if (lenA + lr + ga == I.length + I.lr + I.gaps
+							and ga >= addgaps):
+							score = rule.prob + insidescore + x
+							if lenA+lr+ga > maxlen: current = 0.0
+							else: current = outside[rule.rhs2, lenA, lr, ga]
+							if score < current:
+								agenda.setitem(
+									new_Item(rule.rhs2, lenA, lr, ga),
+									new_Edge(score, 0.0, 0.0, nil, nil))
+								outside[rule.rhs2, lenA, lr, ga] = score
 
 def inside(grammar, maxlen, insidescores):
 	""" Compute inside estimate in bottom-up fashion, with
@@ -273,7 +265,7 @@ def insideconcat(a, b, rule, maxlen):
 	result = resultpos = l = r = 0
 	for n, arg in zip(rule.lengths, rule.args):
 		for x in range(n):
-			if testbitshort(arg, x) == 0:
+			if testbitint(arg, x) == 0:
 				subarg = nextunset(a, l) - l
 				result |= (1 << subarg) - 1 << resultpos
 				resultpos += subarg
@@ -348,6 +340,8 @@ def testestimates(grammar, maxlen, goal):
 def main():
 	from negra import NegraCorpusReader
 	from grammar import induce_srcg, dop_srcg_rules, newsplitgrammar
+	try: from plcfrs_cython import parse, pprint_chart
+	except: from plcfrs import parse, pprint_chart
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
@@ -359,15 +353,31 @@ def main():
 	#tree.chomsky_normal_form()
 	#sent = "Daruber muss nachgedacht werden".split()
 	#grammar = newsplitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
-	trees = [Tree("(ROOT (A (a 0) (b 1)))"), Tree("(ROOT (a 0) (B (b 1) (c 2)))")]
-	grammar = newsplitgrammar(induce_srcg(trees, [["a","b"], ["a","b","c"]]))
+	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
+			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
+			Tree.parse("(ROOT (c 0) (B (c 2) (b 1)))", parse_leaf=int),
+			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
+			]
+	sents =[["a","b"],
+			["a","b","c"],
+			["c","b","c"],
+			["a","b","c"],
+			["a","b","c"]]
+	print "treebank:"
+	for a in trees: print a
+	print "\ngrammar:"
+	grammar = induce_srcg(trees, sents)
+	for (r,yf),w in sorted(grammar):
+		print r[0], "-->", " ".join(r[1:]), yf, exp(w)
+	grammar = newsplitgrammar(grammar)
 	testestimates(grammar, 4, grammar.toid["ROOT"])
-	try: from plcfrs_cython import parse, pprint_chart
-	except: from plcfrs import parse, pprint_chart
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
-	chart, start = parse(["a","b","a"], grammar, estimate=None)
-	pprint_chart(chart,  ["a","b","a"], grammar.tolabel)
-	chart, start = parse(["a","b","a"], grammar, estimate=(outside, 4))
-	pprint_chart(chart,  ["a","b","a"], grammar.tolabel)
+	print "\nwithout estimates"
+	chart, start = parse(["a","b","c"], grammar, estimate=None)
+	pprint_chart(chart,  ["a","b","c"], grammar.tolabel)
+	print "\nwith estimates"
+	chart, start = parse(["a","b","c"], grammar, estimate=(outside, 4))
+	pprint_chart(chart,  ["a","b","c"], grammar.tolabel)
 
 if __name__ == '__main__': main()

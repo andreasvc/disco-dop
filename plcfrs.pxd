@@ -8,6 +8,7 @@ cdef extern from "bit.h":
 	int bitcount(unsigned long vec)
 	bint testbit(unsigned long vec, int pos)
 	bint testbitc(unsigned char vec, int pos)
+	bint testbitint(unsigned int vec, int pos)
 	bint testbitshort(unsigned short vec, int pos)
 	bint bitminmax(unsigned long a, unsigned long b)
 

@@ -15,9 +15,10 @@ cdef class ChartItem:
 		elif op == 1: return self.label <= other.label or self.vec <= other.vec
 		elif op == 0: return self.label < other.label or self.vec < other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
+	def __nonzero__(ChartItem self):
+		return self.label and self.vec
 	def __repr__(ChartItem self):
-		#would need bitlen for proper padding
-		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
+		return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class Edge:
 	def __init__(self, score, inside, prob, left, right):
@@ -51,8 +52,13 @@ cdef class Edge:
 		elif op == 4: return self.score > other.score
 		elif op == 5: return self.score >= other.score
 	def __repr__(self):
-		return "<%g, %g, %g, [%r, %s]>" % (self.score, self.inside, self.prob,
-					self.left, repr(self.right) if self.right else 'None')
+		return "Edge(%g, %g, %g, %r, %r)" % (
+				self.score, self.inside, self.prob, self.left, self.right)
+
+def getlabel(ChartItem a):
+	return a.label
+def getvec(ChartItem a):
+	return a.vec
 
 #cdef class RankEdge(Edge):
 #	def __cinint__(self, Edge edge, int j1, int j2):
@@ -74,5 +80,15 @@ cdef class Rule:
 	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.args = args; self.lengths = lengths
-		self._args = self.args._H; self._lengths = self.lengths._B
+		self._args = self.args._I; self._lengths = self.lengths._H
 		self.prob = prob
+	
+cdef struct DTree:
+	void *rule
+	unsigned long vec
+	bint islexical
+	DTree *left, *right
+
+cdef DTree new_DTree(Rule rule, unsigned long vec, bint islexical, DTree left, DTree right):
+	return DTree(<void *>rule, vec, islexical, &left, &right)
+

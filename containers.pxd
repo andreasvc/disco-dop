@@ -27,5 +27,13 @@ cdef class Rule:
 	cdef public double prob
 	cdef public array args
 	cdef public array lengths
-	cdef unsigned short * _args
-	cdef unsigned char * _lengths
+	cdef unsigned int * _args
+	cdef unsigned short * _lengths
+
+cdef struct DTree:
+	void *rule
+	unsigned long vec
+	bint islexical
+	DTree *left, *right
+
+cdef DTree new_DTree(Rule rule, unsigned long vec, bint islexical, DTree left, DTree right)

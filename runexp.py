@@ -15,18 +15,21 @@ from negra import NegraCorpusReader, fold, unfold
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		export, read_rparse_grammar, mean, harmean, testgrammar,\
 		bracketings, printbrackets, rem_marks, alterbinarization, terminals,\
-		varstoindices, read_bitpar_grammar, read_penn_format, newsplitgrammar
+		varstoindices, read_bitpar_grammar, read_penn_format, newsplitgrammar,\
+		coarse_grammar
 from fragmentseeker import extractfragments
 from treetransforms import collinize, un_collinize, binarizetree
-try: from plcfrs_cython import parse, mostprobableparse, mostprobablederivation
+try: from plcfrs_cython import parse, mostprobableparse, mostprobablederivation, prunelist_fromchart
 except: from plcfrs import parse, mostprobableparse, mostprobablederivation
+from containers import getlabel, getvec
+infinity = float('infinity')
 
 def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
-	dop = True,
+	dop = False,
 	unfolded = False,
-	maxlen = 25,  # max number of words for sentences in training & test corpus
+	maxlen = 30,  # max number of words for sentences in training & test corpus
 	bintype = "collinize", # choices: collinize, nltk, optimal
 	estimator = "sl-dop", # choices: dop1, ewe, shortest, sl-dop
 	factor = "right",
@@ -34,7 +37,7 @@ def main(
 	h = 1,
 	minMarkov = 3,
 	tailmarker = "",
-	#train = 7200, maxsent = 360,	# number of sentences to parse
+	#train = 7200, maxsent = 100,	# number of sentences to parse
 	train = 0.9, maxsent = 9999999,	# number of sentences to parse
 	sample = False,
 	both = False,
@@ -43,10 +46,10 @@ def main(
 	interpolate = 1.0,
 	wrong_interpolate = False,
 	m = 10000,		#number of derivations to sample/enumerate
-	prune=True,	#whether to use srcg chart to prune parsing of dop
+	prune=False,	#whether to use srcg chart to prune parsing of dop
 	sldop_n=7,
-	doestimates=False,
-	useestimates=False
+	doestimates=True,
+	useestimates=True
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -56,7 +59,10 @@ def main(
 	assert bintype in ("optimal", "collinize", "nltk")
 	assert estimator in ("dop1", "ewe", "shortest", "sl-dop")
 	if isinstance(train, float) or train > 7200:
-		corpus = NegraCorpusReader("../rparse", "tigerprocfull.export",
+		#corpus = NegraCorpusReader("../rparse", "tigerprocfull.export",
+		#	headorder=(bintype=="collinize"), headfinal=True,
+		#	headreverse=False, unfold=unfolded)
+		corpus = NegraCorpusReader("../rparse", "negraproc.export",
 			headorder=(bintype=="collinize"), headfinal=True,
 			headreverse=False, unfold=unfolded)
 	else:
@@ -70,20 +76,30 @@ def main(
 	# parse training corpus as a "soundness check"
 	#test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
 	if isinstance(train, float) or train > 7200:
-		test = NegraCorpusReader("../rparse", "tigerprocfull.export")
+		#test = NegraCorpusReader("../rparse", "tigerprocfull.export")
+		test = NegraCorpusReader("../rparse", "negraproc.export")
 	else:
 		test = NegraCorpusReader("../rparse", "tigerproc.export")
 	test = test.parsed_sents()[train:], test.tagged_sents()[train:], test.blocks()[train:]
 	print "read training & test corpus"
+	begin = time.clock()
 	if arity_marks_before_bin: [srcg_productions(a, b) for a, b in zip(trees, sents)]
 	if bintype == "collinize":
 		bintype += " %s h=%d v=%d %s markovize rank > %d" % (factor, h, v, "tailmarker" if tailmarker else '', minMarkov)
-		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker=tailmarker, minMarkov=minMarkov) for a in trees]
+		#for tree in trees:
+		#	for a in tree.subtrees(lambda n: len(n) > 1):
+		#		a[-1].node += "*"
+		#		a.sort(key=lambda n: n.leaves())
+		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker=tailmarker, minMarkov=minMarkov, leftMostUnary=False, rightMostUnary=True) for a in trees]
+		#for tree in trees:
+		#	for a in tree.subtrees(lambda n: "*" in n.node):
+		#		a.node = a.node.replace("*", "")
 	if bintype == "nltk":
 		bintype += " %s h=%d v=%d" % (factor, h, v)
 		for a in trees: a.chomsky_normal_form(factor="left", vertMarkov=v-1, horzMarkov=1)
 	if bintype == "optimal": trees = [binarizetree(tree.freeze()) for tree in trees]
-	print "binarized", bintype
+	print "binarized", bintype,
+	print "time elapsed: ", time.clock() - begin
 
 	#trees = trees[:10]; sents = sents[:10]
 	seen = set()
@@ -98,7 +114,7 @@ def main(
 				match = True
 				v.add(rule[0])
 				e.setdefault(rule[0], set()).add(rule[1])
-				weights[rule[0],rule[1]] = w
+				weights[rule[0], rule[1]] = abs(w)
 		if False and match:
 			print tree
 			print n, sent
@@ -114,14 +130,16 @@ def main(
 	visit.mem = set()
 	for a in v:
 		for b in visit(a, e, []):
-			print "cycle", b, "cost", sum(weights[c,d] for c,d in zip(b, b[1:]))
+			print "cycle (cost %5.2f): %s" % (
+				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b))
 
 	for interp in range(0, 1): #disable interpolation
 		interpolate = 1.0 #interp / 10.0
 		#print "INTERPOLATE", interpolate
-		grammar = []; dopgrammar = []
+		grammar = []; dopgrammar = []; secondarymodel = []
 		if srcg:
 			grammar = induce_srcg(list(trees), sents)
+			#grammar = coarse_grammar(list(trees), sents)
 			#for (rule,yf),w in sorted(grammar, key=lambda x: x[0][0][0]):
 			#	if len(rule) == 2 and rule[1] != "Epsilon":
 			#		print exp(w), rule[0], "-->", " ".join(rule[1:]), "\t\t", [list(a) for a in yf]
@@ -143,6 +161,13 @@ def main(
 				# the secondary model is used to resolve ties for the shortest derivation
 				dopgrammar, secondarymodel = dop_srcg_rules(list(trees), list(sents), normalize=False,
 								shortestderiv=True,	arity_marks=arity_marks)
+			elif estimator == "sl-dop":
+				dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=True,
+								shortestderiv=False,	arity_marks=arity_marks)
+				dopshortest, _ = dop_srcg_rules(list(trees), list(sents),
+								normalize=False, shortestderiv=True,
+								arity_marks=arity_marks)
+				secondarymodel = newsplitgrammar(dopshortest)
 			else:
 				dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
 								shortestderiv=False, arity_marks=arity_marks,
@@ -180,13 +205,18 @@ def main(
 		#for a,b in extractfragments(trees).items():
 		#	print a,b
 		#exit()
+		begin = time.clock()
 		results = doparse(srcg, dop, estimator, unfolded, bintype, sample,
 				both, arity_marks, arity_marks_before_bin, interpolate,
-				wrong_interpolate, m, grammar, dopgrammar, test, maxlen,
-				maxsent, prune, sldop_n, useestimates, outside)
+				wrong_interpolate, m, grammar, dopgrammar, secondarymodel,
+				test, maxlen, maxsent, prune, sldop_n, useestimates, outside)
+		print "time elapsed during parsing: ", time.clock() - begin
 		doeval(*results)
 
-def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, arity_marks_before_bin, interpolate, wrong_interpolate, m, grammar, dopgrammar, test, maxlen, maxsent, prune, sldop_n=14, useestimates=False, outside=None, top='ROOT', tags=True):
+def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
+		arity_marks_before_bin, interpolate, wrong_interpolate, m, grammar,
+		dopgrammar, secondarymodel, test, maxlen, maxsent, prune, sldop_n=14,
+		useestimates=False, outside=None, top='ROOT', tags=True):
 	sresults = []; dresults = []
 	serrors1 = FreqDist(); serrors2 = FreqDist()
 	derrors1 = FreqDist(); derrors2 = FreqDist()
@@ -212,12 +242,13 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, 
 			chart, start = parse([w for w,t in sent], grammar,
 						tags=[t for w,t in sent] if tags else [],
 						start=grammar.toid[top], exhaustive=prune,
-						estimate=(outside, maxlen) if useestimates else None)
+						estimate=(outside, maxlen) if useestimates else None,
+						) #beamwidth=50)
 			print " %.2fs cpu time elapsed" % (time.clock() - begin)
 		else: chart = {}; start = False
 		#for a in chart: chart[a].sort()
 		#for result, prob in enumchart(chart, start, grammar.tolabel) if start else ():
-		if repr(start) != "0[0]":
+		if start:
 			result, prob = mostprobablederivation(chart, start, grammar.tolabel)
 			#result = rem_marks(Tree(alterbinarization(result)))
 			#print result
@@ -258,20 +289,18 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, 
 		scandb.update((nsent, a) for a in candb)
 		if dop:
 			print "DOP:",
-			#estimate = partial(getoutside, outside, maxlen, len(sent))
-			if srcg and prune and repr(start) != "0[0]":
-				srcgchart = chart
-			else: srcgchart = {}
 			begin = time.clock()
+			if srcg and prune and start:
+				prunelist = prunelist_fromchart(chart, start, grammar.toid, dopgrammar.toid)
+			else: prunelist = []
 			chart, start = parse([a[0] for a in sent], dopgrammar,
 								[a[1] for a in sent] if tags else [],
 								dopgrammar.toid[top], True, None,
-								prune=srcgchart,
-								prunetoid=grammar.toid)
+								prunelist=prunelist)
 			print " %.2fs cpu time elapsed" % (time.clock() - begin)
 		else: chart = {}; start = False
-		if dop and repr(start) != "0[0]":
-			if nsent == 1:
+		if dop and start:
+			if False and nsent == 1:
 				codecs.open("dopderivations", "w",
 					encoding="utf-8").writelines(
 						"vitprob=%#.6g\n%s\n" % (exp(-p),
@@ -283,6 +312,47 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks, 
 				mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m,
 						sample=sample, both=both, shortest=True,
 						secondarymodel=secondarymodel).items()
+			elif False and estimator == "sl-dop":
+				# get n most likely derivations
+				derivations = lazykbest(chart, start, m, dopgrammar.tolabel)
+				derivations = dict(derivations)
+				# sum over Goodman derivations to get parse trees
+				idsremoved = defaultdict(set)
+				for t, p in derivations.items():
+					idsremoved[removeids.sub("", t)].add(t)
+				mpp1 = dict((tt, fsum(exp(-derivations[t]) for t in ts)) for tt, ts in idsremoved.items())
+				prunelist = [{} for a in secondarymodel.toid]
+				for a in chart:
+					prunelist[getlabel(a)][getvec(a)] = infinity
+				for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
+					for n in Tree(tt).subtrees():
+						vec = sum(1 << int(x) for x in n.leaves())
+						prunelist[secondarymodel.toid[n.node]][vec] = 0.0
+				for label, n in secondarymodel.toid.items():
+					prunelist[n] = prunelist[secondarymodel.toid[label.split("@")[0]]]
+				mpp2 = {}
+				for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
+					mpp2[tt] = mpp1[tt]
+				
+				chart2, start2 = parse([a[0] for a in sent], secondarymodel,
+								[a[1] for a in sent] if tags else [],
+								secondarymodel.toid[top], True, None,
+								prunelist=prunelist)
+				if start2: shortestderivations = lazykbest(chart2, start2, m, secondarymodel.tolabel)
+				else:
+					shortestderivations = []
+					print "shortest derivation parsing failed"
+				mpp = [ max(mpp2.items(), key=itemgetter(1)) ]
+				for t, s in shortestderivations:
+					tt = removeids.sub("", t)
+					if tt in mpp2:
+						mpp = [ ( tt, (s / log(0.5)	, mpp2[tt])) ]
+						break
+				else:
+					print "no matching derivation found"
+				print "(%d derivations, %d of %d parsetrees)" % (len(derivations), len(mpp), len(mpp1))
+			# old method, estimate shortest derivation directly from number
+			# of addressed nodes
 			elif estimator == "sl-dop":
 				# get n most likely derivations
 				derivations = lazykbest(chart, start, m, dopgrammar.tolabel)
@@ -391,23 +461,23 @@ def doeval(srcg, dop, serrors1, serrors2, derrors1, derrors2, nsent, maxlen,
 	for a in zip(*z)[:10]:
 		print "\t".join(map(lambda x: ": ".join(map(str, x)), a))
 	if srcg and nsent:
-		print "SRCG:"
-		print "coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%" % (
-				nsent - snoparse, nsent, 100.0 * (nsent - snoparse) / nsent,
-				exacts, nsent, 100.0 * exacts / nsent)
-		print "srcg lp %5.2f lr %5.2f lf %5.2f\n" % (
+		print "srcg lp %5.2f lr %5.2f lf %5.2f" % (
 				100 * precision(goldbrackets, scandb),
 				100 * recall(goldbrackets, scandb),
 				100 * f_measure(goldbrackets, scandb))
+		print "coverage %d / %d = %5.2f %%  " %(
+				nsent - snoparse, nsent, 100.0 * (nsent - snoparse) / nsent),
+		print "exact match %d / %d = %5.2f %%\n" % (
+				exacts, nsent, 100.0 * exacts / nsent)
 	if dop and nsent:
-		print "DOP:"
-		print "coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%" % (
-				nsent - dnoparse, nsent, 100.0 * (nsent - dnoparse) / nsent,
-				exact, nsent, 100.0 * exact / nsent)
-		print "dop  lp %5.2f lr %5.2f lf %5.2f\n" % (
+		print "dop  lp %5.2f lr %5.2f lf %5.2f" % (
 				100 * precision(goldbrackets, dcandb),
 				100 * recall(goldbrackets, dcandb),
 				100 * f_measure(goldbrackets, dcandb))
+		print "coverage %d / %d = %5.2f %%  " %(
+				nsent - dnoparse, nsent, 100.0 * (nsent - dnoparse) / nsent),
+		print "exact match %d / %d = %5.2f %%\n" % (
+				exact, nsent, 100.0 * exact / nsent)
 
 def root(tree):
 	if tree.node == "VROOT": tree.node = "ROOT"
