@@ -128,7 +128,8 @@ cdef class heapdict(dict):
 
 	def __repr__(self):
 		return '%s({%s})' % (self.__class__.__name__, ", ".join(
-				['%r: %r' % (a.key, a.value) for a in self.heap if a.count]))
+				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
+				for a in self.heap if (<Entry>a).count]))
 
 	def __str__(self):
 		return self.__repr__()
@@ -146,16 +147,16 @@ cdef class heapdict(dict):
 		return self.mapping.iterkeys()
 
 	def itervalues(self):
-		return imap(lambda entry: entry.value, self.mapping.itervalues())
+		return imap(lambda entry: (<Entry>entry).value, self.mapping.itervalues())
 
 	def iteritems(self):
 		return izip(self.iterkeys(), self.itervalues())
 
 	def peekitem(self):
 		cdef Entry entry
-		while not <Entry>(self.heap[0]).count:
+		while not (<Entry>(self.heap[0])).count:
 			entry = <Entry>heappop(self.heap)
-		return <Entry>(self.heap[0]).key, <Entry>(self.heap[0]).value
+		return (<Entry>(self.heap[0])).key, (<Entry>(self.heap[0])).value
 
 	cpdef tuple popitem(self):
 		cdef Entry entry = self.popentry()
@@ -200,6 +201,11 @@ cdef class heapdict(dict):
 		self.counter = 1
 		del self.heap[:]
 		self.mapping.clear()
+
+	cpdef list getheap(self):
+		return self.heap
+	cpdef Edge getval(self, Entry entry):
+		return entry.value
 
 # this is _significantly_ faster than relying on __richcmp__
 cdef inline bint lessthan(Entry a, Entry b):
