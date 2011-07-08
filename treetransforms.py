@@ -12,7 +12,8 @@
 #	left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
 #   right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
 # in this way the markovization represents the history of the nonterminals that
-# have *already* been parsed, instead of those still to come. 
+# have *already* been parsed, instead of those still to come (assuming
+# bottom-up parsing).
 
 """
 A collection of methods for tree (grammar) transformations used
@@ -119,8 +120,12 @@ from heapq import heappush, heappop
 from itertools import chain
 from nltk import Tree, ImmutableTree, memoize
 from grammar import rangeheads
+from orderedset import UniqueList as OrderedSet
 
-def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|", parentChar="^", tailMarker="$", headMarked=None, minMarkov=3):
+def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
+	childChar="|", parentChar="^", headMarked=None,
+	rightMostUnary=True, leftMostUnary=True,
+	tailMarker="$", minMarkov=3):
 	"""
 	>>> sent = "das muss man jetzt machen".split()
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
@@ -128,15 +133,27 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 	(S (S|<> (VP (VP|<> (PDS 0) (VP|<> (ADV 3) (VP|<> (VVINF 4))))) (S|<> (PIS 2) (S|<> (VMFIN 1)))))
 	>>> un_collinize(tree); print tree
 	(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
+
 	>>> collinize(tree, horzMarkov=1, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4))))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1)))))
+
+	>>> un_collinize(tree); collinize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=True, tailMarker=''); print tree.pprint(margin=999)
+	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1))))
+
+	>>> un_collinize(tree); collinize(tree, horzMarkov=1, leftMostUnary=True, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
+	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS> (PIS 2) (VMFIN 1))))
+	
+	>>> un_collinize(tree); collinize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
+	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
+
 	>>> un_collinize(tree); collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VVINF> (VVINF 4))))) (S|<VP-PIS> (PIS 2) (S|<PIS-VMFIN> (VMFIN 1)))))
+
 	>>> un_collinize(tree); collinize(tree, factor="left", horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VMFIN> (S|<PIS-VMFIN> (S|<VP-PIS> (VP (VP|<VVINF> (VP|<ADV-VVINF> (VP|<PDS-ADV> (PDS 0)) (ADV 3)) (VVINF 4)))) (PIS 2)) (VMFIN 1)))
-
+	
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
-	>>> un_collinize(tree); collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
 	"""
 	# assume all subtrees have homogeneous children
@@ -151,7 +168,7 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 	# two traversals of the tree (one to get the positions, one to iterate
 	# over them) and node access time is proportional to the height of the node.
 	# This method is 7x faster which helps when parsing 40,000 sentences.  
-
+	leftMostUnary = 1 if leftMostUnary else 0
 	nodeList = [(tree, [tree.node])]
 	while nodeList != []:
 		node, parent = nodeList.pop()
@@ -186,10 +203,12 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 				siblings = "-".join(childNodes[start:end])
 				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar,
 												siblings, parentString), [])
-				node[:] = [newNode]
-				node = newNode
-
+				node[:] = []
+				if leftMostUnary:
+					node.append(newNode)
+					node = newNode
 				curNode = node
+
 				for i in range(1, numChildren):
 					marktail = tailMarker if i + 1 == numChildren else ''
 					newNode = Tree('', [])
@@ -202,10 +221,11 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 						end = start + horzMarkov
 						curNode[:] = [newNode, nodeCopy.pop()]
 					# switch direction upon encountering the head
-					if (headMarked and headMarked in childNodes[i] 
-						and factor == "right"):
+					if headMarked and headMarked in childNodes[i]:
 						headidx = i
-						factor = "left"
+						# although it doesn't make any sense to switch from
+						# left to right, it's supported anyway
+						factor = "right" if factor == "left" else "left"
 						start = headidx + numChildren - i - 1
 						end = start + horzMarkov
 					siblings = "-".join(childNodes[start:end])
@@ -213,7 +233,13 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0, childChar="|"
 											marktail, siblings, parentString)
 
 					curNode = newNode
-				curNode.append(nodeCopy.pop())
+				try: assert len(nodeCopy) == 1
+				except: print nodeCopy, leftMostUnary, rightMostUnary
+				if rightMostUnary:
+					curNode.append(nodeCopy.pop())
+				else:
+					curNode.node = nodeCopy[0].node
+					curNode[:] = nodeCopy.pop()[:]
 	
 
 def un_collinize(tree, expandUnary=True, childChar="|", parentChar="^", unaryChar="+"):
@@ -307,7 +333,7 @@ def random(tree):
 	from random import randint
 	return randint(1, 25),
 
-def minimalbinarization(tree, score, sep="|", head=None):
+def minimalbinarization(tree, score, sep="|", head=None, h=999, v=""):
 	"""
 	Implementation of Gildea (2010): Optimal parsing strategies for linear
 	context-free rewriting systems.
@@ -321,19 +347,27 @@ def minimalbinarization(tree, score, sep="|", head=None):
 
 	>>> tree=ImmutableTree.parse("(NP (ART 0) (ADJ 2) (NN 1))", parse_leaf=int)
 	>>> print minimalbinarization(tree, complexityfanout)
-	(NP (NP|<ART-NN> (ART 0) (NN 1)) (ADJ 2))
+	(NP (ADJ 2) (NP|<ART-NN> (NN 1) (ART 0)))
 
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
 	>>> head = ImmutableTree("C", [2])
 	>>> print minimalbinarization(tree, complexityfanout, head=head)
-	(X (X|<A-B-C-D> (X|<A-B-C> (A 0) (X|<B-C> (B 1) (C 2))) (D 3)) (E 4))
+	(X (E 4) (X|<A-B-D-C> (A 0) (X|<B-D-C> (B 1) (X|<D-C> (D 3) (C 2)))))
+	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
+	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
+	>>> print minimalbinarization(tree, complexityfanout, head=head, h=1)
+	(X (E 4) (X|<A> (A 0) (X|<B> (B 1) (X|<D> (D 3) (C 2)))))
 
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
 	>>> head = ImmutableTree("C", [5])
 	>>> print minimalbinarization(tree, complexityfanout, head=head)
-	(X (X|<A-C-D-E> (A 0) (X|<C-D-E> (X|<C-D> (C 5) (D 7)) (E 8))) (B 3))
+	(X (A 0) (X|<B-D-E-C> (B 3) (X|<D-E-C> (D 7) (X|<E-C> (E 8) (C 5)))))
+	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
+	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
+	>>> print minimalbinarization(tree, complexityfanout, head=head, h=1)
+	(X (A 0) (X|<B> (B 3) (X|<D> (D 7) (X|<E> (E 8) (C 5)))))
 
 	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
@@ -346,12 +380,15 @@ def minimalbinarization(tree, score, sep="|", head=None):
 	"""
 	def newproduction(a, b):
 		""" return a new `production' (here a tree) combining a and b """
+		if head: siblings = (nonterms[a] | nonterms[b])[:h]
+		else: siblings =  sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])
 		# swap a and b according to linear precedence
 		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
-		if (min(z for x, y in nonterms[a] for z in y) >
-			min(z for x, y in nonterms[b] for z in y)): a, b = b, a
-		newlabel = "%s%s<%s>" % (tree.node, sep, "-".join(x.node for x,y
-				in sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])))
+		#if (min(z for x, y in nonterms[a] for z in y) >
+		#	min(z for x, y in nonterms[b] for z in y)): a, b = b, a
+		# (disabled, do as postprocessing step instead).
+		newlabel = "%s%s<%s>%s" % (tree.node, sep, "-".join(x.node for x,y
+			in siblings), v)
 		return ImmutableTree(newlabel, [a, b])
 	if len(tree) <= 2: return tree
 	workingset = set()
@@ -365,8 +402,8 @@ def minimalbinarization(tree, score, sep="|", head=None):
 		# caveat: Gildea (2011) shows that this problem is NP hard.
 		for a in (a for a in tree if a != head):
 			workingset.add((score(a), a))
-			nonterms[a] = frozenset([(a, tuple(a.leaves()))])
-		nonterms[head] = frozenset([(head, tuple(head.leaves()))])
+			nonterms[a] = OrderedSet([(a, tuple(a.leaves()))])
+		nonterms[head] = OrderedSet([(head, tuple(head.leaves()))])
 		for a in (a for a in tree if a != head):
 			p = newproduction(a, head); x = score(p)
 			workingset.add((x, p))
@@ -386,8 +423,15 @@ def minimalbinarization(tree, score, sep="|", head=None):
 		for y, p1 in list(workingset):
 			if (y, p1) not in workingset or nonterms[p] & nonterms[p1]:
 				continue
-			p2 = newproduction(p, p1)
-			p2nonterms = nonterms[p] | nonterms[p1]
+			# if we do head-driven binarization, add one nonterminal at a time
+			if head and min(len(p), len(p1)) != 1:
+				continue
+			elif head and len(p1) == 1:
+				p2 = newproduction(p1, p)
+				p2nonterms = nonterms[p1] | nonterms[p]
+			else:
+				p2 = newproduction(p, p1)
+				p2nonterms = nonterms[p] | nonterms[p1]
 			x2 = tuple(max(a) for a in zip(score(p2), y, x))
 			# enumerate binarizations which dominate the same subset 
 			# of the right hand side, but have a lower score
@@ -400,16 +444,21 @@ def minimalbinarization(tree, score, sep="|", head=None):
 				nonterms[p2] = p2nonterms
 				for _, p3 in inferior: del nonterms[p3]
 
-def binarizetree(tree, sep="|"):
-	""" Recursively binarize a tree. Tree needs to be immutable."""
+def binarizetree(tree, sep="|", headdriven=False, h=None, v=1, parents=()):
+	""" Recursively binarize a tree optimizing for complexity.
+	Tree needs to be immutable."""
 	if not isinstance(tree, Tree): return tree
-	# bypass algorithm when there are no discontinuities:
-	elif len(rangeheads(tree.leaves())) == 1:
-		newtree = Tree(tree.node, map(lambda t: binarizetree(t, sep), tree))
-		newtree.chomsky_normal_form(childChar=sep)
-		return newtree
-	return Tree(tree.node, map(lambda t: binarizetree(t, sep),
-				minimalbinarization(tree, complexityfanout, sep)))
+	elif headdriven:
+		return Tree(tree.node, sorted(map(
+			lambda t: binarizetree(t, sep, headdriven, h=h, v=v,
+							parents=parents + (tree.node,)),
+			minimalbinarization(tree, complexityfanout, sep, head=tree[-1],
+					h=h, v="^" + "-".join(parents[-v+1:]) if v > 1 else "")),
+				key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
+	else:
+		return Tree(tree.node, sorted(map(lambda t: binarizetree(t, sep),
+			minimalbinarization(tree, complexityfanout, sep)),
+				key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
 
 #################################################################
 # Demonstration
