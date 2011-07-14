@@ -120,7 +120,7 @@ from heapq import heappush, heappop
 from itertools import chain
 from nltk import Tree, ImmutableTree, memoize
 from grammar import rangeheads
-from orderedset import UniqueList as OrderedSet
+from orderedset import OrderedSet
 
 def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
@@ -333,7 +333,7 @@ def random(tree):
 	from random import randint
 	return randint(1, 25),
 
-def minimalbinarization(tree, score, sep="|", head=None, h=999, v=""):
+def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
 	"""
 	Implementation of Gildea (2010): Optimal parsing strategies for linear
 	context-free rewriting systems.
@@ -341,32 +341,33 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, v=""):
 	indices.
 
 	tree is the tree for which the optimal binarization of its top production
-	will be searched. score is a function from binarized trees to some value,
-	where lower is better (the value can be numeric or a tuple or anything
-	else which supports comparisons)
+	will be searched.
+	score is a function from binarized trees to some value, where lower is
+	better (the value can be numeric or anything else which supports
+	comparisons)
+	head is an optional index of the head node, specifying enables head-driven
+	binarization
 
 	>>> tree=ImmutableTree.parse("(NP (ART 0) (ADJ 2) (NN 1))", parse_leaf=int)
 	>>> print minimalbinarization(tree, complexityfanout)
-	(NP (ADJ 2) (NP|<ART-NN> (NN 1) (ART 0)))
+	(NP (ART 0) (NP|<NN-ADJ> (NN 1) (ADJ 2)))
 
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> head = ImmutableTree("C", [2])
-	>>> print minimalbinarization(tree, complexityfanout, head=head)
+	>>> print minimalbinarization(tree, complexityfanout, head=2)
 	(X (E 4) (X|<A-B-D-C> (A 0) (X|<B-D-C> (B 1) (X|<D-C> (D 3) (C 2)))))
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout, head=head, h=1)
+	>>> print minimalbinarization(tree, complexityfanout, head=2, h=1)
 	(X (E 4) (X|<A> (A 0) (X|<B> (B 1) (X|<D> (D 3) (C 2)))))
 
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> head = ImmutableTree("C", [5])
-	>>> print minimalbinarization(tree, complexityfanout, head=head)
+	>>> print minimalbinarization(tree, complexityfanout, head=2)
 	(X (A 0) (X|<B-D-E-C> (B 3) (X|<D-E-C> (D 7) (X|<E-C> (E 8) (C 5)))))
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout, head=head, h=1)
+	>>> print minimalbinarization(tree, complexityfanout, head=2, h=1)
 	(X (A 0) (X|<B> (B 3) (X|<D> (D 7) (X|<E> (E 8) (C 5)))))
 
 	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))"
@@ -380,7 +381,7 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, v=""):
 	"""
 	def newproduction(a, b):
 		""" return a new `production' (here a tree) combining a and b """
-		if head: siblings = (nonterms[a] | nonterms[b])[:h]
+		if head is not None: siblings = (nonterms[a] | nonterms[b])[:h]
 		else: siblings =  sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])
 		# swap a and b according to linear precedence
 		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
@@ -388,77 +389,86 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, v=""):
 		#	min(z for x, y in nonterms[b] for z in y)): a, b = b, a
 		# (disabled, do as postprocessing step instead).
 		newlabel = "%s%s<%s>%s" % (tree.node, sep, "-".join(x.node for x,y
-			in siblings), v)
+			in siblings), ancestors)
 		return ImmutableTree(newlabel, [a, b])
 	if len(tree) <= 2: return tree
-	workingset = set()
 	agenda = []
+	workingset = {}
 	nonterms = {}
+	revnonterms = {} # reverse mapping of nonterms ... better name anyone?
 	goal = frozenset((a, tuple(a.leaves())) for a in tree)
-	if head:
+	if head is None:
+		for a in tree:
+			workingset[a] = score(a)
+			heappush(agenda, (workingset[a], a))
+			nonterms[a] = frozenset([(a, tuple(a.leaves()))])
+			revnonterms[nonterms[a]] = a
+	else:
 		# head driven binarization:
 		# add all non-head nodes to the working set,
 		# add all combination of non-head nodes with head to agenda
-		# caveat: Gildea (2011) shows that this problem is NP hard.
-		for a in (a for a in tree if a != head):
-			workingset.add((score(a), a))
+		# caveat: Crescenzi et al. (2011) show that this problem is NP hard.
+		hd = tree[head]
+		for n, a in enumerate(tree):
 			nonterms[a] = OrderedSet([(a, tuple(a.leaves()))])
-		nonterms[head] = OrderedSet([(head, tuple(head.leaves()))])
-		for a in (a for a in tree if a != head):
-			p = newproduction(a, head); x = score(p)
-			workingset.add((x, p))
-			heappush(agenda, (x, p))
-			nonterms[p] = nonterms[a] | nonterms[head]
-	else:
-		for a in tree:
-			workingset.add((score(a), a))
-			heappush(agenda, (score(a), a))
-			nonterms[a] = frozenset([(a, tuple(a.leaves()))])
+			revnonterms[nonterms[a]] = a
+			if n != head:
+				workingset[a] = score(a)
+		for n, a in enumerate(tree):
+			if n == head: continue
+			# (add initial unary here)
+			p = newproduction(a, hd)
+			workingset[p] = score(p)
+			heappush(agenda, (workingset[p], p))
+			nonterms[p] = nonterms[a] | nonterms[hd]
+			revnonterms[nonterms[p]] = p
 	while agenda:
 		x, p = item = heappop(agenda)
-		if item not in workingset: continue
+		if p not in workingset or workingset[p] != x: continue
 		if nonterms[p] == goal:
+			# (add final unary here)
 			p = ImmutableTree(tree.node, p[:])
 			return p
-		for y, p1 in list(workingset):
-			if (y, p1) not in workingset or nonterms[p] & nonterms[p1]:
+		for p1, y in workingset.items():
+			if p1 not in workingset or workingset[p1] != y or nonterms[p] & nonterms[p1]:
 				continue
 			# if we do head-driven binarization, add one nonterminal at a time
-			if head and min(len(p), len(p1)) != 1:
-				continue
-			elif head and len(p1) == 1:
-				p2 = newproduction(p1, p)
-				p2nonterms = nonterms[p1] | nonterms[p]
-			else:
+			if head is None:
 				p2 = newproduction(p, p1)
 				p2nonterms = nonterms[p] | nonterms[p1]
+			elif len(nonterms[p1]) == 1:
+				p2 = newproduction(p1, p)
+				p2nonterms = nonterms[p1] | nonterms[p]
+			elif len(nonterms[p]) == 1:
+				p2 = newproduction(p, p1)
+				p2nonterms = nonterms[p] | nonterms[p1]
+			else:
+				continue
+			# important: the score is the maximum score up till now
 			x2 = tuple(max(a) for a in zip(score(p2), y, x))
-			# enumerate binarizations which dominate the same subset 
-			# of the right hand side, but have a lower score
-			inferior = set((z, p3) for z, p3 in workingset
-							if nonterms[p3] == p2nonterms and x2 < z)
-			if inferior or p2nonterms not in nonterms.values():
-				workingset -= inferior
-				workingset.add((x2, p2))
+			#if new or better:
+			if p2nonterms not in revnonterms or revnonterms[p2nonterms] > x2:
+				workingset[p2] = x2
 				heappush(agenda, (x2, p2))
 				nonterms[p2] = p2nonterms
-				for _, p3 in inferior: del nonterms[p3]
+				revnonterms[p2nonterms] = p2
+	raise ValueError
 
 def binarizetree(tree, sep="|", headdriven=False, h=None, v=1, parents=()):
 	""" Recursively binarize a tree optimizing for complexity.
 	Tree needs to be immutable."""
 	if not isinstance(tree, Tree): return tree
-	elif headdriven:
+	if not headdriven:
 		return Tree(tree.node, sorted(map(
-			lambda t: binarizetree(t, sep, headdriven, h=h, v=v,
-							parents=parents + (tree.node,)),
-			minimalbinarization(tree, complexityfanout, sep, head=tree[-1],
-					h=h, v="^" + "-".join(parents[-v+1:]) if v > 1 else "")),
-				key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
-	else:
-		return Tree(tree.node, sorted(map(lambda t: binarizetree(t, sep),
+			lambda t: binarizetree(t, sep),
 			minimalbinarization(tree, complexityfanout, sep)),
 				key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
+	return Tree(tree.node, sorted(map(
+		lambda t: binarizetree(t, sep, headdriven, h=h, v=v,
+					parents=parents + (tree.node,)),
+		minimalbinarization(tree, complexityfanout, sep, head=len(tree) - 1,
+			h=h, ancestors="^" + "-".join(parents[-v+1:]) if v > 1 else "")),
+			key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
 
 #################################################################
 # Demonstration

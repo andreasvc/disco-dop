@@ -1,55 +1,35 @@
 import collections
 
-class UniqueList(collections.MutableSet):
-	""" An ordered set which maintains a regular list and set. """
+class OrderedSet(collections.Set):
+	""" A frozen, ordered set which maintains a regular list/tuple and set. """
 	def __init__(self, iterable=None):
-		self.list = []
-		self.set = set()
 		if iterable:
-			self.list.extend(iterable)
-			self.set.update(self.list)
+			self.seq = tuple(iterable)
+			self.theset = frozenset(self.seq)
+		else:
+			self.seq = ()
+			self.theset = frozenset()
+	def __hash__(self):
+		return hash(self.seq)
 	def __contains__(self, value):
-		return value in self.set
+		return value in self.theset
 	def __len__(self):
-		return len(self.set)
+		return len(self.theset)
 	def __iter__(self):
-		return iter(self.list)
+		return iter(self.seq)
 	def __getitem__(self, n):
-		return self.list[n]
+		return self.seq[n]
 	def __reversed__(self):
-		return reversed(self.list)
-	def add(self, value):
-		if value not in self.set:
-			self.set.add(value)
-			self.list.append(value)
-		else:
-			print "already in set:", value
-			raise ValueError("already in set")
-	def discard(self, value):
-		if value in self.set:
-			self.set.discard(value)
-			self.list.remove(value)
-	def pop(self, value=None):
-		if not self.list:
-			raise KeyError('set is empty')
-		if value is None:
-			value = self.list.pop()
-		else:
-			value = self.list.pop(value)
-		self.set.discard(value)
-		return value
+		return reversed(self.seq)
 	def __repr__(self):
-		if not self.list:
+		if not self.seq:
 			return '%s()' % (self.__class__.__name__,)
-		return '%s(%r)' % (self.__class__.__name__, self.list)
+		return '%s(%r)' % (self.__class__.__name__, self.seq)
 	def __eq__(self, other):
-		if isinstance(other, (UniqueList, collections.Sequence)):
+		if isinstance(other, (OrderedSet, collections.Sequence)):
 			return len(self) == len(other) and list(self) == list(other)
-		return self.set == set(other)
-	def __del__(self):
-		self.set.clear()
-		del self.list[:]
+		return self.theset == set(other)
 	
 if __name__ == '__main__':
-	print(UniqueList('abracadaba'))
-	print(UniqueList('simsalabim'))
+	print(OrderedSet('abracadaba'))
+	print(OrderedSet('simsalabim'))
