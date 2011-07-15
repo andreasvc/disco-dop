@@ -9,7 +9,7 @@
 # element in the RHS.
 # The markovization direction is changed:
 # (A (B ) (C ) (D )) becomes:
-#	left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
+#   left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
 #   right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
 # in this way the markovization represents the history of the nonterminals that
 # have *already* been parsed, instead of those still to come (assuming
@@ -30,21 +30,21 @@ The following is a short tutorial on the available transformations.
 
  1. Chomsky Normal Form (binarization)
 
-	It is well known that any grammar has a Chomsky Normal Form (CNF)
-	equivalent grammar where CNF is defined by every production having
-	either two non-terminals or one terminal on its right hand side.
-	When we have hierarchically structured data (ie. a treebank), it is
-	natural to view this in terms of productions where the root of every
-	subtree is the head (left hand side) of the production and all of
-	its children are the right hand side constituents.  In order to
-	convert a tree into CNF, we simply need to ensure that every subtree
-	has either two subtrees as children (binarization), or one leaf node
-	(non-terminal).  In order to binarize a subtree with more than two
-	children, we must introduce artificial nodes.
+    It is well known that any grammar has a Chomsky Normal Form (CNF)
+    equivalent grammar where CNF is defined by every production having
+    either two non-terminals or one terminal on its right hand side.
+    When we have hierarchically structured data (ie. a treebank), it is
+    natural to view this in terms of productions where the root of every
+    subtree is the head (left hand side) of the production and all of
+    its children are the right hand side constituents.  In order to
+    convert a tree into CNF, we simply need to ensure that every subtree
+    has either two subtrees as children (binarization), or one leaf node
+    (non-terminal).  In order to binarize a subtree with more than two
+    children, we must introduce artificial nodes.
   
-	There are two popular methods to convert a tree into CNF: left
-	factoring and right factoring.  The following example demonstrates
-	the difference between them.  Example::
+    There are two popular methods to convert a tree into CNF: left
+    factoring and right factoring.  The following example demonstrates
+    the difference between them.  Example::
   
       Original    Right-Factored       Left-Factored
 
@@ -56,17 +56,17 @@ The following is a short tutorial on the available transformations.
   
  2. Parent Annotation
   
-	In addition to binarizing the tree, there are two standard
-	modifications to node labels we can do in the same traversal: parent
-	annotation and Markov order-N smoothing (or sibling smoothing).
+    In addition to binarizing the tree, there are two standard
+    modifications to node labels we can do in the same traversal: parent
+    annotation and Markov order-N smoothing (or sibling smoothing).
   
-	The purpose of parent annotation is to refine the probabilities of
-	productions by adding a small amount of context.  With this simple
-	addition, a CYK (inside-outside, dynamic programming chart parse)
-	can improve from 74% to 79% accuracy.  A natural generalization from
-	parent annotation is to grandparent annotation and beyond.  The
-	tradeoff becomes accuracy gain vs. computational complexity.  We
-	must also keep in mind data sparsity issues.  Example:
+    The purpose of parent annotation is to refine the probabilities of
+    productions by adding a small amount of context.  With this simple
+    addition, a CYK (inside-outside, dynamic programming chart parse)
+    can improve from 74% to 79% accuracy.  A natural generalization from
+    parent annotation is to grandparent annotation and beyond.  The
+    tradeoff becomes accuracy gain vs. computational complexity.  We
+    must also keep in mind data sparsity issues.  Example:
   
      Original       Parent Annotation 
     
@@ -79,10 +79,10 @@ The following is a short tutorial on the available transformations.
   
  3. Markov order-N smoothing
   
-	Markov smoothing combats data sparcity issues as well as decreasing
-	computational requirements by limiting the number of children
-	included in artificial nodes.  In practice, most people use an order
-	2 grammar.  Example::
+    Markov smoothing combats data sparcity issues as well as decreasing
+    computational requirements by limiting the number of children
+    included in artificial nodes.  In practice, most people use an order
+    2 grammar.  Example::
   
       Original       No Smoothing       Markov order 1   Markov order 2   etc.
       
@@ -94,20 +94,20 @@ The following is a short tutorial on the available transformations.
 
 
   
-	Annotation decisions can be thought about in the vertical direction
-	(parent, grandparent, etc) and the horizontal direction (number of
-	siblings to keep).  Parameters to the following functions specify
-	these values.  For more information see:
+    Annotation decisions can be thought about in the vertical direction
+    (parent, grandparent, etc) and the horizontal direction (number of
+    siblings to keep).  Parameters to the following functions specify
+    these values.  For more information see:
   
-	Dan Klein and Chris Manning (2003) "Accurate Unlexicalized
-	Parsing", ACL-03.  http://www.aclweb.org/anthology/P03-1054
-	  
+    Dan Klein and Chris Manning (2003) "Accurate Unlexicalized
+    Parsing", ACL-03.  http://www.aclweb.org/anthology/P03-1054
+      
  4. Unary Collapsing  
   
-	Collapse unary productions (ie. subtrees with a single child) into a
-	new non-terminal (Tree node).  This is useful when working with
-	algorithms that do not allow unary productions, yet you do not wish
-	to lose the parent information.  Example::
+    Collapse unary productions (ie. subtrees with a single child) into a
+    new non-terminal (Tree node).  This is useful when working with
+    algorithms that do not allow unary productions, yet you do not wish
+    to lose the parent information.  Example::
   
        A         
        |
@@ -151,7 +151,7 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 
 	>>> un_collinize(tree); collinize(tree, factor="left", horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VMFIN> (S|<PIS-VMFIN> (S|<VP-PIS> (VP (VP|<VVINF> (VP|<ADV-VVINF> (VP|<PDS-ADV> (PDS 0)) (ADV 3)) (VVINF 4)))) (PIS 2)) (VMFIN 1)))
-	
+
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
 	>>> collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
@@ -333,7 +333,7 @@ def random(tree):
 	from random import randint
 	return randint(1, 25),
 
-def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
+def minimalbinarization(tree, score, sep="|", head=None, h=999, v=0, ancestors=()):
 	"""
 	Implementation of Gildea (2010): Optimal parsing strategies for linear
 	context-free rewriting systems.
@@ -347,19 +347,6 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
 	comparisons)
 	head is an optional index of the head node, specifying enables head-driven
 	binarization
-
-	>>> tree=ImmutableTree.parse("(NP (ART 0) (ADJ 2) (NN 1))", parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout)
-	(NP (ART 0) (NP|<NN-ADJ> (NN 1) (ADJ 2)))
-
-	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
-	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout, head=2)
-	(X (E 4) (X|<A-B-D-C> (A 0) (X|<B-D-C> (B 1) (X|<D-C> (D 3) (C 2)))))
-	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
-	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout, head=2, h=1)
-	(X (E 4) (X|<A> (A 0) (X|<B> (B 1) (X|<D> (D 3) (C 2)))))
 
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
 	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
@@ -382,26 +369,31 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
 	def newproduction(a, b):
 		""" return a new `production' (here a tree) combining a and b """
 		if head is not None: siblings = (nonterms[a] | nonterms[b])[:h]
-		else: siblings =  sorted(nonterms[a] | nonterms[b], key=lambda z: z[1])
+		else: siblings =  sorted(nonterms[a] | nonterms[b])
 		# swap a and b according to linear precedence
 		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
 		#if (min(z for x, y in nonterms[a] for z in y) >
 		#	min(z for x, y in nonterms[b] for z in y)): a, b = b, a
 		# (disabled, do as postprocessing step instead).
-		newlabel = "%s%s<%s>%s" % (tree.node, sep, "-".join(x.node for x,y
-			in siblings), ancestors)
+		newlabel = "%s%s<%s>%s" % (tree.node, sep, "-".join(tree[x].node for x
+			in siblings), "-".join(ancestors[:v-1]))
 		return ImmutableTree(newlabel, [a, b])
 	if len(tree) <= 2: return tree
+	elif fanout(tree) == 1:	#don't bother if there are no discontinuities
+		tree = Tree.convert(tree)
+		collinize(tree, horzMarkov=h, vertMarkov=v-1, tailMarker='')	#fix parent annotation
+		return tree
 	agenda = []
 	workingset = {}
 	nonterms = {}
 	revnonterms = {} # reverse mapping of nonterms ... better name anyone?
-	goal = frozenset((a, tuple(a.leaves())) for a in tree)
+	#goal = frozenset((a, tuple(a.leaves())) for a in tree)
+	goal = frozenset(range(len(tree)))
 	if head is None:
-		for a in tree:
+		for n, a in enumerate(tree):
 			workingset[a] = score(a)
-			heappush(agenda, (workingset[a], a))
-			nonterms[a] = frozenset([(a, tuple(a.leaves()))])
+			agenda.append((workingset[a], a))
+			nonterms[a] = frozenset([n])
 			revnonterms[nonterms[a]] = a
 	else:
 		# head driven binarization:
@@ -410,7 +402,7 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
 		# caveat: Crescenzi et al. (2011) show that this problem is NP hard.
 		hd = tree[head]
 		for n, a in enumerate(tree):
-			nonterms[a] = OrderedSet([(a, tuple(a.leaves()))])
+			nonterms[a] = OrderedSet([n])
 			revnonterms[nonterms[a]] = a
 			if n != head:
 				workingset[a] = score(a)
@@ -419,11 +411,13 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
 			# (add initial unary here)
 			p = newproduction(a, hd)
 			workingset[p] = score(p)
-			heappush(agenda, (workingset[p], p))
+			agenda.append((workingset[p], p))
 			nonterms[p] = nonterms[a] | nonterms[hd]
 			revnonterms[nonterms[p]] = p
+	# heapify agenda, used sort() to get stable sort
+	agenda.sort()
 	while agenda:
-		x, p = item = heappop(agenda)
+		x, p = heappop(agenda)
 		if p not in workingset or workingset[p] != x: continue
 		if nonterms[p] == goal:
 			# (add final unary here)
@@ -448,13 +442,17 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999, ancestors=""):
 			x2 = tuple(max(a) for a in zip(score(p2), y, x))
 			#if new or better:
 			if p2nonterms not in revnonterms or revnonterms[p2nonterms] > x2:
+				for a,b in nonterms.items():
+					if b == p2nonterms:
+						del nonterms[a]
+						del workingset[a]
 				workingset[p2] = x2
 				heappush(agenda, (x2, p2))
 				nonterms[p2] = p2nonterms
 				revnonterms[p2nonterms] = p2
 	raise ValueError
 
-def binarizetree(tree, sep="|", headdriven=False, h=None, v=1, parents=()):
+def binarizetree(tree, sep="|", headdriven=False, h=None, v=1, ancestors=()):
 	""" Recursively binarize a tree optimizing for complexity.
 	Tree needs to be immutable."""
 	if not isinstance(tree, Tree): return tree
@@ -463,11 +461,13 @@ def binarizetree(tree, sep="|", headdriven=False, h=None, v=1, parents=()):
 			lambda t: binarizetree(t, sep),
 			minimalbinarization(tree, complexityfanout, sep)),
 				key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
-	return Tree(tree.node, sorted(map(
+	return Tree(tree.node, # fix parent annotation
+		sorted(map(
 		lambda t: binarizetree(t, sep, headdriven, h=h, v=v,
-					parents=parents + (tree.node,)),
+					ancestors=(tree.node,)+ancestors),
 		minimalbinarization(tree, complexityfanout, sep, head=len(tree) - 1,
-			h=h, ancestors="^" + "-".join(parents[-v+1:]) if v > 1 else "")),
+			h=h, ancestors=ancestors)),
+			#"^" + "-".join(parents[-v+1:]) if v > 1 else ""
 			key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
 
 #################################################################

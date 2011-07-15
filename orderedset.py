@@ -26,8 +26,9 @@ class OrderedSet(collections.Set):
 			return '%s()' % (self.__class__.__name__,)
 		return '%s(%r)' % (self.__class__.__name__, self.seq)
 	def __eq__(self, other):
-		if isinstance(other, (OrderedSet, collections.Sequence)):
-			return len(self) == len(other) and list(self) == list(other)
+		#if isinstance(other, (OrderedSet, collections.Sequence)):
+		#	return len(self) == len(other) and list(self) == list(other)
+		# equality is defined _without_ regard for order
 		return self.theset == set(other)
 	
 if __name__ == '__main__':
