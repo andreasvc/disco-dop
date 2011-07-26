@@ -35,11 +35,11 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 			cnt = count(len(leaves))
 			rleaves = [a.leaves() if isinstance(a, Tree) else [a] for a in st]
 			rvars = [rangeheads(sorted(map(int, l))) for a,l in zip(st, rleaves)]
-			#lvars = list(ranges(sorted(chain(*(map(int, l) for l in rleaves)))))
 			lvars = ranges(sorted(a for rng in rleaves for a in map(int, rng)))
 			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
 			lhs = node_arity(st, lvars, side_effect) if arity_marks else st.node
-			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks else a.node for a,b in zip(st, rvars))
+			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks
+										else a.node for a,b in zip(st, rvars))
 			vars = (lvars,) + tuple(rvars)
 			if vars[0][0][0] != vars[1][0]:
 				# sort the right hand side so that the first argument comes
@@ -57,7 +57,7 @@ def varstoindices(rule):
 	"""
 	replace the variable numbers by indices pointing to the
 	nonterminal on the right hand side from which they take
-	their value.
+	their value. restricted to ordered srcg rules.
 	A[0,1,2] -> A[0,2] B[1]  becomes  A[0, 1, 0] -> B C
 
 	>>> varstoindices([['S', [[0, 1, 2]]], ['NP', [1]], ['VP', [0, 2]]])
@@ -72,6 +72,7 @@ def varstoindices(rule):
 	return nonterminals, freeze(vars[0])
 
 def coarse_grammar(trees, sents, arity_marks=True, level=0):
+	""" collapse all labels to X except ROOT and POS tags. """
 	if level == 0: repl = lambda x: "X"
 	label = re.compile("[^^|<>-]+")
 	for tree in trees:
@@ -80,31 +81,36 @@ def coarse_grammar(trees, sents, arity_marks=True, level=0):
 				subtree.node = label.sub(repl, subtree.node)
 	return induce_srcg(trees, sents, arity_marks)
 
-def induce_srcg(trees, sents, arity_marks=True):
+def induce_srcg(trees, sents, arity_marks=True, freqs=False):
 	""" Induce a probabilistic SRCG, similar to how a PCFG is read off 
 		from a treebank """
-	grammar = []
+	rules = []
 	for tree, sent in zip(trees, sents):
-		t = tree.copy(True)
-		grammar.extend(map(varstoindices, srcg_productions(t, sent, arity_marks)))
-	grammar = FreqDist(grammar)
+		rules.extend(map(varstoindices,
+				srcg_productions(tree, sent, arity_marks, side_effect=False)))
+
+	grammar = FreqDist(rules)
 	fd = FreqDist()
-	for rule,freq in grammar.iteritems(): fd.inc(rule[0][0], freq)
-	return [(rule, log(float(freq)/fd[rule[0][0]]))
+	for rule, freq in grammar.iteritems(): fd.inc(rule[0][0], freq)
+	return [(rule, freq if freqs else log(float(freq)/fd[rule[0][0]]))
 				for rule, freq in grammar.iteritems()]
 
-def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpolate=1.0, wrong_interpolate=False, arity_marks=True):
+def dop_srcg_rules(trees, sents, normalize=False,
+				shortestderiv=False, arity_marks=True, freqs=False):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
-	Normalize means the application of the equal weights estimate
-	interpolate 0.6 means 60% dop probabilities, 40% srcg rule relative frequencies"""
-	ids, rules = count(1), FreqDist()
+	Normalize means the application of the equal weights estimate.
+	arity_marks enables or disables arity markers
+	freqs gives frequencies when enabled; default is probabilities. """
+	ids, rules = count(), FreqDist()
 	fd, ntfd = FreqDist(), FreqDist()
 	for tree, sent in zip(trees, sents):
 		t = canonicalize(tree.copy(True))
 		prods = map(varstoindices, srcg_productions(t, sent, arity_marks))
 		ut = decorate_with_ids(t, ids)
 		uprods = map(varstoindices, srcg_productions(ut, sent, False))
+		# replace addressed root node with unaddressed node
+		uprods[0] = ((prods[0][0][0],) + uprods[0][0][1:], uprods[0][1])
 		nodefreq(t, ut, fd, ntfd)
 		# fd: how many subtrees are headed by node X (e.g. NP or NP@12), 
 		# 	counts of NP@... should sum to count of NP
@@ -114,24 +120,51 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False, interpola
 								(x,) if x==y else (x,y)
 								for x,y in zip(a,b)))]
 							for (a,avar),(b,bvar) in zip(prods, uprods))))
-	if interpolate != 1.0:
-		srcg = dict(induce_srcg(trees, sents))
-	else: srcg = defaultdict(lambda: 1)
-	# should we distinguish what kind of arguments a node takes in fd?
-	def prob(((rule, yf), freq)):
-		return (rule, yf), (freq * reduce(mul, (fd[z] for z in rule[1:] if '@' in z), 1)
-        / (float(fd[rule[0]]) * (ntfd[rule[0]] if normalize and '@' not in rule[0] else 1.0))
-        * interpolate #(interpolate if '@' not in rule[0] else 1.0)
-        + ((1 - interpolate) * exp(srcg[rule, yf])
-            if not any('@' in z for z in rule) and not wrong_interpolate else 0))
-	probmodel = [((rule, yf), log(p)) for (rule, yf), p in imap(prob, rules.iteritems()) if p]
+	# map of exterior (unaddressed) nodes to normalized denominators:
+	ewedenoms = {}
+
+	@memoize
+	def sumfracs(nom, denoms):
+		return sum(nom / denom for denom in denoms)
+
+	def rfe(((r, yf), freq)):
+		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996)
+		return (r, yf), (freq *
+			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
+			/ (1 if freqs else (float(fd[r[0]]))))
+
+	def bodewe(((r, yf), freq)):
+		# Bod (2003, figure 3) 
+		return (r, yf), (freq *
+			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
+			/ ((1 if freqs else float(fd[r[0]]))
+				* (ntfd[r[0]] if '@' not in r[0] else 1.)))
+
+	def goodmanewe(((r, yf), freq)):
+		# Goodman (2003, eq. 1.5). Probably a typographic mistake.
+		if '@' in r[0]: return rfe(((r, yf), freq))
+		nom = reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
+		return (r, yf), sumfracs(nom, ewedenoms[r[0]])
+
+	if normalize and False: #goodmanewe
+		for aj in fd:
+			a = aj.split("@")[0]
+			if a == aj: continue	# exterior / unaddressed node
+			ewedenoms.setdefault(a, []).append(float(fd[aj] * ntfd[a]))
+		for a in ewedenoms: ewedenoms[a] = tuple(ewedenoms[a])
+		probmodel = [(rule, log(p)) for rule, p in imap(goodmanewe, rules.iteritems())]
+	elif normalize: #bodewe
+		probmodel = [(rule, p if freqs else log(p)) for rule, p in imap(bodewe, rules.iteritems())]
+	else:
+		probmodel = [(rule, p if freqs else log(p)) for rule, p in imap(rfe, rules.iteritems())]
 	if shortestderiv:
-		nonprobmodel = [(rule, log(1 if '@' in rule[0][0] else 0.5)) for rule in rules]
+		nonprobmodel = [(rule, log(1. if '@' in rule[0][0] else 0.5))
+							for rule in rules]
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
 	
 def doubledop(trees, sents):
-	from fragmentseeker import  extractfragments
+	from fragmentseeker import extractfragments
 	from treetransforms import minimalbinarization, complexityfanout
 	backtransform = {}
 	newprods = []
@@ -234,7 +267,7 @@ def newsplitgrammar(grammar):
 			arity[r.lhs] = 1
 		else:
 			args, lengths = yfarray(yf)
-			assert yf == arraytoyf(args, lengths)
+			assert yf == arraytoyf(args, lengths) # an unbinarized rule causes an error here
 			if len(rule) == 2 and w == 0.0: w += 0.01
 			r = Rule(toid[rule[0]], toid[rule[1]],
 				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
@@ -272,8 +305,16 @@ def arraytoyf(args, lengths):
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
 							for n, a in zip(lengths, args))
 
+def postorder(tree, f=None):
+	for child in tree:
+		if isinstance(child, Tree):
+			for a in postorder(child):
+				if not f or f(a): yield a
+	if not f or f(tree): yield tree
+
 def canonicalize(tree):
-	for a in reversed(list(tree.subtrees(lambda n: len(n) > 1))):
+	""" canonical linear precedence (of first component of each node) order """
+	for a in postorder(tree, lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
 	return tree
 
@@ -306,22 +347,49 @@ def node_arity(n, vars, inplace=False):
 		else: return "%s_%d" % (n.node, len(vars))
 	return n.node if isinstance(n, Tree) else n
 
-def printrule(r):
-	""" Print a rule in latex format"""
+def printrule(r,yf,w):
+		print "%.2f %s --> %s\t %r" % (exp(w), r[0], "  ".join(r[1:]), list(yf))
+
+def printrulelatex(r):
+	""" Print a rule in latex format (before it went through varstoindices)
+	"""
 	lhs = r[0]; rhs = r[1:]
+	print "$",
 	if isinstance(lhs[1][0], tuple) or isinstance(lhs[1][0], list):
 		r = zip(*alpha_normalize(zip(*r)))
 		lhs = r[0]; rhs = r[1:]
 	if not isinstance(lhs[1][0], tuple) and not isinstance(lhs[1][0], list):
 		print "\\textrm{%s}(\\textrm{%s})" % (lhs[0].replace("$","\\$"), lhs[1][0]),
-	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$"), ",".join(r"\langle " + ",".join("x_{%r}" % a for a in x) + r" \rangle " for x in lhs[1])),
+	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"), ",".join(r"\langle " + ",".join("x_{%r}" % a for a in x) + r" \rangle " for x in lhs[1])),
 	print r"\rightarrow",
 	for x in rhs:
 		if x[0] == 'Epsilon': print r'\epsilon',
 		else:
-			print "\\textrm{%s}(%s)" % (x[0].replace("$","\\$"), ",".join("x_{%r}" % a for a in x[1])),
+			print "\\textrm{%s}(%s)" % (x[0].replace("$","\\$").replace("_","\_"), ",".join("x_{%r}" % a for a in x[1])),
 			if x != rhs[-1]: print '\\:',
-	print r'\\'
+	print r' $ \\'
+
+def printrulelatex2(((r, yf), w)):
+	r""" Print a rule in latex format (after it went through varstoindices)
+	>>> r = ((('VP_2@1', 'NP@2', 'VVINF@5'), ((0,), (1,))), -0.916290731874155)
+	>>> printrulelatex2(r)
+	[ 0.4 ] &  $ \textrm{VP\_2@1}(\langle x_{0} \rangle ,\langle x_{1} \rangle ) \rightarrow \textrm{NP@2}(x_{0}) \: \textrm{VVINF@5}(x_{1})  $ \\
+	"""
+	c = count()
+	newrhs = []
+	vars = []
+	if r[1] == "Epsilon":
+		newrhs = [("Epsilon", [])]
+		lhs = (r[0], yf)
+	else:
+		# NB: not working correctly ... variables get mixed up
+		for n,a in enumerate(r[1:]):
+			z = sum(1 for comp in yf for y in comp if y == n)
+			newrhs.append((a, [c.next() for x in range(z)]))
+			vars.append(list(newrhs[-1][1]))
+		lhs = (r[0], [[vars[x].pop(0) for x in comp] for comp in yf])
+	print "[",exp(w),"] & ",
+	printrulelatex(tuple([lhs]+newrhs))
 
 def alpha_normalize(s):
 	""" Substitute variables so that the variables on the left-hand side appear consecutively.
@@ -499,6 +567,9 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 	return newsplitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
 
+def write_bitpar_grammar(grammar, encoding='utf-8'):
+	pass
+
 def read_penn_format(corpus, maxlen=15, n=7200):
 	trees = [a for a in islice((Tree(a) for a in codecs.open(corpus, encoding='iso-8859-1')), n)
 				if len(a.leaves()) <= maxlen]
@@ -567,6 +638,28 @@ def testgrammar(grammar):
 			break
 	else: print "All left hand sides sum to 1"
 
+def grammarinfo(grammar):
+	""" print some statistics on a grammar, before it goes through
+	(new)splitgrammar(). """
+	lhs = set(rule[0] for (rule,yf),w in grammar)
+	l = len(grammar)
+	print "labels:", len(set(rule[a] for (rule,yf),w in grammar for a in range(3) if len(rule) > a)),
+	print "of which preterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
+	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
+	print "max arity:", n, "in",
+	printrule(r, yf, w)
+	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w) for (rule, yf), w in grammar if rule[1] != "Epsilon")
+	print "max vars:", n, "in",
+	printrule(r, yf, w)
+	def arity(sym):
+		if "_" not in sym: return 1
+		return int(sym.split("_")[1].split("@")[0])
+	n, r, yf, w = max((sum(map(arity, rule)), rule, yf, w) for (rule, yf), w in grammar)
+	print "max parsing complexity:", n, "in",
+	printrule(r, yf, w)
+	ll = sum(1 for (rule,yf),w in grammar if rule[1] == "Epsilon")
+	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
+
 def bracketings(tree):
 	""" Return the labeled set of bracketings for a tree: 
 	for each nonterminal node, the set will contain a tuple with the label and
@@ -625,16 +718,108 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
-	try: from plcfrs_cython import parse, mostprobableparse
-	except: from plcfrs import parse, mostprobableparse
-	#from plcfrs import parse, mostprobableparse
+	try: from plcfrs_cython import parse, pprint_chart
+	except: from plcfrs import parse, pprint_chart
+	from disambiguation import mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'])
-	if p:
+	if start:
 		mpp = mostprobableparse(p, start, grammar.tolabel)
 		for t in mpp:
 			print exp(mpp[t]), t
-	else: print "no parse"
+	else:
+		print "no parse"
+		pprint_chart(p, sent, grammar.tolabel)
+	print
+
+def testctf():
+	from treetransforms import splitdiscnodes
+	from negra import NegraCorpusReader, readheadrules
+	headrules = readheadrules()
+	k = 50
+	corpus = NegraCorpusReader(".", "sample2\.export",
+		encoding="iso-8859-1", headorder=True,
+		headfinal=True, headreverse=False)
+	trees = list(corpus.parsed_sents())
+	sents = corpus.sents()
+	
+	dtrees = [t.copy(True) for t in trees]
+	cftrees = [splitdiscnodes(t.copy(True)) for t in trees]
+	parenttrees = [t.copy(True) for t in trees]
+	for t in trees: t.chomsky_normal_form(vertMarkov=0)
+	for t in cftrees: t.chomsky_normal_form(vertMarkov=0, horzMarkov=1)
+	for t in parenttrees: t.chomsky_normal_form(vertMarkov=2)
+	for t in dtrees: t.chomsky_normal_form(vertMarkov=0, horzMarkov=1)
+
+	normal = newsplitgrammar(induce_srcg(trees, sents))
+	parent = newsplitgrammar(induce_srcg(parenttrees, sents))
+	split = newsplitgrammar(induce_srcg(cftrees, sents))
+	fine999 = newsplitgrammar(dop_srcg_rules(trees, sents))
+	fine1 = newsplitgrammar(dop_srcg_rules(dtrees, sents))
+	for msg, coarse, fine, settings in zip(
+		"normal parentannot cf-split".split(),
+		(normal, parent, split),
+		(fine999, fine1, fine1),
+		((False, False), (True, False), (False, True))):
+		print "coarse grammar:", msg
+		for sent, tree in zip(sents, trees):
+			doctf(coarse, fine, sent, tree, k,
+					1 if msg == "parentannot" else 999, headrules, *settings)
+		#doctf(coarse, fine, sents[0], trees[0], k,
+		#			1 if msg == "parentannot" else 999,	headrules, *settings)
+
+def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split, verbose=False):
+	from plcfrs_cython import parse, pprint_chart, kbest_outside, merged_kbest
+	from disambiguation import mostprobableparse
+	from treetransforms import mergediscnodes
+	from coarsetofine import prunelist_fromchart
+	from containers import getlabel, getvec
+	print " C O A R S E "
+	p, start = parse(sent, coarse, start=coarse.toid['ROOT'])
+	if start:
+		mpp = mostprobableparse(p, start, coarse.tolabel)
+		for t in mpp:
+			print exp(-mpp[t]),
+			t = Tree.parse(t, parse_leaf=int); t.un_chomsky_normal_form()
+			if split: mergediscnodes(t)
+			t = canonicalize(rem_marks(t))
+			print t.pprint(margin=999)
+			print "exact match" if t == canonicalize(tree) else "no match"
+	else:
+		print "no parse"
+		pprint_chart(p, sent, coarse.tolabel)
+	l = prunelist_fromchart(p, start, coarse, fine, k,
+				removeparentannotation=pa, mergesplitnodes=split,
+				h=doph, headrules=headrules)
+	if verbose:
+		print "\nitems in 50-best of coarse chart"
+		if split:
+			d = merged_kbest(p, start, k, coarse, headrules)
+			print
+			for label in d:
+				print label, map(bin, d[label].keys())
+		else:
+			kbest = kbest_outside(p, start, k)
+			for a,b in kbest.items():
+				print coarse.tolabel[getlabel(a)], bin(getvec(a)), b
+		print "\nprunelist:"
+		for n,x in enumerate(l):
+			print fine.tolabel[n], [(bin(v), s) for v,s in x.items()]
+		print
+	print " F I N E "
+	p, start = parse(sent, fine, start=fine.toid['ROOT'], prunelist=l, neverblockmarkovized=pa or split)
+	print
+	if start:
+		mpp = mostprobableparse(p, start, fine.tolabel)
+		for t in mpp:
+			print exp(-mpp[t]),
+			t = Tree.parse(t, parse_leaf=int); t.un_chomsky_normal_form()
+			t = canonicalize(rem_marks(t))
+			print t.pprint(margin=999)
+			print "exact match" if t == canonicalize(tree) else "no match"
+	else:
+		print "no parse"
+		if verbose: pprint_chart(p, sent, fine.tolabel)
 	print
 
 def main():
@@ -657,40 +842,35 @@ def main():
 	print
 	tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	sent = "Daruber muss nachgedacht werden".split()
-	tree = Tree("(S (NP 1) (VP (V 0) (ADV 2) (ADJ 3)))")
-	sent = "is Mary very sad".split()
-	tree = Tree("(S (NP 1) (VP (V 0) (ADJ 2)))")
-	sent = "is Mary sad".split()
-	tree2 = Tree("(S (NP 0) (VP (V 1) (ADV 2) (ADJ 3)))")
-	sent2 = "Mary is really happy".split()
+	tree = Tree("(S (NP 1) (VP (VB 0) (JJ 2)))")
+	sent = "is Gatsby rich".split()
+	tree2 = Tree("(S (NP 0) (VP (VB 1) (NP 2)))")
+	sent2 = "Daisy loved Gatsby".split()
 	#tree, sent = corpus.parsed_sents()[0], corpus.sents()[0]
 	#pprint(srcg_productions(tree, sent))
 	#tree.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
 	#tree2.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
-	collinize(tree, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='', minMarkov=1)
-	collinize(tree2, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='', minMarkov=1)
+	collinize(tree, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='')
+	collinize(tree2, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='')
 	for (r, yf), w in sorted(induce_srcg([tree.copy(True), tree2], [sent, sent2]),
 								key=lambda x: (x[0][0][1] == 'Epsilon', x)):
-		print "%.2f %s --> %s\t%r" % (exp(w), r[0], " ".join(r[1:]), list(yf))
+		printrule(r,yf,w)
 	print
-	for ((r, yf), w1), (r2, w2) in zip(dop_srcg_rules([tree.copy(True), tree2], [sent, sent2], interpolate=1.0),
-									dop_srcg_rules([tree.copy(True), tree2], [sent, sent2], interpolate=0.5)):
-		assert (r, yf) == r2
-		print "%.2f %.2f %s --> %s\t%r" % (exp(w1), exp(w2), r[0], " ".join(r[1:]), list(yf))
-
 	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
 
 	pprint(splitgrammar(induce_srcg([tree.copy(True)], [sent])))
-	#pprint(dop_srcg_rules([tree.copy(True)], [sent], interpolate=0.5))
-	do(sent, newsplitgrammar(dop_srcg_rules([tree], [sent])))
-	newsplitgrammar(dop_srcg_rules([tree], [sent]))
+	do(sent, newsplitgrammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
+	grammar = dop_srcg_rules([tree,tree2], [sent,sent2])
+	print 'dop reduction'
+	for (r, yf), w in sorted(grammar):
+		printrule(r,yf,w)
 	trees = list(corpus.parsed_sents()[:10])
 	sents = corpus.sents()[:100]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	grammar, backtransform = doubledop(trees, sents)
-	print 'grammar',
+	print '\ndouble dop grammar',
 	for (r, yf), w in sorted(grammar):
-		print "%.2f %s --> %s\t%r" % (exp(w), r[0], " ".join(r[1:]), list(yf))
+		printrule(r,yf,w)
 	print "backtransform: {",
 	for a,b in backtransform.items():
 		try: print a,
@@ -699,8 +879,9 @@ def main():
 	print "}"
 	grammar = newsplitgrammar(grammar)
 	testgrammar(grammar)
-	try: from plcfrs_cython import parse, mostprobableparse
-	except: from plcfrs import parse, mostprobableparse
+	try: from plcfrs_cython import parse
+	except: from plcfrs import parse
+	from disambiguation import mostprobableparse
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
 		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], exhaustive=True)
@@ -718,11 +899,13 @@ def main():
 				print mpp[t], rem_marks(tree) == r, r
 		else: print "no parse"
 		print
+	testctf()
 
 if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	main()
+	#main()
+	testctf()
 	if attempted and not fail: print "%d doctests succeeded!" % attempted

@@ -34,7 +34,7 @@ def testbit(a, offset):
 	""" Mask a particular bit, return nonzero if set """
 	return a & (1 << offset)
 
-testbitshort = testbitc = testbit
+testbitint = testbitshort = testbitc = testbit
 
 def bitminmax(a, b):
 	"""test if the least and most significant bits of a and b are 

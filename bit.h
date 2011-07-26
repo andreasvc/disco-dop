@@ -32,7 +32,7 @@ inline int bitlength(unsigned long vec) {
 }
 
 inline int testbit(unsigned long vec, unsigned int pos) {
-	return vec & (1 << pos);
+	return vec & (1UL << pos);
 }
 
 inline int testbitc(unsigned char arg, unsigned int pos) {
@@ -40,6 +40,10 @@ inline int testbitc(unsigned char arg, unsigned int pos) {
 }
 
 inline int testbitshort(unsigned short arg, unsigned int pos) {
+	return arg & (1 << pos);
+}
+
+inline int testbitint(unsigned int arg, unsigned int pos) {
 	return arg & (1 << pos);
 }
 

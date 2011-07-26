@@ -16,6 +16,7 @@ cdef extern from "bit.h":
 	m=cython.int,
 	maxA=cython.int,
 	lensent=cython.int,
+	vec=cython.ulong,
 	y=cython.double,
 	p=cython.double,
 	unary=list,
@@ -64,17 +65,6 @@ cdef Edge iscore(Edge e)
 	edge=Edge,
 	item=ChartItem)
 cdef filter_subtree(start, chart, chart2)
-
-@cython.locals(
-	edge=Edge)
-cpdef mostprobablederivation(chart, start, tolabel)
-
-@cython.locals(
-	edge=Edge)
-cdef getmpd(chart, ChartItem start, tolabel)
-
-@cython.locals(edge=Edge)
-cpdef samplechart(dict chart, ChartItem start, dict tolabel)
 
 @cython.locals(
 	a=ChartItem,

@@ -1,5 +1,7 @@
 from nltk.corpus.reader.api import CorpusReader, SyntaxCorpusReader
-from nltk.corpus.reader.util import read_regexp_block, StreamBackedCorpusView, concat
+from nltk.corpus.reader.util import read_regexp_block,\
+								StreamBackedCorpusView, concat
+from nltk.util import LazyMap
 from nltk import Tree
 from itertools import count
 import re
@@ -9,31 +11,22 @@ EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 class NegraCorpusReader(SyntaxCorpusReader):
-	def __init__(self, root, fileids, encoding="utf-8", headorder=False, headfinal=False, headreverse=False, unfold=False):
+	def __init__(self, root, fileids, encoding="utf-8", headorder=False, headfinal=False, headreverse=False, unfold=False, functiontags=False):
 		""" headorder: whether to order constituents according to heads
 			headfinal: whether to put the head in final or in frontal position
-			headreverse: the head is made final/frontal by reversing everything before or after the head.
-				when true, the side on which the head is will be the reversed side
+			headreverse: the head is made final/frontal by reversing everything
+			before or after the head. When true, the side on which the head is
+				will be the reversed side.
 			unfold: whether to apply corpus transformations"""
 		self.headorder = headorder; self.reverse = headreverse
 		self.headfinal = headfinal;	self.unfold = unfold
-		self.headrules = {}
-		# this file containing head assignment rules is part of rparse, 
-		# under src/de/tuebingen/rparse/treebank/constituent/negra/
-		try: rulefile = open("negra.headrules")
-		except IOError:
-			print "WARNING: negra head rules not found! no head annotation will be performed."
-		else:
-			for a in rulefile:
-				if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
-					label, lr, heads = a.upper().split(None, 2)
-					self.headrules.setdefault(label, []).append((lr, heads.split()))
-			self.headrules["ROOT"] = self.headrules["VROOT"]
+		self.functiontags = functiontags
+		self.headrules = readheadrules()
 		CorpusReader.__init__(self, root, fileids, encoding)
 	def _parse(self, s):
 		def getchildren(parent, children):
 			results = []
-			for n,a in children[parent]:
+			for n, a in children[parent]:
 				# n is the index in the block to record word indices
 				if a[WORD].startswith("#"): #nonterminal
 					results.append(Tree(a[TAG], getchildren(a[WORD][1:], children)))
@@ -44,28 +37,6 @@ class NegraCorpusReader(SyntaxCorpusReader):
 			# roughly order constituents by order in sentence
 			results.sort(key=lambda a: a.leaves()[0])
 			return results
-		def headorder(tree):
-			head = [n for n,a in enumerate(tree) if hasattr(a, "source") and "HD" in a.source[FUNC].split("-")]
-			if not head: return
-			headidx = head.pop()
-			# everything until the head is reversed and prepended to the rest,
-			# leaving the head as the first element
-			if self.headfinal:
-				if self.reverse:
-					# head final, reverse rhs: A B C^ D E => A B E D C^
-					tree[:] = tree[:headidx] + tree[headidx:][::-1]
-				else:
-					# head final, no reverse:  A B C^ D E => D E A B C^
-					#return sorted(tree[head+1:] + tree[:head]) + tree[head:head+1]
-					# head final, reverse lhs:  A B C^ D E => E D A B C^
-					tree[:] = tree[headidx+1:][::-1] + tree[:headidx+1]
-			else:
-				if self.reverse:
-					# head first, reverse lhs: A B C^ D E => C^ B A D E
-					tree[:] = tree[:headidx+1][::-1] + tree[headidx+1:]
-				else:
-					# head first, reverse rhs: A B C^ D E => C^ D E B A
-					tree[:] = tree[headidx:] + tree[:headidx][::-1]
 		children = {}
 		for n,a in enumerate(s):
 			children.setdefault(a[PARENT], []).append((n,a))
@@ -73,7 +44,9 @@ class NegraCorpusReader(SyntaxCorpusReader):
 		if self.unfold: result = unfold(result)
 		if self.headorder:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
-			map(headorder, result.subtrees())
+			map(lambda x: headorder(x, self.headfinal, self.reverse),
+													result.subtrees())
+		if self.functiontags: addfunctions(result)
 		return result
 	def _word(self, s):
 		return [a[WORD] for a in s if a[WORD][0] != "#"]
@@ -85,6 +58,10 @@ class NegraCorpusReader(SyntaxCorpusReader):
 			if len(a) == 6: return a
 			elif len(a) == 5: return a[:1] + [''] + a[1:]
 			else: raise ValueError("expected 5 or 6 columns")
+		#def enforcesixelements(block):
+		#	return [sixelements(line.split())
+		#			for line in block.splitlines()[1:]]
+		#return LazyMap(enforcesixelements, read_regexp_block(stream, BOS, EOS))
 		return [[sixelements(line.split()) for line in block.splitlines()[1:]]
 				for block in read_regexp_block(stream, BOS, EOS)]
 			# didn't seem to help:
@@ -96,6 +73,75 @@ class NegraCorpusReader(SyntaxCorpusReader):
 			return [re.sub(BOS,"", result[0])] if result else []
 		return concat([StreamBackedCorpusView(fileid, reader, encoding=enc)
 					for fileid, enc in self.abspaths(self._fileids, True)])
+
+def addfunctions(tree):
+	# FIXME: pos tags should never get a function tag.
+	for a in tree.subtrees():
+		if a.source[FUNC].split("-")[0]:
+			a.node += "+%s" % a.source[FUNC].split("-")[0]
+
+def readheadrules():
+	headrules = {}
+	# this file containing head assignment rules is part of rparse,
+	# under src/de/tuebingen/rparse/treebank/constituent/negra/
+	try: rulefile = open("negra.headrules")
+	except IOError:
+		print "WARNING: negra head rules not found! no head annotation will be performed."
+		return headrules
+	for a in rulefile:
+		if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
+			label, lr, heads = a.upper().split(None, 2)
+			headrules.setdefault(label, []).append((lr, heads.split()))
+	headrules["ROOT"] = headrules["VROOT"]
+	return headrules
+
+def sethead(child):
+	child.source = getattr(child, "source", 6 * [''])
+	if "-" in child.source[FUNC]: pass
+	elif child.source[FUNC]: child.source[FUNC] += "-HD"
+	else: child.source[FUNC] = "HD"
+
+def headfinder(tree, headrules):
+	""" use head finding rules to mark one child of tree as head. """
+	if any(a.source[FUNC].split("-")[-1] == "HD" for a in tree if hasattr(a, "source")):
+		return
+	for lr, heads in headrules.get(tree.node, []):
+		if lr == "LEFT-TO-RIGHT": children = tree
+		elif lr == "RIGHT-TO-LEFT": children = tree[::-1]
+		else: raise ValueError
+		for head in heads:
+			for child in children:
+				if isinstance(child, Tree) and child.node == head:
+					sethead(child)
+					return
+	# default head is initial nonterminal
+	for a in tree:
+		if isinstance(a, Tree):
+			sethead(a)
+			return
+
+def headorder(tree, headfinal, reverse):
+	""" change order of constituents based on head (identified with
+	function tag). """
+	head = [n for n,a in enumerate(tree) if hasattr(a, "source") and "HD" in a.source[FUNC].split("-")]
+	if not head: return
+	headidx = head.pop()
+	# everything until the head is reversed and prepended to the rest,
+	# leaving the head as the first element
+	if headfinal:
+		if reverse:
+			# head final, reverse rhs: A B C^ D E => A B E D C^
+			tree[:] = tree[:headidx] + tree[headidx:][::-1]
+		else:
+			# head final, reverse lhs:  A B C^ D E => E D A B C^
+			tree[:] = tree[headidx+1:][::-1] + tree[:headidx+1]
+	else:
+		if reverse:
+			# head first, reverse lhs: A B C^ D E => C^ B A D E
+			tree[:] = tree[:headidx+1][::-1] + tree[headidx+1:]
+		else:
+			# head first, reverse rhs: A B C^ D E => C^ D E B A
+			tree[:] = tree[headidx:] + tree[:headidx][::-1]
 
 # generalizations suggested by SyntaxGeneralizer of TigerAPI
 # however, instead of renaming, we introduce unary productions
@@ -122,8 +168,15 @@ def function(tree):
 	if hasattr(tree, "source"): return tree.source[FUNC].split("-")[0]
 	else: return ''
 
+def ishead(tree):
+	if hasattr(tree, "source"): return "HD" in tree.source[FUNC]
+	else: return False
+
 def rindex(l, v):
 	return len(l) - 1 - l[::-1].index(v)
+
+def labels(tree):
+	return [a.node for a in tree if isinstance(a, Tree)]
 
 def unfold(tree):
 	""" Unfold redundancies and perform other transformations introducing
@@ -131,6 +184,7 @@ def unfold(tree):
 	grammatical functions and syntactic categories.
 	"""
 	original = tree.copy(Tree); current = tree # for debugging
+
 	# un-flatten PPs
 	addtopp = "AC".split()
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
@@ -151,6 +205,7 @@ def unfold(tree):
 		# NP -> PN -> NP
 		if ac and nk and (len(nk) > 1 or nk[0].node not in "NP PN".split()):
 			pp[:] = ac + [Tree("NP", nk)]
+
 	# introduce DPs
 	#determiners = set("ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT PWS PWAT PWAV".split())
 	determiners = set("ART".split())
@@ -159,6 +214,12 @@ def unfold(tree):
 			np.node = "DP"
 			if len(np) > 1 and np[1].node != "PN":
 				np[:] = [np[0], Tree("NP", np[1:])]
+
+	# VP category split based on head
+	for vp in tree.subtrees(lambda n: n.node == "VP"):
+		hd = [x for x in vp if ishead(x)].pop()
+		vp.node += "-" + hd.node
+	
 	# introduce finite VP at S level, collect objects and modifiers
 	# introduce new S level for discourse markers
 	newlevel = "DM".split()
@@ -170,6 +231,7 @@ def unfold(tree):
 			# introduce a VP unless it would lead to a unary VP -> VP production
 			if len(vp) != 1 or vp[0].node != "VP":
 				s[:] = [a for a in s if function(a) not in addtovp] + [vp]
+
 	# relative clause => S becomes SRC
 	for s in tree.subtrees(lambda n: n.node == "S" and function(n) == "RC"):
 		s.node = "SRC"
@@ -185,22 +247,28 @@ def unfold(tree):
 		cs = tree[labels.index("CS")]
 		toplevel_s = [a for a in cs if a.node == "S"]
 	map(finitevp, toplevel_s)
+
 	# introduce POS tag for particle verbs
 	for a in tree.subtrees(lambda n: "SVP" in map(function, n)):
 		svp = [x for x in a if function(x) == "SVP"].pop()
 		#apparently there can be a _verb_ particle without a verb. headlines? annotation mistake?
-		if "HD" in map(function, a):
-			hd = [x for x in a if function(x) == "HD"].pop()
+		if any(map(ishead, a)):
+			hd = [x for x in a if ishead(x)].pop()
 			if hd.node != a.node:
 				particleverb = Tree(hd.node, [hd, svp])
-				a[:] = [particleverb if function(x) == "HD" else x for x in a if function(x) != "SVP"]
+				a[:] = [particleverb if ishead(x) else x
+									for x in a if function(x) != "SVP"]
+
 	# introduce SBAR level
 	sbarfunc = "CP".split()
-	# in the annotation, complementizers belong to the first S in S
-	# conjunctions, even when they appear to apply to the whole conjunction.
-	for s in list(tree.subtrees(lambda n: n.node == "S" and function(n[0]) in sbarfunc and len(n) > 1)):
+	# in the annotation, complementizers belong to the first S
+	# in S conjunctions, even when they appear to apply to the whole
+	# conjunction.
+	for s in list(tree.subtrees(lambda n: n.node == "S"
+			and function(n[0]) in sbarfunc and len(n) > 1)):
 		s.node = "SBAR"
 		s[:] = [s[0], Tree("S", s[1:])]
+
 	# introduce nested structures for modifiers
 	# (iterated adjunction instead of sister adjunction)
 	#adjunctable = set("NP".split()) # PP AP VP
@@ -212,10 +280,10 @@ def unfold(tree):
 	#		modifier = modifiers.pop()
 	#		a[:] = [Tree(a.node, [x for x in a if x != modifier]), modifier]
 	#		a = a[0]
+
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
-	return tree
-	# introduce phrasal projections for single tokens
+	# introduce phrasal projections for single tokens (currently only adds NPs)
 	for a in tree.treepositions("leaves"):
 		tag = tree[a[:-1]]   # e.g. NN
 		const = tree[a[:-2]] # e.g. S
@@ -227,18 +295,18 @@ def unfold(tree):
 def fold(tree):
 	""" Undo the transformations performed by unfold. Do not apply twice (might
 	remove VPs which shouldn't be). """
-	def labels(tree):
-		return [a.node for a in tree if isinstance(a, Tree)]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
 	global original, current
 	original = tree.copy(True)
 	current = tree
+
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
 		dp.node = "NP"
 		if len(dp) > 1 and dp[1].node == "NP":
 			dp[:] = dp[:1] + dp[1][:]
+
 	# flatten adjunctions
 	#nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
 	#probably_nk = set("AP PIS".split()) | nkonly
@@ -248,20 +316,24 @@ def fold(tree):
 	#								and not set(labels(n)) & probably_nk):
 	#	np.sort(key=lambda n: n.node == "NP")
 	#	np[:] = np[:1] + np[1][:]
+
 	# flatten PPs
 	for pp in tree.subtrees(lambda n: n.node == "PP"):
 		if "NP" in labels(pp) and "NN" not in labels(pp):
 			#ensure NP is in last position
 			pp.sort(key=lambda n: n.node == "NP")
 			pp[:] = pp[:-1] + pp[-1][:]
-	# SRC => S
+	# SRC => S, VP-* => VP
 	for s in tree.subtrees(lambda n: n.node == "SRC"): s.node = "S"
+	for vp in tree.subtrees(lambda n: n.node.startswith("VP-")): vp.node = "VP"
+
 	# merge extra S level
 	for sbar in list(tree.subtrees(lambda n: n.node == "SBAR" or (n.node == "S" and len(n) == 2 and labels(n) == ["PTKANT", "S"]))):
 		sbar.node = "S"
 		if sbar[0].node == "S":
 			sbar[:] = sbar[1:] + sbar[0][:]
 		else: sbar[:] = sbar[:1] + sbar[1][:]
+
 	# merge finite VP with S level
 	def mergevp(s):
 		for vp in (n for n,a in enumerate(s) if a.node == "VP"):
@@ -272,12 +344,14 @@ def fold(tree):
 	#elif any(a.node == "CS" for a in tree):
 	#	map(mergevp, [s for cs in tree for s in cs if cs.node == "CS" and s.node == "S"])
 	for s in tree.subtrees(lambda n: n.node == "S"): mergevp(s)
+
 	# remove constituents for particle verbs
 	# get the grandfather of each verb particle
 	for a in list(tree.subtrees(lambda n: any("PTKVZ" in (x.node for x in m if isinstance(x, Tree)) for m in n if isinstance(m, Tree)))):
 		for n,b in enumerate(a):
 			if len(b) == 2 and b.node.startswith("V") and "PTKVZ" in (c.node for c in b if isinstance(c, Tree)) and any(c.node == b.node for c in b):
 				a[n:n+1] = b[:]
+
 	# remove phrasal projections for single tokens
 	for a in tree.treepositions("leaves"):
 		tag = tree[a[:-1]]    # NN
@@ -290,22 +364,6 @@ def fold(tree):
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
 	return tree
 
-def headfinder(tree, headrules):
-	if any(a.source[FUNC].split("-")[-1] == "HD" for a in tree if hasattr(a, "source")):
-		return
-	for lr, heads in headrules.get(tree.node, []):
-		if lr == "LEFT-TO-RIGHT": children = tree
-		elif lr == "RIGHT-TO-LEFT": children = tree[::-1]
-		else: raise ValueError
-		for head in heads:
-			for child in children:
-				if isinstance(child, Tree) and child.node == head:
-					child.source = getattr(child, "source", 6 * [''])
-					if "-" in child.source[FUNC]: pass
-					elif child.source[FUNC]: child.source[FUNC] += "-HD"
-					else: child.source[FUNC] = "HD"
-					return
-	
 def bracketings(tree):
 	return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
 
@@ -327,8 +385,8 @@ def main():
 	#for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
 	#for a in n.sents(): print " ".join(a)
 	#for a in n.blocks(): print a
-	#n = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=False)
-	#nn = NegraCorpusReader("../rparse", "tigerproc\.export", unfold=True)
+	n = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=False)
+	nn = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=True, unfold=True)
 	print "\nunfolded"
 	correct = exact = d = 0
 	nk = set(); mo = set()

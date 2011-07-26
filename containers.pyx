@@ -4,7 +4,7 @@ cdef class ChartItem:
 		self.label = label
 		self.vec = vec
 		#self._hash = hash((self.label, self.vec))
-		self._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
+		self._hash = (1000003UL * ((1000003UL * 0x345678UL) ^ <long>label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
 		if self._hash == -1: self._hash = -2
 	def __hash__(ChartItem self):
 		return self._hash
@@ -16,7 +16,7 @@ cdef class ChartItem:
 		elif op == 0: return self.label < other.label or self.vec < other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
 	def __nonzero__(ChartItem self):
-		return self.label and self.vec
+		return self.label != 0 and self.vec != 0
 	def __repr__(ChartItem self):
 		return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
@@ -27,10 +27,10 @@ cdef class Edge:
 		self.left = left; self.right = right
 		#self._hash = hash((inside, prob, left, right))
 		# this is the hash function used for tuples, apparently
-		_hash = (<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>inside
-		_hash = (<unsigned long>1000003 * _hash) ^ <long>prob
-		_hash = (<unsigned long>1000003 * _hash) ^ (<ChartItem>left)._hash
-		_hash = (<unsigned long>1000003 * _hash) ^ (<ChartItem>right)._hash
+		_hash = (1000003UL * 0x345678UL) ^ <long>inside
+		_hash = (1000003UL * _hash) ^ <long>prob
+		_hash = (1000003UL * _hash) ^ (<ChartItem>left)._hash
+		_hash = (1000003UL * _hash) ^ (<ChartItem>right)._hash
 		if _hash == -1: self._hash = -2
 		else: self._hash = _hash
 	def __hash__(self):
@@ -59,6 +59,8 @@ def getlabel(ChartItem a):
 	return a.label
 def getvec(ChartItem a):
 	return a.vec
+def getscore(Edge a):
+	return a.score
 
 #cdef class RankEdge(Edge):
 #	def __cinint__(self, Edge edge, int j1, int j2):

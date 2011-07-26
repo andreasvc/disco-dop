@@ -29,7 +29,9 @@ def parse(sent, grammar, tags=[], start=1, exhaustive=False,
 	toid = dict(grammar.toid)
 	tolabel = dict(grammar.tolabel)
 	if start is None: start = toid['ROOT']
-	goal = ChartItem(start, (1 << len(sent)) - 1)
+	vec = 1
+	vec = (vec << len(sent)) - 1
+	goal = ChartItem(start, vec)
 	m = maxA = 0
 	C = {}
 	Cx = [{} for _ in toid]
@@ -252,92 +254,6 @@ def getviterbi(chart, start, mem):
 	mem[start] = bestprobs
 	return bestprobs
 
-def samplechart(chart, start, tolabel):
-	edge = choice(chart[start])
-	if edge.left.label == 0: # == "Epsilon":
-		return "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
-	children = [samplechart(chart, child, tolabel)
-				for child in (edge.left, edge.right) if child.label]
-	tree = "(%s %s)" % (tolabel[start.label],
-							" ".join([a for a,b in children]))
-	return tree, fsum([edge.prob] + [b for a,b in children])
-
-def mostprobablederivation(chart, start, tolabel):
-	edge = min(chart[start])
-	return getmpd(chart, start, tolabel), edge.inside
-
-def getmpd(chart, start, tolabel):
-	edge = min(chart[start])
-	if edge.right.label: #binary
-		return "(%s %s %s)" % (tolabel[start.label],
-					getmpd(chart, edge.left, tolabel),
-					getmpd(chart, edge.right, tolabel))
-	else: #unary or terminal
-		return "(%s %s)" % (tolabel[start.label],
-					getmpd(chart, edge.left, tolabel) if edge.left.label
-									else str(edge.left.vec))
-
-removeids = re.compile("@[0-9]+")
-def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None):
-	""" sum over n random/best derivations from chart,
-		return a dictionary mapping parsetrees to probabilities """
-	print "sample =", sample or both, "kbest =", (not sample) or both,
-	if both:
-		derivations = set(samplechart(chart, start, tolabel) for x in range(n*100))
-		derivations.discard(None)
-		derivations.update(lazykbest(chart, start, n, tolabel))
-		#derivations.update(islice(enumchart(chart, start, tolabel, n), n))
-	elif sample:
-		#filtercycles(chart, start, set(), set())
-		derivations = set(samplechart(chart, start, tolabel) for x in range(n))
-		derivations.discard(None)
-		#calculate real parse probabilities according to Goodman's claimed
-		#method?
-	else:
-		#mem = {}
-		#filtercycles(chart, start, set(), set())
-		#getviterbi(chart, start, mem)
-		#for a in set(chart.keys()) - set(mem.keys()): del chart[a]
-		#print "pruned chart keys", len(chart), "/ values", sum(map(len, chart.values()))
-		#for a in chart: chart[a].sort(key=itemgetter(0))
-		#derivations = list(islice(enumchart(chart, start, tolabel, n), n))
-		#fixme: set shouldn't be necessary
-		derivations = set(lazykbest(chart, start, n, tolabel))
-		#print len(derivations)
-		#print "enumchart:", len(list(islice(enumchart(chart, start, tolabel), n)))
-		#assert(len(list(islice(enumchart(chart, start), n))) == len(set((a.freeze(),b) for a,b in islice(enumchart(chart, start), n))))
-	if shortest:
-		derivations = [(a,b) for a, b in derivations if b == derivations[0][1]]
-	#parsetrees = defaultdict(float)
-	parsetrees = defaultdict(list)
-	m = 0
-	for deriv, prob in derivations:
-		m += 1
-		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
-		#restore linear precedence (disabled, seems to make no difference)
-		#parsetree = Tree(removeids.sub("", deriv))
-		#for a in list(parsetree.subtrees())[::-1]:
-		#	a.sort(key=lambda x: x.leaves())
-		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
-		if shortest:
-			tree = Tree(removeids.sub("", deriv))
-			sent = sorted(tree.leaves(), key=int)
-			rules = induce_srcg([tree], [sent], arity_marks=False)
-			prob = -fsum([secondarymodel[r] for r, w in rules
-											if r[0][1] != 'Epsilon'])
-		parsetrees[removeids.sub("", deriv)].append(-prob)
-	# Adding probabilities in log space
-	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
-	for parsetree in parsetrees:
-		maxprob = max(parsetrees[parsetree])
-		#foo = sum(map(exp, parsetrees[parsetree]))
-		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
-										for prob in parsetrees[parsetree]]))]))
-		#assert log(foo) == parsetrees[parsetree]
-	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
-	return parsetrees
-
 def binrepr(a, sent):
 	return bin(a.vec)[2:].rjust(len(sent), "0")[::-1]
 
@@ -359,6 +275,7 @@ def pprint_chart(chart, sent, tolabel):
 		print
 
 def do(sent, grammar):
+	from disambiguation import mostprobableparse
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar, [], grammar.toid['S'], False, None, None, None)
 	pprint_chart(chart, sent.split(), grammar.tolabel)

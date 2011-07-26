@@ -21,8 +21,7 @@ class ChartItem:
 	def __nonzero__(self):
 		return self.vec and self.label
 	def __repr__(self):
-		#would need bitlen for proper padding
-		return "%s[%s]" % (self.label, bin(self.vec)[2:][::-1])
+		return "ChartItem(%s, %s)" % (self.label, bin(self.vec))
 
 class Edge:
 	__slots__ = ('score', 'inside', 'prob', 'left', 'right', '_hash')
@@ -57,8 +56,11 @@ class Edge:
 	def __ge__(self, other):
 		return self.score >= other.score
 	def __repr__(self):
-		return "<%g, %g, [%r, %s]>" % (self.inside, self.prob,
-					self.left, repr(self.right) if self.right else 'None')
+		return "Edge(%g, %g, %g, %r, %r)" % (self.score, self.inside,
+					self.prob,
+					self.left,
+					self.right)
+					#repr(self.right) if self.right else 'None')
 
 class Terminal:
 	__slots__ = ('lhs', 'rhs1', 'rhs2', 'word', 'prob')
