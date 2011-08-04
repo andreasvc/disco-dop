@@ -2,8 +2,6 @@
 (equivalent to Linear Context-Free Rewriting Systems)"""
 from math import log, exp
 from array import array
-from operator import itemgetter
-from itertools import islice, count
 from collections import defaultdict
 import re, gc
 import numpy as np
@@ -43,8 +41,10 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 	return edge
 
 def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
-			estimate=None, list prunelist=None,
-			bint neverblockmarkovized=False, int beamwidth=0):
+			estimate=None, list prunelist=None, dict prunetoid=None,
+			dict coarsechart=None, bint splitprune=False,
+			bint neverblockmarkovized=False, bint neverblockdiscontinuous=False,
+			int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -54,6 +54,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef dict lexical = <dict>grammar.lexical
 	cdef dict toid = <dict>grammar.toid
 	cdef dict tolabel = <dict>grammar.tolabel
+	cdef array[unsigned char] arity = grammar.arity
 	cdef list rules
 	cdef dict C = {}							#the full chart
 	cdef list Cx = [{} for _ in toid]			#the viterbi probabilities
@@ -61,10 +62,10 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef dict beam = <dict>defaultdict(int)
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
-	cdef unsigned int label, newlabel, blocked = 0
+	cdef unsigned int label, newlabel, blocked = 0, splitlabel = 0
 	cdef unsigned long vec, maxA = 0
 	cdef double x, y, z
-	cdef bint doprune = bool(prunelist), doestimate = bool(estimate)
+	cdef bint doprune = bool(prunelist), prunenow, doestimate = bool(estimate)
 	cdef Py_ssize_t i
 	cdef heapdict A = heapdict()				#the agenda
 	cdef Entry entry
@@ -145,10 +146,19 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 					else:
 						newedge = new_Edge(x + rule.prob, x + rule.prob,
 											rule.prob, Ih, NONE)
-					if neverblockmarkovized:
-						doprune = "|" not in grammar.tolabel[rule.lhs]
+					prunenow = doprune
+					if prunenow and neverblockdiscontinuous:
+						prunenow = arity[rule.lhs] > 1
+					if prunenow and neverblockmarkovized:
+						prunenow = "|" not in tolabel[rule.lhs]
+					if prunenow and splitprune:
+						if arity[rule.lhs] > 1:
+							splitlabel = prunetoid[tolabel[
+										rule.lhs].split("_")[0] + "*"]
+						else: splitlabel = 0
 					process_edge(new_ChartItem(rule.lhs, Ih.vec), newedge,
-							A, C, Cx, doprune, prunelist, lensent, &blocked)
+						A, C, Cx, prunenow, prunelist, splitlabel,
+							coarsechart, lensent, &blocked)
 
 			# binary left
 			l = <list>list_getitem(lbinary, Ih.label)
@@ -172,10 +182,19 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 						else:
 							newedge = new_Edge(x+y+rule.prob, x+y+rule.prob,
 											rule.prob, Ih, I1h)
-						if neverblockmarkovized:
-							doprune = "|" not in grammar.tolabel[rule.lhs]
+						prunenow = doprune
+						if prunenow and neverblockdiscontinuous:
+							prunenow = arity[rule.lhs] > 1
+						if prunenow and neverblockmarkovized:
+							prunenow = "|" not in tolabel[rule.lhs]
+						if prunenow and splitprune:
+							if arity[rule.lhs] > 1:
+								splitlabel = prunetoid[tolabel[
+											rule.lhs].split("_")[0] + "*"]
+						else: splitlabel = 0
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
-							A, C, Cx, doprune, prunelist, lensent, &blocked)
+							A, C, Cx, prunenow, prunelist, splitlabel,
+								coarsechart, lensent, &blocked)
 
 			# binary right
 			l = <list>list_getitem(rbinary, Ih.label)
@@ -199,10 +218,19 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 						else:
 							newedge = new_Edge(x+y+rule.prob, x+y+rule.prob,
 											rule.prob, I1h, Ih)
-						if neverblockmarkovized:
-							doprune = "|" not in grammar.tolabel[rule.lhs]
+						prunenow = doprune
+						if prunenow and neverblockdiscontinuous:
+							prunenow = arity[rule.lhs] > 1
+						if prunenow and neverblockmarkovized:
+							prunenow = "|" not in tolabel[rule.lhs]
+						if prunenow and splitprune:
+							if arity[rule.lhs] > 1:
+								splitlabel = prunetoid[tolabel[
+											rule.lhs].split("_")[0] + "*"]
+						else: splitlabel = 0
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
-							A, C, Cx, doprune, prunelist, lensent, &blocked)
+							A, C, Cx, prunenow, prunelist, splitlabel,
+								coarsechart, lensent, &blocked)
 
 		if A.length > maxA: maxA = A.length
 	print "max agenda size %d, now %d," % (maxA, len(A)),
@@ -213,9 +241,11 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	else: return C, NONE
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
-		dict C, list Cx, bint doprune, list prunelist,
-		unsigned int lensent, unsigned int *blocked):
+		dict C, list Cx, bint doprune, list prunelist, int splitlabel,
+		dict coarsechart, unsigned int lensent, unsigned int *blocked):
 	""" Decide what to do with a newly derived edge. """
+	cdef unsigned long component
+	cdef int a, b = 0
 	cdef Edge e
 	#not in A or C
 	if not (A.contains(newitem) or dict_contains(C, newitem) == 1):
@@ -226,6 +256,17 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
 				#or newedge.inside+<double><object>outside > 300.0:
 				blocked[0] += 1
 				return
+			if splitlabel:
+				while newitem.vec >> b:
+					a = nextset(newitem.vec, b)
+					b = nextunset(newitem.vec, a) - 1
+					component = (1UL << b) - 1 << a
+					outside = dict_getitem(<object>list_getitem(coarsechart,
+												splitlabel), component)
+					if outside==NULL or isinf(<double><object>outside):
+						blocked[0] += 1
+						return
+
 		elif newedge.score > 300.0:
 			blocked[0] += 1
 			return
@@ -285,7 +326,7 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 			elif rule._args[0] == 0b01:
 				return bitminmax(rvec, lvec)
 
-	#this algorithm taken from rparse, FastYFComposer.
+	#this algorithm was adapted from rparse, FastYFComposer.
 	cdef unsigned int n, x
 	cdef unsigned short m
 	for x in range(rule.args.length):
@@ -308,7 +349,7 @@ cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
 						return False
 				elif not testbit(lvec, rpos):
 					return False
-				#jump to next argument
+				# jump to next argument
 				rpos = nextset(rvec, rpos)
 			else: #if bit == 0:
 				# vice versa to the above
@@ -330,25 +371,6 @@ cdef inline Edge iscore(Edge e):
 	""" Replace estimate with inside probability """
 	e.score = e.inside
 	return e
-
-def filterchart(chart, start):
-	""" remove all entries that do not contribute to a complete derivation
-	headed by "start" """
-	chart2 = {}
-	filter_subtree(start, <dict>chart, chart2)
-	return chart2
-
-cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
-	cdef Edge edge
-	cdef ChartItem item
-	chart2[start] = chart[start]
-	for edge in chart[start]:
-		item = (<Edge>edge).left
-		if item.label and item not in chart2:
-			filter_subtree((<Edge>edge).left, chart, chart2)
-		item = (<Edge>edge).right
-		if item.label and item not in chart2:
-			filter_subtree(edge.right, chart, chart2)
 
 def binrepr(ChartItem a, sent):
 	return bin(a.vec)[2:].rjust(len(sent), "0")[::-1]
@@ -374,6 +396,7 @@ def pprint_chart(chart, sent, tolabel):
 
 def do(sent, grammar):
 	from disambiguation import mostprobableparse
+	from operator import itemgetter
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
 	pprint_chart(chart, sent.split(), grammar.tolabel)
@@ -391,7 +414,6 @@ def main():
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
-		((('VP2','VP2'), ((0,),(1,))), log(0.1)),
 		((('PROAV', 'Epsilon'), ('Daruber', ())), 0.0),
 		((('VAINF', 'Epsilon'), ('werden', ())), 0.0),
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),

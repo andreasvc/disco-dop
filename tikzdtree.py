@@ -3,7 +3,16 @@ from collections import defaultdict
 import codecs
 def label(tree, sent):
 	if isinstance(tree, Tree):
-		return tree.node.replace("$", r"\$").replace("[", "(").replace("<","{").replace(">","}").replace("-",",").replace("|","_")
+		l = tree.node.replace("$", r"\$").replace("[", "(")
+		if "|" in l:
+			x, y = l.split("|")
+			if "^" in y:
+				y, z = y.split("^")
+				y = y[1:-1]
+				l = "$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $" % (x, y.replace("-",","), z)
+			else:
+				l = "$ \\textsf{%s}_\\textsf{%s} $" % (x, y.replace("-",","))
+		return l
 	else: return "%s" % sent[int(tree)]
 	#"\\fontsize{4}{5}\\selectfont"
 

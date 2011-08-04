@@ -121,6 +121,7 @@ from itertools import chain
 from nltk import Tree, ImmutableTree, memoize
 from grammar import ranges, canonicalize
 from orderedset import OrderedSet
+import re
 
 def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
@@ -514,39 +515,47 @@ def contsets(tree):
 		rng = a
 	if subset: yield subset
 
-def splitdiscnodes(tree):
+def splitdiscnodes(tree, markorigin=False):
 	""" Boyd (2007): Discontinuity revisited.
 
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
-	>>> print splitdiscnodes(tree).pprint(margin=999)
+	>>> print splitdiscnodes(tree.copy(True)).pprint(margin=999)
 	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4) (VVPP 5)) (VAINF 6)))
-	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
+	>>> print splitdiscnodes(tree, markorigin=True).pprint(margin=999)
+	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 (CARD 4) (VVPP 5)) (VAINF 6)))
 	"""
 	from grammar import postorder
 	for node in postorder(tree):
 		result = []
 		for child in node:
 			if disc(child):
-				result.extend(Tree(child.node + "*", childsubset)
-					for childsubset in contsets(child))
+				if markorigin:
+					result.extend(Tree("%s*%d" % (child.node, n), childsubset)
+						for n, childsubset in enumerate(contsets(child)))
+				else:
+					result.extend(Tree(child.node + "*", childsubset)
+						for n, childsubset in enumerate(contsets(child)))
 			else: result.append(child)
 		node[:] = result
 	return canonicalize(tree)
 
+removesplit = re.compile("\*[0-9]*")
 def mergediscnodes(tree):
 	""" Reverse of Boyd (2007): Discontinuity revisited.
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
 	>>> print mergediscnodes(splitdiscnodes(tree)).pprint(margin=999)
 	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
+	>>> print mergediscnodes(splitdiscnodes(tree, markorigin=True)).pprint(margin=999)
+	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
 	"""
 	for node in tree.subtrees():
 		merge = {}
 		for child in node:
-			if isinstance(child, Tree) and child.node.endswith("*"):
-				merge.setdefault(child.node[:-1], []).append(child)
+			if isinstance(child, Tree) and "*" in child.node:
+				merge.setdefault(removesplit.sub("", child.node),
+							[]).append(child)
 		node[:] = [child for child in node if not isinstance(child, Tree)
 						or "*" not in child.node]
-						#not child.node.endswith("*")]
 		for label, subsets in merge.iteritems():
 			children = [child for component in subsets for child in component]
 			node.append(Tree(label, children))
@@ -611,8 +620,9 @@ if __name__ == '__main__':
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	#demo()
-	if attempted and not fail: print "%d doctests succeeded!" % attempted
+	demo()
+	if attempted and not fail:
+		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	from negra import NegraCorpusReader
 	correct = wrong = 0
 	#n = NegraCorpusReader("../rparse", "tigerproc\.export")

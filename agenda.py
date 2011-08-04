@@ -195,6 +195,12 @@ class heapdict(dict):
 		del self.heap[:]
 		self.mapping.clear()
 
+	def getheap(self):
+		return self.heap
+
+	def getval(self, entry):
+		return entry.value
+
 # this is _significantly_ faster than relying on __richcmp__
 def lessthan(a, b):
 	return (a.value.score < b.value.score
@@ -261,8 +267,8 @@ def _parent(i):
 def _left(i):
 	return (i << 1) + 1
 
-def _right(i):
-	return (i + 1) << 1
+#def _right(i):
+#	return (i + 1) << 1
 
 def siftup(heap, pos):
 	startpos = pos; childpos = _left(pos)
@@ -293,8 +299,6 @@ def siftdown(heap, startpos, pos):
 
 
 # -------------- TEST CODE -------------------------
-# only works with plain python code, so remove any .so files such as
-# containers.so
 import random, unittest, sys
 try: import test.support as test_support # Python 3
 except ImportError: import test.test_support as test_support # Python 2
@@ -302,22 +306,15 @@ from containers import Edge, ChartItem
 NONE = ChartItem(0, 0)
 N = 100
 
-def getval(entry, h):
-	try: return entry[0]
-	except (TypeError, AttributeError):
-		try: return entry.value
-		except: return h.getval(entry)
-
 class TestHeap(unittest.TestCase):
 	def check_invariants(self, h):
-		try: heap = h.heap
-		except: heap = h.getheap()
+		heap = h.getheap()
 		for i in range(len(h)):
 			# this check is only an implementation detail of heapdict,
 			# pq / cpq use this field to break ties.
 			#self.assertEqual(h.heap[i][2], i)
 			if i > 0:
-				self.assertTrue(getval(heap[_parent(i)], h) <= getval(heap[i], h))
+				self.assertTrue(h.getval(heap[_parent(i)]) <= h.getval(heap[i]))
 
 	def make_data(self):
 		pairs = [(random.random(), Edge(random.random(), 0., 0., NONE, NONE)) for i in range(N)]
@@ -457,16 +454,6 @@ def test_main(verbose=None):
 
 	test_classes = [TestHeap]
 	test_support.run_unittest(*test_classes)
-
-	# verify reference counting
-	if verbose and hasattr(sys, "gettotalrefcount"):
-		import gc
-		counts = [None] * 5
-		for i in xrange(len(counts)):
-			test_support.run_unittest(*test_classes)
-			gc.collect()
-			counts[i] = sys.gettotalrefcount()
-		print(counts)
 
 if __name__ == "__main__":
 	test_main(verbose=True)

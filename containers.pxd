@@ -37,3 +37,10 @@ cdef struct DTree:
 	DTree *left, *right
 
 cdef DTree new_DTree(Rule rule, unsigned long vec, bint islexical, DTree left, DTree right)
+
+cpdef inline unsigned int getlabel(ChartItem a)
+cpdef inline unsigned long getvec(ChartItem a)
+cpdef inline double getscore(Edge a)
+cpdef inline dict dictcast(d)
+cpdef inline ChartItem itemcast(i)
+cpdef inline Edge edgecast(e)

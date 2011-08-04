@@ -1,6 +1,6 @@
 cimport cython
 from containers cimport ChartItem, Edge, Rule, Terminal
-from plcfrs_cython cimport new_Edge, new_ChartItem
+from plcfrs cimport new_Edge, new_ChartItem
 from agenda cimport heapdict, Entry
 from array cimport array
 cimport numpy as np

@@ -45,7 +45,7 @@ class Edge:
 	def __le__(self, other):
 		return self.score <= other.score
 	def __ne__(self, other):
-		return not self.__eq__(self, other)
+		return not self.__eq__(other)
 	def __eq__(self, other):
 		return (self.inside == other.inside
 				and self.prob == other.prob
@@ -75,3 +75,20 @@ class Rule:
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.args = args; self.lengths = lengths; self.prob = prob
 		self._args = self.args; self._lengths = self.lengths
+
+def getlabel(a): return a.label
+def getvec(a): return a.vec
+def getscore(a): return a.score
+def dictcast(d): return d
+def itemcast(d): return d
+def edgecast(d): return d
+
+if __name__ == '__main__':
+	from array import array
+	c = ChartItem(0, 0)
+	e = Edge(0., 0., 0., c, c)
+	h = hash(c); h = hash(e)
+	c[0]; c[1]; bool(c); repr(c); repr(e)
+	e < e; e > e; e <= e; e == e; e >= e; e != e
+	t = Terminal(0, 0, 0, "foo", 0.)
+	r = Rule(0, 0, 0, array('H', [0, 0, 0]), array('I', [0, 0, 0]), 0.)

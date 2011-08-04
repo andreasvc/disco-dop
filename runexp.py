@@ -1,26 +1,22 @@
 # -*- coding: UTF-8 -*-
 from collections import defaultdict
-from itertools import islice, chain, count
+from itertools import islice, count
 from operator import itemgetter
-from functools import partial
-from pprint import pprint
-from math import log, exp, fsum
-from heapq import nlargest
+from math import exp
 import cPickle, re, time, codecs
 from nltk import FreqDist, Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
 #import plac
-from kbest import lazykbest
 from negra import NegraCorpusReader, fold, unfold
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		export, read_rparse_grammar, mean, harmean, testgrammar,\
 		bracketings, printbrackets, rem_marks, alterbinarization, terminals,\
 		varstoindices, read_bitpar_grammar, read_penn_format, newsplitgrammar,\
-		coarse_grammar, grammarinfo
+		coarse_grammar, grammarinfo, baseline
 from fragmentseeker import extractfragments
 from treetransforms import collinize, un_collinize, binarizetree,\
 							splitdiscnodes, mergediscnodes
-from plcfrs_cython import parse
+from plcfrs import parse
 from coarsetofine import prunelist_fromchart
 from disambiguation import mostprobableparse, mostprobablederivation,\
 							sldop, sldop_simple
@@ -28,13 +24,14 @@ from disambiguation import mostprobableparse, mostprobablederivation,\
 def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
+	bitpardop = False,
 	dop = True,
 	unfolded = False,
 	maxlen = 40,  # max number of words for sentences in training & test corpus
 	train = 7200, maxsent = 100,	# number of sentences to parse
 	#train = 18602, maxsent = 1000, #9999999,	# number of sentences to parse
 	skip=1000, #skip test set to get dev set
-	bintype = "nltk", # choices: collinize, nltk, optimal, optimalhead
+	bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
 	factor = "right",
 	v = 1,
 	h = 1,
@@ -45,13 +42,16 @@ def main(
 	m = 10000,		#number of derivations to sample/enumerate
 	estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 	sldop_n=7,
-	k = 1000,		#number of coarse derivations to prune with
+	k = 0,		#number of coarse derivations to prune with; k=0 => filter only
 	prune=True,	#whether to use srcg chart to prune parsing of dop
 	getestimates=False, #compute & store estimates
 	useestimates=False,  #load & use estimates
-	removeparentannotation=False,
-	mergesplitnodes=True,
-	neverblockmarkovized=True):
+	removeparentannotation=False, # VP^<S> is treated as VP
+	splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] }
+	mergesplitnodes=False, #coarse grammar is PCFG with splitted nodes eg. VP*
+	neverblockmarkovized=True, #do not prune intermediate nodes of binarization
+	neverblockdiscontinuous=True, #never block discontinuous nodes.
+	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 	#corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1"); maxlen = 99
@@ -82,7 +82,7 @@ def main(
 	test = test.parsed_sents()[train+skip:], test.tagged_sents()[train+skip:], test.blocks()[train+skip:]
 	print "read training & test corpus"
 	begin = time.clock()
-	if mergesplitnodes:
+	if True or mergesplitnodes:
 		splittrees = [splitdiscnodes(a.copy(True)) for a in trees]
 		print "splitted discontinuous nodes"
 		for a in splittrees:
@@ -147,9 +147,15 @@ def main(
 
 	srcggrammar = []; dopgrammar = []; secondarymodel = []
 	if srcg:
-		if mergesplitnodes:
+		if True or mergesplitnodes:
+			#corpus = codecs.open("../tiger/corpus/tiger_release_aug07.mrg", encoding="iso-8859-1").read().splitlines()
+			#splittrees = map(Tree, corpus[:7200])
+			#for a in splittrees:
+			#	a.node = "ROOT"
+			#	a.chomsky_normal_form(horzMarkov=1)
+			#	for n, x in enumerate(a.treepositions('leaves')): a[x] = n
 			srcggrammar = induce_srcg(splittrees, sents)
-			print "induced CFG based on", len(trees), "sentences"
+			print "induced CFG based on", len(splittrees), "sentences"
 			#srcggrammar = dop_srcg_rules(splittrees, sents)
 			#print "induced DOP CFG based on", len(trees), "sentences"
 		else:
@@ -211,7 +217,8 @@ def main(
 			both, arity_marks, arity_marks_before_bin, m,
 			srcggrammar, dopgrammar, secondarymodel, test, maxlen, maxsent,
 			prune, k, sldop_n, useestimates, outside, "ROOT", True,
-			removeparentannotation, mergesplitnodes, neverblockmarkovized)
+			removeparentannotation, splitprune, mergesplitnodes,
+			neverblockmarkovized, neverblockdiscontinuous)
 	print "time elapsed during parsing: ", time.clock() - begin
 	doeval(*results)
 
@@ -219,8 +226,9 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		arity_marks_before_bin, m, srcggrammar, dopgrammar, secondarymodel,
 		test, maxlen, maxsent, prune, k, sldop_n=14, useestimates=False,
 		outside=None, top='ROOT', tags=True, removeparentannotation=False,
-		mergesplitnodes=False, neverblockmarkovized=False, filename="results",
-		sentinit=0, doph=999):
+		splitprune=False, mergesplitnodes=False, neverblockmarkovized=False,
+		neverblockdiscontinuous=False, filename="results", sentinit=0,
+		doph=999):
 	sresults = []; dresults = []
 	serrors1 = FreqDist(); serrors2 = FreqDist()
 	derrors1 = FreqDist(); derrors2 = FreqDist()
@@ -290,6 +298,12 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			sresults.append(result)
 		if srcg: print " %.2fs cpu time elapsed" % (time.clock() - begin)
 		scandb.update((nsent, a) for a in candb)
+		#if bitpardop:	
+		# parse w/bitpar
+		# get MPPs
+		# get prunelist
+		# ???
+		# profit
 		if dop and (start or not prune):
 			print " DOP:",
 			begin = time.clock()
@@ -302,17 +316,10 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 								[w for w,t in sent], dopgrammar,
 								[t for w,t in sent] if tags else [],
 								dopgrammar.toid[top], True, None,
-								prunelist, neverblockmarkovized)
+								prunelist, srcggrammar.toid, chart, splitprune,
+								neverblockmarkovized, neverblockdiscontinuous)
 		else: chart = {}; start = False
 		if dop and start:
-			if False and nsent == 1:
-				codecs.open("dopderivations", "w",
-					encoding="utf-8").writelines(
-						"vitprob=%#.6g\n%s\n" % (exp(-p),
-							re.sub(r'([{}\[\]<>\^$\'])', r'\\\1',
-								terminals(t, sent).replace(') (', ')(')))
-						for t, p in lazykbest(dict(chart), start, m,
-													dopgrammar.tolabel))
 			if estimator == "shortest":
 				mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m,
 						sample=sample, both=both, shortest=True,
@@ -390,7 +397,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			"%s\n" % export(a, b, n + 1)
 			for n,a,b in zip(count(sentinit), dresults, gsent))
 	codecs.open("%s.gold" % filename, "w", encoding='utf-8').write(''.join(
-		"#BOS %d\n%s\n#EOS %d\n" % (n + 1, a, n + 1) for n, a in zip(count(sentinit), gold)))
+		"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1) for n, a in zip(count(sentinit), gold)))
 
 	return (srcg, dop, serrors1, serrors2, derrors1, derrors2, nsent, maxlen,
 		exact, exacts, snoparse, dnoparse, goldbrackets, scandb, dcandb, unfolded,
@@ -426,12 +433,6 @@ def doeval(srcg, dop, serrors1, serrors2, derrors1, derrors2, nsent, maxlen,
 				nsent - dnoparse, nsent, 100.0 * (nsent - dnoparse) / nsent),
 		print "exact match %d / %d = %5.2f %%\n" % (
 				exact, nsent, 100.0 * exact / nsent)
-
-def baseline(wordstags):
-	""" a right branching baseline parse (NP like (NP this (NP example (NP here)))). """
-	if wordstags == []: return ''
-	return "(%s (%s %s) %s)" % ("NP", wordstags[0][1],
-			wordstags[0][0], baseline(wordstags[1:]))
 
 def root(tree):
 	if tree.node == "VROOT": tree.node = "ROOT"
@@ -491,24 +492,24 @@ def readtepacoc():
 
 def parsetepacoc():
 	dop = True; srcg = True; estimator = 'ewe'; unfolded = False;
-	bintype = "nltk"; h=1; v=1; factor = "right"; doph=1
+	bintype = "collinize"; h=999; v=1; factor = "right"; doph=999
 	arity_marks = True; arity_marks_before_bin = False;
 	sample = False; both = False; m = 10000;
-	maxlen = 40; maxsent = 999; k = 1000; prune=True; sldop_n=7
-	removeparentannotation=False; mergesplitnodes=True
-	neverblockmarkovized=True
+	maxlen = 30; maxsent = 999; k = 50; prune=True; sldop_n=7
+	removeparentannotation=False; splitprune=False; mergesplitnodes=False
+	neverblockmarkovized=False
 
 	tepacocids, tepacocsents = readtepacoc()
-	#corpus = NegraCorpusReader("../rparse", "tigerprocfull.export",
-	#		headorder=(bintype in ("collinize", "nltk")), headfinal=True,
-	#		headreverse=False, unfold=unfolded)
-	#corpus_sents = list(corpus.sents())
-	#corpus_taggedsents = list(corpus.tagged_sents())
-	#corpus_trees = list(corpus.parsed_sents())
-	#corpus_blocks = list(corpus.blocks())
-	#thecorpus = [a for a in zip(corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks)]
-	#cPickle.dump(thecorpus, open("tiger.pickle", "wb"), protocol=-1)
-	corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(*cPickle.load(open("tiger.pickle", "rb")))
+	corpus = NegraCorpusReader("../rparse", "tigerprocfullnew.export",
+			headorder=(bintype in ("collinize", "nltk")), headfinal=True,
+			headreverse=False, unfold=unfolded)
+	corpus_sents = list(corpus.sents())
+	corpus_taggedsents = list(corpus.tagged_sents())
+	corpus_trees = list(corpus.parsed_sents())
+	corpus_blocks = list(corpus.blocks())
+	thecorpus = [a for a in zip(corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks)]
+	cPickle.dump(thecorpus, open("tiger.pickle", "wb"), protocol=-1)
+	#corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(*cPickle.load(open("tiger.pickle", "rb")))
 	train = 25005 #int(0.9 * len(corpus_sents))
 	trees, sents, blocks = zip(*[sent for n, sent in 
 				enumerate(zip(corpus_trees, corpus_sents,
@@ -525,7 +526,7 @@ def parsetepacoc():
 	elif bintype == "nltk":
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	elif bintype == "collinize":
-		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="$",
+		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="",
 					leftMostUnary=True, rightMostUnary=True) for a in trees]
 	print "time elapsed during binarization: ", time.clock() - begin
 	srcggrammar = induce_srcg(list(trees), sents)
@@ -581,8 +582,8 @@ def parsetepacoc():
 					both, arity_marks, arity_marks_before_bin, m, srcggrammar,
 					dopgrammar, secondarymodel, test, maxlen, maxsent, prune,
 					k, sldop_n, False, None, "ROOT", True,
-					removeparentannotation, mergesplitnodes,
-					neverblockmarkovized, filename="tepacoc-split40/%s" % cat,
+					removeparentannotation, splitprune, mergesplitnodes,
+					neverblockmarkovized, filename="tepacoc-newc/%s" % cat,
 					sentinit=cnt) #, doph=doph if doph != h else 999)
 		cnt += len(test[0])
 		print "time elapsed during parsing: ", time.clock() - begin

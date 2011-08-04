@@ -95,8 +95,8 @@ def induce_srcg(trees, sents, arity_marks=True, freqs=False):
 	return [(rule, freq if freqs else log(float(freq)/fd[rule[0][0]]))
 				for rule, freq in grammar.iteritems()]
 
-def dop_srcg_rules(trees, sents, normalize=False,
-				shortestderiv=False, arity_marks=True, freqs=False):
+def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False,
+					arity_marks=True, freqs=False):
 	""" Induce a reduction of DOP to an SRCG, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 	Normalize means the application of the equal weights estimate.
@@ -120,8 +120,6 @@ def dop_srcg_rules(trees, sents, normalize=False,
 								(x,) if x==y else (x,y)
 								for x,y in zip(a,b)))]
 							for (a,avar),(b,bvar) in zip(prods, uprods))))
-	# map of exterior (unaddressed) nodes to normalized denominators:
-	ewedenoms = {}
 
 	@memoize
 	def sumfracs(nom, denoms):
@@ -140,6 +138,8 @@ def dop_srcg_rules(trees, sents, normalize=False,
 			/ ((1 if freqs else float(fd[r[0]]))
 				* (ntfd[r[0]] if '@' not in r[0] else 1.)))
 
+	# map of exterior (unaddressed) nodes to normalized denominators:
+	ewedenoms = {}
 	def goodmanewe(((r, yf), freq)):
 		# Goodman (2003, eq. 1.5). Probably a typographic mistake.
 		if '@' in r[0]: return rfe(((r, yf), freq))
@@ -268,7 +268,7 @@ def newsplitgrammar(grammar):
 		else:
 			args, lengths = yfarray(yf)
 			assert yf == arraytoyf(args, lengths) # an unbinarized rule causes an error here
-			if len(rule) == 2 and w == 0.0: w += 0.01
+			if len(rule) == 2 and w == 0.0: w += 0.00000001
 			r = Rule(toid[rule[0]], toid[rule[1]],
 				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
 			if arity[r.lhs] == 0:
@@ -347,6 +347,14 @@ def node_arity(n, vars, inplace=False):
 		else: return "%s_%d" % (n.node, len(vars))
 	return n.node if isinstance(n, Tree) else n
 
+def baseline(wordstags):
+	""" a right branching baseline parse
+	>>> baseline([('like','X'), ('this','X'), ('example','X'), ('here','X')])
+	'(NP (X like) (NP (X this) (NP (X example) (NP (X here) ))))' """
+	if wordstags == []: return ''
+	return "(%s (%s %s) %s)" % ("NP", wordstags[0][1],
+			wordstags[0][0], baseline(wordstags[1:]))
+
 def printrule(r,yf,w):
 		print "%.2f %s --> %s\t %r" % (exp(w), r[0], "  ".join(r[1:]), list(yf))
 
@@ -360,7 +368,7 @@ def printrulelatex(r):
 		lhs = r[0]; rhs = r[1:]
 	if not isinstance(lhs[1][0], tuple) and not isinstance(lhs[1][0], list):
 		print "\\textrm{%s}(\\textrm{%s})" % (lhs[0].replace("$","\\$"), lhs[1][0]),
-	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"), ",".join(r"\langle " + ",".join("x_{%r}" % a for a in x) + r" \rangle " for x in lhs[1])),
+	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"), ",".join(",".join("x_{%r}" % a for a in x)  for x in lhs[1])),
 	print r"\rightarrow",
 	for x in rhs:
 		if x[0] == 'Epsilon': print r'\epsilon',
@@ -369,11 +377,11 @@ def printrulelatex(r):
 			if x != rhs[-1]: print '\\:',
 	print r' $ \\'
 
-def printrulelatex2(((r, yf), w)):
+def printrulelatex2(((r, yf), w), doexp=True):
 	r""" Print a rule in latex format (after it went through varstoindices)
 	>>> r = ((('VP_2@1', 'NP@2', 'VVINF@5'), ((0,), (1,))), -0.916290731874155)
 	>>> printrulelatex2(r)
-	[ 0.4 ] &  $ \textrm{VP\_2@1}(\langle x_{0} \rangle ,\langle x_{1} \rangle ) \rightarrow \textrm{NP@2}(x_{0}) \: \textrm{VVINF@5}(x_{1})  $ \\
+	0.4 &  $ \textrm{VP\_2@1}(x_{0},x_{1}) \rightarrow \textrm{NP@2}(x_{0}) \: \textrm{VVINF@5}(x_{1})  $ \\
 	"""
 	c = count()
 	newrhs = []
@@ -388,7 +396,7 @@ def printrulelatex2(((r, yf), w)):
 			newrhs.append((a, [c.next() for x in range(z)]))
 			vars.append(list(newrhs[-1][1]))
 		lhs = (r[0], [[vars[x].pop(0) for x in comp] for comp in yf])
-	print "[",exp(w),"] & ",
+	print (exp(w) if doexp else w),"& ",
 	printrulelatex(tuple([lhs]+newrhs))
 
 def alpha_normalize(s):
@@ -718,8 +726,7 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
-	try: from plcfrs_cython import parse, pprint_chart
-	except: from plcfrs import parse, pprint_chart
+	from plcfrs import parse, pprint_chart
 	from disambiguation import mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'])
@@ -769,10 +776,10 @@ def testctf():
 		#			1 if msg == "parentannot" else 999,	headrules, *settings)
 
 def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split, verbose=False):
-	from plcfrs_cython import parse, pprint_chart, kbest_outside, merged_kbest
+	from plcfrs import parse, pprint_chart
+	from coarsetofine import kbest_outside, merged_kbest, prunelist_fromchart
 	from disambiguation import mostprobableparse
 	from treetransforms import mergediscnodes
-	from coarsetofine import prunelist_fromchart
 	from containers import getlabel, getvec
 	print " C O A R S E "
 	p, start = parse(sent, coarse, start=coarse.toid['ROOT'])
@@ -790,7 +797,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split, verbose=False
 		pprint_chart(p, sent, coarse.tolabel)
 	l = prunelist_fromchart(p, start, coarse, fine, k,
 				removeparentannotation=pa, mergesplitnodes=split,
-				h=doph, headrules=headrules)
+				reduceh=doph)
 	if verbose:
 		print "\nitems in 50-best of coarse chart"
 		if split:
@@ -879,8 +886,7 @@ def main():
 	print "}"
 	grammar = newsplitgrammar(grammar)
 	testgrammar(grammar)
-	try: from plcfrs_cython import parse
-	except: from plcfrs import parse
+	from plcfrs import parse
 	from disambiguation import mostprobableparse
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
@@ -906,6 +912,7 @@ if __name__ == '__main__':
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	#main()
+	main()
 	testctf()
-	if attempted and not fail: print "%d doctests succeeded!" % attempted
+	if attempted and not fail:
+		print "%s: %d doctests succeeded!" % (__file__, attempted)

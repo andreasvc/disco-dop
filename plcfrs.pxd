@@ -1,74 +1,28 @@
-cimport cython
+from cpython cimport PyList_Append as append,\
+					PyList_GET_ITEM as list_getitem,\
+					PyList_GET_SIZE as list_getsize,\
+					PyDict_Contains as dict_contains,\
+					PyDict_GetItem as dict_getitem
+cimport numpy as np
+from agenda cimport Entry
+from kbest cimport lazykbest, lazykthbest
 from containers cimport ChartItem, Edge, Rule, Terminal
+from array cimport array
 from agenda cimport heapdict
 
 cdef extern from "bit.h":
-	int nextset(unsigned long vec, int pos)
-	int nextunset(unsigned long vec, int pos)
-	int bitcount(unsigned long vec)
-	bint testbit(unsigned long vec, int pos)
-	bint testbitc(unsigned char vec, int pos)
-	bint testbitint(unsigned int vec, int pos)
-	bint testbitshort(unsigned short vec, int pos)
+	bint testbit(unsigned long vec, unsigned int pos)
+	bint testbitc(unsigned char arg, unsigned int pos)
+	bint testbitint(unsigned int arg, unsigned int pos)
+	bint testbitshort(unsigned short arg, unsigned int pos)
 	bint bitminmax(unsigned long a, unsigned long b)
+	int nextset(unsigned long vec, unsigned int pos)
+	int nextunset(unsigned long vec, unsigned int pos)
+	int bitcount(unsigned long vec)
+	int bitlength(unsigned long vec)
 
-@cython.locals(
-	m=cython.int,
-	maxA=cython.int,
-	lensent=cython.int,
-	vec=cython.ulong,
-	y=cython.double,
-	p=cython.double,
-	unary=list,
-	lbinary=list,
-	rbinary=list,
-	lexical=dict,
-	toid=dict,
-	tolabel=dict,
-	C=dict,
-	Cx=list,
-	terminal=Terminal,
-	edge=Edge,
-	Ih=ChartItem,
-	I1h=ChartItem,
-	goal=ChartItem,
-	A=heapdict)
-cpdef tuple parse(list sent, grammar, list tags=*, int start=*, bint exhaustive=*, estimate=*, prune=*, prunetoid=*)
+cdef extern from "math.h":
+	bint isinf(double x)
 
-@cython.locals(
-	y=cython.double,
-	edge=Edge,
-	rule=Rule,
-	I=cython.int,
-	Ir=cython.ulong,
-	I1h=ChartItem,
-	result=list)
-cdef inline list deduced_from(ChartItem Ih, double x, list Cx, list unary, list lbinary, list rbinary)
-
-@cython.locals(
-	lpos=cython.int,
-	rpos=cython.int,
-	n=cython.int,
-	m=cython.int,
-	b=cython.int)
-cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec)
-
-@cython.locals(
-	ee=Edge,
-	ee2=Edge,
-	jj=tuple)
-cdef getitems(Edge e, tuple j, Edge rootedge, dict D, dict chart, dict outside)
-
-cdef Edge iscore(Edge e)
-
-@cython.locals(
-	edge=Edge,
-	item=ChartItem)
-cdef filter_subtree(start, chart, chart2)
-
-@cython.locals(
-	a=ChartItem,
-	edge=Edge)
-cpdef pprint_chart(dict chart, list sent, dict tolabel)
-
-cpdef binrepr(ChartItem a, list sent)
+cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec)
+cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right)

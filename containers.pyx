@@ -55,13 +55,6 @@ cdef class Edge:
 		return "Edge(%g, %g, %g, %r, %r)" % (
 				self.score, self.inside, self.prob, self.left, self.right)
 
-def getlabel(ChartItem a):
-	return a.label
-def getvec(ChartItem a):
-	return a.vec
-def getscore(Edge a):
-	return a.score
-
 #cdef class RankEdge(Edge):
 #	def __cinint__(self, Edge edge, int j1, int j2):
 #		self.inside = ip; self.prob = edge.prob
@@ -94,3 +87,16 @@ cdef struct DTree:
 cdef DTree new_DTree(Rule rule, unsigned long vec, bint islexical, DTree left, DTree right):
 	return DTree(<void *>rule, vec, islexical, &left, &right)
 
+# some helper functions that only serve to bridge cython & python code
+cpdef inline unsigned int getlabel(ChartItem a):
+	return a.label
+cpdef inline unsigned long getvec(ChartItem a):
+	return a.vec
+cpdef inline double getscore(Edge a):
+	return a.score
+cpdef inline dict dictcast(d):
+	return <dict>d
+cpdef inline ChartItem itemcast(i):
+	return <ChartItem>i
+cpdef inline Edge edgecast(e):
+	return <Edge>e

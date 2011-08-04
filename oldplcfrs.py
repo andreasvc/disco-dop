@@ -18,7 +18,7 @@ except:
 NONE = ChartItem(0, 0)
 
 def parse(sent, grammar, tags=[], start=1, exhaustive=False,
-		estimate=(), prune={}, prunetoid={}):
+		estimate=(), prunelist=None, prunetoid=None):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
@@ -113,17 +113,6 @@ def concat(rule, lvec, rvec):
 	if lvec & rvec: return False
 	lpos = nextset(lvec, 0)
 	rpos = nextset(rvec, 0)
-	# if there are no gaps in lvec and rvec, and the yieldfunction is the
-	# concatenation of two elements, then this should be quicker
-	if False and (lvec >> nextunset(lvec, lpos) == 0
-		and rvec >> nextunset(rvec, rpos) == 0):
-		if rule.lengths[0] == 2 and rule.args.length == 1:
-			if rule.args[0] == 0b10:
-				return bitminmax(lvec, rvec)
-			elif rule.args[0] == 0b01:
-				return bitminmax(rvec, lvec)
-		#else:
-		#	return False
 	#this algorithm taken from rparse FastYFComposer.
 	for x in range(len(rule.args)):
 		m = rule.lengths[x] - 1
@@ -166,93 +155,9 @@ def concat(rule, lvec, rvec):
 	# everything looks all right
 	return True
 
-def kbest_outside(chart, start, k):
-	D = {}
-	outside = { start : 0.0 }
-	lazykthbest(start, k, k, D, {}, chart, set())
-	for (e, j), rootedge in D[start]:
-		getitems(e, j, rootedge, D, chart, outside)
-	return outside
-
-def getitems(e, j, rootedge, D, chart, outside):
-	""" Traverse a derivation e,j, noting outside costs relative to its root edge
-	"""
-	if e.left in chart:
-		if e.left in D: (ee, jj), ee2 = D[e.left][j[0]]
-		elif j[0] == 0: jj = (0, 0); ee = ee2 = min(chart[e.left])
-		else: raise ValueError
-		if e.left not in outside:
-			outside[e.left] = rootedge.inside - ee2.inside
-		getitems(ee, jj, rootedge, D, chart, outside)
-	if e.right.label:
-		if e.right in D: (ee, jj), ee2 = D[e.right][j[1]]
-		elif j[1] == 0: jj = (0, 0); ee = ee2 = min(chart[e.right])
-		else: raise ValueError
-		if e.right not in outside:
-			outside[e.right] = rootedge.inside - ee2.inside
-		getitems(ee, jj, rootedge, D, chart, outside)
-
 def iscore(e):
 	e.score = e.inside
 	return e
-
-def filterchart(chart, start):
-	# remove all entries that do not contribute to a complete derivation headed
-	# by "start"
-	chart2 = {}
-	filter_subtree(start, chart, chart2)
-	return chart2
-
-def filter_subtree(start, chart, chart2):
-	chart2[start] = chart[start]
-	for edge in chart[start]:
-		item = edge.left
-		if item.label and item not in chart2:
-			filter_subtree(edge.left, chart, chart2)
-		item = edge.right
-		if item.label and item not in chart2:
-			filter_subtree(edge.right, chart, chart2)
-
-def getviterbi(chart, start, mem):
-	""" recompute the proper viterbi probabilities in a top-down fashion,
-		and sort chart entries according to these probabilities
-		removes zero-probability edges (infinity with log-probabilities)
-		also tracks items visited, for pruning purposes (keys of mem).
-
-		FIXME: not working yet. it seems to be more efficient to do
-		the viterbi thing during parsing -- the log n overhead of
-		the priority queue is small
-	"""
-	probs = []
-	bestprob = 999999 #float('infinity')
-	try: assert len(chart[start])
-	except: print "empty", start
-	# loop backwards because we want to remove items in-place without
-	# invalidating remaining indices.
-	for n, (ip, p, rhs) in zip(count(), chart[start])[::-1]:
-		probs[:] = [p]
-		for a in rhs:
-			# only recurse for nonterminals (=nonzero ids)
-			if a.label and a in chart:
-				if a in mem: result = mem[a]
-				else: result = getviterbi(chart, a, mem)
-				if not isinstance(result, list):
-					print "trouble", start, '->', a
-				probs.extend(result)
-		prob = fsum(probs)
-		if prob < bestprob:
-			bestprob = prob
-			bestprobs = probs[:]
-		# prune or update probability
-		if isinf(prob): del chart[start][n]
-		else: chart[start][n] = (prob, p, rhs)
-	if len(chart[start]):
-		chart[start].sort(key=itemgetter(0))
-		assert fsum(bestprobs) == chart[start][0][0]
-	else:
-		bestprobs = [float('infinity')]
-	mem[start] = bestprobs
-	return bestprobs
 
 def binrepr(a, sent):
 	return bin(a.vec)[2:].rjust(len(sent), "0")[::-1]
