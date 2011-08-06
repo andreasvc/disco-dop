@@ -162,7 +162,7 @@ cdef class heapdict(dict):
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
 
-	cdef inline Entry popentry(self):
+	cpdef Entry popentry(self):
 		""" like popitem, but avoids tuple construction by returning an Entry
 		object """
 		cdef Entry entry

@@ -11,7 +11,7 @@ from negra import NegraCorpusReader, fold, unfold
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		export, read_rparse_grammar, mean, harmean, testgrammar,\
 		bracketings, printbrackets, rem_marks, alterbinarization, terminals,\
-		varstoindices, read_bitpar_grammar, read_penn_format, newsplitgrammar,\
+		varstoindices, read_bitpar_grammar, read_penn_format, splitgrammar,\
 		coarse_grammar, grammarinfo, baseline
 from fragmentseeker import extractfragments
 from treetransforms import collinize, un_collinize, binarizetree,\
@@ -164,7 +164,7 @@ def main(
 		#srcggrammar = coarse_grammar(trees, sents)
 		#srcggrammar = read_rparse_grammar("../rparse/bin3600")
 		grammarinfo(srcggrammar)
-		srcggrammar = newsplitgrammar(srcggrammar)
+		srcggrammar = splitgrammar(srcggrammar)
 		testgrammar(srcggrammar)
 
 	if dop:
@@ -178,14 +178,14 @@ def main(
 			dopshortest, _ = dop_srcg_rules(list(trees), list(sents),
 							normalize=False, shortestderiv=True,
 							arity_marks=arity_marks)
-			secondarymodel = newsplitgrammar(dopshortest)
+			secondarymodel = splitgrammar(dopshortest)
 		else:
 			dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
 							shortestderiv=False, arity_marks=arity_marks)
 			#dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
 			#				shortestderiv=False, arity_marks=arity_marks)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
-		dopgrammar1 = newsplitgrammar(dopgrammar)
+		dopgrammar1 = splitgrammar(dopgrammar)
 		print "DOP model based on", len(trees), "sentences,", nodes, "nodes,",
 		print len(dopgrammar1.toid), "nonterminals"
 		grammarinfo(dopgrammar)
@@ -532,7 +532,7 @@ def parsetepacoc():
 	srcggrammar = induce_srcg(list(trees), sents)
 	print "induced srcg grammar of", len(sents), "sentences"
 	grammarinfo(srcggrammar)
-	srcggrammar = newsplitgrammar(srcggrammar)
+	srcggrammar = splitgrammar(srcggrammar)
 	testgrammar(srcggrammar)
 	
 	if removeparentannotation:
@@ -550,7 +550,7 @@ def parsetepacoc():
 				shortestderiv=False, arity_marks=arity_marks)
 	print "induced dop reduction of", len(sents), "sentences"
 	grammarinfo(dopgrammar)
-	dopgrammar = newsplitgrammar(dopgrammar)
+	dopgrammar = splitgrammar(dopgrammar)
 	testgrammar(dopgrammar)
 	secondarymodel = []
 

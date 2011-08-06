@@ -409,8 +409,8 @@ def do(sent, grammar):
 		print
 
 def main():
-	from grammar import newsplitgrammar
-	grammar = newsplitgrammar([
+	from grammar import splitgrammar
+	grammar = splitgrammar([
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
@@ -422,6 +422,8 @@ def main():
 	do("Daruber muss nachgedacht werden", grammar)
 	do("Daruber muss nachgedacht werden werden", grammar)
 	do("Daruber muss nachgedacht werden werden werden", grammar)
+	print "ungrammatical sentence:"
 	do("muss Daruber nachgedacht werden", grammar)	#no parse
+	print "(as expected)"
 
 if __name__ == '__main__': main()

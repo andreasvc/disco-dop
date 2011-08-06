@@ -120,7 +120,7 @@ def getsamples(chart, start, n, tolabel):
 	return derivations
 
 def mostprobablederivation(chart, start, tolabel):
-	edge = min(chart[start])
+	edge = edgecast(min(chart[start]))
 	return getmpd(chart, start, tolabel), edge.inside
 
 def getmpd(chart, start, tolabel):
@@ -181,7 +181,7 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 
 def main():
 	from nltk import Tree
-	from grammar import dop_srcg_rules, newsplitgrammar
+	from grammar import dop_srcg_rules, splitgrammar
 	from oldplcfrs import parse
 	def e(x):
 		if isinstance(x[1], tuple):
@@ -227,9 +227,9 @@ def main():
 		e f c
 		f b c
 		a d e""".splitlines()]
-	grammar = newsplitgrammar(dop_srcg_rules(trees, sents))
+	grammar = splitgrammar(dop_srcg_rules(trees, sents))
 	shortest, secondarymodel = dop_srcg_rules(trees, sents, shortestderiv=True)
-	shortest = newsplitgrammar(shortest)
+	shortest = splitgrammar(shortest)
 	chart, start = parse("a b c".split(), grammar, None, grammar.toid['ROOT'], True)
 	mpd = mostprobablederivation(chart, start, grammar.tolabel)
 	mpp = mostprobableparse(chart, start, grammar.tolabel, n=1000)

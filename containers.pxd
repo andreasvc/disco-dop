@@ -1,16 +1,16 @@
 from array cimport array
 
 cdef class ChartItem:
-	cdef unsigned int label
-	cdef unsigned long vec
+	cdef public unsigned int label
+	cdef public unsigned long vec
 	cdef long _hash
 
 cdef class Edge:
-	cdef double score
-	cdef double inside
-	cdef double prob
-	cdef ChartItem left
-	cdef ChartItem right
+	cdef public double score
+	cdef public double inside
+	cdef public double prob
+	cdef public ChartItem left
+	cdef public ChartItem right
 	cdef long _hash
 
 cdef class Terminal:

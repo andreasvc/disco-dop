@@ -53,7 +53,7 @@ class GoodmanDOP:
 		- self.exemplars dictionary of known parse trees (memoization)"""
 		from bitpar import BitParChartParser
 		nonterminalfd, subtreefd, cfg = FreqDist(), FreqDist(), FreqDist()
-		ids = count(1)
+		ids = count()
 		self.exemplars = {}
 		if wrap:
 			# wrap trees in a common root symbol (eg. for morphology)
@@ -110,7 +110,7 @@ class GoodmanDOP:
 
 		>>> tree = Tree("(S (NP mary) (VP walks))")
 		>>> d = GoodmanDOP([tree])
-		>>> utree = decorate_with_ids(tree, count(1))
+		>>> utree = decorate_with_ids(tree, count())
 		>>> sorted(d.goodman(tree, utree, False))
 		[(NP, ('mary',)), (NP@1, ('mary',)), (S, (NP, VP)), (S, (NP, VP@2)),
 		(S, (NP@1, VP)), (S, (NP@1, VP@2)), (VP, ('walks',)),
@@ -118,7 +118,7 @@ class GoodmanDOP:
 		"""
 		# linear: nr of nodes
 		sep = "\t"
-		for p, up in zip(tree.productions(), utree.productions()):
+		for n, p, up in zip(count(), tree.productions(), utree.productions()):
 			if len(p.rhs()) == 0: raise ValueError
 			if len(p.rhs()) == 1:
 				if not isinstance(p.rhs()[0], Nonterminal): rhs = (p.rhs(), )
@@ -131,7 +131,8 @@ class GoodmanDOP:
 
 			# constant factor: 8
 			#for l, r in product(*((p.lhs(), up.lhs()), rhs)):
-			for l, r in product(set((p.lhs(), up.lhs())), rhs):
+			lhs = set((p.lhs(), up.lhs())) if n else [p.lhs()]
+			for l, r in product(lhs, rhs):
 				#yield Production(l, r)
 				if bitparfmt:
 					yield "%s%s%s" % (l, sep, sep.join(map(unicode, r)))
@@ -201,20 +202,18 @@ def decorate_with_ids(tree, ids, include_preterminals=True):
 	""" add unique identifiers to each internal non-terminal of a tree.
 
 	>>> tree = Tree("(S (NP (DT the) (N dog)) (VP walks))")
-	>>> decorate_with_ids(tree, count(1))
-	Tree('S', [Tree('NP@1', [Tree('DT@2', ['the']), Tree('N@3', ['dog'])]), 
+	>>> decorate_with_ids(tree, count())
+	Tree('S@0', [Tree('NP@1', [Tree('DT@2', ['the']), Tree('N@3', ['dog'])]), 
 			Tree('VP@4', ['walks'])])
 
 		@param ids: an iterator yielding a stream of IDs"""
 	utree = tree.copy(True)
-	#skip root node
-	for a in utree:
+	for a in utree.subtrees():
 		if not isinstance(a, Tree): continue
-		for b in a.subtrees():
-			#skip word boundary markers
-			if a.node == "_": continue
-			if include_preterminals or any(isinstance(c, Tree) for c in b):
-				b.node = "%s@%d" % (b.node, ids.next())
+		#skip word boundary markers
+		if a.node == "_": continue
+		if include_preterminals or any(isinstance(b, Tree) for b in a):
+			a.node = "%s@%d" % (a.node, ids.next())
 	return utree
 
 def nodefreq(tree, utree, subtreefd, nonterminalfd):
@@ -225,11 +224,11 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	>>> fd = FreqDist()
 	>>> tree = Tree("(S (NP mary) (VP walks))")
 	>>> d = GoodmanDOP([tree])
-	>>> utree = decorate_with_ids(tree, count(1))
+	>>> utree = decorate_with_ids(tree, count())
 	>>> nodefreq(tree, utree, fd, FreqDist())
 	4
 	>>> fd.items()
-	[('S', 4), ('NP', 1), ('NP@1', 1), ('VP', 1), ('VP@2', 1)]
+	[('S', 4), ('S@0', 4), ('NP', 1), ('NP@1', 1), ('VP', 1), ('VP@2', 1)]
 
 		@param nonterminalfd: the FreqDist to store the counts in."""
 	if not isinstance(tree, Tree):
@@ -381,5 +380,5 @@ if __name__ == '__main__':
 	fail, attempted = doctest.testmod(verbose=False,
 	optionflags=doctest.NORMALIZE_WHITESPACE | doctest.ELLIPSIS)
 	if attempted and not fail:
-		print "%d doctests succeeded!" % attempted
+		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	main()

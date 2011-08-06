@@ -193,8 +193,8 @@ def do(sent, grammar):
 		print
 
 def main():
-	from grammar import newsplitgrammar
-	grammar = newsplitgrammar([
+	from grammar import splitgrammar
+	grammar = splitgrammar([
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),

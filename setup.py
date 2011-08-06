@@ -14,14 +14,14 @@ directives = {
 	}
 
 ext_modules = [
-	Extension("plcfrs_cython",
-			["plcfrs_cython.pyx", "plcfrs_cython.pxd"]
+	Extension("plcfrs",
+			["plcfrs.pyx", "plcfrs.pxd"]
 		),
 	Extension("agenda",
 			["agenda.pyx", "agenda.pxd"]
 		),
 	Extension("disambiguation",
-			["disambiguation.pyx"]
+			["disambiguation.py", "disambiguation.pxd"]
 		),
 	Extension("containers",
 			["containers.pyx", "containers.pxd"]
@@ -32,14 +32,14 @@ ext_modules = [
 	Extension("estimates",
 			["estimates.py", "estimates.pxd"]
 		),
-	Extension("plcfrs",
-			["plcfrs.py", "plcfrs.pxd"]
+	Extension("oldplcfrs",
+			["oldplcfrs.py", "oldplcfrs.pxd"]
 		),
 	Extension("fragmentseeker",
 			["fragmentseeker.py", "fragmentseeker.pxd"]
 		),
 	Extension("coarsetofine",
-			["coarsetofine.pyx"]
+			["coarsetofine.py", "coarsetofine.pxd"]
 		)
 	]
 

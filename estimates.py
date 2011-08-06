@@ -339,20 +339,20 @@ def testestimates(grammar, maxlen, goal):
 
 def main():
 	from negra import NegraCorpusReader
-	from grammar import induce_srcg, dop_srcg_rules, newsplitgrammar
+	from grammar import induce_srcg, dop_srcg_rules, splitgrammar
 	try: from plcfrs import parse, pprint_chart
 	except ImportError: from oldplcfrs import parse, pprint_chart
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
-	#grammar = newsplitgrammar(dop_srcg_rules(trees, corpus.sents()))
-	grammar = newsplitgrammar(induce_srcg(trees, corpus.sents()))
+	#grammar = splitgrammar(dop_srcg_rules(trees, corpus.sents()))
+	grammar = splitgrammar(induce_srcg(trees, corpus.sents()))
 	#testestimates(grammar, 30, grammar.toid["ROOT"])
 	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
 	#tree.chomsky_normal_form()
 	#sent = "Daruber muss nachgedacht werden".split()
-	#grammar = newsplitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
+	#grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (c 0) (B (c 2) (b 1)))", parse_leaf=int),
@@ -370,7 +370,7 @@ def main():
 	grammar = induce_srcg(trees, sents)
 	for (r,yf),w in sorted(grammar):
 		print r[0], "-->", " ".join(r[1:]), yf, exp(w)
-	grammar = newsplitgrammar(grammar)
+	grammar = splitgrammar(grammar)
 	testestimates(grammar, 4, grammar.toid["ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	print "\nwithout estimates"

@@ -1,5 +1,5 @@
 from kbest cimport lazykbest, lazykthbest
-from containers cimport ChartItem, Edge, getlabel, getvec
+from containers cimport ChartItem, Edge, getlabel, getvec, edgecast
 
 @cython.locals(
 	edge=Edge)

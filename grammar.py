@@ -218,11 +218,11 @@ def doubledop(trees, sents):
 		grammar[a] = log(b / ntfd.get(a[0][0], b))
 	return grammar.items(), backtransform
 
-def splitgrammar(grammar):
+def oldsplitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
-	accommodate min-heaps."""
-
+	accommodate min-heaps.
+	This version represents rules as tuples. """
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
@@ -247,10 +247,12 @@ def splitgrammar(grammar):
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
 
-def newsplitgrammar(grammar):
+def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
-	accommodate min-heaps."""
+	accommodate min-heaps.
+	Can only represent ordered SRCG rules (monotone LCFRS).
+	This version represent rules in dedicated Rule objects, """
 	from containers import Rule, Terminal
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
@@ -569,10 +571,10 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 			ntfd1[t.split("@")[0]].add(t)
 		grammar.extend((((t, (word,)), ('Epsilon', ())), p) for t, p in tags)
 	if ewe:
-		return newsplitgrammar([(varstoindices(rule),
+		return splitgrammar([(varstoindices(rule),
 			log(p / (ntfd[rule[0][0]] * len(ntfd1[rule[0][0].split("@")[0]]))))
 			for rule, p in grammar])
-	return newsplitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
+	return splitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
 
 def write_bitpar_grammar(grammar, encoding='utf-8'):
@@ -726,7 +728,8 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
-	from plcfrs import parse, pprint_chart
+	try: from plcfrs import parse, pprint_chart
+	except ImportError: from oldplcfrs import parse, pprint_chart
 	from disambiguation import mostprobableparse
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'])
@@ -758,11 +761,11 @@ def testctf():
 	for t in parenttrees: t.chomsky_normal_form(vertMarkov=2)
 	for t in dtrees: t.chomsky_normal_form(vertMarkov=0, horzMarkov=1)
 
-	normal = newsplitgrammar(induce_srcg(trees, sents))
-	parent = newsplitgrammar(induce_srcg(parenttrees, sents))
-	split = newsplitgrammar(induce_srcg(cftrees, sents))
-	fine999 = newsplitgrammar(dop_srcg_rules(trees, sents))
-	fine1 = newsplitgrammar(dop_srcg_rules(dtrees, sents))
+	normal = splitgrammar(induce_srcg(trees, sents))
+	parent = splitgrammar(induce_srcg(parenttrees, sents))
+	split = splitgrammar(induce_srcg(cftrees, sents))
+	fine999 = splitgrammar(dop_srcg_rules(trees, sents))
+	fine1 = splitgrammar(dop_srcg_rules(dtrees, sents))
 	for msg, coarse, fine, settings in zip(
 		"normal parentannot cf-split".split(),
 		(normal, parent, split),
@@ -776,7 +779,8 @@ def testctf():
 		#			1 if msg == "parentannot" else 999,	headrules, *settings)
 
 def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split, verbose=False):
-	from plcfrs import parse, pprint_chart
+	try: from plcfrs import parse, pprint_chart
+	except ImportError: from oldplcfrs import parse, pprint_chart
 	from coarsetofine import kbest_outside, merged_kbest, prunelist_fromchart
 	from disambiguation import mostprobableparse
 	from treetransforms import mergediscnodes
@@ -865,8 +869,8 @@ def main():
 	print
 	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
 
-	pprint(splitgrammar(induce_srcg([tree.copy(True)], [sent])))
-	do(sent, newsplitgrammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
+	pprint(oldsplitgrammar(induce_srcg([tree.copy(True)], [sent])))
+	do(sent, splitgrammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
 	grammar = dop_srcg_rules([tree,tree2], [sent,sent2])
 	print 'dop reduction'
 	for (r, yf), w in sorted(grammar):
@@ -884,9 +888,10 @@ def main():
 		except: print a.pprint(),
 		print ":", b
 	print "}"
-	grammar = newsplitgrammar(grammar)
+	grammar = splitgrammar(grammar)
 	testgrammar(grammar)
-	from plcfrs import parse
+	try: from plcfrs import parse
+	except ImportError: from oldplcfrs import parse
 	from disambiguation import mostprobableparse
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
