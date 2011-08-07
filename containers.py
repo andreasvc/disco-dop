@@ -67,6 +67,9 @@ class Terminal:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
+	def __repr__(self):
+		return "Terminal" + repr((self.lhs, self.rhs1, self.rhs2,
+				self.word, self.prob))
 
 class Rule:
 	__slots__ = ('lhs', 'rhs1', 'rhs2', 'prob',
@@ -75,6 +78,9 @@ class Rule:
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.args = args; self.lengths = lengths; self.prob = prob
 		self._args = self.args; self._lengths = self.lengths
+	def __repr__(self):
+		return "Rule" + repr((self.lhs, self.rhs1, self.rhs2,
+							self.args, self.lengths, self.prob))
 
 def getlabel(a): return a.label
 def getvec(a): return a.vec
