@@ -2,7 +2,7 @@
 Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs).
 """
-from agenda import heapdict
+from agenda import EdgeAgenda
 from containers import ChartItem, Edge, Rule, Terminal
 from collections import defaultdict
 from math import exp
@@ -57,7 +57,7 @@ def simpleinside(grammar, maxlen, insidescores):
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = np.inf
-	agenda = heapdict()
+	agenda = EdgeAgenda()
 	nil = ChartItem(0, 0)
 
 	for n, rules in enumerate(grammar.bylhs):
@@ -109,7 +109,7 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 	""" Compute the outside SX simple LR estimate in top down fashion. """
 	bylhs = grammar.bylhs
 	infinity = np.inf
-	agenda = heapdict()
+	agenda = EdgeAgenda()
 	nil = new_ChartItem(0, 0)
 	for n in range(1, maxlen + 1):
 		agenda[new_Item(goal, n, 0, 0)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
@@ -216,7 +216,7 @@ def inside(grammar, maxlen, insidescores):
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = float('infinity')
-	agenda = heapdict()
+	agenda = EdgeAgenda()
 	nil = ChartItem(0, 0)
 
 	for n, rules in enumerate(grammar.bylhs):

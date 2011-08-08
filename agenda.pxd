@@ -7,22 +7,40 @@ from cpython cimport PyList_Append as append,\
 
 cdef class Entry:
 	cdef public object key
-	cdef public Edge value
+	cdef public object value
 	cdef unsigned long count
 
-cdef class heapdict(dict):
-	cdef dict mapping
-	cdef public list heap
+cdef class Function:
+	cdef inline bint cmpfun(self, Entry a, Entry b)
+cdef class EdgeCmp(Function):
+	cdef inline bint cmpfun(self, Entry a, Entry b)
+cdef class NormalCmp(Function):
+	cdef inline bint cmpfun(self, Entry a, Entry b)
+
+cdef class Agenda(dict):
 	cdef public unsigned long length
+	cdef public list heap
+	cdef dict mapping
 	cdef unsigned long counter
-	cpdef Entry popentry(heapdict self)
-	cdef inline Edge getitem(heapdict self, key)
-	cdef inline void setitem(heapdict self, key, Edge value)
-	cdef inline void setifbetter(heapdict self, key, Edge value)
-	cdef inline bint contains(heapdict self, key)
-	cdef inline Edge replace(heapdict self, object key, Edge value)
-	cpdef tuple popitem(heapdict self)
-	cpdef list getheap(heapdict self)
-	cpdef Edge getval(heapdict self, Entry entry)
+	cdef Function cmpfun
+	cpdef Entry popentry(self)
+	cdef inline object getitem(self, key)
+	cdef inline void setitem(self, key, object value)
+	cdef inline void setifbetter(self, key, object value)
+	cdef inline bint contains(self, key)
+	cdef inline object replace(self, object key, object value)
+	cpdef list getheap(self)
+	cpdef object getkey(self, Entry entry)
+	cpdef object getval(self, Entry entry)
+
+cdef class EdgeAgenda(Agenda):
+	cpdef Entry popentry(self)
+	cdef inline object getitem(self, key)
+	cdef inline void setitem(self, key, object value)
+	cdef inline void setifbetter(self, key, object value)
+	cdef inline bint contains(self, key)
+	cdef inline object replace(self, object key, object value)
+	cpdef list getheap(self)
+	cpdef object getval(self, Entry entry)
 
 cdef inline list nsmallest(int n, list items)

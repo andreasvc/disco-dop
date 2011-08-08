@@ -1,7 +1,7 @@
 cimport cython
 from containers cimport ChartItem, Edge, Rule, Terminal
 from plcfrs cimport new_Edge, new_ChartItem
-from agenda cimport heapdict, Entry
+from agenda cimport EdgeAgenda, Entry
 from array cimport array
 cimport numpy as np
 
@@ -54,7 +54,7 @@ cpdef dict inside(grammar, unsigned int maxlen, dict insidescores)
 	rule=Rule,
 	nil=ChartItem,
 	entry=Entry,
-	agenda=heapdict,
+	agenda=EdgeAgenda,
 	infinity=np.double_t,
 	lbinary=list,
 	rbinary=list,

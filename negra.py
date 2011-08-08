@@ -392,7 +392,7 @@ def main():
 	nk = set(); mo = set()
 	from nltk import FreqDist
 	fnk = FreqDist(); fmo = FreqDist()
-	for a,b,c in zip(n.parsed_sents()[:3600], nn.parsed_sents()[:3600], n.sents()[:3600]):
+	for a,b,c in zip(n.parsed_sents()[:100], nn.parsed_sents()[:100], n.sents()[:100]):
 		#if len(c) > 15: continue
 		for x in a.subtrees(lambda n: n.node == "NP"):
 			nk.update(y.node for y in x if function(y) == "NK")

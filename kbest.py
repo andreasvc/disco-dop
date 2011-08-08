@@ -1,7 +1,7 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
 from math import exp, fsum
-from agenda import heapdict
+from agenda import EdgeAgenda
 from containers import ChartItem, Edge
 from operator import itemgetter
 try: assert nsmallest(1, [1]) == [1]
@@ -19,12 +19,11 @@ def getcandidates(chart, v, k):
 	# three probability y), in which case insertion order should count.
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
-	if v not in chart: return heapdict() #raise error?
-	# todo: heapdict on edge.inside instead of edge.score
-	return heapdict([((edge, binarybest if edge.right.label else unarybest), edge)
+	if v not in chart: return EdgeAgenda() #raise error?
+	# todo: agenda on edge.inside instead of edge.score
+	return EdgeAgenda([
+		((edge, binarybest if edge.right.label else unarybest), edge)
 						for edge in nsmallest(k, chart[v])])
-	#return heapdict([(RankedEdge(edge, edge.inside, 0, 0), edge)
-	#					for edge in nsmallest(k, chart[v])])
 
 def lazykthbest(v, k, k1, D, cand, chart, explored):
 	# k1 is the global k

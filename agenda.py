@@ -22,7 +22,7 @@ def make_entry(k, v, c):
 	entry.key = k; entry.value = v; entry.count = c
 	return entry
 
-class heapdict(dict):
+class Agenda(dict):
 	def __init__(self, iterable=None):
 		""" NB: when initialized with an iterable, we don't guarantee that
 			order of equivalent values in this iterable is preserved, and
@@ -162,7 +162,7 @@ class heapdict(dict):
 		""" like popitem, but avoids tuple construction """
 		while True:
 			try: entry = heappop(self.heap)
-			except IndexError: raise KeyError("popitem(): heapdict is empty")
+			except IndexError: raise KeyError("popitem(): agenda is empty")
 			if entry.count: break
 		self.length -= 1
 		return entry
@@ -206,7 +206,7 @@ def lessthan(a, b):
 	return (a.value.score < b.value.score
 				or (a.value.score == b.value.score and a.count < b.count))
 
-# heap operations (without heapdict's reheapify, adapted from heapq)
+# heap operations (adapted from heapq)
 
 def heappop(heap):
 	entry = (heap[0])
@@ -310,15 +310,12 @@ class TestHeap(unittest.TestCase):
 	def check_invariants(self, h):
 		heap = h.getheap()
 		for i in range(len(h)):
-			# this check is only an implementation detail of heapdict,
-			# pq / cpq use this field to break ties.
-			#self.assertEqual(h.heap[i][2], i)
 			if i > 0:
 				self.assertTrue(h.getval(heap[_parent(i)]) <= h.getval(heap[i]))
 
 	def make_data(self):
 		pairs = [(random.random(), Edge(random.random(), 0., 0., NONE, NONE)) for i in range(N)]
-		h = heapdict()
+		h = Agenda()
 		d = {}
 		for k, v in pairs:
 			h[k] = v
@@ -351,7 +348,7 @@ class TestHeap(unittest.TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_popitem_ties(self):
-		h = heapdict()
+		h = Agenda()
 		for i in range(N):
 			h[i] = Edge(0., 0., 0., NONE, NONE)
 		for i in range(N):
@@ -360,7 +357,7 @@ class TestHeap(unittest.TestCase):
 			self.check_invariants(h)
 
 	def test_popitem_ties_fifo(self):
-		h = heapdict()
+		h = Agenda()
 		for i in range(N):
 			h[i] = Edge(0., 0., 0., NONE, NONE)
 		for i in range(N):
@@ -433,7 +430,7 @@ class TestHeap(unittest.TestCase):
 
 	def test_init(self):
 		h, pairs, d = self.make_data()
-		h = heapdict(d.items())
+		h = Agenda(d.items())
 		while pairs:
 			v = h.popitem()
 			v2 = pairs.pop()

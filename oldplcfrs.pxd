@@ -1,6 +1,6 @@
 cimport cython
 from containers cimport ChartItem, Edge, Rule, Terminal
-from agenda cimport heapdict
+from agenda cimport EdgeAgenda
 
 cdef extern from "bit.h":
 	int nextset(unsigned long vec, int pos)
@@ -32,7 +32,7 @@ cdef extern from "bit.h":
 	Ih=ChartItem,
 	I1h=ChartItem,
 	goal=ChartItem,
-	A=heapdict)
+	A=EdgeAgenda)
 cpdef tuple parse(list sent, grammar, list tags=*, int start=*,
 	bint exhaustive=*, estimate=*, list prunelist=*, dict prunetoid=*)
 

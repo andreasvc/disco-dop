@@ -8,7 +8,7 @@ from agenda cimport Entry
 from kbest cimport lazykbest, lazykthbest
 from containers cimport ChartItem, Edge, Rule, Terminal
 from array cimport array
-from agenda cimport heapdict
+from agenda cimport EdgeAgenda
 
 cdef extern from "bit.h":
 	bint testbit(unsigned long vec, unsigned int pos)

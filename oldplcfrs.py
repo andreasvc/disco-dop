@@ -8,7 +8,7 @@ from operator import itemgetter
 from collections import defaultdict
 from kbest import lazykbest
 from containers import ChartItem, Edge
-from agenda import heapdict
+from agenda import EdgeAgenda
 try:
 	import cython
 	assert cython.compiled
@@ -35,7 +35,7 @@ def parse(sent, grammar, tags=[], start=1, exhaustive=False,
 	m = maxA = 0
 	C = {}
 	Cx = [{} for _ in toid]
-	A = heapdict()
+	A = EdgeAgenda()
 
 	# scan
 	Epsilon = toid["Epsilon"]

@@ -5,7 +5,7 @@ from array import array
 from collections import defaultdict
 import re, gc
 import numpy as np
-from agenda import heapdict, Entry
+from agenda import EdgeAgenda, Entry
 from estimates cimport getoutside
 from containers import ChartItem, Edge, Rule, Terminal
 np.import_array()
@@ -67,7 +67,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef double x, y, z
 	cdef bint doprune = bool(prunelist), prunenow, doestimate = bool(estimate)
 	cdef Py_ssize_t i
-	cdef heapdict A = heapdict()				#the agenda
+	cdef EdgeAgenda A = EdgeAgenda()				#the agenda
 	cdef Entry entry
 	cdef Edge edge, newedge
 	cdef ChartItem NONE = new_ChartItem(0, 0)
@@ -240,7 +240,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	if goal in C: return C, goal
 	else: return C, NONE
 
-cdef inline void process_edge(ChartItem newitem, Edge newedge, heapdict A,
+cdef inline void process_edge(ChartItem newitem, Edge newedge, EdgeAgenda A,
 		dict C, list Cx, bint doprune, list prunelist, int splitlabel,
 		dict coarsechart, unsigned int lensent, unsigned int *blocked):
 	""" Decide what to do with a newly derived edge. """

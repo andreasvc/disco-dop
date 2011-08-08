@@ -256,9 +256,15 @@ def splitgrammar(grammar):
 	from containers import Rule, Terminal
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
-	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
-	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
-	unary, lbinary, rbinary, bylhs = ([[] for _ in nonterminals] for _ in range(4))
+	nonterminals = list(enumerate(["Epsilon", "ROOT"]
+		+ sorted(set(nt for (rule, yf), weight in grammar for nt in rule)
+			- set(["Epsilon", "ROOT"]))))
+	toid = dict((lhs, n) for n, lhs in nonterminals)
+	tolabel = dict((n, lhs) for n, lhs in nonterminals)
+	bylhs = [[] for _ in nonterminals]
+	unary = [[] for _ in nonterminals]
+	lbinary = [[] for _ in nonterminals]
+	rbinary = [[] for _ in nonterminals]
 	arity = array('B', [0] * len(nonterminals))
 	lexical = defaultdict(list)
 	# remove sign from log probabilities because the heap we use is a min-heap
@@ -775,8 +781,6 @@ def testctf():
 		for sent, tree in zip(sents, trees):
 			doctf(coarse, fine, sent, tree, k,
 					1 if msg == "parentannot" else 999, headrules, *settings)
-		#doctf(coarse, fine, sents[0], trees[0], k,
-		#			1 if msg == "parentannot" else 999,	headrules, *settings)
 
 def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split, verbose=False):
 	try: from plcfrs import parse, pprint_chart

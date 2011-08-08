@@ -1,5 +1,5 @@
 cimport cython
-from agenda cimport heapdict, nsmallest
+from agenda cimport EdgeAgenda, nsmallest
 from containers cimport ChartItem, Edge
 
 @cython.locals(edge=Edge)
