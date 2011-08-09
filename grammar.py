@@ -314,6 +314,8 @@ def arraytoyf(args, lengths):
 							for n, a in zip(lengths, args))
 
 def postorder(tree, f=None):
+	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
+	but Tree.subtrees() does a preorder traversal. """
 	for child in tree:
 		if isinstance(child, Tree):
 			for a in postorder(child):
@@ -748,98 +750,9 @@ def do(sent, grammar):
 		pprint_chart(p, sent, grammar.tolabel)
 	print
 
-def testctf():
-	from treetransforms import splitdiscnodes
-	from negra import NegraCorpusReader, readheadrules
-	headrules = readheadrules()
-	k = 50
-	corpus = NegraCorpusReader(".", "sample2\.export",
-		encoding="iso-8859-1", headorder=True,
-		headfinal=True, headreverse=False)
-	trees = list(corpus.parsed_sents())
-	sents = corpus.sents()
-	
-	dtrees = [t.copy(True) for t in trees]
-	cftrees = [splitdiscnodes(t.copy(True)) for t in trees]
-	parenttrees = [t.copy(True) for t in trees]
-	for t in trees: t.chomsky_normal_form(vertMarkov=0)
-	for t in cftrees: t.chomsky_normal_form(vertMarkov=0, horzMarkov=1)
-	for t in parenttrees: t.chomsky_normal_form(vertMarkov=2)
-	for t in dtrees: t.chomsky_normal_form(vertMarkov=0, horzMarkov=1)
-
-	normal = splitgrammar(induce_srcg(trees, sents))
-	parent = splitgrammar(induce_srcg(parenttrees, sents))
-	split = splitgrammar(induce_srcg(cftrees, sents))
-	fine999 = splitgrammar(dop_srcg_rules(trees, sents))
-	fine1 = splitgrammar(dop_srcg_rules(dtrees, sents))
-	for msg, coarse, fine, settings in zip(
-		"normal parentannot cf-split".split(),
-		(normal, parent, split),
-		(fine999, fine1, fine1),
-		((False, False), (True, False), (False, True))):
-		print "coarse grammar:", msg
-		for sent, tree in zip(sents, trees):
-			doctf(coarse, fine, sent, tree, k,
-					1 if msg == "parentannot" else 999, headrules, *settings)
-
-def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split, verbose=False):
-	try: from plcfrs import parse, pprint_chart
-	except ImportError: from oldplcfrs import parse, pprint_chart
-	from coarsetofine import kbest_outside, merged_kbest, prunelist_fromchart
-	from disambiguation import mostprobableparse
-	from treetransforms import mergediscnodes
-	from containers import getlabel, getvec
-	print " C O A R S E "
-	p, start = parse(sent, coarse, start=coarse.toid['ROOT'])
-	if start:
-		mpp = mostprobableparse(p, start, coarse.tolabel)
-		for t in mpp:
-			print exp(-mpp[t]),
-			t = Tree.parse(t, parse_leaf=int); t.un_chomsky_normal_form()
-			if split: mergediscnodes(t)
-			t = canonicalize(rem_marks(t))
-			print t.pprint(margin=999)
-			print "exact match" if t == canonicalize(tree) else "no match"
-	else:
-		print "no parse"
-		pprint_chart(p, sent, coarse.tolabel)
-	l = prunelist_fromchart(p, start, coarse, fine, k,
-				removeparentannotation=pa, mergesplitnodes=split,
-				reduceh=doph)
-	if verbose:
-		print "\nitems in 50-best of coarse chart"
-		if split:
-			d = merged_kbest(p, start, k, coarse, headrules)
-			print
-			for label in d:
-				print label, map(bin, d[label].keys())
-		else:
-			kbest = kbest_outside(p, start, k)
-			for a,b in kbest.items():
-				print coarse.tolabel[getlabel(a)], bin(getvec(a)), b
-		print "\nprunelist:"
-		for n,x in enumerate(l):
-			print fine.tolabel[n], [(bin(v), s) for v,s in x.items()]
-		print
-	print " F I N E "
-	p, start = parse(sent, fine, start=fine.toid['ROOT'], prunelist=l, neverblockmarkovized=pa or split)
-	print
-	if start:
-		mpp = mostprobableparse(p, start, fine.tolabel)
-		for t in mpp:
-			print exp(-mpp[t]),
-			t = Tree.parse(t, parse_leaf=int); t.un_chomsky_normal_form()
-			t = canonicalize(rem_marks(t))
-			print t.pprint(margin=999)
-			print "exact match" if t == canonicalize(tree) else "no match"
-	else:
-		print "no parse"
-		if verbose: pprint_chart(p, sent, fine.tolabel)
-	print
-
 def main():
 	from treetransforms import un_collinize, collinize,\
-				binarizetree, minimalbinarization, complexityfanout
+				optimalbinarize, minimalbinarization, complexityfanout
 	from negra import NegraCorpusReader
 	from fragmentseeker import  extractfragments
 	import sys, codecs
@@ -850,7 +763,7 @@ def main():
 	#corpus = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=True, headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents()[:3], corpus.sents()):
 		print tree.pprint(margin=999)
-		a = binarizetree(tree.freeze())
+		a = optimalbinarize(tree)
 		print a.pprint(margin=999); print
 		un_collinize(a)
 		print a.pprint(margin=999), a == tree
@@ -914,7 +827,6 @@ def main():
 				print mpp[t], rem_marks(tree) == r, r
 		else: print "no parse"
 		print
-	testctf()
 
 if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
@@ -922,6 +834,5 @@ if __name__ == '__main__':
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
 	main()
-	testctf()
 	if attempted and not fail:
 		print "%s: %d doctests succeeded!" % (__file__, attempted)

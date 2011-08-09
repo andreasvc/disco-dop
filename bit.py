@@ -63,6 +63,16 @@ def bitminmax(a, b):
 		b >>= 1
 	return b == 1
 
+def fanout(vec):
+	""" number of contiguous components in bit vector (gaps plus one)
+	>>> fanout(0b011011011)
+	3"""
+	gaps = 0; pos = 0
+	while vec >> pos:
+		pos = nextunset(vec, nextset(vec, pos))
+		gaps += 1
+	return gaps # this value is actually gaps+1
+
 if __name__ == '__main__':
 	assert nextset(0b001100110, 3) == 5
 	assert nextunset(0b001100110, 1) == 3
@@ -72,6 +82,9 @@ if __name__ == '__main__':
 	assert not testbit(0b001100110, 3)
 	assert not bitminmax(0b000011, 0b111000)
 	assert not bitminmax(0b001100, 0b000011)
+	assert fanout(0b0111100) == 1
+	assert fanout(0b1000001) == 2
+	assert fanout(0b011011011) == 3
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)

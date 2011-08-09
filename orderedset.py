@@ -1,6 +1,6 @@
-import collections
+from  collections import Set, Sequence, Iterable
 
-class OrderedSet(collections.Set):
+class OrderedSet(Set):
 	""" A frozen, ordered set which maintains a regular list/tuple and set. """
 	def __init__(self, iterable=None):
 		if iterable:
@@ -26,10 +26,15 @@ class OrderedSet(collections.Set):
 			return '%s()' % (self.__class__.__name__,)
 		return '%s(%r)' % (self.__class__.__name__, self.seq)
 	def __eq__(self, other):
-		#if isinstance(other, (OrderedSet, collections.Sequence)):
+		#if isinstance(other, (OrderedSet, Sequence)):
 		#	return len(self) == len(other) and list(self) == list(other)
 		# equality is defined _without_ regard for order
 		return self.theset == set(other)
+	def __and__(self, other):
+		""" maintain the order of the left operand. """
+		if not isinstance(other, Iterable):
+			return NotImplemented
+		return self._from_iterable(value for value in self if value in other)
 	
 if __name__ == '__main__':
 	print(OrderedSet('abracadaba'))

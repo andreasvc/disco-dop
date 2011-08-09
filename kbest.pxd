@@ -6,7 +6,7 @@ from containers cimport ChartItem, Edge
 cdef inline getcandidates(dict chart, ChartItem v, int k)
 
 @cython.locals(e=Edge, j=tuple)
-cdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand, dict chart, set explored)
+cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand, dict chart, set explored)
 
 @cython.locals(j1=tuple, prob=double)
 cdef inline lazynext(ChartItem v, Edge e, tuple j, int k1, dict D, dict cand, dict chart, set explored)

@@ -34,7 +34,9 @@ cdef extern from "bit.h":
 	goal=ChartItem,
 	A=EdgeAgenda)
 cpdef tuple parse(list sent, grammar, list tags=*, int start=*,
-	bint exhaustive=*, estimate=*, list prunelist=*, dict prunetoid=*)
+		bint exhaustive=*, estimate=*, list prunelist=*, dict prunetoid=*,
+		dict coarsechart=*, bint splitprune=*, bint neverblockmarkovized=*,
+		bint neverblockdiscontinuous=*, int beamwidth=*)
 
 @cython.locals(
 	y=cython.double,

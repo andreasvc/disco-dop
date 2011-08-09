@@ -117,7 +117,7 @@ The following is a short tutorial on the available transformations.
 
 """
 from heapq import heappush, heappop
-from itertools import chain
+from itertools import count
 from nltk import Tree, ImmutableTree, memoize
 from grammar import ranges, canonicalize
 from orderedset import OrderedSet
@@ -239,7 +239,7 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 					curNode.append(nodeCopy.pop())
 				else:
 					curNode.node = nodeCopy[0].node
-					curNode[:] = nodeCopy.pop()[:]
+					curNode[:] = nodeCopy.pop()
 	
 
 def un_collinize(tree, expandUnary=True, childChar="|", parentChar="^", unaryChar="+"):
@@ -318,12 +318,24 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 				for child in node:
 					nodeList.append(child)
 
+def getbits(bitset):
+	""" Iterate over the indices of set bits in a bitset. """
+	for n in xrange(999):
+		if bitset & n: yield n
+		elif not bitset: break
+		bitset >>= 1
+
 def fanout(tree):
 	if not isinstance(tree, Tree): return 1
 	return len(list(ranges(sorted(tree.leaves()))))
 
+from bit import fanout as bitfanout
+def newfanout(tree):
+	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
+
+cachedfanout = newfanout
 #can only be used with ImmutableTrees because of memoization.
-cachedfanout = memoize(fanout)
+#cachedfanout = memoize(fanout)
 
 def complexityfanout(tree):
 	return (cachedfanout(tree) + sum(map(cachedfanout, tree)),
@@ -332,6 +344,29 @@ def complexityfanout(tree):
 def fanoutcomplexity(tree):
 	return (cachedfanout(tree),
 			cachedfanout(tree) + sum(map(cachedfanout, tree)))
+
+def maketree(tree):
+	result = ImmutableTree.parse(tree, parse_leaf=int)
+	for a in result.subtrees():
+		a.bitset = sum(1L << n for n in a.leaves())
+	return result
+
+def defaultrightbin(label, node, sep="|", h=999):
+	""" Binarize one constituent with a right factored binarization.
+	Children remain unmodified. Bottom-up version"""
+	i = len(node) - 2
+	childnodes = [child.node for child in node]
+	newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))
+	prev = ImmutableTree(newlabel, [node.pop(), node.pop()][::-1])
+	prev.bitset = prev[0].bitset | prev[1].bitset
+	for i in range(len(node) - 1, -1, -1):
+		newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))
+		current = ImmutableTree(newlabel, [node.pop(), prev])
+		current.bitset = current[0].bitset | prev.bitset
+		prev = current
+	result = ImmutableTree(label, current[:])
+	result.bitset = current.bitset
+	return result
 
 def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	"""
@@ -349,24 +384,20 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	binarization
 
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
-	>>> tree1=ImmutableTree.parse(tree, parse_leaf=int)
+	>>> tree1=maketree(tree)
 	>>> tree2=Tree.parse(tree, parse_leaf=int)
 	>>> tree2.chomsky_normal_form()
 	>>> minimalbinarization(tree1, complexityfanout, head=2) == tree2
 	True
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
-	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout, head=2)
-	(X (D 7) (X|<A-B-E-C> (A 0) (X|<B-E-C> (B 3) (X|<E-C> (E 8) (C 5)))))
+	>>> print minimalbinarization(maketree(tree), complexityfanout, head=2)
+	(X (D 7) (X|<B-A-E-C> (B 3) (X|<A-E-C> (A 0) (X|<E-C> (E 8) (C 5)))))
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
-	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> print minimalbinarization(tree, complexityfanout, head=2, h=1)
-	(X (D 7) (X|<A> (A 0) (X|<B> (B 3) (X|<E> (E 8) (C 5)))))
-
+	>>> print minimalbinarization(maketree(tree), complexityfanout, head=2,h=1)
+	(X (D 7) (X|<B> (B 3) (X|<A> (A 0) (X|<E> (E 8) (C 5)))))
 	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))"
-	>>> tree=ImmutableTree.parse(tree, parse_leaf=int)
-	>>> a = minimalbinarization(tree, complexityfanout)
-	>>> b = minimalbinarization(tree, fanoutcomplexity)
+	>>> a = minimalbinarization(maketree(tree), complexityfanout)
+	>>> b = minimalbinarization(maketree(tree), fanoutcomplexity)
 	>>> print max(map(complexityfanout, a.subtrees()))
 	(14, 6)
 	>>> print max(map(complexityfanout, b.subtrees()))
@@ -375,77 +406,72 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	def newproduction(a, b):
 		""" return a new `production' (here a tree) combining a and b """
 		if head is not None: siblings = (nonterms[a] | nonterms[b])[:h]
-		else: siblings =  sorted(nonterms[a] | nonterms[b])
+		else: siblings = getbits(nonterms[a] | nonterms[b])
 		# swap a and b according to linear precedence
 		#if min(a.leaves()) > min(b.leaves()): a, b = b, a
 		#if (min(z for x, y in nonterms[a] for z in y) >
 		#	min(z for x, y in nonterms[b] for z in y)): a, b = b, a
 		# (disabled, do as postprocessing step instead).
-		newlabel = "%s%s<%s>" % (tree.node, sep, "-".join(tree[x].node for x
-			in siblings))
-		return ImmutableTree(newlabel, [a, b])
+		newlabel = "%s%s<%s>" % (tree.node, sep,
+				"-".join(labels[x] for x in siblings))
+		new = ImmutableTree(newlabel, [a, b])
+		new.bitset = a.bitset | b.bitset
+		return new
 	if len(tree) <= 2: return tree
-	#don't bother with optimality if there are no discontinuities
+	#don't bother with optimality if this particular node is not discontinuous
 	elif cachedfanout(tree) == 1:
 		# do default right factored binarization
-		node = Tree(tree.node, [a for a in tree])
-		nodeCopy = node.copy(True)
-		#fix parent annotation
-		childnodes = [child.node for child in node]
-		numChildren = len(tree)
-		curNode = node
-		for i in range(1, numChildren):
-			newNode = Tree('', [])
-			curNode[:] = [nodeCopy.pop(0), newNode]
-			siblings = "-".join(childnodes[i:i+h])
-			newNode.node = "%s%s<%s>" % (tree.node, sep, siblings)
-			curNode = newNode
-		curNode.node = nodeCopy[0].node
-		curNode[:] = nodeCopy.pop()[:]
-		return node.freeze() #suboptimal to convert back and forth but well
-	agenda = []
+		#suboptimal to convert back and forth but oh well
+		bitset = tree.bitset
+		new = defaultrightbin(tree.node, [a for a in tree], sep, h)
+		new.bitset = bitset
+		return new
+	from agenda import Agenda
+	labels = [a.node for a in tree]
+	agenda = Agenda()
 	workingset = {}
 	nonterms = {}
-	revnonterms = {} # reverse mapping of nonterms ... better name anyone?
-	#goal = frozenset((a, tuple(a.leaves())) for a in tree)
-	goal = frozenset(range(len(tree)))	#optimization: use bitsets instead
+	nontermstoscore = {}
+	#goal = frozenset(range(len(tree)))
+	goal = (1L << len(tree)) - 1
 	if head is None:
 		for n, a in enumerate(tree):
 			workingset[a] = score(a)
-			agenda.append((workingset[a], a))
-			nonterms[a] = frozenset([n])
-			revnonterms[nonterms[a]] = a
+			agenda[a] = workingset[a]
+			#nonterms[a] = frozenset([n])
+			nonterms[a] = 1 << n
+			nontermstoscore[nonterms[a]] = workingset[a]
 	else:
 		# head driven binarization:
 		# add all non-head nodes to the working set,
-		# add all combination of non-head nodes with head to agenda
+		# add all combinations of non-head nodes with head to agenda
 		# caveat: Crescenzi et al. (2011) show that this problem is NP hard.
 		hd = tree[head]
+		goal = OrderedSet(range(len(tree)))
 		for n, a in enumerate(tree):
 			nonterms[a] = OrderedSet([n])
-			revnonterms[nonterms[a]] = a
 			if n != head:
 				workingset[a] = score(a)
+				nontermstoscore[nonterms[a]] = workingset[a]
 		for n, a in enumerate(tree):
 			if n == head: continue
 			# (add initial unary here)
 			p = newproduction(a, hd)
 			workingset[p] = score(p)
-			agenda.append((workingset[p], p))
+			agenda[p] = workingset[p]
 			nonterms[p] = nonterms[a] | nonterms[hd]
-			revnonterms[nonterms[p]] = p
-	# heapify agenda, use sort() to get stable sort 
-	#[but heappop is not stable, so does it matter??]
-	agenda.sort()
+			nontermstoscore[nonterms[p]] = workingset[p]
 	while agenda:
-		x, p = heappop(agenda)
-		if p not in workingset or workingset[p] != x: continue
+		entry = agenda.popentry()
+		p = agenda.getkey(entry); x = agenda.getval(entry)
 		if nonterms[p] == goal:
 			# (add final unary here)
 			p = ImmutableTree(tree.node, p[:])
+			p.bitset = tree.bitset
 			return p
 		for p1, y in workingset.items():
-			if p1 not in workingset or workingset[p1] != y or nonterms[p] & nonterms[p1]:
+			if (p1 not in workingset or workingset[p1] != y
+				or nonterms[p] & nonterms[p1]):
 				continue
 			# if we do head-driven binarization, add one nonterminal at a time
 			if head is None:
@@ -462,38 +488,58 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 			# important: the score is the maximum score up till now
 			x2 = tuple(max(a) for a in zip(score(p2), y, x))
 			#if new or better:
-			if p2nonterms not in revnonterms or revnonterms[p2nonterms] > x2:
+			if (p2nonterms not in nontermstoscore
+				or nontermstoscore[p2nonterms] > x2):
 				for a,b in nonterms.items():
 					if b == p2nonterms:
 						del nonterms[a]
 						del workingset[a]
-						#might as well remove it from agenda as well if that
-						#were supported
+						if a in agenda: del agenda[a]
 				workingset[p2] = x2
-				heappush(agenda, (x2, p2))
+				agenda[p2] = x2
 				nonterms[p2] = p2nonterms
-				revnonterms[p2nonterms] = p2
+				nontermstoscore[p2nonterms] = x2
 	raise ValueError
 
-def binarizetree(tree, sep="|", headdriven=False, h=None, v=1, ancestors=()):
+def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1, ancestors=()):
 	""" Recursively binarize a tree optimizing for complexity.
-	Tree needs to be immutable. v=0 is not implemented. """
-	if not isinstance(tree, Tree): return tree
-	if not headdriven:
-		return Tree(tree.node, sorted(map(
-			lambda t: binarizetree(t, sep),
-			minimalbinarization(tree, complexityfanout, sep)),
-				key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
-	parentstr = "^<%s>" % ("-".join(ancestors[:v-1])) if v > 1 else ""
-	return Tree(tree.node + parentstr, sorted(map(
-		lambda t: binarizetree(t, sep, headdriven, h=h, v=v,
-				ancestors=(tree.node,)+ancestors),
-		minimalbinarization(tree,complexityfanout,sep,head=len(tree)-1,h=h)),
-		key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
+	v=0 is not implemented. """
+	for a in tree.subtrees():
+		if len(a) > 1: a.sort(key=lambda n: n.node)
+	tree = tree.freeze()
+	for a in tree.subtrees():
+		a.bitset = sum(1L << n for n in a.leaves())
+	if headdriven: return recbinarizetreehd(tree, sep, h, v, ())
+	else: return recbinarizetree(tree, sep)
 
-def disc(tree):
-	if not isinstance(tree, Tree): return False
-	return len(list(ranges(sorted(tree.leaves())))) > 1
+def recbinarizetree(tree, sep="|"):
+	""" postorder / bottom-up binarization """
+	if not isinstance(tree, Tree): return tree
+	newtree = ImmutableTree(tree.node,
+		sorted([recbinarizetree(t, sep) for t in tree],
+			key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
+	newtree.bitset = tree.bitset
+	return minimalbinarization(newtree, complexityfanout, sep)
+
+def recbinarizetreehd(tree, sep="|", h=None, v=1, ancestors=()):
+	""" postorder / bottom-up binarization """
+	if not isinstance(tree, Tree): return tree
+	parentstr = "^<%s>" % ("-".join(ancestors[:v-1])) if v > 1 else ""
+	newtree = ImmutableTree(tree.node + parentstr,
+		sorted([recbinarizetreehd(t, sep, h, v, (tree.node,) + ancestors)
+															for t in tree],
+			key=lambda n: min(n.leaves()) if isinstance(n, Tree) else 1))
+	newtree.bitset = tree.bitset
+	return minimalbinarization(newtree, complexityfanout, sep,
+			head=len(tree) - 1, h=h)
+
+def disc(node):
+	""" This function evaluates whether a particular node is locally
+	discontinuous.  The root node will, by definition, be continuous.
+	Nodes can be continuous even if some of their children are discontinuous.
+	"""
+	if not isinstance(node, Tree): return False
+	return len(list(ranges(sorted(node.leaves())))) > 1
 
 def contsets(tree):
 	""" partition children of tree into continuous subsets
@@ -599,11 +645,12 @@ def demo():
 	collinize(cnfTree, factor="right", horzMarkov=2)
 	collinize(lcnfTree, factor="left", horzMarkov=2)
 	
-	# convert the tree to CNF with parent annotation (one level) and horizontal smoothing of order two
+	# convert the tree to CNF with parent annotation 
+	# (one level) and horizontal smoothing of order two
 	parentTree = collapsedTree.copy(True)
 	collinize(parentTree, horzMarkov=2, vertMarkov=1)
 	
-	# convert the tree back to its original form (used to make CYK results comparable)
+	# convert the tree back to its original form
 	original = cnfTree.copy(True)
 	original2 = lcnfTree.copy(True)
 	un_collinize(original)
@@ -613,16 +660,19 @@ def demo():
 	print "Sentences the same? ", tree == original, tree == original2
 	assert tree == original and tree == original2
 	
-	#draw_trees(tree, collapsedTree, cnfTree, parentTree, original)
+def testminbin():
+	from negra import NegraCorpusReader
+	cnt = 0
+	for tree in open("tiger250disc.txt"):
+		if '64' in tree: continue
+		print "before:", tree
+		print "after:",
+		print optimalbinarize(Tree.parse(tree, parse_leaf=int),
+						headdriven=False, h=None, v=1)
+		cnt += 1
+		if cnt == 75: break
 
-if __name__ == '__main__':
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	# do doctests, but don't be pedantic about whitespace (I suspect it is the
-	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	demo()
-	if attempted and not fail:
-		print "%s: %d doctests succeeded!" % (__file__, attempted)
+def testsplit():
 	from negra import NegraCorpusReader
 	correct = wrong = 0
 	#n = NegraCorpusReader("../rparse", "tigerproc\.export")
@@ -636,4 +686,16 @@ if __name__ == '__main__':
 	print "correct", correct, "=", 100*correct/total, "%"
 	print "wrong", wrong, "=", 100*wrong/total, "%"
 
-__all__ = ["collinize", "un_collinize", "collapse_unary"]
+def main():
+	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
+	# do doctests, but don't be pedantic about whitespace (I suspect it is the
+	# militant anti-tab faction who are behind this obnoxious default)
+	demo()
+	testminbin()
+	testsplit()
+	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	if attempted and not fail:
+		print "%s: %d doctests succeeded!" % (__file__, attempted)
+	else: print "doctest fail"
+__all__ = ["collinize", "un_collinize", "collapse_unary", "splitdiscnodes", "mergediscnodes", "optimalbinarize"]
+if __name__ == '__main__': main()

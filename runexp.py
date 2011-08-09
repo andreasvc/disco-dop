@@ -14,27 +14,34 @@ from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		varstoindices, read_bitpar_grammar, read_penn_format, splitgrammar,\
 		coarse_grammar, grammarinfo, baseline
 from fragmentseeker import extractfragments
-from treetransforms import collinize, un_collinize, binarizetree,\
+from treetransforms import collinize, un_collinize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
 from plcfrs import parse
 from coarsetofine import prunelist_fromchart
 from disambiguation import mostprobableparse, mostprobablederivation,\
 							sldop, sldop_simple
 
+# todo:
+# - all output with logging module
+# - command line interface
+# - split off evaluation code into new module
+
 def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
 	bitpardop = False,
-	dop = True,
+	dop = False,
 	unfolded = False,
-	maxlen = 40,  # max number of words for sentences in training & test corpus
+	maxlen = 25,  # max number of words for sentences in test corpus
+	trainmaxlen = 25, # max number of words for sentences in train corpus
 	train = 7200, maxsent = 100,	# number of sentences to parse
+	skip=0,
 	#train = 18602, maxsent = 1000, #9999999,	# number of sentences to parse
-	skip=1000, #skip test set to get dev set
-	bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
+	#skip=1000, #skip test set to get dev set
+	bintype = "optimalhead", # choices: collinize, nltk, optimal, optimalhead
 	factor = "right",
 	v = 1,
-	h = 1,
+	h = 2,
 	arity_marks = True,
 	arity_marks_before_bin = False,
 	tailmarker = "",
@@ -43,14 +50,14 @@ def main(
 	estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 	sldop_n=7,
 	k = 0,		#number of coarse derivations to prune with; k=0 => filter only
-	prune=True,	#whether to use srcg chart to prune parsing of dop
+	prune=False,	#whether to use srcg chart to prune parsing of dop
 	getestimates=False, #compute & store estimates
 	useestimates=False,  #load & use estimates
-	removeparentannotation=False, # VP^<S> is treated as VP
-	splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] }
+	splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] }
 	mergesplitnodes=False, #coarse grammar is PCFG with splitted nodes eg. VP*
-	neverblockmarkovized=True, #do not prune intermediate nodes of binarization
-	neverblockdiscontinuous=True, #never block discontinuous nodes.
+	removeparentannotation=False, # VP^<S> is treated as VP
+	neverblockmarkovized=False, #do not prune intermediate nodes of binarization
+	neverblockdiscontinuous=False, #never block discontinuous nodes.
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -71,7 +78,7 @@ def main(
 	if isinstance(train, float):
 		train = int(train * len(corpus.sents()))
 	trees, sents, blocks = corpus.parsed_sents()[:train], corpus.sents()[:train], corpus.blocks()[:train]
-	trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks)]) # if len(sent[1]) <= maxlen])
+	trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent[1]) <= trainmaxlen])
 	# parse training corpus as a "soundness check"
 	#test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
 	if isinstance(train, float) or train > 7200:
@@ -82,13 +89,23 @@ def main(
 	test = test.parsed_sents()[train+skip:], test.tagged_sents()[train+skip:], test.blocks()[train+skip:]
 	print "read training & test corpus"
 	begin = time.clock()
-	if True or mergesplitnodes:
+	if mergesplitnodes:
 		splittrees = [splitdiscnodes(a.copy(True)) for a in trees]
 		print "splitted discontinuous nodes"
 		for a in splittrees:
 			a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
+	ln = len(trees) / 100.0
+	def timeprinteval(n,a,f):
+		#print n,n/ln,'%',a,
+		#begin = time.clock()
+		x = f()
+		#print time.clock() - begin,'s'
+		return x
 	if arity_marks_before_bin: [srcg_productions(a, b) for a, b in zip(trees, sents)]
-	if bintype == "collinize":
+	if bintype == "nltk":
+		bintype += " %s h=%d v=%d" % (factor, h, v)
+		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
+	elif bintype == "collinize":
 		bintype += " %s h=%d v=%d %s markovize" % (factor, h, v, "tailmarker" if tailmarker else '')
 		#for tree in trees:
 		#	for a in tree.subtrees(lambda n: len(n) > 1):
@@ -98,22 +115,16 @@ def main(
 		#for tree in trees:
 		#	for a in tree.subtrees(lambda n: "*" in n.node):
 		#		a.node = a.node.replace("*", "")
-	if bintype == "nltk":
-		bintype += " %s h=%d v=%d" % (factor, h, v)
-		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
-	ln = len(trees) / 100.0
-	def timeprinteval(n,a,f):
-		#print n,n/ln,'%',a,
-		#begin = time.clock()
-		x = f()
-		#print time.clock() - begin,'s'
-		return x
-	if bintype == "optimal": trees = [timeprinteval(n,tree,lambda: binarizetree(tree.freeze())) for n,tree in enumerate(trees)]
-	if bintype == "optimalhead": trees = [timeprinteval(n,tree,lambda: binarizetree(tree.freeze(), headdriven=True, h=h, v=v)) for n,tree in enumerate(trees)]
+	elif bintype == "optimal":
+		trees = [timeprinteval(n, tree, lambda: optimalbinarize(tree))
+						for n, tree in enumerate(trees)]
+	elif bintype == "optimalhead":
+		trees = [timeprinteval(n, tree,
+					lambda: optimalbinarize(tree, headdriven=True, h=h, v=v))
+						for n,tree in enumerate(trees)]
 	print "binarized", bintype,
 	print "time elapsed: ", time.clock() - begin
 
-	#trees = trees[:10]; sents = sents[:10]
 	seen = set()
 	v = set(); e = {}; weights = {}
 	for n, (tree, sent) in enumerate(zip(trees, sents)):
@@ -122,7 +133,6 @@ def main(
 		match = False
 		for (rule,yf), w in rules:
 			if len(rule) == 2 and rule[1] != "Epsilon":
-				#print n, rule[0], "-->", rule[1], "\t\t", [list(a) for a in yf]
 				match = True
 				v.add(rule[0])
 				e.setdefault(rule[0], set()).add(rule[1])
@@ -147,7 +157,7 @@ def main(
 
 	srcggrammar = []; dopgrammar = []; secondarymodel = []
 	if srcg:
-		if True or mergesplitnodes:
+		if mergesplitnodes:
 			#corpus = codecs.open("../tiger/corpus/tiger_release_aug07.mrg", encoding="iso-8859-1").read().splitlines()
 			#splittrees = map(Tree, corpus[:7200])
 			#for a in splittrees:
@@ -521,7 +531,7 @@ def parsetepacoc():
 		print "splitted discontinuous nodes"
 	if bintype == "optimal":
 		def timeprinteval(n,a,f): return f()
-		trees = [timeprinteval(n,tree,lambda: binarizetree(tree.freeze()))
+		trees = [timeprinteval(n,tree,lambda: optimalbinarize(tree))
 					for n, tree in enumerate(trees)]
 	elif bintype == "nltk":
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)

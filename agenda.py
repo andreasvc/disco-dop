@@ -201,6 +201,9 @@ class Agenda(dict):
 	def getval(self, entry):
 		return entry.value
 
+
+EdgeAgenda = Agenda # FIXME
+
 # this is _significantly_ faster than relying on __richcmp__
 def lessthan(a, b):
 	return (a.value.score < b.value.score

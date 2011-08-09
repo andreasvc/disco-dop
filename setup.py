@@ -29,6 +29,9 @@ ext_modules = [
 	Extension("kbest",
 			["kbest.py", "kbest.pxd"]
 		),
+	Extension("bit",
+			["bit.pyx"]
+		),
 	Extension("estimates",
 			["estimates.py", "estimates.pxd"]
 		),

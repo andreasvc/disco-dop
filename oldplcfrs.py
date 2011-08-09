@@ -17,8 +17,11 @@ except:
 	from bit import *
 NONE = ChartItem(0, 0)
 
-def parse(sent, grammar, tags=[], start=1, exhaustive=False,
-		estimate=(), prunelist=None, prunetoid=None):
+def parse(sent, grammar, tags=[], start=1, exhaustive=False,\
+		# these arguments are currently ignored:
+		estimate=None, prunelist=None, prunetoid=None, coarsechart=None,
+		splitprune=False, neverblockmarkovized=False,
+		neverblockdiscontinuous=False, beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse
 	"""
