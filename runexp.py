@@ -1,4 +1,5 @@
 # -*- coding: UTF-8 -*-
+import logging
 from collections import defaultdict
 from itertools import islice, count
 from operator import itemgetter
@@ -22,7 +23,6 @@ from disambiguation import mostprobableparse, mostprobablederivation,\
 							sldop, sldop_simple
 
 # todo:
-# - all output with logging module
 # - command line interface
 # - split off evaluation code into new module
 
@@ -30,15 +30,15 @@ def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
 	bitpardop = False,
-	dop = False,
+	dop = True,
 	unfolded = False,
 	maxlen = 25,  # max number of words for sentences in test corpus
 	trainmaxlen = 25, # max number of words for sentences in train corpus
-	train = 7200, maxsent = 100,	# number of sentences to parse
+	train = 72, maxsent = 100,	# number of sentences to parse
 	skip=0,
 	#train = 18602, maxsent = 1000, #9999999,	# number of sentences to parse
 	#skip=1000, #skip test set to get dev set
-	bintype = "optimalhead", # choices: collinize, nltk, optimal, optimalhead
+	bintype = "optimal", # choices: collinize, nltk, optimal, optimalhead
 	factor = "right",
 	v = 1,
 	h = 2,
@@ -49,8 +49,8 @@ def main(
 	m = 10000,		#number of derivations to sample/enumerate
 	estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 	sldop_n=7,
-	k = 0,		#number of coarse derivations to prune with; k=0 => filter only
-	prune=False,	#whether to use srcg chart to prune parsing of dop
+	k = 50,		#number of coarse derivations to prune with; k=0 => filter only
+	prune=True,	#whether to use srcg chart to prune parsing of dop
 	getestimates=False, #compute & store estimates
 	useestimates=False,  #load & use estimates
 	splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] }
@@ -58,23 +58,31 @@ def main(
 	removeparentannotation=False, # VP^<S> is treated as VP
 	neverblockmarkovized=False, #do not prune intermediate nodes of binarization
 	neverblockdiscontinuous=False, #never block discontinuous nodes.
+	quiet=False, reallyquiet=False
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 	#corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1"); maxlen = 99
 	assert bintype in ("optimal", "optimalhead", "collinize", "nltk")
 	assert estimator in ("dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
+	#format = "%(levelname)s %(asctime)s %(funcName)s %(lineno)d %(message)s"
+	# Log everything, and send it to stderr, in a format with just the message.
+	format = '%(message)s'
+	if reallyquiet: logging.basicConfig(level=logging.WARNING, format=format)
+	elif quiet: logging.basicConfig(level=logging.INFO, format=format)
+	else: logging.basicConfig(level=logging.DEBUG, format=format)
+
 	if isinstance(train, float) or train > 7200:
 		#corpus = NegraCorpusReader("../rparse", "tigerprocfull.export",
-		#	headorder=(bintype=="collinize"), headfinal=True,
-		#	headreverse=False, unfold=unfolded)
+		#	headorder=(bintype in ("collinize", "optimalhead")),
+		#	headfinal=True, headreverse=False, unfold=unfolded)
 		corpus = NegraCorpusReader("../rparse", "negraproc.export",
-			headorder=(bintype=="collinize"), headfinal=True,
-			headreverse=False, unfold=unfolded)
+			headorder=(bintype in ("collinize", "optimalhead")),
+			headfinal=True, headreverse=False, unfold=unfolded)
 	else:
 		corpus = NegraCorpusReader("../rparse", "tigerproc.export",
-			headorder=(bintype=="collinize"), headfinal=True,
-			headreverse=False, unfold=unfolded)
+			headorder=(bintype in ("collinize", "optimalhead")),
+			headfinal=True, headreverse=False, unfold=unfolded)
 	if isinstance(train, float):
 		train = int(train * len(corpus.sents()))
 	trees, sents, blocks = corpus.parsed_sents()[:train], corpus.sents()[:train], corpus.blocks()[:train]
@@ -87,11 +95,11 @@ def main(
 	else:
 		test = NegraCorpusReader("../rparse", "tigerproc.export")
 	test = test.parsed_sents()[train+skip:], test.tagged_sents()[train+skip:], test.blocks()[train+skip:]
-	print "read training & test corpus"
+	logging.info("read training & test corpus")
 	begin = time.clock()
 	if mergesplitnodes:
 		splittrees = [splitdiscnodes(a.copy(True)) for a in trees]
-		print "splitted discontinuous nodes"
+		logging.info("splitted discontinuous nodes")
 		for a in splittrees:
 			a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	ln = len(trees) / 100.0
@@ -116,30 +124,25 @@ def main(
 		#	for a in tree.subtrees(lambda n: "*" in n.node):
 		#		a.node = a.node.replace("*", "")
 	elif bintype == "optimal":
-		trees = [timeprinteval(n, tree, lambda: optimalbinarize(tree))
+		trees = [timeprinteval(n, tree, lambda: Tree.convert(
+							optimalbinarize(tree)))
 						for n, tree in enumerate(trees)]
 	elif bintype == "optimalhead":
-		trees = [timeprinteval(n, tree,
-					lambda: optimalbinarize(tree, headdriven=True, h=h, v=v))
+		trees = [timeprinteval(n, tree, lambda: Tree.convert(
+							optimalbinarize(tree, headdriven=True, h=h, v=v)))
 						for n,tree in enumerate(trees)]
-	print "binarized", bintype,
-	print "time elapsed: ", time.clock() - begin
-
+	logging.info("binarized %s  cpu time elapsed: %g s" % (
+						bintype, time.clock() - begin))
 	seen = set()
 	v = set(); e = {}; weights = {}
 	for n, (tree, sent) in enumerate(zip(trees, sents)):
 		rules = [(a,b) for a,b in induce_srcg([tree], [sent]) if a not in seen]
 		seen.update(map(lambda (a,b): a, rules))
-		match = False
 		for (rule,yf), w in rules:
 			if len(rule) == 2 and rule[1] != "Epsilon":
-				match = True
 				v.add(rule[0])
 				e.setdefault(rule[0], set()).add(rule[1])
 				weights[rule[0], rule[1]] = abs(w)
-		if False and match:
-			print tree
-			print n, sent
 
 	def visit(current, edges, visited):
 		""" depth-first cycle detection """
@@ -152,8 +155,8 @@ def main(
 	visit.mem = set()
 	for a in v:
 		for b in visit(a, e, []):
-			print "cycle (cost %5.2f): %s" % (
-				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b))
+			logging.debug("cycle (cost %5.2f): %s" % (
+				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b)))
 
 	srcggrammar = []; dopgrammar = []; secondarymodel = []
 	if srcg:
@@ -165,12 +168,12 @@ def main(
 			#	a.chomsky_normal_form(horzMarkov=1)
 			#	for n, x in enumerate(a.treepositions('leaves')): a[x] = n
 			srcggrammar = induce_srcg(splittrees, sents)
-			print "induced CFG based on", len(splittrees), "sentences"
+			logging.info("induced CFG based on %d sentences" % len(splittrees))
 			#srcggrammar = dop_srcg_rules(splittrees, sents)
-			#print "induced DOP CFG based on", len(trees), "sentences"
+			#logging.info("induced DOP CFG based on %d sentences" % len(trees))
 		else:
 			srcggrammar = induce_srcg(trees, sents)
-			print "induced SRCG based on", len(trees), "sentences"
+			logging.info("induced SRCG based on %d sentences" % len(trees))
 		#srcggrammar = coarse_grammar(trees, sents)
 		#srcggrammar = read_rparse_grammar("../rparse/bin3600")
 		grammarinfo(srcggrammar)
@@ -196,8 +199,8 @@ def main(
 			#				shortestderiv=False, arity_marks=arity_marks)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
 		dopgrammar1 = splitgrammar(dopgrammar)
-		print "DOP model based on", len(trees), "sentences,", nodes, "nodes,",
-		print len(dopgrammar1.toid), "nonterminals"
+		logging.info("DOP model based on %d sentences, %d nodes, %d nonterminals"
+						% (len(trees), nodes, len(dopgrammar1.toid)))
 		grammarinfo(dopgrammar)
 		dopgrammar = dopgrammar1
 		testgrammar(dopgrammar)
@@ -205,18 +208,19 @@ def main(
 	if getestimates:
 		from estimates import getestimates
 		import numpy as np
-		print "computing estimates"
+		logging.info("computing estimates")
 		begin = time.clock()
 		outside = getestimates(srcggrammar, maxlen, srcggrammar.toid["ROOT"])
-		print "done. time elapsed: ", time.clock() - begin,
+		logging.info("estimates done. cpu time elapsed: %g s"
+					% time.clock() - begin)
 		np.savez("outside.npz", outside=outside)
 		#cPickle.dump(outside, open("outside.pickle", "wb"))
-		print "saved estimates"
+		logging.info("saved estimates")
 	if useestimates:
 		import numpy as np
 		#outside = cPickle.load(open("outside.pickle", "rb"))
 		outside = np.load("outside.npz")['outside']
-		print "loaded estimates"
+		logging.info("loaded estimates")
 	else: outside = None
 
 	#for a,b in extractfragments(trees).items():
@@ -229,7 +233,7 @@ def main(
 			prune, k, sldop_n, useestimates, outside, "ROOT", True,
 			removeparentannotation, splitprune, mergesplitnodes,
 			neverblockmarkovized, neverblockdiscontinuous)
-	print "time elapsed during parsing: ", time.clock() - begin
+	logging.info("time elapsed during parsing: %g s" % (time.clock() - begin))
 	doeval(*results)
 
 def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
@@ -252,14 +256,14 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		if len(sent) > maxlen: continue
 		if nsent >= maxsent: break
 		nsent += 1
-		print "%d. [len=%d] " % (nsent, len(sent)),
-		myprint(u" ".join(a[0]+u"/"+a[1] for a in sent))
+		logging.debug("%d. [len=%d] %s" % (nsent, len(sent),
+					u" ".join(a[0]+u"/"+a[1] for a in sent)))
 		goldb = bracketings(tree)
 		gold.append(block)
 		gsent.append(sent)
 		goldbrackets.update((nsent, a) for a in goldb)
 		if srcg:
-			print "SRCG:",
+			msg = "SRCG: "
 			begin = time.clock()
 			chart, start = parse(
 						[w for w,t in sent], srcggrammar,
@@ -277,26 +281,29 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			if mergesplitnodes: mergediscnodes(result)
 			rem_marks(result)
 			if unfolded: fold(result)
-			print "p = %.4e" % (exp(-prob),),
+			msg += "p = %.4e " % exp(-prob)
 			candb = bracketings(result)
 			prec = precision(goldb, candb)
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
 			if result == tree or f1 == 1.0:
 				assert result != tree or f1 == 1.0
-				print "\nexact match"
+				msg += "exact match\n"
 				exacts += 1
 			else:
-				print "\nLP %5.2f LR %5.2f LF %5.2f" % (
+				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
 								100 * prec, 100 * rec, 100 * f1)
-				print "cand-gold", printbrackets(candb - goldb)
-				print "gold-cand", printbrackets(goldb - candb)
-				print "     ", result.pprint(margin=1000)
+				if candb - goldb:
+					msg += "cand-gold %s " % printbrackets(candb - goldb)
+				if goldb - candb:
+					msg += "gold-cand %s" % printbrackets(goldb - candb)
+				if (candb - goldb) or (goldb - candb): msg += '\n'
+				msg += "      %s" % result.pprint(margin=1000)
 				serrors1.update(a[0] for a in candb - goldb)
 				serrors2.update(a[0] for a in goldb - candb)
 			sresults.append(result)
 		else:
-			if srcg: print "\nno parse"
+			if srcg: msg += "no parse"
 			#derivout.write("Failed to parse\nparse_failure.\n\n")
 			result = baseline([(n,t) for n,(w,t) in enumerate(sent)])
 			result = Tree.parse("(%s %s)" % (top, result), parse_leaf=int)
@@ -306,7 +313,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			f1 = f_measure(goldb, candb)
 			snoparse += 1
 			sresults.append(result)
-		if srcg: print " %.2fs cpu time elapsed" % (time.clock() - begin)
+		if srcg: logging.debug(msg+"\n%.2fs cpu time elapsed" % (time.clock() - begin))
 		scandb.update((nsent, a) for a in candb)
 		#if bitpardop:	
 		# parse w/bitpar
@@ -314,8 +321,9 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		# get prunelist
 		# ???
 		# profit
-		if dop and (start or not prune):
-			print " DOP:",
+		msg = ""
+		if dop and (not prune or start):
+			msg = " DOP: "
 			begin = time.clock()
 			if srcg and prune and start:
 				prunelist = prunelist_fromchart(chart, start, srcggrammar,
@@ -347,9 +355,9 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			dresult, prob = max(mpp, key=itemgetter(1))
 			dresult = Tree(dresult)
 			if isinstance(prob, tuple):
-				print "subtrees = %d, p = %.4e" % (abs(prob[0]), prob[1]),
+				msg += "subtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])
 			else:
-				print "p = %.4e" % (prob,),
+				msg += "p = %.4e " % prob
 			un_collinize(dresult)
 			rem_marks(dresult)
 			if unfolded: fold(dresult)
@@ -358,19 +366,22 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
 			if dresult == tree or f1 == 1.0:
-				print "\nexact match"
+				msg += "exact match\n"
 				exact += 1
 			else:
-				print "\nLP %5.2f LR %5.2f LF %5.2f" % (
+				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
 								100 * prec, 100 * rec, 100 * f1)
-				print "cand-gold", printbrackets(candb - goldb)
-				print "gold-cand", printbrackets(goldb - candb)
-				print "     ", dresult.pprint(margin=1000)
+				if candb - goldb:
+					msg += "cand-gold %s " % printbrackets(candb - goldb)
+				if goldb - candb:
+					msg += "gold-cand %s " % printbrackets(goldb - candb)
+				if (candb - goldb) or (goldb - candb): msg += '\n'
+				msg += "      %s" % dresult.pprint(margin=1000)
 				derrors1.update(a[0] for a in candb - goldb)
 				derrors2.update(a[0] for a in goldb - candb)
 			dresults.append(dresult)
 		else:
-			if dop: print "\nno parse"
+			if dop: msg += "no parse"
 			dresult = baseline([(n,t) for n,(w,t) in enumerate(sent)])
 			dresult = Tree.parse("(%s %s)" % (top, result), parse_leaf=int)
 			candb = bracketings(dresult)
@@ -379,24 +390,24 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			f1 = f_measure(goldb, candb)
 			dnoparse += 1
 			dresults.append(dresult)
-		if dop: print " %.2fs cpu time elapsed" % (time.clock() - begin)
-		print "GOLD:", tree.pprint(margin=1000)
+		if dop: logging.debug(msg + "\n%.2fs cpu time elapsed" % (time.clock() - begin))
+		logging.debug("GOLD: %s" % tree.pprint(margin=1000))
 		dcandb.update((nsent, a) for a in candb)
 		if srcg:
-			print "srcg ex %5.2f lp %5.2f lr %5.2f lf %5.2f" % (
+			logging.debug("srcg ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
 								100 * (exacts / float(nsent)),
 								100 * precision(goldbrackets, scandb),
 								100 * recall(goldbrackets, scandb),
-								100 * f_measure(goldbrackets, scandb))
+								100 * f_measure(goldbrackets, scandb),
+								('' if dop else '\n')))
 		if dop:
-			print "dop  ex %5.2f lp %5.2f lr %5.2f lf %5.2f (delta %5.2f)" % (
+			logging.debug("dop  ex %5.2f lp %5.2f lr %5.2f lf %5.2f (delta %5.2f)\n" % (
 								100 * (exact / float(nsent)),
 								100 * precision(goldbrackets, dcandb),
 								100 * recall(goldbrackets, dcandb),
 								100 * f_measure(goldbrackets, dcandb),
 								100 * (f_measure(goldbrackets, dcandb)
-									- f_measure(goldbrackets, scandb)))
-		print
+									- f_measure(goldbrackets, scandb))))
 
 	if srcg:
 		codecs.open("%s.srcg" % filename, "w", encoding='utf-8').writelines(

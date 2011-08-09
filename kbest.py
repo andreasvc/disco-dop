@@ -113,11 +113,12 @@ def lazykbest(chart, goal, k, tolabel):
 	k is the number of derivations desired.
 	tolabel is a dictionary mapping numeric IDs to the original nonterminal
 	labels.  """
+	import logging
 	D = {}
 	cand = {}
 	explored = set()
 	lazykthbest(goal, k, k, D, cand, chart, explored)
-	print len(explored), "(sub)derivations considered",
+	logging.debug("%d (sub)derivations considered" % len(explored))
 	return filter(itemgetter(0), [(getderivation(goal, e, j, D, chart, tolabel, 0), e.inside) for (e,j),_ in D[goal]])
 
 toid = {}

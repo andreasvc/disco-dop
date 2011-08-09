@@ -504,8 +504,9 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1, ancestors=()):
 	""" Recursively binarize a tree optimizing for complexity.
 	v=0 is not implemented. """
-	for a in tree.subtrees():
-		if len(a) > 1: a.sort(key=lambda n: n.node)
+	if not headdriven:
+		for a in tree.subtrees():
+			if len(a) > 1: a.sort(key=lambda n: n.node)
 	tree = tree.freeze()
 	for a in tree.subtrees():
 		a.bitset = sum(1L << n for n in a.leaves())

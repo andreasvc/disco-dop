@@ -3,47 +3,27 @@ from distutils.extension import Extension
 from Cython.Distutils import build_ext
 import numpy as np
 
-# some of these directives increase performance, but at the cost of failing
-# in mysterious ways.
+# some of these directives increase performance,
+# but at the cost of failing in mysterious ways.
 directives = {
-	"boundscheck" : False,
 	"profile" : False,
+	"boundscheck" : False,
 	"nonecheck" : False,
 	"wraparound" : False,
 	"embedsignature" : True
 	}
 
 ext_modules = [
-	Extension("plcfrs",
-			["plcfrs.pyx", "plcfrs.pxd"]
-		),
-	Extension("agenda",
-			["agenda.pyx", "agenda.pxd"]
-		),
-	Extension("disambiguation",
-			["disambiguation.py", "disambiguation.pxd"]
-		),
-	Extension("containers",
-			["containers.pyx", "containers.pxd"]
-		),
-	Extension("kbest",
-			["kbest.py", "kbest.pxd"]
-		),
-	Extension("bit",
-			["bit.pyx"]
-		),
-	Extension("estimates",
-			["estimates.py", "estimates.pxd"]
-		),
-	Extension("oldplcfrs",
-			["oldplcfrs.py", "oldplcfrs.pxd"]
-		),
-	Extension("fragmentseeker",
-			["fragmentseeker.py", "fragmentseeker.pxd"]
-		),
-	Extension("coarsetofine",
-			["coarsetofine.py", "coarsetofine.pxd"]
-		)
+	Extension("bit",			["bit.pyx"]),
+	Extension("kbest",			["kbest.py", "kbest.pxd"]),
+	Extension("agenda",			["agenda.pyx", "agenda.pxd"]),
+	Extension("plcfrs",			["plcfrs.pyx", "plcfrs.pxd"]),
+	Extension("estimates",		["estimates.py", "estimates.pxd"]),
+	Extension("oldplcfrs",		["oldplcfrs.py", "oldplcfrs.pxd"]),
+	Extension("containers",		["containers.pyx", "containers.pxd"]),
+	Extension("coarsetofine",	["coarsetofine.py", "coarsetofine.pxd"]),
+	Extension("disambiguation",	["disambiguation.py", "disambiguation.pxd"]),
+	Extension("fragmentseeker",	["fragmentseeker.py", "fragmentseeker.pxd"])
 	]
 
 for e in ext_modules:

@@ -3,7 +3,7 @@
 from math import log, exp
 from array import array
 from collections import defaultdict
-import re, gc
+import re, gc, logging
 import numpy as np
 from agenda import EdgeAgenda, Entry
 from estimates cimport getoutside
@@ -114,7 +114,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			recognized = True
 			continue
 		elif not recognized:
-			print "not covered:", tags[i] if tags else w
+			logging.error("not covered: %s" % (tags[i] if tags else w))
 			return C, NONE
 
 	# parsing
@@ -233,16 +233,14 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 								coarsechart, lensent, &blocked)
 
 		if A.length > maxA: maxA = A.length
-	print "max agenda size %d, now %d," % (maxA, len(A)),
-	print "chart items %d (%d labels)," % (len(C), len(filter(None, Cx))),
-	print "edges %d, blocked %d" % (sum(map(len, C.values())), blocked),
+	logging.debug("max agenda size %d, now %d, chart items %d (%d labels), edges %d, blocked %d" % (maxA, len(A), len(C), len(filter(None, Cx)), sum(map(len, C.values())), blocked))
 	gc.enable()
 	if goal in C: return C, goal
 	else: return C, NONE
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge, EdgeAgenda A,
 		dict C, list Cx, bint doprune, list prunelist, int splitlabel,
-		dict coarsechart, unsigned int lensent, unsigned int *blocked):
+		dict coarsechart, unsigned int lensent, unsigned int *blocked) except *:
 	""" Decide what to do with a newly derived edge. """
 	cdef unsigned long component
 	cdef int a, b = 0
@@ -252,8 +250,8 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, EdgeAgenda A,
 		if doprune:
 			outside = dict_getitem(<object>list_getitem(prunelist,
 											newitem.label), newitem.vec)
-			if outside==NULL or isinf(<double><object>outside):
-				#or newedge.inside+<double><object>outside > 300.0:
+			if (outside==NULL or isinf(<double>(<object>outside))):
+				#or newedge.inside+<double><object>outside > 300.0):
 				blocked[0] += 1
 				return
 			if splitlabel:

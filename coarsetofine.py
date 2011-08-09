@@ -83,10 +83,14 @@ def kbest_outside(chart, start, k):
 	D = {}
 	outside = { start : 0.0 }
 	if k == 0:
-		return filterchart(chart, start)
-	lazykthbest(start, k, k, D, {}, chart, set())
-	for (e, j), rootedge in D[start]:
-		getitems(e, j, rootedge, D, chart, outside)
+		outside = filterchart(chart, start)
+		for a in outside:
+			e = outside[a]
+			outside[a] = e.inside
+	else:
+		lazykthbest(start, k, k, D, {}, chart, set())
+		for (e, j), rootedge in D[start]:
+			getitems(e, j, rootedge, D, chart, outside)
 	return outside
 
 def getitems(e, j, rootedge, D, chart, outside):
