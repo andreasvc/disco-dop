@@ -13,7 +13,7 @@ from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		export, read_rparse_grammar, mean, harmean, testgrammar,\
 		bracketings, printbrackets, rem_marks, alterbinarization, terminals,\
 		varstoindices, read_bitpar_grammar, read_penn_format, splitgrammar,\
-		coarse_grammar, grammarinfo, baseline
+		coarse_grammar, grammarinfo, baseline, write_srcg_grammar
 from fragmentseeker import extractfragments
 from treetransforms import collinize, un_collinize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
@@ -30,15 +30,15 @@ def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
 	bitpardop = False,
-	dop = True,
+	dop = False,
 	unfolded = False,
 	maxlen = 25,  # max number of words for sentences in test corpus
 	trainmaxlen = 25, # max number of words for sentences in train corpus
-	train = 72, maxsent = 100,	# number of sentences to parse
-	skip=0,
-	#train = 18602, maxsent = 1000, #9999999,	# number of sentences to parse
-	#skip=1000, #skip test set to get dev set
-	bintype = "optimal", # choices: collinize, nltk, optimal, optimalhead
+	#train = 7200, maxsent = 100,	# number of sentences to parse
+	#skip=0,
+	train = 18602, maxsent = 1000, #9999999,	# number of sentences to parse
+	skip=1000, #skip test set to get dev set
+	bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
 	factor = "right",
 	v = 1,
 	h = 2,
@@ -114,7 +114,7 @@ def main(
 		bintype += " %s h=%d v=%d" % (factor, h, v)
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	elif bintype == "collinize":
-		bintype += " %s h=%d v=%d %s markovize" % (factor, h, v, "tailmarker" if tailmarker else '')
+		bintype += " %s h=%d v=%d %s" % (factor, h, v, "tailmarker" if tailmarker else '')
 		#for tree in trees:
 		#	for a in tree.subtrees(lambda n: len(n) > 1):
 		#		a[-1].node += "*"
@@ -131,7 +131,7 @@ def main(
 		trees = [timeprinteval(n, tree, lambda: Tree.convert(
 							optimalbinarize(tree, headdriven=True, h=h, v=v)))
 						for n,tree in enumerate(trees)]
-	logging.info("binarized %s  cpu time elapsed: %g s" % (
+	logging.info("binarized %s cpu time elapsed: %g s" % (
 						bintype, time.clock() - begin))
 	seen = set()
 	v = set(); e = {}; weights = {}
@@ -176,6 +176,7 @@ def main(
 			logging.info("induced SRCG based on %d sentences" % len(trees))
 		#srcggrammar = coarse_grammar(trees, sents)
 		#srcggrammar = read_rparse_grammar("../rparse/bin3600")
+		#write_srcg_grammar(srcggrammar, "rules.srcg", "lexicon.srcg")
 		grammarinfo(srcggrammar)
 		srcggrammar = splitgrammar(srcggrammar)
 		testgrammar(srcggrammar)
@@ -268,7 +269,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			chart, start = parse(
 						[w for w,t in sent], srcggrammar,
 						tags=[t for w,t in sent] if tags else [],
-						start=srcggrammar.toid[top], exhaustive=prune,
+						start=srcggrammar.toid[top], exhaustive=dop and prune,
 						estimate=(outside, maxlen) if useestimates else None,
 						) #beamwidth=50)
 		else: chart = {}; start = False
@@ -288,7 +289,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			f1 = f_measure(goldb, candb)
 			if result == tree or f1 == 1.0:
 				assert result != tree or f1 == 1.0
-				msg += "exact match\n"
+				msg += "exact match"
 				exacts += 1
 			else:
 				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
@@ -366,7 +367,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
 			if dresult == tree or f1 == 1.0:
-				msg += "exact match\n"
+				msg += "exact match"
 				exact += 1
 			else:
 				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (

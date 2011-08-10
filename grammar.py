@@ -228,7 +228,7 @@ def oldsplitgrammar(grammar):
 	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
 	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
 	unary, lbinary, rbinary, bylhs = ([[] for _ in nonterminals] for _ in range(4))
-	lexical = defaultdict(list)
+	lexical = {}
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule,yf),w in grammar:
 		r = tuple(toid[a] for a in rule), yf
@@ -266,7 +266,7 @@ def splitgrammar(grammar):
 	lbinary = [[] for _ in nonterminals]
 	rbinary = [[] for _ in nonterminals]
 	arity = array('B', [0] * len(nonterminals))
-	lexical = defaultdict(list)
+	lexical = {}
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule, yf), w in grammar:
 		if len(rule) == 2 and toid[rule[1]] == 0:
