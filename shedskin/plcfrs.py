@@ -18,6 +18,7 @@ from math import exp, log
 from array import array
 from itertools import chain
 from heapq import heappush, heappop, heapify
+#from bit import nextset, nextunset
 
 print "plcfrs in shedskin mode"
 
@@ -34,6 +35,7 @@ def parse(sent, grammar, tags, start, exhaustive):
     if start == -1: start = toid['S']
     goal = ChartItem(start, (1 << len(sent)) - 1)
     maxA = 0
+    blocked = 0
     Cx = [{} for _ in toid]
     C = {}
     A = agenda()
@@ -44,17 +46,17 @@ def parse(sent, grammar, tags, start, exhaustive):
         recognized = False
         for terminal in lexical.get(w, []):
             if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
-                Ih = ChartItem(terminal.lhs, 1 << i)
+                item = ChartItem(terminal.lhs, 1 << i)
                 I = ChartItem(Epsilon, i)
                 z = terminal.prob
-                A[Ih] = Edge(z, z, z, I, None)
-                C[Ih] = []
+                A[item] = Edge(z, z, z, I, None)
+                C[item] = []
                 recognized = True
         if not recognized and tags and tags[i] in toid:
-            Ih = ChartItem(toid[tags[i]], 1 << i)
+            item = ChartItem(toid[tags[i]], 1 << i)
             I = ChartItem(Epsilon, i)
-            A[Ih] = Edge(0.0, 0.0, 0.0, I, None)
-            C[Ih] = []
+            A[item] = Edge(0.0, 0.0, 0.0, I, None)
+            C[item] = []
             recognized = True
         elif not recognized:
             print "not covered:", tags[i] if tags else w
@@ -62,52 +64,62 @@ def parse(sent, grammar, tags, start, exhaustive):
 
     # parsing
     while A:
-        Ih, edge = A.popitem()
-        C[Ih].append(edge)
-        Cx[Ih.label][Ih] = edge
+        item, edge = A.popitem()
+        C[item].append(edge)
+        Cx[item.label][item] = edge
 
-        if Ih == goal:
+        if item == goal:
             if exhaustive: continue
             else: break 
-        for I1h, edge in deduced_from(Ih, edge.inside, Cx,
-                    unary, lbinary, rbinary):
-            if I1h not in C and I1h not in A:
-                # haven't seen this item before, add to agenda
-                A[I1h] = edge
-                C[I1h] = []
-            elif I1h in A and edge < A[I1h]:
-                # either item has lower score, update agenda
-                C[I1h].append(A[I1h])
-                A[I1h] = edge
-            elif exhaustive:
-                # item is suboptimal, only add to exhaustive chart
-                C[I1h].append(edge)
-
+        for rule in unary[item.label]:
+            blocked += process_edge(
+                ChartItem(rule.lhs, item.vec),
+                Edge(edge.inside + rule.prob, edge.inside + rule.prob,
+                     rule.prob, item, None), A, C, Cx)
+        for rule in lbinary[item.label]:
+            for sibling, e in Cx[rule.rhs2].iteritems():
+                if (item.vec & sibling.vec == 0
+                    and concat(rule, item.vec, sibling.vec)):
+                    blocked += process_edge(
+                        ChartItem(rule.lhs, item.vec ^ sibling.vec),
+                        Edge(edge.inside + e.inside + rule.prob,
+                             edge.inside + e.inside + rule.prob,
+                             rule.prob, item, sibling), A, C, Cx)
+        for rule in rbinary[item.label]:
+            for sibling, e in Cx[rule.rhs1].iteritems():
+                if (sibling.vec & item.vec == 0
+                    and concat(rule, sibling.vec, item.vec)):
+                    blocked += process_edge(
+                        ChartItem(rule.lhs, sibling.vec ^ item.vec),
+                        Edge(e.inside + edge.inside + rule.prob,
+                             e.inside + edge.inside + rule.prob,
+                             rule.prob, sibling, item), A, C, Cx)
         if len(A) > maxA: maxA = len(A)
         if len(A) % 1000 == 0:
-            print "max agenda size %d, now %d, chart items %d (%d labels), edges %d, blocked %d" % (maxA, len(A), len(C), len(filter(None, Cx)), sum(map(len, C.values())), 0)
-    print "max agenda size %d, now %d, chart items %d (%d labels), edges %d, blocked %d" % (maxA, len(A), len(C), len(filter(None, Cx)), sum(map(len, C.values())), 0)
+            print "agenda max %d, now %d, items %d (%d labels)," % (
+                                  maxA, len(A), len(C), len(filter(None, Cx))),
+            print "edges %d, blocked %d" % (sum(map(len, C.values())), blocked)
+    print "agenda max %d, now %d, items %d (%d labels)," % (
+                                  maxA, len(A), len(C), len(filter(None, Cx))),
+    print "edges %d, blocked %d" % (sum(map(len, C.values())), blocked)
     if goal not in C: goal = None
     return (C, goal)
 
-def deduced_from(Ih, x, Cx, unary, lbinary, rbinary):
-    result = []
-    for rule in unary[Ih.label]:
-        result.append((ChartItem(rule.lhs, Ih.vec),
-            Edge(x+rule.prob, x+rule.prob, rule.prob, Ih, None)))
-    for rule in lbinary[Ih.label]:
-        for I1h, edge in Cx[rule.rhs2].iteritems():
-            if Ih.vec & I1h.vec == 0 and concat(rule, Ih.vec, I1h.vec):
-                result.append((ChartItem(rule.lhs, Ih.vec ^ I1h.vec),
-                    Edge(x+edge.inside+rule.prob, x+edge.inside+rule.prob,
-                            rule.prob, Ih, I1h)))
-    for rule in rbinary[Ih.label]:
-        for I1h, edge in Cx[rule.rhs1].iteritems():
-            if I1h.vec & Ih.vec == 0 and concat(rule, I1h.vec, Ih.vec):
-                result.append((ChartItem(rule.lhs, I1h.vec ^ Ih.vec),
-                    Edge(x+edge.inside+rule.prob, x+edge.inside+rule.prob,
-                            rule.prob, I1h, Ih)))
-    return result
+def process_edge(newitem, newedge, A, C, Cx):
+    if newitem not in C and newitem not in A:
+        # prune improbable edges
+        if newedge.score > 300.0: return 1
+        # haven't seen this item before, add to agenda
+        A[newitem] = newedge
+        C[newitem] = []
+    elif newitem in A and newedge.inside < A[newitem].inside:
+        # item has lower score, update agenda
+        C[newitem].append(A[newitem])
+        A[newitem] = newedge
+    else: #if exhaustive:
+        # item is suboptimal, only add to exhaustive chart
+        C[newitem].append(newedge)
+    return 0
 
 def concat(rule, lvec, rvec):
     lpos = nextset(lvec, 0)
