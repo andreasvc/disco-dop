@@ -9,17 +9,16 @@ cpdef inline int nextset(unsigned long vec, unsigned int pos):
 	>>> nextset(0b001101, 1)
 	2
 	"""
-	# return (vec >> pos) ? pos + __builtin_ctzl(vec >> pos) : -1
-	return ((vec >> pos) > 0) * pos + __builtin_ffsl(vec >> pos) - 1
+	return (pos + __builtin_ctzl(vec >> pos)) if (vec >> pos) else -1
+	#return ((vec >> pos) > 0) * pos + __builtin_ffsl(vec >> pos) - 1
 
 cpdef inline int nextunset(unsigned long vec, unsigned int pos):
 	""" Return next unset bit starting from pos. There is always a next unset
-	bit, so no bounds checking. __builtin_ctzl is undefined when input is
-	zero, so the most significant bit should always remain unused.
+	bit, so no bounds checking.
 	>>> nextunset(0b001101, 2)
 	4
 	"""
-	return pos + __builtin_ctzl(~vec >> pos)
+	return pos + __builtin_ctzl(~(vec >> pos))
 
 cpdef inline int bitcount(unsigned long vec):
 	""" Number of set bits (1s)
@@ -35,15 +34,19 @@ cpdef inline int bitlength(unsigned long vec):
 	5"""
 	return sizeof (vec) * 8 - __builtin_clzl(vec)
 
-cpdef inline int fanout(unsigned long vec):
+cpdef inline int fanout(long arg):
 	""" number of contiguous components in bit vector (gaps plus one)
 	>>> fanout(0b011011011)
 	3"""
-	gaps = 0; pos = 0
+	cdef unsigned long vec = <unsigned>arg
+	cdef unsigned int result = 0, pos = 0
 	while vec >> pos:
-		pos = nextunset(vec, nextset(vec, pos))
-		gaps += 1
-	return gaps # this value is actually gaps+1
+		#pos = nextunset(vec, nextset(vec, pos))
+		pos += __builtin_ctzl(vec >> pos)
+		pos += __builtin_ctzl(~(vec >> pos))
+		result += 1
+	return result
+
 
 cpdef inline int testbit(unsigned long vec, unsigned int pos):
 	""" Mask a particular bit, return nonzero if set 

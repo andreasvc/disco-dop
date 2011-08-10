@@ -3,16 +3,14 @@
 // with gcc builtins: (more portable than assembly)
 inline int nextset(unsigned long vec, unsigned int pos) {
 	// return next set bit starting from pos, -1 if there is none.
-	//return (vec >> pos) ? pos + __builtin_ctzl(vec >> pos) : -1;
-	return ((vec >> pos) > 0) * pos + __builtin_ffsl(vec >> pos) - 1;
+	//return ((vec >> pos) > 0) * pos + __builtin_ffsl(vec >> pos) - 1;
+	return (vec >> pos) ? pos + __builtin_ctzl(vec >> pos) : -1;
 }
 
 inline int nextunset(unsigned long vec, unsigned int pos) {
 	// return next unset bit starting from pos. there is always a next unset
-	// bit, so no bounds checking __builtin_ctzl is undefined when input is
-	// zero, in this case it means we should always leave the most significant
-	// bit unused
-	return pos + __builtin_ctzl(~vec >> pos);
+	// bit, so no bounds checking.
+	return pos + __builtin_ctz(~(vec >> pos));
 }
 
 inline int bitminmax(unsigned long a, unsigned long b) {
