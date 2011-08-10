@@ -585,8 +585,36 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 	return splitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
 
-def write_bitpar_grammar(grammar, encoding='utf-8'):
-	pass
+def write_bitpar_grammar(grammar, rules, lexicon, encoding='utf-8'):
+	raise NotImplementedError
+
+def write_srcg_grammar(grammar, rules, lexicon, encoding='utf-8'):
+	""" Writes a grammar as produced by induce_srcg or dop_srcg_rules (so
+	before it goes through splitgrammar) into a simple text file format.
+	Fields are separated by tabs. Components of the yield function are
+	comma-separated. E.g.
+	rules: S	NP	VP	010	0.5
+		VP_2	VB	NP	0,1	0.4
+	lexicon: NN	Epsilon	Haus	0.3
+	"""
+	rules = codecs.open(rules, "w", encoding=encoding)
+	lexicon = codecs.open(lexicon, "w", encoding=encoding)
+	for (r,yf),w in grammar:
+		if len(r) == 2 and r[1] == "Epsilon":
+			lexicon.write("%s\t%s\t%g\n" % ("\t".join(r), yf[0], w))
+		else:
+			yfstr = ",".join("".join(map(str, a)) for a in yf)
+			rules.write("%s\t%s\t%g\n" % ("\t".join(r), yfstr, w))
+
+def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
+	""" Reads a grammar as produced by write_srcg_grammar. """
+	rules = (a[:-1].split('\t') for a in codecs.open(rules, encoding=encoding))
+	lexicon = (a[:-1].split('\t') for a in codecs.open(lexicon,
+															encoding=encoding))
+	rules = [((tuple(a[:-2]), tuple(tuple(map(int, b))
+			for b in a[-2].split(","))), float(a[-1])) for a in rules]
+	lexicon = [((tuple(a[:-2]), (a[-2])), float(a[-1])) for a in lexicon]
+	return rules, lexicon
 
 def read_penn_format(corpus, maxlen=15, n=7200):
 	trees = [a for a in islice((Tree(a) for a in codecs.open(corpus, encoding='iso-8859-1')), n)
@@ -598,6 +626,7 @@ def read_penn_format(corpus, maxlen=15, n=7200):
 	return trees, sents
 
 def terminals(tree, sent):
+	""" Replaces indices with words for a CF-tree. """
 	tree = Tree(tree)
 	tree.node = "VROOT"
 	for a, (w, t) in zip(tree.treepositions('leaves'), sent):
@@ -621,6 +650,7 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	codecs.open(out, "w", encoding=encoding).writelines(grammar)
 
 def rem_marks(tree):
+	""" Remove arity marks, make sure indices at leaves are integers."""
 	for a in tree.subtrees(lambda x: "_" in x.node):
 		a.node = a.node.rsplit("_", 1)[0]
 	for a in tree.treepositions('leaves'):
@@ -628,9 +658,9 @@ def rem_marks(tree):
 	return tree
 
 def alterbinarization(tree):
-	# converts the binarization of rparse to the format that NLTK expects
-	# S1 is the constituent, CS1 the parent, CARD1 the current sibling/child
-	# @^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1
+	"""converts the binarization of rparse to the format that NLTK expects
+	S1 is the constituent, CS1 the parent, CARD1 the current sibling/child
+	@^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1 """
 	#how to optionally add \2 if nonempty?
 	tree = re.sub("@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+", r"\1|<\3>", tree)
 	# remove arity markers
