@@ -18,12 +18,6 @@ DEF infinity = float('infinity')
 cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
 	cdef ChartItem item = ChartItem.__new__(ChartItem)
 	item.label = label; item.vec = vec
-	#item._hash = hash((label, vec))
-	# this is the hash function used for tuples, apparently
-	item._hash = (<unsigned long>1000003
-		* ((<unsigned long>1000003 * <unsigned long>0x345678)
-		^ label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
-	if item._hash == -1: item._hash = -2
 	return item
 
 cdef inline Edge new_Edge(double score, double inside, double prob,
@@ -31,13 +25,6 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 	cdef Edge edge = Edge.__new__(Edge)
 	edge.score = score; edge.inside = inside; edge.prob = prob
 	edge.left = left; edge.right = right
-	#hash((inside, prob, left, right))
-	# this is the hash function used for tuples, apparently
-	edge._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 *
-				((<unsigned long>1000003 * ((<unsigned long>1000003 *
-											<unsigned long>0x345678)
-				^ <long>inside)) ^ <long>prob)) ^ left._hash)) ^ right._hash
-	if edge._hash == -1: edge._hash = -2
 	return edge
 
 def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
@@ -154,8 +141,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 										rule.lhs].split("_")[0] + "*"]
 						else: splitlabel = 0
 					process_edge(new_ChartItem(rule.lhs, item.vec), newedge,
-						agenda, chart, viterbi, prunenow, prunelist, splitlabel,
-							coarsechart, &blocked)
+						agenda, chart, viterbi, exhaustive, prunenow,
+						prunelist, splitlabel, coarsechart, &blocked)
 
 			# binary left
 			l = <list>list_getitem(lbinary, item.label)
@@ -190,8 +177,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 											rule.lhs].split("_")[0] + "*"]
 						else: splitlabel = 0
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
-							agenda, chart, viterbi, prunenow, prunelist,
-							splitlabel, coarsechart, &blocked)
+							agenda, chart, viterbi, exhaustive, prunenow,
+							prunelist, splitlabel, coarsechart, &blocked)
 
 			# binary right
 			l = <list>list_getitem(rbinary, item.label)
@@ -226,25 +213,27 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 											rule.lhs].split("_")[0] + "*"]
 						else: splitlabel = 0
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
-							agenda, chart, viterbi, prunenow, prunelist,
-							splitlabel, coarsechart, &blocked)
+							agenda, chart, viterbi, exhaustive, prunenow,
+							prunelist, splitlabel, coarsechart, &blocked)
 
 		if agenda.length > maxA: maxA = agenda.length
-	logging.debug("max agenda size %d, now %d, chart items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(chart), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
+	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(chart), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	gc.enable()
 	if goal in chart: return chart, goal
 	else: return chart, NONE
 
-cdef inline void process_edge(ChartItem newitem, Edge newedge, EdgeAgenda agenda,
-		dict chart, list viterbi, bint doprune, list prunelist, int splitlabel,
-		dict coarsechart, unsigned int *blocked): # except *:
+cdef inline void process_edge(ChartItem newitem, Edge newedge,
+		EdgeAgenda agenda, dict chart, list viterbi, bint exhaustive,
+		bint doprune, list prunelist, int splitlabel, dict coarsechart,
+		unsigned int *blocked): # except *:
 	""" Decide what to do with a newly derived edge. """
 	cdef unsigned long component
 	cdef int a, b = 0
 	cdef Edge e
 	cdef bint inagenda = agenda.contains(newitem)
+	cdef bint inchart = dict_contains(chart, newitem) == 1
 	#not in agenda or chart
-	if not (inagenda or dict_contains(chart, newitem) == 1):
+	if not (inagenda or inchart):
 		if doprune:
 			outside = dict_getitem(<object>list_getitem(prunelist,
 											newitem.label), newitem.vec)
@@ -270,18 +259,20 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge, EdgeAgenda agenda
 		agenda.setitem(newitem, newedge)
 		chart[newitem] = []
 	# in agenda (maybe in chart)
+	elif not exhaustive and inagenda:
+		agenda.setifbetter(newitem, newedge)
 	elif (inagenda
 		and newedge.inside < (<Edge>(agenda.getitem(newitem))).inside):
-		# item has lower score, update agenda (and add old edge to chart)
-			if newitem in chart:
-				append(chart[newitem], iscore(agenda.replace(newitem, newedge)))
-			else: chart[newitem] = [iscore(agenda.replace(newitem, newedge))]
-	# must be in chart
+		# item has lower score, decrease-key in agenda
+		# (add old, suboptimal edge to chart if parsing exhaustively)
+		append(chart[newitem], iscore(agenda.replace(newitem, newedge)))
+	# not in agenda => must be in chart
 	elif (not inagenda and newedge.inside <
 				(<Edge>(<dict>viterbi[newitem.label])[newitem]).inside):
 		#re-add to agenda because we found a better score
 		agenda.setitem(newitem, newedge)
-	else: #if exhaustive:
+		logging.warning("WARN: re-adding item to agenda: %r" % (newitem))
+	elif exhaustive:
 		# suboptimal edge
 		chart[newitem].append(iscore(newedge))
 

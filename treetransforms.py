@@ -346,7 +346,11 @@ def fanoutcomplexity(tree):
 			cachedfanout(tree) + sum(map(cachedfanout, tree)))
 
 def maketree(tree):
-	result = ImmutableTree.parse(tree, parse_leaf=int)
+	if isinstance(tree, basestring):
+		result = ImmutableTree.parse(tree, parse_leaf=int)
+	elif isinstance(tree, ImmutableTree): result = tree
+	elif isinstance(tree, Tree): result = tree.freeze()
+	else: raise ValueError("expected string or tree object")
 	for a in result.subtrees():
 		a.bitset = sum(1L << n for n in a.leaves())
 	return result
@@ -373,7 +377,8 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	Implementation of Gildea (2010): Optimal parsing strategies for linear
 	context-free rewriting systems.
 	Expects an immutable tree where the terminals are integers corresponding to
-	indices.
+	indices, with a special bitset attribute to avoid having to call leaves(). 
+	The bitset attribute can be added with maketree()
 
 	tree is the tree for which the optimal binarization of its top production
 	will be searched.
@@ -697,6 +702,6 @@ def main():
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
 	if attempted and not fail:
 		print "%s: %d doctests succeeded!" % (__file__, attempted)
-	else: print "doctest fail"
+	else: print "doctest attempted %r failed %r" % (attempted, fail)
 __all__ = ["collinize", "un_collinize", "collapse_unary", "splitdiscnodes", "mergediscnodes", "optimalbinarize"]
 if __name__ == '__main__': main()

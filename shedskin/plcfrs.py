@@ -75,37 +75,37 @@ def parse(sent, grammar, tags, start, exhaustive):
             blocked += process_edge(
                 ChartItem(rule.lhs, item.vec),
                 Edge(edge.inside + rule.prob, edge.inside + rule.prob,
-                     rule.prob, item, None), A, C, Cx)
+                     rule.prob, item, None), A, C, exhaustive)
         for rule in lbinary[item.label]:
-            for sibling, e in Cx[rule.rhs2].iteritems():
+            for sibling in Cx[rule.rhs2]:
+                e = Cx[rule.rhs2][sibling]
                 if (item.vec & sibling.vec == 0
                     and concat(rule, item.vec, sibling.vec)):
                     blocked += process_edge(
                         ChartItem(rule.lhs, item.vec ^ sibling.vec),
                         Edge(edge.inside + e.inside + rule.prob,
                              edge.inside + e.inside + rule.prob,
-                             rule.prob, item, sibling), A, C, Cx)
+                             rule.prob, item, sibling), A, C, exhaustive)
         for rule in rbinary[item.label]:
-            for sibling, e in Cx[rule.rhs1].iteritems():
+            for sibling in Cx[rule.rhs1]:
+                e = Cx[rule.rhs1][sibling]
                 if (sibling.vec & item.vec == 0
                     and concat(rule, sibling.vec, item.vec)):
                     blocked += process_edge(
                         ChartItem(rule.lhs, sibling.vec ^ item.vec),
                         Edge(e.inside + edge.inside + rule.prob,
                              e.inside + edge.inside + rule.prob,
-                             rule.prob, sibling, item), A, C, Cx)
+                             rule.prob, sibling, item), A, C, exhaustive)
         if len(A) > maxA: maxA = len(A)
-        if len(A) % 1000 == 0:
-            print "agenda max %d, now %d, items %d (%d labels)," % (
-                                  maxA, len(A), len(C), len(filter(None, Cx))),
-            print "edges %d, blocked %d" % (sum(map(len, C.values())), blocked)
+        if len(A) % 10000 == 0:
+            print "agenda max %d, now %d, items %d" % (maxA, len(A), len(C))
     print "agenda max %d, now %d, items %d (%d labels)," % (
                                   maxA, len(A), len(C), len(filter(None, Cx))),
     print "edges %d, blocked %d" % (sum(map(len, C.values())), blocked)
     if goal not in C: goal = None
     return (C, goal)
 
-def process_edge(newitem, newedge, A, C, Cx):
+def process_edge(newitem, newedge, A, C, exhaustive):
     if newitem not in C and newitem not in A:
         # prune improbable edges
         if newedge.score > 300.0: return 1
@@ -116,7 +116,7 @@ def process_edge(newitem, newedge, A, C, Cx):
         # item has lower score, update agenda
         C[newitem].append(A[newitem])
         A[newitem] = newedge
-    else: #if exhaustive:
+    elif exhaustive:
         # item is suboptimal, only add to exhaustive chart
         C[newitem].append(newedge)
     return 0
@@ -289,9 +289,11 @@ def arraytoyf(args, lengths):
 def nextset(a, pos):
     """ First set bit, starting from pos """
     result = pos
-    while (not (a >> result) & 1) and a >> result:
-        result += 1
-    return result if a >> result else -1
+    if a >> result:
+        while (a >> result) & 1 == 0:
+            result += 1
+        return result
+    return -1
 
 def nextunset(a, pos):
     """ First unset bit, starting from pos """
@@ -326,13 +328,17 @@ class Grammar(object):
         self.tolabel = tolabel
 
 class ChartItem:
-    __slots__ = ("label", "vec", "_hash")
+    __slots__ = ("label", "vec")
     def __init__(self, label, vec):
         self.label = label      #the category of this item (NP/PP/VP etc)
         self.vec = vec          #bitvector describing the spans of this item
-        self._hash = hash((self.label, self.vec))
     def __hash__(self):
-        return self._hash
+        #form some reason this does not work well:
+        #h = self.label ^ (self.vec << 31) ^ (self.vec >> 31)
+        #the DJB hash function:
+        h = ((5381 << 5) + 5381) * 33 ^ self.label
+        h = ((h << 5) + h) * 33 ^ self.vec
+        return -2 if h == -1 else h
     def __eq__(self, other):
         if other is None: return False
         return self.label == other.label and self.vec == other.vec
@@ -348,8 +354,6 @@ class Edge:
         return self.score < other.score
     def __gt__(self, other):
         return self.score > other.score
-    def __ge__(self, other):
-        return self.score >= other.score
     def __eq__(self, other):
         return (self.inside == other.inside
                 and self.prob == other.prob
@@ -381,9 +385,6 @@ class Entry(object):
         return self.count == other.count
     def __lt__(self, other):
         return self.value < other.value or (self.value == other.value
-                and self.count < other.count)
-    def __le__(self, other):
-        return self.value <= other.value or (self.value == other.value
                 and self.count < other.count)
 
 INVALID = 0
@@ -431,16 +432,6 @@ def heavytest():
     grammar = splitgrammar(rules, lexicon)
     wordstags = "Diese/PDAT Ansicht/NN vertrat/VVFIN am/APPRART Donnerstag/NN ein/ART leitender/ADJA Arzt/NN der/ART Heidelberger/ADJA Rehabilitationsklinik/NN ,/$, Wolfgang/NE Huber/NE ,/$, im/APPRART sogenannten/ADJA Holzschutzmittelprozess/NN vor/APPR dem/ART Frankfurter/ADJA Landgericht/NN ./$."
 
-    '''
-    output of Cython version for this sentence:
-    59. [len=23] Diese/PDAT Ansicht/NN vertrat/VVFIN am/APPRART Donnerstag/NN ein/ART leitender/ADJA Arzt/NN der/ART Heidelberger/ADJA Rehabilitationsklinik/NN ,/$, Wolfgang/NE Huber/NE ,/$, im/APPRART sogenannten/ADJA Holzschutzmittelprozess/NN vor/APPR dem/ART Frankfurter/ADJA Landgericht/NN ./$.
-    max agenda size 220276, now 52815, chart items 633631 (1753 labels), edges 1708636, blocked 0
-
-    cand-gold PP[3-17], PP[15-17] gold-cand PP[3-4], PP[15-21]
-          (ROOT (S (NP (PDAT 0) (NN 1)) (VVFIN 2) (PP (APPRART 3) (NN 4) (NP (ART 5) (ADJA 6) (NN 7) (NP (ART 8) (ADJA 9) (NN 10)) ($, 11) (MPN (NE 12) (NE 13))) ($, 14) (PP (APPRART 15) (ADJA 16) (NN 17))) (PP (APPR 18) (ART 19) (ADJA 20) (NN 21))) ($. 22))
-    283.67s cpu time elapsed
-    GOLD: (ROOT (S (NP (PDAT 0) (NN 1)) (VVFIN 2) (PP (APPRART 3) (NN 4)) (NP (ART 5) (ADJA 6) (NN 7) (NP (ART 8) (ADJA 9) (NN 10)) ($, 11) (MPN (NE 12) (NE 13))) ($, 14) (PP (APPRART 15) (ADJA 16) (NN 17) (PP (APPR 18) (ART 19) (ADJA 20) (NN 21)))) ($. 22))
-    srcg ex 42.37 lp 70.54 lr 70.96 lf 70.75'''
     sent = [a.split("/")[0] for a in wordstags.split()]
     tags = [a.split("/")[1] for a in wordstags.split()]
     chart, start = parse(sent, grammar, tags, grammar.toid['ROOT'], False)

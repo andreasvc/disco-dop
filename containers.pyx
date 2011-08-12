@@ -3,11 +3,11 @@ cdef class ChartItem:
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
-		#self._hash = hash((self.label, self.vec))
-		self._hash = (1000003UL * ((1000003UL * 0x345678UL) ^ <long>label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
-		if self._hash == -1: self._hash = -2
 	def __hash__(ChartItem self):
-		return self._hash
+		cdef long h
+		# juxtapose bits of label and vec, rotating vec if > 33 words
+		h = self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
+		return -2 if h == -1 else h
 	def __richcmp__(ChartItem self, ChartItem other, int op):
 		if op == 2: return self.label == other.label and self.vec == other.vec
 		elif op == 3: return self.label != other.label or self.vec != other.vec
@@ -22,19 +22,19 @@ cdef class ChartItem:
 
 cdef class Edge:
 	def __init__(self, score, inside, prob, left, right):
-		cdef long _hash
 		self.score = score; self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
+	def __hash__(self):
+		cdef long h
 		#self._hash = hash((inside, prob, left, right))
 		# this is the hash function used for tuples, apparently
-		_hash = (1000003UL * 0x345678UL) ^ <long>inside
-		_hash = (1000003UL * _hash) ^ <long>prob
-		_hash = (1000003UL * _hash) ^ (<ChartItem>left)._hash
-		_hash = (1000003UL * _hash) ^ (<ChartItem>right)._hash
-		if _hash == -1: self._hash = -2
-		else: self._hash = _hash
-	def __hash__(self):
-		return self._hash
+		h = (1000003UL * 0x345678UL) ^ <long>self.inside
+		h = (1000003UL * h) ^ <long>self.prob
+		h = (1000003UL * h) ^ (<ChartItem>self.left).vec
+		h = (1000003UL * h) ^ (<ChartItem>self.left).label
+		h = (1000003UL * h) ^ (<ChartItem>self.right).vec
+		h = (1000003UL * h) ^ (<ChartItem>self.right).label
+		return -2 if h == -1 else h
 	def __richcmp__(Edge self, other, int op):
 		# the ordering only depends on the estimate / inside score
 		if op == 0: return self.score < (<Edge>other).score
@@ -55,16 +55,17 @@ cdef class Edge:
 		return "Edge(%g, %g, %g, %r, %r)" % (
 				self.score, self.inside, self.prob, self.left, self.right)
 
-#cdef class RankEdge(Edge):
-#	def __cinint__(self, Edge edge, int j1, int j2):
-#		self.inside = ip; self.prob = edge.prob
-#		self.left = edge.left; self.right = edge.right
-#		self.leftrank = j1; self.rightrank = j2
-#		self._hash = hash((ip, edge.prob, edge.left, edge.right, j1, j2))
-#	def __repr__(self):
-#		return "<%g, %g, [%r[%d], %s[%d]]>" % (self.inside, self.prob,
-#					self.left, self.leftrank,
-#					repr(self.right) if self.right else 'None', self.rightrank)
+cdef class RankEdge(Edge):
+	def __cinit__(self, Edge edge, int j1, int j2):
+		self.edge = edge; self.left = j1; self.right = j2
+	def __hash__(self):
+		cdef long h
+		h = (1000003UL * 0x345678UL) ^ hash(self.edge)
+		h = (1000003UL * h) ^ self.left
+		h = (1000003UL * h) ^ self.right
+		self._hash = h #hash((edge, j1, j2))
+	def __repr__(self):
+		return "RankEdge(%r, %d, %d)" % (self.edge, self.left, self.right)
 
 cdef class Terminal:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):

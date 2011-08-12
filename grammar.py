@@ -165,7 +165,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False,
 	
 def doubledop(trees, sents):
 	from fragmentseeker import extractfragments
-	from treetransforms import minimalbinarization, complexityfanout
+	from treetransforms import minimalbinarization, complexityfanout, maketree
 	backtransform = {}
 	newprods = []
 	# to assign IDs to ambiguous fragments (same yield)
@@ -198,7 +198,7 @@ def doubledop(trees, sents):
 		for a, ((f, fsent), b) in zip(productions, fragments.iteritems())
 		if backtransform.get(a, False)
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
-					minimalbinarization(a, complexityfanout, sep="}")),
+				minimalbinarization(maketree(a), complexityfanout, sep="}")),
 				fsent, arity_marks=True, side_effect=True)),
 			chain((b, ), repeat(1))))
 	# ambiguous fragments
@@ -793,7 +793,7 @@ def main():
 	#corpus = NegraCorpusReader("../rparse", "tigerproc\.export", headorder=True, headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents()[:3], corpus.sents()):
 		print tree.pprint(margin=999)
-		a = optimalbinarize(tree)
+		a = Tree.convert(optimalbinarize(tree))
 		print a.pprint(margin=999); print
 		un_collinize(a)
 		print a.pprint(margin=999), a == tree

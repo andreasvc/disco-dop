@@ -20,7 +20,7 @@ def getcandidates(chart, v, k):
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
 	if v not in chart: return EdgeAgenda() #raise error?
-	# todo: agenda on edge.inside instead of edge.score
+	# todo: agenda on edge.inside instead of edge
 	return EdgeAgenda([
 		((edge, binarybest if edge.right.label else unarybest), edge)
 						for edge in nsmallest(k, chart[v])])

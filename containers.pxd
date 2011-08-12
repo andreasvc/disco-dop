@@ -3,7 +3,6 @@ from array cimport array
 cdef class ChartItem:
 	cdef public unsigned int label
 	cdef public unsigned long vec
-	cdef long _hash
 
 cdef class Edge:
 	cdef public double score
@@ -11,7 +10,6 @@ cdef class Edge:
 	cdef public double prob
 	cdef public ChartItem left
 	cdef public ChartItem right
-	cdef long _hash
 
 cdef class Terminal:
 	cdef public unsigned int lhs
@@ -29,6 +27,11 @@ cdef class Rule:
 	cdef public array lengths
 	cdef unsigned int * _args
 	cdef unsigned short * _lengths
+
+cdef class RankedEdge:
+	cdef public Edge edge
+	cdef public int left
+	cdef public int right
 
 cdef struct DTree:
 	void *rule

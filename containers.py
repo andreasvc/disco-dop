@@ -1,14 +1,13 @@
 
 class ChartItem:
-	__slots__ = ('label', 'vec', '_hash')
+	__slots__ = ('label', 'vec')
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
-		self._hash = hash((self.label, self.vec))
-		#self._hash = (<unsigned long>1000003 * ((<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>label)) ^ (vec & ((1 << 15) - 1) + (vec >> 15))
-		#if self._hash == -1: self._hash = -2
 	def __hash__(self):
-		return self._hash
+		# juxtapose bits of label and vec, rotating vec if > 33 words
+		h = self.label ^ (self.vec << 31) ^ (self.vec >> 31)
+		return -2 if h == -1 else h
 	def __eq__(self, other): return self.label == other.label and self.vec == other.vec
 	def __ne__(self, other): return self.label != other.label or self.vec != other.vec
 	def __ge__(self, other): return self.label >= other.label or self.vec >= other.vec
@@ -24,20 +23,12 @@ class ChartItem:
 		return "ChartItem(%s, %s)" % (self.label, bin(self.vec))
 
 class Edge:
-	__slots__ = ('score', 'inside', 'prob', 'left', 'right', '_hash')
+	__slots__ = ('score', 'inside', 'prob', 'left', 'right')
 	def __init__(self, score, inside, prob, left, right):
 		self.score = score; self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
-		self._hash = hash((inside, prob, left, right))
-		# this is the hash function used for tuples, apparently
-		#_hash = (<unsigned long>1000003 * <unsigned long>0x345678) ^ <long>inside
-		#_hash = (<unsigned long>1000003 * _hash) ^ <long>prob
-		#_hash = (<unsigned long>1000003 * _hash) ^ (<ChartItem>left)._hash
-		#_hash = (<unsigned long>1000003 * _hash) ^ (<ChartItem>right)._hash
-		#if _hash == -1: self._hash = -2
-		#else: self._hash = _hash
 	def __hash__(self):
-		return self._hash
+		return hash((inside, prob, left, right))
 	def __lt__(self, other):
 		# the ordering only depends on inside probobality
 		# (or only on estimate / outside score when added)
