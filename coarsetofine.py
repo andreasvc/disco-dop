@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 from nltk import Tree
 from treetransforms import mergediscnodes, un_collinize, fanout
+from agenda import Entry
 try: dictcast({})
 except NameError:
 	from containers import * #ChartItem, Edge, dictcast, itemcast, edgecast
@@ -89,27 +90,36 @@ def kbest_outside(chart, start, k):
 			outside[a] = e.inside
 	else:
 		lazykthbest(start, k, k, D, {}, chart, set())
-		for (e, j), rootedge in D[start]:
-			getitems(e, j, rootedge, D, chart, outside)
+		for entry in D[start]:
+			getitems(entry.key, entry.value, D, chart, outside)
 	return outside
 
-def getitems(e, j, rootedge, D, chart, outside):
+def getitems(ej, rootprob, D, chart, outside):
 	""" Traverse a derivation e,j, noting outside costs relative to its root
 	edge """
+	e = ej.edge
 	if e.left in chart:
-		if e.left in D: (ee, jj), ee2 = D[e.left][j[0]]
-		elif j[0] == 0: jj = (0, 0); ee = ee2 = min(chart[e.left])
+		if e.left in D:
+			entry = D[e.left][ej.left]
+			eejj = entry.key; prob = entry.value
+		elif ej.left == 0:
+			eejj = RankedEdge(e.left, min(chart[e.left]), 0, 0)
+			prob = eejj.edge.inside
 		else: raise ValueError
 		if e.left not in outside:
-			outside[e.left] = rootedge.inside - ee2.inside
-		getitems(ee, jj, rootedge, D, chart, outside)
+			outside[e.left] = rootprob - prob
+		getitems(eejj, rootprob, D, chart, outside)
 	if e.right.label:
-		if e.right in D: (ee, jj), ee2 = D[e.right][j[1]]
-		elif j[1] == 0: jj = (0, 0); ee = ee2 = min(chart[e.right])
+		if e.right in D:
+			entry = D[e.right][ej.right]
+			eejj = entry.key; prob = entry.value
+		elif ej.right == 0:
+			eejj = RankedEdge(e.right, min(chart[e.right]), 0, 0)
+			prob = eejj.edge.inside
 		else: raise ValueError
 		if e.right not in outside:
-			outside[e.right] = rootedge.inside - ee2.inside
-		getitems(ee, jj, rootedge, D, chart, outside)
+			outside[e.right] = rootprob - prob
+		getitems(eejj, rootprob, D, chart, outside)
 
 def filterchart(chart, start):
 	""" remove all entries that do not contribute to a complete derivation

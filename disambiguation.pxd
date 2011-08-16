@@ -1,3 +1,4 @@
+cimport cython
 from kbest cimport lazykbest, lazykthbest
 from containers cimport ChartItem, Edge, getlabel, getvec, edgecast
 

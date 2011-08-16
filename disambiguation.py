@@ -6,8 +6,8 @@ from collections import defaultdict
 from operator import itemgetter
 from nltk import Tree
 from grammar import induce_srcg
-from kbest import * #lazykbest, lazykthbest
-try: getlabel
+from kbest import * #lazykbest
+try: getlabel(None)
 except NameError: from containers import * #getlabel, getvec
 try: from plcfrs import parse
 except ImportError: from oldplcfrs import parse
@@ -161,11 +161,12 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 			# calculate the derivation probability in a different model.
 			# because we don't keep track of which rules have been used,
 			# read off the rules from the derivation ...
-			tree = Tree(removeids.sub("", deriv))
-			sent = sorted(tree.leaves(), key=int)
+			tree = Tree.parse(removeids.sub("", deriv), parse_leaf=int)
+			sent = sorted(tree.leaves())
 			rules = induce_srcg([tree], [sent], arity_marks=False)
 			prob = -fsum([secondarymodel[r] for r, w in rules
 											if r[0][1] != 'Epsilon'])
+
 		tree = removeids.sub("", deriv)
 		if tree in parsetrees: parsetrees[tree].append(-prob)
 		else: parsetrees[tree] = [-prob]
@@ -175,7 +176,7 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 	for parsetree in parsetrees:
 		maxprob = max(parsetrees[parsetree])
 		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
-										for prob in parsetrees[parsetree]]))]))
+									for prob in parsetrees[parsetree]]))]))
 	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
 	return parsetrees
 

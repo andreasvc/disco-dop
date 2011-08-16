@@ -42,30 +42,44 @@ cdef class Edge:
 		# (in)equality compares all elements
 		# boolean trick: equality and inequality in one expression i.e., the
 		# equality between the two boolean expressions acts as biconditional
-		elif op == 2 or op ==3:
+		elif op == 2 or op == 3:
 			return (op == 2) == (
-				(self.score == (<Edge>other).score
+				self.score == (<Edge>other).score
 				and self.inside == (<Edge>other).inside
 				and self.prob == (<Edge>other).prob
-				and self.left == (<Edge>other).right
-				and self.right == (<Edge>other).right))
+				and self.left == (<Edge>other).left
+				and self.right == (<Edge>other).right)
 		elif op == 4: return self.score > other.score
 		elif op == 5: return self.score >= other.score
 	def __repr__(self):
 		return "Edge(%g, %g, %g, %r, %r)" % (
 				self.score, self.inside, self.prob, self.left, self.right)
 
-cdef class RankEdge(Edge):
-	def __cinit__(self, Edge edge, int j1, int j2):
-		self.edge = edge; self.left = j1; self.right = j2
+cdef class RankedEdge:
+	def __cinit__(self, ChartItem head, Edge edge, int j1, int j2):
+		self.head = head; self.edge = edge
+		self.left = j1; self.right = j2
 	def __hash__(self):
 		cdef long h
-		h = (1000003UL * 0x345678UL) ^ hash(self.edge)
+		#h = hash((head, edge, j1, j2))
+		h = (1000003UL * 0x345678UL) ^ hash(self.head)
+		h = (1000003UL * h) ^ hash(self.edge)
 		h = (1000003UL * h) ^ self.left
 		h = (1000003UL * h) ^ self.right
-		self._hash = h #hash((edge, j1, j2))
+		if h == -1: h = -2
+		return h
+	def __richcmp__(self, RankedEdge other, int op):
+		if op == 2 or op == 3:
+			return (op == 2) == (
+				self.left == other.left
+				and self.right == other.right
+				and self.head == other.head
+				and self.edge == other.edge)
+		else:
+			raise NotImplemented
 	def __repr__(self):
-		return "RankEdge(%r, %d, %d)" % (self.edge, self.left, self.right)
+		return "RankedEdge(%r, %r, %d, %d)" % (
+					self.head, self.edge, self.left, self.right)
 
 cdef class Terminal:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):

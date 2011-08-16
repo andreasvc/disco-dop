@@ -19,6 +19,8 @@ cdef Entry make_entry(object k, object v, unsigned long c):
 	entry.key = k; entry.value = v; entry.count = c
 	return entry
 
+cdef class Entry: pass #defined in pxd file
+
 cdef class Function:
 	cdef inline bint cmpfun(self, Entry a, Entry b): raise NotImplemented
 cdef class EdgeCmp(Function):

@@ -28,7 +28,7 @@ class Edge:
 		self.score = score; self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
 	def __hash__(self):
-		return hash((inside, prob, left, right))
+		return hash((self.inside, self.prob, self.left, self.right))
 	def __lt__(self, other):
 		# the ordering only depends on inside probobality
 		# (or only on estimate / outside score when added)
@@ -40,7 +40,7 @@ class Edge:
 	def __eq__(self, other):
 		return (self.inside == other.inside
 				and self.prob == other.prob
-				and self.left == other.right
+				and self.left == other.left
 				and self.right == other.right)
 	def __gt__(self, other):
 		return self.score > other.score
@@ -52,6 +52,26 @@ class Edge:
 					self.left,
 					self.right)
 					#repr(self.right) if self.right else 'None')
+
+class RankedEdge:
+	def __init__(self, head, edge, j1, j2):
+		self.head = head; self.edge = edge
+		self.left = j1; self.right = j2
+	def __hash__(self):
+		#h = hash((head, edge, j1, j2))
+		h = (1000003L * 0x345678L) ^ hash(self.head)
+		h = (1000003L * h) ^ hash(self.edge)
+		h = (1000003L * h) ^ self.left
+		h = (1000003L * h) ^ self.right
+		if h == -1: h = -2
+		return h
+	def __eq__(self, other):
+		return (isinstance(other, RankedEdge) and self.left == other.left
+			and self.right == other.right and self.head == other.head
+			and self.edge == other.edge)
+	def __repr__(self):
+		return "RankedEdge(%r, %r, %d, %d)" % (
+					self.head, self.edge, self.left, self.right)
 
 class Terminal:
 	__slots__ = ('lhs', 'rhs1', 'rhs2', 'word', 'prob')

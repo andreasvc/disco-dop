@@ -29,6 +29,7 @@ cdef class Rule:
 	cdef unsigned short * _lengths
 
 cdef class RankedEdge:
+	cdef public ChartItem head
 	cdef public Edge edge
 	cdef public int left
 	cdef public int right

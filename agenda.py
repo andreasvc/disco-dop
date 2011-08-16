@@ -204,8 +204,12 @@ class Agenda(dict):
 
 EdgeAgenda = Agenda # FIXME
 
-# this is _significantly_ faster than relying on __richcmp__
 def lessthan(a, b):
+	return (a.value < b.value
+				or (a.value == b.value and a.count < b.count))
+
+# this is _significantly_ faster than relying on __richcmp__
+def lessthanedge(a, b):
 	return (a.value.score < b.value.score
 				or (a.value.score == b.value.score and a.count < b.count))
 
