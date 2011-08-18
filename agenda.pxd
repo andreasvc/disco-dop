@@ -25,8 +25,8 @@ cdef class Agenda(dict):
 	cdef Function cmpfun
 	cpdef Entry popentry(self)
 	cdef inline object getitem(self, key)
-	cdef inline void setitem(self, key, object value)
-	cdef inline void setifbetter(self, key, object value)
+	cpdef inline setitem(self, key, object value)
+	cpdef inline setifbetter(self, key, object value)
 	cdef inline bint contains(self, key)
 	cdef inline object replace(self, object key, object value)
 	cpdef list getheap(self)
@@ -36,8 +36,8 @@ cdef class Agenda(dict):
 cdef class EdgeAgenda(Agenda):
 	cpdef Entry popentry(self)
 	cdef inline object getitem(self, key)
-	cdef inline void setitem(self, key, object value)
-	cdef inline void setifbetter(self, key, object value)
+	cpdef inline setitem(self, key, object value)
+	cpdef inline setifbetter(self, key, object value)
 	cdef inline bint contains(self, key)
 	cdef inline object replace(self, object key, object value)
 	cpdef list getheap(self)

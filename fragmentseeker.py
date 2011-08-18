@@ -4,56 +4,69 @@ from collections import defaultdict
 from grammar import cartpi
 from itertools import count
 from nltk import Tree, ImmutableTree
-from grammar import srcg_productions, canonicalize, alpha_normalize, rangeheads
+from grammar import srcg_productions, canonicalize,\
+					alpha_normalize, rangeheads
 
-def indices(tree):
-	return dict((idx, tree[idx]) for idx in tree.treepositions())
-
+#def dtrees(trees, sents):
+#	results = []
+#	for tree, sent in zip(trees, sents):
+#		results.append(make_DTree(tree, sent))
+#	return results
+#
+#def make_DTree(tree, sent):
+#	vec = sum(1 << n for n in tree.leaves())
+#	if all(lambda x: isinstance(x, Tree)) and 1 <= len(tree) <= 2:
+#		return new_DTree(tree.prod, vec, False,
+#				make_DTree(tree[0]),
+#				make_DTree(tree[1]) if len(tree) == 2 else None)
+#	elif len(tree) == 1:
+#		return new_DTree(tree.prod, vec, True, None, None)
+#	else: raise ValueError
+		
 def extractfragments(trees, sents):
-	""" Seeks the largest fragments occurring at least twice in the corpus.
-	"""
+	""" Seeks the largest fragments occurring at least twice in the
+	corpus.  """
 	fraglist = defaultdict(set)
 	trees = [indices(add_srcg_rules(canonicalize(aa).freeze(), bb))
 				for aa, bb in zip(trees, sents)]
-	mem = {}; l = set()
-	for n in range(len(trees)):
+	lentrees = len(trees)
+	for n in range(lentrees):
 		a = trees[n]; asent = sents[n]
-		for m in range(n + 1, len(trees)):
+		for m in range(n + 1, lentrees):
 			b = trees[m]; bsent = sents[m]
-			for i in a:
-				for j in b:
-					try: x = frozenset(mem[i, j])
-					except KeyError:
-						x = frozenset(extractmaxfragments(a, b, i, j,
-											asent, bsent, mem))
-					if x in l: continue # or len(x) < 2: continue
-					# disjoint-set datastructure here?
-					for y in l:
-						if x < y: break
-						elif x > y:
-							l.remove(y)
-							l.add(x)
-							break
-					else: l.add(x)
-			fragments = set(fragmentfromindices(a, asent, x) for x in l)
-			for xx in fragments:
-				if xx: fraglist[xx].update((a[()], b[()]))
-			mem.clear(); l.clear()
-	fragcounts = dict((aa, len(bb)) for aa, bb in fraglist.iteritems())
-	return fragcounts
+			for x in extractfrom(a, trees[m], asent, sents[m]):
+				if x: fraglist[x].update((n, m))
+	return dict([(aa, len(bb)) for aa, bb in fraglist.iteritems()])
 
-def extractmaxfragments(a,b, i,j, asent,bsent, mem):
-	""" a fragment is a connected subset of nodes where each node either has
-	zero children, or as much as in the original tree.""" 
-	#if (i, j) in mem: return mem[i, j]
+def extractfrom(a, b, asent, bsent):
+	""" Return the set of fragments that a and b have in common.
+	A fragment is a connected subset of nodes where each node either
+	has zero children, or as much as in the original tree.""" 
+	mem = {}; l = set()
+	for i in a:
+		for j in b:
+			try: x = frozenset(mem[i, j])
+			except KeyError:
+				x = frozenset(extractmaxfragments(a, b, i, j,
+									asent, bsent, mem))
+			if len(x) < 2 or x in l: continue
+			# disjoint-set datastructure here?
+			for y in l:
+				if x < y: break
+				elif x > y:
+					l.remove(y)
+					l.add(x)
+					break
+			else: l.add(x)
+	return set([fragmentfromindices(a, asent, x) for x in l])
+
+def extractmaxfragments(a, b, i, j, asent, bsent, mem):
+	""" Get common fragments starting from positions i and j. """
 	# compare label & arity / terminal
 	if type(a[i]) != type(b[j]):
 		mem[i, j] = set()
 		return set()
 	elif isinstance(a[i], Tree):
-		#alhs = a[i].prod[0]
-		#blhs = b[j].prod[0]
-		#if alhs[0] != blhs[0] or len(alhs[1]) != len(blhs[1]):
 		# assume presence of arity markers
 		if a[i].node != b[j].node:
 			mem[i, j] = set()
@@ -74,61 +87,66 @@ def extractmaxfragments(a,b, i,j, asent,bsent, mem):
 	mem[i, j] = nodeset
 	return nodeset
 
-def extractmaxpartialfragments(a, b):
-	""" partial fragments allow difference in number of children
-	not tested. """
-	if not same((a,b)): return set()
-	mappingsset = maxsetmappings(a,b,0,0,True)
-	if not mappingsset: return [ImmutableTree(a.node, [])]
-	partfragset = set()
-	for mapping in mappingsset:
-		maxpartialfragmentpairs = [set() for x in mapping]
-		for i, (n1, n2) in enumerate(mapping):
-			maxpartialfragmentpairs[i] = extractmaxpartialfragments(n1, n2)
-		for nodeset in cartpi(maxpartialfragmentpairs):
-			nodeset.union(a)
-			partfragset.add(nodeset)
-	return partfragset
-
-def maxsetmappings(a,b,x,y,firstCall=False):
-	mappings = []
-	startx = x if firstCall else x + 1
-	starty = y if firstCall else y + 1
-	endx = len(a) - 1
-	endy = len(b) - 1
-	startxexists = startx < len(a)
-	startyexists = starty < len(b)
-	while startxexists or startyexists:
-		if startxexists:
-			for celly in range(endy, starty + 1, -1):
-				if a[startx] == b[celly]:
-					endy = celly
-					submappings = maxsetmappings(a,b,startx,celly)
-					if not firstCall:
-						for mapping in submappings:
-							mapping.add((a[startx],b[celly]))
-					mappings.extend(submappings)
-		if startyexists:
-			for cellx in range(endx, startx + 1, -1):
-				if a[startx] == b[starty]:
-					endx = cellx
-					submappings = maxsetmappings(a,b,cellx,starty)
-					if not firstCall:
-						for mapping in submappings:
-							mapping.add((a[cellx],b[starty]))
-					mappings.extend(submappings)
-		if startxexists and startyexists and a[startx] == b[starty]:
-			submappings = maxsetmappings(a,b,startx,starty,False)
-			if not firstCall:
-				for mapping in submappings:
-					mapping.add((a[startx],b[starty]))
-			mappings.extend(submappings)
-			break
-		if startx+1 <= endx: startx += 1
-		else: startxexists = False
-		if starty+1 <= endy: starty += 1
-		else: startyexists = False
-	return set(mappings)
+#def extractmaxpartialfragments(a, b):
+#	""" partial fragments allow difference in number of children
+#	not tested. """
+#	if not same((a,b)): return set()
+#	mappingsset = maxsetmappings(a,b,0,0,True)
+#	if not mappingsset: return [ImmutableTree(a.node, [])]
+#	partfragset = set()
+#	for mapping in mappingsset:
+#		maxpartialfragmentpairs = [set() for x in mapping]
+#		for i, (n1, n2) in enumerate(mapping):
+#			maxpartialfragmentpairs[i] = extractmaxpartialfragments(n1, n2)
+#		for nodeset in cartpi(maxpartialfragmentpairs):
+#			nodeset.union(a)
+#			partfragset.add(nodeset)
+#	return partfragset
+#
+#def maxsetmappings(a,b,x,y,firstCall=False):
+#	mappings = []
+#	startx = x if firstCall else x + 1
+#	starty = y if firstCall else y + 1
+#	endx = len(a) - 1
+#	endy = len(b) - 1
+#	startxexists = startx < len(a)
+#	startyexists = starty < len(b)
+#	while startxexists or startyexists:
+#		if startxexists:
+#			for celly in range(endy, starty + 1, -1):
+#				if a[startx] == b[celly]:
+#					endy = celly
+#					submappings = maxsetmappings(a,b,startx,celly)
+#					if not firstCall:
+#						for mapping in submappings:
+#							mapping.add((a[startx],b[celly]))
+#					mappings.extend(submappings)
+#		if startyexists:
+#			for cellx in range(endx, startx + 1, -1):
+#				if a[startx] == b[starty]:
+#					endx = cellx
+#					submappings = maxsetmappings(a,b,cellx,starty)
+#					if not firstCall:
+#						for mapping in submappings:
+#							mapping.add((a[cellx],b[starty]))
+#					mappings.extend(submappings)
+#		if startxexists and startyexists and a[startx] == b[starty]:
+#			submappings = maxsetmappings(a,b,startx,starty,False)
+#			if not firstCall:
+#				for mapping in submappings:
+#					mapping.add((a[startx],b[starty]))
+#			mappings.extend(submappings)
+#			break
+#		if startx+1 <= endx: startx += 1
+#		else: startxexists = False
+#		if starty+1 <= endy: starty += 1
+#		else: startyexists = False
+#	return set(mappings)
+#
+#def same(a, b, asent, bsent):
+#	if type(a) != type(b): return False
+#	elif isinstance(a, Tree): return a.node == b.node
+#	else: return asent[a] == bsent[b]
 
 def fragmentfromindices(tree, sent, indices):
 	""" Given a tree and a set of connected indices, return the fragment
@@ -172,15 +190,13 @@ def fragmentfromindices(tree, sent, indices):
 		result[a] = leafmap[result[a]]
 	return (result.freeze(), sent) if len(result) else None
 
-def same(a, b, asent, bsent):
-	if type(a) != type(b): return False
-	elif isinstance(a, Tree): return a.node == b.node
-	else: return asent[a] == bsent[b]
-
 def add_srcg_rules(tree, sent):
 	for a, b in zip(tree.subtrees(), srcg_productions(tree, sent, False)):
 		a.prod = alpha_normalize(zip(*b))
 	return tree
+
+def indices(tree):
+	return dict((idx, tree[idx]) for idx in tree.treepositions())
 
 def main():
 	from negra import NegraCorpusReader

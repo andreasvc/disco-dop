@@ -96,7 +96,7 @@ def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 
 def sumderivs(ts, derivations):
 	#return fsum([exp(-derivations[t]) for t in ts])
-	return sum(exp(-derivations[t]) for t in ts)
+	return sum([exp(-derivations[t]) for t in ts])
 
 def minunaddressed(tt, idsremoved):
 	return min([(t.count("(") - t.count("@")) for t in idsremoved[tt]])
@@ -112,10 +112,10 @@ def samplechart(chart, start, tolabel):
 				for child in (edge.left, edge.right) if child.label]
 	tree = "(%s %s)" % (tolabel[start.label],
 							" ".join([a for a,b in children]))
-	return tree, edge.prob + sum(b for a,b in children)
+	return tree, edge.prob + sum([b for a,b in children])
 
 def getsamples(chart, start, n, tolabel):
-	derivations = set(samplechart(chart, start, tolabel) for x in range(n))
+	derivations = set([samplechart(chart, start, tolabel) for x in range(n)])
 	derivations.discard(None)
 	return derivations
 

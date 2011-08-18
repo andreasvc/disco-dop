@@ -2,8 +2,8 @@
 Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs).
 """
-from agenda import EdgeAgenda
-from containers import ChartItem, Edge, Rule, Terminal
+from agenda import Agenda
+from containers import ChartItem, Rule, Terminal
 from collections import defaultdict
 from math import exp
 import numpy as np
@@ -13,7 +13,7 @@ try:
 except:
 	from bit import *
 	from numpy import * # to import isfinite and isnan
-	exec "new_ChartItem = ChartItem; new_Edge = Edge" in globals()
+	exec "new_ChartItem = ChartItem" in globals()
 else:
 	np.import_array()
 
@@ -57,23 +57,23 @@ def simpleinside(grammar, maxlen, insidescores):
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = np.inf
-	agenda = EdgeAgenda()
+	agenda = Agenda()
 	nil = ChartItem(0, 0)
 
 	for n, rules in enumerate(grammar.bylhs):
 		if n == 0: continue
 		#this is supposed cover all and only preterminals
 		elif rules == []:
-			agenda[new_ChartItem(n, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+			agenda[new_ChartItem(n, 1)] = 0.0
 
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
-		x = entry.value.score
+		x = entry.value
 
-		# This comparison catches the case when insidescores has a higher value
-		# than x, but also when it is NaN, because all comparisons against NaN
-		# are false. Mory explicitly it would be:
+		# This comparison catches the case when insidescores has a higher
+		# value than x, but also when it is NaN, because all comparisons
+		# against NaN are false. Mory explicitly it would be:
 		#if isnan(insidescores[I.label, I.vec]) or x < insidescores[I.label, I.vec]:
 		if not x >= insidescores[I.label, I.vec]:
 			insidescores[I.label, I.vec] = x
@@ -81,8 +81,8 @@ def simpleinside(grammar, maxlen, insidescores):
 		rules = unary[I.label]
 		for rule in rules:
 			if isnan(insidescores[rule.lhs, I.vec]):
-				agenda.setifbetter(new_ChartItem(rule.lhs, I.vec),
-						new_Edge(rule.prob + x, 0.0, 0.0, nil, nil))
+				agenda.setifbetter(
+						new_ChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		rules = lbinary[I.label]
 		for rule in rules:
@@ -90,8 +90,7 @@ def simpleinside(grammar, maxlen, insidescores):
 				if (isfinite(insidescores[rule.rhs2, vec])
 					and isnan(insidescores[rule.lhs, I.vec + vec])):
 					agenda.setifbetter(new_ChartItem(rule.lhs, I.vec + vec),
-						new_Edge(rule.prob + x + insidescores[rule.rhs2, vec],
-									0.0, 0.0, nil, nil))
+						rule.prob + x + insidescores[rule.rhs2, vec])
 
 		rules = rbinary[I.label]
 		for rule in rules:
@@ -99,8 +98,7 @@ def simpleinside(grammar, maxlen, insidescores):
 				if (isfinite(insidescores[rule.rhs1, vec])
 					and isnan(insidescores[rule.lhs, vec + I.vec])):
 					agenda.setifbetter(new_ChartItem(rule.lhs, vec + I.vec),
-						new_Edge(rule.prob + insidescores[rule.rhs1, vec] + x,
-									0.0, 0.0, nil, nil))
+						rule.prob + insidescores[rule.rhs1, vec] + x)
 
 	# anything not reached so far gets probability zero:
 	insidescores[np.isnan(insidescores)] = infinity
@@ -109,17 +107,17 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 	""" Compute the outside SX simple LR estimate in top down fashion. """
 	bylhs = grammar.bylhs
 	infinity = np.inf
-	agenda = EdgeAgenda()
+	agenda = Agenda()
 	nil = new_ChartItem(0, 0)
 	for n in range(1, maxlen + 1):
-		agenda[new_Item(goal, n, 0, 0)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+		agenda[new_Item(goal, n, 0, 0)] = 0.0
 		outside[goal, n, 0, 0] = 0.0
 	print "initialized"
 
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
-		x = entry.value.score
+		x = entry.value
 		if agenda.length % 1000 == 0:
 			print "agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state])
@@ -131,8 +129,7 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 				score = rule.prob + x
 				if score < outside[rule.rhs1, I.length, I.lr, I.gaps]:
 					agenda.setitem(
-						new_Item(rule.rhs1, I.length, I.lr, I.gaps),
-						new_Edge(score, 0.0, 0.0, nil, nil))
+						new_Item(rule.rhs1, I.length, I.lr, I.gaps), score)
 					outside[rule.rhs1, I.length, I.lr, I.gaps] = score
 				continue
 			# X -> A B
@@ -165,8 +162,7 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 							else: current = outside[rule.rhs1, lenA, lr, ga]
 							if score < current:
 								agenda.setitem(
-									new_Item(rule.rhs1, lenA, lr, ga),
-									new_Edge(score, 0.0, 0.0, nil, nil))
+									new_Item(rule.rhs1, lenA, lr, ga), score)
 								outside[rule.rhs1, lenA, lr, ga] = score
 
 			# X -> B A
@@ -206,8 +202,7 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 							else: current = outside[rule.rhs2, lenA, lr, ga]
 							if score < current:
 								agenda.setitem(
-									new_Item(rule.rhs2, lenA, lr, ga),
-									new_Edge(score, 0.0, 0.0, nil, nil))
+									new_Item(rule.rhs2, lenA, lr, ga), score)
 								outside[rule.rhs2, lenA, lr, ga] = score
 
 def inside(grammar, maxlen, insidescores):
@@ -216,17 +211,17 @@ def inside(grammar, maxlen, insidescores):
 	lexical, unary = grammar.lexical, grammar.unary
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = float('infinity')
-	agenda = EdgeAgenda()
+	agenda = Agenda()
 	nil = ChartItem(0, 0)
 
 	for n, rules in enumerate(grammar.bylhs):
 		if rules == []:
-			agenda[new_ChartItem(n, 1)] = new_Edge(0.0, 0.0, 0.0, nil, nil)
+			agenda[new_ChartItem(n, 1)] = 0.0
 
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
-		x = entry.value.score
+		x = entry.value
 		if I.label not in insidescores: insidescores[I.label] =  {}
 		if x < insidescores[I.label].get(I.vec, infinity):
 			insidescores[I.label][I.vec] = x
@@ -234,8 +229,8 @@ def inside(grammar, maxlen, insidescores):
 		for rule in unary[I.label]:
 			if (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):
-				agenda.setifbetter(new_ChartItem(rule.lhs, I.vec),
-						new_Edge(rule.prob + x, 0.0, 0.0, nil, nil))
+				agenda.setifbetter(
+					new_ChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		for rule in lbinary[I.label]:
 			if rule.rhs2 not in insidescores: continue
@@ -244,8 +239,7 @@ def inside(grammar, maxlen, insidescores):
 				if left and (rule.lhs not in insidescores
 					or left not in insidescores[rule.lhs]):
 					agenda.setifbetter(new_ChartItem(rule.lhs, left),
-						new_Edge(rule.prob + x + insidescores[rule.rhs2][vec],
-									0.0, 0.0, nil, nil))
+						rule.prob + x + insidescores[rule.rhs2][vec])
 
 		for rule in rbinary[I.label]:
 			if rule.rhs1 not in insidescores: continue
@@ -254,8 +248,7 @@ def inside(grammar, maxlen, insidescores):
 				if right and (rule.lhs not in insidescores
 					or right not in insidescores[rule.lhs]):
 					agenda.setifbetter(new_ChartItem(rule.lhs, right),
-						new_Edge(rule.prob + insidescores[rule.rhs1][vec] + x,
-									0.0, 0.0, nil, nil))
+						rule.prob + insidescores[rule.rhs1][vec] + x)
 
 	return insidescores
 
@@ -346,24 +339,18 @@ def main():
 	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
-	#grammar = splitgrammar(dop_srcg_rules(trees, corpus.sents()))
 	grammar = splitgrammar(induce_srcg(trees, corpus.sents()))
-	#testestimates(grammar, 30, grammar.toid["ROOT"])
-	#tree = Tree("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))")
-	#tree.chomsky_normal_form()
-	#sent = "Daruber muss nachgedacht werden".split()
-	#grammar = splitgrammar(dop_srcg_rules([tree]*30, [sent]*30))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
-			Tree.parse("(ROOT (c 0) (B (c 2) (b 1)))", parse_leaf=int),
-			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
-			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
+			Tree.parse("(ROOT (C (b 0) (a 1)) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (C (b 0) (a 1)) (c 2))", parse_leaf=int),
 			]
 	sents =[["a","b"],
-			["a","b","c"],
-			["c","b","c"],
-			["a","b","c"],
-			["a","b","c"]]
+			["a","c","b"],
+			["a","c","b"],
+			["b","a","c"],
+			["b","a","a"]]
 	print "treebank:"
 	for a in trees: print a
 	print "\ngrammar:"
@@ -373,11 +360,12 @@ def main():
 	grammar = splitgrammar(grammar)
 	testestimates(grammar, 4, grammar.toid["ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
+	sent = ["a","b","c"]
 	print "\nwithout estimates"
-	chart, start = parse(["a","b","c"], grammar, estimate=None)
-	pprint_chart(chart,  ["a","b","c"], grammar.tolabel)
+	chart, start = parse(sent, grammar, estimate=None)
+	pprint_chart(chart, sent, grammar.tolabel)
 	print "\nwith estimates"
-	chart, start = parse(["a","b","c"], grammar, estimate=(outside, 4))
-	pprint_chart(chart,  ["a","b","c"], grammar.tolabel)
+	chart, start = parse(sent, grammar, estimate=(outside, 4))
+	pprint_chart(chart, sent, grammar.tolabel)
 
 if __name__ == '__main__': main()

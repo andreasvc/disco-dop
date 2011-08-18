@@ -1,7 +1,7 @@
 cimport cython
-from containers cimport ChartItem, Edge, Rule, Terminal
-from plcfrs cimport new_Edge, new_ChartItem
-from agenda cimport EdgeAgenda, Entry
+from containers cimport ChartItem, Rule, Terminal
+from plcfrs cimport new_ChartItem
+from agenda cimport Agenda, Entry
 from array cimport array
 cimport numpy as np
 
@@ -43,18 +43,16 @@ cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, unsigned int max
 
 @cython.locals(
 	I=ChartItem,
-	e=Edge,
 	nil=ChartItem,
 	entry=Entry)
 cpdef dict inside(grammar, unsigned int maxlen, dict insidescores)
 
 @cython.locals(
 	I=ChartItem,
-	e=Edge,
 	rule=Rule,
 	nil=ChartItem,
 	entry=Entry,
-	agenda=EdgeAgenda,
+	agenda=Agenda,
 	infinity=np.double_t,
 	lbinary=list,
 	rbinary=list,
@@ -71,7 +69,6 @@ cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2]
 	newitem=Item,
 	nil=ChartItem,
 	I=Item,
-	e=Edge,
 	bylhs=list,
 	rules=list,
 	rule=Rule,

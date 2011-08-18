@@ -75,7 +75,7 @@ def merged_kbest(chart, start, k, grammar):
 			arity = fanout(node)
 			if arity > 1: label = "%s_%d" % (node.node, arity)
 			else: label = node.node
-			newchart[label][sum(1L << n for n in node.leaves())] = 0.0
+			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
 	return newchart
 
 def kbest_outside(chart, start, k):

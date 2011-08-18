@@ -167,7 +167,8 @@ def binrepr(a, sent):
 
 def pprint_chart(chart, sent, tolabel):
 	print "chart:"
-	for n, a in sorted((bitcount(a.vec), a) for a in chart):
+	for n, a in sorted([(bitcount(a.vec), a) for a in chart]):
+		if not chart[a]: continue
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
 		for edge in chart[a]:
 			print "%g\t%g" % (exp(-edge.inside), exp(-edge.prob)),

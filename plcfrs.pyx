@@ -58,7 +58,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
 	cdef unsigned int label, newlabel, blocked = 0, splitlabel = 0
-	cdef unsigned long vec, maxA = 0
+	cdef unsigned long vec = 0, maxA = 0
 	cdef double x, y
 
 	if start == None: start = toid["ROOT"]
@@ -217,7 +217,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 							prunelist, splitlabel, coarsechart, &blocked)
 
 		if agenda.length > maxA: maxA = agenda.length
-	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(chart), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
+	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(filter(None, chart.values())), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	gc.enable()
 	if goal in chart: return chart, goal
 	else: return chart, NONE
@@ -367,10 +367,12 @@ def binrepr(ChartItem a, sent):
 	return bin(a.vec)[2:].rjust(len(sent), "0")[::-1]
 
 def pprint_chart(chart, sent, tolabel):
+	""" `pretty print' a chart. """
 	cdef ChartItem a
 	cdef Edge edge
 	print "chart:"
-	for n, a in sorted((bitcount(a.vec), a) for a in chart):
+	for a in sorted(chart, key=lambda a: bitcount(a.vec)):
+		if not chart[a]: continue
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
 		for edge in chart[a]:
 			print "%g\t%g" % (exp(-edge.inside), exp(-edge.prob)),
