@@ -424,13 +424,9 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 		return new
 	if len(tree) <= 2: return tree
 	#don't bother with optimality if this particular node is not discontinuous
-	elif cachedfanout(tree) == 1:
+	elif cachedfanout(tree) == 1 and all(cachedfanout(a) == 1 for a in tree):
 		# do default right factored binarization
-		#suboptimal to convert back and forth but oh well
-		bitset = tree.bitset
-		new = defaultrightbin(tree.node, [a for a in tree], sep, h)
-		new.bitset = bitset
-		return new
+		return defaultrightbin(tree.node, [a for a in tree], sep, h)
 	from agenda import Agenda
 	labels = [a.node for a in tree]
 	agenda = Agenda()
