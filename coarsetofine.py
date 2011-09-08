@@ -1,7 +1,7 @@
 """Assorted functions to project items from a coarse chart to corresponding
 items for a fine grammar.
 """
-import re
+import re, logging
 from collections import defaultdict
 from nltk import Tree
 from treetransforms import mergediscnodes, un_collinize, fanout
@@ -56,8 +56,8 @@ def prunelist_fromchart(chart, goal, coarsegrammar, finegrammar, k,
 			l[itemcast(Ih).label][itemcast(Ih).vec] = kbest.get(Ih, infinity)
 		for a, label in toid.iteritems():
 			prunelist[label] = l[prunetoid.get(removeids.sub("", a), 1)]
-	print 'pruning with %d nonterminals, %d items' % (
-			len(filter(None, prunelist)), len(chart))
+	logging.debug('pruning with %d nonterminals, %d items' % (
+			len(filter(None, prunelist)), len(chart)))
 	return prunelist
 
 def merged_kbest(chart, start, k, grammar):

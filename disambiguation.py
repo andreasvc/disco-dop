@@ -1,4 +1,4 @@
-import re
+import re, logging
 from random import choice
 from heapq import nlargest
 from math import fsum, exp, log
@@ -55,7 +55,7 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n, samp
 	if start2: shortestderivations = lazykbest(chart2, start2, m, secondarymodel.tolabel)
 	else:
 		shortestderivations = []
-		print "shortest derivation parsing failed"
+		logging.warning("shortest derivation parsing failed") # error?
 	mpp = [ max(mpp2.items(), key=itemgetter(1)) ]
 	for t, s in shortestderivations:
 		tt = removeids.sub("", t)
@@ -63,8 +63,8 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n, samp
 			mpp = [ ( tt, (s / log(0.5)	, mpp2[tt])) ]
 			break
 	else:
-		print "no matching derivation found"
-	print "(%d derivations, %d of %d parsetrees)" % (len(derivations), min(sldop_n, len(mpp1)), len(mpp1))
+		logging.warning("no matching derivation found") # error?
+	logging.debug("(%d derivations, %d of %d parsetrees)" % (len(derivations), min(sldop_n, len(mpp1)), len(mpp1)))
 	return mpp
 
 def sldop_simple(chart, start, dopgrammar, m, sldop_n):
@@ -76,9 +76,10 @@ def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 	x = len(derivations); derivations = set(derivations)
 	xx = len(derivations); derivations = dict(derivations)
 	if xx != len(derivations):
-		print "duplicates w/different probabilities", x, '=>', xx,
-		print '=>', len(derivations)
-	elif x != xx: print "DUPLICATES DUPLICATES", x, '=>', len(derivations)
+		logging.error("duplicates w/different probabilities %d => %d => %d" % (
+			x, xx, len(derivations)))
+	elif x != xx:
+		logging.error("DUPLICATES DUPLICATES %d => %d" % (x, len(derivations)))
 	# sum over Goodman derivations to get parse trees
 	idsremoved = defaultdict(set)
 	for t, p in derivations.items():
@@ -90,8 +91,8 @@ def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 	# (addressed) nodes.
 	mpp = [(tt, (-minunaddressed(tt, idsremoved), mpp1[tt]))
 				for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t])]
-	print "(%d derivations, %d of %d parsetrees)" % (len(derivations),
-														len(mpp), len(mpp1))
+	logging.debug("(%d derivations, %d of %d parsetrees)" % (len(derivations),
+														len(mpp), len(mpp1)))
 	return mpp
 
 def sumderivs(ts, derivations):
@@ -139,7 +140,7 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 	return a dictionary mapping parsetrees to probabilities """
 	parsetrees = {}
 	m = 0
-	print "sample =", sample or both, "kbest =", (not sample) or both,
+	logging.debug("sample = %r kbest = %r" % (sample or both, (not sample) or both))
 	derivations = set()
 	if sample or both:
 		derivations = getsamples(chart, start, n, tolabel)
@@ -177,7 +178,7 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 		maxprob = max(parsetrees[parsetree])
 		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
 									for prob in parsetrees[parsetree]]))]))
-	print "(%d derivations, %d parsetrees)" % (m, len(parsetrees))
+	logging.debug("(%d derivations, %d parsetrees)" % (m, len(parsetrees)))
 	return parsetrees
 
 def main():
