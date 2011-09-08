@@ -73,9 +73,11 @@ def simpleinside(grammar, maxlen, insidescores):
 
 		# This comparison catches the case when insidescores has a higher
 		# value than x, but also when it is NaN, because all comparisons
-		# against NaN are false. Mory explicitly it would be:
-		#if isnan(insidescores[I.label, I.vec]) or x < insidescores[I.label, I.vec]:
-		if not x >= insidescores[I.label, I.vec]:
+		# against NaN are false.
+		#if not x >= insidescores[I.label, I.vec]:
+		# Mory explicitly:
+		if (isnan(insidescores[I.label, I.vec])
+			or x < insidescores[I.label, I.vec]):
 			insidescores[I.label, I.vec] = x
 
 		rules = unary[I.label]
