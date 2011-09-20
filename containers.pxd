@@ -2,7 +2,7 @@ from array cimport array
 
 cdef class ChartItem:
 	cdef public unsigned int label
-	cdef public unsigned long vec
+	cdef public unsigned long long vec
 
 cdef class Edge:
 	cdef public double score
@@ -36,14 +36,14 @@ cdef class RankedEdge:
 
 cdef struct DTree:
 	void *rule
-	unsigned long vec
+	unsigned long long vec
 	bint islexical
 	DTree *left, *right
 
-cdef DTree new_DTree(Rule rule, unsigned long vec, bint islexical, DTree left, DTree right)
+cdef DTree new_DTree(Rule rule, unsigned long long lec, bint islexical, DTree left, DTree right)
 
 cpdef inline unsigned int getlabel(ChartItem a)
-cpdef inline unsigned long getvec(ChartItem a)
+cpdef inline unsigned long long getvec(ChartItem a)
 cpdef inline double getscore(Edge a)
 cpdef inline dict dictcast(d)
 cpdef inline ChartItem itemcast(i)

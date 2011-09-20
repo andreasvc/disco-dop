@@ -17,13 +17,13 @@ ext_modules = [
 	Extension("bit",			["bit.pyx"]),
 	Extension("kbest",			["kbest.py", "kbest.pxd"]),
 	Extension("agenda",			["agenda.pyx", "agenda.pxd"]),
-	Extension("plcfrs",			["plcfrs.pyx", "plcfrs.pxd"]),
+	Extension("plcfrs",			["plcfrs.pyx",  "plcfrs.pxd"]),
 	Extension("estimates",		["estimates.py", "estimates.pxd"]),
-	Extension("oldplcfrs",		["oldplcfrs.py", "oldplcfrs.pxd"]),
+	Extension("oldplcfrs",		["oldplcfrs.py",  "oldplcfrs.pxd"]),
 	Extension("containers",		["containers.pyx", "containers.pxd"]),
 	Extension("coarsetofine",	["coarsetofine.py", "coarsetofine.pxd"]),
 	Extension("disambiguation",	["disambiguation.py", "disambiguation.pxd"]),
-	Extension("fragmentseeker",	["fragmentseeker.py", "fragmentseeker.pxd"])
+	Extension("fragmentseeker",	["fragmentseeker.py",  "fragmentseeker.pxd"])
 	]
 
 for e in ext_modules:

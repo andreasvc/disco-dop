@@ -1,5 +1,5 @@
 import codecs, re
-from operator import mul
+from operator import mul, itemgetter
 from array import array
 from math import log, exp
 from pprint import pprint
@@ -257,7 +257,7 @@ def splitgrammar(grammar):
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
-		+ sorted(set(nt for (rule, yf), weight in grammar for nt in rule)
+		+ sorted(set(str(nt) for (rule, yf), weight in grammar for nt in rule)
 			- set(["Epsilon", "ROOT"]))))
 	toid = dict((lhs, n) for n, lhs in nonterminals)
 	tolabel = dict((n, lhs) for n, lhs in nonterminals)
@@ -322,10 +322,17 @@ def postorder(tree, f=None):
 				if not f or f(a): yield a
 	if not f or f(tree): yield tree
 
-def canonicalize(tree):
+def canonicalize(tree, preservehead=False):
 	""" canonical linear precedence (of first component of each node) order """
-	for a in postorder(tree, lambda n: len(n) > 1):
-		a.sort(key=lambda n: n.leaves())
+	if preservehead:
+		for a in postorder(tree, lambda n: len(n) > 1):
+			head = a[-1]
+			a.sort(key=lambda n: n.leaves())
+			# head final, reverse lhs:  A B C^ D E => E D A B C^
+			tree[:] = tree[a.index(head)+1:][::-1] + tree[:a.index(head)+1]
+	else:
+		for a in postorder(tree, lambda n: len(n) > 1):
+			a.sort(key=lambda n: n.leaves())
 	return tree
 
 def rangeheads(s):
@@ -366,7 +373,7 @@ def baseline(wordstags):
 			wordstags[0][0], baseline(wordstags[1:]))
 
 def printrule(r,yf,w):
-		print "%.2f %s --> %s\t %r" % (exp(w), r[0], "  ".join(r[1:]), list(yf))
+	return "%.2f %s --> %s\t %r" % (exp(w), r[0], "  ".join(r[1:]), list(yf))
 
 def printrulelatex(r):
 	""" Print a rule in latex format (before it went through varstoindices)
@@ -669,22 +676,33 @@ def alterbinarization(tree):
 	assert "@" not in tree
 	return tree
 
-def testgrammar(grammar):
-	for a,b in enumerate(grammar.bylhs):
-		if b and abs(sum(exp(-rule.prob) for rule in b) - 1.0) > 0.01:
+def testgrammar(grammar, epsilon=0.01):
+	""" report whether all left-hand sides sum to 1 +/-epsilon.
+	"""
+	#We could be strict about separating POS tags and phrasal categories,
+	#but Negra contains at least one tag (--) used for both.
+	sums = defaultdict(float)
+	for lhs, rules in enumerate(grammar.bylhs):
+		if rules: sums[lhs] += sum(exp(-rule.prob) for rule in rules)
+	for terminals in grammar.lexical.itervalues():
+		for term in terminals:
+			sums[term.lhs] += exp(-term.prob)
+	for lhs, mass in sums.iteritems():
+		if abs(mass - 1.0) > epsilon:
 			print "Does not sum to 1:",
-			print grammar.tolabel[a], sum(exp(-rule.prob) for rule in b)
-			return
-	tmp = defaultdict(float)
-	for rr in grammar.lexical.itervalues():
-		for r in rr:
-			tmp[r.lhs] += exp(-r.prob)
-	for a,b in tmp.iteritems():
-		if abs(b - 1.0) > 0.01:
-			print "Does not sum to 1:",
-			print grammar.tolabel[a], b
-			break
-	else: print "All left hand sides sum to 1"
+			print grammar.tolabel[lhs], mass
+			return False
+	print "All left hand sides sum to 1"
+	return True
+
+def subsetgrammar(a, b):
+	""" test whether grammar a is a subset of b. """
+	difference = set(imap(itemgetter(0), a)) - set(imap(itemgetter(0), b))
+	if not difference: return True
+	print "missing productions:"
+	for r, yf in difference:
+		print printrule(r, yf, 0.0)
+	return False
 
 def grammarinfo(grammar):
 	""" print some statistics on a grammar, before it goes through
@@ -695,16 +713,16 @@ def grammarinfo(grammar):
 	print "of which preterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
 	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
 	print "max arity:", n, "in",
-	printrule(r, yf, w)
+	print printrule(r, yf, w)
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w) for (rule, yf), w in grammar if rule[1] != "Epsilon")
 	print "max vars:", n, "in",
-	printrule(r, yf, w)
+	print printrule(r, yf, w)
 	def arity(sym):
 		if "_" not in sym: return 1
 		return int(sym.split("_")[1].split("@")[0])
 	n, r, yf, w = max((sum(map(arity, rule)), rule, yf, w) for (rule, yf), w in grammar)
 	print "max parsing complexity:", n, "in",
-	printrule(r, yf, w)
+	print printrule(r, yf, w)
 	ll = sum(1 for (rule,yf),w in grammar if rule[1] == "Epsilon")
 	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
 
@@ -812,7 +830,7 @@ def main():
 	collinize(tree2, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='')
 	for (r, yf), w in sorted(induce_srcg([tree.copy(True), tree2], [sent, sent2]),
 								key=lambda x: (x[0][0][1] == 'Epsilon', x)):
-		printrule(r,yf,w)
+		print printrule(r,yf,w)
 	print
 	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
 
@@ -821,14 +839,14 @@ def main():
 	grammar = dop_srcg_rules([tree,tree2], [sent,sent2])
 	print 'dop reduction'
 	for (r, yf), w in sorted(grammar):
-		printrule(r,yf,w)
+		print printrule(r,yf,w)
 	trees = list(corpus.parsed_sents()[:10])
 	sents = corpus.sents()[:100]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	grammar, backtransform = doubledop(trees, sents)
 	print '\ndouble dop grammar',
 	for (r, yf), w in sorted(grammar):
-		printrule(r,yf,w)
+		print printrule(r,yf,w)
 	print "backtransform: {",
 	for a,b in backtransform.items():
 		try: print a,

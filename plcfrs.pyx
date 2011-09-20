@@ -15,7 +15,7 @@ DEF infinity = float('infinity')
 # to avoid overhead of __init__ and __cinit__ constructors
 # belongs in containers but putting it here gives
 # a better chance of successful inlining
-cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec):
+cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long long vec):
 	cdef ChartItem item = ChartItem.__new__(ChartItem)
 	item.label = label; item.vec = vec
 	return item
@@ -29,7 +29,7 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 
 def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			estimate=None, list prunelist=None, dict prunetoid=None,
-			dict coarsechart=None, bint splitprune=False,
+			bint splitprune=False, bint markorigin=False,
 			bint neverblockmarkovized=False, bint neverblockdiscontinuous=False,
 			int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -57,9 +57,11 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef bint doestimate = bool(estimate), doprune = bool(prunelist), prunenow
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
-	cdef unsigned int label, newlabel, blocked = 0, splitlabel = 0
-	cdef unsigned long vec = 0, maxA = 0
+	cdef unsigned int newlabel, blocked = 0, splitlabel = 0
+	cdef unsigned long long vec = 0
+	cdef unsigned long maxA = 0
 	cdef double x, y
+	cdef str label = ''
 
 	if start == None: start = toid["ROOT"]
 	assert len(sent) < (sizeof(vec) * 8)
@@ -71,7 +73,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		assert len(grammar.bylhs) == len(outside)
 		assert lensent <= maxlen
 
-	gc.disable() #does this actually do anything with Cython's Boehm allocator?
+	gc.disable() #does this actually do anything with Cython?
 
 	# scan
 	Epsilon = toid["Epsilon"]
@@ -116,7 +118,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			# unary
 			if doestimate:
 				length = bitcount(item.vec); left = nextset(item.vec, 0)
-				gaps = <signed>bitlength(item.vec) - length - left
+				gaps = bitlength(item.vec) - length - left
 				right = lensent - length - left - gaps
 			l = <list>list_getitem(unary, item.label)
 			if not beamwidth or beam[item.vec] < beamwidth:
@@ -131,18 +133,18 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 						newedge = new_Edge(x + rule.prob, x + rule.prob,
 											rule.prob, item, NONE)
 					prunenow = doprune
+					label = ''
 					if prunenow and neverblockdiscontinuous:
-						prunenow = arity[rule.lhs] > 1
+						prunenow = arity[rule.lhs] == 1
 					if prunenow and neverblockmarkovized:
 						prunenow = "|" not in tolabel[rule.lhs]
 					if prunenow and splitprune:
 						if arity[rule.lhs] > 1:
-							splitlabel = prunetoid[tolabel[
-										rule.lhs].split("_")[0] + "*"]
-						else: splitlabel = 0
+							label = tolabel[rule.lhs]
+							label = label[:label.rindex("_")]
 					process_edge(new_ChartItem(rule.lhs, item.vec), newedge,
 						agenda, chart, viterbi, exhaustive, prunenow,
-						prunelist, splitlabel, coarsechart, &blocked)
+						prunelist, prunetoid, label, markorigin, &blocked)
 
 			# binary left
 			l = <list>list_getitem(lbinary, item.label)
@@ -150,14 +152,14 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				rule = <Rule>list_getitem(l, i)
 				for I, e in (<dict>(list_getitem(viterbi, rule.rhs2))).iteritems():
 					sibling = <ChartItem>I
-					if ((not beamwidth or beam[item.vec^sibling.vec] < beamwidth) and
-						concat(rule, item.vec, sibling.vec)):
+					if ((not beamwidth or beam[item.vec^sibling.vec] < beamwidth)
+						and concat(rule, item.vec, sibling.vec)):
 						beam[item.vec ^ sibling.vec] += 1
 						y = (<Edge>e).inside
 						vec = item.vec ^ sibling.vec
 						if doestimate:
 							length = bitcount(vec); left = nextset(vec, 0)
-							gaps = <signed>bitlength(vec) - length - left
+							gaps = bitlength(vec) - length - left
 							right = lensent - length - left - gaps
 							newedge = new_Edge(
 									outside[rule.lhs, length, left+right, gaps]
@@ -167,18 +169,18 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 							newedge = new_Edge(x+y+rule.prob, x+y+rule.prob,
 											rule.prob, item, sibling)
 						prunenow = doprune
+						label = ''
 						if prunenow and neverblockdiscontinuous:
-							prunenow = arity[rule.lhs] > 1
+							prunenow = arity[rule.lhs] == 1
 						if prunenow and neverblockmarkovized:
 							prunenow = "|" not in tolabel[rule.lhs]
 						if prunenow and splitprune:
 							if arity[rule.lhs] > 1:
-								splitlabel = prunetoid[tolabel[
-											rule.lhs].split("_")[0] + "*"]
-						else: splitlabel = 0
+								label = tolabel[rule.lhs]
+								label = label[:label.rindex("_")]
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 							agenda, chart, viterbi, exhaustive, prunenow,
-							prunelist, splitlabel, coarsechart, &blocked)
+							prunelist, prunetoid, label, markorigin, &blocked)
 
 			# binary right
 			l = <list>list_getitem(rbinary, item.label)
@@ -186,14 +188,14 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				rule = <Rule>list_getitem(l, i)
 				for I, e in (<dict>(list_getitem(viterbi, rule.rhs1))).iteritems():
 					sibling = <ChartItem>I
-					if ((not beamwidth or beam[sibling.vec^item.vec] < beamwidth) and
-						concat(rule, sibling.vec, item.vec)):
+					if ((not beamwidth or beam[sibling.vec^item.vec] < beamwidth)
+						and concat(rule, sibling.vec, item.vec)):
 						beam[sibling.vec ^ item.vec] += 1
 						y = (<Edge>e).inside
 						vec = sibling.vec ^ item.vec
 						if doestimate:
 							length = bitcount(vec); left = nextset(vec, 0)
-							gaps = <signed>bitlength(vec) - length - left
+							gaps = bitlength(vec) - length - left
 							right = lensent - length - left - gaps
 							newedge = new_Edge(
 									outside[rule.lhs, length, left+right, gaps]
@@ -203,18 +205,18 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 							newedge = new_Edge(x+y+rule.prob, x+y+rule.prob,
 											rule.prob, sibling, item)
 						prunenow = doprune
+						label = ''
 						if prunenow and neverblockdiscontinuous:
-							prunenow = arity[rule.lhs] > 1
+							prunenow = arity[rule.lhs] == 1
 						if prunenow and neverblockmarkovized:
 							prunenow = "|" not in tolabel[rule.lhs]
 						if prunenow and splitprune:
 							if arity[rule.lhs] > 1:
-								splitlabel = prunetoid[tolabel[
-											rule.lhs].split("_")[0] + "*"]
-						else: splitlabel = 0
+								label = tolabel[rule.lhs]
+								label = label[:label.rindex("_")]
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 							agenda, chart, viterbi, exhaustive, prunenow,
-							prunelist, splitlabel, coarsechart, &blocked)
+							prunelist, prunetoid, label, markorigin, &blocked)
 
 		if agenda.length > maxA: maxA = agenda.length
 	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(filter(None, chart.values())), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
@@ -224,37 +226,55 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge,
 		EdgeAgenda agenda, dict chart, list viterbi, bint exhaustive,
-		bint doprune, list prunelist, int splitlabel, dict coarsechart,
-		unsigned int *blocked): # except *:
+		bint doprune, list prunelist, dict prunetoid, str label,
+		bint markorigin, unsigned int *blocked): # except *:
 	""" Decide what to do with a newly derived edge. """
-	cdef unsigned long component
-	cdef int a, b = 0
+	cdef unsigned long long component
+	cdef unsigned int a, b = 0
+	cdef int cnt = 0, splitlabel = 0
 	cdef Edge e
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = dict_contains(chart, newitem) == 1
 	#not in agenda or chart
 	if not (inagenda or inchart):
 		if doprune:
-			outside = dict_getitem(<object>list_getitem(prunelist,
-											newitem.label), newitem.vec)
-			if (outside==NULL or isinf(<double>(<object>outside))):
-				#or newedge.inside+<double><object>outside > 300.0):
-				blocked[0] += 1
-				return
-			if splitlabel:
+			if label: #does the prune list contain split labels?
+				if not markorigin:
+					try: splitlabel = prunetoid[label + "*"]
+					except KeyError:
+						blocked[0] += 1
+						return
 				while newitem.vec >> b:
+					if markorigin:
+						try: splitlabel = prunetoid["%s*%d" % (label, cnt)]
+						except KeyError:
+							blocked[0] += 1
+							return
 					a = nextset(newitem.vec, b)
 					b = nextunset(newitem.vec, a) - 1
-					component = (1UL << b) - 1 << a
-					outside = dict_getitem(<object>list_getitem(coarsechart,
+					#given a=3, b=6. from left to right: 
+					#10000 => 01111 => 01111000
+					component = (1UL << b) - 1UL << a
+					outside = dict_getitem(<object>list_getitem(prunelist,
 												splitlabel), component)
 					if outside==NULL or isinf(<double><object>outside):
 						blocked[0] += 1
 						return
+					cnt += 1
+			else:
+				outside = dict_getitem(<object>list_getitem(prunelist,
+											newitem.label), newitem.vec)
+				# need a double cast: before outside can be converted to
+				# a double, it needs to be treated as a python float
+				if (outside==NULL or isinf(<double>(<object>outside))):
+					#or newedge.inside+<double><object>outside > 300.0):
+					blocked[0] += 1
+					return
 
-		elif newedge.score > 300.0:
-			blocked[0] += 1
-			return
+		#elif newedge.score > 300.0:
+		#	blocked[0] += 1
+		#	return
+
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem, newedge)
 		chart[newitem] = []
@@ -276,7 +296,7 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge,
 		# suboptimal edge
 		chart[newitem].append(iscore(newedge))
 
-cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec):
+cdef inline bint concat(Rule rule, unsigned long long lvec, unsigned long long rvec):
 	"""
 	Determine the compatibility of two bitvectors (tuples of spans / ranges)
 	according to the given yield function. Ranges should be non-overlapping,
@@ -418,5 +438,7 @@ def main():
 	print "ungrammatical sentence:"
 	do("muss Daruber nachgedacht werden", grammar)	#no parse
 	print "(as expected)"
+	print "long sentence (33 words):"
+	do("Daruber muss nachgedacht %s" % " ".join(30*["werden"]), grammar)
 
 if __name__ == '__main__': main()

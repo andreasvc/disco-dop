@@ -11,15 +11,15 @@ else:
 	print "interpreted"
 
 cdef extern from "bit.h":
-	bint bitminmax(unsigned long a, unsigned long b)
-	bint testbit(unsigned long vec, unsigned int pos)
+	bint bitminmax(unsigned long long a, unsigned long long b)
+	bint testbit(unsigned long long vec, unsigned int pos)
 	bint testbitc(unsigned char c, unsigned int pos)
 	bint testbitint(unsigned int c, unsigned int pos)
 	bint testbitshort(unsigned short c, unsigned int pos)
-	int nextset(unsigned long vec, unsigned int pos)
-	int nextunset(unsigned long vec, unsigned int pos)
-	int bitcount(unsigned long vec)
-	int bitlength(unsigned long vec)
+	int nextset(unsigned long long vec, unsigned int pos)
+	int nextunset(unsigned long long vec, unsigned int pos)
+	int bitcount(unsigned long long vec)
+	int bitlength(unsigned long long vec)
 
 cdef extern from "math.h":
 	bint isnan(double x)
@@ -39,7 +39,7 @@ cdef Item new_Item(unsigned int state, unsigned int length, unsigned int lr, uns
 	right=cython.uint,
 	lr=cython.uint,
 	gaps=cython.uint)
-cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, unsigned int maxlen, unsigned int slen, unsigned int label, unsigned long vec)
+cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, unsigned int maxlen, unsigned int slen, unsigned int label, unsigned long long vec)
 
 @cython.locals(
 	I=ChartItem,

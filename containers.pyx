@@ -95,17 +95,17 @@ cdef class Rule:
 	
 cdef struct DTree:
 	void *rule
-	unsigned long vec
+	unsigned long long vec
 	bint islexical
 	DTree *left, *right
 
-cdef DTree new_DTree(Rule rule, unsigned long vec, bint islexical, DTree left, DTree right):
+cdef DTree new_DTree(Rule rule, unsigned long long vec, bint islexical, DTree left, DTree right):
 	return DTree(<void *>rule, vec, islexical, &left, &right)
 
 # some helper functions that only serve to bridge cython & python code
 cpdef inline unsigned int getlabel(ChartItem a):
 	return a.label
-cpdef inline unsigned long getvec(ChartItem a):
+cpdef inline unsigned long long getvec(ChartItem a):
 	return a.vec
 cpdef inline double getscore(Edge a):
 	return a.score

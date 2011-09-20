@@ -3,14 +3,14 @@ from containers cimport ChartItem, Edge, Rule, Terminal
 from agenda cimport EdgeAgenda
 
 cdef extern from "bit.h":
-	int nextset(unsigned long vec, int pos)
-	int nextunset(unsigned long vec, int pos)
-	int bitcount(unsigned long vec)
-	bint testbit(unsigned long vec, int pos)
+	int nextset(unsigned long long vec, int pos)
+	int nextunset(unsigned long long vec, int pos)
+	int bitcount(unsigned long long vec)
+	bint testbit(unsigned long long vec, int pos)
 	bint testbitc(unsigned char vec, int pos)
 	bint testbitint(unsigned int vec, int pos)
 	bint testbitshort(unsigned short vec, int pos)
-	bint bitminmax(unsigned long a, unsigned long b)
+	bint bitminmax(unsigned long long a, unsigned long long b)
 
 @cython.locals(
 	m=cython.int,
@@ -54,7 +54,7 @@ cdef inline list deduced_from(ChartItem Ih, double x, list Cx, list unary, list 
 	n=cython.int,
 	m=cython.int,
 	b=cython.int)
-cdef inline bint concat(Rule rule, unsigned long lvec, unsigned long rvec)
+cdef inline bint concat(Rule rule, unsigned long long lvec, unsigned long long rvec)
 
 cdef Edge iscore(Edge e)
 

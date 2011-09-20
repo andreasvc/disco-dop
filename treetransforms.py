@@ -224,8 +224,6 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 					# switch direction upon encountering the head
 					if headMarked and headMarked in childNodes[i]:
 						headidx = i
-						# although it doesn't make any sense to switch from
-						# left to right, it's supported anyway
 						factor = "right" if factor == "left" else "left"
 						start = headidx + numChildren - i - 1
 						end = start + horzMarkov
@@ -568,24 +566,21 @@ def splitdiscnodes(tree, markorigin=False):
 
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
 	>>> print splitdiscnodes(tree.copy(True)).pprint(margin=999)
-	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4) (VVPP 5)) (VAINF 6)))
+	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VP* (VP* (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
 	>>> print splitdiscnodes(tree, markorigin=True).pprint(margin=999)
-	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 (CARD 4) (VVPP 5)) (VAINF 6)))
+	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VP*1 (VP*1 (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
 	"""
 	from grammar import postorder
 	for node in postorder(tree):
 		result = []
 		for child in node:
 			if disc(child):
-				if markorigin:
-					result.extend(Tree("%s*%d" % (child.node, n), childsubset)
-						for n, childsubset in enumerate(contsets(child)))
-				else:
-					result.extend(Tree(child.node + "*", childsubset)
-						for n, childsubset in enumerate(contsets(child)))
+				result.extend(Tree(child.node + '*' + (
+					str(n) if markorigin else ''), childsubset)
+					for n, childsubset in enumerate(contsets(child)))
 			else: result.append(child)
 		node[:] = result
-	return canonicalize(tree)
+	return canonicalize(tree, preservehead=True)
 
 removesplit = re.compile("\*[0-9]*")
 def mergediscnodes(tree):
@@ -599,7 +594,8 @@ def mergediscnodes(tree):
 	for node in tree.subtrees():
 		merge = {}
 		for child in node:
-			if isinstance(child, Tree) and "*" in child.node:
+			if (isinstance(child, Tree)
+				and "*" in child.node and "|" not in child.node):
 				merge.setdefault(removesplit.sub("", child.node),
 							[]).append(child)
 		node[:] = [child for child in node if not isinstance(child, Tree)

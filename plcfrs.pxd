@@ -11,18 +11,18 @@ from array cimport array
 from agenda cimport EdgeAgenda
 
 cdef extern from "bit.h":
-	bint testbit(unsigned long vec, unsigned int pos)
+	bint testbit(unsigned long long vec, unsigned int pos)
 	bint testbitc(unsigned char arg, unsigned int pos)
 	bint testbitint(unsigned int arg, unsigned int pos)
 	bint testbitshort(unsigned short arg, unsigned int pos)
-	bint bitminmax(unsigned long a, unsigned long b)
-	int nextset(unsigned long vec, unsigned int pos)
-	int nextunset(unsigned long vec, unsigned int pos)
-	int bitcount(unsigned long vec)
-	int bitlength(unsigned long vec)
+	bint bitminmax(unsigned long long a, unsigned long long b)
+	int nextset(unsigned long long vec, unsigned int pos)
+	int nextunset(unsigned long long vec, unsigned int pos)
+	int bitcount(unsigned long long vec)
+	int bitlength(unsigned long long vec)
 
 cdef extern from "math.h":
 	bint isinf(double x)
 
-cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long vec)
+cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long long vec)
 cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right)
