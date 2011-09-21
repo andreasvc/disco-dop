@@ -121,6 +121,7 @@ from itertools import count
 from nltk import Tree, ImmutableTree, memoize
 from grammar import ranges, canonicalize
 from orderedset import OrderedSet
+from collections import defaultdict
 import re
 
 def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
@@ -566,9 +567,9 @@ def splitdiscnodes(tree, markorigin=False):
 
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
 	>>> print splitdiscnodes(tree.copy(True)).pprint(margin=999)
-	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VP* (VP* (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
+	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4) (VVPP 5)) (VAINF 6)))
 	>>> print splitdiscnodes(tree, markorigin=True).pprint(margin=999)
-	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VP*1 (VP*1 (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
+	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 (CARD 4) (VVPP 5)) (VAINF 6)))
 	"""
 	from grammar import postorder
 	for node in postorder(tree):
@@ -580,9 +581,9 @@ def splitdiscnodes(tree, markorigin=False):
 					for n, childsubset in enumerate(contsets(child)))
 			else: result.append(child)
 		node[:] = result
-	return canonicalize(tree, preservehead=True)
+	return canonicalize(tree)
 
-removesplit = re.compile("\*[0-9]*")
+splitlabel = re.compile("\*[0-9]*$")
 def mergediscnodes(tree):
 	""" Reverse of Boyd (2007): Discontinuity revisited.
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
@@ -592,14 +593,12 @@ def mergediscnodes(tree):
 	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))
 	"""
 	for node in tree.subtrees():
-		merge = {}
+		merge = defaultdict(list)
 		for child in node:
-			if (isinstance(child, Tree)
-				and "*" in child.node and "|" not in child.node):
-				merge.setdefault(removesplit.sub("", child.node),
-							[]).append(child)
+			if isinstance(child, Tree) and splitlabel.search(child.node):
+				merge[splitlabel.sub("", child.node)].append(child)
 		node[:] = [child for child in node if not isinstance(child, Tree)
-						or "*" not in child.node]
+						or not splitlabel.search(child.node)]
 		for label, subsets in merge.iteritems():
 			children = [child for component in subsets for child in component]
 			node.append(Tree(label, children))
