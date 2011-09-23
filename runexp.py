@@ -10,10 +10,10 @@ from nltk.metrics import precision, recall, f_measure, accuracy
 #import plac
 from negra import NegraCorpusReader, fold, unfold
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
-		export, read_rparse_grammar, mean, harmean, testgrammar,\
-		bracketings, printbrackets, rem_marks, alterbinarization, terminals,\
-		varstoindices, read_bitpar_grammar, read_penn_format, splitgrammar,\
-		coarse_grammar, grammarinfo, baseline, write_srcg_grammar
+		read_rparse_grammar, testgrammar, rem_marks, alterbinarization,\
+		terminals, varstoindices, read_bitpar_grammar, read_penn_format,\
+		splitgrammar, coarse_grammar, grammarinfo, baseline, write_srcg_grammar
+from eval import bracketings, printbrackets, export, mean, harmean
 from fragmentseeker import extractfragments
 from treetransforms import collinize, un_collinize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
@@ -285,12 +285,12 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			# build list of items in k-best derivs
 		else: chart = {}; start = False
 		if start:
-			result, prob = mostprobablederivation(chart, start, srcggrammar.tolabel)
+			resultstr, prob = mostprobablederivation(chart, start, srcggrammar.tolabel)
 			#derivout.write("vitprob=%.6g\n%s\n\n" % (
 			#				exp(-prob), terminals(result,  sent)))
-			result = Tree(result)
+			result = Tree(resultstr)
 			if mergesplitnodes:
-				un_collinize(result, childChar=":")
+				result.un_chomsky_normal_form(childChar=":")
 				mergediscnodes(result)
 			un_collinize(result)
 			rem_marks(result)
@@ -531,37 +531,32 @@ def readtepacoc():
 		elif fields[0] == "TuBa": break
 	return tepacocids, tepacocsents
 
-def parsetepacoc():
-	dop = True; srcg = True; estimator = 'ewe'; unfolded = False;
-	bintype = "nltk"; h=999; v=1; factor = "right"; doph=999
-	arity_marks = True; arity_marks_before_bin = False;
-	sample = False; both = False; m = 10000;
-	maxlen = 30; maxsent = 999; k = 50; prune=True; sldop_n=7
-	removeparentannotation=False; splitprune=False; mergesplitnodes=False
-	neverblockmarkovized=False; markorigin = False
+def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
+	bintype="collinize", h=1, v=1, factor="right", doph=1, arity_marks=True,
+	arity_marks_before_bin=False, sample=False, both=False, m=10000,
+	trainmaxlen=999, maxlen=40, maxsent=999, k=50, prune=True, sldop_n=7,
+	removeparentannotation=False, splitprune=True, mergesplitnodes=True,
+	neverblockmarkovized=False, markorigin = True, resultdir="tepacoc-40"):
 
 	format = '%(message)s'
 	logging.basicConfig(level=logging.DEBUG, format=format)
 	tepacocids, tepacocsents = readtepacoc()
-	corpus = NegraCorpusReader("../rparse", "tigerprocfullnew.export",
-			headorder=(bintype in ("collinize", "nltk")), headfinal=True,
-			headreverse=False, unfold=unfolded)
-	corpus_sents = list(corpus.sents())
-	corpus_taggedsents = list(corpus.tagged_sents())
-	corpus_trees = list(corpus.parsed_sents())
-	corpus_blocks = list(corpus.blocks())
-	thecorpus = [a for a in zip(corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks)]
-	cPickle.dump(thecorpus, open("tiger.pickle", "wb"), protocol=-1)
-	#corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(*cPickle.load(open("tiger.pickle", "rb")))
+	#corpus = NegraCorpusReader("../rparse", "tigerprocfullnew.export",
+	#		headorder=(bintype in ("collinize", "nltk")), headfinal=True,
+	#		headreverse=False, unfold=unfolded)
+	#corpus_sents = list(corpus.sents())
+	#corpus_taggedsents = list(corpus.tagged_sents())
+	#corpus_trees = list(corpus.parsed_sents())
+	#corpus_blocks = list(corpus.blocks())
+	#thecorpus = [a for a in zip(corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks)]
+	#cPickle.dump(thecorpus, open("tiger.pickle", "wb"), protocol=-1)
+	corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(*cPickle.load(open("tiger.pickle", "rb")))
 	train = 25005 #int(0.9 * len(corpus_sents))
 	trees, sents, blocks = zip(*[sent for n, sent in 
 				enumerate(zip(corpus_trees, corpus_sents,
-							corpus_blocks)) if len(sent[1]) <= maxlen and
-							n not in tepacocids][:train])
+							corpus_blocks)) if len(sent[1]) <= trainmaxlen
+							and n not in tepacocids][:train])
 	begin = time.clock()
-	if mergesplitnodes:
-		trees = [splitdiscnodes(a.copy(True), markorigin) for a in trees]
-		print "splitted discontinuous nodes"
 	if bintype == "optimal":
 		trees = [optimalbinarize(tree) for n, tree in enumerate(trees)]
 	elif bintype == "nltk":
@@ -570,22 +565,21 @@ def parsetepacoc():
 		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="",
 					leftMostUnary=True, rightMostUnary=True) for a in trees]
 	print "time elapsed during binarization: ", time.clock() - begin
-	srcggrammar = induce_srcg(list(trees), sents)
-	print "induced srcg grammar of", len(sents), "sentences"
+	coarsetrees = trees
+	if mergesplitnodes:
+		coarsetrees = [splitdiscnodes(a.copy(True), markorigin) for a in trees]
+		for a in coarsetrees: a.chomsky_normal_form(childChar=":")
+		print "splitted discontinuous nodes"
+	srcggrammar = induce_srcg(list(coarsetrees), sents)
+	print "induced", "pcfg" if mergesplitnodes else "srcg",
+	print "of", len(sents), "sentences"
 	grammarinfo(srcggrammar)
 	srcggrammar = splitgrammar(srcggrammar)
 	testgrammar(srcggrammar)
 	
 	if removeparentannotation:
 		for a in trees:
-			a.un_chomsky_normal_form()
 			a.chomsky_normal_form(factor="right", horzMarkov=doph)
-	if mergesplitnodes:
-		trees, sents, blocks = zip(*[sent for n, sent in 
-				enumerate(zip(corpus_trees, corpus_sents,
-							corpus_blocks)) if #len(sent[1]) <= maxlen and 
-							n not in tepacocids][:train])
-		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	dopgrammar = dop_srcg_rules(list(trees), list(sents),
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
 				shortestderiv=False, arity_marks=arity_marks)
@@ -625,7 +619,7 @@ def parsetepacoc():
 					k, sldop_n, False, None, "ROOT", True,
 					removeparentannotation, splitprune, mergesplitnodes,
 					markorigin, neverblockmarkovized,
-					filename="tepacoc-train30/%s" % cat,
+					filename="/".join((resultdir, cat)),
 					sentinit=cnt) #, doph=doph if doph != h else 999)
 		cnt += len(test[0])
 		print "time elapsed during parsing: ", time.clock() - begin
@@ -646,14 +640,10 @@ def parsetepacoc():
 			dnoparse, goldbrackets, scandb, dcandb, False, arity_marks,
 			bintype, estimator, sldop_n)
 
-def myprint(a):
-	sys.stdout.write(a)
-	print
-
 if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	#plac.call(main)
 	#cftiger()
-	#parsetepacoc()
-	main()
+	parsetepacoc()
+	#main()
