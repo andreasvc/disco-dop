@@ -4,6 +4,44 @@ from collections import namedtuple
 from array import array
 from math import exp, log
 
+def gen(grammar, start=None, verbose=False):
+	""" generate a random sentence """
+	if start is None: start = grammar.toid['ROOT']
+	if not grammar.bylhs[start]:
+		terminal = chooserule(grammar.lexicalbylhs[start])
+		return [[terminal.word]]
+	rule = chooserule(grammar.bylhs[start])
+	if not rule.rhs2:
+		return gen(grammar, rule.rhs1)
+	return compose(rule, gen(grammar, rule.rhs1), gen(grammar, rule.rhs2), verbose)
+
+def compose(rule, l1, l2, verbose):
+	result = []
+	if verbose: print l1, '+', l2, '=',
+	for n,a in enumerate(rule.lengths):
+		arg = []
+		for b in range(a):
+			if (rule.args[n] >> b) & 1:
+				arg += l2.pop(0)
+			else:
+				arg += l1.pop(0)
+		result.append(arg)
+	if verbose: print result
+	return result
+
+def chooserule(rules, normalize=False):
+	""" given a list of objects with probabilities,
+	choose one according to that distribution."""
+	from random import random
+	random_position = random()
+	if normalize: random_position *= sum(a.prob for a in rules)
+	current_position = 0.0
+	for r in rules:
+		current_position += exp(-r.prob)
+		if random_position < current_position:
+			return r
+	raise ValueError
+
 def splitgrammar(grammar, lexicon):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
@@ -73,8 +111,6 @@ def arraytoyf(args, lengths):
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
 							for n, a in zip(lengths, args))
 
-
-
 def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
 	""" Reads a grammar as produced by write_srcg_grammar. """
 	rules = (a[:-1].split('\t') for a in codecs.open(rules, encoding=encoding))
@@ -84,55 +120,6 @@ def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
 			for b in a[-2].split(","))), float(a[-1])) for a in rules]
 	lexicon = [((tuple(a[:-2]), (a[-2])), float(a[-1])) for a in lexicon]
 	return rules, lexicon
-
-def gen(grammar, start=None, verbose=False):
-	""" generate a random sentence """
-	if start is None: start = grammar.toid['ROOT']
-	if not grammar.bylhs[start]:
-		terminal = chooserule(grammar.lexicalbylhs[start])
-		return [[terminal.word]]
-	rule = chooserule(grammar.bylhs[start])
-	if not rule.rhs2:
-		return gen(grammar, rule.rhs1)
-	return compose(rule, gen(grammar, rule.rhs1), gen(grammar, rule.rhs2), verbose)
-
-def compose(rule, l1, l2, verbose):
-	result = []
-	if verbose: print l1, '+', l2, '=',
-	for n,a in enumerate(rule.lengths):
-		arg = []
-		for b in range(a):
-			if (rule.args[n] >> b) & 1:
-				arg += l2.pop(0)
-			else:
-				arg += l1.pop(0)
-		result.append(arg)
-	if verbose: print result
-	return result
-
-def chooserule(rules, normalize=False):
-	from random import random
-	random_position = random()
-	if normalize: random_position *= sum(a.prob for a in rules)
-	current_position = 0.0
-	for r in rules:
-		current_position += exp(-r.prob)
-		if random_position < current_position:
-			return r
-	raise ValueError
-
-def weighted_choice(probabilities, normalize=False):
-	""" given a list of probabilities, choose an item according to this
-	distribution by returning an index. """
-	from random import random
-	random_position = random()
-	if normalize: random_position *= sum(probabilities)
-	current_position = 0.0
-	for i, p in enumerate(probabilities):
-		current_position += p
-		if random_position < current_position:
-			return i
-	raise ValueError
 
 def test():
 	rules = [
