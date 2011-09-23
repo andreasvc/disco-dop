@@ -2,10 +2,13 @@ from nltk import Tree, ImmutableTree
 from collections import defaultdict
 import codecs
 def label(tree, sent):
+	""" format label for latex """
 	if isinstance(tree, Tree):
 		l = tree.node.replace("$", r"\$").replace("[", "(")
+		# underscore => math mode
 		if "|" in l:
-			x, y = l.split("|")
+			x, y = l.split("|", 1)
+			y = y.replace("<", "").replace(">", "")
 			if "^" in y:
 				y, z = y.split("^")
 				y = y[1:-1]
@@ -14,17 +17,22 @@ def label(tree, sent):
 				l = "$ \\textsf{%s}_\\textsf{%s} $" % (x, y.replace("-",","))
 		return l
 	else: return "%s" % sent[int(tree)]
-	#"\\fontsize{4}{5}\\selectfont"
 
 def tikzdtree(tree, sent):
+	""" produce Tikz code to draw a tree. """
 	#assert len(tree.leaves()) == len(sent)
 	#assert sorted(tree.leaves()) == range(len(sent))
 	for a in list(tree.subtrees(lambda n: isinstance(n[0], Tree)))[::-1]:
 		a.sort(key=lambda n: n.leaves())
-	result = [r"\begin{tikzpicture}[scale=0.5,"
-	r"	cross line/.style={preaction={draw=white, -, line width=6pt}}]",
-	r"\tiny\sffamily", r"\path"]
-	scale = 2
+	result = [r"""\begin{tikzpicture}[scale=0.75,
+		minimum height=1.25em,
+		text height=1.25ex,
+		text depth=.25ex,
+		inner sep=0mm,
+		node distance=1mm]""",
+	r"\footnotesize\sffamily",
+	r"\path"]
+	scale = 1
 	count = 0
 	ids = {}
 	crossed = set()
@@ -107,7 +115,7 @@ def tikzdtree(tree, sent):
 		for m, i in enumerate(matrix[n]):
 			if isinstance(i, tuple):
 				d = scale * depth - n - deleted - 1
-				if d == 1: d = 0.75
+				if d == 0: d = 0.25
 				result.append("\t(%d, %g) node (n%d) {%s}"
 					% (m, d, count, label(tree[i], sent)))
 				ids[i] = "n%d" % count
