@@ -322,17 +322,10 @@ def postorder(tree, f=None):
 				if not f or f(a): yield a
 	if not f or f(tree): yield tree
 
-def canonicalize(tree, preservehead=False):
+def canonicalize(tree):
 	""" canonical linear precedence (of first component of each node) order """
-	if preservehead:
-		for a in postorder(tree, lambda n: len(n) > 1):
-			head = a[-1]
-			a.sort(key=lambda n: n.leaves())
-			# head final, reverse lhs:  A B C^ D E => E D A B C^
-			tree[:] = tree[a.index(head)+1:][::-1] + tree[:a.index(head)+1]
-	else:
-		for a in postorder(tree, lambda n: len(n) > 1):
-			a.sort(key=lambda n: n.leaves())
+	for a in postorder(tree, lambda n: len(n) > 1):
+		a.sort(key=lambda n: n.leaves())
 	return tree
 
 def rangeheads(s):
@@ -593,8 +586,41 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 							for rule, p in grammar])
 
 def write_bitpar_grammar(grammar, rules, lexicon, encoding='utf-8'):
-	raise NotImplementedError
+	""" write grammar as a bitpar grammar to files specified by rules and
+	lexicon."""
+	unary = 0; binary = 1
+	rules = codecs.open(rules, "w", encoding=encoding)
+	for a in grammar.bylhs:
+		for rule in a:
+			assert len(rule.args == 1)		#CFG rule?
+			rules.write("%f\t%s\t%s\n" % (
+					rule.prob, grammar.tolabel[rule.lhs],
+					"".join(grammar.tolabel[rule.rhs1],
+					"\t" + grammar.tolabel[rule.rhs2] if rule.rhs2 else '')))
+	lexicon = codecs.open(lexicon, "w", encoding=encoding)
+	for word in grammar.lexical:
+		lexicon.write("%s\t" % word)
+		for term in grammar.lexical[word]:
+			lexicon.write("%f\t%s" % (term.prob, grammar.tolabel[term.lhs]))
+		lexicon.write("\n")
+	rules.close(); lexicon.close()
 
+def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
+	""" Takes a bitpar grammar and converts it to the format of
+	Mark Jonhson's cky parser. """
+	grammar = []
+	for a in codecs.open(rules, encoding=encoding):
+		a = a.split()
+		p, rule = a[0], a[1:]
+		grammar.append("%s %s --> %s\n" % (p, rule[0], " ".join(rule[1:])))
+	for a in codecs.open(lexicon, encoding=encoding):
+		a = a.split()
+		word, tags = a[0], a[1:]
+		tags = zip(tags[::2], tags[1::2])
+		grammar.extend("%s %s --> %s\n" % (p, t, word) for t, p in tags)
+	assert "VROOT" in grammar[0]
+	codecs.open(out, "w", encoding=encoding).writelines(grammar)
+			
 def write_srcg_grammar(grammar, rules, lexicon, encoding='utf-8'):
 	""" Writes a grammar as produced by induce_srcg or dop_srcg_rules (so
 	before it goes through splitgrammar) into a simple text file format.
@@ -612,6 +638,7 @@ def write_srcg_grammar(grammar, rules, lexicon, encoding='utf-8'):
 		else:
 			yfstr = ",".join("".join(map(str, a)) for a in yf)
 			rules.write("%s\t%s\t%g\n" % ("\t".join(r), yfstr, w))
+	rules.close(); lexicon.close()
 
 def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
 	""" Reads a grammar as produced by write_srcg_grammar. """
@@ -639,22 +666,6 @@ def terminals(tree, sent):
 	for a, (w, t) in zip(tree.treepositions('leaves'), sent):
 		tree[a] = w
 	return tree.pprint(margin=999)
-
-def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
-	""" Takes a bitpar grammar and converts it to the format of
-	Mark Jonhson's cky parser. """
-	grammar = []
-	for a in codecs.open(rules, encoding=encoding):
-		a = a.split()
-		p, rule = a[0], a[1:]
-		grammar.append("%s %s --> %s\n" % (p, rule[0], " ".join(rule[1:])))
-	for a in codecs.open(lexicon, encoding=encoding):
-		a = a.split()
-		word, tags = a[0], a[1:]
-		tags = zip(tags[::2], tags[1::2])
-		grammar.extend("%s %s --> %s\n" % (p, t, word) for t, p in tags)
-	assert "VROOT" in grammar[0]
-	codecs.open(out, "w", encoding=encoding).writelines(grammar)
 
 def rem_marks(tree):
 	""" Remove arity marks, make sure indices at leaves are integers."""
@@ -725,52 +736,6 @@ def grammarinfo(grammar):
 	print printrule(r, yf, w)
 	ll = sum(1 for (rule,yf),w in grammar if rule[1] == "Epsilon")
 	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
-
-def bracketings(tree):
-	""" Return the labeled set of bracketings for a tree: 
-	for each nonterminal node, the set will contain a tuple with the label and
-	the set of terminals which it dominates.
-	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"))
-	frozenset([('VP', frozenset(['0', '2'])),
-				('S', frozenset(['1', '0', '2']))])
-	"""
-	return frozenset( (a.node, frozenset(a.leaves()) )
-				for a in tree.subtrees() if isinstance(a[0], Tree))
-
-def printbrackets(brackets):
-	return ", ".join("%s[%s]" % (a,
-					",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
-					if len(x) > 1 else str(x[0]), ranges(sorted(b)))))
-					for a,b in brackets)
-
-def harmean(seq):
-	try: return len([a for a in seq if a]) / sum(1./a if a else 0. for a in seq)
-	except: return "zerodiv"
-
-def mean(seq):
-	return sum(seq) / float(len(seq)) if seq else "zerodiv"
-
-def export(tree, sent, n):
-	""" Convert a tree with indices as leafs and a sentence with the
-	corresponding non-terminals to a single string in Negra's export format.
-	NB: IDs do not follow the convention that IDs of children are all lower. """
-	result = ["#BOS %d" % n]
-	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
-	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
-	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
-	for i, word in enumerate(sent):
-		idx = wordids[i]
-		result.append("\t".join((word[0],
-				tree[idx[:-1]].node.replace("$[","$("),
-				"--", "--",
-				str(500+nonpreterminals.index(idx[:-2]) if len(idx) > 2 else 0))))
-	for idx in nonpreterminals:
-		result.append("\t".join(("#%d" % (500 + nonpreterminals.index(idx)),
-				tree[idx].node,
-				"--", "--",
-				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
-	result.append("#EOS %d" % n)
-	return "\n".join(result) #.encode("utf-8")
 
 def read_rparse_grammar(file):
 	result = []
