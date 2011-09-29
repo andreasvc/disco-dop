@@ -3,21 +3,25 @@ import codecs
 from collections import namedtuple
 from array import array
 from math import exp, log
+from random import random
+from containers import Rule, Terminal
 
 def gen(grammar, start=None, verbose=False):
 	""" generate a random sentence """
 	if start is None: start = grammar.toid['ROOT']
 	if not grammar.bylhs[start]:
 		terminal = chooserule(grammar.lexicalbylhs[start])
-		return [[terminal.word]]
+		return ( terminal.prob, [[terminal.word]] )
 	rule = chooserule(grammar.bylhs[start])
 	if not rule.rhs2:
-		return gen(grammar, rule.rhs1)
-	return compose(rule, gen(grammar, rule.rhs1), gen(grammar, rule.rhs2), verbose)
+		p1, l1 = gen(grammar, rule.rhs1, verbose)
+		return (p1+rule.prob, l1)
+	return compose(rule, gen(grammar, rule.rhs1, verbose),
+				gen(grammar, rule.rhs2, verbose), verbose)
 
-def compose(rule, l1, l2, verbose):
+def compose(rule, (p1, l1), (p2, l2), verbose):
 	result = []
-	if verbose: print l1, '+', l2, '=',
+	if verbose: print "[%g] %s + %s =" % (exp(-(rule.prob+p1+p2)), l1, l2,),
 	for n,a in enumerate(rule.lengths):
 		arg = []
 		for b in range(a):
@@ -27,19 +31,16 @@ def compose(rule, l1, l2, verbose):
 				arg += l1.pop(0)
 		result.append(arg)
 	if verbose: print result
-	return result
+	return (rule.prob+p1+p2, result)
 
 def chooserule(rules, normalize=False):
 	""" given a list of objects with probabilities,
 	choose one according to that distribution."""
-	from random import random
-	random_position = random()
-	if normalize: random_position *= sum(a.prob for a in rules)
-	current_position = 0.0
+	position = random()
+	if normalize: position *= sum(a.prob for a in rules)
 	for r in rules:
-		current_position += exp(-r.prob)
-		if random_position < current_position:
-			return r
+		position -= exp(-r.prob)
+		if position < 0: return r
 	raise ValueError
 
 def splitgrammar(grammar, lexicon):
@@ -48,7 +49,6 @@ def splitgrammar(grammar, lexicon):
 	accommodate min-heaps.
 	Can only represent ordered SRCG rules (monotone LCFRS).
 	This version represent rules in dedicated Rule objects, """
-	from containers import Rule, Terminal
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs lexicalbylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
@@ -133,14 +133,17 @@ def test():
 		((('VMFIN', 'Epsilon'), u'muss'),        0.0),
 		((('VVPP', 'Epsilon'),  u'nachgedacht'), 0.0)]
 	grammar = splitgrammar(rules, lexicon)
-	print " ".join(gen(grammar, start=grammar.toid['S'], verbose=True).pop())
+	p, sent = gen(grammar, start=grammar.toid['S'], verbose=True)
+	print " ".join(sent.pop())
 
 def main():
 	rules, lexicon = read_srcg_grammar("rules.srcg", "lexicon.srcg")
 	grammar = splitgrammar(rules, lexicon)
 	for a in range(20):
-		print " ".join(gen(grammar)[0])
+		p, sent = gen(grammar)
+		print "[%g] %s" % (exp(-p), " ".join(sent.pop()))
 
 if __name__ == '__main__':
-	#test()
-	main()
+	import sys
+	if "test" in sys.argv: test()
+	else: main()
