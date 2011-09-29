@@ -1,8 +1,11 @@
 # -*- coding: UTF-8 -*-
+import sys
+from itertools import count, imap, izip
+from operator import itemgetter
 from nltk import Tree
 from nltk.metrics import precision, recall, f_measure, accuracy
 from negra import NegraCorpusReader
-import sys
+from grammar import ranges
 #import plac
 
 def bracketings(tree):
@@ -54,7 +57,7 @@ def export(tree, sent, n):
 
 def main():
 	if len(sys.argv) != 3:
-		print "wrong number of arguments. usage: %s gold parses" % sys.argv[0]
+		print "wrong number of arguments. usage: %s gold parses (where gold and parses are files in export format)" % sys.argv[0]
 		print sys.argv
 		return
 	gold = NegraCorpusReader(".", sys.argv[1])
@@ -62,19 +65,45 @@ def main():
 	assert len(gold.sents())
 	assert len(gold.sents()) == len(parses.sents())
 
-	exact = sum(1.0 for a,b
-				in zip(gold.parsed_sents(), parses.parsed_sents())
-				if bracketings(a) == bracketings(b))
-	goldbrackets = frozenset((n, a)
-			for n, sent in enumerate(gold.parsed_sents())
-				for a in bracketings(sent))
-	candb = frozenset((n, a)
-			for n, sent in enumerate(parses.parsed_sents())
-				for a in bracketings(sent))
-
-	print "exact match:\t\t%5.2f" % (100 * (exact / len(gold.sents())))
-	print "labeled precision:\t%5.2f" % (100 * precision(goldbrackets, candb))
-	print "labeled recall:\t\t%5.2f" % (100 * recall(goldbrackets, candb))
-	print "labeled f-measure:\t%5.2f" % (100 * f_measure(goldbrackets, candb))
+	#print "#. precision\trecall\t\tf-measure\tPOS accuracy"
+	print """\
+   Sentence                 Matched   Brackets            Corr      Tag
+  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy
+______________________________________________________________________________"""
+	exact = 0.
+	goldpos = []
+	candpos = []
+	goldb = set()
+	candb = set()
+	for n, csent, gsent in izip(count(), parses.parsed_sents(), gold.parsed_sents()):
+		cpos = sorted(csent.pos())
+		gpos = sorted(gsent.pos())
+		cbrack = bracketings(csent)
+		gbrack = bracketings(gsent)
+		if cbrack == gbrack: exact += 1
+		candb.update((n,a) for a in cbrack)
+		goldb.update((n,a) for a in gbrack)
+		goldpos.extend(gpos)
+		candpos.extend(cpos)
+		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f" % (
+			n+1,
+			len(gpos),
+			100 * recall(gbrack, cbrack),
+			100 * precision(gbrack, cbrack),
+			len(gbrack & cbrack),
+			len(gbrack),
+			len(cbrack),
+			len(gpos), # how is words supposed to be different from len?? should we leave out punctuation or something?
+			sum(1 for a,b in zip(gpos, cpos) if a==b),
+			100 * accuracy(gpos, cpos)
+			)
+	# what about multiple unaries w/same label??
+	print "\n____________ Summary ____________"
+	print "number of sentences:       %6d" % (len(gold.sents()))
+	print "labeled precision:         %6.2f" % (100 * precision(goldb, candb))
+	print "labeled recall:            %6.2f" % (100 * recall(goldb, candb))
+	print "labeled f-measure:         %6.2f" % (100 * f_measure(goldb, candb))
+	print "exact match:               %6.2f" % (100 * (exact / len(gold.sents())))
+	print "Tagging accuracy:          %6.2f" % (100 * accuracy(goldpos, candpos))
 
 if __name__ == '__main__': main()
