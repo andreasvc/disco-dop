@@ -19,7 +19,7 @@ from treetransforms import collinize, un_collinize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
 from plcfrs import parse
 from coarsetofine import prunelist_fromchart
-from disambiguation import mostprobableparse, mostprobablederivation,\
+from disambiguation import marginalize, viterbiderivation,\
 							sldop, sldop_simple
 
 # todo:
@@ -36,12 +36,12 @@ def main(
 	corpusfile="negraproc.export",
 	#corpusfile="tigerprocfull.export",
 	maxlen = 40,  # max number of words for sentences in test corpus
-	trainmaxlen = 40, # max number of words for sentences in train corpus
+	trainmaxlen = 9999, # max number of words for sentences in train corpus
 	#train = 7200, maxsent = 100,	# number of sentences to parse
 	#train = 0.9, maxsent = 9999,	# percent of sentences to parse
 	train = 18602, maxsent = 1000, # number of sentences to parse
-	skip=0,
-	#skip=1000, #skip dev set to get test set
+	#skip=0,	# dev set
+	skip=1000, #skip dev set to get test set
 	bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
 	factor = "right",
 	v = 1,
@@ -94,7 +94,9 @@ def main(
 	#test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
 
 	test = NegraCorpusReader(corpusdir, corpusfile)
-	test = test.parsed_sents()[train+skip:], test.tagged_sents()[train+skip:], test.blocks()[train+skip:]
+	test = (test.parsed_sents()[train+skip:train+skip+maxsent],
+			test.tagged_sents()[train+skip:train+skip+maxsent],
+			test.blocks()[train+skip:train+skip+maxsent])
 
 	logging.info("%d test sentences (before length restriction)" % len(test[0]))
 	test = zip(*((a,b,c) for a,b,c in zip(*test) if len(b) <= maxlen))
@@ -285,7 +287,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			# build list of items in k-best derivs
 		else: chart = {}; start = False
 		if start:
-			resultstr, prob = mostprobablederivation(chart, start, srcggrammar.tolabel)
+			resultstr, prob = viterbiderivation(chart, start, srcggrammar.tolabel)
 			#derivout.write("vitprob=%.6g\n%s\n\n" % (
 			#				exp(-prob), terminals(result,  sent)))
 			result = Tree(resultstr)
@@ -355,7 +357,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		else: chart = {}; start = False
 		if dop and start:
 			if estimator == "shortest":
-				mpp = mostprobableparse(chart, start, dopgrammar.tolabel, n=m,
+				mpp = marginalize(chart, start, dopgrammar.tolabel, n=m,
 						sample=sample, both=both, shortest=True,
 						secondarymodel=secondarymodel).items()
 			elif estimator == "sl-dop":
@@ -366,7 +368,7 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 				# of addressed nodes
 				mpp = sldop_simple(chart, start, dopgrammar, m, sldop_n)
 			else: #dop1, ewe
-				mpp = mostprobableparse(chart, start, dopgrammar.tolabel,
+				mpp = marginalize(chart, start, dopgrammar.tolabel,
 									n=m, sample=sample, both=both).items()
 			dresult, prob = max(mpp, key=itemgetter(1))
 			dresult = Tree(dresult)
@@ -645,5 +647,5 @@ if __name__ == '__main__':
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	#plac.call(main)
 	#cftiger()
-	parsetepacoc()
-	#main()
+	#parsetepacoc()
+	main()

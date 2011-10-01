@@ -146,7 +146,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 	try: from plcfrs import parse, pprint_chart
 	except ImportError: from oldplcfrs import parse, pprint_chart
 	#from coarsetofine import kbest_outside, merged_kbest, prunelist_fromchart
-	from disambiguation import mostprobableparse
+	from disambiguation import marginalize
 	from treetransforms import mergediscnodes, un_collinize
 	from containers import getlabel, getvec
 	from grammar import canonicalize, rem_marks
@@ -155,7 +155,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 	print " C O A R S E ",
 	p, start = parse(sent, coarse, start=coarse.toid['ROOT'], tags=tags)
 	if start:
-		mpp = mostprobableparse(p, start, coarse.tolabel)
+		mpp = marginalize(p, start, coarse.tolabel)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
@@ -187,7 +187,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 	print " F I N E ",
 	pp, start = parse(sent, fine, start=fine.toid['ROOT'], tags=tags, prunelist=None, neverblockmarkovized=pa, neverblockdiscontinuous=False, splitprune=split)
 	if start:
-		mpp = mostprobableparse(pp, start, fine.tolabel)
+		mpp = marginalize(pp, start, fine.tolabel)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)

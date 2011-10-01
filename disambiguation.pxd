@@ -4,11 +4,11 @@ from containers cimport ChartItem, Edge, getlabel, getvec, edgecast
 
 @cython.locals(
 	edge=Edge)
-cpdef mostprobablederivation(chart, start, tolabel)
+cpdef viterbiderivation(chart, start, tolabel)
 
 @cython.locals(
 	edge=Edge)
-cdef getmpd(chart, ChartItem start, tolabel)
+cdef getviterbi(chart, ChartItem start, tolabel)
 
 @cython.locals(
 	parsetrees=dict,
@@ -16,14 +16,14 @@ cdef getmpd(chart, ChartItem start, tolabel)
 	maxprob=cython.double,
 	m=cython.int,
 	edge=Edge)
-cpdef mostprobableparse(chart, start, tolabel, n=*, sample=*, both=*, shortest=*, secondarymodel=*)
+cpdef marginalize(chart, start, tolabel, n=*, sample=*, both=*, shortest=*, secondarymodel=*, mpd=*)
 
 @cython.locals(
 	edge=Edge,
 	child=ChartItem)
-cpdef samplechart(dict chart, ChartItem start, dict tolabel)
+cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables)
 
-cpdef getsamples(dict chart, ChartItem start, int n, dict tolabel)
+#cpdef getsamples(dict chart, ChartItem start, int n, dict tolabel)
 
 cdef inline double sumderivs(ts, derivations)
 cdef inline int minunaddressed(tt, idsremoved)

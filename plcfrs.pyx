@@ -408,7 +408,7 @@ def pprint_chart(chart, sent, tolabel):
 		print
 
 def do(sent, grammar):
-	from disambiguation import mostprobableparse
+	from disambiguation import marginalize
 	from operator import itemgetter
 	print "sentence", sent
 	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
@@ -417,7 +417,7 @@ def do(sent, grammar):
 		print "no parse"
 	else:
 		print "10 best parse trees:"
-		mpp = mostprobableparse(chart, start, grammar.tolabel)
+		mpp = marginalize(chart, start, grammar.tolabel)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))): print p,a
 		print
 

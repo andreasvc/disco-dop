@@ -1,14 +1,17 @@
 import re, logging
-from random import choice
+from random import choice, random
 from heapq import nlargest
 from math import fsum, exp, log
+from bisect import bisect_right
 from collections import defaultdict
 from operator import itemgetter
 from nltk import Tree
 from grammar import induce_srcg
 from kbest import * #lazykbest
-try: getlabel(None)
-except NameError: from containers import * #getlabel, getvec
+try:
+	import cython
+	assert cython.compiled
+except: from containers import * #getlabel, getvec
 try: from plcfrs import parse
 except ImportError: from oldplcfrs import parse
 infinity = float('infinity')
@@ -102,42 +105,61 @@ def sumderivs(ts, derivations):
 def minunaddressed(tt, idsremoved):
 	return min([(t.count("(") - t.count("@")) for t in idsremoved[tt]])
 
-def samplechart(chart, start, tolabel):
-	""" Samples a derivation from a chart.
-	NB: this does not sample properly, as it ignores the distribution of
-	probabilities and samples uniformly instead. """
-	edge = choice(chart[start])
+def samplechart(chart, start, tolabel, tables):
+	""" Samples a derivation from a chart. """
+	#NB: this does not sample properly, as it ignores the distribution of
+	#probabilities and samples uniformly instead. 
+	#edge = choice(chart[start])
+	rnd = random() * tables[start][-1]
+	idx = bisect_right(tables[start], rnd)
+	edge = chart[start][idx]
 	if edge.left.label == 0: # == "Epsilon":
 		return "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
-	children = [samplechart(chart, child, tolabel)
+	children = [samplechart(chart, child, tolabel, tables)
 				for child in (edge.left, edge.right) if child.label]
 	tree = "(%s %s)" % (tolabel[start.label],
 							" ".join([a for a,b in children]))
 	return tree, edge.prob + sum([b for a,b in children])
 
+	#probmass = sum([exp(-edge.prob) for edge in edges])
+	#minprob = min([edge.prob for edge in edges])
+	#probmass = exp(fsum([minprob,
+	#					log(fsum([exp(edge.prob - minprob)
+	#								for edge in edges]))]))
+
 def getsamples(chart, start, n, tolabel):
-	derivations = set([samplechart(chart, start, tolabel) for x in range(n)])
+	tables = {}
+	for item in chart:
+		chart[item].sort(key=lambda edge: edge.prob)
+		tables[item] = []; prev = 0.0
+		minprob = chart[item][0].prob
+		for edge in chart[item]:
+			#prev += exp(-edge.prob); tables[item].append(prev)
+			prev += exp(-minprob - edge.prob)
+			tables[item].append(exp(minprob + log(prev)))
+	derivations = set([samplechart(chart, start, tolabel, tables)
+						for x in range(n)])
 	derivations.discard(None)
 	return derivations
 
-def mostprobablederivation(chart, start, tolabel):
+def viterbiderivation(chart, start, tolabel):
 	edge = edgecast(min(chart[start]))
-	return getmpd(chart, start, tolabel), edge.inside
+	return getviterbi(chart, start, tolabel), edge.inside
 
-def getmpd(chart, start, tolabel):
+def getviterbi(chart, start, tolabel):
 	edge = min(chart[start])
 	if edge.right.label: #binary
 		return "(%s %s %s)" % (tolabel[start.label],
-					getmpd(chart, edge.left, tolabel),
-					getmpd(chart, edge.right, tolabel))
+					getviterbi(chart, edge.left, tolabel),
+					getviterbi(chart, edge.right, tolabel))
 	else: #unary or terminal
 		return "(%s %s)" % (tolabel[start.label],
-					getmpd(chart, edge.left, tolabel) if edge.left.label
+					getviterbi(chart, edge.left, tolabel) if edge.left.label
 									else str(edge.left.vec))
 
-def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None):
-	""" approximate MPP by summing over n random/best derivations from chart,
-	return a dictionary mapping parsetrees to probabilities """
+def marginalize(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None, mpd=False):
+	""" approximate MPP or MPD by summing over n random/best derivations from
+	chart, return a dictionary mapping parsetrees to probabilities """
 	parsetrees = {}
 	m = 0
 	logging.debug("sample = %r kbest = %r" % (sample or both, (not sample) or both))
@@ -168,7 +190,7 @@ def mostprobableparse(chart, start, tolabel, n=10, sample=False, both=False, sho
 			prob = -fsum([secondarymodel[r] for r, w in rules
 											if r[0][1] != 'Epsilon'])
 
-		tree = removeids.sub("", deriv)
+		tree = removeids.sub("@" if mpd else "", deriv)
 		if tree in parsetrees: parsetrees[tree].append(-prob)
 		else: parsetrees[tree] = [-prob]
 	# Adding probabilities in log space
@@ -187,8 +209,8 @@ def main():
 	from oldplcfrs import parse
 	def e(x):
 		if isinstance(x[1], tuple):
-			return x[0], (int(abs(x[1][0])), x[1][1])
-		return x
+			return x[0].replace("@", ""), (int(abs(x[1][0])), x[1][1])
+		return x[0].replace("@", ""), x[1]
 	def f(x):
 		return x[0], exp(-x[1])
 	trees = map(lambda t: Tree.parse(t, parse_leaf=int),
@@ -233,13 +255,16 @@ def main():
 	shortest, secondarymodel = dop_srcg_rules(trees, sents, shortestderiv=True)
 	shortest = splitgrammar(shortest)
 	chart, start = parse("a b c".split(), grammar, None, grammar.toid['ROOT'], True)
-	mpd = mostprobablederivation(chart, start, grammar.tolabel)
-	mpp = mostprobableparse(chart, start, grammar.tolabel, n=1000)
-	mppsampled = mostprobableparse(chart, start, grammar.tolabel, n=1000, sample=True)
+	vit = viterbiderivation(chart, start, grammar.tolabel)
+	mpd = marginalize(chart, start, grammar.tolabel, n=1000, mpd=True)
+	mpp = marginalize(chart, start, grammar.tolabel, n=1000)
+	mppsampled = marginalize(chart, start, grammar.tolabel, n=1000, sample=True)
 	sldopsimple = sldop_simple(chart, start, grammar, 1000, 7)
 	sldop1 = sldop(chart, start, "a b c".split(), None, grammar, shortest, 1000, 7, sample=False, both=False)
-	short = mostprobableparse(chart, start, shortest.tolabel, 1000, shortest=True, secondarymodel=secondarymodel)
-	print "MPD:\t\t%s %r" % (removeids.sub("", mpd[0]), exp(-mpd[1]))
+	short = marginalize(chart, start, shortest.tolabel, 1000, shortest=True, secondarymodel=secondarymodel)
+	print
+	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))
+	print "MPD:\t\t%s %r" % e(max(mpd.items(), key=itemgetter(1)))
 	print "MPP:\t\t%s %r" % e(max(mpp.items(), key=itemgetter(1)))
 	print "MPP sampled:\t%s %r" % e(max(mppsampled.items(), key=itemgetter(1)))
 	print "SL-DOP n=7:\t%s %r" % e(max(sldop1, key=itemgetter(1)))

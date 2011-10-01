@@ -254,7 +254,7 @@ def splitgrammar(grammar):
 	Can only represent ordered SRCG rules (monotone LCFRS).
 	This version represent rules in dedicated Rule objects, """
 	from containers import Rule, Terminal
-	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel arity".split())
+	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs lexicalbylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
 		+ sorted(set(str(nt) for (rule, yf), weight in grammar for nt in rule)
@@ -267,6 +267,7 @@ def splitgrammar(grammar):
 	rbinary = [[] for _ in nonterminals]
 	arity = array('B', [0] * len(nonterminals))
 	lexical = {}
+	lexicalbylhs = {}
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (rule, yf), w in grammar:
 		if len(rule) == 2 and toid[rule[1]] == 0:
@@ -286,6 +287,7 @@ def splitgrammar(grammar):
 			if r.rhs1 == 0: #Epsilon
 				# lexical productions (mis)use the field for the yield function to store the word
 				lexical.setdefault(yf[0], []).append(r)
+				lexicalbylhs.setdefault(r.lhs, []).append(r)
 			else:
 				unary[r.rhs1].append(r)
 				bylhs[r.lhs].append(r)
@@ -295,7 +297,7 @@ def splitgrammar(grammar):
 			bylhs[r.lhs].append(r)
 		else: raise ValueError("grammar not binarized: %s" % repr(r))
 	#assert 0 not in arity[1:]
-	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel, arity)
+	return Grammar(unary, lbinary, rbinary, lexical, bylhs, lexicalbylhs, toid, tolabel, arity)
 
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
@@ -751,11 +753,11 @@ def read_rparse_grammar(file):
 def do(sent, grammar):
 	try: from plcfrs import parse, pprint_chart
 	except ImportError: from oldplcfrs import parse, pprint_chart
-	from disambiguation import mostprobableparse
+	from disambiguation import marginalize
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'])
 	if start:
-		mpp = mostprobableparse(p, start, grammar.tolabel)
+		mpp = marginalize(p, start, grammar.tolabel)
 		for t in mpp:
 			print exp(mpp[t]), t
 	else:
@@ -822,14 +824,14 @@ def main():
 	testgrammar(grammar)
 	try: from plcfrs import parse
 	except ImportError: from oldplcfrs import parse
-	from disambiguation import mostprobableparse
+	from disambiguation import marginalize
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
 		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], exhaustive=True)
 		print "gold", canonicalize(tree)
 		print "parsetrees:"
 		if p:
-			mpp = mostprobableparse(p, start, grammar.tolabel)
+			mpp = marginalize(p, start, grammar.tolabel)
 			for t in mpp:
 				t2 = Tree(t)
 				for idx in t2.treepositions('leaves'): t2[idx] = int(t2[idx])
