@@ -4,7 +4,7 @@ import codecs
 def label(tree, sent):
 	""" format label for latex """
 	if isinstance(tree, Tree):
-		l = tree.node.replace("$", r"\$").replace("[", "(")
+		l = tree.node.replace("$", r"\$").replace("[", "(").replace("_", "\_")
 		# underscore => math mode
 		if "|" in l:
 			x, y = l.split("|", 1)
@@ -24,15 +24,15 @@ def tikzdtree(tree, sent):
 	#assert sorted(tree.leaves()) == range(len(sent))
 	for a in list(tree.subtrees(lambda n: isinstance(n[0], Tree)))[::-1]:
 		a.sort(key=lambda n: n.leaves())
-	result = [r"""\begin{tikzpicture}[scale=0.75,
+	result = [r"""\begin{tikzpicture}[scale=1,
 		minimum height=1.25em,
 		text height=1.25ex,
 		text depth=.25ex,
 		inner sep=0mm,
 		node distance=1mm]""",
 	r"\footnotesize\sffamily",
-	r"\path"]
-	scale = 1
+	r"\matrix[row sep=0.5cm,column sep=0.1cm] {"]
+	scale = 3
 	count = 0
 	ids = {}
 	crossed = set()
@@ -64,8 +64,8 @@ def tikzdtree(tree, sent):
 		for m in nodes[::-1]:
 			if isinstance(tree[m], Tree):
 				if len(tree[m]) == 1: continue
-				l = [a*scale for a in tree[m].leaves()]
-				#l = [a for a in children[m]]
+				#l = [a*scale for a in tree[m].leaves()]
+				l = [a for a in children[m]]
 				center = min(l) + (max(l) - min(l)) / 2
 				i = j = center
 			else:
@@ -99,8 +99,8 @@ def tikzdtree(tree, sent):
 
 	# remove unused columns
 	for m in range(scale * len(sent) - 1, -1, -1):
-		if not any(isinstance(matrix[n][m], tuple) for n in range(depth)):
-			#for n in range(depth): del matrix[n][m]
+		if not any(isinstance(matrix[n][m], tuple) for n in range(scale*depth)):
+			for n in range(scale*depth): del matrix[n][m]
 			pass
 
 	# remove unused rows
@@ -112,30 +112,37 @@ def tikzdtree(tree, sent):
 
 	# write nodes with coordinates
 	for n, _ in enumerate(matrix):
+		row = []
 		for m, i in enumerate(matrix[n]):
 			if isinstance(i, tuple):
 				d = scale * depth - n - deleted - 1
 				if d == 0: d = 0.25
-				result.append("\t(%d, %g) node (n%d) {%s}"
-					% (m, d, count, label(tree[i], sent)))
+				row.append(r"\node (n%d) { %s };"
+						% (count, label(tree[i], sent)))
 				ids[i] = "n%d" % count
 				count += 1
-	result += [";"]
+			row.append("&")
+		# new row: skip last column char "&", add newline
+		result.append(" ".join(row[:-1]) + r"\\")
+	result += ["};"]
 
 	# write branches from node to node
 	for i in reversed(positions):
 		if not isinstance(tree[i], Tree): continue
 		iscrossed = any(a[:-1] == i for a in crossed)
 		shift = -0.5
-		for j, child in enumerate(tree[i] if iscrossed else ()):
+		#for j, child in enumerate(tree[i] if iscrossed else ()):
+		for j, child in enumerate(tree[i]):
 			result.append(
-				"\draw [white, -, line width=6pt] (%s) -- +(0, %g) -| (%s);"
+				"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
 		for j, child in enumerate(tree[i]):
 			result.append("\draw (%s) -- +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
 	result += [r"\end{tikzpicture}"]
 	return "\n".join(result)
+
+	return "\n".join(result) + "}"
 
 def main():
 	from itertools import count
