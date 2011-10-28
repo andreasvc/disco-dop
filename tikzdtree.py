@@ -1,3 +1,5 @@
+""" An attempt at drawing discontinuous trees programmatically.
+Produces TiKZ code, PDF can be produced with latex. """
 from nltk import Tree, ImmutableTree
 from collections import defaultdict
 import codecs
@@ -43,18 +45,22 @@ def tikzdtree(tree, sent):
 	children = defaultdict(list)
 
 	# add each unary above its child
-	for n in range(depth):
-		nodes = sorted(a for a in positions if len(a) == n)
-		for m in nodes:
-			if isinstance(tree[m], Tree) and len(tree[m]) == 1:
-				#i = tree[m].leaves()[0] - zeroindex
-				l = [a*scale for a in tree[m].leaves()]
-				i = min(l) + (max(l) - min(l)) / 2
-				if not isinstance(tree[m][0], Tree):
-					matrix[(depth - 2) * scale][i] = m
-				else:
-					matrix[n * scale][i] = m
-				children[m[:-1]].append(i)
+	#for n in range(depth - 1, -1, -1):
+	#for n in range(depth):
+	#	nodes = sorted(a for a in positions if len(a) == n)
+	#	for m in nodes:
+	#		if isinstance(tree[m], Tree) and len(tree[m]) == 1:
+	#			#i = tree[m].leaves()[0] - zeroindex
+	#			if children[m]:
+	#				candidates = [a for a in children[m]]
+	#			else:
+	#				candidates = [a*scale for a in tree[m].leaves()]
+	#			i = min(candidates) + (max(candidates) - min(candidates)) / 2
+	#			if not isinstance(tree[m][0], Tree):
+	#				matrix[(depth - 2) * scale][i] = m
+	#			else:
+	#				matrix[n * scale][i] = m
+	#			children[m[:-1]].append(i)
 
 	# add other nodes centered on their children, 
 	# if the center is already taken, back off
@@ -63,7 +69,7 @@ def tikzdtree(tree, sent):
 		nodes = sorted(a for a in positions if len(a) == n)
 		for m in nodes[::-1]:
 			if isinstance(tree[m], Tree):
-				if len(tree[m]) == 1: continue
+				#if len(tree[m]) == 1: continue
 				#l = [a*scale for a in tree[m].leaves()]
 				l = [a for a in children[m]]
 				center = min(l) + (max(l) - min(l)) / 2
@@ -75,12 +81,14 @@ def tikzdtree(tree, sent):
 				continue
 			while i < scale * len(sent) or j > zeroindex:
 				if (i < scale * len(sent) and not matrix[n*scale][i]
-					and (not matrix[-scale][i]
-					or matrix[-scale][i][:len(m)] == m)):
+					):
+					#and (not matrix[-scale][i]
+					#or matrix[-scale][i][:len(m)] == m)):
 					break
 				if (j > zeroindex and not matrix[n*scale][j]
-					and (not matrix[-scale][i]
-					or matrix[-scale][i][:len(m)] == m)):
+					):
+					#and (not matrix[-scale][i]
+					#or matrix[-scale][i][:len(m)] == m)):
 					i = j
 					break
 				i += 1
@@ -95,13 +103,13 @@ def tikzdtree(tree, sent):
 					shift = 1
 					crossed.add(m)
 			matrix[n * scale + shift][i] = m
-			children[m[:-1]].append(i)
+			if m <> ():
+				children[m[:-1]].append(i)
 
 	# remove unused columns
 	for m in range(scale * len(sent) - 1, -1, -1):
 		if not any(isinstance(matrix[n][m], tuple) for n in range(scale*depth)):
 			for n in range(scale*depth): del matrix[n][m]
-			pass
 
 	# remove unused rows
 	deleted = 0
@@ -110,13 +118,11 @@ def tikzdtree(tree, sent):
 			del matrix[n]
 			deleted += 1
 
-	# write nodes with coordinates
+	# write matrix with nodes
 	for n, _ in enumerate(matrix):
 		row = []
 		for m, i in enumerate(matrix[n]):
 			if isinstance(i, tuple):
-				d = scale * depth - n - deleted - 1
-				if d == 0: d = 0.25
 				row.append(r"\node (n%d) { %s };"
 						% (count, label(tree[i], sent)))
 				ids[i] = "n%d" % count
@@ -126,12 +132,12 @@ def tikzdtree(tree, sent):
 		result.append(" ".join(row[:-1]) + r"\\")
 	result += ["};"]
 
+	shift = -0.5
+	#move crossed edges last
+	positions.sort(key=lambda a: any(a[:-1] == i for a in crossed))
 	# write branches from node to node
 	for i in reversed(positions):
 		if not isinstance(tree[i], Tree): continue
-		iscrossed = any(a[:-1] == i for a in crossed)
-		shift = -0.5
-		#for j, child in enumerate(tree[i] if iscrossed else ()):
 		for j, child in enumerate(tree[i]):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
