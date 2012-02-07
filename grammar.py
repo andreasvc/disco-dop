@@ -380,7 +380,7 @@ def printrulelatex(r):
 		lhs = r[0]; rhs = r[1:]
 	if not isinstance(lhs[1][0], tuple) and not isinstance(lhs[1][0], list):
 		print "\\textrm{%s}(\\textrm{%s})" % (lhs[0].replace("$","\\$"), lhs[1][0]),
-	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"), ",".join(",".join("x_{%r}" % a for a in x)  for x in lhs[1])),
+	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"), ",".join(" ".join("x_{%r}" % a for a in x)  for x in lhs[1])),
 	print r"\rightarrow",
 	for x in rhs:
 		if x[0] == 'Epsilon': print r'\epsilon',
@@ -596,14 +596,15 @@ def write_bitpar_grammar(grammar, rules, lexicon, encoding='utf-8'):
 		for rule in a:
 			assert len(rule.args == 1)		#CFG rule?
 			rules.write("%f\t%s\t%s\n" % (
-					rule.prob, grammar.tolabel[rule.lhs],
+					exp(-rule.prob), grammar.tolabel[rule.lhs],
 					"".join(grammar.tolabel[rule.rhs1],
 					"\t" + grammar.tolabel[rule.rhs2] if rule.rhs2 else '')))
 	lexicon = codecs.open(lexicon, "w", encoding=encoding)
 	for word in grammar.lexical:
 		lexicon.write("%s\t" % word)
 		for term in grammar.lexical[word]:
-			lexicon.write("%f\t%s" % (term.prob, grammar.tolabel[term.lhs]))
+			lexicon.write("%f\t%s" % (exp(-term.prob),
+								grammar.tolabel[term.lhs]))
 		lexicon.write("\n")
 	rules.close(); lexicon.close()
 
@@ -717,27 +718,44 @@ def subsetgrammar(a, b):
 		print printrule(r, yf, 0.0)
 	return False
 
-def grammarinfo(grammar):
+def mean(seq):
+	return sum(seq) / float(len(seq)) if seq else None #"zerodiv"
+
+def grammarinfo(grammar, dump=None):
 	""" print some statistics on a grammar, before it goes through
-	(new)splitgrammar(). """
+	(new)splitgrammar().
+	dump: if given a filename, will dump distribution of parsing complexity
+	to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120 times, etc."""
 	lhs = set(rule[0] for (rule,yf),w in grammar)
 	l = len(grammar)
-	print "labels:", len(set(rule[a] for (rule,yf),w in grammar for a in range(3) if len(rule) > a)),
-	print "of which preterminals:", len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar for a in range(1,3) if len(rule) > a and rule[a] not in lhs))
+	print "labels:", len(set(rule[a] for (rule,yf),w in grammar
+							for a in range(3) if len(rule) > a)),
+	print "of which preterminals:",
+	print (len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon"))
+			or len(set(rule[a] for (rule,yf),w in grammar
+				for a in range(1,3) if len(rule) > a and rule[a] not in lhs)))
+	ll = sum(1 for (rule,yf),w in grammar if rule[1] == "Epsilon")
+	print "clauses:", l, "lexical clauses:", ll,
+	print "non-lexical clauses:", l - ll
 	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
-	print "max arity:", n, "in",
-	print printrule(r, yf, w)
-	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w) for (rule, yf), w in grammar if rule[1] != "Epsilon")
-	print "max vars:", n, "in",
-	print printrule(r, yf, w)
-	def arity(sym):
+	print "max fan-out:", n, "in",
+	print printrule(r, yf, w),
+	print "average:", mean([len(yf) for (rule, yf), w, in grammar])
+	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
+				for (rule, yf), w in grammar if rule[1] != "Epsilon")
+	print "max vars:", n, "in", printrule(r, yf, w)
+	def fanout(sym):
 		if "_" not in sym: return 1
 		return int(sym.split("_")[1].split("@")[0])
-	n, r, yf, w = max((sum(map(arity, rule)), rule, yf, w) for (rule, yf), w in grammar)
+	pc = [sum(map(fanout, rule)) for (rule, yf), w in grammar]
+	n, r, yf, w = max((sum(map(fanout, rule)), rule, yf, w)
+							for (rule, yf), w in grammar)
 	print "max parsing complexity:", n, "in",
-	print printrule(r, yf, w)
-	ll = sum(1 for (rule,yf),w in grammar if rule[1] == "Epsilon")
-	print "clauses:",l, "lexical clauses:", ll, "non-lexical clauses:", l - ll
+	print printrule(r, yf, w),
+	print "average", mean(pc)
+	if dump:
+		pcdist = FreqDist(pc)
+		open(dump, "w").writelines("%d\t%d\n" % x for x in pcdist.items())
 
 def read_rparse_grammar(file):
 	result = []

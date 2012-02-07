@@ -1,23 +1,24 @@
 # -*- coding: UTF-8 -*-
-import logging
+import logging, os
 from collections import defaultdict
+from collections import Counter as multiset
 from itertools import islice, count
 from operator import itemgetter
 from math import exp
 import cPickle, re, time, codecs
 from nltk import FreqDist, Tree
-from nltk.metrics import precision, recall, f_measure, accuracy
-#import plac
+from nltk.metrics import accuracy
 from negra import NegraCorpusReader, fold, unfold
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		read_rparse_grammar, testgrammar, rem_marks, alterbinarization,\
 		terminals, varstoindices, read_bitpar_grammar, read_penn_format,\
-		splitgrammar, coarse_grammar, grammarinfo, baseline, write_srcg_grammar
-from eval import bracketings, printbrackets, export, mean, harmean
+		splitgrammar, coarse_grammar, grammarinfo, baseline,\
+		write_srcg_grammar, write_bitpar_grammar
+from eval import bracketings, printbrackets, export, mean, harmean, precision, recall, f_measure
 from fragmentseeker import extractfragments
 from treetransforms import collinize, un_collinize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
-from plcfrs import parse
+from plcfrs import parse, cfgparse
 from coarsetofine import prunelist_fromchart
 from disambiguation import marginalize, viterbiderivation,\
 							sldop, sldop_simple
@@ -29,23 +30,25 @@ from disambiguation import marginalize, viterbiderivation,\
 def main(
 	#parameters. parameters. PARAMETERS!!
 	srcg = True,
-	bitpardop = False,
 	dop = True,
 	unfolded = False,
 	corpusdir="../rparse",
 	corpusfile="negraproc.export",
 	#corpusfile="tigerprocfull.export",
-	maxlen = 40,  # max number of words for sentences in test corpus
-	trainmaxlen = 9999, # max number of words for sentences in train corpus
+	maxlen = 25,  # max number of words for sentences in test corpus
+	#trainmaxlen = 40, # max number of words for sentences in train corpus
+	trainmaxlen = 25, # max number of words for sentences in train corpus
 	#train = 7200, maxsent = 100,	# number of sentences to parse
 	#train = 0.9, maxsent = 9999,	# percent of sentences to parse
 	train = 18602, maxsent = 1000, # number of sentences to parse
-	#skip=0,	# dev set
-	skip=1000, #skip dev set to get test set
+	#train = 20894, maxsent = 2611, # number of sentences to parse
+	skip=0,	# dev set
+	#skip=1000, #skip dev set to get test set
 	bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
 	factor = "right",
+	revmarkov = True,
 	v = 1,
-	h = 1,
+	h = 2,
 	arity_marks = True,
 	arity_marks_before_bin = False,
 	tailmarker = "",
@@ -63,14 +66,14 @@ def main(
 	removeparentannotation=False, # VP^<S> is treated as VP
 	neverblockmarkovized=False, #do not prune intermediate nodes of binarization
 	neverblockdiscontinuous=False, #never block discontinuous nodes.
-	usebitpar=False,
-	quiet=False, reallyquiet=False #quiet=no per sentence results
+	quiet=False, reallyquiet=False, #quiet=no per sentence results
+	resultdir='negra25splitcfg1',
 	):
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 	#corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1"); maxlen = 99
 	assert bintype in ("optimal", "optimalhead", "collinize", "nltk")
-	assert estimator in ("dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
+	assert estimator in ("dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple", "srcg")
 	#format = "%(levelname)s %(asctime)s %(funcName)s %(lineno)d %(message)s"
 	# Log everything, and send it to stderr, in a format with just the message.
 	format = '%(message)s'
@@ -88,7 +91,7 @@ def main(
 	trees, sents, blocks = corpus.parsed_sents()[:train], corpus.sents()[:train], corpus.blocks()[:train]
 	logging.info("%d training sentences before length restriction" % len(trees))
 	trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks) if len(sent[1]) <= trainmaxlen])
-	logging.info("%d training sentences after length restriction" % len(trees))
+	logging.info("%d training sentences after length restriction <= %d" % (len(trees), trainmaxlen))
 
 	# parse training corpus as a "soundness check"
 	#test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
@@ -98,9 +101,9 @@ def main(
 			test.tagged_sents()[train+skip:train+skip+maxsent],
 			test.blocks()[train+skip:train+skip+maxsent])
 
-	logging.info("%d test sentences (before length restriction)" % len(test[0]))
+	logging.info("%d test sentences before length restriction" % len(test[0]))
 	test = zip(*((a,b,c) for a,b,c in zip(*test) if len(b) <= maxlen))
-	logging.info("%d test sentences (after length restriction)" % len(test[0]))
+	logging.info("%d test sentences after length restriction <= %d" % (len(test[0]), maxlen))
 	logging.info("read training & test corpus")
 
 	# binarization
@@ -111,7 +114,11 @@ def main(
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	elif bintype == "collinize":
 		bintype += " %s h=%d v=%d %s" % (factor, h, v, "tailmarker" if tailmarker else '')
-		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker=tailmarker, leftMostUnary=True, rightMostUnary=True) for a in trees]
+		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
+				tailMarker=tailmarker,
+				leftMostUnary=True, rightMostUnary=True,
+				#leftMostUnary=False, rightMostUnary=False,
+				reverse=revmarkov) for a in trees]
 	elif bintype == "optimal":
 		trees = [Tree.convert(optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -156,30 +163,37 @@ def main(
 				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b)))
 
 	srcggrammar = []; dopgrammar = []; secondarymodel = []
-	if srcg:
-		if mergesplitnodes:
-			#corpus = codecs.open("../tiger/corpus/tiger_release_aug07.mrg", encoding="iso-8859-1").read().splitlines()
-			#splittrees = map(Tree, corpus[:7200])
-			#for a in splittrees:
-			#	a.node = "ROOT"
-			#	a.chomsky_normal_form(horzMarkov=1)
-			#	for n, x in enumerate(a.treepositions('leaves')): a[x] = n
-			srcggrammar = induce_srcg(splittrees, sents)
-			logging.info("induced CFG based on %d sentences" % len(splittrees))
-			#srcggrammar = dop_srcg_rules(splittrees, sents)
-			#logging.info("induced DOP CFG based on %d sentences" % len(trees))
-			if usebitpar:
-				pass # FIXME
-				# write grammar
-		else:
-			srcggrammar = induce_srcg(trees, sents)
-			logging.info("induced SRCG based on %d sentences" % len(trees))
-		#srcggrammar = coarse_grammar(trees, sents)
-		#srcggrammar = read_rparse_grammar("../rparse/bin3600")
-		#write_srcg_grammar(srcggrammar, "rules.srcg", "lexicon.srcg")
-		grammarinfo(srcggrammar)
-		srcggrammar = splitgrammar(srcggrammar)
-		testgrammar(srcggrammar)
+	if mergesplitnodes:
+		#corpus = codecs.open("../tiger/corpus/tiger_release_aug07.mrg", encoding="iso-8859-1").read().splitlines()
+		#splittrees = map(Tree, corpus[:7200])
+		#for a in splittrees:
+		#	a.node = "ROOT"
+		#	a.chomsky_normal_form(horzMarkov=1)
+		#	for n, x in enumerate(a.treepositions('leaves')): a[x] = n
+		srcggrammar = induce_srcg(splittrees, sents)
+		logging.info("induced CFG based on %d sentences" % len(splittrees))
+		#srcggrammar = dop_srcg_rules(splittrees, sents)
+		#logging.info("induced DOP CFG based on %d sentences" % len(trees))
+	else:
+		srcggrammar = induce_srcg(trees, sents)
+		logging.info("induced SRCG based on %d sentences" % len(trees))
+	#srcggrammar = coarse_grammar(trees, sents)
+	#srcggrammar = read_rparse_grammar("../rparse/bin3600")
+	#write_srcg_grammar(srcggrammar, "rules.srcg", "lexicon.srcg")
+	os.mkdir(resultdir)
+	grammarinfo(srcggrammar, dump="%s/pcdist.txt" % resultdir)
+	write_srcg_grammar(srcggrammar,
+		"%s/grammar.srcg"   % resultdir,
+		"%s/grammar.lex" % resultdir,
+		encoding='utf-8')
+	srcggrammar = splitgrammar(srcggrammar)
+	testgrammar(srcggrammar)
+	logging.info("wrote grammar to %s/grammar.{srcg,lex}" % resultdir)
+	
+	#from nltk.corpus.reader import ConllChunkCorpusReader as ChunkCorpusReader
+	#tags = open("/usr/lib/nltk_data/corpora/tiger/tiger.tags", "r").read().split()
+	#reader = ChunkCorpusReader("/usr/lib/nltk_data/corpora/tiger", r'.*\.iob', tags)
+	#reader.chunked_sents()[42].draw()
 
 	if dop:
 		if estimator == "shortest":
@@ -193,6 +207,10 @@ def main(
 							normalize=False, shortestderiv=True,
 							arity_marks=arity_marks)
 			secondarymodel = splitgrammar(dopshortest)
+		elif estimator == "srcg":
+			# hack to have srcg instead of dop grammar as fine stage
+			dopgrammar = induce_srcg(trees, sents)
+			logging.info("induced SRCG based on %d sentences" % len(trees))
 		else:
 			dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
 							shortestderiv=False, arity_marks=arity_marks)
@@ -200,7 +218,8 @@ def main(
 			#				shortestderiv=False, arity_marks=arity_marks)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
 		dopgrammar1 = splitgrammar(dopgrammar)
-		logging.info("DOP model based on %d sentences, %d nodes, %d nonterminals"
+		if estimator != "srcg":
+			logging.info("DOP model based on %d sentences, %d nodes, %d nonterminals"
 						% (len(trees), nodes, len(dopgrammar1.toid)))
 		grammarinfo(dopgrammar)
 		dopgrammar = dopgrammar1
@@ -233,7 +252,7 @@ def main(
 			srcggrammar, dopgrammar, secondarymodel, test, maxlen, maxsent,
 			prune, k, sldop_n, useestimates, outside, "ROOT", True,
 			removeparentannotation, splitprune, mergesplitnodes, markorigin,
-			neverblockmarkovized, neverblockdiscontinuous, usebitpar)
+			neverblockmarkovized, neverblockdiscontinuous, resultdir)
 	logging.info("time elapsed during parsing: %g s" % (time.clock() - begin))
 	doeval(*results)
 
@@ -243,22 +262,18 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		outside=None, top='ROOT', tags=True, removeparentannotation=False,
 		splitprune=False, mergesplitnodes=False, markorigin=False,
 		neverblockmarkovized=False, neverblockdiscontinuous=False,
-		usebitpar=False, filename="results", sentinit=0, doph=999):
+		resultdir="results", category=None, sentinit=0, doph=999):
 	sresults = []; dresults = []
 	serrors1 = FreqDist(); serrors2 = FreqDist()
 	derrors1 = FreqDist(); derrors2 = FreqDist()
 	gold = []; gsent = []
-	scandb = set(); dcandb = set(); goldbrackets = set()
+	scandb = multiset(); dcandb = multiset(); goldbrackets = multiset()
 	nsent = exact = exacts = snoparse = dnoparse =  0
 	estimate = lambda a,b: 0.0
 	removeids = re.compile("@[0-9]+")
 	#if srcg: derivout = codecs.open("srcgderivations", "w", encoding='utf-8')
-	#if bitpardop:	
-	# parse w/bitpar
-	# get MPPs
-	# get prunelist
-	# ???
-	# profit
+	timesfile = open("%s/parsetimes.txt" % resultdir, "w")
+	# main parse loop over each sentence in test corpus
 	for tree, sent, block in zip(*test):
 		if len(sent) > maxlen: continue
 		if nsent >= maxsent: break
@@ -268,8 +283,9 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		goldb = bracketings(tree)
 		gold.append(block)
 		gsent.append(sent)
-		goldbrackets.update((nsent, a) for a in goldb)
-		if srcg and not usebitpar:
+		goldbrackets.update((nsent, a) for a in goldb.elements())
+		msg = ''
+		if srcg and not mergesplitnodes and len(sent) < 64: # hard limit
 			msg = "SRCG: "
 			begin = time.clock()
 			chart, start = parse(
@@ -278,13 +294,13 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 						start=srcggrammar.toid[top], exhaustive=dop and prune,
 						estimate=(outside, maxlen) if useestimates else None,
 						) #beamwidth=50)
-		elif usebitpar:
+		elif srcg and mergesplitnodes and len(sent) < 64: # hard limit:
 			msg = "PCFG: "
 			begin = time.clock()
-			# FIXME
-			# bitpar
-			# read derivations
-			# build list of items in k-best derivs
+			chart, start = cfgparse(
+						[w for w,t in sent], srcggrammar,
+						tags=[t for w,t in sent] if tags else [],
+						start=srcggrammar.toid[top])
 		else: chart = {}; start = False
 		if start:
 			resultstr, prob = viterbiderivation(chart, start, srcggrammar.tolabel)
@@ -315,8 +331,8 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 					msg += "gold-cand %s" % printbrackets(goldb - candb)
 				if (candb - goldb) or (goldb - candb): msg += '\n'
 				msg += "      %s" % result.pprint(margin=1000)
-				serrors1.update(a[0] for a in candb - goldb)
-				serrors2.update(a[0] for a in goldb - candb)
+				serrors1.update(a[0] for a in (candb - goldb).elements())
+				serrors2.update(a[0] for a in (goldb - candb).elements())
 			sresults.append(result)
 		else:
 			if srcg: msg += "no parse"
@@ -330,9 +346,9 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			snoparse += 1
 			sresults.append(result)
 		if srcg:
-			logging.debug(msg+"\n%.2fs cpu time elapsed" % (
-						time.clock() - begin))
-		scandb.update((nsent, a) for a in candb)
+			srcgtime = time.clock() - begin
+			logging.debug(msg+"\n%.2fs cpu time elapsed" % (srcgtime))
+		scandb.update((nsent, a) for a in candb.elements())
 		msg = ""
 		if dop and start:
 			msg = " DOP: "
@@ -341,6 +357,13 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 				prunelist = prunelist_fromchart(chart, start, srcggrammar,
 								dopgrammar, k, removeparentannotation,
 								mergesplitnodes and not splitprune, doph)
+				# dump prune list
+				#for a, b in enumerate(prunelist):
+				#	print dopgrammar.tolabel[a],
+				#	if b:
+				#		for c,d in b.items():
+				#			print bin(c), exp(-d)
+				#	else: print {}
 			else: prunelist = []
 			chart, start = parse(
 							[w for w,t in sent], dopgrammar,
@@ -395,11 +418,14 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 					msg += "gold-cand %s " % printbrackets(goldb - candb)
 				if (candb - goldb) or (goldb - candb): msg += '\n'
 				msg += "      %s" % dresult.pprint(margin=1000)
-				derrors1.update(a[0] for a in candb - goldb)
-				derrors2.update(a[0] for a in goldb - candb)
+				derrors1.update(a[0] for a in (candb - goldb).elements())
+				derrors2.update(a[0] for a in (goldb - candb).elements())
 			dresults.append(dresult)
 		else:
-			if dop: msg += "no parse"
+			if dop:
+				msg += "no parse"
+				#from plcfrs import pprint_chart
+				#pprint_chart(chart, [str(w) for w,t in sent], dopgrammar.tolabel)
 			dresult = baseline([(n,t) for n,(w,t) in enumerate(sent)])
 			dresult = Tree.parse("(%s %s)" % (top, dresult), parse_leaf=int)
 			candb = bracketings(dresult)
@@ -408,11 +434,13 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 			f1 = f_measure(goldb, candb)
 			dnoparse += 1
 			dresults.append(dresult)
+		doptime = 0
 		if dop:
-			logging.debug(msg+"\n%.2fs cpu time elapsed" % (
-						time.clock() - begin))
+			doptime = time.clock() - begin
+			logging.debug(msg+"\n%.2fs cpu time elapsed" % (doptime))
+		timesfile.write("%d\t%d\t%g\t%g\n" % (nsent, len(sent), srcgtime, doptime))
 		logging.debug("GOLD: %s" % tree.pprint(margin=1000))
-		dcandb.update((nsent, a) for a in candb)
+		dcandb.update((nsent, a) for a in candb.elements())
 		if srcg:
 			logging.debug("srcg cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
 								100 * (1 - snoparse/float(len(sresults))),
@@ -432,15 +460,19 @@ def doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 									- f_measure(goldbrackets, scandb))))
 
 	if srcg:
-		codecs.open("%s.srcg" % filename, "w", encoding='utf-8').writelines(
-			"%s\n" % export(a,b,n + 1)
+		codecs.open("%s/%s.srcg" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines("%s\n" % export(a,b,n + 1)
 			for n,a,b in zip(count(sentinit), sresults, gsent))
 	if dop:
-		codecs.open("%s.dop" % filename, "w", encoding='utf-8').writelines(
-			"%s\n" % export(a, b, n + 1)
+		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines("%s\n" % export(a, b, n + 1)
 			for n,a,b in zip(count(sentinit), dresults, gsent))
-	codecs.open("%s.gold" % filename, "w", encoding='utf-8').write(''.join(
-		"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1) for n, a in zip(count(sentinit), gold)))
+	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
+			"w", encoding='utf-8').write(''.join(
+				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
+				for n, a in zip(count(sentinit), gold)))
+	timesfile.close()
+	logging.info("wrote results to %s/%s.{gold,srcg,dop}" % (resultdir, category or "results"))
 
 	return (srcg, dop, serrors1, serrors2, derrors1, derrors2, nsent, maxlen,
 		exact, exacts, snoparse, dnoparse, goldbrackets, scandb, dcandb, unfolded,
@@ -536,9 +568,9 @@ def readtepacoc():
 def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	bintype="collinize", h=1, v=1, factor="right", doph=1, arity_marks=True,
 	arity_marks_before_bin=False, sample=False, both=False, m=10000,
-	trainmaxlen=999, maxlen=40, maxsent=999, k=50, prune=True, sldop_n=7,
-	removeparentannotation=False, splitprune=True, mergesplitnodes=True,
-	neverblockmarkovized=False, markorigin = True, resultdir="tepacoc-40"):
+	trainmaxlen=999, maxlen=40, maxsent=999, k=1000, prune=True, sldop_n=7,
+	removeparentannotation=False, splitprune=False, mergesplitnodes=True,
+	neverblockmarkovized=False, markorigin = True, resultdir="tepacoc-40k1000"):
 
 	format = '%(message)s'
 	logging.basicConfig(level=logging.DEBUG, format=format)
@@ -590,6 +622,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	dopgrammar = splitgrammar(dopgrammar)
 	testgrammar(dopgrammar)
 	secondarymodel = []
+	os.mkdir(resultdir)
 
 	results = {}
 	testset = {}
@@ -621,11 +654,11 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 					k, sldop_n, False, None, "ROOT", True,
 					removeparentannotation, splitprune, mergesplitnodes,
 					markorigin, neverblockmarkovized,
-					filename="/".join((resultdir, cat)),
+					resultdir=resultdir, category=cat,
 					sentinit=cnt) #, doph=doph if doph != h else 999)
 		cnt += len(test[0])
 		print "time elapsed during parsing: ", time.clock() - begin
-	goldbrackets = set(); scandb = set(); dcandb = set()
+	goldbrackets = multiset(); scandb = multiset(); dcandb = multiset()
 	exact = exacts = snoparse = dnoparse = 0
 	for cat, res in results.iteritems():
 		print "category:", cat
@@ -645,7 +678,12 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-	#plac.call(main)
 	#cftiger()
-	#parsetepacoc()
-	main()
+	#parsetepacoc(); exit()
+	if len(sys.argv) > 1:
+		paramstr = open(sys.argv[1]).read()
+		params = eval("dict(%s)" % paramstr)
+		main(**params)
+		# copy parameter file to result dir
+		open("%s/params.prm" % params['resultdir'], "w").write(paramstr)
+	else: main()

@@ -162,7 +162,6 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False, shortest=
 	chart, return a dictionary mapping parsetrees to probabilities """
 	parsetrees = {}
 	m = 0
-	logging.debug("sample = %r kbest = %r" % (sample or both, (not sample) or both))
 	derivations = set()
 	if sample or both:
 		derivations = getsamples(chart, start, n, tolabel)

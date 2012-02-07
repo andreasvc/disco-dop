@@ -127,7 +127,7 @@ import re
 def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
 	rightMostUnary=True, leftMostUnary=True,
-	tailMarker="$"):
+	tailMarker="$", reverse=True):
 	"""
 	>>> sent = "das muss man jetzt machen".split()
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
@@ -157,6 +157,11 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
 	>>> collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
+
+	>>> tree = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))") 
+	>>> collinize(tree, tailMarker='', reverse=False); print tree.pprint(margin=999)
+	(S (S|<A-B-C-D-E-F> (A 0) (S|<B-C-D-E-F> (B 1) (S|<C-D-E-F> (C 2) (S|<D-E-F> (D 3) (S|<E-F> (E 4) (S|<F> (F 5))))))))
+
 	"""
 	# assume all subtrees have homogeneous children
 	# assume all terminals have no siblings
@@ -198,9 +203,9 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				# insert an initial artificial nonterminal
 				if factor == "right":
 					start = 0
-					end = min(1, horzMarkov)
+					end = min(1, horzMarkov) if reverse else horzMarkov
 				else: # factor == "left"
-					start = numChildren - min(1, horzMarkov)
+					start = (numChildren - min(1, horzMarkov)) if reverse else horzMarkov
 					end = numChildren
 				siblings = "-".join(childNodes[start:end])
 				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar,
@@ -215,8 +220,12 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 					marktail = tailMarker if i + 1 == numChildren else ''
 					newNode = Tree('', [])
 					if factor == "right":
-						start = max(i - horzMarkov + 1, 0)
-						end = i + 1
+						if reverse:
+							start = max(i - horzMarkov + 1, 0)
+							end = i + 1
+						else:
+							start = i
+							end = i + horzMarkov
 						curNode[:] = [nodeCopy.pop(0), newNode]
 					else: # factor == "left":
 						start = headidx + numChildren - i - 1
@@ -320,7 +329,7 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 def getbits(bitset):
 	""" Iterate over the indices of set bits in a bitset. """
 	for n in xrange(999):
-		if bitset & n: yield n
+		if bitset & 1: yield n
 		elif not bitset: break
 		bitset >>= 1
 
@@ -335,6 +344,9 @@ def newfanout(tree):
 cachedfanout = newfanout
 #can only be used with ImmutableTrees because of memoization.
 #cachedfanout = memoize(fanout)
+
+def complexity(tree):
+	return cachedfanout(tree) + sum(map(cachedfanout, tree))
 
 def complexityfanout(tree):
 	return (cachedfanout(tree) + sum(map(cachedfanout, tree)),
@@ -436,7 +448,7 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	goal = (1L << len(tree)) - 1
 	if head is None:
 		for n, a in enumerate(tree):
-			workingset[a] = score(a)
+			workingset[a] = score(a) + (1,)
 			agenda[a] = workingset[a]
 			#nonterms[a] = frozenset([n])
 			nonterms[a] = 1 << n
@@ -451,13 +463,13 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 		for n, a in enumerate(tree):
 			nonterms[a] = OrderedSet([n])
 			if n != head:
-				workingset[a] = score(a)
+				workingset[a] = score(a) + (1,)
 				nontermstoscore[nonterms[a]] = workingset[a]
 		for n, a in enumerate(tree):
 			if n == head: continue
 			# (add initial unary here)
 			p = newproduction(a, hd)
-			workingset[p] = score(p)
+			workingset[p] = score(p) + (1,)
 			agenda[p] = workingset[p]
 			nonterms[p] = nonterms[a] | nonterms[hd]
 			nontermstoscore[nonterms[p]] = workingset[p]
@@ -486,7 +498,15 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 			else:
 				continue
 			# important: the score is the maximum score up till now
-			x2 = tuple(max(a) for a in zip(score(p2), y, x))
+			scorep2 = score(p2)
+			x2 = tuple(max(a) for a in zip(scorep2, y, x))
+			if scorep2[0] == x[0]:
+				cnt = 1 + x[-1] + 1
+				if scorep2[0] == y[0]: cnt += y[-1]
+				x2 = x2[:-1] + (cnt,)
+			elif scorep2[0] == y[0]:
+				cnt = y[-1] + 1
+				x2 = x2[:-1] + (cnt,)
 			#if new or better:
 			if (p2nonterms not in nontermstoscore
 				or nontermstoscore[p2nonterms] > x2):
@@ -658,16 +678,21 @@ def demo():
 	assert tree == original and tree == original2
 	
 def testminbin():
+	""" Verify that all optimal parsing complexities are lower than or equal
+	to the complexities of right-to-left binarizations. """
 	from negra import NegraCorpusReader
-	cnt = 0
-	for tree in open("tiger250disc.txt"):
-		if '64' in tree: continue
-		print "before:", tree
-		print "after:",
-		print optimalbinarize(Tree.parse(tree, parse_leaf=int),
-						headdriven=False, h=None, v=1)
-		cnt += 1
-		if cnt == 75: break
+	corpus = NegraCorpusReader("../rparse", "negraproc\.export")
+	for tree in corpus.parsed_sents():
+		if len(tree.leaves()) > 25: continue
+		foo = optimalbinarize(tree, headdriven=False, h=None, v=1)
+		bar = Tree.convert(tree)
+		bar.chomsky_normal_form()
+		bar = maketree(bar)
+		assert max(map(complexityfanout, foo.subtrees())) <= max(map(complexityfanout, bar.subtrees())), "\nviolation:\n%s : %s\n versus\n%s : %s" % (foo.pprint(margin=999), max(map(complexityfanout, foo.subtrees())), bar.pprint(margin=999), max(map(complexityfanout, bar.subtrees())))
+		for a in foo.subtrees():
+			if complexity(a) == 14: print a
+		for a in bar.subtrees():
+			if complexity(a) == 14: print a
 
 def testsplit():
 	from negra import NegraCorpusReader

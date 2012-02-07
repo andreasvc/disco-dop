@@ -64,14 +64,12 @@ def prunelist_fromchart(chart, goal, coarsegrammar, finegrammar, k,
 def merged_kbest(chart, start, k, grammar):
 	""" Like kbest_outside, but apply the reverse of the Boyd (2007)
 	transformation to the k-best derivations."""
-	#if k == 0: 
 	derivs = [Tree.parse(a, parse_leaf=int) for a, _
 				in lazykbest(chart, start, k, grammar.tolabel)]
-	map(un_collinize, derivs)
+	for a in derivs: un_collinize(a, childChar=":", parentChar="!")
 	map(mergediscnodes, derivs)
 	newchart = dictcast(defaultdict(dict))
 	for tree in derivs:
-		# no binarization! hence only unbinarized nodes can be pruned.
 		for node in tree.subtrees():
 			arity = fanout(node)
 			if arity > 1: label = "%s_%d" % (node.node, arity)

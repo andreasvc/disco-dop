@@ -3,7 +3,7 @@
 from math import log, exp
 from array import array
 from collections import defaultdict
-import re, gc, logging
+import re, gc, logging, sys
 import numpy as np
 from agenda import EdgeAgenda, Entry
 from estimates cimport getoutside
@@ -58,6 +58,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
 	cdef unsigned int newlabel, blocked = 0, splitlabel = 0
+	cdef unsigned int Epsilon = toid["Epsilon"]
 	cdef unsigned long long vec = 0
 	cdef unsigned long maxA = 0
 	cdef double x, y
@@ -76,7 +77,6 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	gc.disable() #does this actually do anything with Cython?
 
 	# scan
-	Epsilon = toid["Epsilon"]
 	for i, w in enumerate(sent):
 		recognized = False
 		for terminal in lexical.get(w, []):
@@ -152,7 +152,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				rule = <Rule>list_getitem(l, i)
 				for I, e in (<dict>(list_getitem(viterbi, rule.rhs2))).iteritems():
 					sibling = <ChartItem>I
-					if ((not beamwidth or beam[item.vec^sibling.vec] < beamwidth)
+					if ((not beamwidth or beam[item.vec ^ sibling.vec] < beamwidth)
 						and concat(rule, item.vec, sibling.vec)):
 						beam[item.vec ^ sibling.vec] += 1
 						y = (<Edge>e).inside
@@ -188,7 +188,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				rule = <Rule>list_getitem(l, i)
 				for I, e in (<dict>(list_getitem(viterbi, rule.rhs1))).iteritems():
 					sibling = <ChartItem>I
-					if ((not beamwidth or beam[sibling.vec^item.vec] < beamwidth)
+					if ((not beamwidth or beam[sibling.vec ^ item.vec] < beamwidth)
 						and concat(rule, sibling.vec, item.vec)):
 						beam[sibling.vec ^ item.vec] += 1
 						y = (<Edge>e).inside
@@ -251,10 +251,10 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge,
 							blocked[0] += 1
 							return
 					a = nextset(newitem.vec, b)
-					b = nextunset(newitem.vec, a) - 1
+					b = nextunset(newitem.vec, a)
 					#given a=3, b=6. from left to right: 
 					#10000 => 01111 => 01111000
-					component = (1UL << b) - 1UL << a
+					component = (1UL << b) - (1UL << a)
 					outside = dict_getitem(<object>list_getitem(prunelist,
 												splitlabel), component)
 					if outside==NULL or isinf(<double><object>outside):
@@ -378,6 +378,209 @@ cdef inline bint concat(Rule rule, unsigned long long lvec, unsigned long long r
 	# success if we've reached the end of both left and right vector
 	return lpos == rpos == -1
 
+def cfgparse(list sent, grammar, start=None, tags=None):
+	""" A CKY parser modeled after Bodenstab's `fast grammar loop.'
+		and the Stanford parser. """
+	cdef short left, right, mid, span, lensent = len(sent)
+	cdef short narrowr, narrowl, widel, wider, minmid, maxmid
+	cdef long numsymbols = len(grammar.toid), lhs
+	cdef double oldscore, prob
+	cdef bint foundbetter = False 
+	cdef Rule rule
+	cdef Terminal terminal
+	cdef ChartItem NONE = new_ChartItem(0, 0)
+	#cdef list chart = [[{} for _ in range(lensent+1)] for _ in range(lensent)]
+	cdef dict chart = {}						#the full chart
+	cdef unicode word
+	cdef unsigned int Epsilon = grammar.toid["Epsilon"]
+	cdef unsigned long long vec = 0
+	# the viterbi chart is initially filled with infinite log probabilities,
+	# cells which are to be blocked contain NaN.
+	cdef np.ndarray[np.double_t, ndim=3] viterbi
+	# matrices for the filter which gives minima and maxima for splits
+	cdef np.ndarray[np.int16_t, ndim=2] minsplitleft = np.array([-1],
+		dtype='int16').repeat(numsymbols * (lensent + 1)
+		).reshape(numsymbols, lensent + 1)
+	cdef np.ndarray[np.int16_t, ndim=2] maxsplitleft = np.array([lensent+1],
+		dtype='int16').repeat(numsymbols * (lensent + 1)).reshape(
+		numsymbols, lensent + 1)
+	cdef np.ndarray[np.int16_t, ndim=2] minsplitright = np.array([lensent + 1],
+		dtype='int16').repeat(numsymbols * (lensent + 1)
+		).reshape(numsymbols, lensent + 1)
+	cdef np.ndarray[np.int16_t, ndim=2] maxsplitright = np.array([-1],
+		dtype='int16').repeat(numsymbols * (lensent + 1)).reshape(
+		numsymbols, lensent + 1)
+	viterbi = np.array([np.inf],
+		dtype='d').repeat(lensent * (lensent+1) * numsymbols).reshape(
+		(numsymbols, lensent, (lensent+1)))
+	
+	if start == None: start = grammar.toid["ROOT"]
+	assert len(sent) < (sizeof(vec) * 8)
+	vec = (1UL << len(sent)) - 1
+	goal = new_ChartItem(start, vec)
+	
+	# assign POS tags
+	print 1, # == span
+	for i, w in enumerate(sent):
+		left = i; right = i + 1
+		recognized = False
+		for terminal in grammar.lexical.get(w, []):
+			# if we are given gold tags, make sure we only allow matching
+			# tags - after removing addresses introduced by the DOP reduction
+			if not tags or tags[i] == grammar.tolabel[terminal.lhs].split("@")[0]:
+				item = new_ChartItem(terminal.lhs, 1UL << i)
+				sibling = new_ChartItem(Epsilon, i)
+				x = terminal.prob
+				viterbi[terminal.lhs, left, right] = terminal.prob
+				chart[new_ChartItem(terminal.lhs, 1UL << left)] = [
+					new_Edge(x, x, x, sibling, NONE)]
+				# update filter
+				if left > minsplitleft[terminal.lhs, right]:
+					minsplitleft[terminal.lhs, right] = left
+				if left < maxsplitleft[terminal.lhs, right]:
+					maxsplitleft[terminal.lhs, right] = left
+				if right < minsplitright[terminal.lhs, left]:
+					minsplitright[terminal.lhs, left] = right
+				if right > maxsplitright[terminal.lhs, left]:
+					maxsplitright[terminal.lhs, left] = right
+				recognized = True
+		if not recognized and tags and tags[i] in grammar.toid:
+			item = new_ChartItem(grammar.toid[tags[i]], 1UL << i)
+			sibling = new_ChartItem(Epsilon, i)
+			lhs = grammar.toid[tags[i]]
+			viterbi[lhs, left, right] = 0.0
+			chart[new_ChartItem(lhs, 1UL << left)] = [
+				new_Edge(0.0, 0.0, 0.0, sibling, NONE)]
+			# update filter
+			if left > minsplitleft[lhs, right]:
+				minsplitleft[lhs, right] = left
+			if left < maxsplitleft[lhs, right]:
+				maxsplitleft[lhs, right] = left
+			if right < minsplitright[lhs, left]:
+				minsplitright[lhs, left] = right
+			if right > maxsplitright[lhs, left]:
+				maxsplitright[lhs, left] = right
+			recognized = True
+		elif not recognized:
+			logging.error("not covered: %s" % (tags[i] if tags else w))
+			return chart, NONE
+
+		# unary rules on POS tags 
+		for rules in <list>grammar.unary:
+			for rule in rules:
+				if isfinite(viterbi[rule.rhs1, left, right]):
+					prob = rule.prob + viterbi[rule.rhs1, left, right]
+					if isfinite(viterbi[rule.lhs, left, right]):
+						chart[new_ChartItem(rule.lhs, 1UL << left)].append(
+							new_Edge(prob, prob, rule.prob,
+							new_ChartItem(rule.rhs1, 1UL << left), NONE))
+					else:
+						chart[new_ChartItem(rule.lhs, 1UL << left)] = [
+							new_Edge(prob, prob, rule.prob,
+							new_ChartItem(rule.rhs1, 1UL << left), NONE)]
+					if (prob < viterbi[rule.lhs, left, right]):
+						viterbi[rule.lhs, left, right] = prob
+						# update filter
+						if left > minsplitleft[rule.lhs, right]:
+							minsplitleft[rule.lhs, right] = left
+						if left < maxsplitleft[rule.lhs, right]:
+							maxsplitleft[rule.lhs, right] = left
+						if right < minsplitright[rule.lhs, left]:
+							minsplitright[rule.lhs, left] = right
+						if right > maxsplitright[rule.lhs, left]:
+							maxsplitright[rule.lhs, left] = right
+
+	for span in range(2, lensent + 1):
+		print span,
+		sys.stdout.flush()
+	
+		# constituents from left to right
+		for left in range(0, lensent - span + 1):
+			right = left + span
+			# binary rules 
+			for lhs, rules in enumerate(<list>(grammar.bylhs)):
+				for rule in <list>rules:
+					if not rule.rhs2: continue
+					#if not (np.isfinite(viterbi[rule.rhs1,left,left+1:right]).any() and np.isfinite(viterbi[rule.rhs2,left:right-1,right]).any()): continue
+					narrowr = minsplitright[rule.rhs1, left]
+					if narrowr >= right: continue
+					narrowl = minsplitleft[rule.rhs2, right]
+					if narrowl < narrowr: continue
+					widel = maxsplitleft[rule.rhs2, right]
+					minmid = narrowr if narrowr > widel else widel
+					wider = maxsplitright[rule.rhs1, left]
+					maxmid = 1 + (wider if wider < narrowl else narrowl)
+					oldscore = viterbi[lhs, left, right]
+					foundbetter = False
+					for mid in range(minmid, maxmid):
+						if (isfinite(viterbi[rule.rhs1, left, mid])
+							and isfinite(viterbi[rule.rhs2, mid, right])):
+							prob = (rule.prob + viterbi[rule.rhs1, left, mid]
+									+ viterbi[rule.rhs2, mid, right])
+							if isfinite(viterbi[lhs, left, right]):
+								chart[new_ChartItem(lhs, (1UL << right)
+									- (1UL << left))].append(
+									new_Edge(prob, prob, rule.prob,
+									new_ChartItem(rule.rhs1,
+										(1UL << mid) - (1UL << left)),
+									new_ChartItem(rule.rhs2,
+										(1UL << right) - (1UL << mid))))
+							else:
+								chart[new_ChartItem(lhs, (1UL << right)
+									- (1UL << left))] = [
+									new_Edge(prob, prob, rule.prob,
+									new_ChartItem(rule.rhs1,
+										(1UL << mid) - (1UL << left)),
+									new_ChartItem(rule.rhs2,
+										(1UL << right) - (1UL << mid)))]
+							if prob < viterbi[lhs, left, right]:
+								foundbetter = True
+								viterbi[lhs, left, right] = prob
+					# update filter
+					if foundbetter and isinf(oldscore):
+						if left > minsplitleft[lhs, right]:
+							minsplitleft[lhs, right] = left
+						if left < maxsplitleft[lhs, right]:
+							maxsplitleft[lhs, right] = left
+						if right < minsplitright[lhs, left]:
+							minsplitright[lhs, left] = right
+						if right > maxsplitright[lhs, left]:
+							maxsplitright[lhs, left] = right
+
+			# unary rules
+			for rules in <list>grammar.unary:
+				for rule in rules:
+					if isfinite(viterbi[rule.rhs1, left, right]):
+						prob = rule.prob + viterbi[rule.rhs1, left, right]
+						if isfinite(viterbi[rule.lhs, left, right]):
+							chart[new_ChartItem(rule.lhs, (1UL << right)
+								- (1UL << left))].append(
+								new_Edge(prob, prob, rule.prob,
+								new_ChartItem(rule.rhs1,
+								(1UL << right) - (1UL << left)),
+								NONE))
+						else:
+							chart[new_ChartItem(rule.lhs, (1UL << right)
+								- (1UL << left))] = [
+								new_Edge(prob, prob, rule.prob,
+								new_ChartItem(rule.rhs1,
+								(1UL << right) - (1UL << left)),
+								NONE)]
+						if prob < viterbi[rule.lhs, left, right]:
+							viterbi[rule.lhs, left, right] = prob
+							# update filter
+							if left > minsplitleft[rule.lhs, right]:
+								minsplitleft[rule.lhs, right] = left
+							if left < maxsplitleft[rule.lhs, right]:
+								maxsplitleft[rule.lhs, right] = left
+							if right < minsplitright[rule.lhs, left]:
+								minsplitright[rule.lhs, left] = right
+							if right > maxsplitright[rule.lhs, left]:
+								maxsplitright[rule.lhs, left] = right
+	print
+	if goal in chart: return chart, goal
+	else: return chart, NONE
+
 cdef inline Edge iscore(Edge e):
 	""" Replace estimate with inside probability """
 	e.score = e.inside
@@ -424,7 +627,7 @@ def do(sent, grammar):
 def main():
 	from grammar import splitgrammar
 	grammar = splitgrammar([
-		((('S','VP2','VMFIN'), ((0,1,0),)), 0),
+		((('S','VP2','VMFIN'), ((0,1,0),)), 0.0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
 		((('VP2','PROAV','VVPP'), ((0,),(1,))), log(0.5)),
 		((('PROAV', 'Epsilon'), ('Daruber', ())), 0.0),
@@ -440,5 +643,13 @@ def main():
 	print "(as expected)"
 	print "long sentence (33 words):"
 	do("Daruber muss nachgedacht %s" % " ".join(30*["werden"]), grammar)
+
+	cfg = splitgrammar([
+		((('S', 'NP', 'VP'), ((0,1),)), 0.0),
+		((('NP', 'Epsilon'), ('mary', ())), 0.0),
+		((('VP', 'Epsilon'), ('walks', ())), 0.0)])
+	print "cfg parsing; sentence: mary walks"
+	chart, start = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
+	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
 
 if __name__ == '__main__': main()

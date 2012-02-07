@@ -1,6 +1,5 @@
 #parameters. parameters. PARAMETERS!!
 srcg = True,
-bitpardop = False,
 dop = False,
 
 unfolded = False,
@@ -44,6 +43,5 @@ removeparentannotation=False, # VP^<S> is treated as VP
 neverblockmarkovized=False, #do not prune intermediate nodes of binarization
 neverblockdiscontinuous=False, #never block discontinuous nodes.
 
-usebitpar=False,
 quiet=True, reallyquiet=False, #quiet=no per sentence results
 resultdir='negra25-rb'
