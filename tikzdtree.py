@@ -21,7 +21,7 @@ def label(tree, sent):
 	else: return "%s" % sent[int(tree)]
 
 def tikzdtree(tree, sent):
-	""" produce Tikz code to draw a tree. """
+	""" produce Tikz code to draw a tree. uses tikz matrices """
 	#assert len(tree.leaves()) == len(sent)
 	#assert sorted(tree.leaves()) == range(len(sent))
 	for a in list(tree.subtrees(lambda n: isinstance(n[0], Tree)))[::-1]:
@@ -149,6 +149,126 @@ def tikzdtree(tree, sent):
 	return "\n".join(result)
 
 	return "\n".join(result) + "}"
+
+def oldtikzdtree(tree, sent):
+	""" produce Tikz code to draw a tree. tikz nodes w/coordinates """
+	#assert len(tree.leaves()) == len(sent)
+	#assert sorted(tree.leaves()) == range(len(sent))
+	for a in list(tree.subtrees(lambda n: isinstance(n[0], Tree)))[::-1]:
+		a.sort(key=lambda n: n.leaves())
+	result = [r"""\begin{tikzpicture}[scale=0.75,
+		minimum height=1.25em,
+		text height=1.25ex,
+		text depth=.25ex,
+		inner sep=0mm,
+		node distance=1mm]""",
+	r"\footnotesize\sffamily",
+	r"\path"]
+	scale = 1
+	count = 0
+	ids = {}
+	crossed = set()
+	zeroindex = 0 if 0 in tree.leaves() else 1
+	positions = tree.treepositions()
+	depth = max(map(len, positions)) + 1
+	matrix = [[None for _ in scale*sent] for _ in range(scale*depth)]
+	children = defaultdict(list)
+
+	# add each unary above its child
+	for n in range(depth):
+		nodes = sorted(a for a in positions if len(a) == n)
+		for m in nodes:
+			if isinstance(tree[m], Tree) and len(tree[m]) == 1:
+				#i = tree[m].leaves()[0] - zeroindex
+				l = [a*scale for a in tree[m].leaves()]
+				i = min(l) + (max(l) - min(l)) / 2
+				if not isinstance(tree[m][0], Tree):
+					matrix[(depth - 2) * scale][i] = m
+				else:
+					matrix[n * scale][i] = m
+				children[m[:-1]].append(i)
+
+	# add other nodes centered on their children, 
+	# if the center is already taken, back off
+	# to the left and right alternately, until an empty cell is found.
+	for n in range(depth - 1, -1, -1):
+		nodes = sorted(a for a in positions if len(a) == n)
+		for m in nodes[::-1]:
+			if isinstance(tree[m], Tree):
+				if len(tree[m]) == 1: continue
+				l = [a*scale for a in tree[m].leaves()]
+				#l = [a for a in children[m]]
+				center = min(l) + (max(l) - min(l)) / 2
+				i = j = center
+			else:
+				i = j = (int(tree[m]) - zeroindex) * scale
+				matrix[(depth - 1) * scale][i] = m
+				children[m[:-1]].append(i)
+				continue
+			while i < scale * len(sent) or j > zeroindex:
+				if (i < scale * len(sent) and not matrix[n*scale][i]
+					and (not matrix[-scale][i]
+					or matrix[-scale][i][:len(m)] == m)):
+					break
+				if (j > zeroindex and not matrix[n*scale][j]
+					and (not matrix[-scale][i]
+					or matrix[-scale][i][:len(m)] == m)):
+					i = j
+					break
+				i += 1
+				j -= 1
+			if not zeroindex <= i < scale * len(sent):
+				raise ValueError("couldn't find location for node")
+			shift = 0
+			if n+1 < len(matrix) and children[m]:
+				pivot = min(children[m])
+				if (set(a[:-1] for a in matrix[(n+1)*scale][:pivot] if a and a[:-1] != i) &
+				(set(a[:-1] for a in matrix[(n+1)*scale][pivot:] if a and a[:-1] != i))):
+					shift = 1
+					crossed.add(m)
+			matrix[n * scale + shift][i] = m
+			children[m[:-1]].append(i)
+
+	# remove unused columns
+	for m in range(scale * len(sent) - 1, -1, -1):
+		if not any(isinstance(matrix[n][m], tuple) for n in range(depth)):
+			#for n in range(depth): del matrix[n][m]
+			pass
+
+	# remove unused rows
+	deleted = 0
+	for n in range(scale * depth - 1, 0, -1):
+		if not any(matrix[n]):
+			del matrix[n]
+			deleted += 1
+
+	# write nodes with coordinates
+	for n, _ in enumerate(matrix):
+		for m, i in enumerate(matrix[n]):
+			if isinstance(i, tuple):
+				d = scale * depth - n - deleted - 1
+				if d == 0: d = 0.25
+				result.append("\t(%d, %g) node (n%d) {%s}"
+					% (m, d, count, label(tree[i], sent)))
+				ids[i] = "n%d" % count
+				count += 1
+	result += [";"]
+
+	# write branches from node to node
+	for i in reversed(positions):
+		if not isinstance(tree[i], Tree): continue
+		iscrossed = any(a[:-1] == i for a in crossed)
+		shift = -0.5
+		for j, child in enumerate(tree[i] if iscrossed else ()):
+			result.append(
+				"\draw [white, -, line width=6pt] (%s) -- +(0, %g) -| (%s);"
+				% (ids[i], shift, ids[i + (j,)]))
+		for j, child in enumerate(tree[i]):
+			result.append("\draw (%s) -- +(0, %g) -| (%s);"
+				% (ids[i], shift, ids[i + (j,)]))
+	result += [r"\end{tikzpicture}"]
+	return "\n".join(result)
+
 
 def main():
 	from itertools import count
