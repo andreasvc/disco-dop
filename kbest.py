@@ -126,7 +126,6 @@ def lazykbest(chart, goal, k, tolabel):
 	cand = {}
 	explored = set()
 	lazykthbest(goal, k, k, D, cand, chart, explored)
-	logging.debug("%d (sub)derivations considered" % len(explored))
 	return filter(itemgetter(0), [
 			(getderivation(entry.key, D, chart, tolabel, 0), entry.value)
 			for entry in D[goal]])

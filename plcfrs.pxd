@@ -23,6 +23,7 @@ cdef extern from "bit.h":
 
 cdef extern from "math.h":
 	bint isinf(double x)
+	bint isfinite(double x)
 
 cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long long vec)
 cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right)
