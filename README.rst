@@ -27,7 +27,7 @@ Requirements:
   * requires array support http://trac.cython.org/cython_trac/ticket/314
   * compile with: "make". NB: compilation uses CFLAGS used to compile Python as defaults.
 
-- numpy         http://numpy.scipy.org/ (only for estimates)
+- numpy         http://numpy.scipy.org/
 
 The python files can be run without arguments as a demonstration.
 
@@ -43,4 +43,11 @@ format.
 Corpora are expected to be in Negra's export format. Access to the Negra corpus
 itself can be requested for non-commercial purposes, while the Tiger corpus is
 freely available.
+
+Alternatively, there is a simpler parser in the "shedskin" directory. This
+LCFRS parser only produces the Viterbi parse. The grammar is supplied in a file
+following a simple text format. The "plcfrs.py" needs to be translated to C++
+by the `Shed Skin <http://code.google.com/p/shedskin/>`_ compiler, after which
+the resulting code can be compiled with "make".
+
 
