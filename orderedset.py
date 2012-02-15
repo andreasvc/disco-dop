@@ -10,7 +10,7 @@ class OrderedSet(Set):
 			self.seq = ()
 			self.theset = frozenset()
 	def __hash__(self):
-		return hash(self.seq)
+		return hash(self.theset)
 	def __contains__(self, value):
 		return value in self.theset
 	def __len__(self):
