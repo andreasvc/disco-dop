@@ -9,7 +9,6 @@ from nltk.metrics import accuracy, edit_distance
 from negra import NegraCorpusReader
 from grammar import ranges
 from treetransforms import disc
-#import plac
 
 def recall(reference, test):
 	return float(sum((reference & test).values()))/sum(reference.values())
@@ -20,8 +19,7 @@ def precision(reference, test):
 def f_measure(reference, test, alpha=0.5):
 	p = precision(reference, test)
 	r = recall(reference, test)
-	if p == 0 or r == 0:
-		return 0
+	if p == 0 or r == 0: return 0
 	return 1.0/(alpha/p + (1-alpha)/r)
 
 def readparams(file):
@@ -30,17 +28,18 @@ def readparams(file):
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	# not yet implemented: DELETE_LABEL_FOR_LENGTH, EQ_WORD
 	validkeysonce = "DEBUG MAX_ERROR CUTOFF_LEN LABELED DISC_ONLY".split()
-	defvalues = {"DEBUG" : 1, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
-					"LABELED" : 1, "DELETE_LABEL" : [],
-					"DELETE_LABEL_FOR_LENGTH" : [], "EQ_LABEL" : [],
-					"EQ_WORDS" : [], "DISC_ONLY" : 0 }
-	if not file: return defvalues
-	for a in open(file):
+	params = { "DEBUG" : 1, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
+					"LABELED" : 1, "DISC_ONLY" : 0,
+					"DELETE_LABEL" : [], "DELETE_LABEL_FOR_LENGTH" : [],
+					"EQ_LABEL" : [], "EQ_WORDS" : [] }
+	seen = set()
+	for a in open(file) if file else ():
 		line = a.strip()
 		if line and not line.startswith("#"):
 			key, val = line.split(None, 1)
 			if key in validkeysonce:
-				assert key not in params, "cannot declare parameter %s twice" % key
+				assert key not in seen, "cannot declare parameter %s twice" % key
+				seen.add(key)
 				params[key] = int(val)
 			elif key in ("DELETE_LABEL", "DELETE_LABEL_FOR_LENGTH"):
 				params[key].append(val)
@@ -49,8 +48,6 @@ def readparams(file):
 				params[key].append(dict((a, hd) for a in val.split()))
 			else:
 				raise ValueError("unrecognized parameter key: %s" % key)
-	for a, b in defvalues.items():
-		if a not in params: params[a] = b
 	return params
 
 def bracketings(tree, labeled=True, delete=(), eqlabel={}, disconly=False):
@@ -60,13 +57,18 @@ def bracketings(tree, labeled=True, delete=(), eqlabel={}, disconly=False):
 	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"))
 	frozenset([('VP', frozenset(['0', '2'])),
 				('S', frozenset(['1', '0', '2']))])
+	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"), delete=["NP"])
+	frozenset([('VP', frozenset(['0', '2'])),
+				('S', frozenset(['0', '2']))])
 	"""
+	# collect all leaves dominated by nodes to be deleted:
+	deleted = frozenset(leaf for subtree in tree.subtrees(lambda x: x.node in delete and not isinstance(x[0], Tree)) for leaf in subtree.leaves())
 	return multiset( (getlabel(a.node, eqlabel) if labeled else "",
-				frozenset(a.leaves()) )
-		for a in tree.subtrees()
-		if isinstance(a[0], Tree)
-			and a.node not in delete
-			and (not disconly or disc(a)))
+				frozenset(a.leaves()) - deleted)
+				for a in tree.subtrees()
+					if isinstance(a[0], Tree)
+					and a.node not in delete
+					and (not disconly or disc(a)))
 
 def getlabel(label, eqlabel):
 	for a in eqlabel:
@@ -164,6 +166,7 @@ def main():
 	assert goldlen == parseslen
 
 	if param["DEBUG"]:
+		print "param =", param
 		print """\
    Sentence                 Matched   Brackets            Corr      Tag
   ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
@@ -232,7 +235,7 @@ __________________________________________________________"""
 				100 * nonetozero(lambda: f_measure(goldbcat[a], candbcat[a])))
 
 		print """\n\
-Wrong Category Statistics
+Wrong Category Statistics (10 most frequent errors)
    test/gold   count
 ____________________"""
 		gmismatch = dict(((n, indices), label)
@@ -240,22 +243,23 @@ ____________________"""
 		wrong = FreqDist((label, gmismatch[n, indices])
 					for n,(label,indices) in (candb - goldb).keys()
 					if (n, indices) in gmismatch)
-		for labels, freq in wrong.items():
+		for labels, freq in wrong.items()[:10]:
 			print "%s %7d" % ("/".join(labels).rjust(12), freq)
 	discbrackets = sum(len(bracketings(tree, disconly=True))
 			for tree in parses.parsed_sents())
+	gdiscbrackets = sum(len(bracketings(tree, disconly=True))
+			for tree in gold.parsed_sents())
 
 	print "\n____________ Summary <= %d _______" % param["CUTOFF_LEN"]
 	print "number of sentences:       %6d" % (n)
-	print "gold brackets:             %6d" % len(goldb)
-	print "candidate brackets:        %6d" % len(candb)
-	print "discont. cand. brackets:   %6d (%.2f%%)" % (discbrackets, float(discbrackets) / len(candb))
 	print "maximum length:            %6d" % (maxlenseen)
+	print "gold brackets (disc.):     %6d (%d)" % (len(goldb), gdiscbrackets)
+	print "cand. brackets (disc.):    %6d (%d)" % (len(candb), discbrackets)
 	print "labeled precision:         %6.2f" % (100 * nonetozero(lambda: precision(goldb, candb)))
 	print "labeled recall:            %6.2f" % (100 * nonetozero(lambda: recall(goldb, candb)))
 	print "labeled f-measure:         %6.2f" % (100 * nonetozero(lambda: f_measure(goldb, candb)))
-	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
 	print "exact match:               %6.2f" % (100 * (exact / sentcount))
+	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
 	print "tagging accuracy:          %6.2f" % (100 * accuracy(goldpos, candpos))
 
 if __name__ == '__main__': main()
