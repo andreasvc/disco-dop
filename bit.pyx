@@ -34,11 +34,11 @@ cpdef inline int bitlength(unsigned long long vec):
 	5"""
 	return sizeof (vec) * 8 - __builtin_clzll(vec)
 
-cpdef inline int fanout(long long arg):
+cpdef inline int fanout(arg):
 	""" number of contiguous components in bit vector (gaps plus one)
 	>>> fanout(0b011011011)
 	3"""
-	cdef unsigned long long vec = <unsigned>arg
+	cdef unsigned long long vec = arg
 	cdef unsigned int result = 0, pos = 0
 	while vec >> pos:
 		#pos = nextunset(vec, nextset(vec, pos))
