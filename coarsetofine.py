@@ -4,7 +4,7 @@ items for a fine grammar.
 import re, logging
 from collections import defaultdict
 from nltk import Tree
-from treetransforms import mergediscnodes, un_collinize, fanout
+from treetransforms import mergediscnodes, un_collinize, slowfanout
 from agenda import Entry
 try: dictcast({})
 except NameError:
@@ -71,7 +71,7 @@ def merged_kbest(chart, start, k, grammar):
 	newchart = dictcast(defaultdict(dict))
 	for tree in derivs:
 		for node in tree.subtrees():
-			arity = fanout(node)
+			arity = slowfanout(node)
 			if arity > 1: label = "%s_%d" % (node.node, arity)
 			else: label = node.node
 			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0

@@ -38,15 +38,28 @@ cpdef inline int fanout(arg):
 	""" number of contiguous components in bit vector (gaps plus one)
 	>>> fanout(0b011011011)
 	3"""
-	cdef unsigned long long vec = arg
-	cdef unsigned int result = 0, pos = 0
-	while vec >> pos:
-		#pos = nextunset(vec, nextset(vec, pos))
-		pos += __builtin_ctzll(vec >> pos)
-		pos += __builtin_ctzll(~(vec >> pos))
-		result += 1
+	cdef unsigned int result = 0
+	cdef unsigned long long vec
+	if arg < ((1 << 63) - 1):
+		vec = arg
+		while vec:
+			vec >>= __builtin_ctzll(vec)
+			vec >>= __builtin_ctzll(~vec)
+			result += 1
+	else:
+		# when the argument does not fit in a 64-bit int, resort to plain
+		# Python code because we need Python's bigints. This algorithm is based
+		# on a bit counting algorihm. It goes through as many iterations as
+		# there are set bits (while the other algorithm jumps over contiguous
+		# sequences of set bits in one go).
+		prev = arg
+		result = 0
+		while arg:
+			arg &= arg - 1
+			if ((prev - arg) << 1) & prev == 0:
+				result += 1
+			prev = arg
 	return result
-
 
 cpdef inline int testbit(unsigned long long vec, unsigned int pos):
 	""" Mask a particular bit, return nonzero if set 

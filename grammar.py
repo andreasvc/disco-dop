@@ -30,7 +30,7 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 			nonterminals = (st.node, 'Epsilon')
 			vars = ((sent[int(st[0])],),())
 			rule = zip(nonterminals, vars)
-		elif isinstance(st[0], Tree):
+		elif st:
 			leaves = map(int, st.leaves())
 			cnt = count(len(leaves))
 			rleaves = [a.leaves() if isinstance(a, Tree) else [a] for a in st]
