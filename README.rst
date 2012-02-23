@@ -25,8 +25,7 @@ Requirements:
 - cython        http://www.cython.org (optional)
 
   * requires array support http://trac.cython.org/cython_trac/ticket/314
-  * compile with: "make". NB: compilation uses CFLAGS used to compile Python as
- 	defaults.
+  * compile with: "make". NB: compilation uses CFLAGS used to compile Python as defaults.
 
 - numpy         http://numpy.scipy.org/
 
