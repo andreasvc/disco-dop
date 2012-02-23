@@ -25,7 +25,8 @@ Requirements:
 - cython        http://www.cython.org (optional)
 
   * requires array support http://trac.cython.org/cython_trac/ticket/314
-  * compile with: "make". NB: compilation uses CFLAGS used to compile Python as defaults.
+  * compile with: "make". NB: compilation uses CFLAGS used to compile Python as
+ 	defaults.
 
 - numpy         http://numpy.scipy.org/
 
@@ -33,16 +34,18 @@ The python files can be run without arguments as a demonstration.
 
 To run an experiment, copy the file sample.prm and edit its parameters.  These
 parameters can then be invoked by executing "python runexp.py filename.prm".
-This will create a new directory with the name specified in the parameter file,
-e.g., negra25/
+This will create a new directory with the basename of the parameter file, i.e.,
+filename/ in this case.
 
 This directory will contain the grammar rules and lexicon in a text format, as
 well as the parsing results and the gold standard file in Negra's export
 format.
 
-Corpora are expected to be in Negra's export format. Access to the Negra corpus
-itself can be requested for non-commercial purposes, while the Tiger corpus is
-freely available.
+Corpora are expected to be in Negra's export format. Access to the `Negra
+corpus <http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/>`_ itself
+can be requested for non-commercial purposes, while the `Tiger corpus
+<http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_ is freely
+available for download for research purposes.
 
 Alternatively, there is a simpler parser in the "shedskin" directory. This
 LCFRS parser only produces the Viterbi parse. The grammar is supplied in a file
