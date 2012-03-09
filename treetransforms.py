@@ -670,7 +670,7 @@ def demo():
 def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
 	to the complexities of right-to-left binarizations. """
-	from negra import NegraCorpusReader
+	from treebank import NegraCorpusReader
 	import time
 	#corpus = NegraCorpusReader("../rparse", "negraproc\.export",
 	corpus = NegraCorpusReader("..", "negra-corpus.export", encoding="iso-8859-1",
@@ -719,7 +719,7 @@ def testminbin():
 	assert violations == violationshd == 0
 
 def testsplit():
-	from negra import NegraCorpusReader
+	from treebank import NegraCorpusReader
 	correct = wrong = 0
 	#n = NegraCorpusReader("../rparse", "tigerproc\.export")
 	n = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
