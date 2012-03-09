@@ -333,7 +333,7 @@ def testestimates(grammar, maxlen, goal):
 	return outside
 
 def main():
-	from negra import NegraCorpusReader
+	from treebank import NegraCorpusReader
 	from grammar import induce_srcg, dop_srcg_rules, splitgrammar
 	try: from plcfrs import parse, pprint_chart
 	except ImportError: from oldplcfrs import parse, pprint_chart

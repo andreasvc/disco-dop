@@ -728,34 +728,34 @@ def grammarinfo(grammar, dump=None):
 	to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120 times, etc."""
 	lhs = set(rule[0] for (rule,yf),w in grammar)
 	l = len(grammar)
-	print "labels:", len(set(rule[a] for (rule,yf),w in grammar
-							for a in range(3) if len(rule) > a)),
-	print "of which preterminals:",
-	print (len(set(rule[0] for (rule,yf),w in grammar if rule[1] == "Epsilon"))
-			or len(set(rule[a] for (rule,yf),w in grammar
+	result = "labels: %d" % len(set(rule[a] for (rule,yf),w in grammar
+							for a in range(3) if len(rule) > a))
+	result += " of which preterminals: %d\n" % (
+		len(set(rule[0] for (rule,yf),w in grammar
+		if rule[1] == "Epsilon")) or len(set(rule[a] for (rule,yf),w in grammar
 				for a in range(1,3) if len(rule) > a and rule[a] not in lhs)))
 	ll = sum(1 for (rule,yf),w in grammar if rule[1] == "Epsilon")
-	print "clauses:", l, "lexical clauses:", ll,
-	print "non-lexical clauses:", l - ll
+	result += "clauses: %d  lexical clauses: %d" % (l, ll)
+	result += " non-lexical clauses: %d\n" % (l - ll)
 	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
-	print "max fan-out:", n, "in",
-	print printrule(r, yf, w),
-	print "average:", mean([len(yf) for (rule, yf), w, in grammar])
+	result += "max fan-out: %d in " % n
+	result += printrule(r, yf, w)
+	result += " average: %g\n" % mean([len(yf) for (rule, yf), w, in grammar])
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
 				for (rule, yf), w in grammar if rule[1] != "Epsilon")
-	print "max vars:", n, "in", printrule(r, yf, w)
+	result += "max vars: %d in %s\n" % (n, printrule(r, yf, w))
 	def fanout(sym):
 		if "_" not in sym: return 1
 		return int(sym.split("_")[1].split("@")[0])
 	pc = [sum(map(fanout, rule)) for (rule, yf), w in grammar]
 	n, r, yf, w = max((sum(map(fanout, rule)), rule, yf, w)
 							for (rule, yf), w in grammar)
-	print "max parsing complexity:", n, "in",
-	print printrule(r, yf, w),
-	print "average", mean(pc)
+	result += "max parsing complexity: %d in %s" % (n, printrule(r, yf, w))
+	result += " average %g" % mean(pc)
 	if dump:
 		pcdist = FreqDist(pc)
 		open(dump, "w").writelines("%d\t%d\n" % x for x in pcdist.items())
+	return result
 
 def read_rparse_grammar(file):
 	result = []
@@ -786,7 +786,7 @@ def do(sent, grammar):
 def main():
 	from treetransforms import un_collinize, collinize,\
 				optimalbinarize, minimalbinarization, complexityfanout
-	from negra import NegraCorpusReader
+	from treebank import NegraCorpusReader
 	from fragmentseeker import  extractfragments
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less

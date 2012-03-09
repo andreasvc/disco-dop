@@ -27,7 +27,7 @@ cdef dict merged_kbest(dict chart, ChartItem start, int k, grammar)
 	e=Edge,
 	D=dict,
 	outside=dict)
-cdef dict kbest_outside(dict chart, ChartItem start, int k)
+cpdef dict kbest_items(dict chart, ChartItem start, int k)
 
 @cython.locals(
 	e=Edge,

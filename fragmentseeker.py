@@ -199,7 +199,7 @@ def indices(tree):
 	return dict((idx, tree[idx]) for idx in tree.treepositions())
 
 def main():
-	from negra import NegraCorpusReader
+	from treebank import NegraCorpusReader
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
