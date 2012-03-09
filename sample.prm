@@ -1,47 +1,38 @@
 #parameters. parameters. PARAMETERS!!
+splitpcfg = True,
 srcg = True,
 dop = False,
-
+corpusdir=".",
+corpusfile="sample2.export",
+encoding="iso-8859-1",
+movepunct=True,
+removepunct=False,
 unfolded = False,
-corpusdir="../rparse",
-corpusfile="negraproc.export",
-
-#corpusfile="tigerprocfull.export",
-maxlen = 25,  # max number of words for sentences in test corpus
-#trainmaxlen = 40, # max number of words for sentences in train corpus
-trainmaxlen = 25, # max number of words for sentences in train corpus
-#train = 7200, maxsent = 100,	# number of sentences to parse
-#train = 0.9, maxsent = 9999,	# percent of sentences to parse
-train = 18602, maxsent = 1000, # number of sentences to parse
-#train = 20894, maxsent = 2611, # number of sentences to parse
-skip=0,	# dev set
-#skip=1000, #skip dev set to get test set
-
-bintype = "nltk", # choices: collinize, nltk, optimal, optimalhead
+maxlen = 100,  # max number of words for sentences in test corpus
+trainmaxlen = 100, # max number of words for sentences in train corpus
+train = 2, # length of training corpus
+maxsent = 1, # number of sentences to parse
+skip=0,	# don't skip sentences between train & test set
+bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
 factor = "right",
+revmarkov = True,
 v = 1,
-h = 999,
-
+h = 2,
 arity_marks = True,
 arity_marks_before_bin = False,
 tailmarker = "",
-
 sample=False, both=False,
 m = 10000,		#number of derivations to sample/enumerate
 estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 sldop_n=7,
 k = 50,		#number of coarse derivations to prune with; k=0 => filter only
 prune=True,	#whether to use srcg chart to prune parsing of dop
-
 getestimates=False, #compute & store estimates
 useestimates=False,  #load & use estimates
-
-mergesplitnodes=False, #coarse grammar is PCFG with splitted nodes eg. VP*
+mergesplitnodes=True, #coarse grammar is PCFG with splitted nodes eg. VP*
 markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
-splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
+splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
 removeparentannotation=False, # VP^<S> is treated as VP
 neverblockmarkovized=False, #do not prune intermediate nodes of binarization
 neverblockdiscontinuous=False, #never block discontinuous nodes.
-
-quiet=True, reallyquiet=False, #quiet=no per sentence results
-resultdir='negra25-rb'
+quiet=False, reallyquiet=False, #quiet=no per sentence results

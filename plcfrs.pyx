@@ -28,7 +28,7 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 	return edge
 
 def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
-			estimate=None, list prunelist=None, dict prunetoid=None,
+			estimate=None, list prunelist=None, dict prunetoid=None, dict coarsechart=None,
 			bint splitprune=False, bint markorigin=False,
 			bint neverblockmarkovized=False, bint neverblockdiscontinuous=False,
 			int beamwidth=0):
@@ -54,10 +54,10 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef Terminal terminal
 	cdef Rule rule
 	cdef np.ndarray[np.double_t, ndim=4] outside
-	cdef bint doestimate = bool(estimate), doprune = bool(prunelist), prunenow
+	cdef bint doestimate = bool(estimate), doprune = bool(prunelist) or bool(coarsechart), prunenow, split
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
-	cdef unsigned int newlabel, blocked = 0, splitlabel = 0
+	cdef unsigned int newlabel, blocked = 0
 	cdef unsigned int Epsilon = toid["Epsilon"]
 	cdef unsigned long long vec = 0
 	cdef unsigned long maxA = 0
@@ -66,6 +66,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 
 	if start == None: start = toid["ROOT"]
 	assert len(sent) < (sizeof(vec) * 8)
+	if splitprune: assert prunetoid is not None
+	else: coarsechart = None
 	vec = (1UL << len(sent)) - 1
 	goal = new_ChartItem(start, vec)
 
@@ -134,17 +136,22 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 											rule.prob, item, NONE)
 					prunenow = doprune
 					label = ''
+					split = False
 					if prunenow and neverblockdiscontinuous:
 						prunenow = arity[rule.lhs] == 1
 					if prunenow and neverblockmarkovized:
 						prunenow = "|" not in tolabel[rule.lhs]
 					if prunenow and splitprune:
+						label = tolabel[rule.lhs]
 						if arity[rule.lhs] > 1:
-							label = tolabel[rule.lhs]
 							label = label[:label.rindex("_")]
+							split = True
+						else:
+							left = label.find("@")
+							if left != -1: label = label[:left]
 					process_edge(new_ChartItem(rule.lhs, item.vec), newedge,
 						agenda, chart, viterbi, exhaustive, prunenow,
-						prunelist, prunetoid, label, markorigin, &blocked)
+						prunelist, prunetoid, coarsechart, label, split, markorigin, &blocked)
 
 			# binary left
 			l = <list>list_getitem(lbinary, item.label)
@@ -170,17 +177,22 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 											rule.prob, item, sibling)
 						prunenow = doprune
 						label = ''
+						split = False
 						if prunenow and neverblockdiscontinuous:
 							prunenow = arity[rule.lhs] == 1
 						if prunenow and neverblockmarkovized:
 							prunenow = "|" not in tolabel[rule.lhs]
 						if prunenow and splitprune:
+							label = tolabel[rule.lhs]
 							if arity[rule.lhs] > 1:
-								label = tolabel[rule.lhs]
 								label = label[:label.rindex("_")]
+								split = True
+							else:
+								left = label.find("@")
+								if left != -1: label = label[:left]
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 							agenda, chart, viterbi, exhaustive, prunenow,
-							prunelist, prunetoid, label, markorigin, &blocked)
+							prunelist, prunetoid, coarsechart, label, split, markorigin, &blocked)
 
 			# binary right
 			l = <list>list_getitem(rbinary, item.label)
@@ -206,19 +218,26 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 											rule.prob, sibling, item)
 						prunenow = doprune
 						label = ''
+						split = False
 						if prunenow and neverblockdiscontinuous:
 							prunenow = arity[rule.lhs] == 1
 						if prunenow and neverblockmarkovized:
 							prunenow = "|" not in tolabel[rule.lhs]
 						if prunenow and splitprune:
+							label = tolabel[rule.lhs]
 							if arity[rule.lhs] > 1:
-								label = tolabel[rule.lhs]
 								label = label[:label.rindex("_")]
+								split = True
+							else:
+								left = label.find("@")
+								if left != -1: label = label[:left]
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 							agenda, chart, viterbi, exhaustive, prunenow,
-							prunelist, prunetoid, label, markorigin, &blocked)
+							prunelist, prunetoid, coarsechart, label, split, markorigin, &blocked)
 
 		if agenda.length > maxA: maxA = agenda.length
+		#if agenda.length % 1000 == 0:
+		#	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(filter(None, chart.values())), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(filter(None, chart.values())), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	gc.enable()
 	if goal in chart: return chart, goal
@@ -226,50 +245,60 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 
 cdef inline void process_edge(ChartItem newitem, Edge newedge,
 		EdgeAgenda agenda, dict chart, list viterbi, bint exhaustive,
-		bint doprune, list prunelist, dict prunetoid, str label,
-		bint markorigin, unsigned int *blocked): # except *:
+		bint doprune, list prunelist, dict prunetoid, dict coarsechart,
+		str label, bint split, bint markorigin, unsigned int *blocked) except *:
 	""" Decide what to do with a newly derived edge. """
-	cdef unsigned long long component
-	cdef unsigned int a, b = 0
-	cdef int cnt = 0, splitlabel = 0
+	cdef unsigned long long component, vec
+	cdef unsigned int a = 0, b = 0, splitlabel = 0, origlabel
+	cdef int cnt = 0
 	cdef Edge e
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = dict_contains(chart, newitem) == 1
 	#not in agenda or chart
 	if not (inagenda or inchart):
 		if doprune:
-			if label: #does the prune list contain split labels?
+			if split: #do we treat discontinuous items as several split items?
+				origlabel = newitem.label; vec = newitem.vec
 				if not markorigin:
 					try: splitlabel = prunetoid[label + "*"]
 					except KeyError:
 						blocked[0] += 1
 						return
-				while newitem.vec >> b:
+				while vec >> b:
 					if markorigin:
 						try: splitlabel = prunetoid["%s*%d" % (label, cnt)]
 						except KeyError:
 							blocked[0] += 1
 							return
-					a = nextset(newitem.vec, b)
-					b = nextunset(newitem.vec, a)
+					a = nextset(vec, b)
+					b = nextunset(vec, a)
 					#given a=3, b=6. from left to right: 
 					#10000 => 01111 => 01111000
 					component = (1UL << b) - (1UL << a)
-					outside = dict_getitem(<object>list_getitem(prunelist,
-												splitlabel), component)
-					if outside==NULL or isinf(<double><object>outside):
+					newitem.label = splitlabel; newitem.vec = component
+					#if outside==NULL or isinf(<double><object>outside):
+					if newitem not in coarsechart:
 						blocked[0] += 1
 						return
 					cnt += 1
+				newitem.label = origlabel; newitem.vec = vec
 			else:
-				outside = dict_getitem(<object>list_getitem(prunelist,
-											newitem.label), newitem.vec)
-				# need a double cast: before outside can be converted to
-				# a double, it needs to be treated as a python float
-				if (outside==NULL or isinf(<double>(<object>outside))):
-					#or newedge.inside+<double><object>outside > 300.0):
-					blocked[0] += 1
-					return
+				if coarsechart is None:
+					outside = dict_getitem(<object>list_getitem(prunelist,
+												newitem.label), newitem.vec)
+					# need a double cast: before outside can be converted to
+					# a double, it needs to be treated as a python float
+					if (outside==NULL or isinf(<double>(<object>outside))):
+						#or newedge.inside+<double><object>outside > 300.0):
+						blocked[0] += 1
+						return
+				else:
+					origlabel = newitem.label
+					newitem.label = prunetoid[label]
+					if newitem not in coarsechart:
+						blocked[0] += 1
+						return
+					newitem.label = origlabel
 
 		#elif newedge.score > 300.0:
 		#	blocked[0] += 1
@@ -548,35 +577,37 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 							maxsplitright[lhs, left] = right
 
 			# unary rules
-			for rules in <list>grammar.unary:
-				for rule in rules:
-					if isfinite(viterbi[rule.rhs1, left, right]):
-						prob = rule.prob + viterbi[rule.rhs1, left, right]
-						if isfinite(viterbi[rule.lhs, left, right]):
-							chart[new_ChartItem(rule.lhs, (1UL << right)
-								- (1UL << left))].append(
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-								(1UL << right) - (1UL << left)),
-								NONE))
-						else:
-							chart[new_ChartItem(rule.lhs, (1UL << right)
-								- (1UL << left))] = [
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-								(1UL << right) - (1UL << left)),
-								NONE)]
-						if prob < viterbi[rule.lhs, left, right]:
-							viterbi[rule.lhs, left, right] = prob
-							# update filter
-							if left > minsplitleft[rule.lhs, right]:
-								minsplitleft[rule.lhs, right] = left
-							if left < maxsplitleft[rule.lhs, right]:
-								maxsplitleft[rule.lhs, right] = left
-							if right < minsplitright[rule.lhs, left]:
-								minsplitright[rule.lhs, left] = right
-							if right > maxsplitright[rule.lhs, left]:
-								maxsplitright[rule.lhs, left] = right
+			for _ in range(2):	#add up to 2 levels of unary nodes
+				for rules in <list>grammar.unary:
+					for rule in rules:
+						if isfinite(viterbi[rule.rhs1, left, right]):
+							prob = rule.prob + viterbi[rule.rhs1, left, right]
+							if isfinite(viterbi[rule.lhs, left, right]):
+								chart[new_ChartItem(rule.lhs, (1UL << right)
+									- (1UL << left))].append(
+									new_Edge(prob, prob, rule.prob,
+									new_ChartItem(rule.rhs1,
+									(1UL << right) - (1UL << left)),
+									NONE))
+							else:
+								chart[new_ChartItem(rule.lhs, (1UL << right)
+									- (1UL << left))] = [
+									new_Edge(prob, prob, rule.prob,
+									new_ChartItem(rule.rhs1,
+									(1UL << right) - (1UL << left)),
+									NONE)]
+							if prob < viterbi[rule.lhs, left, right]:
+								viterbi[rule.lhs, left, right] = prob
+								# update filter
+								if left > minsplitleft[rule.lhs, right]:
+									minsplitleft[rule.lhs, right] = left
+								if left < maxsplitleft[rule.lhs, right]:
+									maxsplitleft[rule.lhs, right] = left
+								if right < minsplitright[rule.lhs, left]:
+									minsplitright[rule.lhs, left] = right
+								if right > maxsplitright[rule.lhs, left]:
+									maxsplitright[rule.lhs, left] = right
+
 	print
 	if goal in chart: return chart, goal
 	else: return chart, NONE
