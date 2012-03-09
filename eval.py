@@ -1,37 +1,24 @@
 # -*- coding: UTF-8 -*-
-import sys
-from itertools import count, izip
+import sys, os.path
+from itertools import count, izip, islice
 from operator import itemgetter
 from collections import defaultdict
 from collections import Counter as multiset
 from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
-from negra import NegraCorpusReader
+from treebank import NegraCorpusReader
 from grammar import ranges
 from treetransforms import disc
 
-def recall(reference, test):
-	return float(sum((reference & test).values()))/sum(reference.values())
-
-def precision(reference, test):
-	return float(sum((reference & test).values()))/sum(test.values())
-
-def f_measure(reference, test, alpha=0.5):
-	p = precision(reference, test)
-	r = recall(reference, test)
-	if p == 0 or r == 0: return 0
-	return 1.0/(alpha/p + (1-alpha)/r)
-
 def readparams(file):
-	""" read a EVALB-style parameter file and return a dictionary. """
+	""" read an EVALB-style parameter file and return a dictionary. """
 	params = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
-	# not yet implemented: DELETE_LABEL_FOR_LENGTH, EQ_WORD
 	validkeysonce = "DEBUG MAX_ERROR CUTOFF_LEN LABELED DISC_ONLY".split()
 	params = { "DEBUG" : 1, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
 					"LABELED" : 1, "DISC_ONLY" : 0,
 					"DELETE_LABEL" : [], "DELETE_LABEL_FOR_LENGTH" : [],
-					"EQ_LABEL" : [], "EQ_WORDS" : [] }
+					"EQ_LABEL" : [], "EQ_WORD" : [] }
 	seen = set()
 	for a in open(file) if file else ():
 		line = a.strip()
@@ -45,12 +32,31 @@ def readparams(file):
 				params[key].append(val)
 			elif key in ("EQ_LABEL", "EQ_WORD"):
 				hd = val.split()[0]
-				params[key].append(dict((a, hd) for a in val.split()))
+				params[key].append(dict((a, hd) for a in val.split()[1:]))
 			else:
 				raise ValueError("unrecognized parameter key: %s" % key)
 	return params
 
-def bracketings(tree, labeled=True, delete=(), eqlabel={}, disconly=False):
+def transform(tree, sent, delete, eqlabel, eqword):
+	""" Apply the transformations according to the parameter file. """
+	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
+		for n, b in zip(count(), a)[::-1]:
+			if not b: a.pop(n)	#remove empty nodes
+			elif b.node in delete:
+				# replace phrasal node with its children; remove pre-terminal entirely
+				if isinstance(b[0], Tree): a[n:n+1] = b
+				else: a.pop(n)
+			else: b.node = getlabel(b.node, eqlabel)
+	if eqword:
+		for a in tree.treepositions('leaves'):
+			if tree[a] in eqword: tree[a] = eqword[tree[a]]
+
+def getlabel(label, eqlabel):
+	for a in eqlabel:
+		if label in a: return a[label]
+	return label
+
+def bracketings(tree, labeled=True, delete=(), disconly=False):
 	""" Return the labeled set of bracketings for a tree: 
 	for each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
@@ -61,19 +67,45 @@ def bracketings(tree, labeled=True, delete=(), eqlabel={}, disconly=False):
 	frozenset([('VP', frozenset(['0', '2'])),
 				('S', frozenset(['0', '2']))])
 	"""
-	# collect all leaves dominated by nodes to be deleted:
-	deleted = frozenset(leaf for subtree in tree.subtrees(lambda x: x.node in delete and not isinstance(x[0], Tree)) for leaf in subtree.leaves())
-	return multiset( (getlabel(a.node, eqlabel) if labeled else "",
-				frozenset(a.leaves()) - deleted)
-				for a in tree.subtrees()
-					if isinstance(a[0], Tree)
+	return multiset( (a.node if labeled else "", frozenset(a.leaves()) )
+			for a in tree.subtrees()
+				if isinstance(a[0], Tree)
 					and a.node not in delete
 					and (not disconly or disc(a)))
 
-def getlabel(label, eqlabel):
-	for a in eqlabel:
-		if label in a: return a[label]
-	return label
+def treedist(a, b, includepreterms=True, includeroot=False):
+	from tdist import Node, treedistance
+	def treetonode(tree):
+		""" Convert NLTK tree object to a different format used by tdist.
+		Ignores terminals and optionally pre-terminals."""
+		#options: delete preterms but keep terms, discount them
+		result = Node(tree.node)
+		for a in tree:
+			if isinstance(a[0], Tree): result.addkid(treetonode(a))
+			#elif includepreterms: result.addkid(Node(a.node+str(a[0])))
+			elif includepreterms: result.addkid(Node(a.node).addkid(Node(a[0])))
+			else: result.addkid(Node(a[0]))
+		return result
+	ted = treedistance(treetonode(a), treetonode(b))
+	# Dice denominator
+	denom = len(list(a.subtrees())) + len(list(b.subtrees()))
+	# optionally discount ROOT nodes and preterminals
+	if not includeroot: denom -= 2
+	if not includepreterms: denom -= 2 * len(a.leaves())
+	return ted, denom
+
+def recall(reference, test):
+	return sum((reference & test).values()) / float(sum(reference.values()))
+
+def precision(reference, test):
+	return sum((reference & test).values()) / float(sum(test.values()))
+
+def f_measure(reference, test, alpha=0.5):
+	p = precision(reference, test)
+	r = recall(reference, test)
+	if p == 0 or r == 0: return 0
+	return 1.0/(alpha/p + (1-alpha)/r)
+
 
 def printbrackets(brackets):
 	return ", ".join("%s[%s]" % (a,
@@ -83,8 +115,8 @@ def printbrackets(brackets):
 
 def leafancestorpaths(tree):
 	paths = dict((a, []) for a in tree.leaves())
-	# skip root label; skip POS tags
-	for a in tree.subtrees(lambda n: n != tree and isinstance(n[0], Tree)):
+	# skip root node; skip POS tags
+	for a in islice(tree.subtrees(lambda n: isinstance(n[0], Tree)), 1, None):
 		leaves = a.leaves()
 		for b in a.leaves():
 			# mark beginning of components
@@ -102,8 +134,8 @@ def leafancestorpaths(tree):
 def pathscore(gold, cand):
 	#catch the case of empty lineages
 	#not sure about this normalization formula
-	return max(0, (1.0 if gold == cand else
-			1.0 - (2.0 * edit_distance(cand, gold))
+	if gold == cand: return 1.0
+	return max(0, (1.0 - (2.0 * edit_distance(cand, gold))
 					/ (len(gold) + len(cand))))
 
 def leafancestor(goldtree, candtree):
@@ -114,66 +146,45 @@ def leafancestor(goldtree, candtree):
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
 
 def nonetozero(a):
-	try:
-		result = a()
-		return 0 if result is None else result
-	except ZeroDivisionError:
-		return 0
+	try: result = a()
+	except ZeroDivisionError: return 0
+	return 0 if result is None else result
 
 def harmean(seq):
-	try: return len([a for a in seq if a]) / sum(1./a if a else 0. for a in seq)
+	try: return len([a for a in seq if a]) / sum(1./a for a in seq if a)
 	except: return "zerodiv"
 
 def mean(seq):
 	return sum(seq) / float(len(seq)) if seq else None #"zerodiv"
-
-def export(tree, sent, n):
-	""" Convert a tree with indices as leafs and a sentence with the
-	corresponding non-terminals to a single string in Negra's export format.
-	NB: IDs do not follow the convention that IDs of children are all lower. """
-	result = ["#BOS %d" % n]
-	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1] for a in tree.treepositions('leaves')]
-	nonpreterminals = list(sorted([a for a in tree.treepositions() if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
-	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
-	for i, word in enumerate(sent):
-		idx = wordids[i]
-		result.append("\t".join((word[0],
-				tree[idx[:-1]].node.replace("$[","$("),
-				"--", "--",
-				str(500+nonpreterminals.index(idx[:-2]) if len(idx) > 2 else 0))))
-	for idx in nonpreterminals:
-		result.append("\t".join(("#%d" % (500 + nonpreterminals.index(idx)),
-				tree[idx].node,
-				"--", "--",
-				str(500+nonpreterminals.index(idx[:-1]) if len(idx) > 1 else 0))))
-	result.append("#EOS %d" % n)
-	return "\n".join(result) #.encode("utf-8")
 
 def splitpath(path):
 	if "/" in path: return path.rsplit("/", 1)
 	else: return ".", path
 
 def main():
-	if len(sys.argv) not in (3, 4):
+	if not 3 <= len(sys.argv) <= 5:
 		print "wrong number of arguments. usage: %s gold parses [param]" % sys.argv[0]
 		print "(where gold and parses are files in export format, param is in EVALB format)" 
 		return
-	gold = NegraCorpusReader(*splitpath(sys.argv[1]))
-	parses = NegraCorpusReader(*splitpath(sys.argv[2]))
-	param = readparams(sys.argv[3] if len(sys.argv) == 4 else None)
+	goldfile, parsesfile = sys.argv[1:3]
+	assert os.path.exists(goldfile), "gold file not found"
+	assert os.path.exists(parsesfile), "parses file not found"
+	gold = NegraCorpusReader(*splitpath(goldfile))
+	parses = NegraCorpusReader(*splitpath(parsesfile))
+	param = readparams(sys.argv[3] if len(sys.argv) >= 4 else None)
+	if len(sys.argv) == 5: param['CUTOFF_LEN'] = int(sys.argv[4])
 	goldlen = len(gold.parsed_sents())
 	parseslen = len(parses.parsed_sents())
-	assert goldlen == parseslen
+	assert goldlen == parseslen, "unequal number of sentences in gold & candidates: %d vs %d" % (goldlen, parseslen)
 
 	if param["DEBUG"]:
 		print "param =", param
 		print """\
    Sentence                 Matched   Brackets            Corr      Tag
-  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
+  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA TED
 ______________________________________________________________________________"""
 	exact = 0.
-	maxlenseen = 0
-	sentcount = 0
+	maxlenseen = sentcount = dicenoms = dicedenoms = 0
 	goldpos = []
 	candpos = []
 	la = []
@@ -181,19 +192,21 @@ ______________________________________________________________________________""
 	candb = multiset()
 	goldbcat = defaultdict(multiset)
 	candbcat = defaultdict(multiset)
-	for n, csent, gsent in izip(count(1), parses.parsed_sents(), gold.parsed_sents()):
-		cpos = sorted(csent.pos())
-		gpos = sorted(gsent.pos())
+	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(), parses.sents(), gold.parsed_sents(), gold.sents()):
+		cpos = sorted(ctree.pos())
+		gpos = sorted(gtree.pos())
 		lencpos = sum(1 for a,b in cpos if b not in param["DELETE_LABEL_FOR_LENGTH"])
 		lengpos = sum(1 for a,b in gpos if b not in param["DELETE_LABEL_FOR_LENGTH"])
 		assert lencpos == lengpos, "sentence length mismatch"
 		if lencpos > param["CUTOFF_LEN"]: continue
 		sentcount += 1
 		if maxlenseen < lencpos: maxlenseen = lencpos
-		cbrack = bracketings(csent, param["LABELED"], param["DELETE_LABEL"],
-									param["EQ_LABEL"], param["DISC_ONLY"])
-		gbrack = bracketings(gsent, param["LABELED"], param["DELETE_LABEL"],
-									param["EQ_LABEL"], param["DISC_ONLY"])
+		transform(ctree, csent, param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
+		transform(gtree, gsent, param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
+		assert csent == gsent, "candidate & gold sentences do not match:\n%s\%s" % (
+				" ".join(csent), " ".join(gsent))
+		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
+		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
 		if cbrack == gbrack: exact += 1
 		candb.update((n,a) for a in cbrack.elements())
 		goldb.update((n,a) for a in gbrack.elements())
@@ -201,9 +214,21 @@ ______________________________________________________________________________""
 		for a in cbrack: candbcat[a[0]][(n, a)] += 1
 		goldpos.extend(gpos)
 		candpos.extend(cpos)
-		la.append(leafancestor(gsent, csent))
+		la.append(leafancestor(gtree, ctree))
+		if la[-1] == 1 and gtree != ctree:
+			print gtree
+			print ctree
+			g = leafancestorpaths(gtree)
+			c = leafancestorpaths(ctree)
+			print g
+			print c
+			print [pathscore(g[leaf], c[leaf]) for leaf in g]
+			assert False
+		#ted, denom = treedist(gtree, ctree, includeroot=gtree.node not in param["DELETE_LABEL"])
+		#dicenoms += ted
+		#dicedenoms += denom
 		if param["DEBUG"] == 0: continue
-		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f" % (
+		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f" % ( # %2d %g" % (
 			n,
 			len(gpos),
 			100 * nonetozero(lambda: recall(gbrack, cbrack)),
@@ -211,10 +236,12 @@ ______________________________________________________________________________""
 			sum((gbrack & cbrack).values()),
 			sum(gbrack.values()),
 			sum(cbrack.values()),
-			lengpos, # how is words supposed to be different from len?? should we leave out punctuation or something?
+			lengpos,
 			sum(1 for a,b in zip(gpos, cpos) if a==b),
 			100 * accuracy(gpos, cpos),
-			100 * la[-1]
+			100 * la[-1],
+			#ted,
+			#1 if ted == 0 else 1 - ted / float(denom)
 			)
 		if param["DEBUG"] > 1:
 			print "gold:", gbrack
@@ -260,6 +287,7 @@ ____________________"""
 	print "labeled f-measure:         %6.2f" % (100 * nonetozero(lambda: f_measure(goldb, candb)))
 	print "exact match:               %6.2f" % (100 * (exact / sentcount))
 	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
+	#print "tree-dist (Dice micro avg) %6.2f" % (100 * (1 - dicenoms / float(dicedenoms)))
 	print "tagging accuracy:          %6.2f" % (100 * accuracy(goldpos, candpos))
 
 if __name__ == '__main__': main()
