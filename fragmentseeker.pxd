@@ -1,31 +1,24 @@
-cimport cython
-from containers cimport new_DTree, DTree
+from libc.stdlib cimport malloc, free
 
-#cdef DTree make_DTree(tree, sent)
+cdef extern from "bit.h":
+	int BITMASK(int b)
+	int BITSLOT(int b)
+	int BITSET(long a[], int b)
+	int BITTEST(long a[], int b)
+	int BITNSLOTS(int nb)
+	int abitcount(long vec[], int slots)
+	int anextset(long vec[], int pos, int slots)
+	int subset(long vec1[], long vec2[], int slots)
+	void setunion(long vec1[], long vec2[], int slots)
 
-@cython.locals(
-	a=dict,
-	b=dict,
-	x=tuple,
-	asent=list,
-	bsent=list,
-	m=cython.int,
-	n=cython.int,
-	lentrees=cython.int,
-	mem=dict
-	)
-cpdef extractfragments(list trees, list sents)
+cdef struct node:
+	int label, prod
+	short left, right
 
-@cython.locals(
-	l=set,
-	i=tuple,
-	j=tuple,
-	x=frozenset,
-	y=frozenset)
-cdef set extractfrom(dict a, dict b, list asent, list bsent)
+cdef struct treetype:
+	int len
+	node *nodes
 
-@cython.locals(
-	n=cython.int,
-	ii=tuple,
-	jj=tuple)
-cdef set extractmaxfragments(dict a, dict b, tuple i, tuple j, list asent, list bsent, dict mem)
+DEF MAXNODE = 256
+DEF BITSIZE = 64 #(8*sizeof(long))
+DEF slots = 4 #BITNSLOTS(MAXNODE)

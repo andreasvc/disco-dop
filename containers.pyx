@@ -93,15 +93,6 @@ cdef class Rule:
 		self._args = self.args._I; self._lengths = self.lengths._H
 		self.prob = prob
 	
-cdef struct DTree:
-	void *rule
-	unsigned long long vec
-	bint islexical
-	DTree *left, *right
-
-cdef DTree new_DTree(Rule rule, unsigned long long vec, bint islexical, DTree left, DTree right):
-	return DTree(<void *>rule, vec, islexical, &left, &right)
-
 # some helper functions that only serve to bridge cython & python code
 cpdef inline unsigned int getlabel(ChartItem a):
 	return a.label

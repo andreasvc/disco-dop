@@ -34,14 +34,6 @@ cdef class RankedEdge:
 	cdef public int left
 	cdef public int right
 
-cdef struct DTree:
-	void *rule
-	unsigned long long vec
-	bint islexical
-	DTree *left, *right
-
-cdef DTree new_DTree(Rule rule, unsigned long long lec, bint islexical, DTree left, DTree right)
-
 cpdef inline unsigned int getlabel(ChartItem a)
 cpdef inline unsigned long long getvec(ChartItem a)
 cpdef inline double getscore(Edge a)

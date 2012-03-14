@@ -23,8 +23,7 @@ ext_modules = [
 	Extension("containers",		["containers.pyx", "containers.pxd"]),
 	Extension("coarsetofine",	["coarsetofine.py", "coarsetofine.pxd"]),
 	Extension("disambiguation",	["disambiguation.py", "disambiguation.pxd"]),
-	Extension("fragmentseeker",	["fragmentseeker.py",  "fragmentseeker.pxd"])
-	]
+	Extension("fragmentseeker",	["fragmentseeker.pyx", "fragmentseeker.pxd"])]
 
 for e in ext_modules:
 	e.pyrex_directives = directives
