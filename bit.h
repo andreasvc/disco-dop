@@ -82,28 +82,30 @@ int nextunset1(unsigned long a, int pos, int bitlen) {
 */
 
 /* http://c-faq.com/misc/bitsets.html */
-#define BITSIZE (8*sizeof(long))
-#define BITMASK(b) (1 << ((b) % BITSIZE))
-#define BITSLOT(b) ((b) / BITSIZE)
-#define BITSET(a, b) ((a)[BITSLOT(b)] |= BITMASK(b))
-#define BITCLEAR(a, b) ((a)[BITSLOT(b)] &= ~BITMASK(b))
-#define BITTEST(a, b) ((a)[BITSLOT(b)] & BITMASK(b))
-#define BITNSLOTS(nb) ((nb + BITSIZE - 1) / BITSIZE)
+#define BITSIZE 			(8*sizeof(long))
+#define BITMASK(b) 			(1 << ((b) % BITSIZE))
+#define BITSLOT(b) 			((b) / BITSIZE)
+#define SETBIT(a, b) 		((a)[BITSLOT(b)] |= BITMASK(b))
+#define BITCLEAR(a, b) 		((a)[BITSLOT(b)] &= ~BITMASK(b))
+#define BITTEST(a, b) 		((a)[BITSLOT(b)] & BITMASK(b))
+#define BITNSLOTS(nb) 		((nb + BITSIZE - 1) / BITSIZE)
+
+#define GET3DIDX(i,j,jmax,kmax)		((i * jmax + j) * kmax)
 
 inline int abitcount(long vec[], int slots) {
 	/* number of set bits in vector */
 	int result = 0, a;
 	for (a=0; a<slots; a++)
-		result += __builtin_popcountll(vec[a]);
+		result += __builtin_popcountl(vec[a]);
 	return result;
 }
 
 inline int anextset(long vec[], unsigned int pos, int slots) {
 	// return next set bit starting from pos, -1 if there is none.
 	int a = BITSLOT(pos), offset = pos % BITSIZE;
-	if (vec[a] >> offset) return pos + __builtin_ctzll(vec[a] >> offset);
+	if (vec[a] >> offset) return pos + __builtin_ctzl(vec[a] >> offset);
 	for (a=a+1; a<slots; a++)
-		if (vec[a]) return a * BITSIZE + __builtin_ctzll(vec[a]);
+		if (vec[a]) return a * BITSIZE + __builtin_ctzl(vec[a]);
 	return -1;
 }
 
