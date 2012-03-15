@@ -14,16 +14,16 @@ directives = {
 	}
 
 ext_modules = [
-	Extension("bit",			["bit.pyx"]),
-	Extension("kbest",			["kbest.py", "kbest.pxd"]),
-	Extension("agenda",			["agenda.pyx", "agenda.pxd"]),
-	Extension("plcfrs",			["plcfrs.pyx",  "plcfrs.pxd"]),
-	Extension("estimates",		["estimates.py", "estimates.pxd"]),
-	Extension("oldplcfrs",		["oldplcfrs.py",  "oldplcfrs.pxd"]),
-	Extension("containers",		["containers.pyx", "containers.pxd"]),
-	Extension("coarsetofine",	["coarsetofine.py", "coarsetofine.pxd"]),
-	Extension("disambiguation",	["disambiguation.py", "disambiguation.pxd"]),
-	Extension("fragmentseeker",	["fragmentseeker.pyx", "fragmentseeker.pxd"])]
+	Extension("bit",				["bit.pyx"]),
+	Extension("kbest",				["kbest.py", "kbest.pxd"]),
+	Extension("agenda",				["agenda.pyx", "agenda.pxd"]),
+	Extension("plcfrs",				["plcfrs.pyx",  "plcfrs.pxd"]),
+	Extension("estimates",			["estimates.py", "estimates.pxd"]),
+	Extension("oldplcfrs",			["oldplcfrs.py",  "oldplcfrs.pxd"]),
+	Extension("containers",			["containers.pyx", "containers.pxd"]),
+	Extension("coarsetofine",		["coarsetofine.py", "coarsetofine.pxd"]),
+	Extension("disambiguation",		["disambiguation.py", "disambiguation.pxd"]),
+	Extension("_fragmentseeker",	["_fragmentseeker.pyx", "_fragmentseeker.pxd"])]
 
 for e in ext_modules:
 	e.pyrex_directives = directives
