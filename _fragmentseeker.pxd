@@ -1,6 +1,7 @@
 from libc.stdlib cimport malloc, free
 
 cdef extern from "bit.h":
+	int BITSIZE
 	int BITMASK(int b)
 	int BITSLOT(int b)
 	int SETBIT(long a[], int b)

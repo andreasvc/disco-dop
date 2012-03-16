@@ -27,6 +27,34 @@ cpdef inline int bitcount(unsigned long long vec):
 	"""
 	return __builtin_popcountll(vec)
 
+cpdef inline int pyintbitcount(vec):
+	"""number of set bits in vector"""
+	cdef unsigned long long lvec
+	cdef int result = 0
+	mask = 1
+	mask <<= (sizeof(lvec)*8)
+	mask -= 1
+	while vec:
+		lvec = vec & mask
+		result += __builtin_popcountll(lvec)
+		vec >>= sizeof(long long) * 8
+	return result
+
+cpdef inline int pyintnextset(vec, unsigned int pos):
+	"""return next set bit starting from pos, -1 if there is none."""
+	cdef unsigned long long lvec
+	#mask = ((1ULL<<(sizeof(lvec)*8))-1)
+	mask = 1
+	mask <<= (sizeof(lvec)*8)
+	mask -= 1
+	vec >>= pos
+	while vec:
+		lvec = vec & mask
+		if lvec: return pos + __builtin_ctzll(lvec)
+		vec >>= sizeof(lvec) * 8
+		pos += sizeof(lvec) * 8
+	return -1
+
 cpdef inline int bitlength(unsigned long long vec):
 	""" number of bits needed to represent vector
 	(equivalently: index of most significant set bit, plus one)

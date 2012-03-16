@@ -5,13 +5,8 @@ from collections import defaultdict, deque
 from itertools import count
 from nltk import Tree
 from grammar import srcg_productions, canonicalize, alpha_normalize, freeze
-from bit import bitcount, nextset
+from bit import pyintnextset as nextset
 from libc.stdlib cimport malloc, free
-
-#DEF ...
-BITSIZE = (8*sizeof(long))
-MAXNODE = 1024 #264 #256
-SLOTS = 16 #15 #16 #4 #BITNSLOTS(MAXNODE)
 
 class Terminal():
 	def __init__(self, node): self.node = node
@@ -24,26 +19,12 @@ def add_srcg_rules(tree, sent):
 	return tree
 
 def tolist(tree):
-	result = []
-	for n, i in enumerate(tree.treepositions()):
-		a = tree[i]
-		if isinstance(a, Tree): a.left = n + 1
-		else: tree[i] = a = Terminal(a)
+	for i in tree.treepositions('leaves'): tree[i] = Terminal(tree[i])
+	result = list(tree.subtrees()) + tree.leaves()
+	for n in reversed(range(len(result))):
+		a = result[n]
 		a.idx = n
-		result.append(a)
-	return result
-
-def levelorder(node):
-	queue = deque([node]); result = []
-	while queue:
-		node = queue.popleft()
-		node.idx = len(result)
-		result.append(node)
-		if isinstance(node, Tree):
-			node.left = len(result) + len(queue)
-			if not isinstance(node[0], Tree): node[0] = Terminal(node[0])
-			queue.append(node[0])
-			if len(node) == 2: queue.append(node[1])
+		if isinstance(a, Tree): a.left = a[0].idx
 	return result
 
 def getprods(trees):
@@ -69,100 +50,15 @@ cdef indices(tree, dict labels, dict prods, node *result):
 			result[n].left = result[n].right = -1
 		else: assert False
 
-cdef dumpCST(long *CST, a, b, asent, bsent):
+cdef dumpCST(long *CST, a, b, asent, bsent, MAXNODE, SLOTS):
 	print "\t".join(['',''] + [str(y) for y, x in enumerate(b) if x is not None])
 	print "\t".join(['',''] + [x.node if isinstance(x, Tree) else
 		bsent[x.node] for x in b if x is not None])
 	for n, aa in enumerate(a):
 		print "\t".join([str(n),
 			aa.node if isinstance(aa, Tree) else asent[aa.node]]
-			+ [str(bitcount(CST[GET3DIDX(n,m,MAXNODE,SLOTS)])) if CST[GET3DIDX(n,m,MAXNODE,SLOTS)] > 0 else ''
+			+ [str(abitcount(&CST[GET3DIDX(n,m,MAXNODE,SLOTS)], SLOTS)) if CST[GET3DIDX(n,m,MAXNODE,SLOTS)] > 0 else ''
 			for m, bb in enumerate(b) if bb is not None])
-
-cpdef extractfragments(list trees1, list sents1, int offset, int chunk, dict labels, dict prods, list trees2=None, list sents2=None):
-	""" Seeks the largest fragments occurring at least twice in the corpus.
-	- scenario 1: recurring fragments in treebank, use:
-		 extractfragments(trees1, sents1, offset, chunk, labels, prods, None, None)
-	- scenario 2: common fragments in two treebanks:
-		 extractfragments(trees1, sents1, offset, chunk, labels, prods, trees2, sents2)
-	offset and chunk is used to divide the work over multiple processes.
-	offset is the starting point in trees1, chunk is the number of trees to
-	work on."""
-	cdef int lentrees1 = len(trees1), lentrees2 = len(trees2 or trees1)
-	cdef int n, m, aa, bb, start = 0
-	#cdef long CST1[MAXNODE][MAXNODE][SLOTS]
-	cdef long *bitset, *CST #= &CST1[0][0][0]
-	#cdef long (*CST)[MAXNODE] = malloc(MAXNODE * MAXNODE * sizeof(long[SLOTS]));
-	cdef treetype a, b, result
-	cdef treetype *newtrees1 = <treetype *>malloc(lentrees1 * sizeof(treetype))
-	cdef treetype *newtrees2
-	assert newtrees1 != NULL
-	inter = defaultdict(set)
-	CST = <long *>malloc(MAXNODE * MAXNODE * SLOTS)
-	assert CST != NULL
-	# convert input
-	if trees2 is not None:
-		newtrees2 = <treetype *>malloc(lentrees2 * sizeof(treetype))
-		assert newtrees2 != NULL
-		for n, tree, sent in zip(count(), trees2, sents2):
-			assert len(tree) <= BITSIZE * SLOTS, "Tree too large. Nodes: %d, MAXNODE: %d, BITSIZE: %d, SLOTS: %d." % (len(tree), MAXNODE, BITSIZE, SLOTS)
-			newtrees2[n].len = len(tree)
-			newtrees2[n].nodes = <node *>malloc(newtrees2[n].len * sizeof(node))
-			assert newtrees2[n].nodes != NULL
-			indices(tree, labels, prods, newtrees2[n].nodes)
-	else:
-		newtrees2 = newtrees1
-	for n, tree, sent in zip(count(), trees1, sents1):
-		assert len(tree) <= BITSIZE * SLOTS, len(tree)
-		newtrees1[n].len = len(tree)
-		newtrees1[n].nodes = <node *>malloc(newtrees1[n].len * sizeof(node))
-		assert newtrees1[n].nodes != NULL
-		indices(tree, labels, prods, newtrees1[n].nodes)
-	# find recurring fragments
-	for n in range(offset, min(offset+(chunk or lentrees1), lentrees1)):
-		a = newtrees1[n]; asent = sents1[n]
-		#inter.clear()
-		if trees2 is None: start = n + 1
-		for m in range(start, lentrees2):
-			b = newtrees2[m]
-			# initialize table
-			for aa in range(a.len):
-				for bb in range(b.len):
-					#bitset = CST[aa][bb]
-					bitset = &CST[GET3DIDX(aa, bb, MAXNODE, SLOTS)]
-					bitset[0] = -1
-					for z in range(1, SLOTS): bitset[z] = 0
-			# fill table
-			for aa in range(a.len):
-				if a.nodes[aa].prod == -1: continue
-				for bb in range(b.len):
-					#bitset = CST[aa][bb]
-					bitset = &CST[GET3DIDX(aa, bb, MAXNODE, SLOTS)]
-					if b.nodes[bb].prod != -1 and bitset[0] == -1:
-						getCST(a, b, aa, bb, CST)
-			# dump table
-			#dumpCST(CST, trees[n], trees[m], asent, sents[m]); exit()
-			if trees2 is None:
-				#for bs in getnodeset(CST, a.len, b.len): inter[bs].add(m)
-				for bs in getnodeset(CST, a.len, b.len):
-					s = inter[n, bs]
-					s.add(n); s.add(m)
-			else:
-				#for bs in getnodeset(CST, a.len, b.len): inter[bs] = None
-				for bs in getnodeset(CST, a.len, b.len): inter[n, bs].add(n)
-		# build actual fragments
-		#for bs in inter:
-		#	if bitcount(bs) == 1: continue
-		#	frag = getsent(getsubtree(trees1[n][nextset(bs, 0)], bs), asent)
-		#	s = fragments[frag]
-		#	s.add(n)
-		#	if trees2 is None: s.update(inter[bs])
-	for n in range(lentrees1): free(newtrees1[n].nodes)
-	free(newtrees1)
-	if trees2 is not None:
-		for n in range(lentrees2): free(newtrees2[n].nodes)
-		free(newtrees2)
-	return inter
 
 def extractfragments1(trees, sents):
 	""" Seeks the largest fragments occurring at least twice in the corpus. """
@@ -172,7 +68,6 @@ def extractfragments1(trees, sents):
 				for x, y in zip(trees, sents)]
 	labels = getlabels(trees)
 	prods = getprods(trees)
-
 	# build actual fragments
 	inter = extractfragments(trees, sents, 0, len(trees), labels, prods, None, None)
 	for n, bs in inter:
@@ -182,8 +77,89 @@ def extractfragments1(trees, sents):
 		s.update(inter[n, bs])
 	return dict([(x, len(y)) for x, y in fragments.iteritems()])
 
-#cdef void getCST(treetype A, treetype B, int i, int j, long CST[][MAXNODE][SLOTS]):
-cdef void getCST(treetype A, treetype B, int i, int j, long *CST):
+cpdef extractfragments(list trees1, list sents1, int offset, int chunk,
+	dict labels, dict prods, list trees2=None, list sents2=None):
+	""" Seeks the largest fragments occurring at least twice in the corpus.
+	- scenario 1: recurring fragments in treebank, use:
+		 extractfragments(trees1, sents1, offset, chunk, labels, prods, None, None)
+	- scenario 2: common fragments in two treebanks:
+		 extractfragments(trees1, sents1, offset, chunk, labels, prods, trees2, sents2)
+	offset and chunk is used to divide the work over multiple processes.
+	offset is the starting point in trees1, chunk is the number of trees to
+	work on."""
+	cdef int lentrees1 = len(trees1), lentrees2 = len(trees2 or trees1)
+	cdef int n, m, aa, bb, start = 0, MAXNODE, SLOTS
+	cdef long *bitset, *CST
+	cdef treetype a, b, result
+	cdef treetype *newtrees1 = <treetype *>malloc(lentrees1 * sizeof(treetype))
+	cdef treetype *newtrees2
+	assert newtrees1 != NULL
+	inter = defaultdict(set)
+	if trees2 is None: MAXNODE = max(map(len, trees1))
+	else: MAXNODE = max(map(len, trees1 + trees2))
+	SLOTS = BITNSLOTS(MAXNODE)
+	CST = <long *>malloc(MAXNODE * MAXNODE * SLOTS * sizeof(long))
+	assert CST != NULL
+	# convert input
+	if trees2 is not None:
+		newtrees2 = <treetype *>malloc(lentrees2 * sizeof(treetype))
+		assert newtrees2 != NULL
+		for n, tree, sent in zip(count(), trees2, sents2):
+			assert len(tree) <= BITSIZE * SLOTS, (
+				"Tree too large. Nodes: %d, "
+				"MAXNODE: %d, BITSIZE: %d, SLOTS: %d." % (
+				len(tree), MAXNODE, BITSIZE, SLOTS))
+			newtrees2[n].len = len(tree)
+			newtrees2[n].nodes = <node *>malloc(newtrees2[n].len * sizeof(node))
+			assert newtrees2[n].nodes != NULL
+			indices(tree, labels, prods, newtrees2[n].nodes)
+	else: newtrees2 = newtrees1
+	for n in range(offset, min(offset+(chunk or lentrees1), lentrees1)):
+		tree = trees1[n]; sent = sents1[n]
+		assert len(tree) <= BITSIZE * SLOTS, len(tree)
+		newtrees1[n].len = len(tree)
+		newtrees1[n].nodes = <node *>malloc(newtrees1[n].len * sizeof(node))
+		assert newtrees1[n].nodes != NULL
+		indices(tree, labels, prods, newtrees1[n].nodes)
+	# find recurring fragments
+	for n in range(offset, min(offset+(chunk or lentrees1), lentrees1)):
+		a = newtrees1[n]; asent = sents1[n]
+		if trees2 is None: start = n + 1
+		for m in range(start, lentrees2):
+			b = newtrees2[m]
+			# initialize table
+			for aa in range(a.len):
+				for bb in range(b.len):
+					bitset = &CST[GET3DIDX(aa, bb, MAXNODE, SLOTS)]
+					bitset[0] = -1
+					for z in range(1, SLOTS): bitset[z] = 0
+			# fill table
+			for aa in range(a.len):
+				if a.nodes[aa].prod == -1: continue
+				for bb in range(b.len):
+					bitset = &CST[GET3DIDX(aa, bb, MAXNODE, SLOTS)]
+					if b.nodes[bb].prod != -1 and bitset[0] == -1:
+						getCST(a, b, CST, aa, bb, MAXNODE, SLOTS)
+			# dump table
+			if False: dumpCST(CST, trees[n], trees[m], asent, sents[m]); exit()
+			if trees2 is None:
+				for bs in getnodeset(CST, a.len, b.len, MAXNODE, SLOTS):
+					s = inter[n, bs]
+					s.add(n); s.add(m)
+			else:
+				for bs in getnodeset(CST, a.len, b.len, MAXNODE, SLOTS):
+					inter[n, bs].add(n)
+	for n in range(offset, min(offset+(chunk or lentrees1), lentrees1)):
+		free(newtrees1[n].nodes)
+	free(newtrees1)
+	if trees2 is not None:
+		for n in range(lentrees2): free(newtrees2[n].nodes)
+		free(newtrees2)
+	free(CST)
+	return inter
+
+cdef void getCST(treetype A, treetype B, long *CST, int i, int j,
+	int MAXNODE, int SLOTS):
 	""" Recursively build common subtree table (CST) for subtrees A[i] & B[j]. """
 	cdef node a = A.nodes[i], b = B.nodes[j]
 	cdef long *bitset, *child
@@ -201,16 +177,17 @@ cdef void getCST(treetype A, treetype B, int i, int j, long *CST):
 			# normal production, recurse or use cached value
 			#child = CST[a.left][b.left]
 			child = &CST[GET3DIDX(a.left, b.left, MAXNODE, SLOTS)]
-			if child[0] == -1: getCST(A, B, a.left, b.left, CST)
+			if child[0] == -1:
+				getCST(A, B, CST, a.left, b.left, MAXNODE, SLOTS)
 			for n in range(SLOTS): bitset[n] |= child[n]
 			if a.right != -1: # and b.right != -1:	#sentinel nodes
 				#child = CST[a.right][b.right]
 				child = &CST[GET3DIDX(a.right, b.right, MAXNODE, SLOTS)]
-				if child[0] == -1: getCST(A, B, a.right, b.right, CST)
+				if child[0] == -1:
+					getCST(A, B, CST, a.right, b.right, MAXNODE, SLOTS)
 				for n in range(SLOTS): bitset[n] |= child[n]
 
-#cdef set getnodeset(long CST[][MAXNODE][SLOTS], int lena, int lenb):
-cdef set getnodeset(long *CST, int lena, int lenb):
+cdef set getnodeset(long *CST, int lena, int lenb, int MAXNODE, int SLOTS):
 	""" Extract the largest, disjuncts bitsets from the common subtree 
 	table (CST). """
 	cdef set finalnodeset = set()

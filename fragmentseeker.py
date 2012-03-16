@@ -4,11 +4,11 @@ from sys import argv
 from collections import defaultdict
 from nltk import Tree
 from _fragmentseeker import extractfragments, tolist, add_srcg_rules,\
-	getlabels, getprods, getsent, getsubtree
-#levelorder, 
+		getlabels, getprods, getsent, getsubtree
 from grammar import canonicalize
 from treebank import NegraCorpusReader
-from bit import bitcount, nextset
+from bit import pyintbitcount as bitcount
+from bit import pyintnextset as nextset
 
 trees1 = []; sents1 = []; trees2 = []; sents2 = []; labels = {}; prods = {}
 chunk = 0
@@ -69,58 +69,70 @@ Output is sent to stdout.
 		quiet=quiet, numproc=numproc, penn=penn,
 		treebank1=argv[1], treebank2=(argv[2] if len(argv)==3 else None)))[1:-1])
 	logging.info("reading treebank")
-	levelorder = tolist
 	if penn:
 		trees1, sents1 = splittrees(argv[1], repeat)
-		trees1 = [levelorder(add_srcg_rules(x, y))
+		trees1 = [tolist(add_srcg_rules(x, y))
 					for x, y in zip(trees1, sents1)]
-		if len(argv) == 3:
-			trees2, sents2 = splittrees(argv[2])
-			trees2 = [levelorder(add_srcg_rules(x, y))
-					for x, y in zip(trees2, sents2)]
 	else:
 		corpus = NegraCorpusReader(*pathsplit(argv[1]))
 		trees1 = corpus.parsed_sents(); sents1 = corpus.sents()
 		for tree in trees1: tree.chomsky_normal_form()
-		trees1 = [levelorder(add_srcg_rules(canonicalize(x), y))
+		trees1 = [tolist(add_srcg_rules(canonicalize(x), y))
 						for x, y in zip(trees1, sents1)]
-		if len(argv) == 3:
+	assert trees1
+	logging.info("treebank1 size: %d; max number of nodes: %d" % (
+		len(trees1), max(map(len, trees1))))
+
+	if len(argv) == 3:
+		if penn:
+			trees2, sents2 = splittrees(argv[2])
+			trees2 = [tolist(add_srcg_rules(x, y))
+					for x, y in zip(trees2, sents2)]
+		else:
 			corpus = NegraCorpusReader(*pathsplit(argv[2]))
 			trees2 = corpus.parsed_sents(); sents2 = corpus.sents()
 			for tree in trees2: tree.chomsky_normal_form()
-			trees2 = [levelorder(add_srcg_rules(canonicalize(x), y))
+			trees2 = [tolist(add_srcg_rules(canonicalize(x), y))
 						for x, y in zip(trees2, sents2)]
-	logging.info("treebank1 size: %d" % len(trees1))
-	logging.info("max number of nodes: %d" % max(map(len, trees1)))
-
-	if len(argv) == 2:
+		assert trees2
+		labels = getlabels(trees1 + trees2)
+		prods = getprods(trees1 + trees2)
+		logging.info("treebank2 size: %d; max number of nodes: %d" % (
+			len(trees2), max(map(len, trees2))))
+	else:
 		labels = getlabels(trees1)
 		prods = getprods(trees1)
 		trees2 = None; sents2 = None
-	else:
-		labels = getlabels(trees1 + trees2)
-		prods = getprods(trees1 + trees2)
-		logging.info("treebank2 size: %d" % len(trees2))
-		logging.info("max number of nodes: %d" % max(map(len, trees2)))
+	logging.info("labels: %d, productions: %d" % (len(labels), len(prods)))
 	logging.info("starting")
 		
 	numtrees = len(trees1)
 	chunk = numtrees / (10*numproc)
-	if numtrees % numproc: chunk += 1
+	if numtrees % (10*numproc): chunk += 1
 	results = defaultdict(set)
 
 	# start worker processes
-	if numproc == 1: dowork = [f(0)]
+	if numproc == 1:
+		dowork = [f(0)]
+		chunk = numtrees
 	else:
 		pool = Pool(processes=numproc)
 		dowork = pool.imap_unordered(f, range(0, numtrees, chunk))
 	for n, a in enumerate(dowork):
-		logging.info("result %d of %d" % (n+1, numproc))
+		logging.info("result %d of %d" % (n+1,
+			numtrees / chunk + (1 if numtrees % chunk else 0)))
 		for (n, bs), x in a.items():
-			frag = getsent(getsubtree(trees1[n][nextset(bs, 0)], bs),
+			if isinstance(trees1[n][nextset(bs, 0)], Tree):
+				frag = getsent(getsubtree(trees1[n][nextset(bs, 0)], bs),
 							sents1[n], penn)
-			frag = Tree(frag)
-			frag.un_chomsky_normal_form()
-			results[frag.pprint(margin=9999)].update(x)
+				frag = Tree(frag)
+				try: frag.un_chomsky_normal_form()
+				except Exception as e: pass
+				#	logging.error("failed to unbinarize:\n%s\n%s" % (frag, e))
+				finally: results[frag.pprint(margin=9999)].update(x)
+			else:
+				logging.error(
+					"Terminal as root node:\n%r\nbitset: %s  nextset: %d" % (
+					trees1[n], bin(bs), nextset(bs, 0)))
 	for a, b in sorted(results.items()):
 		print "%s\t%d" % (a if penn else ("%s\t%s" % a), len(b))
