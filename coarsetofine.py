@@ -4,7 +4,7 @@ items for a fine grammar.
 import re, logging
 from collections import defaultdict
 from nltk import Tree
-from treetransforms import mergediscnodes, un_collinize, slowfanout
+from treetransforms import mergediscnodes, unbinarize, slowfanout
 from agenda import Entry
 try: dictcast({})
 except NameError:
@@ -65,7 +65,7 @@ def merged_kbest(chart, start, k, grammar):
 	transformation to the k-best derivations."""
 	derivs = [Tree.parse(a, parse_leaf=int) for a, _
 				in lazykbest(chart, start, k, grammar.tolabel)]
-	for a in derivs: un_collinize(a, childChar=":", parentChar="!")
+	for a in derivs: unbinarize(a, childChar=":", parentChar="!")
 	map(mergediscnodes, derivs)
 	newchart = dictcast(defaultdict(dict))
 	for tree in derivs:
@@ -144,7 +144,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 	except ImportError: from oldplcfrs import parse, pprint_chart
 	#from coarsetofine import kbest_items, merged_kbest, prunelist_fromchart
 	from disambiguation import marginalize
-	from treetransforms import mergediscnodes, un_collinize
+	from treetransforms import mergediscnodes, unbinarize
 	from containers import getlabel, getvec
 	from grammar import canonicalize, rem_marks
 	from math import exp
@@ -157,9 +157,9 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
 			if split:
-				un_collinize(t, childChar=":", parentChar="!")
+				unbinarize(t, childChar=":", parentChar="!")
 				mergediscnodes(t)
-			un_collinize(t)
+			unbinarize(t)
 			t = canonicalize(rem_marks(t))
 			print "exact match" if t == canonicalize(tree) else "no match" #, t
 	else:
@@ -190,7 +190,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
-			un_collinize(t)
+			unbinarize(t)
 			t = canonicalize(rem_marks(t))
 			#print t.pprint(margin=999)
 			print "exact match" if t == canonicalize(tree) else "no match", t
@@ -209,7 +209,7 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 		#pprint_chart(pp, sent, fine.tolabel)
 
 def main():
-	from treetransforms import splitdiscnodes, collinize
+	from treetransforms import splitdiscnodes, binarize
 	from treebank import NegraCorpusReader, readheadrules
 	from grammar import splitgrammar, induce_srcg, dop_srcg_rules,\
 			printrule, subsetgrammar
@@ -217,23 +217,26 @@ def main():
 	headrules = readheadrules()
 	k = 50
 	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
-	corpus = NegraCorpusReader("../rparse", "negraproc.export",
-		encoding="utf-8", headorder=True, headfinal=True, headreverse=False)
-	train = 400
-	test = 40
-	testmaxlen = 999
-	trees = list(corpus.parsed_sents()[:train])
-	sents = corpus.sents()[:train]
+	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
+	#	encoding="utf-8", headorder=True, headfinal=True, headreverse=False)
+	#train = 400; test = 40; testmaxlen = 999;
+	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
+		headorder=True, headfinal=True, headreverse=False)
+	train = 0; test = 3; testmaxlen = 999;
+	#trees = corpus.parsed_sents()[:train]
+	#sents = corpus.sents()[:train]
+	trees = corpus.parsed_sents()
+	sents = corpus.sents()
 	
 	dtrees = [t.copy(True) for t in trees]
 	parenttrees = [t.copy(True) for t in trees]
-	for t in trees: collinize(t, vertMarkov=0, horzMarkov=1)
+	for t in trees: binarize(t, vertMarkov=0, horzMarkov=1)
 	cftrees = [splitdiscnodes(t.copy(True), markorigin=True) for t in trees]
 	for t in cftrees:
 			#t.chomsky_normal_form(childChar=":")
-			collinize(t, horzMarkov=999, tailMarker='', leftMostUnary=True, childChar=":") #NB leftMostUnary is important
-	for t in parenttrees: collinize(t, vertMarkov=2)
-	for t in dtrees: collinize(t, vertMarkov=0, horzMarkov=1)
+			binarize(t, horzMarkov=999, tailMarker='', leftMostUnary=True, childChar=":") #NB leftMostUnary is important
+	for t in parenttrees: binarize(t, vertMarkov=2)
+	for t in dtrees: binarize(t, vertMarkov=0, horzMarkov=1)
 	# mark heads, canonicalize, binarize head outward
 	normalsrcg = induce_srcg(trees, sents)
 	normal = splitgrammar(normalsrcg)

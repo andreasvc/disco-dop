@@ -73,13 +73,13 @@ class RankedEdge:
 		return "RankedEdge(%r, %r, %d, %d)" % (
 					self.head, self.edge, self.left, self.right)
 
-class Terminal:
+class LexicalRule:
 	__slots__ = ('lhs', 'rhs1', 'rhs2', 'word', 'prob')
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
 	def __repr__(self):
-		return "Terminal" + repr((self.lhs, self.rhs1, self.rhs2,
+		return "LexicalRule" + repr((self.lhs, self.rhs1, self.rhs2,
 				self.word, self.prob))
 
 class Rule:
@@ -107,5 +107,5 @@ if __name__ == '__main__':
 	h = hash(c); h = hash(e)
 	c[0]; c[1]; bool(c); repr(c); repr(e)
 	e < e; e > e; e <= e; e == e; e >= e; e != e
-	t = Terminal(0, 0, 0, "foo", 0.)
+	t = LexicalRule(0, 0, 0, "foo", 0.)
 	r = Rule(0, 0, 0, array('H', [0, 0, 0]), array('I', [0, 0, 0]), 0.)

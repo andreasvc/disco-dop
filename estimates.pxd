@@ -1,5 +1,5 @@
 cimport cython
-from containers cimport ChartItem, Rule, Terminal
+from containers cimport ChartItem, Rule
 from plcfrs cimport new_ChartItem
 from agenda cimport Agenda, Entry
 from array cimport array

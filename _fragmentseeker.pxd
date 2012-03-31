@@ -1,22 +1,17 @@
 from libc.stdlib cimport malloc, free
+from libc.string cimport memset, memcpy
+from bit cimport pyintnextset
+from containers cimport ULong, Node, NodeArray, Ctrees
 
 cdef extern from "bit.h":
 	int BITSIZE
 	int BITMASK(int b)
 	int BITSLOT(int b)
-	int SETBIT(long a[], int b)
-	int BITTEST(long a[], int b)
+	int SETBIT(ULong a[], int b)
+	int CLEARBIT(ULong a[], int b)
+	int TESTBIT(ULong a[], int b)
 	int BITNSLOTS(int nb)
-	int GET3DIDX(int i, int j, int jmax, int kmax)
-	int abitcount(long vec[], int slots)
-	int anextset(long vec[], int pos, int slots)
-	int subset(long vec1[], long vec2[], int slots)
-
-cdef struct node:
-	int label, prod
-	short left, right
-
-cdef struct treetype:
-	int len
-	node *nodes
-
+	int IDX(int i, int j, int jmax, int kmax)
+	int abitcount(ULong vec[], int slots)
+	int anextset(ULong vec[], int pos, int slots)
+	int subset(ULong vec1[], ULong vec2[], int slots)

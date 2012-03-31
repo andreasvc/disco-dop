@@ -355,7 +355,14 @@ def main():
 	#print d.grammar
 	print "corpus"
 	for a in corpus: print a
-	w = "foo!"
+	w = "The little cat saw the dog".split()
+	p = FreqDist()
+	for n, a in enumerate(d.parser.nbest_parse(w)):
+		if n > 10: break
+		print a
+		p.inc(ImmutableTree.convert(removeids(a)), a.prob())
+	print 'best', p.max(), p[p.max()]
+	return
 	while w:
 		print "sentence:",
 		w = raw_input().split()

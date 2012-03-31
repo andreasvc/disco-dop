@@ -1,5 +1,5 @@
 cimport cython
-from containers cimport ChartItem, Edge, Rule, Terminal
+from containers cimport ChartItem, Edge, Rule, LexicalRule
 from agenda cimport EdgeAgenda
 
 cdef extern from "bit.h":
@@ -27,7 +27,7 @@ cdef extern from "bit.h":
 	tolabel=dict,
 	C=dict,
 	Cx=list,
-	terminal=Terminal,
+	terminal=LexicalRule,
 	edge=Edge,
 	Ih=ChartItem,
 	I1h=ChartItem,

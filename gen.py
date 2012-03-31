@@ -4,7 +4,7 @@ from collections import namedtuple
 from array import array
 from math import exp, log
 from random import random
-from containers import Rule, Terminal
+from containers import Rule, LexicalRule
 
 def gen(grammar, start=None, verbose=False):
 	""" generate a random sentence """
@@ -65,14 +65,14 @@ def splitgrammar(grammar, lexicon):
 	lexicalbylhs = {}
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (tag, word), w in lexicon:
-		t = Terminal(toid[tag[0]], toid[tag[1]], 0, word, abs(w))
+		t = LexicalRule(toid[tag[0]], toid[tag[1]], 0, word, abs(w))
 		assert arity[t.lhs] in (0, 1)
 		arity[t.lhs] = 1
 		lexical.setdefault(word, []).append(t)
 		lexicalbylhs.setdefault(t.lhs, []).append(t)
 	for (rule, yf), w in grammar:
 		if len(rule) == 2 and toid[rule[1]] == 0:
-			r = Terminal(toid[rule[0]], toid[rule[1]], 0, unicode(yf[0]), abs(w))
+			r = LexicalRule(toid[rule[0]], toid[rule[1]], 0, unicode(yf[0]), abs(w))
 			assert arity[r.lhs] in (0, 1)
 			arity[r.lhs] = 1
 		else:
@@ -115,7 +115,7 @@ def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
 	""" Reads a grammar as produced by write_srcg_grammar. """
 	rules = (a[:-1].split('\t') for a in codecs.open(rules, encoding=encoding))
 	lexicon = (a[:-1].split('\t') for a in codecs.open(lexicon,
-															encoding=encoding))
+		encoding=encoding))
 	rules = [((tuple(a[:-2]), tuple(tuple(map(int, b))
 			for b in a[-2].split(","))), float(a[-1])) for a in rules]
 	lexicon = [((tuple(a[:-2]), (a[-2])), float(a[-1])) for a in lexicon]
@@ -145,5 +145,5 @@ def main():
 
 if __name__ == '__main__':
 	import sys
-	if "test" in sys.argv: test()
+	if "--test" in sys.argv: test()
 	else: main()

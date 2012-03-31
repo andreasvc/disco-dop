@@ -1,4 +1,8 @@
+from libc.stdlib cimport malloc, free
+from libc.string cimport memcmp
 from array cimport array
+
+ctypedef unsigned long ULong
 
 cdef class ChartItem:
 	cdef public unsigned int label
@@ -11,7 +15,7 @@ cdef class Edge:
 	cdef public ChartItem left
 	cdef public ChartItem right
 
-cdef class Terminal:
+cdef class LexicalRule:
 	cdef public unsigned int lhs
 	cdef public unsigned int rhs1
 	cdef public unsigned int rhs2
@@ -33,6 +37,26 @@ cdef class RankedEdge:
 	cdef public Edge edge
 	cdef public int left
 	cdef public int right
+
+cdef struct Node:
+	int label, prod
+	short left, right
+
+cdef struct NodeArray:
+	int len
+	Node *nodes
+
+cdef class Ctrees:
+	cdef int len, max, maxnodes
+	cdef NodeArray *data
+	cpdef alloc(self, int numtrees, int numnodes, int maxnodes)
+	cpdef add(self, list tree, dict labels, dict prods)
+
+cdef class CBitset:
+	cdef ULong *data
+	cdef long _hash
+	cdef char SLOTS
+	cdef inline sethash(self)
 
 cpdef inline unsigned int getlabel(ChartItem a)
 cpdef inline unsigned long long getvec(ChartItem a)

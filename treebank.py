@@ -543,10 +543,12 @@ def leaves(node):
 
 def puncttest():
 	from treetransforms import slowfanout as fanout
-	corpus = NegraCorpusReader("..", "negra-corpus.export", headorder=False, encoding="iso-8859-1", movepunct=True)
-	corpust2 = NegraCorpusReader("..", "negra-corpus.export", headorder=False, encoding="iso-8859-1", removepunct=True).parsed_sents()
+	#corpus = NegraCorpusReader("..", "negra-corpus.export", headorder=False, encoding="iso-8859-1", movepunct=True)
+	#corpust2 = NegraCorpusReader("..", "negra-corpus.export", headorder=False, encoding="iso-8859-1", removepunct=True).parsed_sents()
 	#corpust3 = NegraCorpusReader("..", "negra-corpus.export", headorder=False, encoding="iso-8859-1").parsed_sents()
 	#corpust3 = NegraCorpusReader("../rparse", "negraproc.export", headorder=False, encoding="iso-8859-1").parsed_sents()
+	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", movepunct=True)
+	corpus2 = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", removepunct=True).parsed_sents()
 	corpust3 = range(len(corpust2))
 	for n, tree, sent, t2, t3 in zip(count(), corpus.parsed_sents(), corpus.sents(), corpust2, corpust3):
 		print n,
@@ -558,7 +560,6 @@ def puncttest():
 			assert fanout(a) == fanout(b), "%d %d\n%s\n%s" % (fanout(a), fanout(b), a.pprint(margin=999), b.pprint(margin=999))
 
 def main():
-	puncttest(); exit()
 	from grammar import canonicalize
 	from itertools import count
 	import sys, codecs
@@ -568,12 +569,8 @@ def main():
 
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=True)
 	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=True, unfold=True)
-	#for a in n.parsed_sents(): print a
-	#for a in n.tagged_sents(): print " ".join("/".join(x) for x in a)
-	#for a in n.sents(): print " ".join(a)
-	#for a in n.blocks(): print a
-	n = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False)
-	nn = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, unfold=True)
+	#n = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False)
+	#nn = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, unfold=True)
 	print "\nunfolded"
 	correct = exact = d = 0
 	nk = set(); mo = set()

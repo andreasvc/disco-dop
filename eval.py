@@ -1,7 +1,5 @@
-# -*- coding: UTF-8 -*-
 import sys, os.path
 from itertools import count, izip, islice
-from operator import itemgetter
 from collections import defaultdict
 from collections import Counter as multiset
 from nltk import Tree, FreqDist
@@ -106,12 +104,11 @@ def f_measure(reference, test, alpha=0.5):
 	if p == 0 or r == 0: return 0
 	return 1.0/(alpha/p + (1-alpha)/r)
 
-
 def printbrackets(brackets):
 	return ", ".join("%s[%s]" % (a,
-					",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
-					if len(x) > 1 else str(x[0]), ranges(sorted(b)))))
-					for a,b in brackets)
+		",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
+		if len(x) > 1 else str(x[0]), ranges(sorted(b)))))
+		for a,b in brackets)
 
 def leafancestorpaths(tree):
 	paths = dict((a, []) for a in tree.leaves())
@@ -161,27 +158,24 @@ def splitpath(path):
 	if "/" in path: return path.rsplit("/", 1)
 	else: return ".", path
 
-def main():
-	if not 3 <= len(sys.argv) <= 5:
-		print "wrong number of arguments. usage: %s gold parses [param]" % sys.argv[0]
-		print "(where gold and parses are files in export format, param is in EVALB format)" 
-		return
-	goldfile, parsesfile = sys.argv[1:3]
+def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 	assert os.path.exists(goldfile), "gold file not found"
 	assert os.path.exists(parsesfile), "parses file not found"
-	gold = NegraCorpusReader(*splitpath(goldfile))
-	parses = NegraCorpusReader(*splitpath(parsesfile))
+	gold = NegraCorpusReader(*splitpath(goldfile), encoding=goldencoding)
+	parses = NegraCorpusReader(*splitpath(parsesfile), encoding=parsesencoding)
 	param = readparams(sys.argv[3] if len(sys.argv) >= 4 else None)
 	if len(sys.argv) == 5: param['CUTOFF_LEN'] = int(sys.argv[4])
+	
 	goldlen = len(gold.parsed_sents())
 	parseslen = len(parses.parsed_sents())
 	assert goldlen == parseslen, "unequal number of sentences in gold & candidates: %d vs %d" % (goldlen, parseslen)
 
 	if param["DEBUG"]:
-		print "param =", param
-		print """\
+		print "Parameters:"
+		for a in param: print "%s\t%s" % (a, param[a])
+		print """
    Sentence                 Matched   Brackets            Corr      Tag
-  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA TED
+  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
 ______________________________________________________________________________"""
 	exact = 0.
 	maxlenseen = sentcount = dicenoms = dicedenoms = 0
@@ -290,4 +284,22 @@ ____________________"""
 	#print "tree-dist (Dice micro avg) %6.2f" % (100 * (1 - dicenoms / float(dicedenoms)))
 	print "tagging accuracy:          %6.2f" % (100 * accuracy(goldpos, candpos))
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	if len(sys.argv) == 2 and sys.argv[1] == "--test":
+		main("sample2.export", "sample2.export", 'iso-8859-1', 'iso-8859-1')
+	elif 3 <= len(sys.argv) <= 5:
+		goldfile, parsesfile = sys.argv[1:3]
+		if "/" in goldfile and not os.path.exists(goldfile):
+			goldfile, goldencoding = goldfile.rsplit("/", 1)
+		if "/" in parsesfile and not os.path.exists(parsesfile):
+			goldfile, goldencoding = goldfile.rsplit("/", 1)
+		main(goldfile, parsesfile)
+	else:
+		print """\
+wrong number of arguments. usage: %s gold[/encoding] parses[/encoding] [param [cutoff]]
+(where gold and parses are files in export format, param is in EVALB format,
+and cutoff is an integer for the length cutoff which overrides the parameter
+file. Encoding defaults to UTF-8, other encodings need to be specified.)
+
+Example:	%s sample2.export/iso-8859-1 myparses.export TEST.prm\
+""" % (sys.argv[0], sys.argv[0])

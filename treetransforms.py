@@ -1,3 +1,22 @@
+"""This file contains three main transformations:
+ - A straightforward binarization: binarize(), based on NLTK code.
+   Modified to introduce a new unary production for the first/last
+   element in the RHS.
+   It is possible to change the markovization direction:
+   (A (B ) (C ) (D )) becomes:
+     left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
+     right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
+   in this way the markovization represents the history of the nonterminals
+   that have *already* been parsed, instead of those still to come
+   (assuming bottom-up parsing).
+ - An optimal binarization for LCFRS: optimalbinarize()
+   Cf. Gildea (2010): Optimal parsing strategies for linear
+   context-free rewriting systems.
+ - Converting discontinuous trees to continuous trees and back:
+   splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited.
+"""
+
+# Original notice:
 # Natural Language Toolkit: Tree Transformations
 #
 # Copyright (C) 2005-2007 Oregon Graduate Institute
@@ -5,15 +24,6 @@
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
 
-# andreasvc: modified to introduce a new unary production for the first/last
-# element in the RHS.
-# The markovization direction is changed:
-# (A (B ) (C ) (D )) becomes:
-#   left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
-#   right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
-# in this way the markovization represents the history of the nonterminals that
-# have *already* been parsed, instead of those still to come (assuming
-# bottom-up parsing).
 
 """
 A collection of methods for tree (grammar) transformations used
@@ -124,42 +134,42 @@ from orderedset import OrderedSet
 from collections import defaultdict
 import re
 
-def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
+def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
 	rightMostUnary=True, leftMostUnary=True,
 	tailMarker="$", reverse=True):
 	"""
 	>>> sent = "das muss man jetzt machen".split()
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
-	>>> collinize(tree, horzMarkov=0, tailMarker=''); print tree.pprint(margin=999)
+	>>> binarize(tree, horzMarkov=0, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<> (VP (VP|<> (PDS 0) (VP|<> (ADV 3) (VP|<> (VVINF 4))))) (S|<> (PIS 2) (S|<> (VMFIN 1)))))
-	>>> un_collinize(tree); print tree
+	>>> unbinarize(tree); print tree
 	(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
 
-	>>> collinize(tree, horzMarkov=1, tailMarker=''); print tree.pprint(margin=999)
+	>>> binarize(tree, horzMarkov=1, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4))))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1)))))
 
-	>>> un_collinize(tree); collinize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=True, tailMarker=''); print tree.pprint(margin=999)
+	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=True, tailMarker=''); print tree.pprint(margin=999)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1))))
 
-	>>> un_collinize(tree); collinize(tree, horzMarkov=1, leftMostUnary=True, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
+	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=True, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS> (PIS 2) (VMFIN 1))))
 	
-	>>> un_collinize(tree); collinize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
+	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
-	>>> un_collinize(tree); collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> unbinarize(tree); binarize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VVINF> (VVINF 4))))) (S|<VP-PIS> (PIS 2) (S|<PIS-VMFIN> (VMFIN 1)))))
 
-	>>> un_collinize(tree); collinize(tree, factor="left", horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> unbinarize(tree); binarize(tree, factor="left", horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VMFIN> (S|<PIS-VMFIN> (S|<VP-PIS> (VP (VP|<VVINF> (VP|<ADV-VVINF> (VP|<PDS-ADV> (PDS 0)) (ADV 3)) (VVINF 4)))) (PIS 2)) (VMFIN 1)))
 
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
-	>>> collinize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> binarize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
 
 	>>> tree = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))") 
-	>>> collinize(tree, tailMarker='', reverse=False); print tree.pprint(margin=999)
+	>>> binarize(tree, tailMarker='', reverse=False); print tree.pprint(margin=999)
 	(S (S|<A-B-C-D-E-F> (A 0) (S|<B-C-D-E-F> (B 1) (S|<C-D-E-F> (C 2) (S|<D-E-F> (D 3) (S|<E-F> (E 4) (S|<F> (F 5))))))))
 
 	"""
@@ -250,15 +260,17 @@ def collinize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 					curNode[:] = nodeCopy.pop()
 	
 
-def un_collinize(tree, expandUnary=True, childChar="|", parentChar="^", unaryChar="+"):
-	# Traverse the tree-depth first keeping a pointer to the parent for modification purposes.
+def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
+	unaryChar="+"):
+	# Traverse the tree-depth first keeping a pointer to the parent for
+	# modification purposes.
 	agenda = [(tree, [])]
 	while agenda:
 		node, parent = agenda.pop()
 		if isinstance(node, Tree):
-			# if the node contains the 'childChar' character it means that
-			# it is an artificial node and can be removed, although we still need
-			# to move its children to its parent
+			# if the node contains the 'childChar' character it means that it
+			# is an artificial node and can be removed, although we still
+			# need to move its children to its parent
 			childIndex = node.node.find(childChar)
 			if childIndex != -1:
 				nodeIndex = parent.index(node)
@@ -384,20 +396,19 @@ def defaultrightbin(label, node, sep="|", h=999):
 	return result
 
 def minimalbinarization(tree, score, sep="|", head=None, h=999):
-	"""
-	Implementation of Gildea (2010): Optimal parsing strategies for linear
-	context-free rewriting systems.
-	Expects an immutable tree where the terminals are integers corresponding to
-	indices, with a special bitset attribute to avoid having to call leaves(). 
+	""" Implementation of Gildea (2010): Optimal parsing strategies for
+	linear context-free rewriting systems.  Expects an immutable tree where
+	the terminals are integers corresponding to indices, with a special
+	bitset attribute to avoid having to call leaves() repeatedly.
 	The bitset attribute can be added with addbitsets()
 
-	tree is the tree for which the optimal binarization of its top production
-	will be searched.
-	score is a function from binarized trees to some value, where lower is
-	better (the value can be numeric or anything else which supports
-	comparisons)
-	head is an optional index of the head node, specifying enables head-driven
-	binarization
+	- tree is the tree for which the optimal binarization of its top
+	  production will be searched.
+	- score is a function from binarized trees to some value, where lower is
+	  better (the value can be numeric or anything else which supports
+	  comparisons)
+	- head is an optional index of the head node, specifying it enables
+	  head-driven binarization (which constrains the possible binarizations)
 
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
 	>>> tree1=addbitsets(tree)
@@ -407,10 +418,10 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	True
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
 	>>> print minimalbinarization(addbitsets(tree), complexityfanout, head=2)
-	(X (D 7) (X|<B-A-E-C> (B 3) (X|<A-E-C> (A 0) (X|<E-C> (E 8) (C 5)))))
+	(X (A 0) (X|<B-E-D-C> (B 3) (X|<E-D-C> (E 8) (X|<D-C> (D 7) (C 5)))))
 	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
 	>>> print minimalbinarization(addbitsets(tree), complexityfanout, head=2,h=1)
-	(X (D 7) (X|<B> (B 3) (X|<A> (A 0) (X|<E> (E 8) (C 5)))))
+	(X (A 0) (X|<B> (B 3) (X|<E> (E 8) (X|<D> (D 7) (C 5)))))
 	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))"
 	>>> a = minimalbinarization(addbitsets(tree), complexityfanout)
 	>>> b = minimalbinarization(addbitsets(tree), fanoutcomplexity)
@@ -485,7 +496,9 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 			return p
 		for p1, y in workingset.items():
 			if p1 not in workingset: continue
-			elif nonterms[p] & nonterms[p1]: continue # this is inefficient. should be single query for all items not overlapping with p
+			# this is inefficient. we should have a single query for all
+			# items not overlapping with p
+			elif nonterms[p] & nonterms[p1]: continue
 			# if we do head-driven binarization, add one nonterminal at a time
 			if head is None:
 				p2 = newproduction(p, p1)
@@ -649,19 +662,19 @@ def demo():
 	# convert the tree to CNF
 	cnfTree = collapsedTree.copy(True)
 	lcnfTree = collapsedTree.copy(True)
-	collinize(cnfTree, factor="right", horzMarkov=2)
-	collinize(lcnfTree, factor="left", horzMarkov=2)
+	binarize(cnfTree, factor="right", horzMarkov=2)
+	binarize(lcnfTree, factor="left", horzMarkov=2)
 	
 	# convert the tree to CNF with parent annotation 
 	# (one level) and horizontal smoothing of order two
 	parentTree = collapsedTree.copy(True)
-	collinize(parentTree, horzMarkov=2, vertMarkov=1)
+	binarize(parentTree, horzMarkov=2, vertMarkov=1)
 	
 	# convert the tree back to its original form
 	original = cnfTree.copy(True)
 	original2 = lcnfTree.copy(True)
-	un_collinize(original)
-	un_collinize(original2)
+	unbinarize(original)
+	unbinarize(original2)
 	
 	print "binarized", cnfTree
 	print "Sentences the same? ", tree == original, tree == original2
@@ -672,12 +685,14 @@ def testminbin():
 	to the complexities of right-to-left binarizations. """
 	from treebank import NegraCorpusReader
 	import time
-	#corpus = NegraCorpusReader("../rparse", "negraproc\.export",
-	corpus = NegraCorpusReader("..", "negra-corpus.export", encoding="iso-8859-1",
+	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
+	#corpus = NegraCorpusReader("..", "negra-corpus.export", encoding="iso-8859-1",
+	#	movepunct=True, headorder=True, headfinal=True, headreverse=False)
+	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 		movepunct=True, headorder=True, headfinal=True, headreverse=False)
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), corpus.parsed_sents()[:-2000], corpus.sents()):
-		if len(tree.leaves()) <= 25: continue
+		#if len(tree.leaves()) <= 25: continue
 		begin = time.clock()
 		t = addbitsets(tree)
 		if all(fanout(x) == 1 for x in t.subtrees()): continue
@@ -705,7 +720,7 @@ def testminbin():
 		foo = optimalbinarize(tree.copy(True), headdriven=True, h=1, v=1)
 		bar = Tree.convert(tree)
 		bar.chomsky_normal_form(horzMarkov=1)
-		#collinize(bar, horzMarkov=1)
+		#binarize(bar, horzMarkov=1)
 		bar = addbitsets(bar)
 		if max(map(complexityfanout, foo.subtrees())) > max(map(complexityfanout, bar.subtrees())):
 			print "hd"
@@ -721,8 +736,8 @@ def testminbin():
 def testsplit():
 	from treebank import NegraCorpusReader
 	correct = wrong = 0
-	#n = NegraCorpusReader("../rparse", "tigerproc\.export")
-	n = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
+	#n = NegraCorpusReader("../rparse", "tigerproc.export")
+	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	for tree in n.parsed_sents():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
 			correct += 1
@@ -736,13 +751,12 @@ def main():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
-	#demo()
-	#newtest(); exit()
-	testminbin(); exit()
-	#testsplit()
+	demo()
+	testminbin()
+	testsplit()
 	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
 	if attempted and not fail:
 		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	else: print "doctest attempted %r failed %r" % (attempted, fail)
-__all__ = ["collinize", "un_collinize", "collapse_unary", "splitdiscnodes", "mergediscnodes", "optimalbinarize"]
+__all__ = ["binarize", "unbinarize", "collapse_unary", "splitdiscnodes", "mergediscnodes", "optimalbinarize"]
 if __name__ == '__main__': main()

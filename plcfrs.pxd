@@ -6,7 +6,7 @@ from cpython cimport PyList_Append as append,\
 cimport numpy as np
 from agenda cimport Entry
 from kbest cimport lazykbest, lazykthbest
-from containers cimport ChartItem, Edge, Rule, Terminal
+from containers cimport ChartItem, Edge, Rule, LexicalRule
 from array cimport array
 from agenda cimport EdgeAgenda
 

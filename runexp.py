@@ -16,7 +16,7 @@ from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
 		write_srcg_grammar, write_bitpar_grammar
 from eval import bracketings, printbrackets, mean, harmean, precision, recall, f_measure
 from fragmentseeker import extractfragments
-from treetransforms import collinize, un_collinize, optimalbinarize,\
+from treetransforms import binarize, unbinarize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
 from plcfrs import parse, cfgparse
 from coarsetofine import prunelist_fromchart, kbest_items
@@ -45,7 +45,7 @@ def main(
 	train = 7200, maxsent = 100, # number of sentences to parse
 	skip=0,	# dev set
 	#skip=1000, #skip dev set to get test set
-	bintype = "collinize", # choices: collinize, nltk, optimal, optimalhead
+	bintype = "binarize", # choices: binarize, nltk, optimal, optimalhead
 	factor = "right",
 	revmarkov = True,
 	v = 1,
@@ -78,8 +78,8 @@ def main(
 
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
-	#corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1"); maxlen = 99
-	assert bintype in ("optimal", "optimalhead", "collinize", "nltk")
+	#corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1"); maxlen = 99
+	assert bintype in ("optimal", "optimalhead", "binarize", "nltk")
 	assert estimator in ("dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple", "srcg")
 	os.mkdir(resultdir)
 	# Log everything, and send it to stderr, in a format with just the message.
@@ -95,7 +95,7 @@ def main(
 	logging.getLogger('').addHandler(file)
 
 	corpus = NegraCorpusReader(corpusdir, corpusfile, encoding=encoding,
-		headorder=(bintype in ("collinize", "optimalhead")),
+		headorder=(bintype in ("binarize", "optimalhead")),
 		headfinal=True, headreverse=False, unfold=unfolded,
 		movepunct=movepunct, removepunct=removepunct)
 	logging.info("%d sentences in corpus %s/%s" % (
@@ -129,9 +129,9 @@ def main(
 	if bintype == "nltk":
 		bintype += " %s h=%d v=%d" % (factor, h, v)
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
-	elif bintype == "collinize":
+	elif bintype == "binarize":
 		bintype += " %s h=%d v=%d %s" % (factor, h, v, "tailmarker" if tailmarker else '')
-		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
+		[binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
 				tailMarker=tailmarker,
 				leftMostUnary=True, rightMostUnary=True,
 				#leftMostUnary=False, rightMostUnary=False,
@@ -286,7 +286,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			result = Tree(resultstr)
 			result.un_chomsky_normal_form(childChar=":")
 			mergediscnodes(result)
-			un_collinize(result)
+			unbinarize(result)
 			rem_marks(result)
 			if unfolded: fold(result)
 			msg += "p = %.4e " % exp(-prob)
@@ -352,7 +352,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 		if start and srcg:
 			resultstr, prob = viterbiderivation(chart, start, srcggrammar.tolabel)
 			result = Tree(resultstr)
-			un_collinize(result)
+			unbinarize(result)
 			rem_marks(result)
 			if unfolded: fold(result)
 			msg += "p = %.4e " % exp(-prob)
@@ -441,7 +441,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				msg += "subtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])
 			else:
 				msg += "p = %.4e " % prob
-			un_collinize(dresult)
+			unbinarize(dresult)
 			rem_marks(dresult)
 			if unfolded: fold(dresult)
 			candb = bracketings(dresult)
@@ -573,7 +573,7 @@ def cftiger():
 	dopgrammar = read_bitpar_grammar('/tmp/gtiger.pcfg', '/tmp/gtiger.lex', ewe=False)
 	testgrammar(grammar)
 	testgrammar(dopgrammar)
-	dop = True; srcg = True; unfolded = False; bintype = "collinize h=1 v=1"
+	dop = True; srcg = True; unfolded = False; bintype = "binarize h=1 v=1"
 	viterbi = True; sample = False; both = False; arity_marks = True
 	arity_marks_before_bin = False; estimator = 'sl-dop'; n = 0; m = 10000;
 	maxlen = 15; maxsent = 360
@@ -645,7 +645,7 @@ def readtepacoc():
 	return tepacocids, tepacocsents
 
 def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
-	bintype="collinize", h=1, v=1, factor="right", doph=1, arity_marks=True,
+	bintype="binarize", h=1, v=1, factor="right", doph=1, arity_marks=True,
 	arity_marks_before_bin=False, sample=False, both=False, m=10000,
 	trainmaxlen=999, maxlen=40, maxsent=999, k=1000, prune=True, sldop_n=7,
 	removeparentannotation=False, splitprune=False, mergesplitnodes=True,
@@ -655,7 +655,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	logging.basicConfig(level=logging.DEBUG, format=format)
 	tepacocids, tepacocsents = readtepacoc()
 	#corpus = NegraCorpusReader("../rparse", "tigerprocfullnew.export",
-	#		headorder=(bintype in ("collinize", "nltk")), headfinal=True,
+	#		headorder=(bintype in ("binarize", "nltk")), headfinal=True,
 	#		headreverse=False, unfold=unfolded)
 	#corpus_sents = list(corpus.sents())
 	#corpus_taggedsents = list(corpus.tagged_sents())
@@ -674,8 +674,8 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 		trees = [optimalbinarize(tree) for n, tree in enumerate(trees)]
 	elif bintype == "nltk":
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
-	elif bintype == "collinize":
-		[collinize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="",
+	elif bintype == "binarize":
+		[binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="",
 					leftMostUnary=True, rightMostUnary=True) for a in trees]
 	print "time elapsed during binarization: ", time.clock() - begin
 	coarsetrees = trees

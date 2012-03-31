@@ -2,6 +2,7 @@
 cdef extern int __builtin_ffsll (unsigned long long)
 cdef extern int __builtin_ctzll (unsigned long long)
 cdef extern int __builtin_clzll (unsigned long long)
+cdef extern int __builtin_ctzl (unsigned long)
 cdef extern int __builtin_popcountll (unsigned long long)
 
 cpdef inline int nextset(unsigned long long vec, unsigned int pos):
@@ -27,33 +28,41 @@ cpdef inline int bitcount(unsigned long long vec):
 	"""
 	return __builtin_popcountll(vec)
 
-cpdef inline int pyintbitcount(vec):
-	"""number of set bits in vector"""
-	cdef unsigned long long lvec
-	cdef int result = 0
-	mask = 1
-	mask <<= (sizeof(lvec)*8)
-	mask -= 1
-	while vec:
-		lvec = vec & mask
-		result += __builtin_popcountll(lvec)
-		vec >>= sizeof(long long) * 8
-	return result
+def pyintbitcount(a):
+	""" Number of set bits (1s)
+	>>> bitcount(0b0011101)
+	4
+	"""
+	print 'hello world', a
+	count = 0
+	while a:
+		a &= a - 1
+		count += 1
+	print 'goodbye world'
+	return count
 
-cpdef inline int pyintnextset(vec, unsigned int pos):
-	"""return next set bit starting from pos, -1 if there is none."""
-	cdef unsigned long long lvec
-	#mask = ((1ULL<<(sizeof(lvec)*8))-1)
-	mask = 1
-	mask <<= (sizeof(lvec)*8)
-	mask -= 1
-	vec >>= pos
-	while vec:
-		lvec = vec & mask
-		if lvec: return pos + __builtin_ctzll(lvec)
-		vec >>= sizeof(lvec) * 8
-		pos += sizeof(lvec) * 8
-	return -1
+cpdef inline int pyintnextset(a, int pos):
+	""" First set bit, starting from pos
+	>>> nextset(0b001101, 1)
+	2
+	"""
+	cdef unsigned long mask = -1
+	a >>= pos
+	if a == 0: return -1
+	while a & mask == 0:
+		a >>= (8*sizeof(unsigned long))
+		pos += (8*sizeof(unsigned long))
+	return pos + __builtin_ctzl(a & mask)
+
+cpdef inline int slowpyintnextset(a, pos):
+	""" First set bit, starting from pos
+	>>> nextset(0b001101, 1)
+	2
+	"""
+	result = pos
+	while (not (a >> result) & 1) and a >> result:
+		result += 1
+	return result if a >> result else -1
 
 cpdef inline int bitlength(unsigned long long vec):
 	""" number of bits needed to represent vector

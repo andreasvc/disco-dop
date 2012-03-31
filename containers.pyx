@@ -1,3 +1,4 @@
+from nltk import Tree
 
 cdef class ChartItem:
 	def __init__(self, label, vec):
@@ -81,7 +82,7 @@ cdef class RankedEdge:
 		return "RankedEdge(%r, %r, %d, %d)" % (
 					self.head, self.edge, self.left, self.right)
 
-cdef class Terminal:
+cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
@@ -92,6 +93,83 @@ cdef class Rule:
 		self.args = args; self.lengths = lengths
 		self._args = self.args._I; self._lengths = self.lengths._H
 		self.prob = prob
+
+cdef class Ctrees:
+	"""auxiliary class to be able to pass around collections of trees in
+	Python"""
+	def __init__(self, list trees=None, dict labels=None, dict prods=None):
+		self.len=0; self.max=0
+		if trees is None: return
+		self.alloc(len(trees), sum(map(len,trees)), len(max(trees,key=len)))
+		for tree in trees: self.add(tree, labels, prods)
+	cpdef alloc(self, int numtrees, int numnodes, int maxnodes):
+		""" Initialize an array of trees of nodes structs. """
+		self.max = numtrees
+		self.maxnodes = maxnodes
+		self.data = <NodeArray *>malloc(numtrees * sizeof(NodeArray))
+		assert self.data != NULL
+		self.data[0].nodes = <Node *>malloc(numnodes * sizeof(Node))
+		assert self.data[0].nodes != NULL
+	cpdef add(self, list tree, dict labels, dict prods):
+		""" Trees can be incrementally added to the node array; useful
+		when dealing with large numbers of NLTK trees (say 100,000)."""
+		assert self.len < self.max, ("either no space left (len >= max) or "
+			"alloc() has not been called (max=0). max = %d" % self.max)
+		assert len(tree) <= self.maxnodes, (
+			"Tree too large. Nodes: %d, MAXNODE: %d." % (
+			len(tree), self.maxnodes))
+		self.data[self.len].len = len(tree)
+		if self.len: # derive pointer from previous tree offset by its size
+			self.data[self.len].nodes = &(
+				self.data[self.len-1].nodes)[self.data[self.len-1].len]
+		indices(tree, labels, prods, self.data[self.len].nodes)
+		self.len += 1
+	def __dealloc__(self):
+		#free(self.data[0].nodes)
+		#free(self.data)
+		pass
+	def __len__(self): return self.len
+
+cdef inline indices(tree, dict labels, dict prods, Node *result):
+	""" Convert NLTK tree to an array of Node structs. """
+	cdef int n
+	for n, a in enumerate(tree):
+		if isinstance(a, Tree):
+			assert 1 <= len(a) <= 2, "trees must be binarized:\n%s" % a
+			result[n].label = labels.get(a.node, -2)
+			if len(a.prod) == 1: result[n].prod = -2
+			else: result[n].prod = prods.get(a.prod, -2)
+			result[n].left = a[0].idx
+			result[n].right = a[1].idx if len(a) == 2 else -1
+		elif isinstance(a, Terminal):
+			result[n].label = a.node
+			result[n].prod = result[n].left = result[n].right = -1
+		else: assert isinstance(a, Tree) or isinstance(a, Terminal)
+
+class Terminal():
+	"""auxiliary class to be able to add indices to terminal nodes of NLTK
+	trees"""
+	def __init__(self, node): self.node = node
+	def __repr__(self): return repr(self.node)
+	def __hash__(self): return hash(self.node)
+
+cdef class CBitset:
+	"""auxiliary class to be able to pass around bitsets in Python"""
+	cdef inline sethash(self):
+		cdef int n
+		self._hash = 5381
+		for n in range(self.SLOTS * sizeof(ULong)):
+			self._hash = self._hash * 33 ^ <char>self.data[n]
+	def __hash__(self): return self._hash
+	def __richcmp__(self, CBitset other, int op):
+		cdef int cmp = memcmp(<void *>self.data, <void *>other.data,
+					self.SLOTS * sizeof(ULong))
+		if op == 2: return cmp == 0
+		elif op == 3: return cmp != 0
+		elif op == 0: return cmp < 0
+		elif op == 4: return cmp > 0
+		elif op == 1: return cmp <= 0
+		return cmp >= 0
 	
 # some helper functions that only serve to bridge cython & python code
 cpdef inline unsigned int getlabel(ChartItem a):

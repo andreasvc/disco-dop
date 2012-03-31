@@ -7,7 +7,7 @@ import re, gc, logging, sys
 import numpy as np
 from agenda import EdgeAgenda, Entry
 from estimates cimport getoutside
-from containers import ChartItem, Edge, Rule, Terminal
+from containers import ChartItem, Edge, Rule, LexicalRule
 np.import_array()
 
 DEF infinity = float('infinity')
@@ -51,7 +51,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef Edge edge, newedge
 	cdef ChartItem NONE = new_ChartItem(0, 0)
 	cdef ChartItem item, sibling, newitem, goal = NONE
-	cdef Terminal terminal
+	cdef LexicalRule terminal
 	cdef Rule rule
 	cdef np.ndarray[np.double_t, ndim=4] outside
 	cdef bint doestimate = bool(estimate), doprune = bool(prunelist) or bool(coarsechart), prunenow, split
@@ -416,7 +416,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 	cdef double oldscore, prob
 	cdef bint foundbetter = False 
 	cdef Rule rule
-	cdef Terminal terminal
+	cdef LexicalRule terminal
 	cdef ChartItem NONE = new_ChartItem(0, 0)
 	#cdef list chart = [[{} for _ in range(lensent+1)] for _ in range(lensent)]
 	cdef dict chart = {}						#the full chart

@@ -3,7 +3,7 @@ Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs).
 """
 from agenda import Agenda
-from containers import ChartItem, Rule, Terminal
+from containers import ChartItem, Rule
 from collections import defaultdict
 from math import exp
 import numpy as np
@@ -338,7 +338,7 @@ def main():
 	try: from plcfrs import parse, pprint_chart
 	except ImportError: from oldplcfrs import parse, pprint_chart
 	from nltk import Tree
-	corpus = NegraCorpusReader(".", "sample2\.export", encoding="iso-8859-1")
+	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
 	grammar = splitgrammar(induce_srcg(trees, corpus.sents()))
