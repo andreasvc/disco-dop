@@ -47,7 +47,7 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	CST = <ULong *>malloc(MAXNODE * MAXNODE * SLOTS * sizeof(ULong))
 	assert CST is not NULL, (MAXNODE, SLOTS, MAXNODE * MAXNODE * SLOTS * sizeof(ULong))
 	# find recurring fragments
-	for n in range(offset, end or trees1.len):
+	for n in range(offset, (end or trees1.len) - (sents2 is None)):
 		a = ctrees1[n]; asent = <list>(sents1[n])
 		if sents2 is None: start = n + 1
 		for m in range(start, trees2.len):
@@ -84,13 +84,13 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		if complete:
 			if discontinuous:
 				for found_in in inter.itervalues():
-					frag = (strtree(a.nodes, revlabel, asent, 0), asent)
+					frag = (strtree(a.nodes, revlabel, asent, a.root), asent)
 					(<set>found_in).add(n)
 					(<set>fragments[frag]).update(found_in)
 				
 			else:
 				for found_in in inter.itervalues():
-					frag = strtree(a.nodes, revlabel, asent, 0)
+					frag = strtree(a.nodes, revlabel, asent, a.root)
 					(<set>found_in).add(n)
 					(<set>fragments[frag]).update(found_in)
 		else:
@@ -283,7 +283,7 @@ def getsent(frag, list sent):
 cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, list asent, list bsent, list revlabel, int SLOTS, bint bitmatrix=False):
 	cdef int n, m
 	cdef Node aa, bb
-	print "tree1: %s\ntree2: %s" % (strtree(a.nodes, revlabel, asent, a.root), strtree(b.nodes, revlabel, bsent, b.root))
+	print "trees:\n%s\n%s" % (strtree(a.nodes, revlabel, asent, a.root), strtree(b.nodes, revlabel, bsent, b.root))
 	print '\t'.join([''] + ["%2d"%x for x in range(b.len) if b.nodes[x].prod != -1]), '\n',
 	for m in range(b.len):
 		bb = b.nodes[m]
@@ -304,6 +304,11 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, list asent, list bsent, list 
 						print abitcount(&CST[IDX(n,m,b.len,SLOTS)], SLOTS) - 1,
 				else: print '-',
 	print
+	print "common productions:", len(set([a.nodes[n].prod for n in range(a.len)]) &
+		set([b.nodes[n].prod for n in range(b.len)]))
+	print "found:",
+	if bitmatrix: print sum([abitcount(&CST[n * SLOTS], SLOTS) > 0 for n in range(a.len)])
+	else: print sum([any([abitcount(&CST[IDX(n,m,b.len,SLOTS)], SLOTS) > 2 for m in range(b.len)]) for n in range(a.len)])
 
 def add_cfg_rules(tree):
 	for a, b in zip(tree.subtrees(), tree.productions()):
@@ -362,7 +367,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		int n, m, x, root, start = 0, MAXNODE, SLOTS
 		ULong *bitset = NULL, *CST = NULL
 		NodeArray a, b, result, *ctrees1, *ctrees2
-		list asent, revlabel = sorted(labels, key=labels.get)
+		list asent, bsent, revlabel = sorted(labels, key=labels.get)
 		dict fragments = <dict>defaultdict(set)
 	
 	ctrees1 = trees1.data
@@ -380,11 +385,12 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	assert bitset is not NULL
 	assert CST is not NULL
 	# find recurring fragments
-	for n in range(offset, end or trees1.len):
+	for n in range(offset, (end or trees1.len) - (sents2 is None)):
 		a = ctrees1[n]; asent = <list>(sents1[n])
 		if sents2 is None: start = n + 1
 		for m in range(start, trees2.len):
 			b = ctrees2[m]
+			bsent = <list>(sents1[m]) if sents2 is None else <list>(sents2[m])
 			if complete:
 				for x in range(b.len):
 					if b.nodes[x].prod == -1: break #skip terminals
@@ -397,19 +403,19 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 						break
 				continue
 			# initialize table
-			memset(CST, 0, b.len * SLOTS * sizeof(ULong))
+			memset(CST, 0, a.len * SLOTS * sizeof(ULong))
 			# fill table
-			fasttreekernel(a.nodes, b.nodes, CST, SLOTS)
+			fasttreekernel(b.nodes, a.nodes, CST, SLOTS)
 			# dump table
 			if debug:
 				print n, m
-				dumpCST(CST, b, a, (sents2[m] if sents2 else sents1[m]), asent,
+				dumpCST(CST, a, b, asent, (sents2[m] if sents2 else sents1[m]),
 					revlabel, SLOTS, True)
 			# extract results
 			x = m if sents2 is None else -1
 			#todo: exact counts! i.e., track multiple occurrences per tree
-			extractbitsets(CST, bitset, a.nodes, b.nodes, b.root, n, m,
-				fragments, discontinuous, revlabel, asent, SLOTS)
+			extractbitsets(CST, bitset, b.nodes, a.nodes, a.root, n, m,
+				fragments, discontinuous, revlabel, bsent, SLOTS)
 	free(bitset)
 	free(CST)
 	return fragments
@@ -462,10 +468,10 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 	SETBIT(result, i)
 	CLEARBIT(&CST[j * SLOTS], i)
 	if a[i].left < 0 or b[j].left < 0: return
-	if TESTBIT(&CST[b[j].left * SLOTS], a[i].left):
+	elif TESTBIT(&CST[b[j].left * SLOTS], a[i].left):
 		extractat(CST, result, a, b, a[i].left, b[j].left, SLOTS)
 	if a[i].right < 0 or b[j].right < 0: return
-	if TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
+	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 
 def extractfragments1(trees, sents):

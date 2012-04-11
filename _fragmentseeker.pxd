@@ -9,7 +9,7 @@ cdef extern from "bit.h":
 	int BITSLOT(int b)
 	int SETBIT(ULong a[], int b)
 	int CLEARBIT(ULong a[], int b)
-	int TESTBIT(ULong a[], int b)
+	ULong TESTBIT(ULong a[], int b)
 	int BITNSLOTS(int nb)
 	int IDX(int i, int j, int jmax, int kmax)
 	int abitcount(ULong vec[], int slots)

@@ -128,7 +128,6 @@ cdef class Ctrees:
 	def __dealloc__(self):
 		free(self.data[0].nodes)
 		free(self.data)
-		pass
 	def __len__(self): return self.len
 
 cdef inline void indices(tree, dict labels, dict prods, Node *result):
