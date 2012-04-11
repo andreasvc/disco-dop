@@ -15,3 +15,4 @@ cdef extern from "bit.h":
 	int abitcount(ULong vec[], int slots)
 	int anextset(ULong vec[], int pos, int slots)
 	int subset(ULong vec1[], ULong vec2[], int slots)
+	void setunion(ULong vec1[], ULong vec2[], int slots)

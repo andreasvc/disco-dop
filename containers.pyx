@@ -100,7 +100,7 @@ cdef class Ctrees:
 	def __init__(self, list trees=None, dict labels=None, dict prods=None):
 		self.len=0; self.max=0
 		if trees is None: return
-		self.alloc(len(trees), sum(map(len,trees)), len(max(trees,key=len)))
+		self.alloc(len(trees), sum(map(len, trees)), len(max(trees, key=len)))
 		for tree in trees: self.add(tree, labels, prods)
 	cpdef alloc(self, int numtrees, int numnodes, int maxnodes):
 		""" Initialize an array of trees of nodes structs. """
@@ -122,17 +122,19 @@ cdef class Ctrees:
 		if self.len: # derive pointer from previous tree offset by its size
 			self.data[self.len].nodes = &(
 				self.data[self.len-1].nodes)[self.data[self.len-1].len]
-		indices(tree, labels, prods, self.data[self.len].nodes)
+		root = indices(tree, labels, prods, self.data[self.len].nodes)
+		self.data[self.len].root = root
 		self.len += 1
 	def __dealloc__(self):
-		#free(self.data[0].nodes)
-		#free(self.data)
+		free(self.data[0].nodes)
+		free(self.data)
 		pass
 	def __len__(self): return self.len
 
-cdef inline indices(tree, dict labels, dict prods, Node *result):
+cdef inline int indices(tree, dict labels, dict prods, Node *result):
 	""" Convert NLTK tree to an array of Node structs. """
 	cdef int n
+	for n in range(len(tree)): result[n].parent = -1
 	for n, a in enumerate(tree):
 		if isinstance(a, Tree):
 			assert 1 <= len(a) <= 2, "trees must be binarized:\n%s" % a
@@ -140,16 +142,22 @@ cdef inline indices(tree, dict labels, dict prods, Node *result):
 			if len(a.prod) == 1: result[n].prod = -2
 			else: result[n].prod = prods.get(a.prod, -2)
 			result[n].left = a[0].idx
-			result[n].right = a[1].idx if len(a) == 2 else -1
+			result[result[n].left].parent = n
+			if len(a) == 2:
+				result[n].right = a[1].idx
+				result[result[n].right].parent = n
+			else: result[n].right = -1
 		elif isinstance(a, Terminal):
 			result[n].label = a.node
 			result[n].prod = result[n].left = result[n].right = -1
 		else: assert isinstance(a, Tree) or isinstance(a, Terminal)
+	for n in range(len(tree)):
+		if result[n].parent == -1: return n
 
 class Terminal():
 	"""auxiliary class to be able to add indices to terminal nodes of NLTK
 	trees"""
-	def __init__(self, node): self.node = node
+	def __init__(self, node): self.prod = self.node = node
 	def __repr__(self): return repr(self.node)
 	def __hash__(self): return hash(self.node)
 

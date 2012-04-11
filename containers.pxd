@@ -40,10 +40,10 @@ cdef class RankedEdge:
 
 cdef struct Node:
 	int label, prod
-	short left, right
+	short left, right, parent
 
 cdef struct NodeArray:
-	int len
+	short len, root
 	Node *nodes
 
 cdef class Ctrees:
