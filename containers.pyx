@@ -122,8 +122,8 @@ cdef class Ctrees:
 		if self.len: # derive pointer from previous tree offset by its size
 			self.data[self.len].nodes = &(
 				self.data[self.len-1].nodes)[self.data[self.len-1].len]
-		root = indices(tree, labels, prods, self.data[self.len].nodes)
-		self.data[self.len].root = root
+		indices(tree, labels, prods, self.data[self.len].nodes)
+		self.data[self.len].root = tree[0].root
 		self.len += 1
 	def __dealloc__(self):
 		free(self.data[0].nodes)
@@ -131,10 +131,9 @@ cdef class Ctrees:
 		pass
 	def __len__(self): return self.len
 
-cdef inline int indices(tree, dict labels, dict prods, Node *result):
+cdef inline void indices(tree, dict labels, dict prods, Node *result):
 	""" Convert NLTK tree to an array of Node structs. """
 	cdef int n
-	for n in range(len(tree)): result[n].parent = -1
 	for n, a in enumerate(tree):
 		if isinstance(a, Tree):
 			assert 1 <= len(a) <= 2, "trees must be binarized:\n%s" % a
@@ -142,17 +141,13 @@ cdef inline int indices(tree, dict labels, dict prods, Node *result):
 			if len(a.prod) == 1: result[n].prod = -2
 			else: result[n].prod = prods.get(a.prod, -2)
 			result[n].left = a[0].idx
-			result[result[n].left].parent = n
 			if len(a) == 2:
 				result[n].right = a[1].idx
-				result[result[n].right].parent = n
 			else: result[n].right = -1
 		elif isinstance(a, Terminal):
 			result[n].label = a.node
 			result[n].prod = result[n].left = result[n].right = -1
 		else: assert isinstance(a, Tree) or isinstance(a, Terminal)
-	for n in range(len(tree)):
-		if result[n].parent == -1: return n
 
 class Terminal():
 	"""auxiliary class to be able to add indices to terminal nodes of NLTK

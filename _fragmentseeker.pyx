@@ -332,16 +332,17 @@ def tolist(tree):
 	for n in reversed(range(len(result))):
 		a = result[n]
 		a.idx = n
-		if isinstance(a, Tree): a.left = a[0].idx
+	result[0].root = 0
 	return result
 
 def sorttrees(trees, prods):
 	for tree in trees:
 		# reverse sort so that terminals end up last
 		tree.sort(key=lambda n: -prods.get(n.prod, -1))
-		for n, a in enumerate(tree): a.idx = n
 		for n, a in enumerate(tree):
-			if isinstance(a, Tree): a.left = a[0].idx
+			if a.idx == 0: a.root = root = n
+			a.idx = n
+		tree[0].root = root
 
 cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	dict labels, dict prods, Ctrees trees2=None, list sents2=None,
