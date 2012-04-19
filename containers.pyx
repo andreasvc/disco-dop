@@ -1,5 +1,7 @@
 from nltk import Tree
+cimport cython
 
+@cython.final
 cdef class ChartItem:
 	def __init__(ChartItem self, label, vec):
 		self.label = label
@@ -21,6 +23,7 @@ cdef class ChartItem:
 	def __repr__(ChartItem self):
 		return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
+@cython.final
 cdef class Edge:
 	def __init__(self, score, inside, prob, left, right):
 		self.score = score; self.inside = inside; self.prob = prob
@@ -56,6 +59,7 @@ cdef class Edge:
 		return "Edge(%g, %g, %g, %r, %r)" % (
 				self.score, self.inside, self.prob, self.left, self.right)
 
+@cython.final
 cdef class RankedEdge:
 	def __cinit__(RankedEdge self, ChartItem head, Edge edge, int j1, int j2):
 		self.head = head; self.edge = edge
@@ -82,11 +86,13 @@ cdef class RankedEdge:
 		return "RankedEdge(%r, %r, %d, %d)" % (
 					self.head, self.edge, self.left, self.right)
 
+@cython.final
 cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
 
+@cython.final
 cdef class Rule:
 	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
@@ -94,6 +100,7 @@ cdef class Rule:
 		self._args = self.args._I; self._lengths = self.lengths._H
 		self.prob = prob
 
+@cython.final
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in
 	Python"""
@@ -170,6 +177,7 @@ class Terminal():
 	def __repr__(self): return repr(self.node)
 	def __hash__(self): return hash(self.node)
 
+@cython.final
 cdef class FrozenArray:
 	def __init__(self, array data):
 		self.data = data
@@ -194,6 +202,7 @@ cdef inline FrozenArray new_FrozenArray(array data):
 	item.data = data
 	return item
 
+@cython.final
 cdef class CBitset:
 	"""auxiliary class to be able to pass around bitsets in Python"""
 	def __cinit__(CBitset self, unsigned char slots):
@@ -215,6 +224,7 @@ cdef class CBitset:
 		elif op == 1: return cmp <= 0
 		return cmp >= 0
 
+@cython.final
 cdef class MemoryPool:
 	"""A memory pool that allocates chunks of poolsize, up to limit times.
 	Memory is automatically freed when object is deallocated. """

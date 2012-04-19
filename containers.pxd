@@ -1,15 +1,18 @@
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memcmp
 from array cimport array
+cimport cython
 
 ctypedef unsigned long ULong
 ctypedef unsigned int UInt
 ctypedef unsigned char UChar
 
+@cython.final
 cdef class ChartItem:
 	cdef public unsigned int label
 	cdef public unsigned long long vec
 
+@cython.final
 cdef class Edge:
 	cdef public double score
 	cdef public double inside
@@ -17,6 +20,7 @@ cdef class Edge:
 	cdef public ChartItem left
 	cdef public ChartItem right
 
+@cython.final
 cdef class LexicalRule:
 	cdef public unsigned int lhs
 	cdef public unsigned int rhs1
@@ -24,6 +28,7 @@ cdef class LexicalRule:
 	cdef public unicode word
 	cdef public double prob
 
+@cython.final
 cdef class Rule:
 	cdef public unsigned int lhs
 	cdef public unsigned int rhs1
@@ -34,6 +39,7 @@ cdef class Rule:
 	cdef unsigned int * _args
 	cdef unsigned short * _lengths
 
+@cython.final
 cdef class RankedEdge:
 	cdef public ChartItem head
 	cdef public Edge edge
@@ -48,6 +54,7 @@ cdef struct NodeArray:
 	short len, root
 	Node *nodes
 
+@cython.final
 cdef class Ctrees:
 	cdef public int maxnodes
 	cdef public long nodes
@@ -58,13 +65,16 @@ cdef class Ctrees:
 	cdef realloc(self, int len)
 	cpdef add(self, list tree, dict labels, dict prods)
 
+@cython.final
 cdef class CBitset:
 	cdef char *data
 	cdef UChar slots
 
+@cython.final
 cdef class FrozenArray:
 	cdef array data
 
+@cython.final
 cdef class MemoryPool:
 	cdef int poolsize, limit, n, leftinpool
 	cdef void **pool

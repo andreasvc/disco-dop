@@ -3,7 +3,7 @@ fragments from large treebanks.
 Moschitti (2006): Making Tree Kernels practical for Natural Language
 Learning. """
 
-import re
+import re, codecs
 from collections import defaultdict
 from itertools import count
 from array import array
@@ -145,39 +145,39 @@ cdef void shiftright(ULong *bitset, int shift, UChar SLOTS):
 		if x: bitset[x-1] |= bitset[x] & mask
 		bitset[x] >>= shift
 
-cdef inline str strtree(Node *tree, list labels, list sent, int i):
+cdef inline unicode strtree(Node *tree, list revlabel, list sent, int i):
 	""" produce string representation of (complete) tree. """
 	if tree[i].prod == -1:
-		if sent is None: return str(tree[i].label)
+		if sent is None: return unicode(tree[i].label)
 		return "" if sent[tree[i].label] is None else sent[tree[i].label]
 	if tree[i].left >= 0:
 		if tree[i].right >= 0:
-			return "(%s %s %s)" % (labels[tree[i].label],
-				strtree(tree, labels, sent, tree[i].left),
-				strtree(tree, labels, sent, tree[i].right))
-		return "(%s %s)" % (labels[tree[i].label],
-			strtree(tree, labels, sent, tree[i].left))
-	return "(%s )" % (labels[tree[i].label])
+			return u"(%s %s %s)" % (revlabel[tree[i].label],
+				strtree(tree, revlabel, sent, tree[i].left),
+				strtree(tree, revlabel, sent, tree[i].right))
+		return u"(%s %s)" % (revlabel[tree[i].label],
+			strtree(tree, revlabel, sent, tree[i].left))
+	return u"(%s )" % (revlabel[tree[i].label])
 
-cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, list sent,
-	int i):
+cdef inline unicode getsubtree(Node *tree, ULong *bitset, list revlabel,
+	list sent, int i):
 	""" Turn bitset into string representation of tree.  """
 	if TESTBIT(bitset, i) and tree[i].left >= 0:
 		if tree[i].right >= 0:
-			return "(%s %s %s)" % (labels[tree[i].label],
-				getsubtree(tree, bitset, labels, sent, tree[i].left),
-				getsubtree(tree, bitset, labels, sent, tree[i].right))
-		return "(%s %s)" % (labels[tree[i].label],
-			getsubtree(tree, bitset, labels, sent, tree[i].left))
+			return u"(%s %s %s)" % (revlabel[tree[i].label],
+				getsubtree(tree, bitset, revlabel, sent, tree[i].left),
+				getsubtree(tree, bitset, revlabel, sent, tree[i].right))
+		return u"(%s %s)" % (revlabel[tree[i].label],
+			getsubtree(tree, bitset, revlabel, sent, tree[i].left))
 	elif tree[i].prod == -1:
-		return str(tree[i].label) if sent is None else sent[tree[i].label]
+		return unicode(tree[i].label) if sent is None else sent[tree[i].label]
 	elif sent is None:
-		return "(%s %s)" % (labels[tree[i].label], yieldheads(tree, sent, i))
-	else: return "(%s )" % (labels[tree[i].label])
+		return u"(%s %s)" % (revlabel[tree[i].label], yieldheads(tree, sent, i))
+	else: return u"(%s )" % (revlabel[tree[i].label])
 
-cdef inline str yieldheads(Node *tree, list sent, int i):
+cdef inline unicode yieldheads(Node *tree, list sent, int i):
 	y = getyield(tree, sent, i)
-	return " ".join([str(a) for a in sorted(y) if a - 1 not in y])
+	return " ".join([unicode(a) for a in sorted(y) if a - 1 not in y])
 
 cdef inline list getyield(Node *tree, list sent, int i):
 	if tree[i].prod == -1: return [tree[i].label]
@@ -201,11 +201,11 @@ def getsent(frag, list sent):
 	if not leaves: return frag, ()
 	maxl = max(leaves)
 	for n in sorted(leaves):
-		leafmap[n] = str(x)
+		leafmap[n] = unicode(x)
 		newsent.append(sent[n])
 		x += 1
 		if n + 1 not in leaves and n != maxl:
-			leafmap[n+1] = str(x)
+			leafmap[n+1] = unicode(x)
 			newsent.append(None)
 			x += 1
 	frag = termsre.sub(repl(leafmap), frag)
@@ -263,7 +263,7 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, list asent, list bsent,
 
 def add_cfg_rules(tree):
 	for a, b in zip(tree.subtrees(), tree.productions()):
-		a.prod = (b.lhs().symbol(),) + tuple(str(x) for x in b.rhs())
+		a.prod = (b.lhs().symbol(),) + tuple(unicode(x) for x in b.rhs())
 	return tree
 
 def add_srcg_rules(tree, sent):
@@ -439,7 +439,7 @@ cpdef array exactcounts(Ctrees trees1, list sents1, Ctrees trees2,
 		n = bitset[SLOTS + 1]
 		a = ctrees1[n]
 		candidates = set()
-		candidates.update(<set>(treeswithprod[a.nodes[i].prod]))
+		candidates |= <set>(treeswithprod[a.nodes[i].prod])
 		for x in range(a.len):
 			if TESTBIT(bitset, x):
 				candidates &= <set>(treeswithprod[a.nodes[x].prod])
@@ -511,24 +511,27 @@ def pathsplit(p):
 	return p.rsplit("/", 1) if "/" in p else (".", p)
 
 def readtreebanks(treebank1, treebank2=None, sort=True, discontinuous=False,
-	limit=0):
+	limit=0, encoding="utf-8"):
 	labels = {}
 	prods = {}
 	trees1, sents1 = readtreebank(treebank1, labels, prods, sort,
-		discontinuous, limit)
+		discontinuous, limit, encoding)
 	trees2, sents2 = readtreebank(treebank2, labels, prods, sort,
-		discontinuous, limit)
+		discontinuous, limit, encoding)
 	revlabel = sorted(labels, key=labels.get)
-	return trees1, sents1, trees2, sents2, labels, prods, revlabel
+	treeswithprod = indextrees(trees1, prods)
+	return dict(trees1=trees1, sents1=sents1, trees2=trees2, sents2=sents2,
+		labels=labels, prods=prods, revlabel=revlabel,
+		treeswithprod=treeswithprod)
 
 def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
-	limit=0):
+	limit=0, encoding="utf-8"):
 	if treebank is None: return None, None
 	if discontinuous:
 		# no incremental reading w/disc trees
 		from grammar import canonicalize
 		from treebank import NegraCorpusReader
-		corpus = NegraCorpusReader(*pathsplit(treebank))
+		corpus = NegraCorpusReader(*pathsplit(treebank), encoding=encoding)
 		trees = corpus.parsed_sents(); sents = corpus.sents()
 		if limit: trees = trees[:limit]; sents = sents[:limit]
 		for tree in trees: tree.chomsky_normal_form()
@@ -547,7 +550,7 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 		return trees, sents
 	sents = []
 	tmp = Tree("TMP", [])
-	lines = open(treebank).readlines()
+	lines = codecs.open(treebank, encoding=encoding).readlines()
 	if limit: lines = lines[:limit]
 	numtrees = len(lines)
 	numnodes = sum(a.count(" ") for a in lines) + numtrees
@@ -571,7 +574,7 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 		# collect new labels and productions
 		for a, b in zip(tree, productions):
 			if a.node not in labels: labels[a.node] = len(labels)
-			a.prod = (b.lhs().symbol(),) + tuple(str(x) for x in b.rhs())
+			a.prod = (b.lhs().symbol(),) + tuple(unicode(x) for x in b.rhs())
 			if a.prod not in prods: prods[a.prod] = len(prods)
 		root = tree[0]
 		if sort: tree.sort(key=lambda n: -prods.get(n.prod, -1))

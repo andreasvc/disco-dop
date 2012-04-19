@@ -76,7 +76,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 		assert len(grammar.bylhs) == len(outside)
 		assert lensent <= maxlen
 
-	gc.disable() #does this actually do anything with Cython?
+	gc.disable() #is this actually beneficial?
+	# maybe we can disable refcounting altogether?
 
 	# scan
 	for i, w in enumerate(sent):
@@ -493,7 +494,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 
 		# unary rules on POS tags 
 		for rules in <list>grammar.unary:
-			for rule in rules:
+			for rule in <list>rules:
 				if isfinite(viterbi[rule.rhs1, left, right]):
 					prob = rule.prob + viterbi[rule.rhs1, left, right]
 					if isfinite(viterbi[rule.lhs, left, right]):
@@ -576,7 +577,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 			# unary rules
 			for _ in range(2):	#add up to 2 levels of unary nodes
 				for rules in <list>grammar.unary:
-					for rule in rules:
+					for rule in <list>rules:
 						if isfinite(viterbi[rule.rhs1, left, right]):
 							prob = rule.prob + viterbi[rule.rhs1, left, right]
 							if isfinite(viterbi[rule.lhs, left, right]):

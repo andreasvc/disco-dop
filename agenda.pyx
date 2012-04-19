@@ -6,11 +6,12 @@ by marking entries as invalid. Provides dictionary-like interface.
 Based on notes in the documentation for heapq, see:
 http://docs.python.org/library/heapq.html
 
-This version is specialised to be used as agenda with edges.
+There is a version specialised to be used as agenda with edges.
 """
 
 from itertools import count, imap, izip
 from operator import itemgetter
+cimport cython
 
 DEF INVALID = 0
 
@@ -23,11 +24,13 @@ cdef class Entry: pass #defined in pxd file
 
 cdef class Function:
 	cdef inline bint cmpfun(self, Entry a, Entry b): raise NotImplemented
+@cython.final
 cdef class EdgeCmp(Function):
 	# this is _significantly_ faster than relying on __richcmp__
 	cdef inline bint cmpfun(self, Entry a, Entry b):
 		return (a.value.score < b.value.score
 				or (a.value.score == b.value.score and a.count < b.count))
+@cython.final
 cdef class NormalCmp(Function):
 	cdef inline bint cmpfun(self, Entry a, Entry b):
 		return (a.value < b.value
@@ -98,18 +101,16 @@ cdef class Agenda(dict):
 		self.setitem(key, value)
 
 	def peekitem(self):
-		cdef Entry entry
 		while not (<Entry>(self.heap[0])).count:
-			entry = <Entry>heappop(self.heap, self.cmpfun)
+			<Entry>heappop(self.heap, self.cmpfun)
 		return (<Entry>(self.heap[0])).key, (<Entry>(self.heap[0])).value
 
 	cpdef Entry popentry(self):
 		""" like popitem, but avoids tuple construction by returning an Entry
 		object """
-		cdef Entry entry
-		while True:
+		cdef Entry entry = <Entry>heappop(self.heap, self.cmpfun)
+		while not entry.count:
 			entry = <Entry>heappop(self.heap, self.cmpfun)
-			if entry.count: break
 		del self.mapping[entry.key]
 		self.length -= 1
 		return entry
@@ -197,6 +198,7 @@ cdef class Agenda(dict):
 	cpdef object getval(self, Entry entry):
 		return entry.value
 
+@cython.final
 cdef class EdgeAgenda(Agenda):
 	def __init__(self, iterable=None):
 		""" NB: when initialized with an iterable, we don't guarantee that
