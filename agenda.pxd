@@ -24,22 +24,22 @@ cdef class Agenda(dict):
 	cdef unsigned long counter
 	cdef Function cmpfun
 	cpdef Entry popentry(self)
-	cdef inline object getitem(self, key)
-	cpdef inline setitem(self, key, object value)
-	cpdef inline setifbetter(self, key, object value)
-	cdef inline bint contains(self, key)
-	cdef inline object replace(self, object key, object value)
+	cdef object getitem(self, key)
+	cpdef setitem(self, key, object value)
+	cpdef setifbetter(self, key, object value)
+	cdef bint contains(self, key)
+	cdef object replace(self, object key, object value)
 	cpdef list getheap(self)
 	cpdef object getkey(self, Entry entry)
 	cpdef object getval(self, Entry entry)
 
 cdef class EdgeAgenda(Agenda):
 	cpdef Entry popentry(self)
-	cdef inline object getitem(self, key)
-	cpdef inline setitem(self, key, object value)
-	cpdef inline setifbetter(self, key, object value)
-	cdef inline bint contains(self, key)
-	cdef inline object replace(self, object key, object value)
+	cdef object getitem(self, key)
+	cpdef setitem(self, key, object value)
+	cpdef setifbetter(self, key, object value)
+	cdef bint contains(self, key)
+	cdef object replace(self, object key, object value)
 	cpdef list getheap(self)
 	cpdef object getval(self, Entry entry)
 

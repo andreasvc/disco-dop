@@ -1,8 +1,10 @@
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memcmp
 from array cimport array
 
 ctypedef unsigned long ULong
+ctypedef unsigned int UInt
+ctypedef unsigned char UChar
 
 cdef class ChartItem:
 	cdef public unsigned int label
@@ -47,17 +49,30 @@ cdef struct NodeArray:
 	Node *nodes
 
 cdef class Ctrees:
-	cdef int len, max, maxnodes
+	cdef public int maxnodes
+	cdef public long nodes
+	cdef int len, max,
+	cdef long nodesleft
 	cdef NodeArray *data
-	cpdef alloc(self, int numtrees, int numnodes, int maxnodes)
+	cpdef alloc(self, int numtrees, long numnodes)
+	cdef realloc(self, int len)
 	cpdef add(self, list tree, dict labels, dict prods)
 
 cdef class CBitset:
-	cdef ULong *data
-	cdef long _hash
-	cdef char SLOTS
-	cdef inline sethash(self)
+	cdef char *data
+	cdef UChar slots
 
+cdef class FrozenArray:
+	cdef array data
+
+cdef class MemoryPool:
+	cdef int poolsize, limit, n, leftinpool
+	cdef void **pool
+	cdef void *cur
+	cdef void *malloc(self, int size)
+	cdef void reset(MemoryPool self)
+
+cdef inline FrozenArray new_FrozenArray(array data)
 cpdef inline unsigned int getlabel(ChartItem a)
 cpdef inline unsigned long long getvec(ChartItem a)
 cpdef inline double getscore(Edge a)

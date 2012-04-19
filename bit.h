@@ -102,7 +102,7 @@ inline int abitcount(unsigned long vec[], int slots) {
 
 inline int anextset(unsigned long vec[], unsigned int pos, int slots) {
 	// return next set bit starting from pos, -1 if there is none.
-	int a = BITSLOT(pos), offset = pos % BITSIZE;
+	unsigned int a = BITSLOT(pos), offset = pos % BITSIZE;
 	if (vec[a] >> offset) return pos + __builtin_ctzl(vec[a] >> offset);
 	for (a=a+1; a<slots; a++)
 		if (vec[a]) return a * BITSIZE + __builtin_ctzl(vec[a]);

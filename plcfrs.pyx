@@ -50,18 +50,18 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef Entry entry
 	cdef Edge edge, newedge
 	cdef ChartItem NONE = new_ChartItem(0, 0)
-	cdef ChartItem item, sibling, newitem, goal = NONE
+	cdef ChartItem item, sibling, goal = NONE
 	cdef LexicalRule terminal
 	cdef Rule rule
 	cdef np.ndarray[np.double_t, ndim=4] outside
 	cdef bint doestimate = bool(estimate), doprune = bool(prunelist) or bool(coarsechart), prunenow, split
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
-	cdef unsigned int newlabel, blocked = 0
+	cdef unsigned int blocked = 0
 	cdef unsigned int Epsilon = toid["Epsilon"]
 	cdef unsigned long long vec = 0
 	cdef unsigned long maxA = 0
-	cdef double x, y
+	cdef double x, y = 0.0
 	cdef str label = ''
 
 	if start == None: start = toid["ROOT"]
@@ -88,16 +88,17 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				item = new_ChartItem(terminal.lhs, 1UL << i)
 				sibling = new_ChartItem(Epsilon, i)
 				x = terminal.prob
-				y = getoutside(outside, maxlen, lensent,
-							item.label, item.vec) if doestimate else 0.0
+				if doestimate:
+					y = getoutside(outside, maxlen, lensent,
+						item.label, item.vec)
 				agenda[item] = new_Edge(x + y, x, x, sibling, NONE)
 				chart[item] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
 			item = new_ChartItem(toid[tags[i]], 1UL << i)
 			sibling = new_ChartItem(Epsilon, i)
-			y = getoutside(outside, maxlen, lensent,
-						item.label, item.vec) if doestimate else 0.0
+			if doestimate:
+				y = getoutside(outside, maxlen, lensent, item.label, item.vec)
 			agenda[item] = new_Edge(y, 0.0, 0.0, sibling, NONE)
 			chart[item] = []
 			recognized = True
@@ -251,7 +252,6 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge,
 	cdef unsigned long long component, vec
 	cdef unsigned int a = 0, b = 0, splitlabel = 0, origlabel
 	cdef int cnt = 0
-	cdef Edge e
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = dict_contains(chart, newitem) == 1
 	#not in agenda or chart
@@ -420,7 +420,6 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 	cdef ChartItem NONE = new_ChartItem(0, 0)
 	#cdef list chart = [[{} for _ in range(lensent+1)] for _ in range(lensent)]
 	cdef dict chart = {}						#the full chart
-	cdef unicode word
 	cdef unsigned int Epsilon = grammar.toid["Epsilon"]
 	cdef unsigned long long vec = 0
 	# the viterbi chart is initially filled with infinite log probabilities,
@@ -461,8 +460,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 				sibling = new_ChartItem(Epsilon, i)
 				x = terminal.prob
 				viterbi[terminal.lhs, left, right] = terminal.prob
-				chart[new_ChartItem(terminal.lhs, 1UL << left)] = [
-					new_Edge(x, x, x, sibling, NONE)]
+				chart[item] = [new_Edge(x, x, x, sibling, NONE)]
 				# update filter
 				if left > minsplitleft[terminal.lhs, right]:
 					minsplitleft[terminal.lhs, right] = left
@@ -474,12 +472,11 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 					maxsplitright[terminal.lhs, left] = right
 				recognized = True
 		if not recognized and tags and tags[i] in grammar.toid:
-			item = new_ChartItem(grammar.toid[tags[i]], 1UL << i)
-			sibling = new_ChartItem(Epsilon, i)
 			lhs = grammar.toid[tags[i]]
+			item = new_ChartItem(lhs, 1UL << i)
+			sibling = new_ChartItem(Epsilon, i)
 			viterbi[lhs, left, right] = 0.0
-			chart[new_ChartItem(lhs, 1UL << left)] = [
-				new_Edge(0.0, 0.0, 0.0, sibling, NONE)]
+			chart[item] = [new_Edge(0.0, 0.0, 0.0, sibling, NONE)]
 			# update filter
 			if left > minsplitleft[lhs, right]:
 				minsplitleft[lhs, right] = left
@@ -680,7 +677,7 @@ def main():
 		((('NP', 'Epsilon'), ('mary', ())), 0.0),
 		((('VP', 'Epsilon'), ('walks', ())), 0.0)])
 	print "cfg parsing; sentence: mary walks"
-	chart, start = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
+	chart, _ = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
 	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
 
 if __name__ == '__main__': main()

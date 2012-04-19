@@ -67,12 +67,12 @@ cdef class Agenda(dict):
 	def __setitem__(self, key, value):
 		self.setitem(key, value)
 
-	cdef inline getitem(self, key):
+	cdef getitem(self, key):
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
 		return entry.value
 
-	cpdef inline setitem(self, key, value):
+	cpdef setitem(self, key, value):
 		cdef Entry oldentry, entry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
@@ -89,9 +89,9 @@ cdef class Agenda(dict):
 			self.mapping[key] = entry
 			heappush(self.heap, entry, self.cmpfun)
 
-	cpdef inline setifbetter(self, key, value):
+	cpdef setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
-		cdef Entry oldentry, entry
+		cdef Entry oldentry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
 			if value >= oldentry.value: return
@@ -150,7 +150,7 @@ cdef class Agenda(dict):
 	def __contains__(self, key):
 		return self.contains(key)
 
-	cdef inline bint contains(self, key):
+	cdef bint contains(self, key):
 		return key in self.mapping
 
 	def __delitem__(self, key):
@@ -225,14 +225,14 @@ cdef class EdgeAgenda(Agenda):
 			assert temp == {}
 			heapify(self.heap, self.cmpfun)
 
-	cpdef inline Edge getitem(self, key):
+	cpdef Edge getitem(self, key):
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
 		return <Edge>entry.value
 
-	cpdef inline setifbetter(self, key, value):
+	cpdef setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
-		cdef Entry oldentry, entry
+		cdef Entry oldentry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
 			if (<Edge>value).score >= (<Edge>oldentry.value).score:

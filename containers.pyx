@@ -1,7 +1,7 @@
 from nltk import Tree
 
 cdef class ChartItem:
-	def __init__(self, label, vec):
+	def __init__(ChartItem self, label, vec):
 		self.label = label
 		self.vec = vec
 	def __hash__(ChartItem self):
@@ -57,10 +57,10 @@ cdef class Edge:
 				self.score, self.inside, self.prob, self.left, self.right)
 
 cdef class RankedEdge:
-	def __cinit__(self, ChartItem head, Edge edge, int j1, int j2):
+	def __cinit__(RankedEdge self, ChartItem head, Edge edge, int j1, int j2):
 		self.head = head; self.edge = edge
 		self.left = j1; self.right = j2
-	def __hash__(self):
+	def __hash__(RankedEdge self):
 		cdef long h
 		#h = hash((head, edge, j1, j2))
 		h = (1000003UL * 0x345678UL) ^ hash(self.head)
@@ -69,7 +69,7 @@ cdef class RankedEdge:
 		h = (1000003UL * h) ^ self.right
 		if h == -1: h = -2
 		return h
-	def __richcmp__(self, RankedEdge other, int op):
+	def __richcmp__(RankedEdge self, RankedEdge other, int op):
 		if op == 2 or op == 3:
 			return (op == 2) == (
 				self.left == other.left
@@ -78,7 +78,7 @@ cdef class RankedEdge:
 				and self.edge == other.edge)
 		else:
 			raise NotImplemented
-	def __repr__(self):
+	def __repr__(RankedEdge self):
 		return "RankedEdge(%r, %r, %d, %d)" % (
 					self.head, self.edge, self.left, self.right)
 
@@ -97,27 +97,40 @@ cdef class Rule:
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in
 	Python"""
-	def __init__(self, list trees=None, dict labels=None, dict prods=None):
-		self.len=0; self.max=0
+	def __init__(Ctrees self, list trees=None, dict labels=None, dict prods=None):
+		self.len=0; self.max=0; self.maxnodes = 0; self.nodesleft = 0
 		if trees is None: return
-		self.alloc(len(trees), sum(map(len, trees)), len(max(trees, key=len)))
+		else: assert labels is not None and prods is not None
+		self.alloc(len(trees), sum(map(len, trees)))
 		for tree in trees: self.add(tree, labels, prods)
-	cpdef alloc(self, int numtrees, int numnodes, int maxnodes):
+	cpdef alloc(Ctrees self, int numtrees, long numnodes):
 		""" Initialize an array of trees of nodes structs. """
 		self.max = numtrees
-		self.maxnodes = maxnodes
 		self.data = <NodeArray *>malloc(numtrees * sizeof(NodeArray))
-		assert self.data != NULL
+		assert self.data is not NULL
 		self.data[0].nodes = <Node *>malloc(numnodes * sizeof(Node))
-		assert self.data[0].nodes != NULL
-	cpdef add(self, list tree, dict labels, dict prods):
+		assert self.data[0].nodes is not NULL
+		self.nodes = self.nodesleft = numnodes
+	cdef realloc(Ctrees self, int len):
+		""" Increase size of array (handy with incremental binarization) """
+		#other options: new alloc: fragmentation (maybe not so bad)
+		#memory pool: idem
+		cdef Node *new = NULL
+		self.nodes += (self.max - self.len) * len #estimate
+		new = <Node *>realloc(self.data[0].nodes, self.nodes * sizeof(Node))
+		assert new is not NULL
+		if new != self.data[0].nodes: # need to update all previous pointers
+			self.data[0].nodes = new
+			for n in range(1, self.len):
+				# derive pointer from previous tree offset by its size
+				self.data[n].nodes = &(
+					self.data[n-1].nodes)[self.data[n-1].len]
+	cpdef add(Ctrees self, list tree, dict labels, dict prods):
 		""" Trees can be incrementally added to the node array; useful
 		when dealing with large numbers of NLTK trees (say 100,000)."""
 		assert self.len < self.max, ("either no space left (len >= max) or "
 			"alloc() has not been called (max=0). max = %d" % self.max)
-		assert len(tree) <= self.maxnodes, (
-			"Tree too large. Nodes: %d, MAXNODE: %d." % (
-			len(tree), self.maxnodes))
+		if self.nodesleft < len(tree): self.realloc(len(tree))
 		self.data[self.len].len = len(tree)
 		if self.len: # derive pointer from previous tree offset by its size
 			self.data[self.len].nodes = &(
@@ -125,12 +138,14 @@ cdef class Ctrees:
 		indices(tree, labels, prods, self.data[self.len].nodes)
 		self.data[self.len].root = tree[0].root
 		self.len += 1
-	def __dealloc__(self):
+		self.nodesleft -= len(tree)
+		self.maxnodes = max(self.maxnodes, len(tree))
+	def __dealloc__(Ctrees self):
 		free(self.data[0].nodes)
 		free(self.data)
-	def __len__(self): return self.len
+	def __len__(Ctrees self): return self.len
 
-cdef inline void indices(tree, dict labels, dict prods, Node *result):
+cdef inline indices(tree, dict labels, dict prods, Node *result):
 	""" Convert NLTK tree to an array of Node structs. """
 	cdef int n
 	for n, a in enumerate(tree):
@@ -155,23 +170,88 @@ class Terminal():
 	def __repr__(self): return repr(self.node)
 	def __hash__(self): return hash(self.node)
 
-cdef class CBitset:
-	"""auxiliary class to be able to pass around bitsets in Python"""
-	cdef inline sethash(self):
-		cdef int n
-		self._hash = 5381
-		for n in range(self.SLOTS * sizeof(ULong)):
-			self._hash = self._hash * 33 ^ <char>self.data[n]
-	def __hash__(self): return self._hash
-	def __richcmp__(self, CBitset other, int op):
-		cdef int cmp = memcmp(<void *>self.data, <void *>other.data,
-					self.SLOTS * sizeof(ULong))
+cdef class FrozenArray:
+	def __init__(self, array data):
+		self.data = data
+	def __hash__(FrozenArray self):
+		cdef int n, _hash
+		_hash = 5381
+		for n in range(self.data.length):
+			_hash *= 33 ^ self.data._B[n]
+		return _hash
+	def __richcmp__(FrozenArray self, FrozenArray other, int op):
+		cdef int cmp = memcmp(self.data._B, other.data._B,
+			self.data.length*sizeof(ULong))
 		if op == 2: return cmp == 0
 		elif op == 3: return cmp != 0
 		elif op == 0: return cmp < 0
 		elif op == 4: return cmp > 0
 		elif op == 1: return cmp <= 0
 		return cmp >= 0
+
+cdef inline FrozenArray new_FrozenArray(array data):
+	cdef FrozenArray item = FrozenArray.__new__(FrozenArray)
+	item.data = data
+	return item
+
+cdef class CBitset:
+	"""auxiliary class to be able to pass around bitsets in Python"""
+	def __cinit__(CBitset self, unsigned char slots):
+		self.slots = slots
+	def __hash__(CBitset self):
+		cdef int n, _hash
+		_hash = 5381
+		for n in range(self.slots):
+			_hash *= 33 ^ self.data[n]
+		return _hash
+	def __richcmp__(CBitset self, CBitset other, int op):
+		# value comparisons
+		cdef int cmp = memcmp(<void *>self.data, <void *>other.data,
+					self.slots)
+		if op == 2: return cmp == 0
+		elif op == 3: return cmp != 0
+		elif op == 0: return cmp < 0
+		elif op == 4: return cmp > 0
+		elif op == 1: return cmp <= 0
+		return cmp >= 0
+
+cdef class MemoryPool:
+	"""A memory pool that allocates chunks of poolsize, up to limit times.
+	Memory is automatically freed when object is deallocated. """
+	def __cinit__(MemoryPool self, int poolsize, int limit):
+		cdef int x
+		self.poolsize = poolsize
+		self.limit = limit
+		self.n = 0
+		self.pool = <void **>malloc(limit * sizeof(void *))
+		assert self.pool is not NULL
+		for x in range(limit): self.pool[x] = NULL
+		self.cur = self.pool[0] = <ULong *>malloc(self.poolsize)
+		assert self.cur is not NULL
+		self.leftinpool = self.poolsize
+	cdef void *malloc(MemoryPool self, int size):
+		cdef void *ptr
+		if size > self.poolsize: return NULL
+		elif self.leftinpool < size:
+			self.n += 1
+			assert self.n < self.limit
+			if self.pool[self.n] is NULL:
+				self.pool[self.n] = <ULong *>malloc(self.poolsize)
+			self.cur = self.pool[self.n]
+			assert self.cur is not NULL
+			self.leftinpool = self.poolsize
+		ptr = self.cur
+		self.cur = &(self.cur[size])
+		self.leftinpool -= size
+		return ptr
+	cdef void reset(MemoryPool self):
+		self.n = 0
+		self.cur = self.pool[0]
+		self.leftinpool = self.poolsize
+	def __dealloc__(MemoryPool self):
+		cdef int x
+		for x in range(self.n+1): free(self.pool[x])
+		free(self.pool)
 	
 # some helper functions that only serve to bridge cython & python code
 cpdef inline unsigned int getlabel(ChartItem a):
