@@ -20,14 +20,15 @@ System (LCFRS) as the symbolic backbone.
 
 Requirements:
 -------------
-- python 2.6+   http://www.python.org
+- python 2.6+   http://www.python.org (need headers, e.g. python-dev package)
 - NLTK          http://www.nltk.org
-- cython        http://www.cython.org (optional)
-
-  * requires array support http://trac.cython.org/cython_trac/ticket/314
-  * compile with: "make". NB: compilation uses CFLAGS used to compile Python as defaults.
-
+- cython        http://www.cython.org
+- cython array support http://trac.cython.org/cython_trac/ticket/314
 - numpy         http://numpy.scipy.org/
+
+Compile with: "make".
+
+NB: compilation uses CFLAGS used to compile Python as defaults.
 
 The python files can be run without arguments as a demonstration.
 
@@ -48,7 +49,7 @@ available for download for research purposes.
 
 Alternatively, there is a simpler parser in the "shedskin" directory. This
 LCFRS parser only produces the Viterbi parse. The grammar is supplied in a file
-following a simple text format. The "plcfrs.py" needs to be translated to C++
+following a simple text format. The "plcfrs.py" script can be translated to C++
 by the `Shed Skin <http://code.google.com/p/shedskin/>`_ compiler, after which
 the resulting code can be compiled with "make".
 
