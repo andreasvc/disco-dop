@@ -15,7 +15,7 @@ DEF infinity = float('infinity')
 # to avoid overhead of __init__ and __cinit__ constructors
 # belongs in containers but putting it here gives
 # a better chance of successful inlining
-cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long long vec):
+cdef inline ChartItem new_ChartItem(UInt label, ULLong vec):
 	cdef ChartItem item = ChartItem.__new__(ChartItem)
 	item.label = label; item.vec = vec
 	return item
@@ -57,9 +57,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef bint doestimate = bool(estimate), doprune = bool(prunelist) or bool(coarsechart), prunenow, split
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
-	cdef unsigned int blocked = 0
-	cdef unsigned int Epsilon = toid["Epsilon"]
-	cdef unsigned long long vec = 0
+	cdef UInt blocked = 0, Epsilon = toid["Epsilon"]
+	cdef ULLong vec = 0
 	cdef unsigned long maxA = 0
 	cdef double x, y = 0.0
 	cdef str label = ''
@@ -248,10 +247,10 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 cdef inline void process_edge(ChartItem newitem, Edge newedge,
 		EdgeAgenda agenda, dict chart, list viterbi, bint exhaustive,
 		bint doprune, list prunelist, dict prunetoid, dict coarsechart,
-		str label, bint split, bint markorigin, unsigned int *blocked) except *:
+		str label, bint split, bint markorigin, UInt *blocked) except *:
 	""" Decide what to do with a newly derived edge. """
-	cdef unsigned long long component, vec
-	cdef unsigned int a = 0, b = 0, splitlabel = 0, origlabel
+	cdef ULLong component, vec
+	cdef UInt a = 0, b = 0, splitlabel = 0, origlabel
 	cdef int cnt = 0
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = dict_contains(chart, newitem) == 1
@@ -326,7 +325,7 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge,
 		# suboptimal edge
 		chart[newitem].append(iscore(newedge))
 
-cdef inline bint concat(Rule rule, unsigned long long lvec, unsigned long long rvec):
+cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 	"""
 	Determine the compatibility of two bitvectors (tuples of spans / ranges)
 	according to the given yield function. Ranges should be non-overlapping,
@@ -368,7 +367,7 @@ cdef inline bint concat(Rule rule, unsigned long long lvec, unsigned long long r
 				return bitminmax(rvec, lvec)
 
 	#this algorithm was adapted from rparse, FastYFComposer.
-	cdef unsigned int n, x
+	cdef UInt n, x
 	cdef unsigned short m
 	for x in range(rule.args.length):
 		m = rule._lengths[x] - 1
@@ -421,8 +420,8 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 	cdef ChartItem NONE = new_ChartItem(0, 0)
 	#cdef list chart = [[{} for _ in range(lensent+1)] for _ in range(lensent)]
 	cdef dict chart = {}						#the full chart
-	cdef unsigned int Epsilon = grammar.toid["Epsilon"]
-	cdef unsigned long long vec = 0
+	cdef UInt Epsilon = grammar.toid["Epsilon"]
+	cdef ULLong vec = 0
 	# the viterbi chart is initially filled with infinite log probabilities,
 	# cells which are to be blocked contain NaN.
 	cdef np.ndarray[np.double_t, ndim=3] viterbi

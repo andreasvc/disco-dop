@@ -6,24 +6,16 @@ from cpython cimport PyList_Append as append,\
 cimport numpy as np
 from agenda cimport Entry
 from kbest cimport lazykbest, lazykthbest
-from containers cimport ChartItem, Edge, Rule, LexicalRule
+from containers cimport ChartItem, Edge, Rule, LexicalRule, UInt, ULLong
 from array cimport array
 from agenda cimport EdgeAgenda
-
-cdef extern from "bit.h":
-	bint testbit(unsigned long long vec, unsigned int pos)
-	bint testbitc(unsigned char arg, unsigned int pos)
-	bint testbitint(unsigned int arg, unsigned int pos)
-	bint testbitshort(unsigned short arg, unsigned int pos)
-	bint bitminmax(unsigned long long a, unsigned long long b)
-	int nextset(unsigned long long vec, unsigned int pos)
-	int nextunset(unsigned long long vec, unsigned int pos)
-	int bitcount(unsigned long long vec)
-	int bitlength(unsigned long long vec)
+from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint,\
+	bitminmax
 
 cdef extern from "math.h":
 	bint isinf(double x)
 	bint isfinite(double x)
 
-cdef inline ChartItem new_ChartItem(unsigned int label, unsigned long long vec)
-cdef inline Edge new_Edge(double score, double inside, double prob, ChartItem left, ChartItem right)
+cdef inline ChartItem new_ChartItem(UInt label, ULLong vec)
+cdef inline Edge new_Edge(double score, double inside, double prob,
+	ChartItem left, ChartItem right)

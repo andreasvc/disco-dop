@@ -11,11 +11,11 @@ cdef class Entry:
 	cdef unsigned long count
 
 cdef class Function:
-	cdef inline bint cmpfun(self, Entry a, Entry b)
+	cdef bint cmpfun(self, Entry a, Entry b)
 cdef class EdgeCmp(Function):
-	cdef inline bint cmpfun(self, Entry a, Entry b)
+	cdef bint cmpfun(self, Entry a, Entry b)
 cdef class NormalCmp(Function):
-	cdef inline bint cmpfun(self, Entry a, Entry b)
+	cdef bint cmpfun(self, Entry a, Entry b)
 
 cdef class Agenda(dict):
 	cdef public unsigned long length

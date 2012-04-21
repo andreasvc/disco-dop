@@ -57,7 +57,7 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		for m in range(start, trees2.len):
 			b = ctrees2[m]
 			# initialize table
-			memset(CST, 0, a.len * b.len * SLOTS * sizeof(ULong))
+			ulongset(CST, 0UL, a.len * b.len * SLOTS)
 			# fill table
 			for aa in range(a.len): # skip terminals
 				if a.nodes[aa].prod == -1: break
@@ -117,13 +117,13 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 			if not TESTBIT(bitset, 0) or abitcount(bitset, SLOTS) < 2:
 				continue
 			shiftright(bitset, 1, SLOTS)
-			memcpy(tmp.data._B, <UChar *>bitset, SLOTS * sizeof(ULong))
+			ulongcpy(tmp.data._L, bitset, SLOTS)
 			if tmp in finalnodeset: continue
 			for bs in finalnodeset:
 				if subset(bitset, bs.data._L, SLOTS): break
 				elif subset(bs.data._L, bitset, SLOTS):
 					pyarray = new_array(ulongarray, SLOTS + 2)
-					memcpy(pyarray._B, <UChar *>bitset, SLOTS * sizeof(ULong))
+					ulongcpy(pyarray._L, bitset, SLOTS)
 					pyarray._L[SLOTS] = n
 					pyarray._L[SLOTS + 1] = t
 					finalnodeset.add(new_FrozenArray(pyarray))
@@ -132,7 +132,7 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 			else:
 				# completely new (disjunct) bitset
 				pyarray = new_array(ulongarray, SLOTS + 2)
-				memcpy(pyarray._B, <UChar *>bitset, SLOTS * sizeof(ULong))
+				ulongcpy(pyarray._L, bitset, SLOTS)
 				pyarray._L[SLOTS] = n
 				pyarray._L[SLOTS + 1] = t
 				finalnodeset.add(new_FrozenArray(pyarray))
@@ -337,7 +337,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		for m in range(start, end2):
 			b = ctrees2[m]
 			# initialize table
-			memset(CST, 0, b.len * SLOTS * sizeof(ULong))
+			ulongset(CST, 0UL, b.len * SLOTS)
 			# fill table
 			fasttreekernel(a.nodes, b.nodes, CST, SLOTS)
 			# dump table
@@ -387,10 +387,10 @@ cdef inline void extractbitsets(ULong *CST, ULong *scratch, Node *a, Node *b,
 	cdef ULong *bitset = &CST[j * SLOTS]
 	cdef short i = anextset(bitset, 0, SLOTS)
 	while i != -1:
-		memset(scratch, 0, SLOTS * sizeof(ULong))
+		ulongset(scratch, 0UL, SLOTS)
 		extractat(CST, scratch, a, b, i, j, SLOTS)
 		pyarray = new_array(pyarray, (SLOTS+2))
-		memcpy(pyarray._L, scratch, SLOTS * sizeof(ULong))
+		ulongcpy(pyarray._L, scratch, SLOTS)
 		pyarray._L[SLOTS] = i; pyarray._L[SLOTS+1] = n
 		results.add(new_FrozenArray(pyarray))
 		i = anextset(bitset, i + 1, SLOTS)
@@ -422,7 +422,7 @@ cpdef array exactcounts(Ctrees trees1, list sents1, Ctrees trees2,
 	a fragment can occur in other trees where it was not a maximal fragment"""
 	cdef:
 		int n, m, i, x, f
-		unsigned int count
+		UInt count
 		UChar SLOTS = 0
 		array pyarray, counts = new_array(uintarray, len(bitsets))
 		ULong *bitset = NULL
@@ -493,7 +493,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 	cdef UChar SLOTS = BITNSLOTS(trees.maxnodes)
 	for n in range(trees.len):
 		pyarray = new_array(ulongarray, SLOTS + 2)
-		memset(pyarray._B, 255, SLOTS * sizeof(ULong))
+		ulongset(pyarray._L, ~0UL, SLOTS)
 		pyarray._L[SLOTS] = trees.data[n].root
 		pyarray._L[SLOTS + 1] = n
 		frag = strtree(trees.data[n].nodes, revlabel,

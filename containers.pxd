@@ -3,14 +3,15 @@ from libc.string cimport memcmp
 from array cimport array
 cimport cython
 
+ctypedef unsigned long long ULLong
 ctypedef unsigned long ULong
 ctypedef unsigned int UInt
 ctypedef unsigned char UChar
 
 @cython.final
 cdef class ChartItem:
-	cdef public unsigned int label
-	cdef public unsigned long long vec
+	cdef public UInt label
+	cdef public ULLong vec
 
 @cython.final
 cdef class Edge:
@@ -22,21 +23,21 @@ cdef class Edge:
 
 @cython.final
 cdef class LexicalRule:
-	cdef public unsigned int lhs
-	cdef public unsigned int rhs1
-	cdef public unsigned int rhs2
+	cdef public UInt lhs
+	cdef public UInt rhs1
+	cdef public UInt rhs2
 	cdef public unicode word
 	cdef public double prob
 
 @cython.final
 cdef class Rule:
-	cdef public unsigned int lhs
-	cdef public unsigned int rhs1
-	cdef public unsigned int rhs2
+	cdef public UInt lhs
+	cdef public UInt rhs1
+	cdef public UInt rhs2
 	cdef public double prob
 	cdef public array args
 	cdef public array lengths
-	cdef unsigned int * _args
+	cdef UInt * _args
 	cdef unsigned short * _lengths
 
 @cython.final
@@ -83,8 +84,8 @@ cdef class MemoryPool:
 	cdef void reset(MemoryPool self)
 
 cdef inline FrozenArray new_FrozenArray(array data)
-cpdef inline unsigned int getlabel(ChartItem a)
-cpdef inline unsigned long long getvec(ChartItem a)
+cpdef inline UInt getlabel(ChartItem a)
+cpdef inline ULLong getvec(ChartItem a)
 cpdef inline double getscore(Edge a)
 cpdef inline dict dictcast(d)
 cpdef inline ChartItem itemcast(i)

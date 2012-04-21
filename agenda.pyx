@@ -23,16 +23,14 @@ cdef Entry make_entry(object k, object v, unsigned long c):
 cdef class Entry: pass #defined in pxd file
 
 cdef class Function:
-	cdef inline bint cmpfun(self, Entry a, Entry b): raise NotImplemented
-@cython.final
+	cdef bint cmpfun(self, Entry a, Entry b): raise Exception
 cdef class EdgeCmp(Function):
 	# this is _significantly_ faster than relying on __richcmp__
-	cdef inline bint cmpfun(self, Entry a, Entry b):
+	cdef bint cmpfun(self, Entry a, Entry b):
 		return (a.value.score < b.value.score
 				or (a.value.score == b.value.score and a.count < b.count))
-@cython.final
 cdef class NormalCmp(Function):
-	cdef inline bint cmpfun(self, Entry a, Entry b):
+	cdef bint cmpfun(self, Entry a, Entry b):
 		return (a.value < b.value
 				or (a.value == b.value and a.count < b.count))
 
@@ -198,7 +196,6 @@ cdef class Agenda(dict):
 	cpdef object getval(self, Entry entry):
 		return entry.value
 
-@cython.final
 cdef class EdgeAgenda(Agenda):
 	def __init__(self, iterable=None):
 		""" NB: when initialized with an iterable, we don't guarantee that

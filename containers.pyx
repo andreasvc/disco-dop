@@ -205,7 +205,7 @@ cdef inline FrozenArray new_FrozenArray(array data):
 @cython.final
 cdef class CBitset:
 	"""auxiliary class to be able to pass around bitsets in Python"""
-	def __cinit__(CBitset self, unsigned char slots):
+	def __cinit__(CBitset self, UChar slots):
 		self.slots = slots
 	def __hash__(CBitset self):
 		cdef int n, _hash
@@ -264,9 +264,9 @@ cdef class MemoryPool:
 		free(self.pool)
 	
 # some helper functions that only serve to bridge cython & python code
-cpdef inline unsigned int getlabel(ChartItem a):
+cpdef inline UInt getlabel(ChartItem a):
 	return a.label
-cpdef inline unsigned long long getvec(ChartItem a):
+cpdef inline ULLong getvec(ChartItem a):
 	return a.vec
 cpdef inline double getscore(Edge a):
 	return a.score

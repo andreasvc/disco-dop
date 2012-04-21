@@ -1,25 +1,14 @@
 cimport cython
-from containers cimport ChartItem, Rule
+from containers cimport ChartItem, Rule, UInt
 from plcfrs cimport new_ChartItem
 from agenda cimport Agenda, Entry
 from array cimport array
 cimport numpy as np
+from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint,\
+	bitminmax
 
-if cython.compiled:
-	print "Yep, I'm compiled"
-else:
-	print "interpreted"
-
-cdef extern from "bit.h":
-	bint bitminmax(unsigned long long a, unsigned long long b)
-	bint testbit(unsigned long long vec, unsigned int pos)
-	bint testbitc(unsigned char c, unsigned int pos)
-	bint testbitint(unsigned int c, unsigned int pos)
-	bint testbitshort(unsigned short c, unsigned int pos)
-	int nextset(unsigned long long vec, unsigned int pos)
-	int nextunset(unsigned long long vec, unsigned int pos)
-	int bitcount(unsigned long long vec)
-	int bitlength(unsigned long long vec)
+if cython.compiled: print "Yep, I'm compiled"
+else: print "interpreted"
 
 cdef extern from "math.h":
 	bint isnan(double x)
@@ -31,7 +20,7 @@ cdef class Item:
 	#def __init__(self, len state, int length, int lr, int gaps)
 
 @cython.locals(item=Item)
-cdef Item new_Item(unsigned int state, unsigned int length, unsigned int lr, unsigned int gaps)
+cdef Item new_Item(UInt state, UInt length, UInt lr, UInt gaps)
 
 @cython.locals(
 	length=cython.uint,
@@ -39,13 +28,13 @@ cdef Item new_Item(unsigned int state, unsigned int length, unsigned int lr, uns
 	right=cython.uint,
 	lr=cython.uint,
 	gaps=cython.uint)
-cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, unsigned int maxlen, unsigned int slen, unsigned int label, unsigned long long vec)
+cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, UInt maxlen, UInt slen, UInt label, unsigned long long vec)
 
 @cython.locals(
 	I=ChartItem,
 	nil=ChartItem,
 	entry=Entry)
-cpdef dict inside(grammar, unsigned int maxlen, dict insidescores)
+cpdef dict inside(grammar, UInt maxlen, dict insidescores)
 
 @cython.locals(
 	I=ChartItem,
@@ -60,7 +49,7 @@ cpdef dict inside(grammar, unsigned int maxlen, dict insidescores)
 	rules=list,
 	x=np.double_t,
 	vec=cython.ulong)
-cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2] insidescores)
+cpdef simpleinside(grammar, UInt maxlen, np.ndarray[np.double_t, ndim=2] insidescores)
 
 @cython.locals(
 	current=np.double_t,
@@ -92,5 +81,5 @@ cpdef simpleinside(grammar, unsigned int maxlen, np.ndarray[np.double_t, ndim=2]
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint
 	)
-cdef void outsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, unsigned int maxlen, unsigned int goal, array[unsigned char] arity, np.ndarray[np.double_t, ndim=4] outside) except *
+cdef void outsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, UInt maxlen, UInt goal, array[unsigned char] arity, np.ndarray[np.double_t, ndim=4] outside) except *
 
