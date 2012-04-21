@@ -19,7 +19,6 @@ ext_modules = [
 	Extension("agenda",				["agenda.pyx", "agenda.pxd"]),
 	Extension("plcfrs",				["plcfrs.pyx",  "plcfrs.pxd"]),
 	Extension("estimates",			["estimates.py", "estimates.pxd"]),
-	Extension("oldplcfrs",			["oldplcfrs.py",  "oldplcfrs.pxd"]),
 	Extension("containers",			["containers.pyx", "containers.pxd"]),
 	Extension("coarsetofine",		["coarsetofine.py", "coarsetofine.pxd"]),
 	Extension("disambiguation",		["disambiguation.py", "disambiguation.pxd"]),

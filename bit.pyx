@@ -15,7 +15,6 @@ cpdef inline int nextset(ULLong vec, UInt pos):
 	#return (pos + __builtin_ctzll(vec >> pos)) if (vec >> pos) else -1
 	# mask instead of shift:
 	return __builtin_ffsll(vec & (~0ULL << pos)) - 1
-	#ULLong x = vec & (~0ULL << pos)
 	#ULLong x = vec & ~((1 << pos) - 1)
 	#ULLong x = (vec >> pos) << pos
 	#return x ? __builtin_ctzll(x) : -1
@@ -23,13 +22,13 @@ cpdef inline int nextset(ULLong vec, UInt pos):
 
 cpdef inline int nextunset(ULLong vec, UInt pos):
 	""" Return next unset bit starting from pos.
-	>>> nextunset(0b001101, 2)
+	>> nextunset(0b001101, 2)
 	4
-	>>> nextunset((1<<64)-1, 0)
+	>> nextunset((1<<64)-1, 0)
 	64
 	"""
-	return ((pos + __builtin_ctzll(~(vec >> pos))) if ~(vec >> pos)
-		else (sizeof(ULLong) * 8))
+	cdef ULLong x = ~vec & (~0ULL << pos)
+	return __builtin_ctzll(x) if x else (sizeof(ULLong) * 8)
 
 cpdef inline int bitcount(ULLong vec):
 	""" Number of set bits (1s)
@@ -190,7 +189,9 @@ cdef inline bint subset(ULong *vec1, ULong *vec2, UInt slots):
 
 def main():
 	assert nextset(0b001100110, 3) == 5
+	assert nextset(0b001100110, 7) == -1
 	assert nextunset(0b001100110, 1) == 3
+	assert nextunset((1<<64)-1, 0) == 64
 	assert bitcount(0b001100110) == 4
 	assert testbit(0b001100110, 1)
 	assert not testbit(0b001100110, 3)
