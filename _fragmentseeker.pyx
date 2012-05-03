@@ -110,7 +110,7 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 	cdef array pyarray
 	cdef FrozenArray bs, tmp
 	cdef set finalnodeset = set()
-	tmp = new_FrozenArray(new_array(ulongarray, SLOTS))
+	tmp = new_FrozenArray(clone(ulongarray, SLOTS, False))
 	for n in range(lena):
 		for m in range(lenb):
 			bitset = &CST[IDX(n, m, lenb, SLOTS)]
@@ -122,7 +122,7 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 			for bs in finalnodeset:
 				if subset(bitset, bs.data._L, SLOTS): break
 				elif subset(bs.data._L, bitset, SLOTS):
-					pyarray = new_array(ulongarray, SLOTS + 2)
+					pyarray = clone(ulongarray, SLOTS + 2, False)
 					ulongcpy(pyarray._L, bitset, SLOTS)
 					pyarray._L[SLOTS] = n
 					pyarray._L[SLOTS + 1] = t
@@ -131,7 +131,7 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 					break
 			else:
 				# completely new (disjunct) bitset
-				pyarray = new_array(ulongarray, SLOTS + 2)
+				pyarray = clone(ulongarray, SLOTS + 2, False)
 				ulongcpy(pyarray._L, bitset, SLOTS)
 				pyarray._L[SLOTS] = n
 				pyarray._L[SLOTS + 1] = t
@@ -389,7 +389,7 @@ cdef inline void extractbitsets(ULong *CST, ULong *scratch, Node *a, Node *b,
 	while i != -1:
 		ulongset(scratch, 0UL, SLOTS)
 		extractat(CST, scratch, a, b, i, j, SLOTS)
-		pyarray = new_array(pyarray, (SLOTS+2))
+		pyarray = clone(pyarray, (SLOTS+2), False)
 		ulongcpy(pyarray._L, scratch, SLOTS)
 		pyarray._L[SLOTS] = i; pyarray._L[SLOTS+1] = n
 		results.add(new_FrozenArray(pyarray))
@@ -414,19 +414,18 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 
-cpdef array exactcounts(Ctrees trees1, list sents1, Ctrees trees2,
-	list bitsets, bint discontinuous, list revlabel, list treeswithprod,
-	bint fast=True):
+cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
+	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees1 as bitsets, produce an exact
-	count of those fragments in trees2. The reason we need to do this is that
+	count of those fragments in trees1. The reason we need to do this is that
 	a fragment can occur in other trees where it was not a maximal fragment"""
 	cdef:
 		int n, m, i, x, f
 		UInt count
 		UChar SLOTS = 0
-		array pyarray, counts = new_array(uintarray, len(bitsets))
+		array pyarray, counts = clone(uintarray, len(bitsets), False)
 		ULong *bitset = NULL
-		NodeArray a, b, *ctrees1 = trees1.data, *ctrees2 = trees2.data
+		NodeArray a, b, *ctrees1 = trees1.data
 		set candidates
 	if SLOTS == 0:
 		pyarray = bitsets[0]
@@ -446,7 +445,7 @@ cpdef array exactcounts(Ctrees trees1, list sents1, Ctrees trees2,
 
 		count = 0
 		for m in candidates:
-			b = ctrees2[m]
+			b = ctrees1[m]
 			for x in range(b.len):
 				if a.nodes[i].prod == b.nodes[x].prod:
 					count += containsbitset(a, b, bitset, i, x)
@@ -492,7 +491,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 	cdef int n
 	cdef UChar SLOTS = BITNSLOTS(trees.maxnodes)
 	for n in range(trees.len):
-		pyarray = new_array(ulongarray, SLOTS + 2)
+		pyarray = clone(ulongarray, SLOTS + 2, False)
 		ulongset(pyarray._L, ~0UL, SLOTS)
 		pyarray._L[SLOTS] = trees.data[n].root
 		pyarray._L[SLOTS + 1] = n

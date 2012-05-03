@@ -1,7 +1,5 @@
 from nltk import Tree
-cimport cython
 
-@cython.final
 cdef class ChartItem:
 	def __init__(ChartItem self, label, vec):
 		self.label = label
@@ -23,7 +21,6 @@ cdef class ChartItem:
 	def __repr__(ChartItem self):
 		return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
-@cython.final
 cdef class Edge:
 	def __init__(self, score, inside, prob, left, right):
 		self.score = score; self.inside = inside; self.prob = prob
@@ -59,7 +56,6 @@ cdef class Edge:
 		return "Edge(%g, %g, %g, %r, %r)" % (
 				self.score, self.inside, self.prob, self.left, self.right)
 
-@cython.final
 cdef class RankedEdge:
 	def __cinit__(RankedEdge self, ChartItem head, Edge edge, int j1, int j2):
 		self.head = head; self.edge = edge
@@ -84,15 +80,14 @@ cdef class RankedEdge:
 			raise NotImplemented
 	def __repr__(RankedEdge self):
 		return "RankedEdge(%r, %r, %d, %d)" % (
-					self.head, self.edge, self.left, self.right)
+			self.head, self.edge, self.left, self.right)
 
-@cython.final
+
 cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
 
-@cython.final
 cdef class Rule:
 	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
@@ -100,7 +95,6 @@ cdef class Rule:
 		self._args = self.args._I; self._lengths = self.lengths._H
 		self.prob = prob
 
-@cython.final
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in
 	Python"""
@@ -170,14 +164,13 @@ cdef inline indices(tree, dict labels, dict prods, Node *result):
 			result[n].prod = result[n].left = result[n].right = -1
 		else: assert isinstance(a, Tree) or isinstance(a, Terminal)
 
-class Terminal():
+class Terminal:
 	"""auxiliary class to be able to add indices to terminal nodes of NLTK
 	trees"""
 	def __init__(self, node): self.prod = self.node = node
 	def __repr__(self): return repr(self.node)
 	def __hash__(self): return hash(self.node)
 
-@cython.final
 cdef class FrozenArray:
 	def __init__(self, array data):
 		self.data = data
@@ -202,7 +195,6 @@ cdef inline FrozenArray new_FrozenArray(array data):
 	item.data = data
 	return item
 
-@cython.final
 cdef class CBitset:
 	"""auxiliary class to be able to pass around bitsets in Python"""
 	def __cinit__(CBitset self, UChar slots):
@@ -210,8 +202,8 @@ cdef class CBitset:
 	def __hash__(CBitset self):
 		cdef int n, _hash
 		_hash = 5381
-		for n in range(self.slots):
-			_hash *= 33 ^ self.data[n]
+		for n in range(self.slots * sizeof(ULong)):
+			_hash *= 33 ^ (<char *>self.data)[n]
 		return _hash
 	def __richcmp__(CBitset self, CBitset other, int op):
 		# value comparisons
@@ -224,7 +216,61 @@ cdef class CBitset:
 		elif op == 1: return cmp <= 0
 		return cmp >= 0
 
-@cython.final
+	cdef int bitcount(self):
+		""" number of set bits in variable length bitvector """
+		cdef int a, result = __builtin_popcountl(self.data[0])
+		for a in range(1, self.slots):
+			result += __builtin_popcountl(self.data[a])
+		return result
+
+	cdef int nextset(self, UInt pos):
+		""" return next set bit starting from pos, -1 if there is none. """
+		cdef UInt a = BITSLOT(pos), offset = pos % BITSIZE
+		if self.data[a] >> offset:
+			return pos + __builtin_ctzl(self.data[a] >> offset)
+		for a in range(a + 1, self.slots):
+			if self.data[a]: return a * BITSIZE + __builtin_ctzl(self.data[a])
+		return -1
+
+	cdef int nextunset(self, UInt pos):
+		""" return next unset bit starting from pos. """
+		cdef UInt a = BITSLOT(pos), offset = pos % BITSIZE
+		if ~(self.data[a] >> offset):
+			return pos + __builtin_ctzl(~(self.data[a] >> offset))
+		a += 1
+		while self.data[a] == ~0UL: a += 1
+		return a * BITSIZE + __builtin_ctzl(~(self.data[a]))
+
+	cdef void setunion(self, CBitset src):
+		""" dest gets the union of dest and src; both operands must have at
+		least `slots' slots. """
+		cdef int a
+		for a in range(self.slots): self.data[a] |= src.data[a]
+
+	cdef bint superset(self, CBitset op):
+		""" test whether `op' is a superset of this bitset; i.e., whether
+		all bits of this bitset are in op. """
+		cdef int a
+		for a in range(self.slots):
+			if self.data[a] != (self.data[a] & op.data[a]): return False
+		return True
+
+	cdef bint subset(self, CBitset op):
+		""" test whether `op' is a subset of this bitset; i.e., whether
+		all bits of op are in this bitset. """
+		cdef int a
+		for a in range(self.slots):
+			if (self.data[a] & op.data[a]) != op.data[a]: return False
+		return True
+
+	cdef bint disjunct(self, CBitset op):
+		""" test whether `op' is disjunct from this bitset; i.e., whether
+		no bits of op are in this bitset & vice versa. """
+		cdef int a
+		for a in range(self.slots):
+			if (self.data[a] & op.data[a]): return False
+		return True
+
 cdef class MemoryPool:
 	"""A memory pool that allocates chunks of poolsize, up to limit times.
 	Memory is automatically freed when object is deallocated. """
@@ -251,7 +297,7 @@ cdef class MemoryPool:
 			assert self.cur is not NULL
 			self.leftinpool = self.poolsize
 		ptr = self.cur
-		self.cur = &(self.cur[size])
+		self.cur = &((<char *>self.cur)[size])
 		self.leftinpool -= size
 		return ptr
 	cdef void reset(MemoryPool self):

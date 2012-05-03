@@ -8,6 +8,18 @@ ctypedef unsigned long ULong
 ctypedef unsigned int UInt
 ctypedef unsigned char UChar
 
+cdef extern:
+	int __builtin_ffsll (ULLong)
+	int __builtin_ctzll (ULLong)
+	int __builtin_clzll (ULLong)
+	int __builtin_ctzl (ULong)
+	int __builtin_popcountl (ULong)
+	int __builtin_popcountll (ULLong)
+
+cdef extern from "bit.h":
+	int BITSIZE
+	int BITSLOT(int b)
+
 @cython.final
 cdef class ChartItem:
 	cdef public UInt label
@@ -70,6 +82,13 @@ cdef class Ctrees:
 cdef class CBitset:
 	cdef char *data
 	cdef UChar slots
+	cdef int bitcount(self)
+	cdef int nextset(self, UInt pos)
+	cdef int nextunset(self, UInt pos)
+	cdef void setunion(self, CBitset src)
+	cdef bint superset(self, CBitset op)
+	cdef bint subset(self, CBitset op)
+	cdef bint disjunct(self, CBitset op)
 
 @cython.final
 cdef class FrozenArray:

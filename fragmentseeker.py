@@ -55,9 +55,8 @@ def exactcountworker((n, m, fragments)):
 	trees2 = params['trees2']; sents2 = params['sents2']
 	penn = params['penn']; revlabel = params['revlabel']
 	treeswithprod = params['treeswithprod']; quadratic = params['quadratic']
-	counts = exactcounts(trees2 or trees1, sents2 or sents1, trees1,
-		fragments, not penn, revlabel, treeswithprod,
-		fast=not quadratic)
+	counts = exactcounts(trees1, sents1, fragments, not penn, revlabel,
+		treeswithprod, fast=not quadratic)
 	logging.info("exact counts %d of %d" % (n+1, m))
 	return counts
 
@@ -167,9 +166,8 @@ Output is sent to stdout; to save the results, redirect to a file.
 				discontinuous=not penn, debug=debug)
 		if exact or complete:
 			logging.info("getting exact counts")
-			counts = exactcounts(trees2 or trees1, sents2 or sents1, trees1,
-				fragments.values(), not penn, revlabel, treeswithprod,
-				fast=not quadratic)
+			counts = exactcounts(trees1, sents1, fragments.values(), not penn,
+				revlabel, treeswithprod, fast=not quadratic)
 		else: counts = fragments.values()
 		printfragments(fragments, counts, nofreq, complete)
 		return
@@ -212,16 +210,17 @@ Output is sent to stdout; to save the results, redirect to a file.
 
 def printfragments(fragments, counts, nofreq, complete):
 	penn = params['penn']
+	logging.info("number of fragments: %d" % len(fragments))
 	if nofreq:
-		logging.info("number of fragments: %d" % len(fragments))
 		for a, freq in zip(fragments.keys(), counts):
 			print "%s" % (a if penn else ("%s\t%s" % a))
 		return
-	if complete:
+	if complete or len(argv) == 3:
+		# with complete fragments or comparing two treebanks, a frequency of 1
+		# is normal.
 		for a, freq in zip(fragments.keys(), counts):
 			if freq: print "%s\t%d" % (a if penn else ("%s\t%s" % a), freq)
 	else:
-		logging.info("number of fragments: %d" % len(fragments))
 		for a, freq in zip(fragments.keys(), counts):
 			if freq > 1:
 				print "%s\t%d" % (a if penn else ("%s\t%r" % a), freq)

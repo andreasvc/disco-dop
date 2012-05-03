@@ -6,7 +6,15 @@ from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
 from treebank import NegraCorpusReader
 from grammar import ranges
-from treetransforms import disc
+#from treetransforms import disc
+
+def disc(node):
+	""" This function evaluates whether a particular node is locally
+	discontinuous.  The root node will, by definition, be continuous.
+	Nodes can be continuous even if some of their children are discontinuous.
+	"""
+	if not isinstance(node, Tree): return False
+	return len(list(ranges(sorted(node.leaves())))) > 1
 
 def readparams(file):
 	""" read an EVALB-style parameter file and return a dictionary. """
@@ -163,12 +171,18 @@ def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 	assert os.path.exists(parsesfile), "parses file not found"
 	gold = NegraCorpusReader(*splitpath(goldfile), encoding=goldencoding)
 	parses = NegraCorpusReader(*splitpath(parsesfile), encoding=parsesencoding)
-	param = readparams(sys.argv[3] if len(sys.argv) >= 4 else None)
-	if len(sys.argv) == 5: param['CUTOFF_LEN'] = int(sys.argv[4])
-	
 	goldlen = len(gold.parsed_sents())
 	parseslen = len(parses.parsed_sents())
+	param = readparams(sys.argv[3] if len(sys.argv) >= 4 else None)
+	start = 0; end = goldlen
+	if len(sys.argv) >= 5: param['CUTOFF_LEN'] = int(sys.argv[4])
+	if len(sys.argv) >= 6: start = int(sys.argv[5])
+	if len(sys.argv) == 7: end = int(sys.argv[6])
+	if start < 0: start += goldlen
+	if end < 0: end += goldlen
+	print start, end
 	assert goldlen == parseslen, "unequal number of sentences in gold & candidates: %d vs %d" % (goldlen, parseslen)
+	goldlen = end - start
 
 	if param["DEBUG"]:
 		print "Parameters:"
@@ -187,6 +201,8 @@ ______________________________________________________________________________""
 	goldbcat = defaultdict(multiset)
 	candbcat = defaultdict(multiset)
 	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(), parses.sents(), gold.parsed_sents(), gold.sents()):
+		if n < start: continue
+		elif n > end: break
 		cpos = sorted(ctree.pos())
 		gpos = sorted(gtree.pos())
 		lencpos = sum(1 for a,b in cpos if b not in param["DELETE_LABEL_FOR_LENGTH"])
@@ -287,7 +303,7 @@ ____________________"""
 if __name__ == '__main__':
 	if len(sys.argv) == 2 and sys.argv[1] == "--test":
 		main("sample2.export", "sample2.export", 'iso-8859-1', 'iso-8859-1')
-	elif 3 <= len(sys.argv) <= 5:
+	elif 3 <= len(sys.argv) <= 7:
 		goldfile, parsesfile = sys.argv[1:3]
 		if "/" in goldfile and not os.path.exists(goldfile):
 			goldfile, goldencoding = goldfile.rsplit("/", 1)

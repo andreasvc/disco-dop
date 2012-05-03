@@ -1,5 +1,13 @@
 from containers cimport ULLong, ULong, UInt, UChar
 
+cdef extern:
+	int __builtin_ffsll (ULLong)
+	int __builtin_ctzll (ULLong)
+	int __builtin_clzll (ULLong)
+	int __builtin_ctzl (ULong)
+	int __builtin_popcountl (ULong)
+	int __builtin_popcountll (ULLong)
+
 cdef extern from "bit.h":
 	int BITSIZE
 	int BITSLOT(int b)

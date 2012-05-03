@@ -1,11 +1,4 @@
 # See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
-cdef extern:
-	int __builtin_ffsll (ULLong)
-	int __builtin_ctzll (ULLong)
-	int __builtin_clzll (ULLong)
-	int __builtin_ctzl (ULong)
-	int __builtin_popcountl (ULong)
-	int __builtin_popcountll (ULLong)
 
 cpdef inline int nextset(ULLong vec, UInt pos):
 	""" Return next set bit starting from pos, -1 if there is none.
