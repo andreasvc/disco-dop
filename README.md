@@ -23,12 +23,12 @@ Requirements:
 - python 2.6+   http://www.python.org (need headers, e.g. python-dev package)
 - NLTK          http://www.nltk.org
 - cython        http://www.cython.org
-- cython array support http://trac.cython.org/cython_trac/ticket/314
+- cython array	[array.pxd](https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/array.pxd) [arrayarray.h](https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/arrayarray.h)
 - numpy         http://numpy.scipy.org/
 
-Compile with: "make".
+Compile with: `make`.
 
-NB: compilation uses CFLAGS used to compile Python as defaults.
+NB: compilation uses `CFLAGS` used to compile Python as defaults.
 
 The python files can be run without arguments as a demonstration.
 
@@ -41,16 +41,16 @@ This directory will contain the grammar rules and lexicon in a text format, as
 well as the parsing results and the gold standard file in Negra's export
 format.
 
-Corpora are expected to be in Negra's export format. Access to the `Negra
-corpus <http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/>`_ itself
-can be requested for non-commercial purposes, while the `Tiger corpus
-<http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_ is freely
+Corpora are expected to be in Negra's export format. Access to the [Negra
+corpus](http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/) itself
+can be requested for non-commercial purposes, while the [Tiger
+corpus](http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/) is freely
 available for download for research purposes.
 
 Alternatively, there is a simpler parser in the "shedskin" directory. This
 LCFRS parser only produces the Viterbi parse. The grammar is supplied in a file
 following a simple text format. The "plcfrs.py" script can be translated to C++
-by the `Shed Skin <http://code.google.com/p/shedskin/>`_ compiler, after which
-the resulting code can be compiled with "make".
+by the [Shed Skin](http://code.google.com/p/shedskin/) compiler, after which
+the resulting code can be compiled with `make`.
 
 
