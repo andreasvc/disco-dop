@@ -25,10 +25,18 @@ Requirements:
 - cython        http://www.cython.org
 - cython array	[array.pxd](https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/array.pxd) [arrayarray.h](https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/arrayarray.h)
 - numpy         http://numpy.scipy.org/
+- GCC
 
-Compile with: `make`.
+For example, to install these dependencies and compile the code on Ubuntu (tested on 12.04), run the following sequence of commands:
 
-NB: compilation uses `CFLAGS` used to compile Python as defaults.
+	apt-get install python-dev python-nltk cython python-numpy build-essential
+	git clone --depth 1 git://github.com/andreasvc/disco-dop.git
+	cd disco-dop
+	wget https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/array.pxd
+	wget https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/arrayarray.h
+	make
+
+NB: compilation will by default use `CFLAGS` used to compile Python.
 
 The python files can be run without arguments as a demonstration.
 
