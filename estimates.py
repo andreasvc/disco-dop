@@ -335,8 +335,7 @@ def testestimates(grammar, maxlen, goal):
 def main():
 	from treebank import NegraCorpusReader
 	from grammar import induce_srcg, dop_srcg_rules, splitgrammar
-	try: from plcfrs import parse, pprint_chart
-	except ImportError: from oldplcfrs import parse, pprint_chart
+	from plcfrs import parse, pprint_chart
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())

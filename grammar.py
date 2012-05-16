@@ -785,8 +785,7 @@ def read_rparse_grammar(file):
 	return result
 
 def do(sent, grammar):
-	try: from plcfrs import parse, pprint_chart
-	except ImportError: from oldplcfrs import parse, pprint_chart
+	from plcfrs import parse, pprint_chart
 	from disambiguation import marginalize
 	print "sentence", sent
 	p, start = parse(sent, grammar, start=grammar.toid['S'])
@@ -855,8 +854,7 @@ def main():
 	print "}"
 	grammar = splitgrammar(grammar)
 	testgrammar(grammar)
-	try: from plcfrs import parse
-	except ImportError: from oldplcfrs import parse
+	from plcfrs import parse
 	from disambiguation import marginalize
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent

@@ -12,8 +12,7 @@ try:
 	import cython
 	assert cython.compiled
 except: from containers import * #getlabel, getvec
-try: from plcfrs import parse
-except ImportError: from oldplcfrs import parse
+from plcfrs import parse
 infinity = float('infinity')
 removeids = re.compile("@[0-9]+")
 
@@ -205,7 +204,7 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False, shortest=
 def main():
 	from nltk import Tree
 	from grammar import dop_srcg_rules, splitgrammar
-	from oldplcfrs import parse
+	from plcfrs import parse
 	def e(x):
 		if isinstance(x[1], tuple):
 			return x[0].replace("@", ""), (int(abs(x[1][0])), x[1][1])

@@ -140,8 +140,7 @@ def filter_subtree(start, chart, chart2):
 
 def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 			verbose=False):
-	try: from plcfrs import parse, pprint_chart
-	except ImportError: from oldplcfrs import parse, pprint_chart
+	from plcfrs import parse, pprint_chart
 	#from coarsetofine import kbest_items, merged_kbest, prunelist_fromchart
 	from disambiguation import marginalize
 	from treetransforms import mergediscnodes, unbinarize
