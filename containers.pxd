@@ -16,7 +16,7 @@ cdef extern:
 	int __builtin_popcountl (ULong)
 	int __builtin_popcountll (ULLong)
 
-cdef extern from "bit.h":
+cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
 

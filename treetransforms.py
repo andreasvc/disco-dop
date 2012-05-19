@@ -130,7 +130,7 @@ from heapq import heappush, heappop
 from itertools import count
 from nltk import Tree, ImmutableTree, memoize
 from grammar import ranges, canonicalize
-from orderedset import OrderedSet
+from containers import OrderedSet
 from collections import defaultdict
 import re
 
