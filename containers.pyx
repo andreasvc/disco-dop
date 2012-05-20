@@ -83,11 +83,25 @@ cdef class RankedEdge:
 		return "RankedEdge(%r, %r, %d, %d)" % (
 			self.head, self.edge, self.left, self.right)
 
+cdef class Grammar:
+	def __init__(self, unary, lbinary, rbinary, lexical, bylhs, lexicalbylhs,
+		toid, tolabel, arity):
+		self.unary = unary; self.lbinary = lbinary; self.rbinary = rbinary
+		self.lexical = lexical; self.bylhs = bylhs
+		self.toid = toid; self.tolabel = tolabel
+		self.lexicalbylhs = lexicalbylhs; self.arity = arity
+	def __repr__(self):
+		return repr(dict(unary=self.unary, lbinary=self.lbinary,
+			rbinary=self.rbinary, lexical=self.lexical, bylhs=self.bylhs,
+			lexicalbylhs=self.lexicalbylhs, toid=self.toid,
+			tolabel=self.tolabel))
 
 cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
+	def __repr__(self):
+		return repr((self.lhs, self.rhs1, self.rhs2, self.word, self.prob))
 
 cdef class Rule:
 	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
@@ -95,6 +109,9 @@ cdef class Rule:
 		self.args = args; self.lengths = lengths
 		self._args = self.args._I; self._lengths = self.lengths._H
 		self.prob = prob
+	def __repr__(self):
+		return repr((self.lhs, self.rhs1, self.rhs2, self.args, self.lengths,
+			self.prob))
 
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in

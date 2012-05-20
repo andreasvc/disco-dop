@@ -34,6 +34,12 @@ cdef class Edge:
 	cdef public ChartItem right
 
 @cython.final
+cdef class Grammar:
+	cdef public list unary, lbinary, rbinary, bylhs
+	cdef public dict lexical, lexicalbylhs, toid, tolabel
+	cdef public array arity
+
+@cython.final
 cdef class LexicalRule:
 	cdef public UInt lhs
 	cdef public UInt rhs1

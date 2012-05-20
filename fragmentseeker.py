@@ -1,22 +1,16 @@
 import os, logging
 from multiprocessing import Pool, log_to_stderr, SUBDEBUG
 from collections import defaultdict
-from itertools import count, islice
-from math import log
 from sys import argv
-from nltk import Tree
-from _fragmentseeker import extractfragments, fastextractfragments, tolist,\
-	readtreebanks, exactcounts, indextrees, completebitsets
-from grammar import canonicalize
-from treebank import NegraCorpusReader
-from containers import Ctrees
+from _fragmentseeker import extractfragments, fastextractfragments,\
+	readtreebanks, exactcounts, completebitsets
 
 params = {}
 
 def initworker(treebank1, treebank2, sort, limit, encoding):
 	global params
 	params.update(readtreebanks(treebank1, treebank2, sort=sort, limit=limit,
-		discontinuous=not penn, encoding=encoding))
+		discontinuous=not params['penn'], encoding=encoding))
 	trees1 = params['trees1']
 	assert trees1
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
@@ -35,24 +29,23 @@ def worker(offset):
 	labels = params['labels']; prods = params['prods']
 	revlabel = params['revlabel']
 	assert offset < len(trees1)
-	end = min(offset + chunk, len(trees1))
+	end = min(offset + params['chunk'], len(trees1))
 	result = {}
 	try:
-		if quadratic:
+		if params['quadratic']:
 			result = extractfragments(trees1, sents1, offset, end, labels,
-				prods, revlabel, trees2, sents2, approx=not exact,
-				discontinuous=not penn, debug=False)
+				prods, revlabel, trees2, sents2, approx=not params['exact'],
+				discontinuous=not params['penn'], debug=False)
 		else:
 			result = fastextractfragments(trees1, sents1, offset, end, labels,
-				prods, revlabel, trees2, sents2, approx=not exact,
-				discontinuous=not penn, debug=False)
+				prods, revlabel, trees2, sents2, approx=not params['exact'],
+				discontinuous=not params['penn'], debug=False)
 	except Exception as e: logging.error(e)
 	logging.info("finished %d--%d" % (offset, end))
 	return result
 
 def exactcountworker((n, m, fragments)):
 	trees1 = params['trees1']; sents1 = params['sents1']
-	trees2 = params['trees2']; sents2 = params['sents2']
 	penn = params['penn']; revlabel = params['revlabel']
 	treeswithprod = params['treeswithprod']; quadratic = params['quadratic']
 	counts = exactcounts(trees1, sents1, fragments, not penn, revlabel,
@@ -62,7 +55,6 @@ def exactcountworker((n, m, fragments)):
 
 def main(argv):
 	global params
-	global trees1, sents1, trees2, sents2, labels, prods, revlabel
 	global quadratic, exact, chunk, penn
 	if "--numproc" in argv:
 		pos = argv.index("--numproc")
@@ -104,7 +96,7 @@ If two treebanks are given, common fragments to both are produced.
 Input is in Penn treebank format (S-expressions), one tree per line.
 Output is sent to stdout; to save the results, redirect to a file.
 --numproc n     use n independent processes, to enable multi-core usage.
-	            The default is not to use multiprocessing.
+                The default is not to use multiprocessing.
 --encoding x	use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
 --numtrees n	only read first n trees from treebank
 --disc          work with discontinuous trees; input is in Negra export format.
@@ -121,7 +113,7 @@ Output is sent to stdout; to save the results, redirect to a file.
 	if complete: assert len(argv) == 3, "need two treebanks with --complete."
 	level = logging.WARNING if quiet else logging.INFO
 	logging.basicConfig(level=level, format='%(message)s')
-	
+
 	if debug and numproc > 1:
 		logger = log_to_stderr()
 		logger.setLevel(SUBDEBUG)

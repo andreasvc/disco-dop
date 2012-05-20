@@ -2,12 +2,11 @@ import codecs, re
 from operator import mul, itemgetter
 from array import array
 from math import log, exp
-from pprint import pprint
-from heapq import nsmallest, heappush, heappop
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 from itertools import chain, count, islice, imap, repeat
 from nltk import ImmutableTree, Tree, FreqDist, memoize
 from dopg import nodefreq, decorate_with_ids
+from containers import Grammar
 
 def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	""" given a tree with integer indices as terminals, and a sentence
@@ -39,8 +38,6 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 				"indices that are None in the sentence.\n"
 				"subtree: %s\nsent: %r" % (st, sent)))
 		elif isinstance(st[0], Tree):
-			leaves = st.leaves()
-			cnt = count(len(leaves))
 			rleaves = [a.leaves() if isinstance(a, Tree) else [a] for a in st]
 			rvars = [rangeheads(sorted(l)) for a,l in zip(st, rleaves)]
 			lvars = ranges(sorted(a for rng in rleaves for a in rng))
@@ -171,7 +168,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False,
 							for rule in rules]
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
-	
+
 def doubledop(trees, sents):
 	from _fragmentseeker import extractfragments1
 	from treetransforms import minimalbinarization, complexityfanout, addbitsets
@@ -229,44 +226,14 @@ def doubledop(trees, sents):
 		grammar[a] = log(b / ntfd.get(a[0][0], b))
 	return grammar.items(), backtransform
 
-def oldsplitgrammar(grammar):
-	""" split the grammar into various lookup tables, mapping nonterminal
-	labels to numeric identifiers. Also negates log-probabilities to
-	accommodate min-heaps.
-	This version represents rules as tuples. """
-	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs toid tolabel".split())
-	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
-	nonterminals = list(enumerate(["Epsilon", "ROOT"] + sorted(set(chain(*(rule for (rule,yf),weight in grammar))) - set(["Epsilon", "ROOT"]))))
-	toid, tolabel = dict((lhs, n) for n, lhs in nonterminals), dict((n, lhs) for n, lhs in nonterminals)
-	unary, lbinary, rbinary, bylhs = ([[] for _ in nonterminals] for _ in range(4))
-	lexical = {}
-	# remove sign from log probabilities because the heap we use is a min-heap
-	for (rule,yf),w in grammar:
-		r = tuple(toid[a] for a in rule), yf
-		if len(rule) == 2:
-			if r[0][1] == 0: #Epsilon
-				# lexical productions (mis)use the field for the yield function to store the word
-				lexical.setdefault(yf[0], []).append((r, abs(w)))
-			else:
-				unary[r[0][1]].append((r, abs(w)))
-				bylhs[r[0][0]].append((r, abs(w)))
-		elif len(rule) == 3:
-			if w == 0.0: w += 0.01
-			lbinary[r[0][1]].append((r, abs(w)))
-			rbinary[r[0][2]].append((r, abs(w)))
-			bylhs[r[0][0]].append((r, abs(w)))
-		else: raise ValueError("grammar not binarized: %s" % repr(r))
-	return Grammar(unary, lbinary, rbinary, lexical, bylhs, toid, tolabel)
-
 def splitgrammar(grammar):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
 	accommodate min-heaps.
-	Can only represent ordered SRCG rules (monotone LCFRS).
-	This version represent rules in dedicated Rule objects, """
+	Can only represent ordered SRCG rules (monotone LCFRS). """
 	from containers import Rule, LexicalRule
-	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs lexicalbylhs toid tolabel arity".split())
-	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
+	# get a list of all nonterminals; make sure Epsilon and ROOT are first,
+	# and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
 		+ sorted(set(str(nt) for (rule, yf), weight in grammar for nt in rule)
 			- set(["Epsilon", "ROOT"]))))
@@ -537,10 +504,10 @@ def bfcartpi(seq):
 			yield result
 
 def enumchart(chart, start, tolabel, n=1):
-	"""exhaustively enumerate trees in chart headed by start in top down 
-		fashion. chart is a dictionary with 
+	"""exhaustively enumerate trees in chart headed by start in top down
+		fashion. chart is a dictionary with
 		lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
-		this function doesn't really belong in this file but Cython doesn't
+		this function doesn't really belong in this file but Cython didn't
 		support generators so this function is "in exile" over here.  """
 	for edge in chart[start]:
 		if edge.left.label == 0: #Epsilon
@@ -606,7 +573,6 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 def write_bitpar_grammar(grammar, rules, lexicon, encoding='utf-8'):
 	""" write grammar as a bitpar grammar to files specified by rules and
 	lexicon."""
-	unary = 0; binary = 1
 	rules = codecs.open(rules, "w", encoding=encoding)
 	for a in grammar.bylhs:
 		for rule in a:
@@ -799,8 +765,7 @@ def do(sent, grammar):
 	print
 
 def main():
-	from treetransforms import unbinarize, binarize,\
-				optimalbinarize, minimalbinarization, complexityfanout
+	from treetransforms import unbinarize, binarize, optimalbinarize
 	from treebank import NegraCorpusReader
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
@@ -833,7 +798,7 @@ def main():
 	print
 	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
 
-	pprint(oldsplitgrammar(induce_srcg([tree.copy(True)], [sent])))
+	print splitgrammar(induce_srcg([tree.copy(True)], [sent]))
 	do(sent, splitgrammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
 	grammar = dop_srcg_rules([tree,tree2], [sent,sent2])
 	print 'dop reduction'

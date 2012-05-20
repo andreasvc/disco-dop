@@ -248,7 +248,7 @@ def unfold(tree):
 	more hierarchy in the phrase-structure annotation, based on
 	grammatical functions and syntactic categories.
 	"""
-	original = tree.copy(Tree); current = tree # for debugging
+	#original = tree.copy(Tree); current = tree # for debugging
 
 	# un-flatten PPs
 	addtopp = "AC".split()
@@ -548,7 +548,7 @@ def puncttest():
 	#corpust3 = NegraCorpusReader("..", "negra-corpus.export", headorder=False, encoding="iso-8859-1").parsed_sents()
 	#corpust3 = NegraCorpusReader("../rparse", "negraproc.export", headorder=False, encoding="iso-8859-1").parsed_sents()
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", movepunct=True)
-	corpus2 = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", removepunct=True).parsed_sents()
+	corpust2 = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", removepunct=True).parsed_sents()
 	corpust3 = range(len(corpust2))
 	for n, tree, sent, t2, t3 in zip(count(), corpus.parsed_sents(), corpus.sents(), corpust2, corpust3):
 		print n,
@@ -561,7 +561,6 @@ def puncttest():
 
 def main():
 	from grammar import canonicalize
-	from itertools import count
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course

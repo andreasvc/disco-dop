@@ -27,7 +27,7 @@
 
 """
 A collection of methods for tree (grammar) transformations used
-in parsing natural language.  
+in parsing natural language.
 
 Although many of these methods are technically grammar transformations
 (ie. Chomsky Norm Form), when working with treebanks it is much more
@@ -51,25 +51,25 @@ The following is a short tutorial on the available transformations.
     has either two subtrees as children (binarization), or one leaf node
     (non-terminal).  In order to binarize a subtree with more than two
     children, we must introduce artificial nodes.
-  
+
     There are two popular methods to convert a tree into CNF: left
     factoring and right factoring.  The following example demonstrates
     the difference between them.  Example::
-  
+
       Original    Right-Factored       Left-Factored
 
-          A              A                      A 
-        / | \          /   \                  /   \ 
-       B  C  D   ==>  B    A|<C-D>   OR   A|<B-C>  D 
-                            /  \          /  \ 
+          A              A                      A
+        / | \          /   \                  /   \
+       B  C  D   ==>  B    A|<C-D>   OR   A|<B-C>  D
+                            /  \          /  \
                            C    D        B    C
-  
+
  2. Parent Annotation
-  
+
     In addition to binarizing the tree, there are two standard
     modifications to node labels we can do in the same traversal: parent
     annotation and Markov order-N smoothing (or sibling smoothing).
-  
+
     The purpose of parent annotation is to refine the probabilities of
     productions by adding a small amount of context.  With this simple
     addition, a CYK (inside-outside, dynamic programming chart parse)
@@ -77,58 +77,57 @@ The following is a short tutorial on the available transformations.
     parent annotation is to grandparent annotation and beyond.  The
     tradeoff becomes accuracy gain vs. computational complexity.  We
     must also keep in mind data sparsity issues.  Example:
-  
-     Original       Parent Annotation 
-    
-          A                A^<?>            
-        / | \             /   \            
-       B  C  D   ==>  B^<A>    A|<C-D>^<?>     where ? is the 
+
+     Original       Parent Annotation
+
+          A                A^<?>
+        / | \             /   \
+       B  C  D   ==>  B^<A>    A|<C-D>^<?>     where ? is the
                                  /  \          parent of A
-                             C^<A>   D^<A>   
-  
-  
+                             C^<A>   D^<A>
+
+
  3. Markov order-N smoothing
-  
+
     Markov smoothing combats data sparcity issues as well as decreasing
     computational requirements by limiting the number of children
     included in artificial nodes.  In practice, most people use an order
     2 grammar.  Example::
-  
+
       Original       No Smoothing       Markov order 1   Markov order 2   etc.
-      
-       __A__            A                      A                A 
-      / /|\ \         /   \                  /   \            /   \  
+
+       __A__            A                      A                A
+      / /|\ \         /   \                  /   \            /   \
      B C D E F  ==>  B    A|<C-D-E-F>  ==>  B   A|<C>  ==>   B  A|<C-D>
-                            /   \               /   \            /   \  
+                            /   \               /   \            /   \
                            C    ...            C    ...         C    ...
 
 
-  
+
     Annotation decisions can be thought about in the vertical direction
     (parent, grandparent, etc) and the horizontal direction (number of
     siblings to keep).  Parameters to the following functions specify
     these values.  For more information see:
-  
+
     Dan Klein and Chris Manning (2003) "Accurate Unlexicalized
     Parsing", ACL-03.  http://www.aclweb.org/anthology/P03-1054
-      
- 4. Unary Collapsing  
-  
+
+ 4. Unary Collapsing
+
     Collapse unary productions (ie. subtrees with a single child) into a
     new non-terminal (Tree node).  This is useful when working with
     algorithms that do not allow unary productions, yet you do not wish
     to lose the parent information.  Example::
-  
-       A         
+
+       A
        |
        B   ==>   A+B
-      / \        / \  
-     C   D      C   D    
+      / \        / \
+     C   D      C   D
 
 """
-from heapq import heappush, heappop
 from itertools import count
-from nltk import Tree, ImmutableTree, memoize
+from nltk import Tree, ImmutableTree
 from grammar import ranges, canonicalize
 from containers import OrderedSet
 from collections import defaultdict

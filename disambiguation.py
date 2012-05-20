@@ -1,5 +1,5 @@
 import re, logging
-from random import choice, random
+from random import random
 from heapq import nlargest
 from math import fsum, exp, log
 from bisect import bisect_right
@@ -7,12 +7,10 @@ from collections import defaultdict
 from operator import itemgetter
 from nltk import Tree
 from grammar import induce_srcg
-from kbest import * #lazykbest
-try:
-	import cython
-	assert cython.compiled
-except: from containers import * #getlabel, getvec
 from plcfrs import parse
+import cython
+assert cython.compiled
+
 infinity = float('infinity')
 removeids = re.compile("@[0-9]+")
 

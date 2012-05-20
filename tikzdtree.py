@@ -1,6 +1,6 @@
 """ An attempt at drawing discontinuous trees programmatically.
 Produces TiKZ code, PDF can be produced with latex. """
-from nltk import Tree, ImmutableTree
+from nltk import Tree
 from collections import defaultdict
 import codecs
 def label(tree, sent):
