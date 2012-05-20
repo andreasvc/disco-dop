@@ -182,7 +182,8 @@ Output is sent to stdout; to save the results, redirect to a file.
 		initworker(argv[1], None, not quadratic, limit, encoding)
 		trees1 = params['trees1']; sents1 = params['sents1']
 		if complete:
-			fragments = completebitsets(trees1, sents1, revlabel, not penn)
+			fragments = completebitsets(trees1, sents1, params['revlabel'],
+				not penn)
 		for a in argv[2:]:
 			params.update(read2ndtreebank(a, params['labels'], params['prods'],
 				not quadratic, not penn, limit, encoding))

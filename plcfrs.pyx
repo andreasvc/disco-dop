@@ -68,7 +68,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	assert len(sent) < (sizeof(vec) * 8)
 	if splitprune: assert prunetoid is not None
 	else: coarsechart = None
-	vec = (1UL << len(sent)) - 1
+	vec = (1ULL << len(sent)) - 1
 	goal = new_ChartItem(start, vec)
 
 	if doestimate:
@@ -86,7 +86,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if not tags or tags[i] == tolabel[terminal.lhs].split("@")[0]:
-				item = new_ChartItem(terminal.lhs, 1UL << i)
+				item = new_ChartItem(terminal.lhs, 1ULL << i)
 				sibling = new_ChartItem(Epsilon, i)
 				x = terminal.prob
 				if doestimate:
@@ -96,7 +96,7 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 				chart[item] = []
 				recognized = True
 		if not recognized and tags and tags[i] in toid:
-			item = new_ChartItem(toid[tags[i]], 1UL << i)
+			item = new_ChartItem(toid[tags[i]], 1ULL << i)
 			sibling = new_ChartItem(Epsilon, i)
 			if doestimate:
 				y = getoutside(outside, maxlen, lensent, item.label, item.vec)
@@ -283,7 +283,7 @@ cdef inline void process_edge(ChartItem newitem, Edge newedge,
 					b = nextunset(vec, a)
 					#given a=3, b=6. from left to right: 
 					#10000 => 01111 => 01111000
-					component = (1UL << b) - (1UL << a)
+					component = (1ULL << b) - (1ULL << a)
 					newitem.label = splitlabel; newitem.vec = component
 					#if outside==NULL or isinf(<double><object>outside):
 					if newitem not in coarsechart:
@@ -367,13 +367,13 @@ cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 
 	# if there are no gaps in lvec and rvec, and the yieldfunction is the
 	# concatenation of two elements, then this should be quicker
-	if False and rule._lengths[0] == 2 and rule.args.length == 1:
-		if (lvec >> nextunset(lvec, lpos) == 0
-			and rvec >> nextunset(rvec, rpos) == 0):
-			if rule._args[0] == 0b10:
-				return bitminmax(lvec, rvec)
-			elif rule._args[0] == 0b01:
-				return bitminmax(rvec, lvec)
+	#if rule._lengths[0] == 2 and rule.args.length == 1:
+	#	if (lvec >> nextunset(lvec, lpos) == 0
+	#		and rvec >> nextunset(rvec, rpos) == 0):
+	#		if rule._args[0] == 0b10:
+	#			return bitminmax(lvec, rvec)
+	#		elif rule._args[0] == 0b01:
+	#			return bitminmax(rvec, lvec)
 
 	#this algorithm was adapted from rparse, FastYFComposer.
 	cdef UInt n, x
@@ -453,7 +453,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 
 	if start == None: start = grammar.toid["ROOT"]
 	assert len(sent) < (sizeof(vec) * 8)
-	vec = (1UL << len(sent)) - 1
+	vec = (1ULL << len(sent)) - 1
 	goal = new_ChartItem(start, vec)
 
 	# assign POS tags
@@ -465,7 +465,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if not tags or tags[i] == grammar.tolabel[terminal.lhs].split("@")[0]:
-				item = new_ChartItem(terminal.lhs, 1UL << i)
+				item = new_ChartItem(terminal.lhs, 1ULL << i)
 				sibling = new_ChartItem(Epsilon, i)
 				x = terminal.prob
 				viterbi[terminal.lhs, left, right] = terminal.prob
@@ -482,7 +482,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 				recognized = True
 		if not recognized and tags and tags[i] in grammar.toid:
 			lhs = grammar.toid[tags[i]]
-			item = new_ChartItem(lhs, 1UL << i)
+			item = new_ChartItem(lhs, 1ULL << i)
 			sibling = new_ChartItem(Epsilon, i)
 			viterbi[lhs, left, right] = 0.0
 			chart[item] = [new_Edge(0.0, 0.0, 0.0, sibling, NONE)]
@@ -506,13 +506,13 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 				if isfinite(viterbi[rule.rhs1, left, right]):
 					prob = rule.prob + viterbi[rule.rhs1, left, right]
 					if isfinite(viterbi[rule.lhs, left, right]):
-						chart[new_ChartItem(rule.lhs, 1UL << left)].append(
+						chart[new_ChartItem(rule.lhs, 1ULL << left)].append(
 							new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1, 1UL << left), NONE))
+							new_ChartItem(rule.rhs1, 1ULL << left), NONE))
 					else:
-						chart[new_ChartItem(rule.lhs, 1UL << left)] = [
+						chart[new_ChartItem(rule.lhs, 1ULL << left)] = [
 							new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1, 1UL << left), NONE)]
+							new_ChartItem(rule.rhs1, 1ULL << left), NONE)]
 					if (prob < viterbi[rule.lhs, left, right]):
 						viterbi[rule.lhs, left, right] = prob
 						# update filter
@@ -555,21 +555,21 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 							prob = (rule.prob + viterbi[rule.rhs1, left, mid]
 									+ viterbi[rule.rhs2, mid, right])
 							if isfinite(viterbi[lhs, left, right]):
-								chart[new_ChartItem(lhs, (1UL << right)
-									- (1UL << left))].append(
+								chart[new_ChartItem(lhs, (1ULL << right)
+									- (1ULL << left))].append(
 									new_Edge(prob, prob, rule.prob,
 									new_ChartItem(rule.rhs1,
-										(1UL << mid) - (1UL << left)),
+										(1ULL << mid) - (1ULL << left)),
 									new_ChartItem(rule.rhs2,
-										(1UL << right) - (1UL << mid))))
+										(1ULL << right) - (1ULL << mid))))
 							else:
-								chart[new_ChartItem(lhs, (1UL << right)
-									- (1UL << left))] = [
+								chart[new_ChartItem(lhs, (1ULL << right)
+									- (1ULL << left))] = [
 									new_Edge(prob, prob, rule.prob,
 									new_ChartItem(rule.rhs1,
-										(1UL << mid) - (1UL << left)),
+										(1ULL << mid) - (1ULL << left)),
 									new_ChartItem(rule.rhs2,
-										(1UL << right) - (1UL << mid)))]
+										(1ULL << right) - (1ULL << mid)))]
 							if prob < viterbi[lhs, left, right]:
 								foundbetter = True
 								viterbi[lhs, left, right] = prob
@@ -591,18 +591,18 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 						if isfinite(viterbi[rule.rhs1, left, right]):
 							prob = rule.prob + viterbi[rule.rhs1, left, right]
 							if isfinite(viterbi[rule.lhs, left, right]):
-								chart[new_ChartItem(rule.lhs, (1UL << right)
-									- (1UL << left))].append(
+								chart[new_ChartItem(rule.lhs, (1ULL << right)
+									- (1ULL << left))].append(
 									new_Edge(prob, prob, rule.prob,
 									new_ChartItem(rule.rhs1,
-									(1UL << right) - (1UL << left)),
+									(1ULL << right) - (1ULL << left)),
 									NONE))
 							else:
-								chart[new_ChartItem(rule.lhs, (1UL << right)
-									- (1UL << left))] = [
+								chart[new_ChartItem(rule.lhs, (1ULL << right)
+									- (1ULL << left))] = [
 									new_Edge(prob, prob, rule.prob,
 									new_ChartItem(rule.rhs1,
-									(1UL << right) - (1UL << left)),
+									(1ULL << right) - (1ULL << left)),
 									NONE)]
 							if prob < viterbi[rule.lhs, left, right]:
 								viterbi[rule.lhs, left, right] = prob
