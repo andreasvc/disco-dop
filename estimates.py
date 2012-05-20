@@ -3,19 +3,11 @@ Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs).
 """
 from agenda import Agenda
-from containers import ChartItem, Rule
-from collections import defaultdict
 from math import exp
 import numpy as np
-try:
-	import cython
-	assert cython.compiled
-except:
-	from bit import *
-	from numpy import * # to import isfinite and isnan
-	exec "new_ChartItem = ChartItem" in globals()
-else:
-	np.import_array()
+import cython
+assert cython.compiled
+np.import_array()
 
 class Item(object):
 	__slots__ = ("state", "length", "lr", "gaps", "_hash")
@@ -58,7 +50,6 @@ def simpleinside(grammar, maxlen, insidescores):
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = np.inf
 	agenda = Agenda()
-	nil = ChartItem(0, 0)
 
 	for n, rules in enumerate(grammar.bylhs):
 		if n == 0: continue
@@ -108,9 +99,8 @@ def simpleinside(grammar, maxlen, insidescores):
 def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 	""" Compute the outside SX simple LR estimate in top down fashion. """
 	bylhs = grammar.bylhs
-	infinity = np.inf
 	agenda = Agenda()
-	nil = new_ChartItem(0, 0)
+
 	for n in range(1, maxlen + 1):
 		agenda[new_Item(goal, n, 0, 0)] = 0.0
 		outside[goal, n, 0, 0] = 0.0
@@ -214,7 +204,6 @@ def inside(grammar, maxlen, insidescores):
 	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = float('infinity')
 	agenda = Agenda()
-	nil = ChartItem(0, 0)
 
 	for n, rules in enumerate(grammar.bylhs):
 		if rules == []:
@@ -334,9 +323,8 @@ def testestimates(grammar, maxlen, goal):
 
 def main():
 	from treebank import NegraCorpusReader
-	from grammar import induce_srcg, dop_srcg_rules, splitgrammar
-	try: from plcfrs import parse, pprint_chart
-	except ImportError: from oldplcfrs import parse, pprint_chart
+	from grammar import induce_srcg, splitgrammar
+	from plcfrs import parse, pprint_chart
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())

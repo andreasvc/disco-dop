@@ -16,7 +16,7 @@ cdef extern:
 	int __builtin_popcountl (ULong)
 	int __builtin_popcountll (ULLong)
 
-cdef extern from "bit.h":
+cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
 
@@ -32,6 +32,12 @@ cdef class Edge:
 	cdef public double prob
 	cdef public ChartItem left
 	cdef public ChartItem right
+
+@cython.final
+cdef class Grammar:
+	cdef public list unary, lbinary, rbinary, bylhs
+	cdef public dict lexical, lexicalbylhs, toid, tolabel
+	cdef public array arity
 
 @cython.final
 cdef class LexicalRule:

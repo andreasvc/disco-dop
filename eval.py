@@ -192,7 +192,8 @@ def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
   ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
 ______________________________________________________________________________"""
 	exact = 0.
-	maxlenseen = sentcount = dicenoms = dicedenoms = 0
+	maxlenseen = sentcount = 0
+	#dicenoms = dicedenoms = 0
 	goldpos = []
 	candpos = []
 	la = []

@@ -1,11 +1,9 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing
 """
-from math import exp, fsum
-from agenda import Agenda, Entry
+from math import exp
+from agenda import Agenda
 from containers import ChartItem, Edge, RankedEdge
 from operator import itemgetter
-try: assert nsmallest(1, [1]) == [1]
-except NameError: from heapq import *
 
 unarybest = (0, )
 binarybest = (0, 0)
@@ -121,7 +119,6 @@ def lazykbest(chart, goal, k, tolabel):
 	k is the number of derivations desired.
 	tolabel is a dictionary mapping numeric IDs to the original nonterminal
 	labels.  """
-	import logging
 	D = {}
 	cand = {}
 	explored = set()
@@ -137,7 +134,6 @@ def l(a): return -log(a)
 def ed(i, p, l, r): return Edge(i, i, p, l, r)
 
 def main():
-	from containers import Edge
 	toid.update([a[::-1] for a in enumerate(
 			"Epsilon S NP V ADV VP VP2 PN Mary walks quickly".split())])
 	tolabel = dict([a[::-1] for a in toid.items()])

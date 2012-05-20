@@ -28,8 +28,8 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 	return edge
 
 def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
-			estimate=None, list prunelist=None, dict prunetoid=None, dict coarsechart=None,
-			bint splitprune=False, bint markorigin=False,
+			estimate=None, list prunelist=None, dict prunetoid=None,
+			dict coarsechart=None, bint splitprune=False, bint markorigin=False,
 			bint neverblockmarkovized=False, bint neverblockdiscontinuous=False,
 			int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -54,7 +54,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 	cdef LexicalRule terminal
 	cdef Rule rule
 	cdef np.ndarray[np.double_t, ndim=4] outside
-	cdef bint doestimate = bool(estimate), doprune = bool(prunelist) or bool(coarsechart), prunenow, split
+	cdef bint doestimate = bool(estimate), prunenow, split
+	cdef bint doprune = bool(prunelist) or bool(coarsechart)
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), maxlen = 0
 	cdef UInt blocked = 0, Epsilon = toid["Epsilon"]
@@ -152,7 +153,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 							if left != -1: label = label[:left]
 					process_edge(new_ChartItem(rule.lhs, item.vec), newedge,
 						agenda, chart, viterbi, exhaustive, prunenow,
-						prunelist, prunetoid, coarsechart, label, split, markorigin, &blocked)
+						prunelist, prunetoid, coarsechart, label, split,
+						markorigin, &blocked)
 
 			# binary left
 			l = <list>list_getitem(lbinary, item.label)
@@ -193,7 +195,8 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 								if left != -1: label = label[:left]
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 							agenda, chart, viterbi, exhaustive, prunenow,
-							prunelist, prunetoid, coarsechart, label, split, markorigin, &blocked)
+							prunelist, prunetoid, coarsechart, label, split,
+							markorigin, &blocked)
 
 			# binary right
 			l = <list>list_getitem(rbinary, item.label)
@@ -234,12 +237,18 @@ def parse(sent, grammar, tags=None, start=None, bint exhaustive=False,
 								if left != -1: label = label[:left]
 						process_edge(new_ChartItem(rule.lhs, vec), newedge,
 							agenda, chart, viterbi, exhaustive, prunenow,
-							prunelist, prunetoid, coarsechart, label, split, markorigin, &blocked)
+							prunelist, prunetoid, coarsechart, label, split,
+							markorigin, &blocked)
 
 		if agenda.length > maxA: maxA = agenda.length
 		#if agenda.length % 1000 == 0:
-		#	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(filter(None, chart.values())), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
-	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (maxA, len(agenda), len(filter(None, chart.values())), len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
+		#	logging.debug(
+		#		"agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
+		#		% (maxA, len(agenda), len(filter(None, chart.values())),
+		#		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
+	logging.debug("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
+		% (maxA, len(agenda), len(filter(None, chart.values())),
+		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	gc.enable()
 	if goal in chart: return chart, goal
 	else: return chart, NONE
@@ -414,7 +423,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 	cdef short narrowr, narrowl, widel, wider, minmid, maxmid
 	cdef long numsymbols = len(grammar.toid), lhs
 	cdef double oldscore, prob
-	cdef bint foundbetter = False 
+	cdef bint foundbetter = False
 	cdef Rule rule
 	cdef LexicalRule terminal
 	cdef ChartItem NONE = new_ChartItem(0, 0)
@@ -441,12 +450,12 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 	viterbi = np.array([np.inf],
 		dtype='d').repeat(lensent * (lensent+1) * numsymbols).reshape(
 		(numsymbols, lensent, (lensent+1)))
-	
+
 	if start == None: start = grammar.toid["ROOT"]
 	assert len(sent) < (sizeof(vec) * 8)
 	vec = (1UL << len(sent)) - 1
 	goal = new_ChartItem(start, vec)
-	
+
 	# assign POS tags
 	print 1, # == span
 	for i, w in enumerate(sent):
@@ -519,7 +528,7 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 	for span in range(2, lensent + 1):
 		print span,
 		sys.stdout.flush()
-	
+
 		# constituents from left to right
 		for left in range(0, lensent - span + 1):
 			right = left + span
@@ -527,7 +536,9 @@ def cfgparse(list sent, grammar, start=None, tags=None):
 			for lhs, rules in enumerate(<list>(grammar.bylhs)):
 				for rule in <list>rules:
 					if not rule.rhs2: continue
-					#if not (np.isfinite(viterbi[rule.rhs1,left,left+1:right]).any() and np.isfinite(viterbi[rule.rhs2,left:right-1,right]).any()): continue
+					#if not (np.isfinite(viterbi[rule.rhs1,left,left+1:right]).any()
+					#and np.isfinite(viterbi[rule.rhs2,left:right-1,right]).any()):
+					#	continue
 					narrowr = minsplitright[rule.rhs1, left]
 					if narrowr >= right: continue
 					narrowl = minsplitleft[rule.rhs2, right]
@@ -646,11 +657,13 @@ def do(sent, grammar):
 	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if start == new_ChartItem(0, 0):
 		print "no parse"
+		return False
 	else:
 		print "10 best parse trees:"
 		mpp = marginalize(chart, start, grammar.tolabel)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))): print p,a
 		print
+		return True
 
 def main():
 	from grammar import splitgrammar
@@ -663,21 +676,22 @@ def main():
 		((('VMFIN', 'Epsilon'), ('muss', ())), 0.0),
 		((('VVPP', 'Epsilon'), ('nachgedacht', ())), 0.0)])
 
-	do("Daruber muss nachgedacht werden", grammar)
-	do("Daruber muss nachgedacht werden werden", grammar)
-	do("Daruber muss nachgedacht werden werden werden", grammar)
+	assert do("Daruber muss nachgedacht werden", grammar)
+	assert do("Daruber muss nachgedacht werden werden", grammar)
+	assert do("Daruber muss nachgedacht werden werden werden", grammar)
 	print "ungrammatical sentence:"
-	do("muss Daruber nachgedacht werden", grammar)	#no parse
+	assert not do("muss Daruber nachgedacht werden", grammar)	#no parse
 	print "(as expected)"
 	print "long sentence (33 words):"
-	do("Daruber muss nachgedacht %s" % " ".join(30*["werden"]), grammar)
+	assert do("Daruber muss nachgedacht %s" % " ".join(30*["werden"]), grammar)
 
 	cfg = splitgrammar([
 		((('S', 'NP', 'VP'), ((0,1),)), 0.0),
 		((('NP', 'Epsilon'), ('mary', ())), 0.0),
 		((('VP', 'Epsilon'), ('walks', ())), 0.0)])
 	print "cfg parsing; sentence: mary walks"
-	chart, _ = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
+	chart, start = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
 	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
+	assert start
 
 if __name__ == '__main__': main()

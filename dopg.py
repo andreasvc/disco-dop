@@ -35,20 +35,20 @@ class GoodmanDOP:
 			VP -> 'walks' [1.0]
 			VP@2 -> 'walks' [1.0]
 		>>> print d.parser.parse("mary walks".split())
-		(S (NP mary) (VP@2 walks)) (p=0.25)		
-		
+		(S (NP mary) (VP@2 walks)) (p=0.25)
+
 		@param treebank: a list of Tree objects. Caveat lector:
 			terminals may not have (non-terminals as) siblings.
 		@param wrap: boolean specifying whether to add the start symbol
 			to each tree
 		@param normalize: whether to normalize frequencies
-		@param parser: a class which will be instantiated with the DOP 
+		@param parser: a class which will be instantiated with the DOP
 			model as its grammar. Supports BitParChartParser.
-		
+
 		instance variables:
 		- self.grammar a WeightedGrammar containing the PCFG reduction
-		- self.fcfg a list of strings containing the PCFG reduction 
-		  with frequencies instead of probabilities
+		- self.fcfg a list of strings containing the PCFG reduction
+			with frequencies instead of probabilities
 		- self.parser an InsideChartParser object
 		- self.exemplars dictionary of known parse trees (memoization)"""
 		from bitpar import BitParChartParser
@@ -90,7 +90,7 @@ class GoodmanDOP:
 			#for a in probs: print a
 			self.grammar = WeightedGrammar(Nonterminal(rootsymbol), probs)
 			self.parser = InsideChartParser(self.grammar)
-			
+
 		#stuff for self.mccparse
 		#the highest id
 		#self.addresses = ids.next()
@@ -143,7 +143,7 @@ class GoodmanDOP:
 				#yield (lambda fd: WeightedProduction(l, r, prob= 
 				#	reduce(mul, map(lambda z: '@' in z and
 				#	fd[z] or 1, r)) / float(fd[l])))
-	
+
 	def parse(self, sent):
 		"""most probable derivation (not very good)."""
 		return self.parser.parse(sent)
@@ -152,7 +152,7 @@ class GoodmanDOP:
 		"""warning: this problem is NP-complete. using an unsorted
 		chart parser avoids unnecessary sorting (since we need all
 		derivations anyway).
-		
+
 		@param sent: a sequence of terminals
 		@param sample: None or int; if int then sample that many parses"""
 		p = FreqDist()
@@ -167,7 +167,7 @@ class GoodmanDOP:
 		most constituents correct parsing algorithm, except for python's
 		zero-based indexing. needs to be modified to return the actual parse
 		tree. expects a pcfg in the form of a dictionary from productions to
-		probabilities """ 
+		probabilities """
 		def g(s, t, x):
 			def f(s, t, x):
 				return self.pcfg[Production(rootsymbol,
@@ -195,7 +195,7 @@ class GoodmanDOP:
 				#for r in range(s, t):
 				#	best_split = max(maxc[(s,r)] + maxc[(r+1,t)])
 				maxc[(s,t)] = sumx[max_x] + best_split
-		
+
 		return maxc[(1, len(sent) + 1)]
 
 def decorate_with_ids(tree, ids, include_preterminals=True):

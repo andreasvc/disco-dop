@@ -1,15 +1,9 @@
 import os, logging, codecs
 from multiprocessing import Pool, log_to_stderr, SUBDEBUG
 from collections import defaultdict
-from itertools import count, islice
-from math import log
 from sys import argv, stdout
-from nltk import Tree
-from _fragmentseeker import extractfragments, fastextractfragments, tolist,\
+from _fragmentseeker import extractfragments, fastextractfragments,\
 	readtreebank, indextrees, exactcounts, completebitsets
-from grammar import canonicalize
-from treebank import NegraCorpusReader
-from containers import Ctrees
 
 # this fixes utf-8 output when piped through e.g. less
 # won't help if the locale is not actually utf-8, of course
@@ -41,7 +35,7 @@ def read2ndtreebank(treebank2, labels, prods, sort=True, discontinuous=False,
 def initworker(treebank1, treebank2, sort, limit, encoding):
 	global params
 	params.update(readtreebanks(treebank1, treebank2, sort=sort, limit=limit,
-		discontinuous=not penn, encoding=encoding))
+		discontinuous=not params['penn'], encoding=encoding))
 	trees1 = params['trees1']
 	assert trees1
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
@@ -60,24 +54,23 @@ def worker(offset):
 	labels = params['labels']; prods = params['prods']
 	revlabel = params['revlabel']
 	assert offset < len(trees1)
-	end = min(offset + chunk, len(trees1))
+	end = min(offset + params['chunk'], len(trees1))
 	result = {}
 	try:
-		if quadratic:
+		if params['quadratic']:
 			result = extractfragments(trees1, sents1, offset, end, labels,
-				prods, revlabel, trees2, sents2, approx=not exact,
-				discontinuous=not penn, debug=False)
+				prods, revlabel, trees2, sents2, approx=not params['exact'],
+				discontinuous=not params['penn'], debug=False)
 		else:
 			result = fastextractfragments(trees1, sents1, offset, end, labels,
-				prods, revlabel, trees2, sents2, approx=not exact,
-				discontinuous=not penn, debug=False)
+				prods, revlabel, trees2, sents2, approx=not params['exact'],
+				discontinuous=not params['penn'], debug=False)
 	except Exception as e: logging.error(e)
 	logging.info("finished %d--%d" % (offset, end))
 	return result
 
 def exactcountworker((n, m, fragments)):
 	trees1 = params['trees1']; sents1 = params['sents1']
-	trees2 = params['trees2']; sents2 = params['sents2']
 	penn = params['penn']; revlabel = params['revlabel']
 	treeswithprod = params['treeswithprod']; quadratic = params['quadratic']
 	counts = exactcounts(trees1, sents1, fragments, not penn, revlabel,
@@ -87,7 +80,6 @@ def exactcountworker((n, m, fragments)):
 
 def main(argv):
 	global params
-	global trees1, sents1, trees2, sents2, labels, prods, revlabel
 	global quadratic, exact, chunk, penn
 	if "--numproc" in argv:
 		pos = argv.index("--numproc")
@@ -135,8 +127,13 @@ Input is in Penn treebank format (S-expressions), one tree per line.
 Output is sent to stdout; to save the results, redirect to a file.
 --numproc n     use n independent processes, to enable multi-core usage.
                 The default is not to use multiprocessing.
+<<<<<<< HEAD
 --encoding x    use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
 --numtrees n    only read first n trees from treebank
+=======
+--encoding x	use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
+--numtrees n	only read first n trees from treebank
+>>>>>>> 08025417d323de1749629788c04559c92fa8fa0b
 --disc          work with discontinuous trees; input is in Negra export format.
 --complete      look for complete matches of trees from treebank1 in treebank2.
 --exact         find exact frequencies (complete implies exact).
@@ -155,7 +152,7 @@ Output is sent to stdout; to save the results, redirect to a file.
 	if complete: assert len(argv) == 3 or batch, "need at least two treebanks with --complete."
 	level = logging.WARNING if quiet else logging.INFO
 	logging.basicConfig(level=level, format='%(message)s')
-	
+
 	if debug and numproc > 1:
 		logger = log_to_stderr()
 		logger.setLevel(SUBDEBUG)

@@ -1,21 +1,15 @@
 # -*- coding: UTF-8 -*-
-import logging, os
-from collections import defaultdict
-from collections import Counter as multiset
+import logging, os, cPickle, time, codecs
+from collections import defaultdict, Counter as multiset
 from itertools import islice, count
 from operator import itemgetter
 from math import exp
-import cPickle, re, time, codecs
-from nltk import FreqDist, Tree
-from nltk.metrics import accuracy
-from treebank import NegraCorpusReader, fold, unfold, export
-from grammar import srcg_productions, dop_srcg_rules, induce_srcg, enumchart,\
-		read_rparse_grammar, testgrammar, rem_marks, alterbinarization,\
-		terminals, varstoindices, read_bitpar_grammar, read_penn_format,\
-		splitgrammar, coarse_grammar, grammarinfo, baseline,\
-		write_srcg_grammar, write_bitpar_grammar
-from eval import bracketings, printbrackets, mean, harmean, precision, recall, f_measure
-from fragmentseeker import extractfragments
+from nltk import Tree
+from treebank import NegraCorpusReader, fold, export
+from grammar import srcg_productions, dop_srcg_rules, induce_srcg, testgrammar,\
+	rem_marks, read_bitpar_grammar, splitgrammar, grammarinfo, baseline,\
+	write_srcg_grammar
+from eval import bracketings, printbrackets, precision, recall, f_measure
 from treetransforms import binarize, unbinarize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
 from plcfrs import parse, cfgparse
@@ -248,8 +242,6 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
 	goldbrackets = multiset()
 	nsent = exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
-	estimate = lambda a,b: 0.0
-	removeids = re.compile("@[0-9]+")
 	#if srcg: derivout = codecs.open("srcgderivations", "w", encoding='utf-8')
 	timesfile = open("%s/parsetimes.txt" % resultdir, "w")
 	# main parse loop over each sentence in test corpus
@@ -279,7 +271,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 						tags=[t for w, t in sent] if tags else [],
 						start=pcfggrammar.toid[top],
 						exhaustive=True)
-		else: chart = {}; start = False 
+		else: chart = {}; start = False
 		if start:
 			resultstr, prob = viterbiderivation(chart, start,
 								pcfggrammar.tolabel)
@@ -574,8 +566,8 @@ def cftiger():
 	testgrammar(grammar)
 	testgrammar(dopgrammar)
 	dop = True; srcg = True; unfolded = False; bintype = "binarize h=1 v=1"
-	viterbi = True; sample = False; both = False; arity_marks = True
-	arity_marks_before_bin = False; estimator = 'sl-dop'; n = 0; m = 10000;
+	sample = False; both = False; arity_marks = True
+	arity_marks_before_bin = False; estimator = 'sl-dop'; m = 10000;
 	maxlen = 15; maxsent = 360
 	prune = False; top = "ROOT"; tags = False; sldop_n = 5
 	trees = list(islice((a for a in islice((root(Tree(a))
@@ -665,7 +657,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	#cPickle.dump(thecorpus, open("tiger.pickle", "wb"), protocol=-1)
 	corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(*cPickle.load(open("tiger.pickle", "rb")))
 	train = 25005 #int(0.9 * len(corpus_sents))
-	trees, sents, blocks = zip(*[sent for n, sent in 
+	trees, sents, blocks = zip(*[sent for n, sent in
 				enumerate(zip(corpus_trees, corpus_sents,
 							corpus_blocks)) if len(sent[1]) <= trainmaxlen
 							and n not in tepacocids][:train])
@@ -689,7 +681,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	logging.info(grammarinfo(srcggrammar))
 	srcggrammar = splitgrammar(srcggrammar)
 	testgrammar(srcggrammar)
-	
+
 	if removeparentannotation:
 		for a in trees:
 			a.chomsky_normal_form(factor="right", horzMarkov=doph)
@@ -741,7 +733,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	exactd = exacts = snoparse = dnoparse = 0
 	for cat, res in results.iteritems():
 		print "category:", cat
-		exact += res[8]
+		exactd += res[8]
 		exacts += res[9]
 		snoparse += res[10]
 		dnoparse += res[11]

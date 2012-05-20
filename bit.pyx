@@ -181,10 +181,12 @@ cdef inline bint subset(ULong *vec1, ULong *vec2, UInt slots):
 	return True
 
 def main():
+	print "8 * sizeof(unsigned long) ", 8 * sizeof(unsigned long)
+	print "8 * sizeof(unsigned long long) ", 8 * sizeof(unsigned long long)
 	assert nextset(0b001100110, 3) == 5
 	assert nextset(0b001100110, 7) == -1
 	assert nextunset(0b001100110, 1) == 3
-	assert nextunset((1<<64)-1, 0) == 64
+	assert nextunset((1UL<<64)-1, 0) == 64
 	assert bitcount(0b001100110) == 4
 	assert testbit(0b001100110, 1)
 	assert not testbit(0b001100110, 3)

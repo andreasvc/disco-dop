@@ -5,11 +5,8 @@ import re, logging
 from collections import defaultdict
 from nltk import Tree
 from treetransforms import mergediscnodes, unbinarize, slowfanout
-from agenda import Entry
-try: dictcast({})
-except NameError:
-	from containers import * #ChartItem, Edge, dictcast, itemcast, edgecast
-	from kbest import * #lazykthbest, lazykbest
+import cython
+assert cython.compiled
 
 infinity = float('infinity')
 removeids = re.compile("@[0-9]+")
@@ -30,7 +27,6 @@ def prunelist_fromchart(chart, goal, coarsegrammar, finegrammar, k, reduceh=999,
 	prunetoid = coarsegrammar.toid
 	prunetolabel = coarsegrammar.tolabel
 	toid = finegrammar.toid
-	tolabel = finegrammar.tolabel
 	prunelist = [None] * len(toid)
 	l = [{} for a in prunetoid]
 	if mergesplitnodes:
@@ -140,8 +136,7 @@ def filter_subtree(start, chart, chart2):
 
 def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 			verbose=False):
-	try: from plcfrs import parse, pprint_chart
-	except ImportError: from oldplcfrs import parse, pprint_chart
+	from plcfrs import parse #, pprint_chart
 	#from coarsetofine import kbest_items, merged_kbest, prunelist_fromchart
 	from disambiguation import marginalize
 	from treetransforms import mergediscnodes, unbinarize
@@ -212,7 +207,7 @@ def main():
 	from treetransforms import splitdiscnodes, binarize
 	from treebank import NegraCorpusReader, readheadrules
 	from grammar import splitgrammar, induce_srcg, dop_srcg_rules,\
-			printrule, subsetgrammar
+			subsetgrammar
 	from time import clock
 	headrules = readheadrules()
 	k = 50
@@ -227,7 +222,7 @@ def main():
 	#sents = corpus.sents()[:train]
 	trees = corpus.parsed_sents()
 	sents = corpus.sents()
-	
+
 	dtrees = [t.copy(True) for t in trees]
 	parenttrees = [t.copy(True) for t in trees]
 	for t in trees: binarize(t, vertMarkov=0, horzMarkov=1)
