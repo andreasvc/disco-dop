@@ -407,10 +407,10 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 	"""Traverse tree a and b in parallel to extract a connected subset """
 	SETBIT(result, i)
 	CLEARBIT(&CST[j * SLOTS], i)
-	if b[j].left < 0: return
+	if a[i].left < 0: return
 	elif TESTBIT(&CST[b[j].left * SLOTS], a[i].left):
 		extractat(CST, result, a, b, a[i].left, b[j].left, SLOTS)
-	if b[j].right < 0: return
+	if a[i].right < 0: return
 	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 
@@ -509,20 +509,6 @@ def frontierorterm(x):
 def pathsplit(p):
 	return p.rsplit("/", 1) if "/" in p else (".", p)
 
-def readtreebanks(treebank1, treebank2=None, sort=True, discontinuous=False,
-	limit=0, encoding="utf-8"):
-	labels = {}
-	prods = {}
-	trees1, sents1 = readtreebank(treebank1, labels, prods, sort,
-		discontinuous, limit, encoding)
-	trees2, sents2 = readtreebank(treebank2, labels, prods, sort,
-		discontinuous, limit, encoding)
-	revlabel = sorted(labels, key=labels.get)
-	treeswithprod = indextrees(trees1, prods)
-	return dict(trees1=trees1, sents1=sents1, trees2=trees2, sents2=sents2,
-		labels=labels, prods=prods, revlabel=revlabel,
-		treeswithprod=treeswithprod)
-
 def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 	limit=0, encoding="utf-8"):
 	if treebank is None: return None, None
@@ -568,7 +554,10 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 		productions = tree.productions()
 		for n, a in enumerate(tree.subtrees(frontierorterm)):
 			# fixme: get rid of this, maybe exclude terminals altogether
-			a[0] = Terminal(n)
+			if a: a[0] = Terminal(n)
+			else:
+				sent.insert(n, None)
+				a.append(Terminal(n))
 		tree = list(tree.subtrees()) + tree.leaves()
 		# collect new labels and productions
 		for a, b in zip(tree, productions):
@@ -579,14 +568,6 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 		if sort: tree.sort(key=lambda n: -prods.get(n.prod, -1))
 		for n, a in enumerate(tree): a.idx = n
 		tree[0].root = root.idx
-		# fixme: can we do this on string instead of Tree object?
-		#for n, a in frontierortermre.findall(line):
-		#	if a[0] == " ": sent.insert(n, None)
-		#line = frontierortermre.sub(count(), line)
-		if frontiersre.search(line):
-			for n, a in enumerate(tree.subtrees(frontierorterm)):
-				if len(a) == 0: sent.insert(n, None)
-				a[:] = [n]
 		trees.add(tree, labels, prods)
 		sents.append(sent)
 	return trees, sents
