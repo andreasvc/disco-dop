@@ -127,13 +127,8 @@ Input is in Penn treebank format (S-expressions), one tree per line.
 Output is sent to stdout; to save the results, redirect to a file.
 --numproc n     use n independent processes, to enable multi-core usage.
                 The default is not to use multiprocessing.
-<<<<<<< HEAD
 --encoding x    use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
 --numtrees n    only read first n trees from treebank
-=======
---encoding x	use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
---numtrees n	only read first n trees from treebank
->>>>>>> 08025417d323de1749629788c04559c92fa8fa0b
 --disc          work with discontinuous trees; input is in Negra export format.
 --complete      look for complete matches of trees from treebank1 in treebank2.
 --exact         find exact frequencies (complete implies exact).
