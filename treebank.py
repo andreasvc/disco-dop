@@ -2,7 +2,7 @@ from nltk import Tree
 from itertools import count, repeat
 from os import path
 from glob import glob
-import re, codecs
+import re, codecs, logging
 
 BOS = re.compile("^#BOS.*\n")
 EOS = re.compile("^#EOS")
@@ -25,7 +25,7 @@ class NegraCorpusReader():
 		self.headfinal = headfinal;	self.unfold = unfold
 		self.functiontags = functiontags;
 		self.removepunct = removepunct; self.movepunct = movepunct
-		self.headrules = readheadrules()
+		self.headrules = readheadrules() if headorder else {}
 		self._parsed_sents_cache = None
 		self._sents_cache = None
 		self._tagged_sents_cache = None
@@ -151,7 +151,7 @@ def readheadrules():
 	# under src/de/tuebingen/rparse/treebank/constituent/negra/
 	try: rulefile = open("negra.headrules")
 	except IOError:
-		print "WARNING: negra head rules not found! no head annotation will be performed."
+		logging.warning("negra head rules not found! no head annotation will be performed.")
 		return headrules
 	for a in rulefile:
 		if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
