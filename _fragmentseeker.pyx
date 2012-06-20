@@ -21,9 +21,9 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	bint debug=False, bint discontinuous=False):
 	""" Seeks the largest fragments in treebank(s)
 	- scenario 1: recurring fragments in single treebank, use:
-		 extractfragments(trees1, sents1, offset, end, labels, prods, None, None)
+		extractfragments(trees1, sents1, offset, end, labels, prods, None, None)
 	- scenario 2: common fragments in two treebanks:
-		 extractfragments(trees1, sents1, offset, end, labels, prods, trees2, sents2)
+		extractfragments(trees1, sents1, offset, end, labels, prods, trees2, sents2)
 	offset and end can be used to divide the work over multiple processes.
 	offset is the starting point in trees1, end is the number of trees from
 	trees1 to work on.
@@ -41,7 +41,7 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		set inter = set()
 
 	if approx: fragments = <dict>defaultdict(one)
-	
+
 	if trees2 is None: trees2 = trees1
 	ctrees1 = trees1.data
 	ctrees2 = trees2.data
@@ -103,7 +103,7 @@ cdef inline void getCST(NodeArray A, NodeArray B, ULong *CST, int i, int j,
 			for n in range(SLOTS): bitset[n] |= child[n]
 
 cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
-	""" Extract the largest, disjuncts bitsets from the common subtree 
+	""" Extract the largest, disjuncts bitsets from the common subtree
 	table (CST). """
 	cdef ULong *bitset
 	cdef int n, m
@@ -116,7 +116,7 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 			bitset = &CST[IDX(n, m, lenb, SLOTS)]
 			if not TESTBIT(bitset, 0) or abitcount(bitset, SLOTS) < 2:
 				continue
-			shiftright(bitset, 1, SLOTS)
+			shiftright(bitset, SLOTS)
 			ulongcpy(tmp.data._L, bitset, SLOTS)
 			if tmp in finalnodeset: continue
 			for bs in finalnodeset:
@@ -138,12 +138,14 @@ cdef inline set getnodeset(ULong *CST, int lena, int lenb, int t, UChar SLOTS):
 				finalnodeset.add(new_FrozenArray(pyarray))
 	return finalnodeset
 
-cdef void shiftright(ULong *bitset, int shift, UChar SLOTS):
+cdef void shiftright(ULong *bitset, UChar SLOTS):
+	""" Shift an array of bitsets one bit to the right. """
 	cdef int x
-	cdef ULong mask = (1 << shift) - 1
-	for x in range(SLOTS):
-		if x: bitset[x-1] |= bitset[x] & mask
-		bitset[x] >>= shift
+	cdef ULong mask = (1 << 1) - 1
+	bitset[0] >>= 1
+	for x in range(1, SLOTS):
+		bitset[x-1] |= bitset[x] & mask
+		bitset[x] >>= 1
 
 cdef inline unicode strtree(Node *tree, list revlabel, list sent, int i):
 	""" produce string representation of (complete) tree. """
@@ -185,9 +187,11 @@ cdef inline list getyield(Node *tree, list sent, int i):
 	elif tree[i].right < 0: return getyield(tree, sent, tree[i].left)
 	else: return getyield(tree, sent, tree[i].left) + getyield(tree, sent, tree[i].right)
 
-termsre = re.compile(r"([^ )]+)\)")
+# match all leaf nodes containing indices
+# (note: phrasal nodes looking like indices will cause problems)
+termsre = re.compile(r"([0-9]+)([ )])")
 def repl(d):
-	def f(x): return d[int(x.groups()[0])] + ")"
+	def f(x): return d[int(x.groups()[0])] + x.groups()[1]
 	return f
 
 def getsent(frag, list sent):
@@ -197,7 +201,7 @@ def getsent(frag, list sent):
 		int x = 0, n, maxl
 		list newsent = []
 		dict leafmap = {}
-	leaves = set(map(int, termsre.findall(frag)))
+	leaves = set(int(x) for x, _ in termsre.findall(frag))
 	if not leaves: return frag, ()
 	maxl = max(leaves)
 	for n in sorted(leaves):
@@ -212,6 +216,7 @@ def getsent(frag, list sent):
 	return frag, tuple(newsent)
 
 cdef dumptree(NodeArray a, list revlabel):
+	""" print a human-readable representation of a tree struct. """
 	cdef int n
 	for n in range(a.len):
 		if a.nodes[n].prod == -1: break #skip terminals
@@ -222,6 +227,7 @@ cdef dumptree(NodeArray a, list revlabel):
 
 cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, list asent, list bsent,
 	list revlabel, UChar SLOTS, bint bitmatrix=False):
+	""" print a table of the common subtrees of two trees. """
 	cdef int n, m
 	cdef Node aa, bb
 	dumptree(a, revlabel); dumptree(b, revlabel)
@@ -297,13 +303,13 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	dict labels, dict prods, list revlabel,
 	Ctrees trees2=None, list sents2=None, bint approx=True,
 	bint debug=False, bint discontinuous=False):
-	""" Seeks the largest fragments in treebank(s) with a linear time tree 
+	""" Seeks the largest fragments in treebank(s) with a linear time tree
 	kernel
 	- scenario 1: recurring fragments in single treebank, use:
-	  fastextractfragments(trees1, sents1, offset, end, labels,prods,None,None)
+      fastextractfragments(trees1, sents1, offset, end, labels,prods,None,None)
 	- scenario 2: common fragments in two treebanks:
-	  fastextractfragments(trees1, sents1, offset, end, labels,prods,
-	  	trees2, sents2)
+      fastextractfragments(trees1, sents1, offset, end, labels,prods,
+      trees2, sents2)
 	offset and end can be used to divide the work over multiple processes.
 	they are indices of trees1 to work on (default is all).
 	when debug is enabled a contingency table is shown for each pair of trees.
@@ -382,7 +388,7 @@ cdef inline void fasttreekernel(Node *a, Node *b, ULong *CST, UChar SLOTS):
 cdef inline void extractbitsets(ULong *CST, ULong *scratch, Node *a, Node *b,
 	short j, int n, array pyarray, set results, bint discontinuous,
 	UChar SLOTS):
-	""" visit nodes of b in pre-order traversal. store bitsets of connected 
+	""" visit nodes of b in pre-order traversal. store bitsets of connected
 	subsets of A as they are encountered. """
 	cdef ULong *bitset = &CST[j * SLOTS]
 	cdef short i = anextset(bitset, 0, SLOTS)
@@ -607,7 +613,7 @@ cdef test():
 		assert abitcount(vec, SLOTS) == 0, abitcount(vec, SLOTS)
 		for m in range(bits): assert not TESTBIT(vec, n)
 	print "bitset test successful"
-	
+
 def main():
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less

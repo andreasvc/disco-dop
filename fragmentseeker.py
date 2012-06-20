@@ -276,11 +276,16 @@ def printfragments(fragments, counts, nofreq, complete, out=stdout):
 		# with complete fragments or comparing two treebanks, a frequency of 1
 		# is normal.
 		for a, freq in zip(fragments.keys(), counts):
-			if freq: out.write("%s\t%d\n" % (a if penn else ("%s\t%s" % a), freq))
+			if freq: out.write("%s\t%d\n" % (a if penn
+				else ("%s\t%s" %
+					(a[0], " ".join("'%s'" % x if x else "''" for x in a[1]))
+					), freq))
 	else:
 		for a, freq in zip(fragments.keys(), counts):
 			if freq > 1:
-				out.write("%s\t%d\n" % (a if penn else ("%s\t%r" % a), freq))
+				out.write("%s\t%d\n" % (a if penn else ("%s\t%s" %
+					(a[0], " ".join("'%s'" % x if x else "''" for x in a[1]))
+					), freq))
 			else: logging.info("invalid fragment--frequency=1: %s" % a)
 
 if __name__ == '__main__': main(argv)
