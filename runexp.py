@@ -6,7 +6,7 @@ from operator import itemgetter
 from math import exp
 from nltk import Tree
 from treebank import NegraCorpusReader, fold, export
-from grammar import srcg_productions, dop_srcg_rules, induce_srcg, testgrammar,\
+from grammar import srcg_productions, dop_srcg_rules, induce_srcg,\
 	rem_marks, read_bitpar_grammar, grammarinfo, baseline,\
 	write_srcg_grammar
 from containers import Grammar

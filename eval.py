@@ -223,7 +223,7 @@ ______________________________________________________________________________\
 		transform(gtree, gsent,
 			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
-			"%s\%s" % (" ".join(csent), " ".join(gsent))
+			"%s\%s" % (" ".join(csent), " ".join(gsent)))
 		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]
 			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
 		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]
