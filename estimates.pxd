@@ -1,5 +1,5 @@
 cimport cython
-from containers cimport ChartItem, Rule, UInt
+from containers cimport ChartItem, Grammar, Rule, UInt
 from plcfrs cimport new_ChartItem
 from agenda cimport Agenda, Entry
 from array cimport array
@@ -15,8 +15,8 @@ cdef extern from "math.h":
 	bint isfinite(double x)
 
 cdef class Item:
-	cdef public int state, length, lr, gaps
 	cdef public long _hash
+	cdef public int state, length, lr, gaps
 	#def __init__(self, len state, int length, int lr, int gaps)
 
 @cython.locals(item=Item)
@@ -33,8 +33,11 @@ cdef double getoutside(np.ndarray[np.double_t, ndim=4] outside, UInt maxlen, UIn
 @cython.locals(
 	I=ChartItem,
 	nil=ChartItem,
+	i=size_t,
 	entry=Entry)
-cpdef dict inside(grammar, UInt maxlen, dict insidescores)
+cpdef dict inside(Grammar grammar, UInt maxlen, dict insidescores)
+
+cdef insideconcat(a, b, Rule rule, maxlen)
 
 @cython.locals(
 	I=ChartItem,
@@ -47,9 +50,10 @@ cpdef dict inside(grammar, UInt maxlen, dict insidescores)
 	rbinary=list,
 	unary=list,
 	rules=list,
+	i=size_t,
 	x=np.double_t,
 	vec=cython.ulong)
-cpdef simpleinside(grammar, UInt maxlen, np.ndarray[np.double_t, ndim=2] insidescores)
+cpdef simpleinside(Grammar grammar, UInt maxlen, np.ndarray[np.double_t, ndim=2] insidescores)
 
 @cython.locals(
 	current=np.double_t,
@@ -61,11 +65,11 @@ cpdef simpleinside(grammar, UInt maxlen, np.ndarray[np.double_t, ndim=2] insides
 	bylhs=list,
 	rules=list,
 	rule=Rule,
-	#arity=array,
 	infinity=cython.double,
 	x=cython.double,
 	y=cython.double,
 	insidescore=cython.double,
+	i=size_t,
 	m=cython.int,
 	n=cython.int,
 	totlen=cython.int,
@@ -81,5 +85,7 @@ cpdef simpleinside(grammar, UInt maxlen, np.ndarray[np.double_t, ndim=2] insides
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint
 	)
-cdef void outsidelr(grammar, np.ndarray[np.double_t, ndim=2] insidescores, UInt maxlen, UInt goal, array[unsigned char] arity, np.ndarray[np.double_t, ndim=4] outside) except *
+cdef void outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores, UInt maxlen, UInt goal, np.ndarray[np.double_t, ndim=4] outside) except *
 
+cpdef testestimates(Grammar grammar, maxlen, goal)
+cpdef getestimates(Grammar grammar, maxlen, goal)

@@ -284,7 +284,7 @@ def unfold(tree):
 	for vp in tree.subtrees(lambda n: n.node == "VP"):
 		hd = [x for x in vp if ishead(x)].pop()
 		vp.node += "-" + hd.node
-	
+
 	# introduce finite VP at S level, collect objects and modifiers
 	# introduce new S level for discourse markers
 	newlevel = "DM".split()

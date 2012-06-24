@@ -14,7 +14,8 @@ assert cython.compiled
 infinity = float('infinity')
 removeids = re.compile("@[0-9]+")
 
-def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n, sample=False, both=False):
+def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
+	sample=False, both=False):
 	""" `proper' method for sl-dop. parses sentence once more to find shortest
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees. Returns the first result of the intersection of the
@@ -46,13 +47,15 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n, samp
 	mpp2 = {}
 	for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
 		mpp2[tt] = mpp1[tt]
-	
+
 	words = [a[0] for a in sent]
 	tagsornil = [a[1] for a in sent] if tags else []
 	chart2, start2 = parse(words, secondarymodel, tagsornil,
 					1, #secondarymodel.toid[top],
 					True, None, prunelist=prunelist)
-	if start2: shortestderivations = lazykbest(chart2, start2, m, secondarymodel.tolabel)
+	if start2:
+		shortestderivations = lazykbest(chart2, start2, m,
+			secondarymodel.tolabel)
 	else:
 		shortestderivations = []
 		logging.warning("shortest derivation parsing failed") # error?
@@ -64,7 +67,8 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n, samp
 			break
 	else:
 		logging.warning("no matching derivation found") # error?
-	logging.debug("(%d derivations, %d of %d parsetrees)" % (len(derivations), min(sldop_n, len(mpp1)), len(mpp1)))
+	logging.debug("(%d derivations, %d of %d parsetrees)" % (
+		len(derivations), min(sldop_n, len(mpp1)), len(mpp1)))
 	return mpp
 
 def sldop_simple(chart, start, dopgrammar, m, sldop_n):
@@ -154,7 +158,8 @@ def getviterbi(chart, start, tolabel):
 					getviterbi(chart, edge.left, tolabel) if edge.left.label
 									else str(edge.left.vec))
 
-def marginalize(chart, start, tolabel, n=10, sample=False, both=False, shortest=False, secondarymodel=None, mpd=False):
+def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
+	shortest=False, secondarymodel=None, mpd=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
 	parsetrees = {}
@@ -201,7 +206,8 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False, shortest=
 
 def main():
 	from nltk import Tree
-	from grammar import dop_srcg_rules, splitgrammar
+	from grammar import dop_srcg_rules
+	from containers import Grammar
 	from plcfrs import parse
 	def e(x):
 		if isinstance(x[1], tuple):
@@ -228,7 +234,7 @@ def main():
 		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (A 0) (C (B 1) (C 2)))
 		(ROOT (A 0) (C (B 1) (C 2)))""".splitlines())
-	sents = [a.split() for a in 
+	sents = [a.split() for a in
 		"""d b c
 		c a b
 		a e f
@@ -247,17 +253,20 @@ def main():
 		e f c
 		f b c
 		a d e""".splitlines()]
-	grammar = splitgrammar(dop_srcg_rules(trees, sents))
+	grammar = Grammar(dop_srcg_rules(trees, sents))
 	shortest, secondarymodel = dop_srcg_rules(trees, sents, shortestderiv=True)
-	shortest = splitgrammar(shortest)
-	chart, start = parse("a b c".split(), grammar, None, grammar.toid['ROOT'], True)
+	shortest = Grammar(shortest)
+	sent = "a b c".split()
+	chart, start = parse(sent, grammar, None, grammar.toid['ROOT'], True)
 	vit = viterbiderivation(chart, start, grammar.tolabel)
 	mpd = marginalize(chart, start, grammar.tolabel, n=1000, mpd=True)
 	mpp = marginalize(chart, start, grammar.tolabel, n=1000)
 	mppsampled = marginalize(chart, start, grammar.tolabel, n=1000, sample=True)
 	sldopsimple = sldop_simple(chart, start, grammar, 1000, 7)
-	sldop1 = sldop(chart, start, "a b c".split(), None, grammar, shortest, 1000, 7, sample=False, both=False)
-	short = marginalize(chart, start, shortest.tolabel, 1000, shortest=True, secondarymodel=secondarymodel)
+	sldop1 = sldop(chart, start, sent, None, grammar, shortest, 1000, 7,
+		sample=False, both=False)
+	short = marginalize(chart, start, shortest.tolabel, 1000, shortest=True,
+		secondarymodel=secondarymodel)
 	print
 	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))
 	print "MPD:\t\t%s %r" % e(max(mpd.items(), key=itemgetter(1)))

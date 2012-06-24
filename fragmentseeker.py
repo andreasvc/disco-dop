@@ -118,33 +118,40 @@ def main(argv):
 	if len(argv) < 2: print "missing treebank argument"
 	if any(a.startswith("--") for a in argv):
 		print "unrecognized options:", [a.startswith("--") for a in argv]
-	if (not batch and len(argv) not in (2, 3)) or any(a.startswith("--") for a in argv):
+	if (not batch and len(argv) not in (2, 3))
+		or any(a.startswith("--") for a in argv):
 		print """\
 usage: %s [options] treebank1 [treebank2]
 If only one treebank is given, fragments occurring at least twice are sought.
-If multiple treebanks are given, finds common fragments between first & rest.
+If two treebanks are given, finds common fragments between first & second.
 Input is in Penn treebank format (S-expressions), one tree per line.
+Output contains lines of the form "tree<TAB>frequency".
 Output is sent to stdout; to save the results, redirect to a file.
---numproc n     use n independent processes, to enable multi-core usage.
-                The default is not to use multiprocessing.
---encoding x    use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
---numtrees n    only read first n trees from treebank
---disc          work with discontinuous trees; input is in Negra export format.
---complete      look for complete matches of trees from treebank1 in treebank2.
---exact         find exact frequencies (complete implies exact).
---quadratic     use the slower, quadratic algorithm for finding fragments.
---nofreq        do not report frequencies.
---batch dir     enable batch mode; any number of treebanks > 1 can be given;
-                first treebank will be compared to all others.
-                results are written to filenames of the form dir/A_B.
---debug         extra debug information, ignored when numproc > 1.
---quiet         disable all log messages.""" % argv[0]
+--complete    find complete matches of fragments from treebank1 in treebank2.
+--exact       find exact frequencies (complete implies exact).
+--disc        work with discontinuous trees; input is in Negra export format.
+              output: tree<TAB>sentence<TAB>frequency
+              where "tree' has indices as leaves, referring to elements of
+              "sentence", a space separated list of words.
+--numproc n   use n independent processes, to enable multi-core usage.
+              The default is not to use multiprocessing.
+--encoding x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
+--numtrees n  only read first n trees from treebank
+--batch dir   enable batch mode; any number of treebanks > 1 can be given;
+              first treebank will be compared to all others.
+              results are written to filenames of the form dir/A_B.
+--quadratic   use the slower, quadratic algorithm for finding fragments.
+--nofreq      do not report frequencies.
+--debug       extra debug information, ignored when numproc > 1.
+--quiet       disable all log messages.""" % argv[0]
 		exit()
-	if batch: assert numproc == 1, "batch mode only supported in single-process mode"
+	if batch:
+		assert numproc == 1, "batch mode only supported in single-process mode"
 	if argv[1] == "-": argv[1] = "/dev/stdin"
 	assert os.path.exists(argv[1]), "not found: %s" % argv[1]
 	for a in argv[2:]: assert os.path.exists(a), "not found: %s" % a
-	if complete: assert len(argv) == 3 or batch, "need at least two treebanks with --complete."
+	if complete: assert (len(argv) == 3 or batch,
+		"need at least two treebanks with --complete.")
 	level = logging.WARNING if quiet else logging.INFO
 	logging.basicConfig(level=level, format='%(message)s')
 
@@ -184,11 +191,12 @@ Output is sent to stdout; to save the results, redirect to a file.
 				not quadratic, not penn, limit, encoding))
 			trees2 = params['trees2']; sents2 = params['sents2']
 			labels = params['labels']; prods = params['prods']
-			revlabel = params['revlabel']; treeswithprod = params['treeswithprod']
+			revlabel = params['revlabel']
+			treeswithprod = params['treeswithprod']
 			if complete: pass
 			elif quadratic:
-				fragments = extractfragments(trees1, sents1, 0, 0, labels, prods,
-					revlabel, trees2, sents2, approx=not exact,
+				fragments = extractfragments(trees1, sents1, 0, 0, labels,
+					prods, revlabel, trees2, sents2, approx=not exact,
 					discontinuous=not penn, debug=debug)
 			else:
 				fragments = fastextractfragments(trees1, sents1, 0, 0, labels,
@@ -196,10 +204,11 @@ Output is sent to stdout; to save the results, redirect to a file.
 					discontinuous=not penn, debug=debug)
 			if exact or complete:
 				logging.info("getting exact counts")
-				counts = exactcounts(trees1, sents1, fragments.values(), not penn,
-					revlabel, treeswithprod, fast=not quadratic)
+				counts = exactcounts(trees1, sents1, fragments.values(),
+					not penn, revlabel, treeswithprod, fast=not quadratic)
 			else: counts = fragments.values()
-			filename="%s/%s_%s" % (batch, os.path.basename(argv[1]), os.path.basename(a))
+			filename="%s/%s_%s" % (batch, os.path.basename(argv[1]),
+				os.path.basename(a))
 			out = codecs.open(filename, "w", encoding=encoding)
 			printfragments(fragments, counts, nofreq, complete, out=out)
 			logging.info("wrote to %s" % filename)
@@ -270,22 +279,18 @@ def printfragments(fragments, counts, nofreq, complete, out=stdout):
 	logging.info("number of fragments: %d" % len(fragments))
 	if nofreq:
 		for a, freq in zip(fragments.keys(), counts):
-			out.write("%s\n" % (a if penn else ("%s\t%s" % a)))
+			out.write("%s\n" % (a if penn
+				else ("%s\t%s" % (a[0],
+					" ".join("%s" % x if x else "" for x in a[1])))))
 		return
-	if complete or len(argv) == 3:
-		# with complete fragments or comparing two treebanks, a frequency of 1
-		# is normal.
-		for a, freq in zip(fragments.keys(), counts):
-			if freq: out.write("%s\t%d\n" % (a if penn
-				else ("%s\t%s" %
-					(a[0], " ".join("'%s'" % x if x else "''" for x in a[1]))
-					), freq))
-	else:
-		for a, freq in zip(fragments.keys(), counts):
-			if freq > 1:
-				out.write("%s\t%d\n" % (a if penn else ("%s\t%s" %
-					(a[0], " ".join("'%s'" % x if x else "''" for x in a[1]))
-					), freq))
-			else: logging.info("invalid fragment--frequency=1: %s" % a)
+	# with complete fragments or comparing two treebanks,
+	# a frequency of 1 is normal; otherwise, raise alarm.
+	if complete or len(argv) == 3: threshold = 1
+	else: threshold = 0
+	for a, freq in zip(fragments.keys(), counts):
+		if freq > threshold:
+			out.write("%s\t%d\n" % (a if penn else ("%s\t%s" % (a[0],
+				" ".join("%s" % x if x else "" for x in a[1]))), freq))
+		elif threshold: logging.warning("invalid fragment--frequency=1: %s" % a)
 
 if __name__ == '__main__': main(argv)

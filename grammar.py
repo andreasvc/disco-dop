@@ -25,10 +25,14 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	[[('NN', [[0], [1]])]]
 	"""
 	rules = []
+	assert set(tree.leaves()) == set(range(len(sent))), (
+		"mismatch between indices and sentence: "
+		"each word in sentence should have "
+		"exactly one corresponding index in leaves of tree")
 	for st in tree.subtrees():
 		if not st: raise ValueError(("Empty node. Frontier nodes should "
 			"designate which part(s) of the sentence they contribute to."))
-		elif isinstance(st[0], int):
+		elif all(isinstance(a, int) for a in st): #isinstance(st[0], int):
 			if len(st) == 1 and sent[st[0]] is not None:
 				rule = [(st.node, (sent[st[0]],)), ('Epsilon', ())]
 			elif all(sent[a] is None for a in st): # frontier node
@@ -37,11 +41,12 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 				"terminal; frontier nodes should dominate a sequence of "
 				"indices that are None in the sentence.\n"
 				"subtree: %s\nsent: %r" % (st, sent)))
-		elif isinstance(st[0], Tree):
+		elif all(isinstance(a, Tree) for a in st): #isinstance(st[0], Tree):
 			rleaves = [a.leaves() if isinstance(a, Tree) else [a] for a in st]
 			rvars = [rangeheads(sorted(l)) for a,l in zip(st, rleaves)]
 			lvars = ranges(sorted(a for rng in rleaves for a in rng))
-			lvars = [[x for x in a if any(x in c for c in rvars)] for a in lvars]
+			lvars = [[x for x in a if any(x in c for c in rvars)]
+				for a in lvars]
 			lhs = node_arity(st, lvars, side_effect) if arity_marks else st.node
 			nonterminals = (lhs,) + tuple(node_arity(a, b) if arity_marks
 										else a.node for a,b in zip(st, rvars))
@@ -88,7 +93,7 @@ def coarse_grammar(trees, sents, arity_marks=True, level=0):
 	return induce_srcg(trees, sents, arity_marks)
 
 def induce_srcg(trees, sents, arity_marks=True, freqs=False):
-	""" Induce a probabilistic SRCG, similar to how a PCFG is read off 
+	""" Induce a probabilistic SRCG, similar to how a PCFG is read off
 	from a treebank """
 	rules = []
 	for tree, sent in zip(trees, sents):
@@ -158,11 +163,14 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False,
 			if a == aj: continue	# exterior / unaddressed node
 			ewedenoms.setdefault(a, []).append(float(fd[aj] * ntfd[a]))
 		for a in ewedenoms: ewedenoms[a] = tuple(ewedenoms[a])
-		probmodel = [(rule, log(p)) for rule, p in imap(goodmanewe, rules.iteritems())]
+		probmodel = [(rule, log(p))
+			for rule, p in imap(goodmanewe, rules.iteritems())]
 	elif normalize: #bodewe
-		probmodel = [(rule, p if freqs else log(p)) for rule, p in imap(bodewe, rules.iteritems())]
+		probmodel = [(rule, p if freqs else log(p))
+			for rule, p in imap(bodewe, rules.iteritems())]
 	else:
-		probmodel = [(rule, p if freqs else log(p)) for rule, p in imap(rfe, rules.iteritems())]
+		probmodel = [(rule, p if freqs else log(p))
+			for rule, p in imap(rfe, rules.iteritems())]
 	if shortestderiv:
 		nonprobmodel = [(rule, log(1. if '@' in rule[0][0] else 0.5))
 							for rule in rules]
@@ -214,8 +222,7 @@ def doubledop(trees, sents):
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 					minimalbinarization(a, complexityfanout, sep="}")),
 				b, arity_marks=a in backtransform, side_effect=True)),
-			chain((fragments[backtransform[a], b] if a in backtransform else 1,),
-				repeat(1))))
+			chain((fragments.get((backtransform.get(a), b), 1),), repeat(1))))
 	# unseen srcg rules
 	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
 	# relative frequences as probabilities
@@ -225,73 +232,6 @@ def doubledop(trees, sents):
 	for a, b in grammar.iteritems():
 		grammar[a] = log(b / ntfd.get(a[0][0], b))
 	return grammar.items(), backtransform
-
-def splitgrammar(grammar):
-	""" split the grammar into various lookup tables, mapping nonterminal
-	labels to numeric identifiers. Also negates log-probabilities to
-	accommodate min-heaps.
-	Can only represent ordered SRCG rules (monotone LCFRS). """
-	from containers import Rule, LexicalRule
-	# get a list of all nonterminals; make sure Epsilon and ROOT are first,
-	# and assign them unique IDs
-	nonterminals = list(enumerate(["Epsilon", "ROOT"]
-		+ sorted(set(str(nt) for (rule, yf), weight in grammar for nt in rule)
-			- set(["Epsilon", "ROOT"]))))
-	toid = dict((lhs, n) for n, lhs in nonterminals)
-	tolabel = dict((n, lhs) for n, lhs in nonterminals)
-	bylhs = [[] for _ in nonterminals]
-	unary = [[] for _ in nonterminals]
-	lbinary = [[] for _ in nonterminals]
-	rbinary = [[] for _ in nonterminals]
-	arity = array('B', [0] * len(nonterminals))
-	lexical = {}
-	lexicalbylhs = {}
-	# remove sign from log probabilities because the heap we use is a min-heap
-	for (rule, yf), w in grammar:
-		if len(rule) == 2 and toid[rule[1]] == 0:
-			r = LexicalRule(toid[rule[0]], toid[rule[1]], 0, unicode(yf[0]), abs(w))
-			assert arity[r.lhs] in (0, 1)
-			arity[r.lhs] = 1
-		else:
-			args, lengths = yfarray(yf)
-			assert yf == arraytoyf(args, lengths) # an unbinarized rule causes an error here
-			if len(rule) == 2 and w == 0.0: w += 0.00000001
-			r = Rule(toid[rule[0]], toid[rule[1]],
-				toid[rule[2]] if len(rule) == 3 else 0, args, lengths, abs(w))
-			if arity[r.lhs] == 0:
-				arity[r.lhs] = len(args)
-			assert arity[r.lhs] == len(args)
-		if len(rule) == 2:
-			if r.rhs1 == 0: #Epsilon
-				# lexical productions (mis)use the field for the yield function to store the word
-				lexical.setdefault(yf[0], []).append(r)
-				lexicalbylhs.setdefault(r.lhs, []).append(r)
-			else:
-				unary[r.rhs1].append(r)
-				bylhs[r.lhs].append(r)
-		elif len(rule) == 3:
-			lbinary[r.rhs1].append(r)
-			rbinary[r.rhs2].append(r)
-			bylhs[r.lhs].append(r)
-		else: raise ValueError("grammar not binarized: %s" % repr(r))
-	#assert 0 not in arity[1:]
-	return Grammar(unary, lbinary, rbinary, lexical, bylhs, lexicalbylhs, toid, tolabel, arity)
-
-def yfarray(yf):
-	""" convert a yield function represented as a 2D sequence to an array
-	object. """
-	# I for 32 bits (int), H for 16 bits (short), B for 8 bits (char)
-	# obviously, all related static declarations should match these types
-	lentype = 'H'; lensize = 8 * array(lentype).itemsize
-	vectype = 'I'; vecsize = 8 * array(vectype).itemsize
-	assert len(yf) <= lensize
-	assert all(len(a) <= vecsize for a in yf)
-	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
-	return array(vectype, initializer), array(lentype, map(len, yf))
-
-def arraytoyf(args, lengths):
-	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
-							for n, a in zip(lengths, args))
 
 def postorder(tree, f=None):
 	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
@@ -319,8 +259,7 @@ def rangeheads(s):
 def ranges(s):
 	""" partition s into a sequence of lists corresponding to contiguous ranges
 	>>> list(ranges( (0, 1, 3, 4, 6) ))
-	[[0, 1], [3, 4], [6]]
-	""" 
+	[[0, 1], [3, 4], [6]]"""
 	rng = []
 	for a in s:
 		if not rng or a == rng[-1]+1:
@@ -357,13 +296,19 @@ def printrulelatex(r):
 		r = alpha_normalize(r)
 		lhs = r[0]; rhs = r[1:]
 	if not isinstance(lhs[1][0], tuple) and not isinstance(lhs[1][0], list):
-		print "\\textrm{%s}(\\textrm{%s})" % (lhs[0].replace("$","\\$"), lhs[1][0]),
-	else: print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"), ",".join(" ".join("x_{%r}" % a for a in x)  for x in lhs[1])),
+		print r"\textrm{%s}(\textrm{%s})" % (
+			lhs[0].replace("$",r"\$"), lhs[1][0]),
+	else:
+		print "\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"),
+			",".join(" ".join("x_{%r}" % a for a in x)  for x in lhs[1])),
 	print r"\rightarrow",
 	for x in rhs:
-		if x[0] == 'Epsilon': print r'\epsilon',
+		if x[0] == 'Epsilon':
+			print r'\epsilon',
 		else:
-			print "\\textrm{%s}(%s)" % (x[0].replace("$","\\$").replace("_","\_"), ",".join("x_{%r}" % a for a in x[1])),
+			print "\\textrm{%s}(%s)" % (
+				x[0].replace("$","\\$").replace("_","\_"),
+				",".join("x_{%r}" % a for a in x[1])),
 			if x != rhs[-1]: print '\\:',
 	print r' $ \\'
 
@@ -390,8 +335,9 @@ def printrulelatex2(((r, yf), w), doexp=True):
 	printrulelatex(tuple([lhs]+newrhs))
 
 def alpha_normalize(prod):
-	""" Substitute variables so that the variables on the left-hand side appear consecutively.
-		E.g. [0,1], [2,3] instead of [0,1], [3,4]. Modifies prod in-place.
+	""" Substitute variables so that the variables on the left-hand side appear
+	consecutively; e.g. [0,1], [2,3] instead of [0,1], [3,4].
+	Modifies prod in-place.
 	>>> alpha_normalize([('S', [[2, 4, 7]]), ('VP_2', [2, 7]), ('NP', [4])])
 	[('S', [[0, 1, 2]]), ('VP_2', [0, 2]), ('NP', [1])]
 	>>> alpha_normalize([('NN', [[11, 15]])])
@@ -415,12 +361,15 @@ def unfreeze(l):
 
 def leaves_and_frontier_nodes(tree, sent):
 	"""Terminals must be integers; frontier nodes must have indices as well.
-	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
+	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2",
+		[Tree("$,", [1]), Tree("$.", [3])])]).freeze()
 	>>> sent = [None, ',', None, '.']
 	>>> print list(leaves_and_frontier_nodes(tree, sent))
 	[ImmutableTree('S_2', [0, 2]), 1, 3]
 	"""
-	if not any(isinstance(child, Tree) for child in tree) and all(sent[child] is None for child in tree): return [tree]
+	if (not any(isinstance(child, Tree) for child in tree)
+		and all(sent[child] is None for child in tree)):
+		return [tree]
 	return [a for b in list(leaves_and_frontier_nodes(child, sent)
 			if isinstance(child, Tree) and len(child)
 			else ([tree] if sent[child] is None else [child])
@@ -429,7 +378,8 @@ def leaves_and_frontier_nodes(tree, sent):
 def flatten((tree, sent)):
 	"""
 	>>> sent = [None, ',', None, '.']
-	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
+	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2",
+		[Tree("$,", [1]), Tree("$.", [3])])]).freeze()
 	>>> print flatten((tree, sent))
 	(ROOT (S_2 0 2) (#&, 1) (#&. 3))
 	"""
@@ -513,9 +463,6 @@ def enumchart(chart, start, tolabel, n=1):
 		if edge.left.label == 0: #Epsilon
 			yield "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
 		else:
-			# this doesn't seem to be a good idea:
-			#for x in nsmallest(n, cartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), key=lambda x: sum(p for z,p in x)):
-			#for x in sorted(islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel, n, depth+1), rhs)), n), key=lambda x: sum(p for z,p in x)):
 			if edge.right: rhs = (edge.left, edge.right)
 			else: rhs = (edge.left, )
 			for x in islice(bfcartpi(map(lambda y: enumchart(chart, y, tolabel), rhs)), n):
@@ -526,7 +473,8 @@ def exportrparse(grammar):
 	""" Export an unsplitted grammar to rparse format. All frequencies are 1,
 	but probabilities are exported.  """
 	def repryf(yf):
-		return "[" + ", ".join("[" + ", ".join("true" if a == 1 else "false" for a in b) + "]" for b in yf) + "]"
+		return "[" + ", ".join("[" + ", ".join("true" if a == 1 else "false"
+			for a in b) + "]" for b in yf) + "]"
 	def rewritelabel(a):
 		a = a.replace("ROOT", "VROOT")
 		if "|" in a:
@@ -541,7 +489,8 @@ def exportrparse(grammar):
 		return "".join(a.split("_")) if "_" in a else a+"1"
 	for (r,yf),w in grammar:
 		if r[1] != 'Epsilon':
-			yield "1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]), " ".join(map(rewritelabel, r[1:])), repryf(yf))
+			yield ("1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]),
+				" ".join(map(rewritelabel, r[1:])), repryf(yf)))
 
 def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 	grammar = []
@@ -564,10 +513,10 @@ def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
 			ntfd1[t.split("@")[0]].add(t)
 		grammar.extend((((t, (word,)), ('Epsilon', ())), p) for t, p in tags)
 	if ewe:
-		return splitgrammar([(varstoindices(rule),
+		return Grammar([(varstoindices(rule),
 			log(p / (ntfd[rule[0][0]] * len(ntfd1[rule[0][0].split("@")[0]]))))
 			for rule, p in grammar])
-	return splitgrammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
+	return Grammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
 
 def write_bitpar_grammar(grammar, rules, lexicon, encoding='utf-8'):
@@ -605,10 +554,10 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 		grammar.extend("%s %s --> %s\n" % (p, t, word) for t, p in tags)
 	assert "VROOT" in grammar[0]
 	codecs.open(out, "w", encoding=encoding).writelines(grammar)
-			
+
 def write_srcg_grammar(grammar, rules, lexicon, encoding='utf-8'):
 	""" Writes a grammar as produced by induce_srcg or dop_srcg_rules (so
-	before it goes through splitgrammar) into a simple text file format.
+	before it goes through Grammar()) into a simple text file format.
 	Fields are separated by tabs. Components of the yield function are
 	comma-separated. E.g.
 	rules: S	NP	VP	010	0.5
@@ -636,8 +585,9 @@ def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
 	return rules, lexicon
 
 def read_penn_format(corpus, maxlen=15, n=7200):
-	trees = [a for a in islice((Tree(a) for a in codecs.open(corpus, encoding='iso-8859-1')), n)
-				if len(a.leaves()) <= maxlen]
+	trees = [a for a in islice((Tree(a)
+		for a in codecs.open(corpus, encoding='iso-8859-1')), n)
+		if len(a.leaves()) <= maxlen]
 	sents = [a.pos() for a in trees]
 	for tree in trees:
 		for n, a in enumerate(tree.treepositions('leaves')):
@@ -665,31 +615,14 @@ def alterbinarization(tree):
 	S1 is the constituent, CS1 the parent, CARD1 the current sibling/child
 	@^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1 """
 	#how to optionally add \2 if nonempty?
-	tree = re.sub("@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+", r"\1|<\3>", tree)
+	tree = re.sub(
+		"@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+",
+		r"\1|<\3>", tree)
 	# remove arity markers
 	tree = re.sub(r"([A-Z.,()$]+)\d+", r"\1", tree)
 	tree = re.sub("VROOT", r"ROOT", tree)
 	assert "@" not in tree
 	return tree
-
-def testgrammar(grammar, epsilon=0.01):
-	""" report whether all left-hand sides sum to 1 +/-epsilon.
-	"""
-	#We could be strict about separating POS tags and phrasal categories,
-	#but Negra contains at least one tag (--) used for both.
-	sums = defaultdict(float)
-	for lhs, rules in enumerate(grammar.bylhs):
-		if rules: sums[lhs] += sum(exp(-rule.prob) for rule in rules)
-	for terminals in grammar.lexical.itervalues():
-		for term in terminals:
-			sums[term.lhs] += exp(-term.prob)
-	for lhs, mass in sums.iteritems():
-		if abs(mass - 1.0) > epsilon:
-			print "Does not sum to 1:",
-			print grammar.tolabel[lhs], mass
-			return False
-	print "All left hand sides sum to 1"
-	return True
 
 def subsetgrammar(a, b):
 	""" test whether grammar a is a subset of b. """
@@ -704,8 +637,7 @@ def mean(seq):
 	return sum(seq) / float(len(seq)) if seq else None #"zerodiv"
 
 def grammarinfo(grammar, dump=None):
-	""" print some statistics on a grammar, before it goes through
-	(new)splitgrammar().
+	""" print some statistics on a grammar, before it goes through Grammar().
 	dump: if given a filename, will dump distribution of parsing complexity
 	to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120 times, etc."""
 	lhs = set(rule[0] for (rule,yf),w in grammar)
@@ -747,7 +679,8 @@ def read_rparse_grammar(file):
 		line.pop(0) #freq?
 		prob, lhs = line.pop(0).split(":")
 		line.pop(0) # -->
-		result.append(((tuple([lhs] + line), tuple(map(tuple, yf))), log(float(prob))))
+		result.append(((tuple([lhs] + line), tuple(map(tuple, yf))),
+			log(float(prob))))
 	return result
 
 def do(sent, grammar):
@@ -771,8 +704,10 @@ def main():
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=True, headfinal=True, headreverse=False)
-	#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, headfinal=True, headreverse=False)
+	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
+		headorder=True, headfinal=True, headreverse=False)
+	#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True,
+	#	headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents()[:3], corpus.sents()):
 		print tree.pprint(margin=999)
 		a = Tree.convert(optimalbinarize(tree))
@@ -780,7 +715,8 @@ def main():
 		unbinarize(a)
 		print a.pprint(margin=999), a == tree
 	print
-	tree = Tree.parse("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))", parse_leaf=int)
+	tree = Tree.parse("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))",
+		parse_leaf=int)
 	sent = "Daruber muss nachgedacht werden".split()
 	tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	sent = "is Gatsby rich".split()
@@ -792,14 +728,21 @@ def main():
 	#tree2.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
 	binarize(tree, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='')
 	binarize(tree2, factor="right", horzMarkov=0, vertMarkov=0, tailMarker='')
-	for (r, yf), w in sorted(induce_srcg([tree.copy(True), tree2], [sent, sent2]),
-								key=lambda x: (x[0][0][1] == 'Epsilon', x)):
+	for (r, yf), w in sorted(induce_srcg([tree.copy(True), tree2],
+		[sent, sent2]), key=lambda x: (x[0][0][1] == 'Epsilon', x)):
 		print printrule(r,yf,w)
 	print
-	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))): print a
+	for a in sorted(exportrparse(induce_srcg([tree.copy(True)], [sent]))):
+		print a
 
-	print splitgrammar(induce_srcg([tree.copy(True)], [sent]))
-	do(sent, splitgrammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
+	print "print grammar"
+	for a in induce_srcg([tree.copy(True)], [sent]): print a
+	print "print Grammar()"
+	print Grammar(induce_srcg([tree.copy(True)], [sent]))
+	return
+
+
+	do(sent, Grammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
 	grammar = dop_srcg_rules([tree,tree2], [sent,sent2])
 	print 'dop reduction'
 	for (r, yf), w in sorted(grammar):
@@ -817,16 +760,17 @@ def main():
 		except: print a.pprint(),
 		print ":", b
 	print "}"
-	grammar = splitgrammar(grammar)
-	testgrammar(grammar)
+	grammar = Grammar(grammar)
+	grammar.testgrammar()
 	from plcfrs import parse
 	from disambiguation import marginalize
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 		print "sentence", sent
-		p, start = parse(sent, grammar, start=grammar.toid['ROOT'], exhaustive=True)
+		p, start = parse(sent, grammar, start=grammar.toid['ROOT'],
+			exhaustive=True)
 		print "gold", canonicalize(tree)
 		print "parsetrees:"
-		if p:
+		if start:
 			mpp = marginalize(p, start, grammar.tolabel)
 			for t in mpp:
 				t2 = Tree(t)
@@ -843,7 +787,8 @@ if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	fail, attempted = testmod(verbose=False,
+		optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
 	main()
 	if attempted and not fail:
 		print "%s: %d doctests succeeded!" % (__file__, attempted)

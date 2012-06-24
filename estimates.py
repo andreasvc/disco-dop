@@ -46,16 +46,13 @@ def simpleinside(grammar, maxlen, insidescores):
 	the constituent)
 	insidescores is a 4-dimensional matrix initialized with NaN to indicate
 	values that have yet to be computed. """
-	lexical, unary = grammar.lexical, grammar.unary
-	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = np.inf
 	agenda = Agenda()
 
-	for n, rules in enumerate(grammar.bylhs):
-		if n == 0: continue
+	for i in range(1, grammar.nonterminals):
 		#this is supposed cover all and only preterminals
-		elif rules == []:
-			agenda[new_ChartItem(n, 1)] = 0.0
+		if grammar.bylhs[i][0].lhs != i:
+			agenda[new_ChartItem(i, 1)] = 0.0
 
 	while agenda.length:
 		entry = agenda.popentry()
@@ -71,22 +68,25 @@ def simpleinside(grammar, maxlen, insidescores):
 			or x < insidescores[I.label, I.vec]):
 			insidescores[I.label, I.vec] = x
 
-		rules = unary[I.label]
-		for rule in rules:
-			if isnan(insidescores[rule.lhs, I.vec]):
+		for i in range(grammar.nonterminals):
+			rule = grammar.unary[I.label][i]
+			if rule.rhs1 != I.label: break
+			elif isnan(insidescores[rule.lhs, I.vec]):
 				agenda.setifbetter(
 						new_ChartItem(rule.lhs, I.vec), rule.prob + x)
 
-		rules = lbinary[I.label]
-		for rule in rules:
+		for i in range(grammar.nonterminals):
+			rule = grammar.lbinary[I.label][i]
+			if rule.rhs1 != I.label: break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (isfinite(insidescores[rule.rhs2, vec])
 					and isnan(insidescores[rule.lhs, I.vec + vec])):
 					agenda.setifbetter(new_ChartItem(rule.lhs, I.vec + vec),
 						rule.prob + x + insidescores[rule.rhs2, vec])
 
-		rules = rbinary[I.label]
-		for rule in rules:
+		for i in range(grammar.nonterminals):
+			rule = grammar.rbinary[I.label][i]
+			if rule.rhs2 != I.label: break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (isfinite(insidescores[rule.rhs1, vec])
 					and isnan(insidescores[rule.lhs, vec + I.vec])):
@@ -96,9 +96,8 @@ def simpleinside(grammar, maxlen, insidescores):
 	# anything not reached so far gets probability zero:
 	insidescores[np.isnan(insidescores)] = infinity
 
-def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
+def outsidelr(grammar, insidescores, maxlen, goal, outside):
 	""" Compute the outside SX simple LR estimate in top down fashion. """
-	bylhs = grammar.bylhs
 	agenda = Agenda()
 
 	for n in range(1, maxlen + 1):
@@ -114,8 +113,9 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 			print "agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state])
 		totlen = I.length + I.lr + I.gaps
-		rules = bylhs[I.state]
-		for rule in rules:
+		for i in range(grammar.numrules):
+			rule = grammar.bylhs[I.state][i]
+			if rule.lhs != I.state: break
 			# X -> A
 			if rule.rhs2 == 0:
 				score = rule.prob + x
@@ -127,19 +127,21 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 			# X -> A B
 			addgaps = addright = 0
 			stopaddright = False
-			for m in range(arity[rule.lhs] - 1, -1, -1):
-				for n in range(rule._lengths[m] - 1, -1, -1):
-					if (not stopaddright
-						and not testbitint(rule._args[m], n)):
-						stopaddright = True
-					if testbitint(rule._args[m], n):
-						if not stopaddright:
-							addright += 1
-						else:
-							addgaps += 1
+			for n in range(bitlength(rule.lengths) - 1, -1, -1):
+				if (not stopaddright
+					and not testbitint(rule.args, n)):
+					stopaddright = True
+				if testbitint(rule.args, n):
+					if not stopaddright:
+						addright += 1
+					else:
+						addgaps += 1
 
-			leftarity = arity[rule.rhs1]
-			rightarity = arity[rule.rhs2]
+			leftarity = rightarity = 1
+			if grammar.bylhs[rule.rhs1][0].lhs == rule.rhs1:
+				leftarity = grammar.bylhs[rule.rhs1][0].fanout
+			if grammar.bylhs[rule.rhs2][0].lhs == rule.rhs2:
+				leftarity = grammar.bylhs[rule.rhs2][0].fanout
 			# binary-left (A is left)
 			for lenA in range(leftarity, I.length - rightarity + 1):
 				lenB = I.length - lenA
@@ -160,25 +162,23 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 			# X -> B A
 			addgaps = addleft = addright = 0
 			stopaddleft = False
-			for m in range(arity[rule.lhs]):
-				for n in range(rule._lengths[m]):
-					if not stopaddleft and testbitint(rule._args[m], n):
-						stopaddleft = True
-					if not testbitint(rule._args[m], n):
-						if stopaddleft:
-							addgaps += 1
-						else:
-							addleft += 1
+			for n in range(bitlength(rule.lengths)):
+				if not stopaddleft and testbitint(rule.args, n):
+					stopaddleft = True
+				if not testbitint(rule.args, n):
+					if stopaddleft:
+						addgaps += 1
+					else:
+						addleft += 1
 
 			stopaddright = False
-			for m in range(arity[rule.lhs] - 1, -1, -1):
-				for n in range(rule._lengths[m] - 1, -1, -1):
-					if (not stopaddright
-						and testbitint(rule._args[m], n)):
-						stopaddright = True
-					if not testbitint(rule._args[m], n):
-						if not stopaddright:
-							addright += 1
+			for n in range(bitlength(rule.lengths) - 1, -1, -1):
+				if (not stopaddright
+					and testbitint(rule.args, n)):
+					stopaddright = True
+				if not testbitint(rule.args, n):
+					if not stopaddright:
+						addright += 1
 			addgaps -= addright
 
 			# binary-right (A is right)
@@ -200,14 +200,13 @@ def outsidelr(grammar, insidescores, maxlen, goal, arity, outside):
 def inside(grammar, maxlen, insidescores):
 	""" Compute inside estimate in bottom-up fashion, with
 	full bit vectors (not used)."""
-	lexical, unary = grammar.lexical, grammar.unary
-	lbinary, rbinary = grammar.lbinary, grammar.rbinary
 	infinity = float('infinity')
 	agenda = Agenda()
 
-	for n, rules in enumerate(grammar.bylhs):
-		if rules == []:
-			agenda[new_ChartItem(n, 1)] = 0.0
+	for i in range(1, grammar.nonterminals):
+		#this is supposed cover all and only preterminals
+		if grammar.bylhs[i][0].lhs != i:
+			agenda[new_ChartItem(i, 1)] = 0.0
 
 	while agenda.length:
 		entry = agenda.popentry()
@@ -217,14 +216,18 @@ def inside(grammar, maxlen, insidescores):
 		if x < insidescores[I.label].get(I.vec, infinity):
 			insidescores[I.label][I.vec] = x
 
-		for rule in unary[I.label]:
-			if (rule.lhs not in insidescores
+		for i in range(grammar.nonterminals):
+			rule = grammar.unary[I.label][i]
+			if rule.rhs1 != I.label: break
+			elif (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):
 				agenda.setifbetter(
 					new_ChartItem(rule.lhs, I.vec), rule.prob + x)
 
-		for rule in lbinary[I.label]:
-			if rule.rhs2 not in insidescores: continue
+		for i in range(grammar.nonterminals):
+			rule = grammar.lbinary[I.label][i]
+			if rule.rhs1 != I.label: break
+			elif rule.rhs2 not in insidescores: continue
 			for vec in insidescores[rule.rhs2]:
 				left = insideconcat(I.vec, vec, rule, maxlen)
 				if left and (rule.lhs not in insidescores
@@ -232,8 +235,10 @@ def inside(grammar, maxlen, insidescores):
 					agenda.setifbetter(new_ChartItem(rule.lhs, left),
 						rule.prob + x + insidescores[rule.rhs2][vec])
 
-		for rule in rbinary[I.label]:
-			if rule.rhs1 not in insidescores: continue
+		for i in range(grammar.nonterminals):
+			rule = grammar.rbinary[I.label][i]
+			if rule.rhs2 != I.label: break
+			elif rule.rhs1 not in insidescores: continue
 			for vec in insidescores[rule.rhs1]:
 				right = insideconcat(vec, I.vec, rule, maxlen)
 				if right and (rule.lhs not in insidescores
@@ -244,38 +249,38 @@ def inside(grammar, maxlen, insidescores):
 	return insidescores
 
 def insideconcat(a, b, rule, maxlen):
-	if len(rule.args) + bitcount(a) + bitcount(b) > maxlen + 1:
+	if rule.fanout + bitcount(a) + bitcount(b) > maxlen + 1:
 		return 0
 	result = resultpos = l = r = 0
-	for n, arg in zip(rule.lengths, rule.args):
-		for x in range(n):
-			if testbitint(arg, x) == 0:
-				subarg = nextunset(a, l) - l
-				result |= (1 << subarg) - 1 << resultpos
-				resultpos += subarg
-				l = subarg + 1
-			else:
-				subarg = nextunset(b, r) - r
-				result |= (1 << subarg) - 1 << resultpos
-				resultpos += subarg
-				r = subarg + 1
-		resultpos += 1
-		result &= ~(1 << resultpos)
+	for x in range(bitlength(rule.lengths)):
+		if testbitint(rule.args, x) == 0:
+			subarg = nextunset(a, l) - l
+			result |= (1 << subarg) - 1 << resultpos
+			resultpos += subarg
+			l = subarg + 1
+		else:
+			subarg = nextunset(b, r) - r
+			result |= (1 << subarg) - 1 << resultpos
+			resultpos += subarg
+			r = subarg + 1
+		if testbitint(rule.lengths, x):
+			resultpos += 1
+			result &= ~(1 << resultpos)
 	return result
 
 def getestimates(grammar, maxlen, goal):
 	try: assert cython.compiled; print "estimates: running cython"
 	except: print "estimates: not cython"
 	insidescores = np.array([np.NAN], dtype='d').repeat(
-				len(grammar.bylhs) * (maxlen+1)).reshape(
-				(len(grammar.bylhs), (maxlen+1)))
+				grammar.nonterminals * (maxlen+1)).reshape(
+				(grammar.nonterminals, (maxlen+1)))
 	outside = np.array([np.inf], dtype='d').repeat(
-				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
-				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
+				grammar.nonterminals * (maxlen+1) * (maxlen+1) * (maxlen+1)
+				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, maxlen+1))
 	print "getting inside"
 	simpleinside(grammar, maxlen, insidescores)
 	print "getting outside"
-	outsidelr(grammar, insidescores, maxlen, goal, grammar.arity, outside)
+	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	return outside
 
 def testestimates(grammar, maxlen, goal):
@@ -284,14 +289,14 @@ def testestimates(grammar, maxlen, goal):
 	insidescores = inside(grammar, maxlen, {})
 	for a in insidescores:
 		for b in insidescores[a]:
-			assert 0 <= a < len(grammar.bylhs)
+			assert 0 <= a < grammar.nonterminals
 			assert 0 <= bitlength(b) <= maxlen
 			#print a,b
 			#print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print len(insidescores) * sum(map(len, insidescores.values())), '\n'
 	insidescores = np.array([np.NAN], dtype='d').repeat(
-				len(grammar.bylhs) * (maxlen+1)).reshape(
-				(len(grammar.bylhs), (maxlen+1)))
+				grammar.nonterminals * (maxlen+1)).reshape(
+				(grammar.nonterminals, (maxlen+1)))
 	simpleinside(grammar, maxlen, insidescores)
 	print "inside"
 	for an, a in enumerate(insidescores):
@@ -304,9 +309,9 @@ def testestimates(grammar, maxlen, goal):
 
 	print "getting outside"
 	outside = np.array([np.inf], dtype='d').repeat(
-				len(grammar.bylhs) * (maxlen+1) * (maxlen+1) * (maxlen+1)
-				).reshape((len(grammar.bylhs), maxlen+1, maxlen+1, maxlen+1))
-	outsidelr(grammar, insidescores, maxlen, goal, grammar.arity, outside)
+				grammar.nonterminals * (maxlen+1) * (maxlen+1) * (maxlen+1)
+				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, maxlen+1))
+	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	#print outside
 	cnt = 0
 	for an, a in enumerate(outside):
@@ -323,13 +328,14 @@ def testestimates(grammar, maxlen, goal):
 
 def main():
 	from treebank import NegraCorpusReader
-	from grammar import induce_srcg, splitgrammar
+	from grammar import induce_srcg
 	from plcfrs import parse, pprint_chart
+	from containers import Grammar
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
-	grammar = splitgrammar(induce_srcg(trees, corpus.sents()))
+	grammar = Grammar(induce_srcg(trees, corpus.sents()))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
@@ -347,7 +353,7 @@ def main():
 	grammar = induce_srcg(trees, sents)
 	for (r,yf),w in sorted(grammar):
 		print r[0], "-->", " ".join(r[1:]), yf, exp(w)
-	grammar = splitgrammar(grammar)
+	grammar = Grammar(grammar)
 	testestimates(grammar, 4, grammar.toid["ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	sent = ["a","b","c"]

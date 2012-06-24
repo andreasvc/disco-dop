@@ -1,5 +1,167 @@
 from nltk import Tree
-from  collections import Set, Sequence, Iterable
+from math import exp
+from collections import Set, Sequence, Iterable
+from functools import partial
+
+cdef class Grammar:
+	def __init__(self, grammar):
+		""" split the grammar into various lookup tables, mapping nonterminal
+		labels to numeric identifiers. Also negates log-probabilities to
+		accommodate min-heaps.
+		Can only represent ordered SRCG rules (monotone LCFRS). """
+		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
+		# and assign them unique IDs
+		nonterminals = list(enumerate(["Epsilon", "ROOT"]
+			+ sorted(set(str(nt) for (rule, _), _ in grammar for nt in rule)
+				- set(["Epsilon", "ROOT"]))))
+		self.nonterminals = len(nonterminals)
+		self.numrules = sum([1 for (r, _), _ in grammar if r[1] != 'Epsilon'])
+		self.toid = dict((lhs, n) for n, lhs in nonterminals)
+		self.tolabel = dict((n, lhs) for n, lhs in nonterminals)
+		self.lexical = {}
+		self.lexicalbylhs = {}
+
+		# the strategy is to lay out all non-lexical rules in a contiguous array
+		# these arrays will contain pointers to relevant parts thereof
+		# (one index per nonterminal)
+		self.unary = <Rule **>malloc(sizeof(Rule *) * self.nonterminals * 4)
+		assert self.unary is not NULL
+		self.lbinary = &(self.unary[1 * self.nonterminals])
+		self.rbinary = &(self.unary[2 * self.nonterminals])
+		self.bylhs = &(self.unary[3 * self.nonterminals])
+
+		# count number of rules in each category for allocation purposes
+		unary_len = binary_len = 0
+		for (rule, yf), w in grammar:
+			if len(rule) == 2:
+				if rule[1] != 'Epsilon':
+					unary_len += 1
+			elif len(rule) == 3:
+				binary_len += 1
+			else: raise ValueError(
+				"grammar not binarized: %s" % repr((rule,yf,w)))
+		bylhs_len = unary_len + binary_len
+		# allocate the actual contiguous array that will contain the rules
+		# (plus sentinels)
+		self.unary[0] = <Rule *>malloc(sizeof(Rule) *
+			(unary_len + bylhs_len + (2 * binary_len) + 4))
+		assert self.unary is not NULL
+		self.lbinary[0] = &(self.unary[0][unary_len + 1])
+		self.rbinary[0] = &(self.lbinary[0][binary_len + 1])
+		self.bylhs[0] = &(self.rbinary[0][binary_len + 1])
+
+		# convert rules and copy to structs / cdef class
+		# remove sign from log probabilities because we use a min-heap
+		for (rule, yf), w in grammar:
+			if len(rule) == 2 and self.toid[rule[1]] == 0:
+				lr = LexicalRule(self.toid[rule[0]], self.toid[rule[1]], 0,
+					unicode(yf[0]), abs(w))
+				# lexical productions (mis)use the field for the yield function
+				# to store the word
+				self.lexical.setdefault(yf[0], []).append(lr)
+				self.lexicalbylhs.setdefault(lr.lhs, []).append(lr)
+		copyrules(grammar, self.unary, 1,
+			lambda rule: len(rule) == 2 and rule[1] != 'Epsilon',
+			self.toid, self.nonterminals)
+		copyrules(grammar, self.lbinary, 1,
+			lambda rule: len(rule) == 3, self.toid, self.nonterminals)
+		copyrules(grammar, self.rbinary, 2,
+			lambda rule: len(rule) == 3, self.toid, self.nonterminals)
+		copyrules(grammar, self.bylhs, 0,
+			lambda rule: rule[1] != 'Epsilon', self.toid, self.nonterminals)
+	def testgrammar(self, epsilon=0.01):
+		""" report whether all left-hand sides sum to 1 +/-epsilon. """
+		#We could be strict about separating POS tags and phrasal categories,
+		#but Negra contains at least one tag (--) used for both.
+		sums = {}
+		for lhs in range(self.nonterminals):
+			if self.bylhs[lhs][0].lhs == lhs:
+				sums[lhs] = sum([exp(-self.bylhs[lhs][n].prob)
+					for n in range(self.numrules)
+					if self.bylhs[lhs][n].lhs == lhs])
+		for terminals in self.lexical.itervalues():
+			for term in terminals:
+				sums[term.lhs] = sums.get(term.lhs, 0.0) + exp(-term.prob)
+		for lhs, mass in sums.iteritems():
+			if abs(mass - 1.0) > epsilon:
+				# fixme: use logging here?
+				print "Does not sum to 1:",
+				print self.tolabel[lhs], mass
+				return False
+		print "All left hand sides sum to 1"
+		return True
+	def __repr__(self):
+		rules = "\n".join("%.2f %s => %s %s (%s)" % (
+			exp(-self.bylhs[0][n].prob),
+			self.tolabel[self.bylhs[0][n].lhs],
+			self.tolabel[self.bylhs[0][n].rhs1],
+			self.tolabel[self.bylhs[0][n].rhs2],
+			yfrepr(self.bylhs[0][n]))
+			for n in range(self.numrules)
+			if self.bylhs[0][n].lhs < self.nonterminals)
+		lexical = "\n".join(["%.2f %s => Epsilon (%s)" % (
+			exp(-lr.prob), self.tolabel[lr.lhs], lr.word)
+				for lrules in self.lexical.values()
+					for lr in lrules])
+		return "rules:\n%s\nlexicon:\n%s\nlabels=%r" % (rules, lexical,
+			self.toid)
+	def __dealloc__(self):
+		free(self.unary[0]); self.unary[0] = NULL
+		free(self.unary); self.unary = NULL
+
+def myitemget(idx, x):
+	""" Given a grammar rule 'x', return the non-terminal in position 'idx'. """
+	if idx < len(x[0][0]): return x[0][0][idx]
+	return 0
+
+cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
+	""" Auxiliary function to create Grammar objects. Copies certain grammar
+	rules from the list in `grammar` to an array of structs. Grammar rules are
+	placed in a contiguous array, sorted order by lhs, rhs1 or rhs2
+	A separate array has a pointer for each non-terminal into this array;
+	e.g.: dest[NP][0] == the first rule with an NP in the idx position.
+	"""
+	cdef UInt prev = 0
+	cdef size_t n = 0, m
+	cdef Rule *cur
+	sortedgrammar = sorted(grammar, key=partial(myitemget, idx))
+	filteredgrammar = [rule for rule in sortedgrammar if cond(rule[0][0])]
+	#need to set dest even when there are no rules for that idx
+	for m in range(nonterminals): dest[m] = dest[0]
+	for (rule, yf), w in filteredgrammar:
+		cur = &(dest[0][n])
+		cur.lhs  = toid[rule[0]]
+		cur.rhs1 = toid[rule[1]]
+		cur.rhs2 = toid[rule[2]] if len(rule) == 3 else 0
+		cur.fanout = len(yf)
+		cur.prob = abs(w)
+		allargs = [a for component in yf for a in component]
+		assert len(allargs) < (8 * sizeof(cur.args)), (
+			len(allargs), (8 * sizeof(cur.args)))
+		cur.args = sum([1 << x for x, a in enumerate(allargs) if a])
+		cur.lengths = offset = 0
+		for a in yf:
+			cur.lengths |= 1 << (offset + len(a) - 1)
+			offset += len(a)
+		# if this is the first rule with this non-terminal,
+		# add it to the index
+		if n and toid[rule[idx]] != prev:
+			dest[toid[rule[idx]]] = cur
+		prev = toid[rule[idx]]
+		n += 1
+	# sentinel rule
+	dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = nonterminals
+
+cdef yfrepr(Rule rule):
+	cdef int n, m = 0
+	result = ""
+	for n in range(8 * sizeof(rule.args)):
+		result += "1" if (rule.args >> n) & 1 else "0"
+		if (rule.lengths >> n) & 1:
+			m += 1
+			if m == rule.fanout: return result
+			else: result += ", "
+	raise ValueError("expected %d components" % rule.fanout)
 
 cdef class ChartItem:
 	def __init__(ChartItem self, label, vec):
@@ -83,18 +245,6 @@ cdef class RankedEdge:
 		return "RankedEdge(%r, %r, %d, %d)" % (
 			self.head, self.edge, self.left, self.right)
 
-cdef class Grammar:
-	def __init__(self, unary, lbinary, rbinary, lexical, bylhs, lexicalbylhs,
-		toid, tolabel, arity):
-		self.unary = unary; self.lbinary = lbinary; self.rbinary = rbinary
-		self.lexical = lexical; self.bylhs = bylhs
-		self.toid = toid; self.tolabel = tolabel
-		self.lexicalbylhs = lexicalbylhs; self.arity = arity
-	def __repr__(self):
-		return repr(dict(unary=self.unary, lbinary=self.lbinary,
-			rbinary=self.rbinary, lexical=self.lexical, bylhs=self.bylhs,
-			lexicalbylhs=self.lexicalbylhs, toid=self.toid,
-			tolabel=self.tolabel))
 
 cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
@@ -103,20 +253,11 @@ cdef class LexicalRule:
 	def __repr__(self):
 		return repr((self.lhs, self.rhs1, self.rhs2, self.word, self.prob))
 
-cdef class Rule:
-	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
-		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
-		self.args = args; self.lengths = lengths
-		self._args = self.args._I; self._lengths = self.lengths._H
-		self.prob = prob
-	def __repr__(self):
-		return repr((self.lhs, self.rhs1, self.rhs2, self.args, self.lengths,
-			self.prob))
-
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in
 	Python"""
-	def __init__(Ctrees self, list trees=None, dict labels=None, dict prods=None):
+	def __init__(Ctrees self, list trees=None, dict labels=None,
+		dict prods=None):
 		self.len=0; self.max=0; self.maxnodes = 0; self.nodesleft = 0
 		if trees is None: return
 		else: assert labels is not None and prods is not None
@@ -160,8 +301,8 @@ cdef class Ctrees:
 		self.nodesleft -= len(tree)
 		self.maxnodes = max(self.maxnodes, len(tree))
 	def __dealloc__(Ctrees self):
-		free(self.data[0].nodes)
-		free(self.data)
+		free(self.data[0].nodes); self.data[0].nodes = NULL
+		free(self.data); self.data = NULL
 	def __len__(Ctrees self): return self.len
 
 cdef inline indices(tree, dict labels, dict prods, Node *result):
@@ -324,9 +465,11 @@ cdef class MemoryPool:
 		self.leftinpool = self.poolsize
 	def __dealloc__(MemoryPool self):
 		cdef int x
-		for x in range(self.n+1): free(self.pool[x])
+		for x in range(self.n+1):
+			free(self.pool[x])
+			self.pool[x] = NULL
 		free(self.pool)
-
+		self.pool = NULL
 
 class OrderedSet(Set):
 	""" A frozen, ordered set which maintains a regular list/tuple and set. """
@@ -363,7 +506,7 @@ class OrderedSet(Set):
 		if not isinstance(other, Iterable):
 			return NotImplemented
 		return self._from_iterable(value for value in self if value in other)
-	
+
 # some helper functions that only serve to bridge cython & python code
 cpdef inline UInt getlabel(ChartItem a):
 	return a.label

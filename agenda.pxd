@@ -18,29 +18,29 @@ cdef class NormalCmp(Function):
 	cdef bint cmpfun(self, Entry a, Entry b)
 
 cdef class Agenda(dict):
+	cpdef Entry popentry(self)
+	cpdef setitem(self, key, object value)
+	cpdef setifbetter(self, key, object value)
+	cpdef list getheap(self)
+	cpdef object getkey(self, Entry entry)
+	cpdef object getval(self, Entry entry)
+	cdef object getitem(self, key)
+	cdef object replace(self, object key, object value)
+	cdef bint contains(self, key)
 	cdef public unsigned long length
 	cdef public list heap
 	cdef dict mapping
 	cdef unsigned long counter
 	cdef Function cmpfun
-	cpdef Entry popentry(self)
-	cdef object getitem(self, key)
-	cpdef setitem(self, key, object value)
-	cpdef setifbetter(self, key, object value)
-	cdef bint contains(self, key)
-	cdef object replace(self, object key, object value)
-	cpdef list getheap(self)
-	cpdef object getkey(self, Entry entry)
-	cpdef object getval(self, Entry entry)
 
 cdef class EdgeAgenda(Agenda):
 	cpdef Entry popentry(self)
-	cdef object getitem(self, key)
 	cpdef setitem(self, key, object value)
 	cpdef setifbetter(self, key, object value)
-	cdef bint contains(self, key)
-	cdef object replace(self, object key, object value)
 	cpdef list getheap(self)
 	cpdef object getval(self, Entry entry)
+	cdef object getitem(self, key)
+	cdef bint contains(self, key)
+	cdef object replace(self, object key, object value)
 
 cdef inline list nsmallest(int n, list items)

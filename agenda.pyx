@@ -1,5 +1,3 @@
-# cython: profile=False
-# cython: boundscheck=False
 """
 Priority Queue based on binary heap which implements decrease-key and remove
 by marking entries as invalid. Provides dictionary-like interface.
@@ -184,7 +182,7 @@ cdef class Agenda(dict):
 		return self.mapping.iterkeys()
 
 	def itervalues(self):
-		return imap(lambda entry: (<Entry>entry).value, self.mapping.itervalues())
+		return imap(lambda entry: entry.value, self.mapping.itervalues())
 
 	def iteritems(self):
 		return izip(self.iterkeys(), self.itervalues())

@@ -14,15 +14,15 @@ directives = {
 	}
 
 ext_modules = [
-	Extension("bit",				["bit.pyx"]),
-	Extension("kbest",				["kbest.py", "kbest.pxd"]),
-	Extension("agenda",				["agenda.pyx", "agenda.pxd"]),
-	Extension("plcfrs",				["plcfrs.pyx",  "plcfrs.pxd"]),
-	Extension("estimates",			["estimates.py", "estimates.pxd"]),
-	Extension("containers",			["containers.pyx", "containers.pxd"]),
-	Extension("coarsetofine",		["coarsetofine.py", "coarsetofine.pxd"]),
-	Extension("disambiguation",		["disambiguation.py", "disambiguation.pxd"]),
-	Extension("_fragmentseeker",	["_fragmentseeker.pyx", "_fragmentseeker.pxd"],
+	Extension("bit",             ["bit.pyx"]),
+	Extension("kbest",           ["kbest.py", "kbest.pxd"]),
+	Extension("agenda",          ["agenda.pyx", "agenda.pxd"]),
+	Extension("plcfrs",          ["plcfrs.pyx",  "plcfrs.pxd"]),
+	Extension("estimates",       ["estimates.py", "estimates.pxd"]),
+	Extension("containers",      ["containers.pyx", "containers.pxd"]),
+	Extension("coarsetofine",    ["coarsetofine.py", "coarsetofine.pxd"]),
+	Extension("disambiguation",  ["disambiguation.py", "disambiguation.pxd"]),
+	Extension("_fragmentseeker", ["_fragmentseeker.pyx", "_fragmentseeker.pxd"],
 	)]
 	#extra_compile_args=["-g", "-O0"], extra_link_args=["-g"],)]
 

@@ -94,7 +94,7 @@ cpdef inline int fanout(arg):
 	return result
 
 cpdef inline bint testbit(ULLong vec, UInt pos):
-	""" Mask a particular bit, return nonzero if set 
+	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
 	1
 	>>> testbit(0b0011101, 1)
@@ -103,7 +103,7 @@ cpdef inline bint testbit(ULLong vec, UInt pos):
 
 # todo: see if this can be turned into a macro
 cpdef inline bint testbitc(UChar arg, UInt pos):
-	""" Mask a particular bit, return nonzero if set 
+	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
 	1
 	>>> testbit(0b0011101, 1)
@@ -111,7 +111,7 @@ cpdef inline bint testbitc(UChar arg, UInt pos):
 	return (arg >> pos) & 1
 
 cpdef inline bint testbitshort(unsigned short arg, UInt pos):
-	""" Mask a particular bit, return nonzero if set 
+	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
 	1
 	>>> testbit(0b0011101, 1)
@@ -119,7 +119,7 @@ cpdef inline bint testbitshort(unsigned short arg, UInt pos):
 	return (arg >> pos) & 1
 
 cpdef inline bint testbitint(UInt arg, UInt pos):
-	""" Mask a particular bit, return nonzero if set 
+	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
 	1
 	>>> testbit(0b0011101, 1)
@@ -198,8 +198,10 @@ def main():
 	#from cydoctest import testmod
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	if attempted and not fail: print "%s: %d doctests succeeded!" % (__file__, attempted)
+	optionflags=NORMALIZE_WHITESPACE | ELLIPSIS
+	fail, attempted = testmod(verbose=False, optionflags=optionflags)
+	if attempted and not fail:
+		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	else: print "attempted", attempted, "fail", fail
 
 if __name__ == '__main__': main()

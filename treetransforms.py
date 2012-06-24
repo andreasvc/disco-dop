@@ -153,7 +153,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 
 	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=True, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS> (PIS 2) (VMFIN 1))))
-	
+
 	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
@@ -174,11 +174,11 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	"""
 	# assume all subtrees have homogeneous children
 	# assume all terminals have no siblings
-	
+
 	# A semi-hack to have elegant looking code below.  As a result,
 	# any subtree with a branching factor greater than 999 will be incorrectly truncated.
 	if horzMarkov == None: horzMarkov = 999
-	
+
 	# Traverse the tree depth-first keeping a list of ancestor nodes to the root.
 	# I chose not to use the tree.treepositions() method since it requires
 	# two traversals of the tree (one to get the positions, one to iterate
@@ -189,7 +189,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	while nodeList != []:
 		node, parent = nodeList.pop()
 		if isinstance(node, Tree):
-  
+
 			# parent annotation
 			parentString = ""
 			originalNode = node.node
@@ -197,7 +197,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				parentString = "%s<%s>" % (parentChar, "-".join(parent))
 				#node.node += parentString
 				parent = [originalNode] + parent[:vertMarkov - 1]
-	
+
 			# add children to the agenda before we mess with them
 			for child in node:
 				nodeList.append((child, parent))
@@ -257,7 +257,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				else:
 					curNode.node = nodeCopy[0].node
 					curNode[:] = nodeCopy.pop()
-	
+
 
 def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 	unaryChar="+"):
@@ -275,7 +275,7 @@ def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 				nodeIndex = parent.index(node)
 				# replace node with children of node
 				parent[nodeIndex:nodeIndex+1] = node
-				
+
 			else:
 				parentIndex = node.node.find(parentChar)
 				if parentIndex != -1:
@@ -304,20 +304,20 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 	unary productions, and completely removing the unary productions
 	would require loss of useful information.  The Tree is modified 
 	directly (since it is passed by reference) and no value is returned.
-	
+
 	@param tree: The Tree to be collapsed
 	@type  tree: C{Tree}
 	@param collapsePOS: 'False' (default) will not collapse the parent of leaf nodes (ie. 
 						Part-of-Speech tags) since they are always unary productions
 	@type  collapsePOS: C{boolean}
 	@param collapseRoot: 'False' (default) will not modify the root production
-						 if it is unary.  For the Penn WSJ treebank corpus, this corresponds
-						 to the TOP -> productions.
+						if it is unary.  For the Penn WSJ treebank corpus, this corresponds
+						to the TOP -> productions.
 	@type collapseRoot: C{boolean}
 	@param joinChar: A string used to connect collapsed node values (default = "+")
 	@type  joinChar: C{string}
 	"""
-	
+
 	if collapseRoot == False and isinstance(tree, Tree) and len(tree) == 1:
 		nodeList = [tree[0]]
 	else:
@@ -402,12 +402,12 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	The bitset attribute can be added with addbitsets()
 
 	- tree is the tree for which the optimal binarization of its top
-	  production will be searched.
+      production will be searched.
 	- score is a function from binarized trees to some value, where lower is
-	  better (the value can be numeric or anything else which supports
-	  comparisons)
+      better (the value can be numeric or anything else which supports
+      comparisons)
 	- head is an optional index of the head node, specifying it enables
-	  head-driven binarization (which constrains the possible binarizations)
+      head-driven binarization (which constrains the possible binarizations)
 
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
 	>>> tree1=addbitsets(tree)
@@ -625,7 +625,7 @@ def mergediscnodes(tree):
 			children = [child for component in subsets for child in component]
 			node.append(Tree(label, children))
 	return canonicalize(tree)
-		
+
 #################################################################
 # Demonstration
 #################################################################
@@ -633,17 +633,17 @@ def mergediscnodes(tree):
 def demo():
 	"""
 	A demonstration showing how each tree transform can be used.
-	"""  
-	
+	"""
+
 	# original tree from WSJ bracketed text
 	sentence = """(TOP (S
 	(S
-	  (VP
-		(VBN Turned)
-		(ADVP (RB loose))
-		(PP
-		  (IN in)
-		  (NP
+      (VP
+        (VBN Turned)
+        (ADVP (RB loose))
+        (PP
+          (IN in)
+          (NP
 			(NP (NNP Shane) (NNP Longman) (POS 's))
 			(NN trading)
 			(NN room)))))
@@ -657,28 +657,28 @@ def demo():
 	# collapse subtrees with only one child
 	collapsedTree = tree.copy(True)
 	#collapse_unary(collapsedTree)
-	
+
 	# convert the tree to CNF
 	cnfTree = collapsedTree.copy(True)
 	lcnfTree = collapsedTree.copy(True)
 	binarize(cnfTree, factor="right", horzMarkov=2)
 	binarize(lcnfTree, factor="left", horzMarkov=2)
-	
+
 	# convert the tree to CNF with parent annotation 
 	# (one level) and horizontal smoothing of order two
 	parentTree = collapsedTree.copy(True)
 	binarize(parentTree, horzMarkov=2, vertMarkov=1)
-	
+
 	# convert the tree back to its original form
 	original = cnfTree.copy(True)
 	original2 = lcnfTree.copy(True)
 	unbinarize(original)
 	unbinarize(original2)
-	
+
 	print "binarized", cnfTree
 	print "Sentences the same? ", tree == original, tree == original2
 	assert tree == original and tree == original2
-	
+
 def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
 	to the complexities of right-to-left binarizations. """

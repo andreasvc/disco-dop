@@ -67,12 +67,14 @@ def getprob(chart, D, ej):
 	e = ej.edge
 	if e.left in D: entry = D[e.left][ej.left]; prob = entry.value
 	elif ej.left == 0: edge = chart[e.left][0]; prob = edge.inside
-	else: raise ValueError("non-zero rank vector not part of explored derivations")
+	else: raise ValueError(
+		"non-zero rank vector not part of explored derivations")
 	result = e.prob + prob
 	if ej.right >= 0: #if e.right.label:
 		if e.right in D: entry = D[e.right][ej.right]; prob = entry.value
 		elif ej.right == 0: edge = chart[e.right][0]; prob = edge.inside
-		else: raise ValueError("non-zero rank vector not part of explored derivations")
+		else: raise ValueError(
+			"non-zero rank vector not part of explored derivations")
 		result += prob
 	return result
 
@@ -171,7 +173,8 @@ def main():
 			if entry.key.right != -1: j += (entry.key.right,)
 			ip = entry.value
 			print tolabel[v.label], ":",
-			print " ".join([tolabel[c.label] for c, _ in zip((e.left, e.right), j)]),
+			print " ".join([tolabel[c.label]
+				for c, _ in zip((e.left, e.right), j)]),
 			print exp(-e.prob), j, exp(-ip)
 		print
 	from pprint import pprint

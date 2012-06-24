@@ -7,8 +7,9 @@ from math import exp
 from nltk import Tree
 from treebank import NegraCorpusReader, fold, export
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg, testgrammar,\
-	rem_marks, read_bitpar_grammar, splitgrammar, grammarinfo, baseline,\
+	rem_marks, read_bitpar_grammar, grammarinfo, baseline,\
 	write_srcg_grammar
+from containers import Grammar
 from eval import bracketings, printbrackets, precision, recall, f_measure
 from treetransforms import binarize, unbinarize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
@@ -68,7 +69,8 @@ def main(
 	):
 	from treetransforms import slowfanout
 	def treebankfanout(trees):
-		return max((slowfanout(a), n) for n, tree in enumerate(trees) for a in tree.subtrees(lambda x: len(x) > 1))
+		return max((slowfanout(a), n) for n, tree in enumerate(trees)
+			for a in tree.subtrees(lambda x: len(x) > 1))
 
 	# Tiger treebank version 2 sample:
 	# http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -154,7 +156,7 @@ def main(
 		#srcggrammar = dop_srcg_rules(splittrees, sents)
 		#logging.info("induced DOP CFG based on %d sentences" % len(trees))
 		logging.info(grammarinfo(pcfggrammar))
-		pcfggrammar = splitgrammar(pcfggrammar)
+		pcfggrammar = Grammar(pcfggrammar)
 	if srcg:
 		srcggrammar = induce_srcg(trees, sents)
 		logging.info("induced SRCG based on %d sentences" % len(trees))
@@ -163,38 +165,39 @@ def main(
 			"%s/grammar.srcg"   % resultdir,
 			"%s/grammar.lex" % resultdir,
 		encoding='utf-8')
-		srcggrammar = splitgrammar(srcggrammar)
-		testgrammar(srcggrammar)
+		srcggrammar = Grammar(srcggrammar)
+		srcggrammar.testgrammar()
 		logging.info("wrote grammar to %s/grammar.{srcg,lex}" % resultdir)
 	if dop:
 		if estimator == "shortest":
 			# the secondary model is used to resolve ties for the shortest derivation
-			dopgrammar, secondarymodel = dop_srcg_rules(list(trees), list(sents), normalize=False,
-							shortestderiv=True,	arity_marks=arity_marks)
+			dopgrammar, secondarymodel = dop_srcg_rules(list(trees), list(sents),
+				normalize=False, shortestderiv=True,	arity_marks=arity_marks)
 		elif "sl-dop" in estimator:
 			dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=True,
 							shortestderiv=False,	arity_marks=arity_marks)
 			dopshortest, _ = dop_srcg_rules(list(trees), list(sents),
 							normalize=False, shortestderiv=True,
 							arity_marks=arity_marks)
-			secondarymodel = splitgrammar(dopshortest)
+			secondarymodel = Grammar(dopshortest)
 		elif estimator == "srcg":
 			# hack to have srcg instead of dop grammar as fine stage
 			dopgrammar = induce_srcg(trees, sents)
 			logging.info("induced SRCG based on %d sentences" % len(trees))
 		else:
-			dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
-							shortestderiv=False, arity_marks=arity_marks)
+			dopgrammar = dop_srcg_rules(list(trees), list(sents),
+				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
+				shortestderiv=False, arity_marks=arity_marks)
 			#dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
 			#				shortestderiv=False, arity_marks=arity_marks)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
-		dopgrammar1 = splitgrammar(dopgrammar)
+		dopgrammar1 = Grammar(dopgrammar)
 		if estimator != "srcg":
 			logging.info("DOP model based on %d sentences, %d nodes, %d nonterminals"
 						% (len(trees), nodes, len(dopgrammar1.toid)))
 		logging.info(grammarinfo(dopgrammar))
 		dopgrammar = dopgrammar1
-		testgrammar(dopgrammar)
+		dopgrammar.testgrammar()
 
 	if getestimates:
 		from estimates import getestimates
@@ -405,7 +408,8 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 							exhaustive=True,
 							estimate=None,
 							prunelist=prunelist,
-							prunetoid=srcggrammar.toid if srcg else (pcfggrammar.toid if splitpcfg else None),
+							prunetoid=srcggrammar.toid if srcg else (
+								pcfggrammar.toid if splitpcfg else None),
 							coarsechart=chart if (splitprune and not srcg) else None,
 							splitprune=splitprune and not srcg,
 							markorigin=markorigin,
@@ -563,8 +567,8 @@ def cftiger():
 	#read_penn_format('../tiger/corpus/tiger_release_aug07.mrg')
 	grammar = read_bitpar_grammar('/tmp/gtigerpcfg.pcfg', '/tmp/gtigerpcfg.lex')
 	dopgrammar = read_bitpar_grammar('/tmp/gtiger.pcfg', '/tmp/gtiger.lex', ewe=False)
-	testgrammar(grammar)
-	testgrammar(dopgrammar)
+	grammar.testgrammar()
+	dopgrammar.testgrammar()
 	dop = True; srcg = True; unfolded = False; bintype = "binarize h=1 v=1"
 	sample = False; both = False; arity_marks = True
 	arity_marks_before_bin = False; estimator = 'sl-dop'; m = 10000;
@@ -679,8 +683,8 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	print "induced", "pcfg" if mergesplitnodes else "srcg",
 	print "of", len(sents), "sentences"
 	logging.info(grammarinfo(srcggrammar))
-	srcggrammar = splitgrammar(srcggrammar)
-	testgrammar(srcggrammar)
+	srcggrammar = Grammar(srcggrammar)
+	srcggrammar.testgrammar()
 
 	if removeparentannotation:
 		for a in trees:
@@ -690,8 +694,8 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 				shortestderiv=False, arity_marks=arity_marks)
 	print "induced dop reduction of", len(sents), "sentences"
 	logging.info(grammarinfo(dopgrammar))
-	dopgrammar = splitgrammar(dopgrammar)
-	testgrammar(dopgrammar)
+	dopgrammar = Grammar(dopgrammar)
+	dopgrammar.testgrammar()
 	secondarymodel = []
 	os.mkdir(resultdir)
 

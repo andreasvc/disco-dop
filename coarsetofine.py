@@ -40,9 +40,10 @@ def prunelist_fromchart(chart, goal, coarsegrammar, finegrammar, k, reduceh=999,
 		for Ih in chart:
 			label = removeparentannot.sub("", prunetolabel[itemcast(Ih).label])
 			if reduceh != 999:
-				label = reducemarkov[reduceh].sub("|<\\1>" if reduceh else "", label)
-			d[label][itemcast(Ih).vec] = min(d[label].get(itemcast(Ih).vec, infinity),
-										kbest.get(Ih, infinity))
+				label = reducemarkov[reduceh].sub("|<\\1>" if reduceh else "",
+					label)
+			d[label][itemcast(Ih).vec] = min(d[label].get(itemcast(Ih).vec,
+				infinity), kbest.get(Ih, infinity))
 	if removeparentannotation or mergesplitnodes:
 		for a, label in toid.iteritems():
 			prunelist[label] = d[removeids.sub("", a)]
@@ -92,7 +93,8 @@ def kbest_items(chart, start, k):
 
 def getitems(ej, rootprob, D, chart, items):
 	""" Traverse a derivation e,j, collecting all items belonging to it, and
-	noting (Viterbi) outside costs relative to its root edge (currently unused)"""
+	noting (Viterbi) outside costs relative to its root edge (these costs are
+	currently unused; only presence or absence in this list is exploited)"""
 	e = ej.edge
 	if e.left in chart:
 		if e.left in D:
@@ -179,7 +181,10 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 			print fine.tolabel[n], [(bin(v), s) for v,s in x.items()]
 	print " F I N E ",
 	p = filterchart(p, start)
-	pp, start = parse(sent, fine, start=fine.toid['ROOT'], tags=tags, prunelist=l, prunetoid=coarse.toid, coarsechart=p, neverblockmarkovized=pa, neverblockdiscontinuous=False, splitprune=split, markorigin=True)
+	pp, start = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
+		prunelist=l, prunetoid=coarse.toid, coarsechart=p,
+		neverblockmarkovized=pa, neverblockdiscontinuous=False,
+		splitprune=split, markorigin=True)
 	if start:
 		mpp = marginalize(pp, start, fine.tolabel)
 		for t in mpp:
@@ -206,8 +211,9 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 def main():
 	from treetransforms import splitdiscnodes, binarize
 	from treebank import NegraCorpusReader, readheadrules
-	from grammar import splitgrammar, induce_srcg, dop_srcg_rules,\
+	from grammar import induce_srcg, dop_srcg_rules,\
 			subsetgrammar
+	from containers import Grammar
 	from time import clock
 	headrules = readheadrules()
 	k = 50
@@ -228,20 +234,21 @@ def main():
 	for t in trees: binarize(t, vertMarkov=0, horzMarkov=1)
 	cftrees = [splitdiscnodes(t.copy(True), markorigin=True) for t in trees]
 	for t in cftrees:
-			#t.chomsky_normal_form(childChar=":")
-			binarize(t, horzMarkov=999, tailMarker='', leftMostUnary=True, childChar=":") #NB leftMostUnary is important
+		#t.chomsky_normal_form(childChar=":")
+		binarize(t, horzMarkov=999, tailMarker='', leftMostUnary=True,
+			childChar=":") #NB leftMostUnary is important
 	for t in parenttrees: binarize(t, vertMarkov=2)
 	for t in dtrees: binarize(t, vertMarkov=0, horzMarkov=1)
 	# mark heads, canonicalize, binarize head outward
 	normalsrcg = induce_srcg(trees, sents)
-	normal = splitgrammar(normalsrcg)
-	parent = splitgrammar(induce_srcg(parenttrees, sents))
-	split = splitgrammar(induce_srcg(cftrees, sents))
+	normal = Grammar(normalsrcg)
+	parent = Grammar(induce_srcg(parenttrees, sents))
+	split = Grammar(induce_srcg(cftrees, sents))
 	for t,s in zip(cftrees, sents):
 		for (r,yf),w in induce_srcg([t], [s]): assert len(yf) == 1
 	fine999srcg = dop_srcg_rules(trees, sents)
-	fine999 = splitgrammar(fine999srcg)
-	fine1 = splitgrammar(dop_srcg_rules(dtrees, sents))
+	fine999 = Grammar(fine999srcg)
+	fine1 = Grammar(dop_srcg_rules(dtrees, sents))
 	trees = list(corpus.parsed_sents()[train:train+test])
 	sents = corpus.tagged_sents()[train:train+test]
 	if subsetgrammar(normalsrcg, fine999srcg):
@@ -259,7 +266,8 @@ def main():
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen: continue
 			print n,
-			doctf(coarse, fine, sent, tree, k,
-					1 if msg == "parentannot" else 999, headrules, *settings, verbose=False)
+			doctf(coarse, fine, sent, tree, k, 1 if msg=="parentannot" else 999,
+				headrules, *settings, verbose=False)
 		print "time elapsed", clock() - begin, "s"
+
 if __name__ == '__main__': main()

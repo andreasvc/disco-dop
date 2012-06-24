@@ -1,12 +1,9 @@
-from cpython cimport PyList_Append as append,\
-					PyList_GET_ITEM as list_getitem,\
-					PyList_GET_SIZE as list_getsize,\
-					PyDict_Contains as dict_contains,\
-					PyDict_GetItem as dict_getitem
+from cpython cimport PyDict_Contains, PyDict_GetItem
 cimport numpy as np
 from agenda cimport Entry
 from kbest cimport lazykbest, lazykthbest
-from containers cimport ChartItem, Edge, Rule, LexicalRule, UInt, ULLong
+from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule,\
+	UChar, UInt, ULLong
 from array cimport array
 from agenda cimport EdgeAgenda
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint,\

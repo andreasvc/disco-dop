@@ -23,7 +23,8 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	- scenario 1: recurring fragments in single treebank, use:
 		extractfragments(trees1, sents1, offset, end, labels, prods, None, None)
 	- scenario 2: common fragments in two treebanks:
-		extractfragments(trees1, sents1, offset, end, labels, prods, trees2, sents2)
+		extractfragments(trees1, sents1, offset, end, labels, prods,
+			trees2, sents2)
 	offset and end can be used to divide the work over multiple processes.
 	offset is the starting point in trees1, end is the number of trees from
 	trees1 to work on.
@@ -185,7 +186,8 @@ cdef inline list getyield(Node *tree, list sent, int i):
 	if tree[i].prod == -1: return [tree[i].label]
 	elif tree[i].left < 0: return [] #??
 	elif tree[i].right < 0: return getyield(tree, sent, tree[i].left)
-	else: return getyield(tree, sent, tree[i].left) + getyield(tree, sent, tree[i].right)
+	else: return (getyield(tree, sent, tree[i].left)
+		+ getyield(tree, sent, tree[i].right))
 
 # match all leaf nodes containing indices
 # (note: phrasal nodes looking like indices will cause problems)
@@ -622,12 +624,14 @@ def main():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	optionflags=NORMALIZE_WHITESPACE | ELLIPSIS
+	fail, attempted = testmod(verbose=False, optionflags=optionflags)
 	if attempted and not fail:
 		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	test()
 
-	treebank1 = """(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
+	treebank1 = """\
+(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (JJ yellow) (NN cat))))
@@ -642,7 +646,7 @@ def main():
 	#for (a,aa),b in sorted(extractfragments1(treebank, sents).items()):
 	#	print "%s\t%s\t%d" % (a, aa, b)
 	for a,b in sorted(extractfragments1(treebank, sents).items()):
-		print "%s\t%d" % (a, b)
+		print "%s\t%s\t%d" % (a[0], a[1], b)
 
 if __name__ == '__main__':
 	main()

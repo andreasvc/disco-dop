@@ -262,7 +262,7 @@ def probabilities(cfg, fd, nonterminalfd):
 		@param cfg: a list of Productions
 		@param fd: number of subtrees headed by each node
 		@param nonterminalfd: a FreqDist of (non)terminals (with and
-		without IDs)""" 
+		without IDs)"""
 	#return [a(nonterminalfd) for a in cfg)
 	def prob(l, r):
 		return reduce(mul, map((lambda z: '@' in unicode(z)
@@ -274,21 +274,23 @@ def probabilities(cfg, fd, nonterminalfd):
 	#	for l, r in set(cfg))
 
 	# merge identical rules:
-	#return [WeightedProduction(rule[0], rule[1:], prob=freq*prob(rule[0], rule[1:])) for rule, freq in ((rule.split('\t'), freq) for rule,freq in cfg.items())]
-	
+	#return [WeightedProduction(rule[0], rule[1:],
+	# prob=freq*prob(rule[0], rule[1:]))
+	# for rule, freq in ((rule.split('\t'), freq) for rule,freq in cfg.items())]
+
 	return [WeightedProduction(l, r, prob=freq*prob(l, r))
 						for (l,r),freq in cfg.items()]
 	# do not merge identical rules
 	#return [WeightedProduction(l, r, prob=prob(l, r)) for l, r in cfg]
 
 def frequencies(cfg, fd, nonterminalfd, normalize=False):
-	"""merge cfg and frequency distribution into a list of weighted 
+	"""merge cfg and frequency distribution into a list of weighted
 	productions with frequencies as weights (as expected by bitpar).
 
 		@param cfg: a list of Productions
 		@param fd: number of subtrees headed by each node
 		@param nonterminalfd: a FreqDist of (non)terminals (with and
-		without IDs)""" 
+		without IDs)"""
 	if normalize:
 		# normalize by assigning equal weight to each node
 		return ((rule, freq * reduce(mul,
@@ -335,7 +337,7 @@ node labels that are strings'
 		if isinstance(child, Tree):
 			prods += productions(child)
 	return prods
-				
+
 def main():
 	""" a basic REPL for testing """
 	corpus = """(S (NP John) (VP (V likes) (NP Mary)))

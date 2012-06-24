@@ -31,7 +31,7 @@ def readparams(file):
 		if line and not line.startswith("#"):
 			key, val = line.split(None, 1)
 			if key in validkeysonce:
-				assert key not in seen, "cannot declare parameter %s twice" % key
+				assert key not in seen, "cannot declare parameter %s twice" %key
 				seen.add(key)
 				params[key] = int(val)
 			elif key in ("DELETE_LABEL", "DELETE_LABEL_FOR_LENGTH"):
@@ -49,7 +49,8 @@ def transform(tree, sent, delete, eqlabel, eqword):
 		for n, b in zip(count(), a)[::-1]:
 			if not b: a.pop(n)	#remove empty nodes
 			elif b.node in delete:
-				# replace phrasal node with its children; remove pre-terminal entirely
+				# replace phrasal node with its children;
+				# remove pre-terminal entirely
 				if isinstance(b[0], Tree): a[n:n+1] = b
 				else: a.pop(n)
 			else: b.node = getlabel(b.node, eqlabel)
@@ -63,7 +64,7 @@ def getlabel(label, eqlabel):
 	return label
 
 def bracketings(tree, labeled=True, delete=(), disconly=False):
-	""" Return the labeled set of bracketings for a tree: 
+	""" Return the labeled set of bracketings for a tree:
 	for each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
 	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"))
@@ -181,7 +182,8 @@ def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 	if start < 0: start += goldlen
 	if end < 0: end += goldlen
 	print start, end
-	assert goldlen == parseslen, "unequal number of sentences in gold & candidates: %d vs %d" % (goldlen, parseslen)
+	assert goldlen == parseslen, ("unequal number of sentences "
+		"in gold & candidates: %d vs %d" % (goldlen, parseslen))
 	goldlen = end - start
 
 	if param["DEBUG"]:
@@ -190,7 +192,8 @@ def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 		print """
    Sentence                 Matched   Brackets            Corr      Tag
   ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
-______________________________________________________________________________"""
+______________________________________________________________________________\
+"""
 	exact = 0.
 	maxlenseen = sentcount = 0
 	#dicenoms = dicedenoms = 0
@@ -201,23 +204,30 @@ ______________________________________________________________________________""
 	candb = multiset()
 	goldbcat = defaultdict(multiset)
 	candbcat = defaultdict(multiset)
-	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(), parses.sents(), gold.parsed_sents(), gold.sents()):
+	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(),
+		parses.sents(), gold.parsed_sents(), gold.sents()):
 		if n < start: continue
 		elif n > end: break
 		cpos = sorted(ctree.pos())
 		gpos = sorted(gtree.pos())
-		lencpos = sum(1 for a,b in cpos if b not in param["DELETE_LABEL_FOR_LENGTH"])
-		lengpos = sum(1 for a,b in gpos if b not in param["DELETE_LABEL_FOR_LENGTH"])
+		lencpos = sum(1 for a,b in cpos
+			if b not in param["DELETE_LABEL_FOR_LENGTH"])
+		lengpos = sum(1 for a,b in gpos
+			if b not in param["DELETE_LABEL_FOR_LENGTH"])
 		assert lencpos == lengpos, "sentence length mismatch"
 		if lencpos > param["CUTOFF_LEN"]: continue
 		sentcount += 1
 		if maxlenseen < lencpos: maxlenseen = lencpos
-		transform(ctree, csent, param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
-		transform(gtree, gsent, param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
-		assert csent == gsent, "candidate & gold sentences do not match:\n%s\%s" % (
-				" ".join(csent), " ".join(gsent))
-		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
-		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
+		transform(ctree, csent,
+			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
+		transform(gtree, gsent,
+			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
+		assert csent == gsent, ("candidate & gold sentences do not match:\n"
+			"%s\%s" % (" ".join(csent), " ".join(gsent))
+		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]
+			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
+		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]
+			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
 		if cbrack == gbrack: exact += 1
 		candb.update((n,a) for a in cbrack.elements())
 		goldb.update((n,a) for a in gbrack.elements())
@@ -235,11 +245,13 @@ ______________________________________________________________________________""
 			print c
 			print [pathscore(g[leaf], c[leaf]) for leaf in g]
 			assert False
-		#ted, denom = treedist(gtree, ctree, includeroot=gtree.node not in param["DELETE_LABEL"])
+		#ted, denom = treedist(gtree, ctree,
+		#	includeroot=gtree.node not in param["DELETE_LABEL"])
 		#dicenoms += ted
 		#dicedenoms += denom
 		if param["DEBUG"] == 0: continue
-		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f" % ( # %2d %g" % (
+		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f" %(
+			# %2d %g" % (
 			n,
 			len(gpos),
 			100 * nonetozero(lambda: recall(gbrack, cbrack)),
@@ -293,13 +305,17 @@ ____________________"""
 	print "maximum length:            %6d" % (maxlenseen)
 	print "gold brackets (disc.):     %6d (%d)" % (len(goldb), gdiscbrackets)
 	print "cand. brackets (disc.):    %6d (%d)" % (len(candb), discbrackets)
-	print "labeled precision:         %6.2f" % (100 * nonetozero(lambda: precision(goldb, candb)))
-	print "labeled recall:            %6.2f" % (100 * nonetozero(lambda: recall(goldb, candb)))
-	print "labeled f-measure:         %6.2f" % (100 * nonetozero(lambda: f_measure(goldb, candb)))
+	print "labeled precision:         %6.2f" % (
+		100 * nonetozero(lambda: precision(goldb, candb)))
+	print "labeled recall:            %6.2f" % (
+		100 * nonetozero(lambda: recall(goldb, candb)))
+	print "labeled f-measure:         %6.2f" % (
+		100 * nonetozero(lambda: f_measure(goldb, candb)))
 	print "exact match:               %6.2f" % (100 * (exact / sentcount))
 	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
-	#print "tree-dist (Dice micro avg) %6.2f" % (100 * (1 - dicenoms / float(dicedenoms)))
-	print "tagging accuracy:          %6.2f" % (100 * accuracy(goldpos, candpos))
+	#print "tree-dist (Dice micro avg) %6.2f" % (
+	#	100 * (1 - dicenoms / float(dicedenoms)))
+	print "tagging accuracy:          %6.2f" % (100*accuracy(goldpos, candpos))
 
 if __name__ == '__main__':
 	if len(sys.argv) == 2 and sys.argv[1] == "--test":
@@ -313,7 +329,8 @@ if __name__ == '__main__':
 		main(goldfile, parsesfile)
 	else:
 		print """\
-wrong number of arguments. usage: %s gold[/encoding] parses[/encoding] [param [cutoff]]
+wrong number of arguments.
+usage: %s gold[/encoding] parses[/encoding] [param [cutoff]]
 (where gold and parses are files in export format, param is in EVALB format,
 and cutoff is an integer for the length cutoff which overrides the parameter
 file. Encoding defaults to UTF-8, other encodings need to be specified.)

@@ -1,5 +1,5 @@
 """ An attempt at drawing discontinuous trees programmatically.
-Produces TiKZ code, PDF can be produced with latex. """
+Produces TiKZ code, PDF can be produced with pdflatex. """
 from nltk import Tree
 from collections import defaultdict
 import codecs
@@ -13,8 +13,8 @@ def label(tree, sent):
 			y = y.replace("<", "").replace(">", "")
 			if "^" in y:
 				y, z = y.split("^")
-				y = y[1:-1]
-				l = "$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $" % (x, y.replace("-",","), z)
+				y = y[1:-1].replace("-", ",")
+				l = "$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $" % (x, y, z)
 			else:
 				l = "$ \\textsf{%s}_\\textsf{%s} $" % (x, y.replace("-",","))
 		return l
