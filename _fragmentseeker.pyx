@@ -190,28 +190,31 @@ cdef inline list getyield(Node *tree, list sent, int i):
 		+ getyield(tree, sent, tree[i].right))
 
 # match all leaf nodes containing indices
-# (note: phrasal nodes looking like indices will cause problems)
-termsre = re.compile(r"([0-9]+)([ )])")
+# by requiring a preceding space, only terminals are matched
+# lookahead to ensure we match whole tokens ("23" instead of 2 or 3)
+termsre = re.compile(r" ([0-9]+)(?=[ )])")
 def repl(d):
-	def f(x): return d[int(x.groups()[0])] + x.groups()[1]
+	def f(x): return d[int(x.groups()[0])]
 	return f
 
 def getsent(frag, list sent):
 	""" Select the words that occur in the fragment and renumber terminals
-	in fragment. Expects a tree as string."""
-	cdef:
-		int x = 0, n, maxl
-		list newsent = []
-		dict leafmap = {}
-	leaves = set(int(x) for x, _ in termsre.findall(frag))
+	in fragment. Expects a tree as string.
+	>>> getsent("(S (NP 0) (VP 2))", ['The', 'man', 'walks'])
+	("(S (NP 0) (VP 2))", [None, 'walks'])
+	"""
+	cdef int x = 0, n, maxl
+	cdef list newsent = []
+	cdef dict leafmap = {}
+	leaves = set(int(x) for x in termsre.findall(frag))
 	if not leaves: return frag, ()
 	maxl = max(leaves)
 	for n in sorted(leaves):
-		leafmap[n] = unicode(x)
+		leafmap[n] = " " + unicode(x)
 		newsent.append(sent[n])
 		x += 1
 		if n + 1 not in leaves and n != maxl:
-			leafmap[n+1] = unicode(x)
+			leafmap[n+1] = " " + unicode(x)
 			newsent.append(None)
 			x += 1
 	frag = termsre.sub(repl(leafmap), frag)

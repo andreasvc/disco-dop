@@ -25,10 +25,10 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	[[('NN', [[0], [1]])]]
 	"""
 	rules = []
-	assert set(tree.leaves()) == set(range(len(sent))), (
-		"mismatch between indices and sentence: "
-		"each word in sentence should have "
-		"exactly one corresponding index in leaves of tree")
+	assert len(set(tree.leaves())) == len(tree.leaves()), (
+		"indices should be unique.")
+	assert all(0 <= a < len(sent) for a in tree.leaves()), (
+		"all indices should point to a word in the sentence.")
 	for st in tree.subtrees():
 		if not st: raise ValueError(("Empty node. Frontier nodes should "
 			"designate which part(s) of the sentence they contribute to."))
@@ -190,9 +190,12 @@ def doubledop(trees, sents):
 			for rule in map(varstoindices, srcg_productions(tree, sent)))
 	# most work happens here
 	fragments = extractfragments1(trees, sents)
+	for a, b in fragments.items(): print a, b
 	fragments = dict(((ImmutableTree.parse(a[0], parse_leaf=int), a[1]), b)
 			for a,b in fragments.items())
 	productions = map(flatten, fragments)
+	for a,b in zip(productions, fragments):
+		print a, '\n', b[0], '\n', b[1], '\n'
 	# construct a mapping of productions to fragments
 	for prod, (frag, terminals) in zip(productions, fragments):
 		if prod == frag: continue
@@ -739,7 +742,6 @@ def main():
 	for a in induce_srcg([tree.copy(True)], [sent]): print a
 	print "print Grammar()"
 	print Grammar(induce_srcg([tree.copy(True)], [sent]))
-	return
 
 
 	do(sent, Grammar(dop_srcg_rules([tree,tree2], [sent,sent2])))

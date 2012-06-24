@@ -10,6 +10,7 @@ directives = {
 	"boundscheck" : False,
 	"nonecheck" : False,
 	"wraparound" : False,
+	"cdivision" : True,
 	"embedsignature" : True
 	}
 
@@ -22,7 +23,7 @@ ext_modules = [
 	Extension("containers",      ["containers.pyx", "containers.pxd"]),
 	Extension("coarsetofine",    ["coarsetofine.py", "coarsetofine.pxd"]),
 	Extension("disambiguation",  ["disambiguation.py", "disambiguation.pxd"]),
-	Extension("_fragmentseeker", ["_fragmentseeker.pyx", "_fragmentseeker.pxd"],
+	Extension("_fragmentseeker", ["_fragmentseeker.pyx", "_fragmentseeker.pxd"]
 	)]
 	#extra_compile_args=["-g", "-O0"], extra_link_args=["-g"],)]
 

@@ -118,8 +118,8 @@ def main(argv):
 	if len(argv) < 2: print "missing treebank argument"
 	if any(a.startswith("--") for a in argv):
 		print "unrecognized options:", [a.startswith("--") for a in argv]
-	if (not batch and len(argv) not in (2, 3))
-		or any(a.startswith("--") for a in argv):
+	if ((not batch and len(argv) not in (2, 3))
+		or any(a.startswith("--") for a in argv)):
 		print """\
 usage: %s [options] treebank1 [treebank2]
 If only one treebank is given, fragments occurring at least twice are sought.
@@ -150,7 +150,7 @@ Output is sent to stdout; to save the results, redirect to a file.
 	if argv[1] == "-": argv[1] = "/dev/stdin"
 	assert os.path.exists(argv[1]), "not found: %s" % argv[1]
 	for a in argv[2:]: assert os.path.exists(a), "not found: %s" % a
-	if complete: assert (len(argv) == 3 or batch,
+	if complete: assert len(argv) == 3 or batch, (
 		"need at least two treebanks with --complete.")
 	level = logging.WARNING if quiet else logging.INFO
 	logging.basicConfig(level=level, format='%(message)s')
