@@ -91,11 +91,11 @@ cdef class Grammar:
 		print "All left hand sides sum to 1"
 		return True
 	def __repr__(self):
-		rules = "\n".join("%.2f %s => %s %s (%s)" % (
+		rules = "\n".join("%.2f %s => %s%s (%s)" % (
 			exp(-self.bylhs[0][n].prob),
 			self.tolabel[self.bylhs[0][n].lhs],
 			self.tolabel[self.bylhs[0][n].rhs1],
-			self.tolabel[self.bylhs[0][n].rhs2],
+			" %s" % self.tolabel[self.bylhs[0][n].rhs2] if self.bylhs[0][n].rhs2 else "",
 			yfrepr(self.bylhs[0][n]))
 			for n in range(self.numrules)
 			if self.bylhs[0][n].lhs < self.nonterminals)
@@ -122,7 +122,8 @@ cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
 	e.g.: dest[NP][0] == the first rule with an NP in the idx position.
 	"""
 	cdef UInt prev = 0
-	cdef size_t n = 0, m
+	cdef size_t n = 0	# rule number
+	cdef size_t m		# bit index in yield function
 	cdef Rule *cur
 	sortedgrammar = sorted(grammar, key=partial(myitemget, idx))
 	filteredgrammar = [rule for rule in sortedgrammar if cond(rule[0][0])]
@@ -135,14 +136,14 @@ cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
 		cur.rhs2 = toid[rule[2]] if len(rule) == 3 else 0
 		cur.fanout = len(yf)
 		cur.prob = abs(w)
-		allargs = [a for component in yf for a in component]
-		assert len(allargs) < (8 * sizeof(cur.args)), (
-			len(allargs), (8 * sizeof(cur.args)))
-		cur.args = sum([1 << x for x, a in enumerate(allargs) if a])
-		cur.lengths = offset = 0
+		cur.lengths = cur.args = m = 0
 		for a in yf:
-			cur.lengths |= 1 << (offset + len(a) - 1)
-			offset += len(a)
+			for b in a: #component:
+				if b == 1: cur.args += 1 << m
+				elif b != 0: raise ValueError("grammar must be binarized")
+				m += 1
+			cur.lengths |= 1 << (m - 1)
+		assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
 		# if this is the first rule with this non-terminal,
 		# add it to the index
 		if n and toid[rule[idx]] != prev:

@@ -190,7 +190,6 @@ def doubledop(trees, sents):
 			for rule in map(varstoindices, srcg_productions(tree, sent)))
 	# most work happens here
 	fragments = extractfragments1(trees, sents)
-	for a, b in fragments.items(): print a, b
 	fragments = dict(((ImmutableTree.parse(a[0], parse_leaf=int), a[1]), b)
 			for a,b in fragments.items())
 	productions = map(flatten, fragments)
