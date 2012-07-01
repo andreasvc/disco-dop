@@ -14,7 +14,7 @@ This work is partly described in the following publications:
   systems. Proc. of EACL.
   http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
 - van Cranenburgh, Scha, Sangati (2011). Discontinuous Data-Oriented Parsing:
-  A mildly context-sensitive all-fragments grammar. SPMRL2011.
+  A mildly context-sensitive all-fragments grammar. Proc. of SPMRL.
   http://www.aclweb.org/anthology/W/W11/W11-3805.pdf
 
 Some references to implemented algorithms:
@@ -36,17 +36,18 @@ Requirements:
 - python 2.6+   http://www.python.org (need headers, e.g. python-dev package)
 - NLTK          http://www.nltk.org
 - cython        http://www.cython.org
-- cython array	[array.pxd](https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/array.pxd) [arrayarray.h](https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/arrayarray.h)
+- cython array	[array.pxd](https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/array.pxd) [arrayarray.h](https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/arrayarray.h)
 - numpy         http://numpy.scipy.org/
 - GCC
 
-For example, to install these dependencies and compile the code on Ubuntu (tested on 12.04), run the following sequence of commands:
+For example, to install these dependencies and compile the code on Ubuntu
+(tested on 12.04), run the following sequence of commands:
 
 	sudo apt-get install python-dev python-nltk python-numpy cython build-essential
 	git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
-	wget https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/array.pxd
-	wget https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/arrayarray.h
+	wget https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/array.pxd
+	wget https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/arrayarray.h 
 	make
 
 NB: compilation will by default use `CFLAGS` used to compile Python.
