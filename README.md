@@ -6,17 +6,30 @@ Data-Oriented Parsing (DOP), with a focus on global world domination.
 Concretely, we build a DOP model with a Linear Context-Free Rewriting
 System (LCFRS) as the symbolic backbone.
 
+Background
+----------
+This work is partly described in the following publications:
+
+- van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
+  systems. Proc. of EACL.
+  http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
+- van Cranenburgh, Scha, Sangati (2011). Discontinuous Data-Oriented Parsing:
+  A mildly context-sensitive all-fragments grammar. SPMRL2011.
+  http://www.aclweb.org/anthology/W/W11/W11-3805.pdf
+
+Some references to implemented algorithms:
+
 - parser, estimates: Maier & Kallmeyer (2010), Data-driven parsing with
   probabilistic linear context-free rewriting systems.
 - data-oriented parsing:
 
   * Goodman (2002), Efficient parsing of DOP with PCFG-reductions
-  * Sangati & Zuidema (2011), Accurate parsing with compact tree-substitution grammars: Double-DOP
+  * Sangati & Zuidema (2011), Accurate parsing with compact tree-substitution
+    grammars: Double-DOP
 
 - k-best list: Huang & Chiang (2005), Better k-best parsing
 - optimal binarization: Gildea (2010), Optimal parsing strategies for linear
   context-free rewriting systems
-
 
 Requirements:
 -------------
@@ -29,7 +42,7 @@ Requirements:
 
 For example, to install these dependencies and compile the code on Ubuntu (tested on 12.04), run the following sequence of commands:
 
-	apt-get install python-dev python-nltk cython python-numpy build-essential
+	sudo apt-get install python-dev python-nltk python-numpy cython build-essential
 	git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
 	wget https://github.com/andreasvc/cython/raw/c7aa65ab69a396438e2bf06279a06f8714dc3f29/Cython/Includes/cpython/array.pxd
@@ -38,6 +51,8 @@ For example, to install these dependencies and compile the code on Ubuntu (teste
 
 NB: compilation will by default use `CFLAGS` used to compile Python.
 
+Usage
+-----
 The python files can be run without arguments as a demonstration.
 
 To run an experiment, copy the file sample.prm and edit its parameters.  These
@@ -55,10 +70,21 @@ can be requested for non-commercial purposes, while the [Tiger
 corpus](http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/) is freely
 available for download for research purposes.
 
-Alternatively, there is a simpler parser in the "shedskin" directory. This
+Alternatively, there is a simpler parser in the "shedskin/" directory. This
 LCFRS parser only produces the Viterbi parse. The grammar is supplied in a file
 following a simple text format. The "plcfrs.py" script can be translated to C++
 by the [Shed Skin](http://code.google.com/p/shedskin/) compiler, after which
-the resulting code can be compiled with `make`.
+the resulting code can be compiled with `make`:
 
+    sudo apt-get install shedskin
+    cd disco-dop/shedskin
+    shedskin -b -l -w plcfrs.py
+    make
+
+A separate tool is `fragmentseeker.py`, which finds recurring or common
+fragments in one or more treebanks. It can be used with discontinuous as well
+as Penn-style bracketed treebanks. Run without arguments for instructions.
+
+Two other scripts, `gen.py` and `bitext.py`, are preliminary experiments in
+LCFRS generation and bitext parsing with synchronous grammars respectively.
 
