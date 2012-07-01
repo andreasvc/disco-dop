@@ -167,7 +167,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	>>> binarize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
 
-	>>> tree = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))") 
+	>>> tree = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))")
 	>>> binarize(tree, tailMarker='', reverse=False); print tree.pprint(margin=999)
 	(S (S|<A-B-C-D-E-F> (A 0) (S|<B-C-D-E-F> (B 1) (S|<C-D-E-F> (C 2) (S|<D-E-F> (D 3) (S|<E-F> (E 4) (S|<F> (F 5))))))))
 
@@ -202,8 +202,8 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 			for child in node:
 				nodeList.append((child, parent))
 
-			# chomsky normal form factorization
-			if len(node) > 2 and isinstance(node[0], Tree):
+			# binary form factorization
+			if len(node) > 2:
 				childNodes = [child.node for child in node]
 				nodeCopy = node.copy()
 				numChildren = len(nodeCopy)
@@ -249,7 +249,6 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 					siblings = "-".join(childNodes[start:end])
 					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar,
 											marktail, siblings, parentString)
-
 					curNode = newNode
 				assert len(nodeCopy) == 1
 				if rightMostUnary:
@@ -257,7 +256,6 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				else:
 					curNode.node = nodeCopy[0].node
 					curNode[:] = nodeCopy.pop()
-
 
 def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 	unaryChar="+"):
@@ -302,7 +300,7 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 	into a new non-terminal (Tree node) joined by 'joinChar'.
 	This is useful when working with algorithms that do not allow
 	unary productions, and completely removing the unary productions
-	would require loss of useful information.  The Tree is modified 
+	would require loss of useful information.  The Tree is modified
 	directly (since it is passed by reference) and no value is returned.
 
 	@param tree: The Tree to be collapsed
@@ -324,7 +322,7 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 		nodeList = [tree]
 
 	# depth-first traversal of tree
-	while nodeList != []:
+	while nodeList:
 		node = nodeList.pop()
 		if isinstance(node,Tree):
 			if len(node) == 1 and isinstance(node[0], Tree) and (collapsePOS == True or isinstance(node[0,0], Tree)):
@@ -336,6 +334,26 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 			else:
 				for child in node:
 					nodeList.append(child)
+
+def introducepreterminals(tree):
+	""" Introduce preterminals with artificial POS-tags where needed
+	(i.e., for every terminal with siblings.)
+
+	>>> tree = Tree("(S (X a b (CD c d) e))")
+	>>> introducepreterminals(tree); print tree.pprint(margin=999)
+	(S (X (X/a a) (X/b b) (CD (CD/c c) (CD/d d)) (X/e e)))
+
+	"""
+	assert isinstance(tree, Tree)
+	nodeList = [tree]
+	while nodeList:
+		node = nodeList.pop()
+		hassiblings = len(node) > 1
+		for n, child in enumerate(node):
+			if isinstance(child, Tree):
+				nodeList.append(child)
+			elif hassiblings:
+				node[n] = Tree("%s/%s" % (node.node, child), [child])
 
 def getbits(bitset):
 	""" Iterate over the indices of set bits in a bitset. """
