@@ -10,6 +10,7 @@ from array import array
 from nltk import Tree
 from grammar import srcg_productions, alpha_normalize, freeze
 from containers import Terminal
+from treetransforms import binarize, introducepreterminals
 
 # these arrays are never used but serve as template to create
 # arrays of this type.
@@ -192,7 +193,10 @@ cdef inline list getyield(Node *tree, list sent, int i):
 # match all leaf nodes containing indices
 # by requiring a preceding space, only terminals are matched
 # lookahead to ensure we match whole tokens ("23" instead of 2 or 3)
-termsre = re.compile(r" ([0-9]+)(?=[ )])")
+#termsre = re.compile(r" ([0-9]+)(?=[ )])")
+# detect word boundary; less precise than  '[ )]',
+# but works with linear-time regex libs
+termsre = re.compile(r" ([0-9]+)\b")
 def repl(d):
 	def f(x): return d[int(x.groups()[0])]
 	return f
@@ -302,6 +306,7 @@ def tolist(tree):
 	result[0].root = 0
 	return result
 
+# used to generate values for defaultdicts
 def one(): return 1
 
 cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
@@ -428,8 +433,9 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
 	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees1 as bitsets, produce an exact
-	count of those fragments in trees1. The reason we need to do this is that
-	a fragment can occur in other trees where it was not a maximal fragment"""
+	count of those fragments in trees1. The reason we need to do this
+	separately is that a fragment can occur in other trees where it was not a
+	maximal fragment. """
 	cdef:
 		int n, m, i, x, f
 		UInt count
@@ -448,8 +454,8 @@ cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
 		i = bitset[SLOTS]
 		n = bitset[SLOTS + 1]
 		a = ctrees1[n]
-		candidates = set()
-		candidates |= <set>(treeswithprod[a.nodes[i].prod])
+		#create copy of set!
+		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
 		for x in range(a.len):
 			if TESTBIT(bitset, x):
 				candidates &= <set>(treeswithprod[a.nodes[x].prod])
@@ -463,6 +469,56 @@ cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
 				elif fast and a.nodes[i].prod > b.nodes[x].prod: break
 		counts[f] = count
 	return counts
+
+cpdef list exactindices(Ctrees trees1, list sents1, list bitsets,
+	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
+	""" Given a set of fragments from trees1 as bitsets, produce the exact
+	set of trees with those fragments in trees1.
+	The reason we need to do this separately is that a fragment can occur in
+	other trees where it was not a maximal fragment.
+	Returns a list with a set of indices for each bitset in the input; the
+	indices point to the trees where the fragments (described by the bitsets)
+	occur. This is useful to look up the contexts of fragments, or when the
+	order of sentences has significance which makes it possible to interpret
+	the set of indices as time-series data.
+	NB: the length of indices for a fragment can be smaller than the exact
+	frequency of that fragment, because fragments can occur multiple times in a
+	single tree."""
+	cdef:
+		int n, m, i, x, f
+		UInt count
+		UChar SLOTS = 0
+		array pyarray
+		ULong *bitset = NULL
+		NodeArray a, b, *ctrees1 = trees1.data
+		set candidates, matches
+		list indices = [set() for _ in bitsets]
+	if SLOTS == 0:
+		pyarray = bitsets[0]
+		SLOTS = pyarray.length - 2
+		assert SLOTS
+	# compare one bitset to each tree for each unique fragment.
+	for f, pyarray in enumerate(bitsets):
+		bitset = pyarray._L
+		i = bitset[SLOTS]
+		n = bitset[SLOTS + 1]
+		a = ctrees1[n]
+		#create copy of set!
+		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
+		for x in range(a.len):
+			if TESTBIT(bitset, x):
+				candidates &= <set>(treeswithprod[a.nodes[x].prod])
+
+		matches = set()
+		for m in candidates:
+			b = ctrees1[m]
+			for x in range(b.len):
+				if a.nodes[i].prod == b.nodes[x].prod:
+					if containsbitset(a, b, bitset, i, x):
+						matches.add(m)
+				elif fast and a.nodes[i].prod > b.nodes[x].prod: break
+		indices[f] = frozenset(matches)
+	return indices
 
 cdef inline bint containsbitset(NodeArray A, NodeArray B, ULong *bitset,
 	short i, short j):
@@ -485,6 +541,9 @@ cdef inline bint containsbitset(NodeArray A, NodeArray B, ULong *bitset,
 	else: return True
 
 cpdef list indextrees(Ctrees trees, dict prods):
+	""" Create an index from specific productions to trees containing that
+	production. Productions are represented as integer IDs, trees are given
+	as sets of integer indices. """
 	cdef list result = [set() for _ in range(len(prods))]
 	cdef NodeArray a
 	cdef int n, m
@@ -497,6 +556,8 @@ cpdef list indextrees(Ctrees trees, dict prods):
 
 cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 	bint discontinuous):
+	""" Utility function to generate bitsets corresponding to whole trees
+	in the input."""
 	cdef dict result = {}
 	cdef array pyarray
 	cdef int n
@@ -515,7 +576,9 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 frontierortermre = re.compile("[^)]\)")
 frontiersre = re.compile(" \)")
 def frontierorterm(x):
-	return len(x) == 0 or (len(x) == 1 and not isinstance(x[0], Tree))
+	# this expression is true when x is empty,
+	# or any of its children is a terminal
+	return not all(isinstance(y, Tree) for y in x)
 
 def pathsplit(p):
 	return p.rsplit("/", 1) if "/" in p else (".", p)
@@ -557,18 +620,27 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 		try: tree = Tree(line)
 		except: print "malformed line:\n%s\nline %d" % (line, m); raise
 		sent = tree.leaves()
+		# every terminal should have its own preterminal
+		introducepreterminals(tree)
 		# binarize (could be a command line option)
 		tmp[:] = [tree]
-		try: tmp.chomsky_normal_form()
-		except: print "malformed tree:\n%s\nline %d" % (tree, m); raise
+		try: binarize(tmp)
+		except AttributeError:
+			import sys
+			print >> sys.stdout, "malformed tree:\n%s\nline %d" % (tree, m)
+			raise
 		# convert tree to list
 		productions = tree.productions()
 		for n, a in enumerate(tree.subtrees(frontierorterm)):
 			# fixme: get rid of this, maybe exclude terminals altogether
-			if a: a[0] = Terminal(n)
-			else:
+			if len(a) == 1:
+				a[0] = Terminal(n)
+			elif len(a) == 0:
 				sent.insert(n, None)
 				a.append(Terminal(n))
+			else: raise ValueError("Expected binarized tree "
+					"with a preterminal for each terminal.\ntree: %s" %
+					tree.pprint(margin=999))
 		tree = list(tree.subtrees()) + tree.leaves()
 		# collect new labels and productions
 		for a, b in zip(tree, productions):
@@ -577,7 +649,12 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 			if a.prod not in prods: prods[a.prod] = len(prods)
 		root = tree[0]
 		if sort: tree.sort(key=lambda n: -prods.get(n.prod, -1))
-		for n, a in enumerate(tree): a.idx = n
+		for n, a in enumerate(tree):
+			assert isinstance(a, (Tree, Terminal)), (
+				"Expected Tree or Terminal, got: "
+				"%s.\nnode: %r\nsent: %r\ntree: %s" % (
+				type(a), a, sent, root.pprint()))
+			a.idx = n
 		tree[0].root = root.idx
 		trees.add(tree, labels, prods)
 		sents.append(sent)

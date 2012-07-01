@@ -296,7 +296,7 @@ cdef class Ctrees:
 		if self.len: # derive pointer from previous tree offset by its size
 			self.data[self.len].nodes = &(
 				self.data[self.len-1].nodes)[self.data[self.len-1].len]
-		indices(tree, labels, prods, self.data[self.len].nodes)
+		copynodes(tree, labels, prods, self.data[self.len].nodes)
 		self.data[self.len].root = tree[0].root
 		self.len += 1
 		self.nodesleft -= len(tree)
@@ -306,7 +306,7 @@ cdef class Ctrees:
 		free(self.data); self.data = NULL
 	def __len__(Ctrees self): return self.len
 
-cdef inline indices(tree, dict labels, dict prods, Node *result):
+cdef inline copynodes(tree, dict labels, dict prods, Node *result):
 	""" Convert NLTK tree to an array of Node structs. """
 	cdef int n
 	for n, a in enumerate(tree):

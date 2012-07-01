@@ -3,7 +3,7 @@ from multiprocessing import Pool, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from sys import argv, stdout
 from _fragmentseeker import extractfragments, fastextractfragments,\
-	readtreebank, indextrees, exactcounts, completebitsets
+	readtreebank, indextrees, exactcounts, exactindices, completebitsets
 
 # this fixes utf-8 output when piped through e.g. less
 # won't help if the locale is not actually utf-8, of course
@@ -59,11 +59,13 @@ def worker(offset):
 	try:
 		if params['quadratic']:
 			result = extractfragments(trees1, sents1, offset, end, labels,
-				prods, revlabel, trees2, sents2, approx=not params['exact'],
+				prods, revlabel, trees2, sents2,
+				approx=not (params['exact'] or params['indices']),
 				discontinuous=not params['penn'], debug=False)
 		else:
 			result = fastextractfragments(trees1, sents1, offset, end, labels,
-				prods, revlabel, trees2, sents2, approx=not params['exact'],
+				prods, revlabel, trees2, sents2,
+				approx=not (params['exact'] or params['indices']),
 				discontinuous=not params['penn'], debug=False)
 	except Exception as e: logging.error(e)
 	logging.info("finished %d--%d" % (offset, end))
@@ -73,10 +75,16 @@ def exactcountworker((n, m, fragments)):
 	trees1 = params['trees1']; sents1 = params['sents1']
 	penn = params['penn']; revlabel = params['revlabel']
 	treeswithprod = params['treeswithprod']; quadratic = params['quadratic']
-	counts = exactcounts(trees1, sents1, fragments, not penn, revlabel,
-		treeswithprod, fast=not quadratic)
-	logging.info("exact counts %d of %d" % (n+1, m))
-	return counts
+	if params['indices']:
+		theindices = exactindices(trees1, sents1, fragments, not penn, revlabel,
+			treeswithprod, fast=not quadratic)
+		logging.info("exact indices %d of %d" % (n+1, m))
+		return theindices
+	else:
+		counts = exactcounts(trees1, sents1, fragments, not penn, revlabel,
+			treeswithprod, fast=not quadratic)
+		logging.info("exact counts %d of %d" % (n+1, m))
+		return counts
 
 def main(argv):
 	global params
@@ -106,12 +114,14 @@ def main(argv):
 	debug = "--debug" in argv
 	complete = "--complete" in argv
 	exact = "--exact" in argv
+	indices = "--indices" in argv
 	quadratic = "--quadratic" in argv
 	nofreq = '--nofreq' in argv
 	if nofreq: argv.remove('--nofreq')
 	if not penn: argv.remove("--disc")
 	if quiet: argv.remove("--quiet")
 	if exact: argv.remove("--exact")
+	if indices: argv.remove("--indices")
 	if debug: argv.remove("--debug")
 	if complete: argv.remove("--complete")
 	if quadratic: argv.remove("--quadratic")
@@ -129,6 +139,7 @@ Output contains lines of the form "tree<TAB>frequency".
 Output is sent to stdout; to save the results, redirect to a file.
 --complete    find complete matches of fragments from treebank1 in treebank2.
 --exact       find exact frequencies (complete implies exact).
+--indices     report sets of indices instead of frequencies.
 --disc        work with discontinuous trees; input is in Negra export format.
               output: tree<TAB>sentence<TAB>frequency
               where "tree' has indices as leaves, referring to elements of
@@ -171,14 +182,16 @@ Output is sent to stdout; to save the results, redirect to a file.
 	chunk = numtrees / (mult*numproc)
 	if numtrees % (mult*numproc): chunk += 1
 	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
-	if exact: fragments = {}
+	if exact or indices: fragments = {}
 	else: fragments = defaultdict(int)
-	params.update(penn=penn, exact=exact, chunk=chunk, quadratic=quadratic)
+	params.update(penn=penn, exact=exact, indices=indices, chunk=chunk,
+		quadratic=quadratic, complete=complete, nofreq=nofreq)
 	logging.info("parameters:\n%s" % "\n".join("    %s: %r" % kv
 		for kv in sorted(dict(
-		quiet=quiet, exact=exact, numproc=numproc, disc=not penn,
-		complete=complete, quadratic=quadratic, treebank1=argv[1],
-		treebank2=argv[2] if len(argv)==3 else None).items())))
+		quiet=quiet, exact=exact, indices=indices, numproc=numproc,
+		disc=not penn, complete=complete, quadratic=quadratic,
+		treebank1=argv[1], treebank2=argv[2] if len(argv)==3 else None
+		).items())))
 
 	if numproc == 1 and batch:
 		initworker(argv[1], None, not quadratic, limit, encoding)
@@ -196,21 +209,27 @@ Output is sent to stdout; to save the results, redirect to a file.
 			if complete: pass
 			elif quadratic:
 				fragments = extractfragments(trees1, sents1, 0, 0, labels,
-					prods, revlabel, trees2, sents2, approx=not exact,
-					discontinuous=not penn, debug=debug)
+					prods, revlabel, trees2, sents2,
+					approx=not (exact or indices), discontinuous=not penn,
+					debug=debug)
 			else:
 				fragments = fastextractfragments(trees1, sents1, 0, 0, labels,
-					prods, revlabel, trees2, sents2, approx=not exact,
-					discontinuous=not penn, debug=debug)
+					prods, revlabel, trees2, sents2,
+					approx=not (exact or indices), discontinuous=not penn,
+					debug=debug)
 			if exact or complete:
 				logging.info("getting exact counts")
 				counts = exactcounts(trees1, sents1, fragments.values(),
+					not penn, revlabel, treeswithprod, fast=not quadratic)
+			elif indices:
+				logging.info("getting indices of occurrence")
+				counts = exactindices(trees1, sents1, fragments.values(),
 					not penn, revlabel, treeswithprod, fast=not quadratic)
 			else: counts = fragments.values()
 			filename="%s/%s_%s" % (batch, os.path.basename(argv[1]),
 				os.path.basename(a))
 			out = codecs.open(filename, "w", encoding=encoding)
-			printfragments(fragments, counts, nofreq, complete, out=out)
+			printfragments(fragments, counts, out=out)
 			logging.info("wrote to %s" % filename)
 		return
 	elif numproc == 1:
@@ -224,18 +243,22 @@ Output is sent to stdout; to save the results, redirect to a file.
 			fragments = completebitsets(trees1, sents1, revlabel, not penn)
 		elif quadratic:
 			fragments = extractfragments(trees1, sents1, 0, 0, labels, prods,
-				revlabel, trees2, sents2, approx=not exact,
+				revlabel, trees2, sents2, approx=not (exact or indices),
 				discontinuous=not penn, debug=debug)
 		else:
 			fragments = fastextractfragments(trees1, sents1, 0, 0, labels,
-				prods, revlabel, trees2, sents2, approx=not exact,
+				prods, revlabel, trees2, sents2, approx=not (exact or indices),
 				discontinuous=not penn, debug=debug)
 		if exact or complete:
 			logging.info("getting exact counts")
-			counts = exactcounts(trees1, sents1, fragments.values(), not penn,
-				revlabel, treeswithprod, fast=not quadratic)
+			counts = exactcounts(trees1, sents1, fragments.values(),
+				not penn, revlabel, treeswithprod, fast=not quadratic)
+		elif indices:
+			logging.info("getting indices of occurrence")
+			counts = exactindices(trees1, sents1, fragments.values(),
+				not penn, revlabel, treeswithprod, fast=not quadratic)
 		else: counts = fragments.values()
-		printfragments(fragments, counts, nofreq, complete)
+		printfragments(fragments, counts)
 		return
 
 	if complete:
@@ -252,19 +275,21 @@ Output is sent to stdout; to save the results, redirect to a file.
 		pool = Pool(processes=numproc, initializer=initworker,
 			initargs=(argv[1], argv[2] if len(argv) == 3 else None,
 				not quadratic, limit, encoding))
+		# FIXME: detect corpus reading errors here (e.g. wrong encoding)
 		dowork = pool.imap_unordered(worker, range(0, numtrees, chunk))
 		for n, a in enumerate(dowork):
-			if exact: fragments.update(a)
+			if exact or indices: fragments.update(a)
 			else:
 				for frag, x in a.items(): fragments[frag] += x
-	if exact or complete:
-		logging.info("dividing work for exact counts")
+	if exact or complete or indices:
+		task = "indices" if indices else "counts"
+		logging.info("dividing work for exact %s" % task)
 		countchunk = 20000
 		f = fragments.values()
 		work = [f[n:n+countchunk] for n in range(0, len(f), countchunk)]
 		work = [(n, len(work), a) for n, a in enumerate(work)]
 		dowork = pool.imap(exactcountworker, work)
-		logging.info("getting exact counts")
+		logging.info("getting exact %s" % task)
 		counts = []
 		for a in dowork: counts.extend(a)
 	else: counts = fragments.values()
@@ -272,12 +297,12 @@ Output is sent to stdout; to save the results, redirect to a file.
 	pool.terminate()
 	pool.join()
 	del dowork, pool
-	printfragments(fragments, counts, nofreq, complete)
+	printfragments(fragments, counts)
 
-def printfragments(fragments, counts, nofreq, complete, out=stdout):
+def printfragments(fragments, counts, out=stdout):
 	penn = params['penn']
 	logging.info("number of fragments: %d" % len(fragments))
-	if nofreq:
+	if params['nofreq']:
 		for a, freq in zip(fragments.keys(), counts):
 			out.write("%s\n" % (a if penn
 				else ("%s\t%s" % (a[0],
@@ -285,8 +310,17 @@ def printfragments(fragments, counts, nofreq, complete, out=stdout):
 		return
 	# with complete fragments or comparing two treebanks,
 	# a frequency of 1 is normal; otherwise, raise alarm.
-	if complete or len(argv) == 3: threshold = 1
+	if params['complete'] or len(argv) == 3: threshold = 1
 	else: threshold = 0
+	if params['indices']:
+		for a, theindices in zip(fragments.keys(), counts):
+			if len(theindices) > threshold:
+				out.write("%s\t%r\n" % (a if penn else ("%s\t%s" % (a[0],
+					" ".join("%s" % x if x else "" for x in a[1]))),
+					list(sorted(theindices))))
+			elif threshold:
+				logging.warning("invalid fragment--frequency=1: %s" % a)
+		return
 	for a, freq in zip(fragments.keys(), counts):
 		if freq > threshold:
 			out.write("%s\t%d\n" % (a if penn else ("%s\t%s" % (a[0],
