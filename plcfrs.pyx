@@ -34,7 +34,34 @@ def parse(sent, Grammar grammar, tags=None, start=None, bint exhaustive=False,
 			bint neverblockmarkovized=False, bint neverblockdiscontinuous=False,
 			int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
-	produce a chart, either exhaustive or up until the viterbi parse
+	produce a chart, either exhaustive or up until the viterbi parse.
+	Other parameters:
+		- start: integer corresponding to the start tag in the grammar,
+			e.g., grammar.toid['ROOT']
+		- exhaustive: don't stop at viterbi parser, return a full chart
+		- estimate: use context-summary estimates (heuristics) to order agenda.
+			if estimates are not consistent, it is no longer guaranteed that
+			the optimal parse will be found. experimental.
+		- prunelist: a whitelist of allowed ChartItems. Anything else is not
+			added to the agenda.
+		- prunetoid: the mapping of string labels to integers, e.g. 'NP' -> 3
+		- coarsechart: the chart from the coarse phase. used when coarse stage
+			was continuous while fine stage is discontinuous.
+		- splitprune: coarse stage used a split-PCFG where discontinuous node
+			appear as multiple CFG nodes. Every discontinuous node will result
+			in multiple lookups into coarsechart to see whether it should be
+			allowed on the agenda.
+		- markorigin: in combination with splitprune, coarse labels include an
+			integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
+			map to the discontinuous node NP_2
+		- neverblockmarkovized: do not block nodes introduced by binarization;
+			useful if coarse and fine stages employ different kinds of
+			markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
+		- neverblockdiscontinuous: same as above but for discontinuous
+			nodes X_n where X is a label and n is a fanout > 1.
+		- beamwidth: specify the maximum number of items that will be explored
+			for each particular span, on a first-come-first-served basis.
+			setting to 0 disables this feature. experimental.
 	"""
 	cdef dict lexical = grammar.lexical
 	cdef dict toid = grammar.toid
@@ -64,7 +91,7 @@ def parse(sent, Grammar grammar, tags=None, start=None, bint exhaustive=False,
 	if start == None: start = toid["ROOT"]
 	assert len(sent) < (sizeof(vec) * 8)
 	if splitprune: assert prunetoid is not None
-	else: coarsechart = None
+	else: coarsechart = None # ??? FIXME
 	vec = (1ULL << len(sent)) - 1
 	goal = new_ChartItem(start, vec)
 
