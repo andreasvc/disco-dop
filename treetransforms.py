@@ -764,7 +764,7 @@ def testsplit():
 	print "correct", correct, "=", 100*correct/total, "%"
 	print "wrong", wrong, "=", 100*wrong/total, "%"
 
-def main():
+def test():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	# do doctests, but don't be pedantic about whitespace (I suspect it is the
 	# militant anti-tab faction who are behind this obnoxious default)
@@ -775,5 +775,109 @@ def main():
 	if attempted and not fail:
 		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	else: print "doctest attempted %r failed %r" % (attempted, fail)
-__all__ = ["binarize", "unbinarize", "collapse_unary", "splitdiscnodes", "mergediscnodes", "optimalbinarize"]
+
+def main():
+	import sys, codecs
+	from getopt import gnu_getopt, GetoptError
+	from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
+			BracketCorpusReader, export
+	flags = ("headdriven", "markorigin", "removepunct", "movepunct")
+	options = ('factor=', 'markorigin=', 'inputfmt=', 'outputfmt=',
+			'inputenc=', 'outputenc=')
+	try:
+		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
+		action, input, output = args
+	except Exception, err:
+		print "error:", err
+		usage()
+		exit(2)
+	else: opts = dict(opts)
+
+	# read input
+	if opts.get('--inputfmt', 'export') == 'export':
+		Reader = NegraCorpusReader
+	elif opts.get('--inputfmt') == 'discbracket':
+		Reader = DiscBracketCorpusReader
+	elif opts.get('--inputfmt') == 'bracket':
+		Reader = BracketCorpusReader
+	else: raise ValueError("unrecognized format: %r" % opts.get('--inputfmt'))
+
+	corpus = Reader(".", input,
+			encoding=opts.get('--inputenc', 'utf-8'),
+			headorder="--headdriven" in opts,
+			headfinal=True, headreverse=False,
+			removepunct="--removepunct" in opts,
+			movepunct="--movepunct" in opts)
+	trees = corpus.parsed_sents()
+
+	# apply transformation
+	if action == "binarize":
+		factor = opts.get('--factor', 'right')
+		h = int(opts['-h']) if 'h' in opts else None
+		v = int(opts.get('-v', 0))
+		for a in trees: binarize(a, factor, h, v)
+	elif action == "unbinarize":
+		for a in trees: unbinarize(a, factor, h, v)
+	elif action == "optimalbinarize":
+		sep="|"; headdriven = "--headdriven" in opts
+		h = int(opts['-h']) if 'h' in opts else None
+		v = int(opts.get('-v', 0))
+		trees = [optimalbinarize(a, sep, headdriven, h, v) for a in trees]
+	elif action == "introducepreterminals":
+		map(introducepreterminals, trees)
+	elif action == "splitdisc":
+		for a in trees: splitdiscnodes(a, '--markorigin' in opts)
+	elif action == "mergedisc":
+		for a in trees: mergediscnodes(a)
+	elif action in ("none"): pass
+	else: raise ValueError("unrecognized action: %r" % action)
+
+	# write output
+	if opts.get('--outputfmt', 'export') == 'export':
+		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')).write(
+			"\n".join(export(tree, sent, n) for n, tree, sent
+				in zip(count(), trees, corpus.tagged_sents())) + "\n")
+	elif opts.get('--outputfmt') == 'discbracket':
+		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
+			).writelines("%s\t%s\n" % (tree.pprint(margin=9999), " ".join(sent))
+			for tree, sent in zip(trees, corpus.sents()))
+	elif opts.get('--outputfmt') == 'bracket':
+		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')).write(
+			"\n".join(Tree.parse(tree.pprint(margin=9999),
+				parse_leaf=lambda l: sent[int(l)]).pprint(margin=9999)
+			for tree, sent in zip(trees, corpus.sents())) + "\n")
+	else: raise ValueError("unrecognized format: %r" % opts.get('--outputfmt'))
+
+def usage():
+	import sys
+	print """Treebank binarization and conversion
+Note: some of these transformations are specific to discontinuous treebanks,
+	specifically the Negra/Tiger treebanks.
+usage: %s [options] action input output
+where input and output are treebanks, and action is one of:
+	binarize [-h x] [-v x] [--factor left|right]
+	optimalbinarize [-h x] [-v x]
+	unbinarize
+	introducepreterminals
+	splitdisc [--markorigin]
+	mergedisc
+	none
+
+options may consist of (* marks default option):
+	--inputfmt [*export|discbracket|bracket]
+	--outputfmt [*export|discbracket|bracket]
+	--inputenc [*UTF-8|ISO-8859-1|...]
+	--outputenc [*UTF-8|ISO-8859-1|...]
+	--factor [left|*right] whether binarization factors to the left or right
+	-h n	horizontal markovization. default: infinite
+	-v n	vertical markovization. default: 1
+	--headdriven	turn on marking of heads; also affects binarization.
+		requires the file "negra.headrules".
+	--removepunct	remove any punctuation.
+	--movepunct	re-attach punctuation to nearest constituent to minimize
+		discontinuity.""" % sys.argv[0]
+
+__all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
+	"splitdiscnodes", "mergediscnodes", "optimalbinarize"]
+
 if __name__ == '__main__': main()

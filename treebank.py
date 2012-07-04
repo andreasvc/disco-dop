@@ -121,6 +121,32 @@ class NegraCorpusReader():
 		return [(a[WORD], a[TAG].replace("$(", "$[")) for a in s
 				if a[WORD][0] != "#"]
 
+def export(tree, sent, n):
+	""" Convert a tree with indices as leafs and a sentence with the
+	corresponding non-terminals to a single string in Negra's export format.
+	sent should be a sequence of (word, tag) tuples.
+	Lemmas, functions, and morphology information will be empty. """
+	result = []
+	if n: result.append("#BOS %d" % n)
+	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1]
+		for a in tree.treepositions('leaves')]
+	phrasalnodes = list(sorted([a for a in tree.treepositions()
+		if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
+	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
+	for i, word in enumerate(sent):
+		idx = wordids[i]
+		result.append("\t".join((word[0],
+				tree[idx[:-1]].node.replace("$[","$("),
+				"--", "--",
+				str(500+phrasalnodes.index(idx[:-2]) if len(idx) > 2 else 0))))
+	for idx in phrasalnodes:
+		result.append("\t".join(("#%d" % (500 + phrasalnodes.index(idx)),
+				tree[idx].node,
+				"--", "--",
+				str(500+phrasalnodes.index(idx[:-1]) if len(idx) > 1 else 0))))
+	if n: result.append("#EOS %d" % n)
+	return "\n".join(result) #.encode("utf-8")
+
 class DiscBracketCorpusReader():
 	""" A corpus reader where the phrase-structure is represented by a tree in
 	bracket notation, where the leaves are indices pointing to words in a
@@ -193,29 +219,69 @@ class DiscBracketCorpusReader():
 		if self.functiontags: addfunctions(result)
 		return result
 
-def export(tree, sent, n):
-	""" Convert a tree with indices as leafs and a sentence with the
-	corresponding non-terminals to a single string in Negra's export format."""
-	result = []
-	if n: result.append("#BOS %d" % n)
-	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1]
-		for a in tree.treepositions('leaves')]
-	phrasalnodes = list(sorted([a for a in tree.treepositions()
-		if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
-	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
-	for i, word in enumerate(sent):
-		idx = wordids[i]
-		result.append("\t".join((word[0],
-				tree[idx[:-1]].node.replace("$[","$("),
-				"--", "--",
-				str(500+phrasalnodes.index(idx[:-2]) if len(idx) > 2 else 0))))
-	for idx in phrasalnodes:
-		result.append("\t".join(("#%d" % (500 + phrasalnodes.index(idx)),
-				tree[idx].node,
-				"--", "--",
-				str(500+phrasalnodes.index(idx[:-1]) if len(idx) > 1 else 0))))
-	if n: result.append("#EOS %d" % n)
-	return "\n".join(result) #.encode("utf-8")
+class BracketCorpusReader():
+	""" A standard corpus reader where the phrase-structure is represented by a
+	tree in bracket notation; e.g.:
+	(S (NP John) (VP (VB is) (JJ rich)) (. .))
+	"""
+	def __init__(self, root, fileids, encoding="utf-8", headorder=False,
+	headfinal=False, headreverse=False, unfold=False, functiontags=False,
+	removepunct=False, movepunct=False):
+		""" headorder: whether to order constituents according to heads
+			headfinal: whether to put the head in final or in frontal position
+			headreverse: the head is made final/frontal by reversing everything
+			before or after the head. When true, the side on which the head is
+				will be the reversed side.
+			unfold: whether to apply corpus transformations
+			functiontags: whether to add function tags to node labels e.g. NP+OA
+			removepunct: eliminate punctuation
+			movepunct: move punctuation to appropriate constituents"""
+		self.headorder = headorder; self.reverse = headreverse
+		self.headfinal = headfinal;	self.unfold = unfold
+		self.functiontags = functiontags;
+		self.removepunct = removepunct; self.movepunct = movepunct
+		self.headrules = readheadrules() if headorder else {}
+		self._encoding = encoding
+		self._filenames = glob(path.join(root, fileids))
+		self._parsed_sents_cache = None
+	def sents(self, fileids=None):
+		return [Tree(line).leaves()
+			for filename in self._filenames
+				for line in codecs.open(filename, encoding=self._encoding)]
+	def tagged_sents(self, fileids=None):
+		# for each line, zip its words & tags together in a list.
+		return [Tree(line).pos()
+			for filename in self._filenames
+				for line in codecs.open(filename, encoding=self._encoding)]
+	def parsed_sents(self, fileids=None):
+		if not self._parsed_sents_cache:
+			self._parsed_sents_cache = map(self._parse, self.blocks())
+		return self._parsed_sents_cache
+	def blocks(self):
+		""" Return a list of strings containing the raw representation of
+		trees in the treebank, with any transformations applied."""
+		return [line for filename in self._filenames
+			for line in codecs.open(filename, encoding=self._encoding)]
+	def _parse(self, s):
+		c = count()
+		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=lambda _: c.next())
+		# roughly order constituents by order in sentence
+		for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
+			a.sort(key=lambda x: x.leaves())
+		if self.removepunct: doremovepunct(result)
+		elif self.movepunct:
+			punctraise(result)
+			balancedpunctraise(result, self._word(s))
+			# restore order
+			for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
+				a.sort(key=lambda x: x.leaves())
+		if self.unfold: result = unfold(result)
+		if self.headorder:
+			map(lambda x: headfinder(x, self.headrules), result.subtrees())
+			map(lambda x: headorder(x, self.headfinal, self.reverse),
+													result.subtrees())
+		if self.functiontags: addfunctions(result)
+		return result
 
 def addfunctions(tree):
 	# FIXME: pos tags probably shouldn't get a function tag.
@@ -227,11 +293,7 @@ def readheadrules():
 	headrules = {}
 	# this file containing head assignment rules is part of rparse,
 	# under src/de/tuebingen/rparse/treebank/constituent/negra/
-	try: rulefile = open("negra.headrules")
-	except IOError:
-		logging.warning("negra head rules not found! no head annotation will be performed.")
-		return headrules
-	for a in rulefile:
+	for a in open("negra.headrules"):
 		if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
 			label, lr, heads = a.upper().split(None, 2)
 			headrules.setdefault(label, []).append((lr, heads.split()))
@@ -647,8 +709,9 @@ def main():
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 
-	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=True)
-	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=True, unfold=True)
+	headorder = False
+	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=headorder)
+	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=headorder, unfold=True)
 	#n = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False)
 	#nn = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, unfold=True)
 	print "\nunfolded"
@@ -687,4 +750,5 @@ def main():
 	print "nk - mo", " ".join(nk - mo)
 	print "mo - nk", " ".join(mo - nk)
 	for x in nk & mo: print x, "as nk", fnk[x], "as mo", fmo[x]
+
 if __name__ == '__main__': main()
