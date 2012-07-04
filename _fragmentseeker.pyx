@@ -430,19 +430,41 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 
-cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
+cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
+	bint discontinuous):
+	""" Utility function to generate bitsets corresponding to whole trees
+	in the input."""
+	cdef dict result = {}
+	cdef array pyarray
+	cdef int n, m
+	cdef UChar SLOTS = BITNSLOTS(trees.maxnodes)
+	for n in range(trees.len):
+		pyarray = clone(ulongarray, SLOTS + 2, False)
+		ulongset(pyarray._L, 0, SLOTS)
+		for m in range(trees.data[n].len / BITSIZE): pyarray._L[m] = ~0UL
+		pyarray._L[trees.data[n].len / BITSIZE] = (
+				1 << trees.data[n].len % BITSIZE) - 1
+		pyarray._L[SLOTS] = trees.data[n].root
+		pyarray._L[SLOTS + 1] = n
+		frag = strtree(trees.data[n].nodes, revlabel,
+			None if discontinuous else sents[n], trees.data[n].root)
+		if discontinuous: frag = getsent(frag, sents[n])
+		result[frag] = pyarray
+	return result
+
+cpdef array exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
-	""" Given a set of fragments from trees1 as bitsets, produce an exact
-	count of those fragments in trees1. The reason we need to do this
-	separately is that a fragment can occur in other trees where it was not a
-	maximal fragment. """
+	""" Given a set of fragments from trees2 as bitsets, produce an exact
+	count of those fragments in trees1 (which may be equal to trees2).
+	The reason we need to do this separately is that a fragment can occur in
+	other trees where it was not a maximal fragment. """
 	cdef:
 		int n, m, i, x, f
 		UInt count
 		UChar SLOTS = 0
 		array pyarray, counts = clone(uintarray, len(bitsets), False)
 		ULong *bitset = NULL
-		NodeArray a, b, *ctrees1 = trees1.data
+		NodeArray a, b, *ctrees1 = trees1.data, *ctrees2 = trees2.data
 		set candidates
 	if SLOTS == 0:
 		pyarray = bitsets[0]
@@ -453,7 +475,7 @@ cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
 		bitset = pyarray._L
 		i = bitset[SLOTS]
 		n = bitset[SLOTS + 1]
-		a = ctrees1[n]
+		a = ctrees2[n] # the fragment
 		#create copy of set!
 		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
 		for x in range(a.len):
@@ -470,10 +492,10 @@ cpdef array exactcounts(Ctrees trees1, list sents1, list bitsets,
 		counts[f] = count
 	return counts
 
-cpdef list exactindices(Ctrees trees1, list sents1, list bitsets,
+cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
-	""" Given a set of fragments from trees1 as bitsets, produce the exact
-	set of trees with those fragments in trees1.
+	""" Given a set of fragments from trees2 as bitsets, produce the exact set
+	of trees with those fragments in trees1 (which may be equal to trees2).
 	The reason we need to do this separately is that a fragment can occur in
 	other trees where it was not a maximal fragment.
 	Returns a list with a set of indices for each bitset in the input; the
@@ -490,7 +512,7 @@ cpdef list exactindices(Ctrees trees1, list sents1, list bitsets,
 		UChar SLOTS = 0
 		array pyarray
 		ULong *bitset = NULL
-		NodeArray a, b, *ctrees1 = trees1.data
+		NodeArray a, b, *ctrees1 = trees1.data, *ctrees2 = trees2.data
 		set candidates, matches
 		list indices = [set() for _ in bitsets]
 	if SLOTS == 0:
@@ -502,7 +524,7 @@ cpdef list exactindices(Ctrees trees1, list sents1, list bitsets,
 		bitset = pyarray._L
 		i = bitset[SLOTS]
 		n = bitset[SLOTS + 1]
-		a = ctrees1[n]
+		a = ctrees2[n] # the fragment
 		#create copy of set!
 		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
 		for x in range(a.len):
@@ -552,25 +574,6 @@ cpdef list indextrees(Ctrees trees, dict prods):
 		for m in range(a.len):
 			if a.nodes[m].prod >= 0: (<set>result[a.nodes[m].prod]).add(n)
 			elif a.nodes[m].prod == -1: break
-	return result
-
-cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
-	bint discontinuous):
-	""" Utility function to generate bitsets corresponding to whole trees
-	in the input."""
-	cdef dict result = {}
-	cdef array pyarray
-	cdef int n
-	cdef UChar SLOTS = BITNSLOTS(trees.maxnodes)
-	for n in range(trees.len):
-		pyarray = clone(ulongarray, SLOTS + 2, False)
-		ulongset(pyarray._L, ~0UL, SLOTS)
-		pyarray._L[SLOTS] = trees.data[n].root
-		pyarray._L[SLOTS + 1] = n
-		frag = strtree(trees.data[n].nodes, revlabel,
-			None if discontinuous else sents[n], trees.data[n].root)
-		if discontinuous: frag = getsent(frag, sents[n])
-		result[frag] = pyarray
 	return result
 
 frontierortermre = re.compile("[^)]\)")
