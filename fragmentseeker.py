@@ -29,6 +29,7 @@ Input is in Penn treebank format (S-expressions), one tree per line.
 Output contains lines of the form "tree<TAB>frequency".
 Frequencies always refer to the first treebank.
 Output is sent to stdout; to save the results, redirect to a file.
+--complete    find complete matches of fragments from treebank2 in treebank1.
 --exact       find exact frequencies
 --indices     report sets of indices instead of frequencies.
 --disc        work with discontinuous trees; input is in Negra export format.
@@ -46,8 +47,6 @@ Output is sent to stdout; to save the results, redirect to a file.
 --nofreq      do not report frequencies.
 --debug       extra debug information, ignored when numproc > 1.
 --quiet       disable all log messages.""" % argv[0]
-# disabled (broken):
-# --complete    find complete matches of fragments from treebank1 in treebank2.
 
 
 def readtreebanks(treebank1, treebank2=None, discontinuous=False,
@@ -118,8 +117,8 @@ def exactcountworker((n, m, fragments)):
 				fast=not params['quadratic'])
 		logging.info("exact indices %d of %d" % (n+1, m))
 	elif params['complete']:
-		results = exactcounts(trees1, trees2, fragments, params['disc'],
-				params['revlabel'], params['treeswithprod'],
+		results = exactcounts(trees1, params['trees2'], fragments,
+				params['disc'], params['revlabel'], params['treeswithprod'],
 				fast=not params['quadratic'])
 	else:
 		results = exactcounts(trees1, trees1, fragments, params['disc'],
@@ -130,7 +129,7 @@ def exactcountworker((n, m, fragments)):
 
 def main(argv):
 	global params
-	flags = ("exact", "indices", "nofreq", # "complete",
+	flags = ("exact", "indices", "nofreq", "complete",
 			"disc", "quiet", "debug", "quadratic")
 	options = ("numproc=", "numtrees=", "encoding=", "batch=")
 	try: opts, args = gnu_getopt(argv[1:], "", flags + options)
@@ -145,12 +144,6 @@ def main(argv):
 	numtrees = int(opts.get("--numtrees", 0))
 	encoding = opts.get("--encoding", "UTF-8")
 	batch = opts.get("--batch")
-
-	#argparser = argparse.ArgumentParser(description="Foo.")
-	#argparser.add_argument("treebank1")
-	#parser.add_argument("--verbose", help="increase output verbosity", action="store_true")
-	#parser.add_argument("--quiet", help="decrease output verbosity", action="store_true")
-	#args = argparser.parse_args()
 
 	if len(args) < 1: print "missing treebank argument"
 	if batch is None and len(args) not in (1, 2):
@@ -200,8 +193,7 @@ def main(argv):
 				params['disc'], limit, encoding))
 			trees2 = params['trees2']; sents2 = params['sents2']
 			labels = params['labels']; prods = params['prods']
-			if params['complete']: pass
-			elif params['quadratic']:
+			if params['quadratic']:
 				fragments = extractfragments(trees1, sents1, 0, 0, labels,
 					prods, params['revlabel'], trees2, sents2,
 					discontinuous=params['disc'], debug=params['debug'],
@@ -238,8 +230,6 @@ def main(argv):
 			#					        needle
 			fragments = completebitsets(trees2, sents2, params['revlabel'],
 					params['disc'])
-			for a,b in fragments.items():
-				print a, bin(b[0]), len(bin(b[0])) - 2, b[1], b[2]
 		elif params['quadratic']:
 			fragments = extractfragments(trees1, sents1, 0, 0, labels, prods,
 				params['revlabel'], trees2, sents2,

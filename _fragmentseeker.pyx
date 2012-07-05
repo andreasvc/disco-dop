@@ -441,9 +441,9 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 	for n in range(trees.len):
 		pyarray = clone(ulongarray, SLOTS + 2, False)
 		ulongset(pyarray._L, 0, SLOTS)
-		for m in range(trees.data[n].len / BITSIZE): pyarray._L[m] = ~0UL
-		pyarray._L[trees.data[n].len / BITSIZE] = (
-				1 << trees.data[n].len % BITSIZE) - 1
+		for m in range(trees.data[n].len):
+			if trees.data[n].nodes[m].prod != -1:
+				SETBIT(pyarray._L, m)
 		pyarray._L[SLOTS] = trees.data[n].root
 		pyarray._L[SLOTS + 1] = n
 		frag = strtree(trees.data[n].nodes, revlabel,
@@ -452,7 +452,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 		result[frag] = pyarray
 	return result
 
-cpdef array exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
+cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees2 as bitsets, produce an exact
 	count of those fragments in trees1 (which may be equal to trees2).
@@ -479,7 +479,7 @@ cpdef array exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		#create copy of set!
 		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
 		for x in range(a.len):
-			if TESTBIT(bitset, x):
+			if TESTBIT(bitset, x): # and a.nodes[x].prod != -1:
 				candidates &= <set>(treeswithprod[a.nodes[x].prod])
 
 		count = 0
