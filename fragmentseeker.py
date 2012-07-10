@@ -361,15 +361,15 @@ def getfragments(trees, sents):
 	dowork = pool.imap_unordered(worker, range(0, numtrees, chunk))
 	for n, a in enumerate(dowork):
 		fragments.update(a)
-		logging.info("dividing work for exact counts")
-		countchunk = 20000
-		f = fragments.values()
-		tmp = [f[n:n+countchunk] for n in range(0, len(f), countchunk)]
-		work = [(n, len(tmp), a) for n, a in enumerate(tmp)]
-		dowork = pool.imap(exactcountworker, work)
-		logging.info("getting exact counts")
-		counts = []
-		for a in dowork: counts.extend(a)
+	logging.info("dividing work for exact counts")
+	countchunk = 20000
+	f = fragments.values()
+	tmp = [f[n:n+countchunk] for n in range(0, len(f), countchunk)]
+	work = [(n, len(tmp), a) for n, a in enumerate(tmp)]
+	dowork = pool.imap(exactcountworker, work)
+	logging.info("getting exact counts")
+	counts = []
+	for a in dowork: counts.extend(a)
 
 	pool.terminate()
 	pool.join()
