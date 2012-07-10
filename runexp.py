@@ -8,7 +8,7 @@ from nltk import Tree
 from treebank import NegraCorpusReader, fold, export
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg,\
 	rem_marks, read_bitpar_grammar, grammarinfo, baseline,\
-	write_srcg_grammar
+	write_srcg_grammar, doubledop
 from containers import Grammar
 from eval import bracketings, printbrackets, precision, recall, f_measure
 from treetransforms import binarize, unbinarize, optimalbinarize,\
@@ -27,6 +27,7 @@ def main(
 	splitpcfg = False,
 	srcg = True,
 	dop = True,
+	usedoubledop = False,	# when False, use DOP reduction instead
 	corpusdir="..",
 	corpusfile="negra-corpus.export",
 	encoding="iso-8859-1",
@@ -145,6 +146,7 @@ def main(
 
 	#cycledetection()
 	pcfggrammar = []; srcggrammar = []; dopgrammar = []; secondarymodel = []
+	backtransform = None
 	if splitpcfg:
 		splittrees = [splitdiscnodes(a.copy(True), markorigin) for a in trees]
 		logging.info("splitted discontinuous nodes")
@@ -184,12 +186,14 @@ def main(
 			# hack to have srcg instead of dop grammar as fine stage
 			dopgrammar = induce_srcg(trees, sents)
 			logging.info("induced SRCG based on %d sentences" % len(trees))
+		elif usedoubledop:
+			assert estimator not in ("ewe", "sl-dop", "sl-dop-simple", "shortest")
+			dopgrammar, backtransform = doubledop(list(trees), list(sents),
+					stroutput=True, debug=False)
 		else:
 			dopgrammar = dop_srcg_rules(list(trees), list(sents),
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
 				shortestderiv=False, arity_marks=arity_marks)
-			#dopgrammar = dop_srcg_rules(list(trees), list(sents), normalize=(estimator in ("ewe", "sl-dop")),
-			#				shortestderiv=False, arity_marks=arity_marks)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
 		dopgrammar1 = Grammar(dopgrammar)
 		if estimator != "srcg":
@@ -227,7 +231,7 @@ def main(
 			prune, splitk, k, sldop_n, useestimates, outside, "ROOT", True,
 			removeparentannotation, splitprune, mergesplitnodes, markorigin,
 			neverblockmarkovized, neverblockdiscontinuous, resultdir,
-			usecfgparse)
+			usecfgparse, backtransform)
 	logging.info("time elapsed during parsing: %g s" % (time.clock() - begin))
 	doeval(*results)
 
@@ -238,8 +242,8 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			top='ROOT',	tags=True, removeparentannotation=False,
 			splitprune=False, mergesplitnodes=False, markorigin=False,
 			neverblockmarkovized=False, neverblockdiscontinuous=False,
-			resultdir="results", usecfgparse=False, category=None, sentinit=0,
-			doph=999):
+			resultdir="results", usecfgparse=False, backtransform=None,
+			category=None, sentinit=0, doph=999):
 	presults = []; sresults = []; dresults = []
 	gold = []; gsent = []
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
@@ -428,6 +432,9 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				# old method, estimate shortest derivation directly from number
 				# of addressed nodes
 				mpp = sldop_simple(chart, start, dopgrammar, m, sldop_n)
+			elif backtransform is not None:
+				mpp = marginalize(chart, start, dopgrammar.tolabel, n=m,
+					sample=sample, both=both, backtransform=backtransform).items()
 			else: #dop1, ewe
 				mpp = marginalize(chart, start, dopgrammar.tolabel,
 									n=m, sample=sample, both=both).items()

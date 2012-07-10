@@ -1,31 +1,31 @@
 #parameters. parameters. PARAMETERS!!
-splitpcfg = True,
-srcg = True,
-dop = False,
+splitpcfg=True,
+srcg=True,
+dop=False,
 corpusdir=".",
 corpusfile="sample2.export",
 encoding="iso-8859-1",
 movepunct=True,
 removepunct=False,
-unfolded = False,
-maxlen = 100,  # max number of words for sentences in test corpus
-trainmaxlen = 100, # max number of words for sentences in train corpus
-train = 2, # length of training corpus
-maxsent = 1, # number of sentences to parse
+unfolded=False,
+maxlen=100,  # max number of words for sentences in test corpus
+trainmaxlen=100, # max number of words for sentences in train corpus
+train=2, # length of training corpus
+maxsent=1, # number of sentences to parse
 skip=0,	# don't skip sentences between train & test set
-bintype = "binarize", # choices: binarize, nltk, optimal, optimalhead
-factor = "right",
-revmarkov = True,
-v = 1,
-h = 2,
-arity_marks = True,
-arity_marks_before_bin = False,
-tailmarker = "",
+bintype="nltk", # choices: binarize, nltk, optimal, optimalhead
+factor="right",
+revmarkov=True,
+v=1,
+h=2,
+arity_marks=True,
+arity_marks_before_bin=False,
+tailmarker="",
 sample=False, both=False,
-m = 10000,		#number of derivations to sample/enumerate
-estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
+m=10000,		#number of derivations to sample/enumerate
+estimator="ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 sldop_n=7,
-k = 50,		#number of coarse derivations to prune with; k=0 => filter only
+k=50,		#number of coarse derivations to prune with; k=0 => filter only
 prune=True,	#whether to use srcg chart to prune parsing of dop
 getestimates=False, #compute & store estimates
 useestimates=False,  #load & use estimates

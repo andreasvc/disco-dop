@@ -6,13 +6,66 @@ from bisect import bisect_right
 from collections import defaultdict
 from operator import itemgetter
 from nltk import Tree
-from grammar import induce_srcg
+from grammar import induce_srcg, recoverfromfragments_str, canonicalize
 from plcfrs import parse
+from treetransforms import unbinarize
 import cython
 assert cython.compiled
 
 infinity = float('infinity')
 removeids = re.compile("@[0-9]+")
+
+def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
+	shortest=False, secondarymodel=None, mpd=False, backtransform=None):
+	""" approximate MPP or MPD by summing over n random/best derivations from
+	chart, return a dictionary mapping parsetrees to probabilities """
+	parsetrees = {}
+	derivations = set()
+	if sample or both:
+		derivations = getsamples(chart, start, n, tolabel)
+	if not sample or both:
+		derivations.update(lazykbest(chart, start, n, tolabel))
+	if shortest:
+		maxprob = min(derivations, key=itemgetter(1))[1]
+		derivations = [(a,b) for a, b in derivations if b == maxprob]
+	if backtransform is not None:
+		derivations = list(derivations)
+		for n, (deriv, prob) in enumerate(derivations):
+			tree = Tree.parse(deriv, parse_leaf=int)
+			unbinarize(tree, childChar="}")
+			derivations[n] = (recoverfromfragments_str(canonicalize(tree),
+				backtransform), prob)
+	for deriv, prob in derivations:
+		# simple way of adding probabilities (too easy):
+		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
+		# restore linear precedence (disabled, seems to make no difference):
+		#parsetree = Tree(removeids.sub("", deriv))
+		#for a in list(parsetree.subtrees())[::-1]:
+		#	a.sort(key=lambda x: x.leaves())
+		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
+		if shortest:
+			# calculate the derivation probability in a different model.
+			# because we don't keep track of which rules have been used,
+			# read off the rules from the derivation ...
+			tree = Tree.parse(removeids.sub("", deriv), parse_leaf=int)
+			sent = sorted(tree.leaves())
+			rules = induce_srcg([tree], [sent], arity_marks=False)
+			prob = -fsum([secondarymodel[r] for r, w in rules
+											if r[0][1] != 'Epsilon'])
+
+		tree = removeids.sub("@" if mpd else "", deriv)
+		if tree in parsetrees: parsetrees[tree].append(-prob)
+		else: parsetrees[tree] = [-prob]
+	# Adding probabilities in log space
+	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
+	for parsetree in parsetrees:
+		maxprob = max(parsetrees[parsetree])
+		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
+									for prob in parsetrees[parsetree]]))]))
+	logging.debug("(%d derivations, %d parsetrees)" % (
+		len(derivations), len(parsetrees)))
+	return parsetrees
 
 def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	sample=False, both=False):
@@ -157,52 +210,6 @@ def getviterbi(chart, start, tolabel):
 		return "(%s %s)" % (tolabel[start.label],
 					getviterbi(chart, edge.left, tolabel) if edge.left.label
 									else str(edge.left.vec))
-
-def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
-	shortest=False, secondarymodel=None, mpd=False):
-	""" approximate MPP or MPD by summing over n random/best derivations from
-	chart, return a dictionary mapping parsetrees to probabilities """
-	parsetrees = {}
-	m = 0
-	derivations = set()
-	if sample or both:
-		derivations = getsamples(chart, start, n, tolabel)
-	if not sample or both:
-		derivations.update(lazykbest(chart, start, n, tolabel))
-	if shortest:
-		maxprob = min(derivations, key=itemgetter(1))[1]
-		derivations = [(a,b) for a, b in derivations if b == maxprob]
-	for deriv, prob in derivations:
-		m += 1
-		# simple way of adding probabilities (too easy):
-		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
-		# restore linear precedence (disabled, seems to make no difference):
-		#parsetree = Tree(removeids.sub("", deriv))
-		#for a in list(parsetree.subtrees())[::-1]:
-		#	a.sort(key=lambda x: x.leaves())
-		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
-		if shortest:
-			# calculate the derivation probability in a different model.
-			# because we don't keep track of which rules have been used,
-			# read off the rules from the derivation ...
-			tree = Tree.parse(removeids.sub("", deriv), parse_leaf=int)
-			sent = sorted(tree.leaves())
-			rules = induce_srcg([tree], [sent], arity_marks=False)
-			prob = -fsum([secondarymodel[r] for r, w in rules
-											if r[0][1] != 'Epsilon'])
-
-		tree = removeids.sub("@" if mpd else "", deriv)
-		if tree in parsetrees: parsetrees[tree].append(-prob)
-		else: parsetrees[tree] = [-prob]
-	# Adding probabilities in log space
-	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
-	for parsetree in parsetrees:
-		maxprob = max(parsetrees[parsetree])
-		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
-									for prob in parsetrees[parsetree]]))]))
-	logging.debug("(%d derivations, %d parsetrees)" % (m, len(parsetrees)))
-	return parsetrees
 
 def main():
 	from nltk import Tree

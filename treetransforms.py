@@ -836,7 +836,7 @@ def main():
 	if opts.get('--outputfmt', 'export') == 'export':
 		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')).write(
 			"\n".join(export(tree, sent, n) for n, tree, sent
-				in zip(count(), trees, corpus.tagged_sents())) + "\n")
+				in zip(count(1), trees, corpus.tagged_sents())) + "\n")
 	elif opts.get('--outputfmt') == 'discbracket':
 		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines("%s\t%s\n" % (tree.pprint(margin=9999), " ".join(sent))

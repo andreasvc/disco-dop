@@ -16,7 +16,7 @@ cdef getviterbi(chart, ChartItem start, tolabel)
 	maxprob=cython.double,
 	m=cython.int,
 	edge=Edge)
-cpdef marginalize(chart, start, tolabel, n=*, sample=*, both=*, shortest=*, secondarymodel=*, mpd=*)
+cpdef marginalize(chart, start, tolabel, n=*, sample=*, both=*, shortest=*, secondarymodel=*, mpd=*, backtransform=*)
 
 @cython.locals(
 	edge=Edge,

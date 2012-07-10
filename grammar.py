@@ -268,6 +268,138 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	for a, b in grammar.iteritems(): grammar[a] = log(b / ntfd.get(a[0][0], b))
 	return grammar.items(), backtransform
 
+frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)+\))")
+def flattenstr((tree, sent)):
+	""" This version works on strings instead of Tree objects
+	>>> sent = [None, ',', None, '.']
+	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
+	>>> print flattenstr((tree, sent))
+	(ROOT (S_2 0 2) (#$,/, 1) (#$./. 3))
+	"""
+	assert isinstance(tree, basestring), (tree, sent)
+	def repl(x):
+		n = x.group(3) # index w/leading space
+		nn = int(n)
+		if sent[nn] is None:
+			return x.group(0)	# (tag index)
+		# (#tag_word index)
+		return "(#%s/%s%s)" % (x.group(2), sent[nn], n)
+	# give terminals unique POS tags
+	newtree = frontierorterm.sub(repl, tree)
+	if newtree.count(" ") == 1: return newtree
+	# remove internal nodes
+	return "%s %s)" % (newtree[:newtree.index(" ")],
+		" ".join(x[0] for x in frontierorterm.findall(newtree)))
+
+def flatten((tree, sent)):
+	"""
+	>>> sent = [None, ',', None, '.']
+	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
+	>>> print flatten((tree, sent))
+	(ROOT (S_2 0 2) (#$,/, 1) (#$./. 3))
+	>>> tree = ImmutableTree.parse("(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP 3)))", parse_leaf=int)
+	>>> sent = ['The', None, 'saw', None]
+	>>> print flatten((tree, sent))
+	(S (#DT/The 0) (NN 1) (#VBP/saw 2) (NP 3))
+	"""
+	assert isinstance(tree, Tree), (tree,sent)
+	if all(isinstance(a, Tree) for a in tree):
+		children = [(b if isinstance(b, Tree) and sent[b[0]] is None
+			else ImmutableTree("#%s/%s" % (b.node, sent[b[0]]), b[:]))
+			for b in preterminals_and_frontier_nodes(tree, sent)]
+	else:
+		children = tree[:]
+	return ImmutableTree(tree.node, children)
+
+def preterminals_and_frontier_nodes(tree, sent):
+	"""Terminals must be integers; frontier nodes must have indices as well.
+	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
+	>>> sent = [None, ',', None, '.']
+	>>> print list(preterminals_and_frontier_nodes(tree, sent))
+	[ImmutableTree('S_2', [0, 2]), ImmutableTree('$,', [1]), ImmutableTree('$.', [3])]
+	"""
+	if any(isinstance(child, Tree) for child in tree):
+		return [b for a in [preterminals_and_frontier_nodes(child, sent)
+					for child in tree] for b in a]
+	return [tree]
+
+def recoverfromfragments(derivation, backtransform):
+	""" Reconstruct a DOP derivation from a double DOP derivation with
+	flattened fragments. Returns expanded derivation as Tree object. """
+	def renumber(tree):
+		leaves = tree.leaves()
+		leafmap = dict(zip(sorted(leaves), count()))
+		for a in tree.treepositions('leaves'):
+			tree[a] = leafmap[tree[a]]
+		return tree.freeze(), dict(zip(count(), leaves))
+	def top_production(tree):
+		return Tree(tree.node,
+			[Tree(a.node, rangeheads(sorted(a.leaves())))
+					if isinstance(a, Tree) else a for a in tree])
+	# handle ambiguous fragments with nodes of the form "#n"
+	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
+		and derivation[0].node.startswith("#")):
+		derivation = derivation[0]
+	prod = top_production(derivation)
+	rprod, leafmap = renumber(prod)
+	result = Tree.convert(backtransform.get(rprod, prod))
+	# revert renumbering
+	for a in result.treepositions('leaves'):
+		result[a] = leafmap.get(result[a], result[a])
+	# recurse on non-terminals of derivation
+	for r, t in zip(result.subtrees(lambda t: t.height() == 2), derivation):
+		if isinstance(r, Tree):
+			if isinstance(t, Tree):
+				new = recoverfromfragments(t, backtransform)
+				#assert r.node == new.node and len(new)
+				r[:] = new[:]
+			#else: print "?", r, t
+			# terminals should already match.
+			#assert r == t
+	return result
+
+termsre = re.compile(r" ([0-9]+)\b")
+def recoverfromfragments_str(derivation, backtransform):
+	""" Reconstruct a DOP derivation from a DOP derivation with
+	flattened fragments. "derivation" should be a Tree object, while
+	backtransform should contain strings as keys and values.
+	Returns expanded derivation as a string. """
+	def repl(d):
+		def f(x): return d.get(int(x.group(1)), x.group(1))
+		return f
+	def renumber(tree):
+		leaves = map(int, termsre.findall(tree))
+		leafmap = dict(zip(sorted(leaves), count()))
+		newtree = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], tree)
+		return newtree, dict(zip(count(), leaves))
+	def topproduction(tree):
+		""" return string with root node of tree with all its children turned
+		into frontier nodes """
+		if not isinstance(tree[0], Tree):
+			return tree.pprint(margin=999)
+		return "(%s %s)" % (tree.node, " ".join("(%s %d)" % (a.node,
+			min(a.leaves())) for a in tree))
+	# remove disambiguation markers #n
+	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
+		and derivation[0].node[0] == "#"):
+		derivation = derivation[0]
+	prod = topproduction(derivation)
+	rprod, leafmap = renumber(prod)
+	#print rprod in backtransform, rprod
+	result = backtransform.get(rprod, rprod)
+	# revert renumbering
+	result = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], result)
+	# recursively expand all substitution sites
+	for t in derivation:
+		if isinstance(t, Tree):
+			if t.node.startswith("#") and not isinstance(t[0], Tree):
+				continue
+			frontier = "(%s %d)" % (t.node, min(t.leaves()))
+			assert frontier in result, (frontier, result)
+			replacement = recoverfromfragments_str(t, backtransform)
+			result = result.replace(frontier, replacement, 1)
+	return result
+
 def postorder(tree, f=None):
 	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
 	but Tree.subtrees() does a preorder traversal. """
@@ -393,148 +525,6 @@ def freeze(l):
 
 def unfreeze(l):
 	return list(map(unfreeze, l)) if isinstance(l, (list, tuple)) else l
-
-frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)+\))")
-def flattenstr((tree, sent)):
-	""" This version works on strings instead of Tree objects
-	>>> sent = [None, ',', None, '.']
-	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> print flattenstr((tree, sent))
-	(ROOT (S_2 0 2) (#$,_, 1) (#$._. 3))
-	"""
-	assert isinstance(tree, basestring), (tree, sent)
-	def repl(x):
-		n = x.group(3) # index w/leading space
-		nn = int(n)
-		if sent[nn] is None:
-			return x.group(0)	# (tag index)
-		# (#tag_word index)
-		return "(#%s_%s%s)" % (x.group(2), sent[nn], n)
-	# give terminals unique POS tags
-	newtree = frontierorterm.sub(repl, tree)
-	if newtree.count(" ") == 1: return newtree
-	# remove internal nodes
-	return "%s %s)" % (newtree[:newtree.index(" ")],
-		" ".join(x[0] for x in frontierorterm.findall(newtree)))
-
-def flatten((tree, sent)):
-	"""
-	>>> sent = [None, ',', None, '.']
-	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
-	>>> print flatten((tree, sent))
-	(ROOT (S_2 0 2) (#$,_, 1) (#$._. 3))
-	>>> tree = ImmutableTree.parse("(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP 3)))", parse_leaf=int)
-	>>> sent = ['The', None, 'saw', None]
-	>>> print flatten((tree, sent))
-	(S (#DT_The 0) (NN 1) (#VBP_saw 2) (NP 3))
-	"""
-	assert isinstance(tree, Tree), (tree,sent)
-	if all(isinstance(a, Tree) for a in tree):
-		children = [(b if isinstance(b, Tree) and sent[b[0]] is None
-			else ImmutableTree("#%s_%s" % (b.node, sent[b[0]]), b[:]))
-			for b in preterminals_and_frontier_nodes(tree, sent)]
-	else:
-		children = tree[:]
-	return ImmutableTree(tree.node, children)
-
-def preterminals_and_frontier_nodes(tree, sent):
-	"""Terminals must be integers; frontier nodes must have indices as well.
-	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
-	>>> sent = [None, ',', None, '.']
-	>>> print list(preterminals_and_frontier_nodes(tree, sent))
-	[ImmutableTree('S_2', [0, 2]), ImmutableTree('$,', [1]), ImmutableTree('$.', [3])]
-	"""
-	if any(isinstance(child, Tree) for child in tree):
-		return [b for a in [preterminals_and_frontier_nodes(child, sent)
-					for child in tree] for b in a]
-	return [tree]
-
-def recoverfromfragments(derivation, backtransform):
-	""" Reconstruct a DOP derivation from a double DOP derivation with
-	flattened fragments. Returns expanded derivation as Tree object. """
-	def renumber(tree):
-		leaves = tree.leaves()
-		leafmap = dict(zip(sorted(leaves), count()))
-		for a in tree.treepositions('leaves'):
-			tree[a] = leafmap[tree[a]]
-		return tree.freeze(), dict(zip(count(), leaves))
-	def top_production(tree):
-		return Tree(tree.node,
-			[Tree(a.node, rangeheads(sorted(a.leaves())))
-					if isinstance(a, Tree) else a for a in tree])
-	prod = top_production(derivation)
-	rprod, leafmap = renumber(prod)
-	result = Tree.convert(backtransform.get(rprod, prod))
-	# revert renumbering
-	for a in result.treepositions('leaves'):
-		result[a] = leafmap.get(result[a], result[a])
-	# handle ambiguous fragments with nodes of the form "#n"
-	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
-		and derivation[0].node.startswith("#")):
-		#derivation = derivation[0]
-		prod = top_production(derivation[0])
-		rprod, leafmap = renumber(prod)
-		result = Tree.convert(backtransform.get(rprod, prod))
-	# recurse on non-terminals of derivation
-	for r, t in zip(result.subtrees(lambda t: t.height() == 2), derivation):
-		if isinstance(r, Tree):
-			if isinstance(t, Tree):
-				new = recoverfromfragments(t, backtransform)
-				#assert r.node == new.node and len(new)
-				r[:] = new[:]
-			#else: print "?", r, t
-			# terminals should already match.
-			#assert r == t
-	return result
-
-termsre = re.compile(r" ([0-9]+)\b")
-def recoverfromfragments_str(derivation, backtransform):
-	""" Reconstruct a DOP derivation from a DOP derivation with
-	flattened fragments. "derivation" should be a Tree object, while
-	backtransform should contain strings as keys and values.
-	Returns expanded derivation as a string. """
-	def repl(d):
-		def f(x): return d.get(int(x.group(1)), x.group(1))
-		return f
-	def renumber(tree):
-		leaves = map(int, termsre.findall(tree))
-		leafmap = dict(zip(sorted(leaves), count()))
-		newtree = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], tree)
-		return newtree, dict(zip(count(), leaves))
-	def topproduction(tree):
-		""" return string with root node of tree with all its children turned
-		into frontier nodes """
-		if not isinstance(tree[0], Tree):
-			return tree.pprint(margin=999)
-		return "(%s %s)" % (tree.node, " ".join(
-			#a.pprint(margin=999)
-			#"(%s %d)" % (a.node[1:a.node.index("_")], a[0])
-			#if a.node.startswith("#") and "_" in a.node else
-			"(%s %d)" % (a.node, min(a.leaves())) for a in tree))
-	prod = topproduction(derivation)
-	rprod, leafmap = renumber(prod)
-	#print rprod in backtransform, rprod
-	result = backtransform.get(rprod, rprod)
-	# revert renumbering
-	result = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], result)
-	# remove disambiguation markers #n
-	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
-		and derivation[0].node[0] == "#"):
-		derivation = derivation[0]
-	# recursively expand all substitution sites
-	for t in derivation:
-		if isinstance(t, Tree):
-			if t.node.startswith("#") and not isinstance(t[0], Tree):
-				continue
-				#frontier = t.pprint()
-				#replacement = "(%s %d)" % (t.node[1:t.node.index("_")], t[0])
-				#if frontier in result: print "yes", frontier
-			else:
-				frontier = "(%s %d)" % (t.node, min(t.leaves()))
-				replacement = recoverfromfragments_str(t, backtransform)
-			assert frontier in result, (frontier, result)
-			result = result.replace(frontier, replacement, 1)
-	return result
 
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
