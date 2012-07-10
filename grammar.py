@@ -296,7 +296,8 @@ def flattenstr((tree, sent)): #(tree, sent)):
 		if sent[nn] is None:
 			return x.group(0)	# (tag index)
 		# (#tag_word index)
-		return "(#%s/%s%s)" % (x.group(2), sent[nn], n)
+		return "(#%s/%s%s)" % (x.group(2),
+			sent[nn].replace('(','[').replace(')',']'), n)
 	# give terminals unique POS tags
 	newtree = frontierorterm.sub(repl, tree)
 	if newtree.count(" ") == 1: return newtree
@@ -318,7 +319,8 @@ def flatten((tree, sent)):
 	assert isinstance(tree, Tree), (tree,sent)
 	if all(isinstance(a, Tree) for a in tree):
 		children = [(b if isinstance(b, Tree) and sent[b[0]] is None
-			else ImmutableTree("#%s/%s" % (b.node, sent[b[0]]), b[:]))
+			else ImmutableTree("#%s/%s" % (b.node,
+				sent[b[0]].replace('(','[').replace(')',']')), b[:]))
 			for b in preterminals_and_frontier_nodes(tree, sent)]
 	else:
 		children = tree[:]
@@ -398,7 +400,6 @@ def recoverfromfragments_str(derivation, backtransform):
 		derivation = derivation[0]
 	prod = topproduction(derivation)
 	rprod, leafmap = renumber(prod)
-	#print rprod in backtransform, rprod
 	result = backtransform.get(rprod, rprod)
 	# revert renumbering
 	result = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], result)
