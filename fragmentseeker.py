@@ -336,8 +336,9 @@ def getfragments(trees, sents):
 	""" Get recurring fragments with exact counts in a single treebank,
 	using all available CPUs."""
 	from treebank import export
+	import tempfile
 	# write trees to temporary file
-	treebank = os.tmpnam()
+	_, treebank = tempfile.mkstemp()
 	tmp = codecs.open(treebank, "w", encoding='utf-8')
 	tmp.writelines(export(*x) for x in zip(trees, sents, count(1)))
 	tmp.close()

@@ -12,7 +12,7 @@ cdef class Grammar:
 		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 		# and assign them unique IDs
 		nonterminals = list(enumerate(["Epsilon", "ROOT"]
-			+ sorted(set(str(nt) for (rule, _), _ in grammar for nt in rule)
+			+ sorted(set(nt for (rule, _), _ in grammar for nt in rule)
 				- set(["Epsilon", "ROOT"]))))
 		self.nonterminals = len(nonterminals)
 		self.numrules = sum([1 for (r, _), _ in grammar if r[1] != 'Epsilon'])
@@ -107,8 +107,9 @@ cdef class Grammar:
 		return "rules:\n%s\nlexicon:\n%s\nlabels=%r" % (rules, lexical,
 			self.toid)
 	def __dealloc__(self):
-		free(self.unary[0]); self.unary[0] = NULL
-		free(self.unary); self.unary = NULL
+		pass #FIXME
+		#free(self.unary[0]); self.unary[0] = NULL
+		#free(self.unary); self.unary = NULL
 
 def myitemget(idx, x):
 	""" Given a grammar rule 'x', return the non-terminal in position 'idx'. """

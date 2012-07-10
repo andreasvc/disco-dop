@@ -774,9 +774,10 @@ def grammarinfo(grammar, dump=None):
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
 				for (rule, yf), w in grammar if rule[1] != "Epsilon")
 	result += "max vars: %d in %s\n" % (n, printrule(r, yf, w))
+	fanoutre = re.compile("_([0-9]+)(?:@[0-9]+)?$")
 	def fanout(sym):
-		if "_" not in sym: return 1
-		return int(sym.split("_")[1].split("@")[0])
+		result = fanoutre.search()
+		return 1 if result is None else int(result.group(1))
 	pc = [sum(map(fanout, rule)) for (rule, yf), w in grammar]
 	n, r, yf, w = max((sum(map(fanout, rule)), rule, yf, w)
 							for (rule, yf), w in grammar)
