@@ -1,7 +1,7 @@
-from nltk import Tree
 from math import exp
-from collections import Set, Sequence, Iterable
+from collections import Set, Iterable
 from functools import partial
+from nltk import Tree
 
 cdef class Grammar:
 	def __init__(self, grammar):
@@ -74,36 +74,42 @@ cdef class Grammar:
 		#We could be strict about separating POS tags and phrasal categories,
 		#but Negra contains at least one tag (--) used for both.
 		sums = {}
-		for lhs in range(self.nonterminals):
-			if self.bylhs[lhs][0].lhs == lhs:
-				sums[lhs] = sum([exp(-self.bylhs[lhs][n].prob)
-					for n in range(self.numrules)
-					if self.bylhs[lhs][n].lhs == lhs])
+		for lhs in range(1, self.nonterminals):
+			for n in range(self.numrules):
+				if self.bylhs[lhs][n].lhs != lhs: break
+				sums[lhs] = sums.get(lhs, 0.0) + exp(-self.bylhs[lhs][n].prob)
 		for terminals in self.lexical.itervalues():
 			for term in terminals:
 				sums[term.lhs] = sums.get(term.lhs, 0.0) + exp(-term.prob)
 		for lhs, mass in sums.iteritems():
 			if abs(mass - 1.0) > epsilon:
 				# fixme: use logging here?
+				print "rules with %s:\n%s" % (
+					self.tolabel[lhs], self.rulerepr(lhs))
 				print "Does not sum to 1:",
 				print self.tolabel[lhs], mass
 				return False
 		print "All left hand sides sum to 1"
 		return True
+	def rulerepr(self, lhs):
+		result = []
+		for n in range(self.numrules):
+			if self.bylhs[lhs][n].lhs != lhs: break
+			result.append("%.2f %s => %s%s (%s)" % (
+				exp(-self.bylhs[lhs][n].prob),
+				self.tolabel[lhs],
+				self.tolabel[self.bylhs[lhs][n].rhs1],
+				" %s" % self.tolabel[self.bylhs[lhs][n].rhs2]
+					if self.bylhs[lhs][n].rhs2 else "",
+				yfrepr(self.bylhs[lhs][n])))
+		return "\n".join(result)
 	def __repr__(self):
-		rules = "\n".join("%.2f %s => %s%s (%s)" % (
-			exp(-self.bylhs[0][n].prob),
-			self.tolabel[self.bylhs[0][n].lhs],
-			self.tolabel[self.bylhs[0][n].rhs1],
-			" %s" % self.tolabel[self.bylhs[0][n].rhs2]
-				if self.bylhs[0][n].rhs2 else "",
-			yfrepr(self.bylhs[0][n]))
-			for n in range(self.numrules)
-			if self.bylhs[0][n].lhs < self.nonterminals)
-		lexical = "\n".join(["%.2f %s => Epsilon (%s)" % (
+		rules = "\n".join(filter(None,
+			[self.rulerepr(lhs) for lhs in range(1, self.nonterminals)]))
+		lexical = "\n".join(["%.2f %s => %s" % (
 			exp(-lr.prob), self.tolabel[lr.lhs], lr.word)
-				for lrules in self.lexical.values()
-					for lr in lrules])
+				for word in sorted(self.lexical)
+					for lr in self.lexical[word]])
 		return "rules:\n%s\nlexicon:\n%s\nlabels=%r" % (rules, lexical,
 			self.toid)
 	def __dealloc__(self):

@@ -43,12 +43,12 @@ cdef class Grammar:
 cdef struct Rule:
 	double prob # 8 bytes
 	UInt args # 4 bytes => 32 max vars per rule
-	UInt lengths # same
+	UInt lengths # 4 bytes => same
 	UInt lhs # 4 bytes
 	UInt rhs1 # 4 bytes
 	UInt rhs2 # 4 bytes
 	UChar fanout # 1 byte
-	# total: 29 bytes.
+	# total: 29 bytes (32 bytes w/padding).
 
 @cython.final
 cdef class LexicalRule:

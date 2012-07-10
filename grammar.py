@@ -250,8 +250,8 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	if debug:
 		print "recurring fragments:"
 		for a, b in zip(productions, fragments):
-			print "fragment: %s\nsent: %s\nprod: %s\n" % (
-					b[0], b[1], a)
+			print "fragment: %s\nprod:     %s\nfreq: %2d  sent: %s\n" % (
+					b[0], a, fragments[b], b[1])
 		print "ambiguous fragments:"
 		for a, b in newprods:
 			print "frag: %s\nsent: %r\n" % (a, b)
@@ -265,21 +265,20 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 		if backtransform.get(a) is not None
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
-				fsent, arity_marks=True, side_effect=False)),
-			chain((b, ), repeat(1))))
+				fsent, arity_marks=True, side_effect=False)), repeat(b)))
 	# ambiguous fragments
 	grammar.update(rule for a, b in newprods
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
 				b, arity_marks=a in backtransform, side_effect=False)),
-			chain((fragments.get((backtransform.get(a), b), 1),), repeat(1))))
+			repeat(fragments.get((backtransform.get(a), b), 1))))
 	# unseen srcg rules
 	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
 	# relative frequences as probabilities
 	ntfd = defaultdict(float)
 	for a, b in grammar.iteritems(): ntfd[a[0][0]] += b
-	for a, b in grammar.iteritems(): grammar[a] = log(b / ntfd.get(a[0][0], b))
-	return grammar.items(), backtransform
+	grammar = [(a, log(b/ntfd[a[0][0]])) for a, b in grammar.iteritems()]
+	return grammar, backtransform
 
 frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)+\))")
 def flattenstr((tree, sent)): #(tree, sent)):
@@ -298,9 +297,9 @@ def flattenstr((tree, sent)): #(tree, sent)):
 		# (#tag_word index)
 		return "(#%s/%s%s)" % (x.group(2),
 			sent[nn].replace('(','[').replace(')',']'), n)
+	if tree.count(" ") == 1: return tree
 	# give terminals unique POS tags
 	newtree = frontierorterm.sub(repl, tree)
-	if newtree.count(" ") == 1: return newtree
 	# remove internal nodes
 	return "%s %s)" % (newtree[:newtree.index(" ")],
 		" ".join(x[0] for x in frontierorterm.findall(newtree)))
@@ -824,7 +823,7 @@ def main():
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
-	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
+	stdout = codecs.getwriter('utf8')(sys.stdout)
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 		headorder=False, headfinal=True, headreverse=False)
 	#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True,
@@ -861,31 +860,30 @@ def main():
 	print "print Grammar()"
 	print Grammar(induce_srcg([tree.copy(True)], [sent]))
 
-	corpus = BracketCorpusReader(".", "treebankExample.mrg")
+	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
 	do(sent, Grammar(dop_srcg_rules([tree,tree2], [sent,sent2])))
 	grammar = dop_srcg_rules([tree,tree2], [sent,sent2])
 	print 'dop reduction'
-	for (r, yf), w in sorted(grammar):
-		print printrule(r,yf,w)
 	grammar = Grammar(grammar)
+	print grammar
 	grammar.testgrammar()
 
 	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	sents = corpus.sents()[:100]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
-	stroutput = True; debug = True
-	grammar, backtransform = doubledop(trees, sents, stroutput=stroutput,
-		debug=debug)
+	stroutput = True; debug = False
+	grammarx, backtransform = doubledop(trees, sents,
+		stroutput=stroutput, debug=debug)
 	print '\ndouble dop grammar (stroutput=%r)' % stroutput
-	for (r, yf), w in sorted(grammar):
-		print printrule(r,yf,w)
+	grammar = Grammar(grammarx)
+	print unicode(grammar)
+	assert grammar.testgrammar() #DOP1 should sum to 1.
 	print "fragment rules:"
-	for x in set(a for a,b in grammar) - set(a for a,b in induce_srcg(trees, sents)):
+	for x in set(a for a,_ in grammarx) - set(a for a,_ in induce_srcg(trees, sents)):
 		print x
-	grammar = Grammar(grammar)
-	grammar.testgrammar()
 	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
-		print "sentence:", " ".join(sent)
+		print "sentence:",
+		for w in sent: stdout.write(' ' + w)
 		root = tree.node
 		chart, start = parse(sent, grammar, start=grammar.toid[root],
 			exhaustive=True)
