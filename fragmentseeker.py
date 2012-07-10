@@ -2,22 +2,22 @@
 Extracts recurring fragments from constituency treebanks.
 
 NB: there is a known bug in multiprocessing which makes it impossible to detect
-ctrl-c or other problems like segmentation faults in children which causes the
+ctrl-c or fatal errors like segmentation faults in children which causes the
 master program to wait forever for output from its children. Therefore if
-there appears to be a problem, re-run without multiprocessing (--numproc 1) to
+the program seems stuck, re-run without multiprocessing (--numproc 1) to
 see if there might be a bug. """
 
-import os, logging, codecs, argparse
-from multiprocessing import Pool, log_to_stderr, SUBDEBUG
+import os, sys, codecs, logging
+from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
-from sys import argv, stdout
+from itertools import count
 from getopt import gnu_getopt, GetoptError
 from _fragmentseeker import extractfragments, fastextractfragments,\
 	readtreebank, indextrees, exactcounts, exactindices, completebitsets
 
 # this fixes utf-8 output when piped through e.g. less
 # won't help if the locale is not actually utf-8, of course
-stdout = codecs.getwriter('utf8')(stdout)
+sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 params = {}
 
 def usage():
@@ -37,7 +37,7 @@ Output is sent to stdout; to save the results, redirect to a file.
               where "tree' has indices as leaves, referring to elements of
               "sentence", a space separated list of words.
 --numproc n   use n independent processes, to enable multi-core usage.
-              The default is not to use multiprocessing.
+              The default is not to use multiprocessing; use 0 to use all CPUs.
 --encoding x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
 --numtrees n  only read first n trees from treebank
 --batch dir   enable batch mode; any number of treebanks > 1 can be given;
@@ -46,7 +46,7 @@ Output is sent to stdout; to save the results, redirect to a file.
 --quadratic   use the slower, quadratic algorithm for finding fragments.
 --nofreq      do not report frequencies.
 --debug       extra debug information, ignored when numproc > 1.
---quiet       disable all log messages.""" % argv[0]
+--quiet       disable all messages.""" % sys.argv[0]
 
 
 def readtreebanks(treebank1, treebank2=None, discontinuous=False,
@@ -120,6 +120,7 @@ def exactcountworker((n, m, fragments)):
 		results = exactcounts(trees1, params['trees2'], fragments,
 				params['disc'], params['revlabel'], params['treeswithprod'],
 				fast=not params['quadratic'])
+		logging.info("complete fragments %d of %d" % (n+1, m))
 	else:
 		results = exactcounts(trees1, trees1, fragments, params['disc'],
 				params['revlabel'], params['treeswithprod'],
@@ -141,6 +142,7 @@ def main(argv):
 
 	for flag in flags: params[flag] = "--" + flag in opts
 	numproc = int(opts.get("--numproc", 1))
+	if numproc == 0: numproc = cpu_count()
 	numtrees = int(opts.get("--numtrees", 0))
 	encoding = opts.get("--encoding", "UTF-8")
 	batch = opts.get("--batch")
@@ -163,7 +165,7 @@ def main(argv):
 		logger = log_to_stderr()
 		logger.setLevel(SUBDEBUG)
 
-	logging.info("fragment seeker")
+	logging.info("Fast Fragment Seeker")
 
 	assert numproc
 	limit = numtrees
@@ -177,7 +179,7 @@ def main(argv):
 	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
 	if params['exact'] or params['indices']: fragments = {}
 	else: fragments = defaultdict(int)
-	params.update(chunk=chunk)
+	params['chunk'] = chunk
 	logging.info("parameters:\n%s" % "\n".join("    %s: %r" % kv
 		for kv in sorted(params.items())))
 	logging.info("\n".join("treebank%d: %s" % (n + 1, a)
@@ -301,7 +303,7 @@ def main(argv):
 	del dowork, pool
 	printfragments(fragments, counts)
 
-def printfragments(fragments, counts, out=stdout):
+def printfragments(fragments, counts, out=sys.stdout):
 	logging.info("number of fragments: %d" % len(fragments))
 	if params['nofreq']:
 		for a in fragments:
@@ -330,4 +332,49 @@ def printfragments(fragments, counts, out=stdout):
 				if params['disc'] else a, freq))
 		elif threshold: logging.warning("invalid fragment--frequency=1: %s" % a)
 
-if __name__ == '__main__': main(argv)
+def getfragments(trees, sents):
+	""" Get recurring fragments with exact counts in a single treebank,
+	using all available CPUs."""
+	from treebank import export
+	# write trees to temporary file
+	treebank = os.tmpnam()
+	tmp = codecs.open(treebank, "w", encoding='utf-8')
+	tmp.writelines(export(*x) for x in zip(trees, sents, count(1)))
+	tmp.close()
+	numproc = cpu_count()
+	numtrees = len(trees)
+	assert numtrees
+	mult = 3
+	chunk = numtrees / (mult*numproc)
+	if numtrees % (mult*numproc): chunk += 1
+	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
+	fragments = {}
+	params.update(chunk=chunk, disc=True, exact=True,
+		complete=False, indices=False, quadratic=False)
+	# start worker processes
+	pool = Pool(processes=numproc, initializer=initworker,
+		initargs=(treebank, None, numtrees, 'utf-8'))
+
+	logging.info("work division:\n%s" % "\n".join("    %s: %r" % kv
+		for kv in sorted(dict(
+		chunksize=chunk,numchunks=numchunks,mult=mult).items())))
+	dowork = pool.imap_unordered(worker, range(0, numtrees, chunk))
+	for n, a in enumerate(dowork):
+		fragments.update(a)
+		logging.info("dividing work for exact counts")
+		countchunk = 20000
+		f = fragments.values()
+		tmp = [f[n:n+countchunk] for n in range(0, len(f), countchunk)]
+		work = [(n, len(tmp), a) for n, a in enumerate(tmp)]
+		dowork = pool.imap(exactcountworker, work)
+		logging.info("getting exact counts")
+		counts = []
+		for a in dowork: counts.extend(a)
+
+	pool.terminate()
+	pool.join()
+	os.remove(treebank)
+	del dowork, pool
+	return dict(zip(fragments.keys(), counts))
+
+if __name__ == '__main__': main(sys.argv)

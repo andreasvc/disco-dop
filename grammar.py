@@ -29,7 +29,7 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 		"indices should be unique. indices: %r\ntree: %s" % (tree.leaves(), tree))
 	assert all(0 <= a < len(sent) for a in tree.leaves()), (
 		"all indices should point to a word in the sentence.\n"
-		"indices: %r\nsent:" % (tree.leaves(), sent))
+		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), tree.leaves(), sent))
 	for st in tree.subtrees():
 		if not st: raise ValueError(("Empty node. Frontier nodes should "
 			"designate which part(s) of the sentence they contribute to."))
@@ -195,7 +195,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	terminals, we replace their POS tags with a tag uniquely identifying that
 	terminal and tag: #&tag_word.
 	"""
-	from _fragmentseeker import extractfragments1
+	from fragmentseeker import getfragments
 	from treetransforms import minimalbinarization, complexityfanout, addbitsets
 	backtransform = {}
 	newprods = []
@@ -206,7 +206,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	srcg = FreqDist(rule for tree, sent in zip(trees, sents)
 			for rule in map(varstoindices, srcg_productions(tree, sent)))
 	# find recurring fragments in treebank
-	fragments = extractfragments1(trees, sents)
+	fragments = getfragments(trees, sents)
 	# fragments are given back as strings; we could work with trees as strings
 	# all the way, but to do binarization and rule extraction, NLTK Tree objects
 	# are better.
@@ -216,49 +216,62 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 		fragments = dict(((ImmutableTree.parse(a[0], parse_leaf=int), a[1]), b)
 			for a, b in fragments.items())
 		productions = map(flatten, fragments)
-	if debug:
-		print "recurring fragments:"
-		for a,b in zip(productions, fragments):
-			print "fragment: %s\nsent: %s\nprod: %s\n" % (
-					b[0], b[1], a)
 	rootnode = re.compile(r"^\([^ ]+\b")
 	# construct a mapping of productions to fragments
 	for prod, (frag, terminals) in zip(productions, fragments):
 		if prod == frag or (stroutput and prod.startswith("(#")): pass
 		elif prod in backtransform:
-			if backtransform[prod] is None:
+			if backtransform[prod] is not None:
+				label = ids.next()
 				if stroutput:
-					tmp = rootnode.sub(ids.next(), prod)
-					newprods.append(("(%s %s)" % (
-						rootnode.search(prod).group(), tmp), terminals))
+					tmp = rootnode.sub("("+label, prod)
+					newprods.append(("%s (%s 0))" % (
+						rootnode.search(prod).group(), label), (None,)))
 				else:
-					tmp = ImmutableTree(ids.next(), prod[:])
-					newprods.append((ImmutableTree(prod.node, [tmp]), terminals))
-				backtransform[tmp] = backtransform[prod, terminals]
+					tmp = ImmutableTree(label, prod[:])
+					newprods.append((ImmutableTree(prod.node,
+						[ImmutableTree(label, [0])]), (None,)))
+				newprods.append((tmp, terminals))
+				backtransform[tmp] = backtransform[prod]
 				backtransform[prod] = None
+			label = ids.next()
 			if stroutput:
-				tmp = ImmutableTree(ids.next(), prod[:])
-				newprods.append((ImmutableTree(prod.node, [tmp]), terminals))
+				tmp = rootnode.sub("("+label, prod)
+				newprods.append(("%s (%s 0))" % (
+					rootnode.search(prod).group(), label), (None,)))
 			else:
-				tmp = rootnode.sub(ids.next(), prod)
-				newprods.append(("(%s %s)" % (
-					rootnode.search(prod).group(), tmp), terminals))
-			backtransform[tmp] = backtransform[prod]
+				tmp = ImmutableTree(label, prod[:])
+				newprods.append((ImmutableTree(prod.node,
+					[ImmutableTree(label, [0])]), (None,)))
+			newprods.append((tmp, terminals))
+			backtransform[tmp] = frag
 		else:
 			backtransform[prod] = frag
+	if debug:
+		print "recurring fragments:"
+		for a, b in zip(productions, fragments):
+			print "fragment: %s\nsent: %s\nprod: %s\n" % (
+					b[0], b[1], a)
+		print "ambiguous fragments:"
+		for a, b in newprods:
+			print "frag: %s\nsent: %r\n" % (a, b)
+		print "backtransform: {"
+		for a,b in backtransform.items():
+			print a, ":\n\t", b
+		print "}"
 	# collect rules
 	grammar = dict(rule
 		for a, ((_, fsent), b) in zip(productions, fragments.iteritems())
 		if backtransform.get(a) is not None
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
-				fsent, arity_marks=True, side_effect=True)),
+				fsent, arity_marks=True, side_effect=False)),
 			chain((b, ), repeat(1))))
 	# ambiguous fragments
 	grammar.update(rule for a, b in newprods
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
-				b, arity_marks=a in backtransform, side_effect=True)),
+				b, arity_marks=a in backtransform, side_effect=False)),
 			chain((fragments.get((backtransform.get(a), b), 1),), repeat(1))))
 	# unseen srcg rules
 	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
@@ -269,7 +282,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	return grammar.items(), backtransform
 
 frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)+\))")
-def flattenstr((tree, sent)):
+def flattenstr((tree, sent)): #(tree, sent)):
 	""" This version works on strings instead of Tree objects
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
@@ -858,16 +871,12 @@ def main():
 	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	sents = corpus.sents()[:100]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
-	stroutput = True; debug=False
+	stroutput = True; debug = True
 	grammar, backtransform = doubledop(trees, sents, stroutput=stroutput,
 		debug=debug)
 	print '\ndouble dop grammar (stroutput=%r)' % stroutput
 	for (r, yf), w in sorted(grammar):
 		print printrule(r,yf,w)
-	print "backtransform: {"
-	for a,b in backtransform.items():
-		print a, ":\n\t", b
-	print "}"
 	print "fragment rules:"
 	for x in set(a for a,b in grammar) - set(a for a,b in induce_srcg(trees, sents)):
 		print x

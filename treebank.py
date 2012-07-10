@@ -49,9 +49,7 @@ class NegraCorpusReader():
 		""" Return a list of blocks from the treebank file,
 		with any transformations applied."""
 		return [export(*x) for x in zip(self.parsed_sents(),
-			self.tagged_sents(), repeat(None))]
-		return ['\n'.join('\t'.join(a) for a in block[1:-1]) + '\n'
-			for block in self._block_cache]
+				self.sents(), repeat(None))]
 	def _read_blocks(self):
 		def sixelements(a):
 			""" take a line and add dummy lemma if that field is not present """
@@ -124,7 +122,6 @@ class NegraCorpusReader():
 def export(tree, sent, n):
 	""" Convert a tree with indices as leafs and a sentence with the
 	corresponding non-terminals to a single string in Negra's export format.
-	sent should be a sequence of (word, tag) tuples.
 	Lemmas, functions, and morphology information will be empty. """
 	result = []
 	if n: result.append("#BOS %d" % n)
@@ -135,7 +132,7 @@ def export(tree, sent, n):
 	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
 	for i, word in enumerate(sent):
 		idx = wordids[i]
-		result.append("\t".join((word[0],
+		result.append("\t".join((word,
 				tree[idx[:-1]].node.replace("$[","$("),
 				"--", "--",
 				str(500+phrasalnodes.index(idx[:-2]) if len(idx) > 2 else 0))))
@@ -145,7 +142,7 @@ def export(tree, sent, n):
 				"--", "--",
 				str(500+phrasalnodes.index(idx[:-1]) if len(idx) > 1 else 0))))
 	if n: result.append("#EOS %d" % n)
-	return "\n".join(result) #.encode("utf-8")
+	return "\n".join(result) + '\n' #.encode("utf-8")
 
 class DiscBracketCorpusReader():
 	""" A corpus reader where the phrase-structure is represented by a tree in

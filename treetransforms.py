@@ -808,7 +808,7 @@ def main():
 			headfinal=True, headreverse=False,
 			removepunct="--removepunct" in opts,
 			movepunct="--movepunct" in opts)
-	trees = corpus.parsed_sents()
+	trees, sents = corpus.parsed_sents(), corpus.sents()
 
 	# apply transformation
 	if action == "binarize":
@@ -834,18 +834,17 @@ def main():
 
 	# write output
 	if opts.get('--outputfmt', 'export') == 'export':
-		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')).write(
-			"\n".join(export(tree, sent, n) for n, tree, sent
-				in zip(count(1), trees, corpus.tagged_sents())) + "\n")
+		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
+			).writelines(export(*x) for x in zip(trees, sents, counts(1)))
 	elif opts.get('--outputfmt') == 'discbracket':
 		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines("%s\t%s\n" % (tree.pprint(margin=9999), " ".join(sent))
-			for tree, sent in zip(trees, corpus.sents()))
+			for tree, sent in zip(trees, sents))
 	elif opts.get('--outputfmt') == 'bracket':
-		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')).write(
-			"\n".join(Tree.parse(tree.pprint(margin=9999),
+		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
+			).writelines("%s\n" % Tree.parse(tree.pprint(margin=9999),
 				parse_leaf=lambda l: sent[int(l)]).pprint(margin=9999)
-			for tree, sent in zip(trees, corpus.sents())) + "\n")
+			for tree, sent in zip(trees, sents))
 	else: raise ValueError("unrecognized format: %r" % opts.get('--outputfmt'))
 
 def usage():

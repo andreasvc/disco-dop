@@ -517,15 +517,15 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 
 	if splitpcfg:
 		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines("%s\n" % export(a,b,n + 1)
+			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b],n + 1)
 			for n,a,b in zip(count(sentinit), presults, gsent))
 	if srcg:
 		codecs.open("%s/%s.srcg" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines("%s\n" % export(a,b,n + 1)
+			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b],n + 1)
 			for n,a,b in zip(count(sentinit), sresults, gsent))
 	if dop:
 		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines("%s\n" % export(a, b, n + 1)
+			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b], n + 1)
 			for n,a,b in zip(count(sentinit), dresults, gsent))
 	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
 			"w", encoding='utf-8').write(''.join(
@@ -596,7 +596,8 @@ def cftiger():
 	for tree in trees:
 		for nn, a in enumerate(tree.treepositions('leaves')):
 			tree[a] = nn
-	blocks = [export(*a) for a in zip(trees, sents, count())]
+	blocks = [export(*a) for a in zip(trees,
+		([w for w,_ in s] for s in sents), count())]
 	test = trees, sents, blocks
 	doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
 		arity_marks_before_bin, m, grammar, dopgrammar, test, maxlen, maxsent,
