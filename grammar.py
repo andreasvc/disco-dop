@@ -775,7 +775,7 @@ def grammarinfo(grammar, dump=None):
 	result += "max vars: %d in %s\n" % (n, printrule(r, yf, w))
 	fanoutre = re.compile("_([0-9]+)(?:@[0-9]+)?$")
 	def fanout(sym):
-		result = fanoutre.search(fanout)
+		result = fanoutre.search(sym)
 		return 1 if result is None else int(result.group(1))
 	pc = [sum(map(fanout, rule)) for (rule, yf), w in grammar]
 	n, r, yf, w = max((sum(map(fanout, rule)), rule, yf, w)
