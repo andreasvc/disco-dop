@@ -161,6 +161,38 @@ def bitext():
 	do(compiled_scfg, ["0"] * 9,
 		u"John misses pizza | John manque a` la pizza".split())
 
+	# the following SCFG is taken from:
+	# http://cdec-decoder.org/index.php?title=SCFG_translation
+	# the grammar has been binarized and some new non-terminals had to be
+	# introduced because terminals cannot appear in binary rules.
+	lexicon = ("|", "ein", "ich", "Haus", "kleines", "grosses", "sah", "fand",
+		"small", "little", "big", "large", "house", "shell", "a", "I", "the",
+		"saw", "found")
+	another_scfg = Grammar([
+		((('ROOT','S', '_|'),  ((0,1,0),)), 0.0),
+		((('S', 'NP', 'VP'), ((0,1), (0,1))), 0.2),
+		((('DT', '_ein', '_a'), ((0,), (1,))), 0.5),
+		((('NP', '_ich', '_I'), ((0,), (1,),)), 0.6),
+		((('NP', 'DT', 'NP|<JJ-NN>'), ((0,1), (0,1))), 0.5),
+		((('NP|<JJ-NN>', 'JJ', 'NN_house'), ((0,1), (0,1))), 0.1),
+		((('NP|<JJ-NN>', 'JJ', 'NN_shell'), ((0,1), (0,1))), 1.3),
+		((('NN_house', '_Haus', '_house'), ((0,), (1,))), 0.0),
+		((('NN_shell', '_Haus', '_shell'), ((0,), (1,))), 0.0),
+		((('JJ', '_kleines', '_small'), ((0,), (1,))), 0.1),
+		((('JJ', '_kleines', '_little'), ((0,), (1,))), 0.9),
+		((('JJ', '_grosses', '_big'), ((0,), (1,))), 0.8),
+		((('JJ', '_grosses', '_large'), ((0,), (1,))), 0.2345),
+		((('VP', 'V', 'NP'), ((0,1), (0,1))), 0.1),
+		((('V', '_sah', '_saw'), ((0,), (1,))), 0.4),
+		((('V', '_fand', '_found'), ((0,), (1,))), 0.4)
+		] + [((('_%s' % word, 'Epsilon'), (word, ())), 0.0)
+			for word in lexicon])
+	print another_scfg
+	do(another_scfg, "ich sah ein kleines Haus | I saw a small house".split())
+	do(another_scfg, "ich sah ein kleines Haus | I saw a little house".split())
+	do(another_scfg, "ich sah ein kleines Haus | I saw a small shell".split())
+	do(another_scfg, "ich sah ein kleines Haus | I saw a little shell".split())
+
 def do(compiledgrammar, testsent, testtags=None):
 	chart, start = plcfrs.parse(testsent,
 		compiledgrammar,

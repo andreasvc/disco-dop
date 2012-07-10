@@ -3,7 +3,7 @@ fragments from large treebanks.
 Moschitti (2006): Making Tree Kernels practical for Natural Language
 Learning. """
 
-import re, codecs
+import re, codecs, sys
 from collections import defaultdict
 from itertools import count
 from array import array
@@ -153,7 +153,7 @@ cdef inline unicode strtree(Node *tree, list revlabel, list sent, int i):
 	""" produce string representation of (complete) tree. """
 	if tree[i].prod == -1:
 		if sent is None: return unicode(tree[i].label)
-		return "" if sent[tree[i].label] is None else sent[tree[i].label]
+		return u"" if sent[tree[i].label] is None else sent[tree[i].label]
 	if tree[i].left >= 0:
 		if tree[i].right >= 0:
 			return u"(%s %s %s)" % (revlabel[tree[i].label],
@@ -176,16 +176,21 @@ cdef inline unicode getsubtree(Node *tree, ULong *bitset, list revlabel,
 	elif tree[i].prod == -1:
 		return unicode(tree[i].label) if sent is None else sent[tree[i].label]
 	elif sent is None:
+		#hack: distinguish terminal from frontier node spans with signs
+		# (e.g., -2 for 1; subtract 1 because -0 is not represented)
 		return u"(%s %s)" % (revlabel[tree[i].label], yieldheads(tree, sent, i))
 	else: return u"(%s )" % (revlabel[tree[i].label])
 
 cdef inline unicode yieldheads(Node *tree, list sent, int i):
+	""" For discontinuous trees, return a string with first indices of the
+	components in the yield of a node; e.g., "0 2". """
 	y = getyield(tree, sent, i)
-	return " ".join([unicode(a) for a in sorted(y) if a - 1 not in y])
+	return " ".join([unicode(-a - 1) for a in sorted(y) if a - 1 not in y])
 
 cdef inline list getyield(Node *tree, list sent, int i):
+	""" Recursively collect indices of terminals under a node. """
 	if tree[i].prod == -1: return [tree[i].label]
-	elif tree[i].left < 0: return [] #??
+	elif tree[i].left < 0: return [] #FIXME?
 	elif tree[i].right < 0: return getyield(tree, sent, tree[i].left)
 	else: return (getyield(tree, sent, tree[i].left)
 		+ getyield(tree, sent, tree[i].right))
@@ -196,31 +201,30 @@ cdef inline list getyield(Node *tree, list sent, int i):
 #termsre = re.compile(r" ([0-9]+)(?=[ )])")
 # detect word boundary; less precise than  '[ )]',
 # but works with linear-time regex libs
-termsre = re.compile(r" ([0-9]+)\b")
+termsre = re.compile(r" (-?[0-9]+)\b")
 def repl(d):
-	def f(x): return d[int(x.groups()[0])]
+	def f(x): return d[int(x.group(1))]
 	return f
 
 def getsent(frag, list sent):
 	""" Select the words that occur in the fragment and renumber terminals
 	in fragment. Expects a tree as string.
-	>>> getsent("(S (NP 0) (VP 2))", ['The', 'man', 'walks'])
-	("(S (NP 0) (VP 2))", [None, 'walks'])
+	>>> getsent("(S (NP 2) (VP 4))", ['The', 'man', 'walks'])
+	("(S (NP 0) (VP 2))", ['The', None, 'walks'])
 	"""
 	cdef int x = 0, n, maxl
 	cdef list newsent = []
 	cdef dict leafmap = {}
-	leaves = set(int(x) for x in termsre.findall(frag))
+	leaves = set(int(a) for a in termsre.findall(frag))
 	if not leaves: return frag, ()
 	maxl = max(leaves)
-	for n in sorted(leaves):
+	for n in sorted(leaves, key=lambda y: (abs(y), y >= 0)):
 		leafmap[n] = " " + unicode(x)
-		newsent.append(sent[n])
-		x += 1
-		if n + 1 not in leaves and n != maxl:
-			leafmap[n+1] = " " + unicode(x)
+		if n < 0:
 			newsent.append(None)
-			x += 1
+			n -= n - 1
+		else: newsent.append(sent[n])
+		x += 1
 	frag = termsre.sub(repl(leafmap), frag)
 	return frag, tuple(newsent)
 
@@ -620,8 +624,11 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 	trees.alloc(numtrees, numnodes)
 	for m, line in enumerate(lines):
 		# create Tree object from string
-		try: tree = Tree(line)
-		except: print "malformed line:\n%s\nline %d" % (line, m); raise
+		try:
+			tree = Tree(line)
+		except:
+			print >> sys.stderr, "malformed line:\n%s\nline %d" % (line, m)
+			raise
 		sent = tree.leaves()
 		# every terminal should have its own preterminal
 		introducepreterminals(tree)
@@ -629,8 +636,7 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 		tmp[:] = [tree]
 		try: binarize(tmp)
 		except AttributeError:
-			import sys
-			print >> sys.stdout, "malformed tree:\n%s\nline %d" % (tree, m)
+			print >> sys.stderr, "malformed tree:\n%s\nline %d" % (tree, m)
 			raise
 		# convert tree to list
 		productions = tree.productions()
@@ -673,9 +679,15 @@ def extractfragments1(trees, sents):
 	labels = {}; getlabels(trees, labels)
 	prods = {}; getprods(trees, prods)
 	revlabel = sorted(labels, key=labels.get)
+	for tree in trees:
+		root = tree[0]
+		# reverse sort so that terminals end up last
+		tree.sort(key=lambda n: -prods.get(n.prod, -1))
+		for n, a in enumerate(tree): a.idx = n
+		tree[0].root = root.idx
 	treesx = Ctrees(trees, labels, prods)
 	# build actual fragments
-	fragments = extractfragments(treesx, sents, 0, 0, labels, prods,
+	fragments = fastextractfragments(treesx, sents, 0, 0, labels, prods,
 		revlabel, discontinuous=True)
 	return fragments
 

@@ -95,7 +95,8 @@ cdef class Grammar:
 			exp(-self.bylhs[0][n].prob),
 			self.tolabel[self.bylhs[0][n].lhs],
 			self.tolabel[self.bylhs[0][n].rhs1],
-			" %s" % self.tolabel[self.bylhs[0][n].rhs2] if self.bylhs[0][n].rhs2 else "",
+			" %s" % self.tolabel[self.bylhs[0][n].rhs2]
+				if self.bylhs[0][n].rhs2 else "",
 			yfrepr(self.bylhs[0][n]))
 			for n in range(self.numrules)
 			if self.bylhs[0][n].lhs < self.nonterminals)
@@ -139,8 +140,12 @@ cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
 		cur.lengths = cur.args = m = 0
 		for a in yf:
 			for b in a: #component:
-				if b == 1: cur.args += 1 << m
-				elif b != 0: raise ValueError("grammar must be binarized")
+				if b == 1:
+					cur.args += 1 << m
+					assert len(rule) == 3, ("mismatich between non-terminals "
+							"and yield function: %r\t%r" % (rule, yf))
+				elif b != 0:
+					raise ValueError("grammar must be binarized")
 				m += 1
 			cur.lengths |= 1 << (m - 1)
 		assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
@@ -311,7 +316,7 @@ cdef inline copynodes(tree, dict labels, dict prods, Node *result):
 	cdef int n
 	for n, a in enumerate(tree):
 		if isinstance(a, Tree):
-			assert 1 <= len(a) <= 2, "trees must be binarized:\n%s" % a
+			assert 1 <= len(a) <= 2, "trees must be non-empty and binarized:\n%s" % a
 			result[n].label = labels.get(a.node, -2)
 			if len(a.prod) == 1: result[n].prod = -2
 			else: result[n].prod = prods.get(a.prod, -2)

@@ -86,6 +86,6 @@ A separate tool is `fragmentseeker.py`, which finds recurring or common
 fragments in one or more treebanks. It can be used with discontinuous as well
 as Penn-style bracketed treebanks. Run without arguments for instructions.
 
-Two other scripts, `gen.py` and `bitext.py`, are preliminary experiments in
-LCFRS generation and bitext parsing with synchronous grammars respectively.
+`gen.py` is an experiment in LCFRS generation.
+`demos.py` contains examples of various formalisms encoded in LCFRS grammars.
 

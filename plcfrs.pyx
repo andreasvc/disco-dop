@@ -660,7 +660,7 @@ def pprint_chart(chart, sent, tolabel):
 	cdef ChartItem a
 	cdef Edge edge
 	print "chart:"
-	for a in sorted(chart, key=lambda a: bitcount(a.vec)):
+	for a in sorted(chart, key=lambda a: (bitcount(a.vec), a.vec)):
 		if not chart[a]: continue
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, sent))
 		for edge in chart[a]:
