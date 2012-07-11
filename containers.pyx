@@ -11,8 +11,9 @@ cdef class Grammar:
 		Can only represent ordered SRCG rules (monotone LCFRS). """
 		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 		# and assign them unique IDs
+		# convert them to ASCII strings.
 		nonterminals = list(enumerate(["Epsilon", "ROOT"]
-			+ sorted(set(nt for (rule, _), _ in grammar for nt in rule)
+			+ sorted(set(str(nt) for (rule, _), _ in grammar for nt in rule)
 				- set(["Epsilon", "ROOT"]))))
 		self.nonterminals = len(nonterminals)
 		self.numrules = sum([1 for (r, _), _ in grammar if r[1] != 'Epsilon'])

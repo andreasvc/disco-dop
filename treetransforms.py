@@ -706,7 +706,7 @@ def testminbin():
 	#corpus = NegraCorpusReader("..", "negra-corpus.export", encoding="iso-8859-1",
 	#	movepunct=True, headorder=True, headfinal=True, headreverse=False)
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-		movepunct=True, headorder=True, headfinal=True, headreverse=False)
+		movepunct=True, headorder=False, headfinal=True, headreverse=False)
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), corpus.parsed_sents()[:-2000], corpus.sents()):
 		#if len(tree.leaves()) <= 25: continue
@@ -850,8 +850,6 @@ def main():
 def usage():
 	import sys
 	print """Treebank binarization and conversion
-Note: some of these transformations are specific to discontinuous treebanks,
-	specifically the Negra/Tiger treebanks.
 usage: %s [options] action input output
 where input and output are treebanks, and action is one of:
 	binarize [-h x] [-v x] [--factor left|right]
@@ -874,7 +872,10 @@ options may consist of (* marks default option):
 		requires the file "negra.headrules".
 	--removepunct	remove any punctuation.
 	--movepunct	re-attach punctuation to nearest constituent to minimize
-		discontinuity.""" % sys.argv[0]
+		discontinuity.
+Note: some of these transformations are specific to discontinuous treebanks,
+	specifically the Negra/Tiger treebanks. In the output only POS & phrasal
+	labels are retained.""" % sys.argv[0]
 
 __all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
 	"splitdiscnodes", "mergediscnodes", "optimalbinarize"]

@@ -280,7 +280,13 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	grammar = [(a, log(b/ntfd[a[0][0]])) for a, b in grammar.iteritems()]
 	return grammar, backtransform
 
-frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)+\))")
+def quotelabel(label):
+	""" Escapes two things: parentheses and non-ascii characters."""
+	# this hack escapes non-ascii characters, so that phrasal labels
+	# can remain ascii-only.
+	return label.replace('(', '[').replace(')', ']').encode('unicode-escape')
+
+frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9])*\))")
 def flattenstr((tree, sent)): #(tree, sent)):
 	""" This version works on strings instead of Tree objects
 	>>> sent = [None, ',', None, '.']
@@ -294,15 +300,19 @@ def flattenstr((tree, sent)): #(tree, sent)):
 		nn = int(n)
 		if sent[nn] is None:
 			return x.group(0)	# (tag index)
-		# (#tag_word index)
-		return "(#%s/%s%s)" % (x.group(2),
-			sent[nn].replace('(','[').replace(')',']'), n)
+		tag = x.group(2)
+		word = sent[nn].replace('(','[').replace(')',']')
+		# this hack escapes non-ascii characters, so that phrasal labels
+		# remain ascii-only. These labels only need to be unique, anyway.
+		word = word.encode('ascii', 'xmlcharrefreplace')
+		return "(#%s/%s%s)" % (tag, quotelabel(word), n)
 	if tree.count(" ") == 1: return tree
 	# give terminals unique POS tags
 	newtree = frontierorterm.sub(repl, tree)
 	# remove internal nodes
 	return "%s %s)" % (newtree[:newtree.index(" ")],
-		" ".join(x[0] for x in frontierorterm.findall(newtree)))
+		" ".join(x[0] for x in sorted(frontierorterm.findall(newtree),
+			key=lambda y: int(y[2]))))
 
 def flatten((tree, sent)):
 	"""
@@ -317,10 +327,10 @@ def flatten((tree, sent)):
 	"""
 	assert isinstance(tree, Tree), (tree,sent)
 	if all(isinstance(a, Tree) for a in tree):
-		children = [(b if isinstance(b, Tree) and sent[b[0]] is None
-			else ImmutableTree("#%s/%s" % (b.node,
-				sent[b[0]].replace('(','[').replace(')',']')), b[:]))
+		children = [b if isinstance(b, Tree) and sent[b[0]] is None else
+			ImmutableTree("#%s/%s" % (b.node, quotelabel(sent[b[0]])), b[:])
 			for b in preterminals_and_frontier_nodes(tree, sent)]
+		children.sort(key=itemgetter(0))
 	else:
 		children = tree[:]
 	return ImmutableTree(tree.node, children)
@@ -356,6 +366,7 @@ def recoverfromfragments(derivation, backtransform):
 		derivation = derivation[0]
 	prod = top_production(derivation)
 	rprod, leafmap = renumber(prod)
+	#if rprod not in backtransform: print "not found", rprod
 	result = Tree.convert(backtransform.get(rprod, prod))
 	# revert renumbering
 	for a in result.treepositions('leaves'):
@@ -385,14 +396,14 @@ def recoverfromfragments_str(derivation, backtransform):
 		leaves = map(int, termsre.findall(tree))
 		leafmap = dict(zip(sorted(leaves), count()))
 		newtree = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], tree)
-		return newtree, dict(zip(count(), leaves))
+		return newtree, dict(zip(leafmap.values(), leafmap.keys()))
 	def topproduction(tree):
 		""" return string with root node of tree with all its children turned
 		into frontier nodes """
 		if not isinstance(tree[0], Tree):
 			return tree.pprint(margin=999)
-		return "(%s %s)" % (tree.node, " ".join("(%s %d)" % (a.node,
-			min(a.leaves())) for a in tree))
+		return "(%s %s)" % (tree.node, " ".join("(%s %s)" % (a.node,
+			" ".join(map(str, rangeheads(sorted(a.leaves()))))) for a in tree))
 	# remove disambiguation markers #n
 	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
 		and derivation[0].node[0] == "#"):
@@ -400,6 +411,7 @@ def recoverfromfragments_str(derivation, backtransform):
 	prod = topproduction(derivation)
 	rprod, leafmap = renumber(prod)
 	result = backtransform.get(rprod, rprod)
+	#if rprod not in backtransform: print "not found", rprod
 	# revert renumbering
 	result = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], result)
 	# recursively expand all substitution sites
@@ -407,7 +419,8 @@ def recoverfromfragments_str(derivation, backtransform):
 		if isinstance(t, Tree):
 			if t.node.startswith("#") and not isinstance(t[0], Tree):
 				continue
-			frontier = "(%s %d)" % (t.node, min(t.leaves()))
+			frontier = "(%s %s)" % (t.node,
+				" ".join(map(str, rangeheads(sorted(t.leaves())))))
 			assert frontier in result, (frontier, result)
 			replacement = recoverfromfragments_str(t, backtransform)
 			result = result.replace(frontier, replacement, 1)
@@ -430,7 +443,7 @@ def canonicalize(tree):
 
 def rangeheads(s):
 	""" iterate over a sequence of numbers and yield first element of each
-	contiguous range
+	contiguous range. input should be shorted.
 	>>> rangeheads( (0, 1, 3, 4, 6) )
 	[0, 3, 6]
 	"""

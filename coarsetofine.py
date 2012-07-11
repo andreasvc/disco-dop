@@ -136,8 +136,7 @@ def filter_subtree(start, chart, chart2):
 		if item.label and item not in chart2:
 			filter_subtree(edge.right, chart, chart2)
 
-def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
-			verbose=False):
+def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 	from plcfrs import parse #, pprint_chart
 	#from coarsetofine import kbest_items, merged_kbest, prunelist_fromchart
 	from disambiguation import marginalize
@@ -210,19 +209,18 @@ def doctf(coarse, fine, sent, tree, k, doph, headrules, pa, split,
 
 def main():
 	from treetransforms import splitdiscnodes, binarize
-	from treebank import NegraCorpusReader, readheadrules
+	from treebank import NegraCorpusReader
 	from grammar import induce_srcg, dop_srcg_rules,\
 			subsetgrammar
 	from containers import Grammar
 	from time import clock
-	headrules = readheadrules()
 	k = 50
 	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
 	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
 	#	encoding="utf-8", headorder=True, headfinal=True, headreverse=False)
 	#train = 400; test = 40; testmaxlen = 999;
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-		headorder=True, headfinal=True, headreverse=False)
+		headorder=False, headfinal=True, headreverse=False)
 	train = 0; test = 3; testmaxlen = 999;
 	#trees = corpus.parsed_sents()[:train]
 	#sents = corpus.sents()[:train]
@@ -267,7 +265,7 @@ def main():
 			if len(sent) > testmaxlen: continue
 			print n,
 			doctf(coarse, fine, sent, tree, k, 1 if msg=="parentannot" else 999,
-				headrules, *settings, verbose=False)
+				*settings, verbose=False)
 		print "time elapsed", clock() - begin, "s"
 
 if __name__ == '__main__': main()
