@@ -109,7 +109,8 @@ def parse(sent, Grammar grammar, tags=None, start=None, bint exhaustive=False,
 		for terminal in lexical.get(w, []):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if not tags or tolabel[terminal.lhs].startswith(tags[i] + "@"):
+			if (not tags or tolabel[terminal.lhs] == tags[i]
+					or tolabel[terminal.lhs].startswith(tags[i] + "@")):
 				item = new_ChartItem(terminal.lhs, 1ULL << i)
 				sibling = new_ChartItem(Epsilon, i)
 				x = terminal.prob
