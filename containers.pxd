@@ -25,6 +25,10 @@ cdef class ChartItem:
 	cdef public ULLong vec
 	cdef public UInt label
 
+cdef class FatChartItem:
+	cdef ULLong vec[4]
+	cdef public UInt label
+
 @cython.final
 cdef class Edge:
 	cdef public double score
