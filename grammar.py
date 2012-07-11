@@ -292,7 +292,7 @@ def flattenstr((tree, sent)): #(tree, sent)):
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
 	>>> print flattenstr((tree, sent))
-	(ROOT (S_2 0 2) (#$,/, 1) (#$./. 3))
+	(ROOT (S_2 0 2) ($,@, 1) ($.@. 3))
 	"""
 	assert isinstance(tree, basestring), (tree, sent)
 	def repl(x):
@@ -305,7 +305,7 @@ def flattenstr((tree, sent)): #(tree, sent)):
 		# this hack escapes non-ascii characters, so that phrasal labels
 		# remain ascii-only. These labels only need to be unique, anyway.
 		word = word.encode('ascii', 'xmlcharrefreplace')
-		return "(#%s/%s%s)" % (tag, quotelabel(word), n)
+		return "(%s@%s%s)" % (tag, quotelabel(word), n)
 	if tree.count(" ") == 1: return tree
 	# give terminals unique POS tags
 	newtree = frontierorterm.sub(repl, tree)
@@ -319,16 +319,16 @@ def flatten((tree, sent)):
 	>>> sent = [None, ',', None, '.']
 	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
 	>>> print flatten((tree, sent))
-	(ROOT (S_2 0 2) (#$,/, 1) (#$./. 3))
+	(ROOT (S_2 0 2) ($,@, 1) ($.@. 3))
 	>>> tree = ImmutableTree.parse("(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP 3)))", parse_leaf=int)
 	>>> sent = ['The', None, 'saw', None]
 	>>> print flatten((tree, sent))
-	(S (#DT/The 0) (NN 1) (#VBP/saw 2) (NP 3))
+	(S (DT@The 0) (NN 1) (VBP@saw 2) (NP 3))
 	"""
 	assert isinstance(tree, Tree), (tree,sent)
 	if all(isinstance(a, Tree) for a in tree):
 		children = [b if isinstance(b, Tree) and sent[b[0]] is None else
-			ImmutableTree("#%s/%s" % (b.node, quotelabel(sent[b[0]])), b[:])
+			ImmutableTree("%s@%s" % (b.node, quotelabel(sent[b[0]])), b[:])
 			for b in preterminals_and_frontier_nodes(tree, sent)]
 		children.sort(key=itemgetter(0))
 	else:
@@ -376,11 +376,7 @@ def recoverfromfragments(derivation, backtransform):
 		if isinstance(r, Tree):
 			if isinstance(t, Tree):
 				new = recoverfromfragments(t, backtransform)
-				#assert r.node == new.node and len(new)
 				r[:] = new[:]
-			#else: print "?", r, t
-			# terminals should already match.
-			#assert r == t
 	return result
 
 termsre = re.compile(r" ([0-9]+)\b")
@@ -417,8 +413,7 @@ def recoverfromfragments_str(derivation, backtransform):
 	# recursively expand all substitution sites
 	for t in derivation:
 		if isinstance(t, Tree):
-			if t.node.startswith("#") and not isinstance(t[0], Tree):
-				continue
+			if not isinstance(t[0], Tree): continue
 			frontier = "(%s %s)" % (t.node,
 				" ".join(map(str, rangeheads(sorted(t.leaves())))))
 			assert frontier in result, (frontier, result)
