@@ -193,7 +193,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	remaining nodes do not uniquely identify the fragment, an extra node with
 	an identifier is inserted: #n where n in an integer. In fragments with
 	terminals, we replace their POS tags with a tag uniquely identifying that
-	terminal and tag: #&tag_word.
+	terminal and tag: tag@word.
 	"""
 	from fragments import getfragments
 	from treetransforms import minimalbinarization, complexityfanout, addbitsets
@@ -219,7 +219,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	rootnode = re.compile(r"^\([^ ]+\b")
 	# construct a mapping of productions to fragments
 	for prod, (frag, terminals) in zip(productions, fragments):
-		if prod == frag or (stroutput and prod.startswith("(#")): pass
+		if prod == frag: pass
 		elif prod in backtransform:
 			if backtransform[prod] is not None:
 				label = ids.next()
@@ -266,7 +266,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
 				fsent, arity_marks=True, side_effect=False)), repeat(b)))
-	# ambiguous fragments
+	# ambiguous fragments (fragments that map to the same flattened production)
 	grammar.update(rule for a, b in newprods
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
@@ -293,6 +293,8 @@ def flattenstr((tree, sent)): #(tree, sent)):
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
 	>>> print flattenstr((tree, sent))
 	(ROOT (S_2 0 2) ($,@, 1) ($.@. 3))
+	>>> print flattenstr(("(NN 0)", ["foo"]))
+	(NN 0)
 	"""
 	assert isinstance(tree, basestring), (tree, sent)
 	def repl(x):
@@ -302,9 +304,6 @@ def flattenstr((tree, sent)): #(tree, sent)):
 			return x.group(0)	# (tag index)
 		tag = x.group(2)
 		word = sent[nn].replace('(','[').replace(')',']')
-		# this hack escapes non-ascii characters, so that phrasal labels
-		# remain ascii-only. These labels only need to be unique, anyway.
-		word = word.encode('ascii', 'xmlcharrefreplace')
 		return "(%s@%s%s)" % (tag, quotelabel(word), n)
 	if tree.count(" ") == 1: return tree
 	# give terminals unique POS tags
@@ -356,15 +355,15 @@ def recoverfromfragments(derivation, backtransform):
 		for a in tree.treepositions('leaves'):
 			tree[a] = leafmap[tree[a]]
 		return tree.freeze(), dict(zip(count(), leaves))
-	def top_production(tree):
+	def topproduction(tree):
 		return Tree(tree.node,
 			[Tree(a.node, rangeheads(sorted(a.leaves())))
 					if isinstance(a, Tree) else a for a in tree])
 	# handle ambiguous fragments with nodes of the form "#n"
 	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
-		and derivation[0].node.startswith("#")):
+		and derivation[0].node[0] == "#"):
 		derivation = derivation[0]
-	prod = top_production(derivation)
+	prod = topproduction(derivation)
 	rprod, leafmap = renumber(prod)
 	#if rprod not in backtransform: print "not found", rprod
 	result = Tree.convert(backtransform.get(rprod, prod))
@@ -373,10 +372,9 @@ def recoverfromfragments(derivation, backtransform):
 		result[a] = leafmap.get(result[a], result[a])
 	# recurse on non-terminals of derivation
 	for r, t in zip(result.subtrees(lambda t: t.height() == 2), derivation):
-		if isinstance(r, Tree):
-			if isinstance(t, Tree):
-				new = recoverfromfragments(t, backtransform)
-				r[:] = new[:]
+		if isinstance(r, Tree) and isinstance(t, Tree):
+			new = recoverfromfragments(t, backtransform)
+			r[:] = new[:]
 	return result
 
 termsre = re.compile(r" ([0-9]+)\b")
@@ -400,7 +398,7 @@ def recoverfromfragments_str(derivation, backtransform):
 			return tree.pprint(margin=999)
 		return "(%s %s)" % (tree.node, " ".join("(%s %s)" % (a.node,
 			" ".join(map(str, rangeheads(sorted(a.leaves()))))) for a in tree))
-	# remove disambiguation markers #n
+	# handle ambiguous fragments with nodes of the form "#n"
 	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
 		and derivation[0].node[0] == "#"):
 		derivation = derivation[0]

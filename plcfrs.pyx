@@ -487,8 +487,7 @@ def cfgparse(list sent, Grammar grammar, start=None, tags=None):
 		for terminal in grammar.lexical.get(w, []):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags
-				or tags[i] == grammar.tolabel[terminal.lhs].rsplit("@", 1)[0]):
+			if not tags or grammar.tolabel[terminal.lhs].startswith(tags[i] + '@'):
 				item = new_ChartItem(terminal.lhs, 1ULL << i)
 				sibling = new_ChartItem(Epsilon, i)
 				x = terminal.prob

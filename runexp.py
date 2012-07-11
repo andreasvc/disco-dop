@@ -406,8 +406,8 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				#			print bin(c), exp(-d)
 				#	else: print {}
 			chart, start = parse(
-							[w for w, t in sent], dopgrammar,
-							tags=[t for w, t in sent] if tags else None,
+							[w for w, _ in sent], dopgrammar,
+							tags=[t for _, t in sent] if tags else None,
 							start=dopgrammar.toid[top],
 							exhaustive=True,
 							estimate=None,
@@ -419,6 +419,12 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 							markorigin=markorigin,
 							neverblockmarkovized=neverblockmarkovized,
 							neverblockdiscontinuous=neverblockdiscontinuous)
+			if not start:
+				from plcfrs import pprint_chart
+				pprint_chart(chart,
+						[w.encode('unicode-escape') for w, _ in sent],
+						dopgrammar.tolabel)
+				raise ValueError("expected successful parse")
 		else: chart = {}; start = False
 		if dop and start:
 			if estimator == "shortest":
@@ -470,8 +476,6 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 		else:
 			if dop:
 				msg += "no parse"
-				#from plcfrs import pprint_chart
-				#pprint_chart(chart, [str(w) for w, t in sent], dopgrammar.tolabel)
 			dresult = baseline([(n,t) for n,(w, t) in enumerate(sent)])
 			dresult = Tree.parse("(%s %s)" % (top, dresult), parse_leaf=int)
 			candb = bracketings(dresult)
