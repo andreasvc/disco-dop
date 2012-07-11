@@ -82,7 +82,7 @@ the resulting code can be compiled with `make`:
     shedskin -b -l -w plcfrs.py
     make
 
-A separate tool is `fragmentseeker.py`, which finds recurring or common
+A separate tool is `fragments.py`, which finds recurring or common
 fragments in one or more treebanks. It can be used with discontinuous as well
 as Penn-style bracketed treebanks. Run without arguments for instructions.
 

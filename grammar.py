@@ -195,7 +195,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	terminals, we replace their POS tags with a tag uniquely identifying that
 	terminal and tag: #&tag_word.
 	"""
-	from fragmentseeker import getfragments
+	from fragments import getfragments
 	from treetransforms import minimalbinarization, complexityfanout, addbitsets
 	backtransform = {}
 	newprods = []

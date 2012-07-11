@@ -12,7 +12,7 @@ from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
-from _fragmentseeker import extractfragments, fastextractfragments,\
+from _fragments import extractfragments, fastextractfragments,\
 	readtreebank, indextrees, exactcounts, exactindices, completebitsets
 
 # this fixes utf-8 output when piped through e.g. less
@@ -376,6 +376,7 @@ def getfragments(trees, sents):
 	pool.join()
 	os.remove(treebank)
 	del dowork, pool
-	return dict(zip(fragments.keys(), counts))
+	logging.info("found %d fragments" % len(fragments))
+	return dict(zip(fragments, counts))
 
 if __name__ == '__main__': main(sys.argv)

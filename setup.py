@@ -20,12 +20,11 @@ ext_modules = [
 	Extension("agenda",          ["agenda.pyx", "agenda.pxd"]),
 	Extension("plcfrs",          ["plcfrs.pyx",  "plcfrs.pxd"]),
 	Extension("estimates",       ["estimates.py", "estimates.pxd"]),
+	Extension("_fragments",      ["_fragments.pyx", "_fragments.pxd"]),
 	Extension("containers",      ["containers.pyx", "containers.pxd"]),
 	Extension("coarsetofine",    ["coarsetofine.py", "coarsetofine.pxd"]),
-	Extension("disambiguation",  ["disambiguation.py", "disambiguation.pxd"]),
-	Extension("_fragmentseeker", ["_fragmentseeker.pyx", "_fragmentseeker.pxd"]
-	)]
-	#,extra_compile_args=["-g", "-O0"], extra_link_args=["-g"],)]
+	Extension("disambiguation",  ["disambiguation.py", "disambiguation.pxd"])
+	] #,extra_compile_args=["-g", "-O0"], extra_link_args=["-g"],)]
 
 for e in ext_modules:
 	e.pyrex_directives = directives

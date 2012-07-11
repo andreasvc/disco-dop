@@ -529,7 +529,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			for n,a,b in zip(count(sentinit), dresults, gsent))
 	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
 			"w", encoding='utf-8').write(''.join(
-				"#BOS %d\n%s\n#EOS %d\n" % (n + 1, a, n + 1)
+				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
 				for n, a in zip(count(sentinit), gold)))
 	timesfile.close()
 	logging.info("wrote results to %s/%s.{gold,srcg,dop}" % (resultdir, category or "results"))
