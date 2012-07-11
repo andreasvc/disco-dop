@@ -106,14 +106,14 @@ def main(
 
 	# parse training corpus as a "soundness check"
 	#test = corpus.parsed_sents(), corpus.tagged_sents(), corpus.blocks()
-
 	test = NegraCorpusReader(corpusdir, corpusfile, encoding=encoding,
 			removepunct=removepunct, movepunct=movepunct)
 	test = (test.parsed_sents()[train+skip:train+skip+maxsent],
 			test.tagged_sents()[train+skip:train+skip+maxsent],
 			test.blocks()[train+skip:train+skip+maxsent])
+	assert len(test[0]), "test corpus should be non-empty"
 
-	f,n=treebankfanout(trees)
+	f, n = treebankfanout(trees)
 	logging.info("%d test sentences before length restriction" % len(test[0]))
 	test = zip(*((a,b,c) for a,b,c in zip(*test) if len(b) <= maxlen))
 	logging.info("%d test sentences after length restriction <= %d" % (len(test[0]), maxlen))
@@ -448,7 +448,10 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			rem_marks(dresult)
 			if unfolded: fold(dresult)
 			candb = bracketings(dresult)
-			prec = precision(goldb, candb)
+			try: prec = precision(goldb, candb)
+			except ZeroDivisionError:
+				prec = 0.0
+				logging.warning("empty candidate brackets?\n%s" % dresult.pprint())
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
 			if dresult == tree or f1 == 1.0:
@@ -505,7 +508,8 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 								100 * f_measure(goldbrackets, scandb),
 								('' if dop else '\n')))
 		if dop:
-			logging.debug("dop  cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f (%+5.2f)\n" % (
+			logging.debug("dop  cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f"
+					" (%+5.2f)\n" % (
 								100 * (1 - dnoparse/float(len(dresults))),
 								100 * (exactd / float(nsent)),
 								100 * precision(goldbrackets, dcandb),
@@ -542,23 +546,29 @@ def doeval(splitpcfg, srcg, dop, nsent, maxlen, exactp, exacts, exactd,
 		pnoparse, snoparse, dnoparse, goldbrackets, pcandb, scandb, dcandb,
 		unfolded, arity_marks, bintype, estimator, sldop_n):
 	print "maxlen", maxlen, "unfolded", unfolded, "arity marks", arity_marks,
-	print "binarized", bintype, "estimator", estimator, sldop_n if 'sl-dop' in estimator else ''
+	print "binarized", bintype, "estimator", estimator,
+	if dop:
+		if'sl-dop' in estimator: print sldop_n
+		if doubledop: print "doubledop"
 	if splitpcfg and nsent:
-		logging.info("pcfg lp %5.2f lr %5.2f lf %5.2f\ncoverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n" %(
+		logging.info("pcfg lp %5.2f lr %5.2f lf %5.2f\n"
+			"coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n" % (
 				100 * precision(goldbrackets, pcandb),
 				100 * recall(goldbrackets, pcandb),
 				100 * f_measure(goldbrackets, pcandb),
 				nsent - pnoparse, nsent, 100.0 * (nsent - pnoparse) / nsent,
 				exactp, nsent, 100.0 * exactp / nsent))
 	if srcg and nsent:
-		logging.info("srcg lp %5.2f lr %5.2f lf %5.2f\ncoverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n" %(
+		logging.info("srcg lp %5.2f lr %5.2f lf %5.2f\n"
+			"coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n" % (
 				100 * precision(goldbrackets, scandb),
 				100 * recall(goldbrackets, scandb),
 				100 * f_measure(goldbrackets, scandb),
 				nsent - snoparse, nsent, 100.0 * (nsent - snoparse) / nsent,
 				exacts, nsent, 100.0 * exacts / nsent))
 	if dop and nsent:
-		logging.info("dop  lp %5.2f lr %5.2f lf %5.2f\ncoverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n" %(
+		logging.info("dop  lp %5.2f lr %5.2f lf %5.2f\n"
+			"coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n" % (
 				100 * precision(goldbrackets, dcandb),
 				100 * recall(goldbrackets, dcandb),
 				100 * f_measure(goldbrackets, dcandb),
@@ -573,7 +583,8 @@ def root(tree):
 def cftiger():
 	#read_penn_format('../tiger/corpus/tiger_release_aug07.mrg')
 	grammar = read_bitpar_grammar('/tmp/gtigerpcfg.pcfg', '/tmp/gtigerpcfg.lex')
-	dopgrammar = read_bitpar_grammar('/tmp/gtiger.pcfg', '/tmp/gtiger.lex', ewe=False)
+	dopgrammar = read_bitpar_grammar('/tmp/gtiger.pcfg', '/tmp/gtiger.lex',
+			ewe=False)
 	grammar.testgrammar()
 	dopgrammar.testgrammar()
 	dop = True; srcg = True; unfolded = False; bintype = "binarize h=1 v=1"
@@ -665,9 +676,11 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	#corpus_taggedsents = list(corpus.tagged_sents())
 	#corpus_trees = list(corpus.parsed_sents())
 	#corpus_blocks = list(corpus.blocks())
-	#thecorpus = [a for a in zip(corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks)]
+	#thecorpus = [a for a in zip(corpus_sents, corpus_taggedsents, corpus_trees,
+	#	corpus_blocks)]
 	#cPickle.dump(thecorpus, open("tiger.pickle", "wb"), protocol=-1)
-	corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(*cPickle.load(open("tiger.pickle", "rb")))
+	corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks = zip(
+		*cPickle.load(open("tiger.pickle", "rb")))
 	train = 25005 #int(0.9 * len(corpus_sents))
 	trees, sents, blocks = zip(*[sent for n, sent in
 				enumerate(zip(corpus_trees, corpus_sents,
@@ -677,7 +690,8 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	if bintype == "optimal":
 		trees = [optimalbinarize(tree) for n, tree in enumerate(trees)]
 	elif bintype == "nltk":
-		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
+		for a in trees:
+			a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	elif bintype == "binarize":
 		[binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h, tailMarker="",
 					leftMostUnary=True, rightMostUnary=True) for a in trees]
