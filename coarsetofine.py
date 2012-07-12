@@ -16,21 +16,19 @@ reducemarkov = [re.compile("\|<[^>]*>"),
 				re.compile("\|<([^->]*-[^->]*)-?[^>]*>"),
 				re.compile("\|<([^->]*-[^->]*-[^->]*)-?[^>]*>")]
 
-def prunelist_fromchart(chart, goal, coarsegrammar, finegrammar, k, reduceh=999,
+def prunechart(chart, goal, coarse, fine, k, reduceh=999,
 		removeparentannotation=False, mergesplitnodes=False):
 	""" Produce a white list of chart items occurring in the k-best derivations
-	of chart, where labels X in prunetoid are projected to the labels X and X@n
-	in 'toid', for possible values of n.  When k==0, the chart is merely
-	filtered to contain only items that contribute to a complete derivation."""
+	of chart, where labels X in coarse.toid are projected to the labels
+	X and X@n in fine.toid, for possible values of n.  When k==0, the chart is
+	merely filtered to contain only items that contribute to a complete
+	derivation."""
 
 	d = dictcast(defaultdict(dict))
-	prunetoid = coarsegrammar.toid
-	prunetolabel = coarsegrammar.tolabel
-	toid = finegrammar.toid
-	prunelist = [None] * len(toid)
-	l = [{} for a in prunetoid]
+	whitelist = [None] * len(fine.toid)
+	l = [{} for a in coarse.toid]
 	if mergesplitnodes:
-		d = merged_kbest(chart, goal, k, coarsegrammar)
+		d = merged_kbest(chart, goal, k, coarse)
 		assert not removeparentannotation, "not implemented"
 	else:
 		# construct a list of the k-best nonterminals to prune with
@@ -38,24 +36,24 @@ def prunelist_fromchart(chart, goal, coarsegrammar, finegrammar, k, reduceh=999,
 	if removeparentannotation:
 		# uses string labels of coarse chart
 		for Ih in chart:
-			label = removeparentannot.sub("", prunetolabel[itemcast(Ih).label])
+			label = removeparentannot.sub("", coarse.tolabel[itemcast(Ih).label])
 			if reduceh != 999:
 				label = reducemarkov[reduceh].sub("|<\\1>" if reduceh else "",
 					label)
 			d[label][itemcast(Ih).vec] = min(d[label].get(itemcast(Ih).vec,
 				infinity), kbest.get(Ih, infinity))
 	if removeparentannotation or mergesplitnodes:
-		for a, label in toid.iteritems():
-			prunelist[label] = d[removeids.sub("", a)]
+		for a, label in fine.toid.iteritems():
+			whitelist[label] = d[removeids.sub("", a)]
 	else:
 		# uses ids of labels in coarse chart
 		for Ih in chart:
 			l[itemcast(Ih).label][itemcast(Ih).vec] = kbest.get(Ih, infinity)
-		for a, label in toid.iteritems():
-			prunelist[label] = l[prunetoid.get(removeids.sub("", a), 1)]
+		for a, label in fine.toid.iteritems():
+			whitelist[label] = l[coarse.toid.get(removeids.sub("", a), 1)]
 	logging.debug('pruning with %d nonterminals, %d items' % (
-			len(filter(None, prunelist)), len(chart)))
-	return prunelist
+			len(filter(None, whitelist)), len(chart)))
+	return whitelist
 
 def merged_kbest(chart, start, k, grammar):
 	""" Like kbest_items, but apply the reverse of the Boyd (2007)
@@ -138,7 +136,7 @@ def filter_subtree(start, chart, chart2):
 
 def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 	from plcfrs import parse #, pprint_chart
-	#from coarsetofine import kbest_items, merged_kbest, prunelist_fromchart
+	#from coarsetofine import kbest_items, merged_kbest, prunechart
 	from disambiguation import marginalize
 	from treetransforms import mergediscnodes, unbinarize
 	from containers import getlabel, getvec
@@ -162,7 +160,7 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 		print "no parse"
 		return
 		#pprint_chart(p, sent, coarse.tolabel)
-	l = prunelist_fromchart(p, start, coarse, fine, k, #0 if split else k,
+	l = prunechart(p, start, coarse, fine, k, #0 if split else k,
 				removeparentannotation=pa, mergesplitnodes=False,
 				reduceh=doph)
 	if verbose:
@@ -175,14 +173,14 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 			kbest = kbest_items(p, start, k)
 			for a,b in kbest.items():
 				print coarse.tolabel[getlabel(a)], bin(getvec(a)), b
-		print "\nprunelist:"
+		print "\nwhitelist:"
 		for n,x in enumerate(l):
 			print fine.tolabel[n], [(bin(v), s) for v,s in x.items()]
 	print " F I N E ",
-	p = filterchart(p, start)
+	p = filterchart(p, start) if split else None
 	pp, start = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
-		prunelist=l, prunetoid=coarse.toid, coarsechart=p,
-		neverblockmarkovized=pa, neverblockdiscontinuous=False,
+		whitelist=l, coarsechart=p, coarsegrammar=coarse,
+		neverblocksubstr="|" if pa else None, neverblockdiscontinuous=False,
 		splitprune=split, markorigin=True)
 	if start:
 		mpp = marginalize(pp, start, fine.tolabel)

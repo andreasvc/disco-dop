@@ -85,7 +85,7 @@ cpdef simpleinside(Grammar grammar, UInt maxlen, np.ndarray[np.double_t, ndim=2]
 	stopaddright=cython.bint,
 	stopaddleft=cython.bint
 	)
-cdef void outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores, UInt maxlen, UInt goal, np.ndarray[np.double_t, ndim=4] outside) except *
+cdef void outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores, UInt maxlen, UInt goal, np.ndarray[np.double_t, ndim=4] outside)
 
 cpdef testestimates(Grammar grammar, maxlen, goal)
 cpdef getestimates(Grammar grammar, maxlen, goal)

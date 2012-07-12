@@ -88,15 +88,15 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 		idsremoved[removeids.sub("", t)].add(t)
 	mpp1 = dict((tt, sumderivs(ts, derivations))
 					for tt, ts in idsremoved.iteritems())
-	prunelist = [{} for a in secondarymodel.toid]
+	whitelist = [{} for a in secondarymodel.toid]
 	for a in chart:
-		prunelist[getlabel(a)][getvec(a)] = infinity
+		whitelist[getlabel(a)][getvec(a)] = infinity
 	for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
 		for n in Tree(tt).subtrees():
 			vec = sum([1L << int(x) for x in n.leaves()])
-			prunelist[secondarymodel.toid[n.node]][vec] = 0.0
+			whitelist[secondarymodel.toid[n.node]][vec] = 0.0
 	for label, n in secondarymodel.toid.items():
-		prunelist[n] = prunelist[secondarymodel.toid[label.split("@")[0]]]
+		whitelist[n] = whitelist[secondarymodel.toid[label.split("@")[0]]]
 	mpp2 = {}
 	for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
 		mpp2[tt] = mpp1[tt]
@@ -105,7 +105,7 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	tagsornil = [a[1] for a in sent] if tags else []
 	chart2, start2 = parse(words, secondarymodel, tagsornil,
 					1, #secondarymodel.toid[top],
-					True, None, prunelist=prunelist)
+					True, None, whitelist=whitelist)
 	if start2:
 		shortestderivations = lazykbest(chart2, start2, m,
 			secondarymodel.tolabel)

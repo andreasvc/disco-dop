@@ -108,7 +108,7 @@ cdef class Grammar:
 		rules = "\n".join(filter(None,
 			[self.rulerepr(lhs) for lhs in range(1, self.nonterminals)]))
 		lexical = "\n".join(["%.2f %s => %s" % (
-			exp(-lr.prob), self.tolabel[lr.lhs], lr.word)
+			exp(-lr.prob), self.tolabel[lr.lhs], lr.word.encode('unicode-escape'))
 				for word in sorted(self.lexical)
 					for lr in self.lexical[word]])
 		return "rules:\n%s\nlexicon:\n%s\nlabels=%r" % (rules, lexical,
@@ -176,6 +176,30 @@ cdef yfrepr(Rule rule):
 			if m == rule.fanout: return result
 			else: result += ", "
 	raise ValueError("expected %d components" % rule.fanout)
+
+cdef class FatChartItem:
+	def __init__(ChartItem self, label):
+		self.label = label
+		#?? self.vec = vec
+	def __hash__(ChartItem self):
+		cdef size_t n
+		cdef long _hash = 5381
+		for n in range(7 * sizeof(ULong)):
+			_hash *= 33 ^ (<char *>self.vec)[n]
+		return _hash
+	def __richcmp__(ChartItem self, ChartItem other, int op):
+		if op == 2: return self.label == other.label and self.vec == other.vec
+		elif op == 3: return self.label != other.label or self.vec != other.vec
+		elif op == 5: return self.label >= other.label or self.vec >= other.vec
+		elif op == 1: return self.label <= other.label or self.vec <= other.vec
+		elif op == 0: return self.label < other.label or self.vec < other.vec
+		elif op == 4: return self.label > other.label or self.vec > other.vec
+	def __nonzero__(ChartItem self):
+		raise NotImplemented
+		#return self.label != 0 and self.vec != 0
+	def __repr__(ChartItem self):
+		raise NotImplemented
+		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class ChartItem:
 	def __init__(ChartItem self, label, vec):
@@ -345,11 +369,13 @@ class Terminal:
 	def __hash__(self): return hash(self.node)
 
 cdef class FrozenArray:
+	""" A wrapper around a Python unsigned long array, with hash value and
+	comparison operators."""
 	def __init__(self, array data):
 		self.data = data
 	def __hash__(FrozenArray self):
-		cdef int n, _hash
-		_hash = 5381
+		cdef size_t n
+		cdef long _hash = 5381
 		for n in range(self.data.length):
 			_hash *= 33 ^ self.data._B[n]
 		return _hash
@@ -369,12 +395,13 @@ cdef inline FrozenArray new_FrozenArray(array data):
 	return item
 
 cdef class CBitset:
-	"""auxiliary class to be able to pass around bitsets in Python"""
+	""" auxiliary class to be able to pass around bitsets in Python.
+	the memory for the bitset itself is not managed by this class. """
 	def __cinit__(CBitset self, UChar slots):
 		self.slots = slots
 	def __hash__(CBitset self):
-		cdef int n, _hash
-		_hash = 5381
+		cdef size_t n
+		cdef long _hash = 5381
 		for n in range(self.slots * sizeof(ULong)):
 			_hash *= 33 ^ (<char *>self.data)[n]
 		return _hash
@@ -534,3 +561,5 @@ cpdef inline ChartItem itemcast(i):
 	return <ChartItem>i
 cpdef inline Edge edgecast(e):
 	return <Edge>e
+
+maxbitveclen = sizeof(ULLong) * 8

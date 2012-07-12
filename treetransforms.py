@@ -616,14 +616,14 @@ def splitdiscnodes(tree, markorigin=False):
 		result = []
 		for child in node:
 			if disc(child):
-				result.extend(Tree(child.node + '*' + (
-					str(n) if markorigin else ''), childsubset)
+				result.extend(Tree((("%s*%d" % (child.node, n))
+					if markorigin else '%s*' % child.node), childsubset)
 					for n, childsubset in enumerate(contsets(child)))
 			else: result.append(child)
 		node[:] = result
 	return canonicalize(tree)
 
-splitlabel = re.compile("\*[0-9]*$")
+splitlabel = re.compile(r"\*[0-9]*$")
 def mergediscnodes(tree):
 	""" Reverse of Boyd (2007): Discontinuity revisited.
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)

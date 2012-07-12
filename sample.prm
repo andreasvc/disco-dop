@@ -33,6 +33,6 @@ mergesplitnodes=True, #coarse grammar is PCFG with splitted nodes eg. VP*
 markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
 splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
 removeparentannotation=False, # VP^<S> is treated as VP
-neverblockmarkovized=False, #do not prune intermediate nodes of binarization
+neverblocksubstr=None, #do not prune intermediate nodes of binarization
 neverblockdiscontinuous=False, #never block discontinuous nodes.
 quiet=False, reallyquiet=False, #quiet=no per sentence results

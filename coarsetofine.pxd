@@ -1,22 +1,16 @@
 cimport cython
 from kbest cimport lazykthbest, lazykbest
 from agenda cimport Entry
-from containers cimport ChartItem, Edge, RankedEdge,\
+from containers cimport ChartItem, Edge, RankedEdge, Grammar,\
 			dictcast, getlabel, getvec, itemcast, edgecast
 
 @cython.locals(
 	kbest=dict,
 	d=dict,
-	prunetoid=dict,
-	prunetolabel=dict,
-	toid=dict,
-	tolabel=dict,
-	prunelist=list,
+	whitelist=list,
 	Ih=ChartItem)
-cpdef list prunelist_fromchart(dict chart, ChartItem goal,
-        coarsegrammar, finegrammar, int k,
-        bint removeparentannotation=*, bint mergesplitnodes=*,
-        int reduceh=*)
+cpdef list prunechart(dict chart, ChartItem goal, Grammar coarse, Grammar fine,
+	int k, bint removeparentannotation=*, bint mergesplitnodes=*, int reduceh=*)
 
 @cython.locals(
 	newchart=dict)
@@ -34,8 +28,8 @@ cpdef dict kbest_items(dict chart, ChartItem start, int k)
 	eejj=RankedEdge,
 	prob=cython.double,
 	entry=Entry)
-cdef void getitems(RankedEdge ej, double rootprob, dict D,
-							dict chart, dict outside)
+cdef getitems(RankedEdge ej, double rootprob, dict D,
+	dict chart, dict outside)
 
 cpdef filterchart(chart, start)
 

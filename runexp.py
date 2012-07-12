@@ -9,12 +9,12 @@ from treebank import NegraCorpusReader, fold, export
 from grammar import srcg_productions, dop_srcg_rules, induce_srcg,\
 	rem_marks, read_bitpar_grammar, grammarinfo, baseline,\
 	write_srcg_grammar, doubledop
-from containers import Grammar
+from containers import Grammar, maxbitveclen
 from eval import bracketings, printbrackets, precision, recall, f_measure
 from treetransforms import binarize, unbinarize, optimalbinarize,\
 							splitdiscnodes, mergediscnodes
 from plcfrs import parse, cfgparse
-from coarsetofine import prunelist_fromchart, kbest_items
+from coarsetofine import prunechart, kbest_items
 from disambiguation import marginalize, viterbiderivation,\
 							sldop, sldop_simple
 
@@ -63,7 +63,7 @@ def main(
 	markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
 	splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
 	removeparentannotation=False, # VP^<S> is treated as VP
-	neverblockmarkovized=False, #do not prune intermediate nodes of binarization
+	neverblocksubstr=None, #do not prune intermediate nodes of binarization
 	neverblockdiscontinuous=False, #never block discontinuous nodes.
 	quiet=False, reallyquiet=False, #quiet=no per sentence results
 	resultdir="output"
@@ -230,7 +230,7 @@ def main(
 			srcggrammar, dopgrammar, secondarymodel, test, maxlen, maxsent,
 			prune, splitk, k, sldop_n, useestimates, outside, "ROOT", True,
 			removeparentannotation, splitprune, mergesplitnodes, markorigin,
-			neverblockmarkovized, neverblockdiscontinuous, resultdir,
+			neverblocksubstr, neverblockdiscontinuous, resultdir,
 			usecfgparse, backtransform)
 	logging.info("time elapsed during parsing: %g s" % (time.clock() - begin))
 	doeval(*results)
@@ -241,7 +241,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			prune, splitk, k, sldop_n=14, useestimates=False, outside=None,
 			top='ROOT',	tags=True, removeparentannotation=False,
 			splitprune=False, mergesplitnodes=False, markorigin=False,
-			neverblockmarkovized=False, neverblockdiscontinuous=False,
+			neverblocksubstr=None, neverblockdiscontinuous=False,
 			resultdir="results", usecfgparse=False, backtransform=None,
 			category=None, sentinit=0, doph=999):
 	presults = []; sresults = []; dresults = []
@@ -264,7 +264,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 		gsent.append(sent)
 		goldbrackets.update((nsent, a) for a in goldb.elements())
 		msg = ''
-		if splitpcfg and len(sent) < 64: # hard limit of word sized bit vectors
+		if splitpcfg and len(sent) < maxbitveclen: # hard limit of word sized bit vectors
 			msg = "PCFG: "
 			begin = time.clock()
 			if usecfgparse:
@@ -301,9 +301,9 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
 								100 * prec, 100 * rec, 100 * f1)
 				if candb - goldb:
-					msg += "cand-gold %s " % printbrackets(candb - goldb)
+					msg += "cand-gold=%s " % printbrackets(candb - goldb)
 				if goldb - candb:
-					msg += "gold-cand %s" % printbrackets(goldb - candb)
+					msg += "gold-cand=%s" % printbrackets(goldb - candb)
 				if (candb - goldb) or (goldb - candb): msg += '\n'
 				msg += "      %s" % result.pprint(margin=1000)
 			presults.append(result)
@@ -322,26 +322,26 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			logging.debug(msg+"\n%.2fs cpu time elapsed" % (pcfgtime))
 		pcandb.update((nsent, a) for a in candb.elements())
 		msg = ""
-		if srcg and (not splitpcfg or start) and len(sent) < 64: # hard limit
+		if srcg and (not splitpcfg or start) and len(sent) < maxbitveclen: # hard limit
 			msg = "SRCG: "
 			begin = time.clock()
-			prunelist = []
+			whitelist = []
 			if splitpcfg and start:
 				if splitprune:
 					pchart = kbest_items(chart, start, splitk)
-					logging.debug("prunelist obtained: %g s; before: %d; after: %d" % (
+					logging.debug("whitelist obtained: %g s; before: %d; after: %d" % (
 						time.clock() - begin, len(chart), len(pchart)))
 				else:
-					prunelist = prunelist_fromchart(chart, start, pcfggrammar,
+					whitelist = prunechart(chart, start, pcfggrammar,
 								srcggrammar, splitk, removeparentannotation,
 								mergesplitnodes and not splitprune, 999)
 			chart, start = parse(
 						[w for w, t in sent], srcggrammar,
 						tags=[t for w, t in sent] if tags else [],
 						start=srcggrammar.toid[top],
-						prunelist=prunelist,
-						prunetoid=pcfggrammar.toid if splitpcfg else None,
+						whitelist=whitelist,
 						coarsechart=pchart if (splitprune and splitpcfg) else None,
+						coarsegrammar=pcfggrammar if splitpcfg else None,
 						splitprune=splitprune and splitpcfg,
 						markorigin=markorigin,
 						exhaustive=dop and prune,
@@ -367,9 +367,9 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
 								100 * prec, 100 * rec, 100 * f1)
 				if candb - goldb:
-					msg += "cand-gold %s " % printbrackets(candb - goldb)
+					msg += "cand-gold=%s " % printbrackets(candb - goldb)
 				if goldb - candb:
-					msg += "gold-cand %s" % printbrackets(goldb - candb)
+					msg += "gold-cand=%s" % printbrackets(goldb - candb)
 				if (candb - goldb) or (goldb - candb): msg += '\n'
 				msg += "      %s" % result.pprint(margin=1000)
 			sresults.append(result)
@@ -388,18 +388,19 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			logging.debug(msg+"\n%.2fs cpu time elapsed" % (srcgtime))
 		scandb.update((nsent, a) for a in candb.elements())
 		msg = ""
-		if dop and start:
+		if (dop and (not (splitpcfg or srcg) or start)
+				and len(sent) < maxbitveclen): # hard limit
 			msg = " DOP: "
 			begin = time.clock()
-			prunelist = []
+			whitelist = []
 			if (splitpcfg or srcg) and prune and start:
 				if splitprune and not srcg: chart = kbest_items(chart, start, k)
 				else:
-					prunelist = prunelist_fromchart(chart, start, srcggrammar,
+					whitelist = prunechart(chart, start, srcggrammar,
 								dopgrammar, k, removeparentannotation,
 								mergesplitnodes and not srcg, doph)
 				# dump prune list
-				#for a, b in enumerate(prunelist):
+				#for a, b in enumerate(whitelist):
 				#	print dopgrammar.tolabel[a],
 				#	if b:
 				#		for c,d in b.items():
@@ -411,13 +412,13 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 							start=dopgrammar.toid[top],
 							exhaustive=True,
 							estimate=None,
-							prunelist=prunelist,
-							prunetoid=srcggrammar.toid if srcg else (
-								pcfggrammar.toid if splitpcfg else None),
+							whitelist=whitelist,
 							coarsechart=chart if (splitprune and not srcg) else None,
+							coarsegrammar=srcggrammar if srcg else (
+								pcfggrammar if splitpcfg else None),
 							splitprune=splitprune and not srcg,
 							markorigin=markorigin,
-							neverblockmarkovized=neverblockmarkovized,
+							neverblocksubstr=neverblocksubstr,
 							neverblockdiscontinuous=neverblockdiscontinuous)
 			if not start:
 				from plcfrs import pprint_chart
@@ -467,9 +468,9 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
 								100 * prec, 100 * rec, 100 * f1)
 				if candb - goldb:
-					msg += "cand-gold %s " % printbrackets(candb - goldb)
+					msg += "cand-gold=%s " % printbrackets(candb - goldb)
 				if goldb - candb:
-					msg += "gold-cand %s " % printbrackets(goldb - candb)
+					msg += "gold-cand=%s " % printbrackets(goldb - candb)
 				if (candb - goldb) or (goldb - candb): msg += '\n'
 				msg += "      %s" % dresult.pprint(margin=1000)
 			dresults.append(dresult)
@@ -668,7 +669,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 	arity_marks_before_bin=False, sample=False, both=False, m=10000,
 	trainmaxlen=999, maxlen=40, maxsent=999, k=1000, prune=True, sldop_n=7,
 	removeparentannotation=False, splitprune=False, mergesplitnodes=True,
-	neverblockmarkovized=False, markorigin = True, resultdir="tepacoc-40k1000"):
+	neverblocksubstr=None, markorigin = True, resultdir="tepacoc-40k1000"):
 
 	format = '%(message)s'
 	logging.basicConfig(level=logging.DEBUG, format=format)
@@ -754,7 +755,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 					dopgrammar, secondarymodel, test, maxlen, maxsent, prune,
 					50, k, sldop_n, False, None, "ROOT", True,
 					removeparentannotation, splitprune, mergesplitnodes,
-					markorigin, neverblockmarkovized,
+					markorigin, neverblocksubstr,
 					resultdir=resultdir, category=cat,
 					sentinit=cnt) #, doph=doph if doph != h else 999)
 		cnt += len(test[0])

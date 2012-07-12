@@ -15,7 +15,7 @@ cdef inline lazynext(RankedEdge ej, int k1,
 
 @cython.locals(result=cython.double, prob=cython.double, i=cython.int,
 			ei=ChartItem, edge=Edge, entry=Entry)
-cdef inline double getprob(dict chart, dict D, RankedEdge ej)
+cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0
 
 @cython.locals(ej=RankedEdge, edge=Edge, children=list, ei=ChartItem,
 	i=cython.int, entry=Entry)

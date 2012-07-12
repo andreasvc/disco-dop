@@ -1,9 +1,9 @@
 from cpython cimport PyDict_Contains, PyDict_GetItem
 cimport numpy as np
-from agenda cimport Entry
+from agenda cimport Entry, EdgeAgenda
 from kbest cimport lazykbest, lazykthbest
 from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule,\
-	UChar, UInt, ULLong
+	UChar, UInt, ULong, ULLong
 from array cimport array
 from agenda cimport EdgeAgenda
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint,\

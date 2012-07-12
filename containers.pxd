@@ -26,7 +26,7 @@ cdef class ChartItem:
 	cdef public UInt label
 
 cdef class FatChartItem:
-	cdef ULLong vec[4]
+	cdef ULLong vec[7]
 	cdef public UInt label
 
 @cython.final
