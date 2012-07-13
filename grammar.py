@@ -224,26 +224,22 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 			if backtransform[prod] is not None:
 				label = ids.next()
 				if stroutput:
-					tmp = rootnode.sub("("+label, prod)
-					newprods.append(("%s (%s 0))" % (
-						rootnode.search(prod).group(), label), (None,)))
+					tmp = "%s (%s 0))" % (rootnode.search(prod).group(), label)
+					newprods.append((rootnode.sub("("+label, prod), terminals))
 				else:
-					tmp = ImmutableTree(label, prod[:])
-					newprods.append((ImmutableTree(prod.node,
-						[ImmutableTree(label, [0])]), (None,)))
-				newprods.append((tmp, terminals))
+					tmp = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
+					newprods.append((ImmutableTree(label, prod[:]), terminals))
+				newprods.append((tmp, (None,)))
 				backtransform[tmp] = backtransform[prod]
 				backtransform[prod] = None
 			label = ids.next()
 			if stroutput:
-				tmp = rootnode.sub("("+label, prod)
-				newprods.append(("%s (%s 0))" % (
-					rootnode.search(prod).group(), label), (None,)))
+				tmp = "%s (%s 0))" % (rootnode.search(prod).group(), label)
+				newprods.append((rootnode.sub("("+label, prod), terminals))
 			else:
-				tmp = ImmutableTree(label, prod[:])
-				newprods.append((ImmutableTree(prod.node,
-					[ImmutableTree(label, [0])]), (None,)))
-			newprods.append((tmp, terminals))
+				tmp = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
+				newprods.append((ImmutableTree(label, prod[:]), terminals))
+			newprods.append((tmp, (None,)))
 			backtransform[tmp] = frag
 		else:
 			backtransform[prod] = frag
@@ -271,7 +267,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
 				b, arity_marks=a in backtransform, side_effect=False)),
-			repeat(fragments.get((backtransform.get(a), b), 1))))
+			chain((fragments.get((backtransform.get(a), b), 1),), repeat(1))))
 	# unseen srcg rules
 	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
 	# relative frequences as probabilities
@@ -359,14 +355,14 @@ def recoverfromfragments(derivation, backtransform):
 		return Tree(tree.node,
 			[Tree(a.node, rangeheads(sorted(a.leaves())))
 					if isinstance(a, Tree) else a for a in tree])
-	# handle ambiguous fragments with nodes of the form "#n"
-	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
-		and derivation[0].node[0] == "#"):
-		derivation = derivation[0]
 	prod = topproduction(derivation)
 	rprod, leafmap = renumber(prod)
 	#if rprod not in backtransform: print "not found", rprod
 	result = Tree.convert(backtransform.get(rprod, prod))
+	# handle ambiguous fragments with nodes of the form "#n"
+	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
+		and derivation[0].node[0] == "#"):
+		derivation = derivation[0]
 	# revert renumbering
 	for a in result.treepositions('leaves'):
 		result[a] = leafmap.get(result[a], result[a])
@@ -398,13 +394,13 @@ def recoverfromfragments_str(derivation, backtransform):
 			return tree.pprint(margin=999)
 		return "(%s %s)" % (tree.node, " ".join("(%s %s)" % (a.node,
 			" ".join(map(str, rangeheads(sorted(a.leaves()))))) for a in tree))
+	prod = topproduction(derivation)
+	rprod, leafmap = renumber(prod)
+	result = backtransform.get(rprod, rprod)
 	# handle ambiguous fragments with nodes of the form "#n"
 	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
 		and derivation[0].node[0] == "#"):
 		derivation = derivation[0]
-	prod = topproduction(derivation)
-	rprod, leafmap = renumber(prod)
-	result = backtransform.get(rprod, rprod)
 	#if rprod not in backtransform: print "not found", rprod
 	# revert renumbering
 	result = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], result)
