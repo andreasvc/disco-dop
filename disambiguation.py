@@ -1,19 +1,21 @@
 import re, logging
-from random import random
 from heapq import nlargest
 from math import fsum, exp, log
+from random import random
 from bisect import bisect_right
-from collections import defaultdict
 from operator import itemgetter
+from itertools import count
+from collections import defaultdict
 from nltk import Tree
-from grammar import induce_srcg, recoverfromfragments_str, canonicalize
 from plcfrs import parse
+from grammar import induce_srcg, canonicalize, rangeheads
 from treetransforms import unbinarize
 import cython
 assert cython.compiled
 
 infinity = float('infinity')
 removeids = re.compile("@[0-9]+")
+termsre = re.compile(r" ([0-9]+)\b")
 
 def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
 	shortest=False, secondarymodel=None, mpd=False, backtransform=None):
@@ -63,9 +65,9 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
 		maxprob = max(parsetrees[parsetree])
 		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
 									for prob in parsetrees[parsetree]]))]))
-	logging.debug("(%d derivations, %d parsetrees)" % (
-		len(derivations), len(parsetrees)))
-	return parsetrees
+	msg = "(%d derivations, %d parsetrees)" % (
+		len(derivations), len(parsetrees))
+	return parsetrees, msg
 
 def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	sample=False, both=False):
@@ -103,7 +105,7 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 
 	words = [a[0] for a in sent]
 	tagsornil = [a[1] for a in sent] if tags else []
-	chart2, start2 = parse(words, secondarymodel, tagsornil,
+	chart2, start2, _ = parse(words, secondarymodel, tagsornil,
 					1, #secondarymodel.toid[top],
 					True, None, whitelist=whitelist)
 	if start2:
@@ -120,9 +122,9 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 			break
 	else:
 		logging.warning("no matching derivation found") # error?
-	logging.debug("(%d derivations, %d of %d parsetrees)" % (
-		len(derivations), min(sldop_n, len(mpp1)), len(mpp1)))
-	return mpp
+	msg = "(%d derivations, %d of %d parsetrees)" % (
+		len(derivations), min(sldop_n, len(mpp1)), len(mpp1))
+	return mpp, msg
 
 def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 	""" simple sl-dop method; estimates shortest derivation directly from
@@ -148,9 +150,9 @@ def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 	# (addressed) nodes.
 	mpp = [(tt, (-minunaddressed(tt, idsremoved), mpp1[tt]))
 				for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t])]
-	logging.debug("(%d derivations, %d of %d parsetrees)" % (len(derivations),
-														len(mpp), len(mpp1)))
-	return mpp
+	msg = "(%d derivations, %d of %d parsetrees)" % (
+			len(derivations), len(mpp), len(mpp1))
+	return mpp, msg
 
 def sumderivs(ts, derivations):
 	#return fsum([exp(-derivations[t]) for t in ts])
@@ -211,6 +213,80 @@ def getviterbi(chart, start, tolabel):
 					getviterbi(chart, edge.left, tolabel) if edge.left.label
 									else str(edge.left.vec))
 
+def renumber(tree):
+	leaves = tree.leaves()
+	leafmap = dict(zip(sorted(leaves), count()))
+	for a in tree.treepositions('leaves'):
+		tree[a] = leafmap[tree[a]]
+	return tree.freeze(), dict(zip(count(), leaves))
+def topproduction(tree):
+	return Tree(tree.node,
+		[Tree(a.node, rangeheads(sorted(a.leaves())))
+				if isinstance(a, Tree) else a for a in tree])
+def frontierorterm(tree):
+	return not isinstance(tree[0], Tree)
+def recoverfromfragments(derivation, backtransform):
+	""" Reconstruct a DOP derivation from a double DOP derivation with
+	flattened fragments. Returns expanded derivation as Tree object. """
+	# handle ambiguous fragments with nodes of the form "#n"
+	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
+		and derivation[0].node[0] == "#"):
+		derivation = derivation[0]
+	prod = topproduction(derivation)
+	rprod, leafmap = renumber(prod)
+	# fetch the actual fragment corresponding to this production
+	#if rprod not in backtransform: print "not found", rprod
+	result = Tree.convert(backtransform.get(rprod, prod))
+	# revert renumbering
+	for a in result.treepositions('leaves'):
+		result[a] = leafmap.get(result[a], result[a])
+	# recurse on non-terminals of derivation
+	for r, t in zip(result.subtrees(frontierorterm), derivation):
+		if isinstance(r, Tree) and isinstance(t, Tree):
+			new = recoverfromfragments(t, backtransform)
+			r[:] = new[:]
+	return result
+
+def repl(d):
+	def f(x): return " %d" % d[int(x.group(1))]
+	return f
+def recoverfromfragments_str(derivation, backtransform):
+	""" Reconstruct a DOP derivation from a DOP derivation with
+	flattened fragments. "derivation" should be a Tree object, while
+	backtransform should contain strings as keys and values.
+	Returns expanded derivation as a string. """
+	# handle ambiguous fragments with nodes of the form "#n"
+	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
+		and derivation[0].node[0] == "#"):
+		derivation = derivation[0]
+	#topproduction_str(derivation):
+	if isinstance(derivation[0], Tree):
+		children = ["(%s %s)" % (a.node, " ".join(map(str,
+			rangeheads(sorted(a.leaves()))))) for a in derivation]
+		prod = "(%s %s)" % (derivation.node, " ".join(children))
+	else:
+		prod = str(derivation)
+	#renumber(prod):
+	leaves = map(int, termsre.findall(prod))
+	leafmap = dict(zip(sorted(leaves), count()))
+	rprod = termsre.sub(repl(leafmap), prod)
+	leafmap = dict(zip(leafmap.values(), leafmap.keys()))
+	# fetch the actual fragment corresponding to this production
+	result = backtransform.get(rprod, rprod)
+	#if rprod not in backtransform: print "not found", rprod
+	# revert renumbering
+	result = termsre.sub(repl(leafmap), result)
+	# recursively expand all substitution sites
+	for t in derivation:
+		if isinstance(t, Tree):
+			if not isinstance(t[0], Tree): continue
+			frontier = "(%s %s)" % (t.node,
+				" ".join(map(str, rangeheads(sorted(t.leaves())))))
+			assert frontier in result, (frontier, result)
+			replacement = recoverfromfragments_str(t, backtransform)
+			result = result.replace(frontier, replacement, 1)
+	return result
+
 def main():
 	from nltk import Tree
 	from grammar import dop_srcg_rules
@@ -264,15 +340,15 @@ def main():
 	shortest, secondarymodel = dop_srcg_rules(trees, sents, shortestderiv=True)
 	shortest = Grammar(shortest)
 	sent = "a b c".split()
-	chart, start = parse(sent, grammar, None, grammar.toid['ROOT'], True)
+	chart, start, _ = parse(sent, grammar, None, grammar.toid['ROOT'], True)
 	vit = viterbiderivation(chart, start, grammar.tolabel)
-	mpd = marginalize(chart, start, grammar.tolabel, n=1000, mpd=True)
-	mpp = marginalize(chart, start, grammar.tolabel, n=1000)
-	mppsampled = marginalize(chart, start, grammar.tolabel, n=1000, sample=True)
-	sldopsimple = sldop_simple(chart, start, grammar, 1000, 7)
-	sldop1 = sldop(chart, start, sent, None, grammar, shortest, 1000, 7,
+	mpd, _ = marginalize(chart, start, grammar.tolabel, n=1000, mpd=True)
+	mpp, _ = marginalize(chart, start, grammar.tolabel, n=1000)
+	mppsampled, _ = marginalize(chart, start, grammar.tolabel, n=1000, sample=True)
+	sldopsimple, _ = sldop_simple(chart, start, grammar, 1000, 7)
+	sldop1, _ = sldop(chart, start, sent, None, grammar, shortest, 1000, 7,
 		sample=False, both=False)
-	short = marginalize(chart, start, shortest.tolabel, 1000, shortest=True,
+	short, _ = marginalize(chart, start, shortest.tolabel, 1000, shortest=True,
 		secondarymodel=secondarymodel)
 	print
 	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))

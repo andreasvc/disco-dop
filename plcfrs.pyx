@@ -3,7 +3,7 @@
 from math import log, exp
 from array import array
 from collections import defaultdict
-import re, gc, logging, sys
+import re, logging, sys
 import numpy as np
 from agenda import EdgeAgenda, Entry
 from estimates cimport getoutside
@@ -34,8 +34,7 @@ cdef inline Edge new_Edge(double score, double inside, double prob,
 def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 			estimate=None, list whitelist=None, dict coarsechart=None,
 			Grammar coarsegrammar=None, bint splitprune=False,
-			bint markorigin=False, str neverblocksubstr=None,
-			bint neverblockdiscontinuous=False, int beamwidth=0):
+			bint markorigin=False, int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse.
 	Other parameters:
@@ -58,12 +57,6 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 		- markorigin: in combination with splitprune, coarse labels include an
 			integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 			map to the discontinuous node NP_2
-		- neverblocksubstr: do not block nodes with a certain substring,
-			e.g., "|<" to ignore nodes introduced by binarization;
-			useful if coarse and fine stages employ different kinds of
-			markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
-		- neverblockdiscontinuous: same as above but for discontinuous
-			nodes X_n where X is a label and n is a fanout > 1.
 		- beamwidth: specify the maximum number of items that will be explored
 			for each particular span, on a first-come-first-served basis.
 			setting to 0 disables this feature. experimental.
@@ -97,9 +90,6 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 		#assert len(grammar.bylhs) == len(outside)
 		assert lensent <= maxlen
 
-	gc.disable() #is this actually beneficial?
-	# maybe we can disable refcounting altogether?
-
 	# scan
 	for i, w in enumerate(sent):
 		recognized = False
@@ -117,8 +107,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				process_edge(item, new_Edge(x + y, x, x, sibling, NONE),
 					agenda, chart, viterbi, grammar, exhaustive, doprune,
 					whitelist, coarsegrammar, coarsechart, 1, splitprune,
-					markorigin, neverblockdiscontinuous, neverblocksubstr,
-					&blocked)
+					markorigin, &blocked)
 				recognized = True
 		if not recognized and tags and tags[i] in grammar.toid:
 			item = new_ChartItem(grammar.toid[tags[i]], 1ULL << i)
@@ -129,8 +118,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 			chart[item] = []
 			recognized = True
 		elif not recognized:
-			logging.error("not covered: %s" % (tags[i] if tags else w))
-			return chart, NONE
+			return chart, NONE, "not covered: %s" % (tags[i] if tags else w)
 
 	# parsing
 	while agenda.length:
@@ -164,8 +152,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					process_edge(new_ChartItem(rule.lhs, item.vec), newedge,
 						agenda, chart, viterbi, grammar, exhaustive, doprune,
 						whitelist, coarsegrammar, coarsechart, rule.fanout,
-						splitprune, markorigin, neverblockdiscontinuous,
-						neverblocksubstr, &blocked)
+						splitprune, markorigin, &blocked)
 
 			# binary left
 			for i in range(grammar.numrules):
@@ -193,7 +180,6 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							agenda, chart, viterbi, grammar, exhaustive,
 							doprune, whitelist, coarsegrammar, coarsechart,
 							rule.fanout, splitprune, markorigin,
-							neverblockdiscontinuous, neverblocksubstr,
 							&blocked)
 
 			# binary right
@@ -222,7 +208,6 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							agenda, chart, viterbi, grammar, exhaustive,
 							doprune, whitelist, coarsegrammar, coarsechart,
 							rule.fanout, splitprune, markorigin,
-							neverblockdiscontinuous, neverblocksubstr,
 							&blocked)
 
 		if agenda.length > maxA: maxA = agenda.length
@@ -231,33 +216,25 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 		#		"agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
 		#		% (maxA, len(agenda), len(filter(None, chart.values())),
 		#		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
-	logging.debug(
-		"agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
-		% (maxA, len(agenda), len(filter(None, chart.values())),
-		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
-	gc.enable()
-	if goal in chart: return chart, goal
-	else: return chart, NONE
+	msg = "agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d" % (
+		maxA, len(agenda), len(filter(None, chart.values())),
+		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked)
+	if goal in chart: return chart, goal, msg
+	else: return chart, NONE, "no parse " + msg
 
 cdef inline process_edge(ChartItem newitem, Edge newedge,
 		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar,
 		bint exhaustive, bint doprune, list whitelist, Grammar coarsegrammar,
 		dict coarsechart, UChar fanout, bint splitprune, bint markorigin,
-		bint neverblockdiscontinuous, str neverblocksubstr, UInt *blocked):
+		UInt *blocked):
 	""" Decide what to do with a newly derived edge. """
 	cdef ULLong component, vec
 	cdef UInt a, b, origlabel, cnt
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = PyDict_Contains(chart, newitem) == 1
-	cdef bint prunenow = doprune
 	cdef str label
-	#not in agenda or chart
 	if not inagenda and not inchart:
-		if prunenow and neverblockdiscontinuous:
-			prunenow = (fanout == 1)
-		if prunenow and neverblocksubstr:
-			prunenow = neverblocksubstr not in grammar.tolabel[newitem.label]
-		if prunenow:
+		if doprune and newitem.label not in grammar.donotprune:
 			# disc. item to be treated as several split items?
 			if splitprune and fanout > 1:
 				origlabel = newitem.label; vec = newitem.vec
@@ -270,7 +247,8 @@ cdef inline process_edge(ChartItem newitem, Edge newedge,
 				a = b = cnt = 0
 				while vec >> b:
 					if markorigin:
-						try: newitem.label = coarsegrammar.toid["%s%d" % (label, cnt)]
+						try:
+							newitem.label = coarsegrammar.toid[label + str(cnt)]
 						except KeyError:
 							blocked[0] += 1
 							return
@@ -452,7 +430,7 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 			unaryrules = set(range(i))
 
 	# assign POS tags
-	print 1, # == span
+	#print 1, # == span
 	for i, w in enumerate(sent):
 		left = i; right = i + 1
 		recognized = False
@@ -537,7 +515,7 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 					break
 
 	for span in range(2, lensent + 1):
-		print span,
+		# print span,
 		sys.stdout.flush()
 
 		# constituents from left to right
@@ -637,7 +615,7 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 						candidates.discard(i)
 						foundnew = True
 						break
-	print
+	# print
 	if goal in chart: return chart, goal
 	else: return chart, NONE
 
@@ -678,14 +656,14 @@ def do(sent, grammar):
 	from disambiguation import marginalize
 	from operator import itemgetter
 	print "sentence", sent
-	chart, start = parse(sent.split(), grammar, start=grammar.toid['S'])
+	chart, start, _ = parse(sent.split(), grammar, start=grammar.toid['S'])
 	pprint_chart(chart, sent.split(), grammar.tolabel)
 	if start == new_ChartItem(0, 0):
 		print "no parse"
 		return False
 	else:
 		print "10 best parse trees:"
-		mpp = marginalize(chart, start, grammar.tolabel)
+		mpp, _ = marginalize(chart, start, grammar.tolabel)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))): print p,a
 		print
 		return True

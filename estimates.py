@@ -358,10 +358,10 @@ def main():
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	sent = ["a","b","c"]
 	print "\nwithout estimates"
-	chart, start = parse(sent, grammar, estimate=None)
+	chart, start, _ = parse(sent, grammar, estimate=None)
 	pprint_chart(chart, sent, grammar.tolabel)
 	print "\nwith estimates"
-	chart, start = parse(sent, grammar, estimate=(outside, 4))
+	chart, start, _ = parse(sent, grammar, estimate=(outside, 4))
 	pprint_chart(chart, sent, grammar.tolabel)
 
 if __name__ == '__main__': main()

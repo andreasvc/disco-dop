@@ -4,8 +4,9 @@ Extracts recurring fragments from constituency treebanks.
 NB: there is a known bug in multiprocessing which makes it impossible to detect
 ctrl-c or fatal errors like segmentation faults in children which causes the
 master program to wait forever for output from its children. Therefore if
-the program seems stuck, re-run without multiprocessing (--numproc 1) to
-see if there might be a bug. """
+you want to abort, kill the program manually (e.g., press ctrl-z and run
+'kill %1'). If the program seems stuck, re-run without multiprocessing
+(pass --numproc 1) to see if there might be a bug. """
 
 import os, sys, codecs, logging
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG

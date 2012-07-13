@@ -27,6 +27,8 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	rules = []
 	assert len(set(tree.leaves())) == len(tree.leaves()), (
 		"indices should be unique. indices: %r\ntree: %s" % (tree.leaves(), tree))
+	assert sent, ("no sentence.\n"
+		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), tree.leaves(), sent))
 	assert all(0 <= a < len(sent) for a in tree.leaves()), (
 		"all indices should point to a word in the sentence.\n"
 		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), tree.leaves(), sent))
@@ -198,7 +200,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	from fragments import getfragments
 	from treetransforms import minimalbinarization, complexityfanout, addbitsets
 	backtransform = {}
-	newprods = []
+	newprods = {}
 	# to assign IDs to ambiguous fragments (same yield)
 	ids = ("#%d" % n for n in count())
 	trees = list(trees)
@@ -224,32 +226,34 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 			if backtransform[prod] is not None:
 				label = ids.next()
 				if stroutput:
-					tmp = "%s (%s 0))" % (rootnode.search(prod).group(), label)
-					newprods.append((rootnode.sub("("+label, prod), terminals))
+					prod1 = "%s (%s 0))" % (rootnode.search(prod).group(), label)
+					prod2 = rootnode.sub("(" + label, prod, 1)
 				else:
-					tmp = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
-					newprods.append((ImmutableTree(label, prod[:]), terminals))
-				newprods.append((tmp, (None,)))
-				backtransform[tmp] = backtransform[prod]
-				backtransform[prod] = None
+					prod1 = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
+					prod2 = ImmutableTree(label, prod[:])
+				newprods[prod1] = (None,)
+				newprods[prod2] = backtransform[prod][1]
+				backtransform[prod1] = backtransform[prod]
+				backtransform[prod] = None # disable this production
 			label = ids.next()
 			if stroutput:
-				tmp = "%s (%s 0))" % (rootnode.search(prod).group(), label)
-				newprods.append((rootnode.sub("("+label, prod), terminals))
+				prod1 = "%s (%s 0))" % (rootnode.search(prod).group(), label)
+				prod2 = rootnode.sub("(" + label, prod, 1)
 			else:
-				tmp = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
-				newprods.append((ImmutableTree(label, prod[:]), terminals))
-			newprods.append((tmp, (None,)))
-			backtransform[tmp] = frag
+				prod1 = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
+				prod2 = ImmutableTree(label, prod[:])
+			newprods[prod1] = (None,)
+			newprods[prod2] = terminals
+			backtransform[prod1] = frag, terminals
 		else:
-			backtransform[prod] = frag
+			backtransform[prod] = frag, terminals
 	if debug:
 		print "recurring fragments:"
 		for a, b in zip(productions, fragments):
 			print "fragment: %s\nprod:     %s\nfreq: %2d  sent: %s\n" % (
 					b[0], a, fragments[b], b[1])
 		print "ambiguous fragments:"
-		for a, b in newprods:
+		for a, b in newprods.iteritems():
 			print "frag: %s\nsent: %r\n" % (a, b)
 		print "backtransform: {"
 		for a,b in backtransform.items():
@@ -263,11 +267,14 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
 				fsent, arity_marks=True, side_effect=False)), repeat(b)))
 	# ambiguous fragments (fragments that map to the same flattened production)
-	grammar.update(rule for a, b in newprods
+	grammar.update(rule for a, b in newprods.iteritems()
 		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
 				b, arity_marks=a in backtransform, side_effect=False)),
-			chain((fragments.get((backtransform.get(a), b), 1),), repeat(1))))
+			chain((fragments.get(backtransform.get(a), 1),), repeat(1))))
+	# drop terminals, ensure ascii strings
+	for a, b in backtransform.iteritems():
+		if b is not None: backtransform[a] = str(b[0]) if stroutput else b[0]
 	# unseen srcg rules
 	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
 	# relative frequences as probabilities
@@ -341,79 +348,6 @@ def preterminals_and_frontier_nodes(tree, sent):
 		return [b for a in [preterminals_and_frontier_nodes(child, sent)
 					for child in tree] for b in a]
 	return [tree]
-
-def recoverfromfragments(derivation, backtransform):
-	""" Reconstruct a DOP derivation from a double DOP derivation with
-	flattened fragments. Returns expanded derivation as Tree object. """
-	def renumber(tree):
-		leaves = tree.leaves()
-		leafmap = dict(zip(sorted(leaves), count()))
-		for a in tree.treepositions('leaves'):
-			tree[a] = leafmap[tree[a]]
-		return tree.freeze(), dict(zip(count(), leaves))
-	def topproduction(tree):
-		return Tree(tree.node,
-			[Tree(a.node, rangeheads(sorted(a.leaves())))
-					if isinstance(a, Tree) else a for a in tree])
-	prod = topproduction(derivation)
-	rprod, leafmap = renumber(prod)
-	#if rprod not in backtransform: print "not found", rprod
-	result = Tree.convert(backtransform.get(rprod, prod))
-	# handle ambiguous fragments with nodes of the form "#n"
-	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
-		and derivation[0].node[0] == "#"):
-		derivation = derivation[0]
-	# revert renumbering
-	for a in result.treepositions('leaves'):
-		result[a] = leafmap.get(result[a], result[a])
-	# recurse on non-terminals of derivation
-	for r, t in zip(result.subtrees(lambda t: t.height() == 2), derivation):
-		if isinstance(r, Tree) and isinstance(t, Tree):
-			new = recoverfromfragments(t, backtransform)
-			r[:] = new[:]
-	return result
-
-termsre = re.compile(r" ([0-9]+)\b")
-def recoverfromfragments_str(derivation, backtransform):
-	""" Reconstruct a DOP derivation from a DOP derivation with
-	flattened fragments. "derivation" should be a Tree object, while
-	backtransform should contain strings as keys and values.
-	Returns expanded derivation as a string. """
-	def repl(d):
-		def f(x): return d.get(int(x.group(1)), x.group(1))
-		return f
-	def renumber(tree):
-		leaves = map(int, termsre.findall(tree))
-		leafmap = dict(zip(sorted(leaves), count()))
-		newtree = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], tree)
-		return newtree, dict(zip(leafmap.values(), leafmap.keys()))
-	def topproduction(tree):
-		""" return string with root node of tree with all its children turned
-		into frontier nodes """
-		if not isinstance(tree[0], Tree):
-			return tree.pprint(margin=999)
-		return "(%s %s)" % (tree.node, " ".join("(%s %s)" % (a.node,
-			" ".join(map(str, rangeheads(sorted(a.leaves()))))) for a in tree))
-	prod = topproduction(derivation)
-	rprod, leafmap = renumber(prod)
-	result = backtransform.get(rprod, rprod)
-	# handle ambiguous fragments with nodes of the form "#n"
-	if (len(derivation) == 1 and isinstance(derivation[0], Tree)
-		and derivation[0].node[0] == "#"):
-		derivation = derivation[0]
-	#if rprod not in backtransform: print "not found", rprod
-	# revert renumbering
-	result = termsre.sub(lambda x: " %d" % leafmap[int(x.group(1))], result)
-	# recursively expand all substitution sites
-	for t in derivation:
-		if isinstance(t, Tree):
-			if not isinstance(t[0], Tree): continue
-			frontier = "(%s %s)" % (t.node,
-				" ".join(map(str, rangeheads(sorted(t.leaves())))))
-			assert frontier in result, (frontier, result)
-			replacement = recoverfromfragments_str(t, backtransform)
-			result = result.replace(frontier, replacement, 1)
-	return result
 
 def postorder(tree, f=None):
 	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
@@ -587,7 +521,7 @@ def enumchart(chart, start, tolabel, n=1):
 				yield tree, edge.prob+sum(px for z,px in x)
 
 def exportrparse(grammar):
-	""" Export an unsplitted grammar to rparse format. All frequencies are 1,
+	""" Export a grammar to rparse format. All frequencies are 1,
 	but probabilities are exported.  """
 	def repryf(yf):
 		return "[" + ", ".join("[" + ", ".join("true" if a == 1 else "false"
@@ -609,52 +543,40 @@ def exportrparse(grammar):
 			yield ("1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]),
 				" ".join(map(rewritelabel, r[1:])), repryf(yf)))
 
-def read_bitpar_grammar(rules, lexicon, encoding='utf-8', ewe=False):
+def read_bitpar_grammar(rules, lexicon, encoding='utf-8', dop=False, ewe=False):
+	""" Read a bitpar grammar. Must be a binarized grammar.
+	Note that the VROOT symbol will be read as `ROOT' instead. Frequencies will
+	be converted to exact relative frequencies (unless ewe is specified)."""
 	grammar = []
 	ntfd = defaultdict(float)
 	ntfd1 = defaultdict(set)
-	for a in codecs.open(rules, encoding=encoding):
+	for a in open(rules):
 		a = a.split()
 		p, rule = float(a[0]), a[1:]
 		if rule[0] == "VROOT": rule[0] = "ROOT"
 		ntfd[rule[0]] += p
-		ntfd1[rule[0].split("@")[0]].add(rule[0])
-		grammar.append(([(rule[0], [range(len(rule) - 1)])]
-					+ [(a, [n]) for n, a in enumerate(rule[1:])], p))
+		if dop: ntfd1[rule[0].split("@")[0]].add(rule[0])
+		if len(rule) == 2:
+			grammar.append(((tuple(rule), ((0,),)), p))
+		elif len(rule) == 3:
+			grammar.append(((tuple(rule), ((0,1),)), p))
+		else: raise ValueError
+		#grammar.append(([(rule[0], [range(len(rule) - 1)])]
+		#			+ [(a, [n]) for n, a in enumerate(rule[1:])], p))
 	for a in codecs.open(lexicon, encoding=encoding):
 		a = a.split()
 		word, tags = a[0], a[1:]
 		tags = zip(tags[::2], map(float, tags[1::2]))
-		for t,p in tags:
+		for t, p in tags:
 			ntfd[t] += p
-			ntfd1[t.split("@")[0]].add(t)
-		grammar.extend((((t, (word,)), ('Epsilon', ())), p) for t, p in tags)
+			if dop: ntfd1[t.split("@")[0]].add(t)
+		grammar.extend((((t, 'Epsilon'), (word, ())), p) for t, p in tags)
 	if ewe:
-		return Grammar([(varstoindices(rule),
+		return Grammar([(rule,
 			log(p / (ntfd[rule[0][0]] * len(ntfd1[rule[0][0].split("@")[0]]))))
 			for rule, p in grammar])
-	return Grammar([(varstoindices(rule), log(p / ntfd[rule[0][0]]))
+	return Grammar([(rule, log(p / ntfd[rule[0][0]]))
 							for rule, p in grammar])
-
-def write_bitpar_grammar(grammar, rules, lexicon, encoding='utf-8'):
-	""" write grammar as a bitpar grammar to files specified by rules and
-	lexicon."""
-	rules = codecs.open(rules, "w", encoding=encoding)
-	for a in grammar.bylhs:
-		for rule in a:
-			assert len(rule.args == 1)		#CFG rule?
-			rules.write("%f\t%s\t%s\n" % (
-					exp(-rule.prob), grammar.tolabel[rule.lhs],
-					"".join(grammar.tolabel[rule.rhs1],
-					"\t" + grammar.tolabel[rule.rhs2] if rule.rhs2 else '')))
-	lexicon = codecs.open(lexicon, "w", encoding=encoding)
-	for word in grammar.lexical:
-		lexicon.write("%s\t" % word)
-		for term in grammar.lexical[word]:
-			lexicon.write("%f\t%s" % (exp(-term.prob),
-								grammar.tolabel[term.lhs]))
-		lexicon.write("\n")
-	rules.close(); lexicon.close()
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	""" Takes a bitpar grammar and converts it to the format of
@@ -693,13 +615,13 @@ def write_srcg_grammar(grammar, rules, lexicon, encoding='utf-8'):
 
 def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
 	""" Reads a grammar as produced by write_srcg_grammar. """
-	rules = (a[:-1].split('\t') for a in codecs.open(rules, encoding=encoding))
-	lexicon = (a[:-1].split('\t') for a in codecs.open(lexicon,
-															encoding=encoding))
-	rules = [((tuple(a[:-2]), tuple(tuple(map(int, b))
-			for b in a[-2].split(","))), float(a[-1])) for a in rules]
-	lexicon = [((tuple(a[:-2]), (a[-2])), float(a[-1])) for a in lexicon]
-	return rules, lexicon
+	rules = (a.strip().split('\t') for a in open(rules))
+	lexicon = (a.strip().split('\t') for a in codecs.open(lexicon,
+			encoding=encoding))
+	grammar = [((a[:-2], tuple(tuple(map(int, b)) for b in a[-2].split(","))),
+			float.fromhex(a[-1])) for a in rules]
+	grammar += [(((t, 'Epsilon'), (w, ())), float.fromhex(p)) for t,w,p in lexicon]
+	return Grammar(grammar)
 
 def read_penn_format(corpus, maxlen=15, n=7200):
 	trees = [a for a in islice((Tree(a)
@@ -806,9 +728,9 @@ def do(sent, grammar):
 	from plcfrs import parse, pprint_chart
 	from disambiguation import marginalize
 	print "sentence", sent
-	p, start = parse(sent, grammar, start=grammar.toid['S'])
+	p, start, _ = parse(sent, grammar, start=grammar.toid['S'])
 	if start:
-		mpp = marginalize(p, start, grammar.tolabel)
+		mpp, _ = marginalize(p, start, grammar.tolabel)
 		for t in mpp:
 			print exp(mpp[t]), t
 	else:
@@ -820,7 +742,8 @@ def main():
 	from treetransforms import unbinarize, binarize, optimalbinarize
 	from treebank import NegraCorpusReader, BracketCorpusReader
 	from plcfrs import parse, pprint_chart
-	from disambiguation import marginalize
+	from disambiguation import marginalize, recoverfromfragments, \
+			recoverfromfragments_str
 	from kbest import lazykbest
 	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
@@ -873,46 +796,48 @@ def main():
 	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	sents = corpus.sents()[:100]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
-	stroutput = True; debug = False
-	grammarx, backtransform = doubledop(trees, sents,
-		stroutput=stroutput, debug=debug)
-	print '\ndouble dop grammar (stroutput=%r)' % stroutput
-	grammar = Grammar(grammarx)
-	print unicode(grammar)
-	assert grammar.testgrammar() #DOP1 should sum to 1.
-	print "fragment rules:"
-	for x in set(a for a,_ in grammarx) - set(a for a,_ in induce_srcg(trees, sents)):
-		print x
-	for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
-		print "sentence:",
-		for w in sent: stdout.write(' ' + w)
-		root = tree.node
-		chart, start = parse(sent, grammar, start=grammar.toid[root],
-			exhaustive=True)
-		print "gold\n", tree.pprint(margin=9999)
-		print "double dop parsetrees:"
-		if start:
-			#mpp = marginalize(chart, start, grammar.tolabel)
-			mpp = {}
-			for t, p in lazykbest(chart, start, 1000, grammar.tolabel):
-				t2 = Tree.parse(t, parse_leaf=int)
-				unbinarize(t2, childChar="}")
-				if debug: print "deriv", t2.pprint(margin=9999)
-				if stroutput:
-					r = Tree(recoverfromfragments_str(canonicalize(t2),
-							backtransform))
-				else:
-					r = recoverfromfragments(canonicalize(t2), backtransform)
-				if debug: print " =>\t", r.pprint(margin=9999)
-				unbinarize(r)
-				r = rem_marks(r).pprint(margin=9999)
-				mpp[r] = mpp.get(r, 0) + exp(-p)
-			for t in mpp:
-				print mpp[t], '\n', t, "match:", t == tree.pprint(margin=9999)
-		else:
-			print "no parse"
-			pprint_chart(chart, sent, grammar.tolabel)
-		print
+	debug = False
+	for stroutput in (False, True):
+		grammarx, backtransform = doubledop(trees, sents,
+			stroutput=stroutput, debug=debug)
+		print '\ndouble dop grammar (stroutput=%r)' % stroutput
+		grammar = Grammar(grammarx)
+		print unicode(grammar)
+		assert grammar.testgrammar() #DOP1 should sum to 1.
+		print "fragment rules:"
+		for x in set(a for a,_ in grammarx) - set(a for a,_ in induce_srcg(trees, sents)):
+			print x
+		for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
+			print "sentence:",
+			for w in sent: stdout.write(' ' + w)
+			root = tree.node
+			chart, start, _ = parse(sent, grammar, start=grammar.toid[root],
+				exhaustive=True)
+			print "gold\n", tree.pprint(margin=9999)
+			print "double dop parsetrees:"
+			if start:
+				#mpp, _ = marginalize(chart, start, grammar.tolabel)
+				mpp = {}
+				for t, p in lazykbest(chart, start, 1000, grammar.tolabel):
+					t2 = Tree.parse(t, parse_leaf=int)
+					unbinarize(t2, childChar="}")
+					if debug: print "deriv", t2.pprint(margin=9999)
+					if stroutput:
+						r = Tree(recoverfromfragments_str(canonicalize(t2),
+								backtransform))
+					else:
+						r = recoverfromfragments(canonicalize(t2), backtransform)
+					if debug: print " =>\t", r.pprint(margin=9999)
+					unbinarize(r)
+					r = rem_marks(r).pprint(margin=9999)
+					mpp[r] = mpp.get(r, 0) + exp(-p)
+				for t in mpp:
+					print mpp[t], '\n', t,
+					print "match:", t == tree.pprint(margin=9999)
+			else:
+				print "no parse"
+				pprint_chart(chart, sent, grammar.tolabel)
+			print
 
 if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS

@@ -194,7 +194,7 @@ def bitext():
 	do(another_scfg, "ich sah ein kleines Haus | I saw a little shell".split())
 
 def do(compiledgrammar, testsent, testtags=None):
-	chart, start = plcfrs.parse(testsent,
+	chart, start, _ = plcfrs.parse(testsent,
 		compiledgrammar,
 		tags=testtags, start=compiledgrammar.toid["ROOT"],
 		exhaustive=True)

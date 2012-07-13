@@ -27,3 +27,15 @@ cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables)
 
 cdef inline double sumderivs(ts, derivations)
 cdef inline int minunaddressed(tt, idsremoved)
+
+cpdef recoverfromfragments(derivation, dict backtransform)
+
+@cython.locals(
+	leaves=list,
+	leafmap=dict,
+	prod=str,
+	rprod=str,
+	result=str,
+	frontier=str,
+	replacement=str)
+cpdef str recoverfromfragments_str(derivation, dict backtransform)

@@ -1,17 +1,19 @@
 #parameters. parameters. PARAMETERS!!
-splitpcfg=True,
+splitpcfg=False,
 srcg=True,
-dop=False,
+dop=True,
+usedoubledop = False,   # when False, use DOP reduction instead
+usecfgparse=False, #whether to use the dedicated CFG parser for splitpcfg
 corpusdir=".",
 corpusfile="sample2.export",
 encoding="iso-8859-1",
 movepunct=True,
 removepunct=False,
 unfolded=False,
-maxlen=100,  # max number of words for sentences in test corpus
-trainmaxlen=100, # max number of words for sentences in train corpus
-train=2, # length of training corpus
-maxsent=1, # number of sentences to parse
+testmaxwords=100,  # max number of words for sentences in test corpus
+trainmaxwords=100, # max number of words for sentences in train corpus
+trainsents=2, # length (sents) of training corpus
+testsents=1, # (max) number of test sentences to parse
 skip=0,	# don't skip sentences between train & test set
 bintype="nltk", # choices: binarize, nltk, optimal, optimalhead
 factor="right",
@@ -25,6 +27,7 @@ sample=False, both=False,
 m=10000,		#number of derivations to sample/enumerate
 estimator="ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 sldop_n=7,
+splitk = 50, #number of coarse pcfg derivations to prune with; k=0 => filter only
 k=50,		#number of coarse derivations to prune with; k=0 => filter only
 prune=True,	#whether to use srcg chart to prune parsing of dop
 getestimates=False, #compute & store estimates
@@ -33,6 +36,6 @@ mergesplitnodes=True, #coarse grammar is PCFG with splitted nodes eg. VP*
 markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
 splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
 removeparentannotation=False, # VP^<S> is treated as VP
-neverblocksubstr=None, #do not prune intermediate nodes of binarization
-neverblockdiscontinuous=False, #never block discontinuous nodes.
+neverblockre=None, #do not prune nodes with label that match regex
 quiet=False, reallyquiet=False, #quiet=no per sentence results
+numproc=4	# enable multiprocessing. 1 to disable, 0 to use all CPUs.

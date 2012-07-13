@@ -1,3 +1,4 @@
+import codecs
 from math import exp
 from collections import Set, Iterable
 from functools import partial
@@ -9,6 +10,7 @@ cdef class Grammar:
 		labels to numeric identifiers. Also negates log-probabilities to
 		accommodate min-heaps.
 		Can only represent ordered SRCG rules (monotone LCFRS). """
+		self.origrules = frozenset(grammar)
 		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 		# and assign them unique IDs
 		# convert them to ASCII strings.
@@ -21,6 +23,7 @@ cdef class Grammar:
 		self.tolabel = dict((n, lhs) for n, lhs in nonterminals)
 		self.lexical = {}
 		self.lexicalbylhs = {}
+		self.donotprune = frozenset()
 
 		# the strategy is to lay out all non-lexical rules in a contiguous array
 		# these arrays will contain pointers to relevant parts thereof
@@ -36,8 +39,19 @@ cdef class Grammar:
 		for (rule, yf), w in grammar:
 			if len(rule) == 2:
 				if rule[1] != 'Epsilon':
+					assert all(b == 0 for a in yf for b in a), (
+						"yield function refers to non-existent second "
+						"non-terminal: %r\t%r" % (rule, yf))
 					unary_len += 1
 			elif len(rule) == 3:
+				assert all(b == 0 or b == 1 for a in yf for b in a), (
+					"grammar must be binarized")
+				assert any(b == 0 for a in yf for b in a), (
+					"mismatch between non-terminals "
+					"and yield function: %r\t%r" % (rule, yf))
+				assert any(b == 1 for a in yf for b in a), (
+					"mismatch between non-terminals "
+					"and yield function: %r\t%r" % (rule, yf))
 				binary_len += 1
 			else: raise ValueError(
 				"grammar not binarized: %s" % repr((rule,yf,w)))
@@ -92,6 +106,67 @@ cdef class Grammar:
 				return False
 		print "All left hand sides sum to 1"
 		return True
+	def getdonotprune(self, neverblockre):
+		""" Construct a list of non-terminal IDs that match a regex. Items in
+		this list will not be pruned during coarse-to-fine parsing.
+		The regex will be applied with .match(), so it should match from the
+		beginning of the label.
+        - e.g., ".+|<" to ignore nodes introduced by binarization;
+            useful if coarse and fine stages employ different kinds of
+            markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
+        - ".+_[0-9]+" to ignore nodes X_n where X is a label and n is a fanout > 1.
+		"""
+		self.donotprune = frozenset([n for n in range(self.nonterminals)
+			if neverblockre.match(self.tolabel[n]) is not None])
+	def write_srcg_grammar(self, rules, lexicon):
+		""" Writes the grammar into a simple text file format.
+		Fields are separated by tabs. Components of the yield function are
+		comma-separated. Weights are expressed as hexadecimal negative logprobs.
+		E.g.
+		rules: S    NP  VP  010 0.5
+			VP_2    VB  NP  0,1 0.4
+			NP	NN	0	0.3
+		lexicon: NN Epsilon Haus    0.3
+		"""
+		with open(rules, "w") as rules:
+			for n in range(self.numrules):
+				if self.bylhs[0][n].lhs == self.nonterminals: break
+				pyfloat = self.bylhs[0][n].prob
+				rules.write("%s\t%s%s\t%s\t%s\n" % (
+					self.tolabel[self.bylhs[0][n].lhs],
+					self.tolabel[self.bylhs[0][n].rhs1],
+					('\t'+self.tolabel[self.bylhs[0][n].rhs2]
+						if self.bylhs[0][n].rhs2 else ''),
+					yfrepr(self.bylhs[0][n]),
+					pyfloat.hex()))
+		with codecs.open(lexicon, "w", encoding='utf-8') as lexicon:
+			for word in self.lexical:
+				for term in self.lexical[word]:
+					pyfloat = term.prob
+					lexicon.write("%s\t%s\t%s\n" % (
+						self.tolabel[term.lhs], word, pyfloat.hex()))
+		lexicon.close()
+	def write_bitpar_grammar(self, rules, lexicon, encoding='utf-8'):
+		""" write grammar as a bitpar grammar to files specified by rules and
+		lexicon. As `frequencies' we give the probabilities in the grammar,
+		which is supported by bitpar. """
+		with open(rules, "w") as rules:
+			for n in range(self.numrules):
+				if self.bylhs[0][n].lhs == self.nonterminals: break
+				assert self.bylhs[0][n].fanout == 1, "can only export CFG rules"
+				rules.write("%f\t%s\t%s%s\n" % (
+						exp(-self.bylhs[0][n].prob),
+						self.tolabel[self.bylhs[0][n].lhs],
+						self.tolabel[self.bylhs[0][n].rhs1],
+						("\t" + self.tolabel[self.bylhs[0][n].rhs2])
+							if self.bylhs[0][n].rhs2 else ''))
+		with codecs.open(lexicon, "w", encoding=encoding) as lexicon:
+			for word in self.lexical:
+				lexicon.write(word)
+				for term in self.lexical[word]:
+					lexicon.write("\t%s %f" % (self.tolabel[term.lhs],
+						exp(-term.prob)))
+				lexicon.write("\n")
 	def rulerepr(self, lhs):
 		result = []
 		for n in range(self.numrules):
@@ -113,6 +188,8 @@ cdef class Grammar:
 					for lr in self.lexical[word]])
 		return "rules:\n%s\nlexicon:\n%s\nlabels=%r" % (rules, lexical,
 			self.toid)
+	def __reduce__(self):
+		return (Grammar, (self.origrules,))
 	def __dealloc__(self):
 		pass #FIXME
 		#free(self.unary[0]); self.unary[0] = NULL
@@ -150,10 +227,6 @@ cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
 			for b in a: #component:
 				if b == 1:
 					cur.args += 1 << m
-					assert len(rule) == 3, ("mismatich between non-terminals "
-							"and yield function: %r\t%r" % (rule, yf))
-				elif b != 0:
-					raise ValueError("grammar must be binarized")
 				m += 1
 			cur.lengths |= 1 << (m - 1)
 		assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
@@ -166,15 +239,15 @@ cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
 	# sentinel rule
 	dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = nonterminals
 
-cdef yfrepr(Rule rule):
+cdef str yfrepr(Rule rule):
 	cdef int n, m = 0
-	result = ""
+	cdef str result = ""
 	for n in range(8 * sizeof(rule.args)):
 		result += "1" if (rule.args >> n) & 1 else "0"
 		if (rule.lengths >> n) & 1:
 			m += 1
 			if m == rule.fanout: return result
-			else: result += ", "
+			else: result += ","
 	raise ValueError("expected %d components" % rule.fanout)
 
 cdef class FatChartItem:

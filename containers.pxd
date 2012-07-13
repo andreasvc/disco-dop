@@ -21,6 +21,13 @@ cdef extern from "macros.h":
 	int BITSLOT(int b)
 
 @cython.final
+cdef class Grammar:
+	cdef Rule **unary, **lbinary, **rbinary, **bylhs
+	cdef public dict lexical, lexicalbylhs, toid, tolabel
+	cdef frozenset donotprune, origrules
+	cdef size_t nonterminals, numrules
+
+@cython.final
 cdef class ChartItem:
 	cdef public ULLong vec
 	cdef public UInt label
@@ -36,12 +43,6 @@ cdef class Edge:
 	cdef public double prob
 	cdef public ChartItem left
 	cdef public ChartItem right
-
-@cython.final
-cdef class Grammar:
-	cdef Rule **unary, **lbinary, **rbinary, **bylhs
-	cdef public dict lexical, lexicalbylhs, toid, tolabel
-	cdef size_t nonterminals, numrules
 
 #@cython.final
 cdef struct Rule:
@@ -113,7 +114,7 @@ cdef class MemoryPool:
 	cdef int poolsize, limit, n, leftinpool
 
 cdef inline FrozenArray new_FrozenArray(array data)
-cdef yfrepr(Rule rule)
+cdef str yfrepr(Rule rule)
 cpdef inline UInt getlabel(ChartItem a)
 cpdef inline ULLong getvec(ChartItem a)
 cpdef inline double getscore(Edge a)

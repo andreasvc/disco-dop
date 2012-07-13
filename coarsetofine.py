@@ -1,7 +1,7 @@
 """Assorted functions to project items from a coarse chart to corresponding
 items for a fine grammar.
 """
-import re, logging
+import re
 from collections import defaultdict
 from nltk import Tree
 from treetransforms import mergediscnodes, unbinarize, slowfanout
@@ -51,8 +51,6 @@ def prunechart(chart, goal, coarse, fine, k, reduceh=999,
 			l[itemcast(Ih).label][itemcast(Ih).vec] = kbest.get(Ih, infinity)
 		for a, label in fine.toid.iteritems():
 			whitelist[label] = l[coarse.toid.get(removeids.sub("", a), 1)]
-	logging.debug('pruning with %d nonterminals, %d items' % (
-			len(filter(None, whitelist)), len(chart)))
 	return whitelist
 
 def merged_kbest(chart, start, k, grammar):
@@ -144,9 +142,9 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 	from math import exp
 	sent, tags = zip(*sent)
 	print " C O A R S E ",
-	p, start = parse(sent, coarse, start=coarse.toid['ROOT'], tags=tags)
+	p, start, _ = parse(sent, coarse, start=coarse.toid['ROOT'], tags=tags)
 	if start:
-		mpp = marginalize(p, start, coarse.tolabel)
+		mpp, _ = marginalize(p, start, coarse.tolabel)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
@@ -178,12 +176,12 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 			print fine.tolabel[n], [(bin(v), s) for v,s in x.items()]
 	print " F I N E ",
 	p = filterchart(p, start) if split else None
-	pp, start = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
+	fine.getdonotprune(re.compile(r"\|<"))
+	pp, start, _ = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
 		whitelist=l, coarsechart=p, coarsegrammar=coarse,
-		neverblocksubstr="|" if pa else None, neverblockdiscontinuous=False,
 		splitprune=split, markorigin=True)
 	if start:
-		mpp = marginalize(pp, start, fine.tolabel)
+		mpp, _ = marginalize(pp, start, fine.tolabel)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
