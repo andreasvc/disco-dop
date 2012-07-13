@@ -13,7 +13,7 @@ DEF infinity = float('infinity')
 # a regex to strip off arity markers and binarization introduced by the
 # fragments of Double DOP (e.g., "NP_2}<...>") or addresses from the DOP
 # reduction (e.g., "NP_2@12")
-striplabel = re.compile(r"(?:_[0-9]+)?(?:@[0-9]+)?$")
+striplabel = re.compile(r"(?:_[0-9]+)?(?:@.+)?$")
 
 # to avoid overhead of __init__ and __cinit__ constructors
 # belongs in containers but putting it here gives

@@ -400,7 +400,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				if splitprune and not srcg:
 					chart = kbest_items(chart, start, k)
 					logging.debug("whitelist obtained: %gs; before: %d; after: %d" % (
-						time.clock() - begin, len(chart), len(pchart)))
+						time.clock() - begin, len(chart), len(chart)))
 				else:
 					whitelist = prunechart(chart, start, srcggrammar,
 								dopgrammar, k, removeparentannotation,
@@ -439,7 +439,8 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			if estimator == "shortest":
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
 						sample=sample, both=both, shortest=True,
-						secondarymodel=secondarymodel).items()
+						secondarymodel=secondarymodel)
+				mpp = mpp.items()
 			elif estimator == "sl-dop":
 				mpp, msg1 = sldop(chart, start, sent, tags, dopgrammar,
 							secondarymodel, m, sldop_n, sample, both)
@@ -449,10 +450,12 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				mpp, msg1 = sldop_simple(chart, start, dopgrammar, m, sldop_n)
 			elif backtransform is not None:
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
-					sample=sample, both=both, backtransform=backtransform).items()
+					sample=sample, both=both, backtransform=backtransform)
+				mpp = mpp.items()
 			else: #dop1, ewe
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel,
-									n=m, sample=sample, both=both).items()
+									n=m, sample=sample, both=both)
+				mpp = mpp.items()
 			logging.debug(msg1)
 			dresult, prob = max(mpp, key=itemgetter(1))
 			dresult = Tree(dresult)
@@ -788,9 +791,7 @@ def parsetepacoc(dop=True, srcg=True, estimator='ewe', unfolded=False,
 
 def worker((nsent, tree, sent, block)):
 	""" parse a sentence using pcfg, lcfrs, dop """
-	assert internalparams.srcggrammar, (internalparams.__dict__keys())
 	d = internalparams
-	assert d.srcggrammar
 	goldb = bracketings(tree)
 	pnoparse = snoparse = dnoparse = False
 	exactp = exacts = exactd = False
@@ -924,7 +925,7 @@ def worker((nsent, tree, sent, block)):
 			if d.splitprune and not d.srcg:
 				chart = kbest_items(chart, start, d.k)
 				msg += "whitelist obtained: %gs; before: %d; after: %d\n" % (
-					time.clock() - begin, len(chart), len(pchart))
+					time.clock() - begin, len(chart), len(chart))
 			else:
 				whitelist = prunechart(chart, start, d.srcggrammar,
 							d.dopgrammar, d.k, d.removeparentannotation,
@@ -955,7 +956,8 @@ def worker((nsent, tree, sent, block)):
 		if d.estimator == "shortest":
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
 					sample=d.sample, both=d.both, shortest=True,
-					secondarymodel=d.secondarymodel).items()
+					secondarymodel=d.secondarymodel)
+			mpp = mpp.items()
 		elif d.estimator == "sl-dop":
 			mpp, msg1 = sldop(chart, start, sent, d.tags, d.dopgrammar,
 						d.secondarymodel, d.m, d.sldop_n, d.sample, d.both)
@@ -965,10 +967,12 @@ def worker((nsent, tree, sent, block)):
 			mpp, msg1 = sldop_simple(chart, start, d.dopgrammar, d.m, d.sldop_n)
 		elif d.backtransform is not None:
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
-				sample=d.sample, both=d.both, backtransform=d.backtransform).items()
+				sample=d.sample, both=d.both, backtransform=d.backtransform)
+			mpp = mpp.items()
 		else: #dop1, ewe
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
-								n=d.m, sample=d.sample, both=d.both).items()
+								n=d.m, sample=d.sample, both=d.both)
+			mpp = mpp.items()
 		msg += msg1
 		dresult, prob = max(mpp, key=itemgetter(1))
 		dresult = Tree(dresult)
@@ -1068,7 +1072,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 	# main parse loop over each sentence in test corpus
 	for data in dowork:
 		nsent, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
-		tree, sent, block = work[nsent-1]
+		_, tree, sent, block = work[nsent-1]
 		logging.debug("%d. [len=%d] %s\n%s" % (nsent, len(sent),
 					u" ".join(a[0] for a in sent),	# words only
 					#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
