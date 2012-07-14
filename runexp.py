@@ -428,7 +428,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 							splitprune=splitprune and not srcg,
 							markorigin=markorigin)
 			msg += msg1
-			if not start:
+			if srcg and not start:
 				from plcfrs import pprint_chart
 				pprint_chart(chart,
 						[w.encode('unicode-escape') for w, _ in sent],
@@ -945,7 +945,7 @@ def worker((nsent, tree, sent, block)):
 						splitprune=d.splitprune and not d.srcg,
 						markorigin=d.markorigin)
 		msg += " DOP: " + msg1
-		if not start:
+		if d.srcg and not start:
 			from plcfrs import pprint_chart
 			pprint_chart(chart,
 					[w.encode('unicode-escape') for w, _ in sent],
@@ -1123,7 +1123,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 								100 * f_measure(goldbrackets, dcandb),
 								100 * (f_measure(goldbrackets, dcandb) -
 									max(f_measure(goldbrackets, pcandb) if splitpcfg else -1,
-									f_measure(goldbrackets, scandb)))))
+									f_measure(goldbrackets, scandb) if srcg else -1))))
 
 	if splitpcfg:
 		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
