@@ -1040,7 +1040,9 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 		resultdir="results", usecfgparse=False, backtransform=None,
 		category=None, sentinit=0, doph=999):
 	""" Like doparse but use multiprocessing. """
-	import tempfile
+	# FIXME: use multiprocessing namespace:
+	#mgr = multiprocessing.Manager()
+	#namespace = mgr.Namespace()
 	params = Params(
 			splitpcfg=splitpcfg, srcg=srcg, dop=dop,
 			pcfggrammar=pcfggrammar, srcggrammar=srcggrammar,

@@ -13,8 +13,8 @@ from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
-from _fragments import extractfragments, fastextractfragments,\
-	readtreebank, indextrees, exactcounts, exactindices, completebitsets
+from _fragments import extractfragments, fastextractfragments, exactcounts, \
+		exactindices, completebitsets, readtreebank, indextrees, getctrees
 
 # this fixes utf-8 output when piped through e.g. less
 # won't help if the locale is not actually utf-8, of course
@@ -339,16 +339,15 @@ def printfragments(fragments, out=sys.stdout):
 				if params['disc'] else a, freq))
 		elif threshold: logging.warning("invalid fragment--frequency=1: %s" % a)
 
+def initworkersimple(trees, sents):
+	global params
+	params.update(getctrees(trees, sents))
+	assert params['trees1']
+
 def getfragments(trees, sents):
 	""" Get recurring fragments with exact counts in a single treebank,
 	using all available CPUs."""
 	from treebank import export
-	import tempfile
-	# write trees to temporary file
-	_, treebank = tempfile.mkstemp()
-	tmp = codecs.open(treebank, "w", encoding='utf-8')
-	tmp.writelines(export(*x) for x in zip(trees, sents, count(1)))
-	tmp.close()
 	numproc = cpu_count()
 	numtrees = len(trees)
 	assert numtrees
@@ -360,8 +359,8 @@ def getfragments(trees, sents):
 	params.update(chunk=chunk, disc=True, exact=True,
 		complete=False, indices=False, quadratic=False)
 	# start worker processes
-	pool = Pool(processes=numproc, initializer=initworker,
-		initargs=(treebank, None, numtrees, 'utf-8'))
+	pool = Pool(processes=numproc, initializer=initworkersimple,
+		initargs=(trees, sents))
 
 	logging.info("work division:\n%s" % "\n".join("    %s: %r" % kv
 		for kv in sorted(dict(
@@ -381,7 +380,6 @@ def getfragments(trees, sents):
 
 	pool.terminate()
 	pool.join()
-	os.remove(treebank)
 	del dowork, pool
 	logging.info("found %d fragments" % len(fragments))
 	return dict(zip(keys, counts))

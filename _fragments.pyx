@@ -590,6 +590,27 @@ def frontierorterm(x):
 def pathsplit(p):
 	return p.rsplit("/", 1) if "/" in p else (".", p)
 
+def getctrees(trees, sents):
+	""" Return Ctrees object for a list of disc. trees and sentences. """
+	from grammar import canonicalize
+	labels = {}; prods = {}
+	trees = [tolist(add_srcg_rules(canonicalize(x), y))
+					for x, y in zip(trees, sents)]
+	getlabels(trees, labels)
+	getprods(trees, prods)
+	for tree in trees:
+		root = tree[0]
+		# reverse sort so that terminals end up last
+		tree.sort(key=lambda n: -prods.get(n.prod, -1))
+		for n, a in enumerate(tree): a.idx = n
+		tree[0].root = root.idx
+	trees = Ctrees(trees, labels, prods)
+	revlabel = sorted(labels, key=labels.get)
+	treeswithprod = indextrees(trees, prods)
+	return dict(trees1=trees, sents1=sents, trees2=None, sents2=None,
+		labels=labels, prods=prods, revlabel=revlabel,
+		treeswithprod=treeswithprod)
+
 def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 	limit=0, encoding="utf-8"):
 	if treebank is None: return None, None
