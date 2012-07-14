@@ -456,7 +456,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel,
 		result[frag] = pyarray
 	return result
 
-cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
+cpdef exactcounts(Ctrees trees1, Ctrees trees2, tuple bitsets,
 	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees2 as bitsets, produce an exact
 	count of those fragments in trees1 (which may be equal to trees2).
@@ -496,7 +496,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		counts[f] = count
 	return counts
 
-cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
+cpdef list exactindices(Ctrees trees1, Ctrees trees2, tuple bitsets,
 	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees2 as bitsets, produce the exact set
 	of trees with those fragments in trees1 (which may be equal to trees2).

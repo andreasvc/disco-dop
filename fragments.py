@@ -208,19 +208,22 @@ def main(argv):
 					approx=not (params['exact'] or params['indices']))
 			if params['indices']:
 				logging.info("getting indices of occurrence")
-				counts = exactindices(trees1, trees1, fragments.values(),
+				keys, f = zip(*fragments.items())
+				counts = exactindices(trees1, trees1, f,
 						params['disc'], params['revlabel'],
 						params['treeswithprod'], fast=not params['quadratic'])
+				fragments = zip(keys, counts)
 			elif params['exact']:
 				logging.info("getting exact counts")
-				counts = exactcounts(trees1, trees1, fragments.values(),
+				keys, f = zip(*fragments.items())
+				counts = exactcounts(trees1, trees1, f,
 						params['disc'], params['revlabel'],
 						params['treeswithprod'], fast=not params['quadratic'])
-			else: counts = fragments.values()
+				fragments = zip(keys, counts)
 			filename="%s/%s_%s" % (batch, os.path.basename(args[0]),
 				os.path.basename(a))
 			out = codecs.open(filename, "w", encoding=encoding)
-			printfragments(fragments, counts, out=out)
+			printfragments(fragments, out=out)
 			logging.info("wrote to %s" % filename)
 		return
 	elif numproc == 1:
@@ -244,25 +247,28 @@ def main(argv):
 				approx=not (params['exact'] or params['indices']),
 				discontinuous=params['disc'], debug=params['debug'])
 		if params['nofreq']:
-			counts = None
-		elif params['complete']:
-			logging.info("getting exact counts")
-			#					haystack,needle  needle
-			counts = exactcounts(trees1, trees2, fragments.values(),
-				params['disc'], params['revlabel'], params['treeswithprod'],
-				fast=not params['quadratic'])
-		elif params['indices']:
-			logging.info("getting indices of occurrence")
-			counts = exactindices(trees1, trees1, fragments.values(),
-				params['disc'], params['revlabel'], params['treeswithprod'],
-				fast=not params['quadratic'])
-		elif params['exact']:
-			logging.info("getting exact counts")
-			counts = exactcounts(trees1, trees1, fragments.values(),
-				params['disc'], params['revlabel'], params['treeswithprod'],
-				fast=not params['quadratic'])
-		else: counts = fragments.values()
-		printfragments(fragments, counts)
+			pass
+		elif params['complete'] or params['indices'] or params['exact']:
+			keys, f = zip(*fragments.items())
+			if params['complete']:
+				logging.info("getting exact counts")
+				#					haystack,needle  needle
+				counts = exactcounts(trees1, trees2, f,
+					params['disc'], params['revlabel'], params['treeswithprod'],
+					fast=not params['quadratic'])
+			elif params['indices']:
+				logging.info("getting indices of occurrence")
+				counts = exactindices(trees1, trees1, f,
+					params['disc'], params['revlabel'], params['treeswithprod'],
+					fast=not params['quadratic'])
+			elif params['exact']:
+				logging.info("getting exact counts")
+				counts = exactcounts(trees1, trees1, f,
+					params['disc'], params['revlabel'], params['treeswithprod'],
+					fast=not params['quadratic'])
+			fragments = zip(keys, counts)
+		else: fragments = fragments.items()
+		printfragments(fragments)
 		return
 
 	# multiprocessing part
@@ -290,24 +296,24 @@ def main(argv):
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s" % task)
 		countchunk = 20000
-		f = fragments.values()
+		keys, f = zip(*fragments.items())
 		work = [f[n:n+countchunk] for n in range(0, len(f), countchunk)]
 		work = [(n, len(work), a) for n, a in enumerate(work)]
 		dowork = pool.imap(exactcountworker, work)
 		logging.info("getting exact %s" % task)
 		counts = []
 		for a in dowork: counts.extend(a)
-	else: counts = fragments.values()
-
+		fragments = zip(key, counts)
+	else: fragments = fragments.items()
 	pool.terminate()
 	pool.join()
 	del dowork, pool
-	printfragments(fragments, counts)
+	printfragments(fragments)
 
-def printfragments(fragments, counts, out=sys.stdout):
+def printfragments(fragments, out=sys.stdout):
 	logging.info("number of fragments: %d" % len(fragments))
 	if params['nofreq']:
-		for a in fragments:
+		for a, _ in fragments:
 			out.write("%s\n" % (("%s\t%s" % (a[0],
 					" ".join("%s" % x if x else "" for x in a[1])))
 					if params['disc'] else a))
@@ -317,7 +323,7 @@ def printfragments(fragments, counts, out=sys.stdout):
 	if params.get('trees2'): threshold = 0
 	else: threshold = 1
 	if params['indices']:
-		for a, theindices in zip(fragments.keys(), counts):
+		for a, theindices in fragments:
 			if len(theindices) > threshold:
 				out.write("%s\t%r\n" % ( ("%s\t%s" % (a[0],
 					" ".join("%s" % x if x else "" for x in a[1])))
@@ -326,7 +332,7 @@ def printfragments(fragments, counts, out=sys.stdout):
 			elif threshold:
 				logging.warning("invalid fragment--frequency=1: %s" % a)
 		return
-	for a, freq in zip(fragments.keys(), counts):
+	for a, freq in fragments:
 		if freq > threshold:
 			out.write("%s\t%d\n" % (("%s\t%s" % (a[0],
 				" ".join("%s" % x if x else "" for x in a[1])))
@@ -365,7 +371,7 @@ def getfragments(trees, sents):
 		fragments.update(a)
 	logging.info("dividing work for exact counts")
 	countchunk = 20000
-	f = fragments.values()
+	keys, f = zip(*fragments.items())
 	tmp = [f[n:n+countchunk] for n in range(0, len(f), countchunk)]
 	work = [(n, len(tmp), a) for n, a in enumerate(tmp)]
 	dowork = pool.imap(exactcountworker, work)
@@ -378,6 +384,6 @@ def getfragments(trees, sents):
 	os.remove(treebank)
 	del dowork, pool
 	logging.info("found %d fragments" % len(fragments))
-	return dict(zip(fragments, counts))
+	return dict(zip(keys, counts))
 
 if __name__ == '__main__': main(sys.argv)

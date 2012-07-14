@@ -821,7 +821,7 @@ def worker((nsent, tree, sent, block)):
 		unbinarize(result)
 		rem_marks(result)
 		if d.unfolded: fold(result)
-		msg += "\np = %.4e " % exp(-prob)
+		msg += "p = %.4e " % exp(-prob)
 		candb = bracketings(result)
 		prec = precision(goldb, candb)
 		rec = recall(goldb, candb)
@@ -1057,73 +1057,81 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			markorigin=markorigin, resultdir=resultdir,
 			usecfgparse=usecfgparse, backtransform=backtransform,
 			category=category, sentinit=sentinit, doph=doph)
-	pool = multiprocessing.Pool(processes=None, initializer=initworker,
-			initargs=(params,))
-	maxlen = min(testmaxwords, maxbitveclen)
-	work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
-	print "going to parse %d sentences." % len(test)
-	dowork = pool.imap_unordered(worker, work)
-
 	presults = []; sresults = []; dresults = []
 	gold = []; gsent = []
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
 	goldbrackets = multiset()
 	exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
-	# main parse loop over each sentence in test corpus
-	for data in dowork:
-		nsent, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
-		_, tree, sent, block = work[nsent-1]
-		logging.debug("%d. [len=%d] %s\n%s" % (nsent, len(sent),
-					u" ".join(a[0] for a in sent),	# words only
-					#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
-					msg))
-		goldb = bracketings(tree)
-		gold.append(block)
-		gsent.append(sent)
-		goldbrackets.update((nsent, a) for a in goldb.elements())
-		if splitpcfg:
-			pcandb.update((nsent, a) for a in p.elements())
-			presults.append(pr)
-			if pp: pnoparse += 1
-			if pe: exactp += 1
-		if srcg:
-			scandb.update((nsent, a) for a in s.elements())
-			sresults.append(sr)
-			if sp: snoparse += 1
-			if se: exacts += 1
-		if dop:
-			dcandb.update((nsent, a) for a in d.elements())
-			dresults.append(dr)
-			if dp: dnoparse += 1
-			if de: exactd += 1
-		msg = ''
-		if splitpcfg:
-			logging.debug("pcfg cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
-								100 * (1 - pnoparse/float(len(presults))),
-								100 * (exactp / float(nsent)),
-								100 * precision(goldbrackets, pcandb),
-								100 * recall(goldbrackets, pcandb),
-								100 * f_measure(goldbrackets, pcandb),
-								('' if srcg or dop else '\n')))
-		if srcg:
-			logging.debug("srcg cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
-								100 * (1 - snoparse/float(len(sresults))),
-								100 * (exacts / float(nsent)),
-								100 * precision(goldbrackets, scandb),
-								100 * recall(goldbrackets, scandb),
-								100 * f_measure(goldbrackets, scandb),
-								('' if dop else '\n')))
-		if dop:
-			logging.debug("dop  cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f"
-					" (%+5.2f)\n" % (
-								100 * (1 - dnoparse/float(len(dresults))),
-								100 * (exactd / float(nsent)),
-								100 * precision(goldbrackets, dcandb),
-								100 * recall(goldbrackets, dcandb),
-								100 * f_measure(goldbrackets, dcandb),
-								100 * (f_measure(goldbrackets, dcandb) -
-									max(f_measure(goldbrackets, pcandb) if splitpcfg else -1,
-									f_measure(goldbrackets, scandb) if srcg else -1))))
+
+	try:
+		pool = multiprocessing.Pool(processes=None, initializer=initworker,
+				initargs=(params,))
+		maxlen = min(testmaxwords, maxbitveclen)
+		work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
+		print "going to parse %d sentences." % len(test)
+		dowork = pool.imap_unordered(worker, work)
+	except: raise
+	else:
+		# main parse loop over each sentence in test corpus
+		for nsent, data in enumerate(dowork, 1):
+			sentid, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
+			thesentid, tree, sent, block = work[sentid-1]
+			assert thesentid == sentid
+			logging.debug("%d/%d (%d). [len=%d] %s\n%s" % (nsent, len(test), sentid, len(sent),
+						u" ".join(a[0] for a in sent),	# words only
+						#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
+						msg))
+			goldb = bracketings(tree)
+			gold.append(block)
+			gsent.append(sent)
+			goldbrackets.update((sentid, a) for a in goldb.elements())
+			if splitpcfg:
+				pcandb.update((sentid, a) for a in p.elements())
+				presults.append(pr)
+				if pp: pnoparse += 1
+				if pe: exactp += 1
+			if srcg:
+				scandb.update((sentid, a) for a in s.elements())
+				sresults.append(sr)
+				if sp: snoparse += 1
+				if se: exacts += 1
+			if dop:
+				dcandb.update((sentid, a) for a in d.elements())
+				dresults.append(dr)
+				if dp: dnoparse += 1
+				if de: exactd += 1
+			msg = ''
+			if splitpcfg:
+				logging.debug("pcfg cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
+									100 * (1 - pnoparse/float(len(presults))),
+									100 * (exactp / float(nsent)),
+									100 * precision(goldbrackets, pcandb),
+									100 * recall(goldbrackets, pcandb),
+									100 * f_measure(goldbrackets, pcandb),
+									('' if srcg or dop else '\n')))
+			if srcg:
+				logging.debug("srcg cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
+									100 * (1 - snoparse/float(len(sresults))),
+									100 * (exacts / float(nsent)),
+									100 * precision(goldbrackets, scandb),
+									100 * recall(goldbrackets, scandb),
+									100 * f_measure(goldbrackets, scandb),
+									('' if dop else '\n')))
+			if dop:
+				logging.debug("dop  cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f"
+						" (%+5.2f)\n" % (
+									100 * (1 - dnoparse/float(len(dresults))),
+									100 * (exactd / float(nsent)),
+									100 * precision(goldbrackets, dcandb),
+									100 * recall(goldbrackets, dcandb),
+									100 * f_measure(goldbrackets, dcandb),
+									100 * (f_measure(goldbrackets, dcandb) -
+										max(f_measure(goldbrackets, pcandb) if splitpcfg else -1,
+										f_measure(goldbrackets, scandb) if srcg else -1))))
+	finally:
+		pool.terminate()
+		pool.join()
+		del dowork, pool
 
 	if splitpcfg:
 		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
@@ -1144,9 +1152,9 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 	logging.info("wrote results to %s/%s.{gold,srcg,dop}" % (
 		resultdir, category or "results"))
 
-	return (splitpcfg, srcg, dop, nsent, testmaxwords, exactp, exacts, exactd,
-		pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb, dcandb,
-		unfolded, arity_marks, bintype, estimator, sldop_n)
+	return (splitpcfg, srcg, dop, len(test), testmaxwords, exactp, exacts,
+			exactd, pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb,
+			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n)
 
 if __name__ == '__main__':
 	import sys
