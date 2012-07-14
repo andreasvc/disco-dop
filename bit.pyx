@@ -130,7 +130,7 @@ cpdef inline bint testbitint(UInt arg, UInt pos):
 cdef inline int abitcount(ULong *vec, UInt slots):
 	""" number of set bits in variable length bitvector """
 	cdef int a, result = __builtin_popcountl(vec[0])
-	for a in range(1, slots):
+	for a from 1 <= a < slots:
 		result += __builtin_popcountl(vec[a])
 	return result
 

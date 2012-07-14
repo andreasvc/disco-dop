@@ -145,7 +145,7 @@ cdef void shiftright(ULong *bitset, UChar SLOTS):
 	cdef int x
 	cdef ULong mask = (1 << 1) - 1
 	bitset[0] >>= 1
-	for x in range(1, SLOTS):
+	for x from 1 <= x < SLOTS:
 		bitset[x-1] |= bitset[x] & mask
 		bitset[x] >>= 1
 

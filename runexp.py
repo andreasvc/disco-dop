@@ -61,7 +61,7 @@ def main(
 	removeparentannotation=False, # VP^<S> is treated as VP
 	neverblockre=None, #do not prune nodes with label that match regex
 	quiet=False, reallyquiet=False, #quiet=no per sentence results
-	numproc=1,
+	multiproc=False,
 	resultdir="output"
 	):
 	from treetransforms import slowfanout
@@ -186,7 +186,7 @@ def main(
 		elif usedoubledop:
 			assert estimator not in ("ewe", "sl-dop", "sl-dop-simple", "shortest")
 			dopgrammar, backtransform = doubledop(list(trees), list(sents),
-					stroutput=True, debug=False)
+					stroutput=True, debug=False, multiproc=multiproc)
 		else:
 			dopgrammar = dop_srcg_rules(list(trees), list(sents),
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
@@ -223,8 +223,7 @@ def main(
 	#	print a,b
 	#exit()
 	begin = time.clock()
-	if numproc == 1: xdoparse = doparse
-	else: xdoparse = multidoparse
+	xdoparse = multidoparse if multiproc else doparse
 	results = xdoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
 			srcggrammar, dopgrammar, secondarymodel, test, testmaxwords, testsents,
@@ -327,9 +326,10 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			whitelist = []
 			if splitpcfg and start:
 				if splitprune:
+					before = len(chart)
 					pchart = kbest_items(chart, start, splitk)
 					logging.debug("whitelist obtained: %gs; before: %d; after: %d" % (
-						time.clock() - begin, len(chart), len(pchart)))
+						time.clock() - begin, before, len(pchart)))
 				else:
 					whitelist = prunechart(chart, start, pcfggrammar,
 								srcggrammar, splitk, removeparentannotation,
@@ -398,9 +398,10 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			whitelist = []
 			if (splitpcfg or srcg) and prune and start:
 				if splitprune and not srcg:
+					before = len(chart)
 					chart = kbest_items(chart, start, k)
 					logging.debug("whitelist obtained: %gs; before: %d; after: %d" % (
-						time.clock() - begin, len(chart), len(chart)))
+						time.clock() - begin, before, len(chart)))
 				else:
 					whitelist = prunechart(chart, start, srcggrammar,
 								dopgrammar, k, removeparentannotation,
@@ -858,9 +859,10 @@ def worker((nsent, tree, sent, block)):
 		whitelist = []
 		if d.splitpcfg and start:
 			if d.splitprune:
+				before = len(chart)
 				pchart = kbest_items(chart, start, d.splitk)
 				msg += "whitelist obtained: %gs; before: %d; after: %d\n" % (
-					time.clock() - begin, len(chart), len(pchart))
+					time.clock() - begin, before, len(pchart))
 			else:
 				whitelist = prunechart(chart, start, d.pcfggrammar,
 							d.srcggrammar, d.splitk, d.removeparentannotation,
@@ -923,9 +925,10 @@ def worker((nsent, tree, sent, block)):
 		whitelist = []
 		if (d.splitpcfg or d.srcg) and d.prune and start:
 			if d.splitprune and not d.srcg:
+				before = len(chart)
 				chart = kbest_items(chart, start, d.k)
 				msg += "whitelist obtained: %gs; before: %d; after: %d\n" % (
-					time.clock() - begin, len(chart), len(chart))
+					time.clock() - begin, before, len(chart))
 			else:
 				whitelist = prunechart(chart, start, d.srcggrammar,
 							d.dopgrammar, d.k, d.removeparentannotation,
@@ -1070,7 +1073,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				initargs=(params,))
 		maxlen = min(testmaxwords, maxbitveclen)
 		work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
-		print "going to parse %d sentences." % len(test)
+		print "going to parse %d sentences." % len(work)
 		dowork = pool.imap_unordered(worker, work)
 	except: raise
 	else:
@@ -1079,7 +1082,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			sentid, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
 			thesentid, tree, sent, block = work[sentid-1]
 			assert thesentid == sentid
-			logging.debug("%d/%d (%d). [len=%d] %s\n%s" % (nsent, len(test), sentid, len(sent),
+			logging.debug("%d/%d (%d). [len=%d] %s\n%s" % (nsent, len(work), sentid, len(sent),
 						u" ".join(a[0] for a in sent),	# words only
 						#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
 						msg))
@@ -1154,7 +1157,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 	logging.info("wrote results to %s/%s.{gold,srcg,dop}" % (
 		resultdir, category or "results"))
 
-	return (splitpcfg, srcg, dop, len(test), testmaxwords, exactp, exacts,
+	return (splitpcfg, srcg, dop, len(work), testmaxwords, exactp, exacts,
 			exactd, pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb,
 			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n)
 

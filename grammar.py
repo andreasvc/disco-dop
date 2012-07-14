@@ -185,7 +185,7 @@ def dop_srcg_rules(trees, sents, normalize=False, shortestderiv=False,
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
 
-def doubledop(trees, sents, stroutput=False, debug=False):
+def doubledop(trees, sents, stroutput=False, debug=False, multiproc=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus any CFG
 	rules need to obtain full coverage.
@@ -196,6 +196,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	an identifier is inserted: #n where n in an integer. In fragments with
 	terminals, we replace their POS tags with a tag uniquely identifying that
 	terminal and tag: tag@word.
+	Modifies trees in-place.
 	"""
 	from fragments import getfragments
 	from treetransforms import minimalbinarization, complexityfanout, addbitsets
@@ -208,7 +209,7 @@ def doubledop(trees, sents, stroutput=False, debug=False):
 	srcg = FreqDist(rule for tree, sent in zip(trees, sents)
 			for rule in map(varstoindices, srcg_productions(tree, sent)))
 	# find recurring fragments in treebank
-	fragments = getfragments(trees, sents)
+	fragments = getfragments(trees, sents, multiproc)
 	# fragments are given back as strings; we could work with trees as strings
 	# all the way, but to do binarization and rule extraction, NLTK Tree objects
 	# are better.
@@ -793,11 +794,14 @@ def main():
 	print grammar
 	grammar.testgrammar()
 
-	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	sents = corpus.sents()[:100]
+	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
+	srcg = induce_srcg(trees, sents)
 	debug = False
 	for stroutput in (False, True):
+		trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
+		[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 		grammarx, backtransform = doubledop(trees, sents,
 			stroutput=stroutput, debug=debug)
 		print '\ndouble dop grammar (stroutput=%r)' % stroutput
@@ -805,7 +809,7 @@ def main():
 		print unicode(grammar)
 		assert grammar.testgrammar() #DOP1 should sum to 1.
 		print "fragment rules:"
-		for x in set(a for a,_ in grammarx) - set(a for a,_ in induce_srcg(trees, sents)):
+		for x in set(a for a,_ in grammarx) - set(a for a,_ in srcg):
 			print x
 		for tree, sent in zip(corpus.parsed_sents(), sents[:10]):
 			print "sentence:",

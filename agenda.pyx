@@ -52,7 +52,7 @@ cdef class Agenda(dict):
 			temp = dict(iterable)
 			self.length = len(temp)
 			self.counter = self.length + 1
-			for i in range(1, self.counter):
+			for i from 1 <= i < self.counter:
 				k, v = temp.popitem()
 				entry = make_entry(k, v, i)
 				self.mapping[k] = entry
@@ -214,7 +214,7 @@ cdef class EdgeAgenda(Agenda):
 			temp = dict(iterable)
 			self.length = len(temp)
 			self.counter = self.length + 1
-			for i in range(1, self.counter):
+			for i from 1 <= i < self.counter:
 				k, v = temp.popitem()
 				entry = make_entry(k, v, i)
 				self.mapping[k] = entry

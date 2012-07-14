@@ -88,8 +88,9 @@ cdef class Grammar:
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
 		#but Negra contains at least one tag (--) used for both.
+		cdef size_t lhs
 		sums = {}
-		for lhs in range(1, self.nonterminals):
+		for lhs from 1 <= lhs < self.nonterminals:
 			for n in range(self.numrules):
 				if self.bylhs[lhs][n].lhs != lhs: break
 				sums[lhs] = sums.get(lhs, 0.0) + exp(-self.bylhs[lhs][n].prob)
@@ -251,38 +252,37 @@ cdef str yfrepr(Rule rule):
 	raise ValueError("expected %d components" % rule.fanout)
 
 cdef class FatChartItem:
-	def __init__(ChartItem self, label):
+	def __init__(self, label):
 		self.label = label
 		#?? self.vec = vec
-	def __hash__(ChartItem self):
+	def __hash__(self):
 		cdef size_t n
 		cdef long _hash = 5381
 		for n in range(7 * sizeof(ULong)):
 			_hash *= 33 ^ (<char *>self.vec)[n]
 		return _hash
-	def __richcmp__(ChartItem self, ChartItem other, int op):
+	def __richcmp__(FatChartItem self, FatChartItem other, int op):
 		if op == 2: return self.label == other.label and self.vec == other.vec
 		elif op == 3: return self.label != other.label or self.vec != other.vec
 		elif op == 5: return self.label >= other.label or self.vec >= other.vec
 		elif op == 1: return self.label <= other.label or self.vec <= other.vec
 		elif op == 0: return self.label < other.label or self.vec < other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
-	def __nonzero__(ChartItem self):
+	def __nonzero__(self):
 		raise NotImplemented
 		#return self.label != 0 and self.vec != 0
-	def __repr__(ChartItem self):
+	def __repr__(self):
 		raise NotImplemented
 		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class ChartItem:
-	def __init__(ChartItem self, label, vec):
+	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
-	def __hash__(ChartItem self):
+	def __hash__(self):
 		cdef long h
 		# juxtapose bits of label and vec, rotating vec if > 33 words
-		h = self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
-		return -2 if h == -1 else h
+		return self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
 	def __richcmp__(ChartItem self, ChartItem other, int op):
 		if op == 2: return self.label == other.label and self.vec == other.vec
 		elif op == 3: return self.label != other.label or self.vec != other.vec
@@ -290,9 +290,9 @@ cdef class ChartItem:
 		elif op == 1: return self.label <= other.label or self.vec <= other.vec
 		elif op == 0: return self.label < other.label or self.vec < other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
-	def __nonzero__(ChartItem self):
+	def __nonzero__(self):
 		return self.label != 0 and self.vec != 0
-	def __repr__(ChartItem self):
+	def __repr__(self):
 		return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class Edge:
@@ -309,7 +309,7 @@ cdef class Edge:
 		h = (1000003UL * h) ^ (<ChartItem>self.left).label
 		h = (1000003UL * h) ^ (<ChartItem>self.right).vec
 		h = (1000003UL * h) ^ (<ChartItem>self.right).label
-		return -2 if h == -1 else h
+		return h
 	def __richcmp__(Edge self, other, int op):
 		# the ordering only depends on the estimate / inside score
 		if op == 0: return self.score < (<Edge>other).score
@@ -331,17 +331,16 @@ cdef class Edge:
 				self.score, self.inside, self.prob, self.left, self.right)
 
 cdef class RankedEdge:
-	def __cinit__(RankedEdge self, ChartItem head, Edge edge, int j1, int j2):
+	def __cinit__(self, ChartItem head, Edge edge, int j1, int j2):
 		self.head = head; self.edge = edge
 		self.left = j1; self.right = j2
-	def __hash__(RankedEdge self):
+	def __hash__(self):
 		cdef long h
 		#h = hash((head, edge, j1, j2))
 		h = (1000003UL * 0x345678UL) ^ hash(self.head)
 		h = (1000003UL * h) ^ hash(self.edge)
 		h = (1000003UL * h) ^ self.left
 		h = (1000003UL * h) ^ self.right
-		if h == -1: h = -2
 		return h
 	def __richcmp__(RankedEdge self, RankedEdge other, int op):
 		if op == 2 or op == 3:
@@ -352,10 +351,9 @@ cdef class RankedEdge:
 				and self.edge == other.edge)
 		else:
 			raise NotImplemented
-	def __repr__(RankedEdge self):
+	def __repr__(self):
 		return "RankedEdge(%r, %r, %d, %d)" % (
 			self.head, self.edge, self.left, self.right)
-
 
 cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
@@ -367,14 +365,14 @@ cdef class LexicalRule:
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in
 	Python"""
-	def __init__(Ctrees self, list trees=None, dict labels=None,
+	def __init__(self, list trees=None, dict labels=None,
 		dict prods=None):
 		self.len=0; self.max=0; self.maxnodes = 0; self.nodesleft = 0
 		if trees is None: return
 		else: assert labels is not None and prods is not None
 		self.alloc(len(trees), sum(map(len, trees)))
 		for tree in trees: self.add(tree, labels, prods)
-	cpdef alloc(Ctrees self, int numtrees, long numnodes):
+	cpdef alloc(self, int numtrees, long numnodes):
 		""" Initialize an array of trees of nodes structs. """
 		self.max = numtrees
 		self.data = <NodeArray *>malloc(numtrees * sizeof(NodeArray))
@@ -382,21 +380,22 @@ cdef class Ctrees:
 		self.data[0].nodes = <Node *>malloc(numnodes * sizeof(Node))
 		assert self.data[0].nodes is not NULL
 		self.nodes = self.nodesleft = numnodes
-	cdef realloc(Ctrees self, int len):
+	cdef realloc(self, int len):
 		""" Increase size of array (handy with incremental binarization) """
 		#other options: new alloc: fragmentation (maybe not so bad)
 		#memory pool: idem
+		cdef size_t n
 		cdef Node *new = NULL
 		self.nodes += (self.max - self.len) * len #estimate
 		new = <Node *>realloc(self.data[0].nodes, self.nodes * sizeof(Node))
 		assert new is not NULL
 		if new != self.data[0].nodes: # need to update all previous pointers
 			self.data[0].nodes = new
-			for n in range(1, self.len):
+			for n from 1 <= n < self.len:
 				# derive pointer from previous tree offset by its size
 				self.data[n].nodes = &(
 					self.data[n-1].nodes)[self.data[n-1].len]
-	cpdef add(Ctrees self, list tree, dict labels, dict prods):
+	cpdef add(self, list tree, dict labels, dict prods):
 		""" Trees can be incrementally added to the node array; useful
 		when dealing with large numbers of NLTK trees (say 100,000)."""
 		assert self.len < self.max, ("either no space left (len >= max) or "
@@ -411,10 +410,10 @@ cdef class Ctrees:
 		self.len += 1
 		self.nodesleft -= len(tree)
 		self.maxnodes = max(self.maxnodes, len(tree))
-	def __dealloc__(Ctrees self):
+	def __dealloc__(self):
 		free(self.data[0].nodes); self.data[0].nodes = NULL
 		free(self.data); self.data = NULL
-	def __len__(Ctrees self): return self.len
+	def __len__(self): return self.len
 
 cdef inline copynodes(tree, dict labels, dict prods, Node *result):
 	""" Convert NLTK tree to an array of Node structs. """
@@ -446,7 +445,7 @@ cdef class FrozenArray:
 	comparison operators."""
 	def __init__(self, array data):
 		self.data = data
-	def __hash__(FrozenArray self):
+	def __hash__(self):
 		cdef size_t n
 		cdef long _hash = 5381
 		for n in range(self.data.length):
@@ -470,9 +469,9 @@ cdef inline FrozenArray new_FrozenArray(array data):
 cdef class CBitset:
 	""" auxiliary class to be able to pass around bitsets in Python.
 	the memory for the bitset itself is not managed by this class. """
-	def __cinit__(CBitset self, UChar slots):
+	def __cinit__(self, UChar slots):
 		self.slots = slots
-	def __hash__(CBitset self):
+	def __hash__(self):
 		cdef size_t n
 		cdef long _hash = 5381
 		for n in range(self.slots * sizeof(ULong)):
@@ -492,7 +491,7 @@ cdef class CBitset:
 	cdef int bitcount(self):
 		""" number of set bits in variable length bitvector """
 		cdef int a, result = __builtin_popcountl(self.data[0])
-		for a in range(1, self.slots):
+		for a from 1 <= a < self.slots:
 			result += __builtin_popcountl(self.data[a])
 		return result
 
@@ -547,7 +546,7 @@ cdef class CBitset:
 cdef class MemoryPool:
 	"""A memory pool that allocates chunks of poolsize, up to limit times.
 	Memory is automatically freed when object is deallocated. """
-	def __cinit__(MemoryPool self, int poolsize, int limit):
+	def __cinit__(self, int poolsize, int limit):
 		cdef int x
 		self.poolsize = poolsize
 		self.limit = limit
@@ -558,7 +557,7 @@ cdef class MemoryPool:
 		self.cur = self.pool[0] = <ULong *>malloc(self.poolsize)
 		assert self.cur is not NULL
 		self.leftinpool = self.poolsize
-	cdef void *malloc(MemoryPool self, int size):
+	cdef void *malloc(self, int size):
 		cdef void *ptr
 		if size > self.poolsize: return NULL
 		elif self.leftinpool < size:
@@ -573,11 +572,11 @@ cdef class MemoryPool:
 		self.cur = &((<char *>self.cur)[size])
 		self.leftinpool -= size
 		return ptr
-	cdef void reset(MemoryPool self):
+	cdef void reset(self):
 		self.n = 0
 		self.cur = self.pool[0]
 		self.leftinpool = self.poolsize
-	def __dealloc__(MemoryPool self):
+	def __dealloc__(self):
 		cdef int x
 		for x in range(self.n+1):
 			free(self.pool[x])
