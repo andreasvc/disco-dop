@@ -395,21 +395,23 @@ def addbitsets(tree):
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
 
-def defaultrightbin(label, node, sep="|", h=999):
+def defaultrightbin(node, sep="|", h=999):
 	""" Binarize one constituent with a right factored binarization.
 	Children remain unmodified. Bottom-up version"""
 	i = len(node) - 2
+	if i == 0: return node
+	label = node.node
 	childnodes = [child.node for child in node]
 	newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))
-	prev = ImmutableTree(newlabel, [node.pop(), node.pop()][::-1])
+	prev = ImmutableTree(newlabel, node[i:])
 	prev.bitset = prev[0].bitset | prev[1].bitset
-	for i in range(len(node) - 1, -1, -1):
+	for i in range(len(node) - 3, 0, -1):
 		newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))
-		current = ImmutableTree(newlabel, [node.pop(), prev])
+		current = ImmutableTree(newlabel, [node[i], prev])
 		current.bitset = current[0].bitset | prev.bitset
 		prev = current
-	result = ImmutableTree(label, current[:])
-	result.bitset = current.bitset
+	result = ImmutableTree(label, [node[0], prev])
+	result.bitset = node[0].bitset | prev.bitset
 	return result
 
 def minimalbinarization(tree, score, sep="|", head=None, h=999):
@@ -460,7 +462,7 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 	#don't bother with optimality if this particular node is not discontinuous
 	#do default right factored binarization instead
 	elif fanout(tree) == 1 and all(fanout(a) == 1 for a in tree):
-		return defaultrightbin(tree.node, [a for a in tree], sep, h)
+		return defaultrightbin(tree, sep, h)
 	from agenda import Agenda
 	labels = [a.node for a in tree]
 	#the four main datastructures:

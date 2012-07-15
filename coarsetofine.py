@@ -23,14 +23,12 @@ def prunechart(chart, goal, coarse, fine, k, reduceh=999,
 	X and X@n in fine.toid, for possible values of n.  When k==0, the chart is
 	merely filtered to contain only items that contribute to a complete
 	derivation."""
-
-	d = dictcast(defaultdict(dict))
 	whitelist = [None] * len(fine.toid)
-	l = [{} for a in coarse.toid]
 	if mergesplitnodes:
 		d = merged_kbest(chart, goal, k, coarse)
 		assert not removeparentannotation, "not implemented"
 	else:
+		d = dictcast(defaultdict(dict))
 		# construct a list of the k-best nonterminals to prune with
 		kbest = kbest_items(chart, goal, k)
 	if removeparentannotation:
@@ -40,15 +38,16 @@ def prunechart(chart, goal, coarse, fine, k, reduceh=999,
 			if reduceh != 999:
 				label = reducemarkov[reduceh].sub("|<\\1>" if reduceh else "",
 					label)
-			d[label][itemcast(Ih).vec] = min(d[label].get(itemcast(Ih).vec,
+			d[label][Ih.vec] = min(d[label].get(Ih.vec,
 				infinity), kbest.get(Ih, infinity))
 	if removeparentannotation or mergesplitnodes:
 		for a, label in fine.toid.iteritems():
 			whitelist[label] = d[removeids.sub("", a)]
 	else:
+		l = [{} for a in coarse.toid]
 		# uses ids of labels in coarse chart
 		for Ih in chart:
-			l[itemcast(Ih).label][itemcast(Ih).vec] = kbest.get(Ih, infinity)
+			l[Ih.label][Ih.vec] = kbest.get(Ih, infinity)
 		for a, label in fine.toid.iteritems():
 			whitelist[label] = l[coarse.toid.get(removeids.sub("", a), 1)]
 	return whitelist

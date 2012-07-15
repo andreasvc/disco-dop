@@ -8,6 +8,10 @@ from nltk import ImmutableTree, Tree, FreqDist, memoize
 from dopg import nodefreq, decorate_with_ids
 from containers import Grammar
 
+frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9])*\))")
+rootnode = re.compile(r"\([^ ]+\b")
+fanoutre = re.compile("_([0-9]+)(?:@[0-9]+)?$")
+
 def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	""" given a tree with integer indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a sequence
@@ -30,7 +34,7 @@ def srcg_productions(tree, sent, arity_marks=True, side_effect=True):
 	assert sent, ("no sentence.\n"
 		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), tree.leaves(), sent))
 	assert all(0 <= a < len(sent) for a in tree.leaves()), (
-		"all indices should point to a word in the sentence.\n"
+		"indices should be integers pointing to a word in the sentence.\n"
 		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), tree.leaves(), sent))
 	for st in tree.subtrees():
 		if not st: raise ValueError(("Empty node. Frontier nodes should "
@@ -189,21 +193,22 @@ def doubledop(trees, sents, stroutput=False, debug=False, multiproc=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus any CFG
 	rules need to obtain full coverage.
-	Input trees need to be binarized. A second level of binarization
-	(a normal form) is needed when fragments are converted to individual
-	grammar rules, which occurs through the removal of internal nodes. When the
-	remaining nodes do not uniquely identify the fragment, an extra node with
-	an identifier is inserted: #n where n in an integer. In fragments with
+	Input trees need to be binarized. A second level of binarization (a normal
+	form) is needed when fragments are converted to individual grammar rules,
+	which occurs through the removal of internal nodes. When the remaining
+	nodes do not uniquely identify the fragment, an extra node with an
+	identifier is inserted: #n where n in an integer. In fragments with
 	terminals, we replace their POS tags with a tag uniquely identifying that
 	terminal and tag: tag@word.
-	Modifies trees in-place.
+	NB: Modifies `trees' in-place.
 	"""
 	from fragments import getfragments
-	from treetransforms import minimalbinarization, complexityfanout, addbitsets
+	#from treetransforms import minimalbinarization, complexityfanout, addbitsets
+	from treetransforms import defaultrightbin, addbitsets
 	backtransform = {}
 	newprods = {}
 	# to assign IDs to ambiguous fragments (same yield)
-	ids = ("#%d" % n for n in count())
+	ids = ("(#%d" % n for n in count())
 	trees = list(trees)
 	# adds arity markers
 	srcg = FreqDist(rule for tree, sent in zip(trees, sents)
@@ -219,65 +224,82 @@ def doubledop(trees, sents, stroutput=False, debug=False, multiproc=False):
 		fragments = dict(((ImmutableTree.parse(a[0], parse_leaf=int), a[1]), b)
 			for a, b in fragments.items())
 		productions = map(flatten, fragments)
-	rootnode = re.compile(r"^\([^ ]+\b")
 	# construct a mapping of productions to fragments
 	for prod, (frag, terminals) in zip(productions, fragments):
+		if stroutput:
+			if frontierorterm.match(prod): continue
+		elif isinstance(prod[0], int): continue
 		if prod in backtransform:
 			if backtransform[prod] is not None:
 				label = ids.next()
 				if stroutput:
-					prod1 = "%s (%s 0))" % (rootnode.search(prod).group(), label)
-					prod2 = rootnode.sub("(" + label, prod, 1)
+					prod1 = "%s %s 0))" % (prod[:prod.index(" ")], label)
+					prod2 = label + prod[prod.index(" "):]
 				else:
-					prod1 = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
-					prod2 = ImmutableTree(label, prod[:])
+					prod1 = ImmutableTree(prod.node, [ImmutableTree(label[1:], [0])])
+					prod2 = ImmutableTree(label[1:], prod[:])
 				newprods[prod1] = (None,)
 				newprods[prod2] = backtransform[prod][1]
 				backtransform[prod1] = backtransform[prod]
 				backtransform[prod] = None # disable this production
 			label = ids.next()
 			if stroutput:
-				prod1 = "%s (%s 0))" % (rootnode.search(prod).group(), label)
-				prod2 = rootnode.sub("(" + label, prod, 1)
+				prod1 = "%s %s 0))" % (prod[:prod.index(" ")], label)
+				prod2 = label + prod[prod.index(" "):]
 			else:
-				prod1 = ImmutableTree(prod.node, [ImmutableTree(label, [0])])
-				prod2 = ImmutableTree(label, prod[:])
+				prod1 = ImmutableTree(prod.node, [ImmutableTree(label[1:], [0])])
+				prod2 = ImmutableTree(label[1:], prod[:])
 			newprods[prod1] = (None,)
 			newprods[prod2] = terminals
 			backtransform[prod1] = frag, terminals
 		else:
 			backtransform[prod] = frag, terminals
 	if debug:
+		print "training data:"
+		for a,b in zip(trees, sents):
+			print a[0].pprint(margin=9999)
+			print " ".join('_' if x is None else x for x in b)
+			print
 		print "recurring fragments:"
 		for a, b in zip(productions, fragments):
 			print "fragment: %s\nprod:     %s\nfreq: %2d  sent: %s\n" % (
-					b[0], a, fragments[b], b[1])
+					b[0], a, fragments[b],
+					" ".join('_' if x is None else x for x in b[1]))
 		print "ambiguous fragments:"
+		if len(newprods) == 0: print "None"
 		for a, b in newprods.iteritems():
-			print "frag: %s\nsent: %r\n" % (a, b)
+			print "prod: %s\nsent: %s" % (a,
+					" ".join('_' if x is None else x for x in b))
+			if backtransform.get(a,''): print "frag:", backtransform[a]
+			print
 		print "backtransform: {"
 		for a,b in backtransform.items():
-			print a, ":\n\t", b
+			if b: print a, ":\n\t", b[0], " ".join(
+					'_' if x is None else x for x in b[1])
 		print "}"
+	def dobin(a):
+		return defaultrightbin(addbitsets(a), "}")
+		#tree = Tree.parse(a, parse_leaf=int)
+		#if isinstance(tree[0], Tree):
+		#	tree.chomsky_normal_form(childChar="}")
+		#return tree
+		#return minimalbinarization(addbitsets(a), complexityfanout: 0, sep="}")
 	# collect rules
 	grammar = dict(rule
 		for a, ((_, fsent), b) in zip(productions, fragments.iteritems())
 		if backtransform.get(a) is not None
-		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
-				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
+		for rule in zip(map(varstoindices, srcg_productions(dobin(a),
 				fsent, arity_marks=True, side_effect=False)), repeat(b)))
 	# ambiguous fragments (fragments that map to the same flattened production)
 	grammar.update(rule for a, b in newprods.iteritems()
-		for rule in zip(map(varstoindices, srcg_productions(Tree.convert(
-				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
+		for rule in zip(map(varstoindices, srcg_productions(dobin(a),
 				b, arity_marks=a in backtransform, side_effect=False)),
 			chain((fragments.get(backtransform.get(a), 1),), repeat(1))))
 	#ensure ascii strings, drop terminals, drop sentinels, drop no-op transforms
 	backtransform = dict((a, str(b[0]) if stroutput else b[0])
 			for a, b in backtransform.iteritems() if b is not None and a != b)
 	# unseen srcg rules
-	for a in set(srcg.keys()) - set(grammar.keys()):
-		grammar[a] = backtransform[a] = srcg[a]
+	grammar.update((a, srcg[a]) for a in srcg.viewkeys() - grammar.viewkeys())
 	# relative frequences as probabilities
 	ntfd = defaultdict(float)
 	for a, b in grammar.iteritems(): ntfd[a[0][0]] += b
@@ -290,7 +312,6 @@ def quotelabel(label):
 	# can remain ascii-only.
 	return label.replace('(', '[').replace(')', ']').encode('unicode-escape')
 
-frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9])*\))")
 def flattenstr((tree, sent)): #(tree, sent)):
 	""" This version works on strings instead of Tree objects
 	>>> sent = [None, ',', None, '.']
@@ -698,7 +719,6 @@ def grammarinfo(grammar, dump=None):
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
 				for (rule, yf), w in grammar if rule[1] != "Epsilon")
 	result += "max vars: %d in %s\n" % (n, printrule(r, yf, w))
-	fanoutre = re.compile("_([0-9]+)(?:@[0-9]+)?$")
 	def fanout(sym):
 		result = fanoutre.search(sym)
 		return 1 if result is None else int(result.group(1))
@@ -750,8 +770,10 @@ def main():
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	stdout = codecs.getwriter('utf8')(sys.stdout)
-	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-		headorder=False, headfinal=True, headreverse=False)
+	#filename = "negraproc.export"
+	filename = "sample2.export"
+	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
+		headorder=True, headfinal=True, headreverse=False, movepunct=True)
 	#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True,
 	#	headfinal=True, headreverse=False)
 	for tree, sent in zip(corpus.parsed_sents()[:3], corpus.sents()):
@@ -795,13 +817,15 @@ def main():
 	grammar.testgrammar()
 
 	sents = corpus.sents()[:100]
-	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
-	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
+	trees = [a.copy(True) for a in corpus.parsed_sents()[:100]]
+	for a in trees: a.chomsky_normal_form(horzMarkov=1)
 	srcg = induce_srcg(trees, sents)
 	debug = True
-	for stroutput in (False, True):
-		trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
-		[a.chomsky_normal_form(horzMarkov=1) for a in trees]
+	for stroutput in (True,): #(False, True):
+		trees = [a.copy(True) for a in corpus.parsed_sents()[:100]]
+		for a in trees:
+			#canonicalize(a)
+			a.chomsky_normal_form(horzMarkov=1)
 		grammarx, backtransform = doubledop(trees, sents,
 			stroutput=stroutput, debug=debug)
 		print '\ndouble dop grammar (stroutput=%r)' % stroutput

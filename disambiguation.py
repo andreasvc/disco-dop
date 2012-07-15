@@ -50,6 +50,8 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
 			unbinarize(tree, childChar="}")
 			treestr = recoverfromfragments_str(canonicalize(tree),
 				backtransform)
+			#treestr = canonicalize(Tree.parse(treestr, parse_leaf=int)
+			#		).pprint(margin=9999) #FIXME
 			del tree
 
 		# simple way of adding probabilities (too easy):
