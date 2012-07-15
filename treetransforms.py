@@ -256,6 +256,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				else:
 					curNode.node = nodeCopy[0].node
 					curNode[:] = nodeCopy.pop()
+	return tree
 
 def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 	unaryChar="+"):
@@ -293,6 +294,7 @@ def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 
 			for child in node:
 				agenda.append((child, parent))
+	return tree
 
 def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "+"):
 	"""
@@ -334,6 +336,7 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 			else:
 				for child in node:
 					nodeList.append(child)
+	return tree
 
 def introducepreterminals(tree):
 	""" Introduce preterminals with artificial POS-tags where needed
@@ -354,6 +357,7 @@ def introducepreterminals(tree):
 				nodeList.append(child)
 			elif hassiblings:
 				node[n] = Tree("%s/%s" % (node.node, child), [child])
+	return tree
 
 def getbits(bitset):
 	""" Iterate over the indices of set bits in a bitset. """
@@ -399,7 +403,7 @@ def defaultrightbin(node, sep="|", h=999):
 	""" Binarize one constituent with a right factored binarization.
 	Children remain unmodified. Bottom-up version"""
 	i = len(node) - 2
-	if i == 0: return node
+	if i < 1: return node
 	label = node.node
 	childnodes = [child.node for child in node]
 	newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))

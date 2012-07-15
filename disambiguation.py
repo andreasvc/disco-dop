@@ -47,11 +47,11 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
 			treestr = removeids.sub("@" if mpd else "", deriv)
 		else: # double dop
 			tree = Tree.parse(deriv, parse_leaf=int)
-			unbinarize(tree, childChar="}")
-			treestr = recoverfromfragments_str(canonicalize(tree),
-				backtransform)
-			#treestr = canonicalize(Tree.parse(treestr, parse_leaf=int)
-			#		).pprint(margin=9999) #FIXME
+			treestr = recoverfromfragments_str(canonicalize(
+				unbinarize(tree, childChar="}")), backtransform)
+			#FIXME: avoidable?
+			treestr = canonicalize(unbinarize(
+				Tree.parse(treestr, parse_leaf=int))).pprint(margin=9999)
 			del tree
 
 		# simple way of adding probabilities (too easy):

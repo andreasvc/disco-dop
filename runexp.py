@@ -457,7 +457,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel,
 									n=m, sample=sample, both=both)
 			logging.debug(msg1)
-			dresult, prob = max(mpp.itervalues())
+			dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
 			dresult = Tree(dresult)
 			if isinstance(prob, tuple):
 				msg += "subtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])
@@ -975,7 +975,7 @@ def worker((nsent, tree, sent, block)):
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
 								n=d.m, sample=d.sample, both=d.both)
 		msg += msg1
-		dresult, prob = max(mpp.itervalues())
+		dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
 		dresult = Tree(dresult)
 		if isinstance(prob, tuple):
 			msg += "\nsubtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])
