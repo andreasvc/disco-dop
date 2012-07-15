@@ -947,7 +947,6 @@ def worker((nsent, tree, sent, block)):
 							d.pcfggrammar if d.splitpcfg else None),
 						splitprune=d.splitprune and not d.srcg,
 						markorigin=d.markorigin)
-		msg += " DOP: " + msg1
 		if d.srcg and not start:
 			from plcfrs import pprint_chart
 			pprint_chart(chart,
@@ -955,6 +954,7 @@ def worker((nsent, tree, sent, block)):
 					d.dopgrammar.tolabel)
 			raise ValueError("expected successful parse")
 	else: chart = {}; start = False
+	msg += " DOP: " + msg1
 	if d.dop and start:
 		if d.estimator == "shortest":
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,

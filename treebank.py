@@ -635,10 +635,14 @@ def punctraise(tree):
 	""" Trees in the Negra corpus have punctuation attached to the root;
 	i.e., it is not part of the phrase-structure.  This function attaches
 	punctuation nodes (that is, a POS tag with punctuation terminal) to an
-	appropriate constituent """
+	appropriate constituent. """
 	punct =  list(tree.subtrees(lambda n: n.node.startswith("$")))
+	#	or (isinstance(n[0], Tree) and all(a.node.startswith("$") for a in n))
 	while punct:
-		node = punct.pop(); node.parent.pop(node.parent_index)
+		node = punct.pop()
+		# dedicated punctation node
+		if all(a.node.startswith("$") for a in node.parent): continue
+		node.parent.pop(node.parent_index)
 		phrasalnode = lambda x: len(x) and isinstance(x[0], Tree)
 		for candidate in tree.subtrees(phrasalnode):
 			# add punctuation mark next to biggest constituent which it borders
@@ -652,13 +656,16 @@ def punctraise(tree):
 def balancedpunctraise(tree, sent):
 	""" Move balanced punctuation marks " ' ( ) [ ] together in the same
 	constituent. Based on rparse code.
-	>>> tree = ParentedTree.parse("(ROOT (S (VAFIN 2) (NP (ART 3) (NN 4) (PP (APPR 5) (CNP (NP (MPN (NE 6) (NE 7)) (FM 9)) (NP (MPN (NE 12) (NE 13)) (FM 15)) (NP (MPN (NE 18) (NE 19)) (FM 21)) (KON 23) (NP (MPN (NE 24) (NE 25)) (FM 27))))) (VP (PP (APPR 0) (ADJA 1)) ($[ 8) ($[ 10) ($, 11) ($[ 14) ($[ 16) ($, 17) ($[ 20) ($[ 22) ($[ 26) ($[ 28) (PP (APPR 29) (ART 30) (NN 31)) (VVPP 32))) ($. 33))", parse_leaf=int)
-	>>> sent = [u'Vor', u'kurzem', u'wurde', u'das', u'Schaffen', u'von', u'David', u'Harrington', u'(', u'violin', u')', u',', u'John', u'Sherba', u'(', u'violin', u')', u',', u'Hank', u'Dutt', u'(', u'violin', u')', u'und', u'Joan', u'Jeanrenaud', u'(', u'cello', u')', u'in', u'einer', u'Box', u'zusammengefa\xc3\x9ft', u'.']
+	>>> tree = ParentedTree.parse("(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20) (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP (APPR 6) (CNP (NN 8) (ADV 9) (ISU ($. 10) ($. 11) ($. 12))))) (S (PRELS 15) (MPN (NE 16) (NE 17)) (ADJD 18) (VVFIN 19))) (VVFIN 21) (ADV 22) (NP (ADJA 23) (NN 24))) ($. 25))", parse_leaf=int)
+	>>> sent = "Die zweite Konzertreihe , sechs Abende mit ' Orgel plus . . . ' , die Hayko Siemens musikalisch leitet , bietet wieder ungewoehnliche Kombinationen .".split()
 	>>> punctraise(tree)
 	>>> balancedpunctraise(tree, sent)
 	>>> from treetransforms import slowfanout
 	>>> print max(map(slowfanout, tree.subtrees()))
-	2
+	1
+	>>> nopunct = Tree.parse("(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 3) (NN 4) (PP (APPR 5) (CNP (NN 6) (ADV 7)))) (S (PRELS 8) (MPN (NE 9) (NE 10)) (ADJD 11) (VVFIN 12))) (VVFIN 13) (ADV 14) (NP (ADJA 15) (NN 16))))", parse_leaf=int)
+	>>> print max(map(slowfanout, nopunct.subtrees()))
+	1
 	"""
 	match = { '"' : '"', '[':']', '(':')', "-":"-", "'" : "'" }
 	punctmap = {}
