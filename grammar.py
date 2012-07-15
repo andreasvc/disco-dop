@@ -222,8 +222,7 @@ def doubledop(trees, sents, stroutput=False, debug=False, multiproc=False):
 	rootnode = re.compile(r"^\([^ ]+\b")
 	# construct a mapping of productions to fragments
 	for prod, (frag, terminals) in zip(productions, fragments):
-		if prod == frag: pass
-		elif prod in backtransform:
+		if prod in backtransform:
 			if backtransform[prod] is not None:
 				label = ids.next()
 				if stroutput:
@@ -273,11 +272,12 @@ def doubledop(trees, sents, stroutput=False, debug=False, multiproc=False):
 				minimalbinarization(addbitsets(a), complexityfanout, sep="}")),
 				b, arity_marks=a in backtransform, side_effect=False)),
 			chain((fragments.get(backtransform.get(a), 1),), repeat(1))))
-	# drop terminals, ensure ascii strings
-	for a, b in backtransform.iteritems():
-		if b is not None: backtransform[a] = str(b[0]) if stroutput else b[0]
+	#ensure ascii strings, drop terminals, drop sentinels, drop no-op transforms
+	backtransform = dict((a, str(b[0]) if stroutput else b[0])
+			for a, b in backtransform.iteritems() if b is not None and a != b)
 	# unseen srcg rules
-	grammar.update((a, srcg[a]) for a in set(srcg.keys()) - set(grammar.keys()))
+	for a in set(srcg.keys()) - set(grammar.keys()):
+		grammar[a] = backtransform[a] = srcg[a]
 	# relative frequences as probabilities
 	ntfd = defaultdict(float)
 	for a, b in grammar.iteritems(): ntfd[a[0][0]] += b
@@ -798,7 +798,7 @@ def main():
 	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	[a.chomsky_normal_form(horzMarkov=1) for a in trees]
 	srcg = induce_srcg(trees, sents)
-	debug = False
+	debug = True
 	for stroutput in (False, True):
 		trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 		[a.chomsky_normal_form(horzMarkov=1) for a in trees]

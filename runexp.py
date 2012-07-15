@@ -441,24 +441,23 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
 						sample=sample, both=both, shortest=True,
 						secondarymodel=secondarymodel)
-				mpp = mpp.items()
 			elif estimator == "sl-dop":
 				mpp, msg1 = sldop(chart, start, sent, tags, dopgrammar,
 							secondarymodel, m, sldop_n, sample, both)
+				mpp = dict(mpp)
 			elif estimator == "sl-dop-simple":
 				# old method, estimate shortest derivation directly from number
 				# of addressed nodes
 				mpp, msg1 = sldop_simple(chart, start, dopgrammar, m, sldop_n)
+				mpp = dict(mpp)
 			elif backtransform is not None:
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
 					sample=sample, both=both, backtransform=backtransform)
-				mpp = mpp.items()
 			else: #dop1, ewe
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel,
 									n=m, sample=sample, both=both)
-				mpp = mpp.items()
 			logging.debug(msg1)
-			dresult, prob = max(mpp, key=itemgetter(1))
+			dresult, prob = max(mpp.itervalues())
 			dresult = Tree(dresult)
 			if isinstance(prob, tuple):
 				msg += "subtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])
@@ -960,24 +959,23 @@ def worker((nsent, tree, sent, block)):
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
 					sample=d.sample, both=d.both, shortest=True,
 					secondarymodel=d.secondarymodel)
-			mpp = mpp.items()
 		elif d.estimator == "sl-dop":
 			mpp, msg1 = sldop(chart, start, sent, d.tags, d.dopgrammar,
 						d.secondarymodel, d.m, d.sldop_n, d.sample, d.both)
+			mpp = dict(mpp)
 		elif d.estimator == "sl-dop-simple":
 			# old method, estimate shortest derivation directly from number
 			# of addressed nodes
 			mpp, msg1 = sldop_simple(chart, start, d.dopgrammar, d.m, d.sldop_n)
+			mpp = dict(mpp)
 		elif d.backtransform is not None:
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
 				sample=d.sample, both=d.both, backtransform=d.backtransform)
-			mpp = mpp.items()
 		else: #dop1, ewe
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
 								n=d.m, sample=d.sample, both=d.both)
-			mpp = mpp.items()
 		msg += msg1
-		dresult, prob = max(mpp, key=itemgetter(1))
+		dresult, prob = max(mpp.itervalues())
 		dresult = Tree(dresult)
 		if isinstance(prob, tuple):
 			msg += "\nsubtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])

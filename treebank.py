@@ -29,11 +29,13 @@ class NegraCorpusReader():
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules() if headorder else {}
 		self._encoding = encoding
-		self._filenames = glob(path.join(root, fileids))
-		self._block_cache = self._read_blocks()
 		self._sents_cache = None
 		self._tagged_sents_cache = None
 		self._parsed_sents_cache = None
+		self._filenames = glob(path.join(root, fileids))
+		assert self._filenames, (
+				"no files matched pattern %s" % path.join(root, fileids))
+		self._block_cache = self._read_blocks()
 	def parsed_sents(self, fileids=None):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = map(self._parse, self._block_cache)

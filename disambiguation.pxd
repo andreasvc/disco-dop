@@ -1,6 +1,6 @@
 cimport cython
 from kbest cimport lazykbest, lazykthbest
-from containers cimport ChartItem, Edge, getlabel, getvec, edgecast
+from containers cimport ChartItem, Edge, Grammar, getlabel, getvec, edgecast
 
 @cython.locals(
 	edge=Edge)
@@ -12,11 +12,15 @@ cdef getviterbi(chart, ChartItem start, tolabel)
 
 @cython.locals(
 	parsetrees=dict,
+	treestr=str,
+	deriv=str,
 	prob=cython.double,
 	maxprob=cython.double,
 	m=cython.int,
 	edge=Edge)
-cpdef marginalize(chart, start, tolabel, n=*, sample=*, both=*, shortest=*, secondarymodel=*, mpd=*, backtransform=*)
+cpdef marginalize(dict chart, ChartItem start, dict tolabel, int n=*,
+	bint sample=*, bint both=*, bint shortest=*, secondarymodel=*,
+	bint mpd=*, dict backtransform=*)
 
 @cython.locals(
 	edge=Edge,

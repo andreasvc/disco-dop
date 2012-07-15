@@ -28,23 +28,10 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
 	if not sample or both:
 		derivations.update(lazykbest(chart, start, n, tolabel))
 	if shortest:
+		# filter out all derivations which are not shortest
 		maxprob = min(derivations, key=itemgetter(1))[1]
 		derivations = [(a,b) for a, b in derivations if b == maxprob]
-	if backtransform is not None:
-		derivations = list(derivations)
-		for n, (deriv, prob) in enumerate(derivations):
-			tree = Tree.parse(deriv, parse_leaf=int)
-			unbinarize(tree, childChar="}")
-			derivations[n] = (recoverfromfragments_str(canonicalize(tree),
-				backtransform), prob)
 	for deriv, prob in derivations:
-		# simple way of adding probabilities (too easy):
-		#parsetrees[removeids.sub("", deriv)] += exp(-prob)
-		# restore linear precedence (disabled, seems to make no difference):
-		#parsetree = Tree(removeids.sub("", deriv))
-		#for a in list(parsetree.subtrees())[::-1]:
-		#	a.sort(key=lambda x: x.leaves())
-		#parsetrees[parsetree.pprint(margin=999)].append(-prob)
 		if shortest:
 			# calculate the derivation probability in a different model.
 			# because we don't keep track of which rules have been used,
@@ -54,10 +41,21 @@ def marginalize(chart, start, tolabel, n=10, sample=False, both=False,
 			rules = induce_srcg([tree], [sent], arity_marks=False)
 			prob = -fsum([secondarymodel[r] for r, w in rules
 											if r[0][1] != 'Epsilon'])
+			del tree
 
-		tree = removeids.sub("@" if mpd else "", deriv)
-		if tree in parsetrees: parsetrees[tree].append(-prob)
-		else: parsetrees[tree] = [-prob]
+		if backtransform is None: #DOP reduction
+			treestr = removeids.sub("@" if mpd else "", deriv)
+		else: # double dop
+			tree = Tree.parse(deriv, parse_leaf=int)
+			unbinarize(tree, childChar="}")
+			treestr = recoverfromfragments_str(canonicalize(tree),
+				backtransform)
+			del tree
+
+		# simple way of adding probabilities (too easy):
+		#parsetrees[treestr] += exp(-prob)
+		if treestr in parsetrees: parsetrees[treestr].append(-prob)
+		else: parsetrees[treestr] = [-prob]
 	# Adding probabilities in log space
 	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
 	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
@@ -124,7 +122,7 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 		logging.warning("no matching derivation found") # error?
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 		len(derivations), min(sldop_n, len(mpp1)), len(mpp1))
-	return mpp, msg
+	return dict(mpp), msg
 
 def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 	""" simple sl-dop method; estimates shortest derivation directly from
@@ -152,7 +150,7 @@ def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 				for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t])]
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 			len(derivations), len(mpp), len(mpp1))
-	return mpp, msg
+	return dict(mpp), msg
 
 def sumderivs(ts, derivations):
 	#return fsum([exp(-derivations[t]) for t in ts])
@@ -236,7 +234,7 @@ def recoverfromfragments(derivation, backtransform):
 	rprod, leafmap = renumber(prod)
 	# fetch the actual fragment corresponding to this production
 	#if rprod not in backtransform: print "not found", rprod
-	result = Tree.convert(backtransform.get(rprod, prod))
+	result = Tree.convert(backtransform.get(rprod, rprod))
 	# revert renumbering
 	for a in result.treepositions('leaves'):
 		result[a] = leafmap.get(result[a], result[a])
@@ -273,7 +271,6 @@ def recoverfromfragments_str(derivation, backtransform):
 	leafmap = dict(zip(leafmap.values(), leafmap.keys()))
 	# fetch the actual fragment corresponding to this production
 	result = backtransform.get(rprod, rprod)
-	#if rprod not in backtransform: print "not found", rprod
 	# revert renumbering
 	result = termsre.sub(repl(leafmap), result)
 	# recursively expand all substitution sites
@@ -298,6 +295,7 @@ def main():
 		return x[0].replace("@", ""), x[1]
 	def f(x):
 		return x[0], exp(-x[1])
+	def maxitem(d): return max(d.iteritems(), key=itemgetter(1))
 	trees = map(lambda t: Tree.parse(t, parse_leaf=int),
 		"""(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
@@ -352,11 +350,11 @@ def main():
 		secondarymodel=secondarymodel)
 	print
 	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))
-	print "MPD:\t\t%s %r" % e(max(mpd.items(), key=itemgetter(1)))
-	print "MPP:\t\t%s %r" % e(max(mpp.items(), key=itemgetter(1)))
-	print "MPP sampled:\t%s %r" % e(max(mppsampled.items(), key=itemgetter(1)))
-	print "SL-DOP n=7:\t%s %r" % e(max(sldop1, key=itemgetter(1)))
-	print "simple SL-DOP:\t%s %r" % e(max(sldopsimple, key=itemgetter(1)))
-	print "shortest:\t%s %r" % f(min(short.items(), key=itemgetter(1)))
+	print "MPD:\t\t%s %r" % e(maxitem(mpd))
+	print "MPP:\t\t%s %r" % e(maxitem(mpp))
+	print "MPP sampled:\t%s %r" % e(maxitem(mppsampled))
+	print "SL-DOP n=7:\t%s %r" % e(maxitem(sldop1))
+	print "simple SL-DOP:\t%s %r" % e(maxitem(sldopsimple))
+	print "shortest:\t%s %r" % f(min(short.iteritems()))
 
 if __name__ == '__main__': main()
