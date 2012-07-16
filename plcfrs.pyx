@@ -75,7 +75,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 	cdef ChartItem item, sibling, NONE = new_ChartItem(0, 0)
 	cdef ChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 	cdef np.ndarray[np.double_t, ndim=4] outside
-	cdef bint doestimate = bool(estimate), prunenow = False, split = False
+	cdef bint doestimate = bool(estimate)
 	cdef bint doprune = bool(whitelist) or bool(coarsechart)
 	cdef double x = 0.0, y = 0.0, score, inside
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
@@ -400,7 +400,7 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 	cdef size_t i
 	cdef UInt Epsilon = grammar.toid["Epsilon"]
 	cdef ULLong vec = 0
-	cdef bint foundnew = False, foundbetter = False
+	cdef bint foundbetter = False
 	cdef Rule rule
 	cdef LexicalRule terminal
 	cdef ChartItem NONE = ChartItem(0, 0)

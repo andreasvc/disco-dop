@@ -97,9 +97,23 @@ cdef class Agenda(dict):
 		self.setitem(key, value)
 
 	def peekitem(self):
-		while not (<Entry>(self.heap[0])).count:
-			<Entry>heappop(self.heap, self.cmpfun)
-		return (<Entry>(self.heap[0])).key, (<Entry>(self.heap[0])).value
+		cdef Entry entry = self.peekentry()
+		return entry.key, entry.value
+
+	cpdef Entry peekentry(self):
+		cdef Entry entry
+		cdef Py_ssize_t n = list_getsize(self.heap)
+		if n == 0: raise IndexError("peek at empty heap")
+		entry = <Entry>(self.heap[0])
+		while entry.count == 0:
+			if n == 1: raise IndexError("peek at empty heap")
+			#replace first element with last element
+			self.heap[0] = self.heap.pop()
+			#and restore heap invariant
+			siftup(self.heap, 0, self.cmpfun)
+			n -= 1
+			entry = <Entry>(self.heap[0])
+		return entry
 
 	cpdef Entry popentry(self):
 		""" like popitem, but avoids tuple construction by returning an Entry
