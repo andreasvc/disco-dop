@@ -38,4 +38,4 @@ splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
 removeparentannotation=False, # VP^<S> is treated as VP
 neverblockre=None, #do not prune nodes with label that match regex
 quiet=False, reallyquiet=False, #quiet=no per sentence results
-multiproc=True	# enable multiprocessing.
+numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.

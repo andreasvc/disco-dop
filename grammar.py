@@ -868,7 +868,7 @@ def main():
 				print "no parse"
 				pprint_chart(chart, sent, grammar.tolabel)
 			print
-	tree = Tree.parse("(ROOT (S (A (B (S (D (E (F 0))))))))", parse_leaf=int)
+	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	g = Grammar(induce_srcg([tree],[range(10)]))
 	print "tree: %s\nunary closure:" % tree
 	g.printclosure()

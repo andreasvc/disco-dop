@@ -19,6 +19,7 @@ cdef class NormalCmp(Function):
 
 cdef class Agenda(dict):
 	cpdef Entry popentry(self)
+	cpdef Entry peekentry(self)
 	cpdef setitem(self, key, object value)
 	cpdef setifbetter(self, key, object value)
 	cpdef list getheap(self)
@@ -35,6 +36,7 @@ cdef class Agenda(dict):
 
 cdef class EdgeAgenda(Agenda):
 	cpdef Entry popentry(self)
+	cpdef Entry peekentry(self)
 	cpdef setitem(self, key, object value)
 	cpdef setifbetter(self, key, object value)
 	cpdef list getheap(self)

@@ -61,7 +61,7 @@ def main(
 	removeparentannotation=False, # VP^<S> is treated as VP
 	neverblockre=None, #do not prune nodes with label that match regex
 	quiet=False, reallyquiet=False, #quiet=no per sentence results
-	multiproc=False,
+	numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
 	resultdir="output"
 	):
 	from treetransforms import slowfanout
@@ -187,7 +187,7 @@ def main(
 		elif usedoubledop:
 			assert estimator not in ("ewe", "sl-dop", "sl-dop-simple", "shortest")
 			dopgrammar, backtransform = doubledop(list(trees), list(sents),
-					stroutput=True, debug=False, multiproc=multiproc)
+					stroutput=True, debug=False, multiproc=numproc != 1)
 		else:
 			dopgrammar = dop_srcg_rules(list(trees), list(sents),
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
@@ -226,13 +226,13 @@ def main(
 	#	print a,b
 	#exit()
 	begin = time.clock()
-	xdoparse = multidoparse if multiproc else doparse
+	xdoparse = doparse if numproc == 1 else multidoparse
 	results = xdoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
 			srcggrammar, dopgrammar, secondarymodel, test, testmaxwords, testsents,
 			prune, splitk, k, sldop_n, useestimates, outside, "ROOT", True,
 			removeparentannotation, splitprune, mergesplitnodes, markorigin,
-			resultdir, usecfgparse, backtransform)
+			resultdir, usecfgparse, backtransform, numproc)
 	logging.info("time elapsed during parsing: %gs" % (time.clock() - begin))
 	doeval(*results)
 
@@ -243,7 +243,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			top='ROOT',	tags=True, removeparentannotation=False,
 			splitprune=False, mergesplitnodes=False, markorigin=False,
 			resultdir="results", usecfgparse=False, backtransform=None,
-			category=None, sentinit=0, doph=999):
+			numproc=None, category=None, sentinit=0, doph=999):
 	presults = []; sresults = []; dresults = []
 	gold = []; gsent = []
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
@@ -440,6 +440,7 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 				raise ValueError("expected successful parse")
 		else: chart = {}; start = False
 		if dop and start:
+			begindisamb = time.clock()
 			if estimator == "shortest":
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
 						sample=sample, both=both, shortest=True,
@@ -459,7 +460,8 @@ def doparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 			else: #dop1, ewe
 				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel,
 									n=m, sample=sample, both=both)
-			logging.debug(msg1)
+			logging.debug("%s; %gs)" % (msg1.rstrip(")"),
+				time.clock() - begindisamb))
 			dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
 			dresult = Tree(dresult)
 			if isinstance(prob, tuple):
@@ -631,8 +633,8 @@ def cftiger():
 		([w for w,_ in s] for s in sents), count())]
 	test = trees, sents, blocks
 	doparse(srcg, dop, estimator, unfolded, bintype, sample, both, arity_marks,
-		arity_marks_before_bin, m, grammar, dopgrammar, test, testmaxwords, testsents,
-		prune, sldop_n, top, tags)
+			arity_marks_before_bin, m, grammar, dopgrammar, test, testmaxwords,
+			testsents, prune, sldop_n, top, tags)
 
 def readtepacoc():
 	tepacocids = set()
@@ -932,6 +934,7 @@ def worker((nsent, tree, sent, block)):
 	else: chart = {}; start = False
 	msg += " DOP: %s\n" % msg1
 	if d.dop and start:
+		begindisamb = time.clock()
 		if d.estimator == "shortest":
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
 					sample=d.sample, both=d.both, shortest=True,
@@ -951,7 +954,7 @@ def worker((nsent, tree, sent, block)):
 		else: #dop1, ewe
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
 								n=d.m, sample=d.sample, both=d.both)
-		msg += msg1
+		msg += "%s; %gs)" % (msg1.rstrip(")"), time.clock() - begindisamb)
 		dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
 		dresult = Tree(dresult)
 		if isinstance(prob, tuple):
@@ -1016,7 +1019,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 		top='ROOT', tags=True, removeparentannotation=False,
 		splitprune=False, mergesplitnodes=False, markorigin=False,
 		resultdir="results", usecfgparse=False, backtransform=None,
-		category=None, sentinit=0, doph=999):
+		numproc=None, category=None, sentinit=0, doph=999):
 	""" Like doparse but use multiprocessing. """
 	# FIXME: use multiprocessing namespace:
 	#mgr = multiprocessing.Manager()
@@ -1044,7 +1047,7 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 	exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
 
 	try:
-		pool = multiprocessing.Pool(processes=None, initializer=initworker,
+		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
 				initargs=(params,))
 		maxlen = min(testmaxwords, maxbitveclen)
 		work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]

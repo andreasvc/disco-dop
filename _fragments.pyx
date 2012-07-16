@@ -212,12 +212,11 @@ def getsent(frag, list sent):
 	>>> getsent("(S (NP 2) (VP 4))", ['The', 'man', 'walks'])
 	("(S (NP 0) (VP 2))", ['The', None, 'walks'])
 	"""
-	cdef int x = 0, n, maxl
+	cdef int x = 0, n
 	cdef list newsent = []
 	cdef dict leafmap = {}
 	leaves = set(int(a) for a in termsre.findall(frag))
 	if not leaves: return frag, ()
-	maxl = max(leaves)
 	for n in sorted(leaves, key=lambda y: (abs(y), y >= 0)):
 		leafmap[n] = " " + unicode(x)
 		if n < 0:
