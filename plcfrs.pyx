@@ -428,9 +428,9 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 
 	assert len(sent) < (sizeof(vec) * 8), ("sentence too long. "
 			"length: %d. limit: %d." % (len(sent), sizeof(vec) * 8))
-	for i in range(grammar.numrules):
-		if grammar.unary[0][i].rhs1 == grammar.nonterminals:
-			unaryrules = set(range(i))
+	i = 0
+	while grammar.unary[0][i].rhs1 != grammar.nonterminals: i += 1
+	unaryrules = set(range(i))
 
 	# assign POS tags
 	#print 1, # == span
@@ -477,45 +477,37 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 			return chart, NONE
 
 		# unary rules on the span of this POS tag
-		# only use each rules once (no cycles)
-		# keep going until no new items can be derived.
-		foundnew = True
-		candidates = set(unaryrules)
-		while foundnew:
-			foundnew = False
-			for i in set(candidates):
+		for rhs1 in range(grammar.nonterminals):
+			for i in grammar.unaryclosure[rhs1]:
 				rule = grammar.unary[0][i]
-				if rule.rhs1 == grammar.nonterminals: break
-				elif isfinite(viterbi[rule.rhs1, left, right]):
-					prob = rule.prob + viterbi[rule.rhs1, left, right]
-					if isfinite(viterbi[rule.lhs, left, right]):
-						chart[new_ChartItem(rule.lhs, (1ULL << right)
-							- (1ULL << left))].append(
-							new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1,
-							(1ULL << right) - (1ULL << left)),
-							NONE))
-					else:
-						chart[new_ChartItem(rule.lhs, (1ULL << right)
-							- (1ULL << left))] = [
-							new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1,
-							(1ULL << right) - (1ULL << left)),
-							NONE)]
-					if prob < viterbi[rule.lhs, left, right]:
-						viterbi[rule.lhs, left, right] = prob
-						# update filter
-						if left > minsplitleft[rule.lhs, right]:
-							minsplitleft[rule.lhs, right] = left
-						if left < maxsplitleft[rule.lhs, right]:
-							maxsplitleft[rule.lhs, right] = left
-						if right < minsplitright[rule.lhs, left]:
-							minsplitright[rule.lhs, left] = right
-						if right > maxsplitright[rule.lhs, left]:
-							maxsplitright[rule.lhs, left] = right
-					candidates.discard(i)
-					foundnew = True
-					break
+				if isfinite(viterbi[rule.rhs1, left, right]):
+					if isfinite(viterbi[rule.rhs1, left, right]):
+						prob = rule.prob + viterbi[rule.rhs1, left, right]
+						if isfinite(viterbi[rule.lhs, left, right]):
+							chart[new_ChartItem(rule.lhs, (1ULL << right)
+								- (1ULL << left))].append(
+								new_Edge(prob, prob, rule.prob,
+								new_ChartItem(rule.rhs1,
+								(1ULL << right) - (1ULL << left)),
+								NONE))
+						else:
+							chart[new_ChartItem(rule.lhs, (1ULL << right)
+								- (1ULL << left))] = [
+								new_Edge(prob, prob, rule.prob,
+								new_ChartItem(rule.rhs1,
+								(1ULL << right) - (1ULL << left)),
+								NONE)]
+						if prob < viterbi[rule.lhs, left, right]:
+							viterbi[rule.lhs, left, right] = prob
+							# update filter
+							if left > minsplitleft[rule.lhs, right]:
+								minsplitleft[rule.lhs, right] = left
+							if left < maxsplitleft[rule.lhs, right]:
+								maxsplitleft[rule.lhs, right] = left
+							if right < minsplitright[rule.lhs, left]:
+								minsplitright[rule.lhs, left] = right
+							if right > maxsplitright[rule.lhs, left]:
+								maxsplitright[rule.lhs, left] = right
 
 	for span in range(2, lensent + 1):
 		# print span,
@@ -579,16 +571,11 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 						maxsplitright[rule.lhs, left] = right
 
 			# unary rules on this span
-			# only use each rules once (no cycles)
-			# keep going until no new items can be derived.
-			foundnew = True
-			candidates = set(unaryrules)
-			while foundnew:
-				foundnew = False
-				for i in candidates:
+			for rhs1 in range(grammar.nonterminals):
+				for i in grammar.unaryclosure[rhs1]:
 					rule = grammar.unary[0][i]
-					if rule.rhs1 == grammar.nonterminals: break
-					elif isfinite(viterbi[rule.rhs1, left, right]):
+					# apply each rule only once?
+					if isfinite(viterbi[rule.rhs1, left, right]):
 						prob = rule.prob + viterbi[rule.rhs1, left, right]
 						if isfinite(viterbi[rule.lhs, left, right]):
 							chart[new_ChartItem(rule.lhs, (1ULL << right)
@@ -615,9 +602,6 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 								minsplitright[rule.lhs, left] = right
 							if right > maxsplitright[rule.lhs, left]:
 								maxsplitright[rule.lhs, left] = right
-						candidates.discard(i)
-						foundnew = True
-						break
 	# print
 	if goal in chart: return chart, goal
 	else: return chart, NONE

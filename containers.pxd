@@ -24,6 +24,7 @@ cdef extern from "macros.h":
 cdef class Grammar:
 	cdef Rule **unary, **lbinary, **rbinary, **bylhs
 	cdef public dict lexical, lexicalbylhs, toid, tolabel
+	cdef public list unaryclosure
 	cdef frozenset donotprune, origrules
 	cdef size_t nonterminals, numrules
 

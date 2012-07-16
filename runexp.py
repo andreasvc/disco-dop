@@ -631,32 +631,6 @@ def cftiger():
 		arity_marks_before_bin, m, grammar, dopgrammar, test, testmaxwords, testsents,
 		prune, sldop_n, top, tags)
 
-def cycledetection(trees, sents):
-	seen = set()
-	v = set(); e = {}; weights = {}
-	for n, (tree, sent) in enumerate(zip(trees, sents)):
-		rules = [(a,b) for a,b in induce_srcg([tree], [sent]) if a not in seen]
-		seen.update(map(lambda (a,b): a, rules))
-		for (rule,yf), w in rules:
-			if len(rule) == 2 and rule[1] != "Epsilon":
-				v.add(rule[0])
-				e.setdefault(rule[0], set()).add(rule[1])
-				weights[rule[0], rule[1]] = abs(w)
-
-	def visit(current, edges, visited):
-		""" depth-first cycle detection """
-		for a in edges.get(current, set()):
-			if a in visited:
-				visit.mem.add(current)
-				yield visited[visited.index(a):] + [a]
-			elif a not in visit.mem:
-				for b in visit(a, edges, visited + [a]): yield b
-	visit.mem = set()
-	for a in v:
-		for b in visit(a, e, []):
-			logging.debug("cycle (cost %5.2f): %s" % (
-				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b)))
-
 def readtepacoc():
 	tepacocids = set()
 	tepacocsents = defaultdict(list)
@@ -953,7 +927,7 @@ def worker((nsent, tree, sent, block)):
 					d.dopgrammar.tolabel)
 			raise ValueError("expected successful parse")
 	else: chart = {}; start = False
-	msg += " DOP: " + msg1
+	msg += " DOP: %s\n" % msg1
 	if d.dop and start:
 		if d.estimator == "shortest":
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
@@ -1158,6 +1132,32 @@ def multidoparse(splitpcfg, srcg, dop, estimator, unfolded, bintype,
 	return (splitpcfg, srcg, dop, len(work), testmaxwords, exactp, exacts,
 			exactd, pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb,
 			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n)
+
+def cycledetection(trees, sents):
+	seen = set()
+	v = set(); e = {}; weights = {}
+	for n, (tree, sent) in enumerate(zip(trees, sents)):
+		rules = [(a,b) for a,b in induce_srcg([tree], [sent]) if a not in seen]
+		seen.update(map(lambda (a,b): a, rules))
+		for (rule,yf), w in rules:
+			if len(rule) == 2 and rule[1] != "Epsilon":
+				v.add(rule[0])
+				e.setdefault(rule[0], set()).add(rule[1])
+				weights[rule[0], rule[1]] = abs(w)
+
+	def visit(current, edges, visited):
+		""" depth-first cycle detection """
+		for a in edges.get(current, set()):
+			if a in visited:
+				visit.mem.add(current)
+				yield visited[visited.index(a):] + [a]
+			elif a not in visit.mem:
+				for b in visit(a, edges, visited + [a]): yield b
+	visit.mem = set()
+	for a in v:
+		for b in visit(a, e, []):
+			logging.debug("cycle (cost %5.2f): %s" % (
+				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b)))
 
 if __name__ == '__main__':
 	import sys

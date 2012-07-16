@@ -277,23 +277,25 @@ def doubledop(trees, sents, stroutput=False, debug=False, multiproc=False):
 			if b: print a, ":\n\t", b[0], " ".join(
 					'_' if x is None else x for x in b[1])
 		print "}"
-	def dobin(a):
-		return defaultrightbin(addbitsets(a), "}")
-		#tree = Tree.parse(a, parse_leaf=int)
-		#if isinstance(tree[0], Tree):
-		#	tree.chomsky_normal_form(childChar="}")
-		#return tree
-		#return minimalbinarization(addbitsets(a), complexityfanout: 0, sep="}")
+	#def dobin(a):
+	#	tree = Tree.parse(a, parse_leaf=int)
+	#	if isinstance(tree[0], Tree):
+	#		tree.chomsky_normal_form(childChar="}")
+	#	return tree
+	#	return minimalbinarization(addbitsets(a), complexityfanout: 0, sep="}")
+
 	# collect rules
 	grammar = dict(rule
 		for a, ((_, fsent), b) in zip(productions, fragments.iteritems())
 		if backtransform.get(a) is not None
-		for rule in zip(map(varstoindices, srcg_productions(dobin(a),
+		for rule in zip(map(varstoindices, srcg_productions(
+			defaultrightbin(addbitsets(a), "}"),
 				fsent, arity_marks=True, side_effect=False)), repeat(b)))
 	# ambiguous fragments (fragments that map to the same flattened production)
 	grammar.update(rule for a, b in newprods.iteritems()
-		for rule in zip(map(varstoindices, srcg_productions(dobin(a),
-				b, arity_marks=a in backtransform, side_effect=False)),
+		for rule in zip(map(varstoindices, srcg_productions(
+			defaultrightbin(addbitsets(a), "}"),
+			b, arity_marks=a in backtransform, side_effect=False)),
 			chain((fragments.get(backtransform.get(a), 1),), repeat(1))))
 	#ensure ascii strings, drop terminals, drop sentinels, drop no-op transforms
 	backtransform = dict((a, str(b[0]) if stroutput else b[0])
@@ -866,6 +868,10 @@ def main():
 				print "no parse"
 				pprint_chart(chart, sent, grammar.tolabel)
 			print
+	tree = Tree.parse("(ROOT (S (A (B (S (D (E (F 0))))))))", parse_leaf=int)
+	g = Grammar(induce_srcg([tree],[range(10)]))
+	print "tree: %s\nunary closure:" % tree
+	g.printclosure()
 
 if __name__ == '__main__':
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS

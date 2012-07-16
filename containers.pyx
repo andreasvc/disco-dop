@@ -84,6 +84,7 @@ cdef class Grammar:
 			lambda rule: len(rule) == 3, self.toid, self.nonterminals)
 		copyrules(grammar, self.bylhs, 0,
 			lambda rule: rule[1] != 'Epsilon', self.toid, self.nonterminals)
+		self.getunaryclosure()
 	def testgrammar(self, epsilon=0.01):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
@@ -107,6 +108,33 @@ cdef class Grammar:
 				return False
 		print "All left hand sides sum to 1"
 		return True
+	def getunaryclosure(self):
+		cdef size_t i = 0
+		self.unaryclosure = [[] for _ in range(self.nonterminals)]
+		closure = [set() for _ in range(self.nonterminals)]
+		candidates = [set() for _ in range(self.nonterminals)]
+		while self.unary[0][i].lhs != self.nonterminals:
+			candidates[self.unary[0][i].rhs1].add(i)
+			i += 1
+		for n in range(self.nonterminals):
+			while candidates[n]:
+				i = candidates[n].pop()
+				m = self.unary[0][i].lhs
+				if i not in closure[n]:
+					self.unaryclosure[n].append(i)
+					closure[n].add(i)
+				for x in self.unaryclosure[m]:
+					if x not in closure[n]: self.unaryclosure[n].append(x)
+				closure[n] |= closure[m]
+				candidates[n] |= candidates[m]
+				candidates[n] -= closure[n]
+	def printclosure(self):
+		for m, a in enumerate(self.unaryclosure):
+			print '%s[%d] ' % (self.tolabel[m], m),
+			for n in a:
+				print "%s <= %s  " % (self.tolabel[self.unary[0][n].rhs1],
+						self.tolabel[self.unary[0][n].lhs]),
+			print
 	def getdonotprune(self, neverblockre):
 		""" Construct a list of non-terminal IDs that match a regex. Items in
 		this list will not be pruned during coarse-to-fine parsing.
