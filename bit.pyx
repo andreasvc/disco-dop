@@ -186,7 +186,7 @@ def main():
 	assert nextset(0b001100110, 3) == 5
 	assert nextset(0b001100110, 7) == -1
 	assert nextunset(0b001100110, 1) == 3
-	assert nextunset((1UL<<64)-1, 0) == 64
+	assert nextunset(~0ULL, 0) == 64
 	assert bitcount(0b001100110) == 4
 	assert testbit(0b001100110, 1)
 	assert not testbit(0b001100110, 3)
