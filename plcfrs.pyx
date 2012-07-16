@@ -395,10 +395,10 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 		and the Stanford parser. """
 	cdef short left, right, mid, span, lensent = len(sent)
 	cdef short narrowr, narrowl, widel, wider, minmid, maxmid
-	cdef long numsymbols = len(grammar.toid), lhs
+	cdef long numsymbols = len(grammar.toid)
 	cdef double oldscore, prob
 	cdef size_t i
-	cdef UInt Epsilon = grammar.toid["Epsilon"]
+	cdef UInt lhs, rhs1, Epsilon = grammar.toid["Epsilon"]
 	cdef ULLong vec = 0
 	cdef bint foundbetter = False
 	cdef Rule rule
@@ -406,7 +406,7 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 	cdef ChartItem NONE = ChartItem(0, 0)
 	cdef ChartItem goal = ChartItem(start, (1ULL << len(sent)) - 1)
 	cdef dict chart = {}						#the full chart
-	cdef set unaryrules, candidates
+	cdef set applied = set()
 	# the viterbi chart is initially filled with infinite log probabilities,
 	# cells which are to be blocked contain NaN.
 	cdef np.ndarray[np.double_t, ndim=3] viterbi = np.array([np.inf],
@@ -430,7 +430,6 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 			"length: %d. limit: %d." % (len(sent), sizeof(vec) * 8))
 	i = 0
 	while grammar.unary[0][i].rhs1 != grammar.nonterminals: i += 1
-	unaryrules = set(range(i))
 
 	# assign POS tags
 	#print 1, # == span
@@ -477,37 +476,40 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 			return chart, NONE
 
 		# unary rules on the span of this POS tag
+		applied.clear()
 		for rhs1 in range(grammar.nonterminals):
+			if not isfinite(viterbi[rhs1, left, right]): continue
 			for i in grammar.unaryclosure[rhs1]:
 				rule = grammar.unary[0][i]
-				if isfinite(viterbi[rule.rhs1, left, right]):
-					if isfinite(viterbi[rule.rhs1, left, right]):
-						prob = rule.prob + viterbi[rule.rhs1, left, right]
-						if isfinite(viterbi[rule.lhs, left, right]):
-							chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))].append(
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-								(1ULL << right) - (1ULL << left)),
-								NONE))
-						else:
-							chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))] = [
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-								(1ULL << right) - (1ULL << left)),
-								NONE)]
-						if prob < viterbi[rule.lhs, left, right]:
-							viterbi[rule.lhs, left, right] = prob
-							# update filter
-							if left > minsplitleft[rule.lhs, right]:
-								minsplitleft[rule.lhs, right] = left
-							if left < maxsplitleft[rule.lhs, right]:
-								maxsplitleft[rule.lhs, right] = left
-							if right < minsplitright[rule.lhs, left]:
-								minsplitright[rule.lhs, left] = right
-							if right > maxsplitright[rule.lhs, left]:
-								maxsplitright[rule.lhs, left] = right
+				if not isfinite(viterbi[rule.rhs1, left, right]): continue
+				elif i in applied: continue
+				else: applied.add(i)
+				prob = rule.prob + viterbi[rule.rhs1, left, right]
+				if isfinite(viterbi[rule.lhs, left, right]):
+					chart[new_ChartItem(rule.lhs, (1ULL << right)
+						- (1ULL << left))].append(
+						new_Edge(prob, prob, rule.prob,
+						new_ChartItem(rule.rhs1,
+						(1ULL << right) - (1ULL << left)),
+						NONE))
+				else:
+					chart[new_ChartItem(rule.lhs, (1ULL << right)
+						- (1ULL << left))] = [
+						new_Edge(prob, prob, rule.prob,
+						new_ChartItem(rule.rhs1,
+						(1ULL << right) - (1ULL << left)),
+						NONE)]
+				if prob < viterbi[rule.lhs, left, right]:
+					viterbi[rule.lhs, left, right] = prob
+					# update filter
+					if left > minsplitleft[rule.lhs, right]:
+						minsplitleft[rule.lhs, right] = left
+					if left < maxsplitleft[rule.lhs, right]:
+						maxsplitleft[rule.lhs, right] = left
+					if right < minsplitright[rule.lhs, left]:
+						minsplitright[rule.lhs, left] = right
+					if right > maxsplitright[rule.lhs, left]:
+						maxsplitright[rule.lhs, left] = right
 
 	for span in range(2, lensent + 1):
 		# print span,
@@ -571,37 +573,40 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 						maxsplitright[rule.lhs, left] = right
 
 			# unary rules on this span
+			applied.clear()
 			for rhs1 in range(grammar.nonterminals):
+				if not isfinite(viterbi[rhs1, left, right]): continue
 				for i in grammar.unaryclosure[rhs1]:
 					rule = grammar.unary[0][i]
-					# apply each rule only once?
-					if isfinite(viterbi[rule.rhs1, left, right]):
-						prob = rule.prob + viterbi[rule.rhs1, left, right]
-						if isfinite(viterbi[rule.lhs, left, right]):
-							chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))].append(
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-								(1ULL << right) - (1ULL << left)),
-								NONE))
-						else:
-							chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))] = [
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-								(1ULL << right) - (1ULL << left)),
-								NONE)]
-						if prob < viterbi[rule.lhs, left, right]:
-							viterbi[rule.lhs, left, right] = prob
-							# update filter
-							if left > minsplitleft[rule.lhs, right]:
-								minsplitleft[rule.lhs, right] = left
-							if left < maxsplitleft[rule.lhs, right]:
-								maxsplitleft[rule.lhs, right] = left
-							if right < minsplitright[rule.lhs, left]:
-								minsplitright[rule.lhs, left] = right
-							if right > maxsplitright[rule.lhs, left]:
-								maxsplitright[rule.lhs, left] = right
+					if not isfinite(viterbi[rule.rhs1, left, right]): continue
+					elif i in applied: continue
+					else: applied.add(i)
+					prob = rule.prob + viterbi[rule.rhs1, left, right]
+					if isfinite(viterbi[rule.lhs, left, right]):
+						chart[new_ChartItem(rule.lhs, (1ULL << right)
+							- (1ULL << left))].append(
+							new_Edge(prob, prob, rule.prob,
+							new_ChartItem(rule.rhs1,
+							(1ULL << right) - (1ULL << left)),
+							NONE))
+					else:
+						chart[new_ChartItem(rule.lhs, (1ULL << right)
+							- (1ULL << left))] = [
+							new_Edge(prob, prob, rule.prob,
+							new_ChartItem(rule.rhs1,
+							(1ULL << right) - (1ULL << left)),
+							NONE)]
+					if prob < viterbi[rule.lhs, left, right]:
+						viterbi[rule.lhs, left, right] = prob
+						# update filter
+						if left > minsplitleft[rule.lhs, right]:
+							minsplitleft[rule.lhs, right] = left
+						if left < maxsplitleft[rule.lhs, right]:
+							maxsplitleft[rule.lhs, right] = left
+						if right < minsplitright[rule.lhs, left]:
+							minsplitright[rule.lhs, left] = right
+						if right > maxsplitright[rule.lhs, left]:
+							maxsplitright[rule.lhs, left] = right
 	# print
 	if goal in chart: return chart, goal
 	else: return chart, NONE
