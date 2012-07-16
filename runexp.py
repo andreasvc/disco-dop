@@ -155,16 +155,17 @@ def main(
 		#logging.info("induced DOP CFG based on %d sentences" % len(trees))
 		logging.info(grammarinfo(pcfggrammar))
 		pcfggrammar = Grammar(pcfggrammar)
+		pcfggrammar.testgrammar()
+		pcfggrammar.write_srcg_grammar(
+			resultdir + "/pcfg.rules", resultdir + "%s/pcfg.lex")
 	if srcg:
 		srcggrammar = induce_srcg(trees, sents)
 		logging.info("induced SRCG based on %d sentences" % len(trees))
 		logging.info(grammarinfo(srcggrammar, dump="%s/pcdist.txt" % resultdir))
-		write_srcg_grammar(srcggrammar,
-			"%s/grammar.srcg"   % resultdir,
-			"%s/grammar.lex" % resultdir,
-		encoding='utf-8')
 		srcggrammar = Grammar(srcggrammar)
 		srcggrammar.testgrammar()
+		srcggrammar.write_srcg_grammar(
+			resultdir + "/srcg.rules", resultdir + "%s/srcg.lex")
 		if neverblockre: srcggrammar.getdonotprune(re.compile(neverblockre))
 		logging.info("wrote grammar to %s/grammar.{srcg,lex}" % resultdir)
 	if dop:
@@ -199,6 +200,8 @@ def main(
 		logging.info(grammarinfo(dopgrammar))
 		dopgrammar = dopgrammar1
 		dopgrammar.testgrammar()
+		dopgrammar.write_srcg_grammar(
+			resultdir + "/dop.rules", resultdir + "%s/dop.lex")
 		if neverblockre: dopgrammar.getdonotprune(re.compile(neverblockre))
 
 	if getestimates:

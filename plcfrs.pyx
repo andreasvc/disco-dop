@@ -274,7 +274,8 @@ cdef inline process_edge(UInt label, ULLong vec, double score, double inside,
 				else:
 					strlabel = striplabel.sub("", grammar.tolabel[newitem.label], 1)
 					origlabel = newitem.label
-					newitem.label = coarsegrammar.toid[strlabel]
+					newitem.label = coarsegrammar.toid.get(strlabel,
+						coarsegrammar.nonterminals)
 					if newitem not in coarsechart:
 						blocked[0] += 1
 						itempool.append(newitem)
