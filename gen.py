@@ -47,7 +47,7 @@ def splitgrammar(grammar, lexicon):
 	""" split the grammar into various lookup tables, mapping nonterminal
 	labels to numeric identifiers. Also negates log-probabilities to
 	accommodate min-heaps.
-	Can only represent ordered SRCG rules (monotone LCFRS).
+	Can only represent monotone LCFRS rules.
 	This version represent rules in dedicated Rule objects, """
 	Grammar = namedtuple("Grammar", "unary lbinary rbinary lexical bylhs lexicalbylhs toid tolabel arity".split())
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first, and assign them unique IDs
@@ -111,8 +111,8 @@ def arraytoyf(args, lengths):
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
 							for n, a in zip(lengths, args))
 
-def read_srcg_grammar(rules, lexicon, encoding='utf-8'):
-	""" Reads a grammar as produced by write_srcg_grammar. """
+def read_lcfrs_grammar(rules, lexicon, encoding='utf-8'):
+	""" Reads a grammar as produced by write_lcfrs_grammar. """
 	rules = (a[:-1].split('\t') for a in codecs.open(rules, encoding=encoding))
 	lexicon = (a[:-1].split('\t') for a in codecs.open(lexicon,
 		encoding=encoding))
@@ -137,7 +137,7 @@ def test():
 	print " ".join(sent.pop())
 
 def main():
-	rules, lexicon = read_srcg_grammar("rules.srcg", "lexicon.srcg")
+	rules, lexicon = read_lcfrs_grammar("grammar.rules", "grammar.lex")
 	grammar = splitgrammar(rules, lexicon)
 	for a in range(20):
 		p, sent = gen(grammar)

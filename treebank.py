@@ -9,11 +9,20 @@ BOS = re.compile("^#BOS.*\n")
 EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
+#def negratransformrations(trees,
+#	headorder=False, headfinal=False, headreverse=False, unfold=False,
+#	functiontags=False, removepunct=False, movepunct=False):
+#	""" Applies a series of in-place transformations"""
+#	# problem: transformations require information like function tags.
+#	for tree in trees:
+#		pass
+#	return trees
+
 class NegraCorpusReader():
 	""" Read a corpus in the Negra export format. """
-	def __init__(self, root, fileids, encoding="utf-8", headorder=False,
-	headfinal=False, headreverse=False, unfold=False, functiontags=False,
-	removepunct=False, movepunct=False):
+	def __init__(self, root, fileids, encoding="utf-8",
+	headorder=False, headfinal=False, headreverse=False, unfold=False,
+	functiontags=False, removepunct=False, movepunct=False):
 		""" headorder: whether to order constituents according to heads
 			headfinal: whether to put the head in final or in frontal position
 			headreverse: the head is made final/frontal by reversing everything
@@ -794,5 +803,5 @@ if __name__ == '__main__':
 	# militant anti-tab faction who are behind this obnoxious default)
 	fail, attempted = testmod(verbose=False,
 		optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	if attempted and not fail:
-		print "%s: %d doctests succeeded!" % (__file__, attempted)
+	assert attempted and not fail
+	print "%s: %d doctests succeeded!" % (__file__, attempted)

@@ -1,65 +1,66 @@
 """Assorted functions to project items from a coarse chart to corresponding
 items for a fine grammar.
 """
-import re
 from collections import defaultdict
 from nltk import Tree
 from treetransforms import mergediscnodes, unbinarize, slowfanout
-import cython
-assert cython.compiled
+from containers cimport ChartItem, Edge, RankedEdge, Grammar
+from kbest import lazykbest, lazykthbest
+from agenda cimport Entry
 
 infinity = float('infinity')
-removeids = re.compile("@[0-9]+")
-removeparentannot = re.compile("\^<.*>")
-reducemarkov = [re.compile("\|<[^>]*>"),
-				re.compile("\|<([^->]*)-?[^>]*>"),
-				re.compile("\|<([^->]*-[^->]*)-?[^>]*>"),
-				re.compile("\|<([^->]*-[^->]*-[^->]*)-?[^>]*>")]
 
-def prunechart(chart, goal, coarse, fine, k, reduceh=999,
-		removeparentannotation=False, mergesplitnodes=False):
+cpdef prunechart(dict chart, ChartItem goal, Grammar coarse, Grammar fine,
+	int k, bint splitprune, bint markorigin):
 	""" Produce a white list of chart items occurring in the k-best derivations
 	of chart, where labels X in coarse.toid are projected to the labels
-	X and X@n in fine.toid, for possible values of n.  When k==0, the chart is
-	merely filtered to contain only items that contribute to a complete
-	derivation."""
+	X and X@n-m in fine.toid, for possible values of n and m.
+		- k: number of k-best derivations to consider. When k==0, the chart is
+			not pruned but filtered to contain only items that contribute to a
+			complete derivation.
+        - splitprune: coarse stage used a split-PCFG where discontinuous node
+            appear as multiple CFG nodes. Every discontinuous node will result
+            in multiple lookups into whitelist to see whether it should be
+            allowed on the agenda.
+		- markorigin: in combination with splitprune, coarse labels include an
+			integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
+			map to the discontinuous node NP_2
+	"""
+	cdef dict d, kbest
+	cdef list whitelist
+	#if splitprune and markorigin: assert fine.splitmapping is not NULL
+	#assert fine.mapping is not NULL
 	whitelist = [None] * len(fine.toid)
-	if mergesplitnodes:
-		d = merged_kbest(chart, goal, k, coarse)
-		assert not removeparentannotation, "not implemented"
-	else:
-		d = dictcast(defaultdict(dict))
-		# construct a list of the k-best nonterminals to prune with
-		kbest = kbest_items(chart, goal, k)
-	if removeparentannotation:
-		# uses string labels of coarse chart
-		for Ih in chart:
-			label = removeparentannot.sub("", coarse.tolabel[itemcast(Ih).label])
-			if reduceh != 999:
-				label = reducemarkov[reduceh].sub("|<\\1>" if reduceh else "",
-					label)
-			d[label][Ih.vec] = min(d[label].get(Ih.vec,
-				infinity), kbest.get(Ih, infinity))
-	if removeparentannotation or mergesplitnodes:
-		for a, label in fine.toid.iteritems():
-			whitelist[label] = d[removeids.sub("", a)]
-	else:
-		l = [{} for a in coarse.toid]
-		# uses ids of labels in coarse chart
-		for Ih in chart:
-			l[Ih.label][Ih.vec] = kbest.get(Ih, infinity)
-		for a, label in fine.toid.iteritems():
-			whitelist[label] = l[coarse.toid.get(removeids.sub("", a), 1)]
-	return whitelist
+	d = <dict>defaultdict(dict)
+	# construct a list of the k-best nonterminals to prune with
+	kbest = kbest_items(chart, goal, k)
+	kbestspans = [{} for a in coarse.toid]
+	kbestspans[0] = None
+	# uses ids of labels in coarse chart
+	for Ih in kbest: kbestspans[Ih.label][Ih.vec] = 0.0
+	for label in range(fine.nonterminals):
+		if splitprune and markorigin and fine.fanout[label] != 1:
+			whitelist[label] = tmp = []
+			for n in range(fine.fanout[label]):
+				assert fine.splitmapping[label][n] < len(kbestspans), (
+					fine.tolabel[label], n, fine.splitmapping[label][n],
+					len(kbestspans))
+				tmp.append(kbestspans[fine.splitmapping[label][n]])
+			#whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
+			#	for n in range(fine.fanout[label])]
+		else:
+			whitelist[label] = kbestspans[fine.mapping[label]]
+	return whitelist, len(kbest)
 
-def merged_kbest(chart, start, k, grammar):
+cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	""" Like kbest_items, but apply the reverse of the Boyd (2007)
 	transformation to the k-best derivations."""
-	derivs = [Tree.parse(a, parse_leaf=int) for a, _
+	cdef dict newchart = <dict>defaultdict(dict)
+	cdef list derivs = [Tree.parse(a, parse_leaf=int) for a, _
 				in lazykbest(chart, start, k, grammar.tolabel)]
-	for a in derivs: unbinarize(a, childChar=":", parentChar="!")
-	map(mergediscnodes, derivs)
-	newchart = dictcast(defaultdict(dict))
+	for a in derivs:
+		unbinarize(a, childChar=":", parentChar="!")
+		mergediscnodes(a)
 	for tree in derivs:
 		for node in tree.subtrees():
 			arity = slowfanout(node)
@@ -68,11 +69,11 @@ def merged_kbest(chart, start, k, grammar):
 			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
 	return newchart
 
-def kbest_items(chart, start, k):
+cpdef dict kbest_items(dict chart, ChartItem start, int k):
 	""" produce a dictionary with ChartItems as keys (value is currently unused)
 	according to the k-best derivations in a chart. """
-	D = {}
-	items = { start : 0.0 }
+	cdef dict D = {}, items = { start : 0.0 }
+	cdef Entry entry
 	if k == 0:
 		items = filterchart(chart, start)
 		for a in items:
@@ -86,11 +87,14 @@ def kbest_items(chart, start, k):
 			getitems(entry.key, entry.value, D, chart, items)
 	return items
 
-def getitems(ej, rootprob, D, chart, items):
+cdef getitems(RankedEdge ej, double rootprob, dict D, dict chart, dict items):
 	""" Traverse a derivation e,j, collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
 	currently unused; only presence or absence in this list is exploited)"""
-	e = ej.edge
+	cdef Edge e = ej.edge
+	cdef RankedEdge eejj
+	cdef Entry entry
+	cdef double prob
 	if e.left in chart:
 		if e.left in D:
 			entry = D[e.left][ej.left]
@@ -114,14 +118,16 @@ def getitems(ej, rootprob, D, chart, items):
 			items[e.right] = rootprob - prob
 		getitems(eejj, rootprob, D, chart, items)
 
-def filterchart(chart, start):
+cpdef filterchart(dict chart, ChartItem start):
 	""" remove all entries that do not contribute to a complete derivation
 	headed by "start" """
 	chart2 = {}
-	filter_subtree(start, dictcast(chart), chart2)
+	filter_subtree(start, chart, chart2)
 	return chart2
 
-def filter_subtree(start, chart, chart2):
+cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
+	cdef Edge edge
+	cdef ChartItem item
 	chart2[start] = chart[start]
 	for edge in chart[start]:
 		item = edge.left
@@ -131,12 +137,9 @@ def filter_subtree(start, chart, chart2):
 		if item.label and item not in chart2:
 			filter_subtree(edge.right, chart, chart2)
 
-def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
-	from plcfrs import parse #, pprint_chart
-	#from coarsetofine import kbest_items, merged_kbest, prunechart
+def doctf(coarse, fine, sent, tree, k, split, verbose=False):
+	from parser import parse #, pprint_chart
 	from disambiguation import marginalize
-	from treetransforms import mergediscnodes, unbinarize
-	from containers import getlabel, getvec
 	from grammar import canonicalize, rem_marks
 	from math import exp
 	sent, tags = zip(*sent)
@@ -157,9 +160,7 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 		print "no parse"
 		return
 		#pprint_chart(p, sent, coarse.tolabel)
-	l = prunechart(p, start, coarse, fine, k, #0 if split else k,
-				removeparentannotation=pa, mergesplitnodes=False,
-				reduceh=doph)
+	l, _ = prunechart(p, start, coarse, fine, k, split, True)
 	if verbose:
 		print "\nitems in 50-best of coarse chart"
 		if split:
@@ -169,16 +170,17 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 		else:
 			kbest = kbest_items(p, start, k)
 			for a,b in kbest.items():
-				print coarse.tolabel[getlabel(a)], bin(getvec(a)), b
+				print coarse.tolabel[(<ChartItem>a).label], bin((<ChartItem>a).vec), b
 		print "\nwhitelist:"
 		for n,x in enumerate(l):
-			print fine.tolabel[n], [(bin(v), s) for v,s in x.items()]
+			if isinstance(x, dict):
+				print fine.tolabel[n], map(bin, x)
+			elif x:
+				for m, y in enumerate(x):
+					print fine.tolabel[n], m, map(bin, y)
 	print " F I N E ",
-	p = filterchart(p, start) if split else None
-	fine.getdonotprune(re.compile(r"\|<"))
 	pp, start, _ = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
-		whitelist=l, coarsechart=p, coarsegrammar=coarse,
-		splitprune=split, markorigin=True)
+		whitelist=l, splitprune=split, markorigin=True)
 	if start:
 		mpp, _ = marginalize(pp, start, fine.tolabel)
 		for t in mpp:
@@ -203,11 +205,10 @@ def doctf(coarse, fine, sent, tree, k, doph, pa, split, verbose=False):
 		#pprint_chart(pp, sent, fine.tolabel)
 
 def main():
-	from treetransforms import splitdiscnodes, binarize
+	import re
+	from treetransforms import splitdiscnodes, binarize, addfanoutmarkers
 	from treebank import NegraCorpusReader
-	from grammar import induce_srcg, dop_srcg_rules,\
-			subsetgrammar
-	from containers import Grammar
+	from grammar import induce_plcfrs, dop_lcfrs_rules, subsetgrammar
 	from time import clock
 	k = 50
 	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
@@ -224,43 +225,52 @@ def main():
 
 	dtrees = [t.copy(True) for t in trees]
 	parenttrees = [t.copy(True) for t in trees]
-	for t in trees: binarize(t, vertMarkov=0, horzMarkov=1)
+	for t in trees:
+		binarize(t, vertMarkov=0, horzMarkov=1)
+		addfanoutmarkers(t)
 	cftrees = [splitdiscnodes(t.copy(True), markorigin=True) for t in trees]
 	for t in cftrees:
 		#t.chomsky_normal_form(childChar=":")
-		binarize(t, horzMarkov=999, tailMarker='', leftMostUnary=True,
+		binarize(t, horzMarkov=1, tailMarker='', leftMostUnary=True,
 			childChar=":") #NB leftMostUnary is important
-	for t in parenttrees: binarize(t, vertMarkov=2)
-	for t in dtrees: binarize(t, vertMarkov=0, horzMarkov=1)
+		addfanoutmarkers(t)
+	for t in parenttrees:
+		binarize(t, vertMarkov=2, horzMarkov=1)
+		addfanoutmarkers(t)
+	for t in dtrees:
+		binarize(t, vertMarkov=0, horzMarkov=1)
+		addfanoutmarkers(t)
 	# mark heads, canonicalize, binarize head outward
-	normalsrcg = induce_srcg(trees, sents)
-	normal = Grammar(normalsrcg)
-	parent = Grammar(induce_srcg(parenttrees, sents))
-	split = Grammar(induce_srcg(cftrees, sents))
+	normallcfrs = induce_plcfrs(trees, sents)
+	normal = Grammar(normallcfrs)
+	parent = Grammar(induce_plcfrs(parenttrees, sents))
+	splitg = Grammar(induce_plcfrs(cftrees, sents))
 	for t,s in zip(cftrees, sents):
-		for (r,yf),w in induce_srcg([t], [s]): assert len(yf) == 1
-	fine999srcg = dop_srcg_rules(trees, sents)
-	fine999 = Grammar(fine999srcg)
-	fine1 = Grammar(dop_srcg_rules(dtrees, sents))
+		for (r,yf),w in induce_plcfrs([t], [s]): assert len(yf) == 1
+	fine999x = dop_lcfrs_rules(trees, sents)
+	fine999 = Grammar(fine999x)
+	fine1 = Grammar(dop_lcfrs_rules(dtrees, sents))
 	trees = list(corpus.parsed_sents()[train:train+test])
 	sents = corpus.tagged_sents()[train:train+test]
-	if subsetgrammar(normalsrcg, fine999srcg):
+	if subsetgrammar(normallcfrs, fine999x):
 		print "DOP grammar is a superset"
 	else: print "DOP grammar is NOT a superset!"
-	for msg, coarse, fine, settings, enabled in zip(
+	for msg, coarse, fine, split, enabled in zip(
 		"normal parentannot cf-split".split(),
-		(normal, parent, split),
+		(normal, parent, splitg),
 		(fine999, fine1, fine1),
-		((False, False), (True, False), (False, True)),
+		(False, False, True),
 		(True, False, True)):
 		if not enabled: continue
 		print "coarse grammar:", msg
+		fine.getmapping(re.compile("@[-0-9]+$"), None, coarse,
+				split, True)
+		#??: fine.getdonotprune(re.compile(r"\|<"))
 		begin = clock()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen: continue
 			print n,
-			doctf(coarse, fine, sent, tree, k, 1 if msg=="parentannot" else 999,
-				*settings, verbose=False)
+			doctf(coarse, fine, sent, tree, k, split, verbose=False)
 		print "time elapsed", clock() - begin, "s"
 
 if __name__ == '__main__': main()

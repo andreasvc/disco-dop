@@ -23,10 +23,26 @@ cdef extern from "macros.h":
 @cython.final
 cdef class Grammar:
 	cdef Rule **unary, **lbinary, **rbinary, **bylhs
+	cdef UChar *fanout
+	cdef UInt *mapping, **splitmapping
+	cdef size_t nonterminals, numrules
 	cdef public dict lexical, lexicalbylhs, toid, tolabel
 	cdef public list unaryclosure
-	cdef frozenset donotprune, origrules
-	cdef size_t nonterminals, numrules
+	cdef frozenset origrules
+	cpdef getmapping(Grammar self, striplabelre, neverblockre, Grammar coarse,
+			bint splitprune, bint markorigin)
+	cdef str rulerepr(self, Rule rule)
+	cdef str yfrepr(self, Rule rule)
+
+cdef struct Rule:
+	double prob # 8 bytes
+	UInt args # 4 bytes => 32 max vars per rule
+	UInt lengths # 4 bytes => same
+	UInt lhs # 4 bytes
+	UInt rhs1 # 4 bytes
+	UInt rhs2 # 4 bytes
+	# total: 28 bytes (32 bytes w/padding).
+	#UChar fanout # 1 byte
 
 @cython.final
 cdef class ChartItem:
@@ -37,6 +53,15 @@ cdef class FatChartItem:
 	cdef ULLong vec[7]
 	cdef public UInt label
 
+
+cdef union VecType:
+	ULLong vec
+	ULong *vecptr
+
+cdef class NewChartItem:
+	cdef VecType vec
+	cdef public UInt label
+
 @cython.final
 cdef class Edge:
 	cdef public double score
@@ -44,17 +69,6 @@ cdef class Edge:
 	cdef public double prob
 	cdef public ChartItem left
 	cdef public ChartItem right
-
-#@cython.final
-cdef struct Rule:
-	double prob # 8 bytes
-	UInt args # 4 bytes => 32 max vars per rule
-	UInt lengths # 4 bytes => same
-	UInt lhs # 4 bytes
-	UInt rhs1 # 4 bytes
-	UInt rhs2 # 4 bytes
-	UChar fanout # 1 byte
-	# total: 29 bytes (32 bytes w/padding).
 
 @cython.final
 cdef class LexicalRule:
@@ -114,11 +128,20 @@ cdef class MemoryPool:
 	cdef void *cur
 	cdef int poolsize, limit, n, leftinpool
 
-cdef inline FrozenArray new_FrozenArray(array data)
-cdef str yfrepr(Rule rule)
-cpdef inline UInt getlabel(ChartItem a)
-cpdef inline ULLong getvec(ChartItem a)
-cpdef inline double getscore(Edge a)
-cpdef inline dict dictcast(d)
-cpdef inline ChartItem itemcast(i)
-cpdef inline Edge edgecast(e)
+# to avoid overhead of __init__ and __cinit__ constructors
+cdef inline FrozenArray new_FrozenArray(array data):
+	cdef FrozenArray item = FrozenArray.__new__(FrozenArray)
+	item.data = data
+	return item
+
+cdef inline ChartItem new_ChartItem(UInt label, ULLong vec):
+	cdef ChartItem item = ChartItem.__new__(ChartItem)
+	item.label = label; item.vec = vec
+	return item
+
+cdef inline Edge new_Edge(double score, double inside, double prob,
+	ChartItem left, ChartItem right):
+	cdef Edge edge = Edge.__new__(Edge)
+	edge.score = score; edge.inside = inside; edge.prob = prob
+	edge.left = left; edge.right = right
+	return edge

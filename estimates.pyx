@@ -1,16 +1,21 @@
-"""
-Implementation of LR estimate (Kallmeyer & Maier 2010).
-Ported almost directly from rparse (except for sign reversal of log probs).
-"""
-from agenda import Agenda
+""" Implementation of LR estimate (Kallmeyer & Maier 2010).
+Ported almost directly from rparse (except for sign reversal of log probs). """
 from math import exp
+from containers cimport ChartItem, Grammar, Rule, UInt, ULLong, new_ChartItem
+from agenda cimport Agenda, Entry
+from array cimport array
+cimport numpy as np
+from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint
 import numpy as np
-import cython
-assert cython.compiled
 np.import_array()
 
-class Item(object):
-	__slots__ = ("state", "length", "lr", "gaps", "_hash")
+cdef extern from "math.h":
+	bint isnan(double x)
+	bint isfinite(double x)
+
+cdef class Item:
+	cdef public long _hash
+	cdef public int state, length, lr, gaps
 	def __hash__(self):
 		return self._hash
 	def __cmp__(self, other):
@@ -23,31 +28,39 @@ class Item(object):
 		return "state %4d, len %2d, lr %2d, gaps %2d" % (
 			self.state, self.length, self.lr, self.gaps)
 
-def new_Item(state, length, lr, gaps):
+cdef inline new_Item(state, length, lr, gaps):
 	item = Item.__new__(Item)
 	item.state = state; item.length = length; item.lr = lr; item.gaps = gaps
 	item._hash = state * 1021 + length * 571 + lr * 311 + gaps
 	return item
 
-def getoutside(outside, maxlen, slen, label, vec):
-	""" Used during parsing to query for outside estimates """
-	length = bitcount(vec)
-	left = nextset(vec, 0)
-	gaps = bitlength(vec) - length - left
-	right = slen - length - left - gaps
-	lr = left + right
+cdef inline double getoutside(np.ndarray[np.double_t, ndim=4] outside,
+		UInt maxlen, UInt slen, UInt label, ULLong vec):
+	""" Query for outside estimate. NB: if this would be used, it should be in
+	a .pxd with `inline.' However, passing the numpy array is slow. """
+	cdef UInt length = bitcount(vec)
+	cdef UInt left = nextset(vec, 0)
+	cdef UInt gaps = bitlength(vec) - length - left
+	cdef UInt right = slen - length - left - gaps
+	cdef UInt lr = left + right
 	if slen > maxlen or length + lr + gaps > maxlen:
 		return 0.0
 	return outside[label, length, lr, gaps]
 
-def simpleinside(grammar, maxlen, insidescores):
+def simpleinside(Grammar grammar, UInt maxlen,
+		np.ndarray[np.double_t, ndim=2] insidescores):
 	""" Compute simple inside estimate in bottom-up fashion.
 	Here vec is actually the length (number of terminals in the yield of
 	the constituent)
 	insidescores is a 4-dimensional matrix initialized with NaN to indicate
 	values that have yet to be computed. """
-	infinity = np.inf
-	agenda = Agenda()
+	cdef ChartItem I
+	cdef Entry entry
+	cdef Rule rule
+	cdef Agenda agenda = Agenda()
+	cdef np.double_t x
+	cdef size_t i
+	cdef ULLong vec
 
 	for i in range(1, grammar.nonterminals):
 		#this is supposed cover all and only preterminals
@@ -94,12 +107,21 @@ def simpleinside(grammar, maxlen, insidescores):
 						rule.prob + insidescores[rule.rhs1, vec] + x)
 
 	# anything not reached so far gets probability zero:
-	insidescores[np.isnan(insidescores)] = infinity
+	insidescores[np.isnan(insidescores)] = np.inf
 
-def outsidelr(grammar, insidescores, maxlen, goal, outside):
+def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
+		UInt maxlen, UInt goal, np.ndarray[np.double_t, ndim=4] outside):
 	""" Compute the outside SX simple LR estimate in top down fashion. """
-	agenda = Agenda()
-
+	cdef Agenda agenda = Agenda()
+	cdef np.double_t current, score
+	cdef Entry entry
+	cdef Item newitem, I
+	cdef Rule rule
+	cdef double x, insidescore
+	cdef size_t i
+	cdef int m, n, totlen, addgaps, addleft, addright, leftarity, rightarity
+	cdef int lenA, lenB, lr, ga
+	cdef bint stopaddleft, stopaddright
 	for n in range(1, maxlen + 1):
 		agenda[new_Item(goal, n, 0, 0)] = 0.0
 		outside[goal, n, 0, 0] = 0.0
@@ -139,9 +161,9 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 
 			leftarity = rightarity = 1
 			if grammar.bylhs[rule.rhs1][0].lhs == rule.rhs1:
-				leftarity = grammar.bylhs[rule.rhs1][0].fanout
+				leftarity = grammar.fanout[rule.rhs1]
 			if grammar.bylhs[rule.rhs2][0].lhs == rule.rhs2:
-				leftarity = grammar.bylhs[rule.rhs2][0].fanout
+				leftarity = grammar.fanout[rule.rhs2]
 			# binary-left (A is left)
 			for lenA in range(leftarity, I.length - rightarity + 1):
 				lenB = I.length - lenA
@@ -197,9 +219,12 @@ def outsidelr(grammar, insidescores, maxlen, goal, outside):
 									new_Item(rule.rhs2, lenA, lr, ga), score)
 								outside[rule.rhs2, lenA, lr, ga] = score
 
-def inside(grammar, maxlen, insidescores):
+def inside(Grammar grammar, UInt maxlen, dict insidescores):
 	""" Compute inside estimate in bottom-up fashion, with
 	full bit vectors (not used)."""
+	cdef ChartItem I
+	cdef Entry entry
+	cdef size_t i
 	infinity = float('infinity')
 	agenda = Agenda()
 
@@ -229,7 +254,7 @@ def inside(grammar, maxlen, insidescores):
 			if rule.rhs1 != I.label: break
 			elif rule.rhs2 not in insidescores: continue
 			for vec in insidescores[rule.rhs2]:
-				left = insideconcat(I.vec, vec, rule, maxlen)
+				left = insideconcat(I.vec, vec, rule, grammar, maxlen)
 				if left and (rule.lhs not in insidescores
 					or left not in insidescores[rule.lhs]):
 					agenda.setifbetter(new_ChartItem(rule.lhs, left),
@@ -240,7 +265,7 @@ def inside(grammar, maxlen, insidescores):
 			if rule.rhs2 != I.label: break
 			elif rule.rhs1 not in insidescores: continue
 			for vec in insidescores[rule.rhs1]:
-				right = insideconcat(vec, I.vec, rule, maxlen)
+				right = insideconcat(vec, I.vec, rule, grammar, maxlen)
 				if right and (rule.lhs not in insidescores
 					or right not in insidescores[rule.lhs]):
 					agenda.setifbetter(new_ChartItem(rule.lhs, right),
@@ -248,8 +273,9 @@ def inside(grammar, maxlen, insidescores):
 
 	return insidescores
 
-def insideconcat(a, b, rule, maxlen):
-	if rule.fanout + bitcount(a) + bitcount(b) > maxlen + 1:
+cdef inline ULLong insideconcat(ULLong a, ULLong b, Rule rule, Grammar grammar,
+		UInt maxlen):
+	if grammar.fanout[rule.lhs] + bitcount(a) + bitcount(b) > maxlen + 1:
 		return 0
 	result = resultpos = l = r = 0
 	for x in range(bitlength(rule.lengths)):
@@ -268,9 +294,7 @@ def insideconcat(a, b, rule, maxlen):
 			result &= ~(1 << resultpos)
 	return result
 
-def getestimates(grammar, maxlen, goal):
-	try: assert cython.compiled; print "estimates: running cython"
-	except: print "estimates: not cython"
+cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 	insidescores = np.array([np.NAN], dtype='d').repeat(
 				grammar.nonterminals * (maxlen+1)).reshape(
 				(grammar.nonterminals, (maxlen+1)))
@@ -283,8 +307,7 @@ def getestimates(grammar, maxlen, goal):
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	return outside
 
-def testestimates(grammar, maxlen, goal):
-	infinity = np.inf
+cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print "getting inside"
 	insidescores = inside(grammar, maxlen, {})
 	for a in insidescores:
@@ -301,7 +324,7 @@ def testestimates(grammar, maxlen, goal):
 	print "inside"
 	for an, a in enumerate(insidescores):
 		for bn, b in enumerate(a):
-			if b < infinity:
+			if b < np.inf:
 				print grammar.tolabel[an], "len", bn, "=", exp(-b)
 	#print insidescores
 	#for a in range(maxlen):
@@ -318,7 +341,7 @@ def testestimates(grammar, maxlen, goal):
 		for bn, b in enumerate(a):
 			for cn, c in enumerate(b):
 				for dn, d in enumerate(c):
-					if d < infinity:
+					if d < np.inf:
 						print grammar.tolabel[an], "length", bn, "lr", cn,
 						print "gaps", dn, "=", exp(-d)
 						cnt += 1
@@ -328,14 +351,14 @@ def testestimates(grammar, maxlen, goal):
 
 def main():
 	from treebank import NegraCorpusReader
-	from grammar import induce_srcg
-	from plcfrs import parse, pprint_chart
+	from grammar import induce_plcfrs
+	from parser import parse, pprint_chart
 	from containers import Grammar
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
-	grammar = Grammar(induce_srcg(trees, corpus.sents()))
+	grammar = Grammar(induce_plcfrs(trees, corpus.sents()))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (a 0) (B (c 2) (b 1)))", parse_leaf=int),
@@ -350,7 +373,7 @@ def main():
 	print "treebank:"
 	for a in trees: print a
 	print "\ngrammar:"
-	grammar = induce_srcg(trees, sents)
+	grammar = induce_plcfrs(trees, sents)
 	for (r,yf),w in sorted(grammar):
 		print r[0], "-->", " ".join(r[1:]), yf, exp(w)
 	grammar = Grammar(grammar)
@@ -358,10 +381,10 @@ def main():
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	sent = ["a","b","c"]
 	print "\nwithout estimates"
-	chart, start, _ = parse(sent, grammar, estimate=None)
+	chart, start, _ = parse(sent, grammar, estimates=None)
 	pprint_chart(chart, sent, grammar.tolabel)
 	print "\nwith estimates"
-	chart, start, _ = parse(sent, grammar, estimate=(outside, 4))
+	chart, start, _ = parse(sent, grammar, estimates=(outside, 4))
 	pprint_chart(chart, sent, grammar.tolabel)
 
 if __name__ == '__main__': main()

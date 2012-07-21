@@ -5,10 +5,13 @@ from agenda import Agenda
 from containers import ChartItem, Edge, RankedEdge
 from operator import itemgetter
 
+from agenda cimport Entry, Agenda, nsmallest
+from containers cimport ChartItem, Edge, RankedEdge
+
 unarybest = (0, )
 binarybest = (0, 0)
 
-def getcandidates(chart, v, k):
+cdef inline getcandidates(dict chart, ChartItem v, int k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
 	# NB: the priority queue should either do a stable sort, or should
 	# sort on rank vector as well to have ties resolved in FIFO order;
@@ -17,12 +20,16 @@ def getcandidates(chart, v, k):
 	# three probability y), in which case insertion order should count.
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
+	cdef Edge edge
 	if v not in chart: return Agenda() #raise error?
 	return Agenda(
 		[(RankedEdge(v, edge, 0, 0 if edge.right.label else -1), edge.inside)
 						for edge in nsmallest(k, chart[v])])
 
-def lazykthbest(v, k, k1, D, cand, chart, explored):
+cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
+		dict chart, set explored):
+	cdef Entry entry
+	cdef RankedEdge ej
 	# k1 is the global k
 	# first visit of vertex v?
 	if v not in cand:
@@ -41,7 +48,10 @@ def lazykthbest(v, k, k1, D, cand, chart, explored):
 		else: break
 	return D
 
-def lazynext(ej, k1, D, cand, chart, explored):
+cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
+		set explored):
+	cdef RankedEdge ej1
+	cdef double prob
 	# add the |e| neighbors
 	for i in range(2):
 		if i == 0:
@@ -63,7 +73,11 @@ def lazynext(ej, k1, D, cand, chart, explored):
 			cand[ej1.head][ej1] = prob
 			explored.add(ej1)
 
-def getprob(chart, D, ej):
+cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
+	cdef ChartItem ei
+	cdef Edge e
+	cdef Entry entry
+	cdef double result, prob
 	e = ej.edge
 	if e.left in D: entry = D[e.left][ej.left]; prob = entry.value
 	elif ej.left == 0: edge = chart[e.left][0]; prob = edge.inside
@@ -78,38 +92,85 @@ def getprob(chart, D, ej):
 		result += prob
 	return result
 
-def getderivation(ej, D, chart, tolabel, n):
+cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
+		int n, str debin):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
 	vector [2, 1], this points to the derivation headed by S and having the 2nd
 	best NP and the 1st best VP as children.
-	"""
+	If `debin' is specified, will perform on-the-fly debinarization of nodes
+	with labels containing `debin' an a substring. """
+	cdef Edge edge
+	cdef RankedEdge rankededge
+	cdef ChartItem ei = ej.edge.left
+	cdef str children = "", child
+	cdef int i = ej.left
 	if n > 100: return ""	#hardcoded limit to prevent cycles
-	e = ej.edge
-	children = []
-	for ei, i in ((e.left, ej.left), (e.right, ej.right)):
-		if i == -1: break
-		if ei in chart:
-			if ei in D:
-				entry = D[ei][i]
-				children.append(
-					getderivation(entry.key, D, chart, tolabel, n + 1))
-			else:
-				if i == 0:
-					edge = nsmallest(1, chart[ei]).pop()
-					children.append(getderivation(
-						RankedEdge(ei, edge, 0, 0 if edge.right.label else -1),
-						D, chart, tolabel, n + 1))
-				else: raise ValueError("non-best edge missing in derivations")
-		else:
+	while i != -1:
+		if ei not in chart:
 			# this must be a terminal
-			children.append(str(ei.vec))
+			children = " %d" % ei.vec
+			break
+		if ei in D:
+			rankededge = (<Entry>D[ei][i]).key
+		else:
+			assert i == 0, "non-best edge missing in derivations"
+			edge = nsmallest(1, chart[ei]).pop()
+			rankededge = RankedEdge(ei, edge, 0, 0 if edge.right.label else -1)
+		child = getderivation(rankededge, D, chart, tolabel, n + 1, debin)
+		if child == "": return ""
+		children += " %s" % child
+		if ei is ej.edge.right: break
+		ei = ej.edge.right
+		i = ej.right
+	if debin is not None and debin in tolabel[ej.head.label]:
+		return children
+	return "(%s%s)" % (tolabel[ej.head.label], children)
 
-	if "" in children: return ""
-	return "(%s %s)" % (tolabel[ej.head.label], " ".join(children))
+#cdef inline list getderivationnum(RankedEdge ej, dict D, dict chart,
+#		dict tolabel, int n, str debin):
+#	""" Translate the (e, j) notation to a list of  productions represented
+#	as tuples of label IDs.
+#	e is an edge, j is a vector prescribing the rank of the
+#	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
+#	vector [2, 1], this points to the derivation headed by S and having the 2nd
+#	best NP and the 1st best VP as children.
+#	If `debin' is specified, will perform on-the-fly debinarization of nodes
+#	with labels containing `debin' an a substring. """
+#	cdef ChartItem ei = ej.edge.left
+#	cdef Entry entry
+#	cdef Edge edge
+#	cdef list children
+#	cdef int x, i = ej.left
+#	if n > 100: raise ValueError("cycle") #hardcoded limit to prevent cycles
+#	e = ej.edge
+#	children = []
+#	for x in range(2):
+#		if i == -1: break
+#		if ei in chart:
+#			if ei in D:
+#				entry = D[ei][i]
+#				children.append(
+#					getderivationnum(entry.key, D, chart, tolabel, n + 1,
+#						debin))
+#			else:
+#				assert i == 0, "non-best edge missing in derivations"
+#				edge = nsmallest(1, chart[ei]).pop()
+#				children.append(getderivationnum(
+#					RankedEdge(ei, edge, 0, 0 if edge.right.label else -1),
+#					D, chart, tolabel, n + 1, debin))
+#		else:
+#			# this must be a terminal
+#			children.append(str(ei.vec))
+#		ei, i = e.right, ej.right
+#	#if "" in children: return ""
+#	if debin is not None and debin in tolabel[ej.head.label]:
+#		return children
+#	return (ej.head.label,) + children
 
-def lazykbest(chart, goal, k, tolabel):
+cpdef list lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
+		str debin=None):
 	""" wrapper function to run lazykthbest and get the actual derivations.
 	chart is a monotone hypergraph; should be acyclic unless probabilities
 	resolve the cycles (maybe nonzero weights for unary productions are
@@ -121,61 +182,64 @@ def lazykbest(chart, goal, k, tolabel):
 	k is the number of derivations desired.
 	tolabel is a dictionary mapping numeric IDs to the original nonterminal
 	labels.  """
-	D = {}
-	cand = {}
-	explored = set()
+	cdef Entry entry
+	cdef dict D = {}, cand = {}
+	cdef set explored = set()
+	cdef double prod
 	lazykthbest(goal, k, k, D, cand, chart, explored)
 	return filter(itemgetter(0), [
-			(getderivation(entry.key, D, chart, tolabel, 0), entry.value)
+			(getderivation(entry.key, D, chart, tolabel, 0, debin), entry.value)
 			for entry in D[goal]])
 
-toid = {}
-from math import log
-def ci(label, vec): return ChartItem(toid[label], vec)
-def l(a): return -log(a)
-def ed(i, p, l, r): return Edge(i, i, p, l, r)
-
-def main():
-	toid.update([a[::-1] for a in enumerate(
+cpdef main():
+	from math import log
+	cdef ChartItem v, ci
+	cdef Edge ed
+	cdef Entry entry
+	toid = dict([a[::-1] for a in enumerate(
 			"Epsilon S NP V ADV VP VP2 PN Mary walks quickly".split())])
 	tolabel = dict([a[::-1] for a in toid.items()])
-	NONE = ci("Epsilon", 0)			# sentinel node
-	goal = ci("S", 0b111)
+	NONE = ("Epsilon", 0)			# sentinel node
 	chart = {
-			ci("S", 0b111) : [
-				ed(l(0.5*0.4), l(0.4),
-						ci("NP", 0b100), ci("VP", 0b011)),
-				ed(l(0.25*0.7), l(0.7),
-						ci("NP", 0b100), ci("VP2", 0b011))],
-			ci("VP", 0b011) : [
-				ed(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
-				ed(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
-			ci("VP2", 0b011) : [
-				ed(l(0.5), l(0.5), ci("V", 0b010), ci("ADV", 0b001)),
-				ed(l(0.4), l(0.4), ci("walks", 1), ci("ADV", 0b001))],
-			ci("NP", 0b100) : [ed(l(0.5), l(0.5), ci("Mary", 0), NONE),
-							ed(l(0.9), l(0.9), ci("PN", 0b100), NONE)],
-			ci("PN", 0b100) : [ed(l(1.0), l(1.0), ci("Mary", 0), NONE),
-							ed(l(0.9), l(0.9), ci("NP", 0b100), NONE)
+			("S", 0b111) : [
+				((0.5*0.4), 0.4,
+						("NP", 0b100), ("VP", 0b011)),
+				((0.25*0.7), 0.7,
+						("NP", 0b100), ("VP2", 0b011))],
+			("VP", 0b011) : [
+				(0.5, 0.5, ("V", 0b010), ("ADV", 0b001)),
+				(0.4, 0.4, ("walks", 1), ("ADV", 0b001))],
+			("VP2", 0b011) : [
+				(0.5, 0.5, ("V", 0b010), ("ADV", 0b001)),
+				(0.4, 0.4, ("walks", 1), ("ADV", 0b001))],
+			("NP", 0b100) : [(0.5, 0.5, ("Mary", 0), NONE),
+							(0.9, 0.9, ("PN", 0b100), NONE)],
+			("PN", 0b100) : [(1.0, 1.0, ("Mary", 0), NONE),
+							(0.9, 0.9, ("NP", 0b100), NONE)
 							],
-			ci("V", 0b010) : [ed(l(1.0), l(1.0), ci("walks", 1), NONE)],
-			ci("ADV", 0b001) : [ed(l(1.0), l(1.0), ci("quickly", 2), NONE)]
+			("V", 0b010) : [(1.0, 1.0, ("walks", 1), NONE)],
+			("ADV", 0b001) : [(1.0, 1.0, ("quickly", 2), NONE)]
 		}
-	assert ci("NP", 0b100) == ci("NP", 0b100)
+	for a in list(chart):
+		chart[ChartItem(toid[a[0]], a[1])] = [Edge(-log(c), -log(c), -log(d),
+				ChartItem(toid[e], f), ChartItem(toid[g], h))
+				for c, d, (e,f), (g,h) in chart.pop(a)]
+	assert ChartItem(toid["NP"], 0b100) == ChartItem(toid["NP"], 0b100)
 	cand = {}
 	D = {}
 	k = 10
+	goal = ChartItem(toid["S"], 0b111)
 	for v, b in lazykthbest(goal, k, k, D, cand, chart, set()).items():
 		print tolabel[v.label], bin(v.vec)[2:]
 		for entry in b:
-			e = entry.key.edge
+			ed = entry.key.edge
 			j = (entry.key.left,)
 			if entry.key.right != -1: j += (entry.key.right,)
 			ip = entry.value
 			print tolabel[v.label], ":",
-			print " ".join([tolabel[c.label]
-				for c, _ in zip((e.left, e.right), j)]),
-			print exp(-e.prob), j, exp(-ip)
+			print " ".join([tolabel[ci.label]
+				for ci, _ in zip((ed.left, ed.right), j)]),
+			print exp(-ed.prob), j, exp(-ip)
 		print
 	from pprint import pprint
 	print "tolabel",
@@ -192,6 +256,5 @@ def main():
 	assert len(D[goal]) == len(set(D[goal]))
 	assert len(derivations) == len(set(derivations))
 	assert len(set(derivations)) == len(dict(derivations))
-
 
 if __name__ == '__main__': main()

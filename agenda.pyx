@@ -13,51 +13,45 @@ cimport cython
 
 DEF INVALID = 0
 
-cdef Entry make_entry(object k, object v, unsigned long c):
+cdef inline Entry new_Entry(object k, object v, unsigned long c):
 	cdef Entry entry = Entry.__new__(Entry)
 	entry.key = k; entry.value = v; entry.count = c
 	return entry
+#cdef inline EdgeEntry new_EdgeEntry(k, v, unsigned long c):
+#	cdef EdgeEntry entry = EdgeEntry.__new__(EdgeEntry)
+#	entry.key = <ChartItem>k; entry.value = <Edge>v; entry.count = c
+#	return entry
 
-cdef class Entry: pass #defined in pxd file
-
-cdef class Function:
-	cdef bint cmpfun(self, Entry a, Entry b): raise Exception
-cdef class EdgeCmp(Function):
-	# this is _significantly_ faster than relying on __richcmp__
-	cdef bint cmpfun(self, Entry a, Entry b):
-		return (a.value.score < b.value.score
-				or (a.value.score == b.value.score and a.count < b.count))
-cdef class NormalCmp(Function):
-	cdef bint cmpfun(self, Entry a, Entry b):
-		return (a.value < b.value
-				or (a.value == b.value and a.count < b.count))
+cdef inline bint cmpfun(Entry a, Entry b):
+	return (a.value < b.value or (a.value == b.value and a.count < b.count))
+# this is _significantly_ faster than going through __richcmp__ of objects
+cdef inline bint edgecmpfun(Entry a, Entry b):
+	return ((<Edge>a.value).score < (<Edge>b.value).score
+		or ((<Edge>a.value).score == (<Edge>b.value).score and a.count < b.count))
 
 cdef class Agenda(dict):
 	def __init__(self, iterable=None):
-		""" NB: when initialized with an iterable, we don't guarantee that
-			order of equivalent values in this iterable is preserved, and
-			duplicate keys will be arbitrarily pruned (not necessarily keeping
-			the ones with best priorities), as we use a dict to make sure we
-			only have unique keys.
-			if order needs to be preserved, insert them one by one. """
-		cdef Entry entry
-		cdef dict temp
+		""" Can be initialized with an iterable; order of equivalent values
+		remains and the best priorities are retained on duplicate keys. """
+		cdef Entry entry, oldentry
 		self.counter = 1
 		self.length = 0
 		self.heap = []
 		self.mapping = {}
-		self.cmpfun = NormalCmp()
+		self.cmpfun = cmpfun
 		if iterable:
-			# put elements in a dictionary to remove duplicate keys
-			temp = dict(iterable)
-			self.length = len(temp)
-			self.counter = self.length + 1
-			for i from 1 <= i < self.counter:
-				k, v = temp.popitem()
-				entry = make_entry(k, v, i)
-				self.mapping[k] = entry
+			for k, v in iterable:
+				entry = new_Entry(k, v, self.counter)
+				if k in self.mapping:
+					oldentry = <Entry>self.mapping[k]
+					if self.cmpfun(entry, oldentry):
+						oldentry.count = INVALID
+						self.mapping[k] = entry
+				else:
+					self.mapping[k] = entry
+					self.counter += 1
 				self.heap.append(entry)
-			assert temp == {}
+			self.length = len(self.mapping)
 			heapify(self.heap, self.cmpfun)
 
 	def __getitem__(self, key):
@@ -175,6 +169,9 @@ cdef class Agenda(dict):
 	def __len__(self):
 		return self.length
 
+	def __nonzero__(self):
+		return self.length != 0
+
 	def __repr__(self):
 		return '%s({%s})' % (self.__class__.__name__, ", ".join(
 				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
@@ -210,30 +207,27 @@ cdef class Agenda(dict):
 
 cdef class EdgeAgenda(Agenda):
 	def __init__(self, iterable=None):
-		""" NB: when initialized with an iterable, we don't guarantee that
-			order of equivalent values in this iterable is preserved, and
-			duplicate keys will be arbitrarily pruned (not necessarily keeping
-			the ones with best priorities), as we use a dict to make sure we
-			only have unique keys.
-			if order needs to be preserved, insert them one by one. """
-		cdef Entry entry
-		cdef dict temp
+		""" Can be initialized with an iterable; order of equivalent values
+		remains and the best priorities are retained on duplicate keys. """
+		cdef Entry entry, oldentry
 		self.counter = 1
 		self.length = 0
 		self.heap = []
 		self.mapping = {}
-		self.cmpfun = EdgeCmp()
+		self.cmpfun = edgecmpfun
 		if iterable:
-			# put elements in a dictionary to remove duplicate keys
-			temp = dict(iterable)
-			self.length = len(temp)
-			self.counter = self.length + 1
-			for i from 1 <= i < self.counter:
-				k, v = temp.popitem()
-				entry = make_entry(k, v, i)
-				self.mapping[k] = entry
+			for k, v in iterable:
+				entry = new_Entry(k, v, self.counter)
+				if k in self.mapping:
+					oldentry = <Entry>self.mapping[k]
+					if self.cmpfun(entry, oldentry):
+						oldentry.count = INVALID
+						self.mapping[k] = entry
+				else:
+					self.mapping[k] = entry
+					self.counter += 1
 				self.heap.append(entry)
-			assert temp == {}
+			self.length = len(self.mapping)
 			heapify(self.heap, self.cmpfun)
 
 	cpdef Edge getitem(self, key):
@@ -257,9 +251,41 @@ cdef class EdgeAgenda(Agenda):
 		entry = <Entry>Entry.__new__(Entry)
 		entry.key =  key; entry.value = value; entry.count = oldentry.count
 		self.mapping[key] = entry
-		heappush(self.heap, entry, self.cmpfun)
+		self.heap.append(entry)
+		siftdown(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
 		oldentry.count = INVALID
 		return <Edge>oldentry.value
+
+	# the following are identical except for `edgecmpfun'
+	cpdef Entry popentry(self):
+		""" like popitem, but avoids tuple construction by returning an Entry
+		object """
+		cdef Entry entry = <Entry>heappop(self.heap, edgecmpfun)
+		while not entry.count:
+			entry = <Entry>heappop(self.heap, edgecmpfun)
+		del self.mapping[entry.key]
+		self.length -= 1
+		return entry
+
+	cpdef setitem(self, key, value):
+		cdef Entry oldentry, entry
+		if key in self.mapping:
+			oldentry = <Entry>self.mapping[key]
+			entry = <Entry>Entry.__new__(Entry)
+			entry.key =  key; entry.value = value; entry.count = oldentry.count
+			self.mapping[key] = entry
+			self.heap.append(entry)
+			siftdown(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+			oldentry.count = INVALID
+		else:
+			self.counter += 1
+			self.length += 1
+			entry = <Entry>Entry.__new__(Entry)
+			entry.key =  key; entry.value = value; entry.count = self.counter
+			self.mapping[key] = entry
+			self.heap.append(entry)
+			siftdown(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
 cdef inline list nsmallest(int n, list items):
@@ -296,7 +322,7 @@ cdef inline int partition(list items, int left, int right, int pivot):
 	return storeindex
 
 # heap operations (adapted from heapq)
-cdef inline Entry heappop(list heap, Function cmpfun):
+cdef inline Entry heappop(list heap, CmpFun cmpfun):
 	cdef Py_ssize_t n = list_getsize(heap)
 	cdef Entry entry
 	if n == 0:
@@ -310,12 +336,12 @@ cdef inline Entry heappop(list heap, Function cmpfun):
 		siftup(heap, 0, cmpfun)
 	return entry
 
-cdef inline void heappush(list heap, Entry entry, Function cmpfun):
+cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 	# place at the end and swap with parents until heap invariant holds
-	append(heap, entry)
+	heap.append(entry)
 	siftdown(heap, 0, list_getsize(heap) - 1, cmpfun)
 
-cdef inline void heapify(list heap, Function cmpfun):
+cdef inline void heapify(list heap, CmpFun cmpfun):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
 	cdef int i
 	for i in range(list_getsize(heap) // 2, -1, -1):
@@ -330,14 +356,14 @@ cdef inline int _left(int i):
 cdef inline int _right(int i):
 	return (i + 1) << 1
 
-cdef inline void siftup(list heap, int pos, Function cmpfun):
+cdef inline void siftup(list heap, int pos, CmpFun cmpfun):
 	cdef int startpos = pos, childpos = _left(pos), rightpos
 	cdef int endpos = list_getsize(heap)
 	cdef Entry newitem = <Entry>list_getitem(heap, pos)
 	while childpos < endpos:
 		rightpos = childpos + 1
 		if (rightpos < endpos and not
-			cmpfun.cmpfun(<Entry>(list_getitem(heap, childpos)),
+			cmpfun(<Entry>(list_getitem(heap, childpos)),
 					<Entry>(list_getitem(heap, rightpos)))):
 			childpos = rightpos
 		heap[pos] = <Entry>list_getitem(heap, childpos)
@@ -346,13 +372,13 @@ cdef inline void siftup(list heap, int pos, Function cmpfun):
 	heap[pos] = newitem
 	siftdown(heap, startpos, pos, cmpfun)
 
-cdef inline void siftdown(list heap, int startpos, int pos, Function cmpfun):
+cdef inline void siftdown(list heap, int startpos, int pos, CmpFun cmpfun):
 	cdef int parentpos
 	cdef Entry parent, newitem = <Entry>list_getitem(heap, pos)
 	while pos > startpos:
 		parentpos = _parent(pos)
 		parent = <Entry>list_getitem(heap, parentpos)
-		if cmpfun.cmpfun(newitem, parent):
+		if cmpfun(newitem, parent):
 			heap[pos] = parent
 			pos = parentpos
 			continue

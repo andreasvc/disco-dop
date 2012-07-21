@@ -1,30 +1,29 @@
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Distutils import build_ext
-import numpy as np
+import numpy
 
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
 directives = {
 	"profile" : False,
-	"boundscheck" : False,
 	"nonecheck" : False,
-	"wraparound" : False,
 	"cdivision" : True,
-	"embedsignature" : True
-	}
+	"wraparound" : False,
+	"boundscheck" : False,
+	"embedsignature" : True }
 
 ext_modules = [
-	Extension("bit",             ["bit.pyx"]),
-	Extension("kbest",           ["kbest.py", "kbest.pxd"]),
+	Extension("kbest",           ["kbest.pyx"]),
+	Extension("parser",          ["parser.pyx"]),
+	Extension("estimates",       ["estimates.pyx"]),
+	Extension("_fragments",      ["_fragments.pyx"]),
+	Extension("coarsetofine",    ["coarsetofine.pyx"]),
+	Extension("disambiguation",  ["disambiguation.pyx"]),
+	Extension("bit",             ["bit.pyx", "bit.pxd"]),
 	Extension("agenda",          ["agenda.pyx", "agenda.pxd"]),
-	Extension("plcfrs",          ["plcfrs.pyx",  "plcfrs.pxd"]),
-	Extension("estimates",       ["estimates.py", "estimates.pxd"]),
-	Extension("_fragments",      ["_fragments.pyx", "_fragments.pxd"]),
 	Extension("containers",      ["containers.pyx", "containers.pxd"]),
-	Extension("coarsetofine",    ["coarsetofine.py", "coarsetofine.pxd"]),
-	Extension("disambiguation",  ["disambiguation.py", "disambiguation.pxd"])
-	] #,extra_compile_args=["-g", "-O0"], extra_link_args=["-g"],)]
+	]
 
 for e in ext_modules:
 	e.pyrex_directives = directives
@@ -32,6 +31,6 @@ for e in ext_modules:
 setup(
 	name = 'disco-dop',
 	cmdclass = {'build_ext': build_ext},
-	include_dirs = [np.get_include(), '.'],
+	include_dirs = [numpy.get_include(), '.'],
 	ext_modules = ext_modules
 )

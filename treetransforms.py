@@ -140,35 +140,50 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	"""
 	>>> sent = "das muss man jetzt machen".split()
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
-	>>> binarize(tree, horzMarkov=0, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = binarize(tree, horzMarkov=0, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (S|<> (VP (VP|<> (PDS 0) (VP|<> (ADV 3) (VP|<> (VVINF 4))))) (S|<> (PIS 2) (S|<> (VMFIN 1)))))
-	>>> unbinarize(tree); print tree
+	>>> tree = unbinarize(tree)
+	>>> print tree
 	(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
 
-	>>> binarize(tree, horzMarkov=1, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = binarize(tree, horzMarkov=1, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4))))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1)))))
 
-	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=True, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = unbinarize(tree)
+	>>> tree = binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=True, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1))))
 
-	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=True, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = unbinarize(tree)
+	>>> tree = binarize(tree, horzMarkov=1, leftMostUnary=True, rightMostUnary=False, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS> (PIS 2) (VMFIN 1))))
 
-	>>> unbinarize(tree); binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=False, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = unbinarize(tree)
+	>>> tree = binarize(tree, horzMarkov=1, leftMostUnary=False, rightMostUnary=False, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
-	>>> unbinarize(tree); binarize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = unbinarize(tree)
+	>>> tree = binarize(tree, horzMarkov=2, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VVINF> (VVINF 4))))) (S|<VP-PIS> (PIS 2) (S|<PIS-VMFIN> (VMFIN 1)))))
 
-	>>> unbinarize(tree); binarize(tree, factor="left", horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = unbinarize(tree)
+	>>> tree = binarize(tree, factor="left", horzMarkov=2, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (S|<VMFIN> (S|<PIS-VMFIN> (S|<VP-PIS> (VP (VP|<VVINF> (VP|<ADV-VVINF> (VP|<PDS-ADV> (PDS 0)) (ADV 3)) (VVINF 4)))) (PIS 2)) (VMFIN 1)))
 
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
-	>>> binarize(tree, horzMarkov=2, tailMarker=''); print tree.pprint(margin=999)
+	>>> tree = binarize(tree, horzMarkov=2, tailMarker='')
+	>>> print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
 
 	>>> tree = Tree("(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))")
-	>>> binarize(tree, tailMarker='', reverse=False); print tree.pprint(margin=999)
+	>>> tree = binarize(tree, tailMarker='', reverse=False)
+	>>> print tree.pprint(margin=999)
 	(S (S|<A-B-C-D-E-F> (A 0) (S|<B-C-D-E-F> (B 1) (S|<C-D-E-F> (C 2) (S|<D-E-F> (D 3) (S|<E-F> (E 4) (S|<F> (F 5))))))))
 
 	"""
@@ -343,7 +358,8 @@ def introducepreterminals(tree):
 	(i.e., for every terminal with siblings.)
 
 	>>> tree = Tree("(S (X a b (CD c d) e))")
-	>>> introducepreterminals(tree); print tree.pprint(margin=999)
+	>>> tree = introducepreterminals(tree)
+	>>> print tree.pprint(margin=999)
 	(S (X (X/a a) (X/b b) (CD (CD/c c) (CD/d d)) (X/e e)))
 
 	"""
@@ -399,21 +415,22 @@ def addbitsets(tree):
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
 
-def defaultrightbin(node, sep="|", h=999):
+def defaultrightbin(node, sep="|", h=999, fanout=False):
 	""" Binarize one constituent with a right factored binarization.
-	Children remain unmodified. Bottom-up version"""
-	i = len(node) - 2
-	if i < 1: return node
+	Children remain unmodified. Bottom-up version. Nodes must contain
+	bitsets (use addbitsets()). """
+	if len(node) < 3: return node
 	label = node.node
-	childnodes = [child.node for child in node]
-	newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))
-	prev = ImmutableTree(newlabel, node[i:])
-	prev.bitset = prev[0].bitset | prev[1].bitset
-	for i in range(len(node) - 3, 0, -1):
-		newlabel = "%s%s<%s>" % (label, sep, "-".join(childnodes[i:i+h]))
-		current = ImmutableTree(newlabel, [node[i], prev])
-		current.bitset = current[0].bitset | prev.bitset
-		prev = current
+	childlabels = [child.node for child in node]
+	prev = node[-1]
+	for i in range(len(node) - 2, 0, -1):
+		newbitset = node[i].bitset | prev.bitset
+		newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[i:i+h]))
+		if fanout:
+			nodefanout = bitfanout(newbitset)
+			if nodefanout > 1: newlabel += "_" + str(nodefanout)
+		prev = ImmutableTree(newlabel, [node[i], prev])
+		prev.bitset = newbitset
 	result = ImmutableTree(label, [node[0], prev])
 	result.bitset = node[0].bitset | prev.bitset
 	return result
@@ -587,6 +604,16 @@ def disc(node):
 	"""
 	if not isinstance(node, Tree): return False
 	return len(list(ranges(sorted(node.leaves())))) > 1
+
+def addfanoutmarkers(tree):
+	""" Modifies tree so that the label of each node with a fanout > 1 contains
+	a marker "_n" indicating its fanout. """
+	for st in tree.subtrees():
+		leaves = set(st.leaves())
+		fanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
+		if fanout > 1 and not st.node.endswith("_%d" % fanout):
+			st.node += "_%d" % fanout
+	return tree
 
 def contsets(tree):
 	""" partition children of tree into continuous subsets
@@ -777,10 +804,10 @@ def test():
 	demo()
 	testminbin()
 	testsplit()
-	fail, attempted = testmod(verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	if attempted and not fail:
-		print "%s: %d doctests succeeded!" % (__file__, attempted)
-	else: print "doctest attempted %r failed %r" % (attempted, fail)
+	import treetransforms as t
+	fail, attempted = testmod(t, verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+	assert attempted and not fail, (repr(attempted), repr(fail))
+	print "%s: %d doctests succeeded!" % (__file__, attempted)
 
 def main():
 	import sys, codecs
@@ -841,7 +868,7 @@ def main():
 	# write output
 	if opts.get('--outputfmt', 'export') == 'export':
 		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
-			).writelines(export(*x) for x in zip(trees, sents, counts(1)))
+			).writelines(export(*x) for x in zip(trees, sents, count(1)))
 	elif opts.get('--outputfmt') == 'discbracket':
 		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines("%s\t%s\n" % (tree.pprint(margin=9999), " ".join(sent))
@@ -884,6 +911,7 @@ Note: some of these transformations are specific to discontinuous treebanks,
 	labels are retained.""" % sys.argv[0]
 
 __all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
-	"splitdiscnodes", "mergediscnodes", "optimalbinarize"]
+	"splitdiscnodes", "mergediscnodes", "optimalbinarize", "defaultrightbin",
+	"addfanoutmarkers"]
 
 if __name__ == '__main__': main()

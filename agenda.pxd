@@ -1,21 +1,13 @@
-from containers cimport Edge
-from cpython cimport PyList_Append as append,\
-					PyList_GET_ITEM as list_getitem,\
+from containers cimport Edge, ChartItem
+from cpython cimport PyList_GET_ITEM as list_getitem,\
 					PyList_GET_SIZE as list_getsize,\
-					PyDict_Contains as dict_contains,\
 					PyDict_GetItem as dict_getitem
 
+ctypedef bint (*CmpFun)(Entry a, Entry b)
 cdef class Entry:
 	cdef public object key
 	cdef public object value
 	cdef unsigned long count
-
-cdef class Function:
-	cdef bint cmpfun(self, Entry a, Entry b)
-cdef class EdgeCmp(Function):
-	cdef bint cmpfun(self, Entry a, Entry b)
-cdef class NormalCmp(Function):
-	cdef bint cmpfun(self, Entry a, Entry b)
 
 cdef class Agenda(dict):
 	cpdef Entry popentry(self)
@@ -32,7 +24,7 @@ cdef class Agenda(dict):
 	cdef public list heap
 	cdef dict mapping
 	cdef unsigned long counter
-	cdef Function cmpfun
+	cdef CmpFun cmpfun
 
 cdef class EdgeAgenda(Agenda):
 	cpdef Entry popentry(self)

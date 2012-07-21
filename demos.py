@@ -1,6 +1,6 @@
 from math import exp
 from nltk import Tree
-import grammar, containers, treetransforms, plcfrs, kbest
+import grammar, containers, treetransforms, parser, kbest
 from containers import Grammar
 
 def tree_adjoining_grammar():
@@ -27,15 +27,15 @@ auxiliary trees:
 		((('NP','NN#1'), ((0,),)), 0.0),
 		((('ADVP#1','RB#1'),  ((0,),)), 0.0),
 		((('ADVP#2','RB#2'),  ((0,),)), 0.0),
-		((('RB#1', 'Epsilon'), ('Later', ())), 0.0),
-		((('NN#1', 'Epsilon'), ('prices', ())), 0.0),
-		((('V#1', 'Epsilon'), ('fell', ())), 0.0),
-		((('RB#2', 'Epsilon'), ('drastically', ())), 0.0)])
+		((('RB#1', 'Epsilon'), ('Later',)), 0.0),
+		((('NN#1', 'Epsilon'), ('prices',)), 0.0),
+		((('V#1', 'Epsilon'), ('fell',)), 0.0),
+		((('RB#2', 'Epsilon'), ('drastically',)), 0.0)])
 	print grammar
-	do(grammar, "prices fell".split())
-	do(grammar, "prices drastically fell".split())
-	do(grammar, "Later prices fell".split())
-	do(grammar, "Later prices drastically fell".split())
+	assert do(grammar, "prices fell".split())
+	assert do(grammar, "prices drastically fell".split())
+	assert do(grammar, "Later prices fell".split())
+	assert do(grammar, "Later prices drastically fell".split())
 
 	# taken from: slides for course Grammar Formalisms, Kallmeyer (2011),
 	# Mildly Context-Sensitive Grammar Formalisms:
@@ -56,29 +56,29 @@ auxiliary trees:
 		((('b', '_b', '_c'), ((0,1),)), 0.0),
 		((('b', 'b_2', 'b'), ((0,1,0),)), 0.0),
 		((('b_2', '_b', '_c'), ((0,),(1,))), 0.0),
-		((('_a', 'Epsilon'), ('a', ())), 0.0),
-		((('_b', 'Epsilon'), ('b', ())), 0.0),
-		((('_c', 'Epsilon'), ('c', ())), 0.0),
-		((('_d', 'Epsilon'), ('d', ())), 0.0),
+		((('_a', 'Epsilon'), ('a',)), 0.0),
+		((('_b', 'Epsilon'), ('b',)), 0.0),
+		((('_c', 'Epsilon'), ('c',)), 0.0),
+		((('_d', 'Epsilon'), ('d',)), 0.0),
 		])
 	print grammar
-	do(grammar, list("d"))
-	do(grammar, list("ad"))
-	do(grammar, list("abcd"))
-	do(grammar, list("abbccd"))
+	assert do(grammar, list("d"))
+	assert do(grammar, list("ad"))
+	assert do(grammar, list("abcd"))
+	assert do(grammar, list("abbccd"))
 	print "wrong:"
-	do(grammar, list("abbbccd"))
+	assert not do(grammar, list("abbbccd"))
 
 	# Taken from: Boullier (1998), Generalization of Mildly
 	# Context-Sensitive Formalisms.
 	# Epsilon replaced with '|', added preterminal rules w/underscores
 	print "the language { ww | w in {a,b}* }"
 	print """initial trees:
-(S (A Epsilon))
-auxiliary trees:
-(A a (A A*) a)
-(A b (A A*) b)
-(A (A A*))"""
+		(S (A Epsilon))
+		auxiliary trees:
+		(A a (A A*) a)
+		(A b (A A*) b)
+		(A (A A*))"""
 	grammar = Grammar([
 		((('ROOT', '_|'), ((0,),)), 0.0),
 		((('ROOT', 'A', '_|'), ((0,1,0),)), 0.0),
@@ -88,17 +88,17 @@ auxiliary trees:
 		((('A', '_bb'), ((0,), (0,))), 0.0),
 		((('_aa', '_a', '_a'), ((0,),(1,))), 0.0),
 		((('_bb', '_b', '_b'), ((0,),(1,))), 0.0),
-		((('_a', 'Epsilon'), ('a', ())), 0.0),
-		((('_b', 'Epsilon'), ('b', ())), 0.0),
-		((('_|', 'Epsilon'), ('|', ())), 0.0),
+		((('_a', 'Epsilon'), ('a',)), 0.0),
+		((('_b', 'Epsilon'), ('b',)), 0.0),
+		((('_|', 'Epsilon'), ('|',)), 0.0),
 		])
 	print grammar
-	do(grammar, list("a|a"))
-	do(grammar, list("ab|ab"))
-	do(grammar, list("abaab|abaab"))
+	assert do(grammar, list("a|a"))
+	assert do(grammar, list("ab|ab"))
+	assert do(grammar, list("abaab|abaab"))
 	print "wrong:"
-	do(grammar, list("a|b"))
-	do(grammar, list("aa|bb"))
+	assert not do(grammar, list("a|b"))
+	assert not do(grammar, list("aa|bb"))
 
 def dependencygrammar():
 	""" An example dependency structure encoded in an LCFRS grammar.
@@ -121,17 +121,17 @@ def dependencygrammar():
 		((('TMP', '_today'), ((0,),)), 0.0),
 		((('is_VC', '_is', 'VC'), ((0,1), (1,))), 0.0),
 		((('NMOD_hearing','NMOD', '_hearing'), ((0,1),)), 0.0),
-		((('_A', 'Epsilon'), ('A', ())), 0.0),
-		((('_hearing', 'Epsilon'), ('hearing', ())), 0.0),
-		((('_is', 'Epsilon'), ('is', ())), 0.0),
-		((('_scheduled', 'Epsilon'), ('scheduled', ())), 0.0),
-		((('_on', 'Epsilon'), ('on', ())), 0.0),
-		((('_the', 'Epsilon'), ('the', ())), 0.0),
-		((('_issue', 'Epsilon'), ('issue', ())), 0.0),
-		((('_today', 'Epsilon'), ('today', ())), 0.0)])
+		((('_A', 'Epsilon'), ('A',)), 0.0),
+		((('_hearing', 'Epsilon'), ('hearing',)), 0.0),
+		((('_is', 'Epsilon'), ('is',)), 0.0),
+		((('_scheduled', 'Epsilon'), ('scheduled',)), 0.0),
+		((('_on', 'Epsilon'), ('on',)), 0.0),
+		((('_the', 'Epsilon'), ('the',)), 0.0),
+		((('_issue', 'Epsilon'), ('issue',)), 0.0),
+		((('_today', 'Epsilon'), ('today',)), 0.0)])
 	print grammar
 	testsent = "A hearing is scheduled on the issue today".split()
-	do(grammar, testsent)
+	assert do(grammar, testsent)
 
 def bitext():
 	print "bitext parsing with a synchronous CFG"
@@ -142,7 +142,7 @@ def bitext():
      (NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) (SEP (| 3)))""".splitlines()]
 	sents = [["0"] * len(a.leaves()) for a in trees]
 	map(treetransforms.binarize, trees)
-	compiled_scfg = Grammar(grammar.induce_srcg(trees, sents))
+	compiled_scfg = Grammar(grammar.induce_plcfrs(trees, sents))
 	print "sentences:"
 	for t in trees: print " ".join(w for _, w in sorted(t.pos()))
 	print "treebank:"
@@ -150,15 +150,15 @@ def bitext():
 	print compiled_scfg, "\n"
 
 	print "correct translations:"
-	do(compiled_scfg, ["0"] * 7,
+	assert do(compiled_scfg, ["0"] * 7,
 		"John likes Mary | John aimes Mary".split())
-	do(compiled_scfg, ["0"] * 9,
+	assert do(compiled_scfg, ["0"] * 9,
 		u"John misses pizza | la pizza manque a` John".split())
 
 	print "incorrect translations:"
-	do(compiled_scfg, ["0"] * 7,
+	assert not do(compiled_scfg, ["0"] * 7,
 		"John likes Mary | Mary aimes John".split())
-	do(compiled_scfg, ["0"] * 9,
+	assert not do(compiled_scfg, ["0"] * 9,
 		u"John misses pizza | John manque a` la pizza".split())
 
 	# the following SCFG is taken from:
@@ -185,16 +185,16 @@ def bitext():
 		((('VP', 'V', 'NP'), ((0,1), (0,1))), 0.1),
 		((('V', '_sah', '_saw'), ((0,), (1,))), 0.4),
 		((('V', '_fand', '_found'), ((0,), (1,))), 0.4)
-		] + [((('_%s' % word, 'Epsilon'), (word, ())), 0.0)
+		] + [((('_%s' % word, 'Epsilon'), (word,)), 0.0)
 			for word in lexicon])
 	print another_scfg
-	do(another_scfg, "ich sah ein kleines Haus | I saw a small house".split())
-	do(another_scfg, "ich sah ein kleines Haus | I saw a little house".split())
-	do(another_scfg, "ich sah ein kleines Haus | I saw a small shell".split())
-	do(another_scfg, "ich sah ein kleines Haus | I saw a little shell".split())
+	assert do(another_scfg, "ich sah ein kleines Haus | I saw a small house".split())
+	assert do(another_scfg, "ich sah ein kleines Haus | I saw a little house".split())
+	assert do(another_scfg, "ich sah ein kleines Haus | I saw a small shell".split())
+	assert do(another_scfg, "ich sah ein kleines Haus | I saw a little shell".split())
 
 def do(compiledgrammar, testsent, testtags=None):
-	chart, start, _ = plcfrs.parse(testsent,
+	chart, start, _ = parser.parse(testsent,
 		compiledgrammar,
 		tags=testtags, start=compiledgrammar.toid["ROOT"],
 		exhaustive=True)
@@ -207,10 +207,12 @@ def do(compiledgrammar, testsent, testtags=None):
 			tree = Tree(tree)
 			treetransforms.unbinarize(tree)
 			print exp(-prob), tree
+		print
+		return True
 	else:
-		print "no parse!"
-		#plcfrs.pprint_chart(chart, testsent, compiledgrammar.tolabel)
-	print
+		print "no parse!\n"
+		#parser.pprint_chart(chart, testsent, compiledgrammar.tolabel)
+		return False
 
 def main():
 	bitext()
