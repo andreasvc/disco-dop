@@ -198,17 +198,19 @@ cdef inline unicode getsubtree(Node *tree, ULong *bitset, list revlabel,
 
 cdef inline unicode yieldranges(Node *tree, list sent, int i):
 	""" For discontinuous trees, return a string with the intervals of indices
-	corresponding to the components in the yield of a node; e.g., "0:1 2:4". """
+	corresponding to the components in the yield of a node.
+	The intervals are of the form start:end, where `end' is part of the
+	interval. e.g., "0:1 2:4" corresponds to (0,1) and (2,3,4). """
 	cdef list yields = []
 	cdef list leaves = sorted(getyield(tree, sent, i))
 	cdef int a, start = -2, prev = -2
 	for a in leaves:
 		if a - 1 != prev:
 			if prev != -2:
-				yields.append(u"%d:%d" % (start, prev + 1))
+				yields.append(u"%d:%d" % (start, prev))
 			start = a
 		prev = a
-	yields.append(u"%d:%d" % (start, prev + 1))
+	yields.append(u"%d:%d" % (start, prev))
 	return u" ".join(yields)
 
 cdef inline list getyield(Node *tree, list sent, int i):
@@ -237,20 +239,23 @@ def getsent(frag, list sent):
 	fragment such that the first index is 0 and any gaps have a width of 1.
 	Expects a tree as string where frontier nodes are marked with intervals.
 	>>> getsent("(S (NP 2) (VP 4))", ['The', 'tall', 'man', 'there', 'walks'])
-	>>> "(S (NP 0) (VP 2))", ['man',  None, 'walks']
-	>>> getsent("(VP (VB 0) (PRT 3))", ['Wake','your','friend','up'])
-	("(VP (VB 0) (PRT 2))", ['Wake', None, 'up'])
-	>>> getsent("(S (NP 2:3 4:5) (VP 1:2 3:4))", ['Walks', 'the', 'quickly', 'man'])
-	("(S (NP 1 3) (VP 0 2))", [None, None, None, None])
-	>>> getsent("(ROOT (S 0:2) ($. 3))", ['Foo', 'bar', 'zed','.'])
+	(u'(S (NP 0) (VP 2))', ('man', None, 'walks'))
+	>>> getsent("(VP (VB 0) (PRT 3))", ['Wake', 'your', 'friend', 'up'])
+	(u'(VP (VB 0) (PRT 2))', ('Wake', None, 'up'))
+	>>> getsent("(S (NP 2:2 4:4) (VP 1:1 3:3))", ['Walks', 'the', 'quickly', 'man'])
+	(u'(S (NP 1 3) (VP 0 2))', (None, None, None, None))
+	>>> getsent("(ROOT (S 0:2) ($. 3))", ['Foo', 'bar', 'zed', '.'])
+	(u'(ROOT (S 0) ($. 1))', (None, '.'))
 	>>> getsent("(ROOT (S 0) ($. 3))", ['Foo', 'bar', 'zed','.'])
-	"(ROOT (S 0) ($. 1))", [None,'.']
+	(u'(ROOT (S 0) ($. 2))', ('Foo', None, '.'))
+	>>> getsent("(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))", "In Japan wird offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur gr\\xf6\\xdften Bank der Welt vorbereitet .".split(" "))
+	(u'(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))
 	"""
 	cdef int n, m = 0, maxl
 	cdef list newsent = []
 	cdef dict leafmap = {}
-	cdef dict spans = dict((int(x[0]), int(x[1]))
-			for x in frontierre.findall(frag))
+	cdef dict spans = dict((int(start), int(end) + 1)
+			for start, end in frontierre.findall(frag))
 	cdef list leaves = map(int, termsre.findall(frag))
 	spans.update((a,a+1) for a in leaves)
 	maxl = max(spans)
@@ -323,7 +328,7 @@ def add_cfg_rules(tree):
 	return tree
 
 def add_lcfrs_rules(tree, sent):
-	for a, b in zip(tree.subtrees(), lcfrs_productions(tree, sent, False)):
+	for a, b in zip(tree.subtrees(), lcfrs_productions(tree, sent)):
 		a.prod = b
 	return tree
 
@@ -795,12 +800,6 @@ def main():
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	# do doctests, but don't be pedantic about whitespace (I suspect it is the
-	# militant anti-tab faction who are behind this obnoxious default)
-	optionflags=NORMALIZE_WHITESPACE | ELLIPSIS
-	fail, attempted = testmod(verbose=False, optionflags=optionflags)
-	if attempted and not fail:
-		print "%s: %d doctests succeeded!" % (__file__, attempted)
 	test()
 
 	treebank = map(Tree, """\

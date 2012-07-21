@@ -176,22 +176,21 @@ def main(
 	if dop:
 		if estimator == "shortest":
 			# the secondary model is used to resolve ties for the shortest derivation
-			dopgrammar, secondarymodel = dop_lcfrs_rules(list(trees), list(sents),
-				normalize=False, shortestderiv=True,	arity_marks=arity_marks)
+			dopgrammar, secondarymodel = dop_lcfrs_rules(trees, sents,
+				normalize=False, shortestderiv=True, arity_marks=arity_marks)
 		elif "sl-dop" in estimator:
-			dopgrammar = dop_lcfrs_rules(list(trees), list(sents), normalize=True,
+			dopgrammar = dop_lcfrs_rules(trees, sents, normalize=True,
 							shortestderiv=False,	arity_marks=arity_marks)
-			dopshortest, _ = dop_lcfrs_rules(list(trees), list(sents),
+			dopshortest, _ = dop_lcfrs_rules(trees, sents,
 							normalize=False, shortestderiv=True,
 							arity_marks=arity_marks)
 			secondarymodel = Grammar(dopshortest)
 		elif usedoubledop:
 			assert estimator not in ("ewe", "sl-dop", "sl-dop-simple",
 					"shortest"), "Not implemented."
-			dopgrammar, backtransform = doubledop(list(trees), list(sents),
-					multiproc=numproc != 1)
+			dopgrammar, backtransform = doubledop(trees, sents, numproc != 1)
 		else:
-			dopgrammar = dop_lcfrs_rules(list(trees), list(sents),
+			dopgrammar = dop_lcfrs_rules(trees, sents,
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
 				shortestderiv=False, arity_marks=arity_marks)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
@@ -211,10 +210,6 @@ def main(
 			gzip.open(resultdir + "/dop.backtransform.gz", "w").writelines(
 				"%s\t%s\n" % a for a in backtransform.iteritems())
 			if prune:
-				# a regex to strip off arity markers and collapsed terminals introduced by
-				# the fragments of Double DOP (e.g., "NN@mann") or addresses from the DOP
-				# reduction (e.g., "NP_2@12")
-				#striplabel = re.compile(r"(?:_[0-9]+)?(?:@.+)?$")
 				dopgrammar.getmapping(re.compile("@.+$"),
 					re.compile(r'^#[0-9]+|.+}<'), # + neverblockre?
 					plcfrsgrammar if plcfrs else pcfggrammar,
@@ -256,7 +251,8 @@ def main(
 			testsents, prune, splitk, k, sldop_n, useestimates, outside,
 			"ROOT", True, splitprune, markorigin, resultdir, usecfgparse,
 			backtransform, numproc)
-	logging.info("time elapsed during parsing: %gs" % (time.clock() - begin))
+	if numproc == 1:
+		logging.info("time elapsed during parsing: %gs" % (time.clock() - begin))
 	doeval(*results)
 
 def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
@@ -1146,6 +1142,23 @@ def cycledetection(trees, sents):
 		for b in visit(a, e, []):
 			logging.debug("cycle (cost %5.2f): %s" % (
 				sum(weights[c,d] for c,d in zip(b, b[1:])), " => ".join(b)))
+
+def test():
+	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
+	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
+	import coarsetofine, treetransforms, disambiguation
+	modules = (bit, demos, kbest, parser, grammar, treebank, estimates,
+			_fragments, coarsetofine, treetransforms, disambiguation)
+	results = {}
+	for mod in modules:
+		results[mod] = fail, _ = testmod(mod, verbose=False,
+				optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+		assert fail == 0, mod.__file__
+	for mod in modules:
+		mod.test() if hasattr(mod, 'test') else mod.main()
+	for mod, (fail, attempted) in sorted(results.iteritems(), key=itemgetter(1)):
+		if attempted: print '%s: %d doctests succeeded!' % (mod.__file__, attempted)
+		else: print '%s: no doctests.' % (mod.__file__)
 
 if __name__ == '__main__':
 	import sys

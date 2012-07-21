@@ -36,4 +36,4 @@ markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
 splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
 neverblockre=None, #do not prune nodes with label that match regex
 quiet=False, reallyquiet=False, #quiet=no per sentence results
-numproc=4,	#increase to use multiple CPUs. Set to None to use all CPUs.
+numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.

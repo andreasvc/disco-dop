@@ -798,16 +798,9 @@ def testsplit():
 	print "wrong", wrong, "=", 100*wrong/total, "%"
 
 def test():
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	# do doctests, but don't be pedantic about whitespace (I suspect it is the
-	# militant anti-tab faction who are behind this obnoxious default)
 	demo()
 	testminbin()
 	testsplit()
-	import treetransforms as t
-	fail, attempted = testmod(t, verbose=False, optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	assert attempted and not fail, (repr(attempted), repr(fail))
-	print "%s: %d doctests succeeded!" % (__file__, attempted)
 
 def main():
 	import sys, codecs

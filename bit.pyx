@@ -13,17 +13,17 @@ def pyintbitcount(a):
 
 cpdef inline bint testbitshort(unsigned short arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
-	>>> testbit(0b0011101, 0)
+	>>> testbitshort(0b0011101, 0)
 	1
-	>>> testbit(0b0011101, 1)
+	>>> testbitshort(0b0011101, 1)
 	0"""
 	return (arg >> pos) & 1
 
 cpdef inline bint testbitc(UChar arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
-	>>> testbit(0b0011101, 0)
+	>>> testbitc(0b0011101, 0)
 	1
-	>>> testbit(0b0011101, 1)
+	>>> testbitc(0b0011101, 1)
 	0"""
 	return (arg >> pos) & 1
 
@@ -36,7 +36,7 @@ cpdef inline int bitcount(ULLong vec):
 
 cpdef inline int pyintnextset(a, int pos):
 	""" First set bit, starting from pos
-	>>> nextset(0b001101, 1)
+	>>> pyintnextset(0b001101, 1)
 	2
 	"""
 	cdef ULong mask = -1
@@ -101,14 +101,5 @@ def main():
 	assert fanout(0b1000001) == 2
 	assert fanout(0b011011011) == 3
 	print "it worked"
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	#from cydoctest import testmod
-	# do doctests, but don't be pedantic about whitespace (I suspect it is the
-	# militant anti-tab faction who are behind this obnoxious default)
-	optionflags=NORMALIZE_WHITESPACE | ELLIPSIS
-	fail, attempted = testmod(verbose=False, optionflags=optionflags)
-	if attempted and not fail:
-		print "%s: %d doctests succeeded!" % (__file__, attempted)
-	else: print "attempted", attempted, "fail", fail
 
 if __name__ == '__main__': main()

@@ -368,11 +368,11 @@ def getfragments(trees, sents, multiproc=True):
 				numproc=numproc).items())))
 		# start worker processes
 		pool = Pool(processes=numproc, initializer=initworkersimple,
-			initargs=(trees, sents))
+			initargs=(trees, list(sents)))
 		mymap = pool.imap_unordered
 		myapply = pool.apply
 	else:
-		initworkersimple(trees, sents)
+		initworkersimple(trees, list(sents))
 		mymap = map
 		myapply = apply
 	# collect recurring fragments

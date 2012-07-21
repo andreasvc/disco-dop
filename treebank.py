@@ -794,14 +794,6 @@ def main():
 	print "nk - mo", " ".join(nk - mo)
 	print "mo - nk", " ".join(mo - nk)
 	for x in nk & mo: print x, "as nk", fnk[x], "as mo", fmo[x]
-
-if __name__ == '__main__':
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	main()
 	puncttest()
-	# do doctests, but don't be pedantic about whitespace (I suspect it is the
-	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = testmod(verbose=False,
-		optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	assert attempted and not fail
-	print "%s: %d doctests succeeded!" % (__file__, attempted)
+
+if __name__ == '__main__': main()

@@ -46,7 +46,7 @@ cpdef marginalize(dict chart, ChartItem start, dict tolabel, int n=10,
 			# read off the rules from the derivation ...
 			tree = Tree.parse(removeids.sub("", deriv), parse_leaf=int)
 			sent = sorted(tree.leaves())
-			rules = induce_plcfrs([tree], [sent], arity_marks=False)
+			rules = induce_plcfrs([tree], [sent])
 			prob = -fsum([secondarymodel[r] for r, w in rules
 											if r[0][1] != 'Epsilon'])
 			del tree

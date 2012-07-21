@@ -11,7 +11,7 @@ frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9])*\))")
 rootnode = re.compile(r"\([^ ]+\b")
 fanoutre = re.compile("_([0-9]+)(?:@[-0-9]+)?$")
 
-def lcfrs_productions(tree, sent, arity_marks=True):
+def lcfrs_productions(tree, sent):
 	""" Given a tree with integer indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a sequence
 	of LCFRS productions. Always produces monotone LCFRS rules.
@@ -52,6 +52,7 @@ def lcfrs_productions(tree, sent, arity_marks=True):
 				"indices that are None in the sentence.\n"
 				"subtree: %s\nsent: %r" % (st, sent)))
 		elif all(isinstance(a, Tree) for a in st): #isinstance(st[0], Tree):
+			# convert leaves() to bitsets
 			childleaves = [a.leaves() if isinstance(a, Tree) else [a] for a in st]
 			leaves = [(idx, n) for n, child in enumerate(childleaves)
 					for idx in child]
@@ -69,44 +70,39 @@ def lcfrs_productions(tree, sent, arity_marks=True):
 				previdx, prevparent = idx, parent
 			nonterminals = (st.node,) + tuple(a.node for a in st)
 			rule = (nonterminals, tuple(map(tuple, yf)))
-			assert len(yf) == len(rangeheads(st.leaves())) == (
-				int(fanoutre.search(st.node).group(1)) if fanoutre.search(st.node) else len(yf)), (
-				"rangeheads: %r\nyf: %r\nleaves: %r\n\t%r\n"
-				"childleaves: %r\ntree:\n%s\nsent: %r" % (rangeheads(st.leaves()), yf,
-				st.leaves(), tmpleaves, childleaves, st.pprint(margin=9999), sent))
+			#assert len(yf) == len(rangeheads(st.leaves())) == (
+			#	int(fanoutre.search(st.node).group(1))
+			#		if fanoutre.search(st.node) else len(yf)), (
+			#	"rangeheads: %r\nyf: %r\nleaves: %r\n\t%r\n"
+			#	"childleaves: %r\ntree:\n%s\nsent: %r" % (rangeheads(st.leaves()), yf,
+			#	st.leaves(), tmpleaves, childleaves, st.pprint(margin=9999), sent))
 		else: raise ValueError("Neither Tree node nor integer index:\n"
 			"%r, %r" % (st[0], type(st[0])))
 		rules.append(rule)
 	return rules
 
-def induce_plcfrs(trees, sents, arity_marks=True, freqs=False):
+def induce_plcfrs(trees, sents, freqs=False):
 	""" Induce a probabilistic LCFRS, similar to how a PCFG is read off
 	from a treebank """
-	from treetransforms import addfanoutmarkers
-	rules = []
-	for tree, sent in zip(trees, sents):
-		if arity_marks: tree = addfanoutmarkers(tree.copy(True))
-		rules.extend(lcfrs_productions(tree, sent))
-
-	grammar = FreqDist(rules)
-	fd = FreqDist()
-	for rule, freq in grammar.iteritems(): fd.inc(rule[0][0], freq)
-	return [(rule, freq if freqs else log(float(freq)/fd[rule[0][0]]))
-				for rule, freq in grammar.iteritems()]
+	grammar = FreqDist(rule for tree, sent in zip(trees, sents)
+			for rule in lcfrs_productions(tree, sent))
+	if freqs: return grammar
+	lhsfd = FreqDist()
+	for rule, freq in grammar.iteritems(): lhsfd[rule[0][0]] += freq
+	for rule, freq in grammar.iteritems():
+		grammar[rule] = log(float(freq) / lhsfd[rule[0][0]])
+	return list(grammar.items())
 
 def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
-					arity_marks=True, freqs=False):
+		freqs=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 	Normalize means the application of the equal weights estimate.
-	arity_marks enables or disables arity markers
 	freqs gives frequencies when enabled; default is probabilities. """
-	from treetransforms import addfanoutmarkers
 	ids, rules = count(), FreqDist()
 	fd, ntfd = FreqDist(), FreqDist()
 	for n, tree, sent in zip(count(), trees, sents):
 		t = canonicalize(tree.copy(True))
-		if arity_marks: addfanoutmarkers(t)
 		prods = lcfrs_productions(t, sent)
 		ut = decorate_with_ids(n, t)
 		uprods = lcfrs_productions(ut, sent)
@@ -181,14 +177,12 @@ def doubledop(trees, sents, stroutput=True, debug=False, multiproc=False):
 	"""
 	from fragments import getfragments
 	#from treetransforms import minimalbinarization, complexityfanout, addbitsets
-	from treetransforms import defaultrightbin, addbitsets, addfanoutmarkers
+	from treetransforms import defaultrightbin, addbitsets
 	grammar = {}
 	newprods = {}
 	backtransform = {}
 	# to assign IDs to ambiguous fragments (same yield)
 	ids = ("(#%d" % n for n in count())
-	# adds markers; e.g., NP_2 for a node with two components.
-	map(addfanoutmarkers, trees)
 	# find recurring fragments in treebank, as well as depth-1 'cover' fragments
 	fragments = getfragments(trees, sents, multiproc)
 
@@ -283,7 +277,7 @@ def doubledop(trees, sents, stroutput=True, debug=False, multiproc=False):
 	grammar = [(a, log(b/ntfd[a[0][0]])) for a, b in grammar.iteritems()]
 	return grammar, backtransform
 
-def coarse_grammar(trees, sents, arity_marks=True, level=0):
+def coarse_grammar(trees, sents, level=0):
 	""" collapse all labels to X except ROOT and POS tags. """
 	if level == 0: repl = lambda x: "X"
 	label = re.compile("[^^|<>-]+")
@@ -291,7 +285,7 @@ def coarse_grammar(trees, sents, arity_marks=True, level=0):
 		for subtree in tree.subtrees():
 			if subtree.node != "ROOT" and isinstance(subtree[0], Tree):
 				subtree.node = label.sub(repl, subtree.node)
-	return induce_plcfrs(trees, sents, arity_marks)
+	return induce_plcfrs(trees, sents)
 
 def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	"""count frequencies of nodes and calculate the number of
@@ -801,6 +795,7 @@ def main():
 	from treetransforms import unbinarize, binarize, optimalbinarize
 	from treebank import NegraCorpusReader, BracketCorpusReader
 	from parser import parse, pprint_chart
+	from treetransforms import addfanoutmarkers
 	from disambiguation import marginalize, recoverfragments, \
 			recoverfragments_str, recoverfragments_strstr
 	from kbest import lazykbest
@@ -812,62 +807,31 @@ def main():
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
 		headorder=True, headfinal=True, headreverse=False, movepunct=True)
-	#corpus = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True,
-	#	headfinal=True, headreverse=False)
-	tree = Tree.parse("(S (VP (VP (PROAV 0) (VVPP 2)) (VAINF 3)) (VMFIN 1))",
-		parse_leaf=int)
-	sent = "Daruber muss nachgedacht werden".split()
-
-	tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
-	sent = "is Gatsby rich".split()
-	tree2 = Tree.parse("(S (NP 0) (VP (VB 1) (NP 2)))", parse_leaf=int)
-	sent2 = "Daisy loved Gatsby".split()
-
-	tree, sent = corpus.parsed_sents()[0], corpus.sents()[0]
-	#pprint(lcfrs_productions(tree, sent))
-	#tree.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
-	#tree2.chomsky_normal_form(horzMarkov=1, vertMarkov=0)
-	binarize(tree, factor="right", horzMarkov=1, tailMarker='')
-	print Grammar(induce_plcfrs([tree.copy(True)], [sent]))
-	binarize(tree2, factor="right", horzMarkov=1, tailMarker='')
-	for (r, yf), w in sorted(induce_plcfrs([tree.copy(True), tree2],
-		[sent, sent2]), key=lambda x: (x[0][0][1] == 'Epsilon', x)):
-		print printrule(r,yf,w)
-	print
-
-
-	print "print grammar"
-	for a in induce_plcfrs([tree.copy(True)], [sent]): print a
-	print "print Grammar()"
-	print Grammar(induce_plcfrs([tree.copy(True)], [sent]))
-
 	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
-	do(sent, Grammar(dop_lcfrs_rules([tree,tree2], [sent,sent2])))
-	grammar = dop_lcfrs_rules([tree,tree2], [sent,sent2])
+	sents = corpus.sents()
+	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
+	for a in trees:
+		a.chomsky_normal_form(horzMarkov=1)
+		addfanoutmarkers(a)
+
+	print 'plcfrs'
+	lcfrs = induce_plcfrs(trees, sents)
+	print Grammar(lcfrs)
+
 	print 'dop reduction'
-	grammar = Grammar(grammar)
+	grammar = Grammar(dop_lcfrs_rules(trees[:2], sents[:2]))
 	print grammar
 	grammar.testgrammar(logging)
 
-	sents = corpus.sents()
-	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
-	for a in trees: a.chomsky_normal_form(horzMarkov=1)
-	lcfrs = induce_plcfrs(trees, sents)
 	debug = True
 	for stroutput in (True,): #(False, True):
-		trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
-		for a in trees:
-			#canonicalize(a)
-			a.chomsky_normal_form(horzMarkov=1)
+		trees = [a.copy(True) for a in trees]
 		grammarx, backtransform = doubledop(trees, sents,
 			stroutput=stroutput, debug=debug)
 		print '\ndouble dop grammar (stroutput=%r)' % stroutput
 		grammar = Grammar(grammarx)
 		print unicode(grammar)
 		assert grammar.testgrammar(logging) #DOP1 should sum to 1.
-		#print "fragment rules:"
-		#for x in set(a for a,_ in grammarx) - set(a for a,_ in lcfrs):
-		#	print x
 		for tree, sent in zip(corpus.parsed_sents(), sents):
 			print "sentence:",
 			for w in sent: stdout.write(' ' + w)
@@ -914,12 +878,4 @@ def main():
 	print "tree: %s\nunary closure:" % tree
 	g.printclosure()
 
-if __name__ == '__main__':
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	main()
-	# do doctests, but don't be pedantic about whitespace (I suspect it is the
-	# militant anti-tab faction who are behind this obnoxious default)
-	fail, attempted = testmod(verbose=False,
-		optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
-	assert attempted and not fail
-	print "%s: %d doctests succeeded!" % (__file__, attempted)
+if __name__ == '__main__': main()
