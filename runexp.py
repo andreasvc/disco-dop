@@ -2,7 +2,7 @@
 import os, re, time, gzip, logging, codecs, cPickle
 import multiprocessing
 from collections import defaultdict, Counter as multiset
-from itertools import islice, count
+from itertools import islice, imap, count
 from operator import itemgetter
 from math import exp
 from nltk import Tree
@@ -244,8 +244,7 @@ def main(
 	#	print a,b
 	#exit()
 	begin = time.clock()
-	xdoparse = doparse if numproc == 1 else multidoparse
-	results = xdoparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
+	results = doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
 			plcfrsgrammar, dopgrammar, secondarymodel, test, testmaxwords,
 			testsents, prune, splitk, k, sldop_n, useestimates, outside,
@@ -256,263 +255,73 @@ def main(
 	doeval(*results)
 
 def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
-			sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
-			plcfrsgrammar, dopgrammar, secondarymodel, test, testmaxwords,
-			testsents, prune, splitk, k, sldop_n=14, useestimates=False,
-			outside=None, top='ROOT', tags=True, splitprune=False,
-			markorigin=False, resultdir="results", usecfgparse=False,
-			backtransform=None, numproc=None, category=None, sentinit=0):
+		sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
+		plcfrsgrammar, dopgrammar, secondarymodel, test, testmaxwords,
+		testsents, prune, splitk, k, sldop_n=14, useestimates=False,
+		outside=None, top='ROOT', tags=True, splitprune=False,
+		markorigin=False, resultdir="results", usecfgparse=False,
+		backtransform=None, numproc=None, category=None, sentinit=0):
+	# FIXME: use multiprocessing namespace:
+	#mgr = multiprocessing.Manager()
+	#namespace = mgr.Namespace()
+	params = Params(
+			splitpcfg=splitpcfg, plcfrs=plcfrs, dop=dop,
+			pcfggrammar=pcfggrammar, plcfrsgrammar=plcfrsgrammar,
+			dopgrammar=dopgrammar, estimator=estimator, unfolded=unfolded,
+			bintype=bintype, sample=sample, both=both, arity_marks=arity_marks,
+			arity_marks_before_bin=arity_marks_before_bin, m=m,
+			secondarymodel=secondarymodel, test=test,
+			testmaxwords=testmaxwords, testsents=testsents, prune=prune,
+			splitk=splitk, k=k, sldop_n=sldop_n, useestimates=useestimates,
+			outside=outside, top=top, tags=tags, splitprune=splitprune,
+			markorigin=markorigin, resultdir=resultdir,
+			usecfgparse=usecfgparse, backtransform=backtransform,
+			category=category, sentinit=sentinit)
 	presults = []; sresults = []; dresults = []
 	gold = []; gsent = []
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
 	goldbrackets = multiset()
-	nsent = exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
-	#if plcfrs: derivout = codecs.open("plcfrsderivations", "w", encoding='utf-8')
-	timesfile = open("%s/parsetimes.txt" % resultdir, "w")
+	exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
+
+	maxlen = min(testmaxwords, maxbitveclen)
+	work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
+	if numproc == 1:
+		initworker(params)
+		dowork = imap(worker, work)
+	else:
+		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
+				initargs=(params,))
+		dowork = pool.imap_unordered(worker, work)
+	print "going to parse %d sentences." % len(work)
 	# main parse loop over each sentence in test corpus
-	for tree, sent, block in zip(*test):
-		if len(sent) > testmaxwords: continue
-		if nsent >= testsents: break
-		nsent += 1
-		logging.debug("%d. [len=%d] %s" % (nsent, len(sent),
-					u" ".join(a[0] for a in sent)))			# words only
+	for nsent, data in enumerate(dowork, 1):
+		sentid, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
+		thesentid, tree, sent, block = work[sentid-1]
+		assert thesentid == sentid
+		logging.debug("%d/%d (%d). [len=%d] %s\n%s" % (nsent, len(work), sentid, len(sent),
+					u" ".join(a[0] for a in sent),	# words only
 					#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
+					msg))
 		goldb = bracketings(tree)
 		gold.append(block)
 		gsent.append(sent)
-		goldbrackets.update((nsent, a) for a in goldb.elements())
-		msg = ''
-		if splitpcfg and len(sent) < maxbitveclen: # hard limit of word sized bit vectors
-			msg = "PCFG: "
-			begin = time.clock()
-			if usecfgparse:
-				chart, start = cfgparse([w for w, t in sent],
-						pcfggrammar,
-						tags=[t for w, t in sent] if tags else [],
-						start=pcfggrammar.toid[top])
-			else:
-				chart, start, msg1 = parse([w for w, t in sent],
-						pcfggrammar,
-						tags=[t for w, t in sent] if tags else [],
-						start=pcfggrammar.toid[top],
-						exhaustive=True)
-				msg += msg1
-		else: chart = {}; start = False
-		if start:
-			resultstr, prob = viterbiderivation(chart, start,
-								pcfggrammar.tolabel)
-			result = Tree(resultstr)
-			result.un_chomsky_normal_form(childChar=":")
-			mergediscnodes(result)
-			unbinarize(result)
-			rem_marks(result)
-			if unfolded: fold(result)
-			msg += "p = %.4e " % exp(-prob)
-			candb = bracketings(result)
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
-			if result == tree or f1 == 1.0:
-				assert result != tree or f1 == 1.0
-				msg += "exact match"
-				exactp += 1
-			else:
-				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-								100 * prec, 100 * rec, 100 * f1)
-				if candb - goldb:
-					msg += "cand-gold=%s " % printbrackets(candb - goldb)
-				if goldb - candb:
-					msg += "gold-cand=%s" % printbrackets(goldb - candb)
-				if (candb - goldb) or (goldb - candb): msg += '\n'
-				msg += "      %s" % result.pprint(margin=1000)
-			presults.append(result)
-		else:
-			if splitpcfg: msg += "no parse"
-			result = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
-			result = Tree.parse("(%s %s)" % (top, result), parse_leaf=int)
-			candb = bracketings(result)
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
-			pnoparse += 1
-			presults.append(result)
+		goldbrackets.update((sentid, a) for a in goldb.elements())
 		if splitpcfg:
-			pcfgtime = time.clock() - begin
-			logging.debug(msg+"\n%.2fs cpu time elapsed" % (pcfgtime))
-		pcandb.update((nsent, a) for a in candb.elements())
-		msg = ""
-		if plcfrs and (not splitpcfg or start) and len(sent) < maxbitveclen: # hard limit
-			msg = "PLCFRS: "
-			begin = time.clock()
-			whitelist = []
-			if splitpcfg and start:
-				whitelist, items = prunechart(chart, start, pcfggrammar,
-					plcfrsgrammar, splitk, splitprune, markorigin)
-				logging.debug(
-					"pruning: %gs; coarse items before: %d; after: %d" % (
-					time.clock() - begin, len(chart), items))
-			chart, start, msg1 = parse(
-						[w for w, t in sent], plcfrsgrammar,
-						tags=[t for w, t in sent] if tags else [],
-						start=plcfrsgrammar.toid[top],
-						whitelist=whitelist,
-						splitprune=splitprune and splitpcfg,
-						markorigin=markorigin,
-						exhaustive=dop and prune,
-						estimates=(outside, testmaxwords) if useestimates else None,
-						)
-			msg += msg1
-		elif plcfrs: chart = {}; start = False
-		if start and plcfrs:
-			resultstr, prob = viterbiderivation(chart, start, plcfrsgrammar.tolabel)
-			result = Tree(resultstr)
-			unbinarize(result)
-			rem_marks(result)
-			if unfolded: fold(result)
-			msg += "p = %.4e " % exp(-prob)
-			candb = bracketings(result)
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
-			if result == tree or f1 == 1.0:
-				assert result != tree or f1 == 1.0
-				msg += "exact match"
-				exacts += 1
-			else:
-				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-								100 * prec, 100 * rec, 100 * f1)
-				if candb - goldb:
-					msg += "cand-gold=%s " % printbrackets(candb - goldb)
-				if goldb - candb:
-					msg += "gold-cand=%s" % printbrackets(goldb - candb)
-				if (candb - goldb) or (goldb - candb): msg += '\n'
-				msg += "      %s" % result.pprint(margin=1000)
-			sresults.append(result)
-		else:
-			if plcfrs: msg += "no parse"
-			result = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
-			result = Tree.parse("(%s %s)" % (top, result), parse_leaf=int)
-			candb = bracketings(result)
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
-			snoparse += 1
-			sresults.append(result)
+			pcandb.update((sentid, a) for a in p.elements())
+			presults.append(pr)
+			if pp: pnoparse += 1
+			if pe: exactp += 1
 		if plcfrs:
-			plcfrstime = time.clock() - begin
-			logging.debug(msg+"\n%.2fs cpu time elapsed" % (plcfrstime))
-		scandb.update((nsent, a) for a in candb.elements())
-		msg = ""
-		if (dop and (not (splitpcfg or plcfrs) or start)
-				and len(sent) < maxbitveclen): # hard limit
-			msg = " DOP: "
-			begin = time.clock()
-			whitelist = []
-			if (splitpcfg or plcfrs) and prune and start:
-				whitelist, items = prunechart(chart, start,
-							plcfrsgrammar if plcfrs else splitpcfg,
-							dopgrammar, k, splitprune and not plcfrs,
-							markorigin)
-				logging.debug(
-					"pruning: %gs; coarse items before: %d; after: %d" % (
-					time.clock() - begin, len(chart), items))
-				# dump prune list
-				#for a, b in enumerate(whitelist):
-				#	print dopgrammar.tolabel[a],
-				#	if b:
-				#		for c,d in b.items():
-				#			print bin(c), exp(-d)
-				#	else: print {}
-			chart, start, msg1 = parse(
-							[w for w, _ in sent], dopgrammar,
-							tags=[t for _, t in sent] if tags else None,
-							start=dopgrammar.toid[top],
-							exhaustive=True,
-							estimates=None,
-							whitelist=whitelist,
-							splitprune=splitprune and not plcfrs,
-							markorigin=markorigin)
-			msg += msg1
-			if plcfrs and not start:
-				pprint_chart(chart,
-						[w.encode('unicode-escape') for w, _ in sent],
-						dopgrammar.tolabel)
-				raise ValueError("expected successful parse")
-		else: chart = {}; start = False
-		if dop and start:
-			begindisamb = time.clock()
-			if estimator == "shortest":
-				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
-						sample=sample, both=both, shortest=True,
-						secondarymodel=secondarymodel)
-			elif estimator == "sl-dop":
-				mpp, msg1 = sldop(chart, start, sent, tags, dopgrammar,
-							secondarymodel, m, sldop_n, sample, both)
-				mpp = dict(mpp)
-			elif estimator == "sl-dop-simple":
-				# old method, estimate shortest derivation directly from number
-				# of addressed nodes
-				mpp, msg1 = sldop_simple(chart, start, dopgrammar, m, sldop_n)
-				mpp = dict(mpp)
-			elif backtransform is not None:
-				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel, n=m,
-					sample=sample, both=both, backtransform=backtransform)
-			else: #dop1, ewe
-				mpp, msg1 = marginalize(chart, start, dopgrammar.tolabel,
-									n=m, sample=sample, both=both)
-			logging.debug("disambiguation: %s; %gs" % (
-				msg1, time.clock() - begindisamb))
-			dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
-			dresult = Tree(dresult)
-			if isinstance(prob, tuple):
-				msg += "subtrees = %d, p = %.4e " % (abs(prob[0]), prob[1])
-			else:
-				msg += "p = %.4e " % prob
-			unbinarize(dresult)
-			rem_marks(dresult)
-			if unfolded: fold(dresult)
-			candb = bracketings(dresult)
-			try: prec = precision(goldb, candb)
-			except ZeroDivisionError:
-				prec = 0.0
-				logging.warning("empty candidate brackets?\n%s" % dresult.pprint())
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
-			if dresult == tree or f1 == 1.0:
-				msg += "exact match"
-				exactd += 1
-			else:
-				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-								100 * prec, 100 * rec, 100 * f1)
-				if candb - goldb:
-					msg += "cand-gold=%s " % printbrackets(candb - goldb)
-				if goldb - candb:
-					msg += "gold-cand=%s " % printbrackets(goldb - candb)
-				if (candb - goldb) or (goldb - candb): msg += '\n'
-				msg += "      %s" % dresult.pprint(margin=1000)
-			dresults.append(dresult)
-		else:
-			if dop:
-				msg += "no parse"
-			dresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
-			dresult = Tree.parse("(%s %s)" % (top, dresult), parse_leaf=int)
-			candb = bracketings(dresult)
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1 = f_measure(goldb, candb)
-			dnoparse += 1
-			dresults.append(dresult)
-		doptime = 0
+			scandb.update((sentid, a) for a in s.elements())
+			sresults.append(sr)
+			if sp: snoparse += 1
+			if se: exacts += 1
 		if dop:
-			doptime = time.clock() - begin
-			logging.debug(msg+"\n%.2fs cpu time elapsed" % (doptime))
-		timesfile.write("%d\t%d" % (nsent, len(sent)))
-		if splitpcfg: timesfile.write("\t%g" % pcfgtime)
-		if plcfrs: timesfile.write("\t%g" % plcfrstime)
-		if dop: timesfile.write("\t%g" % doptime)
-		timesfile.write("\n")
-		logging.debug("GOLD: %s" % tree.pprint(margin=1000))
-		dcandb.update((nsent, a) for a in candb.elements())
+			dcandb.update((sentid, a) for a in d.elements())
+			dresults.append(dr)
+			if dp: dnoparse += 1
+			if de: exactd += 1
+		msg = ''
 		if splitpcfg:
 			logging.debug("pcfg   cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
 								100 * (1 - pnoparse/float(len(presults))),
@@ -538,8 +347,12 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 								100 * recall(goldbrackets, dcandb),
 								100 * f_measure(goldbrackets, dcandb),
 								100 * (f_measure(goldbrackets, dcandb) -
-									max(f_measure(goldbrackets, pcandb),
-									f_measure(goldbrackets, scandb)))))
+									max(f_measure(goldbrackets, pcandb) if splitpcfg else -1,
+									f_measure(goldbrackets, scandb) if plcfrs else -1))))
+	if numproc != 1:
+		pool.terminate()
+		pool.join()
+		del dowork, pool
 
 	if splitpcfg:
 		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
@@ -557,12 +370,13 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			"w", encoding='utf-8').write(''.join(
 				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
 				for n, a in zip(count(sentinit), gold)))
-	timesfile.close()
-	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}" % (resultdir, category or "results"))
+	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}" % (
+		resultdir, category or "results"))
 
-	return (splitpcfg, plcfrs, dop, nsent, testmaxwords, exactp, exacts, exactd,
-		pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb, dcandb,
-		unfolded, arity_marks, bintype, estimator, sldop_n, bool(backtransform))
+	return (splitpcfg, plcfrs, dop, len(work), testmaxwords, exactp, exacts,
+			exactd, pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb,
+			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n,
+			bool(backtransform))
 
 def doeval(splitpcfg, plcfrs, dop, nsent, testmaxwords, exactp, exacts, exactd,
 		pnoparse, snoparse, dnoparse, goldbrackets, pcandb, scandb, dcandb,
@@ -992,130 +806,6 @@ def initworker(params):
 	""" Set global parameter object """
 	global internalparams
 	internalparams = params
-
-def multidoparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
-		sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
-		plcfrsgrammar, dopgrammar, secondarymodel, test, testmaxwords,
-		testsents, prune, splitk, k, sldop_n=14, useestimates=False,
-		outside=None, top='ROOT', tags=True, splitprune=False,
-		markorigin=False, resultdir="results", usecfgparse=False,
-		backtransform=None, numproc=None, category=None, sentinit=0):
-	""" Like doparse but use multiprocessing. """
-	# FIXME: use multiprocessing namespace:
-	#mgr = multiprocessing.Manager()
-	#namespace = mgr.Namespace()
-	params = Params(
-			splitpcfg=splitpcfg, plcfrs=plcfrs, dop=dop,
-			pcfggrammar=pcfggrammar, plcfrsgrammar=plcfrsgrammar,
-			dopgrammar=dopgrammar, estimator=estimator, unfolded=unfolded,
-			bintype=bintype, sample=sample, both=both, arity_marks=arity_marks,
-			arity_marks_before_bin=arity_marks_before_bin, m=m,
-			secondarymodel=secondarymodel, test=test,
-			testmaxwords=testmaxwords, testsents=testsents, prune=prune,
-			splitk=splitk, k=k, sldop_n=sldop_n, useestimates=useestimates,
-			outside=outside, top=top, tags=tags, splitprune=splitprune,
-			markorigin=markorigin, resultdir=resultdir,
-			usecfgparse=usecfgparse, backtransform=backtransform,
-			category=category, sentinit=sentinit)
-	presults = []; sresults = []; dresults = []
-	gold = []; gsent = []
-	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
-	goldbrackets = multiset()
-	exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
-
-	try:
-		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
-				initargs=(params,))
-		maxlen = min(testmaxwords, maxbitveclen)
-		work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
-		print "going to parse %d sentences." % len(work)
-		dowork = pool.imap_unordered(worker, work)
-	except: raise
-	else:
-		# main parse loop over each sentence in test corpus
-		for nsent, data in enumerate(dowork, 1):
-			sentid, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
-			thesentid, tree, sent, block = work[sentid-1]
-			assert thesentid == sentid
-			logging.debug("%d/%d (%d). [len=%d] %s\n%s" % (nsent, len(work), sentid, len(sent),
-						u" ".join(a[0] for a in sent),	# words only
-						#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
-						msg))
-			goldb = bracketings(tree)
-			gold.append(block)
-			gsent.append(sent)
-			goldbrackets.update((sentid, a) for a in goldb.elements())
-			if splitpcfg:
-				pcandb.update((sentid, a) for a in p.elements())
-				presults.append(pr)
-				if pp: pnoparse += 1
-				if pe: exactp += 1
-			if plcfrs:
-				scandb.update((sentid, a) for a in s.elements())
-				sresults.append(sr)
-				if sp: snoparse += 1
-				if se: exacts += 1
-			if dop:
-				dcandb.update((sentid, a) for a in d.elements())
-				dresults.append(dr)
-				if dp: dnoparse += 1
-				if de: exactd += 1
-			msg = ''
-			if splitpcfg:
-				logging.debug("pcfg   cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
-									100 * (1 - pnoparse/float(len(presults))),
-									100 * (exactp / float(nsent)),
-									100 * precision(goldbrackets, pcandb),
-									100 * recall(goldbrackets, pcandb),
-									100 * f_measure(goldbrackets, pcandb),
-									('' if plcfrs or dop else '\n')))
-			if plcfrs:
-				logging.debug("plcfrs cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
-									100 * (1 - snoparse/float(len(sresults))),
-									100 * (exacts / float(nsent)),
-									100 * precision(goldbrackets, scandb),
-									100 * recall(goldbrackets, scandb),
-									100 * f_measure(goldbrackets, scandb),
-									('' if dop else '\n')))
-			if dop:
-				logging.debug("dop    cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f"
-						" (%+5.2f)\n" % (
-									100 * (1 - dnoparse/float(len(dresults))),
-									100 * (exactd / float(nsent)),
-									100 * precision(goldbrackets, dcandb),
-									100 * recall(goldbrackets, dcandb),
-									100 * f_measure(goldbrackets, dcandb),
-									100 * (f_measure(goldbrackets, dcandb) -
-										max(f_measure(goldbrackets, pcandb) if splitpcfg else -1,
-										f_measure(goldbrackets, scandb) if plcfrs else -1))))
-	finally:
-		pool.terminate()
-		pool.join()
-		del dowork, pool
-
-	if splitpcfg:
-		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b],n + 1)
-			for n,a,b in zip(count(sentinit), presults, gsent))
-	if plcfrs:
-		codecs.open("%s/%s.plcfrs" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b],n + 1)
-			for n,a,b in zip(count(sentinit), sresults, gsent))
-	if dop:
-		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b], n + 1)
-			for n,a,b in zip(count(sentinit), dresults, gsent))
-	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
-			"w", encoding='utf-8').write(''.join(
-				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
-				for n, a in zip(count(sentinit), gold)))
-	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}" % (
-		resultdir, category or "results"))
-
-	return (splitpcfg, plcfrs, dop, len(work), testmaxwords, exactp, exacts,
-			exactd, pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb,
-			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n,
-			bool(backtransform))
 
 def cycledetection(trees, sents):
 	seen = set()
