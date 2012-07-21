@@ -188,7 +188,7 @@ def main(
 		elif usedoubledop:
 			assert estimator not in ("ewe", "sl-dop", "sl-dop-simple",
 					"shortest"), "Not implemented."
-			dopgrammar, backtransform = doubledop(trees, sents, numproc != 1)
+			dopgrammar, backtransform = doubledop(trees, sents, numproc)
 		else:
 			dopgrammar = dop_lcfrs_rules(trees, sents,
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),

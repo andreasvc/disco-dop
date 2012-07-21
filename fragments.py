@@ -347,22 +347,23 @@ def initworkersimple(trees, sents):
 	params.update(getctrees(trees, sents))
 	assert params['trees1']
 
-def getfragments(trees, sents, multiproc=True):
-	""" Get recurring fragments with exact counts in a single treebank,
-	using all available CPUs by default. """
+def getfragments(trees, sents, numproc=1):
+	""" Get recurring fragments with exact counts in a single treebank. """
+	if numproc == 0: numproc = cpu_count()
 	numtrees = len(trees)
 	assert numtrees
-	numproc = mult = 1
-	if multiproc:
-		numproc = cpu_count()
-		mult = 3
+	mult = 1
 	chunk = numtrees / (mult*numproc)
 	if numtrees % (mult*numproc): chunk += 1
 	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
 	fragments = {}
 	params.update(chunk=chunk, disc=True, exact=True,
 		complete=False, indices=False, quadratic=False)
-	if multiproc:
+	if numproc == 1:
+		initworkersimple(trees, list(sents))
+		mymap = map
+		myapply = apply
+	else:
 		logging.info("work division:\n%s" % "\n".join("    %s: %r" % kv
 			for kv in sorted(dict(chunksize=chunk, numchunks=numchunks,
 				numproc=numproc).items())))
@@ -371,18 +372,14 @@ def getfragments(trees, sents, multiproc=True):
 			initargs=(trees, list(sents)))
 		mymap = pool.imap_unordered
 		myapply = pool.apply
-	else:
-		initworkersimple(trees, list(sents))
-		mymap = map
-		myapply = apply
 	# collect recurring fragments
+	logging.info("extracting recurring fragments")
 	for n, a in enumerate(mymap(worker, range(0, numtrees, chunk))):
 		fragments.update(a)
 	# add 'cover' fragments corresponding to single productions
 	cover = myapply(coverfragworker, ())
 	fragments.update(cover)
 	logging.info("merged %d cover fragments" % len(cover))
-	logging.info("dividing work for exact counts")
 	countchunk = 20000
 	fragments, bitsets = fragments.keys(), fragments.values()
 	tmp = range(0, len(bitsets), countchunk)
@@ -390,7 +387,7 @@ def getfragments(trees, sents, multiproc=True):
 	logging.info("getting exact counts")
 	counts = []
 	for a in mymap(exactcountworker, work): counts.extend(a)
-	if multiproc:
+	if numproc != 1:
 		pool.terminate()
 		pool.join()
 		del pool

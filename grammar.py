@@ -74,7 +74,8 @@ def lcfrs_productions(tree, sent):
 			#	int(fanoutre.search(st.node).group(1))
 			#		if fanoutre.search(st.node) else len(yf)), (
 			#	"rangeheads: %r\nyf: %r\nleaves: %r\n\t%r\n"
-			#	"childleaves: %r\ntree:\n%s\nsent: %r" % (rangeheads(st.leaves()), yf,
+			#	"childleaves: %r\ntree:\n%s\nsent: %r" % (
+			#		rangeheads(st.leaves()), yf,
 			#	st.leaves(), tmpleaves, childleaves, st.pprint(margin=9999), sent))
 		else: raise ValueError("Neither Tree node nor integer index:\n"
 			"%r, %r" % (st[0], type(st[0])))
@@ -163,7 +164,7 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
 
-def doubledop(trees, sents, stroutput=True, debug=False, multiproc=False):
+def doubledop(trees, sents, numproc=1, stroutput=True, debug=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus all
 	individual productions needed to obtain full coverage.
@@ -184,7 +185,7 @@ def doubledop(trees, sents, stroutput=True, debug=False, multiproc=False):
 	# to assign IDs to ambiguous fragments (same yield)
 	ids = ("(#%d" % n for n in count())
 	# find recurring fragments in treebank, as well as depth-1 'cover' fragments
-	fragments = getfragments(trees, sents, multiproc)
+	fragments = getfragments(trees, sents, numproc)
 
 	# fragments are given back as strings; we could work with trees as strings
 	# all the way, but to do binarization and rule extraction, NLTK Tree objects
