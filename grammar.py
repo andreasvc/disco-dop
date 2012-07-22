@@ -1,4 +1,4 @@
-import logging, codecs, re
+import codecs, re
 from operator import mul, itemgetter
 from array import array
 from math import log, exp
@@ -36,7 +36,6 @@ def lcfrs_productions(tree, sent):
 	assert all(0 <= a < len(sent) for a in leaves), (
 		"indices should point to a word in the sentence.\n"
 		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
-	#tree = canonicalized(tree)
 	rules = []
 	for st in tree.subtrees():
 		if not st: raise ValueError(("Empty node. Frontier nodes should "
@@ -57,7 +56,7 @@ def lcfrs_productions(tree, sent):
 			leaves = [(idx, n) for n, child in enumerate(childleaves)
 					for idx in child]
 			leaves.sort(key=itemgetter(0), reverse=True)
-			tmpleaves = leaves[:]
+			#tmpleaves = leaves[:]
 			previdx, prevparent = leaves.pop()
 			yf = [[prevparent]]
 			while leaves:
@@ -100,24 +99,24 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 	reduces DOP1 to a PCFG.
 	Normalize means the application of the equal weights estimate.
 	freqs gives frequencies when enabled; default is probabilities. """
-	ids, rules = count(), FreqDist()
-	fd, ntfd = FreqDist(), FreqDist()
-	for n, tree, sent in zip(count(), trees, sents):
-		t = canonicalize(tree.copy(True))
+	rules = defaultdict(float) #FreqDist()
+	ntfd = defaultdict(float) #FreqDist()
+	fd = defaultdict(float) #FreqDist()
+	for n, t, sent in zip(count(), trees, sents):
 		prods = lcfrs_productions(t, sent)
 		ut = decorate_with_ids(n, t)
 		uprods = lcfrs_productions(ut, sent)
-		# replace addressed root node with unaddressed node
-		uprods[0] = ((prods[0][0][0],) + uprods[0][0][1:], uprods[0][1])
+		## replace addressed root node with unaddressed node
+		#uprods[0] = ((prods[0][0][0],) + uprods[0][0][1:], uprods[0][1])
 		nodefreq(t, ut, fd, ntfd)
 		# fd: how many subtrees are headed by node X (e.g. NP or NP@12), 
 		# 	counts of NP@... should sum to count of NP
 		# ntfd: frequency of a node in corpus (only makes sense for exterior
 		#   nodes (NP), not interior nodes (NP@12), the latter are always one)
-		rules.update(chain(*([(c,avar) for c in cartpi(list(
-								(x,) if x==y else (x,y)
-								for x,y in zip(a,b)))]
-							for (a,avar),(b,bvar) in zip(prods, uprods))))
+		for (a, avar), (b, bvar) in zip(prods, uprods):
+			assert avar == bvar
+			for c in cartpi([(x,) if x==y else (x,y) for x,y in zip(a, b)]):
+				rules[c, avar] += 1
 
 	@memoize
 	def sumfracs(nom, denoms):
@@ -127,13 +126,13 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996)
 		return (r, yf), (freq *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
-			/ (1 if freqs else (float(fd[r[0]]))))
+			/ (1 if freqs else fd[r[0]]))
 
 	def bodewe(((r, yf), freq)):
 		# Bod (2003, figure 3) 
 		return (r, yf), (freq *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
-			/ ((1 if freqs else float(fd[r[0]]))
+			/ ((1 if freqs else fd[r[0]])
 				* (ntfd[r[0]] if '@' not in r[0] else 1.)))
 
 	# map of exterior (unaddressed) nodes to normalized denominators:
@@ -148,7 +147,7 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 		for aj in fd:
 			a = aj.split("@")[0]
 			if a == aj: continue	# exterior / unaddressed node
-			ewedenoms.setdefault(a, []).append(float(fd[aj] * ntfd[a]))
+			ewedenoms.setdefault(a, []).append(fd[aj] * ntfd[a])
 		for a in ewedenoms: ewedenoms[a] = tuple(ewedenoms[a])
 		probmodel = [(rule, log(p))
 			for rule, p in imap(goodmanewe, rules.iteritems())]
@@ -164,7 +163,7 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 		return (nonprobmodel, dict(probmodel))
 	return probmodel
 
-def doubledop(trees, sents, numproc=1, stroutput=True, debug=False):
+def doubledop(trees, sents, numproc=1, stroutput=True, debug=False, freqs=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus all
 	individual productions needed to obtain full coverage.
@@ -272,6 +271,7 @@ def doubledop(trees, sents, numproc=1, stroutput=True, debug=False):
 	#ensure ascii strings, drop terminals, drop sentinels. drop no-op transforms?
 	backtransform = dict((a, str(b[0]) if stroutput else b[0])
 			for a, b in backtransform.iteritems() if b is not None) #and a != b)
+	if freqs: return grammar, backtransform
 	# relative frequences as probabilities
 	ntfd = defaultdict(float)
 	for a, b in grammar.iteritems(): ntfd[a[0][0]] += b
@@ -303,12 +303,8 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	>>> fd.items()
 	[('S', 4), ('NP', 1), ('NP@1-1', 1), ('VP', 1), ('VP@1-2', 1)]
 	"""
-	assert isinstance(tree, Tree)
-	assert len(tree), ("node with zero children.\n"
-		"this error occurs when a node has zero children,"
-		"e.g., (TOP (wrong))")
 	nonterminalfd[tree.node] += 1.0
-	if any(isinstance(a, Tree) for a in tree):
+	if isinstance(tree[0], Tree):
 		n = reduce(mul, (nodefreq(x, ux, subtreefd, nonterminalfd) + 1
 			for x, ux in zip(tree, utree)))
 	else: # lexical production
@@ -328,14 +324,12 @@ def decorate_with_ids(n, tree):
 	Tree('S', [Tree('NP@1-1', [Tree('DT@1-2', ['the']), Tree('N@1-3', ['dog'])]),
 			Tree('VP@1-4', ['walks'])])
 	"""
-	utree = Tree.convert(tree)
+	utree = Tree.convert(tree.copy(True))
 	ids = 0
-	for child in utree: #top node should not get an ID
-		for a in child.subtrees():
-			if not isinstance(a, Tree): continue
-			#if any(isinstance(b, Tree) for b in a):
-			ids += 1
-			a.node = "%s@%d-%d" % (a.node, n, ids)
+	#skip top node, should not get an ID
+	for a in islice(utree.subtrees(), 1, None):
+		a.node = "%s@%d-%d" % (a.node, n, ids)
+		ids += 1
 	return utree
 
 packed_graph_ids = 0
@@ -792,7 +786,7 @@ def do(sent, grammar):
 		pprint_chart(p, sent, grammar.tolabel)
 	print
 
-def main():
+def test():
 	from treetransforms import unbinarize, binarize, optimalbinarize
 	from treebank import NegraCorpusReader, BracketCorpusReader
 	from parser import parse, pprint_chart
@@ -800,7 +794,8 @@ def main():
 	from disambiguation import marginalize, recoverfragments, \
 			recoverfragments_str, recoverfragments_strstr
 	from kbest import lazykbest
-	import sys, codecs
+	import sys, codecs, logging
+	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	stdout = codecs.getwriter('utf8')(sys.stdout)
@@ -878,5 +873,106 @@ def main():
 	g = Grammar(induce_plcfrs([tree],[range(10)]))
 	print "tree: %s\nunary closure:" % tree
 	g.printclosure()
+
+def main():
+	import sys, gzip, codecs, logging
+	from getopt import gnu_getopt, GetoptError
+	from treetransforms import addfanoutmarkers
+	from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
+			BracketCorpusReader
+	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+	shortoptions = ''
+	flags = ("gzip", ) # "freqs"
+	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
+	try:
+		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
+		model, input, rules, lexicon = args
+	except Exception, err:
+		print "error:", err
+		usage()
+		exit(2)
+	else: opts = dict(opts)
+	assert model in ("pcfg", "plcfrs", "dopreduction", "doubledop"), (
+		"unrecognized model: %r" % model)
+	freqs = opts.get('--freqs', False)
+
+	# read input
+	if opts.get('--inputfmt', 'export') == 'export':
+		Reader = NegraCorpusReader
+	elif opts.get('--inputfmt') == 'discbracket':
+		Reader = DiscBracketCorpusReader
+	elif opts.get('--inputfmt') == 'bracket':
+		Reader = BracketCorpusReader
+	else: raise ValueError("unrecognized format: %r" % opts.get('--inputfmt'))
+
+	corpus = Reader(".", input)
+	trees, sents = corpus.parsed_sents(), corpus.sents()
+	for a in trees:
+		canonicalize(a)
+		addfanoutmarkers(a)
+
+	# apply transformation
+	if model in ("pcfg", "plcfrs"):
+		grammar = induce_plcfrs(trees, sents, freqs=freqs)
+	elif model == "dopreduction":
+		estimator = opts.get('--dopestimator', 'dop1')
+		grammar = dop_lcfrs_rules(trees, sents, normalize=estimator=='ewe',
+				shortestderiv=estimator=='shortest', freqs=freqs)
+	elif model == "doubledop":
+		assert opts.get('--dopestimator', 'dop1') == 'dop1'
+		numproc = int(opts.get('--numproc', 1))
+		grammar = doubledop(trees, sents, numproc=numproc, freqs=freqs)
+
+	print grammarinfo(grammar)
+	cgrammar = Grammar(grammar)
+	cgrammar.testgrammar(logging)
+	if '--gzip' in opts:
+		myopen = gzip.open
+		if not rules.endswith(".gz"): rules += ".gz"
+		if not lexicon.endswith(".gz"): lexicon += ".gz"
+	else: myopen = open
+	with myopen(rules, "w") as rulesfile:
+		with codecs.getwriter('utf-8')(myopen(lexicon, "w")) as lexiconfile:
+			# write output
+			if model == "pcfg" or opts.get('--inputfmt') == 'bracket':
+				cgrammar.write_bitpar_grammar(rulesfile, lexiconfile)
+			else:
+				cgrammar.write_lcfrs_grammar(rulesfile, lexiconfile)
+	print "wrote grammar to %s and %s." % (rules, lexicon)
+
+def usage():
+	import sys
+	print """Read off grammars from treebanks.
+usage: %s [options] model input rules lexicon
+where input is a binarized treebank,
+rules and lexicon are filenames for the output,
+and model is one of:
+    pcfg
+    plcfrs
+    dopreduction
+    doubledop
+
+options may consist of (* marks default option):
+    --inputfmt [*export|discbracket|bracket]
+    --inputenc [*UTF-8|ISO-8859-1|...]
+    --dopestimator [dop1|ewe|shortest|...]
+    --numproc [1|2|...]       (only relevant for double dop fragment extraction)
+    --gzip                    (compress output with gzip, view with zless etc.)
+
+When a PCFG is requested, or the input format is `bracket' (Penn format), the
+output will be in BitPar format. Otherwise the grammar is written as an LCFRS.
+The encoding of the input treebank may be specified, but the output encoding
+will be ASCII for the rules, and UTF-8 for the lexicon.
+The LCFRS format is as follows. Fields are separated by tabs.
+Components of the yield function are comma-separated, 0 refers to a component
+of the first RHS nonterminal, and 1 from the second. Weights are expressed as
+hexadecimal negative logprobs. E.g.:
+rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
+         VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
+         NP      NN      0       0.3
+lexicon: NN Epsilon Haus    0.3
+""" % sys.argv[0]
+#TODO:
+#	--freqs                   (return frequencies instead of probabilities)
 
 if __name__ == '__main__': main()

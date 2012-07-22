@@ -177,13 +177,12 @@ def main(
 		if estimator == "shortest":
 			# the secondary model is used to resolve ties for the shortest derivation
 			dopgrammar, secondarymodel = dop_lcfrs_rules(trees, sents,
-				normalize=False, shortestderiv=True, arity_marks=arity_marks)
+				normalize=False, shortestderiv=True)
 		elif "sl-dop" in estimator:
 			dopgrammar = dop_lcfrs_rules(trees, sents, normalize=True,
-							shortestderiv=False,	arity_marks=arity_marks)
+							shortestderiv=False)
 			dopshortest, _ = dop_lcfrs_rules(trees, sents,
-							normalize=False, shortestderiv=True,
-							arity_marks=arity_marks)
+							normalize=False, shortestderiv=True)
 			secondarymodel = Grammar(dopshortest)
 		elif usedoubledop:
 			assert estimator not in ("ewe", "sl-dop", "sl-dop-simple",
@@ -192,12 +191,9 @@ def main(
 		else:
 			dopgrammar = dop_lcfrs_rules(trees, sents,
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
-				shortestderiv=False, arity_marks=arity_marks)
+				shortestderiv=False)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
-		try: dopgrammar1 = Grammar(dopgrammar)
-		except:
-			for a in dopgrammar: print a
-			raise
+		dopgrammar1 = Grammar(dopgrammar)
 		logging.info("DOP model based on %d sentences, %d nodes, %d nonterminals"
 					% (len(trees), nodes, len(dopgrammar1.toid)))
 		logging.info(grammarinfo(dopgrammar))
@@ -521,7 +517,7 @@ def parsetepacoc(dop=True, plcfrs=True, estimator='ewe', unfolded=False,
 
 	dopgrammar = dop_lcfrs_rules(list(trees), list(sents),
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
-				shortestderiv=False, arity_marks=arity_marks)
+				shortestderiv=False)
 	print "induced dop reduction of", len(sents), "sentences"
 	logging.info(grammarinfo(dopgrammar))
 	dopgrammar = Grammar(dopgrammar)

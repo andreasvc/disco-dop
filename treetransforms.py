@@ -809,7 +809,7 @@ def main():
 			BracketCorpusReader, export
 	flags = ("headdriven", "markorigin", "removepunct", "movepunct")
 	options = ('factor=', 'markorigin=', 'inputfmt=', 'outputfmt=',
-			'inputenc=', 'outputenc=')
+			'inputenc=', 'outputenc=', 'slice=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
 		action, input, output = args
@@ -834,7 +834,10 @@ def main():
 			headfinal=True, headreverse=False,
 			removepunct="--removepunct" in opts,
 			movepunct="--movepunct" in opts)
-	trees, sents = corpus.parsed_sents(), corpus.sents()
+	start, end = opts.get('--slice', ':').split(':')
+	start = int(start) if start else None
+	end = int(end) if end else None
+	trees, sents = corpus.parsed_sents()[start:end], corpus.sents()[start:end]
 
 	# apply transformation
 	if action == "binarize":
@@ -878,30 +881,32 @@ def usage():
 	print """Treebank binarization and conversion
 usage: %s [options] action input output
 where input and output are treebanks, and action is one of:
-	binarize [-h x] [-v x] [--factor left|right]
-	optimalbinarize [-h x] [-v x]
-	unbinarize
-	introducepreterminals
-	splitdisc [--markorigin]
-	mergedisc
-	none
+    binarize [-h x] [-v x] [--factor left|right]
+    optimalbinarize [-h x] [-v x]
+    unbinarize
+    introducepreterminals
+    splitdisc [--markorigin]
+    mergedisc
+    none
 
 options may consist of (* marks default option):
-	--inputfmt [*export|discbracket|bracket]
-	--outputfmt [*export|discbracket|bracket]
-	--inputenc [*UTF-8|ISO-8859-1|...]
-	--outputenc [*UTF-8|ISO-8859-1|...]
-	--factor [left|*right] whether binarization factors to the left or right
-	-h n	horizontal markovization. default: infinite
-	-v n	vertical markovization. default: 1
-	--headdriven	turn on marking of heads; also affects binarization.
-		requires the file "negra.headrules".
-	--removepunct	remove any punctuation.
-	--movepunct	re-attach punctuation to nearest constituent to minimize
-		discontinuity.
+  --inputfmt [*export|discbracket|bracket]
+  --outputfmt [*export|discbracket|bracket]
+  --inputenc [*UTF-8|ISO-8859-1|...]
+  --outputenc [*UTF-8|ISO-8859-1|...]
+  --slice n:m select a range of sentences from input starting with n, up to but
+              not including m; n or m can be left out or negative, as in Python
+  --factor [left|*right] whether binarization factors to the left or right
+  -h n           horizontal markovization. default: infinite
+  -v n           vertical markovization. default: 1
+  --headdriven   turn on marking of heads; also affects binarization.
+                 requires the file "negra.headrules".
+  --removepunct  remove any punctuation.
+  --movepunct    re-attach punctuation to nearest constituent to minimize
+                 discontinuity.
 Note: some of these transformations are specific to discontinuous treebanks,
-	specifically the Negra/Tiger treebanks. In the output only POS & phrasal
-	labels are retained.""" % sys.argv[0]
+    specifically the Negra/Tiger treebanks. In the output only POS & phrasal
+    labels are retained.""" % sys.argv[0]
 
 __all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
 	"splitdiscnodes", "mergediscnodes", "optimalbinarize", "defaultrightbin",
