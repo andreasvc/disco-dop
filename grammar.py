@@ -301,7 +301,7 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	>>> nodefreq(tree, utree, fd, FreqDist())
 	4
 	>>> fd.items()
-	[('S', 4), ('NP', 1), ('NP@1-1', 1), ('VP', 1), ('VP@1-2', 1)]
+	[('S', 4), ('NP', 1), ('NP@1-0', 1), ('VP', 1), ('VP@1-1', 1)]
 	"""
 	nonterminalfd[tree.node] += 1.0
 	if isinstance(tree[0], Tree):
@@ -321,8 +321,8 @@ def decorate_with_ids(n, tree):
 	n should be an identifier of the sentence
 	>>> tree = Tree("(S (NP (DT the) (N dog)) (VP walks))")
 	>>> decorate_with_ids(1, tree)
-	Tree('S', [Tree('NP@1-1', [Tree('DT@1-2', ['the']), Tree('N@1-3', ['dog'])]),
-			Tree('VP@1-4', ['walks'])])
+	Tree('S', [Tree('NP@1-0', [Tree('DT@1-1', ['the']), Tree('N@1-2', ['dog'])]),
+			Tree('VP@1-3', ['walks'])])
 	"""
 	utree = Tree.convert(tree.copy(True))
 	ids = 0
