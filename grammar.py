@@ -870,6 +870,7 @@ def test():
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	g = Grammar(induce_plcfrs([tree],[range(10)]))
 	print "tree: %s\nunary closure:" % tree
+	g.getunaryclosure()
 	g.printclosure()
 
 def main():

@@ -131,19 +131,20 @@ def main(argv):
 					prods, params['revlabel'], trees2, sents2,
 					discontinuous=params['disc'], debug=params['debug'],
 					approx=params['approx'])
-			if not params['approx']:
-				fragments, bitsets = fragments.keys(), fragments.values()
+			if not params['approx'] and not params['nofreq']:
+				bitsets = fragments.values()
+				fragmentkeys = fragments.keys()
 				if params['indices']:
 					logging.info("getting indices of occurrence")
 					counts = exactindices(trees1, trees1, bitsets,
 							params['disc'], params['revlabel'],
 							params['treeswithprod'], fast=not params['quadratic'])
-				elif params['exact']:
+				else:
 					logging.info("getting exact counts")
 					counts = exactcounts(trees1, trees1, bitsets,
 							params['disc'], params['revlabel'],
 							params['treeswithprod'], fast=not params['quadratic'])
-				fragments = zip(fragments, counts)
+				fragments = zip(fragmentkeys, counts)
 			filename="%s/%s_%s" % (batch, os.path.basename(args[0]),
 				os.path.basename(a))
 			out = codecs.open(filename, "w", encoding=encoding)
@@ -195,7 +196,8 @@ def main(argv):
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s" % task)
 		countchunk = 20000
-		fragments, bitsets = fragments.keys(), fragments.values()
+		bitsets = fragments.values()
+		fragmentkeys = fragments.keys()
 		work = [bitsets[n:n+countchunk] for n in range(0, len(bitsets), countchunk)]
 		work = [(n, len(work), a) for n, a in enumerate(work)]
 		if numproc != 1: mymap = pool.imap
@@ -203,7 +205,7 @@ def main(argv):
 		logging.info("getting exact %s" % task)
 		counts = []
 		for a in dowork: counts.extend(a)
-		fragments = zip(fragments, counts)
+		fragments = zip(fragmentkeys, counts)
 	if numproc != 1:
 		pool.terminate()
 		pool.join()
@@ -255,18 +257,16 @@ def worker(offset):
 	assert offset < len(trees1)
 	end = min(offset + params['chunk'], len(trees1))
 	result = {}
-	try:
-		if params['quadratic']:
-			result = extractfragments(trees1, sents1, offset, end, labels,
-				prods, params['revlabel'], trees2, sents2,
-				approx=params['approx'],
-				discontinuous=params['disc'], debug=False)
-		else:
-			result = fastextractfragments(trees1, sents1, offset, end, labels,
-				prods, params['revlabel'], trees2, sents2,
-				approx=params['approx'],
-				discontinuous=params['disc'], debug=False)
-	except Exception as e: logging.error(e)
+	if params['quadratic']:
+		result = extractfragments(trees1, sents1, offset, end, labels,
+			prods, params['revlabel'], trees2, sents2,
+			approx=params['approx'],
+			discontinuous=params['disc'], debug=False)
+	else:
+		result = fastextractfragments(trees1, sents1, offset, end, labels,
+			prods, params['revlabel'], trees2, sents2,
+			approx=params['approx'],
+			discontinuous=params['disc'], debug=False)
 	logging.info("finished %d--%d" % (offset, end))
 	return result
 
@@ -308,11 +308,11 @@ def getfragments(trees, sents, numproc=1):
 	if numtrees % (mult*numproc): chunk += 1
 	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
 	fragments = {}
-	params.update(chunk=chunk, disc=True, exact=True,
+	params.update(chunk=chunk, disc=True, approx=False,
 		complete=False, indices=False, quadratic=False)
 	if numproc == 1:
 		initworkersimple(trees, list(sents))
-		mymap = map
+		mymap = imap
 		myapply = apply
 	else:
 		logging.info("work division:\n%s" % "\n".join("    %s: %r" % kv
@@ -332,7 +332,8 @@ def getfragments(trees, sents, numproc=1):
 	fragments.update(cover)
 	logging.info("merged %d cover fragments" % len(cover))
 	countchunk = 20000
-	fragments, bitsets = fragments.keys(), fragments.values()
+	bitsets = fragments.values()
+	fragmentkeys = fragments.keys()
 	tmp = range(0, len(bitsets), countchunk)
 	work = [(n, len(tmp), bitsets[n:n+countchunk]) for n, a in enumerate(tmp)]
 	logging.info("getting exact counts")
@@ -342,8 +343,8 @@ def getfragments(trees, sents, numproc=1):
 		pool.terminate()
 		pool.join()
 		del pool
-	logging.info("found %d fragments" % len(fragments))
-	return dict(zip(fragments, counts))
+	logging.info("found %d fragments" % len(fragmentkeys))
+	return dict(zip(fragmentkeys, counts))
 
 frontierre = re.compile(r"\(([^ ()]+) \)")
 termre = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")

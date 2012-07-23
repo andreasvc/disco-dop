@@ -149,6 +149,9 @@ cdef class Grammar:
 				candidates[n] |= candidates[m]
 				candidates[n] -= closure[n]
 	def printclosure(self):
+		if self.unaryclosure is None:
+			print "not computed."
+			return
 		for m, a in enumerate(self.unaryclosure):
 			print '%s[%d] ' % (self.tolabel[m], m),
 			for n in a:
