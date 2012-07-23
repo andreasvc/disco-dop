@@ -128,49 +128,44 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 		return children
 	return "(%s%s)" % (tolabel[ej.head.label], children)
 
-#cdef inline list getderivationnum(RankedEdge ej, dict D, dict chart,
-#		dict tolabel, int n, str debin):
-#	""" Translate the (e, j) notation to a list of  productions represented
-#	as tuples of label IDs.
-#	e is an edge, j is a vector prescribing the rank of the
-#	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
-#	vector [2, 1], this points to the derivation headed by S and having the 2nd
-#	best NP and the 1st best VP as children.
-#	If `debin' is specified, will perform on-the-fly debinarization of nodes
-#	with labels containing `debin' an a substring. """
-#	cdef ChartItem ei = ej.edge.left
-#	cdef Entry entry
-#	cdef Edge edge
-#	cdef list children
-#	cdef int x, i = ej.left
-#	if n > 100: raise ValueError("cycle") #hardcoded limit to prevent cycles
-#	e = ej.edge
-#	children = []
-#	for x in range(2):
-#		if i == -1: break
-#		if ei in chart:
-#			if ei in D:
-#				entry = D[ei][i]
-#				children.append(
-#					getderivationnum(entry.key, D, chart, tolabel, n + 1,
-#						debin))
-#			else:
-#				assert i == 0, "non-best edge missing in derivations"
-#				edge = nsmallest(1, chart[ei]).pop()
-#				children.append(getderivationnum(
-#					RankedEdge(ei, edge, 0, 0 if edge.right.label else -1),
-#					D, chart, tolabel, n + 1, debin))
-#		else:
-#			# this must be a terminal
-#			children.append(str(ei.vec))
-#		ei, i = e.right, ej.right
-#	#if "" in children: return ""
-#	if debin is not None and debin in tolabel[ej.head.label]:
-#		return children
-#	return (ej.head.label,) + children
+cdef inline tuple getderivationtuple(RankedEdge ej, dict D, dict chart,
+		dict tolabel, int n, str debin):
+	""" Translate the (e, j) notation to a tuple with integer IDs for labels.
+	e is an edge, j is a vector prescribing the rank of the
+	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
+	vector [2, 1], this points to the derivation headed by S and having the 2nd
+	best NP and the 1st best VP as children.
+	If `debin' is specified, will perform on-the-fly debinarization of nodes
+	with labels containing `debin' an a substring. """
+	cdef Edge edge
+	cdef RankedEdge rankededge
+	cdef ChartItem ei = ej.edge.left
+	cdef tuple children = (), child
+	cdef int i = ej.left
+	if n > 100: return ()	#hardcoded limit to prevent cycles
+	while i != -1:
+		if ei not in chart:
+			# this must be a terminal
+			children = (ei.vec, )
+			break
+		if ei in D:
+			rankededge = (<Entry>D[ei][i]).key
+		else:
+			assert i == 0, "non-best edge missing in derivations"
+			edge = nsmallest(1, chart[ei]).pop()
+			rankededge = RankedEdge(ei, edge, 0, 0 if edge.right.label else -1)
+		child = getderivationtuple(rankededge, D, chart, tolabel, n + 1, debin)
+		if child == (): return ()
+		children += (child,)
+		if ei is ej.edge.right: break
+		ei = ej.edge.right
+		i = ej.right
+	if debin is not None and debin in tolabel[ej.head.label]:
+		return children
+	return (ej.head.label,) + children
 
 cpdef list lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
-		str debin=None):
+		str debin=None, bint tuplerepr=False):
 	""" wrapper function to run lazykthbest and get the actual derivations.
 	chart is a monotone hypergraph; should be acyclic unless probabilities
 	resolve the cycles (maybe nonzero weights for unary productions are
@@ -187,6 +182,10 @@ cpdef list lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
 	cdef set explored = set()
 	cdef double prod
 	lazykthbest(goal, k, k, D, cand, chart, explored)
+	if tuplerepr:
+		return filter(itemgetter(0), [
+				(getderivationtuple(entry.key, D, chart, tolabel, 0, debin),
+					entry.value) for entry in D[goal]])
 	return filter(itemgetter(0), [
 			(getderivation(entry.key, D, chart, tolabel, 0, debin), entry.value)
 			for entry in D[goal]])

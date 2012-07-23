@@ -477,7 +477,7 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 
 cpdef dict coverbitsets(Ctrees trees, list sents, list treeswithprod,
-		list revlabel):
+		list revlabel, bint discontinuous):
 	""" Utility function to generate one bitsets for each type of production. """
 	cdef dict result = {}
 	cdef array pyarray
@@ -494,8 +494,9 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list treeswithprod,
 		else: raise ValueError("production not found. wrong index?")
 		pyarray._L[SLOTS] = m
 		pyarray._L[SLOTS + 1] = n
-		frag = getsubtree(trees.data[n].nodes, pyarray._L, revlabel, None, m)
-		if sents is not None: frag = getsent(frag, sents[n])
+		frag = getsubtree(trees.data[n].nodes, pyarray._L, revlabel,
+				None if discontinuous else sents[n], m)
+		if discontinuous: frag = getsent(frag, sents[n])
 		result[frag] = pyarray
 	return result
 

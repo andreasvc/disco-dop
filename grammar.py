@@ -99,15 +99,13 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 	reduces DOP1 to a PCFG.
 	Normalize means the application of the equal weights estimate.
 	freqs gives frequencies when enabled; default is probabilities. """
-	rules = defaultdict(float) #FreqDist()
-	ntfd = defaultdict(float) #FreqDist()
-	fd = defaultdict(float) #FreqDist()
+	rules = defaultdict(float)
+	ntfd = defaultdict(float)
+	fd = defaultdict(float)
 	for n, t, sent in zip(count(), trees, sents):
 		prods = lcfrs_productions(t, sent)
 		ut = decorate_with_ids(n, t)
 		uprods = lcfrs_productions(ut, sent)
-		## replace addressed root node with unaddressed node
-		#uprods[0] = ((prods[0][0][0],) + uprods[0][0][1:], uprods[0][1])
 		nodefreq(t, ut, fd, ntfd)
 		# fd: how many subtrees are headed by node X (e.g. NP or NP@12), 
 		# 	counts of NP@... should sum to count of NP
@@ -803,7 +801,7 @@ def test():
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
 		headorder=True, headfinal=True, headreverse=False, movepunct=True)
-	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
+	corpus = BracketCorpusReader(".", "treebankExample.mrg")
 	sents = corpus.sents()
 	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
 	for a in trees:
