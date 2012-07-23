@@ -103,7 +103,6 @@ cdef class Grammar:
 			lambda rule: len(rule) == 3, self.toid, self.nonterminals)
 		copyrules(grammar, self.bylhs, 0,
 			lambda rule: rule[1] != 'Epsilon', self.toid, self.nonterminals)
-		self.getunaryclosure()
 	def testgrammar(self, log, epsilon=0.01):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
@@ -128,10 +127,12 @@ cdef class Grammar:
 		log.info("All left hand sides sum to 1")
 		return True
 	def getunaryclosure(self):
+		""" FIXME: closure should be related to probabilities as well.
+		Also, there appears to be an infinite loop here. """
 		cdef size_t i = 0
-		self.unaryclosure = [[] for _ in range(self.nonterminals)]
 		closure = [set() for _ in range(self.nonterminals)]
 		candidates = [set() for _ in range(self.nonterminals)]
+		self.unaryclosure = [[] for _ in range(self.nonterminals)]
 		while self.unary[0][i].lhs != self.nonterminals:
 			candidates[self.unary[0][i].rhs1].add(i)
 			i += 1

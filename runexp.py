@@ -155,6 +155,7 @@ def main(
 		#logging.info("induced DOP CFG based on %d sentences" % len(trees))
 		logging.info(grammarinfo(pcfggrammar))
 		pcfggrammar = Grammar(pcfggrammar)
+		if usecfgparse: pcfggrammar.getunaryclosure()
 		pcfggrammar.testgrammar(logging)
 		pcfggrammar.write_bitpar_grammar(
 			open(resultdir + "/pcfg.rules", "w"),
@@ -193,11 +194,11 @@ def main(
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
 				shortestderiv=False)
 		nodes = sum(len(list(a.subtrees())) for a in trees)
-		dopgrammar1 = Grammar(dopgrammar)
+		msg = grammarinfo(dopgrammar)
+		dopgrammar = Grammar(dopgrammar)
 		logging.info("DOP model based on %d sentences, %d nodes, %d nonterminals"
-					% (len(trees), nodes, len(dopgrammar1.toid)))
-		logging.info(grammarinfo(dopgrammar))
-		dopgrammar = dopgrammar1
+					% (len(trees), nodes, len(dopgrammar.toid)))
+		logging.info(msg)
 		dopgrammar.testgrammar(logging)
 		dopgrammar.write_lcfrs_grammar(
 			gzip.open(resultdir + "/dop.rules.gz", "w"),
@@ -249,6 +250,14 @@ def main(
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs" % (time.clock() - begin))
 	doeval(*results)
+
+class Params:
+	def __init__(self, **kw): self.__dict__.update(kw)
+internalparams = None
+def initworker(params):
+	""" Set global parameter object """
+	global internalparams
+	internalparams = params
 
 def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
@@ -649,8 +658,8 @@ def worker((nsent, tree, sent, block)):
 		if d.splitpcfg and start:
 			whitelist, items = prunechart(chart, start, d.pcfggrammar,
 					d.plcfrsgrammar, d.splitk, d.splitprune, d.markorigin)
-			msg += "\tpruning: %gs; coarse items before: %d; after: %d\n" % (
-				time.clock() - begin, len(chart), items)
+			msg += "\tcoarse items before pruning: %d; after: %d\n" % (
+				len(chart), items)
 		chart, start, msg1 = parse(
 					[w for w, t in sent], d.plcfrsgrammar,
 					tags=[t for w, t in sent] if d.tags else [],
@@ -708,8 +717,8 @@ def worker((nsent, tree, sent, block)):
 					d.plcfrsgrammar if d.plcfrs else d.pcfggrammar,
 					d.dopgrammar, d.k, d.splitprune and not d.plcfrs,
 					d.markorigin)
-			msg += "\tpruning: %gs; coarse items before: %d; after: %d\n" % (
-				time.clock() - begin, len(chart), items)
+			msg += "\tcoarse items before pruning: %d; after: %d\n" % (
+				len(chart), items)
 		chart, start, msg1 = parse(
 						[w for w, _ in sent], d.dopgrammar,
 						tags=[t for _, t in sent] if d.tags else None,
@@ -747,12 +756,12 @@ def worker((nsent, tree, sent, block)):
 		else: #dop1, ewe
 			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
 								n=d.m, sample=d.sample, both=d.both)
-		msg += "\n\tdisambiguation: %s, %gs;" % (msg1, time.clock() - begindisamb)
+		msg += "\n\tdisambiguation: %s, %gs\n" % (msg1, time.clock() - begindisamb)
 		dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
 		dresult = Tree(dresult)
 		if isinstance(prob, tuple):
 			msg += " subtrees = %d, p=%.4e " % (abs(prob[0]), prob[1])
-		else: msg += " p=%.4e " % prob
+		else: msg += "        p=%.4e " % prob
 		unbinarize(dresult)
 		rem_marks(dresult)
 		if d.unfolded: fold(dresult)
@@ -774,7 +783,7 @@ def worker((nsent, tree, sent, block)):
 			if goldb - candb:
 				msg += "gold-cand=%s " % printbrackets(goldb - candb)
 			if (candb - goldb) or (goldb - candb): msg += '\n'
-			msg += "      %s" % dresult.pprint(margin=1000)
+			msg += "        %s" % dresult.pprint(margin=1000)
 	else:
 		if d.dop: msg += "no parse"
 		dresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
@@ -784,24 +793,15 @@ def worker((nsent, tree, sent, block)):
 		rec = recall(goldb, candb)
 		f1 = f_measure(goldb, candb)
 		dnoparse = True
-	dresult = dresult
 	dcandb = candb
 	doptime = 0
 	if d.dop:
 		doptime = time.clock() - begin
 		msg += "\n\t%.2fs cpu time elapsed\n" % (doptime)
-	msg += "GOLD: %s" % tree.pprint(margin=1000)
+	msg += "GOLD:   %s" % tree.pprint(margin=1000)
 	return (nsent, msg, (pcandb, presult, pnoparse, exactp),
 			(scandb, sresult, snoparse, exacts),
 			(dcandb, dresult, dnoparse, exactd))
-
-class Params:
-	def __init__(self, **kw): self.__dict__.update(kw)
-internalparams = None
-def initworker(params):
-	""" Set global parameter object """
-	global internalparams
-	internalparams = params
 
 def cycledetection(trees, sents):
 	seen = set()
