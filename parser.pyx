@@ -682,6 +682,7 @@ def main():
 		((('S', 'NP', 'VP'), ((0,1),)), 0.0),
 		((('NP', 'Epsilon'), ('mary',)), 0.0),
 		((('VP', 'Epsilon'), ('walks',)), 0.0)])
+	cfg.getunaryclosure()
 	print "cfg parsing; sentence: mary walks"
 	chart, start = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
 	pprint_chart(chart, "mary walks".split(), cfg.tolabel)

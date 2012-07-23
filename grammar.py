@@ -7,7 +7,7 @@ from itertools import chain, count, islice, imap, repeat
 from nltk import ImmutableTree, Tree, FreqDist, memoize
 from containers import Grammar
 
-frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9])*\))")
+frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9]+)*\))")
 rootnode = re.compile(r"\([^ ]+\b")
 fanoutre = re.compile("_([0-9]+)(?:@[-0-9]+)?$")
 
@@ -362,6 +362,8 @@ def flattenstr((tree, sent)): #(tree, sent)):
 	(ROOT (S_2 0 2) ($,@, 1) ($.@. 3))
 	>>> print flattenstr(("(NN 0)", ["foo"]))
 	(NN 0)
+	>>> flattenstr((r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> (TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> (VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7)) (VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))", (u'Das', u'Garten-', u'und', u'Friedhofsamt', u'hatte', u'k\xfcrzlich', u'dem', u'Ortsbeirat', None, None, None)))
+	'(S (ART@Das 0) (TRUNC@Garten- 1) (KON@und 2) (NN@Friedhofsamt 3) (VAFIN@hatte 4) (ADV@k\\xfcrzlich 5) (ART@dem 6) (NN@Ortsbeirat 7) (NP_2 8 10) (VVPP 9))'
 	"""
 	assert isinstance(tree, basestring), (tree, sent)
 	def repl(x):

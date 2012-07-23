@@ -69,11 +69,9 @@ cdef class Grammar:
 			else:
 				assert self.fanout[self.toid[rule[0]]] == len(yf), (
 					"conflicting fanouts for symbol '%s'.\n"
-					"previous: %d; this rule: %d.\n"
-					"rules with this lhs: %s" % (rule[0],
-					self.fanout[self.toid[rule[0]]], len(yf),
-					'\n'.join(repr(r) for r in grammar
-						if r[0][0][0] == rule[0])))
+					"previous: %d; this non-terminal: %d.\nrule: %r" % (
+					rule[0], self.fanout[self.toid[rule[0]]], len(yf), rule))
+		#'\n'.join(repr(r) for r in grammar if r[0][0][0] == rule[0])
 		bylhs_len = unary_len + binary_len
 		# allocate the actual contiguous array that will contain the rules
 		# (plus sentinels)
