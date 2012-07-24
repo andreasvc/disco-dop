@@ -28,8 +28,10 @@ cpdef prunechart(dict chart, ChartItem goal, Grammar coarse, Grammar fine,
 	"""
 	cdef dict d, kbest
 	cdef list whitelist
-	#if splitprune and markorigin: assert fine.splitmapping is not NULL
-	#assert fine.mapping is not NULL
+	assert fine.mapping is not NULL
+	if splitprune and markorigin:
+		assert fine.splitmapping is not NULL
+		assert fine.splitmapping[0] is not NULL
 	whitelist = [None] * len(fine.toid)
 	d = <dict>defaultdict(dict)
 	# construct a list of the k-best nonterminals to prune with
@@ -38,18 +40,15 @@ cpdef prunechart(dict chart, ChartItem goal, Grammar coarse, Grammar fine,
 	kbestspans[0] = None
 	# uses ids of labels in coarse chart
 	for Ih in kbest: kbestspans[Ih.label][Ih.vec] = 0.0
+	# now construct a list which references these coarse items:
 	for label in range(fine.nonterminals):
 		if splitprune and markorigin and fine.fanout[label] != 1:
-			whitelist[label] = tmp = []
-			for n in range(fine.fanout[label]):
-				assert fine.splitmapping[label][n] < len(kbestspans), (
-					fine.tolabel[label], n, fine.splitmapping[label][n],
-					len(kbestspans))
-				tmp.append(kbestspans[fine.splitmapping[label][n]])
-			#whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
-			#	for n in range(fine.fanout[label])]
+			if fine.splitmapping[label] is not NULL:
+				whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
+					for n in range(fine.fanout[label])]
 		else:
-			whitelist[label] = kbestspans[fine.mapping[label]]
+			if fine.mapping[label] != 0:
+				whitelist[label] = kbestspans[fine.mapping[label]]
 	return whitelist, len(kbest)
 
 cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):

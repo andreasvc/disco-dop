@@ -157,13 +157,13 @@ cdef class Grammar:
 						self.tolabel[self.unary[0][n].lhs]),
 			print
 	cpdef getmapping(Grammar self, striplabelre, neverblockre, Grammar coarse,
-			bint splitprune, bint markorigin):
+			bint splitprune, bint markorigin, bint debug=False):
 		""" Construct a mapping of fine non-terminal IDs to coarse non-terminal
 		IDS, by applying a regex to the labels, used for coarse-to-fine
 		parsing. A secondary regex is for items that should never be pruned.
 		The regexes should be compiled objects, i.e., re.compile(regex),
 		or None to leave labels unchanged.
-        - e.g., "|<" to ignore nodes introduced by binarization;
+        - use "|<" to ignore nodes introduced by binarization;
             useful if coarse and fine stages employ different kinds of
             markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
         - "_[0-9]+" to ignore nodes X_n where X is a label and n is a fanout.
@@ -207,6 +207,19 @@ cdef class Grammar:
 						self.mapping[n] = coarse.toid[strlabel]
 			else:
 				self.mapping[n] = 0
+		if debug:
+			for n in range(self.nonterminals):
+				if self.mapping[n]:
+					print "%s[%d] =>" % (self.tolabel[n], self.fanout[n]),
+					if self.fanout[n] == 1 or not (splitprune and markorigin):
+						print coarse.tolabel[self.mapping[n]],
+					elif self.fanout[n] > 1:
+						for m in range(self.fanout[n]):
+							print coarse.tolabel[self.splitmapping[n][m]],
+					print
+			print dict(striplabelre=striplabelre.pattern,
+					neverblockre=neverblockre.pattern,
+					splitprune=splitprune, markorigin=markorigin)
 	def write_lcfrs_grammar(self, rules, lexicon):
 		""" Writes the grammar into a simple text file format.
 		Fields are separated by tabs. Components of the yield function are

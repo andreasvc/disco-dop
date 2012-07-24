@@ -210,12 +210,12 @@ def main(
 				dopgrammar.getmapping(re.compile("@.+$"),
 					re.compile(r'^#[0-9]+|.+}<'), # + neverblockre?
 					plcfrsgrammar if plcfrs else pcfggrammar,
-					not plcfrs and splitprune, markorigin)
+					splitprune and not plcfrs, markorigin)
 		elif prune:
 			dopgrammar.getmapping(re.compile("@[-0-9]+$"),
 					re.compile(neverblockre) if neverblockre else None,
 					plcfrsgrammar if plcfrs else pcfggrammar,
-					not plcfrs and splitprune, markorigin)
+					splitprune and not plcfrs, markorigin)
 		logging.info("wrote grammar to %s/dop.{rules,lex%s}.gz" % (
 			resultdir, ".backtransform" if usedoubledop else ''))
 
@@ -259,6 +259,12 @@ def initworker(params):
 	global internalparams
 	internalparams = params
 
+
+class Result:
+	def __init__(self, candb, result, noparse, exact):
+		self.candb = candb; self.result = result
+		self.noparse = noparse; self.exact = exact
+
 def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		sample, both, arity_marks, arity_marks_before_bin, m, pcfggrammar,
 		plcfrsgrammar, dopgrammar, secondarymodel, test, testmaxwords,
@@ -300,7 +306,7 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 	print "going to parse %d sentences." % len(work)
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
-		sentid, msg, (p,pr,pp,pe), (s,sr,sp,se), (d,dr,dp,de) = data
+		sentid, msg, p, s, d = data
 		thesentid, tree, sent, block = work[sentid-1]
 		assert thesentid == sentid
 		logging.debug("%d/%d%s. [len=%d] %s\n%s" % (nsent, len(work),
@@ -313,20 +319,20 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		gsent.append(sent)
 		goldbrackets.update((sentid, a) for a in goldb.elements())
 		if splitpcfg:
-			pcandb.update((sentid, a) for a in p.elements())
-			presults.append(pr)
-			if pp: pnoparse += 1
-			if pe: exactp += 1
+			pcandb.update((sentid, a) for a in p.candb.elements())
+			presults.append(p.result)
+			if p.noparse: pnoparse += 1
+			if p.exact: exactp += 1
 		if plcfrs:
-			scandb.update((sentid, a) for a in s.elements())
-			sresults.append(sr)
-			if sp: snoparse += 1
-			if se: exacts += 1
+			scandb.update((sentid, a) for a in s.candb.elements())
+			sresults.append(s.result)
+			if s.noparse: snoparse += 1
+			if s.exact: exacts += 1
 		if dop:
-			dcandb.update((sentid, a) for a in d.elements())
-			dresults.append(dr)
-			if dp: dnoparse += 1
-			if de: exactd += 1
+			dcandb.update((sentid, a) for a in d.candb.elements())
+			dresults.append(d.result)
+			if d.noparse: dnoparse += 1
+			if d.exact: exactd += 1
 		msg = ''
 		if splitpcfg:
 			logging.debug("pcfg   cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s" % (
@@ -383,6 +389,218 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			exactd, pnoparse, snoparse, dnoparse,goldbrackets, pcandb, scandb,
 			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n,
 			bool(backtransform))
+
+def worker((nsent, tree, sent, block)):
+	""" parse a sentence using pcfg, plcfrs, dop """
+	d = internalparams
+	goldb = bracketings(tree)
+	pnoparse = snoparse = dnoparse = False
+	exactp = exacts = exactd = False
+	msg = ''
+	if d.splitpcfg:
+		msg += "PCFG:"
+		begin = time.clock()
+		if d.usecfgparse:
+			chart, start = cfgparse([w for w, t in sent],
+					d.pcfggrammar,
+					tags=[t for w, t in sent] if d.tags else [],
+					start=d.pcfggrammar.toid[d.top])
+		else:
+			chart, start, msg1 = parse([w for w, t in sent],
+					d.pcfggrammar,
+					tags=[t for w, t in sent] if d.tags else [],
+					start=d.pcfggrammar.toid[d.top],
+					exhaustive=True)
+			msg += msg1
+	else: chart = {}; start = False
+	if start:
+		resultstr, prob = viterbiderivation(chart, start,
+							d.pcfggrammar.tolabel)
+		presult = Tree(resultstr)
+		presult.un_chomsky_normal_form(childChar=":")
+		mergediscnodes(presult)
+		unbinarize(presult)
+		rem_marks(presult)
+		if d.unfolded: fold(presult)
+		msg += "\tp=%.4e " % exp(-prob)
+		pcandb = bracketings(presult)
+		prec = precision(goldb, pcandb)
+		rec = recall(goldb, pcandb)
+		f1 = f_measure(goldb, pcandb)
+		if presult == tree or f1 == 1.0:
+			assert presult != tree or f1 == 1.0
+			msg += "exact match"
+			exactp = True
+		else:
+			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
+							100 * prec, 100 * rec, 100 * f1)
+			if pcandb - goldb:
+				msg += "\tcand-gold=%s " % printbrackets(pcandb - goldb)
+			if goldb - pcandb:
+				msg += "gold-cand=%s" % printbrackets(goldb - pcandb)
+			if (pcandb - goldb) or (goldb - pcandb): msg += '\n'
+			msg += "\t%s" % presult.pprint(margin=1000)
+	else:
+		if d.splitpcfg: msg += "\tno parse"
+		presult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
+		presult = Tree.parse("(%s %s)" % (d.top, presult), parse_leaf=int)
+		pcandb = bracketings(presult)
+		prec = precision(goldb, pcandb)
+		rec = recall(goldb, pcandb)
+		f1 = f_measure(goldb, pcandb)
+		pnoparse = True
+	if d.splitpcfg:
+		pcfgtime = time.clock() - begin
+		msg += "\n\t%.2fs cpu time elapsed\n" % (pcfgtime)
+	msg1 = ''
+	if d.plcfrs and (not d.splitpcfg or start):
+		begin = time.clock()
+		whitelist = []
+		if d.splitpcfg and start:
+			whitelist, items = prunechart(chart, start, d.pcfggrammar,
+					d.plcfrsgrammar, d.splitk, d.splitprune, d.markorigin)
+			msg += "\tcoarse items before pruning: %d; after: %d\n" % (
+				len(chart), items)
+		chart, start, msg1 = parse(
+					[w for w, t in sent], d.plcfrsgrammar,
+					tags=[t for w, t in sent] if d.tags else [],
+					start=d.plcfrsgrammar.toid[d.top],
+					whitelist=whitelist,
+					splitprune=d.splitprune and d.splitpcfg,
+					markorigin=d.markorigin,
+					exhaustive=d.dop and d.prune,
+					estimates=(d.outside, d.testmaxwords)
+						if d.useestimates else None)
+	elif d.plcfrs: chart = {}; start = False
+	if d.plcfrs: msg += "PLCFRS: " + msg1
+	if d.plcfrs and start:
+		resultstr, prob = viterbiderivation(chart, start, d.plcfrsgrammar.tolabel)
+		sresult = Tree(resultstr)
+		unbinarize(sresult)
+		rem_marks(sresult)
+		if d.unfolded: fold(sresult)
+		msg += "\n\tp=%.4e " % exp(-prob)
+		scandb = bracketings(sresult)
+		prec = precision(goldb, scandb)
+		rec = recall(goldb, scandb)
+		f1 = f_measure(goldb, scandb)
+		if sresult == tree or f1 == 1.0:
+			assert sresult != tree or f1 == 1.0
+			msg += "exact match"
+			exacts = True
+		else:
+			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
+							100 * prec, 100 * rec, 100 * f1)
+			if scandb - goldb:
+				msg += "\tcand-gold=%s " % printbrackets(scandb - goldb)
+			if goldb - scandb:
+				msg += "gold-cand=%s" % printbrackets(goldb - scandb)
+			if (scandb - goldb) or (goldb - scandb): msg += '\n'
+			msg += "\t%s" % sresult.pprint(margin=1000)
+	else:
+		if d.plcfrs: msg += "no parse"
+		sresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
+		sresult = Tree.parse("(%s %s)" % (d.top, sresult), parse_leaf=int)
+		scandb = bracketings(sresult)
+		prec = precision(goldb, scandb)
+		rec = recall(goldb, scandb)
+		f1 = f_measure(goldb, scandb)
+		snoparse = True
+	if d.plcfrs:
+		msg += "\n\t%.2fs cpu time elapsed\n" % (time.clock() - begin)
+	if d.dop and (not (d.splitpcfg or d.plcfrs) or start):
+		begin = time.clock()
+		whitelist = []
+		if (d.splitpcfg or d.plcfrs) and d.prune and start:
+			whitelist, items = prunechart(chart, start,
+					d.plcfrsgrammar if d.plcfrs else d.pcfggrammar,
+					d.dopgrammar, d.k, d.splitprune and not d.plcfrs,
+					d.markorigin)
+			msg += "\tcoarse items before pruning: %d; after: %d\n" % (
+				len(chart), items)
+		chart, start, msg1 = parse(
+						[w for w, _ in sent], d.dopgrammar,
+						tags=[t for _, t in sent] if d.tags else None,
+						start=d.dopgrammar.toid[d.top],
+						exhaustive=True,
+						estimates=None,
+						whitelist=whitelist,
+						splitprune=d.splitprune and not d.plcfrs,
+						markorigin=d.markorigin)
+		if d.plcfrs and not start:
+			pprint_chart(chart,
+					[w.encode('unicode-escape') for w, _ in sent],
+					d.dopgrammar.tolabel)
+			raise ValueError("expected successful parse")
+	else: chart = {}; start = False; msg1 = ""
+	msg += "DOP:\t%s" % msg1
+	if d.dop and start:
+		begindisamb = time.clock()
+		if d.estimator == "shortest":
+			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
+					sample=d.sample, both=d.both, shortest=True,
+					secondarymodel=d.secondarymodel)
+		elif d.estimator == "sl-dop":
+			mpp, msg1 = sldop(chart, start, sent, d.tags, d.dopgrammar,
+						d.secondarymodel, d.m, d.sldop_n, d.sample, d.both)
+			mpp = dict(mpp)
+		elif d.estimator == "sl-dop-simple":
+			# old method, estimate shortest derivation directly from number
+			# of addressed nodes
+			mpp, msg1 = sldop_simple(chart, start, d.dopgrammar, d.m, d.sldop_n)
+			mpp = dict(mpp)
+		elif d.backtransform is not None:
+			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
+				sample=d.sample, both=d.both, backtransform=d.backtransform)
+		else: #dop1, ewe
+			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
+								n=d.m, sample=d.sample, both=d.both)
+		msg += "\n\tdisambiguation: %s, %gs\n" % (msg1, time.clock() - begindisamb)
+		dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
+		dresult = Tree(dresult)
+		if isinstance(prob, tuple):
+			msg += " subtrees = %d, p=%.4e " % (abs(prob[0]), prob[1])
+		else: msg += "        p=%.4e " % prob
+		unbinarize(dresult)
+		rem_marks(dresult)
+		if d.unfolded: fold(dresult)
+		dcandb = bracketings(dresult)
+		try: prec = precision(goldb, dcandb)
+		except ZeroDivisionError:
+			prec = 0.0
+			logging.warning("empty candidate brackets?\n%s" % dresult.pprint())
+		rec = recall(goldb, dcandb)
+		f1 = f_measure(goldb, dcandb)
+		if dresult == tree or f1 == 1.0:
+			msg += "exact match"
+			exactd = True
+		else:
+			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
+							100 * prec, 100 * rec, 100 * f1)
+			if dcandb - goldb:
+				msg += "\tcand-gold=%s " % printbrackets(dcandb - goldb)
+			if goldb - dcandb:
+				msg += "gold-cand=%s " % printbrackets(goldb - dcandb)
+			if (dcandb - goldb) or (goldb - dcandb): msg += '\n'
+			msg += "        %s" % dresult.pprint(margin=1000)
+	else:
+		if d.dop: msg += "no parse"
+		dresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
+		dresult = Tree.parse("(%s %s)" % (d.top, dresult), parse_leaf=int)
+		dcandb = bracketings(dresult)
+		prec = precision(goldb, dcandb)
+		rec = recall(goldb, dcandb)
+		f1 = f_measure(goldb, dcandb)
+		dnoparse = True
+	if d.dop:
+		doptime = time.clock() - begin
+		msg += "\n\t%.2fs cpu time elapsed\n" % (doptime)
+	else: doptime = 0
+	msg += "GOLD:   %s" % tree.pprint(margin=1000)
+	return (nsent, msg,
+			Result(pcandb, presult, pnoparse, exactp),
+			Result(scandb, sresult, snoparse, exacts),
+			Result(dcandb, dresult, dnoparse, exactd))
 
 def doeval(splitpcfg, plcfrs, dop, nsent, testmaxwords, exactp, exacts, exactd,
 		pnoparse, snoparse, dnoparse, goldbrackets, pcandb, scandb, dcandb,
@@ -586,222 +804,6 @@ def parsetepacoc(dop=True, plcfrs=True, estimator='ewe', unfolded=False,
 	doeval(True, True, {}, {}, {}, {}, cnt, testmaxwords, exactd, exacts, snoparse,
 			dnoparse, goldbrackets, scandb, dcandb, False, arity_marks,
 			bintype, estimator, sldop_n)
-
-def worker((nsent, tree, sent, block)):
-	""" parse a sentence using pcfg, plcfrs, dop """
-	d = internalparams
-	goldb = bracketings(tree)
-	pnoparse = snoparse = dnoparse = False
-	exactp = exacts = exactd = False
-	msg = ''
-	if d.splitpcfg:
-		msg += "PCFG:"
-		begin = time.clock()
-		if d.usecfgparse:
-			chart, start = cfgparse([w for w, t in sent],
-					d.pcfggrammar,
-					tags=[t for w, t in sent] if d.tags else [],
-					start=d.pcfggrammar.toid[d.top])
-		else:
-			chart, start, msg1 = parse([w for w, t in sent],
-					d.pcfggrammar,
-					tags=[t for w, t in sent] if d.tags else [],
-					start=d.pcfggrammar.toid[d.top],
-					exhaustive=True)
-			msg += msg1
-	else: chart = {}; start = False
-	if start:
-		resultstr, prob = viterbiderivation(chart, start,
-							d.pcfggrammar.tolabel)
-		result = Tree(resultstr)
-		result.un_chomsky_normal_form(childChar=":")
-		mergediscnodes(result)
-		unbinarize(result)
-		rem_marks(result)
-		if d.unfolded: fold(result)
-		msg += "\tp=%.4e " % exp(-prob)
-		candb = bracketings(result)
-		prec = precision(goldb, candb)
-		rec = recall(goldb, candb)
-		f1 = f_measure(goldb, candb)
-		if result == tree or f1 == 1.0:
-			assert result != tree or f1 == 1.0
-			msg += "exact match"
-			exactp = True
-		else:
-			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-							100 * prec, 100 * rec, 100 * f1)
-			if candb - goldb:
-				msg += "\tcand-gold=%s " % printbrackets(candb - goldb)
-			if goldb - candb:
-				msg += "gold-cand=%s" % printbrackets(goldb - candb)
-			if (candb - goldb) or (goldb - candb): msg += '\n'
-			msg += "\t%s" % result.pprint(margin=1000)
-	else:
-		if d.splitpcfg: msg += "\tno parse"
-		result = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
-		result = Tree.parse("(%s %s)" % (d.top, result), parse_leaf=int)
-		candb = bracketings(result)
-		prec = precision(goldb, candb)
-		rec = recall(goldb, candb)
-		f1 = f_measure(goldb, candb)
-		pnoparse = True
-	presult = result
-	pcandb = candb
-	if d.splitpcfg:
-		pcfgtime = time.clock() - begin
-		msg += "\n\t%.2fs cpu time elapsed\n" % (pcfgtime)
-	msg1 = ''
-	if d.plcfrs and (not d.splitpcfg or start):
-		begin = time.clock()
-		whitelist = []
-		if d.splitpcfg and start:
-			whitelist, items = prunechart(chart, start, d.pcfggrammar,
-					d.plcfrsgrammar, d.splitk, d.splitprune, d.markorigin)
-			msg += "\tcoarse items before pruning: %d; after: %d\n" % (
-				len(chart), items)
-		chart, start, msg1 = parse(
-					[w for w, t in sent], d.plcfrsgrammar,
-					tags=[t for w, t in sent] if d.tags else [],
-					start=d.plcfrsgrammar.toid[d.top],
-					whitelist=whitelist,
-					splitprune=d.splitprune and d.splitpcfg,
-					markorigin=d.markorigin,
-					exhaustive=d.dop and d.prune,
-					estimates=(d.outside, d.testmaxwords)
-						if d.useestimates else None)
-	elif d.plcfrs: chart = {}; start = False
-	msg += "PLCFRS: " + msg1
-	if d.plcfrs and start:
-		resultstr, prob = viterbiderivation(chart, start, d.plcfrsgrammar.tolabel)
-		result = Tree(resultstr)
-		unbinarize(result)
-		rem_marks(result)
-		if d.unfolded: fold(result)
-		msg += "\n\tp=%.4e " % exp(-prob)
-		candb = bracketings(result)
-		prec = precision(goldb, candb)
-		rec = recall(goldb, candb)
-		f1 = f_measure(goldb, candb)
-		if result == tree or f1 == 1.0:
-			assert result != tree or f1 == 1.0
-			msg += "exact match"
-			exacts = True
-		else:
-			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-							100 * prec, 100 * rec, 100 * f1)
-			if candb - goldb:
-				msg += "\tcand-gold=%s " % printbrackets(candb - goldb)
-			if goldb - candb:
-				msg += "gold-cand=%s" % printbrackets(goldb - candb)
-			if (candb - goldb) or (goldb - candb): msg += '\n'
-			msg += "\t%s" % result.pprint(margin=1000)
-	else:
-		if d.plcfrs: msg += "no parse"
-		result = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
-		result = Tree.parse("(%s %s)" % (d.top, result), parse_leaf=int)
-		candb = bracketings(result)
-		prec = precision(goldb, candb)
-		rec = recall(goldb, candb)
-		f1 = f_measure(goldb, candb)
-		snoparse = True
-	sresult = result
-	scandb = candb
-	if d.plcfrs:
-		msg += "\n\t%.2fs cpu time elapsed\n" % (time.clock() - begin)
-	if d.dop and (not (d.splitpcfg or d.plcfrs) or start):
-		begin = time.clock()
-		whitelist = []
-		if (d.splitpcfg or d.plcfrs) and d.prune and start:
-			whitelist, items = prunechart(chart, start,
-					d.plcfrsgrammar if d.plcfrs else d.pcfggrammar,
-					d.dopgrammar, d.k, d.splitprune and not d.plcfrs,
-					d.markorigin)
-			msg += "\tcoarse items before pruning: %d; after: %d\n" % (
-				len(chart), items)
-		chart, start, msg1 = parse(
-						[w for w, _ in sent], d.dopgrammar,
-						tags=[t for _, t in sent] if d.tags else None,
-						start=d.dopgrammar.toid[d.top],
-						exhaustive=True,
-						estimates=None,
-						whitelist=whitelist,
-						splitprune=d.splitprune and not d.plcfrs,
-						markorigin=d.markorigin)
-		if d.plcfrs and not start:
-			pprint_chart(chart,
-					[w.encode('unicode-escape') for w, _ in sent],
-					d.dopgrammar.tolabel)
-			raise ValueError("expected successful parse")
-	else: chart = {}; start = False; msg1 = ""
-	msg += "DOP:\t%s" % msg1
-	if d.dop and start:
-		begindisamb = time.clock()
-		if d.estimator == "shortest":
-			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
-					sample=d.sample, both=d.both, shortest=True,
-					secondarymodel=d.secondarymodel)
-		elif d.estimator == "sl-dop":
-			mpp, msg1 = sldop(chart, start, sent, d.tags, d.dopgrammar,
-						d.secondarymodel, d.m, d.sldop_n, d.sample, d.both)
-			mpp = dict(mpp)
-		elif d.estimator == "sl-dop-simple":
-			# old method, estimate shortest derivation directly from number
-			# of addressed nodes
-			mpp, msg1 = sldop_simple(chart, start, d.dopgrammar, d.m, d.sldop_n)
-			mpp = dict(mpp)
-		elif d.backtransform is not None:
-			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel, n=d.m,
-				sample=d.sample, both=d.both, backtransform=d.backtransform)
-		else: #dop1, ewe
-			mpp, msg1 = marginalize(chart, start, d.dopgrammar.tolabel,
-								n=d.m, sample=d.sample, both=d.both)
-		msg += "\n\tdisambiguation: %s, %gs\n" % (msg1, time.clock() - begindisamb)
-		dresult, prob = max(mpp.iteritems(), key=itemgetter(1))
-		dresult = Tree(dresult)
-		if isinstance(prob, tuple):
-			msg += " subtrees = %d, p=%.4e " % (abs(prob[0]), prob[1])
-		else: msg += "        p=%.4e " % prob
-		unbinarize(dresult)
-		rem_marks(dresult)
-		if d.unfolded: fold(dresult)
-		candb = bracketings(dresult)
-		try: prec = precision(goldb, candb)
-		except ZeroDivisionError:
-			prec = 0.0
-			logging.warning("empty candidate brackets?\n%s" % dresult.pprint())
-		rec = recall(goldb, candb)
-		f1 = f_measure(goldb, candb)
-		if dresult == tree or f1 == 1.0:
-			msg += "exact match"
-			exactd = True
-		else:
-			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-							100 * prec, 100 * rec, 100 * f1)
-			if candb - goldb:
-				msg += "\tcand-gold=%s " % printbrackets(candb - goldb)
-			if goldb - candb:
-				msg += "gold-cand=%s " % printbrackets(goldb - candb)
-			if (candb - goldb) or (goldb - candb): msg += '\n'
-			msg += "        %s" % dresult.pprint(margin=1000)
-	else:
-		if d.dop: msg += "no parse"
-		dresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
-		dresult = Tree.parse("(%s %s)" % (d.top, dresult), parse_leaf=int)
-		candb = bracketings(dresult)
-		prec = precision(goldb, candb)
-		rec = recall(goldb, candb)
-		f1 = f_measure(goldb, candb)
-		dnoparse = True
-	dcandb = candb
-	doptime = 0
-	if d.dop:
-		doptime = time.clock() - begin
-		msg += "\n\t%.2fs cpu time elapsed\n" % (doptime)
-	msg += "GOLD:   %s" % tree.pprint(margin=1000)
-	return (nsent, msg, (pcandb, presult, pnoparse, exactp),
-			(scandb, sresult, snoparse, exacts),
-			(dcandb, dresult, dnoparse, exactd))
 
 def cycledetection(trees, sents):
 	seen = set()
