@@ -49,10 +49,10 @@ cdef class ChartItem:
 	cdef public ULLong vec
 	cdef public UInt label
 
+# start scratch
 cdef class FatChartItem:
 	cdef ULLong vec[7]
 	cdef public UInt label
-
 
 cdef union VecType:
 	ULLong vec
@@ -61,6 +61,12 @@ cdef union VecType:
 cdef class NewChartItem:
 	cdef VecType vec
 	cdef public UInt label
+
+cdef class DiscNode:
+	cdef int label
+	cdef CBitset leaves
+	cdef tuple children
+# end scratch
 
 @cython.final
 cdef class Edge:

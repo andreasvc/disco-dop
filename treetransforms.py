@@ -415,17 +415,22 @@ def addbitsets(tree):
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
 
+globid = count()
 def defaultrightbin(node, sep="|", h=999, fanout=False):
 	""" Binarize one constituent with a right factored binarization.
 	Children remain unmodified. Bottom-up version. Nodes must contain
-	bitsets (use addbitsets()). """
+	bitsets (use addbitsets()).
+	By default construct artificial labels using labels of child nodes.
+	When h equals -1, use an arbitrary, unique identifier instead. """
 	if len(node) < 3: return node
 	label = node.node
 	childlabels = [child.node for child in node]
 	prev = node[-1]
 	for i in range(len(node) - 2, 0, -1):
 		newbitset = node[i].bitset | prev.bitset
-		newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[i:i+h]))
+		if h == -1:
+			newlabel = "%s%s<%d>" % (label, sep, globid.next())
+		else: newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[i:i+h]))
 		if fanout:
 			nodefanout = bitfanout(newbitset)
 			if nodefanout > 1: newlabel += "_" + str(nodefanout)

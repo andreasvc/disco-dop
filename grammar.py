@@ -214,7 +214,7 @@ def doubledop(trees, sents, numproc=1, stroutput=True, debug=False, freqs=False)
 					prod1 = ImmutableTree(newlabel[1:], prod[:])
 					newprod = ImmutableTree(prod.node, [prod1])
 				newprod = ImmutableTree(label,
-					[defaultrightbin(addbitsets(newprod)[0], "}", fanout=True)])
+					[defaultrightbin(addbitsets(newprod)[0], "}", h=-1, fanout=True)])
 				newprods[newprod] = backtransform[prod][1]
 				backtransform[prod1] = backtransform[prod]
 				backtransform[prod] = None # disable this production
@@ -228,7 +228,7 @@ def doubledop(trees, sents, numproc=1, stroutput=True, debug=False, freqs=False)
 				prod1 = ImmutableTree(newlabel[1:], prod[:])
 				newprod = ImmutableTree(prod.node, [prod1])
 			newprod = ImmutableTree(label,
-				[defaultrightbin(addbitsets(newprod)[0], "}", fanout=True)])
+				[defaultrightbin(addbitsets(newprod)[0], "}", h=-1, fanout=True)])
 			newprods[newprod] = terminals
 			backtransform[prod1] = frag, terminals
 		else:
@@ -261,7 +261,7 @@ def doubledop(trees, sents, numproc=1, stroutput=True, debug=False, freqs=False)
 		for a, ((_, fsent), b) in zip(productions, fragments.iteritems())
 		if backtransform.get(a) is not None
 		for rule in zip(lcfrs_productions(defaultrightbin(
-			addbitsets(a), "}", fanout=True), fsent), chain((b,), repeat(1))))
+			addbitsets(a), "}", h=-1, fanout=True), fsent), chain((b,), repeat(1))))
 	# ambiguous fragments (fragments that map to the same flattened production)
 	grammar.update(rule for a, b in newprods.iteritems()
 		for rule in zip(lcfrs_productions(a, b),
@@ -363,14 +363,25 @@ def flattenstr((tree, sent)): #(tree, sent)):
 	>>> print flattenstr(("(NN 0)", ["foo"]))
 	(NN 0)
 	>>> flattenstr((r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> (TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> (VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7)) (VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))", (u'Das', u'Garten-', u'und', u'Friedhofsamt', u'hatte', u'k\xfcrzlich', u'dem', u'Ortsbeirat', None, None, None)))
-	'(S (ART@Das 0) (TRUNC@Garten- 1) (KON@und 2) (NN@Friedhofsamt 3) (VAFIN@hatte 4) (ADV@k\\xfcrzlich 5) (ART@dem 6) (NN@Ortsbeirat 7) (NP_2 8 10) (VVPP 9))'
+	'(S (ART@Das 0) (TRUNC@Garten- 1) (KON@und 2) (NN@Friedhofsamt 3) (VAFIN@hatte 4) (ADV@k\\\\xfcrzlich 5) (ART@dem 6) (NN@Ortsbeirat 7) (NP_2 8 10) (VVPP 9))'
+	>>> flattenstr(("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 (ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))", (None, None, None, None, None)))
+	'(S|<VP>_2 (NP 0) (VAFIN 1) (ADV 2) (VVPP 4))'
+	>>> from treetransforms import defaultrightbin, addbitsets
+	>>> lcfrs_productions(defaultrightbin(addbitsets('(S|<VP>_2 (NP 0) (VAFIN 1) (ADV 2) (VVPP 4))'), "}", fanout=True), (None, None, None, None, None))
+	[(('S|<VP>_2', 'NP', 'S|<VP>_2}<VAFIN-ADV-VVPP>_2'), ((0, 1), (1,))),
+	(('S|<VP>_2}<VAFIN-ADV-VVPP>_2', 'VAFIN', 'S|<VP>_2}<ADV-VVPP>_2'), ((0, 1), (1,))),
+	(('S|<VP>_2}<ADV-VVPP>_2', 'ADV', 'VVPP'), ((0,), (1,)))]
+	>>> lcfrs_productions(defaultrightbin(addbitsets('(S|<VP>_2 (ADV 0) (VAFIN 1) (ADV 3) (VVPP 4))'), "}", fanout=True), (None, None, None, None, None))
+	[(('S|<VP>_2', 'ADV', 'S|<VP>_2}<VAFIN-ADV-VVPP>_2'), ((0, 1), (1,))),
+	(('S|<VP>_2}<VAFIN-ADV-VVPP>_2', 'VAFIN', 'S|<VP>_2}<ADV-VVPP>'), ((0,), (1,))),
+	(('S|<VP>_2}<ADV-VVPP>', 'ADV', 'VVPP'), ((0, 1),))]
 	"""
 	assert isinstance(tree, basestring), (tree, sent)
 	def repl(x):
 		n = x.group(3) # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
-			return x.group(0)	# (tag index)
+			return x.group(0)	# (tag indices)
 		# (tag@word idx)
 		return "(%s@%s%s)" % (x.group(2), quotelabel(sent[nn]), n)
 	if tree.count(" ") == 1: return tree
