@@ -1,10 +1,24 @@
 """ generate random sentences with an LCFRS. """
-import codecs
+import codecs, sys
 from collections import namedtuple
-from array import array
 from math import exp, log
+from array import array
 from random import random
-from containers import Rule, LexicalRule
+
+class Rule:
+	def __init__(self, lhs, rhs1, rhs2, args, lengths, prob):
+		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
+		self.args = args; self.lengths = lengths; self.prob = prob
+	def __repr__(self):
+		return 'Rule%s' % repr((self.lhs, self.rhs1, self.rhs2, self.prob))
+
+class LexicalRule:
+	def __init__(self, lhs, rhs1, rhs2, word, prob):
+		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
+		self.word = word; self.prob = prob
+	def __repr__(self):
+		return 'LexicalRule%s' % repr(
+			(self.lhs, self.rhs1, self.rhs2, self.word, self.prob))
 
 def gen(grammar, start=None, verbose=False):
 	""" generate a random sentence """
@@ -65,7 +79,7 @@ def splitgrammar(grammar, lexicon):
 	lexicalbylhs = {}
 	# remove sign from log probabilities because the heap we use is a min-heap
 	for (tag, word), w in lexicon:
-		t = LexicalRule(toid[tag[0]], toid[tag[1]], 0, word, abs(w))
+		t = LexicalRule(toid[tag[0]], 0, 0, word, abs(w))
 		assert arity[t.lhs] in (0, 1)
 		arity[t.lhs] = 1
 		lexical.setdefault(word, []).append(t)
@@ -117,8 +131,8 @@ def read_lcfrs_grammar(rules, lexicon, encoding='utf-8'):
 	lexicon = (a[:-1].split('\t') for a in codecs.open(lexicon,
 		encoding=encoding))
 	rules = [((tuple(a[:-2]), tuple(tuple(map(int, b))
-			for b in a[-2].split(","))), float(a[-1])) for a in rules]
-	lexicon = [((tuple(a[:-2]), (a[-2])), float(a[-1])) for a in lexicon]
+			for b in a[-2].split(","))), float.fromhex(a[-1])) for a in rules]
+	lexicon = [((tuple(a[:-2]), (a[-2])), float.fromhex(a[-1])) for a in lexicon]
 	return rules, lexicon
 
 def test():
@@ -137,13 +151,12 @@ def test():
 	print " ".join(sent.pop())
 
 def main():
-	rules, lexicon = read_lcfrs_grammar("grammar.rules", "grammar.lex")
+	rules, lexicon = read_lcfrs_grammar(sys.argv[1], sys.argv[2])
 	grammar = splitgrammar(rules, lexicon)
 	for a in range(20):
 		p, sent = gen(grammar)
 		print "[%g] %s" % (exp(-p), " ".join(sent.pop()))
 
 if __name__ == '__main__':
-	import sys
 	if "--test" in sys.argv: test()
 	else: main()

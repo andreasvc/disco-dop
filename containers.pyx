@@ -92,15 +92,10 @@ cdef class Grammar:
 				# to store the word
 				self.lexical.setdefault(yf[0], []).append(lr)
 				self.lexicalbylhs.setdefault(lr.lhs, []).append(lr)
-		copyrules(grammar, self.unary, 1,
-			lambda rule: len(rule) == 2 and rule[1] != 'Epsilon',
-			self.toid, self.nonterminals)
-		copyrules(grammar, self.lbinary, 1,
-			lambda rule: len(rule) == 3, self.toid, self.nonterminals)
-		copyrules(grammar, self.rbinary, 2,
-			lambda rule: len(rule) == 3, self.toid, self.nonterminals)
-		copyrules(grammar, self.bylhs, 0,
-			lambda rule: rule[1] != 'Epsilon', self.toid, self.nonterminals)
+		copyrules(grammar, self.unary,   1, 2, self.toid, self.nonterminals)
+		copyrules(grammar, self.lbinary, 1, 3, self.toid, self.nonterminals)
+		copyrules(grammar, self.rbinary, 2, 3, self.toid, self.nonterminals)
+		copyrules(grammar, self.bylhs,   0, 0, self.toid, self.nonterminals)
 	def testgrammar(self, log, epsilon=0.01):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
@@ -127,10 +122,10 @@ cdef class Grammar:
 	def getunaryclosure(self):
 		""" FIXME: closure should be related to probabilities as well.
 		Also, there appears to be an infinite loop here. """
-		cdef size_t i = 0
-		closure = [set() for _ in range(self.nonterminals)]
-		candidates = [set() for _ in range(self.nonterminals)]
-		self.unaryclosure = [[] for _ in range(self.nonterminals)]
+		cdef size_t i = 0, n
+		closure = [set() for n in range(self.nonterminals)]
+		candidates = [set() for n in range(self.nonterminals)]
+		self.unaryclosure = [[] for n in range(self.nonterminals)]
 		while self.unary[0][i].lhs != self.nonterminals:
 			candidates[self.unary[0][i].rhs1].add(i)
 			i += 1
@@ -195,14 +190,8 @@ cdef class Grammar:
 								self.splitmapping[0][components])
 						components += self.fanout[n]
 						for m in range(self.fanout[n]):
-							try:
-								self.splitmapping[n][m] = coarse.toid[strlabel
-									+ str(m)]
-							except KeyError:
-								for a in self.toid: print a
-								print '\ncoarse'
-								for a in coarse.toid: print a
-								raise
+							self.splitmapping[n][m] = coarse.toid[
+								strlabel + str(m)]
 					else:
 						self.mapping[n] = coarse.toid[strlabel]
 			else:
@@ -324,22 +313,24 @@ def myitemget(idx, x):
 	if idx < len(x[0][0]): return x[0][0][idx]
 	return 0
 
-cdef copyrules(grammar, Rule **dest, idx, cond, toid, nonterminals):
+cdef copyrules(grammar, Rule **dest, idx, filterlen, toid, nonterminals):
 	""" Auxiliary function to create Grammar objects. Copies certain grammar
 	rules from the list in `grammar` to an array of structs. Grammar rules are
-	placed in a contiguous array, sorted order by lhs, rhs1 or rhs2
-	A separate array has a pointer for each non-terminal into this array;
-	e.g.: dest[NP][0] == the first rule with an NP in the idx position.
-	"""
+	placed in a contiguous array, sorted order by lhs, rhs1 or rhs2 depending
+	on the value of `idx'. A separate array has a pointer for each non-terminal
+	into this array; e.g.: dest[NP][0] == the first rule with an NP in the idx
+	position. """
 	cdef UInt prev = 0
 	cdef size_t n = 0	# rule number
 	cdef size_t m		# bit index in yield function
 	cdef Rule *cur
-	sortedgrammar = sorted(grammar, key=partial(myitemget, idx))
-	filteredgrammar = [rule for rule in sortedgrammar if cond(rule[0][0])]
+	filteredgrammar = [rule for rule in grammar
+			if rule[0][0][1] != 'Epsilon'
+			and (not filterlen or len(rule[0][0]) == filterlen)]
+	sortedgrammar = sorted(filteredgrammar, key=partial(myitemget, idx))
 	#need to set dest even when there are no rules for that idx
 	for m in range(nonterminals): dest[m] = dest[0]
-	for (rule, yf), w in filteredgrammar:
+	for (rule, yf), w in sortedgrammar:
 		cur = &(dest[0][n])
 		cur.lhs  = toid[rule[0]]
 		cur.rhs1 = toid[rule[1]]

@@ -11,7 +11,7 @@ sample2.export:
 	wget http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
 
 debug:
-	python-dbg setup.py build_ext --inplace --debug #--pyrex-gdb
+	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb
 
 testdebug: debug valgrind-python.supp
 	valgrind --tool=memcheck --leak-check=full --num-callers=30 --suppressions=valgrind-python.supp python-dbg testall.py

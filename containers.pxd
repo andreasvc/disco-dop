@@ -45,6 +45,14 @@ cdef struct Rule:
 	#UChar fanout # 1 byte
 
 @cython.final
+cdef class LexicalRule:
+	cdef public UInt lhs
+	cdef public UInt rhs1
+	cdef public UInt rhs2
+	cdef public unicode word
+	cdef public double prob
+
+@cython.final
 cdef class ChartItem:
 	cdef public ULLong vec
 	cdef public UInt label
@@ -75,14 +83,6 @@ cdef class Edge:
 	cdef public double prob
 	cdef public ChartItem left
 	cdef public ChartItem right
-
-@cython.final
-cdef class LexicalRule:
-	cdef public UInt lhs
-	cdef public UInt rhs1
-	cdef public UInt rhs2
-	cdef public unicode word
-	cdef public double prob
 
 @cython.final
 cdef class RankedEdge:

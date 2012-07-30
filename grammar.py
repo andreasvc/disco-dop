@@ -798,6 +798,7 @@ def do(sent, grammar):
 	print
 
 def test():
+	import sys, codecs, logging
 	from treetransforms import unbinarize, binarize, optimalbinarize
 	from treebank import NegraCorpusReader, BracketCorpusReader
 	from parser import parse, pprint_chart
@@ -805,7 +806,7 @@ def test():
 	from disambiguation import marginalize, recoverfragments, \
 			recoverfragments_str, recoverfragments_strstr
 	from kbest import lazykbest
-	import sys, codecs, logging
+	from estimates import getpcfgestimates
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
@@ -822,8 +823,8 @@ def test():
 		addfanoutmarkers(a)
 
 	print 'plcfrs'
-	lcfrs = induce_plcfrs(trees, sents)
-	print Grammar(lcfrs)
+	lcfrs = Grammar(induce_plcfrs(trees, sents))
+	print lcfrs
 
 	print 'dop reduction'
 	grammar = Grammar(dop_lcfrs_rules(trees[:2], sents[:2]))

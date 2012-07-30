@@ -20,59 +20,61 @@ cdef extern from "math.h":
 	bint isfinite(double x)
 cdef ChartItem NONE = new_ChartItem(0, 0)
 np.import_array()
+DEF SX = 1
+DEF SXlrgaps = 2
 
 def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
-			estimates=None, list whitelist=None, bint splitprune=False,
-			bint markorigin=False, int beamwidth=0):
+		list whitelist=None, bint splitprune=False, bint markorigin=False,
+		estimates=None, int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse.
 	Other parameters:
-		- start: integer corresponding to the start tag in the grammar,
-			e.g., grammar.toid['ROOT']
-		- exhaustive: don't stop at viterbi parser, return a full chart
-		- estimates: use context-summary estimates (heuristics, figures-of-merit)
-			to order agenda. If estimates are not consistent, it is no longer
-			guaranteed that the optimal parse will be found. experimental.
-		- whitelist: a whitelist of allowed ChartItems. Anything else is not
-			added to the agenda.
-		- splitprune: coarse stage used a split-PCFG where discontinuous node
-			appear as multiple CFG nodes. Every discontinuous node will result
-			in multiple lookups into whitelist to see whether it should be
-			allowed on the agenda.
+        - start: integer corresponding to the start symbol that analyses should
+            have, e.g., grammar.toid['ROOT']
+        - exhaustive: don't stop at viterbi parser, return a full chart
+        - whitelist: a whitelist of allowed ChartItems. Anything else is not
+            added to the agenda.
+        - splitprune: coarse stage used a split-PCFG where discontinuous node
+            appear as multiple CFG nodes. Every discontinuous node will result
+            in multiple lookups into whitelist to see whether it should be
+            allowed on the agenda.
         - markorigin: in combination with splitprune, coarse labels include an
             integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
             map to the discontinuous node NP_2
-		- beamwidth: specify the maximum number of items that will be explored
-			for each particular span, on a first-come-first-served basis.
-			setting to 0 disables this feature. experimental.
+        - estimates: use context-summary estimates (heuristics, figures of
+			merit) to order agenda. should be a tuple with the kind of
+			estimates ('SX' or 'SXlrgaps'), and the estimates themselves in a
+			4-dimensional numpy matrix. If estimates are not consistent, it is
+			no longer guaranteed that the optimal parse will be found.
+			experimental.
+        - beamwidth: specify the maximum number of items that will be explored
+            for each particular span, on a first-come-first-served basis.
+            setting to 0 disables this feature. experimental.
 	"""
 	cdef str label = ''
 	cdef dict beam = <dict>defaultdict(int)			#histogram of spans
 	cdef dict chart = {}							#the full chart
 	cdef list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
-	cdef list itempool								#to recycle chart items
 	cdef EdgeAgenda agenda = EdgeAgenda()			#the agenda
 	cdef size_t i
 	cdef Rule rule
 	cdef LexicalRule terminal
 	cdef Entry entry
 	cdef Edge edge
-	cdef ChartItem item, sibling
+	cdef ChartItem item, sibling, newitem = new_ChartItem(0, 0)
 	cdef ChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 	cdef np.ndarray[np.double_t, ndim=4] outside
 	cdef double x = 0.0, y = 0.0, score, inside
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
-	cdef signed int lensent = len(sent), maxlen = 0
+	cdef signed int lensent = len(sent), estimatetype = 0
 	cdef UInt blocked = 0, Epsilon = grammar.toid["Epsilon"]
 	cdef ULong maxA = 0
 	cdef ULLong vec = 0
 
 	assert len(sent) < (sizeof(vec) * 8)
 	if estimates is not None:
-		outside, maxlen = estimates
-		#assert len(grammar.bylhs) == len(outside)
-		assert lensent <= maxlen
-	itempool = [new_ChartItem(0, 0) for _ in range(1000)]
+		estimatetypestr, outside = estimates
+		estimatetype = {"SX":SX, "SXlrgaps":SXlrgaps}[estimatetypestr]
 
 	# scan
 	for i, w in enumerate(sent):
@@ -86,21 +88,31 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 			if (not tags or grammar.tolabel[terminal.lhs] == tags[i]
 				or grammar.tolabel[terminal.lhs].startswith(tags[i] + "@")):
 				score = terminal.prob
-				if estimates is not None:
+				if estimatetype == SX:
+					score += outside[terminal.lhs, left, right, 0]
+					if score > 300.0: continue
+				elif estimatetype == SXlrgaps:
 					score += outside[terminal.lhs, length, left+right, gaps]
-				process_edge(terminal.lhs, 1ULL << i, score, terminal.prob,
+					if score > 300.0: continue
+				tmp = process_edge(terminal.lhs, 1ULL << i, score, terminal.prob,
 					terminal.prob, item, NONE, agenda, chart, viterbi,
-					itempool, grammar, exhaustive, whitelist, False,
+					newitem, grammar, exhaustive, whitelist, False,
 					markorigin, &blocked)
-				recognized = True
+				#check whether item has not been blocked
+				recognized |= newitem is not tmp
+				newitem = tmp
 		if not recognized and tags and tags[i] in grammar.toid:
 			lhs = grammar.toid[tags[i]]
 			score = 0.0
-			if estimates is not None:
+			if estimatetype == SX:
+				score += outside[lhs, left, right, 0]
+				if score > 300.0: continue
+			elif estimatetype == SXlrgaps:
 				score += outside[lhs, length, left+right, gaps]
-			newitem = new_ChartItem(lhs, 1ULL << i)
-			agenda[newitem] = new_Edge(score, 0.0, 0.0, item, NONE)
-			chart[newitem] = []
+				if score > 300.0: continue
+			tagitem = new_ChartItem(lhs, 1ULL << i)
+			agenda[tagitem] = new_Edge(score, 0.0, 0.0, item, NONE)
+			chart[tagitem] = []
 			recognized = True
 		elif not recognized:
 			return chart, NONE, "not covered: '%s'. " % (tags[i] if tags else w)
@@ -127,10 +139,14 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					rule = grammar.unary[item.label][i]
 					if rule.rhs1 != item.label: break
 					score = inside = x + rule.prob
-					if estimates is not None:
+					if estimatetype == SX:
+						score += outside[rule.lhs, left, right, 0]
+						if score > 300.0: continue
+					elif estimatetype == SXlrgaps:
 						score += outside[rule.lhs, length, left+right, gaps]
-					process_edge(rule.lhs, item.vec, score, inside, rule.prob,
-						item, NONE, agenda, chart, viterbi, itempool, grammar,
+						if score > 300.0: continue
+					newitem = process_edge(rule.lhs, item.vec, score, inside, rule.prob,
+						item, NONE, agenda, chart, viterbi, newitem, grammar,
 						exhaustive, whitelist,
 						splitprune and grammar.fanout[rule.lhs] != 1,
 						markorigin, &blocked)
@@ -147,14 +163,20 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 						vec = item.vec ^ sibling.vec
 						y = (<Edge>e).inside
 						score = inside = x + y + rule.prob
-						if estimates is not None:
+						if estimatetype == SX:
+							length = bitcount(vec); left = nextset(vec, 0)
+							right = lensent - length - left
+							score += outside[rule.lhs, left, right, 0]
+							if score > 300.0: continue
+						elif estimatetype == SXlrgaps:
 							length = bitcount(vec); left = nextset(vec, 0)
 							gaps = bitlength(vec) - length - left
 							right = lensent - length - left - gaps
-							score += outside[rule.lhs,length,left+right,gaps]
-						process_edge(rule.lhs, vec, score, inside, rule.prob,
-								item, sibling, agenda, chart, viterbi,
-								itempool, grammar, exhaustive, whitelist,
+							score += outside[rule.lhs, length, left+right, gaps]
+							if score > 300.0: continue
+						newitem = process_edge(rule.lhs, vec, score, inside,
+								rule.prob, item, sibling, agenda, chart, viterbi,
+								newitem, grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
@@ -170,14 +192,20 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 						vec = sibling.vec ^ item.vec
 						y = (<Edge>e).inside
 						score = inside = x + y + rule.prob
-						if estimates is not None:
+						if estimatetype == SX:
+							length = bitcount(vec); left = nextset(vec, 0)
+							right = lensent - length - left
+							score += outside[rule.lhs, left, right, 0]
+							if score > 300.0: continue
+						elif estimatetype == SXlrgaps:
 							length = bitcount(vec); left = nextset(vec, 0)
 							gaps = bitlength(vec) - length - left
 							right = lensent - length - left - gaps
-							score += outside[rule.lhs,length,left+right,gaps]
-						process_edge(rule.lhs, vec, score, inside, rule.prob,
+							score += outside[rule.lhs, length, left+right, gaps]
+							if score > 300.0: continue
+						newitem = process_edge(rule.lhs, vec, score, inside, rule.prob,
 								sibling, item, agenda, chart, viterbi,
-								itempool, grammar, exhaustive, whitelist,
+								newitem, grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
@@ -187,32 +215,34 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 		#		"edges %d, blocked %d" % (maxA, len(agenda),
 		#		len(filter(None, chart.values())), len(filter(None, viterbi)),
 		#		sum(map(len, chart.values())), blocked)))
-	msg = ("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d. "
+	msg = ("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
 		% (maxA, len(agenda), len(filter(None, chart.values())),
 		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	if goal in chart: return chart, goal, msg
 	else: return chart, NONE, "no parse " + msg
 
-cdef inline process_edge(UInt label, ULLong vec, double score, double inside,
+cdef inline ChartItem process_edge(UInt label, ULLong vec, double score, double inside,
 		double prob, ChartItem left, ChartItem right,
-		EdgeAgenda agenda, dict chart, list viterbi, list itempool,
+		EdgeAgenda agenda, dict chart, list viterbi, ChartItem newitem,
 		Grammar grammar, bint exhaustive, list whitelist,
 		bint splitprune, bint markorigin, UInt *blocked):
 	""" Decide what to do with a newly derived edge. """
-	cdef ChartItem newitem
 	cdef ULLong component
 	cdef UInt a, b, cnt
 	cdef bint inagenda
 	cdef bint inchart
 	cdef list componentlist
 	cdef dict componentdict
-	if len(itempool) == 0:
-		itempool = [new_ChartItem(0, 0) for _ in range(10000)]
-	newitem = itempool.pop()
+	# put item in `newitem'; if item ends up in chart, newitem will be replaced
+	# by a fresh object, otherwise, it can be re-used.
 	newitem.label = label; newitem.vec = vec
 	inagenda = agenda.contains(newitem)
 	inchart = PyDict_Contains(chart, newitem) == 1
 	if not inagenda and not inchart:
+		#if score > 300.0:
+		#	blocked[0] += 1
+		#	return newitem
+		# check if we need to prune this item
 		if whitelist is not None and whitelist[label] is not None:
 			# disc. item to be treated as several split items?
 			if splitprune:
@@ -232,20 +262,14 @@ cdef inline process_edge(UInt label, ULLong vec, double score, double inside,
 							raise
 					if PyDict_Contains(componentdict, component) != 1:
 						blocked[0] += 1
-						itempool.append(newitem)
-						return
+						return newitem
 					a = nextset(vec, b)
 					cnt += 1
 			else:
 				if PyDict_Contains(whitelist[label], vec) != 1:
 					#or inside+<double><object>outside > 300.0):
 					blocked[0] += 1
-					itempool.append(newitem)
-					return
-		#elif score > 300.0:
-		#	blocked[0] += 1
-		#	itempool.append(newitem)
-		#	return
+					return newitem
 
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem,
@@ -272,6 +296,7 @@ cdef inline process_edge(UInt label, ULLong vec, double score, double inside,
 		# suboptimal edge
 		chart[newitem].append(iscore(
 				new_Edge(score, inside, prob, left, right)))
+	return ChartItem.__new__(ChartItem)
 
 cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 	"""
@@ -304,13 +329,12 @@ cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 	cdef int rpos = nextset(rvec, 0)
 	cdef UInt n
 
-	# if there are no gaps in lvec and rvec, and the yield function is the
-	# concatenation of two elements, then this should^Wcould be quicker
-	# fixme: profile, check correctness
-	#if rule.args == rule.lengths == 0b10:
-	#	n = nextunset(lvec, lpos)
-	#	if (lvec >> n) == (rvec >> nextunset(rvec, rpos)) == 0:
-	#		return rpos == n
+	# if the yield function is the concatenation of two elements, and there are
+	# no gaps in lvec and rvec, then this should^Wcould be quicker
+	if 0b10 == rule.args == rule.lengths:
+		n = nextunset(lvec, lpos)
+		#e.g. lvec=0011 rvec=1100
+		return rpos == n and 0 == (lvec >> n) == (rvec >> nextunset(rvec, rpos))
 
 	#this algorithm was adapted from rparse, FastYFComposer.
 	for n in range(bitlength(rule.lengths)):
@@ -362,8 +386,9 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 	cdef bint foundbetter = False
 	cdef Rule rule
 	cdef LexicalRule terminal
-	cdef ChartItem goal = ChartItem(start, (1ULL << len(sent)) - 1)
+	cdef ChartItem item, goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 	cdef dict chart = {}						#the full chart
+	cdef list cell
 	cdef set applied = set()
 	# the viterbi chart is initially filled with infinite log probabilities,
 	# cells which are to be blocked contain NaN.
@@ -444,19 +469,13 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 				else: applied.add(i)
 				prob = rule.prob + viterbi[rule.rhs1, left, right]
 				if isfinite(viterbi[rule.lhs, left, right]):
-					chart[new_ChartItem(rule.lhs, (1ULL << right)
-						- (1ULL << left))].append(
-						new_Edge(prob, prob, rule.prob,
-						new_ChartItem(rule.rhs1,
-						(1ULL << right) - (1ULL << left)),
-						NONE))
+					cell = chart[new_ChartItem(rule.lhs, (1ULL << right)
+						- (1ULL << left))]
 				else:
-					chart[new_ChartItem(rule.lhs, (1ULL << right)
-						- (1ULL << left))] = [
-						new_Edge(prob, prob, rule.prob,
-						new_ChartItem(rule.rhs1,
-						(1ULL << right) - (1ULL << left)),
-						NONE)]
+					cell = chart[new_ChartItem(rule.lhs, (1ULL << right)
+						- (1ULL << left))] = []
+				cell.append(new_Edge(prob, prob, rule.prob, new_ChartItem(
+					rule.rhs1, (1ULL << right) - (1ULL << left)), NONE))
 				if prob < viterbi[rule.lhs, left, right]:
 					viterbi[rule.lhs, left, right] = prob
 					# update filter
@@ -469,6 +488,7 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 					if right > maxsplitright[rule.lhs, left]:
 						maxsplitright[rule.lhs, left] = right
 
+	item = new_ChartItem(0, 0)	#recycled for lookup purposes
 	for span in range(2, lensent + 1):
 		# print span,
 		sys.stdout.flush()
@@ -501,21 +521,15 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 						prob = (rule.prob + viterbi[rule.rhs1, left, mid]
 								+ viterbi[rule.rhs2, mid, right])
 						if isfinite(viterbi[rule.lhs, left, right]):
-							chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))].append(
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-									(1ULL << mid) - (1ULL << left)),
-								new_ChartItem(rule.rhs2,
-									(1ULL << right) - (1ULL << mid))))
+							item.label = rule.lhs
+							item.vec = (1ULL << right) - (1ULL << left)
+							cell = chart[item]
 						else:
-							chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))] = [
-								new_Edge(prob, prob, rule.prob,
-								new_ChartItem(rule.rhs1,
-									(1ULL << mid) - (1ULL << left)),
-								new_ChartItem(rule.rhs2,
-									(1ULL << right) - (1ULL << mid)))]
+							cell = chart[new_ChartItem(rule.lhs, (1ULL << right)
+								- (1ULL << left))] = []
+						cell.append(new_Edge(prob, prob, rule.prob,
+							new_ChartItem(rule.rhs1, (1ULL<<mid) - (1ULL<<left)),
+							new_ChartItem(rule.rhs2, (1ULL<<right) - (1ULL<<mid))))
 						if prob < viterbi[rule.lhs, left, right]:
 							foundbetter = True
 							viterbi[rule.lhs, left, right] = prob
@@ -541,19 +555,14 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 					else: applied.add(i)
 					prob = rule.prob + viterbi[rule.rhs1, left, right]
 					if isfinite(viterbi[rule.lhs, left, right]):
-						chart[new_ChartItem(rule.lhs, (1ULL << right)
-							- (1ULL << left))].append(
-							new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1,
-							(1ULL << right) - (1ULL << left)),
-							NONE))
+						item.label = rule.lhs
+						item.vec = (1ULL << right) - (1ULL << left)
+						cell = chart[item]
 					else:
-						chart[new_ChartItem(rule.lhs, (1ULL << right)
-							- (1ULL << left))] = [
-							new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1,
-							(1ULL << right) - (1ULL << left)),
-							NONE)]
+						cell = chart[new_ChartItem(rule.lhs,
+							(1ULL << right) - (1ULL << left))] = []
+					cell.append(new_Edge(prob, prob, rule.prob, new_ChartItem(
+						rule.rhs1, (1ULL << right) - (1ULL << left)), NONE))
 					if prob < viterbi[rule.lhs, left, right]:
 						viterbi[rule.lhs, left, right] = prob
 						# update filter
@@ -618,12 +627,13 @@ def binrepr(ULLong vec, n, cfg=False):
 		return "%d-%d" % (start, nextunset(vec, start))
 	return bin(vec)[2:].rjust(n, "0")[::-1]
 
+def sortfunc(ChartItem a): return (bitcount(a.vec), a.vec)
 def pprint_chart(chart, sent, tolabel, cfg=False):
 	""" `pretty print' a chart. """
 	cdef ChartItem a
 	cdef Edge edge
 	print "chart:"
-	for a in sorted(chart, key=lambda a: (bitcount(a.vec), a.vec)):
+	for a in sorted(chart, key=sortfunc):
 		if chart[a] == []: continue
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a.vec, len(sent), cfg))
 		if isinstance(chart[a], float): continue

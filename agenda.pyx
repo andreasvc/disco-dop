@@ -8,7 +8,7 @@ There is a version specialised to be used as agenda with edges.
 """
 
 from itertools import count, imap, izip
-from operator import itemgetter
+from operator import itemgetter, attrgetter
 cimport cython
 
 DEF INVALID = 0
@@ -193,7 +193,7 @@ cdef class Agenda(dict):
 		return self.mapping.iterkeys()
 
 	def itervalues(self):
-		return imap(lambda entry: entry.value, self.mapping.itervalues())
+		return imap(attrgetter('value'), self.mapping.itervalues())
 
 	def iteritems(self):
 		return izip(self.iterkeys(), self.itervalues())

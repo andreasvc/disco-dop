@@ -6,6 +6,7 @@ Learning. """
 import re, codecs, sys
 from collections import defaultdict
 from itertools import count
+from functools import partial
 from array import array
 from nltk import Tree
 from grammar import lcfrs_productions
@@ -340,10 +341,11 @@ def getlabels(trees, labels):
 	labels.update((l, n) for n, l in enumerate(sorted(set(st.node
 		for tree in trees for st in tree[0].subtrees()) - labels.viewkeys())))
 
+def ispreterminal(n): return len(n)==1 and not isinstance(n[0], Tree)
 def tolist(tree):
 	""" Convert NLTK tree to a list of nodes in pre-order traversal,
 	except for the terminals, which come last."""
-	for a in tree.subtrees(lambda n: len(n)==1 and not isinstance(n[0], Tree)):
+	for a in tree.subtrees(ispreterminal):
 		a[0] = Terminal(a[0])
 	result = list(tree.subtrees()) + tree.leaves()
 	for n in reversed(range(len(result))):
@@ -635,7 +637,7 @@ cpdef list indextrees(Ctrees trees, dict prods):
 	""" Create an index from specific productions to trees containing that
 	production. Productions are represented as integer IDs, trees are given
 	as sets of integer indices. """
-	cdef list result = [set() for _ in range(len(prods))]
+	cdef list result = [set() for _ in prods]
 	cdef NodeArray a
 	cdef int n, m
 	for n in range(trees.len):
@@ -653,6 +655,7 @@ def frontierorterm(x):
 def pathsplit(p):
 	return p.rsplit("/", 1) if "/" in p else (".", p)
 
+def getprodid(prods, node): return -prods.get(node.prod, -1)
 def getctrees(trees, sents):
 	""" Return Ctrees object for a list of disc. trees and sentences. """
 	from grammar import canonicalize
@@ -664,7 +667,7 @@ def getctrees(trees, sents):
 	for tree in trees:
 		root = tree[0]
 		# reverse sort so that terminals end up last
-		tree.sort(key=lambda n: -prods.get(n.prod, -1))
+		tree.sort(key=partial(getprodid, prods))
 		for n, a in enumerate(tree): a.idx = n
 		tree[0].root = root.idx
 	trees = Ctrees(trees, labels, prods)
@@ -693,7 +696,7 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 			for tree in trees:
 				root = tree[0]
 				# reverse sort so that terminals end up last
-				tree.sort(key=lambda n: -prods.get(n.prod, -1))
+				tree.sort(key=partial(getprodid, prods))
 				for n, a in enumerate(tree): a.idx = n
 				tree[0].root = root.idx
 		trees = Ctrees(trees, labels, prods)
@@ -741,7 +744,7 @@ def readtreebank(treebank, labels, prods, sort=True, discontinuous=False,
 			a.prod = (b.lhs().symbol(),) + tuple(unicode(x) for x in b.rhs())
 			if a.prod not in prods: prods[a.prod] = len(prods)
 		root = tree[0]
-		if sort: tree.sort(key=lambda n: -prods.get(n.prod, -1))
+		if sort: tree.sort(key=partial(getprodid, prods))
 		for n, a in enumerate(tree):
 			assert isinstance(a, (Tree, Terminal)), (
 				"Expected Tree or Terminal, got: "
@@ -766,7 +769,7 @@ def extractfragments1(trees, sents):
 	for tree in trees:
 		root = tree[0]
 		# reverse sort so that terminals end up last
-		tree.sort(key=lambda n: -prods.get(n.prod, -1))
+		tree.sort(key=partial(getprodid, prods))
 		for n, a in enumerate(tree): a.idx = n
 		tree[0].root = root.idx
 	treesx = Ctrees(trees, labels, prods)

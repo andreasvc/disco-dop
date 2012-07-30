@@ -3,7 +3,7 @@ from heapq import nlargest
 from math import fsum, exp, log
 from random import random
 from bisect import bisect_right
-from operator import itemgetter
+from operator import itemgetter, attrgetter
 from itertools import count
 from collections import defaultdict
 from nltk import Tree
@@ -107,14 +107,14 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	whitelist = [{} for a in secondarymodel.toid]
 	for a in chart:
 		whitelist[(<ChartItem>a).label][(<ChartItem>a).vec] = infinity
-	for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
+	for tt in nlargest(sldop_n, mpp1, key=mpp1.get):
 		for n in Tree(tt).subtrees():
 			vec = sum([1L << int(x) for x in n.leaves()])
 			whitelist[secondarymodel.toid[n.node]][vec] = 0.0
 	for label, n in secondarymodel.toid.items():
 		whitelist[n] = whitelist[secondarymodel.toid[label.split("@")[0]]]
 	mpp2 = {}
-	for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t]):
+	for tt in nlargest(sldop_n, mpp1, key=mpp1.get):
 		mpp2[tt] = mpp1[tt]
 
 	words = [a[0] for a in sent]
@@ -163,7 +163,7 @@ def sldop_simple(chart, start, dopgrammar, m, sldop_n):
 	# nodes (open parens), minus the number of interior
 	# (addressed) nodes.
 	mpp = [(tt, (-minunaddressed(tt, idsremoved), mpp1[tt]))
-				for tt in nlargest(sldop_n, mpp1, key=lambda t: mpp1[t])]
+				for tt in nlargest(sldop_n, mpp1, key=mpp1.get)]
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 			len(derivations), len(mpp), len(mpp1))
 	return dict(mpp), msg
@@ -208,7 +208,7 @@ cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
 def getsamples(chart, start, n, tolabel):
 	tables = {}
 	for item in chart:
-		chart[item].sort(key=lambda edge: edge.prob)
+		chart[item].sort(key=attrgetter('prob'))
 		tables[item] = []; prev = 0.0
 		minprob = chart[item][0].prob
 		for edge in chart[item]:
@@ -401,7 +401,7 @@ def main():
 	def f(x):
 		return x[0], exp(-x[1])
 	def maxitem(d): return max(d.iteritems(), key=itemgetter(1))
-	trees = map(lambda t: Tree.parse(t, parse_leaf=int),
+	trees = [Tree.parse(t, parse_leaf=int) for t in
 		"""(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
 		(ROOT (B (A 0) (B 1)) (C 2))
@@ -419,7 +419,7 @@ def main():
 		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (A 0) (C (B 1) (C 2)))
-		(ROOT (A 0) (C (B 1) (C 2)))""".splitlines())
+		(ROOT (A 0) (C (B 1) (C 2)))""".splitlines()]
 	sents = [a.split() for a in
 		"""d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c

@@ -138,7 +138,6 @@ def main(
 						bintype, time.clock() - begin))
 	logging.info("binarized treebank fan-out: %d #%d" % treebankfanout(trees))
 	for a in trees: canonicalize(a)
-	if arity_marks: trees = map(addfanoutmarkers, trees)
 
 	#cycledetection()
 	pcfggrammar = []; plcfrsgrammar = []; dopgrammar = []; secondarymodel = []
@@ -160,6 +159,8 @@ def main(
 		pcfggrammar.write_bitpar_grammar(
 			open(resultdir + "/pcfg.rules", "w"),
 			codecs.open(resultdir + "/pcfg.lex", "w", "utf-8"))
+
+	if arity_marks: trees = map(addfanoutmarkers, trees)
 	if plcfrs:
 		plcfrsgrammar = induce_plcfrs(trees, sents)
 		logging.info("induced PLCFRS based on %d sentences" % len(trees))
@@ -170,7 +171,7 @@ def main(
 			open(resultdir + "/plcfrs.rules", "w"),
 			codecs.open(resultdir + "/plcfrs.lex", "w", "utf-8"))
 		if splitpcfg and prune:
-			plcfrsgrammar.getmapping(None,
+			plcfrsgrammar.getmapping(re.compile(r"_[0-9]+$"), #None
 				re.compile(neverblockre) if neverblockre else None,
 				pcfggrammar, splitprune, markorigin)
 		logging.info("wrote grammar to %s/plcfrs.{rules,lex}" % resultdir)
@@ -219,22 +220,41 @@ def main(
 		logging.info("wrote grammar to %s/dop.{rules,lex%s}.gz" % (
 			resultdir, ".backtransform" if usedoubledop else ''))
 
-	if getestimates:
+	if getestimates == 'SX' and splitpcfg:
+		from estimates import getpcfgestimates
+		import numpy as np
+		logging.info("computing PCFG estimates")
+		begin = time.clock()
+		outside = getpcfgestimates(pcfggrammar, testmaxwords,
+				pcfggrammar.toid["ROOT"])
+		logging.info("estimates done. cpu time elapsed: %gs"
+					% (time.clock() - begin))
+		np.savez("pcfgoutside.npz", outside=outside)
+		logging.info("saved PCFG estimates")
+	elif getestimates == 'SXlrgaps' and plcfrs:
 		from estimates import getestimates
 		import numpy as np
-		logging.info("computing estimates")
+		logging.info("computing PLCFRS estimates")
 		begin = time.clock()
-		outside = getestimates(plcfrsgrammar, testmaxwords, plcfrsgrammar.toid["ROOT"])
+		outside = getestimates(plcfrsgrammar, testmaxwords,
+				plcfrsgrammar.toid["ROOT"])
 		logging.info("estimates done. cpu time elapsed: %gs"
 					% (time.clock() - begin))
 		np.savez("outside.npz", outside=outside)
 		#cPickle.dump(outside, open("outside.pickle", "wb"))
 		logging.info("saved estimates")
-	if useestimates:
-		import numpy as np
-		#outside = cPickle.load(open("outside.pickle", "rb"))
-		outside = np.load("outside.npz")['outside']
-		logging.info("loaded estimates")
+	if useestimates == 'SX' and splitpcfg:
+		if not getestimates:
+			import numpy as np
+			assert not cfgparse, "estimates require agenda-based parser."
+			outside = np.load("pcfgoutside.npz")['outside']
+			logging.info("loaded PCFG estimates")
+	elif useestimates == 'SXlrgaps' and plcfrs:
+		if not getestimates:
+			import numpy as np
+			#outside = cPickle.load(open("outside.pickle", "rb"))
+			outside = np.load("outside.npz")['outside']
+			logging.info("loaded PLCFRS estimates")
 	else: outside = None
 
 	#for a,b in extractfragments(trees).items():
@@ -390,15 +410,16 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			dcandb, unfolded, arity_marks, bintype, estimator, sldop_n,
 			bool(backtransform))
 
-def worker((nsent, tree, sent, block)):
+def worker(args):
 	""" parse a sentence using pcfg, plcfrs, dop """
+	nsent, tree, sent, block = args
 	d = internalparams
 	goldb = bracketings(tree)
 	pnoparse = snoparse = dnoparse = False
 	exactp = exacts = exactd = False
 	msg = ''
 	if d.splitpcfg:
-		msg += "PCFG:"
+		msg += "PCFG:\t"
 		begin = time.clock()
 		if d.usecfgparse:
 			chart, start = cfgparse([w for w, t in sent],
@@ -410,7 +431,9 @@ def worker((nsent, tree, sent, block)):
 					d.pcfggrammar,
 					tags=[t for w, t in sent] if d.tags else [],
 					start=d.pcfggrammar.toid[d.top],
-					exhaustive=True)
+					exhaustive=d.prune and (d.plcfrs or d.dop),
+					estimates=('SX', d.outside)
+						if d.useestimates=='SX' else None)
 			msg += msg1
 	else: chart = {}; start = False
 	if start:
@@ -449,6 +472,9 @@ def worker((nsent, tree, sent, block)):
 		rec = recall(goldb, pcandb)
 		f1 = f_measure(goldb, pcandb)
 		pnoparse = True
+		#pprint_chart(chart,
+		#		[w.encode('unicode-escape') for w, _ in sent],
+		#		d.pcfggrammar.tolabel)
 	if d.splitpcfg:
 		pcfgtime = time.clock() - begin
 		msg += "\n\t%.2fs cpu time elapsed\n" % (pcfgtime)
@@ -465,12 +491,12 @@ def worker((nsent, tree, sent, block)):
 					[w for w, t in sent], d.plcfrsgrammar,
 					tags=[t for w, t in sent] if d.tags else [],
 					start=d.plcfrsgrammar.toid[d.top],
-					whitelist=whitelist,
+					whitelist=whitelist if d.splitpcfg else None,
 					splitprune=d.splitprune and d.splitpcfg,
 					markorigin=d.markorigin,
 					exhaustive=d.dop and d.prune,
-					estimates=(d.outside, d.testmaxwords)
-						if d.useestimates else None)
+					estimates=('SXlrgaps', d.outside)
+						if d.useestimates=='SXlrgaps' else None)
 	elif d.plcfrs: chart = {}; start = False
 	if d.plcfrs: msg += "PLCFRS: " + msg1
 	if d.plcfrs and start:
@@ -498,7 +524,7 @@ def worker((nsent, tree, sent, block)):
 			if (scandb - goldb) or (goldb - scandb): msg += '\n'
 			msg += "\t%s" % sresult.pprint(margin=1000)
 	else:
-		if d.plcfrs: msg += "no parse"
+		if d.plcfrs: msg += " no parse"
 		sresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
 		sresult = Tree.parse("(%s %s)" % (d.top, sresult), parse_leaf=int)
 		scandb = bracketings(sresult)
@@ -533,7 +559,7 @@ def worker((nsent, tree, sent, block)):
 					d.dopgrammar.tolabel)
 			raise ValueError("expected successful parse")
 	else: chart = {}; start = False; msg1 = ""
-	msg += "DOP:\t%s" % msg1
+	if d.dop: msg += "DOP:\t%s" % msg1
 	if d.dop and start:
 		begindisamb = time.clock()
 		if d.estimator == "shortest":
@@ -584,7 +610,7 @@ def worker((nsent, tree, sent, block)):
 			if (dcandb - goldb) or (goldb - dcandb): msg += '\n'
 			msg += "        %s" % dresult.pprint(margin=1000)
 	else:
-		if d.dop: msg += "no parse"
+		if d.dop: msg += " no parse"
 		dresult = defaultparse([(n,t) for n,(w, t) in enumerate(sent)])
 		dresult = Tree.parse("(%s %s)" % (d.top, dresult), parse_leaf=int)
 		dcandb = bracketings(dresult)
