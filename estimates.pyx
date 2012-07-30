@@ -34,7 +34,7 @@ cdef class Item:
 		return "I(%4d, %2d, %2d, %2d)" % (
 			self.state, self.length, self.lr, self.gaps)
 
-cdef inline Item new_Item(state, length, lr, gaps):
+cdef inline Item new_Item(int state, int length, int lr, int gaps):
 	cdef Item item = Item.__new__(Item)
 	item.state = state; item.length = length; item.lr = lr; item.gaps = gaps
 	return item
@@ -343,6 +343,7 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 	""" insideSX estimate for a PCFG using agenda. Adapted from:
 	Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse Selection. """
 	cdef size_t n, split
+	cdef ULLong vec
 	cdef ChartItem I
 	cdef Entry entry
 	cdef Rule rule
@@ -396,7 +397,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	cdef np.double_t current, score
 	cdef double x, insidescore
 	cdef int m, n, state, left, right
-	cdef size_t i
+	cdef size_t i, sibsize
 	cdef np.ndarray[np.double_t, ndim=4] outside = np.array([np.inf], dtype='d'
 		).repeat(grammar.nonterminals * (maxlen+1) * (maxlen+1) * 1
 				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, 1))

@@ -120,14 +120,16 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 	def sumfracs(nom, denoms):
 		return sum(nom / denom for denom in denoms)
 
-	def rfe(((r, yf), freq)):
+	def rfe(rule):
 		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996)
+		(r, yf), freq = rule
 		return (r, yf), (freq *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
 			/ (1 if freqs else fd[r[0]]))
 
-	def bodewe(((r, yf), freq)):
+	def bodewe(rule):
 		# Bod (2003, figure 3) 
+		(r, yf), freq = rule
 		return (r, yf), (freq *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
 			/ ((1 if freqs else fd[r[0]])
@@ -135,7 +137,8 @@ def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
 
 	# map of exterior (unaddressed) nodes to normalized denominators:
 	ewedenoms = {}
-	def goodmanewe(((r, yf), freq)):
+	def goodmanewe(rule):
+		(r, yf), freq = rule
 		# Goodman (2003, eq. 1.5). Probably a typographic mistake.
 		if '@' in r[0]: return rfe(((r, yf), freq))
 		nom = reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
@@ -354,7 +357,7 @@ def quotelabel(label):
 	# can remain ascii-only.
 	return label.replace('(', '[').replace(')', ']').encode('unicode-escape')
 
-def flattenstr((tree, sent)): #(tree, sent)):
+def flattenstr(treesent):
 	""" This version accepts and returns strings instead of Tree objects
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
@@ -376,6 +379,7 @@ def flattenstr((tree, sent)): #(tree, sent)):
 	(('S|<VP>_2}<VAFIN-ADV-VVPP>_2', 'VAFIN', 'S|<VP>_2}<ADV-VVPP>'), ((0,), (1,))),
 	(('S|<VP>_2}<ADV-VVPP>', 'ADV', 'VVPP'), ((0, 1),))]
 	"""
+	tree, sent = treesent
 	assert isinstance(tree, basestring), (tree, sent)
 	def repl(x):
 		n = x.group(3) # index w/leading space
@@ -392,7 +396,7 @@ def flattenstr((tree, sent)): #(tree, sent)):
 		" ".join(x[0] for x in sorted(frontierorterm.findall(newtree),
 			key=lambda y: int(y[2]))))
 
-def flatten((tree, sent)):
+def flatten(treesent):
 	"""
 	>>> sent = [None, ',', None, '.']
 	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2", [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
@@ -403,6 +407,7 @@ def flatten((tree, sent)):
 	>>> print flatten((tree, sent))
 	(S (DT@The 0) (NN 1) (VBP@saw 2) (NP 3))
 	"""
+	tree, sent = treesent
 	assert isinstance(tree, Tree), (tree,sent)
 	if all(isinstance(a, Tree) for a in tree):
 		children = [b if isinstance(b, Tree) and sent[b[0]] is None else
@@ -487,12 +492,13 @@ def defaultparse(wordstags):
 def printrule(r,yf,w):
 	return "%.2f %s --> %s\t %r" % (exp(w), r[0], "  ".join(r[1:]), list(yf))
 
-def printrulelatex(((r, yf), w), doexp=True):
+def printrulelatex(rule, doexp=True):
 	r""" Print a rule in latex format.
 	>>> r = ((('VP_2@1', 'NP@2', 'VVINF@5'), ((0,), (1,))), -0.916290731874155)
 	>>> printrulelatex(r)
 	0.4 &  $ \textrm{VP\_2@1}(x_{0},x_{1}) \rightarrow \textrm{NP@2}(x_{0}) \: \textrm{VVINF@5}(x_{1})  $ \\
 	"""
+	(r, yf), w = rule
 	c = count()
 	newrhs = []
 	vars = []

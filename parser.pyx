@@ -254,12 +254,7 @@ cdef inline ChartItem process_edge(UInt label, ULLong vec, double score, double 
 					b = nextunset(vec, a)
 					#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
 					component = (1ULL << b) - (1ULL << a)
-					if markorigin:
-						try: componentdict = <dict>(componentlist[cnt])
-						except KeyError:
-							print grammar.tolabel[label], bin(vec), cnt,
-							print bin(component), map(bin, componentlist)
-							raise
+					if markorigin: componentdict = <dict>(componentlist[cnt])
 					if PyDict_Contains(componentdict, component) != 1:
 						blocked[0] += 1
 						return newitem

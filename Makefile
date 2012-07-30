@@ -18,3 +18,11 @@ testdebug: debug valgrind-python.supp
 
 valgrind-python.supp:
 	wget http://codespeak.net/svn/lxml/trunk/valgrind-python.supp
+
+html:
+	cython -a -X \
+cdivision=True,\
+nonecheck=False,\
+wraparound=False,\
+boundscheck=False \
+*.pyx
