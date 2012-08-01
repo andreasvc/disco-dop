@@ -569,6 +569,11 @@ class Terminal:
 	def __init__(self, node): self.prod = self.node = node
 	def __repr__(self): return repr(self.node)
 	def __hash__(self): return hash(self.node)
+	def __iter__(self): return iter(())
+	def __len__(self): return 0
+	def __getitem__(self, val):
+		if isinstance(val, slice): return ()
+		else: raise IndexError("A terminal has zero children.")
 
 cdef class FrozenArray:
 	""" A wrapper around a Python unsigned long array, with hash value and

@@ -1,20 +1,13 @@
 import sys, os.path
 from itertools import count, izip, islice
-from collections import defaultdict
-from collections import Counter as multiset
+from collections import defaultdict, Counter as multiset
 from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
 from treebank import NegraCorpusReader
 from grammar import ranges
-#from treetransforms import disc
-
-def disc(node):
-	""" This function evaluates whether a particular node is locally
-	discontinuous.  The root node will, by definition, be continuous.
-	Nodes can be continuous even if some of their children are discontinuous.
-	"""
-	if not isinstance(node, Tree): return False
-	return len(list(ranges(sorted(node.leaves())))) > 1
+from treetransforms import disc
+from treedist import treedist
+#from treedist import newtreedist as treedist
 
 def readparams(file):
 	""" read an EVALB-style parameter file and return a dictionary. """
@@ -24,7 +17,7 @@ def readparams(file):
 	params = { "DEBUG" : 1, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
 					"LABELED" : 1, "DISC_ONLY" : 0,
 					"DELETE_LABEL" : [], "DELETE_LABEL_FOR_LENGTH" : [],
-					"EQ_LABEL" : [], "EQ_WORD" : [] }
+					"EQ_LABEL" : {}, "EQ_WORD" : {} }
 	seen = set()
 	for a in open(file) if file else ():
 		line = a.strip()
@@ -38,7 +31,9 @@ def readparams(file):
 				params[key].append(val)
 			elif key in ("EQ_LABEL", "EQ_WORD"):
 				hd = val.split()[0]
-				params[key].append(dict((a, hd) for a in val.split()[1:]))
+				assert not any(a in params[key] for a in val.split()), (
+					"Values for EQ_LABEL and EQ_WORD should be disjoint.")
+				params[key].update((a, hd) for a in val.split()[1:])
 			else:
 				raise ValueError("unrecognized parameter key: %s" % key)
 	return params
@@ -52,16 +47,15 @@ def transform(tree, sent, delete, eqlabel, eqword):
 				# replace phrasal node with its children;
 				# remove pre-terminal entirely
 				if isinstance(b[0], Tree): a[n:n+1] = b
-				else: a.pop(n)
-			else: b.node = getlabel(b.node, eqlabel)
-	if eqword:
-		for a in tree.treepositions('leaves'):
-			if tree[a] in eqword: tree[a] = eqword[tree[a]]
-
-def getlabel(label, eqlabel):
-	for a in eqlabel:
-		if label in a: return a[label]
-	return label
+				else: del a[n]
+			else: b.node = eqlabel.get(b.node, b.node)
+	# removed POS tags cause the numbering to be off, restore.
+	leafmap = dict((m, n) for n, m in enumerate(sorted(tree.leaves())))
+	# retain words still in tree
+	sent = [sent[n] for n in sorted(leafmap.itervalues())]
+	for a in tree.treepositions('leaves'):
+		tree[a] = leafmap[tree[a]]
+		if sent[tree[a]] in eqword: sent[tree[a]] = eqword[sent[tree[a]]]
 
 def bracketings(tree, labeled=True, delete=(), disconly=False):
 	""" Return the labeled set of bracketings for a tree:
@@ -80,39 +74,6 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 					and a.node not in delete
 					and (not disconly or disc(a)))
 
-def treedist(a, b, includepreterms=True, includeroot=False):
-	from tdist import Node, treedistance
-	def treetonode(tree):
-		""" Convert NLTK tree object to a different format used by tdist.
-		Ignores terminals and optionally pre-terminals."""
-		#options: delete preterms but keep terms, discount them
-		result = Node(tree.node)
-		for a in tree:
-			if isinstance(a[0], Tree): result.addkid(treetonode(a))
-			#elif includepreterms: result.addkid(Node(a.node+str(a[0])))
-			elif includepreterms: result.addkid(Node(a.node).addkid(Node(a[0])))
-			else: result.addkid(Node(a[0]))
-		return result
-	ted = treedistance(treetonode(a), treetonode(b))
-	# Dice denominator
-	denom = len(list(a.subtrees())) + len(list(b.subtrees()))
-	# optionally discount ROOT nodes and preterminals
-	if not includeroot: denom -= 2
-	if not includepreterms: denom -= 2 * len(a.leaves())
-	return ted, denom
-
-def recall(reference, test):
-	return sum((reference & test).values()) / float(sum(reference.values()))
-
-def precision(reference, test):
-	return sum((reference & test).values()) / float(sum(test.values()))
-
-def f_measure(reference, test, alpha=0.5):
-	p = precision(reference, test)
-	r = recall(reference, test)
-	if p == 0 or r == 0: return 0
-	return 1.0/(alpha/p + (1-alpha)/r)
-
 def printbrackets(brackets):
 	return ", ".join("%s[%s]" % (a,
 		",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
@@ -120,21 +81,24 @@ def printbrackets(brackets):
 		for a,b in brackets)
 
 def leafancestorpaths(tree):
+	#uses [] to mark components, and () to mark constituent boundaries
+	#deleted words/tags should not affect boundary detection
 	paths = dict((a, []) for a in tree.leaves())
 	# skip root node; skip POS tags
-	for a in islice(tree.subtrees(lambda n: isinstance(n[0], Tree)), 1, None):
+	for a in tree.subtrees(lambda n: n is not tree and isinstance(n[0], Tree)):
 		leaves = a.leaves()
-		for b in a.leaves():
-			# mark beginning of components
-			if len(leaves) > 1:
-				if b - 1 not in leaves and "(" not in paths[b]:
-					paths[b].append("(")
+		first, last = min(leaves), max(leaves)
+		for b in leaves:
+			# mark beginning of constituents / components
+			if len(leaves) > 1 and b - 1 not in leaves:
+				if   b == first and "(" not in paths[b]: paths[b].append("(")
+				elif b != first and "[" not in paths[b]: paths[b].append("[")
 			# add this label to the lineage
 			paths[b].append(a.node)
-			# mark end of components
-			if len(leaves) > 1:
-				if b + 1 not in leaves and ")" not in paths[b]:
-					paths[b].append(")")
+			# mark end of constituents / components
+			if len(leaves) > 1 and b + 1 not in leaves:
+				if   b == last and ")" not in paths[b]: paths[b].append(")")
+				elif b != last and "]" not in paths[b]: paths[b].append("]")
 	return paths
 
 def pathscore(gold, cand):
@@ -151,10 +115,26 @@ def leafancestor(goldtree, candtree):
 	cand = leafancestorpaths(candtree)
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
 
-def nonetozero(a):
-	try: result = a()
-	except ZeroDivisionError: return 0
-	return 0 if result is None else result
+def treedisteval(a, b, includeroot=False, debug=False):
+	ted = treedist(a, b, debug)
+	# Dice denominator
+	denom = len(list(a.subtrees()) + list(b.subtrees()))
+	# optionally discount ROOT nodes and preterminals
+	if not includeroot: denom -= 2
+	#if not includepreterms: denom -= len(a.leaves() + b.leaves())
+	return ted, denom
+
+def recall(reference, test):
+	return sum((reference & test).values()) / float(sum(reference.values()))
+
+def precision(reference, test):
+	return sum((reference & test).values()) / float(sum(test.values()))
+
+def f_measure(reference, test, alpha=0.5):
+	p = precision(reference, test)
+	r = recall(reference, test)
+	if p == 0 or r == 0: return 0
+	return 1.0/(alpha/p + (1-alpha)/r)
 
 def harmean(seq):
 	try: return len([a for a in seq if a]) / sum(1./a for a in seq if a)
@@ -166,6 +146,11 @@ def mean(seq):
 def splitpath(path):
 	if "/" in path: return path.rsplit("/", 1)
 	else: return ".", path
+
+def nonetozero(a):
+	try: result = a()
+	except ZeroDivisionError: return 0
+	return 0 if result is None else result
 
 def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 	assert os.path.exists(goldfile), "gold file not found"
@@ -195,8 +180,7 @@ def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 ______________________________________________________________________________\
 """
 	exact = 0.
-	maxlenseen = sentcount = 0
-	#dicenoms = dicedenoms = 0
+	maxlenseen = sentcount = dicenoms = dicedenoms = 0
 	goldpos = []
 	candpos = []
 	la = []
@@ -210,9 +194,9 @@ ______________________________________________________________________________\
 		elif n > end: break
 		cpos = sorted(ctree.pos())
 		gpos = sorted(gtree.pos())
-		lencpos = sum(1 for a,b in cpos
+		lencpos = sum(1 for _, b in cpos
 			if b not in param["DELETE_LABEL_FOR_LENGTH"])
-		lengpos = sum(1 for a,b in gpos
+		lengpos = sum(1 for _, b in gpos
 			if b not in param["DELETE_LABEL_FOR_LENGTH"])
 		assert lencpos == lengpos, "sentence length mismatch"
 		if lencpos > param["CUTOFF_LEN"]: continue
@@ -237,21 +221,17 @@ ______________________________________________________________________________\
 		candpos.extend(cpos)
 		la.append(leafancestor(gtree, ctree))
 		if la[-1] == 1 and gtree != ctree:
-			print gtree
-			print ctree
-			g = leafancestorpaths(gtree)
-			c = leafancestorpaths(ctree)
-			print g
-			print c
-			print [pathscore(g[leaf], c[leaf]) for leaf in g]
-			assert False
-		#ted, denom = treedist(gtree, ctree,
-		#	includeroot=gtree.node not in param["DELETE_LABEL"])
-		#dicenoms += ted
-		#dicedenoms += denom
+			print "leaf ancestor score 1.0 but no exact match: (bug?)"
+			print gtree, '\n', ctree
+			g = leafancestorpaths(gtree); c = leafancestorpaths(ctree)
+			print g, '\n', c
+			for leaf in g: print pathscore(g[leaf], c[leaf])
+		ted, denom = treedisteval(gtree, ctree,
+			includeroot=gtree.node not in param["DELETE_LABEL"])
+		dicenoms += ted; dicedenoms += denom
 		if param["DEBUG"] == 0: continue
-		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f" %(
-			# %2d %g" % (
+		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %2d" % (
+			#" %(
 			n,
 			len(gpos),
 			100 * nonetozero(lambda: recall(gbrack, cbrack)),
@@ -263,8 +243,7 @@ ______________________________________________________________________________\
 			sum(1 for a,b in zip(gpos, cpos) if a==b),
 			100 * accuracy(gpos, cpos),
 			100 * la[-1],
-			#ted,
-			#1 if ted == 0 else 1 - ted / float(denom)
+			ted, #1 if ted == 0 else 1 - ted / float(denom)
 			)
 		if param["DEBUG"] > 1:
 			print "gold:", gbrack
@@ -313,13 +292,15 @@ ____________________"""
 		100 * nonetozero(lambda: f_measure(goldb, candb)))
 	print "exact match:               %6.2f" % (100 * (exact / sentcount))
 	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
-	#print "tree-dist (Dice micro avg) %6.2f" % (
-	#	100 * (1 - dicenoms / float(dicedenoms)))
+	print "tree-dist (Dice micro avg) %6.2f" % (
+		100 * (1 - dicenoms / float(dicedenoms)))
 	print "tagging accuracy:          %6.2f" % (100*accuracy(goldpos, candpos))
 
+def test():
+	main("sample2.export", "sample2.export", 'iso-8859-1', 'iso-8859-1')
+
 if __name__ == '__main__':
-	if len(sys.argv) == 2 and sys.argv[1] == "--test":
-		main("sample2.export", "sample2.export", 'iso-8859-1', 'iso-8859-1')
+	if len(sys.argv) == 2 and sys.argv[1] == "--test": test()
 	elif 3 <= len(sys.argv) <= 7:
 		goldfile, parsesfile = sys.argv[1:3]
 		if "/" in goldfile and not os.path.exists(goldfile):
@@ -335,5 +316,5 @@ usage: %s gold[/encoding] parses[/encoding] [param [cutoff]]
 and cutoff is an integer for the length cutoff which overrides the parameter
 file. Encoding defaults to UTF-8, other encodings need to be specified.)
 
-Example:	%s sample2.export/iso-8859-1 myparses.export TEST.prm\
+Example:	%s sample2.export/iso-8859-1 parses.export TEST.prm\
 """ % (sys.argv[0], sys.argv[0])

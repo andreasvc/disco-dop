@@ -310,7 +310,6 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			markorigin=markorigin, resultdir=resultdir,
 			usecfgparse=usecfgparse, backtransform=backtransform,
 			category=category, sentinit=sentinit)
-	presults = []; sresults = []; dresults = []
 	gold = []; gsent = []
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
 	goldbrackets = multiset()
@@ -318,6 +317,9 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 
 	maxlen = min(testmaxwords, maxbitveclen)
 	work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
+	presults = [None] * len(work)
+	sresults = [None] * len(work)
+	dresults = [None] * len(work)
 	if numproc == 1:
 		initworker(params)
 		dowork = imap(worker, work)
@@ -342,17 +344,17 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		goldbrackets.update((sentid, a) for a in goldb.elements())
 		if splitpcfg:
 			pcandb.update((sentid, a) for a in p.candb.elements())
-			presults.append(p.result)
+			presults[sentid-1] = p.result
 			if p.noparse: pnoparse += 1
 			if p.exact: exactp += 1
 		if plcfrs:
 			scandb.update((sentid, a) for a in s.candb.elements())
-			sresults.append(s.result)
+			sresults[sentid-1] = s.result
 			if s.noparse: snoparse += 1
 			if s.exact: exacts += 1
 		if dop:
 			dcandb.update((sentid, a) for a in d.candb.elements())
-			dresults.append(d.result)
+			dresults[sentid-1] = d.result
 			if d.noparse: dnoparse += 1
 			if d.exact: exactd += 1
 		msg = ''
