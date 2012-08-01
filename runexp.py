@@ -208,12 +208,14 @@ def main(
 			gzip.open(resultdir + "/dop.backtransform.gz", "w").writelines(
 				"%s\t%s\n" % a for a in backtransform.iteritems())
 			if prune:
-				dopgrammar.getmapping(re.compile("@.+$"),
+				dopgrammar.getmapping(re.compile("@.+$") if plcfrs else
+					re.compile("(?:_[0-9]+)?(?:@.+)?$"),
 					re.compile(r'^#[0-9]+|.+}<'), # + neverblockre?
 					plcfrsgrammar if plcfrs else pcfggrammar,
 					splitprune and not plcfrs, markorigin)
 		elif prune:
-			dopgrammar.getmapping(re.compile("@[-0-9]+$"),
+			dopgrammar.getmapping(re.compile("@[-0-9]+$") if plcfrs else
+					re.compile("(?:_[0-9]+)?(?:@[-0-9]+)?$"),
 					re.compile(neverblockre) if neverblockre else None,
 					plcfrsgrammar if plcfrs else pcfggrammar,
 					splitprune and not plcfrs, markorigin)
