@@ -1,7 +1,7 @@
 """ Implementation of LR estimate (Kallmeyer & Maier 2010).
 Ported almost directly from rparse (except for sign reversal of log probs). """
 from math import exp
-from containers cimport ChartItem, Grammar, Rule, LexicalRule
+from containers cimport Grammar, Rule, LexicalRule, SmallChartItem as ChartItem
 from containers cimport UInt, ULLong, new_ChartItem
 from agenda cimport Agenda, Entry
 from array cimport array
@@ -119,6 +119,7 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 	full bit vectors (not used)."""
 	cdef ChartItem I
 	cdef Entry entry
+	cdef LexicalRule lex
 	cdef size_t i
 	agenda = Agenda()
 
@@ -628,6 +629,7 @@ def main():
 	from containers import Grammar
 	from treetransforms import addfanoutmarkers
 	from nltk import Tree
+	cdef ChartItem item
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
@@ -659,8 +661,8 @@ def main():
 	print msg
 	pprint_chart(estchart, sent, grammar.tolabel)
 	print 'items avoided:'
-	for a in chart.viewkeys() - estchart.viewkeys():
-		print grammar.tolabel[a.label], bin(a.vec)
+	for item in chart.viewkeys() - estchart.viewkeys():
+		print grammar.tolabel[item.label], bin(item.vec)
 	print
 
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
@@ -694,7 +696,7 @@ def main():
 	print msg
 	pprint_chart(estchart, sent, grammar.tolabel)
 	print 'items avoided:'
-	for a in chart.viewkeys() - estchart.viewkeys():
-		print grammar.tolabel[a.label], bin(a.vec)
+	for item in chart.viewkeys() - estchart.viewkeys():
+		print grammar.tolabel[item.label], bin(item.vec)
 
 if __name__ == '__main__': main()

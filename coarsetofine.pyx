@@ -28,6 +28,7 @@ cpdef prunechart(dict chart, ChartItem goal, Grammar coarse, Grammar fine,
 	"""
 	cdef dict d, kbest
 	cdef list whitelist
+	cdef ChartItem Ih
 	assert fine.mapping is not NULL
 	if splitprune and markorigin:
 		assert fine.splitmapping is not NULL
@@ -39,7 +40,9 @@ cpdef prunechart(dict chart, ChartItem goal, Grammar coarse, Grammar fine,
 	kbestspans = [{} for a in coarse.toid]
 	kbestspans[0] = None
 	# uses ids of labels in coarse chart
-	for Ih in kbest: kbestspans[Ih.label][Ih.vec] = 0.0
+	for Ih in kbest:
+		label = Ih.label; Ih.label = 0
+		kbestspans[label][Ih] = 0.0
 	# now construct a list which references these coarse items:
 	for label in range(fine.nonterminals):
 		if splitprune and markorigin and fine.fanout[label] != 1:

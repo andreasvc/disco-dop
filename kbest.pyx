@@ -1,15 +1,13 @@
-""" Implementation of Huang & Chiang (2005): Better k-best parsing
-"""
+""" Implementation of Huang & Chiang (2005): Better k-best parsing. """
 from math import exp
 from agenda import Agenda
 from containers import ChartItem, Edge, RankedEdge
 from operator import itemgetter
 
 from agenda cimport Entry, Agenda, nsmallest
-from containers cimport ChartItem, Edge, RankedEdge
+from containers cimport ChartItem, Edge, RankedEdge, SmallChartItem, FatChartItem
 
-unarybest = (0, )
-binarybest = (0, 0)
+cdef tuple unarybest = (0, ), binarybest = (0, 0)
 
 cdef inline getcandidates(dict chart, ChartItem v, int k):
 	""" Return a heap with up to k candidate arcs starting from vertex v """
@@ -75,7 +73,7 @@ cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
 
 cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 	cdef ChartItem ei
-	cdef Edge e
+	cdef Edge e, edge
 	cdef Entry entry
 	cdef double result, prob
 	e = ej.edge
@@ -110,7 +108,9 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 	while i != -1:
 		if ei not in chart:
 			# this must be a terminal
-			children = " %d" % ei.vec
+			if isinstance(ei, SmallChartItem):
+				children = " %d" % (<SmallChartItem>ei).vec
+			else: children = " %d" % (<FatChartItem>ei).vec[0]
 			break
 		if ei in D:
 			rankededge = (<Entry>D[ei][i]).key
@@ -146,7 +146,9 @@ cdef inline tuple getderivationtuple(RankedEdge ej, dict D, dict chart,
 	while i != -1:
 		if ei not in chart:
 			# this must be a terminal
-			children = (ei.vec, )
+			if isinstance(ei, SmallChartItem):
+				children = ((<SmallChartItem>ei).vec, )
+			else: children = ((<FatChartItem>ei).vec[0], )
 			break
 		if ei in D:
 			rankededge = (<Entry>D[ei][i]).key
@@ -192,8 +194,9 @@ cpdef list lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
 
 cpdef main():
 	from math import log
-	cdef ChartItem v, ci
+	cdef SmallChartItem v, ci
 	cdef Edge ed
+	cdef RankedEdge re
 	cdef Entry entry
 	toid = dict([a[::-1] for a in enumerate(
 			"Epsilon S NP V ADV VP VP2 PN Mary walks quickly".split())])
@@ -220,20 +223,21 @@ cpdef main():
 			("ADV", 0b001) : [(1.0, 1.0, ("quickly", 2), NONE)]
 		}
 	for a in list(chart):
-		chart[ChartItem(toid[a[0]], a[1])] = [Edge(-log(c), -log(c), -log(d),
-				ChartItem(toid[e], f), ChartItem(toid[g], h))
+		chart[SmallChartItem(toid[a[0]], a[1])] = [Edge(-log(c), -log(c), -log(d),
+				SmallChartItem(toid[e], f), SmallChartItem(toid[g], h))
 				for c, d, (e,f), (g,h) in chart.pop(a)]
-	assert ChartItem(toid["NP"], 0b100) == ChartItem(toid["NP"], 0b100)
+	assert SmallChartItem(toid["NP"], 0b100) == SmallChartItem(toid["NP"], 0b100)
 	cand = {}
 	D = {}
 	k = 10
-	goal = ChartItem(toid["S"], 0b111)
+	goal = SmallChartItem(toid["S"], 0b111)
 	for v, b in lazykthbest(goal, k, k, D, cand, chart, set()).items():
 		print tolabel[v.label], bin(v.vec)[2:]
 		for entry in b:
-			ed = entry.key.edge
-			j = (entry.key.left,)
-			if entry.key.right != -1: j += (entry.key.right,)
+			re = entry.key
+			ed = re.edge
+			j = (re.left,)
+			if re.right != -1: j += (re.right,)
 			ip = entry.value
 			print tolabel[v.label], ":",
 			print " ".join([tolabel[ci.label]

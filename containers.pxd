@@ -3,6 +3,7 @@ from libc.string cimport memcmp, memset
 from array cimport array
 cimport cython
 
+DEF SLOTS = 7
 ctypedef unsigned long long ULLong
 ctypedef unsigned long ULong
 ctypedef unsigned int UInt
@@ -46,50 +47,48 @@ cdef struct Rule:
 
 @cython.final
 cdef class LexicalRule:
-	cdef public UInt lhs
-	cdef public UInt rhs1
-	cdef public UInt rhs2
-	cdef public unicode word
-	cdef public double prob
+	cdef UInt lhs
+	cdef UInt rhs1
+	cdef UInt rhs2
+	cdef unicode word
+	cdef double prob
 
-@cython.final
 cdef class ChartItem:
-	cdef public ULLong vec
-	cdef public UInt label
+	cdef UInt label
+cdef class SmallChartItem(ChartItem):
+	cdef ULLong vec
+cdef class FatChartItem(ChartItem):
+	cdef ULong vec[SLOTS]
 
 # start scratch
-cdef class FatChartItem:
-	cdef ULLong vec[7]
-	cdef public UInt label
-
 cdef union VecType:
 	ULLong vec
 	ULong *vecptr
 
 cdef class NewChartItem:
 	cdef VecType vec
-	cdef public UInt label
+	cdef UInt label
 
 cdef class DiscNode:
 	cdef int label
-	cdef CBitset leaves
 	cdef tuple children
+	cdef CBitset leaves
 # end scratch
 
 @cython.final
 cdef class Edge:
-	cdef public double score
-	cdef public double inside
-	cdef public double prob
-	cdef public ChartItem left
-	cdef public ChartItem right
+	cdef double score
+	cdef double inside
+	cdef double prob
+	cdef ChartItem left
+	cdef ChartItem right
 
 @cython.final
 cdef class RankedEdge:
-	cdef public ChartItem head
-	cdef public Edge edge
-	cdef public int left
-	cdef public int right
+	cdef ChartItem head
+	cdef Edge edge
+	cdef int left
+	cdef int right
 
 cdef struct Node:
 	int label, prod
@@ -134,14 +133,21 @@ cdef class MemoryPool:
 	cdef void *cur
 	cdef int poolsize, limit, n, leftinpool
 
+cdef binrepr(ULong *vec)
+
 # to avoid overhead of __init__ and __cinit__ constructors
 cdef inline FrozenArray new_FrozenArray(array data):
 	cdef FrozenArray item = FrozenArray.__new__(FrozenArray)
 	item.data = data
 	return item
 
-cdef inline ChartItem new_ChartItem(UInt label, ULLong vec):
-	cdef ChartItem item = ChartItem.__new__(ChartItem)
+cdef inline FatChartItem new_FatChartItem(UInt label):
+	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
+	item.label = label
+	return item
+
+cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):
+	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
 	item.label = label; item.vec = vec
 	return item
 

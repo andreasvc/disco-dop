@@ -4,7 +4,9 @@ from collections import Set, Iterable
 from functools import partial
 from nltk import Tree
 
-maxbitveclen = sizeof(ULLong) * 8
+#maxbitveclen = sizeof(ULLong) * 8
+DEF SLOTS = 7
+maxbitveclen = SLOTS * sizeof(ULong) * 8
 
 cdef class Grammar:
 	def __cinit__(self):
@@ -101,6 +103,7 @@ cdef class Grammar:
 		#We could be strict about separating POS tags and phrasal categories,
 		#but Negra contains at least one tag (--) used for both.
 		cdef size_t lhs, n
+		cdef LexicalRule term
 		sums = {}
 		for lhs from 1 <= lhs < self.nonterminals:
 			n = 0
@@ -221,6 +224,7 @@ cdef class Grammar:
 		"""
 		cdef size_t n = 0
 		cdef Rule rule = self.bylhs[0][n]
+		cdef LexicalRule term
 		while rule.lhs < self.nonterminals:
 			rule = rule
 			pyfloat = rule.prob
@@ -241,6 +245,7 @@ cdef class Grammar:
 		which is supported by bitpar. """
 		cdef size_t n = 0
 		cdef Rule rule = self.bylhs[0][n]
+		cdef LexicalRule term
 		while rule.lhs < self.nonterminals:
 			assert self.fanout[rule.lhs] == 1, ("can only export CFG rules.\n"
 					"rule: %s" % (self.rulerepr(rule)))
@@ -281,6 +286,7 @@ cdef class Grammar:
 			n += 1
 		return "\n".join(result)
 	def __repr__(self):
+		cdef LexicalRule lr
 		rules = "\n".join(filter(None,
 			[self.rulesrepr(lhs) for lhs in range(1, self.nonterminals)]))
 		lexical = "\n".join(["%.2f %s => %s" % (exp(-lr.prob),
@@ -355,33 +361,42 @@ cdef copyrules(grammar, Rule **dest, idx, filterlen, toid, nonterminals):
 	dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = nonterminals
 
 cdef class FatChartItem:
-	def __init__(self, label):
-		self.label = label
-		#?? self.vec = vec
 	def __hash__(self):
 		cdef size_t n
 		cdef long _hash = 5381
-		for n in range(7 * sizeof(ULong)):
-			_hash *= 33 ^ (<char *>self.vec)[n]
+		for n in range(sizeof(self.vec)):
+			_hash *= 33 ^ (<UChar *>self.vec)[n]
 		return _hash
 	def __richcmp__(FatChartItem self, FatChartItem other, int op):
-		if op == 2: return self.label == other.label and self.vec == other.vec
-		elif op == 3: return self.label != other.label or self.vec != other.vec
-		elif op == 5: return self.label >= other.label or self.vec >= other.vec
-		elif op == 1: return self.label <= other.label or self.vec <= other.vec
-		elif op == 0: return self.label < other.label or self.vec < other.vec
-		elif op == 4: return self.label > other.label or self.vec > other.vec
+		cdef int cmp = memcmp(<UChar *>self.vec, <UChar *>other.vec,
+			sizeof(self.vec))
+		if op == 2: return self.label == other.label and cmp == 0
+		elif op == 3: return self.label != other.label or cmp != 0
+		elif op == 5: return self.label >= other.label or cmp >= 0
+		elif op == 1: return self.label <= other.label or cmp <= 0
+		elif op == 0: return self.label < other.label or cmp < 0
+		elif op == 4: return self.label > other.label or cmp > 0
 	def __nonzero__(self):
-		raise NotImplemented
-		#return self.label != 0 and self.vec != 0
+		cdef int n
+		if self.label:
+			for n in range(sizeof(self.vec)):
+				if self.vec[n]: return True
+		return False
 	def __repr__(self):
-		raise NotImplemented
-		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
+		return "FatChartItem(%d, %s)" % (self.label, binrepr(self.vec))
+
+cdef binrepr(ULong *vec):
+	cdef int m, n = SLOTS - 1
+	cdef str result
+	while n and vec[n] == 0: n -= 1
+	result = bin(vec[n])[2:]
+	for m in range(n - 1, -1, -1):
+		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
+	return result
 
 cdef class NewChartItem:
 	def __init__(self, label):
 		self.label = label
-		#?? self.vec = vec
 	def __hash__(self):
 		cdef size_t n
 		cdef long _hash = 5381
@@ -402,40 +417,38 @@ cdef class NewChartItem:
 		raise NotImplemented
 		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
-cdef class ChartItem:
-	def __init__(self, label, vec):
+cdef class SmallChartItem:
+	def __init__(SmallChartItem self, label, vec):
 		self.label = label
 		self.vec = vec
-	def __hash__(self):
+	def __hash__(SmallChartItem self):
 		cdef long h
 		# juxtapose bits of label and vec, rotating vec if > 33 words
 		return self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
-	def __richcmp__(ChartItem self, ChartItem other, int op):
+	def __richcmp__(SmallChartItem self, SmallChartItem other, int op):
 		if op == 2: return self.label == other.label and self.vec == other.vec
 		elif op == 3: return self.label != other.label or self.vec != other.vec
 		elif op == 5: return self.label >= other.label or self.vec >= other.vec
 		elif op == 1: return self.label <= other.label or self.vec <= other.vec
 		elif op == 0: return self.label < other.label or self.vec < other.vec
 		elif op == 4: return self.label > other.label or self.vec > other.vec
-	def __nonzero__(self):
+	def __nonzero__(SmallChartItem self):
 		return self.label != 0 and self.vec != 0
 	def __repr__(self):
-		return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
+		return "SmallChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class Edge:
-	def __init__(self, score, inside, prob, left, right):
+	def __init__(Edge self, score, inside, prob, left, right):
 		self.score = score; self.inside = inside; self.prob = prob
 		self.left = left; self.right = right
-	def __hash__(self):
+	def __hash__(Edge self):
 		cdef long h
 		#self._hash = hash((inside, prob, left, right))
 		# this is the hash function used for tuples, apparently
 		h = (1000003UL * 0x345678UL) ^ <long>self.inside
 		h = (1000003UL * h) ^ <long>self.prob
-		h = (1000003UL * h) ^ (<ChartItem>self.left).vec
-		h = (1000003UL * h) ^ (<ChartItem>self.left).label
-		h = (1000003UL * h) ^ (<ChartItem>self.right).vec
-		h = (1000003UL * h) ^ (<ChartItem>self.right).label
+		h = (1000003UL * h) ^ <long>self.left.__hash__()
+		h = (1000003UL * h) ^ <long>self.right.__hash__()
 		return h
 	def __richcmp__(Edge self, other, int op):
 		# the ordering only depends on the estimate / inside score

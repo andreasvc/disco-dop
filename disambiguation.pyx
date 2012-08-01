@@ -11,7 +11,7 @@ from kbest import lazykbest
 from parser import parse
 from grammar import induce_plcfrs, canonicalize, rangeheads
 from treetransforms import unbinarize
-from containers cimport ChartItem, Edge, Grammar
+from containers cimport ChartItem, Edge, Grammar, SmallChartItem, FatChartItem
 cimport cython
 
 infinity = float('infinity')
@@ -91,6 +91,7 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	most probable parse trees and shortest derivations.
 	NB: doesn't seem to work so well, so may contain a subtle bug.
 	NB2: assumes ROOT is the top node."""
+	cdef SmallChartItem item
 	# get n most likely derivations
 	derivations = set()
 	if sample:
@@ -106,11 +107,12 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 					for tt, ts in idsremoved.iteritems())
 	whitelist = [{} for a in secondarymodel.toid]
 	for a in chart:
-		whitelist[(<ChartItem>a).label][(<ChartItem>a).vec] = infinity
+		whitelist[(<ChartItem>a).label][a] = infinity
+	# FIXME: use FatChartItem when needed
 	for tt in nlargest(sldop_n, mpp1, key=mpp1.get):
 		for n in Tree(tt).subtrees():
-			vec = sum([1L << int(x) for x in n.leaves()])
-			whitelist[secondarymodel.toid[n.node]][vec] = 0.0
+			item = SmallChartItem(0, sum([1L << int(x) for x in n.leaves()]))
+			whitelist[secondarymodel.toid[n.node]][item] = 0.0
 	for label, n in secondarymodel.toid.items():
 		whitelist[n] = whitelist[secondarymodel.toid[label.split("@")[0]]]
 	mpp2 = {}
@@ -120,8 +122,7 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	words = [a[0] for a in sent]
 	tagsornil = [a[1] for a in sent] if tags else []
 	chart2, start2, _ = parse(words, secondarymodel, tagsornil,
-					1, #secondarymodel.toid[top],
-					True, None, whitelist=whitelist)
+					exhaustive=True, estimates=None, whitelist=whitelist)
 	if start2:
 		shortestderivations = lazykbest(chart2, start2, m,
 			secondarymodel.tolabel)
@@ -192,7 +193,10 @@ cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
 	idx = bisect_right(tables[start], rnd)
 	edge = chart[start][idx]
 	if edge.left.label == 0: # == "Epsilon":
-		return "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
+		if isinstance(edge.left, SmallChartItem):
+			idx = (<SmallChartItem>edge.left).vec
+		else: idx = (<FatChartItem>edge.left).vec[0]
+		return "(%s %d)" % (tolabel[start.label], idx), edge.prob
 	children = [samplechart(chart, child, tolabel, tables)
 				for child in (edge.left, edge.right) if child.label]
 	tree = "(%s %s)" % (tolabel[start.label],
@@ -206,14 +210,16 @@ cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
 	#								for edge in edges]))]))
 
 def getsamples(chart, start, n, tolabel):
-	tables = {}
+	cdef Edge edge
+	cdef dict tables = {}
 	for item in chart:
-		chart[item].sort(key=attrgetter('prob'))
+		#FIXME: work w/inside prob right?
+		chart[item].sort()
+		#chart[item].sort(key=attrgetter('prob'))
 		tables[item] = []; prev = 0.0
-		minprob = chart[item][0].prob
+		minprob = (<Edge>min(chart[item])).inside
 		for edge in chart[item]:
-			#prev += exp(-edge.prob); tables[item].append(prev)
-			prev += exp(-minprob - edge.prob)
+			prev += exp(-minprob - edge.inside)
 			tables[item].append(exp(minprob + log(prev)))
 	derivations = set([samplechart(chart, start, tolabel, tables)
 						for x in range(n)])
@@ -231,9 +237,14 @@ cdef getviterbi(dict chart, ChartItem start, dict tolabel):
 					getviterbi(chart, edge.left, tolabel),
 					getviterbi(chart, edge.right, tolabel))
 	else: #unary or terminal
-		return "(%s %s)" % (tolabel[start.label],
-					getviterbi(chart, edge.left, tolabel) if edge.left.label
-									else str(edge.left.vec))
+		if edge.left.label:
+			return "(%s %s)" % (tolabel[start.label],
+						getviterbi(chart, edge.left, tolabel))
+		else:
+			if isinstance(edge.left, SmallChartItem):
+				idx = (<SmallChartItem>edge.left).vec
+			else: idx = (<FatChartItem>edge.left).vec[0]
+			return "(%s %s)" % (tolabel[start.label], str(idx))
 
 def renumber(tree):
 	leaves = tree.leaves()

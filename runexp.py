@@ -874,10 +874,12 @@ def test():
 		assert fail == 0, mod.__file__
 	for mod in modules:
 		mod.test() if hasattr(mod, 'test') else mod.main()
+	print "no doctests:"
+	for mod, (fail, attempted) in results.iteritems():
+		if not attempted: print mod.__file__,
+	print
 	for mod, (fail, attempted) in sorted(results.iteritems(), key=itemgetter(1)):
 		if attempted: print '%s: %d doctests succeeded!' % (mod.__file__, attempted)
-		else: print '%s: no doctests.' % (mod.__file__)
-
 if __name__ == '__main__':
 	import sys
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)

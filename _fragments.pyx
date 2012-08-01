@@ -18,7 +18,7 @@ from libc.string cimport memset
 from containers cimport ULong, UInt, UChar
 from containers cimport Node, NodeArray, Ctrees, FrozenArray, new_FrozenArray
 from array cimport array, clone
-from bit cimport anextset, abitcount, subset, setunion, ulongcpy, ulongset
+from bit cimport anextset, abitcount, subset, ulongcpy, ulongset
 
 cdef extern from "macros.h":
 	int BITSIZE

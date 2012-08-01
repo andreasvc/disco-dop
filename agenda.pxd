@@ -5,8 +5,8 @@ from cpython cimport PyList_GET_ITEM as list_getitem,\
 
 ctypedef bint (*CmpFun)(Entry a, Entry b)
 cdef class Entry:
-	cdef public object key
-	cdef public object value
+	cdef object key
+	cdef object value
 	cdef unsigned long count
 
 cdef class Agenda(dict):
@@ -20,8 +20,8 @@ cdef class Agenda(dict):
 	cdef object getitem(self, key)
 	cdef object replace(self, object key, object value)
 	cdef bint contains(self, key)
-	cdef public unsigned long length
-	cdef public list heap
+	cdef unsigned long length
+	cdef list heap
 	cdef dict mapping
 	cdef unsigned long counter
 	cdef CmpFun cmpfun

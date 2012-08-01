@@ -81,6 +81,7 @@ cpdef inline int fanout(arg):
 	return result
 
 def main():
+	cdef ULong ulongvec[4]
 	bigpyint = 0b11100110101111001101011111100110101001100110
 	print "8 * sizeof(unsigned long) ", 8 * sizeof(unsigned long)
 	print "8 * sizeof(unsigned long long) ", 8 * sizeof(unsigned long long)
@@ -100,6 +101,13 @@ def main():
 	assert fanout(0b0111100) == 1
 	assert fanout(0b1000001) == 2
 	assert fanout(0b011011011) == 3
+	ulongvec[0] = 1UL << (sizeof(ULong) * 8 - 1)
+	ulongvec[1] = 1
+	assert anextset(ulongvec, 0, 4) == sizeof(ULong) * 8 - 1
+	assert anextset(ulongvec, sizeof(ULong)*8, 4) == sizeof(ULong)*8, (
+		anextset(ulongvec, sizeof(ULong)*8, 4), sizeof(ULong)*8)
+	assert anextunset(ulongvec, sizeof(ULong)*8 - 1, 4) == sizeof(ULong)*8 + 1, (
+		anextunset(ulongvec, sizeof(ULong)*8 - 1, 4), sizeof(ULong)*8 + 1)
 	print "it worked"
 
 if __name__ == '__main__': main()
