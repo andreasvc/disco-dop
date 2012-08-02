@@ -31,7 +31,7 @@ cdef SmallChartItem NONE = new_ChartItem(0, 0)
 np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
-DEF SLOTS = 7
+DEF SLOTS = 2
 
 def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 		list whitelist=None, bint splitprune=False, bint markorigin=False,
@@ -81,7 +81,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 	cdef ULong maxA = 0
 	cdef ULLong vec = 0
 
-	if lensent >= (sizeof(vec) * 8):
+	if lensent >= sizeof(vec) * 8:
 		return parse_longsent(sent, grammar, tags=tags, start=start,
 			exhaustive=exhaustive, whitelist=whitelist, splitprune=splitprune,
 			markorigin=markorigin, estimates=estimates)
@@ -147,24 +147,25 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				length = bitcount(item.vec); left = nextset(item.vec, 0)
 				gaps = bitlength(item.vec) - length - left
 				right = lensent - length - left - gaps
-			if not beamwidth or beam[item.vec] < beamwidth:
+			if beamwidth:
+				if beam[item.vec] > beamwidth: continue
 				beam[item.vec] += 1
-				for i in range(grammar.numrules):
-					rule = grammar.unary[item.label][i]
-					if rule.rhs1 != item.label: break
-					score = inside = x + rule.prob
-					if estimatetype == SX:
-						score += outside[rule.lhs, left, right, 0]
-						if score > 300.0: continue
-					elif estimatetype == SXlrgaps:
-						score += outside[rule.lhs, length, left+right, gaps]
-						if score > 300.0: continue
-					newitem.label = rule.lhs; newitem.vec = item.vec
-					newitem = process_edge(newitem, score, inside, rule.prob,
-						item, NONE, agenda, chart, viterbi, grammar,
-						exhaustive, whitelist,
-						splitprune and grammar.fanout[rule.lhs] != 1,
-						markorigin, &blocked)
+			for i in range(grammar.numrules):
+				rule = grammar.unary[item.label][i]
+				if rule.rhs1 != item.label: break
+				score = inside = x + rule.prob
+				if estimatetype == SX:
+					score += outside[rule.lhs, left, right, 0]
+					if score > 300.0: continue
+				elif estimatetype == SXlrgaps:
+					score += outside[rule.lhs, length, left+right, gaps]
+					if score > 300.0: continue
+				newitem.label = rule.lhs; newitem.vec = item.vec
+				newitem = process_edge(newitem, score, inside, rule.prob,
+					item, NONE, agenda, chart, viterbi, grammar,
+					exhaustive, whitelist,
+					splitprune and grammar.fanout[rule.lhs] != 1,
+					markorigin, &blocked)
 
 			# binary left
 			for i in range(grammar.numrules):
@@ -172,9 +173,10 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				if rule.rhs1 != item.label: break
 				for I, e in (<dict>viterbi[rule.rhs2]).iteritems():
 					sibling = <SmallChartItem>I
-					if ((not beamwidth or beam[item.vec ^ sibling.vec]
-						< beamwidth) and concat(rule, item.vec, sibling.vec)):
+					if beamwidth:
+						if beam[item.vec ^ sibling.vec] > beamwidth: continue
 						beam[item.vec ^ sibling.vec] += 1
+					if concat(rule, item.vec, sibling.vec):
 						newitem.label = rule.lhs
 						newitem.vec = item.vec ^ sibling.vec
 						y = (<Edge>e).inside
@@ -204,9 +206,10 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				if rule.rhs2 != item.label: break
 				for I, e in (<dict>viterbi[rule.rhs1]).iteritems():
 					sibling = <SmallChartItem>I
-					if ((not beamwidth or beam[sibling.vec ^ item.vec]
-						< beamwidth) and concat(rule, sibling.vec, item.vec)):
+					if beamwidth:
+						if beam[sibling.vec ^ item.vec] > beamwidth: continue
 						beam[sibling.vec ^ item.vec] += 1
+					if concat(rule, sibling.vec, item.vec):
 						newitem.label = rule.lhs
 						newitem.vec = sibling.vec ^ item.vec
 						y = (<Edge>e).inside
@@ -415,7 +418,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef ULong maxA = 0
 	goal = new_FatChartItem(start)
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
-	goal.vec[BITNSLOTS(lensent) - 1] = BITMASK(lensent) - 1
+	goal.vec[BITSLOT(lensent)] = BITMASK(lensent) - 1
 
 	assert len(sent) < (sizeof(goal.vec) * 8), ("input length: %d. max: %d" % (
 		lensent, sizeof(goal.vec) * 8))
@@ -445,8 +448,8 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				newitem.label = terminal.lhs
 				SETBIT(newitem.vec, i)
 				tmp = process_fatedge(newitem, score, terminal.prob,
-					terminal.prob, item, FATNONE, agenda, chart, viterbi, grammar,
-					exhaustive, whitelist, False, markorigin, &blocked)
+					terminal.prob, item, FATNONE, agenda, chart, viterbi,
+					grammar, exhaustive, whitelist, False, markorigin, &blocked)
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
 				newitem = tmp
@@ -568,9 +571,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		% (maxA, len(agenda), len(filter(None, chart.values())),
 		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
 	if goal in chart: return chart, goal, msg
-	else:
-		print 'goal',goal
-		return chart, FATNONE, "no parse " + msg
+	else: return chart, FATNONE, "no parse " + msg
 
 cdef FatChartItem fatcomponent = new_FatChartItem(0)
 cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,

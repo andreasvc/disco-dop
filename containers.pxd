@@ -3,7 +3,7 @@ from libc.string cimport memcmp, memset
 from array cimport array
 cimport cython
 
-DEF SLOTS = 7
+DEF SLOTS = 2
 ctypedef unsigned long long ULLong
 ctypedef unsigned long ULong
 ctypedef unsigned int UInt

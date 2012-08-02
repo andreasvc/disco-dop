@@ -5,7 +5,7 @@ from functools import partial
 from nltk import Tree
 
 #maxbitveclen = sizeof(ULLong) * 8
-DEF SLOTS = 7
+DEF SLOTS = 2
 maxbitveclen = SLOTS * sizeof(ULong) * 8
 
 cdef class Grammar:
@@ -370,16 +370,17 @@ cdef class FatChartItem:
 	def __richcmp__(FatChartItem self, FatChartItem other, int op):
 		cdef int cmp = memcmp(<UChar *>self.vec, <UChar *>other.vec,
 			sizeof(self.vec))
-		if op == 2: return self.label == other.label and cmp == 0
-		elif op == 3: return self.label != other.label or cmp != 0
-		elif op == 5: return self.label >= other.label or cmp >= 0
-		elif op == 1: return self.label <= other.label or cmp <= 0
-		elif op == 0: return self.label < other.label or cmp < 0
-		elif op == 4: return self.label > other.label or cmp > 0
+		cdef bint labelmatch = self.label == other.label
+		if op == 2: return labelmatch and cmp == 0
+		elif op == 3: return not labelmatch or cmp != 0
+		elif op == 5: return self.label >= other.label or (labelmatch and cmp >= 0)
+		elif op == 1: return self.label <= other.label or (labelmatch and cmp <= 0)
+		elif op == 0: return self.label < other.label or (labelmatch and cmp < 0)
+		elif op == 4: return self.label > other.label or (labelmatch and cmp > 0)
 	def __nonzero__(self):
 		cdef int n
 		if self.label:
-			for n in range(sizeof(self.vec)):
+			for n in range(SLOTS):
 				if self.vec[n]: return True
 		return False
 	def __repr__(self):
@@ -403,13 +404,14 @@ cdef class NewChartItem:
 		for n in range(7 * sizeof(ULong)):
 			_hash *= 33 ^ (<char *>self.vecptr)[n]
 		return _hash
-	def __richcmp__(FatChartItem self, FatChartItem other, int op):
-		if op == 2: return self.label == other.label and self.vec == other.vec
-		elif op == 3: return self.label != other.label or self.vec != other.vec
-		elif op == 5: return self.label >= other.label or self.vec >= other.vec
-		elif op == 1: return self.label <= other.label or self.vec <= other.vec
-		elif op == 0: return self.label < other.label or self.vec < other.vec
-		elif op == 4: return self.label > other.label or self.vec > other.vec
+	def __richcmp__(NewChartItem self, NewChartItem other, int op):
+		#if op == 2: return self.label == other.label and self.vec == other.vec
+		#elif op == 3: return self.label != other.label or self.vec != other.vec
+		#elif op == 5: return self.label >= other.label or self.vec >= other.vec
+		#elif op == 1: return self.label <= other.label or self.vec <= other.vec
+		#elif op == 0: return self.label < other.label or self.vec < other.vec
+		#elif op == 4: return self.label > other.label or self.vec > other.vec
+		raise NotImplemented
 	def __nonzero__(self):
 		raise NotImplemented
 		#return self.label != 0 and self.vec != 0
@@ -466,6 +468,8 @@ cdef class Edge:
 				and self.right == (<Edge>other).right)
 		elif op == 4: return self.score > other.score
 		elif op == 5: return self.score >= other.score
+		elif op == 1: return self.score <= other.score
+		elif op == 0: return self.score < other.score
 	def __repr__(self):
 		return "Edge(%g, %g, %g, %r, %r)" % (
 				self.score, self.inside, self.prob, self.left, self.right)

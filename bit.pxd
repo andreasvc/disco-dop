@@ -106,18 +106,18 @@ cdef inline int abitlength(ULong *vec, UInt slots):
 
 cdef inline int anextset(ULong *vec, UInt pos, UInt slots):
 	""" return next set bit starting from pos, -1 if there is none. """
-	cdef UInt a = BITSLOT(pos), offset = pos % BITSIZE
-	if vec[a] >> offset: return pos + __builtin_ctzl(vec[a] >> offset)
-	for a in range(a + 1, slots):
-		if vec[a]: return a * BITSIZE + __builtin_ctzl(vec[a])
-	return -1
+	cdef UInt a = BITSLOT(pos) + 1, offset = pos % BITSIZE
+	cdef ULong x = vec[a - 1] >> offset
+	if x: return pos + __builtin_ctzl(x)
+	while a < slots and vec[a] == 0: a += 1
+	return -1 if a == slots else a * BITSIZE + __builtin_ctzl(vec[a])
 
 cdef inline int anextunset(ULong *vec, UInt pos, UInt slots):
 	""" return next unset bit starting from pos. """
 	cdef UInt a = BITSLOT(pos) + 1, offset = pos % BITSIZE
 	cdef ULong x = ~vec[a - 1] >> offset
 	if x: return pos + __builtin_ctzl(x)
-	while vec[a] == ~0UL: a += 1
+	while a < slots and vec[a] == ~0UL: a += 1
 	return a * BITSIZE + __builtin_ctzl(~vec[a])
 
 cdef inline void ulongset(ULong *dest, ULong value, UInt slots):
