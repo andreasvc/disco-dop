@@ -310,13 +310,14 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			markorigin=markorigin, resultdir=resultdir,
 			usecfgparse=usecfgparse, backtransform=backtransform,
 			category=category, sentinit=sentinit)
-	gold = []; gsent = []
 	pcandb = multiset(); scandb = multiset(); dcandb = multiset()
 	goldbrackets = multiset()
 	exactp = exactd = exacts = pnoparse = snoparse = dnoparse =  0
 
 	maxlen = min(testmaxwords, maxbitveclen)
 	work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
+	gold = [None] * len(work)
+	gsent = [None] * len(work)
 	presults = [None] * len(work)
 	sresults = [None] * len(work)
 	dresults = [None] * len(work)
@@ -339,8 +340,8 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 					#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
 					msg))
 		goldb = bracketings(tree)
-		gold.append(block)
-		gsent.append(sent)
+		gold[sentid-1] = block
+		gsent[sentid-1] = sent
 		goldbrackets.update((sentid, a) for a in goldb.elements())
 		if splitpcfg:
 			pcandb.update((sentid, a) for a in p.candb.elements())
@@ -390,22 +391,22 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		pool.join()
 		del dowork, pool
 
-	if splitpcfg:
-		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b],n + 1)
-			for n,a,b in zip(count(sentinit), presults, gsent))
-	if plcfrs:
-		codecs.open("%s/%s.plcfrs" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b],n + 1)
-			for n,a,b in zip(count(sentinit), sresults, gsent))
-	if dop:
-		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w,_ in b], n + 1)
-			for n,a,b in zip(count(sentinit), dresults, gsent))
 	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
 			"w", encoding='utf-8').write(''.join(
 				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
 				for n, a in zip(count(sentinit), gold)))
+	if splitpcfg:
+		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n + 1)
+			for n,a,b in zip(count(sentinit), presults, gsent))
+	if plcfrs:
+		codecs.open("%s/%s.plcfrs" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n + 1)
+			for n,a,b in zip(count(sentinit), sresults, gsent))
+	if dop:
+		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n + 1)
+			for n,a,b in zip(count(sentinit), dresults, gsent))
 	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}" % (
 		resultdir, category or "results"))
 

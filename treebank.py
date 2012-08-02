@@ -137,11 +137,13 @@ def export(tree, sent, n):
 	Lemmas, functions, and morphology information will be empty. """
 	result = []
 	if n: result.append("#BOS %d" % n)
-	wordsandpreterminals = tree.treepositions('leaves') + [a[:-1]
-		for a in tree.treepositions('leaves')]
-	phrasalnodes = list(sorted([a for a in tree.treepositions()
-		if a not in wordsandpreterminals and a != ()], key=len, reverse=True))
-	wordids = dict((tree[a], a) for a in tree.treepositions('leaves'))
+	leaves = tree.treepositions('leaves')
+	wordsandpreterminals = leaves + [a[:-1] for a in leaves]
+	phrasalnodes = [a for a in tree.treepositions()
+		if a not in wordsandpreterminals and a != ()]
+	phrasalnodes.sort(key=len, reverse=True)
+	wordids = dict((tree[a], a) for a in leaves)
+	assert len(sent) == len(leaves) == len(wordids)
 	for i, word in enumerate(sent):
 		idx = wordids[i]
 		result.append("\t".join((word,
