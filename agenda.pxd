@@ -10,31 +10,26 @@ cdef class Entry:
 	cdef unsigned long count
 
 cdef class Agenda(dict):
-	cpdef Entry popentry(self)
-	cpdef Entry peekentry(self)
 	cpdef setitem(self, key, object value)
 	cpdef setifbetter(self, key, object value)
-	cpdef list getheap(self)
-	cpdef object getkey(self, Entry entry)
-	cpdef object getval(self, Entry entry)
+	cpdef Entry popentry(self)
+	cpdef Entry peekentry(self)
 	cdef object getitem(self, key)
 	cdef object replace(self, object key, object value)
 	cdef bint contains(self, key)
 	cdef unsigned long length
+	cdef unsigned long counter
 	cdef list heap
 	cdef dict mapping
-	cdef unsigned long counter
 	cdef CmpFun cmpfun
 
 cdef class EdgeAgenda(Agenda):
-	cpdef Entry popentry(self)
-	cpdef Entry peekentry(self)
 	cpdef setitem(self, key, object value)
 	cpdef setifbetter(self, key, object value)
-	cpdef list getheap(self)
-	cpdef object getval(self, Entry entry)
-	cdef object getitem(self, key)
+	cpdef Entry popentry(self)
+	cpdef Entry peekentry(self)
 	cdef bint contains(self, key)
+	cdef object getitem(self, key)
 	cdef object replace(self, object key, object value)
 
 cdef inline list nsmallest(int n, list items)

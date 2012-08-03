@@ -193,17 +193,10 @@ cdef class Agenda(dict):
 		return self.mapping.iterkeys()
 
 	def itervalues(self):
-		return imap(attrgetter('value'), self.mapping.itervalues())
+		return imap(getval, self.mapping.itervalues())
 
 	def iteritems(self):
 		return izip(self.iterkeys(), self.itervalues())
-
-	cpdef list getheap(self):
-		return self.heap
-	cpdef object getkey(self, Entry entry):
-		return entry.key
-	cpdef object getval(self, Entry entry):
-		return entry.value
 
 cdef class EdgeAgenda(Agenda):
 	def __init__(self, iterable=None):
@@ -384,3 +377,165 @@ cdef inline void siftdown(list heap, int startpos, int pos, CmpFun cmpfun):
 			continue
 		break
 	heap[pos] = newitem
+
+#==============================================================================
+from unittest import TestCase
+testN = 1000
+
+def getval(Entry entry):
+	return entry.value
+
+class TestHeap(TestCase):
+	def check_invariants(self, Agenda h):
+		for i in range(len(h)):
+			if i > 0:
+				self.assertTrue(getval(h.heap[_parent(i)]) <= getval(h.heap[i]))
+
+	def make_data(self):
+		from random import random
+		pairs = [(random(), random()) for i in range(testN)]
+		h = Agenda()
+		d = {}
+		for k, v in pairs:
+			h[k] = v
+			d[k] = v
+
+		pairs.sort(key=itemgetter(1), reverse=True)
+		return h, pairs, d
+
+	def test_contains(self):
+		h, pairs, d = self.make_data()
+		h, pairs2, d = self.make_data()
+		for k, v in pairs + pairs2:
+			self.assertEqual(k in h, k in d)
+
+	def test_len(self):
+		h, pairs, d = self.make_data()
+		self.assertEqual(len(h), len(d))
+
+	def test_popitem(self):
+		h, pairs, d = self.make_data()
+		while pairs:
+			v = h.popitem()
+			v2 = pairs.pop(-1)
+			self.assertEqual(v, v2)
+			d.pop(v[0])
+			self.assertEqual(len(h), len(d))
+			self.assertEqual(set(h.items()), set(d.items()))
+		self.assertEqual(len(h), 0)
+
+	def test_popitem_ties(self):
+		h = Agenda()
+		for i in range(testN):
+			h[i] = 0.
+		for i in range(testN):
+			k, v = h.popitem()
+			self.assertEqual(v, 0.)
+			self.check_invariants(h)
+
+	def test_popitem_ties_fifo(self):
+		h = Agenda()
+		for i in range(testN):
+			h[i] = 0.
+		for i in range(testN):
+			k, v = h.popitem()
+			self.assertEqual(k, i)
+			self.assertEqual(v, 0.)
+			self.check_invariants(h)
+
+	def test_peek(self):
+		h, pairs, d = self.make_data()
+		while pairs:
+			v = h.peekitem()[0]
+			h.popitem()
+			v2 = pairs.pop(-1)
+			self.assertEqual(v, v2[0])
+		self.assertEqual(len(h), 0)
+
+	def test_iter(self):
+		h, pairs, d = self.make_data()
+		self.assertEqual(list(h), list(d))
+
+	def test_keys(self):
+		h, pairs, d = self.make_data()
+		self.assertEqual(sorted(h.keys()), sorted(d.keys()))
+		self.assertEqual(sorted(h.iterkeys()), sorted(d.iterkeys()))
+
+	def test_values(self):
+		h, pairs, d = self.make_data()
+		self.assertEqual(sorted(h.values()), sorted(d.values()))
+		self.assertEqual(sorted(h.itervalues()), sorted(d.itervalues()))
+
+	def test_items(self):
+		h, pairs, d = self.make_data()
+		self.assertEqual(sorted(h.items()), sorted(d.items()))
+		self.assertEqual(sorted(h.iteritems()), sorted(d.iteritems()))
+
+	def test_del(self):
+		h, pairs, d = self.make_data()
+		while pairs:
+			k, v = pairs.pop(len(pairs)//2)
+			del h[k]
+			del d[k]
+			self.assertEqual(len(h), len(d))
+			self.assertEqual(set(h.items()), set(d.items()))
+		self.assertEqual(len(h), 0)
+
+	def test_pop(self):
+		h, pairs, d = self.make_data()
+		while pairs:
+			k, v = pairs.pop(-1)
+			v2 = h.pop(k)
+			v3 = d.pop(k)
+			self.assertEqual(v, v2)
+			self.assertEqual(v, v3)
+			self.assertEqual(len(h), len(d))
+			self.assertEqual(set(h.items()), set(d.items()))
+		self.assertEqual(len(h), 0)
+
+	def test_change(self):
+		h, pairs, d = self.make_data()
+		k, v = pairs[testN//2]
+		h[k] = 0.5
+		pairs[testN//2] = (k, 0.5)
+		pairs.sort(key=itemgetter(1), reverse=True)
+		while pairs:
+			v = h.popitem()
+			v2 = pairs.pop()
+			self.assertEqual(v, v2)
+		self.assertEqual(len(h), 0)
+
+	def test_init(self):
+		h, pairs, d = self.make_data()
+		h = Agenda(d.items())
+		while pairs:
+			v = h.popitem()
+			v2 = pairs.pop()
+			self.assertEqual(v, v2)
+			d.pop(v[0])
+		self.assertEqual(len(h), len(d))
+		self.assertEqual(len(h), 0)
+
+	def test_repr(self):
+		h, pairs, d = self.make_data()
+		#self.assertEqual(h, eval(repr(h)))
+		tmp = repr(h)	# 'Agenda({....})'
+		#strip off class name
+		dstr = tmp[tmp.index('(')+1:tmp.rindex(')')]
+		self.assertEqual(d, eval(dstr))
+
+def test(verbose=False):
+	import sys
+	import test.test_support as test_support # Python 2
+	#import test.support as test_support # Python 3
+	test_support.run_unittest(TestHeap)
+
+	# verify reference counting
+	if verbose and hasattr(sys, "gettotalrefcount"):
+		import gc
+		counts = [None] * 5
+		for i in xrange(len(counts)):
+			test_support.run_unittest(TestHeap)
+			gc.collect()
+			counts[i] = sys.gettotalrefcount()
+		print(counts)

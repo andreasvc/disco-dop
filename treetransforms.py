@@ -532,8 +532,7 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 			nonterms[p] = nonterms[a] | nonterms[hd]
 			revnonterms[nonterms[p]] = p
 	while agenda:
-		entry = agenda.popentry()
-		p = agenda.getkey(entry); x = agenda.getval(entry)
+		p, x = agenda.popitem()
 		if nonterms[p] == goal:
 			# (add final unary here)
 			p = ImmutableTree(tree.node, p[:])
