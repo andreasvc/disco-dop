@@ -362,9 +362,11 @@ cdef copyrules(grammar, Rule **dest, idx, filterlen, toid, nonterminals):
 
 cdef class FatChartItem:
 	def __hash__(self):
+		# juxtapose bits of label and first 32 bits of vec
+		cdef long _hash = self.label ^ (self.vec[0] << 32UL)
 		cdef size_t n
-		cdef long _hash = 5381
-		for n in range(sizeof(self.vec)):
+		# add remaining bits
+		for n in range(4, sizeof(self.vec)):
 			_hash *= 33 ^ (<UChar *>self.vec)[n]
 		return _hash
 	def __richcmp__(FatChartItem self, FatChartItem other, int op):
@@ -424,7 +426,6 @@ cdef class SmallChartItem:
 		self.label = label
 		self.vec = vec
 	def __hash__(SmallChartItem self):
-		cdef long h
 		# juxtapose bits of label and vec, rotating vec if > 33 words
 		return self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
 	def __richcmp__(SmallChartItem self, SmallChartItem other, int op):

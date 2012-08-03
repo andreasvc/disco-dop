@@ -81,7 +81,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 	cdef ULong maxA = 0
 	cdef ULLong vec = 0
 
-	if True or lensent >= sizeof(vec) * 8:
+	if lensent >= sizeof(vec) * 8:
 		return parse_longsent(sent, grammar, tags=tags, start=start,
 			exhaustive=exhaustive, whitelist=whitelist, splitprune=splitprune,
 			markorigin=markorigin, estimates=estimates)
