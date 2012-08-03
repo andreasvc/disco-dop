@@ -22,11 +22,11 @@ from bit cimport anextset, abitcount, subset, ulongcpy, ulongset
 
 cdef extern from "macros.h":
 	int BITSIZE
-	int BITMASK(int b)
 	int BITSLOT(int b)
 	void SETBIT(ULong a[], int b)
 	void CLEARBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
+	ULong BITMASK(int b)
 	int BITNSLOTS(int nb)
 	int IDX(int i, int j, int jmax, int kmax)
 

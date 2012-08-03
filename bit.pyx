@@ -80,8 +80,17 @@ cpdef inline int fanout(arg):
 			prev = arg
 	return result
 
+cdef binrepr(ULong *vec, int slots):
+	cdef int m, n = slots - 1
+	cdef str result
+	while n and vec[n] == 0: n -= 1
+	result = bin(vec[n])
+	for m in range(n - 1, -1, -1):
+		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
+	return result
+
 def main():
-	cdef ULong ulongvec[4]
+	cdef ULong ulongvec[2]
 	bigpyint = 0b11100110101111001101011111100110101001100110
 	print "8 * sizeof(unsigned long) ", 8 * sizeof(unsigned long)
 	print "8 * sizeof(unsigned long long) ", 8 * sizeof(unsigned long long)
@@ -102,14 +111,24 @@ def main():
 	assert fanout(0b1000001) == 2
 	assert fanout(0b011011011) == 3
 	ulongvec[0] = 1UL << (sizeof(ULong) * 8 - 1); ulongvec[1] = 1
-	assert anextset(ulongvec, 0, 4) == sizeof(ULong) * 8 - 1
-	assert anextset(ulongvec, sizeof(ULong)*8, 4) == sizeof(ULong)*8, (
-		anextset(ulongvec, sizeof(ULong)*8, 4), sizeof(ULong)*8)
-	assert anextunset(ulongvec, sizeof(ULong)*8 - 1, 4) == sizeof(ULong)*8 + 1, (
-		anextunset(ulongvec, sizeof(ULong)*8 - 1, 4), sizeof(ULong)*8 + 1)
-	ulongvec[0] = ~0UL; ulongvec[1] = 0
-	assert anextunset(ulongvec, 0, 4) == sizeof(ULong) * 8, (
-		anextunset(ulongvec, 0, 4), sizeof(ULong) * 8)
+	assert anextset(ulongvec, 0, 2) == sizeof(ULong) * 8 - 1, (
+			anextset(ulongvec, 0, 2), sizeof(ULong)*8-1)
+	assert anextset(ulongvec, sizeof(ULong)*8, 2) == sizeof(ULong)*8, (
+		anextset(ulongvec, sizeof(ULong)*8, 2), sizeof(ULong)*8)
+	assert anextunset(ulongvec, 0, 2) == 0, (
+		anextunset(ulongvec, 0, 2), 0)
+	assert anextunset(ulongvec, sizeof(ULong)*8-1, 2) == sizeof(ULong)*8+1, (
+		anextunset(ulongvec, sizeof(ULong)*8 - 1, 2), sizeof(ULong)*8 + 1)
+	ulongvec[0] = 0
+	assert anextset(ulongvec, 0, 2) == sizeof(ULong)*8, (
+		anextset(ulongvec, 0, 2), sizeof(ULong)*8)
+	ulongvec[1] = 0
+	print binrepr(ulongvec, 2)
+	assert anextset(ulongvec, 0, 2) == -1, (
+		anextset(ulongvec, 0, 2), -1)
+	ulongvec[0] = ~0UL
+	assert anextunset(ulongvec, 0, 2) == sizeof(ULong) * 8, (
+		anextunset(ulongvec, 0, 2), sizeof(ULong) * 8)
 	print "it worked"
 
 if __name__ == '__main__': main()

@@ -439,7 +439,7 @@ def worker(args):
 					exhaustive=d.prune and (d.plcfrs or d.dop),
 					estimates=('SX', d.outside)
 						if d.useestimates=='SX' else None)
-			msg += msg1
+			msg += msg1 + '\n'
 	else: chart = {}; start = False
 	if start:
 		resultstr, prob = viterbiderivation(chart, start,

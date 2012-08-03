@@ -166,7 +166,6 @@ def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
 	if len(sys.argv) == 7: end = int(sys.argv[6])
 	if start < 0: start += goldlen
 	if end < 0: end += goldlen
-	print start, end
 	assert goldlen == parseslen, ("unequal number of sentences "
 		"in gold & candidates: %d vs %d" % (goldlen, parseslen))
 	goldlen = end - start
@@ -220,7 +219,7 @@ ______________________________________________________________________________\
 		goldpos.extend(gpos)
 		candpos.extend(cpos)
 		la.append(leafancestor(gtree, ctree))
-		if la[-1] == 1 and gtree != ctree:
+		if la[-1] == 1 and gbrack != cbrack:
 			print "leaf ancestor score 1.0 but no exact match: (bug?)"
 			print gtree, '\n', ctree
 			g = leafancestorpaths(gtree); c = leafancestorpaths(ctree)
@@ -280,7 +279,7 @@ ____________________"""
 			for tree in gold.parsed_sents())
 
 	print "\n____________ Summary <= %d _______" % param["CUTOFF_LEN"]
-	print "number of sentences:       %6d" % (n)
+	print "number of sentences:       %6d" % (sentcount)
 	print "maximum length:            %6d" % (maxlenseen)
 	print "gold brackets (disc.):     %6d (%d)" % (len(goldb), gdiscbrackets)
 	print "cand. brackets (disc.):    %6d (%d)" % (len(candb), discbrackets)

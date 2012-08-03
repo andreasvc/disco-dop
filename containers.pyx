@@ -390,7 +390,7 @@ cdef binrepr(ULong *vec):
 	cdef int m, n = SLOTS - 1
 	cdef str result
 	while n and vec[n] == 0: n -= 1
-	result = bin(vec[n])[2:]
+	result = bin(vec[n])
 	for m in range(n - 1, -1, -1):
 		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
 	return result

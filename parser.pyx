@@ -23,7 +23,7 @@ cdef extern from "math.h":
 cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
-	int BITMASK(int b)
+	ULong BITMASK(int b)
 	int BITNSLOTS(int nb)
 	void SETBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
@@ -81,7 +81,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 	cdef ULong maxA = 0
 	cdef ULLong vec = 0
 
-	if lensent >= sizeof(vec) * 8:
+	if True or lensent >= sizeof(vec) * 8:
 		return parse_longsent(sent, grammar, tags=tags, start=start,
 			exhaustive=exhaustive, whitelist=whitelist, splitprune=splitprune,
 			markorigin=markorigin, estimates=estimates)
@@ -349,6 +349,18 @@ cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 	cdef int lpos = nextset(lvec, 0)
 	cdef int rpos = nextset(rvec, 0)
 	cdef UInt n
+	# idea: isolate set bits instead of dealing with explicit indices
+	#nlvec = ~lvec; nrvec = ~rvec
+	#everything AFTER first set bit:
+	#l = (lvec ^ -lvec)
+	#nlvec &= l
+	#... AFTER first unset bit
+	#l = nlvec & (nlvec ^ -nlvec)
+	#lvec &= l
+	#r = rvec & -rvec
+	#
+	#if l << 1 != r: return False
+	#ur = rvec & ~(r - 1)
 
 	# if the yield function is the concatenation of two elements, and there are
 	# no gaps in lvec and rvec, then this should^Wcould be quicker
