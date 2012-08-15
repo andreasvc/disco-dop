@@ -352,30 +352,26 @@ cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 		lvec |= lvec - 1 # replace trailing zeroes with ones
 		rvec ^= lvec # combine lvec & rvec
 		return rvec & (rvec + 1) == 0 # is power of 2?
-	cdef ULLong mask = lvec
+	cdef ULLong mask = rvec if testbitint(rule.args, 0) else lvec
+	cdef size_t n
 	for n in range(bitlength(rule.lengths)):
-		if testbitint(rule.args, n):
-			# component from right vector
-			if rvec & mask == 0: return False
+		if testbitint(rule.args, n): # component from right vector
+			if rvec & mask == 0: return False # check for expected component
 			rvec |= rvec - 1 # trailing 0 bits => 1 bits
 			mask = rvec & (~rvec - 1) # everything before first 0 bit => 1 bits
-			if lvec & mask: return False
-			rvec &= ~mask # zero out component
-			if testbitint(rule.lengths, n): # a gap
-				if rvec: mask = ~rvec & (rvec - 1)
-				else: mask = ~lvec & (lvec - 1)
-				if lvec & mask or rvec & mask: return False
-		else:
-			# component from left vector
-			if lvec & mask == 0: return False
+		else: # component from left vector
+			if lvec & mask == 0: return False # check for expected component
 			lvec |= lvec - 1 # trailing 0 bits => 1 bits
 			mask = lvec & (~lvec - 1) # everything before first 0 bit => 1 bits
-			if rvec & mask: return False
-			lvec &= ~mask # zero out component
-			if testbitint(rule.lengths, n): # a gap
-				if lvec: mask = ~lvec & (lvec - 1)
-				else: mask = ~rvec & (rvec - 1)
-				if lvec & mask or rvec & mask: return False
+		# zero out component
+		lvec &= ~mask
+		rvec &= ~mask
+		if testbitint(rule.lengths, n): # a gap
+			# check that there is a gap in both vectors
+			if (lvec ^ rvec) & (mask + 1): return False
+			# increase mask to cover gap
+			# get minimum of trailing zero bits of lvec & rvec
+			mask = (~lvec & (lvec - 1)) & (~rvec & (rvec - 1))
 		mask += 1  # e.g., 00111 => 01000
 	# success if we've reached the end of both left and right vector
 	return lvec == rvec == 0
@@ -1017,6 +1013,13 @@ def do(sent, grammar):
 
 def main():
 	from containers import Grammar
+	cdef Rule rule
+	rule.args = 0b1010; rule.lengths = 0b1010
+	assert concat(rule, 0b100010, 0b1000100)
+	assert not concat(rule, 0b1010, 0b10100)
+	rule.args = 0b101; rule.lengths = 0b101
+	assert concat(rule, 0b10000, 0b100100)
+	assert not concat(rule, 0b1000, 0b10100)
 	grammar = Grammar([
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0.0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),

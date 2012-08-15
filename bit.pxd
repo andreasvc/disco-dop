@@ -73,10 +73,13 @@ cdef inline int nextunset(ULLong vec, UInt pos):
 cdef inline bint testbit(ULLong vec, UInt pos):
 	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
-	1
+	True
 	>>> testbit(0b0011101, 1)
-	0"""
-	return vec & (1ULL << pos)
+	False
+	>>> testbit(0b100000000000000000000000000000000, 32) != 0
+	True
+	"""
+	return vec & (1ULL << pos) != 0
 
 cdef inline bint testbitint(UInt arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
