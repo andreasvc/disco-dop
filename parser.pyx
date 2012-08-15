@@ -346,65 +346,39 @@ cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 		index in the sentence / constituent (leftmost).
 	"""
 	if lvec & rvec: return False
-	cdef int lpos = nextset(lvec, 0)
-	cdef int rpos = nextset(rvec, 0)
-	cdef UInt n
-	# idea: isolate set bits instead of dealing with explicit indices
-	#nlvec = ~lvec; nrvec = ~rvec
-	#everything AFTER first set bit:
-	#l = (lvec ^ -lvec)
-	#nlvec &= l
-	#... AFTER first unset bit
-	#l = nlvec & (nlvec ^ -nlvec)
-	#lvec &= l
-	#r = rvec & -rvec
-	#
-	#if l << 1 != r: return False
-	#ur = rvec & ~(r - 1)
-
 	# if the yield function is the concatenation of two elements, and there are
-	# no gaps in lvec and rvec, then this should^Wcould be quicker
-	if 0b10 == rule.args == rule.lengths:
-		n = nextunset(lvec, lpos)
-		#e.g. lvec=0011 rvec=1100
-		return rpos == n and 0 == (lvec >> n) == (rvec >> nextunset(rvec, rpos))
-
-	#this algorithm was adapted from rparse, FastYFComposer.
+	# no gaps in lvec and rvec, then this should be quicker
+	if 0b10 == rule.lengths: # == rule.args:
+		lvec |= lvec - 1 # replace trailing zeroes with ones
+		rvec ^= lvec # combine lvec & rvec
+		return rvec & (rvec + 1) == 0 # is power of 2?
+	cdef ULLong mask = lvec
 	for n in range(bitlength(rule.lengths)):
 		if testbitint(rule.args, n):
-			# check if there are any bits left, and
-			# if any bits on the right should have gone before
-			# ones on this side
-			if rpos == -1 or (lpos != -1 and lpos <= rpos):
-				return False
-			# jump to next gap
-			rpos = nextunset(rvec, rpos)
-			if lpos != -1 and lpos < rpos:
-				return False
-			# there should be a gap if and only if
-			# this is the last element of this argument
-			if testbitint(rule.lengths, n):
-				if testbit(lvec, rpos):
-					return False
-			elif not testbit(lvec, rpos):
-				return False
-			# jump to next argument
-			rpos = nextset(rvec, rpos)
-		else: #if bit == 0:
-			# vice versa to the above
-			if lpos == -1 or (rpos != -1 and rpos <= lpos):
-				return False
-			lpos = nextunset(lvec, lpos)
-			if rpos != -1 and rpos < lpos:
-				return False
-			if testbitint(rule.lengths, n):
-				if testbit(rvec, lpos):
-					return False
-			elif not testbit(rvec, lpos):
-				return False
-			lpos = nextset(lvec, lpos)
+			# component from right vector
+			if rvec & mask == 0: return False
+			rvec |= rvec - 1 # trailing 0 bits => 1 bits
+			mask = rvec & (~rvec - 1) # everything before first 0 bit => 1 bits
+			if lvec & mask: return False
+			rvec &= ~mask # zero out component
+			if testbitint(rule.lengths, n): # a gap
+				if rvec: mask = ~rvec & (rvec - 1)
+				else: mask = ~lvec & (lvec - 1)
+				if lvec & mask or rvec & mask: return False
+		else:
+			# component from left vector
+			if lvec & mask == 0: return False
+			lvec |= lvec - 1 # trailing 0 bits => 1 bits
+			mask = lvec & (~lvec - 1) # everything before first 0 bit => 1 bits
+			if rvec & mask: return False
+			lvec &= ~mask # zero out component
+			if testbitint(rule.lengths, n): # a gap
+				if lvec: mask = ~lvec & (lvec - 1)
+				else: mask = ~rvec & (rvec - 1)
+				if lvec & mask or rvec & mask: return False
+		mask += 1  # e.g., 00111 => 01000
 	# success if we've reached the end of both left and right vector
-	return lpos == rpos == -1
+	return lvec == rvec == 0
 
 cdef FatChartItem FATNONE = new_FatChartItem(0)
 def parse_longsent(sent, Grammar grammar, tags=None, start=1,

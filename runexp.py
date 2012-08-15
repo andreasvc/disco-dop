@@ -865,9 +865,9 @@ def cycledetection(trees, sents):
 def test():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
-	import coarsetofine, treetransforms, disambiguation
+	import agenda, coarsetofine, treetransforms, disambiguation
 	modules = (bit, demos, kbest, parser, grammar, treebank, estimates,
-			_fragments, coarsetofine, treetransforms, disambiguation)
+			_fragments, agenda, coarsetofine, treetransforms, disambiguation)
 	results = {}
 	for mod in modules:
 		results[mod] = fail, _ = testmod(mod, verbose=False,

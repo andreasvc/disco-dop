@@ -9,7 +9,7 @@ cdef class Entry:
 	cdef object value
 	cdef unsigned long count
 
-cdef class Agenda(dict):
+cdef class Agenda:
 	cpdef setitem(self, key, object value)
 	cpdef setifbetter(self, key, object value)
 	cpdef Entry popentry(self)

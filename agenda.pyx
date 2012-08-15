@@ -12,24 +12,22 @@ from operator import itemgetter, attrgetter
 cimport cython
 
 DEF INVALID = 0
+DEF HEAP_ARITY = 4
+# 2 for binary heap, 4 for quadtree heap
 
 cdef inline Entry new_Entry(object k, object v, unsigned long c):
 	cdef Entry entry = Entry.__new__(Entry)
 	entry.key = k; entry.value = v; entry.count = c
 	return entry
-#cdef inline EdgeEntry new_EdgeEntry(k, v, unsigned long c):
-#	cdef EdgeEntry entry = EdgeEntry.__new__(EdgeEntry)
-#	entry.key = <ChartItem>k; entry.value = <Edge>v; entry.count = c
-#	return entry
 
 cdef inline bint cmpfun(Entry a, Entry b):
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))
 # this is _significantly_ faster than going through __richcmp__ of objects
 cdef inline bint edgecmpfun(Entry a, Entry b):
-	return ((<Edge>a.value).score < (<Edge>b.value).score
-		or ((<Edge>a.value).score == (<Edge>b.value).score and a.count < b.count))
+	return ((<Edge>a.value).score < (<Edge>b.value).score or
+		((<Edge>a.value).score == (<Edge>b.value).score and a.count < b.count))
 
-cdef class Agenda(dict):
+cdef class Agenda:
 	def __init__(self, iterable=None):
 		""" Can be initialized with an iterable; order of equivalent values
 		remains and the best priorities are retained on duplicate keys. """
@@ -104,7 +102,7 @@ cdef class Agenda(dict):
 			#replace first element with last element
 			self.heap[0] = self.heap.pop()
 			#and restore heap invariant
-			siftup(self.heap, 0, self.cmpfun)
+			siftdown(self.heap, 0, self.cmpfun)
 			n -= 1
 			entry = <Entry>(self.heap[0])
 		return entry
@@ -245,7 +243,7 @@ cdef class EdgeAgenda(Agenda):
 		entry.key =  key; entry.value = value; entry.count = oldentry.count
 		self.mapping[key] = entry
 		self.heap.append(entry)
-		siftdown(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+		siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
 		oldentry.count = INVALID
 		return <Edge>oldentry.value
 
@@ -268,7 +266,7 @@ cdef class EdgeAgenda(Agenda):
 			entry.key =  key; entry.value = value; entry.count = oldentry.count
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftdown(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+			siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
 			oldentry.count = INVALID
 		else:
 			self.counter += 1
@@ -277,7 +275,7 @@ cdef class EdgeAgenda(Agenda):
 			entry.key =  key; entry.value = value; entry.count = self.counter
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftdown(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+			siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
 
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
@@ -326,56 +324,59 @@ cdef inline Entry heappop(list heap, CmpFun cmpfun):
 		#replace first element with last element and restore heap invariant
 		entry = <Entry>(list_getitem(heap, 0))
 		heap[0] = heap.pop()
-		siftup(heap, 0, cmpfun)
+		siftdown(heap, 0, cmpfun)
 	return entry
 
 cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 	# place at the end and swap with parents until heap invariant holds
 	heap.append(entry)
-	siftdown(heap, 0, list_getsize(heap) - 1, cmpfun)
+	siftup(heap, 0, list_getsize(heap) - 1, cmpfun)
 
 cdef inline void heapify(list heap, CmpFun cmpfun):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
 	cdef int i
-	for i in range(list_getsize(heap) // 2, -1, -1):
-		siftup(heap, i, cmpfun)
+	for i in range(list_getsize(heap) // HEAP_ARITY, -1, -1):
+		siftdown(heap, i, cmpfun)
 
+# shifts only apply for binary tree
 cdef inline int _parent(int i):
-	return (i - 1) >> 1
+	return (i - 1) // HEAP_ARITY
+	#return (i - 1) >> 1
 
 cdef inline int _left(int i):
-	return (i << 1) + 1
+	return i * HEAP_ARITY + 1
+	#return (i << 1) + 1
 
 cdef inline int _right(int i):
-	return (i + 1) << 1
+	""" for documentation purposes; not used. """
+	return i * HEAP_ARITY + 2
+	#return (i + 1) << 1
 
-cdef inline void siftup(list heap, int pos, CmpFun cmpfun):
+cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
 	cdef int startpos = pos, childpos = _left(pos), rightpos
 	cdef int endpos = list_getsize(heap)
 	cdef Entry newitem = <Entry>list_getitem(heap, pos)
 	while childpos < endpos:
-		rightpos = childpos + 1
-		if (rightpos < endpos and not
-			cmpfun(<Entry>(list_getitem(heap, childpos)),
-					<Entry>(list_getitem(heap, rightpos)))):
-			childpos = rightpos
+		for rightpos in range(childpos + 1, childpos + HEAP_ARITY):
+			if (rightpos < endpos and
+				cmpfun(<Entry>(list_getitem(heap, rightpos)),
+					<Entry>(list_getitem(heap, childpos)))):
+				childpos = rightpos
 		heap[pos] = <Entry>list_getitem(heap, childpos)
 		pos = childpos
 		childpos = _left(pos)
 	heap[pos] = newitem
-	siftdown(heap, startpos, pos, cmpfun)
+	siftup(heap, startpos, pos, cmpfun)
 
-cdef inline void siftdown(list heap, int startpos, int pos, CmpFun cmpfun):
+cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 	cdef int parentpos
 	cdef Entry parent, newitem = <Entry>list_getitem(heap, pos)
 	while pos > startpos:
 		parentpos = _parent(pos)
 		parent = <Entry>list_getitem(heap, parentpos)
-		if cmpfun(newitem, parent):
-			heap[pos] = parent
-			pos = parentpos
-			continue
-		break
+		if cmpfun(parent, newitem): break
+		heap[pos] = parent
+		pos = parentpos
 	heap[pos] = newitem
 
 #==============================================================================

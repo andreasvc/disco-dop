@@ -837,7 +837,7 @@ def test():
 	print grammar
 	grammar.testgrammar(logging)
 
-	debug = True
+	debug = False
 	for stroutput in (True,): #(False, True):
 		trees = [a.copy(True) for a in trees]
 		grammarx, backtransform = doubledop(trees, sents,
