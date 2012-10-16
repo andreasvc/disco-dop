@@ -1,4 +1,4 @@
-"""This file contains three main transformations:
+""" This file contains three main transformations:
  - A straightforward binarization: binarize(), based on NLTK code.
    Modified to introduce a new unary production for the first/last
    element in the RHS.
@@ -14,7 +14,6 @@
    context-free rewriting systems.
  - Converting discontinuous trees to continuous trees and back:
    splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited.
-"""
 
 # Original notice:
 # Natural Language Toolkit: Tree Transformations
@@ -25,7 +24,6 @@
 # For license information, see LICENSE.TXT
 
 
-"""
 A collection of methods for tree (grammar) transformations used
 in parsing natural language.
 
@@ -136,7 +134,7 @@ import re
 def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
 	rightMostUnary=True, leftMostUnary=True,
-	tailMarker="$", reverse=True):
+	tailMarker="$", reverse=True, ids=None):
 	"""
 	>>> sent = "das muss man jetzt machen".split()
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
@@ -218,8 +216,10 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				nodeList.append((child, parent))
 
 			# binary form factorization
-			if len(node) > 2:
-				childNodes = [child.node for child in node]
+			if len(node) > (2 if ids is None else 1):
+				if isinstance(node[0], Tree):
+					childNodes = [child.node for child in node]
+				else: childNodes = []
 				nodeCopy = node.copy()
 				numChildren = len(nodeCopy)
 				headidx = 0
@@ -231,7 +231,8 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 				else: # factor == "left"
 					start = (numChildren - min(1, horzMarkov)) if reverse else horzMarkov
 					end = numChildren
-				siblings = "-".join(childNodes[start:end])
+				if ids is None: siblings = "-".join(childNodes[start:end])
+				else: siblings = str(ids.next())
 				newNode = Tree("%s%s<%s>%s" % (originalNode, childChar,
 												siblings, parentString), [])
 				node[:] = []
@@ -261,7 +262,8 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 						factor = "right" if factor == "left" else "left"
 						start = headidx + numChildren - i - 1
 						end = start + horzMarkov
-					siblings = "-".join(childNodes[start:end])
+					if ids is None: siblings = "-".join(childNodes[start:end])
+					else: siblings = str(ids.next())
 					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar,
 											marktail, siblings, parentString)
 					curNode = newNode
@@ -353,7 +355,7 @@ def collapse_unary(tree, collapsePOS = False, collapseRoot = False, joinChar = "
 					nodeList.append(child)
 	return tree
 
-def introducepreterminals(tree):
+def introducepreterminals(tree, ids=None):
 	""" Introduce preterminals with artificial POS-tags where needed
 	(i.e., for every terminal with siblings.)
 
@@ -372,7 +374,8 @@ def introducepreterminals(tree):
 			if isinstance(child, Tree):
 				nodeList.append(child)
 			elif hassiblings:
-				node[n] = Tree("%s/%s" % (node.node, child), [child])
+				node[n] = Tree("%s/%s" % (
+					node.node if ids is None else ids.next(), child), [child])
 	return tree
 
 def getbits(bitset):
@@ -385,7 +388,8 @@ def getbits(bitset):
 
 from bit import fanout as bitfanout
 def slowfanout(tree):
-	return len(list(ranges(sorted(tree.leaves())))) if isinstance(tree, Tree) else 1
+	if isinstance(tree, Tree): return len(list(ranges(sorted(tree.leaves()))))
+	else: return 1
 
 def fastfanout(tree):
 	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
@@ -415,8 +419,31 @@ def addbitsets(tree):
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
 
-globid = count()
-def defaultrightbin(node, sep="|", h=999, fanout=False):
+def defaultleftbin(node, sep="|", h=999, fanout=False, ids=None):
+	""" Binarize one constituent with a left factored binarization.
+	Children remain unmodified. Bottom-up version. Nodes must contain
+	bitsets (use addbitsets()).
+	By default construct artificial labels using labels of child nodes.
+	When iterator ids is specified, use identifiers from that instead. """
+	if len(node) < 3: return node
+	label = node.node
+	childlabels = [child.node for child in node]
+	prev = node[0]
+	for i in range(1, len(node) - 1):
+		newbitset = prev.bitset | node[i].bitset
+		if ids is None:
+			newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[max(0,i-h+1):i+1]))
+		else: newlabel = "%s%s<%d>" % (label, sep, ids.next())
+		if fanout:
+			nodefanout = bitfanout(newbitset)
+			if nodefanout > 1: newlabel += "_" + str(nodefanout)
+		prev = ImmutableTree(newlabel, [prev, node[i]])
+		prev.bitset = newbitset
+	result = ImmutableTree(label, [prev, node[-1]])
+	result.bitset = prev.bitset | node[-1].bitset
+	return result
+
+def defaultrightbin(node, sep="|", h=999, fanout=False, ids=None):
 	""" Binarize one constituent with a right factored binarization.
 	Children remain unmodified. Bottom-up version. Nodes must contain
 	bitsets (use addbitsets()).
@@ -428,9 +455,9 @@ def defaultrightbin(node, sep="|", h=999, fanout=False):
 	prev = node[-1]
 	for i in range(len(node) - 2, 0, -1):
 		newbitset = node[i].bitset | prev.bitset
-		if h == -1:
-			newlabel = "%s%s<%d>" % (label, sep, globid.next())
-		else: newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[i:i+h]))
+		if ids is None:
+			newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[i:i+h]))
+		else: newlabel = "%s%s<%d>" % (label, sep, ids.next())
 		if fanout:
 			nodefanout = bitfanout(newbitset)
 			if nodefanout > 1: newlabel += "_" + str(nodefanout)
@@ -817,7 +844,7 @@ def main():
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
 		action, input, output = args
-	except Exception, err:
+	except (GetoptError, ValueError) as err:
 		print "error:", err
 		usage()
 		exit(2)

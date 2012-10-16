@@ -1,7 +1,7 @@
 all:
 	python setup.py build_ext --inplace
 
-.PHONY: clean test debug testdebug html
+.PHONY: clean test debug testdebug html lint
 
 clean:
 	rm -f *.c *.so
@@ -28,3 +28,6 @@ nonecheck=False,\
 wraparound=False,\
 boundscheck=False \
 *.pyx
+
+lint:
+	pylint -dC demos.py eval.py fragments.py gen.py grammar.py runexp.py setup.py tikzdtree.py treebank.py treedist.py treetransforms.py

@@ -1,4 +1,4 @@
-from containers cimport Edge, ChartItem
+from containers cimport Edge, ChartItem, LCFRSEdge
 from cpython cimport PyList_GET_ITEM as list_getitem,\
 					PyList_GET_SIZE as list_getsize,\
 					PyDict_GetItem as dict_getitem

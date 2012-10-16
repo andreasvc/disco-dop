@@ -36,7 +36,7 @@ def gen(grammar, start=None, verbose=False):
 def compose(rule, (p1, l1), (p2, l2), verbose):
 	result = []
 	if verbose: print "[%g] %s + %s =" % (exp(-(rule.prob+p1+p2)), l1, l2,),
-	for n,a in enumerate(rule.lengths):
+	for n, a in enumerate(rule.lengths):
 		arg = []
 		for b in range(a):
 			if (rule.args[n] >> b) & 1:
@@ -147,13 +147,13 @@ def test():
 		((('VMFIN', 'Epsilon'), u'muss'),        0.0),
 		((('VVPP', 'Epsilon'),  u'nachgedacht'), 0.0)]
 	grammar = splitgrammar(rules, lexicon)
-	p, sent = gen(grammar, start=grammar.toid['S'], verbose=True)
+	_, sent = gen(grammar, start=grammar.toid['S'], verbose=True)
 	print " ".join(sent.pop())
 
 def main():
 	rules, lexicon = read_lcfrs_grammar(sys.argv[1], sys.argv[2])
 	grammar = splitgrammar(rules, lexicon)
-	for a in range(20):
+	for _ in range(20):
 		p, sent = gen(grammar)
 		print "[%g] %s" % (exp(-p), " ".join(sent.pop()))
 

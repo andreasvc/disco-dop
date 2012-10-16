@@ -1,9 +1,9 @@
+from array import array
+from cpython.array cimport array
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memcmp, memset
-from array cimport array
 cimport cython
 
-DEF SLOTS = 2
 ctypedef unsigned long long ULLong
 ctypedef unsigned long ULong
 ctypedef unsigned int UInt
@@ -20,6 +20,15 @@ cdef extern:
 cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
+	ULong BITMASK(int b)
+	int BITNSLOTS(int nb)
+	void SETBIT(ULong a[], int b)
+	ULong TESTBIT(ULong a[], int b)
+	#int SLOTS # doesn't work
+cdef extern from "arrayarray.h": pass
+
+# FIXME: find a way to make this a constant, yet shared across modules.
+DEF SLOTS = 2
 
 @cython.final
 cdef class Grammar:
@@ -42,7 +51,8 @@ cdef struct Rule:
 	UInt lhs # 4 bytes
 	UInt rhs1 # 4 bytes
 	UInt rhs2 # 4 bytes
-	# total: 28 bytes (32 bytes w/padding).
+	int no # 4 bytes
+	# total: 32 bytes.
 	#UChar fanout # 1 byte
 
 @cython.final
@@ -53,12 +63,30 @@ cdef class LexicalRule:
 	cdef unicode word
 	cdef double prob
 
+cdef class ParseForest:
+	""" the chart representation of bitpar. seems to require parsing
+	in 3 stages: recognizer, enumerate analyses, get probs. """
+	#keys
+	cdef list catnum		#lhs
+	cdef list firstanalysis	#idx to lists below.
+	# from firstanalysis[n] to firstanalysis[n+1] or end
+	#values.
+	cdef list rulenumber
+	cdef list firstchild
+	#positive means index to lists above, negative means0 terminal index
+	cdef list child
+
 cdef class ChartItem:
 	cdef UInt label
 cdef class SmallChartItem(ChartItem):
 	cdef ULLong vec
 cdef class FatChartItem(ChartItem):
 	cdef ULong vec[SLOTS]
+cdef class CFGChartItem(ChartItem):
+	cdef UChar start, end
+
+cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)
+cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
 
 # start scratch
 cdef union VecType:
@@ -75,20 +103,35 @@ cdef class DiscNode:
 	cdef CBitset leaves
 # end scratch
 
-@cython.final
 cdef class Edge:
-	cdef double score
 	cdef double inside
-	cdef double prob
+cdef class LCFRSEdge(Edge):
+	cdef double score
+	cdef double prob # we could eliminate prob by using ruleno
 	cdef ChartItem left
 	cdef ChartItem right
+	cdef long _hash
+	cdef int ruleno
+cdef class CFGEdge(Edge):
+	cdef Rule *rule
+	cdef UChar mid
 
 @cython.final
 cdef class RankedEdge:
 	cdef ChartItem head
-	cdef Edge edge
+	cdef LCFRSEdge edge
 	cdef int left
 	cdef int right
+	cdef long _hash
+
+@cython.final
+cdef class RankedCFGEdge:
+	cdef UInt label
+	cdef UChar start, end
+	cdef CFGEdge edge
+	cdef int left
+	cdef int right
+	cdef long _hash
 
 cdef struct Node:
 	int label, prod
@@ -121,9 +164,9 @@ cdef class CBitset:
 	cdef char *data
 	cdef UChar slots
 
-@cython.final
+#@cython.final
 cdef class FrozenArray:
-	cdef array data
+	cdef array obj
 
 @cython.final
 cdef class MemoryPool:
@@ -138,7 +181,7 @@ cdef binrepr(ULong *vec)
 # to avoid overhead of __init__ and __cinit__ constructors
 cdef inline FrozenArray new_FrozenArray(array data):
 	cdef FrozenArray item = FrozenArray.__new__(FrozenArray)
-	item.data = data
+	item.obj = data
 	return item
 
 cdef inline FatChartItem new_FatChartItem(UInt label):
@@ -151,9 +194,19 @@ cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):
 	item.label = label; item.vec = vec
 	return item
 
-cdef inline Edge new_Edge(double score, double inside, double prob,
-	ChartItem left, ChartItem right):
-	cdef Edge edge = Edge.__new__(Edge)
+cdef inline CFGChartItem new_CFGChartItem(UInt label, UChar start, UChar end):
+	cdef CFGChartItem item = CFGChartItem.__new__(CFGChartItem)
+	item.label = label; item.start = start; item.end = end
+	return item
+
+cdef inline LCFRSEdge new_Edge(double score, double inside, double prob,
+	int rule, ChartItem left, ChartItem right):
+	cdef LCFRSEdge edge = LCFRSEdge.__new__(LCFRSEdge)
 	edge.score = score; edge.inside = inside; edge.prob = prob
-	edge.left = left; edge.right = right
+	edge.ruleno = rule; edge.left = left; edge.right = right
+	return edge
+
+cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
+	cdef CFGEdge edge = CFGEdge.__new__(CFGEdge)
+	edge.inside = inside; edge.rule = rule; edge.mid = mid
 	return edge

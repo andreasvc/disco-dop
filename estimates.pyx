@@ -4,7 +4,6 @@ from math import exp
 from containers cimport Grammar, Rule, LexicalRule, SmallChartItem as ChartItem
 from containers cimport UInt, ULLong, new_ChartItem
 from agenda cimport Agenda, Entry
-from array cimport array
 cimport numpy as np
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint
 import numpy as np
@@ -629,7 +628,6 @@ def main():
 	from containers import Grammar
 	from treetransforms import addfanoutmarkers
 	from nltk import Tree
-	cdef ChartItem item
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = list(corpus.parsed_sents())
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
@@ -661,8 +659,11 @@ def main():
 	print msg
 	pprint_chart(estchart, sent, grammar.tolabel)
 	print 'items avoided:'
+	print chart.keys()
+	print
+	print estchart.keys()
 	for item in chart.viewkeys() - estchart.viewkeys():
-		print grammar.tolabel[item.label], bin(item.vec)
+		print item
 	print
 
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
@@ -697,6 +698,6 @@ def main():
 	pprint_chart(estchart, sent, grammar.tolabel)
 	print 'items avoided:'
 	for item in chart.viewkeys() - estchart.viewkeys():
-		print grammar.tolabel[item.label], bin(item.vec)
+		print item
 
 if __name__ == '__main__': main()

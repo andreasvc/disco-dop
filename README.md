@@ -30,9 +30,8 @@ Some references to implemented algorithms:
 
 Requirements:
 -------------
-- Python 2.6+   http://www.python.org (need headers, e.g. python-dev package)
-- Cython        http://www.cython.org
-- Cython array	[array.pxd](https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/array.pxd) [arrayarray.h](https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/arrayarray.h) (to be included in Cython 0.17)
+- Python 2.7+   http://www.python.org (need headers, e.g. python-dev package)
+- Cython 0.17+  http://www.cython.org
 - GCC           http://gcc.gnu.org/
 - NLTK          http://www.nltk.org
 - Numpy         http://numpy.scipy.org/
@@ -40,14 +39,13 @@ Requirements:
 For example, to install these dependencies and compile the code on Ubuntu
 (tested on 12.04), run the following sequence of commands:
 
-	sudo apt-get install python-dev python-nltk python-numpy cython build-essential
+	sudo apt-get install python-dev python-nltk python-numpy build-essential
+	sudo pip install cython
 	git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
-	wget https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/array.pxd
-	wget https://github.com/andreasvc/cython/raw/master/Cython/Includes/cpython/arrayarray.h 
 	make
 
-Alternatively Cython, NLTK, and Numpy can be installed with
+Alternatively Cython, NLTK, and Numpy can all be installed with
 `pip install cython nltk numpy`,
 which does not require root rights and may be more up-to-date.
 NB: compilation will by default use `CFLAGS` used to compile Python.

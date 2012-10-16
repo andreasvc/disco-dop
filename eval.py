@@ -1,5 +1,6 @@
 import sys, os.path
-from itertools import count, izip, islice
+from getopt import gnu_getopt, GetoptError
+from itertools import count, izip
 from collections import defaultdict, Counter as multiset
 from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
@@ -9,17 +10,17 @@ from treetransforms import disc
 from treedist import treedist
 #from treedist import newtreedist as treedist
 
-def readparams(file):
+def readparams(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
 	params = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = "DEBUG MAX_ERROR CUTOFF_LEN LABELED DISC_ONLY".split()
-	params = { "DEBUG" : 1, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
+	params = { "DEBUG" : 0, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
 					"LABELED" : 1, "DISC_ONLY" : 0,
 					"DELETE_LABEL" : [], "DELETE_LABEL_FOR_LENGTH" : [],
 					"EQ_LABEL" : {}, "EQ_WORD" : {} }
 	seen = set()
-	for a in open(file) if file else ():
+	for a in open(filename) if filename else ():
 		line = a.strip()
 		if line and not line.startswith("#"):
 			key, val = line.split(None, 1)
@@ -75,10 +76,9 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 					and (not disconly or disc(a)))
 
 def printbrackets(brackets):
-	return ", ".join("%s[%s]" % (a,
-		",".join(map(lambda x: "%s-%s" % (x[0], x[-1])
-		if len(x) > 1 else str(x[0]), ranges(sorted(b)))))
-		for a,b in brackets)
+	return ", ".join("%s[%s]" % (a, ",".join(
+		"-".join(str(y) for y in set((x[0], x[-1])))
+		for x in ranges(sorted(b)))) for a, b in brackets)
 
 def leafancestorpaths(tree):
 	#uses [] to mark components, and () to mark constituent boundaries
@@ -138,7 +138,7 @@ def f_measure(reference, test, alpha=0.5):
 
 def harmean(seq):
 	try: return len([a for a in seq if a]) / sum(1./a for a in seq if a)
-	except: return "zerodiv"
+	except ZeroDivisionError: return "zerodiv"
 
 def mean(seq):
 	return sum(seq) / float(len(seq)) if seq else None #"zerodiv"
@@ -152,18 +152,14 @@ def nonetozero(a):
 	except ZeroDivisionError: return 0
 	return 0 if result is None else result
 
-def main(goldfile, parsesfile, goldencoding='utf-8', parsesencoding='utf-8'):
+def main(goldfile, parsesfile, param, goldencoding, parsesencoding):
 	assert os.path.exists(goldfile), "gold file not found"
 	assert os.path.exists(parsesfile), "parses file not found"
 	gold = NegraCorpusReader(*splitpath(goldfile), encoding=goldencoding)
 	parses = NegraCorpusReader(*splitpath(parsesfile), encoding=parsesencoding)
 	goldlen = len(gold.parsed_sents())
 	parseslen = len(parses.parsed_sents())
-	param = readparams(sys.argv[3] if len(sys.argv) >= 4 else None)
 	start = 0; end = goldlen
-	if len(sys.argv) >= 5: param['CUTOFF_LEN'] = int(sys.argv[4])
-	if len(sys.argv) >= 6: start = int(sys.argv[5])
-	if len(sys.argv) == 7: end = int(sys.argv[6])
 	if start < 0: start += goldlen
 	if end < 0: end += goldlen
 	assert goldlen == parseslen, ("unequal number of sentences "
@@ -212,8 +208,8 @@ ______________________________________________________________________________\
 		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]
 			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
 		if cbrack == gbrack: exact += 1
-		candb.update((n,a) for a in cbrack.elements())
-		goldb.update((n,a) for a in gbrack.elements())
+		candb.update((n, a) for a in cbrack.elements())
+		goldb.update((n, a) for a in gbrack.elements())
 		for a in gbrack: goldbcat[a[0]][(n, a)] += 1
 		for a in cbrack: candbcat[a[0]][(n, a)] += 1
 		goldpos.extend(gpos)
@@ -239,7 +235,7 @@ ______________________________________________________________________________\
 			sum(gbrack.values()),
 			sum(cbrack.values()),
 			lengpos,
-			sum(1 for a,b in zip(gpos, cpos) if a==b),
+			sum(1 for a, b in zip(gpos, cpos) if a==b),
 			100 * accuracy(gpos, cpos),
 			100 * la[-1],
 			ted, #1 if ted == 0 else 1 - ted / float(denom)
@@ -267,9 +263,9 @@ Wrong Category Statistics (10 most frequent errors)
    test/gold   count
 ____________________"""
 		gmismatch = dict(((n, indices), label)
-					for n,(label,indices) in (goldb - candb).keys())
+					for n, (label, indices) in (goldb - candb).keys())
 		wrong = FreqDist((label, gmismatch[n, indices])
-					for n,(label,indices) in (candb - goldb).keys()
+					for n, (label, indices) in (candb - goldb).keys()
 					if (n, indices) in gmismatch)
 		for labels, freq in wrong.items()[:10]:
 			print "%s %7d" % ("/".join(labels).rjust(12), freq)
@@ -296,24 +292,42 @@ ____________________"""
 	print "tagging accuracy:          %6.2f" % (100*accuracy(goldpos, candpos))
 
 def test():
-	main("sample2.export", "sample2.export", 'iso-8859-1', 'iso-8859-1')
+	main("sample2.export", "sample2.export", readparams(None),
+		'iso-8859-1', 'iso-8859-1')
+	exit(0)
+
+def usage():
+	print """\
+wrong number of arguments. usage:
+%s gold parses [params] [options]
+(where gold and parses are files in export format, params is in EVALB format,
+and options may consist of:
+
+--goldenc enc
+--parsesenc enc  To specify a different encoding than the default UTF-8.
+--cutofflen n    Overrides the sentence length cutoff of the parameter file.
+--debug          Enable printing of verbose information.
+--disconly       Only evaluate on discontinuous constituents.
+
+Example:	%s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
+""" % (sys.argv[0], sys.argv[0])
 
 if __name__ == '__main__':
-	if len(sys.argv) == 2 and sys.argv[1] == "--test": test()
-	elif 3 <= len(sys.argv) <= 7:
-		goldfile, parsesfile = sys.argv[1:3]
-		if "/" in goldfile and not os.path.exists(goldfile):
-			goldfile, goldencoding = goldfile.rsplit("/", 1)
-		if "/" in parsesfile and not os.path.exists(parsesfile):
-			goldfile, goldencoding = goldfile.rsplit("/", 1)
-		main(goldfile, parsesfile)
-	else:
-		print """\
-wrong number of arguments.
-usage: %s gold[/encoding] parses[/encoding] [param [cutoff]]
-(where gold and parses are files in export format, param is in EVALB format,
-and cutoff is an integer for the length cutoff which overrides the parameter
-file. Encoding defaults to UTF-8, other encodings need to be specified.)
-
-Example:	%s sample2.export/iso-8859-1 parses.export TEST.prm\
-""" % (sys.argv[0], sys.argv[0])
+	flags = ("test", "debug", "disconly")
+	options = ('inputenc=', 'outputenc=', 'cutofflen=')
+	try:
+		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
+		opts = dict(opts)
+		if '--test' in opts: test()
+		assert 2 <= len(args) <= 3
+		goldfile, parsesfile = args[:2]
+	except (GetoptError, ValueError, AssertionError) as err:
+		print "error:", err
+		usage(); exit(2)
+	param = readparams(args[2] if len(args) == 3 else None)
+	if '--cutofflen' in opts: param['CUTOFF_LEN'] = int(opts['--cutofflen'])
+	if '--disconly' in opts: param['DISC_ONLY'] = 1
+	if '--debug' in opts: param['DEBUG'] = 1
+	main(goldfile, parsesfile, param,
+		opts.get('--inputenc', 'utf-8'),
+		opts.get('--outputenc', 'utf-8'))

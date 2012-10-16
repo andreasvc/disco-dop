@@ -3,7 +3,7 @@ from itertools import count, repeat
 from operator import itemgetter
 from os import path
 from glob import glob
-import re, codecs, logging
+import re, sys, codecs
 
 BOS = re.compile("^#BOS.*\n")
 EOS = re.compile("^#EOS")
@@ -18,7 +18,7 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 #		pass
 #	return trees
 
-class NegraCorpusReader():
+class NegraCorpusReader(object):
 	""" Read a corpus in the Negra export format. """
 	def __init__(self, root, fileids, encoding="utf-8",
 	headorder=False, headfinal=False, headreverse=False, unfold=False,
@@ -34,7 +34,7 @@ class NegraCorpusReader():
 			movepunct: move punctuation to appropriate constituents"""
 		self.headorder = headorder; self.reverse = headreverse
 		self.headfinal = headfinal;	self.unfold = unfold
-		self.functiontags = functiontags;
+		self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules() if headorder else {}
 		self._encoding = encoding
@@ -45,15 +45,15 @@ class NegraCorpusReader():
 		assert self._filenames, (
 				"no files matched pattern %s" % path.join(root, fileids))
 		self._block_cache = self._read_blocks()
-	def parsed_sents(self, fileids=None):
+	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = map(self._parse, self._block_cache)
 		return self._parsed_sents_cache
-	def tagged_sents(self, fileids=None):
+	def tagged_sents(self):
 		if not self._tagged_sents_cache:
 			self._tagged_sents_cache = map(self._tag, self._block_cache)
 		return self._tagged_sents_cache
-	def sents(self, fileids=None):
+	def sents(self):
 		if not self._sents_cache:
 			self._sents_cache = map(self._word, self._block_cache)
 		return self._sents_cache
@@ -99,19 +99,19 @@ class NegraCorpusReader():
 					results[-1].source = a
 			return results
 		children = {}
-		for n,a in enumerate(s):
-			children.setdefault(a[PARENT], []).append((n,a))
+		for n, a in enumerate(s):
+			children.setdefault(a[PARENT], []).append((n, a))
 		result = ParentedTree("ROOT", getchildren("0", children))
 		# roughly order constituents by order in sentence
 		for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
-			a.sort(key=lambda x: leaves(x))
+			a.sort(key=leaves)
 		if self.removepunct: doremovepunct(result)
 		elif self.movepunct:
 			punctraise(result)
 			balancedpunctraise(result, self._word(s))
 			# restore order
 			for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
-				a.sort(key=lambda x: leaves(x))
+				a.sort(key=leaves)
 		if self.unfold: result = unfold(result)
 		if self.headorder:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
@@ -158,7 +158,7 @@ def export(tree, sent, n):
 	if n: result.append("#EOS %d" % n)
 	return "\n".join(result) + '\n' #.encode("utf-8")
 
-class DiscBracketCorpusReader():
+class DiscBracketCorpusReader(object):
 	""" A corpus reader where the phrase-structure is represented by a tree in
 	bracket notation, where the leaves are indices pointing to words in a
 	separately represented sentence; e.g.:
@@ -184,24 +184,24 @@ class DiscBracketCorpusReader():
 			movepunct: move punctuation to appropriate constituents"""
 		self.headorder = headorder; self.reverse = headreverse
 		self.headfinal = headfinal;	self.unfold = unfold
-		self.functiontags = functiontags;
+		self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules() if headorder else {}
 		self._encoding = encoding
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
-	def sents(self, fileids=None):
+	def sents(self):
 		return [line.split("\t", 1)[1].rstrip("\n\r").split(" ")
 			for filename in self._filenames
 				for line in codecs.open(filename, encoding=self._encoding)]
-	def tagged_sents(self, fileids=None):
+	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
 		return [zip(line.split("\t", 1)[1].rstrip("\n\r").split(" "),
 				map(itemgetter(1), sorted(Tree.parse(line.split("\t", 1)[0],
 					parse_leaf=int).pos())))
 			for filename in self._filenames
 				for line in codecs.open(filename, encoding=self._encoding)]
-	def parsed_sents(self, fileids=None):
+	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = map(self._parse, self.blocks())
 		return self._parsed_sents_cache
@@ -214,14 +214,14 @@ class DiscBracketCorpusReader():
 		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=int)
 		# roughly order constituents by order in sentence
 		for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
-			a.sort(key=lambda x: leaves(x))
+			a.sort(key=leaves)
 		if self.removepunct: doremovepunct(result)
 		elif self.movepunct:
 			punctraise(result)
 			balancedpunctraise(result, self._word(s))
 			# restore order
 			for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
-				a.sort(key=lambda x: leaves(x))
+				a.sort(key=leaves)
 		if self.unfold: result = unfold(result)
 		if self.headorder:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
@@ -229,8 +229,12 @@ class DiscBracketCorpusReader():
 													result.subtrees())
 		if self.functiontags: addfunctions(result)
 		return result
+	def _word(self, s):
+		sent = s.split("\t", 1)[1].rstrip("\n\r").split(" ")
+		if self.removepunct: sent = [a for a in sent if a not in '.,:;\'"()?!-']
+		return sent
 
-class BracketCorpusReader():
+class BracketCorpusReader(object):
 	""" A standard corpus reader where the phrase-structure is represented by a
 	tree in bracket notation; e.g.:
 	(S (NP John) (VP (VB is) (JJ rich)) (. .))
@@ -249,22 +253,22 @@ class BracketCorpusReader():
 			movepunct: move punctuation to appropriate constituents"""
 		self.headorder = headorder; self.reverse = headreverse
 		self.headfinal = headfinal;	self.unfold = unfold
-		self.functiontags = functiontags;
+		self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules() if headorder else {}
 		self._encoding = encoding
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
-	def sents(self, fileids=None):
+	def sents(self):
 		return [Tree(line).leaves()
 			for filename in self._filenames
 				for line in codecs.open(filename, encoding=self._encoding)]
-	def tagged_sents(self, fileids=None):
+	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
 		return [Tree(line).pos()
 			for filename in self._filenames
 				for line in codecs.open(filename, encoding=self._encoding)]
-	def parsed_sents(self, fileids=None):
+	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = map(self._parse, self.blocks())
 		return self._parsed_sents_cache
@@ -293,6 +297,10 @@ class BracketCorpusReader():
 													result.subtrees())
 		if self.functiontags: addfunctions(result)
 		return result
+	def _word(self, s):
+		sent = Tree(s).leaves()
+		if self.removepunct: sent = [a for a in sent if a not in '.,:;\'"()?!-']
+		return sent
 
 def addfunctions(tree):
 	# FIXME: pos tags probably shouldn't get a function tag.
@@ -339,7 +347,7 @@ def headfinder(tree, headrules):
 def headorder(tree, headfinal, reverse):
 	""" change order of constituents based on head (identified with
 	function tag). """
-	head = [n for n,a in enumerate(tree)
+	head = [n for n, a in enumerate(tree)
 		if hasattr(a, "source") and "HD" in a.source[FUNC].split("-")]
 	if not head: return
 	headidx = head.pop()
@@ -498,7 +506,7 @@ def unfold(tree):
 	#adjunctable = set("NP".split()) # PP AP VP
 	#for a in list(tree.subtrees(lambda n: n.node in adjunctable and any(function(x) == "MO" for x in n))):
 	#	modifiers = [x for x in a if function(x) == "MO"]
-	#	if min(n for n,x in enumerate(a) if function(x) =="MO") == 0:
+	#	if min(n for n, x in enumerate(a) if function(x) =="MO") == 0:
 	#		modifiers[:] = modifiers[::-1]
 	#	while modifiers:
 	#		modifier = modifiers.pop()
@@ -563,7 +571,7 @@ def fold(tree):
 
 	# merge finite VP with S level
 	def mergevp(s):
-		for vp in (n for n,a in enumerate(s) if a.node == "VP"):
+		for vp in (n for n, a in enumerate(s) if a.node == "VP"):
 			if any(a.node.endswith("FIN") for a in s[vp]):
 				s[vp][:], s[vp:vp+1] = [], s[vp][:]
 	#if any(a.node == "S" for a in tree):
@@ -574,9 +582,13 @@ def fold(tree):
 
 	# remove constituents for particle verbs
 	# get the grandfather of each verb particle
-	for a in list(tree.subtrees(lambda n: any("PTKVZ" in (x.node for x in m if isinstance(x, Tree)) for m in n if isinstance(m, Tree)))):
-		for n,b in enumerate(a):
-			if len(b) == 2 and b.node.startswith("V") and "PTKVZ" in (c.node for c in b if isinstance(c, Tree)) and any(c.node == b.node for c in b):
+	hasparticle = lambda n: any("PTKVZ" in (x.node for x in m if isinstance(x, Tree))
+		for m in n if isinstance(m, Tree))
+	for a in list(tree.subtrees(hasparticle)):
+		for n, b in enumerate(a):
+			if (len(b) == 2 and b.node.startswith("V")
+				and "PTKVZ" in (c.node for c in b if isinstance(c, Tree))
+				and any(c.node == b.node for c in b)):
 				a[n:n+1] = b[:]
 
 	# remove phrasal projections for single tokens
@@ -592,7 +604,8 @@ def fold(tree):
 	return tree
 
 def bracketings(tree):
-	return [(a.node, tuple(sorted(a.leaves()))) for a in tree.subtrees(lambda t: t.height() > 2)]
+	return [(a.node, tuple(sorted(a.leaves())))
+		for a in tree.subtrees(lambda t: t.height() > 2)]
 
 def labelfunc(tree):
 	for a in tree.subtrees(): a.node += "-" + function(a)
@@ -607,7 +620,7 @@ def doremovepunct(tree):
 				if tree[a[:-(n+1)]]: break
 	#renumber
 	oldleaves = sorted(tree.leaves())
-	newleaves = dict((a,n) for n, a in enumerate(oldleaves))
+	newleaves = dict((a, n) for n, a in enumerate(oldleaves))
 	for a in tree.treepositions("leaves"):
 		tree[a] = newleaves[tree[a]]
 	assert sorted(tree.leaves()) == range(len(tree.leaves())), tree
@@ -669,14 +682,23 @@ def punctraise(tree):
 def balancedpunctraise(tree, sent):
 	""" Move balanced punctuation marks " ' ( ) [ ] together in the same
 	constituent. Based on rparse code.
-	>>> tree = ParentedTree.parse("(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20) (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP (APPR 6) (CNP (NN 8) (ADV 9) (ISU ($. 10) ($. 11) ($. 12))))) (S (PRELS 15) (MPN (NE 16) (NE 17)) (ADJD 18) (VVFIN 19))) (VVFIN 21) (ADV 22) (NP (ADJA 23) (NN 24))) ($. 25))", parse_leaf=int)
-	>>> sent = "Die zweite Konzertreihe , sechs Abende mit ' Orgel plus . . . ' , die Hayko Siemens musikalisch leitet , bietet wieder ungewoehnliche Kombinationen .".split()
+	>>> tree = ParentedTree.parse("(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20)"
+	... " (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP (APPR 6) "
+	... "(CNP (NN 8) (ADV 9) (ISU ($. 10) ($. 11) ($. 12))))) (S (PRELS 15) "
+	... "(MPN (NE 16) (NE 17)) (ADJD 18) (VVFIN 19))) (VVFIN 21) (ADV 22) "
+	... "(NP (ADJA 23) (NN 24))) ($. 25))", parse_leaf=int)
+	>>> sent = ("Die zweite Konzertreihe , sechs Abende mit ' Orgel plus "
+	... ". . . ' , die Hayko Siemens musikalisch leitet , bietet wieder "
+	... "ungewoehnliche Kombinationen .".split())
 	>>> punctraise(tree)
 	>>> balancedpunctraise(tree, sent)
 	>>> from treetransforms import slowfanout
 	>>> print max(map(slowfanout, tree.subtrees()))
 	1
-	>>> nopunct = Tree.parse("(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 3) (NN 4) (PP (APPR 5) (CNP (NN 6) (ADV 7)))) (S (PRELS 8) (MPN (NE 9) (NE 10)) (ADJD 11) (VVFIN 12))) (VVFIN 13) (ADV 14) (NP (ADJA 15) (NN 16))))", parse_leaf=int)
+	>>> nopunct = Tree.parse("(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 3)"
+	... " (NN 4) (PP (APPR 5) (CNP (NN 6) (ADV 7)))) (S (PRELS 8) (MPN (NE 9) "
+	... "(NE 10)) (ADJD 11) (VVFIN 12))) (VVFIN 13) (ADV 14) (NP (ADJA 15) "
+	... "(NN 16))))", parse_leaf=int)
 	>>> print max(map(slowfanout, nopunct.subtrees()))
 	1
 	"""
@@ -749,7 +771,6 @@ def puncttest():
 
 def main():
 	from grammar import canonicalize
-	import sys, codecs
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
@@ -763,7 +784,8 @@ def main():
 	nk = set(); mo = set()
 	from nltk import FreqDist
 	fnk = FreqDist(); fmo = FreqDist()
-	for a,b,c in zip(n.parsed_sents()[:100], nn.parsed_sents()[:100], n.sents()[:100]):
+	for a, b, c in zip(n.parsed_sents()[:100],
+			nn.parsed_sents()[:100], n.sents()[:100]):
 		#if len(c) > 15: continue
 		for x in a.subtrees(lambda n: n.node == "NP"):
 			nk.update(y.node for y in x if function(y) == "NK")
@@ -779,7 +801,7 @@ def main():
 			recall = len(set(b1) & set(b2)) / float(len(set(b2)))
 			if precision != 1.0 or recall != 1.0 or d == z:
 				print d, " ".join(":".join((str(n),
-					a.encode('unicode-escape'))) for n,a in enumerate(c))
+					a.encode('unicode-escape'))) for n, a in enumerate(c))
 				print "no match", precision, recall
 				print len(b1), len(b2), "gold-fold", set(b2) - set(b1),
 				print "fold-gold", set(b1) - set(b2)

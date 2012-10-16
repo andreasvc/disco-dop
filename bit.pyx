@@ -92,8 +92,9 @@ cdef binrepr(ULong *vec, int slots):
 def main():
 	cdef ULong ulongvec[2]
 	bigpyint = 0b11100110101111001101011111100110101001100110
-	print "8 * sizeof(unsigned long) ", 8 * sizeof(unsigned long)
-	print "8 * sizeof(unsigned long long) ", 8 * sizeof(unsigned long long)
+	print "8 * sizeof(unsigned int) ==", 8 * sizeof(unsigned int)
+	print "8 * sizeof(unsigned long) ==", 8 * sizeof(unsigned long)
+	print "8 * sizeof(unsigned long long) ==", 8 * sizeof(unsigned long long)
 	assert nextset(0b001100110, 3) == 5
 	assert nextset(0b001100110, 7) == -1
 	assert nextunset(0b001100110, 1) == 3
@@ -123,7 +124,6 @@ def main():
 	assert anextset(ulongvec, 0, 2) == sizeof(ULong)*8, (
 		anextset(ulongvec, 0, 2), sizeof(ULong)*8)
 	ulongvec[1] = 0
-	print binrepr(ulongvec, 2)
 	assert anextset(ulongvec, 0, 2) == -1, (
 		anextset(ulongvec, 0, 2), -1)
 	ulongvec[0] = ~0UL

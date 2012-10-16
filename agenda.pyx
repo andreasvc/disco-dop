@@ -19,13 +19,15 @@ cdef inline Entry new_Entry(object k, object v, unsigned long c):
 	cdef Entry entry = Entry.__new__(Entry)
 	entry.key = k; entry.value = v; entry.count = c
 	return entry
+def getkey(Entry entry): return entry.key
 
 cdef inline bint cmpfun(Entry a, Entry b):
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))
 # this is _significantly_ faster than going through __richcmp__ of objects
 cdef inline bint edgecmpfun(Entry a, Entry b):
-	return ((<Edge>a.value).score < (<Edge>b.value).score or
-		((<Edge>a.value).score == (<Edge>b.value).score and a.count < b.count))
+	return ((<LCFRSEdge>a.value).score < (<LCFRSEdge>b.value).score
+		or ((<LCFRSEdge>a.value).score == (<LCFRSEdge>b.value).score
+		and a.count < b.count))
 
 cdef class Agenda:
 	def __init__(self, iterable=None):
@@ -221,21 +223,21 @@ cdef class EdgeAgenda(Agenda):
 			self.length = len(self.mapping)
 			heapify(self.heap, self.cmpfun)
 
-	cpdef Edge getitem(self, key):
+	cpdef LCFRSEdge getitem(self, key):
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
-		return <Edge>entry.value
+		return <LCFRSEdge>entry.value
 
 	cpdef setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
 		cdef Entry oldentry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
-			if (<Edge>value).score >= (<Edge>oldentry.value).score:
+			if (<LCFRSEdge>value).score >= (<LCFRSEdge>oldentry.value).score:
 				return
-		self.setitem(key, <Edge>value)
+		self.setitem(key, <LCFRSEdge>value)
 
-	cdef Edge replace(self, key, value):
+	cdef LCFRSEdge replace(self, key, value):
 		""" return current value for key, and also change its value.
 		equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
@@ -245,7 +247,7 @@ cdef class EdgeAgenda(Agenda):
 		self.heap.append(entry)
 		siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
 		oldentry.count = INVALID
-		return <Edge>oldentry.value
+		return <LCFRSEdge>oldentry.value
 
 	# the following are identical except for `edgecmpfun'
 	cpdef Entry popentry(self):

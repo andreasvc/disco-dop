@@ -1,6 +1,7 @@
 from math import exp
 from nltk import Tree
-import grammar, containers, treetransforms, parser, kbest
+import treetransforms, parser, kbest
+from grammar import induce_plcfrs
 from containers import Grammar
 
 def tree_adjoining_grammar():
@@ -141,8 +142,8 @@ def bitext():
 	(ROOT (S (NP (NNP (Mary 0) (Mary 4))) (VP (VB (likes 1) (aimes 5))\
      (NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) (SEP (| 3)))""".splitlines()]
 	sents = [["0"] * len(a.leaves()) for a in trees]
-	map(treetransforms.binarize, trees)
-	compiled_scfg = Grammar(grammar.induce_plcfrs(trees, sents))
+	for a in trees: treetransforms.binarize(a)
+	compiled_scfg = Grammar(induce_plcfrs(trees, sents))
 	print "sentences:"
 	for t in trees: print " ".join(w for _, w in sorted(t.pos()))
 	print "treebank:"
@@ -202,7 +203,7 @@ def do(compiledgrammar, testsent, testtags=None):
 			for a in enumerate(testtags if testtags else testsent)),
 	if start:
 		print
-		results = kbest.lazykbest(chart, start, 10, compiledgrammar.tolabel)
+		results = kbest.lazykbest(chart, start, 10, compiledgrammar.tolabel)[0]
 		for tree, prob in results:
 			tree = Tree(tree)
 			treetransforms.unbinarize(tree)

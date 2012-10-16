@@ -1,7 +1,6 @@
 from distutils.core import setup
-from distutils.extension import Extension
-from Cython.Distutils import build_ext
-import numpy
+from Cython.Build import cythonize
+import os, cython, numpy
 
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
@@ -11,26 +10,21 @@ directives = {
 	"cdivision" : True,
 	"wraparound" : False,
 	"boundscheck" : False,
-	"embedsignature" : True }
+	"embedsignature" : True,
+	#"extra_compile_args" : ["-O3"],
+	#extra_link_args=["-g"]
+	}
 
-ext_modules = [
-	Extension("kbest",           ["kbest.pyx"]),
-	Extension("parser",          ["parser.pyx"]),
-	Extension("estimates",       ["estimates.pyx"]),
-	Extension("_fragments",      ["_fragments.pyx"]),
-	Extension("coarsetofine",    ["coarsetofine.pyx"]),
-	Extension("disambiguation",  ["disambiguation.pyx"]),
-	Extension("bit",             ["bit.pyx", "bit.pxd"]),
-	Extension("agenda",          ["agenda.pyx", "agenda.pxd"]),
-	Extension("containers",      ["containers.pyx", "containers.pxd"]),
-	]
-
-for e in ext_modules:
-	e.pyrex_directives = directives
+# this directory includes 'arrayarray.h', which we include manually
+# to get around a problem where it's not loaded early enough.
+cythonutils = os.path.join(os.path.split(
+	cython.__file__)[0], 'Cython', 'Utility')
 
 setup(
 	name = 'disco-dop',
-	cmdclass = {'build_ext': build_ext},
-	include_dirs = [numpy.get_include(), '.'],
-	ext_modules = ext_modules
+	include_dirs = [numpy.get_include(), cythonutils],
+	ext_modules = cythonize('*.pyx',
+		pyrex_directives=directives,
+		directives=directives,
+		**directives)
 )

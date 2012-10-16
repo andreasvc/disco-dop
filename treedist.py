@@ -34,7 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
 
 import numpy
 from collections import deque
-from nltk import Tree, memoize
+from nltk import Tree
 from containers import Terminal
 from treetransforms import canonicalize
 
@@ -160,7 +160,7 @@ def newtreedist(A, B, debug=False):
 	if debug: print result
 	return result.distance
 
-class EditStats:
+class EditStats(object):
 	__slots__ = ('distance', 'matched', 'editscript')
 	def __init__(self, distance=0, matched=0, editscript=None):
 		if editscript is None: editscript = ()

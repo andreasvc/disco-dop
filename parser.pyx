@@ -1,8 +1,9 @@
 """ Probabilistic CKY parser for monotone, string-rewriting
 Linear Context-Free Rewriting Systems. """
+from array import array
+from cpython.array cimport array
 # python imports
 from math import log, exp
-from array import array
 from collections import defaultdict
 import re, logging, sys
 import numpy as np
@@ -10,11 +11,11 @@ from agenda import EdgeAgenda, Entry
 # cython imports
 from cpython cimport PyDict_Contains, PyDict_GetItem
 cimport numpy as np
-from agenda cimport Entry, EdgeAgenda
-from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule,\
-    UChar, UInt, ULong, ULLong, new_ChartItem, new_Edge, \
-	new_FatChartItem, SmallChartItem, FatChartItem, binrepr as binrepr1
-from array cimport array
+from agenda cimport Entry, EdgeAgenda, Agenda
+from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule, \
+    UChar, UInt, ULong, ULLong, SmallChartItem, FatChartItem, CFGChartItem, \
+	LCFRSEdge, CFGEdge, new_ChartItem, new_Edge, new_CFGChartItem, \
+	new_FatChartItem, new_CFGEdge, binrepr as binrepr1
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint, \
 	anextset, anextunset, abitcount, abitlength, ulongset, ulongcpy, setunion
 cdef extern from "math.h":
@@ -70,7 +71,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 	cdef Rule rule
 	cdef LexicalRule terminal
 	cdef Entry entry
-	cdef Edge edge
+	cdef LCFRSEdge edge
 	cdef SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
 	cdef SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 	cdef np.ndarray[np.double_t, ndim=4] outside
@@ -109,7 +110,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					if score > 300.0: continue
 				newitem.label = terminal.lhs; newitem.vec = 1ULL << i
 				tmp = process_edge(newitem, score, terminal.prob,
-					terminal.prob, item, NONE, agenda, chart, viterbi, grammar,
+					terminal.prob, -1, item, NONE, agenda, chart, viterbi, grammar,
 					exhaustive, whitelist, False, markorigin, &blocked)
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
@@ -124,7 +125,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				score += outside[lhs, length, left+right, gaps]
 				if score > 300.0: continue
 			tagitem = new_ChartItem(lhs, 1ULL << i)
-			agenda[tagitem] = new_Edge(score, 0.0, 0.0, item, NONE)
+			agenda[tagitem] = new_Edge(score, 0.0, 0.0, -1, item, NONE)
 			chart[tagitem] = []
 			recognized = True
 		elif not recognized:
@@ -134,7 +135,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 	while agenda.length:
 		entry = agenda.popentry()
 		item = <SmallChartItem>entry.key
-		edge = <Edge>entry.value
+		edge = <LCFRSEdge>entry.value
 		chart[item].append(iscore(edge))
 		(<dict>viterbi[item.label])[item] = edge
 		if item.label == goal.label and item.vec == goal.vec:
@@ -162,7 +163,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					if score > 300.0: continue
 				newitem.label = rule.lhs; newitem.vec = item.vec
 				newitem = process_edge(newitem, score, inside, rule.prob,
-					item, NONE, agenda, chart, viterbi, grammar,
+					rule.no, item, NONE, agenda, chart, viterbi, grammar,
 					exhaustive, whitelist,
 					splitprune and grammar.fanout[rule.lhs] != 1,
 					markorigin, &blocked)
@@ -179,7 +180,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					if concat(rule, item.vec, sibling.vec):
 						newitem.label = rule.lhs
 						newitem.vec = item.vec ^ sibling.vec
-						y = (<Edge>e).inside
+						y = (<LCFRSEdge>e).inside
 						score = inside = x + y + rule.prob
 						if estimatetype == SX:
 							length = bitcount(newitem.vec)
@@ -195,7 +196,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_edge(newitem, score, inside,
-								rule.prob, item, sibling, agenda, chart,
+								rule.prob, rule.no, item, sibling, agenda, chart,
 								viterbi, grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -212,7 +213,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					if concat(rule, sibling.vec, item.vec):
 						newitem.label = rule.lhs
 						newitem.vec = sibling.vec ^ item.vec
-						y = (<Edge>e).inside
+						y = (<LCFRSEdge>e).inside
 						score = inside = x + y + rule.prob
 						if estimatetype == SX:
 							length = bitcount(item.vec)
@@ -228,7 +229,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_edge(newitem, score, inside,
-								rule.prob, sibling, item, agenda, chart,
+								rule.prob, rule.no, sibling, item, agenda, chart,
 								viterbi, grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -247,7 +248,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 
 cdef SmallChartItem component = new_ChartItem(0, 0)
 cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
-		double inside, double prob, SmallChartItem left, SmallChartItem right,
+		double inside, double prob, int ruleno, SmallChartItem left, SmallChartItem right,
 		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar,
 		bint exhaustive, list whitelist, bint splitprune, bint markorigin,
 		UInt *blocked):
@@ -294,29 +295,29 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, left, right))
+				new_Edge(score, inside, prob, ruleno, left, right))
 		chart[newitem] = []
 	# in agenda (maybe in chart)
 	elif not exhaustive and inagenda:
 		agenda.setifbetter(newitem,
-				new_Edge(score, inside, prob, left, right))
-	elif (inagenda and inside < (<Edge>(agenda.getitem(newitem))).inside):
+				new_Edge(score, inside, prob, ruleno, left, right))
+	elif (inagenda and inside < (<LCFRSEdge>(agenda.getitem(newitem))).inside):
 		# item has lower score, decrease-key in agenda
 		# (add old, suboptimal edge to chart if parsing exhaustively)
 		chart[newitem].append(iscore(agenda.replace(newitem,
-				new_Edge(score, inside, prob, left, right))))
+				new_Edge(score, inside, prob, ruleno, left, right))))
 	# not in agenda => must be in chart
 	elif (not inagenda and inside <
-				(<Edge>(<dict>viterbi[newitem.label])[newitem]).inside):
+				(<LCFRSEdge>(<dict>viterbi[newitem.label])[newitem]).inside):
 		#re-add to agenda because we found a better score.
 		#should not happen without estimates!
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, left, right))
-		logging.warning("WARN: updating score in agenda: %r" % (newitem))
+				new_Edge(score, inside, prob, ruleno, left, right))
+		logging.warning("WARN: updating score in agenda: %r", newitem)
 	elif exhaustive:
 		# suboptimal edge
 		chart[newitem].append(iscore(
-				new_Edge(score, inside, prob, left, right)))
+				new_Edge(score, inside, prob, ruleno, left, right)))
 	return SmallChartItem.__new__(SmallChartItem)
 
 cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
@@ -348,10 +349,10 @@ cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
 	if lvec & rvec: return False
 	# if the yield function is the concatenation of two elements, and there are
 	# no gaps in lvec and rvec, then this should be quicker
-	if 0b10 == rule.lengths: # == rule.args:
-		lvec |= lvec - 1 # replace trailing zeroes with ones
-		rvec ^= lvec # combine lvec & rvec
-		return rvec & (rvec + 1) == 0 # is power of 2?
+	#if 0b10 == rule.lengths: # == rule.args:
+	#	lvec |= lvec - 1 # replace trailing zeroes with ones
+	#	rvec ^= lvec # combine lvec & rvec
+	#	return rvec & (rvec + 1) == 0 # is power of 2?
 	cdef ULLong mask = rvec if testbitint(rule.args, 0) else lvec
 	cdef size_t n
 	for n in range(bitlength(rule.lengths)):
@@ -389,7 +390,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef Rule rule
 	cdef LexicalRule terminal
 	cdef Entry entry
-	cdef Edge edge
+	cdef LCFRSEdge edge
 	cdef FatChartItem item, sibling, newitem = new_FatChartItem(0)
 	cdef FatChartItem goal
 	cdef np.ndarray[np.double_t, ndim=4] outside
@@ -430,7 +431,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				newitem.label = terminal.lhs
 				SETBIT(newitem.vec, i)
 				tmp = process_fatedge(newitem, score, terminal.prob,
-					terminal.prob, item, FATNONE, agenda, chart, viterbi,
+					terminal.prob, -1, item, FATNONE, agenda, chart, viterbi,
 					grammar, exhaustive, whitelist, False, markorigin, &blocked)
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
@@ -446,7 +447,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				if score > 300.0: continue
 			tagitem = new_FatChartItem(lhs)
 			SETBIT(tagitem.vec, i)
-			agenda[tagitem] = new_Edge(score, 0.0, 0.0, item, FATNONE)
+			agenda[tagitem] = new_Edge(score, 0.0, 0.0, -1, item, FATNONE)
 			chart[tagitem] = []
 			recognized = True
 		elif not recognized:
@@ -456,7 +457,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	while agenda.length:
 		entry = agenda.popentry()
 		item = <FatChartItem>entry.key
-		edge = <Edge>entry.value
+		edge = <LCFRSEdge>entry.value
 		chart[item].append(iscore(edge))
 		(<dict>viterbi[item.label])[item] = edge
 		if item.label == goal.label and item.vec == goal.vec:
@@ -483,7 +484,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				newitem.label = rule.lhs
 				ulongcpy(newitem.vec, item.vec, SLOTS)
 				newitem = process_fatedge(newitem, score, inside, rule.prob,
-					item, FATNONE, agenda, chart, viterbi, grammar,
+					rule.no, item, FATNONE, agenda, chart, viterbi, grammar,
 					exhaustive, whitelist,
 					splitprune and grammar.fanout[rule.lhs] != 1,
 					markorigin, &blocked)
@@ -497,7 +498,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 					if fatconcat(rule, item.vec, sibling.vec):
 						newitem.label = rule.lhs
 						setunion(newitem.vec, item.vec, sibling.vec, SLOTS)
-						y = (<Edge>e).inside
+						y = (<LCFRSEdge>e).inside
 						score = inside = x + y + rule.prob
 						if estimatetype == SX:
 							length = abitcount(newitem.vec, SLOTS)
@@ -513,7 +514,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_fatedge(newitem, score, inside,
-								rule.prob, item, sibling, agenda, chart,
+								rule.prob, rule.no, item, sibling, agenda, chart,
 								viterbi, grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -527,7 +528,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 					if fatconcat(rule, sibling.vec, item.vec):
 						newitem.label = rule.lhs
 						setunion(newitem.vec, sibling.vec, item.vec, SLOTS)
-						y = (<Edge>e).inside
+						y = (<LCFRSEdge>e).inside
 						score = inside = x + y + rule.prob
 						if estimatetype == SX:
 							length = abitcount(item.vec, SLOTS)
@@ -543,7 +544,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_fatedge(newitem, score, inside,
-								rule.prob, sibling, item, agenda, chart,
+								rule.prob, rule.no, sibling, item, agenda, chart,
 								viterbi, grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -557,10 +558,10 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 
 cdef FatChartItem fatcomponent = new_FatChartItem(0)
 cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
-		double inside, double prob, FatChartItem left, FatChartItem right,
-		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar,
-		bint exhaustive, list whitelist, bint splitprune, bint markorigin,
-		UInt *blocked):
+		double inside, double prob, int ruleno, FatChartItem left,
+		FatChartItem right, EdgeAgenda agenda, dict chart, list viterbi,
+		Grammar grammar, bint exhaustive, list whitelist, bint splitprune,
+		bint markorigin, UInt *blocked):
 	""" Decide what to do with a newly derived edge. """
 	cdef UInt a, b, cnt, i
 	cdef bint inagenda
@@ -603,29 +604,29 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, left, right))
+				new_Edge(score, inside, prob, ruleno, left, right))
 		chart[newitem] = []
 	# in agenda (maybe in chart)
 	elif not exhaustive and inagenda:
 		agenda.setifbetter(newitem,
-				new_Edge(score, inside, prob, left, right))
-	elif (inagenda and inside < (<Edge>(agenda.getitem(newitem))).inside):
+				new_Edge(score, inside, prob, ruleno, left, right))
+	elif (inagenda and inside < (<LCFRSEdge>(agenda.getitem(newitem))).inside):
 		# item has lower score, decrease-key in agenda
 		# (add old, suboptimal edge to chart if parsing exhaustively)
 		chart[newitem].append(iscore(agenda.replace(newitem,
-				new_Edge(score, inside, prob, left, right))))
+				new_Edge(score, inside, prob, ruleno, left, right))))
 	# not in agenda => must be in chart
 	elif (not inagenda and inside <
-				(<Edge>(<dict>viterbi[newitem.label])[newitem]).inside):
+				(<LCFRSEdge>(<dict>viterbi[newitem.label])[newitem]).inside):
 		#re-add to agenda because we found a better score.
 		#should not happen without estimates!
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, left, right))
-		logging.warning("WARN: updating score in agenda: %r" % (newitem))
+				new_Edge(score, inside, prob, ruleno, left, right))
+		logging.warning("WARN: updating score in agenda: %r", newitem)
 	elif exhaustive:
 		# suboptimal edge
 		chart[newitem].append(iscore(
-				new_Edge(score, inside, prob, left, right)))
+				new_Edge(score, inside, prob, ruleno, left, right)))
 	return FatChartItem.__new__(FatChartItem)
 
 cdef inline bint fatconcat(Rule rule, ULong *lvec, ULong *rvec):
@@ -706,6 +707,7 @@ cdef inline bint fatconcat(Rule rule, ULong *lvec, ULong *rvec):
 	# success if we've reached the end of both left and right vector
 	return lpos == rpos == -1
 
+cdef CFGChartItem CFGNONE = new_CFGChartItem(0, 0, 0)
 def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 	""" A CKY parser modeled after Bodenstab's `fast grammar loop.'
 		and the Stanford parser. """
@@ -717,12 +719,14 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 	cdef UInt lhs, rhs1, Epsilon = grammar.toid["Epsilon"]
 	cdef ULLong vec = 0
 	cdef bint foundbetter = False
-	cdef Rule rule
+	cdef Rule *rule
+	cdef CFGEdge edge
+	cdef Entry entry
 	cdef LexicalRule terminal
-	cdef SmallChartItem item, goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
-	cdef dict chart = {}						#the full chart
+	cdef CFGChartItem item, goal = new_CFGChartItem(start, 0, len(sent))
+	cdef Agenda unaryagenda = Agenda()
+	cdef list chart = [[{} for _ in range(lensent+1)] for _ in range(lensent)]
 	cdef list cell
-	cdef set applied = set()
 	# the viterbi chart is initially filled with infinite log probabilities,
 	# cells which are to be blocked contain NaN.
 	cdef np.ndarray[np.double_t, ndim=3] viterbi = np.array([np.inf],
@@ -742,11 +746,6 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 		dtype='int16').repeat(numsymbols * (lensent + 1)).reshape(
 		numsymbols, lensent + 1)
 
-	assert len(sent) < (sizeof(vec) * 8), ("sentence too long. "
-			"length: %d. limit: %d." % (len(sent), sizeof(vec) * 8))
-	i = 0
-	while grammar.unary[0][i].rhs1 != grammar.nonterminals: i += 1
-
 	# assign POS tags
 	#print 1, # == span
 	for i, w in enumerate(sent):
@@ -757,10 +756,8 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[terminal.lhs] == tags[i]
 				or grammar.tolabel[terminal.lhs].startswith(tags[i] + '@')):
-				item = new_ChartItem(terminal.lhs, 1ULL << i)
-				sibling = new_ChartItem(Epsilon, i)
 				x = viterbi[terminal.lhs, left, right] = terminal.prob
-				chart[item] = [new_Edge(x, x, x, sibling, NONE)]
+				chart[left][right][terminal.lhs] = [new_CFGEdge(x, NULL, right)]
 				# update filter
 				if left > minsplitleft[terminal.lhs, right]:
 					minsplitleft[terminal.lhs, right] = left
@@ -773,10 +770,8 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 				recognized = True
 		if not recognized and tags and tags[i] in grammar.toid:
 			lhs = grammar.toid[tags[i]]
-			item = new_ChartItem(lhs, 1ULL << i)
-			sibling = new_ChartItem(Epsilon, i)
 			viterbi[lhs, left, right] = 0.0
-			chart[item] = [new_Edge(0.0, 0.0, 0.0, sibling, NONE)]
+			chart[left][right][lhs] = [new_CFGEdge(0.0, NULL, right)]
 			# update filter
 			if left > minsplitleft[lhs, right]:
 				minsplitleft[lhs, right] = left
@@ -788,28 +783,30 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 				maxsplitright[lhs, left] = right
 			recognized = True
 		elif not recognized:
-			logging.error("not covered: '%s'. " % (tags[i] if tags else w))
-			return chart, NONE
+			logging.error("not covered: '%s'. ", tags[i] if tags else w)
+			return chart, CFGNONE
 
 		# unary rules on the span of this POS tag
-		applied.clear()
-		for rhs1 in range(grammar.nonterminals):
-			if not isfinite(viterbi[rhs1, left, right]): continue
-			for i in grammar.unaryclosure[rhs1]:
-				rule = grammar.unary[0][i]
-				if not isfinite(viterbi[rule.rhs1, left, right]): continue
-				elif i in applied: continue
-				else: applied.add(i)
-				prob = rule.prob + viterbi[rule.rhs1, left, right]
+		# NB: for this agenda, only the probabilities of the edges matter
+		unaryagenda.update([(
+			rhs1, new_CFGEdge(viterbi[rhs1, left, right], NULL, 0))
+			for rhs1 in range(grammar.nonterminals)
+			if isfinite(viterbi[rhs1, left, right])
+			and grammar.unary[rhs1].rhs1 == rhs1])
+		while unaryagenda.length:
+			rhs1 = unaryagenda.popentry().key
+			for i in range(grammar.numrules):
+				rule = &(grammar.unary[rhs1][i])
+				if rule.rhs1 != rhs1: break
+				prob = rule.prob + viterbi[rhs1, left, right]
 				if isfinite(viterbi[rule.lhs, left, right]):
-					cell = chart[new_ChartItem(rule.lhs, (1ULL << right)
-						- (1ULL << left))]
+					cell = chart[left][right][rule.lhs]
 				else:
-					cell = chart[new_ChartItem(rule.lhs, (1ULL << right)
-						- (1ULL << left))] = []
-				cell.append(new_Edge(prob, prob, rule.prob, new_ChartItem(
-					rule.rhs1, (1ULL << right) - (1ULL << left)), NONE))
+					cell = chart[left][right][rule.lhs] = []
+				edge = new_CFGEdge(prob, rule, right)
+				cell.append(edge)
 				if prob < viterbi[rule.lhs, left, right]:
+					unaryagenda.setifbetter(rule.lhs, edge)
 					viterbi[rule.lhs, left, right] = prob
 					# update filter
 					if left > minsplitleft[rule.lhs, right]:
@@ -821,17 +818,16 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 					if right > maxsplitright[rule.lhs, left]:
 						maxsplitright[rule.lhs, left] = right
 
-	item = new_ChartItem(0, 0)	#recycled for lookup purposes
 	for span in range(2, lensent + 1):
 		# print span,
-		sys.stdout.flush()
+		#sys.stdout.flush()
 
 		# constituents from left to right
 		for left in range(0, lensent - span + 1):
 			right = left + span
 			# binary rules
 			for i in range(grammar.numrules):
-				rule = grammar.bylhs[0][i]
+				rule = &(grammar.bylhs[0][i])
 				if rule.lhs == grammar.nonterminals: break
 				elif not rule.rhs2: continue
 				#if not (np.isfinite(viterbi[rule.rhs1,left,left+1:right]).any()
@@ -854,15 +850,10 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 						prob = (rule.prob + viterbi[rule.rhs1, left, mid]
 								+ viterbi[rule.rhs2, mid, right])
 						if isfinite(viterbi[rule.lhs, left, right]):
-							item.label = rule.lhs
-							item.vec = (1ULL << right) - (1ULL << left)
-							cell = chart[item]
+							cell = chart[left][right][rule.lhs]
 						else:
-							cell = chart[new_ChartItem(rule.lhs, (1ULL << right)
-								- (1ULL << left))] = []
-						cell.append(new_Edge(prob, prob, rule.prob,
-							new_ChartItem(rule.rhs1, (1ULL<<mid) - (1ULL<<left)),
-							new_ChartItem(rule.rhs2, (1ULL<<right) - (1ULL<<mid))))
+							cell = chart[left][right][rule.lhs] = []
+						cell.append(new_CFGEdge(prob, rule, mid))
 						if prob < viterbi[rule.lhs, left, right]:
 							foundbetter = True
 							viterbi[rule.lhs, left, right] = prob
@@ -878,26 +869,26 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 						maxsplitright[rule.lhs, left] = right
 
 			# unary rules on this span
-			applied.clear()
-			for rhs1 in range(grammar.nonterminals):
-				if not isfinite(viterbi[rhs1, left, right]): continue
-				for i in grammar.unaryclosure[rhs1]:
-					rule = grammar.unary[0][i]
-					if not isfinite(viterbi[rule.rhs1, left, right]): continue
-					elif i in applied: continue
-					else: applied.add(i)
-					prob = rule.prob + viterbi[rule.rhs1, left, right]
+			unaryagenda.update([(rhs1,
+				new_CFGEdge(viterbi[rhs1, left, right], NULL, 0))
+				for rhs1 in range(grammar.nonterminals)
+				if isfinite(viterbi[rhs1, left, right])
+				and grammar.unary[rhs1].rhs1 == rhs1])
+			while unaryagenda.length:
+				rhs1 = unaryagenda.popentry().key
+				for i in range(grammar.numrules):
+					rule = &(grammar.unary[rhs1][i])
+					if rule.rhs1 != rhs1: break
+					prob = rule.prob + viterbi[rhs1, left, right]
 					if isfinite(viterbi[rule.lhs, left, right]):
-						item.label = rule.lhs
-						item.vec = (1ULL << right) - (1ULL << left)
-						cell = chart[item]
+						cell = chart[left][right][rule.lhs]
 					else:
-						cell = chart[new_ChartItem(rule.lhs,
-							(1ULL << right) - (1ULL << left))] = []
-					cell.append(new_Edge(prob, prob, rule.prob, new_ChartItem(
-						rule.rhs1, (1ULL << right) - (1ULL << left)), NONE))
+						cell = chart[left][right][rule.lhs] = []
+					edge = new_CFGEdge(prob, rule, right)
+					cell.append(edge)
 					if prob < viterbi[rule.lhs, left, right]:
 						viterbi[rule.lhs, left, right] = prob
+						unaryagenda.setifbetter(rule.lhs, edge)
 						# update filter
 						if left > minsplitleft[rule.lhs, right]:
 							minsplitleft[rule.lhs, right] = left
@@ -907,49 +898,11 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 							minsplitright[rule.lhs, left] = right
 						if right > maxsplitright[rule.lhs, left]:
 							maxsplitright[rule.lhs, left] = right
-			#for lhs in range(grammar.nonterminals):
-			#	best = cur = viterbi[lhs, left, right]
-			#	newitem = new_ChartItem(lhs, (1ULL << right) - (1ULL << left))
-			#	for i in grammar.unaryclosure[lhs]:
-			#		rule = grammar.unary[0][i]
-			#		if lhs == rule.rhs1: continue
-			#		if not isfinite(viterbi[rule.rhs1, left, right]): continue
-			#		prob = rule.prob + viterbi[rule.rhs1, left, right]
-			#		if prob < best: best = prob
-			#		else:
-			#			# a suboptimal edge
-			#			chart[newitem].append(
-			#				new_Edge(prob, prob, rule.prob,
-			#				new_ChartItem(rule.rhs1,
-			#				(1ULL << right) - (1ULL << left)),
-			#				NONE))
-			#	if best < cur:
-			#		viterbi[rule.lhs, left, right] = prob
-			#		if isfinite(viterbi[rule.lhs, left, right]):
-			#			chart[newitem].append(
-			#				new_Edge(prob, prob, rule.prob,
-			#				new_ChartItem(rule.rhs1,
-			#				(1ULL << right) - (1ULL << left)),
-			#				NONE))
-			#		else:
-			#			chart[newitem] = [new_Edge(prob, prob, rule.prob,
-			#				new_ChartItem(rule.rhs1,
-			#					(1ULL << right) - (1ULL << left)),
-			#				NONE)]
-			#		# update filter
-			#		if left > minsplitleft[rule.lhs, right]:
-			#			minsplitleft[rule.lhs, right] = left
-			#		if left < maxsplitleft[rule.lhs, right]:
-			#			maxsplitleft[rule.lhs, right] = left
-			#		if right < minsplitright[rule.lhs, left]:
-			#			minsplitright[rule.lhs, left] = right
-			#		if right > maxsplitright[rule.lhs, left]:
-			#			maxsplitright[rule.lhs, left] = right
 	# print
-	if goal in chart: return chart, goal
-	else: return chart, NONE
+	if goal.label in chart[0][lensent]: return chart, goal
+	else: return chart, CFGNONE
 
-cdef inline Edge iscore(Edge e):
+cdef inline LCFRSEdge iscore(LCFRSEdge e):
 	""" Replace estimate with inside probability """
 	e.score = e.inside
 	return e
@@ -964,22 +917,31 @@ def binrepr(ChartItem a, n, cfg=False):
 	else: result = binrepr1((<FatChartItem>a).vec)
 	return result.rjust(n, "0")[::-1]
 
-def sortfunc(ChartItem a):
+def sortfunc(a):
 	if isinstance(a, SmallChartItem):
 		return (bitcount((<SmallChartItem>a).vec), (<SmallChartItem>a).vec)
-	else:
+	elif isinstance(a, FatChartItem):
 		return (abitcount((<FatChartItem>a).vec, SLOTS),
 			anextset((<FatChartItem>a).vec, 0, SLOTS))
+	elif isinstance(a, Edge):
+		return (<Edge>a).inside
+
 def pprint_chart(chart, sent, tolabel, cfg=False):
 	""" `pretty print' a chart. """
+	if isinstance(chart, list):
+		pprint_chart_cfg(chart, sent, tolabel)
+	else:
+		pprint_chart_lcfrs(chart, sent, tolabel, cfg=cfg)
+
+def pprint_chart_lcfrs(chart, sent, tolabel, cfg=False):
 	cdef ChartItem a
-	cdef Edge edge
+	cdef LCFRSEdge edge
 	print "chart:"
 	for a in sorted(chart, key=sortfunc):
 		if chart[a] == []: continue
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, len(sent), cfg))
 		if isinstance(chart[a], float): continue
-		for edge in chart[a]:
+		for edge in sorted(chart[a], key=sortfunc):
 			print "%g\t%g" % (exp(-edge.inside), exp(-edge.prob)),
 			if edge.left.label:
 				print "\t%s[%s]" % (tolabel[edge.left.label],
@@ -993,6 +955,29 @@ def pprint_chart(chart, sent, tolabel, cfg=False):
 						binrepr(edge.right, len(sent), cfg)),
 			print
 		print
+
+def pprint_chart_cfg(chart, sent, tolabel, cfg=True):
+	cdef CFGEdge edge
+	print "chart:"
+	for left, _ in enumerate(chart):
+		for right, _ in enumerate(chart[left]):
+			for label in chart[left][right]:
+				if chart[left][right][label] == []: continue
+				print "%s[%d:%d] =>" % (tolabel[label], left, right)
+				#?? if isinstance(chart[left][right][label], float): continue
+				for edge in sorted(chart[left][right][label], key=sortfunc):
+					if edge.rule is NULL:
+						print "%g\t??" % (exp(-edge.inside)),
+						print "\t", repr(sent[edge.mid-1]),
+					else:
+						print "%g\t%g" % (exp(-edge.inside), exp(-edge.rule.prob)),
+						print "\t%s[%d:%d]" % (tolabel[edge.rule.rhs1],
+								left, edge.mid),
+						if edge.rule.rhs2:
+							print "\t%s[%d:%d]" % (tolabel[edge.rule.rhs2],
+								edge.mid, right),
+					print
+				print
 
 def do(sent, grammar):
 	from disambiguation import marginalize
@@ -1043,13 +1028,42 @@ def main():
 		(lng-3)*["werden"]), grammar)
 
 	cfg = Grammar([
-		((('S', 'NP', 'VP'), ((0,1),)), 0.0),
+		((('S', 'D'), ((0,),)), log(0.5)),
+		((('S', 'A'), ((0,),)), log(0.8)),
+		((('A', 'A'), ((0,),)), log(0.7)),
+		((('A', 'B'), ((0,),)), log(0.6)),
+		((('A', 'C'), ((0,),)), log(0.5)),
+		((('A', 'D'), ((0,),)), log(0.4)),
+		((('B', 'A'), ((0,),)), log(0.3)),
+		((('B', 'B'), ((0,),)), log(0.2)),
+		((('B', 'C'), ((0,),)), log(0.1)),
+		((('B', 'D'), ((0,),)), log(0.2)),
+		((('B', 'C'), ((0,),)), log(0.3)),
+		((('C', 'A'), ((0,),)), log(0.4)),
+		((('C', 'B'), ((0,),)), log(0.5)),
+		((('C', 'C'), ((0,),)), log(0.6)),
+		((('C', 'D'), ((0,),)), log(0.7)),
+		((('D', 'A'), ((0,),)), log(0.8)),
+		((('D', 'B'), ((0,),)), log(0.9)),
+		((('D', 'C'), ((0,),)), log(0.8)),
+		((('D', 'NP', 'VP'), ((0,1),)), 0.0),
 		((('NP', 'Epsilon'), ('mary',)), 0.0),
 		((('VP', 'Epsilon'), ('walks',)), 0.0)])
 	cfg.getunaryclosure()
+	print cfg
 	print "cfg parsing; sentence: mary walks"
-	chart, start = cfgparse("mary walks".split(), cfg, start=grammar.toid['S'])
+	print "lcfrs",
+	chart1, start, _ = parse("mary walks".split(), cfg, start=cfg.toid['S'],
+		exhaustive=True)
+	pprint_chart(chart1, "mary walks".split(), cfg.tolabel)
+
+	print "pcfg",
+	chart, start = cfgparse("mary walks".split(), cfg, start=cfg.toid['S'])
 	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
 	assert start
+	#assert chart.viewkeys() == chart1.viewkeys(), (
+	#	chart.viewkeys() ^ chart1.viewkeys())
+	#assert all(sorted(chart1[a]) == sorted(chart[a]) for a in chart), (
+	#	[(a,b, chart1[a]) for a,b in chart.items() if chart1[a] != b])
 
 if __name__ == '__main__': main()

@@ -103,7 +103,7 @@ def tikzdtree(tree, sent):
 					shift = 1
 					crossed.add(m)
 			matrix[n * scale + shift][i] = m
-			if m <> ():
+			if m != ():
 				children[m[:-1]].append(i)
 
 	# remove unused columns
@@ -112,11 +112,9 @@ def tikzdtree(tree, sent):
 			for n in range(scale*depth): del matrix[n][m]
 
 	# remove unused rows
-	deleted = 0
 	for n in range(scale * depth - 1, 0, -1):
 		if not any(matrix[n]):
 			del matrix[n]
-			deleted += 1
 
 	# write matrix with nodes
 	for n, _ in enumerate(matrix):
@@ -142,13 +140,11 @@ def tikzdtree(tree, sent):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
-		for j, child in enumerate(tree[i]):
+		for j, _ in enumerate(tree[i]):
 			result.append("\draw (%s) -- +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
 	result += [r"\end{tikzpicture}"]
 	return "\n".join(result)
-
-	return "\n".join(result) + "}"
 
 def oldtikzdtree(tree, sent):
 	""" produce Tikz code to draw a tree. tikz nodes w/coordinates """
@@ -259,11 +255,11 @@ def oldtikzdtree(tree, sent):
 		if not isinstance(tree[i], Tree): continue
 		iscrossed = any(a[:-1] == i for a in crossed)
 		shift = -0.5
-		for j, child in enumerate(tree[i] if iscrossed else ()):
+		for j, _ in enumerate(tree[i] if iscrossed else ()):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s) -- +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
-		for j, child in enumerate(tree[i]):
+		for j, _ in enumerate(tree[i]):
 			result.append("\draw (%s) -- +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
 	result += [r"\end{tikzpicture}"]

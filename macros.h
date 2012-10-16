@@ -10,11 +10,29 @@
 #define BITMASK(b) 			(1UL << ((b) % BITSIZE))
 #define BITSLOT(b) 			((b) / BITSIZE)
 #define SETBIT(a, b) 		((a)[BITSLOT(b)] |= BITMASK(b))
+#define TOGGLEBIT(a, b)		((a)[BITSLOT(b)] ^= BITMASK(b))
 #define CLEARBIT(a, b) 		((a)[BITSLOT(b)] &= ~BITMASK(b))
 #define TESTBIT(a, b) 		((a)[BITSLOT(b)] & BITMASK(b))
-#define BITNSLOTS(nb) 		((nb + BITSIZE - 1) / BITSIZE)
+#define BITNSLOTS(nb) 		(((nb) + BITSIZE - 1) / BITSIZE)
 
 #define SETUNION(a, b, i, slots)	(for(i=0; i<slots; i++) a[i] |= b[i])
 
 /* 3D array indexing (implicit third index k = 0) */
 #define IDX(i,j,jmax,kmax)		((i * jmax + j) * kmax)
+
+/* used for FatChartItem */
+#define SLOTS	2
+
+/* temporary hack: */
+/* inline attribute */
+#ifndef CYTHON_INLINE
+  #if defined(__GNUC__)
+    #define CYTHON_INLINE __inline__
+  #elif defined(_MSC_VER)
+    #define CYTHON_INLINE __inline
+  #elif defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+    #define CYTHON_INLINE inline
+  #else
+    #define CYTHON_INLINE
+  #endif
+#endif
