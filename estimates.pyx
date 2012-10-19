@@ -294,12 +294,9 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print "allocating outside matrix:",
 	print 8 * grammar.nonterminals * (maxlen+1) * (maxlen+1) * (maxlen+1) / 1024**2, 'MB'
-	insidescores = np.array([np.NAN], dtype='d').repeat(
-				grammar.nonterminals * (maxlen+1)).reshape(
-				(grammar.nonterminals, (maxlen+1)))
-	outside = np.array([np.inf], dtype='d').repeat(
-				grammar.nonterminals * (maxlen+1) * (maxlen+1) * (maxlen+1)
-				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, maxlen+1))
+	insidescores = np.empty((grammar.nonterminals, (maxlen+1)), dtype='d')
+	outside = np.empty((grammar.nonterminals,) + 3 * (maxlen+1,), dtype='d')
+	insidescores.fill(np.NAN); outside.fill(np.inf)
 	print "getting inside"
 	simpleinside(grammar, maxlen, insidescores)
 	print "getting outside"
@@ -398,9 +395,9 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	cdef double x, insidescore
 	cdef int m, n, state, left, right
 	cdef size_t i, sibsize
-	cdef np.ndarray[np.double_t, ndim=4] outside = np.array([np.inf], dtype='d'
-		).repeat(grammar.nonterminals * (maxlen+1) * (maxlen+1) * 1
-				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, 1))
+	cdef np.ndarray[np.double_t, ndim=4] outside = np.empty(
+				(grammar.nonterminals, maxlen+1, maxlen+1, 1), dtype='d')
+	outside.fill(np.inf)
 
 	agenda[goal, 0, 0] = outside[goal, 0, 0, 0] = 0.0
 	while agenda.length:
@@ -477,9 +474,8 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 		for k, v in sorted(outsidescores.iteritems()):
 			if v == infinity: print "%s[%d-%d]" % (
 				grammar.tolabel[k[0]], k[1], k[2]),
-	outside = np.array([np.inf], dtype='d').repeat(
-				grammar.nonterminals * (maxlen+1) * (maxlen+1) * 1
-				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, 1))
+	outside = np.empty((grammar.nonterminals, maxlen+1, maxlen+1, 1), dtype='d')
+	outside.fill(np.inf)
 	#convert sparse dictionary to dense numpy array
 	for (state, lspan, rspan), prob in outsidescores.iteritems():
 		outside[state, lspan, rspan, 0] = prob
@@ -589,9 +585,8 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 			#print a,b
 			#print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print len(insidescores) * sum(map(len, insidescores.values())), '\n'
-	insidescores = np.array([np.NAN], dtype='d').repeat(
-				grammar.nonterminals * (maxlen+1)).reshape(
-				(grammar.nonterminals, (maxlen+1)))
+	insidescores = np.empty((grammar.nonterminals, (maxlen+1)), dtype='d')
+	insidescores.fill(np.NAN)
 	simpleinside(grammar, maxlen, insidescores)
 	print "inside"
 	for an, a in enumerate(insidescores):
@@ -603,9 +598,8 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	#	print grammar.tolabel[goal], "len", a, "=", exp(-insidescores[goal, a])
 
 	print "getting outside"
-	outside = np.array([np.inf], dtype='d').repeat(
-				grammar.nonterminals * (maxlen+1) * (maxlen+1) * (maxlen+1)
-				).reshape((grammar.nonterminals, maxlen+1, maxlen+1, maxlen+1))
+	outside = np.empty((grammar.nonterminals,) + 3 * (maxlen+1,), dtype='d')
+	outside.fill(np.inf)
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	#print outside
 	cnt = 0

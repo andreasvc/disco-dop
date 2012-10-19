@@ -270,7 +270,8 @@ def worker(offset):
 	logging.info("finished %d--%d", offset, end)
 	return result
 
-def exactcountworker((n, m, fragments)):
+def exactcountworker(args):
+	n, m, fragments = args
 	trees1 = params['trees1']
 	if params['indices']:
 		results = exactindices(trees1, trees1, fragments, params['disc'],
@@ -364,7 +365,6 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 			if trees is None: trees = []; sents = []
 			trees.extend(newtrees)
 			sents.extend(newsents)
-			for a,b in newfrags: print a,b
 			fragmentkeys.extend(newfrags)
 			counts.extend(newcounts)
 			fragments.update(zip(newfrags, newcounts))

@@ -729,22 +729,16 @@ def cfgparse(list sent, Grammar grammar, start=1, tags=None):
 	cdef list cell
 	# the viterbi chart is initially filled with infinite log probabilities,
 	# cells which are to be blocked contain NaN.
-	cdef np.ndarray[np.double_t, ndim=3] viterbi = np.array([np.inf],
-		dtype='d').repeat(lensent * (lensent+1) * numsymbols).reshape(
-		(numsymbols, lensent, (lensent+1)))
+	cdef np.ndarray[np.double_t, ndim=3] viterbi = np.empty(
+		(numsymbols, lensent, lensent+1), dtype='d')
 	# matrices for the filter which gives minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minsplitleft = np.array([-1],
-		dtype='int16').repeat(numsymbols * (lensent + 1)
-		).reshape(numsymbols, lensent + 1)
-	cdef np.ndarray[np.int16_t, ndim=2] maxsplitleft = np.array([lensent+1],
-		dtype='int16').repeat(numsymbols * (lensent + 1)).reshape(
-		numsymbols, lensent + 1)
-	cdef np.ndarray[np.int16_t, ndim=2] minsplitright = np.array([lensent + 1],
-		dtype='int16').repeat(numsymbols * (lensent + 1)
-		).reshape(numsymbols, lensent + 1)
-	cdef np.ndarray[np.int16_t, ndim=2] maxsplitright = np.array([-1],
-		dtype='int16').repeat(numsymbols * (lensent + 1)).reshape(
-		numsymbols, lensent + 1)
+	cdef np.ndarray[np.int16_t, ndim=2] minsplitleft, maxsplitleft, \
+			minsplitright, maxsplitright
+	minsplitleft = np.empty((numsymbols, lensent + 1), dtype='int16')
+	minsplitleft.fill(-1); viterbi.fill(np.inf)
+	maxsplitleft = np.empty_like(minsplitleft); maxsplitleft.fill(lensent+1)
+	minsplitright = np.empty_like(minsplitleft); minsplitright.fill(lensent+1)
+	maxsplitright = np.empty_like(minsplitleft); maxsplitright.fill(-1)
 
 	# assign POS tags
 	#print 1, # == span

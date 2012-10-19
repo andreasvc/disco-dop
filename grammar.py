@@ -238,70 +238,60 @@ def doubledop(fragments, debug=False, freqs=False):
 	"""
 	from treetransforms import defaultrightbin, addbitsets
 	grammar = {}
-	newprods = {}
+	ambigfrags = {}
 	backtransform = {}
 	# to assign IDs to ambiguous fragments (same yield)
-	ids = count()
+	ids = count(); binids = count()
 
 	# fragments are given back as strings; we could work with trees as strings
 	# all the way, but to do binarization and rule extraction, NLTK Tree objects
 	# are better.
-	productions = map(flattenstr, fragments)
-	# construct a mapping of productions to fragments
-	for prod, (frag, terminals) in zip(productions, fragments):
-		if frontierorterm.match(prod):
-			lexprod = lcfrs_productions(addbitsets(prod), terminals)[0]
+	sortedfragments = sorted(fragments)
+	flatfrags = map(flatten, sortedfragments)
+	# construct a mapping of flattened fragments to fragments
+	for flatfrag, (frag, terminals) in zip(flatfrags, sortedfragments):
+		if frontierorterm.match(flatfrag):
+			lexprod = lcfrs_productions(addbitsets(flatfrag), terminals)[0]
 			prob = fragments[frag, terminals]
-			assert lexprod not in grammar
 			grammar[lexprod] = prob
 			continue
-		if prod in backtransform:
-			if backtransform[prod] is not None:
-				newlabel = "(#%d" % ids.next()
-				label = prod[1:prod.index(" ")]
-				prod1 = newlabel + prod[prod.index(" "):]
-				newprod = "(%s %s)" % (label, prod1)
-				newprod = ImmutableTree(label,
-					[defaultrightbin(addbitsets(newprod)[0], "}", fanout=True, ids=ids)])
-				newprods[newprod] = backtransform[prod]
-				backtransform[prod1] = backtransform[prod]
-				backtransform[prod] = None # disable this production
+		if flatfrag in backtransform:
 			newlabel = "(#%d" % ids.next()
-			label = prod[1:prod.index(" ")]
-			prod1 = newlabel + prod[prod.index(" "):]
-			newprod = "(%s %s)" % (label, prod1)
-			newprod = ImmutableTree(label,
-				[defaultrightbin(addbitsets(newprod)[0], "}", fanout=True, ids=ids)])
-			newprods[newprod] = frag, terminals
-			backtransform[prod1] = frag, terminals
-		else:
-			backtransform[prod] = frag, terminals
+			label = flatfrag[1:flatfrag.index(" ")]
+			flatfrag = newlabel + flatfrag[flatfrag.index(" "):]
+			newflatfrag = "(%s %s)" % (label, flatfrag)
+			newflatfrag = ImmutableTree(label, [defaultrightbin(
+				addbitsets(newflatfrag)[0], "}", fanout=True, ids=binids)])
+			ambigfrags[newflatfrag] = frag, terminals
+		backtransform[flatfrag] = frag, terminals
 	if debug:
-		doubledopdump(productions, fragments, newprods, backtransform)
+		doubledopdump(flatfrags, fragments, ambigfrags, backtransform)
 
 	# collect rules
 	grammar.update(rule
-		for a, ((_, fsent), b) in zip(productions, fragments.iteritems())
-		if backtransform.get(a) is not None
-		for rule in zip(lcfrs_productions(defaultrightbin(
-			addbitsets(a), "}", fanout=True, ids=ids), fsent), chain((b,), repeat(1))))
-	# ambiguous fragments (fragments that map to the same flattened production)
-	grammar.update(rule for a, (b, c) in newprods.iteritems()
-		for rule in zip(lcfrs_productions(a, c),
-			chain((fragments[b, c],), repeat(1))))
-	#ensure ascii strings, drop terminals, drop sentinels. drop no-op transforms?
-	backtransform = dict((a, str(b[0]))
-			for a, b in backtransform.iteritems() if b is not None) #and a != b)
+		for flatfrag, (frag, terminals) in zip(flatfrags, sortedfragments)
+		for rule in zip(lcfrs_productions(defaultrightbin(addbitsets(flatfrag),
+			"}", fanout=True, ids=ids), terminals),
+			chain((fragments[frag, terminals],), repeat(1))))
+	# ambiguous fragments (fragments that map to the same flattened fragment)
+	grammar.update(rule for flatfrag, (frag, terminals) in ambigfrags.iteritems()
+		for rule in zip(lcfrs_productions(flatfrag, terminals),
+			chain((fragments[frag, terminals],), repeat(1))))
+	#ensure ascii strings, drop terminals. drop no-op transforms?
+	backtransform = dict((flatfrag, str(frag))
+			for flatfrag, (frag, _) in backtransform.iteritems())
+			#if flatfrag != frag)
 	if freqs: return grammar.items(), backtransform
 	# relative frequences as probabilities
 	ntfd = defaultdict(float)
-	for a, b in grammar.iteritems(): ntfd[a[0][0]] += b
-	grammar = [(a, log(b/ntfd[a[0][0]])) for a, b in grammar.iteritems()]
+	for (rule, _), freq in grammar.iteritems(): ntfd[rule[0]] += freq
+	grammar = [(rule, log(freq / ntfd[rule[0][0]]))
+			for rule, freq in grammar.iteritems()]
 	return grammar, backtransform
 
-def doubledopdump(productions, fragments, newprods, backtransform):
+def doubledopdump(flatfrags, fragments, newprods, backtransform):
 	print "recurring fragments:"
-	for a, b in zip(productions, fragments):
+	for a, b in zip(flatfrags, fragments):
 		if isinstance(a, tuple):
 			print "fragment: %s\nprod:     %s\ntemplate: %s\nfreq: %2d  sent: %s\n" % (
 					b[0], a[0], a[1], fragments[b],
@@ -431,7 +421,8 @@ def flatten_new(tree, sent, ids):
 	(('S}<5>', 'S}<4>', 'ADV@kuerzlich'), ((0, 1),)),
 	(('S}<4>', 'S}<3>', 'VAFIN@hatte'), ((0, 1),)),
 	(('S}<3>', 'S}<2>', 'NN@Friedhofsamt'), ((0, 1),)),
-	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)), (('S}<1>', 'ART@Das', 'TRUNC@Garten-'), ((0, 1),)),
+	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)), (('S}<1>', 'ART@Das', \
+	'TRUNC@Garten-'), ((0, 1),)),
 	(('ART@Das', 'Epsilon'), (u'Das',)),
 	(('TRUNC@Garten-', 'Epsilon'), (u'Garten-',)),
 	(('KON@und', 'Epsilon'), (u'und',)),
@@ -440,14 +431,17 @@ def flatten_new(tree, sent, ids):
 	(('ADV@kuerzlich', 'Epsilon'), (u'kuerzlich',)),
 	(('ART@dem', 'Epsilon'), (u'dem',)),
 	(('NN@Ortsbeirat', 'Epsilon'), (u'Ortsbeirat',))],
-	'(S (S|<VP> (S|<NP> (NP %s (CNP (CNP|<TRUNC> %s (CNP|<KON> %s (CNP|<NN> %s))))) (S|<VAFIN> %s)) (VP (VP|<ADV> %s (VP|<NP> (NP %s %s) (VP|<NP> %s (VP|<VVPP> %s)))))))')
+	'(S (S|<VP> (S|<NP> (NP %s (CNP (CNP|<TRUNC> %s (CNP|<KON> %s \
+	(CNP|<NN> %s))))) (S|<VAFIN> %s)) (VP (VP|<ADV> %s (VP|<NP> \
+	(NP %s %s) (VP|<NP> %s (VP|<VVPP> %s)))))))')
 	>>> flatten_new("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 (ADV 2) "
 	... "(VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
 	... (None, None, None, None, None), ids)
 	([(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 	(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
 	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
-	'(S|<VP>_2 (VP_3 (VP|<NP>_3 %s (VP|<ADV>_2 %s (VP|<VVPP> %s)))) (S|<VAFIN> %s))')
+	'(S|<VP>_2 (VP_3 (VP|<NP>_3 %s (VP|<ADV>_2 %s (VP|<VVPP> %s)))) \
+	(S|<VAFIN> %s))')
 	"""
 	from treetransforms import defaultleftbin, addbitsets
 	assert isinstance(tree, basestring), (tree, sent)
@@ -472,15 +466,16 @@ def flatten_new(tree, sent, ids):
 	newtree = str(frontierorterm.sub('%s', tree))
 	return prods, newtree
 
-def flattenstr(treesent):
-	""" This version accepts and returns strings instead of Tree objects
+def flatten(treesent):
+	""" Remove internal nodes from a tree and read off its binarized
+	productions. Accepts and returns trees as strings.
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> print flattenstr((tree, sent))
+	>>> print flatten((tree, sent))
 	(ROOT (S_2 0 2) ($,@, 1) ($.@. 3))
-	>>> print flattenstr(("(NN 0)", ["foo"]))
+	>>> print flatten(("(NN 0)", ["foo"]))
 	(NN 0)
-	>>> flattenstr((r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
+	>>> flatten((r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
 	... "(TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> "
 	... "(VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7))"
 	... " (VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))",
@@ -489,7 +484,7 @@ def flattenstr(treesent):
 	'(S (ART@Das 0) (TRUNC@Garten- 1) (KON@und 2) (NN@Friedhofsamt 3) \
 	(VAFIN@hatte 4) (ADV@kuerzlich 5) (ART@dem 6) (NN@Ortsbeirat 7) \
 	(NP_2 8 10) (VVPP 9))'
-	>>> flattenstr(("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 (ADV 2)"
+	>>> flatten(("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 (ADV 2)"
 	... " (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
 	... (None, None, None, None, None)))
 	'(S|<VP>_2 (NP 0) (VAFIN 1) (ADV 2) (VVPP 4))'
@@ -524,30 +519,6 @@ def flattenstr(treesent):
 	return "%s %s)" % (newtree[:newtree.index(" ")],
 		" ".join(x[0] for x in sorted(frontierorterm.findall(newtree),
 			key=lambda y: int(y[2]))))
-
-def flatten(treesent):
-	"""
-	>>> sent = [None, ',', None, '.']
-	>>> tree = Tree("ROOT", [Tree("S_2", [0, 2]), Tree("ROOT|<$,>_2",
-	... [Tree("$,", [1]), Tree("$.", [3])])]).freeze()
-	>>> print flatten((tree, sent))
-	(ROOT (S_2 0 2) ($,@, 1) ($.@. 3))
-	>>> tree = ImmutableTree.parse("(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP 3)))",
-	... parse_leaf=int)
-	>>> sent = ['The', None, 'saw', None]
-	>>> print flatten((tree, sent))
-	(S (DT@The 0) (NN 1) (VBP@saw 2) (NP 3))
-	"""
-	tree, sent = treesent
-	assert isinstance(tree, Tree), (tree, sent)
-	if all(isinstance(a, Tree) for a in tree):
-		children = [b if isinstance(b, Tree) and sent[b[0]] is None else
-			ImmutableTree("%s@%s" % (b.node, quotelabel(sent[b[0]])), b[:])
-			for b in preterminals_and_frontier_nodes(tree, sent)]
-		children.sort(key=itemgetter(0))
-	else:
-		children = tree[:]
-	return ImmutableTree(tree.node, children)
 
 def preterminals_and_frontier_nodes(tree, sent):
 	"""Terminals must be integers; frontier nodes must have indices as well.

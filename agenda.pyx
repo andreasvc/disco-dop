@@ -281,7 +281,7 @@ cdef class EdgeAgenda(Agenda):
 
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
-cdef inline list nsmallest(int n, list items):
+cdef list nsmallest(int n, list items):
 	""" return an _unsorted_ list of the n best items in a list """
 	if len(items) > 1:
 		quickfindfirstk(items, 0, len(items) - 1, n)

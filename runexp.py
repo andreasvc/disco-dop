@@ -202,10 +202,13 @@ def main(
 			# as well as depth-1 'cover' fragments
 			fragments = getfragments(trees, sents, numproc,
 					iterate=iterate, complement=complement)
+			logging.info("fragments: %r", hash(frozenset(fragments.items())))
 			if newdd:
 				dopgrammar, backtransform = doubledop_new(fragments)
 			else:
 				dopgrammar, backtransform = doubledop(fragments)
+			logging.info("grammar: %r", hash(frozenset(dopgrammar)))
+			logging.info("backtransform: %r", hash(frozenset(backtransform.items())))
 		else:
 			dopgrammar = dop_lcfrs_rules(trees, sents,
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
@@ -431,7 +434,7 @@ def worker(args):
 	exactp = exacts = exactd = False
 	msg = ''
 	if d.splitpcfg:
-		msg += "PCFG:\t"
+		msg += "PCFG:"
 		begin = time.clock()
 		if d.usecfgparse:
 			chart, start = cfgparse([w for w, t in sent],
@@ -446,7 +449,7 @@ def worker(args):
 					exhaustive=d.prune and (d.plcfrs or d.dop),
 					estimates=('SX', d.outside)
 						if d.useestimates=='SX' else None)
-			msg += msg1 + '\n'
+			msg += '\t' + msg1 + '\n'
 	else: chart = {}; start = None
 	if start:
 		try:
