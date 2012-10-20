@@ -1,7 +1,6 @@
 """ Probabilistic CKY parser for monotone, string-rewriting
 Linear Context-Free Rewriting Systems. """
 from array import array
-from cpython.array cimport array
 # python imports
 from math import log, exp
 from collections import defaultdict
@@ -10,6 +9,7 @@ import numpy as np
 from agenda import EdgeAgenda, Entry
 # cython imports
 from cpython cimport PyDict_Contains, PyDict_GetItem
+from cpython.array cimport array
 cimport numpy as np
 from agenda cimport Entry, EdgeAgenda, Agenda
 from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule, \

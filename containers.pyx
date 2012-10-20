@@ -227,19 +227,18 @@ cdef class Grammar:
 		cdef Rule rule = self.bylhs[0][n]
 		cdef LexicalRule term
 		while rule.lhs < self.nonterminals:
-			rule = rule
 			pyfloat = rule.prob
 			rules.write("%s\t%s%s\t%s\t%g\n" % (self.tolabel[rule.lhs],
 				self.tolabel[rule.rhs1],
 				('\t'+self.tolabel[rule.rhs2] if rule.rhs2 else ''),
-				self.yfrepr(rule), exp(-rule.prob))) #pyfloat.hex()))
+				self.yfrepr(rule), exp(-pyfloat))) #pyfloat.hex()))
 			n += 1
 			rule = self.bylhs[0][n]
 		for word in self.lexical:
 			for term in self.lexical[word]:
 				pyfloat = term.prob
 				lexicon.write("%s\t%s\t%g\n" % (
-					self.tolabel[term.lhs], word, exp(-rule.prob))) #pyfloat.hex()))
+					self.tolabel[term.lhs], word, exp(-pyfloat))) #pyfloat.hex()))
 	def write_bitpar_grammar(self, rules, lexicon):
 		""" write grammar as a bitpar grammar to files specified by rules and
 		lexicon. As `frequencies' we give the probabilities in the grammar,

@@ -90,7 +90,7 @@ def induce_plcfrs(trees, sents, freqs=False):
 	from a treebank """
 	grammar = FreqDist(rule for tree, sent in zip(trees, sents)
 			for rule in lcfrs_productions(tree, sent))
-	if freqs: return grammar
+	if freqs: return list(grammar.items())
 	lhsfd = FreqDist()
 	for rule, freq in grammar.iteritems(): lhsfd[rule[0][0]] += freq
 	for rule, freq in grammar.iteritems():
@@ -777,10 +777,10 @@ def write_lcfrs_grammar(grammar, rules, lexicon, encoding='utf-8'):
 	lexicon = codecs.open(lexicon, "w", encoding=encoding)
 	for (r, yf), w in grammar:
 		if len(r) == 2 and r[1] == "Epsilon":
-			lexicon.write("%s\t%s\t%g\n" % ("\t".join(r), yf[0], w))
+			lexicon.write("%s\t%s\t%g\n" % ("\t".join(r), yf[0], float(w)))
 		else:
 			yfstr = ",".join("".join(map(str, a)) for a in yf)
-			rules.write("%s\t%s\t%g\n" % ("\t".join(r), yfstr, w))
+			rules.write("%s\t%s\t%g\n" % ("\t".join(r), yfstr, float(w)))
 	rules.close(); lexicon.close()
 
 def read_lcfrs_grammar(rules, lexicon, encoding='utf-8'):
