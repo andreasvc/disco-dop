@@ -235,13 +235,13 @@ cpdef dict completebitsets(Ctrees trees, list sents, list revlabel):
 	return result
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
-	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
+	list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees2 as bitsets, produce an exact
 	count of those fragments in trees1 (which may be equal to trees2).
-	The reason we need to do this separately is that a fragment can occur in
-	other trees where it was not a maximal fragment. """
+	The reason we need to do this separately from extracting maximal fragments
+	is that a fragment can occur in other trees where it was not a maximal. """
 	cdef:
-		int n, m, i, x, f
+		int n, i, x, f
 		UInt count
 		array counts = clone(uintarray, len(bitsets), False)
 		array pyarray = bitsets[0]
@@ -254,26 +254,25 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	for f, pyarray in enumerate(bitsets):
 		bitset = pyarray.data.as_ulongs
 		i = bitset[SLOTS]
-		n = bitset[SLOTS + 1]
-		a = ctrees2[n] # the fragment
+		a = ctrees2[bitset[SLOTS + 1]] # the fragment
 		#create copy of set!
 		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
 		for x in range(a.len):
-			if TESTBIT(bitset, x): # and a.nodes[x].prod != -1:
+			if TESTBIT(bitset, x) and a.nodes[x].prod != -1:
 				candidates &= <set>(treeswithprod[a.nodes[x].prod])
 
 		count = 0
-		for m in candidates:
-			b = ctrees1[m]
+		for n in candidates:
+			b = ctrees1[n]
 			for x in range(b.len):
-				if a.nodes[i].prod == b.nodes[x].prod:
+				if a.nodes[i].prod != -1 and a.nodes[i].prod == b.nodes[x].prod:
 					count += containsbitset(a, b, bitset, i, x)
 				elif fast and a.nodes[i].prod > b.nodes[x].prod: break
 		counts[f] = count
 	return counts
 
 cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
-	bint discontinuous, list revlabel, list treeswithprod, bint fast=True):
+	list treeswithprod, bint fast=True):
 	""" Given a set of fragments from trees2 as bitsets, produce the exact set
 	of trees with those fragments in trees1 (which may be equal to trees2).
 	The reason we need to do this separately is that a fragment can occur in
@@ -287,7 +286,7 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 	frequency of that fragment, because fragments can occur multiple times in a
 	single tree."""
 	cdef:
-		int n, m, i, x, f
+		int n, i, x, f
 		UInt count
 		UChar SLOTS = 0
 		array pyarray
@@ -303,44 +302,41 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 	for f, pyarray in enumerate(bitsets):
 		bitset = pyarray.data.as_ulongs
 		i = bitset[SLOTS]
-		n = bitset[SLOTS + 1]
-		a = ctrees2[n] # the fragment
+		a = ctrees2[bitset[SLOTS + 1]] # the fragment
 		#create copy of set!
 		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
 		for x in range(a.len):
-			if TESTBIT(bitset, x):
+			if TESTBIT(bitset, x) and a.nodes[x].prod != -1:
 				candidates &= <set>(treeswithprod[a.nodes[x].prod])
 
 		matches = set()
-		for m in candidates:
-			b = ctrees1[m]
+		for n in candidates:
+			b = ctrees1[n]
 			for x in range(b.len):
-				if a.nodes[i].prod == b.nodes[x].prod:
-					if containsbitset(a, b, bitset, i, x):
-						matches.add(m)
+				if a.nodes[i].prod != -1 and a.nodes[i].prod == b.nodes[x].prod:
+					if containsbitset(a, b, bitset, i, x): matches.add(n)
 				elif fast and a.nodes[i].prod > b.nodes[x].prod: break
 		indices[f] = frozenset(matches)
 	return indices
 
-cdef inline bint containsbitset(NodeArray A, NodeArray B, ULong *bitset,
+cdef inline int containsbitset(NodeArray A, NodeArray B, ULong *bitset,
 	short i, short j):
 	""" Recursively check whether fragment starting from A[i] described by
 	bitset is equal to B[j], i.e., whether B contains that fragment from A. """
 	cdef Node a = A.nodes[i], b = B.nodes[j]
-	if a.prod != b.prod: return False
+	if a.prod != b.prod: return 0
 	# lexical production, no recursion
-	if A.nodes[a.left].prod == -1: return True
+	if A.nodes[a.left].prod == -1: return 1
 	# test for structural mismatch
-	if (a.left  < 0) != (a.left  < 0): return False
-	if (a.right < 0) != (b.right < 0): return False
+	if (a.left < 0) != (a.left < 0) or (a.right < 0) != (b.right < 0): return 0
 	# recurse on further nodes
-	if a.left < 0: return True
+	if a.left < 0: return 1
 	if TESTBIT(bitset, a.left):
-		if not containsbitset(A, B, bitset, a.left, b.left): return False
-	if a.right < 0: return True
+		if not containsbitset(A, B, bitset, a.left, b.left): return 0
+	if a.right < 0: return 1
 	if TESTBIT(bitset, a.right):
 		return containsbitset(A, B, bitset, a.right, b.right)
-	else: return True
+	else: return 1
 
 cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	dict labels, dict prods, list revlabel,

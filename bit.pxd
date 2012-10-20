@@ -16,14 +16,14 @@ cdef extern from "macros.h":
 
 # cpdef functions defined in bit.pyx
 #on python integers
-cpdef inline int fanout(arg)
-cpdef inline int pyintnextset(a, int pos)
+cpdef int fanout(arg)
+cpdef int pyintnextset(a, int pos)
 
 #on ULLongs
-cpdef inline int bitcount(ULLong vec)
-cpdef inline bint bitminmax(ULLong a, ULLong b)
-cpdef inline bint testbitc(UChar arg, UInt pos)
-cpdef inline bint testbitshort(unsigned short arg, UInt pos)
+cpdef int bitcount(ULLong vec)
+cpdef bint bitminmax(ULLong a, ULLong b)
+cpdef bint testbitc(UChar arg, UInt pos)
+cpdef bint testbitshort(unsigned short arg, UInt pos)
 
 cdef binrepr(ULong *vec, int slots)
 

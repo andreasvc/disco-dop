@@ -294,46 +294,8 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 		return children
 	return "(%s%s)" % (tolabel[ej.head.label], children)
 
-cdef inline tuple getderivationtuple(RankedEdge ej, dict D, dict chart,
-		dict tolabel, int n, str debin):
-	""" Translate the (e, j) notation to a tuple with integer IDs for labels.
-	e is an edge, j is a vector prescribing the rank of the
-	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
-	vector [2, 1], this points to the derivation headed by S and having the 2nd
-	best NP and the 1st best VP as children.
-	If `debin' is specified, will perform on-the-fly debinarization of nodes
-	with labels containing `debin' an a substring. """
-	cdef Edge edge
-	cdef RankedEdge rankededge
-	cdef ChartItem ei = ej.edge.left
-	cdef tuple children = (), child
-	cdef int i = ej.left
-	if n > 100: return ()	#hardcoded limit to prevent cycles
-	while i != -1:
-		if ei not in chart:
-			# this must be a terminal
-			if isinstance(ei, SmallChartItem):
-				children = ((<SmallChartItem>ei).vec, )
-			else: children = ((<FatChartItem>ei).vec[0], )
-			break
-		if ei in D:
-			rankededge = (<Entry>D[ei][i]).key
-		else:
-			assert i == 0, "non-best edge missing in derivations"
-			edge = nsmallest(1, chart[ei]).pop()
-			rankededge = RankedEdge(ei, edge, 0, 0 if edge.right.label else -1)
-		child = getderivationtuple(rankededge, D, chart, tolabel, n + 1, debin)
-		if child == (): return ()
-		children += (child,)
-		if ei is ej.edge.right: break
-		ei = ej.edge.right
-		i = ej.right
-	if debin is not None and debin in tolabel[ej.head.label]:
-		return children
-	return (ej.head.label,) + children
-
 cpdef tuple lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
-		str debin=None, bint tuplerepr=False):
+		str debin=None):
 	""" wrapper function to run lazykthbest and get the actual derivations,
 	as well as the ranked chart.
 	chart is a monotone hypergraph; should be acyclic unless probabilities
@@ -350,10 +312,6 @@ cpdef tuple lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
 	cdef dict D = {}, cand = {}
 	cdef set explored = set()
 	lazykthbest(goal, k, k, D, cand, chart, explored)
-	if tuplerepr:
-		derivations = filter(itemgetter(0), [
-				(getderivationtuple(entry.key, D, chart, tolabel, 0, debin),
-					entry.value) for entry in D[goal]])
 	derivations = []; tmp = []
 	for entry in D[goal]:
 		d = getderivation(entry.key, D, chart, tolabel, 0, debin)

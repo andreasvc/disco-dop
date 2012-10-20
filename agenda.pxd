@@ -32,4 +32,4 @@ cdef class EdgeAgenda(Agenda):
 	cdef object getitem(self, key)
 	cdef object replace(self, object key, object value)
 
-cdef inline list nsmallest(int n, list items)
+cdef list nsmallest(int n, list items)

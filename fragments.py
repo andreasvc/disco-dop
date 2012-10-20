@@ -132,17 +132,14 @@ def main(argv):
 					discontinuous=params['disc'], debug=params['debug'],
 					approx=params['approx'])
 			if not params['approx'] and not params['nofreq']:
-				bitsets = fragments.values()
-				fragmentkeys = fragments.keys()
+				fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
 				if params['indices']:
 					logging.info("getting indices of occurrence")
 					counts = exactindices(trees1, trees1, bitsets,
-							params['disc'], params['revlabel'],
 							params['treeswithprod'], fast=not params['quadratic'])
 				else:
 					logging.info("getting exact counts")
 					counts = exactcounts(trees1, trees1, bitsets,
-							params['disc'], params['revlabel'],
 							params['treeswithprod'], fast=not params['quadratic'])
 				fragments = zip(fragmentkeys, counts)
 			filename="%s/%s_%s" % (batch, os.path.basename(args[0]),
@@ -162,7 +159,7 @@ def main(argv):
 		pool = Pool(processes=numproc, initializer=initworker,
 			initargs=(args[0], args[1] if len(args) == 2 else None,
 				limit, encoding))
-		mymap = pool.imap_unordered
+		mymap = pool.imap
 		myapply = pool.apply
 		# FIXME: detect corpus reading errors here (e.g. wrong encoding)
 		# currently they will lead to an unclear backtrace due to multiprocessing
@@ -186,9 +183,8 @@ def main(argv):
 		cover = myapply(coverfragworker, ())
 		if params['approx']:
 			fragments.update(zip(cover.keys(), exactcounts(trees1, trees1,
-				cover.values(), params['disc'],
-				params['revlabel'], params['treeswithprod'], fast=not
-				params['quadratic'])))
+				cover.values(), params['treeswithprod'],
+				fast=not params['quadratic'])))
 		else: fragments.update(cover)
 		logging.info("merged %d cover fragments", len(cover))
 	if params['approx'] or params['nofreq']:
@@ -197,8 +193,7 @@ def main(argv):
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s", task)
 		countchunk = 20000
-		bitsets = fragments.values()
-		fragmentkeys = fragments.keys()
+		fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
 		work = [bitsets[n:n+countchunk] for n in range(0, len(bitsets), countchunk)]
 		work = [(n, len(work), a) for n, a in enumerate(work)]
 		if numproc != 1: mymap = pool.imap
@@ -280,13 +275,12 @@ def exactcountworker(args):
 		logging.info("exact indices %d of %d", n+1, m)
 	elif params['complete']:
 		results = exactcounts(trees1, params['trees2'], fragments,
-				params['disc'], params['revlabel'], params['treeswithprod'],
+				params['treeswithprod'],
 				fast=not params['quadratic'])
 		logging.info("complete fragments %d of %d", n+1, m)
 	else:
-		results = exactcounts(trees1, trees1, fragments, params['disc'],
-				params['revlabel'], params['treeswithprod'],
-				fast=not params['quadratic'])
+		results = exactcounts(trees1, trees1, fragments,
+				params['treeswithprod'], fast=not params['quadratic'])
 		logging.info("exact counts %d of %d", n+1, m)
 	return results
 
@@ -322,7 +316,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 		# start worker processes
 		pool = Pool(processes=numproc, initializer=initworkersimple,
 			initargs=(trees, list(sents)))
-		mymap = pool.imap_unordered
+		mymap = pool.imap
 		myapply = pool.apply
 	# collect recurring fragments
 	logging.info("extracting recurring fragments")
@@ -333,8 +327,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	fragments.update(cover)
 	logging.info("merged %d cover fragments", len(cover))
 	countchunk = 20000
-	bitsets = fragments.values()
-	fragmentkeys = fragments.keys()
+	fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
 	tmp = range(0, len(bitsets), countchunk)
 	work = [(n, len(tmp), bitsets[n:n+countchunk]) for n, a in enumerate(tmp)]
 	logging.info("getting exact counts")
@@ -384,7 +377,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 		# since the input trees change, we need a new pool each time
 		pool = Pool(processes=numproc, initializer=initworkersimple,
 			initargs=(newtrees, newsents, trees, sents))
-		mymap = pool.imap_unordered
+		mymap = pool.imap
 	newfragments = {}
 	for a in mymap(worker, range(0, numtrees, chunk)):
 		newfragments.update(a)
