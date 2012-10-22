@@ -194,13 +194,11 @@ def main(argv):
 		logging.info("dividing work for exact %s", task)
 		countchunk = 20000
 		fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-		work = [bitsets[n:n+countchunk] for n in range(0, len(bitsets), countchunk)]
+		work = [bitsets[a:a+countchunk] for a in range(0, len(bitsets), countchunk)]
 		work = [(n, len(work), a) for n, a in enumerate(work)]
-		if numproc != 1: mymap = pool.imap
-		dowork = mymap(exactcountworker, work)
 		logging.info("getting exact %s", task)
 		counts = []
-		for a in dowork: counts.extend(a)
+		for a in mymap(exactcountworker, work): counts.extend(a)
 		fragments = zip(fragmentkeys, counts)
 	if numproc != 1:
 		pool.terminate()
@@ -269,14 +267,12 @@ def exactcountworker(args):
 	n, m, fragments = args
 	trees1 = params['trees1']
 	if params['indices']:
-		results = exactindices(trees1, trees1, fragments, params['disc'],
-				params['revlabel'], params['treeswithprod'],
-				fast=not params['quadratic'])
+		results = exactindices(trees1, trees1, fragments,
+				params['treeswithprod'], fast=not params['quadratic'])
 		logging.info("exact indices %d of %d", n+1, m)
 	elif params['complete']:
 		results = exactcounts(trees1, params['trees2'], fragments,
-				params['treeswithprod'],
-				fast=not params['quadratic'])
+				params['treeswithprod'], fast=not params['quadratic'])
 		logging.info("complete fragments %d of %d", n+1, m)
 	else:
 		results = exactcounts(trees1, trees1, fragments,
@@ -329,7 +325,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	countchunk = 20000
 	fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
 	tmp = range(0, len(bitsets), countchunk)
-	work = [(n, len(tmp), bitsets[n:n+countchunk]) for n, a in enumerate(tmp)]
+	work = [(n, len(tmp), bitsets[a:a+countchunk]) for n, a in enumerate(tmp)]
 	logging.info("getting exact counts")
 	counts = []
 	for a in mymap(exactcountworker, work): counts.extend(a)

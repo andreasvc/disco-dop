@@ -237,8 +237,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	The reason we need to do this separately from extracting maximal fragments
 	is that a fragment can occur in other trees where it was not a maximal. """
 	cdef:
-		int n, m, i, j
-		UInt count
+		UInt count, n, m, i, j
 		array[UInt] counts = clone(uintarray, len(bitsets), True)
 		array[ULong] bitset = bitsets[0]
 		UChar SLOTS = len(bitset) - 2
@@ -248,11 +247,12 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	# compare one bitset to each tree for each unique fragment.
 	for n, bitset in enumerate(bitsets):
 		a = ctrees2[bitset[SLOTS + 1]] # the fragment
-		#create copy of set!
-		candidates = set(<set>(treeswithprod[a.nodes[bitset[SLOTS]].prod]))
-		for i in range(a.len):
-			if TESTBIT(bitset.data.as_ulongs, i):
-				candidates &= <set>(treeswithprod[a.nodes[i].prod])
+		i = anextset(bitset.data.as_ulongs, 0, SLOTS)
+		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
+		while True:
+			i = anextset(bitset.data.as_ulongs, i, SLOTS)
+			if i == -1: break
+			candidates &= <set>(treeswithprod[a.nodes[i].prod])
 		i = bitset[SLOTS] # root of fragment in a
 
 		count = 0
@@ -283,8 +283,7 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 		int n, m, i, j
 		UInt count
 		UChar SLOTS = 0
-		array[ULong] pyarray
-		ULong *bitset = NULL
+		array[ULong] bitset
 		NodeArray a, b, *ctrees1 = trees1.data, *ctrees2 = trees2.data
 		set candidates, matches
 		list indices = [set() for _ in bitsets]
@@ -293,13 +292,11 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 		SLOTS = len(pyarray) - 2
 		assert SLOTS
 	# compare one bitset to each tree for each unique fragment.
-	for n, pyarray in enumerate(bitsets):
-		bitset = pyarray.data.as_ulongs
+	for n, bitset in enumerate(bitsets):
 		a = ctrees2[bitset[SLOTS + 1]] # the fragment
-		#create copy of set!
-		candidates = set(<set>(treeswithprod[a.nodes[bitset[SLOTS]].prod]))
+		candidates = set(range(trees1.len))
 		for i in range(a.len):
-			if TESTBIT(bitset, i):
+			if TESTBIT(bitset.data.as_ulongs, i):
 				candidates &= <set>(treeswithprod[a.nodes[i].prod])
 		i = bitset[SLOTS]
 
@@ -308,7 +305,8 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 			b = ctrees1[m]
 			for j in range(b.len):
 				if a.nodes[i].prod != -1 and a.nodes[i].prod == b.nodes[j].prod:
-					if containsbitset(a, b, bitset, i, j): matches.add(m)
+					if containsbitset(a, b, bitset.data.as_ulongs, i, j):
+						matches.add(m)
 				elif fast and a.nodes[i].prod > b.nodes[j].prod: break
 		indices[n] = frozenset(matches)
 	return indices
@@ -330,7 +328,7 @@ cdef inline int containsbitset(NodeArray A, NodeArray B, ULong *bitset,
 	if a.right < 0: return 1
 	if TESTBIT(bitset, a.right):
 		return containsbitset(A, B, bitset, a.right, b.right)
-	else: return 1
+	return 1
 
 cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	dict labels, dict prods, list revlabel,
