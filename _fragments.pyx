@@ -247,12 +247,10 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	# compare one bitset to each tree for each unique fragment.
 	for n, bitset in enumerate(bitsets):
 		a = ctrees2[bitset[SLOTS + 1]] # the fragment
-		i = anextset(bitset.data.as_ulongs, 0, SLOTS)
-		candidates = set(<set>(treeswithprod[a.nodes[i].prod]))
-		while True:
-			i = anextset(bitset.data.as_ulongs, i, SLOTS)
-			if i == -1: break
-			candidates &= <set>(treeswithprod[a.nodes[i].prod])
+		candidates = set(range(trees1.len))
+		for i in range(a.len):
+			if TESTBIT(bitset.data.as_ulongs, i):
+				candidates &= <set>(treeswithprod[a.nodes[i].prod])
 		i = bitset[SLOTS] # root of fragment in a
 
 		count = 0
@@ -298,7 +296,7 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 		for i in range(a.len):
 			if TESTBIT(bitset.data.as_ulongs, i):
 				candidates &= <set>(treeswithprod[a.nodes[i].prod])
-		i = bitset[SLOTS]
+		i = bitset[SLOTS] # root of fragment in a
 
 		matches = set()
 		for m in candidates:
