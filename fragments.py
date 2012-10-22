@@ -386,7 +386,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	bitsets = [newfragments[a] for a in newkeys]
 	countchunk = 20000
 	tmp = range(0, len(bitsets), countchunk)
-	work = [(n, len(tmp), bitsets[n:n+countchunk]) for n, a in enumerate(tmp)]
+	work = [(n, len(tmp), bitsets[a:a+countchunk]) for n, a in enumerate(tmp)]
 	logging.info("getting exact counts")
 	counts = []
 	for a in mymap(exactcountworker, work): counts.extend(a)
