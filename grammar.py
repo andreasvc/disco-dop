@@ -192,14 +192,14 @@ def doubledop_new(fragments, debug=False, freqs=False):
 		prods, newfrag = flatten_new(frag, terminals, ids)
 		if prods[0][0][1] == 'Epsilon': #lexical production
 			lexprod = prods[0]
-			assert lexprod not in grammar
 			grammar[lexprod] = fragments[frag, terminals]
 			continue
 		elif prods[0] in backtransform:
 			# normally, rules of fragments are disambiguated by binarization IDs
 			# in case there's a fragment with only one or two frontier nodes,
 			# we add an artficial node.
-			newlabel = "%s}<%d>" % (prods[0][0][0], ids.next())
+			newlabel = "%s}<%d>%s" % (prods[0][0][0], ids.next(),
+					'' if len(prods[0][1]) == 1 else '_%d' % len(prods[0][1]))
 			prod1 = ((prods[0][0][0], newlabel) + prods[0][0][2:], prods[0][1])
 			# we have to determine fanout of the first nonterminal
 			# on the right hand side
@@ -215,7 +215,7 @@ def doubledop_new(fragments, debug=False, freqs=False):
 	if debug:
 		doubledopdump([], fragments, {}, backtransform)
 	# replace keys with numeric ids of rules, drop terminals.
-	grammar = list(sorted(grammar.items()))
+	grammar = sorted(grammar.items())
 	backtransform = dict((n, backtransform[r])
 		for n, (r, _) in enumerate(grammar) if r in backtransform)
 	if freqs: return grammar, backtransform

@@ -1,11 +1,13 @@
 # -*- coding: UTF-8 -*-
-import os, re, sys, time, gzip, logging, codecs, cPickle
+import os, re, sys, time, gzip, string, codecs, logging, cPickle, tempfile
 import multiprocessing
 from collections import defaultdict, Counter as multiset
 from itertools import islice, imap, count
 from operator import itemgetter
+from subprocess import Popen, PIPE
 from math import exp
 from nltk import Tree
+from nltk.metrics import accuracy
 import numpy as np
 from treebank import NegraCorpusReader, fold, export
 from fragments import getfragments
@@ -24,7 +26,9 @@ def main(
 	splitpcfg = True,
 	plcfrs = True,
 	dop = True,
+	usecfgparse=False, #whether to use the dedicated CFG parser for splitpcfg
 	usedoubledop = False,	# when False, use DOP reduction instead
+	usetagger=None,	#default is to use tags from treebank.
 	corpusdir=".",
 	corpusfile="sample2.export",
 	encoding="iso-8859-1",
@@ -48,7 +52,6 @@ def main(
 	arity_marks_before_bin = False,
 	tailmarker = "",
 	sample=False, both=False,
-	usecfgparse=False, #whether to use the dedicated CFG parser for splitpcfg
 	m = 10000,		#number of derivations to sample/enumerate
 	estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
 	sldop_n=7,
@@ -78,6 +81,7 @@ def main(
 	#corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1"); testmaxwords = 99
 	assert bintype in ("optimal", "optimalhead", "binarize", "nltk")
 	assert estimator in ("dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
+	assert usetagger in ("treetagger", "stanford")
 	os.mkdir(resultdir)
 	# Log everything, and send it to stderr, in a format with just the message.
 	format = '%(message)s'
@@ -114,6 +118,19 @@ def main(
 			test.tagged_sents()[trainsents+skip:trainsents+skip+testsents],
 			test.blocks()[trainsents+skip:trainsents+skip+testsents])
 	assert len(test[0]), "test corpus should be non-empty"
+
+	if usetagger:
+		if usetagger == 'treetagger':
+			# these two tags are never given by tree-tagger,
+			# so collect words whose tag needs to be overriden
+			traintaggedsents = corpus.tagged_sents()[:trainsents]
+			taxlex = defaultdict(set)
+			for word, tag in traintaggedsents: taglex[word].add(tag)
+			overridetag = dict((tag,
+				set(word for word, tags in taxlex.iteritems() if tags == set([tag])))
+				for tag in ("PTKANT", "PIDAT"))
+		else: overridetag = {}
+		test[1] = dotagging(usetagger, test[1], overridetag)
 
 	f, n = treebankfanout(trees)
 	logging.info("%d test sentences before length restriction", len(test[0]))
@@ -202,13 +219,10 @@ def main(
 			# as well as depth-1 'cover' fragments
 			fragments = getfragments(trees, sents, numproc,
 					iterate=iterate, complement=complement)
-			logging.info("fragments: %r", hash(frozenset(fragments.items())))
 			if newdd:
 				dopgrammar, backtransform = doubledop_new(fragments)
 			else:
 				dopgrammar, backtransform = doubledop(fragments)
-			logging.info("grammar: %r", hash(frozenset(dopgrammar)))
-			logging.info("backtransform: %r", hash(frozenset(backtransform.items())))
 		else:
 			dopgrammar = dop_lcfrs_rules(trees, sents,
 				normalize=(estimator in ("ewe", "sl-dop", "sl-dop-simple")),
@@ -346,8 +360,8 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		assert thesentid == sentid
 		logging.debug("%d/%d%s. [len=%d] %s\n%s", nsent, len(work),
 					(' (%d)' % sentid) if numproc != 1 else '', len(sent),
-					u" ".join(a[0] for a in sent),	# words only
-					#u" ".join(a[0]+u"/"+a[1] for a in sent))) word/TAG
+					#u" ".join(a[0] for a in sent),	# words only
+					u" ".join(a[0]+u"/"+a[1] for a in sent), # word/TAG
 					msg)
 		goldb = bracketings(tree)
 		gold[sentid-1] = block
@@ -805,8 +819,7 @@ def parsetepacoc(dop=True, plcfrs=True, estimator='ewe', unfolded=False,
 	cnt = 0
 	for cat, catsents in tepacocsents.iteritems():
 		print "category:", cat,
-		trees, sents, blocks = [], [], []
-		test = trees, sents, blocks
+		test = trees, sents, blocks = [], [], []
 		for n, sent in catsents:
 			corpus_sent = corpus_sents[n]
 			if len(corpus_sent) <= testmaxwords:
@@ -820,6 +833,7 @@ def parsetepacoc(dop=True, plcfrs=True, estimator='ewe', unfolded=False,
 				blocks.append(corpus_blocks[n])
 		print len(test[0]), "of", len(catsents), "sentences"
 		testset[cat] = test
+	if usetagger: sents = dotagging(usetagger, sents, {})
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	for cat, test in sorted(testset.items()):
 		print "category:", cat
@@ -874,6 +888,72 @@ def cycledetection(trees, sents):
 			logging.debug("cycle (cost %5.2f): %s",
 				sum(weights[c, d] for c, d in zip(b, b[1:])), " => ".join(b))
 
+def dotagging(usetagger, sents, overridetag):
+	logging.info("Start tagging.")
+	goldtags = [t for sent in sents for _, t in sent]
+	if usetagger == "treetagger": # Tree-tagger
+		# ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
+		# ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
+		#tagger = Popen(executable="tree-tagger/cmd/tree-tagger-german",
+		#		args=["tree-tagger/cmd/tree-tagger-german"],
+		#		stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False)
+		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
+				" tree-tagger/lib/german-par-linux-3.2-utf8.bin"
+				" | tree-tagger/cmd/filter-german-tags",
+				stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
+		for tagsent in sents:
+			sent = map(itemgetter(0), tagsent)
+			tagger.stdin.write("\n".join(wordmangle(w, n, sent)
+				for n, w in enumerate(sent)) + "\n<S>\n")
+		tagger.stdin.close()
+		tagout = tagger.stdout.read().decode('utf-8').split("<S>")[:-1]
+		taggedsents = [[tagmangle(a, None, overridetag)
+					for a in tags.splitlines() if a.strip()]
+					for tags in tagout]
+	elif usetagger == "stanford": # Stanford Tagger
+		# http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
+		infile, inname = tempfile.mkstemp(text=True)
+		with os.fdopen(infile, 'w') as infile:
+			for tagsent in sents:
+				sent = map(itemgetter(0), tagsent)
+				infile.write(" ".join(wordmangle(w, n, sent)
+					for n, w in enumerate(sent)) + "\n")
+		tagger = Popen(args=(
+				"/usr/bin/java -mx2G -classpath stanford-postagger.jar "
+				"edu.stanford.nlp.tagger.maxent.MaxentTagger "
+				"-model models/german-hgc.tagger -tokenize false "
+				"-encoding utf-8 -textFile %s" % inname).split(),
+				cwd="../src/stanford-postagger-full-2012-07-09",
+				shell=False, stdout=PIPE)
+		tagout = tagger.stdout.read().decode('utf-8').splitlines()
+		os.unlink(inname)
+		taggedsents = [[tagmangle(a, "_", overridetag) for a in tags.split()]
+				for tags in tagout]
+	assert len(taggedsents) == len(test[1]), (
+			"mismatch in number of sentences after tagging.")
+	for n, tags in enumerate(taggedsents):
+		assert len(test[1][n]) == len(tags), (
+				"mismatch in number of tokens after tagging.\n"
+				"before: %r\nafter: %r" % (test[1][n], tags))
+	newtags = [t for sent in taggedsents for _, t in sent]
+	logging.info("Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r",
+		(100 * accuracy(goldtags, newtags)),
+		set(newtags) - set(goldtags), set(goldtags) - set(newtags))
+	return taggedsents
+
+sentend = "(\"'!?..." # ";/-"
+def wordmangle(w, n, sent):
+	#if n > 0 and w[0] in string.uppercase and not sent[n-1] in sentend:
+	#	return ("%s\tNE\tNN\tFM" % w).encode('utf-8')
+	return w.encode('utf-8')
+
+tagmap = { "$(": "$[", "PAV": "PROAV"} #, "PIDAT": "PIAT" }
+def tagmangle(a, splitchar, overridetag):
+	word, tag = a.split(splitchar)
+	for newtag in overridetag:
+		if word in overridetag[newtag]: return word, newtag
+	return word, tagmap.get(tag, tag)
+
 def test():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
@@ -896,8 +976,7 @@ def test():
 	for mod, (fail, attempted) in sorted(results.iteritems(), key=itemgetter(1)):
 		if attempted: print '%s: %d doctests succeeded!' % (mod.__file__, attempted)
 
-def usage():
-	print """Usage: %s [--test|parameter file]
+usage = """Usage: %s [--test|parameter file]
 --test	run tests on all modules
 If a parameter file is given, an experiment is run. See the file sample.prm
 for an example parameter file. Note that to repeat an experiment, the directory
@@ -916,4 +995,4 @@ if __name__ == '__main__':
 		main(**params)
 		# copy parameter file to result dir
 		open("%s/params.prm" % params['resultdir'], "w").write(paramstr)
-	else: usage()
+	else: print usage

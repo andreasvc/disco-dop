@@ -1,6 +1,6 @@
 import sys, os.path
 from getopt import gnu_getopt, GetoptError
-from itertools import count, izip
+from itertools import count, izip, izip_longest
 from collections import defaultdict, Counter as multiset
 from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
@@ -18,7 +18,7 @@ def readparams(filename):
 	params = { "DEBUG" : 0, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
 					"LABELED" : 1, "DISC_ONLY" : 0,
 					"DELETE_LABEL" : [], "DELETE_LABEL_FOR_LENGTH" : [],
-					"EQ_LABEL" : {}, "EQ_WORD" : {} }
+					"EQ_LABEL" : {}, "EQ_WORD" : {}, "TED": 0 }
 	seen = set()
 	for a in open(filename) if filename else ():
 		line = a.strip()
@@ -39,21 +39,24 @@ def readparams(filename):
 				raise ValueError("unrecognized parameter key: %s" % key)
 	return params
 
-def transform(tree, sent, delete, eqlabel, eqword):
+def transform(tree, sent, pos, gpos, delete, eqlabel, eqword):
 	""" Apply the transformations according to the parameter file. """
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in zip(count(), a)[::-1]:
-			if not b: a.pop(n)	#remove empty nodes
-			elif b.node in delete:
+			if not b: a.pop(n)  #remove empty nodes
+			elif b.node in delete and isinstance(b[0], Tree):
 				# replace phrasal node with its children;
-				# remove pre-terminal entirely
-				if isinstance(b[0], Tree): a[n:n+1] = b
-				else: del a[n]
+				a[n:n+1] = b
+			elif not isinstance(b[0], Tree) and gpos[b[0]] in delete:
+				# remove pre-terminal entirely, but only look at gold tree,
+				# to ensure the sentence lengths stay the same
+				del a[n]
 			else: b.node = eqlabel.get(b.node, b.node)
 	# removed POS tags cause the numbering to be off, restore.
 	leafmap = dict((m, n) for n, m in enumerate(sorted(tree.leaves())))
 	# retain words still in tree
-	sent = [sent[n] for n in sorted(leafmap.itervalues())]
+	sent[:] = [sent[n] for n in sorted(leafmap)]
+	pos[:] = [pos[n] for n in sorted(leafmap)]
 	for a in tree.treepositions('leaves'):
 		tree[a] = leafmap[tree[a]]
 		if sent[tree[a]] in eqword: sent[tree[a]] = eqword[sent[tree[a]]]
@@ -169,11 +172,10 @@ def main(goldfile, parsesfile, param, goldencoding, parsesencoding):
 	if param["DEBUG"]:
 		print "Parameters:"
 		for a in param: print "%s\t%s" % (a, param[a])
-		print """
-   Sentence                 Matched   Brackets            Corr      Tag
-  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
-______________________________________________________________________________\
-"""
+		print (
+			"   Sentence                 Matched   Brackets            Corr      Tag\n"
+			"  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA\n"
+			"______________________________________________________________________________")
 	exact = 0.
 	maxlenseen = sentcount = dicenoms = dicedenoms = 0
 	goldpos = []
@@ -183,6 +185,7 @@ ______________________________________________________________________________\
 	candb = multiset()
 	goldbcat = defaultdict(multiset)
 	candbcat = defaultdict(multiset)
+	ted = denom = 0
 	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(),
 		parses.sents(), gold.parsed_sents(), gold.sents()):
 		if n < start: continue
@@ -197,9 +200,9 @@ ______________________________________________________________________________\
 		if lencpos > param["CUTOFF_LEN"]: continue
 		sentcount += 1
 		if maxlenseen < lencpos: maxlenseen = lencpos
-		transform(ctree, csent,
+		transform(ctree, csent, cpos, dict(gpos),
 			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
-		transform(gtree, gsent,
+		transform(gtree, gsent, gpos, dict(gpos),
 			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
 			"%s\%s" % (" ".join(csent), " ".join(gsent)))
@@ -221,11 +224,12 @@ ______________________________________________________________________________\
 			g = leafancestorpaths(gtree); c = leafancestorpaths(ctree)
 			print g, '\n', c
 			for leaf in g: print pathscore(g[leaf], c[leaf])
-		ted, denom = treedisteval(gtree, ctree,
-			includeroot=gtree.node not in param["DELETE_LABEL"])
+		if param["TED"]:
+			ted, denom = treedisteval(gtree, ctree,
+				includeroot=gtree.node not in param["DELETE_LABEL"])
 		dicenoms += ted; dicedenoms += denom
 		if param["DEBUG"] == 0: continue
-		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %2d" % (
+		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %s" % (
 			#" %(
 			n,
 			len(gpos),
@@ -238,37 +242,54 @@ ______________________________________________________________________________\
 			sum(1 for a, b in zip(gpos, cpos) if a==b),
 			100 * accuracy(gpos, cpos),
 			100 * la[-1],
-			ted, #1 if ted == 0 else 1 - ted / float(denom)
+			str(ted).rjust(2) if param["TED"] else "",
 			)
 		if param["DEBUG"] > 1:
 			print "gold:", gbrack
 			print "cand:", cbrack
 
 	if param["LABELED"]:
-		print """\n\
-__________________ Category Statistics ___________________
-     label      % gold   catRecall   catPrecis   catFScore
-__________________________________________________________"""
-		for a in sorted(set(goldbcat) | set(candbcat),
-				key=lambda x: len(goldbcat[x]), reverse=True):
-			print " %s      %6.2f      %6.2f      %6.2f      %6.2f" % (
-				a.rjust(9),
-				100 * sum(goldbcat[a].values()) / float(len(goldb)),
-				100 * nonetozero(lambda: recall(goldbcat[a], candbcat[a])),
-				100 * nonetozero(lambda: precision(goldbcat[a], candbcat[a])),
-				100 * nonetozero(lambda: f_measure(goldbcat[a], candbcat[a])))
-
-		print """\n\
-Wrong Category Statistics (10 most frequent errors)
-   test/gold   count
-____________________"""
+		print ("\n Category Statistics (10 most frequent categories / errors)\n"
+			"  label  % gold  recall   prec.      F1           test/gold   count\n"
+			"________________________________________       _____________________")
 		gmismatch = dict(((n, indices), label)
 					for n, (label, indices) in (goldb - candb).keys())
 		wrong = FreqDist((label, gmismatch[n, indices])
 					for n, (label, indices) in (candb - goldb).keys()
 					if (n, indices) in gmismatch)
-		for labels, freq in wrong.items()[:10]:
-			print "%s %7d" % ("/".join(labels).rjust(12), freq)
+		freqcats = sorted(set(goldbcat) | set(candbcat),
+				key=lambda x: len(goldbcat[x]), reverse=True)
+		for cat, mismatch in izip_longest(freqcats[:10], wrong.keys()[:10]):
+			if cat is None: print "                                       ",
+			else: print "%s  %6.2f  %6.2f  %6.2f  %6.2f" % (
+					cat.rjust(7),
+					100 * sum(goldbcat[cat].values()) / float(len(goldb)),
+					100 * nonetozero(lambda: recall(goldbcat[cat], candbcat[cat])),
+					100 * nonetozero(lambda: precision(goldbcat[cat], candbcat[cat])),
+					100 * nonetozero(lambda: f_measure(goldbcat[cat], candbcat[cat]))),
+			print "      ",
+			if mismatch is None: mismatch = ("", "")
+			print "%s %7d" % ( "/".join(mismatch).rjust(12), wrong[mismatch])
+
+		if accuracy(goldpos, candpos) != 1:
+			print ("\n Tag Statistics (10 most frequent tags / errors)\n"
+				"    tag  % gold  recall   prec.      F1           test/gold   count\n"
+				"________________________________________       _____________________")
+			tags = FreqDist(tag for _, tag in goldpos)
+			wrong = FreqDist((g, c) for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
+			for tag, mismatch in izip_longest(tags.keys()[:10], wrong.keys()[:10]):
+				if tag is None: tag = ""
+				if mismatch is None: mismatch = ("", "")
+				goldtag = multiset(n for n, (w,t) in enumerate(goldpos) if t == tag)
+				candtag = multiset(n for n, (w,t) in enumerate(candpos) if t == tag)
+				print "%s  %6.2f  %6.2f  %6.2f  %6.2f        %s %7d" % (
+						tag.rjust(7),
+						100 * len(goldtag) / float(len(goldpos)),
+						100 * recall(goldtag, candtag),
+						100 * precision(goldtag, candtag),
+						100 * f_measure(goldtag, candtag),
+						"/".join(mismatch).rjust(12), wrong[mismatch])
+
 	discbrackets = sum(len(bracketings(tree, disconly=True))
 			for tree in parses.parsed_sents())
 	gdiscbrackets = sum(len(bracketings(tree, disconly=True))
@@ -287,8 +308,9 @@ ____________________"""
 		100 * nonetozero(lambda: f_measure(goldb, candb)))
 	print "exact match:               %6.2f" % (100 * (exact / sentcount))
 	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
-	print "tree-dist (Dice micro avg) %6.2f" % (
-		100 * (1 - dicenoms / float(dicedenoms)))
+	if param["TED"]:
+		print "tree-dist (Dice micro avg) %6.2f" % (
+			100 * (1 - dicenoms / float(dicedenoms)))
 	print "tagging accuracy:          %6.2f" % (100*accuracy(goldpos, candpos))
 
 def test():
@@ -296,8 +318,7 @@ def test():
 		'iso-8859-1', 'iso-8859-1')
 	exit(0)
 
-def usage():
-	print """\
+usage = """
 wrong number of arguments. usage:
 %s gold parses [params] [options]
 (where gold and parses are files in export format, params is in EVALB format,
@@ -313,7 +334,7 @@ Example:	%s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
 """ % (sys.argv[0], sys.argv[0])
 
 if __name__ == '__main__':
-	flags = ("test", "debug", "disconly")
+	flags = ("test", "debug", "disconly", "ted")
 	options = ('inputenc=', 'outputenc=', 'cutofflen=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
@@ -322,12 +343,13 @@ if __name__ == '__main__':
 		assert 2 <= len(args) <= 3
 		goldfile, parsesfile = args[:2]
 	except (GetoptError, ValueError, AssertionError) as err:
-		print "error:", err
-		usage(); exit(2)
+		print "error:", err, usage
+		exit(2)
 	param = readparams(args[2] if len(args) == 3 else None)
 	if '--cutofflen' in opts: param['CUTOFF_LEN'] = int(opts['--cutofflen'])
 	if '--disconly' in opts: param['DISC_ONLY'] = 1
 	if '--debug' in opts: param['DEBUG'] = 1
+	if '--ted' in opts: param['TED'] = 1
 	main(goldfile, parsesfile, param,
 		opts.get('--inputenc', 'utf-8'),
 		opts.get('--outputenc', 'utf-8'))
