@@ -10,6 +10,211 @@ from treetransforms import disc
 from treedist import treedist
 #from treedist import newtreedist as treedist
 
+usage = """usage:
+%s gold parses [params] [options]
+(where gold and parses are files in export format, params is in EVALB format,
+and options may consist of:
+
+--goldenc enc
+--parsesenc enc  To specify a different encoding than the default UTF-8.
+--cutofflen n    Overrides the sentence length cutoff of the parameter file.
+--debug          Enable printing of verbose information.
+--disconly       Only evaluate on discontinuous constituents.
+
+Example:
+%s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
+""" % (sys.argv[0], sys.argv[0])
+
+def main():
+	flags = ("test", "debug", "disconly", "ted")
+	options = ('inputenc=', 'outputenc=', 'cutofflen=')
+	try:
+		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
+		opts = dict(opts)
+		if '--test' in opts: test()
+		assert 2 <= len(args) <= 3, "Wrong number of arguments."
+		goldfile, parsesfile = args[:2]
+	except (GetoptError, ValueError, AssertionError) as err:
+		print "error:", err, usage
+		exit(2)
+	param = readparams(args[2] if len(args) == 3 else None)
+	if '--cutofflen' in opts: param['CUTOFF_LEN'] = int(opts['--cutofflen'])
+	if '--disconly' in opts: param['DISC_ONLY'] = 1
+	if '--debug' in opts: param['DEBUG'] = 1
+	if '--ted' in opts: param['TED'] = 1
+	doeval(goldfile, parsesfile, param,
+		opts.get('--inputenc', 'utf-8'),
+		opts.get('--outputenc', 'utf-8'))
+
+def doeval(goldfile, parsesfile, param, goldencoding, parsesencoding):
+	assert os.path.exists(goldfile), "gold file not found"
+	assert os.path.exists(parsesfile), "parses file not found"
+	gold = NegraCorpusReader(*splitpath(goldfile), encoding=goldencoding)
+	parses = NegraCorpusReader(*splitpath(parsesfile), encoding=parsesencoding)
+	goldlen = len(gold.parsed_sents())
+	parseslen = len(parses.parsed_sents())
+	start = 0; end = goldlen
+	if start < 0: start += goldlen
+	if end < 0: end += goldlen
+	assert goldlen == parseslen, ("unequal number of sentences "
+		"in gold & candidates: %d vs %d" % (goldlen, parseslen))
+	goldlen = end - start
+
+	if param["DEBUG"]:
+		print "Parameters:"
+		for a in param: print "%s\t%s" % (a, param[a])
+		print (
+			"   Sentence                 Matched   Brackets            Corr      Tag\n"
+			"  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA\n"
+			"______________________________________________________________________________")
+	exact = 0.
+	maxlenseen = sentcount = dicenoms = dicedenoms = 0
+	goldpos = []
+	candpos = []
+	la = []
+	goldb = multiset()
+	candb = multiset()
+	goldbcat = defaultdict(multiset)
+	candbcat = defaultdict(multiset)
+	ted = denom = 0
+	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(),
+		parses.sents(), gold.parsed_sents(), gold.sents()):
+		if n < start: continue
+		elif n > end: break
+		cpos = sorted(ctree.pos())
+		gpos = sorted(gtree.pos())
+		lencpos = sum(1 for _, b in cpos
+			if b not in param["DELETE_LABEL_FOR_LENGTH"])
+		lengpos = sum(1 for _, b in gpos
+			if b not in param["DELETE_LABEL_FOR_LENGTH"])
+		assert lencpos == lengpos, "sentence length mismatch"
+		if lencpos > param["CUTOFF_LEN"]: continue
+		sentcount += 1
+		if maxlenseen < lencpos: maxlenseen = lencpos
+		transform(ctree, csent, cpos, dict(gpos),
+			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
+		transform(gtree, gsent, gpos, dict(gpos),
+			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
+		assert csent == gsent, ("candidate & gold sentences do not match:\n"
+			"%s\%s" % (" ".join(csent), " ".join(gsent)))
+		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]
+			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
+		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]
+			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
+		if cbrack == gbrack: exact += 1
+		candb.update((n, a) for a in cbrack.elements())
+		goldb.update((n, a) for a in gbrack.elements())
+		for a in gbrack: goldbcat[a[0]][(n, a)] += 1
+		for a in cbrack: candbcat[a[0]][(n, a)] += 1
+		goldpos.extend(gpos)
+		candpos.extend(cpos)
+		la.append(leafancestor(gtree, ctree))
+		if la[-1] == 1 and gbrack != cbrack:
+			print "leaf ancestor score 1.0 but no exact match: (bug?)"
+			print gtree, '\n', ctree
+			g = leafancestorpaths(gtree); c = leafancestorpaths(ctree)
+			print g, '\n', c
+			for leaf in g: print pathscore(g[leaf], c[leaf])
+		if param["TED"]:
+			ted, denom = treedisteval(gtree, ctree,
+				includeroot=gtree.node not in param["DELETE_LABEL"])
+		dicenoms += ted; dicedenoms += denom
+		if param["DEBUG"] == 0: continue
+		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %s" % (
+			#" %(
+			n,
+			len(gpos),
+			100 * nonetozero(lambda: recall(gbrack, cbrack)),
+			100 * nonetozero(lambda: precision(gbrack, cbrack)),
+			sum((gbrack & cbrack).values()),
+			sum(gbrack.values()),
+			sum(cbrack.values()),
+			lengpos,
+			sum(1 for a, b in zip(gpos, cpos) if a==b),
+			100 * accuracy(gpos, cpos),
+			100 * la[-1],
+			str(ted).rjust(2) if param["TED"] else "",
+			)
+		if param["DEBUG"] > 1:
+			print "gold:", gbrack
+			print "cand:", cbrack
+
+	summary(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
+			sentcount, maxlenseen, exact, la, dicenoms, dicedenoms)
+
+def summary(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
+		sentcount, maxlenseen, exact, la, dicenoms, dicedenoms):
+	if param["LABELED"]:
+		print ("\n Category Statistics (10 most frequent categories / errors)\n"
+			"  label  % gold  recall   prec.      F1           test/gold   count\n"
+			"________________________________________       _____________________")
+		gmismatch = dict(((n, indices), label)
+					for n, (label, indices) in (goldb - candb).keys())
+		wrong = FreqDist((label, gmismatch[n, indices])
+					for n, (label, indices) in (candb - goldb).keys()
+					if (n, indices) in gmismatch)
+		freqcats = sorted(set(goldbcat) | set(candbcat),
+				key=lambda x: len(goldbcat[x]), reverse=True)
+		for cat, mismatch in izip_longest(freqcats[:10], wrong.keys()[:10]):
+			if cat is None: print "                                       ",
+			else: print "%s  %6.2f  %6.2f  %6.2f  %6.2f" % (
+					cat.rjust(7),
+					100 * sum(goldbcat[cat].values()) / float(len(goldb)),
+					100 * nonetozero(lambda: recall(goldbcat[cat], candbcat[cat])),
+					100 * nonetozero(lambda: precision(goldbcat[cat], candbcat[cat])),
+					100 * nonetozero(lambda: f_measure(goldbcat[cat], candbcat[cat]))),
+			if mismatch is not None:
+				print "      %s %7d" % (
+						"/".join(mismatch).rjust(12), wrong[mismatch]),
+			print
+
+		if accuracy(goldpos, candpos) != 1:
+			print ("\n Tag Statistics (10 most frequent tags / errors)\n"
+				"    tag  % gold  recall   prec.      F1           test/gold   count\n"
+				"________________________________________       _____________________")
+			tags = FreqDist(tag for _, tag in goldpos)
+			wrong = FreqDist((g, c) for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
+			for tag, mismatch in izip_longest(tags.keys()[:10], wrong.keys()[:10]):
+				goldtag = multiset(n for n, (w,t) in enumerate(goldpos)
+						if t == tag)
+				candtag = multiset(n for n, (w,t) in enumerate(candpos)
+						if t == tag)
+				if tag is None: print "".rjust(40),
+				else:
+					print "%s  %6.2f  %6.2f  %6.2f  %6.2f" % (
+							tag.rjust(7),
+							100 * len(goldtag) / float(len(goldpos)),
+							100 * recall(goldtag, candtag),
+							100 * precision(goldtag, candtag),
+							100 * f_measure(goldtag, candtag)),
+				if mismatch is not None:
+					print "        %s %7d" % (
+						"/".join(mismatch).rjust(12), wrong[mismatch]),
+				print
+
+	discbrackets = sum(1 for n, (a, b) in candb.elements()
+			if b != set(range(min(b), max(b)+1)))
+	gdiscbrackets = sum(1 for n, (a, b) in goldb.elements()
+			if b != set(range(min(b), max(b)+1)))
+
+	print "\n____________ Summary <= %d _______" % param["CUTOFF_LEN"]
+	print "number of sentences:       %6d" % (sentcount)
+	print "maximum length:            %6d" % (maxlenseen)
+	print "gold brackets (disc.):     %6d (%d)" % (len(goldb), gdiscbrackets)
+	print "cand. brackets (disc.):    %6d (%d)" % (len(candb), discbrackets)
+	print "labeled precision:         %6.2f" % (
+		100 * nonetozero(lambda: precision(goldb, candb)))
+	print "labeled recall:            %6.2f" % (
+		100 * nonetozero(lambda: recall(goldb, candb)))
+	print "labeled f-measure:         %6.2f" % (
+		100 * nonetozero(lambda: f_measure(goldb, candb)))
+	print "exact match:               %6.2f" % (100 * (exact / sentcount))
+	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
+	if param["TED"]:
+		print "tree-dist (Dice micro avg) %6.2f" % (
+			100 * (1 - dicenoms / float(dicedenoms)))
+	print "tagging accuracy:          %6.2f" % (100*accuracy(goldpos, candpos))
+
 def readparams(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
 	params = defaultdict(list)
@@ -155,201 +360,9 @@ def nonetozero(a):
 	except ZeroDivisionError: return 0
 	return 0 if result is None else result
 
-def main(goldfile, parsesfile, param, goldencoding, parsesencoding):
-	assert os.path.exists(goldfile), "gold file not found"
-	assert os.path.exists(parsesfile), "parses file not found"
-	gold = NegraCorpusReader(*splitpath(goldfile), encoding=goldencoding)
-	parses = NegraCorpusReader(*splitpath(parsesfile), encoding=parsesencoding)
-	goldlen = len(gold.parsed_sents())
-	parseslen = len(parses.parsed_sents())
-	start = 0; end = goldlen
-	if start < 0: start += goldlen
-	if end < 0: end += goldlen
-	assert goldlen == parseslen, ("unequal number of sentences "
-		"in gold & candidates: %d vs %d" % (goldlen, parseslen))
-	goldlen = end - start
-
-	if param["DEBUG"]:
-		print "Parameters:"
-		for a in param: print "%s\t%s" % (a, param[a])
-		print (
-			"   Sentence                 Matched   Brackets            Corr      Tag\n"
-			"  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA\n"
-			"______________________________________________________________________________")
-	exact = 0.
-	maxlenseen = sentcount = dicenoms = dicedenoms = 0
-	goldpos = []
-	candpos = []
-	la = []
-	goldb = multiset()
-	candb = multiset()
-	goldbcat = defaultdict(multiset)
-	candbcat = defaultdict(multiset)
-	ted = denom = 0
-	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(),
-		parses.sents(), gold.parsed_sents(), gold.sents()):
-		if n < start: continue
-		elif n > end: break
-		cpos = sorted(ctree.pos())
-		gpos = sorted(gtree.pos())
-		lencpos = sum(1 for _, b in cpos
-			if b not in param["DELETE_LABEL_FOR_LENGTH"])
-		lengpos = sum(1 for _, b in gpos
-			if b not in param["DELETE_LABEL_FOR_LENGTH"])
-		assert lencpos == lengpos, "sentence length mismatch"
-		if lencpos > param["CUTOFF_LEN"]: continue
-		sentcount += 1
-		if maxlenseen < lencpos: maxlenseen = lencpos
-		transform(ctree, csent, cpos, dict(gpos),
-			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
-		transform(gtree, gsent, gpos, dict(gpos),
-			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
-		assert csent == gsent, ("candidate & gold sentences do not match:\n"
-			"%s\%s" % (" ".join(csent), " ".join(gsent)))
-		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]
-			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
-		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]
-			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
-		if cbrack == gbrack: exact += 1
-		candb.update((n, a) for a in cbrack.elements())
-		goldb.update((n, a) for a in gbrack.elements())
-		for a in gbrack: goldbcat[a[0]][(n, a)] += 1
-		for a in cbrack: candbcat[a[0]][(n, a)] += 1
-		goldpos.extend(gpos)
-		candpos.extend(cpos)
-		la.append(leafancestor(gtree, ctree))
-		if la[-1] == 1 and gbrack != cbrack:
-			print "leaf ancestor score 1.0 but no exact match: (bug?)"
-			print gtree, '\n', ctree
-			g = leafancestorpaths(gtree); c = leafancestorpaths(ctree)
-			print g, '\n', c
-			for leaf in g: print pathscore(g[leaf], c[leaf])
-		if param["TED"]:
-			ted, denom = treedisteval(gtree, ctree,
-				includeroot=gtree.node not in param["DELETE_LABEL"])
-		dicenoms += ted; dicedenoms += denom
-		if param["DEBUG"] == 0: continue
-		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %s" % (
-			#" %(
-			n,
-			len(gpos),
-			100 * nonetozero(lambda: recall(gbrack, cbrack)),
-			100 * nonetozero(lambda: precision(gbrack, cbrack)),
-			sum((gbrack & cbrack).values()),
-			sum(gbrack.values()),
-			sum(cbrack.values()),
-			lengpos,
-			sum(1 for a, b in zip(gpos, cpos) if a==b),
-			100 * accuracy(gpos, cpos),
-			100 * la[-1],
-			str(ted).rjust(2) if param["TED"] else "",
-			)
-		if param["DEBUG"] > 1:
-			print "gold:", gbrack
-			print "cand:", cbrack
-
-	if param["LABELED"]:
-		print ("\n Category Statistics (10 most frequent categories / errors)\n"
-			"  label  % gold  recall   prec.      F1           test/gold   count\n"
-			"________________________________________       _____________________")
-		gmismatch = dict(((n, indices), label)
-					for n, (label, indices) in (goldb - candb).keys())
-		wrong = FreqDist((label, gmismatch[n, indices])
-					for n, (label, indices) in (candb - goldb).keys()
-					if (n, indices) in gmismatch)
-		freqcats = sorted(set(goldbcat) | set(candbcat),
-				key=lambda x: len(goldbcat[x]), reverse=True)
-		for cat, mismatch in izip_longest(freqcats[:10], wrong.keys()[:10]):
-			if cat is None: print "                                       ",
-			else: print "%s  %6.2f  %6.2f  %6.2f  %6.2f" % (
-					cat.rjust(7),
-					100 * sum(goldbcat[cat].values()) / float(len(goldb)),
-					100 * nonetozero(lambda: recall(goldbcat[cat], candbcat[cat])),
-					100 * nonetozero(lambda: precision(goldbcat[cat], candbcat[cat])),
-					100 * nonetozero(lambda: f_measure(goldbcat[cat], candbcat[cat]))),
-			print "      ",
-			if mismatch is None: mismatch = ("", "")
-			print "%s %7d" % ( "/".join(mismatch).rjust(12), wrong[mismatch])
-
-		if accuracy(goldpos, candpos) != 1:
-			print ("\n Tag Statistics (10 most frequent tags / errors)\n"
-				"    tag  % gold  recall   prec.      F1           test/gold   count\n"
-				"________________________________________       _____________________")
-			tags = FreqDist(tag for _, tag in goldpos)
-			wrong = FreqDist((g, c) for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
-			for tag, mismatch in izip_longest(tags.keys()[:10], wrong.keys()[:10]):
-				if tag is None: tag = ""
-				if mismatch is None: mismatch = ("", "")
-				goldtag = multiset(n for n, (w,t) in enumerate(goldpos) if t == tag)
-				candtag = multiset(n for n, (w,t) in enumerate(candpos) if t == tag)
-				print "%s  %6.2f  %6.2f  %6.2f  %6.2f        %s %7d" % (
-						tag.rjust(7),
-						100 * len(goldtag) / float(len(goldpos)),
-						100 * recall(goldtag, candtag),
-						100 * precision(goldtag, candtag),
-						100 * f_measure(goldtag, candtag),
-						"/".join(mismatch).rjust(12), wrong[mismatch])
-
-	discbrackets = sum(len(bracketings(tree, disconly=True))
-			for tree in parses.parsed_sents())
-	gdiscbrackets = sum(len(bracketings(tree, disconly=True))
-			for tree in gold.parsed_sents())
-
-	print "\n____________ Summary <= %d _______" % param["CUTOFF_LEN"]
-	print "number of sentences:       %6d" % (sentcount)
-	print "maximum length:            %6d" % (maxlenseen)
-	print "gold brackets (disc.):     %6d (%d)" % (len(goldb), gdiscbrackets)
-	print "cand. brackets (disc.):    %6d (%d)" % (len(candb), discbrackets)
-	print "labeled precision:         %6.2f" % (
-		100 * nonetozero(lambda: precision(goldb, candb)))
-	print "labeled recall:            %6.2f" % (
-		100 * nonetozero(lambda: recall(goldb, candb)))
-	print "labeled f-measure:         %6.2f" % (
-		100 * nonetozero(lambda: f_measure(goldb, candb)))
-	print "exact match:               %6.2f" % (100 * (exact / sentcount))
-	print "leaf-ancestor:             %6.2f" % (100 * mean(la))
-	if param["TED"]:
-		print "tree-dist (Dice micro avg) %6.2f" % (
-			100 * (1 - dicenoms / float(dicedenoms)))
-	print "tagging accuracy:          %6.2f" % (100*accuracy(goldpos, candpos))
-
 def test():
-	main("sample2.export", "sample2.export", readparams(None),
+	doeval("sample2.export", "sample2.export", readparams(None),
 		'iso-8859-1', 'iso-8859-1')
 	exit(0)
 
-usage = """
-wrong number of arguments. usage:
-%s gold parses [params] [options]
-(where gold and parses are files in export format, params is in EVALB format,
-and options may consist of:
-
---goldenc enc
---parsesenc enc  To specify a different encoding than the default UTF-8.
---cutofflen n    Overrides the sentence length cutoff of the parameter file.
---debug          Enable printing of verbose information.
---disconly       Only evaluate on discontinuous constituents.
-
-Example:	%s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
-""" % (sys.argv[0], sys.argv[0])
-
-if __name__ == '__main__':
-	flags = ("test", "debug", "disconly", "ted")
-	options = ('inputenc=', 'outputenc=', 'cutofflen=')
-	try:
-		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
-		opts = dict(opts)
-		if '--test' in opts: test()
-		assert 2 <= len(args) <= 3
-		goldfile, parsesfile = args[:2]
-	except (GetoptError, ValueError, AssertionError) as err:
-		print "error:", err, usage
-		exit(2)
-	param = readparams(args[2] if len(args) == 3 else None)
-	if '--cutofflen' in opts: param['CUTOFF_LEN'] = int(opts['--cutofflen'])
-	if '--disconly' in opts: param['DISC_ONLY'] = 1
-	if '--debug' in opts: param['DEBUG'] = 1
-	if '--ted' in opts: param['TED'] = 1
-	main(goldfile, parsesfile, param,
-		opts.get('--inputenc', 'utf-8'),
-		opts.get('--outputenc', 'utf-8'))
+if __name__ == '__main__': main()

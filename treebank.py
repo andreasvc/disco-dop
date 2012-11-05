@@ -68,8 +68,8 @@ class NegraCorpusReader(object):
 			if "%%" in a: a[a.index("%%"):] = []
 			lena = len(a)
 			if lena == 5: return a[:1] + [''] + a[1:]
-			elif lena == 6: return a
-			else: raise ValueError("expected 5 or 6 columns: %r" % a)
+			elif lena >= 6: return a[:6] # skip secondary edges
+			else: raise ValueError("expected at lest 5 columns: %r" % a)
 		result = []
 		started = False
 		for filename in self._filenames:

@@ -803,14 +803,6 @@ def read_penn_format(corpus, maxlen=15, n=7200):
 			tree[a] = n
 	return trees, sents
 
-def terminals(tree, sent):
-	""" Replaces indices with words for a CF-tree. """
-	tree = Tree(tree)
-	tree.node = "VROOT"
-	for a, (w, _) in zip(tree.treepositions('leaves'), sent):
-		tree[a] = w
-	return tree.pprint(margin=999)
-
 def rem_marks(tree):
 	""" Remove arity marks, make sure indices at leaves are integers."""
 	for a in tree.subtrees(lambda x: "_" in x.node):
@@ -1021,7 +1013,7 @@ def main():
 	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
-		model, input, rules, lexicon = args
+		model, treebankfile, rules, lexicon = args
 	except (GetoptError, ValueError) as err:
 		print "error:", err
 		usage()
@@ -1031,7 +1023,7 @@ def main():
 		"unrecognized model: %r" % model)
 	freqs = opts.get('--freqs', False)
 
-	# read input
+	# read treebank
 	if opts.get('--inputfmt', 'export') == 'export':
 		Reader = NegraCorpusReader
 	elif opts.get('--inputfmt') == 'discbracket':
@@ -1040,7 +1032,7 @@ def main():
 		Reader = BracketCorpusReader
 	else: raise ValueError("unrecognized format: %r" % opts.get('--inputfmt'))
 
-	corpus = Reader(".", input)
+	corpus = Reader(".", treebankfile)
 	trees, sents = corpus.parsed_sents(), corpus.sents()
 	for a in trees:
 		canonicalize(a)

@@ -1,4 +1,4 @@
-import codecs
+import codecs, logging
 from math import exp
 from collections import Set, Iterable
 from functools import partial
@@ -98,7 +98,7 @@ cdef class Grammar:
 		copyrules(grammar, self.lbinary, 1, 3, self.toid, self.nonterminals)
 		copyrules(grammar, self.rbinary, 2, 3, self.toid, self.nonterminals)
 		copyrules(grammar, self.bylhs,   0, 0, self.toid, self.nonterminals)
-	def testgrammar(self, log, epsilon=0.01):
+	def testgrammar(self, epsilon=0.01):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
 		#but Negra contains at least one tag (--) used for both.
@@ -115,12 +115,12 @@ cdef class Grammar:
 				sums[term.lhs] = sums.get(term.lhs, 0.0) + exp(-term.prob)
 		for lhs, mass in sums.iteritems():
 			if abs(mass - 1.0) > epsilon:
-				#log.info("rules with %s:\n%s" % (
+				#logging.info("rules with %s:\n%s" % (
 				#	self.tolabel[lhs], self.rulesrepr(lhs)))
-				log.info("Does not sum to 1 (+/- %g): %s; sums to %g" % (
+				logging.error("Does not sum to 1 (+/- %g): %s; sums to %g" % (
 					epsilon, self.tolabel[lhs], mass))
 				return False
-		log.info("All left hand sides sum to 1")
+		logging.info("All left hand sides sum to 1")
 		return True
 	def getunaryclosure(self):
 		""" FIXME: closure should be related to probabilities as well.
