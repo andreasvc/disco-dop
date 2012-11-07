@@ -174,11 +174,11 @@ class EditStats(object):
 	def __lt__(self, other):
 		return self.distance < other.distance
 	def __repr__(self):
-		return ("%s(distance=%d, matched=%d, "
-			"[\n\t%s])" % (self.__class__.__name__, self.distance,
-			self.matched, ",\n\t".join("%s(%s, %s)" % (a[0],
-			a[1].node if isinstance(a[1], Tree) else a[1],
-			a[2].node if isinstance(a[2], Tree) else a[2])
+		return ("%s(distance=%d, matched=%d, [\n\t%s])" % (
+			self.__class__.__name__, self.distance, self.matched,
+			",\n\t".join("%s(%s, %s)" % (a[0],
+			"%s[%d]" % (a[1].node, a[1].idx) if isinstance(a[1], Tree) else a[1],
+			"%s[%d]" % (a[2].node, a[2].idx) if isinstance(a[2], Tree) else a[2])
 			for a in self.editscript)))
 
 def geteditstats(forest1, forest2):

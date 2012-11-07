@@ -7,7 +7,7 @@ from nltk.metrics import accuracy, edit_distance
 from treebank import NegraCorpusReader
 from grammar import ranges
 from treetransforms import disc
-from treedist import treedist
+from treedist import treedist, newtreedist
 #from treedist import newtreedist as treedist
 
 usage = """usage:
@@ -18,15 +18,17 @@ and options may consist of:
 --goldenc enc
 --parsesenc enc  To specify a different encoding than the default UTF-8.
 --cutofflen n    Overrides the sentence length cutoff of the parameter file.
---debug          Enable printing of verbose information.
---disconly       Only evaluate on discontinuous constituents.
+--verbose        Print table with per sentence information.
+--debug          Print debug information showing per sentence bracketings etc.
+--disconly       Only evaluate bracketings of discontinuous constituents
+                 (only affects Parseval measures).
 
 Example:
 %s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
 """ % (sys.argv[0], sys.argv[0])
 
 def main():
-	flags = ("test", "debug", "disconly", "ted")
+	flags = ("test", "verbose", "debug", "disconly", "ted")
 	options = ('inputenc=', 'outputenc=', 'cutofflen=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
@@ -40,7 +42,8 @@ def main():
 	param = readparams(args[2] if len(args) == 3 else None)
 	if '--cutofflen' in opts: param['CUTOFF_LEN'] = int(opts['--cutofflen'])
 	if '--disconly' in opts: param['DISC_ONLY'] = 1
-	if '--debug' in opts: param['DEBUG'] = 1
+	if '--verbose' in opts: param['DEBUG'] = 1
+	if '--debug' in opts: param['DEBUG'] = 2
 	if '--ted' in opts: param['TED'] = 1
 	doeval(goldfile, parsesfile, param,
 		opts.get('--inputenc', 'utf-8'),
@@ -97,10 +100,10 @@ def doeval(goldfile, parsesfile, param, goldencoding, parsesencoding):
 			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"])
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
 			"%s\%s" % (" ".join(csent), " ".join(gsent)))
-		cbrack = bracketings(ctree, param["LABELED"], set([gtree.node]
-			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
-		gbrack = bracketings(gtree, param["LABELED"], set([gtree.node]
-			).intersection(param["DELETE_LABEL"]), param["DISC_ONLY"])
+		cbrack = bracketings(ctree, param["LABELED"], param["DELETE_LABEL"],
+				param["DISC_ONLY"])
+		gbrack = bracketings(gtree, param["LABELED"], param["DELETE_LABEL"],
+				param["DISC_ONLY"])
 		if cbrack == gbrack: exact += 1
 		candb.update((n, a) for a in cbrack.elements())
 		goldb.update((n, a) for a in gbrack.elements())
@@ -108,20 +111,16 @@ def doeval(goldfile, parsesfile, param, goldencoding, parsesencoding):
 		for a in cbrack: candbcat[a[0]][(n, a)] += 1
 		goldpos.extend(gpos)
 		candpos.extend(cpos)
-		la.append(leafancestor(gtree, ctree))
+		la.append(leafancestor(gtree, ctree, param["DELETE_LABEL"]))
 		if la[-1] == 1 and gbrack != cbrack:
 			print "leaf ancestor score 1.0 but no exact match: (bug?)"
-			print gtree, '\n', ctree
-			g = leafancestorpaths(gtree); c = leafancestorpaths(ctree)
-			print g, '\n', c
-			for leaf in g: print pathscore(g[leaf], c[leaf])
+		elif la[-1] is None: del la[-1]
 		if param["TED"]:
 			ted, denom = treedisteval(gtree, ctree,
 				includeroot=gtree.node not in param["DELETE_LABEL"])
 		dicenoms += ted; dicedenoms += denom
 		if param["DEBUG"] == 0: continue
 		print "%4d  %5d  %6.2f  %6.2f   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %s" % (
-			#" %(
 			n,
 			len(gpos),
 			100 * nonetozero(lambda: recall(gbrack, cbrack)),
@@ -136,8 +135,21 @@ def doeval(goldfile, parsesfile, param, goldencoding, parsesencoding):
 			str(ted).rjust(2) if param["TED"] else "",
 			)
 		if param["DEBUG"] > 1:
-			print "gold:", gbrack
-			print "cand:", cbrack
+			print "Gold tree:      %s\nCandidate tree: %s" % (
+				gtree.pprint(margin=999), ctree.pprint(margin=999))
+			print "Gold brackets:      %s\nCandidate brackets: %s" % (
+				printbrackets(gbrack), printbrackets(cbrack))
+			g = leafancestorpaths(gtree, param["DELETE_LABEL"])
+			c = leafancestorpaths(ctree, param["DELETE_LABEL"])
+			for leaf in g:
+				print "%6.3g  %s     %s : %s" % (pathscore(g[leaf], c[leaf]),
+					gsent[leaf].ljust(15), " ".join(g[leaf][::-1]).rjust(20),
+					" ".join(c[leaf][::-1]))
+			print "%6.3g  average = leaf-ancestor score" % la[-1]
+			if param["TED"]:
+				print "Tree-dist: %g / %g = %g" % (
+					ted, denom, 1 - ted / float(denom))
+				newtreedist(gtree, ctree, True)
 
 	summary(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			sentcount, maxlenseen, exact, la, dicenoms, dicedenoms)
@@ -245,7 +257,9 @@ def readparams(filename):
 	return params
 
 def transform(tree, sent, pos, gpos, delete, eqlabel, eqword):
-	""" Apply the transformations according to the parameter file. """
+	""" Apply the transformations according to the parameter file,
+	except for deleting the root node, which is a special case because if there
+	is more than one child it cannot be deleted. """
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in zip(count(), a)[::-1]:
 			if not b: a.pop(n)  #remove empty nodes
@@ -279,7 +293,7 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 	"""
 	return multiset( (a.node if labeled else "", frozenset(a.leaves()) )
 			for a in tree.subtrees()
-				if isinstance(a[0], Tree)
+				if a and isinstance(a[0], Tree)
 					and a.node not in delete
 					and (not disconly or disc(a)))
 
@@ -288,39 +302,45 @@ def printbrackets(brackets):
 		"-".join(str(y) for y in set((x[0], x[-1])))
 		for x in ranges(sorted(b)))) for a, b in brackets)
 
-def leafancestorpaths(tree):
+def leafancestorpaths(tree, delete):
 	#uses [] to mark components, and () to mark constituent boundaries
 	#deleted words/tags should not affect boundary detection
 	paths = dict((a, []) for a in tree.leaves())
-	# skip root node; skip POS tags
-	for a in tree.subtrees(lambda n: n is not tree and isinstance(n[0], Tree)):
-		leaves = a.leaves()
-		first, last = min(leaves), max(leaves)
-		for b in leaves:
-			# mark beginning of constituents / components
-			if len(leaves) > 1 and b - 1 not in leaves:
-				if   b == first and "(" not in paths[b]: paths[b].append("(")
-				elif b != first and "[" not in paths[b]: paths[b].append("[")
-			# add this label to the lineage
-			paths[b].append(a.node)
-			# mark end of constituents / components
-			if len(leaves) > 1 and b + 1 not in leaves:
-				if   b == last and ")" not in paths[b]: paths[b].append(")")
-				elif b != last and "]" not in paths[b]: paths[b].append("]")
+	# do a top-down level-order traversal
+	thislevel = [tree]
+	while thislevel:
+		nextlevel = []
+		for n in thislevel:
+			leaves = sorted(n.leaves())
+			first, last = min(leaves), max(leaves)
+			# skip nodes to be deleted; skip POS tags
+			if not isinstance(n[0], Tree) or n.node in delete: continue
+			for b in leaves:
+				# mark end of constituents / components
+				if b + 1 not in leaves:
+					if   b == last and ")" not in paths[b]: paths[b].append(")")
+					elif b != last and "]" not in paths[b]: paths[b].append("]")
+				# add this label to the lineage
+				paths[b].append(n.node)
+				# mark beginning of constituents / components
+				if b - 1 not in leaves:
+					if   b == first and "(" not in paths[b]: paths[b].append("(")
+					elif b != first and "[" not in paths[b]: paths[b].append("[")
+			nextlevel.extend(n)
+		thislevel = nextlevel
 	return paths
 
 def pathscore(gold, cand):
 	#catch the case of empty lineages
-	#not sure about this normalization formula
 	if gold == cand: return 1.0
-	return max(0, (1.0 - (2.0 * edit_distance(cand, gold))
-					/ (len(gold) + len(cand))))
+	return max(0, (1.0 - edit_distance(cand, gold)
+					/ float(len(gold) + len(cand))))
 
-def leafancestor(goldtree, candtree):
+def leafancestor(goldtree, candtree, delete):
 	""" Geoffrey Sampson, Anna Babarcz (2003):
 	A test of the leaf-ancestor metric for parse accuracy """
-	gold = leafancestorpaths(goldtree)
-	cand = leafancestorpaths(candtree)
+	gold = leafancestorpaths(goldtree, delete)
+	cand = leafancestorpaths(candtree, delete)
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
 
 def treedisteval(a, b, includeroot=False, debug=False):
@@ -349,7 +369,7 @@ def harmean(seq):
 	except ZeroDivisionError: return "zerodiv"
 
 def mean(seq):
-	return sum(seq) / float(len(seq)) if seq else None #"zerodiv"
+	return (sum(seq) / float(len(seq))) if seq else None #"zerodiv"
 
 def splitpath(path):
 	if "/" in path: return path.rsplit("/", 1)
