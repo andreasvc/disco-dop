@@ -77,7 +77,7 @@ def main(
 	#corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1"); testmaxwords = 99
 	assert bintype in ("optimal", "optimalhead", "binarize", "nltk")
 	assert estimator in ("dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
-	assert usetagger in ("treetagger", "stanford")
+	assert usetagger in (None, "treetagger", "stanford")
 	os.mkdir(resultdir)
 	# Log everything, and send it to stderr, in a format with just the message.
 	format = '%(message)s'
@@ -119,15 +119,16 @@ def main(
 		if usetagger == 'treetagger':
 			# these two tags are never given by tree-tagger,
 			# so collect words whose tag needs to be overriden
-			traintaggedsents = corpus.tagged_sents()[:trainsents]
-			taglex = defaultdict(set)
-			for word, tag in traintaggedsents: taglex[word].add(tag)
-			overridetag = dict((tag,
-				set(word for word, tags in taglex.iteritems() if tags == set([tag])))
-				for tag in ("PTKANT", "PIDAT"))
-		else: overridetag = {}
-		tagmap = { "$(": "$[", "PAV": "PROAV", "PIDAT": "PIAT" }
-		dotagging(usetagger, test[1], overridetag, tagmap)
+			overridetags = ("PTKANT", "PIDAT")
+		else: overridetags = ("PTKANT", )
+		taglex = defaultdict(set)
+		for sent in corpus.tagged_sents()[:trainsents]:
+			for word, tag in sent: taglex[word].add(tag)
+		overridetagdict = dict((tag,
+			set(word for word, tags in taglex.iteritems() if tags == set([tag])))
+			for tag in overridetags)
+		tagmap = { "$(": "$[", "PAV": "PROAV" }
+		dotagging(usetagger, test[1], overridetagdict, tagmap)
 
 	f, n = treebankfanout(trees)
 	logging.info("%d test sentences before length restriction", len(test[0]))
@@ -257,7 +258,8 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		goldb = bracketings(tree)
 		gold[sentid-1] = block
 		gsent[sentid-1] = sent
-		goldbrackets.update((sentid, a) for a in goldb.elements())
+		goldbrackets.update((sentid, (label, span)) for label, span
+				in goldb.elements() if label not in deletelabel)
 		if splitpcfg:
 			pcandb.update((sentid, (label, span)) for label, span
 					in p.candb.elements() if label not in deletelabel)
@@ -277,7 +279,7 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 			if d.noparse: dnoparse += 1
 			if d.exact: exactd += 1
 		msg = ''
-		if splitpcfg:
+		if splitpcfg and pcandb:
 			logging.debug("pcfg   cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s",
 								100 * (1 - pnoparse/float(nsent)),
 								100 * (exactp / float(nsent)),
@@ -285,7 +287,7 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 								100 * recall(goldbrackets, pcandb),
 								100 * f_measure(goldbrackets, pcandb),
 								('' if plcfrs or dop else '\n'))
-		if plcfrs:
+		if plcfrs and scandb:
 			logging.debug("plcfrs cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s",
 								100 * (1 - snoparse/float(nsent)),
 								100 * (exacts / float(nsent)),
@@ -293,7 +295,7 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 								100 * recall(goldbrackets, scandb),
 								100 * f_measure(goldbrackets, scandb),
 								('' if dop else '\n'))
-		if dop:
+		if dop and dcandb:
 			logging.debug("dop    cov %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f"
 					" (%+5.2f)\n",
 								100 * (1 - dnoparse/float(nsent)),
@@ -308,25 +310,8 @@ def doparse(splitpcfg, plcfrs, dop, estimator, unfolded, bintype,
 		pool.terminate()
 		pool.join()
 		del dowork, pool
-
-	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
-			"w", encoding='utf-8').write(''.join(
-				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
-				for n, a in zip(count(sentinit), gold)))
-	if splitpcfg:
-		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n + 1)
-			for n, a, b in zip(count(sentinit), presults, gsent))
-	if plcfrs:
-		codecs.open("%s/%s.plcfrs" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n + 1)
-			for n, a, b in zip(count(sentinit), sresults, gsent))
-	if dop:
-		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
-			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n + 1)
-			for n, a, b in zip(count(sentinit), dresults, gsent))
-	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}",
-		resultdir, category or "results")
+	writeresults(splitpcfg, plcfrs, dop, gold, gsent, presults, sresults,
+			dresults, resultdir, category, sentinit)
 
 	return (splitpcfg, plcfrs, dop, len(work), testmaxwords, exactp, exacts,
 			exactd, pnoparse, snoparse, dnoparse, goldbrackets, pcandb, scandb,
@@ -372,9 +357,11 @@ def worker(args):
 		if d.unfolded: fold(presult)
 		msg += "\tp=%.4e " % exp(-prob)
 		pcandb = bracketings(presult)
-		prec = precision(goldb, pcandb)
-		rec = recall(goldb, pcandb)
-		f1 = f_measure(goldb, pcandb)
+		if goldb and pcandb:
+			prec = precision(goldb, pcandb)
+			rec = recall(goldb, pcandb)
+			f1 = f_measure(goldb, pcandb)
+		else: prec = rec = f1 = 0
 		if presult == tree or f1 == 1.0:
 			assert presult != tree or f1 == 1.0
 			msg += "exact match"
@@ -430,9 +417,11 @@ def worker(args):
 		if d.unfolded: fold(sresult)
 		msg += "\n\tp=%.4e " % exp(-prob)
 		scandb = bracketings(sresult)
-		prec = precision(goldb, scandb)
-		rec = recall(goldb, scandb)
-		f1 = f_measure(goldb, scandb)
+		if goldb and scandb:
+			prec = precision(goldb, scandb)
+			rec = recall(goldb, scandb)
+			f1 = f_measure(goldb, scandb)
+		else: prec = rec = f1 = 0
 		if sresult == tree or f1 == 1.0:
 			assert sresult != tree or f1 == 1.0
 			msg += "exact match"
@@ -516,12 +505,11 @@ def worker(args):
 		rem_marks(dresult)
 		if d.unfolded: fold(dresult)
 		dcandb = bracketings(dresult)
-		try: prec = precision(goldb, dcandb)
-		except ZeroDivisionError:
-			prec = 0.0
-			logging.warning("empty candidate brackets?\n%s", dresult.pprint())
-		rec = recall(goldb, dcandb)
-		f1 = f_measure(goldb, dcandb)
+		if goldb and dcandb:
+			prec = precision(goldb, dcandb)
+			rec = recall(goldb, dcandb)
+			f1 = f_measure(goldb, dcandb)
+		else: prec = rec = f1 = 0
 		if dresult == tree or f1 == 1.0:
 			msg += "exact match"
 			exactd = True
@@ -552,6 +540,27 @@ def worker(args):
 			Result(pcandb, presult, pnoparse, exactp),
 			Result(scandb, sresult, snoparse, exacts),
 			Result(dcandb, dresult, dnoparse, exactd))
+
+def writeresults(splitpcfg, plcfrs, dop, gold, gsent, presults, sresults,
+		dresults, resultdir, category, sentinit):
+	codecs.open("%s/%s.gold" % (resultdir, category or "results"),
+			"w", encoding='utf-8').write(''.join(
+				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
+				for n, a in zip(count(sentinit), gold)))
+	if splitpcfg:
+		codecs.open("%s/%s.pcfg" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n+1)
+			for n, a, b in zip(count(sentinit), presults, gsent))
+	if plcfrs:
+		codecs.open("%s/%s.plcfrs" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n+1)
+			for n, a, b in zip(count(sentinit), sresults, gsent))
+	if dop:
+		codecs.open("%s/%s.dop" % (resultdir, category or "results"),
+			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n+1)
+			for n, a, b in zip(count(sentinit), dresults, gsent))
+	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}",
+		resultdir, category or "results")
 
 def doeval(splitpcfg, plcfrs, dop, nsent, testmaxwords, exactp, exacts, exactd,
 		pnoparse, snoparse, dnoparse, goldbrackets, pcandb, scandb, dcandb,
@@ -640,11 +649,11 @@ def getgrammars(trees, sents, splitpcfg, plcfrs, dop, estimator, bintype, h, v,
 		for a in trees: a.chomsky_normal_form(factor="right", vertMarkov=v-1, horzMarkov=h)
 	elif bintype == "binarize":
 		bintype += " %s h=%d v=%d %s" % (factor, h, v, "tailmarker" if tailmarker else '')
-		[binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
-				tailMarker=tailmarker,
-				leftMostUnary=True, rightMostUnary=True,
-				#fixme: leftMostUnary=False, rightMostUnary=False,
-				reverse=revmarkov) for a in trees]
+		for a in trees:
+			binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
+					tailMarker=tailmarker, leftMostUnary=True,
+					rightMostUnary=True, reverse=revmarkov)
+					#fixme: leftMostUnary=False, rightMostUnary=False, 
 	elif bintype == "optimal":
 		trees = [Tree.convert(optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -767,15 +776,15 @@ def readtepacoc():
 	return tepacocids, tepacocsents
 
 def parsetepacoc(splitpcfg=True, plcfrs=True, dop=True, estimator='dop1',
-		unfolded=False, bintype="binarize", h=1, v=1, factor="right",
-		tailmarker='$', revmarkov=False, arity_marks=True,
+		unfolded=False, bintype="binarize", h=1, v=2, factor="right",
+		tailmarker='', revmarkov=False, arity_marks=True,
 		arity_marks_before_bin=False, sample=False, both=False, m=10000,
 		trainmaxwords=999, testmaxwords=999, testsents=2000, splitk=10000,
 		k=5000, prune=True, sldop_n=7, neverblockre=None, splitprune=True,
 		markorigin=True, iterate=False, complement=False, usecfgparse=True,
 		usedoubledop=True, newdd=False, usetagger='stanford',
-		resultdir="tepacoc", numproc=4):
-	trainsents = 25005 #int(0.9 * len(corpus_sents))
+		resultdir="tepacoc-sfdv2", numproc=8):
+	trainsents = 25005
 	os.mkdir(resultdir)
 	# Log everything, and send it to stderr, in a format with just the message.
 	format = '%(message)s'
@@ -822,22 +831,30 @@ def parsetepacoc(splitpcfg=True, plcfrs=True, dop=True, estimator='dop1',
 		logging.info("category: %s, %d of %d sentences",
 				cat, len(test[0]), len(catsents))
 		testset[cat] = test
-	testset['baseline'] = (corpus_trees[trainsents:trainsents+2000],
-			corpus_taggedsents[trainsents:trainsents+2000],
-			corpus_blocks[trainsents:trainsents+2000])
+	testset['baseline'] = zip(*[sent for n, sent in
+				enumerate(zip(corpus_trees, corpus_taggedsents, corpus_blocks))
+				if len(sent[1]) <= trainmaxwords
+				and n not in tepacocids][trainsents:trainsents+2000])
 	allsents.extend(testset['baseline'][1])
+
 	if usetagger:
+		overridetags = ("PTKANT", "VAIMP")
+		taglex = defaultdict(set)
+		for sent in corpus_taggedsents[:trainsents]:
+			for word, tag in sent: taglex[word].add(tag)
+		overridetagdict = dict((tag,
+			set(word for word, tags in taglex.iteritems() if tags == set([tag])))
+			for tag in overridetags)
+		tagmap = { "$(": "$[", "PAV": "PROAV", "PIDAT": "PIAT" }
 		# the sentences in the list allsents are modified in-place so that
 		# the relevant copy in testset[cat][1] is updated as well.
-		tagmap = { "$(": "$[", "PAV": "PROAV", "PIDAT": "PIAT" }
-		dotagging(usetagger, allsents, {}, tagmap)
+		dotagging(usetagger, allsents, overridetagdict, tagmap)
 
 	# training set
 	trees, sents, blocks = zip(*[sent for n, sent in
 				enumerate(zip(corpus_trees, corpus_sents,
 							corpus_blocks)) if len(sent[1]) <= trainmaxwords
 							and n not in tepacocids][:trainsents])
-
 	(pcfggrammar, plcfrsgrammar,
 			dopgrammar, backtransform, secondarymodel) = getgrammars(
 			trees, sents, splitpcfg, plcfrs, dop, estimator, bintype, h, v,
@@ -863,8 +880,14 @@ def parsetepacoc(splitpcfg=True, plcfrs=True, dop=True, estimator='dop1',
 		logging.info("time elapsed during parsing: %g", time.clock() - begin)
 	goldbrackets = multiset(); pcandb = multiset(); scandb = multiset(); dcandb = multiset()
 	exactp = exacts = exactd = pnoparse = snoparse = dnoparse = 0
+	glines = []; plines = []; slines = []; dlines = []
 	for cat, res in results.iteritems():
 		logging.info("category: %s", cat)
+		for ext, b in zip("gold pcgf plcfrs dop".split(),
+				(glines, plines, slines, dlines)):
+			if os.path.exists("%s/%s.%s" % (resultdir, cat, ext)):
+				b.append(codecs.open("%s/%s.%s" % (resultdir, cat, ext),
+					encoding='utf-8').read())
 		exactp += res[5]
 		exacts += res[6]
 		exactd += res[7]
@@ -877,6 +900,12 @@ def parsetepacoc(splitpcfg=True, plcfrs=True, dop=True, estimator='dop1',
 		dcandb |= res[14]
 		doeval(*res)
 	logging.info("TOTAL")
+	# write TOTAL results file with all tepacoc sentences (not the baseline)
+	for ext, b in zip("gold pcgf plcfrs dop".split(),
+			(glines, plines, slines, dlines)):
+		if b:
+			codecs.open("%s/TOTAL.%s" % (resultdir, ext), "w",
+					encoding='utf-8').writelines(b)
 	doeval(splitpcfg, plcfrs, dop, cnt, testmaxwords, exactp, exacts, exactd,
 		pnoparse, snoparse, dnoparse, goldbrackets, pcandb, scandb, dcandb,
 		False, arity_marks, bintype, estimator, sldop_n, usedoubledop)
@@ -924,19 +953,21 @@ def dotagging(usetagger, sents, overridetag, tagmap):
 	if usetagger == "treetagger": # Tree-tagger
 		# ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
 		# ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
+		infile, inname = tempfile.mkstemp(text=True)
+		with os.fdopen(infile, 'w') as infile:
+			for tagsent in sents:
+				sent = map(itemgetter(0), tagsent)
+				infile.write("\n".join(wordmangle(w, n, sent)
+					for n, w in enumerate(sent)) + "\n<S>\n")
 		#tagger = Popen(executable="tree-tagger/cmd/tree-tagger-german",
 		#		args=["tree-tagger/cmd/tree-tagger-german"],
 		#		stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=False)
 		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
 				" tree-tagger/lib/german-par-linux-3.2-utf8.bin"
-				" | tree-tagger/cmd/filter-german-tags",
-				stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)
-		for tagsent in sents:
-			sent = map(itemgetter(0), tagsent)
-			tagger.stdin.write("\n".join(wordmangle(w, n, sent)
-				for n, w in enumerate(sent)) + "\n<S>\n")
-		tagger.stdin.close()
+				" %s | tree-tagger/cmd/filter-german-tags" % inname,
+				stdout=PIPE, shell=True)
 		tagout = tagger.stdout.read().decode('utf-8').split("<S>")[:-1]
+		os.unlink(inname)
 		taggedsents = [[tagmangle(a, None, overridetag, tagmap)
 					for a in tags.splitlines() if a.strip()]
 					for tags in tagout]
@@ -969,7 +1000,7 @@ def dotagging(usetagger, sents, overridetag, tagmap):
 	newtags = [t for sent in taggedsents for _, t in sent]
 	logging.info("Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r",
 		(100 * accuracy(goldtags, newtags)),
-		set(newtags) - set(goldtags), set(goldtags) - set(newtags))
+		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
 
 sentend = "(\"'!?..." # ";/-"
 def wordmangle(w, n, sent):
@@ -980,7 +1011,7 @@ def wordmangle(w, n, sent):
 def tagmangle(a, splitchar, overridetag, tagmap):
 	word, tag = a.rsplit(splitchar, 1)
 	for newtag in overridetag:
-		if word in overridetag[newtag]: return word, newtag
+		if word in overridetag[newtag]: tag = newtag
 	return word, tagmap.get(tag, tag)
 
 def treebankfanout(trees):

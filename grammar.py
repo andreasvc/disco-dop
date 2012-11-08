@@ -6,6 +6,39 @@ from itertools import chain, count, islice, imap, repeat
 from nltk import ImmutableTree, Tree, FreqDist, memoize
 from containers import Grammar
 
+usage = """Read off grammars from treebanks.
+usage: %s [options] model input rules lexicon
+where input is a binarized treebank,
+rules and lexicon are filenames for the output,
+and model is one of:
+    pcfg
+    plcfrs
+    dopreduction
+    doubledop
+
+options may consist of (* marks default option):
+    --inputfmt [*export|discbracket|bracket]
+    --inputenc [*UTF-8|ISO-8859-1|...]
+    --dopestimator [dop1|ewe|shortest|...]
+    --numproc [1|2|...]       (only relevant for double dop fragment extraction)
+    --gzip                    (compress output with gzip, view with zless etc.)
+
+When a PCFG is requested, or the input format is `bracket' (Penn format), the
+output will be in BitPar format. Otherwise the grammar is written as an LCFRS.
+The encoding of the input treebank may be specified, but the output encoding
+will be ASCII for the rules, and UTF-8 for the lexicon.
+The LCFRS format is as follows. Fields are separated by tabs.
+Components of the yield function are comma-separated, 0 refers to a component
+of the first RHS nonterminal, and 1 from the second. Weights are expressed as
+hexadecimal negative logprobs. E.g.:
+rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
+         VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
+         NP      NN      0       0.3
+lexicon: NN Epsilon Haus    0.3
+""" % sys.argv[0]
+#TODO:
+#	--freqs                   (return frequencies instead of probabilities)
+
 frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9]+)*\))")
 rootnode = re.compile(r"\([^ ]+\b")
 fanoutre = re.compile("_([0-9]+)(?:@[-0-9]+)?$")
@@ -1015,8 +1048,7 @@ def main():
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
 		model, treebankfile, rules, lexicon = args
 	except (GetoptError, ValueError) as err:
-		print "error:", err
-		usage()
+		print "error: %r\n%s" % (err, usage)
 		exit(2)
 	else: opts = dict(opts)
 	assert model in ("pcfg", "plcfrs", "dopreduction", "doubledop"), (
@@ -1067,40 +1099,6 @@ def main():
 			else:
 				cgrammar.write_lcfrs_grammar(rulesfile, lexiconfile)
 	print "wrote grammar to %s and %s." % (rules, lexicon)
-
-def usage():
-	print """Read off grammars from treebanks.
-usage: %s [options] model input rules lexicon
-where input is a binarized treebank,
-rules and lexicon are filenames for the output,
-and model is one of:
-    pcfg
-    plcfrs
-    dopreduction
-    doubledop
-
-options may consist of (* marks default option):
-    --inputfmt [*export|discbracket|bracket]
-    --inputenc [*UTF-8|ISO-8859-1|...]
-    --dopestimator [dop1|ewe|shortest|...]
-    --numproc [1|2|...]       (only relevant for double dop fragment extraction)
-    --gzip                    (compress output with gzip, view with zless etc.)
-
-When a PCFG is requested, or the input format is `bracket' (Penn format), the
-output will be in BitPar format. Otherwise the grammar is written as an LCFRS.
-The encoding of the input treebank may be specified, but the output encoding
-will be ASCII for the rules, and UTF-8 for the lexicon.
-The LCFRS format is as follows. Fields are separated by tabs.
-Components of the yield function are comma-separated, 0 refers to a component
-of the first RHS nonterminal, and 1 from the second. Weights are expressed as
-hexadecimal negative logprobs. E.g.:
-rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
-         VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
-         NP      NN      0       0.3
-lexicon: NN Epsilon Haus    0.3
-""" % sys.argv[0]
-#TODO:
-#	--freqs                   (return frequencies instead of probabilities)
 
 if __name__ == '__main__':
 	if '--test' in sys.argv: test()

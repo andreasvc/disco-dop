@@ -312,20 +312,26 @@ def leafancestorpaths(tree, delete):
 		nextlevel = []
 		for n in thislevel:
 			leaves = sorted(n.leaves())
+			# skip POS tags and empty nodes
+			if not leaves or not isinstance(n[0], Tree): continue
 			first, last = min(leaves), max(leaves)
-			# skip nodes to be deleted; skip POS tags
-			if not isinstance(n[0], Tree) or n.node in delete: continue
-			for b in leaves:
-				# mark end of constituents / components
-				if b + 1 not in leaves:
-					if   b == last and ")" not in paths[b]: paths[b].append(")")
-					elif b != last and "]" not in paths[b]: paths[b].append("]")
-				# add this label to the lineage
-				paths[b].append(n.node)
-				# mark beginning of constituents / components
-				if b - 1 not in leaves:
-					if   b == first and "(" not in paths[b]: paths[b].append("(")
-					elif b != first and "[" not in paths[b]: paths[b].append("[")
+			# skip nodes to be deleted
+			if n.node not in delete:
+				for b in leaves:
+					# mark end of constituents / components
+					if b + 1 not in leaves:
+						if b == last and ")" not in paths[b]:
+							paths[b].append(")")
+						elif b != last and "]" not in paths[b]:
+							paths[b].append("]")
+					# add this label to the lineage
+					paths[b].append(n.node)
+					# mark beginning of constituents / components
+					if b - 1 not in leaves:
+						if b == first and "(" not in paths[b]:
+							paths[b].append("(")
+						elif b != first and "[" not in paths[b]:
+							paths[b].append("[")
 			nextlevel.extend(n)
 		thislevel = nextlevel
 	return paths
@@ -353,10 +359,12 @@ def treedisteval(a, b, includeroot=False, debug=False):
 	return ted, denom
 
 def recall(reference, test):
-	return sum((reference & test).values()) / float(sum(reference.values()))
+	if reference: return sum((reference & test).values()) / float(sum(reference.values()))
+	return float('nan')
 
 def precision(reference, test):
-	return sum((reference & test).values()) / float(sum(test.values()))
+	if test: return sum((reference & test).values()) / float(sum(test.values()))
+	return float('nan')
 
 def f_measure(reference, test, alpha=0.5):
 	p = precision(reference, test)

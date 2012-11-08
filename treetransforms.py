@@ -124,12 +124,43 @@ The following is a short tutorial on the available transformations.
      C   D      C   D
 
 """
+import re, sys
 from itertools import count
 from nltk import Tree, ImmutableTree
 from grammar import ranges, canonicalize
 from containers import OrderedSet
 from collections import defaultdict
-import re
+
+usage = """Treebank binarization and conversion
+usage: %s [options] action input output
+where input and output are treebanks, and action is one of:
+    binarize [-h x] [-v x] [--factor left|right]
+    optimalbinarize [-h x] [-v x]
+    unbinarize
+    introducepreterminals
+    splitdisc [--markorigin]
+    mergedisc
+    none
+
+options may consist of (* marks default option):
+  --inputfmt [*export|discbracket|bracket]
+  --outputfmt [*export|discbracket|bracket]
+  --inputenc [*UTF-8|ISO-8859-1|...]
+  --outputenc [*UTF-8|ISO-8859-1|...]
+  --slice n:m select a range of sentences from input starting with n, up to but
+              not including m; n or m can be left out or negative, as in Python
+  --factor [left|*right] whether binarization factors to the left or right
+  -h n           horizontal markovization. default: infinite
+  -v n           vertical markovization. default: 1
+  --headdriven   turn on marking of heads; also affects binarization.
+                 requires the file "negra.headrules".
+  --removepunct  remove any punctuation.
+  --movepunct    re-attach punctuation to nearest constituent to minimize
+                 discontinuity.
+Note: some of these transformations are specific to discontinuous treebanks,
+    specifically the Negra/Tiger treebanks. In the output only POS & phrasal
+    labels are retained.""" % sys.argv[0]
+
 
 def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
@@ -845,8 +876,7 @@ def main():
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
 		action, input, output = args
 	except (GetoptError, ValueError) as err:
-		print "error:", err
-		usage()
+		print "error: %r\n%s" % (err, usage)
 		exit(2)
 	else: opts = dict(opts)
 
@@ -906,38 +936,6 @@ def main():
 				parse_leaf=lambda l: sent[int(l)]).pprint(margin=9999)
 			for tree, sent in zip(trees, sents))
 	else: raise ValueError("unrecognized format: %r" % opts.get('--outputfmt'))
-
-def usage():
-	import sys
-	print """Treebank binarization and conversion
-usage: %s [options] action input output
-where input and output are treebanks, and action is one of:
-    binarize [-h x] [-v x] [--factor left|right]
-    optimalbinarize [-h x] [-v x]
-    unbinarize
-    introducepreterminals
-    splitdisc [--markorigin]
-    mergedisc
-    none
-
-options may consist of (* marks default option):
-  --inputfmt [*export|discbracket|bracket]
-  --outputfmt [*export|discbracket|bracket]
-  --inputenc [*UTF-8|ISO-8859-1|...]
-  --outputenc [*UTF-8|ISO-8859-1|...]
-  --slice n:m select a range of sentences from input starting with n, up to but
-              not including m; n or m can be left out or negative, as in Python
-  --factor [left|*right] whether binarization factors to the left or right
-  -h n           horizontal markovization. default: infinite
-  -v n           vertical markovization. default: 1
-  --headdriven   turn on marking of heads; also affects binarization.
-                 requires the file "negra.headrules".
-  --removepunct  remove any punctuation.
-  --movepunct    re-attach punctuation to nearest constituent to minimize
-                 discontinuity.
-Note: some of these transformations are specific to discontinuous treebanks,
-    specifically the Negra/Tiger treebanks. In the output only POS & phrasal
-    labels are retained.""" % sys.argv[0]
 
 __all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
 	"splitdiscnodes", "mergediscnodes", "optimalbinarize", "defaultrightbin",
