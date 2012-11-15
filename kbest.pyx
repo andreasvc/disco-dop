@@ -231,7 +231,7 @@ cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
 	while i != -1:
 		if label not in chart[start][end]:
 			# this must be a terminal
-			children = " %d" % ej.mid
+			children = " %d" % start
 			break
 		if label in D[start][end]:
 			rankededge = (<Entry>D[start][end][label][i]).key
@@ -294,7 +294,7 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 		return children
 	return "(%s%s)" % (tolabel[ej.head.label], children)
 
-cpdef tuple lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
+cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel,
 		str debin=None):
 	""" wrapper function to run lazykthbest and get the actual derivations,
 	as well as the ranked chart.
@@ -309,16 +309,29 @@ cpdef tuple lazykbest(dict chart, ChartItem goal, int k, dict tolabel,
 	tolabel is a dictionary mapping numeric IDs to the original nonterminal
 	labels.  """
 	cdef Entry entry
-	cdef dict D = {}, cand = {}
 	cdef set explored = set()
-	lazykthbest(goal, k, k, D, cand, chart, explored)
-	derivations = []; tmp = []
-	for entry in D[goal]:
-		d = getderivation(entry.key, D, chart, tolabel, 0, debin)
-		if d:
-			derivations.append((d, entry.value))
-			tmp.append(entry)
-	D[goal] = tmp
+	cdef list derivations = [], tmp = []
+	if isinstance(goal, CFGChartItem):
+		D = [[{} for _ in x] for x in chart]
+		cand = [[{} for _ in x] for x in chart]
+		start = (<CFGChartItem>goal).start
+		end = (<CFGChartItem>goal).end
+		lazykthbestcfg(goal.label, start, end, k, k, D, cand, chart, explored)
+		for entry in D[start][end][goal.label]:
+			d = getderivationcfg(entry.key, D, chart, tolabel, 0, debin)
+			if d:
+				derivations.append((d, entry.value))
+				tmp.append(entry)
+		D[start][end][goal.label] = tmp
+	else:
+		D = {}; cand = {}
+		lazykthbest(goal, k, k, D, cand, chart, explored)
+		for entry in D[goal]:
+			d = getderivation(entry.key, D, chart, tolabel, 0, debin)
+			if d:
+				derivations.append((d, entry.value))
+				tmp.append(entry)
+		D[goal] = tmp
 	return derivations, D
 
 cpdef main():

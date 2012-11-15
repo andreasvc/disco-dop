@@ -30,7 +30,7 @@ cdef class Item:
 		elif op == 4: return a > b
 		elif op == 5: return a >= b
 	def __repr__(Item self):
-		return "I(%4d, %2d, %2d, %2d)" % (
+		return "%s(%4d, %2d, %2d, %2d)" % (self.__class__.__name__,
 			self.state, self.length, self.lr, self.gaps)
 
 cdef inline Item new_Item(int state, int length, int lr, int gaps):

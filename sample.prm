@@ -1,42 +1,58 @@
-#parameters. parameters. PARAMETERS!!
-splitpcfg=False,
-plcfrs=True,
-dop=True,
-usedoubledop=True,   # when False, use DOP reduction instead
-usecfgparse=False, #whether to use the dedicated CFG parser for splitpcfg
+stages=[
+dict(
+	name='pcfg',
+	mode='pcfg', # use the PCFG CKY parser
+	split=True, # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
+	markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
+),
+dict(
+	name='plcfrs',
+	mode='plcfrs', # use the agenda-based PLCFRS parser
+	prune=True, #whether to use previous chart to prune parsing of this stage
+	splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
+	k = 10000, #number of coarse pcfg derivations to prune with; k=0 => filter only
+	getestimates=False, #compute & store estimates; choices: 'SX', 'SXlrgaps'
+	useestimates=False, #load & use estimates; choices: same as above.
+	neverblockre=None, #do not prune nodes with labels that match this regex
+),
+dict(
+	name='dop',
+	mode='plcfrs',
+	prune=True,	#whether to use previous chart to prune parsing of this stage
+	k = 50,	#number of coarse plcfrs derivations to prune with; k=0 => filter only
+	dop=True, # enable DOP mode
+	usedoubledop=False, # when Fales, use dop reduction, otherwise use Double-DOP
+	newdd=False, #use experimental, more efficient double dop algorithm
+	iterate=False, #for double dop, whether to include fragments of fragments
+	complement=False, #for double dop, whether to include fragments which form
+			#the complement of the maximal recurring fragments extracted
+	m = 10000, #number of derivations to sample/enumerate
+	sample=False, both=False, # whether to use sampling during marginalization
+	estimator="dop1", # choices: dop1, ewe, shortest, sl-dop[-simple]
+)],
+# corpus options
+corpusfmt="export", # choices: export, bracket, discbracket
 corpusdir=".",
 corpusfile="sample2.export",
 encoding="iso-8859-1",
 movepunct=True,
 removepunct=False,
 unfolded=False,
+usetagger=None,	#default is to use gold tags from treebank.
 testmaxwords=100,  # max number of words for sentences in test corpus
 trainmaxwords=100, # max number of words for sentences in train corpus
 trainsents=2, # length (sents) of training corpus
 testsents=1, # (max) number of test sentences to parse
-skip=0,	# don't skip sentences between train & test set
-bintype="nltk", # choices: binarize, nltk, optimal, optimalhead
+skip=0, # don't skip sentences between train & test set
+# binarization options
+bintype="binarize", # choices: binarize, nltk, optimal, optimalhead
 factor="right",
 revmarkov=True,
 v=1,
-h=2,
+h=1,
 arity_marks=True,
 arity_marks_before_bin=False,
 tailmarker="",
-sample=False, both=False,
-m=10000,		#number of derivations to sample/enumerate
-estimator="dop1", # choices: dop1, ewe, shortest, sl-dop[-simple]
-sldop_n=7,
-splitk=50, #number of coarse pcfg derivations to prune with; k=0 => filter only
-k=50,		#number of coarse derivations to prune with; k=0 => filter only
-prune=True,	#whether to use srcg chart to prune parsing of dop
-getestimates=False, #compute & store estimates
-useestimates=False,  #load & use estimates
-markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
-splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
-neverblockre=None, #do not prune nodes with label that match regex
-iterate=False, #for double dop, whether to include fragments of fragments
-complement=False, #for double dop, whether to include fragments which form the
-		#complement of the maximal recurring fragments extracted
+# misc
 quiet=False, reallyquiet=False, #quiet=no per sentence results
 numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.

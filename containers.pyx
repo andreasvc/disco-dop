@@ -286,6 +286,8 @@ cdef class Grammar:
 			n += 1
 		return "\n".join(result)
 	def __repr__(self):
+		return "%s(%r)" % (self.__class__.__name__, self.origrules)
+	def __str__(self):
 		cdef LexicalRule lr
 		rules = "\n".join(filter(None,
 			[self.rulesrepr(lhs) for lhs in range(1, self.nonterminals)]))
@@ -380,7 +382,8 @@ cdef class SmallChartItem:
 	def __nonzero__(SmallChartItem self):
 		return self.label != 0 and self.vec != 0
 	def __repr__(self):
-		return "SmallChartItem(%d, %s)" % (self.label, bin(self.vec))
+		return "%s(%d, %s)" % (self.__class__.__name__,
+				self.label, bin(self.vec))
 	def lexidx(self):
 		assert self.label == 0
 		return self.vec
@@ -415,7 +418,8 @@ cdef class FatChartItem:
 				if self.vec[n]: return True
 		return False
 	def __repr__(self):
-		return "FatChartItem(%d, %s)" % (self.label, binrepr(self.vec))
+		return "%s(%d, %s)" % (self.__class__.__name__,
+			self.label, binrepr(self.vec))
 	def lexidx(self):
 		assert self.label == 0
 		return self.vec[0]
@@ -455,7 +459,8 @@ cdef class CFGChartItem:
 	def __nonzero__(self):
 		return self.label and self.end
 	def __repr__(self):
-		return "CFGChartItem(%d, %d, %d)" % (self.label, self.start, self.end)
+		return "%s(%d, %d, %d)" % (self.__class__.__name__,
+				self.label, self.start, self.end)
 	def lexidx(self):
 		assert self.label == 0
 		return self.start
@@ -484,30 +489,30 @@ cdef binrepr(ULong *vec):
 		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
 	return result
 
-cdef class NewChartItem:
-	""" Item with arbitrary length bitvector. Not used. """
-	def __init__(self, label):
-		self.label = label
-	def __hash__(self):
-		cdef size_t n
-		cdef long _hash = 5381
-		for n in range(7 * sizeof(ULong)):
-			_hash *= 33 ^ (<char *>self.vecptr)[n]
-		return _hash
-	def __richcmp__(NewChartItem self, NewChartItem other, int op):
-		#if op == 2: return self.label == other.label and self.vec == other.vec
-		#elif op == 3: return self.label != other.label or self.vec != other.vec
-		#elif op == 5: return self.label >= other.label or self.vec >= other.vec
-		#elif op == 1: return self.label <= other.label or self.vec <= other.vec
-		#elif op == 0: return self.label < other.label or self.vec < other.vec
-		#elif op == 4: return self.label > other.label or self.vec > other.vec
-		raise NotImplemented
-	def __nonzero__(self):
-		raise NotImplemented
-		#return self.label != 0 and self.vec != 0
-	def __repr__(self):
-		raise NotImplemented
-		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
+#cdef class NewChartItem:
+#	""" Item with arbitrary length bitvector. Not used. """
+#	def __init__(self, label):
+#		self.label = label
+#	def __hash__(self):
+#		cdef size_t n
+#		cdef long _hash = 5381
+#		for n in range(7 * sizeof(ULong)):
+#			_hash *= 33 ^ (<char *>self.vecptr)[n]
+#		return _hash
+#	def __richcmp__(NewChartItem self, NewChartItem other, int op):
+#		#if op == 2: return self.label == other.label and self.vec == other.vec
+#		#elif op == 3: return self.label != other.label or self.vec != other.vec
+#		#elif op == 5: return self.label >= other.label or self.vec >= other.vec
+#		#elif op == 1: return self.label <= other.label or self.vec <= other.vec
+#		#elif op == 0: return self.label < other.label or self.vec < other.vec
+#		#elif op == 4: return self.label > other.label or self.vec > other.vec
+#		raise NotImplemented
+#	def __nonzero__(self):
+#		raise NotImplemented
+#		#return self.label != 0 and self.vec != 0
+#	def __repr__(self):
+#		raise NotImplemented
+#		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class LCFRSEdge:
 	def __init__(LCFRSEdge self, score, inside, prob, ruleno, left, right):
@@ -542,7 +547,7 @@ cdef class LCFRSEdge:
 		elif op == 1: return self.score <= other.score
 		elif op == 0: return self.score < other.score
 	def __repr__(self):
-		return "LCFRSEdge(%g, %g, %g, %r, %r)" % (
+		return "%s(%g, %g, %g, %r, %r)" % (self.__class__.__name__,
 				self.score, self.inside, self.prob, self.left, self.right)
 	def copy(self):
 		return LCFRSEdge(self.score, self.inside, self.prob, self.ruleno,
@@ -576,7 +581,8 @@ cdef class CFGEdge:
 		elif op == 1: return self.inside <= other.inside
 		elif op == 0: return self.inside < other.inside
 	def __repr__(self):
-		return "CFGEdge(%g, 0x%x, %r)" % (self.inside, <long>self.rule, self.mid)
+		return "%s(%g, 0x%x, %r)" % (self.__class__.__name__,
+				self.inside, <long>self.rule, self.mid)
 
 cdef class RankedEdge:
 	def __cinit__(self, ChartItem head, LCFRSEdge edge, int j1, int j2):
@@ -601,7 +607,7 @@ cdef class RankedEdge:
 		else:
 			raise NotImplemented
 	def __repr__(self):
-		return "RankedEdge(%r, %r, %d, %d)" % (
+		return "%s(%r, %r, %d, %d)" % (self.__class__.__name__,
 			self.head, self.edge, self.left, self.right)
 
 cdef class RankedCFGEdge:
@@ -630,7 +636,7 @@ cdef class RankedCFGEdge:
 		else:
 			raise NotImplemented
 	def __repr__(self):
-		return "RankedCFGEdge(%r, %r, %r, %r, %d, %d)" % (
+		return "%s(%r, %r, %r, %r, %d, %d)" % (self.__class__.__name__,
 			self.label, self.start, self.end, self.edge, self.left, self.right)
 
 cdef class LexicalRule:
@@ -638,7 +644,8 @@ cdef class LexicalRule:
 		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
 		self.word = word; self.prob = prob
 	def __repr__(self):
-		return repr((self.lhs, self.rhs1, self.rhs2, self.word, self.prob))
+		return "%s%r" % (self.__class__.__name__,
+				(self.lhs, self.rhs1, self.rhs2, self.word, self.prob))
 
 cdef class Ctrees:
 	"""auxiliary class to be able to pass around collections of trees in

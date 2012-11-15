@@ -25,15 +25,15 @@ infinity = float('infinity')
 removeids = re.compile("@[-0-9]+")
 termsre = re.compile(r" ([0-9]+)\b")
 
-cpdef marginalize(dict chart, ChartItem start, dict tolabel, int n=10,
+cpdef marginalize(chart, ChartItem start, dict tolabel, int n=10,
 	bint sample=False, bint both=False, bint shortest=False,
 	secondarymodel=None, bint mpd=False, dict backtransform=None,
 	bint newdd=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
-	cdef LCFRSEdge edge
 	cdef Entry entry
 	cdef dict parsetrees = {}
+	cdef list entries = []
 	cdef str treestr, deriv, debin = None
 	cdef double prob, maxprob
 	cdef int m
@@ -58,7 +58,9 @@ cpdef marginalize(dict chart, ChartItem start, dict tolabel, int n=10,
 		maxprob = min(derivations, key=itemgetter(1))[1]
 		derivations = [(a,b) for a, b in derivations if b == maxprob]
 	if newdd:
-		for entry in D[start]:
+		if isinstance(start, CFGChartItem): raise NotImplemented
+		else: entries = D[start]
+		for entry in entries:
 			prob = entry.value
 			try:
 				treestr = recoverfragments_new(<RankedEdge>entry.key, D,
@@ -77,7 +79,11 @@ cpdef marginalize(dict chart, ChartItem start, dict tolabel, int n=10,
 			if treestr in parsetrees: parsetrees[treestr].append(-prob)
 			else: parsetrees[treestr] = [-prob]
 	else: #DOP reduction / old double dop method
-		for (deriv, prob), entry in zip(derivations, D[start]):
+		if isinstance(start, CFGChartItem):
+			entries = D[(<CFGChartItem>start).start][(<CFGChartItem>start).end
+					][start.label]
+		else: entries = D[start]
+		for (deriv, prob), entry in zip(derivations, entries):
 			if shortest:
 				# calculate the derivation probability in a different model.
 				# because we don't keep track of which rules have been used,
