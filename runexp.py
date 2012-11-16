@@ -220,6 +220,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		if stage.split: traintrees = splittrees
 		else: traintrees = trees
 		if stage.dop:
+			stages[n].backtransform = None
 			if stage.estimator == "shortest":
 				# the secondary model is used to resolve ties
 				# for the shortest derivation
@@ -295,9 +296,9 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 					stages[n-1].markorigin)
 
 		stages[n].grammar = grammar
-		rules = gzip.open("%s/stage%d.rules.gz" % (resultdir, n+1), "w")
-		lexicon = codecs.getwriter('utf-8')(gzip.open("%s/stage%d.lex.gz" % (
-			resultdir, n+1), "w"))
+		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stages[n].name), "w")
+		lexicon = codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
+			resultdir, stages[n].name), "w"))
 		if f == 1 or stage.split: grammar.write_bitpar_grammar(rules, lexicon)
 		else: grammar.write_lcfrs_grammar(rules, lexicon)
 		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz",
@@ -540,10 +541,12 @@ def writeresults(results, gold, gsent, resultdir, category, sentinit):
 			".".join(category, result.name) if category else result.name),
 			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n+1)
 			for n, a, b in zip(count(sentinit), result.parsetrees, gsent))
-	open("%s/parsetimes.txt" % resultdir, "w").writelines(
-		"%d\t%s\n" % (n + 1, "\t".join(str(result.elapsedtime[n])
-				for result in results))
-			for n, _ in enumerate(results[0].elapsedtime))
+	with open("%s/parsetimes.txt" % resultdir, "w") as f:
+		f.write("# id\tlen\t%s\n" % "\t".join(result.name for result in results))
+		f.writelines(
+			"%d\t%d\t%s\n" % (n + 1, len(gsent[n]),
+					"\t".join(str(result.elapsedtime[n]) for result in results))
+				for n, _ in enumerate(results[0].elapsedtime))
 	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}",
 		resultdir, category or "results")
 

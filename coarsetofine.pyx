@@ -187,12 +187,16 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 			items[ei] = rootprob - prob
 		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems)
 
-cpdef filterchart(dict chart, ChartItem start):
+cpdef filterchart(chart, ChartItem start):
 	""" remove all entries that do not contribute to a complete derivation
 	headed by "start" """
 	chart2 = {}
 	if isinstance(start, CFGChartItem):
-		filter_subtreecfg(start, chart, chart2)
+		start1 = (<CFGChartItem>start).start
+		end = (<CFGChartItem>start).end
+		fat = end >= (sizeof(ULLong) * 8)
+		chart = [[b.copy() for b in a] for a in chart]
+		filter_subtreecfg(start.label, start1, end, chart, chart2, fat)
 	else: filter_subtree(start, chart, chart2)
 	return chart2
 
@@ -208,22 +212,19 @@ cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 		if item.label and item not in chart2:
 			filter_subtree(edge.right, chart, chart2)
 
-cdef CFGChartItem tmpitem = CFGChartItem(0, 0, 0)
-cdef void filter_subtreecfg(CFGChartItem item, list chart, dict chart2):
+cdef void filter_subtreecfg(label, start, end, list chart, dict chart2, bint fat):
 	cdef CFGEdge edge
-	# FIXME!
-	chart2[item] = chart[item]
-	for edge in chart[item]:
-		tmpitem.label = edge.rule.rhs1
-		tmpitem.start = item.start
-		tmpitem.end = edge.mid
-		if tmpitem.label and tmpitem not in chart2:
-			filter_subtree(tmpitem, chart, chart2)
-		tmpitem.label = edge.rule.rhs2
-		tmpitem.start = edge.mid
-		tmpitem.end = item.end
-		if tmpitem.label and tmpitem not in chart2:
-			filter_subtree(tmpitem, chart, chart2)
+	cdef ChartItem newitem
+	if fat: newitem = CFGtoFatChartItem(label, start, end)
+	else: newitem = CFGtoSmallChartItem(label, start, end)
+	# should convert CFGEdge to LCFRSEdge, but currently not used anyway.
+	chart2[newitem] = chart[start][end].pop(label)
+	for edge in chart2[newitem]:
+		if edge.rule is NULL: continue
+		if edge.rule.rhs1 and edge.rule.rhs1 in chart[start][edge.mid]:
+			filter_subtreecfg(edge.rule.rhs1, start, edge.mid, chart, chart2, fat)
+		if edge.rule.rhs2 and edge.rule.rhs2 in chart[edge.mid][end]:
+			filter_subtreecfg(edge.rule.rhs2, edge.mid, end, chart, chart2, fat)
 
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	from parser import parse #, pprint_chart
