@@ -25,6 +25,7 @@
 
 /* temporary hack: */
 /* inline attribute */
+/*
 #ifndef CYTHON_INLINE
   #if defined(__GNUC__)
     #define CYTHON_INLINE __inline__
@@ -36,3 +37,4 @@
     #define CYTHON_INLINE
   #endif
 #endif
+*/

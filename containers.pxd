@@ -25,7 +25,7 @@ cdef extern from "macros.h":
 	void SETBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
 	#int SLOTS # doesn't work
-cdef extern from "arrayarray.h": pass
+#cdef extern from "arrayarray.h": pass
 
 # FIXME: find a way to make this a constant, yet shared across modules.
 DEF SLOTS = 2
@@ -63,25 +63,15 @@ cdef class LexicalRule:
 	cdef unicode word
 	cdef double prob
 
-cdef class ParseForest:
-	""" the chart representation of bitpar. seems to require parsing
-	in 3 stages: recognizer, enumerate analyses, get probs. """
-	#keys
-	cdef list catnum		#lhs
-	cdef list firstanalysis	#idx to lists below.
-	# from firstanalysis[n] to firstanalysis[n+1] or end
-	#values.
-	cdef list rulenumber
-	cdef list firstchild
-	#positive means index to lists above, negative means0 terminal index
-	cdef list child
-
 cdef class ChartItem:
 	cdef UInt label
+@cython.final
 cdef class SmallChartItem(ChartItem):
 	cdef ULLong vec
+@cython.final
 cdef class FatChartItem(ChartItem):
 	cdef ULong vec[SLOTS]
+@cython.final
 cdef class CFGChartItem(ChartItem):
 	cdef UChar start, end
 
@@ -89,22 +79,36 @@ cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)
 cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
 
 # start scratch
-cdef union VecType:
-	ULLong vec
-	ULong *vecptr
-
-cdef class NewChartItem:
-	cdef VecType vec
-	cdef UInt label
-
-cdef class DiscNode:
-	cdef int label
-	cdef tuple children
-	cdef CBitset leaves
+#cdef union VecType:
+#	ULLong vec
+#	ULong *vecptr
+#
+#cdef class ParseForest:
+#	""" the chart representation of bitpar. seems to require parsing
+#	in 3 stages: recognizer, enumerate analyses, get probs. """
+#	#keys
+#	cdef list catnum		#lhs
+#	cdef list firstanalysis	#idx to lists below.
+#	# from firstanalysis[n] to firstanalysis[n+1] or end
+#	#values.
+#	cdef list rulenumber
+#	cdef list firstchild
+#	#positive means index to lists above, negative means0 terminal index
+#	cdef list child
+#
+#cdef class NewChartItem:
+#	cdef VecType vec
+#	cdef UInt label
+#
+#cdef class DiscNode:
+#	cdef int label
+#	cdef tuple children
+#	cdef CBitset leaves
 # end scratch
 
 cdef class Edge:
 	cdef double inside
+@cython.final
 cdef class LCFRSEdge(Edge):
 	cdef double score
 	cdef double prob # we could eliminate prob by using ruleno
@@ -112,6 +116,7 @@ cdef class LCFRSEdge(Edge):
 	cdef ChartItem right
 	cdef long _hash
 	cdef int ruleno
+@cython.final
 cdef class CFGEdge(Edge):
 	cdef Rule *rule
 	cdef UChar mid
@@ -164,7 +169,7 @@ cdef class CBitset:
 	cdef char *data
 	cdef UChar slots
 
-#@cython.final
+@cython.final
 cdef class FrozenArray:
 	cdef array obj
 

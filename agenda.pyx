@@ -9,7 +9,6 @@ There is a version specialised to be used as agenda with edges.
 
 from itertools import count, imap, izip
 from operator import itemgetter, attrgetter
-cimport cython
 
 DEF INVALID = 0
 DEF HEAP_ARITY = 4
@@ -54,18 +53,7 @@ cdef class Agenda:
 			self.length = len(self.mapping)
 			heapify(self.heap, self.cmpfun)
 
-	def __getitem__(self, key):
-		return self.getitem(key)
-
-	def __setitem__(self, key, value):
-		self.setitem(key, value)
-
-	cdef getitem(self, key):
-		cdef Entry entry
-		entry = <Entry>self.mapping[key]
-		return entry.value
-
-	cpdef setitem(self, key, value):
+	cdef setitem(self, key, value):
 		cdef Entry oldentry, entry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
@@ -82,7 +70,7 @@ cdef class Agenda:
 			self.mapping[key] = entry
 			heappush(self.heap, entry, self.cmpfun)
 
-	cpdef setifbetter(self, key, value):
+	cdef setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
 		cdef Entry oldentry
 		if key in self.mapping:
@@ -90,34 +78,10 @@ cdef class Agenda:
 			if value >= oldentry.value: return
 		self.setitem(key, value)
 
-	def peekitem(self):
-		cdef Entry entry = self.peekentry()
-		return entry.key, entry.value
-
-	cpdef Entry peekentry(self):
+	cdef getitem(self, key):
 		cdef Entry entry
-		cdef Py_ssize_t n = list_getsize(self.heap)
-		if n == 0: raise IndexError("peek at empty heap")
-		entry = <Entry>(self.heap[0])
-		while entry.count == 0:
-			if n == 1: raise IndexError("peek at empty heap")
-			#replace first element with last element
-			self.heap[0] = self.heap.pop()
-			#and restore heap invariant
-			siftdown(self.heap, 0, self.cmpfun)
-			n -= 1
-			entry = <Entry>(self.heap[0])
-		return entry
-
-	cpdef Entry popentry(self):
-		""" like popitem, but avoids tuple construction by returning an Entry
-		object """
-		cdef Entry entry = <Entry>heappop(self.heap, self.cmpfun)
-		while not entry.count:
-			entry = <Entry>heappop(self.heap, self.cmpfun)
-		del self.mapping[entry.key]
-		self.length -= 1
-		return entry
+		entry = <Entry>self.mapping[key]
+		return entry.value
 
 	cdef object replace(self, key, value):
 		""" return current value for key, and also change its value.
@@ -130,6 +94,37 @@ cdef class Agenda:
 		oldentry.count = INVALID
 		return oldentry.value
 
+	def peekitem(self):
+		cdef Entry entry = self.peekentry()
+		return entry.key, entry.value
+
+	cdef Entry peekentry(self):
+		cdef Entry entry
+		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
+		if n == 0: raise IndexError("peek at empty heap")
+		entry = <Entry>(self.heap[0])
+		while entry.count == 0:
+			if n == 1: raise IndexError("peek at empty heap")
+			#replace first element with last element
+			self.heap[0] = self.heap.pop()
+			#and restore heap invariant
+			siftdown(self.heap, 0, self.cmpfun)
+			n -= 1
+			entry = <Entry>(self.heap[0])
+		return entry
+
+	cdef Entry popentry(self):
+		""" like popitem, but avoids tuple construction by returning an Entry
+		object """
+		cdef Entry entry = <Entry>heappop(self.heap, self.cmpfun)
+		while not entry.count:
+			entry = <Entry>heappop(self.heap, self.cmpfun)
+		del self.mapping[entry.key]
+		self.length -= 1
+		return entry
+
+	cdef bint contains(self, key): return key in self.mapping
+	# standard dict() methods
 	def pop(self, key):
 		cdef Entry entry
 		if key is None:
@@ -138,67 +133,39 @@ cdef class Agenda:
 		entry.count = INVALID
 		self.length -= 1
 		return entry.value
-
 	def popitem(self):
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
-
-	def update(self, *a, **kw):
-		for k, v in dict(*a, **kw).iteritems():
-			self[k] = v
-
-	def clear(self):
-		self.counter = 1
-		del self.heap[:]
-		self.mapping.clear()
-
-	def __contains__(self, key):
-		return self.contains(key)
-
-	cdef bint contains(self, key):
-		return key in self.mapping
-
 	def __delitem__(self, key):
 		(<Entry>self.mapping[key]).count = INVALID
 		self.length -= 1
 		del self.mapping[key]
-
-	def __iter__(self):
-		return iter(self.mapping)
-
-	def __len__(self):
-		return self.length
-
-	def __nonzero__(self):
-		return self.length != 0
-
+	def update(self, *a, **kw):
+		for k, v in dict(*a, **kw).iteritems():
+			self[k] = v
+	def clear(self):
+		self.counter = 1
+		del self.heap[:]
+		self.mapping.clear()
 	def __repr__(self):
 		return '%s({%s})' % (self.__class__.__name__, ", ".join(
 				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
 				for a in self.heap if (<Entry>a).count]))
+	def __contains__(self, key): return key in self.mapping
+	def __getitem__(self, key): return self.getitem(key)
+	def __setitem__(self, key, value): self.setitem(key, value)
+	def __str__(self): return self.__repr__()
+	def __iter__(self): return iter(self.mapping)
+	def __len__(self): return self.length
+	def __nonzero__(self): return self.length != 0
+	def keys(self): return self.mapping.keys()
+	def values(self): return [(<Entry>e).value for e in self.mapping.values()]
+	def items(self): return zip(self.keys(), self.values())
+	def iterkeys(self): return self.mapping.iterkeys()
+	def itervalues(self): return imap(getval, self.mapping.itervalues())
+	def iteritems(self): return izip(self.iterkeys(), self.itervalues())
 
-	def __str__(self):
-		return self.__repr__()
-
-	def keys(self):
-		return self.mapping.keys()
-
-	def values(self):
-		return [(<Entry>e).value for e in self.mapping.values()]
-
-	def items(self):
-		return zip(self.keys(), self.values())
-
-	def iterkeys(self):
-		return self.mapping.iterkeys()
-
-	def itervalues(self):
-		return imap(getval, self.mapping.itervalues())
-
-	def iteritems(self):
-		return izip(self.iterkeys(), self.itervalues())
-
-cdef class EdgeAgenda(Agenda):
+cdef class EdgeAgenda:
 	def __init__(self, iterable=None):
 		""" Can be initialized with an iterable; order of equivalent values
 		remains and the best priorities are retained on duplicate keys. """
@@ -223,12 +190,12 @@ cdef class EdgeAgenda(Agenda):
 			self.length = len(self.mapping)
 			heapify(self.heap, self.cmpfun)
 
-	cpdef LCFRSEdge getitem(self, key):
+	cdef LCFRSEdge getitem(self, key):
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
 		return <LCFRSEdge>entry.value
 
-	cpdef setifbetter(self, key, value):
+	cdef setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
 		cdef Entry oldentry
 		if key in self.mapping:
@@ -245,12 +212,12 @@ cdef class EdgeAgenda(Agenda):
 		entry.key =  key; entry.value = value; entry.count = oldentry.count
 		self.mapping[key] = entry
 		self.heap.append(entry)
-		siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+		siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
 		oldentry.count = INVALID
 		return <LCFRSEdge>oldentry.value
 
 	# the following are identical except for `edgecmpfun'
-	cpdef Entry popentry(self):
+	cdef Entry popentry(self):
 		""" like popitem, but avoids tuple construction by returning an Entry
 		object """
 		cdef Entry entry = <Entry>heappop(self.heap, edgecmpfun)
@@ -260,7 +227,22 @@ cdef class EdgeAgenda(Agenda):
 		self.length -= 1
 		return entry
 
-	cpdef setitem(self, key, value):
+	cdef Entry peekentry(self):
+		cdef Entry entry
+		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
+		if n == 0: raise IndexError("peek at empty heap")
+		entry = <Entry>(self.heap[0])
+		while entry.count == 0:
+			if n == 1: raise IndexError("peek at empty heap")
+			#replace first element with last element
+			self.heap[0] = self.heap.pop()
+			#and restore heap invariant
+			siftdown(self.heap, 0, edgecmpfun)
+			n -= 1
+			entry = <Entry>(self.heap[0])
+		return entry
+
+	cdef setitem(self, key, value):
 		cdef Entry oldentry, entry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
@@ -268,7 +250,7 @@ cdef class EdgeAgenda(Agenda):
 			entry.key =  key; entry.value = value; entry.count = oldentry.count
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
 			oldentry.count = INVALID
 		else:
 			self.counter += 1
@@ -277,8 +259,49 @@ cdef class EdgeAgenda(Agenda):
 			entry.key =  key; entry.value = value; entry.count = self.counter
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftup(self.heap, 0, list_getsize(self.heap) - 1, edgecmpfun)
+			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
 
+	# identical to Agenda() methods
+	cdef bint contains(self, key): return key in self.mapping
+	def pop(self, key):
+		cdef Entry entry
+		if key is None:
+			return self.popentry().value
+		entry = <Entry>(self.mapping.pop(key))
+		entry.count = INVALID
+		self.length -= 1
+		return entry.value
+	def popitem(self):
+		cdef Entry entry = self.popentry()
+		return entry.key, entry.value
+	def __delitem__(self, key):
+		(<Entry>self.mapping[key]).count = INVALID
+		self.length -= 1
+		del self.mapping[key]
+	def update(self, *a, **kw):
+		for k, v in dict(*a, **kw).iteritems():
+			self[k] = v
+	def clear(self):
+		self.counter = 1
+		del self.heap[:]
+		self.mapping.clear()
+	def __repr__(self):
+		return '%s({%s})' % (self.__class__.__name__, ", ".join(
+				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
+				for a in self.heap if (<Entry>a).count]))
+	def __contains__(self, key): return key in self.mapping
+	def __getitem__(self, key): return self.getitem(key)
+	def __setitem__(self, key, value): self.setitem(key, value)
+	def __str__(self): return self.__repr__()
+	def __iter__(self): return iter(self.mapping)
+	def __len__(self): return self.length
+	def __nonzero__(self): return self.length != 0
+	def keys(self): return self.mapping.keys()
+	def values(self): return [(<Entry>e).value for e in self.mapping.values()]
+	def items(self): return zip(self.keys(), self.values())
+	def iterkeys(self): return self.mapping.iterkeys()
+	def itervalues(self): return imap(getval, self.mapping.itervalues())
+	def iteritems(self): return izip(self.iterkeys(), self.itervalues())
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
 cdef list nsmallest(int n, list items):
@@ -316,7 +339,7 @@ cdef inline int partition(list items, int left, int right, int pivot):
 
 # heap operations (adapted from heapq)
 cdef inline Entry heappop(list heap, CmpFun cmpfun):
-	cdef Py_ssize_t n = list_getsize(heap)
+	cdef Py_ssize_t n = PyList_GET_SIZE(heap)
 	cdef Entry entry
 	if n == 0:
 		raise IndexError("pop from empty heap")
@@ -324,7 +347,7 @@ cdef inline Entry heappop(list heap, CmpFun cmpfun):
 		entry = <Entry>heap.pop()
 	else:
 		#replace first element with last element and restore heap invariant
-		entry = <Entry>(list_getitem(heap, 0))
+		entry = <Entry>(PyList_GET_ITEM(heap, 0))
 		heap[0] = heap.pop()
 		siftdown(heap, 0, cmpfun)
 	return entry
@@ -332,12 +355,12 @@ cdef inline Entry heappop(list heap, CmpFun cmpfun):
 cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 	# place at the end and swap with parents until heap invariant holds
 	heap.append(entry)
-	siftup(heap, 0, list_getsize(heap) - 1, cmpfun)
+	siftup(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
 
 cdef inline void heapify(list heap, CmpFun cmpfun):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
 	cdef int i
-	for i in range(list_getsize(heap) // HEAP_ARITY, -1, -1):
+	for i in range(PyList_GET_SIZE(heap) // HEAP_ARITY, -1, -1):
 		siftdown(heap, i, cmpfun)
 
 # shifts only apply for binary tree
@@ -356,15 +379,15 @@ cdef inline int _right(int i):
 
 cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
 	cdef int startpos = pos, childpos = _left(pos), rightpos
-	cdef int endpos = list_getsize(heap)
-	cdef Entry newitem = <Entry>list_getitem(heap, pos)
+	cdef int endpos = PyList_GET_SIZE(heap)
+	cdef Entry newitem = <Entry>PyList_GET_ITEM(heap, pos)
 	while childpos < endpos:
 		for rightpos in range(childpos + 1, childpos + HEAP_ARITY):
 			if (rightpos < endpos and
-				cmpfun(<Entry>(list_getitem(heap, rightpos)),
-					<Entry>(list_getitem(heap, childpos)))):
+				cmpfun(<Entry>(PyList_GET_ITEM(heap, rightpos)),
+					<Entry>(PyList_GET_ITEM(heap, childpos)))):
 				childpos = rightpos
-		heap[pos] = <Entry>list_getitem(heap, childpos)
+		heap[pos] = <Entry>PyList_GET_ITEM(heap, childpos)
 		pos = childpos
 		childpos = _left(pos)
 	heap[pos] = newitem
@@ -372,10 +395,10 @@ cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
 
 cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 	cdef int parentpos
-	cdef Entry parent, newitem = <Entry>list_getitem(heap, pos)
+	cdef Entry parent, newitem = <Entry>PyList_GET_ITEM(heap, pos)
 	while pos > startpos:
 		parentpos = _parent(pos)
-		parent = <Entry>list_getitem(heap, parentpos)
+		parent = <Entry>PyList_GET_ITEM(heap, parentpos)
 		if cmpfun(parent, newitem): break
 		heap[pos] = parent
 		pos = parentpos

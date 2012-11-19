@@ -45,7 +45,7 @@ cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
 			lazynext(ej, k1, D, cand, chart, explored)
 		# get the next best derivation and delete it from the heap
 		if cand[v]:
-			D.setdefault(v, []).append(cand[v].popentry())
+			D.setdefault(v, []).append((<Agenda>cand[v]).popentry())
 		else: break
 	return D
 
@@ -134,7 +134,7 @@ cpdef inline lazykthbestcfg(UInt label, UChar start, UChar end, int k, int k1,
 		# get the next best derivation and delete it from the heap
 		if cand[start][end][label]:
 			D[start][end].setdefault(label, []).append(
-				cand[start][end][label].popentry())
+				(<Agenda>cand[start][end][label]).popentry())
 		else: break
 	return D
 
@@ -237,7 +237,8 @@ cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
 			rankededge = (<Entry>D[start][end][label][i]).key
 		else:
 			assert i == 0, "non-best edge missing in derivations"
-			entry = getcandidatescfg(chart, label, start, end, 1).popentry()
+			entry = (<Agenda>getcandidatescfg(chart, label, start, end, 1)
+					).popentry()
 			D[start][end][label] = [entry]
 			rankededge = entry.key
 		child = getderivationcfg(rankededge, D, chart, tolabel, n + 1, debin)
@@ -281,7 +282,7 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 			rankededge = (<Entry>D[ei][i]).key
 		else:
 			assert i == 0, "non-best edge missing in derivations"
-			entry = getcandidates(chart, ei, 1).popentry()
+			entry = (<Agenda>getcandidates(chart, ei, 1)).popentry()
 			D[ei] = [entry]
 			rankededge = entry.key
 		child = getderivation(rankededge, D, chart, tolabel, n + 1, debin)

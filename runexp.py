@@ -424,14 +424,15 @@ def worker(args):
 						d.stages[n-1].grammar, stage.grammar, stage.k,
 						stage.splitprune, d.stages[n-1].markorigin)
 				msg += "coarse items before pruning: %d; after: %d\n\t" % (
-					(sum(len(a) for x in chart for a in x)
+					(sum(len(a) for x in chart for a in x if a)
 					if d.stages[n-1].mode == 'pcfg' else len(chart)), items)
 			else: whitelist = None
 			if stage.mode == 'pcfg':
 				chart, start = cfgparse([w for w, _ in sent],
 						stage.grammar,
 						tags=[t for _, t in sent] if d.tags else None,
-						start=stage.grammar.toid[d.top])
+						start=stage.grammar.toid[d.top],
+						) #chart=whitelist if stage.prune else None)
 			else:
 				chart, start, msg1 = parse([w for w, _ in sent],
 						stage.grammar,
@@ -447,11 +448,12 @@ def worker(args):
 				msg += "%s\n\t" % msg1
 			if (n != 0 and not start and not results[-1].noparse
 					and stage.split == d.stages[n-1].split):
-				pprint_chart(chart,
-						[w.encode('unicode-escape') for w, _ in sent],
-						stage.grammar.tolabel)
-				raise ValueError("expected successful parse. "
+				#pprint_chart(chart,
+				#		[w.encode('unicode-escape') for w, _ in sent],
+				#		stage.grammar.tolabel)
+				logging.error("expected successful parse. "
 						"sent %d, %s." % (nsent, stage.name))
+				raise ValueError
 		# store & report result
 		if start:
 			if stage.dop:
