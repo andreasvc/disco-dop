@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 import os, re, sys, time, gzip, codecs, logging, cPickle, tempfile
 import multiprocessing
-from collections import defaultdict, Counter as multiset
+from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import imap, count, izip_longest
 from operator import itemgetter
 from subprocess import Popen, PIPE
@@ -57,8 +57,8 @@ def main(
 		revmarkov = True,
 		v = 1,
 		h = 2,
-		arity_marks = True,
-		arity_marks_before_bin = False,
+		fanout_marks = True,
+		fanout_marks_before_bin = False,
 		tailmarker = "",
 		quiet=False, reallyquiet=False, #quiet=no per sentence results
 		numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
@@ -119,9 +119,9 @@ def main(
 			len(corpus.parsed_sents()), corpusdir, corpusfile)
 	if isinstance(trainsents, float):
 		trainsents = int(trainsents * len(corpus.sents()))
-	trees = corpus.parsed_sents()[:trainsents]
-	sents = corpus.sents()[:trainsents]
-	blocks = corpus.blocks()[:trainsents]
+	trees = corpus.parsed_sents().values()[:trainsents]
+	sents = corpus.sents().values()[:trainsents]
+	blocks = corpus.blocks().values()[:trainsents]
 	logging.info("%d training sentences before length restriction", len(trees))
 	trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks)
 		if len(sent[1]) <= trainmaxwords])
@@ -130,10 +130,13 @@ def main(
 
 	test = CorpusReader(corpusdir, corpusfile, encoding=encoding,
 			removepunct=removepunct, movepunct=movepunct)
-	test = (test.parsed_sents()[trainsents+skip:trainsents+skip+testsents],
-			test.tagged_sents()[trainsents+skip:trainsents+skip+testsents],
-			test.blocks()[trainsents+skip:trainsents+skip+testsents])
-	assert len(test[0]), "test corpus should be non-empty"
+	test_parsed_sents = test.parsed_sents()
+	test_tagged_sents = test.tagged_sents()
+	test = OrderedDict((a, (test_parsed_sents[a], test_tagged_sents[a], block))
+		for a, block in test.blocks().items()[
+		trainsents+skip:trainsents+skip+testsents])
+
+	assert test, "test corpus should be non-empty"
 
 	if usetagger:
 		if usetagger == 'treetagger':
@@ -142,7 +145,7 @@ def main(
 			overridetags = ("PTKANT", "PIDAT")
 		else: overridetags = ("PTKANT", )
 		taglex = defaultdict(set)
-		for sent in corpus.tagged_sents()[:trainsents]:
+		for sent in corpus.tagged_sents().values()[:trainsents]:
 			for word, tag in sent: taglex[word].add(tag)
 		overridetagdict = dict((tag,
 			set(word for word, tags in taglex.iteritems() if tags == set([tag])))
@@ -150,24 +153,24 @@ def main(
 		tagmap = { "$(": "$[", "PAV": "PROAV" }
 		dotagging(usetagger, test[1], overridetagdict, tagmap)
 
-	logging.info("%d test sentences before length restriction", len(test[0]))
-	test = zip(*((a, b, c) for a, b, c in zip(*test) if len(b) <= testmaxwords))
+	logging.info("%d test sentences before length restriction", len(test))
+	test = OrderedDict(a for a in test.items() if len(a[1][1]) <= testmaxwords)
 	logging.info("%d test sentences after length restriction <= %d",
-		len(test[0]), testmaxwords)
+		len(test), testmaxwords)
 	logging.info("read training & test corpus")
 
 	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-			revmarkov, arity_marks, arity_marks_before_bin, testmaxwords,
+			revmarkov, fanout_marks, fanout_marks_before_bin, testmaxwords,
 			resultdir, numproc)
 
 	begin = time.clock()
-	results = doparse(stages, unfolded, bintype, arity_marks,
-			arity_marks_before_bin, test, testmaxwords, testsents,
+	results = doparse(stages, unfolded, bintype, fanout_marks,
+			fanout_marks_before_bin, test, testmaxwords, testsents,
 			trees[0].node, True, resultdir, numproc)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
 	print "testmaxwords", testmaxwords, "unfolded", unfolded,
-	print "arity marks", arity_marks, "binarized", bintype,
+	print "fanout marks", fanout_marks, "binarized", bintype,
 	if stages[-1].dop:
 		print "estimator", stages[-1].estimator,
 		if 'sl-dop' in stages[-1].estimator: print stages[-1].sldop_n
@@ -175,13 +178,13 @@ def main(
 	doeval(*results)
 
 def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-		revmarkov, arity_marks, arity_marks_before_bin, testmaxwords, resultdir,
+		revmarkov, fanout_marks, fanout_marks_before_bin, testmaxwords, resultdir,
 		numproc):
 	f, n = treebankfanout(trees)
 	logging.info("treebank fan-out before binarization: %d #%d", f, n)
 	# binarization
 	begin = time.clock()
-	if arity_marks_before_bin: trees = map(addfanoutmarkers, trees)
+	if fanout_marks_before_bin: trees = map(addfanoutmarkers, trees)
 	if bintype == "nltk":
 		bintype += " %s h=%d v=%d" % (factor, h, v)
 		for a in trees:
@@ -201,7 +204,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		trees = [Tree.convert(
 					optimalbinarize(tree, headdriven=True, h=h, v=v))
 						for n, tree in enumerate(trees)]
-	if arity_marks: trees = map(addfanoutmarkers, trees)
+	if fanout_marks: trees = map(addfanoutmarkers, trees)
 	logging.info("binarized %s cpu time elapsed: %gs",
 						bintype, time.clock() - begin)
 	logging.info("binarized treebank fan-out: %d #%d", *treebankfanout(trees))
@@ -339,54 +342,55 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 
 #def doparse(**params):
 #	params = DictObj(**params)
-def doparse(stages, unfolded, bintype, arity_marks, arity_marks_before_bin,
+def doparse(stages, unfolded, bintype, fanout_marks, fanout_marks_before_bin,
 		test, testmaxwords, testsents, top, tags=True,
 		resultdir="results", numproc=None, category=None, sentinit=0,
 		deletelabel=("ROOT", "VROOT", "TOP", "$.", "$,", "$(", "$[")):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
-			arity_marks=arity_marks,
-			arity_marks_before_bin=arity_marks_before_bin, test=test,
+			fanout_marks=fanout_marks,
+			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
 			resultdir=resultdir, category=category, sentinit=sentinit)
 	goldbrackets = multiset()
 	maxlen = min(testmaxwords, maxbitveclen)
-	work = [a for a in zip(count(1), *test) if len(a[2]) <= maxlen][:testsents]
-	gold = [None] * len(work)
-	gsent = [None] * len(work)
+	gold = OrderedDict.fromkeys(test)
+	gsent = OrderedDict.fromkeys(test)
 	results = [DictObj(name=stage.name) for stage in stages]
 	for result in results:
-		result.elapsedtime = [None] * len(work)
-		result.parsetrees = [None] * len(work)
+		result.elapsedtime = dict.fromkeys(test)
+		result.parsetrees = dict.fromkeys(test)
 		result.brackets = multiset()
 		result.exact = result.noparse = 0
 	if numproc == 1:
 		initworker(params)
-		dowork = imap(worker, work)
+		dowork = imap(worker, test.items())
 	else:
 		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
 				initargs=(params,))
-		dowork = pool.imap_unordered(worker, work)
-	print "going to parse %d sentences." % len(work)
+		dowork = pool.imap_unordered(worker, test.items())
+	print "going to parse %d sentences." % len(test)
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
 		sentid, msg, sentresults = data
-		thesentid, tree, sent, block = work[sentid-1]
-		assert thesentid == sentid
-		logging.debug("%d/%d%s. [len=%d] %s\n%s", nsent, len(work),
-					(' (%d)' % sentid) if numproc != 1 else '', len(sent),
+		tree, sent, block = test[sentid]
+		logging.debug("%d/%d (%s). [len=%d] %s\n%s", nsent, len(test),
+					sentid, len(sent),
 					#u" ".join(a[0] for a in sent),	# words only
 					u" ".join(a[0]+u"/"+a[1] for a in sent), # word/TAG
 					msg)
 		goldb = bracketings(tree)
-		gold[sentid-1] = block
-		gsent[sentid-1] = sent
+		assert gold[sentid] == gsent[sentid] == None
+		gold[sentid] = block
+		gsent[sentid] = sent
 		goldbrackets.update((sentid, (label, span)) for label, span
 				in goldb.elements() if label not in deletelabel)
 		for n, r in enumerate(sentresults):
 			results[n].brackets.update((sentid, (label, span)) for label, span
 					in r.candb.elements() if label not in deletelabel)
-			results[n].parsetrees[sentid-1] = r.parsetree
-			results[n].elapsedtime[sentid-1] = r.elapsedtime
+			assert (results[n].parsetrees[sentid]
+				== results[n].elapsedtime[sentid] == None)
+			results[n].parsetrees[sentid] = r.parsetree
+			results[n].elapsedtime[sentid] = r.elapsedtime
 			if r.noparse: results[n].noparse += 1
 			if r.exact: results[n].exact += 1
 			logging.debug(
@@ -404,11 +408,11 @@ def doparse(stages, unfolded, bintype, arity_marks, arity_marks_before_bin,
 		del dowork, pool
 
 	writeresults(results, gold, gsent, resultdir, category, sentinit)
-	return results, len(work), goldbrackets, gold, gsent
+	return results, len(test), goldbrackets, gold, gsent
 
 def worker(args):
 	""" parse a sentence using specified stages (pcfg, plcfrs, dop, ...) """
-	nsent, tree, sent, _ = args
+	nsent, (tree, sent, _) = args
 	d = internalparams
 	goldb = bracketings(tree)
 	results = []
@@ -535,20 +539,18 @@ def worker(args):
 def writeresults(results, gold, gsent, resultdir, category, sentinit):
 	codecs.open("%s/%s.export" % (resultdir,
 			".".join(category, "gold") if category else "gold"),
-			"w", encoding='utf-8').write(''.join(
-				"#BOS %d\n%s#EOS %d\n" % (n + 1, a, n + 1)
-				for n, a in zip(count(sentinit), gold)))
+			"w", encoding='utf-8').writelines(gold[n] for n in gold)
 	for result in results:
 		codecs.open("%s/%s.export" % (resultdir,
 			".".join(category, result.name) if category else result.name),
-			"w", encoding='utf-8').writelines(export(a, [w for w, _ in b], n+1)
-			for n, a, b in zip(count(sentinit), result.parsetrees, gsent))
+			"w", encoding='utf-8').writelines(export(result.parsetrees[n],
+			[w for w, _ in gsent[n]], n) for n in gsent)
 	with open("%s/parsetimes.txt" % resultdir, "w") as f:
 		f.write("# id\tlen\t%s\n" % "\t".join(result.name for result in results))
 		f.writelines(
-			"%d\t%d\t%s\n" % (n + 1, len(gsent[n]),
+			"%s\t%d\t%s\n" % (n, len(gsent[n]),
 					"\t".join(str(result.elapsedtime[n]) for result in results))
-				for n, _ in enumerate(results[0].elapsedtime))
+				for n in gold)
 	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}",
 		resultdir, category or "results")
 
@@ -614,8 +616,8 @@ def parsetepacoc(
 			complement=False, #for double dop, whether to include fragments which form
 		)),
 		unfolded=False, bintype="binarize", h=1, v=1, factor="right",
-		tailmarker='', revmarkov=False, arity_marks=True,
-		arity_marks_before_bin=False,
+		tailmarker='', revmarkov=False, fanout_marks=True,
+		fanout_marks_before_bin=False,
 		trainmaxwords=999, testmaxwords=999, testsents=2000,
 		usetagger='stanford', resultdir="tepacoc", numproc=1):
 	trainsents = 25005
@@ -638,10 +640,10 @@ def parsetepacoc(
 				headorder=(bintype in ("binarize", "nltk")), headfinal=True,
 				headreverse=False, unfold=unfolded, movepunct=True,
 				removepunct=False, encoding='iso-8859-1')
-		corpus_sents = list(corpus.sents())
-		corpus_taggedsents = list(corpus.tagged_sents())
-		corpus_trees = list(corpus.parsed_sents())
-		corpus_blocks = list(corpus.blocks())
+		corpus_sents = corpus.sents().values()
+		corpus_taggedsents = corpus.tagged_sents().values()
+		corpus_trees = corpus.parsed_sents().values()
+		corpus_blocks = corpus.blocks().values()
 		cPickle.dump((corpus_sents, corpus_taggedsents, corpus_trees,
 			corpus_blocks), gzip.open("tiger.pickle.gz", "wb"), protocol=-1)
 
@@ -692,7 +694,7 @@ def parsetepacoc(
 							corpus_blocks)) if len(sent[1]) <= trainmaxwords
 							and n not in tepacocids][:trainsents])
 	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-			revmarkov, arity_marks, arity_marks_before_bin, testmaxwords,
+			revmarkov, fanout_marks, fanout_marks_before_bin, testmaxwords,
 			resultdir, numproc)
 
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
@@ -702,8 +704,8 @@ def parsetepacoc(
 		if cat == 'baseline': continue
 		logging.info("category: %s", cat)
 		begin = time.clock()
-		results[cat] = doparse(stages, unfolded, bintype, arity_marks,
-				arity_marks_before_bin, test, testmaxwords, testsents,
+		results[cat] = doparse(stages, unfolded, bintype, fanout_marks,
+				fanout_marks_before_bin, test, testmaxwords, testsents,
 				trees[0].node, True, resultdir, numproc, category=cat,
 				sentinit=cnt)
 		cnt += len(test[0])
@@ -736,8 +738,8 @@ def parsetepacoc(
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info("category: %s", cat)
-	doeval(*doparse(stages, unfolded, bintype, arity_marks,
-			arity_marks_before_bin, testset[cat], testmaxwords, testsents,
+	doeval(*doparse(stages, unfolded, bintype, fanout_marks,
+			fanout_marks_before_bin, testset[cat], testmaxwords, testsents,
 			trees[0].node, True, resultdir, numproc, category=cat,
 			sentinit=cnt))
 
@@ -894,8 +896,8 @@ def testmain():
 		revmarkov = True,
 		v = 1,
 		h = 2,
-		arity_marks = True,
-		arity_marks_before_bin = False,
+		fanout_marks = True,
+		fanout_marks_before_bin = False,
 		tailmarker = "",
 		quiet=False, reallyquiet=False, #quiet=no per sentence results
 		numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
@@ -904,8 +906,8 @@ def testmain():
 def test():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
-	import agenda, coarsetofine, treetransforms, disambiguation
-	modules = (bit, demos, kbest, parser, grammar, treebank, estimates,
+	import agenda, coarsetofine, treetransforms, disambiguation, eval
+	modules = (bit, eval, demos, kbest, parser, grammar, treebank, estimates,
 			_fragments, agenda, coarsetofine, treetransforms, disambiguation)
 	results = {}
 	for mod in modules:

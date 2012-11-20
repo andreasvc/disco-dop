@@ -610,8 +610,8 @@ def ranges(s):
 			rng = [a]
 	if rng: yield rng
 
-def node_arity(n, vars, inplace=False):
-	""" mark node with arity if necessary """
+def node_fanout(n, vars, inplace=False):
+	""" mark node with fanout if necessary """
 	if len(vars) > 1 and not n.node.endswith("_%d" % len(vars)):
 		if inplace: n.node = "%s_%d" % (n.node, len(vars))
 		else: return "%s_%d" % (n.node, len(vars))
@@ -732,14 +732,14 @@ def exportrparse(grammar):
 	def rewritelabel(a):
 		a = a.replace("ROOT", "VROOT")
 		if "|" in a:
-			arity = a.rsplit("_", 1)[-1] if "_" in a[a.rindex(">"):] else "1"
+			fanout = a.rsplit("_", 1)[-1] if "_" in a[a.rindex(">"):] else "1"
 			parent = a[a.index("^")+2:a.index(">",a.index("^"))] if "^" in a else ""
 			parent = "^"+"-".join(x.replace("_","") if "_" in x else x+"1" for x in parent.split("-"))
 			children = a[a.index("<")+1:a.index(">")].split("-")
 			children = "-".join(x.replace("_","") if "_" in x else x+"1" for x in children)
 			current = a.split("|")[0]
 			current = "".join(current.split("_")) if "_" in current else current+"1"
-			return "@^%s%s-%sX%s" % (current, parent, children, arity)
+			return "@^%s%s-%sX%s" % (current, parent, children, fanout)
 		return "".join(a.split("_")) if "_" in a else a+"1"
 	for (r, yf), w in grammar:
 		if r[1] != 'Epsilon':
@@ -837,7 +837,7 @@ def read_penn_format(corpus, maxlen=15, n=7200):
 	return trees, sents
 
 def rem_marks(tree):
-	""" Remove arity marks, make sure indices at leaves are integers."""
+	""" Remove fanout marks, make sure indices at leaves are integers."""
 	for a in tree.subtrees(lambda x: "_" in x.node):
 		a.node = a.node.rsplit("_", 1)[0]
 	for a in tree.treepositions('leaves'):
@@ -852,7 +852,7 @@ def alterbinarization(tree):
 	tree = re.sub(
 		"@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+",
 		r"\1|<\3>", tree)
-	# remove arity markers
+	# remove fanout markers
 	tree = re.sub(r"([A-Z.,()$]+)\d+", r"\1", tree)
 	tree = re.sub("VROOT", r"ROOT", tree)
 	assert "@" not in tree
@@ -949,9 +949,9 @@ def test():
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
 		headorder=True, headfinal=True, headreverse=False, movepunct=True)
-	corpus = BracketCorpusReader(".", "treebankExample.mrg")
-	sents = corpus.sents()
-	trees = [a.copy(True) for a in corpus.parsed_sents()[:10]]
+	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
+	sents = corpus.sents().values()
+	trees = [a.copy(True) for a in corpus.parsed_sents().values()[:10]]
 	for a in trees:
 		a.chomsky_normal_form(horzMarkov=1)
 		addfanoutmarkers(a)
@@ -976,9 +976,8 @@ def test():
 		grammar = Grammar(grammarx)
 		print unicode(grammar)
 		assert grammar.testgrammar(logging) #DOP1 should sum to 1.
-		for tree, sent in zip(corpus.parsed_sents(), sents):
-			print "sentence:",
-			for w in sent: stdout.write(' ' + w)
+		for tree, sent in zip(corpus.parsed_sents().values(), sents):
+			print "sentence:", " ".join(sent)
 			root = tree.node
 			chart, start, msg = parse(sent, grammar, start=grammar.toid[root],
 				exhaustive=True)
@@ -1065,7 +1064,7 @@ def main():
 	else: raise ValueError("unrecognized format: %r" % opts.get('--inputfmt'))
 
 	corpus = Reader(".", treebankfile)
-	trees, sents = corpus.parsed_sents(), corpus.sents()
+	trees, sents = corpus.parsed_sents().values(), corpus.sents().values()
 	for a in trees:
 		canonicalize(a)
 		addfanoutmarkers(a)

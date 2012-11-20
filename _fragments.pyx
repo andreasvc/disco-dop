@@ -709,7 +709,7 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 
 def readtreebank(treebankfile, labels, prods, sort=True, discontinuous=False,
 	limit=0, encoding="utf-8"):
-	# this could use BracketedCorpusReader or expect trees/sents as input,
+	# this could use BracketCorpusReader or expect trees/sents as input,
 	# but this version reads the treebank incrementally which reduces memory
 	# requirements.
 	if treebankfile is None: return None, None
@@ -718,7 +718,7 @@ def readtreebank(treebankfile, labels, prods, sort=True, discontinuous=False,
 		from grammar import canonicalize
 		from treebank import NegraCorpusReader
 		corpus = NegraCorpusReader(*pathsplit(treebankfile), encoding=encoding)
-		trees = corpus.parsed_sents(); sents = corpus.sents()
+		trees = corpus.parsed_sents().values(); sents = corpus.sents().values()
 		if limit: trees = trees[:limit]; sents = sents[:limit]
 		for tree in trees: tree.chomsky_normal_form()
 		trees = [tolist(add_lcfrs_rules(canonicalize(x), y), y)

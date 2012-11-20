@@ -35,11 +35,25 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
 import numpy
 from collections import deque
 from nltk import Tree
-from containers import Terminal
-from treetransforms import canonicalize
+
+class Terminal:
+	""" Auxiliary class to be able to add indices to terminal nodes of NLTK
+	trees. """
+	def __init__(self, node): self.prod = self.node = node
+	def __repr__(self): return repr(self.node)
+	def __hash__(self): return hash(self.node)
+	def __iter__(self): return iter(())
+	def __len__(self): return 0
+	def __index__(self): return self.node
+	def __getitem__(self, val):
+		if isinstance(val, slice): return ()
+		else: raise IndexError("A terminal has zero children.")
 
 def prepare(tree, includeterms=False):
-	tree = canonicalize(tree.copy(True))
+	tree = tree.copy(True)
+	# canonical order of children
+	for a in tree.subtrees(lambda n: isinstance(n[0], Tree)):
+		a.sort(key=lambda n: min(n.leaves()))
 	if includeterms:
 		for a in tree.treepositions('leaves'): tree[a] = Terminal(tree[a])
 	else:

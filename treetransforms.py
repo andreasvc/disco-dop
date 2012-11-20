@@ -803,7 +803,8 @@ def testminbin():
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 		movepunct=True, headorder=False, headfinal=True, headreverse=False)
 	total = violations = violationshd = 0
-	for n, tree, sent in zip(count(), corpus.parsed_sents()[:-2000], corpus.sents()):
+	for n, tree, sent in zip(count(), corpus.parsed_sents().values()[:-2000],
+			corpus.sents().values()):
 		#if len(tree.leaves()) <= 25: continue
 		begin = time.clock()
 		t = addbitsets(tree)
@@ -850,7 +851,7 @@ def testsplit():
 	correct = wrong = 0
 	#n = NegraCorpusReader("../rparse", "tigerproc.export")
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
-	for tree in n.parsed_sents():
+	for tree in n.parsed_sents().values():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
 			correct += 1
 		else:
@@ -898,7 +899,8 @@ def main():
 	start, end = opts.get('--slice', ':').split(':')
 	start = int(start) if start else None
 	end = int(end) if end else None
-	trees, sents = corpus.parsed_sents()[start:end], corpus.sents()[start:end]
+	trees = corpus.parsed_sents().values()[start:end]
+	sents = corpus.sents().values()[start:end]
 
 	# apply transformation
 	if action == "binarize":

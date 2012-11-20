@@ -50,8 +50,8 @@ factor="right",
 revmarkov=True,
 v=1,
 h=1,
-arity_marks=True,
-arity_marks_before_bin=False,
+fanout_marks=True,
+fanout_marks_before_bin=False,
 tailmarker="",
 # misc
 quiet=False, reallyquiet=False, #quiet=no per sentence results

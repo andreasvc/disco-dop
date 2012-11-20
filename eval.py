@@ -4,24 +4,25 @@ from itertools import count, izip, izip_longest
 from collections import defaultdict, Counter as multiset
 from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
-from treebank import NegraCorpusReader
-from grammar import ranges
-from treetransforms import disc
+from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
+		BracketCorpusReader
 from treedist import treedist, newtreedist
 #from treedist import newtreedist as treedist
 
 usage = """usage:
 %s gold parses [params] [options]
-(where gold and parses are files in export format, params is in EVALB format,
+(where gold and parses are files with parse trees, params is in EVALB format,
 and options may consist of:
 
---goldenc enc
---parsesenc enc  To specify a different encoding than the default UTF-8.
 --cutofflen n    Overrides the sentence length cutoff of the parameter file.
 --verbose        Print table with per sentence information.
 --debug          Print debug information showing per sentence bracketings etc.
 --disconly       Only evaluate bracketings of discontinuous constituents
                  (only affects Parseval measures).
+--goldenc enc
+--parsesenc enc  To specify a different encoding than the default UTF-8.
+--goldfmt
+--parsesfmt      Specify a corpus format. Options: export, bracket, discbracket
 
 Example:
 %s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
@@ -29,7 +30,7 @@ Example:
 
 def main():
 	flags = ("test", "verbose", "debug", "disconly", "ted")
-	options = ('inputenc=', 'outputenc=', 'cutofflen=')
+	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
 		opts = dict(opts)
@@ -45,24 +46,22 @@ def main():
 	if '--verbose' in opts: param['DEBUG'] = 1
 	if '--debug' in opts: param['DEBUG'] = 2
 	if '--ted' in opts: param['TED'] = 1
-	doeval(goldfile, parsesfile, param,
-		opts.get('--inputenc', 'utf-8'),
-		opts.get('--outputenc', 'utf-8'))
-
-def doeval(goldfile, parsesfile, param, goldencoding, parsesencoding):
 	assert os.path.exists(goldfile), "gold file not found"
 	assert os.path.exists(parsesfile), "parses file not found"
-	gold = NegraCorpusReader(*splitpath(goldfile), encoding=goldencoding)
-	parses = NegraCorpusReader(*splitpath(parsesfile), encoding=parsesencoding)
-	goldlen = len(gold.parsed_sents())
-	parseslen = len(parses.parsed_sents())
-	start = 0; end = goldlen
-	if start < 0: start += goldlen
-	if end < 0: end += goldlen
-	assert goldlen == parseslen, ("unequal number of sentences "
-		"in gold & candidates: %d vs %d" % (goldlen, parseslen))
-	goldlen = end - start
+	Readers = {'export' : NegraCorpusReader,
+		'bracket': BracketCorpusReader,
+		'discbracket': DiscBracketCorpusReader}
+	assert opts.get('--goldfmt', 'export') in Readers
+	assert opts.get('--parsesfmt', 'export') in Readers
+	goldencoding = opts.get('--goldenc', 'utf-8')
+	parsesencoding = opts.get('--parsesenc', 'utf-8')
+	goldreader = Readers[opts.get('--goldfmt', 'export')]
+	parsesreader = Readers[opts.get('--parsesfmt', 'export')]
+	gold = goldreader(*splitpath(goldfile), encoding=goldencoding)
+	parses = parsesreader(*splitpath(parsesfile), encoding=parsesencoding)
+	doeval(gold, parses, param)
 
+def doeval(gold, parses, param):
 	if param["DEBUG"]:
 		print "Parameters:"
 		for a in param: print "%s\t%s" % (a, param[a])
@@ -80,10 +79,13 @@ def doeval(goldfile, parsesfile, param, goldencoding, parsesencoding):
 	goldbcat = defaultdict(multiset)
 	candbcat = defaultdict(multiset)
 	ted = denom = 0
-	for n, ctree, csent, gtree, gsent in izip(count(1), parses.parsed_sents(),
-		parses.sents(), gold.parsed_sents(), gold.sents()):
-		if n < start: continue
-		elif n > end: break
+	parses_sents = parses.sents()
+	gold_sents = gold.sents()
+	gold_parsed_sents = gold.parsed_sents()
+	for n, ctree in parses.parsed_sents().iteritems():
+		csent = parses_sents[n]
+		gsent = gold_sents[n]
+		gtree = gold_parsed_sents[n]
 		cpos = sorted(ctree.pos())
 		gpos = sorted(gtree.pos())
 		lencpos = sum(1 for _, b in cpos
@@ -285,11 +287,10 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 	for each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
 	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"))
-	frozenset([('VP', frozenset(['0', '2'])),
-				('S', frozenset(['1', '0', '2']))])
-	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"), delete=["NP"])
-	frozenset([('VP', frozenset(['0', '2'])),
-				('S', frozenset(['0', '2']))])
+	Counter({('VP', frozenset(['0', '2'])): 1,
+				('S', frozenset(['1', '0', '2'])): 1})
+	>>> bracketings(Tree("(S (NP 1) (VP (VB 0) (JJ 2)))"), delete=["S"])
+	Counter({('VP', frozenset(['0', '2'])): 1})
 	"""
 	return multiset( (a.node if labeled else "", frozenset(a.leaves()) )
 			for a in tree.subtrees()
@@ -299,8 +300,8 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 
 def printbrackets(brackets):
 	return ", ".join("%s[%s]" % (a, ",".join(
-		"-".join(str(y) for y in set((x[0], x[-1])))
-		for x in ranges(sorted(b)))) for a, b in brackets)
+		"-".join(str(y) for y in set(x))
+		for x in intervals(sorted(b)))) for a, b in brackets)
 
 def leafancestorpaths(tree, delete):
 	#uses [] to mark components, and () to mark constituent boundaries
@@ -383,14 +384,42 @@ def splitpath(path):
 	if "/" in path: return path.rsplit("/", 1)
 	else: return ".", path
 
+def intervals(s):
+	""" partition s into a sequence of intervals corresponding to contiguous ranges
+	An interval is a pair (a, b), with a <= b denoting terminals x s.t. a <= x <= b
+	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
+	[(0, 1), (3, 4), (6, 8)]"""
+	start = prev = None
+	for a in s:
+		if start is None: start = prev = a
+		elif a == prev + 1: prev = a
+		else:
+			yield start, prev
+			start = prev = a
+	if start is not None: yield start, prev
+
+def disc(node):
+	""" This function evaluates whether a particular node is locally
+	discontinuous.  The root node will, by definition, be continuous.
+	Nodes can be continuous even if some of their children are discontinuous.
+	"""
+	if not isinstance(node, Tree): return False
+	start = prev = None
+	for a in sorted(node.leaves()):
+		if start is None: start = prev = a
+		elif a == prev + 1: prev = a
+		else: return True
+	return False
+
 def nonetozero(a):
 	try: result = a()
 	except ZeroDivisionError: return 0
 	return 0 if result is None else result
 
 def test():
-	doeval("sample2.export", "sample2.export", readparams(None),
-		'iso-8859-1', 'iso-8859-1')
-	exit(0)
+	doeval(
+		NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1"),
+		NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1"),
+		readparams(None))
 
 if __name__ == '__main__': main()

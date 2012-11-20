@@ -307,10 +307,10 @@ def main():
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 		headorder=False, headfinal=True, headreverse=False)
 	train = 0; test = 3; testmaxlen = 999;
-	#trees = corpus.parsed_sents()[:train]
-	#sents = corpus.sents()[:train]
-	trees = corpus.parsed_sents()
-	sents = corpus.sents()
+	#trees = corpus.parsed_sents().values()[:train]
+	#sents = corpus.sents().values()[:train]
+	trees = corpus.parsed_sents().values()
+	sents = corpus.sents().values()
 
 	dtrees = [t.copy(True) for t in trees]
 	parenttrees = [t.copy(True) for t in trees]
@@ -339,8 +339,8 @@ def main():
 	fine999x = dop_lcfrs_rules(trees, sents)
 	fine999 = Grammar(fine999x)
 	fine1 = Grammar(dop_lcfrs_rules(dtrees, sents))
-	trees = list(corpus.parsed_sents()[train:train+test])
-	sents = corpus.tagged_sents()[train:train+test]
+	trees = corpus.parsed_sents().values()[train:train+test]
+	sents = corpus.tagged_sents().values()[train:train+test]
 	if subsetgrammar(normallcfrs, fine999x):
 		print "DOP grammar is a superset"
 	else: print "DOP grammar is NOT a superset!"

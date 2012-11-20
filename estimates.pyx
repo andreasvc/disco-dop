@@ -623,10 +623,10 @@ def main():
 	from treetransforms import addfanoutmarkers
 	from nltk import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
-	trees = list(corpus.parsed_sents())
+	trees = corpus.parsed_sents().values()
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
 	map(addfanoutmarkers, trees)
-	grammar = Grammar(induce_plcfrs(trees, corpus.sents()))
+	grammar = Grammar(induce_plcfrs(trees, corpus.sents().values()))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),

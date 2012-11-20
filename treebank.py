@@ -1,12 +1,11 @@
 from nltk import ParentedTree, Tree
 from itertools import count, repeat
+from collections import OrderedDict, deque
 from operator import itemgetter
 from os import path
 from glob import glob
 import re, sys, codecs
 
-BOS = re.compile("^#BOS.*\n")
-EOS = re.compile("^#EOS")
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 #def negratransformrations(trees,
@@ -46,22 +45,34 @@ class NegraCorpusReader(object):
 				"no files matched pattern %s" % path.join(root, fileids))
 		self._block_cache = self._read_blocks()
 	def parsed_sents(self):
+		""" Return a dictionary of parse trees. """
 		if not self._parsed_sents_cache:
-			self._parsed_sents_cache = map(self._parse, self._block_cache)
+			self._parsed_sents_cache = OrderedDict((a, self._parse(b))
+					for a, b in self._block_cache.iteritems())
 		return self._parsed_sents_cache
 	def tagged_sents(self):
+		""" Return a dictionary of tagged sentences,
+		each sentence being a list of (word, tag) tuples. """
 		if not self._tagged_sents_cache:
-			self._tagged_sents_cache = map(self._tag, self._block_cache)
+			self._tagged_sents_cache = OrderedDict((a, self._tag(b))
+					for a, b in self._block_cache.iteritems())
 		return self._tagged_sents_cache
 	def sents(self):
+		""" Return a dictionary of sentences, each sentence being a list of
+		words. """
 		if not self._sents_cache:
-			self._sents_cache = map(self._word, self._block_cache)
+			self._sents_cache = OrderedDict((a, self._word(b))
+					for a, b in self._block_cache.iteritems())
 		return self._sents_cache
-	def blocks(self):
-		""" Return a list of blocks from the treebank file,
-		with any transformations applied."""
-		return [export(*x) for x in zip(self.parsed_sents(),
-				self.sents(), repeat(None))]
+	def blocks(self, includetransformations=False):
+		""" Return a list of strings containing the raw representation of
+		trees in the treebank, verbatim or with transformations applied."""
+		if includetransformations:
+			return OrderedDict((x[2], export(*x)) for x in zip(
+				self.parsed_sents().values(),
+				self.sents().values(), self.sents().keys()))
+		return OrderedDict((a, "\n".join(b))
+				for a, b in self._block_cache.iteritems())
 	def _read_blocks(self):
 		def sixelements(a):
 			""" take a line and add dummy lemma if that field is not present """
@@ -70,19 +81,25 @@ class NegraCorpusReader(object):
 			if lena == 5: return a[:1] + [''] + a[1:]
 			elif lena >= 6: return a[:6] # skip secondary edges
 			else: raise ValueError("expected at lest 5 columns: %r" % a)
-		result = []
+		result = OrderedDict()
 		started = False
 		for filename in self._filenames:
 			for line in codecs.open(filename, encoding=self._encoding):
 				if line.startswith("#BOS"):
-					if not started:
-						started = True
-						lines = []
-					else: raise ValueError("beginning of sentence marker while "
+					assert not started, ("beginning of sentence marker while "
 							"previous one still open: %s" % line)
-				elif started and line.startswith("#EOS"):
+					started = True
+					sentid = line.strip().split()[1]
+					lines = []
+				elif line.startswith("#EOS"):
+					assert started, "end of sentence marker while none started"
+					thissentid = line.strip().split()[1]
+					assert sentid == thissentid, ("unexpected sentence id: "
+							"start=%s, end=%s" % (sentid, thissentid))
 					started = False
-					result.append(lines)
+					assert sentid not in result, (
+							"duplicate sentence ID: %s" % sentid)
+					result[sentid] = lines
 				elif started: lines.append(sixelements(line.split()))
 		return result
 	def _parse(self, s):
@@ -136,7 +153,7 @@ def export(tree, sent, n):
 	corresponding non-terminals to a single string in Negra's export format.
 	Lemmas, functions, and morphology information will be empty. """
 	result = []
-	if n: result.append("#BOS %d" % n)
+	if n is not None: result.append("#BOS %s" % n)
 	leaves = tree.treepositions('leaves')
 	wordsandpreterminals = leaves + [a[:-1] for a in leaves]
 	phrasalnodes = [a for a in tree.treepositions()
@@ -155,7 +172,7 @@ def export(tree, sent, n):
 				tree[idx].node,
 				"--", "--",
 				str(500+phrasalnodes.index(idx[:-1]) if len(idx) > 1 else 0))))
-	if n: result.append("#EOS %d" % n)
+	if n is not None: result.append("#EOS %s" % n)
 	return "\n".join(result) + '\n' #.encode("utf-8")
 
 class DiscBracketCorpusReader(object):
@@ -191,25 +208,28 @@ class DiscBracketCorpusReader(object):
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
 	def sents(self):
-		return [line.split("\t", 1)[1].rstrip("\n\r").split(" ")
+		return OrderedDict(enumerate(
+			line.split("\t", 1)[1].rstrip("\n\r").split(" ")
 			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)]
+				for line in codecs.open(filename, encoding=self._encoding)))
 	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
-		return [zip(line.split("\t", 1)[1].rstrip("\n\r").split(" "),
+		return OrderedDict(enumerate(
+				zip(line.split("\t", 1)[1].rstrip("\n\r").split(" "),
 				map(itemgetter(1), sorted(Tree.parse(line.split("\t", 1)[0],
 					parse_leaf=int).pos())))
 			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)]
+				for line in codecs.open(filename, encoding=self._encoding)))
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
-			self._parsed_sents_cache = map(self._parse, self.blocks())
+			self._parsed_sents_cache = OrderedDict(enumerate(
+					map(self._parse, self.blocks())))
 		return self._parsed_sents_cache
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
 		trees in the treebank, with any transformations applied."""
-		return [line for filename in self._filenames
-			for line in codecs.open(filename, encoding=self._encoding)]
+		return OrderedDict(enumerate(line for filename in self._filenames
+			for line in codecs.open(filename, encoding=self._encoding)))
 	def _parse(self, s):
 		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=int)
 		# roughly order constituents by order in sentence
@@ -260,23 +280,24 @@ class BracketCorpusReader(object):
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
 	def sents(self):
-		return [Tree(line).leaves()
+		return OrderedDict(enumerate([Tree(line).leaves()
 			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)]
+				for line in codecs.open(filename, encoding=self._encoding)]))
 	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
-		return [Tree(line).pos()
+		return OrderedDict(enumerate([Tree(line).pos()
 			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)]
+				for line in codecs.open(filename, encoding=self._encoding)]))
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
-			self._parsed_sents_cache = map(self._parse, self.blocks())
+			self._parsed_sents_cache = OrderedDict(enumerate(
+					map(self._parse, self.blocks())))
 		return self._parsed_sents_cache
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
 		trees in the treebank, with any transformations applied."""
-		return [line for filename in self._filenames
-			for line in codecs.open(filename, encoding=self._encoding)]
+		return OrderedDict(enumerate([line for filename in self._filenames
+			for line in codecs.open(filename, encoding=self._encoding)]))
 	def _parse(self, s):
 		c = count()
 		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=lambda _: c.next())
@@ -724,7 +745,6 @@ def balancedpunctraise(tree, sent):
 		elif sent[terminal] in match:
 			punctmap[match[sent[terminal]]] = terminal
 
-from collections import deque
 def leaves(node):
 	"""Return the leaves of the tree. Non-recursive version."""
 	queue, theleaves = deque(node), []
@@ -749,13 +769,13 @@ def puncttest():
 	mangledtrees = NegraCorpusReader(".", file, headorder=False,
 			encoding="iso-8859-1", movepunct=True)
 	nopunct = NegraCorpusReader(".", file, headorder=False,
-			encoding="iso-8859-1", removepunct=True).parsed_sents()
+			encoding="iso-8859-1", removepunct=True).parsed_sents().values()
 	originals = NegraCorpusReader(".", file, headorder=False,
-			encoding="iso-8859-1").parsed_sents()
+			encoding="iso-8859-1").parsed_sents().values()
 	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
-			mangledtrees.parsed_sents(), mangledtrees.sents(), nopunct,
-			originals):
+			mangledtrees.parsed_sents().values(), mangledtrees.sents().values(),
+			nopunct, originals):
 		print n,
 		for a, b in zip(sorted(mangled.subtrees(phrasal),
 			key=lambda n: min(leaves(n))),
@@ -771,6 +791,7 @@ def puncttest():
 
 def main():
 	from grammar import canonicalize
+	from nltk import FreqDist
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
@@ -782,10 +803,9 @@ def main():
 	print "\nunfolded"
 	correct = exact = d = 0
 	nk = set(); mo = set()
-	from nltk import FreqDist
 	fnk = FreqDist(); fmo = FreqDist()
-	for a, b, c in zip(n.parsed_sents()[:100],
-			nn.parsed_sents()[:100], n.sents()[:100]):
+	for a, b, c in zip(n.parsed_sents().values()[:100],
+			nn.parsed_sents().values()[:100], n.sents().values()[:100]):
 		#if len(c) > 15: continue
 		for x in a.subtrees(lambda n: n.node == "NP"):
 			nk.update(y.node for y in x if function(y) == "NK")
