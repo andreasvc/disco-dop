@@ -71,7 +71,7 @@ class NegraCorpusReader(object):
 			return OrderedDict((x[2], export(*x)) for x in zip(
 				self.parsed_sents().values(),
 				self.sents().values(), self.sents().keys()))
-		return OrderedDict((a, "\n".join(b))
+		return OrderedDict((a, "\n".join("\t".join(c) for c in b))
 				for a, b in self._block_cache.iteritems())
 	def _read_blocks(self):
 		def sixelements(a):
