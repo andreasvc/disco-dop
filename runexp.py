@@ -539,7 +539,8 @@ def worker(args):
 def writeresults(results, gold, gsent, resultdir, category, sentinit):
 	codecs.open("%s/%s.export" % (resultdir,
 			".".join(category, "gold") if category else "gold"),
-			"w", encoding='utf-8').writelines(gold[n] for n in gold)
+			"w", encoding='utf-8').writelines("#BOS %s\n%s\n#EOS %s\n" % (
+			n, gold[n], n) for n in gold)
 	for result in results:
 		codecs.open("%s/%s.export" % (resultdir,
 			".".join(category, result.name) if category else result.name),
