@@ -143,7 +143,7 @@ def main(
 	logging.info("%d sentences in test corpus %s/%s",
 			len(test.parsed_sents()), corpusdir, testcorpus)
 	logging.info("%d test sentences before length restriction",
-			len(gold_sents[skip:skip+testsents]))
+			len(gold_sents.keys()[skip:skip+testsents]))
 	if usetagger:
 		if usetagger == 'treetagger':
 			# these two tags are never given by tree-tagger,
