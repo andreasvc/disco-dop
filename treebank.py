@@ -197,7 +197,7 @@ class DiscBracketCorpusReader(object):
 			before or after the head. When true, the side on which the head is
 				will be the reversed side.
 			dounfold: whether to apply corpus transformations
-			functiontags: whether to add function tags to node labels e.g. NP+OA
+			functiontags: ignored
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
 		self.reverse = headreverse; self.headfinal = headfinal
@@ -247,7 +247,6 @@ class DiscBracketCorpusReader(object):
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
 			map(lambda x: headorder(x, self.headfinal, self.reverse),
 													result.subtrees())
-		if self.functiontags: addfunctions(result)
 		return result
 	def _word(self, s):
 		sent = s.split("\t", 1)[1].rstrip("\n\r").split(" ")
@@ -269,7 +268,8 @@ class BracketCorpusReader(object):
 			before or after the head. When true, the side on which the head is
 				will be the reversed side.
 			dounfold: whether to apply corpus transformations
-			functiontags: whether to add function tags to node labels e.g. NP+OA
+			functiontags: whether to leaves function tags on node labels (True)
+				e.g. NP-SBJ, or strip them away (False).
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
 		self.unfold = dounfold; self.functiontags = functiontags
@@ -314,7 +314,7 @@ class BracketCorpusReader(object):
 		if self.headrules:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
 			map(headmark, result.subtrees())
-		if self.functiontags: addfunctions(result)
+		if not self.functiontags: stripfunctions(result)
 		return result
 	def _word(self, s):
 		sent = Tree(s).leaves()
@@ -326,6 +326,9 @@ def addfunctions(tree):
 	for a in tree.subtrees():
 		if a.source[FUNC].split("-")[0]:
 			a.node += "+%s" % a.source[FUNC].split("-")[0]
+
+def stripfunctions(tree):
+	for a in tree.subtrees(): a.node = a.node.split("-")[0].split("=")[0]
 
 def readheadrules(filename):
 	headrules = {}

@@ -67,6 +67,7 @@ def main(
 		testcorpus="sample2.export", testencoding="iso-8859-1",
 		movepunct=False,
 		removepunct=False,
+		functiontags=False, # whether to add/strip function tags from node labels
 		unfolded=False,
 		testmaxwords=40,
 		trainmaxwords=40,
@@ -117,7 +118,8 @@ def main(
 	elif corpusfmt == 'discbracket': CorpusReader = DiscBracketCorpusReader
 	corpus = CorpusReader(corpusdir, traincorpus, encoding=trainencoding,
 		headrules=headrules, headfinal=True, headreverse=False,
-		dounfold=unfolded, movepunct=movepunct, removepunct=removepunct)
+		movepunct=movepunct, removepunct=removepunct, functiontags=functiontags,
+		dounfold=unfolded)
 	logging.info("%d sentences in corpus %s/%s",
 			len(corpus.parsed_sents()), corpusdir, traincorpus)
 	if isinstance(trainsents, float):
