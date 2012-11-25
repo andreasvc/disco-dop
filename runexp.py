@@ -120,7 +120,7 @@ def main(
 		headrules=headrules, headfinal=True, headreverse=False,
 		movepunct=movepunct, removepunct=removepunct, functiontags=functiontags,
 		dounfold=unfolded)
-	logging.info("%d sentences in corpus %s/%s",
+	logging.info("%d sentences in training corpus %s/%s",
 			len(corpus.parsed_sents()), corpusdir, traincorpus)
 	if isinstance(trainsents, float):
 		trainsents = int(trainsents * len(corpus.sents()))
@@ -139,9 +139,11 @@ def main(
 			removepunct=removepunct, movepunct=movepunct)
 	gold_sents = test.tagged_sents()
 	test_parsed_sents = test.parsed_sents()
-	logging.info("%d test sentences before length restriction",
-			len(gold_sents))
 	if skiptrain: skip += trainsents
+	logging.info("%d sentences in test corpus %s/%s",
+			len(test.parsed_sents()), corpusdir, testcorpus)
+	logging.info("%d test sentences before length restriction",
+			len(gold_sents[skip:skip+testsents]))
 	if usetagger:
 		if usetagger == 'treetagger':
 			# these two tags are never given by tree-tagger,
