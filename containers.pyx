@@ -581,8 +581,10 @@ cdef class CFGEdge:
 		elif op == 1: return self.inside <= other.inside
 		elif op == 0: return self.inside < other.inside
 	def __repr__(self):
-		return "%s(%g, 0x%x, %r)" % (self.__class__.__name__,
-				self.inside, <long>self.rule, self.mid)
+		return "%s(%g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r)" % (
+			self.__class__.__name__, self.inside, self.rule.prob,
+			self.rule.args, self.rule.lengths, self.rule.lhs, self.rule.rhs1,
+			self.rule.rhs2, self.rule.no, self.mid)
 
 cdef class RankedEdge:
 	def __cinit__(self, ChartItem head, LCFRSEdge edge, int j1, int j2):

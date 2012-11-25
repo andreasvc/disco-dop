@@ -302,10 +302,11 @@ def main():
 	k = 50
 	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
 	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
-	#	encoding="utf-8", headorder=True, headfinal=True, headreverse=False)
+	#	encoding="utf-8", headrules="negra.headrules", headfinal=True,
+	#   headreverse=False)
 	#train = 400; test = 40; testmaxlen = 999;
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-		headorder=False, headfinal=True, headreverse=False)
+		headrules=None, headfinal=True, headreverse=False)
 	train = 0; test = 3; testmaxlen = 999;
 	#trees = corpus.parsed_sents().values()[:train]
 	#sents = corpus.sents().values()[:train]

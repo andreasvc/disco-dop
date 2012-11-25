@@ -20,7 +20,8 @@ from treetransforms import binarize, unbinarize, optimalbinarize,\
 from coarsetofine import prunechart
 from parser import parse, cfgparse, pprint_chart
 from disambiguation import marginalize, viterbiderivation, sldop, sldop_simple
-from eval import bracketings, precision, recall, f_measure, printbrackets
+from eval import doeval, readparam, printbrackets, transform, \
+		bracketings, precision, recall, f_measure
 
 class DictObj(object):
 	""" A class to wrap a dictionary. """
@@ -36,30 +37,55 @@ def initworker(params):
 	global internalparams
 	internalparams = params
 
+defaultstage = dict(
+		name='stage1', # identifier, used for filenames
+		mode='plcfrs', # use the agenda-based PLCFRS parser
+		prune=False,	#whether to use previous chart to prune parsing of this stage
+		split=False, #split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
+		splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] } for pruning
+		markorigin=False, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
+		k = 50, #number of coarse pcfg derivations to prune with; k=0 => filter only
+		neverblockre=None, #do not prune nodes with label that match regex
+		getestimates=None, #compute & store estimates
+		useestimates=None,  #load & use estimates
+		dop=False, # enable DOP mode (DOP reduction / double DOP)
+		usedoubledop = False,	# when False, use DOP reduction instead
+		newdd=False, #use experimental, more efficient double dop algorithm
+		iterate=False, #for double dop, whether to include fragments of fragments
+		complement=False, #for double dop, whether to include fragments which form
+				#the complement of the maximal recurring fragments extracted
+		sample=False, both=False,
+		m = 10000,		#number of derivations to sample/enumerate
+		estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
+		sldop_n=7)
+
 def main(
-		stages=(), # see variable 'defaults' below
+		stages=(), # see variable 'defaults' above
 		corpusfmt="export", # choices: export, discbracket, bracket
 		corpusdir=".",
-		corpusfile="sample2.export",
-		encoding="iso-8859-1",
+		traincorpus="sample2.export", trainencoding="iso-8859-1",
+		testcorpus="sample2.export", testencoding="iso-8859-1",
 		movepunct=False,
 		removepunct=False,
-		unfolded = False,
-		testmaxwords = 40,
-		trainmaxwords = 40,
-		trainsents = 2,
-		testsents = 1, # number of sentences to parse
-		skip=0,	# dev set
-		#skip=1000, #skip dev set to get test set
+		unfolded=False,
+		testmaxwords=40,
+		trainmaxwords=40,
+		trainsents=2,
+		testsents=1, # number of sentences to parse
+		skiptrain=True, # test set starts after training set
+		# (useful when they are in the same file)
+		skip=0,	# number of sentences to skip from test corpus
 		usetagger=None,	#default is to use gold tags from treebank.
-		bintype = "binarize", # choices: binarize, nltk, optimal, optimalhead
-		factor = "right",
-		revmarkov = True,
-		v = 1,
-		h = 2,
-		fanout_marks = True,
-		fanout_marks_before_bin = False,
-		tailmarker = "",
+		bintype="binarize", # choices: binarize, nltk, optimal, optimalhead
+		factor="right",
+		revmarkov=True,
+		v=1,
+		h=2,
+		leftMostUnary=True, #start binarization with unary node
+		rightMostUnary=True, #end binarization with unary node
+		headrules=None, # rules for finding heads of constituents
+		fanout_marks_before_bin=False,
+		tailmarker="",
 		quiet=False, reallyquiet=False, #quiet=no per sentence results
 		numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
 		resultdir='results'):
@@ -67,33 +93,11 @@ def main(
 	assert bintype in ("optimal", "optimalhead", "binarize", "nltk")
 	assert usetagger in (None, "treetagger", "stanford")
 
-	defaults = dict(
-			name='stage1', # identifier, used for filenames
-			mode='plcfrs', # use the agenda-based PLCFRS parser
-			prune=False,	#whether to use previous chart to prune parsing of this stage
-			split=False, #split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
-			splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] } for pruning
-			markorigin=False, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
-			k = 50, #number of coarse pcfg derivations to prune with; k=0 => filter only
-			neverblockre=None, #do not prune nodes with label that match regex
-			getestimates=None, #compute & store estimates
-			useestimates=None,  #load & use estimates
-			dop=False, # enable DOP mode (DOP reduction / double DOP)
-			usedoubledop = False,	# when False, use DOP reduction instead
-			newdd=False, #use experimental, more efficient double dop algorithm
-			iterate=False, #for double dop, whether to include fragments of fragments
-			complement=False, #for double dop, whether to include fragments which form
-					#the complement of the maximal recurring fragments extracted
-			sample=False, both=False,
-			m = 10000,		#number of derivations to sample/enumerate
-			estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
-			sldop_n=7)
-	for n, a in enumerate(stages):
-		tmp = defaults.copy()
-		tmp.update(a)
-		assert tmp['estimator'] in (
-				"dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
-		stages[n] = DictObj(**tmp)
+	for stage in stages:
+		for key in stage:
+			assert key in defaultstage, "unrecognized option: %r" % key
+	stages = [DictObj(**dict((k, stage.get(k, v))
+			for k, v in defaultstage.iteritems())) for stage in stages]
 
 	os.mkdir(resultdir)
 	# Log everything, and send it to stderr, in a format with just the message.
@@ -111,33 +115,31 @@ def main(
 	if corpusfmt == 'export': CorpusReader = NegraCorpusReader
 	elif corpusfmt == 'bracket': CorpusReader = BracketCorpusReader
 	elif corpusfmt == 'discbracket': CorpusReader = DiscBracketCorpusReader
-	corpus = CorpusReader(corpusdir, corpusfile, encoding=encoding,
-		headorder=(bintype in ("binarize", "optimalhead")),
-		headfinal=True, headreverse=False, unfold=unfolded,
+	corpus = CorpusReader(corpusdir, traincorpus, encoding=trainencoding,
+		headrules=headrules, headfinal=True, headreverse=False, unfold=unfolded,
 		movepunct=movepunct, removepunct=removepunct)
 	logging.info("%d sentences in corpus %s/%s",
-			len(corpus.parsed_sents()), corpusdir, corpusfile)
+			len(corpus.parsed_sents()), corpusdir, traincorpus)
 	if isinstance(trainsents, float):
 		trainsents = int(trainsents * len(corpus.sents()))
 	trees = corpus.parsed_sents().values()[:trainsents]
 	sents = corpus.sents().values()[:trainsents]
+	train_tagged_sents = corpus.tagged_sents().values()[:trainsents]
 	blocks = corpus.blocks().values()[:trainsents]
+	assert trees, "training corpus should be non-empty"
 	logging.info("%d training sentences before length restriction", len(trees))
 	trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks)
 		if len(sent[1]) <= trainmaxwords])
 	logging.info("%d training sentences after length restriction <= %d",
 		len(trees), trainmaxwords)
 
-	test = CorpusReader(corpusdir, corpusfile, encoding=encoding,
+	test = CorpusReader(corpusdir, testcorpus, encoding=testencoding,
 			removepunct=removepunct, movepunct=movepunct)
+	gold_sents = test.tagged_sents()
 	test_parsed_sents = test.parsed_sents()
-	test_tagged_sents = test.tagged_sents()
-	test = OrderedDict((a, (test_parsed_sents[a], test_tagged_sents[a], block))
-		for a, block in test.blocks().items()[
-		trainsents+skip:trainsents+skip+testsents])
-
-	assert test, "test corpus should be non-empty"
-
+	logging.info("%d test sentences before length restriction",
+			len(gold_sents))
+	if skiptrain: skip += trainsents
 	if usetagger:
 		if usetagger == 'treetagger':
 			# these two tags are never given by tree-tagger,
@@ -145,41 +147,59 @@ def main(
 			overridetags = ("PTKANT", "PIDAT")
 		else: overridetags = ("PTKANT", )
 		taglex = defaultdict(set)
-		for sent in corpus.tagged_sents().values()[:trainsents]:
+		for sent in train_tagged_sents:
 			for word, tag in sent: taglex[word].add(tag)
 		overridetagdict = dict((tag,
 			set(word for word, tags in taglex.iteritems() if tags == set([tag])))
 			for tag in overridetags)
 		tagmap = { "$(": "$[", "PAV": "PROAV" }
-		dotagging(usetagger, test[1], overridetagdict, tagmap)
-
-	logging.info("%d test sentences before length restriction", len(test))
-	test = OrderedDict(a for a in test.items() if len(a[1][1]) <= testmaxwords)
+		test_tagged_sents = dotagging(usetagger, OrderedDict((a, b)
+				for a, b in gold_sents.items()[skip:skip+testsents]
+				if len(b) <= testmaxwords),
+				overridetagdict, tagmap)
+	else: test_tagged_sents = gold_sents
+	test = OrderedDict((a, (test_parsed_sents[a], test_tagged_sents[a], block))
+			for a, block in test.blocks().items()[skip:skip+testsents]
+			if len(test_tagged_sents[a]) <= testmaxwords)
+	assert test_tagged_sents, "test corpus should be non-empty"
 	logging.info("%d test sentences after length restriction <= %d",
-		len(test), testmaxwords)
+			len(test), testmaxwords)
+
 	logging.info("read training & test corpus")
 
 	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-			revmarkov, fanout_marks, fanout_marks_before_bin, testmaxwords,
-			resultdir, numproc)
+			revmarkov, leftMostUnary, rightMostUnary,
+			fanout_marks_before_bin, testmaxwords, resultdir, numproc)
 
 	begin = time.clock()
-	results = doparse(stages, unfolded, bintype, fanout_marks,
+	results = doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, test, testmaxwords, testsents,
 			trees[0].node, True, resultdir, numproc)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
-	print "testmaxwords", testmaxwords, "unfolded", unfolded,
-	print "fanout marks", fanout_marks, "binarized", bintype,
+	print "testmaxwords", testmaxwords, "binarization", bintype,
+	if unfolded: print "unfolded",
+	if fanout_marks_before_bin: print "fanout marks before binarization",
 	if stages[-1].dop:
 		print "estimator", stages[-1].estimator,
-		if 'sl-dop' in stages[-1].estimator: print stages[-1].sldop_n
-		if stages[-1].usedoubledop: print "doubledop"
-	doeval(*results)
+		if 'sl-dop' in stages[-1].estimator: print stages[-1].sldop_n,
+		if stages[-1].usedoubledop: print "doubledop",
+		print
+	param = readparam("proper.prm")
+	param["DEBUG"] = -1
+	for result in results[0]:
+		print "\n%s" % (" " + result.name.upper() + " ").center(35, "="),
+		doeval(test_parsed_sents, gold_sents,
+				result.parsetrees, test_tagged_sents, param)
+		nsent = len(result.parsetrees)
+		print "coverage:    %s = %6.2f" % (
+				("%d / %d" % (nsent - result.noparse, nsent)).rjust(11),
+				100.0 * (nsent - result.noparse) / nsent)
 
 def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-		revmarkov, fanout_marks, fanout_marks_before_bin, testmaxwords, resultdir,
-		numproc):
+		revmarkov, leftMostUnary, rightMostUnary,
+		fanout_marks_before_bin, testmaxwords, resultdir, numproc):
+	""" Apply binarization and read off the requested grammars. """
 	f, n = treebankfanout(trees)
 	logging.info("treebank fan-out before binarization: %d #%d", f, n)
 	# binarization
@@ -194,9 +214,8 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			"tailmarker" if tailmarker else '')
 		for a in trees:
 			binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
-					tailMarker=tailmarker, leftMostUnary=True,
-					rightMostUnary=True, reverse=revmarkov)
-					#fixme: leftMostUnary=False, rightMostUnary=False, 
+					tailMarker=tailmarker, leftMostUnary=leftMostUnary,
+					rightMostUnary=rightMostUnary, reverse=revmarkov)
 	elif bintype == "optimal":
 		trees = [Tree.convert(optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -204,7 +223,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		trees = [Tree.convert(
 					optimalbinarize(tree, headdriven=True, h=h, v=v))
 						for n, tree in enumerate(trees)]
-	if fanout_marks: trees = map(addfanoutmarkers, trees)
+	trees = map(addfanoutmarkers, trees)
 	logging.info("binarized %s cpu time elapsed: %gs",
 						bintype, time.clock() - begin)
 	logging.info("binarized treebank fan-out: %d #%d", *treebankfanout(trees))
@@ -224,6 +243,8 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		else: traintrees = trees
 		if stage.dop:
 			stages[n].backtransform = None
+			assert stage.estimator in (
+				"dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
 			if stage.estimator == "shortest":
 				# the secondary model is used to resolve ties
 				# for the shortest derivation
@@ -342,15 +363,15 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 
 #def doparse(**params):
 #	params = DictObj(**params)
-def doparse(stages, unfolded, bintype, fanout_marks, fanout_marks_before_bin,
+def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		test, testmaxwords, testsents, top, tags=True,
 		resultdir="results", numproc=None, category=None, sentinit=0,
 		deletelabel=("ROOT", "VROOT", "TOP", "$.", "$,", "$(", "$[")):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
-			fanout_marks=fanout_marks,
 			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
-			resultdir=resultdir, category=category, sentinit=sentinit)
+			resultdir=resultdir, category=category, sentinit=sentinit,
+			deletelabel=deletelabel)
 	goldbrackets = multiset()
 	maxlen = min(testmaxwords, maxbitveclen)
 	gold = OrderedDict.fromkeys(test)
@@ -378,15 +399,18 @@ def doparse(stages, unfolded, bintype, fanout_marks, fanout_marks_before_bin,
 					#u" ".join(a[0] for a in sent),	# words only
 					u" ".join(a[0]+u"/"+a[1] for a in sent), # word/TAG
 					msg)
-		goldb = bracketings(tree)
+		evaltree = tree.copy(True)
+		transform(evaltree, [w for w, _ in sent], evaltree.pos(),
+				dict(evaltree.pos()), deletelabel, {}, {}, False)
+		goldb = bracketings(evaltree)
 		assert gold[sentid] == gsent[sentid] == None
 		gold[sentid] = block
 		gsent[sentid] = sent
 		goldbrackets.update((sentid, (label, span)) for label, span
-				in goldb.elements() if label not in deletelabel)
+				in goldb.elements())
 		for n, r in enumerate(sentresults):
 			results[n].brackets.update((sentid, (label, span)) for label, span
-					in r.candb.elements() if label not in deletelabel)
+					in r.candb.elements())
 			assert (results[n].parsetrees[sentid]
 				== results[n].elapsedtime[sentid] == None)
 			results[n].parsetrees[sentid] = r.parsetree
@@ -414,7 +438,10 @@ def worker(args):
 	""" parse a sentence using specified stages (pcfg, plcfrs, dop, ...) """
 	nsent, (tree, sent, _) = args
 	d = internalparams
-	goldb = bracketings(tree)
+	evaltree = tree.copy(True)
+	transform(evaltree, [w for w, _ in sent], evaltree.pos(),
+			dict(evaltree.pos()), d.deletelabel, {}, {}, False)
+	goldb = bracketings(evaltree)
 	results = []
 	msg = ''
 	chart = {}; start = None
@@ -424,9 +451,14 @@ def worker(args):
 		msg += "%s:\t" % stage.name.upper()
 		if n == 0 or start:
 			if n != 0 and stage.prune:
-				whitelist, items = prunechart(chart, start,
+				try:
+					whitelist, items = prunechart(chart, start,
 						d.stages[n-1].grammar, stage.grammar, stage.k,
 						stage.splitprune, d.stages[n-1].markorigin)
+				except:
+					pprint_chart(chart,
+							[w.encode('unicode-escape') for w, _ in sent],
+							stage.grammar.tolabel)
 				msg += "coarse items before pruning: %d; after: %d\n\t" % (
 					(sum(len(a) for x in chart for a in x if a)
 					if d.stages[n-1].mode == 'pcfg' else len(chart)), items)
@@ -456,7 +488,7 @@ def worker(args):
 				#		[w.encode('unicode-escape') for w, _ in sent],
 				#		stage.grammar.tolabel)
 				logging.error("expected successful parse. "
-						"sent %d, %s." % (nsent, stage.name))
+						"sent %d, %s.", nsent, stage.name)
 				raise ValueError
 		# store & report result
 		if start:
@@ -501,7 +533,10 @@ def worker(args):
 			unbinarize(parsetree)
 			rem_marks(parsetree)
 			if d.unfolded: fold(parsetree)
-			candb = bracketings(parsetree)
+			evaltree = parsetree.copy(True)
+			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
+					dict(evaltree.pos()), d.deletelabel, {}, {}, False)
+			candb = bracketings(evaltree)
 			if goldb and candb:
 				prec = precision(goldb, candb)
 				rec = recall(goldb, candb)
@@ -524,7 +559,10 @@ def worker(args):
 			msg += "no parse. "
 			parsetree = defaultparse([(n, t) for n, (w, t) in enumerate(sent)])
 			parsetree = Tree.parse("(%s %s)" % (d.top, parsetree), parse_leaf=int)
-			candb = bracketings(parsetree)
+			evaltree = parsetree.copy(True)
+			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
+					dict(evaltree.pos()), d.deletelabel, {}, {}, False)
+			candb = bracketings(evaltree)
 			prec = precision(goldb, candb)
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
@@ -555,7 +593,7 @@ def writeresults(results, gold, gsent, resultdir, category, sentinit):
 	logging.info("wrote results to %s/%s.{gold,plcfrs,dop}",
 		resultdir, category or "results")
 
-def doeval(results, nsent, goldbrackets, gold, gsent):
+def olddoeval(results, nsent, goldbrackets, gold, gsent):
 	for n, result in enumerate(results):
 		if nsent == 0: break
 		logging.info("%s lp %5.2f lr %5.2f lf %5.2f\n"
@@ -617,11 +655,17 @@ def parsetepacoc(
 			complement=False, #for double dop, whether to include fragments which form
 		)),
 		unfolded=False, bintype="binarize", h=1, v=1, factor="right",
-		tailmarker='', revmarkov=False, fanout_marks=True,
+		tailmarker='', revmarkov=False,
+		leftMostUnary=True, rightMostUnary=True,
 		fanout_marks_before_bin=False,
 		trainmaxwords=999, testmaxwords=999, testsents=2000,
 		usetagger='stanford', resultdir="tepacoc", numproc=1):
 	trainsents = 25005
+	for stage in stages:
+		for key in stage:
+			assert key in defaultstage, "unrecognized option: %r" % key
+	stages = [DictObj(**dict((k, stage.get(k, v))
+			for k, v in defaultstage.iteritems())) for stage in stages]
 	os.mkdir(resultdir)
 	# Log everything, and send it to stderr, in a format with just the message.
 	formatstr = '%(message)s'
@@ -638,7 +682,8 @@ def parsetepacoc(
 					gzip.open("tiger.pickle.gz", "rb"))
 	except IOError: # file not found
 		corpus = NegraCorpusReader("../tiger/corpus", "tiger_release_aug07.export",
-				headorder=(bintype in ("binarize", "nltk")), headfinal=True,
+				headrules=("negra.headrules" if bintype in ("binarize", "nltk")
+						else None), headfinal=True,
 				headreverse=False, unfold=unfolded, movepunct=True,
 				removepunct=False, encoding='iso-8859-1')
 		corpus_sents = corpus.sents().values()
@@ -695,8 +740,8 @@ def parsetepacoc(
 							corpus_blocks)) if len(sent[1]) <= trainmaxwords
 							and n not in tepacocids][:trainsents])
 	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-			revmarkov, fanout_marks, fanout_marks_before_bin, testmaxwords,
-			resultdir, numproc)
+			revmarkov, leftMostUnary, rightMostUnary,
+			fanout_marks_before_bin, testmaxwords, resultdir, numproc)
 
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
@@ -705,7 +750,7 @@ def parsetepacoc(
 		if cat == 'baseline': continue
 		logging.info("category: %s", cat)
 		begin = time.clock()
-		results[cat] = doparse(stages, unfolded, bintype, fanout_marks,
+		results[cat] = doparse(stages, unfolded, bintype,
 				fanout_marks_before_bin, test, testmaxwords, testsents,
 				trees[0].node, True, resultdir, numproc, category=cat,
 				sentinit=cnt)
@@ -731,15 +776,15 @@ def parsetepacoc(
 			totresult.noparse += result.noparse
 			totresult.brackets |= result.brackets
 			totresult.elapsedtime.extend(result.elapsedtime)
-		doeval(*res)
+		olddoeval(*res)
 	logging.info("TOTAL")
 	# write TOTAL results file with all tepacoc sentences (not the baseline)
 	writeresults(totresults, gold, gsent, resultdir, "TOTAL", 0) #sentinit??
-	doeval(totresults, cnt, goldbrackets, gold, gsent)
+	olddoeval(totresults, cnt, goldbrackets, gold, gsent)
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info("category: %s", cat)
-	doeval(*doparse(stages, unfolded, bintype, fanout_marks,
+	olddoeval(*doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset[cat], testmaxwords, testsents,
 			trees[0].node, True, resultdir, numproc, category=cat,
 			sentinit=cnt))
@@ -771,16 +816,23 @@ def cycledetection(trees, sents):
 				sum(weights[c, d] for c, d in zip(b, b[1:])), " => ".join(b))
 
 def dotagging(usetagger, sents, overridetag, tagmap):
-	""" Use an external tool to tag a list of tagged sentences, overwriting the
-	original tags in-place. """
+	""" Use an external tool to tag a list of tagged sentences. """
 	logging.info("Start tagging.")
-	goldtags = [t for sent in sents for _, t in sent]
+	goldtags = [t for sent in sents.values() for _, t in sent]
 	if usetagger == "treetagger": # Tree-tagger
-		# ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
-		# ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
+		installation = """tree tagger not found. commands to install:
+mkdir tree-tagger && cd tree-tagger
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
+tar -xzf tree-tagger-linux-3.2.tar.gz
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+mkdir lib && cd lib
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
+gunzip german-par-linux-3.2-utf8.bin.gz"""
+		assert os.path.exists("tree-tagger/bin/tree-tagger"), installation
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
-			for tagsent in sents:
+			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
 				infile.write("\n".join(wordmangle(w, n, sent)
 					for n, w in enumerate(sent)) + "\n<S>\n")
@@ -793,14 +845,17 @@ def dotagging(usetagger, sents, overridetag, tagmap):
 				stdout=PIPE, shell=True)
 		tagout = tagger.stdout.read().decode('utf-8').split("<S>")[:-1]
 		os.unlink(inname)
-		taggedsents = [[tagmangle(a, None, overridetag, tagmap)
-					for a in tags.splitlines() if a.strip()]
-					for tags in tagout]
+		taggedsents = OrderedDict((n, [tagmangle(a, None, overridetag, tagmap)
+					for a in tags.splitlines() if a.strip()])
+					for n, tags in zip(sents, tagout))
 	elif usetagger == "stanford": # Stanford Tagger
-		# http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
+		installation = """Stanford tagger not found. Commands to install:
+wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
+tar -xzf stanford-postagger-full-2012-07-09.tgz"""
+		assert os.path.exists("stanford-postagger-full-2012-07-09"), installation
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
-			for tagsent in sents:
+			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
 				infile.write(" ".join(wordmangle(w, n, sent)
 					for n, w in enumerate(sent)) + "\n")
@@ -809,23 +864,23 @@ def dotagging(usetagger, sents, overridetag, tagmap):
 				"edu.stanford.nlp.tagger.maxent.MaxentTagger "
 				"-model models/german-hgc.tagger -tokenize false "
 				"-encoding utf-8 -textFile %s" % inname).split(),
-				cwd="../src/stanford-postagger-full-2012-07-09",
+				cwd="stanford-postagger-full-2012-07-09",
 				shell=False, stdout=PIPE)
 		tagout = tagger.stdout.read().decode('utf-8').splitlines()
 		os.unlink(inname)
-		taggedsents = [[tagmangle(a, "_", overridetag, tagmap)
-			for a in tags.split()] for tags in tagout]
+		taggedsents = OrderedDict((n, [tagmangle(a, "_", overridetag, tagmap)
+			for a in tags.split()]) for n, tags in zip(sents, tagout))
 	assert len(taggedsents) == len(sents), (
 			"mismatch in number of sentences after tagging.")
-	for n, tags in enumerate(taggedsents):
+	for n, tags in taggedsents.iteritems():
 		assert len(sents[n]) == len(tags), (
 				"mismatch in number of tokens after tagging.\n"
 				"before: %r\nafter: %r" % (sents[n], tags))
-		sents[n][:] = tags
-	newtags = [t for sent in taggedsents for _, t in sent]
+	newtags = [t for sent in taggedsents.values() for _, t in sent]
 	logging.info("Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r",
 		(100 * accuracy(goldtags, newtags)),
 		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
+	return taggedsents
 
 sentend = "(\"'!?..." # ";/-"
 def wordmangle(w, n, sent):
@@ -880,7 +935,8 @@ def testmain():
 			neverblockre=None, #do not prune nodes with label that match regex
 		)],
 		corpusdir=".",
-		corpusfile="sample2.export",
+		traincorpus="sample2.export",
+		testcorpus="sample2.export",
 		encoding="iso-8859-1",
 		movepunct=False,
 		removepunct=False,
@@ -897,7 +953,6 @@ def testmain():
 		revmarkov = True,
 		v = 1,
 		h = 2,
-		fanout_marks = True,
 		fanout_marks_before_bin = False,
 		tailmarker = "",
 		quiet=False, reallyquiet=False, #quiet=no per sentence results

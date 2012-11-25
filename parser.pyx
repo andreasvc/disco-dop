@@ -1095,18 +1095,19 @@ def pprint_chart_cfg(chart, sent, tolabel, cfg=True):
 		for right, _ in enumerate(chart[left]):
 			for label in chart[left][right] or ():
 				if chart[left][right][label] == []: continue
-				print "%s[%d:%d] =>" % (tolabel[label], left, right)
-				#?? if isinstance(chart[left][right][label], float): continue
+				print "%s[%d:%d] =>" % (tolabel.get(label), left, right)
 				for edge in sorted(chart[left][right][label] or (), key=sortfunc):
 					if edge.rule is NULL:
 						print "%g\t??" % (exp(-edge.inside)),
 						print "\t", repr(sent[edge.mid-1]),
 					else:
 						print "%g\t%g" % (exp(-edge.inside), exp(-edge.rule.prob)),
-						print "\t%s[%d:%d]" % (tolabel[edge.rule.rhs1],
+						print "\t%s[%d:%d]" % (#tolabel[edge.rule.rhs1],
+								tolabel.get(edge.rule.rhs1),
 								left, edge.mid),
 						if edge.rule.rhs2:
-							print "\t%s[%d:%d]" % (tolabel[edge.rule.rhs2],
+							print "\t%s[%d:%d]" % (#tolabel[edge.rule.rhs2],
+								tolabel.get(edge.rule.rhs2),
 								edge.mid, right),
 					print
 				print

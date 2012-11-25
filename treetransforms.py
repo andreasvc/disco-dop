@@ -1,4 +1,4 @@
-""" This file contains three main transformations:
+r""" This file contains three main transformations:
  - A straightforward binarization: binarize(), based on NLTK code.
    Modified to introduce a new unary production for the first/last
    element in the RHS.
@@ -152,8 +152,8 @@ options may consist of (* marks default option):
   --factor [left|*right] whether binarization factors to the left or right
   -h n           horizontal markovization. default: infinite
   -v n           vertical markovization. default: 1
-  --headdriven   turn on marking of heads; also affects binarization.
-                 requires the file "negra.headrules".
+  --headrules x  turn on marking of heads; also affects binarization.
+                 reads rule from file "x" (e.g., "negra.headrules").
   --removepunct  remove any punctuation.
   --movepunct    re-attach punctuation to nearest constituent to minimize
                  discontinuity.
@@ -165,8 +165,36 @@ Note: some of these transformations are specific to discontinuous treebanks,
 def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	childChar="|", parentChar="^", headMarked=None,
 	rightMostUnary=True, leftMostUnary=True,
-	tailMarker="$", reverse=True, ids=None):
-	"""
+	tailMarker="", reverse=False, ids=None):
+	""" Binarize an NLTK Tree object. Parameters:
+	factor: "left" or "right". Determines whether binarization proceeds from
+			left to right or vice versa.
+	horzMarkov: amount of horizontal context in labels. Default is infinity,
+			such that now new generalization are introduced by the
+			binarization.
+	vertMarkov: number of ancestors to include in labels.
+			NB: 1 means only the direct parent, as in a normal tree.
+	headMarked: when given a string, signifies that a node is the head node;
+			the direction of binarization will be switched when it is
+			encountered, to enable a head-outward binarization.
+			NB: for discontinuous trees this is not necessary, as the order of
+			children can be freely adjusted to achieve the same effect of a
+			head-outward binarization.
+	leftMostUnary: see below
+	rightMostUnary: introduce a new unary production for the first/last element
+			in the RHS. This enables the same generalizations for the
+			first & last non-terminals as with other siblings.
+	tailMarker: when given a non-empty string, add this to artificial nodes
+			introducing the last symbol. This is useful if the last symbol is
+			the head node, ensuring that it is not exchangeable with other
+			non-terminals.
+	reverse: reverse direction of the horizontal markovization; e.g.:
+			(A (B ) (C ) (D )) becomes:
+			left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
+			right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
+			in this way the markovization represents the history of the
+			nonterminals that have *already* been parsed, instead of those
+			still to come (assuming bottom-up parsing).
 	>>> sent = "das muss man jetzt machen".split()
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
 	>>> tree = binarize(tree, horzMarkov=0, tailMarker='')
@@ -196,7 +224,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
 	>>> tree = unbinarize(tree)
-	>>> tree = binarize(tree, horzMarkov=2, tailMarker='')
+	>>> tree = binarize(tree, horzMarkov=2, tailMarker='', reverse=True)
 	>>> print tree.pprint(margin=999)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VVINF> (VVINF 4))))) (S|<VP-PIS> (PIS 2) (S|<PIS-VMFIN> (VMFIN 1)))))
 
@@ -206,7 +234,7 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	(S (S|<VMFIN> (S|<PIS-VMFIN> (S|<VP-PIS> (VP (VP|<VVINF> (VP|<ADV-VVINF> (VP|<PDS-ADV> (PDS 0)) (ADV 3)) (VVINF 4)))) (PIS 2)) (VMFIN 1)))
 
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
-	>>> tree = binarize(tree, horzMarkov=2, tailMarker='')
+	>>> tree = binarize(tree, horzMarkov=2, tailMarker='', reverse=True)
 	>>> print tree.pprint(margin=999)
 	(S (S|<NN> (NN 2) (S|<NN-VP> (VP (VP|<PDS> (PDS 0) (VP|<PDS-ADV> (ADV 3) (VP|<ADV-VAINF> (VAINF 4))))) (S|<VP-VMFIN> (VMFIN 1)))))
 
@@ -219,15 +247,15 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=0,
 	# assume all subtrees have homogeneous children
 	# assume all terminals have no siblings
 
-	# A semi-hack to have elegant looking code below.  As a result,
-	# any subtree with a branching factor greater than 999 will be incorrectly truncated.
+	# A semi-hack to have elegant looking code below.  As a result, any subtree
+	# with a branching factor greater than 999 will be incorrectly truncated.
 	if horzMarkov == None: horzMarkov = 999
 
-	# Traverse the tree depth-first keeping a list of ancestor nodes to the root.
+	# Traverse tree depth-first keeping a list of ancestor nodes to the root.
 	# I chose not to use the tree.treepositions() method since it requires
 	# two traversals of the tree (one to get the positions, one to iterate
 	# over them) and node access time is proportional to the height of the node.
-	# This method is 7x faster which helps when parsing 40,000 sentences.  
+	# This method is 7x faster which helps when binarizing 40,000 sentences.
 	leftMostUnary = 1 if leftMostUnary else 0
 	nodeList = [(tree, [tree.node])]
 	while nodeList != []:
@@ -799,9 +827,9 @@ def testminbin():
 	import time
 	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
 	#corpus = NegraCorpusReader("..", "negra-corpus.export", encoding="iso-8859-1",
-	#	movepunct=True, headorder=True, headfinal=True, headreverse=False)
+	#	movepunct=True, headrules="negra.headrules", headfinal=True, headreverse=False)
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-		movepunct=True, headorder=False, headfinal=True, headreverse=False)
+		movepunct=True, headrules=None, headfinal=True, headreverse=False)
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), corpus.parsed_sents().values()[:-2000],
 			corpus.sents().values()):
@@ -870,9 +898,9 @@ def main():
 	from getopt import gnu_getopt, GetoptError
 	from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
 			BracketCorpusReader, export
-	flags = ("headdriven", "markorigin", "removepunct", "movepunct")
-	options = ('factor=', 'markorigin=', 'inputfmt=', 'outputfmt=',
-			'inputenc=', 'outputenc=', 'slice=')
+	flags = ('markorigin', 'removepunct', 'movepunct')
+	options = ('factor=', 'headrules=', 'markorigin=', 'inputfmt=',
+			'outputfmt=', 'inputenc=', 'outputenc=', 'slice=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
 		action, input, output = args
@@ -892,7 +920,7 @@ def main():
 
 	corpus = Reader(".", input,
 			encoding=opts.get('--inputenc', 'utf-8'),
-			headorder="--headdriven" in opts,
+			headrules=opts.get("--headrules"),
 			headfinal=True, headreverse=False,
 			removepunct="--removepunct" in opts,
 			movepunct="--movepunct" in opts)
@@ -911,7 +939,7 @@ def main():
 	elif action == "unbinarize":
 		for a in trees: unbinarize(a, factor, h, v)
 	elif action == "optimalbinarize":
-		sep="|"; headdriven = "--headdriven" in opts
+		sep="|"; headdriven = "--headrules" in opts
 		h = int(opts['-h']) if 'h' in opts else None
 		v = int(opts.get('-v', 0))
 		trees = [optimalbinarize(a, sep, headdriven, h, v) for a in trees]

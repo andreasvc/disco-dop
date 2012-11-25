@@ -948,7 +948,8 @@ def test():
 	#filename = "negraproc.export"
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
-		headorder=True, headfinal=True, headreverse=False, movepunct=True)
+		headrules="negra.headrules", headfinal=True, headreverse=False,
+		movepunct=True)
 	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
 	sents = corpus.sents().values()
 	trees = [a.copy(True) for a in corpus.parsed_sents().values()[:10]]

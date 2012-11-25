@@ -37,13 +37,12 @@ cdef class Agenda:
 		self.length = 0
 		self.heap = []
 		self.mapping = {}
-		self.cmpfun = cmpfun
 		if iterable:
 			for k, v in iterable:
 				entry = new_Entry(k, v, self.counter)
 				if k in self.mapping:
 					oldentry = <Entry>self.mapping[k]
-					if self.cmpfun(entry, oldentry):
+					if cmpfun(entry, oldentry):
 						oldentry.count = INVALID
 						self.mapping[k] = entry
 				else:
@@ -51,7 +50,7 @@ cdef class Agenda:
 					self.counter += 1
 				self.heap.append(entry)
 			self.length = len(self.mapping)
-			heapify(self.heap, self.cmpfun)
+			heapify(self.heap, cmpfun)
 
 	cdef setitem(self, key, value):
 		cdef Entry oldentry, entry
@@ -60,7 +59,7 @@ cdef class Agenda:
 			entry = <Entry>Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = oldentry.count
 			self.mapping[key] = entry
-			heappush(self.heap, entry, self.cmpfun)
+			heappush(self.heap, entry, cmpfun)
 			oldentry.count = INVALID
 		else:
 			self.counter += 1
@@ -68,7 +67,7 @@ cdef class Agenda:
 			entry = <Entry>Entry.__new__(Entry)
 			entry.key =  key; entry.value = value; entry.count = self.counter
 			self.mapping[key] = entry
-			heappush(self.heap, entry, self.cmpfun)
+			heappush(self.heap, entry, cmpfun)
 
 	cdef setifbetter(self, key, value):
 		""" sets an item, but only if item is new or has lower score """
@@ -90,13 +89,9 @@ cdef class Agenda:
 		entry = <Entry>Entry.__new__(Entry)
 		entry.key =  key; entry.value = value; entry.count = oldentry.count
 		self.mapping[key] = entry
-		heappush(self.heap, entry, self.cmpfun)
+		heappush(self.heap, entry, cmpfun)
 		oldentry.count = INVALID
 		return oldentry.value
-
-	def peekitem(self):
-		cdef Entry entry = self.peekentry()
-		return entry.key, entry.value
 
 	cdef Entry peekentry(self):
 		cdef Entry entry
@@ -108,22 +103,27 @@ cdef class Agenda:
 			#replace first element with last element
 			self.heap[0] = self.heap.pop()
 			#and restore heap invariant
-			siftdown(self.heap, 0, self.cmpfun)
+			siftdown(self.heap, 0, cmpfun)
 			n -= 1
 			entry = <Entry>(self.heap[0])
 		return entry
 
 	cdef Entry popentry(self):
-		""" like popitem, but avoids tuple construction by returning an Entry
+		""" like popitem(), but avoids tuple construction by returning an Entry
 		object """
-		cdef Entry entry = <Entry>heappop(self.heap, self.cmpfun)
+		cdef Entry entry = <Entry>heappop(self.heap, cmpfun)
 		while not entry.count:
-			entry = <Entry>heappop(self.heap, self.cmpfun)
+			entry = <Entry>heappop(self.heap, cmpfun)
 		del self.mapping[entry.key]
 		self.length -= 1
 		return entry
 
 	cdef bint contains(self, key): return key in self.mapping
+
+	def peekitem(self):
+		cdef Entry entry = self.peekentry()
+		return entry.key, entry.value
+
 	# standard dict() methods
 	def pop(self, key):
 		cdef Entry entry
@@ -174,13 +174,12 @@ cdef class EdgeAgenda:
 		self.length = 0
 		self.heap = []
 		self.mapping = {}
-		self.cmpfun = edgecmpfun
 		if iterable:
 			for k, v in iterable:
 				entry = new_Entry(k, v, self.counter)
 				if k in self.mapping:
 					oldentry = <Entry>self.mapping[k]
-					if self.cmpfun(entry, oldentry):
+					if edgecmpfun(entry, oldentry):
 						oldentry.count = INVALID
 						self.mapping[k] = entry
 				else:
@@ -188,7 +187,7 @@ cdef class EdgeAgenda:
 					self.counter += 1
 				self.heap.append(entry)
 			self.length = len(self.mapping)
-			heapify(self.heap, self.cmpfun)
+			heapify(self.heap, edgecmpfun)
 
 	cdef LCFRSEdge getitem(self, key):
 		cdef Entry entry

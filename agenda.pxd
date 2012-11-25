@@ -11,6 +11,9 @@ ctypedef bint (*CmpFun)(Entry a, Entry b)
 
 @cython.final
 cdef class Agenda:
+	cdef unsigned long length, counter
+	cdef list heap
+	cdef dict mapping
 	cdef setitem(self, key, object value)
 	cdef setifbetter(self, key, object value)
 	cdef object getitem(self, key)
@@ -18,13 +21,12 @@ cdef class Agenda:
 	cdef Entry popentry(self)
 	cdef Entry peekentry(self)
 	cdef bint contains(self, key)
-	cdef unsigned long length, counter
-	cdef list heap
-	cdef dict mapping
-	cdef CmpFun cmpfun
 
 @cython.final
 cdef class EdgeAgenda:
+	cdef unsigned long length, counter
+	cdef list heap
+	cdef dict mapping
 	cdef setitem(self, key, object value)
 	cdef setifbetter(self, key, object value)
 	cdef LCFRSEdge getitem(self, key)
@@ -32,9 +34,5 @@ cdef class EdgeAgenda:
 	cdef Entry popentry(self)
 	cdef Entry peekentry(self)
 	cdef bint contains(self, key)
-	cdef unsigned long length, counter
-	cdef list heap
-	cdef dict mapping
-	cdef CmpFun cmpfun
 
 cdef list nsmallest(int n, list items)

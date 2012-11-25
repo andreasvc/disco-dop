@@ -9,7 +9,7 @@ import re, sys, codecs
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 #def negratransformrations(trees,
-#	headorder=False, headfinal=False, headreverse=False, unfold=False,
+#	headrules=None, headfinal=False, headreverse=False, unfold=False,
 #	functiontags=False, removepunct=False, movepunct=False):
 #	""" Applies a series of in-place transformations"""
 #	# problem: transformations require information like function tags.
@@ -19,10 +19,11 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 class NegraCorpusReader(object):
 	""" Read a corpus in the Negra export format. """
-	def __init__(self, root, fileids, encoding="utf-8",
-	headorder=False, headfinal=False, headreverse=False, unfold=False,
-	functiontags=False, removepunct=False, movepunct=False):
-		""" headorder: whether to order constituents according to heads
+	def __init__(self, root, fileids, encoding="utf-8", headrules=None,
+			headfinal=False, headreverse=False, unfold=False,
+			functiontags=False, removepunct=False, movepunct=False):
+		""" headrules: if given, read rules for assigning heads and apply them
+				by ordering constituents according to their heads
 			headfinal: whether to put the head in final or in frontal position
 			headreverse: the head is made final/frontal by reversing everything
 			before or after the head. When true, the side on which the head is
@@ -31,11 +32,10 @@ class NegraCorpusReader(object):
 			functiontags: whether to add function tags to node labels e.g. NP+OA
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
-		self.headorder = headorder; self.reverse = headreverse
-		self.headfinal = headfinal;	self.unfold = unfold
-		self.functiontags = functiontags
+		self.reverse = headreverse; self.headfinal = headfinal
+		self.unfold = unfold; self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
-		self.headrules = readheadrules() if headorder else {}
+		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
 		self._sents_cache = None
 		self._tagged_sents_cache = None
@@ -130,7 +130,7 @@ class NegraCorpusReader(object):
 			for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
 				a.sort(key=leaves)
 		if self.unfold: result = unfold(result)
-		if self.headorder:
+		if self.headrules:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
 			map(lambda x: headorder(x, self.headfinal, self.reverse),
 													result.subtrees())
@@ -187,10 +187,11 @@ class DiscBracketCorpusReader(object):
 	functional edges. On the other hand, it is very close to the internal
 	representation employed here, so it is quick to load.
 	"""
-	def __init__(self, root, fileids, encoding="utf-8", headorder=False,
-	headfinal=False, headreverse=False, unfold=False, functiontags=False,
-	removepunct=False, movepunct=False):
-		""" headorder: whether to order constituents according to heads
+	def __init__(self, root, fileids, encoding="utf-8", headrules=None,
+			headfinal=False, headreverse=False, unfold=False,
+			functiontags=False, removepunct=False, movepunct=False):
+		""" headrules: if given, read rules for assigning heads and apply them
+				by ordering constituents according to their heads
 			headfinal: whether to put the head in final or in frontal position
 			headreverse: the head is made final/frontal by reversing everything
 			before or after the head. When true, the side on which the head is
@@ -199,37 +200,36 @@ class DiscBracketCorpusReader(object):
 			functiontags: whether to add function tags to node labels e.g. NP+OA
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
-		self.headorder = headorder; self.reverse = headreverse
-		self.headfinal = headfinal;	self.unfold = unfold
-		self.functiontags = functiontags
+		self.reverse = headreverse; self.headfinal = headfinal
+		self.unfold = unfold; self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
-		self.headrules = readheadrules() if headorder else {}
+		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
 	def sents(self):
-		return OrderedDict(enumerate(
+		return OrderedDict(enumerate((
 			line.split("\t", 1)[1].rstrip("\n\r").split(" ")
 			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)))
+				for line in codecs.open(filename, encoding=self._encoding)), 1))
 	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
-		return OrderedDict(enumerate(
+		return OrderedDict(enumerate((
 				zip(line.split("\t", 1)[1].rstrip("\n\r").split(" "),
 				map(itemgetter(1), sorted(Tree.parse(line.split("\t", 1)[0],
 					parse_leaf=int).pos())))
 			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)))
+				for line in codecs.open(filename, encoding=self._encoding)), 1))
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = OrderedDict(enumerate(
-					map(self._parse, self.blocks())))
+					map(self._parse, self.blocks().itervalues()), 1))
 		return self._parsed_sents_cache
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
 		trees in the treebank, with any transformations applied."""
-		return OrderedDict(enumerate(line for filename in self._filenames
-			for line in codecs.open(filename, encoding=self._encoding)))
+		return OrderedDict(enumerate((line for filename in self._filenames
+			for line in codecs.open(filename, encoding=self._encoding)), 1))
 	def _parse(self, s):
 		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=int)
 		# roughly order constituents by order in sentence
@@ -243,7 +243,7 @@ class DiscBracketCorpusReader(object):
 			for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
 				a.sort(key=leaves)
 		if self.unfold: result = unfold(result)
-		if self.headorder:
+		if self.headrules:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
 			map(lambda x: headorder(x, self.headfinal, self.reverse),
 													result.subtrees())
@@ -259,51 +259,50 @@ class BracketCorpusReader(object):
 	tree in bracket notation; e.g.:
 	(S (NP John) (VP (VB is) (JJ rich)) (. .))
 	"""
-	def __init__(self, root, fileids, encoding="utf-8", headorder=False,
+	def __init__(self, root, fileids, encoding="utf-8", headrules=None,
 	headfinal=False, headreverse=False, unfold=False, functiontags=False,
 	removepunct=False, movepunct=False):
-		""" headorder: whether to order constituents according to heads
-			headfinal: whether to put the head in final or in frontal position
-			headreverse: the head is made final/frontal by reversing everything
+		""" headrules: if given, read rules for assigning heads and apply them
+				by marking constituents with '^' according to their heads
+			headfinal: ignored (for compatibility with the other corpus readers)
+			headreverse: ignored
 			before or after the head. When true, the side on which the head is
 				will be the reversed side.
 			unfold: whether to apply corpus transformations
 			functiontags: whether to add function tags to node labels e.g. NP+OA
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
-		self.headorder = headorder; self.reverse = headreverse
-		self.headfinal = headfinal;	self.unfold = unfold
-		self.functiontags = functiontags
+		self.unfold = unfold; self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
-		self.headrules = readheadrules() if headorder else {}
+		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
+		self._sents_cache = None
 	def sents(self):
-		return OrderedDict(enumerate([Tree(line).leaves()
-			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)]))
+		if not self._sents_cache:
+			terminals = re.compile(r" ([^ )]+)\)")
+			self._sents_cache = OrderedDict((n, terminals.findall(tree))
+				for n, tree in self.blocks().iteritems())
+		return self._sents_cache
 	def tagged_sents(self):
-		# for each line, zip its words & tags together in a list.
-		return OrderedDict(enumerate([Tree(line).pos()
-			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)]))
+		return OrderedDict((n, [(a, b) for a, (_, b) in zip(sent, tree.pos())])
+			for (n, tree), sent
+			in zip(self.parsed_sents().iteritems(), self.sents().values()))
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = OrderedDict(enumerate(
-					map(self._parse, self.blocks())))
+					map(self._parse, self.blocks().itervalues()), 1))
 		return self._parsed_sents_cache
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
 		trees in the treebank, with any transformations applied."""
-		return OrderedDict(enumerate([line for filename in self._filenames
-			for line in codecs.open(filename, encoding=self._encoding)]))
+		return OrderedDict(enumerate((line.strip()
+			for filename in self._filenames
+			for line in codecs.open(filename, encoding=self._encoding)), 1))
 	def _parse(self, s):
 		c = count()
-		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=lambda _: c.next())
-		# roughly order constituents by order in sentence
-		for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
-			a.sort(key=lambda x: x.leaves())
+		result = Tree.parse(s, parse_leaf=lambda _: c.next())
 		if self.removepunct: doremovepunct(result)
 		elif self.movepunct:
 			punctraise(result)
@@ -312,10 +311,9 @@ class BracketCorpusReader(object):
 			for a in reversed(list(result.subtrees(lambda x: len(x) > 1))):
 				a.sort(key=lambda x: x.leaves())
 		if self.unfold: result = unfold(result)
-		if self.headorder:
+		if self.headrules:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
-			map(lambda x: headorder(x, self.headfinal, self.reverse),
-													result.subtrees())
+			map(lambda x: headmark(x), result.subtrees())
 		if self.functiontags: addfunctions(result)
 		return result
 	def _word(self, s):
@@ -329,11 +327,11 @@ def addfunctions(tree):
 		if a.source[FUNC].split("-")[0]:
 			a.node += "+%s" % a.source[FUNC].split("-")[0]
 
-def readheadrules():
+def readheadrules(filename):
 	headrules = {}
 	# this file containing head assignment rules is part of rparse,
 	# under src/de/tuebingen/rparse/treebank/constituent/negra/
-	for a in open("negra.headrules"):
+	for a in open(filename):
 		if a.strip() and not a.strip().startswith("%") and len(a.split()) > 2:
 			label, lr, heads = a.upper().split(None, 2)
 			headrules.setdefault(label, []).append((lr, heads.split()))
@@ -364,6 +362,14 @@ def headfinder(tree, headrules):
 		if isinstance(a, Tree):
 			sethead(a)
 			return
+
+def headmark(tree):
+	""" change order of constituents based on head (identified with
+	function tag). """
+	head = [n for n, a in enumerate(tree)
+		if hasattr(a, "source") and "HD" in a.source[FUNC].split("-")]
+	if not head: return
+	head[-1].node += "^"
 
 def headorder(tree, headfinal, reverse):
 	""" change order of constituents based on head (identified with
@@ -766,11 +772,11 @@ def preterminals(node):
 def puncttest():
 	from treetransforms import slowfanout as fanout
 	file = 'sample2.export' #'negraproc.export'
-	mangledtrees = NegraCorpusReader(".", file, headorder=False,
+	mangledtrees = NegraCorpusReader(".", file, headrules=None,
 			encoding="iso-8859-1", movepunct=True)
-	nopunct = NegraCorpusReader(".", file, headorder=False,
+	nopunct = NegraCorpusReader(".", file, headrules=None,
 			encoding="iso-8859-1", removepunct=True).parsed_sents().values()
-	originals = NegraCorpusReader(".", file, headorder=False,
+	originals = NegraCorpusReader(".", file, headrules=None,
 			encoding="iso-8859-1").parsed_sents().values()
 	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
@@ -795,11 +801,11 @@ def main():
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
-	headorder = True
-	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=headorder)
-	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1", headorder=headorder, unfold=True)
-	#n = NegraCorpusReader("../rparse", "tigerproc.export", headorder=False)
-	#nn = NegraCorpusReader("../rparse", "tigerproc.export", headorder=True, unfold=True)
+	headrules = "negra.headrules"
+	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
+			headrules=headrules)
+	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
+			headrules=headrules, unfold=True)
 	print "\nunfolded"
 	correct = exact = d = 0
 	nk = set(); mo = set()

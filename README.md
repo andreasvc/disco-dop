@@ -23,18 +23,19 @@ Some references to implemented algorithms:
   probabilistic linear context-free rewriting systems.
 - data-oriented parsing (DOP):
   * Goodman (2002), Efficient parsing of DOP with PCFG-reductions
-  * Sangati & Zuidema (2011), Accurate parsing with compact tree-substitution grammars: Double-DOP
+  * Sangati & Zuidema (2011), Accurate parsing with compact tree-substitution
+    grammars: Double-DOP
 - k-best list: Huang & Chiang (2005), Better k-best parsing
 - optimal binarization: Gildea (2010), Optimal parsing strategies for linear
   context-free rewriting systems
 
 Requirements:
 -------------
-- Python 2.7+   http://www.python.org (need headers, e.g. python-dev package)
-- Cython 0.17+  http://www.cython.org
-- GCC           http://gcc.gnu.org/
-- NLTK          http://www.nltk.org
-- Numpy         http://numpy.scipy.org/
+- Python 2.7+     http://www.python.org (need headers, e.g. python-dev package)
+- Cython 0.17.2+  http://www.cython.org
+- GCC             http://gcc.gnu.org/
+- NLTK            http://www.nltk.org
+- Numpy           http://numpy.scipy.org/
 
 For example, to install these dependencies and compile the code on Ubuntu
 (tested on 12.04), run the following sequence of commands:
@@ -46,9 +47,9 @@ For example, to install these dependencies and compile the code on Ubuntu
 	make
 
 Alternatively Cython, NLTK, and Numpy can all be installed with
-`pip install cython nltk numpy`,
-which does not require root rights and may be more up-to-date.
-NB: compilation will by default use `CFLAGS` used to compile Python.
+`pip install --user cython nltk numpy`,
+which does not require root rights and may be more up-to-date than the
+packages in your distribution.
 
 To port the code to another compiler such as Visual C, replace the compiler
 intrinsics in `macros.h`, `bit.pyx`, and `bit.pxd` to their equivalents in the
@@ -64,10 +65,10 @@ parameters can then be invoked by executing:
 	python runexp.py filename.prm
 
 This will create a new directory with the basename of the parameter file, i.e.,
-filename/ in this case. This directory must not exist yet, to avoid overwriting
-previous results. The directory will contain the grammar rules and lexicon in a
-text format, as well as the parsing results and the gold standard file in
-Negra's export format. 
+`filename/` in this case. This directory must not exist yet, to avoid
+accidentally overwriting previous results. The directory will contain the
+grammar rules and lexicon in a text format, as well as the parsing results and
+the gold standard file in Negra's export format.
 
 Corpora are expected to be in Negra's export format. Access to the [Negra
 corpus](http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/) itself
@@ -88,21 +89,21 @@ the resulting code can be compiled with `make`:
 
 Usage: tools
 ------------
-Aside from the parser there are some standalone tools.
+Aside from the parser there are some standalone tools:
 
-- `eval.py`:             while `runexp.py` already shows F-scores, more detailed
+- `eval.py`:             While `runexp.py` already shows F-scores, more detailed
                          evaluation can be done with `eval.py`, which accepts
                          `EVALB` style parameter files: `python eval.py
-                         sample/results.gold sample/results.dop proper.prm`
-- `treetransforms.py`:   a command line interface to perform transformations on
-                         treebanks 
-- `grammar.py`:          a command line interface to read off grammars
-                         from (binarized) treebanks
-- `fragments.py`:        finds recurring or common fragments in one or more
+                         negra-corpus.export sample/plcfrs.export proper.prm`
+- `treetransforms.py`:   A command line interface to perform transformations on
+                         treebanks such as binarization.
+- `grammar.py`:          A command line interface to read off grammars
+                         from (binarized) treebanks.
+- `fragments.py`:        Finds recurring or common fragments in one or more
                          treebanks. It can be used with discontinuous as well as
                          Penn-style bracketed treebanks.
-- `demos.py`:            contains examples of various formalisms encoded in
+- `demos.py`:            Contains examples of various formalisms encoded in
                          LCFRS grammars.
-- `gen.py`:              an experiment in LCFRS generation.
+- `gen.py`:              An experiment in generation with LCFRS.
 
 These programs can be started without arguments for instructions.
