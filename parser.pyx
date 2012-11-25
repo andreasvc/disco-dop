@@ -402,8 +402,10 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
 	goal.vec[BITSLOT(lensent)] = BITMASK(lensent) - 1
 
-	assert len(sent) < (sizeof(goal.vec) * 8), ("input length: %d. max: %d" % (
-		lensent, sizeof(goal.vec) * 8))
+	if len(sent) >= (sizeof(goal.vec) * 8):
+		msg = ("sentence too long (recompile with larger value for SLOTS)."
+				"input length: %d. max: %d" % (lensent, sizeof(goal.vec) * 8))
+		return chart, FATNONE, msg
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {"SX":SX, "SXlrgaps":SXlrgaps}[estimatetypestr]

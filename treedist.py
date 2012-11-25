@@ -78,10 +78,10 @@ class AnnotatedTree:
 		j = 0
 		while stack:
 			n, anc = stack.pop()
-			n._id = j
+			n.id = j
 			for c in n:
 				a = deque(anc)
-				a.appendleft(n._id)
+				a.appendleft(n.id)
 				stack.append((c, a))
 			pstack.append((n, anc))
 			j += 1
@@ -97,7 +97,7 @@ class AnnotatedTree:
 					if a in leftmostdescendents: break
 					else: leftmostdescendents[a] = i
 			else:
-				lmd = leftmostdescendents[n._id]
+				lmd = leftmostdescendents[n.id]
 			self.leftmostdescendents.append(lmd)
 			keyroots[lmd] = i
 			i += 1

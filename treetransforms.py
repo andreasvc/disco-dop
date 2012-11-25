@@ -478,7 +478,7 @@ def addbitsets(tree):
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
 
-def defaultleftbin(node, sep="|", h=999, fanout=False, ids=None):
+def defaultleftbin(node, sep="|", h=999, markfanout=False, ids=None):
 	""" Binarize one constituent with a left factored binarization.
 	Children remain unmodified. Bottom-up version. Nodes must contain
 	bitsets (use addbitsets()).
@@ -493,7 +493,7 @@ def defaultleftbin(node, sep="|", h=999, fanout=False, ids=None):
 		if ids is None:
 			newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[max(0,i-h+1):i+1]))
 		else: newlabel = "%s%s<%d>" % (label, sep, ids.next())
-		if fanout:
+		if markfanout:
 			nodefanout = bitfanout(newbitset)
 			if nodefanout > 1: newlabel += "_" + str(nodefanout)
 		prev = ImmutableTree(newlabel, [prev, node[i]])
@@ -502,7 +502,7 @@ def defaultleftbin(node, sep="|", h=999, fanout=False, ids=None):
 	result.bitset = prev.bitset | node[-1].bitset
 	return result
 
-def defaultrightbin(node, sep="|", h=999, fanout=False, ids=None):
+def defaultrightbin(node, sep="|", h=999, markfanout=False, ids=None):
 	""" Binarize one constituent with a right factored binarization.
 	Children remain unmodified. Bottom-up version. Nodes must contain
 	bitsets (use addbitsets()).
@@ -517,7 +517,7 @@ def defaultrightbin(node, sep="|", h=999, fanout=False, ids=None):
 		if ids is None:
 			newlabel = "%s%s<%s>" % (label, sep, "-".join(childlabels[i:i+h]))
 		else: newlabel = "%s%s<%d>" % (label, sep, ids.next())
-		if fanout:
+		if markfanout:
 			nodefanout = bitfanout(newbitset)
 			if nodefanout > 1: newlabel += "_" + str(nodefanout)
 		prev = ImmutableTree(newlabel, [node[i], prev])
@@ -659,7 +659,7 @@ def minimalbinarization(tree, score, sep="|", head=None, h=999):
 				agenda[p2] = workingset[p2] = x2
 	raise ValueError
 
-def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1, ancestors=()):
+def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1):
 	""" Recursively binarize a tree optimizing for complexity.
 	v=0 is not implemented. """
 	if headdriven: return recbinarizetreehd(addbitsets(tree), sep, h, v, ())
@@ -700,9 +700,9 @@ def addfanoutmarkers(tree):
 	a marker "_n" indicating its fanout. """
 	for st in tree.subtrees():
 		leaves = set(st.leaves())
-		fanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
-		if fanout > 1 and not st.node.endswith("_%d" % fanout):
-			st.node += "_%d" % fanout
+		thisfanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
+		if thisfanout > 1 and not st.node.endswith("_%d" % thisfanout):
+			st.node += "_%d" % thisfanout
 	return tree
 
 def contsets(tree):
@@ -894,7 +894,7 @@ def test():
 	testsplit()
 
 def main():
-	import sys, codecs
+	import codecs
 	from getopt import gnu_getopt, GetoptError
 	from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
 			BracketCorpusReader, export
@@ -903,7 +903,7 @@ def main():
 			'outputfmt=', 'inputenc=', 'outputenc=', 'slice=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
-		action, input, output = args
+		action, infile, outfile = args
 	except (GetoptError, ValueError) as err:
 		print "error: %r\n%s" % (err, usage)
 		exit(2)
@@ -918,7 +918,7 @@ def main():
 		Reader = BracketCorpusReader
 	else: raise ValueError("unrecognized format: %r" % opts.get('--inputfmt'))
 
-	corpus = Reader(".", input,
+	corpus = Reader(".", infile,
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get("--headrules"),
 			headfinal=True, headreverse=False,
@@ -954,14 +954,14 @@ def main():
 
 	# write output
 	if opts.get('--outputfmt', 'export') == 'export':
-		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
+		codecs.open(outfile, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines(export(*x) for x in zip(trees, sents, count(1)))
 	elif opts.get('--outputfmt') == 'discbracket':
-		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
+		codecs.open(outfile, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines("%s\t%s\n" % (tree.pprint(margin=9999), " ".join(sent))
 			for tree, sent in zip(trees, sents))
 	elif opts.get('--outputfmt') == 'bracket':
-		codecs.open(output, "w", encoding=opts.get('outputenc', 'utf-8')
+		codecs.open(outfile, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines("%s\n" % Tree.parse(tree.pprint(margin=9999),
 				parse_leaf=lambda l: sent[int(l)]).pprint(margin=9999)
 			for tree, sent in zip(trees, sents))

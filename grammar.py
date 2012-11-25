@@ -20,6 +20,7 @@ options may consist of (* marks default option):
     --inputfmt [*export|discbracket|bracket]
     --inputenc [*UTF-8|ISO-8859-1|...]
     --dopestimator [dop1|ewe|shortest|...]
+    --freqs                   (produce frequencies instead of probabilities)
     --numproc [1|2|...]       (only relevant for double dop fragment extraction)
     --gzip                    (compress output with gzip, view with zless etc.)
 
@@ -36,8 +37,6 @@ rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
          NP      NN      0       0.3
 lexicon: NN Epsilon Haus    0.3
 """ % sys.argv[0]
-#TODO:
-#	--freqs                   (return frequencies instead of probabilities)
 
 frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9]+)*\))")
 rootnode = re.compile(r"\([^ ]+\b")
@@ -294,7 +293,7 @@ def doubledop(fragments, debug=False, freqs=False):
 			flatfrag = newlabel + flatfrag[flatfrag.index(" "):]
 			newflatfrag = "(%s %s)" % (label, flatfrag)
 			newflatfrag = ImmutableTree(label, [defaultrightbin(
-				addbitsets(newflatfrag)[0], "}", fanout=True, ids=binids)])
+				addbitsets(newflatfrag)[0], "}", markfanout=True, ids=binids)])
 			ambigfrags[newflatfrag] = frag, terminals
 		backtransform[flatfrag] = frag, terminals
 	if debug:
@@ -304,7 +303,7 @@ def doubledop(fragments, debug=False, freqs=False):
 	grammar.update(rule
 		for flatfrag, (frag, terminals) in zip(flatfrags, sortedfragments)
 		for rule in zip(lcfrs_productions(defaultrightbin(addbitsets(flatfrag),
-			"}", fanout=True, ids=ids), terminals),
+			"}", markfanout=True, ids=ids), terminals),
 			chain((fragments[frag, terminals],), repeat(1))))
 	# ambiguous fragments (fragments that map to the same flattened fragment)
 	grammar.update(rule for flatfrag, (frag, terminals) in ambigfrags.iteritems()
@@ -494,7 +493,7 @@ def flatten_new(tree, sent, ids):
 		" ".join(x[0] for x in sorted(frontierorterm.findall(prod),
 			key=lambda y: int(y[2]))))
 	prods = lcfrs_productions(defaultleftbin(addbitsets(prod), "}",
-		fanout=True, ids=ids), sent)
+		markfanout=True, ids=ids), sent)
 	# mark substitution sites and ensure ascii string.
 	newtree = str(frontierorterm.sub('%s', tree))
 	return prods, newtree
@@ -523,14 +522,14 @@ def flatten(treesent):
 	'(S|<VP>_2 (NP 0) (VAFIN 1) (ADV 2) (VVPP 4))'
 	>>> from treetransforms import defaultrightbin, addbitsets
 	>>> lcfrs_productions(defaultrightbin(addbitsets(
-	... '(S|<VP>_2 (NP 0) (VAFIN 1) (ADV 2) (VVPP 4))'), "}", fanout=True),
+	... '(S|<VP>_2 (NP 0) (VAFIN 1) (ADV 2) (VVPP 4))'), "}", markfanout=True),
 	... (None, None, None, None, None))
 	[(('S|<VP>_2', 'NP', 'S|<VP>_2}<VAFIN-ADV-VVPP>_2'), ((0, 1), (1,))),
 	(('S|<VP>_2}<VAFIN-ADV-VVPP>_2', 'VAFIN',
 	'S|<VP>_2}<ADV-VVPP>_2'), ((0, 1), (1,))),
 	(('S|<VP>_2}<ADV-VVPP>_2', 'ADV', 'VVPP'), ((0,), (1,)))]
 	>>> lcfrs_productions(defaultrightbin(addbitsets(
-	... '(S|<VP>_2 (ADV 0) (VAFIN 1) (ADV 3) (VVPP 4))'), "}", fanout=True),
+	... '(S|<VP>_2 (ADV 0) (VAFIN 1) (ADV 3) (VVPP 4))'), "}", markfanout=True),
 	... (None, None, None, None, None))
 	[(('S|<VP>_2', 'ADV', 'S|<VP>_2}<VAFIN-ADV-VVPP>_2'), ((0, 1), (1,))),
 	(('S|<VP>_2}<VAFIN-ADV-VVPP>_2', 'VAFIN', 'S|<VP>_2}<ADV-VVPP>'), ((0,), (1,))),
@@ -610,11 +609,11 @@ def ranges(s):
 			rng = [a]
 	if rng: yield rng
 
-def node_fanout(n, vars, inplace=False):
+def node_fanout(n, variables, inplace=False):
 	""" mark node with fanout if necessary """
-	if len(vars) > 1 and not n.node.endswith("_%d" % len(vars)):
-		if inplace: n.node = "%s_%d" % (n.node, len(vars))
-		else: return "%s_%d" % (n.node, len(vars))
+	if len(variables) > 1 and not n.node.endswith("_%d" % len(variables)):
+		if inplace: n.node = "%s_%d" % (n.node, len(variables))
+		else: return "%s_%d" % (n.node, len(variables))
 	return n.node if isinstance(n, Tree) else n
 
 def defaultparse(wordstags):
@@ -637,7 +636,7 @@ def printrulelatex(rule, doexp=True):
 	(r, yf), w = rule
 	c = count()
 	newrhs = []
-	vars = []
+	variables = []
 	if r[1] == "Epsilon":
 		newrhs = [("Epsilon", [])]
 		lhs = (r[0], yf)
@@ -646,8 +645,8 @@ def printrulelatex(rule, doexp=True):
 		for n, a in enumerate(r[1:]):
 			z = sum(1 for comp in yf for y in comp if y == n)
 			newrhs.append((a, [c.next() for x in range(z)]))
-			vars.append(list(newrhs[-1][1]))
-		lhs = (r[0], [[vars[x].pop(0) for x in comp] for comp in yf])
+			variables.append(list(newrhs[-1][1]))
+		lhs = (r[0], [[variables[x].pop(0) for x in comp] for comp in yf])
 	print (exp(w) if doexp else w),"& ",
 	r = tuple([lhs]+newrhs)
 	lhs = r[0]; rhs = r[1:]
@@ -797,24 +796,23 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	assert "VROOT" in grammar[0]
 	codecs.open(out, "w", encoding=encoding).writelines(grammar)
 
-def write_lcfrs_grammar(grammar, rules, lexicon, encoding='utf-8'):
+def write_lcfrs_grammar(grammar, rules, lexicon, encoding='utf-8', bitpar=False):
 	""" Writes a grammar as produced by induce_plcfrs or dop_lcfrs_rules
 	(so before it goes through Grammar()) into a simple text file format.
-	Fields are separated by tabs. Components of the yield function are
-	comma-separated. E.g.
+	Expects file objects with write() methods. Fields are separated by tabs.
+	Components of the yield function are comma-separated; e.g.:
 	rules: S	NP	VP	010	0.5
 		VP_2	VB	NP	0,1	0.4
 	lexicon: NN	Epsilon	Haus	0.3
-	"""
-	rules = codecs.open(rules, "w", encoding=encoding)
-	lexicon = codecs.open(lexicon, "w", encoding=encoding)
+	When bitpar is True, use bitpar format: for rules, put weight first and
+	leave out the yield function. """
 	for (r, yf), w in grammar:
 		if len(r) == 2 and r[1] == "Epsilon":
 			lexicon.write("%s\t%s\t%g\n" % ("\t".join(r), yf[0], float(w)))
+		elif bitpar: rules.write("%g\t%s\n" % (w, "\t".join(r)))
 		else:
 			yfstr = ",".join("".join(map(str, a)) for a in yf)
 			rules.write("%s\t%s\t%g\n" % ("\t".join(r), yfstr, float(w)))
-	rules.close(); lexicon.close()
 
 def read_lcfrs_grammar(rules, lexicon, encoding='utf-8'):
 	""" Reads a grammar as produced by write_lcfrs_grammar. """
@@ -891,7 +889,7 @@ def grammarinfo(grammar, dump=None):
 	result += " average: %g\n" % mean([len(yf) for (rule, yf), w, in grammar])
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
 				for (rule, yf), w in grammar if rule[1] != "Epsilon")
-	result += "max vars: %d in %s\n" % (n, printrule(r, yf, w))
+	result += "max variables: %d in %s\n" % (n, printrule(r, yf, w))
 	def fanout(sym):
 		result = fanoutre.search(sym)
 		return 1 if result is None else int(result.group(1))
@@ -934,7 +932,7 @@ def do(sent, grammar):
 
 def test():
 	from treetransforms import unbinarize
-	from treebank import NegraCorpusReader, BracketCorpusReader
+	from treebank import NegraCorpusReader
 	from parser import parse, pprint_chart
 	from treetransforms import addfanoutmarkers
 	from disambiguation import recoverfragments, recoverfragments_new
@@ -944,7 +942,7 @@ def test():
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
-	stdout = codecs.getwriter('utf8')(sys.stdout)
+	#sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	#filename = "negraproc.export"
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
@@ -1042,7 +1040,7 @@ def main():
 	from fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
-	flags = ("gzip", ) # "freqs"
+	flags = ("gzip", "freqs")
 	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
@@ -1084,8 +1082,9 @@ def main():
 		grammar = doubledop(fragments, freqs=freqs)
 
 	print grammarinfo(grammar)
-	cgrammar = Grammar(grammar)
-	cgrammar.testgrammar(logging)
+	if not freqs:
+		cgrammar = Grammar(grammar)
+		cgrammar.testgrammar(logging)
 	if '--gzip' in opts:
 		myopen = gzip.open
 		if not rules.endswith(".gz"): rules += ".gz"
@@ -1095,9 +1094,12 @@ def main():
 		with codecs.getwriter('utf-8')(myopen(lexicon, "w")) as lexiconfile:
 			# write output
 			if model == "pcfg" or opts.get('--inputfmt') == 'bracket':
-				cgrammar.write_bitpar_grammar(rulesfile, lexiconfile)
+				if freqs:
+					write_lcfrs_grammar(grammar, rulesfile, lexiconfile, bitpar=True)
+				else: cgrammar.write_bitpar_grammar(rulesfile, lexiconfile)
 			else:
-				cgrammar.write_lcfrs_grammar(rulesfile, lexiconfile)
+				if freqs: write_lcfrs_grammar(grammar, rulesfile, lexiconfile)
+				else: cgrammar.write_lcfrs_grammar(rulesfile, lexiconfile)
 	print "wrote grammar to %s and %s." % (rules, lexicon)
 
 if __name__ == '__main__':

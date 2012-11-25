@@ -1,5 +1,5 @@
 from nltk import ParentedTree, Tree
-from itertools import count, repeat
+from itertools import count
 from collections import OrderedDict, deque
 from operator import itemgetter
 from os import path
@@ -9,7 +9,7 @@ import re, sys, codecs
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 
 #def negratransformrations(trees,
-#	headrules=None, headfinal=False, headreverse=False, unfold=False,
+#	headrules=None, headfinal=False, headreverse=False, dounfold=False,
 #	functiontags=False, removepunct=False, movepunct=False):
 #	""" Applies a series of in-place transformations"""
 #	# problem: transformations require information like function tags.
@@ -20,7 +20,7 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 class NegraCorpusReader(object):
 	""" Read a corpus in the Negra export format. """
 	def __init__(self, root, fileids, encoding="utf-8", headrules=None,
-			headfinal=False, headreverse=False, unfold=False,
+			headfinal=False, headreverse=False, dounfold=False,
 			functiontags=False, removepunct=False, movepunct=False):
 		""" headrules: if given, read rules for assigning heads and apply them
 				by ordering constituents according to their heads
@@ -28,12 +28,12 @@ class NegraCorpusReader(object):
 			headreverse: the head is made final/frontal by reversing everything
 			before or after the head. When true, the side on which the head is
 				will be the reversed side.
-			unfold: whether to apply corpus transformations
+			dounfold: whether to apply corpus transformations
 			functiontags: whether to add function tags to node labels e.g. NP+OA
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
 		self.reverse = headreverse; self.headfinal = headfinal
-		self.unfold = unfold; self.functiontags = functiontags
+		self.unfold = dounfold; self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
@@ -154,13 +154,13 @@ def export(tree, sent, n):
 	Lemmas, functions, and morphology information will be empty. """
 	result = []
 	if n is not None: result.append("#BOS %s" % n)
-	leaves = tree.treepositions('leaves')
-	wordsandpreterminals = leaves + [a[:-1] for a in leaves]
+	indices = tree.treepositions('leaves')
+	wordsandpreterminals = indices + [a[:-1] for a in indices]
 	phrasalnodes = [a for a in tree.treepositions()
 		if a not in wordsandpreterminals and a != ()]
 	phrasalnodes.sort(key=len, reverse=True)
-	wordids = dict((tree[a], a) for a in leaves)
-	assert len(sent) == len(leaves) == len(wordids)
+	wordids = dict((tree[a], a) for a in indices)
+	assert len(sent) == len(indices) == len(wordids)
 	for i, word in enumerate(sent):
 		idx = wordids[i]
 		result.append("\t".join((word,
@@ -188,7 +188,7 @@ class DiscBracketCorpusReader(object):
 	representation employed here, so it is quick to load.
 	"""
 	def __init__(self, root, fileids, encoding="utf-8", headrules=None,
-			headfinal=False, headreverse=False, unfold=False,
+			headfinal=False, headreverse=False, dounfold=False,
 			functiontags=False, removepunct=False, movepunct=False):
 		""" headrules: if given, read rules for assigning heads and apply them
 				by ordering constituents according to their heads
@@ -196,12 +196,12 @@ class DiscBracketCorpusReader(object):
 			headreverse: the head is made final/frontal by reversing everything
 			before or after the head. When true, the side on which the head is
 				will be the reversed side.
-			unfold: whether to apply corpus transformations
+			dounfold: whether to apply corpus transformations
 			functiontags: whether to add function tags to node labels e.g. NP+OA
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
 		self.reverse = headreverse; self.headfinal = headfinal
-		self.unfold = unfold; self.functiontags = functiontags
+		self.unfold = dounfold; self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
@@ -260,7 +260,7 @@ class BracketCorpusReader(object):
 	(S (NP John) (VP (VB is) (JJ rich)) (. .))
 	"""
 	def __init__(self, root, fileids, encoding="utf-8", headrules=None,
-	headfinal=False, headreverse=False, unfold=False, functiontags=False,
+	headfinal=False, headreverse=False, dounfold=False, functiontags=False,
 	removepunct=False, movepunct=False):
 		""" headrules: if given, read rules for assigning heads and apply them
 				by marking constituents with '^' according to their heads
@@ -268,11 +268,11 @@ class BracketCorpusReader(object):
 			headreverse: ignored
 			before or after the head. When true, the side on which the head is
 				will be the reversed side.
-			unfold: whether to apply corpus transformations
+			dounfold: whether to apply corpus transformations
 			functiontags: whether to add function tags to node labels e.g. NP+OA
 			removepunct: eliminate punctuation
 			movepunct: move punctuation to appropriate constituents"""
-		self.unfold = unfold; self.functiontags = functiontags
+		self.unfold = dounfold; self.functiontags = functiontags
 		self.removepunct = removepunct; self.movepunct = movepunct
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
@@ -313,7 +313,7 @@ class BracketCorpusReader(object):
 		if self.unfold: result = unfold(result)
 		if self.headrules:
 			map(lambda x: headfinder(x, self.headrules), result.subtrees())
-			map(lambda x: headmark(x), result.subtrees())
+			map(headmark, result.subtrees())
 		if self.functiontags: addfunctions(result)
 		return result
 	def _word(self, s):
@@ -396,26 +396,28 @@ def headorder(tree, headfinal, reverse):
 			# head first, reverse rhs: A B C^ D E => C^ D E B A
 			tree[:] = nodes[headidx:] + nodes[:headidx][::-1]
 
-# generalizations suggested by SyntaxGeneralizer of TigerAPI
-# however, instead of renaming, we introduce unary productions
-# POS tags
-tonp = "NN NNE PNC PRF PDS PIS PPER PPOS PRELS PWS".split()
-topp = "PROAV PWAV".split()  # ??
-toap = "ADJA PDAT PIAT PPOSAT PRELAT PWAT PRELS".split()
-toavp = "ADJD ADV".split()
+def getgeneralizations():
+	# generalizations suggested by SyntaxGeneralizer of TigerAPI
+	# however, instead of renaming, we introduce unary productions
+	# POS tags
+	tonp = "NN NNE PNC PRF PDS PIS PPER PPOS PRELS PWS".split()
+	#topp = "PROAV PWAV".split()  # ??
+	#toap = "ADJA PDAT PIAT PPOSAT PRELAT PWAT PRELS".split()
+	#toavp = "ADJD ADV".split()
 
-tagtoconst = {}
-for a in tonp: tagtoconst[a] = "NP"
-#for a in toap: tagtoconst[a] = "AP"
-#for a in toavp: tagtoconst[a] = "AVP"
+	tagtoconst = {}
+	for label in tonp: tagtoconst[label] = "NP"
+	#for label in toap: tagtoconst[label] = "AP"
+	#for label in toavp: tagtoconst[label] = "AVP"
 
-# phrasal categories
-tonp = "CNP NM PN".split()
-topp = "CPP".split()
-toap = "MTA CAP".split()
-toavp = "AA CAVP".split()
-unaryconst = {}
-for a in tonp: unaryconst[a] = "NP"
+	# phrasal categories
+	tonp = "CNP NM PN".split()
+	#topp = "CPP".split()
+	#toap = "MTA CAP".split()
+	#toavp = "AA CAVP".split()
+	unaryconst = {}
+	for label in tonp: unaryconst[label] = "NP"
+	return tagtoconst, unaryconst
 
 def function(tree):
 	if hasattr(tree, "source"): return tree.source[FUNC].split("-")[0]
@@ -440,6 +442,7 @@ def unfold(tree):
 	def pop(a):
 		try: return a.parent.pop(a.parent_index)
 		except AttributeError: return a
+	tagtoconst, unaryconst = getgeneralizations()
 
 	# un-flatten PPs
 	addtopp = "AC".split()
@@ -483,7 +486,6 @@ def unfold(tree):
 	# introduce new S level for discourse markers
 	newlevel = "DM".split()
 	addtovp = "HD AC DA MO NG OA OA2 OC OG PD VO SVP".split()
-	labels = [a.node for a in tree]
 	def finitevp(s):
 		if any(x.node.startswith("V") and x.node.endswith("FIN")
 			for x in s if isinstance(x, Tree)):
@@ -495,15 +497,15 @@ def unfold(tree):
 	for s in tree.subtrees(lambda n: n.node == "S" and function(n) == "RC"):
 		s.node = "SRC"
 	toplevel_s = []
-	if "S" in labels:
+	if "S" in labels(tree):
 		toplevel_s = [a for a in tree if a.node == "S"]
 		for s in toplevel_s:
 			while function(s[0]) in newlevel:
 				s[:] = [s[0], ParentedTree("S", s[1:])]
 				s = s[1]
 				toplevel_s = [s]
-	elif "CS" in labels:
-		cs = tree[labels.index("CS")]
+	elif "CS" in labels(tree):
+		cs = tree[labels(tree).index("CS")]
 		toplevel_s = [a for a in cs if a.node == "S"]
 	map(finitevp, toplevel_s)
 
@@ -554,11 +556,11 @@ def unfold(tree):
 def fold(tree):
 	""" Undo the transformations performed by unfold. Do not apply twice
 	(might remove VPs which shouldn't be). """
+	tagtoconst, unaryconst = getgeneralizations()
+
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1): a.sort(key=lambda n: n.leaves())
-	global original, current
-	original = tree.copy(True)
-	current = tree
+	#original = tree.copy(True); current = tree
 
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.node == "DP"):
@@ -653,11 +655,11 @@ def doremovepunct(tree):
 	assert sorted(tree.leaves()) == range(len(tree.leaves())), tree
 
 def renumber(tree):
-	leaves = sorted(tree.leaves())
+	indices = sorted(tree.leaves())
 	newleaves = {}
 	shift = 0
-	for n, a in enumerate(leaves):
-		if a > 1 and a - 1 not in leaves:
+	for n, a in enumerate(indices):
+		if a > 1 and a - 1 not in indices:
 			shift += 1
 		newleaves[a] = n + shift
 	for a in tree.treepositions("leaves"):
@@ -771,12 +773,12 @@ def preterminals(node):
 
 def puncttest():
 	from treetransforms import slowfanout as fanout
-	file = 'sample2.export' #'negraproc.export'
-	mangledtrees = NegraCorpusReader(".", file, headrules=None,
+	filename = 'sample2.export' #'negraproc.export'
+	mangledtrees = NegraCorpusReader(".", filename, headrules=None,
 			encoding="iso-8859-1", movepunct=True)
-	nopunct = NegraCorpusReader(".", file, headrules=None,
+	nopunct = NegraCorpusReader(".", filename, headrules=None,
 			encoding="iso-8859-1", removepunct=True).parsed_sents().values()
-	originals = NegraCorpusReader(".", file, headrules=None,
+	originals = NegraCorpusReader(".", filename, headrules=None,
 			encoding="iso-8859-1").parsed_sents().values()
 	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
@@ -805,7 +807,7 @@ def main():
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			headrules=headrules)
 	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-			headrules=headrules, unfold=True)
+			headrules=headrules, dounfold=True)
 	print "\nunfolded"
 	correct = exact = d = 0
 	nk = set(); mo = set()

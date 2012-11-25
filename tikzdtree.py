@@ -136,7 +136,7 @@ def tikzdtree(tree, sent):
 	# write branches from node to node
 	for i in reversed(positions):
 		if not isinstance(tree[i], Tree): continue
-		for j, child in enumerate(tree[i]):
+		for j, _ in enumerate(tree[i]):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))

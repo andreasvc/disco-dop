@@ -2,7 +2,7 @@
 import os, re, sys, time, gzip, codecs, logging, cPickle, tempfile
 import multiprocessing
 from collections import defaultdict, OrderedDict, Counter as multiset
-from itertools import imap, count, izip_longest
+from itertools import imap, izip_longest
 from operator import itemgetter
 from subprocess import Popen, PIPE
 from math import exp
@@ -14,11 +14,11 @@ from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
 from fragments import getfragments
 from grammar import induce_plcfrs, dop_lcfrs_rules, doubledop, grammarinfo, \
 	rem_marks, defaultparse, canonicalize, doubledop_new
-from containers import Grammar, maxbitveclen
+from containers import Grammar
 from treetransforms import binarize, unbinarize, optimalbinarize,\
 	splitdiscnodes, mergediscnodes, addfanoutmarkers, slowfanout
 from coarsetofine import prunechart
-from parser import parse, cfgparse, pprint_chart
+from parser import parse, cfgparse
 from disambiguation import marginalize, viterbiderivation, sldop, sldop_simple
 from eval import doeval, readparam, printbrackets, transform, \
 		bracketings, precision, recall, f_measure
@@ -116,8 +116,8 @@ def main(
 	elif corpusfmt == 'bracket': CorpusReader = BracketCorpusReader
 	elif corpusfmt == 'discbracket': CorpusReader = DiscBracketCorpusReader
 	corpus = CorpusReader(corpusdir, traincorpus, encoding=trainencoding,
-		headrules=headrules, headfinal=True, headreverse=False, unfold=unfolded,
-		movepunct=movepunct, removepunct=removepunct)
+		headrules=headrules, headfinal=True, headreverse=False,
+		dounfold=unfolded, movepunct=movepunct, removepunct=removepunct)
 	logging.info("%d sentences in corpus %s/%s",
 			len(corpus.parsed_sents()), corpusdir, traincorpus)
 	if isinstance(trainsents, float):
@@ -365,15 +365,13 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 #	params = DictObj(**params)
 def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		test, testmaxwords, testsents, top, tags=True,
-		resultdir="results", numproc=None, category=None, sentinit=0,
+		resultdir="results", numproc=None, category=None,
 		deletelabel=("ROOT", "VROOT", "TOP", "$.", "$,", "$(", "$[")):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
-			resultdir=resultdir, category=category, sentinit=sentinit,
-			deletelabel=deletelabel)
+			resultdir=resultdir, category=category, deletelabel=deletelabel)
 	goldbrackets = multiset()
-	maxlen = min(testmaxwords, maxbitveclen)
 	gold = OrderedDict.fromkeys(test)
 	gsent = OrderedDict.fromkeys(test)
 	results = [DictObj(name=stage.name) for stage in stages]
@@ -431,7 +429,7 @@ def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		pool.join()
 		del dowork, pool
 
-	writeresults(results, gold, gsent, resultdir, category, sentinit)
+	writeresults(results, gold, gsent, resultdir, category)
 	return results, len(test), goldbrackets, gold, gsent
 
 def worker(args):
@@ -451,14 +449,9 @@ def worker(args):
 		msg += "%s:\t" % stage.name.upper()
 		if n == 0 or start:
 			if n != 0 and stage.prune:
-				try:
-					whitelist, items = prunechart(chart, start,
-						d.stages[n-1].grammar, stage.grammar, stage.k,
-						stage.splitprune, d.stages[n-1].markorigin)
-				except:
-					pprint_chart(chart,
-							[w.encode('unicode-escape') for w, _ in sent],
-							stage.grammar.tolabel)
+				whitelist, items = prunechart(chart, start,
+					d.stages[n-1].grammar, stage.grammar, stage.k,
+					stage.splitprune, d.stages[n-1].markorigin)
 				msg += "coarse items before pruning: %d; after: %d\n\t" % (
 					(sum(len(a) for x in chart for a in x if a)
 					if d.stages[n-1].mode == 'pcfg' else len(chart)), items)
@@ -484,6 +477,7 @@ def worker(args):
 				msg += "%s\n\t" % msg1
 			if (n != 0 and not start and not results[-1].noparse
 					and stage.split == d.stages[n-1].split):
+				#from parser import pprint_chart
 				#pprint_chart(chart,
 				#		[w.encode('unicode-escape') for w, _ in sent],
 				#		stage.grammar.tolabel)
@@ -574,7 +568,7 @@ def worker(args):
 	msg += "GOLD:   %s" % tree.pprint(margin=1000)
 	return (nsent, msg, results)
 
-def writeresults(results, gold, gsent, resultdir, category, sentinit):
+def writeresults(results, gold, gsent, resultdir, category):
 	codecs.open("%s/%s.export" % (resultdir,
 			".".join(category, "gold") if category else "gold"),
 			"w", encoding='utf-8').writelines("#BOS %s\n%s\n#EOS %s\n" % (
@@ -684,7 +678,7 @@ def parsetepacoc(
 		corpus = NegraCorpusReader("../tiger/corpus", "tiger_release_aug07.export",
 				headrules=("negra.headrules" if bintype in ("binarize", "nltk")
 						else None), headfinal=True,
-				headreverse=False, unfold=unfolded, movepunct=True,
+				headreverse=False, dounfold=unfolded, movepunct=True,
 				removepunct=False, encoding='iso-8859-1')
 		corpus_sents = corpus.sents().values()
 		corpus_taggedsents = corpus.tagged_sents().values()
@@ -752,8 +746,7 @@ def parsetepacoc(
 		begin = time.clock()
 		results[cat] = doparse(stages, unfolded, bintype,
 				fanout_marks_before_bin, test, testmaxwords, testsents,
-				trees[0].node, True, resultdir, numproc, category=cat,
-				sentinit=cnt)
+				trees[0].node, True, resultdir, numproc, category=cat)
 		cnt += len(test[0])
 		if numproc == 1:
 			logging.info("time elapsed during parsing: %g", time.clock() - begin)
@@ -779,15 +772,14 @@ def parsetepacoc(
 		olddoeval(*res)
 	logging.info("TOTAL")
 	# write TOTAL results file with all tepacoc sentences (not the baseline)
-	writeresults(totresults, gold, gsent, resultdir, "TOTAL", 0) #sentinit??
+	writeresults(totresults, gold, gsent, resultdir, "TOTAL")
 	olddoeval(totresults, cnt, goldbrackets, gold, gsent)
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info("category: %s", cat)
 	olddoeval(*doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset[cat], testmaxwords, testsents,
-			trees[0].node, True, resultdir, numproc, category=cat,
-			sentinit=cnt))
+			trees[0].node, True, resultdir, numproc, category=cat))
 
 def cycledetection(trees, sents):
 	seen = set()
@@ -937,7 +929,8 @@ def testmain():
 		corpusdir=".",
 		traincorpus="sample2.export",
 		testcorpus="sample2.export",
-		encoding="iso-8859-1",
+		testencoding="iso-8859-1",
+		trainencoding="iso-8859-1",
 		movepunct=False,
 		removepunct=False,
 		unfolded = False,
