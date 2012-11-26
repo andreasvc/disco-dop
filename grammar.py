@@ -243,7 +243,7 @@ def doubledop_new(fragments, debug=False, freqs=False):
 		grammar[prods[0]] = fragments[frag, terminals]
 		grammar.update(zip(prods[1:], repeat(1)))
 		# & becomes key in backtransform
-		backtransform[prods[0]] = newfrag, prods[0], frag
+		backtransform[prods[0]] = newfrag
 	if debug:
 		doubledopdump([], fragments, {}, backtransform)
 	# replace keys with numeric ids of rules, drop terminals.
@@ -293,7 +293,8 @@ def doubledop(fragments, debug=False, freqs=False):
 			flatfrag = newlabel + flatfrag[flatfrag.index(" "):]
 			newflatfrag = "(%s %s)" % (label, flatfrag)
 			newflatfrag = ImmutableTree(label, [defaultrightbin(
-				addbitsets(newflatfrag)[0], "}", markfanout=True, ids=binids)])
+				addbitsets(newflatfrag)[0], "}", markfanout=True, ids=binids,
+				threshold=1)])
 			ambigfrags[newflatfrag] = frag, terminals
 		backtransform[flatfrag] = frag, terminals
 	if debug:
@@ -303,7 +304,7 @@ def doubledop(fragments, debug=False, freqs=False):
 	grammar.update(rule
 		for flatfrag, (frag, terminals) in zip(flatfrags, sortedfragments)
 		for rule in zip(lcfrs_productions(defaultrightbin(addbitsets(flatfrag),
-			"}", markfanout=True, ids=ids), terminals),
+			"}", markfanout=True, ids=ids, threshold=0), terminals),
 			chain((fragments[frag, terminals],), repeat(1))))
 	# ambiguous fragments (fragments that map to the same flattened fragment)
 	grammar.update(rule for flatfrag, (frag, terminals) in ambigfrags.iteritems()
@@ -342,7 +343,8 @@ def doubledopdump(flatfrags, fragments, newprods, backtransform):
 		print
 	print "backtransform:"
 	for a, b in backtransform.items():
-		if b: print a, ":\n\t", b[0], " ".join(
+		if not isinstance(b, tuple): print b
+		elif b: print a, ":\n\t", b[0], " ".join(
 				'_' if x is None else quotelabel(x) for x in b[1])
 
 def coarse_grammar(trees, sents, level=0):
@@ -437,7 +439,7 @@ def flatten_new(tree, sent, ids):
 	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT %s (ROOT|<$,>_2 %s %s))')
+	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
 	>>> print flatten_new("(NN 0)", ["foo"], ids)
 	([(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
 	>>> flatten_new(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
@@ -463,17 +465,17 @@ def flatten_new(tree, sent, ids):
 	(('ADV@kuerzlich', 'Epsilon'), (u'kuerzlich',)),
 	(('ART@dem', 'Epsilon'), (u'dem',)),
 	(('NN@Ortsbeirat', 'Epsilon'), (u'Ortsbeirat',))],
-	'(S (S|<VP> (S|<NP> (NP %s (CNP (CNP|<TRUNC> %s (CNP|<KON> %s \
-	(CNP|<NN> %s))))) (S|<VAFIN> %s)) (VP (VP|<ADV> %s (VP|<NP> \
-	(NP %s %s) (VP|<NP> %s (VP|<VVPP> %s)))))))')
+	'(S (S|<VP> (S|<NP> (NP {0} (CNP (CNP|<TRUNC> {1} (CNP|<KON> {2} \
+	(CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} (VP|<NP> \
+	(NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
 	>>> flatten_new("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 (ADV 2) "
 	... "(VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
 	... (None, None, None, None, None), ids)
 	([(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 	(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
 	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
-	'(S|<VP>_2 (VP_3 (VP|<NP>_3 %s (VP|<ADV>_2 %s (VP|<VVPP> %s)))) \
-	(S|<VAFIN> %s))')
+	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {1} (VP|<VVPP> {2})))) \
+	(S|<VAFIN> {3}))')
 	"""
 	from treetransforms import defaultleftbin, addbitsets
 	assert isinstance(tree, basestring), (tree, sent)
@@ -488,14 +490,17 @@ def flatten_new(tree, sent, ids):
 		return lcfrs_productions(addbitsets(tree), sent), tree
 	# give terminals unique POS tags
 	prod = frontierorterm.sub(repl, tree)
-	# remove internal nodes
+	# remember original order of frontiers / terminals for template
+	order = dict((x[2], "{%d}" % n)
+			for n, x in enumerate(frontierorterm.findall(prod)))
+	# remove internal nodes, reorder
 	prod = "%s %s)" % (prod[:prod.index(" ")],
 		" ".join(x[0] for x in sorted(frontierorterm.findall(prod),
-			key=lambda y: int(y[2]))))
+		key=lambda x: int(x[2]))))
 	prods = lcfrs_productions(defaultleftbin(addbitsets(prod), "}",
-		markfanout=True, ids=ids), sent)
+		markfanout=True, ids=ids, threshold=2), sent)
 	# mark substitution sites and ensure ascii string.
-	newtree = str(frontierorterm.sub('%s', tree))
+	newtree = str(frontierorterm.sub(lambda x: order[x.group(3)], tree))
 	return prods, newtree
 
 def flatten(treesent):

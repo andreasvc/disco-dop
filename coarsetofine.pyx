@@ -316,19 +316,19 @@ def main():
 	dtrees = [t.copy(True) for t in trees]
 	parenttrees = [t.copy(True) for t in trees]
 	for t in trees:
-		binarize(t, vertMarkov=0, horzMarkov=1)
+		binarize(t, vertMarkov=1, horzMarkov=1)
 		addfanoutmarkers(t)
 	cftrees = [splitdiscnodes(t.copy(True), markorigin=True) for t in trees]
 	for t in cftrees:
 		#t.chomsky_normal_form(childChar=":")
-		binarize(t, horzMarkov=1, tailMarker='', leftMostUnary=True,
+		binarize(t, horzMarkov=2, tailMarker='', leftMostUnary=True,
 			childChar=":") #NB leftMostUnary is important
 		addfanoutmarkers(t)
 	for t in parenttrees:
-		binarize(t, vertMarkov=2, horzMarkov=1)
+		binarize(t, vertMarkov=3, horzMarkov=1)
 		addfanoutmarkers(t)
 	for t in dtrees:
-		binarize(t, vertMarkov=0, horzMarkov=1)
+		binarize(t, vertMarkov=1, horzMarkov=1)
 		addfanoutmarkers(t)
 	# mark heads, canonicalize, binarize head outward
 	normallcfrs = induce_plcfrs(trees, sents)

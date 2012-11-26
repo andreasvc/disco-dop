@@ -212,7 +212,7 @@ cdef class Grammar:
 			print dict(striplabelre=striplabelre.pattern,
 					neverblockre=neverblockre.pattern,
 					splitprune=splitprune, markorigin=markorigin)
-	def write_lcfrs_grammar(self, rules, lexicon):
+	def write_lcfrs_grammar(self, rules, lexicon, hexprobs=True):
 		""" Writes the grammar into a simple text file format, to the file
 		objects given as arguments. Fields are separated by tabs. Components of
 		the yield function are comma-separated. Weights are expressed as
@@ -228,21 +228,23 @@ cdef class Grammar:
 		cdef LexicalRule term
 		while rule.lhs < self.nonterminals:
 			pyfloat = rule.prob
-			rules.write("%s\t%s%s\t%s\t%g\n" % (self.tolabel[rule.lhs],
+			rules.write("%s\t%s%s\t%s\t%s\n" % (self.tolabel[rule.lhs],
 				self.tolabel[rule.rhs1],
 				('\t'+self.tolabel[rule.rhs2] if rule.rhs2 else ''),
-				self.yfrepr(rule), exp(-pyfloat))) #pyfloat.hex()))
+				self.yfrepr(rule),
+				pyfloat.hex() if hexprobs else exp(-pyfloat)))
 			n += 1
 			rule = self.bylhs[0][n]
 		for word in self.lexical:
 			for term in self.lexical[word]:
 				pyfloat = term.prob
-				lexicon.write("%s\t%s\t%g\n" % (
-					self.tolabel[term.lhs], word, exp(-pyfloat))) #pyfloat.hex()))
+				lexicon.write("%s\t%s\t%s\n" % (
+					self.tolabel[term.lhs], word,
+					pyfloat.hex() if hexprobs else exp(-pyfloat)))
 	def write_bitpar_grammar(self, rules, lexicon):
 		""" write grammar as a bitpar grammar to files specified by rules and
-		lexicon. As `frequencies' we give the probabilities in the grammar,
-		which is supported by bitpar. """
+		lexicon. As weights we give the probabilities in the grammar instead
+		of frequencies, which is supported by bitpar. """
 		cdef size_t n = 0
 		cdef Rule rule = self.bylhs[0][n]
 		cdef LexicalRule term

@@ -410,7 +410,7 @@ cpdef str recoverfragments_new(RankedEdge derivation, dict D,
 	cdef list children = []
 
 	# get fragment
-	result, prod, frag = backtransform[(<LCFRSEdge>derivation.edge).ruleno]
+	result = backtransform[(<LCFRSEdge>derivation.edge).ruleno]
 
 	# recursively expand all substitution sites,
 	# w/on the fly left-factored debinarization
@@ -420,8 +420,9 @@ cpdef str recoverfragments_new(RankedEdge derivation, dict D,
 			# one of the right children
 			child = (<Entry>D[derivedge.right][derivation.right]).key
 			childedge = child.edge
-			children.append('(%s %d)' % (
-				tolabel[child.head.label].split("@", 1)[0], childedge.left.lexidx())
+			children.append(('(%s %d)' % (
+				tolabel[child.head.label].split("@", 1)[0],
+				childedge.left.lexidx()))
 				if childedge.ruleno == -1 else
 				recoverfragments_new(child, D, tolabel, backtransform, debin))
 			# move on to next node in this binarized constituent
@@ -432,7 +433,8 @@ cpdef str recoverfragments_new(RankedEdge derivation, dict D,
 			child = (<Entry>D[derivedge.right][derivation.right]).key
 			childedge = child.edge
 			children.append('(%s %d)' % (
-				tolabel[child.head.label].split("@", 1)[0], childedge.left.lexidx())
+				tolabel[child.head.label].split("@", 1)[0],
+				childedge.left.lexidx())
 				if childedge.ruleno == -1 else
 				recoverfragments_new(child, D, tolabel, backtransform, debin))
 	elif debin in tolabel[derivedge.left.label]:
@@ -441,11 +443,11 @@ cpdef str recoverfragments_new(RankedEdge derivation, dict D,
 	# left-most child
 	child = (<Entry>D[derivedge.left][derivation.left]).key
 	childedge = child.edge
-	children.append('(%s %d)' % (
-		tolabel[child.head.label].split("@", 1)[0], childedge.left.lexidx())
+	children.append(('(%s %d)' % (
+		tolabel[child.head.label].split("@", 1)[0], childedge.left.lexidx()))
 		if childedge.ruleno == -1 else
 		recoverfragments_new(child, D, tolabel, backtransform, debin))
-	return result % tuple(reversed(children))
+	return result.format(*reversed(children))
 
 def main():
 	from nltk import Tree

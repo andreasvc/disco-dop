@@ -217,7 +217,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		bintype += " %s h=%d v=%d %s" % (factor, h, v,
 			"tailmarker" if tailmarker else '')
 		for a in trees:
-			binarize(a, factor=factor, vertMarkov=v-1, horzMarkov=h,
+			binarize(a, factor=factor, vertMarkov=v, horzMarkov=h,
 					tailMarker=tailmarker, leftMostUnary=leftMostUnary,
 					rightMostUnary=rightMostUnary, reverse=revmarkov)
 	elif bintype == "optimal":
@@ -285,8 +285,12 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			logging.info(msg)
 			grammar.testgrammar()
 			if stage.usedoubledop:
+				# with newdd, backtransform is parallel to rules file
+				if stage.newdd:
+					lines = [v for _, v in sorted(backtransform.items())]
+				else: lines = ["\t".join(a) for a in backtransform.iteritems()]
 				gzip.open(resultdir + "/dop.backtransform.gz", "w").writelines(
-					"%s\t%s\n" % a for a in backtransform.iteritems())
+					"%s\n" % a for a in lines)
 				if stage.prune:
 					grammar.getmapping(re.compile("(?:_[0-9]+)?(?:@.+)?$")
 						if stages[n-1].split else re.compile("@.+$"),
