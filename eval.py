@@ -163,7 +163,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			print "leaf ancestor score 1.0 but no exact match: (bug?)"
 		elif la[-1] is None: del la[-1]
 		if param["DEBUG"] <= 0: continue
-		print "%4d  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %6.2f %6.2f %s" % (
+		print "%4s  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f %s" % (
 			n,
 			lengpos,
 			nozerodiv(lambda: recall(gbrack, cbrack)),
@@ -173,7 +173,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			sum(cbrack.values()),
 			len(gpos),
 			sum(1 for a, b in zip(gpos, cpos) if a==b),
-			100 * accuracy(gpos, cpos),
+			nozerodiv(lambda: accuracy(gpos, cpos)),
 			100 * la[-1],
 			str(ted).rjust(2) if param["TED"] else "",
 			)
@@ -190,7 +190,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			c = leafancestorpaths(ctree, param["DELETE_LABEL"])
 			for leaf in g:
 				print "%6.3g  %s     %s : %s" % (pathscore(g[leaf], c[leaf]),
-					str(gsent[leaf]).ljust(15), " ".join(g[leaf][::-1]).rjust(20),
+					unicode(gsent[leaf]).ljust(15),
+					" ".join(g[leaf][::-1]).rjust(20),
 					" ".join(c[leaf][::-1]))
 			print "%6.3g  average = leaf-ancestor score" % la[-1]
 			if param["TED"]:
@@ -288,7 +289,7 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		print "leaf-ancestor:             %s" % (
 				nozerodiv(lambda: mean(la)))
 		if param["TED"]:
-			print "tree-dist (Dice micro avg) %6.2f" % (
+			print "tree-dist (Dice micro avg) %s" % (
 					nozerodiv(lambda: 1 - dicenoms / float(dicedenoms)))
 		print "tagging accuracy:          %s" % (
 				nozerodiv(lambda: accuracy(goldpos, candpos)))
@@ -338,9 +339,9 @@ def readparam(filename):
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = "DEBUG MAX_ERROR CUTOFF_LEN LABELED DISC_ONLY".split()
 	param = { "DEBUG" : 0, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
-					"LABELED" : 1, "DISC_ONLY" : 0, "PRESERVE_FUNCTIONS": 0,
-					"DELETE_LABEL" : [], "DELETE_LABEL_FOR_LENGTH" : [],
-					"EQ_LABEL" : {}, "EQ_WORD" : {}, "TED": 0 }
+					"LABELED" : 1, "DELETE_LABEL_FOR_LENGTH" : [],
+					"DELETE_LABEL" : [], "EQ_LABEL" : set(), "EQ_WORD" : set(),
+					"DISC_ONLY" : 0, "PRESERVE_FUNCTIONS": 0, "TED": 0 }
 	seen = set()
 	for a in open(filename) if filename else ():
 		line = a.strip()
@@ -353,12 +354,30 @@ def readparam(filename):
 			elif key in ("DELETE_LABEL", "DELETE_LABEL_FOR_LENGTH"):
 				param[key].append(val)
 			elif key in ("EQ_LABEL", "EQ_WORD"):
-				hd = val.split()[0]
-				assert not any(a in param[key] for a in val.split()), (
-					"Values for %s should be disjoint." % key)
-				param[key].update((a, hd) for a in val.split()[1:])
+				# these are given as undirected pairs
+				# will be represented as equivalence classes A => {A, B, C, D}
+				try: b, c = val.split()
+				except ValueError: raise ValueError("%s requires two values" % key)
+				param[key].add((b, c))
 			else:
 				raise ValueError("unrecognized parameter key: %s" % key)
+	# transitive closure of (undirected) EQ relations with DFS
+	for key in ("EQ_LABEL", "EQ_WORD"):
+		connectedcomponents = {}
+		seen = set()
+		for k, v in param[key]:
+			if k in seen or v in seen: continue
+			connectedcomponents[k] = set((k, v))
+			agenda = [x for x in param[key] if k in x or v in x]
+			while agenda:
+				a, b = agenda.pop()
+				connectedcomponents[k].update((a, b))
+				if a not in seen:
+					agenda.extend(x for x in param[key] if a in x)
+				if b not in seen:
+					agenda.extend(x for x in param[key] if b in x)
+				seen.update((a, b))
+		param[key] = connectedcomponents
 	return param
 
 def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
@@ -431,6 +450,7 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 					and (not disconly or disc(a)))
 
 def printbrackets(brackets):
+	if not brackets: return "{}"
 	return ", ".join("%s[%s]" % (a, ",".join(
 		"-".join(str(y) for y in sorted(set(x)))
 		for x in intervals(sorted(b)))) for a, b in brackets)
