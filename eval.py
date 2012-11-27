@@ -127,7 +127,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			not param["PRESERVE_FUNCTIONS"])
 		#if not gtree or not ctree: continue
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
-			"%s\%s" % (" ".join(csent), " ".join(gsent)))
+			"%r // %r" % (" ".join(csent), " ".join(gsent)))
 		cbrack = bracketings(ctree, param["LABELED"], param["DELETE_LABEL"],
 				param["DISC_ONLY"])
 		gbrack = bracketings(gtree, param["LABELED"], param["DELETE_LABEL"],
@@ -355,7 +355,7 @@ def readparam(filename):
 			elif key in ("EQ_LABEL", "EQ_WORD"):
 				hd = val.split()[0]
 				assert not any(a in param[key] for a in val.split()), (
-					"Values for EQ_LABEL and EQ_WORD should be disjoint.") #ORLY?
+					"Values for %s should be disjoint." % key)
 				param[key].update((a, hd) for a in val.split()[1:])
 			else:
 				raise ValueError("unrecognized parameter key: %s" % key)
@@ -369,7 +369,10 @@ def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
 	posnodes = []
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in zip(count(), a)[::-1]:
-			if stripfunctions: b.node = b.node.split("-")[0].split("=")[0]
+			if stripfunctions:
+				x = b.node.find("-"); y = b.node.find("=")
+				if x >= 1: a.node = b.node[:x]
+				if y >= 0: a.node = b.node[:y]
 			b.node = eqlabel.get(b.node, b.node)
 			if not b: a.pop(n)  #remove empty nodes
 			elif isinstance(b[0], Tree):

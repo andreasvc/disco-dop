@@ -208,18 +208,15 @@ class DiscBracketCorpusReader(object):
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
 	def sents(self):
-		return OrderedDict(enumerate((
-			line.split("\t", 1)[1].rstrip("\n\r").split(" ")
-			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)), 1))
+		return OrderedDict((n, line.split("\t", 1)[1].split(" "))
+				for n, line in self.blocks())
 	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
-		return OrderedDict(enumerate((
-				zip(line.split("\t", 1)[1].rstrip("\n\r").split(" "),
+		return OrderedDict((n,
+				zip(line.split("\t", 1)[1].split(" "),
 				map(itemgetter(1), sorted(Tree.parse(line.split("\t", 1)[0],
-					parse_leaf=int).pos())))
-			for filename in self._filenames
-				for line in codecs.open(filename, encoding=self._encoding)), 1))
+					parse_leaf=int).pos()))))
+				for n, line in self.blocks())
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = OrderedDict(enumerate(
@@ -228,8 +225,9 @@ class DiscBracketCorpusReader(object):
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
 		trees in the treebank, with any transformations applied."""
-		return OrderedDict(enumerate((line for filename in self._filenames
-			for line in codecs.open(filename, encoding=self._encoding)), 1))
+		return OrderedDict(enumerate(filter(None, (line.strip("\n\r")
+			for filename in self._filenames
+			for line in codecs.open(filename, encoding=self._encoding))), 1))
 	def _parse(self, s):
 		result = Tree.parse(s.split("\t", 1)[0], parse_leaf=int)
 		# roughly order constituents by order in sentence
@@ -297,9 +295,9 @@ class BracketCorpusReader(object):
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
 		trees in the treebank, with any transformations applied."""
-		return OrderedDict(enumerate((line.strip()
+		return OrderedDict(enumerate(filter(None, (line.strip()
 			for filename in self._filenames
-			for line in codecs.open(filename, encoding=self._encoding)), 1))
+			for line in codecs.open(filename, encoding=self._encoding))), 1))
 	def _parse(self, s):
 		c = count()
 		result = Tree.parse(s, parse_leaf=lambda _: c.next())
@@ -328,7 +326,11 @@ def addfunctions(tree):
 			a.node += "+%s" % a.source[FUNC].split("-")[0]
 
 def stripfunctions(tree):
-	for a in tree.subtrees(): a.node = a.node.split("-")[0].split("=")[0]
+	for a in tree.subtrees():
+		x = a.node.find("-"); y = a.node.find("=")
+		if x >= 1: a.node = a.node[:x]
+		if y >= 0: a.node = a.node[:y]
+		if a.node[0] != "-": a.node = a.node.split("-")[0].split("=")[0]
 
 def readheadrules(filename):
 	headrules = {}

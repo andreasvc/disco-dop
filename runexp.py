@@ -87,6 +87,7 @@ def main(
 		headrules=None, # rules for finding heads of constituents
 		fanout_marks_before_bin=False,
 		tailmarker="",
+		evalparam="proper.prm", # EVALB-style parameter file
 		quiet=False, reallyquiet=False, #quiet=no per sentence results
 		numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
 		resultdir='results'):
@@ -174,11 +175,14 @@ def main(
 	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			revmarkov, leftMostUnary, rightMostUnary,
 			fanout_marks_before_bin, testmaxwords, resultdir, numproc)
+	evalparam = readparam(evalparam)
+	evalparam["DEBUG"] = -1
+	deletelabel = evalparam.get("DELETE_LABEL", ())
 
 	begin = time.clock()
 	results = doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, test, testmaxwords, testsents,
-			trees[0].node, True, resultdir, numproc)
+			trees[0].node, True, resultdir, numproc, deletelabel=deletelabel)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
 	print "testmaxwords", testmaxwords, "binarization", bintype,
@@ -189,12 +193,10 @@ def main(
 		if 'sl-dop' in stages[-1].estimator: print stages[-1].sldop_n,
 		if stages[-1].usedoubledop: print "doubledop",
 		print
-	param = readparam("proper.prm")
-	param["DEBUG"] = -1
 	for result in results[0]:
 		print "\n%s" % (" " + result.name.upper() + " ").center(35, "="),
 		doeval(test_parsed_sents, gold_sents,
-				result.parsetrees, test_tagged_sents, param)
+				result.parsetrees, test_tagged_sents, evalparam)
 		nsent = len(result.parsetrees)
 		print "coverage:    %s = %6.2f" % (
 				("%d / %d" % (nsent - result.noparse, nsent)).rjust(11),
@@ -372,9 +374,8 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 #def doparse(**params):
 #	params = DictObj(**params)
 def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
-		test, testmaxwords, testsents, top, tags=True,
-		resultdir="results", numproc=None, category=None,
-		deletelabel=("ROOT", "VROOT", "TOP", "$.", "$,", "$(", "$[")):
+		test, testmaxwords, testsents, top, tags=True, resultdir="results",
+		numproc=None, category=None, deletelabel=()):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
@@ -408,7 +409,7 @@ def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		evaltree = tree.copy(True)
 		transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), deletelabel, {}, {}, False)
-		goldb = bracketings(evaltree)
+		goldb = bracketings(evaltree, delete=deletelabel)
 		assert gold[sentid] == gsent[sentid] == None
 		gold[sentid] = block
 		gsent[sentid] = sent
@@ -447,7 +448,7 @@ def worker(args):
 	evaltree = tree.copy(True)
 	transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 			dict(evaltree.pos()), d.deletelabel, {}, {}, False)
-	goldb = bracketings(evaltree)
+	goldb = bracketings(evaltree, delete=d.deletelabel)
 	results = []
 	msg = ''
 	chart = {}; start = None
@@ -538,7 +539,7 @@ def worker(args):
 			evaltree = parsetree.copy(True)
 			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 					dict(evaltree.pos()), d.deletelabel, {}, {}, False)
-			candb = bracketings(evaltree)
+			candb = bracketings(evaltree, delete=d.deletelabel)
 			if goldb and candb:
 				prec = precision(goldb, candb)
 				rec = recall(goldb, candb)
@@ -564,7 +565,7 @@ def worker(args):
 			evaltree = parsetree.copy(True)
 			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 					dict(evaltree.pos()), d.deletelabel, {}, {}, False)
-			candb = bracketings(evaltree)
+			candb = bracketings(evaltree, delete=d.deletelabel)
 			prec = precision(goldb, candb)
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)

@@ -646,13 +646,17 @@ def nonfrontier(sent):
 def ispreterminal(n): return not isinstance(n[0], Tree)
 def tolist(tree, sent):
 	""" Convert NLTK tree to a list of nodes in pre-order traversal,
-	except for the terminals, which come last."""
+	except for the terminals, which come last. """
 	for a in tree.subtrees(ispreterminal):
 		a[0] = Terminal(a[0])
 	result = list(tree.subtrees(nonfrontier(sent))) + tree.leaves()
 	for n in reversed(range(len(result))):
 		a = result[n]
 		a.idx = n
+		assert isinstance(a, Terminal) or a.node, (
+				"labels should be non-empty. "
+				"tree: %s\nsubtree: %s\nindex %d, label %r" % (
+				tree, a, n, a.node))
 	result[0].root = 0
 	return result
 
