@@ -5,15 +5,15 @@ from random import random
 from bisect import bisect_right
 from operator import itemgetter, attrgetter
 from itertools import count
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from nltk import Tree
 from kbest import lazykbest, lazykthbest, getderiv
 from parser import parse
 from agenda cimport Entry
-from grammar import induce_plcfrs, canonicalize, rangeheads
-from treetransforms import unbinarize
-from containers cimport Grammar, ChartItem, Edge, LCFRSEdge, CFGEdge, \
-		CFGChartItem, SmallChartItem, FatChartItem, RankedEdge, \
+from grammar import induce_plcfrs, rangeheads
+from treetransforms import unbinarize #, canonicalize
+from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem,\
+		Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, Grammar,\
 		UChar, ULong, ULLong
 cimport cython
 
@@ -23,51 +23,47 @@ cdef extern from "macros.h":
 
 infinity = float('infinity')
 removeids = re.compile("@[-0-9]+")
+removewordtags = re.compile("@[^ )]+")
 termsre = re.compile(r" ([0-9]+)\b")
 
-cpdef marginalize(chart, ChartItem start, dict tolabel, int n=10,
+cpdef marginalize(chart, ChartItem start, Grammar grammar, int n=10,
 	bint sample=False, bint both=False, bint shortest=False,
 	secondarymodel=None, bint mpd=False, dict backtransform=None,
 	bint newdd=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
 	cdef Entry entry
-	cdef dict parsetrees = {}
+	cdef dict parsetrees = <dict>defaultdict(float)
 	cdef list entries = []
 	cdef str treestr, deriv, debin = None
 	cdef double prob, maxprob
 	cdef int m
 	derivations = []; D = {}
 	if not sample or both:
-		#if newdd: #if backtransform is not None:
-		#	debin = "}<"
-		#	D = {}
-		#	# FIXME: need to guarantee that all rankededges are in D
-		#	lazykthbest(start, n, n, D, {}, chart, set())
-		#else:
-		#	derivations, D = lazykbest(chart, start, n, tolabel, debin)
 		debin = "}<"
-		derivations, D = lazykbest(chart, start, n, tolabel, debin)
+		derivations, D = lazykbest(chart, start, n, grammar.tolabel, debin, not newdd)
 	if sample or both:
 		assert backtransform is None, "not implemented for double dop."
-		derivations.extend(getsamples(chart, start, n, tolabel))
+		derivations.extend(getsamples(chart, start, n, grammar.tolabel))
 		D.setdefault(start, []).extend([None] * n)
 	if shortest:
 		assert backtransform is None, "not implemented for double dop."
 		# filter out all derivations which are not shortest
 		maxprob = min(derivations, key=itemgetter(1))[1]
 		derivations = [(a,b) for a, b in derivations if b == maxprob]
+	if isinstance(start, CFGChartItem):
+		entries = D[(<CFGChartItem>start).start][
+				(<CFGChartItem>start).end][start.label]
+	else: entries = D[start]
 	if newdd:
-		if isinstance(start, CFGChartItem): raise NotImplemented
-		else: entries = D[start]
 		for entry in entries:
 			prob = entry.value
 			try:
-				treestr = recoverfragments_new(<RankedEdge>entry.key, D,
-					tolabel, backtransform, "}<")
+				treestr = recoverfragments_new(entry.key, D,
+					grammar, backtransform) #, "}<")
 				assert "}" not in treestr
 			except KeyError:
-				deriv = getderiv(entry.key, D, chart, tolabel, 0, debin)
+				deriv = getderiv(entry.key, D, chart, grammar.tolabel, debin)
 				print 'deriv', deriv
 				if "}" in treestr:
 					print ("unrecovered ambiguous fragment in tree."
@@ -75,14 +71,10 @@ cpdef marginalize(chart, ChartItem start, dict tolabel, int n=10,
 				raise
 
 			# simple way of adding probabilities (too easy):
-			#parsetrees[treestr] += exp(-prob)
-			if treestr in parsetrees: parsetrees[treestr].append(-prob)
-			else: parsetrees[treestr] = [-prob]
+			parsetrees[treestr] += exp(-prob)
+			#if treestr in parsetrees: parsetrees[treestr].append(-prob)
+			#else: parsetrees[treestr] = [-prob]
 	else: #DOP reduction / old double dop method
-		if isinstance(start, CFGChartItem):
-			entries = D[(<CFGChartItem>start).start][(<CFGChartItem>start).end
-					][start.label]
-		else: entries = D[start]
 		for (deriv, prob), entry in zip(derivations, entries):
 			if shortest:
 				# calculate the derivation probability in a different model.
@@ -92,27 +84,27 @@ cpdef marginalize(chart, ChartItem start, dict tolabel, int n=10,
 				sent = sorted(tree.leaves())
 				rules = induce_plcfrs([tree], [sent])
 				prob = -fsum([secondarymodel[r] for r, w in rules
-												if r[0][1] != 'Epsilon'])
+						if r[0][1] != 'Epsilon'])
 				del tree
 			if backtransform is None:
 				treestr = removeids.sub("@" if mpd else "", deriv)
 			else:
 				treestr = recoverfragments(deriv, backtransform)
 			# simple way of adding probabilities (too easy):
-			#parsetrees[treestr] += exp(-prob)
-			if treestr in parsetrees: parsetrees[treestr].append(-prob)
-			else: parsetrees[treestr] = [-prob]
+			parsetrees[treestr] += exp(-prob)
+			#if treestr in parsetrees: parsetrees[treestr].append(-prob)
+			#else: parsetrees[treestr] = [-prob]
 	# Adding probabilities in log space
 	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
 	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
-	for parsetree in parsetrees:
-		maxprob = max(parsetrees[parsetree])
-		parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
-									for prob in parsetrees[parsetree]]))]))
+	#for parsetree in parsetrees:
+	#	maxprob = max(parsetrees[parsetree])
+	#	parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
+	#								for prob in parsetrees[parsetree]]))]))
 	#for n, parsetree in enumerate(sorted(parsetrees, key=parsetrees.get)):
 	#	print "%3d. %g %s" % (n, parsetrees[parsetree], parsetree)
 	msg = "%d derivations, %d parsetrees" % (
-		len(derivations), len(parsetrees))
+			len(entries) if newdd else len(derivations), len(parsetrees))
 	return parsetrees, msg
 
 def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
@@ -228,7 +220,7 @@ cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
 	cdef ChartItem child
 	rnd = random() * tables[start][-1]
 	idx = bisect_right(tables[start], rnd)
-	edge = chart[start][idx]
+	edge = chart[start].values()[idx]
 	if edge.left.label == 0: # == "Epsilon":
 		#if isinstance(edge.left, SmallChartItem):
 		#	idx = (<SmallChartItem>edge.left).vec
@@ -252,11 +244,12 @@ def getsamples(chart, start, n, tolabel):
 	cdef dict tables = {}
 	for item in chart:
 		#FIXME: work w/inside prob right?
-		chart[item].sort()
+		#chart[item].sort()
 		#chart[item].sort(key=attrgetter('prob'))
+		chart[item] = OrderedDict(sorted(chart[item].items()))
 		tables[item] = []; prev = 0.0
 		minprob = (<LCFRSEdge>min(chart[item])).inside
-		for edge in chart[item]:
+		for edge in sorted(chart[item]):
 			prev += exp(-minprob - edge.inside)
 			tables[item].append(exp(minprob + log(prev)))
 	derivations = set([samplechart(chart, start, tolabel, tables)
@@ -272,8 +265,9 @@ cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
 		edge = min(chart[tmp.start][tmp.end][tmp.label])
 		return getviterbicfg(chart, tmp.label, tmp.start, tmp.end,
 			tolabel), edge.inside
-	edge = min(chart[start])
-	return getviterbi(chart, start, tolabel), edge.inside
+	else:
+		edge = min(chart[start])
+		return getviterbi(chart, start, tolabel), edge.inside
 
 cdef getviterbi(dict chart, ChartItem start, dict tolabel):
 	cdef LCFRSEdge edge = min(chart[start])
@@ -397,14 +391,30 @@ cdef inline str mysub(regex, dict repldict, str haystack):
 		prev = match.end()
 	return "".join(result) + haystack[prev:]
 
-cpdef str recoverfragments_new(RankedEdge derivation, dict D,
-		dict tolabel, dict backtransform, str debin):
+cpdef str recoverfragments_new(derivation, D, Grammar grammar,
+		dict backtransform):
 	""" Reconstruct a DOP derivation from a DOP derivation with
-	flattened fragments. `derivation' should be a string, and
-	backtransform should contain strings as keys and values.
-	Returns expanded derivation as a string.
-	This version use the first binarized production as key,
-	which map to string templates as values. """
+	flattened fragments which are left-binarized. `derivation' should be
+	a RankedEdge representing a derivation, and backtransform should contain
+	rule numbers as keys and strings as values. Uses the first binarized
+	production as key, which map to string templates as values. Returns
+	expanded derivation as a string.
+
+	Does on-the-fly debinarization following labels that are not mapped to a
+	label in the coarse grammar, i.e., it assumes that neverblockre is only
+	used to avoid blocking nonterminals from the double-dop binarization
+	(containing the string '}<'). Note that this means getmapping() has to have
+	been called on `grammar', even when not doing coarse-to-fine parsing. """
+	if isinstance(derivation, RankedEdge):
+		return removewordtags.sub("", recoverfragments_new_lcfrs(
+				derivation, D, grammar, backtransform))
+	elif isinstance(derivation, RankedCFGEdge):
+		return removewordtags.sub("", recoverfragments_new_cfg(
+				derivation, D, grammar, backtransform))
+	raise ValueError("derivation should be RankedEdge or RankedCFGEdge.")
+
+cdef str recoverfragments_new_lcfrs(RankedEdge derivation, dict D,
+		Grammar grammar, dict backtransform):
 	cdef RankedEdge child
 	cdef LCFRSEdge childedge, derivedge = derivation.edge
 	cdef list children = []
@@ -416,15 +426,14 @@ cpdef str recoverfragments_new(RankedEdge derivation, dict D,
 	# w/on the fly left-factored debinarization
 	if derivedge.right.label: # is there a right child?
 		# keep going while left child is part of same binarized constituent
-		while debin in tolabel[derivedge.left.label]:
+		while grammar.mapping[derivedge.left.label] == 0:
 			# one of the right children
 			child = (<Entry>D[derivedge.right][derivation.right]).key
 			childedge = child.edge
 			children.append(('(%s %d)' % (
-				tolabel[child.head.label].split("@", 1)[0],
-				childedge.left.lexidx()))
-				if childedge.ruleno == -1 else
-				recoverfragments_new(child, D, tolabel, backtransform, debin))
+				grammar.tolabel[child.head.label], childedge.left.lexidx()))
+				if childedge.ruleno == -1 else recoverfragments_new_lcfrs(
+						child, D, grammar, backtransform))
 			# move on to next node in this binarized constituent
 			derivation = (<Entry>D[derivedge.left][derivation.left]).key
 			derivedge = derivation.edge
@@ -433,21 +442,70 @@ cpdef str recoverfragments_new(RankedEdge derivation, dict D,
 			child = (<Entry>D[derivedge.right][derivation.right]).key
 			childedge = child.edge
 			children.append('(%s %d)' % (
-				tolabel[child.head.label].split("@", 1)[0],
-				childedge.left.lexidx())
-				if childedge.ruleno == -1 else
-				recoverfragments_new(child, D, tolabel, backtransform, debin))
-	elif debin in tolabel[derivedge.left.label]:
+				grammar.tolabel[child.head.label], childedge.left.lexidx())
+				if childedge.ruleno == -1 else recoverfragments_new_lcfrs(
+						child, D, grammar, backtransform))
+	elif grammar.mapping[derivedge.left.label] == 0:
 		derivation = (<Entry>D[derivedge.left][derivation.left]).key
 		derivedge = derivation.edge
 	# left-most child
 	child = (<Entry>D[derivedge.left][derivation.left]).key
 	childedge = child.edge
 	children.append(('(%s %d)' % (
-		tolabel[child.head.label].split("@", 1)[0], childedge.left.lexidx()))
-		if childedge.ruleno == -1 else
-		recoverfragments_new(child, D, tolabel, backtransform, debin))
-	return result.format(*reversed(children))
+		grammar.tolabel[child.head.label], childedge.left.lexidx()))
+		if childedge.ruleno == -1 else recoverfragments_new_lcfrs(
+				child, D, grammar, backtransform))
+	children.reverse()
+	return result.format(*children)
+
+cdef str recoverfragments_new_cfg(RankedCFGEdge derivation, list D,
+		Grammar grammar, dict backtransform):
+	cdef RankedCFGEdge child
+	cdef CFGEdge childedge, derivedge = derivation.edge
+	cdef list children = []
+
+	# get fragment
+	result = backtransform[(<CFGEdge>derivation.edge).rule.no]
+
+	# recursively expand all substitution sites,
+	# w/on the fly left-factored debinarization
+	if derivedge.rule.rhs2: # is there a right child?
+		# keep going while left child is part of same binarized constituent
+		# this shortcut assumes that neverblockre is only used to avoid
+		# blocking nonterminals from the double-dop binarization.
+		while grammar.mapping[derivedge.rule.rhs1] == 0:
+			# one of the right children
+			child = (<Entry>D[derivedge.mid][derivation.end][
+					derivedge.rule.rhs2][derivation.right]).key
+			childedge = child.edge
+			children.append(('(%s %d)' % (grammar.tolabel[child.label],
+				child.start)) if childedge.rule is NULL else
+				recoverfragments_new_cfg(child, D, grammar, backtransform))
+			# move on to next node in this binarized constituent
+			derivation = (<Entry>D[derivation.start][derivedge.mid][
+					derivedge.rule.rhs1][derivation.left]).key
+			derivedge = derivation.edge
+		# last right child
+		if derivedge.rule.rhs2: # is there a right child?
+			child = (<Entry>D[derivedge.mid][derivation.end][
+					derivedge.rule.rhs2][derivation.right]).key
+			childedge = child.edge
+			children.append(('(%s %d)' % (grammar.tolabel[child.label],
+				child.start)) if childedge.rule is NULL else
+				recoverfragments_new_cfg(child, D, grammar, backtransform))
+	elif grammar.mapping[derivedge.rule.rhs1] == 0:
+		derivation = (<Entry>D[derivation.start][derivedge.mid][
+				derivedge.rule.rhs1][derivation.left]).key
+		derivedge = derivation.edge
+	# left-most child
+	child = (<Entry>D[derivation.start][derivedge.mid][
+			derivedge.rule.rhs1][derivation.left]).key
+	childedge = child.edge
+	children.append(('(%s %d)' % (grammar.tolabel[child.label], child.start))
+		if childedge.rule is NULL else recoverfragments_new_cfg(
+				child, D, grammar, backtransform))
+	children.reverse()
+	return result.format(*children)
 
 def main():
 	from nltk import Tree
@@ -490,13 +548,13 @@ def main():
 	sent = "a b c".split()
 	chart, start, _ = parse(sent, grammar, None, grammar.toid['ROOT'], True)
 	vit = viterbiderivation(chart, start, grammar.tolabel)
-	mpd, _ = marginalize(chart, start, grammar.tolabel, n=1000, mpd=True)
-	mpp, _ = marginalize(chart, start, grammar.tolabel, n=1000)
-	mppsampled, _ = marginalize(chart, start, grammar.tolabel, n=1000, sample=True)
+	mpd, _ = marginalize(chart, start, grammar, n=1000, mpd=True)
+	mpp, _ = marginalize(chart, start, grammar, n=1000)
+	mppsampled, _ = marginalize(chart, start, grammar, n=1000, sample=True)
 	sldopsimple, _ = sldop_simple(chart, start, grammar, 1000, 7)
 	sldop1, _ = sldop(chart, start, sent, None, grammar, shortest, 1000, 7,
 		sample=False, both=False)
-	short, _ = marginalize(chart, start, shortest.tolabel, 1000, shortest=True,
+	short, _ = marginalize(chart, start, shortest, 1000, shortest=True,
 		secondarymodel=secondarymodel)
 	print
 	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))

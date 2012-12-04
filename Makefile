@@ -22,7 +22,7 @@ valgrind-python.supp:
 	wget http://codespeak.net/svn/lxml/trunk/valgrind-python.supp
 
 html:
-	cython -a -X \
+	cython --annotate --timestamps --verbose -X \
 cdivision=True,\
 nonecheck=False,\
 wraparound=False,\
@@ -30,4 +30,4 @@ boundscheck=False \
 *.pyx
 
 lint:
-	pylint -dC demos.py eval.py fragments.py gen.py grammar.py runexp.py setup.py tikzdtree.py treebank.py treedist.py treetransforms.py
+	pylint eval.py fragments.py grammar.py runexp.py treebank.py treetransforms.py

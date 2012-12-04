@@ -189,10 +189,12 @@ def bitext():
 		] + [((('_%s' % word, 'Epsilon'), (word,)), 0.0)
 			for word in lexicon])
 	print another_scfg
-	assert do(another_scfg, "ich sah ein kleines Haus | I saw a small house".split())
-	assert do(another_scfg, "ich sah ein kleines Haus | I saw a little house".split())
-	assert do(another_scfg, "ich sah ein kleines Haus | I saw a small shell".split())
-	assert do(another_scfg, "ich sah ein kleines Haus | I saw a little shell".split())
+	sents = [
+		"ich sah ein kleines Haus | I saw a small house".split(),
+		"ich sah ein kleines Haus | I saw a little house".split(),
+		"ich sah ein kleines Haus | I saw a small shell".split(),
+		"ich sah ein kleines Haus | I saw a little shell".split()]
+	for sent in sents: assert do(another_scfg, sent), sent
 
 def do(compiledgrammar, testsent, testtags=None):
 	chart, start, _ = parser.parse(testsent,

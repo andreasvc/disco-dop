@@ -1,4 +1,5 @@
-""" generate random sentences with an LCFRS. """
+""" Generate random sentences with an LCFRS. Reads grammar from a
+text file. """
 import codecs, sys
 from collections import namedtuple
 from math import exp, log

@@ -293,7 +293,8 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 
 cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print "allocating outside matrix:",
-	print 8 * grammar.nonterminals * (maxlen+1) * (maxlen+1) * (maxlen+1) / 1024**2, 'MB'
+	print (8 * grammar.nonterminals * (maxlen+1) * (maxlen+1)
+			* (maxlen+1) / 1024**2), 'MB'
 	insidescores = np.empty((grammar.nonterminals, (maxlen+1)), dtype='d')
 	outside = np.empty((grammar.nonterminals,) + 3 * (maxlen+1,), dtype='d')
 	insidescores.fill(np.NAN); outside.fill(np.inf)
@@ -314,7 +315,8 @@ cdef inline double getpcfgoutside(dict outsidescores,
 		return 0.0
 	return outsidescores[label, left, right]
 
-cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal, bint debug=False):
+cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
+		bint debug=False):
 	insidescores = pcfginsidesx(grammar, maxlen)
 	outside = pcfgoutsidesx(grammar, insidescores, goal, maxlen)
 	if debug:
@@ -355,7 +357,8 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value
-		if I.label not in insidescores[I.vec] or x < insidescores[I.vec][I.label]:
+		if (I.label not in insidescores[I.vec]
+				or x < insidescores[I.vec][I.label]):
 			insidescores[I.vec][I.label] = x
 
 		for i in range(grammar.nonterminals):

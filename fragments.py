@@ -8,7 +8,7 @@ you want to abort, kill the program manually (e.g., press ctrl-z and run
 'kill %1'). If the program seems stuck, re-run without multiprocessing
 (pass --numproc 1) to see if there might be a bug. """
 
-import os, re, sys, codecs, logging
+import os, re, sys, codecs, logging, random
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count, imap
@@ -23,8 +23,7 @@ from _fragments import extractfragments, fastextractfragments, \
 sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 params = {}
 
-def usage():
-	print """Fast Fragment Seeker
+USAGE = """Fast Fragment Seeker
 usage: %s [options] treebank1 [treebank2]
 If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
@@ -55,33 +54,41 @@ Output is sent to stdout; to save the results, redirect to a file.
 --quiet       disable all messages.""" % sys.argv[0]
 
 def main(argv):
+	""" Command line interface to fragment extraction. """
 	flags = ("approx", "indices", "nofreq", "complete", "complement",
 			"disc", "quiet", "debug", "quadratic", "cover", "alt")
 	options = ("numproc=", "numtrees=", "encoding=", "batch=")
-	try: opts, args = gnu_getopt(argv[1:], "", flags + options)
+	try:
+		opts, args = gnu_getopt(argv[1:], "", flags + options)
 	except GetoptError as err:
-		print err
-		usage()
+		print "%s\n%s" % (err, USAGE)
 		exit(2)
-	else: opts = dict(opts)
+	else:
+		opts = dict(opts)
 
-	for flag in flags: params[flag] = "--" + flag in opts
+	for flag in flags:
+		params[flag] = "--" + flag in opts
 	numproc = int(opts.get("--numproc", 1))
-	if numproc == 0: numproc = cpu_count()
+	if numproc == 0:
+		numproc = cpu_count()
 	numtrees = int(opts.get("--numtrees", 0))
 	encoding = opts.get("--encoding", "UTF-8")
 	batch = opts.get("--batch")
 
-	if len(args) < 1: print "missing treebank argument"
+	if len(args) < 1:
+		print "missing treebank argument"
 	if batch is None and len(args) not in (1, 2):
 		print "incorrect number of arguments:", args
-		usage()
+		print USAGE
 		exit(2)
 	if batch:
 		assert numproc == 1, "batch mode only supported in single-process mode"
-	if args[0] == "-": args[0] = "/dev/stdin"
-	for a in args: assert os.path.exists(a), "not found: %s" % a
-	if params['complete']: assert len(args) == 2 or batch, (
+	if args[0] == "-":
+		args[0] = "/dev/stdin"
+	for a in args:
+		assert os.path.exists(a), "not found: %s" % a
+	if params['complete']:
+		assert len(args) == 2 or batch, (
 		"need at least two treebanks with --complete.")
 	level = logging.WARNING if params['quiet'] else logging.INFO
 	logging.basicConfig(level=level, format='%(message)s')
@@ -95,16 +102,20 @@ def main(argv):
 	assert numproc
 	limit = numtrees
 	if numtrees == 0:
-		if params['disc']: numtrees = open(args[0]).read().count("#BOS")
-		else: numtrees = sum(1 for _ in open(args[0]))
+		if params['disc']:
+			numtrees = open(args[0]).read().count("#BOS")
+		else:
+			numtrees = sum(1 for _ in open(args[0]))
 	assert numtrees
-	if numproc == 1: mult = 1
-	else: mult = 3 #max(1, int(log(numtrees, 10)))
+	mult = 3 if numproc > 1 else 1
 	chunk = numtrees / (mult*numproc)
-	if numtrees % (mult*numproc): chunk += 1
+	if numtrees % (mult*numproc):
+		chunk += 1
 	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
-	if params['approx']: fragments = defaultdict(int)
-	else: fragments = {}
+	if params['approx']:
+		fragments = defaultdict(int)
+	else:
+		fragments = {}
 	logging.info("parameters:\n%s", "\n".join("    %s:\t%r" % kv
 		for kv in sorted(params.items())))
 	logging.info("\n".join("treebank%d: %s" % (n + 1, a)
@@ -113,14 +124,17 @@ def main(argv):
 
 	if numproc == 1 and batch:
 		initworker(args[0], None, limit, encoding)
-		trees1 = params['trees1']; sents1 = params['sents1']
+		trees1 = params['trees1']
+		sents1 = params['sents1']
 		if params['complete']:
 			raise NotImplementedError
 		for a in args[1:]:
 			params.update(read2ndtreebank(a, params['labels'], params['prods'],
 				params['disc'], limit, encoding))
-			trees2 = params['trees2']; sents2 = params['sents2']
-			labels = params['labels']; prods = params['prods']
+			trees2 = params['trees2']
+			sents2 = params['sents2']
+			labels = params['labels']
+			prods = params['prods']
 			if params['quadratic']:
 				fragments = extractfragments(trees1, sents1, 0, 0, labels,
 					prods, params['revlabel'], trees2, sents2,
@@ -134,16 +148,20 @@ def main(argv):
 			if not params['approx'] and not params['nofreq']:
 				fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
 				if params['indices']:
-					logging.info("getting indices of occurrence")
+					logging.info("getting indices of occurrence "
+							"for %d fragments", len(bitsets))
 					counts = exactindices(trees1, trees1, bitsets,
-							params['treeswithprod'], fast=not params['quadratic'])
+							params['treeswithprod'],
+							fast=not params['quadratic'])
 				else:
-					logging.info("getting exact counts")
+					logging.info("getting exact counts for %d fragments",
+							len(bitsets))
 					counts = exactcounts(trees1, trees1, bitsets,
-							params['treeswithprod'], fast=not params['quadratic'])
+							params['treeswithprod'],
+							fast=not params['quadratic'])
 				fragments = zip(fragmentkeys, counts)
-			filename="%s/%s_%s" % (batch, os.path.basename(args[0]),
-				os.path.basename(a))
+			filename = "%s/%s_%s" % (batch, os.path.basename(args[0]),
+					os.path.basename(a))
 			out = codecs.open(filename, "w", encoding=encoding)
 			printfragments(fragments, out=out)
 			logging.info("wrote to %s", filename)
@@ -174,31 +192,36 @@ def main(argv):
 			logging.info("work division:\n%s", "\n".join("    %s:\t%r" % kv
 				for kv in sorted(dict(chunksize=chunk, numchunks=numchunks,
 				mult=mult).items())))
-		dowork = mymap(worker, range(0, numtrees, chunk))
+		dowork = mymap(worker, shuffled(range(0, numtrees, chunk)))
 		for n, a in enumerate(dowork):
 			if params['approx']:
-				for frag, x in a.items(): fragments[frag] += x
-			else: fragments.update(a)
+				for frag, x in a.items():
+					fragments[frag] += x
+			else:
+				fragments.update(a)
 	if params['cover']:
 		cover = myapply(coverfragworker, ())
 		if params['approx']:
 			fragments.update(zip(cover.keys(), exactcounts(trees1, trees1,
 				cover.values(), params['treeswithprod'],
 				fast=not params['quadratic'])))
-		else: fragments.update(cover)
+		else:
+			fragments.update(cover)
 		logging.info("merged %d cover fragments", len(cover))
 	if params['approx'] or params['nofreq']:
 		fragments = fragments.items()
 	else:
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s", task)
-		countchunk = 20000
 		fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-		work = [bitsets[a:a+countchunk] for a in range(0, len(bitsets), countchunk)]
-		work = [(n, len(work), a) for n, a in enumerate(work)]
+		countchunk = len(bitsets) / (mult*numproc) #20000
+		tmp = shuffled(range(0, len(bitsets), countchunk))
+		work = [(n, len(tmp), bitsets[a:a+countchunk])
+				for n, a in enumerate(tmp)]
 		logging.info("getting exact %s", task)
 		counts = []
-		for a in mymap(exactcountworker, work): counts.extend(a)
+		for a in mymap(exactcountworker, work):
+			counts.extend(a)
 		fragments = zip(fragmentkeys, counts)
 	if numproc != 1:
 		pool.terminate()
@@ -207,7 +230,8 @@ def main(argv):
 	printfragments(fragments)
 
 def readtreebanks(treebank1, treebank2=None, discontinuous=False,
-	limit=0, encoding="utf-8"):
+		limit=0, encoding="utf-8"):
+	""" Read one or two treebanks.  """
 	labels = {}
 	prods = {}
 	trees1, sents1 = readtreebank(treebank1, labels, prods,
@@ -222,6 +246,7 @@ def readtreebanks(treebank1, treebank2=None, discontinuous=False,
 
 def read2ndtreebank(treebank2, labels, prods, discontinuous=False,
 	limit=0, encoding="utf-8"):
+	""" Read a second treebank.  """
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
 		not params['quadratic'], discontinuous, limit, encoding)
 	revlabel = sorted(labels, key=labels.get)
@@ -229,6 +254,8 @@ def read2ndtreebank(treebank2, labels, prods, discontinuous=False,
 		revlabel=revlabel)
 
 def initworker(treebank1, treebank2, limit, encoding):
+	""" Read treebanks for this worker. We do this separately for each process
+	under the assumption that this is advantageous with a NUMA architecture. """
 	params.update(readtreebanks(treebank1, treebank2,
 		limit=limit, discontinuous=params['disc'], encoding=encoding))
 	trees1 = params['trees1']
@@ -244,9 +271,14 @@ def initworker(treebank1, treebank2, limit, encoding):
 		len(params['prods']))
 
 def worker(offset):
-	trees1 = params['trees1']; sents1 = params['sents1']
-	trees2 = params['trees2']; sents2 = params['sents2']
-	labels = params['labels']; prods = params['prods']
+	""" Worker function that initiates the extraction of fragments
+	in each process. """
+	trees1 = params['trees1']
+	trees2 = params['trees2']
+	sents1 = params['sents1']
+	sents2 = params['sents2']
+	labels = params['labels']
+	prods = params['prods']
 	assert offset < len(trees1)
 	end = min(offset + params['chunk'], len(trees1))
 	result = {}
@@ -264,6 +296,8 @@ def worker(offset):
 	return result
 
 def exactcountworker(args):
+	""" Worker function that initiates the counting of fragments
+	in each process. """
 	n, m, fragments = args
 	trees1 = params['trees1']
 	if params['indices']:
@@ -281,21 +315,27 @@ def exactcountworker(args):
 	return results
 
 def coverfragworker():
+	""" Worker function that gets depth-1 fragments. Does not need
+	multiprocessing but using it avoids reading the treebank again. """
 	return coverbitsets(params['trees1'], params['sents1'],
 			params['treeswithprod'], params['revlabel'], params['disc'])
 
 def initworkersimple(trees, sents, trees2=None, sents2=None):
+	""" A simpler initialization for a worker in which a treebank has already
+	been loaded. """
 	params.update(getctrees(trees, sents, trees2, sents2))
 	assert params['trees1']
 
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	""" Get recurring fragments with exact counts in a single treebank. """
-	if numproc == 0: numproc = cpu_count()
+	if numproc == 0:
+		numproc = cpu_count()
 	numtrees = len(trees)
 	assert numtrees
-	mult = 1
+	mult = 3 if numproc > 1 else 1
 	chunk = numtrees / (mult*numproc)
-	if numtrees % (mult*numproc): chunk += 1
+	if numtrees % (mult*numproc):
+		chunk += 1
 	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
 	fragments = {}
 	trees = trees[:]
@@ -316,19 +356,20 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 		myapply = pool.apply
 	# collect recurring fragments
 	logging.info("extracting recurring fragments")
-	for a in mymap(worker, range(0, numtrees, chunk)):
+	for a in mymap(worker, shuffled(range(0, numtrees, chunk))):
 		fragments.update(a)
 	# add 'cover' fragments corresponding to single productions
 	cover = myapply(coverfragworker, ())
 	fragments.update(cover)
 	logging.info("merged %d cover fragments", len(cover))
-	countchunk = 20000
 	fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-	tmp = range(0, len(bitsets), countchunk)
+	countchunk = len(bitsets) / (mult*numproc) #20000
+	tmp = shuffled(range(0, len(bitsets), countchunk))
 	work = [(n, len(tmp), bitsets[a:a+countchunk]) for n, a in enumerate(tmp)]
-	logging.info("getting exact counts")
+	logging.info("getting exact counts for %d fragments", len(bitsets))
 	counts = []
-	for a in mymap(exactcountworker, work): counts.extend(a)
+	for a in mymap(exactcountworker, work):
+		counts.extend(a)
 	if numproc != 1:
 		pool.terminate()
 		pool.join()
@@ -350,8 +391,11 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 
 			newfrags, newcounts = iteratefragments(
 					fragments, newtrees, newsents, trees, sents, numproc)
-			if len(newfrags) == 0: break
-			if trees is None: trees = []; sents = []
+			if len(newfrags) == 0:
+				break
+			if trees is None:
+				trees = []
+				sents = []
 			trees.extend(newtrees)
 			sents.extend(newsents)
 			fragmentkeys.extend(newfrags)
@@ -365,7 +409,8 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	numtrees = len(newtrees)
 	assert numtrees
 	chunk = numtrees / numproc
-	if numtrees % numproc: chunk += 1
+	if numtrees % numproc:
+		chunk += 1
 	if numproc == 1: # set fragments as input
 		initworkersimple(newtrees, newsents, trees, sents)
 		mymap = map
@@ -375,7 +420,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 			initargs=(newtrees, newsents, trees, sents))
 		mymap = pool.imap
 	newfragments = {}
-	for a in mymap(worker, range(0, numtrees, chunk)):
+	for a in mymap(worker, shuffled(range(0, numtrees, chunk))):
 		newfragments.update(a)
 	logging.info("before: %d, after: %d, difference: %d",
 		len(fragments), len(fragments.viewkeys() | newfragments.keys()),
@@ -385,11 +430,12 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	newkeys = list(newfragments.viewkeys() - fragments.viewkeys())
 	bitsets = [newfragments[a] for a in newkeys]
 	countchunk = 20000
-	tmp = range(0, len(bitsets), countchunk)
+	tmp = shuffled(range(0, len(bitsets), countchunk))
 	work = [(n, len(tmp), bitsets[a:a+countchunk]) for n, a in enumerate(tmp)]
-	logging.info("getting exact counts")
+	logging.info("getting exact counts for %d fragments", len(bitsets))
 	counts = []
-	for a in mymap(exactcountworker, work): counts.extend(a)
+	for a in mymap(exactcountworker, work):
+		counts.extend(a)
 	if numproc != 1:
 		pool.terminate()
 		pool.join()
@@ -403,16 +449,24 @@ def altrepr(a):
 	Replace double quotes with double single quotes: " -> ''
 	Quote terminals with double quotes terminal: -> "terminal"
 	Remove parentheses around frontier nodes: (NN ) -> NN
+
 	>>> altrepr("(NP (DT a) (NN ))"
 	(NP (DT "a") NN)
 	"""
 	return frontierre.sub(r'\1', termre.sub(r'(\1 "\2")', a.replace('"', "''")))
 
+def shuffled(l):
+	""" Wrapper to make shuffle return its result. """
+	random.shuffle(l)
+	return l
+
 def printfragments(fragments, out=sys.stdout):
+	""" Dump fragments to standard output or some other file object. """
 	logging.info("number of fragments: %d", len(fragments))
 	if params['nofreq']:
 		for a, _ in fragments:
-			if params['alt']: a = altrepr(a)
+			if params['alt']:
+				a = altrepr(a)
 			out.write("%s\n" % (("%s\t%s" % (a[0],
 					" ".join("%s" % x if x else "" for x in a[1])))
 					if params['disc'] else a))
@@ -421,10 +475,12 @@ def printfragments(fragments, out=sys.stdout):
 	# otherwise, raise alarm.
 	if params.get('trees2') or params['cover'] or params['complement']:
 		threshold = 0
-	else: threshold = 1
+	else:
+		threshold = 1
 	if params['indices']:
 		for a, theindices in fragments:
-			if params['alt']: a = altrepr(a)
+			if params['alt']:
+				a = altrepr(a)
 			if len(theindices) > threshold:
 				out.write("%s\t%r\n" % ( ("%s\t%s" % (a[0],
 					" ".join("%s" % x if x else "" for x in a[1])))
@@ -435,10 +491,13 @@ def printfragments(fragments, out=sys.stdout):
 		return
 	for a, freq in fragments:
 		if freq > threshold:
-			if params['alt']: a = altrepr(a)
+			if params['alt']:
+				a = altrepr(a)
 			out.write("%s\t%d\n" % (("%s\t%s" % (a[0],
 				" ".join("%s" % x if x else "" for x in a[1])))
 				if params['disc'] else a, freq))
-		elif threshold: logging.warning("invalid fragment--frequency=1: %r", a)
+		elif threshold:
+			logging.warning("invalid fragment--frequency=1: %r", a)
 
-if __name__ == '__main__': main(sys.argv)
+if __name__ == '__main__':
+	main(sys.argv)

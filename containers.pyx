@@ -154,8 +154,9 @@ cdef class Grammar:
 				print "%s <= %s  " % (self.tolabel[self.unary[0][n].rhs1],
 						self.tolabel[self.unary[0][n].lhs]),
 			print
-	cpdef getmapping(Grammar self, striplabelre, neverblockre, Grammar coarse,
-			bint splitprune, bint markorigin, bint debug=False):
+	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=None,
+			neverblockre=None, bint splitprune=False, bint markorigin=False,
+			bint debug=False):
 		""" Construct a mapping of fine non-terminal IDs to coarse non-terminal
 		IDS, by applying a regex to the labels, used for coarse-to-fine
 		parsing. A secondary regex is for items that should never be pruned.
@@ -164,17 +165,18 @@ cdef class Grammar:
         - use "|<" to ignore nodes introduced by binarization;
             useful if coarse and fine stages employ different kinds of
             markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
-        - "_[0-9]+" to ignore nodes X_n where X is a label and n is a fanout.
-		"""
+        - "_[0-9]+" to ignore discontinuous nodes X_n where X is a label
+			and n is a fanout. """
 		cdef int n, m, components = 0
-		assert coarse is not None
+		if coarse is None: coarse = self
 		if self.mapping is not NULL: free(self.mapping)
 		self.mapping = <UInt *>malloc(sizeof(UInt) * self.nonterminals)
 		if splitprune and markorigin:
 			if self.splitmapping is not NULL:
 				if self.splitmapping[0] is not NULL: free(self.splitmapping[0])
 				free(self.splitmapping)
-			self.splitmapping = <UInt **>malloc(sizeof(UInt *) * self.nonterminals)
+			self.splitmapping = <UInt **>malloc(sizeof(UInt *)
+					* self.nonterminals)
 			for n in range(self.nonterminals): self.splitmapping[n] = NULL
 			self.splitmapping[0] = <UInt *>malloc(sizeof(UInt) *
 				sum([self.fanout[n] for n in range(self.nonterminals)
@@ -216,7 +218,8 @@ cdef class Grammar:
 		""" Writes the grammar into a simple text file format, to the file
 		objects given as arguments. Fields are separated by tabs. Components of
 		the yield function are comma-separated. Weights are expressed as
-		hexadecimal negative logprobs. TODO: store & print rational numbers instead
+		hexadecimal negative logprobs.
+		TODO: store & print rational numbers instead.
 		E.g.
 		rules: S    NP  VP  010 0x1.9c041f7ed8d33p+1
 			VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
@@ -517,13 +520,14 @@ cdef binrepr(ULong *vec):
 #		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 cdef class LCFRSEdge:
+	""" NB: hash / (in)equality considers all elements except inside score,
+	order is determined by inside score only. """
 	def __init__(LCFRSEdge self, score, inside, prob, ruleno, left, right):
 		self.score = score; self.inside = inside; self.prob = prob
 		self.ruleno = ruleno; self.left = left; self.right = right
-		cdef long h
-		#self._hash = hash((inside, prob, left, right))
+		cdef long h = 0x345678UL
+		#self._hash = hash((prob, left, right))
 		# this is the hash function used for tuples, apparently
-		h = (1000003UL * 0x345678UL) ^ <long>self.inside
 		h = (1000003UL * h) ^ <long>self.prob
 		h = (1000003UL * h) ^ <long>self.left.__hash__()
 		h = (1000003UL * h) ^ <long>self.right.__hash__()
@@ -531,16 +535,13 @@ cdef class LCFRSEdge:
 	def __hash__(LCFRSEdge self):
 		return self._hash
 	def __richcmp__(LCFRSEdge self, other, int op):
-		# the ordering only depends on the estimate / inside score
 		if op == 0: return self.score < (<LCFRSEdge>other).score
 		elif op == 1: return self.score <= (<LCFRSEdge>other).score
-		# (in)equality compares all elements
 		# boolean trick: equality and inequality in one expression i.e., the
 		# equality between the two boolean expressions acts as biconditional
 		elif op == 2 or op == 3:
 			return (op == 2) == (
 				self.score == (<LCFRSEdge>other).score
-				and self.inside == (<LCFRSEdge>other).inside
 				and self.prob == (<LCFRSEdge>other).prob
 				and self.left == (<LCFRSEdge>other).left
 				and self.right == (<LCFRSEdge>other).right)
@@ -556,27 +557,24 @@ cdef class LCFRSEdge:
 				self.left.copy(), self.right.copy())
 
 cdef class CFGEdge:
+	""" NB: hash / (in)equality considers all elements except inside score,
+	order is determined by inside score only. """
 	def __init__(self): raise NotImplemented
-	#def __init__(CFGEdge self, inside, Rule *rule, mid):
-	#	self.inside = inside; self.rule = rule; self.mid = mid
 	def __hash__(CFGEdge self):
 		cdef long h
 		# this is the hash function used for tuples, apparently
-		h = (1000003UL * 0x345678UL) ^ <long>self.inside
-		h = (1000003UL * h) ^ <long>self.rule
+		h = (1000003UL * 0x345678UL) ^ <long>self.rule #.no
 		h = (1000003UL * h) ^ <long>self.mid
 		return h
 	def __richcmp__(CFGEdge self, CFGEdge other, int op):
-		# the ordering only depends on the inside score
 		if op == 0: return self.inside < other.inside
 		elif op == 1: return self.inside <= other.inside
-		# (in)equality compares all elements
 		# boolean trick: equality and inequality in one expression i.e., the
 		# equality between the two boolean expressions acts as biconditional
 		elif op == 2 or op == 3:
 			return (op == 2) == (
 				self.rule is other.rule
-				and self.inside == other.inside
+				#and self.inside == other.inside
 				and self.mid == other.mid)
 		elif op == 4: return self.inside > other.inside
 		elif op == 5: return self.inside >= other.inside

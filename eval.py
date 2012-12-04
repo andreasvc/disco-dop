@@ -1,3 +1,5 @@
+""" Evaluation of (discontinuous) parse trees, following EVALB as much as
+possible, as well as some alternative evaluation metrics.  """
 import sys, os.path
 from getopt import gnu_getopt, GetoptError
 from itertools import count, izip_longest
@@ -5,11 +7,11 @@ from collections import defaultdict, Counter as multiset
 from nltk import Tree, FreqDist
 from nltk.metrics import accuracy, edit_distance
 from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
-		BracketCorpusReader
+		BracketCorpusReader, readheadrules, dependencies, export
 from treedist import treedist, newtreedist
 #from treedist import newtreedist as treedist
 
-usage = """\
+USAGE = """\
 Evaluation of (discontinuous) parse trees, following EVALB as much as possible.
 usage: %s gold parses [param] [options]
 where gold and parses are files with parse trees, param is in EVALB format,
@@ -24,6 +26,9 @@ and options may consist of:
 --parsesenc enc  To specify a different encoding than the default UTF-8.
 --goldfmt
 --parsesfmt      Specify a corpus format. Options: export, bracket, discbracket
+--ted            Enable tree-edit distance evaluation.
+--headrules x    Specify rules for head assignment; this enables dependency
+                 evaluation.
 
 Example:
 %s sample2.export parses.export TEST.prm --goldenc iso-8859-1\
@@ -46,41 +51,48 @@ MAX_ERROR        this values is ignored, no errors are tolerated.
                  EVALB parameter files.
 """ % (sys.argv[0], sys.argv[0])
 
-header = """
+HEADER = """
    Sentence                 Matched   Brackets            Corr      Tag
   ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
 ______________________________________________________________________________\
 """
 
 def main():
+	""" Command line interface for evaluation. """
 	flags = ("test", "verbose", "debug", "disconly", "ted")
-	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=')
+	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=',
+		'headrules=',)
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
 		opts = dict(opts)
-		if '--test' in opts: test()
+		if '--test' in opts:
+			test()
+			return
 		assert 2 <= len(args) <= 3, "Wrong number of arguments."
 		goldfile, parsesfile = args[:2]
 	except (GetoptError, ValueError, AssertionError) as err:
-		print "error:", err, usage
+		print "error: %s\n%s" % (err, USAGE)
 		exit(2)
 	param = readparam(args[2] if len(args) == 3 else None)
-	if '--cutofflen' in opts: param['CUTOFF_LEN'] = int(opts['--cutofflen'])
-	if '--disconly' in opts: param['DISC_ONLY'] = 1
-	if '--verbose' in opts: param['DEBUG'] = 1
-	if '--debug' in opts: param['DEBUG'] = 2
-	if '--ted' in opts: param['TED'] = 1
+	param['CUTOFF_LEN'] = int(opts.get('--cutofflen', param['CUTOFF_LEN']))
+	param['DISC_ONLY'] = '--disconly' in opts
+	param['DEBUG'] = max(param['DEBUG'],
+			'--verbose' in opts, 2 * ('--debug' in opts))
+	param['TED'] |= '--ted' in opts
+	param['DEP'] = '--headrules' in opts
+	if '--headrules' in opts:
+		param['HEADRULES'] = readheadrules(opts['--headrules'])
 	assert os.path.exists(goldfile), "gold file not found"
 	assert os.path.exists(parsesfile), "parses file not found"
-	Readers = {'export' : NegraCorpusReader,
+	readers = {'export' : NegraCorpusReader,
 		'bracket': BracketCorpusReader,
 		'discbracket': DiscBracketCorpusReader}
-	assert opts.get('--goldfmt', 'export') in Readers
-	assert opts.get('--parsesfmt', 'export') in Readers
+	assert opts.get('--goldfmt', 'export') in readers
+	assert opts.get('--parsesfmt', 'export') in readers
 	goldencoding = opts.get('--goldenc', 'utf-8')
 	parsesencoding = opts.get('--parsesenc', 'utf-8')
-	goldreader = Readers[opts.get('--goldfmt', 'export')]
-	parsesreader = Readers[opts.get('--parsesfmt', 'export')]
+	goldreader = readers[opts.get('--goldfmt', 'export')]
+	parsesreader = readers[opts.get('--parsesfmt', 'export')]
 	gold = goldreader(*splitpath(goldfile), encoding=goldencoding)
 	parses = parsesreader(*splitpath(parsesfile), encoding=parsesencoding)
 	doeval(gold.parsed_sents(),
@@ -90,25 +102,42 @@ def main():
 			param)
 
 def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
+	""" Do the actual evaluation on given parse trees and parameters.
+	Results are printed to standard output. """
 	assert gold_trees, "no trees in gold file"
 	assert cand_trees, "no trees in parses file"
 	if param["DEBUG"] > 0:
 		print "Parameters:"
-		for a in param: print "%s\t%s" % (a, param[a])
-		print header
+		for a in param:
+			print "%s\t%s" % (a, param[a])
+		print HEADER
 	# the suffix '40' is for the length restricted results
 	maxlenseen = sentcount = maxlenseen40 = sentcount40 = 0
-	goldb = multiset(); candb = multiset()
-	goldb40 = multiset(); candb40 = multiset()
-	goldbcat = defaultdict(multiset); candbcat = defaultdict(multiset)
-	goldbcat40 = defaultdict(multiset); candbcat40 = defaultdict(multiset)
-	exact = 0.0; exact40 = 0.0
-	la = []; la40 = []
+	goldb = multiset()
+	candb = multiset()
+	goldb40 = multiset()
+	candb40 = multiset()
+	goldbcat = defaultdict(multiset)
+	candbcat = defaultdict(multiset)
+	goldbcat40 = defaultdict(multiset)
+	candbcat40 = defaultdict(multiset)
+	la = []
+	la40 = []
+	golddep = []
+	canddep = []
+	golddep40 = []
+	canddep40 = []
+	goldpos = []
+	candpos = []
+	goldpos40 = []
+	candpos40 = []
+	exact = exact40 = 0.0
 	dicenoms = dicedenoms = dicenoms40 = dicedenoms40 = 0
-	goldpos = []; candpos = []
-	goldpos40 = []; candpos40 = []
+	import codecs
+	gdepfile = codecs.open("/tmp/gold.dep", "w", encoding='utf-8')
+	cdepfile = codecs.open("/tmp/cand.dep", "w", encoding='utf-8')
 	for n, ctree in cand_trees.iteritems():
-		gtree = gold_trees[n].copy(True)
+		gtree = gold_trees[n]
 		cpos = sorted(ctree.pos())
 		gpos = sorted(gtree.pos())
 		csent = [w for w, _ in cand_sents[n]]
@@ -117,7 +146,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			if b not in param["DELETE_LABEL_FOR_LENGTH"])
 		lengpos = sum(1 for _, b in gpos
 			if b not in param["DELETE_LABEL_FOR_LENGTH"])
-		assert lencpos == lengpos, "sentence length mismatch"
+		assert lencpos == lengpos, ("sentence length mismatch. "
+				"sents:\n%s\n%s" % (" ".join(csent), " ".join(gsent)))
 		# massage the data (in-place modifications)
 		transform(ctree, csent, cpos, dict(gpos),
 			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"],
@@ -133,37 +163,64 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		gbrack = bracketings(gtree, param["LABELED"], param["DELETE_LABEL"],
 				param["DISC_ONLY"])
 		sentcount += 1
-		if maxlenseen < lencpos: maxlenseen = lencpos
-		if cbrack == gbrack: exact += 1
+		# this is to deal with "sentences" with only a single punctuation mark.
+		if not gpos:
+			sentcount40 += 1
+			continue
+		if maxlenseen < lencpos:
+			maxlenseen = lencpos
+		if cbrack == gbrack:
+			exact += 1
 		candb.update((n, a) for a in cbrack.elements())
 		goldb.update((n, a) for a in gbrack.elements())
-		for a in gbrack: goldbcat[a[0]][(n, a)] += 1
-		for a in cbrack: candbcat[a[0]][(n, a)] += 1
+		for a in gbrack:
+			goldbcat[a[0]][(n, a)] += 1
+		for a in cbrack:
+			candbcat[a[0]][(n, a)] += 1
 		goldpos.extend(gpos)
 		candpos.extend(cpos)
 		la.append(leafancestor(gtree, ctree, param["DELETE_LABEL"]))
 		if param["TED"]:
 			ted, denom = treedisteval(gtree, ctree,
 				includeroot=gtree.node not in param["DELETE_LABEL"])
-			dicenoms += ted; dicedenoms += denom
+			dicenoms += ted
+			dicedenoms += denom
+		if param["DEP"]:
+			cdep = dependencies(ctree, param['HEADRULES'])
+			gdep = dependencies(gtree, param['HEADRULES'])
+			gdepfile.write(export(gsent, gpos, n, "conll", param['HEADRULES']))
+			cdepfile.write(export(csent, cpos, n, "conll", param['HEADRULES']))
+			canddep.extend(cdep)
+			golddep.extend(gdep)
 		if lencpos <= param["CUTOFF_LEN"]:
 			sentcount40 += 1
-			if maxlenseen40 < lencpos: maxlenseen40 = lencpos
+			if maxlenseen40 < lencpos:
+				maxlenseen40 = lencpos
 			candb40.update((n, a) for a in cbrack.elements())
 			goldb40.update((n, a) for a in gbrack.elements())
-			for a in gbrack: goldbcat40[a[0]][(n, a)] += 1
-			for a in cbrack: candbcat40[a[0]][(n, a)] += 1
-			if cbrack == gbrack: exact40 += 1
+			for a in gbrack:
+				goldbcat40[a[0]][(n, a)] += 1
+			for a in cbrack:
+				candbcat40[a[0]][(n, a)] += 1
+			if cbrack == gbrack:
+				exact40 += 1
 			goldpos40.extend(gpos)
 			candpos40.extend(cpos)
-			if la[-1] is not None: la40.append(la[-1])
+			if la[-1] is not None:
+				la40.append(la[-1])
 			if param["TED"]:
-				dicenoms40 += ted; dicedenoms40 += denom
+				dicenoms40 += ted
+				dicedenoms40 += denom
+			if param["DEP"]:
+				canddep40.extend(cdep)
+				golddep40.extend(gdep)
 		if la[-1] == 1 and gbrack != cbrack:
 			print "leaf ancestor score 1.0 but no exact match: (bug?)"
-		elif la[-1] is None: del la[-1]
-		if param["DEBUG"] <= 0: continue
-		print "%4s  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f %s" % (
+		elif la[-1] is None:
+			del la[-1]
+		if param["DEBUG"] <= 0:
+			continue
+		print "%4s  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f%s%s" % (
 			n,
 			lengpos,
 			nozerodiv(lambda: recall(gbrack, cbrack)),
@@ -175,17 +232,18 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			sum(1 for a, b in zip(gpos, cpos) if a==b),
 			nozerodiv(lambda: accuracy(gpos, cpos)),
 			100 * la[-1],
-			str(ted).rjust(2) if param["TED"] else "",
+			str(ted).rjust(3) if param["TED"] else "",
+			nozerodiv(lambda: accuracy(gdep, cdep)) if param["DEP"] else "",
 			)
 		if param["DEBUG"] > 1:
 			print "Sentence:", " ".join(gsent)
 			print "Gold tree:      %s\nCandidate tree: %s" % (
 				gtree.pprint(margin=999), ctree.pprint(margin=999))
 			print "Gold brackets:      %s\nCandidate brackets: %s" % (
-				printbrackets(gbrack), printbrackets(cbrack))
+				strbracketings(gbrack), strbracketings(cbrack))
 			print "Matched brackets:      %s\nUnmatched brackets: %s" % (
-				printbrackets(gbrack & cbrack),
-				printbrackets((cbrack - gbrack) | (gbrack - cbrack)))
+				strbracketings(gbrack & cbrack),
+				strbracketings((cbrack - gbrack) | (gbrack - cbrack)))
 			g = leafancestorpaths(gtree, param["DELETE_LABEL"])
 			c = leafancestorpaths(ctree, param["DELETE_LABEL"])
 			for leaf in g:
@@ -198,24 +256,36 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 				print "Tree-dist: %g / %g = %g" % (
 					ted, denom, 1 - ted / float(denom))
 				newtreedist(gtree, ctree, True)
+			if param["DEP"]:
+				print "Sentence:", " ".join(gsent)
+				print "dependencies gold                                   cand"
+				for (_, a, b), (_, c, d) in zip(gdep, cdep):
+					# use original sentences because we don't delete
+					# punctuation for dependency evaluation
+					print "%15s -> %15s           %15s -> %15s" % (
+						gold_sents[n][a-1][0], gold_sents[n][b-1][0],
+						cand_sents[n][c-1][0], cand_sents[n][d-1][0])
 
 	breakdowns(param, goldb40, candb40, goldpos40, candpos40, goldbcat40,
 			candbcat40, maxlenseen)
 	summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
-			exact, la, dicenoms, dicedenoms, goldb40, candb40, goldpos40,
-			candpos40, sentcount40, maxlenseen40, exact40, la40, dicenoms40,
-			dicedenoms40)
+			exact, la, dicenoms, dicedenoms, golddep, canddep,
+			goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
+			exact40, la40, dicenoms40, dicedenoms40, golddep40, canddep40)
 
 def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		maxlenseen):
+	""" Print breakdowns for the most frequent labels / tags. """
 	if param["LABELED"] and param["DEBUG"] != -1:
 		print
 		print " Category Statistics (10 most frequent categories / errors)",
 		if maxlenseen > param["CUTOFF_LEN"]:
 			print "for length <= %d" % param["CUTOFF_LEN"],
 		print
-		print "  label  % gold   recall   prec.     F1           test/gold   count"
-		print "_______________________________________        ____________________"
+		print "  label  % gold   recall   prec.     F1",
+		print "          test/gold   count"
+		print "_______________________________________",
+		print "       ____________________"
 		gmismatch = dict(((n, indices), label)
 					for n, (label, indices) in (goldb - candb).keys())
 		wrong = FreqDist((label, gmismatch[n, indices])
@@ -224,8 +294,10 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		freqcats = sorted(set(goldbcat) | set(candbcat),
 				key=lambda x: len(goldbcat[x]), reverse=True)
 		for cat, mismatch in izip_longest(freqcats[:10], wrong.keys()[:10]):
-			if cat is None: print "                                       ",
-			else: print "%s  %6.2f  %s  %s  %s" % (
+			if cat is None:
+				print "                                       ",
+			else:
+				print "%s  %6.2f  %s  %s  %s" % (
 					cat.rjust(7),
 					100 * sum(goldbcat[cat].values()) / float(len(goldb)),
 					nozerodiv(lambda: recall(goldbcat[cat], candbcat[cat])),
@@ -241,16 +313,21 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			print " Tag Statistics (10 most frequent tags / errors)",
 			if maxlenseen > param["CUTOFF_LEN"]:
 				print "for length <= %d" % param["CUTOFF_LEN"],
-			print "\n    tag  % gold  recall   prec.      F1           test/gold   count"
-			print "_______________________________________        ____________________"
+			print "\n    tag  % gold  recall   prec.      F1",
+			print "          test/gold   count"
+			print "_______________________________________",
+			print "       ____________________"
 			tags = FreqDist(tag for _, tag in goldpos)
-			wrong = FreqDist((g, c) for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
-			for tag, mismatch in izip_longest(tags.keys()[:10], wrong.keys()[:10]):
-				goldtag = multiset(n for n, (w,t) in enumerate(goldpos)
+			wrong = FreqDist((g, c)
+					for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
+			for tag, mismatch in izip_longest(tags.keys()[:10],
+					wrong.keys()[:10]):
+				goldtag = multiset(n for n, (w, t) in enumerate(goldpos)
 						if t == tag)
-				candtag = multiset(n for n, (w,t) in enumerate(candpos)
+				candtag = multiset(n for n, (w, t) in enumerate(candpos)
 						if t == tag)
-				if tag is None: print "".rjust(40),
+				if tag is None:
+					print "".rjust(40),
 				else:
 					print "%s  %6.2f  %6.2f  %6.2f  %6.2f" % (
 							tag.rjust(7),
@@ -264,9 +341,10 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 				print
 
 def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
-		exact, la, dicenoms, dicedenoms, goldb40, candb40, goldpos40,
-		candpos40, sentcount40, maxlenseen40, exact40, la40, dicenoms40,
-		dicedenoms40):
+		exact, la, dicenoms, dicedenoms, golddep, canddep,
+		goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
+		exact40, la40, dicenoms40, dicedenoms40, golddep40, canddep40):
+	""" Print overview with scores for all sentences. """
 	discbrackets = sum(1 for n, (a, b) in candb.elements()
 			if b != set(range(min(b), max(b)+1)))
 	gdiscbrackets = sum(1 for n, (a, b) in goldb.elements()
@@ -276,8 +354,10 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		print "\n%s" % " Summary (ALL) ".center(35, '_')
 		print "number of sentences:       %6d" % (sentcount)
 		print "longest sentence:          %6d" % (maxlenseen)
-		print "gold brackets (disc.):     %6d (%d)" % (len(goldb), gdiscbrackets)
-		print "cand. brackets (disc.):    %6d (%d)" % (len(candb), discbrackets)
+		print "gold brackets (disc.):     %6d (%d)" % (
+				len(goldb), gdiscbrackets)
+		print "cand. brackets (disc.):    %6d (%d)" % (
+				len(candb), discbrackets)
 		print "labeled recall:            %s" % (
 				nozerodiv(lambda: recall(goldb, candb)))
 		print "labeled precision:         %s" % (
@@ -291,6 +371,9 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		if param["TED"]:
 			print "tree-dist (Dice micro avg) %s" % (
 					nozerodiv(lambda: 1 - dicenoms / float(dicedenoms)))
+		if param["DEP"]:
+			print "unlabeled dependencies:    %s" % (
+					nozerodiv(lambda: accuracy(golddep, canddep)))
 		print "tagging accuracy:          %s" % (
 				nozerodiv(lambda: accuracy(goldpos, candpos)))
 		return
@@ -299,39 +382,45 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 			if b != set(range(min(b), max(b)+1)))
 	gdiscbrackets40 = sum(1 for n, (a, b) in goldb40.elements()
 			if b != set(range(min(b), max(b)+1)))
-	print "\n%s ALL ____ <= %d" % (
+	print "\n%s <= %d ____ ALL" % (
 			" Summary ".center(29, "_"), param["CUTOFF_LEN"])
-	print "number of sentences:       %6d     %6d" % (sentcount, sentcount40)
-	print "longest sentence:          %6d     %6d" % (maxlenseen, maxlenseen40)
-	print "gold brackets:             %6d     %6d" % (len(goldb), len(goldb40))
-	print "cand. brackets:            %6d     %6d" % (len(candb), len(candb40))
+	print "number of sentences:       %6d     %6d" % (sentcount40, sentcount)
+	print "longest sentence:          %6d     %6d" % (maxlenseen40, maxlenseen)
+	print "gold brackets:             %6d     %6d" % (len(goldb40), len(goldb))
+	print "cand. brackets:            %6d     %6d" % (len(candb40), len(candb))
 	if gdiscbrackets or discbrackets:
 		print "disc. gold brackets:       %6d     %6d" % (
-				gdiscbrackets, gdiscbrackets40)
+				gdiscbrackets40, gdiscbrackets)
 		print "disc. cand. brackets:      %6d     %6d" % (
-				discbrackets, discbrackets40)
+				discbrackets40, discbrackets)
 	print "labeled recall:            %s     %s" % (
-			nozerodiv(lambda: recall(goldb, candb)),
-			nozerodiv(lambda: recall(goldb40, candb40)))
+			nozerodiv(lambda: recall(goldb40, candb40)),
+			nozerodiv(lambda: recall(goldb, candb)))
 	print "labeled precision:         %s     %s" % (
-			nozerodiv(lambda: precision(goldb, candb)),
-			nozerodiv(lambda: precision(goldb40, candb40)))
+			nozerodiv(lambda: precision(goldb40, candb40)),
+			nozerodiv(lambda: precision(goldb, candb)))
 	print "labeled f-measure:         %s     %s" % (
-			nozerodiv(lambda: f_measure(goldb, candb)),
-			nozerodiv(lambda: f_measure(goldb40, candb40)))
+			nozerodiv(lambda: f_measure(goldb40, candb40)),
+			nozerodiv(lambda: f_measure(goldb, candb)))
 	print "exact match:               %s     %s" % (
-			nozerodiv(lambda: exact / sentcount),
-			nozerodiv(lambda: exact40 / sentcount40))
+			nozerodiv(lambda: exact40 / sentcount40),
+			nozerodiv(lambda: exact / sentcount))
 	print "leaf-ancestor:             %s     %s" % (
-			nozerodiv(lambda: mean(la)),
-			nozerodiv(lambda: mean(la40)))
+			nozerodiv(lambda: mean(la40)),
+			nozerodiv(lambda: mean(la)))
 	if param["TED"]:
 		print "tree-dist (Dice micro avg) %s     %s" % (
-			nozerodiv(lambda: (1 - dicenoms / float(dicedenoms))),
-			nozerodiv(lambda: (1 - dicenoms40 / float(dicedenoms40))))
+			nozerodiv(lambda: (1 - dicenoms40 / float(dicedenoms40))),
+			nozerodiv(lambda: (1 - dicenoms / float(dicedenoms))))
+	if param["DEP"]:
+		print "unlabeled dependencies:    %s     %s  (%d / %d)" % (
+				nozerodiv(lambda: accuracy(golddep40, canddep40)),
+				nozerodiv(lambda: accuracy(golddep, canddep)),
+				len(filter(lambda (a, b): a ==b, zip(golddep, canddep))),
+				len(golddep))
 	print "tagging accuracy:          %s     %s" % (
-			nozerodiv(lambda: accuracy(goldpos, candpos)),
-			nozerodiv(lambda: accuracy(goldpos40, candpos40)))
+			nozerodiv(lambda: accuracy(goldpos40, candpos40)),
+			nozerodiv(lambda: accuracy(goldpos, candpos)))
 
 def readparam(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
@@ -339,16 +428,16 @@ def readparam(filename):
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = "DEBUG MAX_ERROR CUTOFF_LEN LABELED DISC_ONLY".split()
 	param = { "DEBUG" : 0, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
-					"LABELED" : 1, "DELETE_LABEL_FOR_LENGTH" : [],
-					"DELETE_LABEL" : [], "EQ_LABEL" : set(), "EQ_WORD" : set(),
-					"DISC_ONLY" : 0, "PRESERVE_FUNCTIONS": 0, "TED": 0 }
+				"LABELED" : 1, "DELETE_LABEL_FOR_LENGTH" : [],
+				"DELETE_LABEL" : [], "EQ_LABEL" : set(), "EQ_WORD" : set(),
+				"DISC_ONLY" : 0, "PRESERVE_FUNCTIONS": 0, "TED": 0, "DEP": 0}
 	seen = set()
 	for a in open(filename) if filename else ():
 		line = a.strip()
 		if line and not line.startswith("#"):
 			key, val = line.split(None, 1)
 			if key in validkeysonce:
-				assert key not in seen, "cannot declare parameter %s twice" %key
+				assert key not in seen, "cannot declare %s twice" % key
 				seen.add(key)
 				param[key] = int(val)
 			elif key in ("DELETE_LABEL", "DELETE_LABEL_FOR_LENGTH"):
@@ -356,8 +445,10 @@ def readparam(filename):
 			elif key in ("EQ_LABEL", "EQ_WORD"):
 				# these are given as undirected pairs
 				# will be represented as equivalence classes A => {A, B, C, D}
-				try: b, c = val.split()
-				except ValueError: raise ValueError("%s requires two values" % key)
+				try:
+					b, c = val.split()
+				except ValueError:
+					raise ValueError("%s requires two values" % key)
 				param[key].add((b, c))
 			else:
 				raise ValueError("unrecognized parameter key: %s" % key)
@@ -366,7 +457,8 @@ def readparam(filename):
 		connectedcomponents = {}
 		seen = set()
 		for k, v in param[key]:
-			if k in seen or v in seen: continue
+			if k in seen or v in seen:
+				continue
 			connectedcomponents[k] = set((k, v))
 			agenda = [x for x in param[key] if k in x or v in x]
 			while agenda:
@@ -389,14 +481,18 @@ def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in zip(count(), a)[::-1]:
 			if stripfunctions:
-				x = b.node.find("-"); y = b.node.find("=")
-				if x >= 1: a.node = b.node[:x]
-				if y >= 0: a.node = b.node[:y]
+				x = b.node.find("-")
+				y = b.node.find("=")
+				if x >= 1:
+					a.node = b.node[:x]
+				if y >= 0:
+					a.node = b.node[:y]
 			b.node = eqlabel.get(b.node, b.node)
-			if not b: a.pop(n)  #remove empty nodes
+			if not b:
+				a.pop(n)  #remove empty nodes
 			elif isinstance(b[0], Tree):
 				if b.node in delete:
-					# replace phrasal node with its children;
+					# replace phrasal node with its children
 					a[n:n+1] = b
 			elif gpos[b[0]] in delete:
 				# remove pre-terminal entirely, but only look at gold tree,
@@ -414,19 +510,25 @@ def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
 	for a in posnodes:
 		a[0] = leafmap[a[0]]
 		a.indices = [a[0]]
-		if sent[a[0]] in eqword: sent[a[0]] = eqword[sent[a[0]]]
+		if sent[a[0]] in eqword:
+			sent[a[0]] = eqword[sent[a[0]]]
 	# cache spans
 	for a in reversed(list(tree.subtrees())):
-		if isinstance(a[0], Tree):
+		if not a:
 			a.indices = []
-			for b in a: a.indices.extend(b.indices)
-		else: a.indices = [a[0]]
+		elif isinstance(a[0], Tree):
+			a.indices = []
+			for b in a:
+				a.indices.extend(b.indices)
+		else:
+			a.indices = [a[0]]
 
 def bracketings(tree, labeled=True, delete=(), disconly=False):
 	""" Return the labeled set of bracketings for a tree:
 	for each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
 	Tree must have been processed by transform().
+
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
 			{}, {}, False)
@@ -449,13 +551,21 @@ def bracketings(tree, labeled=True, delete=(), disconly=False):
 					and a.node not in delete
 					and (not disconly or disc(a)))
 
-def printbrackets(brackets):
-	if not brackets: return "{}"
+def strbracketings(brackets):
+	""" Return a string with a concise representation of a bracketing.
+
+	>>> strbracketings(set([('S', frozenset([0, 1, 2])), \
+			('VP', frozenset([0, 2]))]))
+	'S[0-2], VP[0,2]'
+	"""
+	if not brackets:
+		return "{}"
 	return ", ".join("%s[%s]" % (a, ",".join(
 		"-".join(str(y) for y in sorted(set(x)))
 		for x in intervals(sorted(b)))) for a, b in brackets)
 
 def leafancestorpaths(tree, delete):
+	""" Generate a list of ancestors for each leaf node in a tree. """
 	#uses [] to mark components, and () to mark constituent boundaries
 	#deleted words/tags should not affect boundary detection
 	paths = dict((a, []) for a in tree.indices)
@@ -466,7 +576,8 @@ def leafancestorpaths(tree, delete):
 		for n in thislevel:
 			leaves = sorted(n.indices)
 			# skip empty nodes and POS tags
-			if not leaves or not isinstance(n[0], Tree): continue
+			if not leaves or not isinstance(n[0], Tree):
+				continue
 			first, last = min(leaves), max(leaves)
 			# skip root node if it is to be deleted
 			if n.node not in delete:
@@ -490,8 +601,10 @@ def leafancestorpaths(tree, delete):
 	return paths
 
 def pathscore(gold, cand):
+	""" Get edit distance for two leaf-ancestor paths. """
 	#catch the case of empty lineages
-	if gold == cand: return 1.0
+	if gold == cand:
+		return 1.0
 	return max(0, (1.0 - edit_distance(cand, gold)
 					/ float(len(gold) + len(cand))))
 
@@ -503,75 +616,115 @@ def leafancestor(goldtree, candtree, delete):
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
 
 def treedisteval(a, b, includeroot=False, debug=False):
+	""" Get tree-distance for two trees and compute the Dice normalization. """
 	ted = treedist(a, b, debug)
 	# Dice denominator
 	denom = len(list(a.subtrees()) + list(b.subtrees()))
 	# optionally discount ROOT nodes and preterminals
-	if not includeroot: denom -= 2
-	#if not includepreterms: denom -= len(a.leaves() + b.leaves())
+	if not includeroot:
+		denom -= 2
+	#if not includepreterms:
+	#	denom -= len(a.leaves() + b.leaves())
 	return ted, denom
 
+# If the goldfile contains n constituents for the same span, and the parsed
+# file contains m constituents with that nonterminal, the scorer works as
+# follows:
+#
+# i) If m>n, then the precision is n/m, recall is 100%
+#
+# ii) If n>m, then the precision is 100%, recall is m/n.
+#
+# iii) If n==m, recall and precision are both 100%.
 def recall(reference, candidate):
-	if reference: return sum((reference & candidate).values()) / float(sum(reference.values()))
-	return float('nan')
+	""" Get recall score for two multisets. """
+	if not reference:
+		return float('nan')
+	return sum(min(reference[a], candidate[a])
+			for a in reference & candidate) / float(
+			sum(reference.values()))
 
 def precision(reference, candidate):
-	if candidate: return sum((reference & candidate).values()) / float(sum(candidate.values()))
-	return float('nan')
+	""" Get precision score for two multisets. """
+	if not candidate:
+		return float('nan')
+	return sum(min(reference[a], candidate[a])
+			for a in reference & candidate) / float(
+			sum(candidate.values()))
 
 def f_measure(reference, candidate, alpha=0.5):
+	""" Get F1-measure for two multisets. """
 	p = precision(reference, candidate)
 	r = recall(reference, candidate)
-	if p == 0 or r == 0: return 0
+	if p == 0 or r == 0:
+		return 0
 	return 1.0/(alpha/p + (1-alpha)/r)
 
 def harmean(seq):
-	try: return len([a for a in seq if a]) / sum(1./a for a in seq if a)
-	except ZeroDivisionError: return "zerodiv"
+	""" Compute harmonic mean of a sequence. """
+	try:
+		return len([a for a in seq if a]) / sum(1./a for a in seq if a)
+	except ZeroDivisionError:
+		return float('nan')
 
 def mean(seq):
-	return (sum(seq) / float(len(seq)))
+	""" Compute arithmetic mean of a sequence. """
+	return sum(seq) / float(len(seq))
 
 def splitpath(path):
-	if "/" in path: return path.rsplit("/", 1)
-	else: return ".", path
+	""" Split path into a pair of (directory, filename). """
+	if "/" in path:
+		return path.rsplit("/", 1)
+	else:
+		return ".", path
 
 def intervals(s):
 	""" Partition s into a sequence of intervals corresponding to contiguous
 	ranges. An interval is a pair (a, b), with a <= b denoting terminals x
 	such that a <= x <= b.
+
 	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
 	[(0, 1), (3, 4), (6, 8)]"""
 	start = prev = None
 	for a in s:
-		if start is None: start = prev = a
-		elif a == prev + 1: prev = a
+		if start is None:
+			start = prev = a
+		elif a == prev + 1:
+			prev = a
 		else:
 			yield start, prev
 			start = prev = a
-	if start is not None: yield start, prev
+	if start is not None:
+		yield start, prev
 
 def disc(node):
 	""" This function evaluates whether a particular node is locally
 	discontinuous.  The root node will, by definition, be continuous.
 	Nodes can be continuous even if some of their children are discontinuous.
 	"""
-	if not isinstance(node, Tree): return False
+	if not isinstance(node, Tree):
+		return False
 	start = prev = None
 	for a in sorted(node.indices):
-		if start is None: start = prev = a
-		elif a == prev + 1: prev = a
-		else: return True
+		if start is None:
+			start = prev = a
+		elif a == prev + 1:
+			prev = a
+		else:
+			return True
 	return False
 
 def nozerodiv(a):
 	""" Convenience function to catch zero division or None as a result,
 	and otherwise format as a percentage with two decimals. """
-	try: result = a()
-	except ZeroDivisionError: return ' 0DIV!'
+	try:
+		result = a()
+	except ZeroDivisionError:
+		return ' 0DIV!'
 	return '  None' if result is None else "%6.2f" % (100 * result)
 
 def test():
+	""" Simple sanity check; should give 100% score on all metrics. """
 	gold = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	parses = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	doeval(gold.parsed_sents(),
@@ -580,4 +733,5 @@ def test():
 			parses.tagged_sents(),
 			readparam(None))
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()

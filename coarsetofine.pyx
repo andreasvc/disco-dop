@@ -1,6 +1,5 @@
-"""Assorted functions to project items from a coarse chart to corresponding
-items for a fine grammar.
-"""
+""" Assorted functions to project items from a coarse chart to corresponding
+items for a fine grammar. """
 from collections import defaultdict
 from nltk import Tree
 from treetransforms import mergediscnodes, unbinarize, slowfanout
@@ -13,7 +12,7 @@ from agenda cimport Entry
 infinity = float('infinity')
 
 cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
-	int k, bint splitprune, bint markorigin):
+	int k, bint splitprune, bint markorigin, bint finecfg):
 	""" Produce a white list of chart items occurring in the k-best derivations
 	of chart, where labels X in coarse.toid are projected to the labels
 	X and X@n-m in fine.toid, for possible values of n and m.
@@ -27,57 +26,50 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
             allowed on the agenda.
 		- markorigin: in combination with splitprune, coarse labels include an
 			integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
-			map to the discontinuous node NP_2
-	"""
-	cdef dict d, kbest
+			map to the discontinuous node NP_2. """
+	cdef dict d
 	cdef list whitelist
 	cdef ChartItem Ih
 	assert fine.mapping is not NULL
 	if splitprune and markorigin:
 		assert fine.splitmapping is not NULL
 		assert fine.splitmapping[0] is not NULL
-	whitelist = [None] * len(fine.toid)
 	d = <dict>defaultdict(dict)
 	# construct a list of the k-best nonterminals to prune with
-	kbest = kbest_items(chart, goal, k)
-	kbestspans = [{} for a in coarse.toid]
-	kbestspans[0] = None
-	# uses ids of labels in coarse chart
-	for Ih in kbest:
-		label = Ih.label; Ih.label = 0
-		kbestspans[label][Ih] = 0.0
-	# now construct a list which references these coarse items:
-	for label in range(fine.nonterminals):
-		if splitprune and markorigin and fine.fanout[label] != 1:
-			if fine.splitmapping[label] is not NULL:
-				whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
-					for n in range(fine.fanout[label])]
-		else:
-			if fine.mapping[label] != 0:
-				whitelist[label] = kbestspans[fine.mapping[label]]
+	kbest = kbest_items(chart, goal, k, finecfg, coarse.tolabel)
+	if finecfg:
+		whitelist = [[{} for _ in range((<CFGChartItem>goal).end + 1)]
+				for _ in range((<CFGChartItem>goal).end)]
+		for left in range((<CFGChartItem>goal).end):
+			for right in range(left + 1, (<CFGChartItem>goal).end + 1):
+				span = left, right
+				cell = whitelist[left][right]
+				for label in range(1, fine.nonterminals):
+					if (fine.mapping[label] == 0
+							or span in kbest[fine.mapping[label]]):
+						cell[label] = None
+	else:
+		whitelist = [None] * len(fine.toid)
+		kbestspans = [{} for a in coarse.toid]
+		kbestspans[0] = None
+		# uses ids of labels in coarse chart
+		for Ih in kbest:
+			label = Ih.label; Ih.label = 0
+			kbestspans[label][Ih] = 0.0
+		# now construct a list which references these coarse items:
+		for label in range(fine.nonterminals):
+			if splitprune and markorigin and fine.fanout[label] != 1:
+				if fine.splitmapping[label] is not NULL:
+					whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
+						for n in range(fine.fanout[label])]
+			else:
+				if fine.mapping[label] != 0:
+					whitelist[label] = kbestspans[fine.mapping[label]]
 	return whitelist, len(kbest)
 
-cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
-	""" Like kbest_items, but apply the reverse of the Boyd (2007)
-	transformation to the k-best derivations."""
-	cdef dict newchart = <dict>defaultdict(dict)
-	cdef list derivs = [Tree.parse(a, parse_leaf=int) for a, _
-				in lazykbest(chart, start, k, grammar.tolabel)[0]]
-	for a in derivs:
-		unbinarize(a, childChar=":", parentChar="!")
-		mergediscnodes(a)
-	for tree in derivs:
-		for node in tree.subtrees():
-			arity = slowfanout(node)
-			if arity > 1: label = "%s_%d" % (node.node, arity)
-			else: label = node.node
-			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
-	return newchart
-
-cpdef dict kbest_items(chart, ChartItem start, int k):
+cpdef kbest_items(chart, ChartItem start, int k, bint finecfg, coarsetolabel):
 	""" produce a dictionary with ChartItems as keys (value is currently unused)
 	according to the k-best derivations in a chart. """
-	cdef dict items
 	cdef Entry entry
 	cdef CFGChartItem ci
 	if k == 0:
@@ -94,11 +86,14 @@ cpdef dict kbest_items(chart, ChartItem start, int k):
 			if ci.end >= (sizeof(ULLong) * 8):
 				ei = CFGtoFatChartItem(ci.label, ci.start, ci.end)
 			else: ei = CFGtoSmallChartItem(ci.label, ci.start, ci.end)
-			items = { ei : 0.0 }
+			if finecfg:
+				items = [{} for _ in coarsetolabel]
+				items[ci.label][ci.start, ci.end] = 0.0
+			else: items = { ei : 0.0 }
 			for entry in D[(<CFGChartItem>start).start][
 				(<CFGChartItem>start).end][start.label]:
 				traversekbestcfg(entry.key, entry.value, D, chart, items,
-					(<CFGChartItem>start).end >= (sizeof(ULLong) * 8))
+					(<CFGChartItem>start).end >= (sizeof(ULLong) * 8), finecfg)
 		else:
 			D = {}
 			items = { start : 0.0 }
@@ -107,7 +102,8 @@ cpdef dict kbest_items(chart, ChartItem start, int k):
 				traversekbest(entry.key, entry.value, D, chart, items)
 	return items
 
-cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart, dict items):
+cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart,
+		dict items):
 	""" Traverse a derivation e,j, collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
 	currently unused; only presence or absence in this list is exploited)"""
@@ -141,7 +137,7 @@ cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart, dict item
 		traversekbest(eejj, rootprob, D, chart, items)
 
 cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
-		dict items, bint fatitems):
+		items, bint fatitems, bint finecfg):
 	""" Traverse a derivation e,j, collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
 	currently unused; only presence or absence in this list is exploited)"""
@@ -164,11 +160,14 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 				min(chart[start][end][label]), 0, 0)
 			prob = eejj.edge.inside
 		else: raise ValueError
-		if fatitems: ei = CFGtoFatChartItem(label, start, end)
-		else: ei = CFGtoSmallChartItem(label, start, end)
-		if ei not in items:
-			items[ei] = rootprob - prob
-		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems)
+		if finecfg:
+			if (start, end) not in items[label]:
+				items[label][start, end] = rootprob - prob
+		else:
+			if fatitems: ei = CFGtoFatChartItem(label, start, end)
+			else: ei = CFGtoSmallChartItem(label, start, end)
+			if ei not in items: items[ei] = rootprob - prob
+		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems, finecfg)
 	if e.rule is not NULL and e.rule.rhs2:
 		label = e.rule.rhs2
 		start = e.mid; end = ej.end
@@ -181,11 +180,14 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 				min(chart[start][end][label]), 0, 0)
 			prob = eejj.edge.inside
 		else: raise ValueError
-		if fatitems: ei = CFGtoFatChartItem(label, start, end)
-		else: ei = CFGtoSmallChartItem(label, start, end)
-		if ei not in items:
-			items[ei] = rootprob - prob
-		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems)
+		if finecfg:
+			if (start, end) not in items[label]:
+				items[label][start, end] = rootprob - prob
+		else:
+			if fatitems: ei = CFGtoFatChartItem(label, start, end)
+			else: ei = CFGtoSmallChartItem(label, start, end)
+			if ei not in items: items[ei] = rootprob - prob
+		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems, finecfg)
 
 cpdef filterchart(chart, ChartItem start):
 	""" remove all entries that do not contribute to a complete derivation
@@ -212,7 +214,8 @@ cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 		if item.label and item not in chart2:
 			filter_subtree(edge.right, chart, chart2)
 
-cdef void filter_subtreecfg(label, start, end, list chart, dict chart2, bint fat):
+cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
+		bint fat):
 	cdef CFGEdge edge
 	cdef ChartItem newitem
 	if fat: newitem = CFGtoFatChartItem(label, start, end)
@@ -222,20 +225,38 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2, bint fat
 	for edge in chart2[newitem]:
 		if edge.rule is NULL: continue
 		if edge.rule.rhs1 and edge.rule.rhs1 in chart[start][edge.mid]:
-			filter_subtreecfg(edge.rule.rhs1, start, edge.mid, chart, chart2, fat)
+			filter_subtreecfg(edge.rule.rhs1, start, edge.mid,
+					chart, chart2, fat)
 		if edge.rule.rhs2 and edge.rule.rhs2 in chart[edge.mid][end]:
 			filter_subtreecfg(edge.rule.rhs2, edge.mid, end, chart, chart2, fat)
+
+cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
+	""" Like kbest_items, but apply the reverse of the Boyd (2007)
+	transformation to the k-best derivations."""
+	cdef dict newchart = <dict>defaultdict(dict)
+	cdef list derivs = [Tree.parse(a, parse_leaf=int) for a, _
+				in lazykbest(chart, start, k, grammar.tolabel)[0]]
+	for a in derivs:
+		unbinarize(a, childChar=":", parentChar="!")
+		mergediscnodes(a)
+	for tree in derivs:
+		for node in tree.subtrees():
+			arity = slowfanout(node)
+			if arity > 1: label = "%s_%d" % (node.node, arity)
+			else: label = node.node
+			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
+	return newchart
 
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	from parser import parse #, pprint_chart
 	from disambiguation import marginalize
-	from grammar import canonicalize, rem_marks
+	from treetransforms import canonicalize, removefanoutmarkers
 	from math import exp
 	sent, tags = zip(*sent)
 	print " C O A R S E ",
 	p, start, _ = parse(sent, coarse, start=coarse.toid['ROOT'], tags=tags)
 	if start:
-		mpp, _ = marginalize(p, start, coarse.tolabel)
+		mpp, _ = marginalize(p, start, coarse)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
@@ -243,13 +264,13 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 				unbinarize(t, childChar=":", parentChar="!")
 				mergediscnodes(t)
 			unbinarize(t)
-			t = canonicalize(rem_marks(t))
+			t = canonicalize(removefanoutmarkers(t))
 			print "exact match" if t == canonicalize(tree) else "no match" #, t
 	else:
 		print "no parse"
 		return
 		#pprint_chart(p, sent, coarse.tolabel)
-	l, _ = prunechart(p, start, coarse, fine, k, split, True)
+	l, _ = prunechart(p, start, coarse, fine, k, split, True, False)
 	if verbose:
 		print "\nitems in 50-best of coarse chart"
 		if split:
@@ -257,9 +278,10 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 			for label in d:
 				print label, map(bin, d[label].keys())
 		else:
-			kbest = kbest_items(p, start, k)
+			kbest = kbest_items(p, start, k, False, ())
 			for a,b in kbest.items():
-				print coarse.tolabel[(<ChartItem>a).label], bin((<ChartItem>a).vec), b
+				print coarse.tolabel[(<ChartItem>a).label],
+				print bin((<ChartItem>a).vec), b
 		print "\nwhitelist:"
 		for n,x in enumerate(l):
 			if isinstance(x, dict):
@@ -271,12 +293,12 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	pp, start, _ = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
 		whitelist=l, splitprune=split, markorigin=True)
 	if start:
-		mpp, _ = marginalize(pp, start, fine.tolabel)
+		mpp, _ = marginalize(pp, start, fine)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
 			unbinarize(t)
-			t = canonicalize(rem_marks(t))
+			t = canonicalize(removefanoutmarkers(t))
 			#print t.pprint(margin=999)
 			print "exact match" if t == canonicalize(tree) else "no match", t
 	else:
@@ -330,7 +352,6 @@ def main():
 	for t in dtrees:
 		binarize(t, vertMarkov=1, horzMarkov=1)
 		addfanoutmarkers(t)
-	# mark heads, canonicalize, binarize head outward
 	normallcfrs = induce_plcfrs(trees, sents)
 	normal = Grammar(normallcfrs)
 	parent = Grammar(induce_plcfrs(parenttrees, sents))
@@ -353,8 +374,7 @@ def main():
 		(True, False, True)):
 		if not enabled: continue
 		print "coarse grammar:", msg
-		fine.getmapping(re.compile("@[-0-9]+$"), None, coarse,
-				split, True)
+		fine.getmapping(coarse, re.compile("@[-0-9]+$"), None, split, True)
 		#??: fine.getdonotprune(re.compile(r"\|<"))
 		begin = clock()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):

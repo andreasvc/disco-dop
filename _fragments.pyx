@@ -238,20 +238,20 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	is that a fragment can occur in other trees where it was not a maximal. """
 	cdef:
 		UInt count, n, m, i, j
-		array[UInt] counts = clone(uintarray, len(bitsets), True)
-		array[ULong] bitset = bitsets[0]
+		array counts = clone(uintarray, len(bitsets), True)
+		array bitset = bitsets[0]
 		UChar SLOTS = len(bitset) - 2
 		NodeArray a, b, *ctrees1 = trees1.data, *ctrees2 = trees2.data
 		set candidates
 	assert SLOTS
 	# compare one bitset to each tree for each unique fragment.
 	for n, bitset in enumerate(bitsets):
-		a = ctrees2[bitset[SLOTS + 1]] # the fragment
+		a = ctrees2[bitset.data.as_ulongs[SLOTS + 1]] # the fragment
 		candidates = set(range(trees1.len))
 		for i in range(a.len):
 			if TESTBIT(bitset.data.as_ulongs, i):
 				candidates &= <set>(treeswithprod[a.nodes[i].prod])
-		i = bitset[SLOTS] # root of fragment in a
+		i = bitset.data.as_ulongs[SLOTS] # root of fragment in a
 
 		count = 0
 		for m in candidates:
@@ -260,7 +260,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 				if a.nodes[i].prod != -1 and a.nodes[i].prod == b.nodes[j].prod:
 					count += containsbitset(a, b, bitset.data.as_ulongs, i, j)
 				elif fast and a.nodes[i].prod > b.nodes[j].prod: break
-		counts[n] = count
+		counts.data.as_uints[n] = count
 	return counts
 
 cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
@@ -489,7 +489,8 @@ cdef inline unicode getsubtree(Node *tree, ULong *bitset, list revlabel,
 	elif tree[i].prod == -1: # a terminal
 		return unicode(tree[i].label) if sent is None else sent[tree[i].label]
 	elif sent is None:
-		return u"(%s %s)" % (revlabel[tree[i].label], yieldranges(tree, sent, i))
+		return u"(%s %s)" % (revlabel[tree[i].label],
+				yieldranges(tree, sent, i))
 	else: return u"(%s )" % (revlabel[tree[i].label])
 
 cdef inline unicode yieldranges(Node *tree, list sent, int i):
@@ -685,7 +686,7 @@ def pathsplit(p):
 def getprodid(prods, node): return -prods.get(node.prod, -1)
 def getctrees(trees, sents, trees2=None, sents2=None):
 	""" Return Ctrees object for a list of disc. trees and sentences. """
-	from grammar import canonicalize
+	from treetransforms import canonicalize
 	labels = {}; prods = {}
 	# make deep copies to avoid side effects.
 	trees = [tolist(add_lcfrs_rules(canonicalize(x.copy(True)), y), y)
@@ -719,7 +720,7 @@ def readtreebank(treebankfile, labels, prods, sort=True, discontinuous=False,
 	if treebankfile is None: return None, None
 	if discontinuous:
 		# no incremental reading w/disc trees
-		from grammar import canonicalize
+		from treetransforms import canonicalize
 		from treebank import NegraCorpusReader
 		corpus = NegraCorpusReader(*pathsplit(treebankfile), encoding=encoding)
 		trees = corpus.parsed_sents().values(); sents = corpus.sents().values()

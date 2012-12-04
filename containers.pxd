@@ -39,8 +39,8 @@ cdef class Grammar:
 	cdef public dict lexical, lexicalbylhs, toid, tolabel
 	cdef public list unaryclosure
 	cdef frozenset origrules
-	cpdef getmapping(Grammar self, striplabelre, neverblockre, Grammar coarse,
-			bint splitprune, bint markorigin, bint debug=*)
+	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=*,
+			neverblockre=*, bint splitprune=*, bint markorigin=*, bint debug=*)
 	cdef str rulerepr(self, Rule rule)
 	cdef str yfrepr(self, Rule rule)
 

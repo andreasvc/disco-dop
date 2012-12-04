@@ -20,17 +20,19 @@ cython_directives = dict(
 cythonutils = os.path.join(os.path.split(
 	cython.__file__)[0], 'Cython', 'Utility')
 
+#Options.fast_fail = True
 Options.extra_compile_args=["-O3"],
 Options.extra_link_args=["-O3"], #["-g"],
-setup(
-	name = 'disco-dop',
-	include_dirs = [numpy.get_include()], #cythonutils],
-	ext_modules = cythonize(
-		[Extension('*', ['*.pyx'],
-			extra_compile_args=["-O3"],
-			extra_link_args=["-O3"], #["-g"],
-		)],
-		nthreads=4,
-		cython_directives=cython_directives,
-		)
-)
+if __name__ == '__main__':
+	setup(
+		name = 'disco-dop',
+		include_dirs = [numpy.get_include()], #cythonutils],
+		ext_modules = cythonize(
+			[Extension('*', ['*.pyx'],
+				extra_compile_args=["-O3"],
+				extra_link_args=["-O3"], #["-g"],
+			)],
+			nthreads=4,
+			cython_directives=cython_directives,
+			)
+	)
