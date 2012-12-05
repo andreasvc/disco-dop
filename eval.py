@@ -188,10 +188,10 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		if param["DEP"]:
 			cdep = dependencies(ctree, param['HEADRULES'])
 			gdep = dependencies(gtree, param['HEADRULES'])
-			gdepfile.write(export(gsent, gpos, n, "conll", param['HEADRULES']))
-			cdepfile.write(export(csent, cpos, n, "conll", param['HEADRULES']))
 			canddep.extend(cdep)
 			golddep.extend(gdep)
+			gdepfile.write(export(gtree, gsent, n, "conll", param['HEADRULES']))
+			cdepfile.write(export(ctree, csent, n, "conll", param['HEADRULES']))
 		if lencpos <= param["CUTOFF_LEN"]:
 			sentcount40 += 1
 			if maxlenseen40 < lencpos:

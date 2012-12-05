@@ -807,16 +807,16 @@ def cfgparse_dense(list sent, Grammar grammar, start=1, tags=None):
 				edge = new_CFGEdge(prob, rule, right)
 				if isfinite(viterbi[lhs, left, right]):
 					if prob < viterbi[lhs, left, right]:
-						unaryagenda.setitem(lhs, edge)
+						unaryagenda.setifbetter(lhs, edge)
 						viterbi[lhs, left, right] = prob
 						cell[lhs][edge] = edge
 					elif (edge not in cell[lhs] or
 							prob < (<CFGEdge>cell[lhs][edge]).inside):
 						cell[lhs][edge] = edge
 					continue
-				cell[lhs] = {edge: edge}
-				unaryagenda.setitem(lhs, edge)
+				unaryagenda.setifbetter(lhs, edge)
 				viterbi[lhs, left, right] = prob
+				cell[lhs] = {edge: edge}
 				# update filter
 				if left > minleft[lhs, right]: minleft[lhs, right] = left
 				if left < maxleft[lhs, right]: maxleft[lhs, right] = left
@@ -873,21 +873,23 @@ def cfgparse_dense(list sent, Grammar grammar, start=1, tags=None):
 				rhs1 = unaryagenda.popentry().key
 				for i in range(grammar.numrules):
 					rule = &(grammar.unary[rhs1][i])
-					if rule.rhs1 != rhs1: break
+					if rule.rhs1 != rhs1:
+						break
 					prob = rule.prob + viterbi[rhs1, left, right]
 					lhs = rule.lhs
 					edge = new_CFGEdge(prob, rule, right)
 					if isfinite(viterbi[lhs, left, right]):
 						if prob < viterbi[lhs, left, right]:
-							unaryagenda.setitem(lhs, edge)
+							unaryagenda.setifbetter(lhs, edge)
 							viterbi[lhs, left, right] = prob
 							cell[lhs][edge] = edge
-						elif edge not in cell[lhs]:
+						elif (edge not in cell[lhs] or
+								prob < (<CFGEdge>cell[lhs][edge]).inside):
 							cell[lhs][edge] = edge
 						continue
-					cell[lhs] = {edge: edge}
-					unaryagenda.setitem(lhs, edge)
+					unaryagenda.setifbetter(lhs, edge)
 					viterbi[lhs, left, right] = prob
+					cell[lhs] = {edge: edge}
 					# update filter
 					if left > minleft[lhs, right]: minleft[lhs, right] = left
 					if left < maxleft[lhs, right]: maxleft[lhs, right] = left
@@ -989,16 +991,16 @@ def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
 				edge = new_CFGEdge(prob, rule, right)
 				if cell[lhs]:
 					if prob < (<CFGEdge>viterbicell[lhs]).inside:
-						unaryagenda.setitem(lhs, edge)
+						unaryagenda.setifbetter(lhs, edge)
 						viterbi[left][right][lhs] = edge
 						cell[lhs][edge] = edge
 					elif (edge not in cell[lhs] or
 							prob < (<CFGEdge>cell[lhs][edge]).inside):
 						cell[lhs][edge] = edge
 					continue
+				unaryagenda.setifbetter(lhs, edge)
 				viterbicell[lhs] = edge
 				cell[lhs] = {edge: edge}
-				unaryagenda.setitem(lhs, edge)
 				# update filter
 				if left > minleft[lhs, right]: minleft[lhs, right] = left
 				if left < maxleft[lhs, right]: maxleft[lhs, right] = left
@@ -1068,16 +1070,16 @@ def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
 					edge = new_CFGEdge(prob, rule, right)
 					if cell[lhs]:
 						if prob < (<CFGEdge>viterbicell[lhs]).inside:
-							unaryagenda.setitem(lhs, edge)
+							unaryagenda.setifbetter(lhs, edge)
 							viterbicell[lhs] = edge
 							cell[lhs][edge] = edge
 						elif (edge not in cell[lhs] or
 								prob < (<CFGEdge>cell[lhs][edge]).inside):
 							cell[lhs][edge] = edge
 						continue
+					unaryagenda.setifbetter(lhs, edge)
 					viterbicell[lhs] = edge
 					cell[lhs] = {edge: edge}
-					unaryagenda.setitem(lhs, edge)
 					# update filter
 					if left > minleft[lhs, right]: minleft[lhs, right] = left
 					if left < maxleft[lhs, right]: maxleft[lhs, right] = left

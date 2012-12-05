@@ -12,16 +12,16 @@ from nltk import Tree
 from nltk.metrics import accuracy
 import numpy as np
 from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
-		BracketCorpusReader, fold, export
+		BracketCorpusReader, fold, export, FUNC
+from treetransforms import binarize, unbinarize, optimalbinarize, \
+		splitdiscnodes, mergediscnodes, addfanoutmarkers, slowfanout, \
+		removefanoutmarkers, canonicalize
 from fragments import getfragments
 from grammar import induce_plcfrs, dopreduction, doubledop, doubledop_new, \
 		grammarinfo
 from containers import Grammar
-from treetransforms import binarize, unbinarize, optimalbinarize, \
-		splitdiscnodes, mergediscnodes, addfanoutmarkers, slowfanout, \
-		removefanoutmarkers, canonicalize
-from coarsetofine import prunechart
 from parser import parse, cfgparse
+from coarsetofine import prunechart
 from disambiguation import marginalize, viterbiderivation, sldop, sldop_simple
 from eval import doeval, readparam, strbracketings, transform, \
 		bracketings, precision, recall, f_measure
@@ -203,8 +203,8 @@ def main(
 	begin = time.clock()
 	results = doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, test, testmaxwords, testsents,
-			trees[0].node, True, resultdir, numproc, deletelabel=deletelabel,
-			corpusfmt=corpusfmt)
+			trees[0].node, True, resultdir, numproc, tailmarker,
+			deletelabel=deletelabel, corpusfmt=corpusfmt)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
 	print "testmaxwords", testmaxwords, "binarization", bintype,
@@ -417,11 +417,12 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 #	params = DictObj(**params)
 def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		test, testmaxwords, testsents, top, tags=True, resultdir="results",
-		numproc=None, category=None, deletelabel=(), corpusfmt="export"):
+		numproc=None, tailmarker='', category=None, deletelabel=(), corpusfmt="export"):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
-			resultdir=resultdir, category=category, deletelabel=deletelabel)
+			resultdir=resultdir, category=category, deletelabel=deletelabel,
+			tailmarker=tailmarker)
 	goldbrackets = multiset()
 	gold = OrderedDict.fromkeys(test)
 	gsent = OrderedDict.fromkeys(test)
@@ -584,7 +585,7 @@ def worker(args):
 			if stage.split:
 				parsetree.un_chomsky_normal_form(childChar=":")
 				mergediscnodes(parsetree)
-			saveheads(parsetree)
+			saveheads(parsetree, d.tailmarker)
 			unbinarize(parsetree)
 			removefanoutmarkers(parsetree)
 			if d.unfolded:
@@ -599,8 +600,7 @@ def worker(args):
 				f1 = f_measure(goldb, candb)
 			else:
 				prec = rec = f1 = 0
-			if parsetree == tree or f1 == 1.0:
-				assert not parsetree or f1 == 1.0
+			if parsetree and parsetree == tree and f1 == 1.0:
 				msg += "exact match "
 				exact = True
 			else:
@@ -672,14 +672,12 @@ def olddoeval(results, nsent, goldbrackets, gold, gsent):
 				100.0 * (nsent - result.noparse) / nsent,
 				result.exact, nsent, 100.0 * result.exact / nsent)
 
-def saveheads(tree):
+def saveheads(tree, tailmarker):
 	""" When a head-outward binarization is used, this function ensures the
 	head is known when the tree is converted to export format. """
-	from treebank import FUNC
-	for node in tree.subtrees(lambda n: "|" in n.node
-			and not any("|" in m.node for m in n)):
-		node[-1].source = ['--'] * 6
-		node[-1].source[FUNC] = 'HD'
+	for node in tree.subtrees(lambda n: "tailmarker" in n.node):
+		node.source = ['--'] * 6
+		node.source[FUNC] = 'HD'
 
 def defaultparse(wordstags):
 	""" a right branching default parse
@@ -841,7 +839,7 @@ def parsetepacoc(
 		begin = time.clock()
 		results[cat] = doparse(stages, unfolded, bintype,
 				fanout_marks_before_bin, test, testmaxwords, testsents,
-				trees[0].node, True, resultdir, numproc, category=cat)
+				trees[0].node, True, resultdir, numproc, tailmarker, category=cat)
 		cnt += len(test[0])
 		if numproc == 1:
 			logging.info("time elapsed during parsing: %g",
@@ -876,7 +874,7 @@ def parsetepacoc(
 	logging.info("category: %s", cat)
 	olddoeval(*doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset[cat], testmaxwords, testsents,
-			trees[0].node, True, resultdir, numproc, category=cat))
+			trees[0].node, True, resultdir, numproc, tailmarker, category=cat))
 
 def cycledetection(trees, sents):
 	""" Find trees with cyclic unary productions. """

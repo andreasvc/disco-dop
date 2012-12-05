@@ -261,14 +261,17 @@ def getsamples(chart, start, n, tolabel):
 cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
 	cdef Edge edge
 	cdef CFGChartItem tmp
-	if isinstance(start, CFGChartItem):
-		tmp = start
-		edge = min(chart[tmp.start][tmp.end][tmp.label])
-		return getviterbicfg(chart, tmp.label, tmp.start, tmp.end,
-			tolabel), edge.inside
-	else:
-		edge = min(chart[start])
-		return getviterbi(chart, start, tolabel), edge.inside
+	derivations, _ = lazykbest(chart, start, 10, tolabel)
+	return derivations[0]
+	# FIXME: these can go into an infinite loop with unary cycles:
+	#if isinstance(start, CFGChartItem):
+	#	tmp = start
+	#	edge = min(chart[tmp.start][tmp.end][tmp.label])
+	#	return getviterbicfg(chart, tmp.label, tmp.start, tmp.end,
+	#		tolabel), edge.inside
+	#else:
+	#	edge = min(chart[start])
+	#	return getviterbi(chart, start, tolabel), edge.inside
 
 cdef getviterbi(dict chart, ChartItem start, dict tolabel):
 	cdef LCFRSEdge edge = min(chart[start])
