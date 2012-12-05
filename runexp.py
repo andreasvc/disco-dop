@@ -14,7 +14,7 @@ import numpy as np
 from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
 		BracketCorpusReader, fold, export
 from fragments import getfragments
-from grammar import induce_plcfrs, dop_lcfrs_rules, doubledop, doubledop_new, \
+from grammar import induce_plcfrs, dopreduction, doubledop, doubledop_new, \
 		grammarinfo
 from containers import Grammar
 from treetransforms import binarize, unbinarize, optimalbinarize, \
@@ -286,13 +286,13 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			if stage.estimator == "shortest":
 				# the secondary model is used to resolve ties
 				# for the shortest derivation
-				grammar, secondarymodel = dop_lcfrs_rules(traintrees, sents,
+				grammar, secondarymodel = dopreduction(traintrees, sents,
 					normalize=False, shortestderiv=True)
 				stages[n].secondarymodel = secondarymodel
 			elif "sl-dop" in stage.estimator:
-				grammar = dop_lcfrs_rules(traintrees, sents, normalize=True,
+				grammar = dopreduction(traintrees, sents, normalize=True,
 								shortestderiv=False)
-				dopshortest, _ = dop_lcfrs_rules(traintrees, sents,
+				dopshortest, _ = dopreduction(traintrees, sents,
 								normalize=False, shortestderiv=True)
 				secondarymodel = Grammar(dopshortest)
 				stages[n].secondarymodel = secondarymodel
@@ -309,7 +309,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 					grammar, backtransform = doubledop(fragments)
 				stages[n].backtransform = backtransform
 			else:
-				grammar = dop_lcfrs_rules(traintrees, sents,
+				grammar = dopreduction(traintrees, sents,
 					normalize=(stage.estimator
 						in ("ewe", "sl-dop", "sl-dop-simple")),
 					shortestderiv=False)
@@ -321,13 +321,15 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			logging.info(msg)
 			grammar.testgrammar()
 			if stage.usedoubledop:
-				# with newdd, backtransform is parallel to rules file
 				if stage.newdd:
-					lines = [v for _, v in sorted(backtransform.items())]
+					# with newdd, backtransform keys are line numbers
+					# to rules file; to see them together do:
+					# $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
+					lines = ["%s\n" % a for a in backtransform.itervalues()]
 				else:
-					lines = ["\t".join(a) for a in backtransform.iteritems()]
-				gzip.open(resultdir + "/dop.backtransform.gz", "w").writelines(
-					"%s\n" % a for a in lines)
+					lines = ["%s\t%s\n" % a for a in backtransform.iteritems()]
+				gzip.open(resultdir + "/dop.backtransform.gz", "w"
+						).writelines(lines)
 				if stage.prune:
 					grammar.getmapping(stages[n-1].grammar,
 						striplabelre=re.compile("(?:_[0-9]+)?(?:@.+)?$")
@@ -598,7 +600,7 @@ def worker(args):
 			else:
 				prec = rec = f1 = 0
 			if parsetree == tree or f1 == 1.0:
-				assert parsetree != tree or f1 == 1.0
+				assert not parsetree or f1 == 1.0
 				msg += "exact match "
 				exact = True
 			else:

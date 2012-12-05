@@ -25,7 +25,6 @@ cdef class Grammar:
 			+ sorted(set(str(nt) for (rule, _), _ in grammar for nt in rule)
 				- set(["Epsilon", "ROOT"]))))
 		self.nonterminals = len(nonterminals)
-		self.numrules = sum([1 for (r, _), _ in grammar if r[1] != 'Epsilon'])
 		self.toid = dict((lhs, n) for n, lhs in nonterminals)
 		self.tolabel = dict((n, lhs) for n, lhs in nonterminals)
 		self.lexical = {}
@@ -46,14 +45,14 @@ cdef class Grammar:
 		for n in range(self.nonterminals): self.fanout[n] = 0
 
 		# count number of rules in each category for allocation purposes
-		unary_len = binary_len = 0
+		self.numunary = self.numbinary = 0
 		for (rule, yf), w in grammar:
 			if len(rule) == 2:
 				if rule[1] != 'Epsilon':
 					assert all(b == 0 for a in yf for b in a), (
 						"yield function refers to non-existent second "
 						"non-terminal: %r\t%r" % (rule, yf))
-					unary_len += 1
+					self.numunary += 1
 			elif len(rule) == 3:
 				assert all(b == 0 or b == 1 for a in yf for b in a), (
 					"grammar must be binarized")
@@ -63,7 +62,7 @@ cdef class Grammar:
 				assert any(b == 1 for a in yf for b in a), (
 					"mismatch between non-terminals "
 					"and yield function: %r\t%r" % (rule, yf))
-				binary_len += 1
+				self.numbinary += 1
 			else:
 				raise ValueError("grammar not binarized: %s" % repr((rule,yf,w)))
 			if self.fanout[self.toid[rule[0]]] == 0:
@@ -74,15 +73,15 @@ cdef class Grammar:
 					"previous: %d; this non-terminal: %d.\nrule: %r" % (
 					rule[0], self.fanout[self.toid[rule[0]]], len(yf), rule))
 		#'\n'.join(repr(r) for r in grammar if r[0][0][0] == rule[0])
-		bylhs_len = unary_len + binary_len
+		self.numrules = self.numunary + self.numbinary
 		# allocate the actual contiguous array that will contain the rules
 		# (plus sentinels)
 		self.unary[0] = <Rule *>malloc(sizeof(Rule) *
-			(unary_len + bylhs_len + (2 * binary_len) + 4))
+			(self.numunary + self.numrules + (2 * self.numbinary) + 4))
 		assert self.unary is not NULL
-		self.lbinary[0] = &(self.unary[0][unary_len + 1])
-		self.rbinary[0] = &(self.lbinary[0][binary_len + 1])
-		self.bylhs[0] = &(self.rbinary[0][binary_len + 1])
+		self.lbinary[0] = &(self.unary[0][self.numunary + 1])
+		self.rbinary[0] = &(self.lbinary[0][self.numbinary + 1])
+		self.bylhs[0] = &(self.rbinary[0][self.numbinary + 1])
 
 		# convert rules and copy to structs / cdef class
 		# remove sign from log probabilities because we use a min-heap
@@ -229,15 +228,17 @@ cdef class Grammar:
 		cdef size_t n = 0
 		cdef Rule rule = self.bylhs[0][n]
 		cdef LexicalRule term
+		cdef list result = [''] * len(self.origrules)
 		while rule.lhs < self.nonterminals:
 			pyfloat = rule.prob
-			rules.write("%s\t%s%s\t%s\t%s\n" % (self.tolabel[rule.lhs],
-				self.tolabel[rule.rhs1],
-				('\t'+self.tolabel[rule.rhs2] if rule.rhs2 else ''),
-				self.yfrepr(rule),
-				pyfloat.hex() if hexprobs else exp(-pyfloat)))
+			result[rule.no] = "%s\t%s%s\t%s\t%s\n" % (self.tolabel[rule.lhs],
+					self.tolabel[rule.rhs1],
+					('\t'+self.tolabel[rule.rhs2] if rule.rhs2 else ''),
+					self.yfrepr(rule),
+					pyfloat.hex() if hexprobs else exp(-pyfloat))
 			n += 1
 			rule = self.bylhs[0][n]
+		rules.writelines(result)
 		for word in self.lexical:
 			for term in self.lexical[word]:
 				pyfloat = term.prob
@@ -251,14 +252,24 @@ cdef class Grammar:
 		cdef size_t n = 0
 		cdef Rule rule = self.bylhs[0][n]
 		cdef LexicalRule term
+		cdef list result = [''] * len(self.origrules)
 		while rule.lhs < self.nonterminals:
 			assert self.fanout[rule.lhs] == 1, ("can only export CFG rules.\n"
 					"rule: %s" % (self.rulerepr(rule)))
-			rules.write("%g\t%s\t%s%s\n" % (exp(-rule.prob),
-				self.tolabel[rule.lhs], self.tolabel[rule.rhs1],
-				("\t" + self.tolabel[rule.rhs2]) if rule.rhs2 else ''))
+			try:
+				result[rule.no] = "%g\t%s\t%s%s\n" % (exp(-rule.prob),
+					self.tolabel[rule.lhs], self.tolabel[rule.rhs1],
+					("\t" + self.tolabel[rule.rhs2]) if rule.rhs2 else '')
+			except:
+				print rule.no
+				print len(result)
+				print "%g\t%s\t%s%s\n" % (exp(-rule.prob),
+					self.tolabel[rule.lhs], self.tolabel[rule.rhs1],
+					("\t" + self.tolabel[rule.rhs2]) if rule.rhs2 else '')
+				raise
 			n += 1
 			rule = self.bylhs[0][n]
+		rules.writelines(result)
 		for word in self.lexical:
 			lexicon.write(word)
 			for term in self.lexical[word]:

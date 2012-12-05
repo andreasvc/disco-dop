@@ -14,7 +14,7 @@ from grammar import induce_plcfrs, rangeheads
 from treetransforms import unbinarize #, canonicalize
 from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem,\
 		Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, Grammar,\
-		UChar, ULong, ULLong
+		UChar, UInt, ULong, ULLong
 cimport cython
 
 from libc.string cimport memset
@@ -136,7 +136,8 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	for tt in nlargest(sldop_n, mpp1, key=mpp1.get):
 		for n in Tree(tt).subtrees():
 			if len(sent) < sizeof(ULLong) * 8:
-				item = SmallChartItem(0, sum([1L << int(x) for x in n.leaves()]))
+				item = SmallChartItem(0, sum([1L << int(x)
+						for x in n.leaves()]))
 			else:
 				fitem = item = FatChartItem(0)
 				memset(<char *>fitem.vec, 0, sizeof(fitem.vec))
@@ -271,7 +272,7 @@ cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
 
 cdef getviterbi(dict chart, ChartItem start, dict tolabel):
 	cdef LCFRSEdge edge = min(chart[start])
-	if edge.right.label: #binary
+	if edge.right.label: # binary
 		return "(%s %s %s)" % (tolabel[start.label],
 				getviterbi(chart, edge.left, tolabel),
 				getviterbi(chart, edge.right, tolabel))
@@ -281,18 +282,18 @@ cdef getviterbi(dict chart, ChartItem start, dict tolabel):
 	else: # terminal
 		return "(%s %d)" % (tolabel[start.label], edge.left.lexidx())
 
-cdef getviterbicfg(list chart, int label, UChar start, UChar end,
+cdef getviterbicfg(list chart, UInt label, UChar start, UChar end,
 		dict tolabel):
 	cdef CFGEdge edge = min(chart[start][end][label])
 	if edge.rule is NULL: # terminal
 		return "(%s %d)" % (tolabel[label], start)
-	elif edge.rule.rhs2: #binary
+	elif edge.rule.rhs2: # binary
 		return "(%s %s %s)" % (tolabel[label],
 					getviterbicfg(chart, edge.rule.rhs1,
 						start, edge.mid, tolabel),
 					getviterbicfg(chart, edge.rule.rhs2,
 						edge.mid, end, tolabel))
-	elif edge.rule.rhs1: #unary
+	elif edge.rule.rhs1: # unary
 		return "(%s %s)" % (tolabel[label],
 				getviterbicfg(chart, edge.rule.rhs1, start, edge.mid, tolabel))
 	raise ValueError
@@ -509,7 +510,7 @@ cdef str recoverfragments_new_cfg(RankedCFGEdge derivation, list D,
 
 def main():
 	from nltk import Tree
-	from grammar import dop_lcfrs_rules
+	from grammar import dopreduction
 	from containers import Grammar
 	from parser import parse
 	def e(x):
@@ -542,8 +543,8 @@ def main():
 		"""d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
 		a d e""".splitlines()]
-	grammar = Grammar(dop_lcfrs_rules(trees, sents))
-	shortest, secondarymodel = dop_lcfrs_rules(trees, sents, shortestderiv=True)
+	grammar = Grammar(dopreduction(trees, sents))
+	shortest, secondarymodel = dopreduction(trees, sents, shortestderiv=True)
 	shortest = Grammar(shortest)
 	sent = "a b c".split()
 	chart, start, _ = parse(sent, grammar, None, grammar.toid['ROOT'], True)

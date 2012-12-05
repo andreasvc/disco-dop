@@ -139,7 +139,7 @@ def induce_plcfrs(trees, sents, freqs=False):
 		grammar[rule] = log(float(freq) / lhsfd[rule[0][0]])
 	return list(grammar.items())
 
-def dop_lcfrs_rules(trees, sents, normalize=False, shortestderiv=False,
+def dopreduction(trees, sents, normalize=False, shortestderiv=False,
 		freqs=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
@@ -259,8 +259,16 @@ def doubledop_new(fragments, debug=False, freqs=False):
 		backtransform[prods[0]] = newfrag
 	if debug:
 		doubledopdump([], fragments, {}, backtransform)
+	#sort grammar such that we have these clusters:
+	# 1. non-binarized rules or initial rules of a binarized constituent
+	# 2: non-initial binarized rules.
+	# 3: lexical productions
+	# this is so that the backtransform aligns with the first part of the rules
+	grammar = sorted(grammar.items(), key=lambda (rule, _): (
+				rule[0][1] == 'Epsilon',
+				"}<" in rule[0][0],
+				rule))
 	# replace keys with numeric ids of rules, drop terminals.
-	grammar = sorted(grammar.items())
 	backtransform = dict((n, backtransform[r])
 		for n, (r, _) in enumerate(grammar) if r in backtransform)
 	if freqs:
@@ -839,7 +847,7 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	codecs.open(out, "w", encoding=encoding).writelines(grammar)
 
 def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False):
-	""" Writes a grammar as produced by induce_plcfrs or dop_lcfrs_rules
+	""" Writes a grammar as produced by induce_plcfrs() or dopreduction()
 	(so before it goes through Grammar()) into a simple text file format.
 	Expects file objects with write() methods. Fields are separated by tabs.
 	Components of the yield function are comma-separated; e.g.:
@@ -978,7 +986,7 @@ def test():
 	print lcfrs
 
 	print 'dop reduction'
-	grammar = Grammar(dop_lcfrs_rules(trees[:2], sents[:2]))
+	grammar = Grammar(dopreduction(trees[:2], sents[:2]))
 	print grammar
 	grammar.testgrammar(logging)
 
@@ -1091,7 +1099,7 @@ def main():
 		grammar = induce_plcfrs(trees, sents, freqs=freqs)
 	elif model == "dopreduction":
 		estimator = opts.get('--dopestimator', 'dop1')
-		grammar = dop_lcfrs_rules(trees, sents, normalize=estimator=='ewe',
+		grammar = dopreduction(trees, sents, normalize=estimator=='ewe',
 				shortestderiv=estimator=='shortest', freqs=freqs)
 	elif model == "doubledop":
 		assert opts.get('--dopestimator', 'dop1') == 'dop1'

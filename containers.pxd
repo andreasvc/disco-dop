@@ -35,7 +35,7 @@ cdef class Grammar:
 	cdef Rule **unary, **lbinary, **rbinary, **bylhs
 	cdef UChar *fanout
 	cdef UInt *mapping, **splitmapping
-	cdef size_t nonterminals, numrules
+	cdef size_t nonterminals, numrules, numunary, numbinary
 	cdef public dict lexical, lexicalbylhs, toid, tolabel
 	cdef public list unaryclosure
 	cdef frozenset origrules
@@ -93,8 +93,9 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
 #	#values.
 #	cdef list rulenumber
 #	cdef list firstchild
-#	#positive means index to lists above, negative means0 terminal index
+#	#positive means index to lists above, negative means terminal index
 #	cdef list child
+
 #
 #cdef class NewChartItem:
 #	cdef VecType vec

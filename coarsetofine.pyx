@@ -319,7 +319,7 @@ def main():
 	import re
 	from treetransforms import splitdiscnodes, binarize, addfanoutmarkers
 	from treebank import NegraCorpusReader
-	from grammar import induce_plcfrs, dop_lcfrs_rules, subsetgrammar
+	from grammar import induce_plcfrs, dopreduction, subsetgrammar
 	from time import clock
 	k = 50
 	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
@@ -358,9 +358,9 @@ def main():
 	splitg = Grammar(induce_plcfrs(cftrees, sents))
 	for t,s in zip(cftrees, sents):
 		for (r,yf),w in induce_plcfrs([t], [s]): assert len(yf) == 1
-	fine999x = dop_lcfrs_rules(trees, sents)
+	fine999x = dopreduction(trees, sents)
 	fine999 = Grammar(fine999x)
-	fine1 = Grammar(dop_lcfrs_rules(dtrees, sents))
+	fine1 = Grammar(dopreduction(dtrees, sents))
 	trees = corpus.parsed_sents().values()[train:train+test]
 	sents = corpus.tagged_sents().values()[train:train+test]
 	if subsetgrammar(normallcfrs, fine999x):

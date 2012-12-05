@@ -882,8 +882,7 @@ def cfgparse_dense(list sent, Grammar grammar, start=1, tags=None):
 							unaryagenda.setitem(lhs, edge)
 							viterbi[lhs, left, right] = prob
 							cell[lhs][edge] = edge
-						elif (edge not in cell[lhs] or
-								prob < (<CFGEdge>cell[lhs][edge]).inside):
+						elif edge not in cell[lhs]:
 							cell[lhs][edge] = edge
 						continue
 					cell[lhs] = {edge: edge}
@@ -1041,8 +1040,7 @@ def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
 									prob < (<CFGEdge>viterbicell[lhs]).inside):
 								viterbicell[lhs] = edge
 								cell[lhs][edge] = edge
-							elif (edge not in cell[lhs] or
-									prob < (<CFGEdge>cell[lhs][edge]).inside):
+							elif edge not in cell[lhs]:
 								cell[lhs][edge] = edge
 					i +=1
 					rule = &(grammar.bylhs[lhs][i])
