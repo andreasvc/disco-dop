@@ -5,9 +5,9 @@ from containers import ChartItem, Edge, RankedEdge
 from operator import itemgetter
 
 from agenda cimport Entry, Agenda, nsmallest
-from containers cimport ChartItem, Edge, RankedEdge, SmallChartItem, \
-	FatChartItem, CFGChartItem, CFGEdge, LCFRSEdge, new_CFGChartItem, \
-	RankedCFGEdge, UChar, UInt
+from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem, \
+	new_CFGChartItem, Edge, LCFRSEdge, new_LCFRSEdge, CFGEdge, \
+	RankedEdge, RankedCFGEdge, UChar, UInt, Rule
 
 cdef tuple unarybest = (0, ), binarybest = (0, 0)
 
@@ -83,7 +83,7 @@ cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 	elif ej.left == 0: edge = min(chart[ei]); prob = edge.inside
 	else: raise ValueError(
 		"non-zero rank vector not part of explored derivations")
-	result = ej.edge.prob + prob
+	result = ej.edge.rule.prob + prob
 	if ej.right >= 0: #if e.right.label:
 		ei = ej.edge.right
 		if ei in D: entry = D[ei][ej.right]; prob = entry.value
@@ -390,16 +390,17 @@ cpdef main():
 	cdef LCFRSEdge ed
 	cdef RankedEdge re
 	cdef Entry entry
+	cdef Rule rules[11]
 	toid = dict([a[::-1] for a in enumerate(
 			"Epsilon S NP V ADV VP VP2 PN".split())])
 	tolabel = dict([a[::-1] for a in toid.items()])
 	NONE = ("Epsilon", 0)			# sentinel node
 	chart = {
 			("S", 0b111) : [
-				((0.5*0.4), 0.4,
-						("NP", 0b100), ("VP", 0b011)),
-				((0.25*0.7), 0.7,
-						("NP", 0b100), ("VP2", 0b011))],
+				((0.7*0.9*0.5), 0.7,
+						("NP", 0b100), ("VP2", 0b011)),
+				((0.4*0.9*0.5), 0.4,
+						("NP", 0b100), ("VP", 0b011))],
 			("VP", 0b011) : [
 				(0.5, 0.5, ("V", 0b010), ("ADV", 0b001)),
 				(0.4, 0.4, ("walks", 1), ("ADV", 0b001))],
@@ -413,10 +414,14 @@ cpdef main():
 			("V", 0b010) : [(1.0, 1.0, ("walks", 1), NONE)],
 			("ADV", 0b001) : [(1.0, 1.0, ("quickly", 2), NONE)]
 		}
+	# a hack to make Rule structs with the right probabilities.
+	# rules[7] will be a Rule with probability 0.7
+	for a in range(1, 11):
+		rules[a].prob = -log(a / 10.0)
 	for a in list(chart):
 		chart[SmallChartItem(toid[a[0]], a[1])] = dict([(x, x)
-			for x in [LCFRSEdge(-log(c), -log(c),
-			-log(d), 0, SmallChartItem(toid.get(e, 0), f),
+			for x in [new_LCFRSEdge(-log(c), -log(c), &(rules[int(d*10)]),
+			SmallChartItem(toid.get(e, 0), f),
 			SmallChartItem(toid.get(g, 0), h))
 			for c, d, (e,f), (g,h) in chart.pop(a)]])
 	assert SmallChartItem(toid["NP"], 0b100) == SmallChartItem(
@@ -436,7 +441,7 @@ cpdef main():
 			print tolabel[v.label], ":",
 			print " ".join([tolabel[ci.label]
 				for ci, _ in zip((ed.left, ed.right), j)]),
-			print exp(-ed.prob), j, exp(-ip)
+			print exp(-ed.rule.prob), j, exp(-ip)
 		print
 	from pprint import pprint
 	print "tolabel",

@@ -14,7 +14,7 @@ cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
 from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule, \
     UChar, UInt, ULong, ULLong, SmallChartItem, FatChartItem, CFGChartItem, \
-	LCFRSEdge, CFGEdge, new_ChartItem, new_Edge, new_CFGChartItem, \
+	LCFRSEdge, CFGEdge, new_ChartItem, new_LCFRSEdge, new_CFGChartItem, \
 	new_FatChartItem, new_CFGEdge, binrepr as binrepr1
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint, \
 	anextset, anextunset, abitcount, abitlength, ulongset, ulongcpy, setunion
@@ -110,10 +110,9 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					score += outside[lexrule.lhs, length, left+right, gaps]
 					if score > 300.0: continue
 				newitem.label = lexrule.lhs; newitem.vec = 1ULL << i
-				tmp = process_edge(newitem, score, lexrule.prob,
-						lexrule.prob, -1, item, NONE, agenda, chart, viterbi,
-						grammar, exhaustive, whitelist, False, markorigin,
-						&blocked)
+				tmp = process_edge(newitem, score, lexrule.prob, NULL,
+						item, NONE, agenda, chart, viterbi, grammar,
+						exhaustive, whitelist, False, markorigin, &blocked)
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
 				newitem = tmp
@@ -127,7 +126,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				score += outside[lhs, length, left+right, gaps]
 				if score > 300.0: continue
 			tagitem = new_ChartItem(lhs, 1ULL << i)
-			agenda[tagitem] = new_Edge(score, 0.0, 0.0, -1, item, NONE)
+			agenda[tagitem] = new_LCFRSEdge(score, 0.0, NULL, item, NONE)
 			chart[tagitem] = {}
 			recognized = True
 		elif not recognized:
@@ -164,11 +163,11 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					score += outside[rule.lhs, length, left+right, gaps]
 					if score > 300.0: continue
 				newitem.label = rule.lhs; newitem.vec = item.vec
-				newitem = process_edge(newitem, score, inside, rule.prob,
-					rule.no, item, NONE, agenda, chart, viterbi, grammar,
-					exhaustive, whitelist,
-					splitprune and grammar.fanout[rule.lhs] != 1,
-					markorigin, &blocked)
+				newitem = process_edge(newitem, score, inside, &rule,
+						item, NONE, agenda, chart, viterbi, grammar,
+						exhaustive, whitelist,
+						splitprune and grammar.fanout[rule.lhs] != 1,
+						markorigin, &blocked)
 
 			# binary left
 			for i in range(grammar.numrules):
@@ -197,9 +196,9 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							right = lensent - length - left - gaps
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
-						newitem = process_edge(newitem, score, inside,
-								rule.prob, rule.no, item, sibling, agenda,
-								chart, viterbi, grammar, exhaustive, whitelist,
+						newitem = process_edge(newitem, score, inside, &rule,
+								item, sibling, agenda, chart, viterbi, grammar,
+								exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
@@ -230,9 +229,9 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							right = lensent - length - left - gaps
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
-						newitem = process_edge(newitem, score, inside,
-								rule.prob, rule.no, sibling, item, agenda,
-								chart, viterbi, grammar, exhaustive, whitelist,
+						newitem = process_edge(newitem, score, inside, &rule,
+								sibling, item, agenda, chart, viterbi, grammar,
+								exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
@@ -250,10 +249,10 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 
 cdef SmallChartItem component = new_ChartItem(0, 0)
 cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
-		double inside, double prob, int ruleno, SmallChartItem left,
-		SmallChartItem right, EdgeAgenda agenda, dict chart, list viterbi,
-		Grammar grammar, bint exhaustive, list whitelist, bint splitprune,
-		bint markorigin, UInt *blocked):
+		double inside, Rule *rule, SmallChartItem left, SmallChartItem right,
+		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar, bint
+		exhaustive, list whitelist, bint splitprune, bint markorigin,
+		UInt *blocked):
 	""" Decide what to do with a newly derived edge. """
 	cdef UInt a, b, cnt, label
 	cdef bint inagenda
@@ -297,17 +296,17 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right))
+				new_LCFRSEdge(score, inside, rule, left, right))
 		chart[newitem] = {}
 	# in agenda (maybe in chart)
 	elif not exhaustive and inagenda:
 		agenda.setifbetter(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right))
+				new_LCFRSEdge(score, inside, rule, left, right))
 	elif (inagenda and inside < (<LCFRSEdge>(agenda.getitem(newitem))).inside):
 		# item has lower score, decrease-key in agenda
 		# (add old, suboptimal edge to chart if parsing exhaustively)
 		edge = iscore(agenda.replace(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right)))
+				new_LCFRSEdge(score, inside, rule, left, right)))
 		chart[newitem][edge] = edge
 	# not in agenda => must be in chart
 	elif (not inagenda and inside <
@@ -315,11 +314,11 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 		#re-add to agenda because we found a better score.
 		#should not happen without estimates!
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right))
+				new_LCFRSEdge(score, inside, rule, left, right))
 		logging.warning("WARN: updating score in agenda: %r", newitem)
 	elif exhaustive:
 		# suboptimal edge
-		edge = iscore(new_Edge(score, inside, prob, ruleno, left, right))
+		edge = iscore(new_LCFRSEdge(score, inside, rule, left, right))
 		chart[newitem][edge] = edge
 	return SmallChartItem.__new__(SmallChartItem)
 
@@ -434,9 +433,9 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 					if score > 300.0: continue
 				newitem.label = lexrule.lhs
 				SETBIT(newitem.vec, i)
-				tmp = process_fatedge(newitem, score, lexrule.prob,
-					lexrule.prob, -1, item, FATNONE, agenda, chart, viterbi,
-					grammar, exhaustive, whitelist, False, markorigin, &blocked)
+				tmp = process_fatedge(newitem, score, lexrule.prob, NULL,
+						item, FATNONE, agenda, chart, viterbi, grammar,
+						exhaustive, whitelist, False, markorigin, &blocked)
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
 				newitem = tmp
@@ -451,7 +450,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				if score > 300.0: continue
 			tagitem = new_FatChartItem(lhs)
 			SETBIT(tagitem.vec, i)
-			agenda[tagitem] = new_Edge(score, 0.0, 0.0, -1, item, FATNONE)
+			agenda[tagitem] = new_LCFRSEdge(score, 0.0, NULL, item, FATNONE)
 			chart[tagitem] = {}
 			recognized = True
 		elif not recognized:
@@ -488,11 +487,11 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 					if score > 300.0: continue
 				newitem.label = rule.lhs
 				ulongcpy(newitem.vec, item.vec, SLOTS)
-				newitem = process_fatedge(newitem, score, inside, rule.prob,
-					rule.no, item, FATNONE, agenda, chart, viterbi, grammar,
-					exhaustive, whitelist,
-					splitprune and grammar.fanout[rule.lhs] != 1,
-					markorigin, &blocked)
+				newitem = process_fatedge(newitem, score, inside,
+						&rule, item, FATNONE, agenda, chart, viterbi,
+						grammar, exhaustive, whitelist,
+						splitprune and grammar.fanout[rule.lhs] != 1,
+						markorigin, &blocked)
 
 			# binary left
 			for i in range(grammar.numrules):
@@ -520,8 +519,8 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_fatedge(newitem, score, inside,
-								rule.prob, rule.no, item, sibling, agenda,
-								chart, viterbi, grammar, exhaustive, whitelist,
+								&rule, item, sibling, agenda, chart, viterbi,
+								grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
@@ -550,8 +549,8 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_fatedge(newitem, score, inside,
-								rule.prob, rule.no, sibling, item, agenda,
-								chart, viterbi, grammar, exhaustive, whitelist,
+								&rule, sibling, item, agenda, chart, viterbi,
+								grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
@@ -564,10 +563,10 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 
 cdef FatChartItem fatcomponent = new_FatChartItem(0)
 cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
-		double inside, double prob, int ruleno, FatChartItem left,
-		FatChartItem right, EdgeAgenda agenda, dict chart, list viterbi,
-		Grammar grammar, bint exhaustive, list whitelist, bint splitprune,
-		bint markorigin, UInt *blocked):
+		double inside, Rule *rule, FatChartItem left, FatChartItem right,
+		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar, bint
+		exhaustive, list whitelist, bint splitprune, bint markorigin,
+		UInt *blocked):
 	""" Decide what to do with a newly derived edge. """
 	cdef UInt a, b, cnt, i
 	cdef bint inagenda
@@ -610,17 +609,17 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right))
+				new_LCFRSEdge(score, inside, rule, left, right))
 		chart[newitem] = {}
 	# in agenda (maybe in chart)
 	elif not exhaustive and inagenda:
 		agenda.setifbetter(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right))
+				new_LCFRSEdge(score, inside, rule, left, right))
 	elif (inagenda and inside < (<LCFRSEdge>(agenda.getitem(newitem))).inside):
 		# item has lower score, decrease-key in agenda
 		# (add old, suboptimal edge to chart if parsing exhaustively)
 		edge = iscore(agenda.replace(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right)))
+				new_LCFRSEdge(score, inside, rule, left, right)))
 		chart[newitem][edge] = edge
 	# not in agenda => must be in chart
 	elif (not inagenda and inside <
@@ -628,11 +627,11 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 		#re-add to agenda because we found a better score.
 		#should not happen without estimates!
 		agenda.setitem(newitem,
-				new_Edge(score, inside, prob, ruleno, left, right))
+				new_LCFRSEdge(score, inside, rule, left, right))
 		logging.warning("WARN: updating score in agenda: %r", newitem)
 	elif exhaustive:
 		# suboptimal edge
-		edge = iscore(new_Edge(score, inside, prob, ruleno, left, right))
+		edge = iscore(new_LCFRSEdge(score, inside, rule, left, right))
 		chart[newitem][edge] = edge
 	return FatChartItem.__new__(FatChartItem)
 
@@ -1140,17 +1139,19 @@ def pprint_chart_lcfrs(chart, sent, tolabel, cfg=False):
 		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, len(sent), cfg))
 		if isinstance(chart[a], float): continue
 		for edge in sorted(chart[a], key=sortfunc):
-			print "%9.7f  %9.7f " % (exp(-edge.inside), exp(-edge.prob)),
-			if edge.left.label:
-				print "%s[%s]" % (tolabel[edge.left.label],
-						binrepr(edge.left, len(sent), cfg)),
-			else:
+			if edge.rule is NULL:
+				print "%9.7f  %9.7f " % (exp(-edge.inside), 1),
 				if isinstance(edge.left, SmallChartItem):
 					print "\t", repr(sent[(<SmallChartItem>edge.left).vec]),
 				else: print "\t", repr(sent[(<FatChartItem>edge.left).vec[0]]),
-			if edge.right:
-				print "\t%s[%s]" % (tolabel[edge.right.label],
-						binrepr(edge.right, len(sent), cfg)),
+			else:
+				print "%9.7f  %9.7f " % (exp(-edge.inside),
+						exp(-edge.rule.prob)),
+				print "%s[%s]" % (tolabel[edge.left.label],
+						binrepr(edge.left, len(sent), cfg)),
+				if edge.right:
+					print "\t%s[%s]" % (tolabel[edge.right.label],
+							binrepr(edge.right, len(sent), cfg)),
 			print
 		print
 
@@ -1302,7 +1303,6 @@ def main():
 		((('D', 'NP', 'VP'), ((0,1),)), 0.0),
 		((('NP', 'Epsilon'), ('mary',)), 0.0),
 		((('VP', 'Epsilon'), ('walks',)), 0.0)])
-	cfg.getunaryclosure()
 	print cfg
 	print "cfg parsing; sentence: mary walks"
 	print "lcfrs",

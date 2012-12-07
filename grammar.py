@@ -730,26 +730,6 @@ def bfcartpi(seq):
 		for result in cartpi(seqlist[:n] + [seqlist[n][-1:]] + seqlist[n+1:]):
 			yield result
 
-def enumchart(chart, start, tolabel, n=1):
-	""" Exhaustively enumerate trees in chart headed by start in top down
-	fashion. chart is a dictionary with
-	lhs -> [(insideprob, ruleprob, rhs), (insideprob, ruleprob, rhs) ... ]
-	this function doesn't really belong in this file but Cython didn't
-	support generators so this function is "in exile" over here.  """
-	for edge in chart[start]:
-		if edge.left.label == 0: #Epsilon
-			yield "(%s %d)" % (tolabel[start.label], edge.left.vec), edge.prob
-		else:
-			if edge.right:
-				rhs = (edge.left, edge.right)
-			else:
-				rhs = (edge.left, )
-			for x in islice(bfcartpi(map(
-					lambda y: enumchart(chart, y, tolabel), rhs)), n):
-				tree = "(%s %s)" % (tolabel[start.label],
-					" ".join(z for z, px in x))
-				yield tree, edge.prob+sum(px for z, px in x)
-
 def read_rparse_grammar(filename):
 	""" Read a grammar in the format as produced by rparse. """
 	result = []
@@ -1051,9 +1031,9 @@ def test():
 			print
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	g = Grammar(induce_plcfrs([tree], [range(10)]))
-	print "tree: %s\nunary closure:" % tree
-	g.getunaryclosure()
-	g.printclosure()
+	#print "tree: %s\nunary closure:" % tree
+	#g.getunaryclosure()
+	#g.printclosure()
 
 def main():
 	import gzip

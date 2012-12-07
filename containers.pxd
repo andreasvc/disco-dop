@@ -36,9 +36,9 @@ cdef class Grammar:
 	cdef UChar *fanout
 	cdef UInt *mapping, **splitmapping
 	cdef size_t nonterminals, numrules, numunary, numbinary
-	cdef public dict lexical, lexicalbylhs, toid, tolabel
-	cdef public list unaryclosure
+	cdef public dict lexical, lexicalbylhs, toid, tolabel, rulenos
 	cdef frozenset origrules
+	cdef copyrules(Grammar self, Rule **dest, idx, filterlen)
 	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=*,
 			neverblockre=*, bint splitprune=*, bint markorigin=*, bint debug=*)
 	cdef str rulerepr(self, Rule rule)
@@ -51,9 +51,8 @@ cdef struct Rule:
 	UInt lhs # 4 bytes
 	UInt rhs1 # 4 bytes
 	UInt rhs2 # 4 bytes
-	int no # 4 bytes
+	UInt no # 4 bytes
 	# total: 32 bytes.
-	#UChar fanout # 1 byte
 
 @cython.final
 cdef class LexicalRule:
@@ -78,48 +77,17 @@ cdef class CFGChartItem(ChartItem):
 cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)
 cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
 
-# start scratch
-#cdef union VecType:
-#	ULLong vec
-#	ULong *vecptr
-#
-#cdef class ParseForest:
-#	""" the chart representation of bitpar. seems to require parsing
-#	in 3 stages: recognizer, enumerate analyses, get probs. """
-#	#keys
-#	cdef list catnum		#lhs
-#	cdef list firstanalysis	#idx to lists below.
-#	# from firstanalysis[n] to firstanalysis[n+1] or end
-#	#values.
-#	cdef list rulenumber
-#	cdef list firstchild
-#	#positive means index to lists above, negative means terminal index
-#	cdef list child
-
-#
-#cdef class NewChartItem:
-#	cdef VecType vec
-#	cdef UInt label
-#
-#cdef class DiscNode:
-#	cdef int label
-#	cdef tuple children
-#	cdef CBitset leaves
-# end scratch
-
 cdef class Edge:
 	cdef double inside
+	cdef Rule *rule
 @cython.final
 cdef class LCFRSEdge(Edge):
-	cdef double score
-	cdef double prob # we could eliminate prob by using ruleno
+	cdef double score # inside probability + estimate score
 	cdef ChartItem left
 	cdef ChartItem right
 	cdef long _hash
-	cdef int ruleno
 @cython.final
 cdef class CFGEdge(Edge):
-	cdef Rule *rule
 	cdef UChar mid
 
 @cython.final
@@ -138,6 +106,9 @@ cdef class RankedCFGEdge:
 	cdef int left
 	cdef int right
 	cdef long _hash
+
+
+# start fragments stuff
 
 cdef struct Node:
 	int label, prod
@@ -174,6 +145,9 @@ cdef class CBitset:
 cdef class FrozenArray:
 	cdef array obj
 
+# end fragments stuff
+
+
 @cython.final
 cdef class MemoryPool:
 	cdef void reset(MemoryPool self)
@@ -197,22 +171,38 @@ cdef inline FatChartItem new_FatChartItem(UInt label):
 
 cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):
 	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
-	item.label = label; item.vec = vec
+	item.label = label
+	item.vec = vec
 	return item
 
 cdef inline CFGChartItem new_CFGChartItem(UInt label, UChar start, UChar end):
 	cdef CFGChartItem item = CFGChartItem.__new__(CFGChartItem)
-	item.label = label; item.start = start; item.end = end
+	item.label = label
+	item.start = start
+	item.end = end
 	return item
 
-cdef inline LCFRSEdge new_Edge(double score, double inside, double prob,
-	int rule, ChartItem left, ChartItem right):
+cdef inline LCFRSEdge new_LCFRSEdge(double score, double inside, Rule *rule,
+		ChartItem left, ChartItem right):
 	cdef LCFRSEdge edge = LCFRSEdge.__new__(LCFRSEdge)
-	edge.score = score; edge.inside = inside; edge.prob = prob
-	edge.ruleno = rule; edge.left = left; edge.right = right
+	cdef long h = 0x345678UL
+	edge.score = score
+	edge.inside = inside
+	edge.rule = rule
+	edge.left = left
+	edge.right = right
+	#self._hash = hash((prob, left, right))
+	# this is the hash function used for tuples, apparently
+	h = (1000003UL * h) ^ <long>rule
+	h = (1000003UL * h) ^ <long>left.__hash__()
+	# if it weren't for this call to left.__hash__(), the hash would better
+	# be computed on the fly.
+	edge._hash = h
 	return edge
 
 cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
 	cdef CFGEdge edge = CFGEdge.__new__(CFGEdge)
-	edge.inside = inside; edge.rule = rule; edge.mid = mid
+	edge.inside = inside
+	edge.rule = rule
+	edge.mid = mid
 	return edge

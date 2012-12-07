@@ -214,46 +214,42 @@ cdef inline int minunaddressed(tt, idsremoved):
 
 cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
 	""" Samples a derivation from a chart. """
+	cdef LCFRSEdge edge
+	cdef ChartItem child
 	#NB: this does not sample properly, as it ignores the distribution of
 	#probabilities and samples uniformly instead. 
 	#edge = choice(chart[start])
-	cdef LCFRSEdge edge
-	cdef ChartItem child
 	rnd = random() * tables[start][-1]
 	idx = bisect_right(tables[start], rnd)
-	edge = chart[start].values()[idx]
+	edge = chart[start][idx]
 	if edge.left.label == 0: # == "Epsilon":
-		#if isinstance(edge.left, SmallChartItem):
-		#	idx = (<SmallChartItem>edge.left).vec
-		#else: idx = (<FatChartItem>edge.left).vec[0]
 		idx = edge.left.lexidx()
-		return "(%s %d)" % (tolabel[start.label], idx), edge.prob
+		return "(%s %d)" % (tolabel[start.label], idx), edge.inside
 	children = [samplechart(chart, child, tolabel, tables)
 				for child in (edge.left, edge.right) if child.label]
 	tree = "(%s %s)" % (tolabel[start.label],
 							" ".join([a for a,b in children]))
-	return tree, edge.prob + sum([b for a,b in children])
+	return tree, edge.rule.prob + sum([b for a,b in children])
 
-	#probmass = sum([exp(-edge.prob) for edge in edges])
-	#minprob = min([edge.prob for edge in edges])
+	#probmass = sum([exp(-edge.rule.prob) for edge in edges])
+	#minprob = min([edge.rule.prob for edge in edges])
 	#probmass = exp(fsum([minprob,
-	#					log(fsum([exp(edge.prob - minprob)
+	#					log(fsum([exp(edge.rule.prob - minprob)
 	#								for edge in edges]))]))
 
 def getsamples(chart, start, n, tolabel):
 	cdef LCFRSEdge edge
-	cdef dict tables = {}
+	cdef dict tables = {}, chartcopy = {}
 	for item in chart:
 		#FIXME: work w/inside prob right?
-		#chart[item].sort()
+		chartcopy[item] = sorted(chart[item])
 		#chart[item].sort(key=attrgetter('prob'))
-		chart[item] = OrderedDict(sorted(chart[item].items()))
 		tables[item] = []; prev = 0.0
 		minprob = (<LCFRSEdge>min(chart[item])).inside
-		for edge in sorted(chart[item]):
+		for edge in chartcopy[item]:
 			prev += exp(-minprob - edge.inside)
 			tables[item].append(exp(minprob + log(prev)))
-	derivations = set([samplechart(chart, start, tolabel, tables)
+	derivations = set([samplechart(chartcopy, start, tolabel, tables)
 						for x in range(n)])
 	derivations.discard(None)
 	return derivations
@@ -424,7 +420,7 @@ cdef str recoverfragments_new_lcfrs(RankedEdge derivation, dict D,
 	cdef list children = []
 
 	# get fragment
-	result = backtransform[(<LCFRSEdge>derivation.edge).ruleno]
+	result = backtransform[(<LCFRSEdge>derivation.edge).rule.no]
 
 	# recursively expand all substitution sites,
 	# w/on the fly left-factored debinarization
@@ -436,7 +432,7 @@ cdef str recoverfragments_new_lcfrs(RankedEdge derivation, dict D,
 			childedge = child.edge
 			children.append(('(%s %d)' % (
 				grammar.tolabel[child.head.label], childedge.left.lexidx()))
-				if childedge.ruleno == -1 else recoverfragments_new_lcfrs(
+				if childedge.rule is NULL else recoverfragments_new_lcfrs(
 						child, D, grammar, backtransform))
 			# move on to next node in this binarized constituent
 			derivation = (<Entry>D[derivedge.left][derivation.left]).key
@@ -447,7 +443,7 @@ cdef str recoverfragments_new_lcfrs(RankedEdge derivation, dict D,
 			childedge = child.edge
 			children.append('(%s %d)' % (
 				grammar.tolabel[child.head.label], childedge.left.lexidx())
-				if childedge.ruleno == -1 else recoverfragments_new_lcfrs(
+				if childedge.rule is NULL else recoverfragments_new_lcfrs(
 						child, D, grammar, backtransform))
 	elif grammar.mapping[derivedge.left.label] == 0:
 		derivation = (<Entry>D[derivedge.left][derivation.left]).key
@@ -457,7 +453,7 @@ cdef str recoverfragments_new_lcfrs(RankedEdge derivation, dict D,
 	childedge = child.edge
 	children.append(('(%s %d)' % (
 		grammar.tolabel[child.head.label], childedge.left.lexidx()))
-		if childedge.ruleno == -1 else recoverfragments_new_lcfrs(
+		if childedge.rule is NULL else recoverfragments_new_lcfrs(
 				child, D, grammar, backtransform))
 	children.reverse()
 	return result.format(*children)

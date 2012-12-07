@@ -354,10 +354,14 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		print "\n%s" % " Summary (ALL) ".center(35, '_')
 		print "number of sentences:       %6d" % (sentcount)
 		print "longest sentence:          %6d" % (maxlenseen)
-		print "gold brackets (disc.):     %6d (%d)" % (
-				len(goldb), gdiscbrackets)
-		print "cand. brackets (disc.):    %6d (%d)" % (
-				len(candb), discbrackets)
+		if gdiscbrackets or discbrackets:
+			print "gold brackets (disc.):     %6d (%d)" % (
+					len(goldb), gdiscbrackets)
+			print "cand. brackets (disc.):    %6d (%d)" % (
+					len(candb), discbrackets)
+		else:
+			print "gold brackets:             %6d" % len(goldb)
+			print "cand. brackets:            %6d" % len(candb)
 		print "labeled recall:            %s" % (
 				nozerodiv(lambda: recall(goldb, candb)))
 		print "labeled precision:         %s" % (

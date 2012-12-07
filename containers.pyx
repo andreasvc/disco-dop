@@ -64,7 +64,7 @@ cdef class Grammar:
 					"and yield function: %r\t%r" % (rule, yf))
 				self.numbinary += 1
 			else:
-				raise ValueError("grammar not binarized: %s" % repr((rule,yf,w)))
+				raise ValueError("grammar not binarized: %r" % ((rule, yf, w),))
 			if self.fanout[self.toid[rule[0]]] == 0:
 				self.fanout[self.toid[rule[0]]] = len(yf)
 			else:
@@ -85,18 +85,64 @@ cdef class Grammar:
 
 		# convert rules and copy to structs / cdef class
 		# remove sign from log probabilities because we use a min-heap
+		self.rulenos = dict([(rule, m) for m, (rule, _) in enumerate(grammar)])
 		for (rule, yf), w in grammar:
 			if len(rule) == 2 and self.toid[rule[1]] == 0:
 				lr = LexicalRule(self.toid[rule[0]], self.toid[rule[1]], 0,
 					unicode(yf[0]), abs(w))
+				#	self.rulenos[rule, yf])
 				# lexical productions (mis)use the field for the yield function
 				# to store the word
 				self.lexical.setdefault(yf[0], []).append(lr)
 				self.lexicalbylhs.setdefault(lr.lhs, []).append(lr)
-		copyrules(grammar, self.unary,   1, 2, self.toid, self.nonterminals)
-		copyrules(grammar, self.lbinary, 1, 3, self.toid, self.nonterminals)
-		copyrules(grammar, self.rbinary, 2, 3, self.toid, self.nonterminals)
-		copyrules(grammar, self.bylhs,   0, 0, self.toid, self.nonterminals)
+		self.copyrules(self.unary, 1, 2)
+		self.copyrules(self.lbinary, 1, 3)
+		self.copyrules(self.rbinary, 2, 3)
+		self.copyrules(self.bylhs, 0, 0)
+	cdef copyrules(Grammar self, Rule **dest, idx, filterlen):
+		""" Auxiliary function to create Grammar objects. Copies certain
+		grammar rules from the set in `origrules` to an array of structs.
+		Grammar rules are placed in a contiguous array, ordered by lhs,
+		rhs1, or rhs2 depending on the value of `idx' (0, 1, or 2);
+		filterlen can be 0, 2, or 3 to get all, only unary, or only binary
+		rules, respectively. A separate array has a pointer for each
+		non-terminal into this array;
+		e.g.: dest[NP][0] == the first rule with an NP in the idx position. """
+		cdef UInt prev = 0
+		cdef size_t n = 0	# rule number
+		cdef size_t m		# bit index in yield function
+		cdef Rule *cur
+		filteredgrammar = [rule for rule in self.origrules
+				if rule[0][0][1] != 'Epsilon'
+				and (not filterlen or len(rule[0][0]) == filterlen)]
+		sortedgrammar = sorted(filteredgrammar, key=partial(myitemget, idx))
+		#need to set dest even when there are no rules for that idx
+		for m in range(self.nonterminals):
+			dest[m] = dest[0]
+		for (rule, yf), w in sortedgrammar:
+			cur = &(dest[0][n])
+			cur.no = self.rulenos[rule, yf]
+			cur.lhs  = self.toid[rule[0]]
+			cur.rhs1 = self.toid[rule[1]]
+			cur.rhs2 = self.toid[rule[2]] if len(rule) == 3 else 0
+			#cur.fanout = len(yf)
+			cur.prob = abs(w)
+			cur.lengths = cur.args = m = 0
+			for a in yf:
+				for b in a: #component:
+					if b == 1:
+						cur.args += 1 << m
+					m += 1
+				cur.lengths |= 1 << (m - 1)
+			assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
+			# if this is the first rule with this non-terminal,
+			# add it to the index
+			if n and self.toid[rule[idx]] != prev:
+				dest[self.toid[rule[idx]]] = cur
+			prev = self.toid[rule[idx]]
+			n += 1
+		# sentinel rule
+		dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = self.nonterminals
 	def testgrammar(self, epsilon=0.01):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
@@ -121,38 +167,6 @@ cdef class Grammar:
 				return False
 		logging.info("All left hand sides sum to 1")
 		return True
-	def getunaryclosure(self):
-		""" FIXME: closure should be related to probabilities as well.
-		Also, there appears to be an infinite loop here. """
-		cdef size_t i = 0, n
-		closure = [set() for n in range(self.nonterminals)]
-		candidates = [set() for n in range(self.nonterminals)]
-		self.unaryclosure = [[] for n in range(self.nonterminals)]
-		while self.unary[0][i].lhs != self.nonterminals:
-			candidates[self.unary[0][i].rhs1].add(i)
-			i += 1
-		for n in range(self.nonterminals):
-			while candidates[n]:
-				i = candidates[n].pop()
-				m = self.unary[0][i].lhs
-				if i not in closure[n]:
-					self.unaryclosure[n].append(i)
-					closure[n].add(i)
-				for x in self.unaryclosure[m]:
-					if x not in closure[n]: self.unaryclosure[n].append(x)
-				closure[n] |= closure[m]
-				candidates[n] |= candidates[m]
-				candidates[n] -= closure[n]
-	def printclosure(self):
-		if self.unaryclosure is None:
-			print "not computed."
-			return
-		for m, a in enumerate(self.unaryclosure):
-			print '%s[%d] ' % (self.tolabel[m], m),
-			for n in a:
-				print "%s <= %s  " % (self.tolabel[self.unary[0][n].rhs1],
-						self.tolabel[self.unary[0][n].lhs]),
-			print
 	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=None,
 			neverblockre=None, bint splitprune=False, bint markorigin=False,
 			bint debug=False):
@@ -331,54 +345,43 @@ cdef class Grammar:
 			free(self.splitmapping[0])
 			free(self.splitmapping)
 			self.splitmapping = NULL
+	#def getunaryclosure(self):
+	#	""" FIXME: closure should be related to probabilities as well.
+	#	Also, there appears to be an infinite loop here. """
+	#	cdef size_t i = 0, n
+	#	closure = [set() for n in range(self.nonterminals)]
+	#	candidates = [set() for n in range(self.nonterminals)]
+	#	self.unaryclosure = [[] for n in range(self.nonterminals)]
+	#	while self.unary[0][i].lhs != self.nonterminals:
+	#		candidates[self.unary[0][i].rhs1].add(i)
+	#		i += 1
+	#	for n in range(self.nonterminals):
+	#		while candidates[n]:
+	#			i = candidates[n].pop()
+	#			m = self.unary[0][i].lhs
+	#			if i not in closure[n]:
+	#				self.unaryclosure[n].append(i)
+	#				closure[n].add(i)
+	#			for x in self.unaryclosure[m]:
+	#				if x not in closure[n]: self.unaryclosure[n].append(x)
+	#			closure[n] |= closure[m]
+	#			candidates[n] |= candidates[m]
+	#			candidates[n] -= closure[n]
+	#def printclosure(self):
+	#	if self.unaryclosure is None:
+	#		print "not computed."
+	#		return
+	#	for m, a in enumerate(self.unaryclosure):
+	#		print '%s[%d] ' % (self.tolabel[m], m),
+	#		for n in a:
+	#			print "%s <= %s  " % (self.tolabel[self.unary[0][n].rhs1],
+	#					self.tolabel[self.unary[0][n].lhs]),
+	#		print
 
 def myitemget(idx, x):
 	""" Given a grammar rule 'x', return the non-terminal in position 'idx'. """
 	if idx < len(x[0][0]): return x[0][0][idx]
 	return 0
-
-cdef copyrules(grammar, Rule **dest, idx, filterlen, toid, nonterminals):
-	""" Auxiliary function to create Grammar objects. Copies certain grammar
-	rules from the list in `grammar` to an array of structs. Grammar rules are
-	placed in a contiguous array, sorted order by lhs, rhs1 or rhs2 depending
-	on the value of `idx'. A separate array has a pointer for each non-terminal
-	into this array; e.g.: dest[NP][0] == the first rule with an NP in the idx
-	position. """
-	cdef UInt prev = 0
-	cdef size_t n = 0	# rule number
-	cdef size_t m		# bit index in yield function
-	cdef Rule *cur
-	cdef dict rulenos = dict([(rule, m) for m, (rule, w) in enumerate(grammar)])
-	filteredgrammar = [rule for rule in grammar
-			if rule[0][0][1] != 'Epsilon'
-			and (not filterlen or len(rule[0][0]) == filterlen)]
-	sortedgrammar = sorted(filteredgrammar, key=partial(myitemget, idx))
-	#need to set dest even when there are no rules for that idx
-	for m in range(nonterminals): dest[m] = dest[0]
-	for (rule, yf), w in sortedgrammar:
-		cur = &(dest[0][n])
-		cur.no = rulenos[rule, yf]
-		cur.lhs  = toid[rule[0]]
-		cur.rhs1 = toid[rule[1]]
-		cur.rhs2 = toid[rule[2]] if len(rule) == 3 else 0
-		#cur.fanout = len(yf)
-		cur.prob = abs(w)
-		cur.lengths = cur.args = m = 0
-		for a in yf:
-			for b in a: #component:
-				if b == 1:
-					cur.args += 1 << m
-				m += 1
-			cur.lengths |= 1 << (m - 1)
-		assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
-		# if this is the first rule with this non-terminal,
-		# add it to the index
-		if n and toid[rule[idx]] != prev:
-			dest[toid[rule[idx]]] = cur
-		prev = toid[rule[idx]]
-		n += 1
-	# sentinel rule
-	dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = nonterminals
 
 cdef class SmallChartItem:
 	""" Item with word sized bitvector """
@@ -505,72 +508,43 @@ cdef binrepr(ULong *vec):
 		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
 	return result
 
-#cdef class NewChartItem:
-#	""" Item with arbitrary length bitvector. Not used. """
-#	def __init__(self, label):
-#		self.label = label
-#	def __hash__(self):
-#		cdef size_t n
-#		cdef long _hash = 5381
-#		for n in range(7 * sizeof(ULong)):
-#			_hash *= 33 ^ (<char *>self.vecptr)[n]
-#		return _hash
-#	def __richcmp__(NewChartItem self, NewChartItem other, int op):
-#		#if op == 2: return self.label == other.label and self.vec == other.vec
-#		#elif op == 3: return self.label != other.label or self.vec != other.vec
-#		#elif op == 5: return self.label >= other.label or self.vec >= other.vec
-#		#elif op == 1: return self.label <= other.label or self.vec <= other.vec
-#		#elif op == 0: return self.label < other.label or self.vec < other.vec
-#		#elif op == 4: return self.label > other.label or self.vec > other.vec
-#		raise NotImplemented
-#	def __nonzero__(self):
-#		raise NotImplemented
-#		#return self.label != 0 and self.vec != 0
-#	def __repr__(self):
-#		raise NotImplemented
-#		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
-
 cdef class LCFRSEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
-	def __init__(LCFRSEdge self, score, inside, prob, ruleno, left, right):
-		self.score = score; self.inside = inside; self.prob = prob
-		self.ruleno = ruleno; self.left = left; self.right = right
-		cdef long h = 0x345678UL
-		#self._hash = hash((prob, left, right))
-		# this is the hash function used for tuples, apparently
-		h = (1000003UL * h) ^ <long>self.prob
-		h = (1000003UL * h) ^ <long>self.left.__hash__()
-		h = (1000003UL * h) ^ <long>self.right.__hash__()
-		self._hash = h
+	def __init__(self):
+		raise NotImplemented
 	def __hash__(LCFRSEdge self):
 		return self._hash
-	def __richcmp__(LCFRSEdge self, other, int op):
-		if op == 0: return self.score < (<LCFRSEdge>other).score
-		elif op == 1: return self.score <= (<LCFRSEdge>other).score
+	def __richcmp__(LCFRSEdge self, LCFRSEdge other, int op):
+		if op == 0: return self.score < other.score
+		elif op == 1: return self.score <= other.score
 		# boolean trick: equality and inequality in one expression i.e., the
 		# equality between the two boolean expressions acts as biconditional
 		elif op == 2 or op == 3:
-			return (op == 2) == (
-				self.score == (<LCFRSEdge>other).score
-				and self.prob == (<LCFRSEdge>other).prob
-				and self.left == (<LCFRSEdge>other).left
-				and self.right == (<LCFRSEdge>other).right)
+			return (op == 2) == (self.rule is other.rule
+				and self.left == other.left
+				# since edges are only ever compared for the same cell,
+				# right matches iff left matches, so skip this check:
+				) #and self.right == other.right)
 		elif op == 4: return self.score > other.score
 		elif op == 5: return self.score >= other.score
 		elif op == 1: return self.score <= other.score
 		elif op == 0: return self.score < other.score
 	def __repr__(self):
-		return "%s(%g, %g, %g, %r, %r)" % (self.__class__.__name__,
-				self.score, self.inside, self.prob, self.left, self.right)
+		return "%s(%g, %g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r, %r)" % (
+				self.__class__.__name__, self.score, self.inside,
+				self.rule.prob, self.rule.args, self.rule.lengths,
+				self.rule.lhs, self.rule.rhs1, self.rule.rhs2, self.rule.no,
+				self.left, self.right)
 	def copy(self):
-		return LCFRSEdge(self.score, self.inside, self.prob, self.ruleno,
+		return new_LCFRSEdge(self.score, self.inside, self.rule,
 				self.left.copy(), self.right.copy())
 
 cdef class CFGEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
-	def __init__(self): raise NotImplemented
+	def __init__(self):
+		raise NotImplemented
 	def __hash__(CFGEdge self):
 		cdef long h
 		# this is the hash function used for tuples, apparently
@@ -585,7 +559,6 @@ cdef class CFGEdge:
 		elif op == 2 or op == 3:
 			return (op == 2) == (
 				self.rule is other.rule
-				#and self.inside == other.inside
 				and self.mid == other.mid)
 		elif op == 4: return self.inside > other.inside
 		elif op == 5: return self.inside >= other.inside
@@ -599,8 +572,10 @@ cdef class CFGEdge:
 
 cdef class RankedEdge:
 	def __cinit__(self, ChartItem head, LCFRSEdge edge, int j1, int j2):
-		self.head = head; self.edge = edge
-		self.left = j1; self.right = j2
+		self.head = head
+		self.edge = edge
+		self.left = j1
+		self.right = j2
 		cdef long h
 		#h = hash((head, edge, j1, j2))
 		h = (1000003UL * 0x345678UL) ^ hash(self.head)
@@ -626,15 +601,18 @@ cdef class RankedEdge:
 cdef class RankedCFGEdge:
 	def __cinit__(self, UInt label, UChar start, UChar end, Edge edge,
 			int j1, int j2):
-		self.label = label; self.start = start; self.end = end
-		self.edge = edge; self.left = j1; self.right = j2
+		self.label = label
+		self.start = start
+		self.end = end
+		self.edge = edge
+		self.left = j1
+		self.right = j2
 		cdef long h
-		h = hash((label, start, end, edge, j1, j2))
 		#h = (1000003UL * 0x345678UL) ^ hash(self.head)
 		#h = (1000003UL * h) ^ hash(self.edge)
 		#h = (1000003UL * h) ^ self.left
 		#h = (1000003UL * h) ^ self.right
-		self._hash = h
+		self._hash = hash((label, start, end, edge, j1, j2))
 	def __hash__(self):
 		return self._hash
 	def __richcmp__(RankedCFGEdge self, RankedCFGEdge other, int op):
@@ -654,8 +632,11 @@ cdef class RankedCFGEdge:
 
 cdef class LexicalRule:
 	def __init__(self, lhs, rhs1, rhs2, word, prob):
-		self.lhs = lhs; self.rhs1 = rhs1; self.rhs2 = rhs2
-		self.word = word; self.prob = prob
+		self.lhs = lhs
+		self.rhs1 = rhs1
+		self.rhs2 = rhs2
+		self.word = word
+		self.prob = prob
 	def __repr__(self):
 		return "%s%r" % (self.__class__.__name__,
 				(self.lhs, self.rhs1, self.rhs2, self.word, self.prob))
@@ -667,7 +648,10 @@ cdef class Ctrees:
 		self.data = NULL
 	def __init__(self, list trees=None, dict labels=None,
 		dict prods=None):
-		self.len=0; self.max=0; self.maxnodes = 0; self.nodesleft = 0
+		self.len = 0
+		self.max = 0
+		self.maxnodes = 0
+		self.nodesleft = 0
 		if trees is None: return
 		else: assert labels is not None and prods is not None
 		self.alloc(len(trees), sum(map(len, trees)))
@@ -889,7 +873,9 @@ cdef class MemoryPool:
 		free(self.pool)
 
 class OrderedSet(Set):
-	""" A frozen, ordered set which maintains a regular list/tuple and set. """
+	""" A frozen, ordered set which maintains a regular list/tuple and set.
+		The set is indexable. Equality is defined _without_ regard for order.
+	"""
 	def __init__(self, iterable=None):
 		if iterable:
 			self.seq = tuple(iterable)
@@ -923,3 +909,32 @@ class OrderedSet(Set):
 		if not isinstance(other, Iterable):
 			return NotImplemented
 		return self._from_iterable(value for value in self if value in other)
+
+# begin scratch
+
+#cdef class NewChartItem:
+#	""" Item with arbitrary length bitvector. Not used. """
+#	def __init__(self, label):
+#		self.label = label
+#	def __hash__(self):
+#		cdef size_t n
+#		cdef long _hash = 5381
+#		for n in range(7 * sizeof(ULong)):
+#			_hash *= 33 ^ (<char *>self.vecptr)[n]
+#		return _hash
+#	def __richcmp__(NewChartItem self, NewChartItem other, int op):
+#		#if op == 2: return self.label == other.label and self.vec == other.vec
+#		#elif op == 3: return self.label != other.label or self.vec != other.vec
+#		#elif op == 5: return self.label >= other.label or self.vec >= other.vec
+#		#elif op == 1: return self.label <= other.label or self.vec <= other.vec
+#		#elif op == 0: return self.label < other.label or self.vec < other.vec
+#		#elif op == 4: return self.label > other.label or self.vec > other.vec
+#		raise NotImplemented
+#	def __nonzero__(self):
+#		raise NotImplemented
+#		#return self.label != 0 and self.vec != 0
+#	def __repr__(self):
+#		raise NotImplemented
+#		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
+
+# end scratch

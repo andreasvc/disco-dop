@@ -198,6 +198,7 @@ def main(
 			fanout_marks_before_bin, testmaxwords, resultdir, numproc)
 	evalparam = readparam(evalparam)
 	evalparam["DEBUG"] = -1
+	evalparam["CUTOFF_LEN"] = 40
 	deletelabel = evalparam.get("DELETE_LABEL", ())
 
 	begin = time.clock()

@@ -33,6 +33,7 @@ if __name__ == '__main__':
 				extra_link_args=["-O3"], #["-g"],
 			)],
 			nthreads=4,
+			annotate=True,
 			cython_directives=cython_directives,
 			)
 	)
