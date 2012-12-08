@@ -108,10 +108,6 @@ def main(argv):
 			numtrees = sum(1 for _ in open(args[0]))
 	assert numtrees
 	mult = 3 if numproc > 1 else 1
-	chunk = numtrees / (mult*numproc)
-	if numtrees % (mult*numproc):
-		chunk += 1
-	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
 	if params['approx']:
 		fragments = defaultdict(int)
 	else:
@@ -120,7 +116,6 @@ def main(argv):
 		for kv in sorted(params.items())))
 	logging.info("\n".join("treebank%d: %s" % (n + 1, a)
 		for n, a in enumerate(args)))
-	params['chunk'] = chunk
 
 	if numproc == 1 and batch:
 		initworker(args[0], None, limit, encoding)
@@ -169,7 +164,8 @@ def main(argv):
 
 	# multiprocessing part
 	if numproc == 1:
-		initworker(args[0], args[1] if len(args) == 2 else None, limit, encoding)
+		initworker(args[0], args[1] if len(args) == 2 else None,
+				limit, encoding)
 		mymap = imap
 		myapply = apply
 	else:
@@ -180,7 +176,7 @@ def main(argv):
 		mymap = pool.imap
 		myapply = pool.apply
 		# FIXME: detect corpus reading errors here (e.g. wrong encoding)
-		# currently they will lead to an unclear backtrace due to multiprocessing
+		# currently they lead to an unclear backtrace due to multiprocessing
 
 	if params['complete']:
 		initworker(args[0], args[1] if len(args) == 2 else None,
@@ -188,11 +184,16 @@ def main(argv):
 		fragments = completebitsets(params['trees2'],
 				sents2 if params['disc'] else None, params['revlabel'])
 	else:
+		if len(args) == 2:
+			work = workload(numtrees, mult, numproc)
+		else:
+			chunk = numtrees / (mult * numproc)
+			if numtrees % (mult * numproc): chunk += 1
+			work = [(a, a + chunk) for a in range(0, numtrees, chunk)]
 		if numproc != 1:
 			logging.info("work division:\n%s", "\n".join("    %s:\t%r" % kv
-				for kv in sorted(dict(chunksize=chunk, numchunks=numchunks,
-				mult=mult).items())))
-		dowork = mymap(worker, shuffled(range(0, numtrees, chunk)))
+				for kv in sorted(dict(numchunks=len(work), mult=mult).items())))
+		dowork = mymap(worker, work)
 		for n, a in enumerate(dowork):
 			if params['approx']:
 				for frag, x in a.items():
@@ -214,10 +215,10 @@ def main(argv):
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s", task)
 		fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-		countchunk = len(bitsets) / (mult*numproc) #20000
-		tmp = shuffled(range(0, len(bitsets), countchunk))
-		work = [(n, len(tmp), bitsets[a:a+countchunk])
-				for n, a in enumerate(tmp)]
+		countchunk = len(bitsets) / (mult * numproc) #20000
+		work = range(0, len(bitsets), countchunk)
+		work = [(n, len(work), bitsets[a:a + countchunk])
+				for n, a in enumerate(work)]
 		logging.info("getting exact %s", task)
 		counts = []
 		for a in mymap(exactcountworker, work):
@@ -270,9 +271,10 @@ def initworker(treebank1, treebank2, limit, encoding):
 	logging.info("%s labels: %d, prods: %d", m, len(params['labels']),
 		len(params['prods']))
 
-def worker(offset):
+def worker(interval):
 	""" Worker function that initiates the extraction of fragments
 	in each process. """
+	offset, end = interval
 	trees1 = params['trees1']
 	trees2 = params['trees2']
 	sents1 = params['sents1']
@@ -280,7 +282,6 @@ def worker(offset):
 	labels = params['labels']
 	prods = params['prods']
 	assert offset < len(trees1)
-	end = min(offset + params['chunk'], len(trees1))
 	result = {}
 	if params['quadratic']:
 		result = extractfragments(trees1, sents1, offset, end, labels,
@@ -326,28 +327,43 @@ def initworkersimple(trees, sents, trees2=None, sents2=None):
 	params.update(getctrees(trees, sents, trees2, sents2))
 	assert params['trees1']
 
+def workload(numtrees, mult, numproc):
+	""" Get an even workload. When n trees are compared against themselves,
+	n * (n - 1) total comparisons are made.
+	Each tree m has to be compared to all trees x given m < x < n.
+	(meaning there are more comparisons for lower n).
+	This functions returns a sequence of (start, end) intervals such that
+	the number of comparisons is approximately balanced. """
+	# here chunk is the number of tree pairs that willl be compared
+	chunk = (numtrees * numtrees) / (2.0 * (mult * numproc))
+	result = []
+	last = 0
+	for n in range(numtrees):
+		if ((n - last) * (numtrees - last) > chunk):
+			result.append((last, n))
+			last = n
+	result.append((last, numtrees))
+	return result
+
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	""" Get recurring fragments with exact counts in a single treebank. """
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)
 	assert numtrees
-	mult = 3 if numproc > 1 else 1
-	chunk = numtrees / (mult*numproc)
-	if numtrees % (mult*numproc):
-		chunk += 1
-	numchunks = numtrees / chunk + (1 if numtrees % chunk else 0)
+	mult = 1 #3 if numproc > 1 else 1
 	fragments = {}
 	trees = trees[:]
-	params.update(chunk=chunk, disc=True, approx=False,
-		complete=False, indices=False, quadratic=False, complement=complement)
+	work = workload(numtrees, mult, numproc)
+	params.update(disc=True, approx=False, complete=False, indices=False,
+			quadratic=False, complement=complement)
 	if numproc == 1:
 		initworkersimple(trees, list(sents))
 		mymap = imap
 		myapply = apply
 	else:
 		logging.info("work division:\n%s", "\n".join("    %s: %r" % kv
-			for kv in sorted(dict(chunksize=chunk, numchunks=numchunks,
+			for kv in sorted(dict(numchunks=len(work),
 				numproc=numproc).items())))
 		# start worker processes
 		pool = Pool(processes=numproc, initializer=initworkersimple,
@@ -356,16 +372,18 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 		myapply = pool.apply
 	# collect recurring fragments
 	logging.info("extracting recurring fragments")
-	for a in mymap(worker, shuffled(range(0, numtrees, chunk))):
+	for a in mymap(worker, work):
 		fragments.update(a)
 	# add 'cover' fragments corresponding to single productions
 	cover = myapply(coverfragworker, ())
 	fragments.update(cover)
 	logging.info("merged %d cover fragments", len(cover))
 	fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-	countchunk = len(bitsets) / (mult*numproc) #20000
-	tmp = shuffled(range(0, len(bitsets), countchunk))
-	work = [(n, len(tmp), bitsets[a:a+countchunk]) for n, a in enumerate(tmp)]
+	mult = 1
+	countchunk = len(bitsets) / (mult * numproc) #20000
+	work = range(0, len(bitsets), countchunk)
+	work = [(n, len(work), bitsets[a:a + countchunk])
+			for n, a in enumerate(work)]
 	logging.info("getting exact counts for %d fragments", len(bitsets))
 	counts = []
 	for a in mymap(exactcountworker, work):
@@ -408,9 +426,6 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	""" Get fragments of fragments. """
 	numtrees = len(newtrees)
 	assert numtrees
-	chunk = numtrees / numproc
-	if numtrees % numproc:
-		chunk += 1
 	if numproc == 1: # set fragments as input
 		initworkersimple(newtrees, newsents, trees, sents)
 		mymap = map
@@ -420,7 +435,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 			initargs=(newtrees, newsents, trees, sents))
 		mymap = pool.imap
 	newfragments = {}
-	for a in mymap(worker, shuffled(range(0, numtrees, chunk))):
+	for a in mymap(worker, workload(numtrees, mult, numproc)):
 		newfragments.update(a)
 	logging.info("before: %d, after: %d, difference: %d",
 		len(fragments), len(fragments.viewkeys() | newfragments.keys()),
@@ -430,8 +445,9 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	newkeys = list(newfragments.viewkeys() - fragments.viewkeys())
 	bitsets = [newfragments[a] for a in newkeys]
 	countchunk = 20000
-	tmp = shuffled(range(0, len(bitsets), countchunk))
-	work = [(n, len(tmp), bitsets[a:a+countchunk]) for n, a in enumerate(tmp)]
+	work = range(0, len(bitsets), countchunk)
+	work = [(n, len(work), bitsets[a:a + countchunk])
+			for n, a in enumerate(work)]
 	logging.info("getting exact counts for %d fragments", len(bitsets))
 	counts = []
 	for a in mymap(exactcountworker, work):

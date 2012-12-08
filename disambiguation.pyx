@@ -35,13 +35,13 @@ cpdef marginalize(chart, ChartItem start, Grammar grammar, int n=10,
 	cdef Entry entry
 	cdef dict parsetrees = <dict>defaultdict(float)
 	cdef list entries = []
-	cdef str treestr, deriv, debin = None
+	cdef str treestr, deriv, debin = "" if newdd else "}<"
 	cdef double prob, maxprob
 	cdef int m
 	derivations = []; D = {}
 	if not sample or both:
-		debin = "}<"
-		derivations, D = lazykbest(chart, start, n, grammar.tolabel, debin, not newdd)
+		derivations, D = lazykbest(chart, start, n, grammar.tolabel,
+				debin, derivs=not newdd)
 	if sample or both:
 		assert backtransform is None, "not implemented for double dop."
 		derivations.extend(getsamples(chart, start, n, grammar.tolabel))
@@ -58,17 +58,19 @@ cpdef marginalize(chart, ChartItem start, Grammar grammar, int n=10,
 	if newdd:
 		for entry in entries:
 			prob = entry.value
-			try:
-				treestr = recoverfragments_new(entry.key, D,
-					grammar, backtransform) #, "}<")
-				assert "}" not in treestr
-			except KeyError:
-				deriv = getderiv(entry.key, D, chart, grammar.tolabel, debin)
-				print 'deriv', deriv
-				if "}" in treestr:
-					print ("unrecovered ambiguous fragment in tree."
-						" deriv: %s\ntree:%s" % (deriv, treestr))
-				raise
+			treestr = recoverfragments_new(entry.key, D,
+					grammar, backtransform)
+			#try:
+			#	treestr = recoverfragments_new(entry.key, D,
+			#			grammar, backtransform)
+			#	assert debin not in treestr
+			#except KeyError:
+			#	deriv = getderiv(entry.key, D, chart, grammar.tolabel, debin)
+			#	print 'deriv', deriv
+			#	if debin in treestr:
+			#		print ("unrecovered ambiguous fragment in tree."
+			#			" deriv: %s\ntree:%s" % (deriv, treestr))
+			#	raise
 
 			# simple way of adding probabilities (too easy):
 			parsetrees[treestr] += exp(-prob)
@@ -355,7 +357,6 @@ cpdef recoverfragments(derivation, dict backtransform):
 		prev = a
 
 	rprod = termsre.sub(repl(leafmap), prod)
-	#rprod = mysub(termsre, leafmap, prod)
 	leafmap = dict(zip(leafmap.values(), leafmap.keys()))
 	# fetch the actual fragment corresponding to this production
 	try: result = backtransform[rprod] #, rprod)
@@ -370,7 +371,6 @@ cpdef recoverfragments(derivation, dict backtransform):
 
 	# revert renumbering
 	result = termsre.sub(repl(leafmap), result)
-	#result = mysub(termsre, leafmap, result)
 	# recursively expand all substitution sites
 	for t, theads in zip(children, childheads):
 		#if t.startswith("(") and "(" in t[1:]: # redundant?
@@ -381,15 +381,6 @@ cpdef recoverfragments(derivation, dict backtransform):
 			result = result.replace(frontier, replacement, 1)
 	#assert result.count("(") == result.count(")")
 	return result
-
-cdef inline str mysub(regex, dict repldict, str haystack):
-	cdef int prev = 0
-	cdef list result = []
-	for match in regex.finditer(haystack):
-		result.append("%s %d" % (haystack[prev:match.start()],
-			repldict[int(match.group(1))]))
-		prev = match.end()
-	return "".join(result) + haystack[prev:]
 
 cpdef str recoverfragments_new(derivation, D, Grammar grammar,
 		dict backtransform):

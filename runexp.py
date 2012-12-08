@@ -418,7 +418,8 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 #	params = DictObj(**params)
 def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		test, testmaxwords, testsents, top, tags=True, resultdir="results",
-		numproc=None, tailmarker='', category=None, deletelabel=(), corpusfmt="export"):
+		numproc=None, tailmarker='', category=None, deletelabel=(),
+		corpusfmt="export"):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
@@ -601,7 +602,7 @@ def worker(args):
 				f1 = f_measure(goldb, candb)
 			else:
 				prec = rec = f1 = 0
-			if parsetree and parsetree == tree and f1 == 1.0:
+			if f1 == 1.0:
 				msg += "exact match "
 				exact = True
 			else:

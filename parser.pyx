@@ -69,7 +69,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 		list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
 		EdgeAgenda agenda = EdgeAgenda()			#the agenda
 		size_t i
-		Rule rule
+		Rule *rule
 		LexicalRule lexrule
 		Entry entry
 		LCFRSEdge edge
@@ -107,7 +107,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					score += outside[lexrule.lhs, left, right, 0]
 					if score > 300.0: continue
 				elif estimatetype == SXlrgaps:
-					score += outside[lexrule.lhs, length, left+right, gaps]
+					score += outside[lexrule.lhs, length, left + right, gaps]
 					if score > 300.0: continue
 				newitem.label = lexrule.lhs; newitem.vec = 1ULL << i
 				tmp = process_edge(newitem, score, lexrule.prob, NULL,
@@ -153,7 +153,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				if beam[item.vec] > beamwidth: continue
 				beam[item.vec] += 1
 			for i in range(grammar.numrules):
-				rule = grammar.unary[item.label][i]
+				rule = &(grammar.unary[item.label][i])
 				if rule.rhs1 != item.label: break
 				score = inside = x + rule.prob
 				if estimatetype == SX:
@@ -163,7 +163,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 					score += outside[rule.lhs, length, left+right, gaps]
 					if score > 300.0: continue
 				newitem.label = rule.lhs; newitem.vec = item.vec
-				newitem = process_edge(newitem, score, inside, &rule,
+				newitem = process_edge(newitem, score, inside, rule,
 						item, NONE, agenda, chart, viterbi, grammar,
 						exhaustive, whitelist,
 						splitprune and grammar.fanout[rule.lhs] != 1,
@@ -171,7 +171,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 
 			# binary left
 			for i in range(grammar.numrules):
-				rule = grammar.lbinary[item.label][i]
+				rule = &(grammar.lbinary[item.label][i])
 				if rule.rhs1 != item.label: break
 				for I, e in (<dict>viterbi[rule.rhs2]).iteritems():
 					sibling = <SmallChartItem>I
@@ -196,7 +196,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							right = lensent - length - left - gaps
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
-						newitem = process_edge(newitem, score, inside, &rule,
+						newitem = process_edge(newitem, score, inside, rule,
 								item, sibling, agenda, chart, viterbi, grammar,
 								exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
@@ -204,7 +204,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 
 			# binary right
 			for i in range(grammar.numrules):
-				rule = grammar.rbinary[item.label][i]
+				rule = &(grammar.rbinary[item.label][i])
 				if rule.rhs2 != item.label: break
 				for I, e in (<dict>viterbi[rule.rhs1]).iteritems():
 					sibling = <SmallChartItem>I
@@ -229,7 +229,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 							right = lensent - length - left - gaps
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
-						newitem = process_edge(newitem, score, inside, &rule,
+						newitem = process_edge(newitem, score, inside, rule,
 								sibling, item, agenda, chart, viterbi, grammar,
 								exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
@@ -322,7 +322,7 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 		chart[newitem][edge] = edge
 	return SmallChartItem.__new__(SmallChartItem)
 
-cdef inline bint concat(Rule rule, ULLong lvec, ULLong rvec):
+cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 	""" Determine the compatibility of two bitvectors (tuples of spans /
 	ranges) according to the given yield function. Ranges should be
 	non-overlapping, continuous when they are concatenated, and adhere to the
@@ -388,7 +388,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
 	cdef EdgeAgenda agenda = EdgeAgenda()			#the agenda
 	cdef size_t i
-	cdef Rule rule
+	cdef Rule *rule
 	cdef LexicalRule lexrule
 	cdef Entry entry
 	cdef LCFRSEdge edge
@@ -476,7 +476,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				gaps = abitlength(item.vec, SLOTS) - length - left
 				right = lensent - length - left - gaps
 			for i in range(grammar.numrules):
-				rule = grammar.unary[item.label][i]
+				rule = &(grammar.unary[item.label][i])
 				if rule.rhs1 != item.label: break
 				score = inside = x + rule.prob
 				if estimatetype == SX:
@@ -488,14 +488,14 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				newitem.label = rule.lhs
 				ulongcpy(newitem.vec, item.vec, SLOTS)
 				newitem = process_fatedge(newitem, score, inside,
-						&rule, item, FATNONE, agenda, chart, viterbi,
+						rule, item, FATNONE, agenda, chart, viterbi,
 						grammar, exhaustive, whitelist,
 						splitprune and grammar.fanout[rule.lhs] != 1,
 						markorigin, &blocked)
 
 			# binary left
 			for i in range(grammar.numrules):
-				rule = grammar.lbinary[item.label][i]
+				rule = &(grammar.lbinary[item.label][i])
 				if rule.rhs1 != item.label: break
 				for I, e in (<dict>viterbi[rule.rhs2]).iteritems():
 					sibling = <FatChartItem>I
@@ -519,14 +519,14 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_fatedge(newitem, score, inside,
-								&rule, item, sibling, agenda, chart, viterbi,
+								rule, item, sibling, agenda, chart, viterbi,
 								grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
 
 			# binary right
 			for i in range(grammar.numrules):
-				rule = grammar.rbinary[item.label][i]
+				rule = &(grammar.rbinary[item.label][i])
 				if rule.rhs2 != item.label: break
 				for I, e in (<dict>viterbi[rule.rhs1]).iteritems():
 					sibling = <FatChartItem>I
@@ -549,7 +549,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 							score += outside[rule.lhs, length, left+right, gaps]
 							if score > 300.0: continue
 						newitem = process_fatedge(newitem, score, inside,
-								&rule, sibling, item, agenda, chart, viterbi,
+								rule, sibling, item, agenda, chart, viterbi,
 								grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -635,7 +635,7 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 		chart[newitem][edge] = edge
 	return FatChartItem.__new__(FatChartItem)
 
-cdef inline bint fatconcat(Rule rule, ULong *lvec, ULong *rvec):
+cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	""" Determine the compatibility of two bitvectors (tuples of spans /
 	ranges) according to the given yield function. Ranges should be
 	non-overlapping, continuous when they are concatenated, and adhere to the
@@ -1254,11 +1254,11 @@ def main():
 	from containers import Grammar
 	cdef Rule rule
 	rule.args = 0b1010; rule.lengths = 0b1010
-	assert concat(rule, 0b100010, 0b1000100)
-	assert not concat(rule, 0b1010, 0b10100)
+	assert concat(&rule, 0b100010, 0b1000100)
+	assert not concat(&rule, 0b1010, 0b10100)
 	rule.args = 0b101; rule.lengths = 0b101
-	assert concat(rule, 0b10000, 0b100100)
-	assert not concat(rule, 0b1000, 0b10100)
+	assert concat(&rule, 0b10000, 0b100100)
+	assert not concat(&rule, 0b1000, 0b10100)
 	grammar = Grammar([
 		((('S','VP2','VMFIN'), ((0,1,0),)), 0.0),
 		((('VP2','VP2','VAINF'),  ((0,),(0,1))), log(0.5)),
