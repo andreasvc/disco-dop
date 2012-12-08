@@ -226,7 +226,7 @@ def main(
 				for a, b in test_parsed_sents.iteritems()), gold_sents,
 				result.parsetrees, test_tagged_sents, evalparam)
 		nsent = len(result.parsetrees)
-		print "coverage:    %s = %6.2f" % (
+		print "coverage:         %s = %6.2f" % (
 				("%d / %d" % (nsent - result.noparse, nsent)).rjust(11),
 				100.0 * (nsent - result.noparse) / nsent)
 

@@ -107,7 +107,7 @@ def main(argv):
 		else:
 			numtrees = sum(1 for _ in open(args[0]))
 	assert numtrees
-	mult = 3 if numproc > 1 else 1
+	mult = 1 #3 if numproc > 1 else 1
 	if params['approx']:
 		fragments = defaultdict(int)
 	else:
@@ -184,7 +184,7 @@ def main(argv):
 		fragments = completebitsets(params['trees2'],
 				sents2 if params['disc'] else None, params['revlabel'])
 	else:
-		if len(args) == 2:
+		if len(args) == 1:
 			work = workload(numtrees, mult, numproc)
 		else:
 			chunk = int(math.ceil(numtrees / (mult * numproc)))
@@ -334,15 +334,19 @@ def workload(numtrees, mult, numproc):
 	This functions returns a sequence of (start, end) intervals such that
 	the number of comparisons is approximately balanced. """
 	# here chunk is the number of tree pairs that willl be compared
-	chunk = int(math.ceil((numtrees * (numtrees - 1))
-			/ (2.0 * (mult * numproc))))
+	goal = togo = total = 0.5 * numtrees * (numtrees - 1)
+	chunk = int(math.ceil(total / (mult * numproc)))
+	goal -= chunk
 	result = []
 	last = 0
-	for n in range(numtrees):
-		if ((n - last) * (numtrees - last) > chunk):
+	for n in range(1, numtrees):
+		togo -= numtrees - n
+		if togo <= goal:
+			goal -= chunk
 			result.append((last, n))
 			last = n
-	result.append((last, numtrees))
+	if last < numtrees:
+		result.append((last, numtrees))
 	return result
 
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
