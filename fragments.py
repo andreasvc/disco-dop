@@ -214,7 +214,7 @@ def main(argv):
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s", task)
 		fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-		countchunk = len(bitsets) / (mult * numproc) #20000
+		countchunk = math.ceil(len(bitsets) / float(numproc))
 		work = range(0, len(bitsets), countchunk)
 		work = [(n, len(work), bitsets[a:a + countchunk])
 				for n, a in enumerate(work)]
@@ -383,8 +383,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	fragments.update(cover)
 	logging.info("merged %d cover fragments", len(cover))
 	fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
-	mult = 1
-	countchunk = len(bitsets) / (mult * numproc) #20000
+	countchunk = math.ceil(len(bitsets) / float(numproc))
 	work = range(0, len(bitsets), countchunk)
 	work = [(n, len(work), bitsets[a:a + countchunk])
 			for n, a in enumerate(work)]
@@ -448,7 +447,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	# from the same set of trees
 	newkeys = list(newfragments.viewkeys() - fragments.viewkeys())
 	bitsets = [newfragments[a] for a in newkeys]
-	countchunk = 20000
+	countchunk = math.ceil(len(bitsets) / float(numproc))
 	work = range(0, len(bitsets), countchunk)
 	work = [(n, len(work), bitsets[a:a + countchunk])
 			for n, a in enumerate(work)]
