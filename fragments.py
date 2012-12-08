@@ -8,7 +8,7 @@ you want to abort, kill the program manually (e.g., press ctrl-z and run
 'kill %1'). If the program seems stuck, re-run without multiprocessing
 (pass --numproc 1) to see if there might be a bug. """
 
-import os, re, sys, codecs, logging, random
+import os, re, sys, math, codecs, logging
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count, imap
@@ -187,8 +187,7 @@ def main(argv):
 		if len(args) == 2:
 			work = workload(numtrees, mult, numproc)
 		else:
-			chunk = numtrees / (mult * numproc)
-			if numtrees % (mult * numproc): chunk += 1
+			chunk = int(math.ceil(numtrees / (mult * numproc)))
 			work = [(a, a + chunk) for a in range(0, numtrees, chunk)]
 		if numproc != 1:
 			logging.info("work division:\n%s", "\n".join("    %s:\t%r" % kv
@@ -335,7 +334,8 @@ def workload(numtrees, mult, numproc):
 	This functions returns a sequence of (start, end) intervals such that
 	the number of comparisons is approximately balanced. """
 	# here chunk is the number of tree pairs that willl be compared
-	chunk = (numtrees * numtrees) / (2.0 * (mult * numproc))
+	chunk = int(math.ceil((numtrees * (numtrees - 1))
+			/ (2.0 * (mult * numproc))))
 	result = []
 	last = 0
 	for n in range(numtrees):
@@ -470,11 +470,6 @@ def altrepr(a):
 	(NP (DT "a") NN)
 	"""
 	return frontierre.sub(r'\1', termre.sub(r'(\1 "\2")', a.replace('"', "''")))
-
-def shuffled(l):
-	""" Wrapper to make shuffle return its result. """
-	random.shuffle(l)
-	return l
 
 def printfragments(fragments, out=sys.stdout):
 	""" Dump fragments to standard output or some other file object. """
