@@ -43,8 +43,10 @@ cpdef marginalize(chart, ChartItem start, Grammar grammar, int n=10,
 		derivations, D = lazykbest(chart, start, n, grammar.tolabel,
 				debin, derivs=not newdd)
 	if sample or both:
-		assert backtransform is None, "not implemented for double dop."
-		derivations.extend(getsamples(chart, start, n, grammar.tolabel))
+		assert not newdd, "not implemented for new double dop."
+		assert not isinstance(start, CFGChartItem), (
+				"not implemented for PCFG charts.")
+		derivations.extend(getsamples(chart, start, n, grammar.tolabel, debin))
 		D.setdefault(start, []).extend([None] * n)
 	if shortest:
 		assert backtransform is None, "not implemented for double dop."
@@ -214,24 +216,30 @@ cdef inline int minunaddressed(tt, idsremoved):
 	return result
 	#return min([(t.count("(") - t.count("@")) for t in idsremoved[tt]])
 
-cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
+cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
+		str debin):
 	""" Samples a derivation from a chart. """
 	cdef LCFRSEdge edge
 	cdef ChartItem child
 	#NB: this does not sample properly, as it ignores the distribution of
 	#probabilities and samples uniformly instead. 
 	#edge = choice(chart[start])
+	if start.label == 0:
+		return str(start.lexidx()), 0.0
 	rnd = random() * tables[start][-1]
 	idx = bisect_right(tables[start], rnd)
 	edge = chart[start][idx]
 	if edge.left.label == 0: # == "Epsilon":
 		idx = edge.left.lexidx()
 		return "(%s %d)" % (tolabel[start.label], idx), edge.inside
-	children = [samplechart(chart, child, tolabel, tables)
-				for child in (edge.left, edge.right) if child.label]
-	tree = "(%s %s)" % (tolabel[start.label],
-							" ".join([a for a,b in children]))
-	return tree, edge.rule.prob + sum([b for a,b in children])
+	children = [samplechart(chart, child, tolabel, tables, debin)
+		for child in (edge.left, edge.right) if child.label]
+	if debin is not None and debin in tolabel[start.label]:
+		tree = " ".join([a for a, _ in children])
+	else:
+		tree = "(%s %s)" % (tolabel[start.label],
+								" ".join([a for a,b in children]))
+	return tree, edge.rule.prob + sum([b for _, b in children])
 
 	#probmass = sum([exp(-edge.rule.prob) for edge in edges])
 	#minprob = min([edge.rule.prob for edge in edges])
@@ -239,7 +247,7 @@ cpdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables):
 	#					log(fsum([exp(edge.rule.prob - minprob)
 	#								for edge in edges]))]))
 
-def getsamples(chart, start, n, tolabel):
+def getsamples(chart, start, n, tolabel, debin=None):
 	cdef LCFRSEdge edge
 	cdef dict tables = {}, chartcopy = {}
 	for item in chart:
@@ -251,7 +259,7 @@ def getsamples(chart, start, n, tolabel):
 		for edge in chartcopy[item]:
 			prev += exp(-minprob - edge.inside)
 			tables[item].append(exp(minprob + log(prev)))
-	derivations = set([samplechart(chartcopy, start, tolabel, tables)
+	derivations = set([samplechart(chartcopy, start, tolabel, tables, debin)
 						for x in range(n)])
 	derivations.discard(None)
 	return derivations
