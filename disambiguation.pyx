@@ -26,78 +26,90 @@ removeids = re.compile("@[-0-9]+")
 removewordtags = re.compile("@[^ )]+")
 termsre = re.compile(r" ([0-9]+)\b")
 
-cpdef marginalize(chart, ChartItem start, Grammar grammar, int n=10,
-	bint sample=False, bint both=False, bint shortest=False,
-	secondarymodel=None, bint mpd=False, dict backtransform=None,
-	bint newdd=False):
+cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
+		bint sample=False, bint kbest=True, list sent=None, bint tags=False,
+		secondarymodel=None, int sldop_n=7,
+		dict backtransform=None, bint newdd=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
 	cdef Entry entry
 	cdef dict parsetrees = <dict>defaultdict(float)
-	cdef list entries = []
+	cdef list derivations = [], entries
 	cdef str treestr, deriv, debin = "" if newdd else "}<"
 	cdef double prob, maxprob
 	cdef int m
-	derivations = []; D = {}
-	if not sample or both:
+	cdef bint shortest = method == "shortest"
+	cdef bint mpd = method == "mpd"
+
+	assert kbest or sample
+	if kbest:
 		derivations, D = lazykbest(chart, start, n, grammar.tolabel,
 				debin, derivs=not newdd)
-	if sample or both:
-		assert not newdd, "not implemented for new double dop."
+	if sample:
+		assert not newdd, "sampling not implemented for new double dop."
 		assert not isinstance(start, CFGChartItem), (
-				"not implemented for PCFG charts.")
+				"sampling not implemented for PCFG charts.")
 		derivations.extend(getsamples(chart, start, n, grammar.tolabel, debin))
-		D.setdefault(start, []).extend([None] * n)
-	if shortest:
-		assert backtransform is None, "not implemented for double dop."
+
+	if method == "sl-dop":
+		assert backtransform is None
+		return sldop(derivations, chart, start, sent, tags, grammar,
+				secondarymodel, n, sldop_n, backtransform)
+	elif method == "sl-dop-simple":
+		assert not newdd, "%s not implemented for new double dop" % method
+		return sldop_simple(derivations, grammar, n, sldop_n, backtransform)
+	elif method == "shortest":
+		assert backtransform is None, (
+				"shortest derivation not implemented for double dop.")
 		# filter out all derivations which are not shortest
-		maxprob = min(derivations, key=itemgetter(1))[1]
-		derivations = [(a,b) for a, b in derivations if b == maxprob]
-	if isinstance(start, CFGChartItem):
-		entries = D[(<CFGChartItem>start).start][
-				(<CFGChartItem>start).end][start.label]
-	else: entries = D[start]
+		_, maxprob = min(derivations, key=itemgetter(1))
+		derivations = [(a, b) for a, b in derivations if b == maxprob]
+
 	if newdd:
+		if isinstance(start, CFGChartItem):
+			entries = D[(<CFGChartItem>start).start][
+					(<CFGChartItem>start).end][start.label]
+		else:
+			entries = D[start]
 		for entry in entries:
 			prob = entry.value
 			treestr = recoverfragments_new(entry.key, D,
 					grammar, backtransform)
-			#try:
-			#	treestr = recoverfragments_new(entry.key, D,
-			#			grammar, backtransform)
-			#	assert debin not in treestr
-			#except KeyError:
-			#	deriv = getderiv(entry.key, D, chart, grammar.tolabel, debin)
-			#	print 'deriv', deriv
-			#	if debin in treestr:
-			#		print ("unrecovered ambiguous fragment in tree."
-			#			" deriv: %s\ntree:%s" % (deriv, treestr))
-			#	raise
-
-			# simple way of adding probabilities (too easy):
-			parsetrees[treestr] += exp(-prob)
-			#if treestr in parsetrees: parsetrees[treestr].append(-prob)
-			#else: parsetrees[treestr] = [-prob]
+			if mpd:
+				if exp(-prob) > parsetrees[treestr]:
+					parsetrees[treestr] = exp(-prob)
+			else:
+				# simple way of adding probabilities (too easy):
+				parsetrees[treestr] += exp(-prob)
+				#if treestr in parsetrees: parsetrees[treestr].append(-prob)
+				#else: parsetrees[treestr] = [-prob]
 	else: #DOP reduction / old double dop method
-		for (deriv, prob), entry in zip(derivations, entries):
-			if shortest:
-				# calculate the derivation probability in a different model.
-				# because we don't keep track of which rules have been used,
-				# read off the rules from the derivation ...
-				tree = Tree.parse(removeids.sub("", deriv), parse_leaf=int)
-				sent = sorted(tree.leaves())
-				rules = induce_plcfrs([tree], [sent])
-				prob = -fsum([secondarymodel[r] for r, w in rules
-						if r[0][1] != 'Epsilon'])
-				del tree
+		for deriv, prob in derivations:
+			if shortest and backtransform is None:
+				# for purposes of tie breaking, calculate the derivation
+				# probability in a different model. because we don't keep track
+				# of which rules have been used, read off the rules from the
+				# derivation ...
+				prob = -fsum([secondarymodel[r] for r, _ in induce_plcfrs(
+						[Tree.parse(deriv, parse_leaf=int)], [sent])])
+			elif shortest and backtransform is not None:
+				# number of fragments is number of rules minus ones
+				# introduced for lexical items & disambiguation.
+				prob = 0.5 ** (treestr.count("(") - treestr.count("@")
+						- treestr.count("#"))
 			if backtransform is None:
 				treestr = removeids.sub("@" if mpd else "", deriv)
 			else:
 				treestr = recoverfragments(deriv, backtransform)
-			# simple way of adding probabilities (too easy):
-			parsetrees[treestr] += exp(-prob)
-			#if treestr in parsetrees: parsetrees[treestr].append(-prob)
-			#else: parsetrees[treestr] = [-prob]
+			if backtransform is None or not mpd:
+				# simple way of adding probabilities (too easy):
+				parsetrees[treestr] += exp(-prob)
+				#if treestr in parsetrees: parsetrees[treestr].append(-prob)
+				#else: parsetrees[treestr] = [-prob]
+			else:
+				if exp(-prob) > parsetrees[treestr]:
+					parsetrees[treestr] = exp(-prob)
+
 	# Adding probabilities in log space
 	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
 	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
@@ -105,14 +117,12 @@ cpdef marginalize(chart, ChartItem start, Grammar grammar, int n=10,
 	#	maxprob = max(parsetrees[parsetree])
 	#	parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
 	#								for prob in parsetrees[parsetree]]))]))
-	#for n, parsetree in enumerate(sorted(parsetrees, key=parsetrees.get)):
-	#	print "%3d. %g %s" % (n, parsetrees[parsetree], parsetree)
 	msg = "%d derivations, %d parsetrees" % (
-			len(entries) if newdd else len(derivations), len(parsetrees))
+			len(entries if newdd else derivations), len(parsetrees))
 	return parsetrees, msg
 
-def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
-	sample=False, both=False):
+cdef sldop(derivations, chart, start, sent, tags, dopgrammar, secondarymodel,
+		m, sldop_n, backtransform):
 	""" `proper' method for sl-dop. parses sentence once more to find shortest
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees. Returns the first result of the intersection of the
@@ -121,19 +131,21 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	NB2: assumes ROOT is the top node."""
 	cdef ChartItem item
 	cdef FatChartItem fitem
-	# get n most likely derivations
-	derivations = set()
-	if sample:
-		derivations = getsamples(chart, start, 10*m, dopgrammar.tolabel)
-	if not sample or both:
-		derivations.update(lazykbest(chart, start, m, dopgrammar.tolabel)[0])
 	derivations = dict(derivations)
-	# sum over Goodman derivations to get parse trees
+	# sum over derivations to get parse trees
 	idsremoved = defaultdict(set)
-	for t, p in derivations.items():
-		idsremoved[removeids.sub("", t)].add(t)
-	mpp1 = dict((tt, sumderivs(ts, derivations))
-					for tt, ts in idsremoved.iteritems())
+	for deriv in derivations:
+		if backtransform is None:
+			idsremoved[removeids.sub("", deriv)].add(deriv)
+		else:
+			tree = recoverfragments(deriv, backtransform)
+	mpp1 = dict([(tt, sumderivs(ts, derivations))
+					for tt, ts in idsremoved.iteritems()])
+
+	# use getmapping and prunechart here instead of manually built whitelist
+	# prunechart(chart, n, ...)
+	# parse ...
+	# OR: use two coarse-to-fine stages, the second collects SL-DOP parse
 	whitelist = [{} for a in secondarymodel.toid]
 	for a in chart:
 		whitelist[(<ChartItem>a).label][a] = infinity
@@ -145,7 +157,8 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 			else:
 				fitem = item = FatChartItem(0)
 				memset(<char *>fitem.vec, 0, sizeof(fitem.vec))
-				for x in n.leaves(): SETBIT(fitem.vec, x)
+				for x in n.leaves():
+					SETBIT(fitem.vec, x)
 			whitelist[secondarymodel.toid[n.node]][item] = 0.0
 	for label, n in secondarymodel.toid.items():
 		whitelist[n] = whitelist[secondarymodel.toid[label.split("@")[0]]]
@@ -163,11 +176,11 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 	else:
 		shortestderivations = []
 		logging.warning("shortest derivation parsing failed") # error?
-	mpp = [ max(mpp2.items(), key=itemgetter(1)) ]
-	for t, s in shortestderivations:
-		tt = removeids.sub("", t)
+	mpp = [max(mpp2.items(), key=itemgetter(1))]
+	for deriv, s in shortestderivations:
+		tt = removeids.sub("", deriv)
 		if tt in mpp2:
-			mpp = [ ( tt, (s / log(0.5)	, mpp2[tt])) ]
+			mpp = [(tt, (s / log(0.5), mpp2[tt]))]
 			break
 	else:
 		logging.warning("no matching derivation found") # error?
@@ -175,46 +188,40 @@ def sldop(chart, start, sent, tags, dopgrammar, secondarymodel, m, sldop_n,
 		len(derivations), min(sldop_n, len(mpp1)), len(mpp1))
 	return dict(mpp), msg
 
-def sldop_simple(chart, start, dopgrammar, m, sldop_n):
+cdef sldop_simple(derivations, dopgrammar, m, sldop_n, backtransform):
 	""" simple sl-dop method; estimates shortest derivation directly from
 	number of addressed nodes in the k-best derivations. After selecting the n
 	best parse trees, the one with the shortest derivation is returned."""
-	# get n most likely derivations
-	derivations = lazykbest(chart, start, m, dopgrammar.tolabel)[0]
-	x = len(derivations); derivations = set(derivations)
-	xx = len(derivations); derivations = dict(derivations)
-	if xx != len(derivations):
-		logging.error("duplicates w/different probabilities %d => %d => %d",
-			x, xx, len(derivations))
-	elif x != xx:
-		logging.error("DUPLICATE DERIVATIONS %d => %d", x, len(derivations))
-	# sum over Goodman derivations to get parse trees
-	idsremoved = defaultdict(set)
-	for t, p in derivations.items():
-		idsremoved[removeids.sub("", t)].add(t)
-	mpp1 = dict((tt, sumderivs(ts, derivations))
-					for tt, ts in idsremoved.items())
+	# sum over derivations to get parse trees
+	parsetrees = defaultdict(set)
+	for deriv, _ in derivations:
+		if backtransform is None:
+			tree = removeids.sub("", deriv)
+		else:
+			tree = recoverfragments(deriv, backtransform)
+		parsetrees[tree].add(deriv)
+	mpp1 = dict([(tt, sumderivs(ts, dict(derivations)))
+					for tt, ts in parsetrees.items()])
+
 	# the number of fragments used is the number of
 	# nodes (open parens), minus the number of interior
 	# (addressed) nodes.
-	mpp = [(tt, (-minunaddressed(tt, idsremoved), mpp1[tt]))
+	mpp = [(tt, (-minunaddressed(tt, parsetrees), mpp1[tt]))
 				for tt in nlargest(sldop_n, mpp1, key=mpp1.get)]
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 			len(derivations), len(mpp), len(mpp1))
 	return dict(mpp), msg
 
 cdef inline double sumderivs(ts, derivations):
-	#return fsum([exp(-derivations[t]) for t in ts])
 	cdef double result = 0.0
 	for t in ts: result += exp(-derivations[t])
 	return result
+	#return fsum([exp(-derivations[t]) for t in ts])
 	#return sum([exp(-derivations[t]) for t in ts])
 
 cdef inline int minunaddressed(tt, idsremoved):
-	cdef int result = 0
-	for t in idsremoved[tt]: result += t.count("(") - t.count("@")
-	return result
-	#return min([(t.count("(") - t.count("@")) for t in idsremoved[tt]])
+	return min([t.count("(") - t.count("@") - t.count("#")
+			for t in idsremoved[tt]])
 
 cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 		str debin):
@@ -240,12 +247,6 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 		tree = "(%s %s)" % (tolabel[start.label],
 								" ".join([a for a,b in children]))
 	return tree, edge.rule.prob + sum([b for _, b in children])
-
-	#probmass = sum([exp(-edge.rule.prob) for edge in edges])
-	#minprob = min([edge.rule.prob for edge in edges])
-	#probmass = exp(fsum([minprob,
-	#					log(fsum([exp(edge.rule.prob - minprob)
-	#								for edge in edges]))]))
 
 def getsamples(chart, start, n, tolabel, debin=None):
 	cdef LCFRSEdge edge
@@ -547,14 +548,16 @@ def main():
 	sent = "a b c".split()
 	chart, start, _ = parse(sent, grammar, None, grammar.toid['ROOT'], True)
 	vit = viterbiderivation(chart, start, grammar.tolabel)
-	mpd, _ = marginalize(chart, start, grammar, n=1000, mpd=True)
-	mpp, _ = marginalize(chart, start, grammar, n=1000)
-	mppsampled, _ = marginalize(chart, start, grammar, n=1000, sample=True)
-	sldopsimple, _ = sldop_simple(chart, start, grammar, 1000, 7)
-	sldop1, _ = sldop(chart, start, sent, None, grammar, shortest, 1000, 7,
-		sample=False, both=False)
-	short, _ = marginalize(chart, start, shortest, 1000, shortest=True,
-		secondarymodel=secondarymodel)
+	mpd, _ = marginalize("mpd", chart, start, grammar, 1000)
+	mpp, _ = marginalize("mpp", chart, start, grammar, 1000)
+	mppsampled, _ = marginalize("mpp", chart, start, grammar, 1000,
+			sample=True, kbest=False)
+	sldop1, _ = marginalize("sl-dop", chart, start, grammar, 1000,
+			sldop_n=7, sent=sent, secondarymodel=shortest)
+	sldopsimple, _ = marginalize("sl-dop-simple", chart, start, grammar, 1000,
+			sldop_n=7, sent=sent)
+	short, _ = marginalize("shortest", chart, start, shortest,
+		1000, sent=sent, secondarymodel=secondarymodel)
 	print
 	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))
 	print "MPD:\t\t%s %r" % e(maxitem(mpd))

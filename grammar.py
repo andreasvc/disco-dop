@@ -928,7 +928,7 @@ def do(sent, grammar):
 	print "sentence", sent
 	p, start, _ = parse(sent, grammar, start=grammar.toid['S'])
 	if start:
-		mpp, _ = marginalize(p, start, grammar)
+		mpp, _ = marginalize("mpp", p, start, grammar, 10)
 		for t in mpp:
 			print exp(mpp[t]), t
 	else:
@@ -994,7 +994,6 @@ def test():
 			print "\ngold ", tree.pprint(margin=9999)
 			print "double dop",
 			if start:
-				#mpp, _ = marginalize(chart, start, grammar)
 				mpp = {}
 				parsetrees = {}
 				if new_dd:

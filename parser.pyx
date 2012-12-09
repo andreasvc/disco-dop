@@ -1185,15 +1185,16 @@ def do(sent, grammar):
 	from disambiguation import marginalize
 	from operator import itemgetter
 	print "sentence", sent
-	chart, start, _ = parse(sent.split(), grammar, start=grammar.toid['S'])
+	sent = sent.split()
+	chart, start, _ = parse(sent, grammar, start=grammar.toid['S'])
 	if len(sent) < sizeof(ULLong):
-		pprint_chart(chart, sent.split(), grammar.tolabel)
+		pprint_chart(chart, sent, grammar.tolabel)
 	if not start:
 		print "no parse"
 		return False
 	else:
 		print "10 best parse trees:"
-		mpp, _ = marginalize(chart, start, grammar)
+		mpp, _ = marginalize("mpp", chart, start, grammar, 10)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))): print p,a
 		print
 		return True

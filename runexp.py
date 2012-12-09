@@ -22,7 +22,7 @@ from grammar import induce_plcfrs, dopreduction, doubledop, doubledop_new, \
 from containers import Grammar
 from parser import parse, cfgparse
 from coarsetofine import prunechart
-from disambiguation import marginalize, viterbiderivation, sldop, sldop_simple
+from disambiguation import marginalize, viterbiderivation
 from eval import doeval, readparam, strbracketings, transform, \
 		bracketings, precision, recall, f_measure
 
@@ -65,9 +65,11 @@ defaultstage = dict(
 		iterate=False, #for double dop, whether to include fragments of fragments
 		complement=False, #for double dop, whether to include fragments which
 				#form the complement of the maximal recurring fragments extracted
-		sample=False, both=False,
+		sample=False, kbest=True,
 		m = 10000, #number of derivations to sample/enumerate
-		estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
+		estimator = "ewe", # choices: dop1, ewe
+		objective = "mpp", # choices: mpp, mpd, shortest, sl-dop[-simple]
+			# NB: w/shortest derivation, estimator only affects tie breaking.
 		sldop_n=7)
 
 def main(
@@ -208,27 +210,16 @@ def main(
 			deletelabel=deletelabel, corpusfmt=corpusfmt)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
-	print "testmaxwords", testmaxwords, "binarization", bintype,
-	if unfolded:
-		print "unfolded",
-	if fanout_marks_before_bin:
-		print "fanout marks before binarization",
-	if stages[-1].dop:
-		print "estimator", stages[-1].estimator,
-		if 'sl-dop' in stages[-1].estimator:
-			print stages[-1].sldop_n,
-		if stages[-1].usedoubledop:
-			print "doubledop",
-		print
 	for result in results[0]:
-		print "\n%s" % (" " + result.name.upper() + " ").center(35, "="),
-		doeval(OrderedDict((a, b.copy(True))
+		nsent = len(result.parsetrees)
+		header = (" " + result.name.upper() + " ").center(35, "=")
+		evalsummary = doeval(OrderedDict((a, b.copy(True))
 				for a, b in test_parsed_sents.iteritems()), gold_sents,
 				result.parsetrees, test_tagged_sents, evalparam)
-		nsent = len(result.parsetrees)
-		print "coverage:         %s = %6.2f" % (
-				("%d / %d" % (nsent - result.noparse, nsent)).rjust(11),
+		coverage = "coverage: %s = %6.2f" % (
+				("%d / %d" % (nsent - result.noparse, nsent)).rjust(25),
 				100.0 * (nsent - result.noparse) / nsent)
+		logging.info("\n".join(("", header, evalsummary, coverage)))
 
 def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		revmarkov, leftMostUnary, rightMostUnary,
@@ -282,24 +273,12 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				"need previous stage to prune, but this stage is first.")
 		if stage.dop:
 			stages[n].backtransform = None
-			assert stage.estimator in (
-				"dop1", "ewe", "shortest", "sl-dop", "sl-dop-simple")
-			if stage.estimator == "shortest":
-				# the secondary model is used to resolve ties
-				# for the shortest derivation
-				grammar, secondarymodel = dopreduction(traintrees, sents,
-					normalize=False, shortestderiv=True)
-				stages[n].secondarymodel = secondarymodel
-			elif "sl-dop" in stage.estimator:
-				grammar = dopreduction(traintrees, sents, normalize=True,
-								shortestderiv=False)
-				dopshortest, _ = dopreduction(traintrees, sents,
-								normalize=False, shortestderiv=True)
-				secondarymodel = Grammar(dopshortest)
-				stages[n].secondarymodel = secondarymodel
-			elif stage.usedoubledop:
-				assert stage.estimator not in ("ewe", "sl-dop", "sl-dop-simple",
-						"shortest"), "Not implemented."
+			assert stage.estimator in ("dop1", "ewe")
+			assert stage.objective in ("mpp", "mpd", "shortest",
+					"sl-dop", "sl-dop-simple")
+			if stage.usedoubledop:
+				assert stage.estimator != "ewe", (
+						"EWE not implemented for double-dop.")
 				# find recurring fragments in treebank,
 				# as well as depth-1 'cover' fragments
 				fragments = getfragments(traintrees, sents, numproc,
@@ -309,7 +288,26 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				else:
 					grammar, backtransform = doubledop(fragments)
 				stages[n].backtransform = backtransform
-			else:
+				if stage.objective in ("shortest", "sl-dop", "sl-dop-simple"):
+					dopshortest = [(r, log(0.5)) for r, _ in grammar]
+					if stage.objective == "shortest":
+						grammar, secondarymodel = secondarymodel, grammar
+					stages[n].secondarymodel = Grammar(secondarymodel)
+			elif stage.objective == "shortest": # dopreduction from here on
+				# the secondary model is used to resolve ties
+				# for the shortest derivation
+				# i.e., secondarymodel is probabilistic
+				grammar, secondarymodel = dopreduction(traintrees, sents,
+					normalize=stage.estimator=="ewe", shortestderiv=True)
+				stages[n].secondarymodel = secondarymodel
+			elif "sl-dop" in stage.objective:
+				# here secondarymodel is non-probabilistic
+				grammar = dopreduction(traintrees, sents,
+						normalize=stage.estimator=="ewe", shortestderiv=False)
+				secondarymodel, _ = dopreduction(traintrees, sents,
+								normalize=False, shortestderiv=True)
+				stages[n].secondarymodel = Grammar(secondarymodel)
+			else: # mpp or mpd
 				grammar = dopreduction(traintrees, sents,
 					normalize=(stage.estimator
 						in ("ewe", "sl-dop", "sl-dop-simple")),
@@ -441,7 +439,7 @@ def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
 				initargs=(params,))
 		dowork = pool.imap_unordered(worker, test.items())
-	print "going to parse %d sentences." % len(test)
+	logging.info("going to parse %d sentences." % len(test))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
 		sentid, msg, sentresults = data
@@ -549,30 +547,14 @@ def worker(args):
 		if start:
 			if stage.dop:
 				begindisamb = time.clock()
-				if stage.estimator == "shortest":
-					mpp, msg1 = marginalize(chart, start, stage.grammar,
-							n=stage.m, sample=stage.sample, both=stage.both,
-							shortest=True, secondarymodel=stage.secondarymodel)
-				elif stage.estimator == "sl-dop":
-					mpp, msg1 = sldop(chart, start, sent, d.tags, stage.grammar,
-							stage.secondarymodel, stage.m, stage.sldop_n,
-							stage.sample, stage.both)
-					mpp = dict(mpp)
-				elif stage.estimator == "sl-dop-simple":
-					# old method, estimate shortest derivation directly
-					# from number of addressed nodes
-					mpp, msg1 = sldop_simple(chart, start, stage.grammar,
-							stage.m, stage.sldop_n)
-					mpp = dict(mpp)
-				elif stage.backtransform is not None:
-					mpp, msg1 = marginalize(chart, start, stage.grammar,
-							n=stage.m, sample=stage.sample, both=stage.both,
-							backtransform=stage.backtransform,
-							newdd=stage.newdd)
-				else: #dop1, ewe
-					mpp, msg1 = marginalize(chart, start, stage.grammar,
-							n=stage.m, sample=stage.sample, both=stage.both)
-				resultstr, prob = max(mpp.iteritems(), key=itemgetter(1))
+				parsetrees, msg1 = marginalize(stage.objective, chart, start,
+						stage.grammar, stage.m,
+						sample=stage.sample, kbest=stage.kbest,
+						secondarymodel=stage.secondarymodel,
+						sent=sent, tags=d.tags, sldop_n=stage.sldop_n,
+						backtransform=stage.backtransform,
+						newdd=stage.newdd)
+				resultstr, prob = max(parsetrees.iteritems(), key=itemgetter(1))
 				msg += "disambiguation: %s, %gs\n\t" % (
 						msg1, time.clock() - begindisamb)
 				if isinstance(prob, tuple):
@@ -734,8 +716,10 @@ def parsetepacoc(
 			newdd=False, #use experimental, more efficient double dop algorithm
 					#the complement of the maximal recurring fragments extracted
 			m = 10000,		#number of derivations to sample/enumerate
-			estimator = "dop1", # choices: dop1, ewe, shortest, sl-dop[-simple]
-			sample=False, both=False,
+			estimator = "dop1", # choices: dop1, ewe
+			objective = "mpp", # choices: mpp, mpd, shortest, sl-dop[-simple]
+			# NB: w/shortest derivation, estimator only affects tie breaking.
+			sample=False, kbest=True,
 			iterate=False, #for double dop, whether to include
 					#fragments of fragments
 			complement=False, #for double dop, whether to include fragments
@@ -1028,9 +1012,11 @@ def testmain():
 					#fragments of fragments
 			complement=False, #for double dop, whether to include fragments
 					#that are the complement of the extracted fragments
-			sample=False, both=False,
+			sample=False, kbest=True,
 			m = 10000,		#number of derivations to sample/enumerate
-			estimator = "ewe", # choices: dop1, ewe, shortest, sl-dop[-simple]
+			estimator = "ewe", # choices: dop1, ewe
+			objective = "mpp", # choices: mpp, mpd, shortest, sl-dop[-simple]
+			# NB: w/shortest derivation, estimator only affects tie breaking.
 			sldop_n=7,
 			neverblockre=None, #do not prune nodes with label that match regex
 		)],

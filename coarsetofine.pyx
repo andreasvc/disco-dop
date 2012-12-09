@@ -256,7 +256,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	print " C O A R S E ",
 	p, start, _ = parse(sent, coarse, start=coarse.toid['ROOT'], tags=tags)
 	if start:
-		mpp, _ = marginalize(p, start, coarse)
+		mpp, _ = marginalize("mpp", p, start, coarse, 10)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)
@@ -293,7 +293,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	pp, start, _ = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
 		whitelist=l, splitprune=split, markorigin=True)
 	if start:
-		mpp, _ = marginalize(pp, start, fine)
+		mpp, _ = marginalize("mpp", pp, start, fine, 10)
 		for t in mpp:
 			print exp(-mpp[t]),
 			t = Tree.parse(t, parse_leaf=int)

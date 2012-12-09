@@ -27,8 +27,8 @@ dict(
 	complement=False, #for double dop, whether to include fragments which form
 			#the complement of the maximal recurring fragments extracted
 	m = 10000, #number of derivations to sample/enumerate
-	sample=False, both=False, # whether to use sampling during marginalization
-	estimator="dop1", # choices: dop1, ewe, shortest, sl-dop[-simple]
+	sample=False, kbest=True, #use sampling and/or kbest during marginalization
+	estimator="dop1", #choices: dop1, ewe, shortest, sl-dop[-simple]
 )],
 # corpus options
 corpusfmt="export", # choices: export, bracket, discbracket

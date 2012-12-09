@@ -95,7 +95,7 @@ def main():
 	parsesreader = readers[opts.get('--parsesfmt', 'export')]
 	gold = goldreader(*splitpath(goldfile), encoding=goldencoding)
 	parses = parsesreader(*splitpath(parsesfile), encoding=parsesencoding)
-	doeval(gold.parsed_sents(),
+	print doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),
 			parses.tagged_sents(),
@@ -268,10 +268,11 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 
 	breakdowns(param, goldb40, candb40, goldpos40, candpos40, goldbcat40,
 			candbcat40, maxlenseen)
-	summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
-			exact, la, dicenoms, dicedenoms, golddep, canddep,
+	msg = summary(param, goldb, candb, goldpos, candpos, sentcount,
+			maxlenseen, exact, la, dicenoms, dicedenoms, golddep, canddep,
 			goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
 			exact40, la40, dicenoms40, dicedenoms40, golddep40, canddep40)
+	return msg
 
 def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		maxlenseen):
@@ -339,92 +340,95 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 					print "       %s %7d" % (
 						"/".join(mismatch).rjust(12), wrong[mismatch]),
 				print
+		print
 
 def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		exact, la, dicenoms, dicedenoms, golddep, canddep,
 		goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
 		exact40, la40, dicenoms40, dicedenoms40, golddep40, canddep40):
-	""" Print overview with scores for all sentences. """
+	""" Return overview with scores for all sentences. """
 	discbrackets = sum(1 for n, (a, b) in candb.elements()
 			if b != set(range(min(b), max(b)+1)))
 	gdiscbrackets = sum(1 for n, (a, b) in goldb.elements()
 			if b != set(range(min(b), max(b)+1)))
 
 	if maxlenseen <= param["CUTOFF_LEN"]:
-		print "\n%s" % " Summary (ALL) ".center(35, '_')
-		print "number of sentences:       %6d" % (sentcount)
-		print "longest sentence:          %6d" % (maxlenseen)
+		msg = ["%s" % " Summary (ALL) ".center(35, '_'),
+			"number of sentences:       %6d" % (sentcount),
+			"longest sentence:          %6d" % (maxlenseen)]
 		if gdiscbrackets or discbrackets:
-			print "gold brackets (disc.):     %6d (%d)" % (
-					len(goldb), gdiscbrackets)
-			print "cand. brackets (disc.):    %6d (%d)" % (
-					len(candb), discbrackets)
+			msg.extend(["gold brackets (disc.):     %6d (%d)" % (
+					len(goldb), gdiscbrackets),
+				"cand. brackets (disc.):    %6d (%d)" % (
+					len(candb), discbrackets)])
 		else:
-			print "gold brackets:             %6d" % len(goldb)
-			print "cand. brackets:            %6d" % len(candb)
-		print "labeled recall:            %s" % (
-				nozerodiv(lambda: recall(goldb, candb)))
-		print "labeled precision:         %s" % (
-				nozerodiv(lambda: precision(goldb, candb)))
-		print "labeled f-measure:         %s" % (
-				nozerodiv(lambda: f_measure(goldb, candb)))
-		print "exact match:               %s" % (
-				nozerodiv(lambda: exact / sentcount))
-		print "leaf-ancestor:             %s" % (
-				nozerodiv(lambda: mean(la)))
+			msg.extend(["gold brackets:             %6d" % len(goldb),
+				"cand. brackets:            %6d" % len(candb)])
+		msg.extend([
+				"labeled recall:            %s" % (
+					nozerodiv(lambda: recall(goldb, candb))),
+				"labeled precision:         %s" % (
+					nozerodiv(lambda: precision(goldb, candb))),
+				"labeled f-measure:         %s" % (
+					nozerodiv(lambda: f_measure(goldb, candb))),
+				"exact match:               %s" % (
+					nozerodiv(lambda: exact / sentcount)),
+				"leaf-ancestor:             %s" % (
+					nozerodiv(lambda: mean(la)))])
 		if param["TED"]:
-			print "tree-dist (Dice micro avg) %s" % (
-					nozerodiv(lambda: 1 - dicenoms / float(dicedenoms)))
+			msg.append("tree-dist (Dice micro avg) %s" % (
+					nozerodiv(lambda: 1 - dicenoms / float(dicedenoms))))
 		if param["DEP"]:
-			print "unlabeled dependencies:    %s" % (
-					nozerodiv(lambda: accuracy(golddep, canddep)))
-		print "tagging accuracy:          %s" % (
-				nozerodiv(lambda: accuracy(goldpos, candpos)))
-		return
+			msg.append("unlabeled dependencies:    %s" % (
+					nozerodiv(lambda: accuracy(golddep, canddep))))
+		msg.append("tagging accuracy:          %s" % (
+				nozerodiv(lambda: accuracy(goldpos, candpos))))
+		return "\n".join(msg)
 
 	discbrackets40 = sum(1 for n, (a, b) in candb40.elements()
 			if b != set(range(min(b), max(b)+1)))
 	gdiscbrackets40 = sum(1 for n, (a, b) in goldb40.elements()
 			if b != set(range(min(b), max(b)+1)))
-	print "\n%s <= %d ____ ALL" % (
-			" Summary ".center(29, "_"), param["CUTOFF_LEN"])
-	print "number of sentences:       %6d     %6d" % (sentcount40, sentcount)
-	print "longest sentence:          %6d     %6d" % (maxlenseen40, maxlenseen)
-	print "gold brackets:             %6d     %6d" % (len(goldb40), len(goldb))
-	print "cand. brackets:            %6d     %6d" % (len(candb40), len(candb))
+	msg = ["%s <= %d ______ ALL" % (
+			" Summary ".center(27, "_"), param["CUTOFF_LEN"]),
+		"number of sentences:       %6d     %6d" % (sentcount40, sentcount),
+		"longest sentence:          %6d     %6d" % (maxlenseen40, maxlenseen),
+		"gold brackets:             %6d     %6d" % (len(goldb40), len(goldb)),
+		"cand. brackets:            %6d     %6d" % (len(candb40), len(candb))]
 	if gdiscbrackets or discbrackets:
-		print "disc. gold brackets:       %6d     %6d" % (
-				gdiscbrackets40, gdiscbrackets)
-		print "disc. cand. brackets:      %6d     %6d" % (
-				discbrackets40, discbrackets)
-	print "labeled recall:            %s     %s" % (
+		msg.extend(["disc. gold brackets:       %6d     %6d" % (
+				gdiscbrackets40, gdiscbrackets),
+				"disc. cand. brackets:      %6d     %6d" % (
+				discbrackets40, discbrackets)])
+	msg.extend(["labeled recall:            %s     %s" % (
 			nozerodiv(lambda: recall(goldb40, candb40)),
-			nozerodiv(lambda: recall(goldb, candb)))
-	print "labeled precision:         %s     %s" % (
+			nozerodiv(lambda: recall(goldb, candb))),
+		"labeled precision:         %s     %s" % (
 			nozerodiv(lambda: precision(goldb40, candb40)),
-			nozerodiv(lambda: precision(goldb, candb)))
-	print "labeled f-measure:         %s     %s" % (
+			nozerodiv(lambda: precision(goldb, candb))),
+		"labeled f-measure:         %s     %s" % (
 			nozerodiv(lambda: f_measure(goldb40, candb40)),
-			nozerodiv(lambda: f_measure(goldb, candb)))
-	print "exact match:               %s     %s" % (
+			nozerodiv(lambda: f_measure(goldb, candb))),
+		"exact match:               %s     %s" % (
 			nozerodiv(lambda: exact40 / sentcount40),
-			nozerodiv(lambda: exact / sentcount))
-	print "leaf-ancestor:             %s     %s" % (
+			nozerodiv(lambda: exact / sentcount)),
+		"leaf-ancestor:             %s     %s" % (
 			nozerodiv(lambda: mean(la40)),
-			nozerodiv(lambda: mean(la)))
+			nozerodiv(lambda: mean(la)))])
 	if param["TED"]:
-		print "tree-dist (Dice micro avg) %s     %s" % (
+		msg.append("tree-dist (Dice micro avg) %s     %s" % (
 			nozerodiv(lambda: (1 - dicenoms40 / float(dicedenoms40))),
-			nozerodiv(lambda: (1 - dicenoms / float(dicedenoms))))
+			nozerodiv(lambda: (1 - dicenoms / float(dicedenoms)))))
 	if param["DEP"]:
-		print "unlabeled dependencies:    %s     %s  (%d / %d)" % (
+		msg.append("unlabeled dependencies:    %s     %s  (%d / %d)" % (
 				nozerodiv(lambda: accuracy(golddep40, canddep40)),
 				nozerodiv(lambda: accuracy(golddep, canddep)),
 				len(filter(lambda (a, b): a ==b, zip(golddep, canddep))),
-				len(golddep))
-	print "tagging accuracy:          %s     %s" % (
+				len(golddep)))
+	msg.append("tagging accuracy:          %s     %s" % (
 			nozerodiv(lambda: accuracy(goldpos40, candpos40)),
-			nozerodiv(lambda: accuracy(goldpos, candpos)))
+			nozerodiv(lambda: accuracy(goldpos, candpos))))
+	return "\n".join(msg)
 
 def readparam(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
