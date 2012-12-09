@@ -449,7 +449,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	bitsets = [newfragments[a] for a in newkeys]
 	countchunk = int(math.ceil(len(bitsets) / float(numproc)))
 	if countchunk == 0:
-		return newkeys, counts
+		return newkeys, []
 	work = range(0, len(bitsets), countchunk)
 	work = [(n, len(work), bitsets[a:a + countchunk])
 			for n, a in enumerate(work)]

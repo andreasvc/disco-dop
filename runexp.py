@@ -7,7 +7,7 @@ from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import imap, izip_longest
 from operator import itemgetter
 from subprocess import Popen, PIPE
-from math import exp
+from math import exp, log
 from nltk import Tree
 from nltk.metrics import accuracy
 import numpy as np
@@ -289,7 +289,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 					grammar, backtransform = doubledop(fragments)
 				stages[n].backtransform = backtransform
 				if stage.objective in ("shortest", "sl-dop", "sl-dop-simple"):
-					dopshortest = [(r, log(0.5)) for r, _ in grammar]
+					secondarymodel = [(r, log(0.5)) for r, _ in grammar]
 					if stage.objective == "shortest":
 						grammar, secondarymodel = secondarymodel, grammar
 					stages[n].secondarymodel = Grammar(secondarymodel)
