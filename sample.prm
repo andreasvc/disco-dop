@@ -29,6 +29,8 @@ dict(
 	m = 10000, #number of derivations to sample/enumerate
 	sample=False, kbest=True, #use sampling and/or kbest during marginalization
 	estimator="dop1", #choices: dop1, ewe, shortest, sl-dop[-simple]
+	objective = "mpp", # choices: mpp, mpd, shortest, sl-dop[-simple]
+			# NB: w/shortest derivation, estimator only affects tie breaking.
 )],
 # corpus options
 corpusfmt="export", # choices: export, bracket, discbracket
