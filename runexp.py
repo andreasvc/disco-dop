@@ -272,7 +272,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		assert n > 0 or not stage.prune, (
 				"need previous stage to prune, but this stage is first.")
 		if stage.dop:
-			stages[n].backtransform = None
+			stages[n].backtransform = stages[n].secondarymodel = None
 			assert stage.estimator in ("dop1", "ewe")
 			assert stage.objective in ("mpp", "mpd", "shortest",
 					"sl-dop", "sl-dop-simple")
@@ -288,11 +288,15 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				else:
 					grammar, backtransform = doubledop(fragments)
 				stages[n].backtransform = backtransform
-				if stage.objective in ("shortest", "sl-dop", "sl-dop-simple"):
-					secondarymodel = [(r, log(0.5)) for r, _ in grammar]
-					if stage.objective == "shortest":
-						grammar, secondarymodel = secondarymodel, grammar
-					stages[n].secondarymodel = Grammar(secondarymodel)
+				if stage.objective == "shortest":
+					# use RFE for tie breaking of shortest derivations
+					# Bod (2000) uses the ranks of subtree frequencies for each
+					# root node.
+					stages[n].secondarymodel = dict(grammar)
+					grammar = [(r, log(0.5)) for r, _ in grammar]
+				elif stage.objective.startswith("sl-dop"):
+					stages[n].secondarymodel = dict(
+							(r, log(0.5)) for r, _ in grammar)
 			elif stage.objective == "shortest": # dopreduction from here on
 				# the secondary model is used to resolve ties
 				# for the shortest derivation
@@ -548,12 +552,11 @@ def worker(args):
 			if stage.dop:
 				begindisamb = time.clock()
 				parsetrees, msg1 = marginalize(stage.objective, chart, start,
-						stage.grammar, stage.m,
-						sample=stage.sample, kbest=stage.kbest,
+						stage.grammar, stage.m, sample=stage.sample,
+						kbest=stage.kbest, sent=sent, tags=d.tags,
 						secondarymodel=stage.secondarymodel,
-						sent=sent, tags=d.tags, sldop_n=stage.sldop_n,
-						backtransform=stage.backtransform,
-						newdd=stage.newdd)
+						sldop_n=stage.sldop_n,
+						backtransform=stage.backtransform, newdd=stage.newdd)
 				resultstr, prob = max(parsetrees.iteritems(), key=itemgetter(1))
 				msg += "disambiguation: %s, %gs\n\t" % (
 						msg1, time.clock() - begindisamb)

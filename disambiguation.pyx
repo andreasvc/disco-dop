@@ -32,14 +32,14 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		dict backtransform=None, bint newdd=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
+	cdef bint mpd = method == "mpd"
+	cdef bint shortest = method == "shortest"
 	cdef Entry entry
 	cdef dict parsetrees = <dict>defaultdict(float)
 	cdef list derivations = [], entries
-	cdef str treestr, deriv, debin = "" if newdd else "}<"
+	cdef str treestr, deriv, debin = None if newdd or shortest else "}<"
 	cdef double prob, maxprob
 	cdef int m
-	cdef bint shortest = method == "shortest"
-	cdef bint mpd = method == "mpd"
 
 	assert kbest or sample
 	if kbest:
@@ -52,18 +52,19 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		derivations.extend(getsamples(chart, start, n, grammar.tolabel, debin))
 
 	if method == "sl-dop":
-		assert backtransform is None
-		return sldop(derivations, chart, start, sent, tags, grammar,
+		assert backtransform is None, "sl-dop not implemented for double-dop"
+		assert not isinstance(start, CFGChartItem), (
+				"sl-dop not implemented for PCFG charts.")
+		return sldop(dict(derivations), chart, start, sent, tags, grammar,
 				secondarymodel, n, sldop_n, backtransform)
 	elif method == "sl-dop-simple":
 		assert not newdd, "%s not implemented for new double dop" % method
-		return sldop_simple(derivations, grammar, n, sldop_n, backtransform)
+		return sldop_simple(dict(derivations), n, sldop_n, backtransform)
 	elif method == "shortest":
-		assert backtransform is None, (
-				"shortest derivation not implemented for double dop.")
 		# filter out all derivations which are not shortest
-		_, maxprob = min(derivations, key=itemgetter(1))
-		derivations = [(a, b) for a, b in derivations if b == maxprob]
+		if derivations:
+			_, maxprob = min(derivations, key=itemgetter(1))
+			derivations = [(a, b) for a, b in derivations if b == maxprob]
 
 	if newdd:
 		if isinstance(start, CFGChartItem):
@@ -81,22 +82,24 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			else:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr] += exp(-prob)
-				#if treestr in parsetrees: parsetrees[treestr].append(-prob)
-				#else: parsetrees[treestr] = [-prob]
+				#if treestr in parsetrees:
+				#	parsetrees[treestr].append(-prob)
+				#else:
+				#	parsetrees[treestr] = [-prob]
 	else: #DOP reduction / old double dop method
 		for deriv, prob in derivations:
-			if shortest and backtransform is None:
+			if shortest:
 				# for purposes of tie breaking, calculate the derivation
 				# probability in a different model. because we don't keep track
 				# of which rules have been used, read off the rules from the
 				# derivation ...
-				prob = -fsum([secondarymodel[r] for r, _ in induce_plcfrs(
-						[Tree.parse(deriv, parse_leaf=int)], [sent])])
-			elif shortest and backtransform is not None:
-				# number of fragments is number of rules minus ones
-				# introduced for lexical items & disambiguation.
-				prob = 0.5 ** (treestr.count("(") - treestr.count("@")
-						- treestr.count("#"))
+				tree = Tree.parse(deriv, parse_leaf=int)
+				prob = -sum([secondarymodel.get(r, 0.0) for r, _
+					in induce_plcfrs([tree], [[w for w, _ in sent]])])
+				if backtransform is not None:
+					# tie breaking relies on binarized productions,
+					# to recover derivation we need to unbinarize
+					deriv = unbinarize(tree, childChar="}").pprint(margin=9999)
 			if backtransform is None:
 				treestr = removeids.sub("@" if mpd else "", deriv)
 			else:
@@ -104,8 +107,10 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			if backtransform is None or not mpd:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr] += exp(-prob)
-				#if treestr in parsetrees: parsetrees[treestr].append(-prob)
-				#else: parsetrees[treestr] = [-prob]
+				#if treestr in parsetrees:
+				#	parsetrees[treestr].append(-prob)
+				#else:
+				#	parsetrees[treestr] = [-prob]
 			else:
 				if exp(-prob) > parsetrees[treestr]:
 					parsetrees[treestr] = exp(-prob)
@@ -121,26 +126,29 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			len(entries if newdd else derivations), len(parsetrees))
 	return parsetrees, msg
 
-cdef sldop(derivations, chart, start, sent, tags, dopgrammar, secondarymodel,
-		m, sldop_n, backtransform):
+cdef sldop(dict derivations, chart, ChartItem start, list sent, bint tags,
+		Grammar dopgrammar, Grammar secondarymodel, int m, int sldop_n,
+		dict backtransform):
 	""" `proper' method for sl-dop. parses sentence once more to find shortest
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees. Returns the first result of the intersection of the
 	most probable parse trees and shortest derivations.
 	NB: doesn't seem to work so well, so may contain a subtle bug.
+		should be rewritten to support PCFG charts, double-dop, etc.
 	NB2: assumes ROOT is the top node."""
 	cdef ChartItem item
 	cdef FatChartItem fitem
-	derivations = dict(derivations)
-	# sum over derivations to get parse trees
-	idsremoved = defaultdict(set)
+	# collect derivations for each parse tree
+	derivsfortree = defaultdict(set)
 	for deriv in derivations:
 		if backtransform is None:
-			idsremoved[removeids.sub("", deriv)].add(deriv)
+			derivsfortree[removeids.sub("", deriv)].add(deriv)
 		else:
 			tree = recoverfragments(deriv, backtransform)
-	mpp1 = dict([(tt, sumderivs(ts, derivations))
-					for tt, ts in idsremoved.iteritems()])
+	# sum over derivations to get parse trees
+	parsetreeprob = {}
+	for tree, derivs in derivsfortree.iteritems():
+		parsetreeprob[tree] = sum([exp(-derivations[d]) for d in derivs])
 
 	# use getmapping and prunechart here instead of manually built whitelist
 	# prunechart(chart, n, ...)
@@ -149,7 +157,7 @@ cdef sldop(derivations, chart, start, sent, tags, dopgrammar, secondarymodel,
 	whitelist = [{} for a in secondarymodel.toid]
 	for a in chart:
 		whitelist[(<ChartItem>a).label][a] = infinity
-	for tt in nlargest(sldop_n, mpp1, key=mpp1.get):
+	for tt in nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get):
 		for n in Tree(tt).subtrees():
 			if len(sent) < sizeof(ULLong) * 8:
 				item = SmallChartItem(0, sum([1L << int(x)
@@ -163,8 +171,8 @@ cdef sldop(derivations, chart, start, sent, tags, dopgrammar, secondarymodel,
 	for label, n in secondarymodel.toid.items():
 		whitelist[n] = whitelist[secondarymodel.toid[label.split("@")[0]]]
 	mpp2 = {}
-	for tt in nlargest(sldop_n, mpp1, key=mpp1.get):
-		mpp2[tt] = mpp1[tt]
+	for tt in nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get):
+		mpp2[tt] = parsetreeprob[tt]
 
 	words = [a[0] for a in sent]
 	tagsornil = [a[1] for a in sent] if tags else []
@@ -176,52 +184,47 @@ cdef sldop(derivations, chart, start, sent, tags, dopgrammar, secondarymodel,
 	else:
 		shortestderivations = []
 		logging.warning("shortest derivation parsing failed") # error?
-	mpp = [max(mpp2.items(), key=itemgetter(1))]
+	result = dict([max(mpp2.items(), key=itemgetter(1))])
 	for deriv, s in shortestderivations:
 		tt = removeids.sub("", deriv)
 		if tt in mpp2:
-			mpp = [(tt, (s / log(0.5), mpp2[tt]))]
+			result = dict([(tt, (s / log(0.5), mpp2[tt]))])
 			break
 	else:
 		logging.warning("no matching derivation found") # error?
 	msg = "(%d derivations, %d of %d parsetrees)" % (
-		len(derivations), min(sldop_n, len(mpp1)), len(mpp1))
-	return dict(mpp), msg
+		len(derivations), min(sldop_n, len(parsetreeprob)), len(parsetreeprob))
+	return result, msg
 
-cdef sldop_simple(derivations, dopgrammar, m, sldop_n, backtransform):
+cdef sldop_simple(dict derivations, int m, int sldop_n, dict backtransform):
 	""" simple sl-dop method; estimates shortest derivation directly from
 	number of addressed nodes in the k-best derivations. After selecting the n
 	best parse trees, the one with the shortest derivation is returned."""
-	# sum over derivations to get parse trees
-	parsetrees = defaultdict(set)
-	for deriv, _ in derivations:
+	derivsfortree = defaultdict(set)
+	# collect derivations for each parse tree
+	for deriv in derivations:
 		if backtransform is None:
 			tree = removeids.sub("", deriv)
 		else:
 			tree = recoverfragments(deriv, backtransform)
-		parsetrees[tree].add(deriv)
-	mpp1 = dict([(tt, sumderivs(ts, dict(derivations)))
-					for tt, ts in parsetrees.items()])
+		derivsfortree[tree].add(deriv)
+
+	# sum over derivations to get parse trees
+	parsetreeprob = {}
+	for tree, derivs in derivsfortree.iteritems():
+		parsetreeprob[tree] = sum([exp(-derivations[d]) for d in derivs])
+	selectedtrees = nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get)
 
 	# the number of fragments used is the number of
 	# nodes (open parens), minus the number of interior
 	# (addressed) nodes.
-	mpp = [(tt, (-minunaddressed(tt, parsetrees), mpp1[tt]))
-				for tt in nlargest(sldop_n, mpp1, key=mpp1.get)]
+	result = dict([(tree, (-min([deriv.count("(") - (
+			deriv.count("@") + deriv.count("(#"))
+		for deriv in derivsfortree[tree]]), parsetreeprob[tree]))
+				for tree in selectedtrees])
 	msg = "(%d derivations, %d of %d parsetrees)" % (
-			len(derivations), len(mpp), len(mpp1))
-	return dict(mpp), msg
-
-cdef inline double sumderivs(ts, derivations):
-	cdef double result = 0.0
-	for t in ts: result += exp(-derivations[t])
-	return result
-	#return fsum([exp(-derivations[t]) for t in ts])
-	#return sum([exp(-derivations[t]) for t in ts])
-
-cdef inline int minunaddressed(tt, idsremoved):
-	return min([t.count("(") - t.count("@") - t.count("#")
-			for t in idsremoved[tt]])
+			len(derivations), len(result), len(parsetreeprob))
+	return result, msg
 
 cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 		str debin):
@@ -249,13 +252,15 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 	return tree, edge.rule.prob + sum([b for _, b in children])
 
 def getsamples(chart, start, n, tolabel, debin=None):
+	""" Samples n derivations from a chart. """
 	cdef LCFRSEdge edge
 	cdef dict tables = {}, chartcopy = {}
 	for item in chart:
 		#FIXME: work w/inside prob right?
 		chartcopy[item] = sorted(chart[item])
 		#chart[item].sort(key=attrgetter('prob'))
-		tables[item] = []; prev = 0.0
+		tables[item] = []
+		prev = 0.0
 		minprob = (<LCFRSEdge>min(chart[item])).inside
 		for edge in chartcopy[item]:
 			prev += exp(-minprob - edge.inside)
@@ -268,49 +273,13 @@ def getsamples(chart, start, n, tolabel, debin=None):
 cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
 	cdef Edge edge
 	cdef CFGChartItem tmp
+	# Ask for at least 10 derivations because unary cycles.
 	derivations, _ = lazykbest(chart, start, 10, tolabel)
 	return derivations[0]
-	# FIXME: these can go into an infinite loop with unary cycles:
-	#if isinstance(start, CFGChartItem):
-	#	tmp = start
-	#	edge = min(chart[tmp.start][tmp.end][tmp.label])
-	#	return getviterbicfg(chart, tmp.label, tmp.start, tmp.end,
-	#		tolabel), edge.inside
-	#else:
-	#	edge = min(chart[start])
-	#	return getviterbi(chart, start, tolabel), edge.inside
-
-cdef getviterbi(dict chart, ChartItem start, dict tolabel):
-	cdef LCFRSEdge edge = min(chart[start])
-	if edge.right.label: # binary
-		return "(%s %s %s)" % (tolabel[start.label],
-				getviterbi(chart, edge.left, tolabel),
-				getviterbi(chart, edge.right, tolabel))
-	elif edge.left.label: # unary
-		return "(%s %s)" % (tolabel[start.label],
-				getviterbi(chart, edge.left, tolabel))
-	else: # terminal
-		return "(%s %d)" % (tolabel[start.label], edge.left.lexidx())
-
-cdef getviterbicfg(list chart, UInt label, UChar start, UChar end,
-		dict tolabel):
-	cdef CFGEdge edge = min(chart[start][end][label])
-	if edge.rule is NULL: # terminal
-		return "(%s %d)" % (tolabel[label], start)
-	elif edge.rule.rhs2: # binary
-		return "(%s %s %s)" % (tolabel[label],
-					getviterbicfg(chart, edge.rule.rhs1,
-						start, edge.mid, tolabel),
-					getviterbicfg(chart, edge.rule.rhs2,
-						edge.mid, end, tolabel))
-	elif edge.rule.rhs1: # unary
-		return "(%s %s)" % (tolabel[label],
-				getviterbicfg(chart, edge.rule.rhs1, start, edge.mid, tolabel))
-	raise ValueError
-
 
 def repl(d):
-	def replfun(x): return " %d" % d[int(x.group(1))]
+	def replfun(x):
+		return " %d" % d[int(x.group(1))]
 	return replfun
 cpdef recoverfragments(derivation, dict backtransform):
 	""" Reconstruct a DOP derivation from a DOP derivation with
@@ -332,7 +301,8 @@ cpdef recoverfragments(derivation, dict backtransform):
 	# tokenize tree structure into direct children
 	for n, a in enumerate(derivation):
 		if a == '(':
-			if parens == 1: start = n
+			if parens == 1:
+				start = n
 			parens += 1
 		elif a == ')':
 			parens -= 1
@@ -348,7 +318,8 @@ cpdef recoverfragments(derivation, dict backtransform):
 		childheads = [" ".join(map(str, a)) for a in childintheads]
 		prod = "%s %s)" % (derivation[:derivation.index(" ")],
 				" ".join(["(%s %s)" % a for a in zip(childlabels, childheads)]))
-	else: prod = derivation
+	else:
+		prod = derivation
 
 	#renumber the ranges to canonical form
 	leafmap = dict([(b, n) for n, a in enumerate(childleaves) for b in a])
@@ -362,16 +333,19 @@ cpdef recoverfragments(derivation, dict backtransform):
 			n += 1
 			prevparent = leafmap[a]
 			leafmap[a] = n
-		else: del leafmap[a]
+		else:
+			del leafmap[a]
 		prev = a
 
 	rprod = termsre.sub(repl(leafmap), prod)
 	leafmap = dict(zip(leafmap.values(), leafmap.keys()))
 	# fetch the actual fragment corresponding to this production
-	try: result = backtransform[rprod] #, rprod)
+	try:
+		result = backtransform[rprod] #, rprod)
 	except KeyError:
 		#print 'backtransform'
-		#for a in backtransform: print a
+		#for a in backtransform:
+		#	print a
 		print '\nleafmap', leafmap
 		print prod
 		print derivation
@@ -518,7 +492,8 @@ def main():
 		return x[0].replace("@", ""), x[1]
 	def f(x):
 		return x[0], exp(-x[1])
-	def maxitem(d): return max(d.iteritems(), key=itemgetter(1))
+	def maxitem(d):
+		return max(d.iteritems(), key=itemgetter(1))
 	trees = [Tree.parse(t, parse_leaf=int) for t in
 		"""(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
@@ -567,4 +542,5 @@ def main():
 	print "simple SL-DOP:\t%s %r" % e(maxitem(sldopsimple))
 	print "shortest:\t%s %r" % f(min(short.iteritems()))
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()
