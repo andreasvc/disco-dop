@@ -1051,8 +1051,7 @@ def main():
 	except (GetoptError, ValueError) as err:
 		print "error: %r\n%s" % (err, usage)
 		exit(2)
-	else:
-		opts = dict(opts)
+	opts = dict(opts)
 	assert model in ("pcfg", "plcfrs", "dopreduction", "doubledop"), (
 		"unrecognized model: %r" % model)
 	freqs = opts.get('--freqs', False)

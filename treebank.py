@@ -202,14 +202,14 @@ class DiscBracketCorpusReader(object):
 		self._parsed_sents_cache = None
 	def sents(self):
 		return OrderedDict((n, line.split("\t", 1)[1].split(" "))
-				for n, line in self.blocks())
+				for n, line in self.blocks().iteritems())
 	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
 		return OrderedDict((n,
 				zip(line.split("\t", 1)[1].split(" "),
 				map(itemgetter(1), sorted(Tree.parse(line.split("\t", 1)[0],
 					parse_leaf=int).pos()))))
-				for n, line in self.blocks())
+				for n, line in self.blocks().iteritems())
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = OrderedDict(enumerate(
@@ -237,7 +237,7 @@ class DiscBracketCorpusReader(object):
 		if self.unfold:
 			result = unfold(result)
 		if self.headrules:
-			for node in result.subtrees():
+			for node in result.subtrees(lambda n: isinstance(n[0], Tree)):
 				sethead(headfinder(node, self.headrules))
 				headorder(node, self.headfinal, self.reverse)
 		return result
@@ -310,7 +310,7 @@ class BracketCorpusReader(object):
 		if self.unfold:
 			result = unfold(result)
 		if self.headrules:
-			for node in result.subtrees():
+			for node in result.subtrees(lambda n: isinstance(n[0], Tree)):
 				headmark(headfinder(node, self.headrules))
 		if not self.functiontags:
 			stripfunctions(result)
