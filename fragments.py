@@ -63,8 +63,7 @@ def main(argv):
 	except GetoptError as err:
 		print "%s\n%s" % (err, USAGE)
 		exit(2)
-	else:
-		opts = dict(opts)
+	opts = dict(opts)
 
 	for flag in flags:
 		params[flag] = "--" + flag in opts
@@ -210,7 +209,7 @@ def main(argv):
 		logging.info("merged %d cover fragments", len(cover))
 	if params['approx'] or params['nofreq']:
 		fragments = fragments.items()
-	else:
+	elif fragments:
 		task = "indices" if params['indices'] else "counts"
 		logging.info("dividing work for exact %s", task)
 		fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))

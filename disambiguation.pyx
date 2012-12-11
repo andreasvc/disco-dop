@@ -144,7 +144,7 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, bint tags,
 		if backtransform is None:
 			derivsfortree[removeids.sub("", deriv)].add(deriv)
 		else:
-			tree = recoverfragments(deriv, backtransform)
+			derivsfortree[recoverfragments(deriv, backtransform)].add(deriv)
 	# sum over derivations to get parse trees
 	parsetreeprob = {}
 	for tree, derivs in derivsfortree.iteritems():
@@ -185,8 +185,12 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, bint tags,
 		shortestderivations = []
 		logging.warning("shortest derivation parsing failed") # error?
 	result = dict([max(mpp2.items(), key=itemgetter(1))])
+
 	for deriv, s in shortestderivations:
-		tt = removeids.sub("", deriv)
+		if backtransform is None:
+			tt = removeids.sub("", deriv)
+		else:
+			tt = recoverfragments(deriv, backtransform)
 		if tt in mpp2:
 			result = dict([(tt, (s / log(0.5), mpp2[tt]))])
 			break
@@ -231,12 +235,10 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 	""" Samples a derivation from a chart. """
 	cdef LCFRSEdge edge
 	cdef ChartItem child
-	#NB: this does not sample properly, as it ignores the distribution of
-	#probabilities and samples uniformly instead. 
-	#edge = choice(chart[start])
 	if start.label == 0:
 		return str(start.lexidx()), 0.0
-	rnd = random() * tables[start][-1]
+	lst = tables[start]
+	rnd = random() * lst[len(lst) - 1]
 	idx = bisect_right(tables[start], rnd)
 	edge = chart[start][idx]
 	if edge.left.label == 0: # == "Epsilon":
@@ -253,26 +255,26 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 
 def getsamples(chart, start, n, tolabel, debin=None):
 	""" Samples n derivations from a chart. """
-	cdef LCFRSEdge edge
+	cdef Edge edge
 	cdef dict tables = {}, chartcopy = {}
 	for item in chart:
 		#FIXME: work w/inside prob right?
-		chartcopy[item] = sorted(chart[item])
 		#chart[item].sort(key=attrgetter('prob'))
+		chartcopy[item] = sorted(chart[item])
 		tables[item] = []
 		prev = 0.0
-		minprob = (<LCFRSEdge>min(chart[item])).inside
+		#minprob = (<Edge>chartcopy[item][0]).inside
 		for edge in chartcopy[item]:
-			prev += exp(-minprob - edge.inside)
-			tables[item].append(exp(minprob + log(prev)))
+			prev += exp(-edge.inside)
+			tables[item].append(prev)
+			#prev += exp(-minprob - edge.inside)
+			#tables[item].append(exp(minprob + log(prev)))
 	derivations = set([samplechart(chartcopy, start, tolabel, tables, debin)
 						for x in range(n)])
 	derivations.discard(None)
 	return derivations
 
 cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
-	cdef Edge edge
-	cdef CFGChartItem tmp
 	# Ask for at least 10 derivations because unary cycles.
 	derivations, _ = lazykbest(chart, start, 10, tolabel)
 	return derivations[0]

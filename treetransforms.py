@@ -1055,8 +1055,7 @@ def main():
 	except (GetoptError, ValueError) as err:
 		print "error: %r\n%s" % (err, usage)
 		exit(2)
-	else:
-		opts = dict(opts)
+	opts = dict(opts)
 
 	# read input
 	if opts.get('--inputfmt', 'export') == 'export':
