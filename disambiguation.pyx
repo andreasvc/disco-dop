@@ -36,7 +36,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 	cdef bint shortest = method == "shortest"
 	cdef Entry entry
 	cdef dict parsetrees = <dict>defaultdict(float)
-	cdef list derivations = [], entries
+	cdef list derivations = [], entries = []
 	cdef str treestr, deriv, debin = None if newdd or shortest else "}<"
 	cdef double prob, maxprob
 	cdef int m
@@ -45,6 +45,11 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 	if kbest:
 		derivations, D = lazykbest(chart, start, n, grammar.tolabel,
 				debin, derivs=not newdd)
+		if isinstance(start, CFGChartItem):
+			entries = D[(<CFGChartItem>start).start][
+					(<CFGChartItem>start).end][start.label]
+		else:
+			entries = D[start]
 	if sample:
 		assert not newdd, "sampling not implemented for new double dop."
 		assert not isinstance(start, CFGChartItem), (
@@ -62,16 +67,14 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		return sldop_simple(dict(derivations), n, sldop_n, backtransform)
 	elif method == "shortest":
 		# filter out all derivations which are not shortest
-		if derivations:
+		if newdd:
+			maxprob = min([entry.value for entry in entries])
+			entries = [entry for entry in entries if entry.value == maxprob]
+		elif derivations:
 			_, maxprob = min(derivations, key=itemgetter(1))
 			derivations = [(a, b) for a, b in derivations if b == maxprob]
 
 	if newdd:
-		if isinstance(start, CFGChartItem):
-			entries = D[(<CFGChartItem>start).start][
-					(<CFGChartItem>start).end][start.label]
-		else:
-			entries = D[start]
 		for entry in entries:
 			prob = entry.value
 			treestr = recoverfragments_new(entry.key, D,
@@ -79,6 +82,15 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			if mpd:
 				if exp(-prob) > parsetrees[treestr]:
 					parsetrees[treestr] = exp(-prob)
+			elif shortest:
+				deriv = getderiv(entry.key, D, chart,
+						grammar.tolabel, None)
+				tree = Tree.parse(deriv, parse_leaf=int)
+				newprob = exp(sum([secondarymodel.get(r, 0.0) for r, _
+					in induce_plcfrs([tree], [[w for w, _ in sent]])]))
+				score = (prob / log(0.5), newprob)
+				if score > parsetrees[treestr]:
+					parsetrees[treestr] = score
 			else:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr] += exp(-prob)
@@ -94,8 +106,8 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				# of which rules have been used, read off the rules from the
 				# derivation ...
 				tree = Tree.parse(deriv, parse_leaf=int)
-				prob = -sum([secondarymodel.get(r, 0.0) for r, _
-					in induce_plcfrs([tree], [[w for w, _ in sent]])])
+				newprob = exp(sum([secondarymodel.get(r, 0.0) for r, _
+					in induce_plcfrs([tree], [[w for w, _ in sent]])]))
 				if backtransform is not None:
 					# tie breaking relies on binarized productions,
 					# to recover derivation we need to unbinarize
@@ -104,16 +116,20 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				treestr = removeids.sub("@" if mpd else "", deriv)
 			else:
 				treestr = recoverfragments(deriv, backtransform)
-			if backtransform is None or not mpd:
+			if shortest:
+				score = (prob / log(0.5), newprob)
+				if score > parsetrees[treestr]:
+					parsetrees[treestr] = score
+			elif mpd and backtransform is not None:
+				if exp(-prob) > parsetrees[treestr]:
+					parsetrees[treestr] = exp(-prob)
+			else:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr] += exp(-prob)
 				#if treestr in parsetrees:
 				#	parsetrees[treestr].append(-prob)
 				#else:
 				#	parsetrees[treestr] = [-prob]
-			else:
-				if exp(-prob) > parsetrees[treestr]:
-					parsetrees[treestr] = exp(-prob)
 
 	# Adding probabilities in log space
 	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
