@@ -250,7 +250,7 @@ cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
 		tree = " ".join([a for a, _ in children])
 	else:
 		tree = "(%s %s)" % (tolabel[start.label],
-								" ".join([a for a,b in children]))
+								" ".join([a for a, _ in children]))
 	return tree, edge.rule.prob + sum([b for _, b in children])
 
 def getsamples(chart, start, n, tolabel, debin=None):
@@ -342,17 +342,7 @@ cpdef recoverfragments(derivation, dict backtransform):
 	rprod = termsre.sub(repl(leafmap), prod)
 	leafmap = dict(zip(leafmap.values(), leafmap.keys()))
 	# fetch the actual fragment corresponding to this production
-	try:
-		result = backtransform[rprod] #, rprod)
-	except KeyError:
-		#print 'backtransform'
-		#for a in backtransform:
-		#	print a
-		print '\nleafmap', leafmap
-		print prod
-		print derivation
-		print zip(childlabels, childheads)
-		raise
+	result = backtransform[rprod] #, rprod)
 
 	# revert renumbering
 	result = termsre.sub(repl(leafmap), result)

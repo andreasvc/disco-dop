@@ -217,7 +217,9 @@ def main(
 				for a, b in test_parsed_sents.iteritems()), gold_sents,
 				result.parsetrees, test_tagged_sents, evalparam)
 		coverage = "coverage: %s = %6.2f" % (
-				("%d / %d" % (nsent - result.noparse, nsent)).rjust(25),
+				("%d / %d" % (nsent - result.noparse, nsent)).rjust(
+				25 if any(len(a) > evalparam["CUTOFF_LEN"]
+				for a in gold_sents.itervalues()) else 14),
 				100.0 * (nsent - result.noparse) / nsent)
 		logging.info("\n".join(("", header, evalsummary, coverage)))
 
@@ -293,7 +295,13 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 					# Bod (2000) uses the ranks of subtree frequencies for each
 					# root node.
 					stages[n].secondarymodel = dict(grammar)
-					grammar = [(r, log(0.5)) for r, _ in grammar]
+					# any rule corresponding to the introduction of a fragment
+					# has a probability of 0.5, else 1.
+					grammar = [(r, log(0.5) if
+							("}" not in r[0][0]
+							and "@" not in r[0][0]
+							and r[0][0][0] != "#")
+							else 0.0) for r, _ in grammar]
 				elif stage.objective.startswith("sl-dop"):
 					stages[n].secondarymodel = dict(
 							(r, log(0.5)) for r, _ in grammar)
@@ -333,20 +341,16 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 					lines = ["%s\t%s\n" % a for a in backtransform.iteritems()]
 				gzip.open(resultdir + "/dop.backtransform.gz", "w"
 						).writelines(lines)
-				if stage.prune:
+				if n and stage.prune:
 					grammar.getmapping(stages[n-1].grammar,
-						striplabelre=re.compile("(?:_[0-9]+)?(?:@.+)?$")
-							if stages[n-1].split and not stage.split
-							else re.compile("@.+$"),
+						striplabelre=re.compile("@.+$"),
 						neverblockre=re.compile(r'^#[0-9]+|.+}<'),
 						# + stage.neverblockre?
 						splitprune=stage.splitprune and stages[n-1].split,
 						markorigin=stages[n-1].markorigin)
-			elif stage.prune:
+			elif n and stage.prune: # dop reduction
 				grammar.getmapping(stages[n-1].grammar,
-					striplabelre=re.compile("(?:_[0-9]+)?(?:@[-0-9]+)?$")
-						if stages[n-1].split and not stage.split
-						else re.compile("@[-0-9]+$"),
+					striplabelre=re.compile("@[-0-9]+$"),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n-1].split,
@@ -363,9 +367,9 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 						dump="%s/pcdist.txt" % resultdir))
 			grammar = Grammar(grammar)
 			grammar.testgrammar()
-			if stage.prune:
+			if n and stage.prune:
 				grammar.getmapping(stages[n-1].grammar,
-					striplabelre=None, #FIXME: re.compile(r"_[0-9]+$"),
+					striplabelre=None,
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n-1].split,

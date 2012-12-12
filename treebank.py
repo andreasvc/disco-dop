@@ -8,6 +8,7 @@ from glob import glob
 import re, sys, codecs
 
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
+TERMINALSRE = re.compile(r" ([^ )]+)\)")
 
 #def negratransformrations(trees,
 #	headrules=None, headfinal=False, headreverse=False, dounfold=False,
@@ -201,13 +202,13 @@ class DiscBracketCorpusReader(object):
 		self._filenames = glob(path.join(root, fileids))
 		self._parsed_sents_cache = None
 	def sents(self):
-		return OrderedDict((n, line.split("\t", 1)[1].split(" "))
+		return OrderedDict((n, self._word(line))
 				for n, line in self.blocks().iteritems())
 	def tagged_sents(self):
 		# for each line, zip its words & tags together in a list.
 		return OrderedDict((n,
-				zip(line.split("\t", 1)[1].split(" "),
-				map(itemgetter(1), sorted(Tree.parse(line.split("\t", 1)[0],
+				zip(self._word(line), map(itemgetter(1),
+				sorted(Tree.parse(line.split("\t", 1)[0],
 					parse_leaf=int).pos()))))
 				for n, line in self.blocks().iteritems())
 	def parsed_sents(self):
@@ -277,8 +278,7 @@ class BracketCorpusReader(object):
 		self._sents_cache = None
 	def sents(self):
 		if not self._sents_cache:
-			terminals = re.compile(r" ([^ )]+)\)")
-			self._sents_cache = OrderedDict((n, terminals.findall(tree))
+			self._sents_cache = OrderedDict((n, self._word(tree))
 				for n, tree in self.blocks().iteritems())
 		return self._sents_cache
 	def tagged_sents(self):
@@ -292,7 +292,7 @@ class BracketCorpusReader(object):
 		return self._parsed_sents_cache
 	def blocks(self):
 		""" Return a list of strings containing the raw representation of
-		trees in the treebank, with any transformations applied."""
+		trees in the treebank. """ #, with any transformations applied."""
 		return OrderedDict(enumerate(filter(None,
 			(line for filename in self._filenames
 			for line in codecs.open(filename, encoding=self._encoding))), 1))
@@ -316,7 +316,7 @@ class BracketCorpusReader(object):
 			stripfunctions(result)
 		return result
 	def _word(self, s):
-		sent = Tree(s).leaves()
+		sent = TERMINALSRE.findall(s)
 		if self.removepunct:
 			sent = [a for a in sent if a not in '.,:;\'"()?!-']
 		return sent

@@ -332,6 +332,8 @@ def workload(numtrees, mult, numproc):
 	(meaning there are more comparisons for lower n).
 	This functions returns a sequence of (start, end) intervals such that
 	the number of comparisons is approximately balanced. """
+	if numproc == 1:
+		return [(0, numtrees)]
 	# here chunk is the number of tree pairs that willl be compared
 	goal = togo = total = 0.5 * numtrees * (numtrees - 1)
 	chunk = int(math.ceil(total / (mult * numproc)))

@@ -266,19 +266,24 @@ cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
 	while i != -1:
 		if label not in chart[start][end]:
 			# this must be a terminal
-			children = " %d" % start
+			children = "%d" % start
 			break
 		rankededge = (<Entry>D[start][end][label][i]).key
 		child = getderivationcfg(rankededge, D, chart, tolabel, n + 1, debin)
-		if child == "": return ""
-		children += " %s" % child
+		if child == "":
+			return ""
+		if children:
+			children += " %s" % child
+		else:
+			children = child
 		if end == ej.end: break
 		label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs2
-		start = ej.edge.mid; end = ej.end
+		start = ej.edge.mid
+		end = ej.end
 		i = ej.right
 	if debin is not None and debin in tolabel[ej.label]:
 		return children
-	return "(%s%s)" % (tolabel[ej.label], children)
+	return "(%s %s)" % (tolabel[ej.label], children)
 # --- end CFG specific
 
 def getderiv(ej, D, chart, dict tolabel, str debin):
@@ -330,18 +335,23 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 	while i != -1:
 		if ei not in chart:
 			# this must be a terminal
-			children = " %d" % ei.lexidx()
+			children = "%d" % ei.lexidx()
 			break
 		rankededge = (<Entry>D[ei][i]).key
 		child = getderivation(rankededge, D, chart, tolabel, n + 1, debin)
-		if child == "": return ""
-		children += " %s" % child
-		if ei is ej.edge.right: break
+		if child == "":
+			return ""
+		if children:
+			children += " %s" % child
+		else:
+			children = child
+		if ei is ej.edge.right:
+			break
 		ei = ej.edge.right
 		i = ej.right
 	if debin is not None and debin in tolabel[ej.head.label]:
 		return children
-	return "(%s%s)" % (tolabel[ej.head.label], children)
+	return "(%s %s)" % (tolabel[ej.head.label], children)
 
 cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel,
 		str debin=None, bint derivs=True):

@@ -258,7 +258,10 @@ def doubledop_new(fragments, debug=False, freqs=False):
 		# & becomes key in backtransform
 		backtransform[prods[0]] = newfrag
 	if debug:
-		doubledopdump([], fragments, {}, backtransform)
+		ids = count()
+		flatfrags = [flatten_new(frag, terminals, ids)
+				for frag, terminals in fragments]
+		doubledopdump(flatfrags, fragments, {}, backtransform)
 	#sort grammar such that we have these clusters:
 	# 1. non-binarized rules or initial rules of a binarized constituent
 	# 2: non-initial binarized rules.
@@ -318,7 +321,7 @@ def doubledop(fragments, debug=False, freqs=False):
 			newflatfrag = "(%s %s)" % (label, flatfrag)
 			newflatfrag = ImmutableTree(label, [defaultrightbin(
 				addbitsets(newflatfrag)[0], "}", markfanout=True, ids=binids,
-				threshold=1)])
+				threshold=2)])
 			ambigfrags[newflatfrag] = frag, terminals
 		backtransform[flatfrag] = frag, terminals
 	if debug:
@@ -328,7 +331,7 @@ def doubledop(fragments, debug=False, freqs=False):
 	grammar.update(rule
 		for flatfrag, (frag, terminals) in zip(flatfrags, sortedfragments)
 		for rule in zip(lcfrs_productions(defaultrightbin(addbitsets(flatfrag),
-			"}", markfanout=True, ids=ids, threshold=0), terminals),
+			"}", markfanout=True, ids=ids, threshold=2), terminals),
 			chain((fragments[frag, terminals],), repeat(1))))
 	# ambiguous fragments (fragments that map to the same flattened fragment)
 	grammar.update(rule for flatfrag, (frag, terminals) in ambigfrags.iteritems()
@@ -353,7 +356,8 @@ def doubledopdump(flatfrags, fragments, newprods, backtransform):
 	print "recurring fragments:"
 	for a, b in zip(flatfrags, fragments):
 		if isinstance(a, tuple):
-			print "fragment: %s\nprod:     %s" % (b[0], a[0])
+			print "fragment: %s\nprod:     %s" % (b[0], "\n\t".join(
+				printrule(r, yf, 0) for r, yf in a[0]))
 			print "template: %s\nfreq: %2d  sent: %s\n" % (
 					a[1], fragments[b], " ".join('_' if x is None
 					else quotelabel(x) for x in b[1]))
@@ -530,15 +534,15 @@ def flatten_new(tree, sent, ids):
 		return lcfrs_productions(addbitsets(tree), sent), tree
 	# give terminals unique POS tags
 	prod = frontierorterm.sub(repl, tree)
-	# remember original order of frontiers / terminals for template
-	order = dict((x[2], "{%d}" % n)
-			for n, x in enumerate(frontierorterm.findall(prod)))
 	# remove internal nodes, reorder
 	prod = "%s %s)" % (prod[:prod.index(" ")],
 		" ".join(x[0] for x in sorted(frontierorterm.findall(prod),
 		key=lambda x: int(x[2]))))
 	prods = lcfrs_productions(defaultleftbin(addbitsets(prod), "}",
 		markfanout=True, ids=ids, threshold=2), sent)
+	# remember original order of frontiers / terminals for template
+	order = dict((x[2], "{%d}" % n)
+			for n, x in enumerate(frontierorterm.findall(prod)))
 	# mark substitution sites and ensure ascii string.
 	newtree = str(frontierorterm.sub(lambda x: order[x.group(3)], tree))
 	return prods, newtree

@@ -323,9 +323,12 @@ cdef class Grammar:
 			[self.rulesrepr(lhs) for lhs in range(1, self.nonterminals)]))
 		lexical = "\n".join(["%.2f %s => %s" % (exp(-lr.prob),
 				self.tolabel[lr.lhs], lr.word.encode('unicode-escape'))
-			for word in sorted(self.lexical) for lr in self.lexical[word]])
-		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s" % (rules, lexical,
-			", ".join("%s=%d" % a for a in sorted(self.toid.iteritems())))
+			for word in sorted(self.lexical)
+			for lr in sorted(self.lexical[word],
+			key=lambda lr: (<LexicalRule>lr).lhs)])
+		labels = ", ".join("%s=%d" % a for a in sorted(self.toid.iteritems()))
+		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s" % (
+				rules, lexical, labels)
 	def __reduce__(self):
 		return (Grammar, (self.origrules,))
 	def __dealloc__(Grammar self):
