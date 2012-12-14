@@ -9,7 +9,7 @@ from collections import defaultdict, OrderedDict
 from nltk import Tree
 from kbest import lazykbest, lazykthbest, getderiv
 from parser import parse
-from agenda cimport Entry
+from agenda cimport Entry, new_Entry
 from grammar import induce_plcfrs, rangeheads
 from treetransforms import unbinarize #, canonicalize
 from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem,\
@@ -50,11 +50,20 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					(<CFGChartItem>start).end][start.label]
 		else:
 			entries = D[start]
+	else:
+		if isinstance(start, CFGChartItem):
+			D = [[{} for right in left] for left in chart]
+		else:
+			D = {}
 	if sample:
-		assert not newdd, "sampling not implemented for new double dop."
 		assert not isinstance(start, CFGChartItem), (
 				"sampling not implemented for PCFG charts.")
-		derivations.extend(getsamples(chart, start, n, grammar.tolabel, debin))
+		derivations.extend(
+				getsamples(D, chart, start, n, grammar.tolabel, debin))
+		# filter out duplicate derivations
+		filteredderivations = dict(zip(derivations, D[start]))
+		entries[:] = filteredderivations.values()
+		derivations = filteredderivations.keys()
 
 	if method == "sl-dop":
 		assert backtransform is None, "sl-dop not implemented for double-dop"
@@ -63,8 +72,8 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		return sldop(dict(derivations), chart, start, sent, tags, grammar,
 				secondarymodel, n, sldop_n, backtransform)
 	elif method == "sl-dop-simple":
-		assert not newdd, "%s not implemented for new double dop" % method
-		return sldop_simple(dict(derivations), n, sldop_n, backtransform)
+		return sldop_simple(dict(derivations), entries, n, sldop_n,
+				D, chart, grammar, backtransform, newdd)
 	elif method == "shortest":
 		# filter out all derivations which are not shortest
 		if newdd:
@@ -216,18 +225,28 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, bint tags,
 		len(derivations), min(sldop_n, len(parsetreeprob)), len(parsetreeprob))
 	return result, msg
 
-cdef sldop_simple(dict derivations, int m, int sldop_n, dict backtransform):
+cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
+		D, chart, Grammar grammar, dict backtransform, bint newdd):
 	""" simple sl-dop method; estimates shortest derivation directly from
 	number of addressed nodes in the k-best derivations. After selecting the n
 	best parse trees, the one with the shortest derivation is returned."""
+	cdef Entry entry
 	derivsfortree = defaultdict(set)
 	# collect derivations for each parse tree
-	for deriv in derivations:
-		if backtransform is None:
+	if backtransform is None:
+		for deriv in derivations:
 			tree = removeids.sub("", deriv)
-		else:
+			derivsfortree[tree].add(deriv)
+	elif newdd:
+		for entry in entries:
+			deriv = getderiv(entry.key, D, chart, grammar.tolabel, "}<")
+			tree = recoverfragments_new(entry.key, D, grammar, backtransform)
+			derivations[deriv] = entry.value
+			derivsfortree[tree].add(deriv)
+	else:
+		for deriv in derivations:
 			tree = recoverfragments(deriv, backtransform)
-		derivsfortree[tree].add(deriv)
+			derivsfortree[tree].add(deriv)
 
 	# sum over derivations to get parse trees
 	parsetreeprob = {}
@@ -246,49 +265,52 @@ cdef sldop_simple(dict derivations, int m, int sldop_n, dict backtransform):
 			len(derivations), len(result), len(parsetreeprob))
 	return result, msg
 
-cdef samplechart(dict chart, ChartItem start, dict tolabel, dict tables,
+cdef samplechart(dict D, dict chart, ChartItem start, dict tolabel, dict tables,
 		str debin):
 	""" Samples a derivation from a chart. """
 	cdef LCFRSEdge edge
 	cdef ChartItem child
-	if start.label == 0:
-		return str(start.lexidx()), 0.0
+	cdef double prob
 	lst = tables[start]
 	rnd = random() * lst[len(lst) - 1]
-	idx = bisect_right(tables[start], rnd)
+	idx = bisect_right(lst, rnd)
 	edge = chart[start][idx]
 	if edge.left.label == 0: # == "Epsilon":
 		idx = edge.left.lexidx()
+		newedge = RankedEdge(start, edge, 0, -1)
+		D.setdefault(start, []).append(new_Entry(newedge, edge.inside, 0))
 		return "(%s %d)" % (tolabel[start.label], idx), edge.inside
-	children = [samplechart(chart, child, tolabel, tables, debin)
+	children = [samplechart(D, chart, child, tolabel, tables, debin)
 		for child in (edge.left, edge.right) if child.label]
 	if debin is not None and debin in tolabel[start.label]:
 		tree = " ".join([a for a, _ in children])
 	else:
 		tree = "(%s %s)" % (tolabel[start.label],
 								" ".join([a for a, _ in children]))
-	return tree, edge.rule.prob + sum([b for _, b in children])
+	# create an edge that has as children the edges that were just created
+	# by our recursive call
+	newedge = RankedEdge(start, edge, len(D[edge.left]) - 1,
+			(len(D[edge.right]) - 1) if edge.right.label else -1)
+	prob = edge.rule.prob + sum([b for _, b in children])
+	D.setdefault(start, []).append(new_Entry(newedge, prob, 0))
+	return tree, prob
 
-def getsamples(chart, start, n, tolabel, debin=None):
+def getsamples(D, chart, start, n, tolabel, debin=None):
 	""" Samples n derivations from a chart. """
 	cdef Edge edge
 	cdef dict tables = {}, chartcopy = {}
 	for item in chart:
 		#FIXME: work w/inside prob right?
 		#chart[item].sort(key=attrgetter('prob'))
+		# sort so that highest probability edges come first
 		chartcopy[item] = sorted(chart[item])
 		tables[item] = []
 		prev = 0.0
-		#minprob = (<Edge>chartcopy[item][0]).inside
 		for edge in chartcopy[item]:
 			prev += exp(-edge.inside)
 			tables[item].append(prev)
-			#prev += exp(-minprob - edge.inside)
-			#tables[item].append(exp(minprob + log(prev)))
-	derivations = set([samplechart(chartcopy, start, tolabel, tables, debin)
-						for x in range(n)])
-	derivations.discard(None)
-	return derivations
+	return [samplechart(<dict>D, chartcopy, start, tolabel, tables, debin)
+						for _ in range(n)]
 
 cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
 	# Ask for at least 10 derivations because unary cycles.

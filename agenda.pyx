@@ -14,11 +14,8 @@ DEF INVALID = 0
 DEF HEAP_ARITY = 4
 # 2 for binary heap, 4 for quadtree heap
 
-cdef inline Entry new_Entry(object k, object v, unsigned long c):
-	cdef Entry entry = Entry.__new__(Entry)
-	entry.key = k; entry.value = v; entry.count = c
-	return entry
-def getkey(Entry entry): return entry.key
+def getkey(Entry entry):
+	return entry.key
 
 cdef inline bint cmpfun(Entry a, Entry b):
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))

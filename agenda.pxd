@@ -9,6 +9,11 @@ cdef class Entry:
 	cdef unsigned long count
 ctypedef bint (*CmpFun)(Entry a, Entry b)
 
+cdef inline Entry new_Entry(object k, object v, unsigned long c):
+	cdef Entry entry = Entry.__new__(Entry)
+	entry.key = k; entry.value = v; entry.count = c
+	return entry
+
 @cython.final
 cdef class Agenda:
 	cdef unsigned long length, counter
