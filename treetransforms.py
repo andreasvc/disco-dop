@@ -374,7 +374,9 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=1,
 def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 		unaryChar="+"):
 	""" Restore a binarized tree to the original n-ary tree.
-	Modifies tree in-place. """
+	Modifies tree in-place.
+	NB: a malformed node such as (X|<Y> ) which is not supposed to be empty
+	will be silently discarded. """
 	# Traverse the tree-depth first keeping a pointer to the parent for
 	# modification purposes.
 	agenda = [(tree, [])]
@@ -803,11 +805,9 @@ def addfanoutmarkers(tree):
 	return tree
 
 def removefanoutmarkers(tree):
-	""" Remove fanout marks, make sure indices at leaves are integers."""
+	""" Remove fanout marks. """
 	for a in tree.subtrees(lambda x: "_" in x.node):
 		a.node = a.node.rsplit("_", 1)[0]
-	for a in tree.treepositions('leaves'):
-		tree[a] = int(tree[a])
 	return tree
 
 def postorder(tree, f=None):

@@ -572,10 +572,9 @@ def worker(args):
 				resultstr, prob = viterbiderivation(chart, start,
 						stage.grammar.tolabel)
 				msg += "p=%.4e " % exp(-prob)
-			parsetree = Tree(resultstr)
+			parsetree = Tree.parse(resultstr, parse_leaf=int)
 			if stage.split:
-				parsetree.un_chomsky_normal_form(childChar=":")
-				mergediscnodes(parsetree)
+				mergediscnodes(unbinarize(parsetree, childChar=":"))
 			saveheads(parsetree, d.tailmarker)
 			unbinarize(parsetree)
 			removefanoutmarkers(parsetree)
