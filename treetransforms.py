@@ -377,6 +377,9 @@ def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 	Modifies tree in-place.
 	NB: a malformed node such as (X|<Y> ) which is not supposed to be empty
 	will be silently discarded. """
+	# increase robustness
+	childChar += "<"
+	parentChar += "<"
 	# Traverse the tree-depth first keeping a pointer to the parent for
 	# modification purposes.
 	agenda = [(tree, [])]
@@ -390,7 +393,7 @@ def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 			if childIndex != -1:
 				nodeIndex = parent.index(node)
 				# replace node with children of node
-				parent[nodeIndex:nodeIndex+1] = node
+				parent[nodeIndex:nodeIndex + 1] = node
 			else:
 				parentIndex = node.node.find(parentChar)
 				if parentIndex != -1:
@@ -402,7 +405,7 @@ def unbinarize(tree, expandUnary=True, childChar="|", parentChar="^",
 					if unaryIndex != -1:
 						newNode = Tree(node.node[unaryIndex + 1:], node[:])
 						node.node = node.node[:unaryIndex]
-						node[0:] = [newNode]
+						node[:] = [newNode]
 				# non-binarized constituent, so move on to next parent
 				parent = node
 
