@@ -1078,6 +1078,7 @@ def main():
 	end = int(end) if end else None
 	trees = corpus.parsed_sents().values()[start:end]
 	sents = corpus.sents().values()[start:end]
+	keys = corpus.sents().keys()[start:end]
 
 	# apply transformation
 	actions = ("binarize unbinarize optimalbinarize introducepreterminals "
@@ -1113,11 +1114,13 @@ def main():
 		assert opts.get("--headrules"), (
 				"need head rules for dependency conversion")
 		headrules = readheadrules(opts.get("--headrules"))
+	else:
+		headrules = None
 	codecs.open(outfile, "w", encoding=opts.get('outputenc', 'utf-8')
 			).writelines(export(*x) for x in zip(
-				trees, sents, corpus.sents().keys()[start:end],
-				repeat(opts.get('--outputfmt', 'export'),
-				repeat(headrules))))
+				trees, sents, keys,
+				repeat(opts.get('--outputfmt', 'export')),
+				repeat(headrules)))
 
 __all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
 	"splitdiscnodes", "mergediscnodes", "optimalbinarize", "defaultrightbin",

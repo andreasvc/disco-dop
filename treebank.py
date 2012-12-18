@@ -9,6 +9,7 @@ import re, sys, codecs
 
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 TERMINALSRE = re.compile(r" ([^ )]+)\)")
+EXPORTNONTERMINAL = re.compile(r"^#[0-9]+$")
 
 #def negratransformrations(trees,
 #	headrules=None, headfinal=False, headreverse=False, dounfold=False,
@@ -118,7 +119,7 @@ class NegraCorpusReader(object):
 			results = []
 			for n, a in children[parent]:
 				# n is the index in the block to record word indices
-				if a[WORD].startswith("#"): #nonterminal
+				if EXPORTNONTERMINAL.match(a[WORD]):
 					results.append(ParentedTree(a[TAG], getchildren(a[WORD][1:],
 						children)))
 					results[-1].source = a
@@ -156,15 +157,16 @@ class NegraCorpusReader(object):
 		return new
 	def _word(self, s):
 		if self.removepunct:
-			return [a[WORD] for a in s if a[WORD][0] != "#"
+			return [a[WORD] for a in s if not EXPORTNONTERMINAL.match(a[WORD])
 				and not a[TAG].startswith("$")]
-		return [a[WORD] for a in s if a[WORD][0] != "#"]
+		return [a[WORD] for a in s if not EXPORTNONTERMINAL.match(a[WORD])]
 	def _tag(self, s):
 		if self.removepunct:
 			return [(a[WORD], a[TAG].replace("$(", "$[")) for a in s
-				if a[WORD][0] != "#" and not a[TAG].startswith("$")]
+				if not EXPORTNONTERMINAL.match(a[WORD])
+				and not a[TAG].startswith("$")]
 		return [(a[WORD], a[TAG].replace("$(", "$[")) for a in s
-				if a[WORD][0] != "#"]
+				if not EXPORTNONTERMINAL.match(a[WORD])]
 
 class DiscBracketCorpusReader(object):
 	""" A corpus reader where the phrase-structure is represented by a tree in
@@ -416,7 +418,8 @@ def readheadrules(filename):
 		if line and not line[0].startswith("%") and len(line.split()) > 2:
 			label, lr, heads = line.split(None, 2)
 			headrules.setdefault(label, []).append((lr, heads.split()))
-	headrules["ROOT"] = headrules["VROOT"]
+	if "VROOT" in headrules:
+		headrules["ROOT"] = headrules["VROOT"]
 	return headrules
 
 def headfinder(tree, headrules):
