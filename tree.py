@@ -1254,6 +1254,41 @@ class ImmutableMultiParentedTree(ImmutableTree, MultiParentedTree):
 			return # see note in Tree.__init__()
 		super(ImmutableMultiParentedTree, self).__init__(node_or_str, children)
 
+## discontinuous trees ##
+def eqtree(tree1, sent1, tree2, sent2):
+	""" Test whether two discontinuous trees are equivalent;
+	assumes canonicalized() ordering. """
+	if tree1.node != tree2.node or len(tree1) != len(tree2):
+		return False
+	for a, b in zip(tree1, tree2):
+		istree = isinstance(a, Tree)
+		if istree != isinstance(b, Tree):
+			return False
+		elif istree:
+			if not a.__eq__(b):
+				return False
+		else:
+			return sent1[a] == sent2[b]
+	return True
+
+class DiscTree(ImmutableTree):
+	""" Wrap an immutable tree with indices as leaves
+	and a sentence. """
+	def __init__(self, tree, sent):
+		super(DiscTree, self).__init__(tree.node,
+				tuple(DiscTree(a, sent) if isinstance(a, Tree) else a
+				for a in tree))
+		self.sent = sent
+	def __eq__(self, other):
+		return isinstance(other, Tree) and eqtree(self, self.sent,
+				other, other.sent)
+	def __hash__(self):
+		return hash((self.node, ) + tuple(a.__hash__()
+				if isinstance(a, Tree) else self.sent[a] for a in self))
+	def __repr__(self):
+		return "DisctTree(%r, %r)" % (
+				super(DiscTree, self).__repr__(), self.sent)
+
 ######################################################################
 ## Demonstration
 ######################################################################

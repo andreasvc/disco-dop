@@ -24,18 +24,26 @@ cdef class Item:
 				and self.lr == other.lr and self.gaps == other.gaps)
 		a = (self.state, self.length, self.lr, self.gaps)
 		b = (other.state, other.length, other.lr, other.gaps)
-		if op == 0: return a < b
-		elif op == 1: return a <= b
-		elif op == 3: return a != b
-		elif op == 4: return a > b
-		elif op == 5: return a >= b
+		if op == 0:
+			return a < b
+		elif op == 1:
+			return a <= b
+		elif op == 3:
+			return a != b
+		elif op == 4:
+			return a > b
+		elif op == 5:
+			return a >= b
 	def __repr__(Item self):
 		return "%s(%4d, %2d, %2d, %2d)" % (self.__class__.__name__,
 			self.state, self.length, self.lr, self.gaps)
 
 cdef inline Item new_Item(int state, int length, int lr, int gaps):
 	cdef Item item = Item.__new__(Item)
-	item.state = state; item.length = length; item.lr = lr; item.gaps = gaps
+	item.state = state
+	item.length = length
+	item.lr = lr
+	item.gaps = gaps
 	return item
 
 cdef inline double getoutside(np.ndarray[np.double_t, ndim=4] outside,
@@ -87,14 +95,16 @@ def simpleinside(Grammar grammar, UInt maxlen,
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.unary[I.label][i]
-			if rule.rhs1 != I.label: break
+			if rule.rhs1 != I.label:
+				break
 			elif isnan(insidescores[rule.lhs, I.vec]):
 				agenda.setifbetter(
 						new_ChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.lbinary[I.label][i]
-			if rule.rhs1 != I.label: break
+			if rule.rhs1 != I.label:
+				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (isfinite(insidescores[rule.rhs2, vec])
 					and isnan(insidescores[rule.lhs, I.vec + vec])):
@@ -103,7 +113,8 @@ def simpleinside(Grammar grammar, UInt maxlen,
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.rbinary[I.label][i]
-			if rule.rhs2 != I.label: break
+			if rule.rhs2 != I.label:
+				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (isfinite(insidescores[rule.rhs1, vec])
 					and isnan(insidescores[rule.lhs, vec + I.vec])):
@@ -130,13 +141,15 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value
-		if I.label not in insidescores: insidescores[I.label] =  {}
+		if I.label not in insidescores:
+			insidescores[I.label] =  {}
 		if x < insidescores[I.label].get(I.vec, infinity):
 			insidescores[I.label][I.vec] = x
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.unary[I.label][i]
-			if rule.rhs1 != I.label: break
+			if rule.rhs1 != I.label:
+				break
 			elif (rule.lhs not in insidescores
 				or I.vec not in insidescores[rule.lhs]):
 				agenda.setifbetter(
@@ -144,8 +157,10 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.lbinary[I.label][i]
-			if rule.rhs1 != I.label: break
-			elif rule.rhs2 not in insidescores: continue
+			if rule.rhs1 != I.label:
+				break
+			elif rule.rhs2 not in insidescores:
+				continue
 			for vec in insidescores[rule.rhs2]:
 				left = insideconcat(I.vec, vec, rule, grammar, maxlen)
 				if left and (rule.lhs not in insidescores
@@ -155,8 +170,10 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.rbinary[I.label][i]
-			if rule.rhs2 != I.label: break
-			elif rule.rhs1 not in insidescores: continue
+			if rule.rhs2 != I.label:
+				break
+			elif rule.rhs1 not in insidescores:
+				continue
 			for vec in insidescores[rule.rhs1]:
 				right = insideconcat(vec, I.vec, rule, grammar, maxlen)
 				if right and (rule.lhs not in insidescores
@@ -216,7 +233,8 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 			print "agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state])
 		totlen = I.length + I.lr + I.gaps
-		i = 0; rule = grammar.bylhs[I.state][i]
+		i = 0
+		rule = grammar.bylhs[I.state][i]
 		while rule.lhs == I.state:
 			# X -> A
 			if rule.rhs2 == 0:
@@ -225,15 +243,18 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 					agenda.setitem(
 						new_Item(rule.rhs1, I.length, I.lr, I.gaps), score)
 					outside[rule.rhs1, I.length, I.lr, I.gaps] = score
-				i += 1; rule = grammar.bylhs[I.state][i]
+				i += 1
+				rule = grammar.bylhs[I.state][i]
 				continue
 			# X -> A B
 			addgaps = addright = 0
 			stopaddright = False
 			for n in range(bitlength(rule.lengths) - 1, -1, -1):
 				if testbitint(rule.args, n):
-					if stopaddright: addgaps += 1
-					else: addright += 1
+					if stopaddright:
+						addgaps += 1
+					else:
+						addright += 1
 				elif not stopaddright:
 					stopaddright = True
 
@@ -245,7 +266,8 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 				lenB = I.length - lenA
 				insidescore = insidescores[rule.rhs2, lenB]
 				for lr in range(I.lr, I.lr + lenB + 2): #FIXME: why 2?
-					if addright == 0 and lr != I.lr: continue
+					if addright == 0 and lr != I.lr:
+						continue
 					for ga in range(leftfanout - 1, totlen + 1):
 						if (lenA + lr + ga == I.length + I.lr + I.gaps
 							and ga >= addgaps):
@@ -263,7 +285,8 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 				if not stopaddleft and testbitint(rule.args, n):
 					stopaddleft = True
 				if not testbitint(rule.args, n):
-					if stopaddleft: addgaps += 1
+					if stopaddleft:
+						addgaps += 1
 
 			stopaddright = False
 			for n in range(bitlength(rule.lengths) - 1, -1, -1):
@@ -287,17 +310,19 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 								agenda.setitem(
 									new_Item(rule.rhs2, lenA, lr, ga), score)
 								outside[rule.rhs2, lenA, lr, ga] = score
-			i += 1; rule = grammar.bylhs[I.state][i]
+			i += 1
+			rule = grammar.bylhs[I.state][i]
 		#end while rule.lhs == I.state:
 	#end while agenda.length:
 
 cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print "allocating outside matrix:",
-	print (8 * grammar.nonterminals * (maxlen+1) * (maxlen+1)
-			* (maxlen+1) / 1024**2), 'MB'
-	insidescores = np.empty((grammar.nonterminals, (maxlen+1)), dtype='d')
-	outside = np.empty((grammar.nonterminals,) + 3 * (maxlen+1,), dtype='d')
-	insidescores.fill(np.NAN); outside.fill(np.inf)
+	print (8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
+			* (maxlen + 1) / 1024 ** 2), 'MB'
+	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
+	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
+	insidescores.fill(np.NAN)
+	outside.fill(np.inf)
 	print "getting inside"
 	simpleinside(grammar, maxlen, insidescores)
 	print "getting outside"
@@ -328,9 +353,10 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 		print 'infinite:',
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].iteritems()):
-				if v == infinity: print "%s[%d]" % (grammar.tolabel[k], span),
+				if v == infinity:
+					print "%s[%d]" % (grammar.tolabel[k], span),
 		print '\n\noutside:'
-		for lspan in range(maxlen+1):
+		for lspan in range(maxlen + 1):
 			for rspan in range(maxlen - lspan + 1):
 				for lhs in range(grammar.nonterminals):
 					if outside[lhs, lspan, rspan] < infinity:
@@ -363,14 +389,16 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.unary[I.label][i]
-			if rule.rhs1 != I.label: break
+			if rule.rhs1 != I.label:
+				break
 			elif rule.lhs not in insidescores[I.vec]:
 				agenda.setifbetter(
 						new_ChartItem(rule.lhs, I.vec), rule.prob + x)
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.lbinary[I.label][i]
-			if rule.rhs1 != I.label: break
+			if rule.rhs1 != I.label:
+				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (rule.rhs2 in insidescores[vec]
 					and rule.lhs not in insidescores[I.vec + vec]):
@@ -379,7 +407,8 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 
 		for i in range(grammar.nonterminals):
 			rule = grammar.rbinary[I.label][i]
-			if rule.rhs2 != I.label: break
+			if rule.rhs2 != I.label:
+				break
 			for vec in range(1, maxlen - I.vec + 1):
 				if (rule.rhs1 in insidescores[vec]
 					and rule.lhs not in insidescores[vec + I.vec]):
@@ -399,7 +428,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	cdef int m, n, state, left, right
 	cdef size_t i, sibsize
 	cdef np.ndarray[np.double_t, ndim=4] outside = np.empty(
-				(grammar.nonterminals, maxlen+1, maxlen+1, 1), dtype='d')
+				(grammar.nonterminals, maxlen + 1, maxlen + 1, 1), dtype='d')
 	outside.fill(np.inf)
 
 	agenda[goal, 0, 0] = outside[goal, 0, 0, 0] = 0.0
@@ -411,7 +440,8 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 		if agenda.length % 1000 == 0:
 			print "agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x), grammar.tolabel[state])
-		i = 0; rule = grammar.bylhs[state][i]
+		i = 0
+		rule = grammar.bylhs[state][i]
 		while rule.lhs == state:
 			# X -> A
 			if rule.rhs2 == 0:
@@ -419,7 +449,8 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 				if score < outside[rule.rhs1, left, right, 0]:
 					agenda.setitem((rule.rhs1, left, right), score)
 					outside[rule.rhs1, left, right, 0] = score
-				i += 1; rule = grammar.bylhs[state][i]
+				i += 1
+				rule = grammar.bylhs[state][i]
 				continue
 
 			# item is on the left: X -> A B.
@@ -440,7 +471,8 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 					agenda.setitem((rule.rhs2, left + sibsize, right), score)
 					outside[rule.rhs2, left + sibsize, right, 0] = score
 
-			i += 1; rule = grammar.bylhs[state][i]
+			i += 1
+			rule = grammar.bylhs[state][i]
 		#end while rule.lhs == state:
 	#end while agenda.length:
 	return outside
@@ -452,10 +484,11 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 	for span in range(1, maxlen + 1):
 		insidescores[span][goal] = pcfginsidesxrec(
 			grammar, insidescores, goal, span)
-	for lspan in range(maxlen+1):
+	for lspan in range(maxlen + 1):
 		for rspan in range(maxlen - lspan + 1):
 			for lhs in grammar.lexicalbylhs:
-				if (lhs, lspan, rspan) in outsidescores: continue
+				if (lhs, lspan, rspan) in outsidescores:
+					continue
 				outsidescores[lhs, lspan, rspan] = pcfgoutsidesxrec(grammar,
 						insidescores, outsidescores, goal, lhs, lspan, rspan)
 	if debug:
@@ -467,17 +500,21 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 		print 'infinite:',
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].iteritems()):
-				if v == infinity: print "%s[%d]" % (grammar.tolabel[k], span),
+				if v == infinity:
+					print "%s[%d]" % (grammar.tolabel[k], span),
 
 		print '\n\noutside:'
 		for k, v in sorted(outsidescores.iteritems()):
-			if v < infinity: print "%s[%d-%d] %g" % (
+			if v < infinity:
+				print "%s[%d-%d] %g" % (
 				grammar.tolabel[k[0]], k[1], k[2], exp(-v))
 		print 'infinite:',
 		for k, v in sorted(outsidescores.iteritems()):
-			if v == infinity: print "%s[%d-%d]" % (
+			if v == infinity:
+				print "%s[%d-%d]" % (
 				grammar.tolabel[k[0]], k[1], k[2]),
-	outside = np.empty((grammar.nonterminals, maxlen+1, maxlen+1, 1), dtype='d')
+	outside = np.empty((grammar.nonterminals, maxlen + 1, maxlen + 1, 1),
+			dtype='d')
 	outside.fill(np.inf)
 	#convert sparse dictionary to dense numpy array
 	for (state, lspan, rspan), prob in outsidescores.iteritems():
@@ -495,23 +532,28 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 		return 0 if state == 0 else infinity
 	if span == 1 and state in grammar.lexicalbylhs:
 		score =  min([lex.prob for lex in grammar.lexicalbylhs[state]])
-	else: score = infinity
+	else:
+		score = infinity
 	for split in range(1, span + 1):
-		n = 0; rule = grammar.bylhs[state][n]
+		n = 0
+		rule = grammar.bylhs[state][n]
 		while rule.lhs == state:
 			if rule.rhs1 in insidescores[split]:
 				inleft = insidescores[split][rule.rhs1]
 				if inleft == -1:
-					n += 1; rule = grammar.bylhs[state][n]
+					n += 1
+					rule = grammar.bylhs[state][n]
 			else:
 				insidescores[split][rule.rhs1] = -1 # mark to avoid cycles.
 				inleft = pcfginsidesxrec(
 					grammar, insidescores, rule.rhs1, split)
 				insidescores[split][rule.rhs1] = inleft
 			if rule.rhs2 == 0:
-				if split == span: inright = 0
+				if split == span:
+					inright = 0
 				else:
-					n += 1; rule = grammar.bylhs[state][n]
+					n += 1
+					rule = grammar.bylhs[state][n]
 					continue
 			elif rule.rhs2 in insidescores[span - split]:
 				inright = insidescores[span - split][rule.rhs2]
@@ -520,8 +562,10 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 					grammar, insidescores, rule.rhs2, span - split)
 				insidescores[span - split][rule.rhs2] = inright
 			cost = inleft + inright + rule.prob
-			if cost < score: score = cost
-			n += 1; rule = grammar.bylhs[state][n]
+			if cost < score:
+				score = cost
+			n += 1
+			rule = grammar.bylhs[state][n]
 	return score
 
 cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
@@ -535,47 +579,59 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 		return 0 if state == goal else infinity
 	score = infinity
 	# unary productions: no sibling
-	n = 0; rule = grammar.unary[state][n]
+	n = 0
+	rule = grammar.unary[state][n]
 	while rule.rhs1 == state:
 		item = (rule.lhs, lspan, rspan)
 		if item in outsidescores:
 			out = outsidescores[item]
 			if out == -1:
-				n += 1; rule = grammar.unary[state][n]
+				n += 1
+				rule = grammar.unary[state][n]
 				continue
 		else:
 			outsidescores[item] = -1 # mark to avoid cycles
 			outsidescores[item] = out = pcfgoutsidesxrec(grammar,
 				insidescores, outsidescores, goal, rule.lhs, lspan, rspan)
 		cost = out + rule.prob
-		if cost < score: score = cost
-		n += 1; rule = grammar.unary[state][n]
+		if cost < score:
+			score = cost
+		n += 1
+		rule = grammar.unary[state][n]
 	# could have a left sibling
 	for sibsize in range(1, lspan + 1):
-		n = 0; rule = grammar.rbinary[state][n]
+		n = 0
+		rule = grammar.rbinary[state][n]
 		while rule.rhs2 == state:
 			item = (rule.lhs, lspan - sibsize, rspan)
-			if item in outsidescores: out = outsidescores[item]
+			if item in outsidescores:
+				out = outsidescores[item]
 			else:
 				outsidescores[item] = out = pcfgoutsidesxrec(grammar, insidescores,
 					outsidescores, goal, rule.lhs, lspan - sibsize, rspan)
 			cost = (insidescores[sibsize].get(rule.rhs1, infinity)
 					+ out + rule.prob)
-			if cost < score: score = cost
-			n += 1; rule = grammar.rbinary[state][n]
+			if cost < score:
+				score = cost
+			n += 1
+			rule = grammar.rbinary[state][n]
 	# could have a right sibling
 	for sibsize in range(1, rspan + 1):
-		n = 0; rule = grammar.lbinary[state][n]
+		n = 0
+		rule = grammar.lbinary[state][n]
 		while rule.rhs1 == state:
 			item = (rule.lhs, lspan, rspan - sibsize)
-			if item in outsidescores: out = outsidescores[item]
+			if item in outsidescores:
+				out = outsidescores[item]
 			else:
 				outsidescores[item] = out = pcfgoutsidesxrec(grammar, insidescores,
 					outsidescores, goal, rule.lhs, lspan, rspan - sibsize)
 			cost = (insidescores[sibsize].get(rule.rhs2, infinity)
 					+ out + rule.prob)
-			if cost < score: score = cost
-			n += 1; rule = grammar.lbinary[state][n]
+			if cost < score:
+				score = cost
+			n += 1
+			rule = grammar.lbinary[state][n]
 	return score
 
 cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
@@ -585,10 +641,10 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 		for b in insidescores[a]:
 			assert 0 <= a < grammar.nonterminals
 			assert 0 <= bitlength(b) <= maxlen
-			#print a,b
+			#print a, b
 			#print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
 	print len(insidescores) * sum(map(len, insidescores.values())), '\n'
-	insidescores = np.empty((grammar.nonterminals, (maxlen+1)), dtype='d')
+	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	insidescores.fill(np.NAN)
 	simpleinside(grammar, maxlen, insidescores)
 	print "inside"
@@ -601,7 +657,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	#	print grammar.tolabel[goal], "len", a, "=", exp(-insidescores[goal, a])
 
 	print "getting outside"
-	outside = np.empty((grammar.nonterminals,) + 3 * (maxlen+1,), dtype='d')
+	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
 	outside.fill(np.inf)
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	#print outside
@@ -621,32 +677,34 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 def main():
 	from treebank import NegraCorpusReader
 	from grammar import induce_plcfrs
-	from parser import parse, pprint_chart
+	from _parser import parse, pprint_chart
 	from containers import Grammar
-	from treetransforms import addfanoutmarkers
+	from treetransforms import addfanoutmarkers, binarize
 	from tree import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = corpus.parsed_sents().values()
-	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)
-	map(addfanoutmarkers, trees)
+	for a in trees:
+		binarize(a, vertMarkov=1, horzMarkov=1)
+		addfanoutmarkers(a)
 	grammar = Grammar(induce_plcfrs(trees, corpus.sents().values()))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
 			Tree.parse("(ROOT (C (a 0) (c 2)) (b 1))", parse_leaf=int),
 			]
-	sents =[["a","b"],
-			["a","b","c"],
-			["a","b","c"],
-			["a","b","c"]]
+	sents =[["a", "b"],
+			["a", "b", "c"],
+			["a", "b", "c"],
+			["a", "b", "c"]]
 	print "treebank:"
-	for a in trees: print a
+	for a in trees:
+		print a
 	print "\ngrammar:"
 	grammar = Grammar(induce_plcfrs(trees, sents))
 	print grammar, '\n'
 	testestimates(grammar, 4, grammar.toid["ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
-	sent = ["a","b","c"]
+	sent = ["a", "b", "c"]
 	print "\nwithout estimates"
 	chart, start, msg = parse(sent, grammar, estimates=None)
 	print msg
@@ -671,20 +729,21 @@ def main():
 			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
 			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
 			]
-	sents =[["a","b"],
-			["a","b","c"],
-			["a","b","c"],
-			["a","b","c"],
-			["a","b","c"],
-			["a","b","c"],
-			["a","b","c"]]
+	sents =[["a", "b"],
+			["a", "b", "c"],
+			["a", "b", "c"],
+			["a", "b", "c"],
+			["a", "b", "c"],
+			["a", "b", "c"],
+			["a", "b", "c"]]
 	print "treebank:"
-	for a in trees: print a
+	for a in trees:
+		print a
 	print "\npcfg grammar:"
 	grammar = Grammar(induce_plcfrs(trees, sents))
 	print grammar, '\n'
 	outside = getpcfgestimates(grammar, 4, grammar.toid["ROOT"], debug=True)
-	sent = ["a","b","c"]
+	sent = ["a", "b", "c"]
 	print "\nwithout estimates"
 	chart, start, msg = parse(sent, grammar, estimates=None)
 	print msg
@@ -697,4 +756,5 @@ def main():
 	for item in chart.viewkeys() - estchart.viewkeys():
 		print item
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()

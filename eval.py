@@ -154,7 +154,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		transform(gtree, gsent, gpos, dict(gpos),
 			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"],
 			not param["PRESERVE_FUNCTIONS"])
-		#if not gtree or not ctree: continue
+		#if not gtree or not ctree:
+		#	continue
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
 			"%r // %r" % (" ".join(csent), " ".join(gsent)))
 		cbrack = bracketings(ctree, param["LABELED"], param["DELETE_LABEL"],
@@ -752,7 +753,8 @@ def edit_distance(s1, s2):
 	have been done in other orders, but at least three steps are needed.
 	"""
 	# set up a 2-D array
-	len1 = len(s1); len2 = len(s2)
+	len1 = len(s1)
+	len2 = len(s2)
 	# initialize 2-D array to zero
 	lev = [[0] * (len2 + 1) for _ in range(len1 + 1)]
 	for i in range(len1 + 1):

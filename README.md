@@ -39,11 +39,11 @@ Requirements:
 For example, to install these dependencies and compile the code on Ubuntu
 (tested on 12.04), run the following sequence of commands:
 
-	sudo apt-get install python-dev python-numpy build-essential
-	sudo pip install cython
-	git clone --depth 1 git://github.com/andreasvc/disco-dop.git
-	cd disco-dop
-	make
+    sudo apt-get install python-dev python-numpy build-essential
+    sudo pip install cython
+    git clone --depth 1 git://github.com/andreasvc/disco-dop.git
+    cd disco-dop
+    make
 
 Alternatively Cython and Numpy can be installed with
 `pip install --user cython numpy`,
@@ -62,7 +62,7 @@ To run a full experiment from treebank to evaluation on a test set,
 copy the file sample.prm and edit its parameters.
 These parameters can then be invoked by executing:
 
-	python runexp.py filename.prm
+    python runexp.py filename.prm
 
 This will create a new directory with the basename of the parameter file, i.e.,
 `filename/` in this case. This directory must not exist yet, to avoid
@@ -91,16 +91,15 @@ Usage: tools
 ------------
 Aside from the parser there are some standalone tools:
 
-- `parser.py`:           A basic command line interface to the parser
-                         comparable to bitpar. Reads grammars from text files.
-- `eval.py`:             While `runexp.py` already shows F-scores, more detailed
-                         evaluation can be done with `eval.py`, which accepts
-                         `EVALB` style parameter files: `python eval.py
-                         negra-corpus.export sample/plcfrs.export proper.prm`
 - `treetransforms.py`:   A command line interface to perform transformations on
                          treebanks such as binarization.
 - `grammar.py`:          A command line interface to read off grammars
                          from (binarized) treebanks.
+- `parser.py`:           A basic command line interface to the parser
+                         comparable to bitpar. Reads grammars from text files.
+- `eval.py`:             Discontinuous evaluation. Reports F-scores and other
+                         metrics. Accepts `EVALB` parameter files:
+                         `python eval.py negra-corpus.export sample/plcfrs.export proper.prm`
 - `fragments.py`:        Finds recurring or common fragments in one or more
                          treebanks. It can be used with discontinuous as well as
                          Penn-style bracketed treebanks.

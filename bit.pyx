@@ -41,10 +41,11 @@ cpdef int pyintnextset(a, int pos):
 	"""
 	cdef ULong mask = -1
 	a >>= pos
-	if a == 0: return -1
+	if a == 0:
+		return -1
 	while a & mask == 0:
-		a >>= (8*sizeof(ULong))
-		pos += (8*sizeof(ULong))
+		a >>= (8 * sizeof(ULong))
+		pos += (8 * sizeof(ULong))
 	return pos + __builtin_ctzl(a & mask)
 
 cpdef bint bitminmax(ULLong a, ULLong b):
@@ -83,7 +84,8 @@ cpdef int fanout(arg):
 cdef binrepr(ULong *vec, int slots):
 	cdef int m, n = slots - 1
 	cdef str result
-	while n and vec[n] == 0: n -= 1
+	while n and vec[n] == 0:
+		n -= 1
 	result = bin(vec[n])
 	for m in range(n - 1, -1, -1):
 		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
@@ -111,18 +113,20 @@ def main():
 	assert fanout(0b0111100) == 1
 	assert fanout(0b1000001) == 2
 	assert fanout(0b011011011) == 3
-	ulongvec[0] = 1UL << (sizeof(ULong) * 8 - 1); ulongvec[1] = 1
+	ulongvec[0] = 1UL << (sizeof(ULong) * 8 - 1)
+	ulongvec[1] = 1
 	assert anextset(ulongvec, 0, 2) == sizeof(ULong) * 8 - 1, (
-			anextset(ulongvec, 0, 2), sizeof(ULong)*8-1)
-	assert anextset(ulongvec, sizeof(ULong)*8, 2) == sizeof(ULong)*8, (
-		anextset(ulongvec, sizeof(ULong)*8, 2), sizeof(ULong)*8)
+			anextset(ulongvec, 0, 2), sizeof(ULong) * 8 - 1)
+	assert anextset(ulongvec, sizeof(ULong) * 8, 2) == sizeof(ULong) * 8, (
+		anextset(ulongvec, sizeof(ULong) * 8, 2), sizeof(ULong) * 8)
 	assert anextunset(ulongvec, 0, 2) == 0, (
 		anextunset(ulongvec, 0, 2), 0)
-	assert anextunset(ulongvec, sizeof(ULong)*8-1, 2) == sizeof(ULong)*8+1, (
-		anextunset(ulongvec, sizeof(ULong)*8 - 1, 2), sizeof(ULong)*8 + 1)
+	assert anextunset(ulongvec, sizeof(ULong) * 8 - 1, 2) == (
+			sizeof(ULong) * 8 + 1), (anextunset(ulongvec,
+			sizeof(ULong) * 8 - 1, 2), sizeof(ULong) * 8 + 1)
 	ulongvec[0] = 0
-	assert anextset(ulongvec, 0, 2) == sizeof(ULong)*8, (
-		anextset(ulongvec, 0, 2), sizeof(ULong)*8)
+	assert anextset(ulongvec, 0, 2) == sizeof(ULong) * 8, (
+		anextset(ulongvec, 0, 2), sizeof(ULong) * 8)
 	ulongvec[1] = 0
 	assert anextset(ulongvec, 0, 2) == -1, (
 		anextset(ulongvec, 0, 2), -1)
@@ -131,4 +135,5 @@ def main():
 		anextunset(ulongvec, 0, 2), sizeof(ULong) * 8)
 	print "it worked"
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()

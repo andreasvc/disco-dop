@@ -54,7 +54,8 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 		kbestspans[0] = None
 		# uses ids of labels in coarse chart
 		for Ih in kbest:
-			label = Ih.label; Ih.label = 0
+			label = Ih.label
+			Ih.label = 0
 			kbestspans[label][Ih] = 0.0
 		# now construct a list which references these coarse items:
 		for label in range(fine.nonterminals):
@@ -85,18 +86,20 @@ cpdef kbest_items(chart, ChartItem start, int k, bint finecfg, coarsetolabel):
 			D = lazykbestcfg(chart, start, k)
 			if ci.end >= (sizeof(ULLong) * 8):
 				ei = CFGtoFatChartItem(ci.label, ci.start, ci.end)
-			else: ei = CFGtoSmallChartItem(ci.label, ci.start, ci.end)
+			else:
+				ei = CFGtoSmallChartItem(ci.label, ci.start, ci.end)
 			if finecfg:
 				items = [{} for _ in coarsetolabel]
 				items[ci.label][ci.start, ci.end] = 0.0
-			else: items = { ei : 0.0 }
+			else:
+				items = {ei: 0.0}
 			for entry in D[(<CFGChartItem>start).start][
 				(<CFGChartItem>start).end][start.label]:
 				traversekbestcfg(entry.key, entry.value, D, chart, items,
 					(<CFGChartItem>start).end >= (sizeof(ULLong) * 8), finecfg)
 		else:
 			D = {}
-			items = { start : 0.0 }
+			items = {start: 0.0}
 			lazykthbest(start, k, k, D, {}, chart, set())
 			for entry in D[start]:
 				traversekbest(entry.key, entry.value, D, chart, items)
@@ -104,7 +107,7 @@ cpdef kbest_items(chart, ChartItem start, int k, bint finecfg, coarsetolabel):
 
 cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart,
 		dict items):
-	""" Traverse a derivation e,j, collecting all items belonging to it, and
+	""" Traverse a derivation (e, j), collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
 	currently unused; only presence or absence in this list is exploited)"""
 	cdef LCFRSEdge e = ej.edge
@@ -116,29 +119,33 @@ cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart,
 	if e.left in chart:
 		if e.left in D:
 			entry = D[e.left][ej.left]
-			eejj = entry.key; prob = entry.value
+			eejj = entry.key
+			prob = entry.value
 		elif ej.left == 0:
 			eejj = RankedEdge(e.left, min(chart[e.left]), 0, 0)
 			prob = eejj.edge.inside
-		else: raise ValueError
+		else:
+			raise ValueError
 		if e.left not in items:
 			items[e.left] = rootprob - prob
 		traversekbest(eejj, rootprob, D, chart, items)
 	if e.right.label:
 		if e.right in D:
 			entry = D[e.right][ej.right]
-			eejj = entry.key; prob = entry.value
+			eejj = entry.key
+			prob = entry.value
 		elif ej.right == 0:
 			eejj = RankedEdge(e.right, min(chart[e.right]), 0, 0)
 			prob = eejj.edge.inside
-		else: raise ValueError
+		else:
+			raise ValueError
 		if e.right not in items:
 			items[e.right] = rootprob - prob
 		traversekbest(eejj, rootprob, D, chart, items)
 
 cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 		items, bint fatitems, bint finecfg):
-	""" Traverse a derivation e,j, collecting all items belonging to it, and
+	""" Traverse a derivation (e, j), collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
 	currently unused; only presence or absence in this list is exploited)"""
 	cdef ChartItem ei
@@ -149,7 +156,8 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 	# TODO: efficiently track already-visited ranked edges.
 	# maintaining a set only slows things down.
 	label = 0 if e.rule is NULL else e.rule.rhs1
-	start = ej.start; end = e.mid
+	start = ej.start
+	end = e.mid
 	if label in chart[start][end]:
 		if label in D[start][end]:
 			entry = D[start][end][label][ej.left]
@@ -159,18 +167,23 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 			eejj = RankedCFGEdge(label, start, end,
 				min(chart[start][end][label]), 0, 0)
 			prob = eejj.edge.inside
-		else: raise ValueError
+		else:
+			raise ValueError
 		if finecfg:
 			if (start, end) not in items[label]:
 				items[label][start, end] = rootprob - prob
 		else:
-			if fatitems: ei = CFGtoFatChartItem(label, start, end)
-			else: ei = CFGtoSmallChartItem(label, start, end)
-			if ei not in items: items[ei] = rootprob - prob
+			if fatitems:
+				ei = CFGtoFatChartItem(label, start, end)
+			else:
+				ei = CFGtoSmallChartItem(label, start, end)
+			if ei not in items:
+				items[ei] = rootprob - prob
 		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems, finecfg)
 	if e.rule is not NULL and e.rule.rhs2:
 		label = e.rule.rhs2
-		start = e.mid; end = ej.end
+		start = e.mid
+		end = ej.end
 		if label in D[start][end]:
 			entry = D[start][end][label][ej.right]
 			eejj = <RankedEdge>entry.key
@@ -179,14 +192,18 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 			eejj = RankedCFGEdge(label, start, end,
 				min(chart[start][end][label]), 0, 0)
 			prob = eejj.edge.inside
-		else: raise ValueError
+		else:
+			raise ValueError
 		if finecfg:
 			if (start, end) not in items[label]:
 				items[label][start, end] = rootprob - prob
 		else:
-			if fatitems: ei = CFGtoFatChartItem(label, start, end)
-			else: ei = CFGtoSmallChartItem(label, start, end)
-			if ei not in items: items[ei] = rootprob - prob
+			if fatitems:
+				ei = CFGtoFatChartItem(label, start, end)
+			else:
+				ei = CFGtoSmallChartItem(label, start, end)
+			if ei not in items:
+				items[ei] = rootprob - prob
 		traversekbestcfg(eejj, rootprob, D, chart, items, fatitems, finecfg)
 
 cpdef filterchart(chart, ChartItem start):
@@ -199,7 +216,8 @@ cpdef filterchart(chart, ChartItem start):
 		fat = end >= (sizeof(ULLong) * 8)
 		chart = [[b.copy() for b in a] for a in chart]
 		filter_subtreecfg(start.label, start1, end, chart, chart2, fat)
-	else: filter_subtree(start, chart, chart2)
+	else:
+		filter_subtree(start, chart, chart2)
 	return chart2
 
 cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
@@ -218,12 +236,15 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 		bint fat):
 	cdef CFGEdge edge
 	cdef ChartItem newitem
-	if fat: newitem = CFGtoFatChartItem(label, start, end)
-	else: newitem = CFGtoSmallChartItem(label, start, end)
+	if fat:
+		newitem = CFGtoFatChartItem(label, start, end)
+	else:
+		newitem = CFGtoSmallChartItem(label, start, end)
 	# should convert CFGEdge to LCFRSEdge, but currently not used anyway.
 	chart2[newitem] = chart[start][end].pop(label)
 	for edge in chart2[newitem]:
-		if edge.rule is NULL: continue
+		if edge.rule is NULL:
+			continue
 		if edge.rule.rhs1 and edge.rule.rhs1 in chart[start][edge.mid]:
 			filter_subtreecfg(edge.rule.rhs1, start, edge.mid,
 					chart, chart2, fat)
@@ -242,13 +263,15 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	for tree in derivs:
 		for node in tree.subtrees():
 			arity = slowfanout(node)
-			if arity > 1: label = "%s_%d" % (node.node, arity)
-			else: label = node.node
+			if arity > 1:
+				label = "%s_%d" % (node.node, arity)
+			else:
+				label = node.node
 			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
 	return newchart
 
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
-	from parser import parse #, pprint_chart
+	from _parser import parse #, pprint_chart
 	from disambiguation import marginalize
 	from treetransforms import canonicalize, removefanoutmarkers
 	from math import exp
@@ -279,11 +302,11 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 				print label, map(bin, d[label].keys())
 		else:
 			kbest = kbest_items(p, start, k, False, ())
-			for a,b in kbest.items():
+			for a, b in kbest.items():
 				print coarse.tolabel[(<ChartItem>a).label],
 				print bin((<ChartItem>a).vec), b
 		print "\nwhitelist:"
-		for n,x in enumerate(l):
+		for n, x in enumerate(l):
 			if isinstance(x, dict):
 				print fine.tolabel[n], map(bin, x)
 			elif x:
@@ -302,17 +325,19 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 			#print t.pprint(margin=999)
 			print "exact match" if t == canonicalize(tree) else "no match", t
 	else:
-		print "no parse. problem."; return
+		print "no parse. problem."
+		return
 		#if verbose:
 		#xp = set((coarse.tolabel[a.label], a.vec) for a in p.keys() if p[a])
 		#xpp = set((fine.tolabel[a.label], a.vec) for a in pp.keys() if pp[a])
 		#print "difference:"
 		#for a in xp - xpp:
-		#	if "*" not in a[0]: print a[0], bin(a[1])
+		#	if "*" not in a[0]:
+		#		print a[0], bin(a[1])
 		#print "\nfine chart:"
 		#for a in xpp:
-		#	if "@" not in a[0]: print a[0], bin(a[1])
-
+		#	if "@" not in a[0]:
+		#		print a[0], bin(a[1])
 		#pprint_chart(pp, sent, fine.tolabel)
 
 def main():
@@ -326,10 +351,14 @@ def main():
 	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
 	#	encoding="utf-8", headrules="negra.headrules", headfinal=True,
 	#   headreverse=False)
-	#train = 400; test = 40; testmaxlen = 999;
+	#train = 400
+	#test = 40
+	#testmaxlen = 999
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 		headrules=None, headfinal=True, headreverse=False)
-	train = 0; test = 3; testmaxlen = 999;
+	train = 0
+	test = 3
+	testmaxlen = 999
 	#trees = corpus.parsed_sents().values()[:train]
 	#sents = corpus.sents().values()[:train]
 	trees = corpus.parsed_sents().values()
@@ -356,8 +385,9 @@ def main():
 	normal = Grammar(normallcfrs)
 	parent = Grammar(induce_plcfrs(parenttrees, sents))
 	splitg = Grammar(induce_plcfrs(cftrees, sents))
-	for t,s in zip(cftrees, sents):
-		for (r,yf),w in induce_plcfrs([t], [s]): assert len(yf) == 1
+	for t, s in zip(cftrees, sents):
+		for (r, yf), w in induce_plcfrs([t], [s]):
+			assert len(yf) == 1
 	fine999x = dopreduction(trees, sents)
 	fine999 = Grammar(fine999x)
 	fine1 = Grammar(dopreduction(dtrees, sents))
@@ -365,22 +395,25 @@ def main():
 	sents = corpus.tagged_sents().values()[train:train+test]
 	if subsetgrammar(normallcfrs, fine999x):
 		print "DOP grammar is a superset"
-	else: print "DOP grammar is NOT a superset!"
+	else:
+		print "DOP grammar is NOT a superset!"
 	for msg, coarse, fine, split, enabled in zip(
 		"normal parentannot cf-split".split(),
 		(normal, parent, splitg),
 		(fine999, fine1, fine1),
 		(False, False, True),
 		(True, False, True)):
-		if not enabled: continue
+		if not enabled:
+			continue
 		print "coarse grammar:", msg
 		fine.getmapping(coarse, re.compile("@[-0-9]+$"), None, split, True)
-		#??: fine.getdonotprune(re.compile(r"\|<"))
 		begin = clock()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
-			if len(sent) > testmaxlen: continue
+			if len(sent) > testmaxlen:
+				continue
 			print n,
 			doctf(coarse, fine, sent, tree, k, split, verbose=False)
 		print "time elapsed", clock() - begin, "s"
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()

@@ -39,23 +39,34 @@ from tree import Tree
 class Terminal:
 	""" Auxiliary class to be able to add indices to terminal nodes of NLTK
 	trees. """
-	def __init__(self, node): self.prod = self.node = node
-	def __repr__(self): return repr(self.node)
-	def __hash__(self): return hash(self.node)
-	def __iter__(self): return iter(())
-	def __len__(self): return 0
-	def __index__(self): return self.node
+	def __init__(self, node):
+		self.prod = self.node = node
+	def __repr__(self):
+		return repr(self.node)
+	def __hash__(self):
+		return hash(self.node)
+	def __iter__(self):
+		return iter(())
+	def __len__(self):
+		return 0
+	def __index__(self):
+		return self.node
 	def __getitem__(self, val):
-		if isinstance(val, slice): return ()
-		else: raise IndexError("A terminal has zero children.")
+		if isinstance(val, slice):
+			return ()
+		else:
+			raise IndexError("A terminal has zero children.")
 
 def prepare(tree, includeterms=False):
+	""" Copy a tree object; sort children to have canonical order; merge
+	preterminals and terminals in single nodes (unless includeterms is True)."""
 	tree = tree.copy(True)
 	# canonical order of children
 	for a in tree.subtrees(lambda n: isinstance(n[0], Tree)):
 		a.sort(key=lambda n: min(n.leaves()))
 	if includeterms:
-		for a in tree.treepositions('leaves'): tree[a] = Terminal(tree[a])
+		for a in tree.treepositions('leaves'):
+			tree[a] = Terminal(tree[a])
 	else:
 		for a in tree.treepositions('leaves'):
 			tree[a[:-1]].node += "-%d" % tree[a]
@@ -64,6 +75,7 @@ def prepare(tree, includeterms=False):
 
 # begin Zhang-Shasha Tree Edit Distance Implementation.
 class AnnotatedTree:
+	""" Wrap a tree to add some extra information. """
 	def __init__(self, root):
 		self.root = root
 		self.nodes = [] # a pre-order enumeration of the nodes in the tree
@@ -94,8 +106,10 @@ class AnnotatedTree:
 			if len(n) == 0:
 				lmd = i
 				for a in anc:
-					if a in leftmostdescendents: break
-					else: leftmostdescendents[a] = i
+					if a in leftmostdescendents:
+						break
+					else:
+						leftmostdescendents[a] = i
 			else:
 				lmd = leftmostdescendents[n.id]
 			self.leftmostdescendents.append(lmd)
@@ -103,8 +117,12 @@ class AnnotatedTree:
 			i += 1
 		self.keyroots = sorted(keyroots.itervalues())
 
-def strdist(a, b): return 0 if a == b else 1
+def strdist(a, b):
+	""" Default categorical distance function. """
+	return 0 if a == b else 1
+
 def treedist(A, B, debug=False):
+	""" Zhang-Shasha tree edit distance. """
 	A = AnnotatedTree(prepare(A))
 	B = AnnotatedTree(prepare(B))
 	Al = A.leftmostdescendents
@@ -130,54 +148,64 @@ def treedist(A, B, debug=False):
 					# only need to check if x is an ancestor of i
 					# and y is an ancestor of j
 					if Al[i] == Al[x+ioff] and Bl[j] == Bl[y+joff]:
-						#                  +-
-						#                  | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
-						# δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
-						#                  | δ(l(i1)..i-1, l(j1)..j-1) + γ(v → w)
-						#                  +-
+						#                 +-
+						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
+						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
+						#                 | δ(l(i1)..i-1, l(j1)..j-1) + γ(v → w)
+						#                 +-
 						labeldist = strdist(An[x+ioff].node, Bn[y+joff].node)
 						fd[x, y] = min(fd[x-1, y] + 1, fd[x, y-1] + 1,
 							fd[x-1, y-1] + labeldist)
 						treedists[x+ioff, y+joff] = fd[x, y]
 					else:
-						#                  +-
-						#                  | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
-						# δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
-						#                  | δ(l(i1)..l(i)-1, l(j1)..l(j)-1)
-						#                  |                   + treedist(i1,j1)
-						#                  +-
+						#                 +-
+						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
+						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
+						#                 | δ(l(i1)..l(i)-1, l(j1)..l(j)-1)
+						#                 |                   + treedist(i1,j1)
+						#                 +-
 						p = Al[x+ioff]-1-ioff
 						q = Bl[y+joff]-1-joff
 						fd[x, y] = min(fd[x-1, y] + 1, fd[x, y-1] + 1,
 							fd[p, q] + treedists[x+ioff, y+joff])
 		if debug:
-			if isinstance(An[i], Tree): astr = An[i].node #pprint(margin=9999)
-			else: astr = str(An[i])
+			if isinstance(An[i], Tree):
+				astr = An[i].node #pprint(margin=9999)
+			else:
+				astr = str(An[i])
 			j = treedists[i].argmin()
-			if isinstance(Bn[j], Tree): bstr = Bn[j].node #pprint(margin=9999)
-			else: bstr = str(Bn[j])
+			if isinstance(Bn[j], Tree):
+				bstr = Bn[j].node #pprint(margin=9999)
+			else:
+				bstr = str(Bn[j])
 			if treedists[i, j]:
 				print "%s[%d] %s[%d] %d" % (astr, i, bstr, j, treedists[i, j])
 	return treedists[len(A.nodes)-1, len(B.nodes)-1]
 # end Zhang-Shasha Tree Edit Distance Implementation.
 
 
-# implementation as in Billie (2005), based on rparse code.
-# slower but records edit script.
-# should be converted to use a set of matrices as dynamic programming tables.
 def newtreedist(A, B, debug=False):
-	A = prepare(A).freeze(); B = prepare(B).freeze()
-	for n, a in enumerate(A.subtrees()): a.idx = n
-	for n, a in enumerate(B.subtrees()): a.idx = n
+	""" implementation as in Billie (2005), based on rparse code.
+	slower but records edit script. should be converted to use a set of
+	matrices as dynamic programming tables. """
+	A = prepare(A).freeze()
+	B = prepare(B).freeze()
+	for n, a in enumerate(A.subtrees()):
+		a.idx = n
+	for n, a in enumerate(B.subtrees()):
+		a.idx = n
 	result = geteditstats((A,), (B,))
 	geteditstats.mem.clear()
-	if debug: print result
+	if debug:
+		print result
 	return result.distance
 
 class EditStats(object):
+	""" Collect edit operations on a tree. """
 	__slots__ = ('distance', 'matched', 'editscript')
 	def __init__(self, distance=0, matched=0, editscript=None):
-		if editscript is None: editscript = ()
+		if editscript is None:
+			editscript = ()
 		self.distance = distance
 		self.matched = matched
 		self.editscript = editscript
@@ -188,20 +216,28 @@ class EditStats(object):
 	def __lt__(self, other):
 		return self.distance < other.distance
 	def __repr__(self):
-		return ("%s(distance=%d, matched=%d, [\n\t%s])" % (
-			self.__class__.__name__, self.distance, self.matched,
-			",\n\t".join("%s(%s, %s)" % (a[0],
-			"%s[%d]" % (a[1].node, a[1].idx) if isinstance(a[1], Tree) else a[1],
-			"%s[%d]" % (a[2].node, a[2].idx) if isinstance(a[2], Tree) else a[2])
-			for a in self.editscript)))
+		return "%s(distance=%d, matched=%d, [\n\t%s])" % (
+				self.__class__.__name__, self.distance, self.matched,
+				",\n\t".join("%s(%s, %s)" % (a[0],
+					"%s[%d]" % (a[1].node, a[1].idx)
+						if isinstance(a[1], Tree) else a[1],
+					"%s[%d]" % (a[2].node, a[2].idx)
+						if isinstance(a[2], Tree) else a[2])
+					for a in self.editscript))
 
 def geteditstats(forest1, forest2):
-	try: return geteditstats.mem[forest1, forest2]
-	except KeyError: pass
-	flatforest1 = forest1 if forest1 == () else forest1[:-1] + tuple(forest1[-1][:])
-	flatforest2 = forest2 if forest2 == () else forest2[:-1] + tuple(forest2[-1][:])
+	""" Recursively get edit distance. """
+	try:
+		return geteditstats.mem[forest1, forest2]
+	except KeyError:
+		pass
+	flatforest1 = forest1 if forest1 == () else (
+			forest1[:-1] + tuple(forest1[-1][:]))
+	flatforest2 = forest2 if forest2 == () else (
+			forest2[:-1] + tuple(forest2[-1][:]))
 	if forest2 == ():
-		if forest1 == (): result = EditStats(0, 0, ())
+		if forest1 == ():
+			result = EditStats(0, 0, ())
 		else:
 			tmp = geteditstats(flatforest1, ())
 			result =  EditStats(tmp.distance + 1, tmp.matched,
@@ -211,7 +247,8 @@ def geteditstats(forest1, forest2):
 		result = EditStats(tmp.distance + 1, tmp.matched,
 			(('I', None, forest2[-1]), ) + tmp.editscript)
 	else:
-		v = forest1[-1]; w = forest2[-1]
+		v = forest1[-1]
+		w = forest2[-1]
 		tmp = geteditstats(flatforest1, forest2)
 		deleteStats = EditStats(tmp.distance + 1, tmp.matched,
 				(('D', v, None),) + tmp.editscript)
@@ -235,11 +272,20 @@ geteditstats.mem = {}
 def main():
 	a = Tree.parse("(f (d (a 0) (c (b 1))) (e 2))", parse_leaf=int)
 	b = Tree.parse("(f (c (d (a 0) (b 1)) (e 2)))", parse_leaf=int)
-	print '%s\n%s\ndistance: %d' % (a, b, treedist(a, b, debug=True))
-	print '%s\n%s\ndistance: %d' % (a, b, newtreedist(a, b, debug=True))
+	result1 = treedist(a, b, debug=True)
+	assert result1 == 2
+	print '%s\n%s\ndistance: %d' % (a, b, result1)
+	result2 = newtreedist(a, b, debug=True)
+	assert result2 == 2
+	print '%s\n%s\ndistance: %d' % (a, b, result2)
 	a = Tree.parse("(f (d (x (a 0)) (b 1) (c 2)) (z 3))", parse_leaf=int)
 	b = Tree.parse("(f (c (d (a 0) (x (b 1)) (c 2)) (z 3)))", parse_leaf=int)
-	print '%s\n%s\ndistance: %d' % (a, b, treedist(a, b, debug=True))
-	print '%s\n%s\ndistance: %d' % (a, b, newtreedist(a, b, debug=True))
+	result1 = treedist(a, b, debug=True)
+	assert result1 == 3
+	print '%s\n%s\ndistance: %d' % (a, b, result1)
+	result2 = newtreedist(a, b, debug=True)
+	assert result2 == 3
+	print '%s\n%s\ndistance: %d' % (a, b, result2)
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()

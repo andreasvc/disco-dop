@@ -21,7 +21,8 @@ cdef inline getcandidates(dict chart, ChartItem v, int k):
 	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
 	# as a neighbor and puts it in cand[v] for a second time.
 	cdef LCFRSEdge el
-	if v not in chart: return Agenda() #raise error?
+	if v not in chart:
+		return Agenda() #raise error?
 	return Agenda(
 		[(RankedEdge(v, el, 0, 0 if el.right.label else -1), el.inside)
 						for el in nsmallest(k, chart[v].values())])
@@ -45,7 +46,8 @@ cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
 		# get the next best derivation and delete it from the heap
 		if cand[v]:
 			D.setdefault(v, []).append((<Agenda>cand[v]).popentry())
-		else: break
+		else:
+			break
 	return D
 
 cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
@@ -60,7 +62,8 @@ cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
 		elif i == 1 and ej.right >= 0: #edge.right.label:
 			ei = ej.edge.right
 			ej1 = RankedEdge(ej.head, ej.edge, ej.left, ej.right + 1)
-		else: break
+		else:
+			break
 		# recursively solve a subproblem
 		# NB: increment j1[i] again because j is zero-based and k is not
 		lazykthbest(ei, (ej1.right if i else ej1.left) + 1, k1,
@@ -79,16 +82,25 @@ cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 	cdef Entry entry
 	cdef double result, prob
 	ei = ej.edge.left
-	if ei in D: entry = D[ei][ej.left]; prob = entry.value
-	elif ej.left == 0: edge = min(chart[ei]); prob = edge.inside
-	else: raise ValueError(
-		"non-zero rank vector not part of explored derivations")
+	if ei in D:
+		entry = D[ei][ej.left]
+		prob = entry.value
+	elif ej.left == 0:
+		edge = min(chart[ei])
+		prob = edge.inside
+	else:
+		raise ValueError("non-zero rank vector not part of explored derivations")
 	result = ej.edge.rule.prob + prob
 	if ej.right >= 0: #if e.right.label:
 		ei = ej.edge.right
-		if ei in D: entry = D[ei][ej.right]; prob = entry.value
-		elif ej.right == 0: edge = min(chart[ei]); prob = edge.inside
-		else: raise ValueError(
+		if ei in D:
+			entry = D[ei][ej.right]
+			prob = entry.value
+		elif ej.right == 0:
+			edge = min(chart[ei])
+			prob = edge.inside
+		else:
+			raise ValueError(
 			"non-zero rank vector not part of explored derivations")
 		result += prob
 	return result
@@ -106,7 +118,8 @@ cdef inline getcandidatescfg(list chart, UInt label,
 	# as a neighbor and puts it in cand[v] for a second time.
 	cdef CFGEdge ec
 	cell = chart[start][end]
-	if not cell.get(label): return Agenda()
+	if not cell.get(label):
+		return Agenda()
 	return Agenda(
 		[(RankedCFGEdge(label, start, end, ec, 0, 0 if ec.rule is not NULL
 						and ec.rule.rhs2 else -1), ec.inside)
@@ -132,7 +145,8 @@ cpdef inline lazykthbestcfg(UInt label, UChar start, UChar end, int k, int k1,
 		if cand[start][end][label]:
 			D[start][end].setdefault(label, []).append(
 				(<Agenda>cand[start][end][label]).popentry())
-		else: break
+		else:
+			break
 	return D
 
 cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand, list chart,
@@ -145,7 +159,8 @@ cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand, list chart,
 	# add the |e| neighbors
 	# left child
 	label = 0 if ec.rule is NULL else ec.rule.rhs1
-	start = ej.start; end = ec.mid
+	start = ej.start
+	end = ec.mid
 	ej1 = RankedCFGEdge(ej.label, ej.start, ej.end, ej.edge,
 			ej.left + 1, ej.right)
 	# recursively solve a subproblem
@@ -160,9 +175,11 @@ cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand, list chart,
 		cand[ej1.start][ej1.end][ej1.label][ej1] = prob
 		explored.add(ej1)
 	# right child?
-	if ej.right == -1: return
+	if ej.right == -1:
+		return
 	label = 0 if ec.rule is NULL else ec.rule.rhs2
-	start = ec.mid; end = ej.end
+	start = ec.mid
+	end = ej.end
 	ej1 = RankedCFGEdge(ej.label, ej.start, ej.end, ej.edge,
 			ej.left, ej.right + 1)
 	lazykthbestcfg(label, start, end, ej1.right + 1, k1,
@@ -181,25 +198,31 @@ cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.0:
 	cdef double result, prob
 	ec = ej.edge
 	label = 0 if ec.rule is NULL else ec.rule.rhs1
-	start = ej.start; end = ec.mid
+	start = ej.start
+	end = ec.mid
 	if label in D[start][end]:
-		entry = D[start][end][label][ej.left]; prob = entry.value
-	elif ej.left == 0: edge = min(chart[start][end][label]); prob = edge.inside
-	else: raise ValueError(
-		"non-zero rank vector not part of explored derivations")
+		entry = D[start][end][label][ej.left]
+		prob = entry.value
+	elif ej.left == 0:
+		edge = min(chart[start][end][label])
+		prob = edge.inside
+	else:
+		raise ValueError("non-zero rank vector not part of explored derivations")
 	# NB: edge.inside if preterminal, 0.0 for terminal
 	result = (0.0 if ec.rule is NULL else ec.rule.prob) + prob
 	if ej.right >= 0: #if e.right.label:
 		label = 0 if ec.rule is NULL else ec.rule.rhs2
-		start = ec.mid; end = ej.end
+		start = ec.mid
+		end = ej.end
 		if label in D[start][end]:
 			entry = D[start][end][label][ej.right]
 			prob = entry.value
 		elif ej.right == 0:
 			edge = min(chart[start][end][label])
 			prob = edge.inside
-		else: raise ValueError(
-			"non-zero rank vector not part of explored derivations")
+		else:
+			raise ValueError(
+					"non-zero rank vector not part of explored derivations")
 		result += prob
 	return result
 
@@ -224,12 +247,14 @@ cdef inline bint explorederivationcfg(RankedCFGEdge ej, list D, list chart,
 	cdef int i = ej.left
 	cdef UInt label
 	cdef UChar start, end
-	if n > 100: return False #hardcoded limit to prevent cycles
+	if n > 100:
+		return False #hardcoded limit to prevent cycles
 	label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs1
 	start = ej.start
 	end = ej.edge.mid
 	while i != -1:
-		if label not in chart[start][end]: break
+		if label not in chart[start][end]:
+			break
 		elif label not in D[start][end]:
 			assert i == 0, "non-best edge missing in derivations"
 			entry = (<Agenda>getcandidatescfg(chart, label, start, end, 1)
@@ -237,12 +262,14 @@ cdef inline bint explorederivationcfg(RankedCFGEdge ej, list D, list chart,
 			D[start][end][label] = [entry]
 		if explorederivationcfg(<RankedCFGEdge>
 				(<Entry>D[start][end][label][i]).key, D, chart, n + 1):
-			if end == ej.end: break
+			if end == ej.end:
+				break
 			label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs2
 			start = ej.edge.mid
 			end = ej.end
 			i = ej.right
-		else: return False
+		else:
+			return False
 	return True
 
 cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
@@ -260,9 +287,11 @@ cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
 	cdef int i = ej.left
 	cdef UInt label
 	cdef UChar start, end
-	if n > 100: return ""	#hardcoded limit to prevent cycles
+	if n > 100:
+		return ""	#hardcoded limit to prevent cycles
 	label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs1
-	start = ej.start; end = ej.edge.mid
+	start = ej.start
+	end = ej.edge.mid
 	while i != -1:
 		if label not in chart[start][end]:
 			# this must be a terminal
@@ -276,7 +305,8 @@ cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
 			children += " %s" % child
 		else:
 			children = child
-		if end == ej.end: break
+		if end == ej.end:
+			break
 		label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs2
 		start = ej.edge.mid
 		end = ej.end
@@ -300,20 +330,24 @@ cdef bint explorederivation(RankedEdge ej, dict D, dict chart, int n):
 	cdef ChartItem ei
 	cdef str children = "", child
 	cdef int i = ej.left
-	if n > 100: return False #hardcoded limit to prevent cycles
+	if n > 100:
+		return False #hardcoded limit to prevent cycles
 	ei = ej.edge.left
 	while i != -1:
-		if ei not in chart: break # this must be a terminal
+		if ei not in chart:
+			break # this must be a terminal
 		elif ei not in D:
 			assert i == 0, "non-best edge missing in derivations"
 			entry = (<Agenda>getcandidates(chart, ei, 1)).popentry()
 			D[ei] = [entry]
 		if explorederivation(<RankedEdge>(<Entry>D[ei][i]).key,
 				D, chart, n + 1):
-			if ei is ej.edge.right: break
+			if ei is ej.edge.right:
+				break
 			ei = ej.edge.right
 			i = ej.right
-		else: return False
+		else:
+			return False
 	return True
 
 cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
@@ -330,7 +364,8 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 	cdef ChartItem ei
 	cdef str children = "", child
 	cdef int i = ej.left
-	if n > 100: return ""	#hardcoded limit to prevent cycles
+	if n > 100:
+		return ""	#hardcoded limit to prevent cycles
 	ei = ej.edge.left
 	while i != -1:
 		if ei not in chart:
@@ -384,7 +419,8 @@ cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel,
 					entry.key, D, chart, tolabel, 0, debin), entry.value)
 					for entry in D[start][end][goal.label]]
 	else:
-		D = {}; cand = {}
+		D = {}
+		cand = {}
 		lazykthbest(goal, k, k, D, cand, chart, explored)
 		D[goal] = [entry for entry in D[goal]
 				if explorederivation(entry.key, D, chart, 0)]
@@ -406,23 +442,23 @@ cpdef main():
 	tolabel = dict([a[::-1] for a in toid.items()])
 	NONE = ("Epsilon", 0)			# sentinel node
 	chart = {
-			("S", 0b111) : [
-				((0.7*0.9*0.5), 0.7,
+			("S", 0b111): [
+				((0.7 * 0.9 * 0.5), 0.7,
 						("NP", 0b100), ("VP2", 0b011)),
-				((0.4*0.9*0.5), 0.4,
+				((0.4 * 0.9 * 0.5), 0.4,
 						("NP", 0b100), ("VP", 0b011))],
-			("VP", 0b011) : [
+			("VP", 0b011): [
 				(0.5, 0.5, ("V", 0b010), ("ADV", 0b001)),
 				(0.4, 0.4, ("walks", 1), ("ADV", 0b001))],
-			("VP2", 0b011) : [
+			("VP2", 0b011): [
 				(0.5, 0.5, ("V", 0b010), ("ADV", 0b001)),
 				(0.4, 0.4, ("walks", 1), ("ADV", 0b001))],
-			("NP", 0b100) : [(0.5, 0.5, ("Mary", 0), NONE),
+			("NP", 0b100): [(0.5, 0.5, ("Mary", 0), NONE),
 							(0.9, 0.9, ("PN", 0b100), NONE)],
-			("PN", 0b100) : [(1.0, 1.0, ("Mary", 0), NONE),
+			("PN", 0b100): [(1.0, 1.0, ("Mary", 0), NONE),
 							(0.9, 0.9, ("NP", 0b100), NONE)],
-			("V", 0b010) : [(1.0, 1.0, ("walks", 1), NONE)],
-			("ADV", 0b001) : [(1.0, 1.0, ("quickly", 2), NONE)]
+			("V", 0b010): [(1.0, 1.0, ("walks", 1), NONE)],
+			("ADV", 0b001): [(1.0, 1.0, ("quickly", 2), NONE)]
 		}
 	# a hack to make Rule structs with the right probabilities.
 	# rules[7] will be a Rule with probability 0.7
@@ -430,10 +466,10 @@ cpdef main():
 		rules[a].prob = -log(a / 10.0)
 	for a in list(chart):
 		chart[SmallChartItem(toid[a[0]], a[1])] = dict([(x, x)
-			for x in [new_LCFRSEdge(-log(c), -log(c), &(rules[int(d*10)]),
+			for x in [new_LCFRSEdge(-log(c), -log(c), &(rules[int(d * 10)]),
 			SmallChartItem(toid.get(e, 0), f),
 			SmallChartItem(toid.get(g, 0), h))
-			for c, d, (e,f), (g,h) in chart.pop(a)]])
+			for c, d, (e, f), (g, h) in chart.pop(a)]])
 	assert SmallChartItem(toid["NP"], 0b100) == SmallChartItem(
 			toid["NP"], 0b100)
 	cand = {}
@@ -445,8 +481,9 @@ cpdef main():
 		for entry in b:
 			re = entry.key
 			ed = re.edge
-			j = (re.left,)
-			if re.right != -1: j += (re.right,)
+			j = (re.left, )
+			if re.right != -1:
+				j += (re.right, )
 			ip = entry.value
 			print tolabel[v.label], ":",
 			print " ".join([tolabel[ci.label]
@@ -469,4 +506,5 @@ cpdef main():
 	assert len(derivations) == len(set(derivations))
 	assert len(set(derivations)) == len(dict(derivations))
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+	main()

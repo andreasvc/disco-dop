@@ -12,8 +12,8 @@ from parser import parse
 from agenda cimport Entry, new_Entry
 from grammar import induce_plcfrs, rangeheads
 from treetransforms import unbinarize #, canonicalize
-from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem,\
-		Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, Grammar,\
+from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem, \
+		Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, Grammar, \
 		UChar, UInt, ULong, ULLong
 cimport cython
 
@@ -431,7 +431,7 @@ cdef str recoverfragments_cfg(RankedCFGEdge derivation, list D,
 def main():
 	from grammar import dopreduction
 	from containers import Grammar
-	from parser import parse
+	from _parser import parse
 	def e(x):
 		if isinstance(x[1], tuple):
 			return x[0].replace("@", ""), (int(abs(x[1][0])), x[1][1])

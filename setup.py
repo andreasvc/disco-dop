@@ -1,8 +1,9 @@
+""" Generic setup.py for Cython code. """
 from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 from Cython.Compiler import Options
-import cython, numpy
+import numpy
 
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
@@ -16,8 +17,8 @@ cython_directives = dict(
 )
 
 #Options.fast_fail = True
-Options.extra_compile_args=["-O3"],
-Options.extra_link_args=["-O3"], #["-g"],
+Options.extra_compile_args = ["-O3"]
+Options.extra_link_args = ["-O3"]  #["-g"],
 if __name__ == '__main__':
 	setup(
 		name = 'disco-dop',

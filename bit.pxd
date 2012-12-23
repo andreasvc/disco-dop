@@ -107,18 +107,21 @@ cdef inline int abitlength(ULong *vec, UInt slots):
 	""" number of bits needed to represent vector
 	(equivalently: index of most significant set bit, plus one)"""
 	cdef int a = slots - 1
-	while a and not vec[a]: a -= 1
+	while a and not vec[a]:
+		a -= 1
 	return (a + 1) * sizeof(ULong) * 8 - __builtin_clzll(vec[a])
 
 cdef inline int anextset(ULong *vec, UInt pos, UInt slots):
 	""" return next set bit starting from pos, -1 if there is none. """
 	cdef UInt a = BITSLOT(pos)
 	cdef ULong x
-	if a >= slots: return -1
+	if a >= slots:
+		return -1
 	x = vec[a] & (~0UL << (pos % BITSIZE))
 	while x == 0:
 		a += 1
-		if a == slots: return -1
+		if a == slots:
+			return -1
 		x = vec[a]
 	return a * BITSIZE + __builtin_ctzl(x)
 
@@ -126,11 +129,13 @@ cdef inline int anextunset(ULong *vec, UInt pos, UInt slots):
 	""" return next unset bit starting from pos. """
 	cdef UInt a = BITSLOT(pos)
 	cdef ULong x
-	if a >= slots: return a * BITSIZE
+	if a >= slots:
+		return a * BITSIZE
 	x = vec[a] | (BITMASK(pos) - 1)
 	while x == ~0UL:
 		a += 1
-		if a == slots: return a * BITSIZE
+		if a == slots:
+			return a * BITSIZE
 		x = vec[a]
 	return a * BITSIZE + __builtin_ctzl(~x)
 
@@ -138,31 +143,36 @@ cdef inline void ulongset(ULong *dest, ULong value, UInt slots):
 	""" Like memset, but set one ULong at a time; should be faster
 	for small arrays. """
 	cdef int a
-	for a in range(slots): dest[a] = value
+	for a in range(slots):
+		dest[a] = value
 
 cdef inline void ulongcpy(ULong *dest, ULong *src, UInt slots):
 	""" Like memcpy, but copy one ULong at a time; should be faster
 	for small arrays. """
 	cdef int a
-	for a in range(slots): dest[a] = src[a]
+	for a in range(slots):
+		dest[a] = src[a]
 
 cdef inline void setunioninplace(ULong *dest, ULong *src, UInt slots):
 	""" dest gets the union of dest and src; both operands must have at least
 	`slots' slots. """
 	cdef int a
-	for a in range(slots): dest[a] |= src[a]
+	for a in range(slots):
+		dest[a] |= src[a]
 
 cdef inline void setunion(ULong *dest, ULong *src1, ULong *src2, UInt slots):
 	""" dest gets the union of src1 and src2; operands must have at least
 	`slots' slots. """
 	cdef int a
-	for a in range(slots): dest[a] = src1[a] | src2[a]
+	for a in range(slots):
+		dest[a] = src1[a] | src2[a]
 
 cdef inline bint subset(ULong *vec1, ULong *vec2, UInt slots):
 	""" test whether vec1 is a subset of vec2; i.e., all bits of vec1 should be
 	in vec2. """
 	cdef int a
 	for a in range(slots):
-		if (vec1[a] & vec2[a]) != vec1[a]: return False
+		if (vec1[a] & vec2[a]) != vec1[a]:
+			return False
 	return True
 

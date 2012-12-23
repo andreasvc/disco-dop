@@ -30,4 +30,5 @@ boundscheck=False \
 *.pyx
 
 lint:
-	pylint eval.py fragments.py grammar.py runexp.py tree.py treebank.py treetransforms.py
+	pylint eval.py fragments.py grammar.py runexp.py treebank.py treetransforms.py \
+		demos.py gen.py setup.py parser.py tree.py treedist.py tikzdtree.py

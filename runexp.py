@@ -7,7 +7,8 @@ from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import imap, izip_longest
 from operator import itemgetter
 from subprocess import Popen, PIPE
-from math import exp, log
+from fractions import Fraction
+from math import exp
 from tree import Tree
 import numpy as np
 from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
@@ -16,9 +17,10 @@ from treetransforms import binarize, unbinarize, optimalbinarize, \
 		splitdiscnodes, mergediscnodes, addfanoutmarkers, slowfanout, \
 		removefanoutmarkers, canonicalize
 from fragments import getfragments
-from grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo
+from grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
+		write_lcfrs_grammar
 from containers import Grammar
-from parser import parse, cfgparse
+from _parser import parse, cfgparse
 from coarsetofine import prunechart
 from disambiguation import marginalize, viterbiderivation
 from eval import doeval, readparam, strbracketings, transform, \
@@ -168,14 +170,14 @@ def main(
 		logging.info("%d training sentences after length restriction <= %d",
 			len(trees), trainmaxwords)
 
-	test = CorpusReader(corpusdir, testcorpus, encoding=testencoding,
+	testset = CorpusReader(corpusdir, testcorpus, encoding=testencoding,
 			removepunct=removepunct, movepunct=movepunct)
-	gold_sents = test.tagged_sents()
-	test_parsed_sents = test.parsed_sents()
+	gold_sents = testset.tagged_sents()
+	test_parsed_sents = testset.parsed_sents()
 	if skiptrain:
 		skip += trainsents
 	logging.info("%d sentences in test corpus %s/%s",
-			len(test.parsed_sents()), corpusdir, testcorpus)
+			len(testset.parsed_sents()), corpusdir, testcorpus)
 	logging.info("%d test sentences before length restriction",
 			len(gold_sents.keys()[skip:skip+testsents]))
 	if usetagger:
@@ -199,12 +201,12 @@ def main(
 				overridetagdict, tagmap)
 	else:
 		test_tagged_sents = gold_sents
-	test = OrderedDict((a, (test_parsed_sents[a], test_tagged_sents[a], block))
-			for a, block in test.blocks().items()[skip:skip+testsents]
+	testset = OrderedDict((a, (test_parsed_sents[a], test_tagged_sents[a], block))
+			for a, block in testset.blocks().items()[skip:skip+testsents]
 			if len(test_tagged_sents[a]) <= testmaxwords)
 	assert test_tagged_sents, "test corpus should be non-empty"
 	logging.info("%d test sentences after length restriction <= %d",
-			len(test), testmaxwords)
+			len(testset), testmaxwords)
 
 	if rerun:
 		readgrammars(resultdir, stages)
@@ -214,7 +216,7 @@ def main(
 		getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				revmarkov, leftMostUnary, rightMostUnary,
 				fanout_marks_before_bin, testmaxwords, resultdir, numproc)
-	top = test_parsed_sents[test.keys()[0]].node
+	top = test_parsed_sents[testset.keys()[0]].node
 	evalparam = readparam(evalparam)
 	evalparam["DEBUG"] = -1
 	evalparam["CUTOFF_LEN"] = 40
@@ -222,7 +224,7 @@ def main(
 
 	begin = time.clock()
 	results = doparse(stages, unfolded, bintype,
-			fanout_marks_before_bin, test, testmaxwords, testsents,
+			fanout_marks_before_bin, testset, testmaxwords, testsents,
 			top, True, resultdir, numproc, tailmarker,
 			deletelabel=deletelabel, corpusfmt=corpusfmt)
 	if numproc == 1:
@@ -351,50 +353,50 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				fragments = getfragments(traintrees, sents, numproc,
 						iterate=stage.iterate, complement=stage.complement,
 						indices=stage.estimator=="ewe")
-				grammar, backtransform = doubledop(fragments,
+				xgrammar, backtransform = doubledop(fragments,
 						ewe=stage.estimator=="ewe")
 				stages[n].backtransform = backtransform
-				if stage.objective == "shortest":
-					# use RFE for tie breaking of shortest derivations
-					# Bod (2000) uses the ranks of subtree frequencies for each
-					# root node.
-					stages[n].secondarymodel = dict(grammar)
-					# any rule corresponding to the introduction of a fragment
-					# has a probability of 0.5, else 1.
-					grammar = [(r, log(0.5) if
-							("}" not in r[0][0]
-							and "@" not in r[0][0]
-							and r[0][0][0] != "#")
-							else 0.0) for r, _ in grammar]
-				elif stage.objective.startswith("sl-dop"):
-					stages[n].secondarymodel = dict(
-							(r, log(0.5)) for r, _ in grammar)
+				half = Fraction(1, 2)
+				if (stage.objective == "shortest"
+						or stage.objective.startswith("sl-dop")):
+					# any rule corresponding to the introduction of a
+					# fragment has a probability of 0.5, else 1.
+					shortest = [(r, 1 if ("}" in r[0][0] or "@" in r[0][0])
+							else half) for r, _ in xgrammar]
+					if stage.objective == "shortest":
+						# use RFE for tie breaking of shortest derivations
+						# Bod (2000) uses the ranks of subtree frequencies for
+						# each root node.
+						stages[n].secondarymodel = dict(xgrammar)
+						xgrammar = shortest
+					elif stage.objective.startswith("sl-dop"):
+						stages[n].secondarymodel = dict(shortest)
 			elif stage.objective == "shortest": # dopreduction from here on
 				# the secondary model is used to resolve ties
 				# for the shortest derivation
 				# i.e., secondarymodel is probabilistic
-				grammar, secondarymodel = dopreduction(traintrees, sents,
+				xgrammar, secondarymodel = dopreduction(traintrees, sents,
 					ewe=stage.estimator=="ewe", shortestderiv=True)
 				stages[n].secondarymodel = secondarymodel
 			elif "sl-dop" in stage.objective:
 				# here secondarymodel is non-probabilistic
-				grammar = dopreduction(traintrees, sents,
+				xgrammar = dopreduction(traintrees, sents,
 						ewe=stage.estimator=="ewe", shortestderiv=False)
 				secondarymodel, _ = dopreduction(traintrees, sents,
 								ewe=False, shortestderiv=True)
 				stages[n].secondarymodel = Grammar(secondarymodel)
 			else: # mpp or mpd
-				grammar = dopreduction(traintrees, sents,
+				xgrammar = dopreduction(traintrees, sents,
 					ewe=(stage.estimator in ("ewe", "sl-dop",
 					"sl-dop-simple")), shortestderiv=False,
 					packedgraph=stage.packedgraph)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
-			msg = grammarinfo(grammar)
-			grammar = Grammar(grammar)
+			msg = grammarinfo(xgrammar)
+			grammar = Grammar(xgrammar)
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals",  len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
-			grammar.testgrammar()
+			sumsto1 = grammar.testgrammar()
 			if stage.usedoubledop:
 				# backtransform keys are line numbers to rules file;
 				# to see them together do:
@@ -424,17 +426,17 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 					splitprune=stage.splitprune and stages[n-1].split,
 					markorigin=stages[n-1].markorigin)
 		else: # not stage.dop
-			grammar = induce_plcfrs(traintrees, sents)
+			xgrammar = induce_plcfrs(traintrees, sents)
 			logging.info("induced %s based on %d sentences",
 				("PCFG" if f == 1 or stage.split else "PLCFRS"),
 				len(traintrees))
 			if stage.split or os.path.exists("%s/pcdist.txt" % resultdir):
-				logging.info(grammarinfo(grammar))
+				logging.info(grammarinfo(xgrammar))
 			else:
-				logging.info(grammarinfo(grammar,
+				logging.info(grammarinfo(xgrammar,
 						dump="%s/pcdist.txt" % resultdir))
-			grammar = Grammar(grammar)
-			grammar.testgrammar()
+			grammar = Grammar(xgrammar)
+			sumsto1 = grammar.testgrammar()
 			if n and stage.prune:
 				grammar.getmapping(stages[n-1].grammar,
 					striplabelre=None,
@@ -447,13 +449,15 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stages[n].name), "w")
 		lexicon = codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
 			resultdir, stages[n].name), "w"))
-		if f == 1 or stage.split:
-			grammar.write_bitpar_grammar(rules, lexicon)
-		else:
-			grammar.write_lcfrs_grammar(rules, lexicon)
-		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz",
-			resultdir, stage.name,
-			",backtransform" if stage.usedoubledop else '')
+		bitpar = f == 1 or stage.split
+		# when grammar is LCFRS, write rational fractions.
+		# when grammar is PCFG, write frequencies if probabilities sum to 1,
+		# i.e., in that case probalities can be re-computed as relative
+		# frequencies. otherwise, resort to decimal fractions (imprecise).
+		write_lcfrs_grammar(xgrammar, rules, lexicon,
+				bitpar=bitpar, freqs=bitpar and sumsto1)
+		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz", resultdir,
+				stage.name, ",backtransform" if stage.usedoubledop else '')
 
 		outside = None
 		if stage.getestimates == 'SX':
@@ -491,36 +495,36 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 #def doparse(**params):
 #	params = DictObj(**params)
 def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
-		test, testmaxwords, testsents, top, tags=True, resultdir="results",
+		testset, testmaxwords, testsents, top, tags=True, resultdir="results",
 		numproc=None, tailmarker='', category=None, deletelabel=(),
 		corpusfmt="export"):
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
-			fanout_marks_before_bin=fanout_marks_before_bin, test=test,
+			fanout_marks_before_bin=fanout_marks_before_bin, testset=testset,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
 			resultdir=resultdir, category=category, deletelabel=deletelabel,
 			tailmarker=tailmarker)
 	goldbrackets = multiset()
-	gold = OrderedDict.fromkeys(test)
-	gsent = OrderedDict.fromkeys(test)
+	gold = OrderedDict.fromkeys(testset)
+	gsent = OrderedDict.fromkeys(testset)
 	results = [DictObj(name=stage.name) for stage in stages]
 	for result in results:
-		result.elapsedtime = dict.fromkeys(test)
-		result.parsetrees = dict.fromkeys(test)
+		result.elapsedtime = dict.fromkeys(testset)
+		result.parsetrees = dict.fromkeys(testset)
 		result.brackets = multiset()
 		result.exact = result.noparse = 0
 	if numproc == 1:
 		initworker(params)
-		dowork = imap(worker, test.items())
+		dowork = imap(worker, testset.items())
 	else:
 		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
 				initargs=(params,))
-		dowork = pool.imap_unordered(worker, test.items())
-	logging.info("going to parse %d sentences." % len(test))
+		dowork = pool.imap_unordered(worker, testset.items())
+	logging.info("going to parse %d sentences.", len(testset))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
 		sentid, msg, sentresults = data
-		tree, sent, block = test[sentid]
-		logging.debug("%d/%d (%s). [len=%d] %s\n%s", nsent, len(test),
+		tree, sent, block = testset[sentid]
+		logging.debug("%d/%d (%s). [len=%d] %s\n%s", nsent, len(testset),
 					sentid, len(sent),
 					#u" ".join(a[0] for a in sent),	# words only
 					u" ".join(a[0]+u"/"+a[1] for a in sent), # word/TAG
@@ -560,7 +564,7 @@ def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		del dowork, pool
 
 	writeresults(results, gold, gsent, resultdir, category, corpusfmt)
-	return results, len(test), goldbrackets, gold, gsent
+	return results, goldbrackets
 
 def worker(args):
 	""" parse a sentence using specified stages (pcfg, plcfrs, dop, ...) """
@@ -611,7 +615,7 @@ def worker(args):
 			msg += "%s\n\t" % msg1
 			if (n != 0 and not start and not results[-1].noparse
 					and stage.split == d.stages[n-1].split):
-				#from parser import pprint_chart
+				#from _parser import pprint_chart
 				#pprint_chart(chart,
 				#		[w.encode('unicode-escape') for w, _ in sent],
 				#		stage.grammar.tolabel)
@@ -717,10 +721,11 @@ def writeresults(results, gold, gsent, resultdir, category, corpusfmt="export"):
 		resultdir, (category + ".") if category else "",
 		",".join(result.name for result in results), ext[corpusfmt])
 
-def olddoeval(results, nsent, goldbrackets, gold, gsent):
+def oldeval(results, goldbrackets):
+	nsent = len(results[0].parsetrees)
+	if nsent == 0:
+		return
 	for n, result in enumerate(results):
-		if nsent == 0:
-			break
 		logging.info("%s lp %5.2f lr %5.2f lf %5.2f\n"
 			"coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n",
 				result.name,
@@ -840,7 +845,7 @@ def parsetepacoc(
 	testset = {}
 	allsents = []
 	for cat, catsents in tepacocsents.iteritems():
-		test = trees, sents, blocks = [], [], []
+		testset = trees, sents, blocks = [], [], []
 		for n, sent in catsents:
 			if sent != corpus_sents[n]:
 				logging.error("mismatch. sent %d:\n%r\n%r\n"
@@ -856,8 +861,8 @@ def parsetepacoc(
 				blocks.append(corpus_blocks[n])
 		allsents.extend(sents)
 		logging.info("category: %s, %d of %d sentences",
-				cat, len(test[0]), len(catsents))
-		testset[cat] = test
+				cat, len(testset[0]), len(catsents))
+		testset[cat] = testset
 	testset['baseline'] = zip(*[sent for n, sent in
 				enumerate(zip(corpus_trees, corpus_taggedsents, corpus_blocks))
 				if len(sent[1]) <= trainmaxwords
@@ -890,15 +895,15 @@ def parsetepacoc(
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
-	for cat, test in sorted(testset.items()):
+	for cat, testset in sorted(testset.items()):
 		if cat == 'baseline':
 			continue
 		logging.info("category: %s", cat)
 		begin = time.clock()
 		results[cat] = doparse(stages, unfolded, bintype,
-				fanout_marks_before_bin, test, testmaxwords, testsents,
+				fanout_marks_before_bin, testset, testmaxwords, testsents,
 				trees[0].node, True, resultdir, numproc, tailmarker, category=cat)
-		cnt += len(test[0])
+		cnt += len(testset[0])
 		if numproc == 1:
 			logging.info("time elapsed during parsing: %g",
 					time.clock() - begin)
@@ -922,15 +927,15 @@ def parsetepacoc(
 			totresult.noparse += result.noparse
 			totresult.brackets |= result.brackets
 			totresult.elapsedtime.extend(result.elapsedtime)
-		olddoeval(*res)
+		oldeval(*res)
 	logging.info("TOTAL")
 	# write TOTAL results file with all tepacoc sentences (not the baseline)
 	writeresults(totresults, gold, gsent, resultdir, "TOTAL")
-	olddoeval(totresults, cnt, goldbrackets, gold, gsent)
+	oldeval(totresults, goldbrackets)
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info("category: %s", cat)
-	olddoeval(*doparse(stages, unfolded, bintype,
+	oldeval(*doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset[cat], testmaxwords, testsents,
 			trees[0].node, True, resultdir, numproc, tailmarker, category=cat))
 
@@ -1047,8 +1052,8 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 
 def treebankfanout(trees):
 	""" Get maximal fan-out of a list of trees. """
-	# FIXME: this is unnecessarily slow.
-	return max((slowfanout(a), n) for n, tree in enumerate(trees)
+	from treetransforms import addbitsets, fastfanout
+	return max((fastfanout(addbitsets(a)), n) for n, tree in enumerate(trees)
 		for a in tree.subtrees(lambda x: len(x) > 1))
 
 def testmain():
@@ -1121,8 +1126,10 @@ def test():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
 	import agenda, coarsetofine, treetransforms, disambiguation, eval
+	import gen, treedist
 	modules = (bit, eval, demos, kbest, parser, grammar, treebank, estimates,
-			_fragments, agenda, coarsetofine, treetransforms, disambiguation)
+			_fragments, agenda, coarsetofine, treetransforms, treedist, gen,
+			disambiguation)
 	results = {}
 	for mod in modules:
 		print 'running doctests of', mod.__file__

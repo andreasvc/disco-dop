@@ -1,7 +1,6 @@
-"""
-Priority Queue based on binary heap which implements decrease-key and remove
-by marking entries as invalid. Provides dictionary-like interface.
-Based on notes in the documentation for heapq, see:
+""" Priority Queue based on binary heap which implements decrease-key and
+remove by marking entries as invalid. Provides dictionary-like interface. Based
+on notes in the documentation for heapq, see:
 http://docs.python.org/library/heapq.html
 
 There is a version specialised to be used as agenda with edges.
@@ -54,7 +53,9 @@ cdef class Agenda:
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key; entry.value = value; entry.count = oldentry.count
+			entry.key =  key
+			entry.value = value
+			entry.count = oldentry.count
 			self.mapping[key] = entry
 			heappush(self.heap, entry, cmpfun)
 			oldentry.count = INVALID
@@ -62,7 +63,9 @@ cdef class Agenda:
 			self.counter += 1
 			self.length += 1
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key; entry.value = value; entry.count = self.counter
+			entry.key =  key
+			entry.value = value
+			entry.count = self.counter
 			self.mapping[key] = entry
 			heappush(self.heap, entry, cmpfun)
 
@@ -71,7 +74,8 @@ cdef class Agenda:
 		cdef Entry oldentry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
-			if value >= oldentry.value: return
+			if value >= oldentry.value:
+				return
 		self.setitem(key, value)
 
 	cdef getitem(self, key):
@@ -84,7 +88,9 @@ cdef class Agenda:
 		equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
-		entry.key =  key; entry.value = value; entry.count = oldentry.count
+		entry.key =  key
+		entry.value = value
+		entry.count = oldentry.count
 		self.mapping[key] = entry
 		heappush(self.heap, entry, cmpfun)
 		oldentry.count = INVALID
@@ -93,10 +99,12 @@ cdef class Agenda:
 	cdef Entry peekentry(self):
 		cdef Entry entry
 		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
-		if n == 0: raise IndexError("peek at empty heap")
+		if n == 0:
+			raise IndexError("peek at empty heap")
 		entry = <Entry>(self.heap[0])
 		while entry.count == 0:
-			if n == 1: raise IndexError("peek at empty heap")
+			if n == 1:
+				raise IndexError("peek at empty heap")
 			#replace first element with last element
 			self.heap[0] = self.heap.pop()
 			#and restore heap invariant
@@ -115,7 +123,8 @@ cdef class Agenda:
 		self.length -= 1
 		return entry
 
-	cdef bint contains(self, key): return key in self.mapping
+	cdef bint contains(self, key):
+		return key in self.mapping
 
 	def peekitem(self):
 		cdef Entry entry = self.peekentry()
@@ -205,7 +214,9 @@ cdef class EdgeAgenda:
 		equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
-		entry.key =  key; entry.value = value; entry.count = oldentry.count
+		entry.key =  key
+		entry.value = value
+		entry.count = oldentry.count
 		self.mapping[key] = entry
 		self.heap.append(entry)
 		siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
@@ -226,10 +237,12 @@ cdef class EdgeAgenda:
 	cdef Entry peekentry(self):
 		cdef Entry entry
 		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
-		if n == 0: raise IndexError("peek at empty heap")
+		if n == 0:
+			raise IndexError("peek at empty heap")
 		entry = <Entry>(self.heap[0])
 		while entry.count == 0:
-			if n == 1: raise IndexError("peek at empty heap")
+			if n == 1:
+				raise IndexError("peek at empty heap")
 			#replace first element with last element
 			self.heap[0] = self.heap.pop()
 			#and restore heap invariant
@@ -243,7 +256,9 @@ cdef class EdgeAgenda:
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key; entry.value = value; entry.count = oldentry.count
+			entry.key =  key
+			entry.value = value
+			entry.count = oldentry.count
 			self.mapping[key] = entry
 			self.heap.append(entry)
 			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
@@ -252,13 +267,16 @@ cdef class EdgeAgenda:
 			self.counter += 1
 			self.length += 1
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key; entry.value = value; entry.count = self.counter
+			entry.key =  key
+			entry.value = value
+			entry.count = self.counter
 			self.mapping[key] = entry
 			self.heap.append(entry)
 			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
 
 	# identical to Agenda() methods
-	cdef bint contains(self, key): return key in self.mapping
+	cdef bint contains(self, key):
+		return key in self.mapping
 	def pop(self, key):
 		cdef Entry entry
 		if key is None:
@@ -395,7 +413,8 @@ cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 	while pos > startpos:
 		parentpos = _parent(pos)
 		parent = <Entry>PyList_GET_ITEM(heap, parentpos)
-		if cmpfun(parent, newitem): break
+		if cmpfun(parent, newitem):
+			break
 		heap[pos] = parent
 		pos = parentpos
 	heap[pos] = newitem
@@ -496,7 +515,7 @@ class TestHeap(TestCase):
 	def test_del(self):
 		h, pairs, d = self.make_data()
 		while pairs:
-			k, v = pairs.pop(len(pairs)//2)
+			k, v = pairs.pop(len(pairs) // 2)
 			del h[k]
 			del d[k]
 			self.assertEqual(len(h), len(d))
@@ -517,9 +536,9 @@ class TestHeap(TestCase):
 
 	def test_change(self):
 		h, pairs, d = self.make_data()
-		k, v = pairs[testN//2]
+		k, v = pairs[testN // 2]
 		h[k] = 0.5
-		pairs[testN//2] = (k, 0.5)
+		pairs[testN // 2] = (k, 0.5)
 		pairs.sort(key=itemgetter(1), reverse=True)
 		while pairs:
 			v = h.popitem()
@@ -543,7 +562,7 @@ class TestHeap(TestCase):
 		#self.assertEqual(h, eval(repr(h)))
 		tmp = repr(h)	# 'Agenda({....})'
 		#strip off class name
-		dstr = tmp[tmp.index('(')+1:tmp.rindex(')')]
+		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
 		self.assertEqual(d, eval(dstr))
 
 def test(verbose=False):

@@ -127,18 +127,16 @@ def main(argv):
 				params['disc'], limit, encoding))
 			trees2 = params['trees2']
 			sents2 = params['sents2']
-			labels = params['labels']
-			prods = params['prods']
 			if params['quadratic']:
-				fragments = extractfragments(trees1, sents1, 0, 0, labels,
-					prods, params['revlabel'], trees2, sents2,
-					discontinuous=params['disc'], debug=params['debug'],
-					approx=params['approx'])
+				fragments = extractfragments(trees1, sents1, 0, 0,
+						params['revlabel'], trees2, sents2,
+						discontinuous=params['disc'], debug=params['debug'],
+						approx=params['approx'])
 			else:
-				fragments = fastextractfragments(trees1, sents1, 0, 0, labels,
-					prods, params['revlabel'], trees2, sents2,
-					discontinuous=params['disc'], debug=params['debug'],
-					approx=params['approx'])
+				fragments = fastextractfragments(trees1, sents1, 0, 0,
+						params['revlabel'], trees2, sents2,
+						discontinuous=params['disc'], debug=params['debug'],
+						approx=params['approx'])
 			if not params['approx'] and not params['nofreq']:
 				fragmentkeys, bitsets = map(list, zip(*fragments.iteritems()))
 				if params['indices']:
@@ -168,14 +166,16 @@ def main(argv):
 		mymap = imap
 		myapply = apply
 	else:
+		# detect corpus reading errors in this process (e.g. wrong encoding)
+		initworker(args[0], args[1] if len(args) == 2 else None,
+				limit, encoding)
 		# start worker processes
-		pool = Pool(processes=numproc, initializer=initworker,
+		pool = Pool(processes=numproc, initializer=
+			initworker,
 			initargs=(args[0], args[1] if len(args) == 2 else None,
 				limit, encoding))
 		mymap = pool.imap
 		myapply = pool.apply
-		# FIXME: detect corpus reading errors here (e.g. wrong encoding)
-		# currently they lead to an unclear backtrace due to multiprocessing
 
 	if params['complete']:
 		initworker(args[0], args[1] if len(args) == 2 else None,
@@ -257,6 +257,13 @@ def initworker(treebank1, treebank2, limit, encoding):
 	under the assumption that this is advantageous with a NUMA architecture. """
 	params.update(readtreebanks(treebank1, treebank2,
 		limit=limit, discontinuous=params['disc'], encoding=encoding))
+	if params['debug']:
+		print "labels:"
+		for a, b in params['labels'].iteritems():
+			print a, b
+		print "\nproductions:"
+		for a, b in params['prods'].iteritems():
+			print a, b
 	trees1 = params['trees1']
 	assert trees1
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
@@ -277,20 +284,17 @@ def worker(interval):
 	trees2 = params['trees2']
 	sents1 = params['sents1']
 	sents2 = params['sents2']
-	labels = params['labels']
-	prods = params['prods']
 	assert offset < len(trees1)
 	result = {}
 	if params['quadratic']:
-		result = extractfragments(trees1, sents1, offset, end, labels,
-			prods, params['revlabel'], trees2, sents2,
-			approx=params['approx'],
-			discontinuous=params['disc'], debug=False)
+		result = extractfragments(trees1, sents1, offset, end,
+				params['revlabel'], trees2, sents2, approx=params['approx'],
+				discontinuous=params['disc'], debug=params['debug'])
 	else:
-		result = fastextractfragments(trees1, sents1, offset, end, labels,
-			prods, params['revlabel'], trees2, sents2,
-			approx=params['approx'], discontinuous=params['disc'],
-			complement=params['complement'], debug=False)
+		result = fastextractfragments(trees1, sents1, offset, end,
+				params['revlabel'], trees2, sents2, approx=params['approx'],
+				discontinuous=params['disc'], complement=params['complement'],
+				debug=params.get('debug'))
 	logging.info("finished %d--%d", offset, end)
 	return result
 

@@ -1,10 +1,11 @@
 """ Assorted functions to read grammars of treebanks. """
 import codecs, logging, sys, re
 from operator import mul, itemgetter
-from math import log, exp
+from math import exp
+from fractions import Fraction
 from collections import defaultdict, Counter as multiset
-from itertools import chain, count, islice, imap, repeat
-from tree import ImmutableTree, Tree
+from itertools import count, islice, imap, repeat
+from tree import ImmutableTree, Tree, DiscTree
 from containers import Grammar
 
 usage = """Read off grammars from treebanks.
@@ -135,34 +136,31 @@ def lcfrs_productions(tree, sent, frontiers=False):
 		rules.append(rule)
 	return rules
 
-def induce_plcfrs(trees, sents, freqs=False):
+def induce_plcfrs(trees, sents):
 	""" Induce a probabilistic LCFRS, similar to how a PCFG is read off
 	from a treebank """
 	grammar = multiset(rule for tree, sent in zip(trees, sents)
 			for rule in lcfrs_productions(tree, sent))
-	if freqs:
-		return list(grammar.items())
 	lhsfd = multiset()
 	for rule, freq in grammar.iteritems():
 		lhsfd[rule[0][0]] += freq
 	for rule, freq in grammar.iteritems():
-		grammar[rule] = log(float(freq) / lhsfd[rule[0][0]])
+		grammar[rule] = Fraction(freq, lhsfd[rule[0][0]])
 	return list(grammar.items())
 
-def dopreduction(trees, sents, ewe=False, shortestderiv=False,
-		freqs=False, packedgraph=False):
+def dopreduction(trees, sents, ewe=False,
+		shortestderiv=False, packedgraph=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 		ewe: apply the equal weights estimate.
-		freqs: return frequencies instead of probabilities.
-	TODO: verify packed graph encoding (Bansal & Klein 2010). """
-	global packed_graph_ids, packedgraphs
+		packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
+	"""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@12),
 	# 	counts of NP@... should sum to count of NP
 	# ntfd: frequency of a node in corpus
-	fd = defaultdict(float)
-	ntfd = defaultdict(float)
-	rules = defaultdict(float)
+	fd = defaultdict(int)
+	ntfd = defaultdict(int)
+	rules = defaultdict(int)
 	if packedgraph:
 		trees = [tree.freeze() for tree in trees]
 		decoratefun = decorate_with_ids_mem
@@ -187,21 +185,19 @@ def dopreduction(trees, sents, ewe=False, shortestderiv=False,
 	def rfe(rule):
 		""" relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996) """
 		(r, yf), freq = rule
-		return (r, yf), ((1 if any('@' in z for z in r) else freq) *
-			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
-			/ (1 if freqs else fd[r[0]]))
+		return (r, yf), Fraction((1 if any('@' in z for z in r) else freq) *
+			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
 
 	def bodewe(rule):
 		""" Bod (2003, figure 3) """
 		(r, yf), freq = rule
-		return (r, yf), ((1 if '@' in r[0] else freq) *
-			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
-			/ ((1 if freqs else fd[r[0]])
-				* (ntfd[r[0]] if '@' not in r[0] else 1.)))
+		return (r, yf), Fraction((1 if '@' in r[0] else freq) *
+			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1),
+			(fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
 
 	#@memoize
 	#def sumfracs(nom, denoms):
-	#	return sum(nom / denom for denom in denoms)
+	#	return sum(Fraction(nom, denom) for denom in denoms)
 	#
 	# map of exterior (unaddressed) nodes to normalized denominators:
 	#ewedenoms = {}
@@ -221,21 +217,19 @@ def dopreduction(trees, sents, ewe=False, shortestderiv=False,
 	#		ewedenoms.setdefault(a, []).append(fd[aj] * ntfd[a])
 	#	for a in ewedenoms:
 	#		ewedenoms[a] = tuple(ewedenoms[a])
-	#	probmodel = [(rule, log(p))
-	#		for rule, p in imap(goodmanewe, rules.iteritems())]
+	#	probmodel = map(goodmanewe, rules.iteritems())
 	if ewe: #bodewe
-		probmodel = [(rule, p if freqs else log(p))
-			for rule, p in imap(bodewe, rules.iteritems())]
+		probmodel = map(bodewe, rules.iteritems())
 	else:
-		probmodel = [(rule, p if freqs else log(p))
-			for rule, p in imap(rfe, rules.iteritems())]
+		probmodel = map(rfe, rules.iteritems())
 	if shortestderiv:
-		nonprobmodel = [(rule, log(1. if '@' in rule[0][0] else 0.5))
+		nonprobmodel = [(rule, Fraction(1, 1 if '@' in rule[0][0] else 2))
 							for rule in rules]
 		return (nonprobmodel, dict(probmodel))
-	return probmodel
+	else:
+		return list(probmodel)
 
-def doubledop(fragments, debug=False, ewe=False, freqs=False):
+def doubledop(fragments, debug=False, ewe=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus all
 	individual productions needed to obtain full coverage.
@@ -248,13 +242,21 @@ def doubledop(fragments, debug=False, ewe=False, freqs=False):
 	terminal and tag: tag@word.
 	When ewe is true, the equal weights estimate is applied. This requires that
 	the fragments are accompanied by indices instead of frequencies. """
+	def getprob(frag, terminals, ewe):
+		if ewe:
+			# Sangati & Zuidema (2011, eq. 5)
+			# TODO: verify that this formula is equivalent to Bod (2003).
+			return sum(Fraction(v, fragmentcount[k])
+					for k, v in fragments[frag, terminals].iteritems())
+		else:
+			return fragments[frag, terminals]
 	grammar = {}
 	backtransform = {}
-	ntfd = defaultdict(float)
+	ntfd = defaultdict(int)
 	ids = count()
 	if ewe:
 		# build an index to get the number of fragments extracted from a tree
-		fragmentcount = defaultdict(float)
+		fragmentcount = defaultdict(int)
 		for indices in fragments.itervalues():
 			for index, cnt in indices.iteritems():
 				fragmentcount[index] += cnt
@@ -264,43 +266,44 @@ def doubledop(fragments, debug=False, ewe=False, freqs=False):
 	# construct a mapping of productions to fragments
 	for frag, terminals in fragments:
 		prods, newfrag = flatten(frag, terminals, ids)
-		if prods[0][0][1] == 'Epsilon': #lexical production
-			lexprod = prods[0]
-			if ewe:
-				# Sangati & Zuidema (2011, eq. 5)
-				grammar[lexprod] = sum(v / fragmentcount[k]
-						for k, v in fragments[frag, terminals].iteritems())
-			else:
-				grammar[lexprod] = fragments[frag, terminals]
+		prod = prods[0]
+		if prod[0][1] == 'Epsilon': #lexical production
+			grammar[prod] = getprob(frag, terminals, ewe)
 			continue
-		elif prods[0] in backtransform:
+		elif prod in backtransform:
 			# normally, rules of fragments are disambiguated by binarization IDs
 			# in case there's a fragment with only one or two frontier nodes,
 			# we add an artficial node.
-			newlabel = "%s}<%d>%s" % (prods[0][0][0], ids.next(),
-					'' if len(prods[0][1]) == 1 else '_%d' % len(prods[0][1]))
-			prod1 = ((prods[0][0][0], newlabel) + prods[0][0][2:], prods[0][1])
+			newlabel = "%s}<%d>%s" % (prod[0][0], ids.next(),
+					'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
+			prod1 = ((prod[0][0], newlabel) + prod[0][2:], prod[1])
 			# we have to determine fanout of the first nonterminal
 			# on the right hand side
-			prod2 = ((newlabel, prods[0][0][1]),
-				tuple((0,) for component in prods[0][1]
+			prod2 = ((newlabel, prod[0][1]),
+				tuple((0,) for component in prod[1]
 				for a in component if a == 0))
 			prods[:1] = [prod1, prod2]
+
 		# first binarized production gets prob. mass
-		if ewe:
-			# Sangati & Zuidema (2011, eq. 5)
-			grammar[prods[0]] = sum(v / fragmentcount[k]
-					for k, v in fragments[frag, terminals].iteritems())
-		else:
-			grammar[prods[0]] = fragments[frag, terminals]
+		grammar[prod] = getprob(frag, terminals, ewe)
 		grammar.update(zip(prods[1:], repeat(1)))
 		# & becomes key in backtransform
-		backtransform[prods[0]] = newfrag
+		backtransform[prod] = newfrag
 	if debug:
 		ids = count()
 		flatfrags = [flatten(frag, terminals, ids)
 				for frag, terminals in fragments]
-		doubledopdump(flatfrags, fragments, {}, backtransform)
+		print "recurring fragments:"
+		for a, b in zip(flatfrags, fragments):
+			print "fragment: %s\nprod:     %s" % (b[0], "\n\t".join(
+				printrule(r, yf, 0) for r, yf in a[0]))
+			print "template: %s\nfreq: %2d  sent: %s\n" % (
+					a[1], fragments[b], " ".join('_' if x is None
+					else quotelabel(x) for x in b[1]))
+		print "backtransform:"
+		for a, b in backtransform.items():
+			print a, b
+
 	#sort grammar such that we have these clusters:
 	# 1. non-binarized rules or initial rules of a binarized constituent
 	# 2: non-initial binarized rules.
@@ -313,45 +316,12 @@ def doubledop(fragments, debug=False, ewe=False, freqs=False):
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = {n: backtransform[r]
 		for n, (r, _) in enumerate(grammar) if r in backtransform}
-	if freqs:
-		return grammar, backtransform
 	# relative frequences as probabilities
 	for rule, freq in grammar:
 		ntfd[rule[0][0]] += freq
-	grammar = [(rule, log(freq / ntfd[rule[0][0]])) for rule, freq in grammar]
+	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
+			for rule, freq in grammar]
 	return grammar, backtransform
-
-def doubledopdump(flatfrags, fragments, newprods, backtransform):
-	""" Print some diagnostic information on a Double-DOP grammar. """
-	print "recurring fragments:"
-	for a, b in zip(flatfrags, fragments):
-		if isinstance(a, tuple):
-			print "fragment: %s\nprod:     %s" % (b[0], "\n\t".join(
-				printrule(r, yf, 0) for r, yf in a[0]))
-			print "template: %s\nfreq: %2d  sent: %s\n" % (
-					a[1], fragments[b], " ".join('_' if x is None
-					else quotelabel(x) for x in b[1]))
-		else:
-			print "fragment: %s\nprod:     %s\nfreq: %2d  sent: %s\n" % (
-					b[0], a, fragments[b],
-					" ".join('_' if x is None else quotelabel(x) for x in b[1]))
-	print "ambiguous fragments:"
-	if len(newprods) == 0:
-		print "None"
-	for a, b in newprods.iteritems():
-		b = b[1]
-		print "prod: %s\nsent: %s" % (a,
-				" ".join('_' if x is None else quotelabel(x) for x in b))
-		if backtransform.get(a,''):
-			print "frag:", backtransform[a]
-		print
-	print "backtransform:"
-	for a, b in backtransform.items():
-		if not isinstance(b, tuple):
-			print b
-		elif b:
-			print a, ":\n\t", b[0], " ".join(
-				'_' if x is None else quotelabel(x) for x in b[1])
 
 def coarse_grammar(trees, sents, level=0):
 	""" collapse all labels to X except ROOT and POS tags. """
@@ -412,40 +382,6 @@ def decorate_with_ids(n, tree, sent):
 		ids += 1
 	return utree
 
-def eqtree(tree1, sent1, tree2, sent2):
-	""" Test whether two discontinuous trees are equivalent;
-	assumes canonicalized() ordering. """
-	if tree1.node != tree2.node or len(tree1) != len(tree2):
-		return False
-	for a, b in zip(tree1, tree2):
-		istree = isinstance(a, Tree)
-		if istree != isinstance(b, Tree):
-			return False
-		elif istree:
-			if not a.__eq__(b):
-				return False
-		else:
-			return sent1[a] == sent2[b]
-	return True
-
-class DiscTree(ImmutableTree):
-	""" Wrap an immutable tree with indices as leaves
-	and a sentence. """
-	def __init__(self, tree, sent):
-		super(DiscTree, self).__init__(tree.node,
-				tuple(DiscTree(a, sent) if isinstance(a, Tree) else a
-				for a in tree))
-		self.sent = sent
-	def __eq__(self, other):
-		return isinstance(other, Tree) and eqtree(self, self.sent,
-				other, other.sent)
-	def __hash__(self):
-		return hash((self.node, ) + tuple(a.__hash__()
-				if isinstance(a, Tree) else self.sent[a] for a in self))
-	def __repr__(self):
-		return "DisctTree(%r, %r)" % (
-				super(DiscTree, self).__repr__(), self.sent)
-
 packed_graph_ids = 0
 packedgraphs = {}
 def decorate_with_ids_mem(n, tree, sent):
@@ -469,7 +405,7 @@ def decorate_with_ids_mem(n, tree, sent):
 		else:
 			return copyexceptindices(tree, packedgraphs[tree])
 	def copyexceptindices(tree1, tree2):
-		""" """
+		""" Copy the nonterminals from tree2, but take indices from tree1. """
 		if not isinstance(tree1, Tree):
 			return tree1
 		return ImmutableTree(tree2.node,
@@ -593,12 +529,12 @@ def ranges(s):
 
 def printrule(r, yf, w):
 	""" Return a string with a representation of a rule. """
-	return "%.2f %s --> %s\t %r" % (exp(w), r[0], "  ".join(r[1:]), list(yf))
+	return "%s %s --> %s\t %r" % (w, r[0], "  ".join(r[1:]), list(yf))
 
-def printrulelatex(rule, doexp=True):
+def printrulelatex(rule):
 	r""" Return a string with a representation of a rule in latex format.
 
-	>>> r = ((('VP_2@1', 'NP@2', 'VVINF@5'), ((0,), (1,))), -0.916290731874155)
+	>>> r = ((('VP_2@1', 'NP@2', 'VVINF@5'), ((0,), (1,))), 0.4)
 	>>> printrulelatex(r)
 	0.4 &  $ \textrm{VP\_2@1}(x_{0},x_{1}) \rightarrow \textrm{NP@2}(x_{0}) \: \textrm{VVINF@5}(x_{1})  $ \\
 	"""
@@ -616,7 +552,7 @@ def printrulelatex(rule, doexp=True):
 			newrhs.append((a, [c.next() for x in range(z)]))
 			variables.append(list(newrhs[-1][1]))
 		lhs = (r[0], [[variables[x].pop(0) for x in comp] for comp in yf])
-	print (exp(w) if doexp else w), "& ",
+	print w, "& ",
 	r = tuple([lhs]+newrhs)
 	lhs = r[0]
 	rhs = r[1:]
@@ -707,7 +643,7 @@ def read_rparse_grammar(filename):
 		prob, lhs = line.pop(0).split(":")
 		line.pop(0) # -->
 		result.append(((tuple([lhs] + line), tuple(map(tuple, yf))),
-			log(float(prob))))
+			float(prob)))
 	return result
 
 def exportrparsegrammar(grammar):
@@ -734,46 +670,50 @@ def exportrparsegrammar(grammar):
 		return "".join(a.split("_")) if "_" in a else a+"1"
 	for (r, yf), w in grammar:
 		if r[1] != 'Epsilon':
-			yield ("1 %s:%s --> %s [%s]" % (repr(exp(w)), rewritelabel(r[0]),
+			yield ("1 %s:%s --> %s [%s]" % (w, rewritelabel(r[0]),
 				" ".join(map(rewritelabel, r[1:])), repryf(yf)))
 
-def read_bitpar_grammar(rules, lexicon, dop=False, ewe=False):
-	""" Read a bitpar grammar given two file objects. Must be a binarized grammar.
-	Note that the VROOT symbol will be read as `ROOT' instead. Frequencies will
-	be converted to exact relative frequencies (unless ewe is specified)."""
+def read_bitpar_grammar(rules, lexicon):
+	""" Read a bitpar grammar given two file objects. Must be a binarized
+	grammar. Integer frequencies will be converted to exact relative
+	frequencies; otherwise weights are kept as-is. """
 	grammar = []
-	ntfd = defaultdict(float)
-	ntfd1 = defaultdict(set)
+	integralweights = True
+	ntfd = defaultdict(int)
 	for a in rules:
 		a = a.split()
 		p, rule = float(a[0]), a[1:]
-		if rule[0] == "VROOT":
-			rule[0] = "ROOT"
+		if integralweights:
+			ip = int(p)
+			if ip == p:
+				p == ip
+			else:
+				integralweights = False
 		ntfd[rule[0]] += p
-		if dop:
-			ntfd1[rule[0].split("@")[0]].add(rule[0])
 		if len(rule) == 2:
 			grammar.append(((tuple(rule), ((0,),)), p))
 		elif len(rule) == 3:
 			grammar.append(((tuple(rule), ((0, 1),)), p))
 		else:
-			raise ValueError
-		#grammar.append(([(rule[0], [range(len(rule) - 1)])]
-		#			+ [(a, [n]) for n, a in enumerate(rule[1:])], p))
+			raise ValueError("grammar is not binarized")
 	for a in lexicon:
 		a = a.split()
-		word, tags = a[0], a[1:]
-		tags = zip(tags[::2], map(float, tags[1::2]))
+		word = a[0]
+		tags, weights = a[1::2], a[2::2]
+		weights = map(float, weights)
+		if integralweights:
+			if all(int(w) == w for w in weights):
+				weights = map(int, weights)
+			else:
+				integralweights = False
+		tags = zip(tags, weights)
 		for t, p in tags:
 			ntfd[t] += p
-			if dop:
-				ntfd1[t.split("@")[0]].add(t)
 		grammar.extend((((t, 'Epsilon'), (word,)), p) for t, p in tags)
-	if ewe:
-		return Grammar([(rule,
-			log(p / (ntfd[rule[0][0]] * len(ntfd1[rule[0][0].split("@")[0]]))))
-			for rule, p in grammar])
-	return [(rule, log(p / ntfd[rule[0][0]])) for rule, p in grammar]
+	if integralweights:
+		return [(rule, Fraction(p, ntfd[rule[0][0]])) for rule, p in grammar]
+	else:
+		return grammar
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	""" Takes a bitpar grammar and converts it to the format of
@@ -791,34 +731,55 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	assert "VROOT" in grammar[0]
 	codecs.open(out, "w", encoding=encoding).writelines(grammar)
 
-def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False):
+def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 	""" Writes a grammar as produced by induce_plcfrs() or dopreduction()
 	(so before it goes through Grammar()) into a simple text file format.
 	Expects file objects with write() methods. Fields are separated by tabs.
-	Components of the yield function are comma-separated; e.g.:
-	rules: S	NP	VP	010	0.5
-		VP_2	VB	NP	0,1	0.4
-	lexicon: NN	Epsilon	Haus	0.3
-	When bitpar is True, use bitpar format: for rules, put weight first and
-	leave out the yield function. """
+	Components of the yield function are comma-separated; weights are printed
+	as rational fractions (when freqiencies is True, only print numerator).
+	e.g.:
+	rules: S	NP	VP	010	1/2
+		VP_2	VB	NP	0,1	2/5
+	lexicon: Haus NN 2/9	JJ 1/15
+	When bitpar is True, use bitpar format: for rules, put weight first (as
+	decimal fraction or frequency) and leave out the yield function; for lexical
+	productions, use one line per word followed by pairs of tags and weights.
+	"""
+	lexical = {}
 	for (r, yf), w in grammar:
 		if len(r) == 2 and r[1] == "Epsilon":
-			lexicon.write("%s\t%s\t%g\n" % ("\t".join(r), yf[0], float(w)))
+			lexical.setdefault(yf[0], []).append((r[0], w))
+	for word, lexrules in lexical.iteritems():
+		lexicon.write(word)
+		for tag, w in lexrules:
+			if freqs:
+				lexicon.write("\t%s %s" % (tag, w.numerator))
+			elif bitpar:
+				lexicon.write("\t%s %g" % (tag, w))
+			else:
+				lexicon.write("\t%s %s" % (tag, w))
+		lexicon.write("\n")
+	for (r, yf), w in grammar:
+		if len(r) == 2 and r[1] == "Epsilon":
+			continue
 		elif bitpar:
-			rules.write("%g\t%s\n" % (w, "\t".join(r)))
+			rules.write("%s\t%s\n" % (w.numerator if freqs else "%g" % w,
+					"\t".join(r)))
 		else:
 			yfstr = ",".join("".join(map(str, a)) for a in yf)
-			rules.write("%s\t%s\t%g\n" % ("\t".join(r), yfstr, float(w)))
+			rules.write("%s\t%s\t%s\n" % ("\t".join(r), yfstr,
+					w.numerator if freqs else w))
 
-def read_lcfrs_grammar(rules, lexicon, encoding='utf-8'):
+def read_lcfrs_grammar(rules, lexicon):
 	""" Reads a grammar as produced by write_lcfrs_grammar from two file
 	objects. """
 	rules = (a.strip().split('\t') for a in rules)
 	grammar = [((tuple(a[:-2]), tuple(tuple(map(int, b))
-			for b in a[-2].split(","))), float.fromhex(a[-1])) for a in rules]
-	lexicon = (a.strip().split('\t') for a in lexicon)
-	grammar += [(((t, 'Epsilon'), (w,)), float.fromhex(p))
-			for t, w, p in lexicon]
+			for b in a[-2].split(","))), Fraction(a[-1])) for a in rules]
+	# one word per line, word (tag weight)+
+	grammar += [(((t, 'Epsilon'), (lexentry[0],)), Fraction(p))
+			for lexentry in (a.strip().split() for a in lexicon)
+			for t, p in zip(lexentry[1::2], lexentry[2::2])]
 	return grammar
 
 def alterbinarization(tree):
@@ -889,7 +850,8 @@ def grammarinfo(grammar, dump=None):
 	return result
 
 def do(sent, grammar):
-	from parser import parse, pprint_chart
+	""" Parse a sentence with a grammar. """
+	from _parser import parse, pprint_chart
 	from disambiguation import marginalize
 	print "sentence", sent
 	p, start, _ = parse(sent, grammar, start=grammar.toid['S'])
@@ -903,9 +865,10 @@ def do(sent, grammar):
 	print
 
 def test():
+	""" Run some tests. """
 	from treetransforms import unbinarize, removefanoutmarkers
 	from treebank import NegraCorpusReader
-	from parser import parse, pprint_chart
+	from _parser import parse, pprint_chart
 	from treetransforms import addfanoutmarkers
 	from disambiguation import recoverfragments
 	from kbest import lazykbest
@@ -981,10 +944,7 @@ def test():
 			pprint_chart(chart, sent, grammar.tolabel)
 		print
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
-	g = Grammar(induce_plcfrs([tree], [range(10)]))
-	#print "tree: %s\nunary closure:" % tree
-	#g.getunaryclosure()
-	#g.printclosure()
+	Grammar(induce_plcfrs([tree], [range(10)]))
 
 def main():
 	import gzip
@@ -1026,17 +986,17 @@ def main():
 
 	# read off grammar
 	if model in ("pcfg", "plcfrs"):
-		grammar = induce_plcfrs(trees, sents, freqs=freqs)
+		grammar = induce_plcfrs(trees, sents)
 	elif model == "dopreduction":
 		estimator = opts.get('--dopestimator', 'dop1')
 		grammar = dopreduction(trees, sents, ewe=estimator=='ewe',
-				shortestderiv=estimator=='shortest', freqs=freqs,
+				shortestderiv=estimator=='shortest',
 				packedgraph="--packed" in opts)
 	elif model == "doubledop":
 		assert opts.get('--dopestimator', 'dop1') == 'dop1'
 		numproc = int(opts.get('--numproc', 1))
 		fragments = getfragments(trees, sents, numproc)
-		grammar, backtransform = doubledop(fragments, freqs=freqs)
+		grammar, backtransform = doubledop(fragments)
 
 	print grammarinfo(grammar)
 	if not freqs:
@@ -1053,17 +1013,9 @@ def main():
 	with myopen(rules, "w") as rulesfile:
 		with codecs.getwriter('utf-8')(myopen(lexicon, "w")) as lexiconfile:
 			# write output
-			if model == "pcfg" or opts.get('--inputfmt') == 'bracket':
-				if freqs:
-					write_lcfrs_grammar(grammar, rulesfile, lexiconfile,
-							bitpar=True)
-				else:
-					cgrammar.write_bitpar_grammar(rulesfile, lexiconfile)
-			else:
-				if freqs:
-					write_lcfrs_grammar(grammar, rulesfile, lexiconfile)
-				else:
-					cgrammar.write_lcfrs_grammar(rulesfile, lexiconfile)
+			bitpar = model == "pcfg" or opts.get('--inputfmt') == 'bracket'
+			write_lcfrs_grammar(grammar, rulesfile, lexiconfile,
+					bitpar=bitpar, freqs=freqs)
 	if model == "doubledop":
 		backtransformfile = "%s.backtransform%s" % (grammarfile,
 			".gz" if '--gzip' in opts else "")

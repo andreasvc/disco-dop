@@ -20,18 +20,18 @@ auxiliary trees:
 (S (ADVP (RB Later) (S* ))
 (VP (ADVP (RB drastically)) (VP* ))"""
 	grammar = Grammar([
-		((('ROOT','S'),  ((0,),)), 0.0),
-		((('S', 'NP', 'VP'), ((0,1),)), 0.0),
-		((('S', 'ADVP#1', 'S'), ((0,1),)), 0.0),
-		((('VP', 'V#1'), ((0,),)), 0.0),
-		((('VP', 'ADVP#2', 'VP'), ((0,1),)), 0.0),
-		((('NP','NN#1'), ((0,),)), 0.0),
-		((('ADVP#1','RB#1'),  ((0,),)), 0.0),
-		((('ADVP#2','RB#2'),  ((0,),)), 0.0),
-		((('RB#1', 'Epsilon'), ('Later',)), 0.0),
-		((('NN#1', 'Epsilon'), ('prices',)), 0.0),
-		((('V#1', 'Epsilon'), ('fell',)), 0.0),
-		((('RB#2', 'Epsilon'), ('drastically',)), 0.0)])
+		((('ROOT','S'),  ((0,),)), 1),
+		((('S', 'NP', 'VP'), ((0,1),)), 1),
+		((('S', 'ADVP#1', 'S'), ((0,1),)), 1),
+		((('VP', 'V#1'), ((0,),)), 1),
+		((('VP', 'ADVP#2', 'VP'), ((0,1),)), 1),
+		((('NP','NN#1'), ((0,),)), 1),
+		((('ADVP#1','RB#1'),  ((0,),)), 1),
+		((('ADVP#2','RB#2'),  ((0,),)), 1),
+		((('RB#1', 'Epsilon'), ('Later',)), 1),
+		((('NN#1', 'Epsilon'), ('prices',)), 1),
+		((('V#1', 'Epsilon'), ('fell',)), 1),
+		((('RB#2', 'Epsilon'), ('drastically',)), 1)])
 	print grammar
 	assert do(grammar, "prices fell".split())
 	assert do(grammar, "prices drastically fell".split())
@@ -48,19 +48,19 @@ auxiliary trees:
 auxiliary trees:
 (S b S* c)"""
 	grammar = Grammar([
-		((('ROOT', 'a1'), ((0,),)), 0.0),
-		((('ROOT', 'a2'), ((0,),)), 0.0),
-		((('a1', 'a_b', 'a2'), ((0,1),)), 0.0),
-		((('a1', '_a', 'a2'), ((0,1),)), 0.0),
-		((('a2', '_d'), ((0,),)), 0.0),
-		((('a_b', '_a', 'b'), ((0,1),)), 0.0),
-		((('b', '_b', '_c'), ((0,1),)), 0.0),
-		((('b', 'b_2', 'b'), ((0,1,0),)), 0.0),
-		((('b_2', '_b', '_c'), ((0,),(1,))), 0.0),
-		((('_a', 'Epsilon'), ('a',)), 0.0),
-		((('_b', 'Epsilon'), ('b',)), 0.0),
-		((('_c', 'Epsilon'), ('c',)), 0.0),
-		((('_d', 'Epsilon'), ('d',)), 0.0),
+		((('ROOT', 'a1'), ((0,),)), 1),
+		((('ROOT', 'a2'), ((0,),)), 1),
+		((('a1', 'a_b', 'a2'), ((0,1),)), 1),
+		((('a1', '_a', 'a2'), ((0,1),)), 1),
+		((('a2', '_d'), ((0,),)), 1),
+		((('a_b', '_a', 'b'), ((0,1),)), 1),
+		((('b', '_b', '_c'), ((0,1),)), 1),
+		((('b', 'b_2', 'b'), ((0,1,0),)), 1),
+		((('b_2', '_b', '_c'), ((0,),(1,))), 1),
+		((('_a', 'Epsilon'), ('a',)), 1),
+		((('_b', 'Epsilon'), ('b',)), 1),
+		((('_c', 'Epsilon'), ('c',)), 1),
+		((('_d', 'Epsilon'), ('d',)), 1),
 		])
 	print grammar
 	assert do(grammar, list("d"))
@@ -81,17 +81,17 @@ auxiliary trees:
 		(A b (A A*) b)
 		(A (A A*))"""
 	grammar = Grammar([
-		((('ROOT', '_|'), ((0,),)), 0.0),
-		((('ROOT', 'A', '_|'), ((0,1,0),)), 0.0),
-		((('A', '_aa', 'A'), ((0,1), (0,1))), 0.0),
-		((('A', '_bb', 'A'), ((0,1), (0,1))), 0.0),
-		((('A', '_aa'), ((0,), (0,))), 0.0),
-		((('A', '_bb'), ((0,), (0,))), 0.0),
-		((('_aa', '_a', '_a'), ((0,),(1,))), 0.0),
-		((('_bb', '_b', '_b'), ((0,),(1,))), 0.0),
-		((('_a', 'Epsilon'), ('a',)), 0.0),
-		((('_b', 'Epsilon'), ('b',)), 0.0),
-		((('_|', 'Epsilon'), ('|',)), 0.0),
+		((('ROOT', '_|'), ((0,),)), 1),
+		((('ROOT', 'A', '_|'), ((0,1,0),)), 1),
+		((('A', '_aa', 'A'), ((0,1), (0,1))), 1),
+		((('A', '_bb', 'A'), ((0,1), (0,1))), 1),
+		((('A', '_aa'), ((0,), (0,))), 1),
+		((('A', '_bb'), ((0,), (0,))), 1),
+		((('_aa', '_a', '_a'), ((0,),(1,))), 1),
+		((('_bb', '_b', '_b'), ((0,),(1,))), 1),
+		((('_a', 'Epsilon'), ('a',)), 1),
+		((('_b', 'Epsilon'), ('b',)), 1),
+		((('_|', 'Epsilon'), ('|',)), 1),
 		])
 	print grammar
 	assert do(grammar, list("a|a"))
@@ -112,24 +112,24 @@ def dependencygrammar():
 	"""
 	print "A dependency grammar in an LCFRS:"
 	grammar = Grammar([
-		((('NMOD', '_A'), ((0,),)), 0.0),
-		((('SBJ','NMOD_hearing','PP'), ((0,), (1,))), 0.0),
-		((('ROOT','SBJ','is_VC'),  ((0,1,0,1),)), 0.0),
-		((('VC','_scheduled', 'TMP'), ((0,),(1,))), 0.0),
-		((('PP','_on', 'NP'), ((0,1,),)), 0.0),
-		((('NP','NMOD', '_issue'), ((0,1),)), 0.0),
-		((('NMOD', '_the'), ((0,),)), 0.0),
-		((('TMP', '_today'), ((0,),)), 0.0),
-		((('is_VC', '_is', 'VC'), ((0,1), (1,))), 0.0),
-		((('NMOD_hearing','NMOD', '_hearing'), ((0,1),)), 0.0),
-		((('_A', 'Epsilon'), ('A',)), 0.0),
-		((('_hearing', 'Epsilon'), ('hearing',)), 0.0),
-		((('_is', 'Epsilon'), ('is',)), 0.0),
-		((('_scheduled', 'Epsilon'), ('scheduled',)), 0.0),
-		((('_on', 'Epsilon'), ('on',)), 0.0),
-		((('_the', 'Epsilon'), ('the',)), 0.0),
-		((('_issue', 'Epsilon'), ('issue',)), 0.0),
-		((('_today', 'Epsilon'), ('today',)), 0.0)])
+		((('NMOD', '_A'), ((0,),)), 1),
+		((('SBJ','NMOD_hearing','PP'), ((0,), (1,))), 1),
+		((('ROOT','SBJ','is_VC'),  ((0,1,0,1),)), 1),
+		((('VC','_scheduled', 'TMP'), ((0,),(1,))), 1),
+		((('PP','_on', 'NP'), ((0,1,),)), 1),
+		((('NP','NMOD', '_issue'), ((0,1),)), 1),
+		((('NMOD', '_the'), ((0,),)), 1),
+		((('TMP', '_today'), ((0,),)), 1),
+		((('is_VC', '_is', 'VC'), ((0,1), (1,))), 1),
+		((('NMOD_hearing','NMOD', '_hearing'), ((0,1),)), 1),
+		((('_A', 'Epsilon'), ('A',)), 1),
+		((('_hearing', 'Epsilon'), ('hearing',)), 1),
+		((('_is', 'Epsilon'), ('is',)), 1),
+		((('_scheduled', 'Epsilon'), ('scheduled',)), 1),
+		((('_on', 'Epsilon'), ('on',)), 1),
+		((('_the', 'Epsilon'), ('the',)), 1),
+		((('_issue', 'Epsilon'), ('issue',)), 1),
+		((('_today', 'Epsilon'), ('today',)), 1)])
 	print grammar
 	testsent = "A hearing is scheduled on the issue today".split()
 	assert do(grammar, testsent)
@@ -142,12 +142,15 @@ def bitext():
 	(ROOT (S (NP (NNP (Mary 0) (Mary 4))) (VP (VB (likes 1) (aimes 5))\
      (NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) (SEP (| 3)))""".splitlines()]
 	sents = [["0"] * len(a.leaves()) for a in trees]
-	for a in trees: treetransforms.binarize(a)
+	for a in trees:
+		treetransforms.binarize(a)
 	compiled_scfg = Grammar(induce_plcfrs(trees, sents))
 	print "sentences:"
-	for t in trees: print " ".join(w for _, w in sorted(t.pos()))
+	for t in trees:
+		print " ".join(w for _, w in sorted(t.pos()))
 	print "treebank:"
-	for t in trees: print t
+	for t in trees:
+		print t
 	print compiled_scfg, "\n"
 
 	print "correct translations:"
@@ -170,15 +173,15 @@ def bitext():
 		"small", "little", "big", "large", "house", "shell", "a", "I", "the",
 		"saw", "found")
 	another_scfg = Grammar([
-		((('ROOT','S', '_|'),  ((0,1,0),)), 0.0),
+		((('ROOT','S', '_|'),  ((0,1,0),)), 1),
 		((('S', 'NP', 'VP'), ((0,1), (0,1))), 0.2),
 		((('DT', '_ein', '_a'), ((0,), (1,))), 0.5),
 		((('NP', '_ich', '_I'), ((0,), (1,),)), 0.6),
 		((('NP', 'DT', 'NP|<JJ-NN>'), ((0,1), (0,1))), 0.5),
 		((('NP|<JJ-NN>', 'JJ', 'NN_house'), ((0,1), (0,1))), 0.1),
 		((('NP|<JJ-NN>', 'JJ', 'NN_shell'), ((0,1), (0,1))), 1.3),
-		((('NN_house', '_Haus', '_house'), ((0,), (1,))), 0.0),
-		((('NN_shell', '_Haus', '_shell'), ((0,), (1,))), 0.0),
+		((('NN_house', '_Haus', '_house'), ((0,), (1,))), 1),
+		((('NN_shell', '_Haus', '_shell'), ((0,), (1,))), 1),
 		((('JJ', '_kleines', '_small'), ((0,), (1,))), 0.1),
 		((('JJ', '_kleines', '_little'), ((0,), (1,))), 0.9),
 		((('JJ', '_grosses', '_big'), ((0,), (1,))), 0.8),
@@ -186,7 +189,7 @@ def bitext():
 		((('VP', 'V', 'NP'), ((0,1), (0,1))), 0.1),
 		((('V', '_sah', '_saw'), ((0,), (1,))), 0.4),
 		((('V', '_fand', '_found'), ((0,), (1,))), 0.4)
-		] + [((('_%s' % word, 'Epsilon'), (word,)), 0.0)
+		] + [((('_%s' % word, 'Epsilon'), (word,)), 1)
 			for word in lexicon])
 	print another_scfg
 	sents = [
@@ -194,7 +197,8 @@ def bitext():
 		"ich sah ein kleines Haus | I saw a little house".split(),
 		"ich sah ein kleines Haus | I saw a small shell".split(),
 		"ich sah ein kleines Haus | I saw a little shell".split()]
-	for sent in sents: assert do(another_scfg, sent), sent
+	for sent in sents:
+		assert do(another_scfg, sent), sent
 
 def do(compiledgrammar, testsent, testtags=None):
 	chart, start, _ = parser.parse(testsent,
@@ -222,4 +226,5 @@ def main():
 	dependencygrammar()
 	tree_adjoining_grammar()
 
-if __name__=='__main__': main()
+if __name__ == '__main__':
+	main()
