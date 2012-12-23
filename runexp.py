@@ -653,7 +653,6 @@ def worker(args):
 			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), d.deletelabel, {}, {}, False)
 			candb = bracketings(evaltree, delete=d.deletelabel)
-			start = goldb = candb = None
 			if goldb and candb:
 				prec = precision(goldb, candb)
 				rec = recall(goldb, candb)

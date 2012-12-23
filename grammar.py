@@ -28,13 +28,21 @@ options may consist of (* marks default option):
     --packed              use packed graph encoding for DOP reduction
 
 When a PCFG is requested, or the input format is `bracket' (Penn format), the
-output will be in BitPar format. Otherwise the grammar is written as an LCFRS.
+output will be in bitpar format. Otherwise the grammar is written as an LCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
-The LCFRS format is as follows. Fields are separated by tabs.
-Components of the yield function are comma-separated, 0 refers to a component
-of the first RHS nonterminal, and 1 from the second. Weights are expressed as
-hexadecimal negative logprobs. E.g.:
+
+The LCFRS format is as follows. Rules are delimited by newlines.
+Fields are separated by tabs. The fields are:
+
+LHS	RHS1	[RHS2]	yield-function	weight
+
+The yield function defines how the spans of the RHS nonterminals
+are combined to form the spans of the LHS nonterminal. Components of the yield
+function are comma-separated, 0 refers to a component of the first RHS
+nonterminal, and 1 from the second. Weights are expressed as hexadecimal
+negative logprobs. E.g.:
+
 rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
          VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
          NP      NN      0       0.3

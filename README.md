@@ -58,8 +58,9 @@ implementation on a given processor.
 
 Usage: parser
 -------------
-To run an experiment, copy the file sample.prm and edit its parameters. These
-parameters can then be invoked by executing:
+To run a full experiment from treebank to evaluation on a test set,
+copy the file sample.prm and edit its parameters.
+These parameters can then be invoked by executing:
 
 	python runexp.py filename.prm
 
@@ -90,6 +91,8 @@ Usage: tools
 ------------
 Aside from the parser there are some standalone tools:
 
+- `parser.py`:           A basic command line interface to the parser
+                         comparable to bitpar. Reads grammars from text files.
 - `eval.py`:             While `runexp.py` already shows F-scores, more detailed
                          evaluation can be done with `eval.py`, which accepts
                          `EVALB` style parameter files: `python eval.py
