@@ -4,11 +4,11 @@ Moschitti (2006): Making Tree Kernels practical for Natural Language
 Learning. """
 
 import re, codecs, sys
-from collections import defaultdict
+from collections import defaultdict, Counter as multiset
 from itertools import count
 from functools import partial
 from array import array
-from nltk import Tree
+from tree import Tree
 from grammar import lcfrs_productions
 from containers import Terminal
 from treetransforms import binarize, introducepreterminals
@@ -247,7 +247,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	# compare one bitset to each tree for each unique fragment.
 	for n, bitset in enumerate(bitsets):
 		a = ctrees2[bitset.data.as_ulongs[SLOTS + 1]] # the fragment
-		candidates = set(range(trees1.len))
+		candidates = {m for m in range(trees1.len)}
 		for i in range(a.len):
 			if TESTBIT(bitset.data.as_ulongs, i):
 				candidates &= <set>(treeswithprod[a.nodes[i].prod])
@@ -258,6 +258,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 			b = ctrees1[m]
 			for j in range(b.len):
 				if a.nodes[i].prod != -1 and a.nodes[i].prod == b.nodes[j].prod:
+					# exploit the fact that True == 1, False == 0
 					count += containsbitset(a, b, bitset.data.as_ulongs, i, j)
 				elif fast and a.nodes[i].prod > b.nodes[j].prod: break
 		counts.data.as_uints[n] = count
@@ -265,25 +266,24 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 
 cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 	list treeswithprod, bint fast=True):
-	""" Given a set of fragments from trees2 as bitsets, produce the exact set
-	of trees with those fragments in trees1 (which may be equal to trees2).
-	The reason we need to do this separately is that a fragment can occur in
-	other trees where it was not a maximal fragment.
-	Returns a list with a set of indices for each bitset in the input; the
-	indices point to the trees where the fragments (described by the bitsets)
-	occur. This is useful to look up the contexts of fragments, or when the
-	order of sentences has significance which makes it possible to interpret
-	the set of indices as time-series data.
-	NB: the length of indices for a fragment can be smaller than the exact
-	frequency of that fragment, because fragments can occur multiple times in a
-	single tree."""
+	""" Given a set of fragments from trees2 as bitsets, produce a mapping of
+	fragments to the multiset of indices to trees1 which contain those
+	fragments. This is a multiset to account for multiple occurrences of a
+	fragment in a tree. (NB: trees1 may be equal to trees2). The reason we need
+	to do this separately is that a fragment can occur in other trees where it
+	was not a maximal fragment.
+	Returns a list with a multiset of indices for each bitset in the input;
+	the indices point to the trees where the fragments (described by the
+	bitsets) occur. This is useful to look up the contexts of fragments, or
+	when the order of sentences has significance which makes it possible to
+	interpret the set of indices as time-series data. """
 	cdef:
 		int n, m, i, j
 		UInt count
 		UChar SLOTS = 0
 		array bitset
 		NodeArray a, b, *ctrees1 = trees1.data, *ctrees2 = trees2.data
-		set candidates, matches
+		set candidates
 		list indices = [set() for _ in bitsets]
 	if SLOTS == 0:
 		pyarray = bitsets[0]
@@ -292,21 +292,21 @@ cpdef list exactindices(Ctrees trees1, Ctrees trees2, list bitsets,
 	# compare one bitset to each tree for each unique fragment.
 	for n, bitset in enumerate(bitsets):
 		a = ctrees2[bitset.data.as_ulongs[SLOTS + 1]] # the fragment
-		candidates = set(range(trees1.len))
+		candidates = {m for m in range(trees1.len)}
 		for i in range(a.len):
 			if TESTBIT(bitset.data.as_ulongs, i):
 				candidates &= <set>(treeswithprod[a.nodes[i].prod])
 		i = bitset.data.as_ulongs[SLOTS] # root of fragment in a
 
-		matches = set()
+		matches = multiset()
 		for m in candidates:
 			b = ctrees1[m]
 			for j in range(b.len):
 				if a.nodes[i].prod != -1 and a.nodes[i].prod == b.nodes[j].prod:
 					if containsbitset(a, b, bitset.data.as_ulongs, i, j):
-						matches.add(m)
+						matches[m] += 1
 				elif fast and a.nodes[i].prod > b.nodes[j].prod: break
-		indices[n] = frozenset(matches)
+		indices[n] = matches
 	return indices
 
 cdef inline int containsbitset(NodeArray A, NodeArray B, ULong *bitset,
@@ -553,8 +553,8 @@ def getsent(frag, list sent):
 	cdef int n, m = 0, maxl
 	cdef list newsent = []
 	cdef dict leafmap = {}
-	cdef dict spans = dict((int(start), int(end) + 1)
-			for start, end in frontierre.findall(frag))
+	cdef dict spans = {int(start): int(end) + 1
+			for start, end in frontierre.findall(frag)}
 	cdef list leaves = map(int, termsre.findall(frag))
 	spans.update((a,a+1) for a in leaves)
 	maxl = max(spans)
@@ -608,8 +608,8 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, list asent, list bsent,
 						print abitcount(&CST[IDX(n,m,b.len,SLOTS)], SLOTS) - 1,
 				else: print '-',
 	print "\ncommon productions:",
-	print len(set([a.nodes[n].prod for n in range(a.len)]) &
-		set([b.nodes[n].prod for n in range(b.len)]) - set([-1]))
+	print len({a.nodes[n].prod for n in range(a.len)} &
+		{b.nodes[n].prod for n in range(b.len)} - {-1})
 	print "found:",
 	if bitmatrix:
 		print "horz", sum([abitcount(&CST[n * SLOTS], SLOTS) > 0
@@ -633,12 +633,12 @@ def add_lcfrs_rules(tree, sent):
 	return tree
 
 def getprods(trees, prods):
-	prods.update((p, n) for n, p in enumerate(sorted(set(st.prod
-		for tree in trees for st in tree[0].subtrees()) - prods.viewkeys())))
+	prods.update((p, n) for n, p in enumerate(sorted({st.prod
+		for tree in trees for st in tree[0].subtrees()} - prods.viewkeys())))
 
 def getlabels(trees, labels):
-	labels.update((l, n) for n, l in enumerate(sorted(set(st.node
-		for tree in trees for st in tree[0].subtrees()) - labels.viewkeys())))
+	labels.update((l, n) for n, l in enumerate(sorted({st.node
+		for tree in trees for st in tree[0].subtrees()} - labels.viewkeys())))
 
 def nonfrontier(sent):
 	def nonfrontierfun(x):
@@ -646,7 +646,7 @@ def nonfrontier(sent):
 	return nonfrontierfun
 def ispreterminal(n): return not isinstance(n[0], Tree)
 def tolist(tree, sent):
-	""" Convert NLTK tree to a list of nodes in pre-order traversal,
+	""" Convert Tree object to a list of nodes in pre-order traversal,
 	except for the terminals, which come last. """
 	for a in tree.subtrees(ispreterminal):
 		a[0] = Terminal(a[0])

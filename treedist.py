@@ -34,7 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
 
 import numpy
 from collections import deque
-from nltk import Tree
+from tree import Tree
 
 class Terminal:
 	""" Auxiliary class to be able to add indices to terminal nodes of NLTK

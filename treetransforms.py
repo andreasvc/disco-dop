@@ -119,7 +119,7 @@ The following is a short tutorial on the available transformations.
 import re, sys
 from itertools import count, repeat
 from collections import defaultdict
-from nltk import Tree, ImmutableTree
+from tree import Tree, ImmutableTree
 from grammar import ranges
 from containers import OrderedSet
 from bit import fanout as bitfanout
@@ -358,8 +358,8 @@ def binarize(tree, factor="right", horzMarkov=None, vertMarkov=1,
 						siblings = "-".join(childNodes[start:end])
 					else:
 						siblings = str(ids.next())
-					newNode.node = "%s%s%s<%s>%s" % (originalNode, childChar,
-											marktail, siblings, parentString)
+					newNode.node = "%s%s<%s>%s%s" % (originalNode, childChar,
+							siblings, parentString, marktail)
 					curNode = newNode
 				assert len(nodeCopy) == 1
 				if rightMostUnary:
@@ -449,7 +449,7 @@ def collapse_unary(tree, collapsePOS=False, collapseRoot=False, joinChar="+"):
 					collapsePOS == True or isinstance(node[0,0], Tree)):
 				node.node += joinChar + node[0].node
 				node[0:] = [child for child in node[0]]
-				# since we assigned the child's children to the current node, 
+				# since we assigned the child's children to the current node,
 				# evaluate the current node again
 				nodeList.append(node)
 			else:
@@ -847,7 +847,7 @@ def contsets(tree):
 	>>> tree = Tree.parse( \
 		"(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
 	>>> print list(contsets(tree))
-	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])], 
+	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])],
 	[Tree('CARD', [4]), Tree('VVPP', [5])]]
 	"""
 	rng = -1
@@ -952,7 +952,7 @@ def demo():
 	binarize(cnfTree, factor="right", horzMarkov=2)
 	binarize(lcnfTree, factor="left", horzMarkov=2)
 
-	# convert the tree to CNF with parent annotation 
+	# convert the tree to CNF with parent annotation
 	# (one level) and horizontal smoothing of order two
 	parentTree = collapsedTree.copy(True)
 	binarize(parentTree, horzMarkov=2, vertMarkov=1)

@@ -1,7 +1,7 @@
 """ Assorted functions to project items from a coarse chart to corresponding
 items for a fine grammar. """
 from collections import defaultdict
-from nltk import Tree
+from tree import Tree
 from treetransforms import mergediscnodes, unbinarize, slowfanout
 from containers cimport ChartItem, Edge, RankedEdge, RankedCFGEdge, Grammar, \
 		CFGChartItem, CFGEdge, LCFRSEdge, new_CFGChartItem, ULLong, \

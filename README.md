@@ -34,20 +34,19 @@ Requirements:
 - Python 2.7+     http://www.python.org (need headers, e.g. python-dev package)
 - Cython 0.17.2+  http://www.cython.org
 - GCC             http://gcc.gnu.org/
-- NLTK            http://www.nltk.org
 - Numpy           http://numpy.scipy.org/
 
 For example, to install these dependencies and compile the code on Ubuntu
 (tested on 12.04), run the following sequence of commands:
 
-	sudo apt-get install python-dev python-nltk python-numpy build-essential
+	sudo apt-get install python-dev python-numpy build-essential
 	sudo pip install cython
 	git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
 	make
 
-Alternatively Cython, NLTK, and Numpy can all be installed with
-`pip install --user cython nltk numpy`,
+Alternatively Cython and Numpy can be installed with
+`pip install --user cython numpy`,
 which does not require root rights and may be more up-to-date than the
 packages in your distribution.
 

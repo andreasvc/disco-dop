@@ -2,7 +2,7 @@ import codecs, logging
 from math import exp
 from collections import Set, Iterable
 from functools import partial
-from nltk import Tree
+from tree import Tree
 
 DEF SLOTS = 2
 #maxbitveclen = sizeof(ULLong) * 8
@@ -22,11 +22,11 @@ cdef class Grammar:
 		# and assign them unique IDs
 		# convert them to ASCII strings.
 		nonterminals = list(enumerate(["Epsilon", "ROOT"]
-			+ sorted(set(str(nt) for (rule, _), _ in grammar for nt in rule)
-				- set(["Epsilon", "ROOT"]))))
+			+ sorted({str(nt) for (rule, _), _ in grammar for nt in rule}
+				- {"Epsilon", "ROOT"})))
 		self.nonterminals = len(nonterminals)
-		self.toid = dict((lhs, n) for n, lhs in nonterminals)
-		self.tolabel = dict((n, lhs) for n, lhs in nonterminals)
+		self.toid = {lhs: n for n, lhs in nonterminals}
+		self.tolabel = {n: lhs for n, lhs in nonterminals}
 		self.lexical = {}
 		self.lexicalbylhs = {}
 		self.mapping = self.splitmapping = NULL

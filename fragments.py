@@ -350,7 +350,8 @@ def workload(numtrees, mult, numproc):
 		result.append((last, numtrees))
 	return result
 
-def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
+def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
+		indices=False):
 	""" Get recurring fragments with exact counts in a single treebank. """
 	if numproc == 0:
 		numproc = cpu_count()
@@ -360,7 +361,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	fragments = {}
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
-	params.update(disc=True, approx=False, complete=False, indices=False,
+	params.update(disc=True, indices=indices, approx=False, complete=False,
 			quadratic=False, complement=complement)
 	if numproc == 1:
 		initworkersimple(trees, list(sents))
@@ -397,7 +398,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 		pool.join()
 		del pool
 	if iterate: # optionally collect fragments of fragments
-		from nltk import Tree
+		from tree import Tree
 		logging.info("extracting fragments of recurring fragments")
 		params['complement'] = False #needs to be turned off if it was on
 		newfrags = fragments
@@ -502,7 +503,7 @@ def printfragments(fragments, out=sys.stdout):
 				out.write("%s\t%r\n" % ( ("%s\t%s" % (a[0],
 					" ".join("%s" % x if x else "" for x in a[1])))
 					if params['disc'] else a,
-					list(sorted(theindices))))
+					list(sorted(theindices.elements()))))
 			elif threshold:
 				logging.warning("invalid fragment--frequency=1: %r", a)
 		return

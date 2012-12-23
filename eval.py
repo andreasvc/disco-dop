@@ -4,8 +4,7 @@ import sys, os.path
 from getopt import gnu_getopt, GetoptError
 from itertools import count, izip_longest
 from collections import defaultdict, Counter as multiset
-from nltk import Tree, FreqDist
-from nltk.metrics import accuracy, edit_distance
+from tree import Tree
 from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
 		BracketCorpusReader, readheadrules, dependencies, export
 from treedist import treedist, newtreedist
@@ -283,18 +282,18 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		if maxlenseen > param["CUTOFF_LEN"]:
 			print "for length <= %d" % param["CUTOFF_LEN"],
 		print
-		print "  label  % gold   recall   prec.     F1",
+		print "  label  % gold  recall    prec.     F1",
 		print "          test/gold   count"
 		print "_______________________________________",
 		print "       ____________________"
-		gmismatch = dict(((n, indices), label)
-					for n, (label, indices) in (goldb - candb).keys())
-		wrong = FreqDist((label, gmismatch[n, indices])
+		gmismatch = {(n, indices): label
+					for n, (label, indices) in (goldb - candb).keys()}
+		wrong = multiset((label, gmismatch[n, indices])
 					for n, (label, indices) in (candb - goldb).keys()
 					if (n, indices) in gmismatch)
 		freqcats = sorted(set(goldbcat) | set(candbcat),
 				key=lambda x: len(goldbcat[x]), reverse=True)
-		for cat, mismatch in izip_longest(freqcats[:10], wrong.keys()[:10]):
+		for cat, mismatch in izip_longest(freqcats[:10], wrong.most_common(10)):
 			if cat is None:
 				print "                                       ",
 			else:
@@ -306,7 +305,7 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 					nozerodiv(lambda: f_measure(goldbcat[cat], candbcat[cat]))),
 			if mismatch is not None:
 				print "       %s %7d" % (
-						"/".join(mismatch).rjust(12), wrong[mismatch]),
+						"/".join(mismatch[0]).rjust(12), mismatch[1]),
 			print
 
 		if accuracy(goldpos, candpos) != 1:
@@ -318,27 +317,27 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			print "          test/gold   count"
 			print "_______________________________________",
 			print "       ____________________"
-			tags = FreqDist(tag for _, tag in goldpos)
-			wrong = FreqDist((g, c)
+			tags = multiset(tag for _, tag in goldpos)
+			wrong = multiset((g, c)
 					for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
-			for tag, mismatch in izip_longest(tags.keys()[:10],
-					wrong.keys()[:10]):
-				goldtag = multiset(n for n, (w, t) in enumerate(goldpos)
-						if t == tag)
-				candtag = multiset(n for n, (w, t) in enumerate(candpos)
-						if t == tag)
+			for tag, mismatch in izip_longest(tags.most_common(10),
+					wrong.most_common(10)):
 				if tag is None:
 					print "".rjust(40),
 				else:
+					goldtag = multiset(n for n, (w, t) in enumerate(goldpos)
+							if t == tag[0])
+					candtag = multiset(n for n, (w, t) in enumerate(candpos)
+							if t == tag[0])
 					print "%s  %6.2f  %6.2f  %6.2f  %6.2f" % (
-							tag.rjust(7),
+							tag[0].rjust(7),
 							100 * len(goldtag) / float(len(goldpos)),
 							100 * recall(goldtag, candtag),
 							100 * precision(goldtag, candtag),
 							100 * f_measure(goldtag, candtag)),
 				if mismatch is not None:
 					print "       %s %7d" % (
-						"/".join(mismatch).rjust(12), wrong[mismatch]),
+						"/".join(mismatch[0]).rjust(12), mismatch[1]),
 				print
 		print
 
@@ -467,7 +466,7 @@ def readparam(filename):
 		for k, v in param[key]:
 			if k in seen or v in seen:
 				continue
-			connectedcomponents[k] = set((k, v))
+			connectedcomponents[k] = {k, v}
 			agenda = [x for x in param[key] if k in x or v in x]
 			while agenda:
 				a, b = agenda.pop()
@@ -477,7 +476,9 @@ def readparam(filename):
 				if b not in seen:
 					agenda.extend(x for x in param[key] if b in x)
 				seen.update((a, b))
-		param[key] = connectedcomponents
+		# reverse mappping {'A': {'A', 'B'}} => {'A': 'A', 'B': 'A'}
+		param[key] = {x: k for k in connectedcomponents
+				for x in connectedcomponents[k]}
 	return param
 
 def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
@@ -514,7 +515,7 @@ def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
 	sent[:] = [sent[n] for n in leaves]
 	pos[:] = [pos[n] for n in leaves]
 	# removed POS tags cause the numbering to be off, restore.
-	leafmap = dict((m, n) for n, m in enumerate(leaves))
+	leafmap = {m: n for n, m in enumerate(leaves)}
 	for a in posnodes:
 		a[0] = leafmap[a[0]]
 		a.indices = [a[0]]
@@ -576,7 +577,7 @@ def leafancestorpaths(tree, delete):
 	""" Generate a list of ancestors for each leaf node in a tree. """
 	#uses [] to mark components, and () to mark constituent boundaries
 	#deleted words/tags should not affect boundary detection
-	paths = dict((a, []) for a in tree.indices)
+	paths = {a: [] for a in tree.indices}
 	# do a top-down level-order traversal
 	thislevel = [tree]
 	while thislevel:
@@ -668,6 +669,16 @@ def f_measure(reference, candidate, alpha=0.5):
 		return 0
 	return 1.0/(alpha/p + (1-alpha)/r)
 
+def accuracy(reference, candidate):
+	""" Given a sequence of reference values and a corresponding sequence of
+	test values, return the fraction of corresponding values that are equal.
+	In particular, return the fraction of indices
+	0<i<=len(test) such that test[i] == reference[i]. """
+	assert len(reference) == len(candidate), (
+		"Sequences must have the same length.")
+	return sum(1 for a, b in zip(reference, candidate) if a == b) / float(
+		len(reference))
+
 def harmean(seq):
 	""" Compute harmonic mean of a sequence. """
 	try:
@@ -730,6 +741,33 @@ def nozerodiv(a):
 	except ZeroDivisionError:
 		return ' 0DIV!'
 	return '  None' if result is None else "%6.2f" % (100 * result)
+
+
+def edit_distance(s1, s2):
+	""" Calculate the Levenshtein edit-distance between two strings. The edit
+	distance is the number of characters that need to be substituted, inserted,
+	or deleted, to transform s1 into s2.  For example, transforming "rain" to
+	"shine" requires three steps, consisting of two substitutions and one
+	insertion: "rain" -> "sain" -> "shin" -> "shine".  These operations could
+	have been done in other orders, but at least three steps are needed.
+	"""
+	# set up a 2-D array
+	len1 = len(s1); len2 = len(s2)
+	# initialize 2-D array to zero
+	lev = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+	for i in range(len1 + 1):
+		lev[i][0] = i           # column 0: 0,1,2,3,4,...
+	for j in range(len2 + 1):
+		lev[0][j] = j           # row 0: 0,1,2,3,4,...
+
+	# iterate over the array
+	for i in range(len1):
+		for j in range (len2):
+			a = lev[i][j + 1] + 1               # skipping s1[i]
+			b = lev[i][j] + (s1[i] != s2[j])    # matching s1[i] with s2[j]
+			c = lev[i + 1][j] + 1               # skipping s2[j]
+			lev[i + 1][j + 1] = min(a, b, c)    # pick the cheapest
+	return lev[len1][len2]
 
 def test():
 	""" Simple sanity check; should give 100% score on all metrics. """

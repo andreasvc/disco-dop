@@ -22,7 +22,6 @@ dict(
 	k = 50,	#number of coarse plcfrs derivations to prune with; k=0 => filter only
 	dop=True, # enable DOP mode
 	usedoubledop=False, # when Fales, use dop reduction, otherwise use Double-DOP
-	newdd=False, #use experimental, more efficient double dop algorithm
 	iterate=False, #for double dop, whether to include fragments of fragments
 	complement=False, #for double dop, whether to include fragments which form
 			#the complement of the maximal recurring fragments extracted
@@ -51,7 +50,7 @@ skiptrain=False, # when the train & test set are read from the same file,
 skip=0, # skip (additional) sentences between train & test set
 headrules=None, # file with rules for head assignment
 # binarization options
-bintype="binarize", # choices: binarize, nltk, optimal, optimalhead
+bintype="binarize", # choices: binarize, optimal, optimalhead
 factor="right", # right factored binarization
 		# (applicable for non-optimal binarizations)
 revmarkov=True, # reverse order for horizontal Markovization

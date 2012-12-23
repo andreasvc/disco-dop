@@ -1,11 +1,10 @@
 """ Read and write treebanks. """
-from nltk import ParentedTree, Tree
+import os, re, sys, codecs
+from glob import glob
 from itertools import count, repeat
 from collections import OrderedDict, deque
 from operator import itemgetter
-from os import path
-from glob import glob
-import re, sys, codecs
+from tree import ParentedTree, Tree
 
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = range(6)
 TERMINALSRE = re.compile(r" ([^ )]+)\)")
@@ -46,9 +45,9 @@ class NegraCorpusReader(object):
 		self._sents_cache = None
 		self._tagged_sents_cache = None
 		self._parsed_sents_cache = None
-		self._filenames = glob(path.join(root, fileids))
+		self._filenames = glob(os.path.join(root, fileids))
 		assert self._filenames, (
-				"no files matched pattern %s" % path.join(root, fileids))
+				"no files matched pattern %s" % os.path.join(root, fileids))
 		self._block_cache = self._read_blocks()
 	def parsed_sents(self):
 		""" Return a dictionary of parse trees. """
@@ -201,7 +200,7 @@ class DiscBracketCorpusReader(object):
 		self.movepunct = movepunct
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
-		self._filenames = glob(path.join(root, fileids))
+		self._filenames = glob(os.path.join(root, fileids))
 		self._parsed_sents_cache = None
 	def sents(self):
 		return OrderedDict((n, self._word(line))
@@ -275,7 +274,7 @@ class BracketCorpusReader(object):
 		self.movepunct = movepunct
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
-		self._filenames = glob(path.join(root, fileids))
+		self._filenames = glob(os.path.join(root, fileids))
 		self._parsed_sents_cache = None
 		self._sents_cache = None
 	def sents(self):
@@ -346,7 +345,7 @@ def export(tree, sent, n, fmt, headrules=None):
 		phrasalnodes = [a for a in tree.treepositions()
 			if a not in wordsandpreterminals and a != ()]
 		phrasalnodes.sort(key=len, reverse=True)
-		wordids = dict((tree[a], a) for a in indices)
+		wordids = {tree[a]: a for a in indices}
 		assert len(sent) == len(indices) == len(wordids)
 		for i, word in enumerate(sent):
 			idx = wordids[i]
@@ -587,7 +586,7 @@ def unfold(tree):
 		#	print "PP but no AC or NK", " ".join(functions)
 		nk = [a for a in pp if a not in ac]
 		# introduce a PP unless there is already an NP in the PP (annotation
-		# mistake), or there is a PN and we want to avoid a cylic unary of 
+		# mistake), or there is a PN and we want to avoid a cylic unary of
 		# NP -> PN -> NP
 		if ac and nk and (len(nk) > 1 or nk[0].node not in "NP PN".split()):
 			pp[:] = []
@@ -596,7 +595,7 @@ def unfold(tree):
 	# introduce DPs
 	#determiners = set("ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT "
 	#	"PWS PWAT PWAV".split())
-	determiners = set("ART".split())
+	determiners = {"ART"}
 	for np in list(tree.subtrees(lambda n: n.node == "NP")):
 		if np[0].node in determiners:
 			np.node = "DP"
@@ -707,8 +706,8 @@ def fold(tree):
 	#nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE "
 	#	"PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
 	#probably_nk = set("AP PIS".split()) | nkonly
-	#for np in tree.subtrees(lambda n: len(n) == 2 
-	#								and n.node == "NP" 
+	#for np in tree.subtrees(lambda n: len(n) == 2
+	#								and n.node == "NP"
 	#								and [x.node for x in n].count("NP") == 1
 	#								and not set(labels(n)) & probably_nk):
 	#	np.sort(key=lambda n: n.node == "NP")
@@ -792,7 +791,7 @@ def doremovepunct(tree):
 					break
 	#renumber
 	oldleaves = sorted(tree.leaves())
-	newleaves = dict((a, n) for n, a in enumerate(oldleaves))
+	newleaves = {a: n for n, a in enumerate(oldleaves)}
 	for a in tree.treepositions("leaves"):
 		tree[a] = newleaves[tree[a]]
 	assert sorted(tree.leaves()) == range(len(tree.leaves())), tree
@@ -952,7 +951,7 @@ def puncttest():
 
 def main():
 	from treetransforms import canonicalize
-	from nltk import FreqDist
+	from collections import Counter as multiset
 	# this fixes utf-8 output when piped through e.g. less
 	# won't help if the locale is not actually utf-8, of course
 	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
@@ -965,8 +964,8 @@ def main():
 	correct = exact = d = 0
 	nk = set()
 	mo = set()
-	fnk = FreqDist()
-	fmo = FreqDist()
+	fnk = multiset()
+	fmo = multiset()
 	for a, b, c in zip(n.parsed_sents().values()[:100],
 			nn.parsed_sents().values()[:100], n.sents().values()[:100]):
 		#if len(c) > 15:

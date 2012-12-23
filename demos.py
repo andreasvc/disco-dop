@@ -1,5 +1,5 @@
 from math import exp
-from nltk import Tree
+from tree import Tree
 import treetransforms, parser, kbest
 from grammar import induce_plcfrs
 from containers import Grammar

@@ -22,19 +22,3 @@
 
 /* used for FatChartItem */
 #define SLOTS	2
-
-/* temporary hack: */
-/* inline attribute */
-/*
-#ifndef CYTHON_INLINE
-  #if defined(__GNUC__)
-    #define CYTHON_INLINE __inline__
-  #elif defined(_MSC_VER)
-    #define CYTHON_INLINE __inline
-  #elif defined (__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-    #define CYTHON_INLINE inline
-  #else
-    #define CYTHON_INLINE
-  #endif
-#endif
-*/

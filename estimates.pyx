@@ -624,7 +624,7 @@ def main():
 	from parser import parse, pprint_chart
 	from containers import Grammar
 	from treetransforms import addfanoutmarkers
-	from nltk import Tree
+	from tree import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	trees = corpus.parsed_sents().values()
 	for a in trees: a.chomsky_normal_form(vertMarkov=1, horzMarkov=1)

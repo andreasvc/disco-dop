@@ -1,6 +1,6 @@
 """ An attempt at drawing discontinuous trees programmatically.
 Produces TiKZ code, PDF can be produced with pdflatex. """
-from nltk import Tree
+from tree import Tree
 from collections import defaultdict
 import codecs
 def label(tree, sent):
@@ -62,7 +62,7 @@ def tikzdtree(tree, sent):
 	#				matrix[n * scale][i] = m
 	#			children[m[:-1]].append(i)
 
-	# add other nodes centered on their children, 
+	# add other nodes centered on their children,
 	# if the center is already taken, back off
 	# to the left and right alternately, until an empty cell is found.
 	for n in range(depth - 1, -1, -1):
@@ -184,7 +184,7 @@ def oldtikzdtree(tree, sent):
 					matrix[n * scale][i] = m
 				children[m[:-1]].append(i)
 
-	# add other nodes centered on their children, 
+	# add other nodes centered on their children,
 	# if the center is already taken, back off
 	# to the left and right alternately, until an empty cell is found.
 	for n in range(depth - 1, -1, -1):

@@ -2,7 +2,7 @@ from distutils.core import setup
 from distutils.extension import Extension
 from Cython.Build import cythonize
 from Cython.Compiler import Options
-import os, cython, numpy
+import cython, numpy
 
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
@@ -14,11 +14,6 @@ cython_directives = dict(
 	boundscheck=False,
 	embedsignature=True,
 )
-
-# this directory includes 'arrayarray.h', which we include manually
-# to get around a problem where it's not loaded early enough.
-cythonutils = os.path.join(os.path.split(
-	cython.__file__)[0], 'Cython', 'Utility')
 
 #Options.fast_fail = True
 Options.extra_compile_args=["-O3"],
