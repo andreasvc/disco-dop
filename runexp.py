@@ -1146,10 +1146,10 @@ def testmain():
 def test():
 	""" Run doctests and other tests from all modules. """
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
+	import bit, demos, kbest, grammar, treebank, estimates, _fragments, _parser,
 	import agenda, coarsetofine, treetransforms, disambiguation, eval
 	import gen, treedist
-	modules = (bit, eval, demos, kbest, parser, grammar, treebank, estimates,
+	modules = (bit, eval, demos, kbest, _parser, grammar, treebank, estimates,
 			_fragments, agenda, coarsetofine, treetransforms, treedist, gen,
 			disambiguation)
 	results = {}
