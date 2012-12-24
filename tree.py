@@ -1312,7 +1312,7 @@ def latexlabel(tree, sent):
 	else:
 		return "%s" % sent[int(tree)]
 
-def tikzdtree(tree, sent):
+def tikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 	""" An attempt at drawing discontinuous trees programmatically.
 	Produces TiKZ code, PDF can be produced with pdflatex.
 	Uses tikz matrices """
@@ -1419,8 +1419,9 @@ def tikzdtree(tree, sent):
 		row = []
 		for m, i in enumerate(matrix[n]):
 			if isinstance(i, tuple):
-				row.append(r"\node (n%d) { %s };"
-						% (count, latexlabel(tree[i], sent)))
+				row.append(r"\node [%s] (n%d) { %s };" % (
+						leafcolor if n == len(matrix) - 1 else nodecolor,
+						count, latexlabel(tree[i], sent)))
 				ids[i] = "n%d" % count
 				count += 1
 			row.append("&")
@@ -1445,7 +1446,7 @@ def tikzdtree(tree, sent):
 	result += [r"\end{tikzpicture}"]
 	return "\n".join(result)
 
-def oldtikzdtree(tree, sent):
+def oldtikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 	""" produce Tikz code to draw a tree. tikz nodes w/coordinates """
 	#assert len(tree.leaves()) == len(sent)
 	#assert sorted(tree.leaves()) == range(len(sent))
@@ -1548,8 +1549,10 @@ def oldtikzdtree(tree, sent):
 				d = scale * depth - n - deleted - 1
 				if d == 0:
 					d = 0.25
-				result.append("\t(%d, %g) node (n%d) {%s}"
-					% (m, d, count, latexlabel(tree[i], sent)))
+				result.append("\t(%d, %g) node [%s] (n%d) {%s}"
+					% (m, d,
+					leafcolor if n == len(matrix) - 1 else nodecolor,
+					count, latexlabel(tree[i], sent)))
 				ids[i] = "n%d" % count
 				count += 1
 	result += [";"]
