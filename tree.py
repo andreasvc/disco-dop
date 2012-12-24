@@ -1310,6 +1310,7 @@ def latexlabel(tree, sent):
 				l = "$ \\textsf{%s}_\\textsf{%s} $" % (x, y.replace("-",","))
 		return l
 	else:
+		assert sent[tree] != None
 		return "%s" % sent[int(tree)]
 
 def tikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
@@ -1333,7 +1334,9 @@ def tikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 	ids = {}
 	crossed = set()
 	zeroindex = 0 if 0 in tree.leaves() else 1
-	positions = tree.treepositions()
+	#positions = tree.treepositions()
+	positions = [a for a in tree.treepositions()
+			if (not isinstance(tree[a], int)) or sent[tree[a]] != None]
 	depth = max(map(len, positions)) + 1
 	matrix = [[None for _ in scale*sent] for _ in range(scale*depth)]
 	children = defaultdict(list)
@@ -1342,25 +1345,24 @@ def tikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 	#for n in range(depth - 1, -1, -1):
 	#for n in range(depth):
 	#	nodes = sorted(a for a in positions if len(a) == n)
-	#	for m in nodes:
-	#		if isinstance(tree[m], Tree) and len(tree[m]) == 1:
-	#			#i = tree[m].leaves()[0] - zeroindex
-	#			if children[m]:
-	#				candidates = [a for a in children[m]]
-	#			else:
-	#				candidates = [a*scale for a in tree[m].leaves()]
-	#			i = min(candidates) + (max(candidates) - min(candidates)) / 2
-	#			if not isinstance(tree[m][0], Tree):
-	#				matrix[(depth - 2) * scale][i] = m
-	#			else:
-	#				matrix[n * scale][i] = m
-	#			children[m[:-1]].append(i)
+
+	# add preterminals directly above terminals
+	for m in sorted(a for a in positions if isinstance(tree[a], Tree)
+			and not isinstance(tree[a][0], Tree)):
+		#i = tree[m].leaves()[0] - zeroindex
+		candidates = [a*scale for a in tree[m].leaves()]
+		i = min(candidates) + (max(candidates) - min(candidates)) / 2
+		matrix[(depth - 2) * scale][i] = m
+		children[m[:-1]].append(i)
 
 	# add other nodes centered on their children,
 	# if the center is already taken, back off
 	# to the left and right alternately, until an empty cell is found.
 	for n in range(depth - 1, -1, -1):
-		nodes = sorted(a for a in positions if len(a) == n)
+		#nodes = sorted(a for a in positions if len(a) == n)
+		nodes = sorted(a for a in positions if len(a) == n
+				and ((not isinstance(tree[a], Tree))
+				or isinstance(tree[a][0], Tree)))
 		for m in nodes[::-1]:
 			if isinstance(tree[m], Tree):
 				#if len(tree[m]) == 1:
@@ -1440,9 +1442,17 @@ def tikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 			result.append(
 				"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
+			if i + (j,) in ids:
+				result.append(
+					"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
+					% (ids[i], shift, ids[i + (j,)]))
 		for j, _ in enumerate(tree[i]):
 			result.append("\draw (%s) -- +(0, %g) -| (%s);"
 				% (ids[i], shift, ids[i + (j,)]))
+			if i + (j,) in ids:
+				result.append("\draw (%s) -- +(0, %g) -| (%s);"
+						% (ids[i], shift, ids[i + (j,)]))
+
 	result += [r"\end{tikzpicture}"]
 	return "\n".join(result)
 
@@ -1465,7 +1475,9 @@ def oldtikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 	ids = {}
 	crossed = set()
 	zeroindex = 0 if 0 in tree.leaves() else 1
-	positions = tree.treepositions()
+	#positions = tree.treepositions()
+	positions = [a for a in tree.treepositions()
+			if (not isinstance(tree[a], int)) or sent[tree[a]] != None]
 	depth = max(map(len, positions)) + 1
 	matrix = [[None for _ in scale*sent] for _ in range(scale*depth)]
 	children = defaultdict(list)
@@ -1525,6 +1537,8 @@ def oldtikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 							if a and a[:-1] != i))):
 					shift = 1
 					crossed.add(m)
+			# problem: now that shift is added we should again verify
+			# that this position is vacant
 			matrix[n * scale + shift][i] = m
 			children[m[:-1]].append(i)
 
@@ -1564,12 +1578,17 @@ def oldtikzdtree(tree, sent, nodecolor="blue", leafcolor="red"):
 		iscrossed = any(a[:-1] == i for a in crossed)
 		shift = -0.5
 		for j, _ in enumerate(tree[i] if iscrossed else ()):
-			result.append(
-				"\draw [white, -, line width=6pt] (%s) -- +(0, %g) -| (%s);"
-				% (ids[i], shift, ids[i + (j,)]))
+			if i + (j,) in ids:
+				result.append(
+					"\draw [white, -, line width=6pt] (%s)  +(0, %g) -| (%s);"
+					% (ids[i], shift, ids[i + (j,)]))
 		for j, _ in enumerate(tree[i]):
-			result.append("\draw (%s) -- +(0, %g) -| (%s);"
-				% (ids[i], shift, ids[i + (j,)]))
+			try:
+				result.append("\draw (%s) -- +(0, %g) -| (%s);"
+						% (ids[i], shift, ids[i + (j,)]))
+			except KeyError:
+				continue
+
 	result += [r"\end{tikzpicture}"]
 	return "\n".join(result)
 
