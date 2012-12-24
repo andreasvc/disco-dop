@@ -657,7 +657,8 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, list asent, list bsent,
 			else:
 				if TESTBIT(&CST[IDX(n, m, b.len, SLOTS)], 0):
 					if abitcount(&CST[IDX(n, m, b.len, SLOTS)], SLOTS) - 1:
-						print abitcount(&CST[IDX(n, m, b.len, SLOTS)], SLOTS) - 1,
+						print abitcount(&CST[IDX(n, m, b.len, SLOTS)],
+								SLOTS) - 1,
 				else:
 					print '-',
 	print "\ncommon productions:",
@@ -685,7 +686,7 @@ def getprods(trees, prods):
 		for tree in trees for st in tree[0].subtrees()} - prods.viewkeys())))
 
 def getlabels(trees, labels):
-	labels.update((l, n) for n, l in enumerate(sorted({st.node
+	labels.update((l, n) for n, l in enumerate(sorted({st.label
 		for tree in trees for st in tree[0].subtrees()} - labels.viewkeys())))
 
 def nonfrontier(sent):
@@ -703,10 +704,10 @@ def tolist(tree, sent):
 	for n in reversed(range(len(result))):
 		a = result[n]
 		a.idx = n
-		assert isinstance(a, Terminal) or a.node, (
+		assert isinstance(a, Terminal) or a.label, (
 				"labels should be non-empty. "
 				"tree: %s\nsubtree: %s\nindex %d, label %r" % (
-				tree, a, n, a.node))
+				tree, a, n, a.label))
 	result[0].root = 0
 	return result
 
@@ -835,16 +836,15 @@ def readtreebank(treebankfile, labels, prods, sort=True, discontinuous=False,
 				a.append(Terminal(n))
 			else:
 				raise ValueError("Expected binarized tree "
-					"with a preterminal for each terminal.\ntree: %s" %
-					tree.pprint(margin=999))
+					"with a preterminal for each terminal.\ntree: %s" % tree)
 		tree = list(tree.subtrees()) + tree.leaves()
 		# collect new labels and productions
 		for a in tree:
 			if not isinstance(a, Tree):
 				continue
-			if a.node not in labels:
-				labels[a.node] = len(labels)
-			a.prod = (a.node, ) + tuple(unicode(x.node
+			if a.label not in labels:
+				labels[a.label] = len(labels)
+			a.prod = (a.label, ) + tuple(unicode(x.label
 					if isinstance(x, Tree) else sent[x]) for x in a)
 			if a.prod not in prods:
 				prods[a.prod] = len(prods)

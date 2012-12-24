@@ -8,7 +8,23 @@ from itertools import count, islice, imap, repeat
 from tree import ImmutableTree, Tree, DiscTree
 from containers import Grammar
 
-usage = """Read off grammars from treebanks.
+FORMAT = """The LCFRS format is as follows. Rules are delimited by newlines.
+Fields are separated by tabs. The fields are:
+
+LHS	RHS1	[RHS2]	yield-function	weight
+
+The yield function defines how the spans of the RHS nonterminals
+are combined to form the spans of the LHS nonterminal. Components of the yield
+function are comma-separated, 0 refers to a component of the first RHS
+nonterminal, and 1 from the second. Weights are expressed as hexadecimal
+negative logprobs. E.g.:
+
+rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
+         VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
+         NP      NN      0       0.3
+lexicon: NN Epsilon Haus    0.3"""
+
+USAGE = """Read off grammars from treebanks.
 usage: %s [options] model input output
 
 model is one of:
@@ -33,22 +49,8 @@ output will be in bitpar format. Otherwise the grammar is written as an LCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
 
-The LCFRS format is as follows. Rules are delimited by newlines.
-Fields are separated by tabs. The fields are:
-
-LHS	RHS1	[RHS2]	yield-function	weight
-
-The yield function defines how the spans of the RHS nonterminals
-are combined to form the spans of the LHS nonterminal. Components of the yield
-function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as hexadecimal
-negative logprobs. E.g.:
-
-rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
-         VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
-         NP      NN      0       0.3
-lexicon: NN Epsilon Haus    0.3
-""" % sys.argv[0]
+%s
+""" % (sys.argv[0], FORMAT)
 
 frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9]+)*\))")
 rootnode = re.compile(r"\([^ ]+\b")
@@ -91,10 +93,10 @@ def lcfrs_productions(tree, sent, frontiers=False):
 		#elif all(isinstance(a, int) for a in st):
 		elif isinstance(st[0], int):
 			if len(st) == 1 and sent[st[0]] is not None: # terminal node
-				rule = ((st.node, 'Epsilon'), (sent[st[0]],))
+				rule = ((st.label, 'Epsilon'), (sent[st[0]],))
 			#elif all(sent[a] is None for a in st): # frontier node
 			elif frontiers:
-				rule = ((st.node, ), ())
+				rule = ((st.label, ), ())
 			else:
 				continue
 			#else:
@@ -120,16 +122,15 @@ def lcfrs_productions(tree, sent, frontiers=False):
 					yf[-1].append(parent)
 				# otherwise terminal is part of current range
 				previdx, prevparent = idx, parent
-			nonterminals = (st.node,) + tuple(a.node for a in st)
+			nonterminals = (st.label,) + tuple(a.label for a in st)
 			rule = (nonterminals, tuple(map(tuple, yf)))
 			#assert len(yf) == len(rangeheads(st.leaves())) == (
-			#	int(fanoutre.search(st.node).group(1))
-			#		if fanoutre.search(st.node) else len(yf)), (
+			#	int(fanoutre.search(st.label).group(1))
+			#		if fanoutre.search(st.label) else len(yf)), (
 			#	"rangeheads: %r\nyf: %r\nleaves: %r\n\t%r\n"
 			#	"childleaves: %r\ntree:\n%s\nsent: %r" % (
 			#		rangeheads(st.leaves()), yf,
-			#	st.leaves(), tmpleaves, childleaves,
-			#	st.pprint(margin=9999), sent))
+			#	st.leaves(), tmpleaves, childleaves, st, sent))
 		else:
 			raise ValueError("Neither Tree node nor integer index:\n"
 				"%r, %r" % (st[0], type(st[0])))
@@ -243,6 +244,7 @@ def doubledop(fragments, debug=False, ewe=False):
 	When ewe is true, the equal weights estimate is applied. This requires that
 	the fragments are accompanied by indices instead of frequencies. """
 	def getprob(frag, terminals, ewe):
+		""" Apply EWE or return frequency. """
 		if ewe:
 			# Sangati & Zuidema (2011, eq. 5)
 			# TODO: verify that this formula is equivalent to Bod (2003).
@@ -330,8 +332,8 @@ def coarse_grammar(trees, sents, level=0):
 	label = re.compile("[^^|<>-]+")
 	for tree in trees:
 		for subtree in tree.subtrees():
-			if subtree.node != "ROOT" and isinstance(subtree[0], Tree):
-				subtree.node = label.sub(repl, subtree.node)
+			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
+				subtree.label = label.sub(repl, subtree.label)
 	return induce_plcfrs(trees, sents)
 
 def nodefreq(tree, utree, subtreefd, nonterminalfd):
@@ -350,18 +352,18 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	>>> fd
 	Counter({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
 	"""
-	nonterminalfd[tree.node] += 1.0
-	nonterminalfd[utree.node] += 1.0
+	nonterminalfd[tree.label] += 1
+	nonterminalfd[utree.label] += 1
 	if isinstance(tree[0], Tree):
 		n = reduce(mul, (nodefreq(x, ux, subtreefd, nonterminalfd) + 1
 			for x, ux in zip(tree, utree)))
 	else: # lexical production
 		n = 1
-	subtreefd[tree.node] += n
-	# only add counts when utree.node is actually an interior node,
+	subtreefd[tree.label] += n
+	# only add counts when utree.label is actually an interior node,
 	# e.g., root node receives no ID so shouldn't be counted twice
-	if utree.node != tree.node:  #if subtreefd[utree.node] == 0:
-		subtreefd[utree.node] += n
+	if utree.label != tree.label:  #if subtreefd[utree.label] == 0:
+		subtreefd[utree.label] += n
 	return n
 
 def decorate_with_ids(n, tree, sent):
@@ -378,7 +380,7 @@ def decorate_with_ids(n, tree, sent):
 	ids = 0
 	#skip top node, should not get an ID
 	for a in islice(utree.subtrees(), 1, None):
-		a.node = "%s@%d-%d" % (a.node, n, ids)
+		a.label = "%s@%d-%d" % (a.label, n, ids)
 		ids += 1
 	return utree
 
@@ -399,7 +401,7 @@ def decorate_with_ids_mem(n, tree, sent):
 		elif tree not in packedgraphs:
 			packed_graph_ids += 1
 			packedgraphs[tree] = ImmutableTree("%s@%d-%d" %
-				(tree.node, n, packed_graph_ids),
+				(tree.label, n, packed_graph_ids),
 				map(recursive_decorate, tree))
 			return packedgraphs[tree]
 		else:
@@ -408,14 +410,14 @@ def decorate_with_ids_mem(n, tree, sent):
 		""" Copy the nonterminals from tree2, but take indices from tree1. """
 		if not isinstance(tree1, Tree):
 			return tree1
-		return ImmutableTree(tree2.node,
+		return ImmutableTree(tree2.label,
 			[copyexceptindices(a, b) for a, b in zip(tree1, tree2)])
 	global packed_graph_ids
 	packed_graph_ids = 0
 	# wrap tree to get equality wrt sent
 	tree = DiscTree(tree.freeze(), sent)
 	#skip top node, should not get an ID
-	return ImmutableTree(tree.node, map(recursive_decorate, tree))
+	return ImmutableTree(tree.label, map(recursive_decorate, tree))
 
 def quotelabel(label):
 	""" Escapes two things: parentheses and non-ascii characters.
@@ -479,10 +481,13 @@ def flatten(tree, sent, ids):
 	from treetransforms import defaultleftbin, addbitsets
 	assert isinstance(tree, basestring), (tree, sent)
 	def repl(x):
+		""" Add information to a frontier or terminal:
+		frontiers => (label indices)
+		terminals => (tag@word idx)"""
 		n = x.group(3) # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
-			return x.group(0)	# (tag indices)
+			return x.group(0)	# (label indices)
 		# (tag@word idx)
 		return "(%s@%s%s)" % (x.group(2), quotelabel(sent[nn]), n)
 	if tree.count(" ") == 1:
@@ -685,8 +690,8 @@ def read_bitpar_grammar(rules, lexicon):
 		p, rule = float(a[0]), a[1:]
 		if integralweights:
 			ip = int(p)
-			if ip == p:
-				p == ip
+			if p == ip:
+				p = ip
 			else:
 				integralweights = False
 		ntfd[rule[0]] += p
@@ -882,7 +887,7 @@ def test():
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
 		headrules="negra.headrules", headfinal=True, headreverse=False,
-		movepunct=True)
+		punct="move")
 	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
 	sents = corpus.sents().values()
 	trees = [a.copy(True) for a in corpus.parsed_sents().values()[:10]]
@@ -911,11 +916,11 @@ def test():
 	assert grammar.testgrammar(logging) #DOP1 should sum to 1.
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
 		print "sentence:", " ".join(sent)
-		root = tree.node
+		root = tree.label
 		chart, start, msg = parse(sent, grammar, start=grammar.toid[root],
 			exhaustive=True)
 		print '\n', msg,
-		print "\ngold ", tree.pprint(margin=9999)
+		print "\ngold ", tree
 		print "double dop",
 		if start:
 			mpp = {}
@@ -925,15 +930,14 @@ def test():
 			for d, (t, p) in zip(D[start], derivations):
 				r = Tree(recoverfragments(getkey(d), D,
 					grammar, backtransform))
-				unbinarize(r)
-				r = removefanoutmarkers(r).pprint(margin=9999)
+				r = str(removefanoutmarkers(unbinarize(r)))
 				mpp[r] = mpp.get(r, 0.0) + exp(-p)
 				parsetrees.setdefault(r, []).append((t, p))
 			print len(mpp), 'parsetrees',
 			print sum(map(len, parsetrees.values())), 'derivations'
 			for t, tp in sorted(mpp.items(), key=itemgetter(1)):
 				print tp, '\n', t,
-				print "match:", t == tree.pprint(margin=9999)
+				print "match:", t == str(tree)
 				assert len(set(parsetrees[t])) == len(parsetrees[t])
 				if not debug:
 					continue
@@ -947,11 +951,11 @@ def test():
 	Grammar(induce_plcfrs([tree], [range(10)]))
 
 def main():
+	"""" Command line interface to create grammars from treebanks. """
 	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from treetransforms import addfanoutmarkers, canonicalize
-	from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
-			BracketCorpusReader
+	from treebank import getreader
 	from fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
@@ -961,7 +965,7 @@ def main():
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
 		model, treebankfile, grammarfile = args
 	except (GetoptError, ValueError) as err:
-		print "error: %r\n%s" % (err, usage)
+		print "error: %r\n%s" % (err, USAGE)
 		exit(2)
 	opts = dict(opts)
 	assert model in ("pcfg", "plcfrs", "dopreduction", "doubledop"), (
@@ -969,15 +973,7 @@ def main():
 	freqs = opts.get('--freqs', False)
 
 	# read treebank
-	if opts.get('--inputfmt', 'export') == 'export':
-		Reader = NegraCorpusReader
-	elif opts.get('--inputfmt') == 'discbracket':
-		Reader = DiscBracketCorpusReader
-	elif opts.get('--inputfmt') == 'bracket':
-		Reader = BracketCorpusReader
-	else:
-		raise ValueError("unrecognized format: %r" % opts.get('--inputfmt'))
-
+	Reader = getreader(opts.get('--inputfmt', 'export'))
 	corpus = Reader(".", treebankfile)
 	trees, sents = corpus.parsed_sents().values(), corpus.sents().values()
 	for a in trees:

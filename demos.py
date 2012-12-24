@@ -1,3 +1,4 @@
+""" Examples of various formalisms encoded in LCFRS grammars. """
 from math import exp
 from tree import Tree
 import treetransforms, parser, kbest
@@ -135,6 +136,9 @@ def dependencygrammar():
 	assert do(grammar, testsent)
 
 def bitext():
+	""" Bitext parsing with a synchronous CFG.
+	Translation would require a special decoder (instead of normal kbest
+	derivations where the whole sentence is given)."""
 	print "bitext parsing with a synchronous CFG"
 	trees = [Tree.parse(a, parse_leaf=int) for a in """\
 	(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) (manque 5))\
@@ -201,6 +205,7 @@ def bitext():
 		assert do(another_scfg, sent), sent
 
 def do(compiledgrammar, testsent, testtags=None):
+	""" Parse a sentence with a grammar. """
 	chart, start, _ = parser.parse(testsent,
 		compiledgrammar,
 		tags=testtags, start=compiledgrammar.toid["ROOT"],
@@ -222,9 +227,11 @@ def do(compiledgrammar, testsent, testtags=None):
 		return False
 
 def main():
+	""" Run all examples. """
 	bitext()
 	dependencygrammar()
 	tree_adjoining_grammar()
+	bitext()
 
 if __name__ == '__main__':
 	main()

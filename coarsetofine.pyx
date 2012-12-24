@@ -262,11 +262,11 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 		mergediscnodes(a)
 	for tree in derivs:
 		for node in tree.subtrees():
-			arity = slowfanout(node)
-			if arity > 1:
-				label = "%s_%d" % (node.node, arity)
+			fanout = slowfanout(node)
+			if fanout > 1:
+				label = "%s_%d" % (node.label, fanout)
 			else:
-				label = node.node
+				label = node.label
 			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
 	return newchart
 
@@ -322,7 +322,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 			t = Tree.parse(t, parse_leaf=int)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))
-			#print t.pprint(margin=999)
+			#print t
 			print "exact match" if t == canonicalize(tree) else "no match", t
 	else:
 		print "no parse. problem."

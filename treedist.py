@@ -40,17 +40,17 @@ class Terminal:
 	""" Auxiliary class to be able to add indices to terminal nodes of NLTK
 	trees. """
 	def __init__(self, node):
-		self.prod = self.node = node
+		self.prod = self.label = node
 	def __repr__(self):
-		return repr(self.node)
+		return repr(self.label)
 	def __hash__(self):
-		return hash(self.node)
+		return hash(self.label)
 	def __iter__(self):
 		return iter(())
 	def __len__(self):
 		return 0
 	def __index__(self):
-		return self.node
+		return self.label
 	def __getitem__(self, val):
 		if isinstance(val, slice):
 			return ()
@@ -69,7 +69,7 @@ def prepare(tree, includeterms=False):
 			tree[a] = Terminal(tree[a])
 	else:
 		for a in tree.treepositions('leaves'):
-			tree[a[:-1]].node += "-%d" % tree[a]
+			tree[a[:-1]].label += "-%d" % tree[a]
 			del tree[a]
 	return tree
 
@@ -153,7 +153,7 @@ def treedist(A, B, debug=False):
 						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
 						#                 | δ(l(i1)..i-1, l(j1)..j-1) + γ(v → w)
 						#                 +-
-						labeldist = strdist(An[x+ioff].node, Bn[y+joff].node)
+						labeldist = strdist(An[x+ioff].label, Bn[y+joff].label)
 						fd[x, y] = min(fd[x-1, y] + 1, fd[x, y-1] + 1,
 							fd[x-1, y-1] + labeldist)
 						treedists[x+ioff, y+joff] = fd[x, y]
@@ -170,12 +170,12 @@ def treedist(A, B, debug=False):
 							fd[p, q] + treedists[x+ioff, y+joff])
 		if debug:
 			if isinstance(An[i], Tree):
-				astr = An[i].node #pprint(margin=9999)
+				astr = An[i].label #pprint()
 			else:
 				astr = str(An[i])
 			j = treedists[i].argmin()
 			if isinstance(Bn[j], Tree):
-				bstr = Bn[j].node #pprint(margin=9999)
+				bstr = Bn[j].label #pprint()
 			else:
 				bstr = str(Bn[j])
 			if treedists[i, j]:
@@ -219,9 +219,9 @@ class EditStats(object):
 		return "%s(distance=%d, matched=%d, [\n\t%s])" % (
 				self.__class__.__name__, self.distance, self.matched,
 				",\n\t".join("%s(%s, %s)" % (a[0],
-					"%s[%d]" % (a[1].node, a[1].idx)
+					"%s[%d]" % (a[1].label, a[1].idx)
 						if isinstance(a[1], Tree) else a[1],
-					"%s[%d]" % (a[2].node, a[2].idx)
+					"%s[%d]" % (a[2].label, a[2].idx)
 						if isinstance(a[2], Tree) else a[2])
 					for a in self.editscript))
 
@@ -257,7 +257,7 @@ def geteditstats(forest1, forest2):
 				(('I', None, w), ) + tmp.editscript)
 		matchOrSwapStats = (geteditstats(tuple(v[:]), tuple(w[:]))
 				+ geteditstats(forest1[:-1], forest2[:-1]))
-		if v.node == w.node:
+		if v.label == w.label:
 			matchOrSwapStats = EditStats(matchOrSwapStats.distance,
 				matchOrSwapStats.matched + 1, matchOrSwapStats.editscript)
 		else:
@@ -270,6 +270,7 @@ def geteditstats(forest1, forest2):
 geteditstats.mem = {}
 
 def main():
+	""" Simple demonstration. """
 	a = Tree.parse("(f (d (a 0) (c (b 1))) (e 2))", parse_leaf=int)
 	b = Tree.parse("(f (c (d (a 0) (b 1)) (e 2)))", parse_leaf=int)
 	result1 = treedist(a, b, debug=True)

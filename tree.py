@@ -96,7 +96,7 @@ class Tree(list):
 	Any other properties that a Tree defines are known as
 	node properties, and are used to add information about
 	individual hierarchical groupings.  For example, syntax trees use a
-	NODE property to label syntactic constituents with phrase tags,
+	label property to label syntactic constituents with phrase tags,
 	such as \"NP\" and\"VP\".
 
 	Several Tree methods use tree positions to specify
@@ -112,27 +112,27 @@ class Tree(list):
 	specifying self[i]; or a sequence (i1, i2, ...,
 	iN), specifying
 	self[i1][i2]...[iN]. """
-	def __new__(cls, node_or_str=None, children=None):
-		if node_or_str is None:
+	def __new__(cls, label_or_str=None, children=None):
+		if label_or_str is None:
 			return list.__new__(cls) # used by copy.deepcopy
 		if children is None:
-			if not isinstance(node_or_str, basestring):
-				raise TypeError("%s: Expected a node value and child list "
+			if not isinstance(label_or_str, basestring):
+				raise TypeError("%s: Expected a label and child list "
 						"or a single string" % cls.__name__)
-			return cls.parse(node_or_str)
+			return cls.parse(label_or_str)
 		else:
 			if (isinstance(children, basestring) or
 				not hasattr(children, '__iter__')):
 				raise TypeError("%s() argument 2 should be a list, not a "
 						"string" % cls.__name__)
-			return list.__new__(cls, node_or_str, children)
+			return list.__new__(cls, label_or_str, children)
 
-	def __init__(self, node_or_str, children=None):
+	def __init__(self, label_or_str, children=None):
 		""" Construct a new tree.  This constructor can be called in one
 		of two ways:
 
-		- Tree(node, children) constructs a new tree with the
-			specified node value and list of children.
+		- Tree(label, children) constructs a new tree with the
+			specified label and list of children.
 
 		- Tree(s) constructs a new tree by parsing the string
 			s.  It is equivalent to calling the class method
@@ -147,7 +147,7 @@ class Tree(list):
 			return
 
 		list.__init__(self, children)
-		self.node = node_or_str
+		self.label = label_or_str
 
 	#////////////////////////////////////////////////////////////
 	# Comparison operators
@@ -156,25 +156,25 @@ class Tree(list):
 	def __eq__(self, other):
 		if not isinstance(other, Tree):
 			return False
-		return self.node == other.node and list.__eq__(self, other)
+		return self.label == other.label and list.__eq__(self, other)
 	def __ne__(self, other):
 		return not (self == other)
 	def __lt__(self, other):
 		if not isinstance(other, Tree):
 			return False
-		return self.node < other.node or list.__lt__(self, other)
+		return self.label < other.label or list.__lt__(self, other)
 	def __le__(self, other):
 		if not isinstance(other, Tree):
 			return False
-		return self.node <= other.node or list.__le__(self, other)
+		return self.label <= other.label or list.__le__(self, other)
 	def __gt__(self, other):
 		if not isinstance(other, Tree):
 			return True
-		return self.node > other.node or list.__gt__(self, other)
+		return self.label > other.label or list.__gt__(self, other)
 	def __ge__(self, other):
 		if not isinstance(other, Tree):
 			return False
-		return self.node >= other.node or list.__ge__(self, other)
+		return self.label >= other.label or list.__ge__(self, other)
 
 	#////////////////////////////////////////////////////////////
 	# Disabled list operations
@@ -248,7 +248,7 @@ class Tree(list):
 		""" @return: a tree consisting of this tree's root connected directly
 			to its leaves, omitting all intervening non-terminal nodes.
 		@rtype: Tree """
-		return Tree(self.node, self.leaves())
+		return Tree(self.label, self.leaves())
 
 	def height(self):
 		""" @return: The height of this tree.  The height of a tree
@@ -304,7 +304,7 @@ class Tree(list):
 			if isinstance(child, Tree):
 				pos.extend(child.pos())
 			else:
-				pos.append((child, self.node))
+				pos.append((child, self.label))
 		return pos
 
 	def leaf_treeposition(self, index):
@@ -444,14 +444,15 @@ class Tree(list):
 		@return: The new Tree. """
 		if isinstance(val, Tree):
 			children = [cls.convert(child) for child in val]
-			return cls(val.node, children)
+			return cls(val.label, children)
 		else:
 			return val
 	convert = classmethod(convert)
 
 	def copy(self, deep=False):
+		""" Create a copy of this tree. """
 		if not deep:
-			return self.__class__(self.node, self)
+			return self.__class__(self.label, self)
 		else:
 			return self.__class__.convert(self)
 
@@ -474,8 +475,8 @@ class Tree(list):
 	#////////////////////////////////////////////////////////////
 
 	@classmethod
-	def parse(cls, s, brackets='()', parse_node=None, parse_leaf=None,
-			node_pattern=None, leaf_pattern=None,
+	def parse(cls, s, brackets='()', parse_label=None, parse_leaf=None,
+			label_pattern=None, leaf_pattern=None,
 			remove_empty_top_bracketing=False):
 		""" Parse a bracketed tree string and return the resulting tree.
 		Trees are represented as nested brackettings, such as::
@@ -489,29 +490,29 @@ class Tree(list):
 		@param brackets: The bracket characters used to mark the
 			beginning and end of trees and subtrees.
 
-		@type parse_node: function
+		@type parse_label: function
 		@type parse_leaf: function
-		@param parse_node, parse_leaf: If specified, these functions
+		@param parse_label, parse_leaf: If specified, these functions
 			are applied to the substrings of s corresponding to
-			nodes and leaves (respectively) to obtain the values for
-			those nodes and leaves.  They should have the following
+			labels and leaves (respectively) to obtain the values for
+			those labels and leaves.  They should have the following
 			signature:
 
-				>>> parse_node(str) -> value
+				>>> parse_label(str) -> value
 
-			For example, these functions could be used to parse nodes
+			For example, these functions could be used to parse labels
 			and leaves whose values should be some type other than
 			string (such as FeatStruct <nltk.featstruct.FeatStruct>).
-			Note that by default, node strings and leaf strings are
+			Note that by default, label strings and leaf strings are
 			delimited by whitespace and brackets; to override this
-			default, use the node_pattern and leaf_pattern
+			default, use the label_pattern and leaf_pattern
 			arguments.
 
-		@type node_pattern: str
+		@type label_pattern: str
 		@type leaf_pattern: str
-		@param node_pattern, leaf_pattern: Regular expression patterns
-			used to find node and leaf substrings in s.  By
-			default, both nodes patterns are defined to match any
+		@param label_pattern, leaf_pattern: Regular expression patterns
+			used to find label and leaf substrings in s.  By
+			default, both label and leaf patterns are defined to match any
 			sequence of non-whitespace non-bracket characters.
 
 		@type remove_empty_top_bracketing: bool
@@ -531,24 +532,24 @@ class Tree(list):
 		# Construct a regexp that will tokenize the string.
 		open_b, close_b = brackets
 		open_pattern, close_pattern = (re.escape(open_b), re.escape(close_b))
-		if node_pattern is None:
-			node_pattern = '[^\s%s%s]+' % (open_pattern, close_pattern)
+		if label_pattern is None:
+			label_pattern = '[^\s%s%s]+' % (open_pattern, close_pattern)
 		if leaf_pattern is None:
 			leaf_pattern = '[^\s%s%s]+' % (open_pattern, close_pattern)
 		token_re = re.compile('%s\s*(%s)?|%s|(%s)' % (
-			open_pattern, node_pattern, close_pattern, leaf_pattern))
+			open_pattern, label_pattern, close_pattern, leaf_pattern))
 		# Walk through each token, updating a stack of trees.
-		stack = [(None, [])] # list of (node, children) tuples
+		stack = [(None, [])] # list of (label, children) tuples
 		for match in token_re.finditer(s):
 			token = match.group()
 			# Beginning of a tree/subtree
 			if token[0] == open_b:
 				if len(stack) == 1 and len(stack[0][1]) > 0:
 					cls._parse_error(s, match, 'end-of-string')
-				node = token[1:].lstrip()
-				if parse_node is not None:
-					node = parse_node(node)
-				stack.append((node, []))
+				label = token[1:].lstrip()
+				if parse_label is not None:
+					label = parse_label(label)
+				stack.append((label, []))
 			# End of a tree/subtree
 			elif token == close_b:
 				if len(stack) == 1:
@@ -556,8 +557,8 @@ class Tree(list):
 						cls._parse_error(s, match, open_b)
 					else:
 						cls._parse_error(s, match, 'end-of-string')
-				node, children = stack.pop()
-				stack[-1][1].append(cls(node, children))
+				label, children = stack.pop()
+				stack[-1][1].append(cls(label, children))
 			# Leaf node
 			else:
 				if len(stack) == 1:
@@ -576,9 +577,9 @@ class Tree(list):
 			assert len(stack[0][1]) == 1
 		tree = stack[0][1][0]
 
-		# If the tree has an extra level with node='', then get rid of
+		# If the tree has an extra level with label='', then get rid of
 		# it.  E.g.: "((S (NP ...) (VP ...)))"
-		if remove_empty_top_bracketing and tree.node == '' and len(tree) == 1:
+		if remove_empty_top_bracketing and tree.label == '' and len(tree) == 1:
 			tree = tree[0]
 		# return the tree.
 		return tree
@@ -613,12 +614,12 @@ class Tree(list):
 
 	def __repr__(self):
 		childstr = ", ".join(repr(c) for c in self)
-		return '%s(%r, [%s])' % (self.__class__.__name__, self.node, childstr)
+		return '%s(%r, [%s])' % (self.__class__.__name__, self.label, childstr)
 
 	def __str__(self):
-		return self.pprint()
+		return self._pprint_flat('', '()', False)
 
-	def pprint(self, margin=70, indent=0, nodesep='', parens='()',
+	def pprint(self, margin=70, indent=0, labelsep='', parens='()',
 			quotes=False):
 		""" @return: A pretty-printed string representation of this tree.
 		@rtype: string
@@ -628,24 +629,24 @@ class Tree(list):
 			begins.  This number is used to decide how far to indent
 			subsequent lines.
 		@type indent: int
-		@param nodesep: A string that is used to separate the node
-			from the children.  E.g., the default value ':' gives
+		@param labelsep: A string that is used to separate the label
+			from the children.  E.g., the value ':' gives
 			trees like (S: (NP: I) (VP: (V: saw) (NP: it))). """
 
 		# Try writing it on one line.
-		s = self._pprint_flat(nodesep, parens, quotes)
+		s = self._pprint_flat(labelsep, parens, quotes)
 		if len(s) + indent < margin:
 			return s
 
 		# If it doesn't fit on one line, then write it on multi-lines.
-		if isinstance(self.node, basestring):
-			s = '%s%s%s' % (parens[0], self.node, nodesep)
+		if isinstance(self.label, basestring):
+			s = '%s%s%s' % (parens[0], self.label, labelsep)
 		else:
-			s = '%s%r%s' % (parens[0], self.node, nodesep)
+			s = '%s%r%s' % (parens[0], self.label, labelsep)
 		for child in self:
 			if isinstance(child, Tree):
 				s += '\n' + ' ' * (indent + 2) + child.pprint(margin,
-						indent + 2, nodesep, parens, quotes)
+						indent + 2, labelsep, parens, quotes)
 			elif isinstance(child, tuple):
 				s += '\n' + ' ' * (indent + 2) + "/".join(child)
 			elif isinstance(child, basestring) and not quotes:
@@ -670,38 +671,40 @@ class Tree(list):
 
 		@return: A latex qtree representation of this tree.
 		@rtype: string """
-		return r'\Tree ' + self.pprint(indent=6, nodesep='',
+		return r'\Tree ' + self.pprint(indent=6, labelsep='',
 				parens=('[.', ' ]'))
 
-	def _pprint_flat(self, nodesep, parens, quotes):
+	def _pprint_flat(self, labelsep, parens, quotes):
 		childstrs = []
 		for child in self:
 			if isinstance(child, Tree):
-				childstrs.append(child._pprint_flat(nodesep, parens, quotes))
+				childstrs.append(child._pprint_flat(labelsep, parens, quotes))
 			elif isinstance(child, tuple):
 				childstrs.append("/".join(child))
 			elif isinstance(child, basestring) and not quotes:
 				childstrs.append('%s' % child)
 			else:
 				childstrs.append('%r' % child)
-		if isinstance(self.node, basestring):
-			return '%s%s%s %s%s' % (parens[0], self.node, nodesep,
+		if isinstance(self.label, basestring):
+			return '%s%s%s %s%s' % (parens[0], self.label, labelsep,
 									" ".join(childstrs), parens[1])
 		else:
-			return '%s%r%s %s%s' % (parens[0], self.node, nodesep,
+			return '%s%r%s %s%s' % (parens[0], self.label, labelsep,
 									" ".join(childstrs), parens[1])
 
 class ImmutableTree(Tree):
-	def __init__(self, node_or_str, children=None):
+	""" A tree which may not be modified.
+	Has a hash() value. """
+	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
-		super(ImmutableTree, self).__init__(node_or_str, children)
+		super(ImmutableTree, self).__init__(label_or_str, children)
 		# Precompute our hash value.  This ensures that we're really
 		# immutable.  It also means we only have to calculate it once.
 		try:
-			self._hash = hash( (self.node, tuple(self)) )
+			self._hash = hash( (self.label, tuple(self)) )
 		except (TypeError, ValueError):
-			raise ValueError("ImmutableTree's node value and children "
+			raise ValueError("ImmutableTree's label and children "
 					"must be immutable")
 	def __setitem__(self):
 		raise ValueError, 'ImmutableTrees may not be modified'
@@ -730,15 +733,15 @@ class ImmutableTree(Tree):
 	def __hash__(self):
 		return self._hash
 
-	def _set_node(self, node):
-		"""Set self._node.  This will only succeed the first time the
-		node value is set, which should occur in Tree.__init__()."""
-		if hasattr(self, 'node'):
+	def _set_label(self, label):
+		"""Set self._label.  This will only succeed the first time the
+		label is set, which should occur in Tree.__init__()."""
+		if hasattr(self, 'label'):
 			raise ValueError, 'ImmutableTrees may not be modified'
-		self._node = node
-	def _get_node(self):
-		return self._node
-	node = property(_get_node, _set_node)
+		self._label = label
+	def _get_label(self):
+		return self._label
+	label = property(_get_label, _set_label)
 
 ######################################################################
 ## Parented trees
@@ -766,10 +769,10 @@ class AbstractParentedTree(Tree):
 
 	- _setparent() is called whenever a new child is added.
 	- _delparent() is called whenever a child is removed. """
-	def __init__(self, node_or_str, children=None):
+	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
-		super(AbstractParentedTree, self).__init__(node_or_str, children)
+		super(AbstractParentedTree, self).__init__(label_or_str, children)
 		# iterate over self, and *not* children, because children
 		# might be an iterator.
 		for i, child in enumerate(self):
@@ -982,14 +985,14 @@ class ParentedTree(AbstractParentedTree):
 	ParentedTrees should never be used in the same tree as Trees
 	or MultiParentedTrees.  Mixing tree implementations may result
 	in incorrect parent pointers and in TypeError exceptions. """
-	def __init__(self, node_or_str, children=None):
+	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
 
 		self._parent = None
 		"""The parent of this Tree, or None if it has no parent."""
 
-		super(ParentedTree, self).__init__(node_or_str, children)
+		super(ParentedTree, self).__init__(label_or_str, children)
 
 	def _frozen_class(self):
 		return ImmutableParentedTree
@@ -1101,7 +1104,7 @@ class MultiParentedTree(AbstractParentedTree):
 	MultiParentedTrees should never be used in the same tree as
 	Trees or ParentedTrees.  Mixing tree implementations may
 	result in incorrect parent pointers and in TypeError exceptions. """
-	def __init__(self, node_or_str, children=None):
+	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
 
@@ -1110,7 +1113,7 @@ class MultiParentedTree(AbstractParentedTree):
 			contain duplicates, even if a parent contains this tree
 			multiple times."""
 
-		super(MultiParentedTree, self).__init__(node_or_str, children)
+		super(MultiParentedTree, self).__init__(label_or_str, children)
 
 	def _frozen_class(self):
 		return ImmutableMultiParentedTree
@@ -1244,22 +1247,22 @@ class MultiParentedTree(AbstractParentedTree):
 				child._parents.append(self)
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):
-	def __init__(self, node_or_str, children=None):
+	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
-		super(ImmutableParentedTree, self).__init__(node_or_str, children)
+		super(ImmutableParentedTree, self).__init__(label_or_str, children)
 
 class ImmutableMultiParentedTree(ImmutableTree, MultiParentedTree):
-	def __init__(self, node_or_str, children=None):
+	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
-		super(ImmutableMultiParentedTree, self).__init__(node_or_str, children)
+		super(ImmutableMultiParentedTree, self).__init__(label_or_str, children)
 
 ## discontinuous trees ##
 def eqtree(tree1, sent1, tree2, sent2):
 	""" Test whether two discontinuous trees are equivalent;
 	assumes canonicalized() ordering. """
-	if tree1.node != tree2.node or len(tree1) != len(tree2):
+	if tree1.label != tree2.label or len(tree1) != len(tree2):
 		return False
 	for a, b in zip(tree1, tree2):
 		istree = isinstance(a, Tree)
@@ -1276,7 +1279,7 @@ class DiscTree(ImmutableTree):
 	""" Wrap an immutable tree with indices as leaves
 	and a sentence. """
 	def __init__(self, tree, sent):
-		super(DiscTree, self).__init__(tree.node,
+		super(DiscTree, self).__init__(tree.label,
 				tuple(DiscTree(a, sent) if isinstance(a, Tree) else a
 				for a in tree))
 		self.sent = sent
@@ -1284,7 +1287,7 @@ class DiscTree(ImmutableTree):
 		return isinstance(other, Tree) and eqtree(self, self.sent,
 				other, other.sent)
 	def __hash__(self):
-		return hash((self.node, ) + tuple(a.__hash__()
+		return hash((self.label, ) + tuple(a.__hash__()
 				if isinstance(a, Tree) else self.sent[a] for a in self))
 	def __repr__(self):
 		return "DisctTree(%r, %r)" % (
@@ -1294,7 +1297,7 @@ class DiscTree(ImmutableTree):
 def latexlabel(tree, sent):
 	""" format label for latex """
 	if isinstance(tree, Tree):
-		l = tree.node.replace("$", r"\$").replace("[", "(").replace("_", "\_")
+		l = tree.label.replace("$", r"\$").replace("[", "(").replace("_", "\_")
 		# underscore => math mode
 		if "|" in l:
 			x, y = l.split("|", 1)
@@ -1587,7 +1590,7 @@ def main():
 	print t.__repr__()
 
 	print "Display tree properties:"
-	print t.node		# tree's constituent type
+	print t.label		# tree's constituent type
 	print t[0]			# tree's first child
 	print t[1]			# tree's second child
 	print t.height()
@@ -1626,7 +1629,7 @@ def main():
 	print
 
 	# Demonstrate tree nodes containing objects other than strings
-	t.node = ('test', 3)
+	t.label = ('test', 3)
 	print t
 
 	trees = """(S (NP (NN 1) (EX 3)) (VP (VB 0) (JJ 2)))

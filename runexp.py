@@ -11,14 +11,13 @@ from fractions import Fraction
 from math import exp
 from tree import Tree
 import numpy as np
-from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
-		BracketCorpusReader, fold, export, FUNC
+from treebank import getreader, fold, export, FUNC
 from treetransforms import binarize, unbinarize, optimalbinarize, \
-		splitdiscnodes, mergediscnodes, addfanoutmarkers, slowfanout, \
-		removefanoutmarkers, canonicalize
+		splitdiscnodes, mergediscnodes, canonicalize, \
+		addfanoutmarkers, removefanoutmarkers, addbitsets, fastfanout
 from fragments import getfragments
-from grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
-		write_lcfrs_grammar
+from grammar import induce_plcfrs, dopreduction, doubledop, \
+		grammarinfo, write_lcfrs_grammar
 from containers import Grammar
 from _parser import parse, cfgparse
 from coarsetofine import prunechart
@@ -50,11 +49,11 @@ def initworker(params):
 defaultstage = dict(
 		name='stage1', # identifier, used for filenames
 		mode='plcfrs', # use the agenda-based PLCFRS parser
-		prune=False, #whether to use previous chart to prune parsing of this stage
+		prune=False, #whether to use previous chart to prune this stage
 		split=False, #split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
-		splitprune=False, #VP_2[101] is treated as { VP*[100], VP*[001] } for pruning
-		markorigin=False, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
-		k=50, #number of coarse pcfg derivations to prune with; k=0 => filter only
+		splitprune=False, #VP_2[101] is treated as {VP*[100], VP*[001]} for pruning
+		markorigin=False, #mark origin of split nodes: VP_2 => {VP*1, VP*2}
+		k=50, #no. of coarse pcfg derivations to prune with; k=0 => filter only
 		neverblockre=None, #do not prune nodes with label that match regex
 		getestimates=None, #compute & store estimates
 		useestimates=None, #load & use estimates
@@ -77,8 +76,7 @@ def main(
 		corpusdir=".",
 		traincorpus="sample2.export", trainencoding="iso-8859-1",
 		testcorpus="sample2.export", testencoding="iso-8859-1",
-		movepunct=False,
-		removepunct=False,
+		punct=None, # options: move, remove, restore
 		functiontags=False, # whether to add/strip function tags from node labels
 		unfolded=False,
 		testmaxwords=40,
@@ -104,7 +102,7 @@ def main(
 		numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
 		resultdir='results',
 		rerun=False):
-
+	""" Main entry point. """
 	assert bintype in ("optimal", "optimalhead", "binarize")
 	assert usetagger in (None, "treetagger", "stanford")
 
@@ -142,18 +140,11 @@ def main(
 	fileobj.setFormatter(logging.Formatter(formatstr))
 	logging.getLogger('').addHandler(fileobj)
 
-	if corpusfmt == 'export':
-		CorpusReader = NegraCorpusReader
-	elif corpusfmt == 'bracket':
-		CorpusReader = BracketCorpusReader
-	elif corpusfmt == 'discbracket':
-		CorpusReader = DiscBracketCorpusReader
-
+	CorpusReader = getreader(corpusfmt)
 	if not rerun:
 		corpus = CorpusReader(corpusdir, traincorpus, encoding=trainencoding,
 			headrules=headrules, headfinal=True, headreverse=False,
-			movepunct=movepunct, removepunct=removepunct,
-			functiontags=functiontags, dounfold=unfolded)
+			punct=punct, functiontags=functiontags, dounfold=unfolded)
 		logging.info("%d sentences in training corpus %s/%s",
 				len(corpus.parsed_sents()), corpusdir, traincorpus)
 		if isinstance(trainsents, float):
@@ -171,7 +162,7 @@ def main(
 			len(trees), trainmaxwords)
 
 	testset = CorpusReader(corpusdir, testcorpus, encoding=testencoding,
-			removepunct=removepunct, movepunct=movepunct)
+			punct=punct)
 	gold_sents = testset.tagged_sents()
 	test_parsed_sents = testset.parsed_sents()
 	if skiptrain:
@@ -216,17 +207,18 @@ def main(
 		getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				revmarkov, leftMostUnary, rightMostUnary,
 				fanout_marks_before_bin, testmaxwords, resultdir, numproc)
-	top = test_parsed_sents[testset.keys()[0]].node
+	top = test_parsed_sents[testset.keys()[0]].label
 	evalparam = readparam(evalparam)
 	evalparam["DEBUG"] = -1
 	evalparam["CUTOFF_LEN"] = 40
 	deletelabel = evalparam.get("DELETE_LABEL", ())
+	deleteword = evalparam.get("DELETE_WORD", ())
 
 	begin = time.clock()
 	results = doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset, testmaxwords, testsents,
-			top, True, resultdir, numproc, tailmarker,
-			deletelabel=deletelabel, corpusfmt=corpusfmt)
+			top, True, resultdir, numproc, tailmarker, deletelabel=deletelabel,
+			deleteword=deleteword, corpusfmt=corpusfmt)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
 	for result in results[0]:
@@ -466,7 +458,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			logging.info("computing PCFG estimates")
 			begin = time.clock()
 			outside = getpcfgestimates(grammar, testmaxwords,
-					grammar.toid[trees[0].node])
+					grammar.toid[trees[0].label])
 			logging.info("estimates done. cpu time elapsed: %gs",
 					time.clock() - begin)
 			np.savez("pcfgoutside.npz", outside=outside)
@@ -482,7 +474,7 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			logging.info("computing PLCFRS estimates")
 			begin = time.clock()
 			outside = getestimates(grammar, testmaxwords,
-					grammar.toid[trees[0].node])
+					grammar.toid[trees[0].label])
 			logging.info("estimates done. cpu time elapsed: %gs",
 						time.clock() - begin)
 			np.savez("outside.npz", outside=outside)
@@ -497,12 +489,13 @@ def getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		testset, testmaxwords, testsents, top, tags=True, resultdir="results",
 		numproc=None, tailmarker='', category=None, deletelabel=(),
-		corpusfmt="export"):
+		deleteword=(), corpusfmt="export"):
+	""" Parse a set of sentences using worker processes. """
 	params = DictObj(stages=stages, unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin, testset=testset,
 			testmaxwords=testmaxwords, testsents=testsents, top=top, tags=tags,
 			resultdir=resultdir, category=category, deletelabel=deletelabel,
-			tailmarker=tailmarker)
+			deleteword=deleteword, tailmarker=tailmarker)
 	goldbrackets = multiset()
 	gold = OrderedDict.fromkeys(testset)
 	gsent = OrderedDict.fromkeys(testset)
@@ -531,8 +524,8 @@ def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 					msg)
 		evaltree = tree.copy(True)
 		transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-				dict(evaltree.pos()), deletelabel, {}, {}, False)
-		goldb = bracketings(evaltree, delete=deletelabel)
+				dict(evaltree.pos()), deletelabel, deleteword, {}, {}, False)
+		goldb = bracketings(evaltree, dellabel=deletelabel)
 		assert gold[sentid] == gsent[sentid] == None
 		gold[sentid] = block
 		gsent[sentid] = sent
@@ -572,8 +565,8 @@ def worker(args):
 	d = internalparams
 	evaltree = tree.copy(True)
 	transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-			dict(evaltree.pos()), d.deletelabel, {}, {}, False)
-	goldb = bracketings(evaltree, delete=d.deletelabel)
+			dict(evaltree.pos()), d.deletelabel, d.deleteword, {}, {}, False)
+	goldb = bracketings(evaltree, dellabel=d.deletelabel)
 	results = []
 	msg = ''
 	chart = {}
@@ -655,8 +648,9 @@ def worker(args):
 				fold(parsetree)
 			evaltree = parsetree.copy(True)
 			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-				dict(evaltree.pos()), d.deletelabel, {}, {}, False)
-			candb = bracketings(evaltree, delete=d.deletelabel)
+					dict(evaltree.pos()), d.deletelabel, d.deleteword,
+					{}, {}, False)
+			candb = bracketings(evaltree, dellabel=d.deletelabel)
 			if goldb and candb:
 				prec = precision(goldb, candb)
 				rec = recall(goldb, candb)
@@ -683,8 +677,9 @@ def worker(args):
 				parse_leaf=int)
 			evaltree = parsetree.copy(True)
 			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-					dict(evaltree.pos()), d.deletelabel, {}, {}, False)
-			candb = bracketings(evaltree, delete=d.deletelabel)
+					dict(evaltree.pos()), d.deletelabel, d.deleteword,
+					{}, {}, False)
+			candb = bracketings(evaltree, dellabel=d.deletelabel)
 			prec = precision(goldb, candb)
 			rec = recall(goldb, candb)
 			f1 = f_measure(goldb, candb)
@@ -722,6 +717,7 @@ def writeresults(results, gold, gsent, resultdir, category, corpusfmt="export"):
 		",".join(result.name for result in results), ext[corpusfmt])
 
 def oldeval(results, goldbrackets):
+	""" Simple evaluation. """
 	nsent = len(results[0].parsetrees)
 	if nsent == 0:
 		return
@@ -739,7 +735,7 @@ def oldeval(results, goldbrackets):
 def saveheads(tree, tailmarker):
 	""" When a head-outward binarization is used, this function ensures the
 	head is known when the tree is converted to export format. """
-	for node in tree.subtrees(lambda n: "tailmarker" in n.node):
+	for node in tree.subtrees(lambda n: "tailmarker" in n.label):
 		node.source = ['--'] * 6
 		node.source[FUNC] = 'HD'
 
@@ -755,6 +751,7 @@ def defaultparse(wordstags):
 			wordstags[0][0], defaultparse(wordstags[1:]))
 
 def readtepacoc():
+	""" Read the tepacoc test set. """
 	tepacocids = set()
 	tepacocsents = defaultdict(list)
 	cat = "undefined"
@@ -808,6 +805,7 @@ def parsetepacoc(
 		fanout_marks_before_bin=False,
 		trainmaxwords=999, testmaxwords=999, testsents=2000,
 		usetagger='stanford', resultdir="tepacoc", numproc=1):
+	""" Parse the tepacoc test set. """
 	trainsents = 25005
 	for stage in stages:
 		for key in stage:
@@ -829,11 +827,11 @@ def parsetepacoc(
 				corpus_trees, corpus_blocks) = cPickle.load(
 					gzip.open("tiger.pickle.gz", "rb"))
 	except IOError: # file not found
-		corpus = NegraCorpusReader("../tiger/corpus",
+		corpus = getreader("export")("../tiger/corpus",
 				"tiger_release_aug07.export",
 				headrules="negra.headrules" if bintype == "binarize" else None,
 				headfinal=True, headreverse=False, dounfold=unfolded,
-				movepunct=True, removepunct=False, encoding='iso-8859-1')
+				punct="move", encoding='iso-8859-1')
 		corpus_sents = corpus.sents().values()
 		corpus_taggedsents = corpus.tagged_sents().values()
 		corpus_trees = corpus.parsed_sents().values()
@@ -902,7 +900,8 @@ def parsetepacoc(
 		begin = time.clock()
 		results[cat] = doparse(stages, unfolded, bintype,
 				fanout_marks_before_bin, testset, testmaxwords, testsents,
-				trees[0].node, True, resultdir, numproc, tailmarker, category=cat)
+				trees[0].label, True, resultdir, numproc, tailmarker,
+				category=cat)
 		cnt += len(testset[0])
 		if numproc == 1:
 			logging.info("time elapsed during parsing: %g",
@@ -937,7 +936,7 @@ def parsetepacoc(
 	logging.info("category: %s", cat)
 	oldeval(*doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset[cat], testmaxwords, testsents,
-			trees[0].node, True, resultdir, numproc, tailmarker, category=cat))
+			trees[0].label, True, resultdir, numproc, tailmarker, category=cat))
 
 def cycledetection(trees, sents):
 	""" Find trees with cyclic unary productions. """
@@ -1039,11 +1038,13 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 
 sentend = "(\"'!?..." # ";/-"
 def wordmangle(w, n, sent):
+	""" Function to filter words before they are sent to the tagger. """
 	#if n > 0 and w[0] in string.uppercase and not sent[n-1] in sentend:
 	#	return ("%s\tNE\tNN\tFM" % w).encode('utf-8')
 	return w.encode('utf-8')
 
 def tagmangle(a, splitchar, overridetag, tagmap):
+	""" Function to filter tags after they are produced by the tagger. """
 	word, tag = a.rsplit(splitchar, 1)
 	for newtag in overridetag:
 		if word in overridetag[newtag]:
@@ -1052,7 +1053,6 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 
 def treebankfanout(trees):
 	""" Get maximal fan-out of a list of trees. """
-	from treetransforms import addbitsets, fastfanout
 	return max((fastfanout(addbitsets(a)), n) for n, tree in enumerate(trees)
 		for a in tree.subtrees(lambda x: len(x) > 1))
 
@@ -1101,8 +1101,7 @@ def testmain():
 		testcorpus="sample2.export",
 		testencoding="iso-8859-1",
 		trainencoding="iso-8859-1",
-		movepunct=False,
-		removepunct=False,
+		punct="move",
 		unfolded=False,
 		testmaxwords=40,
 		trainmaxwords=40,
@@ -1123,6 +1122,7 @@ def testmain():
 	)
 
 def test():
+	""" Run doctests and other tests from all modules. """
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	import bit, demos, kbest, parser, grammar, treebank, estimates, _fragments
 	import agenda, coarsetofine, treetransforms, disambiguation, eval

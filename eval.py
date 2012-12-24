@@ -5,8 +5,7 @@ from getopt import gnu_getopt, GetoptError
 from itertools import count, izip_longest
 from collections import defaultdict, Counter as multiset
 from tree import Tree
-from treebank import NegraCorpusReader, DiscBracketCorpusReader, \
-		BracketCorpusReader, readheadrules, dependencies, export
+from treebank import getreader, readheadrules, dependencies, export
 from treedist import treedist, newtreedist
 #from treedist import newtreedist as treedist
 
@@ -83,15 +82,10 @@ def main():
 		param['HEADRULES'] = readheadrules(opts['--headrules'])
 	assert os.path.exists(goldfile), "gold file not found"
 	assert os.path.exists(parsesfile), "parses file not found"
-	readers = {'export' : NegraCorpusReader,
-		'bracket': BracketCorpusReader,
-		'discbracket': DiscBracketCorpusReader}
-	assert opts.get('--goldfmt', 'export') in readers
-	assert opts.get('--parsesfmt', 'export') in readers
 	goldencoding = opts.get('--goldenc', 'utf-8')
 	parsesencoding = opts.get('--parsesenc', 'utf-8')
-	goldreader = readers[opts.get('--goldfmt', 'export')]
-	parsesreader = readers[opts.get('--parsesfmt', 'export')]
+	goldreader = getreader(opts.get('--goldfmt', 'export'))
+	parsesreader = getreader(opts.get('--parsesfmt', 'export'))
 	gold = goldreader(*splitpath(goldfile), encoding=goldencoding)
 	parses = parsesreader(*splitpath(parsesfile), encoding=parsesencoding)
 	print doeval(gold.parsed_sents(),
@@ -148,12 +142,12 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		assert lencpos == lengpos, ("sentence length mismatch. "
 				"sents:\n%s\n%s" % (" ".join(csent), " ".join(gsent)))
 		# massage the data (in-place modifications)
-		transform(ctree, csent, cpos, dict(gpos),
-			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"],
-			not param["PRESERVE_FUNCTIONS"])
-		transform(gtree, gsent, gpos, dict(gpos),
-			param["DELETE_LABEL"], param["EQ_LABEL"], param["EQ_WORD"],
-			not param["PRESERVE_FUNCTIONS"])
+		transform(ctree, csent, cpos, dict(gpos), param["DELETE_LABEL"],
+				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"],
+				not param["PRESERVE_FUNCTIONS"])
+		transform(gtree, gsent, gpos, dict(gpos), param["DELETE_LABEL"],
+				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"],
+				not param["PRESERVE_FUNCTIONS"])
 		#if not gtree or not ctree:
 		#	continue
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
@@ -162,15 +156,16 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 				param["DISC_ONLY"])
 		gbrack = bracketings(gtree, param["LABELED"], param["DELETE_LABEL"],
 				param["DISC_ONLY"])
-		sentcount += 1
+		if not param['DISC_ONLY'] or cbrack or gbrack:
+			sentcount += 1
 		# this is to deal with "sentences" with only a single punctuation mark.
 		if not gpos:
-			sentcount40 += 1
 			continue
 		if maxlenseen < lencpos:
 			maxlenseen = lencpos
 		if cbrack == gbrack:
-			exact += 1
+			if not param['DISC_ONLY'] or cbrack or gbrack:
+				exact += 1
 		candb.update((n, a) for a in cbrack.elements())
 		goldb.update((n, a) for a in gbrack.elements())
 		for a in gbrack:
@@ -182,7 +177,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		la.append(leafancestor(gtree, ctree, param["DELETE_LABEL"]))
 		if param["TED"]:
 			ted, denom = treedisteval(gtree, ctree,
-				includeroot=gtree.node not in param["DELETE_LABEL"])
+				includeroot=gtree.label not in param["DELETE_LABEL"])
 			dicenoms += ted
 			dicedenoms += denom
 		if param["DEP"]:
@@ -193,7 +188,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			gdepfile.write(export(gtree, gsent, n, "conll", param['HEADRULES']))
 			cdepfile.write(export(ctree, csent, n, "conll", param['HEADRULES']))
 		if lencpos <= param["CUTOFF_LEN"]:
-			sentcount40 += 1
+			if not param['DISC_ONLY'] or cbrack or gbrack:
+				sentcount40 += 1
 			if maxlenseen40 < lencpos:
 				maxlenseen40 = lencpos
 			candb40.update((n, a) for a in cbrack.elements())
@@ -203,7 +199,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			for a in cbrack:
 				candbcat40[a[0]][(n, a)] += 1
 			if cbrack == gbrack:
-				exact40 += 1
+				if not param['DISC_ONLY'] or cbrack or gbrack:
+					exact40 += 1
 			goldpos40.extend(gpos)
 			candpos40.extend(cpos)
 			if la[-1] is not None:
@@ -237,8 +234,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			)
 		if param["DEBUG"] > 1:
 			print "Sentence:", " ".join(gsent)
-			print "Gold tree:      %s\nCandidate tree: %s" % (
-				gtree.pprint(margin=999), ctree.pprint(margin=999))
+			print "Gold tree:      %s\nCandidate tree: %s" % (gtree, ctree)
 			print "Gold brackets:      %s\nCandidate brackets: %s" % (
 				strbracketings(gbrack), strbracketings(cbrack))
 			print "Matched brackets:      %s\nUnmatched brackets: %s" % (
@@ -434,11 +430,13 @@ def readparam(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
-	validkeysonce = "DEBUG MAX_ERROR CUTOFF_LEN LABELED DISC_ONLY".split()
-	param = { "DEBUG" : 0, "MAX_ERROR": 10, "CUTOFF_LEN" : 40,
-				"LABELED" : 1, "DELETE_LABEL_FOR_LENGTH" : [],
-				"DELETE_LABEL" : [], "EQ_LABEL" : set(), "EQ_WORD" : set(),
-				"DISC_ONLY" : 0, "PRESERVE_FUNCTIONS": 0, "TED": 0, "DEP": 0}
+	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED', 'DISC_ONLY',
+			'PRESERVE_FUNCTIONS', 'TED', 'DEP')
+	param = {'DEBUG': 0, 'MAX_ERROR': 10, 'CUTOFF_LEN': 40,
+				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': [],
+				'DELETE_LABEL': set(), 'DELETE_WORD': set(),
+				'EQ_LABEL': {}, 'EQ_WORD': {},
+				'DISC_ONLY': 0, 'PRESERVE_FUNCTIONS': 0, 'TED': 0, 'DEP': 0}
 	seen = set()
 	for a in open(filename) if filename else ():
 		line = a.strip()
@@ -448,8 +446,9 @@ def readparam(filename):
 				assert key not in seen, "cannot declare %s twice" % key
 				seen.add(key)
 				param[key] = int(val)
-			elif key in ("DELETE_LABEL", "DELETE_LABEL_FOR_LENGTH"):
-				param[key].append(val)
+			elif key in ("DELETE_LABEL", "DELETE_LABEL_FOR_LENGTH",
+					"DELETE_WORD"):
+				param[key].add(val)
 			elif key in ("EQ_LABEL", "EQ_WORD"):
 				# these are given as undirected pairs
 				# will be represented as equivalence classes A => {A, B, C, D}
@@ -482,7 +481,8 @@ def readparam(filename):
 				for x in connectedcomponents[k]}
 	return param
 
-def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
+def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
+		stripfunctions):
 	""" Apply the transformations according to the parameter file,
 	except for deleting the root node, which is a special case because if there
 	is more than one child it cannot be deleted. """
@@ -491,20 +491,20 @@ def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in zip(count(), a)[::-1]:
 			if stripfunctions:
-				x = b.node.find("-")
-				y = b.node.find("=")
+				x = b.label.find("-")
+				y = b.label.find("=")
 				if x >= 1:
-					a.node = b.node[:x]
+					a.label = b.label[:x]
 				if y >= 0:
-					a.node = b.node[:y]
-			b.node = eqlabel.get(b.node, b.node)
+					a.label = b.label[:y]
+			b.label = eqlabel.get(b.label, b.label)
 			if not b:
 				a.pop(n)  #remove empty nodes
 			elif isinstance(b[0], Tree):
-				if b.node in delete:
+				if b.label in dellabel:
 					# replace phrasal node with its children
 					a[n:n+1] = b
-			elif gpos[b[0]] in delete:
+			elif gpos[b[0]] in dellabel or sent[b[0]] in delword:
 				# remove pre-terminal entirely, but only look at gold tree,
 				# to ensure the sentence lengths stay the same
 				leaves.remove(b[0])
@@ -533,32 +533,34 @@ def transform(tree, sent, pos, gpos, delete, eqlabel, eqword, stripfunctions):
 		else:
 			a.indices = [a[0]]
 
-def bracketings(tree, labeled=True, delete=(), disconly=False):
+def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	""" Return the labeled set of bracketings for a tree:
 	for each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
 	Tree must have been processed by transform().
+	The argument 'dellabel' is only used to exclude the TOP/ROOT node from the
+	results (because it cannot be deleted by transform() when non-unary).
 
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
-			{}, {}, False)
+			(), {}, {}, False)
 	>>> bracketings(tree)
 	Counter({('S', frozenset([0, 1, 2])): 1, ('VP', frozenset([0, 2])): 1})
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("VP",), \
-			{}, {}, False)
+			(), {}, {}, False)
 	>>> bracketings(tree)
 	Counter({('S', frozenset([0, 1, 2])): 1})
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("S",), \
-			{}, {}, False)
-	>>> bracketings(tree, delete=("S",))
+			(), {}, {}, False)
+	>>> bracketings(tree, dellabel=("S",))
 	Counter({('VP', frozenset([0, 2])): 1})
 	"""
-	return multiset((a.node if labeled else "", frozenset(a.indices))
+	return multiset((a.label if labeled else "", frozenset(a.indices))
 			for a in tree.subtrees()
 				if a and isinstance(a[0], Tree) # nonempty and not a preterminal
-					and a.node not in delete
+					and a.label not in dellabel
 					and (not disconly or disc(a)))
 
 def strbracketings(brackets):
@@ -574,7 +576,7 @@ def strbracketings(brackets):
 		"-".join(str(y) for y in sorted(set(x)))
 		for x in intervals(sorted(b)))) for a, b in brackets)
 
-def leafancestorpaths(tree, delete):
+def leafancestorpaths(tree, dellabel):
 	""" Generate a list of ancestors for each leaf node in a tree. """
 	#uses [] to mark components, and () to mark constituent boundaries
 	#deleted words/tags should not affect boundary detection
@@ -590,7 +592,7 @@ def leafancestorpaths(tree, delete):
 				continue
 			first, last = min(leaves), max(leaves)
 			# skip root node if it is to be deleted
-			if n.node not in delete:
+			if n.label not in dellabel:
 				for b in leaves:
 					# mark end of constituents / components
 					if b + 1 not in leaves:
@@ -599,7 +601,7 @@ def leafancestorpaths(tree, delete):
 						elif b != last and "]" not in paths[b]:
 							paths[b].append("]")
 					# add this label to the lineage
-					paths[b].append(n.node)
+					paths[b].append(n.label)
 					# mark beginning of constituents / components
 					if b - 1 not in leaves:
 						if b == first and "(" not in paths[b]:
@@ -618,11 +620,11 @@ def pathscore(gold, cand):
 	return max(0, (1.0 - edit_distance(cand, gold)
 					/ float(len(gold) + len(cand))))
 
-def leafancestor(goldtree, candtree, delete):
+def leafancestor(goldtree, candtree, dellabel):
 	""" Geoffrey Sampson, Anna Babarcz (2003):
 	A test of the leaf-ancestor metric for parse accuracy """
-	gold = leafancestorpaths(goldtree, delete)
-	cand = leafancestorpaths(candtree, delete)
+	gold = leafancestorpaths(goldtree, dellabel)
+	cand = leafancestorpaths(candtree, dellabel)
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
 
 def treedisteval(a, b, includeroot=False, debug=False):
@@ -773,8 +775,8 @@ def edit_distance(s1, s2):
 
 def test():
 	""" Simple sanity check; should give 100% score on all metrics. """
-	gold = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
-	parses = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
+	gold = getreader("export")(".", "sample2.export", encoding="iso-8859-1")
+	parses = getreader("export")(".", "sample2.export", encoding="iso-8859-1")
 	doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),

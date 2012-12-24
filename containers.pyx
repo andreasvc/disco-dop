@@ -684,7 +684,7 @@ cdef inline copynodes(tree, dict labels, dict prods, Node *result):
 		if isinstance(a, Tree):
 			assert 1 <= len(a) <= 2, (
 				"trees must be non-empty and binarized:\n%s\n%s" % (a, tree[0]))
-			result[n].label = labels.get(a.node, -2)
+			result[n].label = labels.get(a.label, -2)
 			if len(a.prod) == 1:
 				result[n].prod = -2 #fixme: correct for LCFRS?
 			else:
@@ -698,7 +698,7 @@ cdef inline copynodes(tree, dict labels, dict prods, Node *result):
 			else:
 				result[n].right = -1
 		elif isinstance(a, Terminal):
-			result[n].label = a.node
+			result[n].label = a.label
 			result[n].prod = result[n].left = result[n].right = -1
 		else:
 			assert isinstance(a, Tree) or isinstance(a, Terminal)
@@ -706,18 +706,18 @@ cdef inline copynodes(tree, dict labels, dict prods, Node *result):
 class Terminal:
 	"""auxiliary class to be able to add indices to terminal nodes of NLTK
 	trees"""
-	def __init__(self, node):
-		self.prod = self.node = node
+	def __init__(self, label):
+		self.prod = self.label = label
 	def __repr__(self):
-		return repr(self.node)
+		return repr(self.label)
 	def __hash__(self):
-		return hash(self.node)
+		return hash(self.label)
 	def __iter__(self):
 		return iter(())
 	def __len__(self):
 		return 0
 	def __index__(self):
-		return self.node
+		return self.label
 	def __getitem__(self, val):
 		if isinstance(val, slice):
 			return ()

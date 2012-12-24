@@ -6,6 +6,7 @@ from fractions import Fraction
 from math import exp, log
 from array import array
 from random import random
+from grammar import read_lcfrs_grammar, read_bitpar_grammar
 
 USAGE = """
 Generate random sentences with a PLCFRS or PCFG.
@@ -141,61 +142,6 @@ def arraytoyf(args, lengths):
 	""" Inverse of yfarray(). """
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
 							for n, a in zip(lengths, args))
-
-def read_lcfrs_grammar(rules, lexicon):
-	""" Reads a grammar as produced by write_lcfrs_grammar from two file
-	objects. """
-	rules = (a.strip().split('\t') for a in rules)
-	grammar = [((tuple(a[:-2]), tuple(tuple(map(int, b))
-			for b in a[-2].split(","))), Fraction(a[-1])) for a in rules]
-	# one word per line, word (tag weight)+
-	grammar += [(((t, 'Epsilon'), (lexentry[0],)), Fraction(p))
-			for lexentry in (a.strip().split() for a in lexicon)
-			for t, p in zip(lexentry[1::2], lexentry[2::2])]
-	return grammar
-
-def read_bitpar_grammar(rules, lexicon):
-	""" Read a bitpar grammar given two file objects. Must be a binarized
-	grammar. Integer frequencies will be converted to exact relative
-	frequencies; otherwise weights are kept as-is. """
-	grammar = []
-	integralweights = True
-	ntfd = defaultdict(int)
-	for a in rules:
-		a = a.split()
-		p, rule = float(a[0]), a[1:]
-		if integralweights:
-			ip = int(p)
-			if ip == p:
-				p = ip
-			else:
-				integralweights = False
-		ntfd[rule[0]] += p
-		if len(rule) == 2:
-			grammar.append(((tuple(rule), ((0,),)), p))
-		elif len(rule) == 3:
-			grammar.append(((tuple(rule), ((0, 1),)), p))
-		else:
-			raise ValueError("grammar is not binarized")
-	for a in lexicon:
-		a = a.split()
-		word = a[0]
-		tags, weights = a[1::2], a[2::2]
-		weights = map(float, weights)
-		if integralweights:
-			newweights = map(int, weights)
-			if weights == newweights:
-				weights = newweights
-			else:
-				integralweights = False
-		tags = zip(tags, weights)
-		for t, p in tags:
-			ntfd[t] += p
-		grammar.extend((((t, 'Epsilon'), (word,)), p) for t, p in tags)
-	if integralweights:
-		return [(rule, Fraction(p, ntfd[rule[0][0]])) for rule, p in grammar]
-	else:
-		return grammar
 
 def test():
 	""" Demonstration on an example grammar. """

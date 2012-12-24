@@ -118,7 +118,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				if backtransform is not None:
 					# tie breaking relies on binarized productions,
 					# to recover derivation we need to unbinarize
-					deriv = unbinarize(tree, childChar="}").pprint(margin=9999)
+					deriv = str(unbinarize(tree, childChar="}"))
 			treestr = removeids.sub("@" if mpd else "", deriv)
 			if shortest:
 				score = (prob / log(0.5), newprob)
@@ -192,7 +192,7 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
 				memset(<char *>fitem.vec, 0, sizeof(fitem.vec))
 				for x in n.leaves():
 					SETBIT(fitem.vec, x)
-			whitelist[secondarymodel.toid[n.node]][item] = 0.0
+			whitelist[secondarymodel.toid[n.label]][item] = 0.0
 	for label, n in secondarymodel.toid.items():
 		whitelist[n] = whitelist[secondarymodel.toid[label.split("@")[0]]]
 	mpp2 = {}

@@ -31,4 +31,4 @@ boundscheck=False \
 
 lint:
 	pylint eval.py fragments.py grammar.py runexp.py treebank.py treetransforms.py \
-		demos.py gen.py setup.py parser.py tree.py treedist.py tikzdtree.py
+		demos.py gen.py setup.py parser.py tree.py treedist.py

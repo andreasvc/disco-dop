@@ -36,8 +36,11 @@ corpusfmt="export", # choices: export, bracket, discbracket
 corpusdir=".",
 traincorpus="sample2.export", trainencoding="iso-8859-1",
 testcorpus="sample2.export", testencoding="iso-8859-1",
-movepunct=True, # re-attach punctuation to appropriate constituents
-removepunct=False, # remove all punctuation
+punct=None, # options:
+		#None: leave punctuation as-is
+		#'move': re-attach punctuation to appropriate constituents
+		#'remove': remove all punctuation
+		#'restore': attach punctuation under root node
 unfolded=False, # apply transformations for Negra/Tiger to make trees less flat
 usetagger=None,	#default is to use gold tags from treebank.
 #train/test sets
