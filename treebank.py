@@ -976,7 +976,7 @@ def preterminals(node):
 def replacerarewords(sents, unknownword, unknownthreshold):
 	""" Replace all terminals that occur less than unknownthreshold times
 	with a signature of features as returned by unknownword().
-	Returns list of words that exceed the threshold (i.e., the lexicon). """
+	Returns set of words that exceed the threshold (i.e., the lexicon). """
 	words = multiset(word for sent in sents for word in sent)
 	lexicon = {a for a, b in words.iteritems() if b > unknownthreshold}
 	for sent in sents:

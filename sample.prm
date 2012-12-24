@@ -43,6 +43,7 @@ punct=None, # options:
 		#'restore': attach punctuation under root node
 unfolded=False, # apply transformations for Negra/Tiger to make trees less flat
 usetagger=None,	#default is to use gold tags from treebank.
+		# choices: treetagger, stanford, unknownword4, unknownword6
 #train/test sets
 testmaxwords=100,  # max number of words for sentences in test corpus
 trainmaxwords=100, # max number of words for sentences in train corpus

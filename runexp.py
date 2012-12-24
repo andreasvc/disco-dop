@@ -11,7 +11,8 @@ from fractions import Fraction
 from math import exp
 from tree import Tree
 import numpy as np
-from treebank import getreader, fold, export, FUNC
+from treebank import getreader, fold, export, FUNC, \
+		replacerarewords, unknownword4, unknownword6
 from treetransforms import binarize, unbinarize, optimalbinarize, \
 		splitdiscnodes, mergediscnodes, canonicalize, \
 		addfanoutmarkers, removefanoutmarkers, addbitsets, fastfanout
@@ -87,6 +88,7 @@ def main(
 		# (useful when they are in the same file)
 		skip=0,	# number of sentences to skip from test corpus
 		usetagger=None,	#default is to use gold tags from treebank.
+			# choices: treetagger, stanford, unknownword4, unknownword6
 		bintype="binarize", # choices: binarize, optimal, optimalhead
 		factor="right",
 		revmarkov=True,
@@ -104,7 +106,8 @@ def main(
 		rerun=False):
 	""" Main entry point. """
 	assert bintype in ("optimal", "optimalhead", "binarize")
-	assert usetagger in (None, "treetagger", "stanford")
+	assert usetagger in (None, "treetagger", "stanford",
+			"unknownword4", "unknownword4")
 
 	for stage in stages:
 		for key in stage:
@@ -171,7 +174,7 @@ def main(
 			len(testset.parsed_sents()), corpusdir, testcorpus)
 	logging.info("%d test sentences before length restriction",
 			len(gold_sents.keys()[skip:skip+testsents]))
-	if usetagger:
+	if usetagger in ('treetagger', 'stanford'):
 		if usetagger == 'treetagger':
 			# these two tags are never given by tree-tagger,
 			# so collect words whose tag needs to be overriden
@@ -190,8 +193,26 @@ def main(
 				for a, b in gold_sents.items()[skip:skip+testsents]
 				if len(b) <= testmaxwords),
 				overridetagdict, tagmap)
+		# give these tags to parser
+		tags = True
+	elif usetagger.startswith("unknownword"):
+		unknownword = {"unknownword4": unknownword4,
+				"unknownword6": unknownword6}[usetagger]
+		unknownthreshold = 5
+		# replace rare train words with features
+		knownwords = replacerarewords(sents, unknownword, unknownthreshold)
+		# replace unknown test words with features
+		test_tagged_sents = OrderedDict((n,
+			[((a if a in knownwords else unknownword(a, m, knownwords)), None)
+						for m, (a, _) in enumerate(sent)])
+					for n, sent in gold_sents.iteritems())
+		# make sure gold tags are not given to parser
+		tags = False
 	else:
 		test_tagged_sents = gold_sents
+		# give gold POS tags to parser
+		tags = True
+
 	testset = OrderedDict((a, (test_parsed_sents[a], test_tagged_sents[a], block))
 			for a, block in testset.blocks().items()[skip:skip+testsents]
 			if len(test_tagged_sents[a]) <= testmaxwords)
@@ -217,7 +238,7 @@ def main(
 	begin = time.clock()
 	results = doparse(stages, unfolded, bintype,
 			fanout_marks_before_bin, testset, testmaxwords, testsents,
-			top, True, resultdir, numproc, tailmarker, deletelabel=deletelabel,
+			top, tags, resultdir, numproc, tailmarker, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=corpusfmt)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
@@ -226,7 +247,8 @@ def main(
 		header = (" " + result.name.upper() + " ").center(35, "=")
 		evalsummary = doeval(OrderedDict((a, b.copy(True))
 				for a, b in test_parsed_sents.iteritems()), gold_sents,
-				result.parsetrees, test_tagged_sents, evalparam)
+				result.parsetrees, test_tagged_sents if tags else gold_sents,
+				evalparam)
 		coverage = "coverage: %s = %6.2f" % (
 				("%d / %d" % (nsent - result.noparse, nsent)).rjust(
 				25 if any(len(a) > evalparam["CUTOFF_LEN"]
@@ -519,8 +541,8 @@ def doparse(stages, unfolded, bintype, fanout_marks_before_bin,
 		tree, sent, block = testset[sentid]
 		logging.debug("%d/%d (%s). [len=%d] %s\n%s", nsent, len(testset),
 					sentid, len(sent),
-					#u" ".join(a[0] for a in sent),	# words only
-					u" ".join(a[0]+u"/"+a[1] for a in sent), # word/TAG
+					u" ".join(a[0]+u"/"+a[1] for a in sent)
+					if tags else u" ".join(a[0] for a in sent),
 					msg)
 		evaltree = tree.copy(True)
 		transform(evaltree, [w for w, _ in sent], evaltree.pos(),
