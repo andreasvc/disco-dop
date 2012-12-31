@@ -1,3 +1,7 @@
+""" Extract parse tree(s) from a chart following a particular objective
+function. """
+
+from __future__ import print_function
 import re, logging
 from heapq import nlargest
 from math import fsum, exp, log
@@ -7,7 +11,7 @@ from operator import itemgetter, attrgetter
 from itertools import count
 from collections import defaultdict, OrderedDict
 from tree import Tree
-from kbest import lazykbest, lazykthbest, getderiv
+from kbest import lazykbest, getderiv
 from parser import parse
 from agenda cimport Entry, new_Entry
 from grammar import induce_plcfrs, rangeheads
@@ -24,7 +28,7 @@ cdef extern from "macros.h":
 infinity = float('infinity')
 removeids = re.compile("@[-0-9]+")
 removewordtags = re.compile("@[^ )]+")
-termsre = re.compile(r" ([0-9]+)\b")
+termsre = re.compile(" ([0-9]+)\\b")
 
 cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		bint sample=False, bint kbest=True, list sent=None, list tags=None,
@@ -42,7 +46,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 
 	assert kbest or sample
 	if kbest:
-		derivations, D = lazykbest(chart, start, n, grammar.tolabel,
+		derivations, D, _ = lazykbest(chart, start, n, grammar.tolabel,
 				None, derivs=backtransform is None)
 		if isinstance(start, CFGChartItem):
 			entries = D[(<CFGChartItem>start).start][
@@ -62,7 +66,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		# filter out duplicate derivations
 		filteredderivations = dict(zip(derivations, D[start]))
 		entries[:] = filteredderivations.values()
-		derivations = filteredderivations.keys()
+		derivations[:] = filteredderivations.keys()
 
 	if method == "sl-dop":
 		assert not isinstance(start, CFGChartItem), (
@@ -105,7 +109,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				#	parsetrees[treestr].append(-prob)
 				#else:
 				#	parsetrees[treestr] = [-prob]
-	else: #DOP reduction / old double dop method
+	else: #DOP reduction
 		for deriv, prob in derivations:
 			if shortest:
 				# for purposes of tie breaking, calculate the derivation
@@ -118,7 +122,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				if backtransform is not None:
 					# tie breaking relies on binarized productions,
 					# to recover derivation we need to unbinarize
-					deriv = str(unbinarize(tree, childChar="}"))
+					deriv = unbinarize(tree, childchar="}")
 			treestr = removeids.sub("@" if mpd else "", deriv)
 			if shortest:
 				score = (prob / log(0.5), newprob)
@@ -172,7 +176,7 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
 					dopgrammar.tolabel, backtransform)].add(deriv)
 	# sum over derivations to get parse trees
 	parsetreeprob = {}
-	for tree, derivs in derivsfortree.iteritems():
+	for tree, derivs in derivsfortree.items():
 		parsetreeprob[tree] = sum([exp(-derivations[d]) for d in derivs])
 
 	# use getmapping and prunechart here instead of manually built whitelist
@@ -202,7 +206,7 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
 	chart2, start2, _ = parse(sent, secondarymodel, tags=tags,
 					exhaustive=True, estimates=None, whitelist=whitelist)
 	if start2:
-		shortestderivations, DD = lazykbest(chart2, start2, m,
+		shortestderivations, DD, _ = lazykbest(chart2, start2, m,
 			secondarymodel.tolabel)
 	else:
 		shortestderivations = []
@@ -245,17 +249,17 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 
 	# sum over derivations to get parse trees
 	parsetreeprob = {}
-	for tree, derivs in derivsfortree.iteritems():
+	for tree, derivs in derivsfortree.items():
 		parsetreeprob[tree] = sum([exp(-derivations[d]) for d in derivs])
 	selectedtrees = nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get)
 
 	# the number of fragments used is the number of
 	# nodes (open parens), minus the number of interior
 	# (addressed) nodes.
-	result = dict([(tree, (-min([deriv.count("(") - (
+	result = {tree: (-min([deriv.count("(") - (
 			deriv.count("@") + deriv.count("(#"))
-		for deriv in derivsfortree[tree]]), parsetreeprob[tree]))
-				for tree in selectedtrees])
+		for deriv in derivsfortree[tree]]), parsetreeprob[tree])
+				for tree in selectedtrees}
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 			len(derivations), len(result), len(parsetreeprob))
 	return result, msg
@@ -281,7 +285,7 @@ cdef samplechart(dict D, dict chart, ChartItem start, dict tolabel, dict tables,
 		tree = " ".join([a for a, _ in children])
 	else:
 		tree = "(%s %s)" % (tolabel[start.label],
-								" ".join([a for a, _ in children]))
+				" ".join([a for a, _ in children]))
 	# create an edge that has as children the edges that were just created
 	# by our recursive call
 	newedge = RankedEdge(start, edge, len(D[edge.left]) - 1,
@@ -309,7 +313,7 @@ def getsamples(D, chart, start, n, tolabel, debin=None):
 
 cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
 	# Ask for at least 10 derivations because unary cycles.
-	derivations, _ = lazykbest(chart, start, 10, tolabel)
+	derivations = lazykbest(chart, start, 10, tolabel)[0]
 	return derivations[0]
 
 cpdef str recoverfragments(derivation, D, Grammar grammar,
@@ -334,7 +338,7 @@ cpdef str recoverfragments(derivation, D, Grammar grammar,
 				derivation, D, grammar, backtransform))
 	raise ValueError("derivation should be RankedEdge or RankedCFGEdge.")
 
-cdef str recoverfragments_lcfrs(RankedEdge derivation, dict D,
+cdef recoverfragments_lcfrs(RankedEdge derivation, dict D,
 		Grammar grammar, dict backtransform):
 	cdef RankedEdge child
 	cdef LCFRSEdge childedge, derivedge = derivation.edge
@@ -437,10 +441,10 @@ def main():
 			return x[0].replace("@", ""), (int(abs(x[1][0])), x[1][1])
 		return x[0].replace("@", ""), x[1]
 	def f(x):
-		print "foo", x
+		print("foo", x)
 		return x[0], exp(-x[1])
 	def maxitem(d):
-		return max(d.iteritems(), key=itemgetter(1))
+		return max(d.items(), key=itemgetter(1))
 	trees = [Tree.parse(t, parse_leaf=int) for t in
 		"""(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
@@ -480,15 +484,14 @@ def main():
 			sldop_n=7, sent=sent)
 	short, _ = marginalize("shortest", chart, start, shortest,
 		1000, sent=sent, secondarymodel=secondarymodel)
-	print
-	print "vit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1])))
-	print "MPD:\t\t%s %r" % e(maxitem(mpd))
-	print "MPP:\t\t%s %r" % e(maxitem(mpp))
-	print "MPP sampled:\t%s %r" % e(maxitem(mppsampled))
-	print "SL-DOP n=7:\t%s %r" % e(maxitem(sldop1))
-	print "simple SL-DOP:\t%s %r" % e(maxitem(sldopsimple))
-	#print "shortest:\t%s %r" % f(min(short.iteritems()))
-	print "shortest:\t%s %r" % e(maxitem(short))
+	print("\nvit:\t\t%s %r" % e((removeids.sub("", vit[0]), exp(-vit[1]))),
+		"MPD:\t\t%s %r" % e(maxitem(mpd)),
+		"MPP:\t\t%s %r" % e(maxitem(mpp)),
+		"MPP sampled:\t%s %r" % e(maxitem(mppsampled)),
+		"SL-DOP n=7:\t%s %r" % e(maxitem(sldop1)),
+		"simple SL-DOP:\t%s %r" % e(maxitem(sldopsimple)),
+		#"shortest:\t%s %r" % f(min(short.items())),
+		"shortest:\t%s %r" % e(maxitem(short)), sep='\n')
 
 if __name__ == '__main__':
 	main()

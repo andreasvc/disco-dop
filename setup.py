@@ -8,12 +8,13 @@ import numpy
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
 cython_directives = dict(
-	profile=False,
+	profile=True,
 	cdivision=True,
 	nonecheck=False,
 	wraparound=False,
 	boundscheck=False,
 	embedsignature=True,
+	language_level=3
 )
 
 #Options.fast_fail = True

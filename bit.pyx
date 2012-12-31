@@ -1,4 +1,6 @@
-#NB: most functions implemented in bit.pxd to facilitate function inlining.
+""" NB: most functions implemented in bit.pxd to facilitate function inlining.
+"""
+from __future__ import print_function
 
 def pyintbitcount(a):
 	""" Number of set bits (1s)
@@ -88,15 +90,15 @@ cdef binrepr(ULong *vec, int slots):
 		n -= 1
 	result = bin(vec[n])
 	for m in range(n - 1, -1, -1):
-		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
+		result += bin(vec[m])[2:].zfill(BITSIZE)
 	return result
 
 def main():
 	cdef ULong ulongvec[2]
 	bigpyint = 0b11100110101111001101011111100110101001100110
-	print "8 * sizeof(unsigned int) ==", 8 * sizeof(unsigned int)
-	print "8 * sizeof(unsigned long) ==", 8 * sizeof(unsigned long)
-	print "8 * sizeof(unsigned long long) ==", 8 * sizeof(unsigned long long)
+	print("8 * sizeof(unsigned int) ==", 8 * sizeof(unsigned int))
+	print("8 * sizeof(unsigned long) ==", 8 * sizeof(unsigned long))
+	print("8 * sizeof(unsigned long long) ==", 8 * sizeof(unsigned long long))
 	assert nextset(0b001100110, 3) == 5
 	assert nextset(0b001100110, 7) == -1
 	assert nextunset(0b001100110, 1) == 3
@@ -133,7 +135,7 @@ def main():
 	ulongvec[0] = ~0UL
 	assert anextunset(ulongvec, 0, 2) == sizeof(ULong) * 8, (
 		anextunset(ulongvec, 0, 2), sizeof(ULong) * 8)
-	print "it worked"
+	print("it worked")
 
 if __name__ == '__main__':
 	main()

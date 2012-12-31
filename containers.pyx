@@ -1,6 +1,9 @@
-import codecs, logging
+""" Data types for grammars, chart items, &c. """
+
+from __future__ import print_function
+import logging
 from math import exp, log
-from collections import Set, Iterable, defaultdict
+from collections import defaultdict
 from functools import partial
 from tree import Tree
 
@@ -21,9 +24,10 @@ cdef class Grammar:
 		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 		# and assign them unique IDs
 		# convert them to ASCII strings.
-		nonterminals = list(enumerate(["Epsilon", "ROOT"]
-			+ sorted({str(nt) for (rule, _), _ in grammar for nt in rule}
-				- {"Epsilon", "ROOT"})))
+		# FIXME: ROOT symbol should be a parameter.
+		nonterminals = list(enumerate([b"Epsilon", b"ROOT"]
+				+ sorted({nt.encode('ascii') for (rule, _), _ in grammar
+					for nt in rule} - {b"Epsilon", b"ROOT"})))
 		self.nonterminals = len(nonterminals)
 		self.toid = {lhs: n for n, lhs in nonterminals}
 		self.tolabel = {n: lhs for n, lhs in nonterminals}
@@ -49,7 +53,7 @@ cdef class Grammar:
 		self.numunary = self.numbinary = 0
 		for (rule, yf), w in grammar:
 			if len(rule) == 2:
-				if rule[1] != 'Epsilon':
+				if rule[1] != b'Epsilon':
 					assert all(b == 0 for a in yf for b in a), (
 						"yield function refers to non-existent second "
 						"non-terminal: %r\t%r" % (rule, yf))
@@ -74,6 +78,8 @@ cdef class Grammar:
 					"conflicting fanouts for symbol '%s'.\n"
 					"previous: %d; this non-terminal: %d.\nrule: %r" % (
 					rule[0], self.fanout[self.toid[rule[0]]], len(yf), rule))
+			assert w >= 0, "weights must be non-negative: %r" % (
+					((rule, yf), w), )
 		#'\n'.join(repr(r) for r in grammar if r[0][0][0] == rule[0])
 		self.numrules = self.numunary + self.numbinary
 		# allocate the actual contiguous array that will contain the rules
@@ -87,7 +93,7 @@ cdef class Grammar:
 
 		# convert rules and copy to structs / cdef class
 		# remove sign from log probabilities because we use a min-heap
-		self.rulenos = dict([(rule, m) for m, (rule, _) in enumerate(grammar)])
+		self.rulenos = {rule: m for m, (rule, _) in enumerate(grammar)}
 		for (rule, yf), w in grammar:
 			if len(rule) == 2 and self.toid[rule[1]] == 0:
 				lr = LexicalRule(self.toid[rule[0]], self.toid[rule[1]], 0,
@@ -95,7 +101,7 @@ cdef class Grammar:
 				#	self.rulenos[rule, yf])
 				# lexical productions (mis)use the field for the yield function
 				# to store the word
-				self.lexical.setdefault(yf[0], []).append(lr)
+				self.lexical.setdefault(unicode(yf[0]), []).append(lr)
 				self.lexicalbylhs.setdefault(lr.lhs, []).append(lr)
 		self.copyrules(self.unary, 1, 2)
 		self.copyrules(self.lbinary, 1, 3)
@@ -115,7 +121,7 @@ cdef class Grammar:
 		cdef size_t m		# bit index in yield function
 		cdef Rule *cur
 		filteredgrammar = [rule for rule in self.origrules
-				if rule[0][0][1] != 'Epsilon'
+				if rule[0][0][1] != b'Epsilon'
 				and (not filterlen or len(rule[0][0]) == filterlen)]
 		sortedgrammar = sorted(filteredgrammar, key=partial(myitemget, idx))
 		#need to set dest even when there are no rules for that idx
@@ -144,14 +150,14 @@ cdef class Grammar:
 			n += 1
 		# sentinel rule
 		dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = self.nonterminals
-	def testgrammar(self, epsilon=0.01):
+	def testgrammar(self, epsilon=0):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
 		#but Negra contains at least one tag (--) used for both.
 		sums = defaultdict(int)
 		for (r, yf), w in self.origrules:
 			sums[r[0]] += w
-		for lhs, mass in sums.iteritems():
+		for lhs, mass in sums.items():
 			if mass != 1:
 				logging.error("Does not sum to 1: %s; sums to %s", lhs, mass)
 				return False
@@ -188,6 +194,7 @@ cdef class Grammar:
 			self.splitmapping[0] = <UInt *>malloc(sizeof(UInt) *
 				sum([self.fanout[n] for n in range(self.nonterminals)
 					if self.fanout[n] > 1]))
+		seen = set([0])
 		for n in range(self.nonterminals):
 			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
 				strlabel = self.tolabel[n]
@@ -195,6 +202,7 @@ cdef class Grammar:
 					strlabel = striplabelre.sub("", strlabel, 1)
 				if self.fanout[n] == 1 or not splitprune:
 					self.mapping[n] = coarse.toid[strlabel]
+					seen.add(self.mapping[n])
 				else:
 					strlabel += "*"
 					if markorigin:
@@ -203,25 +211,42 @@ cdef class Grammar:
 						components += self.fanout[n]
 						for m in range(self.fanout[n]):
 							self.splitmapping[n][m] = coarse.toid[
-								strlabel + str(m)]
+								b"%s%d" % (strlabel, m)]
+							seen.add(self.splitmapping[n][m])
 					else:
 						self.mapping[n] = coarse.toid[strlabel]
+						seen.add(self.mapping[n])
 			else:
 				self.mapping[n] = 0
+		if seen != set(coarse.tolabel):
+			# fixme: sort by whether in nev
+			l = [coarse.tolabel[a] for a in sorted(set(coarse.tolabel) - seen,
+					key=coarse.tolabel.get)] #filter on '*' in label ..
+			diff1 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
+			l = [coarse.tolabel[a] for a in seen - set(coarse.tolabel)]
+			diff2 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
+			msg = ('grammar is not a superset:\n'
+					'only in coarse: {%s}\nonly in fine: {%s}' % (diff1, diff2))
+		elif coarse.nonterminals < self.nonterminals:
+			msg = 'grammar is a proper superset'
+		elif seen == set(coarse.tolabel):
+			msg = 'label sets are a equal'
 		if debug:
+			msg += "\n"
 			for n in range(self.nonterminals):
 				if self.mapping[n]:
-					print "%s[%d] =>" % (self.tolabel[n], self.fanout[n]),
+					msg += "%s[%d] =>" % (self.tolabel[n], self.fanout[n])
 					if self.fanout[n] == 1 or not (splitprune and markorigin):
-						print coarse.tolabel[self.mapping[n]],
+						msg += coarse.tolabel[self.mapping[n]]
 					elif self.fanout[n] > 1:
 						for m in range(self.fanout[n]):
-							print coarse.tolabel[self.splitmapping[n][m]],
-					print
-			print dict(striplabelre=striplabelre.pattern,
+							msg += coarse.tolabel[self.splitmapping[n][m]]
+					print()
+			print(dict(striplabelre=striplabelre.pattern,
 					neverblockre=neverblockre.pattern,
-					splitprune=splitprune, markorigin=markorigin)
-	cdef str rulerepr(self, Rule rule):
+					splitprune=splitprune, markorigin=markorigin))
+		return msg
+	cdef rulerepr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
 			exp(-rule.prob),
 			self.tolabel[rule.lhs],
@@ -229,9 +254,9 @@ cdef class Grammar:
 			"  %s" % self.tolabel[rule.rhs2]
 				if rule.rhs2 else "")
 		return left.ljust(40) + self.yfrepr(rule)
-	cdef str yfrepr(self, Rule rule):
+	cdef yfrepr(self, Rule rule):
 		cdef int n, m = 0
-		cdef str result = ""
+		cdef result = ""
 		for n in range(8 * sizeof(rule.args)):
 			result += "1" if (rule.args >> n) & 1 else "0"
 			if (rule.lengths >> n) & 1:
@@ -259,7 +284,7 @@ cdef class Grammar:
 			for word in sorted(self.lexical)
 			for lr in sorted(self.lexical[word],
 			key=lambda lr: (<LexicalRule>lr).lhs)])
-		labels = ", ".join("%s=%d" % a for a in sorted(self.toid.iteritems()))
+		labels = ", ".join("%s=%d" % a for a in sorted(self.toid.items()))
 		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s" % (
 				rules, lexical, labels)
 	def __reduce__(self):
@@ -464,7 +489,7 @@ cdef binrepr(ULong *vec):
 		n -= 1
 	result = bin(vec[n])
 	for m in range(n - 1, -1, -1):
-		result += bin(vec[m])[2:].rjust(BITSIZE, '0')
+		result += bin(vec[m])[2:].zfill(BITSIZE)
 	return result
 
 cdef class LCFRSEdge:
@@ -882,44 +907,6 @@ cdef class MemoryPool:
 		for x in range(self.n + 1):
 			free(self.pool[x])
 		free(self.pool)
-
-class OrderedSet(Set):
-	""" A frozen, ordered set which maintains a regular list/tuple and set.
-		The set is indexable. Equality is defined _without_ regard for order.
-	"""
-	def __init__(self, iterable=None):
-		if iterable:
-			self.seq = tuple(iterable)
-			self.theset = frozenset(self.seq)
-		else:
-			self.seq = ()
-			self.theset = frozenset()
-	def __hash__(self):
-		return hash(self.theset)
-	def __contains__(self, value):
-		return value in self.theset
-	def __len__(self):
-		return len(self.theset)
-	def __iter__(self):
-		return iter(self.seq)
-	def __getitem__(self, n):
-		return self.seq[n]
-	def __reversed__(self):
-		return reversed(self.seq)
-	def __repr__(self):
-		if not self.seq:
-			return '%s()' % self.__class__.__name__
-		return '%s(%r)' % (self.__class__.__name__, self.seq)
-	def __eq__(self, other):
-		#if isinstance(other, (OrderedSet, Sequence)):
-		#	return len(self) == len(other) and list(self) == list(other)
-		# equality is defined _without_ regard for order
-		return self.theset == set(other)
-	def __and__(self, other):
-		""" maintain the order of the left operand. """
-		if not isinstance(other, Iterable):
-			return NotImplemented
-		return self._from_iterable(value for value in self if value in other)
 
 # begin scratch
 

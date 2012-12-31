@@ -7,7 +7,11 @@ clean:
 	rm -f *.c *.so
 
 test: all sample2.export
-	python -c 'import runexp; runexp.test()'
+	python -tt runexp.py --test
+
+test3: sample2.export
+	python3 setup.py build_ext --inplace
+	PYTHONIOENCODING=utf-8 python3 -bb -tt runexp.py --test
 
 sample2.export:
 	wget http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
@@ -29,6 +33,9 @@ wraparound=False,\
 boundscheck=False \
 *.pyx
 
+# C0103 == Invalid name
 lint:
-	pylint eval.py fragments.py grammar.py runexp.py treebank.py treetransforms.py \
-		demos.py gen.py setup.py parser.py tree.py treedist.py
+	pylint \
+		--indent-string='\t' --disable=C0103 --good-names=a,b,c,i,j,k,ex,Run,_ \
+		eval.py fragments.py grammar.py runexp.py treebank.py \
+		treetransforms.py demos.py gen.py setup.py parser.py tree.py treedist.py

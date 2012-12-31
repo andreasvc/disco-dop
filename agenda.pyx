@@ -6,8 +6,8 @@ http://docs.python.org/library/heapq.html
 There is a version specialised to be used as agenda with edges.
 """
 
-from itertools import count, imap, izip
-from operator import itemgetter, attrgetter
+from __future__ import print_function
+from operator import itemgetter
 
 DEF INVALID = 0
 DEF HEAP_ARITY = 4
@@ -147,7 +147,10 @@ cdef class Agenda:
 		self.length -= 1
 		del self.mapping[key]
 	def update(self, *a, **kw):
-		for k, v in dict(*a, **kw).iteritems():
+		for b in a:
+			for k, v in b:
+				self[k] = v
+		for k, v in kw.items():
 			self[k] = v
 	def clear(self):
 		self.counter = 1
@@ -165,11 +168,8 @@ cdef class Agenda:
 	def __len__(self): return self.length
 	def __nonzero__(self): return self.length != 0
 	def keys(self): return self.mapping.keys()
-	def values(self): return [(<Entry>e).value for e in self.mapping.values()]
+	def values(self): return map(getval, self.mapping.values())
 	def items(self): return zip(self.keys(), self.values())
-	def iterkeys(self): return self.mapping.iterkeys()
-	def itervalues(self): return imap(getval, self.mapping.itervalues())
-	def iteritems(self): return izip(self.iterkeys(), self.itervalues())
 
 cdef class EdgeAgenda:
 	def __init__(self, iterable=None):
@@ -293,7 +293,10 @@ cdef class EdgeAgenda:
 		self.length -= 1
 		del self.mapping[key]
 	def update(self, *a, **kw):
-		for k, v in dict(*a, **kw).iteritems():
+		for b in a:
+			for k, v in b:
+				self[k] = v
+		for k, v in kw.items():
 			self[k] = v
 	def clear(self):
 		self.counter = 1
@@ -311,11 +314,8 @@ cdef class EdgeAgenda:
 	def __len__(self): return self.length
 	def __nonzero__(self): return self.length != 0
 	def keys(self): return self.mapping.keys()
-	def values(self): return [(<Entry>e).value for e in self.mapping.values()]
+	def values(self): return map(getval, self.mapping.values())
 	def items(self): return zip(self.keys(), self.values())
-	def iterkeys(self): return self.mapping.iterkeys()
-	def itervalues(self): return imap(getval, self.mapping.itervalues())
-	def iteritems(self): return izip(self.iterkeys(), self.itervalues())
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
 cdef list nsmallest(int n, list items):
@@ -326,7 +326,7 @@ cdef list nsmallest(int n, list items):
 
 cdef inline void quickfindfirstk(list items, int left, int right, int k):
 	""" quicksort k-best selection """
-	# select pivotIndex between left and right
+	# select pivot index between left and right
 	# middle between left & right
 	cdef int pivot = left + (right - left) // 2
 	cdef int pivotnewindex = partition(items, left, right, pivot)
@@ -500,17 +500,14 @@ class TestHeap(TestCase):
 	def test_keys(self):
 		h, pairs, d = self.make_data()
 		self.assertEqual(sorted(h.keys()), sorted(d.keys()))
-		self.assertEqual(sorted(h.iterkeys()), sorted(d.iterkeys()))
 
 	def test_values(self):
 		h, pairs, d = self.make_data()
 		self.assertEqual(sorted(h.values()), sorted(d.values()))
-		self.assertEqual(sorted(h.itervalues()), sorted(d.itervalues()))
 
 	def test_items(self):
 		h, pairs, d = self.make_data()
 		self.assertEqual(sorted(h.items()), sorted(d.items()))
-		self.assertEqual(sorted(h.iteritems()), sorted(d.iteritems()))
 
 	def test_del(self):
 		h, pairs, d = self.make_data()

@@ -1,4 +1,5 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing. """
+from __future__ import print_function
 from math import exp
 from agenda import Agenda
 from containers import ChartItem, Edge, RankedEdge
@@ -237,121 +238,123 @@ cpdef list lazykbestcfg(list chart, CFGChartItem goal, int k):
 			chart, explored)
 	return D
 
-cdef inline bint explorederivationcfg(RankedCFGEdge ej, list D, list chart,
-		int n):
-	""" Walk through a derivation to ensured RankedEdges are present in D
+cdef inline bint explorederivationcfg(RankedCFGEdge ej,
+		list D, list chart, set explored, int n):
+	""" Traverse a derivation to ensured RankedEdges are present in D
 	for every edge. """
 	cdef Entry entry
 	cdef RankedCFGEdge rankededge
-	cdef str children = "", child
-	cdef int i = ej.left
 	cdef UInt label
-	cdef UChar start, end
 	if n > 100:
 		return False #hardcoded limit to prevent cycles
-	label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs1
-	start = ej.start
-	end = ej.edge.mid
-	while i != -1:
-		if label not in chart[start][end]:
-			break
-		elif label not in D[start][end]:
-			assert i == 0, "non-best edge missing in derivations"
-			entry = (<Agenda>getcandidatescfg(chart, label, start, end, 1)
-				).popentry()
-			D[start][end][label] = [entry]
-		if explorederivationcfg(<RankedCFGEdge>
-				(<Entry>D[start][end][label][i]).key, D, chart, n + 1):
-			if end == ej.end:
-				break
-			label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs2
-			start = ej.edge.mid
-			end = ej.end
-			i = ej.right
-		else:
+	elif ej.edge.rule is NULL:
+		return True
+	label = ej.edge.rule.rhs1
+	if ej.left != -1 and label in chart[ej.start][ej.edge.mid]:
+		if label not in D[ej.start][ej.edge.mid]:
+			assert ej.left == 0, "non-best edge missing in derivations"
+			entry = (<Agenda>getcandidatescfg(chart, label, ej.start,
+					ej.edge.mid, 1)).popentry()
+			D[ej.start][ej.edge.mid][label] = [entry]
+			explored.add(entry.key)
+		if not explorederivationcfg(<RankedCFGEdge>
+				(<Entry>D[ej.start][ej.edge.mid][label][ej.left]).key,
+				D, chart, explored, n + 1):
 			return False
+	label = ej.edge.rule.rhs2
+	if ej.right != -1 and label in chart[ej.edge.mid][ej.end]:
+		if label not in D[ej.edge.mid][ej.end]:
+			assert ej.right == 0, "non-best edge missing in derivations"
+			entry = (<Agenda>getcandidatescfg(chart, label, ej.edge.mid,
+					ej.end, 1)).popentry()
+			explored.add(entry.key)
+			D[ej.edge.mid][ej.end][label] = [entry]
+		return explorederivationcfg(<RankedCFGEdge>
+				(<Entry>D[ej.edge.mid][ej.end][label][ej.right]).key,
+				D, chart, explored, n + 1)
 	return True
 
-cdef inline str getderivationcfg(RankedCFGEdge ej, list  D, list chart,
-		dict tolabel, int n, str debin):
-	""" Translate the (e, j) notation to an actual tree string in
-	bracket notation.  e is an edge, j is a vector prescribing the rank of the
-	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
-	vector [2, 1], this points to the derivation headed by S and having the 2nd
-	best NP and the 1st best VP as children.
-	If `debin' is specified, will perform on-the-fly debinarization of nodes
-	with labels containing `debin' an a substring. """
+cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
+		list chart, dict tolabel, str debin):
 	cdef Entry entry
 	cdef RankedCFGEdge rankededge
-	cdef str children = "", child
-	cdef int i = ej.left
 	cdef UInt label
-	cdef UChar start, end
-	if n > 100:
-		return ""	#hardcoded limit to prevent cycles
-	label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs1
-	start = ej.start
-	end = ej.edge.mid
-	while i != -1:
-		if label not in chart[start][end]:
-			# this must be a terminal
-			children = "%d" % start
-			break
-		rankededge = (<Entry>D[start][end][label][i]).key
-		child = getderivationcfg(rankededge, D, chart, tolabel, n + 1, debin)
-		if child == "":
-			return ""
-		if children:
-			children += " %s" % child
-		else:
-			children = child
-		if end == ej.end:
-			break
-		label = 0 if ej.edge.rule is NULL else ej.edge.rule.rhs2
-		start = ej.edge.mid
-		end = ej.end
-		i = ej.right
-	if debin is not None and debin in tolabel[ej.label]:
-		return children
-	return "(%s %s)" % (tolabel[ej.label], children)
+	if debin is None or debin not in tolabel[ej.label]:
+		result += '('
+		result += tolabel[ej.label]
+		result += ' '
+	if ej.edge.rule is NULL: # this must be a terminal
+		result += str(ej.start)
+	elif ej.left != -1:
+		label = ej.edge.rule.rhs1
+		rankededge = (<Entry>D[ej.start][ej.edge.mid][label][ej.left]).key
+		getderivationcfg(result, rankededge, D, chart, tolabel, debin)
+		result += ' '
+		if ej.right != -1:
+			label = ej.edge.rule.rhs2
+			rankededge = (<Entry>D[ej.edge.mid][ej.end][label][ej.right]).key
+			getderivationcfg(result, rankededge, D, chart, tolabel, debin)
+	if debin is None or debin not in tolabel[ej.habel]:
+		result += ')'
 # --- end CFG specific
 
-def getderiv(ej, D, chart, dict tolabel, str debin):
-	if isinstance(ej, RankedEdge):
-		return getderivation(ej, D, chart, tolabel, 0, debin)
-	elif isinstance(ej, RankedCFGEdge):
-		return getderivationcfg(ej, D, chart, tolabel, 0, debin)
-
-cdef bint explorederivation(RankedEdge ej, dict D, dict chart, int n):
-	""" Walk through a derivation to ensured RankedEdges are present in D
-	for every edge. """
+cdef bint explorederivation(RankedEdge ej, dict D, dict chart, set explored,
+		int n):
+	""" Traverse a derivation to ensure RankedEdges are present
+	in D for every edge. """
 	cdef Entry entry
 	cdef RankedEdge rankededge
-	cdef ChartItem ei
-	cdef str children = "", child
-	cdef int i = ej.left
 	if n > 100:
 		return False #hardcoded limit to prevent cycles
-	ei = ej.edge.left
-	while i != -1:
-		if ei not in chart:
-			break # this must be a terminal
-		elif ei not in D:
-			assert i == 0, "non-best edge missing in derivations"
-			entry = (<Agenda>getcandidates(chart, ei, 1)).popentry()
-			D[ei] = [entry]
-		if explorederivation(<RankedEdge>(<Entry>D[ei][i]).key,
-				D, chart, n + 1):
-			if ei is ej.edge.right:
-				break
-			ei = ej.edge.right
-			i = ej.right
-		else:
+	if ej.left != -1 and ej.edge.left in chart:
+		if ej.edge.left not in D:
+			assert ej.left == 0, "non-best edge missing in derivations"
+			entry = (<Agenda>getcandidates(chart, ej.edge.left, 1)).popentry()
+			D[ej.edge.left] = [entry]
+			explored.add(entry.key)
+		if not explorederivation(
+				<RankedEdge>(<Entry>D[ej.edge.left][ej.left]).key,
+				D, chart, explored, n + 1):
 			return False
+	if ej.right != -1 and ej.edge.right in chart:
+		if ej.edge.right not in D:
+			assert ej.right == 0, "non-best edge missing in derivations"
+			entry = (<Agenda>getcandidates(chart, ej.edge.right, 1)).popentry()
+			D[ej.edge.right] = [entry]
+			explored.add(entry.key)
+		return explorederivation(
+				<RankedEdge>(<Entry>D[ej.edge.right][ej.right]).key,
+				D, chart, explored, n + 1)
 	return True
 
-cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
-		int n, str debin):
+cdef inline getderivation(result, RankedEdge ej, dict D,
+		dict chart, dict tolabel, str debin):
+	cdef Entry entry
+	cdef RankedEdge rankededge
+	cdef ChartItem item
+	if debin is None or debin not in tolabel[ej.head.label]:
+		result += '('
+		result += tolabel[ej.head.label]
+		result += ' '
+	item = ej.edge.left
+	if item not in chart:
+		# this must be a terminal
+		result += str(item.lexidx())
+	else:
+		rankededge = (<Entry>D[item][ej.left]).key
+		getderivation(result, rankededge, D, chart, tolabel, debin)
+	if ej.right != -1:
+		item = ej.edge.right
+		result += ' '
+		if item in chart:
+			rankededge = (<Entry>D[item][ej.right]).key
+			getderivation(result, rankededge, D, chart, tolabel, debin)
+		else:
+			result += str(item.lexidx())
+	if debin is None or debin not in tolabel[ej.head.label]:
+		result += ')'
+
+def getderiv(ej, D, chart, dict tolabel, str debin):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
@@ -359,36 +362,14 @@ cdef inline str getderivation(RankedEdge ej, dict D, dict chart, dict tolabel,
 	best NP and the 1st best VP as children.
 	If `debin' is specified, will perform on-the-fly debinarization of nodes
 	with labels containing `debin' an a substring. """
-	cdef Entry entry
-	cdef RankedEdge rankededge
-	cdef ChartItem ei
-	cdef str children = "", child
-	cdef int i = ej.left
-	if n > 100:
-		return ""	#hardcoded limit to prevent cycles
-	ei = ej.edge.left
-	while i != -1:
-		if ei not in chart:
-			# this must be a terminal
-			children = "%d" % ei.lexidx()
-			break
-		rankededge = (<Entry>D[ei][i]).key
-		child = getderivation(rankededge, D, chart, tolabel, n + 1, debin)
-		if child == "":
-			return ""
-		if children:
-			children += " %s" % child
-		else:
-			children = child
-		if ei is ej.edge.right:
-			break
-		ei = ej.edge.right
-		i = ej.right
-	if debin is not None and debin in tolabel[ej.head.label]:
-		return children
-	return "(%s %s)" % (tolabel[ej.head.label], children)
+	result = bytearray()
+	if isinstance(ej, RankedEdge):
+		getderivation(result, ej, D, chart, tolabel, debin)
+	elif isinstance(ej, RankedCFGEdge):
+		getderivationcfg(result, ej, D, chart, tolabel, debin)
+	return str(result)
 
-cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel,
+cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel=None,
 		str debin=None, bint derivs=True):
 	""" wrapper function to run lazykthbest and get the actual derivations,
 	(except when derivs is False) as well as the ranked chart.
@@ -412,23 +393,23 @@ cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel,
 		end = (<CFGChartItem>goal).end
 		lazykthbestcfg(goal.label, start, end, k, k, D, cand, chart, explored)
 		D[start][end][goal.label] = [entry
-				for entry in D[start][end][goal.label]
-				if explorederivationcfg(entry.key, D, chart, 0)]
+				for entry in D[start][end][goal.label][:k]
+				if explorederivationcfg(entry.key, D, chart, explored, 0)]
 		if derivs:
-			derivations = [(getderivationcfg(
-					entry.key, D, chart, tolabel, 0, debin), entry.value)
+			derivations = [(getderiv(
+					entry.key, D, chart, tolabel, debin), entry.value)
 					for entry in D[start][end][goal.label]]
 	else:
 		D = {}
 		cand = {}
 		lazykthbest(goal, k, k, D, cand, chart, explored)
-		D[goal] = [entry for entry in D[goal]
-				if explorederivation(entry.key, D, chart, 0)]
+		D[goal] = [entry for entry in D[goal][:k]
+				if explorederivation(entry.key, D, chart, explored, 0)]
 		if derivs:
-			derivations = [(getderivation(
-					entry.key, D, chart, tolabel, 0, debin), entry.value)
+			derivations = [(getderiv(
+					entry.key, D, chart, tolabel, debin), entry.value)
 					for entry in D[goal]]
-	return derivations, D
+	return derivations, D, explored
 
 cpdef main():
 	from math import log
@@ -437,9 +418,9 @@ cpdef main():
 	cdef RankedEdge re
 	cdef Entry entry
 	cdef Rule rules[11]
-	toid = dict([a[::-1] for a in enumerate(
-			"Epsilon S NP V ADV VP VP2 PN".split())])
-	tolabel = dict([a[::-1] for a in toid.items()])
+	toid = {a: n for n, a in enumerate(
+			"Epsilon S NP V ADV VP VP2 PN".split())}
+	tolabel = {b: a for a, b in toid.items()}
 	NONE = ("Epsilon", 0)			# sentinel node
 	chart = {
 			("S", 0b111): [
@@ -465,11 +446,11 @@ cpdef main():
 	for a in range(1, 11):
 		rules[a].prob = -log(a / 10.0)
 	for a in list(chart):
-		chart[SmallChartItem(toid[a[0]], a[1])] = dict([(x, x)
+		chart[SmallChartItem(toid[a[0]], a[1])] = {x: x
 			for x in [new_LCFRSEdge(-log(c), -log(c), &(rules[int(d * 10)]),
 			SmallChartItem(toid.get(e, 0), f),
 			SmallChartItem(toid.get(g, 0), h))
-			for c, d, (e, f), (g, h) in chart.pop(a)]])
+			for c, d, (e, f), (g, h) in chart.pop(a)]}
 	assert SmallChartItem(toid["NP"], 0b100) == SmallChartItem(
 			toid["NP"], 0b100)
 	cand = {}
@@ -477,7 +458,7 @@ cpdef main():
 	k = 10
 	goal = SmallChartItem(toid["S"], 0b111)
 	for v, b in lazykthbest(goal, k, k, D, cand, chart, set()).items():
-		print tolabel[v.label], bin(v.vec)[2:]
+		print(tolabel[v.label], bin(v.vec)[2:])
 		for entry in b:
 			re = entry.key
 			ed = re.edge
@@ -485,23 +466,23 @@ cpdef main():
 			if re.right != -1:
 				j += (re.right, )
 			ip = entry.value
-			print tolabel[v.label], ":",
-			print " ".join([tolabel[ci.label]
-				for ci, _ in zip((ed.left, ed.right), j)]),
-			print exp(-ed.rule.prob), j, exp(-ip)
-		print
+			print(tolabel[v.label], ":",
+				" ".join([tolabel[ci.label] for ci, _
+				in zip((ed.left, ed.right), j)]),
+				exp(-ed.rule.prob), j, exp(-ip))
+		print()
 	from pprint import pprint
-	print "tolabel",
+	print("tolabel", end='')
 	pprint(tolabel)
-	print "candidates",
+	print("candidates", end='')
 	for a in cand:
-		print a, len(cand[a]),
-		pprint(cand[a].items())
+		print(a, len(cand[a]), end='')
+		pprint(list(cand[a].items()))
 
-	print "\n%d derivations" % (len(D[goal]))
+	print("\n%d derivations" % (len(D[goal])))
 	derivations = lazykbest(chart, goal, k, tolabel)[0]
 	for a, p in derivations:
-		print exp(-p), a
+		print(exp(-p), a)
 	assert len(D[goal]) == len(set(D[goal]))
 	assert len(derivations) == len(set(derivations))
 	assert len(set(derivations)) == len(dict(derivations))

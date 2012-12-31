@@ -41,8 +41,8 @@ cdef class Grammar:
 	cdef copyrules(Grammar self, Rule **dest, idx, filterlen)
 	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=*,
 			neverblockre=*, bint splitprune=*, bint markorigin=*, bint debug=*)
-	cdef str rulerepr(self, Rule rule)
-	cdef str yfrepr(self, Rule rule)
+	cdef rulerepr(self, Rule rule)
+	cdef yfrepr(self, Rule rule)
 
 cdef struct Rule:
 	double prob # 8 bytes
@@ -106,6 +106,123 @@ cdef class RankedCFGEdge:
 	cdef int left
 	cdef int right
 	cdef long _hash
+
+# start scratch
+#cdef union VecType:
+#	ULLong vec
+#	ULong *vecptr
+#
+#cdef class ParseForest:
+#	""" the chart representation of bitpar. seems to require parsing
+#	in 3 stages: recognizer, enumerate analyses, get probs. """
+#	#keys
+#	cdef list catnum		#lhs
+#	cdef list firstanalysis	#idx to lists below.
+#	# from firstanalysis[n] to firstanalysis[n+1] or end
+#	#values.
+#	cdef list rulenumber
+#	cdef list firstchild
+#	#positive means index to lists above, negative means terminal index
+#	cdef list child
+
+#cdef struct PackedCFGEdge: # 18 bytes
+#	double inside # float here could help squeeze this in 16 bytes
+#	UInt ruleno
+#	short mid
+#
+#cdef struct PackedParseForest:
+#	PackedCFGEdge *edges
+#	size_t *celloffset
+#	size_t *labeloffset
+#	size_t *edgeoffset
+#	ULong numedges
+#	#celloffset[left * lensent + right] => idx to edges
+#	#labeloffset[left * lensent + right][lhs] => idx to edges
+#	#edgeoffset[left * lensent + right][mid][ruleno] => idx to edges
+#
+#cdef inline setedge(PackedParseForest forest, size_t celloffset,
+#		left, right, mid, lhs, ruleno, inside):
+#	cdef PackedCFGEdge *newedge
+#	if ...: # already in chart
+#		newedge = &(forest.edges[celloffset
+#				+ forest.edgeoffset[celloffset][mid][ruleno]])
+#	else:
+#		newedge =
+#		forest.edges += 1
+#	newedge.ruleno = ruleno
+#	newedge.inside = inside
+#	newedge.mid = mid
+#cdef inline PackedCFGEdge getviterbi(PackedParseForest forest,
+#		size_t celloffset, left, right, lhs):
+#	return forest.edges[celloffset + forest.labeloffset[celloffset][lhs]]
+#cdef inline PackedCFGEdge getedge(PackedParseForest forest, size_t celloffset,
+#		left, right, mid, ruleno, inside):
+#	return forest.edges[celloffset + forest.edgeoffset[celloffset][mid][ruleno]]
+#
+#@cython.final
+#cdef class ParseForest:
+#	""" A packed parse forest represented in contiguous arrays.
+#	This only works if for each cell, all rules for each lhs are added
+#	in order. """
+#	cdef PackedCFGEdge **edges
+#	#
+#	cdef UInt *rules
+#	cdef short *midpoints
+#	cdef double *inside
+#	# offset[lhs] contains the index where the edges for that label start.
+#	cdef size_t *offset
+#	# unaries are stored separately:
+#	# unaryrules[left * lensent + right][edgeno]
+#	# unaryinside[left * lensent + right]edgeno]
+#	cdef Rule **unaryrules
+#	cdef double **unaryinside
+#	#cdef __init__(self, Grammar grammar, short lensent):
+#	#	self.lensent = lensent
+#	#	self.numrules = grammar.numrules
+#	#	# this is for a dense array,
+#	#	# start with conservative estimate and then re-alloc along the way?
+#	#	self.midpoints = calloc(sizeof(self.midpoints), lensent * lensent)
+#	#	self.rules = calloc(sizeof(self.rules), lensent * lensent)
+#	#	self.inside = calloc(sizeof(self.inside), lensent * lensent)
+#	#	self.offset = calloc(sizeof(self.offset), len(grammar.tolabel))
+#	#	self.unaryrules = calloc(sizeof(self.unaryrules), lensent * lensent
+#	#			* len(grammar.numunary))
+#	#	self.unaryinside = calloc(sizeof(self.unaryinside), lensent * lensent
+#	#			* len(grammar.numunary))
+#	cdef inline getinside(self, short left, short right, UInt label):
+#		cdef size_t dest = self.offsets[label + 1]
+#		return self.inside[left * self.lensent + right][self.offset[label]]
+#	cdef inline getrule(self, short left, short right, UInt label):
+#		return self.rules[left * self.lensent + right][self.offset[label]]
+#	cdef inline getmidpoint(self, short left, short right, UInt label):
+#		return self.midpoints[left * self.lensent + right][self.offset[label]]
+#	cdef inline setitem(self, short left, short right, UInt label,
+#			UInt ruleno, short mid, double inside):
+#		cdef size_t dest = self.offsets[label + 1]
+#		self.rules[dest] = ruleno
+#		self.midpoints[dest] = mid
+#		self.inside[dest] = inside
+#		self.offsets[label + 1] += 1
+#	#cdef __dealloc__(self):
+#	#	if self.inside is not None:
+#	#		free(self.inside)
+#	#		self.inside = None
+#	#	if self.rules is not None:
+#	#		free(self.rules)
+#	#		self.rules = None
+#	#	if self.midpoints is not None:
+#	#		free(self.midpoints)
+#	#		self.midpoints = None
+#
+#cdef class NewChartItem:
+#	cdef VecType vec
+#	cdef UInt label
+#
+#cdef class DiscNode:
+#	cdef int label
+#	cdef tuple children
+#	cdef CBitset leaves
+# end scratch
 
 
 # start fragments stuff

@@ -1,5 +1,6 @@
 """ Simple command line interface to parse with grammar(s) in text format.  """
-import os, re, sys, time, gzip, codecs
+from __future__ import print_function
+import io, os, re, sys, time, gzip, codecs
 from math import exp
 from getopt import gnu_getopt, GetoptError
 from heapq import nlargest
@@ -35,13 +36,13 @@ Files must be encoded in UTF-8.
 
 def main():
 	""" Handle command line arguments. """
-	print >> sys.stderr, "PLCFRS parser - Andreas van Cranenburgh"
+	print("PLCFRS parser - Andreas van Cranenburgh", file=sys.stderr)
 	options = "kbestctf= prob mpd".split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "u:b:s:", options)
 		assert 2 <= len(args) <= 6, "incorrect number of arguments"
 	except (GetoptError, AssertionError) as err:
-		print err, USAGE
+		print(err, USAGE)
 		return
 	for n, filename in enumerate(args):
 		assert os.path.exists(filename), (
@@ -64,9 +65,9 @@ def main():
 		lcfrs = True
 	assert top in coarse.toid, "Start symbol %r not in grammar." % top
 	if 2 <= len(args) <= 4:
-		infile = (codecs.open(args[2], encoding='utf-8')
+		infile = (io.open(args[2], encoding='utf-8')
 				if len(args) >= 3 else sys.stdin)
-		out = (codecs.open(args[3], "w", encoding='utf-8')
+		out = (io.open(args[3], "w", encoding='utf-8')
 				if len(args) == 4 else sys.stdout)
 		simple(coarse, lcfrs, infile, out, k, prob, top)
 	elif 4 <= len(args) <= 6:
@@ -85,9 +86,9 @@ def main():
 			lcfrs = True
 		fine.getmapping(coarse, striplabelre=re.compile("@.+$"))
 		assert top in fine.toid, "Start symbol %r not in fine grammar." % top
-		infile = (codecs.open(args[4], encoding='utf-8')
+		infile = (io.open(args[4], encoding='utf-8')
 				if len(args) >= 5 else sys.stdin)
-		out = (codecs.open(args[5], "w", encoding='utf-8')
+		out = (io.open(args[5], "w", encoding='utf-8')
 				if len(args) == 6 else sys.stdout)
 		ctf(coarse, fine, lcfrs, infile, out, k, prob, top, threshold,
 				"--mpd" in opts)
@@ -99,17 +100,17 @@ def simple(grammar, lcfrs, infile, out, k, printprob, top):
 		if not a.strip():
 			continue
 		sent = a.splitlines()
-		assert not set(sent) - grammar.lexical.viewkeys(), (
+		assert not set(sent) - set(grammar.lexical), (
 			"unknown words and no open class tags supplied: %r" % (
-			list(set(sent) - grammar.lexical.viewkeys())))
-		print >> sys.stderr, "parsing:", n, " ".join(sent)
+			list(set(sent) - set(grammar.lexical))))
+		print("parsing:", n, " ".join(sent), file=sys.stderr)
 		sys.stdout.flush()
 		if lcfrs:
 			chart, start, _ = parse(sent, grammar, start=grammar.toid[top])
 		else:
 			chart, start, _ = cfgparse(sent, grammar, start=grammar.toid[top])
 		if start:
-			derivations, _ = lazykbest(chart, start, k, grammar.tolabel)
+			derivations = lazykbest(chart, start, k, grammar.tolabel)[0]
 			if printprob:
 				out.writelines("vitprob=%.16g\n%s\n" % (exp(-prob), tree)
 					for tree, prob in derivations)
@@ -122,11 +123,11 @@ def simple(grammar, lcfrs, infile, out, k, printprob, top):
 		#out.write("\n")
 		out.flush()
 		times.append(time.clock())
-		print >> sys.stderr, times[-1] - times[-2], "s"
-	print >> sys.stderr, "raw cpu time", time.clock() - times[0]
+		print(times[-1] - times[-2], "s", file=sys.stderr)
+	print("raw cpu time", time.clock() - times[0], file=sys.stderr)
 	times = [a - b for a, b in zip(times[1::2], times[::2])]
-	print >> sys.stderr, "average time per sentence", sum(times) / len(times)
-	print >> sys.stderr, "finished"
+	print("average time per sentence", sum(times) / len(times), file=sys.stderr)
+	print("finished", file=sys.stderr)
 	out.close()
 
 def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
@@ -144,19 +145,19 @@ def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
 		sent = a.splitlines()
 		if len(sent) > maxlen:
 			continue
-		unknown = (set(sent) - coarse.lexical.viewkeys()
-			| set(sent) - fine.lexical.viewkeys())
+		unknown = (set(sent) - set(coarse.lexical)
+			| set(sent) - set(fine.lexical))
 		assert not unknown, (
 			"unknown words and no open class tags supplied: %r" % list(unknown))
-		print >> sys.stderr, "parsing:", n, " ".join(sent),
+		print("parsing:", n, " ".join(sent), end='', file=sys.stderr)
 		if lcfrs:
 			chart, start, msg = parse(sent, coarse, start=coarse.toid[top],
 					exhaustive=True)
 		else:
 			chart, start, msg = cfgparse(sent, coarse, start=coarse.toid[top])
-		print >> sys.stderr, msg
+		print(msg, file=sys.stderr)
 		if start:
-			print >> sys.stderr, "pruning ...",
+			print("pruning ...", file=sys.stderr, end='')
 			sys.stdout.flush()
 			whitelist, _ = prunechart(chart, start, coarse, fine, threshold,
 					False, False, not lcfrs)
@@ -166,15 +167,15 @@ def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
 			else:
 				chart, start, _ = cfgparse(sent, fine, start=fine.toid[top],
 						chart=whitelist)
-			print >> sys.stderr, msg
+			print(msg, file=sys.stderr)
 
 			assert start, (
 				"sentence covered by coarse grammar could not be parsed "\
 				"by fine grammar")
-			print >> sys.stderr, "disambiguating ...",
+			print("disambiguating ...", file=sys.stderr, end='')
 			parsetrees, msg = marginalize("mpd" if mpd else "mpp", chart,
 					start, fine, m, sample=False, kbest=True, sent=sent)
-			print >> sys.stderr, msg
+			print(msg, file=sys.stderr)
 			results = nlargest(k, parsetrees, key=itemgetter(1))
 			# print k-best parsetrees
 			if printprob:
@@ -185,17 +186,18 @@ def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
 				out.writelines("%s\n" % tree for tree in results)
 		else:
 			unparsed += 1
-			print >> sys.stderr, "No parse"
+			print("No parse", file=sys.stderr)
 			out.write("No parse for \"%s\"\n" % " ".join(sent))
 		out.write("\n")
 		times.append(time.clock())
-		print >> sys.stderr, times[-1] - times[-2], "s"
+		print(times[-1] - times[-2], "s", file=sys.stderr)
 		out.flush()
-	print >> sys.stderr, "raw cpu time", time.clock() - times[0]
 	times = [a - b for a, b in zip(times[1::2], times[::2])]
-	print >> sys.stderr, "average time per sentence", sum(times) / len(times)
-	print >> sys.stderr, "unparsed sentences:", unparsed
-	print >> sys.stderr, "finished"
+	print("raw cpu time", time.clock() - times[0],
+			"\naverage time per sentence", sum(times) / len(times),
+			"\nunparsed sentences:", unparsed,
+			"\nfinished",
+			file=sys.stderr)
 	out.close()
 
 if __name__ == '__main__':

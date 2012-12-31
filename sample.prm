@@ -1,71 +1,89 @@
 stages=[
-dict(
-	name='pcfg', # an identifier, used as filename when writing results
-	mode='pcfg', # use the PCFG CKY parser
-	split=True, # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
-	markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
-),
-dict(
-	name='plcfrs',
-	mode='plcfrs', # use the agenda-based PLCFRS parser
-	prune=True, #whether to use previous chart to prune parsing of this stage
-	splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
-	k = 10000, #number of coarse pcfg derivations to prune with; k=0 => filter only
-	getestimates=False, #compute & store estimates; choices: 'SX', 'SXlrgaps'
-	useestimates=False, #load & use estimates; choices: same as above.
-	neverblockre=None, #do not prune nodes with labels that match this regex
-),
-dict(
-	name='dop',
-	mode='plcfrs',
-	prune=True,	#whether to use previous chart to prune parsing of this stage
-	k = 50,	#number of coarse plcfrs derivations to prune with; k=0 => filter only
-	dop=True, # enable DOP mode
-	usedoubledop=False, # when Fales, use dop reduction, otherwise use Double-DOP
-	iterate=False, #for double dop, whether to include fragments of fragments
-	complement=False, #for double dop, whether to include fragments which form
-			#the complement of the maximal recurring fragments extracted
-	m = 10000, #number of derivations to sample/enumerate
-	sample=False, kbest=True, #use sampling and/or kbest during marginalization
-	estimator="dop1", #choices: dop1, ewe
-	objective = "mpp", # choices: mpp, mpd, shortest, sl-dop[-simple]
-			# NB: w/shortest derivation, estimator only affects tie breaking.
-)],
+  dict(
+    name='pcfg', # an identifier, used as filename when writing results
+    mode='pcfg', # use the PCFG CKY parser
+    split=True, # split discontinuous nodes to get a PCFG: VP_2 => {VP*, VP*}
+    markorigin=True, #when splitting nodes, mark origin: VP_2 => {VP*1, VP*2}
+  ),
+  dict(
+    name='plcfrs',
+    mode='plcfrs', # use the agenda-based PLCFRS parser
+    prune=True, #whether to use previous chart to prune parsing of this stage
+    splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
+    k = 10000, #number of coarse pcfg derivations to prune with; k=0 => filter only
+    getestimates=False, #compute & store estimates; choices: 'SX', 'SXlrgaps'
+    useestimates=False, #load & use estimates; choices: same as above.
+    neverblockre=None, #do not prune nodes with labels that match this regex
+  ),
+  dict(
+    name='dop',
+    mode='plcfrs',
+    prune=True,  #whether to use previous chart to prune parsing of this stage
+    k = 50,  #number of coarse plcfrs derivations to prune with; k=0 => filter only
+    dop=True, # enable DOP mode
+    usedoubledop=False, # when Fales, use dop reduction, otherwise use Double-DOP
+    iterate=False, #for double dop, whether to include fragments of fragments
+    complement=False, #for double dop, whether to include fragments which form
+        #the complement of the maximal recurring fragments extracted
+    m = 10000, #number of derivations to sample/enumerate
+    sample=False, kbest=True, #use sampling and/or kbest during marginalization
+    estimator="dop1", #choices: dop1, ewe
+    objective = "mpp", # choices: mpp, mpd, shortest, sl-dop[-simple]
+        # NB: w/shortest derivation, estimator only affects tie breaking.
+  )
+],
+
 # corpus options
 corpusfmt="export", # choices: export, bracket, discbracket
 corpusdir=".",
 traincorpus="sample2.export", trainencoding="iso-8859-1",
 testcorpus="sample2.export", testencoding="iso-8859-1",
+evalparam="proper.prm", # EVALB-style parameter file
+
 punct=None, # options:
-		#None: leave punctuation as-is
-		#'move': re-attach punctuation to appropriate constituents
-		#'remove': remove all punctuation
-		#'restore': attach punctuation under root node
+    #None: leave punctuation as-is
+    #'move': re-attach punctuation to appropriate constituents
+    #'remove': remove all punctuation
+    #'root': attach punctuation under root node
 unfolded=False, # apply transformations for Negra/Tiger to make trees less flat
-usetagger=None,	#default is to use gold tags from treebank.
-		# choices: treetagger, stanford, unknownword4, unknownword6
+
+# postagging: pass None to use tags from treebank.
+postagging=dict(
+    # choices: unknownword (assign during parsing),
+    #    treetagger, stanford (external taggers)
+    method="unknownword",
+    # choices unknownword: 4, 6, base,
+    # for treetagger / stanford: [filename of external tagger model]
+    model="4",
+    # options for unknown word models:
+    unknownthreshold=1, # use probs of rare words for unknown words
+    openclassthreshold=50, # add unseen tags for known words. 0 to disable.
+    simplelexsmooth=True, # disable sophisticated smoothing
+),
+
 #train/test sets
 testmaxwords=100,  # max number of words for sentences in test corpus
 trainmaxwords=100, # max number of words for sentences in train corpus
-trainsents=3, # length (sents) of training corpus
-testsents=3, # (max) number of test sentences to parse
+trainnumsents=3, # length (sents) of training corpus
+testnumsents=3, # (max) number of test sentences to parse
 skiptrain=False, # when the train & test set are read from the same file,
-		# enable this to skip the training sentences to get to the test set.
+    # enable this to skip the training sentences to get to the test set.
 skip=0, # skip (additional) sentences between train & test set
 headrules=None, # file with rules for head assignment
+
 # binarization options
 bintype="binarize", # choices: binarize, optimal, optimalhead
 factor="right", # right factored binarization
-		# (applicable for non-optimal binarizations)
+    # (applicable for non-optimal binarizations)
 revmarkov=True, # reverse order for horizontal Markovization
 v=1, # vertical Markovization; v=1 means no additional parent annotation.
 h=1, # horizontal Markovization: number of siblings of context
-leftMostUnary=True, #start binarization with unary node
-rightMostUnary=True, #end binarization with unary node
+leftmostunary=True, #start binarization with unary node
+rightmostunary=True, #end binarization with unary node
 tailmarker="", # symbol to add to last node in a binarization, to mark head node
 fanout_marks_before_bin=False, # whether to add fanout markers before
-		# binarization, to distinguish them for markovization,
-		# e.g., VP|<NP_2-VVFIN> instead of VP|<NP-VVFIN>
+    # binarization, to distinguish them for markovization,
+    # e.g., VP|<NP_2-VVFIN> instead of VP|<NP-VVFIN>
 # misc
 quiet=False, reallyquiet=False, #quiet=no per sentence results
-numproc=1,	#increase to use multiple CPUs. Set to None to use all CPUs.
+numproc=1,  #increase to use multiple CPUs. Set to None to use all CPUs.

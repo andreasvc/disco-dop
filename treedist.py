@@ -32,7 +32,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
 # - modified to work with NLTK Tree objects.
 # - added implementation as in Billie (2005), which records edit script.
 
-import numpy
+from __future__ import division, print_function
 from collections import deque
 from tree import Tree
 
@@ -115,7 +115,7 @@ class AnnotatedTree:
 			self.leftmostdescendents.append(lmd)
 			keyroots[lmd] = i
 			i += 1
-		self.keyroots = sorted(keyroots.itervalues())
+		self.keyroots = sorted(keyroots.values())
 
 def strdist(a, b):
 	""" Default categorical distance function. """
@@ -129,6 +129,7 @@ def treedist(A, B, debug=False):
 	Bl = B.leftmostdescendents
 	An = A.nodes
 	Bn = B.nodes
+	import numpy
 	treedists = numpy.zeros((len(A.nodes), len(B.nodes)), int)
 	for i in A.keyroots:
 		for j in B.keyroots:
@@ -179,7 +180,7 @@ def treedist(A, B, debug=False):
 			else:
 				bstr = str(Bn[j])
 			if treedists[i, j]:
-				print "%s[%d] %s[%d] %d" % (astr, i, bstr, j, treedists[i, j])
+				print("%s[%d] %s[%d] %d" % (astr, i, bstr, j, treedists[i, j]))
 	return treedists[len(A.nodes)-1, len(B.nodes)-1]
 # end Zhang-Shasha Tree Edit Distance Implementation.
 
@@ -197,7 +198,7 @@ def newtreedist(A, B, debug=False):
 	result = geteditstats((A,), (B,))
 	geteditstats.mem.clear()
 	if debug:
-		print result
+		print(result)
 	return result.distance
 
 class EditStats(object):
@@ -250,21 +251,21 @@ def geteditstats(forest1, forest2):
 		v = forest1[-1]
 		w = forest2[-1]
 		tmp = geteditstats(flatforest1, forest2)
-		deleteStats = EditStats(tmp.distance + 1, tmp.matched,
+		deletestats = EditStats(tmp.distance + 1, tmp.matched,
 				(('D', v, None),) + tmp.editscript)
 		tmp = geteditstats(forest1, flatforest2)
-		insertStats = EditStats(tmp.distance + 1, tmp.matched,
+		insertstats = EditStats(tmp.distance + 1, tmp.matched,
 				(('I', None, w), ) + tmp.editscript)
-		matchOrSwapStats = (geteditstats(tuple(v[:]), tuple(w[:]))
+		matchorswapstats = (geteditstats(tuple(v[:]), tuple(w[:]))
 				+ geteditstats(forest1[:-1], forest2[:-1]))
 		if v.label == w.label:
-			matchOrSwapStats = EditStats(matchOrSwapStats.distance,
-				matchOrSwapStats.matched + 1, matchOrSwapStats.editscript)
+			matchorswapstats = EditStats(matchorswapstats.distance,
+				matchorswapstats.matched + 1, matchorswapstats.editscript)
 		else:
-			matchOrSwapStats = EditStats(matchOrSwapStats.distance + 1,
-				matchOrSwapStats.matched,
-				(('S', v, w), ) + matchOrSwapStats.editscript)
-		result = min(deleteStats, insertStats, matchOrSwapStats)
+			matchorswapstats = EditStats(matchorswapstats.distance + 1,
+				matchorswapstats.matched,
+				(('S', v, w), ) + matchorswapstats.editscript)
+		result = min(deletestats, insertstats, matchorswapstats)
 	geteditstats.mem[forest1, forest2] = result
 	return result
 geteditstats.mem = {}
@@ -275,18 +276,18 @@ def main():
 	b = Tree.parse("(f (c (d (a 0) (b 1)) (e 2)))", parse_leaf=int)
 	result1 = treedist(a, b, debug=True)
 	assert result1 == 2
-	print '%s\n%s\ndistance: %d' % (a, b, result1)
+	print('%s\n%s\ndistance: %d' % (a, b, result1))
 	result2 = newtreedist(a, b, debug=True)
 	assert result2 == 2
-	print '%s\n%s\ndistance: %d' % (a, b, result2)
+	print('%s\n%s\ndistance: %d' % (a, b, result2))
 	a = Tree.parse("(f (d (x (a 0)) (b 1) (c 2)) (z 3))", parse_leaf=int)
 	b = Tree.parse("(f (c (d (a 0) (x (b 1)) (c 2)) (z 3)))", parse_leaf=int)
 	result1 = treedist(a, b, debug=True)
 	assert result1 == 3
-	print '%s\n%s\ndistance: %d' % (a, b, result1)
+	print('%s\n%s\ndistance: %d' % (a, b, result1))
 	result2 = newtreedist(a, b, debug=True)
 	assert result2 == 3
-	print '%s\n%s\ndistance: %d' % (a, b, result2)
+	print('%s\n%s\ndistance: %d' % (a, b, result2))
 
 if __name__ == '__main__':
 	main()

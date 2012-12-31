@@ -1,5 +1,10 @@
-""" Implementation of LR estimate (Kallmeyer & Maier 2010).
-Ported almost directly from rparse (except for sign reversal of log probs). """
+""" Implementation of outside estimates:
+- PCFG A* estimate (Klein & Manning 2003),
+- PLCFRS LR context-summary estimate (Kallmeyer & Maier 2010).
+The latter ported almost directly from rparse
+(except for sign reversal of log probs). """
+
+from __future__ import print_function
 from math import exp
 from containers cimport Grammar, Rule, LexicalRule, SmallChartItem as ChartItem
 from containers cimport UInt, ULLong, new_ChartItem
@@ -223,15 +228,15 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 	for n in range(1, maxlen + 1):
 		agenda[new_Item(goal, n, 0, 0)] = 0.0
 		outside[goal, n, 0, 0] = 0.0
-	print "initialized"
+	print("initialized")
 
 	while agenda.length:
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value
 		if agenda.length % 1000 == 0:
-			print "agenda size: %dk top: %r, %g %s" % (
-				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state])
+			print("agenda size: %dk top: %r, %g %s" % (
+				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state]))
 		totlen = I.length + I.lr + I.gaps
 		i = 0
 		rule = grammar.bylhs[I.state][i]
@@ -316,16 +321,16 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 	#end while agenda.length:
 
 cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
-	print "allocating outside matrix:",
-	print (8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
-			* (maxlen + 1) / 1024 ** 2), 'MB'
+	print("allocating outside matrix:",
+		(8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
+			* (maxlen + 1) / 1024 ** 2), 'MB')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
 	insidescores.fill(np.NAN)
 	outside.fill(np.inf)
-	print "getting inside"
+	print("getting inside estimates")
 	simpleinside(grammar, maxlen, insidescores)
-	print "getting outside"
+	print("getting outside estimates")
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	return outside
 
@@ -345,23 +350,23 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 	insidescores = pcfginsidesx(grammar, maxlen)
 	outside = pcfgoutsidesx(grammar, insidescores, goal, maxlen)
 	if debug:
-		print 'inside:'
+		print('inside:')
 		for span in range(1, maxlen + 1):
-			for k, v in sorted(insidescores[span].iteritems()):
+			for k, v in sorted(insidescores[span].items()):
 				if v < infinity:
-					print "%s[%d] %g" % (grammar.tolabel[k], span, exp(-v))
-		print 'infinite:',
+					print("%s[%d] %g" % (grammar.tolabel[k], span, exp(-v)))
+		print('infinite:', end='')
 		for span in range(1, maxlen + 1):
-			for k, v in sorted(insidescores[span].iteritems()):
+			for k, v in sorted(insidescores[span].items()):
 				if v == infinity:
-					print "%s[%d]" % (grammar.tolabel[k], span),
-		print '\n\noutside:'
+					print("%s[%d]" % (grammar.tolabel[k], span), end='')
+		print('\n\noutside:')
 		for lspan in range(maxlen + 1):
 			for rspan in range(maxlen - lspan + 1):
 				for lhs in range(grammar.nonterminals):
 					if outside[lhs, lspan, rspan] < infinity:
-						print "%s[%d-%d] %g" % (grammar.tolabel[lhs],
-								lspan, rspan, exp(-outside[lhs, lspan, rspan]))
+						print("%s[%d-%d] %g" % (grammar.tolabel[lhs],
+								lspan, rspan, exp(-outside[lhs, lspan, rspan])))
 	return outside
 
 cdef pcfginsidesx(Grammar grammar, UInt maxlen):
@@ -438,8 +443,8 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 		x = entry.value
 		state, left, right = I
 		if agenda.length % 1000 == 0:
-			print "agenda size: %dk top: %r, %g %s" % (
-				agenda.length / 1000, I, exp(-x), grammar.tolabel[state])
+			print("agenda size: %dk top: %r, %g %s" % (
+				agenda.length / 1000, I, exp(-x), grammar.tolabel[state]))
 		i = 0
 		rule = grammar.bylhs[state][i]
 		while rule.lhs == state:
@@ -492,32 +497,32 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 				outsidescores[lhs, lspan, rspan] = pcfgoutsidesxrec(grammar,
 						insidescores, outsidescores, goal, lhs, lspan, rspan)
 	if debug:
-		print 'inside:'
+		print('inside:')
 		for span in range(1, maxlen + 1):
-			for k, v in sorted(insidescores[span].iteritems()):
+			for k, v in sorted(insidescores[span].items()):
 				if v < infinity:
-					print "%s[%d] %g" % (grammar.tolabel[k], span, exp(-v))
-		print 'infinite:',
+					print("%s[%d] %g" % (grammar.tolabel[k], span, exp(-v)))
+		print('infinite:', end='')
 		for span in range(1, maxlen + 1):
-			for k, v in sorted(insidescores[span].iteritems()):
+			for k, v in sorted(insidescores[span].items()):
 				if v == infinity:
-					print "%s[%d]" % (grammar.tolabel[k], span),
+					print("%s[%d]" % (grammar.tolabel[k], span), end='')
 
-		print '\n\noutside:'
-		for k, v in sorted(outsidescores.iteritems()):
+		print('\n\noutside:')
+		for k, v in sorted(outsidescores.items()):
 			if v < infinity:
-				print "%s[%d-%d] %g" % (
-				grammar.tolabel[k[0]], k[1], k[2], exp(-v))
-		print 'infinite:',
-		for k, v in sorted(outsidescores.iteritems()):
+				print("%s[%d-%d] %g" % (
+						grammar.tolabel[k[0]], k[1], k[2], exp(-v)))
+		print('infinite:', end='')
+		for k, v in sorted(outsidescores.items()):
 			if v == infinity:
-				print "%s[%d-%d]" % (
-				grammar.tolabel[k[0]], k[1], k[2]),
+				print("%s[%d-%d]" % (
+						grammar.tolabel[k[0]], k[1], k[2]), end='')
 	outside = np.empty((grammar.nonterminals, maxlen + 1, maxlen + 1, 1),
 			dtype='d')
 	outside.fill(np.inf)
 	#convert sparse dictionary to dense numpy array
-	for (state, lspan, rspan), prob in outsidescores.iteritems():
+	for (state, lspan, rspan), prob in outsidescores.items():
 		outside[state, lspan, rspan, 0] = prob
 	return outside
 
@@ -624,8 +629,9 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 			if item in outsidescores:
 				out = outsidescores[item]
 			else:
-				outsidescores[item] = out = pcfgoutsidesxrec(grammar, insidescores,
+				out = pcfgoutsidesxrec(grammar, insidescores,
 					outsidescores, goal, rule.lhs, lspan, rspan - sibsize)
+				outsidescores[item] = out
 			cost = (insidescores[sibsize].get(rule.rhs2, infinity)
 					+ out + rule.prob)
 			if cost < score:
@@ -635,43 +641,43 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 	return score
 
 cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
-	print "getting inside"
+	print("getting inside")
 	insidescores = inside(grammar, maxlen, {})
 	for a in insidescores:
 		for b in insidescores[a]:
 			assert 0 <= a < grammar.nonterminals
 			assert 0 <= bitlength(b) <= maxlen
-			#print a, b
-			#print "%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b])
-	print len(insidescores) * sum(map(len, insidescores.values())), '\n'
+			#print(a, b)
+			#print("%s[%d] =" % (grammar.tolabel[a], b), exp(insidescores[a][b]))
+	print(len(insidescores) * sum(map(len, insidescores.values())), '\n')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	insidescores.fill(np.NAN)
 	simpleinside(grammar, maxlen, insidescores)
-	print "inside"
+	print("inside")
 	for an, a in enumerate(insidescores):
 		for bn, b in enumerate(a):
 			if b < np.inf:
-				print grammar.tolabel[an], "len", bn, "=", exp(-b)
-	#print insidescores
+				print(grammar.tolabel[an], "len", bn, "=", exp(-b))
+	#print(insidescores)
 	#for a in range(maxlen):
-	#	print grammar.tolabel[goal], "len", a, "=", exp(-insidescores[goal, a])
+	#	print(grammar.tolabel[goal], "len", a, "=", exp(-insidescores[goal, a]))
 
-	print "getting outside"
+	print("getting outside")
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
 	outside.fill(np.inf)
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
-	#print outside
+	#print(outside)
 	cnt = 0
 	for an, a in enumerate(outside):
 		for bn, b in enumerate(a):
 			for cn, c in enumerate(b):
 				for dn, d in enumerate(c):
 					if d < np.inf:
-						print grammar.tolabel[an], "length", bn, "lr", cn,
-						print "gaps", dn, "=", exp(-d)
+						print(grammar.tolabel[an], "length", bn, "lr", cn,
+								"gaps", dn, "=", exp(-d))
 						cnt += 1
-	print cnt
-	print "done"
+	print(cnt)
+	print("done")
 	return outside
 
 def main():
@@ -682,52 +688,52 @@ def main():
 	from treetransforms import addfanoutmarkers, binarize
 	from tree import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
-	trees = corpus.parsed_sents().values()
+	trees = list(corpus.parsed_sents().values())
 	for a in trees:
-		binarize(a, vertMarkov=1, horzMarkov=1)
+		binarize(a, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(a)
-	grammar = Grammar(induce_plcfrs(trees, corpus.sents().values()))
-	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
-			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
-			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
-			Tree.parse("(ROOT (C (a 0) (c 2)) (b 1))", parse_leaf=int),
+	grammar = Grammar(induce_plcfrs(trees, list(corpus.sents().values())))
+	trees = [Tree.parse(b"(ROOT (A (a 0) (b 1)))", parse_leaf=int),
+			Tree.parse(b"(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
+			Tree.parse(b"(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
+			Tree.parse(b"(ROOT (C (a 0) (c 2)) (b 1))", parse_leaf=int),
 			]
 	sents =[["a", "b"],
 			["a", "b", "c"],
 			["a", "b", "c"],
 			["a", "b", "c"]]
-	print "treebank:"
+	print("treebank:")
 	for a in trees:
-		print a
-	print "\ngrammar:"
+		print(a)
+	print("\ngrammar:")
 	grammar = Grammar(induce_plcfrs(trees, sents))
-	print grammar, '\n'
+	print(grammar, '\n')
 	testestimates(grammar, 4, grammar.toid["ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	sent = ["a", "b", "c"]
-	print "\nwithout estimates"
+	print("\nwithout estimates")
 	chart, start, msg = parse(sent, grammar, estimates=None)
-	print msg
+	print(msg)
 	pprint_chart(chart, sent, grammar.tolabel)
-	print "\nwith estimates"
+	print("\nwith estimates")
 	estchart, start, msg = parse(sent, grammar, estimates=('SXlrgaps', outside))
-	print msg
+	print(msg)
 	pprint_chart(estchart, sent, grammar.tolabel)
-	print 'items avoided:'
-	print chart.keys()
-	print
-	print estchart.keys()
+	print('items avoided:')
+	print(list(chart.keys()))
+	print()
+	print(list(estchart.keys()))
 	for item in chart.viewkeys() - estchart.viewkeys():
-		print item
-	print
+		print(item)
+	print()
 
-	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
-			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
+	trees = [Tree.parse(b"(ROOT (A (a 0) (b 1)))", parse_leaf=int),
+			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse(b"(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
 			]
 	sents =[["a", "b"],
 			["a", "b", "c"],
@@ -736,25 +742,25 @@ def main():
 			["a", "b", "c"],
 			["a", "b", "c"],
 			["a", "b", "c"]]
-	print "treebank:"
+	print("treebank:")
 	for a in trees:
-		print a
-	print "\npcfg grammar:"
+		print(a)
+	print("\npcfg grammar:")
 	grammar = Grammar(induce_plcfrs(trees, sents))
-	print grammar, '\n'
+	print(grammar, '\n')
 	outside = getpcfgestimates(grammar, 4, grammar.toid["ROOT"], debug=True)
 	sent = ["a", "b", "c"]
-	print "\nwithout estimates"
+	print("\nwithout estimates")
 	chart, start, msg = parse(sent, grammar, estimates=None)
-	print msg
+	print(msg)
 	pprint_chart(chart, sent, grammar.tolabel)
-	print "\nwith estimates"
+	print("\nwith estimates")
 	estchart, start, msg = parse(sent, grammar, estimates=('SX', outside))
-	print msg
+	print(msg)
 	pprint_chart(estchart, sent, grammar.tolabel)
-	print 'items avoided:'
+	print('items avoided:')
 	for item in chart.viewkeys() - estchart.viewkeys():
-		print item
+		print(item)
 
 if __name__ == '__main__':
 	main()

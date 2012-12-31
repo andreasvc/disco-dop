@@ -1,5 +1,6 @@
 """ Probabilistic CKY parser for monotone, string-rewriting
 Linear Context-Free Rewriting Systems. """
+from __future__ import print_function
 from array import array
 # python imports
 from math import log, exp
@@ -63,7 +64,6 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
             setting to 0 disables this feature. experimental.
 	"""
 	cdef:
-		str label = ''
 		dict beam = <dict>defaultdict(int)			#histogram of spans
 		dict chart = {}								#the full chart
 		list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
@@ -189,7 +189,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				rule = &(grammar.lbinary[item.label][i])
 				if rule.rhs1 != item.label:
 					break
-				for I, e in (<dict>viterbi[rule.rhs2]).iteritems():
+				for I, e in (<dict>viterbi[rule.rhs2]).items():
 					sibling = <SmallChartItem>I
 					if beamwidth:
 						if beam[item.vec ^ sibling.vec] > beamwidth:
@@ -226,7 +226,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 				rule = &(grammar.rbinary[item.label][i])
 				if rule.rhs2 != item.label:
 					break
-				for I, e in (<dict>viterbi[rule.rhs1]).iteritems():
+				for I, e in (<dict>viterbi[rule.rhs1]).items():
 					sibling = <SmallChartItem>I
 					if beamwidth:
 						if beam[sibling.vec ^ item.vec] > beamwidth:
@@ -417,7 +417,6 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=False, list whitelist=None, bint splitprune=False, bint
 		markorigin=False, estimates=None):
 	""" Parse a sentence longer than the machine word size. """
-	cdef str label = ''
 	cdef dict chart = {}							#the full chart
 	cdef list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
 	cdef EdgeAgenda agenda = EdgeAgenda()			#the agenda
@@ -543,7 +542,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				rule = &(grammar.lbinary[item.label][i])
 				if rule.rhs1 != item.label:
 					break
-				for I, e in (<dict>viterbi[rule.rhs2]).iteritems():
+				for I, e in (<dict>viterbi[rule.rhs2]).items():
 					sibling = <FatChartItem>I
 					if fatconcat(rule, item.vec, sibling.vec):
 						newitem.label = rule.lhs
@@ -577,7 +576,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				rule = &(grammar.rbinary[item.label][i])
 				if rule.rhs2 != item.label:
 					break
-				for I, e in (<dict>viterbi[rule.rhs1]).iteritems():
+				for I, e in (<dict>viterbi[rule.rhs1]).items():
 					sibling = <FatChartItem>I
 					if fatconcat(rule, sibling.vec, item.vec):
 						newitem.label = rule.lhs
@@ -990,7 +989,7 @@ def cfgparse_dense(list sent, Grammar grammar, start=1, tags=None):
 			if cell:
 				spans += 1
 				items += len(cell)
-				edges += sum(map(len, cell.itervalues()))
+				edges += sum(map(len, cell.values()))
 	msg = "chart spans %d, items %d, edges %d" % (
 			spans, items, edges)
 	if chart[0][lensent].get(start):
@@ -1082,7 +1081,7 @@ def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
 					tags[left] if tags else word)
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
-		unaryagenda.update(viterbicell.iteritems())
+		unaryagenda.update(viterbicell.items())
 		while unaryagenda.length:
 			entry = unaryagenda.popentry()
 			rhs1 = entry.key
@@ -1172,7 +1171,7 @@ def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
 					maxright[lhs, left] = right
 
 			# unary rules
-			unaryagenda.update(viterbicell.iteritems())
+			unaryagenda.update(viterbicell.items())
 			while unaryagenda.length:
 				entry = unaryagenda.popentry()
 				rhs1 = entry.key
@@ -1208,7 +1207,7 @@ def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
 						minright[lhs, left] = right
 					if right > maxright[lhs, left]:
 						maxright[lhs, left] = right
-			nonempty = filter(None, cell.itervalues())
+			nonempty = filter(None, cell.values())
 			if nonempty:
 				spans += 1
 				items += len(nonempty)
@@ -1239,7 +1238,7 @@ def binrepr(ChartItem a, n, cfg=False):
 		result = bin(vec)[2:]
 	else:
 		result = binrepr1((<FatChartItem>a).vec)
-	return result.rjust(n, "0")[::-1]
+	return result.zfill(n)[::-1]
 
 def sortfunc(a):
 	if isinstance(a, SmallChartItem):
@@ -1260,75 +1259,75 @@ def pprint_chart(chart, sent, tolabel, cfg=False):
 def pprint_chart_lcfrs(chart, sent, tolabel, cfg=False):
 	cdef ChartItem a
 	cdef LCFRSEdge edge
-	print "chart:"
+	print("chart:")
 	for a in sorted(chart, key=sortfunc):
 		if chart[a] == []:
 			continue
-		print "%s[%s] =>" % (tolabel[a.label], binrepr(a, len(sent), cfg))
+		print("%s[%s] =>" % (tolabel[a.label], binrepr(a, len(sent), cfg)))
 		if isinstance(chart[a], float):
 			continue
 		for edge in sorted(chart[a], key=sortfunc):
 			if edge.rule is NULL:
-				print "%9.7f  %9.7f " % (exp(-edge.inside), 1),
+				print("%9.7f  %9.7f " % (exp(-edge.inside), 1), end='')
 				if isinstance(edge.left, SmallChartItem):
-					print "\t", repr(sent[(<SmallChartItem>edge.left).vec]),
+					print("\t", repr(sent[(<SmallChartItem>edge.left).vec]), end='')
 				else:
-					print "\t", repr(sent[(<FatChartItem>edge.left).vec[0]]),
+					print("\t", repr(sent[(<FatChartItem>edge.left).vec[0]]), end='')
 			else:
-				print "%9.7f  %9.7f " % (exp(-edge.inside),
+				print("%9.7f  %9.7f " % (exp(-edge.inside),
 						exp(-edge.rule.prob)),
-				print "%s[%s]" % (tolabel[edge.left.label],
-						binrepr(edge.left, len(sent), cfg)),
+						"%s[%s]" % (tolabel[edge.left.label],
+						binrepr(edge.left, len(sent), cfg)), end='')
 				if edge.right:
-					print "\t%s[%s]" % (tolabel[edge.right.label],
-							binrepr(edge.right, len(sent), cfg)),
-			print
-		print
+					print("\t%s[%s]" % (tolabel[edge.right.label],
+							binrepr(edge.right, len(sent), cfg)), end='')
+			print()
+		print()
 
 def pprint_chart_cfg(chart, sent, tolabel, cfg=True):
 	cdef CFGEdge edge
-	print "chart:"
+	print("chart:")
 	for left, _ in enumerate(chart):
 		for right, _ in enumerate(chart[left]):
 			for label in chart[left][right] or ():
 				if not chart[left][right][label]:
 					continue
-				print "%s[%d:%d] =>" % (tolabel.get(label), left, right)
+				print("%s[%d:%d] =>" % (tolabel.get(label), left, right))
 				for edge in sorted(chart[left][right][label] or (),
 						key=sortfunc):
 					if edge.rule is NULL:
-						print "%9.7f  %9.7f " % (exp(-edge.inside), 1),
-						print repr(sent[edge.mid - 1]),
+						print("%9.7f  %9.7f " % (exp(-edge.inside), 1),
+							repr(sent[edge.mid - 1]), end='')
 					else:
-						print "%9.7f  %9.7f " % (exp(-edge.inside),
+						print("%9.7f  %9.7f " % (exp(-edge.inside),
 								exp(-edge.rule.prob)),
-						print "%s[%d:%d]" % (#tolabel[edge.rule.rhs1],
+							"%s[%d:%d]" % (#tolabel[edge.rule.rhs1],
 								tolabel.get(edge.rule.rhs1),
-								left, edge.mid),
+								left, edge.mid), end='')
 						if edge.rule.rhs2:
-							print "\t%s[%d:%d]" % (#tolabel[edge.rule.rhs2],
+							print("\t%s[%d:%d]" % (#tolabel[edge.rule.rhs2],
 								tolabel.get(edge.rule.rhs2),
-								edge.mid, right),
-					print
-				print
+								edge.mid, right), end='')
+					print()
+				print()
 
 def do(sent, grammar):
 	from disambiguation import marginalize
 	from operator import itemgetter
-	print "sentence", sent
+	print("sentence", sent)
 	sent = sent.split()
 	chart, start, _ = parse(sent, grammar, start=grammar.toid['S'])
 	if len(sent) < sizeof(ULLong):
 		pprint_chart(chart, sent, grammar.tolabel)
 	if not start:
-		print "no parse"
+		print("no parse")
 		return False
 	else:
-		print "10 best parse trees:"
+		print("10 best parse trees:")
 		mpp, _ = marginalize("mpp", chart, start, grammar, 10)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))):
-			print p, a
-		print
+			print(p, a)
+		print()
 		return True
 
 #def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
@@ -1408,17 +1407,17 @@ def main():
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
 		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)])
-	print grammar
-	print "Rule structs take", sizeof(Rule), "bytes"
+	print(grammar)
+	print("Rule structs take", sizeof(Rule), "bytes")
 
 	lng = 67
 	assert do("Daruber muss nachgedacht werden", grammar)
 	assert do("Daruber muss nachgedacht werden werden", grammar)
 	assert do("Daruber muss nachgedacht werden werden werden", grammar)
-	print "ungrammatical sentence:"
+	print("ungrammatical sentence:")
 	assert not do("muss Daruber nachgedacht werden", grammar)	#no parse
-	print "(as expected)"
-	print "long sentence (%d words):" % lng
+	print("(as expected)")
+	print("long sentence (%d words):" % lng)
 	assert do("Daruber muss nachgedacht %s" % " ".join(
 		(lng - 3) * ["werden"]), grammar)
 
@@ -1444,14 +1443,14 @@ def main():
 		((('D', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)])
-	print cfg
-	print "cfg parsing; sentence: mary walks"
-	print "lcfrs",
+	print(cfg)
+	print("cfg parsing; sentence: mary walks")
+	print("lcfrs", end='')
 	chart1, start, _ = parse("mary walks".split(), cfg, start=cfg.toid['S'],
 		exhaustive=True)
 	pprint_chart(chart1, "mary walks".split(), cfg.tolabel)
 
-	print "pcfg",
+	print("pcfg", end='')
 	chart, start, _ = cfgparse("mary walks".split(), cfg, start=cfg.toid['S'])
 	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
 	assert start

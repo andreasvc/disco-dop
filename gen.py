@@ -1,8 +1,8 @@
 """ Generate random sentences with an LCFRS. Reads grammar from a
 text file. """
-import codecs, gzip, sys
-from collections import namedtuple, defaultdict
-from fractions import Fraction
+from __future__ import print_function
+import sys, gzip, codecs
+from collections import namedtuple
 from math import exp, log
 from array import array
 from random import random
@@ -37,12 +37,13 @@ def gen(grammar, start=None, verbose=False):
 	return compose(rule, gen(grammar, rule.rhs1, verbose),
 				gen(grammar, rule.rhs2, verbose), verbose)
 
-def compose(rule, (p1, l1), (p2, l2), verbose):
+def compose(rule, left, right, verbose):
 	""" Combine the results of two generated non-terminals into a single
 	non-terminal, as specified by the given rule. """
+	(p1, l1), (p2, l2) = left, right
 	result = []
 	if verbose:
-		print "[%g] %s + %s =" % (exp(-(rule.prob+p1+p2)), l1, l2),
+		print("[%g] %s + %s =" % (exp(-(rule.prob+p1+p2)), l1, l2), end='')
 	for n, a in enumerate(rule.lengths):
 		arg = []
 		for b in range(a):
@@ -52,7 +53,7 @@ def compose(rule, (p1, l1), (p2, l2), verbose):
 				arg += l1.pop(0)
 		result.append(arg)
 	if verbose:
-		print result
+		print(result)
 	return (rule.prob + p1 + p2, result)
 
 def chooserule(rules, normalize=False):
@@ -97,7 +98,7 @@ def splitgrammar(rules):
 			continue
 		if len(rule) == 2 and grammar.toid[rule[1]] == 0:
 			r = LexicalRule(grammar.toid[rule[0]], grammar.toid[rule[1]], 0,
-					unicode(yf[0]), abs(log(w)))
+					yf[0], abs(log(w)))
 			assert grammar.fanout[r.lhs] in (0, 1)
 			grammar.fanout[r.lhs] = 1
 		else:
@@ -150,18 +151,18 @@ def test():
 		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 0.5),
 		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 0.5),
 		((('VP2', 'VP2'), ((0, ), (0, ))), 0.1),
-		((('PROAV', 'Epsilon'), (u'Darueber', )), 1),
-		((('VAINF', 'Epsilon'), (u'werden', )), 1),
-		((('VMFIN', 'Epsilon'), (u'muss', )), 1),
-		((('VVPP', 'Epsilon'), (u'nachgedacht', )), 1)]
+		((('PROAV', 'Epsilon'), ('Darueber', )), 1),
+		((('VAINF', 'Epsilon'), ('werden', )), 1),
+		((('VMFIN', 'Epsilon'), ('muss', )), 1),
+		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)]
 	grammar = splitgrammar(rules)
 	_, sent = gen(grammar, start=grammar.toid['S'], verbose=True)
-	print " ".join(sent.pop())
+	print(" ".join(sent.pop()))
 
 def main():
 	""" Load a grammar from a text file and generate 20 sentences. """
 	if len(sys.argv) != 3:
-		print USAGE
+		print(USAGE)
 		return
 	rules = (gzip.open if sys.argv[1].endswith(".gz") else open)(sys.argv[1])
 	lexicon = codecs.getreader('utf-8')((gzip.open
@@ -169,12 +170,12 @@ def main():
 	try:
 		grammar = read_lcfrs_grammar(rules, lexicon)
 	except ValueError as err:
-		print err
+		print(err)
 		grammar = read_bitpar_grammar(rules, lexicon)
 	grammar = splitgrammar(grammar)
 	for _ in range(20):
 		p, sent = gen(grammar)
-		print "[%g] %s" % (exp(-p), " ".join(sent.pop()))
+		print("[%g] %s" % (exp(-p), " ".join(sent.pop())))
 
 if __name__ == '__main__':
 	if "--test" in sys.argv:

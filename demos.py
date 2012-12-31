@@ -1,4 +1,5 @@
 """ Examples of various formalisms encoded in LCFRS grammars. """
+from __future__ import print_function
 from math import exp
 from tree import Tree
 import treetransforms, parser, kbest
@@ -13,13 +14,13 @@ def tree_adjoining_grammar():
 		- no epsilon productions
 	Non-terminals have identifiers to encode elementary trees of depth > 2
 	"""
-	print "Tree-Adjoining Grammars in LCFRS"
-	print """initial trees:
+	print("Tree-Adjoining Grammars in LCFRS")
+	print("""initial trees:
 (S (NP ) (VP (V fell)))
 (NP (NN prices))
 auxiliary trees:
 (S (ADVP (RB Later) (S* ))
-(VP (ADVP (RB drastically)) (VP* ))"""
+(VP (ADVP (RB drastically)) (VP* ))""")
 	grammar = Grammar([
 		((('ROOT','S'),  ((0,),)), 1),
 		((('S', 'NP', 'VP'), ((0,1),)), 1),
@@ -33,7 +34,7 @@ auxiliary trees:
 		((('NN#1', 'Epsilon'), ('prices',)), 1),
 		((('V#1', 'Epsilon'), ('fell',)), 1),
 		((('RB#2', 'Epsilon'), ('drastically',)), 1)])
-	print grammar
+	print(grammar)
 	assert do(grammar, "prices fell".split())
 	assert do(grammar, "prices drastically fell".split())
 	assert do(grammar, "Later prices fell".split())
@@ -42,12 +43,12 @@ auxiliary trees:
 	# taken from: slides for course Grammar Formalisms, Kallmeyer (2011),
 	# Mildly Context-Sensitive Grammar Formalisms:
 	# LCFRS: Relations to other Formalisms
-	print "the language {d} + {a**n b**m c**m d **n} with n>0, m>=0"
-	print """initial trees:
+	print("the language {d} + {a**n b**m c**m d **n} with n>0, m>=0")
+	print("""initial trees:
 (S a (S Epsilon) F)
 (F d)
 auxiliary trees:
-(S b S* c)"""
+(S b S* c)""")
 	grammar = Grammar([
 		((('ROOT', 'a1'), ((0,),)), 1),
 		((('ROOT', 'a2'), ((0,),)), 1),
@@ -63,24 +64,24 @@ auxiliary trees:
 		((('_c', 'Epsilon'), ('c',)), 1),
 		((('_d', 'Epsilon'), ('d',)), 1),
 		])
-	print grammar
+	print(grammar)
 	assert do(grammar, list("d"))
 	assert do(grammar, list("ad"))
 	assert do(grammar, list("abcd"))
 	assert do(grammar, list("abbccd"))
-	print "wrong:"
+	print("wrong:")
 	assert not do(grammar, list("abbbccd"))
 
 	# Taken from: Boullier (1998), Generalization of Mildly
 	# Context-Sensitive Formalisms.
 	# Epsilon replaced with '|', added preterminal rules w/underscores
-	print "the language { ww | w in {a,b}* }"
-	print """initial trees:
+	print("the language { ww | w in {a,b}* }")
+	print("""initial trees:
 		(S (A Epsilon))
 		auxiliary trees:
 		(A a (A A*) a)
 		(A b (A A*) b)
-		(A (A A*))"""
+		(A (A A*))""")
 	grammar = Grammar([
 		((('ROOT', '_|'), ((0,),)), 1),
 		((('ROOT', 'A', '_|'), ((0,1,0),)), 1),
@@ -94,11 +95,11 @@ auxiliary trees:
 		((('_b', 'Epsilon'), ('b',)), 1),
 		((('_|', 'Epsilon'), ('|',)), 1),
 		])
-	print grammar
+	print(grammar)
 	assert do(grammar, list("a|a"))
 	assert do(grammar, list("ab|ab"))
 	assert do(grammar, list("abaab|abaab"))
-	print "wrong:"
+	print("wrong:")
 	assert not do(grammar, list("a|b"))
 	assert not do(grammar, list("aa|bb"))
 
@@ -111,7 +112,7 @@ def dependencygrammar():
 		- lexical rules have to be unary
 	These have been dealt with by introducing nodes w/underscores.
 	"""
-	print "A dependency grammar in an LCFRS:"
+	print("A dependency grammar in an LCFRS:")
 	grammar = Grammar([
 		((('NMOD', '_A'), ((0,),)), 1),
 		((('SBJ','NMOD_hearing','PP'), ((0,), (1,))), 1),
@@ -131,7 +132,7 @@ def dependencygrammar():
 		((('_the', 'Epsilon'), ('the',)), 1),
 		((('_issue', 'Epsilon'), ('issue',)), 1),
 		((('_today', 'Epsilon'), ('today',)), 1)])
-	print grammar
+	print(grammar)
 	testsent = "A hearing is scheduled on the issue today".split()
 	assert do(grammar, testsent)
 
@@ -139,7 +140,7 @@ def bitext():
 	""" Bitext parsing with a synchronous CFG.
 	Translation would require a special decoder (instead of normal kbest
 	derivations where the whole sentence is given)."""
-	print "bitext parsing with a synchronous CFG"
+	print("bitext parsing with a synchronous CFG")
 	trees = [Tree.parse(a, parse_leaf=int) for a in """\
 	(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) (manque 5))\
      (PP (IN (a` 6)) (NP (NNP (Mary 2) (Mary 4)))))) (SEP (| 3)))
@@ -149,25 +150,25 @@ def bitext():
 	for a in trees:
 		treetransforms.binarize(a)
 	compiled_scfg = Grammar(induce_plcfrs(trees, sents))
-	print "sentences:"
+	print("sentences:")
 	for t in trees:
-		print " ".join(w for _, w in sorted(t.pos()))
-	print "treebank:"
+		print(" ".join(w for _, w in sorted(t.pos())))
+	print("treebank:")
 	for t in trees:
-		print t
-	print compiled_scfg, "\n"
+		print(t)
+	print(compiled_scfg, "\n")
 
-	print "correct translations:"
+	print("correct translations:")
 	assert do(compiled_scfg, ["0"] * 7,
 		"John likes Mary | John aimes Mary".split())
 	assert do(compiled_scfg, ["0"] * 9,
-		u"John misses pizza | la pizza manque a` John".split())
+		"John misses pizza | la pizza manque a` John".split())
 
-	print "incorrect translations:"
+	print("incorrect translations:")
 	assert not do(compiled_scfg, ["0"] * 7,
 		"John likes Mary | Mary aimes John".split())
 	assert not do(compiled_scfg, ["0"] * 9,
-		u"John misses pizza | John manque a` la pizza".split())
+		"John misses pizza | John manque a` la pizza".split())
 
 	# the following SCFG is taken from:
 	# http://cdec-decoder.org/index.php?title=SCFG_translation
@@ -195,7 +196,7 @@ def bitext():
 		((('V', '_fand', '_found'), ((0,), (1,))), 0.4)
 		] + [((('_%s' % word, 'Epsilon'), (word,)), 1)
 			for word in lexicon])
-	print another_scfg
+	print(another_scfg)
 	sents = [
 		"ich sah ein kleines Haus | I saw a small house".split(),
 		"ich sah ein kleines Haus | I saw a little house".split(),
@@ -210,19 +211,19 @@ def do(compiledgrammar, testsent, testtags=None):
 		compiledgrammar,
 		tags=testtags, start=compiledgrammar.toid["ROOT"],
 		exhaustive=True)
-	print "input:", " ".join("%d:%s" % a
-			for a in enumerate(testtags if testtags else testsent)),
+	print("input:", " ".join("%d:%s" % a
+			for a in enumerate(testtags if testtags else testsent)), end=' ')
 	if start:
-		print
+		print()
 		results = kbest.lazykbest(chart, start, 10, compiledgrammar.tolabel)[0]
 		for tree, prob in results:
 			tree = Tree(tree)
 			treetransforms.unbinarize(tree)
-			print exp(-prob), tree
-		print
+			print(exp(-prob), tree)
+		print()
 		return True
 	else:
-		print "no parse!\n"
+		print("no parse!\n")
 		#parser.pprint_chart(chart, testsent, compiledgrammar.tolabel)
 		return False
 
