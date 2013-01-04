@@ -1,3 +1,5 @@
+<img align="right" alt="Discontinuous Data-Oriented Parsing" style="float:right" src="http://staff.science.uva.nl/~acranenb/disco-dop.png" title="contrived discontinuous constituent for expository purposes." />
+
 Discontinuous DOP
 =================
 
@@ -29,8 +31,8 @@ Some references to implemented algorithms:
 - optimal binarization: Gildea (2010), Optimal parsing strategies for linear
   context-free rewriting systems
 
-Requirements:
--------------
+Requirements
+------------
 - Python 2.7+     http://www.python.org (need headers, e.g. python-dev package)
 - Cython 0.17.2+  http://www.cython.org
 - GCC             http://gcc.gnu.org/
@@ -108,3 +110,13 @@ Aside from the parser there are some standalone tools:
 - `gen.py`:              An experiment in generation with LCFRS.
 
 These programs can be started without arguments for instructions.
+
+Acknowledgments
+---------------
+
+The Tree datastructures in `tree.py` and the simple binarization algorithm in
+`treetransforms.py` was taken from [NLTK](http://www.nltk.org).
+The Zhang-Shasha tree-edit distance algorithm in `treedist.py` was taken from
+[https://github.com/timtadh/zhang-shasha](https://github.com/timtadh/zhang-shasha)
+Elements of the PLCFRS parser and punctuation re-attachment are based on code from
+`rparse`. Various other bits from the Stanford parser, Berkeley parser, Bubs parser, &c.
