@@ -5,36 +5,56 @@ import logging
 from math import exp, log
 from collections import defaultdict
 from functools import partial
+from operator import getitem
 from tree import Tree
+from agenda cimport EdgeAgenda, Entry
 
 DEF SLOTS = 2
 #maxbitveclen = sizeof(ULLong) * 8
 maxbitveclen = SLOTS * sizeof(ULong) * 8
 
 cdef class Grammar:
+	""" Turn a sequence of LCFRS grammar rules in the form of tuples into
+	various lookup tables, mapping nonterminal labels to numeric
+	identifiers; start is the distinguished start symbol (as a string).
+	Also turns probabilities into negative log-probabilities by default
+	(negative to accommodate min-heaps). Can only represent monotone LCFRS
+	rules; i.e., the components of the yield that are covered by a
+	non-terminal are ordered from left to right. """
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
-	def __init__(self, grammar):
-		""" Turn a sequence of grammar rules into various lookup tables,
-		mapping nonterminal labels to numeric identifiers. Also negates
-		log-probabilities to accommodate min-heaps. Can only represent monotone
-		LCFRS rules; i.e., the components of the yield that are covered by a
-		non-terminal are ordered from left to right. """
+	def __init__(self, grammar, start=b"ROOT", logprob=True):
+		""" Parameters:
+		- grammar: a sequence of grammar productions (both phrasal and lexical)
+			represented as tuples:
+			[((('lhs', 'rhs1', 'rhs2'), ((0, 1), (1, 0)), 0.5), ...]
+		- start: a string identifying the unique start symbol of this grammar,
+			which will be used by default when parsing with this grammar
+		- logprob: whether to convert probabilities to negative log
+			probabilities. """
 		self.origrules = frozenset(grammar)
 		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 		# and assign them unique IDs
 		# convert them to ASCII strings.
-		# FIXME: ROOT symbol should be a parameter.
-		nonterminals = list(enumerate([b"Epsilon", b"ROOT"]
-				+ sorted({nt.encode('ascii') for (rule, _), _ in grammar
-					for nt in rule} - {b"Epsilon", b"ROOT"})))
-		self.nonterminals = len(nonterminals)
-		self.toid = {lhs: n for n, lhs in nonterminals}
-		self.tolabel = {n: lhs for n, lhs in nonterminals}
+		start = start.encode('ascii')
+		Epsilon = "Epsilon".encode('ascii')
+		labels = {nt.encode('ascii')
+				for (rule, _), _ in grammar
+					for nt in rule}
+		assert start in labels, ("Start symbol %r not in set of "
+				"non-terminal labels extracted from grammar rules." % start)
+		assert Epsilon in labels, ("'Epsilon' non-terminal symbol not in set "
+				"of labels extracted from grammar rules: no lexical rules?")
+		self.tolabel = [Epsilon, start] + sorted(labels - {Epsilon, start})
+		self.nonterminals = len(self.tolabel)
+		for lhs in self.tolabel:
+			assert isinstance(lhs, str), repr(lhs)
+		self.toid = {lhs: n for n, lhs in enumerate(self.tolabel)}
 		self.lexical = {}
 		self.lexicalbylhs = {}
 		self.mapping = self.splitmapping = NULL
-
+		self.logprob = logprob
+		self.unaryclosure = self.unaryclosuretopdown = None
 
 		# the strategy is to lay out all non-lexical rules in a contiguous array
 		# these arrays will contain pointers to relevant parts thereof
@@ -46,6 +66,7 @@ cdef class Grammar:
 		self.rbinary = &(self.unary[2 * self.nonterminals])
 		self.bylhs = &(self.unary[3 * self.nonterminals])
 		self.fanout = <UChar *>malloc(sizeof(UChar) * self.nonterminals)
+		assert self.fanout is not NULL
 		for n in range(self.nonterminals):
 			self.fanout[n] = 0
 
@@ -73,6 +94,8 @@ cdef class Grammar:
 						(rule, yf, w), ))
 			if self.fanout[self.toid[rule[0]]] == 0:
 				self.fanout[self.toid[rule[0]]] = len(yf)
+				if self.fanout[self.toid[rule[0]]] > self.maxfanout:
+					self.maxfanout = self.fanout[self.toid[rule[0]]]
 			else:
 				assert self.fanout[self.toid[rule[0]]] == len(yf), (
 					"conflicting fanouts for symbol '%s'.\n"
@@ -96,12 +119,12 @@ cdef class Grammar:
 		self.rulenos = {rule: m for m, (rule, _) in enumerate(grammar)}
 		for (rule, yf), w in grammar:
 			if len(rule) == 2 and self.toid[rule[1]] == 0:
-				lr = LexicalRule(self.toid[rule[0]], self.toid[rule[1]], 0,
-					unicode(yf[0]), abs(w))
-				#	self.rulenos[rule, yf])
+				word = unicode(yf[0])
+				lr = LexicalRule(self.toid[rule[0]], word,
+						abs(log(w)) if logprob else float(w))
 				# lexical productions (mis)use the field for the yield function
 				# to store the word
-				self.lexical.setdefault(unicode(yf[0]), []).append(lr)
+				self.lexical.setdefault(word, []).append(lr)
 				self.lexicalbylhs.setdefault(lr.lhs, []).append(lr)
 		self.copyrules(self.unary, 1, 2)
 		self.copyrules(self.lbinary, 1, 3)
@@ -133,7 +156,7 @@ cdef class Grammar:
 			cur.lhs  = self.toid[rule[0]]
 			cur.rhs1 = self.toid[rule[1]]
 			cur.rhs2 = self.toid[rule[2]] if len(rule) == 3 else 0
-			cur.prob = abs(log(w))
+			cur.prob = abs(log(w)) if self.logprob else float(w)
 			cur.lengths = cur.args = m = 0
 			for a in yf:
 				for b in a: #component:
@@ -150,6 +173,15 @@ cdef class Grammar:
 			n += 1
 		# sentinel rule
 		dest[0][n].lhs = dest[0][n].rhs1 = dest[0][n].rhs2 = self.nonterminals
+	def buildchainvec(self):
+		cdef UInt n
+		cdef Rule *rule
+		self.chainvec = <ULong *>calloc(self.nonterminals
+				* BITNSLOTS(self.nonterminals), sizeof(ULong))
+		assert self.chainvec is not NULL
+		for n in range(self.numunary):
+			rule = self.unary[n]
+			SETBIT(self.chainvec, rule.rhs1 * self.nonterminals + rule.lhs)
 	def testgrammar(self, epsilon=0):
 		""" report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
@@ -194,7 +226,7 @@ cdef class Grammar:
 			self.splitmapping[0] = <UInt *>malloc(sizeof(UInt) *
 				sum([self.fanout[n] for n in range(self.nonterminals)
 					if self.fanout[n] > 1]))
-		seen = set([0])
+		seen = {0}
 		for n in range(self.nonterminals):
 			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
 				strlabel = self.tolabel[n]
@@ -206,6 +238,7 @@ cdef class Grammar:
 				else:
 					strlabel += "*"
 					if markorigin:
+						self.mapping[n] = self.nonterminals #sentinel value
 						self.splitmapping[n] = &(
 								self.splitmapping[0][components])
 						components += self.fanout[n]
@@ -218,19 +251,22 @@ cdef class Grammar:
 						seen.add(self.mapping[n])
 			else:
 				self.mapping[n] = 0
-		if seen != set(coarse.tolabel):
-			# fixme: sort by whether in nev
-			l = [coarse.tolabel[a] for a in sorted(set(coarse.tolabel) - seen,
-					key=coarse.tolabel.get)] #filter on '*' in label ..
+		if seen == set(range(coarse.nonterminals)):
+			msg = 'label sets are equal'
+		elif seen != set(range(coarse.nonterminals)):
+			l = [coarse.tolabel[a] for a in sorted(
+					set(range(coarse.nonterminals)) - seen,
+					key=partial(getitem, coarse.tolabel))]
 			diff1 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
-			l = [coarse.tolabel[a] for a in seen - set(coarse.tolabel)]
+			l = [coarse.tolabel[a] for a in seen -
+					set(range(coarse.nonterminals))]
 			diff2 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
-			msg = ('grammar is not a superset:\n'
-					'only in coarse: {%s}\nonly in fine: {%s}' % (diff1, diff2))
-		elif coarse.nonterminals < self.nonterminals:
-			msg = 'grammar is a proper superset'
-		elif seen == set(coarse.tolabel):
-			msg = 'label sets are a equal'
+			if coarse.nonterminals > self.nonterminals:
+				msg = ('grammar is not a superset of coarse grammar:\n'
+						'only in coarse: {%s}\nonly in fine: {%s}' % (
+						diff1, diff2))
+			elif coarse.nonterminals < self.nonterminals:
+				msg = 'grammar is a proper superset of coarse grammar'
 		if debug:
 			msg += "\n"
 			for n in range(self.nonterminals):
@@ -285,8 +321,18 @@ cdef class Grammar:
 			for lr in sorted(self.lexical[word],
 			key=lambda lr: (<LexicalRule>lr).lhs)])
 		labels = ", ".join("%s=%d" % a for a in sorted(self.toid.items()))
-		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s" % (
-				rules, lexical, labels)
+		if self.unaryclosure is None:
+			closure = ""
+		else:
+			closure = "\nunary closure: %s\ntop down unary closure: %s" % (
+					"\n".join(["%.2f %s => %s" % (
+							prob, self.tolabel[lhs], self.tolabel[rhs1])
+					for lhs, rhs1, prob in self.unaryclosure]),
+					"\n".join(["%.2f %s => %s" % (
+							prob, self.tolabel[lhs], self.tolabel[rhs1])
+					for lhs, rhs1, prob in self.unaryclosuretopdown]))
+		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s%s" % (
+				rules, lexical, labels, closure)
 	def __reduce__(self):
 		return (Grammar, (self.origrules, ))
 	def __dealloc__(Grammar self):
@@ -296,9 +342,10 @@ cdef class Grammar:
 				self.unary[0] = NULL
 			free(self.unary)
 			self.unary = NULL
-		if self.fanout is not NULL:
 			free(self.fanout)
 			self.fanout = NULL
+			free(self.chainvec)
+			self.chainvec = NULL
 		if self.mapping is not NULL:
 			free(self.mapping)
 			self.mapping = NULL
@@ -306,39 +353,6 @@ cdef class Grammar:
 			free(self.splitmapping[0])
 			free(self.splitmapping)
 			self.splitmapping = NULL
-	#def getunaryclosure(self):
-	#	""" FIXME: closure should be related to probabilities as well.
-	#	Also, there appears to be an infinite loop here. """
-	#	cdef size_t i = 0, n
-	#	closure = [set() for n in range(self.nonterminals)]
-	#	candidates = [set() for n in range(self.nonterminals)]
-	#	self.unaryclosure = [[] for n in range(self.nonterminals)]
-	#	while self.unary[0][i].lhs != self.nonterminals:
-	#		candidates[self.unary[0][i].rhs1].add(i)
-	#		i += 1
-	#	for n in range(self.nonterminals):
-	#		while candidates[n]:
-	#			i = candidates[n].pop()
-	#			m = self.unary[0][i].lhs
-	#			if i not in closure[n]:
-	#				self.unaryclosure[n].append(i)
-	#				closure[n].add(i)
-	#			for x in self.unaryclosure[m]:
-	#				if x not in closure[n]:
-	#					self.unaryclosure[n].append(x)
-	#			closure[n] |= closure[m]
-	#			candidates[n] |= candidates[m]
-	#			candidates[n] -= closure[n]
-	#def printclosure(self):
-	#	if self.unaryclosure is None:
-	#		print "not computed."
-	#		return
-	#	for m, a in enumerate(self.unaryclosure):
-	#		print '%s[%d] ' % (self.tolabel[m], m),
-	#		for n in a:
-	#			print "%s <= %s  " % (self.tolabel[self.unary[0][n].rhs1],
-	#					self.tolabel[self.unary[0][n].lhs]),
-	#		print
 
 def myitemget(idx, x):
 	""" Given a grammar rule 'x', return the non-terminal in position 'idx'. """
@@ -371,12 +385,14 @@ cdef class SmallChartItem:
 		return self.label != 0 and self.vec != 0
 	def __repr__(self):
 		return "%s(%d, %s)" % (self.__class__.__name__,
-				self.label, bin(self.vec))
+				self.label, self.binrepr())
 	def lexidx(self):
 		assert self.label == 0
 		return self.vec
 	def copy(SmallChartItem self):
 		return SmallChartItem(self.label, self.vec)
+	def binrepr(SmallChartItem self, int lensent=0):
+		return bin(self.vec)[2:].zfill(lensent)[::-1]
 
 cdef class FatChartItem:
 	""" Item with fixed-with bitvector. """
@@ -414,7 +430,7 @@ cdef class FatChartItem:
 		return False
 	def __repr__(self):
 		return "%s(%d, %s)" % (self.__class__.__name__,
-			self.label, binrepr(self.vec))
+			self.label, self.binrepr())
 	def lexidx(self):
 		assert self.label == 0
 		return self.vec[0]
@@ -423,6 +439,15 @@ cdef class FatChartItem:
 		for n in range(SLOTS):
 			a.vec[n] = self.vec[n]
 		return a
+	def binrepr(FatChartItem self, lensent=0):
+		cdef int m, n = SLOTS - 1
+		cdef str result
+		while n and self.vec[n] == 0:
+			n -= 1
+		result = bin(self.vec[n])
+		for m in range(n - 1, -1, -1):
+			result += bin(self.vec[m])[2:].zfill(BITSIZE)
+		return result.zfill(lensent)[::-1]
 
 cdef class CFGChartItem:
 	""" Item for CFG parsing; span is denoted with start and end indices. """
@@ -481,16 +506,6 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 			fci.vec[n] = ~0UL
 		fci.vec[BITSLOT(end)] = BITMASK(end) - 1
 	return fci
-
-cdef binrepr(ULong *vec):
-	cdef int m, n = SLOTS - 1
-	cdef str result
-	while n and vec[n] == 0:
-		n -= 1
-	result = bin(vec[n])
-	for m in range(n - 1, -1, -1):
-		result += bin(vec[m])[2:].zfill(BITSIZE)
-	return result
 
 cdef class LCFRSEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
@@ -567,6 +582,8 @@ cdef class CFGEdge:
 			self.rule.rhs2, self.rule.no, self.mid)
 
 cdef class RankedEdge:
+	""" An edge, including the ChartItem to which it points, along with
+	ranks for its children, to denote a k-best derivation. """
 	def __cinit__(self, ChartItem head, LCFRSEdge edge, int j1, int j2):
 		self.head = head
 		self.edge = edge
@@ -595,6 +612,8 @@ cdef class RankedEdge:
 			self.head, self.edge, self.left, self.right)
 
 cdef class RankedCFGEdge:
+	""" An edge, including the ChartItem to which it points, along with
+	ranks for its children, to denote a k-best derivation. """
 	def __cinit__(self, UInt label, UChar start, UChar end, Edge edge,
 			int j1, int j2):
 		self.label = label
@@ -627,10 +646,10 @@ cdef class RankedCFGEdge:
 			self.label, self.start, self.end, self.edge, self.left, self.right)
 
 cdef class LexicalRule:
-	def __init__(self, lhs, rhs1, rhs2, word, prob):
+	""" A weighted rule of the form 'non-terminal --> word'. """
+	def __init__(self, lhs, word, prob):
 		self.lhs = lhs
-		self.rhs1 = rhs1
-		self.rhs2 = rhs2
+		self.rhs1 = self.rhs2 = 0 #FIXME: superfluous?
 		self.word = word
 		self.prob = prob
 	def __repr__(self):
@@ -690,7 +709,7 @@ cdef class Ctrees:
 			self.data[self.len].nodes = &(
 				self.data[self.len - 1].nodes)[self.data[self.len - 1].len]
 		copynodes(tree, labels, prods, self.data[self.len].nodes)
-		self.data[self.len].root = tree[0].root
+		self.data[self.len].root = tree[0].rootidx
 		self.len += 1
 		self.nodesleft -= len(tree)
 		self.maxnodes = max(self.maxnodes, len(tree))
@@ -869,7 +888,8 @@ cdef class CBitset:
 
 cdef class MemoryPool:
 	"""A memory pool that allocates chunks of poolsize, up to limit times.
-	Memory is automatically freed when object is deallocated. """
+	Memory is automatically freed when object is deallocated
+	(and cannot be released before). """
 	def __cinit__(self, int poolsize, int limit):
 		cdef int x
 		self.poolsize = poolsize
@@ -882,7 +902,7 @@ cdef class MemoryPool:
 		self.cur = self.pool[0] = <ULong *>malloc(self.poolsize)
 		assert self.cur is not NULL
 		self.leftinpool = self.poolsize
-	cdef void *malloc(self, int size):
+	cdef void *alloc(self, int size):
 		cdef void *ptr
 		if size > self.poolsize:
 			return NULL

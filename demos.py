@@ -2,7 +2,7 @@
 from __future__ import print_function
 from math import exp
 from tree import Tree
-import treetransforms, parser, kbest
+import treetransforms, plcfrs, kbest
 from grammar import induce_plcfrs
 from containers import Grammar
 
@@ -35,10 +35,10 @@ auxiliary trees:
 		((('V#1', 'Epsilon'), ('fell',)), 1),
 		((('RB#2', 'Epsilon'), ('drastically',)), 1)])
 	print(grammar)
-	assert do(grammar, "prices fell".split())
-	assert do(grammar, "prices drastically fell".split())
-	assert do(grammar, "Later prices fell".split())
-	assert do(grammar, "Later prices drastically fell".split())
+	assert parse(grammar, "prices fell".split())
+	assert parse(grammar, "prices drastically fell".split())
+	assert parse(grammar, "Later prices fell".split())
+	assert parse(grammar, "Later prices drastically fell".split())
 
 	# taken from: slides for course Grammar Formalisms, Kallmeyer (2011),
 	# Mildly Context-Sensitive Grammar Formalisms:
@@ -65,12 +65,12 @@ auxiliary trees:
 		((('_d', 'Epsilon'), ('d',)), 1),
 		])
 	print(grammar)
-	assert do(grammar, list("d"))
-	assert do(grammar, list("ad"))
-	assert do(grammar, list("abcd"))
-	assert do(grammar, list("abbccd"))
+	assert parse(grammar, list("d"))
+	assert parse(grammar, list("ad"))
+	assert parse(grammar, list("abcd"))
+	assert parse(grammar, list("abbccd"))
 	print("wrong:")
-	assert not do(grammar, list("abbbccd"))
+	assert not parse(grammar, list("abbbccd"))
 
 	# Taken from: Boullier (1998), Generalization of Mildly
 	# Context-Sensitive Formalisms.
@@ -96,12 +96,12 @@ auxiliary trees:
 		((('_|', 'Epsilon'), ('|',)), 1),
 		])
 	print(grammar)
-	assert do(grammar, list("a|a"))
-	assert do(grammar, list("ab|ab"))
-	assert do(grammar, list("abaab|abaab"))
+	assert parse(grammar, list("a|a"))
+	assert parse(grammar, list("ab|ab"))
+	assert parse(grammar, list("abaab|abaab"))
 	print("wrong:")
-	assert not do(grammar, list("a|b"))
-	assert not do(grammar, list("aa|bb"))
+	assert not parse(grammar, list("a|b"))
+	assert not parse(grammar, list("aa|bb"))
 
 def dependencygrammar():
 	""" An example dependency structure encoded in an LCFRS grammar.
@@ -134,7 +134,7 @@ def dependencygrammar():
 		((('_today', 'Epsilon'), ('today',)), 1)])
 	print(grammar)
 	testsent = "A hearing is scheduled on the issue today".split()
-	assert do(grammar, testsent)
+	assert parse(grammar, testsent)
 
 def bitext():
 	""" Bitext parsing with a synchronous CFG.
@@ -151,23 +151,23 @@ def bitext():
 		treetransforms.binarize(a)
 	compiled_scfg = Grammar(induce_plcfrs(trees, sents))
 	print("sentences:")
-	for t in trees:
-		print(" ".join(w for _, w in sorted(t.pos())))
+	for tree in trees:
+		print(" ".join(w for _, w in sorted(tree.pos())))
 	print("treebank:")
-	for t in trees:
-		print(t)
+	for tree in trees:
+		print(tree)
 	print(compiled_scfg, "\n")
 
 	print("correct translations:")
-	assert do(compiled_scfg, ["0"] * 7,
+	assert parse(compiled_scfg, ["0"] * 7,
 		"John likes Mary | John aimes Mary".split())
-	assert do(compiled_scfg, ["0"] * 9,
+	assert parse(compiled_scfg, ["0"] * 9,
 		"John misses pizza | la pizza manque a` John".split())
 
 	print("incorrect translations:")
-	assert not do(compiled_scfg, ["0"] * 7,
+	assert not parse(compiled_scfg, ["0"] * 7,
 		"John likes Mary | Mary aimes John".split())
-	assert not do(compiled_scfg, ["0"] * 9,
+	assert not parse(compiled_scfg, ["0"] * 9,
 		"John misses pizza | John manque a` la pizza".split())
 
 	# the following SCFG is taken from:
@@ -203,14 +203,12 @@ def bitext():
 		"ich sah ein kleines Haus | I saw a small shell".split(),
 		"ich sah ein kleines Haus | I saw a little shell".split()]
 	for sent in sents:
-		assert do(another_scfg, sent), sent
+		assert parse(another_scfg, sent), sent
 
-def do(compiledgrammar, testsent, testtags=None):
+def parse(compiledgrammar, testsent, testtags=None):
 	""" Parse a sentence with a grammar. """
-	chart, start, _ = parser.parse(testsent,
-		compiledgrammar,
-		tags=testtags, start=compiledgrammar.toid["ROOT"],
-		exhaustive=True)
+	chart, start, _ = plcfrs.parse(testsent,
+		compiledgrammar, tags=testtags, exhaustive=True)
 	print("input:", " ".join("%d:%s" % a
 			for a in enumerate(testtags if testtags else testsent)), end=' ')
 	if start:

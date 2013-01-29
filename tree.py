@@ -9,16 +9,15 @@
 #
 # This is an adaptation of the original tree.py file from NLTK.
 # Probabilistic trees have been removed, as well as the possibility
-# to read off CFG productions or draw trees.
+# to read off CFG productions or draw trees
 # Remaining dependencies have been inlined.
 """ Class for representing hierarchical language structures, such as syntax
 trees and morphological trees. """
 
 from __future__ import division, print_function, unicode_literals
-from collections import defaultdict, deque, OrderedDict
 import re, sys
 if sys.version[0] >= '3':
-	basestring = (str, bytes)
+	basestring = (str, bytes) # pylint: disable=W0622,C0103
 
 ######################################################################
 ## Trees
@@ -249,6 +248,8 @@ class Tree(list):
 	def subtrees(self, condition=None):
 		""" Generate all the subtrees of this tree, optionally restricted
 		to trees matching the condition function.
+		NB: if the condition does not match a subtree,
+		its children are still considered.
 		@type condition: function
 		@param condition: the function to filter all local trees """
 		if condition is None or condition(self):
@@ -657,6 +658,7 @@ class Tree(list):
 			return '%s%r%s %s%s' % (parens[0], self.label, labelsep,
 									" ".join(childstrs), parens[1])
 	def draw(self):
+		from treedraw import DrawTree
 		return DrawTree(self, self.leaves()).text()
 
 class ImmutableTree(Tree):
@@ -1224,18 +1226,24 @@ class MultiParentedTree(AbstractParentedTree):
 				child._parents.append(self)
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):
+	""" Combination of an Immutable and Parented Tree. """
 	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
 		super(ImmutableParentedTree, self).__init__(label_or_str, children)
 
 class ImmutableMultiParentedTree(ImmutableTree, MultiParentedTree):
+	""" Combination of an Immutable and Multi Parented Tree. """
 	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return # see note in Tree.__init__()
 		super(ImmutableMultiParentedTree, self).__init__(label_or_str, children)
 
-## discontinuous trees ##
+
+######################################################################
+## Discontinuous Trees
+######################################################################
+
 def eqtree(tree1, sent1, tree2, sent2):
 	""" Test whether two discontinuous trees are equivalent;
 	assumes canonicalized() ordering. """
@@ -1269,470 +1277,6 @@ class DiscTree(ImmutableTree):
 	def __repr__(self):
 		return "DisctTree(%r, %r)" % (
 				super(DiscTree, self).__repr__(), self.sent)
-
-
-######################################################################
-## Discontinuous tree drawing
-######################################################################
-
-class DrawTree(object):
-	""" Visualize a discontinuous tree in various formats. """
-	def __init__(self, tree, sent):
-		self.nodes, self.coords, self.edges = self.nodecoords(tree, sent)
-	def __str__(self):
-		return self.text()
-	def __repr__(self):
-		return "\n".join("%d: coord=%r, parent=%r, node=%s" % (
-						n, self.coords[n], self.edges.get(n), self.nodes[n])
-					for n in sorted(self.nodes))
-
-	def nodecoords(self, tree, sent):
-		""" Resolve placement of nodes for drawing discontinuous trees
-		programmatically.
-		Objective:
-		- Produce coordinates for a non-overlapping placement of nodes and
-			horizontal lines.
-		- Order edges so that crossing edges cross a minimal number of previous
-			horizontal lines (never vertical lines).
-		Approach:
-		- bottom up level order traversal (start at terminals)
-		- at each level, identify nodes which cannot be on the same row
-		- identify nodes which cannot be in the same column
-		- place nodes into a grid at (row, column)
-		- order child-parent edges with crossing edges last
-		Coordinates are (row, column); the origin (0, 0) is at the top left; the
-		root node is on row 0. Coordinates do not consider the size of a node
-		(which depends on font, &c), so the width of a column of the grid
-		should be automatically determined by the element with the greatest
-		width in that column. Alternatively, the integer coordinates could be
-		converted to coordinates in which the distances between adjacent nodes
-		are non-uniform.
-		Produces tuple (nodes, coords, edges) where:
-		- nodes[id] == Tree object for the node with this integer id
-		- coords[id] == (n, m) coordinate where to draw node with id in the grid
-		- edges[id] == parent id of node with this id (ordered dictionary)
-		"""
-		def findcell(rows, children):
-			""" find vacant row, column index
-			iterate over current rows for this level (try lowest first)
-			and look for cell between first and last child of this node,
-			add new row to level if no free row available. """
-			l = [a for a in children[m]]
-			center = min(l) + (max(l) - min(l)) // 2
-			i = min(center + 1, max(l))
-			j = center
-			initi, initj = i, j
-
-			for idx, row in enumerate(rows):
-				i, j = initi, initj
-				if all(a is None for a in
-						row[min(children[m]):max(children[m])+1]):
-					# find free column
-					while zeroindex < j or i < scale * len(sent):
-						if scale * len(sent) > i and rows[idx][i] is None:
-							return idx, i
-						elif zeroindex < j and rows[idx][j] is None:
-							return idx, j
-						i += 1
-						j -= 1
-			# end of for loop without finding candidate
-			rows.append([None] * (len(sent) * scale))
-			rowindex = len(rows) - 1
-			return rowindex, initi
-
-		assert all(isinstance(n, int) and 0 <= n < len(sent)
-				for n in tree.leaves()), (tree.leaves(), sent)
-		blocked = 1 # constant
-		tree = tree.copy(True)
-		for a in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
-			a.sort(key=lambda n: min(n.leaves()))
-		scale = 10
-		crossed = set()
-		zeroindex = min(tree.leaves())
-		# internal nodes and lexical nodes (no frontiers)
-		positions = tree.treepositions()
-		#positions = [a for a in tree.treepositions()
-		#		if (not isinstance(tree[a], int))] # or sent[tree[a]] != None]
-		depth = max(map(len, positions)) + 1
-		childcols = defaultdict(list)
-		matrix = [[None] * (len(sent) * scale) for _ in range(2)]
-		nodes = {}
-		ids = {a: n for n, a in enumerate(positions)}
-		levels = {n: [] for n in range(depth)}
-		preterminals = []
-		terminals = []
-		for a in positions:
-			node = tree[a]
-			if isinstance(node, Tree):
-				if node and not isinstance(node[0], Tree):
-					preterminals.append(a)
-				else:
-					levels[len(a)].append(a)
-			else:
-				terminals.append(a)
-
-		for n in levels:
-			levels[n].sort(key=lambda n: (max(tree[n].leaves())
-					- min(tree[n].leaves()), len(n)), reverse=True)
-		preterminals.sort()
-		terminals.sort()
-		positions = set(positions)
-
-		for m in terminals:
-			i = int(tree[m]) * scale
-			assert matrix[1][i] == None, (
-					matrix[1][i], m, i)
-			matrix[1][i] = ids[m]
-			nodes[ids[m]] = sent[tree[m]]
-			if nodes[ids[m]] is None:
-				nodes[ids[m]] = "..."
-				#matrix[0][i] = True
-			positions.remove(m)
-			childcols[m[:-1]].append(i)
-		# preterminals directly above (if any)
-		for m in preterminals:
-			candidates = [a * scale for a in tree[m].leaves()]
-			i = min(candidates) + (max(candidates) - min(candidates)) // 2
-			assert matrix[0][i] in (None, True), (matrix[0][i], m, i)
-			matrix[0][i] = ids[m]
-			nodes[ids[m]] = tree[m]
-			positions.remove(m)
-			childcols[m[:-1]].append(i)
-
-		# add other nodes centered on their children,
-		# if the center is already taken, back off
-		# to the left and right alternately, until an empty cell is found.
-		for n in sorted(levels, reverse=True):
-			nodesatdepth = levels[n]
-			rows = [[None] * (len(sent) * scale)]
-			for m in nodesatdepth: #[::-1]:
-				if n < depth - 1 and childcols[m]:
-					pivot = min(childcols[m])
-					if (set(a[:-1] for row in rows[1:] for a in row[:pivot]
-							if isinstance(a, tuple)) &
-						(set(a[:-1] for row in rows[1:] for a in row[pivot:]
-							if isinstance(a, tuple)))):
-						crossed.add(m)
-
-				rowindex, i = findcell(rows, childcols)
-				positions.remove(m)
-
-				# block positions where children of this node branch out
-				for x in childcols[m]:
-					assert rows[rowindex][x] is None, (rows[rowindex][x], m)
-					rows[rowindex][x] = blocked
-				# node itself
-				assert rows[rowindex][i] in (None, blocked), (
-						rows[rowindex][i], m)
-				rows[rowindex][i] = ids[m]
-				nodes[ids[m]] = tree[m]
-				ids[m] = ids[m]
-				# add column to the set of children for its parent
-				if m != ():
-					childcols[m[:-1]].append(i)
-			matrix[:0] = rows
-
-		assert len(positions) == 0
-
-		# remove unused columns, right to left
-		for m in range(scale * len(sent) - 1, -1, -1):
-			if not any(isinstance(row[m], (Tree, int))
-					for row in matrix):
-				for row in matrix:
-					del row[m]
-
-		# remove unused rows
-		matrix = [row for row in matrix if not all(a is None for a in row)]
-
-		# collect coordinates of nodes
-		coords = {}
-		for n, _ in enumerate(matrix):
-			for m, i in enumerate(matrix[n]):
-				if isinstance(i, (Tree, int)):
-					coords[i] = n, m
-
-		#move crossed edges last
-		positions = sorted([a for level in levels.values()
-				for a in level] + preterminals,
-				key=lambda a: a[:-1] in crossed)
-
-		# collect edges from node to node
-		edges = OrderedDict()
-		for i in reversed(positions):
-			for j, _ in enumerate(tree[i]):
-				edges[ids[i + (j, )]] = ids[i]
-		return nodes, coords, edges
-
-	def svg(self, nodecolor='blue', leafcolor='red'):
-		""" Return SVG representation of a discontinuous tree. """
-		fontsize = 12
-		hscale = 40
-		vscale = 25
-		hstart = vstart = 20
-		width = max(col for _, col in self.coords.values())
-		height = max(row for row, _ in self.coords.values())
-		result = ['<svg version="1.1" xmlns="http://www.w3.org/2000/svg" '
-				'width="%dem" height="%dem" viewBox="%d %d %d %d">' % (
-						width * 3,
-						height * 2.5,
-						-hstart, -vstart,
-						width * hscale + 3 * hstart,
-						height * vscale + 3 * vstart)]
-
-		children = defaultdict(set)
-		for n in self.nodes:
-			if n:
-				children[self.edges[n]].add(n)
-
-		# horizontal branches from nodes to children
-		for node in self.nodes:
-			if not children[node]:
-				continue
-			py, px = self.coords[node]
-			px *= hscale
-			py *= vscale
-			px += hstart
-			py += vstart + fontsize // 2
-			childx = [self.coords[c][1] for c in children[node]]
-			xmin = hstart + hscale * min(childx)
-			xmax = hstart + hscale * max(childx)
-			result.append(
-				'\t<polyline style="stroke:black; stroke-width:1; fill:none;" '
-					'points="%g,%g %g,%g" />' % (
-					xmin, py, xmax, py))
-			result.append(
-				'\t<polyline style="stroke:black; stroke-width:1; fill:none;" '
-					'points="%g,%g %g,%g" />' % (
-					px, py, px, py - fontsize // 3))
-
-		# vertical branches from children to parents
-		for child, parent in self.edges.items():
-			py, _ = self.coords[parent]
-			py *= vscale
-			py += vstart + fontsize // 2
-			y, x = self.coords[child]
-			x *= hscale
-			y *= vscale
-			x += hstart
-			y += vstart - fontsize
-			result.append(
-				'\t<polyline style="stroke:white; stroke-width:10; fill:none;" '
-				'points="%g,%g %g,%g" />' % (x, y, x, py + 5))
-			result.append(
-				'\t<polyline style="stroke:black; stroke-width:1; fill:none;" '
-				'points="%g,%g %g,%g" />' % (x, y, x, py))
-
-		# write nodes with coordinates
-		for n, (row, column) in self.coords.items():
-			node = self.nodes[n]
-			x = column * hscale + hstart
-			y = row * vscale + vstart
-			result.append('\t<text style="text-anchor: middle; fill: %s; '
-					'font-size: %dpx;" x="%g" y="%g">%s</text>' % (
-					nodecolor if isinstance(node, Tree) else leafcolor,
-					fontsize, x, y, node.label
-					if isinstance(node, Tree) else node))
-
-		result += ['</svg>']
-		return "\n".join(result)
-
-	def text(self, nodedist=1, unicodelines=False, html=False,
-				nodecolor="blue", leafcolor="red"):
-		""" Return ASCII art for a discontinuous tree.
-		unicodelines: whether to use Unicode line drawing characters
-			instead of plain (7-bit) ASCII.
-		html: whether to wrap output in html code (default plain text).
-		leafcolor, nodecolor: specify colors of leaves and phrasal nodes.
-			Only applicable when html is True (use ANSI codes?). """
-
-		if unicodelines:
-			horzline = '\u2500'
-			leftcorner = '\u250c'
-			rightcorner = '\u2510'
-			vertline = ' \u2502 '
-			tee = horzline + '\u252C' + horzline
-			bottom = horzline + '\u2534' + horzline
-			cross = horzline + '\u253c' + horzline
-		else:
-			horzline = "_"
-			leftcorner = rightcorner = " "
-			vertline = " | "
-			tee = 3 * horzline
-			cross = bottom = "_|_"
-		def crosscell(cur, x=vertline):
-			""" Overwrite center of this cell with a vertical branch. """
-			splitl = len(cur) - len(cur) // 2 - len(x) // 2 - 1
-			lst = list(cur)
-			lst[splitl:splitl+len(x)] = list(x)
-			return ''.join(lst)
-
-		result = []
-		matrix = defaultdict(dict)
-		maxnode = defaultdict(lambda: 3)
-		maxcol = 0
-		minchildcol = {}
-		maxchildcol = {}
-		childcols = defaultdict(set)
-		for a in self.nodes:
-			row, column = self.coords[a]
-			matrix[row][column] = a
-			maxcol = max(maxcol, column)
-			maxnode[column] = max(maxnode[column], len(self.nodes[a].label
-					if isinstance(self.nodes[a], Tree) else self.nodes[a]))
-			if a not in self.edges:
-				continue # e.g. root
-			parent = self.edges[a]
-			childcols[parent].add(column)
-			minchildcol[parent] = min(minchildcol.get(parent, column), column)
-			maxchildcol[parent] = max(maxchildcol.get(parent, column), column)
-		for col in range(maxcol + 1):
-			maxnode[col] += nodedist
-		# bottom up level order traversal
-		for row in sorted(matrix, reverse=True):
-			noderow = ["".center(maxnode[col]) for col in range(maxcol + 1)]
-			branchrow = ["".center(maxnode[col]) for col in range(maxcol + 1)]
-			for col in matrix[row]:
-				n = matrix[row][col]
-				node = self.nodes[n]
-				if isinstance(node, Tree):
-					text = node.label
-					n = matrix[row][col]
-					#horizontal branch towards children for this node
-					if n in minchildcol and minchildcol[n] < maxchildcol[n]:
-						i, j = minchildcol[n], maxchildcol[n]
-						l, m = (maxnode[i] + 1) // 2 - 1, maxnode[j] // 2
-						branchrow[i] = ((' ' * l) + leftcorner).ljust(
-								maxnode[i], horzline)
-						branchrow[j] = (rightcorner + (' ' * m)).rjust(
-								maxnode[j], horzline)
-						for i in range(minchildcol[n] + 1, maxchildcol[n]):
-							if i == col and i in childcols[n]:
-								line = cross
-							elif i == col:
-								line = bottom
-							elif i in childcols[n]:
-								line = tee
-							else:
-								line = horzline
-							branchrow[i] = line.center(maxnode[i], horzline)
-					else: #if n and n in minchildcol:
-						branchrow[col] = crosscell(branchrow[col])
-				else:
-					text = node
-				text = text.center(maxnode[col])
-				if html:
-					if isinstance(node, Tree):
-						text = "<font color=%s>%s</font>" % (nodecolor, text)
-					else:
-						text = "<font color=%s>%s</font>" % (leafcolor, text)
-				noderow[col] = text
-			#for each column, if there is a node below us which has a parent
-			#above us, draw a vertical branch in that column.
-			if row != max(matrix):
-				for n, (childrow, col) in self.coords.items():
-					if n and self.coords[self.edges[n]][0] < row < childrow:
-						branchrow[col] = crosscell(branchrow[col])
-						if col not in matrix[row]:
-							noderow[col] = crosscell(noderow[col])
-				noderow.append("\n")
-				result.append("".join(noderow + branchrow))
-			else:
-				result.append("".join(noderow))
-		return "\n".join(reversed(result)) + "\n"
-
-	def tikzmatrix(self, nodecolor="blue", leafcolor="red"):
-		""" Produce TiKZ code for use with LaTeX. PDF can be produced with
-		pdflatex. Uses TiKZ matrices meaning that nodes are put into a fixed
-		grid. Where the cells of each column all have the same width."""
-		result = [r"""\begin{tikzpicture}[scale=1, minimum height=1.25em,
-			text height=1.25ex, text depth=.25ex,
-			inner sep=0mm, node distance=1mm]""",
-		r"\footnotesize\sffamily",
-		r"\matrix[row sep=0.5cm,column sep=0.1cm] {"]
-
-		# write matrix with nodes
-		matrix = defaultdict(dict)
-		maxcol = 0
-		for a in self.nodes:
-			row, column = self.coords[a]
-			matrix[row][column] = a
-			maxcol = max(maxcol, column)
-
-		for row in sorted(matrix):
-			line = []
-			for col in range(maxcol + 1):
-				if col in matrix[row]:
-					i = matrix[row][col]
-					node = self.nodes[i]
-					if isinstance(node, Tree):
-						color = nodecolor
-						label = latexlabel(node.label)
-					else:
-						color = leafcolor
-						label = node
-					line.append(r"\node [%s] (n%d) { %s };" % (
-							color, i, label))
-				line.append("&")
-			# new row: skip last column char "&", add newline
-			result.append(" ".join(line[:-1]) + r" \\")
-		result += ["};"]
-
-		shift = -0.5
-		# write branches from node to node
-		for child, parent in self.edges.items():
-			result.append(
-				"\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
-				"	\draw (n%d) -- +(0, %g) -| (n%d);" % (
-				parent, shift, child, parent, shift, child))
-
-		result += [r"\end{tikzpicture}"]
-		return "\n".join(result)
-
-	def tikznode(self, nodecolor="blue", leafcolor="red"):
-		""" Produce TiKZ code to draw a tree. Nodes are drawn with the
-		\\node command so they can have arbitrary coordinates. """
-		result = [r"""\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
-			text height=1.25ex, text depth=.25ex,
-			inner sep=0mm, node distance=1mm]""",
-		r"\footnotesize\sffamily",
-		r"\path"]
-
-		bottom = max(row for row, _ in self.coords.values())
-		# write nodes with coordinates
-		for n, (row, column) in self.coords.items():
-			node = self.nodes[n]
-			result.append("\t(%d, %d) node [%s] (n%d) {%s}"
-					% (column, bottom - row,
-					nodecolor if isinstance(node, Tree) else leafcolor,
-					n, latexlabel(node.label)
-					if isinstance(node, Tree) else node))
-		result += [";"]
-
-		shift = -0.5
-		# write branches from node to node
-		for child, parent in self.edges.items():
-			result.append(
-				"\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
-				"	\draw (n%d) -- +(0, %g) -| (n%d);" % (
-				parent, shift, child, parent, shift, child))
-
-		result += [r"\end{tikzpicture}"]
-		return "\n".join(result)
-
-def latexlabel(label):
-	""" quote/format label for latex """
-	l = label.replace("$", r"\$").replace("[", "(").replace("_", "\_")
-	# underscore => math mode
-	if "|" in l:
-		x, y = l.split("|", 1)
-		y = y.replace("<", "").replace(">", "")
-		if "^" in y:
-			y, z = y.split("^")
-			y = y[1:-1].replace("-", ",")
-			l = "$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $" % (x, y, z)
-		else:
-			l = "$ \\textsf{%s}_\\textsf{%s} $" % (x, y.replace("-",","))
-	return l
 
 ######################################################################
 ## Utilitiy functions
@@ -1861,140 +1405,6 @@ def main():
 	# Demonstrate tree nodes containing objects other than strings
 	t.label = ('test', 3)
 	print(t)
-
-	trees = """(ROOT (S (ADV 0) (VVFIN 1) (NP (PDAT 2) (NN 3)) (PTKNEG 4) \
-				(PP (APPRART 5) (NN 6) (NP (ART 7) (ADJA 8) (NN 9)))) ($. 10))
-			(S (NP (NN 1) (EX 3)) (VP (VB 0) (JJ 2)))
-			(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
-			(top (du (comp 0) (smain (noun 1) (verb 2) (inf (verb 8) (inf \
-				(adj 3) (pp (prep 4) (np (det 5) (noun 6))) (part 7) (verb 9) \
-				(pp (prep 10) (np (det 11) (noun 12) (pp (prep 13) (mwu \
-				(noun 14) (noun 15))))))))) (punct 16))
-			(top (smain (noun 0) (verb 1) (inf (verb 5) (inf (np (det 2) \
-				(adj 3) (noun 4)) (verb 6) (pp (prep 7) (noun 8))))) (punct 9))
-			(top (smain (noun 0) (verb 1) (noun 2) (inf (adv 3) (verb 4))) \
-				(punct 5))
-			(top (punct 5) (du (smain (noun 0) (verb 1) (ppart (np (det 2) \
-				(noun 3)) (verb 4))) (conj (sv1 (conj (noun 6) (vg 7) (np \
-				(det 8) (noun 9))) (verb 10) (noun 11) (part 12)) (vg 13) \
-				(sv1 (verb 14) (ti (comp 19) (inf (np (conj (det 15) (vg 16) \
-				(det 17)) (noun 18)) (verb 20)))))) (punct 21))
-			(top (punct 10) (punct 16) (punct 18) (smain (np (det 0) (noun 1) \
-				(pp (prep 2) (np (det 3) (noun 4)))) (verb 5) (adv 6) (np \
-				(noun 7) (noun 8)) (part 9) (np (det 11) (noun 12) (pp \
-				(prep 13) (np (det 14) (noun 15)))) (conj (vg 20) (ppres \
-				(adj 17) (pp (prep 22) (np (det 23) (adj 24) (noun 25)))) \
-				(ppres (adj 19)) (ppres (adj 21)))) (punct 26))
-			(top (punct 10) (punct 11) (punct 16) (smain (np (det 0) (noun 1)) \
-				(verb 2) (np (det 3) (noun 4)) (adv 5) (du (cp (comp 6) (ssub \
-				(noun 7) (verb 8) (inf (verb 9)))) (du (smain (noun 12) \
-				(verb 13) (adv 14) (part 15)) (noun 17)))) \
-				(punct 18) (punct 19))
-			(top (smain (noun 0) (verb 1) (inf (verb 8) (inf (verb 9) (inf \
-				(adv 2) (pp (prep 3) (noun 4)) (pp (prep 5) (np (det 6) \
-				(noun 7))) (verb 10))))) (punct 11))
-			(top (smain (noun 0) (verb 1) (pp (prep 2) (np (det 3) (adj 4) \
-				(noun 5) (rel (noun 6) (ssub (noun 7) (verb 10) (ppart (adj 8) \
-				(part 9) (verb 11))))))) (punct 12))
-			(top (smain (np (det 0) (noun 1)) (verb 2) (ap (adv 3) (num 4) \
-				(cp (comp 5) (np (det 6) (adj 7) (noun 8) (rel (noun 9) (ssub \
-				(noun 10) (verb 11) (pp (prep 12) (np (det 13) (adj 14) \
-				(adj 15) (noun 16))))))))) (punct 17))
-			(top (smain (np (det 0) (noun 1)) (verb 2) (adv 3) (pp (prep 4) \
-				(np (det 5) (noun 6)) (part 7))) (punct 8))
-			(top (punct 7) (conj (smain (noun 0) (verb 1) (np (det 2) \
-				(noun 3)) (pp (prep 4) (np (det 5) (noun 6)))) (smain (verb 8) \
-				(np (det 9) (num 10) (noun 11)) (part 12)) (vg 13) (smain \
-				(verb 14) (noun 15) (pp (prep 16) (np (det 17) (noun 18) \
-				(pp (prep 19) (np (det 20) (noun 21))))))) (punct 22))
-			(top (smain (np (det 0) (noun 1) (rel (noun 2) (ssub (np (num 3) \
-				(noun 4)) (adj 5) (verb 6)))) (verb 7) (ppart (verb 8) (pp \
-				(prep 9) (noun 10)))) (punct 11))
-			(top (conj (sv1 (np (det 0) (noun 1)) (verb 2) (ppart (verb 3))) \
-				(vg 4) (sv1 (verb 5) (pp (prep 6) (np (det 7) (adj 8) \
-				(noun 9))))) (punct 10))
-			(top (smain (noun 0) (verb 1) (np (det 2) (noun 3)) (inf (adj 4) \
-				(verb 5) (cp (comp 6) (ssub (noun 7) (adv 8) (verb 10) (ap \
-				(num 9) (cp (comp 11) (np (det 12) (adj 13) (noun 14) (pp \
-				(prep 15) (conj (np (det 16) (noun 17)) (vg 18) (np \
-				(noun 19))))))))))) (punct 20))
-			(top (punct 8) (smain (noun 0) (verb 1) (inf (verb 5) \
-				(inf (verb 6) (conj (inf (pp (prep 2) (np (det 3) (noun 4))) \
-				(verb 7)) (inf (verb 9)) (vg 10) (inf (verb 11)))))) \
-				(punct 12))
-			(top (smain (verb 2) (noun 3) (adv 4) (ppart (np (det 0) (noun 1)) \
-				(verb 5))) (punct 6))
-			(top (conj (smain (np (det 0) (noun 1)) (verb 2) (adj 3) (pp \
-				(prep 4) (np (det 5) (noun 6)))) (vg 7) (smain (np (det 8) \
-				(noun 9) (pp (prep 10) (np (det 11) (noun 12)))) (verb 13) \
-				(pp (prep 14) (np (det 15) (noun 16))))) (punct 17))
-			(top (conj (smain (noun 0) (verb 1) (inf (ppart (np (noun 2) \
-				(noun 3)) (verb 4)) (verb 5))) (vg 6) (smain (noun 7) \
-				(inf (ppart (np (det 8) (noun 9)))))) (punct 10))
-			(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) \
-                    (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))
-			(A (B1 6 13) (B2 3 7 10)  (B3 1 \
-                    9 11 14 16) (B4 0 5 8))
-			(VP (VB 0) (PRT 2))
-			(VP (VP 0 3) (NP (PRP 1) (NN 2)))"""
-	sents = """Leider stehen diese Fragen nicht im Vordergrund der \
-				augenblicklichen Diskussion .
-			is Mary happy there
-			das muss man jetzt machen
-			Of ze had gewoon met haar vriendinnen rond kunnen slenteren in de \
-				buurt van Trafalgar Square .
-			Het had een prachtige dag kunnen zijn in Londen .
-			Cathy zag hen wild zwaaien .
-			Het was een spel geworden , zij en haar vriendinnen kozen iemand \
-				uit en probeerden zijn of haar nationaliteit te raden .
-			Elk jaar in het hoogseizoen trokken daar massa's toeristen voorbij \
-				, hun fototoestel in de aanslag , pratend , gillend en lachend \
-				in de vreemdste talen .
-			Haar vader stak zijn duim omhoog alsof hij wilde zeggen : " het \
-				komt wel goed , joch " .
-			Ze hadden languit naast elkaar op de strandstoelen kunnen gaan \
-				liggen .
-			Het hoorde bij de warme zomerdag die ze ginds achter had gelaten .
-			De oprijlaan was niet meer dan een hobbelige zandstrook die zich \
-				voortslingerde tussen de hoge grijze boomstammen .
-			Haar moeder kleefde bijna tegen het autoraampje aan .
-			Ze veegde de tranen uit haar ooghoeken , tilde haar twee koffers \
-				op en begaf zich in de richting van het landhuis .
-			Het meisje dat vijf keer juist raadde werd getrakteerd op ijs .
-			Haar neus werd platgedrukt en leek op een jonge champignon .
-			Cathy zag de BMW langzaam verdwijnen tot hij niet meer was dan \
-				een zilveren schijnsel tussen de bomen en struiken .
-			Ze had met haar moeder kunnen gaan winkelen , zwemmen of terrassen .
-			Dat werkwoord had ze zelf uitgevonden .
-			De middagzon hing klein tussen de takken en de schaduwen van de \
-				wolken drentelden over het gras .
-			Zij zou mams rug ingewreven hebben en mam de hare .
-			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
-			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"""
-	trees = [Tree.parse(a, parse_leaf=int) for a in trees.splitlines()]
-	sents = [a.split() for a in sents.splitlines()]
-	sents.extend([['Wake', None, 'up'],
-		[None, 'your', 'friend', None]])
-	#for tree, sent in zip(trees, sents):
-	#	nodes, coords, edges = nodecoords(tree, sent)
-	#	print("tikz node:\n", tikznode(nodes, coords, edges))
-	#	print("tikz matrix:\n", tikzmatrix(nodes, coords, edges))
-	#req = open("/tmp/t.html", "w")
-	#req.write("""<!doctype html><html><body>""")
-	for n, (tree, sent) in enumerate(zip(trees, sents)):
-		dt = DrawTree(tree, sent)
-		#req.write("<div>%s</div>\n\n" % dt.svg().encode('utf-8'))
-		#open("/tmp/t%d.svg" % n, "w").writelines(dt.svg())
-		print("\ntree, sent", tree,
-				" ".join("..." if a is None else a for a in sent),
-				#repr(dt),
-				sep='\n')
-		try:
-			print(dt.text(unicodelines=True, html=False), sep='\n')
-		except (UnicodeDecodeError, UnicodeEncodeError):
-			print(dt.text(unicodelines=False, html=False), sep='\n')
-	#req.write("</body></html>")
-	#req.close()
 
 if __name__ == '__main__':
 	main()

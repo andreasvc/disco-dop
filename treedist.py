@@ -121,43 +121,46 @@ def strdist(a, b):
 	""" Default categorical distance function. """
 	return 0 if a == b else 1
 
-def treedist(A, B, debug=False):
+def treedist(tree1, tree2, debug=False):
 	""" Zhang-Shasha tree edit distance. """
-	A = AnnotatedTree(prepare(A))
-	B = AnnotatedTree(prepare(B))
-	Al = A.leftmostdescendents
-	Bl = B.leftmostdescendents
-	An = A.nodes
-	Bn = B.nodes
+	tree1 = AnnotatedTree(prepare(tree1))
+	tree2 = AnnotatedTree(prepare(tree2))
+	tree1lmd = tree1.leftmostdescendents
+	tree2lmd = tree2.leftmostdescendents
+	tree1nodes = tree1.nodes
+	tree2nodes = tree2.nodes
 	import numpy
-	treedists = numpy.zeros((len(A.nodes), len(B.nodes)), int)
-	for i in A.keyroots:
-		for j in B.keyroots:
-			m = i - Al[i] + 2
-			n = j - Bl[j] + 2
-			fd = numpy.zeros((m, n), int)
-			ioff = Al[i] - 1
-			joff = Bl[j] - 1
+	treedists = numpy.zeros((len(tree1.nodes), len(tree2.nodes)), int)
+	for i in tree1.keyroots:
+		for j in tree2.keyroots:
+			m = i - tree1lmd[i] + 2
+			n = j - tree2lmd[j] + 2
+			table = numpy.zeros((m, n), int)
+			ioff = tree1lmd[i] - 1
+			joff = tree2lmd[j] - 1
 
 			for x in range(1, m): # δ(l(i1)..i, θ) = δ(l(1i)..1-1, θ) + γ(v → λ)
-				fd[x, 0] = fd[x-1, 0] + 1
+				table[x, 0] = table[x - 1, 0] + 1
 			for y in range(1, n): # δ(θ, l(j1)..j) = δ(θ, l(j1)..j-1) + γ(λ → w)
-				fd[0, y] = fd[0, y-1] + 1
+				table[0, y] = table[0, y - 1] + 1
 
 			for x in range(1, m):
 				for y in range(1, n):
 					# only need to check if x is an ancestor of i
 					# and y is an ancestor of j
-					if Al[i] == Al[x+ioff] and Bl[j] == Bl[y+joff]:
+					if (tree1lmd[i] == tree1lmd[x+ioff]
+							and tree2lmd[j] == tree2lmd[y+joff]):
 						#                 +-
 						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
 						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
 						#                 | δ(l(i1)..i-1, l(j1)..j-1) + γ(v → w)
 						#                 +-
-						labeldist = strdist(An[x+ioff].label, Bn[y+joff].label)
-						fd[x, y] = min(fd[x-1, y] + 1, fd[x, y-1] + 1,
-							fd[x-1, y-1] + labeldist)
-						treedists[x+ioff, y+joff] = fd[x, y]
+						labeldist = strdist(tree1nodes[x + ioff].label,
+								tree2nodes[y+joff].label)
+						table[x, y] = min(table[x - 1, y] + 1,
+								table[x, y - 1] + 1,
+								table[x - 1, y - 1] + labeldist)
+						treedists[x + ioff, y + joff] = table[x, y]
 					else:
 						#                 +-
 						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
@@ -165,37 +168,38 @@ def treedist(A, B, debug=False):
 						#                 | δ(l(i1)..l(i)-1, l(j1)..l(j)-1)
 						#                 |                   + treedist(i1,j1)
 						#                 +-
-						p = Al[x+ioff]-1-ioff
-						q = Bl[y+joff]-1-joff
-						fd[x, y] = min(fd[x-1, y] + 1, fd[x, y-1] + 1,
-							fd[p, q] + treedists[x+ioff, y+joff])
+						a = tree1lmd[x + ioff] - 1 - ioff
+						b = tree2lmd[y + joff] - 1 - joff
+						table[x, y] = min(table[x - 1, y] + 1,
+								table[x, y - 1] + 1,
+								table[a, b] + treedists[x + ioff, y + joff])
 		if debug:
-			if isinstance(An[i], Tree):
-				astr = An[i].label #pprint()
+			if isinstance(tree1nodes[i], Tree):
+				astr = tree1nodes[i].label #pprint()
 			else:
-				astr = str(An[i])
+				astr = str(tree1nodes[i])
 			j = treedists[i].argmin()
-			if isinstance(Bn[j], Tree):
-				bstr = Bn[j].label #pprint()
+			if isinstance(tree2nodes[j], Tree):
+				bstr = tree2nodes[j].label #pprint()
 			else:
-				bstr = str(Bn[j])
+				bstr = str(tree2nodes[j])
 			if treedists[i, j]:
 				print("%s[%d] %s[%d] %d" % (astr, i, bstr, j, treedists[i, j]))
-	return treedists[len(A.nodes)-1, len(B.nodes)-1]
+	return treedists[len(tree1.nodes) - 1, len(tree2.nodes) - 1]
 # end Zhang-Shasha Tree Edit Distance Implementation.
 
 
-def newtreedist(A, B, debug=False):
+def newtreedist(tree1, tree2, debug=False):
 	""" implementation as in Billie (2005), based on rparse code.
 	slower but records edit script. should be converted to use a set of
 	matrices as dynamic programming tables. """
-	A = prepare(A).freeze()
-	B = prepare(B).freeze()
-	for n, a in enumerate(A.subtrees()):
+	tree1 = prepare(tree1).freeze()
+	tree2 = prepare(tree2).freeze()
+	for n, a in enumerate(tree1.subtrees()):
 		a.idx = n
-	for n, a in enumerate(B.subtrees()):
+	for n, a in enumerate(tree2.subtrees()):
 		a.idx = n
-	result = geteditstats((A,), (B,))
+	result = geteditstats((tree1,), (tree2,))
 	geteditstats.mem.clear()
 	if debug:
 		print(result)
@@ -248,23 +252,23 @@ def geteditstats(forest1, forest2):
 		result = EditStats(tmp.distance + 1, tmp.matched,
 			(('I', None, forest2[-1]), ) + tmp.editscript)
 	else:
-		v = forest1[-1]
-		w = forest2[-1]
+		node1 = forest1[-1]
+		node2 = forest2[-1]
 		tmp = geteditstats(flatforest1, forest2)
 		deletestats = EditStats(tmp.distance + 1, tmp.matched,
-				(('D', v, None),) + tmp.editscript)
+				(('D', node1, None),) + tmp.editscript)
 		tmp = geteditstats(forest1, flatforest2)
 		insertstats = EditStats(tmp.distance + 1, tmp.matched,
-				(('I', None, w), ) + tmp.editscript)
-		matchorswapstats = (geteditstats(tuple(v[:]), tuple(w[:]))
+				(('I', None, node2), ) + tmp.editscript)
+		matchorswapstats = (geteditstats(tuple(node1[:]), tuple(node2[:]))
 				+ geteditstats(forest1[:-1], forest2[:-1]))
-		if v.label == w.label:
+		if node1.label == node2.label:
 			matchorswapstats = EditStats(matchorswapstats.distance,
 				matchorswapstats.matched + 1, matchorswapstats.editscript)
 		else:
 			matchorswapstats = EditStats(matchorswapstats.distance + 1,
 				matchorswapstats.matched,
-				(('S', v, w), ) + matchorswapstats.editscript)
+				(('S', node1, node2), ) + matchorswapstats.editscript)
 		result = min(deletestats, insertstats, matchorswapstats)
 	geteditstats.mem[forest1, forest2] = result
 	return result

@@ -25,8 +25,6 @@ cpdef bint bitminmax(ULLong a, ULLong b)
 cpdef bint testbitc(UChar arg, UInt pos)
 cpdef bint testbitshort(unsigned short arg, UInt pos)
 
-cdef binrepr(ULong *vec, int slots)
-
 # cdef inline functions defined here:
 #on ULLongs
 #cdef inline int nextset(ULLong vec, UInt pos)
@@ -152,6 +150,13 @@ cdef inline void ulongcpy(ULong *dest, ULong *src, UInt slots):
 	cdef int a
 	for a in range(slots):
 		dest[a] = src[a]
+
+cdef inline void setintersectinplace(ULong *dest, ULong *src, UInt slots):
+	""" dest gets the intersection of dest and src;
+	both operands must have at least `slots' slots. """
+	cdef int a
+	for a in range(slots):
+		dest[a] &= src[a]
 
 cdef inline void setunioninplace(ULong *dest, ULong *src, UInt slots):
 	""" dest gets the union of dest and src; both operands must have at least

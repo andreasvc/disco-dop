@@ -5,10 +5,13 @@ from collections import defaultdict
 from tree import Tree
 from treetransforms import mergediscnodes, unbinarize, slowfanout
 from containers cimport ChartItem, Edge, RankedEdge, RankedCFGEdge, Grammar, \
-		CFGChartItem, CFGEdge, LCFRSEdge, new_CFGChartItem, ULLong, \
+		CFGChartItem, CFGEdge, LCFRSEdge, new_CFGChartItem, ULLong, UInt, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
 from kbest import lazykbest
 from agenda cimport Entry
+import numpy as np
+cimport numpy as np
+np.import_array()
 
 infinity = float('infinity')
 
@@ -50,7 +53,7 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 							or span in kbest[fine.mapping[label]]):
 						cell[label] = None
 	else:
-		whitelist = [None] * len(fine.toid)
+		whitelist = [None] * fine.nonterminals
 		kbestspans = [{} for a in coarse.toid]
 		kbestspans[0] = None
 		# uses ids of labels in coarse chart
@@ -233,6 +236,74 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 		if edge.rule.rhs2 and edge.rule.rhs2 in chart[edge.mid][end]:
 			filter_subtreecfg(edge.rule.rhs2, edge.mid, end, chart, chart2, fat)
 
+def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
+	np.ndarray[np.double_t, ndim=3] outside, ChartItem start,
+	Grammar coarse, Grammar fine, double threshold,
+	bint splitprune, bint markorigin):
+	""" compute posterior probabilities and prune away cells below some
+	threshold. this version is for use with parse_sparse(). """
+	cdef UInt label
+	cdef short lensent = (<CFGChartItem>start).end
+	assert 0 < threshold < 1, (
+			"threshold should be a cutoff for probabilities between 0 and 1.")
+	sentprob = inside[0, lensent, start.label]
+	posterior = (inside[:lensent, :lensent + 1]
+		* outside[:lensent, :lensent+1]) / sentprob
+
+	finechart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
+	leftidx, rightidx, labels = (posterior[:lensent, :lensent + 1]
+		> threshold).nonzero()
+
+	kbestspans = [{} for _ in coarse.toid]
+	fatitems = lensent >= (sizeof(ULLong) * 8)
+	for label, left, right in zip(labels, leftidx, rightidx):
+		if fatitems:
+			ei = CFGtoFatChartItem(0, left, right)
+		else:
+			ei = CFGtoSmallChartItem(0, left, right)
+		kbestspans[label][ei] = 0.0
+
+	whitelist = [None] * fine.nonterminals
+	for label in range(fine.nonterminals):
+		if splitprune and markorigin and fine.fanout[label] != 1:
+			if fine.splitmapping[label] is not NULL:
+				whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
+					for n in range(fine.fanout[label])]
+		else:
+			if fine.mapping[label] != 0:
+				whitelist[label] = kbestspans[fine.mapping[label]]
+	unfiltered = (outside != 0.0).sum()
+	numitems = (posterior != 0.0).sum()
+	numremain = (posterior > threshold).sum()
+	return whitelist, sentprob, unfiltered, numitems, numremain
+
+def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
+	np.ndarray[np.double_t, ndim=3] outside, ChartItem goal, Grammar coarse,
+	Grammar fine, np.ndarray[np.double_t, ndim=3] finechart, short maxlen,
+	double threshold):
+	""" compute posterior probabilities and prune away cells below some
+	threshold. this version produces a matrix with pruned spans having NaN as
+	value. """
+	cdef long label
+	cdef short lensent = goal.right
+	sentprob = inside[0, lensent, goal.label]
+	#print >>stderr, "sentprob=%g" % sentprob
+	posterior = (inside[:lensent, :lensent+1, :]
+			* outside[:lensent, :lensent+1, :]) / sentprob
+	inside[:lensent, :lensent + 1, :] = np.NAN
+	inside[posterior > threshold] = np.inf
+	#print >>stderr, " ", (posterior > threshold).sum(),
+	#print >>stderr, "of", (posterior != 0.0).sum(),
+	#print >>stderr, "nonzero coarse items left",
+	#labels, leftidx, rightidx = (posterior[:lensent, :lensent+1, :]
+	#	> threshold).nonzero()
+	#for left, right, label in zip(leftidx, rightidx, labels):
+	#	for x in mapping[label]:
+	#		finechart[left, right, x] = inside[left, right, label]
+	for label in range(len(fine.toid)):
+		finechart[:lensent, :lensent+1, label] = inside[:lensent,:lensent+1,
+			fine.mapping[label]]
+
 cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	""" Like kbest_items, but apply the reverse of the Boyd (2007)
 	transformation to the k-best derivations."""
@@ -253,13 +324,13 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	return newchart
 
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
-	from _parser import parse #, pprint_chart
+	import plcfrs
 	from disambiguation import marginalize
 	from treetransforms import canonicalize, removefanoutmarkers
 	from math import exp
 	sent, tags = zip(*sent)
 	print(" C O A R S E ", end='')
-	p, start, _ = parse(sent, coarse, start=coarse.toid['ROOT'], tags=tags)
+	p, start, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if start:
 		mpp, _ = marginalize("mpp", p, start, coarse, 10)
 		for t in mpp:
@@ -295,8 +366,8 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 				for m, y in enumerate(x):
 					print(fine.tolabel[n], m, map(bin, y))
 	print(" F I N E ", end='')
-	pp, start, _ = parse(sent, fine, start=fine.toid['ROOT'], tags=tags,
-		whitelist=l, splitprune=split, markorigin=True)
+	pp, start, _ = plcfrs.parse(sent, fine, tags=tags, whitelist=l,
+			splitprune=split, markorigin=True)
 	if start:
 		mpp, _ = marginalize("mpp", pp, start, fine, 10)
 		for t in mpp:
@@ -364,15 +435,15 @@ def main():
 		binarize(t, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(t)
 	normallcfrs = induce_plcfrs(trees, sents)
-	normal = Grammar(normallcfrs)
-	parent = Grammar(induce_plcfrs(parenttrees, sents))
-	splitg = Grammar(induce_plcfrs(cftrees, sents))
+	normal = Grammar(normallcfrs, "ROOT")
+	parent = Grammar(induce_plcfrs(parenttrees, sents), "ROOT")
+	splitg = Grammar(induce_plcfrs(cftrees, sents), "ROOT")
 	for t, s in zip(cftrees, sents):
 		for (r, yf), w in induce_plcfrs([t], [s]):
 			assert len(yf) == 1
 	fine999x = dopreduction(trees, sents)
-	fine999 = Grammar(fine999x)
-	fine1 = Grammar(dopreduction(dtrees, sents))
+	fine999 = Grammar(fine999x, "ROOT")
+	fine1 = Grammar(dopreduction(dtrees, sents), "ROOT")
 	trees = list(corpus.parsed_sents().values())[train:train+test]
 	sents = list(corpus.tagged_sents().values())[train:train+test]
 	if subsetgrammar(normallcfrs, fine999x):

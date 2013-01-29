@@ -83,16 +83,6 @@ cpdef int fanout(arg):
 			prev = arg
 	return result
 
-cdef binrepr(ULong *vec, int slots):
-	cdef int m, n = slots - 1
-	cdef str result
-	while n and vec[n] == 0:
-		n -= 1
-	result = bin(vec[n])
-	for m in range(n - 1, -1, -1):
-		result += bin(vec[m])[2:].zfill(BITSIZE)
-	return result
-
 def main():
 	cdef ULong ulongvec[2]
 	bigpyint = 0b11100110101111001101011111100110101001100110

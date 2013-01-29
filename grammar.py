@@ -8,8 +8,8 @@ from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
 from tree import ImmutableTree, Tree, DiscTree
 if sys.version[0] >= '3':
-	from functools import reduce
-	basestring = (str, bytes)
+	from functools import reduce # pylint: disable=W0622
+	basestring = (str, bytes) # pylint: disable=W0622,C0103
 
 FORMAT = """The LCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are:
@@ -680,6 +680,24 @@ def ranges(s):
 	if rng:
 		yield rng
 
+def defaultparse(wordstags, rightbranching=False):
+	""" a default parse, either right branching NPs, or all words under a single
+	constituent 'NOPARSE'.
+
+	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'), \
+			('here','X')])
+	'(NOPARSE (X like) (X this) (NN example) (X here))'
+	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'), \
+			('here','X')], True)
+	'(NP (X like) (NP (X this) (NP (NN example) (NP (X here)))))' """
+	if rightbranching:
+		if wordstags[1:]:
+			return "(NP (%s %s) %s)" % (wordstags[0][1],
+					wordstags[0][0], defaultparse(wordstags[1:], rightbranching))
+		else:
+			return "(NP (%s %s))" % wordstags[0][::-1]
+	return "(NOPARSE %s)" % " ".join("(%s %s)" % a[::-1] for a in wordstags)
+
 def printrule(r, yf, w):
 	""" Return a string with a representation of a rule. """
 	return "%s %s --> %s\t %r" % (w, r[0], "  ".join(r[1:]), list(yf))
@@ -966,14 +984,14 @@ def grammarinfo(grammar, dump=None):
 	dump: if given a filename, will dump distribution of parsing complexity
 	to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120 times, etc. """
 	from eval import mean
-	lhs = set(rule[0] for (rule, yf), w in grammar)
+	lhs = {rule[0] for (rule, yf), w in grammar}
 	l = len(grammar)
-	result = "labels: %d" % len(set(rule[a] for (rule, yf), w in grammar
-							for a in range(3) if len(rule) > a))
+	result = "labels: %d" % len({rule[a] for (rule, yf), w in grammar
+							for a in range(3) if len(rule) > a})
 	result += " of which preterminals: %d\n" % (
-		len(set(rule[0] for (rule, yf), w in grammar if rule[1] == "Epsilon"))
-		or len(set(rule[a] for (rule, yf), w in grammar
-				for a in range(1,3) if len(rule) > a and rule[a] not in lhs)))
+		len({rule[0] for (rule, yf), w in grammar if rule[1] == "Epsilon"})
+		or len({rule[a] for (rule, yf), w in grammar
+				for a in range(1,3) if len(rule) > a and rule[a] not in lhs}))
 	ll = sum(1 for (rule, yf), w in grammar if rule[1] == "Epsilon")
 	result += "clauses: %d  lexical clauses: %d" % (l, ll)
 	result += " non-lexical clauses: %d\n" % (l - ll)
@@ -1001,26 +1019,11 @@ def grammarinfo(grammar, dump=None):
 		open(dump, "w").writelines("%d\t%d\n" % x for x in pcdist.items())
 	return result
 
-def do(sent, grammar):
-	""" Parse a sentence with a grammar. """
-	from _parser import parse, pprint_chart
-	from disambiguation import marginalize
-	print("sentence", sent)
-	p, start, _ = parse(sent, grammar, start=grammar.toid['S'])
-	if start:
-		mpp, _ = marginalize("mpp", p, start, grammar, 10)
-		for t in mpp:
-			print(exp(mpp[t]), t)
-	else:
-		print("no parse")
-		pprint_chart(p, sent, grammar.tolabel)
-	print()
-
 def test():
 	""" Run some tests. """
 	from treetransforms import unbinarize, removefanoutmarkers
 	from treebank import NegraCorpusReader
-	from _parser import parse, pprint_chart
+	import plcfrs
 	from treetransforms import addfanoutmarkers
 	from disambiguation import recoverfragments
 	from kbest import lazykbest
@@ -1041,11 +1044,11 @@ def test():
 		addfanoutmarkers(a)
 
 	print('plcfrs')
-	lcfrs = Grammar(induce_plcfrs(trees, sents))
+	lcfrs = Grammar(induce_plcfrs(trees, sents), trees[0].label)
 	print(lcfrs)
 
 	print('dop reduction')
-	grammar = Grammar(dopreduction(trees[:2], sents[:2]))
+	grammar = Grammar(dopreduction(trees[:2], sents[:2]), trees[0].label)
 	print(grammar)
 	grammar.testgrammar(logging)
 
@@ -1053,7 +1056,7 @@ def test():
 	debug = '--debug' in sys.argv
 	grammarx, backtransform = doubledop(fragments, debug=debug)
 	print('\ndouble dop grammar')
-	grammar = Grammar(grammarx)
+	grammar = Grammar(grammarx, trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
 		neverblockre=re.compile(r'^#[0-9]+|.+}<'),
 		splitprune=False, markorigin=False)
@@ -1061,9 +1064,7 @@ def test():
 	assert grammar.testgrammar(logging), "DOP1 should sum to 1."
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
 		print("sentence:", " ".join(a.encode('unicode-escape') for a in sent))
-		root = tree.label
-		chart, start, msg = parse(sent, grammar, start=grammar.toid[root],
-			exhaustive=True)
+		chart, start, msg = plcfrs.parse(sent, grammar, exhaustive=True)
 		print('\n', msg, end='')
 		print("\ngold ", tree)
 		print("double dop", end='')
@@ -1090,7 +1091,7 @@ def test():
 					print(' <= %6g %s' % (exp(-p), deriv))
 		else:
 			print("no parse")
-			pprint_chart(chart, sent, grammar.tolabel)
+			plcfrs.pprint_chart(chart, sent, grammar.tolabel)
 		print()
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	Grammar(induce_plcfrs([tree], [list(range(10))]))
@@ -1119,8 +1120,8 @@ def main():
 	freqs = opts.get('--freqs', False)
 
 	# read treebank
-	Reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = Reader(".", treebankfile)
+	reader = getreader(opts.get('--inputfmt', 'export'))
+	corpus = reader(".", treebankfile)
 	trees = list(corpus.parsed_sents().values())
 	sents = list(corpus.sents().values())
 	for a in trees:

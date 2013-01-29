@@ -1,6 +1,6 @@
 from array import array
 from cpython.array cimport array
-from libc.stdlib cimport malloc, realloc, free
+from libc.stdlib cimport malloc, realloc, calloc, free
 from libc.string cimport memcmp, memset
 cimport cython
 
@@ -33,10 +33,13 @@ DEF SLOTS = 2
 @cython.final
 cdef class Grammar:
 	cdef Rule **unary, **lbinary, **rbinary, **bylhs
-	cdef UChar *fanout
+	cdef ULong *chainvec
 	cdef UInt *mapping, **splitmapping
-	cdef size_t nonterminals, numrules, numunary, numbinary
-	cdef public dict lexical, lexicalbylhs, toid, tolabel, rulenos
+	cdef UChar *fanout
+	cdef size_t nonterminals, numrules, numunary, numbinary, maxfanout
+	cdef bint logprob
+	cdef public list tolabel, unaryclosure, unaryclosuretopdown
+	cdef public dict lexical, lexicalbylhs, toid, rulenos
 	cdef frozenset origrules
 	cdef copyrules(Grammar self, Rule **dest, idx, filterlen)
 	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=*,
@@ -116,15 +119,17 @@ cdef class RankedCFGEdge:
 #	""" the chart representation of bitpar. seems to require parsing
 #	in 3 stages: recognizer, enumerate analyses, get probs. """
 #	#keys
-#	cdef list catnum		#lhs
-#	cdef list firstanalysis	#idx to lists below.
+#	cdef UInt *catnum			#lhs
+#	cdef size_t *firstanalysis	#idx to arrays below.
 #	# from firstanalysis[n] to firstanalysis[n+1] or end
 #	#values.
-#	cdef list rulenumber
-#	cdef list firstchild
+#	cdef size_t *firstchild
+#	cdef UInt *ruleno
 #	#positive means index to lists above, negative means terminal index
-#	cdef list child
-
+#	cdef UInt *child
+#
+# no, instead of explicitly recording ruleno & mid, record them as part of
+# indices / hashes
 #cdef struct PackedCFGEdge: # 18 bytes
 #	double inside # float here could help squeeze this in 16 bytes
 #	UInt ruleno
@@ -268,12 +273,10 @@ cdef class FrozenArray:
 @cython.final
 cdef class MemoryPool:
 	cdef void reset(MemoryPool self)
-	cdef void *malloc(self, int size)
+	cdef void *alloc(self, int size)
 	cdef void **pool
 	cdef void *cur
 	cdef int poolsize, limit, n, leftinpool
-
-cdef binrepr(ULong *vec)
 
 # to avoid overhead of __init__ and __cinit__ constructors
 cdef inline FrozenArray new_FrozenArray(array data):

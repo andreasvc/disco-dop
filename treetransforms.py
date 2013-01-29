@@ -121,7 +121,7 @@ import re, sys
 from itertools import count, repeat
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
-	basestring = (str, bytes)
+	basestring = (str, bytes) # pylint: disable=W0622,C0103
 from tree import Tree, ImmutableTree
 from grammar import ranges
 try:
@@ -150,18 +150,21 @@ where input and output are treebanks, and action is one of:
     mergedisc
 
 options may consist of (* marks default option):
-  --inputfmt [*export|discbracket|bracket]
-  --outputfmt [*export|discbracket|bracket|conll|mst]
-  --inputenc [*UTF-8|ISO-8859-1|...]
-  --outputenc [*UTF-8|ISO-8859-1|...]
-  --slice n:m select a range of sentences from input starting with n, up to but
-              not including m; n or m can be left out or negative, as in Python
-  --factor [left|*right] whether binarization factors to the left or right
+  --inputfmt|--outputfmt [*export|discbracket|bracket|alpino]
+  --inputenc|--ounpuntenc [*UTF-8|ISO-8859-1|...]
+  --slice n:m    select a range of sentences from input starting with n,
+                 up to but not including m; as in Python, n or m can be left
+                 out or negative, and the first index is 0.
+  --factor [left|*right]
+                 whether binarization factors to the left or right
   -h n           horizontal markovization. default: infinite
   -v n           vertical markovization. default: 1
   --headrules x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
   --markheads    mark heads with '^' in phrasal labels.
+  --morphaspos   for input, use morphology tags instead of POS tags
+  --functions [add|remove]
+                 for input, add or remove function tags to phrasal labels
   --punct x      possible options:
                  remove: remove any punctuation.
                  move: re-attach punctuation to nearest constituent to minimize
@@ -170,9 +173,9 @@ options may consist of (* marks default option):
 Note: some of these transformations are specific to discontinuous treebanks,
     specifically the Negra/Tiger treebanks. In the output only POS & phrasal
     labels are guaranteed to be retained.
-	The formats 'conll' and 'mst' do an unlabeled dependency conversion and
-	require all constituents to have a child with HD as one of its function
-	tags, or the use of heuristic head rules. """ % sys.argv[0]
+    The formats 'conll' and 'mst' do an unlabeled dependency conversion and
+    require all constituents to have a child with HD as one of its function
+    tags, or the use of heuristic head rules. """ % sys.argv[0]
 
 
 def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
@@ -218,11 +221,12 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 		factor binary productions to include an artificial node, etc.
 
 	>>> sent = "das muss man jetzt machen".split()
+	>>> origtree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
 	>>> tree = Tree("(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))")
 	>>> tree = binarize(tree, horzmarkov=0, tailmarker='')
 	>>> print(tree)
 	(S (VP (PDS 0) (VP|<> (ADV 3) (VVINF 4))) (S|<> (PIS 2) (VMFIN 1)))
-	>>> tree = unbinarize(tree)
+	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> print(tree)
 	(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
 
@@ -230,37 +234,58 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 	>>> print(tree)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
-	>>> tree = unbinarize(tree)
+	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> tree = binarize(tree, horzmarkov=1, leftmostunary=False, \
 		rightmostunary=True, tailmarker='')
 	>>> print(tree)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS> \
 		(PIS 2) (S|<VMFIN> (VMFIN 1))))
 
-	>>> tree = unbinarize(tree)
+	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> tree = binarize(tree, horzmarkov=1, leftmostunary=True, \
 		rightmostunary=False, tailmarker='')
 	>>> print(tree)
 	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS> \
 		(PIS 2) (VMFIN 1))))
 
-	>>> tree = unbinarize(tree)
+	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> tree = binarize(tree, horzmarkov=1, leftmostunary=False, \
 		rightmostunary=False, tailmarker='')
 	>>> print(tree)
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
-	>>> tree = unbinarize(tree)
+	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> tree = binarize(tree, horzmarkov=2, tailmarker='', reverse=True)
 	>>> print(tree)
 	(S (VP (PDS 0) (VP|<PDS-ADV> (ADV 3) (VVINF 4))) (S|<VP-PIS> (PIS 2) \
 		(VMFIN 1)))
 
-	>>> tree = unbinarize(tree)
+	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> tree = binarize(tree, factor="left", horzmarkov=2, tailmarker='')
 	>>> print(tree)
 	(S (S|<PIS-VMFIN> (VP (VP|<ADV-VVINF> (PDS 0) (ADV 3)) (VVINF 4)) (PIS 2)) \
 		(VMFIN 1))
+
+	>>> tree = unbinarize(tree); assert tree == origtree
+	>>> tree = binarize(tree, horzmarkov=1, vertmarkov=2, leftmostunary=True, \
+		rightmostunary=False, tailmarker='')
+	>>> print(tree)
+	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS 0) (VP|<ADV>^<S> (ADV 3) \
+		(VVINF 4)))) (S|<PIS> (PIS 2) (VMFIN 1))))
+
+	>>> tree = unbinarize(tree); assert tree == origtree
+	>>> tree = binarize(tree, horzmarkov=1, vertmarkov=2, leftmostunary=True, \
+		rightmostunary=False, tailmarker='', pospa=True)
+	>>> print(tree)
+	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP> 0) (VP|<ADV>^<S> (ADV^<VP> 3) \
+			(VVINF^<VP> 4)))) (S|<PIS> (PIS^<S> 2) (VMFIN^<S> 1))))
+
+	>>> tree = unbinarize(tree); assert tree == origtree
+	>>> tree = binarize(tree, horzmarkov=1, vertmarkov=3, leftmostunary=True, \
+		rightmostunary=False, tailmarker='', pospa=True)
+	>>> print(tree)
+	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP-S> 0) (VP|<ADV>^<S> \
+		(ADV^<VP-S> 3) (VVINF^<VP-S> 4)))) (S|<PIS> (PIS^<S> 2) (VMFIN^<S> 1))))
 
 	>>> tree = Tree("(S (NN 2) (VP (PDS 0) (ADV 3) (VAINF 4)) (VMFIN 1))")
 	>>> tree = binarize(tree, horzmarkov=2, tailmarker='', reverse=True)
@@ -289,104 +314,100 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 	# over them) and node access time is proportional to the height of the node.
 	# This method is 7x faster which helps when binarizing 40,000 sentences.
 	assert factor in ("left", "right")
+	treeclass = tree.__class__
 	leftmostunary = 1 if leftmostunary else 0
-	nodelist = [(tree, [tree.label])]
-	while nodelist:
-		node, parent = nodelist.pop()
-		if isinstance(node, Tree):
-			# parent annotation
-			parentstring = ""
-			originalnode = node.label if vertmarkov else ""
-			if vertmarkov > 1 and node is not tree and (
-					pospa or isinstance(node[0], Tree)):
-				parentstring = "%s<%s>" % (parentchar, "-".join(parent))
-				node.label += parentstring
-				parent = [originalnode] + parent[:vertmarkov]
-				if not artpa:
-					parentstring = ""
+	agenda = [(tree, [tree.label])]
+	while agenda:
+		node, parent = agenda.pop()
+		if not isinstance(node, Tree):
+			continue
+		# parent annotation
+		parentstring = ""
+		originallabel = node.label if vertmarkov else ""
+		if vertmarkov > 1 and node is not tree and (
+				pospa or isinstance(node[0], Tree)):
+			parentstring = "%s<%s>" % (parentchar, "-".join(parent))
+			node.label += parentstring
+			parent = [originallabel] + parent[:vertmarkov - 2]
+			if not artpa:
+				parentstring = ""
 
-			# add children to the agenda before we mess with them
-			nodelist.extend((child, parent) for child in node)
+		# add children to the agenda before we mess with them
+		agenda.extend((child, parent) for child in node)
 
-			# binary form factorization
-			if len(node) <= threshold:
+		# binary form factorization
+		if len(node) <= threshold:
+			continue
+		elif 1 <= len(node) <= 2:
+			if not isinstance(node[0], Tree):
 				continue
-			elif 1 <= len(node) <= 2:
-				if not isinstance(node[0], Tree):
-					continue
-				# insert an initial artificial nonterminal
-				if ids is None:
-					siblings = "-".join(child.label for child in node[:horzmarkov])
-				else:
-					siblings = str(next(ids))
-				newnode = Tree("%s%s<%s>%s" % (originalnode, childchar,
-												siblings, parentstring), node)
-				node[:] = [newnode]
+			# insert an initial artificial nonterminal
+			if ids is None:
+				siblings = "-".join(child.label for child in node[:horzmarkov])
 			else:
-				if isinstance(node[0], Tree):
-					childnodes = [child.label for child in node]
-				else:
-					childnodes = []
-				nodecopy = node.copy()
-				numchildren = len(nodecopy)
-				headidx = 0
+				siblings = str(next(ids))
+			newnode = treeclass("%s%s<%s>%s" % (originallabel, childchar,
+					siblings, parentstring), node)
+			node[:] = [newnode]
+		else:
+			if isinstance(node[0], Tree):
+				childlabels = [child.label for child in node]
+			else:
+				childlabels = []
+			childnodes = list(node)
+			numchildren = len(childnodes)
+			headidx = 0
 
-				# insert an initial artificial nonterminal
+			# insert an initial artificial nonterminal
+			if factor == "right":
+				start = 0
+				end = min(1, horzmarkov) if reverse else horzmarkov
+			else: # factor == "left"
+				start = ((numchildren - min(1, horzmarkov))
+						if reverse else horzmarkov)
+				end = numchildren
+			if ids is None:
+				siblings = "-".join(childlabels[start:end])
+			else:
+				siblings = str(next(ids))
+			newnode = treeclass("%s%s<%s>%s" % (originallabel, childchar,
+											siblings, parentstring), [])
+			node[:] = []
+			if leftmostunary:
+				node.append(newnode)
+				node = newnode
+			curnode = node
+
+			for i in range(1, numchildren - (not rightmostunary)):
+				marktail = tailmarker if i + 1 == numchildren else ''
+				newnode = treeclass('', [])
 				if factor == "right":
-					start = 0
-					end = min(1, horzmarkov) if reverse else horzmarkov
-				else: # factor == "left"
-					start = ((numchildren - min(1, horzmarkov))
-							if reverse else horzmarkov)
-					end = numchildren
+					if reverse:
+						start = max(i - horzmarkov + 1, 0)
+						end = i + 1
+					else:
+						start = i
+						end = i + horzmarkov
+					curnode[:] = [childnodes.pop(0), newnode]
+				else: # factor == "left":
+					start = headidx + numchildren - i - 1
+					end = start + horzmarkov
+					curnode[:] = [newnode, childnodes.pop()]
+				# switch direction upon encountering the head
+				if headmarked and headmarked in childlabels[i]:
+					headidx = i
+					factor = "right" if factor == "left" else "left"
+					start = headidx + numchildren - i - 1
+					end = start + horzmarkov
 				if ids is None:
-					siblings = "-".join(childnodes[start:end])
+					siblings = "-".join(childlabels[start:end])
 				else:
 					siblings = str(next(ids))
-				newnode = Tree("%s%s<%s>%s" % (originalnode, childchar,
-												siblings, parentstring), [])
-				node[:] = []
-				if leftmostunary:
-					node.append(newnode)
-					node = newnode
-				curnode = node
-
-				for i in range(1, numchildren):
-					marktail = tailmarker if i + 1 == numchildren else ''
-					newnode = Tree('', [])
-					if factor == "right":
-						if reverse:
-							start = max(i - horzmarkov + 1, 0)
-							end = i + 1
-						else:
-							start = i
-							end = i + horzmarkov
-						curnode[:] = [nodecopy.pop(0), newnode]
-					else: # factor == "left":
-						start = headidx + numchildren - i - 1
-						end = start + horzmarkov
-						curnode[:] = [newnode, nodecopy.pop()]
-					# switch direction upon encountering the head
-					if headmarked and headmarked in childnodes[i]:
-						headidx = i
-						factor = "right" if factor == "left" else "left"
-						start = headidx + numchildren - i - 1
-						end = start + horzmarkov
-					if ids is None:
-						siblings = "-".join(childnodes[start:end])
-					else:
-						siblings = str(next(ids))
-					newnode.label = "%s%s<%s>%s%s" % (originalnode, childchar,
-							siblings, parentstring, marktail)
-					curnode = newnode
-				assert len(nodecopy) == 1
-				if rightmostunary:
-					curnode.append(nodecopy.pop())
-				else:
-					curnode.label = nodecopy[0].label
-					curnode[:] = nodecopy[0]
-					# re-add to agenda (fixme shouldn't be necessary)
-					nodelist.append((curnode, parent))
+				newnode.label = "%s%s<%s>%s%s" % (originallabel, childchar,
+						siblings, parentstring, marktail)
+				curnode = newnode
+			assert len(childnodes) == 1 + (not rightmostunary)
+			curnode.extend(childnodes)
 	return tree
 
 def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
@@ -398,6 +419,7 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 	# increase robustness
 	childchar += "<"
 	parentchar += "<"
+	treeclass =  tree.__class__
 	# Traverse the tree-depth first keeping a pointer to the parent for
 	# modification purposes.
 	agenda = [(tree, [])]
@@ -409,9 +431,9 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 			# need to move its children to its parent
 			childindex = node.label.find(childchar)
 			if childindex != -1:
-				nodeindex = parent.index(node)
-				# replace node with children of node
-				parent[nodeindex:nodeindex + 1] = node
+				# go by identity instead of equality
+				n = [id(a) for a in parent].index(id(node))
+				parent[n:n + 1] = node
 			else:
 				parentindex = node.label.find(parentchar)
 				if parentindex != -1:
@@ -421,7 +443,8 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 				if expandunary:
 					unaryindex = node.label.find(unarychar)
 					if unaryindex != -1:
-						newnode = Tree(node.label[unaryindex + 1:], node[:])
+						newnode = treeclass(
+								node.label[unaryindex + 1:], node[:])
 						node.label = node.label[:unaryindex]
 						node[:] = [newnode]
 				# non-binarized constituent, so move on to next parent
@@ -431,7 +454,7 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 				agenda.append((child, parent))
 	return tree
 
-def collapse_unary(tree, collapsePOS=False, collapseroot=False, joinchar="+"):
+def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar="+"):
 	"""
 	Collapse subtrees with a single child (ie. unary productions)
 	into a new non-terminal (Tree node) joined by 'joinchar'.
@@ -442,10 +465,10 @@ def collapse_unary(tree, collapsePOS=False, collapseroot=False, joinchar="+"):
 
 	@param tree: The Tree to be collapsed
 	@type  tree: C{Tree}
-	@param collapsePOS: 'False' (default) will not collapse the parent of leaf
+	@param collapsepos: 'False' (default) will not collapse the parent of leaf
 						nodes (i.e., Part-of-Speech tags) since they are always
 						unary productions
-	@type  collapsePOS: C{boolean}
+	@type  collapsepos: C{boolean}
 	@param collapseroot: 'False' (default) will not modify the root production
 						if it is unary.  For the Penn WSJ treebank corpus, this
 						corresponds to the TOP -> productions.
@@ -453,26 +476,24 @@ def collapse_unary(tree, collapsePOS=False, collapseroot=False, joinchar="+"):
 	@param joinchar: A string used to connect collapsed node values (default: "+")
 	@type  joinchar: C{string}
 	"""
-
-	if collapseroot == False and isinstance(tree, Tree) and len(tree) == 1:
-		nodelist = [tree[0]]
-	else:
-		nodelist = [tree]
+	agenda = [tree]
+	if not collapseroot and isinstance(tree, Tree) and len(tree) == 1:
+		agenda = [tree[0]]
 
 	# depth-first traversal of tree
-	while nodelist:
-		node = nodelist.pop()
+	while agenda:
+		node = agenda.pop()
 		if isinstance(node, Tree):
-			if len(node) == 1 and isinstance(node[0], Tree) and (
-					collapsePOS == True or isinstance(node[0,0], Tree)):
+			if (len(node) == 1 and isinstance(node[0], Tree)
+					and (collapsepos or isinstance(node[0, 0], Tree))):
 				node.label += joinchar + node[0].label
 				node[0:] = [child for child in node[0]]
 				# since we assigned the child's children to the current node,
 				# evaluate the current node again
-				nodelist.append(node)
+				agenda.append(node)
 			else:
 				for child in node:
-					nodelist.append(child)
+					agenda.append(child)
 	return tree
 
 def introducepreterminals(tree, ids=None):
@@ -486,15 +507,16 @@ def introducepreterminals(tree, ids=None):
 
 	"""
 	assert isinstance(tree, Tree)
-	nodelist = [tree]
-	while nodelist:
-		node = nodelist.pop()
+	treeclass = tree.__class__
+	agenda = [tree]
+	while agenda:
+		node = agenda.pop()
 		hassiblings = len(node) > 1
 		for n, child in enumerate(node):
 			if isinstance(child, Tree):
-				nodelist.append(child)
+				agenda.append(child)
 			elif hassiblings:
-				node[n] = Tree("%s/%s" % (
+				node[n] = treeclass("%s/%s" % (
 					node.label if ids is None else next(ids), child), [child])
 	return tree
 
@@ -861,8 +883,8 @@ def canonicalized(tree):
 		children.sort(key=lambda n: n.leaves())
 	return Tree(tree.label, children)
 
-def contsets(tree):
-	""" partition children of tree into continuous subsets
+def contsets(nodes):
+	""" partition children into continuous subsets
 
 	>>> tree = Tree.parse( \
 		"(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
@@ -872,14 +894,15 @@ def contsets(tree):
 	"""
 	rng = -1
 	subset = []
-	mins = [min(a.leaves()) if isinstance(a, Tree) else a for a in tree]
+	mins = {min(a.leaves()) if isinstance(a, Tree) else a: a for a in nodes}
+	leaves = [a for child in nodes for a in child.leaves()]
 
-	for a in sorted(tree.leaves()):
+	for a in sorted(leaves):
 		if rng >= 0 and a != rng + 1:
 			yield subset
 			subset = []
 		if a in mins:
-			subset.append(tree[mins.index(a)])
+			subset.append(mins[a])
 		rng = a
 	if subset:
 		yield subset
@@ -896,21 +919,24 @@ def splitdiscnodes(tree, markorigin=False):
 	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 \
 		(CARD 4) (VVPP 5)) (VAINF 6)))
 	"""
+	treeclass = tree.__class__
 	for node in postorder(tree):
-		result = []
-		for child in node:
+		nodes = list(node)
+		node[:] = []
+		for child in nodes:
 			if disc(child):
-				result.extend(Tree((("%s*%d" % (child.label, n))
+				childnodes = list(child)
+				child[:] = []
+				node.extend(treeclass((("%s*%d" % (child.label, n))
 					if markorigin else '%s*' % child.label), childsubset)
-					for n, childsubset in enumerate(contsets(child)))
+					for n, childsubset in enumerate(contsets(childnodes)))
 			else:
-				result.append(child)
-		node[:] = result
+				node.append(child)
 	return canonicalize(tree)
 
-splitlabel = re.compile(r"\*[0-9]*$")
+splitlabel = re.compile(r"(.*)\*([0-9]*)$")
 def mergediscnodes(tree):
-	""" Reverse of Boyd (2007): Discontinuity revisited.
+	""" Reverse transformation of splitdiscnodes()
 
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) \
 		(VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
@@ -920,18 +946,41 @@ def mergediscnodes(tree):
 	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
 	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) \
 	(VMFIN 3))
+	>>> tree = Tree.parse("(S (X (A 0) (A 2)) (X (A 1) (A 3)))", parse_leaf=int)
+	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
+	(S (X (A 0) (A 2)) (X (A 1) (A 3)))
+	>>> tree = Tree.parse("(S (X (A 0) (A 2)) (X (A 1) (A 3)))", parse_leaf=int)
+	>>> print(splitdiscnodes(tree, markorigin=True))
+	(S (X*0 (A 0)) (X*0 (A 1)) (X*1 (A 2)) (X*1 (A 3)))
+	>>> tree = Tree.parse("(S (X (A 0) (A 2)) (X (A 1) (A 3)))", parse_leaf=int)
+	>>> print(mergediscnodes(splitdiscnodes(tree)))
+	(S (X (A 0) (A 1) (A 2) (A 3)))
 	"""
+	treeclass = tree.__class__
 	for node in tree.subtrees():
 		merge = defaultdict(list)
-		for child in node:
-			if isinstance(child, Tree) and splitlabel.search(child.label):
-				merge[splitlabel.sub("", child.label)].append(child)
-		node[:] = [child for child in node if not isinstance(child, Tree)
-						or not splitlabel.search(child.label)]
-		for label, subsets in merge.items():
-			children = [child for component in subsets for child in component]
-			node.append(Tree(label, children))
-	return canonicalize(tree)
+		nodes = list(node)
+		node[:] = []
+		for child in nodes:
+			if not isinstance(child, Tree):
+				node.append(child)
+				continue
+			match = splitlabel.search(child.label)
+			if not match:
+				node.append(child)
+				continue
+			label = match.group(1)
+			grandchildren = list(child)
+			child[:] = []
+			if not merge[child.label]:
+				merge[child.label].append(treeclass(label, []))
+				node.append(merge[child.label][0])
+			merge[child.label][0].extend(grandchildren)
+			if match.group(2):
+				nextlabel = "%s*%d" % (
+						match.group(1), int(match.group(2)) + 1)
+				merge[nextlabel].append(merge[child.label].pop(0))
+	return tree
 
 class OrderedSet(Set):
 	""" A frozen, ordered set which maintains a regular list/tuple and set.
@@ -1110,9 +1159,10 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from treebank import getreader, writetree, readheadrules
-	flags = ('markorigin', 'markheads')
+	flags = ('markorigin', 'markheads', 'morphaspos')
 	options = ('factor=', 'headrules=', 'markorigin=', 'inputfmt=',
-			'outputfmt=', 'inputenc=', 'outputenc=', 'slice=', 'punct=')
+			'outputfmt=', 'inputenc=', 'outputenc=', 'slice=', 'punct=',
+			'functions=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
 		action, infilename, outfilename = args
@@ -1126,7 +1176,10 @@ def main():
 	corpus = Reader(".", infilename,
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get("--headrules"),
-			markheads=opts.get('--markheads'),
+			markheads='--markheads' in opts,
+			morphaspos='--morphaspos' in opts,
+			functiontags={'add': True, 'remove': False,
+					None: None}[opts.get('--functions')],
 			punct=opts.get("--punct"))
 	start, end = opts.get('--slice', ':').split(':')
 	start = int(start) if start else None
@@ -1134,6 +1187,7 @@ def main():
 	trees = list(corpus.parsed_sents().values())[start:end]
 	sents = list(corpus.sents().values())[start:end]
 	keys = list(corpus.sents().keys())[start:end]
+	print("read %d trees from %s" % (len(trees), infilename))
 
 	# apply transformation
 	actions = ("binarize unbinarize optimalbinarize introducepreterminals "
@@ -1164,6 +1218,8 @@ def main():
 	elif action == "mergedisc":
 		for a in trees:
 			mergediscnodes(a)
+	if action != "none":
+		print("transformed %d trees with action %r" % (len(trees), action))
 
 	# write output
 	if opts.get('--outputfmt') in ('mst', 'conll'):
@@ -1173,6 +1229,7 @@ def main():
 	else:
 		headrules = None
 
+	print("going to write %d trees to %s" % (len(trees), outfilename))
 	encoding = opts.get('outputenc', 'utf-8')
 	with io.open(outfilename, "w", encoding=encoding) as outfile:
 		if action == 'none' and (None == opts.get("--headrules")
@@ -1186,6 +1243,7 @@ def main():
 						trees, sents, keys,
 						repeat(opts.get('--outputfmt', 'export')),
 						repeat(headrules)))
+	print("done")
 
 __all__ = ["binarize", "unbinarize", "collapse_unary", "introducepreterminals",
 	"splitdiscnodes", "mergediscnodes", "optimalbinarize", "defaultrightbin",

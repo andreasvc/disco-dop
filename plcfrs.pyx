@@ -4,7 +4,7 @@ from __future__ import print_function
 from array import array
 # python imports
 from math import log, exp
-from collections import defaultdict
+from collections import defaultdict, deque
 import re, logging, sys
 import numpy as np
 from agenda import EdgeAgenda, Entry
@@ -13,10 +13,9 @@ from cpython cimport PyDict_Contains, PyDict_GetItem
 from cpython.array cimport array
 cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
-from containers cimport ChartItem, Edge, Grammar, Rule, LexicalRule, \
-    UChar, UInt, ULong, ULLong, SmallChartItem, FatChartItem, CFGChartItem, \
-	LCFRSEdge, CFGEdge, new_ChartItem, new_LCFRSEdge, new_CFGChartItem, \
-	new_FatChartItem, new_CFGEdge, binrepr as binrepr1
+from containers cimport Grammar, Rule, LexicalRule, LCFRSEdge, ChartItem, \
+	SmallChartItem, FatChartItem, new_LCFRSEdge, new_ChartItem, \
+	new_FatChartItem, UChar, UInt, ULong, ULLong
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint, \
 	anextset, anextunset, abitcount, abitlength, ulongset, ulongcpy, setunion
 cdef extern from "math.h":
@@ -35,7 +34,7 @@ DEF SX = 1
 DEF SXlrgaps = 2
 DEF SLOTS = 2
 
-def parse(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
+def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 		list whitelist=None, bint splitprune=False, bint markorigin=False,
 		estimates=None, int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -312,6 +311,8 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 						componentdict = <dict>(componentlist[cnt])
 					if PyDict_Contains(componentdict, component) != 1:
 						blocked[0] += 1
+						#print('blocked split', grammar.tolabel[newitem.label],
+						#		newitem.label, newitem)
 						return newitem
 					a = nextset(newitem.vec, b)
 					cnt += 1
@@ -321,6 +322,7 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 				if PyDict_Contains(whitelist[label], newitem) != 1:
 					#or inside + <double><object>outside > 300.0):
 					blocked[0] += 1
+					#print('blocked', grammar.tolabel[label], label, newitem)
 					return newitem
 				newitem.label = label
 
@@ -772,473 +774,142 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	# success if we've reached the end of both left and right vector
 	return lpos == rpos == -1
 
-cdef CFGChartItem CFGNONE = new_CFGChartItem(0, 0, 0)
-def cfgparse(list sent, Grammar grammar, start=1, tags=None, chart=None):
-	#assert all(grammar.fanout[a] == 1 for a in range(1, grammar.nonterminals))
-	if grammar.nonterminals < 10000 and chart is None:
-		return cfgparse_dense(sent, grammar, start=start, tags=tags)
-	return cfgparse_sparse(sent, grammar, start=start, tags=tags, chart=chart)
-
-def cfgparse_dense(list sent, Grammar grammar, start=1, tags=None):
-	""" A CKY parser modeled after Bodenstab's `fast grammar loop'
-		and the Stanford parser. Tries to apply each grammar rule for all
-		spans. Tracks the viterbi scores in a separate array. For grammars with
-		up to 10,000 nonterminals.
-		Edges are kept in a dictionary for each labelled span:
-		chart[left][right][label] = {edge1: edge1, edge2: edge2} """
+def symbolicparse(sent, Grammar grammar, tags=None, start=1,
+		bint exhaustive=False, list whitelist=None, bint splitprune=False, bint
+		markorigin=False):
+	""" parse sentence, a list of tokens, optionally with gold tags, and
+	produce a chart, either exhaustive or up until the first parse.
+	Non-probabilistic version.
+	Other parameters:
+        - start: integer corresponding to the start symbol that analyses should
+            have, e.g., grammar.toid['ROOT']
+        - exhaustive: don't stop at viterbi parser, return a full chart
+        - whitelist: a whitelist of allowed ChartItems. Anything else is not
+            added to the agenda.
+        - splitprune: coarse stage used a split-PCFG where discontinuous node
+            appear as multiple CFG nodes. Every discontinuous node will result
+            in multiple lookups into whitelist to see whether it should be
+            allowed on the agenda.
+        - markorigin: in combination with splitprune, coarse labels include an
+            integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
+            map to the discontinuous node NP_2
+	"""
 	cdef:
-		short left, right, mid, span, lensent = len(sent)
-		short narrowr, narrowl, widel, wider, minmid, maxmid
-		double oldscore, prob
+		dict chart = {}								#the full chart
+		list items = [deque() for _ in grammar.toid]	#titems for each label
+		object agenda = deque()						#the agenda
 		size_t i
-		UInt lhs, rhs1, Epsilon = grammar.toid["Epsilon"]
-		UInt spans = 0, items = 0, edges = 0, blocked = 0
-		ULLong vec = 0
-		bint foundnew = False
 		Rule *rule
-		CFGEdge edge
-		Entry entry
 		LexicalRule lexrule
-		EdgeAgenda unaryagenda = EdgeAgenda()
-		list chart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
-		dict cell
-	# the viterbi chart is initially filled with infinite log probabilities,
-	# cells which are to be blocked contain NaN.
-	cdef np.ndarray[np.double_t, ndim=3] viterbi = np.empty(
-		(grammar.nonterminals, lensent, lensent + 1), dtype='d')
-	# matrices for the filter which gives minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
-	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
-	maxleft = np.empty_like(minleft)
-	minright = np.empty_like(minleft)
-	maxright = np.empty_like(minleft)
-	minleft.fill(-1)
-	viterbi.fill(np.inf)
-	maxleft.fill(lensent + 1)
-	minright.fill(lensent + 1)
-	maxright.fill(-1)
+		Entry entry
+		LCFRSEdge edge
+		SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
+		SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
+		signed int lensent = len(sent)
+		UInt blocked = 0, Epsilon = grammar.toid["Epsilon"]
+		ULong maxA = 0
+		ULLong vec = 0
 
-	# assign POS tags
-	for left, word in enumerate(sent):
-		right = left + 1
-		cell = chart[left][right]
+	if lensent >= sizeof(vec) * 8:
+		raise NotImplemented
+
+	# scan
+	for i, word in enumerate(sent):
 		recognized = False
+		item = new_ChartItem(Epsilon, i)
 		for lexrule in grammar.lexical.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			lhs = lexrule.lhs
-			if (not tags or grammar.tolabel[lhs] == tags[left]
-				or grammar.tolabel[lhs].startswith(tags[left] + '@')):
-				x = viterbi[lhs, left, right] = lexrule.prob
-				edge = new_CFGEdge(x, NULL, right)
-				cell[lhs] = {edge: edge}
-				recognized = True
-				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-		if not recognized and tags and tags[left] in grammar.toid:
-			lhs = grammar.toid[tags[left]]
-			viterbi[lhs, left, right] = 0.0
-			edge = new_CFGEdge(0.0, NULL, right)
-			cell[lhs] = {edge: edge}
+			if (not tags or grammar.tolabel[lexrule.lhs] == tags[i]
+				or grammar.tolabel[lexrule.lhs].startswith(tags[i] + "@")):
+				score = lexrule.prob
+				newitem.label = lexrule.lhs
+				newitem.vec = 1ULL << i
+				edge = new_LCFRSEdge(0.0, 0.0, NULL, item, NONE)
+				agenda.append(newitem)
+				chart[newitem][edge] = edge
+				items[newitem.label].append(newitem)
+				newitem = SmallChartItem.__new__(SmallChartItem)
+		if not recognized and tags and tags[i] in grammar.toid:
+			newitem.label = grammar.toid[tags[i]]
+			newitem.vec = 1ULL << i
+			edge = new_LCFRSEdge(0.0, 0.0, NULL, item, NONE)
+			agenda.append(newitem)
+			chart[newitem][edge] = edge
+			items[newitem.label].append(newitem)
+			newitem = SmallChartItem.__new__(SmallChartItem)
 			recognized = True
-			# update filter
-			if left > minleft[lhs, right]:
-				minleft[lhs, right] = left
-			if left < maxleft[lhs, right]:
-				maxleft[lhs, right] = left
-			if right < minright[lhs, left]:
-				minright[lhs, left] = right
-			if right > maxright[lhs, left]:
-				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, CFGNONE, "not covered: %r" % (
-					tags[left] if tags else word)
+			return chart, NONE, "not covered: %r" % (tags[i] if tags else word)
 
-		# unary rules on the span of this POS tag
-		# NB: for this agenda, only the probabilities of the edges matter
-		unaryagenda.update([(
-			rhs1, new_CFGEdge(viterbi[rhs1, left, right], NULL, 0))
-			for rhs1 in range(grammar.nonterminals)
-			if isfinite(viterbi[rhs1, left, right])
-			and grammar.unary[rhs1].rhs1 == rhs1])
-		while unaryagenda.length:
-			rhs1 = unaryagenda.popentry().key
+	# parsing
+	while agenda:
+		item = agenda.pop()
+		if item in chart:
+			continue
+		items[item.label].append(item)
+		if item.label == goal.label and item.vec == goal.vec:
+			if not exhaustive:
+				break
+		else:
+			# unary
 			for i in range(grammar.numrules):
-				rule = &(grammar.unary[rhs1][i])
-				if rule.rhs1 != rhs1:
+				rule = &(grammar.unary[item.label][i])
+				if rule.rhs1 != item.label:
 					break
-				lhs = rule.lhs
-				prob = rule.prob + viterbi[rhs1, left, right]
-				edge = new_CFGEdge(prob, rule, right)
-				if isfinite(viterbi[lhs, left, right]):
-					if prob < viterbi[lhs, left, right]:
-						unaryagenda.setifbetter(lhs, edge)
-						viterbi[lhs, left, right] = prob
-						cell[lhs][edge] = edge
-					elif (edge not in cell[lhs] or
-							prob < (<CFGEdge>cell[lhs][edge]).inside):
-						cell[lhs][edge] = edge
-					continue
-				unaryagenda.setifbetter(lhs, edge)
-				viterbi[lhs, left, right] = prob
-				cell[lhs] = {edge: edge}
-				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-
-	for span in range(2, lensent + 1):
-		# constituents from left to right
-		for left in range(lensent - span + 1):
-			right = left + span
-			cell = chart[left][right]
-			# binary rules
+				newitem.label = rule.lhs
+				newitem.vec = item.vec
+				if newitem not in chart:
+					edge = new_LCFRSEdge(0.0, 0.0, rule, item, NONE)
+					agenda.append(newitem)
+					chart[newitem][edge] = edge
+					newitem = SmallChartItem.__new__(SmallChartItem)
+			# binary left
 			for i in range(grammar.numrules):
-				rule = &(grammar.bylhs[0][i])
-				if rule.lhs == grammar.nonterminals:
+				rule = &(grammar.lbinary[item.label][i])
+				if rule.rhs1 != item.label:
 					break
-				elif not rule.rhs2:
-					continue
-				lhs = rule.lhs
-				narrowr = minright[rule.rhs1, left]
-				if narrowr >= right:
-					continue
-				narrowl = minleft[rule.rhs2, right]
-				if narrowl < narrowr:
-					continue
-				widel = maxleft[rule.rhs2, right]
-				minmid = narrowr if narrowr > widel else widel
-				wider = maxright[rule.rhs1, left]
-				maxmid = wider if wider < narrowl else narrowl
-				oldscore = viterbi[lhs, left, right]
-				if isinf(oldscore):
-					cell[lhs] = {}
-				for mid in range(minmid, maxmid + 1):
-					if (isfinite(viterbi[rule.rhs1, left, mid])
-						and isfinite(viterbi[rule.rhs2, mid, right])):
-						prob = (rule.prob + viterbi[rule.rhs1, left, mid]
-								+ viterbi[rule.rhs2, mid, right])
-						edge = new_CFGEdge(prob, rule, mid)
-						if prob < viterbi[lhs, left, right]:
-							if isinf(viterbi[lhs, left, right]):
-								cell[lhs] = {}
-							viterbi[lhs, left, right] = prob
-							cell[lhs][edge] = edge
-						elif (edge not in cell[lhs] or
-								prob < (<CFGEdge>cell[lhs][edge]).inside):
-							cell[lhs][edge] = edge
-				# update filter
-				if isinf(oldscore):
-					if left > minleft[lhs, right]:
-						minleft[lhs, right] = left
-					if left < maxleft[lhs, right]:
-						maxleft[lhs, right] = left
-					if right < minright[lhs, left]:
-						minright[lhs, left] = right
-					if right > maxright[lhs, left]:
-						maxright[lhs, left] = right
+				for I in items[rule.rhs2]:
+					sibling = <SmallChartItem>I
+					if concat(rule, item.vec, sibling.vec):
+						newitem.label = rule.lhs
+						newitem.vec = item.vec ^ sibling.vec
+						if newitem not in chart:
+							edge = new_LCFRSEdge(0.0, 0.0, rule, item, sibling)
+							agenda.append(newitem)
+							chart[newitem][edge] = edge
+							newitem = SmallChartItem.__new__(SmallChartItem)
 
-			# unary rules on this span
-			unaryagenda.update([(rhs1,
-				new_CFGEdge(viterbi[rhs1, left, right], NULL, 0))
-				for rhs1 in range(grammar.nonterminals)
-				if isfinite(viterbi[rhs1, left, right])
-				and grammar.unary[rhs1].rhs1 == rhs1])
-			while unaryagenda.length:
-				rhs1 = unaryagenda.popentry().key
-				for i in range(grammar.numrules):
-					rule = &(grammar.unary[rhs1][i])
-					if rule.rhs1 != rhs1:
-						break
-					prob = rule.prob + viterbi[rhs1, left, right]
-					lhs = rule.lhs
-					edge = new_CFGEdge(prob, rule, right)
-					if isfinite(viterbi[lhs, left, right]):
-						if prob < viterbi[lhs, left, right]:
-							unaryagenda.setifbetter(lhs, edge)
-							viterbi[lhs, left, right] = prob
-							cell[lhs][edge] = edge
-						elif (edge not in cell[lhs] or
-								prob < (<CFGEdge>cell[lhs][edge]).inside):
-							cell[lhs][edge] = edge
-						continue
-					unaryagenda.setifbetter(lhs, edge)
-					viterbi[lhs, left, right] = prob
-					cell[lhs] = {edge: edge}
-					# update filter
-					if left > minleft[lhs, right]:
-						minleft[lhs, right] = left
-					if left < maxleft[lhs, right]:
-						maxleft[lhs, right] = left
-					if right < minright[lhs, left]:
-						minright[lhs, left] = right
-					if right > maxright[lhs, left]:
-						maxright[lhs, left] = right
-			if cell:
-				spans += 1
-				items += len(cell)
-				edges += sum(map(len, cell.values()))
-	msg = "chart spans %d, items %d, edges %d" % (
-			spans, items, edges)
-	if chart[0][lensent].get(start):
-		return chart, new_CFGChartItem(start, 0, lensent), msg
+			# binary right
+			for i in range(grammar.numrules):
+				rule = &(grammar.rbinary[item.label][i])
+				if rule.rhs2 != item.label:
+					break
+				for I in items[rule.rhs1]:
+					sibling = <SmallChartItem>I
+					if concat(rule, sibling.vec, item.vec):
+						newitem.label = rule.lhs
+						newitem.vec = sibling.vec ^ item.vec
+						if newitem not in chart:
+							edge = new_LCFRSEdge(0.0, 0.0, rule, sibling, item)
+							agenda.append(newitem)
+							chart[newitem][edge] = edge
+							newitem = SmallChartItem.__new__(SmallChartItem)
+
+		if agenda.length > maxA:
+			maxA = agenda.length
+	msg = ("agenda max %d, now %d, items %d, edges %d, blocked %d" % (
+			maxA, len(agenda), len(filter(None, chart.values())),
+			sum(map(len, chart.values())), blocked))
+	if goal in chart:
+		return chart, goal, msg
 	else:
-		return chart, CFGNONE, "no parse " + msg
-
-def cfgparse_sparse(list sent, Grammar grammar, start=1, tags=None,
-		list chart=None, int beamwidth=0):
-	""" A CKY parser modeled after Bodenstab's `fast grammar loop,' filtered by
-	the list of allowed items (if a prepopulated chart is given).
-	This version keeps the viterbi probabilities and the rest of chart in
-	a hash tables, useful for large grammars. The edge with the viterbi score
-	for a labeled span is kept in viterbi[left][right][label]. """
-	cdef:
-		double oldscore, prob, leftprob, infinity = float('infinity')
-		short left, right, mid, span, lensent = len(sent)
-		short narrowl, narrowr, minmid, maxmid
-		UInt lhs, rhs1, spans = 0, items = 0, edges = 0
-		bint foundnew, newspan
-		Rule *rule
-		LexicalRule lexrule
-		EdgeAgenda unaryagenda = EdgeAgenda()
-		Entry entry
-		list viterbi = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
-		dict cell, viterbicell
-		unicode word
-	# matrices for the filter which gives minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
-	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
-	maxleft = np.empty_like(minleft)
-	minright = np.empty_like(minleft)
-	maxright = np.empty_like(minleft)
-	minleft.fill(-1)
-	maxleft.fill(lensent + 1)
-	minright.fill(lensent + 1)
-	maxright.fill(-1)
-	#assert grammar.logprob, "Expecting grammar with log probabilities."
-	if chart is None:
-		chart = [[None] * (lensent + 1) for _ in range(lensent)]
-		cell = dict.fromkeys(range(1, grammar.nonterminals))
-		for left in range(lensent):
-			for right in range(left, lensent):
-				chart[left][right + 1] = cell.copy()
-	# assign POS tags
-	for left, word in enumerate(sent):
-		right = left + 1
-		viterbicell = viterbi[left][right]
-		cell = chart[left][right]
-		recognized = False
-		for lexrule in <list>grammar.lexical.get(word, ()):
-			if lexrule.lhs not in cell:
-				continue
-			lhs = lexrule.lhs
-			# if we are given gold tags, make sure we only allow matching
-			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lhs] == tags[left]
-				or grammar.tolabel[lhs].startswith(tags[left] + '@')):
-				edge = new_CFGEdge(lexrule.prob, NULL, right)
-				viterbicell[lhs] = edge
-				cell[lhs] = {edge: edge}
-				recognized = True
-				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-		# NB: don't allow blocking of gold tags if given
-		if not recognized and tags and tags[left] in grammar.toid:
-			lhs = grammar.toid[tags[left]]
-			edge = new_CFGEdge(0.0, NULL, right)
-			viterbicell[lhs] = edge
-			cell[lhs] = {edge: edge}
-			# update filter
-			if left > minleft[lhs, right]:
-				minleft[lhs, right] = left
-			if left < maxleft[lhs, right]:
-				maxleft[lhs, right] = left
-			if right < minright[lhs, left]:
-				minright[lhs, left] = right
-			if right > maxright[lhs, left]:
-				maxright[lhs, left] = right
-		elif not recognized:
-			return chart, CFGNONE, "not covered: %r" % (
-					tags[left] if tags else word)
-		# unary rules on the span of this POS tag
-		# NB: for this agenda, only the probabilities of the edges matter
-		unaryagenda.update(viterbicell.items())
-		while unaryagenda.length:
-			entry = unaryagenda.popentry()
-			rhs1 = entry.key
-			for i in range(grammar.numrules):
-				rule = &(grammar.unary[rhs1][i])
-				if rule.rhs1 != rhs1:
-					break
-				elif rule.lhs not in cell:
-					continue
-				lhs = rule.lhs
-				#prob = rule.prob + (<CFGEdge>entry.value).inside
-				prob = rule.prob + (<CFGEdge>viterbicell[rhs1]).inside
-				edge = new_CFGEdge(prob, rule, right)
-				if cell[lhs]:
-					if prob < (<CFGEdge>viterbicell[lhs]).inside:
-						unaryagenda.setifbetter(lhs, edge)
-						viterbi[left][right][lhs] = edge
-						cell[lhs][edge] = edge
-					elif (edge not in cell[lhs] or
-							prob < (<CFGEdge>cell[lhs][edge]).inside):
-						cell[lhs][edge] = edge
-					continue
-				unaryagenda.setifbetter(lhs, edge)
-				viterbicell[lhs] = edge
-				cell[lhs] = {edge: edge}
-				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-
-	for span in range(2, lensent + 1):
-		# constituents from left to right
-		for left in range(lensent - span + 1):
-			right = left + span
-			viterbicell = viterbi[left][right]
-			cell = chart[left][right]
-			# binary rules
-			for lhs in cell:
-				i = 0
-				rule = &(grammar.bylhs[lhs][i])
-				oldscore = ((<CFGEdge>viterbicell[lhs]).inside
-						if lhs in viterbicell else infinity)
-				while rule.lhs == lhs:
-					narrowr = minright[rule.rhs1, left]
-					narrowl = minleft[rule.rhs2, right]
-					if rule.rhs2 == 0 or narrowr >= right or narrowl < narrowr:
-						i +=1
-						rule = &(grammar.bylhs[lhs][i])
-						continue
-					widel = maxleft[rule.rhs2, right]
-					minmid = narrowr if narrowr > widel else widel
-					wider = maxright[rule.rhs1, left]
-					maxmid = wider if wider < narrowl else narrowl
-					if lhs not in viterbicell:
-						cell[lhs] = {}
-					for mid in range(minmid, maxmid + 1):
-						if (rule.rhs1 in viterbi[left][mid]
-								and rule.rhs2 in viterbi[mid][right]):
-							prob = (rule.prob + (<CFGEdge>viterbi[
-								left][mid][rule.rhs1]).inside + (<CFGEdge>
-								viterbi[mid][right][rule.rhs2]).inside)
-							edge = new_CFGEdge(prob, rule, mid)
-							if (lhs not in viterbicell or
-									prob < (<CFGEdge>viterbicell[lhs]).inside):
-								viterbicell[lhs] = edge
-								cell[lhs][edge] = edge
-							elif edge not in cell[lhs]:
-								cell[lhs][edge] = edge
-					i +=1
-					rule = &(grammar.bylhs[lhs][i])
-
-				# update filter
-				if not isinf(oldscore):
-					continue
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-
-			# unary rules
-			unaryagenda.update(viterbicell.items())
-			while unaryagenda.length:
-				entry = unaryagenda.popentry()
-				rhs1 = entry.key
-				for i in range(grammar.numrules):
-					rule = &(grammar.unary[rhs1][i])
-					if rule.rhs1 != rhs1:
-						break
-					elif rule.lhs not in cell:
-						continue
-					lhs = rule.lhs
-					#prob = rule.prob + (<CFGEdge>entry.value).inside
-					prob = rule.prob + (<CFGEdge>
-							viterbicell[rhs1]).inside
-					edge = new_CFGEdge(prob, rule, right)
-					if cell[lhs]:
-						if prob < (<CFGEdge>viterbicell[lhs]).inside:
-							unaryagenda.setifbetter(lhs, edge)
-							viterbicell[lhs] = edge
-							cell[lhs][edge] = edge
-						elif (edge not in cell[lhs] or
-								prob < (<CFGEdge>cell[lhs][edge]).inside):
-							cell[lhs][edge] = edge
-						continue
-					unaryagenda.setifbetter(lhs, edge)
-					viterbicell[lhs] = edge
-					cell[lhs] = {edge: edge}
-					# update filter
-					if left > minleft[lhs, right]:
-						minleft[lhs, right] = left
-					if left < maxleft[lhs, right]:
-						maxleft[lhs, right] = left
-					if right < minright[lhs, left]:
-						minright[lhs, left] = right
-					if right > maxright[lhs, left]:
-						maxright[lhs, left] = right
-			nonempty = filter(None, cell.values())
-			if nonempty:
-				spans += 1
-				items += len(nonempty)
-				# clean up labelled spans that were whitelisted but not used:
-				#for label in cell.keys():
-				#	if cell[label] is None:
-				#		del cell[label]
-				edges += sum(map(len, nonempty))
-	msg = "chart items %d (spans %d), edges %d" % (
-			items, spans, edges)
-	if chart[0][lensent].get(start):
-		return chart, new_CFGChartItem(start, 0, lensent), msg
-	else:
-		return chart, CFGNONE, "no parse " + msg
-
+		return chart, NONE, "no parse " + msg
 
 cdef inline LCFRSEdge iscore(LCFRSEdge e):
 	""" Replace estimate with inside probability """
 	e.score = e.inside
 	return e
-
-def binrepr(ChartItem a, n, cfg=False):
-	if cfg:
-		start = nextset((<SmallChartItem>a).vec, 0)
-		return "%d-%d" % (start, nextunset((<SmallChartItem>a).vec, start))
-	if isinstance(a, SmallChartItem):
-		vec = (<SmallChartItem>a).vec
-		result = bin(vec)[2:]
-	else:
-		result = binrepr1((<FatChartItem>a).vec)
-	return result.zfill(n)[::-1]
 
 def sortfunc(a):
 	if isinstance(a, SmallChartItem):
@@ -1246,77 +917,41 @@ def sortfunc(a):
 	elif isinstance(a, FatChartItem):
 		return (abitcount((<FatChartItem>a).vec, SLOTS),
 			anextset((<FatChartItem>a).vec, 0, SLOTS))
-	elif isinstance(a, Edge):
-		return (<Edge>a).inside
+	elif isinstance(a, LCFRSEdge):
+		return (<LCFRSEdge>a).inside
 
-def pprint_chart(chart, sent, tolabel, cfg=False):
+def pprint_chart(chart, sent, tolabel):
 	""" `pretty print' a chart. """
-	if isinstance(chart, list):
-		pprint_chart_cfg(chart, sent, tolabel)
-	else:
-		pprint_chart_lcfrs(chart, sent, tolabel, cfg=cfg)
-
-def pprint_chart_lcfrs(chart, sent, tolabel, cfg=False):
 	cdef ChartItem a
 	cdef LCFRSEdge edge
 	print("chart:")
 	for a in sorted(chart, key=sortfunc):
 		if chart[a] == []:
 			continue
-		print("%s[%s] =>" % (tolabel[a.label], binrepr(a, len(sent), cfg)))
+		print("%s[%s] =>" % (tolabel[a.label], a.binrepr(len(sent))))
 		if isinstance(chart[a], float):
 			continue
 		for edge in sorted(chart[a], key=sortfunc):
 			if edge.rule is NULL:
 				print("%9.7f  %9.7f " % (exp(-edge.inside), 1), end='')
-				if isinstance(edge.left, SmallChartItem):
-					print("\t", repr(sent[(<SmallChartItem>edge.left).vec]), end='')
-				else:
-					print("\t", repr(sent[(<FatChartItem>edge.left).vec[0]]), end='')
+				print("\t'%s'" % sent[edge.left.lexidx()], end='')
 			else:
 				print("%9.7f  %9.7f " % (exp(-edge.inside),
 						exp(-edge.rule.prob)),
 						"%s[%s]" % (tolabel[edge.left.label],
-						binrepr(edge.left, len(sent), cfg)), end='')
+						edge.left.binrepr(len(sent))), end='')
 				if edge.right:
 					print("\t%s[%s]" % (tolabel[edge.right.label],
-							binrepr(edge.right, len(sent), cfg)), end='')
+							edge.right.binrepr(len(sent))), end='')
 			print()
 		print()
-
-def pprint_chart_cfg(chart, sent, tolabel, cfg=True):
-	cdef CFGEdge edge
-	print("chart:")
-	for left, _ in enumerate(chart):
-		for right, _ in enumerate(chart[left]):
-			for label in chart[left][right] or ():
-				if not chart[left][right][label]:
-					continue
-				print("%s[%d:%d] =>" % (tolabel.get(label), left, right))
-				for edge in sorted(chart[left][right][label] or (),
-						key=sortfunc):
-					if edge.rule is NULL:
-						print("%9.7f  %9.7f " % (exp(-edge.inside), 1),
-							repr(sent[edge.mid - 1]), end='')
-					else:
-						print("%9.7f  %9.7f " % (exp(-edge.inside),
-								exp(-edge.rule.prob)),
-							"%s[%d:%d]" % (#tolabel[edge.rule.rhs1],
-								tolabel.get(edge.rule.rhs1),
-								left, edge.mid), end='')
-						if edge.rule.rhs2:
-							print("\t%s[%d:%d]" % (#tolabel[edge.rule.rhs2],
-								tolabel.get(edge.rule.rhs2),
-								edge.mid, right), end='')
-					print()
-				print()
 
 def do(sent, grammar):
 	from disambiguation import marginalize
 	from operator import itemgetter
 	print("sentence", sent)
 	sent = sent.split()
-	chart, start, _ = parse(sent, grammar, start=grammar.toid['S'])
+	chart, start, _ = parse(sent, grammar)
 	if len(sent) < sizeof(ULLong):
 		pprint_chart(chart, sent, grammar.tolabel)
 	if not start:
@@ -1406,7 +1041,7 @@ def main():
 		((('PROAV', 'Epsilon'), ('Daruber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
-		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)])
+		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)], "S")
 	print(grammar)
 	print("Rule structs take", sizeof(Rule), "bytes")
 
@@ -1420,44 +1055,3 @@ def main():
 	print("long sentence (%d words):" % lng)
 	assert do("Daruber muss nachgedacht %s" % " ".join(
 		(lng - 3) * ["werden"]), grammar)
-
-	cfg = Grammar([
-		((('S', 'D'), ((0, ), )), 0.5),
-		((('S', 'A'), ((0, ), )), 0.8),
-		((('A', 'A'), ((0, ), )), 0.7),
-		((('A', 'B'), ((0, ), )), 0.6),
-		((('A', 'C'), ((0, ), )), 0.5),
-		((('A', 'D'), ((0, ), )), 0.4),
-		((('B', 'A'), ((0, ), )), 0.3),
-		((('B', 'B'), ((0, ), )), 0.2),
-		((('B', 'C'), ((0, ), )), 0.1),
-		((('B', 'D'), ((0, ), )), 0.2),
-		((('B', 'C'), ((0, ), )), 0.3),
-		((('C', 'A'), ((0, ), )), 0.4),
-		((('C', 'B'), ((0, ), )), 0.5),
-		((('C', 'C'), ((0, ), )), 0.6),
-		((('C', 'D'), ((0, ), )), 0.7),
-		((('D', 'A'), ((0, ), )), 0.8),
-		((('D', 'B'), ((0, ), )), 0.9),
-		((('D', 'C'), ((0, ), )), 0.8),
-		((('D', 'NP', 'VP'), ((0, 1), )), 1),
-		((('NP', 'Epsilon'), ('mary', )), 1),
-		((('VP', 'Epsilon'), ('walks', )), 1)])
-	print(cfg)
-	print("cfg parsing; sentence: mary walks")
-	print("lcfrs", end='')
-	chart1, start, _ = parse("mary walks".split(), cfg, start=cfg.toid['S'],
-		exhaustive=True)
-	pprint_chart(chart1, "mary walks".split(), cfg.tolabel)
-
-	print("pcfg", end='')
-	chart, start, _ = cfgparse("mary walks".split(), cfg, start=cfg.toid['S'])
-	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
-	assert start
-	#assert chart.viewkeys() == chart1.viewkeys(), (
-	#	chart.viewkeys() ^ chart1.viewkeys())
-	#assert all(sorted(chart1[a]) == sorted(chart[a]) for a in chart), (
-	#	[(a, b, chart1[a]) for a, b in chart.items() if chart1[a] != b])
-
-if __name__ == '__main__':
-	main()

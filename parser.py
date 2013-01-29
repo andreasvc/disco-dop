@@ -5,7 +5,7 @@ from math import exp
 from getopt import gnu_getopt, GetoptError
 from heapq import nlargest
 from operator import itemgetter
-from _parser import parse, cfgparse
+import plcfrs, pcfg
 from grammar import read_bitpar_grammar, read_lcfrs_grammar, FORMAT
 from containers import Grammar
 from kbest import lazykbest
@@ -55,45 +55,45 @@ def main():
 	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith(".gz")
 			else open)(args[1]))
 	try:
-		coarse = Grammar(read_lcfrs_grammar(rules, lexicon))
+		rulelist = read_lcfrs_grammar(rules, lexicon)
 	except ValueError:
 		rules.seek(0)
 		lexicon.seek(0)
-		coarse = Grammar(read_bitpar_grammar(rules, lexicon))
+		rulelist = read_bitpar_grammar(rules, lexicon)
 		lcfrs = False
 	else:
 		lcfrs = True
-	assert top in coarse.toid, "Start symbol %r not in grammar." % top
+	coarse = Grammar(rulelist, top)
 	if 2 <= len(args) <= 4:
 		infile = (io.open(args[2], encoding='utf-8')
 				if len(args) >= 3 else sys.stdin)
 		out = (io.open(args[3], "w", encoding='utf-8')
 				if len(args) == 4 else sys.stdout)
-		simple(coarse, lcfrs, infile, out, k, prob, top)
+		simple(coarse, lcfrs, infile, out, k, prob)
 	elif 4 <= len(args) <= 6:
 		threshold = int(opts.get("--kbestctf", 50))
 		rules = (gzip.open if args[2].endswith(".gz") else open)(args[2])
 		lexicon = codecs.getreader('utf-8')((gzip.open
 				if args[3].endswith(".gz") else open)(args[3]))
 		try:
-			fine = Grammar(read_lcfrs_grammar(rules, lexicon))
+			rulelist = read_lcfrs_grammar(rules, lexicon)
 		except ValueError:
 			rules.seek(0)
 			lexicon.seek(0)
-			fine = Grammar(read_bitpar_grammar(rules, lexicon))
+			rulelist = read_bitpar_grammar(rules, lexicon)
 			lcfrs |= False
 		else:
 			lcfrs = True
+		fine = Grammar(rulelist, top)
 		fine.getmapping(coarse, striplabelre=re.compile("@.+$"))
-		assert top in fine.toid, "Start symbol %r not in fine grammar." % top
 		infile = (io.open(args[4], encoding='utf-8')
 				if len(args) >= 5 else sys.stdin)
 		out = (io.open(args[5], "w", encoding='utf-8')
 				if len(args) == 6 else sys.stdout)
-		ctf(coarse, fine, lcfrs, infile, out, k, prob, top, threshold,
+		ctf(coarse, fine, lcfrs, infile, out, k, prob, threshold,
 				"--mpd" in opts)
 
-def simple(grammar, lcfrs, infile, out, k, printprob, top):
+def simple(grammar, lcfrs, infile, out, k, printprob):
 	""" Parse with a single grammar. """
 	times = [time.clock()]
 	for n, a in enumerate(infile.read().split("\n\n")):
@@ -106,9 +106,9 @@ def simple(grammar, lcfrs, infile, out, k, printprob, top):
 		print("parsing:", n, " ".join(sent), file=sys.stderr)
 		sys.stdout.flush()
 		if lcfrs:
-			chart, start, _ = parse(sent, grammar, start=grammar.toid[top])
+			chart, start, _ = plcfrs.parse(sent, grammar)
 		else:
-			chart, start, _ = cfgparse(sent, grammar, start=grammar.toid[top])
+			chart, start, _ = pcfg.parse(sent, grammar)
 		if start:
 			derivations = lazykbest(chart, start, k, grammar.tolabel)[0]
 			if printprob:
@@ -130,7 +130,7 @@ def simple(grammar, lcfrs, infile, out, k, printprob, top):
 	print("finished", file=sys.stderr)
 	out.close()
 
-def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
+def ctf(coarse, fine, lcfrs, infile, out, k, printprob, threshold, mpd):
 	""" Do coarse-to-fine parsing with two grammars.
 	Assumes state splits in fine grammar are marked with '@'; e.g., 'NP@2'.
 	Sums probabilities of derivations producing the same tree. """
@@ -151,10 +151,10 @@ def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
 			"unknown words and no open class tags supplied: %r" % list(unknown))
 		print("parsing:", n, " ".join(sent), end='', file=sys.stderr)
 		if lcfrs:
-			chart, start, msg = parse(sent, coarse, start=coarse.toid[top],
+			chart, start, msg = plcfrs.parse(sent, coarse,
 					exhaustive=True)
 		else:
-			chart, start, msg = cfgparse(sent, coarse, start=coarse.toid[top])
+			chart, start, msg = pcfg.parse(sent, coarse)
 		print(msg, file=sys.stderr)
 		if start:
 			print("pruning ...", file=sys.stderr, end='')
@@ -162,11 +162,9 @@ def ctf(coarse, fine, lcfrs, infile, out, k, printprob, top, threshold, mpd):
 			whitelist, _ = prunechart(chart, start, coarse, fine, threshold,
 					False, False, not lcfrs)
 			if lcfrs:
-				chart, start, _ = parse(sent, fine, start=fine.toid[top],
-						whitelist=whitelist)
+				chart, start, _ = plcfrs.parse(sent, fine, whitelist=whitelist)
 			else:
-				chart, start, _ = cfgparse(sent, fine, start=fine.toid[top],
-						chart=whitelist)
+				chart, start, _ = pcfg.parse(sent, fine, chart=whitelist)
 			print(msg, file=sys.stderr)
 
 			assert start, (

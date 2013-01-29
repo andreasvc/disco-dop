@@ -3,7 +3,7 @@ remove by marking entries as invalid. Provides dictionary-like interface. Based
 on notes in the documentation for heapq, see:
 http://docs.python.org/library/heapq.html
 
-There is a version specialised to be used as agenda with edges.
+There is a version specialized to be used as agenda with edges.
 """
 
 from __future__ import print_function
@@ -25,6 +25,9 @@ cdef inline bint edgecmpfun(Entry a, Entry b):
 		and a.count < b.count))
 
 cdef class Agenda:
+	""" Priority Queue based on binary heap which implements decrease-key and
+	remove by marking entries as invalid. Provides dictionary-like interface.
+	"""
 	def __init__(self, iterable=None):
 		""" Can be initialized with an iterable; order of equivalent values
 		remains and the best priorities are retained on duplicate keys. """
@@ -172,6 +175,11 @@ cdef class Agenda:
 	def items(self): return zip(self.keys(), self.values())
 
 cdef class EdgeAgenda:
+	""" Priority Queue based on binary heap which implements decrease-key and
+	remove by marking entries as invalid. Provides dictionary-like interface.
+
+	This version is specialized to be used as agenda with edges.
+	"""
 	def __init__(self, iterable=None):
 		""" Can be initialized with an iterable; order of equivalent values
 		remains and the best priorities are retained on duplicate keys. """

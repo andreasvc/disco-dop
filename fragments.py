@@ -9,7 +9,7 @@ you want to abort, kill the program manually (e.g., press ctrl-z and run
 (pass --numproc 1) to see if there might be a bug. """
 
 from __future__ import division, print_function
-import os, re, sys, math, io, logging
+import io, os, re, sys, logging
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
@@ -52,19 +52,22 @@ Output is sent to stdout; to save the results, redirect to a file.
 --debug       extra debug information, ignored when numproc > 1.
 --quiet       disable all messages.""" % sys.argv[0]
 
-def main(argv):
+FLAGS = ("approx", "indices", "nofreq", "complete", "complement",
+		"disc", "quiet", "debug", "quadratic", "cover", "alt")
+OPTIONS = ("numproc=", "numtrees=", "encoding=", "batch=")
+
+def main(argv=None):
 	""" Command line interface to fragment extraction. """
-	flags = ("approx", "indices", "nofreq", "complete", "complement",
-			"disc", "quiet", "debug", "quadratic", "cover", "alt")
-	options = ("numproc=", "numtrees=", "encoding=", "batch=")
+	if argv is None:
+		argv = sys.argv
 	try:
-		opts, args = gnu_getopt(argv[1:], "", flags + options)
+		opts, args = gnu_getopt(argv[1:], "", FLAGS + OPTIONS)
 	except GetoptError as err:
 		print("%s\n%s" % (err, USAGE))
-		sys.exit(2)
+		return
 	opts = dict(opts)
 
-	for flag in flags:
+	for flag in FLAGS:
 		params[flag] = "--" + flag in opts
 	numproc = int(opts.get("--numproc", 1))
 	if numproc == 0:
@@ -78,7 +81,7 @@ def main(argv):
 	if batch is None and len(args) not in (1, 2):
 		print("incorrect number of arguments:", args)
 		print(USAGE)
-		sys.exit(2)
+		return
 	if batch:
 		assert numproc == 1, "batch mode only supported in single-process mode"
 	if args[0] == "-":
@@ -138,8 +141,8 @@ def main(argv):
 						approx=params['approx'])
 			if not params['approx'] and not params['nofreq']:
 				items = list(fragments.items())
-				fragmentkeys = [a for a, _ in items]
-				bitsets = [a for _, a in items]
+				fragmentkeys = [b for b, _ in items]
+				bitsets = [b for _, b in items]
 				if params['indices']:
 					logging.info("getting indices of occurrence "
 							"for %d fragments", len(bitsets))
@@ -187,7 +190,7 @@ def main(argv):
 		if len(args) == 1:
 			work = workload(numtrees, mult, numproc)
 		else:
-			chunk = int(math.ceil(numtrees // (mult * numproc)))
+			chunk = numtrees // (mult * numproc) + 1
 			work = [(a, a + chunk) for a in range(0, numtrees, chunk)]
 		if numproc != 1:
 			logging.info("work division:\n%s", "\n".join("    %s:\t%r" % kv
@@ -216,7 +219,7 @@ def main(argv):
 		items = list(fragments.items())
 		fragmentkeys = [a for a, _ in items]
 		bitsets = [a for _, a in items]
-		countchunk = int(math.ceil(len(bitsets) // numproc))
+		countchunk = len(bitsets) // numproc + 1
 		work = list(range(0, len(bitsets), countchunk))
 		work = [(n, len(work), bitsets[a:a + countchunk])
 				for n, a in enumerate(work)]
@@ -335,15 +338,16 @@ def initworkersimple(trees, sents, trees2=None, sents2=None):
 def workload(numtrees, mult, numproc):
 	""" Get an even workload. When n trees are compared against themselves,
 	n * (n - 1) total comparisons are made.
-	Each tree m has to be compared to all trees x given m < x < n.
+	Each tree m has to be compared to all trees x such that m < x < n.
 	(meaning there are more comparisons for lower n).
-	This functions returns a sequence of (start, end) intervals such that
+	This function returns a sequence of (start, end) intervals such that
 	the number of comparisons is approximately balanced. """
+	# could base on number of nodes as well.
 	if numproc == 1:
 		return [(0, numtrees)]
-	# here chunk is the number of tree pairs that willl be compared
+	# here chunk is the number of tree pairs that will be compared
 	goal = togo = total = 0.5 * numtrees * (numtrees - 1)
-	chunk = int(math.ceil(total // (mult * numproc)))
+	chunk = total // (mult * numproc) + 1
 	goal -= chunk
 	result = []
 	last = 0
@@ -389,12 +393,13 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 		fragments.update(a)
 	# add 'cover' fragments corresponding to single productions
 	cover = myapply(coverfragworker, ())
+	before = len(fragments)
 	fragments.update(cover)
-	logging.info("merged %d cover fragments", len(cover))
+	logging.info("merged %d unseen cover fragments", len(fragments) - before)
 	items = list(fragments.items())
 	fragmentkeys = [a for a, _ in items]
 	bitsets = [a for _, a in items]
-	countchunk = int(math.ceil(len(bitsets) // numproc))
+	countchunk = len(bitsets) // numproc + 1
 	work = list(range(0, len(bitsets), countchunk))
 	work = [(n, len(work), bitsets[a:a + countchunk])
 			for n, a in enumerate(work)]
@@ -414,13 +419,11 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 		trees, sents = None, None
 		ids = count()
 		for _ in range(10): # up to 10 iterations
-			newtrees, newsents = zip(*newfrags)
 			newtrees = [binarize(
-				introducepreterminals(Tree.parse(a, parse_leaf=int), ids=ids),
-				childchar="}") for a in newtrees]
+					introducepreterminals(Tree.parse(tree, parse_leaf=int),
+					ids=ids), childchar="}") for tree, _ in newfrags]
 			newsents = [["#%d" % next(ids) if word is None else word
-				for word in sent] for sent in newsents]
-
+					for word in sent] for _, sent in newfrags]
 			newfrags, newcounts = iteratefragments(
 					fragments, newtrees, newsents, trees, sents, numproc)
 			if len(newfrags) == 0:
@@ -458,7 +461,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	# from the same set of trees
 	newkeys = list(set(newfragments) - set(fragments))
 	bitsets = [newfragments[a] for a in newkeys]
-	countchunk = int(math.ceil(len(bitsets) // numproc))
+	countchunk = len(bitsets) // numproc + 1
 	if countchunk == 0:
 		return newkeys, []
 	work = list(range(0, len(bitsets), countchunk))
@@ -474,18 +477,18 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 		del pool
 	return newkeys, counts
 
-frontierre = re.compile(r"\(([^ ()]+) \)")
-termre = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
+FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
+TERMRE = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
 def altrepr(a):
 	""" Alternative format
 	Replace double quotes with double single quotes: " -> ''
 	Quote terminals with double quotes terminal: -> "terminal"
 	Remove parentheses around frontier nodes: (NN ) -> NN
 
-	>>> altrepr("(NP (DT a) (NN ))"
-	(NP (DT "a") NN)
+	>>> altrepr("(NP (DT a) (NN ))")
+	'(NP (DT "a") NN)'
 	"""
-	return frontierre.sub(r'\1', termre.sub(r'(\1 "\2")', a.replace('"', "''")))
+	return FRONTIERRE.sub(r'\1', TERMRE.sub(r'(\1 "\2")', a.replace('"', "''")))
 
 def printfragments(fragments, out=sys.stdout):
 	""" Dump fragments to standard output or some other file object. """
@@ -526,5 +529,9 @@ def printfragments(fragments, out=sys.stdout):
 		elif threshold:
 			logging.warning("invalid fragment--frequency=1: %r", a)
 
+def test():
+	""" Simple test. """
+	main("fragments.py --disc --encoding iso-8859-1 sample2.export".split())
+
 if __name__ == '__main__':
-	main(sys.argv)
+	main()

@@ -275,7 +275,7 @@ cdef inline bint explorederivationcfg(RankedCFGEdge ej,
 	return True
 
 cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
-		list chart, dict tolabel, str debin):
+		list chart, list tolabel, str debin):
 	cdef Entry entry
 	cdef RankedCFGEdge rankededge
 	cdef UInt label
@@ -289,8 +289,8 @@ cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
 		label = ej.edge.rule.rhs1
 		rankededge = (<Entry>D[ej.start][ej.edge.mid][label][ej.left]).key
 		getderivationcfg(result, rankededge, D, chart, tolabel, debin)
-		result += ' '
 		if ej.right != -1:
+			result += ' '
 			label = ej.edge.rule.rhs2
 			rankededge = (<Entry>D[ej.edge.mid][ej.end][label][ej.right]).key
 			getderivationcfg(result, rankededge, D, chart, tolabel, debin)
@@ -328,7 +328,7 @@ cdef bint explorederivation(RankedEdge ej, dict D, dict chart, set explored,
 	return True
 
 cdef inline getderivation(result, RankedEdge ej, dict D,
-		dict chart, dict tolabel, str debin):
+		dict chart, list tolabel, str debin):
 	cdef Entry entry
 	cdef RankedEdge rankededge
 	cdef ChartItem item
@@ -354,7 +354,7 @@ cdef inline getderivation(result, RankedEdge ej, dict D,
 	if debin is None or debin not in tolabel[ej.head.label]:
 		result += ')'
 
-def getderiv(ej, D, chart, dict tolabel, str debin):
+def getderiv(ej, D, chart, list tolabel, str debin):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
@@ -369,7 +369,7 @@ def getderiv(ej, D, chart, dict tolabel, str debin):
 		getderivationcfg(result, ej, D, chart, tolabel, debin)
 	return str(result)
 
-cpdef tuple lazykbest(chart, ChartItem goal, int k, dict tolabel=None,
+cpdef tuple lazykbest(chart, ChartItem goal, int k, list tolabel=None,
 		str debin=None, bint derivs=True):
 	""" wrapper function to run lazykthbest and get the actual derivations,
 	(except when derivs is False) as well as the ranked chart.
@@ -418,9 +418,8 @@ cpdef main():
 	cdef RankedEdge re
 	cdef Entry entry
 	cdef Rule rules[11]
-	toid = {a: n for n, a in enumerate(
-			"Epsilon S NP V ADV VP VP2 PN".split())}
-	tolabel = {b: a for a, b in toid.items()}
+	tolabel = "Epsilon S NP V ADV VP VP2 PN".split()
+	toid = {a: n for n, a in enumerate(tolabel)}
 	NONE = ("Epsilon", 0)			# sentinel node
 	chart = {
 			("S", 0b111): [

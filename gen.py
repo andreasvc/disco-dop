@@ -2,8 +2,8 @@
 text file. """
 from __future__ import print_function
 import sys, gzip, codecs
+from fractions import Fraction
 from collections import namedtuple
-from math import exp, log
 from array import array
 from random import random
 from grammar import read_lcfrs_grammar, read_bitpar_grammar
@@ -17,25 +17,50 @@ Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
 """ % sys.argv[0]
 
 Grammar = namedtuple("Grammar", ('unary', 'lbinary', 'rbinary', 'lexical',
-		'bylhs', 'lexicalbylhs', 'toid', 'tolabel', 'fanout'))
+		'bylhs', 'lexicalbylhs', 'toid', 'tolabel', 'fanout', 'numrules'))
 Rule = namedtuple("Rule",
-		('lhs', 'rhs1', 'rhs2', 'args', 'lengths', 'prob'))
+		('lhs', 'rhs1', 'rhs2', 'args', 'lengths', 'prob', 'no'))
 LexicalRule = namedtuple("LexicalRule",
-		('lhs', 'rhs1', 'rhs2', 'word', 'prob'))
+		('lhs', 'rhs1', 'rhs2', 'word', 'prob', 'no'))
 
-def gen(grammar, start=None, verbose=False):
-	""" generate a random sentence in top-down fashion. """
-	if start is None:
-		start = grammar.toid['ROOT']
+def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
+	""" generate a random sentence in top-down fashion.
+	discount is a factor between 0 and 1.0; 1.0 means no discount,
+	lower values introduce increasingly larger discount for repeated rules.
+	Cf. http://eli.thegreenplace.net/2010/01/28/generating-random-sentences\
+	-from-a-context-free-grammar/
+	"""
+	if prodcounts is None:
+		prodcounts = [1] * grammar.numrules
 	if not grammar.bylhs[start]:
-		terminal = chooserule(grammar.lexicalbylhs[start])
+		terminal = chooserule(grammar.lexicalbylhs[start], discount, prodcounts)
 		return (terminal.prob, [[terminal.word]])
-	rule = chooserule(grammar.bylhs[start])
-	if not rule.rhs2:
-		p1, l1 = gen(grammar, rule.rhs1, verbose)
-		return (p1 + rule.prob, l1)
-	return compose(rule, gen(grammar, rule.rhs1, verbose),
-				gen(grammar, rule.rhs2, verbose), verbose)
+	rule = chooserule(grammar.bylhs[start], discount, prodcounts)
+	prodcounts[rule.no] += 1
+	p1, l1 = gen(grammar, rule.rhs1, discount, prodcounts, verbose)
+	assert l1
+	if rule.rhs2:
+		p2, l2 = gen(grammar, rule.rhs2, discount, prodcounts, verbose)
+		assert l2
+	prodcounts[rule.no] -= 1
+	if rule.rhs2:
+		assert l1
+		assert l2
+		return compose(rule, (p1, l1), (p2, l2), verbose)
+	else:
+		return (p1 * rule.prob, l1)
+
+def chooserule(rules, discount, prodcounts):
+	""" given a list of objects with probabilities,
+	choose one according to that distribution."""
+	weights = [rule.prob * discount ** prodcounts[rule.no] for rule in rules]
+	position = random()
+	position *= sum(weights)
+	for r, w in zip(rules, weights):
+		position -= w
+		if position < 0:
+			return r
+	raise ValueError
 
 def compose(rule, left, right, verbose):
 	""" Combine the results of two generated non-terminals into a single
@@ -43,7 +68,7 @@ def compose(rule, left, right, verbose):
 	(p1, l1), (p2, l2) = left, right
 	result = []
 	if verbose:
-		print("[%g] %s + %s =" % (exp(-(rule.prob+p1+p2)), l1, l2), end='')
+		print("[%s] %s + %s = " % (rule.prob * p1 * p2, l1, l2), end='')
 	for n, a in enumerate(rule.lengths):
 		arg = []
 		for b in range(a):
@@ -54,19 +79,7 @@ def compose(rule, left, right, verbose):
 		result.append(arg)
 	if verbose:
 		print(result)
-	return (rule.prob + p1 + p2, result)
-
-def chooserule(rules, normalize=False):
-	""" given a list of objects with probabilities,
-	choose one according to that distribution."""
-	position = random()
-	if normalize:
-		position *= sum(a.prob for a in rules)
-	for r in rules:
-		position -= exp(-r.prob)
-		if position < 0:
-			return r
-	raise ValueError
+	return (rule.prob * p1 * p2, result)
 
 def splitgrammar(rules):
 	""" split the grammar into various lookup tables, mapping nonterminal
@@ -76,7 +89,7 @@ def splitgrammar(rules):
 	# and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
 		+ sorted(set(str(nt) for (rule, yf), weight in rules for nt in rule)
-			- set(["Epsilon", "ROOT"]))))
+			- {"Epsilon", "ROOT"})))
 	grammar = Grammar(
 			toid=dict((lhs, n) for n, lhs in nonterminals),
 			tolabel=dict((n, lhs) for n, lhs in nonterminals),
@@ -86,30 +99,25 @@ def splitgrammar(rules):
 			rbinary=[[] for _ in nonterminals],
 			fanout=array('B', [0] * len(nonterminals)),
 			lexical={},
-			lexicalbylhs={})
-	for (rule, yf), w in rules:
+			lexicalbylhs={},
+			numrules=len(rules))
+	for n, ((rule, yf), w) in enumerate(rules):
 		if rule[1] == 'Epsilon':
 			word = yf[0]
-			t = LexicalRule(grammar.toid[rule[0]], 0, 0, word, abs(log(w)))
+			t = LexicalRule(grammar.toid[rule[0]], 0, 0, word, w, n)
 			assert grammar.fanout[t.lhs] in (0, 1)
 			grammar.fanout[t.lhs] = 1
 			grammar.lexical.setdefault(word, []).append(t)
 			grammar.lexicalbylhs.setdefault(t.lhs, []).append(t)
 			continue
-		if len(rule) == 2 and grammar.toid[rule[1]] == 0:
-			r = LexicalRule(grammar.toid[rule[0]], grammar.toid[rule[1]], 0,
-					yf[0], abs(log(w)))
-			assert grammar.fanout[r.lhs] in (0, 1)
-			grammar.fanout[r.lhs] = 1
 		else:
 			args, lengths = yfarray(yf)
-			# an unbinarized rule causes an error here
-			assert yf == arraytoyf(args, lengths)
+			assert yf == arraytoyf(args, lengths), "rule not binarized?"
 			if len(rule) == 2 and w == 1:
 				w -= 0.00000001
 			r = Rule(grammar.toid[rule[0]], grammar.toid[rule[1]],
-				grammar.toid[rule[2]] if len(rule) == 3 else 0, args, lengths,
-						abs(log(w)))
+					grammar.toid[rule[2]] if len(rule) == 3 else 0, args,
+					lengths, w, n)
 			if grammar.fanout[r.lhs] == 0:
 				grammar.fanout[r.lhs] = len(args)
 			assert grammar.fanout[r.lhs] == len(args)
@@ -147,10 +155,10 @@ def arraytoyf(args, lengths):
 def test():
 	""" Demonstration on an example grammar. """
 	rules = [
-		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )),  1.0),
-		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 0.5),
-		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 0.5),
-		((('VP2', 'VP2'), ((0, ), (0, ))), 0.1),
+		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )),  1),
+		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), Fraction(1, 2)),
+		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), Fraction(1, 2)),
+		((('VP2', 'VP2'), ((0, ), (0, ))), Fraction(1, 10)),
 		((('PROAV', 'Epsilon'), ('Darueber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
@@ -161,6 +169,12 @@ def test():
 
 def main():
 	""" Load a grammar from a text file and generate 20 sentences. """
+	if "-s" in sys.argv:
+		i = sys.argv.index("-s")
+		start = sys.argv.pop(i + 1)
+		sys.argv[i:i + 2] = []
+	else:
+		start = "ROOT"
 	if len(sys.argv) != 3:
 		print(USAGE)
 		return
@@ -168,14 +182,13 @@ def main():
 	lexicon = codecs.getreader('utf-8')((gzip.open
 			if sys.argv[2].endswith(".gz") else open)(sys.argv[2]))
 	try:
-		grammar = read_lcfrs_grammar(rules, lexicon)
-	except ValueError as err:
-		print(err)
-		grammar = read_bitpar_grammar(rules, lexicon)
-	grammar = splitgrammar(grammar)
+		xgrammar = read_lcfrs_grammar(rules, lexicon)
+	except ValueError:
+		xgrammar = read_bitpar_grammar(rules, lexicon)
+	grammar = splitgrammar(xgrammar)
 	for _ in range(20):
-		p, sent = gen(grammar)
-		print("[%g] %s" % (exp(-p), " ".join(sent.pop())))
+		p, sent = gen(grammar, start=grammar.toid[start])
+		print("[%g] %s" % (p, " ".join(sent.pop())))
 
 if __name__ == '__main__':
 	if "--test" in sys.argv:

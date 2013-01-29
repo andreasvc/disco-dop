@@ -1,22 +1,21 @@
 """ Evaluation of (discontinuous) parse trees, following EVALB as much as
 possible, as well as some alternative evaluation metrics.  """
 from __future__ import division, print_function
-import sys, os.path
+import sys
 from getopt import gnu_getopt, GetoptError
 from itertools import count
 from collections import defaultdict, Counter as multiset
-if sys.version < '3':
-	from itertools import izip_longest as zip_longest
+if sys.version[0] >= '3':
+	from itertools import zip_longest # pylint: disable=E0611
 else:
-	from itertools import zip_longest
+	from itertools import izip_longest as zip_longest
 
 from tree import Tree
 from treebank import getreader, readheadrules, dependencies
-from treedist import newtreedist
 try:
-	from treedist import treedist
+	from treedist import treedist, newtreedist
 except ImportError:
-	treedist = newtreedist
+	from treedist import newtreedist as newtreedist, newtreedist
 
 USAGE = "usage: %s gold parses [param] [options]" % sys.argv[0]
 HELP = """\
@@ -44,7 +43,7 @@ Example: %s sample2.export parses.export TEST.prm --goldenc iso-8859-1
 The parameter file supports the following additional options
 (in addition to those described in README of EVALB):
 
-PRESERVE_LABELS  default 0 (false); when true, do not strip away everything
+PRESERVE_FUNC    default 0 (false); when true, do not strip away everything
                  after '-' or '=' in non-terminal labels.
 DISC_ONLY        only consider discontinuous constituents for F-scores.
 TED              when enabled, give tree-edit distance scores; disabled by
@@ -155,10 +154,10 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		# massage the data (in-place modifications)
 		transform(ctree, csent, cpos, dict(gpos), param["DELETE_LABEL"],
 				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"],
-				not param["PRESERVE_FUNCTIONS"])
+				not param["PRESERVE_FUNC"])
 		transform(gtree, gsent, gpos, dict(gpos), param["DELETE_LABEL"],
 				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"],
-				not param["PRESERVE_FUNCTIONS"])
+				not param["PRESERVE_FUNC"])
 		#if not gtree or not ctree:
 		#	continue
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
@@ -271,7 +270,6 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 					print("%15s -> %15s           %15s -> %15s" % (
 						gold_sents[n][a-1][0], gold_sents[n][b-1][0],
 						cand_sents[n][c-1][0], cand_sents[n][d-1][0]))
-
 	breakdowns(param, goldb40, candb40, goldpos40, candpos40, goldbcat40,
 			candbcat40, maxlenseen)
 	msg = summary(param, goldb, candb, goldpos, candpos, sentcount,
@@ -285,7 +283,7 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 	""" Print breakdowns for the most frequent labels / tags. """
 	if param["LABELED"] and param["DEBUG"] != -1:
 		print()
-		print(" Category Statistics (10 most frequent categories / errors)",
+		print(" Category Statistics (10 most frequent categories / errors) ",
 				end='')
 		if maxlenseen > param["CUTOFF_LEN"]:
 			print("for length <= %d" % param["CUTOFF_LEN"], end='')
@@ -443,12 +441,12 @@ def readparam(filename):
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED', 'DISC_ONLY',
-			'PRESERVE_FUNCTIONS', 'TED', 'DEP')
+			'PRESERVE_FUNC', 'TED', 'DEP')
 	param = {'DEBUG': 0, 'MAX_ERROR': 10, 'CUTOFF_LEN': 40,
-				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': [],
+				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': set(),
 				'DELETE_LABEL': set(), 'DELETE_WORD': set(),
-				'EQ_LABEL': {}, 'EQ_WORD': {},
-				'DISC_ONLY': 0, 'PRESERVE_FUNCTIONS': 0, 'TED': 0, 'DEP': 0}
+				'EQ_LABEL': set(), 'EQ_WORD': set(),
+				'DISC_ONLY': 0, 'PRESERVE_FUNC': 0, 'TED': 0, 'DEP': 0}
 	seen = set()
 	for a in open(filename) if filename else ():
 		line = a.strip()
@@ -462,8 +460,8 @@ def readparam(filename):
 					"DELETE_WORD"):
 				param[key].add(val)
 			elif key in ("EQ_LABEL", "EQ_WORD"):
-				# these are given as undirected pairs
-				# will be represented as equivalence classes A => {A, B, C, D}
+				# these are given as undirected pairs (A, B), (B, C), ...
+				# to be represented as equivalence classes A => {A, B, C, D}
 				try:
 					b, c = val.split()
 				except ValueError:
@@ -476,9 +474,9 @@ def readparam(filename):
 		# to eq classes: {'A': {'A', 'B', 'C'}}
 		# to a mapping of all elements to their representative:
 		# {'A': 'A', 'B': 'A', 'C': 'A'}
-		param[key] = {x: k for k, eqclass in
-				transitiveclosure(param[key]).items()
-				for x in eqclass}
+		param[key] = {x: k
+				for k, eqclass in transitiveclosure(param[key]).items()
+					for x in eqclass}
 	return param
 
 def transitiveclosure(eqpairs):
@@ -486,9 +484,8 @@ def transitiveclosure(eqpairs):
 	i.e., given a sequence of pairs denoting an equivalence relation,
 	produce a dictionary with equivalence classes as values and
 	arbitrary members of those classes as keys.
-	>>> transitiveclosure([('A', 'B'), ('B', 'C')])
-	{'A': set(['A', 'C', 'B'])}
-	"""
+	>>> transitiveclosure({('A', 'B'), ('B', 'C')})
+	{'A': set(['A', 'C', 'B'])} """
 	edges = defaultdict(set)
 	for a, b in eqpairs:
 		edges[a].add(b)
@@ -517,19 +514,23 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in zip(count(), a)[::-1]:
 			if stripfunctions:
+				# e.g., NP-SUBJ or NP=2 => NP, but don't touch -NONE-
 				x = b.label.find("-")
-				y = b.label.find("=")
-				if x >= 1:
-					a.label = b.label[:x]
-				if y >= 0:
-					a.label = b.label[:y]
+				if x > 0:
+					b.label = b.label[:x]
+				x = b.label.find("=")
+				if x > 0:
+					b.label = b.label[:x]
 			b.label = eqlabel.get(b.label, b.label)
 			if not b:
 				a.pop(n)  #remove empty nodes
 			elif isinstance(b[0], Tree):
 				if b.label in dellabel:
 					# replace phrasal node with its children
-					a[n:n+1] = b
+					# (must remove nodes from b first because ParentedTree)
+					bnodes = b[:]
+					b[:] = []
+					a[n:n+1] = bnodes
 			elif gpos[b[0]] in dellabel or sent[b[0]] in delword:
 				# remove pre-terminal entirely, but only look at gold tree,
 				# to ensure the sentence lengths stay the same
@@ -592,8 +593,8 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 def strbracketings(brackets):
 	""" Return a string with a concise representation of a bracketing.
 
-	>>> strbracketings(set([('S', frozenset([0, 1, 2])), \
-			('VP', frozenset([0, 2]))]))
+	>>> strbracketings({('S', frozenset([0, 1, 2])), \
+			('VP', frozenset([0, 2]))})
 	'S[0-2], VP[0,2]'
 	"""
 	if not brackets:
@@ -733,15 +734,15 @@ def splitpath(path):
 	else:
 		return ".", path
 
-def intervals(s):
-	""" Partition s into a sequence of intervals corresponding to contiguous
+def intervals(seq):
+	""" Partition seq into a sequence of intervals corresponding to contiguous
 	ranges. An interval is a pair (a, b), with a <= b denoting terminals x
 	such that a <= x <= b.
 
 	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
 	[(0, 1), (3, 4), (6, 8)]"""
 	start = prev = None
-	for a in s:
+	for a in seq:
 		if start is None:
 			start = prev = a
 		elif a == prev + 1:
@@ -779,17 +780,17 @@ def nozerodiv(a):
 	return '  None' if result is None else "%6.2f" % (100 * result)
 
 
-def edit_distance(s1, s2):
+def edit_distance(seq1, seq2):
 	""" Calculate the Levenshtein edit-distance between two strings. The edit
 	distance is the number of characters that need to be substituted, inserted,
-	or deleted, to transform s1 into s2.  For example, transforming "rain" to
-	"shine" requires three steps, consisting of two substitutions and one
+	or deleted, to transform seq1 into seq2.  For example, transforming "rain"
+	to "shine" requires three steps, consisting of two substitutions and one
 	insertion: "rain" -> "sain" -> "shin" -> "shine".  These operations could
 	have been done in other orders, but at least three steps are needed.
 	"""
 	# set up a 2-D array
-	len1 = len(s1)
-	len2 = len(s2)
+	len1 = len(seq1)
+	len2 = len(seq2)
 	# initialize 2-D array to zero
 	lev = [[0] * (len2 + 1) for _ in range(len1 + 1)]
 	for i in range(len1 + 1):
@@ -800,9 +801,9 @@ def edit_distance(s1, s2):
 	# iterate over the array
 	for i in range(len1):
 		for j in range (len2):
-			a = lev[i][j + 1] + 1               # skipping s1[i]
-			b = lev[i][j] + (s1[i] != s2[j])    # matching s1[i] with s2[j]
-			c = lev[i + 1][j] + 1               # skipping s2[j]
+			a = lev[i][j + 1] + 1               # skipping seq1[i]
+			b = lev[i][j] + (seq1[i] != seq2[j]) # matching seq1[i] with seq2[j]
+			c = lev[i + 1][j] + 1               # skipping seq2[j]
 			lev[i + 1][j + 1] = min(a, b, c)    # pick the cheapest
 	return lev[len1][len2]
 

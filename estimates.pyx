@@ -683,7 +683,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 def main():
 	from treebank import NegraCorpusReader
 	from grammar import induce_plcfrs
-	from _parser import parse, pprint_chart
+	import plcfrs
 	from containers import Grammar
 	from treetransforms import addfanoutmarkers, binarize
 	from tree import Tree
@@ -692,7 +692,8 @@ def main():
 	for a in trees:
 		binarize(a, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(a)
-	grammar = Grammar(induce_plcfrs(trees, list(corpus.sents().values())))
+	grammar = Grammar(induce_plcfrs(trees, list(corpus.sents().values())),
+			"ROOT")
 	trees = [Tree.parse(b"(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse(b"(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
 			Tree.parse(b"(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
@@ -706,19 +707,20 @@ def main():
 	for a in trees:
 		print(a)
 	print("\ngrammar:")
-	grammar = Grammar(induce_plcfrs(trees, sents))
+	grammar = Grammar(induce_plcfrs(trees, sents), "ROOT")
 	print(grammar, '\n')
 	testestimates(grammar, 4, grammar.toid["ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid["ROOT"])
 	sent = ["a", "b", "c"]
 	print("\nwithout estimates")
-	chart, start, msg = parse(sent, grammar, estimates=None)
+	chart, start, msg = plcfrs.parse(sent, grammar, estimates=None)
 	print(msg)
-	pprint_chart(chart, sent, grammar.tolabel)
+	plcfrs.pprint_chart(chart, sent, grammar.tolabel)
 	print("\nwith estimates")
-	estchart, start, msg = parse(sent, grammar, estimates=('SXlrgaps', outside))
+	estchart, start, msg = plcfrs.parse(sent, grammar,
+			estimates=('SXlrgaps', outside))
 	print(msg)
-	pprint_chart(estchart, sent, grammar.tolabel)
+	plcfrs.pprint_chart(estchart, sent, grammar.tolabel)
 	print('items avoided:')
 	print(list(chart.keys()))
 	print()
@@ -727,13 +729,13 @@ def main():
 		print(item)
 	print()
 
-	trees = [Tree.parse(b"(ROOT (A (a 0) (b 1)))", parse_leaf=int),
-			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse(b"(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
-			Tree.parse(b"(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
+	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
+			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))", parse_leaf=int),
+			Tree.parse("(ROOT (C (a 0) (b 1)) (c 2))", parse_leaf=int),
 			]
 	sents =[["a", "b"],
 			["a", "b", "c"],
@@ -746,18 +748,18 @@ def main():
 	for a in trees:
 		print(a)
 	print("\npcfg grammar:")
-	grammar = Grammar(induce_plcfrs(trees, sents))
+	grammar = Grammar(induce_plcfrs(trees, sents), "ROOT")
 	print(grammar, '\n')
 	outside = getpcfgestimates(grammar, 4, grammar.toid["ROOT"], debug=True)
 	sent = ["a", "b", "c"]
 	print("\nwithout estimates")
-	chart, start, msg = parse(sent, grammar, estimates=None)
+	chart, start, msg = plcfrs.parse(sent, grammar, estimates=None)
 	print(msg)
-	pprint_chart(chart, sent, grammar.tolabel)
+	plcfrs.pprint_chart(chart, sent, grammar.tolabel)
 	print("\nwith estimates")
-	estchart, start, msg = parse(sent, grammar, estimates=('SX', outside))
+	estchart, start, msg = plcfrs.parse(sent, grammar, estimates=('SX', outside))
 	print(msg)
-	pprint_chart(estchart, sent, grammar.tolabel)
+	plcfrs.pprint_chart(estchart, sent, grammar.tolabel)
 	print('items avoided:')
 	for item in chart.viewkeys() - estchart.viewkeys():
 		print(item)

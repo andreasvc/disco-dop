@@ -12,7 +12,7 @@ from itertools import count
 from collections import defaultdict, OrderedDict
 from tree import Tree
 from kbest import lazykbest, getderiv
-from parser import parse
+import plcfrs
 from agenda cimport Entry, new_Entry
 from grammar import induce_plcfrs, rangeheads
 from treetransforms import unbinarize #, canonicalize
@@ -40,7 +40,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 	cdef Entry entry
 	cdef dict parsetrees = <dict>defaultdict(float)
 	cdef list derivations = [], entries = []
-	cdef str treestr, deriv
+	cdef bytes treestr, deriv
 	cdef double prob, maxprob
 	cdef int m
 
@@ -203,7 +203,7 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
 	for tt in nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get):
 		mpp2[tt] = parsetreeprob[tt]
 
-	chart2, start2, _ = parse(sent, secondarymodel, tags=tags,
+	chart2, start2, _ = plcfrs.parse(sent, secondarymodel, tags=tags,
 					exhaustive=True, estimates=None, whitelist=whitelist)
 	if start2:
 		shortestderivations, DD, _ = lazykbest(chart2, start2, m,
@@ -264,8 +264,8 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 			len(derivations), len(result), len(parsetreeprob))
 	return result, msg
 
-cdef samplechart(dict D, dict chart, ChartItem start, dict tolabel, dict tables,
-		str debin):
+cdef samplechart(dict D, dict chart, ChartItem start, list tolabel, dict tables,
+		bytes debin):
 	""" Samples a derivation from a chart. """
 	cdef LCFRSEdge edge
 	cdef ChartItem child
@@ -311,12 +311,12 @@ def getsamples(D, chart, start, n, tolabel, debin=None):
 	return [samplechart(<dict>D, chartcopy, start, tolabel, tables, debin)
 						for _ in range(n)]
 
-cpdef viterbiderivation(chart, ChartItem start, dict tolabel):
+cpdef viterbiderivation(chart, ChartItem start, list tolabel):
 	# Ask for at least 10 derivations because unary cycles.
 	derivations = lazykbest(chart, start, 10, tolabel)[0]
 	return derivations[0]
 
-cpdef str recoverfragments(derivation, D, Grammar grammar,
+cpdef bytes recoverfragments(derivation, D, Grammar grammar,
 		dict backtransform):
 	""" Reconstruct a DOP derivation from a DOP derivation with
 	flattened fragments which are left-binarized. `derivation' should be
@@ -338,7 +338,7 @@ cpdef str recoverfragments(derivation, D, Grammar grammar,
 				derivation, D, grammar, backtransform))
 	raise ValueError("derivation should be RankedEdge or RankedCFGEdge.")
 
-cdef recoverfragments_lcfrs(RankedEdge derivation, dict D,
+cdef bytes recoverfragments_lcfrs(RankedEdge derivation, dict D,
 		Grammar grammar, dict backtransform):
 	cdef RankedEdge child
 	cdef LCFRSEdge childedge, derivedge = derivation.edge
@@ -351,6 +351,8 @@ cdef recoverfragments_lcfrs(RankedEdge derivation, dict D,
 	# w/on the fly left-factored debinarization
 	if derivedge.right.label: # is there a right child?
 		# keep going while left child is part of same binarized constituent
+		# instead of looking for a binarization marker in the label string, we
+		# use the fact that such labels do not have a mapping as proxy.
 		while grammar.mapping[derivedge.left.label] == 0:
 			# one of the right children
 			child = (<Entry>D[derivedge.right][derivation.right]).key
@@ -383,7 +385,7 @@ cdef recoverfragments_lcfrs(RankedEdge derivation, dict D,
 	children.reverse()
 	return result.format(*children)
 
-cdef str recoverfragments_cfg(RankedCFGEdge derivation, list D,
+cdef bytes recoverfragments_cfg(RankedCFGEdge derivation, list D,
 		Grammar grammar, dict backtransform):
 	cdef RankedCFGEdge child
 	cdef CFGEdge childedge, derivedge = derivation.edge
@@ -435,7 +437,7 @@ cdef str recoverfragments_cfg(RankedCFGEdge derivation, list D,
 def main():
 	from grammar import dopreduction
 	from containers import Grammar
-	from _parser import parse
+	import plcfrs
 	def e(x):
 		if isinstance(x[1], tuple):
 			return x[0].replace("@", ""), (int(abs(x[1][0])), x[1][1])
@@ -472,7 +474,8 @@ def main():
 	shortest, secondarymodel = dopreduction(trees, sents, shortestderiv=True)
 	shortest = Grammar(shortest)
 	sent = "a b c".split()
-	chart, start, _ = parse(sent, grammar, None, grammar.toid['ROOT'], True)
+	chart, start, _ = plcfrs.parse(sent, grammar, None, True)
+	assert start
 	vit = viterbiderivation(chart, start, grammar.tolabel)
 	mpd, _ = marginalize("mpd", chart, start, grammar, 1000)
 	mpp, _ = marginalize("mpp", chart, start, grammar, 1000)
