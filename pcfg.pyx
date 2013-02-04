@@ -61,7 +61,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		short narrowr, narrowl, widel, wider, minmid, maxmid
 		double oldscore, prob
 		size_t n
-		UInt lhs, rhs1, Epsilon = grammar.toid["Epsilon"]
+		UInt lhs, rhs1
 		UInt spans = 0, items = 0, edges = 0, blocked = 0
 		ULLong vec = 0
 		bint foundnew = False
@@ -92,6 +92,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 
 	# assign POS tags
 	for left, word in enumerate(sent):
+		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		cell = chart[left][right]
 		recognized = False
@@ -99,8 +100,8 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			lhs = lexrule.lhs
-			if (not tags or grammar.tolabel[lhs] == tags[left]
-				or grammar.tolabel[lhs].startswith(tags[left] + '@')):
+			if (not tags or grammar.tolabel[lhs] == tag
+				or grammar.tolabel[lhs].startswith(tag + b'@')):
 				x = viterbi[lhs, left, right] = lexrule.prob
 				edge = new_CFGEdge(x, NULL, right)
 				cell[lhs] = {edge: edge}
@@ -114,8 +115,8 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 					minright[lhs, left] = right
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
-		if not recognized and tags and tags[left] in grammar.toid:
-			lhs = grammar.toid[tags[left]]
+		if not recognized and tags and tag in grammar.toid:
+			lhs = grammar.toid[tag]
 			viterbi[lhs, left, right] = 0.0
 			edge = new_CFGEdge(0.0, NULL, right)
 			cell[lhs] = {edge: edge}
@@ -130,8 +131,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (
-					tags[left] if tags else word)
+			return chart, NONE, "not covered: %r" % (tag or word)
 
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
@@ -310,6 +310,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 				chart[left][right + 1] = cell.copy()
 	# assign POS tags
 	for left, word in enumerate(sent):
+		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		viterbicell = viterbi[left][right]
 		cell = chart[left][right]
@@ -320,8 +321,8 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lhs] == tags[left]
-				or grammar.tolabel[lhs].startswith(tags[left] + '@')):
+			if (not tags or grammar.tolabel[lhs] == tag
+				or grammar.tolabel[lhs].startswith(tag + b'@')):
 				edge = new_CFGEdge(lexrule.prob, NULL, right)
 				viterbicell[lhs] = edge
 				cell[lhs] = {edge: edge}
@@ -336,8 +337,8 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
 		# NB: don't allow blocking of gold tags if given
-		if not recognized and tags and tags[left] in grammar.toid:
-			lhs = grammar.toid[tags[left]]
+		if not recognized and tags and tag in grammar.toid:
+			lhs = grammar.toid[tag]
 			edge = new_CFGEdge(0.0, NULL, right)
 			viterbicell[lhs] = edge
 			cell[lhs] = {edge: edge}
@@ -351,8 +352,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (
-					tags[left] if tags else word)
+			return chart, NONE, "not covered: %r" % (tag or word)
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
 		unaryagenda.update(viterbicell.items())
@@ -537,6 +537,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 				chart[left][right + 1] = cell.copy()
 	# assign POS tags
 	for left, word in enumerate(sent):
+		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		cell = chart[left][right]
 		recognized = False
@@ -546,8 +547,8 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lhs] == tags[left]
-				or grammar.tolabel[lhs].startswith(tags[left] + '@')):
+			if (not tags or grammar.tolabel[lhs] == tag
+				or grammar.tolabel[lhs].startswith(tag + b'@')):
 				edge = new_CFGEdge(lexrule.prob, NULL, right)
 				cell[lhs] = {edge: edge}
 				recognized = True
@@ -561,8 +562,8 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
 		# NB: don't allow blocking of gold tags if given
-		if not recognized and tags and tags[left] in grammar.toid:
-			lhs = grammar.toid[tags[left]]
+		if not recognized and tags and tag in grammar.toid:
+			lhs = grammar.toid[tag]
 			edge = new_CFGEdge(0.0, NULL, right)
 			cell[lhs] = {edge: edge}
 			# update filter
@@ -575,8 +576,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (
-					tags[left] if tags else word)
+			return chart, NONE, "not covered: %r" % (tag or word)
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
 		unaryagenda.update(cell.keys())
@@ -707,7 +707,6 @@ def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 		start = new_CFGChartItem(1, 0, lensent)
 		msg = ""
 	else:
-		#pprint_matrix(inside, sent, grammar.tolabel)
 		start = NONE
 		msg = "no parse"
 	return inside, outside, start, msg
@@ -743,23 +742,23 @@ def insidescores(list sent, Grammar grammar,
 	inside[:lensent, :lensent+1, :] = 0.0
 	# assign POS tags
 	for left in range(lensent):
+		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		for lexrule in grammar.lexical.get(sent[left], []):
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if not tags or (grammar.tolabel[lhs] == tags[left]
-					or grammar.tolabel[lhs].startswith(tags[left] + '@')):
+			if not tags or (grammar.tolabel[lhs] == tag
+					or grammar.tolabel[lhs].startswith(tag + b'@')):
 				inside[left, right, lhs] = lexrule.prob
 		if not inside[left, right].any():
 			if tags is not None:
-				lhs = grammar.toid[tags[left]]
-				if not tags or (grammar.tolabel[lhs] == tags[left]
-						or grammar.tolabel[lhs].startswith(tags[left] + '@')):
+				lhs = grammar.toid[tag]
+				if not tags or (grammar.tolabel[lhs] == tag
+						or grammar.tolabel[lhs].startswith(tag + b'@')):
 					inside[left, right, lhs] = 1.
 			else:
-				raise ValueError("not covered: %r" % (
-						tags[left] if tags else sent[left]))
+				raise ValueError("not covered: %r" % (tag or sent[left]))
 		# unary rules on POS tags 
 		unaryagenda.update([(rhs1,
 			new_CFGEdge(-inside[left, right, rhs1], NULL, 0))
@@ -1090,7 +1089,8 @@ def pprint_chart(chart, sent, tolabel):
 			for label in chart[left][right] or ():
 				if not chart[left][right][label]:
 					continue
-				print("%s[%d:%d] =>" % (tolabel[label], left, right))
+				print("%s[%d:%d] =>" % (
+						tolabel[label].decode('ascii'), left, right))
 				for edge in sorted(chart[left][right][label] or (),
 						key=sortfunc):
 					if edge.rule is NULL:
@@ -1098,11 +1098,12 @@ def pprint_chart(chart, sent, tolabel):
 								sent[edge.mid - 1]), end='')
 					else:
 						print("%9.7f  %9.7f " % (exp(-edge.inside),
-								exp(-edge.rule.prob)),
-							"%s[%d:%d]" % (tolabel[edge.rule.rhs1],
+								exp(-edge.rule.prob)), "%s[%d:%d]" % (
+									tolabel[edge.rule.rhs1].decode('ascii'),
 								left, edge.mid), end='')
 						if edge.rule.rhs2:
-							print("\t%s[%d:%d]" % (tolabel[edge.rule.rhs2],
+							print("\t%s[%d:%d]" % (
+									tolabel[edge.rule.rhs2].decode('ascii'),
 									edge.mid, right), end='')
 					print()
 				print()
@@ -1119,8 +1120,8 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 				for lhs in range(len(matrix[left, right])):
 					if matrix[left, right, lhs] or (
 							matrix2 is not None and matrix2[left, right, lhs]):
-						print("%20s\t%8.6g" % (
-								tolabel[lhs], matrix[left, right, lhs]), end='')
+						print("%20s\t%8.6g" % (tolabel[lhs].decode('ascii'),
+								matrix[left, right, lhs]), end='')
 						if matrix2 is not None:
 							print("\t%8.6g" % matrix2[left, right, lhs], end='')
 						print()
@@ -1150,7 +1151,7 @@ def main():
 		((('D', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)],
-		"S")
+		'S')
 	print(cfg)
 	print("cfg parsing; sentence: mary walks")
 	print("pcfg", end='')
@@ -1160,13 +1161,13 @@ def main():
 	cfg1 = Grammar([
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
-		((('VP', 'Epsilon'), ('walks', )), 1)], "S", logprob=False)
+		((('VP', 'Epsilon'), ('walks', )), 1)], 'S', logprob=False)
 	i, o, start, _ = doinsideoutside("mary walks".split(), cfg1)
 	assert start
-	print(i[0, 2, cfg1.toid["S"]], o[0, 2, cfg1.toid["S"]])
+	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
 	i, o, start, _ = doinsideoutside("walks mary".split(), cfg1)
 	assert not start
-	print(i[0, 2, cfg1.toid["S"]], o[0, 2, cfg1.toid["S"]])
+	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
 	rules = [
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('PP', 'P', 'NP'), ((0, 1), )), 1),
@@ -1180,16 +1181,16 @@ def main():
 		((('NP', 'Epsilon'), ('saw', )), 0.04),
 		((('NP', 'Epsilon'), ('stars', )), 0.18),
 		((('NP', 'Epsilon'), ('telescopes', )), 0.1)]
-	cfg2 = Grammar(rules, "S", logprob=False)
+	cfg2 = Grammar(rules, 'S', logprob=False)
 	sent = "astronomers saw stars with ears".split()
 	inside, outside, _, msg = doinsideoutside(sent, cfg2)
 	print(msg)
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)
 
-	cfg2 = Grammar(rules, "S", logprob=True)
+	cfg2 = Grammar(rules, 'S', logprob=True)
 	chart, start, _ = parse(sent, cfg2)
 	from disambiguation import marginalize
 	from operator import itemgetter
-	mpp, _ = marginalize("mpp", chart, start, cfg2, 10)
+	mpp, _ = marginalize('mpp', chart, start, cfg2, 10)
 	for a, p in sorted(mpp.items(), key=itemgetter(1), reverse=True):
 		print(p, a)

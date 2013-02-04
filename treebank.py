@@ -81,7 +81,7 @@ class CorpusReader(object):
 			# this assumes that .sents() and .parsed_sents() correctly remove
 			# punctuation if requested.
 			self._tagged_sents_cache = OrderedDict((n,
-				zip(sent, map(itemgetter(1), sorted(tree.pos()))))
+				list(zip(sent, map(itemgetter(1), sorted(tree.pos())))))
 				for (n, sent), tree in zip(self.sents().items(),
 						self.parsed_sents().values()))
 		return self._tagged_sents_cache
@@ -274,7 +274,7 @@ class BracketCorpusReader(CorpusReader):
 	def tagged_sents(self):
 		if not self._tagged_sents_cache:
 			self._tagged_sents_cache = OrderedDict(
-				(n, zip(sent, POSRE.findall(block))) for (n, sent), block
+				(n, list(zip(sent, POSRE.findall(block)))) for (n, sent), block
 				in zip(self.sents().items(), self.blocks()))
 		return self._sents_cache
 	def parsed_sents(self):
@@ -733,7 +733,7 @@ def unfold(tree):
 		# NP -> PN -> NP
 		if ac and nk and (len(nk) > 1 or nk[0].label not in "NP PN".split()):
 			pp[:] = []
-			pp[:] = ac + [ParentedTree(b"NP", nk)]
+			pp[:] = ac + [ParentedTree("NP", nk)]
 
 	# introduce DPs
 	#determiners = set("ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT "
@@ -745,7 +745,7 @@ def unfold(tree):
 			if len(np) > 1 and np[1].label != "PN":
 				np1 = np[1:]
 				np[1:] = []
-				np[1:] = [ParentedTree(b"NP", np1)]
+				np[1:] = [ParentedTree("NP", np1)]
 
 	# VP category split based on head
 	for vp in tree.subtrees(lambda n: n.label == "VP"):
@@ -772,7 +772,7 @@ def unfold(tree):
 		toplevel_s = [a for a in tree if a.label == "S"]
 		for s in toplevel_s:
 			while function(s[0]) in newlevel:
-				s[:] = [s[0], ParentedTree(b"S", s[1:])]
+				s[:] = [s[0], ParentedTree("S", s[1:])]
 				s = s[1]
 				toplevel_s = [s]
 	elif "CS" in labels(tree):
@@ -801,7 +801,7 @@ def unfold(tree):
 	for s in list(tree.subtrees(lambda n: n.label == "S"
 			and function(n[0]) in sbarfunc and len(n) > 1)):
 		s.label = "SBAR"
-		s[:] = [s[0], ParentedTree(b"S", s[1:])]
+		s[:] = [s[0], ParentedTree("S", s[1:])]
 
 	# introduce nested structures for modifiers
 	# (iterated adjunction instead of sister adjunction)
@@ -1227,9 +1227,6 @@ ispunc = re.compile("([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 def unknownwordftb(word, loc, lexicon):
 	""" Model 2 for French of the Stanford parser. """
 	sig = "UNK"
-	# unicode hack.
-	if isinstance(word, str):
-		word = word.decode("utf-8")
 
 	if advsuffix.search(word):
 		sig += "-ADV"
@@ -1306,7 +1303,6 @@ def main():
 	"""" Test whether the Tiger transformations (fold / unfold) are
 	reversible. """
 	from treetransforms import canonicalize
-	#sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	headrules = "negra.headrules"
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			headrules=headrules)

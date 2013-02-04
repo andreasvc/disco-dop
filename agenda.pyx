@@ -326,8 +326,9 @@ cdef class EdgeAgenda:
 	def items(self): return zip(self.keys(), self.values())
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
-cdef list nsmallest(int n, list items):
+cdef list nsmallest(int n, object iterable):
 	""" return an _unsorted_ list of the n best items in a list """
+	cdef list items = list(iterable)
 	if len(items) > 1:
 		quickfindfirstk(items, 0, len(items) - 1, n)
 	return items[:n]
@@ -572,8 +573,10 @@ class TestHeap(TestCase):
 
 def test(verbose=False):
 	import sys
-	import test.test_support as test_support # Python 2
-	#import test.support as test_support # Python 3
+	if sys.version[0] >= '3':
+		import test.support as test_support # Python 3
+	else:
+		import test.test_support as test_support # Python 2
 	test_support.run_unittest(TestHeap)
 
 	# verify reference counting

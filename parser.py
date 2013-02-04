@@ -85,7 +85,7 @@ def main():
 		else:
 			lcfrs = True
 		fine = Grammar(rulelist, top)
-		fine.getmapping(coarse, striplabelre=re.compile("@.+$"))
+		fine.getmapping(coarse, striplabelre=re.compile(b"@.+$"))
 		infile = (io.open(args[4], encoding='utf-8')
 				if len(args) >= 5 else sys.stdin)
 		out = (io.open(args[5], "w", encoding='utf-8')

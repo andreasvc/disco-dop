@@ -213,7 +213,8 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list treeswithprod,
 	cdef UChar SLOTS = BITNSLOTS(trees.maxnodes)
 	for p, treeindices in enumerate(treeswithprod):
 		pyarray = clone(ulongarray, SLOTS + 2, True)
-		n = iter(treeindices).next()
+		# slightly convoluted way of getting an arbitrary set member:
+		n = next(iter(treeindices))
 		for m in range(trees.data[n].len):
 			if trees.data[n].nodes[m].prod == p:
 				SETBIT(pyarray.data.as_ulongs, m)
@@ -645,7 +646,7 @@ def getsent(frag, list sent):
 	cdef dict spans = {int(start):
 		int(end) + 1
 			for start, end in frontierre.findall(frag)}
-	cdef list leaves = map(int, termsre.findall(frag))
+	cdef list leaves = list(map(int, termsre.findall(frag)))
 	spans.update((a, a + 1) for a in leaves)
 	maxl = max(spans)
 	for n in sorted(spans):
@@ -947,7 +948,7 @@ def main():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
 	test()
 
-	treebank = map(Tree, """\
+	treebank = [Tree(x) for x in """\
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
@@ -955,7 +956,7 @@ def main():
 (S (NP (DT The) (JJ little) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
 (S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))\
-		""".splitlines())
+		""".splitlines()]
 	for tree in treebank:
 		tree.chomsky_normal_form()
 	sents = [tree.leaves() for tree in treebank]
@@ -970,7 +971,7 @@ def main():
 			list(fragments.values()), treeswithprod, fast=True)
 	print("number of fragments:", len(fragments))
 	assert len(fragments) == 25
-	for (a, b), c in sorted(zip(fragments, counts)):
+	for (a, b), c in sorted(zip(fragments, counts), key=repr):
 		print("%s\t%d" % (re.sub("[0-9]+", lambda x: b[int(x.group())], a), c))
 		#print("%s\t%s\t%d" % (a, b, c))
 

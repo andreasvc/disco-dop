@@ -757,7 +757,7 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 			p = ImmutableTree(tree.label, p[:])
 			p.bitset = tree.bitset
 			return p
-		for p1, y in workingset.items():
+		for p1, y in list(workingset.items()):
 			if p1 not in workingset:
 				continue
 			# this is inefficient. we should have a single query for all

@@ -459,7 +459,7 @@ def main():
 		if not enabled:
 			continue
 		print("coarse grammar:", msg)
-		fine.getmapping(coarse, re.compile("@[-0-9]+$"), None, split, True)
+		fine.getmapping(coarse, re.compile(b'@[-0-9]+$'), None, split, True)
 		begin = clock()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen:

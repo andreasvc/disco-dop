@@ -41,7 +41,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 	produce a chart, either exhaustive or up until the viterbi parse.
 	Other parameters:
         - start: integer corresponding to the start symbol that analyses should
-            have, e.g., grammar.toid['ROOT']
+            have, e.g., grammar.toid[b'ROOT']
         - exhaustive: don't stop at viterbi parser, return a full chart
         - whitelist: a whitelist of allowed ChartItems. Anything else is not
             added to the agenda.
@@ -78,7 +78,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
 		signed int lensent = len(sent), estimatetype = 0
-		UInt blocked = 0, Epsilon = grammar.toid["Epsilon"]
+		UInt blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 		ULLong vec = 0
 
@@ -94,6 +94,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 	for i, word in enumerate(sent):
 		recognized = False
 		item = new_ChartItem(Epsilon, i)
+		tag = tags[i].encode('ascii') if tags else None
 		if estimates is not None:
 			length = 1
 			left = i
@@ -102,8 +103,8 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 		for lexrule in grammar.lexical.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lexrule.lhs] == tags[i]
-				or grammar.tolabel[lexrule.lhs].startswith(tags[i] + "@")):
+			if (not tags or grammar.tolabel[lexrule.lhs] == tag
+					or grammar.tolabel[lexrule.lhs].startswith(tag + b'@')):
 				score = lexrule.prob
 				if estimatetype == SX:
 					score += outside[lexrule.lhs, left, right, 0]
@@ -121,8 +122,8 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
 				newitem = tmp
-		if not recognized and tags and tags[i] in grammar.toid:
-			lhs = grammar.toid[tags[i]]
+		if not recognized and tags and tag in grammar.toid:
+			lhs = grammar.toid[tag]
 			score = 0.0
 			if estimatetype == SX:
 				score += outside[lhs, left, right, 0]
@@ -137,7 +138,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 			chart[tagitem] = {}
 			recognized = True
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tags[i] if tags else word)
+			return chart, NONE, "not covered: %r" % (tag or word)
 
 	# parsing
 	while agenda.length:
@@ -265,8 +266,8 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 		#		len(filter(None, chart.values())), len(filter(None, viterbi)),
 		#		sum(map(len, chart.values())), blocked)))
 	msg = ("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
-		% (maxA, len(agenda), len(filter(None, chart.values())),
-		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
+		% (maxA, len(agenda), len(list(filter(None, chart.values()))),
+		len(list(filter(None, viterbi))), sum(map(len, chart.values())), blocked))
 	if goal in chart:
 		return chart, goal, msg
 	else:
@@ -311,8 +312,6 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 						componentdict = <dict>(componentlist[cnt])
 					if PyDict_Contains(componentdict, component) != 1:
 						blocked[0] += 1
-						#print('blocked split', grammar.tolabel[newitem.label],
-						#		newitem.label, newitem)
 						return newitem
 					a = nextset(newitem.vec, b)
 					cnt += 1
@@ -322,7 +321,6 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 				if PyDict_Contains(whitelist[label], newitem) != 1:
 					#or inside + <double><object>outside > 300.0):
 					blocked[0] += 1
-					#print('blocked', grammar.tolabel[label], label, newitem)
 					return newitem
 				newitem.label = label
 
@@ -433,7 +431,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef double x = 0.0, y = 0.0, score, inside
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), estimatetype = 0
-	cdef UInt blocked = 0, Epsilon = grammar.toid["Epsilon"]
+	cdef UInt blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 	cdef ULong maxA = 0
 	goal = new_FatChartItem(start)
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
@@ -450,6 +448,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	# scan
 	for i, word in enumerate(sent):
 		recognized = False
+		tag = tags[i].encode('ascii') if tags else None
 		item = new_FatChartItem(Epsilon)
 		item.vec[0] = i
 		if estimates is not None:
@@ -460,8 +459,8 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		for lexrule in grammar.lexical.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lexrule.lhs] == tags[i]
-				or grammar.tolabel[lexrule.lhs].startswith(tags[i] + "@")):
+			if (not tags or grammar.tolabel[lexrule.lhs] == tag
+				or grammar.tolabel[lexrule.lhs].startswith(tag + b'@')):
 				score = lexrule.prob
 				if estimatetype == SX:
 					score += outside[lexrule.lhs, left, right, 0]
@@ -479,8 +478,8 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 				#check whether item has not been blocked
 				recognized |= newitem is not tmp
 				newitem = tmp
-		if not recognized and tags and tags[i] in grammar.toid:
-			lhs = grammar.toid[tags[i]]
+		if not recognized and tags and tag in grammar.toid:
+			lhs = grammar.toid[tag]
 			score = 0.0
 			if estimatetype == SX:
 				score += outside[lhs, left, right, 0]
@@ -496,7 +495,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 			chart[tagitem] = {}
 			recognized = True
 		elif not recognized:
-			msg = "not covered: %r" % (tags[i] if tags else word)
+			msg = "not covered: %r" % (tag or word)
 			return chart, FATNONE, msg
 
 	# parsing
@@ -609,8 +608,8 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		if agenda.length > maxA:
 			maxA = agenda.length
 	msg = ("agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d"
-		% (maxA, len(agenda), len(filter(None, chart.values())),
-		len(filter(None, viterbi)), sum(map(len, chart.values())), blocked))
+		% (maxA, len(agenda), len(list(filter(None, chart.values()))),
+		len(list(filter(None, viterbi))), sum(map(len, chart.values())), blocked))
 	if goal in chart:
 		return chart, goal, msg
 	else:
@@ -806,7 +805,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 		SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
 		SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 		signed int lensent = len(sent)
-		UInt blocked = 0, Epsilon = grammar.toid["Epsilon"]
+		UInt blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 		ULLong vec = 0
 
@@ -816,12 +815,13 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 	# scan
 	for i, word in enumerate(sent):
 		recognized = False
+		tag = tags[i].encode('ascii') if tags else None
 		item = new_ChartItem(Epsilon, i)
 		for lexrule in grammar.lexical.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lexrule.lhs] == tags[i]
-				or grammar.tolabel[lexrule.lhs].startswith(tags[i] + "@")):
+			if (not tags or grammar.tolabel[lexrule.lhs] == tag
+				or grammar.tolabel[lexrule.lhs].startswith(tag + b'@')):
 				score = lexrule.prob
 				newitem.label = lexrule.lhs
 				newitem.vec = 1ULL << i
@@ -830,8 +830,8 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 				chart[newitem][edge] = edge
 				items[newitem.label].append(newitem)
 				newitem = SmallChartItem.__new__(SmallChartItem)
-		if not recognized and tags and tags[i] in grammar.toid:
-			newitem.label = grammar.toid[tags[i]]
+		if not recognized and tags and tag in grammar.toid:
+			newitem.label = grammar.toid[tag]
 			newitem.vec = 1ULL << i
 			edge = new_LCFRSEdge(0.0, 0.0, NULL, item, NONE)
 			agenda.append(newitem)
@@ -840,7 +840,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 			newitem = SmallChartItem.__new__(SmallChartItem)
 			recognized = True
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tags[i] if tags else word)
+			return chart, NONE, "not covered: %r" % (tag or word)
 
 	# parsing
 	while agenda:
@@ -899,72 +899,20 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 		if agenda.length > maxA:
 			maxA = agenda.length
 	msg = ("agenda max %d, now %d, items %d, edges %d, blocked %d" % (
-			maxA, len(agenda), len(filter(None, chart.values())),
+			maxA, len(agenda), len(list(filter(None, chart.values()))),
 			sum(map(len, chart.values())), blocked))
 	if goal in chart:
 		return chart, goal, msg
 	else:
 		return chart, NONE, "no parse " + msg
 
-cdef inline LCFRSEdge iscore(LCFRSEdge e):
-	""" Replace estimate with inside probability """
-	e.score = e.inside
-	return e
-
-def sortfunc(a):
-	if isinstance(a, SmallChartItem):
-		return (bitcount((<SmallChartItem>a).vec), (<SmallChartItem>a).vec)
-	elif isinstance(a, FatChartItem):
-		return (abitcount((<FatChartItem>a).vec, SLOTS),
-			anextset((<FatChartItem>a).vec, 0, SLOTS))
-	elif isinstance(a, LCFRSEdge):
-		return (<LCFRSEdge>a).inside
-
-def pprint_chart(chart, sent, tolabel):
-	""" `pretty print' a chart. """
-	cdef ChartItem a
-	cdef LCFRSEdge edge
-	print("chart:")
-	for a in sorted(chart, key=sortfunc):
-		if chart[a] == []:
-			continue
-		print("%s[%s] =>" % (tolabel[a.label], a.binrepr(len(sent))))
-		if isinstance(chart[a], float):
-			continue
-		for edge in sorted(chart[a], key=sortfunc):
-			if edge.rule is NULL:
-				print("%9.7f  %9.7f " % (exp(-edge.inside), 1), end='')
-				print("\t'%s'" % sent[edge.left.lexidx()], end='')
-			else:
-				print("%9.7f  %9.7f " % (exp(-edge.inside),
-						exp(-edge.rule.prob)),
-						"%s[%s]" % (tolabel[edge.left.label],
-						edge.left.binrepr(len(sent))), end='')
-				if edge.right:
-					print("\t%s[%s]" % (tolabel[edge.right.label],
-							edge.right.binrepr(len(sent))), end='')
-			print()
-		print()
-
-def do(sent, grammar):
-	from disambiguation import marginalize
-	from operator import itemgetter
-	print("sentence", sent)
-	sent = sent.split()
-	chart, start, _ = parse(sent, grammar)
-	if len(sent) < sizeof(ULLong):
-		pprint_chart(chart, sent, grammar.tolabel)
-	if not start:
-		print("no parse")
-		return False
-	else:
-		print("10 best parse trees:")
-		mpp, _ = marginalize("mpp", chart, start, grammar, 10)
-		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))):
-			print(p, a)
-		print()
-		return True
-
+#def doinsideoutside(dict chart, ChartItem start):
+#	cdef dict result = dict.fromkeys(chart)
+#	getinside(result, chart, start)
+#
+#cdef getinside(dict result, chart, start):
+#	#...
+#
 #def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
 #		list whitelist=None, bint splitprune=False, bint markorigin=False,
 #		estimates=None, int beamwidth=0):
@@ -1022,6 +970,66 @@ def do(sent, grammar):
 #		if not candidates:
 #			break
 #	return candidates if pos == -1 else set()
+
+cdef inline LCFRSEdge iscore(LCFRSEdge e):
+	""" Replace estimate with inside probability """
+	e.score = e.inside
+	return e
+
+def sortfunc(a):
+	if isinstance(a, SmallChartItem):
+		return (bitcount((<SmallChartItem>a).vec), (<SmallChartItem>a).vec)
+	elif isinstance(a, FatChartItem):
+		return (abitcount((<FatChartItem>a).vec, SLOTS),
+			anextset((<FatChartItem>a).vec, 0, SLOTS))
+	elif isinstance(a, LCFRSEdge):
+		return (<LCFRSEdge>a).inside
+
+def pprint_chart(chart, sent, tolabel):
+	""" `pretty print' a chart. """
+	cdef ChartItem a
+	cdef LCFRSEdge edge
+	print("chart:")
+	for a in sorted(chart, key=sortfunc):
+		if chart[a] == []:
+			continue
+		print("%s[%s] =>" % (tolabel[a.label].decode('ascii'),
+				a.binrepr(len(sent))))
+		if isinstance(chart[a], float):
+			continue
+		for edge in sorted(chart[a], key=sortfunc):
+			if edge.rule is NULL:
+				print("%9.7f  %9.7f " % (exp(-edge.inside), 1), end='')
+				print("\t'%s'" % sent[edge.left.lexidx()], end='')
+			else:
+				print("%9.7f  %9.7f " % (exp(-edge.inside),
+						exp(-edge.rule.prob)),
+						"%s[%s]" % (tolabel[edge.left.label].decode('ascii'),
+						edge.left.binrepr(len(sent))), end='')
+				if edge.right:
+					print("\t%s[%s]" % (tolabel[edge.right.label].decode('ascii'),
+							edge.right.binrepr(len(sent))), end='')
+			print()
+		print()
+
+def do(sent, grammar):
+	from disambiguation import marginalize
+	from operator import itemgetter
+	print("sentence", sent)
+	sent = sent.split()
+	chart, start, _ = parse(sent, grammar)
+	if len(sent) < sizeof(ULLong):
+		pprint_chart(chart, sent, grammar.tolabel)
+	if not start:
+		print("no parse")
+		return False
+	else:
+		print("10 best parse trees:")
+		mpp, _ = marginalize("mpp", chart, start, grammar, 10)
+		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))):
+			print(p, a)
+		print()
+		return True
 
 def main():
 	from containers import Grammar

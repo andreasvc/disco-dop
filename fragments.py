@@ -104,9 +104,11 @@ def main(argv=None):
 	limit = numtrees
 	if numtrees == 0:
 		if params['disc']:
-			numtrees = open(args[0]).read().count("#BOS")
+			numtrees = len([a for a in
+					io.open(args[0], encoding=encoding).readlines()
+					if a.startswith("#BOS ")])
 		else:
-			numtrees = sum(1 for _ in open(args[0]))
+			numtrees = len(io.open(args[0], encoding=encoding).readlines())
 	assert numtrees
 	mult = 1 #3 if numproc > 1 else 1
 	if params['approx']:
@@ -377,7 +379,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 	if numproc == 1:
 		initworkersimple(trees, list(sents))
 		mymap = map
-		myapply = apply
+		myapply = lambda x, y: x(*y)
 	else:
 		logging.info("work division:\n%s", "\n".join("    %s: %r" % kv
 			for kv in sorted(dict(numchunks=len(work),

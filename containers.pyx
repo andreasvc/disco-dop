@@ -32,23 +32,23 @@ cdef class Grammar:
 			which will be used by default when parsing with this grammar
 		- logprob: whether to convert probabilities to negative log
 			probabilities. """
-		self.origrules = frozenset(grammar)
 		# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 		# and assign them unique IDs
 		# convert them to ASCII strings.
-		start = start.encode('ascii')
-		Epsilon = "Epsilon".encode('ascii')
-		labels = {nt.encode('ascii')
-				for (rule, _), _ in grammar
-					for nt in rule}
+		if not isinstance(start, bytes):
+			start = start.encode('ascii')
+		Epsilon = b'Epsilon'
+		grammar = [((tuple(nt if isinstance(nt, bytes) else nt.encode('ascii')
+				for nt in r), yf), w)
+				for (r, yf), w in grammar] # non-terminal labels => bytes
+		self.origrules = frozenset(grammar)
+		labels = {nt for (rule, _), _ in grammar for nt in rule}
 		assert start in labels, ("Start symbol %r not in set of "
 				"non-terminal labels extracted from grammar rules." % start)
 		assert Epsilon in labels, ("'Epsilon' non-terminal symbol not in set "
 				"of labels extracted from grammar rules: no lexical rules?")
 		self.tolabel = [Epsilon, start] + sorted(labels - {Epsilon, start})
 		self.nonterminals = len(self.tolabel)
-		for lhs in self.tolabel:
-			assert isinstance(lhs, str), repr(lhs)
 		self.toid = {lhs: n for n, lhs in enumerate(self.tolabel)}
 		self.lexical = {}
 		self.lexicalbylhs = {}
@@ -231,12 +231,12 @@ cdef class Grammar:
 			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
 				strlabel = self.tolabel[n]
 				if striplabelre is not None:
-					strlabel = striplabelre.sub("", strlabel, 1)
+					strlabel = striplabelre.sub(b"", strlabel, 1)
 				if self.fanout[n] == 1 or not splitprune:
 					self.mapping[n] = coarse.toid[strlabel]
 					seen.add(self.mapping[n])
 				else:
-					strlabel += "*"
+					strlabel += b'*'
 					if markorigin:
 						self.mapping[n] = self.nonterminals #sentinel value
 						self.splitmapping[n] = &(
@@ -244,7 +244,7 @@ cdef class Grammar:
 						components += self.fanout[n]
 						for m in range(self.fanout[n]):
 							self.splitmapping[n][m] = coarse.toid[
-								b"%s%d" % (strlabel, m)]
+								strlabel + str(m).encode('ascii')]
 							seen.add(self.splitmapping[n][m])
 					else:
 						self.mapping[n] = coarse.toid[strlabel]
@@ -254,11 +254,11 @@ cdef class Grammar:
 		if seen == set(range(coarse.nonterminals)):
 			msg = 'label sets are equal'
 		elif seen != set(range(coarse.nonterminals)):
-			l = [coarse.tolabel[a] for a in sorted(
+			l = [coarse.tolabel[a].decode('ascii') for a in sorted(
 					set(range(coarse.nonterminals)) - seen,
 					key=partial(getitem, coarse.tolabel))]
 			diff1 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
-			l = [coarse.tolabel[a] for a in seen -
+			l = [coarse.tolabel[a].decode('ascii') for a in seen -
 					set(range(coarse.nonterminals))]
 			diff2 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
 			if coarse.nonterminals > self.nonterminals:
@@ -271,12 +271,14 @@ cdef class Grammar:
 			msg += "\n"
 			for n in range(self.nonterminals):
 				if self.mapping[n]:
-					msg += "%s[%d] =>" % (self.tolabel[n], self.fanout[n])
+					msg += "%s[%d] =>" % (
+							self.tolabel[n].decode('ascii'), self.fanout[n])
 					if self.fanout[n] == 1 or not (splitprune and markorigin):
-						msg += coarse.tolabel[self.mapping[n]]
+						msg += coarse.tolabel[self.mapping[n]].decode('ascii')
 					elif self.fanout[n] > 1:
 						for m in range(self.fanout[n]):
-							msg += coarse.tolabel[self.splitmapping[n][m]]
+							msg += coarse.tolabel[self.splitmapping[n][m]
+									].decode('ascii')
 					print()
 			print(dict(striplabelre=striplabelre.pattern,
 					neverblockre=neverblockre.pattern,
@@ -285,9 +287,9 @@ cdef class Grammar:
 	cdef rulerepr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
 			exp(-rule.prob),
-			self.tolabel[rule.lhs],
-			self.tolabel[rule.rhs1],
-			"  %s" % self.tolabel[rule.rhs2]
+			self.tolabel[rule.lhs].decode('ascii'),
+			self.tolabel[rule.rhs1].decode('ascii'),
+			"  %s" % self.tolabel[rule.rhs2].decode('ascii')
 				if rule.rhs2 else "")
 		return left.ljust(40) + self.yfrepr(rule)
 	cdef yfrepr(self, Rule rule):
@@ -316,20 +318,24 @@ cdef class Grammar:
 		rules = "\n".join(filter(None,
 			[self.rulesrepr(lhs) for lhs in range(1, self.nonterminals)]))
 		lexical = "\n".join(["%.2f %s => %s" % (exp(-lr.prob),
-				self.tolabel[lr.lhs], lr.word.encode('unicode-escape'))
+				self.tolabel[lr.lhs].decode('ascii'),
+				lr.word.encode('unicode-escape').decode('ascii'))
 			for word in sorted(self.lexical)
 			for lr in sorted(self.lexical[word],
 			key=lambda lr: (<LexicalRule>lr).lhs)])
-		labels = ", ".join("%s=%d" % a for a in sorted(self.toid.items()))
+		labels = ", ".join("%s=%d" % (a.decode('ascii'), b)
+				for a, b in sorted(self.toid.items()))
 		if self.unaryclosure is None:
 			closure = ""
 		else:
 			closure = "\nunary closure: %s\ntop down unary closure: %s" % (
 					"\n".join(["%.2f %s => %s" % (
-							prob, self.tolabel[lhs], self.tolabel[rhs1])
+							prob, self.tolabel[lhs].decode('ascii'),
+							self.tolabel[rhs1].decode('ascii'))
 					for lhs, rhs1, prob in self.unaryclosure]),
 					"\n".join(["%.2f %s => %s" % (
-							prob, self.tolabel[lhs], self.tolabel[rhs1])
+							prob, self.tolabel[lhs].decode('ascii'),
+							self.tolabel[rhs1].decode('ascii'))
 					for lhs, rhs1, prob in self.unaryclosuretopdown]))
 		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s%s" % (
 				rules, lexical, labels, closure)

@@ -484,8 +484,9 @@ def transitiveclosure(eqpairs):
 	i.e., given a sequence of pairs denoting an equivalence relation,
 	produce a dictionary with equivalence classes as values and
 	arbitrary members of those classes as keys.
-	>>> transitiveclosure({('A', 'B'), ('B', 'C')})
-	{'A': set(['A', 'C', 'B'])} """
+	>>> result = {'A': {'A', 'C', 'B'}}
+	>>> transitiveclosure({('A', 'B'), ('B', 'C')}) == result
+	True """
 	edges = defaultdict(set)
 	for a, b in eqpairs:
 		edges[a].add(b)
@@ -512,7 +513,7 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 	leaves = list(range(len(sent)))
 	posnodes = []
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
-		for n, b in zip(count(), a)[::-1]:
+		for n, b in list(zip(count(), a))[::-1]:
 			if stripfunctions:
 				# e.g., NP-SUBJ or NP=2 => NP, but don't touch -NONE-
 				x = b.label.find("-")
@@ -551,14 +552,18 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 			sent[a[0]] = eqword[sent[a[0]]]
 	# cache spans
 	for a in reversed(list(tree.subtrees())):
-		if not a:
-			a.indices = []
-		elif isinstance(a[0], Tree):
-			a.indices = []
-			for b in a:
-				a.indices.extend(b.indices)
-		else:
-			a.indices = [a[0]]
+		indices = []
+		for b in a:
+			if isinstance(b, Tree):
+				indices.extend(b.indices)
+			elif isinstance(b, int):
+				indices.append(b)
+			else:
+				raise ValueError("Tree should consist of Tree nodes and "
+						"integer indices:\n%r" % b)
+		assert len(indices) == len(set(indices)), (
+			"duplicate index in tree:\n%s" % tree)
+		a.indices = tuple(sorted(indices))
 
 def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	""" Return the labeled set of bracketings for a tree:
@@ -572,19 +577,19 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
 			(), {}, {}, False)
 	>>> bracketings(tree)
-	Counter({('S', frozenset([0, 1, 2])): 1, ('VP', frozenset([0, 2])): 1})
+	Counter({('S', (0, 1, 2)): 1, ('VP', (0, 2)): 1})
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("VP",), \
 			(), {}, {}, False)
 	>>> bracketings(tree)
-	Counter({('S', frozenset([0, 1, 2])): 1})
+	Counter({('S', (0, 1, 2)): 1})
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("S",), \
 			(), {}, {}, False)
 	>>> bracketings(tree, dellabel=("S",))
-	Counter({('VP', frozenset([0, 2])): 1})
+	Counter({('VP', (0, 2)): 1})
 	"""
-	return multiset((a.label if labeled else "", frozenset(a.indices))
+	return multiset((a.label if labeled else "", a.indices)
 			for a in tree.subtrees()
 				if a and isinstance(a[0], Tree) # nonempty and not a preterminal
 					and a.label not in dellabel
@@ -593,8 +598,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 def strbracketings(brackets):
 	""" Return a string with a concise representation of a bracketing.
 
-	>>> strbracketings({('S', frozenset([0, 1, 2])), \
-			('VP', frozenset([0, 2]))})
+	>>> strbracketings({('S', (0, 1, 2)), ('VP', (0, 2))})
 	'S[0-2], VP[0,2]'
 	"""
 	if not brackets:

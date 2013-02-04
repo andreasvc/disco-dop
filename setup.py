@@ -11,8 +11,8 @@ cython_directives = dict(
 	profile=False,
 	cdivision=True,
 	nonecheck=False,
-	wraparound=True,
-	boundscheck=True,
+	wraparound=False,
+	boundscheck=False,
 	embedsignature=True,
 	language_level=3
 )

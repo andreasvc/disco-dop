@@ -42,4 +42,4 @@ cdef class EdgeAgenda:
 	cdef Entry peekentry(self)
 	cdef bint contains(self, key)
 
-cdef list nsmallest(int n, list items)
+cdef list nsmallest(int n, object iterable)

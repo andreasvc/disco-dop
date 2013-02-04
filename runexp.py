@@ -320,7 +320,7 @@ def main(
 	if rerun:
 		trees = []
 		sents = []
-	toplabels = {tree.label.encode('ascii') for tree in trees} | {
+	toplabels = {tree.label for tree in trees} | {
 			test_parsed_sents[n].label for n in testset}
 	assert len(toplabels) == 1, "expected unique TOP/ROOT label"
 	top = toplabels.pop()
@@ -387,18 +387,18 @@ def readgrammars(resultdir, stages, top):
 						stage.name)).read().splitlines()))
 				if n and stage.prune:
 					_ = grammar.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile("@.+$"),
-						neverblockre=re.compile(r'^#[0-9]+|.+}<'),
+						striplabelre=re.compile(b'@.+$'),
+						neverblockre=re.compile(b'^#[0-9]+|.+}<'),
 						splitprune=stage.splitprune and stages[n - 1].split,
 						markorigin=stages[n - 1].markorigin)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
 					_ = grammar.getmapping(None,
-						neverblockre=re.compile(r'.+}<'))
+						neverblockre=re.compile(b'.+}<'))
 			elif n and stage.prune: # dop reduction
 				_ = grammar.getmapping(stages[n - 1].grammar,
-					striplabelre=re.compile("@[-0-9]+$"),
+					striplabelre=re.compile(b'@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
@@ -526,8 +526,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					out.writelines("%s\n" % a for a in backtransform.values())
 				if n and stage.prune:
 					msg = grammar.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile("@.+$"),
-						neverblockre=re.compile(r'.+}<'),
+						striplabelre=re.compile(b'@.+$'),
+						neverblockre=re.compile(b'.+}<'),
 						# + stage.neverblockre?
 						splitprune=stage.splitprune and stages[n - 1].split,
 						markorigin=stages[n - 1].markorigin)
@@ -536,13 +536,13 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					# binarization nodes
 					msg = grammar.getmapping(None,
 						striplabelre=None,
-						neverblockre=re.compile(r'.+}<'),
+						neverblockre=re.compile(b'.+}<'),
 						# + stage.neverblockre?
 						splitprune=False, markorigin=False)
 				logging.info(msg)
 			elif n and stage.prune: # dop reduction
 				msg = grammar.getmapping(stages[n - 1].grammar,
-					striplabelre=re.compile("@[-0-9]+$"),
+					striplabelre=re.compile(b'@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
@@ -574,9 +574,10 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
 
-		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name), "w")
+		rules = codecs.getwriter('ascii')(gzip.open("%s/%s.rules.gz" % (
+				resultdir, stage.name), "w"))
 		lexicon = codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
-			resultdir, stage.name), "w"))
+				resultdir, stage.name), "w"))
 		bitpar = fanout == 1 or stage.split
 		# when grammar is LCFRS, write rational fractions.
 		# when grammar is PCFG, write frequencies if probabilities sum to 1,
@@ -1174,7 +1175,7 @@ def treebankfanout(trees):
 
 def test():
 	""" Run doctests and other tests from all modules. """
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
+	from doctest import testmod, NORMALIZE_WHITESPACE, REPORT_NDIFF
 	import bit, demos, kbest, grammar, treebank, estimates, fragments
 	import _fragments, agenda, coarsetofine, disambiguation
 	import eval, gen, tree, treetransforms, treedist, treedraw
@@ -1183,9 +1184,9 @@ def test():
 			treetransforms, tree, treebank, treedist, treedraw)
 	results = {}
 	for mod in modules:
-		print('running doctests of', mod.__file__)
+		print('running doctests of %s' % mod.__file__)
 		results[mod] = fail, attempted = testmod(mod, verbose=False,
-			optionflags=NORMALIZE_WHITESPACE | ELLIPSIS)
+			optionflags=NORMALIZE_WHITESPACE | REPORT_NDIFF)
 		assert fail == 0, mod.__file__
 	if any(not attempted for fail, attempted in results.values()):
 		print("no doctests:")
@@ -1228,5 +1229,4 @@ if __name__ == '__main__':
 		faulthandler.enable()
 	except ImportError:
 		pass
-	sys.stdout = codecs.getwriter('utf8')(sys.stdout)
 	dispatch(sys.argv)

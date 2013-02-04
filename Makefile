@@ -7,9 +7,11 @@ clean:
 	rm -f *.c *.so
 
 test: all sample2.export
+	rm -rf sample/
 	python -tt runexp.py --test
 
 test3: sample2.export
+	rm -rf sample/
 	python3 setup.py build_ext --inplace
 	PYTHONIOENCODING=utf-8 python3 -bb -tt runexp.py --test
 

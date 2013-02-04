@@ -55,10 +55,6 @@ ASCII for the rules, and UTF-8 for the lexicon.
 %s
 """ % (sys.argv[0], FORMAT)
 
-frontierorterm = re.compile(r"(\(([^ ]+)( [0-9]+)(?: [0-9]+)*\))")
-rootnode = re.compile(r"\([^ ]+\b")
-fanoutre = re.compile("_([0-9]+)(?:@[-0-9]+)?$")
-
 def lcfrs_productions(tree, sent, frontiers=False):
 	""" Given a tree with integer indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a sequence
@@ -96,7 +92,7 @@ def lcfrs_productions(tree, sent, frontiers=False):
 		#elif all(isinstance(a, int) for a in st):
 		elif isinstance(st[0], int):
 			if len(st) == 1 and sent[st[0]] is not None: # terminal node
-				rule = ((st.label, b'Epsilon'), (sent[st[0]],))
+				rule = ((st.label, 'Epsilon'), (sent[st[0]],))
 			#elif all(sent[a] is None for a in st): # frontier node
 			elif frontiers:
 				rule = ((st.label, ), ())
@@ -127,13 +123,6 @@ def lcfrs_productions(tree, sent, frontiers=False):
 				previdx, prevparent = idx, parent
 			nonterminals = (st.label, ) + tuple(a.label for a in st)
 			rule = (nonterminals, tuple(map(tuple, yf)))
-			#assert len(yf) == len(rangeheads(st.leaves())) == (
-			#	int(fanoutre.search(st.label).group(1))
-			#		if fanoutre.search(st.label) else len(yf)), (
-			#	"rangeheads: %r\nyf: %r\nleaves: %r\n\t%r\n"
-			#	"childleaves: %r\ntree:\n%s\nsent: %r" % (
-			#		rangeheads(st.leaves()), yf,
-			#	st.leaves(), tmpleaves, childleaves, st, sent))
 		else:
 			raise ValueError("Neither Tree node nor integer index:\n"
 				"%r, %r" % (st[0], type(st[0])))
@@ -316,7 +305,7 @@ def doubledop(fragments, debug=False, ewe=False):
 	# this is so that the backtransform aligns with the first part of the rules
 	grammar = sorted(grammar.items(), key=lambda rule: (
 				rule[0][0][1] == 'Epsilon',
-				"}<" in rule[0][0][0],
+				'}<' in rule[0][0][0],
 				rule))
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = {n: backtransform[r]
@@ -363,7 +352,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		openclasstags = {tag: None for tag, ws in wordsfortag.items()
 				if len(ws) >= openclassthreshold}
 		openclasswords = lexicon - {word
-				for tag in tags - openclasstags.viewkeys()
+				for tag in set(tags) - set(openclasstags)
 					for word in wordsfortag[tag]}
 	else:
 		openclasstags = openclasswords = {}
@@ -547,9 +536,9 @@ def decorate_with_ids_mem(n, tree, sent):
 		# but translate indices to start at 0, gaps to have length 1.
 		elif tree not in packedgraphs:
 			packed_graph_ids += 1
-			packedgraphs[tree] = ImmutableTree("%s@%d-%d" %
-				(tree.label, n, packed_graph_ids),
-				[recursive_decorate(child) for child in tree])
+			packedgraphs[tree] = ImmutableTree(("%s@%d-%d" % (
+					tree, n, packed_graph_ids)),
+					[recursive_decorate(child) for child in tree])
 			return packedgraphs[tree]
 		else:
 			return copyexceptindices(tree, packedgraphs[tree])
@@ -571,8 +560,11 @@ def quotelabel(label):
 	""" Escapes two things: parentheses and non-ascii characters.
 	Parentheses are replaced by square brackets. Also escapes non-ascii
 	characters, so that phrasal labels can remain ascii-only. """
-	return label.replace('(', '[').replace(')', ']').encode('unicode-escape')
+	newlabel = label.replace('(', '[').replace(')', ']')
+	# juggling to get str in both Python 2 and Python 3.
+	return str(newlabel.encode('unicode-escape').decode('ascii'))
 
+FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 def flatten(tree, sent, ids):
 	""" Auxiliary function for Double-DOP.
 	Remove internal nodes from a tree and read off its binarized
@@ -585,19 +577,19 @@ def flatten(tree, sent, ids):
 	>>> ids = count()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> print(flatten(tree, sent, ids))
+	>>> flatten(tree, sent, ids)
 	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
-	>>> print(flatten("(NN 0)", ["foo"], ids))
+	>>> flatten("(NN 0)", ["foo"], ids)
 	([(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
 	>>> flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
 	... "(TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> "
 	... "(VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7)) "
 	... "(VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))",
-	... (u'Das', u'Garten-', u'und', u'Friedhofsamt', u'hatte', u'kuerzlich',
-	... u'dem', u'Ortsbeirat', None, None, None), ids)
+	... ['Das', 'Garten-', 'und', 'Friedhofsamt', 'hatte', 'kuerzlich',
+	... 'dem', 'Ortsbeirat', None, None, None], ids)
 	([(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
 	(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
 	(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
@@ -605,21 +597,21 @@ def flatten(tree, sent, ids):
 	(('S}<5>', 'S}<4>', 'ADV@kuerzlich'), ((0, 1),)),
 	(('S}<4>', 'S}<3>', 'VAFIN@hatte'), ((0, 1),)),
 	(('S}<3>', 'S}<2>', 'NN@Friedhofsamt'), ((0, 1),)),
-	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)), (('S}<1>', 'ART@Das', \
-	'TRUNC@Garten-'), ((0, 1),)),
-	(('ART@Das', 'Epsilon'), (u'Das',)),
-	(('TRUNC@Garten-', 'Epsilon'), (u'Garten-',)),
-	(('KON@und', 'Epsilon'), (u'und',)),
-	(('NN@Friedhofsamt', 'Epsilon'), (u'Friedhofsamt',)),
-	(('VAFIN@hatte', 'Epsilon'), (u'hatte',)),
-	(('ADV@kuerzlich', 'Epsilon'), (u'kuerzlich',)),
-	(('ART@dem', 'Epsilon'), (u'dem',)),
-	(('NN@Ortsbeirat', 'Epsilon'), (u'Ortsbeirat',))],
+	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)),
+	(('S}<1>', 'ART@Das', 'TRUNC@Garten-'), ((0, 1),)),
+	(('ART@Das', 'Epsilon'), ('Das',)),
+	(('TRUNC@Garten-', 'Epsilon'), ('Garten-',)),
+	(('KON@und', 'Epsilon'), ('und',)),
+	(('NN@Friedhofsamt', 'Epsilon'), ('Friedhofsamt',)),
+	(('VAFIN@hatte', 'Epsilon'), ('hatte',)),
+	(('ADV@kuerzlich', 'Epsilon'), ('kuerzlich',)),
+	(('ART@dem', 'Epsilon'), ('dem',)),
+	(('NN@Ortsbeirat', 'Epsilon'), ('Ortsbeirat',))],
 	'(S (S|<VP> (S|<NP> (NP {0} (CNP (CNP|<TRUNC> {1} (CNP|<KON> {2} \
 	(CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} (VP|<NP> \
 	(NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
-	>>> flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 (ADV 2) "
-	... "(VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
+	>>> flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
+	... "(ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
 	... (None, None, None, None, None), ids)
 	([(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 	(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
@@ -627,33 +619,35 @@ def flatten(tree, sent, ids):
 	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
 	(S|<VAFIN> {1}))') """
 	from treetransforms import defaultleftbin, addbitsets
-	assert isinstance(tree, basestring), (tree, sent)
+
 	def repl(x):
 		""" Add information to a frontier or terminal:
 		frontiers => (label indices)
 		terminals => (tag@word idx)"""
-		n = x.group(3) # index w/leading space
+		n = x.group(2) # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
 			return x.group(0)	# (label indices)
+		word = quotelabel(sent[nn])
 		# (tag@word idx)
-		return "(%s@%s%s)" % (x.group(2), quotelabel(sent[nn]), n)
+		return "(%s@%s%s)" % (x.group(1), word, n)
+
 	if tree.count(" ") == 1:
-		return lcfrs_productions(addbitsets(tree), sent), tree
+		return lcfrs_productions(addbitsets(tree), sent), str(tree)
 	# give terminals unique POS tags
-	prod = frontierorterm.sub(repl, tree)
+	prod = FRONTIERORTERM.sub(repl, tree)
 	# remove internal nodes, reorder
 	prod = "%s %s)" % (prod[:prod.index(" ")],
-		" ".join(x[0] for x in sorted(frontierorterm.findall(prod),
-		key=lambda x: int(x[2]))))
-	prods = lcfrs_productions(defaultleftbin(addbitsets(prod), "}",
-		markfanout=True, ids=ids, threshold=2), sent)
+		" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+		key=lambda x: int(x.group(2)))))
+	prods = lcfrs_productions(defaultleftbin(addbitsets(prod),
+			"}", markfanout=True, ids=ids, threshold=2), sent)
 	# remember original order of frontiers / terminals for template
-	order = {x[2]: "{%d}" % n
-			for n, x in enumerate(frontierorterm.findall(prod))}
+	order = {x.group(2): "{%d}" % n
+			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
 	# mark substitution sites and ensure string.
-	newtree = str(frontierorterm.sub(lambda x: order[x.group(3)], tree))
-	return prods, newtree
+	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], tree)
+	return prods, str(newtree)
 
 def rangeheads(s):
 	""" Iterate over a sequence of numbers and return first element of each
@@ -700,7 +694,7 @@ def defaultparse(wordstags, rightbranching=False):
 
 def printrule(r, yf, w):
 	""" Return a string with a representation of a rule. """
-	return "%s %s --> %s\t %r" % (w, r[0], "  ".join(r[1:]), list(yf))
+	return "%s %s --> %s\t %r" % (w, r[0], " ".join(x for x in r[1:]), list(yf))
 
 def printrulelatex(rule):
 	r""" Return a string with a representation of a rule in latex format.
@@ -907,9 +901,10 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 	""" Writes a grammar as produced by induce_plcfrs() or dopreduction()
 	(so before it goes through Grammar()) into a simple text file format.
-	Expects file objects with write() methods. Fields are separated by tabs.
-	Components of the yield function are comma-separated; weights are printed
-	as rational fractions (when freqiencies is True, only print(numerator).)
+	Expects file objects with write() methods accepting strings (not bytes).
+	Fields are separated by tabs. Components of the yield function are
+	comma-separated; weights are printed as rational fractions (when
+	freqiencies is True, only print(numerator).)
 	e.g.:
 	rules: S	NP	VP	010	1/2
 		VP_2	VB	NP	0,1	2/5
@@ -920,7 +915,7 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 	"""
 	lexical = {}
 	for (r, yf), w in grammar:
-		if len(r) == 2 and r[1] == "Epsilon":
+		if len(r) == 2 and r[1] == 'Epsilon':
 			lexical.setdefault(yf[0], []).append((r[0], w))
 	for word, lexrules in lexical.items():
 		lexicon.write(word)
@@ -933,14 +928,15 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 				lexicon.write("\t%s %s" % (tag, w))
 		lexicon.write("\n")
 	for (r, yf), w in grammar:
-		if len(r) == 2 and r[1] == "Epsilon":
+		if len(r) == 2 and r[1] == 'Epsilon':
 			continue
 		elif bitpar:
 			rules.write("%s\t%s\n" % (w.numerator if freqs else "%g" % w,
-					"\t".join(r)))
+					"\t".join(x for x in r)))
 		else:
 			yfstr = ",".join("".join(map(str, a)) for a in yf)
-			rules.write("%s\t%s\t%s\n" % ("\t".join(r), yfstr,
+			rules.write("%s\t%s\t%s\n" % (
+					"\t".join(x for x in r), yfstr,
 					w.numerator if freqs else w))
 
 def read_lcfrs_grammar(rules, lexicon):
@@ -989,10 +985,10 @@ def grammarinfo(grammar, dump=None):
 	result = "labels: %d" % len({rule[a] for (rule, yf), w in grammar
 							for a in range(3) if len(rule) > a})
 	result += " of which preterminals: %d\n" % (
-		len({rule[0] for (rule, yf), w in grammar if rule[1] == "Epsilon"})
+		len({rule[0] for (rule, yf), w in grammar if rule[1] == 'Epsilon'})
 		or len({rule[a] for (rule, yf), w in grammar
 				for a in range(1,3) if len(rule) > a and rule[a] not in lhs}))
-	ll = sum(1 for (rule, yf), w in grammar if rule[1] == "Epsilon")
+	ll = sum(1 for (rule, yf), w in grammar if rule[1] == 'Epsilon')
 	result += "clauses: %d  lexical clauses: %d" % (l, ll)
 	result += " non-lexical clauses: %d\n" % (l - ll)
 	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
@@ -1000,7 +996,7 @@ def grammarinfo(grammar, dump=None):
 	result += printrule(r, yf, w)
 	result += " average: %g\n" % mean([len(yf) for (_, yf), _, in grammar])
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
-				for (rule, yf), w in grammar if rule[1] != "Epsilon")
+				for (rule, yf), w in grammar if rule[1] != 'Epsilon')
 	result += "max variables: %d in %s\n" % (n, printrule(r, yf, w))
 	def parsingcomplexity(yf):
 		""" this sums the fanouts of LHS & RHS """
@@ -1058,12 +1054,13 @@ def test():
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
-		neverblockre=re.compile(r'^#[0-9]+|.+}<'),
+		neverblockre=re.compile(b'^#[0-9]+|.+}<'),
 		splitprune=False, markorigin=False)
 	print(grammar)
 	assert grammar.testgrammar(logging), "DOP1 should sum to 1."
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
-		print("sentence:", " ".join(a.encode('unicode-escape') for a in sent))
+		print("sentence:", " ".join(a.encode('unicode-escape').decode()
+				for a in sent))
 		chart, start, msg = plcfrs.parse(sent, grammar, exhaustive=True)
 		print('\n', msg, end='')
 		print("\ngold ", tree)
@@ -1072,7 +1069,7 @@ def test():
 			mpp = {}
 			parsetrees = {}
 			derivations, D, _ = lazykbest(chart, start, 1000,
-				grammar.tolabel, "}<")
+				grammar.tolabel, b'}<')
 			for d, (t, p) in zip(D[start], derivations):
 				r = Tree(recoverfragments(getkey(d), D,
 					grammar, backtransform))
@@ -1154,7 +1151,7 @@ def main():
 		lexicon += ".gz"
 	else:
 		myopen = open
-	with myopen(rules, "w") as rulesfile:
+	with codecs.getwriter('ascii')(myopen(rules, "w")) as rulesfile:
 		with codecs.getwriter('utf-8')(myopen(lexicon, "w")) as lexiconfile:
 			# write output
 			bitpar = model == "pcfg" or opts.get('--inputfmt') == 'bracket'
