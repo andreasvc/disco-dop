@@ -36,7 +36,7 @@ Requirements
 - Python 2.7+     http://www.python.org (need headers, e.g. python-dev package)
 - Cython 0.17.2+  http://www.cython.org
 - GCC             http://gcc.gnu.org/
-- Numpy           http://numpy.scipy.org/
+- Numpy           http://numpy.org/
 
 For example, to install these dependencies and compile the code on Ubuntu
 (tested on 12.04), run the following sequence of commands:
