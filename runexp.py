@@ -226,7 +226,7 @@ def main(
 			len(trees), trainmaxwords)
 
 	testset = corpusreader(corpusdir, testcorpus, encoding=testencoding,
-			punct=punct, morphaspos=morphaspos)
+			punct=punct, morphaspos=morphaspos, functiontags=functiontags)
 	gold_sents = testset.tagged_sents()
 	test_parsed_sents = testset.parsed_sents()
 	if skiptrain:
@@ -322,7 +322,7 @@ def main(
 		sents = []
 	toplabels = {tree.label for tree in trees} | {
 			test_parsed_sents[n].label for n in testset}
-	assert len(toplabels) == 1, "expected unique TOP/ROOT label"
+	assert len(toplabels) == 1, "expected unique TOP/ROOT label: %r" % toplabels
 	top = toplabels.pop()
 	if rerun:
 		readgrammars(resultdir, stages, top)

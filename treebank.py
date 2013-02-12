@@ -502,10 +502,14 @@ def writetree(tree, sent, n, fmt, headrules=None):
 	else:
 		raise ValueError("unrecognized format: %r" % fmt)
 
-def addfunctions(tree, pos=False):
-	""" Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'. """
+def addfunctions(tree, pos=False, top=False):
+	""" Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
+	pos: whether to add function tags to POS tags.
+	top: whether to add function tags to the top node."""
 	for a in tree.subtrees():
-		if pos or isinstance(tree[0], Tree):
+		if not top and a is tree: # skip TOP label
+			continue
+		if pos or isinstance(a[0], Tree):
 			# test for non-empty function tag (e.g., "---" is considered empty)
 			if hasattr(a, "source") and any(a.source[FUNC].split("-")):
 				a.label += "-%s" % a.source[FUNC].split("-")[0].upper()
