@@ -445,7 +445,7 @@ def writetree(tree, sent, n, fmt, headrules=None):
 	"""
 	def getword(idx):
 		word = sent[int(idx[:-1])]
-		return {'(': '-LRB-', ')': '-RRB-'}.get(word, word)
+		return word.replace('(', '-LRB-').replace(')', '-RRB-')
 	if fmt == "alpino":
 		fmt = "export" #FIXME
 
