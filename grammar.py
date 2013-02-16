@@ -349,7 +349,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			wordclass[wordsig[word]] += 1
 			wordclasstag[wordsig[word], tag] += 1
 	if openclassthreshold:
-		openclasstags = {tag: None for tag, ws in wordsfortag.items()
+		openclasstags = {tag: len({w.lower() for w in ws})
+				for tag, ws in wordsfortag.items()
 				if len({w.lower() for w in ws}) >= openclassthreshold}
 		openclasswords = lexicon - {word
 				for tag in set(tags) - set(openclasstags)
@@ -358,7 +359,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		openclasstags = openclasswords = {}
 	msg = "known words: %d, wordclass types seen: %d\n" % (
 			len(lexicon), len(wordclass))
-	msg += "open class tags: {%s}" % ", ".join(openclasstags)
+	msg += "open class tags: {%s}" % ", ".join(
+			"%s:%d" % a for a in openclasstags.items())
 	return (wordclass, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags,
 			wordsig, wordclasstag), msg
@@ -574,15 +576,15 @@ def new_flatten(tree, sent, ids):
 	unique IDs for non-terminals introdudced by the binarization;
 	output is a tuple (prods, frag). Trees are in the form of strings.
 
-	>>> ids = count()
-	>>> sent = [None, ',', None, '.']
-	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> new_flatten(tree, sent, ids)
-	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
-	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
-	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
-	['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
+	#>>> ids = count()
+	#>>> sent = [None, ',', None, '.']
+	#>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
+	#>>> new_flatten(tree, sent, ids)
+	#([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
+	#(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
+	#(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
+	#'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
+	#['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
 	from treetransforms import defaultleftbin, addbitsets
 
 	def repl(x):

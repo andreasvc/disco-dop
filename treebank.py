@@ -1088,7 +1088,7 @@ def replacerarewords(sents, unknownword, unknownthreshold, wordcounts):
 	lexicon = set(wordcounts)
 	for sent in sents:
 		for n, word in enumerate(sent):
-			if words[word] <= unknownthreshold:
+			if wordcounts[word] <= unknownthreshold:
 				sent[n] = unknownword(word, n, lexicon)
 
 
