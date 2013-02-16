@@ -106,7 +106,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				parsetrees[treestr] += exp(-prob)
 				#parsetrees[treestr].append(-prob)
 			else:
-				parsetrees[treestr] = prob
+				parsetrees[treestr] = exp(-prob)
 				#parsetrees[treestr] = [-prob]
 	else: #DOP reduction
 		for deriv, prob in derivations:
@@ -132,7 +132,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				parsetrees[treestr] += exp(-prob)
 				#parsetrees[treestr].append(-prob)
 			else:
-				parsetrees[treestr] = prob
+				parsetrees[treestr] = exp(-prob)
 				#parsetrees[treestr] = [-prob]
 
 	# Adding probabilities in log space
