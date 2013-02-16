@@ -350,7 +350,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			wordclasstag[wordsig[word], tag] += 1
 	if openclassthreshold:
 		openclasstags = {tag: None for tag, ws in wordsfortag.items()
-				if len(ws) >= openclassthreshold}
+				if len({w.lower() for w in ws}) >= openclassthreshold}
 		openclasswords = lexicon - {word
 				for tag in set(tags) - set(openclasstags)
 					for word in wordsfortag[tag]}
@@ -563,6 +563,57 @@ def quotelabel(label):
 	newlabel = label.replace('(', '[').replace(')', ']')
 	# juggling to get str in both Python 2 and Python 3.
 	return str(newlabel.encode('unicode-escape').decode('ascii'))
+
+FRONTIERORTERM_new = re.compile(r"\([^ ]+(?: [0-9]+)+\)")
+def new_flatten(tree, sent, ids):
+	""" Auxiliary function for Double-DOP.
+	Remove internal nodes from a tree and read off its binarized
+	productions. Aside from returning productions, also return tree with
+	lexical and frontier nodes replaced by a templating symbol '%s'.
+	Input is a tree and sentence, as well as an iterator which yields
+	unique IDs for non-terminals introdudced by the binarization;
+	output is a tuple (prods, frag). Trees are in the form of strings.
+
+	>>> ids = count()
+	>>> sent = [None, ',', None, '.']
+	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
+	>>> new_flatten(tree, sent, ids)
+	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
+	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
+	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
+	'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
+	['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
+	from treetransforms import defaultleftbin, addbitsets
+
+	def repl(x):
+		""" Add information to a frontier or terminal:
+		frontiers => (label indices)
+		terminals => (tag@word idx)"""
+		n = x.group(2) # index w/leading space
+		nn = int(n)
+		if sent[nn] is None:
+			return x.group(0)	# (label indices)
+		word = quotelabel(sent[nn])
+		# (tag@word idx)
+		return "(%s@%s%s)" % (x.group(1), word, n)
+
+	if tree.count(" ") == 1:
+		return lcfrs_productions(addbitsets(tree), sent), ([str(tree)], [])
+	# give terminals unique POS tags
+	prod = FRONTIERORTERM.sub(repl, tree)
+	# remove internal nodes, reorder
+	prod = "%s %s)" % (prod[:prod.index(" ")],
+		" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+		key=lambda x: int(x.group(2)))))
+	prods = lcfrs_productions(defaultleftbin(addbitsets(prod),
+			"}", markfanout=True, ids=ids, threshold=2), sent)
+
+	# remember original order of frontiers / terminals for template
+	order = [int(x.group(2)) for x in FRONTIERORTERM.finditer(prod)]
+	# ensure string, split around substitution sites.
+	#lambda x: order[x.group(2)],
+	treeparts = FRONTIERORTERM_new.split(str(tree))
+	return prods, (treeparts, order)
 
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 def flatten(tree, sent, ids):

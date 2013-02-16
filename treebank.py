@@ -395,6 +395,8 @@ class AlpinoCorpusReader(CorpusReader):
 		# root/top node
 		result = getsubtree(block.find('node'))
 		sent = self._word(block)
+		if not sent:
+			return result
 		if self.punct == "remove":
 			punctremove(result, sent)
 		elif self.punct == "move":
@@ -1080,14 +1082,15 @@ def balancedpunctraise(tree, sent):
 		elif sent[terminal] in BALANCEDPUNCTMATCH:
 			punctmap[BALANCEDPUNCTMATCH[sent[terminal]]] = terminal
 
-def replacerarewords(sents, unknownword, unknownthreshold):
+def replacerarewords(sents, unknownword, unknownthreshold, wordcounts):
 	""" Replace all terminals that occur less than unknownthresh
 	with a signature of features as returned by unknownword(). """
-	words = multiset(word for sent in sents for word in sent)
+	lexicon = set(wordcounts)
 	for sent in sents:
 		for n, word in enumerate(sent):
 			if words[word] <= unknownthreshold:
-				sent[n] = unknownword(word, n, set(words))
+				sent[n] = unknownword(word, n, lexicon)
+
 
 hasdigit = re.compile(r"\d", re.UNICODE)
 hasnondigit = re.compile(r"\D", re.UNICODE)

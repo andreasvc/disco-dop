@@ -259,6 +259,7 @@ def main(
 		# give these tags to parser
 		tags = True
 	elif postagging and postagging['method'] == "unknownword":
+		# resolve name to function assigning unknown word signatures
 		unknownword = {"4": unknownword4,
 				"6": unknownword6,
 				"base": unknownwordbase}[postagging['model']]
@@ -276,7 +277,8 @@ def main(
 			logging.info(msg)
 		wordclass, knownwords = lexresults[:2]
 		# replace rare train words with features
-		replacerarewords(sents, unknownword, postagging['unknownthreshold'])
+		replacerarewords(sents, unknownword,
+				postagging['unknownthreshold'], knownwords)
 		# replace unknown test words with features
 		test_tagged_sents = OrderedDict()
 		for n, sent in gold_sents.items():
@@ -290,10 +292,9 @@ def main(
 					if sig not in wordclass:
 						#logging.debug("UNKNOWN CLASS: %s => %s => UNK", word, sig)
 						sig = "UNK"
-					else:
-						pass
-						#logging.debug("unknown word: %s => %s", word, sig)
-				newsent.append((sig, None))
+					#else:
+					#	logging.debug("unknown word: %s => %s", word, sig)
+				newsent.append((sig, None)) # tag will not be used, use None.
 			test_tagged_sents[n] = newsent
 		# make sure gold tags are not given to parser
 		tags = False
