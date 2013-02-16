@@ -33,7 +33,7 @@ Some references to implemented algorithms:
 
 Requirements
 ------------
-- Python 2.7+     http://www.python.org (need headers, e.g. python-dev package)
+- Python 2.7+/3   http://www.python.org (need headers, e.g. python-dev package)
 - Cython 0.17.2+  http://www.cython.org
 - GCC             http://gcc.gnu.org/
 - Numpy           http://numpy.org/

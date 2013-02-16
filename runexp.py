@@ -18,8 +18,7 @@ from fractions import Fraction
 from math import exp
 from tree import Tree
 import numpy as np
-from treebank import getreader, fold, writetree, FUNC, \
-		unknownword4, unknownword6, unknownwordbase, replacerarewords
+from treebank import getreader, fold, writetree, FUNC
 from treetransforms import binarize, unbinarize, optimalbinarize, \
 		splitdiscnodes, mergediscnodes, canonicalize, \
 		addfanoutmarkers, removefanoutmarkers, addbitsets, fastfanout
@@ -27,8 +26,10 @@ from fragments import getfragments
 from estimates import getestimates, getpcfgestimates
 from grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
 		read_lcfrs_grammar, read_bitpar_grammar, write_lcfrs_grammar, \
-		getunknownwordmodel, getlexmodel, smoothlexicon, simplesmoothlexicon, \
 		defaultparse
+from lexicon import getunknownwordmodel, getlexmodel, \
+		smoothlexicon, simplesmoothlexicon, replacerarewords, \
+		unknownword4, unknownword6, unknownwordbase
 from containers import Grammar
 import plcfrs, pcfg
 from coarsetofine import prunechart, whitelistfromposteriors
@@ -277,8 +278,8 @@ def main(
 			logging.info(msg)
 		wordclass, knownwords = lexresults[:2]
 		# replace rare train words with features
-		replacerarewords(sents, unknownword,
-				postagging['unknownthreshold'], knownwords)
+		sents = replacerarewords(train_tagged_sents, unknownword,
+				postagging['unknownthreshold'], knownwords, lexresults[4])
 		# replace unknown test words with features
 		test_tagged_sents = OrderedDict()
 		for n, sent in gold_sents.items():
@@ -1178,11 +1179,11 @@ def test():
 	""" Run doctests and other tests from all modules. """
 	from doctest import testmod, NORMALIZE_WHITESPACE, REPORT_NDIFF
 	import bit, demos, kbest, grammar, treebank, estimates, fragments
-	import _fragments, agenda, coarsetofine, disambiguation
+	import _fragments, agenda, coarsetofine, disambiguation, lexicon
 	import eval, gen, tree, treetransforms, treedist, treedraw
-	modules = (bit, eval, fragments, _fragments, grammar, plcfrs, pcfg, demos,
-			gen, kbest, estimates, agenda, coarsetofine, disambiguation,
-			treetransforms, tree, treebank, treedist, treedraw)
+	modules = (agenda, bit, coarsetofine, demos, disambiguation, estimates,
+			eval, fragments, _fragments, gen, grammar, lexicon, kbest, plcfrs,
+			pcfg, tree, treebank, treedist, treedraw, treetransforms)
 	results = {}
 	for mod in modules:
 		print('running doctests of %s' % mod.__file__)

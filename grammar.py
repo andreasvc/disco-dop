@@ -317,152 +317,6 @@ def doubledop(fragments, debug=False, ewe=False):
 			for rule, freq in grammar]
 	return grammar, backtransform
 
-### Unknown word models ###
-def getunknownwordmodel(tagged_sents, unknownword,
-		unknownthreshold=4, openclassthreshold=50):
-	""" Compute an unknown word model that smooths lexical probabilities
-	for unknown & rare words.
-	tagged_sents: the sentences from the training set with the gold POS
-			tags from the treebank.
-	unknownword: a function that returns a signature or wordclass for a
-			given word; e.g., "UNK-C-S-ed".
-	unknownthreshold: words with frequency lower than this are replaced
-			by their wordclass.
-	openclassthreshold: tags that rewrite to at least this much word types
-			are considered to be open class categories.
-	"""
-	wordsfortag = defaultdict(set)
-	tags = multiset()
-	wordtags = multiset()
-	wordclass = multiset()
-	wordclasstag = multiset()
-	words = multiset(word for sent in tagged_sents for word, tag in sent)
-	lexicon = {word for word in words if words[word] > unknownthreshold}
-	wordsig = {word: unknownword(word, n, lexicon)
-			for sent in tagged_sents
-				for n, (word, _) in enumerate(sent)}
-	for sent in tagged_sents:
-		for word, tag in sent:
-			wordsfortag[tag].add(word)
-			tags[tag] += 1
-			wordtags[word, tag] += 1
-			wordclass[wordsig[word]] += 1
-			wordclasstag[wordsig[word], tag] += 1
-	if openclassthreshold:
-		openclasstags = {tag: len({w.lower() for w in ws})
-				for tag, ws in wordsfortag.items()
-				if len({w.lower() for w in ws}) >= openclassthreshold}
-		openclasswords = lexicon - {word
-				for tag in set(tags) - set(openclasstags)
-					for word in wordsfortag[tag]}
-	else:
-		openclasstags = openclasswords = {}
-	msg = "known words: %d, wordclass types seen: %d\n" % (
-			len(lexicon), len(wordclass))
-	msg += "open class tags: {%s}" % ", ".join(
-			"%s:%d" % a for a in openclasstags.items())
-	return (wordclass, words, lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags,
-			wordsig, wordclasstag), msg
-
-def simplesmoothlexicon(grammar, lexmodel,
-		epsilon=Fraction(1, 100), normalize=True):
-	""" introduce lexical productions for unobserved combinations of
-	known open class words and tags, as well as for unobserved
-	wordclasses which are mapped to 'UNK'.
-	epsilon: 'frequency' of productions for unseen tag, word pair.
-	normalize: re-scale probabilities so that they sum to 1 again. """
-	(lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags) = lexmodel
-	# rare words as wordclass AND as word:
-	for word, tag in wordtags:
-		if word not in lexicon:
-			# needs to be normalized later
-			grammar.append((((tag, 'Epsilon'), (word, )),
-					Fraction(wordtags[word, tag], tags[tag])))
-			#print(>> sys.stderr, grammar[-1])
-	# open class tag word pairs / unknown wordclasses
-	for tag in openclasstags:
-		epsilon1 = epsilon / tags[tag]
-		for word in {'UNK'} | openclasswords - wordsfortag[tag]:
-			grammar.append((((tag, 'Epsilon'), (word, )), epsilon1))
-	if normalize: # normalize weights
-		mass = multiset()
-		for (r, _), w in grammar:
-			mass[r[0]] += w
-		return [(r, w / mass[r[0][0]]) for r, w in grammar]
-	return grammar
-
-def getlexmodel(wordclass, words, lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags, wordsig, wordclasstag,
-			openclassoffset=1, kappa=1):
-	""" Compute a smoothed lexical model. Returns a dictionary
-	giving P(word_or_class | tag).
-	openclassoffset: for words that only appear with open class tags, add
-			unseen combinations of open class (tag, word) with this count.
-	kappa: FIXME; cf. Klein & Manning (2003). """
-	for tag in openclasstags:
-		for word in openclasswords - wordsfortag[tag]:
-			wordtags[word, tag] += openclassoffset
-			words[word] += openclassoffset
-			tags[tag] += openclassoffset
-		# unseen wordclasses
-		wordclass["UNK"] += 1
-		wordclasstag["UNK", tag] += 1
-	# Compute P(tag|wordclass)
-	tagtotal = sum(tags.values())
-	wordstotal = sum(words.values())
-	wordclasstotal = sum(wordclass.values())
-	P_tag = {}
-	for tag in tags:
-		P_tag[tag] = Fraction(tags[tag], tagtotal)
-	P_word = defaultdict(int)
-	for word in words:
-		P_word[word] = Fraction(words[word], wordstotal)
-	P_tagwordclass = defaultdict(Fraction) #??
-	for wclass in wordclass:
-		P_tagwordclass[tag, wclass] = Fraction(P_tag[tag],
-				Fraction(wordclass[wclass], wordclasstotal))
-		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		tag, wclass, P_tagwordclass[tag, wclass])
-	# Klein & Manning (2003) Accurate unlexicalized parsing
-	# P(tag|word) = [count(tag, word) + kappa * P(tag|wordclass)]
-	#		/ [count(word) + kappa]
-	P_tagword = defaultdict(int)
-	for word, tag in wordtags:
-		P_tagword[tag, word] = Fraction(wordtags[word, tag]
-				+ kappa * P_tagwordclass[tag, wordsig[word]],
-				words[word] + kappa)
-		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		tag, word, P_tagword[tag, word])
-	# invert with Bayes theorem to get P(word|tag)
-	P_wordtag = defaultdict(int)
-	for tag, word in P_tagword:
-		#wordorclass = word if word in lexicon else wordsig[word]
-		wordorclass = word
-		P_wordtag[wordorclass, tag] += Fraction((P_tagword[tag, word]
-				* P_word[word]), P_tag[tag])
-		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		word, tag, P_wordtag[wordorclass, tag])
-	msg = "(word, tag) pairs in model: %d" % len(P_tagword)
-	return P_wordtag, msg
-
-def smoothlexicon(grammar, P_wordtag):
-	""" Replace lexical probabilities using given unknown word model.
-	Ignores lexical productions of known subtrees (tag contains '@')
-	introduced by DOP, i.e., we only modify lexical depth 1 subtrees. """
-	newrules = []
-	for (rule, yf), w in grammar:
-		if rule[1] == 'Epsilon' and '@' not in rule[0]:
-			wordorclass = yf[0]
-			tag = rule[0]
-			newrule = (((tag, 'Epsilon'), (wordorclass, )),
-					P_wordtag[wordorclass, tag])
-			newrules.append(newrule)
-		else:
-			newrules.append(((rule, yf), w))
-	return newrules
-
 def coarse_grammar(trees, sents, level=0):
 	""" collapse all labels to X except ROOT and POS tags. """
 	if level == 0:
@@ -585,7 +439,7 @@ def new_flatten(tree, sent, ids):
 	#(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 	#'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
 	#['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
-	from treetransforms import defaultleftbin, addbitsets
+	from treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
@@ -607,8 +461,8 @@ def new_flatten(tree, sent, ids):
 	prod = "%s %s)" % (prod[:prod.index(" ")],
 		" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
 		key=lambda x: int(x.group(2)))))
-	prods = lcfrs_productions(defaultleftbin(addbitsets(prod),
-			"}", markfanout=True, ids=ids, threshold=2), sent)
+	prods = lcfrs_productions(factorconstituent(addbitsets(prod),
+			"}", factor='left', markfanout=True, ids=ids, threshold=2), sent)
 
 	# remember original order of frontiers / terminals for template
 	order = [int(x.group(2)) for x in FRONTIERORTERM.finditer(prod)]
@@ -671,7 +525,7 @@ def flatten(tree, sent, ids):
 	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
 	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
 	(S|<VAFIN> {1}))') """
-	from treetransforms import defaultleftbin, addbitsets
+	from treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
@@ -693,8 +547,8 @@ def flatten(tree, sent, ids):
 	prod = "%s %s)" % (prod[:prod.index(" ")],
 		" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
 		key=lambda x: int(x.group(2)))))
-	prods = lcfrs_productions(defaultleftbin(addbitsets(prod),
-			"}", markfanout=True, ids=ids, threshold=2), sent)
+	prods = lcfrs_productions(factorconstituent(addbitsets(prod),
+			"}", factor='left', markfanout=True, ids=ids, threshold=2), sent)
 	# remember original order of frontiers / terminals for template
 	order = {x.group(2): "{%d}" % n
 			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}

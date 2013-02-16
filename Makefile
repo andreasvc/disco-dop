@@ -35,9 +35,8 @@ wraparound=False,\
 boundscheck=False \
 *.pyx
 
-# C0103 == Invalid name
+# R=refactor, C0103 == Invalid name
 lint:
-	pylint \
-		--indent-string='\t' --disable=C0103 --good-names=a,b,c,i,j,k,ex,Run,_ \
-		eval.py fragments.py grammar.py runexp.py treebank.py \
-		treetransforms.py demos.py gen.py setup.py parser.py tree.py treedist.py
+	pylint --indent-string='\t' --disable=R,C0103 --good-names=a,b,c,i,j,k,ex,Run,_ \
+		demos.py eval.py fragments.py gen.py grammar.py lexicon.py runexp.py \
+		setup.py parser.py tree.py treebank.py treedist.py treedraw.py treetransforms.py
