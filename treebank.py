@@ -275,8 +275,8 @@ class BracketCorpusReader(CorpusReader):
 		if not self._tagged_sents_cache:
 			self._tagged_sents_cache = OrderedDict(
 				(n, list(zip(sent, POSRE.findall(block)))) for (n, sent), block
-				in zip(self.sents().items(), self.blocks()))
-		return self._sents_cache
+				in zip(self.sents().items(), self.blocks().values()))
+		return self._tagged_sents_cache
 	def parsed_sents(self):
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = OrderedDict(enumerate(
@@ -287,9 +287,8 @@ class BracketCorpusReader(CorpusReader):
 			return ["%s\n" % indexre.sub(lambda x: sent[int(x.group())],
 					"%s\n" % tree)
 					for tree, sent in zip(self.parsed_sents(), self.sents())]
-		return OrderedDict(enumerate(filter(None,
-			(line for filename in self._filenames
-			for line in io.open(filename, encoding=self._encoding))), 1))
+		return OrderedDict(enumerate((line for filename in self._filenames
+			for line in io.open(filename, encoding=self._encoding) if line), 1))
 	def _parse(self, block):
 		c = count()
 		result = ParentedTree.parse(block, parse_leaf=lambda _: next(c))
