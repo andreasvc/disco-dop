@@ -184,43 +184,6 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 						splitprune and grammar.fanout[rule.lhs] != 1,
 						markorigin, &blocked)
 
-			# binary left
-			for i in range(grammar.numrules):
-				rule = &(grammar.lbinary[item.label][i])
-				if rule.rhs1 != item.label:
-					break
-				for I, e in (<dict>viterbi[rule.rhs2]).items():
-					sibling = <SmallChartItem>I
-					if beamwidth:
-						if beam[item.vec ^ sibling.vec] > beamwidth:
-							continue
-						beam[item.vec ^ sibling.vec] += 1
-					if concat(rule, item.vec, sibling.vec):
-						newitem.label = rule.lhs
-						newitem.vec = item.vec ^ sibling.vec
-						y = (<LCFRSEdge>e).inside
-						score = inside = x + y + rule.prob
-						if estimatetype == SX:
-							length = bitcount(newitem.vec)
-							left = nextset(newitem.vec, 0)
-							right = lensent - length - left
-							score += outside[rule.lhs, left, right, 0]
-							if score > 300.0:
-								continue
-						elif estimatetype == SXlrgaps:
-							length = bitcount(newitem.vec)
-							left = nextset(newitem.vec, 0)
-							gaps = bitlength(newitem.vec) - length - left
-							right = lensent - length - left - gaps
-							score += outside[rule.lhs, length, left + right, gaps]
-							if score > 300.0:
-								continue
-						newitem = process_edge(newitem, score, inside, rule,
-								item, sibling, agenda, chart, viterbi, grammar,
-								exhaustive, whitelist,
-								splitprune and grammar.fanout[rule.lhs] != 1,
-								markorigin, &blocked)
-
 			# binary right
 			for i in range(grammar.numrules):
 				rule = &(grammar.rbinary[item.label][i])
@@ -254,6 +217,43 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
 								continue
 						newitem = process_edge(newitem, score, inside, rule,
 								sibling, item, agenda, chart, viterbi, grammar,
+								exhaustive, whitelist,
+								splitprune and grammar.fanout[rule.lhs] != 1,
+								markorigin, &blocked)
+
+			# binary left
+			for i in range(grammar.numrules):
+				rule = &(grammar.lbinary[item.label][i])
+				if rule.rhs1 != item.label:
+					break
+				for I, e in (<dict>viterbi[rule.rhs2]).items():
+					sibling = <SmallChartItem>I
+					if beamwidth:
+						if beam[item.vec ^ sibling.vec] > beamwidth:
+							continue
+						beam[item.vec ^ sibling.vec] += 1
+					if concat(rule, item.vec, sibling.vec):
+						newitem.label = rule.lhs
+						newitem.vec = item.vec ^ sibling.vec
+						y = (<LCFRSEdge>e).inside
+						score = inside = x + y + rule.prob
+						if estimatetype == SX:
+							length = bitcount(newitem.vec)
+							left = nextset(newitem.vec, 0)
+							right = lensent - length - left
+							score += outside[rule.lhs, left, right, 0]
+							if score > 300.0:
+								continue
+						elif estimatetype == SXlrgaps:
+							length = bitcount(newitem.vec)
+							left = nextset(newitem.vec, 0)
+							gaps = bitlength(newitem.vec) - length - left
+							right = lensent - length - left - gaps
+							score += outside[rule.lhs, length, left + right, gaps]
+							if score > 300.0:
+								continue
+						newitem = process_edge(newitem, score, inside, rule,
+								item, sibling, agenda, chart, viterbi, grammar,
 								exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -538,6 +538,39 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 						splitprune and grammar.fanout[rule.lhs] != 1,
 						markorigin, &blocked)
 
+			# binary right
+			for i in range(grammar.numrules):
+				rule = &(grammar.rbinary[item.label][i])
+				if rule.rhs2 != item.label:
+					break
+				for I, e in (<dict>viterbi[rule.rhs1]).items():
+					sibling = <FatChartItem>I
+					if fatconcat(rule, sibling.vec, item.vec):
+						newitem.label = rule.lhs
+						setunion(newitem.vec, sibling.vec, item.vec, SLOTS)
+						y = (<LCFRSEdge>e).inside
+						score = inside = x + y + rule.prob
+						if estimatetype == SX:
+							length = abitcount(item.vec, SLOTS)
+							left = anextset(item.vec, 0, SLOTS)
+							right = lensent - length - left
+							score += outside[rule.lhs, left, right, 0]
+							if score > 300.0:
+								continue
+						elif estimatetype == SXlrgaps:
+							length = abitcount(item.vec, SLOTS)
+							left = anextset(item.vec, 0, SLOTS)
+							gaps = abitlength(item.vec, SLOTS) - length - left
+							right = lensent - length - left - gaps
+							score += outside[rule.lhs, length, left + right, gaps]
+							if score > 300.0:
+								continue
+						newitem = process_fatedge(newitem, score, inside,
+								rule, sibling, item, agenda, chart, viterbi,
+								grammar, exhaustive, whitelist,
+								splitprune and grammar.fanout[rule.lhs] != 1,
+								markorigin, &blocked)
+
 			# binary left
 			for i in range(grammar.numrules):
 				rule = &(grammar.lbinary[item.label][i])
@@ -568,39 +601,6 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 								continue
 						newitem = process_fatedge(newitem, score, inside,
 								rule, item, sibling, agenda, chart, viterbi,
-								grammar, exhaustive, whitelist,
-								splitprune and grammar.fanout[rule.lhs] != 1,
-								markorigin, &blocked)
-
-			# binary right
-			for i in range(grammar.numrules):
-				rule = &(grammar.rbinary[item.label][i])
-				if rule.rhs2 != item.label:
-					break
-				for I, e in (<dict>viterbi[rule.rhs1]).items():
-					sibling = <FatChartItem>I
-					if fatconcat(rule, sibling.vec, item.vec):
-						newitem.label = rule.lhs
-						setunion(newitem.vec, sibling.vec, item.vec, SLOTS)
-						y = (<LCFRSEdge>e).inside
-						score = inside = x + y + rule.prob
-						if estimatetype == SX:
-							length = abitcount(item.vec, SLOTS)
-							left = anextset(item.vec, 0, SLOTS)
-							right = lensent - length - left
-							score += outside[rule.lhs, left, right, 0]
-							if score > 300.0:
-								continue
-						elif estimatetype == SXlrgaps:
-							length = abitcount(item.vec, SLOTS)
-							left = anextset(item.vec, 0, SLOTS)
-							gaps = abitlength(item.vec, SLOTS) - length - left
-							right = lensent - length - left - gaps
-							score += outside[rule.lhs, length, left + right, gaps]
-							if score > 300.0:
-								continue
-						newitem = process_fatedge(newitem, score, inside,
-								rule, sibling, item, agenda, chart, viterbi,
 								grammar, exhaustive, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
 								markorigin, &blocked)
@@ -864,21 +864,6 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 					agenda.append(newitem)
 					chart[newitem][edge] = edge
 					newitem = SmallChartItem.__new__(SmallChartItem)
-			# binary left
-			for i in range(grammar.numrules):
-				rule = &(grammar.lbinary[item.label][i])
-				if rule.rhs1 != item.label:
-					break
-				for I in items[rule.rhs2]:
-					sibling = <SmallChartItem>I
-					if concat(rule, item.vec, sibling.vec):
-						newitem.label = rule.lhs
-						newitem.vec = item.vec ^ sibling.vec
-						if newitem not in chart:
-							edge = new_LCFRSEdge(0.0, 0.0, rule, item, sibling)
-							agenda.append(newitem)
-							chart[newitem][edge] = edge
-							newitem = SmallChartItem.__new__(SmallChartItem)
 
 			# binary right
 			for i in range(grammar.numrules):
@@ -892,6 +877,22 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 						newitem.vec = sibling.vec ^ item.vec
 						if newitem not in chart:
 							edge = new_LCFRSEdge(0.0, 0.0, rule, sibling, item)
+							agenda.append(newitem)
+							chart[newitem][edge] = edge
+							newitem = SmallChartItem.__new__(SmallChartItem)
+
+			# binary left
+			for i in range(grammar.numrules):
+				rule = &(grammar.lbinary[item.label][i])
+				if rule.rhs1 != item.label:
+					break
+				for I in items[rule.rhs2]:
+					sibling = <SmallChartItem>I
+					if concat(rule, item.vec, sibling.vec):
+						newitem.label = rule.lhs
+						newitem.vec = item.vec ^ sibling.vec
+						if newitem not in chart:
+							edge = new_LCFRSEdge(0.0, 0.0, rule, item, sibling)
 							agenda.append(newitem)
 							chart[newitem][edge] = edge
 							newitem = SmallChartItem.__new__(SmallChartItem)
