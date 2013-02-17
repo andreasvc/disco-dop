@@ -292,6 +292,8 @@ class BracketCorpusReader(CorpusReader):
 	def _parse(self, block):
 		c = count()
 		result = ParentedTree.parse(block, parse_leaf=lambda _: next(c))
+		if result.label not in ('TOP', 'ROOT'):
+			result = ParentedTree('TOP', [result])
 		sent = self._word(block, orig=True)
 		if self.punct == "remove":
 			punctremove(result, sent)
