@@ -151,6 +151,7 @@ def main(
 		h=2,
 		leftmostunary=True, #start binarization with unary node
 		rightmostunary=True, #end binarization with unary node
+		pospa=False, # when v > 1, add parent annotation to POS tags?
 		headrules=None, # rules for finding heads of constituents
 		fanout_marks_before_bin=False,
 		tailmarker="",
@@ -331,7 +332,7 @@ def main(
 	else:
 		logging.info("read training & test corpus")
 		getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-				revmarkov, leftmostunary, rightmostunary,
+				revmarkov, leftmostunary, rightmostunary, pospa,
 				fanout_marks_before_bin, testmaxwords, resultdir, numproc,
 				lexmodel, simplelexsmooth, top)
 	evalparam = readparam(evalparam)
@@ -417,7 +418,7 @@ def readgrammars(resultdir, stages, top):
 				secondarymodel=None, outside=None)
 
 def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
-		tailmarker, revmarkov, leftmostunary, rightmostunary,
+		tailmarker, revmarkov, leftmostunary, rightmostunary, pospa,
 		fanout_marks_before_bin, testmaxwords, resultdir, numproc,
 		lexmodel, simplelexsmooth, top):
 	""" Apply binarization and read off the requested grammars. """
@@ -436,7 +437,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			binarize(a, factor=factor, tailmarker=tailmarker,
 					horzmarkov=horzmarkov, vertmarkov=vertmarkov,
 					leftmostunary=leftmostunary, rightmostunary=rightmostunary,
-					reverse=revmarkov)
+					reverse=revmarkov, pospa=pospa)
 	elif bintype == "optimal":
 		trees = [Tree.convert(optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -939,7 +940,7 @@ def parsetepacoc(
 		trainmaxwords=999, trainnumsents=25005,
 		testmaxwords=999, testnumsents=2000,
 		bintype="binarize", h=1, v=1, factor="right", tailmarker='',
-		revmarkov=False, leftmostunary=True, rightmostunary=True,
+		revmarkov=False, leftmostunary=True, rightmostunary=True, pospa=False,
 		fanout_marks_before_bin=False, unfolded=False,
 		usetagger='stanford', resultdir="tepacoc", numproc=1):
 	""" Parse the tepacoc test set. """
@@ -1025,7 +1026,7 @@ def parsetepacoc(
 							corpus_blocks)) if len(sent[1]) <= trainmaxwords
 							and n not in tepacocids][:trainnumsents])
 	getgrammars(trees, sents, stages, bintype, h, v, factor,
-			tailmarker, revmarkov, leftmostunary, rightmostunary,
+			tailmarker, revmarkov, leftmostunary, rightmostunary, pospa,
 			fanout_marks_before_bin, testmaxwords, resultdir,
 			numproc, None, False, trees[0].label)
 
