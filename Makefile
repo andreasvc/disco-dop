@@ -16,7 +16,7 @@ test3: sample2.export
 	PYTHONIOENCODING=utf-8 python3 -bb -tt runexp.py --test
 
 sample2.export:
-	wget http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/annotation/sample2.export
+	wget http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/TIGERCorpus/annotation/sample2.export
 
 debug:
 	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb
