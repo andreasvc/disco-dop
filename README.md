@@ -34,7 +34,7 @@ Some references to implemented algorithms:
 Requirements
 ------------
 - Python 2.7+/3   http://www.python.org (need headers, e.g. python-dev package)
-- Cython 0.17.2+  http://www.cython.org
+- Cython 0.18+    http://www.cython.org
 - GCC             http://gcc.gnu.org/
 - Numpy           http://numpy.org/
 
@@ -93,6 +93,9 @@ Usage: tools
 ------------
 Aside from the parser there are some standalone tools:
 
+- `fragments.py`:        Finds recurring or common fragments in one or more
+                         treebanks. It can be used with discontinuous as well as
+                         Penn-style bracketed treebanks.
 - `treetransforms.py`:   A command line interface to perform transformations on
                          treebanks such as binarization.
 - `grammar.py`:          A command line interface to read off grammars
@@ -102,9 +105,6 @@ Aside from the parser there are some standalone tools:
 - `eval.py`:             Discontinuous evaluation. Reports F-scores and other
                          metrics. Accepts `EVALB` parameter files:
                          `python eval.py negra-corpus.export sample/plcfrs.export proper.prm`
-- `fragments.py`:        Finds recurring or common fragments in one or more
-                         treebanks. It can be used with discontinuous as well as
-                         Penn-style bracketed treebanks.
 - `demos.py`:            Contains examples of various formalisms encoded in
                          LCFRS grammars.
 - `gen.py`:              An experiment in generation with LCFRS.
@@ -120,3 +120,4 @@ The Zhang-Shasha tree-edit distance algorithm in `treedist.py` was taken from
 [https://github.com/timtadh/zhang-shasha](https://github.com/timtadh/zhang-shasha)
 Elements of the PLCFRS parser and punctuation re-attachment are based on code from
 `rparse`. Various other bits from the Stanford parser, Berkeley parser, Bubs parser, &c.
+
