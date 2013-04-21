@@ -1,12 +1,12 @@
 """ Simple command line interface to parse with grammar(s) in text format.  """
 from __future__ import print_function
-import io, os, re, sys, time, gzip, codecs
+import io, os, re, sys, time, gzip, codecs, string # pylint: disable=W0402
 from math import exp
 from getopt import gnu_getopt, GetoptError
 from heapq import nlargest
 from operator import itemgetter
 import plcfrs, pcfg
-from grammar import read_bitpar_grammar, read_lcfrs_grammar, FORMAT
+from grammar import FORMAT
 from containers import Grammar
 from kbest import lazykbest
 from coarsetofine import prunechart
@@ -17,10 +17,13 @@ usage: %s [options] rules lexicon [input [output]]
 or: %s [options] coarserules coarselexicon finerules finelexicon \
 [input [output]]
 
-Grammars need to be binarized, and are in bitpar or LCFRS format.
+Grammars need to be binarized, and are in bitpar or PLCFRS format.
 When no file is given, output is written to standard output;
 when additionally no input is given, it is read from standard input.
 Files must be encoded in UTF-8.
+Input should contain one token per line, with sentences delimited by two
+newlines. Output consists of bracketed trees, with discontinuities indicated
+through indices pointing to words in the original sentence.
 
     Options:
     -b k          Return the k-best parses instead of just 1.
@@ -51,49 +54,34 @@ def main():
 	k = int(opts.get("-b", 1))
 	top = opts.get("-s", "TOP")
 	prob = "--prob" in opts
-	rules = (gzip.open if args[0].endswith(".gz") else open)(args[0])
+	rules = (gzip.open if args[0].endswith(".gz") else open)(args[0]).read()
 	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith(".gz")
-			else open)(args[1]))
-	try:
-		rulelist = read_lcfrs_grammar(rules, lexicon)
-	except ValueError:
-		rules.seek(0)
-		lexicon.seek(0)
-		rulelist = read_bitpar_grammar(rules, lexicon)
-		lcfrs = False
-	else:
-		lcfrs = True
-	coarse = Grammar(rulelist, top)
+			else open)(args[1])).read()
+	bitpar = rules[0] in string.digits
+	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar)
 	if 2 <= len(args) <= 4:
 		infile = (io.open(args[2], encoding='utf-8')
 				if len(args) >= 3 else sys.stdin)
 		out = (io.open(args[3], "w", encoding='utf-8')
 				if len(args) == 4 else sys.stdout)
-		simple(coarse, lcfrs, infile, out, k, prob)
+		simple(coarse, bitpar, infile, out, k, prob)
 	elif 4 <= len(args) <= 6:
 		threshold = int(opts.get("--kbestctf", 50))
-		rules = (gzip.open if args[2].endswith(".gz") else open)(args[2])
+		rules = (gzip.open if args[2].endswith(".gz") else open)(args[2]).read()
 		lexicon = codecs.getreader('utf-8')((gzip.open
-				if args[3].endswith(".gz") else open)(args[3]))
-		try:
-			rulelist = read_lcfrs_grammar(rules, lexicon)
-		except ValueError:
-			rules.seek(0)
-			lexicon.seek(0)
-			rulelist = read_bitpar_grammar(rules, lexicon)
-			lcfrs |= False
-		else:
-			lcfrs = True
-		fine = Grammar(rulelist, top)
+				if args[3].endswith(".gz") else open)(args[3])).read()
+		# detect bitpar format
+		bitpar = rules[0] in string.digits
+		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar)
 		fine.getmapping(coarse, striplabelre=re.compile(b"@.+$"))
 		infile = (io.open(args[4], encoding='utf-8')
 				if len(args) >= 5 else sys.stdin)
 		out = (io.open(args[5], "w", encoding='utf-8')
 				if len(args) == 6 else sys.stdout)
-		ctf(coarse, fine, lcfrs, infile, out, k, prob, threshold,
+		ctf(coarse, fine, bitpar, infile, out, k, prob, threshold,
 				"--mpd" in opts)
 
-def simple(grammar, lcfrs, infile, out, k, printprob):
+def simple(grammar, ispcfg, infile, out, k, printprob):
 	""" Parse with a single grammar. """
 	times = [time.clock()]
 	for n, a in enumerate(infile.read().split("\n\n")):
@@ -103,12 +91,12 @@ def simple(grammar, lcfrs, infile, out, k, printprob):
 		assert not set(sent) - set(grammar.lexical), (
 			"unknown words and no open class tags supplied: %r" % (
 			list(set(sent) - set(grammar.lexical))))
-		print("parsing:", n, " ".join(sent), file=sys.stderr)
+		print("parsing %d: %s" % (n, ' '.join(sent)), file=sys.stderr)
 		sys.stdout.flush()
-		if lcfrs:
-			chart, start, _ = plcfrs.parse(sent, grammar)
-		else:
+		if ispcfg:
 			chart, start, _ = pcfg.parse(sent, grammar)
+		else:
+			chart, start, _ = plcfrs.parse(sent, grammar, exhaustive=k > 1)
 		if start:
 			derivations = lazykbest(chart, start, k, grammar.tolabel)[0]
 			if printprob:
@@ -130,7 +118,7 @@ def simple(grammar, lcfrs, infile, out, k, printprob):
 	print("finished", file=sys.stderr)
 	out.close()
 
-def ctf(coarse, fine, lcfrs, infile, out, k, printprob, threshold, mpd):
+def ctf(coarse, fine, ispcfg, infile, out, k, printprob, threshold, mpd):
 	""" Do coarse-to-fine parsing with two grammars.
 	Assumes state splits in fine grammar are marked with '@'; e.g., 'NP@2'.
 	Sums probabilities of derivations producing the same tree. """
@@ -149,22 +137,22 @@ def ctf(coarse, fine, lcfrs, infile, out, k, printprob, threshold, mpd):
 			| set(sent) - set(fine.lexical))
 		assert not unknown, (
 			"unknown words and no open class tags supplied: %r" % list(unknown))
-		print("parsing:", n, " ".join(sent), end='', file=sys.stderr)
-		if lcfrs:
-			chart, start, msg = plcfrs.parse(sent, coarse,
-					exhaustive=True)
-		else:
+		print("parsing %d: %s" % (n, ' '.join(sent)), file=sys.stderr)
+		if ispcfg:
 			chart, start, msg = pcfg.parse(sent, coarse)
+		else:
+			chart, start, msg = plcfrs.parse(sent, coarse, exhaustive=True)
 		print(msg, file=sys.stderr)
 		if start:
 			print("pruning ...", file=sys.stderr, end='')
 			sys.stdout.flush()
 			whitelist, _ = prunechart(chart, start, coarse, fine, threshold,
-					False, False, not lcfrs)
-			if lcfrs:
-				chart, start, _ = plcfrs.parse(sent, fine, whitelist=whitelist)
-			else:
+					False, False, ispcfg)
+			if ispcfg:
 				chart, start, _ = pcfg.parse(sent, fine, chart=whitelist)
+			else:
+				chart, start, _ = plcfrs.parse(sent, fine, whitelist=whitelist,
+						exhaustive=k > 1)
 			print(msg, file=sys.stderr)
 
 			assert start, (

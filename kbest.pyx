@@ -5,6 +5,7 @@ from agenda import Agenda
 from containers import ChartItem, Edge, RankedEdge
 from operator import itemgetter
 
+cimport cython
 from agenda cimport Entry, Agenda, nsmallest
 from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem, \
 	new_CFGChartItem, Edge, LCFRSEdge, new_LCFRSEdge, CFGEdge, \
@@ -28,6 +29,7 @@ cdef inline getcandidates(dict chart, ChartItem v, int k):
 		[(RankedEdge(v, el, 0, 0 if el.right.label else -1), el.inside)
 						for el in nsmallest(k, chart[v].values())])
 
+@cython.wraparound(True)
 cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
 		dict chart, set explored):
 	cdef Entry entry
@@ -126,6 +128,7 @@ cdef inline getcandidatescfg(list chart, UInt label,
 						and ec.rule.rhs2 else -1), ec.inside)
 						for ec in nsmallest(k, cell[label].values())])
 
+@cython.wraparound(True)
 cpdef inline lazykthbestcfg(UInt label, UChar start, UChar end, int k, int k1,
 		list D, list cand, list chart, set explored):
 	cdef Entry entry

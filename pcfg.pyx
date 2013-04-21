@@ -1,7 +1,6 @@
 """ Probabilistic Context-Free Grammar (PCFG) parser using CKY. """
 
 from __future__ import print_function
-from array import array
 
 # python imports
 from math import log, exp
@@ -14,11 +13,10 @@ from agenda import EdgeAgenda, Entry
 # cython imports
 from libc.stdlib cimport malloc, calloc, free
 from cpython cimport PyDict_Contains, PyDict_GetItem
-from cpython.array cimport array
 cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
-		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong
+		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong, logprobadd
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint, \
 		anextset, anextunset, abitcount, abitlength, ulongset, ulongcpy, \
 		setunioninplace
@@ -1026,12 +1024,12 @@ def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
 def doplexprobs(tree, Grammar grammar):
 	neginf = float('-inf')
 	cdef dict chart = <dict>defaultdict(lambda: neginf)
-	cdef LexicalRule terminal
+	cdef LexicalRule lexrule
 
 	for n, word in enumerate(tree.leaves()):
-		for terminal in grammar.lexical[word]:
-			chart[terminal.lhs, n, n+1] = logprobadd(
-				chart[terminal.lhs, n, n+1], -terminal.prob)
+		for lexrule in grammar.lexical[word]:
+			chart[lexrule.lhs, n, n+1] = logprobadd(
+				chart[lexrule.lhs, n, n+1], -lexrule.prob)
 	return chart
 
 def getgrammarmapping(Grammar coarse, Grammar fine):
@@ -1056,26 +1054,6 @@ def getgrammarmapping(Grammar coarse, Grammar fine):
 			mapping[fine.tolabel[rule.lhs].rsplit("@", 1)[0],
 				fine.tolabel[rule.rhs1].rsplit("@", 1)[0]].append(ruleno)
 	return mapping
-
-cdef double log1e200 = log(1e200)
-cdef inline logprobadd(double x, double y):
-	""" add two log probabilities in log space.
-	i.e., logprobadd(log(a), log(b)) == log(a + b) """
-	if isinf(x):
-		return y
-	elif isinf(y):
-		return x
-	# If one value is much smaller than the other, keep the larger value.
-	elif x < (y - log1e200):
-		return y
-	elif y < (x - log1e200):
-		return x
-	diff = y - x
-	assert not isinf(diff)
-	if isinf(exp(diff)):	# difference is too large
-		return x if x > y else y
-	# otherwise return the sum.
-	return x + log(1.0 + exp(diff))
 
 
 def sortfunc(CFGEdge e):
@@ -1151,7 +1129,7 @@ def main():
 		((('D', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)],
-		'S')
+		start='S')
 	print(cfg)
 	print("cfg parsing; sentence: mary walks")
 	print("pcfg", end='')
@@ -1161,7 +1139,7 @@ def main():
 	cfg1 = Grammar([
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
-		((('VP', 'Epsilon'), ('walks', )), 1)], 'S', logprob=False)
+		((('VP', 'Epsilon'), ('walks', )), 1)], start='S', logprob=False)
 	i, o, start, _ = doinsideoutside("mary walks".split(), cfg1)
 	assert start
 	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
@@ -1181,13 +1159,13 @@ def main():
 		((('NP', 'Epsilon'), ('saw', )), 0.04),
 		((('NP', 'Epsilon'), ('stars', )), 0.18),
 		((('NP', 'Epsilon'), ('telescopes', )), 0.1)]
-	cfg2 = Grammar(rules, 'S', logprob=False)
+	cfg2 = Grammar(rules, start='S', logprob=False)
 	sent = "astronomers saw stars with ears".split()
 	inside, outside, _, msg = doinsideoutside(sent, cfg2)
 	print(msg)
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)
 
-	cfg2 = Grammar(rules, 'S', logprob=True)
+	cfg2 = Grammar(rules, start='S', logprob=True)
 	chart, start, _ = parse(sent, cfg2)
 	from disambiguation import marginalize
 	from operator import itemgetter

@@ -135,13 +135,6 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				parsetrees[treestr] = exp(-prob)
 				#parsetrees[treestr] = [-prob]
 
-	# Adding probabilities in log space
-	# http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-	# https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
-	#for parsetree in parsetrees:
-	#	maxprob = max(parsetrees[parsetree])
-	#	parsetrees[parsetree] = exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
-	#								for prob in parsetrees[parsetree]]))]))
 	msg = "%d derivations, %d parsetrees" % (
 			len(derivations if backtransform is None else entries),
 			len(parsetrees))
@@ -315,8 +308,7 @@ cpdef viterbiderivation(chart, ChartItem start, list tolabel):
 	derivations = lazykbest(chart, start, 10, tolabel)[0]
 	return derivations[0]
 
-cpdef str recoverfragments(deriv, D, Grammar grammar,
-		dict backtransform):
+cpdef str recoverfragments(deriv, D, Grammar grammar, dict backtransform):
 	""" Reconstruct a DOP derivation from a DOP derivation with
 	flattened fragments which are left-binarized. `derivation' should be
 	a RankedEdge representing a derivation, and backtransform should contain
@@ -362,8 +354,11 @@ cdef str recoverfragments_lcfrs(RankedEdge deriv, dict D,
 	children.append((<Entry>D[deriv.edge.left][deriv.left]).key)
 
 	# recursively expand all substitution sites
+	# FIXME: to avoid using str, we could use
+	# PyObject* PyBytes_FromFormat(const char *format, ...)
+	# PyBytes_FromFormat('(%s %d)', <char *>..., ...)
 	children = [('(%s %d)' % (
-		str(grammar.tolabel[child.head.label].decode('ascii')),
+		str(grammar.tolabel[child.head.label].decode('ascii')), # FIXME
 		child.edge.left.lexidx()))
 		if child.edge.rule is NULL else recoverfragments_lcfrs(
 				child, D, grammar, backtransform)
@@ -428,6 +423,54 @@ cdef str recoverfragments_cfg(RankedCFGEdge deriv, list D,
 
 	# substitute results in template
 	return frag.format(*children)
+
+def extractfragments(dict chart, ChartItem start, Grammar grammar,
+		dict backtransform):
+	""" Traverse derivation and collect the fragments it contains,
+	with their frontiers restored. Return sequence of (fragment, sent) pairs,
+	where sent contains the terminals. """
+	_, D, _ = lazykbest(chart, start, 10, grammar.tolabel, None, derivs=False)
+	result = []
+	extractfragments_rec((<Entry>D[start][0]).key, D, grammar, backtransform,
+			result)
+	return result
+
+cdef extractfragments_rec(RankedEdge deriv, dict D,
+		Grammar grammar, dict backtransform, list result):
+	cdef RankedEdge child
+	cdef list children = [], labels = []
+	cdef str frag = backtransform[(<CFGEdge>deriv.edge).rule.no] # template
+
+	# collect all children w/on the fly left-factored debinarization
+	if deriv.edge.right.label: # is there a right child?
+		# keep going while left child is part of same binarized constituent
+		# instead of looking for a binarization marker in the label string, we
+		# use the fact that such labels do not have a mapping as proxy.
+		while grammar.mapping[deriv.edge.left.label] == 0:
+			# one of the right children
+			children.append((<Entry>D[deriv.edge.right][deriv.right]).key)
+			labels.append(grammar.tolabel[deriv.edge.right.label])
+			# move on to next node in this binarized constituent
+			deriv = (<Entry>D[deriv.edge.left][deriv.left]).key
+		# last right child
+		if deriv.edge.right.label: # is there a right child?
+			children.append((<Entry>D[deriv.edge.right][deriv.right]).key)
+			labels.append(grammar.tolabel[deriv.edge.right.label])
+	elif grammar.mapping[deriv.edge.left.label] == 0:
+		deriv = (<Entry>D[deriv.edge.left][deriv.left]).key
+	# left-most child
+	children.append((<Entry>D[deriv.edge.left][deriv.left]).key)
+	labels.append(grammar.tolabel[deriv.edge.left.label])
+
+	frag = frag.format(*['(%s %d)' % (a.split('@')[0], n)
+			for n, a in enumerate(reversed(labels))])
+	sent = [a[a.index('@') + 1:].decode('unicode-escape') if '@' in a else None
+			for a in reversed(labels)]
+	result.append((frag, sent))
+	# recursively expand all substitution sites
+	for child in reversed(children):
+		if not child.edge.rule is NULL:
+			extractfragments_rec(child, D, grammar, backtransform, result)
 
 def main():
 	from grammar import dopreduction

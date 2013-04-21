@@ -25,8 +25,7 @@ from treetransforms import binarize, unbinarize, optimalbinarize, \
 from fragments import getfragments
 from estimates import getestimates, getpcfgestimates
 from grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
-		read_lcfrs_grammar, read_bitpar_grammar, write_lcfrs_grammar, \
-		defaultparse
+		write_lcfrs_grammar, defaultparse
 from lexicon import getunknownwordmodel, getlexmodel, \
 		smoothlexicon, simplesmoothlexicon, replacerarewords, \
 		unknownword4, unknownword6, unknownwordbase
@@ -372,13 +371,8 @@ def readgrammars(resultdir, stages, top):
 		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name))
 		lexicon = codecs.getreader('utf-8')(gzip.open("%s/%s.lex.gz" % (
 				resultdir, stage.name)))
-		if stage.mode == 'pcfg':
-			grammar = read_bitpar_grammar(rules, lexicon)
-		elif stage.mode == 'plcfrs':
-			grammar = read_lcfrs_grammar(rules, lexicon)
-		else:
-			raise ValueError
-		grammar = Grammar(grammar, top)
+		grammar = Grammar(rules.read(), lexicon.read(),
+				start=top, bitpar=stage.mode == 'pcfg')
 		backtransform = None
 		if stage.dop:
 			assert stage.objective not in (
@@ -503,7 +497,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						ewe=stage.estimator=="ewe", shortestderiv=False)
 				secondarymodel, _ = dopreduction(traintrees, sents,
 								ewe=False, shortestderiv=True)
-				secondarymodel = Grammar(secondarymodel, top)
+				secondarymodel = Grammar(secondarymodel, start=top)
 			else: # mpp or mpd
 				xgrammar = dopreduction(traintrees, sents,
 					ewe=(stage.estimator in ("ewe", "sl-dop",
@@ -515,7 +509,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)
-			grammar = Grammar(xgrammar, top)
+			grammar = Grammar(xgrammar, start=top)
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals",  len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
@@ -565,7 +559,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				xgrammar = simplesmoothlexicon(xgrammar, lexmodel)
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
-			grammar = Grammar(xgrammar, top,
+			grammar = Grammar(xgrammar, start=top,
 					logprob=stage.mode != "pcfg-posterior")
 			sumsto1 = grammar.testgrammar()
 			if n and stage.prune:
@@ -577,8 +571,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
 
-		rules = codecs.getwriter('ascii')(gzip.open("%s/%s.rules.gz" % (
-				resultdir, stage.name), "w"))
+		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name), "w")
 		lexicon = codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
 				resultdir, stage.name), "w"))
 		bitpar = fanout == 1 or stage.split
@@ -1115,16 +1108,17 @@ gunzip german-par-linux-3.2-utf8.bin.gz"""
 		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
 				" %s %s %s" % (model, inname, filtertags),
 				stdout=PIPE, shell=True)
-		tagout = tagger.stdout.read().decode('utf-8').split("<S>")[:-1]
+		tagout = tagger.stdout.read().decode('utf-8' # pylint: disable=E1101
+				).split("<S>")[:-1]
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, None, overridetag, tagmap)
 					for a in tags.splitlines() if a.strip()])
 					for n, tags in zip(sents, tagout))
 	elif usetagger == "stanford": # Stanford Tagger
-		installation = """Stanford tagger not found. Commands to install:
+		install = """Stanford tagger not found. Commands to install:
 wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
 tar -xzf stanford-postagger-full-2012-07-09.tgz"""
-		assert os.path.exists("stanford-postagger-full-2012-07-09"), installation
+		assert os.path.exists("stanford-postagger-full-2012-07-09"), install
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
@@ -1140,7 +1134,8 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 				" -model %s -textFile %s" % (model, inname)).split(),
 				cwd="stanford-postagger-full-2012-07-09",
 				shell=False, stdout=PIPE)
-		tagout = tagger.stdout.read().decode('utf-8').splitlines()
+		tagout = tagger.stdout.read().decode('utf-8' # pylint: disable=E1101
+				).splitlines()
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, "_", overridetag, tagmap)
 			for a in tags.split()]) for n, tags in zip(sents, tagout))

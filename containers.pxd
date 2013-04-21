@@ -1,6 +1,5 @@
-from array import array
-from cpython.array cimport array
-from libc.stdlib cimport malloc, realloc, calloc, free
+from math import exp, log, isinf
+from libc.stdlib cimport malloc, realloc, calloc, free, qsort
 from libc.string cimport memcmp, memset
 cimport cython
 
@@ -25,7 +24,6 @@ cdef extern from "macros.h":
 	void SETBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
 	#int SLOTS # doesn't work
-#cdef extern from "arrayarray.h": pass
 
 # FIXME: find a way to make this a constant, yet shared across modules.
 DEF SLOTS = 2
@@ -38,12 +36,12 @@ cdef class Grammar:
 	cdef UChar *fanout
 	cdef size_t nonterminals, numrules, numunary, numbinary, maxfanout
 	cdef bint logprob
-	cdef public list tolabel, unaryclosure, unaryclosuretopdown
-	cdef public dict lexical, lexicalbylhs, toid, rulenos
-	cdef frozenset origrules
-	cdef copyrules(Grammar self, Rule **dest, idx, filterlen)
-	cpdef getmapping(Grammar self, Grammar coarse, striplabelre=*,
-			neverblockre=*, bint splitprune=*, bint markorigin=*, bint debug=*)
+	cdef bytes origrules
+	cdef unicode origlexicon
+	cdef public list tolabel
+	cdef public dict toid, lexical, lexicalbylhs
+	cdef _convertrules(Grammar self, list rulelines, bint bitpar)
+	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
 	cdef rulerepr(self, Rule rule)
 	cdef yfrepr(self, Rule rule)
 
@@ -60,8 +58,6 @@ cdef struct Rule:
 @cython.final
 cdef class LexicalRule:
 	cdef UInt lhs
-	cdef UInt rhs1
-	cdef UInt rhs2
 	cdef unicode word
 	cdef double prob
 
@@ -232,24 +228,34 @@ cdef class RankedCFGEdge:
 
 # start fragments stuff
 
+# changes to Node representation:
+# removed .label; .prod is used to find label
+# remove nodes for terminals, merge informatio into  preterminals:
+
 cdef struct Node:
-	int label, prod
-	short left, right
+	int prod # non-negative, ID of a phrasal or lexical production
+	short left # >= 0: array idx to child Node; <0: idx sent[-left - 1];
+	short right # >=0: array idx to child Node; -1: empty (unary Node)
 
 cdef struct NodeArray:
-	Node *nodes
-	short len, root
+	size_t offset # index to array of nodes in treebank where this tree starts
+	short len, root # number of nodes, index to root node
 
 @cython.final
 cdef class Ctrees:
+	cdef Node *nodes
+	cdef NodeArray *trees
+	cdef long nodesleft
+	cdef public size_t numnodes
+	cdef public short maxnodes
+	cdef int len, max
+	cdef list treeswithprod
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int len)
-	cpdef add(self, list tree, dict labels, dict prods)
-	cdef NodeArray *data
-	cdef long nodesleft
-	cdef public long nodes
-	cdef public int maxnodes
-	cdef int len, max
+	cpdef add(self, list tree, dict prods)
+	cdef addnodes(self, Node *nodes, int cnt, int root)
+
+# end fragments stuff
 
 @cython.final
 cdef class CBitset:
@@ -264,13 +270,6 @@ cdef class CBitset:
 	cdef UChar slots
 
 @cython.final
-cdef class FrozenArray:
-	cdef array obj
-
-# end fragments stuff
-
-
-@cython.final
 cdef class MemoryPool:
 	cdef void reset(MemoryPool self)
 	cdef void *alloc(self, int size)
@@ -278,11 +277,37 @@ cdef class MemoryPool:
 	cdef void *cur
 	cdef int poolsize, limit, n, leftinpool
 
-# to avoid overhead of __init__ and __cinit__ constructors
-cdef inline FrozenArray new_FrozenArray(array data):
-	cdef FrozenArray item = FrozenArray.__new__(FrozenArray)
-	item.obj = data
-	return item
+# ---------------------------------------------------------------
+#                          INLINED FUNCTIONS
+# ---------------------------------------------------------------
+
+cdef inline long djb_hash(UChar *key, int size):
+	cdef unsigned long h = 5381UL
+	cdef int n
+	for n in range(size):
+		h *= 33UL ^ key[n]
+	return <long>h
+
+cdef inline long oat_hash(UChar *key, int size):
+	cdef unsigned long h = 0UL
+	cdef int n
+	for n in range(size):
+		h += key[n]
+		h += h << 10UL
+		h ^= h >> 6UL
+	h += h << 3UL
+	h ^= h >> 11UL
+	h += h << 15UL
+	return <long>h
+
+cdef inline long fnv_hash(UChar *key, int size):
+	""" FNV-1a hash; constants for 64 bit words. """
+	cdef unsigned long h = 14695981039346656037UL
+	cdef int n
+	for n in range(size):
+		h ^= key[n]
+		h *= 1099511628211UL
+	return h
 
 cdef inline FatChartItem new_FatChartItem(UInt label):
 	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
@@ -326,3 +351,40 @@ cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
 	edge.rule = rule
 	edge.mid = mid
 	return edge
+
+cdef object log1e200 = log(1e200)
+cdef inline logprobadd(x, y):
+	""" add two log probabilities in log space;
+	i.e., logprobadd(log(a), log(b)) == log(a + b)
+	NB: expect python floats, not C doubles """
+	if isinf(x):
+		return y
+	elif isinf(y):
+		return x
+	# If one value is much smaller than the other, keep the larger value.
+	elif x < (y - log1e200):
+		return y
+	elif y < (x - log1e200):
+		return x
+	diff = y - x
+	assert not isinf(diff)
+	if isinf(exp(diff)):	# difference is too large
+		return x if x > y else y
+	# otherwise return the sum.
+	return x + log(1.0 + exp(diff))
+
+cdef inline double logprobsum(list logprobs):
+	""" Takes a list of log probabilities and sums them producing a new
+	log probability;
+	NB: since the input is a Python list, this function works with python
+	floats, not C doubles.
+	i.e., logprobsum([log(a), log(b), ...]) == log(sum([a, b, ...]))
+
+	http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+	https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations """
+	maxprob = max(logprobs)
+	# fsum is supposedly more accurate.
+	#return exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
+	#							for prob in logprobs]))]))
+	return maxprob + log(sum([exp(prob - maxprob) for prob in logprobs]))
+

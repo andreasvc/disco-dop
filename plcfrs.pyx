@@ -1,7 +1,6 @@
 """ Probabilistic CKY parser for monotone, string-rewriting
 Linear Context-Free Rewriting Systems. """
 from __future__ import print_function
-from array import array
 # python imports
 from math import log, exp
 from collections import defaultdict, deque
@@ -10,7 +9,6 @@ import numpy as np
 from agenda import EdgeAgenda, Entry
 # cython imports
 from cpython cimport PyDict_Contains, PyDict_GetItem
-from cpython.array cimport array
 cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, LCFRSEdge, ChartItem, \
@@ -34,7 +32,7 @@ DEF SX = 1
 DEF SXlrgaps = 2
 DEF SLOTS = 2
 
-def parse(sent, Grammar grammar, tags=None, bint exhaustive=False, start=1,
+def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		list whitelist=None, bint splitprune=False, bint markorigin=False,
 		estimates=None, int beamwidth=0):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -414,7 +412,7 @@ cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 
 cdef FatChartItem FATNONE = new_FatChartItem(0)
 def parse_longsent(sent, Grammar grammar, tags=None, start=1,
-		bint exhaustive=False, list whitelist=None, bint splitprune=False, bint
+		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False, estimates=None):
 	""" Parse a sentence longer than the machine word size. """
 	cdef dict chart = {}							#the full chart
@@ -774,7 +772,7 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	return lpos == rpos == -1
 
 def symbolicparse(sent, Grammar grammar, tags=None, start=1,
-		bint exhaustive=False, list whitelist=None, bint splitprune=False, bint
+		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the first parse.
@@ -914,7 +912,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 #cdef getinside(dict result, chart, start):
 #	#...
 #
-#def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=False,
+#def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=True,
 #		list whitelist=None, bint splitprune=False, bint markorigin=False,
 #		estimates=None, int beamwidth=0):
 #	# assign POS tags, unaries on POS tags
@@ -1050,7 +1048,7 @@ def main():
 		((('PROAV', 'Epsilon'), ('Daruber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
-		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)], "S")
+		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)], start='S')
 	print(grammar)
 	print("Rule structs take", sizeof(Rule), "bytes")
 

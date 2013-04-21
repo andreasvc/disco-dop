@@ -1,4 +1,5 @@
 from containers cimport ULLong, ULong, UInt, UChar
+from libc.string cimport memcpy
 
 cdef extern:
 	int __builtin_ffsll (ULLong)
@@ -27,10 +28,10 @@ cpdef bint testbitshort(unsigned short arg, UInt pos)
 
 # cdef inline functions defined here:
 #on ULLongs
-#cdef inline int nextset(ULLong vec, UInt pos)
-#cdef inline int nextunset(ULLong vec, UInt pos)
 #cdef inline bint testbit(ULLong vec, UInt pos)
 #cdef inline bint testbitint(UInt arg, UInt pos)
+#cdef inline int nextset(ULLong vec, UInt pos)
+#cdef inline int nextunset(ULLong vec, UInt pos)
 #cdef inline int bitlength(ULLong vec)
 
 #on arrays of unsigned long
@@ -67,7 +68,6 @@ cdef inline int nextunset(ULLong vec, UInt pos):
 	cdef ULLong x = ~vec & (~0ULL << pos)
 	return __builtin_ctzll(x) if x else (sizeof(ULLong) * 8)
 
-# todo: see if this can be turned into a macro
 cdef inline bint testbit(ULLong vec, UInt pos):
 	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
@@ -144,12 +144,16 @@ cdef inline void ulongset(ULong *dest, ULong value, UInt slots):
 	for a in range(slots):
 		dest[a] = value
 
-cdef inline void ulongcpy(ULong *dest, ULong *src, UInt slots):
-	""" Like memcpy, but copy one ULong at a time; should be faster
-	for small arrays. """
-	cdef int a
-	for a in range(slots):
-		dest[a] = src[a]
+#cdef inline void ulongcpy(ULong *dest, ULong *src, UInt slots):
+#	""" Like memcpy, but copy one ULong at a time; should be faster
+#	for small arrays. """
+#	cdef int a
+#	for a in range(slots):
+#		dest[a] = src[a]
+
+cdef inline void ulongcpy(ULong *dest, ULong *src, short slots):
+	""" memcpy wrapper for unsigned long arrays. """
+	memcpy(<char *>dest, <char *>src, slots * sizeof(ULong))
 
 cdef inline void setintersectinplace(ULong *dest, ULong *src, UInt slots):
 	""" dest gets the intersection of dest and src;
