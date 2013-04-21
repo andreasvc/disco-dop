@@ -165,20 +165,20 @@ hasnondigit = re.compile(r"\D", re.UNICODE)
 #NB: includes '-', hyphen, non-breaking hyphen
 # does NOT include: figure-dash, em-dash, en-dash (these are punctuation,
 # not word-combining) u2012-u2015; nb: these are hex values.
-hasdash = re.compile(r"[-\u2010\u2011]", re.UNICODE)
+hasdash = re.compile(u"[-\u2010\u2011]", re.UNICODE)
 # FIXME: exclude accented characters for model 6?
-haslower = re.compile('[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
-		'\xef\xfc\xff\u0153\xe6]', re.UNICODE)
-hasupper = re.compile('[a-z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
-		'\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
-hasletter = re.compile('[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
-		'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
-		'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]' , re.UNICODE)
+haslower = re.compile(u'[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
+		u'\xef\xfc\xff\u0153\xe6]', re.UNICODE)
+hasupper = re.compile(u'[a-z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
+		u'\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
+hasletter = re.compile(u'[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
+		u'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
+		u'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]' , re.UNICODE)
 # Cf. http://en.wikipedia.org/wiki/French_alphabet
-LOWER = ('abcdefghijklmnopqrstuvwxyz\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
-		'\xeb\xef\xfc\xff\u0153\xe6')
-UPPER = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb'
-		'\xcb\xcf\xdc\u0178\u0152\xc6')
+LOWER = (u'abcdefghijklmnopqrstuvwxyz\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
+		u'\xeb\xef\xfc\xff\u0153\xe6')
+UPPER = (u'ABCDEFGHIJKLMNOPQRSTUVWXYZ\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb'
+		u'\xcb\xcf\xdc\u0178\u0152\xc6')
 LOWERUPPER = LOWER + UPPER
 def unknownword6(word, loc, lexicon):
 	""" Model 6 of the Stanford parser (for WSJ treebank). """
@@ -281,23 +281,23 @@ def unknownwordbase(word, loc, lexicon):
 			sig += "-%s" % word[-2].lower()
 	return sig
 
-nounsuffix = re.compile("(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
-		"|ence|eau|erie|ng|ette|age|ade|ance|ude|ogue|aphe|ate|duc|anthe"
-		"|archie|coque|érèse|ergie|ogie|lithe|mètre|métrie|odie|pathie|phie"
-		"|phone|phore|onyme|thèque|scope|some|pole|ôme|chromie|pie)s?$")
-adjsuffix = re.compile("(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
-		"|ible|atif|ique|if|ive|eux|aise|ent|ois|oise|ante|el|elle|ente|oire"
-		"|ain|aine)s?$")
-possibleplural = re.compile("(s|ux)$")
-verbsuffix = re.compile("(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras|é|és|ées"
-		"|isse|it)$")
+nounsuffix = re.compile(u"(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
+		u"|ence|eau|erie|ng|ette|age|ade|ance|ude|ogue|aphe|ate|duc|anthe"
+		u"|archie|coque|érèse|ergie|ogie|lithe|mètre|métrie|odie|pathie|phie"
+		u"|phone|phore|onyme|thèque|scope|some|pole|ôme|chromie|pie)s?$")
+adjsuffix = re.compile(u"(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
+		u"|ible|atif|ique|if|ive|eux|aise|ent|ois|oise|ante|el|elle|ente|oire"
+		u"|ain|aine)s?$")
+possibleplural = re.compile(u"(s|ux)$")
+verbsuffix = re.compile(u"(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras|é|és|ées"
+		u"|isse|it)$")
 advsuffix = re.compile("(iment|ement|emment|amment)$")
-haspunc = re.compile("([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
-		"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
-		"\u20A0-\u20B5])+")
-ispunc = re.compile("([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
-		"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
-		"\u20A0-\u20B5])+$")
+haspunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
+		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
+		u"\u20A0-\u20B5])+")
+ispunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
+		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
+		u"\u20A0-\u20B5])+$")
 
 def unknownwordftb(word, loc, lexicon):
 	""" Model 2 for French of the Stanford parser. """

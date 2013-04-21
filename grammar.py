@@ -9,9 +9,9 @@ from itertools import count, islice, repeat
 from tree import ImmutableTree, Tree, DiscTree
 if sys.version[0] >= '3':
 	from functools import reduce # pylint: disable=W0622
-	basestring = (str, bytes) # pylint: disable=W0622,C0103
+	unicode = str # pylint: disable=W0622,C0103
 
-FORMAT = """The LCFRS format is as follows. Rules are delimited by newlines.
+FORMAT = """The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are:
 
 LHS	RHS1	[RHS2]	yield-function	weight
@@ -19,13 +19,18 @@ LHS	RHS1	[RHS2]	yield-function	weight
 The yield function defines how the spans of the RHS nonterminals
 are combined to form the spans of the LHS nonterminal. Components of the yield
 function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as hexadecimal
-negative logprobs. E.g.:
+nonterminal, and 1 from the second. Weights are expressed as rational
+fractions.
+The lexicon is defined in a separate file. Lines start with a single word,
+followed by pairs of possible tags and their probabilities.
 
-rules:   S    NP  VP  010 0x1.9c041f7ed8d33p+1
-         VP_2    VB  NP  0,1 0x1.434b1382efeb8p+1
-         NP      NN      0       0.3
-lexicon: NN Epsilon Haus    0.3"""
+WORD	TAG1	PROB1	[TAG2	PROB2 ...]
+
+E.g.:
+rules:   S	NP	VP	010	1/2
+         VP_2	VB	NP	0,1	2/3
+         NP	NN	0	1/4
+lexicon: Haus	NN	3/10	JJ	1/9"""
 
 USAGE = """Read off grammars from treebanks.
 usage: %s [options] model input output
@@ -48,7 +53,7 @@ options may consist of (* marks default option):
     --packed              use packed graph encoding for DOP reduction
 
 When a PCFG is requested, or the input format is `bracket' (Penn format), the
-output will be in bitpar format. Otherwise the grammar is written as an LCFRS.
+output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
 
@@ -474,9 +479,10 @@ def new_flatten(tree, sent, ids):
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 def flatten(tree, sent, ids):
 	""" Auxiliary function for Double-DOP.
-	Remove internal nodes from a tree and read off its binarized
-	productions. Aside from returning productions, also return tree with
-	lexical and frontier nodes replaced by a templating symbol '%s'.
+	Remove internal nodes from a tree and read off the binarized
+	productions of the resulting flattened tree. Aside from returning
+	productions, also return tree with lexical and frontier nodes replaced by a
+	templating symbol '{n}' where n is an index.
 	Input is a tree and sentence, as well as an iterator which yields
 	unique IDs for non-terminals introdudced by the binarization;
 	output is a tuple (prods, frag). Trees are in the form of strings.
@@ -637,17 +643,17 @@ def printrulelatex(rule):
 		print(r"\textrm{%s}(\textrm{%s})" % (
 			lhs[0].replace("$", r"\$"), lhs[1][0]), end='')
 	else:
-		print("\\textrm{%s}(%s)" % (lhs[0].replace("$","\\$").replace("_","\_"),
-			",".join(" ".join("x_{%r}" % a for a in x)  for x in lhs[1])),
-			end='')
+		print("\\textrm{%s}(%s)" % (lhs[0].replace('$', r'\$').replace('_',
+			r'\_'), ','.join(' '.join('x_{%r}' % a for a in x)
+			for x in lhs[1])), end='')
 	print(r"\rightarrow", end='\n\t')
 	for x in rhs:
 		if x[0] == 'Epsilon':
 			print(r'\epsilon', end='')
 		else:
 			print("\\textrm{%s}(%s)" % (
-				x[0].replace("$","\\$").replace("_","\_"),
-				",".join("x_{%r}" % a for a in x[1])), end='')
+				x[0].replace('$', r'\$').replace('_', r'\_'),
+				','.join("x_{%r}" % a for a in x[1])), end='')
 			if x != rhs[-1]:
 				print('\\:', end='')
 	print(r' $ \\')
@@ -747,48 +753,6 @@ def exportrparsegrammar(grammar):
 			yield ("1 %s:%s --> %s [%s]" % (w, rewritelabel(r[0]),
 				" ".join(map(rewritelabel, r[1:])), repryf(yf)))
 
-def read_bitpar_grammar(rules, lexicon):
-	""" Read a bitpar grammar given two file objects. Must be a binarized
-	grammar. Integer frequencies will be converted to exact relative
-	frequencies; otherwise weights are kept as-is. """
-	grammar = []
-	integralweights = True
-	ntfd = defaultdict(int)
-	for a in rules:
-		a = a.split()
-		p, rule = float(a[0]), a[1:]
-		if integralweights:
-			ip = int(p)
-			if p == ip:
-				p = ip
-			else:
-				integralweights = False
-		ntfd[rule[0]] += p
-		if len(rule) == 2:
-			grammar.append(((tuple(rule), ((0,),)), p))
-		elif len(rule) == 3:
-			grammar.append(((tuple(rule), ((0, 1),)), p))
-		else:
-			raise ValueError("grammar is not binarized")
-	for a in lexicon:
-		a = a.split()
-		word = a[0]
-		tags, weights = a[1::2], a[2::2]
-		weights = map(float, weights)
-		if integralweights:
-			if all(int(w) == w for w in weights):
-				weights = map(int, weights)
-			else:
-				integralweights = False
-		tags = zip(tags, weights)
-		for t, p in tags:
-			ntfd[t] += p
-		grammar.extend((((t, 'Epsilon'), (word,)), p) for t, p in tags)
-	if integralweights:
-		return [(rule, Fraction(p, ntfd[rule[0][0]])) for rule, p in grammar]
-	else:
-		return grammar
-
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	""" Takes a bitpar grammar and converts it to the format of
 	Mark Jonhson's cky parser. """
@@ -806,57 +770,35 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	io.open(out, "w", encoding=encoding).writelines(grammar)
 
 def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
-	""" Writes a grammar as produced by induce_plcfrs() or dopreduction()
-	(so before it goes through Grammar()) into a simple text file format.
-	Expects file objects with write() methods accepting strings (not bytes).
-	Fields are separated by tabs. Components of the yield function are
-	comma-separated; weights are printed as rational fractions (when
-	freqiencies is True, only print(numerator).)
-	e.g.:
-	rules: S	NP	VP	010	1/2
-		VP_2	VB	NP	0,1	2/5
-	lexicon: Haus NN 2/9	JJ 1/15
+	""" Writes a grammar to a simple text file format. Parameters:
+	- grammar: sequence of rule tuples, as produced by induce_plcfrs(),
+		dopreduction(), doubledop().
+	- rules: a file object with a write() method accepting ascii byte strings
+	- lexicon: a file object with a write() method accepting unicode strings
+	For a description of the file format, see grammar.FORMAT.
 	When bitpar is True, use bitpar format: for rules, put weight first (as
-	decimal fraction or frequency) and leave out the yield function; for lexical
-	productions, use one line per word followed by pairs of tags and weights.
-	"""
+	decimal fraction or frequency) and leave out the yield function. """
 	lexical = {}
 	for (r, yf), w in grammar:
 		if len(r) == 2 and r[1] == 'Epsilon':
-			lexical.setdefault(yf[0], []).append((r[0], w))
+			lexical.setdefault(unicode(yf[0]), []).append((r[0], w))
+			continue
+		elif bitpar:
+			rules.write(("%g\t%s\n" % (w.numerator if freqs else w,
+					"\t".join(x for x in r))).encode('ascii'))
+		else:
+			yfstr = ",".join("".join(map(str, a)) for a in yf)
+			rules.write(("%s\t%s\t%s\n" % (
+					"\t".join(x for x in r), yfstr,
+					w.numerator if freqs else w)).encode('ascii'))
 	for word, lexrules in lexical.items():
 		lexicon.write(word)
 		for tag, w in lexrules:
 			if freqs:
-				lexicon.write("\t%s %s" % (tag, w.numerator))
-			elif bitpar:
-				lexicon.write("\t%s %g" % (tag, w))
+				lexicon.write(unicode("\t%s %s" % (tag, w.numerator)))
 			else:
-				lexicon.write("\t%s %s" % (tag, w))
-		lexicon.write("\n")
-	for (r, yf), w in grammar:
-		if len(r) == 2 and r[1] == 'Epsilon':
-			continue
-		elif bitpar:
-			rules.write("%s\t%s\n" % (w.numerator if freqs else "%g" % w,
-					"\t".join(x for x in r)))
-		else:
-			yfstr = ",".join("".join(map(str, a)) for a in yf)
-			rules.write("%s\t%s\t%s\n" % (
-					"\t".join(x for x in r), yfstr,
-					w.numerator if freqs else w))
-
-def read_lcfrs_grammar(rules, lexicon):
-	""" Reads a grammar as produced by write_lcfrs_grammar from two file
-	objects. """
-	rules = (a.strip().split('\t') for a in rules)
-	grammar = [((tuple(a[:-2]), tuple(tuple(map(int, b))
-			for b in a[-2].split(","))), Fraction(a[-1])) for a in rules]
-	# one word per line, word (tag weight)+
-	grammar += [(((t, 'Epsilon'), (lexentry[0],)), Fraction(p))
-			for lexentry in (a.strip().split() for a in lexicon)
-			for t, p in zip(lexentry[1::2], lexentry[2::2])]
-	return grammar
+				lexicon.write(unicode("\t%s %s" % (tag, w)))
+		lexicon.write(unicode('\n'))
 
 def alterbinarization(tree):
 	"""converts the binarization of rparse to the format that NLTK expects
@@ -864,7 +806,7 @@ def alterbinarization(tree):
 	@^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1 """
 	#how to optionally add \2 if nonempty?
 	tree = re.sub(
-		"@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+",
+		r"@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+",
 		r"\1|<\3>", tree)
 	# remove fanout markers
 	tree = re.sub(r"([A-Z.,()$]+)\d+", r"\1", tree)
@@ -934,10 +876,9 @@ def test():
 	from fragments import getfragments
 	from containers import Grammar
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	#filename = "negraproc.export"
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
-		headrules="negra.headrules", headfinal=True, headreverse=False,
+		headrules=None, headfinal=True, headreverse=False,
 		punct="move")
 	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
 	sents = list(corpus.sents().values())
@@ -947,24 +888,24 @@ def test():
 		addfanoutmarkers(a)
 
 	print('plcfrs')
-	lcfrs = Grammar(induce_plcfrs(trees, sents), trees[0].label)
+	lcfrs = Grammar(induce_plcfrs(trees, sents), start=trees[0].label)
 	print(lcfrs)
 
 	print('dop reduction')
-	grammar = Grammar(dopreduction(trees[:2], sents[:2]), trees[0].label)
+	grammar = Grammar(dopreduction(trees[:2], sents[:2]), start=trees[0].label)
 	print(grammar)
-	grammar.testgrammar(logging)
+	grammar.testgrammar()
 
 	fragments = getfragments(trees, sents, 1)
 	debug = '--debug' in sys.argv
 	grammarx, backtransform = doubledop(fragments, debug=debug)
 	print('\ndouble dop grammar')
-	grammar = Grammar(grammarx, trees[0].label)
+	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
 		neverblockre=re.compile(b'^#[0-9]+|.+}<'),
 		splitprune=False, markorigin=False)
 	print(grammar)
-	assert grammar.testgrammar(logging), "DOP1 should sum to 1."
+	assert grammar.testgrammar(), "DOP1 should sum to 1."
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
 		print("sentence:", " ".join(a.encode('unicode-escape').decode()
 				for a in sent))
@@ -1025,7 +966,7 @@ def main():
 
 	# read treebank
 	reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = reader(".", treebankfile)
+	corpus = reader(".", treebankfile, encoding=opts.get('--inputenc', 'utf8'))
 	trees = list(corpus.parsed_sents().values())
 	sents = list(corpus.sents().values())
 	for a in trees:
@@ -1049,7 +990,7 @@ def main():
 	print(grammarinfo(grammar))
 	if not freqs:
 		cgrammar = Grammar(grammar)
-		cgrammar.testgrammar(logging)
+		cgrammar.testgrammar()
 	rules = grammarfile + ".rules"
 	lexicon = grammarfile + ".lex"
 	if '--gzip' in opts:

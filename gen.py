@@ -2,15 +2,13 @@
 text file. """
 from __future__ import print_function
 import sys, gzip, codecs
-from fractions import Fraction
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 from array import array
 from random import random
-from grammar import read_lcfrs_grammar, read_bitpar_grammar
 
 USAGE = """
 Generate random sentences with a PLCFRS or PCFG.
-Reads grammar from a text file in LCFRS or bitpar format.
+Reads grammar from a text file in PLCFRS or bitpar format.
 usage: %s rules lexicon | --test
 
 Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
@@ -43,9 +41,13 @@ def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 		p2, l2 = gen(grammar, rule.rhs2, discount, prodcounts, verbose)
 		assert l2
 	prodcounts[rule.no] -= 1
+	if verbose:
+		print('%s => %s %r [p=%s]' % (
+				grammar.tolabel[rule.lhs],
+				' '.join((grammar.tolabel[rule.rhs1],
+				grammar.tolabel[rule.rhs2] if rule.rhs2 else '')),
+				arraytoyf(rule.args, rule.lengths), rule.prob))
 	if rule.rhs2:
-		assert l1
-		assert l2
 		return compose(rule, (p1, l1), (p2, l2), verbose)
 	else:
 		return (p1 * rule.prob, l1)
@@ -54,8 +56,7 @@ def chooserule(rules, discount, prodcounts):
 	""" given a list of objects with probabilities,
 	choose one according to that distribution."""
 	weights = [rule.prob * discount ** prodcounts[rule.no] for rule in rules]
-	position = random()
-	position *= sum(weights)
+	position = random() * sum(weights)
 	for r, w in zip(rules, weights):
 		position -= w
 		if position < 0:
@@ -80,6 +81,68 @@ def compose(rule, left, right, verbose):
 	if verbose:
 		print(result)
 	return (rule.prob * p1 * p2, result)
+
+def parsefrac(a):
+	""" Parse a string of a fraction into a float ('1/2' => 0.5).
+	Substitute for creating Fraction objects (which is slow). """
+	n = a.find('/')
+	if n == -1:
+		return float(a)
+	return float(a[:n]) / float(a[n + 1:])
+
+def read_lcfrs_grammar(rules, lexicon):
+	""" Reads a grammar as produced by write_lcfrs_grammar from two file
+	objects. """
+	rules = (a.strip().split('\t') for a in rules)
+	grammar = [((tuple(a[:-2]), tuple(tuple(map(int, b))
+			for b in a[-2].split(","))), parsefrac(a[-1])) for a in rules]
+	# one word per line, word (tag weight)+
+	grammar += [(((t, 'Epsilon'), (lexentry[0],)), parsefrac(p))
+			for lexentry in (a.strip().split() for a in lexicon)
+			for t, p in zip(lexentry[1::2], lexentry[2::2])]
+	return grammar
+
+def read_bitpar_grammar(rules, lexicon):
+	""" Read a bitpar grammar given two file objects. Must be a binarized
+	grammar. Integer frequencies will be converted to exact relative
+	frequencies; otherwise weights are kept as-is. """
+	grammar = []
+	integralweights = True
+	ntfd = defaultdict(int)
+	for a in rules:
+		a = a.split()
+		p, rule = float(a[0]), a[1:]
+		if integralweights:
+			ip = int(p)
+			if p == ip:
+				p = ip
+			else:
+				integralweights = False
+		ntfd[rule[0]] += p
+		if len(rule) == 2:
+			grammar.append(((tuple(rule), ((0,),)), p))
+		elif len(rule) == 3:
+			grammar.append(((tuple(rule), ((0, 1),)), p))
+		else:
+			raise ValueError("grammar is not binarized")
+	for a in lexicon:
+		a = a.split()
+		word = a[0]
+		tags, weights = a[1::2], a[2::2]
+		weights = map(float, weights)
+		if integralweights:
+			if all(int(w) == w for w in weights):
+				weights = map(int, weights)
+			else:
+				integralweights = False
+		tags = zip(tags, weights)
+		for t, p in tags:
+			ntfd[t] += p
+		grammar.extend((((t, 'Epsilon'), (word,)), p) for t, p in tags)
+	if integralweights:
+		return [(rule, p / ntfd[rule[0][0]]) for rule, p in grammar]
+	else:
+		return grammar
 
 def splitgrammar(rules):
 	""" split the grammar into various lookup tables, mapping nonterminal
@@ -156,9 +219,9 @@ def test():
 	""" Demonstration on an example grammar. """
 	rules = [
 		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )),  1),
-		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), Fraction(1, 2)),
-		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), Fraction(1, 2)),
-		((('VP2', 'VP2'), ((0, ), (0, ))), Fraction(1, 10)),
+		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 1./2),
+		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 1./2),
+		((('VP2', 'VP2'), ((0, ), (0, ))), 1./10),
 		((('PROAV', 'Epsilon'), ('Darueber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
@@ -169,12 +232,14 @@ def test():
 
 def main():
 	""" Load a grammar from a text file and generate 20 sentences. """
+	start = "ROOT"
 	if "-s" in sys.argv:
 		i = sys.argv.index("-s")
 		start = sys.argv.pop(i + 1)
 		sys.argv[i:i + 2] = []
-	else:
-		start = "ROOT"
+	verbose = "--verbose" in sys.argv
+	if verbose:
+		sys.argv.remove('--verbose')
 	if len(sys.argv) != 3:
 		print(USAGE)
 		return
@@ -187,7 +252,7 @@ def main():
 		xgrammar = read_bitpar_grammar(rules, lexicon)
 	grammar = splitgrammar(xgrammar)
 	for _ in range(20):
-		p, sent = gen(grammar, start=grammar.toid[start])
+		p, sent = gen(grammar, start=grammar.toid[start], verbose=verbose)
 		print("[%g] %s" % (p, " ".join(sent.pop())))
 
 if __name__ == '__main__':
