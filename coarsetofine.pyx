@@ -435,15 +435,15 @@ def main():
 		binarize(t, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(t)
 	normallcfrs = induce_plcfrs(trees, sents)
-	normal = Grammar(normallcfrs, "ROOT")
-	parent = Grammar(induce_plcfrs(parenttrees, sents), "ROOT")
-	splitg = Grammar(induce_plcfrs(cftrees, sents), "ROOT")
+	normal = Grammar(normallcfrs)
+	parent = Grammar(induce_plcfrs(parenttrees, sents))
+	splitg = Grammar(induce_plcfrs(cftrees, sents))
 	for t, s in zip(cftrees, sents):
 		for (r, yf), w in induce_plcfrs([t], [s]):
 			assert len(yf) == 1
 	fine999x = dopreduction(trees, sents)
-	fine999 = Grammar(fine999x, "ROOT")
-	fine1 = Grammar(dopreduction(dtrees, sents), "ROOT")
+	fine999 = Grammar(fine999x)
+	fine1 = Grammar(dopreduction(dtrees, sents))
 	trees = list(corpus.parsed_sents().values())[train:train+test]
 	sents = list(corpus.tagged_sents().values())[train:train+test]
 	if subsetgrammar(normallcfrs, fine999x):

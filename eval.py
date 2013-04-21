@@ -66,7 +66,7 @@ ______________________________________________________________________________\
 
 def main():
 	""" Command line interface for evaluation. """
-	flags = ("test", "verbose", "debug", "disconly", "ted")
+	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
 	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=',
 		'headrules=',)
 	try:
@@ -283,10 +283,10 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 	""" Print breakdowns for the most frequent labels / tags. """
 	if param["LABELED"] and param["DEBUG"] != -1:
 		print()
-		print(" Category Statistics (10 most frequent categories / errors) ",
+		print(" Category Statistics (10 most frequent categories / errors)",
 				end='')
 		if maxlenseen > param["CUTOFF_LEN"]:
-			print("for length <= %d" % param["CUTOFF_LEN"], end='')
+			print(" for length <= %d" % param["CUTOFF_LEN"], end='')
 		print()
 		print("  label  % gold  recall    prec.     F1",
 				"          test/gold   count")
@@ -319,7 +319,7 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			print()
 			print(" Tag Statistics (10 most frequent tags / errors)", end='')
 			if maxlenseen > param["CUTOFF_LEN"]:
-				print("for length <= %d" % param["CUTOFF_LEN"], end='')
+				print(" for length <= %d" % param["CUTOFF_LEN"], end='')
 			print("\n    tag  % gold  recall   prec.      F1",
 					"          test/gold   count")
 			print("_______________________________________",
@@ -353,10 +353,10 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
 		exact40, lascores40, dicenoms40, dicedenoms40, golddep40, canddep40):
 	""" Return overview with scores for all sentences. """
-	discbrackets = sum(1 for n, (a, b) in candb.elements()
-			if b != set(range(min(b), max(b)+1)))
-	gdiscbrackets = sum(1 for n, (a, b) in goldb.elements()
-			if b != set(range(min(b), max(b)+1)))
+	discbrackets = sum(1 for _, (_, a) in candb.elements()
+			if a != tuple(range(min(a), max(a) + 1)))
+	gdiscbrackets = sum(1 for _, (_, a) in goldb.elements()
+			if a != tuple(range(min(a), max(a) + 1)))
 
 	if maxlenseen <= param["CUTOFF_LEN"]:
 		msg = ["%s" % " Summary (ALL) ".center(35, '_'),
@@ -391,10 +391,10 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 				nozerodiv(lambda: accuracy(goldpos, candpos))))
 		return "\n".join(msg)
 
-	discbrackets40 = sum(1 for n, (a, b) in candb40.elements()
-			if b != set(range(min(b), max(b)+1)))
-	gdiscbrackets40 = sum(1 for n, (a, b) in goldb40.elements()
-			if b != set(range(min(b), max(b)+1)))
+	discbrackets40 = sum(1 for _, (_, a) in candb40.elements()
+			if a != tuple(range(min(a), max(a) + 1)))
+	gdiscbrackets40 = sum(1 for _, (_, a) in goldb40.elements()
+			if a != tuple(range(min(a), max(a) + 1)))
 	msg = ["%s <= %d ______ ALL" % (
 			" Summary ".center(27, "_"), param["CUTOFF_LEN"]),
 		"number of sentences:       %6d     %6d" % (sentcount40, sentcount),
@@ -759,7 +759,7 @@ def intervals(seq):
 
 def disc(node):
 	""" This function evaluates whether a particular node is locally
-	discontinuous.  The root node will, by definition, be continuous.
+	discontinuous. The root node will, by definition, be continuous.
 	Nodes can be continuous even if some of their children are discontinuous.
 	"""
 	if not isinstance(node, Tree):

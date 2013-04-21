@@ -74,15 +74,15 @@ def simpleinside(Grammar grammar, UInt maxlen,
 	cdef ChartItem I
 	cdef Entry entry
 	cdef Rule rule
-	cdef LexicalRule lex
+	cdef LexicalRule lexrule
 	cdef Agenda agenda = Agenda()
 	cdef np.double_t x
 	cdef size_t i
 	cdef ULLong vec
 
 	for i in grammar.lexicalbylhs:
-		agenda[new_ChartItem(i, 1)] = min([lex.prob
-			for lex in grammar.lexicalbylhs[i]])
+		agenda[new_ChartItem(i, 1)] = min([lexrule.prob
+			for lexrule in grammar.lexicalbylhs[i]])
 
 	while agenda.length:
 		entry = agenda.popentry()
@@ -134,13 +134,13 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 	full bit vectors (not used)."""
 	cdef ChartItem I
 	cdef Entry entry
-	cdef LexicalRule lex
+	cdef LexicalRule lexrule
 	cdef size_t i
 	agenda = Agenda()
 
 	for i in grammar.lexicalbylhs:
-		agenda[new_ChartItem(i, 1)] = min([lex.prob
-			for lex in grammar.lexicalbylhs[i]])
+		agenda[new_ChartItem(i, 1)] = min([lexrule.prob
+			for lexrule in grammar.lexicalbylhs[i]])
 
 	while agenda.length:
 		entry = agenda.popentry()
@@ -218,7 +218,7 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 	cdef Entry entry
 	cdef Item I
 	cdef Rule rule
-	cdef LexicalRule lex
+	cdef LexicalRule lexrule
 	cdef double x, insidescore
 	cdef int m, n, totlen, addgaps, addright, leftfanout, rightfanout
 	cdef int lenA, lenB, lr, ga
@@ -377,12 +377,12 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 	cdef ChartItem I
 	cdef Entry entry
 	cdef Rule rule
-	cdef LexicalRule lex
+	cdef LexicalRule lexrule
 	cdef Agenda agenda = Agenda()
 	cdef double x
 	cdef list insidescores = [{} for n in range(maxlen + 1)]
 	for n in grammar.lexicalbylhs:
-		x = min([lex.prob for lex in grammar.lexicalbylhs[n]])
+		x = min([lexrule.prob for lexrule in grammar.lexicalbylhs[n]])
 		agenda[new_ChartItem(n, 1)] = x
 	while agenda.length:
 		entry = agenda.popentry()
@@ -427,7 +427,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	cdef Entry entry
 	cdef tuple I
 	cdef Rule rule
-	cdef LexicalRule lex
+	cdef LexicalRule lexrule
 	cdef np.double_t current, score
 	cdef double x, insidescore
 	cdef int m, n, state, left, right
@@ -532,11 +532,11 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, split
 	cdef Rule rule
-	cdef LexicalRule lex
+	cdef LexicalRule lexrule
 	if span == 0:
 		return 0 if state == 0 else infinity
 	if span == 1 and state in grammar.lexicalbylhs:
-		score =  min([lex.prob for lex in grammar.lexicalbylhs[state]])
+		score =  min([lexrule.prob for lexrule in grammar.lexicalbylhs[state]])
 	else:
 		score = infinity
 	for split in range(1, span + 1):
@@ -612,8 +612,9 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 			if item in outsidescores:
 				out = outsidescores[item]
 			else:
-				outsidescores[item] = out = pcfgoutsidesxrec(grammar, insidescores,
-					outsidescores, goal, rule.lhs, lspan - sibsize, rspan)
+				outsidescores[item] = out = pcfgoutsidesxrec(grammar,
+						insidescores, outsidescores, goal, rule.lhs,
+						lspan - sibsize, rspan)
 			cost = (insidescores[sibsize].get(rule.rhs1, infinity)
 					+ out + rule.prob)
 			if cost < score:
@@ -657,7 +658,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	for an, a in enumerate(insidescores):
 		for bn, b in enumerate(a):
 			if b < np.inf:
-				print(grammar.tolabel[an].decode('ascii'), "len", bn, "=", exp(-b))
+				print("%s len %d = %g" % (grammar.tolabel[an].decode('ascii'), bn, exp(-b)))
 	#print(insidescores)
 	#for a in range(maxlen):
 	#	print(grammar.tolabel[goal].decode('ascii'), "len", a, "=", exp(-insidescores[goal, a]))
@@ -673,8 +674,8 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 			for cn, c in enumerate(b):
 				for dn, d in enumerate(c):
 					if d < np.inf:
-						print(grammar.tolabel[an].decode('ascii'), "length", bn, "lr", cn,
-								"gaps", dn, "=", exp(-d))
+						print("%s length %d lr %d gaps %d = %g" % (
+								grammar.tolabel[an].decode('ascii'), bn, cn, dn, exp(-d)))
 						cnt += 1
 	print(cnt)
 	print("done")
@@ -692,8 +693,7 @@ def main():
 	for a in trees:
 		binarize(a, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(a)
-	grammar = Grammar(induce_plcfrs(trees, list(corpus.sents().values())),
-			b"ROOT")
+	grammar = Grammar(induce_plcfrs(trees, list(corpus.sents().values())))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
@@ -707,7 +707,7 @@ def main():
 	for a in trees:
 		print(a)
 	print("\ngrammar:")
-	grammar = Grammar(induce_plcfrs(trees, sents), b"ROOT")
+	grammar = Grammar(induce_plcfrs(trees, sents))
 	print(grammar, '\n')
 	testestimates(grammar, 4, grammar.toid[b"ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid[b"ROOT"])
@@ -748,7 +748,7 @@ def main():
 	for a in trees:
 		print(a)
 	print("\npcfg grammar:")
-	grammar = Grammar(induce_plcfrs(trees, sents), b"ROOT")
+	grammar = Grammar(induce_plcfrs(trees, sents))
 	print(grammar, '\n')
 	outside = getpcfgestimates(grammar, 4, grammar.toid[b"ROOT"], debug=True)
 	sent = ["a", "b", "c"]
