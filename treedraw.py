@@ -12,7 +12,7 @@ from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from tree import Tree
 if sys.version[0] >= '3':
-	basestring = (str, bytes) # pylint: disable=W0622,C0103
+	basestring = str # pylint: disable=W0622,C0103
 
 class DrawTree(object):
 	""" Visualize a discontinuous tree in various formats. """
@@ -92,6 +92,7 @@ class DrawTree(object):
 						i += 1
 						j -= 1
 			raise ValueError("could not find a free cell.")
+
 		leaves = tree.leaves()
 		assert all(isinstance(n, int) for n in leaves), (
 				"All leaves must be integer indices.")
@@ -303,13 +304,13 @@ class DrawTree(object):
 			Only applicable when html is True (use ANSI codes?). """
 
 		if unicodelines:
-			horzline = '\u2500'
-			leftcorner = '\u250c'
-			rightcorner = '\u2510'
-			vertline = ' \u2502 '
-			tee = horzline + '\u252C' + horzline
-			bottom = horzline + '\u2534' + horzline
-			cross = horzline + '\u253c' + horzline
+			horzline = u'\u2500'
+			leftcorner = u'\u250c'
+			rightcorner = u'\u2510'
+			vertline = u' \u2502 '
+			tee = horzline + u'\u252C' + horzline
+			bottom = horzline + u'\u2534' + horzline
+			cross = horzline + u'\u253c' + horzline
 		else:
 			horzline = "_"
 			leftcorner = rightcorner = " "
@@ -440,8 +441,8 @@ class DrawTree(object):
 		# write branches from node to node
 		for child, parent in self.edges.items():
 			result.append(
-				"\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
-				"	\draw (n%d) -- +(0, %g) -| (n%d);" % (
+				"\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
+				"	\\draw (n%d) -- +(0, %g) -| (n%d);" % (
 				parent, shift, child, parent, shift, child))
 
 		result += [r"\end{tikzpicture}"]
@@ -476,8 +477,8 @@ class DrawTree(object):
 		# write branches from node to node
 		for child, parent in self.edges.items():
 			result.append(
-				"\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
-				"	\draw (n%d) -- +(0, %g) -| (n%d);" % (
+				"\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
+				"	\\draw (n%d) -- +(0, %g) -| (n%d);" % (
 				parent, shift, child, parent, shift, child))
 
 		result += [r"\end{tikzpicture}"]
@@ -489,7 +490,7 @@ def htmllabel(label):
 
 def latexlabel(label):
 	""" quote/format label for latex """
-	newlabel = label.replace("$", r"\$").replace("[", "(").replace("_", "\_")
+	newlabel = label.replace('$', r'\$').replace('[', '(').replace('_', r'\_')
 	# turn binarization marker intO subscripts in math mode
 	if "|" in newlabel:
 		cat, siblings = newlabel.split("|", 1)
@@ -582,7 +583,10 @@ def main():
 			(A (B1 6 13) (B2 3 7 10)  (B3 1 \
                     9 11 14 16) (B4 0 5 8))
 			(VP (VB 0) (PRT 2))
-			(VP (VP 0 3) (NP (PRP 1) (NN 2)))"""
+			(VP (VP 0 3) (NP (PRP 1) (NN 2)))
+			(ROOT (S (VP_2 (PP (APPR 0) (ART 1) (NN 2) (PP (APPR 3) (ART 4) \
+				(ADJA 5) (NN 6))) (ADJD 10) (PP (APPR 11) (NN 12)) (VVPP 13)) \
+				(VAFIN 7) (NP (ART 8) (NN 9))) ($. 14))"""
 	sents = """Leider stehen diese Fragen nicht im Vordergrund der \
 				augenblicklichen Diskussion .
 			is Mary happy there
@@ -616,7 +620,11 @@ def main():
 				wolken drentelden over het gras .
 			Zij zou mams rug ingewreven hebben en mam de hare .
 			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
-			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"""
+			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+			Mit einer Messe in der Sixtinischen Kapelle ist das Konklave \
+				offiziell zu Ende gegangen ."""
 	trees = [Tree.parse(a, parse_leaf=int) for a in trees.splitlines()]
 	sents = [a.split() for a in sents.splitlines()]
 	sents.extend([['Wake', None, 'up'],
@@ -625,7 +633,7 @@ def main():
 		drawtree = DrawTree(tree, sent)
 		print("\ntree, sent", n, tree,
 				" ".join("..." if a is None else a for a in sent),
-				#repr(drawtree),
+				repr(drawtree),
 				sep='\n')
 		try:
 			print(drawtree.text(unicodelines=True, html=False), sep='\n')
