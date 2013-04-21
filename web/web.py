@@ -2,7 +2,9 @@
 Expects a series of grammars in subdirectories of grammar/ """
 # Wishlist:
 # - shortest derivation, SL-DOP, MPSD, &c.
-import os, re, cgi, sys, gzip, heapq, time, string, random, codecs
+# - arbitrary configuration of CTF stages;
+#   should become class also used by runexp.py & parser.py
+import os, re, cgi, sys, glob, gzip, heapq, time, string, random, codecs
 from operator import itemgetter
 from flask import Flask, Markup, request, render_template
 from flask import send_from_directory
@@ -41,15 +43,44 @@ def parse():
 	senttok = tokenize(sent)
 	key = (senttok, objfun, marg)
 	if key in parse.cache:
-		return parse.cache[key]
-	if senttok and 1 <= len(senttok) <= limit:
-		result, frags, nbest = getparse(senttok, objfun, marg)
+		result = parse.cache.get(key)
+	elif senttok and 1 <= len(senttok) <= limit:
+		result = getparse(senttok, objfun, marg)
+		parse.cache[key] = result
 	else:
-		result = 'Sentence too long: %d words, maximum %d' % (
-				len(senttok), limit)
-	parse.cache[key] = render_template('parse.html', sent=sent, result=result,
+		return 'Sentence too long: %d words, maximum %d' % (len(senttok), limit)
+	if result is None:
+		return "no parse!\n"
+	(parsetrees, fragments, elapsed, msg1, msg2, msg3) = result
+	tree, prob = parsetrees[0]
+	app.logger.debug('[%g] %s' % (prob, tree))
+	tree = morphtags.sub(r'(\1\2', tree)
+	tree = Tree.parse(tree, parse_leaf=int)
+	treetransforms.unbinarize(tree)
+	treetransforms.removefanoutmarkers(tree)
+	result = Markup(DrawTree(tree, senttok).text(
+			unicodelines=True, html=True))
+	frags = Markup('\n\n'.join(
+			DrawTree(Tree.parse(frag, parse_leaf=int), terminals
+				).text(unicodelines=True, html=True)
+			for frag, terminals in fragments))
+	elapsed = 'CPU time elapsed: %s => %gs' % (
+			' '.join('%gs' % a for a in elapsed), sum(elapsed))
+	nbest = Markup('\n'.join((
+			'\n\n'.join('%d. [p=%g]\n%s' % (n + 1, prob,
+				DrawTree(
+					treetransforms.removefanoutmarkers(
+						treetransforms.unbinarize(
+							Tree.parse(morphtags.sub(r'(\1\2', tree),
+								parse_leaf=int))), senttok
+					).text(unicodelines=True, html=True))
+				for n, (tree, prob) in enumerate(parsetrees)),
+			msg1, msg2, msg3, elapsed,
+			'10 most probable parse trees:',
+			'\n'.join('%d. [p=%g] %s' % (n + 1, prob, cgi.escape(tree))
+				for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
+	return render_template('parse.html', sent=sent, result=result,
 			frags=frags, nbest=nbest, randid=randid())
-	return parse.cache[key]
 parse.cache = {} #FIXME: cache should expire items
 
 @app.route('/favicon.ico')
@@ -62,8 +93,8 @@ def loadgrammars():
 	""" Load grammars if necessary. """
 	if grammars != {}:
 		return
-	for lang in ('alpino', 'negra', 'wsj'):
-		folder = 'grammars/' + lang
+	for folder in glob.glob('grammars/*/'):
+		_, lang = os.path.split(os.path.dirname(folder))
 		grammarlist = []
 		for stagename in ('pcfg', 'plcfrs', 'dop'):
 			rules = gzip.open("%s/%s.rules.gz" % (folder, stagename)).read()
@@ -94,7 +125,6 @@ def loadgrammars():
 
 def getparse(senttok, objfun, marg):
 	""" Do the actual parsing. """
-	result = frags = nbest = None
 	elapsed = []
 	begin = time.clock()
 	lang = guesslang(senttok)
@@ -108,7 +138,6 @@ def getparse(senttok, objfun, marg):
 			unksent, grammar[0], tags=None)
 	elapsed.append(time.clock() - begin)
 	begin = time.clock()
-	result = "no parse!\n"
 	if start:
 		(whitelist, _, _, _, _) = coarsetofine.whitelistfromposteriors(
 				inside, outside, start,
@@ -143,41 +172,14 @@ def getparse(senttok, objfun, marg):
 				kbest=marg in ('nbest', 'both'),
 				sample=marg in ('sample', 'both'),
 				sent=unksent, tags=None, backtransform=backtransform)
+		fragments = disambiguation.extractfragments(
+				chart, start, grammar[2], backtransform)
 		elapsed.append(time.clock() - begin)
-		begin = time.clock()
-		tree, prob = max(parsetrees.items(), key=itemgetter(1))
-		app.logger.debug('[%g] %s' % (prob, tree))
-		tree = morphtags.sub(r'(\1\2', tree)
-		tree = Tree.parse(tree, parse_leaf=int)
-		treetransforms.unbinarize(tree)
-		treetransforms.removefanoutmarkers(tree)
-		result = Markup(DrawTree(tree, senttok).text(
-				unicodelines=True, html=True))
-		frags = Markup('\n\n'.join(
-				DrawTree(Tree.parse(frag, parse_leaf=int), terminals
-					).text(unicodelines=True, html=True)
-				for frag, terminals in disambiguation.extractfragments(
-						chart, start, grammar[2], backtransform)))
-		elapsed = 'CPU time elapsed: %s => %gs' % (
-				' '.join('%gs' % a for a in elapsed), sum(elapsed))
-		nbest = Markup('\n'.join((
-				'\n\n'.join('%d. [p=%g]\n%s' % (n + 1, prob,
-					DrawTree(
-						treetransforms.removefanoutmarkers(
-							treetransforms.unbinarize(
-								Tree.parse(morphtags.sub(r'(\1\2', tree),
-									parse_leaf=int))), senttok
-						).text(unicodelines=True, html=True))
-					for n, (tree, prob) in enumerate(heapq.nlargest(10,
-						parsetrees.items(), key=itemgetter(1)))),
-				msg1, msg2, msg3, elapsed,
-				'10 most probable parse trees:',
-				'\n'.join('%d. [p=%g] %s' % (n + 1, prob, cgi.escape(tree))
-					for n, (tree, prob) in enumerate(heapq.nlargest(10,
-						parsetrees.items(), key=itemgetter(1)))) + '\n')))
+		return (heapq.nlargest(10, parsetrees.items(), key=itemgetter(1)),
+				fragments, elapsed, msg1, msg2, msg3)
 	else:
 		app.logger.debug('stage 3 fail')
-	return result, frags, nbest
+		return None
 
 def randid():
 	""" return a string with 6 random letters. """
@@ -210,7 +212,7 @@ def tokenize(text):
 	# Separate single quotes if they're followed by a space.
 	text = re.sub(r"([,']\s)", r' \1', text)
 	# Separate periods that come before newline or end of string.
-	text = re.sub('\. *(\n|$)', ' . ', text)
+	text = re.sub(r'\. *(\n|$)', ' . ', text)
 	return tuple(text.split())
 
 def guesslang(sent):
