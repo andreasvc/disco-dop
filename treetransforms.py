@@ -20,7 +20,7 @@ import re, sys
 from itertools import count, repeat
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
-	basestring = (str, bytes) # pylint: disable=W0622,C0103
+	basestring = str # pylint: disable=W0622,C0103
 from tree import Tree, ImmutableTree
 from grammar import ranges
 try:
@@ -624,7 +624,7 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 				agenda[p2] = workingset[p2] = x2
 	raise ValueError
 
-def optimalbinarize(tree, sep="|", h=None, v=1):
+def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1):
 	""" Recursively binarize a tree optimizing for complexity.
 	v=0 is not implemented.
 	Setting h to a nonzero integer restricts the possible binarizations
@@ -633,18 +633,19 @@ def optimalbinarize(tree, sep="|", h=None, v=1):
 		tree = Tree.convert(tree)
 		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
 			a.sort(key=lambda x: x.leaves())
-	return recbinarizetree(addbitsets(tree), sep, h or 999, v, ())
+	return recbinarizetree(addbitsets(tree), sep, headdriven, h or 999, v, ())
 
-def recbinarizetree(tree, sep, h, v, ancestors):
+def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
 	""" postorder / bottom-up binarization """
 	if not isinstance(tree, Tree):
 		return tree
 	parentstr = "^<%s>" % ("-".join(ancestors[:v-1])) if v > 1 else ""
 	newtree = ImmutableTree(tree.label + parentstr,
-		[recbinarizetree(t, sep, h, v, (tree.label,) + ancestors) for t in tree])
+		[recbinarizetree(t, sep, headdriven, h, v, (tree.label,) + ancestors)
+				for t in tree])
 	newtree.bitset = tree.bitset
-	return minimalbinarization(newtree, complexityfanout, sep, parentstr=parentstr,
-		h=h, head=None if h == 999 else (len(tree) - 1))
+	return minimalbinarization(newtree, complexityfanout, sep,
+		parentstr=parentstr, h=h, head=(len(tree) - 1) if headdriven else None)
 
 def disc(node):
 	""" Test whether a particular node is locally discontinuous, i.e., whether
@@ -887,10 +888,6 @@ def testminbin():
 	to the complexities of right-to-left binarizations. """
 	from treebank import NegraCorpusReader
 	import time
-	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
-	#corpus = NegraCorpusReader("..", "negra-corpus.export",
-	#	encoding="iso-8859-1", punct="move", headrules="negra.headrules",
-	#	headfinal=True, headreverse=False)
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			punct="move", headrules=None, headfinal=True, headreverse=False)
 	total = violations = violationshd = 0
@@ -1016,7 +1013,7 @@ def main():
 		headdriven = "--headrules" in opts
 		h = int(opts['-h']) if 'h' in opts else None
 		v = int(opts.get('-v', 1))
-		trees = [optimalbinarize(a, sep, headdriven, h, v) for a in trees]
+		trees = [optimalbinarize(a, sep, h, v) for a in trees]
 	elif action == "introducepreterminals":
 		for a in trees:
 			introducepreterminals(a)

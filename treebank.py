@@ -450,7 +450,7 @@ def writetree(tree, sent, n, fmt, headrules=None):
 		word = sent[int(idx[:-1])]
 		return word.replace('(', '-LRB-').replace(')', '-RRB-')
 	if fmt == "alpino":
-		fmt = "export" #FIXME
+		fmt = "export" #FIXME implement Alpino XML output?
 
 	if fmt == "bracket":
 		return indexre.sub(lambda x: ' %s)' % getword(x.group()),
@@ -704,7 +704,58 @@ def rindex(l, v):
 def labels(tree):
 	return [a.label for a in tree if isinstance(a, Tree)]
 
-def unfold(tree):
+def unfold(tree, transformations=('S-RC', 'VP-GF', 'NP')):
+	for name in transformations:
+		# negra
+		if name == 'S-RC': # relative clause => S becomes SRC
+			for s in tree.subtrees(lambda n: n.label == "S"
+					and function(n) == "RC"):
+				s.label = "S-RC"
+		elif name == 'VP-GF': # VP category split based on head
+			for vp in tree.subtrees(lambda n: n.label == "VP"):
+				vp.label += "-" + function(vp)
+		elif name == 'NP': # case
+			for np in tree.subtrees(lambda n: n.label == "NP"):
+				np.label += "-" + function(np)
+		# wsj
+		elif name == "S-WH":
+			for sbar in tree.subtrees(lambda n: n.label == "SBAR"):
+				for s in sbar:
+					if (s.label == "S"
+							and any(a.label.startswith("WH") for a in s)):
+						s.label += "-WH"
+		elif name == "VP-HD": # VP category split based on head
+			for vp in tree.subtrees(lambda n: n.label == "VP"):
+				hd = [x for x in vp if ishead(x)].pop()
+				if hd.label == 'VB':
+					vp.label += '-HINF'
+				elif hd.label == 'TO':
+					vp.label += '-HTO'
+				elif hd.label in ('VBN', 'VBG'):
+					vp.label += '-HPART'
+		elif name == "S-INF":
+			for s in tree.subtrees(lambda n: n.label == "S"):
+				hd = [x for x in s if ishead(x)].pop()
+				if hd.label in ('VP-HINF', 'VP-HTO'):
+					s.label += '-INF'
+		# alpino?
+		# ...
+		else:
+			raise ValueError("unrecognized transformation %r" % name)
+	return tree
+
+def fold(tree):
+	# maybe not necessary, if transforms only add -FUNC.
+	for node in tree.subtrees(lambda n: "-" in n.label):
+		node.label = node.label[:node.label.index("-")]
+	#for a in transformations:
+	#	if a == 'SRC':
+	#		pass
+	#	else:
+	#		pass
+	return tree
+
+def unfold_orig(tree):
 	""" Unfold redundancies and perform other transformations introducing
 	more hierarchy in the phrase-structure annotation, based on
 	grammatical functions and syntactic categories.
@@ -835,7 +886,7 @@ def unfold(tree):
 			tag.label = tagtoconst[tag.label]		# NP -> NN -> word
 	return tree
 
-def fold(tree):
+def fold_orig(tree):
 	""" Undo the transformations performed by unfold. Do not apply twice
 	(might remove VPs which shouldn't be). """
 	tagtoconst, unaryconst = getgeneralizations()
@@ -947,7 +998,7 @@ def bracketings(tree):
 #1/513           XY      -
 #1/2467          $.      ·      #NB this is not a period but a \cdot ...
 
-PUNCTUATION = ',."()&:-/!!!??;\'\```....[]|\xc2\xab\xc2\xbb\\'
+PUNCTUATION = ',."()&:-/!!!??;\'```....[]|\xc2\xab\xc2\xbb\\'
 def ispunct(word, tag):
 	# fixme: treebank specific parameters for detecting punctuation.
 	return tag in ('$,', '$.', '$[', '$(',) or word in PUNCTUATION
@@ -1133,7 +1184,7 @@ def main():
 	"""" Test whether the Tiger transformations (fold / unfold) are
 	reversible. """
 	from treetransforms import canonicalize
-	headrules = "negra.headrules"
+	headrules = None #"negra.headrules"
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			headrules=headrules)
 	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",

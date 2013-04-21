@@ -17,7 +17,7 @@ trees and morphological trees. """
 from __future__ import division, print_function, unicode_literals
 import re, sys
 if sys.version[0] >= '3':
-	basestring = (str, bytes) # pylint: disable=W0622,C0103
+	basestring = str # pylint: disable=W0622,C0103
 
 ######################################################################
 ## Trees
@@ -493,16 +493,16 @@ class Tree(list):
 		@rtype: Tree """
 		if not isinstance(brackets, basestring) or len(brackets) != 2:
 			raise TypeError('brackets must be a length-2 string')
-		if re.search('\s', brackets):
+		if re.search(r'\s', brackets):
 			raise TypeError('whitespace brackets not allowed')
 		# Construct a regexp that will tokenize the string.
 		open_b, close_b = brackets
 		open_pattern, close_pattern = (re.escape(open_b), re.escape(close_b))
 		if label_pattern is None:
-			label_pattern = '[^\s%s%s]+' % (open_pattern, close_pattern)
+			label_pattern = r'[^\s%s%s]+' % (open_pattern, close_pattern)
 		if leaf_pattern is None:
-			leaf_pattern = '[^\s%s%s]+' % (open_pattern, close_pattern)
-		token_re = re.compile('%s\s*(%s)?|%s|(%s)' % (
+			leaf_pattern = r'[^\s%s%s]+' % (open_pattern, close_pattern)
+		token_re = re.compile(r'%s\s*(%s)?|%s|(%s)' % (
 			open_pattern, label_pattern, close_pattern, leaf_pattern))
 		# Walk through each token, updating a stack of trees.
 		stack = [(None, [])] # list of (label, children) tuples
