@@ -1,0 +1,11 @@
+<pre style="display: none;" id=n{{ randid }}>
+{{ nbest }}
+</pre>
+<pre style="display: none;" id=f{{ randid }}>
+Phrasal fragments used in the most probable derivation of the highest ranked parse tree:
+{{ frags }}
+</pre>
+<pre>
+{{ result }}
+(<a href='javascript: toggle("f{{ randid }}")' id=linkf{{ randid }}>show fragments</a>; <a href='javascript: toggle("n{{ randid }}")' id=linkn{{ randid }}>show alternative analyses</a>; <a href="/?sent={{ sent }}">link</a>)
+</pre>

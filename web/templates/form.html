@@ -1,0 +1,61 @@
+<!doctype html>
+<title>Discontinuous parsing</title>
+<script src="static/main.js"></script>
+<style>
+body { font-family: Helvetica, Arial, sans-serif; }
+blockquote { width: 600px; /* text-align: justify; */ }
+span.r { color: red; }
+span.tt { font-family: monospace; }
+</style>
+
+<body onLoad="placeFocus();" >
+<h1>Discontinuous parsing</h1>
+
+<blockquote><p>
+Enter a sentence in Dutch, English, or German (auto-detected).
+The sentence will be parsed and the most probable parse tree will be shown
+(<a href="javascript: toggle('tech'); " id=linktech>show technical details</a>).</p>
+
+<div id=tech style="display: none; "><p>
+	Linear Context-Free Rewriting Systems (LCFRS) allow for parsing with
+	discontinuous constituents. The Data-Oriented Parsing (DOP) framework
+	entails constructing analyses from fragments of past experience.
+	Double-DOP operationalizes this as the set of fragments that occur at least twice
+	in the training data.
+	For efficiency, sentences are parsed with the following coarse-to-fine
+	pipeline: </p>
+	<ol>
+	<li> Split-PCFG (prune items with posterior probability &lt; 1e-5)
+	<li> PLCFRS (prune items not in 50-best derivations)
+	<li> Discontinuous Double-DOP (use 1000-best derivations to approximate most probable parse)
+	</ol>
+
+	Training data:
+	<ul>
+	<li>English: WSJ section of Penn treebank
+	<li>German: Negra treebank
+	<li>Dutch: Alpino treebank
+	</ul>
+</div>
+</blockquote>
+
+<div id=result>
+{{ result }}
+</div>
+
+<form name=queryform onSubmit="event.preventDefault(); ajaxFunction(); return false; ">
+Sentence:
+<input type=text size=80 name=sent />
+<select name=ojbfun>
+	<option value=mpp>MPP</option>
+	<option value=mpd>MPD</option>
+</select>
+<select name=marg>
+	<option value=nbest>n-best</option>
+	<option value=sample>sample</option>
+	<option value=both>both</option>
+</select>
+<input type=submit value=Parse />
+</form>
+
+</body>
