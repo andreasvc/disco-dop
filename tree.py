@@ -185,25 +185,6 @@ class Tree(list):
 				leaves.append(child)
 		return leaves
 
-	#def leaves(self):
-	#	""" @return: a list containing this tree's leaves.
-	#		The order reflects the order of the
-	#		leaves in the tree's hierarchical structure.
-	#	@rtype: list
-	#	Non-recursive version. Does not seem to have a speed advantage,
-	#	but doesn't clutter profiles with enormous amounts of recursive
-	#	calls ...
-	#	"""
-	#	queue = deque(self)
-	#	theleaves = []
-	#	while queue:
-	#		node = queue.popleft()
-	#		if isinstance(node, Tree):
-	#			queue.extendleft(reversed(node))
-	#		else:
-	#			theleaves.append(node)
-	#	return theleaves
-
 	def flatten(self):
 		""" @return: a tree consisting of this tree's root connected directly
 			to its leaves, omitting all intervening non-terminal nodes.
@@ -1337,74 +1318,8 @@ def slice_bounds(sequence, slice_obj, allow_step=False):
 			sequence[stop - 1]
 		except IndexError:
 			stop = len(sequence)
-
-	# Make sure start isn't past stop.
 	start = min(start, stop)
-
-	# That's all folks!
 	return start, stop
 
-######################################################################
-## Demonstration
-######################################################################
-
 def main():
-	"""
-	A demonstration showing how Trees and Trees can be
-	used.  This demonstration creates a Tree, and loads a
-	Tree from the treebank<nltk.corpus.treebank> corpus,
-	and shows the results of calling several of their methods.
-	"""
-
-	# Demonstrate tree parsing.
-	s = '(S (NP (DT the) (NN cat)) (VP (VBD ate) (NP (DT a) (NN cookie))))'
-	t = Tree(s)
-	print("Convert bracketed string into tree:")
-	print(t)
-	print(t.__repr__())
-
-	print("Display tree properties:")
-	print(t.label)		# tree's constituent type
-	print(t[0])			# tree's first child
-	print(t[1])			# tree's second child
-	print(t.height())
-	print(t.leaves())
-	print(t[1])
-	print(t[1, 1])
-	print(t[1, 1, 0])
-
-	# Demonstrate tree modification.
-	the_cat = t[0]
-	the_cat.insert(1, Tree.parse('(JJ big)'))
-	print("Tree modification:")
-	print(t)
-	t[1, 1, 1] = Tree.parse('(NN cake)')
-	print(t)
-	print()
-
-	# Tree transforms
-	print("Collapse unary:")
-	t.collapse_unary()
-	print(t)
-	print("Chomsky normal form:")
-	t.chomsky_normal_form()
-	print(t)
-	print()
-
-	# Demonstrate parsing of treebank output format.
-	t = Tree.parse(t.pprint())
-	print("Convert tree to bracketed string and back again:")
-	print(t)
-	print()
-
-	# Demonstrate LaTeX output
-	print("LaTeX output:")
-	print(t.pprint_latex_qtree())
-	print()
-
-	# Demonstrate tree nodes containing objects other than strings
-	t.label = ('test', 3)
-	print(t)
-
-if __name__ == '__main__':
-	main()
+	""" Nothing to see here. """

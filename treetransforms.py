@@ -314,12 +314,12 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 	return tree
 
 def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar="+"):
-	""" Collapse subtrees with a single child (ie. unary productions)
+	""" Collapse subtrees with a single child (i.e., unary productions)
 	into a new non-terminal (Tree node) joined by 'joinchar'.
 	This is useful when working with algorithms that do not allow
 	unary productions, and completely removing the unary productions
 	would require loss of useful information.  The Tree is modified
-	directly (since it is passed by reference) and no value is returned.
+	directly (since it is passed by reference).
 
 	@param tree: The Tree to be collapsed
 	@type  tree: C{Tree}
@@ -398,8 +398,6 @@ def fastfanout(tree):
 	attribute. """
 	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
 
-#can only be used with ImmutableTrees because of memoization.
-#fanout = memoize(slowfanout)
 fanout = fastfanout
 
 def complexity(tree):
@@ -682,7 +680,6 @@ def postorder(tree, f=None):
 	if not f or f(tree):
 		yield tree
 
-
 def canonicalize(tree):
 	""" canonical linear precedence (of first component of each node) order """
 	for a in postorder(tree, lambda n: isinstance(n[0], Tree)):
@@ -833,55 +830,8 @@ class OrderedSet(Set):
 
 
 #################################################################
-# Demonstration & tests
+# Tests
 #################################################################
-
-def demo():
-	""" A demonstration showing how each tree transform can be used. """
-
-	# original tree from WSJ bracketed text
-	sentence = """(TOP (S
-	(S
-      (VP
-        (VBN Turned)
-        (ADVP (RB loose))
-        (PP
-          (IN in)
-          (NP
-			(NP (NNP Shane) (NNP Longman) (POS 's))
-			(NN trading)
-			(NN room)))))
-	(, ,)
-	(NP (DT the) (NN yuppie) (NNS dealers))
-	(VP (AUX do) (NP (NP (RB little)) (ADJP (RB right))))
-	(. .)))"""
-	tree = Tree(sentence)
-	print("original", tree)
-
-	# collapse subtrees with only one child
-	collapsedtree = tree.copy(True)
-	#collapse_unary(collapsedtree)
-
-	# convert the tree to CNF
-	cnftree = collapsedtree.copy(True)
-	lcnftree = collapsedtree.copy(True)
-	binarize(cnftree, factor="right", horzmarkov=2)
-	binarize(lcnftree, factor="left", horzmarkov=2)
-
-	# convert the tree to CNF with parent annotation
-	# (one level) and horizontal smoothing of order two
-	parenttree = collapsedtree.copy(True)
-	binarize(parenttree, horzmarkov=2, vertmarkov=1)
-
-	# convert the tree back to its original form
-	original = cnftree.copy(True)
-	original2 = lcnftree.copy(True)
-	unbinarize(original)
-	unbinarize(original2)
-
-	print("binarized", cnftree)
-	print("Sentences the same? ", tree == original, tree == original2)
-	assert tree == original and tree == original2
 
 def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
@@ -893,7 +843,6 @@ def testminbin():
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), list(
 			corpus.parsed_sents().values())[:-2000], corpus.sents().values()):
-		#if len(tree.leaves()) <= 25: continue
 		begin = time.clock()
 		t = addbitsets(tree)
 		if all(fanout(x) == 1 for x in t.subtrees()):
@@ -901,9 +850,6 @@ def testminbin():
 		print(n, tree, '\n', " ".join(sent))
 		total += 1
 		optbin = optimalbinarize(tree.copy(True), headdriven=False, h=None, v=1)
-		print(time.clock() - begin, "s\n")
-		continue
-
 		normbin = Tree.convert(tree)
 		# undo head-ordering to get a normal right-to-left binarization
 		for a in list(normbin.subtrees(lambda x: len(x) > 1))[::-1]:
@@ -918,23 +864,19 @@ def testminbin():
 			print(max(map(complexityfanout, normbin.subtrees())), normbin)
 			print('\n')
 			violations += 1
-			assert False
 
 		optbin = optimalbinarize(tree.copy(True), headdriven=True, h=1, v=1)
 		normbin = Tree.convert(tree)
-		normbin.chomsky_normal_form(horzmarkov=1)
-		#binarize(normbin, horzmarkov=1)
+		binarize(normbin, horzmarkov=1)
 		normbin = addbitsets(normbin)
 		if (max(map(complexityfanout, optbin.subtrees()))
 				> max(map(complexityfanout, normbin.subtrees()))):
-			print("hd")
-			print(tree)
+			print("hd\n", tree)
 			print(max(map(complexityfanout, optbin.subtrees())), optbin)
-			print(max(map(complexityfanout, normbin.subtrees())), normbin)
-			print('\n')
+			print(max(map(complexityfanout, normbin.subtrees())), normbin, '\n')
 			violationshd += 1
-	print("violations: %d / %d" % (violations, total))
-	print("violationshd: %d / %d" % (violationshd, total))
+	print("violations normal: %d / %d;  hd: %d / %d" % (
+			violations, total, violationshd, total))
 	assert violations == violationshd == 0
 
 def testsplit():
@@ -942,7 +884,6 @@ def testsplit():
 	same trees for a treebank"""
 	from treebank import NegraCorpusReader
 	correct = wrong = 0
-	#n = NegraCorpusReader("../rparse", "tigerproc.export")
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	for tree in n.parsed_sents().values():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
@@ -955,7 +896,6 @@ def testsplit():
 
 def test():
 	""" Run all examples. """
-	demo()
 	testminbin()
 	testsplit()
 

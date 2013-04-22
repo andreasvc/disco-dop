@@ -12,7 +12,6 @@ from agenda cimport EdgeAgenda, Entry
 cimport cython
 
 DEF SLOTS = 2
-#maxbitveclen = sizeof(ULLong) * 8
 maxbitveclen = SLOTS * sizeof(ULong) * 8
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},
@@ -120,13 +119,11 @@ cdef class Grammar:
 				continue
 			fields = line.split()
 			if bitpar:
-				#w = fields[0]
 				rule = fields[1:]
 				yf = '0' if len(rule) == 2 else '01'
 			else:
 				rule = fields[:-2]
 				yf = fields[-2]
-				#w = fields[-1]
 			assert Epsilon not in rule, ("Epsilon symbol is only used "
 						"to introduce terminal symbols in lexical rules.")
 			assert start not in rule[1:], (
@@ -192,9 +189,7 @@ cdef class Grammar:
 		""" Auxiliary function to create Grammar objects. Copies grammar
 		rules from a text file to an array of structs.
 		Grammar rules are placed in a contiguous array. """
-		cdef size_t n = 0	# rule index in this array, ID for rule
-		cdef size_t m
-		cdef UInt prev = self.nonterminals
+		cdef UInt n = 0, m, prev = self.nonterminals
 		cdef Rule *cur
 		for line in rulelines:
 			if not line:
@@ -204,7 +199,7 @@ cdef class Grammar:
 				rule = fields[1:]
 				yf = b'0' if len(rule) == 2 else b'01'
 				w = fields[0]
-				# should do normalization for proper bitpar support
+				# FIXME: should do normalization for proper bitpar support
 			else:
 				rule = fields[:-2]
 				yf = fields[-2]
@@ -213,6 +208,7 @@ cdef class Grammar:
 			x = w.find(b'/')
 			w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
 			assert w > 0, "weights should be positive and non-zero:\n%r" % line
+			# n is the rule index in the array, and will be the ID for the rule
 			cur = &(self.bylhs[0][n])
 			cur.no = n
 			cur.lhs = self.toid[rule[0]]
@@ -270,9 +266,8 @@ cdef class Grammar:
 		""" Normalize frequencies to relative frequencies,
 		and turn weights into negative log probabilities (both optionally).
 		Should be run during initialization. """
-		cdef size_t n = 0
 		cdef double mass = 0
-		cdef UInt lhs
+		cdef UInt n = 0, lhs
 		cdef LexicalRule lexrule
 		for lhs in range(self.nonterminals):
 			if normalize:
@@ -304,8 +299,7 @@ cdef class Grammar:
 		unary, or only binary rules, respectively.
 		A separate array has a pointer for each non-terminal into this array;
 		e.g.: dest[NP][0] == the first rule with an NP in the idx position. """
-		cdef UInt prev = self.nonterminals, idxlabel = 0
-		cdef size_t n, m = 0
+		cdef UInt prev = self.nonterminals, idxlabel = 0, n, m = 0
 		cdef Rule *cur
 		#need to set dest even when there are no rules for that idx
 		for n in range(self.nonterminals):
@@ -548,7 +542,7 @@ cdef class SmallChartItem:
 		# juxtapose bits of label and vec, rotating vec if > 33 words
 		return self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
 	def __richcmp__(SmallChartItem self, SmallChartItem other, int op):
-		if   op == 2:
+		if op == 2:
 			return self.label == other.label and self.vec == other.vec
 		elif op == 3:
 			return self.label != other.label or self.vec != other.vec
@@ -576,10 +570,9 @@ cdef class SmallChartItem:
 cdef class FatChartItem:
 	""" Item with fixed-with bitvector. """
 	def __hash__(self):
+		cdef long _hash = self.label, n
 		# juxtapose bits of label and first 32 bits of vec
-		cdef long _hash
-		cdef size_t n
-		_hash = self.label ^ (self.vec[0] << 31UL) ^ (self.vec[0] >> 31UL)
+		_hash ^= (self.vec[0] << 31UL) ^ (self.vec[0] >> 31UL)
 		# add remaining bits
 		for n in range(sizeof(self.vec[0]), sizeof(self.vec)):
 			_hash *= 33 ^ (<UChar *>self.vec)[n]
@@ -631,9 +624,8 @@ cdef class FatChartItem:
 cdef class CFGChartItem:
 	""" Item for CFG parsing; span is denoted with start and end indices. """
 	def __hash__(self):
-		cdef long _hash
+		cdef long _hash = self.label
 		# juxtapose bits of label and indices of span
-		_hash = self.label
 		_hash ^= <ULong>self.start << 32UL
 		_hash ^= <ULong>self.end << 40UL
 		return _hash
@@ -692,20 +684,28 @@ cdef class LCFRSEdge:
 	def __init__(self):
 		raise NotImplemented
 	def __hash__(LCFRSEdge self):
-		return self._hash
+		cdef long _hash = 0x345678UL
+		# this condition could be avoided by using a dedicated sentinel Rule
+		if self.rule is not NULL:
+			_hash = (1000003UL * _hash) ^ <long>self.rule.no
+		# we only look at the left item, because this edge will only be compared
+		# to other edges for the same parent item
+		# unfortunately we cannot compute hash directly here, because
+		# left can be of different subtypes.
+		_hash = (1000003UL * _hash) ^ <long>self.left.__hash__()
+		return _hash
 	def __richcmp__(LCFRSEdge self, LCFRSEdge other, int op):
 		if op == 0:
 			return self.score < other.score
 		elif op == 1:
 			return self.score <= other.score
-		# boolean trick: equality and inequality in one expression i.e., the
-		# equality between the two boolean expressions acts as biconditional
 		elif op == 2 or op == 3:
+			# boolean trick: equality and inequality in one expression i.e., the
+			# equality between the two boolean expressions acts as biconditional
+			# since edges are only ever compared for the same cell,
+			# right matches iff left matches, so skip that check
 			return (op == 2) == (self.rule is other.rule
-				and self.left == other.left
-				# since edges are only ever compared for the same cell,
-				# right matches iff left matches, so skip this check:
-				) #and self.right == other.right)
+				and self.left == other.left)
 		elif op == 4:
 			return self.score > other.score
 		elif op == 5:
@@ -730,22 +730,18 @@ cdef class CFGEdge:
 	def __init__(self):
 		raise NotImplemented
 	def __hash__(CFGEdge self):
-		cdef long h
-		# this is the hash function used for tuples, apparently
-		h = (1000003UL * 0x345678UL) ^ <long>self.rule #.no
-		h = (1000003UL * h) ^ <long>self.mid
-		return h
+		cdef long _hash = 0x345678UL
+		_hash = (1000003UL * _hash) ^ <long>self.rule #.no
+		_hash = (1000003UL * _hash) ^ <long>self.mid
+		return _hash
 	def __richcmp__(CFGEdge self, CFGEdge other, int op):
 		if op == 0:
 			return self.inside < other.inside
 		elif op == 1:
 			return self.inside <= other.inside
-		# boolean trick: equality and inequality in one expression i.e., the
-		# equality between the two boolean expressions acts as biconditional
 		elif op == 2 or op == 3:
 			return (op == 2) == (
-				self.rule is other.rule
-				and self.mid == other.mid)
+					self.rule is other.rule and self.mid == other.mid)
 		elif op == 4:
 			return self.inside > other.inside
 		elif op == 5:
@@ -768,15 +764,13 @@ cdef class RankedEdge:
 		self.edge = edge
 		self.left = j1
 		self.right = j2
-		cdef long h
-		#h = hash((head, edge, j1, j2))
-		h = (1000003UL * 0x345678UL) ^ hash(self.head)
-		h = (1000003UL * h) ^ hash(self.edge)
-		h = (1000003UL * h) ^ self.left
-		h = (1000003UL * h) ^ self.right
-		self._hash = h
 	def __hash__(self):
-		return self._hash
+		cdef long _hash = 0x345678UL
+		_hash = (1000003UL * _hash) ^ hash(self.head)
+		_hash = (1000003UL * _hash) ^ hash(self.edge)
+		_hash = (1000003UL * _hash) ^ self.left
+		_hash = (1000003UL * _hash) ^ self.right
+		return _hash
 	def __richcmp__(RankedEdge self, RankedEdge other, int op):
 		if op == 2 or op == 3:
 			return (op == 2) == (
@@ -784,8 +778,7 @@ cdef class RankedEdge:
 				and self.right == other.right
 				and self.head == other.head
 				and self.edge == other.edge)
-		else:
-			raise NotImplemented
+		raise NotImplemented
 	def __repr__(self):
 		return "%s(%r, %r, %d, %d)" % (self.__class__.__name__,
 			self.head, self.edge, self.left, self.right)
@@ -801,14 +794,15 @@ cdef class RankedCFGEdge:
 		self.edge = edge
 		self.left = j1
 		self.right = j2
-		cdef long h
-		#h = (1000003UL * 0x345678UL) ^ hash(self.head)
-		#h = (1000003UL * h) ^ hash(self.edge)
-		#h = (1000003UL * h) ^ self.left
-		#h = (1000003UL * h) ^ self.right
-		self._hash = hash((label, start, end, edge, j1, j2))
 	def __hash__(self):
-		return self._hash
+		cdef long _hash = 0x345678UL
+		_hash = (1000003UL * _hash) ^ hash(self.edge)
+		_hash = (1000003UL * _hash) ^ self.label
+		_hash = (1000003UL * _hash) ^ self.start
+		_hash = (1000003UL * _hash) ^ self.end
+		_hash = (1000003UL * _hash) ^ self.left
+		_hash = (1000003UL * _hash) ^ self.right
+		return _hash
 	def __richcmp__(RankedCFGEdge self, RankedCFGEdge other, int op):
 		if op == 2 or op == 3:
 			return (op == 2) == (
@@ -818,8 +812,7 @@ cdef class RankedCFGEdge:
 				and self.start == other.start
 				and self.end == other.end
 				and self.edge == other.edge)
-		else:
-			raise NotImplemented
+		raise NotImplemented
 	def __repr__(self):
 		return "%s(%r, %r, %r, %r, %d, %d)" % (self.__class__.__name__,
 			self.label, self.start, self.end, self.edge, self.left, self.right)
@@ -955,93 +948,7 @@ cdef inline copynodes(tree, dict prods, Node *result):
 			else: # unary node
 				result[n].right = -1
 
-cdef class CBitset:
-	""" auxiliary class to be able to pass around bitsets in Python.
-	the memory for the bitset itself is not managed by this class. """
-	def __cinit__(self, UChar slots):
-		self.slots = slots
-	def __hash__(self):
-		cdef size_t n
-		cdef long _hash = 5381
-		for n in range(self.slots * sizeof(ULong)):
-			_hash *= 33 ^ (<char *>self.data)[n]
-		return _hash
-	def __richcmp__(CBitset self, CBitset other, int op):
-		# value comparisons
-		cdef int cmp = memcmp(<void *>self.data, <void *>other.data,
-					self.slots)
-		if op == 2:
-			return cmp == 0
-		elif op == 3:
-			return cmp != 0
-		elif op == 0:
-			return cmp < 0
-		elif op == 4:
-			return cmp > 0
-		elif op == 1:
-			return cmp <= 0
-		return cmp >= 0
-
-	cdef int bitcount(self):
-		""" number of set bits in variable length bitvector """
-		cdef int a, result = __builtin_popcountl(self.data[0])
-		for a in range(1, self.slots):
-			result += __builtin_popcountl(self.data[a])
-		return result
-
-	cdef int nextset(self, UInt pos):
-		""" return next set bit starting from pos, -1 if there is none. """
-		cdef UInt a = BITSLOT(pos), offset = pos % BITSIZE
-		if self.data[a] >> offset:
-			return pos + __builtin_ctzl(self.data[a] >> offset)
-		for a in range(a + 1, self.slots):
-			if self.data[a]:
-				return a * BITSIZE + __builtin_ctzl(self.data[a])
-		return -1
-
-	cdef int nextunset(self, UInt pos):
-		""" return next unset bit starting from pos. """
-		cdef UInt a = BITSLOT(pos), offset = pos % BITSIZE
-		if ~(self.data[a] >> offset):
-			return pos + __builtin_ctzl(~(self.data[a] >> offset))
-		a += 1
-		while self.data[a] == ~0UL:
-			a += 1
-		return a * BITSIZE + __builtin_ctzl(~(self.data[a]))
-
-	cdef void setunion(self, CBitset src):
-		""" dest gets the union of dest and src; both operands must have at
-		least `slots' slots. """
-		cdef int a
-		for a in range(self.slots):
-			self.data[a] |= src.data[a]
-
-	cdef bint superset(self, CBitset op):
-		""" test whether `op' is a superset of this bitset; i.e., whether
-		all bits of this bitset are in op. """
-		cdef int a
-		for a in range(self.slots):
-			if self.data[a] != (self.data[a] & op.data[a]):
-				return False
-		return True
-
-	cdef bint subset(self, CBitset op):
-		""" test whether `op' is a subset of this bitset; i.e., whether
-		all bits of op are in this bitset. """
-		cdef int a
-		for a in range(self.slots):
-			if (self.data[a] & op.data[a]) != op.data[a]:
-				return False
-		return True
-
-	cdef bint disjunct(self, CBitset op):
-		""" test whether `op' is disjunct from this bitset; i.e., whether
-		no bits of op are in this bitset & vice versa. """
-		cdef int a
-		for a in range(self.slots):
-			if (self.data[a] & op.data[a]):
-				return False
-		return True
+# begin scratch
 
 cdef class MemoryPool:
 	"""A memory pool that allocates chunks of poolsize, up to limit times.
@@ -1088,68 +995,5 @@ cdef class MemoryPool:
 					self.pool[x] = NULL
 			free(self.pool)
 			self.pool = NULL
-
-# begin scratch
-
-#cdef class FragmentBitset:
-#	def __init__(self, root, n, data):
-#		self.root = root
-#		self.n = n
-#		self.data = <ULong *><char *>data
-#	def __hash__(self):
-#		# NB: we ignore self.n and self.root
-#		return oat_hash(self.data, self.slots * sizeof(ULong))
-#	def __richcmp__(FrozenArray self, FrozenArray other, int op):
-#		cdef int cmp = memcmp(self.data, other.data,
-#				self.slots * sizeof(ULong))
-#		if op == 2:
-#			return cmp == 0
-#		elif op == 3:
-#			return cmp != 0
-#		elif op == 0:
-#			return cmp < 0
-#		elif op == 4:
-#			return cmp > 0
-#		elif op == 1:
-#			return cmp <= 0
-#		else:
-#			return cmp >= 0
-#	def __reduce__(self):
-#		return (self.root, self.n, (<char *>self.data)[:self.slots])
-#	def __dealloc__(self):
-#		if self.data is not NULL:
-#			free(self.data)
-#			self.data = NULL
-
-#cdef class NewChartItem:
-#	""" Item with arbitrary length bitvector. Not used. """
-#	def __init__(self, label):
-#		self.label = label
-#	def __hash__(self):
-#		cdef size_t n
-#		cdef long _hash = 5381
-#		for n in range(7 * sizeof(ULong)):
-#			_hash *= 33 ^ (<char *>self.vecptr)[n]
-#		return _hash
-#	def __richcmp__(NewChartItem self, NewChartItem other, int op):
-#		#if op == 2:
-#			return self.label == other.label and self.vec == other.vec
-#		#elif op == 3:
-#			return self.label != other.label or self.vec != other.vec
-#		#elif op == 5:
-#			return self.label >= other.label or self.vec >= other.vec
-#		#elif op == 1:
-#			return self.label <= other.label or self.vec <= other.vec
-#		#elif op == 0:
-#			return self.label < other.label or self.vec < other.vec
-#		#elif op == 4:
-#			return self.label > other.label or self.vec > other.vec
-#		raise NotImplemented
-#	def __nonzero__(self):
-#		raise NotImplemented
-#		#return self.label != 0 and self.vec != 0
-#	def __repr__(self):
-#		raise NotImplemented
-#		#return "ChartItem(%d, %s)" % (self.label, bin(self.vec))
 
 # end scratch

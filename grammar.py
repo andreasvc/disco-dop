@@ -22,11 +22,11 @@ function are comma-separated, 0 refers to a component of the first RHS
 nonterminal, and 1 from the second. Weights are expressed as rational
 fractions.
 The lexicon is defined in a separate file. Lines start with a single word,
-followed by pairs of possible tags and their probabilities.
+followed by pairs of possible tags and their probabilities:
 
 WORD	TAG1	PROB1	[TAG2	PROB2 ...]
 
-E.g.:
+Example:
 rules:   S	NP	VP	010	1/2
          VP_2	VB	NP	0,1	2/3
          NP	NN	0	1/4
@@ -56,9 +56,7 @@ When a PCFG is requested, or the input format is `bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
-
-%s
-""" % (sys.argv[0], FORMAT)
+\n%s\n""" % (sys.argv[0], FORMAT)
 
 def lcfrs_productions(tree, sent, frontiers=False):
 	""" Given a tree with integer indices as terminals, and a sentence
@@ -193,29 +191,6 @@ def dopreduction(trees, sents, ewe=False,
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1),
 			(fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
 
-	#@memoize
-	#def sumfracs(nom, denoms):
-	#	return sum(Fraction(nom, denom) for denom in denoms)
-	#
-	# map of exterior (unaddressed) nodes to normalized denominators:
-	#ewedenoms = {}
-	#def goodmanewe(rule):
-	#	""" Goodman (2003, eq. 1.5). Probably a typographic mistake. """
-	#	(r, yf), freq = rule
-	#	if '@' in r[0]:
-	#		return rfe(((r, yf), freq))
-	#	nom = reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1)
-	#	return (r, yf), sumfracs(nom, ewedenoms[r[0]])
-	#
-	#if ewe: #goodmanewe
-	#	for aj in fd:
-	#		a = aj.split("@")[0]
-	#		if a == aj:
-	#			continue	# exterior / unaddressed node
-	#		ewedenoms.setdefault(a, []).append(fd[aj] * ntfd[a])
-	#	for a in ewedenoms:
-	#		ewedenoms[a] = tuple(ewedenoms[a])
-	#	probmodel = map(goodmanewe, rules.items())
 	if ewe: #bodewe
 		probmodel = [bodewe(r) for r in rules.items()]
 	else:
@@ -244,7 +219,7 @@ def doubledop(fragments, debug=False, ewe=False):
 		""" Apply EWE or return frequency. """
 		if ewe:
 			# Sangati & Zuidema (2011, eq. 5)
-			# TODO: verify that this formula is equivalent to Bod (2003).
+			# FIXME: verify that this formula is equivalent to Bod (2003).
 			return sum(Fraction(v, fragmentcount[k])
 					for k, v in fragments[frag, terminals].items())
 		else:
@@ -658,20 +633,6 @@ def printrulelatex(rule):
 				print('\\:', end='')
 	print(r' $ \\')
 
-def freeze(l):
-	""" Recursively walk through a structure converting lists to tuples.
-
-	>>> freeze([[0], [1]])
-	((0,), (1,)) """
-	return tuple(map(freeze, l)) if isinstance(l, (list, tuple)) else l
-
-def unfreeze(l):
-	""" Recursively walk through a structure converting tuples to lists.
-
-	>>> unfreeze(((0,), (1,)))
-	[[0], [1]] """
-	return list(map(unfreeze, l)) if isinstance(l, (list, tuple)) else l
-
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
 
@@ -680,37 +641,6 @@ def cartpi(seq):
 	if seq:
 		return (b + (a,) for b in cartpi(seq[:-1]) for a in seq[-1])
 	return ((), )
-
-def bfcartpi(seq):
-	""" breadth-first (diagonal) cartesian product
-
-	>>> list(islice(bfcartpi([count(), count(0)]), 9))
-	[(0, 0), (0, 1), (1, 0), (1, 1), (0, 2), (1, 2), (2, 0), (2, 1), (2, 2)]"""
-	#wrap items of seq in generators
-	seqit = [(x for x in a) for a in seq]
-	#fetch initial values
-	try:
-		seqlist = [[next(a)] for a in seqit]
-	except StopIteration:
-		return
-	yield tuple(a[0] for a in seqlist)
-	#bookkeeping of which iterators still have values
-	stopped = len(seqit) * [False]
-	n = len(seqit)
-	while not all(stopped):
-		if n == 0:
-			n = len(seqit) - 1
-		else:
-			n -= 1
-		if stopped[n]:
-			continue
-		try:
-			seqlist[n].append(next(seqit[n]))
-		except StopIteration:
-			stopped[n] = True
-			continue
-		for result in cartpi(seqlist[:n] + [seqlist[n][-1:]] + seqlist[n+1:]):
-			yield result
 
 def read_rparse_grammar(filename):
 	""" Read a grammar in the format as produced by rparse. """

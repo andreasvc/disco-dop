@@ -65,7 +65,6 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		dict chart = {}								#the full chart
 		list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
 		EdgeAgenda agenda = EdgeAgenda()			#the agenda
-		size_t i
 		Rule *rule
 		LexicalRule lexrule
 		Entry entry
@@ -76,7 +75,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
 		signed int lensent = len(sent), estimatetype = 0
-		UInt blocked = 0, Epsilon = grammar.toid[b'Epsilon']
+		UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 		ULLong vec = 0
 
@@ -377,12 +376,6 @@ cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 		index in the sentence / constituent (leftmost). """
 	if lvec & rvec:
 		return False
-	# if the yield function is the concatenation of two elements, and there are
-	# no gaps in lvec and rvec, then this should be quicker
-	#if 0b10 == rule.lengths: # == rule.args:
-	#	lvec |= lvec - 1 # replace trailing zeroes with ones
-	#	rvec ^= lvec # combine lvec & rvec
-	#	return rvec & (rvec + 1) == 0 # is power of 2?
 	cdef ULLong mask = rvec if testbitint(rule.args, 0) else lvec
 	cdef size_t n
 	for n in range(bitlength(rule.lengths)):
@@ -418,7 +411,6 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef dict chart = {}							#the full chart
 	cdef list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
 	cdef EdgeAgenda agenda = EdgeAgenda()			#the agenda
-	cdef size_t i
 	cdef Rule *rule
 	cdef LexicalRule lexrule
 	cdef Entry entry
@@ -429,7 +421,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef double x = 0.0, y = 0.0, score, inside
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), estimatetype = 0
-	cdef UInt blocked = 0, Epsilon = grammar.toid[b'Epsilon']
+	cdef UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 	cdef ULong maxA = 0
 	goal = new_FatChartItem(start)
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
@@ -726,14 +718,6 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	lpos = anextset(lvec, 0, SLOTS)
 	rpos = anextset(rvec, 0, SLOTS)
 
-	# if the yield function is the concatenation of two elements, and there are
-	# no gaps in lvec and rvec, then this should^Wcould be quicker
-	if 0b10 == rule.args == rule.lengths:
-		n = anextunset(lvec, lpos, SLOTS)
-		#e.g. lvec=0011 rvec=1100
-		return rpos == n and -1 == anextset(lvec, n, SLOTS) == anextset(
-			rvec, anextunset(rvec, rpos, SLOTS), SLOTS)
-
 	#this algorithm was adapted from rparse, FastYFComposer.
 	for n in range(bitlength(rule.lengths)):
 		if testbitint(rule.args, n):
@@ -789,13 +773,11 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
             allowed on the agenda.
         - markorigin: in combination with splitprune, coarse labels include an
             integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
-            map to the discontinuous node NP_2
-	"""
+            map to the discontinuous node NP_2. """
 	cdef:
 		dict chart = {}								#the full chart
 		list items = [deque() for _ in grammar.toid]	#titems for each label
 		object agenda = deque()						#the agenda
-		size_t i
 		Rule *rule
 		LexicalRule lexrule
 		Entry entry
@@ -803,7 +785,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 		SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
 		SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 		signed int lensent = len(sent)
-		UInt blocked = 0, Epsilon = grammar.toid[b'Epsilon']
+		UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 		ULLong vec = 0
 
@@ -910,7 +892,6 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 #	getinside(result, chart, start)
 #
 #cdef getinside(dict result, chart, start):
-#	#...
 #
 #def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=True,
 #		list whitelist=None, bint splitprune=False, bint markorigin=False,
@@ -1019,16 +1000,15 @@ def do(sent, grammar):
 	chart, start, _ = parse(sent, grammar)
 	if len(sent) < sizeof(ULLong):
 		pprint_chart(chart, sent, grammar.tolabel)
-	if not start:
-		print("no parse")
-		return False
-	else:
+	if start:
 		print("10 best parse trees:")
 		mpp, _ = marginalize("mpp", chart, start, grammar, 10)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))):
 			print(p, a)
 		print()
 		return True
+	print("no parse")
+	return False
 
 def main():
 	from containers import Grammar
@@ -1050,15 +1030,12 @@ def main():
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
 		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)], start='S')
 	print(grammar)
-	print("Rule structs take", sizeof(Rule), "bytes")
 
-	lng = 67
 	assert do("Daruber muss nachgedacht werden", grammar)
 	assert do("Daruber muss nachgedacht werden werden", grammar)
 	assert do("Daruber muss nachgedacht werden werden werden", grammar)
 	print("ungrammatical sentence:")
 	assert not do("muss Daruber nachgedacht werden", grammar)	#no parse
 	print("(as expected)")
-	print("long sentence (%d words):" % lng)
-	assert do("Daruber muss nachgedacht %s" % " ".join(
-		(lng - 3) * ["werden"]), grammar)
+	print("long sentence (%d words):" % 67)
+	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)

@@ -42,24 +42,6 @@ If a parameter file is given, an experiment is run. See the file sample.prm
 for an example parameter file. To repeat an experiment with an existing grammar,
 pass the option --rerun.""" % sys.argv[0]
 
-class DictObj(object):
-	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
-	def __init__(self, *a, **kw):
-		self.__dict__.update(*a, **kw)
-	def update(self, *a, **kw):
-		""" Update/add more attributes. """
-		self.__dict__.update(*a, **kw)
-	def __getattr__(self, name):
-		""" This is only called when the normal mechanism fails, so in practice
-		should never be called. It is only provided to satisfy pylint that it
-		is okay not to raise E1101 errors in the client code. """
-		raise AttributeError("%r instance has no attribute %r" % (
-				self.__class__.__name__, name))
-	def __repr__(self):
-		return "%s(%s)" % (self.__class__.__name__,
-			",\n".join("%s=%r" % a for a in self.__dict__.items()))
-
-
 INTERNALPARAMS = None
 def initworker(params):
 	""" Set global parameter object """
@@ -287,14 +269,10 @@ def main(
 			for m, (word, _) in enumerate(sent):
 				if word in knownwords:
 					sig = word
-					#logging.debug("known word: %s freq=%d", word, knownwords[word])
 				else:
 					sig = unknownword(word, m, knownwords)
 					if sig not in wordclass:
-						#logging.debug("UNKNOWN CLASS: %s => %s => UNK", word, sig)
 						sig = "UNK"
-					#else:
-					#	logging.debug("unknown word: %s => %s", word, sig)
 				newsent.append((sig, None)) # tag will not be used, use None.
 			test_tagged_sents[n] = newsent
 		# make sure gold tags are not given to parser
@@ -642,7 +620,6 @@ def doparse(**kwds):
 		sent, goldtree, goldsent, _ = params.testset[sentid]
 		logging.debug("%d/%d (%s). [len=%d] %s\n%s", nsent, len(params.testset),
 					sentid, len(sent),
-					#" ".join("/".join(a) for a in sent) if params.tags else
 					" ".join(a[0] for a in goldsent), msg)
 		evaltree = goldtree.copy(True)
 		transform(evaltree, [w for w, _ in sent], evaltree.pos(),
@@ -731,8 +708,6 @@ def worker(args):
 						[w for w, _ in sent],
 						stage.grammar,
 						tags=[t for _, t in sent] if prm.tags else None)
-				#pcfg.pprint_matrix(inside, sent, stage.grammar.tolabel, outside)
-				#print()
 			elif stage.mode == 'plcfrs':
 				chart, start, msg1 = plcfrs.parse([w for w, _ in sent],
 						stage.grammar,
@@ -789,10 +764,6 @@ def worker(args):
 			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), prm.deletelabel, prm.deleteword,
 				{}, {}, False)
-			#except IndexError:
-			#	logging.error("ERROR: %s", parsetree)
-			#	start = None
-			#	continue
 			candb = bracketings(evaltree, dellabel=prm.deletelabel)
 			if goldb and candb:
 				prec = precision(goldb, candb)
@@ -812,8 +783,7 @@ def worker(args):
 					msg += "cand-gold=%s " % strbracketings(candb - goldb)
 				if goldb - candb:
 					msg += "gold-cand=%s" % strbracketings(goldb - candb)
-				msg += '\n\t'
-				#msg += "%s\n\t" % parsetree
+				msg += '\n\t' # "%s\n\t" % parsetree
 		if not start or stage.mode == 'pcfg-posterior':
 			parsetree = defaultparse([(n, t) for n, (w, t) in enumerate(sent)])
 			parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],
@@ -1219,6 +1189,25 @@ def dispatch(argv):
 		main(**params)
 		if not params['rerun']: # copy parameter file to result dir
 			open("%s/params.prm" % params['resultdir'], "w").write(paramstr)
+
+
+class DictObj(object):
+	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
+	def __init__(self, *a, **kw):
+		self.__dict__.update(*a, **kw)
+	def update(self, *a, **kw):
+		""" Update/add more attributes. """
+		self.__dict__.update(*a, **kw)
+	def __getattr__(self, name):
+		""" This is only called when the normal mechanism fails, so in practice
+		should never be called. It is only provided to satisfy pylint that it
+		is okay not to raise E1101 errors in the client code. """
+		raise AttributeError("%r instance has no attribute %r" % (
+				self.__class__.__name__, name))
+	def __repr__(self):
+		return "%s(%s)" % (self.__class__.__name__,
+			",\n".join("%s=%r" % a for a in self.__dict__.items()))
+
 
 if __name__ == '__main__':
 	try:

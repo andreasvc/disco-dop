@@ -84,7 +84,6 @@ cdef class LCFRSEdge(Edge):
 	cdef double score # inside probability + estimate score
 	cdef ChartItem left
 	cdef ChartItem right
-	cdef long _hash
 @cython.final
 cdef class CFGEdge(Edge):
 	cdef UChar mid
@@ -95,7 +94,6 @@ cdef class RankedEdge:
 	cdef LCFRSEdge edge
 	cdef int left
 	cdef int right
-	cdef long _hash
 
 @cython.final
 cdef class RankedCFGEdge:
@@ -104,7 +102,6 @@ cdef class RankedCFGEdge:
 	cdef CFGEdge edge
 	cdef int left
 	cdef int right
-	cdef long _hash
 
 # start scratch
 #cdef union VecType:
@@ -215,10 +212,6 @@ cdef class RankedCFGEdge:
 #	#		free(self.midpoints)
 #	#		self.midpoints = None
 #
-#cdef class NewChartItem:
-#	cdef VecType vec
-#	cdef UInt label
-#
 #cdef class DiscNode:
 #	cdef int label
 #	cdef tuple children
@@ -227,10 +220,6 @@ cdef class RankedCFGEdge:
 
 
 # start fragments stuff
-
-# changes to Node representation:
-# removed .label; .prod is used to find label
-# remove nodes for terminals, merge informatio into  preterminals:
 
 cdef struct Node:
 	int prod # non-negative, ID of a phrasal or lexical production
@@ -256,18 +245,6 @@ cdef class Ctrees:
 	cdef addnodes(self, Node *nodes, int cnt, int root)
 
 # end fragments stuff
-
-@cython.final
-cdef class CBitset:
-	cdef int bitcount(self)
-	cdef int nextset(self, UInt pos)
-	cdef int nextunset(self, UInt pos)
-	cdef void setunion(self, CBitset src)
-	cdef bint superset(self, CBitset op)
-	cdef bint subset(self, CBitset op)
-	cdef bint disjunct(self, CBitset op)
-	cdef char *data
-	cdef UChar slots
 
 @cython.final
 cdef class MemoryPool:
@@ -336,13 +313,6 @@ cdef inline LCFRSEdge new_LCFRSEdge(double score, double inside, Rule *rule,
 	edge.rule = rule
 	edge.left = left
 	edge.right = right
-	#self._hash = hash((prob, left, right))
-	# this is the hash function used for tuples, apparently
-	h = (1000003UL * h) ^ <long>rule
-	h = (1000003UL * h) ^ <long>left.__hash__()
-	# if it weren't for this call to left.__hash__(), the hash would better
-	# be computed on the fly.
-	edge._hash = h
 	return edge
 
 cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):

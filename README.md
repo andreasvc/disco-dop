@@ -105,6 +105,7 @@ Aside from the parser there are some standalone tools:
 - `eval.py`:             Discontinuous evaluation. Reports F-scores and other
                          metrics. Accepts `EVALB` parameter files:
                          `python eval.py negra-corpus.export sample/plcfrs.export proper.prm`
+- `web.py`:              A web interface to the parser; requires Flask.
 - `demos.py`:            Contains examples of various formalisms encoded in
                          LCFRS grammars.
 - `gen.py`:              An experiment in generation with LCFRS.

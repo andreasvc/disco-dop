@@ -1,8 +1,7 @@
 """ Probabilistic Context-Free Grammar (PCFG) parser using CKY. """
 
-from __future__ import print_function
-
 # python imports
+from __future__ import print_function
 from math import log, exp
 from collections import defaultdict, deque
 import re, logging, sys
@@ -58,11 +57,8 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		short left, right, mid, span, lensent = len(sent)
 		short narrowr, narrowl, widel, wider, minmid, maxmid
 		double oldscore, prob
-		size_t n
-		UInt lhs, rhs1
-		UInt spans = 0, items = 0, edges = 0, blocked = 0
-		ULLong vec = 0
 		bint foundnew = False
+		UInt n, lhs, rhs1, spans = 0, items = 0, edges = 0, blocked = 0
 		Rule *rule
 		CFGEdge edge
 		Entry entry
@@ -278,8 +274,8 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 		double oldscore, prob, leftprob, infinity = float('infinity')
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
-		UInt lhs, rhs1, spans = 0, items = 0, edges = 0
 		bint foundnew, newspan
+		UInt lhs, rhs1, spans = 0, items = 0, edges = 0
 		Rule *rule
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
@@ -717,10 +713,9 @@ def insidescores(list sent, Grammar grammar,
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
 		double oldscore, prob, ls, rs, ins
-		UInt lhs, rhs1
+		UInt n, lhs, rhs1
 		bint foundbetter = False
 		Rule *rule
-		size_t n
 		LexicalRule lexrule
 		unicode word
 		list cell = [{} for _ in grammar.toid]
@@ -879,10 +874,9 @@ def outsidescores(Grammar grammar, list sent,
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
 		double ls, rs, os
-		UInt lhs, rhs1, rhs2
+		UInt n, lhs, rhs1, rhs2
 		bint foundbetter = False
 		Rule *rule
-		size_t n
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		Entry entry
