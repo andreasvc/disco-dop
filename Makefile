@@ -1,7 +1,7 @@
 all:
 	python setup.py build_ext --inplace
 
-.PHONY: clean test debug testdebug html lint
+.PHONY: clean test debug testdebug lint
 
 clean:
 	rm -f *.c *.so
@@ -26,14 +26,6 @@ testdebug: debug valgrind-python.supp
 
 valgrind-python.supp:
 	wget http://codespeak.net/svn/lxml/trunk/valgrind-python.supp
-
-html:
-	cython --annotate --timestamps --verbose -X \
-cdivision=True,\
-nonecheck=False,\
-wraparound=False,\
-boundscheck=False \
-*.pyx
 
 # R=refactor, C0103 == Invalid name
 lint:

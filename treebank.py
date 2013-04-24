@@ -366,16 +366,10 @@ class AlpinoCorpusReader(CorpusReader):
 
 def getreader(fmt):
 	""" Return the appropriate corpus reader class given a format string. """
-	if fmt == 'export':
-		return NegraCorpusReader
-	elif fmt == 'discbracket':
-		return DiscBracketCorpusReader
-	elif fmt == 'bracket':
-		return BracketCorpusReader
-	elif fmt == 'alpino':
-		return AlpinoCorpusReader
-	else:
-		raise ValueError("unrecognized format: %r" % fmt)
+	return {'export': NegraCorpusReader,
+		'discbracket': DiscBracketCorpusReader,
+		'bracket': BracketCorpusReader,
+		'alpino': AlpinoCorpusReader}[fmt]
 
 indexre = re.compile(r" [0-9]+\)")
 def writetree(tree, sent, n, fmt, headrules=None):
@@ -518,8 +512,6 @@ def sethead(child):
 		else:
 			x[FUNC] = x[FUNC] + "-HD"
 		child.source = tuple(x)
-		# better if 'source' remains unchanged; perhaps:
-		#child.head = True
 
 def headmark(tree):
 	""" add marker to label of head node. """
@@ -688,26 +680,15 @@ def unfold(tree, transformations=('S-RC', 'VP-GF', 'NP')):
 	return tree
 
 def fold(tree):
-	""" Reverse several transformations, mostly by removing extra strings
-	after a dash. """
-	# maybe not necessary, if transforms only add -FUNC.
+	""" Reverse transformations by removing extra strings after a dash. """
 	for node in tree.subtrees(lambda n: "-" in n.label):
 		node.label = node.label[:node.label.index("-")]
-	#for a in transformations:
-	#	if a == 'SRC':
-	#		pass
-	#	else:
-	#		pass
 	return tree
 
 def unfold_orig(tree):
 	""" Unfold redundancies and perform other transformations introducing
 	more hierarchy in the phrase-structure annotation, based on
-	grammatical functions and syntactic categories.
-	"""
-	# for debugging:
-	#original = tree.copy(Tree)
-	#current = tree
+	grammatical functions and syntactic categories. """
 	def pop(a):
 		try:
 			return a.parent.pop(a.parent_index)
@@ -839,8 +820,6 @@ def fold_orig(tree):
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
-	#original = tree.copy(True)
-	#current = tree
 
 	# remove DPs
 	for dp in tree.subtrees(lambda n: n.label == "DP"):

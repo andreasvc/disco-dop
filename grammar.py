@@ -227,7 +227,7 @@ def doubledop(fragments, debug=False, ewe=False):
 	grammar = {}
 	backtransform = {}
 	ntfd = defaultdict(int)
-	ids = count()
+	ids = BinarizationIDs()
 	if ewe:
 		# build an index to get the number of fragments extracted from a tree
 		fragmentcount = defaultdict(int)
@@ -321,9 +321,8 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	>>> utree = decorate_with_ids(1, tree, ['mary', 'walks'])
 	>>> nodefreq(tree, utree, fd, multiset())
 	4
-	>>> fd
-	Counter({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
-	"""
+	>>> fd == multiset({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
+	True """
 	nonterminalfd[tree.label] += 1
 	nonterminalfd[utree.label] += 1
 	if isinstance(tree[0], Tree):
@@ -451,6 +450,26 @@ def new_flatten(tree, sent, ids):
 	treeparts = FRONTIERORTERM_new.split(str(tree))
 	return prods, (treeparts, order)
 
+class BinarizationIDs(object):
+	""" Produces numeric IDs for artficial labels of binarization.
+	When used as iterator, result is always unique;
+	When used as dictionary, a ID unique for the given key is returned. """
+	def __init__(self):
+		self.cnt = 0 # next available ID
+		self.ids = {} # IDs for labels seen
+	def __getitem__(self, key):
+		val = self.ids.get(key)
+		if val is None:
+			val = self.ids[key] = self.cnt
+			self.cnt += 1
+		return val
+	def __iter__(self):
+		return self
+	def __next__(self):
+		self.cnt += 1
+		return self.cnt - 1
+	next = __next__
+
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 def flatten(tree, sent, ids):
 	""" Auxiliary function for Double-DOP.
@@ -462,7 +481,7 @@ def flatten(tree, sent, ids):
 	unique IDs for non-terminals introdudced by the binarization;
 	output is a tuple (prods, frag). Trees are in the form of strings.
 
-	>>> ids = count()
+	>>> ids = BinarizationIDs()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
 	>>> flatten(tree, sent, ids)
@@ -526,10 +545,11 @@ def flatten(tree, sent, ids):
 	prod = FRONTIERORTERM.sub(repl, tree)
 	# remove internal nodes, reorder
 	prod = "%s %s)" % (prod[:prod.index(" ")],
-		" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
-		key=lambda x: int(x.group(2)))))
-	prods = lcfrs_productions(factorconstituent(addbitsets(prod),
-			"}", factor='left', markfanout=True, ids=ids, threshold=2), sent)
+			" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+			key=lambda x: int(x.group(2)))))
+	prods = lcfrs_productions(factorconstituent(addbitsets(prod), "}",
+			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2),
+			sent)
 	# remember original order of frontiers / terminals for template
 	order = {x.group(2): "{%d}" % n
 			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}

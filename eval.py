@@ -484,8 +484,11 @@ def transitiveclosure(eqpairs):
 	i.e., given a sequence of pairs denoting an equivalence relation,
 	produce a dictionary with equivalence classes as values and
 	arbitrary members of those classes as keys.
-	>>> result = {'A': {'A', 'C', 'B'}}
-	>>> transitiveclosure({('A', 'B'), ('B', 'C')}) == result
+	>>> result = transitiveclosure({('A', 'B'), ('B', 'C')})
+	>>> len(result)
+	1
+	>>> k, v = result.popitem()
+	>>> k in ('A', 'B', 'C') and v == {'A', 'B', 'C'}
 	True """
 	edges = defaultdict(set)
 	for a, b in eqpairs:
@@ -576,8 +579,8 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
 			(), {}, {}, False)
-	>>> bracketings(tree)
-	Counter({('S', (0, 1, 2)): 1, ('VP', (0, 2)): 1})
+	>>> sorted(bracketings(tree).items())
+	[(('S', (0, 1, 2)), 1), (('VP', (0, 2)), 1)]
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("VP",), \
 			(), {}, {}, False)
@@ -605,7 +608,7 @@ def strbracketings(brackets):
 		return "{}"
 	return ", ".join("%s[%s]" % (a, ",".join(
 		"-".join(str(y) for y in sorted(set(x)))
-		for x in intervals(sorted(b)))) for a, b in brackets)
+		for x in intervals(sorted(b)))) for a, b in sorted(brackets))
 
 def leafancestorpaths(tree, dellabel):
 	""" Generate a list of ancestors for each leaf node in a tree. """

@@ -48,8 +48,12 @@ function ajaxFunction() {
 		  window.scroll(0, document.height); // scroll to bottom of page
 	  }
 	};
-
-	xmlhttp.open("GET", "parse?sent=" + document.queryform.sent.value, true);
+	var objfun = document.queryform.objfun;
+	var marg = document.queryform.marg;
+	url = "parse?sent=" + encodeURIComponent(document.queryform.sent.value)
+			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
+			+ "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value);
+	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);
 	document.queryform.sent.value = '';
 }	

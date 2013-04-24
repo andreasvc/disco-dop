@@ -432,25 +432,56 @@ def addbitsets(tree):
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
 
+def getyf(left, right):
+	""" Given two trees with bitsets, return a string representation of
+	their yield function, e.g., ';01,10'. """
+	result = [';']
+	cur = ','
+	for n in range(max(left.bitset.bit_length(), right.bitset.bit_length())):
+		mask = 1 << n
+		if left.bitset & mask:
+			if cur != '0':
+				cur = '0'
+				result.append(cur)
+		elif right.bitset & mask:
+			if cur != '1':
+				cur = '1'
+				result.append(cur)
+		elif cur != ',':
+			cur = ','
+			result.append(cur)
+	#lpos = pyintnextset(left.bitset, 0)
+	#rpos = pyintnextset(right.bitset, 0)
+	#result = ['0' if lpos < rpos else '1']
+	# etc.
+	return ''.join(result)
+
 def factorconstituent(node, sep='|', h=999, factor='right',
-		markfanout=False, ids=None, threshold=2):
+		markfanout=False, markyf=False, ids=None, threshold=2):
 	""" Binarize one constituent with a left/right factored binarization.
-	Children remain unmodified. Bottom-up version. Nodes must contain
-	bitsets (use addbitsets()).
+	Children remain unmodified. Bottom-up version. Nodes must be immutable
+	and contain bitsets; use addbitsets().
 	By default construct artificial labels using labels of child nodes.
-	When iterator ids is specified, use identifiers from that instead. """
+	When markyf is True, each artificial label will include the yield function;
+	this is necessary for a 'normal form' binarization that is equivalent to the
+	original. When an iterator ids is given, and a dictionary binids, it is used
+	to assign an unique ID to each artificial label (since these can become
+	very long). The first ID in a binarization will always be unique, while the
+	others will be re-used for the same combination of labels and yield
+	function. """
 	if len(node) <= threshold:
 		return node
 	elif 1 <= len(node) <= 2:
 		if ids is None:
-			childlabels = [child.label for child in node]
-			newlabel = "%s%s<%s>" % (node.label, sep, "-".join(childlabels[:h]))
+			key = "%s%s" % ('-'.join(child.label for child in node[:h]),
+					getyf(*node) if markyf else '')
 		else:
-			newlabel = "%s%s<%d>" % (node.label, sep, next(ids))
+			key = str(next(ids))
+		newlabel = "%s%s<%s>" % (node.label, sep, key)
+
 		result = ImmutableTree(node.label, [ImmutableTree(newlabel, node)])
 		result.bitset = node.bitset
 	else:
-		childlabels = [child.label for child in node]
 		if factor == 'right':
 			prev = node[-1]
 			rng = range(len(node) - 2, 0, -1)
@@ -461,14 +492,22 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 			raise ValueError
 		for i in rng:
 			newbitset = node[i].bitset | prev.bitset
-			if ids is None:
-				if factor == 'right':
-					history = childlabels[i:i+h]
-				else:
-					history = childlabels[max(0, i - h + 1):i + 1]
-				newlabel = "%s%s<%s>" % (node.label, sep, "-".join(history))
+			if factor == 'right' and (ids is None or i != 1):
+				key = '-'.join(child.label for child in node[i:i+h])
+				if markyf:
+					key += getyf(node[i], prev)
+				if ids is not None:
+					key = str(ids[key])
+			elif factor == 'left' and (ids is None or i != len(node) - 2):
+				key = '-'.join(child.label
+						for child in node[max(0, i - h + 1):i + 1])
+				if markyf:
+					key += getyf(prev, node[i])
+				if ids is not None:
+					key = str(ids[key])
 			else:
-				newlabel = "%s%s<%d>" % (node.label, sep, next(ids))
+				key = str(next(ids))
+			newlabel = "%s%s<%s>" % (node.label, sep, key)
 			if markfanout:
 				nodefanout = bitfanout(newbitset)
 				if nodefanout > 1:
@@ -503,12 +542,6 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 	>>> tree2.chomsky_normal_form()
 	>>> minimalbinarization(tree1, complexityfanout, head=2) == tree2
 	True
-	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
-	>>> print(minimalbinarization(addbitsets(tree), complexityfanout, head=2))
-	(X (A 0) (X|<B-E-D-C> (B 3) (X|<E-D-C> (E 8) (X|<D-C> (D 7) (C 5)))))
-	>>> tree = "(X (A 0) (B 3) (C 5) (D 7) (E 8))"
-	>>> print(minimalbinarization(addbitsets(tree), complexityfanout, head=2, h=1))
-	(X (A 0) (X|<B> (B 3) (X|<E> (E 8) (X|<D> (D 7) (C 5)))))
 	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) \
 		(t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))"
 	>>> a = minimalbinarization(addbitsets(tree), complexityfanout)
