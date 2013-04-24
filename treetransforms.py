@@ -492,13 +492,13 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 			raise ValueError
 		for i in rng:
 			newbitset = node[i].bitset | prev.bitset
-			if factor == 'right' and (ids is None or i != 1):
+			if factor == 'right' and (ids is None or i > 1):
 				key = '-'.join(child.label for child in node[i:i+h])
 				if markyf:
 					key += getyf(node[i], prev)
 				if ids is not None:
 					key = str(ids[key])
-			elif factor == 'left' and (ids is None or i != len(node) - 2):
+			elif factor == 'left' and (ids is None or i < len(node) - 2):
 				key = '-'.join(child.label
 						for child in node[max(0, i - h + 1):i + 1])
 				if markyf:

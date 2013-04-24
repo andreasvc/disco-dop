@@ -227,7 +227,7 @@ def doubledop(fragments, debug=False, ewe=False):
 	grammar = {}
 	backtransform = {}
 	ntfd = defaultdict(int)
-	ids = BinarizationIDs()
+	ids = UniqueIDs()
 	if ewe:
 		# build an index to get the number of fragments extracted from a tree
 		fragmentcount = defaultdict(int)
@@ -450,10 +450,15 @@ def new_flatten(tree, sent, ids):
 	treeparts = FRONTIERORTERM_new.split(str(tree))
 	return prods, (treeparts, order)
 
-class BinarizationIDs(object):
-	""" Produces numeric IDs for artficial labels of binarization.
-	When used as iterator, result is always unique;
-	When used as dictionary, a ID unique for the given key is returned. """
+class UniqueIDs(object):
+	""" Produce numeric IDs. Can be used as iterator (ID will not be re-used)
+	and dictionary (ID will be re-used for same key).
+
+	>>> ids = UniqueIDs()
+	>>> next(ids)
+	0
+	>>> ids['foo'], ids['bar'], ids['foo']
+	(1, 2, 1)"""
 	def __init__(self):
 		self.cnt = 0 # next available ID
 		self.ids = {} # IDs for labels seen
@@ -463,11 +468,11 @@ class BinarizationIDs(object):
 			val = self.ids[key] = self.cnt
 			self.cnt += 1
 		return val
-	def __iter__(self):
-		return self
 	def __next__(self):
 		self.cnt += 1
 		return self.cnt - 1
+	def __iter__(self):
+		return self
 	next = __next__
 
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
@@ -481,7 +486,7 @@ def flatten(tree, sent, ids):
 	unique IDs for non-terminals introdudced by the binarization;
 	output is a tuple (prods, frag). Trees are in the form of strings.
 
-	>>> ids = BinarizationIDs()
+	>>> ids = UniqueIDs()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
 	>>> flatten(tree, sent, ids)
