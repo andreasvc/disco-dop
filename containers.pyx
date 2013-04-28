@@ -682,7 +682,7 @@ cdef class LCFRSEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
 	def __init__(self):
-		raise NotImplemented
+		raise NotImplementedError
 	def __hash__(LCFRSEdge self):
 		cdef long _hash = 0x345678UL
 		# this condition could be avoided by using a dedicated sentinel Rule
@@ -728,7 +728,7 @@ cdef class CFGEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
 	def __init__(self):
-		raise NotImplemented
+		raise NotImplementedError
 	def __hash__(CFGEdge self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ <long>self.rule #.no
@@ -778,7 +778,7 @@ cdef class RankedEdge:
 				and self.right == other.right
 				and self.head == other.head
 				and self.edge == other.edge)
-		raise NotImplemented
+		return NotImplemented
 	def __repr__(self):
 		return "%s(%r, %r, %d, %d)" % (self.__class__.__name__,
 			self.head, self.edge, self.left, self.right)
@@ -812,7 +812,7 @@ cdef class RankedCFGEdge:
 				and self.start == other.start
 				and self.end == other.end
 				and self.edge == other.edge)
-		raise NotImplemented
+		return NotImplemented
 	def __repr__(self):
 		return "%s(%r, %r, %r, %r, %d, %d)" % (self.__class__.__name__,
 			self.label, self.start, self.end, self.edge, self.left, self.right)

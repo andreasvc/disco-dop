@@ -790,7 +790,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 		ULLong vec = 0
 
 	if lensent >= sizeof(vec) * 8:
-		raise NotImplemented
+		raise NotImplementedError("sentence too long.")
 
 	# scan
 	for i, word in enumerate(sent):
