@@ -1,7 +1,3 @@
-.. image:: http://staff.science.uva.nl/~acranenb/disco-dop.png
-   :align: right
-   :alt: contrived discontinuous constituent for expository purposes.
-
 Discontinuous DOP
 =================
 
@@ -9,6 +5,10 @@ The aim of this project is to parse discontinuous constituents with
 Data-Oriented Parsing (DOP), with a focus on global world domination.
 Concretely, we build a DOP model with a Linear Context-Free Rewriting
 System (LCFRS) as the symbolic backbone.
+
+.. image:: http://staff.science.uva.nl/~acranenb/disco-dop.png
+   :align: right
+   :alt: contrived discontinuous constituent for expository purposes.
 
 Background
 ----------
@@ -119,7 +119,7 @@ For example::
 
     discodop fragments --help
 
-Prints instructions for the fragment extractor.
+... prints instructions for the fragment extractor.
 
 Acknowledgments
 ---------------
@@ -129,5 +129,5 @@ The Tree data structures in ``tree.py`` and the simple binarization algorithm in
 The Zhang-Shasha tree-edit distance algorithm in ``treedist.py`` was taken from
 https://github.com/timtadh/zhang-shasha
 Elements of the PLCFRS parser and punctuation re-attachment are based on code from
-``rparse <http://wolfgang-maier.de/rparse>`_. Various other bits from the Stanford parser, Berkeley parser, Bubs parser, &c.
+`rparse <http://wolfgang-maier.de/rparse>`_. Various other bits from the Stanford parser, Berkeley parser, Bubs parser, &c.
 
