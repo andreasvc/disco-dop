@@ -10,12 +10,11 @@ from operator import itemgetter
 from flask import Flask, Markup, request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 
-sys.path.append('..')
-import treetransforms, disambiguation, coarsetofine
-import lexicon, pcfg, plcfrs
-from tree import Tree
-from treedraw import DrawTree
-from containers import Grammar
+from discodop import treetransforms, disambiguation, coarsetofine,\
+		lexicon, pcfg, plcfrs
+from discodop.tree import Tree
+from discodop.treedraw import DrawTree
+from discodop.containers import Grammar
 
 app = Flask(__name__)
 morphtags = re.compile(
