@@ -112,14 +112,20 @@ Aside from the parser there are some standalone tools:
     python evalnegra-corpus.export sample/plcfrs.export proper.prm
 :``demos``: Contains examples of various formalisms encoded in LCFRS grammars.
 :``gen``: An experiment in generation with LCFRS.
-:``web/web.py``: A web interface to the parser; requires Flask.
 
-All of these (except the last) can be started with the ``discodop`` command.
+All of these can be started with the ``discodop`` command.
 For example::
 
     discodop fragments --help
 
 ... prints instructions for the fragment extractor.
+
+Usage: tools
+------------
+There are two web based tools, which require Flask to be installed:
+
+:``web/parse.py``: A web interface to the parser. Expects a series of grammars in subdirectories of ``web/grammars/``.
+:``web/treesearch.py``: A web interface for searching trough treebanks. Expects one or more treebanks with the ``.mrg`` extension in the directory ``web/corpus/``.
 
 Acknowledgments
 ---------------

@@ -1,0 +1,20 @@
+<script src="static/d3.v3.min.js"></script>
+<script type="text/javascript">
+var data = {{ data }};
+var x = d3.scale.linear()
+    .domain([0, d3.max(data)])
+    .range(["0px", "420px"]);
+var chart = d3.select("body").append("div").attr("class", "chart").attr("id", "chart1");
+chart.append("text").text("Absolute counts of pattern");
+chart.selectAll("div").data({{ sortedcounts }})
+   .enter().append("div").style("width", function(d) {
+		return data[d] / ({{ maxcounts }} / 800) + "px";
+	} ).text(function(d) { return d + ': ' + data[d]; });
+
+var relfreq = {{ relfreq }};
+var chart2 = d3.select("body").append("div").attr("class", "chart2").attr("id", "chart2");
+chart2.append("text").text("Relative frequency of pattern: (count / num_{{ norm }})");
+chart2.selectAll("div").data({{ sortedrelfreq }}).enter().append("div")
+     .style("width", function(d) { return (800 * relfreq[d]) + "px"; } )
+    .text(function(d) { return d + ': ' + Math.round(relfreq[d] * 10000) / 100 + '%'; });
+</script>

@@ -1,0 +1,134 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>
+{{ 'tgrep ' + form['query'] if 'query' in form else 'Treebank Search' }}
+</title>
+<script src="static/main.js"></script>
+<style>
+.chart div {
+    font: 10px sans-serif;
+    background-color: steelblue;
+    text-align: left;
+    padding: 3px;
+    margin: 1px;
+    color: white;
+}
+.chart2 div {
+    font: 10px sans-serif;
+    background-color: red;
+    text-align: left;
+    padding: 3px;
+    margin: 1px;
+    color: black;
+}
+#chart1 { margin-bottom: 20px; }
+#chart2 { margin-bottom: 20px; }
+body { font-family: Helvetica, Arial, sans-serif; }
+blockquote { width: 600px; text-align: justify;  }
+span.r { color: red; }
+span.tt { font-family: monospace; }
+</style>
+
+<body onLoad="placeFocus();" >
+<div class="content">
+<h3>Treebank Search</h3>
+
+<blockquote><p>
+    A web-interface to TGrep2 on a corpus of parse trees.
+    Enter a <a href="http://tedlab.mit.edu/~dr/Tgrep2/">TGrep2 pattern</a>
+    (<a href="javascript: toggle('tgrephelp'); ">toggle TGrep overview</a>)
+    to search the corpus. Results can be displayed in various ways and
+	morphological tags of the form <tt>TAG[MORPH1,...]</tt> and grammatical
+	functions of the form <tt>LABEL-FUNC</tt> can optionally be filtered out.</p>
+
+    <p><a href="/style">Show surface characteristics of texts</a>
+    (using <span class=tt><a href="http://manpages.ubuntu.com/manpages/precise/en/man1/style.1.html">style(1)</a></span>)
+</p></blockquote>
+
+<form action="/" method=get name=queryform onSubmit="mergecheckboxes(); "><table>
+    <tr><td><label for=f1>Query:</label></td>
+    <td><input type=text name=query id=f1 size=100 value="{{ form['query'] }}"></td>
+    <td><input type=submit></td></tr>
+    <tr><td style="vertical-align: text-top; ">
+    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>
+    <div id=selecttexts style="display: {{ 'none' if form.get('query') else 'block' }}; ">
+    (Select <a href="javascript: checkall('t', true); numchecked(); ">all</a>; 
+	<a href="javascript: checkall('t', false); numchecked(); ">none</a>)<br>
+	<input type=hidden name=texts value="">
+	{%- for text in texts -%}
+	<label><input type=checkbox name=t value={{ loop.index0 }}{{
+		' checked' if loop.index0 in selectedtexts }} onChange="numchecked(); ">{{ text }}</label><br>
+	{% endfor -%}
+    </div>
+    </td><td></td></tr>
+    <tr><td>Output:</td>
+    <td><label><input type=radio name=output value=counts{{
+		' checked' if output == 'counts' }}>Counts;</label>
+    <label><input type=radio name=output value=trees{{
+		' checked' if output in ('trees', None) }}>Draw matching trees;</label>
+    <label><input type=radio name=output value=brackets{{
+		' checked' if output == 'brackets' }}>
+		Matches in bracket notation;</label>
+    </td><td></td></tr>
+    <tr><td></td><td>
+    <label><input type=radio name=output value=sents{{
+		' checked' if output == 'sents' }}>
+		Matching sentences (words only);</label>
+    <label><input type=radio name=output value=export{{
+		' checked' if output == 'export' }}>
+		Export all matching trees as text file;</label><br>
+    </td><td></td></tr>
+    <tr><td>Normalization:</td>
+    <td><label><input type=radio name=norm value=sents{{
+		' checked' if norm == 'sents' }}>Show % of Sentences;</label>
+    <label><input type=radio name=norm value=consts{{
+		' checked' if norm == 'consts' }}>Show % of Constituents;</label>
+    <label><input type=radio name=norm value=words{{
+		' checked' if norm == 'words' }}>Show % of Words;</label>
+    </td><td></td></tr>
+    <tr><td></td><td>
+    <label><input type=checkbox name=nomorph{{
+		' checked' if 'nomorph' in form or 'query' not in form }}>
+		Hide morphology tags</label>
+    <label><input type=checkbox name=nofunc{{ ' checked' if 'nofunc' in form }}>
+		Hide function tags</label><br>
+    </td><td></td></tr>
+</table></form>
+<div id=tgrephelp style="display: none; "><pre>{{ """
+TGrep2 operators:
+  A < B       A is the parent of (immediately dominates) B.
+  A > B       A is the child of B.
+  A <N B      B is the Nth child of A (the first child is <1).
+  A >N B      A is the Nth child of B (the first child is >1).
+  A <, B      Synonymous with A <1 B.
+  A >, B      Synonymous with A >1 B.
+  A <-N B     B is the Nth-to-last child of A (the last child is <-1).
+  A >-N B     A is the Nth-to-last child of B (the last child is >-1).
+  A <- B      B is the last child of A (synonymous with A <-1 B).
+  A >- B      A is the last child of B (synonymous with A >-1 B).
+  A <` B      B is the last child of A (also synonymous with A <-1 B).
+  A >` B      A is the last child of B (also synonymous with A >-1 B).
+  A <: B      B is the only child of A.
+  A >: B      A is the only child of B.
+  A << B      A dominates B (A is an ancestor of B).
+  A >> B      A is dominated by B (A is a descendant of B).
+  A <<, B     B is a left-most descendant of A.
+  A >>, B     A is a left-most descendant of B.
+  A <<` B     B is a right-most descendant of A.
+  A >>` B     A is a right-most descendant of B.
+  A <<: B     There is a single path of descent from A and B is on it.
+  A >>: B     There is a single path of descent from B and A is on it.
+  A . B       A immediately precedes B.
+  A , B       A immediately follows B.
+  A .. B      A precedes B.
+  A ,, B      A follows B.
+  A $ B       A is a sister of B (and A != B).
+  A $. B      A is a sister of and immediately precedes B.
+  A $, B      A is a sister of and immediately follows B.
+  A $.. B     A is a sister of and precedes B.
+  A $,, B     A is a sister of and follows B.
+  A = B       A is also matched by B.
+"""|e }}</pre></div>
+<div id=result>
+{%- block result %}{% endblock -%}
+</div></div></body>

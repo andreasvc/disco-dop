@@ -4,19 +4,29 @@ Expects a series of grammars in subdirectories of grammar/ """
 # - shortest derivation, SL-DOP, MPSD, &c.
 # - arbitrary configuration of CTF stages;
 #   should become class also used by runexp.py & parser.py
-import os, re, cgi, sys, glob, gzip, heapq, time, string, random, codecs, logging
+import os
+import re
+import cgi
+import glob
+import gzip
+import heapq
+import time
+import string
+import random
+import codecs
+import logging
 from functools import wraps
 from operator import itemgetter
 from flask import Flask, Markup, request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 
-from discodop import treetransforms, disambiguation, coarsetofine,\
+from discodop import treetransforms, disambiguation, coarsetofine, \
 		lexicon, pcfg, plcfrs
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.containers import Grammar
 
-app = Flask(__name__)
+APP = Flask(__name__)
 morphtags = re.compile(
 		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 limit = 40 # maximum sentence length
@@ -25,12 +35,12 @@ grammars = {}
 backtransforms = {}
 knownwords = {}
 
-@app.route('/')
+@APP.route('/')
 def main():
 	""" Serve the main form. """
-	return render_template('form.html', result=Markup(parse()))
+	return render_template('parse.html', result=Markup(parse()))
 
-@app.route('/parse')
+@APP.route('/parse')
 def parse():
 	""" Parse sentence and return a textual representation of a parse tree,
 	in a HTML fragment. To be invoked by an AJAX call."""
@@ -48,7 +58,7 @@ def parse():
 		return "no parse!\n"
 	(parsetrees, fragments, elapsed, msg1, msg2, msg3) = result
 	tree, prob = parsetrees[0]
-	app.logger.info('[%g] %s' % (prob, tree))
+	APP.logger.info('[%g] %s' % (prob, tree))
 	tree = morphtags.sub(r'(\1\2', tree)
 	tree = Tree.parse(tree, parse_leaf=int)
 	treetransforms.unbinarize(tree)
@@ -72,13 +82,13 @@ def parse():
 			'10 most probable parse trees:',
 			'\n'.join('%d. [p=%g] %s' % (n + 1, prob, cgi.escape(tree))
 				for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
-	return render_template('parse.html', sent=sent, result=result,
+	return render_template('parsetree.html', sent=sent, result=result,
 			frags=frags, nbest=nbest, info=info, randid=randid())
 
-@app.route('/favicon.ico')
+@APP.route('/favicon.ico')
 def favicon():
 	""" Serve the favicon. """
-	return send_from_directory(os.path.join(app.root_path, 'static'),
+	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 def loadgrammars():
@@ -87,7 +97,7 @@ def loadgrammars():
 		return
 	for folder in glob.glob('grammars/*/'):
 		_, lang = os.path.split(os.path.dirname(folder))
-		app.logger.info('Loading grammar %r', lang)
+		APP.logger.info('Loading grammar %r', lang)
 		grammarlist = []
 		for stagename in ('pcfg', 'plcfrs', 'dop'):
 			rules = gzip.open("%s/%s.rules.gz" % (folder, stagename)).read()
@@ -114,20 +124,20 @@ def loadgrammars():
 		grammars[lang] = grammarlist
 		knownwords[lang] = {w for w in grammars[lang][0].lexical
 				if not w.startswith("UNK")}
-		app.logger.info('Grammar for %s loaded.' % lang)
+		APP.logger.info('Grammar for %s loaded.' % lang)
 
 def cached(timeout=3600):
-	def decorator(f):
-		f.cache = SimpleCache()
-		@wraps(f)
+	def decorator(func):
+		func.cache = SimpleCache()
+		@wraps(func)
 		def decorated_function(*args, **kwargs):
 			cache_key = args
-			rv = f.cache.get(cache_key)
-			if rv is not None:
-				return rv
-			rv = f(*args, **kwargs)
-			f.cache.set(cache_key, rv, timeout=timeout)
-			return rv
+			result = func.cache.get(cache_key)
+			if result is not None:
+				return result
+			result = func(*args, **kwargs)
+			func.cache.set(cache_key, result, timeout=timeout)
+			return result
 		return decorated_function
 	return decorator
 
@@ -159,7 +169,7 @@ def getparse(senttok, objfun, marg):
 		elapsed.append(time.clock() - begin)
 		begin = time.clock()
 	else:
-		app.logger.warning('stage 1 fail')
+		APP.logger.warning('stage 1 fail')
 	if start:
 		whitelist, items = coarsetofine.prunechart(
 				chart, start, grammar[1], grammar[2],
@@ -174,7 +184,7 @@ def getparse(senttok, objfun, marg):
 		elapsed.append(time.clock() - begin)
 		begin = time.clock()
 	else:
-		app.logger.warning('stage 2 fail')
+		APP.logger.warning('stage 2 fail')
 	if start:
 		parsetrees, msg3 = disambiguation.marginalize(objfun, chart,
 				start, grammar[2], 10000,
@@ -187,7 +197,7 @@ def getparse(senttok, objfun, marg):
 		return (heapq.nlargest(10, parsetrees.items(), key=itemgetter(1)),
 				fragments, elapsed, msg1, msg2, msg3)
 	else:
-		app.logger.warning('stage 3 fail')
+		APP.logger.warning('stage 3 fail')
 		return 'no parse'
 
 def randid():
@@ -227,14 +237,14 @@ def tokenize(text):
 def guesslang(sent):
 	""" simple heuristic: language that contains most words from input. """
 	lang = max(knownwords, key=lambda x: len(knownwords[x] & set(sent)))
-	app.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
+	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
 
 if __name__ == '__main__':
 	logging.basicConfig()
-	for log in (logging.getLogger(), app.logger):
+	for log in (logging.getLogger(), APP.logger):
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 	loadgrammars()
-	app.run(debug=False, host='0.0.0.0')
+	APP.run(debug=False, host='0.0.0.0')
