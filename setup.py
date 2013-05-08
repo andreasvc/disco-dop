@@ -16,7 +16,7 @@ metadata = dict(name='disco-dop',
 				'Development Status :: 4 - Beta',
 				'Environment :: Console',
 				'Environment :: Web Environment',
-				'Intended audiencie :: Science/Research',
+				'Intended Audience :: Science/Research',
 				'License :: OSI Approved :: GNU General Public License (GPL)',
 				'Operating System :: POSIX',
 				'Programming Language :: Python :: 2',
@@ -28,9 +28,8 @@ metadata = dict(name='disco-dop',
 				'numpy',
 		],
 		packages=['discodop'],
-		package_data={'discodop': ['sample.prm', 'proper.prm']},
 		scripts=['bin/discodop'],
-		test_suite = 'discodop.tests.test'
+		#test_suite = 'tests'
 )
 
 # some of these directives increase performance,

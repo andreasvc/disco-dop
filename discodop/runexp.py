@@ -167,7 +167,7 @@ def main(
 	else:
 		assert not os.path.exists(resultdir), (
 			"Directory %r exists.\n"
-			"Use --rerun to parse with existing grammar"
+			"Use --rerun to parse with existing grammar "
 			"and overwrite previous results." % resultdir)
 		os.mkdir(resultdir)
 

@@ -1,5 +1,5 @@
-recursive-include discodop *
+include README.rst LICENSE setup.py *.prm
+recursive-include discodop *.py *.pyx *.pxd *.h
+recursive-exclude discodop *.c
 recursive-include web *
-include README.rst
-include LICENSE
-include setup.py
+recursive-exclude web/grammars *
