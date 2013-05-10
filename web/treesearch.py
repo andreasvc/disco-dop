@@ -77,18 +77,18 @@ def cached(timeout=3600):
 def main():
 	""" Main search form & results page. """
 	output = None
-	if 'output' in request.args:
-		output = request.args['output']
-	elif request.path != '/':
+	if request.path != '/':
 		output = request.path.lstrip('/')
+	elif 'output' in request.args:
+		output = request.args['output']
 	texts, selected = selectedtexts(request.args)
 	if output:
 		if output not in DISPATCH:
 			return 'Invalid argument', 404
 		return Response(stream_template('searchresults.html', form=request.args,
-				texts=texts, selectedtexts=selected,
-				output=output, results=DISPATCH[output](request.args)))
-	return render_template('search.html', form=request.args,
+				texts=texts, selectedtexts=selected, output=output,
+				results=DISPATCH[output](request.args)))
+	return render_template('search.html', form=request.args, output='counts',
 			texts=texts, selectedtexts=selected)
 
 @APP.route('/style')
@@ -104,7 +104,8 @@ def style():
 			files = glob.glob('corpus/*.t2c.gz')
 			yield ("No .txt files found in corpus/\n"
 					"Using sentences extracted from parse trees.\n"
-					"Text files with original formatting are preferrable.\n\n")
+					"Supply text files with original formatting\n"
+					"to get meaningful paragraph information.\n\n")
 		for a in files:
 			if a.endswith('.t2c.gz'):
 				tgrep = subprocess.Popen(args=['tgrep2', '-t', '-c', a, '*'],
@@ -117,7 +118,8 @@ def style():
 				stdin = None
 			proc = subprocess.Popen(args=cmd, shell=False, stdin=stdin,
 					stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-			yield "%s\n%s\n%s\n\n" % (os.path.basename(a), '=' * len(a),
+			name = os.path.basename(a)
+			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name),
 					proc.communicate()[0])
 	resp = Response(generate(), mimetype='text/plain')
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
@@ -167,15 +169,15 @@ def counts(form):
 	sumtotal = 0
 	norm = form.get('norm', 'sents')
 	gotresult = False
-	for n, (text, results, stderr) in enumerate(
-			doqueries(form, lines=False)):
+	for n, (text, results, stderr) in enumerate(doqueries(form, lines=False)):
 		if n == 0:
-			gotresult = True
 			yield ("Query: %s\n"
 					"NB: the counts reflect the total number of "
 					"times a pattern matches for each tree.\n\n"
 					"Counts:\n" % stderr)
 		cnt = results.count('\n')
+		if cnt:
+			gotresult = True
 		text = text.replace('.t2c.gz', '')
 		filename = os.path.join(CORPUS_DIR, text)
 		cnts[text] = cnt
@@ -207,14 +209,13 @@ def counts(form):
 				data=repr(dict(cnts)), sortedcounts=sortedcounts,
 				maxcounts=maxcounts, relfreq=repr(relfreq),
 				sortedrelfreq=sortedrelfreq)
-	else:
-		yield 'no results.'
 
 def trees(form):
 	""" Return visualization of parse trees in search results. """
 	# TODO:
 	# - allow to view context of x number of sentences.
 	# - paginate to more than 10 matching trees per text
+	gotresults = False
 	for n, (text, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
@@ -222,6 +223,7 @@ def trees(form):
 					"Trees (showing up to 10 per text):\n" % stderr)
 		for m, line in enumerate(islice(results, 10)):
 			if m == 0:
+				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
 			lineno, text, treestr, match = line.split(":::")
@@ -250,9 +252,12 @@ def trees(form):
 				line = "%s\n%s\n" % (lineno, treerepr)
 			yield Markup(line)
 		yield "</span>"
+	if not gotresults:
+		yield "No matches."
 
 def sents(form, dobrackets=False):
 	""" Return search results as terminals or in bracket notation. """
+	gotresults = False
 	for n, (text, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
@@ -260,6 +265,7 @@ def sents(form, dobrackets=False):
 					"Trees (showing up to 1000 per text):\n" % stderr)
 		for m, line in enumerate(islice(results, 1000)):
 			if m == 0:
+				gotresults = True
 				yield ("%s: [<a href=\"javascript: toggle('n%d'); \">toggle</a>]"
 						"<ol id=n%d>" % (text, n, n))
 			lineno, text, treestr, match = line.rstrip().split(":::")
@@ -278,6 +284,8 @@ def sents(form, dobrackets=False):
 						' '.join(GETLEAVES.findall(post)))
 			yield "<li>%s [%s] %s" % (lineno.rjust(6), link, Markup(out))
 		yield "</ol>"
+	if not gotresults:
+		yield "No matches."
 
 def brackets(form):
 	""" Wrapper. """

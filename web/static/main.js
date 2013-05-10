@@ -1,10 +1,9 @@
 function toggle(id) {
     var el = document.getElementById(id);
-    if (el.style.display == 'none') {
+    if (el.style.display == 'none')
         el.style.display = 'block';
-    } else {
+    else
         el.style.display = 'none';
-	}
 }
 
 function togglelink(id) {
@@ -17,6 +16,18 @@ function togglelink(id) {
         el.style.display = 'none';
 		link.innerHTML = 'show' + link.innerHTML.substring(4);
 	}
+}
+
+function show(id) {
+    var el = document.getElementById(id);
+    if (el.style.visibility != 'visible')
+        el.style.visibility = 'visible';
+}
+
+function hide(id) {
+    var el = document.getElementById(id);
+    if (el.style.visibility != 'hidden')
+        el.style.visibility = 'hidden';
 }
 
 function placeFocus() {

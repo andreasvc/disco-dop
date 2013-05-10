@@ -63,30 +63,33 @@ span.tt { font-family: monospace; }
     </td><td></td></tr>
     <tr><td>Output:</td>
     <td><label><input type=radio name=output value=counts{{
-		' checked' if output == 'counts' }}>Counts;</label>
+		' checked' if output == 'counts' }} onChange="show('normrow'); hide('labelrow'); " >Counts;</label>
+    <label><input type=radio name=output value=sents{{
+		' checked' if output == 'sents' }} onChange="hide('normrow'); hide('labelrow'); ">
+		Matching sentences (words only);</label>
     <label><input type=radio name=output value=trees{{
-		' checked' if output in ('trees', None) }}>Draw matching trees;</label>
-    <label><input type=radio name=output value=brackets{{
-		' checked' if output == 'brackets' }}>
-		Matches in bracket notation;</label>
+		' checked' if output == 'trees' }} onChange="hide('normrow'); show('labelrow'); ">Draw matching trees;</label>
     </td><td></td></tr>
     <tr><td></td><td>
-    <label><input type=radio name=output value=sents{{
-		' checked' if output == 'sents' }}>
-		Matching sentences (words only);</label>
+    <label><input type=radio name=output value=brackets{{
+		' checked' if output == 'brackets' }}  onChange="hide('normrow'); show('labelrow'); ">
+		Matches in bracket notation;</label>
     <label><input type=radio name=output value=export{{
-		' checked' if output == 'export' }}>
+		' checked' if output == 'export' }}  onChange="hide('normrow'); hide('labelrow'); ">
 		Export all matching trees as text file;</label><br>
     </td><td></td></tr>
-    <tr><td>Normalization:</td>
+    <tr id=normrow><td>Normalization:</td>
     <td><label><input type=radio name=norm value=sents{{
-		' checked' if norm == 'sents' }}>Show % of Sentences;</label>
+		' checked' if form.get('norm', 'sents') == 'sents' }}>
+		Show % of Sentences;</label>
     <label><input type=radio name=norm value=consts{{
-		' checked' if norm == 'consts' }}>Show % of Constituents;</label>
+		' checked' if form.get('norm') == 'consts' }}>
+		Show % of Constituents;</label>
     <label><input type=radio name=norm value=words{{
-		' checked' if norm == 'words' }}>Show % of Words;</label>
+		' checked' if form.get('norm') == 'words' }}>
+		Show % of Words;</label>
     </td><td></td></tr>
-    <tr><td></td><td>
+    <tr id=labelrow style="visibility: hidden; "><td>Labels</td><td>
     <label><input type=checkbox name=nomorph{{
 		' checked' if 'nomorph' in form or 'query' not in form }}>
 		Hide morphology tags</label>
