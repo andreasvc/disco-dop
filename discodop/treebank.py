@@ -7,7 +7,7 @@ from glob import glob
 from itertools import count, repeat, islice
 from collections import OrderedDict, Counter as multiset
 from operator import itemgetter
-from tree import Tree, ParentedTree
+from .tree import Tree, ParentedTree
 
 FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
@@ -1024,7 +1024,7 @@ def balancedpunctraise(tree, sent):
 	... "ungewoehnliche Kombinationen .".split())
 	>>> punctraise(tree, sent)
 	>>> balancedpunctraise(tree, sent)
-	>>> from treetransforms import slowfanout
+	>>> from .treetransforms import slowfanout
 	>>> max(map(slowfanout, tree.subtrees()))
 	1
 	>>> nopunct = Tree.parse("(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 3)"
@@ -1061,7 +1061,7 @@ def balancedpunctraise(tree, sent):
 
 def puncttest():
 	""" Verify that punctuation movement does not increase fan-out. """
-	from treetransforms import slowfanout as fanout
+	from .treetransforms import slowfanout as fanout
 	filename = 'sample2.export' #'negraproc.export'
 	mangledtrees = NegraCorpusReader(".", filename, headrules=None,
 			encoding="iso-8859-1", punct="move")
@@ -1099,7 +1099,7 @@ def numbase(key):
 def main():
 	"""" Test whether the Tiger transformations (fold / unfold) are
 	reversible. """
-	from treetransforms import canonicalize
+	from .treetransforms import canonicalize
 	headrules = None #"negra.headrules"
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			headrules=headrules)

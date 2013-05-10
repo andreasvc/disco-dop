@@ -1,10 +1,10 @@
 """ Examples of various formalisms encoded in LCFRS grammars. """
 from __future__ import print_function
 from math import exp
-from tree import Tree
-import treetransforms, plcfrs, kbest
-from grammar import induce_plcfrs
-from containers import Grammar
+from . import treetransforms, plcfrs, kbest
+from .tree import Tree
+from .grammar import induce_plcfrs
+from .containers import Grammar
 
 def tree_adjoining_grammar():
 	""" Example of a tree-adjoining grammar (TAG) encoded as an LCFRS.

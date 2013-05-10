@@ -21,10 +21,10 @@ from itertools import count, repeat
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str # pylint: disable=W0622,C0103
-from tree import Tree, ImmutableTree
-from grammar import ranges
+from .tree import Tree, ImmutableTree
+from .grammar import ranges
 try:
-	from bit import fanout as bitfanout
+	from .bit import fanout as bitfanout
 except ImportError:
 	def bitfanout(arg):
 		""" Slower version. """
@@ -567,7 +567,7 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 	#do default right factored binarization instead
 	elif fanout(tree) == 1 and all(fanout(a) == 1 for a in tree):
 		return factorconstituent(tree, sep=sep, h=h)
-	from agenda import Agenda
+	from .agenda import Agenda
 	labels = [a.label for a in tree]
 	#the four main datastructures:
 	#the agenda is a priority queue of partial binarizations to explore
@@ -869,8 +869,8 @@ class OrderedSet(Set):
 def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
 	to the complexities of right-to-left binarizations. """
-	from treebank import NegraCorpusReader
 	import time
+	from .treebank import NegraCorpusReader
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			punct="move", headrules=None, headfinal=True, headreverse=False)
 	total = violations = violationshd = 0
@@ -915,7 +915,7 @@ def testminbin():
 def testsplit():
 	"""" Verify that splitting and merging discontinuties gives the
 	same trees for a treebank"""
-	from treebank import NegraCorpusReader
+	from .treebank import NegraCorpusReader
 	correct = wrong = 0
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
 	for tree in n.parsed_sents().values():
@@ -936,7 +936,7 @@ def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
-	from treebank import getreader, writetree, readheadrules
+	from .treebank import getreader, writetree, readheadrules
 	flags = ('markorigin', 'markheads', 'morphaspos')
 	options = ('factor=', 'headrules=', 'markorigin=', 'inputfmt=',
 			'outputfmt=', 'inputenc=', 'outputenc=', 'slice=', 'punct=',

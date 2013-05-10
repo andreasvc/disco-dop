@@ -19,7 +19,7 @@ metadata = dict(name='disco-dop',
 				'Intended Audience :: Science/Research',
 				'License :: OSI Approved :: GNU General Public License (GPL)',
 				'Operating System :: POSIX',
-				'Programming Language :: Python :: 2',
+				'Programming Language :: Python',
 				'Programming Language :: Python :: 3',
 				'Programming Language :: Cython',
 				'Topic :: Text Processing :: Linguistic'],
@@ -29,7 +29,6 @@ metadata = dict(name='disco-dop',
 		],
 		packages=['discodop'],
 		scripts=['bin/discodop'],
-		#test_suite = 'tests'
 )
 
 # some of these directives increase performance,
@@ -52,9 +51,10 @@ if __name__ == '__main__':
 			cmdclass = dict(build_ext=build_ext),
 			ext_modules = cythonize(
 					'discodop/*.pyx',
-					nthreads=4,
+					#nthreads=4,
 					annotate=True,
 					compiler_directives=directives,
 					#language_level=3, # FIXME make this work ...
 			),
+			#test_suite = 'tests'
 			**metadata)

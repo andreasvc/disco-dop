@@ -326,7 +326,7 @@ class Tree(list):
 		@param parentchar: A string used to separate the node
 			representation from its vertical annotation
 		@type  parentchar: string """
-		from treetransforms import binarize
+		from .treetransforms import binarize
 		binarize(self, factor, horzmarkov, vertmarkov + 1, childchar,
 				parentchar)
 
@@ -351,7 +351,7 @@ class Tree(list):
 		@param unarychar: A string joining two non-terminals in a unary
 			production (default = "+")
 		@type  unarychar: string """
-		from treetransforms import unbinarize
+		from .treetransforms import unbinarize
 		unbinarize(self, expandunary, childchar, parentchar, unarychar)
 
 	def collapse_unary(self, collapsepos=False, collapseroot=False,
@@ -374,7 +374,7 @@ class Tree(list):
 		@param joinchar: A string used to connect collapsed node values
 			(default = "+")
 		@type  joinchar: string """
-		from treetransforms import collapse_unary
+		from .treetransforms import collapse_unary
 		collapse_unary(self, collapsepos, collapseroot, joinchar)
 
 	#////////////////////////////////////////////////////////////
@@ -639,7 +639,7 @@ class Tree(list):
 			return '%s%r%s %s%s' % (parens[0], self.label, labelsep,
 									" ".join(childstrs), parens[1])
 	def draw(self):
-		from treedraw import DrawTree
+		from .treedraw import DrawTree
 		return DrawTree(self, self.leaves()).text()
 
 class ImmutableTree(Tree):

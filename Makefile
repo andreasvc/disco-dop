@@ -4,7 +4,8 @@ all:
 .PHONY: clean test debug testdebug lint
 
 clean:
-	rm -f discodop/*.c discodop/*.so
+	rm -rf build/
+	cd discodop; rm -rf *.c *.so *.html *.pyc __pycache__
 
 test: all sample2.export
 	rm -rf sample/
@@ -16,7 +17,10 @@ test3: sample2.export
 	PYTHONIOENCODING=utf-8 python3 -bb -tt tests.py
 
 sample2.export:
-	wget http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/TIGERCorpus/annotation/sample2.export
+	# kludge to restore original encoding & strip spurious HTML sent by server
+	curl http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/TIGERCorpus/annotation/sample2.export \
+	| iconv --from-code=utf8 --to-code=iso8859-1 \
+	| sed -e 's/\(<[^>]*>\)\+//' > sample2.export
 
 debug:
 	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb

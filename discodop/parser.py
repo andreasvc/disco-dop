@@ -5,12 +5,12 @@ from math import exp
 from getopt import gnu_getopt, GetoptError
 from heapq import nlargest
 from operator import itemgetter
-import plcfrs, pcfg
-from grammar import FORMAT
-from containers import Grammar
-from kbest import lazykbest
-from coarsetofine import prunechart
-from disambiguation import marginalize
+from . import plcfrs, pcfg
+from .grammar import FORMAT
+from .containers import Grammar
+from .kbest import lazykbest
+from .coarsetofine import prunechart
+from .disambiguation import marginalize
 
 USAGE = """
 usage: %s [options] rules lexicon [input [output]]

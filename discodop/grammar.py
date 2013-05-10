@@ -6,7 +6,7 @@ from math import exp
 from fractions import Fraction
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
-from tree import ImmutableTree, Tree, DiscTree
+from .tree import ImmutableTree, Tree, DiscTree
 if sys.version[0] >= '3':
 	from functools import reduce # pylint: disable=W0622
 	unicode = str # pylint: disable=W0622,C0103
@@ -418,7 +418,7 @@ def new_flatten(tree, sent, ids):
 	#(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 	#'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
 	#['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
-	from treetransforms import factorconstituent, addbitsets
+	from .treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
@@ -530,7 +530,7 @@ def flatten(tree, sent, ids):
 	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
 	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
 	(S|<VAFIN> {1}))') """
-	from treetransforms import factorconstituent, addbitsets
+	from .treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
@@ -783,7 +783,7 @@ def grammarinfo(grammar, dump=None):
 	""" print(some statistics on a grammar, before it goes through Grammar().)
 	dump: if given a filename, will dump distribution of parsing complexity
 	to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120 times, etc. """
-	from eval import mean
+	from .eval import mean
 	lhs = {rule[0] for (rule, yf), w in grammar}
 	l = len(grammar)
 	result = "labels: %d" % len({rule[a] for (rule, yf), w in grammar
@@ -821,15 +821,14 @@ def grammarinfo(grammar, dump=None):
 
 def test():
 	""" Run some tests. """
-	from treetransforms import unbinarize, removefanoutmarkers
-	from treebank import NegraCorpusReader
-	import plcfrs
-	from treetransforms import addfanoutmarkers
-	from disambiguation import recoverfragments
-	from kbest import lazykbest
-	from agenda import getkey
-	from fragments import getfragments
-	from containers import Grammar
+	from . import plcfrs
+	from .treebank import NegraCorpusReader
+	from .treetransforms import unbinarize, removefanoutmarkers, addfanoutmarkers
+	from .disambiguation import recoverfragments
+	from .kbest import lazykbest
+	from .agenda import getkey
+	from .fragments import getfragments
+	from .containers import Grammar
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
@@ -900,10 +899,10 @@ def main():
 	"""" Command line interface to create grammars from treebanks. """
 	import gzip
 	from getopt import gnu_getopt, GetoptError
-	from treetransforms import addfanoutmarkers, canonicalize
-	from treebank import getreader
-	from fragments import getfragments
-	from containers import Grammar
+	from .treetransforms import addfanoutmarkers, canonicalize
+	from .treebank import getreader
+	from .fragments import getfragments
+	from .containers import Grammar
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
 	flags = ("gzip", "freqs", "packed")

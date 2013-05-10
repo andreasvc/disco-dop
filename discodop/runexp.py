@@ -16,28 +16,27 @@ from operator import itemgetter
 from subprocess import Popen, PIPE
 from fractions import Fraction
 from math import exp
-from tree import Tree
 import numpy as np
-from treebank import getreader, fold, writetree, FUNC
-from treetransforms import binarize, unbinarize, optimalbinarize, \
+from .tree import Tree
+from .treebank import getreader, fold, writetree, FUNC
+from .treetransforms import binarize, unbinarize, optimalbinarize, \
 		splitdiscnodes, mergediscnodes, canonicalize, \
 		addfanoutmarkers, removefanoutmarkers, addbitsets, fastfanout
-from fragments import getfragments
-from estimates import getestimates, getpcfgestimates
-from grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
+from .fragments import getfragments
+from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
 		write_lcfrs_grammar, defaultparse
-from lexicon import getunknownwordmodel, getlexmodel, \
+from .lexicon import getunknownwordmodel, getlexmodel, \
 		smoothlexicon, simplesmoothlexicon, replacerarewords, \
 		unknownword4, unknownword6, unknownwordbase
-from containers import Grammar
-import plcfrs, pcfg
-from coarsetofine import prunechart, whitelistfromposteriors
-from disambiguation import marginalize, viterbiderivation
-from eval import doeval, readparam, strbracketings, transform, \
+from .eval import doeval, readparam, strbracketings, transform, \
 		bracketings, precision, recall, f_measure, accuracy
+from . import plcfrs, pcfg
+from .estimates import getestimates, getpcfgestimates
+from .containers import Grammar
+from .coarsetofine import prunechart, whitelistfromposteriors
+from .disambiguation import marginalize, viterbiderivation
 
-USAGE = """Usage: %s --test | [--rerun] parameter file
---test	run tests on all modules
+USAGE = """Usage: %s [--rerun] parameter file
 If a parameter file is given, an experiment is run. See the file sample.prm
 for an example parameter file. To repeat an experiment with an existing grammar,
 pass the option --rerun.""" % sys.argv[0]
@@ -1145,9 +1144,6 @@ def dispatch(argv):
 	""" Parse command line arguments. """
 	if len(argv) == 1:
 		print(USAGE)
-	elif '--test' in argv:
-		import tests
-		tests.test()
 	elif '--tepacoc' in argv:
 		parsetepacoc()
 	else:

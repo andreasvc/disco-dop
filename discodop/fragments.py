@@ -14,8 +14,8 @@ from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
-from treetransforms import binarize, introducepreterminals
-from _fragments import extractfragments, fastextractfragments, \
+from .treetransforms import binarize, introducepreterminals
+from ._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
 
 USAGE = """Fast Fragment Seeker
@@ -410,7 +410,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 		pool.join()
 		del pool
 	if iterate: # optionally collect fragments of fragments
-		from tree import Tree
+		from .tree import Tree
 		logging.info("extracting fragments of recurring fragments")
 		PARAMS['complement'] = False #needs to be turned off if it was on
 		newfrags = fragments

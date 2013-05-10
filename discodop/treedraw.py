@@ -10,7 +10,7 @@ from __future__ import division, print_function, unicode_literals
 import sys
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
-from tree import Tree
+from .tree import Tree
 if sys.version[0] >= '3':
 	basestring = str # pylint: disable=W0622,C0103
 
