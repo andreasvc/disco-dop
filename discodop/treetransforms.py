@@ -16,11 +16,12 @@ r""" This file contains three main transformations:
 # For license information, see LICENSE.TXT
 
 from __future__ import print_function
-import re, sys
+import re
+import sys
 from itertools import count, repeat
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
-	basestring = str # pylint: disable=W0622,C0103
+	basestring = str  # pylint: disable=W0622,C0103
 from .tree import Tree, ImmutableTree
 from .grammar import ranges
 try:
@@ -164,7 +165,7 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 
 	# A semi-hack to have elegant looking code below.  As a result, any subtree
 	# with a branching factor greater than 999 will be incorrectly truncated.
-	if horzmarkov == None:
+	if horzmarkov is None:
 		horzmarkov = 999
 
 	# Traverse tree depth-first keeping a list of ancestor nodes to the root.
@@ -221,7 +222,7 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 			if factor == "right":
 				start = 0
 				end = min(1, horzmarkov) if reverse else horzmarkov
-			else: # factor == "left"
+			else:  # factor == "left"
 				start = ((numchildren - min(1, horzmarkov))
 						if reverse else horzmarkov)
 				end = numchildren
@@ -248,7 +249,7 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 						start = i
 						end = i + horzmarkov
 					curnode[:] = [childnodes.pop(0), newnode]
-				else: # factor == "left":
+				else:  # factor == "left":
 					start = headidx + numchildren - i - 1
 					end = start + horzmarkov
 					curnode[:] = [newnode, childnodes.pop()]
@@ -269,6 +270,7 @@ def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
 			curnode.extend(childnodes)
 	return tree
 
+
 def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 		unarychar="+"):
 	""" Restore a binarized tree to the original n-ary tree.
@@ -278,7 +280,7 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 	# increase robustness
 	childchar += "<"
 	parentchar += "<"
-	treeclass =  tree.__class__
+	treeclass = tree.__class__
 	# Traverse the tree-depth first keeping a pointer to the parent for
 	# modification purposes.
 	agenda = [(tree, [])]
@@ -312,6 +314,7 @@ def unbinarize(tree, expandunary=True, childchar="|", parentchar="^",
 			for child in node:
 				agenda.append((child, parent))
 	return tree
+
 
 def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar="+"):
 	""" Collapse subtrees with a single child (i.e., unary productions)
@@ -353,6 +356,7 @@ def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar="+"):
 					agenda.append(child)
 	return tree
 
+
 def introducepreterminals(tree, ids=None):
 	""" Introduce preterminals with artificial POS-tags where needed
 	(i.e., for every terminal with siblings.)
@@ -374,6 +378,7 @@ def introducepreterminals(tree, ids=None):
 					node.label if ids is None else next(ids), child), [child])
 	return tree
 
+
 def getbits(bitset):
 	""" Iterate over the indices of set bits in a bitset. """
 	n = 0
@@ -385,6 +390,7 @@ def getbits(bitset):
 		bitset >>= 1
 		n += 1
 
+
 def slowfanout(tree):
 	""" Get the fan-out of a constituent. Slow because call to leaves() is
 	recursive and not cached. """
@@ -393,6 +399,7 @@ def slowfanout(tree):
 	else:
 		return 1
 
+
 def fastfanout(tree):
 	""" Get the fan-out of a constituent. Requires the presence of a bitset
 	attribute. """
@@ -400,10 +407,12 @@ def fastfanout(tree):
 
 fanout = fastfanout
 
+
 def complexity(tree):
 	""" The degree of the time complextiy of parsing with this rule.
 	Cf. Gildea (2011). """
 	return fanout(tree) + sum(map(fanout, tree))
+
 
 def complexityfanout(tree):
 	""" Combination of complexity and fan-out, where the latter is used
@@ -411,11 +420,13 @@ def complexityfanout(tree):
 	return (fanout(tree) + sum(map(fanout, tree)),
 			fanout(tree))
 
+
 def fanoutcomplexity(tree):
 	""" Combination of fan-out and complexity, where the latter is used
 	to break ties in the former. """
 	return (fanout(tree),
 			fanout(tree) + sum(map(fanout, tree)))
+
 
 def addbitsets(tree):
 	""" Turn tree into an ImmutableTree and add a bitset attribute to each
@@ -431,6 +442,7 @@ def addbitsets(tree):
 	for a in result.subtrees():
 		a.bitset = sum(1 << n for n in a.leaves())
 	return result
+
 
 def getyf(left, right):
 	""" Given two trees with bitsets, return a string representation of
@@ -455,6 +467,7 @@ def getyf(left, right):
 	#result = ['0' if lpos < rpos else '1']
 	# etc.
 	return ''.join(result)
+
 
 def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2):
@@ -493,7 +506,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		for i in rng:
 			newbitset = node[i].bitset | prev.bitset
 			if factor == 'right' and (ids is None or i > 1):
-				key = '-'.join(child.label for child in node[i:i+h])
+				key = '-'.join(child.label for child in node[i:i + h])
 				if markyf:
 					key += getyf(node[i], prev)
 				if ids is not None:
@@ -520,6 +533,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		result.bitset = (node[0].bitset if factor == 'right'
 				else node[-1].bitset) | prev.bitset
 	return result
+
 
 def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 	""" Implementation of Gildea (2010): Optimal parsing strategies for
@@ -655,6 +669,7 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 				agenda[p2] = workingset[p2] = x2
 	raise ValueError
 
+
 def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1):
 	""" Recursively binarize a tree optimizing for complexity.
 	v=0 is not implemented.
@@ -666,17 +681,19 @@ def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1):
 			a.sort(key=lambda x: x.leaves())
 	return recbinarizetree(addbitsets(tree), sep, headdriven, h or 999, v, ())
 
+
 def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
 	""" postorder / bottom-up binarization """
 	if not isinstance(tree, Tree):
 		return tree
-	parentstr = "^<%s>" % ("-".join(ancestors[:v-1])) if v > 1 else ""
+	parentstr = '^<%s>' % ('-'.join(ancestors[:v - 1])) if v > 1 else ''
 	newtree = ImmutableTree(tree.label + parentstr,
 		[recbinarizetree(t, sep, headdriven, h, v, (tree.label,) + ancestors)
-				for t in tree])
+			for t in tree])
 	newtree.bitset = tree.bitset
 	return minimalbinarization(newtree, complexityfanout, sep,
 		parentstr=parentstr, h=h, head=(len(tree) - 1) if headdriven else None)
+
 
 def disc(node):
 	""" Test whether a particular node is locally discontinuous, i.e., whether
@@ -685,6 +702,7 @@ def disc(node):
 	if not isinstance(node, Tree):
 		return False
 	return len(list(ranges(sorted(node.leaves())))) > 1
+
 
 def addfanoutmarkers(tree):
 	""" Modifies tree so that the label of each node with a fanout > 1 contains
@@ -696,11 +714,13 @@ def addfanoutmarkers(tree):
 			st.label += "_%d" % thisfanout
 	return tree
 
+
 def removefanoutmarkers(tree):
 	""" Remove fanout marks. """
 	for a in tree.subtrees(lambda x: "_" in x.label):
 		a.label = a.label.rsplit("_", 1)[0]
 	return tree
+
 
 def postorder(tree, f=None):
 	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
@@ -713,11 +733,13 @@ def postorder(tree, f=None):
 	if not f or f(tree):
 		yield tree
 
+
 def canonicalize(tree):
 	""" canonical linear precedence (of first component of each node) order """
 	for a in postorder(tree, lambda n: isinstance(n[0], Tree)):
 		a.sort(key=lambda n: n.leaves())
 	return tree
+
 
 def canonicalized(tree):
 	""" canonical linear precedence (of first component of each node) order.
@@ -728,6 +750,7 @@ def canonicalized(tree):
 	if len(children) > 1:
 		children.sort(key=lambda n: n.leaves())
 	return Tree(tree.label, children)
+
 
 def contsets(nodes):
 	""" partition children into continuous subsets
@@ -751,6 +774,7 @@ def contsets(nodes):
 		rng = a
 	if subset:
 		yield subset
+
 
 def splitdiscnodes(tree, markorigin=False):
 	""" Boyd (2007): Discontinuity revisited.
@@ -779,6 +803,8 @@ def splitdiscnodes(tree, markorigin=False):
 	return canonicalize(tree)
 
 splitlabel = re.compile(r"(.*)\*([0-9]*)$")
+
+
 def mergediscnodes(tree):
 	""" Reverse transformation of splitdiscnodes()
 
@@ -824,6 +850,7 @@ def mergediscnodes(tree):
 				merge[nextlabel].append(merge[child.label].pop(0))
 	return tree
 
+
 class OrderedSet(Set):
 	""" A frozen, ordered set which maintains a regular list/tuple and set.
 	The set is indexable. Equality is defined _without_ regard for order. """
@@ -834,27 +861,36 @@ class OrderedSet(Set):
 		else:
 			self.seq = ()
 			self.theset = frozenset()
+
 	def __hash__(self):
 		return hash(self.theset)
+
 	def __contains__(self, value):
 		return value in self.theset
+
 	def __len__(self):
 		return len(self.theset)
+
 	def __iter__(self):
 		return iter(self.seq)
+
 	def __getitem__(self, n):
 		return self.seq[n]
+
 	def __reversed__(self):
 		return reversed(self.seq)
+
 	def __repr__(self):
 		if not self.seq:
 			return '%s()' % self.__class__.__name__
 		return '%s(%r)' % (self.__class__.__name__, self.seq)
+
 	def __eq__(self, other):
 		#if isinstance(other, (OrderedSet, Sequence)):
 		#	return len(self) == len(other) and list(self) == list(other)
 		# equality is defined _without_ regard for order
 		return self.theset == set(other)
+
 	def __and__(self, other):
 		""" maintain the order of the left operand. """
 		if not isinstance(other, Iterable):
@@ -912,6 +948,7 @@ def testminbin():
 			violations, total, violationshd, total))
 	assert violations == violationshd == 0
 
+
 def testsplit():
 	"""" Verify that splitting and merging discontinuties gives the
 	same trees for a treebank"""
@@ -927,10 +964,12 @@ def testsplit():
 	print("correct", correct, "=", 100 * correct / total, "%")
 	print("wrong", wrong, "=", 100 * wrong / total, "%")
 
+
 def test():
 	""" Run all examples. """
 	testminbin()
 	testsplit()
+
 
 def main():
 	""" Command line interface for applying tree(bank) transforms. """
@@ -1017,9 +1056,9 @@ def main():
 			outfile.writelines(block for block in corpus.blocks().values())
 		else:
 			outfile.writelines(writetree(*x) for x in zip(
-						trees, sents, keys,
-						repeat(opts.get('--outputfmt', 'export')),
-						repeat(headrules)))
+					trees, sents, keys,
+					repeat(opts.get('--outputfmt', 'export')),
+					repeat(headrules)))
 
 if __name__ == '__main__':
 	main()

@@ -6,6 +6,7 @@ import re
 from collections import defaultdict, Counter as multiset
 from fractions import Fraction
 
+
 def replacerarewords(tagged_sents, unknownword, unknownthreshold,
 		wordcounts, openclasstags):
 	""" Replace all terminals that occur less than unknownthresh
@@ -15,6 +16,7 @@ def replacerarewords(tagged_sents, unknownword, unknownthreshold,
 			if tag in openclasstags and wordcounts[word] <= unknownthreshold
 			else word for n, (word, tag) in enumerate(sent)]
 			for sent in tagged_sents]
+
 
 def getunknownwordmodel(tagged_sents, unknownword,
 		unknownthreshold=4, openclassthreshold=50):
@@ -62,6 +64,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			openclasswords, tags, wordtags,
 			wordsig, wordclasstag), msg
 
+
 def simplesmoothlexicon(grammar, lexmodel,
 		epsilon=Fraction(1, 100), normalize=False):
 	""" introduce lexical productions for unobserved combinations of
@@ -83,12 +86,13 @@ def simplesmoothlexicon(grammar, lexmodel,
 		epsilon1 = epsilon / tags[tag]
 		for word in {'UNK'} | openclasswords - wordsfortag[tag]:
 			grammar.append((((tag, 'Epsilon'), (word, )), epsilon1))
-	if normalize: # normalize weights
+	if normalize:  # normalize weights
 		mass = multiset()
 		for (r, _), w in grammar:
 			mass[r[0]] += w
 		return [(r, w / mass[r[0][0]]) for r, w in grammar]
 	return grammar
+
 
 def getlexmodel(wordclass, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags, wordsig, wordclasstag,
@@ -116,7 +120,7 @@ def getlexmodel(wordclass, words, lexicon, wordsfortag, openclasstags,
 	P_word = defaultdict(int)
 	for word in words:
 		P_word[word] = Fraction(words[word], wordstotal)
-	P_tagwordclass = defaultdict(Fraction) #??
+	P_tagwordclass = defaultdict(Fraction)  # ??
 	for wclass in wordclass:
 		P_tagwordclass[tag, wclass] = Fraction(P_tag[tag],
 				Fraction(wordclass[wclass], wordclasstotal))
@@ -143,6 +147,7 @@ def getlexmodel(wordclass, words, lexicon, wordsfortag, openclasstags,
 		#		word, tag, P_wordtag[wordorclass, tag])
 	msg = "(word, tag) pairs in model: %d" % len(P_tagword)
 	return P_wordtag, msg
+
 
 def smoothlexicon(grammar, P_wordtag):
 	""" Replace lexical probabilities using given unknown word model.
@@ -173,13 +178,15 @@ hasupper = re.compile(u'[a-z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
 		u'\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
 hasletter = re.compile(u'[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
 		u'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
-		u'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]' , re.UNICODE)
+		u'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
 # Cf. http://en.wikipedia.org/wiki/French_alphabet
 LOWER = (u'abcdefghijklmnopqrstuvwxyz\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
 		u'\xeb\xef\xfc\xff\u0153\xe6')
 UPPER = (u'ABCDEFGHIJKLMNOPQRSTUVWXYZ\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb'
 		u'\xcb\xcf\xdc\u0178\u0152\xc6')
 LOWERUPPER = LOWER + UPPER
+
+
 def unknownword6(word, loc, lexicon):
 	""" Model 6 of the Stanford parser (for WSJ treebank). """
 	wlen = len(word)
@@ -213,6 +220,7 @@ def unknownword6(word, loc, lexicon):
 				sig += "-%s" % a
 	return sig
 
+
 def unknownword4(word, loc, lexicon):
 	""" Model 4 of the Stanford parser. Relatively language agnostic. """
 	sig = "UNK"
@@ -230,7 +238,7 @@ def unknownword4(word, loc, lexicon):
 	elif hasletter.search(word):
 		sig += "-U"
 	else:
-		sig += "-S" # no letter
+		sig += "-S"  # no letter
 
 	# digits
 	if hasdigit.search(word):
@@ -250,6 +258,7 @@ def unknownword4(word, loc, lexicon):
 		if word[-1] in LOWERUPPER:
 			sig += "-%s" % word[-1].lower()
 	return sig
+
 
 def unknownwordbase(word, loc, lexicon):
 	""" BaseUnknownWordModel of the Stanford parser.
@@ -289,8 +298,8 @@ adjsuffix = re.compile(u"(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
 		u"|ible|atif|ique|if|ive|eux|aise|ent|ois|oise|ante|el|elle|ente|oire"
 		u"|ain|aine)s?$")
 possibleplural = re.compile(u"(s|ux)$")
-verbsuffix = re.compile(u"(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras|é|és|ées"
-		u"|isse|it)$")
+verbsuffix = re.compile(u"(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras"
+		u"|é|és|ées|isse|it)$")
 advsuffix = re.compile("(iment|ement|emment|amment)$")
 haspunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
@@ -298,6 +307,7 @@ haspunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 ispunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
 		u"\u20A0-\u20B5])+$")
+
 
 def unknownwordftb(word, loc, lexicon):
 	""" Model 2 for French of the Stanford parser. """

@@ -1,7 +1,9 @@
 """ Generate random sentences with an LCFRS. Reads grammar from a
 text file. """
 from __future__ import print_function
-import sys, gzip, codecs
+import sys
+import gzip
+import codecs
 from collections import namedtuple, defaultdict
 from array import array
 from random import random
@@ -20,6 +22,7 @@ Rule = namedtuple("Rule",
 		('lhs', 'rhs1', 'rhs2', 'args', 'lengths', 'prob', 'no'))
 LexicalRule = namedtuple("LexicalRule",
 		('lhs', 'rhs1', 'rhs2', 'word', 'prob', 'no'))
+
 
 def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 	""" generate a random sentence in top-down fashion.
@@ -52,6 +55,7 @@ def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 	else:
 		return (p1 * rule.prob, l1)
 
+
 def chooserule(rules, discount, prodcounts):
 	""" given a list of objects with probabilities,
 	choose one according to that distribution."""
@@ -62,6 +66,7 @@ def chooserule(rules, discount, prodcounts):
 		if position < 0:
 			return r
 	raise ValueError
+
 
 def compose(rule, left, right, verbose):
 	""" Combine the results of two generated non-terminals into a single
@@ -82,6 +87,7 @@ def compose(rule, left, right, verbose):
 		print(result)
 	return (rule.prob * p1 * p2, result)
 
+
 def parsefrac(a):
 	""" Parse a string of a fraction into a float ('1/2' => 0.5).
 	Substitute for creating Fraction objects (which is slow). """
@@ -89,6 +95,7 @@ def parsefrac(a):
 	if n == -1:
 		return float(a)
 	return float(a[:n]) / float(a[n + 1:])
+
 
 def read_lcfrs_grammar(rules, lexicon):
 	""" Reads a grammar as produced by write_lcfrs_grammar from two file
@@ -101,6 +108,7 @@ def read_lcfrs_grammar(rules, lexicon):
 			for lexentry in (a.strip().split() for a in lexicon)
 			for t, p in zip(lexentry[1::2], lexentry[2::2])]
 	return grammar
+
 
 def read_bitpar_grammar(rules, lexicon):
 	""" Read a bitpar grammar given two file objects. Must be a binarized
@@ -143,6 +151,7 @@ def read_bitpar_grammar(rules, lexicon):
 		return [(rule, p / ntfd[rule[0][0]]) for rule, p in grammar]
 	else:
 		return grammar
+
 
 def splitgrammar(rules):
 	""" split the grammar into various lookup tables, mapping nonterminal
@@ -196,6 +205,7 @@ def splitgrammar(rules):
 	#assert 0 not in grammar.fanout[1:]
 	return grammar
 
+
 def yfarray(yf):
 	""" convert a yield function represented as a 2D sequence to an array
 	object. """
@@ -207,21 +217,23 @@ def yfarray(yf):
 	vecsize = 8 * array(vectype).itemsize
 	assert len(yf) <= lensize
 	assert all(len(a) <= vecsize for a in yf)
-	initializer = [sum(2**n*b for n, b in enumerate(a)) for a in yf]
+	initializer = [sum(2 ** n * b for n, b in enumerate(a)) for a in yf]
 	return array(vectype, initializer), array(lentype, map(len, yf))
+
 
 def arraytoyf(args, lengths):
 	""" Inverse of yfarray(). """
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
 							for n, a in zip(lengths, args))
 
+
 def test():
 	""" Demonstration on an example grammar. """
 	rules = [
-		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )),  1),
-		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 1./2),
-		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 1./2),
-		((('VP2', 'VP2'), ((0, ), (0, ))), 1./10),
+		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )), 1),
+		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 1. / 2),
+		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 1. / 2),
+		((('VP2', 'VP2'), ((0, ), (0, ))), 1. / 10),
 		((('PROAV', 'Epsilon'), ('Darueber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
 		((('VMFIN', 'Epsilon'), ('muss', )), 1),
@@ -229,6 +241,7 @@ def test():
 	grammar = splitgrammar(rules)
 	_, sent = gen(grammar, start=grammar.toid['S'], verbose=True)
 	print(" ".join(sent.pop()))
+
 
 def main():
 	""" Load a grammar from a text file and generate 20 sentences. """

@@ -9,7 +9,11 @@ you want to abort, kill the program manually (e.g., press Ctrl-Z and issue
 (pass --numproc 1) to see if there might be a bug. """
 
 from __future__ import division, print_function
-import io, os, re, sys, logging
+import io
+import os
+import re
+import sys
+import logging
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
@@ -31,7 +35,7 @@ Output is sent to stdout; to save the results, redirect to a file.
               where "tree' has indices as leaves, referring to elements of
               "sentence", a space separated list of words.
 --indices     report sets of indices instead of frequencies.
---cover       include all `cover' fragments corresponding to single productions.
+--cover       include `cover' fragments corresponding to single productions.
 --complete    find complete matches of fragments from treebank1 (needle) in
               treebank2 (haystack).
 --batch dir   enable batch mode; any number of treebanks > 1 can be given;
@@ -54,6 +58,9 @@ FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
 		'disc', 'quiet', 'debug', 'quadratic', 'cover', 'alt')
 OPTIONS = ('numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
+FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
+TERMRE = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
+
 
 def main(argv=None):
 	""" Command line interface to fragment extraction. """
@@ -114,6 +121,7 @@ def main(argv=None):
 		fragmentkeys, counts = regular(args, numproc, limit, encoding)
 		printfragments(fragmentkeys, counts)
 
+
 def regular(filenames, numproc, limit, encoding):
 	""" non-batch processing. multiprocessing optional. """
 	mult = 1
@@ -127,7 +135,7 @@ def regular(filenames, numproc, limit, encoding):
 	if numproc == 1:
 		mymap = map
 		myapply = lambda x, y: x(*y)
-	else: # multiprocessing, start worker processes
+	else:  # multiprocessing, start worker processes
 		pool = Pool(processes=numproc, initializer=initworker,
 			initargs=(filenames[0],
 				filenames[1] if len(filenames) == 2 else None, limit, encoding))
@@ -188,6 +196,7 @@ def regular(filenames, numproc, limit, encoding):
 		del dowork, pool
 	return fragmentkeys, counts
 
+
 def batch(outputdir, filenames, limit, encoding):
 	""" batch processing: three or more treebanks specified.
 	The use case for this is when you have one big treebank which you want to
@@ -235,6 +244,7 @@ def batch(outputdir, filenames, limit, encoding):
 		printfragments(fragmentkeys, counts, out=out)
 		logging.info("wrote to %s", outputfilename)
 
+
 def readtreebanks(treebank1, treebank2=None, discontinuous=False,
 		limit=0, encoding="utf-8"):
 	""" Read one or two treebanks.  """
@@ -250,6 +260,7 @@ def readtreebanks(treebank1, treebank2=None, discontinuous=False,
 	return dict(trees1=trees1, sents1=sents1, trees2=trees2, sents2=sents2,
 		prods=prods, labels=labels)
 
+
 def read2ndtreebank(treebank2, labels, prods, discontinuous=False,
 	limit=0, encoding="utf-8"):
 	""" Read a second treebank.  """
@@ -260,6 +271,7 @@ def read2ndtreebank(treebank2, labels, prods, discontinuous=False,
 			treebank2, len(trees2), trees2.numnodes, trees2.maxnodes,
 			len(set(PARAMS['labels'])), len(PARAMS['prods']))
 	return dict(trees2=trees2, sents2=sents2, prods=prods, labels=labels)
+
 
 def initworker(treebank1, treebank2, limit, encoding):
 	""" Read treebanks for this worker. We do this separately for each process
@@ -282,11 +294,13 @@ def initworker(treebank1, treebank2, limit, encoding):
 	logging.info("%s labels: %d, prods: %d", m, len(set(PARAMS['labels'])),
 		len(PARAMS['prods']))
 
+
 def initworkersimple(trees, sents, trees2=None, sents2=None):
 	""" A simpler initialization for a worker in which a treebank has already
 	been loaded. """
 	PARAMS.update(getctrees(trees, sents, trees2, sents2))
 	assert PARAMS['trees1']
+
 
 def worker(interval):
 	""" Worker function that initiates the extraction of fragments
@@ -310,6 +324,7 @@ def worker(interval):
 	logging.info("finished %d--%d", offset, end)
 	return result
 
+
 def exactcountworker(args):
 	""" Worker function that initiates the counting of fragments
 	in each process. """
@@ -325,6 +340,7 @@ def exactcountworker(args):
 		logging.info("exact counts %d of %d", n + 1, m)
 	return results
 
+
 def coverfragworker():
 	""" Worker function that gets depth-1 fragments. Does not need
 	multiprocessing but using it avoids reading the treebank again. """
@@ -333,6 +349,7 @@ def coverfragworker():
 	return coverbitsets(trees1, PARAMS['sents1'], PARAMS['labels'],
 			max(trees1.maxnodes, (trees2 or trees1).maxnodes),
 			PARAMS['disc'])
+
 
 def workload(numtrees, mult, numproc):
 	""" Get an even workload. When n trees are compared against themselves,
@@ -360,6 +377,7 @@ def workload(numtrees, mult, numproc):
 		result.append((last, numtrees))
 	return result
 
+
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 		indices=False):
 	""" Get recurring fragments with exact counts in a single treebank. """
@@ -367,7 +385,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 		numproc = cpu_count()
 	numtrees = len(trees)
 	assert numtrees
-	mult = 1 #3 if numproc > 1 else 1
+	mult = 1  # 3 if numproc > 1 else 1
 	fragments = {}
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
@@ -409,14 +427,14 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 		pool.close()
 		pool.join()
 		del pool
-	if iterate: # optionally collect fragments of fragments
+	if iterate:  # optionally collect fragments of fragments
 		from .tree import Tree
 		logging.info("extracting fragments of recurring fragments")
-		PARAMS['complement'] = False #needs to be turned off if it was on
+		PARAMS['complement'] = False  # needs to be turned off if it was on
 		newfrags = fragments
 		trees, sents = None, None
 		ids = count()
-		for _ in range(10): # up to 10 iterations
+		for _ in range(10):  # up to 10 iterations
 			newtrees = [binarize(
 					introducepreterminals(Tree.parse(tree, parse_leaf=int),
 					ids=ids), childchar="}") for tree, _ in newfrags]
@@ -437,11 +455,12 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 	logging.info("found %d fragments", len(fragmentkeys))
 	return dict(zip(fragmentkeys, counts))
 
+
 def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	""" Get fragments of fragments. """
 	numtrees = len(newtrees)
 	assert numtrees
-	if numproc == 1: # set fragments as input
+	if numproc == 1:  # set fragments as input
 		initworkersimple(newtrees, newsents, trees, sents)
 		mymap = map
 	else:
@@ -475,8 +494,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 		del pool
 	return newkeys, counts
 
-FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
-TERMRE = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
+
 def altrepr(a):
 	""" Alternative format
 	Replace double quotes with double single quotes: " -> ''
@@ -487,6 +505,7 @@ def altrepr(a):
 	'(NP (DT "a") NN)'
 	"""
 	return FRONTIERRE.sub(r'\1', TERMRE.sub(r'(\1 "\2")', a.replace('"', "''")))
+
 
 def printfragments(fragments, counts, out=sys.stdout):
 	""" Dump fragments to standard output or some other file object. """
@@ -513,7 +532,7 @@ def printfragments(fragments, counts, out=sys.stdout):
 			if PARAMS['alt']:
 				a = altrepr(a)
 			if len(theindices) > threshold:
-				out.write("%s\t%r\n" % ( ("%s\t%s" % (a[0],
+				out.write("%s\t%r\n" % (("%s\t%s" % (a[0],
 					" ".join("%s" % x if x else "" for x in a[1])))
 					if PARAMS['disc'] else a.decode('utf-8'),
 					list(sorted(theindices.elements()))))
@@ -531,6 +550,7 @@ def printfragments(fragments, counts, out=sys.stdout):
 		elif threshold:
 			raise ValueError("invalid fragment--frequency=1: %r" % a)
 			#logging.warning("invalid fragment--frequency=1: %r", a)
+
 
 def test():
 	""" Simple test. """

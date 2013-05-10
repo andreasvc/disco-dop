@@ -1,6 +1,13 @@
 """ Simple command line interface to parse with grammar(s) in text format.  """
 from __future__ import print_function
-import io, os, re, sys, time, gzip, codecs, string # pylint: disable=W0402
+import io
+import os
+import re
+import sys
+import time
+import gzip
+import codecs
+import string  # pylint: disable=W0402
 from math import exp
 from getopt import gnu_getopt, GetoptError
 from heapq import nlargest
@@ -36,6 +43,7 @@ through indices pointing to words in the original sentence.
 
 %s
 """ % (sys.argv[0], sys.argv[0], FORMAT)
+
 
 def main():
 	""" Handle command line arguments. """
@@ -81,6 +89,7 @@ def main():
 		ctf(coarse, fine, bitpar, infile, out, k, prob, threshold,
 				"--mpd" in opts)
 
+
 def simple(grammar, ispcfg, infile, out, k, printprob):
 	""" Parse with a single grammar. """
 	times = [time.clock()]
@@ -104,7 +113,7 @@ def simple(grammar, ispcfg, infile, out, k, printprob):
 					for tree, prob in derivations)
 			else:
 				out.writelines("%s\n" % tree for tree, _ in derivations)
-		elif True: # baseline parse:
+		elif True:  # baseline parse:
 			out.write("(NP %s)\n" % "".join("(%s %s)" % (a, a) for a in sent))
 		#else:
 		#	out.write("No parse for \"%s\"\n" % " ".join(sent))
@@ -118,12 +127,13 @@ def simple(grammar, ispcfg, infile, out, k, printprob):
 	print("finished", file=sys.stderr)
 	out.close()
 
+
 def ctf(coarse, fine, ispcfg, infile, out, k, printprob, threshold, mpd):
 	""" Do coarse-to-fine parsing with two grammars.
 	Assumes state splits in fine grammar are marked with '@'; e.g., 'NP@2'.
 	Sums probabilities of derivations producing the same tree. """
-	m = 10000 # number of derivations from fine grammar to marginalize
-	maxlen = 999 #65
+	m = 10000  # number of derivations from fine grammar to marginalize
+	maxlen = 999  # 65
 	unparsed = 0
 	times = [time.clock()]
 
@@ -156,7 +166,7 @@ def ctf(coarse, fine, ispcfg, infile, out, k, printprob, threshold, mpd):
 			print(msg, file=sys.stderr)
 
 			assert start, (
-				"sentence covered by coarse grammar could not be parsed "\
+				"sentence covered by coarse grammar could not be parsed "
 				"by fine grammar")
 			print("disambiguating ...", file=sys.stderr, end='')
 			parsetrees, msg = marginalize("mpd" if mpd else "mpp", chart,

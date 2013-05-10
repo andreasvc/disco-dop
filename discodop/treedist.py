@@ -21,13 +21,13 @@ modification, are permitted provided that the following conditions are met:
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
 # andreasvc:
 # - modified to work with NLTK Tree objects.
 # - added implementation as in Billie (2005), which records edit script.
@@ -36,26 +36,34 @@ from __future__ import division, print_function
 from collections import deque
 from .tree import Tree
 
+
 class Terminal:
 	""" Auxiliary class to be able to add indices to terminal nodes of NLTK
 	trees. """
 	def __init__(self, node):
 		self.prod = self.label = node
+
 	def __repr__(self):
 		return repr(self.label)
+
 	def __hash__(self):
 		return hash(self.label)
+
 	def __iter__(self):
 		return iter(())
+
 	def __len__(self):
 		return 0
+
 	def __index__(self):
 		return self.label
+
 	def __getitem__(self, val):
 		if isinstance(val, slice):
 			return ()
 		else:
 			raise IndexError("A terminal has zero children.")
+
 
 def prepare(tree, includeterms=False):
 	""" Copy a tree object; sort children to have canonical order; merge
@@ -73,12 +81,13 @@ def prepare(tree, includeterms=False):
 			del tree[a]
 	return tree
 
+
 # begin Zhang-Shasha Tree Edit Distance Implementation.
 class AnnotatedTree:
 	""" Wrap a tree to add some extra information. """
 	def __init__(self, root):
 		self.root = root
-		self.nodes = [] # a pre-order enumeration of the nodes in the tree
+		self.nodes = []  # a pre-order enumeration of the nodes in the tree
 		self.leftmostdescendents = []  # left most descendents
 		self.keyroots = None
 		# k and k' are nodes specified in the pre-order enumeration.
@@ -117,9 +126,11 @@ class AnnotatedTree:
 			i += 1
 		self.keyroots = sorted(keyroots.values())
 
+
 def strdist(a, b):
 	""" Default categorical distance function. """
 	return 0 if a == b else 1
+
 
 def treedist(tree1, tree2, debug=False):
 	""" Zhang-Shasha tree edit distance. """
@@ -139,24 +150,24 @@ def treedist(tree1, tree2, debug=False):
 			ioff = tree1lmd[i] - 1
 			joff = tree2lmd[j] - 1
 
-			for x in range(1, m): # δ(l(i1)..i, θ) = δ(l(1i)..1-1, θ) + γ(v → λ)
+			for x in range(1, m):  # δ(l(i1)..i, θ) = δ(l(1i)..1-1, θ) + γ(v → λ)
 				table[x, 0] = table[x - 1, 0] + 1
-			for y in range(1, n): # δ(θ, l(j1)..j) = δ(θ, l(j1)..j-1) + γ(λ → w)
+			for y in range(1, n):  # δ(θ, l(j1)..j) = δ(θ, l(j1)..j-1) + γ(λ → w)
 				table[0, y] = table[0, y - 1] + 1
 
 			for x in range(1, m):
 				for y in range(1, n):
 					# only need to check if x is an ancestor of i
 					# and y is an ancestor of j
-					if (tree1lmd[i] == tree1lmd[x+ioff]
-							and tree2lmd[j] == tree2lmd[y+joff]):
+					if (tree1lmd[i] == tree1lmd[x + ioff]
+							and tree2lmd[j] == tree2lmd[y + joff]):
 						#                 +-
 						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
 						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
 						#                 | δ(l(i1)..i-1, l(j1)..j-1) + γ(v → w)
 						#                 +-
 						labeldist = strdist(tree1nodes[x + ioff].label,
-								tree2nodes[y+joff].label)
+								tree2nodes[y + joff].label)
 						table[x, y] = min(table[x - 1, y] + 1,
 								table[x, y - 1] + 1,
 								table[x - 1, y - 1] + labeldist)
@@ -175,12 +186,12 @@ def treedist(tree1, tree2, debug=False):
 								table[a, b] + treedists[x + ioff, y + joff])
 		if debug:
 			if isinstance(tree1nodes[i], Tree):
-				astr = tree1nodes[i].label #pprint()
+				astr = tree1nodes[i].label  # pprint()
 			else:
 				astr = str(tree1nodes[i])
 			j = treedists[i].argmin()
 			if isinstance(tree2nodes[j], Tree):
-				bstr = tree2nodes[j].label #pprint()
+				bstr = tree2nodes[j].label  # pprint()
 			else:
 				bstr = str(tree2nodes[j])
 			if treedists[i, j]:
@@ -205,21 +216,26 @@ def newtreedist(tree1, tree2, debug=False):
 		print(result)
 	return result.distance
 
+
 class EditStats(object):
 	""" Collect edit operations on a tree. """
 	__slots__ = ('distance', 'matched', 'editscript')
+
 	def __init__(self, distance=0, matched=0, editscript=None):
 		if editscript is None:
 			editscript = ()
 		self.distance = distance
 		self.matched = matched
 		self.editscript = editscript
+
 	def __add__(self, other):
 		return EditStats(self.distance + other.distance,
 			self.matched + other.matched,
 			self.editscript + other.editscript)
+
 	def __lt__(self, other):
 		return self.distance < other.distance
+
 	def __repr__(self):
 		return "%s(distance=%d, matched=%d, [\n\t%s])" % (
 				self.__class__.__name__, self.distance, self.matched,
@@ -229,6 +245,7 @@ class EditStats(object):
 					"%s[%d]" % (a[2].label, a[2].idx)
 						if isinstance(a[2], Tree) else a[2])
 					for a in self.editscript))
+
 
 def geteditstats(forest1, forest2):
 	""" Recursively get edit distance. """
@@ -245,8 +262,8 @@ def geteditstats(forest1, forest2):
 			result = EditStats(0, 0, ())
 		else:
 			tmp = geteditstats(flatforest1, ())
-			result =  EditStats(tmp.distance + 1, tmp.matched,
-				(('D', forest1[-1], None),) + tmp.editscript)
+			result = EditStats(tmp.distance + 1, tmp.matched,
+				(('D', forest1[-1], None), ) + tmp.editscript)
 	elif forest1 == ():
 		tmp = geteditstats((), flatforest2)
 		result = EditStats(tmp.distance + 1, tmp.matched,
@@ -273,6 +290,7 @@ def geteditstats(forest1, forest2):
 	geteditstats.mem[forest1, forest2] = result
 	return result
 geteditstats.mem = {}
+
 
 def main():
 	""" Simple demonstration. """

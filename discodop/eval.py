@@ -6,7 +6,7 @@ from getopt import gnu_getopt, GetoptError
 from itertools import count
 from collections import defaultdict, Counter as multiset
 if sys.version[0] >= '3':
-	from itertools import zip_longest # pylint: disable=E0611
+	from itertools import zip_longest  # pylint: disable=E0611
 else:
 	from itertools import izip_longest as zip_longest
 
@@ -64,6 +64,7 @@ HEADER = """
 ______________________________________________________________________________\
 """
 
+
 def main():
 	""" Command line interface for evaluation. """
 	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
@@ -106,6 +107,7 @@ def main():
 			parses.parsed_sents(),
 			parses.tagged_sents(),
 			param))
+
 
 def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 	""" Do the actual evaluation on given parse trees and parameters.
@@ -234,7 +236,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			sum(gbrack.values()),
 			sum(cbrack.values()),
 			len(gpos),
-			sum(1 for a, b in zip(gpos, cpos) if a==b),
+			sum(1 for a, b in zip(gpos, cpos) if a == b),
 			nozerodiv(lambda: accuracy(gpos, cpos)),
 			100 * lascores[-1],
 			str(ted).rjust(3) if param["TED"] else "",
@@ -268,8 +270,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 					# use original sentences because we don't delete
 					# punctuation for dependency evaluation
 					print("%15s -> %15s           %15s -> %15s" % (
-						gold_sents[n][a-1][0], gold_sents[n][b-1][0],
-						cand_sents[n][c-1][0], cand_sents[n][d-1][0]))
+						gold_sents[n][a - 1][0], gold_sents[n][b - 1][0],
+						cand_sents[n][c - 1][0], cand_sents[n][d - 1][0]))
 	breakdowns(param, goldb40, candb40, goldpos40, candpos40, goldbcat40,
 			candbcat40, maxlenseen)
 	msg = summary(param, goldb, candb, goldpos, candpos, sentcount,
@@ -277,6 +279,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
 			exact40, lascores40, dicenoms40, dicedenoms40, golddep40, canddep40)
 	return msg
+
 
 def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		maxlenseen):
@@ -348,6 +351,7 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 				print()
 		print()
 
+
 def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		exact, lascores, dicenoms, dicedenoms, golddep, canddep,
 		goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
@@ -364,9 +368,9 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 			"longest sentence:          %6d" % (maxlenseen)]
 		if gdiscbrackets or discbrackets:
 			msg.extend(["gold brackets (disc.):     %6d (%d)" % (
-					len(goldb), gdiscbrackets),
-				"cand. brackets (disc.):    %6d (%d)" % (
-					len(candb), discbrackets)])
+						len(goldb), gdiscbrackets),
+					"cand. brackets (disc.):    %6d (%d)" % (
+						len(candb), discbrackets)])
 		else:
 			msg.extend(["gold brackets:             %6d" % len(goldb),
 				"cand. brackets:            %6d" % len(candb)])
@@ -436,6 +440,7 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 			nozerodiv(lambda: accuracy(goldpos, candpos))))
 	return "\n".join(msg)
 
+
 def readparam(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
 	param = defaultdict(list)
@@ -479,6 +484,7 @@ def readparam(filename):
 					for x in eqclass}
 	return param
 
+
 def transitiveclosure(eqpairs):
 	""" Transitive closure of (undirected) EQ relations with DFS;
 	i.e., given a sequence of pairs denoting an equivalence relation,
@@ -508,6 +514,7 @@ def transitiveclosure(eqpairs):
 			agenda.update(edges[eqelem] - seen)
 	return eqclasses
 
+
 def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 		stripfunctions):
 	""" Apply the transformations according to the parameter file,
@@ -527,14 +534,14 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 					b.label = b.label[:x]
 			b.label = eqlabel.get(b.label, b.label)
 			if not b:
-				a.pop(n)  #remove empty nodes
+				a.pop(n)  # remove empty nodes
 			elif isinstance(b[0], Tree):
 				if b.label in dellabel:
 					# replace phrasal node with its children
 					# (must remove nodes from b first because ParentedTree)
 					bnodes = b[:]
 					b[:] = []
-					a[n:n+1] = bnodes
+					a[n:n + 1] = bnodes
 			elif gpos[b[0]] in dellabel or sent[b[0]] in delword:
 				# remove pre-terminal entirely, but only look at gold tree,
 				# to ensure the sentence lengths stay the same
@@ -568,6 +575,7 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 			"duplicate index in tree:\n%s" % tree)
 		a.indices = tuple(sorted(indices))
 
+
 def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	""" Return the labeled set of bracketings for a tree:
 	for each nonterminal node, the set will contain a tuple with the label and
@@ -594,9 +602,10 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	"""
 	return multiset((a.label if labeled else "", a.indices)
 			for a in tree.subtrees()
-				if a and isinstance(a[0], Tree) # nonempty and not a preterminal
+				if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
 					and a.label not in dellabel
 					and (not disconly or disc(a)))
+
 
 def strbracketings(brackets):
 	""" Return a string with a concise representation of a bracketing.
@@ -609,6 +618,7 @@ def strbracketings(brackets):
 	return ", ".join("%s[%s]" % (a, ",".join(
 		"-".join(str(y) for y in sorted(set(x)))
 		for x in intervals(sorted(b)))) for a, b in sorted(brackets))
+
 
 def leafancestorpaths(tree, dellabel):
 	""" Generate a list of ancestors for each leaf node in a tree. """
@@ -646,10 +656,12 @@ def leafancestorpaths(tree, dellabel):
 		thislevel = nextlevel
 	return paths
 
+
 def pathscore(gold, cand):
 	""" Get edit distance for two leaf-ancestor paths. """
 	return 1.0 - (edit_distance(cand, gold)
 					/ max(len(gold) + len(cand), 1))
+
 
 def leafancestor(goldtree, candtree, dellabel):
 	""" Geoffrey Sampson, Anna Babarcz (2003):
@@ -657,6 +669,7 @@ def leafancestor(goldtree, candtree, dellabel):
 	gold = leafancestorpaths(goldtree, dellabel)
 	cand = leafancestorpaths(candtree, dellabel)
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
+
 
 def treedisteval(a, b, includeroot=False, debug=False):
 	""" Get tree-distance for two trees and compute the Dice normalization. """
@@ -669,6 +682,7 @@ def treedisteval(a, b, includeroot=False, debug=False):
 	#if not includepreterms:
 	#	denom -= len(a.leaves() + b.leaves())
 	return ted, denom
+
 
 # If the goldfile contains n constituents for the same span, and the parsed
 # file contains m constituents with that nonterminal, the scorer works as
@@ -686,12 +700,14 @@ def recall(reference, candidate):
 	return sum(min(reference[a], candidate[a])
 			for a in reference & candidate) / sum(reference.values())
 
+
 def precision(reference, candidate):
 	""" Get precision score for two multisets. """
 	if not candidate:
 		return float('nan')
 	return sum(min(reference[a], candidate[a])
 			for a in reference & candidate) / sum(candidate.values())
+
 
 def f_measure(reference, candidate, alpha=0.5):
 	""" Get F-measure of precision and recall for two multisets.
@@ -702,6 +718,7 @@ def f_measure(reference, candidate, alpha=0.5):
 		return float('nan')
 	return 1.0 / (alpha / p + (1 - alpha) / r)
 
+
 def accuracy(reference, candidate):
 	""" Given a sequence of reference values and a corresponding sequence of
 	test values, return the fraction of corresponding values that are equal.
@@ -711,6 +728,7 @@ def accuracy(reference, candidate):
 		"Sequences must have the same length.")
 	return sum(1 for a, b in zip(reference, candidate)
 			if a == b) / len(reference)
+
 
 def harmean(seq):
 	""" Compute harmonic mean of a sequence of non-zero numbers. """
@@ -724,6 +742,7 @@ def harmean(seq):
 		return float('nan')
 	return numerator / denominator
 
+
 def mean(seq):
 	""" Compute arithmetic mean of a sequence. """
 	numerator = denominator = 0
@@ -734,12 +753,14 @@ def mean(seq):
 		return float('nan')
 	return numerator / denominator
 
+
 def splitpath(path):
 	""" Split path into a pair of (directory, filename). """
 	if "/" in path:
 		return path.rsplit("/", 1)
 	else:
 		return ".", path
+
 
 def intervals(seq):
 	""" Partition seq into a sequence of intervals corresponding to contiguous
@@ -760,6 +781,7 @@ def intervals(seq):
 	if start is not None:
 		yield start, prev
 
+
 def disc(node):
 	""" This function evaluates whether a particular node is locally
 	discontinuous. The root node will, by definition, be continuous.
@@ -776,6 +798,7 @@ def disc(node):
 		else:
 			return True
 	return False
+
 
 def nozerodiv(a):
 	""" Convenience function to catch zero division or None as a result,
@@ -807,12 +830,13 @@ def edit_distance(seq1, seq2):
 
 	# iterate over the array
 	for i in range(len1):
-		for j in range (len2):
-			a = lev[i][j + 1] + 1               # skipping seq1[i]
-			b = lev[i][j] + (seq1[i] != seq2[j]) # matching seq1[i] with seq2[j]
-			c = lev[i + 1][j] + 1               # skipping seq2[j]
+		for j in range(len2):
+			a = lev[i][j + 1] + 1               # skip seq1[i]
+			b = lev[i][j] + (seq1[i] != seq2[j])  # match seq1[i] with seq2[j]
+			c = lev[i + 1][j] + 1               # skip seq2[j]
 			lev[i + 1][j + 1] = min(a, b, c)    # pick the cheapest
 	return lev[len1][len2]
+
 
 def test():
 	""" Simple sanity check; should give 100% score on all metrics. """

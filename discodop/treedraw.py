@@ -12,7 +12,8 @@ from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from .tree import Tree
 if sys.version[0] >= '3':
-	basestring = str # pylint: disable=W0622,C0103
+	basestring = str  # pylint: disable=W0622,C0103
+
 
 class DrawTree(object):
 	""" Visualize a discontinuous tree in various formats. """
@@ -28,8 +29,10 @@ class DrawTree(object):
 		self.highlight = set()
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				tree, sent, highlight)
+
 	def __str__(self):
 		return self.text()
+
 	def __repr__(self):
 		return "\n".join("%d: coord=%r, parent=%r, node=%s" % (
 						n, self.coords[n], self.edges.get(n), self.nodes[n])
@@ -82,7 +85,7 @@ class DrawTree(object):
 					return idx, i
 				elif all(a in (None, vertline) for a in
 						row[min(children[m], key=itemgetter(1))[1]:
-								max(children[m], key=itemgetter(1))[1]+1]):
+								max(children[m], key=itemgetter(1))[1] + 1]):
 					# find free column
 					while zeroindex < j or i < scale * len(sent):
 						if scale * len(sent) > i and matrix[idx][i] is None:
@@ -102,8 +105,7 @@ class DrawTree(object):
 					"All leaves must be in the interval 0..n with n=len(sent)"
 					"\nlength: %d leaves: %r\nsent: %s" % (
 					len(sent), tree.leaves(), sent))
-		vertline = -1 # constants
-		corner = -2 #
+		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)
 		for a in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
 			a.sort(key=lambda n: min(n.leaves()))
@@ -143,7 +145,7 @@ class DrawTree(object):
 
 		for m in terminals:
 			i = int(tree[m]) * scale
-			assert matrix[0][i] == None, (
+			assert matrix[0][i] is None, (
 					matrix[0][i], m, i)
 			matrix[0][i] = ids[m]
 			nodes[ids[m]] = sent[tree[m]]
@@ -160,7 +162,7 @@ class DrawTree(object):
 			startoflevel = len(matrix)
 			matrix.append([vertline if a not in (corner, None) else None
 					for a in matrix[-1]])
-			for m in nodesatdepth: #[::-1]:
+			for m in nodesatdepth:  # [::-1]:
 				if n < depth - 1 and childcols[m]:
 					_, pivot = min(childcols[m], key=itemgetter(1))
 					if ({a[:-1] for row in matrix[:-1] for a in row[:pivot]
@@ -205,7 +207,7 @@ class DrawTree(object):
 				if isinstance(i, int) and i >= 0:
 					coords[i] = n, m
 
-		#move crossed edges last
+		# move crossed edges last
 		positions = sorted([a for level in levels.values()
 				for a in level] + preterminals,
 				key=lambda a: a[:-1] in crossed)
@@ -317,11 +319,12 @@ class DrawTree(object):
 			vertline = " | "
 			tee = 3 * horzline
 			cross = bottom = "_|_"
+
 		def crosscell(cur, x=vertline):
 			""" Overwrite center of this cell with a vertical branch. """
 			splitl = len(cur) - len(cur) // 2 - len(x) // 2 - 1
 			lst = list(cur)
-			lst[splitl:splitl+len(x)] = list(x)
+			lst[splitl:splitl + len(x)] = list(x)
 			return ''.join(lst)
 
 		result = []
@@ -338,7 +341,7 @@ class DrawTree(object):
 			maxnode[column] = max(maxnode[column], len(self.nodes[a].label
 					if isinstance(self.nodes[a], Tree) else self.nodes[a]))
 			if a not in self.edges:
-				continue # e.g. root
+				continue  # e.g. root
 			parent = self.edges[a]
 			childcols[parent].add((row, column))
 			minchildcol[parent] = min(minchildcol.get(parent, column), column)
@@ -353,7 +356,7 @@ class DrawTree(object):
 				if isinstance(node, Tree):
 					text = node.label
 					n = matrix[row][col]
-					#horizontal branch towards children for this node
+					# horizontal branch towards children for this node
 					if n in minchildcol and minchildcol[n] < maxchildcol[n]:
 						i, j = minchildcol[n], maxchildcol[n]
 						a, b = (maxnode[i] + 1) // 2 - 1, maxnode[j] // 2
@@ -372,7 +375,7 @@ class DrawTree(object):
 							else:
 								line = horzline
 							branchrow[i] = line.center(maxnode[i], horzline)
-					else: #if n and n in minchildcol:
+					else:  # if n and n in minchildcol:
 						branchrow[col] = crosscell(branchrow[col])
 				else:
 					text = node
@@ -383,8 +386,8 @@ class DrawTree(object):
 						text = "<font color=%s>%s</font>" % ((nodecolor
 								if isinstance(node, Tree) else leafcolor), text)
 				noderow[col] = text
-			#for each column, if there is a node below us which has a parent
-			#above us, draw a vertical branch in that column.
+			# for each column, if there is a node below us which has a parent
+			# above us, draw a vertical branch in that column.
 			if row != max(matrix):
 				for n, (childrow, col) in self.coords.items():
 					if n > 0 and self.coords[self.edges[n]][0] < row < childrow:
@@ -484,9 +487,11 @@ class DrawTree(object):
 		result += [r"\end{tikzpicture}"]
 		return "\n".join(result)
 
+
 def htmllabel(label):
 	""" quote/format label for html """
 	return label.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
 
 def latexlabel(label):
 	""" quote/format label for latex """
@@ -502,10 +507,11 @@ def latexlabel(label):
 					cat, siblings, parents)
 		else:
 			newlabel = "$ \\textsf{%s}_\\textsf{%s} $" % (
-					cat, siblings.replace("-",","))
+					cat, siblings.replace('-', ','))
 	else:
 		newlabel = newlabel.replace("<", "$<$").replace(">", "$>$")
 	return newlabel
+
 
 def main():
 	""" Do some tests. """
