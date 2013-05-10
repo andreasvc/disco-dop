@@ -133,8 +133,8 @@ def regular(filenames, numproc, limit, encoding):
 				filenames[1] if len(filenames) == 2 else None, limit, encoding))
 		mymap = pool.imap
 		myapply = pool.apply
-	numtrees = (len(PARAMS['trees1']) if limit == 0
-			else min(len(PARAMS['trees1']), limit))
+	numtrees = (PARAMS['trees1'].len if limit == 0
+			else min(PARAMS['trees1'].len, limit))
 
 	if PARAMS['complete']:
 		fragments = completebitsets(PARAMS['trees1'], PARAMS['sents1'],
@@ -273,12 +273,12 @@ def initworker(treebank1, treebank2, limit, encoding):
 	trees1 = PARAMS['trees1']
 	assert trees1
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
-		len(trees1), trees1.numnodes, trees1.maxnodes)
+		trees1.len, trees1.numnodes, trees1.maxnodes)
 	if treebank2:
 		trees2 = PARAMS['trees2']
 		assert trees2
 		m += " treebank2: %d trees; %d nodes (max %d);" % (
-			len(trees2), trees2.numnodes, trees2.maxnodes)
+			trees2.len, trees2.numnodes, trees2.maxnodes)
 	logging.info("%s labels: %d, prods: %d", m, len(set(PARAMS['labels'])),
 		len(PARAMS['prods']))
 
@@ -296,7 +296,7 @@ def worker(interval):
 	trees2 = PARAMS['trees2']
 	sents1 = PARAMS['sents1']
 	sents2 = PARAMS['sents2']
-	assert offset < len(trees1)
+	assert offset < trees1.len
 	result = {}
 	if PARAMS['quadratic']:
 		result = extractfragments(trees1, sents1, offset, end,

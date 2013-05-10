@@ -175,7 +175,7 @@ def bitext():
 	# the grammar has been binarized and some new non-terminals had to be
 	# introduced because terminals cannot appear in binary rules.
 	lexicon = ("|", "ein", "ich", "Haus", "kleines", "grosses", "sah", "fand",
-		"small", "little", "big", "large", "house", "shell", "a", "I", "the",
+		"small", "little", "big", "large", "house", "shell", "a", "I",
 		"saw", "found")
 	another_scfg = Grammar([
 		((('ROOT','S', '_|'),  ((0,1,0),)), 1),

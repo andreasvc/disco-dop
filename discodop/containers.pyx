@@ -843,8 +843,6 @@ cdef class Ctrees:
 			self.alloc(len(trees), sum(map(len, trees)))
 			for tree in trees:
 				self.add(tree, prods)
-	def __len__(self):
-		return self.len
 	cpdef alloc(self, int numtrees, long numnodes):
 		""" Initialize an array of trees of nodes structs. """
 		self.max = numtrees

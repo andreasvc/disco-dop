@@ -38,8 +38,8 @@ cdef class Grammar:
 	cdef bint logprob
 	cdef bytes origrules
 	cdef unicode origlexicon
-	cdef public list tolabel
-	cdef public dict toid, lexical, lexicalbylhs
+	cdef readonly list tolabel
+	cdef readonly dict toid, lexical, lexicalbylhs
 	cdef _convertrules(Grammar self, list rulelines, bint bitpar)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
 	cdef rulerepr(self, Rule rule)
@@ -235,9 +235,10 @@ cdef class Ctrees:
 	cdef Node *nodes
 	cdef NodeArray *trees
 	cdef long nodesleft
-	cdef public size_t numnodes
-	cdef public short maxnodes
-	cdef int len, max
+	cdef readonly size_t numnodes
+	cdef readonly short maxnodes
+	cdef readonly int len
+	cdef int max
 	cdef list treeswithprod
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int len)

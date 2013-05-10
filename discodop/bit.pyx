@@ -1,6 +1,4 @@
-""" NB: most functions implemented in bit.pxd to facilitate function inlining.
-"""
-from __future__ import print_function
+""" NB: most functions are in bit.pxd to facilitate function inlining. """
 
 def pyintbitcount(a):
 	""" Number of set bits (1s)
@@ -86,9 +84,6 @@ cpdef int fanout(arg):
 def main():
 	cdef ULong ulongvec[2]
 	bigpyint = 0b11100110101111001101011111100110101001100110
-	print("8 * sizeof(unsigned int) ==", 8 * sizeof(unsigned int))
-	print("8 * sizeof(unsigned long) ==", 8 * sizeof(unsigned long))
-	print("8 * sizeof(unsigned long long) ==", 8 * sizeof(unsigned long long))
 	assert nextset(0b001100110, 3) == 5
 	assert nextset(0b001100110, 7) == -1
 	assert nextunset(0b001100110, 1) == 3
