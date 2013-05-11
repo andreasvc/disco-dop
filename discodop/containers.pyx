@@ -2,7 +2,8 @@
 
 from __future__ import print_function
 from io import BytesIO, StringIO
-import re, logging
+import re
+import logging
 from math import exp, log
 from collections import defaultdict
 from functools import partial
@@ -15,7 +16,8 @@ DEF SLOTS = 2
 maxbitveclen = SLOTS * sizeof(ULong) * 8
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},
-YFBINARY = re.compile(br'^(?:0|1|1?(?:01)+|0?(?:10)+)(?:,(?:0|1|1?(?:01)+|0?(?:10)+))*$')
+YFBINARY = re.compile(
+		br'^(?:0|1|1?(?:01)+|0?(?:10)+)(?:,(?:0|1|1?(?:01)+|0?(?:10)+))*$')
 YFUNARYRE = re.compile(br'^0(?:,0)*$')
 # Match when non-integral weights are present
 LCFRS_NONINT = re.compile(b"\t[0-9]+[./][0-9]+\n")
@@ -45,6 +47,7 @@ cdef class Grammar:
 	indexed in various ways. """
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
+
 	def __init__(self, rules_tuples_or_bytes=None, lexicon=None,
 			start=b"ROOT", logprob=True, bitpar=False):
 		""" Parameters:
@@ -105,6 +108,7 @@ cdef class Grammar:
 		self._indexrules(self.unary, 1, 2)
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
+
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines, bint bitpar, bytes start):
 		""" Count unary & binary rules; make a canonical list of all
@@ -112,8 +116,8 @@ cdef class Grammar:
 		Epsilon = b'Epsilon'
 		# Epsilon and the start symbol get IDs 0 and 1 respectively.
 		self.toid = {Epsilon: 0}
-		count = 2 # used to assign IDs to non-terminal labels
-		fanoutdict = {Epsilon: 0} # temporary mapping of labels to fan-outs
+		count = 2  # used to assign IDs to non-terminal labels
+		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
 		for line in rulelines:
 			if not line:
 				continue
@@ -163,6 +167,7 @@ cdef class Grammar:
 		self.tolabel = sorted(self.toid, key=self.toid.get)
 		self.nonterminals = len(self.toid)
 		return fanoutdict
+
 	def _allocate(self):
 		""" Allocate memory to store rules. """
 		# the strategy is to lay out all non-lexical rules in a contiguous array
@@ -184,6 +189,7 @@ cdef class Grammar:
 		self.rbinary[0] = &(self.lbinary[0][self.numbinary + 1])
 		self.fanout = <UChar *>malloc(sizeof(UChar) * self.nonterminals)
 		assert self.fanout is not NULL
+
 	@cython.wraparound(True)
 	cdef _convertrules(Grammar self, list rulelines, bint bitpar):
 		""" Auxiliary function to create Grammar objects. Copies grammar
@@ -229,6 +235,7 @@ cdef class Grammar:
 			assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
+
 	def _convertlexicon(self, fanoutdict):
 		""" Make objects for lexical rules. """
 		self.lexical = {}
@@ -262,6 +269,7 @@ cdef class Grammar:
 				self.lexical[word].append(lexrule)
 				self.lexicalbylhs[lexrule.lhs].append(lexrule)
 			assert self.lexical and self.lexicalbylhs, "no lexical rules found."
+
 	def _alterweights(self, bint normalize):
 		""" Normalize frequencies to relative frequencies,
 		and turn weights into negative log probabilities (both optionally).
@@ -339,6 +347,7 @@ cdef class Grammar:
 			assert cur.no < self.numrules
 		# sentinel rule
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
+
 	def buildchainvec(self):
 		""" Build a boolean matrix representing the unary (chain) rules. """
 		cdef UInt n
@@ -349,6 +358,7 @@ cdef class Grammar:
 		for n in range(self.numunary):
 			rule = self.unary[n]
 			SETBIT(self.chainvec, rule.rhs1 * self.nonterminals + rule.lhs)
+
 	def testgrammar(self, epsilon=0):
 		""" Report whether all left-hand sides sum to 1 +/-epsilon. """
 		#We could be strict about separating POS tags and phrasal categories,
@@ -371,6 +381,7 @@ cdef class Grammar:
 				return False
 		logging.info("All left hand sides sum to 1")
 		return True
+
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
 			neverblockre=None, bint splitprune=False, bint markorigin=False,
 			bint debug=False):
@@ -484,6 +495,7 @@ cdef class Grammar:
 				self.tolabel[rule.lhs], self.tolabel[rule.rhs1],
 				self.tolabel[rule.rhs2],
 				bin(rule.args), bin(rule.lengths)))
+
 	def rulesrepr(self, lhs):
 		cdef int n = 0
 		result = []
@@ -491,9 +503,11 @@ cdef class Grammar:
 			result.append(self.rulerepr(self.bylhs[lhs][n]))
 			n += 1
 		return "\n".join(result)
+
 	def __repr__(self):
 		return "%s(%r)" % (self.__class__.__name__,
 				self.origrules, self.origlexicon)
+
 	def __str__(self):
 		cdef LexicalRule lexrule
 		rules = "\n".join(filter(None,
@@ -508,9 +522,11 @@ cdef class Grammar:
 				for a, b in sorted(self.toid.items()))
 		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s" % (
 				rules, lexical, labels)
+
 	def __reduce__(self):
 		""" Helper function for pickling. """
 		return (Grammar, (self.origrules, self.origlexicon))
+
 	def __dealloc__(self):
 		if self.bylhs is NULL:
 			return
@@ -538,9 +554,11 @@ cdef class SmallChartItem:
 	def __init__(SmallChartItem self, label, vec):
 		self.label = label
 		self.vec = vec
+
 	def __hash__(SmallChartItem self):
 		# juxtapose bits of label and vec, rotating vec if > 33 words
 		return self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
+
 	def __richcmp__(SmallChartItem self, SmallChartItem other, int op):
 		if op == 2:
 			return self.label == other.label and self.vec == other.vec
@@ -554,16 +572,21 @@ cdef class SmallChartItem:
 			return self.label < other.label or self.vec < other.vec
 		elif op == 4:
 			return self.label > other.label or self.vec > other.vec
+
 	def __nonzero__(SmallChartItem self):
 		return self.label != 0 and self.vec != 0
+
 	def __repr__(self):
 		return "%s(%d, %s)" % (self.__class__.__name__,
 				self.label, self.binrepr())
+
 	def lexidx(self):
 		assert self.label == 0
 		return self.vec
+
 	def copy(SmallChartItem self):
 		return SmallChartItem(self.label, self.vec)
+
 	def binrepr(SmallChartItem self, int lensent=0):
 		return bin(self.vec)[2:].zfill(lensent)[::-1]
 
@@ -577,11 +600,12 @@ cdef class FatChartItem:
 		for n in range(sizeof(self.vec[0]), sizeof(self.vec)):
 			_hash *= 33 ^ (<UChar *>self.vec)[n]
 		return _hash
+
 	def __richcmp__(FatChartItem self, FatChartItem other, int op):
 		cdef int cmp = memcmp(<UChar *>self.vec, <UChar *>other.vec,
 			sizeof(self.vec))
 		cdef bint labelmatch = self.label == other.label
-		if   op == 2:
+		if op == 2:
 			return labelmatch and cmp == 0
 		elif op == 3:
 			return not labelmatch or cmp != 0
@@ -593,6 +617,7 @@ cdef class FatChartItem:
 			return self.label < other.label or (labelmatch and cmp < 0)
 		elif op == 4:
 			return self.label > other.label or (labelmatch and cmp > 0)
+
 	def __nonzero__(self):
 		cdef int n
 		if self.label:
@@ -600,17 +625,21 @@ cdef class FatChartItem:
 				if self.vec[n]:
 					return True
 		return False
+
 	def __repr__(self):
 		return "%s(%d, %s)" % (self.__class__.__name__,
 			self.label, self.binrepr())
+
 	def lexidx(self):
 		assert self.label == 0
 		return self.vec[0]
+
 	def copy(FatChartItem self):
 		cdef FatChartItem a = FatChartItem(self.label)
 		for n in range(SLOTS):
 			a.vec[n] = self.vec[n]
 		return a
+
 	def binrepr(FatChartItem self, lensent=0):
 		cdef int m, n = SLOTS - 1
 		cdef str result
@@ -629,9 +658,10 @@ cdef class CFGChartItem:
 		_hash ^= <ULong>self.start << 32UL
 		_hash ^= <ULong>self.end << 40UL
 		return _hash
+
 	def __richcmp__(CFGChartItem self, CFGChartItem other, int op):
 		cdef bint labelmatch = self.label == other.label
-		if   op == 2:
+		if op == 2:
 			return (labelmatch and self.start == other.start
 				and self.end == other.end)
 		elif op == 3:
@@ -653,14 +683,18 @@ cdef class CFGChartItem:
 			return self.label > other.label or (labelmatch
 			and (self.start > other.start or (
 			self.start == other.start and self.end > other.end)))
+
 	def __nonzero__(self):
 		return self.label and self.end
+
 	def __repr__(self):
 		return "%s(%d, %d, %d)" % (self.__class__.__name__,
 				self.label, self.start, self.end)
+
 	def lexidx(self):
 		assert self.label == 0
 		return self.start
+
 	def copy(CFGChartItem self):
 		return new_CFGChartItem(self.label, self.start, self.end)
 
@@ -683,6 +717,7 @@ cdef class LCFRSEdge:
 	order is determined by inside score only. """
 	def __init__(self):
 		raise NotImplementedError
+
 	def __hash__(LCFRSEdge self):
 		cdef long _hash = 0x345678UL
 		# this condition could be avoided by using a dedicated sentinel Rule
@@ -694,6 +729,7 @@ cdef class LCFRSEdge:
 		# left can be of different subtypes.
 		_hash = (1000003UL * _hash) ^ <long>self.left.__hash__()
 		return _hash
+
 	def __richcmp__(LCFRSEdge self, LCFRSEdge other, int op):
 		if op == 0:
 			return self.score < other.score
@@ -714,12 +750,14 @@ cdef class LCFRSEdge:
 			return self.score <= other.score
 		elif op == 0:
 			return self.score < other.score
+
 	def __repr__(self):
 		return "%s(%g, %g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r, %r)" % (
 				self.__class__.__name__, self.score, self.inside,
 				self.rule.prob, self.rule.args, self.rule.lengths,
 				self.rule.lhs, self.rule.rhs1, self.rule.rhs2, self.rule.no,
 				self.left, self.right)
+
 	def copy(self):
 		return new_LCFRSEdge(self.score, self.inside, self.rule,
 				self.left.copy(), self.right.copy())
@@ -729,11 +767,13 @@ cdef class CFGEdge:
 	order is determined by inside score only. """
 	def __init__(self):
 		raise NotImplementedError
+
 	def __hash__(CFGEdge self):
 		cdef long _hash = 0x345678UL
-		_hash = (1000003UL * _hash) ^ <long>self.rule #.no
+		_hash = (1000003UL * _hash) ^ <long>self.rule  # self.rule.no
 		_hash = (1000003UL * _hash) ^ <long>self.mid
 		return _hash
+
 	def __richcmp__(CFGEdge self, CFGEdge other, int op):
 		if op == 0:
 			return self.inside < other.inside
@@ -750,6 +790,7 @@ cdef class CFGEdge:
 			return self.inside <= other.inside
 		elif op == 0:
 			return self.inside < other.inside
+
 	def __repr__(self):
 		return "%s(%g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r)" % (
 			self.__class__.__name__, self.inside, self.rule.prob,
@@ -764,6 +805,7 @@ cdef class RankedEdge:
 		self.edge = edge
 		self.left = j1
 		self.right = j2
+
 	def __hash__(self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ hash(self.head)
@@ -771,6 +813,7 @@ cdef class RankedEdge:
 		_hash = (1000003UL * _hash) ^ self.left
 		_hash = (1000003UL * _hash) ^ self.right
 		return _hash
+
 	def __richcmp__(RankedEdge self, RankedEdge other, int op):
 		if op == 2 or op == 3:
 			return (op == 2) == (
@@ -779,6 +822,7 @@ cdef class RankedEdge:
 				and self.head == other.head
 				and self.edge == other.edge)
 		return NotImplemented
+
 	def __repr__(self):
 		return "%s(%r, %r, %d, %d)" % (self.__class__.__name__,
 			self.head, self.edge, self.left, self.right)
@@ -794,6 +838,7 @@ cdef class RankedCFGEdge:
 		self.edge = edge
 		self.left = j1
 		self.right = j2
+
 	def __hash__(self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ hash(self.edge)
@@ -803,6 +848,7 @@ cdef class RankedCFGEdge:
 		_hash = (1000003UL * _hash) ^ self.left
 		_hash = (1000003UL * _hash) ^ self.right
 		return _hash
+
 	def __richcmp__(RankedCFGEdge self, RankedCFGEdge other, int op):
 		if op == 2 or op == 3:
 			return (op == 2) == (
@@ -813,6 +859,7 @@ cdef class RankedCFGEdge:
 				and self.end == other.end
 				and self.edge == other.edge)
 		return NotImplemented
+
 	def __repr__(self):
 		return "%s(%r, %r, %r, %r, %d, %d)" % (self.__class__.__name__,
 			self.label, self.start, self.end, self.edge, self.left, self.right)
@@ -823,6 +870,7 @@ cdef class LexicalRule:
 		self.lhs = lhs
 		self.word = word
 		self.prob = prob
+
 	def __repr__(self):
 		return "%s%r" % (self.__class__.__name__,
 				(self.lhs, self.word, self.prob))
@@ -832,6 +880,7 @@ cdef class Ctrees:
 	Python. """
 	def __cinit__(self):
 		self.trees = self.nodes = NULL
+
 	def __init__(self, list trees=None, dict prods=None):
 		""" When trees is given, prods should be given as well.
 		When trees is not given, the alloc() method should be called and
@@ -843,6 +892,7 @@ cdef class Ctrees:
 			self.alloc(len(trees), sum(map(len, trees)))
 			for tree in trees:
 				self.add(tree, prods)
+
 	cpdef alloc(self, int numtrees, long numnodes):
 		""" Initialize an array of trees of nodes structs. """
 		self.max = numtrees
@@ -851,6 +901,7 @@ cdef class Ctrees:
 		self.nodes = <Node *>malloc(numnodes * sizeof(Node))
 		assert self.nodes is not NULL
 		self.nodesleft = numnodes
+
 	cdef realloc(self, int len):
 		""" Increase size of array (handy with incremental binarization) """
 		self.nodesleft += len
@@ -859,6 +910,7 @@ cdef class Ctrees:
 		self.nodes = <Node *>realloc(self.nodes,
 				(self.numnodes + self.nodesleft) * sizeof(Node))
 		assert self.nodes is not NULL
+
 	cpdef add(self, list tree, dict prods):
 		""" Trees can be incrementally added to the node array; useful
 		when dealing with large numbers of NLTK trees (say 100,000)."""
@@ -874,6 +926,7 @@ cdef class Ctrees:
 		self.nodesleft -= len(tree)
 		self.numnodes += len(tree)
 		self.maxnodes = max(self.maxnodes, len(tree))
+
 	cdef addnodes(self, Node *source, int cnt, int root):
 		""" Trees can be incrementally added to the node array; this version
 		copies a tree that has already been converted to an array of nodes. """
@@ -903,6 +956,7 @@ cdef class Ctrees:
 		self.numnodes += cnt
 		if cnt > self.maxnodes:
 			self.maxnodes = cnt
+
 	def indextrees(self, dict prods):
 		""" Create an index from specific productions to trees containing that
 		production. Productions are represented as integer IDs, trees are given
@@ -918,6 +972,7 @@ cdef class Ctrees:
 			for m in range(a.len):
 				(<set>result[nodes[m].prod]).add(n)
 		self.treeswithprod = result
+
 	def __dealloc__(Ctrees self):
 		if self.nodes is not NULL:
 			free(self.nodes)
@@ -925,6 +980,7 @@ cdef class Ctrees:
 		if self.trees is not NULL:
 			free(self.trees)
 			self.trees = NULL
+
 	def __len__(self):
 		return self.len
 
@@ -937,13 +993,13 @@ cdef inline copynodes(tree, dict prods, Node *result):
 		assert 1 <= len(a) <= 2, (
 			"trees must be non-empty and binarized:\n%s\n%s" % (a, tree[0]))
 		result[n].prod = prods[a.prod]
-		if isinstance(a[0], int): # a terminal index
+		if isinstance(a[0], int):  # a terminal index
 			result[n].left = -a[0] - 1
 		else:
 			result[n].left = a[0].idx
 			if len(a) == 2:
 				result[n].right = a[1].idx
-			else: # unary node
+			else:  # unary node
 				result[n].right = -1
 
 # begin scratch
@@ -964,6 +1020,7 @@ cdef class MemoryPool:
 		self.cur = self.pool[0] = <ULong *>malloc(self.poolsize)
 		assert self.cur is not NULL
 		self.leftinpool = self.poolsize
+
 	cdef void *alloc(self, int size):
 		cdef void *ptr
 		if size > self.poolsize:
@@ -980,10 +1037,12 @@ cdef class MemoryPool:
 		self.cur = &((<char *>self.cur)[size])
 		self.leftinpool -= size
 		return ptr
+
 	cdef void reset(self):
 		self.n = 0
 		self.cur = self.pool[0]
 		self.leftinpool = self.poolsize
+
 	def __dealloc__(MemoryPool self):
 		cdef int x
 		if self.pool is not NULL:

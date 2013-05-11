@@ -13,7 +13,6 @@ import numpy as np
 cimport numpy as np
 np.import_array()
 
-infinity = float('infinity')
 
 cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 	int k, bint splitprune, bint markorigin, bint finecfg):
@@ -236,6 +235,7 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 		if edge.rule.rhs2 and edge.rule.rhs2 in chart[edge.mid][end]:
 			filter_subtreecfg(edge.rule.rhs2, edge.mid, end, chart, chart2, fat)
 
+
 def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
 	np.ndarray[np.double_t, ndim=3] outside, ChartItem start,
 	Grammar coarse, Grammar fine, double threshold,
@@ -248,7 +248,7 @@ def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
 			"threshold should be a cutoff for probabilities between 0 and 1.")
 	sentprob = inside[0, lensent, start.label]
 	posterior = (inside[:lensent, :lensent + 1]
-		* outside[:lensent, :lensent+1]) / sentprob
+		* outside[:lensent, :lensent + 1]) / sentprob
 
 	finechart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
 	leftidx, rightidx, labels = (posterior[:lensent, :lensent + 1]
@@ -277,6 +277,7 @@ def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
 	numremain = (posterior > threshold).sum()
 	return whitelist, sentprob, unfiltered, numitems, numremain
 
+
 def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
 	np.ndarray[np.double_t, ndim=3] outside, ChartItem goal, Grammar coarse,
 	Grammar fine, np.ndarray[np.double_t, ndim=3] finechart, short maxlen,
@@ -288,8 +289,8 @@ def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
 	cdef short lensent = goal.right
 	sentprob = inside[0, lensent, goal.label]
 	#print >>stderr, "sentprob=%g" % sentprob
-	posterior = (inside[:lensent, :lensent+1, :]
-			* outside[:lensent, :lensent+1, :]) / sentprob
+	posterior = (inside[:lensent, :lensent + 1, :]
+			* outside[:lensent, :lensent + 1, :]) / sentprob
 	inside[:lensent, :lensent + 1, :] = np.NAN
 	inside[posterior > threshold] = np.inf
 	#print >>stderr, " ", (posterior > threshold).sum(),
@@ -301,8 +302,8 @@ def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
 	#	for x in mapping[label]:
 	#		finechart[left, right, x] = inside[left, right, label]
 	for label in range(len(fine.toid)):
-		finechart[:lensent, :lensent+1, label] = inside[:lensent,:lensent+1,
-			fine.mapping[label]]
+		finechart[:lensent, :lensent + 1, label] = inside[
+				:lensent, :lensent + 1, fine.mapping[label]]
 
 cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	""" Like kbest_items, but apply the reverse of the Boyd (2007)
@@ -323,6 +324,7 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
 	return newchart
 
+
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	import plcfrs
 	from disambiguation import marginalize
@@ -341,7 +343,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 				mergediscnodes(t)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))
-			print("exact match" if t == canonicalize(tree) else "no match") #, t
+			print("exact match" if t == canonicalize(tree) else "no match")
 	else:
 		print("no parse")
 		return
@@ -393,6 +395,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 		#		print(a[0], bin(a[1]))
 		#pprint_chart(pp, sent, fine.tolabel)
 
+
 def main():
 	import re
 	from treetransforms import splitdiscnodes, binarize, addfanoutmarkers
@@ -426,7 +429,7 @@ def main():
 	for t in cftrees:
 		#t.chomsky_normal_form(childchar=":")
 		binarize(t, horzmarkov=2, tailmarker='', leftmostunary=True,
-			childchar=":") #NB leftmostunary is important
+			childchar=":")  # NB leftmostunary is important
 		addfanoutmarkers(t)
 	for t in parenttrees:
 		binarize(t, vertmarkov=3, horzmarkov=1)
@@ -444,8 +447,8 @@ def main():
 	fine999x = dopreduction(trees, sents)
 	fine999 = Grammar(fine999x)
 	fine1 = Grammar(dopreduction(dtrees, sents))
-	trees = list(corpus.parsed_sents().values())[train:train+test]
-	sents = list(corpus.tagged_sents().values())[train:train+test]
+	trees = list(corpus.parsed_sents().values())[train:train + test]
+	sents = list(corpus.tagged_sents().values())[train:train + test]
 	if subsetgrammar(normallcfrs, fine999x):
 		print("DOP grammar is a superset")
 	else:

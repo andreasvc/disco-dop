@@ -4,7 +4,9 @@
 from __future__ import print_function
 from math import log, exp
 from collections import defaultdict, deque
-import re, logging, sys
+import re
+import logging
+import sys
 import numpy as np
 from tree import Tree
 from agenda import EdgeAgenda, Entry
@@ -16,9 +18,9 @@ cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
 		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong, logprobadd
-from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint, \
-		anextset, anextunset, abitcount, abitlength, ulongset, ulongcpy, \
-		setunioninplace
+from bit cimport nextset, nextunset, bitcount, bitlength, \
+		testbit, testbitint, anextset, anextunset, abitcount, abitlength, \
+		ulongset, ulongcpy, setunioninplace
 
 # C code
 cdef extern from "macros.h":
@@ -38,13 +40,15 @@ np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
 DEF SLOTS = 2
-
 cdef CFGChartItem NONE = new_CFGChartItem(0, 0, 0)
+
+
 def parse(list sent, Grammar grammar, tags=None, start=1, chart=None):
 	#assert all(grammar.fanout[a] == 1 for a in range(1, grammar.nonterminals))
 	if grammar.nonterminals < 20000 and chart is None:
 		return parse_dense(sent, grammar, start=start, tags=tags)
 	return parse_sparse(sent, grammar, start=start, tags=tags, chart=chart)
+
 
 def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 	""" A CKY parser modeled after Bodenstab's `fast grammar loop'
@@ -262,6 +266,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		return chart, new_CFGChartItem(start, 0, lensent), msg
 	else:
 		return chart, NONE, "no parse " + msg
+
 
 def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 		list chart=None, int beamwidth=0):
@@ -491,6 +496,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 	else:
 		return chart, NONE, "no parse " + msg
 
+
 def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 		list chart=None):
 	""" parse sentence, a list of tokens, optionally with gold tags, and
@@ -680,18 +686,19 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 	else:
 		return chart, NONE, "no parse " + msg
 
+
 def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 		tags=None):
 	assert grammar.maxfanout == 1, "Not a PCFG!"
 	assert not grammar.logprob, "Grammar must not have log probabilities."
 	lensent = len(sent)
-	if inside == None:
+	if inside is None:
 		inside = np.zeros((lensent, lensent + 1,
 				grammar.nonterminals), dtype='d')
 	else:
 		inside[:len(sent), :len(sent) + 1, :] = 0.0
-	if outside == None:
-		outside = np.zeros((lensent, lensent+1,
+	if outside is None:
+		outside = np.zeros((lensent, lensent + 1,
 				grammar.nonterminals), dtype='d')
 	else:
 		outside[:len(sent), :len(sent) + 1, :] = 0.0
@@ -704,6 +711,7 @@ def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 		start = NONE
 		msg = "no parse"
 	return inside, outside, start, msg
+
 
 def insidescores(list sent, Grammar grammar,
 		np.ndarray[np.double_t, ndim=3] inside, tags=None):
@@ -724,15 +732,15 @@ def insidescores(list sent, Grammar grammar,
 	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
 	cdef np.ndarray[np.double_t, ndim=1] unaryscores = np.empty((
 			grammar.nonterminals), dtype='double')
-	minleft = np.empty((grammar.nonterminals, lensent+1), dtype='int16')
+	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minright = np.empty_like(minleft)
 	maxright = np.empty_like(minleft)
-	maxleft.fill(lensent+1)
-	minright.fill(lensent+1)
+	maxleft.fill(lensent + 1)
+	minright.fill(lensent + 1)
 	minleft.fill(-1)
 	maxright.fill(-1)
-	inside[:lensent, :lensent+1, :] = 0.0
+	inside[:lensent, :lensent + 1, :] = 0.0
 	# assign POS tags
 	for left in range(lensent):
 		tag = tags[left].encode('ascii') if tags else None
@@ -752,7 +760,7 @@ def insidescores(list sent, Grammar grammar,
 					inside[left, right, lhs] = 1.
 			else:
 				raise ValueError("not covered: %r" % (tag or sent[left]))
-		# unary rules on POS tags 
+		# unary rules on POS tags
 		unaryagenda.update([(rhs1,
 			new_CFGEdge(-inside[left, right, rhs1], NULL, 0))
 			for rhs1 in range(grammar.nonterminals)
@@ -819,15 +827,15 @@ def insidescores(list sent, Grammar grammar,
 					assert 0.0 < inside[left, right, lhs] <= 1.0, (
 						inside[left, right, lhs],
 						left, right, grammar.tolabel[lhs])
-				if foundbetter: #and oldscore == 0.0:
+				if foundbetter:  # and oldscore == 0.0:
 					if left > minleft[lhs, right]:
-						minleft[lhs,right] = left
+						minleft[lhs, right] = left
 					if left < maxleft[lhs, right]:
-						maxleft[lhs,right] = left
+						maxleft[lhs, right] = left
 					if right < minright[lhs, left]:
-						minright[lhs,left] = right
+						minright[lhs, left] = right
 					if right > maxright[lhs, left]:
-						maxright[lhs,left] = right
+						maxright[lhs, left] = right
 			# unary rules on this span
 			unaryagenda.update([(rhs1,
 				new_CFGEdge(-inside[left, right, rhs1], NULL, 0))
@@ -862,6 +870,7 @@ def insidescores(list sent, Grammar grammar,
 					if right > maxright[lhs, left]:
 						maxright[lhs, left] = right
 	return minleft, maxleft, minright, maxright
+
 
 def outsidescores(Grammar grammar, list sent,
 		np.ndarray[np.double_t, ndim=3] inside,
@@ -941,6 +950,7 @@ def outsidescores(Grammar grammar, list sent,
 					assert 0.0 < outside[split, right, rule.rhs2] <= 1.0
 	return outside
 
+
 def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
 	""" Given an NLTK tree, compute the exact DOP parse probability given
 	a DOP reduction.
@@ -966,7 +976,7 @@ def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
 	derivations, but then the input would have to distinguish whether nodes are
 	internal nodes of fragments, or whether they join two fragments. """
 	neginf = float('-inf')
-	cdef dict chart = {}	#chart[left, right][label]
+	cdef dict chart = {}  # chart[left, right][label]
 	cdef tuple a, b, c
 	cdef Rule *rule
 	assert grammar.maxfanout == 1
@@ -988,7 +998,7 @@ def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
 		prod = (node.node,) + tuple(a.node for a in node)
 		left = min(node.leaves())
 		right = max(node.leaves()) + 1
-		if len(node) == 1: #unary node
+		if len(node) == 1:  # unary node
 			for ruleno in rulemapping[prod]:
 				rule = grammar.bylhs[ruleno]
 				b = (rule.rhs1, left, right)
@@ -998,7 +1008,7 @@ def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
 						chart[a] = logprobadd(chart[a], -rule.prob + chart[b])
 					else:
 						chart[a] = (-rule.prob + chart[b])
-		elif len(node) == 2: #binary node
+		elif len(node) == 2:  # binary node
 			split = min(node[1].leaves())
 			for ruleno in rulemapping[prod]:
 				rule = grammar.bylhs[ruleno]
@@ -1015,6 +1025,7 @@ def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
 			raise ValueError("expected binary tree.")
 	return chart.get((grammar.toid[tree.node], 0, len(tree.leaves())), neginf)
 
+
 def doplexprobs(tree, Grammar grammar):
 	neginf = float('-inf')
 	cdef dict chart = <dict>defaultdict(lambda: neginf)
@@ -1022,9 +1033,10 @@ def doplexprobs(tree, Grammar grammar):
 
 	for n, word in enumerate(tree.leaves()):
 		for lexrule in grammar.lexical[word]:
-			chart[lexrule.lhs, n, n+1] = logprobadd(
-				chart[lexrule.lhs, n, n+1], -lexrule.prob)
+			chart[lexrule.lhs, n, n + 1] = logprobadd(
+				chart[lexrule.lhs, n, n + 1], -lexrule.prob)
 	return chart
+
 
 def getgrammarmapping(Grammar coarse, Grammar fine):
 	""" producing a mapping of coarse rules to sets of fine rules;
@@ -1053,6 +1065,7 @@ def getgrammarmapping(Grammar coarse, Grammar fine):
 def sortfunc(CFGEdge e):
 	return e.inside
 
+
 def pprint_chart(chart, sent, tolabel):
 	cdef CFGEdge edge
 	print("chart:")
@@ -1080,6 +1093,7 @@ def pprint_chart(chart, sent, tolabel):
 					print()
 				print()
 
+
 def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 	""" Print a chart in a numpy matrix; optionally in parallel with another
 	matrix. """
@@ -1097,6 +1111,7 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 						if matrix2 is not None:
 							print("\t%8.6g" % matrix2[left, right, lhs], end='')
 						print()
+
 
 def main():
 	from containers import Grammar

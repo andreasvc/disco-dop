@@ -33,9 +33,7 @@ valgrind-python.supp:
 
 # R=refactor, C0103 == Invalid name
 lint:
-	cd discodop/ ; \
 	pylint \
 		--indent-string='\t' \
 		--disable=R,C0103 \
-		demos.py eval.py fragments.py gen.py grammar.py lexicon.py runexp.py \
-		parser.py tree.py treebank.py treedist.py treedraw.py treetransforms.py
+		discodop/*.py

@@ -20,8 +20,8 @@ from operator import itemgetter
 from flask import Flask, Markup, request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 
-from discodop import treetransforms, disambiguation, coarsetofine, \
-		lexicon, pcfg, plcfrs
+from discodop import treetransforms, disambiguation, coarsetofine
+from discodop import lexicon, pcfg, plcfrs
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.containers import Grammar
@@ -29,16 +29,18 @@ from discodop.containers import Grammar
 APP = Flask(__name__)
 morphtags = re.compile(
 		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
-limit = 40 # maximum sentence length
-prunek = 5000 # number of PLCFRS derivations to use for DOP parsing
+limit = 40  # maximum sentence length
+prunek = 5000  # number of PLCFRS derivations to use for DOP parsing
 grammars = {}
 backtransforms = {}
 knownwords = {}
+
 
 @APP.route('/')
 def main():
 	""" Serve the main form. """
 	return render_template('parse.html', result=Markup(parse()))
+
 
 @APP.route('/parse')
 def parse():
@@ -66,12 +68,13 @@ def parse():
 	result = Markup(DrawTree(tree, senttok).text(
 			unicodelines=True, html=True))
 	frags = Markup('\n\n'.join(
-			DrawTree(Tree.parse(frag, parse_leaf=int), terminals
-				).text(unicodelines=True, html=True)
+			DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
+					unicodelines=True, html=True)
 			for frag, terminals in fragments))
 	elapsed = 'CPU time elapsed: %s => %gs' % (
 			' '.join('%gs' % a for a in elapsed), sum(elapsed))
-	nbest = Markup('\n\n'.join('%d. [p=%g]\n%s' % (n + 1, prob,
+	nbest = Markup('\n\n'.join('%d. [p=%g]\n%s' % (
+				n + 1, prob,
 				DrawTree(treetransforms.removefanoutmarkers(
 					treetransforms.unbinarize(Tree.parse(morphtags.sub(
 						r'(\1\2', tree), parse_leaf=int))),
@@ -81,15 +84,17 @@ def parse():
 			len(senttok), objfun, marg), msg1, msg2, msg3, elapsed,
 			'10 most probable parse trees:',
 			'\n'.join('%d. [p=%g] %s' % (n + 1, prob, cgi.escape(tree))
-				for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
+					for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
 	return render_template('parsetree.html', sent=sent, result=result,
 			frags=frags, nbest=nbest, info=info, randid=randid())
+
 
 @APP.route('/favicon.ico')
 def favicon():
 	""" Serve the favicon. """
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 
 def loadgrammars():
 	""" Load grammars if necessary. """
@@ -126,9 +131,11 @@ def loadgrammars():
 				if not w.startswith("UNK")}
 		APP.logger.info('Grammar for %s loaded.' % lang)
 
+
 def cached(timeout=3600):
 	def decorator(func):
 		func.cache = SimpleCache()
+
 		@wraps(func)
 		def decorated_function(*args, **kwargs):
 			cache_key = args
@@ -138,8 +145,10 @@ def cached(timeout=3600):
 			result = func(*args, **kwargs)
 			func.cache.set(cache_key, result, timeout=timeout)
 			return result
+
 		return decorated_function
 	return decorator
+
 
 @cached(timeout=24 * 3600)
 def getparse(senttok, objfun, marg):
@@ -200,10 +209,12 @@ def getparse(senttok, objfun, marg):
 		APP.logger.warning('stage 3 fail')
 		return 'no parse'
 
+
 def randid():
 	""" return a string with 6 random letters. """
 	return ''.join(random.choice(string.ascii_letters)
 		for _ in range(6))
+
 
 # List of contractions adapted from Robert MacIntyre's tokenizer.
 CONTRACTIONS2 = re.compile(
@@ -221,6 +232,7 @@ CONTRACTIONS2 = re.compile(
 		r"\b(Wan)(na)"]))
 CONTRACTIONS3 = re.compile(r"(?i)\b(?:(Whad)(dd)(ya)|(Wha)(t)(cha))\b")
 
+
 def tokenize(text):
 	""" Adapted from nltk.tokenize.TreebankTokenizer. """
 	text = CONTRACTIONS2.sub(r'\1 \2', text)
@@ -234,11 +246,13 @@ def tokenize(text):
 	text = re.sub(r'\. *(\n|$)', ' . ', text)
 	return tuple(text.split())
 
+
 def guesslang(sent):
 	""" simple heuristic: language that contains most words from input. """
 	lang = max(knownwords, key=lambda x: len(knownwords[x] & set(sent)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
+
 
 if __name__ == '__main__':
 	logging.basicConfig()

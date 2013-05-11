@@ -4,7 +4,9 @@ from __future__ import print_function
 # python imports
 from math import log, exp
 from collections import defaultdict, deque
-import re, logging, sys
+import re
+import logging
+import sys
 import numpy as np
 from agenda import EdgeAgenda, Entry
 # cython imports
@@ -14,8 +16,9 @@ from agenda cimport Entry, EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, LCFRSEdge, ChartItem, \
 	SmallChartItem, FatChartItem, new_LCFRSEdge, new_ChartItem, \
 	new_FatChartItem, UChar, UInt, ULong, ULLong
-from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint, \
-	anextset, anextunset, abitcount, abitlength, ulongset, ulongcpy, setunion
+from bit cimport nextset, nextunset, bitcount, bitlength, \
+	testbit, testbitint, anextset, anextunset, abitcount, abitlength, \
+	ulongset, ulongcpy, setunion
 cdef extern from "math.h":
 	bint isinf(double x)
 	bint isfinite(double x)
@@ -26,11 +29,15 @@ cdef extern from "macros.h":
 	int BITNSLOTS(int nb)
 	void SETBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
-cdef SmallChartItem NONE = new_ChartItem(0, 0)
 np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
 DEF SLOTS = 2
+cdef SmallChartItem COMPONENT = new_ChartItem(0, 0)
+cdef SmallChartItem NONE = new_ChartItem(0, 0)
+cdef FatChartItem FATNONE = new_FatChartItem(0)
+cdef FatChartItem FATCOMPONENT = new_FatChartItem(0)
+
 
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		list whitelist=None, bint splitprune=False, bint markorigin=False,
@@ -38,33 +45,33 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 	""" parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse.
 	Other parameters:
-        - start: integer corresponding to the start symbol that analyses should
-            have, e.g., grammar.toid[b'ROOT']
-        - exhaustive: don't stop at viterbi parser, return a full chart
-        - whitelist: a whitelist of allowed ChartItems. Anything else is not
-            added to the agenda.
-        - splitprune: coarse stage used a split-PCFG where discontinuous node
-            appear as multiple CFG nodes. Every discontinuous node will result
-            in multiple lookups into whitelist to see whether it should be
-            allowed on the agenda.
-        - markorigin: in combination with splitprune, coarse labels include an
-            integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
-            map to the discontinuous node NP_2
-        - estimates: use context-summary estimates (heuristics, figures of
-			merit) to order agenda. should be a tuple with the kind of
-			estimates ('SX' or 'SXlrgaps'), and the estimates themselves in a
-			4-dimensional numpy matrix. If estimates are not consistent, it is
-			no longer guaranteed that the optimal parse will be found.
-			experimental.
-        - beamwidth: specify the maximum number of items that will be explored
-            for each particular span, on a first-come-first-served basis.
-            setting to 0 disables this feature. experimental.
+	- start: integer corresponding to the start symbol that analyses should
+		have, e.g., grammar.toid[b'ROOT']
+	- exhaustive: don't stop at viterbi parser, return a full chart
+	- whitelist: a whitelist of allowed ChartItems. Anything else is not
+		added to the agenda.
+	- splitprune: coarse stage used a split-PCFG where discontinuous node
+		appear as multiple CFG nodes. Every discontinuous node will result
+		in multiple lookups into whitelist to see whether it should be
+		allowed on the agenda.
+	- markorigin: in combination with splitprune, coarse labels include an
+		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
+		map to the discontinuous node NP_2
+	- estimates: use context-summary estimates (heuristics, figures of
+		merit) to order agenda. should be a tuple with the kind of
+		estimates ('SX' or 'SXlrgaps'), and the estimates themselves in a
+		4-dimensional numpy matrix. If estimates are not consistent, it is
+		no longer guaranteed that the optimal parse will be found.
+		experimental.
+	- beamwidth: specify the maximum number of items that will be explored
+		for each particular span, on a first-come-first-served basis.
+		setting to 0 disables this feature. experimental.
 	"""
 	cdef:
-		dict beam = <dict>defaultdict(int)			#histogram of spans
-		dict chart = {}								#the full chart
-		list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
-		EdgeAgenda agenda = EdgeAgenda()			#the agenda
+		dict beam = <dict>defaultdict(int)  # histogram of spans
+		dict chart = {}  # the full chart
+		list viterbi = [{} for _ in grammar.toid]  # the viterbi probabilities
+		EdgeAgenda agenda = EdgeAgenda()  # the agenda
 		Rule *rule
 		LexicalRule lexrule
 		Entry entry
@@ -127,7 +134,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 				if score > 300.0:
 					continue
 			elif estimatetype == SXlrgaps:
-				score += outside[lhs, length, left+right, gaps]
+				score += outside[lhs, length, left + right, gaps]
 				if score > 300.0:
 					continue
 			tagitem = new_ChartItem(lhs, 1ULL << i)
@@ -270,7 +277,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 	else:
 		return chart, NONE, "no parse " + msg
 
-cdef SmallChartItem component = new_ChartItem(0, 0)
+
 cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 		double inside, Rule *rule, SmallChartItem left, SmallChartItem right,
 		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar, bint
@@ -298,16 +305,16 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 					componentlist = <list>(whitelist[newitem.label])
 				else:
 					componentdict = <dict>(whitelist[newitem.label])
-				component.label = 0
+				COMPONENT.label = 0
 				b = cnt = 0
 				a = nextset(newitem.vec, b)
 				while a != -1:
 					b = nextunset(newitem.vec, a)
 					#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-					component.vec = (1ULL << b) - (1ULL << a)
+					COMPONENT.vec = (1ULL << b) - (1ULL << a)
 					if markorigin:
 						componentdict = <dict>(componentlist[cnt])
-					if PyDict_Contains(componentdict, component) != 1:
+					if PyDict_Contains(componentdict, COMPONENT) != 1:
 						blocked[0] += 1
 						return newitem
 					a = nextset(newitem.vec, b)
@@ -349,6 +356,7 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 		chart[newitem][edge] = edge
 	return SmallChartItem.__new__(SmallChartItem)
 
+
 cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 	""" Determine the compatibility of two bitvectors (tuples of spans /
 	ranges) according to the given yield function. Ranges should be
@@ -379,20 +387,20 @@ cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 	cdef ULLong mask = rvec if testbitint(rule.args, 0) else lvec
 	cdef size_t n
 	for n in range(bitlength(rule.lengths)):
-		if testbitint(rule.args, n): # component from right vector
+		if testbitint(rule.args, n):  # component from right vector
 			if rvec & mask == 0:
-				return False # check for expected component
-			rvec |= rvec - 1 # trailing 0 bits => 1 bits
-			mask = rvec & (~rvec - 1) # everything before first 0 bit => 1 bits
-		else: # component from left vector
+				return False  # check for expected component
+			rvec |= rvec - 1  # trailing 0 bits => 1 bits
+			mask = rvec & (~rvec - 1)  # everything before first 0 bit => 1 bits
+		else:  # component from left vector
 			if lvec & mask == 0:
-				return False # check for expected component
-			lvec |= lvec - 1 # trailing 0 bits => 1 bits
-			mask = lvec & (~lvec - 1) # everything before first 0 bit => 1 bits
+				return False  # check for expected component
+			lvec |= lvec - 1  # trailing 0 bits => 1 bits
+			mask = lvec & (~lvec - 1)  # everything before first 0 bit => 1 bits
 		# zero out component
 		lvec &= ~mask
 		rvec &= ~mask
-		if testbitint(rule.lengths, n): # a gap
+		if testbitint(rule.lengths, n):  # a gap
 			# check that there is a gap in both vectors
 			if (lvec ^ rvec) & (mask + 1):
 				return False
@@ -403,14 +411,14 @@ cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 	# success if we've reached the end of both left and right vector
 	return lvec == rvec == 0
 
-cdef FatChartItem FATNONE = new_FatChartItem(0)
+
 def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False, estimates=None):
 	""" Parse a sentence longer than the machine word size. """
-	cdef dict chart = {}							#the full chart
-	cdef list viterbi = [{} for _ in grammar.toid]	#the viterbi probabilities
-	cdef EdgeAgenda agenda = EdgeAgenda()			#the agenda
+	cdef dict chart = {}  # the full chart
+	cdef list viterbi = [{} for _ in grammar.toid]  # the viterbi probabilities
+	cdef EdgeAgenda agenda = EdgeAgenda()  # the agenda
 	cdef Rule *rule
 	cdef LexicalRule lexrule
 	cdef Entry entry
@@ -433,7 +441,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		return chart, FATNONE, msg
 	if estimates is not None:
 		estimatetypestr, outside = estimates
-		estimatetype = {"SX":SX, "SXlrgaps":SXlrgaps}[estimatetypestr]
+		estimatetype = {"SX": SX, "SXlrgaps": SXlrgaps}[estimatetypestr]
 
 	# scan
 	for i, word in enumerate(sent):
@@ -605,7 +613,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	else:
 		return chart, FATNONE, "no parse " + msg
 
-cdef FatChartItem fatcomponent = new_FatChartItem(0)
+
 cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 		double inside, Rule *rule, FatChartItem left, FatChartItem right,
 		EdgeAgenda agenda, dict chart, list viterbi, Grammar grammar, bint
@@ -639,10 +647,10 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 					b = anextunset(newitem.vec, a, SLOTS)
 					#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
 					for i in range(a, b):
-						SETBIT(fatcomponent.vec, i)
+						SETBIT(FATCOMPONENT.vec, i)
 					if markorigin:
 						componentdict = <dict>(componentlist[cnt])
-					if PyDict_Contains(componentdict, fatcomponent) != 1:
+					if PyDict_Contains(componentdict, FATCOMPONENT) != 1:
 						blocked[0] += 1
 						return newitem
 					a = anextset(newitem.vec, b, SLOTS)
@@ -683,6 +691,7 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 		edge = iscore(new_LCFRSEdge(score, inside, rule, left, right))
 		chart[newitem][edge] = edge
 	return FatChartItem.__new__(FatChartItem)
+
 
 cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	""" Determine the compatibility of two bitvectors (tuples of spans /
@@ -739,7 +748,7 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 				return False
 			# jump to next argument
 			rpos = anextset(rvec, rpos, SLOTS)
-		else: #if bit == 0:
+		else:  # if bit == 0:
 			# vice versa to the above
 			if lpos == -1 or (rpos != -1 and rpos <= lpos):
 				return False
@@ -755,6 +764,7 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	# success if we've reached the end of both left and right vector
 	return lpos == rpos == -1
 
+
 def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False):
@@ -762,22 +772,22 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 	produce a chart, either exhaustive or up until the first parse.
 	Non-probabilistic version.
 	Other parameters:
-        - start: integer corresponding to the start symbol that analyses should
-            have, e.g., grammar.toid['ROOT']
-        - exhaustive: don't stop at viterbi parser, return a full chart
-        - whitelist: a whitelist of allowed ChartItems. Anything else is not
-            added to the agenda.
-        - splitprune: coarse stage used a split-PCFG where discontinuous node
-            appear as multiple CFG nodes. Every discontinuous node will result
-            in multiple lookups into whitelist to see whether it should be
-            allowed on the agenda.
-        - markorigin: in combination with splitprune, coarse labels include an
-            integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
-            map to the discontinuous node NP_2. """
+	- start: integer corresponding to the start symbol that analyses should
+		have, e.g., grammar.toid['ROOT']
+	- exhaustive: don't stop at viterbi parser, return a full chart
+	- whitelist: a whitelist of allowed ChartItems. Anything else is not
+		added to the agenda.
+	- splitprune: coarse stage used a split-PCFG where discontinuous node
+		appear as multiple CFG nodes. Every discontinuous node will result
+		in multiple lookups into whitelist to see whether it should be
+		allowed on the agenda.
+	- markorigin: in combination with splitprune, coarse labels include an
+		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
+		map to the discontinuous node NP_2. """
 	cdef:
-		dict chart = {}								#the full chart
-		list items = [deque() for _ in grammar.toid]	#titems for each label
-		object agenda = deque()						#the agenda
+		dict chart = {}  # the full chart
+		list items = [deque() for _ in grammar.toid]  # items for each label
+		object agenda = deque()  # the agenda
 		Rule *rule
 		LexicalRule lexrule
 		Entry entry
@@ -887,6 +897,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 	else:
 		return chart, NONE, "no parse " + msg
 
+
 #def doinsideoutside(dict chart, ChartItem start):
 #	cdef dict result = dict.fromkeys(chart)
 #	getinside(result, chart, start)
@@ -951,10 +962,12 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 #			break
 #	return candidates if pos == -1 else set()
 
+
 cdef inline LCFRSEdge iscore(LCFRSEdge e):
 	""" Replace estimate with inside probability """
 	e.score = e.inside
 	return e
+
 
 def sortfunc(a):
 	if isinstance(a, SmallChartItem):
@@ -964,6 +977,7 @@ def sortfunc(a):
 			anextset((<FatChartItem>a).vec, 0, SLOTS))
 	elif isinstance(a, LCFRSEdge):
 		return (<LCFRSEdge>a).inside
+
 
 def pprint_chart(chart, sent, tolabel):
 	""" `pretty print' a chart. """
@@ -992,6 +1006,7 @@ def pprint_chart(chart, sent, tolabel):
 			print()
 		print()
 
+
 def do(sent, grammar):
 	from disambiguation import marginalize
 	from operator import itemgetter
@@ -1010,6 +1025,7 @@ def do(sent, grammar):
 	print("no parse")
 	return False
 
+
 def main():
 	from containers import Grammar
 	cdef Rule rule
@@ -1023,7 +1039,7 @@ def main():
 	assert not concat(&rule, 0b1000, 0b10100)
 	grammar = Grammar([
 		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )), 1),
-		((('VP2', 'VP2', 'VAINF'),  ((0, ), (0, 1))), 0.5),
+		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 0.5),
 		((('VP2', 'PROAV', 'VVPP'), ((0, ), (1, ))), 0.5),
 		((('PROAV', 'Epsilon'), ('Daruber', )), 1),
 		((('VAINF', 'Epsilon'), ('werden', )), 1),
@@ -1035,7 +1051,7 @@ def main():
 	assert do("Daruber muss nachgedacht werden werden", grammar)
 	assert do("Daruber muss nachgedacht werden werden werden", grammar)
 	print("ungrammatical sentence:")
-	assert not do("muss Daruber nachgedacht werden", grammar)	#no parse
+	assert not do("muss Daruber nachgedacht werden", grammar)  # no parse
 	print("(as expected)")
 	print("long sentence (%d words):" % 67)
 	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)

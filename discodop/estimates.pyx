@@ -21,8 +21,10 @@ cdef extern from "math.h":
 
 cdef class Item:
 	cdef int state, length, lr, gaps
+
 	def __hash__(Item self):
 		return self.state * 1021 + self.length * 571 + self.lr * 311 + self.gaps
+
 	def __richcmp__(Item self, Item other, op):
 		if op == 2:
 			return (self.state == other.state and self.length == other.length
@@ -39,9 +41,11 @@ cdef class Item:
 			return a > b
 		elif op == 5:
 			return a >= b
+
 	def __repr__(Item self):
 		return "%s(%4d, %2d, %2d, %2d)" % (self.__class__.__name__,
 			self.state, self.length, self.lr, self.gaps)
+
 
 cdef inline Item new_Item(int state, int length, int lr, int gaps):
 	cdef Item item = Item.__new__(Item)
@@ -50,6 +54,7 @@ cdef inline Item new_Item(int state, int length, int lr, int gaps):
 	item.lr = lr
 	item.gaps = gaps
 	return item
+
 
 cdef inline double getoutside(np.ndarray[np.double_t, ndim=4] outside,
 		UInt maxlen, UInt slen, UInt label, ULLong vec):
@@ -63,6 +68,7 @@ cdef inline double getoutside(np.ndarray[np.double_t, ndim=4] outside,
 	if slen > maxlen or length + lr + gaps > maxlen:
 		return 0.0
 	return outside[label, length, lr, gaps]
+
 
 def simpleinside(Grammar grammar, UInt maxlen,
 		np.ndarray[np.double_t, ndim=2] insidescores):
@@ -129,6 +135,7 @@ def simpleinside(Grammar grammar, UInt maxlen,
 	# anything not reached so far gets probability zero:
 	insidescores[np.isnan(insidescores)] = np.inf
 
+
 def inside(Grammar grammar, UInt maxlen, dict insidescores):
 	""" Compute inside estimate in bottom-up fashion, with
 	full bit vectors (not used)."""
@@ -147,7 +154,7 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 		I = entry.key
 		x = entry.value
 		if I.label not in insidescores:
-			insidescores[I.label] =  {}
+			insidescores[I.label] = {}
 		if x < insidescores[I.label].get(I.vec, infinity):
 			insidescores[I.label][I.vec] = x
 
@@ -187,6 +194,7 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 						rule.prob + insidescores[rule.rhs1][vec] + x)
 
 	return insidescores
+
 
 cdef inline ULLong insideconcat(ULLong a, ULLong b, Rule rule, Grammar grammar,
 		UInt maxlen):
@@ -236,7 +244,8 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 		x = entry.value
 		if agenda.length % 1000 == 0:
 			print("agenda size: %dk top: %r, %g %s" % (
-				agenda.length / 1000, I, exp(-x), grammar.tolabel[I.state].decode('ascii')))
+				agenda.length / 1000, I, exp(-x),
+				grammar.tolabel[I.state].decode('ascii')))
 		totlen = I.length + I.lr + I.gaps
 		i = 0
 		rule = grammar.bylhs[I.state][i]
@@ -270,7 +279,7 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 			for lenA in range(leftfanout, I.length - rightfanout + 1):
 				lenB = I.length - lenA
 				insidescore = insidescores[rule.rhs2, lenB]
-				for lr in range(I.lr, I.lr + lenB + 2): #FIXME: why 2?
+				for lr in range(I.lr, I.lr + lenB + 2):  # FIXME: why 2?
 					if addright == 0 and lr != I.lr:
 						continue
 					for ga in range(leftfanout - 1, totlen + 1):
@@ -305,7 +314,7 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 			for lenA in range(rightfanout, I.length - leftfanout + 1):
 				lenB = I.length - lenA
 				insidescore = insidescores[rule.rhs1, lenB]
-				for lr in range(I.lr, I.lr + lenB + 2): #FIXME: why 2?
+				for lr in range(I.lr, I.lr + lenB + 2):  # FIXME: why 2?
 					for ga in range(rightfanout - 1, totlen + 1):
 						if (lenA + lr + ga == I.length + I.lr + I.gaps
 							and ga >= addgaps):
@@ -319,6 +328,7 @@ def outsidelr(Grammar grammar, np.ndarray[np.double_t, ndim=2] insidescores,
 			rule = grammar.bylhs[I.state][i]
 		#end while rule.lhs == I.state:
 	#end while agenda.length:
+
 
 cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print("allocating outside matrix:",
@@ -334,6 +344,7 @@ cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	return outside
 
+
 cdef inline double getpcfgoutside(dict outsidescores,
 		UInt maxlen, UInt slen, UInt label, ULLong vec):
 	""" Query for a PCFG A* estimate. For documentation purposes. """
@@ -344,6 +355,7 @@ cdef inline double getpcfgoutside(dict outsidescores,
 	if slen > maxlen or length + left + right > maxlen:
 		return 0.0
 	return outsidescores[label, left, right]
+
 
 cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 		bint debug=False):
@@ -368,6 +380,7 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 						print("%s[%d-%d] %g" % (grammar.tolabel[lhs].decode('ascii'),
 								lspan, rspan, exp(-outside[lhs, lspan, rspan])))
 	return outside
+
 
 cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 	""" insideSX estimate for a PCFG using agenda. Adapted from:
@@ -420,6 +433,7 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 					agenda.setifbetter(new_ChartItem(rule.lhs, vec + I.vec),
 						rule.prob + insidescores[vec][rule.rhs1] + x)
 	return insidescores
+
 
 cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	""" outsideSX estimate for a PCFG, agenda-based version. """
@@ -482,6 +496,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	#end while agenda.length:
 	return outside
 
+
 cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 	bint debug=False):
 	insidescores = [{} for _ in range(maxlen + 1)]
@@ -526,6 +541,7 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 		outside[state, lspan, rspan, 0] = prob
 	return outside
 
+
 cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 	""" insideSX estimate for a PCFG. Straight from Klein & Manning (2003),
 	A* parsing: Fast Exact Viterbi Parse Selection. """
@@ -536,7 +552,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 	if span == 0:
 		return 0 if state == 0 else infinity
 	if span == 1 and state in grammar.lexicalbylhs:
-		score =  min([lexrule.prob for lexrule in grammar.lexicalbylhs[state]])
+		score = min([lexrule.prob for lexrule in grammar.lexicalbylhs[state]])
 	else:
 		score = infinity
 	for split in range(1, span + 1):
@@ -549,7 +565,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 					n += 1
 					rule = grammar.bylhs[state][n]
 			else:
-				insidescores[split][rule.rhs1] = -1 # mark to avoid cycles.
+				insidescores[split][rule.rhs1] = -1  # mark to avoid cycles.
 				inleft = pcfginsidesxrec(
 					grammar, insidescores, rule.rhs1, split)
 				insidescores[split][rule.rhs1] = inleft
@@ -573,6 +589,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 			rule = grammar.bylhs[state][n]
 	return score
 
+
 cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 		UInt goal, UInt state, int lspan, int rspan):
 	""" outsideSX estimate for a PCFG. """
@@ -595,7 +612,7 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 				rule = grammar.unary[state][n]
 				continue
 		else:
-			outsidescores[item] = -1 # mark to avoid cycles
+			outsidescores[item] = -1  # mark to avoid cycles
 			outsidescores[item] = out = pcfgoutsidesxrec(grammar,
 				insidescores, outsidescores, goal, rule.lhs, lspan, rspan)
 		cost = out + rule.prob
@@ -641,6 +658,7 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 			rule = grammar.lbinary[state][n]
 	return score
 
+
 cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print("getting inside")
 	insidescores = inside(grammar, maxlen, {})
@@ -649,7 +667,8 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 			assert 0 <= a < grammar.nonterminals
 			assert 0 <= bitlength(b) <= maxlen
 			#print(a, b)
-			#print("%s[%d] =" % (grammar.tolabel[a].decode('ascii'), b), exp(insidescores[a][b]))
+			#print("%s[%d] =" % (grammar.tolabel[a].decode('ascii'), b),
+			#		exp(insidescores[a][b]))
 	print(len(insidescores) * sum(map(len, insidescores.values())), '\n')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	insidescores.fill(np.NAN)
@@ -658,10 +677,12 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	for an, a in enumerate(insidescores):
 		for bn, b in enumerate(a):
 			if b < np.inf:
-				print("%s len %d = %g" % (grammar.tolabel[an].decode('ascii'), bn, exp(-b)))
+				print("%s len %d = %g" % (grammar.tolabel[an].decode('ascii'),
+						bn, exp(-b)))
 	#print(insidescores)
 	#for a in range(maxlen):
-	#	print(grammar.tolabel[goal].decode('ascii'), "len", a, "=", exp(-insidescores[goal, a]))
+	#	print(grammar.tolabel[goal].decode('ascii'), "len", a, "=",
+	#			exp(-insidescores[goal, a]))
 
 	print("getting outside")
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
@@ -680,6 +701,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 	print(cnt)
 	print("done")
 	return outside
+
 
 def main():
 	from treebank import NegraCorpusReader

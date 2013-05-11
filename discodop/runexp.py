@@ -85,17 +85,20 @@ DEFAULTSTAGE = dict(
 def main(
 		stages=(
 		# see variable 'DEFAULTSTAGE' above
-		dict(mode='pcfg',  # use the dedicated PCFG parser
+		dict(
+			mode='pcfg',  # use the dedicated PCFG parser
 			split=True,
 			markorigin=True,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
 		),
-		dict(mode='plcfrs',  # the agenda-based PLCFRS parser
+		dict(
+			mode='plcfrs',  # the agenda-based PLCFRS parser
 			prune=True,  # whether to use previous chart to prune this stage
 			splitprune=True,  # VP_2[101] is treated as { VP*[100], VP*[001] }
 			k=50,  # number of coarse pcfg derivations to prune with;
 					# k=0 => filter only
 		),
-		dict(mode='plcfrs',  # the agenda-based PLCFRS parser
+		dict(
+			mode='plcfrs',  # the agenda-based PLCFRS parser
 			prune=True,  # whether to use previous chart to prune this stage
 			k=50,		# number of coarse plcfrs derivations to prune with;
 					# k=0 => filter only
@@ -904,21 +907,12 @@ def readtepacoc():
 
 def parsetepacoc(
 		stages=(
-		dict(mode='pcfg',
-			split=True,
-			markorigin=True,
+				dict(mode='pcfg', split=True, markorigin=True),
+				dict(mode='plcfrs', prune=True, k=10000, splitprune=True),
+				dict(mode='plcfrs', prune=True, k=5000, dop=True,
+					usedoubledop=True, estimator="dop1", objective="mpp",
+					sample=False, kbest=True)
 		),
-		dict(mode='plcfrs',
-			prune=True,
-			k=10000,
-			splitprune=True,
-		),
-		dict(mode='plcfrs',
-			prune=True, k=5000,
-			dop=True, usedoubledop=True,
-			estimator="dop1", objective="mpp",
-			sample=False, kbest=True,
-		)),
 		trainmaxwords=999, trainnumsents=25005,
 		testmaxwords=999, testnumsents=2000,
 		bintype="binarize", h=1, v=1, factor="right", tailmarker='',
@@ -1099,8 +1093,8 @@ gunzip german-par-linux-3.2-utf8.bin.gz"""
 		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
 				" %s %s %s" % (model, inname, filtertags),
 				stdout=PIPE, shell=True)
-		tagout = tagger.stdout.read().decode('utf-8'  # pylint: disable=E1101
-				).split("<S>")[:-1]
+		tagout = tagger.stdout.read(  # pylint: disable=E1101
+				).decode('utf-8').split("<S>")[:-1]
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, None, overridetag, tagmap)
 					for a in tags.splitlines() if a.strip()])
@@ -1125,8 +1119,8 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 				" -model %s -textFile %s" % (model, inname)).split(),
 				cwd="stanford-postagger-full-2012-07-09",
 				shell=False, stdout=PIPE)
-		tagout = tagger.stdout.read().decode('utf-8'  # pylint: disable=E1101
-				).splitlines()
+		tagout = tagger.stdout.read(  # pylint: disable=E1101
+				).decode('utf-8').splitlines()
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, "_", overridetag, tagmap)
 			for a in tags.split()]) for n, tags in zip(sents, tagout))

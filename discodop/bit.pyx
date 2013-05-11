@@ -1,5 +1,6 @@
 """ NB: most functions are in bit.pxd to facilitate function inlining. """
 
+
 def pyintbitcount(a):
 	""" Number of set bits (1s)
 	>>> bitcount(0b0011101)
@@ -11,6 +12,7 @@ def pyintbitcount(a):
 		count += 1
 	return count
 
+
 cpdef bint testbitshort(unsigned short arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
 	>>> testbitshort(0b0011101, 0)
@@ -18,6 +20,7 @@ cpdef bint testbitshort(unsigned short arg, UInt pos):
 	>>> testbitshort(0b0011101, 1)
 	0"""
 	return (arg >> pos) & 1
+
 
 cpdef bint testbitc(UChar arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
@@ -27,12 +30,14 @@ cpdef bint testbitc(UChar arg, UInt pos):
 	0"""
 	return (arg >> pos) & 1
 
+
 cpdef int bitcount(ULLong vec):
 	""" Number of set bits (1s)
 	>>> bitcount(0b0011101)
 	4
 	"""
 	return __builtin_popcountll(vec)
+
 
 cpdef int pyintnextset(a, int pos):
 	""" First set bit, starting from pos
@@ -48,10 +53,12 @@ cpdef int pyintnextset(a, int pos):
 		pos += (8 * sizeof(ULong))
 	return pos + __builtin_ctzl(a & mask)
 
+
 cpdef bint bitminmax(ULLong a, ULLong b):
 	""" test whether the leftmost bit of b is adjacent to the first component
 	of a. """
 	return nextset(b, 0) == nextunset(a, nextset(a, 0))
+
 
 cpdef int fanout(arg):
 	""" number of contiguous components in bit vector (gaps plus one)
@@ -80,6 +87,7 @@ cpdef int fanout(arg):
 				result += 1
 			prev = arg
 	return result
+
 
 def main():
 	cdef ULong ulongvec[2]

@@ -46,6 +46,7 @@ ABBRPOS = {
 	'NOUN': 'NN',
 	'VERB': 'VB'}
 
+
 def stream_template(template_name, **context):
 	""" From Flask documentation. """
 	APP.update_template_context(context)
@@ -54,9 +55,11 @@ def stream_template(template_name, **context):
 	result.enable_buffering(5)
 	return result
 
+
 def cached(timeout=3600):
 	def decorator(func):
 		func.cache = SimpleCache()
+
 		@wraps(func)
 		def decorated_function():
 			key = (request.path, ) + tuple(sorted(request.args.items()))
@@ -65,15 +68,17 @@ def cached(timeout=3600):
 				result = func()
 				func.cache.set(key, result, timeout=timeout)
 			return result
+
 		return decorated_function
 	return decorator
+
 
 @APP.route('/')
 @APP.route('/counts')
 @APP.route('/trees')
 @APP.route('/sents')
 @APP.route('/brackets')
-#@cached(timeout=24 * 3600) #FIXME does not work with generators
+#@cached(timeout=24 * 3600)  # FIXME does not work with generators
 def main():
 	""" Main search form & results page. """
 	output = None
@@ -90,6 +95,7 @@ def main():
 				results=DISPATCH[output](request.args)))
 	return render_template('search.html', form=request.args, output='counts',
 			texts=texts, selectedtexts=selected)
+
 
 @APP.route('/style')
 def style():
@@ -121,13 +127,15 @@ def style():
 			name = os.path.basename(a)
 			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name),
 					proc.communicate()[0])
+
 	resp = Response(generate(), mimetype='text/plain')
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
-		datetime.utcnow() + timedelta(7, 0 )
-		).strftime('%a, %d %b %Y %H:%M:%S UTC')
+		datetime.utcnow() + timedelta(7, 0)).strftime(
+		'%a, %d %b %Y %H:%M:%S UTC')
 	return resp
+
 
 @APP.route('/export')
 def export():
@@ -140,6 +148,7 @@ def export():
 	resp.headers['Content-Disposition'] = 'attachment; filename=trees.txt'
 	return resp
 
+
 @APP.route('/draw')
 def draw():
 	""" Produce a visualization of a tree on a separate page. """
@@ -150,11 +159,13 @@ def draw():
 	return "<pre>%s</pre>" % DrawTree(tree, sent).text(
 				unicodelines=True, html=True)
 
+
 #@APP.route('/favicon.ico')
 #def favicon():
 #	""" Serve the favicon. """
 #	return send_from_directory(os.path.join(APP.root_path, 'static'),
 #			'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 
 def counts(form):
 	""" Produce counts of matches for each text. """
@@ -162,7 +173,7 @@ def counts(form):
 	# - name should not be cut off by bar;
 	#   separate div for bar in background with abs. pos.:
 	#   z-index:1;position:absolute;top:0;background:PaleTurquoise;border:1px
-	#   solid #a6a6a6
+	#   solid  # a6a6a6
 	# - show dispersion of matches in each text
 	cnts = Counter()
 	relfreq = {}
@@ -210,6 +221,7 @@ def counts(form):
 				maxcounts=maxcounts, relfreq=repr(relfreq),
 				sortedrelfreq=sortedrelfreq)
 
+
 def trees(form):
 	""" Return visualization of parse trees in search results. """
 	# TODO:
@@ -255,6 +267,7 @@ def trees(form):
 	if not gotresults:
 		yield "No matches."
 
+
 def sents(form, dobrackets=False):
 	""" Return search results as terminals or in bracket notation. """
 	gotresults = False
@@ -287,9 +300,11 @@ def sents(form, dobrackets=False):
 	if not gotresults:
 		yield "No matches."
 
+
 def brackets(form):
 	""" Wrapper. """
 	return sents(form, dobrackets=True)
+
 
 def doqueries(form, lines=False, doexport=False):
 	""" Run tgrep2 on each text """
@@ -313,6 +328,7 @@ def doqueries(form, lines=False, doexport=False):
 		else:
 			yield text, proc.stdout.read().decode('utf8'), proc.stderr.read()
 
+
 def filterlabels(form, line):
 	""" Optionally remove morphological and grammatical function labels
 	from parse tree. """
@@ -323,6 +339,7 @@ def filterlabels(form, line):
 		line = MORPH_TAGS.sub(lambda g: '(%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
+
 
 def selectedtexts(form):
 	""" Find available texts and parse selected texts argument. """
@@ -342,6 +359,7 @@ def selectedtexts(form):
 		selected.update(range(len(texts)))
 	return texts, selected
 
+
 def preparecorpus():
 	""" Produce indexed versions of parse trees in .mrg files """
 	files = glob.glob('corpus/*.mrg')
@@ -353,15 +371,14 @@ def preparecorpus():
 					stdout=subprocess.PIPE,
 					stderr=subprocess.PIPE)
 
-# this is redundant but needed to support both javascript-enabled /foo
-# as well as non-javascript /?output=foo
+
+# this is redundant but used to support both javascript-enabled /foo
+# as well as non-javascript fallback /?output=foo
 DISPATCH = {
 	'counts': counts,
 	'trees': trees,
 	'sents': sents,
 	'brackets': brackets,
-	#'style': style,
-	#'export': export
 }
 
 if __name__ == '__main__':

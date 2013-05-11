@@ -7,9 +7,9 @@ from operator import itemgetter
 
 cimport cython
 from agenda cimport Entry, Agenda, nsmallest
-from containers cimport ChartItem, SmallChartItem, FatChartItem, CFGChartItem, \
-	new_CFGChartItem, Edge, LCFRSEdge, new_LCFRSEdge, CFGEdge, \
-	RankedEdge, RankedCFGEdge, UChar, UInt, Rule
+from containers cimport ChartItem, SmallChartItem, FatChartItem, \
+	CFGChartItem, new_CFGChartItem, Edge, LCFRSEdge, new_LCFRSEdge, \
+	CFGEdge, RankedEdge, RankedCFGEdge, UChar, UInt, Rule
 
 cdef tuple unarybest = (0, ), binarybest = (0, 0)
 
@@ -24,10 +24,11 @@ cdef inline getcandidates(dict chart, ChartItem v, int k):
 	# as a neighbor and puts it in cand[v] for a second time.
 	cdef LCFRSEdge el
 	if v not in chart:
-		return Agenda() #raise error?
-	return Agenda(
-		[(RankedEdge(v, el, 0, 0 if el.right.label else -1), el.inside)
-						for el in nsmallest(k, chart[v].values())])
+		return Agenda()  # raise error?
+	return Agenda([
+		(RankedEdge(v, el, 0, 0 if el.right.label else -1), el.inside)
+				for el in nsmallest(k, chart[v].values())])
+
 
 @cython.wraparound(True)
 cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
@@ -53,6 +54,7 @@ cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
 			break
 	return D
 
+
 cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
 		set explored):
 	cdef RankedEdge ej1
@@ -62,7 +64,7 @@ cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
 		if i == 0:
 			ei = ej.edge.left
 			ej1 = RankedEdge(ej.head, ej.edge, ej.left + 1, ej.right)
-		elif i == 1 and ej.right >= 0: #edge.right.label:
+		elif i == 1 and ej.right >= 0:  # edge.right.label:
 			ei = ej.edge.right
 			ej1 = RankedEdge(ej.head, ej.edge, ej.left, ej.right + 1)
 		else:
@@ -73,11 +75,12 @@ cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
 							D, cand, chart, explored)
 		# if it exists and is not in heap yet
 		if ((ei in D and (ej1.right if i else ej1.left) < len(D[ei]))
-			and ej1 not in explored): #cand[ej1.head]): <= gives duplicates
+			and ej1 not in explored):  # cand[ej1.head]): <= gives duplicates
 			prob = getprob(chart, D, ej1)
 			# add it to the heap
 			cand[ej1.head][ej1] = prob
 			explored.add(ej1)
+
 
 cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 	cdef ChartItem ei
@@ -94,7 +97,7 @@ cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 	else:
 		raise ValueError("non-zero rank vector not part of explored derivations")
 	result = ej.edge.rule.prob + prob
-	if ej.right >= 0: #if e.right.label:
+	if ej.right >= 0:  # if e.right.label:
 		ei = ej.edge.right
 		if ei in D:
 			entry = D[ei][ej.right]
@@ -107,6 +110,7 @@ cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 			"non-zero rank vector not part of explored derivations")
 		result += prob
 	return result
+
 
 # --- start CFG specific
 cdef inline getcandidatescfg(list chart, UInt label,
@@ -127,6 +131,7 @@ cdef inline getcandidatescfg(list chart, UInt label,
 		[(RankedCFGEdge(label, start, end, ec, 0, 0 if ec.rule is not NULL
 						and ec.rule.rhs2 else -1), ec.inside)
 						for ec in nsmallest(k, cell[label].values())])
+
 
 @cython.wraparound(True)
 cpdef inline lazykthbestcfg(UInt label, UChar start, UChar end, int k, int k1,
@@ -153,8 +158,9 @@ cpdef inline lazykthbestcfg(UInt label, UChar start, UChar end, int k, int k1,
 			break
 	return D
 
-cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand, list chart,
-		set explored):
+
+cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand,
+		list chart, set explored):
 	cdef RankedCFGEdge ej1
 	cdef CFGEdge ec = ej.edge
 	cdef double prob
@@ -173,7 +179,7 @@ cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand, list chart,
 						D, cand, chart, explored)
 	# if it exists and is not in heap yet
 	if ((label in D[start][end] and ej1.left < len(D[start][end][label]))
-		and ej1 not in explored): #cand[ej1.head]): <= gives duplicates
+		and ej1 not in explored):  # cand[ej1.head]): <= gives duplicates
 		prob = getprobcfg(chart, D, ej1)
 		# add it to the heap
 		cand[ej1.start][ej1.end][ej1.label][ej1] = prob
@@ -190,13 +196,14 @@ cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand, list chart,
 						D, cand, chart, explored)
 	# if it exists and is not in heap yet
 	if ((label in D[start][end] and ej1.right < len(D[start][end][label]))
-		and ej1 not in explored): #cand[ej1.head]): <= gives duplicates
+		and ej1 not in explored):  # cand[ej1.head]): <= gives duplicates
 		prob = getprobcfg(chart, D, ej1)
 		# add it to the heap
 		cand[ej1.start][ej1.end][ej1.label][ej1] = prob
 		explored.add(ej1)
 
-cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.0:
+
+cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.:
 	cdef CFGEdge ec, edge
 	cdef Entry entry
 	cdef double result, prob
@@ -214,7 +221,7 @@ cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.0:
 		raise ValueError("non-zero rank vector not part of explored derivations")
 	# NB: edge.inside if preterminal, 0.0 for terminal
 	result = (0.0 if ec.rule is NULL else ec.rule.prob) + prob
-	if ej.right >= 0: #if e.right.label:
+	if ej.right >= 0:  # if e.right.label:
 		label = 0 if ec.rule is NULL else ec.rule.rhs2
 		start = ec.mid
 		end = ej.end
@@ -230,6 +237,7 @@ cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.0:
 		result += prob
 	return result
 
+
 cpdef list lazykbestcfg(list chart, CFGChartItem goal, int k):
 	""" wrapper function to run lazykthbestcfg.
 	does not give actual derivations, but the ranked chart D. """
@@ -241,6 +249,7 @@ cpdef list lazykbestcfg(list chart, CFGChartItem goal, int k):
 			chart, explored)
 	return D
 
+
 cdef inline bint explorederivationcfg(RankedCFGEdge ej,
 		list D, list chart, set explored, int n):
 	""" Traverse a derivation to ensured RankedEdges are present in D
@@ -249,7 +258,7 @@ cdef inline bint explorederivationcfg(RankedCFGEdge ej,
 	cdef RankedCFGEdge rankededge
 	cdef UInt label
 	if n > 100:
-		return False #hardcoded limit to prevent cycles
+		return False  # hardcoded limit to prevent cycles
 	elif ej.edge.rule is NULL:
 		return True
 	label = ej.edge.rule.rhs1
@@ -277,6 +286,7 @@ cdef inline bint explorederivationcfg(RankedCFGEdge ej,
 				D, chart, explored, n + 1)
 	return True
 
+
 cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
 		list chart, list tolabel, bytes debin):
 	cdef Entry entry
@@ -286,7 +296,7 @@ cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
 		result += b'('
 		result += tolabel[ej.label]
 		result += b' '
-	if ej.edge.rule is NULL: # this must be a terminal
+	if ej.edge.rule is NULL:  # this must be a terminal
 		result += str(ej.start).encode('ascii')
 	elif ej.left != -1:
 		label = ej.edge.rule.rhs1
@@ -308,7 +318,7 @@ cdef bint explorederivation(RankedEdge ej, dict D, dict chart, set explored,
 	cdef Entry entry
 	cdef RankedEdge rankededge
 	if n > 100:
-		return False #hardcoded limit to prevent cycles
+		return False  # hardcoded limit to prevent cycles
 	if ej.left != -1 and ej.edge.left in chart:
 		if ej.edge.left not in D:
 			assert ej.left == 0, "non-best edge missing in derivations"
@@ -329,6 +339,7 @@ cdef bint explorederivation(RankedEdge ej, dict D, dict chart, set explored,
 				<RankedEdge>(<Entry>D[ej.edge.right][ej.right]).key,
 				D, chart, explored, n + 1)
 	return True
+
 
 cdef inline getderivationlcfrs(result, RankedEdge ej, dict D,
 		dict chart, list tolabel, bytes debin):
@@ -357,6 +368,7 @@ cdef inline getderivationlcfrs(result, RankedEdge ej, dict D,
 	if debin is None or debin not in tolabel[ej.head.label]:
 		result += b')'
 
+
 def getderiv(ej, D, chart, list tolabel, bytes debin):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
@@ -371,6 +383,7 @@ def getderiv(ej, D, chart, list tolabel, bytes debin):
 	elif isinstance(ej, RankedCFGEdge):
 		getderivationcfg(result, ej, D, chart, tolabel, debin)
 	return str(result.decode('ascii'))
+
 
 cpdef tuple lazykbest(chart, ChartItem goal, int k, list tolabel=None,
 		bytes debin=None, bint derivs=True):
@@ -413,6 +426,7 @@ cpdef tuple lazykbest(chart, ChartItem goal, int k, list tolabel=None,
 					entry.key, D, chart, tolabel, debin), entry.value)
 					for entry in D[goal]]
 	return derivations, D, explored
+
 
 cpdef main():
 	from math import log

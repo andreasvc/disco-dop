@@ -4,7 +4,9 @@ Moschitti (2006): Making Tree Kernels practical for Natural Language
 Learning. """
 
 from __future__ import print_function
-import re, io, sys
+import re
+import io
+import sys
 from collections import defaultdict, Counter as multiset
 from itertools import count
 from functools import partial
@@ -34,9 +36,11 @@ cdef extern from "macros.h":
 cdef array uintarray = array('I', ())
 
 # NB: (?: ) is a non-grouping operator; the second ':' is part of what we match
-FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?::[0-9]+)?\b') # all leaf nodes
-TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)\)') # leaf nodes w/term. indices
-FRONTIERRE = re.compile(r' ([0-9]+):([0-9]+)\b') # non-terminal frontiers
+FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
+TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term. indices
+FRONTIERRE = re.compile(r' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
+LABEL = re.compile(' *\( *([^ ()]+) *')
+
 
 # used to generate values for defaultdicts
 def one():
@@ -52,20 +56,31 @@ def one():
 # of a python object, and with a struct the root & id fields must be in front
 # which seems to lead to bad hashing behavior (?)
 cdef packed struct BitsetTail:
-	UInt id # tree no. of which this fragment was extracted
-	short root # index of the root of the fragment in the NodeArray
+	UInt id  # tree no. of which this fragment was extracted
+	short root  # index of the root of the fragment in the NodeArray
+
+
 cdef inline bytes wrap(ULong *data, short SLOTS):
 	return (<char *>data)[:SLOTS * sizeof(ULong) + sizeof(BitsetTail)]
+
+
 cdef inline ULong *getpointer(object wrapper):
 	return <ULong *><char *><bytes>wrapper
+
+
 cdef inline UInt getid(ULong *data, short SLOTS):
 	return (<BitsetTail *>&data[SLOTS]).id
+
+
 cdef inline short getroot(ULong *data, short SLOTS):
 	return (<BitsetTail *>&data[SLOTS]).root
+
+
 cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
 	cdef BitsetTail *tail = <BitsetTail *>&data[SLOTS]
 	tail.id = id
 	tail.root = root
+
 
 cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
@@ -83,9 +98,9 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	pair of trees is extracted as well. """
 	cdef:
 		int n, m, x, start = 0, end2
-		short SLOTS	# the number of bitsets needed to cover the largest tree
-		ULong *CST = NULL # Common Subtree Table
-		ULong *scratch, *bitset # temporary variables
+		short SLOTS  # the number of bitsets needed to cover the largest tree
+		ULong *CST = NULL  # Common Subtree Table
+		ULong *scratch, *bitset  # temporary variables
 		NodeArray a, b, *ctrees1, *ctrees2
 		Node *anodes, *bnodes
 		list asent
@@ -154,6 +169,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	free(scratch)
 	return fragments
 
+
 cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
 		ULong *CST, short SLOTS):
 	""" Fast Tree Kernel (average case linear time). Expects trees to be sorted
@@ -175,6 +191,7 @@ cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
 					jj += 1
 				i += 1
 
+
 cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
 		short j, int n, set results, ULong *scratch, short SLOTS):
 	""" Visit nodes of 'b' in pre-order traversal. store bitsets of connected
@@ -195,6 +212,7 @@ cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
 		if b[j].right >= 0:
 			extractbitsets(CST, a, b, b[j].right, n, results, scratch, SLOTS)
 
+
 cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
 	""" Traverse tree a and b in parallel to extract a connected subset """
@@ -208,6 +226,7 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		return
 	if TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
+
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bint fast=True, bint indices=False):
@@ -241,7 +260,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	# compare one bitset to each tree for each unique fragment.
 	for n, wrapper in enumerate(bitsets):
 		bitset = getpointer(wrapper)
-		a = trees1.trees[getid(bitset, SLOTS)] # fragment came from this tree
+		a = trees1.trees[getid(bitset, SLOTS)]  # fragment came from this tree
 		anodes = &trees1.nodes[a.offset]
 		i = anextset(bitset, 0, SLOTS)
 		assert i != -1
@@ -250,7 +269,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		while i != -1:
 			candidates &= <set>(trees2.treeswithprod[anodes[i].prod])
 			i = anextset(bitset, i + 1, SLOTS)
-		i = getroot(bitset, SLOTS) # root of fragment in a
+		i = getroot(bitset, SLOTS)  # root of fragment in a
 		if indices:
 			matches = theindices[n]
 		for m in candidates:
@@ -266,6 +285,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 				elif fast and anodes[i].prod < bnodes[j].prod:
 					break
 	return theindices if indices else counts
+
 
 cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 		short i, short j):
@@ -283,6 +303,7 @@ cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 	elif TESTBIT(bitset, a[i].right):
 		return containsbitset(a, b, bitset, a[i].right, b[j].right)
 	return 1
+
 
 cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		short maxnodes, bint discontinuous):
@@ -316,6 +337,7 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		result[frag] = wrap(scratch, SLOTS)
 	return result
 
+
 cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		bint discontinuous=False):
 	""" Utility function to generate bitsets corresponding to whole trees
@@ -342,6 +364,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		result[frag] = wrap(scratch, SLOTS)
 	return result
 
+
 cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 		int i, int n, set results, short SLOTS, ULong *scratch):
 	""" Visit nodes of 'a' in pre-order traversal. store bitsets of connected
@@ -350,14 +373,14 @@ cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 	changes with each recursive step. 'n' is the identifier of this tree which
 	is stored with extracted fragments. """
 	cdef bint start = scratch is NULL and not TESTBIT(bitset, i)
-	if start: # start extracting a fragment
+	if start:  # start extracting a fragment
 		# need to create a new array because further down in the recursion
 		# other fragments may be encountered which should not overwrite
 		# this one
 		scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		assert scratch is not NULL
 		setrootid(scratch, i, n, SLOTS)
-	elif TESTBIT(bitset, i): # stop extracting for this fragment
+	elif TESTBIT(bitset, i):  # stop extracting for this fragment
 		scratch = NULL
 	if scratch is not NULL:
 		SETBIT(scratch, i)
@@ -365,9 +388,10 @@ cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 		extractcompbitsets(bitset, a, a[i].left, n, results, SLOTS, scratch)
 		if a[i].right >= 0:
 			extractcompbitsets(bitset, a, a[i].right, n, results, SLOTS, scratch)
-	if start: # store fragment
+	if start:  # store fragment
 		results.add(wrap(scratch, SLOTS))
 		free(scratch)
+
 
 cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
@@ -443,11 +467,12 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	free(CST)
 	return fragments
 
+
 cdef inline void getCST(Node *a, Node *b, int alen, int blen, ULong *CST,
 		int i, int j, short SLOTS):
 	""" Recursively build common subtree table (CST) for subtrees a[i], b[j]. """
 	cdef ULong *child, *bitset = &CST[IDX(i, j, blen, SLOTS)]
-	SETBIT(bitset, alen) # mark cell as visited
+	SETBIT(bitset, alen)  # mark cell as visited
 	# compare label & arity / terminal; assume presence of arity markers.
 	if a[i].prod == b[j].prod:
 		SETBIT(bitset, i)
@@ -460,13 +485,14 @@ cdef inline void getCST(Node *a, Node *b, int alen, int blen, ULong *CST,
 			getCST(a, b, alen, blen, CST, a[i].left, b[j].left, SLOTS)
 		for n in range(SLOTS):
 			bitset[n] |= child[n]
-		if a[i].right < 0: # and b[j].right < 0: # unary node
+		if a[i].right < 0:  # and b[j].right < 0: # unary node
 			return
 		child = &CST[IDX(a[i].right, b[j].right, blen, SLOTS)]
 		if not TESTBIT(child, alen):
 			getCST(a, b, alen, blen, CST, a[i].right, b[j].right, SLOTS)
 		for n in range(SLOTS):
 			bitset[n] |= child[n]
+
 
 cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
 		ULong *scratch, short SLOTS):
@@ -499,9 +525,11 @@ cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
 				finalnodeset.add(tmp)
 	return finalnodeset
 
+
 cdef inline short termidx(x):
 	""" Translate representation for terminal indices. """
 	return -x - 1
+
 
 cdef inline str strtree(Node *tree, list labels, int i):
 	""" produce string representation of (complete) tree, with indices as
@@ -514,6 +542,7 @@ cdef inline str strtree(Node *tree, list labels, int i):
 	return "(%s %s %s)" % (labels[tree[i].prod],
 			strtree(tree, labels, tree[i].left),
 			strtree(tree, labels, tree[i].right))
+
 
 cdef inline unicode unicodetree(Node *tree, list labels, list sent, int i):
 	""" produce string representation of (complete) tree, with words as
@@ -530,6 +559,7 @@ cdef inline unicode unicodetree(Node *tree, list labels, list sent, int i):
 			unicodetree(tree, labels, sent, tree[i].left),
 			unicodetree(tree, labels, sent, tree[i].right))
 
+
 cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, int i):
 	""" Turn bitset into string representation of tree,
 	with indices as terminals. """
@@ -544,6 +574,7 @@ cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, int i):
 				getsubtree(tree, bitset, labels, tree[i].right))
 	# node not in bitset, frontier non-terminal
 	return "(%s %s)" % (labels[tree[i].prod], yieldranges(tree, i))
+
 
 cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
 		list sent, int i):
@@ -563,6 +594,7 @@ cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
 	# node not in bitset, frontier non-terminal
 	return u"(%s )" % labels[tree[i].prod]
 
+
 cdef inline yieldranges(Node *tree, int i):
 	""" For discontinuous trees, return a string with the intervals of indices
 	corresponding to the components in the yield of a node.
@@ -579,6 +611,7 @@ cdef inline yieldranges(Node *tree, int i):
 	yields.append("%d:%d" % (start, prev))
 	return " ".join(yields)
 
+
 cdef inline list getyield(Node *tree, int i):
 	""" Recursively collect indices of terminals under a node. """
 	if tree[i].left < 0:
@@ -587,10 +620,12 @@ cdef inline list getyield(Node *tree, int i):
 		return getyield(tree, tree[i].left)
 	return getyield(tree, tree[i].left) + getyield(tree, tree[i].right)
 
+
 def repl(d):
 	def f(x):
 		return d[int(x.group(1))]
 	return f
+
 
 cdef getsent(frag, list sent):
 	""" Select the words that occur in the fragment and renumber terminals in
@@ -623,16 +658,17 @@ cdef getsent(frag, list sent):
 	maxl = max(spans)
 	for n in sorted(spans):
 		if n in leaves:
-			newsent.append(sent[n]) # a terminal
+			newsent.append(sent[n])  # a terminal
 		else:
-			newsent.append(None) # a frontier node
+			newsent.append(None)  # a frontier node
 		leafmap[n] = " %d" % m
 		m += 1
-		if spans[n] not in spans and n != maxl: # a gap
+		if spans[n] not in spans and n != maxl:  # a gap
 			newsent.append(None)
 			m += 1
 	frag = FRONTIERORTERMRE.sub(repl(leafmap), frag)
 	return frag, tuple(newsent)
+
 
 cdef dumptree(NodeArray a, Node *anodes, list asent, list labels):
 	""" dump the node structs of a tree showing numeric IDs as well
@@ -653,6 +689,7 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, list labels):
 			print()
 	print(unicodetree(anodes, labels, asent, a.root), '\n', asent, '\n')
 
+
 cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 		list asent, list bsent, list labels, short SLOTS, bint bitmatrix=False):
 	""" dump a table of the common subtrees of two trees. """
@@ -660,14 +697,14 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 	cdef Node aa, bb
 	dumptree(a, anodes, asent, labels)
 	dumptree(b, bnodes, bsent, labels)
-	print('\t'.join([''] + ["%2d"%x for x in range(b.len)
+	print('\t'.join([''] + ["%2d" % x for x in range(b.len)
 		if bnodes[x].prod != -1]))
 	for m in range(b.len):
 		bb = bnodes[m]
 		print('\t', labels[bb.prod][:3], end='')
 	for n in range(a.len):
 		aa = anodes[n]
-		print("\n%2d"%n, labels[aa.prod][:3], end='')
+		print("\n%2d" % n, labels[aa.prod][:3], end='')
 		for m in range(b.len):
 			print('\t', end='')
 			if bitmatrix:
@@ -690,14 +727,16 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 				for n in range(b.len)]) for m in range(a.len)]),
 			"both", abitcount(CST, b.len * SLOTS))
 	else:
-		print(sum([any([abitcount(&CST[IDX(n,m,b.len,SLOTS)], SLOTS) > 1
+		print(sum([any([abitcount(&CST[IDX(n, m, b.len, SLOTS)], SLOTS) > 1
 			for m in range(b.len)]) for n in range(a.len)]))
+
 
 def add_lcfrs_rules(tree, sent):
 	for a, b in zip(tree.subtrees(),
 			lcfrs_productions(tree, sent, frontiers=True)):
 		a.prod = b
 	return tree
+
 
 def getlabelsprods(trees, labels, prods):
 	""" collect label/prod attributes from 'trees' and index them. """
@@ -709,10 +748,13 @@ def getlabelsprods(trees, labels, prods):
 				prods[st.prod] = pnum
 				pnum += 1
 
+
 def nonfrontier(sent):
 	def nonfrontierfun(x):
 		return isinstance(x[0], Tree) or sent[x[0]] is not None
 	return nonfrontierfun
+
+
 def tolist(tree, sent):
 	""" Convert Tree object to list of non-terminal nodes in pre-order
 	traversal; add indices to nodes reflecting their position in the list. """
@@ -725,11 +767,14 @@ def tolist(tree, sent):
 	result[0].rootidx = 0
 	return result
 
+
 def pathsplit(p):
 	return p.rsplit('/', 1) if '/' in p else ('.', p)
 
+
 def getprodid(prods, node):
 	return prods.get(node.prod, -1)
+
 
 def getctrees(trees, sents, trees2=None, sents2=None):
 	""" Return Ctrees object for a list of disc. trees and sentences. """
@@ -757,7 +802,7 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 	return dict(trees1=trees, sents1=sents, trees2=trees2, sents2=sents2,
 		prods=prods, labels=labels)
 
-LABEL = re.compile(' *\( *([^ ()]+) *')
+
 cdef readnode(line, list labels, dict prods, Node *result,
 		size_t *idx, list sent, origlabel):
 	""" Parse an s-expression in a string, and store in an array of Node
@@ -791,7 +836,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 				elif child2 is None:
 					child2 = rest[start:n + 1]
 					startchild2 = start
-				else: # will do on the fly binarization
+				else:  # will do on the fly binarization
 					childlabels = []
 					break
 	# if there were more children, collect labels for a binarized constituent
@@ -805,7 +850,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 				parens -= 1
 				if parens == 0:
 					match = LABEL.match(rest, start)
-					if match is None: # introduce preterminal
+					if match is None:  # introduce preterminal
 						childlabels.append('/'.join((label, rest[start:n + 1])))
 					else:
 						childlabels.append(match.group(1))
@@ -815,12 +860,12 @@ cdef readnode(line, list labels, dict prods, Node *result,
 				+ '> ' + rest[startchild2:])
 	assert parens == -1, "unbalanced parentheses: %d\n%r" % (parens, line)
 	match1 = LABEL.match(child1)
-	if match1 is not None: # non-terminal label
+	if match1 is not None:  # non-terminal label
 		labelchild1 = match1.group(1)
-	elif child2 is not None: # insert preterminal
+	elif child2 is not None:  # insert preterminal
 		labelchild1 = '/'.join((label, child1))
 		child1 = '(' + ' '.join((labelchild1, child1)) + ')'
-	else: # terminal following pre-terminal; store terminal
+	else:  # terminal following pre-terminal; store terminal
 		# leading space distinguishes terminal from non-terminal
 		labelchild1 = ' ' + child1
 		left = termidx(len(sent))
@@ -831,11 +876,11 @@ cdef readnode(line, list labels, dict prods, Node *result,
 		match = LABEL.match(child2)
 		if match is not None:
 			labelchild2 = match.group(1)
-		else: # insert preterminal
+		else:  # insert preterminal
 			labelchild2 = '/'.join((label, child2))
 			child2 = '(' + ' '.join((labelchild2, child2)) + ')'
 		prod = (label, labelchild1, labelchild2)
-	if prod not in prods: # assign new ID?
+	if prod not in prods:  # assign new ID?
 		prods[prod] = len(prods)
 		labels.append(label)
 	n = idx[0]
@@ -851,6 +896,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 	result[n].prod = prods[prod]
 	result[n].left = left
 	result[n].right = right
+
 
 def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		bint discontinuous=False, int limit=0, encoding="utf-8"):
@@ -902,7 +948,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	ctrees = Ctrees()
 	ctrees.alloc(numtrees, numnodes)
 	ctrees.maxnodes = max(nodesperline)
-	binfactor = 2 # conservative estimate to accommodate binarization
+	binfactor = 2  # conservative estimate to accommodate binarization
 	scratch = <Node *>malloc(ctrees.maxnodes * binfactor * sizeof(Node))
 	assert scratch is not NULL
 	for m, line in enumerate(lines):
@@ -913,6 +959,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		ctrees.addnodes(scratch, cnt, 0)
 	free(scratch)
 	return ctrees, sents
+
 
 cdef test():
 	""" Test some of the bitvector operations """
@@ -937,6 +984,7 @@ cdef test():
 		for m in range(bits):
 			assert not TESTBIT(vec, n)
 	print("bitset test successful")
+
 
 def main():
 	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS

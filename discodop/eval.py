@@ -228,20 +228,19 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		if param["DEBUG"] <= 0:
 			continue
 		print("%4s  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f%s%s" % (
-			n,
-			lengpos,
-			nozerodiv(lambda: recall(gbrack, cbrack)),
-			nozerodiv(lambda: precision(gbrack, cbrack)),
-			sum((gbrack & cbrack).values()),
-			sum(gbrack.values()),
-			sum(cbrack.values()),
-			len(gpos),
-			sum(1 for a, b in zip(gpos, cpos) if a == b),
-			nozerodiv(lambda: accuracy(gpos, cpos)),
-			100 * lascores[-1],
-			str(ted).rjust(3) if param["TED"] else "",
-			nozerodiv(lambda: accuracy(gdep, cdep)) if param["DEP"] else "",
-			))
+				n,
+				lengpos,
+				nozerodiv(lambda: recall(gbrack, cbrack)),
+				nozerodiv(lambda: precision(gbrack, cbrack)),
+				sum((gbrack & cbrack).values()),
+				sum(gbrack.values()),
+				sum(cbrack.values()),
+				len(gpos),
+				sum(1 for a, b in zip(gpos, cpos) if a == b),
+				nozerodiv(lambda: accuracy(gpos, cpos)),
+				100 * lascores[-1],
+				str(ted).rjust(3) if param["TED"] else "",
+				nozerodiv(lambda: accuracy(gdep, cdep)) if param['DEP'] else ''))
 		if param["DEBUG"] > 1:
 			print("Sentence:", " ".join(gsent))
 			print("Gold tree:      %s\nCandidate tree: %s" % (gtree, ctree))

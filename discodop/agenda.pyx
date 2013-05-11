@@ -13,16 +13,21 @@ DEF INVALID = 0
 DEF HEAP_ARITY = 4
 # 2 for binary heap, 4 for quadtree heap
 
+
 def getkey(Entry entry):
 	return entry.key
 
+
 cdef inline bint cmpfun(Entry a, Entry b):
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))
+
+
 # this is _significantly_ faster than going through __richcmp__ of objects
 cdef inline bint edgecmpfun(Entry a, Entry b):
 	return ((<LCFRSEdge>a.value).score < (<LCFRSEdge>b.value).score
 		or ((<LCFRSEdge>a.value).score == (<LCFRSEdge>b.value).score
 		and a.count < b.count))
+
 
 cdef class Agenda:
 	""" Priority Queue based on binary heap which implements decrease-key and
@@ -56,7 +61,7 @@ cdef class Agenda:
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key
+			entry.key = key
 			entry.value = value
 			entry.count = oldentry.count
 			self.mapping[key] = entry
@@ -66,7 +71,7 @@ cdef class Agenda:
 			self.counter += 1
 			self.length += 1
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key
+			entry.key = key
 			entry.value = value
 			entry.count = self.counter
 			self.mapping[key] = entry
@@ -91,7 +96,7 @@ cdef class Agenda:
 		equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
-		entry.key =  key
+		entry.key = key
 		entry.value = value
 		entry.count = oldentry.count
 		self.mapping[key] = entry
@@ -142,37 +147,62 @@ cdef class Agenda:
 		entry.count = INVALID
 		self.length -= 1
 		return entry.value
+
 	def popitem(self):
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
+
 	def __delitem__(self, key):
 		(<Entry>self.mapping[key]).count = INVALID
 		self.length -= 1
 		del self.mapping[key]
+
 	def update(self, *a, **kw):
 		for b in a:
 			for k, v in b:
 				self[k] = v
 		for k, v in kw.items():
 			self[k] = v
+
 	def clear(self):
 		self.counter = 1
 		del self.heap[:]
 		self.mapping.clear()
+
 	def __repr__(self):
 		return '%s({%s})' % (self.__class__.__name__, ", ".join(
 				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
 				for a in self.heap if (<Entry>a).count]))
-	def __contains__(self, key): return key in self.mapping
-	def __getitem__(self, key): return self.getitem(key)
-	def __setitem__(self, key, value): self.setitem(key, value)
-	def __str__(self): return self.__repr__()
-	def __iter__(self): return iter(self.mapping)
-	def __len__(self): return self.length
-	def __nonzero__(self): return self.length != 0
-	def keys(self): return self.mapping.keys()
-	def values(self): return map(getval, self.mapping.values())
-	def items(self): return zip(self.keys(), self.values())
+
+	def __contains__(self, key):
+		return key in self.mapping
+
+	def __getitem__(self, key):
+		return self.getitem(key)
+
+	def __setitem__(self, key, value):
+		self.setitem(key, value)
+
+	def __str__(self):
+		return self.__repr__()
+
+	def __iter__(self):
+		return iter(self.mapping)
+
+	def __len__(self):
+		return self.length
+
+	def __nonzero__(self):
+		return self.length != 0
+
+	def keys(self):
+		return self.mapping.keys()
+
+	def values(self):
+		return map(getval, self.mapping.values())
+
+	def items(self):
+		return zip(self.keys(), self.values())
 
 cdef class EdgeAgenda:
 	""" Priority Queue based on binary heap which implements decrease-key and
@@ -222,7 +252,7 @@ cdef class EdgeAgenda:
 		equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
-		entry.key =  key
+		entry.key = key
 		entry.value = value
 		entry.count = oldentry.count
 		self.mapping[key] = entry
@@ -264,7 +294,7 @@ cdef class EdgeAgenda:
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key
+			entry.key = key
 			entry.value = value
 			entry.count = oldentry.count
 			self.mapping[key] = entry
@@ -275,7 +305,7 @@ cdef class EdgeAgenda:
 			self.counter += 1
 			self.length += 1
 			entry = <Entry>Entry.__new__(Entry)
-			entry.key =  key
+			entry.key = key
 			entry.value = value
 			entry.count = self.counter
 			self.mapping[key] = entry
@@ -285,6 +315,7 @@ cdef class EdgeAgenda:
 	# identical to Agenda() methods
 	cdef bint contains(self, key):
 		return key in self.mapping
+
 	def pop(self, key):
 		cdef Entry entry
 		if key is None:
@@ -293,37 +324,63 @@ cdef class EdgeAgenda:
 		entry.count = INVALID
 		self.length -= 1
 		return entry.value
+
 	def popitem(self):
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
+
 	def __delitem__(self, key):
 		(<Entry>self.mapping[key]).count = INVALID
 		self.length -= 1
 		del self.mapping[key]
+
 	def update(self, *a, **kw):
 		for b in a:
 			for k, v in b:
 				self[k] = v
 		for k, v in kw.items():
 			self[k] = v
+
 	def clear(self):
 		self.counter = 1
 		del self.heap[:]
 		self.mapping.clear()
+
 	def __repr__(self):
 		return '%s({%s})' % (self.__class__.__name__, ", ".join(
 				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
 				for a in self.heap if (<Entry>a).count]))
-	def __contains__(self, key): return key in self.mapping
-	def __getitem__(self, key): return self.getitem(key)
-	def __setitem__(self, key, value): self.setitem(key, value)
-	def __str__(self): return self.__repr__()
-	def __iter__(self): return iter(self.mapping)
-	def __len__(self): return self.length
-	def __nonzero__(self): return self.length != 0
-	def keys(self): return self.mapping.keys()
-	def values(self): return map(getval, self.mapping.values())
-	def items(self): return zip(self.keys(), self.values())
+
+	def __contains__(self, key):
+		return key in self.mapping
+
+	def __getitem__(self, key):
+		return self.getitem(key)
+
+	def __setitem__(self, key, value):
+		self.setitem(key, value)
+
+	def __str__(self):
+		return self.__repr__()
+
+	def __iter__(self):
+		return iter(self.mapping)
+
+	def __len__(self):
+		return self.length
+
+	def __nonzero__(self):
+		return self.length != 0
+
+	def keys(self):
+		return self.mapping.keys()
+
+	def values(self):
+		return map(getval, self.mapping.values())
+
+	def items(self):
+		return zip(self.keys(), self.values())
+
 
 #a more efficient nsmallest implementation. Assumes items are Edge objects.
 cdef list nsmallest(int n, object iterable):
@@ -332,6 +389,7 @@ cdef list nsmallest(int n, object iterable):
 	if len(items) > 1:
 		quickfindfirstk(items, 0, len(items) - 1, n)
 	return items[:n]
+
 
 cdef inline void quickfindfirstk(list items, int left, int right, int k):
 	""" quicksort k-best selection """
@@ -347,6 +405,7 @@ cdef inline void quickfindfirstk(list items, int left, int right, int k):
 		if right > pivotnewindex + 1:
 			quickfindfirstk(items, pivotnewindex + 1, right, k)
 
+
 cdef inline int partition(list items, int left, int right, int pivot):
 	cdef Edge pivotvalue = <Edge>(items[pivot])
 	# Move pivot to end
@@ -359,6 +418,7 @@ cdef inline int partition(list items, int left, int right, int pivot):
 	# Move pivot to its final place
 	items[storeindex], items[right] = items[right], items[storeindex]
 	return storeindex
+
 
 # heap operations (adapted from heapq)
 cdef inline Entry heappop(list heap, CmpFun cmpfun):
@@ -375,10 +435,12 @@ cdef inline Entry heappop(list heap, CmpFun cmpfun):
 		siftdown(heap, 0, cmpfun)
 	return entry
 
+
 cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 	# place at the end and swap with parents until heap invariant holds
 	heap.append(entry)
 	siftup(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
+
 
 cdef inline void heapify(list heap, CmpFun cmpfun):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
@@ -386,19 +448,23 @@ cdef inline void heapify(list heap, CmpFun cmpfun):
 	for i in range(PyList_GET_SIZE(heap) // HEAP_ARITY, -1, -1):
 		siftdown(heap, i, cmpfun)
 
+
 # shifts only apply for binary tree
 cdef inline int _parent(int i):
 	return (i - 1) // HEAP_ARITY
 	#return (i - 1) >> 1
 
+
 cdef inline int _left(int i):
 	return i * HEAP_ARITY + 1
 	#return (i << 1) + 1
+
 
 cdef inline int _right(int i):
 	""" for documentation purposes; not used. """
 	return i * HEAP_ARITY + 2
 	#return (i + 1) << 1
+
 
 cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
 	cdef int startpos = pos, childpos = _left(pos), rightpos
@@ -416,6 +482,7 @@ cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
 	heap[pos] = newitem
 	siftup(heap, startpos, pos, cmpfun)
 
+
 cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 	cdef int parentpos
 	cdef Entry parent, newitem = <Entry>PyList_GET_ITEM(heap, pos)
@@ -428,12 +495,15 @@ cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 		pos = parentpos
 	heap[pos] = newitem
 
+
 #==============================================================================
 from unittest import TestCase
 testN = 1000
 
+
 def getval(Entry entry):
 	return entry.value
+
 
 class TestHeap(TestCase):
 	def check_invariants(self, Agenda h):
@@ -566,17 +636,18 @@ class TestHeap(TestCase):
 	def test_repr(self):
 		h, pairs, d = self.make_data()
 		#self.assertEqual(h, eval(repr(h)))
-		tmp = repr(h)	# 'Agenda({....})'
+		tmp = repr(h)  # 'Agenda({....})'
 		#strip off class name
 		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
 		self.assertEqual(d, eval(dstr))
 
+
 def test(verbose=False):
 	import sys
 	if sys.version[0] >= '3':
-		import test.support as test_support # Python 3
+		import test.support as test_support  # Python 3
 	else:
-		import test.test_support as test_support # Python 2
+		import test.test_support as test_support  # Python 2
 	test_support.run_unittest(TestHeap)
 
 	# verify reference counting
