@@ -1,0 +1,16 @@
+#!/usr/bin/env python
+import os, sys
+
+COMMANDS = {'demos', 'eval', 'fragments', 'gen', 'parser',
+		'runexp', 'grammar', 'treetransforms'}
+
+if len(sys.argv) <= 1 or sys.argv[1] not in COMMANDS:
+	print('usage: %s <command> [arguments]' % sys.argv[0])
+	print('where command is one of:')
+	for a in COMMANDS:
+		print('\t%s' % a)
+	print('for additional instructions issue: %s <command> --help' % sys.argv[0])
+else:
+	cmd = sys.argv[1]
+	sys.argv[0] = os.path.basename(sys.argv.pop(0)) + ' ' + cmd
+	__import__('discodop.%s' % cmd, globals(), locals(), ['main']).main()
