@@ -310,7 +310,7 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 				a = nextset(newitem.vec, b)
 				while a != -1:
 					b = nextunset(newitem.vec, a)
-					#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+					# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
 					COMPONENT.vec = (1ULL << b) - (1ULL << a)
 					if markorigin:
 						componentdict = <dict>(componentlist[cnt])

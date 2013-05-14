@@ -82,7 +82,7 @@ DEFAULTSTAGE = dict(
 		sldop_n=7)
 
 
-def main(
+def startexp(
 		stages=(
 		# see variable 'DEFAULTSTAGE' above
 		dict(
@@ -154,7 +154,7 @@ def main(
 		numproc=1,  # increase to use multiple CPUs; set to None to use all CPUs.
 		resultdir='results',
 		rerun=False):
-	""" Main entry point. """
+	""" Execute an experiment. """
 	assert bintype in ("optimal", "optimalhead", "binarize")
 	if postagging is not None:
 		assert set(postagging).issubset({"method", "model",
@@ -1161,22 +1161,6 @@ def treebankfanout(trees):
 		for a in tree.subtrees(lambda x: len(x) > 1))
 
 
-def dispatch(argv):
-	""" Parse command line arguments. """
-	if len(argv) == 1:
-		print(USAGE)
-	elif '--tepacoc' in argv:
-		parsetepacoc()
-	else:
-		paramstr = open(argv[1]).read()
-		params = eval("dict(%s)" % paramstr)
-		params['resultdir'] = argv[1].rsplit(".", 1)[0]
-		params['rerun'] = '--rerun' in argv
-		main(**params)
-		if not params['rerun']:  # copy parameter file to result dir
-			open("%s/params.prm" % params['resultdir'], "w").write(paramstr)
-
-
 class DictObj(object):
 	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
 
@@ -1199,11 +1183,25 @@ class DictObj(object):
 			",\n".join("%s=%r" % a for a in self.__dict__.items()))
 
 
-if __name__ == '__main__':
+def main(argv=None):
+	""" Parse command line arguments. """
 	try:
 		# report backtrace on segfaults &c. pip install faulthandler
 		import faulthandler
 		faulthandler.enable()
 	except ImportError:
 		pass
-	dispatch(sys.argv)
+	if argv is None:
+		argv = sys.argv
+	if len(argv) == 1:
+		print(USAGE)
+	elif '--tepacoc' in argv:
+		parsetepacoc()
+	else:
+		paramstr = open(argv[1]).read()
+		params = eval("dict(%s)" % paramstr)
+		params['resultdir'] = argv[1].rsplit(".", 1)[0]
+		params['rerun'] = '--rerun' in argv
+		startexp(**params)
+		if not params['rerun']:  # copy parameter file to result dir
+			open("%s/params.prm" % params['resultdir'], "w").write(paramstr)

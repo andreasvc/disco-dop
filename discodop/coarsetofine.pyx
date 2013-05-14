@@ -65,7 +65,7 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 			if splitprune and markorigin and fine.fanout[label] != 1:
 				if fine.splitmapping[label] is not NULL:
 					whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
-						for n in range(fine.fanout[label])]
+							for n in range(fine.fanout[label])]
 			else:
 				if fine.mapping[label] != 0:
 					whitelist[label] = kbestspans[fine.mapping[label]]

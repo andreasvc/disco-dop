@@ -1,7 +1,8 @@
 """ Run doctests and other tests from all modules. """
 from doctest import testmod, NORMALIZE_WHITESPACE, REPORT_NDIFF
 from operator import itemgetter
-from discodop.runexp import dispatch
+import sys
+import discodop.runexp
 from discodop import bit, demos, kbest, grammar, treebank, estimates, pcfg, \
 		fragments, _fragments, plcfrs, agenda, coarsetofine, eval, gen, \
 		disambiguation, lexicon, tree, treetransforms, treedist, treedraw
@@ -22,7 +23,7 @@ for mod in modules:
 		mod.test()
 	else:
 		mod.main()
-dispatch("runexp.py sample.prm".split())
+discodop.runexp.main(argv="runexp.py sample.prm".split())
 for mod, (fail, attempted) in sorted(results.items(),
 		key=itemgetter(1)):
 	if attempted:
