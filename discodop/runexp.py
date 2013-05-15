@@ -437,15 +437,12 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 	logging.info("binarized treebank fan-out: %d #%d", *treebankfanout(trees))
 	trees = [canonicalize(a).freeze() for a in trees]
 
-	if any(stage.split for stage in stages):
-		splittrees = [binarize(splitdiscnodes(Tree.convert(a),
-				stages[0].markorigin), childchar=":").freeze()
-				for a in trees]
-		logging.info("splitted discontinuous nodes")
 	for n, stage in enumerate(stages):
 		assert stage.mode in ("plcfrs", "pcfg", "pcfg-posterior")
 		if stage.split:
-			traintrees = splittrees
+			traintrees = [binarize(splitdiscnodes(Tree.convert(a),
+					stage.markorigin), childchar=":").freeze() for a in trees]
+			logging.info("splitted discontinuous nodes")
 		else:
 			traintrees = trees
 		assert n > 0 or not stage.prune, (
