@@ -118,11 +118,11 @@ For example::
 
 Usage: tools
 ------------
-There are two web based tools, which require Flask to be installed:
+There are two web based tools in the ``web/`` directory. These require Flask to be installed.
 
-:``web/parse.py``: A web interface to the parser. Expects a series of grammars
+:``parse.py``: A web interface to the parser. Expects a series of grammars
     in subdirectories of ``web/grammars/``.
-:``web/treesearch.py``: A web interface for searching trough treebanks. Expects
+:``treesearch.py``: A web interface for searching trough treebanks. Expects
     one or more treebanks with the ``.mrg`` extension in the directory
     ``web/corpus/`` (sample included).
 
