@@ -1,5 +1,8 @@
 include README.rst LICENSE setup.py *.prm
 recursive-include discodop *.py *.pyx *.pxd *.h
 recursive-exclude discodop *.c
-recursive-include web *
+recursive-include web *.py
+recursive-include web/static *
+recursive-include web/templates *
+recursive-include web/corpus *.mrg
 recursive-exclude web/grammars *
