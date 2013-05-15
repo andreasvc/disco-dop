@@ -1,14 +1,14 @@
 Discontinuous DOP
 =================
 
+.. image:: http://staff.science.uva.nl/~acranenb/disco-dop.png
+   :align: right
+   :alt: contrived discontinuous constituent for expository purposes.
+
 The aim of this project is to parse discontinuous constituents with
 Data-Oriented Parsing (DOP), with a focus on global world domination.
 Concretely, we build a DOP model with a Linear Context-Free Rewriting
 System (LCFRS) as the symbolic backbone.
-
-.. image:: http://staff.science.uva.nl/~acranenb/disco-dop.png
-   :align: right
-   :alt: contrived discontinuous constituent for expository purposes.
 
 Background
 ----------
@@ -94,20 +94,16 @@ Usage: tools
 ------------
 Aside from the parser there are some standalone tools:
 
-:``fragments``:
-  Finds recurring or common fragments in one or more treebanks. It can be used
-  with discontinuous as well as Penn-style bracketed treebanks.
-:``treetransforms``:
-  A command line interface to perform transformations on treebanks such as
-  binarization.
-:``grammar``:
-  A command line interface to read off grammars from (binarized) treebanks.
-:``parser``:
-  A basic command line interface to the parser comparable to bitpar. Reads
-  grammars from text files.
-:``eval``:
-  Discontinuous evaluation. Reports F-scores and other metrics. Accepts
-  ``EVALB`` parameter files::
+:``fragments``: Finds recurring or common fragments in one or more treebanks.
+    It can be used with discontinuous as well as Penn-style bracketed treebanks.
+:``treetransforms``: A command line interface to perform transformations on
+     treebanks such as binarization.
+:``grammar``: A command line interface to read off grammars from (binarized)
+      treebanks.
+:``parser``: A basic command line interface to the parser comparable to bitpar.
+    Reads grammars from text files.
+:``eval``: Discontinuous evaluation. Reports F-scores and other metrics.
+    Accepts ``EVALB`` parameter files::
 
     python evalnegra-corpus.export sample/plcfrs.export proper.prm
 :``demos``: Contains examples of various formalisms encoded in LCFRS grammars.
@@ -124,8 +120,11 @@ Usage: tools
 ------------
 There are two web based tools, which require Flask to be installed:
 
-:``web/parse.py``: A web interface to the parser. Expects a series of grammars in subdirectories of ``web/grammars/``.
-:``web/treesearch.py``: A web interface for searching trough treebanks. Expects one or more treebanks with the ``.mrg`` extension in the directory ``web/corpus/``.
+:``web/parse.py``: A web interface to the parser. Expects a series of grammars
+    in subdirectories of ``web/grammars/``.
+:``web/treesearch.py``: A web interface for searching trough treebanks. Expects
+    one or more treebanks with the ``.mrg`` extension in the directory
+    ``web/corpus/`` (sample included).
 
 Acknowledgments
 ---------------
