@@ -321,10 +321,10 @@ def doqueries(form, lines=False, doexport=False):
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
 		if n == 0:
-			logging.debug(' '.join(cmd + [text + '.t2c.gz']))
+			logging.debug(' '.join("'%s'" % x if ' ' in x else x for x in cmd))
 		if lines:
 			yield text, (filterlabels(form, a.decode('utf8'))
-					for a in proc.stdout), proc.stderr.read()
+					for a in proc.stdout.readlines()), proc.stderr.read()
 		else:
 			yield text, proc.stdout.read().decode('utf8'), proc.stderr.read()
 

@@ -81,13 +81,13 @@ span.tt { font-family: monospace; }
     <tr id=normrow><td>Normalization:</td>
     <td><label><input type=radio name=norm value=sents{{
 		' checked' if form.get('norm', 'sents') == 'sents' }}>
-		Show % of Sentences;</label>
+		% of Sentences;</label>
     <label><input type=radio name=norm value=consts{{
 		' checked' if form.get('norm') == 'consts' }}>
-		Show % of Constituents;</label>
+		% of Constituents;</label>
     <label><input type=radio name=norm value=words{{
 		' checked' if form.get('norm') == 'words' }}>
-		Show % of Words;</label>
+		% of Words;</label>
     </td><td></td></tr>
     <tr id=labelrow style="visibility: hidden; "><td>Labels</td><td>
     <label><input type=checkbox name=nomorph{{
