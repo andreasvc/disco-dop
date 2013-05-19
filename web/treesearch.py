@@ -334,7 +334,6 @@ def doqueries(form, lines=False, doexport=False):
 			yield text, out, err
 
 
-
 def filterlabels(form, line):
 	""" Optionally remove morphological and grammatical function labels
 	from parse tree. """
@@ -350,7 +349,8 @@ def filterlabels(form, line):
 def barplot(counts, total, title, style='chart', width=800.0):
 	""" A HTML bar plot given a dictionary and max value. """
 	result = ['<div class=%s>' % style,
-			'<text style="font-family: sans-serif; font-size: 16px; ">%s</text>' % title]
+			('<text style="font-family: sans-serif; font-size: 16px; ">'
+			'%s</text>' % title)]
 	for key in sorted(counts, key=counts.get):
 		result.append('<div class=%s style="width: %gpx" >%s: %g</div>' % (
 				style, width * counts[key] / total, key, counts[key]))
@@ -358,19 +358,16 @@ def barplot(counts, total, title, style='chart', width=800.0):
 	return ''.join(result)
 
 
-def concplot(indices, total):
+def concplot(indices, total, width=800.0):
 	""" Draw a concordance plot from a sequence of indices and the total number
 	of items. """
-	result = [('\t<svg version="1.1" '
-			'xmlns="http://www.w3.org/2000/svg" '
-			'width="60%%" height=10px viewBox="0 0 %d 10" '
-			'preserveAspectRatio=none >' % total),
-			'<rect x=0 y=0 width=%d height=10 '
-			'fill=white stroke=black stroke-width=1 />' % total]
-	for idx in indices:
-		result.append('<line x1=%d y1=0 x2=%d y2=10 '
-				'stroke=black stroke-width=1 />' % (idx, idx))
-	return '\n'.join(result) + '\n</svg>'
+	return ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
+			' width="%dpx" height="10px" >\n'
+			'<rect x=0 y=0 width="%dpx" height=10 fill=white stroke=black />\n'
+			'<g transform="scale(%g, 1)">\n'
+			'<path stroke=black d="%s" /></g></svg>') % (
+			width, width, width / total,
+			''.join('M %d 0v 10' % idx for idx in sorted(indices)))
 
 
 def selectedtexts(form):
