@@ -93,7 +93,7 @@ def parse():
 def favicon():
 	""" Serve the favicon. """
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
-			'favicon.ico', mimetype='image/vnd.microsoft.icon')
+			'parse.ico', mimetype='image/vnd.microsoft.icon')
 
 
 def loadgrammars():

@@ -14,7 +14,7 @@ from functools import wraps
 # Flask & co
 from flask import Flask, Markup, Response
 from flask import request, render_template
-#from flask import send_from_directory
+from flask import send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 # disco-dop
 from discodop.tree import Tree
@@ -115,7 +115,7 @@ def style():
 			if a.endswith('.t2c.gz'):
 				tgrep = subprocess.Popen(
 						args=[which('tgrep2'), '-t', '-c', a, '*'],
-						shell=False, stdout=subprocess.PIPE)
+						shell=False, bufsize=-1, stdout=subprocess.PIPE)
 				cmd = [which('style'), '--language', lang]
 				stdin = tgrep.stdout
 			else:
@@ -123,11 +123,19 @@ def style():
 				stdin = None
 			if n == 0:
 				yield ' '.join(cmd) + '\n\n'
-			proc = subprocess.Popen(args=cmd, shell=False, stdin=stdin,
-					stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+			proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
+					stdin=stdin, stdout=subprocess.PIPE,
+					stderr=subprocess.STDOUT)
+			out = proc.communicate()[0]
+			if stdin:
+				proc.stdin.close()
+			proc.stdout.close()
+			proc.wait()
+			if a.endswith('.t2c.gz'):
+				tgrep.stdout.close()
+				tgrep.wait()
 			name = os.path.basename(a)
-			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name),
-					proc.communicate()[0])
+			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name), out)
 
 	resp = Response(generate(request.args.get('lang', 'en')),
 			mimetype='text/plain')
@@ -162,11 +170,11 @@ def draw():
 				unicodelines=True, html=True)
 
 
-#@APP.route('/favicon.ico')
-#def favicon():
-#	""" Serve the favicon. """
-#	return send_from_directory(os.path.join(APP.root_path, 'static'),
-#			'favicon.ico', mimetype='image/vnd.microsoft.icon')
+@APP.route('/favicon.ico')
+def favicon():
+	""" Serve the favicon. """
+	return send_from_directory(os.path.join(APP.root_path, 'static'),
+			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
 def counts(form):
@@ -194,27 +202,24 @@ def counts(form):
 		text = text.replace('.t2c.gz', '')
 		filename = os.path.join(CORPUS_DIR, text)
 		cnts[text] = cnt
-		if norm == 'sents':
-			total = len(open(filename).readlines())
-		elif norm == 'consts':
+		total = totalsent = len(open(filename).readlines())
+		if norm == 'consts':
 			total = open(filename).read().count('(')
 		elif norm == 'words':
 			total = len(GETLEAVES.findall(open(filename).read()))
-		else:
+		elif norm != 'sents':
 			raise ValueError
 		relfreq[text] = float(cnt) / total
 		sumtotal += total
 		line = "%s%6d    %5.2f %%" % (
 				text.ljust(40)[:40], cnt, 100 * relfreq[text])
+		indices = {int(line[:line.index(':::')])
+				for line in results.splitlines()}
+		plot = concplot(indices, totalsent)
 		if cnt:
-			plot = ''
-			if norm == 'sents':
-				indices = {int(line[:line.index(':::')])
-						for line in results.splitlines()}
-				plot = concplot(indices, total)
 			yield line + plot + '\n'
 		else:
-			yield '<span style="color: black; ">%s</span>\n' % line
+			yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
 	if gotresult:
 		yield ("%s%6d    %5.2f %%\n</span>\n" % (
 				"TOTAL".ljust(40),
@@ -321,13 +326,16 @@ def doqueries(form, lines=False, doexport=False):
 				'-c', os.path.join(CORPUS_DIR, text + '.t2c.gz'),
 				form['query']]
 		proc = subprocess.Popen(args=cmd,
-				shell=False,
+				bufsize=-1, shell=False,
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
 		if n == 0:
 			logging.debug(' '.join("'%s'" % x if ' ' in x else x for x in cmd))
 		out, err = proc.communicate()
 		out, err = out.decode('utf8'), err.decode('utf8')
+		proc.stdout.close()
+		proc.stderr.close()
+		proc.wait()
 		if lines:
 			yield text, filterlabels(form, out).splitlines(), err
 		else:
@@ -351,7 +359,7 @@ def barplot(counts, total, title, style='chart', width=800.0):
 	result = ['<div class=%s>' % style,
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
-	for key in sorted(counts, key=counts.get):
+	for key in sorted(counts, key=counts.get, reverse=True):
 		result.append('<div class=%s style="width: %gpx" >%s: %g</div>' % (
 				style, width * counts[key] / total, key, counts[key]))
 	result.append('</div>\n')
