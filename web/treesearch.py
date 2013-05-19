@@ -21,7 +21,6 @@ from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 
 CORPUS_DIR = "corpus/"
-TGREP_BIN = '/usr/local/bin/tgrep2'
 
 APP = Flask(__name__)
 MORPH_TAGS = re.compile(
@@ -101,7 +100,7 @@ def main():
 def style():
 	""" Use style(1) program to get staticstics for each text. """
 	# TODO: tabulate & plot
-	def generate():
+	def generate(lang):
 		""" Generator for results. """
 		files = glob.glob('corpus/*.txt')
 		if files:
@@ -112,23 +111,26 @@ def style():
 					"Using sentences extracted from parse trees.\n"
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
-		for a in files:
+		for n, a in enumerate(sorted(files)):
 			if a.endswith('.t2c.gz'):
-				tgrep = subprocess.Popen(args=['tgrep2', '-t', '-c', a, '*'],
+				tgrep = subprocess.Popen(
+						args=[which('tgrep2'), '-t', '-c', a, '*'],
 						shell=False, stdout=subprocess.PIPE)
-				cmd = ['/usr/bin/style']
+				cmd = [which('style'), '--language', lang]
 				stdin = tgrep.stdout
 			else:
-				#cmd = ['/usr/local/bin/style', '--language', 'nl', a]
-				cmd = ['/usr/bin/style', a]
+				cmd = [which('style'), '--language', lang, a]
 				stdin = None
+			if n == 0:
+				yield ' '.join(cmd) + '\n\n'
 			proc = subprocess.Popen(args=cmd, shell=False, stdin=stdin,
 					stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 			name = os.path.basename(a)
 			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name),
 					proc.communicate()[0])
 
-	resp = Response(generate(), mimetype='text/plain')
+	resp = Response(generate(request.args.get('lang', 'en')),
+			mimetype='text/plain')
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
@@ -205,21 +207,23 @@ def counts(form):
 		line = "%s%6d    %5.2f %%" % (
 				text.ljust(40)[:40], cnt, 100 * relfreq[text])
 		if cnt:
-			yield line + '\n'
+			plot = ''
+			if norm == 'sents':
+				indices = {int(line[:line.index(':::')])
+						for line in results.splitlines()}
+				plot = concplot(indices, total)
+			yield line + plot + '\n'
 		else:
 			yield '<span style="color: black; ">%s</span>\n' % line
 	if gotresult:
-		yield ("%s%6d    %5.2f %%\n</span>" % (
+		yield ("%s%6d    %5.2f %%\n</span>\n" % (
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
 				100.0 * sum(cnts.values()) / sumtotal))
-		sortedcounts = repr(sorted(cnts, key=cnts.get))
-		maxcounts = max(cnts.values())
-		sortedrelfreq = repr(sorted(relfreq, key=relfreq.get))
-		yield APP.jinja_env.get_template('graph').render(
-				data=repr(dict(cnts)), sortedcounts=sortedcounts,
-				maxcounts=maxcounts, relfreq=repr(relfreq),
-				sortedrelfreq=sortedrelfreq)
+		yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern')
+		yield barplot(relfreq, 1.,
+				'Relative frequency of pattern: (count / num_%s)' % norm,
+				style='chart2')
 
 
 def trees(form):
@@ -259,9 +263,9 @@ def trees(form):
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True)
 			except Exception as err:
-				line = "%s \nERROR: %s\n%s\n%s\n" % (lineno, err, treestr, tree)
+				line = "#%s \nERROR: %s\n%s\n%s\n" % (lineno, err, treestr, tree)
 			else:
-				line = "%s\n%s\n" % (lineno, treerepr)
+				line = "#%s\n%s\n" % (lineno, treerepr)
 			yield Markup(line)
 		yield "</span>"
 	if not gotresults:
@@ -295,7 +299,7 @@ def sents(form, dobrackets=False):
 						' '.join(GETLEAVES.findall(highlight))
 								if '(' in highlight else highlight,
 						' '.join(GETLEAVES.findall(post)))
-			yield "<li>%s [%s] %s" % (lineno.rjust(6), link, Markup(out))
+			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, Markup(out))
 		yield "</ol>"
 	if not gotresults:
 		yield "No matches."
@@ -312,8 +316,8 @@ def doqueries(form, lines=False, doexport=False):
 	for n, text in enumerate(texts):
 		if n not in selected:
 			continue
-		cmd = [TGREP_BIN, '-z', '-a',
-				'-m', (r"%w\n" if doexport else r"#%s:::%f:::%w:::%h\n"),
+		cmd = [which('tgrep2'), '-z', '-a',
+				'-m', (r"%w\n" if doexport else r"%s:::%f:::%w:::%h\n"),
 				'-c', os.path.join(CORPUS_DIR, text + '.t2c.gz'),
 				form['query']]
 		proc = subprocess.Popen(args=cmd,
@@ -322,11 +326,13 @@ def doqueries(form, lines=False, doexport=False):
 				stderr=subprocess.PIPE)
 		if n == 0:
 			logging.debug(' '.join("'%s'" % x if ' ' in x else x for x in cmd))
+		out, err = proc.communicate()
+		out, err = out.decode('utf8'), err.decode('utf8')
 		if lines:
-			yield text, (filterlabels(form, a.decode('utf8'))
-					for a in proc.stdout.readlines()), proc.stderr.read()
+			yield text, filterlabels(form, out).splitlines(), err
 		else:
-			yield text, proc.stdout.read().decode('utf8'), proc.stderr.read()
+			yield text, out, err
+
 
 
 def filterlabels(form, line):
@@ -339,6 +345,32 @@ def filterlabels(form, line):
 		line = MORPH_TAGS.sub(lambda g: '(%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
+
+
+def barplot(counts, total, title, style='chart', width=800.0):
+	""" A HTML bar plot given a dictionary and max value. """
+	result = ['<div class=%s>' % style,
+			'<text style="font-family: sans-serif; font-size: 16px; ">%s</text>' % title]
+	for key in sorted(counts, key=counts.get):
+		result.append('<div class=%s style="width: %gpx" >%s: %g</div>' % (
+				style, width * counts[key] / total, key, counts[key]))
+	result.append('</div>\n')
+	return ''.join(result)
+
+
+def concplot(indices, total):
+	""" Draw a concordance plot from a sequence of indices and the total number
+	of items. """
+	result = [('\t<svg version="1.1" '
+			'xmlns="http://www.w3.org/2000/svg" '
+			'width="60%%" height=10px viewBox="0 0 %d 10" '
+			'preserveAspectRatio=none >' % total),
+			'<rect x=0 y=0 width=%d height=10 '
+			'fill=white stroke=black stroke-width=1 />' % total]
+	for idx in indices:
+		result.append('<line x1=%d y1=0 x2=%d y2=10 '
+				'stroke=black stroke-width=1 />' % (idx, idx))
+	return '\n'.join(result) + '\n</svg>'
 
 
 def selectedtexts(form):
@@ -366,10 +398,18 @@ def preparecorpus():
 	assert files, "Expected one or more .mrg files with parse trees in corpus/"
 	for a in files:
 		if not os.path.exists(a + '.t2c.gz'):
-			subprocess.check_call(args=[TGREP_BIN, '-p', a, a + '.t2c.gz'],
+			subprocess.check_call(
+					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
 					shell=False,
 					stdout=subprocess.PIPE,
 					stderr=subprocess.PIPE)
+
+
+def which(program):
+	""" Return first match for program in search path. """
+	for path in os.environ.get('PATH', os.defpath).split(":"):
+		if path and os.path.exists(os.path.join(path, program)):
+			return os.path.join(path, program)
 
 
 # this is redundant but used to support both javascript-enabled /foo
