@@ -45,7 +45,7 @@ Requirements
 For example, to install these dependencies and compile the code on Ubuntu
 (tested on 12.04), run the following sequence of commands::
 
-    sudo apt-get install python-dev python-numpy build-essential
+    sudo apt-get install build-essential python-dev python-numpy
     sudo pip install cython
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
@@ -105,7 +105,7 @@ Aside from the parser there are some standalone tools:
 :``eval``: Discontinuous evaluation. Reports F-scores and other metrics.
     Accepts ``EVALB`` parameter files::
 
-    python evalnegra-corpus.export sample/plcfrs.export proper.prm
+    discodop eval sample/gold.export sample/dop.export proper.prm
 :``demos``: Contains examples of various formalisms encoded in LCFRS grammars.
 :``gen``: An experiment in generation with LCFRS.
 
@@ -116,8 +116,8 @@ For example::
 
 ... prints instructions for the fragment extractor.
 
-Usage: tools
-------------
+Usage: web interfaces
+---------------------
 There are two web based tools in the ``web/`` directory. These require Flask to be installed.
 
 :``parse.py``: A web interface to the parser. Expects a series of grammars
