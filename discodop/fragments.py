@@ -13,6 +13,7 @@ import io
 import os
 import re
 import sys
+import codecs
 import logging
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
@@ -507,8 +508,12 @@ def altrepr(a):
 	return FRONTIERRE.sub(r'\1', TERMRE.sub(r'(\1 "\2")', a.replace('"', "''")))
 
 
-def printfragments(fragments, counts, out=sys.stdout):
+def printfragments(fragments, counts, out=None):
 	""" Dump fragments to standard output or some other file object. """
+	if out is None:
+		out = sys.stdout
+		if sys.stdout.encoding is None:
+			out = codecs.getwriter('utf-8')(out)
 	if PARAMS['complete']:
 		logging.info("total number of matches: %d", sum(counts))
 	else:
