@@ -106,13 +106,13 @@ function mergecheckboxes() {
 		}
 		if (checkboxes[start].checked)
 			if (start == n - 1)
-				result += n + ',';
+				result += ',' + start;
 			else
-				result += start + '-' + n + ',';
+				result += ',' + start + '-' + n;
 		while (n < checkboxes.length && !checkboxes[n].checked)
 			n++;
 	}
-	document.forms[0].texts.value = result;
+	document.forms[0].texts.value = result.substring(1);
 	var radioboxes = document.getElementsByName('output');
 	for (n in radioboxes) {
 		if (radioboxes[n].checked) {

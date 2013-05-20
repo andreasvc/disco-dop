@@ -179,12 +179,6 @@ def favicon():
 
 def counts(form):
 	""" Produce counts of matches for each text. """
-	# todo:
-	# - name should not be cut off by bar;
-	#   separate div for bar in background with abs. pos.:
-	#   z-index:1;position:absolute;top:0;background:PaleTurquoise;border:1px
-	#   solid  # a6a6a6
-	# - show dispersion of matches in each text
 	cnts = Counter()
 	relfreq = {}
 	sumtotal = 0
