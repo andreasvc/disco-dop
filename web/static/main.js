@@ -18,22 +18,36 @@ function togglelink(id) {
 	}
 }
 
-function show(id) {
+function show(id, name) {
     var el = document.getElementById(id);
     if (el.style.visibility != 'visible')
         el.style.visibility = 'visible';
+	var elems = document.getElementsByName(name);
+	for (var n in elems)
+		elems[n].disabled = false;
 }
 
-function hide(id) {
+function hide(id, name) {
     var el = document.getElementById(id);
     if (el.style.visibility != 'hidden')
         el.style.visibility = 'hidden';
+	var elems = document.getElementsByName(name);
+	for (var n in elems)
+		elems[n].disabled = true;
 }
 
 function placeFocus() {
     document.forms[0].query.focus();
 }
 
+function triggerForm(name) {
+	var elems = document.getElementsByName('output')
+	for (var n in elems)
+		if (elems[n].value == name) {
+			elems[n].onchange();
+			break;
+		}
+}
 
 function entsub(e) {
      var key;
@@ -106,9 +120,9 @@ function mergecheckboxes() {
 		}
 		if (checkboxes[start].checked)
 			if (start == n - 1)
-				result += ',' + start;
+				result += '.' + start;
 			else
-				result += ',' + start + '-' + n;
+				result += '.' + start + '-' + n;
 		while (n < checkboxes.length && !checkboxes[n].checked)
 			n++;
 	}
