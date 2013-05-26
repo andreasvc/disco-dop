@@ -376,6 +376,7 @@ def decorate_with_ids_mem(n, tree, sent):
 	This version does memoization, which means that equivalent subtrees
 	(including the yield) will get the same IDs. Experimental. """
 	def recursive_decorate(tree):
+		""" Traverse subtrees not yet seen. """
 		global packed_graph_ids
 		if isinstance(tree, int):
 			return tree
@@ -718,10 +719,13 @@ def exportrparsegrammar(grammar):
 	""" Export a grammar to rparse format. All frequencies are 1,
 	but probabilities are exported.  """
 	def repryf(yf):
+		""" >>> repryf(((0, 1), (0, )))
+		[[false, true], [false]]. """
 		return '[' + ', '.join('[' + ', '.join('true' if a == 1 else 'false'
 			for a in b) + ']' for b in yf) + ']'
 
 	def rewritelabel(a):
+		""" Rewrite binarization markers to alternate format. """
 		a = a.replace('ROOT', 'VROOT')
 		if '|' in a:
 			fanout = a.rsplit('_', 1)[-1] if '_' in a[a.rindex('>'):] else '1'

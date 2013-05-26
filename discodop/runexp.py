@@ -786,7 +786,7 @@ def worker(args):
 			else:
 				prec = rec = f1score = 0
 			if f1score == 1.0:
-				msg += "exact match "
+				msg += "exact match \n"
 				exact = True
 			else:
 				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (

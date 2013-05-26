@@ -193,6 +193,7 @@ class NegraCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		def getchildren(parent):
+			""" Traverse tree in export format and create Tree object. """
 			results = []
 			for n, source in children[parent]:
 				# n is the index in the block to record word indices
@@ -344,6 +345,7 @@ class AlpinoCorpusReader(CorpusReader):
 	def _parse(self, block):
 		""" Return a parse tree given a string. """
 		def getsubtree(node):
+			""" Traverse Alpino XML tree and create Tree object. """
 			# FIXME: proper representation for arbitrary features
 			source = [''] * len(FIELDS)
 			source[WORD] = node.get('word') or ("#%s" % node.get('id'))
@@ -415,8 +417,8 @@ def writetree(tree, sent, n, fmt, headrules=None):
 	be empty unless nodes contain a 'source' attribute with such information.
 	"""
 	def getword(idx):
-		word = sent[int(idx[:-1])]
-		return word.replace('(', '-LRB-').replace(')', '-RRB-')
+		""" Get word given an index and restore parentheses. """
+		return sent[int(idx[:-1])].replace('(', '-LRB-').replace(')', '-RRB-')
 	if fmt == "alpino":
 		fmt = "export"  # FIXME implement Alpino XML output?
 
@@ -635,6 +637,7 @@ def makedep(root, deps, headrules):
 
 
 def getgeneralizations():
+	""" Some tree transforms for Negra/Tiger.  """
 	# generalizations suggested by SyntaxGeneralizer of TigerAPI
 	# however, instead of renaming, we introduce unary productions
 	# POS tags
@@ -743,6 +746,7 @@ def unfold_orig(tree):
 	grammatical functions and syntactic categories. """
 
 	def pop(a):
+		""" Remove this node from its parent node, if it has one. """
 		try:
 			return a.parent.pop(a.parent_index)
 		except AttributeError:
@@ -795,6 +799,7 @@ def unfold_orig(tree):
 	addtovp = "HD AC DA MO NG OA OA2 OC OG PD VO SVP".split()
 
 	def finitevp(s):
+		""" Introduce finite VPs grouping verbs and their objects. """
 		if any(x.label.startswith("V") and x.label.endswith("FIN")
 				for x in s if isinstance(x, Tree)):
 			vp = [a for a in s if function(a) in addtovp]
@@ -1025,6 +1030,8 @@ def punctlower(tree, sent):
 	removal at previous location is up to the caller.  Based on rparse code.
 	Initial candidate is the root node."""
 	def lower(node, candidate):
+		""" Lower a specific instance of punctuation in tree,
+		recursing top-down on suitable candidates. """
 		num = node.leaves()[0]
 		for i, child in enumerate(sorted(candidate, key=lambda x: x.leaves())):
 			if not isinstance(child[0], Tree):

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """ Zhang-Shasha Tree Edit Distance Implementation is licensed under a BSD
 style license

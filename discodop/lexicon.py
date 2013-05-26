@@ -339,7 +339,7 @@ def unknownwordftb(word, loc, lexicon):
 
 
 def main():
-	pass
+	""" Not implemented. """
 
 if __name__ == '__main__':
 	main()

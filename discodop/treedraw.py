@@ -17,18 +17,32 @@ if sys.version[0] >= '3':
 
 class DrawTree(object):
 	""" Visualize a discontinuous tree in various formats. """
-	def __init__(self, tree, sent, highlight=()):
+	def __init__(self, tree, sent=None, highlight=()):
 		""" Create an object for a tree from which different visualizations
 		can be created.
+		If sent is not given, and the tree contains non-integers as leaves,
+		a continuous phrase-structure tree is assumed.
+		If sent is not given and the tree contains only indices as leaves,
+		the indices are displayed as placeholder terminals.
 		Optionally, highlight is a sequence of Tree objects which should be
 		highlighted. Has the effect of only applying colors to nodes in this
 		sequence (nodes should be given as Tree objects, terminals as indices).
 		"""
 		self.tree = tree
-		self.sent = sent
+		if sent is None:
+			if all(isinstance(a, int) for a in tree.leaves()):
+				self.sent = [str(a) for a in tree.leaves()]
+			else:
+				self.tree = tree.copy(True)
+				self.sent = tree.leaves()
+				for n, a in enumerate(self.tree.subtrees(
+						lambda x: x and not isinstance(x[0], Tree))):
+					a[0] = n
+		else:
+			self.sent = sent
 		self.highlight = set()
 		self.nodes, self.coords, self.edges = self.nodecoords(
-				tree, sent, highlight)
+				self.tree, self.sent, highlight)
 
 	def __str__(self):
 		return self.text()

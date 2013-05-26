@@ -1,3 +1,7 @@
+""" Classes for representing hierarchical language structures, such as syntax
+trees and morphological trees. """
+
+# Original notice:
 # Natural Language Toolkit: Text Trees
 #
 # Copyright (C) 2001-2010 NLTK Project
@@ -6,13 +10,11 @@
 #         Nathan Bodenstab <bodenstab@cslu.ogi.edu> (tree transforms)
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
-#
+
 # This is an adaptation of the original tree.py file from NLTK.
 # Probabilistic trees have been removed, as well as the possibility
 # to read off CFG productions or draw trees
 # Remaining dependencies have been inlined.
-""" Class for representing hierarchical language structures, such as syntax
-trees and morphological trees. """
 
 from __future__ import division, print_function, unicode_literals
 import re
@@ -417,6 +419,7 @@ class Tree(list):
 		return ImmutableTree
 
 	def freeze(self, leaf_freezer=None):
+		""" Return an immutable version of this tree. """
 		frozen_class = self._frozen_class()
 		if leaf_freezer is None:
 			newcopy = frozen_class.convert(self)
@@ -651,6 +654,7 @@ class Tree(list):
 									" ".join(childstrs), parens[1])
 
 	def draw(self):
+		""" Return an ASCII art visualization of tree. """
 		from .treedraw import DrawTree
 		return DrawTree(self, self.leaves()).text()
 
