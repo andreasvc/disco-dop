@@ -378,7 +378,7 @@ def selectedtexts(form):
 	texts = [os.path.basename(a) for a in files]
 	selected = set()
 	if 'texts' in form:
-		for a in filter(None, form['texts'].split(',')):
+		for a in filter(None, form['texts'].replace('.', ',').split(',')):
 			if '-' in a:
 				b, c = a.split('-')
 				selected.update(n for n in range(int(b), int(c)))
