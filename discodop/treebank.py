@@ -153,21 +153,6 @@ class NegraCorpusReader(CorpusReader):
 	def _read_blocks(self):
 		""" Read corpus and return list of blocks corresponding to each
 		sentence."""
-		def normalize(fields):
-			""" take a line and add dummy fields (lemma, sec. edge) if those
-			fields are absent. """
-			if "%%" in fields:  # we don't want comments.
-				fields[fields.index("%%"):] = []
-			lena = len(fields)
-			if lena == 5:
-				fields[1:1] = ['']
-				fields.extend(['', ''])
-			elif lena == 6:
-				fields.extend(['', ''])
-			elif lena != 8:
-				raise ValueError("expected 5, 6, or 8 columns: %r" % fields)
-			return fields
-
 		result = OrderedDict()
 		started = False
 		for filename in self._filenames:
@@ -188,34 +173,13 @@ class NegraCorpusReader(CorpusReader):
 							"duplicate sentence ID: %s" % sentid)
 					result[sentid] = lines
 				elif started:
-					lines.append(normalize(line.split()))
+					lines.append(exportsplit(line))
 		return result
 
 	def _parse(self, block):
-		def getchildren(parent):
-			""" Traverse tree in export format and create Tree object. """
-			results = []
-			for n, source in children[parent]:
-				# n is the index in the block to record word indices
-				m = EXPORTNONTERMINAL.match(source[WORD])
-				if m:
-					child = ParentedTree(source[TAG], getchildren(m.group(1)))
-				else:  # POS + terminal
-					# escape Negra's paren tag to avoid hassles
-					# w/bracket notation of trees
-					label = source[MORPH if self.morphaspos else TAG]
-					child = ParentedTree(
-							label.replace('(', '[').replace(')', ']'), [n])
-				child.source = tuple(source)
-				results.append(child)
-			return results
-
-		children = {}
-		for n, source in enumerate(block):
-			children.setdefault(source[PARENT], []).append((n, source))
-		result = ParentedTree("ROOT", getchildren("0"))
+		tree = exportparse(block, self.morphaspos)
 		sent = self._word(block, orig=True)
-		return result, sent
+		return tree, sent
 
 	def _word(self, block, orig=False):
 		if orig or self.punct != "remove":
@@ -396,6 +360,51 @@ class AlpinoCorpusReader(CorpusReader):
 		When orig is True, return original sentence verbatim;
 		otherwise it will follow parameters for punctuation. """
 		return block.find('sentence').text.split()
+
+
+def exportsplit(line):
+	""" take a line in export format and split into fields,
+	add dummy fields lemma, sec. edge if those fields are absent. """
+	if "%%" in line:  # we don't want comments.
+		line = line[:line.index("%%")]
+	fields = line.split()
+	lena = len(fields)
+	if lena == 5:
+		fields[1:1] = ['']
+		fields.extend(['', ''])
+	elif lena == 6:
+		fields.extend(['', ''])
+	elif lena != 8:
+		raise ValueError("expected 5, 6, or 8 columns: %r" % fields)
+	return fields
+
+
+def exportparse(block, morphaspos=False):
+	""" Given a tree in export format as a list of lists,
+	construct a Tree object for it. """
+	def getchildren(parent):
+		""" Traverse tree in export format and create Tree object. """
+		results = []
+		for n, source in children[parent]:
+			# n is the index in the block to record word indices
+			m = EXPORTNONTERMINAL.match(source[WORD])
+			if m:
+				child = ParentedTree(source[TAG], getchildren(m.group(1)))
+			else:  # POS + terminal
+				# escape Negra's paren tag to avoid hassles
+				# w/bracket notation of trees
+				label = source[MORPH if morphaspos else TAG]
+				child = ParentedTree(
+						label.replace('(', '[').replace(')', ']'), [n])
+			child.source = tuple(source)
+			results.append(child)
+		return results
+
+	children = {}
+	for n, source in enumerate(block):
+		children.setdefault(source[PARENT], []).append((n, source))
+	result = ParentedTree("ROOT", getchildren("0"))
+	return result
 
 
 def getreader(fmt):

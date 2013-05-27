@@ -416,6 +416,7 @@ class Tree(list):
 			return self.__class__.convert(self)
 
 	def _frozen_class(self):
+		""" The frozen version of this class. """
 		return ImmutableTree
 
 	def freeze(self, leaf_freezer=None):
@@ -580,7 +581,7 @@ class Tree(list):
 	def __str__(self):
 		return self._pprint_flat('', '()', False)
 
-	def pprint(self, margin=70, indent=0, labelsep='', parens='()',
+	def pprint(self, margin=70, indent=0, labelsep='', brackets='()',
 			quotes=False):
 		""" @return: A pretty-printed string representation of this tree.
 		@rtype: string
@@ -595,26 +596,26 @@ class Tree(list):
 			trees like (S: (NP: I) (VP: (V: saw) (NP: it))). """
 
 		# Try writing it on one line.
-		s = self._pprint_flat(labelsep, parens, quotes)
+		s = self._pprint_flat(labelsep, brackets, quotes)
 		if len(s) + indent < margin:
 			return s
 
 		# If it doesn't fit on one line, then write it on multi-lines.
 		if isinstance(self.label, basestring):
-			s = '%s%s%s' % (parens[0], self.label, labelsep)
+			s = '%s%s%s' % (brackets[0], self.label, labelsep)
 		else:
-			s = '%s%r%s' % (parens[0], self.label, labelsep)
+			s = '%s%r%s' % (brackets[0], self.label, labelsep)
 		for child in self:
 			if isinstance(child, Tree):
 				s += '\n' + ' ' * (indent + 2) + child.pprint(margin,
-						indent + 2, labelsep, parens, quotes)
+						indent + 2, labelsep, brackets, quotes)
 			elif isinstance(child, tuple):
 				s += '\n' + ' ' * (indent + 2) + '/'.join(child)
 			elif isinstance(child, basestring) and not quotes:
 				s += '\n' + ' ' * (indent + 2) + '%s' % child
 			else:
 				s += '\n' + ' ' * (indent + 2) + '%r' % child
-		return s + parens[1]
+		return s + brackets[1]
 
 	def pprint_latex_qtree(self):
 		r""" Returns a representation of the tree compatible with the
@@ -633,13 +634,14 @@ class Tree(list):
 		@return: A latex qtree representation of this tree.
 		@rtype: string """
 		return r'\Tree ' + self.pprint(indent=6, labelsep='',
-				parens=('[.', ' ]'))
+				brackets=('[.', ' ]'))
 
-	def _pprint_flat(self, labelsep, parens, quotes):
+	def _pprint_flat(self, labelsep, brackets, quotes):
+		""" pretty-printing helper function. """
 		childstrs = []
 		for child in self:
 			if isinstance(child, Tree):
-				childstrs.append(child._pprint_flat(labelsep, parens, quotes))
+				childstrs.append(child._pprint_flat(labelsep, brackets, quotes))
 			elif isinstance(child, tuple):
 				childstrs.append("/".join(child))
 			elif isinstance(child, basestring) and not quotes:
@@ -647,11 +649,11 @@ class Tree(list):
 			else:
 				childstrs.append('%r' % child)
 		if isinstance(self.label, basestring):
-			return '%s%s%s %s%s' % (parens[0], self.label, labelsep,
-									" ".join(childstrs), parens[1])
+			return '%s%s%s %s%s' % (brackets[0], self.label, labelsep,
+									" ".join(childstrs), brackets[1])
 		else:
-			return '%s%r%s %s%s' % (parens[0], self.label, labelsep,
-									" ".join(childstrs), parens[1])
+			return '%s%r%s %s%s' % (brackets[0], self.label, labelsep,
+									" ".join(childstrs), brackets[1])
 
 	def draw(self):
 		""" Return an ASCII art visualization of tree. """
@@ -733,8 +735,9 @@ class ImmutableTree(Tree):
 		self._label = label
 
 	def _get_label(self):
+		""" Get node label. """
 		return self._label
-	label = property(_get_label, _set_label)
+	label = property(_get_label, _set_label, doc=_get_label.__doc__)
 
 
 ######################################################################
@@ -1000,6 +1003,11 @@ class ParentedTree(AbstractParentedTree):
 	#/////////////////////////////////////////////////////////////////
 
 	def _get_parent_index(self):
+		""" The index of this tree in its parent.
+		I.e., ptree.parent[ptree.parent_index] is ptree.
+		Note that ptree.parent_index is not necessarily equal to
+		ptree.parent.index(ptree), since the index() method
+		returns the first child that is _equal_ to its argument. """
 		if self._parent is None:
 			return None
 		for i, child in enumerate(self._parent):
@@ -1008,18 +1016,22 @@ class ParentedTree(AbstractParentedTree):
 		assert False, 'expected to find self in self._parent!'
 
 	def _get_left_sibling(self):
+		""" The left sibling of this tree, or None if it has none. """
 		parent_index = self._get_parent_index()
 		if self._parent and parent_index > 0:
 			return self._parent[parent_index - 1]
 		return None  # no left sibling
 
 	def _get_right_sibling(self):
+		""" The right sibling of this tree, or None if it has none. """
 		parent_index = self._get_parent_index()
 		if self._parent and parent_index < (len(self._parent) - 1):
 			return self._parent[parent_index + 1]
 		return None  # no right sibling
 
 	def _get_treeposition(self):
+		""" The tree position of this tree, relative to the root of the
+		tree.  I.e., ptree.root[ptree.treeposition] is ptree. """
 		if self._parent is None:
 			return ()
 		else:
@@ -1027,6 +1039,9 @@ class ParentedTree(AbstractParentedTree):
 					(self._get_parent_index(), ))
 
 	def _get_root(self):
+		""" The root of this tree.  I.e., the unique ancestor of this tree
+		whose parent is None.  If ptree.parent is None, then
+		ptree is its own root. """
 		if self._parent is None:
 			return self
 		else:
@@ -1034,29 +1049,11 @@ class ParentedTree(AbstractParentedTree):
 
 	parent = property(lambda self: self._parent, doc="""
 		The parent of this tree, or None if it has no parent.""")
-
-	parent_index = property(_get_parent_index, doc="""
-		The index of this tree in its parent.  I.e.,
-		ptree.parent[ptree.parent_index] is ptree.  Note that
-		ptree.parent_index is not necessarily equal to
-		ptree.parent.index(ptree), since the index() method
-		returns the first child that is _equal_ to its argument.""")
-
-	left_sibling = property(_get_left_sibling, doc="""
-		The left sibling of this tree, or None if it has none.""")
-
-	right_sibling = property(_get_right_sibling, doc="""
-		The right sibling of this tree, or None if it has none.""")
-
-	root = property(_get_root, doc="""
-		The root of this tree.  I.e., the unique ancestor of this tree
-		whose parent is None.  If ptree.parent is None, then
-		ptree is its own root.""")
-
-	treeposition = property(_get_treeposition, doc="""
-		The tree position of this tree, relative to the root of the
-		tree.  I.e., ptree.root[ptree.treeposition] is ptree.""")
-	treepos = treeposition  # [xx] alias -- which name should we use?
+	parent_index = property(_get_parent_index, doc=_get_parent_index.__doc__)
+	left_sibling = property(_get_left_sibling, doc=_get_left_sibling.__doc__)
+	right_sibling = property(_get_right_sibling, doc=_get_right_sibling.__doc__)
+	root = property(_get_root, doc=_get_root.__doc__)
+	treeposition = property(_get_treeposition, doc=_get_treeposition.__doc__)
 
 	#/////////////////////////////////////////////////////////////////
 	# Parent Management
@@ -1122,25 +1119,46 @@ class MultiParentedTree(AbstractParentedTree):
 	#/////////////////////////////////////////////////////////////////
 
 	def _get_parent_indices(self):
+		""" Collect tuples of (parent, index) for all parents in a list. """
 		return [(parent, index)
 				for parent in self._parents
 				for index, child in enumerate(parent)
 				if child is self]
 
 	def _get_left_siblings(self):
+		""" A list of all left siblings of this tree, in any of its parent
+		trees.  A tree may be its own left sibling if it is used as
+		multiple contiguous children of the same parent.  A tree may
+		appear multiple times in this list if it is the left sibling
+		of this tree with respect to multiple parents.
+
+		@type: list of MultiParentedTree"""
 		return [parent[index - 1]
 				for (parent, index) in self._get_parent_indices()
 				if index > 0]
 
 	def _get_right_siblings(self):
+		""" A list of all right siblings of this tree, in any of its parent
+		trees.  A tree may be its own right sibling if it is used as
+		multiple contiguous children of the same parent.  A tree may
+		appear multiple times in this list if it is the right sibling
+		of this tree with respect to multiple parents.
+
+		@type: list of MultiParentedTree """
 		return [parent[index + 1]
 				for (parent, index) in self._get_parent_indices()
 				if index < (len(parent) - 1)]
 
 	def _get_roots(self):
+		""" The set of all roots of this tree.  This set is formed by
+		tracing all possible parent paths until trees with no parents
+		are found.
+
+		@type: list of MultiParentedTree """
 		return list(self._get_roots_helper({}).values())
 
 	def _get_roots_helper(self, result):
+		""" Collect all roots for this node. """
 		if self._parents:
 			for parent in self._parents:
 				parent._get_roots_helper(result)
@@ -1155,35 +1173,13 @@ class MultiParentedTree(AbstractParentedTree):
 		parent_indices property.
 
 		@type: list of MultiParentedTree""")
-
-	left_siblings = property(_get_left_siblings, doc="""
-		A list of all left siblings of this tree, in any of its parent
-		trees.  A tree may be its own left sibling if it is used as
-		multiple contiguous children of the same parent.  A tree may
-		appear multiple times in this list if it is the left sibling
-		of this tree with respect to multiple parents.
-
-		@type: list of MultiParentedTree""")
-
-	right_siblings = property(_get_right_siblings, doc="""
-		A list of all right siblings of this tree, in any of its parent
-		trees.  A tree may be its own right sibling if it is used as
-		multiple contiguous children of the same parent.  A tree may
-		appear multiple times in this list if it is the right sibling
-		of this tree with respect to multiple parents.
-
-		@type: list of MultiParentedTree""")
-
-	roots = property(_get_roots, doc="""
-		The set of all roots of this tree.  This set is formed by
-		tracing all possible parent paths until trees with no parents
-		are found.
-
-		@type: list of MultiParentedTree""")
+	left_siblings = property(_get_left_siblings, doc=_get_left_siblings.__doc__)
+	right_siblings = property(_get_right_siblings,
+			doc=_get_right_siblings.__doc__)
+	roots = property(_get_roots, doc=_get_roots.__doc__)
 
 	def parent_indices(self, parent):
-		"""
-		Return a list of the indices where this tree occurs as a child
+		""" Return a list of the indices where this tree occurs as a child
 		of parent.  If this child does not occur as a child of
 		parent, then the empty list is returned.  The following is
 		always true::

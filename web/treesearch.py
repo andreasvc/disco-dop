@@ -55,29 +55,11 @@ def stream_template(template_name, **context):
 	return result
 
 
-def cached(timeout=3600):
-	def decorator(func):
-		func.cache = SimpleCache()
-
-		@wraps(func)
-		def decorated_function():
-			key = (request.path, ) + tuple(sorted(request.args.items()))
-			result = func.cache.get(key)
-			if result is None:
-				result = func()
-				func.cache.set(key, result, timeout=timeout)
-			return result
-
-		return decorated_function
-	return decorator
-
-
 @APP.route('/')
 @APP.route('/counts')
 @APP.route('/trees')
 @APP.route('/sents')
 @APP.route('/brackets')
-#@cached(timeout=24 * 3600)  # FIXME does not work with generators
 def main():
 	""" Main search form & results page. """
 	output = None
@@ -117,7 +99,7 @@ def style():
 						args=[which('tgrep2'), '-t', '-c', a, '*'],
 						shell=False, bufsize=-1, stdout=subprocess.PIPE)
 				cmd = [which('style'), '--language', lang]
-				stdin = tgrep.stdout
+				stdin = tgrep.stdout  # pylint: disable=E1101
 			else:
 				cmd = [which('style'), '--language', lang, a]
 				stdin = None
@@ -128,12 +110,12 @@ def style():
 					stderr=subprocess.STDOUT)
 			out = proc.communicate()[0]
 			if stdin:
-				proc.stdin.close()
-			proc.stdout.close()
-			proc.wait()
+				proc.stdin.close()  # pylint: disable=E1101
+			proc.stdout.close()  # pylint: disable=E1101
+			proc.wait()  # pylint: disable=E1101
 			if a.endswith('.t2c.gz'):
-				tgrep.stdout.close()
-				tgrep.wait()
+				tgrep.stdout.close()  # pylint: disable=E1101
+				tgrep.wait()  # pylint: disable=E1101
 			name = os.path.basename(a)
 			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name), out)
 
@@ -327,9 +309,9 @@ def doqueries(form, lines=False, doexport=False):
 			logging.debug(' '.join("'%s'" % x if ' ' in x else x for x in cmd))
 		out, err = proc.communicate()
 		out, err = out.decode('utf8'), err.decode('utf8')
-		proc.stdout.close()
-		proc.stderr.close()
-		proc.wait()
+		proc.stdout.close()  # pylint: disable=E1101
+		proc.stderr.close()  # pylint: disable=E1101
+		proc.wait()  # pylint: disable=E1101
 		if lines:
 			yield text, filterlabels(form, out).splitlines(), err
 		else:

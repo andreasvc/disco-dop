@@ -133,11 +133,14 @@ def loadgrammars():
 
 
 def cached(timeout=3600):
+	""" Caching decorator from Flask documentation """
 	def decorator(func):
+		""" Wrapper """
 		func.cache = SimpleCache()
 
 		@wraps(func)
 		def decorated_function(*args, **kwargs):
+			""" memoize on function arguments. """
 			cache_key = args
 			result = func.cache.get(cache_key)
 			if result is not None:
