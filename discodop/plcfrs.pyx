@@ -32,7 +32,7 @@ cdef extern from "macros.h":
 np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
-DEF SLOTS = 2
+DEF SLOTS = 3
 cdef SmallChartItem COMPONENT = new_ChartItem(0, 0)
 cdef SmallChartItem NONE = new_ChartItem(0, 0)
 cdef FatChartItem FATNONE = new_FatChartItem(0)

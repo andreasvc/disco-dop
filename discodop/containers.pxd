@@ -26,7 +26,7 @@ cdef extern from "macros.h":
 	#int SLOTS # doesn't work
 
 # FIXME: find a way to make this a constant, yet shared across modules.
-DEF SLOTS = 2
+DEF SLOTS = 3
 
 @cython.final
 cdef class Grammar:

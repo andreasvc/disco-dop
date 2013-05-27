@@ -39,7 +39,6 @@ cdef extern from "math.h":
 np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
-DEF SLOTS = 2
 cdef CFGChartItem NONE = new_CFGChartItem(0, 0, 0)
 
 

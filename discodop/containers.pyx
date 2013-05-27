@@ -12,7 +12,7 @@ from tree import Tree
 from agenda cimport EdgeAgenda, Entry
 cimport cython
 
-DEF SLOTS = 2
+DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},

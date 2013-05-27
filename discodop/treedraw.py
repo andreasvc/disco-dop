@@ -20,26 +20,35 @@ class DrawTree(object):
 	def __init__(self, tree, sent=None, highlight=()):
 		""" Create an object for a tree from which different visualizations
 		can be created.
-		If sent is not given, and the tree contains non-integers as leaves,
-		a continuous phrase-structure tree is assumed.
-		If sent is not given and the tree contains only indices as leaves,
-		the indices are displayed as placeholder terminals.
-		Optionally, highlight is a sequence of Tree objects which should be
-		highlighted. Has the effect of only applying colors to nodes in this
-		sequence (nodes should be given as Tree objects, terminals as indices).
+		- tree may be a Tree object or a string.
+		- sent is a list of words (strings). If sent is not given, and the tree
+			contains non-integers as leaves, a continuous phrase-structure tree
+			is assumed. If sent is not given and the tree contains only indices
+			as leaves, the indices are displayed as placeholder terminals.
+		- Optionally, highlight is a sequence of Tree objects which should be
+			highlighted. Has the effect of only applying colors to nodes in
+			this sequence (nodes should be given as Tree objects, terminals as
+			indices).
+
+		>>> print(DrawTree("(S (NP Mary) (VP walks))"))
+		      S
+		  ____|____
+		 NP        VP
+		 |         |
+		Mary     walks
 		"""
 		self.tree = tree
+		self.sent = sent
+		if isinstance(tree, basestring):
+			self.tree = Tree(tree)
 		if sent is None:
-			if all(isinstance(a, int) for a in tree.leaves()):
-				self.sent = [str(a) for a in tree.leaves()]
+			if all(isinstance(a, int) for a in self.tree.leaves()):
+				self.sent = [str(a) for a in self.tree.leaves()]
 			else:
-				self.tree = tree.copy(True)
-				self.sent = tree.leaves()
-				for n, a in enumerate(self.tree.subtrees(
-						lambda x: x and not isinstance(x[0], Tree))):
-					a[0] = n
-		else:
-			self.sent = sent
+				self.tree = self.tree.copy(True)
+				self.sent = self.tree.leaves()
+				for n, pos in enumerate(self.tree.treepositions('leaves')):
+					self.tree[pos] = n
 		self.highlight = set()
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				self.tree, self.sent, highlight)
@@ -510,7 +519,7 @@ def htmllabel(label):
 def latexlabel(label):
 	""" quote/format label for latex """
 	newlabel = label.replace('$', r'\$').replace('[', '(').replace('_', r'\_')
-	# turn binarization marker intO subscripts in math mode
+	# turn binarization marker into subscripts in math mode
 	if "|" in newlabel:
 		cat, siblings = newlabel.split("|", 1)
 		siblings = siblings.replace("<", "").replace(">", "")
@@ -599,9 +608,9 @@ def main():
 				(noun 3)) (verb 4)) (verb 5))) (vg 6) (smain (noun 7) \
 				(inf (ppart (np (det 8) (noun 9)))))) (punct 10))
 			(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) \
-                    (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))
+				(t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))
 			(A (B1 6 13) (B2 3 7 10)  (B3 1 \
-                    9 11 14 16) (B4 0 5 8))
+				9 11 14 16) (B4 0 5 8))
 			(VP (VB 0) (PRT 2))
 			(VP (VP 0 3) (NP (PRP 1) (NN 2)))
 			(ROOT (S (VP_2 (PP (APPR 0) (ART 1) (NN 2) (PP (APPR 3) (ART 4) \
