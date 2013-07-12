@@ -76,12 +76,12 @@ def simplesmoothlexicon(grammar, lexmodel,
 			openclasswords, tags, wordtags) = lexmodel
 	# rare words as wordclass AND as word:
 	for word, tag in wordtags:
-		if word not in lexicon:
+		if word not in lexicon and word in openclasswords:
 			# needs to be normalized later
 			grammar.append((((tag, 'Epsilon'), (word, )),
 					Fraction(wordtags[word, tag], tags[tag])))
 			#print(>> sys.stderr, grammar[-1])
-	# open class tag word pairs / unknown wordclasses
+	# open class tag-word pairs / unknown wordclasses
 	for tag in openclasstags:
 		epsilon1 = epsilon / tags[tag]
 		for word in {'UNK'} | openclasswords - wordsfortag[tag]:
