@@ -640,56 +640,6 @@ def printrule(r, yf, w):
 	return "%s %s --> %s\t %r" % (w, r[0], " ".join(x for x in r[1:]), list(yf))
 
 
-def printrulelatex(rule):
-	r""" Return a string with a representation of a rule in latex format.
-
-	>>> r = ((('VP_2@1', 'NP@2', 'VVINF@5'), ((0,), (1,))), 0.4)
-	>>> printrulelatex(r)
-	0.4 & $\textrm{VP\_2@1}(x_{0},x_{1})\rightarrow
-		\textrm{NP@2}(x_{0})\:\textrm{VVINF@5}(x_{1}) $ \\
-	"""
-	(r, yf), w = rule
-	c = count()
-	newrhs = []
-	variables = []
-	if r[1] == "Epsilon":
-		newrhs = [("Epsilon", [])]
-		lhs = (r[0], yf)
-	else:
-		# NB: not working correctly ... variables get mixed up
-		for n, a in enumerate(r[1:]):
-			z = sum(1 for comp in yf for y in comp if y == n)
-			newrhs.append((a, [next(c) for x in range(z)]))
-			variables.append(list(newrhs[-1][1]))
-		lhs = (r[0], [[variables[x].pop(0) for x in comp] for comp in yf])
-	print(w, "& ", end='')
-	r = tuple([lhs] + newrhs)
-	lhs = r[0]
-	rhs = r[1:]
-	print("$", end='')
-	if isinstance(lhs[1][0], tuple) or isinstance(lhs[1][0], list):
-		lhs = r[0]
-		rhs = r[1:]
-	if not isinstance(lhs[1][0], tuple) and not isinstance(lhs[1][0], list):
-		print(r"\textrm{%s}(\textrm{%s})" % (
-			lhs[0].replace("$", r"\$"), lhs[1][0]), end='')
-	else:
-		print("\\textrm{%s}(%s)" % (lhs[0].replace('$', r'\$').replace('_',
-			r'\_'), ','.join(' '.join('x_{%r}' % a for a in x)
-			for x in lhs[1])), end='')
-	print(r"\rightarrow", end='\n\t')
-	for x in rhs:
-		if x[0] == 'Epsilon':
-			print(r'\epsilon', end='')
-		else:
-			print("\\textrm{%s}(%s)" % (
-				x[0].replace('$', r'\$').replace('_', r'\_'),
-				','.join("x_{%r}" % a for a in x[1])), end='')
-			if x != rhs[-1]:
-				print('\\:', end='')
-	print(r' $ \\')
-
-
 def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
 

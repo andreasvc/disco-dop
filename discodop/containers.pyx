@@ -1002,6 +1002,29 @@ cdef inline copynodes(tree, dict prods, Node *result):
 			else:  # unary node
 				result[n].right = -1
 
+
+class DictObj(object):
+	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
+
+	def __init__(self, *a, **kw):
+		self.__dict__.update(*a, **kw)
+
+	def update(self, *a, **kw):
+		""" Update/add more attributes. """
+		self.__dict__.update(*a, **kw)
+
+	def __getattr__(self, name):
+		""" This is only called when the normal mechanism fails, so in practice
+		should never be called. It is only provided to satisfy pylint that it
+		is okay not to raise E1101 errors in the client code. """
+		raise AttributeError("%r instance has no attribute %r" % (
+				self.__class__.__name__, name))
+
+	def __repr__(self):
+		return "%s(%s)" % (self.__class__.__name__,
+			",\n".join("%s=%r" % a for a in self.__dict__.items()))
+
+
 # begin scratch
 
 cdef class MemoryPool:

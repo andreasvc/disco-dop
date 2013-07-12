@@ -10,12 +10,12 @@ from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, count
 from collections import Counter
-from functools import wraps
+#from functools import wraps
 # Flask & co
 from flask import Flask, Markup, Response
 from flask import request, render_template
 from flask import send_from_directory
-from werkzeug.contrib.cache import SimpleCache
+#from werkzeug.contrib.cache import SimpleCache
 # disco-dop
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
@@ -201,10 +201,11 @@ def counts(form):
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
 				100.0 * sum(cnts.values()) / sumtotal))
-		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern', style='chart1')
+		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern',
+		#		barstyle='chart1')
 		yield barplot(relfreq, max(relfreq.values()),
 				'Relative frequency of pattern: (count / num_%s * 100)' % norm,
-				style='chart2')
+				barstyle='chart2')
 
 
 def trees(form):
@@ -330,15 +331,15 @@ def filterlabels(form, line):
 	return line
 
 
-def barplot(counts, total, title, style='chart1', width=800.0):
+def barplot(data, total, title, barstyle='chart1', width=800.0):
 	""" A HTML bar plot given a dictionary and max value. """
 	result = ['</pre><div class=chart>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
-	for key in sorted(counts, key=counts.get, reverse=True):
+	for key in sorted(data, key=data.get, reverse=True):
 		result.append('<div class=%s style="width: %gpx" >%s: %g</div>' % (
-				style if counts[key] else 'chart',
-				width * counts[key] / total, key, counts[key]))
+				barstyle if data[key] else 'chart',
+				width * data[key] / total, key, data[key]))
 	result.append('</div>\n<pre>')
 	return '\n'.join(result)
 

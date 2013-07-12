@@ -6,23 +6,18 @@ import os
 import re
 import cgi
 import glob
-import gzip
 import heapq
-import time
 import string
 import random
-import codecs
 import logging
 from functools import wraps
 from operator import itemgetter
 from flask import Flask, Markup, request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
-from discodop import treetransforms, disambiguation, coarsetofine
-from discodop import lexicon, pcfg, plcfrs
+from discodop import treetransforms
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop.containers import Grammar
-from discodop.runexp import readgrammars, Parser
+from discodop.parser import readgrammars, Parser
 
 APP = Flask(__name__)
 morphtags = re.compile(

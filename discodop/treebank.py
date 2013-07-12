@@ -601,6 +601,14 @@ def headorder(tree, headfinal, reverse):
 			tree[:] = nodes[headidx:] + nodes[:headidx][::-1]
 
 
+def saveheads(tree, tailmarker):
+	""" When a head-outward binarization is used, this function ensures the
+	head is known when the tree is converted to export format. """
+	for node in tree.subtrees(lambda n: tailmarker in n.label):
+		node.source = ['--'] * 6
+		node.source[FUNC] = 'HD'
+
+
 def headstats(trees):
 	""" collects some information useful for writing headrules. """
 	from collections import defaultdict

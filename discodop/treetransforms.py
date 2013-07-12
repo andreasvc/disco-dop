@@ -324,18 +324,13 @@ def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar="+"):
 	would require loss of useful information.  The Tree is modified
 	directly (since it is passed by reference).
 
-	@param tree: The Tree to be collapsed
-	@type  tree: C{Tree}
-	@param collapsepos: 'False' (default) will not collapse the parent of leaf
+	collapsepos: 'False' (default) will not collapse the parent of leaf
 						nodes (i.e., Part-of-Speech tags) since they are always
 						unary productions
-	@type  collapsepos: C{boolean}
-	@param collapseroot: 'False' (default) will not modify the root production
+	collapseroot: 'False' (default) will not modify the root production
 						if it is unary.  For the Penn WSJ treebank corpus, this
 						corresponds to the TOP -> productions.
-	@type collapseroot: C{boolean}
-	@param joinchar: A string used to connect collapsed node values (default: "+")
-	@type  joinchar: C{string} """
+	joinchar: A string used to connect collapsed node values (default: "+") """
 	agenda = [tree]
 	if not collapseroot and isinstance(tree, Tree) and len(tree) == 1:
 		agenda = [tree[0]]
@@ -462,10 +457,6 @@ def getyf(left, right):
 		elif cur != ',':
 			cur = ','
 			result.append(cur)
-	#lpos = pyintnextset(left.bitset, 0)
-	#rpos = pyintnextset(right.bitset, 0)
-	#result = ['0' if lpos < rpos else '1']
-	# etc.
 	return ''.join(result)
 
 
@@ -792,10 +783,10 @@ def splitdiscnodes(tree, markorigin=False):
 	def label(child, childnodes, n):
 		""" Create a label for the component of a discontinuous constituent,
 		with the amount of context set by markorigin. """
-		if markorigin == False:
-			return '%s*' % child.label
-		elif markorigin == True:
+		if markorigin:
 			return "%s*%d" % (child.label, n)
+		else:
+			return '%s*' % child.label
 	treeclass = tree.__class__
 	for node in postorder(tree):
 		nodes = list(node)
