@@ -5,10 +5,12 @@ Discontinuous DOP
    :align: right
    :alt: contrived discontinuous constituent for expository purposes.
 
-The aim of this project is to parse discontinuous constituents with
+The aim of this project is to parse discontinuous constituents in natural language using
 Data-Oriented Parsing (DOP), with a focus on global world domination.
 Concretely, we build a DOP model with a Linear Context-Free Rewriting
 System (LCFRS) as the symbolic backbone.
+The grammar is extracted from a treebank of sentences annotated with
+(discontinuous) phrase-structure trees.
 
 Background
 ----------
