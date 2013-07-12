@@ -185,10 +185,10 @@ def counts(form):
 			total = len(GETLEAVES.findall(open(filename).read()))
 		elif norm != 'sents':
 			raise ValueError
-		relfreq[text] = float(cnt) / total
+		relfreq[text] = 100.0 * cnt / total
 		sumtotal += total
 		line = "%s%6d    %5.2f %%" % (
-				text.ljust(40)[:40], cnt, 100 * relfreq[text])
+				text.ljust(40)[:40], cnt, relfreq[text])
 		indices = {int(line[:line.index(':::')])
 				for line in results.splitlines()}
 		plot = concplot(indices, totalsent)
@@ -201,9 +201,9 @@ def counts(form):
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
 				100.0 * sum(cnts.values()) / sumtotal))
-		yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern')
-		yield barplot(relfreq, 1.,
-				'Relative frequency of pattern: (count / num_%s)' % norm,
+		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern', style='chart1')
+		yield barplot(relfreq, max(relfreq.values()),
+				'Relative frequency of pattern: (count / num_%s * 100)' % norm,
 				style='chart2')
 
 
@@ -330,28 +330,31 @@ def filterlabels(form, line):
 	return line
 
 
-def barplot(counts, total, title, style='chart', width=800.0):
+def barplot(counts, total, title, style='chart1', width=800.0):
 	""" A HTML bar plot given a dictionary and max value. """
-	result = ['<div class=%s>' % style,
+	result = ['</pre><div class=chart>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
 	for key in sorted(counts, key=counts.get, reverse=True):
 		result.append('<div class=%s style="width: %gpx" >%s: %g</div>' % (
-				style, width * counts[key] / total, key, counts[key]))
-	result.append('</div>\n')
-	return ''.join(result)
+				style if counts[key] else 'chart',
+				width * counts[key] / total, key, counts[key]))
+	result.append('</div>\n<pre>')
+	return '\n'.join(result)
 
 
 def concplot(indices, total, width=800.0):
 	""" Draw a concordance plot from a sequence of indices and the total number
 	of items. """
-	return ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
+	result = ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
 			' width="%dpx" height="10px" >\n'
-			'<rect x=0 y=0 width="%dpx" height=10 fill=white stroke=black />\n'
-			'<g transform="scale(%g, 1)">\n'
-			'<path stroke=black d="%s" /></g></svg>') % (
-			width, width, width / total,
-			''.join('M %d 0v 10' % idx for idx in sorted(indices)))
+			'<rect x=0 y=0 width="%dpx" height=10 '
+			'fill=white stroke=black />\n' % (width, width))
+	if indices:
+		result += ('<g transform="scale(%g, 1)">\n'
+				'<path stroke=black d="%s" /></g>') % (width / total,
+				''.join('M %d 0v 10' % idx for idx in sorted(indices)))
+	return result + '</svg>'
 
 
 def selectedtexts(form):
