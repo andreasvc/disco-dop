@@ -128,7 +128,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word)
+			return chart, NONE, "not covered: %r" % (tag or word, )
 
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
@@ -350,7 +350,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word)
+			return chart, NONE, "not covered: %r" % (tag or word, )
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
 		unaryagenda.update(viterbicell.items())
@@ -575,7 +575,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word)
+			return chart, NONE, "not covered: %r" % (tag or word, )
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
 		unaryagenda.update(cell.keys())
@@ -758,7 +758,7 @@ def insidescores(list sent, Grammar grammar,
 						or grammar.tolabel[lhs].startswith(tag + b'@')):
 					inside[left, right, lhs] = 1.
 			else:
-				raise ValueError("not covered: %r" % (tag or sent[left]))
+				raise ValueError("not covered: %r" % (tag or sent[left]), )
 		# unary rules on POS tags
 		unaryagenda.update([(rhs1,
 			new_CFGEdge(-inside[left, right, rhs1], NULL, 0))

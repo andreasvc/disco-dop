@@ -142,7 +142,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 			chart[tagitem] = {}
 			recognized = True
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word)
+			return chart, NONE, "not covered: %r" % (tag or word, )
 
 	# parsing
 	while agenda.length:
@@ -493,7 +493,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 			chart[tagitem] = {}
 			recognized = True
 		elif not recognized:
-			msg = "not covered: %r" % (tag or word)
+			msg = "not covered: %r" % (tag or word, )
 			return chart, FATNONE, msg
 
 	# parsing
@@ -830,7 +830,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 			newitem = SmallChartItem.__new__(SmallChartItem)
 			recognized = True
 		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word)
+			return chart, NONE, "not covered: %r" % (tag or word, )
 
 	# parsing
 	while agenda:

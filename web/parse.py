@@ -2,8 +2,6 @@
 Expects a series of grammars in subdirectories of grammar/ """
 # Wishlist:
 # - shortest derivation, SL-DOP, MPSD, &c.
-# - arbitrary configuration of CTF stages;
-#   should become class also used by runexp.py & parser.py
 import os
 import re
 import cgi
@@ -19,12 +17,12 @@ from functools import wraps
 from operator import itemgetter
 from flask import Flask, Markup, request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
-
 from discodop import treetransforms, disambiguation, coarsetofine
 from discodop import lexicon, pcfg, plcfrs
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.containers import Grammar
+from discodop.runexp import readgrammars, Parser
 
 APP = Flask(__name__)
 morphtags = re.compile(
@@ -32,6 +30,7 @@ morphtags = re.compile(
 limit = 40  # maximum sentence length
 prunek = 5000  # number of PLCFRS derivations to use for DOP parsing
 grammars = {}
+parsers = {}
 backtransforms = {}
 knownwords = {}
 
@@ -55,11 +54,20 @@ def parse():
 	senttok = tokenize(sent)
 	if not senttok or not 1 <= len(senttok) <= limit:
 		return 'Sentence too long: %d words, maximum %d' % (len(senttok), limit)
-	result = getparse(senttok, objfun, marg)
-	if result == 'no parse':
+	lang = guesslang(senttok)
+	parsers[lang].stages[-1].objective = objfun
+	parsers[lang].stages[-1].kbest = marg in ('nbest', 'both')
+	parsers[lang].stages[-1].sample = marg in ('sample', 'both')
+	result = list(parsers[lang].parse(senttok))
+	if result[0].noparse:
 		return "no parse!\n"
-	(parsetrees, fragments, elapsed, msg1, msg2, msg3) = result
-	tree, prob = parsetrees[0]
+	tree = str(result[-1].parsetree)
+	prob = result[-1].prob
+	parsetrees = result[-1].parsetrees or {}
+	parsetrees = heapq.nlargest(10, parsetrees.items(), key=itemgetter(1))
+	fragments = result[-1].fragments or ()
+	msg = '\n'.join(stage.msg for stage in result)
+	elapsed = [stage.elapsedtime for stage in result]
 	APP.logger.info('[%g] %s' % (prob, tree))
 	tree = morphtags.sub(r'(\1\2', tree)
 	tree = Tree.parse(tree, parse_leaf=int)
@@ -81,7 +89,7 @@ def parse():
 					senttok).text(unicodelines=True, html=True))
 				for n, (tree, prob) in enumerate(parsetrees)))
 	info = Markup('\n'.join(('sentence length: %d; objfun=%s; marg=%s' % (
-			len(senttok), objfun, marg), msg1, msg2, msg3, elapsed,
+			len(senttok), objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',
 			'\n'.join('%d. [p=%g] %s' % (n + 1, prob, cgi.escape(tree))
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
@@ -96,40 +104,17 @@ def favicon():
 			'parse.ico', mimetype='image/vnd.microsoft.icon')
 
 
-def loadgrammars():
+def loadparsers():
 	""" Load grammars if necessary. """
-	if grammars != {}:
-		return
-	for folder in glob.glob('grammars/*/'):
-		_, lang = os.path.split(os.path.dirname(folder))
-		APP.logger.info('Loading grammar %r', lang)
-		grammarlist = []
-		for stagename in ('pcfg', 'plcfrs', 'dop'):
-			rules = gzip.open("%s/%s.rules.gz" % (folder, stagename)).read()
-			lexical = codecs.getreader('utf-8')(gzip.open("%s/%s.lex.gz" % (
-					folder, stagename))).read()
-			if stagename == 'pcfg':
-				grammarlist.append(Grammar(rules, lexical,
-						logprob=False, bitpar=True))
-			else:
-				grammarlist.append(Grammar(rules, lexical))
-			assert grammarlist[-1].testgrammar(), stagename
-			if stagename == 'plcfrs':
-				_ = grammarlist[-1].getmapping(grammarlist[-2],
-						striplabelre=re.compile(b'@.+$'),
-						neverblockre=re.compile(b'.+}<'),
-						splitprune=True, markorigin=True)
-			elif stagename == 'dop':
-				_ = grammarlist[-1].getmapping(grammarlist[-2],
-						striplabelre=re.compile(b'@.+$'),
-						neverblockre=re.compile(b'.+}<'),
-						splitprune=False, markorigin=False)
-				backtransforms[lang] = dict(enumerate(gzip.open(
-						"%s/dop.backtransform.gz" % folder).read().splitlines()))
-		grammars[lang] = grammarlist
-		knownwords[lang] = {w for w in grammars[lang][0].lexical
-				if not w.startswith("UNK")}
-		APP.logger.info('Grammar for %s loaded.' % lang)
+	if not parsers:
+		for folder in glob.glob('grammars/*/'):
+			_, lang = os.path.split(os.path.dirname(folder))
+			APP.logger.info('Loading grammar %r', lang)
+			stages = readgrammars(folder)
+			parsers[lang] = Parser(stages)
+			knownwords[lang] = {w for w in stages[0].grammar.lexical
+					if not w.startswith("UNK")}
+			APP.logger.info('Grammar for %s loaded.' % lang)
 
 
 def cached(timeout=3600):
@@ -151,66 +136,6 @@ def cached(timeout=3600):
 
 		return decorated_function
 	return decorator
-
-
-@cached(timeout=24 * 3600)
-def getparse(senttok, objfun, marg):
-	""" Do the actual parsing. """
-	elapsed = []
-	begin = time.clock()
-	lang = guesslang(senttok)
-	grammar = grammars[lang]
-	knownword = knownwords[lang]
-	backtransform = backtransforms[lang]
-	unksent = [w if w in knownword
-			else lexicon.unknownword4(w, n, knownword)
-			for n, w in enumerate(senttok)]
-	inside, outside, start, _ = pcfg.doinsideoutside(
-			unksent, grammar[0], tags=None)
-	elapsed.append(time.clock() - begin)
-	begin = time.clock()
-	if start:
-		(whitelist, _, _, _, _) = coarsetofine.whitelistfromposteriors(
-				inside, outside, start,
-				grammar[0], grammar[1], 1e-5, True, True)
-		elapsed.append(time.clock() - begin)
-		begin = time.clock()
-		chart, start, _ = plcfrs.parse(unksent, grammar[1],
-				exhaustive=True, whitelist=whitelist,
-				splitprune=True, markorigin=True)
-		elapsed.append(time.clock() - begin)
-		begin = time.clock()
-	else:
-		APP.logger.warning('stage 1 fail')
-	if start:
-		whitelist, items = coarsetofine.prunechart(
-				chart, start, grammar[1], grammar[2],
-				prunek, False, False, False)
-		elapsed.append(time.clock() - begin)
-		msg1 = "PLCFRS items: %d; In %d-best derivations: %d" % (
-				prunek, len(chart), items)
-		begin = time.clock()
-		chart, start, msg2 = plcfrs.parse(unksent, grammar[2],
-				exhaustive=objfun != 'mpd', whitelist=whitelist,
-				splitprune=False, markorigin=False)
-		elapsed.append(time.clock() - begin)
-		begin = time.clock()
-	else:
-		APP.logger.warning('stage 2 fail')
-	if start:
-		parsetrees, msg3 = disambiguation.marginalize(objfun, chart,
-				start, grammar[2], 10000,
-				kbest=marg in ('nbest', 'both'),
-				sample=marg in ('sample', 'both'),
-				sent=unksent, tags=None, backtransform=backtransform)
-		fragments = disambiguation.extractfragments(
-				chart, start, grammar[2], backtransform)
-		elapsed.append(time.clock() - begin)
-		return (heapq.nlargest(10, parsetrees.items(), key=itemgetter(1)),
-				fragments, elapsed, msg1, msg2, msg3)
-	else:
-		APP.logger.warning('stage 3 fail')
-		return 'no parse'
 
 
 def randid():
@@ -263,5 +188,5 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	loadgrammars()
+	loadparsers()
 	APP.run(debug=False, host='0.0.0.0')

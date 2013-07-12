@@ -25,6 +25,7 @@ from subprocess import Popen, PIPE
 from fractions import Fraction
 from math import exp
 import numpy as np
+from . import eval as evalmod
 from .tree import Tree
 from .treebank import getreader, fold, writetree, FUNC
 from .treetransforms import binarize, unbinarize, optimalbinarize, \
@@ -36,13 +37,11 @@ from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
 from .lexicon import getunknownwordmodel, getlexmodel, \
 		smoothlexicon, simplesmoothlexicon, replacerarewords, \
 		unknownword4, unknownword6, unknownwordbase
-from .eval import doeval, readparam, strbracketings, transform, \
-		bracketings, precision, recall, f_measure, accuracy
 from . import plcfrs, pcfg
 from .estimates import getestimates, getpcfgestimates
 from .containers import Grammar
 from .coarsetofine import prunechart, whitelistfromposteriors
-from .disambiguation import marginalize, viterbiderivation
+from .disambiguation import marginalize, viterbiderivation, extractfragments
 
 USAGE = """Usage: %s [--rerun] parameter file
 If a parameter file is given, an experiment is run. See the file sample.prm for
@@ -83,32 +82,7 @@ DEFAULTSTAGE = dict(
 
 
 def startexp(
-		stages=(
-		# see variable 'DEFAULTSTAGE' above
-		dict(
-			mode='pcfg',  # use the dedicated PCFG parser
-			split=True,
-			markorigin=True,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
-		),
-		dict(
-			mode='plcfrs',  # the agenda-based PLCFRS parser
-			prune=True,  # whether to use previous chart to prune this stage
-			splitprune=True,  # VP_2[101] is treated as { VP*[100], VP*[001] }
-			k=50,  # number of coarse pcfg derivations to prune with;
-					# k=0 => filter only
-		),
-		dict(
-			mode='plcfrs',  # the agenda-based PLCFRS parser
-			prune=True,  # whether to use previous chart to prune this stage
-			k=50,		# number of coarse plcfrs derivations to prune with;
-					# k=0 => filter only
-			dop=True,
-			usedoubledop=False,  # when False, use DOP reduction instead
-			sample=False, kbest=True,
-			m=10000,		# number of derivations to sample/enumerate
-			estimator="ewe",  # choices: dop1, ewe
-			objective="mpp",  # choices: mpp, mpd, shortest, sl-dop[-simple]
-		)),
+		stages=(DEFAULTSTAGE, ),  # see above
 		corpusfmt="export",  # choices: export, discbracket, bracket
 		corpusdir=".",
 		# filenames may include globbing characters '*' and '?'.
@@ -325,14 +299,14 @@ def startexp(
 				revmarkov, leftmostunary, rightmostunary, pospa,
 				fanout_marks_before_bin, testmaxwords, resultdir, numproc,
 				lexmodel, simplelexsmooth, top)
-	evalparam = readparam(evalparam)
+	evalparam = evalmod.readparam(evalparam)
 	evalparam["DEBUG"] = -1
 	evalparam["CUTOFF_LEN"] = 40
 	deletelabel = evalparam.get("DELETE_LABEL", ())
 	deleteword = evalparam.get("DELETE_WORD", ())
 
 	begin = time.clock()
-	results = doparse(stages=stages, unfolded=unfolded, bintype=bintype,
+	results = doparsing(parser=Parser(stages), unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin, testset=testset,
 			testmaxwords=testmaxwords, testnumsents=testnumsents,
 			tags=tags, resultdir=resultdir, numproc=numproc,
@@ -343,7 +317,7 @@ def startexp(
 	for result in results[0]:
 		nsent = len(result.parsetrees)
 		header = (" " + result.name.upper() + " ").center(35, "=")
-		evalsummary = doeval(OrderedDict((a, b.copy(True))
+		evalsummary = evalmod.doeval(OrderedDict((a, b.copy(True))
 				for a, b in test_parsed_sents.items()), gold_sents,
 				result.parsetrees, test_tagged_sents if tags else gold_sents,
 				evalparam)
@@ -355,9 +329,18 @@ def startexp(
 		logging.info("\n".join(("", header, evalsummary, coverage)))
 
 
-def readgrammars(resultdir, stages, top):
+def readgrammars(resultdir, stages=None, top='ROOT'):
 	""" Read the grammars from a previous experiment. Must have same parameters.
 	"""
+	if stages is None:
+		params = readparam(os.path.join(resultdir, 'params.prm'))
+		params['resultdir'] = resultdir
+		for stage in params['stages']:
+			for key in stage:
+				assert key in DEFAULTSTAGE, "unrecognized option: %r" % key
+		stages = params['stages'] = [DictObj({k: stage.get(k, v)
+				for k, v in DEFAULTSTAGE.items()})
+					for stage in params['stages']]
 	for n, stage in enumerate(stages):
 		logging.info("reading: %s", stage.name)
 		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name))
@@ -368,7 +351,7 @@ def readgrammars(resultdir, stages, top):
 		backtransform = None
 		if stage.dop:
 			assert stage.objective not in (
-					"shortest", "sl-dop", "sl-dop-simple"), ("not supported.")
+					"shortest", "sl-dop", "sl-dop-simple"), "not supported."
 			assert stage.useestimates is None, "not supported"
 			if stage.usedoubledop:
 				backtransform = dict(enumerate(
@@ -402,6 +385,7 @@ def readgrammars(resultdir, stages, top):
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform,
 				secondarymodel=None, outside=None)
+	return stages
 
 
 def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
@@ -568,7 +552,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		# when grammar is LCFRS, write rational fractions.
 		# when grammar is PCFG, write frequencies if probabilities sum to 1,
 		# i.e., in that case probalities can be re-computed as relative
-		# frequencies. otherwise, resort to decimal fractions (imprecise).
+		# frequencies. otherwise, resort to decimal floats (imprecise).
 		write_lcfrs_grammar(xgrammar, rules, lexicon,
 				bitpar=bitpar, freqs=bitpar and sumsto1)
 		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz", resultdir,
@@ -588,7 +572,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		elif stage.useestimates == 'SX':
 			assert fanout == 1 or stage.split, "SX estimate requires PCFG."
 			assert stage.mode != 'pcfg', (
-				"estimates require agenda-based parser.")
+					"estimates require agenda-based parser.")
 			outside = np.load("pcfgoutside.npz")['outside']
 			logging.info("loaded PCFG estimates")
 		if stage.getestimates == 'SXlrgaps':
@@ -607,14 +591,14 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				secondarymodel=secondarymodel, outside=outside)
 
 
-def doparse(**kwds):
+def doparsing(**kwds):
 	""" Parse a set of sentences using worker processes. """
 	params = DictObj(tags=True, numproc=None, tailmarker='',
 		category=None, deletelabel=(), deleteword=(), corpusfmt="export")
 	params.update(kwds)
 	goldbrackets = multiset()
 	totaltokens = 0
-	results = [DictObj(name=stage.name) for stage in params.stages]
+	results = [DictObj(name=stage.name) for stage in params.parser.stages]
 	for result in results:
 		result.update(elapsedtime=dict.fromkeys(params.testset),
 				parsetrees=dict.fromkeys(params.testset), brackets=multiset(),
@@ -635,10 +619,10 @@ def doparse(**kwds):
 					sentid, len(sent),
 					" ".join(a[0] for a in goldsent), msg)
 		evaltree = goldtree.copy(True)
-		transform(evaltree, [w for w, _ in sent], evaltree.pos(),
+		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), params.deletelabel, params.deleteword,
 				{}, {}, False)
-		goldb = bracketings(evaltree, dellabel=params.deletelabel)
+		goldb = evalmod.bracketings(evaltree, dellabel=params.deletelabel)
 		goldbrackets.update((sentid, (label, span)) for label, span
 				in goldb.elements())
 		totaltokens += sum(1 for _, t in goldsent if t not in params.deletelabel)
@@ -662,9 +646,9 @@ def doparse(**kwds):
 					100 * (1 - results[n].noparse / nsent),
 					100 * (results[n].tagscorrect / totaltokens),
 					100 * (results[n].exact / nsent),
-					100 * precision(goldbrackets, results[n].brackets),
-					100 * recall(goldbrackets, results[n].brackets),
-					100 * f_measure(goldbrackets, results[n].brackets),
+					100 * evalmod.precision(goldbrackets, results[n].brackets),
+					100 * evalmod.recall(goldbrackets, results[n].brackets),
+					100 * evalmod.f_measure(goldbrackets, results[n].brackets),
 					('' if n + 1 < len(sentresults) else '\n'))
 	if params.numproc != 1:
 		pool.terminate()
@@ -675,147 +659,172 @@ def doparse(**kwds):
 	return results, goldbrackets
 
 
+class Parser(object):
+	""" An object to parse sentences following parameters given as a sequence
+	of coarse-to-fine stages. """
+	def __init__(self, stages):
+		self.stages = stages
+
+	def parse(self, sent, tags=None, unfolded=False, tailmarker='$'):
+		""" Parse a sentence and yield a dictionary from parse trees to
+		probabilities for each stage. """
+		sent = list(sent)
+		if tags is not None:
+			tags = list(tags)
+		chart = {}
+		start = inside = outside = None
+		for n, stage in enumerate(self.stages):
+			begin = time.clock()
+			noparse = False
+			parsetrees = fragments = None
+			msg = "%s:\t" % stage.name.upper()
+			if not stage.prune or start:
+				if n != 0 and stage.prune:
+					if self.stages[n - 1].mode == 'pcfg-posterior':
+						(whitelist, sentprob, unfiltered,
+							numitems, numremain) = whitelistfromposteriors(
+								inside, outside, start,
+								self.stages[n - 1].grammar, stage.grammar,
+								stage.k, stage.splitprune,
+								self.stages[n - 1].markorigin)
+						msg += ("coarse items before pruning=%d; filtered: %d; "
+								"pruned: %d; sentprob=%g\n\t" % (
+								unfiltered, numitems, numremain, sentprob))
+					else:
+						whitelist, items = prunechart(
+								chart, start, self.stages[n - 1].grammar,
+								stage.grammar, stage.k, stage.splitprune,
+								self.stages[n - 1].markorigin,
+								stage.mode == "pcfg")
+						msg += "coarse items before pruning: %d; " % (
+								sum(len(a) for x in chart for a in x if a)
+								if self.stages[n - 1].mode == 'pcfg'
+								else len(chart))
+						msg += "after: %d\n\t" % (items)
+				else:
+					whitelist = None
+				if stage.mode == 'pcfg':
+					chart, start, msg1 = pcfg.parse(
+							sent, stage.grammar, tags=tags,
+							chart=whitelist if stage.prune else None)
+				elif stage.mode == 'pcfg-posterior':
+					inside, outside, start, msg1 = pcfg.doinsideoutside(
+							sent, stage.grammar, tags=tags)
+				elif stage.mode == 'plcfrs':
+					chart, start, msg1 = plcfrs.parse(sent,
+							stage.grammar, tags=tags,
+							exhaustive=stage.dop or (n + 1 != len(self.stages)
+								and self.stages[n + 1].prune),
+							whitelist=whitelist,
+							splitprune=stage.splitprune
+								and self.stages[n - 1].split,
+							markorigin=self.stages[n - 1].markorigin,
+							estimates=(stage.useestimates, stage.outside)
+								if stage.useestimates in ('SX', 'SXlrgaps')
+								else None)
+				else:
+					raise ValueError
+				msg += "%s\n\t" % msg1
+				if (n != 0 and not start and not noparse
+						and stage.split == self.stages[n - 1].split):
+					logging.error("ERROR: expected successful parse. "
+							"sent: %s\nstage: %s.", ' '.join(sent), stage.name)
+					#raise ValueError("ERROR: expected successful parse. "
+					#		"sent %s, %s." % (nsent, stage.name))
+			if start and stage.mode != 'pcfg-posterior':
+				if True:  # stage.dop:
+					begindisamb = time.clock()
+					parsetrees, msg1 = marginalize(stage.objective,
+							chart, start, stage.grammar, stage.m,
+							sample=stage.sample, kbest=stage.kbest,
+							sent=sent, tags=tags,
+							secondarymodel=stage.secondarymodel,
+							sldop_n=stage.sldop_n,
+							backtransform=stage.backtransform)
+					if stage.mode == 'plcfrs':
+						fragments = extractfragments(
+							chart, start, stage.grammar, stage.backtransform)
+					resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
+					msg += "disambiguation: %s, %gs\n\t" % (
+							msg1, time.clock() - begindisamb)
+					if isinstance(prob, tuple):
+						msg += "subtrees = %d, p=%.4e " % (
+								abs(prob[0]), prob[1])
+					else:
+						msg += "p=%.4e " % prob
+				#elif not stage.dop:
+				#	resultstr, prob = viterbiderivation(chart, start,
+				#			stage.grammar.tolabel)
+				#	msg += "p=%.4e " % exp(-prob)
+				parsetree = Tree.parse(resultstr, parse_leaf=int)
+				if stage.split:
+					mergediscnodes(unbinarize(parsetree, childchar=":"))
+				saveheads(parsetree, tailmarker)
+				unbinarize(parsetree)
+				removefanoutmarkers(parsetree)
+				if unfolded:
+					fold(parsetree)
+			if not start or stage.mode == 'pcfg-posterior':
+				parsetree = defaultparse([(n, t)
+						for n, t in enumerate(tags or (len(sent) * ['NONE']))])
+				parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],
+						parsetree), parse_leaf=int)
+				prob = 0.0
+				noparse = True
+			elapsedtime = time.clock() - begin
+			msg += "%.2fs cpu time elapsed\n" % (elapsedtime)
+			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
+					parsetrees=parsetrees, fragments=fragments,
+					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
+
+
 def worker(args):
-	""" parse a sentence using specified stages (pcfg, plcfrs, dop, ...) """
+	""" Parse a sentence using a global Parser object,
+	and do incremental evaluation.
+	Returns diagnostic information in a string, as well as a list of
+	DictObj with the results for each stage. """
 	nsent, (sent, goldtree, _, _) = args
 	prm = INTERNALPARAMS
 	evaltree = goldtree.copy(True)
-	transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-		dict(evaltree.pos()), prm.deletelabel, prm.deleteword, {}, {}, False)
-	goldb = bracketings(evaltree, dellabel=prm.deletelabel)
+	evalmod.transform(evaltree, [w for w, _ in sent],
+			evaltree.pos(), dict(evaltree.pos()),
+			prm.deletelabel, prm.deleteword, {}, {}, False)
+	goldb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
 	results = []
 	msg = ''
 	chart = {}
 	start = inside = outside = None
-	for n, stage in enumerate(prm.stages):
-		begin = time.clock()
-		exact = noparse = False
-		msg += "%s:\t" % stage.name.upper()
-		if not stage.prune or start:
-			if n != 0 and stage.prune:
-				if prm.stages[n - 1].mode == 'pcfg-posterior':
-					(whitelist, sentprob, unfiltered, numitems, numremain
-						) = whitelistfromposteriors(inside, outside, start,
-							prm.stages[n - 1].grammar, stage.grammar, stage.k,
-							stage.splitprune, prm.stages[n - 1].markorigin)
-					msg += ("coarse items before pruning=%d; filtered: %d; "
-							"pruned: %d; sentprob=%g\n\t" % (
-							unfiltered, numitems, numremain, sentprob))
-				else:
-					whitelist, items = prunechart(chart, start,
-						prm.stages[n - 1].grammar, stage.grammar, stage.k,
-						stage.splitprune, prm.stages[n - 1].markorigin,
-						stage.mode == "pcfg")
-					msg += "coarse items before pruning: %d; after: %d\n\t" % (
-						(sum(len(a) for x in chart for a in x if a)
-						if prm.stages[n - 1].mode == 'pcfg'
-						else len(chart)), items)
-			else:
-				whitelist = None
-			if stage.mode == 'pcfg':
-				chart, start, msg1 = pcfg.parse([w for w, _ in sent],
-						stage.grammar,
-						tags=[t for _, t in sent] if prm.tags else None,
-						chart=whitelist if stage.prune else None)
-			elif stage.mode == 'pcfg-posterior':
-				inside, outside, start, msg1 = pcfg.doinsideoutside(
-						[w for w, _ in sent],
-						stage.grammar,
-						tags=[t for _, t in sent] if prm.tags else None)
-			elif stage.mode == 'plcfrs':
-				chart, start, msg1 = plcfrs.parse([w for w, _ in sent],
-						stage.grammar,
-						tags=[t for _, t in sent] if prm.tags else None,
-						exhaustive=stage.dop or (n + 1 != len(prm.stages)
-								and prm.stages[n + 1].prune),
-						whitelist=whitelist,
-						splitprune=stage.splitprune and prm.stages[n - 1].split,
-						markorigin=prm.stages[n - 1].markorigin,
-						estimates=(stage.useestimates, stage.outside)
-							if stage.useestimates in ('SX', 'SXlrgaps')
-							else None)
-			else:
-				raise ValueError
-			msg += "%s\n\t" % msg1
-			if (n != 0 and not start and not results[-1].noparse
-					and stage.split == prm.stages[n - 1].split):
-				logging.error("ERROR: expected successful parse. "
-						"sent %s, %s.", nsent, stage.name)
-				#raise ValueError("ERROR: expected successful parse. "
-				#		"sent %s, %s." % (nsent, stage.name))
-		# store & report result
-		if start and stage.mode != 'pcfg-posterior':
-			if stage.dop:
-				begindisamb = time.clock()
-				parsetrees, msg1 = marginalize(stage.objective, chart, start,
-						stage.grammar, stage.m, sample=stage.sample,
-						kbest=stage.kbest, sent=[w for w, _ in sent],
-						tags=[t for _, t in sent] if prm.tags else None,
-						secondarymodel=stage.secondarymodel,
-						sldop_n=stage.sldop_n,
-						backtransform=stage.backtransform)
-				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
-				msg += "disambiguation: %s, %gs\n\t" % (
-						msg1, time.clock() - begindisamb)
-				if isinstance(prob, tuple):
-					msg += "subtrees = %d, p=%.4e " % (abs(prob[0]), prob[1])
-				else:
-					msg += "p=%.4e " % prob
-			elif not stage.dop:
-				resultstr, prob = viterbiderivation(chart, start,
-						stage.grammar.tolabel)
-				msg += "p=%.4e " % exp(-prob)
-			parsetree = Tree.parse(resultstr, parse_leaf=int)
-			assert set(parsetree.leaves()) == set(goldtree.leaves())
-			if stage.split:
-				mergediscnodes(unbinarize(parsetree, childchar=":"))
-			saveheads(parsetree, prm.tailmarker)
-			unbinarize(parsetree)
-			removefanoutmarkers(parsetree)
-			if prm.unfolded:
-				fold(parsetree)
-			evaltree = parsetree.copy(True)
-			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
+	for result in prm.parser.parse([w for w, _ in sent],
+			tags=[t for _, t in sent] if prm.tags else None):
+		msg += result.msg
+		evaltree = result.parsetree.copy(True)
+		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), prm.deletelabel, prm.deleteword,
 				{}, {}, False)
-			candb = bracketings(evaltree, dellabel=prm.deletelabel)
-			if goldb and candb:
-				prec = precision(goldb, candb)
-				rec = recall(goldb, candb)
-				f1score = f_measure(goldb, candb)
-			else:
-				prec = rec = f1score = 0
-			if f1score == 1.0:
-				msg += "exact match \n"
-				exact = True
-			else:
-				msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
-								100 * prec, 100 * rec, 100 * f1score)
-				if (candb - goldb) or (goldb - candb):
-					msg += '\t'
-				if candb - goldb:
-					msg += "cand-gold=%s " % strbracketings(candb - goldb)
-				if goldb - candb:
-					msg += "gold-cand=%s" % strbracketings(goldb - candb)
-				msg += '\n\t'  # "%s\n\t" % parsetree
-		if not start or stage.mode == 'pcfg-posterior':
-			parsetree = defaultparse([(n, t) for n, (w, t) in enumerate(sent)])
-			parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],
-					parsetree), parse_leaf=int)
-			evaltree = parsetree.copy(True)
-			transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-					dict(evaltree.pos()), prm.deletelabel, prm.deleteword,
-					{}, {}, False)
-			candb = bracketings(evaltree, dellabel=prm.deletelabel)
-			prec = precision(goldb, candb)
-			rec = recall(goldb, candb)
-			f1score = f_measure(goldb, candb)
-			noparse = True
-		elapsedtime = time.clock() - begin
-		msg += "%.2fs cpu time elapsed\n" % (elapsedtime)
-		results.append(DictObj(name=stage.name, candb=candb,
-				parsetree=parsetree, noparse=noparse, exact=exact,
-				elapsedtime=elapsedtime))
+		candb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
+		if goldb and candb:
+			prec = evalmod.precision(goldb, candb)
+			rec = evalmod.recall(goldb, candb)
+			f1score = evalmod.f_measure(goldb, candb)
+		else:
+			prec = rec = f1score = 0
+		if f1score == 1.0:
+			exact = True
+			msg += "exact match \n"
+		else:
+			exact = False
+			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
+					100 * prec, 100 * rec, 100 * f1score)
+			if (candb - goldb) or (goldb - candb):
+				msg += '\t'
+			if candb - goldb:
+				msg += "cand-gold=%s " % evalmod.strbracketings(candb - goldb)
+			if goldb - candb:
+				msg += "gold-cand=%s" % evalmod.strbracketings(goldb - candb)
+			msg += '\n\t'  # "%s\n\t" % parsetree
+		msg += "%.2fs cpu time elapsed\n" % (result.elapsedtime)
+		result.update(dict(candb=candb, exact=exact))
+		results.append(result)
 	#msg += "GOLD:   %s" % goldtree.pprint(margin=1000)
 	return (nsent, msg, results)
 
@@ -863,9 +872,9 @@ def oldeval(results, goldbrackets):
 		logging.info("%s lp %5.2f lr %5.2f lf %5.2f\n"
 			"coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n",
 				result.name,
-				100 * precision(goldbrackets, result.brackets),
-				100 * recall(goldbrackets, result.brackets),
-				100 * f_measure(goldbrackets, result.brackets),
+				100 * evalmod.precision(goldbrackets, result.brackets),
+				100 * evalmod.recall(goldbrackets, result.brackets),
+				100 * evalmod.f_measure(goldbrackets, result.brackets),
 				nsent - result.noparse, nsent,
 				100 * (nsent - result.noparse) / nsent,
 				result.exact, nsent, 100 * result.exact / nsent)
@@ -1012,7 +1021,7 @@ def parsetepacoc(
 			continue
 		logging.info("category: %s", cat)
 		begin = time.clock()
-		results[cat] = doparse(stages=stages, testset=testset,
+		results[cat] = doparsing(parser=Parser(stages), testset=testset,
 				testmaxwords=testmaxwords, testnumsents=testnumsents,
 				top=trees[0].label, tags=True, bintype=bintype,
 				tailmarker=tailmarker, unfolded=unfolded,
@@ -1053,7 +1062,7 @@ def parsetepacoc(
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info("category: %s", cat)
-	oldeval(*doparse(stages=stages, unfolded=unfolded, bintype=bintype,
+	oldeval(*doparsing(parser=Parser(stages), unfolded=unfolded, bintype=bintype,
 			fanout_marks_before_bin=fanout_marks_before_bin,
 			testset=testsets[cat], testmaxwords=testmaxwords,
 			testnumsents=testnumsents, top=trees[0].label, tags=True,
@@ -1129,7 +1138,7 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 				"before: %r\nafter: %r" % (sents[n], tags))
 	newtags = [t for sent in taggedsents.values() for _, t in sent]
 	logging.info("Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r",
-		(100 * accuracy(goldtags, newtags)),
+		(100 * evalmod.accuracy(goldtags, newtags)),
 		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
 	return taggedsents
 
@@ -1180,6 +1189,13 @@ class DictObj(object):
 			",\n".join("%s=%r" % a for a in self.__dict__.items()))
 
 
+def readparam(filename):
+	""" Parse a parameter file:
+		a list of of attribute=value pairs treated as a dict(). """
+	paramstr = open(filename).read()
+	return eval("dict(%s)" % paramstr)
+
+
 def main(argv=None):
 	""" Parse command line arguments. """
 	try:
@@ -1195,10 +1211,10 @@ def main(argv=None):
 	elif '--tepacoc' in argv:
 		parsetepacoc()
 	else:
-		paramstr = open(argv[1]).read()
-		params = eval("dict(%s)" % paramstr)
+		params = readparam(argv[1])
 		params['resultdir'] = argv[1].rsplit(".", 1)[0]
 		params['rerun'] = '--rerun' in argv
 		startexp(**params)
 		if not params['rerun']:  # copy parameter file to result dir
-			open("%s/params.prm" % params['resultdir'], "w").write(paramstr)
+			open("%s/params.prm" % params['resultdir'], "w").write(
+					open(argv[1]).read())

@@ -425,7 +425,7 @@ cdef class Grammar:
 				else:
 					strlabel += b'*'
 					if markorigin:
-						self.mapping[n] = self.nonterminals #sentinel value
+						self.mapping[n] = self.nonterminals  # sentinel value
 						self.splitmapping[n] = &(
 								self.splitmapping[0][components])
 						components += self.fanout[n]

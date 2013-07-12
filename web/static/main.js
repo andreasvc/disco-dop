@@ -1,43 +1,43 @@
 function toggle(id) {
-    var el = document.getElementById(id);
-    if (el.style.display == 'none')
-        el.style.display = 'block';
-    else
-        el.style.display = 'none';
+	var el = document.getElementById(id);
+	if (el.style.display == 'none')
+		el.style.display = 'block';
+	else
+		el.style.display = 'none';
 }
 
 function togglelink(id) {
-    var el = document.getElementById(id);
-    var link = document.getElementById('link' + id);
-    if (el.style.display == 'none') {
-        el.style.display = 'block';
+	var el = document.getElementById(id);
+	var link = document.getElementById('link' + id);
+	if (el.style.display == 'none') {
+		el.style.display = 'block';
 		link.innerHTML = 'hide' + link.innerHTML.substring(4);
-    } else {
-        el.style.display = 'none';
+	} else {
+		el.style.display = 'none';
 		link.innerHTML = 'show' + link.innerHTML.substring(4);
 	}
 }
 
 function show(id, name) {
-    var el = document.getElementById(id);
-    if (el.style.visibility != 'visible')
-        el.style.visibility = 'visible';
+	var el = document.getElementById(id);
+	if (el.style.visibility != 'visible')
+		el.style.visibility = 'visible';
 	var elems = document.getElementsByName(name);
 	for (var n in elems)
 		elems[n].disabled = false;
 }
 
 function hide(id, name) {
-    var el = document.getElementById(id);
-    if (el.style.visibility != 'hidden')
-        el.style.visibility = 'hidden';
+	var el = document.getElementById(id);
+	if (el.style.visibility != 'hidden')
+		el.style.visibility = 'hidden';
 	var elems = document.getElementsByName(name);
 	for (var n in elems)
 		elems[n].disabled = true;
 }
 
 function placeFocus() {
-    document.forms[0].query.focus();
+	document.forms[0].elements[0].focus();
 }
 
 function triggerForm(name) {
@@ -50,13 +50,13 @@ function triggerForm(name) {
 }
 
 function entsub(e) {
-     var key;
-     if(window.event)
-          key = window.event.keyCode;     //IE
-     else
-          key = e.which;     //firefox
-     if(key == 13)
-          ajaxFunction();
+	 var key;
+	 if(window.event)
+		  key = window.event.keyCode;	 //IE
+	 else
+		  key = e.which;	 //firefox
+	 if(key == 13)
+		  ajaxFunction();
 }
 
 function ajaxFunction() {
@@ -71,10 +71,10 @@ function ajaxFunction() {
 	  alert("Your browser does not support XMLHTTP!");
 	}
 
-    var div = document.createElement('div');
+	var div = document.createElement('div');
 	div.innerHTML = '[...wait for it...]';
-    document.getElementById('result').appendChild(div);
-    window.scroll(0, document.height); // scroll to bottom of page
+	document.getElementById('result').appendChild(div);
+	window.scroll(0, document.height); // scroll to bottom of page
 
 	xmlhttp.onreadystatechange=function() {
 		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
@@ -93,22 +93,22 @@ function ajaxFunction() {
 }	
 
 function checkall(name, val) {
-    var checkboxes = document.getElementsByName(name);
-    for (var i in checkboxes)
-        checkboxes[i].checked = val;
+	var checkboxes = document.getElementsByName(name);
+	for (var i in checkboxes)
+		checkboxes[i].checked = val;
 }
 
 function numchecked() {
-    var checkboxes = document.getElementsByName('t');
+	var checkboxes = document.getElementsByName('t');
 	var checked = 0;
-    for (var i in checkboxes)
-        if (checkboxes[i].checked)
+	for (var i in checkboxes)
+		if (checkboxes[i].checked)
 			checked++;
 	document.getElementById('numchecked').innerHTML = checked;
 }
 
 function mergecheckboxes() {
-    var checkboxes = document.getElementsByName('t');
+	var checkboxes = document.getElementsByName('t');
 	var n = 0;
 	var start = 0;
 	var result = ''

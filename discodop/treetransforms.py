@@ -778,6 +778,8 @@ def contsets(nodes):
 
 def splitdiscnodes(tree, markorigin=False):
 	""" Boyd (2007): Discontinuity revisited.
+	markorigin=False: VP* (bare label)
+	markorigin=True: VP*1 (add index)
 
 	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) \
 		(VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
@@ -787,6 +789,13 @@ def splitdiscnodes(tree, markorigin=False):
 	>>> print(splitdiscnodes(tree, markorigin=True))
 	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 \
 		(CARD 4) (VVPP 5)) (VAINF 6))) """
+	def label(child, childnodes, n):
+		""" Create a label for the component of a discontinuous constituent,
+		with the amount of context set by markorigin. """
+		if markorigin == False:
+			return '%s*' % child.label
+		elif markorigin == True:
+			return "%s*%d" % (child.label, n)
 	treeclass = tree.__class__
 	for node in postorder(tree):
 		nodes = list(node)
@@ -795,14 +804,13 @@ def splitdiscnodes(tree, markorigin=False):
 			if disc(child):
 				childnodes = list(child)
 				child[:] = []
-				node.extend(treeclass((("%s*%d" % (child.label, n))
-					if markorigin else '%s*' % child.label), childsubset)
-					for n, childsubset in enumerate(contsets(childnodes)))
+				node.extend(treeclass(label(child, childnodes, n), childsubset)
+						for n, childsubset in enumerate(contsets(childnodes)))
 			else:
 				node.append(child)
 	return canonicalize(tree)
 
-splitlabel = re.compile(r"(.*)\*([0-9]*)$")
+SPLITLABEL = re.compile(r"(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$")
 
 
 def mergediscnodes(tree):
@@ -815,7 +823,7 @@ def mergediscnodes(tree):
 		(VMFIN 3))
 	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
 	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) \
-	(VMFIN 3))
+		(VMFIN 3))
 	>>> tree = Tree.parse("(S (X (A 0) (A 2)) (X (A 1) (A 3)))", parse_leaf=int)
 	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
 	(S (X (A 0) (A 2)) (X (A 1) (A 3)))
@@ -834,7 +842,7 @@ def mergediscnodes(tree):
 			if not isinstance(child, Tree):
 				node.append(child)
 				continue
-			match = splitlabel.search(child.label)
+			match = SPLITLABEL.search(child.label)
 			if not match:
 				node.append(child)
 				continue

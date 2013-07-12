@@ -18,6 +18,7 @@ from .containers import Grammar
 from .kbest import lazykbest
 from .coarsetofine import prunechart
 from .disambiguation import marginalize
+from .runexp import Parser, DictObj, DEFAULTSTAGE
 
 USAGE = """
 usage: %s [options] rules lexicon [input [output]]
@@ -67,13 +68,21 @@ def main():
 			else open)(args[1])).read()
 	bitpar = rules[0] in string.digits
 	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar)
-	if 2 <= len(args) <= 4:
-		infile = (io.open(args[2], encoding='utf-8')
-				if len(args) >= 3 else sys.stdin)
-		out = (io.open(args[3], "w", encoding='utf-8')
-				if len(args) == 4 else sys.stdout)
-		simple(coarse, bitpar, infile, out, k, prob)
-	elif 4 <= len(args) <= 6:
+	stages = []
+	infile = (io.open(args[2], encoding='utf-8')
+			if len(args) >= 3 else sys.stdin)
+	out = (io.open(args[3], "w", encoding='utf-8')
+			if len(args) == 4 else sys.stdout)
+	stage = DEFAULTSTAGE.copy()
+	stage.update(
+			name='coarse',
+			mode='pcfg' if bitpar else 'plcfrs',
+			grammar=coarse,
+			secondarymodel=None,
+			backtransform=None,
+			m=k)
+	stages.append(DictObj(stage))
+	if 4 <= len(args) <= 6:
 		threshold = int(opts.get("--kbestctf", 50))
 		rules = (gzip.open if args[2].endswith(".gz") else open)(args[2]).read()
 		lexicon = codecs.getreader('utf-8')((gzip.open
@@ -86,108 +95,48 @@ def main():
 				if len(args) >= 5 else sys.stdin)
 		out = (io.open(args[5], "w", encoding='utf-8')
 				if len(args) == 6 else sys.stdout)
-		ctf(coarse, fine, bitpar, infile, out, k, prob, threshold,
-				"--mpd" in opts)
+		stage = DEFAULTSTAGE.copy()
+		stage.update(
+				name='fine',
+				mode='pcfg' if bitpar else 'plcfrs',
+				grammar=fine,
+				secondarymodel=None,
+				backtransform=None,
+				m=k,
+				k=threshold,
+				objective='mpd' if '--mpd' in opts else 'mpp')
+		stages.append(DictObj(stage))
+	doparsing(Parser(stages), infile, out, prob)
 
 
-def simple(grammar, ispcfg, infile, out, k, printprob):
-	""" Parse with a single grammar. """
+def doparsing(parser, infile, out, printprob):
+	""" Parse sentences from file and write results to file, log to stdout. """
 	times = [time.clock()]
+	unparsed = 0
 	for n, a in enumerate(infile.read().split("\n\n")):
 		if not a.strip():
 			continue
 		sent = a.splitlines()
-		assert not set(sent) - set(grammar.lexical), (
+		lexicon = parser.stages[0].grammar.lexical
+		assert not set(sent) - set(lexicon), (
 			"unknown words and no open class tags supplied: %r" % (
-			list(set(sent) - set(grammar.lexical))))
+			list(set(sent) - set(lexicon))))
 		print("parsing %d: %s" % (n, ' '.join(sent)), file=sys.stderr)
 		sys.stdout.flush()
-		if ispcfg:
-			chart, start, _ = pcfg.parse(sent, grammar)
-		else:
-			chart, start, _ = plcfrs.parse(sent, grammar, exhaustive=k > 1)
-		if start:
-			derivations = lazykbest(chart, start, k, grammar.tolabel)[0]
-			if printprob:
-				out.writelines("vitprob=%.16g\n%s\n" % (exp(-prob), tree)
-					for tree, prob in derivations)
-			else:
-				out.writelines("%s\n" % tree for tree, _ in derivations)
-		elif True:  # baseline parse:
-			out.write("(NP %s)\n" % "".join("(%s %s)" % (a, a) for a in sent))
-		#else:
-		#	out.write("No parse for \"%s\"\n" % " ".join(sent))
-		#out.write("\n")
-		out.flush()
-		times.append(time.clock())
-		print(times[-1] - times[-2], "s", file=sys.stderr)
-	print("raw cpu time", time.clock() - times[0], file=sys.stderr)
-	times = [a - b for a, b in zip(times[1::2], times[::2])]
-	print("average time per sentence", sum(times) / len(times), file=sys.stderr)
-	print("finished", file=sys.stderr)
-	out.close()
-
-
-def ctf(coarse, fine, ispcfg, infile, out, k, printprob, threshold, mpd):
-	""" Do coarse-to-fine parsing with two grammars.
-	Assumes state splits in fine grammar are marked with '@'; e.g., 'NP@2'.
-	Sums probabilities of derivations producing the same tree. """
-	m = 10000  # number of derivations from fine grammar to marginalize
-	maxlen = 999  # 65
-	unparsed = 0
-	times = [time.clock()]
-
-	for n, a in enumerate(infile.read().split("\n\n")):
-		if not a.strip():
-			continue
-		sent = a.splitlines()
-		if len(sent) > maxlen:
-			continue
-		unknown = (set(sent) - set(coarse.lexical)
-			| set(sent) - set(fine.lexical))
-		assert not unknown, (
-			"unknown words and no open class tags supplied: %r" % list(unknown))
-		print("parsing %d: %s" % (n, ' '.join(sent)), file=sys.stderr)
-		if ispcfg:
-			chart, start, msg = pcfg.parse(sent, coarse)
-		else:
-			chart, start, msg = plcfrs.parse(sent, coarse, exhaustive=True)
-		print(msg, file=sys.stderr)
-		if start:
-			print("pruning ...", file=sys.stderr, end='')
-			sys.stdout.flush()
-			whitelist, _ = prunechart(chart, start, coarse, fine, threshold,
-					False, False, ispcfg)
-			if ispcfg:
-				chart, start, _ = pcfg.parse(sent, fine, chart=whitelist)
-			else:
-				chart, start, _ = plcfrs.parse(sent, fine, whitelist=whitelist,
-						exhaustive=k > 1)
-			print(msg, file=sys.stderr)
-
-			assert start, (
-				"sentence covered by coarse grammar could not be parsed "
-				"by fine grammar")
-			print("disambiguating ...", file=sys.stderr, end='')
-			parsetrees, msg = marginalize("mpd" if mpd else "mpp", chart,
-					start, fine, m, sample=False, kbest=True, sent=sent)
-			print(msg, file=sys.stderr)
-			results = nlargest(k, parsetrees, key=itemgetter(1))
-			# print k-best parsetrees
-			if printprob:
-				label = "derivprob" if mpd else "parseprob"
-				out.writelines("%s=%.16g\n%s\n" % (label, parsetrees[tree],
-					tree) for tree in results)
-			else:
-				out.writelines("%s\n" % tree for tree in results)
-		else:
+		result = list(parser.parse(sent))[-1]
+		if result.noparse:
 			unparsed += 1
-			print("No parse", file=sys.stderr)
-			out.write("No parse for \"%s\"\n" % " ".join(sent))
-		out.write("\n")
+		if printprob:
+			out.writelines("vitprob=%.16g\n%s\n" % (exp(-prob), tree)
+					for tree, prob in sorted(result.parsetrees.items(),
+						key=itemgetter(1)))
+		else:
+			out.writelines("%s\n" % tree
+					for tree in sorted(result.parsetrees,
+						key=result.parsetrees.get))
+		out.flush()
 		times.append(time.clock())
 		print(times[-1] - times[-2], "s", file=sys.stderr)
-		out.flush()
 	times = [a - b for a, b in zip(times[1::2], times[::2])]
 	print("raw cpu time", time.clock() - times[0],
 			"\naverage time per sentence", sum(times) / len(times),
