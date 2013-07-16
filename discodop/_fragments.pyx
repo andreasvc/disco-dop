@@ -245,8 +245,8 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		array counts
 		set candidates
 		ULong *bitset
-		short SLOTS = 0
-		UInt n, m, i, j, *countsp = NULL
+		short i, j, SLOTS = 0
+		UInt n, m, *countsp = NULL
 		NodeArray a, b
 		Node *anodes, *bnodes
 	if indices:
