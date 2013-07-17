@@ -934,7 +934,8 @@ cdef class Ctrees:
 		cdef int n, m
 		cdef Node *dest
 		assert self.len < self.max, ("either no space left (len >= max) or "
-			"alloc() has not been called (max=0). max = %d" % self.max)
+				"alloc() has not been called (max=0).\n"
+				"len = %d, max = %d" % (self.len, self.max))
 		if self.nodesleft < cnt:
 			self.realloc(cnt)
 		prodsintree = {n: source[n].prod for n in range(cnt)}
@@ -991,7 +992,7 @@ cdef inline copynodes(tree, dict prods, Node *result):
 		assert isinstance(a, Tree), (
 				'Expected Tree node, got %s\n%r' % (type(a), a))
 		assert 1 <= len(a) <= 2, (
-			"trees must be non-empty and binarized:\n%s\n%s" % (a, tree[0]))
+				"trees must be non-empty and binarized\n%s\n%s" % (a, tree[0]))
 		result[n].prod = prods[a.prod]
 		if isinstance(a[0], int):  # a terminal index
 			result[n].left = -a[0] - 1

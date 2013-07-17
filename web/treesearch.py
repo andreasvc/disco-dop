@@ -210,9 +210,7 @@ def counts(form):
 
 def trees(form):
 	""" Return visualization of parse trees in search results. """
-	# TODO:
-	# - allow to view context of x number of sentences.
-	# - paginate to more than 10 matching trees per text
+	# TODO: show context of x sentences around result, offer pagination.
 	gotresults = False
 	for n, (text, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
