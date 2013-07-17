@@ -183,6 +183,7 @@ class Parser(object):
 		sent = list(sent)
 		if tags is not None:
 			tags = list(tags)
+		# FIXME: do unknown word model stuff here.
 		chart = {}
 		start = inside = outside = None
 		for n, stage in enumerate(self.stages):

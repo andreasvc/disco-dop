@@ -209,8 +209,8 @@ def startexp(
 		# get smoothed probalities for lexical productions
 		lexresults, msg = getunknownwordmodel(
 				train_tagged_sents, unknownword,
-				unknownthreshold=postagging['unknownthreshold'],
-				openclassthreshold=postagging['openclassthreshold'])
+				postagging['unknownthreshold'],
+				postagging['openclassthreshold'])
 		logging.info(msg)
 		simplelexsmooth = postagging['simplelexsmooth']
 		if simplelexsmooth:
@@ -218,11 +218,15 @@ def startexp(
 		else:
 			lexmodel, msg = getlexmodel(*lexresults)
 			logging.info(msg)
-		wordclass, knownwords = lexresults[:2]
-		# replace rare train words with features
-		sents = replacerarewords(train_tagged_sents, unknownword,
-				postagging['unknownthreshold'], knownwords, lexresults[4])
+		# NB: knownwords are all words in training set, lexicon is the subset
+		# of words that are above the frequency threshold.
+		# for training purposes we work with the subset, at test time we exploit
+		# the full set of known words from the training set.
+		sigs, knownwords, lexicon = lexresults[:3]
+		# replace rare train words with signatures
+		sents = replacerarewords(train_tagged_sents, unknownword, lexicon)
 		# replace unknown test words with features
+		# FIXME: this should happen in Parser object!
 		test_tagged_sents = OrderedDict()
 		for n, sent in gold_sents.items():
 			newsent = []
@@ -231,7 +235,7 @@ def startexp(
 					sig = word
 				else:
 					sig = unknownword(word, m, knownwords)
-					if sig not in wordclass:
+					if sig not in sigs:
 						sig = "UNK"
 				newsent.append((sig, None))  # tag will not be used, use None.
 			test_tagged_sents[n] = newsent

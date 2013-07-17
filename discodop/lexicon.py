@@ -7,36 +7,26 @@ from collections import defaultdict, Counter as multiset
 from fractions import Fraction
 
 
-def replacerarewords(tagged_sents, unknownword, unknownthreshold,
-		wordcounts, openclasstags):
-	""" Replace all terminals that occur less than unknownthresh
-	with a signature of features as returned by unknownword(). """
-	lexicon = set(wordcounts)
-	return [[unknownword(word, n, lexicon)
-			if tag in openclasstags and wordcounts[word] <= unknownthreshold
-			else word for n, (word, tag) in enumerate(sent)]
-			for sent in tagged_sents]
-
-
 def getunknownwordmodel(tagged_sents, unknownword,
-		unknownthreshold=4, openclassthreshold=50):
+		unknownthreshold, openclassthreshold):
 	""" Compute an unknown word model that smooths lexical probabilities
 	for unknown & rare words.
 	tagged_sents: the sentences from the training set with the gold POS
 			tags from the treebank.
-	unknownword: a function that returns a signature or wordclass for a
-			given word; e.g., "UNK-C-S-ed".
-	unknownthreshold: words with frequency lower than this are replaced
-			by their wordclass.
+	unknownword: a function that returns a signature for a given word;
+			e.g., "eschewed" => "UNK-L-d".
+	unknownthreshold: words with frequency lower than or equal to this are
+			replaced by their signature.
 	openclassthreshold: tags that rewrite to at least this much word types
 			are considered to be open class categories. """
 	wordsfortag = defaultdict(set)
 	tags = multiset()
 	wordtags = multiset()
-	wordclass = multiset()
-	wordclasstag = multiset()
+	sigs = multiset()
+	sigtag = multiset()
 	words = multiset(word for sent in tagged_sents for word, tag in sent)
-	lexicon = {word for word in words if words[word] > unknownthreshold}
+	lexicon = {word for word, freq in words.items() if freq > unknownthreshold}
+	# FIXME: using only word as key throws away dependency on n and lexicon.
 	wordsig = {word: unknownword(word, n, lexicon)
 			for sent in tagged_sents
 				for n, (word, _) in enumerate(sent)}
@@ -45,8 +35,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			wordsfortag[tag].add(word)
 			tags[tag] += 1
 			wordtags[word, tag] += 1
-			wordclass[wordsig[word]] += 1
-			wordclasstag[wordsig[word], tag] += 1
+			sigs[wordsig[word]] += 1
+			sigtag[wordsig[word], tag] += 1
 	if openclassthreshold:
 		openclasstags = {tag: len({w.lower() for w in ws})
 				for tag, ws in wordsfortag.items()
@@ -54,34 +44,45 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		openclasswords = lexicon - {word
 				for tag in set(tags) - set(openclasstags)
 					for word in wordsfortag[tag]}
+		# NB: could add all closed-class rare words back to lexicon
 	else:
-		openclasstags = openclasswords = {}
-	msg = "known words: %d, wordclass types seen: %d\n" % (
-			len(lexicon), len(wordclass))
+		openclasstags = {}
+		openclasswords = {}
+	msg = "known words: %d, signature types seen: %d\n" % (
+			len(lexicon), len(sigs))
 	msg += "open class tags: {%s}" % ", ".join(
 			"%s:%d" % a for a in openclasstags.items())
-	return (wordclass, words, lexicon, wordsfortag, openclasstags,
+	return (sigs, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags,
-			wordsig, wordclasstag), msg
+			wordsig, sigtag), msg
+
+
+def replacerarewords(tagged_sents, unknownword, lexicon):
+	""" Given a training set, replace all terminals not part of the lexicon
+	with a signature of features as returned by unknownword(),
+	before a grammar is read of from the training set. """
+	return [[word if word in lexicon else unknownword(word, n, lexicon)
+			for n, (word, _) in enumerate(sent)]
+			for sent in tagged_sents]
 
 
 def simplesmoothlexicon(grammar, lexmodel,
 		epsilon=Fraction(1, 100), normalize=False):
-	""" introduce lexical productions for unobserved combinations of
-	known open class words and tags, as well as for unobserved
-	wordclasses which are mapped to 'UNK'.
+	""" given a grammar, introduce lexical productions for unobserved
+	combinations of known open class words and tags, as well as for unobserved
+	signatures which are mapped to 'UNK'.
 	epsilon: 'frequency' of productions for unseen tag, word pair.
 	normalize: re-scale probabilities so that they sum to 1 again. """
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
-	# rare words as wordclass AND as word:
+	# rare words as signature AND as word:
 	for word, tag in wordtags:
-		if word not in lexicon and word in openclasswords:
+		if word not in lexicon:  # and word in openclasswords:
 			# needs to be normalized later
 			grammar.append((((tag, 'Epsilon'), (word, )),
 					Fraction(wordtags[word, tag], tags[tag])))
 			#print(>> sys.stderr, grammar[-1])
-	# open class tag-word pairs / unknown wordclasses
+	# open class tag-word pairs / unknown signatures
 	for tag in openclasstags:
 		epsilon1 = epsilon / tags[tag]
 		for word in {'UNK'} | openclasswords - wordsfortag[tag]:
@@ -94,11 +95,11 @@ def simplesmoothlexicon(grammar, lexmodel,
 	return grammar
 
 
-def getlexmodel(wordclass, words, lexicon, wordsfortag, openclasstags,
-			openclasswords, tags, wordtags, wordsig, wordclasstag,
+def getlexmodel(sigs, words, lexicon, wordsfortag, openclasstags,
+			openclasswords, tags, wordtags, wordsig, sigtag,
 			openclassoffset=1, kappa=1):
 	""" Compute a smoothed lexical model. Returns a dictionary
-	giving P(word_or_class | tag).
+	giving P(word_or_sig | tag).
 	openclassoffset: for words that only appear with open class tags, add
 			unseen combinations of open class (tag, word) with this count.
 	kappa: FIXME; cf. Klein & Manning (2003). """
@@ -107,44 +108,44 @@ def getlexmodel(wordclass, words, lexicon, wordsfortag, openclasstags,
 			wordtags[word, tag] += openclassoffset
 			words[word] += openclassoffset
 			tags[tag] += openclassoffset
-		# unseen wordclasses
-		wordclass["UNK"] += 1
-		wordclasstag["UNK", tag] += 1
-	# Compute P(tag|wordclass)
+		# unseen signatures
+		sigs["UNK"] += 1
+		sigtag["UNK", tag] += 1
+	# Compute P(tag|sig)
 	tagtotal = sum(tags.values())
 	wordstotal = sum(words.values())
-	wordclasstotal = sum(wordclass.values())
+	sigstotal = sum(sigs.values())
 	P_tag = {}
 	for tag in tags:
 		P_tag[tag] = Fraction(tags[tag], tagtotal)
 	P_word = defaultdict(int)
 	for word in words:
 		P_word[word] = Fraction(words[word], wordstotal)
-	P_tagwordclass = defaultdict(Fraction)  # ??
-	for wclass in wordclass:
-		P_tagwordclass[tag, wclass] = Fraction(P_tag[tag],
-				Fraction(wordclass[wclass], wordclasstotal))
+	P_tagsig = defaultdict(Fraction)  # ??
+	for sig in sigs:
+		P_tagsig[tag, sig] = Fraction(P_tag[tag],
+				Fraction(sigs[sig], sigstotal))
 		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		tag, wclass, P_tagwordclass[tag, wclass])
+		#		tag, sig, P_tagsig[tag, sig])
 	# Klein & Manning (2003) Accurate unlexicalized parsing
-	# P(tag|word) = [count(tag, word) + kappa * P(tag|wordclass)]
+	# P(tag|word) = [count(tag, word) + kappa * P(tag|sig)]
 	#		/ [count(word) + kappa]
 	P_tagword = defaultdict(int)
 	for word, tag in wordtags:
 		P_tagword[tag, word] = Fraction(wordtags[word, tag]
-				+ kappa * P_tagwordclass[tag, wordsig[word]],
+				+ kappa * P_tagsig[tag, wordsig[word]],
 				words[word] + kappa)
 		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
 		#		tag, word, P_tagword[tag, word])
 	# invert with Bayes theorem to get P(word|tag)
 	P_wordtag = defaultdict(int)
 	for tag, word in P_tagword:
-		#wordorclass = word if word in lexicon else wordsig[word]
-		wordorclass = word
-		P_wordtag[wordorclass, tag] += Fraction((P_tagword[tag, word]
+		#wordorsig = word if word in lexicon else wordsig[word]
+		wordorsig = word
+		P_wordtag[wordorsig, tag] += Fraction((P_tagword[tag, word]
 				* P_word[word]), P_tag[tag])
 		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		word, tag, P_wordtag[wordorclass, tag])
+		#		word, tag, P_wordtag[wordorsig, tag])
 	msg = "(word, tag) pairs in model: %d" % len(P_tagword)
 	return P_wordtag, msg
 
@@ -156,10 +157,10 @@ def smoothlexicon(grammar, P_wordtag):
 	newrules = []
 	for (rule, yf), w in grammar:
 		if rule[1] == 'Epsilon' and '@' not in rule[0]:
-			wordorclass = yf[0]
+			wordorsig = yf[0]
 			tag = rule[0]
-			newrule = (((tag, 'Epsilon'), (wordorclass, )),
-					P_wordtag[wordorclass, tag])
+			newrule = (((tag, 'Epsilon'), (wordorsig, )),
+					P_wordtag[wordorsig, tag])
 			newrules.append(newrule)
 		else:
 			newrules.append(((rule, yf), w))
@@ -174,7 +175,7 @@ hasdash = re.compile(u"[-\u2010\u2011]", re.UNICODE)
 # FIXME: exclude accented characters for model 6?
 haslower = re.compile(u'[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
 		u'\xef\xfc\xff\u0153\xe6]', re.UNICODE)
-hasupper = re.compile(u'[a-z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
+hasupper = re.compile(u'[A-Z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
 		u'\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
 hasletter = re.compile(u'[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
 		u'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
