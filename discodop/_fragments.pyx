@@ -265,10 +265,11 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		i = anextset(bitset, 0, SLOTS)
 		assert i != -1
 		candidates = <set>(trees2.treeswithprod[anodes[i].prod]).copy()
-		i = anextset(bitset, i + 1, SLOTS)
-		while i != -1:
-			candidates &= <set>(trees2.treeswithprod[anodes[i].prod])
+		while True:
 			i = anextset(bitset, i + 1, SLOTS)
+			if i == -1 or i >= a.len:  # FIXME. why is 2nd condition necessary?
+				break
+			candidates &= <set>(trees2.treeswithprod[anodes[i].prod])
 		i = getroot(bitset, SLOTS)  # root of fragment in a
 		if indices:
 			matches = theindices[n]
