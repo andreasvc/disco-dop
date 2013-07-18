@@ -33,9 +33,8 @@ from .treetransforms import binarize, optimalbinarize, \
 from .fragments import getfragments
 from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
 		write_lcfrs_grammar
-from .lexicon import getunknownwordmodel, getlexmodel, \
-		smoothlexicon, simplesmoothlexicon, replacerarewords, \
-		unknownword4, unknownword6, unknownwordbase
+from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
+		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from .parser import DEFAULTSTAGE, readgrammars, Parser
 from .estimates import getestimates, getpcfgestimates
 from .containers import Grammar, DictObj
@@ -178,7 +177,8 @@ def startexp(
 			len(testset.parsed_sents()), corpusdir, testcorpus)
 	logging.info("%d test sentences before length restriction",
 			len(list(gold_sents.keys())[skip:skip + testnumsents]))
-	lexmodel = None
+	lexmodel = knownwords = unknownword = None
+	test_tagged_sents = gold_sents
 	if postagging and postagging['method'] in ('treetagger', 'stanford'):
 		if postagging['method'] == 'treetagger':
 			# these two tags are never given by tree-tagger,
@@ -200,12 +200,9 @@ def startexp(
 				if len(b) <= testmaxwords),
 				overridetagdict, tagmap)
 		# give these tags to parser
-		tags = True
+		usetags = True
 	elif postagging and postagging['method'] == "unknownword":
-		# resolve name to function assigning unknown word signatures
-		unknownword = {"4": unknownword4,
-				"6": unknownword6,
-				"base": unknownwordbase}[postagging['model']]
+		unknownword = getunknownwordfun(postagging['model'])
 		# get smoothed probalities for lexical productions
 		lexresults, msg = getunknownwordmodel(
 				train_tagged_sents, unknownword,
@@ -224,34 +221,19 @@ def startexp(
 		# the full set of known words from the training set.
 		sigs, knownwords, lexicon = lexresults[:3]
 		# replace rare train words with signatures
-		sents = replacerarewords(train_tagged_sents, unknownword, lexicon)
-		# replace unknown test words with features
-		# FIXME: this should happen in Parser object!
-		test_tagged_sents = OrderedDict()
-		for n, sent in gold_sents.items():
-			newsent = []
-			for m, (word, _) in enumerate(sent):
-				if word in knownwords:
-					sig = word
-				else:
-					sig = unknownword(word, m, knownwords)
-					if sig not in sigs:
-						sig = "UNK"
-				newsent.append((sig, None))  # tag will not be used, use None.
-			test_tagged_sents[n] = newsent
-		# make sure gold tags are not given to parser
-		tags = False
+		sents = replaceraretrainwords(train_tagged_sents, unknownword, lexicon)
+		# make sure gold POS tags are not given to parser
+		usetags = False
 	else:
 		simplelexsmooth = False
-		test_tagged_sents = gold_sents
 		# give gold POS tags to parser
-		tags = True
+		usetags = True
 
-	# - test sentences as they should be handed to the parser,
-	# - gold trees for evaluation purposes
-	# - gold sentence because test sentences may be mangled by unknown word
+	# 0: test sentences as they should be handed to the parser,
+	# 1: gold trees for evaluation purposes
+	# 2: gold sentence because test sentences may be mangled by unknown word
 	#   model
-	# - blocks from treebank file to reproduce the relevant part of the
+	# 3: blocks from treebank file to reproduce the relevant part of the
 	#   original treebank verbatim.
 	testset = OrderedDict((a, (test_tagged_sents[a], test_parsed_sents[a],
 			gold_sents[a], block)) for a, block
@@ -283,11 +265,10 @@ def startexp(
 	deleteword = evalparam.get("DELETE_WORD", ())
 
 	begin = time.clock()
-	results = doparsing(parser=Parser(stages), unfolded=unfolded, bintype=bintype,
-			fanout_marks_before_bin=fanout_marks_before_bin, testset=testset,
-			testmaxwords=testmaxwords, testnumsents=testnumsents,
-			tags=tags, resultdir=resultdir, numproc=numproc,
-			tailmarker=tailmarker, deletelabel=deletelabel,
+	parser = Parser(stages, unfolded=unfolded, tailmarker=tailmarker,
+			unknownword=unknownword, lexicon=knownwords, sigs=sigs)
+	results = doparsing(parser=parser, testset=testset, resultdir=resultdir,
+			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=corpusfmt)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
@@ -296,7 +277,7 @@ def startexp(
 		header = (" " + result.name.upper() + " ").center(35, "=")
 		evalsummary = evalmod.doeval(OrderedDict((a, b.copy(True))
 				for a, b in test_parsed_sents.items()), gold_sents,
-				result.parsetrees, test_tagged_sents if tags else gold_sents,
+				result.parsetrees, test_tagged_sents if usetags else gold_sents,
 				evalparam)
 		coverage = "coverage: %s = %6.2f" % (
 				("%d / %d" % (nsent - result.noparse, nsent)).rjust(
@@ -511,7 +492,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 
 def doparsing(**kwds):
 	""" Parse a set of sentences using worker processes. """
-	params = DictObj(tags=True, numproc=None, tailmarker='',
+	params = DictObj(usetags=True, numproc=None, tailmarker='',
 		category=None, deletelabel=(), deleteword=(), corpusfmt="export")
 	params.update(kwds)
 	goldbrackets = multiset()
@@ -592,7 +573,7 @@ def worker(args):
 	results = []
 	msg = ''
 	for result in prm.parser.parse([w for w, _ in sent],
-			tags=[t for _, t in sent] if prm.tags else None):
+			tags=[t for _, t in sent] if prm.usetags else None):
 		msg += result.msg
 		evaltree = result.parsetree.copy(True)
 		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
@@ -801,21 +782,17 @@ def parsetepacoc(
 			tailmarker, revmarkov, leftmostunary, rightmostunary, pospa,
 			fanout_marks_before_bin, testmaxwords, resultdir,
 			numproc, None, False, trees[0].label)
-
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
+	parser = Parser(stages, tailmarker=tailmarker, unfolded=unfolded)
 	for cat, testset in sorted(testsets.items()):
 		if cat == 'baseline':
 			continue
 		logging.info("category: %s", cat)
 		begin = time.clock()
-		results[cat] = doparsing(parser=Parser(stages), testset=testset,
-				testmaxwords=testmaxwords, testnumsents=testnumsents,
-				top=trees[0].label, tags=True, bintype=bintype,
-				tailmarker=tailmarker, unfolded=unfolded,
-				fanout_marks_before_bin=fanout_marks_before_bin,
-				resultdir=resultdir, numproc=numproc, category=cat)
+		results[cat] = doparsing(parser, testset=testset, resultdir=resultdir,
+				usetags=True, numproc=numproc, category=cat)
 		cnt += len(testset[0])
 		if numproc == 1:
 			logging.info("time elapsed during parsing: %g",
@@ -851,12 +828,8 @@ def parsetepacoc(
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info("category: %s", cat)
-	oldeval(*doparsing(parser=Parser(stages), unfolded=unfolded, bintype=bintype,
-			fanout_marks_before_bin=fanout_marks_before_bin,
-			testset=testsets[cat], testmaxwords=testmaxwords,
-			testnumsents=testnumsents, top=trees[0].label, tags=True,
-			resultdir=resultdir, numproc=numproc, tailmarker=tailmarker,
-			category=cat))
+	oldeval(*doparsing(parser=parser, testset=testsets[cat],
+			resultdir=resultdir, usetags=True, numproc=numproc, category=cat))
 
 
 def dotagging(usetagger, model, sents, overridetag, tagmap):

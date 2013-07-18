@@ -17,7 +17,9 @@ from werkzeug.contrib.cache import SimpleCache
 from discodop import treetransforms
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
+from discodop.runexp import readparam
 from discodop.parser import readgrammars, Parser
+from discodop.lexicon import getunknownwordfun
 
 APP = Flask(__name__)
 morphtags = re.compile(
@@ -27,7 +29,6 @@ prunek = 5000  # number of PLCFRS derivations to use for DOP parsing
 grammars = {}
 parsers = {}
 backtransforms = {}
-knownwords = {}
 
 
 @APP.route('/')
@@ -105,10 +106,20 @@ def loadparsers():
 		for folder in glob.glob('grammars/*/'):
 			_, lang = os.path.split(os.path.dirname(folder))
 			APP.logger.info('Loading grammar %r', lang)
-			stages = readgrammars(folder)
-			parsers[lang] = Parser(stages)
-			knownwords[lang] = {w for w in stages[0].grammar.lexical
+			stages = readgrammars(folder)  # FIXME: return other parameters
+			params = readparam(os.path.join(folder, 'params.prm'))
+			unknownword = None
+			if params.get('postagging'):
+				unknownword = getunknownwordfun(params['postagging']['model'])
+			lexicon = {w for w in stages[0].grammar.lexical
 					if not w.startswith("UNK")}
+			sigs = {w for w in stages[0].grammar.lexical
+					if w.startswith("UNK")}
+			parsers[lang] = Parser(stages,
+					unfolded=params['unfolded'],
+					tailmarker=params['tailmarker'],
+					unknownword=unknownword,
+					lexicon=lexicon, sigs=sigs)
 			APP.logger.info('Grammar for %s loaded.' % lang)
 
 
@@ -172,7 +183,7 @@ def tokenize(text):
 
 def guesslang(sent):
 	""" simple heuristic: language that contains most words from input. """
-	lang = max(knownwords, key=lambda x: len(knownwords[x] & set(sent)))
+	lang = max(parsers, key=lambda x: len(parsers[x].lexicon & set(sent)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
 

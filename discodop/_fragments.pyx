@@ -22,7 +22,8 @@ from cpython.array cimport array, clone
 from cpython.set cimport PySet_GET_SIZE
 from containers cimport ULong, UInt
 from containers cimport Node, NodeArray, Ctrees
-from bit cimport anextset, abitcount, subset, ulongcpy, ulongset
+from bit cimport anextset, abitcount, subset, ulongcpy, ulongset, \
+		setunioninplace
 
 cdef extern from "macros.h":
 	int BITSIZE
@@ -46,24 +47,27 @@ LABEL = re.compile(' *\( *([^ ()]+) *')
 def one():
 	return 1
 
-# wrap bitsets in bytes objects: can be (1) used in dictionaries and
-# (2) passed them between processes.
-# we leave one byte for NUL-termination:
-# data (SLOTS * 8), id (4), root(2), NUL (1)
+
 # bitsets representing fragments are ULong arrays with the number of elements
-# determined by SLOTS. After SLOTS elements, this struct follows:
-# use getters & setters because a cdef class would incur overhead & indirection
-# of a python object, and with a struct the root & id fields must be in front
-# which seems to lead to bad hashing behavior (?)
+# determined by SLOTS. While SLOTS is not a constant nor a global, it is
+# set just once for a treebank to fit its largest tree.
+# After SLOTS elements, this struct follows:
 cdef packed struct BitsetTail:
 	UInt id  # tree no. of which this fragment was extracted
 	short root  # index of the root of the fragment in the NodeArray
 
 
+# we wrap bitsets in bytes objects, because these can be (1) used in
+# dictionaries and (2) passed between processes.
+# we leave one byte for NUL-termination:
+# data (SLOTS * 8), id (4), root (2), NUL (1)
 cdef inline bytes wrap(ULong *data, short SLOTS):
 	return (<char *>data)[:SLOTS * sizeof(ULong) + sizeof(BitsetTail)]
 
 
+# use getters & setters because a cdef class would incur overhead & indirection
+# of a python object, and with a struct the root & id fields must be in front
+# which seems to lead to bad hashing behavior (?)
 cdef inline ULong *getpointer(object wrapper):
 	return <ULong *><char *><bytes>wrapper
 
@@ -97,7 +101,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	when complement is true, the complement of the recurring fragments in each
 	pair of trees is extracted as well. """
 	cdef:
-		int n, m, x, start = 0, end2
+		int n, m, start = 0, end2
 		short SLOTS  # the number of bitsets needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
 		ULong *scratch, *bitset  # temporary variables
@@ -113,7 +117,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		trees2 = trees1
 	ctrees1 = trees1.trees
 	ctrees2 = trees2.trees
-	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes))
+	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 	CST = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
 	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 	assert CST is not NULL and scratch is not NULL
@@ -145,21 +149,20 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 				# combine bitsets of inter together with bitwise or
 				ulongset(scratch, 0UL, SLOTS)
 				for wrapper in inter:
-					bitset = getpointer(wrapper)
-					for x in range(SLOTS):
-						scratch[x] |= bitset[x]
+					setunioninplace(scratch, getpointer(wrapper), SLOTS)
 				# extract bitsets in A from result, without regard for B
 				extractcompbitsets(scratch, anodes, a.root, n, inter,
 						SLOTS, NULL)
 		# collect string representations of fragments
 		for wrapper in inter:
 			bitset = getpointer(wrapper)
-			x = getroot(bitset, SLOTS)
 			if discontinuous:
-				frag = getsubtree(anodes, bitset, labels, x)
+				frag = getsubtree(anodes, bitset, labels,
+						getroot(bitset, SLOTS))
 				frag = getsent(frag, asent)
 			else:
-				frag = getsubtreeunicode(anodes, bitset, labels, asent, x)
+				frag = getsubtreeunicode(anodes, bitset, labels, asent,
+						getroot(bitset, SLOTS))
 			if approx:
 				fragments[frag] += 1
 			elif frag not in fragments:
@@ -224,7 +227,7 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		extractat(CST, result, a, b, a[i].left, b[j].left, SLOTS)
 	if a[i].right < 0:
 		return
-	if TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
+	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 
 
@@ -241,12 +244,12 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	The reason we need to do this separately from extracting maximal fragments
 	is that a fragment can occur in other trees where it was not a maximal. """
 	cdef:
-		list theindices
 		array counts
+		list theindices
 		set candidates
-		ULong *bitset
-		short i, j, SLOTS = 0
+		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 		UInt n, m, *countsp = NULL
+		ULong *bitset
 		NodeArray a, b
 		Node *anodes, *bnodes
 	if indices:
@@ -254,9 +257,6 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	else:
 		counts = clone(uintarray, len(bitsets), True)
 		countsp = counts.data.as_uints
-	if bitsets:
-		bitset = getpointer(bitsets[0])
-		SLOTS = (len(bitsets[0]) - sizeof(BitsetTail)) / sizeof(ULong)
 	# compare one bitset to each tree for each unique fragment.
 	for n, wrapper in enumerate(bitsets):
 		bitset = getpointer(wrapper)
@@ -270,7 +270,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 			if i == -1 or i >= a.len:  # FIXME. why is 2nd condition necessary?
 				break
 			candidates &= <set>(trees2.treeswithprod[anodes[i].prod])
-		i = getroot(bitset, SLOTS)  # root of fragment in a
+		i = getroot(bitset, SLOTS)  # root of fragment in tree 'a'
 		if indices:
 			matches = theindices[n]
 		for m in candidates:
@@ -312,7 +312,7 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 	cdef:
 		dict result = {}
 		int p, i, n = -1
-		short SLOTS = BITNSLOTS(maxnodes)
+		short SLOTS = BITNSLOTS(maxnodes + 1)
 		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		Node *nodes
 	assert scratch is not NULL
@@ -347,7 +347,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		dict result = {}
 		list sent
 		int n, i
-		short SLOTS = BITNSLOTS(trees.maxnodes)
+		short SLOTS = BITNSLOTS(trees.maxnodes + 1)
 		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		Node *nodes
 	for n in range(trees.len):
@@ -632,6 +632,7 @@ cdef getsent(frag, list sent):
 	""" Select the words that occur in the fragment and renumber terminals in
 	fragment such that the first index is 0 and any gaps have a width of 1.
 	Expects a tree as string where frontier nodes are marked with intervals.
+
 	>>> getsent('(S (NP 2) (VP 4))', ['The', 'tall', 'man', 'there', 'walks'])
 	('(S (NP 0) (VP 2))', ('man', None, 'walks'))
 	>>> getsent('(VP (VB 0) (PRT 3))', ['Wake', 'your', 'friend', 'up'])
@@ -645,8 +646,7 @@ cdef getsent(frag, list sent):
 	>>> getsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', "In Japan wird \
 	offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur \
 	gr\\xf6\\xdften Bank der Welt vorbereitet .".split(" "))
-	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))
-	"""
+	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))"""
 	cdef:
 		int n, m = 0, maxl
 		list newsent = []
@@ -962,35 +962,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	return ctrees, sents
 
 
-cdef test():
-	""" Test some of the bitvector operations """
-	cdef short SLOTS = 4
-	cdef int n, m
-	cdef ULong vec[4]
-	for n in range(SLOTS):
-		vec[n] = 0
-	bits = SLOTS * BITSIZE
-	print("BITSIZE:", BITSIZE)
-	print("bits:", bits, "in", SLOTS, "SLOTS")
-	for n in range(bits):
-		SETBIT(vec, n)
-		assert abitcount(vec, SLOTS) == 1, abitcount(vec, SLOTS)
-		for m in range(bits):
-			if m == n:
-				assert TESTBIT(vec, n)
-			else:
-				assert not TESTBIT(vec, m), (n, m)
-		CLEARBIT(vec, n)
-		assert abitcount(vec, SLOTS) == 0, abitcount(vec, SLOTS)
-		for m in range(bits):
-			assert not TESTBIT(vec, n)
-	print("bitset test successful")
-
-
 def main():
-	from doctest import testmod, NORMALIZE_WHITESPACE, ELLIPSIS
-	test()
-
 	treebank = [Tree(x) for x in """\
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))

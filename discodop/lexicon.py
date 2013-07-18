@@ -26,17 +26,17 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	sigtag = multiset()
 	words = multiset(word for sent in tagged_sents for word, tag in sent)
 	lexicon = {word for word, freq in words.items() if freq > unknownthreshold}
-	# FIXME: using only word as key throws away dependency on n and lexicon.
-	wordsig = {word: unknownword(word, n, lexicon)
-			for sent in tagged_sents
-				for n, (word, _) in enumerate(sent)}
+	wordsig = {}
 	for sent in tagged_sents:
-		for word, tag in sent:
+		for n, (word, tag) in enumerate(sent):
 			wordsfortag[tag].add(word)
 			tags[tag] += 1
 			wordtags[word, tag] += 1
-			sigs[wordsig[word]] += 1
-			sigtag[wordsig[word], tag] += 1
+			sig = unknownword(word, n, lexicon)
+			# NB: using only word as key throws away dependency on n and lexicon
+			wordsig[word] = sig
+			sigs[sig] += 1
+			sigtag[sig, tag] += 1
 	if openclassthreshold:
 		openclasstags = {tag: len({w.lower() for w in ws})
 				for tag, ws in wordsfortag.items()
@@ -44,7 +44,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		openclasswords = lexicon - {word
 				for tag in set(tags) - set(openclasstags)
 					for word in wordsfortag[tag]}
-		# NB: could add all closed-class rare words back to lexicon
+		# add all closed-class rare words back to lexicon
+		lexicon.update(set(words) - openclasswords)
 	else:
 		openclasstags = {}
 		openclasswords = {}
@@ -57,13 +58,28 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			wordsig, sigtag), msg
 
 
-def replacerarewords(tagged_sents, unknownword, lexicon):
+def replaceraretrainwords(tagged_sents, unknownword, lexicon):
 	""" Given a training set, replace all terminals not part of the lexicon
 	with a signature of features as returned by unknownword(),
 	before a grammar is read of from the training set. """
 	return [[word if word in lexicon else unknownword(word, n, lexicon)
 			for n, (word, _) in enumerate(sent)]
 			for sent in tagged_sents]
+
+
+def replaceraretestwords(sent, unknownword, lexicon, sigs):
+	""" Given a test sentence, replace words not part of the lexicon
+	with a signature of features as returned by unknownword(),
+	if that signature is part of the grammar. """
+	for n, word in enumerate(sent):
+		if word in lexicon:
+			yield word
+		else:
+			sig = unknownword(word, n, lexicon)
+			if sig in sigs:
+				yield sig
+			else:
+				yield 'UNK'
 
 
 def simplesmoothlexicon(grammar, lexmodel,
@@ -165,6 +181,17 @@ def smoothlexicon(grammar, P_wordtag):
 		else:
 			newrules.append(((rule, yf), w))
 	return newrules
+
+
+# === functions for unknown word signatures ============
+# resolve name to function assigning unknown word signatures
+def getunknownwordfun(model):
+	""" Resolve name of unknown word model into function for that model. """
+	return {"4": unknownword4,
+		"6": unknownword6,
+		"base": unknownwordbase,
+		"ftb": unknownwordftb,
+		}[model]
 
 hasdigit = re.compile(r"\d", re.UNICODE)
 hasnondigit = re.compile(r"\D", re.UNICODE)

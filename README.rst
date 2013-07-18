@@ -5,10 +5,10 @@ Discontinuous DOP
    :align: right
    :alt: contrived discontinuous constituent for expository purposes.
 
-The aim of this project is to parse discontinuous constituents in natural language using
-Data-Oriented Parsing (DOP), with a focus on global world domination.
-Concretely, we build a DOP model with a Linear Context-Free Rewriting
-System (LCFRS) as the symbolic backbone.
+The aim of this project is to parse discontinuous constituents in natural
+language using Data-Oriented Parsing (DOP), with a focus on global world
+domination. Concretely, we build a DOP model with a Linear Context-Free
+Rewriting System (LCFRS) as the symbolic backbone.
 The grammar is extracted from a treebank of sentences annotated with
 (discontinuous) phrase-structure trees.
 
@@ -44,21 +44,30 @@ Requirements
 - GCC             http://gcc.gnu.org/
 - Numpy           http://numpy.org/
 
-For example, to install these dependencies and compile the code on Ubuntu
-(tested on 12.04), run the following sequence of commands::
+For example, to install these dependencies and the latest stable release on
+`Ubuntu <http://www.ubuntu.com>`_
+using `pip <http://http://www.pip-installer.org>`_,
+issue the following commands::
 
-    sudo apt-get install build-essential python-dev python-numpy
-    sudo pip install cython
+    sudo apt-get install build-essential python-dev python-numpy python-pip
+    pip install --user discodop
+
+To compile the latest development version on Ubuntu,
+run the following sequence of commands::
+
+    sudo apt-get install build-essential python-dev python-numpy python-pip
+    pip install cython --user
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
-    python setup.py install
+    python setup.py install --user
 
-(add ``--user`` to the ``pip`` command and the ``python setup.py`` command to
-install to your home directory which does not require root privileges).
+(the ``--user`` option means the packages will be installed to your home
+directory which does not require root privileges).
+
 To port the code to another compiler such as Visual C, replace the compiler
-intrinsics in ``macros.h``, ``bit.pyx``, and ``bit.pxd`` to their equivalents in the
-compiler in question. This mainly concerns operations to scan for bits in
-integers, for which these compiler intrinsics provide the most efficient
+intrinsics in ``macros.h``, ``bit.pyx``, and ``bit.pxd`` to their equivalents
+for the compiler in question. This mainly concerns operations to scan for bits
+in integers, for which these compiler intrinsics provide the most efficient
 implementation on a given processor.
 
 Usage: parser
@@ -128,7 +137,7 @@ be installed.
 :``treesearch.py``: A web interface for searching trough treebanks. Expects
     one or more treebanks with the ``.mrg`` extension in the directory
     ``web/corpus/`` (sample included).
-:``treedraw.py``: A web interface for drawing discontinunous trees in various
+:``treedraw.py``: A web interface for drawing discontinuous trees in various
     formats.
 
 Acknowledgments

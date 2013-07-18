@@ -604,6 +604,8 @@ def headorder(tree, headfinal, reverse):
 def saveheads(tree, tailmarker):
 	""" When a head-outward binarization is used, this function ensures the
 	head is known when the tree is converted to export format. """
+	if not tailmarker:
+		return
 	for node in tree.subtrees(lambda n: tailmarker in n.label):
 		node.source = ['--'] * 6
 		node.source[FUNC] = 'HD'

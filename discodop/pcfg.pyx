@@ -18,19 +18,6 @@ cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
 		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong, logprobadd
-from bit cimport nextset, nextunset, bitcount, bitlength, \
-		testbit, testbitint, anextset, anextunset, abitcount, abitlength, \
-		ulongset, ulongcpy, setunioninplace
-
-# C code
-cdef extern from "macros.h":
-	int BITSIZE
-	int BITSLOT(int b)
-	ULong BITMASK(int b)
-	int BITNSLOTS(int nb)
-	void SETBIT(ULong a[], int b)
-	ULong TESTBIT(ULong a[], int b)
-	int IDX(int i, int j, int jmax, int kmax)
 
 cdef extern from "math.h":
 	bint isinf(double x)

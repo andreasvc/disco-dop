@@ -18,6 +18,7 @@ from .containers import Grammar, DictObj
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize, extractfragments
 from .tree import Tree
+from .lexicon import replaceraretestwords
 from .treebank import fold, saveheads
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
@@ -51,18 +52,18 @@ DEFAULTSTAGE = dict(
 		mode='plcfrs',  # use the agenda-based PLCFRS parser
 		prune=False,  # whether to use previous chart to prune this stage
 		split=False,  # split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
-		splitprune=False,  # VP_2[101] is treated as {VP*[100], VP*[001]} for pruning
+		splitprune=False,  # treat VP_2[101] as {VP*[100], VP*[001]} for pruning
 		markorigin=False,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
-		k=50,  # no. of coarse pcfg derivations to prune with; k=0 => filter only
+		k=50,  # no. of coarse pcfg derivations to prune with; k=0: filter only
 		neverblockre=None,  # do not prune nodes with label that match regex
 		getestimates=None,  # compute & store estimates
 		useestimates=None,  # load & use estimates
 		dop=False,  # enable DOP mode (DOP reduction / double DOP)
 		packedgraph=False,  # use packed graph encoding for DOP reduction
 		usedoubledop=False,  # when False, use DOP reduction instead
-		iterate=False,  # for double dop, whether to include fragments of fragments
+		iterate=False,  # for double dop, whether to add fragments of fragments
 		complement=False,  # for double dop, whether to include fragments which
-				# form the complement of the maximal recurring fragments extracted
+			# form the complement of the maximal recurring fragments extracted
 		sample=False, kbest=True,
 		m=10000,  # number of derivations to sample/enumerate
 		estimator="ewe",  # choices: dop1, ewe
@@ -174,16 +175,38 @@ def doparsing(parser, infile, out, printprob):
 class Parser(object):
 	""" An object to parse sentences following parameters given as a sequence
 	of coarse-to-fine stages. """
-	def __init__(self, stages):
+	def __init__(self, stages, unfolded=False, tailmarker=None,
+			unknownword=None, lexicon=None, sigs=None):
+		""" Parameters:
+		stages: a list of coarse-to-fine stages containing grammars and
+			parameters.
+		unfolded: reverse treebank transformations on resulting parses.
+		tailmarker: if heads have been marked with a symbol, use this to
+			mark heads in the output.
+		unknownword: when an unknown word model is used, this function produces
+			signatures for unknown words in the input.
+		lexicon: if grammars use an unknown word model, this should be the
+			set of known words.
+		sigs: if grammars use an unknown word model, this should be the
+			set of word signatures occurring in the grammar. """
 		self.stages = stages
+		self.unfolded = unfolded
+		self.tailmarker = tailmarker
+		self.unknownword = unknownword
+		self.lexicon = lexicon
+		self.sigs = sigs
 
-	def parse(self, sent, tags=None, unfolded=False, tailmarker='$'):
+	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
-		probabilities for each stage. """
+		probabilities for each stage.
+		tags: if given, will be given to the parser instead of trying all
+			possible tags. """
+		if self.unknownword is not None:
+			sent = replaceraretestwords(sent, self.unknownword,
+					self.lexicon, self.sigs)
 		sent = list(sent)
 		if tags is not None:
 			tags = list(tags)
-		# FIXME: do unknown word model stuff here.
 		chart = {}
 		start = inside = outside = None
 		for n, stage in enumerate(self.stages):
@@ -267,10 +290,10 @@ class Parser(object):
 				parsetree = Tree.parse(resultstr, parse_leaf=int)
 				if stage.split:
 					mergediscnodes(unbinarize(parsetree, childchar=":"))
-				saveheads(parsetree, tailmarker)
+				saveheads(parsetree, self.tailmarker)
 				unbinarize(parsetree)
 				removefanoutmarkers(parsetree)
-				if unfolded:
+				if self.unfolded:
 					fold(parsetree)
 			if not start or stage.mode == 'pcfg-posterior':
 				parsetree = defaultparse([(n, t)
@@ -288,7 +311,8 @@ class Parser(object):
 
 def readgrammars(resultdir, stages=None, top='ROOT'):
 	""" Read the grammars from a previous experiment. Must have same parameters.
-	"""
+	Expects a directory 'resultdir' which contains the relevant grammars and
+	the parameter file 'params.prm', as produced by runexp. """
 	if stages is None:
 		from .runexp import readparam
 		params = readparam(os.path.join(resultdir, 'params.prm'))
