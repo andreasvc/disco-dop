@@ -73,7 +73,7 @@ implementation on a given processor.
 Usage: parser
 -------------
 To run a full experiment from treebank to evaluation on a test set,
-copy the file sample.prm and edit its parameters.
+copy the file ``sample.prm`` and edit its parameters.
 These parameters can then be invoked by executing::
 
     discodop runexp.py filename.prm
@@ -84,22 +84,12 @@ accidentally overwriting previous results. The directory will contain the
 grammar rules and lexicon in a text format, as well as the parsing results and
 the gold standard file in Negra's export format.
 
-Corpora are expected to be in Negra's export format. Access to the `Negra
-corpus <http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/>`_ itself
-can be requested for non-commercial purposes, while the `Tiger
-corpus <http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_ is freely
-available for download for research purposes.
-
-Alternatively, there is a simpler parser in the ``shedskin/`` directory. This
-LCFRS parser only produces the Viterbi parse. The grammar is supplied in a file
-following a simple text format. The ``plcfrs.py`` script can be translated to C++
-by the `Shed Skin <http://code.google.com/p/shedskin/>`_ compiler, after which
-the resulting code can be compiled with ``make``::
-
-    sudo apt-get install shedskin
-    cd disco-dop/shedskin
-    shedskin -b -l -w plcfrs.py
-    make
+Corpora are expected to be in Negra's export format, or in the bracketed Penn
+treebank format. Access to the
+`Negra corpus <http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/>`_
+can be requested for non-commercial purposes, while the
+`Tiger corpus <http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_
+is freely available for download for research purposes.
 
 Usage: tools
 ------------
