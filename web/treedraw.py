@@ -8,7 +8,7 @@ from subprocess import Popen, PIPE
 #from functools import wraps
 # Flask & co
 from flask import Flask, Response
-from flask import request, render_template
+from flask import request, render_template, redirect, url_for
 from flask import send_from_directory
 #from werkzeug.contrib.cache import SimpleCache
 # disco-dop
@@ -61,7 +61,13 @@ APP = Flask(__name__)
 
 @APP.route('/')
 def main():
-	""" Main search form & results page. """
+	""" Redirect to avoid trailing slash hassles. """
+	return redirect(url_for('index'))
+
+
+@APP.route('/index')
+def index():
+	""" Form for trees & parameters. """
 	return render_template('draw.html')
 
 
