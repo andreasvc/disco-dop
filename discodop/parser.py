@@ -18,7 +18,7 @@ from .containers import Grammar, DictObj
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize, extractfragments
 from .tree import Tree
-from .lexicon import replaceraretestwords
+from .lexicon import replaceraretestwords, getunknownwordfun
 from .treebank import fold, saveheads
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
@@ -176,34 +176,31 @@ class Parser(object):
 	""" An object to parse sentences following parameters given as a sequence
 	of coarse-to-fine stages. """
 	def __init__(self, stages, unfolded=False, tailmarker=None,
-			unknownword=None, lexicon=None, sigs=None):
+			postagging=None):
 		""" Parameters:
 		stages: a list of coarse-to-fine stages containing grammars and
 			parameters.
 		unfolded: reverse treebank transformations on resulting parses.
 		tailmarker: if heads have been marked with a symbol, use this to
 			mark heads in the output.
-		unknownword: when an unknown word model is used, this function produces
-			signatures for unknown words in the input.
-		lexicon: if grammars use an unknown word model, this should be the
-			set of known words.
-		sigs: if grammars use an unknown word model, this should be the
-			set of word signatures occurring in the grammar. """
+		postagging: if given, an unknown word model is used, consisting of a
+			dictionary with three items:
+			- unknownwordfun: function to produces signatures for unknown words.
+			- lexicon: the set of known words in the grammar.
+			- sigs: the set of word signatures occurring in the grammar. """
 		self.stages = stages
 		self.unfolded = unfolded
 		self.tailmarker = tailmarker
-		self.unknownword = unknownword
-		self.lexicon = lexicon
-		self.sigs = sigs
+		self.postagging = postagging
 
 	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
 		probabilities for each stage.
 		tags: if given, will be given to the parser instead of trying all
 			possible tags. """
-		if self.unknownword is not None:
-			sent = replaceraretestwords(sent, self.unknownword,
-					self.lexicon, self.sigs)
+		if self.postagging:
+			sent = replaceraretestwords(sent, self.postagging['unknownwordfun'],
+					self.postagging['lexicon'], self.postagging['sigs'])
 		sent = list(sent)
 		if tags is not None:
 			tags = list(tags)
@@ -309,20 +306,10 @@ class Parser(object):
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
 
 
-def readgrammars(resultdir, stages=None, top='ROOT'):
+def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	""" Read the grammars from a previous experiment. Must have same parameters.
 	Expects a directory 'resultdir' which contains the relevant grammars and
 	the parameter file 'params.prm', as produced by runexp. """
-	if stages is None:
-		from .runexp import readparam
-		params = readparam(os.path.join(resultdir, 'params.prm'))
-		params['resultdir'] = resultdir
-		for stage in params['stages']:
-			for key in stage:
-				assert key in DEFAULTSTAGE, "unrecognized option: %r" % key
-		stages = params['stages'] = [DictObj({k: stage.get(k, v)
-				for k, v in DEFAULTSTAGE.items()})
-					for stage in params['stages']]
 	for n, stage in enumerate(stages):
 		logging.info("reading: %s", stage.name)
 		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name))
@@ -367,7 +354,12 @@ def readgrammars(resultdir, stages=None, top='ROOT'):
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform,
 				secondarymodel=None, outside=None)
-	return stages
+	if postagging and postagging['method'] == 'unknownword':
+		postagging['unknownwordfun'] = getunknownwordfun(postagging['model'])
+		postagging['lexicon'] = {w for w in stages[0].grammar.lexical
+				if not w.startswith("UNK")}
+		postagging['sigs'] = {w for w in stages[0].grammar.lexical
+				if w.startswith("UNK")}
 
 
 if __name__ == '__main__':

@@ -111,17 +111,12 @@ def startexp(
 			assert postagging['openclassthreshold'] >= 0
 		else:
 			assert postagging['method'] in ("treetagger", "stanford")
-	for stage in stages:
-		for key in stage:
-			assert key in DEFAULTSTAGE, "unrecognized option: %r" % key
-	stages = [DictObj({k: stage.get(k, v) for k, v in DEFAULTSTAGE.items()})
-			for stage in stages]
 
 	if rerun:
 		assert os.path.exists(resultdir), (
 				"Directory %r does not exist."
 				"--rerun requires a directory "
-				"with the grammar of a previous experiment."
+				"with the grammar(s) of a previous experiment."
 				% resultdir)
 	else:
 		assert not os.path.exists(resultdir), (
@@ -177,7 +172,7 @@ def startexp(
 			len(testset.parsed_sents()), corpusdir, testcorpus)
 	logging.info("%d test sentences before length restriction",
 			len(list(gold_sents.keys())[skip:skip + testnumsents]))
-	lexmodel = knownwords = unknownword = None
+	lexmodel = None
 	test_tagged_sents = gold_sents
 	if postagging and postagging['method'] in ('treetagger', 'stanford'):
 		if postagging['method'] == 'treetagger':
@@ -201,11 +196,11 @@ def startexp(
 				overridetagdict, tagmap)
 		# give these tags to parser
 		usetags = True
-	elif postagging and postagging['method'] == "unknownword":
-		unknownword = getunknownwordfun(postagging['model'])
+	elif postagging and postagging['method'] == 'unknownword' and not rerun:
+		postagging['unknownwordfun'] = getunknownwordfun(postagging['model'])
 		# get smoothed probalities for lexical productions
 		lexresults, msg = getunknownwordmodel(
-				train_tagged_sents, unknownword,
+				train_tagged_sents, postagging['unknownwordfun'],
 				postagging['unknownthreshold'],
 				postagging['openclassthreshold'])
 		logging.info(msg)
@@ -220,8 +215,10 @@ def startexp(
 		# for training purposes we work with the subset, at test time we exploit
 		# the full set of known words from the training set.
 		sigs, knownwords, lexicon = lexresults[:3]
+		postagging['sigs'], postagging['lexicon'] = sigs, knownwords
 		# replace rare train words with signatures
-		sents = replaceraretrainwords(train_tagged_sents, unknownword, lexicon)
+		sents = replaceraretrainwords(train_tagged_sents,
+				postagging['unknownwordfun'], lexicon)
 		# make sure gold POS tags are not given to parser
 		usetags = False
 	else:
@@ -251,7 +248,7 @@ def startexp(
 	assert len(toplabels) == 1, "expected unique TOP/ROOT label: %r" % toplabels
 	top = toplabels.pop()
 	if rerun:
-		readgrammars(resultdir, stages, top)
+		readgrammars(resultdir, stages, postagging, top)
 	else:
 		logging.info("read training & test corpus")
 		getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
@@ -266,7 +263,8 @@ def startexp(
 
 	begin = time.clock()
 	parser = Parser(stages, unfolded=unfolded, tailmarker=tailmarker,
-			unknownword=unknownword, lexicon=knownwords, sigs=sigs)
+			postagging=postagging if postagging
+			and postagging['method'] == 'unknownword' else None)
 	results = doparsing(parser=parser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=corpusfmt)
@@ -791,8 +789,9 @@ def parsetepacoc(
 			continue
 		logging.info("category: %s", cat)
 		begin = time.clock()
-		results[cat] = doparsing(parser, testset=testset, resultdir=resultdir,
-				usetags=True, numproc=numproc, category=cat)
+		results[cat] = doparsing(parser=parser, testset=testset,
+				resultdir=resultdir, usetags=True, numproc=numproc,
+				category=cat)
 		cnt += len(testset[0])
 		if numproc == 1:
 			logging.info("time elapsed during parsing: %g",
@@ -933,7 +932,14 @@ def readparam(filename):
 	""" Parse a parameter file:
 		a list of of attribute=value pairs treated as a dict(). """
 	paramstr = open(filename).read()
-	return eval("dict(%s)" % paramstr)
+	params = eval("dict(%s)" % paramstr)
+	for stage in params['stages']:
+		for key in stage:
+			assert key in DEFAULTSTAGE, "unrecognized option: %r" % key
+	params['stages'] = [DictObj({k: stage.get(k, v)
+			for k, v in DEFAULTSTAGE.items()})
+				for stage in params['stages']]
+	return params
 
 
 def main(argv=None):

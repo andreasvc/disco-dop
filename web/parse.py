@@ -103,23 +103,18 @@ def favicon():
 def loadparsers():
 	""" Load grammars if necessary. """
 	if not parsers:
-		for folder in glob.glob('grammars/*/'):
-			_, lang = os.path.split(os.path.dirname(folder))
+		for directory in glob.glob('grammars/*/'):
+			_, lang = os.path.split(os.path.dirname(directory))
 			APP.logger.info('Loading grammar %r', lang)
-			stages = readgrammars(folder)  # FIXME: return other parameters
-			params = readparam(os.path.join(folder, 'params.prm'))
-			unknownword = None
-			if params.get('postagging'):
-				unknownword = getunknownwordfun(params['postagging']['model'])
-			lexicon = {w for w in stages[0].grammar.lexical
-					if not w.startswith("UNK")}
-			sigs = {w for w in stages[0].grammar.lexical
-					if w.startswith("UNK")}
-			parsers[lang] = Parser(stages,
-					unfolded=params['unfolded'],
-					tailmarker=params['tailmarker'],
-					unknownword=unknownword,
-					lexicon=lexicon, sigs=sigs)
+			params = readparam(os.path.join(directory, 'params.prm'))
+			params['resultdir'] = directory
+			stages = params['stages']
+			postagging = params['postagging']
+			readgrammars(directory, stages, postagging)
+			parsers[lang] = Parser(stages, unfolded=params['unfolded'],
+					tailmarker=params['tailmarker'], postagging=postagging
+					if postagging and postagging['method'] == 'unknownword'
+					else None)
 			APP.logger.info('Grammar for %s loaded.' % lang)
 
 
@@ -183,7 +178,8 @@ def tokenize(text):
 
 def guesslang(sent):
 	""" simple heuristic: language that contains most words from input. """
-	lang = max(parsers, key=lambda x: len(parsers[x].lexicon & set(sent)))
+	lang = max(parsers, key=lambda x: len(set(sent).intersection(
+			parsers[x].stages[0].grammar.lexical)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
 
