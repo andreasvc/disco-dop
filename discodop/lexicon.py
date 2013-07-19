@@ -33,19 +33,18 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			tags[tag] += 1
 			wordtags[word, tag] += 1
 			sig = unknownword(word, n, lexicon)
-			# NB: using only word as key throws away dependency on n and lexicon
-			wordsig[word] = sig
+			wordsig[word] = sig  # NB: sig may also depend on n and lexicon
 			sigs[sig] += 1
 			sigtag[sig, tag] += 1
 	if openclassthreshold:
 		openclasstags = {tag: len({w.lower() for w in ws})
 				for tag, ws in wordsfortag.items()
 				if len({w.lower() for w in ws}) >= openclassthreshold}
-		openclasswords = lexicon - {word
-				for tag in set(tags) - set(openclasstags)
+		closedclasswords = {word for tag in set(tags) - set(openclasstags)
 					for word in wordsfortag[tag]}
-		# add all closed-class rare words back to lexicon
-		lexicon.update(set(words) - openclasswords)
+		openclasswords = lexicon - closedclasswords
+		# add rare closed-class words back to lexicon
+		lexicon.update(closedclasswords)
 	else:
 		openclasstags = {}
 		openclasswords = {}
