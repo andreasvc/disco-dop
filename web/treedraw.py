@@ -102,11 +102,11 @@ def gettrees(form):
 				trees = [Tree.parse(a, parse_leaf=int, brackets=brackets)
 						for a in form['tree'].splitlines()]
 				sents = [a.split() for a in form.get('sent', ''
-						).decode('utf-8').splitlines() if a.split()]
+						).splitlines() if a.split()]
 			except ValueError:  # a single tree spread over multiple lines
 				trees = [Tree.parse(form['tree'], parse_leaf=int,
 						brackets=brackets)]
-				sents = [form.get('sent', '').decode('utf-8').split()]
+				sents = [form.get('sent', '').split()]
 		except ValueError:  # continuous tree: strings as terminals
 			try:  # one or more trees, one per line
 				trees, sents = [], []
