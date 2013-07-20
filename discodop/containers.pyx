@@ -770,7 +770,7 @@ cdef class CFGEdge:
 
 	def __hash__(CFGEdge self):
 		cdef long _hash = 0x345678UL
-		_hash = (1000003UL * _hash) ^ <long>self.rule  # self.rule.no
+		_hash = (1000003UL * _hash) ^ <long>self.rule
 		_hash = (1000003UL * _hash) ^ <long>self.mid
 		return _hash
 

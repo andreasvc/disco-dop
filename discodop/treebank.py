@@ -145,7 +145,7 @@ class NegraCorpusReader(CorpusReader):
 		if includetransformations:
 			return OrderedDict((x[2], writetree(*x)) for x in zip(
 				self.parsed_sents().values(), self.sents().values(),
-				self.sents().keys(), repeat("export")))
+				self.sents(), repeat("export")))
 		return OrderedDict((a, "#BOS %s\n%s\n#EOS %s\n" % (a,
 				"\n".join("\t".join(c) for c in b), a))
 				for a, b in self._block_cache.items())

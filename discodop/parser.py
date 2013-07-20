@@ -65,7 +65,7 @@ DEFAULTSTAGE = dict(
 		complement=False,  # for double dop, whether to include fragments which
 			# form the complement of the maximal recurring fragments extracted
 		sample=False, kbest=True,
-		m=10000,  # number of derivations to sample/enumerate
+		m=10,  # number of derivations to sample/enumerate
 		estimator="ewe",  # choices: dop1, ewe
 		objective="mpp",  # choices: mpp, mpd, shortest, sl-dop[-simple]
 			# NB: w/shortest derivation, estimator only affects tie breaking.
@@ -240,6 +240,9 @@ class Parser(object):
 					chart, start, msg1 = pcfg.parse(
 							sent, stage.grammar, tags=tags,
 							chart=whitelist if stage.prune else None)
+				elif stage.mode == 'pcfg-symbolic':
+					chart, start, msg1 = pcfg.symbolicparse(
+							sent, stage.grammar, tags=tags)
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, stage.grammar, tags=tags)

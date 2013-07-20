@@ -3,19 +3,19 @@
 # python imports
 from __future__ import print_function
 from math import log, exp
-from collections import defaultdict, deque
+from collections import defaultdict
 import re
 import logging
 import sys
 import numpy as np
 from tree import Tree
-from agenda import EdgeAgenda, Entry
+from agenda import EdgeAgenda
 
 # cython imports
 from libc.stdlib cimport malloc, calloc, free
 from cpython cimport PyDict_Contains, PyDict_GetItem
 cimport numpy as np
-from agenda cimport Entry, EdgeAgenda
+from agenda cimport EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
 		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong, logprobadd
 
@@ -45,31 +45,28 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		chart[left][right][label] = {edge1: edge1, edge2: edge2} """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
-		short narrowr, narrowl, widel, wider, minmid, maxmid
+		short narrowl, narrowr, widel, wider, minmid, maxmid
+		UInt n, lhs, rhs1, spans = 0, items = 0, edges = 0
 		double oldscore, prob
-		bint foundnew = False
-		UInt n, lhs, rhs1, spans = 0, items = 0, edges = 0, blocked = 0
 		Rule *rule
-		CFGEdge edge
-		Entry entry
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		list chart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
 		dict cell
-	assert grammar.maxfanout == 1, "Not a PCFG!"
+		# the viterbi chart is initially filled with infinite log probabilities,
+		# cells containing NaN are blocked.
+		np.ndarray[np.double_t, ndim=3] viterbi = np.empty(
+				(grammar.nonterminals, lensent, lensent + 1), dtype='d')
+		# matrices for the filter which gives minima and maxima for splits
+		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert grammar.logprob
-	# the viterbi chart is initially filled with infinite log probabilities,
-	# cells which are to be blocked contain NaN.
-	cdef np.ndarray[np.double_t, ndim=3] viterbi = np.empty(
-		(grammar.nonterminals, lensent, lensent + 1), dtype='d')
-	# matrices for the filter which gives minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
 	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minright = np.empty_like(minleft)
 	maxright = np.empty_like(minleft)
-	minleft.fill(-1)
 	viterbi.fill(np.inf)
+	minleft.fill(-1)
 	maxleft.fill(lensent + 1)
 	minright.fill(lensent + 1)
 	maxright.fill(-1)
@@ -81,9 +78,9 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		cell = chart[left][right]
 		recognized = False
 		for lexrule in grammar.lexical.get(word, ()):
+			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
-			lhs = lexrule.lhs
 			if (not tags or grammar.tolabel[lhs] == tag
 				or grammar.tolabel[lhs].startswith(tag + b'@')):
 				x = viterbi[lhs, left, right] = lexrule.prob
@@ -99,23 +96,23 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 					minright[lhs, left] = right
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
-		if not recognized and tags and tag in grammar.toid:
-			lhs = grammar.toid[tag]
-			viterbi[lhs, left, right] = 0.0
-			edge = new_CFGEdge(0.0, NULL, right)
-			cell[lhs] = {edge: edge}
-			recognized = True
-			# update filter
-			if left > minleft[lhs, right]:
-				minleft[lhs, right] = left
-			if left < maxleft[lhs, right]:
-				maxleft[lhs, right] = left
-			if right < minright[lhs, left]:
-				minright[lhs, left] = right
-			if right > maxright[lhs, left]:
-				maxright[lhs, left] = right
-		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word, )
+		if not recognized:
+			if tags and tag in grammar.toid:
+				lhs = grammar.toid[tag]
+				viterbi[lhs, left, right] = 0.0
+				edge = new_CFGEdge(0.0, NULL, right)
+				cell[lhs] = {edge: edge}
+				# update filter
+				if left > minleft[lhs, right]:
+					minleft[lhs, right] = left
+				if left < maxleft[lhs, right]:
+					maxleft[lhs, right] = left
+				if right < minright[lhs, left]:
+					minright[lhs, left] = right
+				if right > maxright[lhs, left]:
+					maxright[lhs, left] = right
+			else:
+				return chart, NONE, "not covered: %r" % (tag or word, )
 
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
@@ -135,14 +132,14 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 				edge = new_CFGEdge(prob, rule, right)
 				if isfinite(viterbi[lhs, left, right]):
 					if prob < viterbi[lhs, left, right]:
-						unaryagenda.setifbetter(lhs, edge)
+						unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 						viterbi[lhs, left, right] = prob
 						cell[lhs][edge] = edge
 					elif (edge not in cell[lhs] or
 							prob < (<CFGEdge>cell[lhs][edge]).inside):
 						cell[lhs][edge] = edge
 					continue
-				unaryagenda.setifbetter(lhs, edge)
+				unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 				viterbi[lhs, left, right] = prob
 				cell[lhs] = {edge: edge}
 				# update filter
@@ -197,6 +194,9 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 							cell[lhs][edge] = edge
 				# update filter
 				if isinf(oldscore):
+					if not cell[lhs]:
+						del cell[lhs]
+						continue
 					if left > minleft[lhs, right]:
 						minleft[lhs, right] = left
 					if left < maxleft[lhs, right]:
@@ -223,14 +223,14 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 					edge = new_CFGEdge(prob, rule, right)
 					if isfinite(viterbi[lhs, left, right]):
 						if prob < viterbi[lhs, left, right]:
-							unaryagenda.setifbetter(lhs, edge)
+							unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 							viterbi[lhs, left, right] = prob
 							cell[lhs][edge] = edge
 						elif (edge not in cell[lhs] or
 								prob < (<CFGEdge>cell[lhs][edge]).inside):
 							cell[lhs][edge] = edge
 						continue
-					unaryagenda.setifbetter(lhs, edge)
+					unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 					viterbi[lhs, left, right] = prob
 					cell[lhs] = {edge: edge}
 					# update filter
@@ -246,8 +246,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 				spans += 1
 				items += len(cell)
 				edges += sum(map(len, cell.values()))
-	msg = "chart spans %d, items %d, edges %d" % (
-			spans, items, edges)
+	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
 	if chart[0][lensent].get(start):
 		return chart, new_CFGChartItem(start, 0, lensent), msg
 	else:
@@ -262,22 +261,20 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 	a hash tables, useful for large grammars. The edge with the viterbi score
 	for a labeled span is kept in viterbi[left][right][label]. """
 	cdef:
-		double oldscore, prob, leftprob, infinity = float('infinity')
 		short left, right, mid, span, lensent = len(sent)
-		short narrowl, narrowr, minmid, maxmid
-		bint foundnew, newspan
-		UInt lhs, rhs1, spans = 0, items = 0, edges = 0
+		short narrowl, narrowr, widel, wider, minmid, maxmid
+		UInt n, lhs, rhs1, spans = 0, items = 0, edges = 0
+		double oldscore, prob, infinity = float('infinity')
 		Rule *rule
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
-		Entry entry
 		list viterbi = [[{} for _ in range(lensent + 1)]
 				for _ in range(lensent)]
 		dict cell, viterbicell
-	assert grammar.maxfanout == 1, "Not a PCFG!"
+		# matrices for the filter which gives minima and maxima for splits
+		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert grammar.logprob
-	# matrices for the filter which gives minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
 	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minright = np.empty_like(minleft)
@@ -322,28 +319,28 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
 		# NB: don't allow blocking of gold tags if given
-		if not recognized and tags and tag in grammar.toid:
-			lhs = grammar.toid[tag]
-			edge = new_CFGEdge(0.0, NULL, right)
-			viterbicell[lhs] = edge
-			cell[lhs] = {edge: edge}
-			# update filter
-			if left > minleft[lhs, right]:
-				minleft[lhs, right] = left
-			if left < maxleft[lhs, right]:
-				maxleft[lhs, right] = left
-			if right < minright[lhs, left]:
-				minright[lhs, left] = right
-			if right > maxright[lhs, left]:
-				maxright[lhs, left] = right
-		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word, )
+		if not recognized:
+			if tags and tag in grammar.toid:
+				lhs = grammar.toid[tag]
+				edge = new_CFGEdge(0.0, NULL, right)
+				viterbicell[lhs] = edge
+				cell[lhs] = {edge: edge}
+				# update filter
+				if left > minleft[lhs, right]:
+					minleft[lhs, right] = left
+				if left < maxleft[lhs, right]:
+					maxleft[lhs, right] = left
+				if right < minright[lhs, left]:
+					minright[lhs, left] = right
+				if right > maxright[lhs, left]:
+					maxright[lhs, left] = right
+			else:
+				return chart, NONE, "not covered: %r" % (tag or word, )
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
 		unaryagenda.update(viterbicell.items())
 		while unaryagenda.length:
-			entry = unaryagenda.popentry()
-			rhs1 = entry.key
+			rhs1 = unaryagenda.popentry().key
 			for n in range(grammar.numrules):
 				rule = &(grammar.unary[rhs1][n])
 				if rule.rhs1 != rhs1:
@@ -351,19 +348,18 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 				elif rule.lhs not in cell:
 					continue
 				lhs = rule.lhs
-				#prob = rule.prob + (<CFGEdge>entry.value).inside
 				prob = rule.prob + (<CFGEdge>viterbicell[rhs1]).inside
 				edge = new_CFGEdge(prob, rule, right)
 				if cell[lhs]:
 					if prob < (<CFGEdge>viterbicell[lhs]).inside:
-						unaryagenda.setifbetter(lhs, edge)
+						unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 						viterbi[left][right][lhs] = edge
 						cell[lhs][edge] = edge
 					elif (edge not in cell[lhs] or
 							prob < (<CFGEdge>cell[lhs][edge]).inside):
 						cell[lhs][edge] = edge
 					continue
-				unaryagenda.setifbetter(lhs, edge)
+				unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 				viterbicell[lhs] = edge
 				cell[lhs] = {edge: edge}
 				# update filter
@@ -418,22 +414,23 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 					rule = &(grammar.bylhs[lhs][n])
 
 				# update filter
-				if not isinf(oldscore):
-					continue
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
+				if isinf(oldscore):
+					if not cell[lhs]:
+						del cell[lhs]
+						continue
+					if left > minleft[lhs, right]:
+						minleft[lhs, right] = left
+					if left < maxleft[lhs, right]:
+						maxleft[lhs, right] = left
+					if right < minright[lhs, left]:
+						minright[lhs, left] = right
+					if right > maxright[lhs, left]:
+						maxright[lhs, left] = right
 
 			# unary rules
 			unaryagenda.update(viterbicell.items())
 			while unaryagenda.length:
-				entry = unaryagenda.popentry()
-				rhs1 = entry.key
+				rhs1 = unaryagenda.popentry().key
 				for n in range(grammar.numrules):
 					rule = &(grammar.unary[rhs1][n])
 					if rule.rhs1 != rhs1:
@@ -441,20 +438,19 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 					elif rule.lhs not in cell:
 						continue
 					lhs = rule.lhs
-					#prob = rule.prob + (<CFGEdge>entry.value).inside
 					prob = rule.prob + (<CFGEdge>
 							viterbicell[rhs1]).inside
 					edge = new_CFGEdge(prob, rule, right)
 					if cell[lhs]:
 						if prob < (<CFGEdge>viterbicell[lhs]).inside:
-							unaryagenda.setifbetter(lhs, edge)
+							unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 							viterbicell[lhs] = edge
 							cell[lhs][edge] = edge
 						elif (edge not in cell[lhs] or
 								prob < (<CFGEdge>cell[lhs][edge]).inside):
 							cell[lhs][edge] = edge
 						continue
-					unaryagenda.setifbetter(lhs, edge)
+					unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 					viterbicell[lhs] = edge
 					cell[lhs] = {edge: edge}
 					# update filter
@@ -471,42 +467,38 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 				spans += 1
 				items += len(nonempty)
 				# clean up labelled spans that were whitelisted but not used:
-				#for label in cell.keys():
+				#for label in cell:
 				#	if cell[label] is None:
 				#		del cell[label]
 				edges += sum(map(len, nonempty))
-	msg = "chart items %d (spans %d), edges %d" % (
-			items, spans, edges)
+	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
 	if chart[0][lensent].get(start):
 		return chart, new_CFGChartItem(start, 0, lensent), msg
 	else:
 		return chart, NONE, "no parse " + msg
 
 
-def symbolicparse(sent, Grammar grammar, start=1, tags=None,
-		list chart=None):
-	""" parse sentence, a list of tokens, optionally with gold tags, and
-	produce a chart, either exhaustive or up until the viterbi parse.
-	Non-probabilistic version.
-	Other parameters:
+def symbolicparse(sent, Grammar grammar, start=1, tags=None):
+	""" Parse sentence, a list of tokens, and produce a chart, either
+	exhaustive or up until the first complete parse. Non-probabilistic version;
+	returns a CFG chart with each 'probability' 1. Other parameters:
 		- start: integer corresponding to the start symbol that analyses should
 			have, e.g., grammar.toid['ROOT']
-		- tags: the corresponding POS tags for the words in sent.
-	"""
+		- tags: optionally, a list with the corresponding POS tags
+			for the words in sent. """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
-		short narrowl, narrowr, minmid, maxmid
-		UInt lhs, rhs1, spans = 0, items = 0, edges = 0
-		bint foundnew, newspan
+		short narrowl, narrowr, widel, wider, minmid, maxmid
+		UInt n, lhs, rhs1, spans = 0, items = 0, edges = 0
+		bint newspan
 		Rule *rule
 		LexicalRule lexrule
-		object unaryagenda = deque()
-		list viterbi = [[{} for _ in range(lensent + 1)]
-				for _ in range(lensent)]
+		set unaryagenda = set()
+		list chart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
 		dict cell
-	assert grammar.maxfanout == 1, "Not a PCFG!"
-	# matrices for the filter which gives minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+		# matrices for the filter which gives minima and maxima for splits
+		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minright = np.empty_like(minleft)
@@ -515,27 +507,19 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 	maxleft.fill(lensent + 1)
 	minright.fill(lensent + 1)
 	maxright.fill(-1)
-	if chart is None:
-		chart = [[None] * (lensent + 1) for _ in range(lensent)]
-		cell = dict.fromkeys(range(1, grammar.nonterminals))
-		for left in range(lensent):
-			for right in range(left, lensent):
-				chart[left][right + 1] = cell.copy()
 	# assign POS tags
 	for left, word in enumerate(sent):
 		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		cell = chart[left][right]
 		recognized = False
-		for lexrule in <list>grammar.lexical.get(word, ()):
-			if lexrule.lhs not in cell:
-				continue
+		for lexrule in grammar.lexical.get(word, ()):
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[lhs] == tag
 				or grammar.tolabel[lhs].startswith(tag + b'@')):
-				edge = new_CFGEdge(lexrule.prob, NULL, right)
+				edge = new_CFGEdge(0.0, NULL, right)
 				cell[lhs] = {edge: edge}
 				recognized = True
 				# update filter
@@ -547,40 +531,36 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 					minright[lhs, left] = right
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
-		# NB: don't allow blocking of gold tags if given
-		if not recognized and tags and tag in grammar.toid:
-			lhs = grammar.toid[tag]
-			edge = new_CFGEdge(0.0, NULL, right)
-			cell[lhs] = {edge: edge}
-			# update filter
-			if left > minleft[lhs, right]:
-				minleft[lhs, right] = left
-			if left < maxleft[lhs, right]:
-				maxleft[lhs, right] = left
-			if right < minright[lhs, left]:
-				minright[lhs, left] = right
-			if right > maxright[lhs, left]:
-				maxright[lhs, left] = right
-		elif not recognized:
-			return chart, NONE, "not covered: %r" % (tag or word, )
+		if not recognized:
+			if tags and tag in grammar.toid:
+				lhs = grammar.toid[tag]
+				edge = new_CFGEdge(0.0, NULL, right)
+				cell[lhs] = {edge: edge}
+				# update filter
+				if left > minleft[lhs, right]:
+					minleft[lhs, right] = left
+				if left < maxleft[lhs, right]:
+					maxleft[lhs, right] = left
+				if right < minright[lhs, left]:
+					minright[lhs, left] = right
+				if right > maxright[lhs, left]:
+					maxright[lhs, left] = right
+			else:
+				return chart, NONE, "not covered: %r" % (tag or word, )
 		# unary rules on the span of this POS tag
-		# NB: for this agenda, only the probabilities of the edges matter
-		unaryagenda.update(cell.keys())
+		unaryagenda.update(cell)
 		while unaryagenda:
-			rhs1 = unaryagenda.popleft()
+			rhs1 = unaryagenda.pop()
 			for n in range(grammar.numrules):
 				rule = &(grammar.unary[rhs1][n])
 				if rule.rhs1 != rhs1:
 					break
-				elif rule.lhs not in cell:
-					continue
 				lhs = rule.lhs
 				edge = new_CFGEdge(0.0, rule, right)
-				if cell[lhs]:
-					if edge not in cell[lhs]:
-						cell[lhs][edge] = edge
+				if lhs in cell:
+					cell[lhs][edge] = edge
 					continue
-				unaryagenda.append(lhs)
+				unaryagenda.add(lhs)
 				cell[lhs] = {edge: edge}
 				# update filter
 				if left > minleft[lhs, right]:
@@ -598,58 +578,60 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 			right = left + span
 			cell = chart[left][right]
 			# binary rules
-			for lhs in cell:
-				n = 0
-				rule = &(grammar.bylhs[lhs][n])
-				while rule.lhs == lhs:
-					narrowr = minright[rule.rhs1, left]
-					narrowl = minleft[rule.rhs2, right]
-					if rule.rhs2 == 0 or narrowr >= right or narrowl < narrowr:
-						n +=1
-						rule = &(grammar.bylhs[lhs][n])
-						continue
-					widel = maxleft[rule.rhs2, right]
-					minmid = narrowr if narrowr > widel else widel
-					wider = maxright[rule.rhs1, left]
-					maxmid = wider if wider < narrowl else narrowl
-					for mid in range(minmid, maxmid + 1):
-						if (rule.rhs1 in chart[left][mid]
-								and rule.rhs2 in chart[mid][right]):
-							edge = new_CFGEdge(0.0, rule, mid)
-							if lhs not in cell:
-								cell[lhs][edge] = edge
-							elif edge not in cell[lhs]:
-								cell[lhs][edge] = edge
-					n +=1
-					rule = &(grammar.bylhs[lhs][n])
+			for n in range(grammar.numrules):
+				rule = &(grammar.bylhs[0][n])
+				if rule.lhs == grammar.nonterminals:
+					break
+				elif not rule.rhs2:
+					continue
+				lhs = rule.lhs
+				narrowr = minright[rule.rhs1, left]
+				if narrowr >= right:
+					continue
+				narrowl = minleft[rule.rhs2, right]
+				if narrowl < narrowr:
+					continue
+				widel = maxleft[rule.rhs2, right]
+				minmid = narrowr if narrowr > widel else widel
+				wider = maxright[rule.rhs1, left]
+				maxmid = wider if wider < narrowl else narrowl
+				newspan = lhs not in cell
+				if newspan:
+					cell[lhs] = {}
+				for mid in range(minmid, maxmid + 1):
+					if (rule.rhs1 in chart[left][mid]
+							and rule.rhs2 in chart[mid][right]):
+						edge = new_CFGEdge(0.0, rule, mid)
+						cell[lhs][edge] = edge
 
 				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
+				if newspan:
+					if not cell[lhs]:
+						del cell[lhs]
+						continue
+					if left > minleft[lhs, right]:
+						minleft[lhs, right] = left
+					if left < maxleft[lhs, right]:
+						maxleft[lhs, right] = left
+					if right < minright[lhs, left]:
+						minright[lhs, left] = right
+					if right > maxright[lhs, left]:
+						maxright[lhs, left] = right
 
 			# unary rules
-			unaryagenda.update(cell.keys())
+			unaryagenda.update(cell)
 			while unaryagenda:
-				rhs1 = unaryagenda.popleft()
+				rhs1 = unaryagenda.pop()
 				for n in range(grammar.numrules):
 					rule = &(grammar.unary[rhs1][n])
 					if rule.rhs1 != rhs1:
 						break
-					elif rule.lhs not in cell:
-						continue
 					lhs = rule.lhs
 					edge = new_CFGEdge(0.0, rule, right)
-					if cell[lhs]:
-						if edge not in cell[lhs]:
-							cell[lhs][edge] = edge
+					if lhs in cell:
+						cell[lhs][edge] = edge
 						continue
-					unaryagenda.append(lhs)
+					unaryagenda.add(lhs)
 					cell[lhs] = {edge: edge}
 					# update filter
 					if left > minleft[lhs, right]:
@@ -665,8 +647,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 				spans += 1
 				items += len(nonempty)
 				edges += sum(map(len, nonempty))
-	msg = "chart items %d (spans %d), edges %d" % (
-			items, spans, edges)
+	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
 	if chart[0][lensent].get(start):
 		return chart, new_CFGChartItem(start, 0, lensent), msg
 	else:
@@ -675,7 +656,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None,
 
 def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 		tags=None):
-	assert grammar.maxfanout == 1, "Not a PCFG!"
+	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert not grammar.logprob, "Grammar must not have log probabilities."
 	lensent = len(sent)
 	if inside is None:
@@ -714,10 +695,10 @@ def insidescores(list sent, Grammar grammar,
 		unicode word
 		list cell = [{} for _ in grammar.toid]
 		EdgeAgenda unaryagenda = EdgeAgenda()
-	# matrices for the filter which give minima and maxima for splits
-	cdef np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
-	cdef np.ndarray[np.double_t, ndim=1] unaryscores = np.empty((
-			grammar.nonterminals), dtype='double')
+		# matrices for the filter which give minima and maxima for splits
+		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+		np.ndarray[np.double_t, ndim=1] unaryscores = np.empty((
+				grammar.nonterminals), dtype='double')
 	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minright = np.empty_like(minleft)
@@ -763,7 +744,7 @@ def insidescores(list sent, Grammar grammar,
 				lhs = rule.lhs
 				edge = new_CFGEdge(-prob, rule, right)
 				if edge not in cell[lhs]:
-					unaryagenda.setifbetter(lhs, edge)
+					unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 					inside[left, right, lhs] += prob
 					cell[lhs][edge] = edge
 		for a in cell:
@@ -839,7 +820,7 @@ def insidescores(list sent, Grammar grammar,
 					lhs = rule.lhs
 					edge = new_CFGEdge(-prob, rule, right)
 					if edge not in cell[lhs]:
-						unaryagenda.setifbetter(lhs, edge)
+						unaryagenda.setifbetter(lhs, <CFGEdge>edge)
 						inside[left, right, lhs] += prob
 						cell[lhs][edge] = edge
 			for a in cell:
@@ -874,8 +855,6 @@ def outsidescores(Grammar grammar, list sent,
 		Rule *rule
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
-		Entry entry
-		CFGEdge edge
 		list cell = [{} for _ in grammar.toid]
 		np.ndarray[np.double_t, ndim=1] unaryscores = np.empty((
 			grammar.nonterminals), dtype='double')
@@ -890,8 +869,7 @@ def outsidescores(Grammar grammar, list sent,
 				if outside[left, right, lhs]])
 			unaryscores.fill(0.0)
 			while unaryagenda.length:
-				entry = unaryagenda.popentry()
-				lhs = entry.key
+				lhs = unaryagenda.popentry().key
 				for n in range(grammar.numrules):
 					rule = &(grammar.bylhs[lhs][n])
 					if rule.lhs != lhs:
@@ -901,7 +879,7 @@ def outsidescores(Grammar grammar, list sent,
 					prob = rule.prob * outside[left, right, lhs]
 					edge = new_CFGEdge(-prob, rule, right)
 					if edge not in cell[lhs]:
-						unaryagenda.setifbetter(rule.rhs1, edge)
+						unaryagenda.setifbetter(rule.rhs1, <CFGEdge>edge)
 						cell[lhs][edge] = edge
 						outside[left, right, rule.rhs1] += prob
 			for rhs1 in range(grammar.nonterminals):
@@ -1058,8 +1036,8 @@ def pprint_chart(chart, sent, tolabel):
 	for left, _ in enumerate(chart):
 		for right, _ in enumerate(chart[left]):
 			for label in chart[left][right] or ():
-				if not chart[left][right][label]:
-					continue
+				#if not chart[left][right][label]:
+				#	continue
 				print("%s[%d:%d] =>" % (
 						tolabel[label].decode('ascii'), left, right))
 				for edge in sorted(chart[left][right][label] or (),
@@ -1161,9 +1139,12 @@ def main():
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)
 
 	cfg2 = Grammar(rules, start='S', logprob=True)
-	chart, start, _ = parse(sent, cfg2)
+	chart, start, msg = parse(sent, cfg2)
 	from disambiguation import marginalize
 	from operator import itemgetter
 	mpp, _ = marginalize('mpp', chart, start, cfg2, 10)
 	for a, p in sorted(mpp.items(), key=itemgetter(1), reverse=True):
 		print(p, a)
+	chart1, start1, msg1 = symbolicparse(sent, cfg2)
+	print(msg)
+	print(msg1)

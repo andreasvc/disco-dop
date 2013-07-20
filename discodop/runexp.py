@@ -171,7 +171,7 @@ def startexp(
 	logging.info("%d sentences in test corpus %s/%s",
 			len(testset.parsed_sents()), corpusdir, testcorpus)
 	logging.info("%d test sentences before length restriction",
-			len(list(gold_sents.keys())[skip:skip + testnumsents]))
+			len(list(gold_sents)[skip:skip + testnumsents]))
 	lexmodel = None
 	test_tagged_sents = gold_sents
 	if postagging and postagging['method'] in ('treetagger', 'stanford'):
@@ -319,20 +319,14 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 	trees = [canonicalize(a).freeze() for a in trees]
 
 	for n, stage in enumerate(stages):
-		assert stage.mode in ("plcfrs", "pcfg", "pcfg-posterior")
 		if stage.split:
 			traintrees = [binarize(splitdiscnodes(Tree.convert(a),
 					stage.markorigin), childchar=":").freeze() for a in trees]
 			logging.info("splitted discontinuous nodes")
 		else:
 			traintrees = trees
-		assert n > 0 or not stage.prune, (
-				"need previous stage to prune, but this stage is first.")
 		secondarymodel = backtransform = None
 		if stage.dop:
-			assert stage.estimator in ("dop1", "ewe")
-			assert stage.objective in ("mpp", "mpd", "shortest",
-					"sl-dop", "sl-dop-simple")
 			if stage.usedoubledop:
 				# find recurring fragments in treebank,
 				# as well as depth-1 'cover' fragments
@@ -586,10 +580,10 @@ def worker(args):
 			prec = rec = f1score = 0
 		if f1score == 1.0:
 			exact = True
-			msg += "exact match \n"
+			msg += "\texact match \n"
 		else:
 			exact = False
-			msg += "LP %5.2f LR %5.2f LF %5.2f\n" % (
+			msg += "\tLP %5.2f LR %5.2f LF %5.2f\n" % (
 					100 * prec, 100 * rec, 100 * f1score)
 			if (candb - goldb) or (goldb - candb):
 				msg += '\t'
@@ -598,7 +592,6 @@ def worker(args):
 			if goldb - candb:
 				msg += "gold-cand=%s" % evalmod.strbracketings(goldb - candb)
 			msg += '\n\t'  # "%s\n\t" % parsetree
-		msg += "%.2fs cpu time elapsed\n" % (result.elapsedtime)
 		result.update(dict(candb=candb, exact=exact))
 		results.append(result)
 	#msg += "GOLD:   %s" % goldtree.pprint(margin=1000)
@@ -939,6 +932,15 @@ def readparam(filename):
 	params['stages'] = [DictObj({k: stage.get(k, v)
 			for k, v in DEFAULTSTAGE.items()})
 				for stage in params['stages']]
+	for n, stage in enumerate(params['stages']):
+		assert stage.mode in (
+				'plcfrs', 'pcfg', 'pcfg-posterior', 'pcfg-symbolic')
+		assert n > 0 or not stage.prune, (
+				"need previous stage to prune, but this stage is first.")
+		if stage.dop:
+			assert stage.estimator in ("dop1", "ewe")
+			assert stage.objective in ("mpp", "mpd", "shortest",
+					"sl-dop", "sl-dop-simple")
 	return params
 
 

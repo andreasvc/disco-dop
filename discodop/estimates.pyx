@@ -696,7 +696,8 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 				for dn, d in enumerate(c):
 					if d < np.inf:
 						print("%s length %d lr %d gaps %d = %g" % (
-								grammar.tolabel[an].decode('ascii'), bn, cn, dn, exp(-d)))
+								grammar.tolabel[an].decode('ascii'),
+								bn, cn, dn, exp(-d)))
 						cnt += 1
 	print(cnt)
 	print("done")
@@ -744,9 +745,9 @@ def main():
 	print(msg)
 	plcfrs.pprint_chart(estchart, sent, grammar.tolabel)
 	print('items avoided:')
-	print(list(chart.keys()))
+	print(list(chart))
 	print()
-	print(list(estchart.keys()))
+	print(list(estchart))
 	for item in set(chart) - set(estchart):
 		print(item)
 	print()

@@ -168,13 +168,13 @@ def regular(filenames, numproc, limit, encoding):
 		assert not PARAMS['trees2'], "only supported for single treebank."
 		cover = myapply(coverfragworker, ()).get()
 		if PARAMS['approx']:
-			fragments.update(zip(cover.keys(),
+			fragments.update(zip(cover,
 					exactcounts(PARAMS['trees1'], PARAMS['trees1'],
 					cover.values(), fast=not PARAMS['quadratic'])))
 		else:
 			fragments.update(cover)
 		logging.info("merged %d cover fragments", len(cover))
-	fragmentkeys = list(fragments.keys())
+	fragmentkeys = list(fragments)
 	if PARAMS['nofreq']:
 		counts = None
 	elif PARAMS['approx']:
@@ -229,7 +229,7 @@ def batch(outputdir, filenames, limit, encoding):
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'])
 		counts = None
-		fragmentkeys = list(fragments.keys())
+		fragmentkeys = list(fragments)
 		if PARAMS['approx'] or not fragments:
 			counts = fragments.values()
 		elif not PARAMS['nofreq']:
@@ -414,7 +414,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 	before = len(fragments)
 	fragments.update(cover)
 	logging.info("merged %d unseen cover fragments", len(fragments) - before)
-	fragmentkeys = list(fragments.keys())
+	fragmentkeys = list(fragments)
 	bitsets = [fragments[a] for a in fragmentkeys]
 	countchunk = len(bitsets) // numproc + 1
 	work = list(range(0, len(bitsets), countchunk))

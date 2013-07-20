@@ -501,7 +501,7 @@ def transitiveclosure(eqpairs):
 		edges[b].add(a)
 	eqclasses = {}
 	seen = set()
-	for elem in set(edges.keys()):
+	for elem in set(edges):
 		if elem in seen:
 			continue
 		eqclasses[elem] = set()

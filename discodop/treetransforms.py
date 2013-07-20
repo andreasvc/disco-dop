@@ -1002,7 +1002,7 @@ def main():
 	end = int(end) if end else None
 	trees = list(corpus.parsed_sents().values())[start:end]
 	sents = list(corpus.sents().values())[start:end]
-	keys = list(corpus.sents().keys())[start:end]
+	keys = list(corpus.sents())[start:end]
 	print("read %d trees from %s" % (len(trees), infilename))
 
 	# apply transformation
