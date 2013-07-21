@@ -152,7 +152,8 @@ def startexp(
 			trainnumsents = int(trainnumsents * len(corpus.sents()))
 		trees = list(corpus.parsed_sents().values())[:trainnumsents]
 		sents = list(corpus.sents().values())[:trainnumsents]
-		train_tagged_sents = list(corpus.tagged_sents().values())[:trainnumsents]
+		train_tagged_sents = [[(a, b) for a, (_, b) in zip(sent, tree.pos())]
+				for tree, sent in zip(trees, sents)]
 		blocks = list(corpus.blocks().values())[:trainnumsents]
 		assert trees, "training corpus should be non-empty"
 		logging.info("%d training sentences before length restriction",

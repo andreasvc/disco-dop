@@ -633,7 +633,7 @@ class Tree(list):
 	def draw(self):
 		""" Return an ASCII art visualization of tree. """
 		from .treedraw import DrawTree
-		return DrawTree(self, self.leaves()).text()
+		return DrawTree(self, [str(a) for a in self.leaves()]).text()
 
 
 class ImmutableTree(Tree):

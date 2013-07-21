@@ -34,7 +34,6 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			wordtags[word, tag] += 1
 			sig = unknownword(word, n, lexicon)
 			wordsig[word] = sig  # NB: sig may also depend on n and lexicon
-			sigs[sig] += 1
 			sigtag[sig, tag] += 1
 	if openclassthreshold:
 		openclasstags = {tag: len({w.lower() for w in ws})
@@ -48,6 +47,11 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	else:
 		openclasstags = {}
 		openclasswords = {}
+	for sent in tagged_sents:
+		for n, (word, _) in enumerate(sent):
+			if word not in lexicon:
+				sig = unknownword(word, n, lexicon)
+				sigs[sig] += 1
 	msg = "known words: %d, signature types seen: %d\n" % (
 			len(lexicon), len(sigs))
 	msg += "open class tags: {%s}" % ", ".join(

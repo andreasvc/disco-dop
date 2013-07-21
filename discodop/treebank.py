@@ -362,6 +362,17 @@ class AlpinoCorpusReader(CorpusReader):
 		return block.find('sentence').text.split()
 
 
+def numbase(key):
+	""" Turn a file name into a numeric sorting key if possible. """
+	path, base = os.path.split(key)
+	base = base.split(".", 1)
+	try:
+		base[0] = int(base[0])
+	except ValueError:
+		pass
+	return [path] + base
+
+
 def exportsplit(line):
 	""" take a line in export format and split into fields,
 	add dummy fields lemma, sec. edge if those fields are absent. """
@@ -1177,17 +1188,6 @@ def puncttest():
 			assert fanout(a) == fanout(b), "%d %d\n%s\n%s" % (
 				fanout(a), fanout(b), a, b)
 	print()
-
-
-def numbase(key):
-	""" Turn a file name into a numeric sorting key if possible. """
-	path, base = os.path.split(key)
-	base = base.split(".", 1)
-	try:
-		base[0] = int(base[0])
-	except ValueError:
-		pass
-	return [path] + base
 
 
 def main():
