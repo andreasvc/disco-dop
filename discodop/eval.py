@@ -327,7 +327,7 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			print("_______________________________________",
 					"       ____________________")
 			tags = multiset(tag for _, tag in goldpos)
-			wrong = multiset((g, c)
+			wrong = multiset((c, g)
 					for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
 			for tag, mismatch in zip_longest(tags.most_common(10),
 					wrong.most_common(10)):

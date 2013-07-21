@@ -152,8 +152,9 @@ def startexp(
 			trainnumsents = int(trainnumsents * len(corpus.sents()))
 		trees = list(corpus.parsed_sents().values())[:trainnumsents]
 		sents = list(corpus.sents().values())[:trainnumsents]
-		train_tagged_sents = [[(a, b) for a, (_, b) in zip(sent, tree.pos())]
-				for tree, sent in zip(trees, sents)]
+		train_tagged_sents = [[(a, b) for a, (_, b)
+				in zip(sent, sorted(tree.pos()))]
+					for tree, sent in zip(trees, sents)]
 		blocks = list(corpus.blocks().values())[:trainnumsents]
 		assert trees, "training corpus should be non-empty"
 		logging.info("%d training sentences before length restriction",
@@ -581,7 +582,7 @@ def worker(args):
 			prec = rec = f1score = 0
 		if f1score == 1.0:
 			exact = True
-			msg += "\texact match \n"
+			msg += "\texact match"
 		else:
 			exact = False
 			msg += "\tLP %5.2f LR %5.2f LF %5.2f\n" % (
@@ -592,7 +593,8 @@ def worker(args):
 				msg += "cand-gold=%s " % evalmod.strbracketings(candb - goldb)
 			if goldb - candb:
 				msg += "gold-cand=%s" % evalmod.strbracketings(goldb - candb)
-			msg += '\n\t'  # "%s\n\t" % parsetree
+			#msg += "\n%s" % parsetree
+		msg += '\n'
 		result.update(dict(candb=candb, exact=exact))
 		results.append(result)
 	#msg += "GOLD:   %s" % goldtree.pprint(margin=1000)

@@ -566,29 +566,29 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 def sethead(child):
 	""" mark node as head in an auxiliary field. """
 	child.source = getattr(child, "source", 6 * [''])
-	if "HD" not in child.source[FUNC].split("-"):
+	if 'HD' not in child.source[FUNC].upper().split("-"):
 		x = list(child.source)
-		if child.source[FUNC] in (None, '', "--"):
-			x[FUNC] = "HD"
+		if child.source[FUNC] in (None, '', '--'):
+			x[FUNC] = 'HD'
 		else:
-			x[FUNC] = x[FUNC] + "-HD"
+			x[FUNC] = x[FUNC] + '-HD'
 		child.source = tuple(x)
 
 
 def headmark(tree):
 	""" add marker to label of head node. """
-	head = [a for a in tree if hasattr(a, "source")
-			and "HD" in a.source[FUNC].split("-")]
+	head = [a for a in tree if hasattr(a, 'source')
+			and 'HD' in a.source[FUNC].upper().split('-')]
 	if not head:
 		return
-	head[-1].label += "-HD"
+	head[-1].label += '-HD'
 
 
 def headorder(tree, headfinal, reverse):
 	""" change order of constituents based on head (identified with
 	function tag). """
 	head = [n for n, a in enumerate(tree)
-		if hasattr(a, "source") and "HD" in a.source[FUNC].split("-")]
+		if hasattr(a, "source") and 'HD' in a.source[FUNC].upper().split("-")]
 	if not head:
 		return
 	headidx = head.pop()
@@ -706,7 +706,7 @@ def function(tree):
 def ishead(tree):
 	""" Test whether this node is the head of the parent constituent. """
 	if hasattr(tree, "source"):
-		return "HD" in tree.source[FUNC].upper().split("-")
+		return 'HD' in tree.source[FUNC].upper().split("-")
 	else:
 		return False
 
