@@ -22,7 +22,7 @@ from cpython.array cimport array, clone
 from cpython.set cimport PySet_GET_SIZE
 from containers cimport ULong, UInt
 from containers cimport Node, NodeArray, Ctrees
-from bit cimport anextset, abitcount, subset, ulongcpy, ulongset, \
+from bit cimport iteratesetbits, abitcount, subset, ulongcpy, ulongset, \
 		setunioninplace
 
 cdef extern from "macros.h":
@@ -203,13 +203,15 @@ cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
 	each recursive step. 'n' is the identifier of this tree which is stored
 	with extracted fragments. """
 	cdef ULong *bitset = &CST[j * SLOTS]
-	cdef short i = anextset(bitset, 0, SLOTS)
+	cdef ULong cur = bitset[0]
+	cdef short idx = 0
+	cdef short i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	while i != -1:
 		ulongset(scratch, 0UL, SLOTS)
 		extractat(CST, scratch, a, b, i, j, SLOTS)
 		setrootid(scratch, i, n, SLOTS)
 		results.add(wrap(scratch, SLOTS))
-		i = anextset(bitset, i + 1, SLOTS)
+		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	if b[j].left >= 0:
 		extractbitsets(CST, a, b, b[j].left, n, results, scratch, SLOTS)
 		if b[j].right >= 0:
@@ -252,6 +254,8 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		ULong *bitset
 		NodeArray a, b
 		Node *anodes, *bnodes
+		ULong cur
+		short idx
 	if indices:
 		theindices = [multiset() for _ in bitsets]
 	else:
@@ -262,11 +266,13 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bitset = getpointer(wrapper)
 		a = trees1.trees[getid(bitset, SLOTS)]  # fragment came from this tree
 		anodes = &trees1.nodes[a.offset]
-		i = anextset(bitset, 0, SLOTS)
+		idx = 0
+		cur = bitset[idx]
+		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 		assert i != -1
 		candidates = <set>(trees2.treeswithprod[anodes[i].prod]).copy()
 		while True:
-			i = anextset(bitset, i + 1, SLOTS)
+			i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 			if i == -1 or i >= a.len:  # FIXME. why is 2nd condition necessary?
 				break
 			candidates &= <set>(trees2.treeswithprod[anodes[i].prod])

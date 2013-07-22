@@ -14,6 +14,7 @@ cdef extern from "macros.h":
 	int BITSLOT(int b)
 	ULong BITMASK(int b)
 	ULong TESTBIT(ULong a[], int b)
+	void CLEARBIT(ULong a[], int b)
 
 # cpdef functions defined in bit.pyx
 #on python integers
@@ -58,6 +59,7 @@ cdef inline int nextset(ULLong vec, UInt pos):
 	#return x ? __builtin_ctzll(x) : -1
 	#return  __builtin_ffsll(x) - 1
 
+
 cdef inline int nextunset(ULLong vec, UInt pos):
 	""" Return next unset bit starting from pos.
 	>> nextunset(0b001101, 2)
@@ -67,6 +69,7 @@ cdef inline int nextunset(ULLong vec, UInt pos):
 	"""
 	cdef ULLong x = ~vec & (~0ULL << pos)
 	return __builtin_ctzll(x) if x else (sizeof(ULLong) * 8)
+
 
 cdef inline bint testbit(ULLong vec, UInt pos):
 	""" Mask a particular bit, return nonzero if set
@@ -79,6 +82,7 @@ cdef inline bint testbit(ULLong vec, UInt pos):
 	"""
 	return vec & (1ULL << pos) != 0
 
+
 cdef inline bint testbitint(UInt arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
 	>>> testbit(0b0011101, 0)
@@ -87,12 +91,14 @@ cdef inline bint testbitint(UInt arg, UInt pos):
 	0"""
 	return arg & (1ULL << pos)
 
+
 cdef inline int bitlength(ULLong vec):
 	""" number of bits needed to represent vector
 	(equivalently: index of most significant set bit, plus one)
 	>>> bitlength(0b0011101)
 	5"""
 	return sizeof(vec) * 8 - __builtin_clzll(vec)
+
 
 cdef inline int abitcount(ULong *vec, short slots):
 	""" number of set bits in variable length bitvector """
@@ -102,6 +108,7 @@ cdef inline int abitcount(ULong *vec, short slots):
 		result += __builtin_popcountl(vec[a])
 	return result
 
+
 cdef inline int abitlength(ULong *vec, short slots):
 	""" number of bits needed to represent vector
 	(equivalently: index of most significant set bit, plus one)"""
@@ -109,6 +116,7 @@ cdef inline int abitlength(ULong *vec, short slots):
 	while a and not vec[a]:
 		a -= 1
 	return (a + 1) * sizeof(ULong) * 8 - __builtin_clzll(vec[a])
+
 
 cdef inline int anextset(ULong *vec, UInt pos, short slots):
 	""" return next set bit starting from pos, -1 if there is none. """
@@ -124,6 +132,7 @@ cdef inline int anextset(ULong *vec, UInt pos, short slots):
 		x = vec[a]
 	return a * BITSIZE + __builtin_ctzl(x)
 
+
 cdef inline int anextunset(ULong *vec, UInt pos, short slots):
 	""" return next unset bit starting from pos. """
 	cdef short a = BITSLOT(pos)
@@ -137,6 +146,31 @@ cdef inline int anextunset(ULong *vec, UInt pos, short slots):
 			return a * BITSIZE
 		x = vec[a]
 	return a * BITSIZE + __builtin_ctzl(~x)
+
+
+cdef inline short iteratesetbits(ULong *vec, short slots,
+		ULong *cur, short *idx):
+	""" iterate over set bits in an array of unsigned long with 'slots'
+	elements. cur and idx are pointers to variables to maintain state, idx
+	should be initialized to 0, and cur to the first element of the bit array
+	vec. returns the index of a set bit, returns -1 if there are no more set
+	bits. result of calling stopped iterator is undefined.
+	e.g.,
+	ULong vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
+	short idx = 0
+	iteratesetbits(vec, 0, 4, &cur, &idx) # returns 0
+	iteratesetbits(vec, 0, 4, &cur, &idx) # returns 4
+	iteratesetbits(vec, 0, 4, &cur, &idx) # returns -1 """
+	cdef short tmp
+	while not cur[0]:
+		idx[0] += 1
+		if idx[0] >= slots:
+			return -1
+		cur[0] = vec[idx[0]]
+	tmp = __builtin_ctzl(cur[0])  # index of bit in current slot
+	CLEARBIT(cur, tmp)
+	return idx[0] * BITSIZE + tmp
+
 
 cdef inline void ulongset(ULong *dest, ULong value, short slots):
 	""" Like memset, but set one ULong at a time; should be faster
@@ -156,12 +190,14 @@ cdef inline void ulongcpy(ULong *dest, ULong *src, short slots):
 	""" memcpy wrapper for unsigned long arrays. """
 	memcpy(<char *>dest, <char *>src, slots * sizeof(ULong))
 
+
 cdef inline void setintersectinplace(ULong *dest, ULong *src, short slots):
 	""" dest gets the intersection of dest and src;
 	both operands must have at least `slots' slots. """
 	cdef short a
 	for a in range(slots):
 		dest[a] &= src[a]
+
 
 cdef inline void setunioninplace(ULong *dest, ULong *src, short slots):
 	""" dest gets the union of dest and src; both operands must have at least
@@ -170,12 +206,14 @@ cdef inline void setunioninplace(ULong *dest, ULong *src, short slots):
 	for a in range(slots):
 		dest[a] |= src[a]
 
+
 cdef inline void setunion(ULong *dest, ULong *src1, ULong *src2, short slots):
 	""" dest gets the union of src1 and src2; operands must have at least
 	`slots' slots. """
 	cdef short a
 	for a in range(slots):
 		dest[a] = src1[a] | src2[a]
+
 
 cdef inline bint subset(ULong *vec1, ULong *vec2, short slots):
 	""" test whether vec1 is a subset of vec2; i.e., all bits of vec1 should be
