@@ -22,7 +22,7 @@ class CorpusReader(object):
 	""" Abstract corpus reader. """
 	def __init__(self, root, fileids, encoding='utf-8', headrules=None,
 				headfinal=True, headreverse=False, markheads=False, punct=None,
-				dounfold=False, functiontags=None, morphaspos=False):
+				transformations=None, functions=None, morphology=None):
 		""" headrules: if given, read rules for assigning heads and apply them
 				by ordering constituents according to their heads
 			headfinal: whether to put the head in final or in frontal position
@@ -30,9 +30,8 @@ class CorpusReader(object):
 				before or after the head. When true, the side on which the head
 				is will be the reversed side.
 			markheads: add '^' to phrasal label of heads.
-			dounfold: whether to apply corpus transformations
-			functiontags: if True, add function tags to node labels;
-					if False, strip them away if present.
+			transformations: None, or a sequence of corpus transformations.
+				For the list of possible transformations, see unfold().
 			punct: one of ...
 				None: leave punctuation as is.
 				'move': move punctuation to appropriate constituents
@@ -40,22 +39,35 @@ class CorpusReader(object):
 				'remove': eliminate punctuation.
 				'root': attach punctuation directly to root
 						(as in original Negra/Tiger treebanks).
-			morphaspos: use morphological tags as POS tags.
-			"""  # idea: put morphology tag between POS and word
-			# (NN (N[soort,mv,basis] problemen))
+			functions: one of ...
+				None: leave syntactic labels as is.
+				'add': concatenate grammatical function to syntactic label,
+					separated by a hypen: e.g., NP => NP-SBJ
+				'remove': strip away hyphen-separated grammatical function,
+					e.g., NP-SBJ => NP
+				'replace': replace syntactic label with grammatical function,
+					e.g., NP => SBJ
+			morphology: one of ...
+				None: use POS tags as preterminals
+				'add': concatenate morphological information to POS tags,
+					e.g., DET/sg.def
+				'replace': use morphological information as preterminal label
+				'between': add node with morphological information between
+					POS tag and word, e.g., (DET (sg.def the)) """
 		self.reverse = headreverse
 		self.headfinal = headfinal
 		self.markheads = markheads
-		self.unfold = dounfold
-		self.functiontags = functiontags
+		self.transformations = transformations
+		self.functions = functions
 		self.punct = punct
-		self.morphaspos = morphaspos
+		self.morphology = morphology
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
 		if fileids == '':
 			fileids = '*'
 		self._filenames = sorted(glob(os.path.join(root, fileids)), key=numbase)
-		assert punct in (None, "move", "remove", "root")
+		assert functions in (None, 'add', 'remove', 'replace'), functions
+		assert punct in (None, 'move', 'remove', 'root')
 		assert self._filenames, (
 				"no files matched pattern %s" % os.path.join(root, fileids))
 		self._sents_cache = None
@@ -121,16 +133,15 @@ class CorpusReader(object):
 				a.sort(key=Tree.leaves)
 		elif self.punct == "root":
 			punctroot(tree, sent)
-		if self.unfold:
-			tree = unfold(tree)
+		if self.transformations:
+			tree = unfold(tree, sent, self.transformations)
 		if self.headrules:
 			for node in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
 				sethead(headfinder(node, self.headrules))
 				headorder(node, self.headfinal, self.reverse)
 				if self.markheads:
 					headmark(node)
-		if self.functiontags:
-			addfunctions(tree)
+		handlefunctions(self.functions, tree)
 		return tree
 
 	def _word(self, block, orig=False):
@@ -177,7 +188,7 @@ class NegraCorpusReader(CorpusReader):
 		return result
 
 	def _parse(self, block):
-		tree = exportparse(block, self.morphaspos)
+		tree = exportparse(block, self.morphology)
 		sent = self._word(block, orig=True)
 		return tree, sent
 
@@ -335,17 +346,10 @@ class AlpinoCorpusReader(CorpusReader):
 				result = ParentedTree(label.upper(), children)
 			else:  # leaf node
 				assert 'word' in node.keys()
-				if self.morphaspos:
-					label = source[MORPH].replace('(', '[').replace(')', ']')
-				else:
-					label = source[TAG]
-				idx = label.find('[')
-				if idx == -1:
-					idx = len(label)
-				label = ''.join((label[:idx].upper(), label[idx:]))
 				children = list(range(int(node.get('begin')),
 						int(node.get('end'))))
-				result = ParentedTree(label, children)
+				result = ParentedTree('', children)
+				handlemorphology(self.morphology, result, source)
 			assert children, node.tostring()
 			result.source = source
 			return result
@@ -390,7 +394,7 @@ def exportsplit(line):
 	return fields
 
 
-def exportparse(block, morphaspos=False):
+def exportparse(block, morphology=None):
 	""" Given a tree in export format as a list of lists,
 	construct a Tree object for it. """
 	def getchildren(parent):
@@ -402,11 +406,8 @@ def exportparse(block, morphaspos=False):
 			if m:
 				child = ParentedTree(source[TAG], getchildren(m.group(1)))
 			else:  # POS + terminal
-				# escape Negra's paren tag to avoid hassles
-				# w/bracket notation of trees
-				label = source[MORPH if morphaspos else TAG]
-				child = ParentedTree(
-						label.replace('(', '[').replace(')', ']'), [n])
+				child = ParentedTree('', [n])
+				handlemorphology(morphology, child, source)
 			child.source = tuple(source)
 			results.append(child)
 		return results
@@ -496,31 +497,53 @@ def writetree(tree, sent, n, fmt, headrules=None):
 		raise ValueError("unrecognized format: %r" % fmt)
 
 
-def addfunctions(tree, pos=False, top=False):
+def handlefunctions(action, tree, pos=False, top=False):
 	""" Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
+	action: one of {None, 'add', 'replace', 'remove'}
 	pos: whether to add function tags to POS tags.
 	top: whether to add function tags to the top node."""
+	if action in (None, 'leave'):
+		return
 	for a in tree.subtrees():
-		if not top and a is tree:  # skip TOP label
-			continue
-		if pos or isinstance(a[0], Tree):
-			# test for non-empty function tag (e.g., "---" is considered empty)
-			if hasattr(a, "source") and any(a.source[FUNC].split("-")):
-				a.label += "-%s" % a.source[FUNC].split("-")[0].upper()
+		if action == 'remove':
+			# e.g., NP-SUBJ or NP=2 => NP, but don't touch -NONE-
+			x = a.label.find('-')
+			if x > 0:
+				a.label = a.label[:x]
+			x = a.label.find('=')
+			if x > 0:
+				a.label = a.label[:x]
+		else:
+			if not top and a is tree:  # skip TOP label
+				continue
+			if pos or isinstance(a[0], Tree):
+				# test for non-empty function tag ("---" is considered empty)
+				if hasattr(a, "source") and any(a.source[FUNC].split("-")):
+					func = a.source[FUNC].split("-")[0].upper()
+					if action == 'add':
+						a.label += "-%s" % func
+					elif action == 'replace':
+						a.label = func
 
 
-def stripfunctions(tree):
-	""" Remove function tags from phrasal labels e.g., 'VP-HD' => 'VP' """
-	for a in tree.subtrees():
-		x = a.label.find("-")
-		y = a.label.find("=")
-		if x >= 1:
-			a.label = a.label[:x]
-		if y >= 0:
-			a.label = a.label[:y]
-		if a.label[0] != "-":
-			a.label = a.label.split("-")[0].split("=")[0]
-
+def handlemorphology(action, preterminal, source):
+	""" Given a preterminal, augment or replace its label with morphological
+	information. """
+	# escape any parentheses to avoid hassles w/bracket notation of trees
+	tag = source[TAG].replace('(', '[').replace(')', ']')
+	morph = source[MORPH].replace('(', '[').replace(')', ']')
+	if action in (None, 'no'):
+		preterminal.label = tag
+	elif action == 'add':
+		preterminal.label = '%s/%s' % (tag, morph)
+	elif action == 'replace':
+		preterminal.label = morph
+	elif action == 'between':
+		preterminal[:] = preterminal.__class__(preterminal.label, preterminal)
+		preterminal.label = morph
+	else:
+		raise ValueError
+	return preterminal
 
 def readheadrules(filename):
 	""" Read a file containing heuristic rules for head assigment.
@@ -543,7 +566,7 @@ def readheadrules(filename):
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	""" use head finding rules to select one child of tree as head. """
 	candidates = [a for a in tree if hasattr(a, "source")
-			and headlabels.intersection(a.source[FUNC].split("-"))]
+			and headlabels.intersection(a.source[FUNC].upper().split("-"))]
 	if candidates:
 		return candidates[0]
 	for lr, heads in headrules.get(tree.label, []):
@@ -721,8 +744,12 @@ def labels(tree):
 	return [a.label for a in tree if isinstance(a, Tree)]
 
 
-def unfold(tree, transformations=('S-RC', 'VP-GF', 'NP')):
-	""" Perform some transformations, specific to Negra and WSJ treebanks. """
+def unfold(tree, sent, transformations=('S-RC', 'VP-GF', 'NP')):
+	""" Perform some transformations, specific to Negra and WSJ treebanks.
+	negra:  transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')
+	wsj:    transformations=('S-WH', 'VP-HD', 'S-INF')
+	alpino: transformations=('PUNCT', )
+	"""
 	for name in transformations:
 		# negra
 		if name == 'S-RC':  # relative clause => S becomes SRC
@@ -735,6 +762,9 @@ def unfold(tree, transformations=('S-RC', 'VP-GF', 'NP')):
 		elif name == 'NP':  # case
 			for np in tree.subtrees(lambda n: n.label == "NP"):
 				np.label += "-" + function(np)
+		elif name == 'PUNCT':  # distinguish . ? !
+			for punct in tree.subtrees(lambda n: n.label == "$."):
+				punct.label += "-" + sent[punct[0]]
 		# wsj
 		elif name == "S-WH":
 			for sbar in tree.subtrees(lambda n: n.label == "SBAR"):
@@ -1198,7 +1228,7 @@ def main():
 	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
 			headrules=headrules)
 	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-			headrules=headrules, dounfold=True)
+			headrules=headrules, transformations=('S-RC', 'VP-GF', 'NP'))
 	print("\nunfolded")
 	correct = exact = d = 0
 	for a, b, c in islice(zip(n.parsed_sents().values(),
@@ -1218,7 +1248,7 @@ def main():
 						"fold-gold", set(b1) - set(b2))
 				print(a)
 				print(foldb)
-				addfunctions(a)
+				handlefunctions('add', a)
 				print(a)
 				print(b)
 				print()

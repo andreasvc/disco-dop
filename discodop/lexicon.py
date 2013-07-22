@@ -39,8 +39,9 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		openclasstags = {tag: len({w.lower() for w in ws})
 				for tag, ws in wordsfortag.items()
 				if len({w.lower() for w in ws}) >= openclassthreshold}
-		closedclasswords = {word for tag in set(tags) - set(openclasstags)
-					for word in wordsfortag[tag]}
+		closedclasstags = set(tags) - set(openclasstags)
+		closedclasswords = {word for tag in closedclasstags
+				for word in wordsfortag[tag]}
 		openclasswords = lexicon - closedclasswords
 		# add rare closed-class words back to lexicon
 		lexicon.update(closedclasswords)

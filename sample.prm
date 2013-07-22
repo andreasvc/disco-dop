@@ -41,11 +41,28 @@ testcorpus="sample2.export", testencoding="iso-8859-1",
 evalparam="proper.prm", # EVALB-style parameter file
 
 punct=None, # options:
-    #None: leave punctuation as-is
-    #'move': re-attach punctuation to appropriate constituents
-    #'remove': remove all punctuation
-    #'root': attach punctuation under root node
-unfolded=False, # apply transformations for Negra/Tiger to make trees less flat
+#	None: leave punctuation as-is
+#	'move': re-attach punctuation to appropriate constituents
+#	'remove': remove all punctuation
+#	'root': attach punctuation under root node
+functions=None,  # options:
+#	None: leave syntactic labels as is
+#	'add': concatenate grammatical function to syntactic label,
+#		separated by a hypen: e.g., NP => NP-SBJ
+#	'remove': strip away hyphen-separated grammatical function
+#		from syntactic label, e.g., NP-SBJ => NP
+#	'replace': replace syntactic label with grammatical function,
+#		e.g., NP => SBJ
+morphology=None,  # options:
+#	None: use POS tags as preterminals
+#	'add': concatenate morphological information to POS tags,
+#		e.g., DET/sg.def
+#	'replace': use morphological information as preterminal label
+#	'between': add node with morphological information between
+#		POS tag and word, e.g., (DET (sg.def the))
+
+transformations=None, # apply transformations for Negra/Tiger to make trees less flat
+relationalrealizational=False,  # whether to apply RR-transform
 
 # postagging: pass None to use tags from treebank.
 postagging=dict(

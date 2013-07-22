@@ -62,14 +62,22 @@ options may consist of (* marks default option):
   --headrules x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
   --markheads    mark heads with '^' in phrasal labels.
-  --morphaspos   for input, use morphology tags instead of POS tags
-  --functions [add|remove]
-                 for input, add or remove function tags to phrasal labels
   --punct x      possible options:
                  remove: remove any punctuation.
                  move: re-attach punctuation to nearest constituent to minimize
                        discontinuity.
                  restore: attach punctuation under root node.
+  --functions x  'leave': (default): leave syntactic labels as is,
+                 'remove': strip away hyphen-separated function labels
+                 'add': concatenate syntactic categories with functions,
+                 'replace': replace syntactic labels with grammatical functions.
+  --morphology x 'no' (default): use POS tags as preterminals
+                 'add': concatenate morphological information to POS tags,
+                     e.g., DET/sg.def
+                 'replace': use morphological information as preterminal label
+                 'between': add node with morphological information between
+                     POS tag and word, e.g., (DET (sg.def the))
+
 Note: some of these transformations are specific to discontinuous treebanks,
     specifically the Negra/Tiger treebanks. In the output only POS & phrasal
     labels are guaranteed to be retained.
@@ -726,7 +734,7 @@ def postorder(tree, f=None):
 
 
 def canonicalize(tree):
-	""" canonical linear precedence (of first component of each node) order """
+	""" restore canonical linear precedence order. tree modified in-place. """
 	for a in postorder(tree, lambda n: isinstance(n[0], Tree)):
 		a.sort(key=lambda n: n.leaves())
 	return tree
@@ -780,13 +788,6 @@ def splitdiscnodes(tree, markorigin=False):
 	>>> print(splitdiscnodes(tree, markorigin=True))
 	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 \
 		(CARD 4) (VVPP 5)) (VAINF 6))) """
-	def label(child, childnodes, n):
-		""" Create a label for the component of a discontinuous constituent,
-		with the amount of context set by markorigin. """
-		if markorigin:
-			return "%s*%d" % (child.label, n)
-		else:
-			return '%s*' % child.label
 	treeclass = tree.__class__
 	for node in postorder(tree):
 		nodes = list(node)
@@ -795,7 +796,8 @@ def splitdiscnodes(tree, markorigin=False):
 			if disc(child):
 				childnodes = list(child)
 				child[:] = []
-				node.extend(treeclass(label(child, childnodes, n), childsubset)
+				node.extend(treeclass(("%s*%d" % (child.label, n)
+						if markorigin else '%s*' % child.label), childsubset)
 						for n, childsubset in enumerate(contsets(childnodes)))
 			else:
 				node.append(child)
@@ -975,10 +977,10 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from .treebank import getreader, writetree, readheadrules
-	flags = ('markorigin', 'markheads', 'morphaspos')
+	flags = ('markorigin', 'markheads')
 	options = ('factor=', 'headrules=', 'markorigin=', 'inputfmt=',
 			'outputfmt=', 'inputenc=', 'outputenc=', 'slice=', 'punct=',
-			'functions=')
+            'functions=', 'morphology=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "h:v:", flags + options)
 		action, infilename, outfilename = args
@@ -993,10 +995,9 @@ def main():
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get("--headrules"),
 			markheads='--markheads' in opts,
-			morphaspos='--morphaspos' in opts,
-			functiontags={'add': True, 'remove': False,
-					None: None}[opts.get('--functions')],
-			punct=opts.get("--punct"))
+			punct=opts.get("--punct"),
+			functions=opts.get('--functions'),
+			morphology=opts.get('--morphology'))
 	start, end = opts.get('--slice', ':').split(':')
 	start = int(start) if start else None
 	end = int(end) if end else None

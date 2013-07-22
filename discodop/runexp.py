@@ -61,8 +61,9 @@ def startexp(
 		traincorpus="sample2.export", trainencoding="iso-8859-1",
 		testcorpus="sample2.export", testencoding="iso-8859-1",
 		punct=None,  # options: move, remove, root
-		functiontags=False,  # whether to add/strip function tags from node labels
-		unfolded=False,
+		functions=None,  # options None, 'add', 'remove', 'replace'
+		morphology=None,  # choices: None, 'add', 'replace', 'between'
+		transformations=None,  # apply treebank transformations
 		testmaxwords=40,
 		trainmaxwords=40,
 		trainnumsents=2,
@@ -83,7 +84,6 @@ def startexp(
 			openclassthreshold=50,  # add unseen tags for known words; 0: disable
 			simplelexsmooth=True,  # disable sophisticated smoothing
 		),
-		morphaspos=False,  # use morphological tags as POS tags
 		bintype="binarize",  # choices: binarize, optimal, optimalhead
 		factor="right",
 		revmarkov=True,
@@ -143,9 +143,9 @@ def startexp(
 	corpusreader = getreader(corpusfmt)
 	if not rerun:
 		corpus = corpusreader(corpusdir, traincorpus, encoding=trainencoding,
-			headrules=headrules, headfinal=True, headreverse=False,
-			punct=punct, functiontags=functiontags, dounfold=unfolded,
-			morphaspos=morphaspos)
+				headrules=headrules, headfinal=True, headreverse=False,
+				punct=punct, functions=functions, morphology=morphology,
+				transformations=transformations)
 		logging.info("%d sentences in training corpus %s/%s",
 				len(corpus.parsed_sents()), corpusdir, traincorpus)
 		if isinstance(trainnumsents, float):
@@ -165,7 +165,7 @@ def startexp(
 			len(trees), trainmaxwords)
 
 	testset = corpusreader(corpusdir, testcorpus, encoding=testencoding,
-			punct=punct, morphaspos=morphaspos, functiontags=functiontags)
+			punct=punct, morphology=morphology, functions=functions)
 	gold_sents = testset.tagged_sents()
 	test_parsed_sents = testset.parsed_sents()
 	if skiptrain:
@@ -223,6 +223,8 @@ def startexp(
 				postagging['unknownwordfun'], lexicon)
 		# make sure gold POS tags are not given to parser
 		usetags = False
+	elif postagging and postagging['method'] == 'unknownword' and rerun:
+		usetags = False
 	else:
 		simplelexsmooth = False
 		# give gold POS tags to parser
@@ -264,7 +266,7 @@ def startexp(
 	deleteword = evalparam.get("DELETE_WORD", ())
 
 	begin = time.clock()
-	parser = Parser(stages, unfolded=unfolded, tailmarker=tailmarker,
+	parser = Parser(stages, unfolded=transformations, tailmarker=tailmarker,
 			postagging=postagging if postagging
 			and postagging['method'] == 'unknownword' else None)
 	results = doparsing(parser=parser, testset=testset, resultdir=resultdir,
@@ -514,7 +516,7 @@ def doparsing(**kwds):
 		evaltree = goldtree.copy(True)
 		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), params.deletelabel, params.deleteword,
-				{}, {}, False)
+				{}, {})
 		goldb = evalmod.bracketings(evaltree, dellabel=params.deletelabel)
 		goldbrackets.update((sentid, (label, span)) for label, span
 				in goldb.elements())
@@ -562,7 +564,7 @@ def worker(args):
 	evaltree = goldtree.copy(True)
 	evalmod.transform(evaltree, [w for w, _ in sent],
 			evaltree.pos(), dict(evaltree.pos()),
-			prm.deletelabel, prm.deleteword, {}, {}, False)
+			prm.deletelabel, prm.deleteword, {}, {})
 	goldb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
 	results = []
 	msg = ''
@@ -571,8 +573,7 @@ def worker(args):
 		msg += result.msg
 		evaltree = result.parsetree.copy(True)
 		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-				dict(evaltree.pos()), prm.deletelabel, prm.deleteword,
-				{}, {}, False)
+				dict(evaltree.pos()), prm.deletelabel, prm.deleteword, {}, {})
 		candb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
 		if goldb and candb:
 			prec = evalmod.precision(goldb, candb)
@@ -687,7 +688,7 @@ def parsetepacoc(
 		testmaxwords=999, testnumsents=2000,
 		bintype="binarize", h=1, v=1, factor="right", tailmarker='',
 		revmarkov=False, leftmostunary=True, rightmostunary=True, pospa=False,
-		fanout_marks_before_bin=False, unfolded=False,
+		fanout_marks_before_bin=False, transformations=None,
 		usetagger='stanford', resultdir="tepacoc", numproc=1):
 	""" Parse the tepacoc test set. """
 	for stage in stages:
@@ -713,8 +714,8 @@ def parsetepacoc(
 		corpus = getreader("export")("../tiger/corpus",
 				"tiger_release_aug07.export",
 				headrules="negra.headrules" if bintype == "binarize" else None,
-				headfinal=True, headreverse=False, dounfold=unfolded,
-				punct="move", encoding='iso-8859-1')
+				headfinal=True, headreverse=False, punct="move",
+				encoding='iso-8859-1', transformations=transformations)
 		corpus_sents = list(corpus.sents().values())
 		corpus_taggedsents = list(corpus.tagged_sents().values())
 		corpus_trees = list(corpus.parsed_sents().values())
@@ -779,7 +780,7 @@ def parsetepacoc(
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
-	parser = Parser(stages, tailmarker=tailmarker, unfolded=unfolded)
+	parser = Parser(stages, tailmarker=tailmarker, unfolded=transformations)
 	for cat, testset in sorted(testsets.items()):
 		if cat == 'baseline':
 			continue

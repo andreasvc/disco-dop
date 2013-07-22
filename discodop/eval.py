@@ -35,16 +35,22 @@ and options may consist of:
 --goldfmt        ...
 --parsesfmt      Specify a corpus format. Options: export, bracket, discbracket
 --ted            Enable tree-edit distance evaluation.
---headrules x    Specify rules for head assignment; this enables dependency
+--headrules x    Specify rules for head assignment of constituents that do not
+                 already have a child marked as head; this enables dependency
                  evaluation.
-
+--functions x    'remove' (default): strip hyphen-separated function from labels
+                 'leave': leave syntactic labels as is,
+                 'add': evaluate both syntactic categories and functions,
+                 'replace': only evaluate grammatical functions.
+--morphology x   'no' (default): only evaluate POS tags,
+                 'add': concatenate morphology tags to POS tags,
+                 'replace': replace POS tags with morphology tags,
+                 'between': insert morphological node between POS tag and word.
 Example: %s sample2.export parses.export TEST.prm --goldenc iso-8859-1
 
 The parameter file supports the following additional options
 (in addition to those described in README of EVALB):
 
-PRESERVE_FUNC    default 0 (false); when true, do not strip away everything
-                 after '-' or '=' in non-terminal labels.
 DISC_ONLY        only consider discontinuous constituents for F-scores.
 TED              when enabled, give tree-edit distance scores; disabled by
                  default as these are slow to compute.
@@ -69,7 +75,7 @@ def main():
 	""" Command line interface for evaluation. """
 	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
 	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=',
-		'headrules=',)
+		'headrules=', 'functions=', 'morphology=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
 	except GetoptError as err:
@@ -96,12 +102,16 @@ def main():
 	except AssertionError as err:
 		print("error: %s" % err)
 		sys.exit(2)
-	goldencoding = opts.get('--goldenc', 'utf-8')
-	parsesencoding = opts.get('--parsesenc', 'utf-8')
 	goldreader = getreader(opts.get('--goldfmt', 'export'))
 	parsesreader = getreader(opts.get('--parsesfmt', 'export'))
-	gold = goldreader(*splitpath(goldfile), encoding=goldencoding)
-	parses = parsesreader(*splitpath(parsesfile), encoding=parsesencoding)
+	gold = goldreader(*splitpath(goldfile),
+			encoding=opts.get('--goldenc', 'utf-8'),
+			functions=opts.get('--functions', 'remove'),
+            morphology=opts.get('--morphology'))
+	parses = parsesreader(*splitpath(parsesfile),
+			encoding=opts.get('--parsesenc', 'utf-8'),
+			functions=opts.get('--functions', 'remove'),
+            morphology=opts.get('--morphology'))
 	print(doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),
@@ -155,11 +165,9 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 				"sents:\n%s\n%s" % (" ".join(csent), " ".join(gsent)))
 		# massage the data (in-place modifications)
 		transform(ctree, csent, cpos, dict(gpos), param["DELETE_LABEL"],
-				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"],
-				not param["PRESERVE_FUNC"])
+				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"])
 		transform(gtree, gsent, gpos, dict(gpos), param["DELETE_LABEL"],
-				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"],
-				not param["PRESERVE_FUNC"])
+				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"])
 		#if not gtree or not ctree:
 		#	continue
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
@@ -445,12 +453,12 @@ def readparam(filename):
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED', 'DISC_ONLY',
-			'PRESERVE_FUNC', 'TED', 'DEP')
+			'TED', 'DEP')
 	param = {'DEBUG': 0, 'MAX_ERROR': 10, 'CUTOFF_LEN': 40,
 				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': set(),
 				'DELETE_LABEL': set(), 'DELETE_WORD': set(),
 				'EQ_LABEL': set(), 'EQ_WORD': set(),
-				'DISC_ONLY': 0, 'PRESERVE_FUNC': 0, 'TED': 0, 'DEP': 0}
+				'DISC_ONLY': 0, 'TED': 0, 'DEP': 0}
 	seen = set()
 	for a in open(filename) if filename else ():
 		line = a.strip()
@@ -514,8 +522,7 @@ def transitiveclosure(eqpairs):
 	return eqclasses
 
 
-def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
-		stripfunctions):
+def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 	""" Apply the transformations according to the parameter file,
 	except for deleting the root node, which is a special case because if there
 	is more than one child it cannot be deleted. """
@@ -523,14 +530,6 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword,
 	posnodes = []
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in list(zip(count(), a))[::-1]:
-			if stripfunctions:
-				# e.g., NP-SUBJ or NP=2 => NP, but don't touch -NONE-
-				x = b.label.find("-")
-				if x > 0:
-					b.label = b.label[:x]
-				x = b.label.find("=")
-				if x > 0:
-					b.label = b.label[:x]
 			b.label = eqlabel.get(b.label, b.label)
 			if not b:
 				a.pop(n)  # remove empty nodes
@@ -585,17 +584,17 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
-			(), {}, {}, False)
+			(), {}, {})
 	>>> sorted(bracketings(tree).items())
 	[(('S', (0, 1, 2)), 1), (('VP', (0, 2)), 1)]
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("VP",), \
-			(), {}, {}, False)
+			(), {}, {})
 	>>> bracketings(tree)
 	Counter({('S', (0, 1, 2)): 1})
 	>>> tree = Tree.parse("(S (NP 1) (VP (VB 0) (JJ 2)))", parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ("S",), \
-			(), {}, {}, False)
+			(), {}, {})
 	>>> bracketings(tree, dellabel=("S",))
 	Counter({('VP', (0, 2)): 1})
 	"""
