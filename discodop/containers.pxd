@@ -290,6 +290,7 @@ cdef inline long fnv_hash(UChar *key, int size):
 cdef inline FatChartItem new_FatChartItem(UInt label):
 	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
 	item.label = label
+	# NB: since item.vec is a static array, its elements are initialized to 0.
 	return item
 
 cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):

@@ -424,14 +424,13 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 	cdef Entry entry
 	cdef LCFRSEdge edge
 	cdef FatChartItem item, sibling, newitem = new_FatChartItem(0)
-	cdef FatChartItem goal
+	cdef FatChartItem goal = new_FatChartItem(start)
 	cdef np.ndarray[np.double_t, ndim=4] outside
 	cdef double x = 0.0, y = 0.0, score, inside
 	cdef signed int length = 0, left = 0, right = 0, gaps = 0
 	cdef signed int lensent = len(sent), estimatetype = 0
 	cdef UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 	cdef ULong maxA = 0
-	goal = new_FatChartItem(start)
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
 	goal.vec[BITSLOT(lensent)] = BITMASK(lensent) - 1
 
@@ -469,6 +468,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 					if score > 300.0:
 						continue
 				newitem.label = lexrule.lhs
+				ulongset(newitem.vec, 0UL, SLOTS)
 				SETBIT(newitem.vec, i)
 				tmp = process_fatedge(newitem, score, lexrule.prob, NULL,
 						item, FATNONE, agenda, chart, viterbi, grammar,
@@ -646,6 +646,7 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 				while a != -1:
 					b = anextunset(newitem.vec, a, SLOTS)
 					#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+					ulongset(FATCOMPONENT, 0UL, SLOTS)
 					for i in range(a, b):
 						SETBIT(FATCOMPONENT.vec, i)
 					if markorigin:
