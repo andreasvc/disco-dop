@@ -646,7 +646,7 @@ cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
 				while a != -1:
 					b = anextunset(newitem.vec, a, SLOTS)
 					#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-					ulongset(FATCOMPONENT, 0UL, SLOTS)
+					ulongset(FATCOMPONENT.vec, 0UL, SLOTS)
 					for i in range(a, b):
 						SETBIT(FATCOMPONENT.vec, i)
 					if markorigin:
