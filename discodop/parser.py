@@ -175,12 +175,12 @@ def doparsing(parser, infile, out, printprob):
 class Parser(object):
 	""" An object to parse sentences following parameters given as a sequence
 	of coarse-to-fine stages. """
-	def __init__(self, stages, unfolded=False, tailmarker=None,
+	def __init__(self, stages, transformations=None, tailmarker=None,
 			postagging=None):
 		""" Parameters:
 		stages: a list of coarse-to-fine stages containing grammars and
 			parameters.
-		unfolded: reverse treebank transformations on resulting parses.
+		transformations: treebank transformations to reverse on parses.
 		tailmarker: if heads have been marked with a symbol, use this to
 			mark heads in the output.
 		postagging: if given, an unknown word model is used, consisting of a
@@ -189,7 +189,7 @@ class Parser(object):
 			- lexicon: the set of known words in the grammar.
 			- sigs: the set of word signatures occurring in the grammar. """
 		self.stages = stages
-		self.unfolded = unfolded
+		self.transformations = transformations
 		self.tailmarker = tailmarker
 		self.postagging = postagging
 
@@ -293,9 +293,9 @@ class Parser(object):
 				saveheads(parsetree, self.tailmarker)
 				unbinarize(parsetree)
 				removefanoutmarkers(parsetree)
-				if self.unfolded:
-					fold(parsetree)
-			if not start or stage.mode == 'pcfg-posterior':
+				if self.transformations:
+					fold(parsetree, self.transformations)
+			else:
 				parsetree = defaultparse([(n, t)
 						for n, t in enumerate(tags or (len(sent) * ['NONE']))])
 				parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],

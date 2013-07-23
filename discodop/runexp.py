@@ -266,8 +266,8 @@ def startexp(
 	deleteword = evalparam.get("DELETE_WORD", ())
 
 	begin = time.clock()
-	parser = Parser(stages, unfolded=transformations, tailmarker=tailmarker,
-			postagging=postagging if postagging
+	parser = Parser(stages, transformations=transformations,
+			tailmarker=tailmarker, postagging=postagging if postagging
 			and postagging['method'] == 'unknownword' else None)
 	results = doparsing(parser=parser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
@@ -780,7 +780,8 @@ def parsetepacoc(
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
-	parser = Parser(stages, tailmarker=tailmarker, unfolded=transformations)
+	parser = Parser(stages, tailmarker=tailmarker,
+			transformations=transformations)
 	for cat, testset in sorted(testsets.items()):
 		if cat == 'baseline':
 			continue

@@ -70,7 +70,7 @@ options may consist of (* marks default option):
   --functions x  'leave': (default): leave syntactic labels as is,
                  'remove': strip away hyphen-separated function labels
                  'add': concatenate syntactic categories with functions,
-                 'replace': replace syntactic labels with grammatical functions.
+                 'replace': replace syntactic labels w/grammatical functions.
   --morphology x 'no' (default): use POS tags as preterminals
                  'add': concatenate morphological information to POS tags,
                      e.g., DET/sg.def
@@ -735,7 +735,7 @@ def postorder(tree, f=None):
 
 def canonicalize(tree):
 	""" restore canonical linear precedence order. tree modified in-place. """
-	for a in postorder(tree, lambda n: isinstance(n[0], Tree)):
+	for a in postorder(tree, lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
 	return tree
 

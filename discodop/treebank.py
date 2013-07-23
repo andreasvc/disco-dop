@@ -545,6 +545,7 @@ def handlemorphology(action, preterminal, source):
 		raise ValueError
 	return preterminal
 
+
 def readheadrules(filename):
 	""" Read a file containing heuristic rules for head assigment.
 	The file containing head assignment rules for negra is part of rparse,
@@ -744,27 +745,145 @@ def labels(tree):
 	return [a.label for a in tree if isinstance(a, Tree)]
 
 
+def pop(a):
+	""" Remove this node from its parent node, if it has one.
+	Convenience function for ParentedTrees."""
+	try:
+		return a.parent.pop(a.parent_index)
+	except AttributeError:
+		return a
+
+
 def unfold(tree, sent, transformations=('S-RC', 'VP-GF', 'NP')):
 	""" Perform some transformations, specific to Negra and WSJ treebanks.
 	negra:  transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')
 	wsj:    transformations=('S-WH', 'VP-HD', 'S-INF')
-	alpino: transformations=('PUNCT', )
-	"""
+	alpino: transformations=('PUNCT', ) """
 	for name in transformations:
-		# negra
+		# negra / tiger
 		if name == 'S-RC':  # relative clause => S becomes SRC
 			for s in tree.subtrees(lambda n: n.label == "S"
 					and function(n) == "RC"):
 				s.label = "S-RC"
-		elif name == 'VP-GF':  # VP category split based on head
-			for vp in tree.subtrees(lambda n: n.label == "VP"):
-				vp.label += "-" + function(vp)
 		elif name == 'NP':  # case
 			for np in tree.subtrees(lambda n: n.label == "NP"):
 				np.label += "-" + function(np)
 		elif name == 'PUNCT':  # distinguish . ? !
 			for punct in tree.subtrees(lambda n: n.label == "$."):
 				punct.label += "-" + sent[punct[0]]
+		elif name == 'PP-NP':  # un-flatten PPs by introducing NPs
+			addtopp = ('AC', )
+			for pp in tree.subtrees(lambda n: n.label == "PP"):
+				ac = [a for a in pp if function(a) in addtopp]
+				# anything before an initial preposition goes to the PP
+				# (modifiers, punctuation), otherwise it goes to the NP;
+				# mutatis mutandis for postpositions.
+				functions = [function(x) for x in pp]
+				if "AC" in functions and "NK" in functions:
+					if functions.index("AC") < functions.index("NK"):
+						ac[:0] = pp[:functions.index("AC")]
+					if rindex(functions, "AC") > rindex(functions, "NK"):
+						ac += pp[rindex(functions, "AC") + 1:]
+				#else:
+				#	print("PP but no AC or NK", " ".join(functions))
+				nk = [a for a in pp if a not in ac]
+				# introduce a PP unless there is already an NP in the PP
+				# (annotation mistake?), or there is a PN and we want to avoid
+				# a cylic unary of NP -> PN -> NP.
+				if ac and nk and (len(nk) > 1
+						or nk[0].label not in s('NP', 'PN')):
+					pp[:] = []
+					pp[:] = ac + [ParentedTree("NP", nk)]
+		elif name == 'DP':  # introduce determiner phrases (DPs)
+			#determiners = set('ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT "
+			#	"PWS PWAT PWAV'.split())
+			determiners = {'ART'}
+			for np in list(tree.subtrees(lambda n: n.label == 'NP')):
+				if np[0].label in determiners:
+					np.label = 'DP'
+					if len(np) > 1 and np[1].label != 'PN':
+						np1 = np[1:]
+						np[1:] = []
+						np[1:] = [ParentedTree('NP', np1)]
+		elif name == 'VP-GF':  # VP category split based on head
+			for vp in tree.subtrees(lambda n: n.label == "VP"):
+				vp.label += "-" + function(vp)
+		elif name == 'VP-FIN_NEGRA':  # introduce finite VP at S level
+			# collect objects and modifiers
+			# introduce new S level for discourse markers
+			newlevel = "DM".split()
+			addtovp = "HD AC DA MO NG OA OA2 OC OG PD VO SVP".split()
+
+			def finitevp(s):
+				""" Introduce finite VPs grouping verbs and their objects. """
+				if any(x.label.startswith("V") and x.label.endswith("FIN")
+						for x in s if isinstance(x, Tree)):
+					vp = [a for a in s if function(a) in addtovp]
+					# introduce a VP unless it would lead to a unary
+					# VP -> VP production
+					if len(vp) != 1 or vp[0].label != "VP":
+						s[:] = [pop(a) for a in s if function(a) not in addtovp
+								] + [pop(a) for a in vp]
+			toplevel_s = []
+			if "S" in labels(tree):
+				toplevel_s = [a for a in tree if a.label == "S"]
+				for s in toplevel_s:
+					while function(s[0]) in newlevel:
+						s[:] = [s[0], ParentedTree("S", s[1:])]
+						s = s[1]
+						toplevel_s = [s]
+			elif "CS" in labels(tree):
+				cs = tree[labels(tree).index("CS")]
+				toplevel_s = [a for a in cs if a.label == "S"]
+			for a in toplevel_s:
+				finitevp(a)
+		elif name == 'POS-PART':  # introduce POS tag for particle verbs
+			for a in tree.subtrees(
+					lambda n: any(function(x) == "SVP" for x in n)):
+				svp = [x for x in a if function(x) == "SVP"].pop()
+				# apparently there can be a _verb_ particle without a verb.
+				# headlines? annotation mistake?
+				if any(map(ishead, a)):
+					hd = [x for x in a if ishead(x)].pop()
+					if hd.label != a.label:
+						particleverb = ParentedTree(hd.label, [hd, svp])
+						a[:] = [particleverb if ishead(x) else x
+											for x in a if function(x) != "SVP"]
+		elif name == 'SBAR':  # introduce SBAR level
+			sbarfunc = "CP".split()
+			# in the annotation, complementizers belong to the first S
+			# in S conjunctions, even when they appear to apply to the whole
+			# conjunction.
+			for s in list(tree.subtrees(lambda n: n.label == "S"
+					and function(n[0]) in sbarfunc and len(n) > 1)):
+				s.label = "SBAR"
+				s[:] = [s[0], ParentedTree("S", s[1:])]
+		elif name == 'NEST':  # introduce nested structures for modifiers
+			# (iterated adjunction instead of sister adjunction)
+			adjunctable = set("NP".split())  # PP AP VP
+			for a in list(tree.subtrees(lambda n: n.label in adjunctable
+					and any(function(x) == "MO" for x in n))):
+				modifiers = [x for x in a if function(x) == "MO"]
+				if min(n for n, x in enumerate(a) if function(x) == "MO") == 0:
+					modifiers[:] = modifiers[::-1]
+				while modifiers:
+					modifier = modifiers.pop()
+					a[:] = [ParentedTree(a.label,
+							[x for x in a if x != modifier]), modifier]
+					a = a[0]
+		elif name == 'UNARY':  # introduce phrasal projections for single tokens
+			# currently only adds NPs.
+			tagtoconst, unaryconst = getgeneralizations()
+			for a in tree.treepositions("leaves"):
+				tag = tree[a[:-1]]   # e.g. NN
+				const = tree[a[:-2]]  # e.g. S
+				if (tag.label in tagtoconst
+						and const.label != tagtoconst[tag.label]):
+					# NN -> NN -> word
+					tag[:] = [ParentedTree(tag.label, [tag[0]])]
+					# NP -> NN -> word
+					tag.label = tagtoconst[tag.label]
+
 		# wsj
 		elif name == "S-WH":
 			for sbar in tree.subtrees(lambda n: n.label == "SBAR"):
@@ -786,234 +905,103 @@ def unfold(tree, sent, transformations=('S-RC', 'VP-GF', 'NP')):
 				hd = [x for x in s if ishead(x)].pop()
 				if hd.label in ('VP-HINF', 'VP-HTO'):
 					s.label += '-INF'
+		elif name == "VP-FIN_WSJ":  # add disc. finite VP when verb is under S
+			for s in tree.subtrees(lambda n: n.label == "S"):
+				if not any(a.label.startswith('VP') for a in s):
+					raise NotImplementedError
 		# alpino?
 		# ...
 		else:
 			raise ValueError("unrecognized transformation %r" % name)
+	for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
+		a.sort(key=Tree.leaves)
 	return tree
 
 
-def fold(tree):
-	""" Reverse transformations by removing extra strings after a dash. """
+def fold(tree, transformations=None):
+	""" Undo specified transformations, as well as removing any hyphen-marked
+	state splits. Do not apply twice (might remove VPs which shouldn't be). """
+	tagtoconst, unaryconst = getgeneralizations()
+	if not transformations:
+		return tree
+
+	# Generic state-split removal
 	for node in tree.subtrees(lambda n: "-" in n.label):
 		node.label = node.label[:node.label.index("-")]
-	return tree
-
-
-def unfold_orig(tree):
-	""" Unfold redundancies and perform other transformations introducing
-	more hierarchy in the phrase-structure annotation, based on
-	grammatical functions and syntactic categories. """
-
-	def pop(a):
-		""" Remove this node from its parent node, if it has one. """
-		try:
-			return a.parent.pop(a.parent_index)
-		except AttributeError:
-			return a
-	tagtoconst, unaryconst = getgeneralizations()
-
-	# un-flatten PPs
-	addtopp = "AC".split()
-	for pp in tree.subtrees(lambda n: n.label == "PP"):
-		ac = [a for a in pp if function(a) in addtopp]
-		# anything before an initial preposition goes to the PP (modifiers,
-		# punctuation), otherwise it goes to the NP; mutatis mutandis for
-		# postpositions
-		functions = [function(x) for x in pp]
-		if "AC" in functions and "NK" in functions:
-			if functions.index("AC") < functions.index("NK"):
-				ac[:0] = pp[:functions.index("AC")]
-			if rindex(functions, "AC") > rindex(functions, "NK"):
-				ac += pp[rindex(functions, "AC") + 1:]
-		#else:
-		#	print("PP but no AC or NK", " ".join(functions))
-		nk = [a for a in pp if a not in ac]
-		# introduce a PP unless there is already an NP in the PP (annotation
-		# mistake), or there is a PN and we want to avoid a cylic unary of
-		# NP -> PN -> NP
-		if ac and nk and (len(nk) > 1 or nk[0].label not in "NP PN".split()):
-			pp[:] = []
-			pp[:] = ac + [ParentedTree("NP", nk)]
-
-	# introduce DPs
-	#determiners = set("ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT "
-	#	"PWS PWAT PWAV".split())
-	determiners = {"ART"}
-	for np in list(tree.subtrees(lambda n: n.label == "NP")):
-		if np[0].label in determiners:
-			np.label = "DP"
-			if len(np) > 1 and np[1].label != "PN":
-				np1 = np[1:]
-				np[1:] = []
-				np[1:] = [ParentedTree("NP", np1)]
-
-	# VP category split based on head
-	for vp in tree.subtrees(lambda n: n.label == "VP"):
-		hd = [x for x in vp if ishead(x)].pop()
-		vp.label += "-" + hd.label
-
-	# introduce finite VP at S level, collect objects and modifiers
-	# introduce new S level for discourse markers
-	newlevel = "DM".split()
-	addtovp = "HD AC DA MO NG OA OA2 OC OG PD VO SVP".split()
-
-	def finitevp(s):
-		""" Introduce finite VPs grouping verbs and their objects. """
-		if any(x.label.startswith("V") and x.label.endswith("FIN")
-				for x in s if isinstance(x, Tree)):
-			vp = [a for a in s if function(a) in addtovp]
-			# introduce a VP unless it would lead to a unary VP -> VP production
-			if len(vp) != 1 or vp[0].label != "VP":
-				s[:] = [pop(a) for a in s if function(a) not in addtovp] + [
-						pop(a) for a in vp]
-	# relative clause => S becomes SRC
-	for s in tree.subtrees(lambda n: n.label == "S" and function(n) == "RC"):
-		s.label = "SRC"
-	toplevel_s = []
-	if "S" in labels(tree):
-		toplevel_s = [a for a in tree if a.label == "S"]
-		for s in toplevel_s:
-			while function(s[0]) in newlevel:
-				s[:] = [s[0], ParentedTree("S", s[1:])]
-				s = s[1]
-				toplevel_s = [s]
-	elif "CS" in labels(tree):
-		cs = tree[labels(tree).index("CS")]
-		toplevel_s = [a for a in cs if a.label == "S"]
-	for a in toplevel_s:
-		finitevp(a)
-
-	# introduce POS tag for particle verbs
-	for a in tree.subtrees(lambda n: any(function(x) == "SVP" for x in n)):
-		svp = [x for x in a if function(x) == "SVP"].pop()
-		# apparently there can be a _verb_ particle without a verb.
-		# headlines? annotation mistake?
-		if any(map(ishead, a)):
-			hd = [x for x in a if ishead(x)].pop()
-			if hd.label != a.label:
-				particleverb = ParentedTree(hd.label, [hd, svp])
-				a[:] = [particleverb if ishead(x) else x
-									for x in a if function(x) != "SVP"]
-
-	# introduce SBAR level
-	sbarfunc = "CP".split()
-	# in the annotation, complementizers belong to the first S
-	# in S conjunctions, even when they appear to apply to the whole
-	# conjunction.
-	for s in list(tree.subtrees(lambda n: n.label == "S"
-			and function(n[0]) in sbarfunc and len(n) > 1)):
-		s.label = "SBAR"
-		s[:] = [s[0], ParentedTree("S", s[1:])]
-
-	# introduce nested structures for modifiers
-	# (iterated adjunction instead of sister adjunction)
-	#adjunctable = set("NP".split())  # PP AP VP
-	#for a in list(tree.subtrees(lambda n: n.label in adjunctable
-	#		and any(function(x) == "MO" for x in n))):
-	#	modifiers = [x for x in a if function(x) == "MO"]
-	#	if min(n for n, x in enumerate(a) if function(x) =="MO") == 0:
-	#		modifiers[:] = modifiers[::-1]
-	#	while modifiers:
-	#		modifier = modifiers.pop()
-	#		a[:] = [ParentedTree(a.label, [x for x in a if x != modifier]), modifier]
-	#		a = a[0]
 
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
-	# introduce phrasal projections for single tokens (currently only adds NPs)
-	for a in tree.treepositions("leaves"):
-		tag = tree[a[:-1]]   # e.g. NN
-		const = tree[a[:-2]]  # e.g. S
-		if tag.label in tagtoconst and const.label != tagtoconst[tag.label]:
-			tag[:] = [ParentedTree(tag.label, [tag[0]])]  # NN -> NN -> word
-			tag.label = tagtoconst[tag.label]  # NP -> NN -> word
-	return tree
-
-
-def fold_orig(tree):
-	""" Undo the transformations performed by unfold. Do not apply twice
-	(might remove VPs which shouldn't be). """
-	tagtoconst, unaryconst = getgeneralizations()
-
-	# restore linear precedence ordering
-	for a in tree.subtrees(lambda n: len(n) > 1):
-		a.sort(key=lambda n: n.leaves())
-
-	# remove DPs
-	for dp in tree.subtrees(lambda n: n.label == "DP"):
-		dp.label = "NP"
-		if len(dp) > 1 and dp[1].label == "NP":
-			#dp1 = dp[1][:]
-			#dp[1][:] = []
-			#dp[1:] = dp1
-			dp[1][:], dp[1:] = [], dp[1][:]
-	# flatten adjunctions
-	#nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE "
-	#	"PIAT PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
-	#probably_nk = set("AP PIS".split()) | nkonly
-	#for np in tree.subtrees(lambda n: len(n) == 2
-	#								and n.label == "NP"
-	#								and [x.label for x in n].count("NP") == 1
-	#								and not set(labels(n)) & probably_nk):
-	#	np.sort(key=lambda n: n.label == "NP")
-	#	np[:] = np[:1] + np[1][:]
-
-	# flatten PPs
-	for pp in tree.subtrees(lambda n: n.label == "PP"):
-		if "NP" in labels(pp) and "NN" not in labels(pp):
-			# ensure NP is in last position
-			pp.sort(key=lambda n: n.label == "NP")
-			pp[-1][:], pp[-1:] = [], pp[-1][:]
-	# SRC => S, VP-* => VP
-	for s in tree.subtrees(lambda n: n.label == "SRC"):
-		s.label = "S"
-	for vp in tree.subtrees(lambda n: n.label.startswith("VP-")):
-		vp.label = "VP"
-
-	# merge extra S level
-	for sbar in list(tree.subtrees(lambda n: n.label == "SBAR"
-		or (n.label == "S" and len(n) == 2 and labels(n) == ["PTKANT", "S"]))):
-		sbar.label = "S"
-		if sbar[0].label == "S":
-			sbar[:] = sbar[1:] + sbar[0][:]
-		else:
-			sbar[:] = sbar[:1] + sbar[1][:]
-
-	def mergevp(s):
-		""" merge finite VP with S level """
-		for vp in (n for n, a in enumerate(s) if a.label == "VP"):
-			if any(a.label.endswith("FIN") for a in s[vp]):
-				s[vp][:], s[vp:vp + 1] = [], s[vp][:]
-	#if any(a.label == "S" for a in tree):
-	#	map(mergevp, [a for a in tree if a.label == "S"])
-	#elif any(a.label == "CS" for a in tree):
-	#	map(mergevp, [s for cs in tree for s in cs if cs.label == "CS"
-	#		and s.label == "S"])
-	for s in tree.subtrees(lambda n: n.label == "S"):
-		mergevp(s)
-
-	# remove constituents for particle verbs
-	# get the grandfather of each verb particle
-	hasparticle = lambda n: any("PTKVZ" in (x.label
-			for x in m if isinstance(x, Tree)) for m in n if isinstance(m, Tree))
-	for a in list(tree.subtrees(hasparticle)):
-		for n, b in enumerate(a):
-			if (len(b) == 2 and b.label.startswith("V")
-				and "PTKVZ" in (c.label for c in b if isinstance(c, Tree))
-				and any(c.label == b.label for c in b)):
-				a[n:n + 1] = b[:]
-
-	# remove phrasal projections for single tokens
-	for a in tree.treepositions("leaves"):
-		tag = tree[a[:-1]]    # NN
-		const = tree[a[:-2]]  # NP
-		parent = tree[a[:-3]]  # PP
-		if (len(const) == 1 and tag.label in tagtoconst
-				and const.label == tagtoconst[tag.label]):
-			parent[a[-3]] = const.pop(0)
-			del const
+	for name in reversed(transformations):
+		if name == 'DP':  # remove DPs
+			for dp in tree.subtrees(lambda n: n.label == "DP"):
+				dp.label = "NP"
+				if len(dp) > 1 and dp[1].label == "NP":
+					#dp1 = dp[1][:]
+					#dp[1][:] = []
+					#dp[1:] = dp1
+					dp[1][:], dp[1:] = [], dp[1][:]
+		elif name == 'NEST':  # flatten adjunctions
+			nkonly = set("PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS"
+					" PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER".split())
+			probably_nk = set("AP PIS".split()) | nkonly
+			for np in tree.subtrees(lambda n: len(n) == 2
+					and n.label == "NP"
+					and [x.label for x in n].count("NP") == 1
+					and not set(labels(n)) & probably_nk):
+				np.sort(key=lambda n: n.label == "NP")
+				np[:] = np[:1] + np[1][:]
+		elif name == 'PP-NP':  # flatten PPs
+			for pp in tree.subtrees(lambda n: n.label == "PP"):
+				if "NP" in labels(pp) and "NN" not in labels(pp):
+					# ensure NP is in last position
+					pp.sort(key=lambda n: n.label == "NP")
+					pp[-1][:], pp[-1:] = [], pp[-1][:]
+		elif name == 'SBAR':  # merge extra S level
+			for sbar in list(tree.subtrees(lambda n: n.label == "SBAR"
+					or (n.label == "S" and len(n) == 2
+						and labels(n) == ["PTKANT", "S"]))):
+				sbar.label = "S"
+				if sbar[0].label == "S":
+					sbar[:] = sbar[1:] + sbar[0][:]
+				else:
+					sbar[:] = sbar[:1] + sbar[1][:]
+		elif name == 'VP-FIN_NEGRA':
+			def mergevp(s):
+				""" merge finite VP with S level """
+				for vp in (n for n, a in enumerate(s) if a.label == "VP"):
+					if any(a.label.endswith("FIN") for a in s[vp]):
+						s[vp][:], s[vp:vp + 1] = [], s[vp][:]
+			#if any(a.label == "S" for a in tree):
+			#	map(mergevp, [a for a in tree if a.label == "S"])
+			#elif any(a.label == "CS" for a in tree):
+			#	map(mergevp, [s for cs in tree for s in cs if cs.label == "CS"
+			#		and s.label == "S"])
+			for s in tree.subtrees(lambda n: n.label == "S"):
+				mergevp(s)
+		elif name == 'POS-PART':
+			# remove constituents for particle verbs
+			# get the grandfather of each verb particle
+			hasparticle = lambda n: any("PTKVZ" in (x.label
+					for x in m if isinstance(x, Tree)) for m in n
+					if isinstance(m, Tree))
+			for a in list(tree.subtrees(hasparticle)):
+				for n, b in enumerate(a):
+					if (len(b) == 2 and b.label.startswith("V")
+						and "PTKVZ" in (c.label for c in b
+							if isinstance(c, Tree))
+						and any(c.label == b.label for c in b)):
+						a[n:n + 1] = b[:]
+		elif name == 'UNARY':
+			# remove phrasal projections for single tokens
+			for a in tree.treepositions("leaves"):
+				tag = tree[a[:-1]]    # NN
+				const = tree[a[:-2]]  # NP
+				parent = tree[a[:-3]]  # PP
+				if (len(const) == 1 and tag.label in tagtoconst
+						and const.label == tagtoconst[tag.label]):
+					parent[a[-3]] = const.pop(0)
+					del const
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())

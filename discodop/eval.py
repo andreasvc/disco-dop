@@ -38,11 +38,11 @@ and options may consist of:
 --headrules x    Specify rules for head assignment of constituents that do not
                  already have a child marked as head; this enables dependency
                  evaluation.
---functions x    'remove' (default): strip hyphen-separated function from labels
+--functions x    'remove'=default: strip hyphen-separated function from labels
                  'leave': leave syntactic labels as is,
                  'add': evaluate both syntactic categories and functions,
                  'replace': only evaluate grammatical functions.
---morphology x   'no' (default): only evaluate POS tags,
+--morphology x   'no'=default: only evaluate POS tags,
                  'add': concatenate morphology tags to POS tags,
                  'replace': replace POS tags with morphology tags,
                  'between': insert morphological node between POS tag and word.

@@ -111,7 +111,8 @@ def loadparsers():
 			stages = params['stages']
 			postagging = params['postagging']
 			readgrammars(directory, stages, postagging)
-			parsers[lang] = Parser(stages, unfolded=params['unfolded'],
+			parsers[lang] = Parser(stages,
+					transformations=params['transformations'],
 					tailmarker=params['tailmarker'], postagging=postagging
 					if postagging and postagging['method'] == 'unknownword'
 					else None)
