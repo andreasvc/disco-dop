@@ -76,7 +76,7 @@ To run a full experiment from treebank to evaluation on a test set,
 copy the file ``sample.prm`` and edit its parameters.
 These parameters can then be invoked by executing::
 
-    discodop runexp.py filename.prm
+    discodop runexp filename.prm
 
 This will create a new directory with the basename of the parameter file, i.e.,
 ``filename/`` in this case. This directory must not exist yet, to avoid
@@ -106,7 +106,7 @@ Aside from the parser there are some standalone tools:
 :``eval``: Discontinuous evaluation. Reports F-scores and other metrics.
     Accepts ``EVALB`` parameter files::
 
-    discodop eval sample/gold.export sample/dop.export proper.prm
+    ``discodop eval sample/gold.export sample/dop.export proper.prm``
 :``demos``: Contains examples of various formalisms encoded in LCFRS grammars.
 :``gen``: An experiment in generation with LCFRS.
 
@@ -123,10 +123,11 @@ There are two web based tools in the ``web/`` directory. These require Flask to
 be installed.
 
 :``parse.py``: A web interface to the parser. Expects a series of grammars
-    in subdirectories of ``web/grammars/``.
+    in subdirectories of ``web/grammars/``, each containing grammar files
+    as produced by running ``discodop runexp``.
 :``treesearch.py``: A web interface for searching trough treebanks. Expects
-    one or more treebanks with the ``.mrg`` extension in the directory
-    ``web/corpus/`` (sample included).
+    one or more (non-discontinuous) treebanks with the ``.mrg`` extension in
+    the directory ``web/corpus/`` (sample included).
 :``treedraw.py``: A web interface for drawing discontinuous trees in various
     formats.
 
@@ -138,5 +139,6 @@ The Tree data structures in ``tree.py`` and the simple binarization algorithm in
 The Zhang-Shasha tree-edit distance algorithm in ``treedist.py`` was taken from
 https://github.com/timtadh/zhang-shasha
 Elements of the PLCFRS parser and punctuation re-attachment are based on code from
-`rparse <http://wolfgang-maier.de/rparse>`_. Various other bits from the Stanford parser, Berkeley parser, Bubs parser, &c.
+`rparse <http://wolfgang-maier.de/rparse>`_. Various other bits from the
+Stanford parser, Berkeley parser, Bubs parser, &c.
 
