@@ -289,7 +289,7 @@ class BracketCorpusReader(CorpusReader):
 
 
 class AlpinoCorpusReader(CorpusReader):
-	""" Corpus reader for the dutch Alpino treebank in XML format. """
+	""" Corpus reader for the Dutch Alpino treebank in XML format. """
 
 	def blocks(self, includetransformations=False):
 		""" Return a list of strings containing the raw representation of
@@ -383,14 +383,16 @@ def exportsplit(line):
 	if "%%" in line:  # we don't want comments.
 		line = line[:line.index("%%")]
 	fields = line.split()
-	lena = len(fields)
-	if lena == 5:
+	fieldlen = len(fields)
+	if fieldlen == 5:
 		fields[1:1] = ['']
 		fields.extend(['', ''])
-	elif lena == 6:
+	elif fieldlen == 6:
 		fields.extend(['', ''])
-	elif lena != 8:
-		raise ValueError("expected 5, 6, or 8 columns: %r" % fields)
+	elif fieldlen < 8 or fieldlen & 1:
+		# NB: zero or more sec. edges come in pairs of parent id and label
+		raise ValueError(
+				'expected 5 or 6+ even number of columns: %r' % fields)
 	return fields
 
 
@@ -593,7 +595,7 @@ def sethead(child):
 	if 'HD' not in child.source[FUNC].upper().split("-"):
 		x = list(child.source)
 		if child.source[FUNC] in (None, '', '--'):
-			x[FUNC] = 'HD'
+			x[FUNC] = '-HD'
 		else:
 			x[FUNC] = x[FUNC] + '-HD'
 		child.source = tuple(x)
