@@ -7,7 +7,7 @@ import re
 import cgi
 import glob
 import heapq
-import string
+import string  # pylint: disable=W0402
 import random
 import logging
 from functools import wraps
@@ -19,7 +19,6 @@ from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.runexp import readparam
 from discodop.parser import readgrammars, Parser
-from discodop.lexicon import getunknownwordfun
 
 APP = Flask(__name__)
 morphtags = re.compile(
@@ -54,36 +53,39 @@ def parse():
 	parsers[lang].stages[-1].objective = objfun
 	parsers[lang].stages[-1].kbest = marg in ('nbest', 'both')
 	parsers[lang].stages[-1].sample = marg in ('sample', 'both')
-	result = list(parsers[lang].parse(senttok))
-	if result[0].noparse:
-		return "no parse!\n"
-	tree = str(result[-1].parsetree)
-	prob = result[-1].prob
-	parsetrees = result[-1].parsetrees or {}
-	parsetrees = heapq.nlargest(10, parsetrees.items(), key=itemgetter(1))
-	fragments = result[-1].fragments or ()
-	msg = '\n'.join(stage.msg for stage in result)
-	elapsed = [stage.elapsedtime for stage in result]
-	APP.logger.info('[%g] %s' % (prob, tree))
-	tree = morphtags.sub(r'(\1\2', tree)
-	tree = Tree.parse(tree, parse_leaf=int)
-	treetransforms.unbinarize(tree)
-	treetransforms.removefanoutmarkers(tree)
-	result = Markup(DrawTree(tree, senttok).text(
-			unicodelines=True, html=True))
-	frags = Markup('\n\n'.join(
-			DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
-					unicodelines=True, html=True)
-			for frag, terminals in fragments))
-	elapsed = 'CPU time elapsed: %s => %gs' % (
-			' '.join('%gs' % a for a in elapsed), sum(elapsed))
-	nbest = Markup('\n\n'.join('%d. [p=%g]\n%s' % (
+	results = list(parsers[lang].parse(senttok))
+	if results[-1].noparse:
+		result = 'no parse!\n'
+		frags = nbest = ''
+		parsetrees = {}
+	else:
+		tree = str(results[-1].parsetree)
+		prob = results[-1].prob
+		parsetrees = results[-1].parsetrees or {}
+		parsetrees = heapq.nlargest(10, parsetrees.items(), key=itemgetter(1))
+		fragments = results[-1].fragments or ()
+		msg = '\n'.join(stage.msg for stage in results)
+		APP.logger.info('[%g] %s' % (prob, tree))
+		tree = morphtags.sub(r'(\1\2', tree)
+		tree = Tree.parse(tree, parse_leaf=int)
+		treetransforms.unbinarize(tree)
+		treetransforms.removefanoutmarkers(tree)
+		result = Markup(DrawTree(tree, senttok).text(
+				unicodelines=True, html=True))
+		frags = Markup('\n\n'.join(
+				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
+						unicodelines=True, html=True)
+				for frag, terminals in fragments))
+		nbest = Markup('\n\n'.join('%d. [p=%g]\n%s' % (
 				n + 1, prob,
 				DrawTree(treetransforms.removefanoutmarkers(
 					treetransforms.unbinarize(Tree.parse(morphtags.sub(
 						r'(\1\2', tree), parse_leaf=int))),
 					senttok).text(unicodelines=True, html=True))
 				for n, (tree, prob) in enumerate(parsetrees)))
+	elapsed = [stage.elapsedtime for stage in results]
+	elapsed = 'CPU time elapsed: %s => %gs' % (
+			' '.join('%gs' % a for a in elapsed), sum(elapsed))
 	info = Markup('\n'.join(('sentence length: %d; objfun=%s; marg=%s' % (
 			len(senttok), objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',

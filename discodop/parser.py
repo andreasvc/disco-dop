@@ -319,7 +319,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		lexicon = codecs.getreader('utf-8')(gzip.open("%s/%s.lex.gz" % (
 				resultdir, stage.name)))
 		grammar = Grammar(rules.read(), lexicon.read(),
-				start=top, bitpar=stage.mode == 'pcfg')
+				start=top, bitpar=stage.mode.startswith('pcfg'),
+				logprob=stage.mode != 'pcfg-posterior')
 		backtransform = None
 		if stage.dop:
 			assert stage.objective not in (

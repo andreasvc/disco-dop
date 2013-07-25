@@ -456,9 +456,8 @@ def writetree(tree, sent, n, fmt, headrules=None):
 			result.append("#BOS %s" % n)
 		indices = tree.treepositions('leaves')
 		wordsandpreterminals = indices + [a[:-1] for a in indices]
-		phrasalnodes = [a for a in tree.treepositions()
-			if a not in wordsandpreterminals and a != ()]
-		phrasalnodes.sort(key=len, reverse=True)
+		phrasalnodes = [a for a in tree.treepositions('postorder')
+				if a not in wordsandpreterminals and a != ()]
 		wordids = {tree[a]: a for a in indices}
 		assert len(sent) == len(indices) == len(wordids)
 		for i, word in enumerate(sent):
@@ -1033,7 +1032,8 @@ def bracketings(tree):
 #1/513           XY      -
 #1/2467          $.      ·      # NB this is not a period but a \cdot ...
 
-PUNCTUATION = ',."()&:-/!!!??;\'```....[]|\xc2\xab\xc2\xbb\\'
+PUNCTUATION = frozenset(',."()&:-/!!!??;\'```....[]|\xc2\xab\xc2\xbb\\'
+		) | {'&bullet;'}
 
 
 def ispunct(word, tag):
