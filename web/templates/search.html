@@ -73,18 +73,15 @@ span.tt { font-family: monospace; }
     <label><input type=radio name=output value=sents{{
 		' checked' if output == 'sents' }} onChange="hide('normrow', 'norm'); hide('labelrow', 'nomorph'); ">
 		Matching sentences (words only);</label>
+    </td><td></td></tr>
+    <tr><td></td><td>
     <label><input type=radio name=output value=trees{{
 		' checked' if output == 'trees' }} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
 		Draw matching trees;</label>
-    </td><td></td></tr>
-    <tr><td></td><td>
     <label><input type=radio name=output value=brackets{{
 		' checked' if output == 'brackets' }}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
 		Matches in bracket notation;</label>
-    <label><input type=radio name=output value=export{{
-		' checked' if output == 'export' }}  onChange="hide('normrow', 'norm'); hide('labelrow', 'nomorph'); ">
-		Export all matching trees as text file;</label><br>
-    </td><td></td></tr>
+	<br></td><td></td></tr>
     <tr id=normrow>
 	<td>Normalization:</td>
     <td><label><input type=radio name=norm value=sents{{

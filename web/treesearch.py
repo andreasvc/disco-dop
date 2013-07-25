@@ -71,6 +71,8 @@ def main():
 	if output:
 		if output not in DISPATCH:
 			return 'Invalid argument', 404
+		elif request.args.get('export'):
+			return export(request.args, output)
 		return Response(stream_template('searchresults.html', form=request.args,
 				texts=texts, selectedtexts=selected, output=output,
 				results=DISPATCH[output](request.args)))
@@ -129,15 +131,21 @@ def style():
 	return resp
 
 
-@APP.route('/export')
-def export():
+def export(form, output):
 	""" Export search results to a file for download. """
 	# NB: no distinction between trees from different texts
 	# (Does consttreeviewer support # comments?)
-	results = (a[1] + '\n' for a in
-			doqueries(request.args, lines=False, doexport=True))
+	if output == 'counts':
+		results = counts(form, doexport=True)
+		filename = 'counts.csv'
+	else:
+		if output == 'brackets':
+			output = 'trees'
+		filename = '%s.txt' % output
+		results = (a[1] + '\n' for a in doqueries(form, lines=False,
+					doexport=output))
 	resp = Response(results, mimetype='text/plain')
-	resp.headers['Content-Disposition'] = 'attachment; filename=trees.txt'
+	resp.headers['Content-Disposition'] = 'attachment; filename=' + filename
 	return resp
 
 
@@ -159,7 +167,7 @@ def favicon():
 			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
-def counts(form):
+def counts(form, doexport=False):
 	""" Produce counts of matches for each text. """
 	cnts = Counter()
 	relfreq = {}
@@ -168,10 +176,16 @@ def counts(form):
 	gotresult = False
 	for n, (text, results, stderr) in enumerate(doqueries(form, lines=False)):
 		if n == 0:
-			yield ("Query: %s\n"
-					"NB: the counts reflect the total number of "
-					"times a pattern matches for each tree.\n\n"
-					"Counts:\n" % stderr)
+			if doexport:
+				yield '"text","count","relfreq"\r\n'
+			else:
+				url = 'counts?query=%s&norm=%s&texts=%s&export=1' % (
+						form['query'], form['norm'], form['texts'])
+				yield ('Query: %s\n'
+						'NB: the counts reflect the total number of '
+						'times a pattern matches for each tree.\n\n'
+						'Counts (<a href="%s">export to CSV</a>):\n' % (
+						stderr, url))
 		cnt = results.count('\n')
 		if cnt:
 			gotresult = True
@@ -187,16 +201,19 @@ def counts(form):
 			raise ValueError
 		relfreq[text] = 100.0 * cnt / total
 		sumtotal += total
-		line = "%s%6d    %5.2f %%" % (
-				text.ljust(40)[:40], cnt, relfreq[text])
-		indices = {int(line[:line.index(':::')])
-				for line in results.splitlines()}
-		plot = concplot(indices, totalsent)
-		if cnt:
-			yield line + plot + '\n'
+		if doexport:
+			yield '"%s",%d,%g\r\n' % (text, cnt, relfreq[text])
 		else:
-			yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
-	if gotresult:
+			line = "%s%6d    %5.2f %%" % (
+					text.ljust(40)[:40], cnt, relfreq[text])
+			indices = {int(line[:line.index(':::')])
+					for line in results.splitlines()}
+			plot = concplot(indices, totalsent)
+			if cnt:
+				yield line + plot + '\n'
+			else:
+				yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
+	if gotresult and not doexport:
 		yield ("%s%6d    %5.2f %%\n</span>\n" % (
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
@@ -215,8 +232,12 @@ def trees(form):
 	for n, (text, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
-			yield ("Query: %s\n"
-					"Trees (showing up to 10 per text):\n" % stderr)
+			# NB: we do not hide function or morphology tags when exporting
+			url = 'trees?query=%s&texts=%s&export=1' % (
+					form['query'], form['texts'])
+			yield ('Query: %s\n'
+					'Trees (showing up to 10 per text; '
+					'<a href="%s">download all</a>):\n' % (stderr, url))
 		for m, line in enumerate(islice(results, 10)):
 			if m == 0:
 				gotresults = True
@@ -258,8 +279,12 @@ def sents(form, dobrackets=False):
 	for n, (text, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
-			yield ("Query: %s\n"
-					"Trees (showing up to 1000 per text):\n" % stderr)
+			url = '%s?query=%s&texts=%s&export=1' % (
+					'trees' if dobrackets else 'sents',
+					form['query'], form['texts'])
+			yield ('Query: %s\n'
+					'Sentences (showing up to 1000 per text; '
+					'<a href="%s">download all</a>):\n' % (stderr, url))
 		for m, line in enumerate(islice(results, 1000)):
 			if m == 0:
 				gotresults = True
@@ -290,14 +315,22 @@ def brackets(form):
 	return sents(form, dobrackets=True)
 
 
-def doqueries(form, lines=False, doexport=False):
+def doqueries(form, lines=False, doexport=None):
 	""" Run tgrep2 on each text """
 	texts, selected = selectedtexts(form)
 	for n, text in enumerate(texts):
 		if n not in selected:
 			continue
+		if doexport == 'sents':
+			fmt = r'%f:%s|%tw\n'
+		elif doexport == 'trees':
+			# NB: no distinction between trees from different texts
+			# (Does consttreeviewer support # comments?)
+			fmt = r"%w\n"
+		else:
+			fmt = r'%s:::%f:::%w:::%h\n'
 		cmd = [which('tgrep2'), '-z', '-a',
-				'-m', (r"%w\n" if doexport else r"%s:::%f:::%w:::%h\n"),
+				'-m', fmt,
 				'-c', os.path.join(CORPUS_DIR, text + '.t2c.gz'),
 				form['query']]
 		proc = subprocess.Popen(args=cmd,
