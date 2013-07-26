@@ -441,10 +441,9 @@ cdef class Grammar:
 						seen.add(self.mapping[n])
 			else:
 				self.mapping[n] = 0
-		msg = '?!?'
 		if seen == set(range(coarse.nonterminals)):
 			msg = 'label sets are equal'
-		elif seen != set(range(coarse.nonterminals)):
+		else:
 			l = [coarse.tolabel[a].decode('ascii') for a in sorted(
 					set(range(coarse.nonterminals)) - seen,
 					key=partial(getitem, coarse.tolabel))]
@@ -458,6 +457,8 @@ cdef class Grammar:
 						diff1, diff2))
 			elif coarse.nonterminals < self.nonterminals:
 				msg = 'grammar is a proper superset of coarse grammar'
+			else:
+				msg = 'equal number of nodes, but not equivalent'
 		if debug:
 			msg += "\n"
 			for n in range(self.nonterminals):

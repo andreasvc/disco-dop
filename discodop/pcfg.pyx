@@ -1034,7 +1034,7 @@ def getgrammarmapping(Grammar coarse, Grammar fine):
 UNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
 
 
-def parse_bitpar(rulesfile, lexiconfile, sent, n, start, startlabel, tags=None):
+def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	""" Parse a single sentence with bitpar, given filenames of rules and
 	lexicon. n is the number of derivations to ask for (max 1000).
 	Result is a dictionary of derivations with their probabilities. """
@@ -1051,9 +1051,9 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, start, startlabel, tags=None):
 	results = results.strip('\t\n ')  # decode or not?
 	if tags:
 		unlink(lexiconfile)
-	if results.startswith("No parse"):
-		return {}, start, results
-	start = new_CFGChartItem(start, 0, len(sent))
+	if not results or results.startswith("No parse"):
+		return {}, None, '%s\n%s' % (results, msg)
+	start = new_CFGChartItem(1, 0, len(sent))
 	lines = UNESCAPE.sub(r'\1', results).splitlines()
 	return {renumber(deriv): -log(float(prob[prob.index('=') + 1:]))
 			for prob, deriv in zip(lines[::2], lines[1::2])}, start, msg

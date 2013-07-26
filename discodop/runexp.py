@@ -418,24 +418,27 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
 
-		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name), "w")
-		lexicon = codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
-				resultdir, stage.name), "w"))
 		bitpar = fanout == 1 or stage.split
 		# when grammar is LCFRS, write rational fractions.
 		# when grammar is PCFG, write frequencies if probabilities sum to 1,
 		# i.e., in that case probalities can be re-computed as relative
 		# frequencies. otherwise, resort to decimal floats (imprecise).
-		write_lcfrs_grammar(xgrammar, rules, lexicon,
-				bitpar=bitpar, freqs=bitpar and sumsto1)
+		with gzip.open("%s/%s.rules.gz" % (
+				resultdir, stage.name), 'w') as rulesfile:
+			with codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
+					resultdir, stage.name), 'w')) as lexiconfile:
+				# write output
+				write_lcfrs_grammar(xgrammar, rulesfile, lexiconfile,
+						bitpar=bitpar, freqs=bitpar and sumsto1)
 		if stage.mode == 'pcfg-bitpar':
 			assert fanout == 1 or stage.split
-			_, stage.rulesfile = tempfile.mkstemp()
-			_, stage.lexiconfile = tempfile.mkstemp()
-			rules = open(stage.rulesfile, "w")
-			lexicon = io.open(stage.lexiconfile, "w", encoding='utf-8')
-			write_lcfrs_grammar(xgrammar, rules, lexicon,
+			stage.rulesfile = tempfile.NamedTemporaryFile()
+			stage.lexiconfile = tempfile.NamedTemporaryFile()
+			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
+			write_lcfrs_grammar(xgrammar, stage.rulesfile, lexicon,
 					bitpar=bitpar, freqs=bitpar and sumsto1)
+			stage.rulesfile.flush()
+			lexicon.flush()
 		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz", resultdir,
 				stage.name, ",backtransform" if stage.usedoubledop else '')
 

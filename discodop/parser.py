@@ -255,10 +255,9 @@ class Parser(object):
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, grammar, tags=tags)
 				elif stage.mode == 'pcfg-bitpar':
-					chart, start, msg1 = pcfg.parse_bitpar(stage.rulesfile,
-							stage.lexiconfile, sent, stage.m,
-							stage.grammar.toid[stage.grammar.start],
-							stage.grammar.start)
+					chart, start, msg1 = pcfg.parse_bitpar(stage.rulesfile.name,
+							stage.lexiconfile.name, sent, stage.m,
+							stage.grammar.start, tags=tags)
 					msg1 += '%d derivations' % (len(chart) if start else 0)
 				elif stage.mode == 'plcfrs':
 					chart, start, msg1 = plcfrs.parse(sent,
@@ -370,12 +369,13 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					markorigin=stages[n - 1].markorigin)
 		if stage.mode == 'pcfg-bitpar':
 			assert grammar.maxfanout == 1
-			_, stage.rulesfile = tempfile.mkstemp()
-			_, stage.lexiconfile = tempfile.mkstemp()
-			with open(stage.rulesfile, "w") as rules:
-				rules.write(grammar.origrules)
-			with io.open(stage.lexiconfile, "w", encoding='utf-8') as lexicon:
-				lexicon.write(grammar.origlexicon)
+			stage.rulesfile = tempfile.NamedTemporaryFile()
+			stage.rulesfile.write(grammar.origrules)
+			stage.rulesfile.flush()
+			stage.lexiconfile = tempfile.NamedTemporaryFile()
+			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
+			lexicon.write(grammar.origlexicon)
+			lexicon.flush()
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging['method'] == 'unknownword':
