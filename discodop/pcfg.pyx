@@ -1046,7 +1046,8 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	proc = Popen(['bitpar', '-q', '-vp', '-b', str(n), '-s', startlabel,
 			rulesfile, lexiconfile],
 			shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-	results, msg = proc.communicate('\n'.join([word.encode('utf8')
+	results, msg = proc.communicate('\n'.join([
+			word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
 			for word in (tags or sent)]) + '\n')
 	results = results.strip('\t\n ')  # decode or not?
 	if tags:

@@ -15,7 +15,7 @@ from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 from . import plcfrs, pcfg
 from .grammar import FORMAT, defaultparse, shortestderivgrammar
-from .containers import Grammar, CFGChartItem, DictObj
+from .containers import Grammar, DictObj
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
 from .tree import Tree
@@ -204,7 +204,7 @@ class Parser(object):
 		if tags is not None:
 			tags = list(tags)
 		chart = {}
-		start = inside = outside = None
+		start = inside = outside = prevgrammar = None
 		for n, stage in enumerate(self.stages):
 			begin = time.clock()
 			noparse = False
@@ -374,7 +374,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			stage.rulesfile.flush()
 			stage.lexiconfile = tempfile.NamedTemporaryFile()
 			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
-			lexicon.write(grammar.origlexicon)
+			lexicon.write(grammar.origlexicon.replace(
+					'(', '-LRB-').replace(')', '-RRB-'))
 			lexicon.flush()
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)

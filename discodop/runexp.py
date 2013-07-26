@@ -436,7 +436,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			stage.lexiconfile = tempfile.NamedTemporaryFile()
 			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
 			write_lcfrs_grammar(xgrammar, stage.rulesfile, lexicon,
-					bitpar=bitpar, freqs=bitpar and sumsto1)
+					bitpar=bitpar, freqs=bitpar and sumsto1, escapeparens=True)
 			stage.rulesfile.flush()
 			lexicon.flush()
 		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz", resultdir,

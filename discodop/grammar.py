@@ -752,7 +752,8 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	io.open(out, 'w', encoding=encoding).writelines(grammar)
 
 
-def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
+def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
+		escapeparens=False):
 	""" Writes a grammar to a simple text file format. Parameters:
 	- grammar: sequence of rule tuples, as produced by induce_plcfrs(),
 		dopreduction(), doubledop().
@@ -775,6 +776,8 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 					"\t".join(x for x in r), yfstr,
 					w.numerator if freqs else w)).encode('ascii'))
 	for word, lexrules in lexical.items():
+		if escapeparens:
+			word = word.replace('(', '-LRB-').replace(')', '-RRB-')
 		lexicon.write(word)
 		for tag, w in lexrules:
 			if freqs:
