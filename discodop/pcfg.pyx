@@ -1054,7 +1054,8 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	if not results or results.startswith("No parse"):
 		return {}, None, '%s\n%s' % (results, msg)
 	start = new_CFGChartItem(1, 0, len(sent))
-	lines = UNESCAPE.sub(r'\1', results).splitlines()
+	lines = UNESCAPE.sub(r'\1', results).replace(
+			r'\(', '[').replace(r'\)', ']').replace(')(', ') (').splitlines()
 	return {renumber(deriv): -log(float(prob[prob.index('=') + 1:]))
 			for prob, deriv in zip(lines[::2], lines[1::2])}, start, msg
 
