@@ -8,15 +8,16 @@ import time
 import gzip
 import codecs
 import logging
+import tempfile
 import string  # pylint: disable=W0402
 from math import exp
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 from . import plcfrs, pcfg
-from .grammar import FORMAT, defaultparse
-from .containers import Grammar, DictObj
+from .grammar import FORMAT, defaultparse, shortestderivgrammar
+from .containers import Grammar, CFGChartItem, DictObj
 from .coarsetofine import prunechart, whitelistfromposteriors
-from .disambiguation import marginalize, extractfragments
+from .disambiguation import marginalize
 from .tree import Tree
 from .lexicon import replaceraretestwords, getunknownwordfun
 from .treebank import fold, saveheads
@@ -104,7 +105,6 @@ def main():
 			name='coarse',
 			mode='pcfg' if bitpar else 'plcfrs',
 			grammar=coarse,
-			secondarymodel=None,
 			backtransform=None,
 			m=k)
 	stages.append(DictObj(stage))
@@ -126,7 +126,6 @@ def main():
 				name='fine',
 				mode='pcfg' if bitpar else 'plcfrs',
 				grammar=fine,
-				secondarymodel=None,
 				backtransform=None,
 				m=k,
 				k=threshold,
@@ -211,13 +210,21 @@ class Parser(object):
 			noparse = False
 			parsetrees = fragments = None
 			msg = "%s:\t" % stage.name.upper()
+			grammar = stage.grammar
+			secondarymodel = None
+			if stage.dop:
+				if stage.objective == 'shortest':
+					grammar = stage.shortest['nonprob']
+					secondarymodel = stage.shortest['asdict']
+				elif stage.objective == 'sl-dop':
+					grammar = stage.grammar
+					secondarymodel = stage.shortest['nonprob']
 			if not stage.prune or start:
 				if n != 0 and stage.prune:
 					if self.stages[n - 1].mode == 'pcfg-posterior':
 						(whitelist, sentprob, unfiltered,
 							numitems, numremain) = whitelistfromposteriors(
-								inside, outside, start,
-								self.stages[n - 1].grammar, stage.grammar,
+								inside, outside, start, prevgrammar, grammar,
 								stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin)
 						msg += ("coarse items before pruning=%d; filtered: %d; "
@@ -226,9 +233,10 @@ class Parser(object):
 					else:
 						whitelist, items = prunechart(
 								chart, start, self.stages[n - 1].grammar,
-								stage.grammar, stage.k, stage.splitprune,
+								grammar, stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin,
-								stage.mode == "pcfg")
+								stage.mode == 'pcfg',
+								self.stages[n - 1].mode == 'pcfg-bitpar')
 						msg += "coarse items before pruning: %d; " % (
 								sum(len(a) for x in chart for a in x if a)
 								if self.stages[n - 1].mode == 'pcfg'
@@ -238,17 +246,23 @@ class Parser(object):
 					whitelist = None
 				if stage.mode == 'pcfg':
 					chart, start, msg1 = pcfg.parse(
-							sent, stage.grammar, tags=tags,
+							sent, grammar, tags=tags,
 							chart=whitelist if stage.prune else None)
 				elif stage.mode == 'pcfg-symbolic':
 					chart, start, msg1 = pcfg.symbolicparse(
-							sent, stage.grammar, tags=tags)
+							sent, grammar, tags=tags)
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
-							sent, stage.grammar, tags=tags)
+							sent, grammar, tags=tags)
+				elif stage.mode == 'pcfg-bitpar':
+					chart, start, msg1 = pcfg.parse_bitpar(stage.rulesfile,
+							stage.lexiconfile, sent, stage.m,
+							stage.grammar.toid[stage.grammar.start],
+							stage.grammar.start)
+					msg1 += '%d derivations' % (len(chart) if start else 0)
 				elif stage.mode == 'plcfrs':
 					chart, start, msg1 = plcfrs.parse(sent,
-							stage.grammar, tags=tags,
+							grammar, tags=tags,
 							exhaustive=stage.dop or (n + 1 != len(self.stages)
 								and self.stages[n + 1].prune),
 							whitelist=whitelist,
@@ -267,26 +281,23 @@ class Parser(object):
 							"sent: %s\nstage: %s.", ' '.join(sent), stage.name)
 					#raise ValueError("ERROR: expected successful parse. "
 					#		"sent %s, %s." % (nsent, stage.name))
+			prevgrammar = grammar
 			if start and stage.mode != 'pcfg-posterior':
 				begindisamb = time.clock()
-				parsetrees, msg1 = marginalize(stage.objective,
-						chart, start, stage.grammar, stage.m,
+				parsetrees, derivs, msg1 = marginalize(stage.objective
+						if stage.dop else 'mpd',
+						chart, start, grammar, stage.m,
 						sample=stage.sample, kbest=stage.kbest,
 						sent=sent, tags=tags,
-						secondarymodel=stage.secondarymodel,
+						secondarymodel=secondarymodel,
 						sldop_n=stage.sldop_n,
-						backtransform=stage.backtransform)
-				if stage.backtransform is not None and stage.mode == 'plcfrs':
-					fragments = extractfragments(
-						chart, start, stage.grammar, stage.backtransform)
+						backtransform=stage.backtransform,
+						bitpar=stage.mode == 'pcfg-bitpar')
 				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
+				fragments = derivs.get(resultstr)
 				msg += "disambiguation: %s, %gs\n\t" % (
 						msg1, time.clock() - begindisamb)
-				if isinstance(prob, tuple):
-					msg += "subtrees = %d, p=%.4e " % (
-							abs(prob[0]), prob[1])
-				else:
-					msg += "p=%.4e " % prob
+				msg += probstr(prob) + ' '
 				parsetree = Tree.parse(resultstr, parse_leaf=int)
 				if stage.split:
 					mergediscnodes(unbinarize(parsetree, childchar=":"))
@@ -298,7 +309,7 @@ class Parser(object):
 			else:
 				parsetree = defaultparse([(n, t)
 						for n, t in enumerate(tags or (len(sent) * ['NONE']))])
-				parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],
+				parsetree = Tree.parse("(%s %s)" % (grammar.tolabel[1],
 						parsetree), parse_leaf=int)
 				prob = 0.0
 				noparse = True
@@ -323,31 +334,33 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				logprob=stage.mode != 'pcfg-posterior')
 		backtransform = None
 		if stage.dop:
-			assert stage.objective not in (
-					"shortest", "sl-dop", "sl-dop-simple"), "not supported."
 			assert stage.useestimates is None, "not supported"
+			stage.shortest = shortestderivgrammar(grammar)
 			if stage.usedoubledop:
 				backtransform = dict(enumerate(
 						gzip.open("%s/%s.backtransform.gz" % (resultdir,
 						stage.name)).read().splitlines()))
 				if n and stage.prune:
-					_ = grammar.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile(b'@.+$'),
-						neverblockre=re.compile(b'^#[0-9]+|.+}<'),
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin)
+					for x in (grammar, stage.shortest['nonprob']):
+						_ = x.getmapping(stages[n - 1].grammar,
+							striplabelre=re.compile(b'@.+$'),
+							neverblockre=re.compile(b'^#[0-9]+|.+}<'),
+							splitprune=stage.splitprune and stages[n - 1].split,
+							markorigin=stages[n - 1].markorigin)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
-					_ = grammar.getmapping(None,
-						neverblockre=re.compile(b'.+}<'))
+					for x in (grammar, stage.shortest['nonprob']):
+						_ = x.getmapping(None,
+							neverblockre=re.compile(b'.+}<'))
 			elif n and stage.prune:  # dop reduction
-				_ = grammar.getmapping(stages[n - 1].grammar,
-					striplabelre=re.compile(b'@[-0-9]+$'),
-					neverblockre=re.compile(stage.neverblockre)
-						if stage.neverblockre else None,
-					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin)
+				for x in (grammar, stage.shortest['nonprob']):
+					_ = x.getmapping(stages[n - 1].grammar,
+						striplabelre=re.compile(b'@[-0-9]+$'),
+						neverblockre=re.compile(stage.neverblockre)
+							if stage.neverblockre else None,
+						splitprune=stage.splitprune and stages[n - 1].split,
+						markorigin=stages[n - 1].markorigin)
 		else:  # not stage.dop
 			if n and stage.prune:
 				_ = grammar.getmapping(stages[n - 1].grammar,
@@ -355,15 +368,29 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
+		if stage.mode == 'pcfg-bitpar':
+			assert grammar.maxfanout == 1
+			_, stage.rulesfile = tempfile.mkstemp()
+			_, stage.lexiconfile = tempfile.mkstemp()
+			with open(stage.rulesfile, "w") as rules:
+				rules.write(grammar.origrules)
+			with io.open(stage.lexiconfile, "w", encoding='utf-8') as lexicon:
+				lexicon.write(grammar.origlexicon)
 		grammar.testgrammar()
-		stage.update(grammar=grammar, backtransform=backtransform,
-				secondarymodel=None, outside=None)
+		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging['method'] == 'unknownword':
 		postagging['unknownwordfun'] = getunknownwordfun(postagging['model'])
 		postagging['lexicon'] = {w for w in stages[0].grammar.lexical
 				if not w.startswith("UNK")}
 		postagging['sigs'] = {w for w in stages[0].grammar.lexical
 				if w.startswith("UNK")}
+
+
+def probstr(prob):
+	""" Render probability / number of subtrees as string. """
+	if isinstance(prob, tuple):
+		return "subtrees=%d, p=%.4e " % (abs(prob[0]), prob[1])
+	return "p=%.4e" % prob
 
 
 if __name__ == '__main__':

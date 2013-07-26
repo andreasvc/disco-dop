@@ -34,13 +34,13 @@ cdef class Grammar:
 	cdef ULong *chainvec
 	cdef UInt *mapping, **splitmapping
 	cdef UChar *fanout
-	cdef size_t nonterminals, numrules, numunary, numbinary, maxfanout
-	cdef bint logprob
-	cdef bytes origrules
-	cdef unicode origlexicon
+	cdef readonly size_t nonterminals, numrules, numunary, numbinary, maxfanout
+	cdef readonly bytes origrules, start
+	cdef readonly unicode origlexicon
+	cdef readonly bint logprob, bitpar
 	cdef readonly list tolabel
-	cdef readonly dict toid, lexical, lexicalbylhs
-	cdef _convertrules(Grammar self, list rulelines, bint bitpar)
+	cdef readonly dict toid, lexical, lexicalbylhs, rulenos
+	cdef _convertrules(Grammar self, list rulelines)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
 	cdef rulerepr(self, Rule rule)
 	cdef yfrepr(self, Rule rule)

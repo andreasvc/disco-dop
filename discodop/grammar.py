@@ -50,7 +50,7 @@ output is the base for the filenames to write the grammar to.
 options may consist of (* marks default option):
     --inputfmt [*export|discbracket|bracket]
     --inputenc [*UTF-8|ISO-8859-1|...]
-    --dopestimator [dop1|ewe|shortest|...]
+    --dopestimator [dop1|ewe|...]
     --freqs               produce frequencies instead of probabilities
     --numproc [1|2|...]   only relevant for double dop fragment extraction
     --gzip                compress output with gzip, view with zless &c.
@@ -151,8 +151,7 @@ def induce_plcfrs(trees, sents):
 	return list(grammar.items())
 
 
-def dopreduction(trees, sents, ewe=False,
-		shortestderiv=False, packedgraph=False):
+def dopreduction(trees, sents, ewe=False, packedgraph=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 		ewe: apply the equal weights estimate.
@@ -202,12 +201,7 @@ def dopreduction(trees, sents, ewe=False,
 		probmodel = [bodewe(r) for r in rules.items()]
 	else:
 		probmodel = [rfe(r) for r in rules.items()]
-	if shortestderiv:
-		nonprobmodel = [(rule, Fraction(1, 1 if '@' in rule[0][0] else 2))
-							for rule in rules]
-		return (nonprobmodel, dict(probmodel))
-	else:
-		return list(probmodel)
+	return list(probmodel)
 
 
 def doubledop(fragments, debug=False, ewe=False):
@@ -304,6 +298,49 @@ def doubledop(fragments, debug=False, ewe=False):
 	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
 			for rule, freq in grammar]
 	return grammar, backtransform
+
+
+LCFRS = re.compile(b"([^ \t\n]+\t)([^ \t\n]+\t(?:[^ \t\n]+\t)?[01,]+\t)[0-9]+"
+		"(?:[./][0-9]+)?")
+BITPAR = re.compile(b"[0-9]+(?:\\.[0-9]+)?[ \t]([^ \t\n]]+\t)([^ \t\n]+[ \t]"
+		"(?:[^ \t\n]]+\t)?)")
+LEXICON = re.compile("\t([^ \t\n]+)[ \t][0-9]+([./][0-9]+)?")
+
+
+def shortestderivgrammar(grammar):
+	""" Given a probabilistic DOP grammar in the form of a Grammar object,
+	return a non-probabilistic grammar where all weights are 1, except for
+	rules that introduce new fragments which receive a weight of 0.5. """
+	from .containers import Grammar
+	# any rule corresponding to the introduction of a
+	# fragment has a probability of 1/2, else 1.
+	one, half = '1', '1/2'
+
+	def bitparrepl(match):
+		""" Rewrite weight of bitpar rule. """
+		lhs, rhs = match.group(1), match.group(2)
+		weight = one if '@' in lhs or '{' in lhs else half
+		return '%s\t%s%s' % (weight, lhs, rhs)
+
+	def lcfrsrepl(match):
+		""" Rewrite weight of LCFRS rule. """
+		lhs, rest = match.group(1), match.group(2)
+		weight = one if '@' in lhs or '{' in lhs else half
+		return '%s%s\t%s' % (lhs, rest, weight)
+
+	def lexiconrepl(match):
+		""" Rewrite weight of 'tag prob' pair. """
+		lhs = match.group(1)
+		weight = one if '@' in lhs or '{' in lhs else half
+		return '\t%s %s' % (lhs, weight)
+
+	if grammar.bitpar:
+		rules = BITPAR.sub(bitparrepl, grammar.origrules)
+	else:
+		rules = LCFRS.sub(lcfrsrepl, grammar.origrules)
+	lexicon = LEXICON.sub(lexiconrepl, grammar.origlexicon)
+	return dict(nonprob=Grammar(rules, lexicon, bitpar=grammar.bitpar),
+			asdict=dict(grammar.as_tuples()))  # fixme: this is ugly
 
 
 def coarse_grammar(trees, sents, level=0):
@@ -931,7 +968,6 @@ def main():
 	elif model == "dopreduction":
 		estimator = opts.get('--dopestimator', 'dop1')
 		grammar = dopreduction(trees, sents, ewe=estimator == 'ewe',
-				shortestderiv=estimator == 'shortest',
 				packedgraph="--packed" in opts)
 	elif model == "doubledop":
 		assert opts.get('--dopestimator', 'dop1') == 'dop1'

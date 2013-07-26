@@ -22,7 +22,6 @@ else:
 from collections import defaultdict, OrderedDict, Counter as multiset
 from operator import itemgetter
 from subprocess import Popen, PIPE
-from fractions import Fraction
 import numpy as np
 from . import eval as evalmod
 from .tree import Tree
@@ -32,7 +31,7 @@ from .treetransforms import binarize, optimalbinarize, \
 		addfanoutmarkers, addbitsets, fastfanout
 from .fragments import getfragments
 from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
-		write_lcfrs_grammar
+		write_lcfrs_grammar, shortestderivgrammar
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from .parser import DEFAULTSTAGE, readgrammars, Parser
@@ -60,10 +59,6 @@ def startexp(
 		# filenames may include globbing characters '*' and '?'.
 		traincorpus="sample2.export", trainencoding="iso-8859-1",
 		testcorpus="sample2.export", testencoding="iso-8859-1",
-		punct=None,  # options: move, remove, root
-		functions=None,  # options None, 'add', 'remove', 'replace'
-		morphology=None,  # choices: None, 'add', 'replace', 'between'
-		transformations=None,  # apply treebank transformations
 		testmaxwords=40,
 		trainmaxwords=40,
 		trainnumsents=2,
@@ -72,6 +67,10 @@ def startexp(
 		# (useful when they are in the same file)
 		skip=0,  # number of sentences to skip from test corpus
 		# postagging: pass None to use tags from treebank.
+		punct=None,  # choices: None, 'move', 'remove', 'root'
+		functions=None,  # choices None, 'add', 'remove', 'replace'
+		morphology=None,  # choices: None, 'add', 'replace', 'between'
+		transformations=None,  # apply treebank transformations
 		postagging=dict(
 			method="unknownword",
 			# choices: unknownword (assign during parsing),
@@ -81,7 +80,7 @@ def startexp(
 			model="4",
 			# options for unknown word models:
 			unknownthreshold=1,  # use probs of rare words for unknown words
-			openclassthreshold=50,  # add unseen tags for known words; 0: disable
+			openclassthreshold=50,  # add unseen tags for known words; 0=disable
 			simplelexsmooth=True,  # disable sophisticated smoothing
 		),
 		bintype="binarize",  # choices: binarize, optimal, optimalhead
@@ -97,7 +96,7 @@ def startexp(
 		tailmarker="",
 		evalparam="proper.prm",  # EVALB-style parameter file
 		quiet=False, reallyquiet=False,  # quiet=no per sentence results
-		numproc=1,  # increase to use multiple CPUs; set to None to use all CPUs.
+		numproc=1,  # increase to use multiple CPUs; None: use all CPUs.
 		resultdir='results',
 		rerun=False):
 	""" Execute an experiment. """
@@ -329,7 +328,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			logging.info("splitted discontinuous nodes")
 		else:
 			traintrees = trees
-		secondarymodel = backtransform = None
+		backtransform = None
 		if stage.dop:
 			if stage.usedoubledop:
 				# find recurring fragments in treebank,
@@ -339,39 +338,10 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						indices=stage.estimator == "ewe")
 				xgrammar, backtransform = doubledop(fragments,
 						ewe=stage.estimator == "ewe")
-				half = Fraction(1, 2)
-				if (stage.objective == "shortest"
-						or stage.objective.startswith("sl-dop")):
-					# any rule corresponding to the introduction of a
-					# fragment has a probability of 0.5, else 1.
-					shortest = [(r, 1 if ("}" in r[0][0] or "@" in r[0][0])
-							else half) for r, _ in xgrammar]
-					if stage.objective == "shortest":
-						# use RFE for tie breaking of shortest derivations
-						# Bod (2000) uses the ranks of subtree frequencies for
-						# each root node.
-						secondarymodel = dict(xgrammar)
-						xgrammar = shortest
-					elif stage.objective.startswith("sl-dop"):
-						secondarymodel = dict(shortest)
-			elif stage.objective == "shortest":  # dopreduction from here on
-				# the secondary model is used to resolve ties
-				# for the shortest derivation
-				# i.e., secondarymodel is probabilistic
-				xgrammar, secondarymodel = dopreduction(traintrees, sents,
-					ewe=stage.estimator == "ewe", shortestderiv=True)
-			elif "sl-dop" in stage.objective:
-				# here secondarymodel is non-probabilistic
-				xgrammar = dopreduction(traintrees, sents,
-						ewe=stage.estimator == "ewe", shortestderiv=False)
-				secondarymodel, _ = dopreduction(traintrees, sents,
-								ewe=False, shortestderiv=True)
-				secondarymodel = Grammar(secondarymodel, start=top)
 			else:  # mpp or mpd
 				xgrammar = dopreduction(traintrees, sents,
 					ewe=(stage.estimator in ("ewe", "sl-dop",
-					"sl-dop-simple")), shortestderiv=False,
-					packedgraph=stage.packedgraph)
+					"sl-dop-simple")), packedgraph=stage.packedgraph)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
 			if lexmodel and simplelexsmooth:
 				xgrammar = simplesmoothlexicon(xgrammar, lexmodel)
@@ -379,6 +349,11 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)
 			grammar = Grammar(xgrammar, start=top)
+			if stage.objective in ('shortest', 'sl-dop', 'sl-dop-simple'):
+				stage.shortest = shortestderivgrammar(grammar)
+				grammars = (stage.shortest['nonprob'], grammar)
+			else:
+				grammars = (grammar, )
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals", len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
@@ -391,28 +366,31 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						resultdir, stage.name), "w") as out:
 					out.writelines("%s\n" % a for a in backtransform.values())
 				if n and stage.prune:
-					msg = grammar.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile(b'@.+$'),
-						neverblockre=re.compile(b'.+}<'),
-						# + stage.neverblockre?
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin)
+					for x in grammars:
+						msg = x.getmapping(stages[n - 1].grammar,
+							striplabelre=re.compile(b'@.+$'),
+							neverblockre=re.compile(b'.+}<'),
+							# + stage.neverblockre?
+							splitprune=stage.splitprune and stages[n - 1].split,
+							markorigin=stages[n - 1].markorigin)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
-					msg = grammar.getmapping(None,
-						striplabelre=None,
-						neverblockre=re.compile(b'.+}<'),
-						# + stage.neverblockre?
-						splitprune=False, markorigin=False)
+					for x in grammars:
+						msg = x.getmapping(None,
+							striplabelre=None,
+							neverblockre=re.compile(b'.+}<'),
+							# + stage.neverblockre?
+							splitprune=False, markorigin=False)
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
-				msg = grammar.getmapping(stages[n - 1].grammar,
-					striplabelre=re.compile(b'@[-0-9]+$'),
-					neverblockre=re.compile(stage.neverblockre)
-						if stage.neverblockre else None,
-					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin)
+				for x in grammars:
+					msg = x.getmapping(stages[n - 1].grammar,
+						striplabelre=re.compile(b'@[-0-9]+$'),
+						neverblockre=re.compile(stage.neverblockre)
+							if stage.neverblockre else None,
+						splitprune=stage.splitprune and stages[n - 1].split,
+						markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
 		else:  # not stage.dop
 			xgrammar = induce_plcfrs(traintrees, sents)
@@ -450,6 +428,14 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		# frequencies. otherwise, resort to decimal floats (imprecise).
 		write_lcfrs_grammar(xgrammar, rules, lexicon,
 				bitpar=bitpar, freqs=bitpar and sumsto1)
+		if stage.mode == 'pcfg-bitpar':
+			assert fanout == 1 or stage.split
+			_, stage.rulesfile = tempfile.mkstemp()
+			_, stage.lexiconfile = tempfile.mkstemp()
+			rules = open(stage.rulesfile, "w")
+			lexicon = io.open(stage.lexiconfile, "w", encoding='utf-8')
+			write_lcfrs_grammar(xgrammar, rules, lexicon,
+					bitpar=bitpar, freqs=bitpar and sumsto1)
 		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz", resultdir,
 				stage.name, ",backtransform" if stage.usedoubledop else '')
 
@@ -483,7 +469,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			outside = np.load("outside.npz")['outside']
 			logging.info("loaded PLCFRS estimates")
 		stage.update(grammar=grammar, backtransform=backtransform,
-				secondarymodel=secondarymodel, outside=outside)
+				outside=outside)
 
 
 def doparsing(**kwds):
@@ -939,7 +925,8 @@ def readparam(filename):
 				for stage in params['stages']]
 	for n, stage in enumerate(params['stages']):
 		assert stage.mode in (
-				'plcfrs', 'pcfg', 'pcfg-posterior', 'pcfg-symbolic')
+				'plcfrs', 'pcfg', 'pcfg-posterior', 'pcfg-symbolic',
+				'pcfg-bitpar')
 		assert n > 0 or not stage.prune, (
 				"need previous stage to prune, but this stage is first.")
 		if stage.dop:

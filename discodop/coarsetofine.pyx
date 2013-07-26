@@ -15,7 +15,7 @@ np.import_array()
 
 
 cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
-	int k, bint splitprune, bint markorigin, bint finecfg):
+	int k, bint splitprune, bint markorigin, bint finecfg, bint bitpar):
 	""" Produce a white list of chart items occurring in the k-best derivations
 	of chart, where labels X in coarse.toid are projected to the labels
 	X and X@n-m in fine.toid, for possible values of n and m.
@@ -39,7 +39,10 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 		assert fine.splitmapping[0] is not NULL
 	d = <dict>defaultdict(dict)
 	# construct a list of the k-best nonterminals to prune with
-	kbest = kbest_items(chart, goal, k, finecfg, coarse.tolabel)
+	if bitpar:
+		kbest = bitparkbestitems(chart, coarse)
+	else:
+		kbest = kbest_items(chart, goal, k, finecfg, coarse.tolabel)
 	if finecfg:
 		whitelist = [[{} for _ in range((<CFGChartItem>goal).end + 1)]
 				for _ in range((<CFGChartItem>goal).end)]
@@ -197,9 +200,9 @@ cpdef filterchart(chart, ChartItem start):
 	if isinstance(start, CFGChartItem):
 		start1 = (<CFGChartItem>start).start
 		end = (<CFGChartItem>start).end
-		fat = end >= (sizeof(ULLong) * 8)
+		fatitems = end >= (sizeof(ULLong) * 8)
 		chart = [[b.copy() for b in a] for a in chart]
-		filter_subtreecfg(start.label, start1, end, chart, chart2, fat)
+		filter_subtreecfg(start.label, start1, end, chart, chart2, fatitems)
 	else:
 		filter_subtree(start, chart, chart2)
 	return chart2
@@ -217,10 +220,10 @@ cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 			filter_subtree(edge.right, chart, chart2)
 
 cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
-		bint fat):
+		bint fatitems):
 	cdef CFGEdge edge
 	cdef ChartItem newitem
-	if fat:
+	if fatitems:
 		newitem = CFGtoFatChartItem(label, start, end)
 	else:
 		newitem = CFGtoSmallChartItem(label, start, end)
@@ -231,9 +234,10 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 			continue
 		if edge.rule.rhs1 and edge.rule.rhs1 in chart[start][edge.mid]:
 			filter_subtreecfg(edge.rule.rhs1, start, edge.mid,
-					chart, chart2, fat)
+					chart, chart2, fatitems)
 		if edge.rule.rhs2 and edge.rule.rhs2 in chart[edge.mid][end]:
-			filter_subtreecfg(edge.rule.rhs2, edge.mid, end, chart, chart2, fat)
+			filter_subtreecfg(edge.rule.rhs2, edge.mid, end,
+					chart, chart2, fatitems)
 
 
 def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
@@ -305,6 +309,7 @@ def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
 		finechart[:lensent, :lensent + 1, label] = inside[
 				:lensent, :lensent + 1, fine.mapping[label]]
 
+
 cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	""" Like kbest_items, but apply the reverse of the Boyd (2007)
 	transformation to the k-best derivations."""
@@ -325,6 +330,28 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	return newchart
 
 
+def bitparkbestitems(dict derivs, Grammar coarse):
+	""" Take a dictionary of CFG derivations as strings, and produce a list of
+	ChartItems occurring in those derivations. """
+	items = {}
+	fatitems = None
+	for deriv in derivs:
+		t = Tree.parse(deriv, parse_leaf=int)
+		if fatitems is None:
+			fatitems = len(t.leaves()) >= (sizeof(ULLong) * 8)
+		for n in t.subtrees():
+			label = coarse.toid[n.label]
+			leaves = n.leaves()
+			start = min(leaves)
+			end = max(leaves) + 1
+			if fatitems:
+				item = CFGtoFatChartItem(label, start, end)
+			else:
+				item = CFGtoSmallChartItem(label, start, end)
+			items[item] = 0.0
+	return items
+
+
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	import plcfrs
 	from disambiguation import marginalize
@@ -334,7 +361,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	print(" C O A R S E ", end='')
 	p, start, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if start:
-		mpp, _ = marginalize("mpp", p, start, coarse, 10)
+		mpp, _, _ = marginalize("mpp", p, start, coarse, 10)
 		for t in mpp:
 			print(exp(-mpp[t]), end='')
 			t = Tree.parse(t, parse_leaf=int)
@@ -348,7 +375,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 		print("no parse")
 		return
 		#pprint_chart(p, sent, coarse.tolabel)
-	l, _ = prunechart(p, start, coarse, fine, k, split, True, False)
+	l, _ = prunechart(p, start, coarse, fine, k, split, True, False, False)
 	if verbose:
 		print("\nitems in 50-best of coarse chart")
 		if split:
@@ -371,7 +398,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	pp, start, _ = plcfrs.parse(sent, fine, tags=tags, whitelist=l,
 			splitprune=split, markorigin=True)
 	if start:
-		mpp, _ = marginalize("mpp", pp, start, fine, 10)
+		mpp, _, _ = marginalize("mpp", pp, start, fine, 10)
 		for t in mpp:
 			print(exp(-mpp[t]), end='')
 			t = Tree.parse(t, parse_leaf=int)

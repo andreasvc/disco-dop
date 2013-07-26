@@ -4,12 +4,17 @@
 from __future__ import print_function
 from math import log, exp
 from collections import defaultdict
+from subprocess import Popen, PIPE
+from itertools import count
+from os import unlink
 import re
-import logging
 import sys
+import logging
+import tempfile
 import numpy as np
 from tree import Tree
 from agenda import EdgeAgenda
+
 
 # cython imports
 from libc.stdlib cimport malloc, calloc, free
@@ -1026,6 +1031,44 @@ def getgrammarmapping(Grammar coarse, Grammar fine):
 	return mapping
 
 
+UNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
+
+
+def parse_bitpar(rulesfile, lexiconfile, sent, n, start, startlabel, tags=None):
+	""" Parse a single sentence with bitpar, given filenames of rules and
+	lexicon. n is the number of derivations to ask for (max 1000).
+	Result is a dictionary of derivations with their probabilities. """
+	assert 1 <= n <= 1000
+	if tags:
+		_, lexiconfile = tempfile.mkstemp()
+		with open(lexiconfile, 'w') as f:
+			f.writelines(['%s\t%s 1\n' % (t, t) for t in set(tags)])
+	proc = Popen(['bitpar', '-q', '-vp', '-b', str(n), '-s', startlabel,
+			rulesfile, lexiconfile],
+			shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+	results, msg = proc.communicate('\n'.join([word.encode('utf8')
+			for word in (tags or sent)]) + '\n')
+	results = results.strip('\t\n ')  # decode or not?
+	if tags:
+		unlink(lexiconfile)
+	if results.startswith("No parse"):
+		return {}, start, results
+	start = new_CFGChartItem(start, 0, len(sent))
+	lines = UNESCAPE.sub(r'\1', results).splitlines()
+	return {renumber(deriv): -log(float(prob[prob.index('=') + 1:]))
+			for prob, deriv in zip(lines[::2], lines[1::2])}, start, msg
+
+
+def renumber(deriv):
+	""" Replace terminals of CF-derivation (string) with indices. """
+	it = count()
+
+	def closure(match):
+		return ' %s)' % next(it)
+
+	return re.sub(r' [^ )]+\)', closure, deriv)
+
+
 def sortfunc(CFGEdge e):
 	return e.inside
 
@@ -1142,7 +1185,7 @@ def main():
 	chart, start, msg = parse(sent, cfg2)
 	from disambiguation import marginalize
 	from operator import itemgetter
-	mpp, _ = marginalize('mpp', chart, start, cfg2, 10)
+	mpp, _, _ = marginalize('mpp', chart, start, cfg2, 10)
 	for a, p in sorted(mpp.items(), key=itemgetter(1), reverse=True):
 		print(p, a)
 	chart1, start1, msg1 = symbolicparse(sent, cfg2)

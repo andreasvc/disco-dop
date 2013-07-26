@@ -1018,7 +1018,7 @@ def do(sent, grammar):
 		pprint_chart(chart, sent, grammar.tolabel)
 	if start:
 		print("10 best parse trees:")
-		mpp, _ = marginalize("mpp", chart, start, grammar, 10)
+		mpp, _, _ = marginalize("mpp", chart, start, grammar, 10)
 		for a, p in reversed(sorted(mpp.items(), key=itemgetter(1))):
 			print(p, a)
 		print()

@@ -25,7 +25,7 @@ BITPAR_NONINT = re.compile(b"(?:^|\n)[0-9]+\.[0-9]+[ \t]")
 LEXICON_NONINT = re.compile("[ \t][0-9]+[./][0-9]+[ \t\n]")
 
 LCFRS = re.compile(b"^([^ \t\n]+\t){2,3}[01,]+\t[0-9]+([./][0-9]+)?$")
-BITPAR = re.compile(b"^[0-9]+(\.[0-9]+)?[ \t]([^ \t\n]]+\t){2,3}$")
+BITPAR = re.compile(b"^[0-9]+(\.[0-9]+)?[ \t]([^ \t\n]+[ \t]){2,3}$")
 LEXICON = re.compile("^[^ \t]+\t([^ \t\n]+[ \t][0-9]+([./][0-9]+)?)+$")
 
 # comparison functions for sorting rules on LHS/RHS labels.
@@ -65,8 +65,11 @@ cdef class Grammar:
 		self.mapping = self.splitmapping = self.bylhs = NULL
 		if not isinstance(start, bytes):
 			start = start.encode('ascii')
+		self.start = start
 		self.logprob = logprob
+		self.bitpar = bitpar
 		self.numunary = self.numbinary = 0
+		self.rulenos = {}
 
 		if isinstance(rules_tuples_or_bytes, bytes):
 			assert isinstance(lexicon, unicode), "expected lexicon"
@@ -82,17 +85,17 @@ cdef class Grammar:
 				lexicontmp.seek(0)
 				self.origrules = ruletmp.read()
 				self.origlexicon = lexicontmp.read()
-			bitpar = False
+			self.bitpar = False
 		else:
 			raise ValueError("expected sequence of tuples or bytes string.")
 
 		# collect non-terminal labels; count number of rules in each category
 		# for allocation purposes.
 		rulelines = self.origrules.splitlines()
-		fanoutdict = self._countrules(rulelines, bitpar, start)
+		fanoutdict = self._countrules(rulelines)
 		self._allocate()
 		# convert phrasal & lexical rules
-		self._convertrules(rulelines, bitpar)
+		self._convertrules(rulelines)
 		del rulelines
 		self._convertlexicon(fanoutdict)
 		for n in range(self.nonterminals):
@@ -101,7 +104,7 @@ cdef class Grammar:
 		self._indexrules(self.bylhs, 0, 0)
 		# if the grammar only contains integral values (frequencies),
 		# normalize them into relative frequencies.
-		nonint = BITPAR_NONINT if bitpar else LCFRS_NONINT
+		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
 		normalize = not (nonint.search(self.origrules)
 				or LEXICON_NONINT.search(self.origlexicon))
 		self._alterweights(normalize)
@@ -110,7 +113,7 @@ cdef class Grammar:
 		self._indexrules(self.rbinary, 2, 3)
 
 	@cython.wraparound(True)
-	def _countrules(self, list rulelines, bint bitpar, bytes start):
+	def _countrules(self, list rulelines):
 		""" Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs """
 		Epsilon = b'Epsilon'
@@ -122,7 +125,7 @@ cdef class Grammar:
 			if not line:
 				continue
 			fields = line.split()
-			if bitpar:
+			if self.bitpar:
 				rule = fields[1:]
 				yf = '0' if len(rule) == 2 else '01'
 			else:
@@ -130,7 +133,7 @@ cdef class Grammar:
 				yf = fields[-2]
 			assert Epsilon not in rule, ("Epsilon symbol is only used "
 						"to introduce terminal symbols in lexical rules.")
-			assert start not in rule[1:], (
+			assert self.start not in rule[1:], (
 					"Start symbol should only occur on LHS.")
 			if len(rule) == 2:
 				assert YFUNARYRE.match(yf), ("yield function refers to "
@@ -151,7 +154,7 @@ cdef class Grammar:
 							"previous: %d; this non-terminal: %d.\nrule: %r" % (
 							nt, fanoutdict[nt], fanout, rule))
 				else:
-					if nt == start:
+					if nt == self.start:
 						self.toid[nt] = 1
 					else:
 						self.toid[nt] = count
@@ -160,8 +163,8 @@ cdef class Grammar:
 					if fanoutdict[nt] > self.maxfanout:
 						self.maxfanout = fanoutdict[nt]
 
-		assert start in self.toid, ("Start symbol %r not in set of "
-				"non-terminal labels extracted from grammar rules." % start)
+		assert self.start in self.toid, ("Start symbol %r not in set of "
+				"non-terminal labels extracted from grammar rules." % self.start)
 		self.numrules = self.numunary + self.numbinary
 		assert self.numrules, "no rules found"
 		self.tolabel = sorted(self.toid, key=self.toid.get)
@@ -191,17 +194,16 @@ cdef class Grammar:
 		assert self.fanout is not NULL
 
 	@cython.wraparound(True)
-	cdef _convertrules(Grammar self, list rulelines, bint bitpar):
+	cdef _convertrules(Grammar self, list rulelines):
 		""" Auxiliary function to create Grammar objects. Copies grammar
-		rules from a text file to an array of structs.
-		Grammar rules are placed in a contiguous array. """
+		rules from a text file to a contiguous array of structs. """
 		cdef UInt n = 0, m, prev = self.nonterminals
 		cdef Rule *cur
 		for line in rulelines:
 			if not line:
 				continue
 			fields = line.split()
-			if bitpar:
+			if self.bitpar:
 				rule = fields[1:]
 				yf = b'0' if len(rule) == 2 else b'01'
 				w = fields[0]
@@ -233,6 +235,7 @@ cdef class Grammar:
 				m += 1
 			cur.lengths |= 1 << (m - 1)
 			assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
+			self.rulenos[tuple(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
 
@@ -438,6 +441,7 @@ cdef class Grammar:
 						seen.add(self.mapping[n])
 			else:
 				self.mapping[n] = 0
+		msg = '?!?'
 		if seen == set(range(coarse.nonterminals)):
 			msg = 'label sets are equal'
 		elif seen != set(range(coarse.nonterminals)):
@@ -471,6 +475,40 @@ cdef class Grammar:
 					neverblockre=neverblockre.pattern,
 					splitprune=splitprune, markorigin=markorigin))
 		return msg
+
+	def as_tuples(self):
+		""" Return the grammar as a sequence of rule tuples. """
+		cdef LexicalRule lexrule
+		cdef Rule rule
+		cdef int n, a, b
+		cdef list result = []
+		for n in range(self.numrules):
+			rule = self.bylhs[0][n]
+			lhs = self.tolabel[rule.lhs]
+			rhs1 = self.tolabel[rule.rhs1]
+			yf = [()]
+			b = 0
+			for a in range(8 * sizeof(rule.args)):
+				yf[b] += (1, ) if (rule.args >> a) & 1 else (0, )
+				if (rule.lengths >> a) & 1:
+					b += 1
+					if b == self.fanout[rule.lhs]:
+						break
+					else:
+						yf.append(())
+			w = exp(-rule.prob) if self.logprob else rule.prob
+			if rule.rhs2 == 0:
+				result.append((((lhs, rhs1), tuple(yf)), w))
+			else:
+				rhs2 = self.tolabel[rule.rhs2]
+				result.append((((lhs, rhs1, rhs2), tuple(yf)), w))
+		for word in self.lexical:
+			for lexrule in self.lexical[word]:
+				tag = self.tolabel[lexrule.lhs]
+				w = exp(-lexrule.prob) if self.logprob else lexrule.prob
+				result.append((((tag, b'Epsilon'), (word, )), w))
+		return result
+
 	cdef rulerepr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
 			exp(-rule.prob),
@@ -479,6 +517,7 @@ cdef class Grammar:
 			"  %s" % self.tolabel[rule.rhs2].decode('ascii')
 				if rule.rhs2 else "")
 		return left.ljust(40) + self.yfrepr(rule)
+
 	cdef yfrepr(self, Rule rule):
 		cdef int n, m = 0
 		cdef result = ""
@@ -505,7 +544,7 @@ cdef class Grammar:
 		return "\n".join(result)
 
 	def __repr__(self):
-		return "%s(%r)" % (self.__class__.__name__,
+		return "%s(\n%s,\n%s\n)" % (self.__class__.__name__,
 				self.origrules, self.origlexicon)
 
 	def __str__(self):
@@ -525,7 +564,8 @@ cdef class Grammar:
 
 	def __reduce__(self):
 		""" Helper function for pickling. """
-		return (Grammar, (self.origrules, self.origlexicon))
+		return (Grammar, (self.origrules, self.origlexicon,
+				self.start, self.logprob, self.bitpar))
 
 	def __dealloc__(self):
 		if self.bylhs is NULL:
