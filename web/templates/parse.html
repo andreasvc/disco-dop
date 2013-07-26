@@ -36,6 +36,21 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>German: Negra treebank
 	<li>Dutch: Alpino treebank
 	</ul>
+
+	Objective functions:
+	<ul>
+	<li>MPP: most probable parse
+	<li>MPD: most probable derivation
+	<li>MPSD: most probable shortest derivation
+	<li>SL-DOP: shortest derivation among n most probable parse trees (n=7)
+	<li>SL-DOP: shortest derivation among derivations of n most probable parse trees (n=7; approximation)
+	</ul>
+
+	Marginalization:
+	<ul>
+	<li>n-best: find the n most probable derivations.
+	<li>sample: sample derivations according to their probability distribution
+	</ul>
 </div>
 </blockquote>
 
@@ -49,6 +64,9 @@ Sentence:
 <select name=objfun>
 	<option value=mpp>MPP</option>
 	<option value=mpd>MPD</option>
+	<option value=shortest>MPSD</option>
+	<option value=sl-dop>SL-DOP</option>
+	<option value=sl-dop-simple>SL-DOP-simple</option>
 </select>
 <select name=marg>
 	<option value=nbest>n-best</option>

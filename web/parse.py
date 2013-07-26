@@ -14,11 +14,11 @@ from functools import wraps
 from operator import itemgetter
 from flask import Flask, Markup, request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
-from discodop import treetransforms
+from discodop import treetransforms, treebank
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.runexp import readparam
-from discodop.parser import readgrammars, Parser
+from discodop.parser import Parser, readgrammars, probstr
 
 APP = Flask(__name__)
 morphtags = re.compile(
@@ -55,9 +55,10 @@ def parse():
 	parsers[lang].stages[-1].sample = marg in ('sample', 'both')
 	results = list(parsers[lang].parse(senttok))
 	if results[-1].noparse:
-		result = 'no parse!\n'
-		frags = nbest = ''
 		parsetrees = {}
+		result = 'no parse!'
+		frags = nbest = ''
+		msg = ''
 	else:
 		tree = str(results[-1].parsetree)
 		prob = results[-1].prob
@@ -65,19 +66,17 @@ def parse():
 		parsetrees = heapq.nlargest(10, parsetrees.items(), key=itemgetter(1))
 		fragments = results[-1].fragments or ()
 		msg = '\n'.join(stage.msg for stage in results)
-		APP.logger.info('[%g] %s' % (prob, tree))
+		APP.logger.info('[%s] %s' % (probstr(prob), tree))
 		tree = morphtags.sub(r'(\1\2', tree)
 		tree = Tree.parse(tree, parse_leaf=int)
-		treetransforms.unbinarize(tree)
-		treetransforms.removefanoutmarkers(tree)
 		result = Markup(DrawTree(tree, senttok).text(
 				unicodelines=True, html=True))
 		frags = Markup('\n\n'.join(
 				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
 						unicodelines=True, html=True)
 				for frag, terminals in fragments))
-		nbest = Markup('\n\n'.join('%d. [p=%g]\n%s' % (
-				n + 1, prob,
+		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (
+				n + 1, probstr(prob),
 				DrawTree(treetransforms.removefanoutmarkers(
 					treetransforms.unbinarize(Tree.parse(morphtags.sub(
 						r'(\1\2', tree), parse_leaf=int))),
@@ -89,7 +88,7 @@ def parse():
 	info = Markup('\n'.join(('sentence length: %d; objfun=%s; marg=%s' % (
 			len(senttok), objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',
-			'\n'.join('%d. [p=%g] %s' % (n + 1, prob, cgi.escape(tree))
+			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), cgi.escape(tree))
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
 	return render_template('parsetree.html', sent=sent, result=result,
 			frags=frags, nbest=nbest, info=info, randid=randid())
