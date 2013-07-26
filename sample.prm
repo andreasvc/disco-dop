@@ -10,7 +10,7 @@ stages=[
     mode='plcfrs', # use the agenda-based PLCFRS parser
     prune=True, #whether to use previous chart to prune parsing of this stage
     splitprune=True, #VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
-    k = 10000, #number of coarse pcfg derivations to prune with; k=0 => filter only
+    k=10000, #number of coarse pcfg derivations to prune with; k=0 => filter only
     getestimates=False, #compute & store estimates; choices: 'SX', 'SXlrgaps'
     useestimates=False, #load & use estimates; choices: same as above.
     neverblockre=None, #do not prune nodes with labels that match this regex
