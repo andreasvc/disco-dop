@@ -61,8 +61,21 @@ morphology=None,  # options:
 #	'between': add node with morphological information between
 #		POS tag and word, e.g., (DET (sg.def the))
 
-transformations=None, # apply transformations for Negra/Tiger to make trees less flat
-relationalrealizational=False,  # whether to apply RR-transform
+# apply transformations for Negra/Tiger to make trees less flat
+transformations=None,
+relationalrealizational=None,
+#relationalrealizational=dict(  # Negra/Tiger
+#	# the function labels to treat as adjunction
+#	adjunctionlabel='MO',
+#	# functions that are ignored for argument structures
+#	ignorefunctions=('--', 'CD', 'CP', 'NK'),
+#		# auxiliaries:
+#	ignorecategories=(
+#		'VAFIN', 'VAIMP', 'VAINF', 'VAPP', 'VMFIN', 'VMINF', 'VMPP'),
+#	morphlevels=1,  # percolate morph. features this many levels up
+#	# percolate only the following features:
+#	percolatefeatures=set('1 2 3 Sg Pl Akk Acc Dat Nom Gen'.split()),
+#),
 
 # postagging: pass None to use tags from treebank.
 postagging=dict(

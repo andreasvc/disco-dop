@@ -8,12 +8,14 @@ from math import exp, log
 from collections import defaultdict
 from functools import partial
 from operator import getitem
+import numpy as np
 from tree import Tree
 from agenda cimport EdgeAgenda, Entry
 cimport cython
 
 DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8
+np.import_array()
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},
 YFBINARY = re.compile(
@@ -42,45 +44,47 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 #cdef CmpFun **cmpfun = [&cmp0, &cmp1, &cmp2]
 #cdef int (* cmpfun)(const void *, const void *) cmpfun = [&cmp0, &cmp1, &cmp2]
 
+
 cdef class Grammar:
 	""" A grammar object which stores rules compactly,
 	indexed in various ways. """
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
-	def __init__(self, rules_tuples_or_bytes=None, lexicon=None,
-			start=b"ROOT", logprob=True, bitpar=False):
+	def __init__(self, rule_tuples_or_bytes=None, lexicon=None,
+			start=b"ROOT", bitpar=False):
 		""" Parameters:
-		- rules_tuples_or_bytes: either a sequence of tuples containing both
+		- rule_tuples_or_bytes: either a sequence of tuples containing both
 			phrasal & lexical rules, or a bytes string containing the phrasal
 			rules in text format; in the latter case lexicon should be given.
 			The text format allows for more efficient loading and is used
 			internally.
 		- start: a string identifying the unique start symbol of this grammar,
 			which will be used by default when parsing with this grammar
-		- logprob: whether to convert probabilities to negative log
-			probabilities.
 		- bitpar: whether the rules are given in bitpar text format
-			(default PLCFRS format; not applicable with tuples). """
+			(default PLCFRS format; not applicable with tuples).
+		NB: by default the grammar is in logprob mode;
+		invoke grammar.switch('default', logprob=False) to switch. """
+		cdef LexicalRule lexrule
+		cdef np.ndarray[np.double_t, ndim=3] models = self.models
 		self.mapping = self.splitmapping = self.bylhs = NULL
 		if not isinstance(start, bytes):
 			start = start.encode('ascii')
 		self.start = start
-		self.logprob = logprob
 		self.bitpar = bitpar
-		self.numunary = self.numbinary = 0
-		self.rulenos = {}
+		self.numunary = self.numbinary = self.currentmodel = 0
+		self.modelnames = [u'default']
 
-		if isinstance(rules_tuples_or_bytes, bytes):
+		if isinstance(rule_tuples_or_bytes, bytes):
 			assert isinstance(lexicon, unicode), "expected lexicon"
-			self.origrules = rules_tuples_or_bytes
+			self.origrules = rule_tuples_or_bytes
 			self.origlexicon = lexicon
-		elif isinstance(rules_tuples_or_bytes[0], tuple):
+		elif isinstance(rule_tuples_or_bytes[0], tuple):
 			# convert tuples to strings with text format
 			# this is somewhat roundabout but avoids code duplication
 			from grammar import write_lcfrs_grammar
 			with BytesIO() as ruletmp, StringIO() as lexicontmp:
-				write_lcfrs_grammar(rules_tuples_or_bytes, ruletmp, lexicontmp)
+				write_lcfrs_grammar(rule_tuples_or_bytes, ruletmp, lexicontmp)
 				ruletmp.seek(0)
 				lexicontmp.seek(0)
 				self.origrules = ruletmp.read()
@@ -95,9 +99,11 @@ cdef class Grammar:
 		fanoutdict = self._countrules(rulelines)
 		self._allocate()
 		# convert phrasal & lexical rules
+		self._convertlexicon(fanoutdict)
+		self.models = models = np.empty((1, 2,
+				self.numrules + len(self.lexical)), dtype='d')
 		self._convertrules(rulelines)
 		del rulelines
-		self._convertlexicon(fanoutdict)
 		for n in range(self.nonterminals):
 			self.fanout[n] = fanoutdict[self.tolabel[n]]
 		# index & filter phrasal rules in different ways
@@ -105,12 +111,19 @@ cdef class Grammar:
 		# if the grammar only contains integral values (frequencies),
 		# normalize them into relative frequencies.
 		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
-		normalize = not (nonint.search(self.origrules)
-				or LEXICON_NONINT.search(self.origlexicon))
-		self._alterweights(normalize)
+		if not (nonint.search(self.origrules)
+				or LEXICON_NONINT.search(self.origlexicon)):
+			self._normalize()
 		self._indexrules(self.unary, 1, 2)
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
+		for n in range(self.numrules):
+			models[0][0][n] = self.bylhs[0][n].prob
+			models[0][1][n] = -log(self.bylhs[0][n].prob)
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+				models[0][0][n] = lexrule.prob
+				models[0][1][n] = -log(lexrule.prob)
+		self.switch('default', True)
 
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines):
@@ -199,6 +212,7 @@ cdef class Grammar:
 		rules from a text file to a contiguous array of structs. """
 		cdef UInt n = 0, m, prev = self.nonterminals
 		cdef Rule *cur
+		self.rulenos = {}
 		for line in rulelines:
 			if not line:
 				continue
@@ -241,17 +255,19 @@ cdef class Grammar:
 
 	def _convertlexicon(self, fanoutdict):
 		""" Make objects for lexical rules. """
-		self.lexical = {}
+		cdef int n, x
+		self.lexical = []
+		self.lexicalbyword = {}
 		self.lexicalbylhs = {}
 		for line in self.origlexicon.splitlines():
 			if not line:
 				continue
-			n = line.index('\t')
-			word = line[:n]
-			fields = line[n + 1:].encode('ascii').split()
-			assert word not in self.lexical, (
+			x = line.index('\t')
+			word = line[:x]
+			fields = line[x + 1:].encode('ascii').split()
+			assert word not in self.lexicalbyword, (
 					"word %r appears more than once in lexicon file" % word)
-			self.lexical[word] = []
+			self.lexicalbyword[word] = []
 			for tag, w in zip(fields[::2], fields[1::2]):
 				if tag not in self.toid:
 					logging.warning("POS tag %r for word %r "
@@ -262,46 +278,40 @@ cdef class Grammar:
 				assert fanoutdict[tag] == 1, (
 						"POS tag %r does not have fan-out 1." % tag)
 				# convert fraction to float
-				n = w.find(b'/')
-				w = float(w[:n]) / float(w[n + 1:]) if n > 0 else float(w)
+				x = w.find(b'/')
+				w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
 				assert w > 0, (
 						"weights should be positive and non-zero:\n%r" % line)
 				lexrule = LexicalRule(self.toid[tag], word, w)
 				if lexrule.lhs not in self.lexicalbylhs:
-					self.lexicalbylhs[lexrule.lhs] = []
-				self.lexical[word].append(lexrule)
-				self.lexicalbylhs[lexrule.lhs].append(lexrule)
-			assert self.lexical and self.lexicalbylhs, "no lexical rules found."
+					self.lexicalbylhs[lexrule.lhs] = {}
+				self.lexical.append(lexrule)
+				self.lexicalbyword[word].append(lexrule)
+				self.lexicalbylhs[lexrule.lhs][word] = lexrule
+			assert self.lexical and self.lexicalbyword and self.lexicalbylhs, (
+					"no lexical rules found.")
 
-	def _alterweights(self, bint normalize):
-		""" Normalize frequencies to relative frequencies,
-		and turn weights into negative log probabilities (both optionally).
+	def _normalize(self):
+		""" Optionally normalize frequencies to relative frequencies.
 		Should be run during initialization. """
 		cdef double mass = 0
 		cdef UInt n = 0, lhs
 		cdef LexicalRule lexrule
 		for lhs in range(self.nonterminals):
-			if normalize:
-				mass = 0
-				n = 0
-				while self.bylhs[lhs][n].lhs == lhs:
-					mass += self.bylhs[lhs][n].prob
-					# can't do this with logprobs
-					n += 1
-				for lexrule in self.lexicalbylhs.get(lhs, ()):
-					mass += lexrule.prob
+			mass = 0
 			n = 0
 			while self.bylhs[lhs][n].lhs == lhs:
-				if normalize:
-					self.bylhs[lhs][n].prob /= mass
-				if self.logprob:
-					self.bylhs[lhs][n].prob = abs(log(self.bylhs[lhs][n].prob))
+				mass += self.bylhs[lhs][n].prob
 				n += 1
-			for lexrule in self.lexicalbylhs.get(lhs, ()):
-				if normalize:
-					lexrule.prob /= mass
-				if self.logprob:
-					lexrule.prob = abs(log(lexrule.prob))
+			for lexrule in self.lexicalbylhs.get(lhs, {}).values():
+				mass += lexrule.prob
+			n = 0
+			while self.bylhs[lhs][n].lhs == lhs:
+				self.bylhs[lhs][n].prob /= mass
+				n += 1
+			for lexrule in self.lexicalbylhs.get(lhs, {}).values():
+				lexrule.prob /= mass
+
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen):
 		""" Auxiliary function to create Grammar objects. Copies certain
 		grammar rules and sorts them on the given index.
@@ -351,6 +361,55 @@ cdef class Grammar:
 		# sentinel rule
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
+	def register(self, name, model):
+		""" Register a probabilistic model supplied as a name and a pair
+		(ruleprobs, lexprobs), where ruleprobs and lexprobs are sequences of
+		probabilities, in the same order as that of self.origrules and
+		self.origlexicon. """
+		cdef int n, m
+		cdef list ruleprobs, lexprobs
+		cdef np.ndarray[np.double_t, ndim=3] models
+		ruleprobs, lexprobs = model
+		name = unicode(name)
+		assert name not in self.modelnames
+		assert len(self.modelnames) <= 255, (
+				'256 probabilistic models should be enuogh for anyone.')
+		assert len(ruleprobs) == self.numrules
+		assert len(lexprobs) == len(self.lexical)
+		m = len(self.modelnames)
+		self.modelnames.append(name)
+		self.models.resize(m + 1, 2, self.numrules + len(self.lexical))
+		models = self.models
+		for n, prob in enumerate(ruleprobs):
+			models[m][0][n] = prob
+			models[m][1][n] = -log(prob)
+		for n, prob in enumerate(lexprobs, self.numrules):
+			models[m][0][n] = prob
+			models[m][1][n] = -log(prob)
+
+	def switch(self, name, bint logprob=True):
+		""" Switch to a different probabilistic model;
+		use 'default' to swith back to model given during initialization. """
+		cdef int n, m
+		cdef LexicalRule lexrule
+		cdef np.ndarray[np.double_t, ndim=3] models = self.models
+		m = self.modelnames.index(name)
+		if self.currentmodel == m and self.logprob == logprob:
+			return
+		for n in range(self.numrules):
+			self.bylhs[0][n].prob = models[m][logprob][self.bylhs[0][n].no]
+		for n in range(self.numbinary):
+			self.lbinary[0][n].prob = models[m][logprob][
+					self.lbinary[0][n].no]
+			self.rbinary[0][n].prob = models[m][logprob][
+					self.rbinary[0][n].no]
+		for n in range(self.numunary):
+			self.unary[0][n].prob = models[m][logprob][self.unary[0][n].no]
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			lexrule.prob = models[m][logprob][n]
+		self.logprob = logprob
+		self.currentmodel = m
+
 	def buildchainvec(self):
 		""" Build a boolean matrix representing the unary (chain) rules. """
 		cdef UInt n
@@ -374,7 +433,7 @@ cdef class Grammar:
 			rule = &(self.bylhs[0][n])
 			sums[rule.lhs].append(rule.prob)
 		for n in self.lexicalbylhs:
-			for lexrule in self.lexicalbylhs[n]:
+			for lexrule in self.lexicalbylhs[n].values():
 				sums[lexrule.lhs].append(lexrule.prob)
 		for lhs, probs in sums.items():
 			mass = logprobsum(probs) if self.logprob else sum(probs)
@@ -389,8 +448,9 @@ cdef class Grammar:
 			neverblockre=None, bint splitprune=False, bint markorigin=False,
 			bint debug=False):
 		""" Construct a mapping of fine non-terminal IDs to coarse non-terminal
-		IDS, by applying a regex to the labels, used for coarse-to-fine
-		parsing. A secondary regex is for items that should never be pruned.
+		IDS, by applying the regex striplabelre to the labels, used for
+		coarse-to-fine pruning. A secondary regex neverblockre is for items
+		that should never be pruned.
 		The regexes should be compiled objects, i.e., re.compile(regex),
 		or None to leave labels unchanged.
         - use "|<" to ignore nodes introduced by binarization;
@@ -477,39 +537,6 @@ cdef class Grammar:
 					splitprune=splitprune, markorigin=markorigin))
 		return msg
 
-	def as_tuples(self):
-		""" Return the grammar as a sequence of rule tuples. """
-		cdef LexicalRule lexrule
-		cdef Rule rule
-		cdef int n, a, b
-		cdef list result = []
-		for n in range(self.numrules):
-			rule = self.bylhs[0][n]
-			lhs = self.tolabel[rule.lhs]
-			rhs1 = self.tolabel[rule.rhs1]
-			yf = [()]
-			b = 0
-			for a in range(8 * sizeof(rule.args)):
-				yf[b] += (1, ) if (rule.args >> a) & 1 else (0, )
-				if (rule.lengths >> a) & 1:
-					b += 1
-					if b == self.fanout[rule.lhs]:
-						break
-					else:
-						yf.append(())
-			w = exp(-rule.prob) if self.logprob else rule.prob
-			if rule.rhs2 == 0:
-				result.append((((lhs, rhs1), tuple(yf)), w))
-			else:
-				rhs2 = self.tolabel[rule.rhs2]
-				result.append((((lhs, rhs1, rhs2), tuple(yf)), w))
-		for word in self.lexical:
-			for lexrule in self.lexical[word]:
-				tag = self.tolabel[lexrule.lhs]
-				w = exp(-lexrule.prob) if self.logprob else lexrule.prob
-				result.append((((tag, b'Epsilon'), (word, )), w))
-		return result
-
 	cdef rulerepr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
 			exp(-rule.prob),
@@ -555,8 +582,8 @@ cdef class Grammar:
 		lexical = "\n".join(["%.2f %s => %s" % (exp(-lexrule.prob),
 				self.tolabel[lexrule.lhs].decode('ascii'),
 				lexrule.word.encode('unicode-escape').decode('ascii'))
-			for word in sorted(self.lexical)
-			for lexrule in sorted(self.lexical[word],
+			for word in sorted(self.lexicalbyword)
+			for lexrule in sorted(self.lexicalbyword[word],
 			key=lambda lexrule: (<LexicalRule>lexrule).lhs)])
 		labels = ", ".join("%s=%d" % (a.decode('ascii'), b)
 				for a, b in sorted(self.toid.items()))
@@ -589,6 +616,7 @@ cdef class Grammar:
 			free(self.splitmapping[0])
 			free(self.splitmapping)
 			self.splitmapping = NULL
+
 
 cdef class SmallChartItem:
 	""" Item with word sized bitvector """
@@ -630,6 +658,7 @@ cdef class SmallChartItem:
 
 	def binrepr(SmallChartItem self, int lensent=0):
 		return bin(self.vec)[2:].zfill(lensent)[::-1]
+
 
 cdef class FatChartItem:
 	""" Item with fixed-with bitvector. """
@@ -691,6 +720,7 @@ cdef class FatChartItem:
 			result += bin(self.vec[m])[2:].zfill(BITSIZE)
 		return result.zfill(lensent)[::-1]
 
+
 cdef class CFGChartItem:
 	""" Item for CFG parsing; span is denoted with start and end indices. """
 	def __hash__(self):
@@ -739,8 +769,10 @@ cdef class CFGChartItem:
 	def copy(CFGChartItem self):
 		return new_CFGChartItem(self.label, self.start, self.end)
 
+
 cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end):
 	return new_ChartItem(label, (1ULL << end) - (1ULL << start))
+
 
 cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 	cdef FatChartItem fci = new_FatChartItem(label)
@@ -752,6 +784,7 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 			fci.vec[n] = ~0UL
 		fci.vec[BITSLOT(end)] = BITMASK(end) - 1
 	return fci
+
 
 cdef class LCFRSEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
@@ -803,6 +836,7 @@ cdef class LCFRSEdge:
 		return new_LCFRSEdge(self.score, self.inside, self.rule,
 				self.left.copy(), self.right.copy())
 
+
 cdef class CFGEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
@@ -838,6 +872,7 @@ cdef class CFGEdge:
 			self.rule.args, self.rule.lengths, self.rule.lhs, self.rule.rhs1,
 			self.rule.rhs2, self.rule.no, self.mid)
 
+
 cdef class RankedEdge:
 	""" An edge, including the ChartItem to which it points, along with
 	ranks for its children, to denote a k-best derivation. """
@@ -867,6 +902,7 @@ cdef class RankedEdge:
 	def __repr__(self):
 		return "%s(%r, %r, %d, %d)" % (self.__class__.__name__,
 			self.head, self.edge, self.left, self.right)
+
 
 cdef class RankedCFGEdge:
 	""" An edge, including the ChartItem to which it points, along with
@@ -905,6 +941,7 @@ cdef class RankedCFGEdge:
 		return "%s(%r, %r, %r, %r, %d, %d)" % (self.__class__.__name__,
 			self.label, self.start, self.end, self.edge, self.left, self.right)
 
+
 cdef class LexicalRule:
 	""" A weighted rule of the form 'non-terminal --> word'. """
 	def __init__(self, lhs, word, prob):
@@ -915,6 +952,7 @@ cdef class LexicalRule:
 	def __repr__(self):
 		return "%s%r" % (self.__class__.__name__,
 				(self.lhs, self.word, self.prob))
+
 
 cdef class Ctrees:
 	""" Auxiliary class to be able to pass around collections of trees in
@@ -1025,6 +1063,7 @@ cdef class Ctrees:
 
 	def __len__(self):
 		return self.len
+
 
 cdef inline copynodes(tree, dict prods, Node *result):
 	""" Convert NLTK tree to an array of Node structs. """

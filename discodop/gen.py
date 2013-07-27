@@ -16,8 +16,8 @@ usage: %s rules lexicon | --test
 Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
 """ % sys.argv[0]
 
-Grammar = namedtuple("Grammar", ('unary', 'lbinary', 'rbinary', 'lexical',
-		'bylhs', 'lexicalbylhs', 'toid', 'tolabel', 'fanout', 'numrules'))
+Grammar = namedtuple("Grammar", ('numrules', 'unary', 'lbinary', 'rbinary',
+		'bylhs', 'lexicalbyword', 'lexicalbylhs', 'toid', 'tolabel', 'fanout'))
 Rule = namedtuple("Rule",
 		('lhs', 'rhs1', 'rhs2', 'args', 'lengths', 'prob', 'no'))
 LexicalRule = namedtuple("LexicalRule",
@@ -170,7 +170,7 @@ def splitgrammar(rules):
 			lbinary=[[] for _ in nonterminals],
 			rbinary=[[] for _ in nonterminals],
 			fanout=array('B', [0] * len(nonterminals)),
-			lexical={},
+			lexicalbyword={},
 			lexicalbylhs={},
 			numrules=len(rules))
 	for n, ((rule, yf), w) in enumerate(rules):
@@ -179,7 +179,7 @@ def splitgrammar(rules):
 			t = LexicalRule(grammar.toid[rule[0]], 0, 0, word, w, n)
 			assert grammar.fanout[t.lhs] in (0, 1)
 			grammar.fanout[t.lhs] = 1
-			grammar.lexical.setdefault(word, []).append(t)
+			grammar.lexicalbyword.setdefault(word, []).append(t)
 			grammar.lexicalbylhs.setdefault(t.lhs, []).append(t)
 			continue
 		else:

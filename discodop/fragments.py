@@ -380,7 +380,7 @@ def workload(numtrees, mult, numproc):
 
 
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
-		indices=False):
+		indices=False):  # TODO: add disc= option, optimize disc=False.
 	""" Get recurring fragments with exact counts in a single treebank. """
 	if numproc == 0:
 		numproc = cpu_count()

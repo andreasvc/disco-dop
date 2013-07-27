@@ -14,13 +14,13 @@ from math import exp
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 from . import plcfrs, pcfg
-from .grammar import FORMAT, defaultparse, shortestderivgrammar
+from .grammar import FORMAT, defaultparse, shortestderivmodel
 from .containers import Grammar, DictObj
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
 from .tree import Tree
 from .lexicon import replaceraretestwords, getunknownwordfun
-from .treebank import fold, saveheads
+from .treebank import fold, saveheads, rrbacktransform
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
 USAGE = """
@@ -142,7 +142,7 @@ def doparsing(parser, infile, out, printprob):
 		if not a.strip():
 			continue
 		sent = a.splitlines()
-		lexicon = parser.stages[0].grammar.lexical
+		lexicon = parser.stages[0].grammar.lexicalbyword
 		assert not set(sent) - set(lexicon), (
 			"unknown words and no open class tags supplied: %r" % (
 			list(set(sent) - set(lexicon))))
@@ -175,7 +175,7 @@ class Parser(object):
 	""" An object to parse sentences following parameters given as a sequence
 	of coarse-to-fine stages. """
 	def __init__(self, stages, transformations=None, tailmarker=None,
-			postagging=None):
+			relationalrealizational=None, postagging=None):
 		""" Parameters:
 		stages: a list of coarse-to-fine stages containing grammars and
 			parameters.
@@ -186,11 +186,13 @@ class Parser(object):
 			dictionary with three items:
 			- unknownwordfun: function to produces signatures for unknown words.
 			- lexicon: the set of known words in the grammar.
-			- sigs: the set of word signatures occurring in the grammar. """
+			- sigs: the set of word signatures occurring in the grammar.
+		relationalrealizational: whether to reverse the RR-transform. """
 		self.stages = stages
 		self.transformations = transformations
 		self.tailmarker = tailmarker
 		self.postagging = postagging
+		self.relationalrealizational = relationalrealizational
 
 	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
@@ -204,28 +206,22 @@ class Parser(object):
 		if tags is not None:
 			tags = list(tags)
 		chart = {}
-		start = inside = outside = prevgrammar = None
+		start = inside = outside = None
 		for n, stage in enumerate(self.stages):
 			begin = time.clock()
 			noparse = False
 			parsetrees = fragments = None
 			msg = "%s:\t" % stage.name.upper()
-			grammar = stage.grammar
-			secondarymodel = None
-			if stage.dop:
-				if stage.objective == 'shortest':
-					grammar = stage.shortest['nonprob']
-					secondarymodel = stage.shortest['asdict']
-				elif stage.objective == 'sl-dop':
-					grammar = stage.grammar
-					secondarymodel = stage.shortest['nonprob']
+			stage.grammar.switch(
+					u'shortest' if stage.dop and stage.objective == 'shortest'
+					else u'default', logprob=stage.mode != 'pcfg-posterior')
 			if not stage.prune or start:
 				if n != 0 and stage.prune:
 					if self.stages[n - 1].mode == 'pcfg-posterior':
 						(whitelist, sentprob, unfiltered,
 							numitems, numremain) = whitelistfromposteriors(
-								inside, outside, start, prevgrammar, grammar,
-								stage.k, stage.splitprune,
+								inside, outside, start, stage[n - 1].grammar,
+								stage.grammar, stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin)
 						msg += ("coarse items before pruning=%d; filtered: %d; "
 								"pruned: %d; sentprob=%g\n\t" % (
@@ -233,7 +229,7 @@ class Parser(object):
 					else:
 						whitelist, items = prunechart(
 								chart, start, self.stages[n - 1].grammar,
-								grammar, stage.k, stage.splitprune,
+								stage.grammar, stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin,
 								stage.mode == 'pcfg',
 								self.stages[n - 1].mode == 'pcfg-bitpar')
@@ -246,22 +242,22 @@ class Parser(object):
 					whitelist = None
 				if stage.mode == 'pcfg':
 					chart, start, msg1 = pcfg.parse(
-							sent, grammar, tags=tags,
+							sent, stage.grammar, tags=tags,
 							chart=whitelist if stage.prune else None)
 				elif stage.mode == 'pcfg-symbolic':
 					chart, start, msg1 = pcfg.symbolicparse(
-							sent, grammar, tags=tags)
+							sent, stage.grammar, tags=tags)
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
-							sent, grammar, tags=tags)
+							sent, stage.grammar, tags=tags)
 				elif stage.mode == 'pcfg-bitpar':
 					chart, start, msg1 = pcfg.parse_bitpar(stage.rulesfile.name,
 							stage.lexiconfile.name, sent, stage.m,
 							stage.grammar.start, tags=tags)
 					msg1 += '%d derivations' % (len(chart) if start else 0)
 				elif stage.mode == 'plcfrs':
-					chart, start, msg1 = plcfrs.parse(sent,
-							grammar, tags=tags,
+					chart, start, msg1 = plcfrs.parse(
+							sent, stage.grammar, tags=tags,
 							exhaustive=stage.dop or (n + 1 != len(self.stages)
 								and self.stages[n + 1].prune),
 							whitelist=whitelist,
@@ -280,22 +276,22 @@ class Parser(object):
 							"sent: %s\nstage: %s.", ' '.join(sent), stage.name)
 					#raise ValueError("ERROR: expected successful parse. "
 					#		"sent %s, %s." % (nsent, stage.name))
-			prevgrammar = grammar
-			if start and stage.mode != 'pcfg-posterior':
+			if start and stage.mode != 'pcfg-posterior' and not (
+					self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
 				parsetrees, derivs, msg1 = marginalize(stage.objective
 						if stage.dop else 'mpd',
-						chart, start, grammar, stage.m,
+						chart, start, stage.grammar, stage.m,
 						sample=stage.sample, kbest=stage.kbest,
 						sent=sent, tags=tags,
-						secondarymodel=secondarymodel,
 						sldop_n=stage.sldop_n,
 						backtransform=stage.backtransform,
 						bitpar=stage.mode == 'pcfg-bitpar')
-				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
-				fragments = derivs.get(resultstr)
 				msg += "disambiguation: %s, %gs\n\t" % (
 						msg1, time.clock() - begindisamb)
+			if parsetrees:
+				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
+				fragments = derivs.get(resultstr)
 				msg += probstr(prob) + ' '
 				parsetree = Tree.parse(resultstr, parse_leaf=int)
 				if stage.split:
@@ -303,12 +299,15 @@ class Parser(object):
 				saveheads(parsetree, self.tailmarker)
 				unbinarize(parsetree)
 				removefanoutmarkers(parsetree)
+				if self.relationalrealizational:
+					parsetree = rrbacktransform(parsetree,
+							self.relationalrealizational['adjunctionlabel'])
 				if self.transformations:
 					fold(parsetree, self.transformations)
 			else:
 				parsetree = defaultparse([(n, t)
 						for n, t in enumerate(tags or (len(sent) * ['NONE']))])
-				parsetree = Tree.parse("(%s %s)" % (grammar.tolabel[1],
+				parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],
 						parsetree), parse_leaf=int)
 				prob = 0.0
 				noparse = True
@@ -329,37 +328,33 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		lexicon = codecs.getreader('utf-8')(gzip.open("%s/%s.lex.gz" % (
 				resultdir, stage.name)))
 		grammar = Grammar(rules.read(), lexicon.read(),
-				start=top, bitpar=stage.mode.startswith('pcfg'),
-				logprob=stage.mode != 'pcfg-posterior')
+				start=top, bitpar=stage.mode.startswith('pcfg'))
 		backtransform = None
 		if stage.dop:
 			assert stage.useestimates is None, "not supported"
-			stage.shortest = shortestderivgrammar(grammar)
+			grammar.register('shortest', shortestderivmodel(grammar))
 			if stage.usedoubledop:
 				backtransform = dict(enumerate(
 						gzip.open("%s/%s.backtransform.gz" % (resultdir,
 						stage.name)).read().splitlines()))
 				if n and stage.prune:
-					for x in (grammar, stage.shortest['nonprob']):
-						_ = x.getmapping(stages[n - 1].grammar,
-							striplabelre=re.compile(b'@.+$'),
-							neverblockre=re.compile(b'^#[0-9]+|.+}<'),
-							splitprune=stage.splitprune and stages[n - 1].split,
-							markorigin=stages[n - 1].markorigin)
+					_ = grammar.getmapping(stages[n - 1].grammar,
+						striplabelre=re.compile(b'@.+$'),
+						neverblockre=re.compile(b'^#[0-9]+|.+}<'),
+						splitprune=stage.splitprune and stages[n - 1].split,
+						markorigin=stages[n - 1].markorigin)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
-					for x in (grammar, stage.shortest['nonprob']):
-						_ = x.getmapping(None,
-							neverblockre=re.compile(b'.+}<'))
+					_ = grammar.getmapping(None,
+						neverblockre=re.compile(b'.+}<'))
 			elif n and stage.prune:  # dop reduction
-				for x in (grammar, stage.shortest['nonprob']):
-					_ = x.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile(b'@[-0-9]+$'),
-						neverblockre=re.compile(stage.neverblockre)
-							if stage.neverblockre else None,
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin)
+				_ = grammar.getmapping(stages[n - 1].grammar,
+					striplabelre=re.compile(b'@[-0-9]+$'),
+					neverblockre=re.compile(stage.neverblockre)
+						if stage.neverblockre else None,
+					splitprune=stage.splitprune and stages[n - 1].split,
+					markorigin=stages[n - 1].markorigin)
 		else:  # not stage.dop
 			if n and stage.prune:
 				_ = grammar.getmapping(stages[n - 1].grammar,
@@ -373,17 +368,18 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			stage.rulesfile.write(grammar.origrules)
 			stage.rulesfile.flush()
 			stage.lexiconfile = tempfile.NamedTemporaryFile()
-			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
-			lexicon.write(grammar.origlexicon.replace(
-					'(', '-LRB-').replace(')', '-RRB-'))
-			lexicon.flush()
+			lexicon = grammar.origlexicon.replace(  # pylint: disable=E1101
+					'(', '-LRB-').replace(')', '-RRB-')
+			lexiconfile = codecs.getwriter('utf-8')(stage.lexiconfile)
+			lexiconfile.write(lexicon)
+			lexiconfile.flush()
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging['method'] == 'unknownword':
 		postagging['unknownwordfun'] = getunknownwordfun(postagging['model'])
-		postagging['lexicon'] = {w for w in stages[0].grammar.lexical
+		postagging['lexicon'] = {w for w in stages[0].grammar.lexicalbyword
 				if not w.startswith("UNK")}
-		postagging['sigs'] = {w for w in stages[0].grammar.lexical
+		postagging['sigs'] = {w for w in stages[0].grammar.lexicalbyword
 				if w.startswith("UNK")}
 
 

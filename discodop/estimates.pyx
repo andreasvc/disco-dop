@@ -88,7 +88,7 @@ def simpleinside(Grammar grammar, UInt maxlen,
 
 	for i in grammar.lexicalbylhs:
 		agenda[new_ChartItem(i, 1)] = min([lexrule.prob
-			for lexrule in grammar.lexicalbylhs[i]])
+			for lexrule in grammar.lexicalbylhs[i].values()])
 
 	while agenda.length:
 		entry = agenda.popentry()
@@ -147,7 +147,7 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 
 	for i in grammar.lexicalbylhs:
 		agenda[new_ChartItem(i, 1)] = min([lexrule.prob
-			for lexrule in grammar.lexicalbylhs[i]])
+			for lexrule in grammar.lexicalbylhs[i].values()])
 
 	while agenda.length:
 		entry = agenda.popentry()
@@ -395,7 +395,7 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 	cdef double x
 	cdef list insidescores = [{} for n in range(maxlen + 1)]
 	for n in grammar.lexicalbylhs:
-		x = min([lexrule.prob for lexrule in grammar.lexicalbylhs[n]])
+		x = min([lexrule.prob for lexrule in grammar.lexicalbylhs[n].values()])
 		agenda[new_ChartItem(n, 1)] = x
 	while agenda.length:
 		entry = agenda.popentry()
@@ -516,23 +516,27 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].items()):
 				if v < infinity:
-					print("%s[%d] %g" % (grammar.tolabel[k].decode('ascii'), span, exp(-v)))
+					print("%s[%d] %g" % (
+							grammar.tolabel[k].decode('ascii'), span, exp(-v)))
 		print('infinite:', end='')
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].items()):
 				if v == infinity:
-					print("%s[%d]" % (grammar.tolabel[k].decode('ascii'), span), end='')
+					print("%s[%d]" % (
+							grammar.tolabel[k].decode('ascii'), span), end='')
 
 		print('\n\noutside:')
 		for k, v in sorted(outsidescores.items()):
 			if v < infinity:
 				print("%s[%d-%d] %g" % (
-						grammar.tolabel[k[0]].decode('ascii'), k[1], k[2], exp(-v)))
+						grammar.tolabel[k[0]].decode('ascii'), k[1], k[2],
+						exp(-v)))
 		print('infinite:', end='')
 		for k, v in sorted(outsidescores.items()):
 			if v == infinity:
 				print("%s[%d-%d]" % (
-						grammar.tolabel[k[0]].decode('ascii'), k[1], k[2]), end='')
+						grammar.tolabel[k[0]].decode('ascii'), k[1], k[2]),
+						end='')
 	outside = np.empty((grammar.nonterminals, maxlen + 1, maxlen + 1, 1),
 			dtype='d')
 	outside.fill(np.inf)
@@ -552,7 +556,8 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 	if span == 0:
 		return 0 if state == 0 else infinity
 	if span == 1 and state in grammar.lexicalbylhs:
-		score = min([lexrule.prob for lexrule in grammar.lexicalbylhs[state]])
+		score = min([lexrule.prob for lexrule
+				in grammar.lexicalbylhs[state].values()])
 	else:
 		score = infinity
 	for split in range(1, span + 1):

@@ -1,6 +1,7 @@
 from math import exp, log, isinf
 from libc.stdlib cimport malloc, realloc, calloc, free, qsort
 from libc.string cimport memcmp, memset
+cimport numpy as np
 cimport cython
 
 ctypedef unsigned long long ULLong
@@ -25,21 +26,21 @@ cdef extern from "macros.h":
 	ULong TESTBIT(ULong a[], int b)
 	#int SLOTS # doesn't work
 
-# FIXME: find a way to make this a constant, yet shared across modules.
-DEF SLOTS = 3
+DEF SLOTS = 3 # FIXME: make this a constant, yet shared across modules.
 
 @cython.final
 cdef class Grammar:
 	cdef Rule **unary, **lbinary, **rbinary, **bylhs
 	cdef ULong *chainvec
 	cdef UInt *mapping, **splitmapping
-	cdef UChar *fanout
+	cdef UChar *fanout, currentmodel
+	cdef object models
 	cdef readonly size_t nonterminals, numrules, numunary, numbinary, maxfanout
+	cdef readonly bint logprob, bitpar
 	cdef readonly bytes origrules, start
 	cdef readonly unicode origlexicon
-	cdef readonly bint logprob, bitpar
-	cdef readonly list tolabel
-	cdef readonly dict toid, lexical, lexicalbylhs, rulenos
+	cdef readonly list tolabel, lexical, modelnames
+	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
 	cdef _convertrules(Grammar self, list rulelines)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
 	cdef rulerepr(self, Rule rule)
@@ -79,11 +80,13 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
 cdef class Edge:
 	cdef double inside
 	cdef Rule *rule
+
 @cython.final
 cdef class LCFRSEdge(Edge):
 	cdef double score # inside probability + estimate score
 	cdef ChartItem left
 	cdef ChartItem right
+
 @cython.final
 cdef class CFGEdge(Edge):
 	cdef UChar mid

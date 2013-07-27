@@ -25,13 +25,13 @@ from subprocess import Popen, PIPE
 import numpy as np
 from . import eval as evalmod
 from .tree import Tree
-from .treebank import getreader, writetree
+from .treebank import getreader, writetree, rrtransform
 from .treetransforms import binarize, optimalbinarize, \
 		splitdiscnodes, canonicalize, \
 		addfanoutmarkers, addbitsets, fastfanout
 from .fragments import getfragments
 from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
-		write_lcfrs_grammar, shortestderivgrammar
+		write_lcfrs_grammar, shortestderivmodel
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from .parser import DEFAULTSTAGE, readgrammars, Parser
@@ -83,6 +83,7 @@ def startexp(
 			openclassthreshold=50,  # add unseen tags for known words; 0=disable
 			simplelexsmooth=True,  # disable sophisticated smoothing
 		),
+		relationalrealizational=None,  # do not apply RR-transform
 		bintype="binarize",  # choices: binarize, optimal, optimalhead
 		factor="right",
 		revmarkov=True,
@@ -150,6 +151,9 @@ def startexp(
 		if isinstance(trainnumsents, float):
 			trainnumsents = int(trainnumsents * len(corpus.sents()))
 		trees = list(corpus.parsed_sents().values())[:trainnumsents]
+		if relationalrealizational:
+			trees = [rrtransform(a, **relationalrealizational)[0]
+					for a in trees]
 		sents = list(corpus.sents().values())[:trainnumsents]
 		train_tagged_sents = [[(a, b) for a, (_, b)
 				in zip(sent, sorted(tree.pos()))]
@@ -267,7 +271,8 @@ def startexp(
 	begin = time.clock()
 	parser = Parser(stages, transformations=transformations,
 			tailmarker=tailmarker, postagging=postagging if postagging
-			and postagging['method'] == 'unknownword' else None)
+			and postagging['method'] == 'unknownword' else None,
+			relationalrealizational=relationalrealizational)
 	results = doparsing(parser=parser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=corpusfmt)
@@ -350,10 +355,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			msg = grammarinfo(xgrammar)
 			grammar = Grammar(xgrammar, start=top)
 			if stage.objective in ('shortest', 'sl-dop', 'sl-dop-simple'):
-				stage.shortest = shortestderivgrammar(grammar)
-				grammars = (stage.shortest['nonprob'], grammar)
-			else:
-				grammars = (grammar, )
+				grammar.register('shortest', shortestderivmodel(grammar))
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals", len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
@@ -366,31 +368,28 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						resultdir, stage.name), "w") as out:
 					out.writelines("%s\n" % a for a in backtransform.values())
 				if n and stage.prune:
-					for x in grammars:
-						msg = x.getmapping(stages[n - 1].grammar,
-							striplabelre=re.compile(b'@.+$'),
-							neverblockre=re.compile(b'.+}<'),
-							# + stage.neverblockre?
-							splitprune=stage.splitprune and stages[n - 1].split,
-							markorigin=stages[n - 1].markorigin)
+					msg = grammar.getmapping(stages[n - 1].grammar,
+						striplabelre=re.compile(b'@.+$'),
+						neverblockre=re.compile(b'.+}<'),
+						# + stage.neverblockre?
+						splitprune=stage.splitprune and stages[n - 1].split,
+						markorigin=stages[n - 1].markorigin)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
-					for x in grammars:
-						msg = x.getmapping(None,
-							striplabelre=None,
-							neverblockre=re.compile(b'.+}<'),
-							# + stage.neverblockre?
-							splitprune=False, markorigin=False)
+					msg = grammar.getmapping(None,
+						striplabelre=None,
+						neverblockre=re.compile(b'.+}<'),
+						# + stage.neverblockre?
+						splitprune=False, markorigin=False)
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
-				for x in grammars:
-					msg = x.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile(b'@[-0-9]+$'),
-						neverblockre=re.compile(stage.neverblockre)
-							if stage.neverblockre else None,
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin)
+				msg = grammar.getmapping(stages[n - 1].grammar,
+					striplabelre=re.compile(b'@[-0-9]+$'),
+					neverblockre=re.compile(stage.neverblockre)
+						if stage.neverblockre else None,
+					splitprune=stage.splitprune and stages[n - 1].split,
+					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
 		else:  # not stage.dop
 			xgrammar = induce_plcfrs(traintrees, sents)
@@ -406,8 +405,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				xgrammar = simplesmoothlexicon(xgrammar, lexmodel)
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
-			grammar = Grammar(xgrammar, start=top,
-					logprob=stage.mode != "pcfg-posterior")
+			grammar = Grammar(xgrammar, start=top)
 			sumsto1 = grammar.testgrammar()
 			if n and stage.prune:
 				msg = grammar.getmapping(stages[n - 1].grammar,

@@ -73,7 +73,7 @@ implementation on a given processor.
 Usage: parser
 -------------
 To run a full experiment from treebank to evaluation on a test set,
-copy the file ``sample.prm`` and edit its parameters.
+make a copy of the file ``sample.prm`` and edit its parameters.
 These parameters can then be invoked by executing::
 
     discodop runexp filename.prm

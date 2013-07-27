@@ -104,7 +104,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 			left = i
 			gaps = 0
 			right = lensent - 1 - i
-		for lexrule in grammar.lexical.get(word, ()):
+		for lexrule in grammar.lexicalbyword.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[lexrule.lhs] == tag
@@ -453,7 +453,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 			left = i
 			gaps = 0
 			right = lensent - 1 - i
-		for lexrule in grammar.lexical.get(word, ()):
+		for lexrule in grammar.lexicalbyword.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[lexrule.lhs] == tag
@@ -808,7 +808,7 @@ def symbolicparse(sent, Grammar grammar, tags=None, start=1,
 		recognized = False
 		tag = tags[i].encode('ascii') if tags else None
 		item = new_ChartItem(Epsilon, i)
-		for lexrule in grammar.lexical.get(word, ()):
+		for lexrule in grammar.lexicalbyword.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[lexrule.lhs] == tag

@@ -200,6 +200,28 @@ class NegraCorpusReader(CorpusReader):
 			and not ispunct(a[WORD], a[TAG])]
 
 
+class TigerXMLCorpusReader(CorpusReader):
+	""" Corpus reader for the Tiger XML format. """
+	def blocks(self, includetransformations=False):
+		raise NotImplementedError
+
+	def _read_blocks(self):
+		raise NotImplementedError
+		results = OrderedDict()
+		for filename in self._filenames:
+			# use iterparse()
+			block = ElementTree.parse(filename).getroot()
+			for sent in block.get('body').findall('s'):
+				results[sent.get('id')] = sent
+		return results
+
+	def _parse(self, block):
+		raise NotImplementedError
+
+	def _word(self, block, orig=False):
+		raise NotImplementedError
+
+
 class DiscBracketCorpusReader(CorpusReader):
 	""" A corpus reader where the phrase-structure is represented by a tree in
 	bracket notation, where the leaves are indices pointing to words in a
@@ -689,6 +711,135 @@ def makedep(root, deps, headrules):
 		lexheadofchild = makedep(child, deps, headrules)
 		deps.append(("NONE", lexheadofchild, lexhead))
 	return lexhead
+
+
+def unifymorphfeat(feats, percolatefeatures=None):
+	""" Treat a sequence of strings as feature vectors, either
+	comma or dot separated, and produce the sorted union of their features.
+	percolatefeatures: if a set is given, select only these features;
+		by default all features are used.
+	>>> print(unifymorphfeat({'Def.*.*', '*.Sg.*', '*.*.Akk'}))
+	Akk.Def.Sg
+	>>> print(unifymorphfeat({'LID[bep,stan,rest]', 'N[soort,ev,zijd,stan]'}))
+	bep,ev,rest,soort,stan,zijd
+	"""
+	sep = '.' if any('.' in a for a in feats) else ','
+	result = set()
+	for a in feats:
+		if '[' in a:
+			a = a[a.index('[') + 1:a.index(']')]
+		result.update(a.split(sep))
+	if percolatefeatures:
+		result.intersection_update(percolatefeatures)
+	return sep.join(sorted(result - {'*', '--'}))
+
+
+def rrtransform(tree, morphlevels=0, percolatefeatures=None,
+		adjunctionlabel=None, ignorefunctions=None, ignorecategories=None):
+	""" Relational-realizational tree transformation.
+	Every constituent node is expanded to three levels:
+	1) syntactic category, e.g., S
+	2) unordered functional argument structure of children, e.g., S/<SBJ,HD,OBJ>
+	3) for each child:
+		grammatical function + parent syntactic category, e.g., OBJ/S
+	(NP-SBJ (NN-HD ...)) => (NP (<HD>/NP (HD/NP...)))
+	adjunctionlabel: a grammatical function label identifying adjunctions. they
+		will not be part of argument structures, and their grammatical function
+		will be replaced with their neighboring non-adjunctive functions.
+	ignorefunctions: function labels that do not go into argument structure,
+		but keep their function in their realization to make backtransform
+		possible.
+	morphlevels: if nonzero, percolate morphological features this many levels
+		upwards. For a given node, the union of the features of its children
+		are collected, and the result is appended to its syntactic category.
+	percolatefeatures: if a sequence is given, percolate only these
+		morphological features; by default all features are used.
+	"""
+	def realize(child, prevfunc, nextfunc):
+		""" Generate realization of a child node by recursion. """
+		newchild, morph, lvl = rrtransform(child, morphlevels,
+				percolatefeatures, adjunctionlabel, ignorefunctions,
+				ignorecategories)
+		result = tree.__class__('%s/%s' % (('%s:%s' % (prevfunc, nextfunc)
+				if child.source[FUNC] == adjunctionlabel
+				else child.source[FUNC]), tree.label), [newchild])
+		return result, morph, lvl
+
+	if not isinstance(tree[0], Tree):
+		morph = tree.source[MORPH].replace('(', '[').replace(')', ']')
+		preterminal = tree.__class__('%s/%s' % (tree.label, morph), tree)
+		if morphlevels:
+			return preterminal, morph, morphlevels
+		return preterminal, None, 0
+	# for each node, collect the functions of the closest non-adjunctive sibling
+	# fixme: auxiliaries should also be ignored
+	childfuncsl = (prevfunc, ) = ['']
+	for child in tree:
+		if (isinstance(child, Tree) and child.source[FUNC]
+				and child.source[FUNC] != adjunctionlabel
+				and child.source[FUNC] not in ignorefunctions
+				and child.label not in ignorecategories):
+			prevfunc = child.source[FUNC]
+		childfuncsl.append(prevfunc)
+	childfuncsr = (nextfunc, ) = ['']
+	for child in reversed(tree[1:]):
+		if (isinstance(child, Tree) and child.source[FUNC]
+				and child.source[FUNC] != adjunctionlabel
+				and child.source[FUNC] not in ignorefunctions
+				and child.label not in ignorecategories):
+			nextfunc = child.source[FUNC]
+		childfuncsr.insert(0, prevfunc)
+	funcstr = ','.join(sorted(child.source[FUNC] for child in tree
+			if isinstance(child, Tree) and child.source[FUNC]
+					and child.source[FUNC] != adjunctionlabel
+					and child.source[FUNC] not in ignorefunctions
+					and child.label not in ignorecategories))
+	children, feats, levels = [], [], []
+	for child, prevfunc, nextfunc in zip(tree, childfuncsl, childfuncsr):
+		newchild, morph, lvl = realize(child, prevfunc, nextfunc)
+		children.append(newchild)
+		if morph and lvl:
+			feats.append(morph)
+			levels.append(lvl)
+	morph, lvl = None, 0
+	if feats and max(levels) and tree.label != 'ROOT':
+		morph, lvl = unifymorphfeat(feats, percolatefeatures), max(levels) - 1
+	configuration = tree.__class__('%s/<%s>' % (tree.label, funcstr),
+			children)
+	projection = tree.__class__(('%s-%s' % (tree.label, morph)) if morph
+			else tree.label, [configuration])
+	return projection, morph, lvl
+
+
+def rrbacktransform(tree, adjunctionlabel=None, func=None):
+	""" Reverse the relational-realizational transformation, conserving
+	grammatical functions.
+	adjunctionlabel: used to assign a grammatical function to adjunctions that
+		have been converted to contextual labels 'next:prev'.
+	func: used internally to percolate functional labels. """
+	morph = None
+	if not isinstance(tree[0], Tree):
+		tag, morph = tree.label.split('/')
+		result = tree.__class__(tag, tree)
+	elif '/' not in tree[0].label:
+		result = tree.__class__(tree.label,
+				[rrbacktransform(child, adjunctionlabel) for child in tree])
+	else:
+		result = tree.__class__(tree.label.split('-')[0],
+				[rrbacktransform(
+						child[0],
+						adjunctionlabel,
+						child.label.split('/')[0])
+					for child in tree[0]])
+	result.source = ['--'] * 8
+	result.source[TAG] = result.label
+	if morph:
+		result.source[MORPH] = morph.replace('[', '(').replace(']', ')')
+	if func and adjunctionlabel and ':' in func:
+		result.source[FUNC] = adjunctionlabel
+	elif func:
+		result.source[FUNC] = func
+	return result
 
 
 def getgeneralizations():

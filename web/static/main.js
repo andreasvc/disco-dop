@@ -84,7 +84,7 @@ function ajaxFunction() {
 	};
 	var objfun = document.queryform.objfun;
 	var marg = document.queryform.marg;
-	url = "parse?sent=" + encodeURIComponent(document.queryform.sent.value)
+	url = "parse?html=1&sent=" + encodeURIComponent(document.queryform.sent.value)
 			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
 			+ "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value);
 	xmlhttp.open("GET", url, true);

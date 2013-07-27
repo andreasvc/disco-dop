@@ -300,47 +300,23 @@ def doubledop(fragments, debug=False, ewe=False):
 	return grammar, backtransform
 
 
-LCFRS = re.compile(b"([^ \t\n]+\t)([^ \t\n]+\t(?:[^ \t\n]+\t)?[01,]+\t)[0-9]+"
-		"(?:[./][0-9]+)?")
-BITPAR = re.compile(b"[0-9]+(?:\\.[0-9]+)?[ \t]([^ \t\n]]+\t)([^ \t\n]+[ \t]"
-		"(?:[^ \t\n]]+\t)?)")
-LEXICON = re.compile("\t([^ \t\n]+)[ \t][0-9]+([./][0-9]+)?")
+LCFRS = re.compile(b'(?:^|\n)([^ \t\n]+)\t')
+BITPAR = re.compile(b'[0-9]+(?:\\.[0-9]+)?[ \t]([^ \t\n]])+\t')
+LEXICON = re.compile('[ \t]([^ \t\n]+)[ \t][0-9]+(?:[./][0-9]+)?\\b')
 
 
-def shortestderivgrammar(grammar):
+def shortestderivmodel(grammar):
 	""" Given a probabilistic DOP grammar in the form of a Grammar object,
-	return a non-probabilistic grammar where all weights are 1, except for
+	return a non-probabilistic model where all weights are 1, except for
 	rules that introduce new fragments which receive a weight of 0.5. """
-	from .containers import Grammar
 	# any rule corresponding to the introduction of a
 	# fragment has a probability of 1/2, else 1.
-	one, half = '1', '1/2'
-
-	def bitparrepl(match):
-		""" Rewrite weight of bitpar rule. """
-		lhs, rhs = match.group(1), match.group(2)
-		weight = one if '@' in lhs or '{' in lhs else half
-		return '%s\t%s%s' % (weight, lhs, rhs)
-
-	def lcfrsrepl(match):
-		""" Rewrite weight of LCFRS rule. """
-		lhs, rest = match.group(1), match.group(2)
-		weight = one if '@' in lhs or '{' in lhs else half
-		return '%s%s\t%s' % (lhs, rest, weight)
-
-	def lexiconrepl(match):
-		""" Rewrite weight of 'tag prob' pair. """
-		lhs = match.group(1)
-		weight = one if '@' in lhs or '{' in lhs else half
-		return '\t%s %s' % (lhs, weight)
-
-	if grammar.bitpar:
-		rules = BITPAR.sub(bitparrepl, grammar.origrules)
-	else:
-		rules = LCFRS.sub(lcfrsrepl, grammar.origrules)
-	lexicon = LEXICON.sub(lexiconrepl, grammar.origlexicon)
-	return dict(nonprob=Grammar(rules, lexicon, bitpar=grammar.bitpar),
-			asdict=dict(grammar.as_tuples()))  # fixme: this is ugly
+	ruleprobs = [1 if '@' in lhs or '{' in lhs else 0.5
+			for lhs in (BITPAR if grammar.bitpar else LCFRS).findall(
+				grammar.origrules)]
+	lexprobs = [1 if '@' in lhs or '{' in lhs else 0.5
+			for lhs in LEXICON.findall(grammar.origlexicon)]
+	return ruleprobs, lexprobs
 
 
 def coarse_grammar(trees, sents, level=0):

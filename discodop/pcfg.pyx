@@ -82,7 +82,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		right = left + 1
 		cell = chart[left][right]
 		recognized = False
-		for lexrule in grammar.lexical.get(word, ()):
+		for lexrule in grammar.lexicalbyword.get(word, ()):
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
@@ -261,9 +261,9 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 		list chart=None, int beamwidth=0):
 	""" A CKY parser modeled after Bodenstab's `fast grammar loop,' filtered by
-	the list of allowed items (if a prepopulated chart is given).
-	This version keeps the viterbi probabilities and the rest of chart in
-	a hash tables, useful for large grammars. The edge with the viterbi score
+	the list of allowed items (if a pre-populated chart is given).
+	This version keeps the Viterbi probabilities and the rest of chart in
+	hash tables, useful for large grammars. The edge with the viterbi score
 	for a labeled span is kept in viterbi[left][right][label]. """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
@@ -279,7 +279,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 		# matrices for the filter which gives minima and maxima for splits
 		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
 	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
-	assert grammar.logprob
+	assert grammar.logprob, "Expecting grammar with log probabilities."
 	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minright = np.empty_like(minleft)
@@ -288,7 +288,6 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 	maxleft.fill(lensent + 1)
 	minright.fill(lensent + 1)
 	maxright.fill(-1)
-	#assert grammar.logprob, "Expecting grammar with log probabilities."
 	if chart is None:
 		chart = [[None] * (lensent + 1) for _ in range(lensent)]
 		cell = dict.fromkeys(range(1, grammar.nonterminals))
@@ -302,7 +301,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 		viterbicell = viterbi[left][right]
 		cell = chart[left][right]
 		recognized = False
-		for lexrule in <list>grammar.lexical.get(word, ()):
+		for lexrule in <list>grammar.lexicalbyword.get(word, ()):
 			if lexrule.lhs not in cell:
 				continue
 			lhs = lexrule.lhs
@@ -518,7 +517,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None):
 		right = left + 1
 		cell = chart[left][right]
 		recognized = False
-		for lexrule in grammar.lexical.get(word, ()):
+		for lexrule in grammar.lexicalbyword.get(word, ()):
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
@@ -717,7 +716,7 @@ def insidescores(list sent, Grammar grammar,
 	for left in range(lensent):
 		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
-		for lexrule in grammar.lexical.get(sent[left], []):
+		for lexrule in grammar.lexicalbyword.get(sent[left], []):
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
@@ -1001,7 +1000,7 @@ def doplexprobs(tree, Grammar grammar):
 	cdef LexicalRule lexrule
 
 	for n, word in enumerate(tree.leaves()):
-		for lexrule in grammar.lexical[word]:
+		for lexrule in grammar.lexicalbyword[word]:
 			chart[lexrule.lhs, n, n + 1] = logprobadd(
 				chart[lexrule.lhs, n, n + 1], -lexrule.prob)
 	return chart
@@ -1038,6 +1037,7 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	""" Parse a single sentence with bitpar, given filenames of rules and
 	lexicon. n is the number of derivations to ask for (max 1000).
 	Result is a dictionary of derivations with their probabilities. """
+	# TODO: get full viterbi parse forest, turn into chart w/ChartItems
 	assert 1 <= n <= 1000
 	if tags:
 		_, lexiconfile = tempfile.mkstemp()
@@ -1067,7 +1067,7 @@ def renumber(deriv):
 	def closure(match):
 		return ' %s)' % next(it)
 
-	return re.sub(r' \\\)\)| [^ )]+\)', closure, deriv)
+	return re.sub(r' [^ )]+\)', closure, deriv)
 
 
 def sortfunc(CFGEdge e):
@@ -1156,7 +1156,8 @@ def main():
 	cfg1 = Grammar([
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
-		((('VP', 'Epsilon'), ('walks', )), 1)], start='S', logprob=False)
+		((('VP', 'Epsilon'), ('walks', )), 1)], start='S')
+	cfg1.switch('default', False)
 	i, o, start, _ = doinsideoutside("mary walks".split(), cfg1)
 	assert start
 	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
@@ -1176,13 +1177,14 @@ def main():
 		((('NP', 'Epsilon'), ('saw', )), 0.04),
 		((('NP', 'Epsilon'), ('stars', )), 0.18),
 		((('NP', 'Epsilon'), ('telescopes', )), 0.1)]
-	cfg2 = Grammar(rules, start='S', logprob=False)
+	cfg2 = Grammar(rules, start='S')
+	cfg2.switch('default', False)
 	sent = "astronomers saw stars with ears".split()
 	inside, outside, _, msg = doinsideoutside(sent, cfg2)
 	print(msg)
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)
 
-	cfg2 = Grammar(rules, start='S', logprob=True)
+	cfg2.switch('default', True)
 	chart, start, msg = parse(sent, cfg2)
 	from disambiguation import marginalize
 	from operator import itemgetter
