@@ -1,7 +1,9 @@
 """ Web interface to the disco-dop parser. Requires Flask.
-Expects a series of grammars in subdirectories of grammar/ """
-# Wishlist:
-# - shortest derivation, SL-DOP, MPSD, &c.
+Expects a series of grammars produced by runexp in subdirectories of grammar/
+
+Also usable from the command line:
+$ curl http://localhost:5000/parse -G --data-urlencode "sent=What's up?"
+"""
 import os
 import re
 import cgi
@@ -12,7 +14,8 @@ import random
 import logging
 from functools import wraps
 from operator import itemgetter
-from flask import Flask, Markup, request, render_template, send_from_directory
+from flask import Flask, Markup, Response
+from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 from discodop import treetransforms, treebank
 from discodop.tree import Tree
@@ -39,10 +42,11 @@ def main():
 @APP.route('/parse')
 def parse():
 	""" Parse sentence and return a textual representation of a parse tree,
-	in a HTML fragment. To be invoked by an AJAX call."""
+	in a HTML fragment or plain text. To be invoked by an AJAX call."""
 	sent = request.args.get('sent', None)
 	objfun = request.args.get('objfun', 'mpp')
 	marg = request.args.get('marg', 'nbest')
+	html = request.args.get('html', False)
 	if not sent:
 		return ''
 	frags = nbest = None
@@ -60,6 +64,8 @@ def parse():
 		frags = nbest = ''
 		msg = ''
 	else:
+		if parsers[lang].relationalrealizational:
+			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
 		tree = str(results[-1].parsetree)
 		prob = results[-1].prob
 		parsetrees = results[-1].parsetrees or {}
@@ -70,17 +76,19 @@ def parse():
 		tree = morphtags.sub(r'(\1\2', tree)
 		tree = Tree.parse(tree, parse_leaf=int)
 		result = Markup(DrawTree(tree, senttok).text(
-				unicodelines=True, html=True))
-		frags = Markup('\n\n'.join(
+				unicodelines=True, html=html))
+		frags = Markup('Phrasal fragments used in the most probable derivation '
+				'of the highest ranked parse tree:\n'
+				+ '\n\n'.join(
 				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
-						unicodelines=True, html=True)
+						unicodelines=True, html=html)
 				for frag, terminals in fragments))
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (
 				n + 1, probstr(prob),
 				DrawTree(treetransforms.removefanoutmarkers(
 					treetransforms.unbinarize(Tree.parse(morphtags.sub(
 						r'(\1\2', tree), parse_leaf=int))),
-					senttok).text(unicodelines=True, html=True))
+					senttok).text(unicodelines=True, html=html))
 				for n, (tree, prob) in enumerate(parsetrees)))
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
@@ -90,6 +98,9 @@ def parse():
 			'10 most probable parse trees:',
 			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), cgi.escape(tree))
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
+	if not html:
+		return Response('\n'.join((nbest, frags, info, result)),
+				mimetype='text/plain')
 	return render_template('parsetree.html', sent=sent, result=result,
 			frags=frags, nbest=nbest, info=info, randid=randid())
 
@@ -116,7 +127,9 @@ def loadparsers():
 					transformations=params['transformations'],
 					tailmarker=params['tailmarker'], postagging=postagging
 					if postagging and postagging['method'] == 'unknownword'
-					else None)
+					else None,
+					relationalrealizational=params.get(
+						'relationalrealizational'))
 			APP.logger.info('Grammar for %s loaded.' % lang)
 
 
