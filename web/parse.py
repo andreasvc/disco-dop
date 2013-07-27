@@ -194,7 +194,7 @@ def tokenize(text):
 def guesslang(sent):
 	""" simple heuristic: language that contains most words from input. """
 	lang = max(parsers, key=lambda x: len(set(sent).intersection(
-			parsers[x].stages[0].grammar.lexicalbylhs)))
+			parsers[x].stages[0].grammar.lexicalbyword)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
 
