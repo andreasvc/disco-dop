@@ -28,6 +28,7 @@ cdef extern from "macros.h":
 
 INFINITY = float('infinity')
 REMOVEIDS = re.compile('@[-0-9]+')
+BREMOVEIDS = re.compile(b'@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
 
 
@@ -371,7 +372,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 			# do not prune item
 			whitelist[n] = None
 		elif backtransform is None:
-			whitelist[n] = whitelist[grammar.toid[REMOVEIDS.sub('', label)]]
+			whitelist[n] = whitelist[grammar.toid[BREMOVEIDS.sub(b'', label)]]
 		else:
 			whitelist[n] = whitelist[grammar.toid[label]]
 
@@ -673,7 +674,7 @@ def main():
 	sent = "a b c".split()
 	chart, start, _ = plcfrs.parse(sent, grammar, None, True)
 	assert start
-	vit = viterbiderivation(chart, start, grammar.tolabel)
+	vitderiv, vitprob = viterbiderivation(chart, start, grammar.tolabel)
 	mpd, _, _ = marginalize("mpd", chart, start, grammar, 1000)
 	mpp, _, _ = marginalize("mpp", chart, start, grammar, 1000)
 	mppsampled, _, _ = marginalize("mpp", chart, start, grammar, 1000,
@@ -684,7 +685,7 @@ def main():
 			sldop_n=7, sent=sent)
 	short, _, _ = marginalize("shortest", chart, start, grammar,
 		1000, sent=sent)
-	print("\nvit:\t\t%s %r" % e((REMOVEIDS.sub('', vit[0]), exp(-vit[1]))),
+	print("\nvit:\t\t%s %r" % e((REMOVEIDS.sub('', vitderiv), exp(-vitprob))),
 		"MPD:\t\t%s %r" % e(maxitem(mpd)),
 		"MPP:\t\t%s %r" % e(maxitem(mpp)),
 		"MPP sampled:\t%s %r" % e(maxitem(mppsampled)),

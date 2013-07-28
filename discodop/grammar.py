@@ -311,7 +311,7 @@ def shortestderivmodel(grammar):
 	rules that introduce new fragments which receive a weight of 0.5. """
 	# any rule corresponding to the introduction of a
 	# fragment has a probability of 1/2, else 1.
-	ruleprobs = [1 if '@' in lhs or '{' in lhs else 0.5
+	ruleprobs = [1 if b'@' in lhs or b'{' in lhs else 0.5
 			for lhs in (BITPAR if grammar.bitpar else LCFRS).findall(
 				grammar.origrules)]
 	lexprobs = [1 if '@' in lhs or '{' in lhs else 0.5

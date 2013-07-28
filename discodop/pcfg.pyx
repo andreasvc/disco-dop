@@ -466,7 +466,7 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 						minright[lhs, left] = right
 					if right > maxright[lhs, left]:
 						maxright[lhs, left] = right
-			nonempty = filter(None, cell.values())
+			nonempty = list(filter(None, cell.values()))
 			if nonempty:
 				spans += 1
 				items += len(nonempty)
@@ -646,7 +646,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None):
 						minright[lhs, left] = right
 					if right > maxright[lhs, left]:
 						maxright[lhs, left] = right
-			nonempty = filter(None, cell.values())
+			nonempty = list(filter(None, cell.values()))
 			if nonempty:
 				spans += 1
 				items += len(nonempty)
