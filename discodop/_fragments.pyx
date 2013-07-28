@@ -616,7 +616,7 @@ cdef inline yieldranges(Node *tree, int i):
 			start = a
 		prev = a
 	yields.append("%d:%d" % (start, prev))
-	return " ".join(yields)
+	return ' '.join(yields)
 
 
 cdef inline list getyield(Node *tree, int i):
@@ -651,7 +651,7 @@ cdef getsent(frag, list sent):
 	('(ROOT (S 0) ($. 2))', ('Foo', None, '.'))
 	>>> getsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', "In Japan wird \
 	offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur \
-	gr\\xf6\\xdften Bank der Welt vorbereitet .".split(" "))
+	gr\\xf6\\xdften Bank der Welt vorbereitet .".split(' '))
 	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))"""
 	cdef:
 		int n, m = 0, maxl
@@ -715,7 +715,7 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 		for m in range(b.len):
 			print('\t', end='')
 			if bitmatrix:
-				print("1" if TESTBIT(&CST[m * SLOTS], n) else " ", end='')
+				print("1" if TESTBIT(&CST[m * SLOTS], n) else ' ', end='')
 			else:
 				if TESTBIT(&CST[IDX(n, m, b.len, SLOTS)], a.len):
 					if abitcount(&CST[IDX(n, m, b.len, SLOTS)], SLOTS) - 1:

@@ -115,7 +115,7 @@ def simplesmoothlexicon(grammar, lexmodel,
 	return grammar
 
 
-def getlexmodel(sigs, words, lexicon, wordsfortag, openclasstags,
+def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags, wordsig, sigtag,
 			openclassoffset=1, kappa=1):
 	""" Compute a smoothed lexical model. Returns a dictionary
@@ -253,7 +253,7 @@ def unknownword6(word, loc, lexicon):
 	return sig
 
 
-def unknownword4(word, loc, lexicon):
+def unknownword4(word, loc, _):
 	""" Model 4 of the Stanford parser. Relatively language agnostic. """
 	sig = "UNK"
 
@@ -292,7 +292,7 @@ def unknownword4(word, loc, lexicon):
 	return sig
 
 
-def unknownwordbase(word, loc, lexicon):
+def unknownwordbase(word, _loc, _lexicon):
 	""" BaseUnknownWordModel of the Stanford parser.
 	Relatively language agnostic. """
 	sig = "UNK"
@@ -341,7 +341,7 @@ ispunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 		u"\u20A0-\u20B5])+$")
 
 
-def unknownwordftb(word, loc, lexicon):
+def unknownwordftb(word, loc, _):
 	""" Model 2 for French of the Stanford parser. """
 	sig = "UNK"
 

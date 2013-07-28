@@ -153,7 +153,7 @@ def bitext():
 	compiled_scfg = Grammar(induce_plcfrs(trees, sents))
 	print("sentences:")
 	for tree in trees:
-		print(" ".join(w for _, w in sorted(tree.pos())))
+		print(' '.join(w for _, w in sorted(tree.pos())))
 	print("treebank:")
 	for tree in trees:
 		print(tree)
@@ -211,7 +211,7 @@ def parse(compiledgrammar, testsent, testtags=None):
 	""" Parse a sentence with a grammar. """
 	chart, start, _ = plcfrs.parse(testsent,
 		compiledgrammar, tags=testtags, exhaustive=True)
-	print("input:", " ".join("%d:%s" % a
+	print("input:", ' '.join("%d:%s" % a
 			for a in enumerate(testtags if testtags else testsent)), end=' ')
 	if start:
 		print()

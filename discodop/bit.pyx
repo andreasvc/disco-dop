@@ -128,7 +128,7 @@ def main():
 	ulongvec[0] = ~0UL
 	assert anextunset(ulongvec, 0, 2) == sizeof(ULong) * 8, (
 		anextunset(ulongvec, 0, 2), sizeof(ULong) * 8)
-	print("it worked")
+	print('it worked')
 
 if __name__ == '__main__':
 	main()

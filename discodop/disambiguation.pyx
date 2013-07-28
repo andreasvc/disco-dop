@@ -325,10 +325,10 @@ cdef samplechart(dict D, dict chart, ChartItem start, list tolabel,
 	children = [samplechart(D, chart, child, tolabel, tables, debin)
 		for child in (edge.left, edge.right) if child.label]
 	if debin is not None and debin in tolabel[start.label]:
-		tree = " ".join([a for a, _ in children])
+		tree = ' '.join([a for a, _ in children])
 	else:
 		tree = "(%s %s)" % (tolabel[start.label].decode('ascii'),
-				" ".join([a for a, _ in children]))
+				' '.join([a for a, _ in children]))
 	# create an edge that has as children the edges that were just created
 	# by our recursive call
 	newedge = RankedEdge(start, edge, len(D[edge.left]) - 1,
@@ -638,8 +638,8 @@ def main():
 	def e(x):
 		a, b = x
 		if isinstance(b, tuple):
-			return (a.replace("@", ""), (int(abs(b[0])), b[1]))
-		return a.replace("@", ""), b
+			return (a.replace("@", ''), (int(abs(b[0])), b[1]))
+		return a.replace("@", ''), b
 
 	def maxitem(d):
 		return max(d.items(), key=itemgetter(1))

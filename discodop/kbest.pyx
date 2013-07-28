@@ -483,7 +483,7 @@ cpdef main():
 				j += (re.right, )
 			ip = entry.value
 			print(tolabel[v.label].decode('ascii'), ":",
-				" ".join([tolabel[ci.label].decode('ascii') for ci, _
+				' '.join([tolabel[ci.label].decode('ascii') for ci, _
 				in zip((ed.left, ed.right), j)]),
 				exp(-ed.rule.prob), j, exp(-ip))
 		print()

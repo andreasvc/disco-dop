@@ -15,7 +15,7 @@ from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 from . import plcfrs, pcfg
 from .grammar import FORMAT, defaultparse, shortestderivmodel
-from .containers import Grammar, DictObj
+from .containers import Grammar
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
 from .tree import Tree
@@ -382,6 +382,28 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				if not w.startswith("UNK")}
 		postagging['sigs'] = {w for w in stages[0].grammar.lexicalbyword
 				if w.startswith("UNK")}
+
+
+class DictObj(object):
+	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
+
+	def __init__(self, *a, **kw):
+		self.__dict__.update(*a, **kw)
+
+	def update(self, *a, **kw):
+		""" Update/add more attributes. """
+		self.__dict__.update(*a, **kw)
+
+	def __getattr__(self, name):
+		""" This is only called when the normal mechanism fails, so in practice
+		should never be called. It is only provided to satisfy pylint that it
+		is okay not to raise E1101 errors in the client code. """
+		raise AttributeError("%r instance has no attribute %r" % (
+				self.__class__.__name__, name))
+
+	def __repr__(self):
+		return "%s(%s)" % (self.__class__.__name__,
+			",\n".join("%s=%r" % a for a in self.__dict__.items()))
 
 
 def probstr(prob):

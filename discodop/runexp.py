@@ -34,9 +34,9 @@ from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
 		write_lcfrs_grammar, shortestderivmodel
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
-from .parser import DEFAULTSTAGE, readgrammars, Parser
+from .parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
 from .estimates import getestimates, getpcfgestimates
-from .containers import Grammar, DictObj
+from .containers import Grammar
 
 USAGE = """Usage: %s [--rerun] parameter file
 If a parameter file is given, an experiment is run. See the file sample.prm for
@@ -94,7 +94,7 @@ def startexp(
 		pospa=False,  # when v > 1, add parent annotation to POS tags?
 		headrules=None,  # rules for finding heads of constituents
 		fanout_marks_before_bin=False,
-		tailmarker="",
+		tailmarker='',
 		evalparam="proper.prm",  # EVALB-style parameter file
 		quiet=False, reallyquiet=False,  # quiet=no per sentence results
 		numproc=1,  # increase to use multiple CPUs; None: use all CPUs.
@@ -282,7 +282,7 @@ def startexp(
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
 	for result in results[0]:
 		nsent = len(result.parsetrees)
-		header = (" " + result.name.upper() + " ").center(35, "=")
+		header = (' ' + result.name.upper() + ' ').center(35, "=")
 		evalsummary = evalmod.doeval(OrderedDict((a, b.copy(True))
 				for a, b in test_parsed_sents.items()), gold_sents,
 				result.parsetrees, test_tagged_sents if usetags else gold_sents,
@@ -292,7 +292,7 @@ def startexp(
 				25 if any(len(a) > evalparam["CUTOFF_LEN"]
 				for a in gold_sents.values()) else 14),
 				100.0 * (nsent - result.noparse) / nsent)
-		logging.info("\n".join(("", header, evalsummary, coverage)))
+		logging.info("\n".join(('', header, evalsummary, coverage)))
 
 
 def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
@@ -303,7 +303,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 	# fixme: this n should correspond to sentence id
 	tbfanout, n = treebankfanout(trees)
 	logging.info("treebank fan-out before binarization: %d #%d\n%s\n%s",
-			tbfanout, n, trees[n], " ".join(sents[n]))
+			tbfanout, n, trees[n], ' '.join(sents[n]))
 	# binarization
 	begin = time.clock()
 	if fanout_marks_before_bin:
@@ -501,7 +501,7 @@ def doparsing(**kwds):
 		sent, goldtree, goldsent, _ = params.testset[sentid]
 		logging.debug("%d/%d (%s). [len=%d] %s\n%s", nsent, len(params.testset),
 					sentid, len(sent),
-					" ".join(a[0] for a in goldsent), msg)
+					' '.join(a[0] for a in goldsent), msg)
 		evaltree = goldtree.copy(True)
 		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
 				dict(evaltree.pos()), params.deletelabel, params.deleteword,
@@ -598,7 +598,7 @@ def writeresults(results, params):
 			"bracket": "mrg",
 			"discbracket": "dbr",
 			"alpino": "xml"}
-	category = (params.category + ".") if params.category else ""
+	category = (params.category + ".") if params.category else ''
 	if params.corpusfmt == 'alpino':
 		corpusfmt = 'export'
 		io.open("%s/%sgold.%s" % (params.resultdir, category, ext[corpusfmt]),
@@ -666,15 +666,12 @@ def readtepacoc():
 
 
 def parsetepacoc(
-		stages=(
-				dict(mode='pcfg', split=True, markorigin=True),
+		stages=(dict(mode='pcfg', split=True, markorigin=True),
 				dict(mode='plcfrs', prune=True, k=10000, splitprune=True),
 				dict(mode='plcfrs', prune=True, k=5000, dop=True,
 					usedoubledop=True, estimator="dop1", objective="mpp",
-					sample=False, kbest=True)
-		),
-		trainmaxwords=999, trainnumsents=25005,
-		testmaxwords=999, testnumsents=2000,
+					sample=False, kbest=True)),
+		trainmaxwords=999, trainnumsents=25005, testmaxwords=999,
 		bintype="binarize", h=1, v=1, factor="right", tailmarker='',
 		revmarkov=False, leftmostunary=True, rightmostunary=True, pospa=False,
 		fanout_marks_before_bin=False, transformations=None,
@@ -758,7 +755,7 @@ def parsetepacoc(
 		tagmap = {"$(": "$[", "PAV": "PROAV", "PIDAT": "PIAT"}
 		# the sentences in the list allsents are modified in-place so that
 		# the relevant copy in testsets[cat][0] is updated as well.
-		dotagging(usetagger, "", allsents, overridetagdict, tagmap)
+		dotagging(usetagger, '', allsents, overridetagdict, tagmap)
 
 	# training set
 	trees, sents, blocks = zip(*[sent for n, sent in
@@ -840,13 +837,13 @@ gunzip german-par-linux-3.2-utf8.bin.gz"""
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
-				infile.write("\n".join(wordmangle(w, n, sent)
+				infile.write("\n".join(w.encode('utf-8')
 					for n, w in enumerate(sent)) + "\n<S>\n")
 		if not model:
 			model = "tree-tagger/lib/german-par-linux-3.2-utf8.bin"
 			filtertags = "| tree-tagger/cmd/filter-german-tags"
 		else:
-			filtertags = ""
+			filtertags = ''
 		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
 				" %s %s %s" % (model, inname, filtertags),
 				stdout=PIPE, shell=True)
@@ -865,7 +862,7 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
-				infile.write(" ".join(wordmangle(w, n, sent)
+				infile.write(' '.join(w.encode('utf-8')
 					for n, w in enumerate(sent)) + "\n")
 		if not model:
 			model = "models/german-hgc.tagger"
@@ -894,13 +891,6 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 	return taggedsents
 
 SENTEND = "(\"'!?..."  # ";/-"
-
-
-def wordmangle(w, n, sent):
-	""" Function to filter words before they are sent to the tagger. """
-	#if n > 0 and w[0] in string.uppercase and not sent[n - 1] in SENTEND:
-	#	return ("%s\tNE\tNN\tFM" % w).encode('utf-8')
-	return w.encode('utf-8')
 
 
 def tagmangle(a, splitchar, overridetag, tagmap):

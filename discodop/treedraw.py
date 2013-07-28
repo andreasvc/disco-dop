@@ -209,7 +209,7 @@ class DrawTree(object):
 				if m != ():
 					childcols[m[:-1]].add((rowindex, i))
 			#print("level", n)
-			#for row in matrix: print("".join(("%4s" % a)[-2:] for a in row))
+			#for row in matrix: print(''.join(("%4s" % a)[-2:] for a in row))
 		assert len(positions) == 0
 
 		# remove unused columns, right to left
@@ -338,7 +338,7 @@ class DrawTree(object):
 			cross = horzline + u'\u253c' + horzline
 		else:
 			horzline = "_"
-			leftcorner = rightcorner = " "
+			leftcorner = rightcorner = ' '
 			vertline = " | "
 			tee = 3 * horzline
 			cross = bottom = "_|_"
@@ -371,8 +371,8 @@ class DrawTree(object):
 			maxchildcol[parent] = max(maxchildcol.get(parent, column), column)
 		# bottom up level order traversal
 		for row in sorted(matrix, reverse=True):
-			noderow = ["".center(maxnode[col]) for col in range(maxcol + 1)]
-			branchrow = ["".center(maxnode[col]) for col in range(maxcol + 1)]
+			noderow = [''.center(maxnode[col]) for col in range(maxcol + 1)]
+			branchrow = [''.center(maxnode[col]) for col in range(maxcol + 1)]
 			for col in matrix[row]:
 				n = matrix[row][col]
 				node = self.nodes[n]
@@ -417,19 +417,19 @@ class DrawTree(object):
 						branchrow[col] = crosscell(branchrow[col])
 						if col not in matrix[row]:
 							noderow[col] = crosscell(noderow[col])
-				branchrow = [a + ((a[-1] if a[-1] != " " else b[0]) * nodedist)
-						for a, b in zip(branchrow, branchrow[1:] + [" "])]
-				result.append("".join(branchrow))
-				result.append((" " * nodedist).join(noderow))
+				branchrow = [a + ((a[-1] if a[-1] != ' ' else b[0]) * nodedist)
+						for a, b in zip(branchrow, branchrow[1:] + [' '])]
+				result.append(''.join(branchrow))
+				result.append((' ' * nodedist).join(noderow))
 			else:
-				result.append((" " * nodedist).join(noderow))
+				result.append((' ' * nodedist).join(noderow))
 		return "\n".join(reversed(result)) + "\n"
 
 	def tikzmatrix(self, nodecolor="blue", leafcolor="red"):
 		""" Produce TiKZ code for use with LaTeX. PDF can be produced with
 		pdflatex. Uses TiKZ matrices meaning that nodes are put into a fixed
 		grid. Where the cells of each column all have the same width."""
-		result = ["%% %s\n%% %s" % (self.tree, " ".join(self.sent)),
+		result = ["%% %s\n%% %s" % (self.tree, ' '.join(self.sent)),
 			r"""\begin{tikzpicture}[scale=1, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
 			inner sep=0mm, node distance=1mm]""",
@@ -460,7 +460,7 @@ class DrawTree(object):
 							color, i, label))
 				line.append("&")
 			# new row: skip last column char "&", add newline
-			result.append(" ".join(line[:-1]) + r" \\")
+			result.append(' '.join(line[:-1]) + r" \\")
 		result += ["};"]
 
 		shift = -0.5
@@ -477,7 +477,7 @@ class DrawTree(object):
 	def tikznode(self, nodecolor="blue", leafcolor="red"):
 		""" Produce TiKZ code to draw a tree. Nodes are drawn with the
 		\\node command so they can have arbitrary coordinates. """
-		result = ["%% %s\n%% %s" % (self.tree, " ".join(self.sent)),
+		result = ["%% %s\n%% %s" % (self.tree, ' '.join(self.sent)),
 			r"""\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
 			inner sep=0mm, node distance=1mm]""",
@@ -522,7 +522,7 @@ def latexlabel(label):
 	# turn binarization marker into subscripts in math mode
 	if "|" in newlabel:
 		cat, siblings = newlabel.split("|", 1)
-		siblings = siblings.replace("<", "").replace(">", "")
+		siblings = siblings.replace("<", '').replace(">", '')
 		if "^" in siblings:
 			siblings, parents = siblings.split("^")
 			siblings = siblings[1:-1].replace("-", ",")
@@ -661,7 +661,7 @@ def main():
 	for n, (tree, sent) in enumerate(zip(trees, sents)):
 		drawtree = DrawTree(tree, sent)
 		print("\ntree, sent", n, tree,
-				" ".join("..." if a is None else a for a in sent),
+				' '.join("..." if a is None else a for a in sent),
 				repr(drawtree),
 				sep='\n')
 		try:

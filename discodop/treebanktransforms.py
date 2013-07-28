@@ -43,7 +43,7 @@ def transform(tree, sent, transformations):
 					if rindex(functions, "AC") > rindex(functions, "NK"):
 						ac += pp[rindex(functions, "AC") + 1:]
 				#else:
-				#	print("PP but no AC or NK", " ".join(functions))
+				#	print("PP but no AC or NK", ' '.join(functions))
 				nk = [a for a in pp if a not in ac]
 				# introduce a PP unless there is already an NP in the PP
 				# (annotation mistake?), or there is a PN and we want to avoid
@@ -131,7 +131,7 @@ def transform(tree, sent, transformations):
 					a = a[0]
 		elif name == 'UNARY':  # introduce phrasal projections for single tokens
 			# currently only adds NPs.
-			tagtoconst, unaryconst = getgeneralizations()
+			tagtoconst, _ = getgeneralizations()
 			for a in tree.treepositions("leaves"):
 				tag = tree[a[:-1]]   # e.g. NN
 				const = tree[a[:-2]]  # e.g. S
@@ -179,7 +179,7 @@ def transform(tree, sent, transformations):
 def reversetransform(tree, transformations):
 	""" Undo specified transformations, as well as removing any hyphen-marked
 	state splits. Do not apply twice (might remove VPs which shouldn't be). """
-	tagtoconst, unaryconst = getgeneralizations()
+	tagtoconst, _ = getgeneralizations()
 	# Generic state-split removal
 	for node in tree.subtrees(lambda n: "-" in n.label):
 		node.label = node.label[:node.label.index("-")]
@@ -645,7 +645,7 @@ def puncttest():
 				sorted(addbitsets(nopunct).subtrees(phrasal),
 				key=lambda n: min(n.leaves()))):
 			if fanout(a) != fanout(b):
-				print(" ".join(sent))
+				print(' '.join(sent))
 				print(mangled)
 				print(nopunct)
 				print(original)

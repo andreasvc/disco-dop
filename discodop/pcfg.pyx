@@ -677,7 +677,7 @@ def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 	if inside[0, len(sent), 1]:
 		outside = outsidescores(grammar, sent, inside, outside, *minmaxlr)
 		start = new_CFGChartItem(1, 0, lensent)
-		msg = ""
+		msg = ''
 	else:
 		start = NONE
 		msg = "no parse"

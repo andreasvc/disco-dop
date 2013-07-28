@@ -240,7 +240,7 @@ def test():
 		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)]
 	grammar = splitgrammar(rules)
 	_, sent = gen(grammar, start=grammar.toid['S'], verbose=True)
-	print(" ".join(sent.pop()))
+	print(' '.join(sent.pop()))
 
 
 def main():
@@ -266,7 +266,7 @@ def main():
 	grammar = splitgrammar(xgrammar)
 	for _ in range(20):
 		p, sent = gen(grammar, start=grammar.toid[start], verbose=verbose)
-		print("[%g] %s" % (p, " ".join(sent.pop())))
+		print("[%g] %s" % (p, ' '.join(sent.pop())))
 
 if __name__ == '__main__':
 	if "--test" in sys.argv:

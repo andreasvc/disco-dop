@@ -5,7 +5,7 @@ import os
 import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
-from itertools import count, repeat, islice
+from itertools import count, islice
 from collections import OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree
@@ -198,13 +198,13 @@ class TigerXMLCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		raise NotImplementedError
-		results = OrderedDict()
-		for filename in self._filenames:
-			# use iterparse()
-			block = ElementTree.parse(filename).getroot()
-			for sent in block.get('body').findall('s'):
-				results[sent.get('id')] = sent
-		return results
+		#results = OrderedDict()
+		#for filename in self._filenames:
+		#	# use iterparse()
+		#	block = ElementTree.parse(filename).getroot()
+		#	for sent in block.get('body').findall('s'):
+		#		results[sent.get('id')] = sent
+		#return results
 
 	def _parse(self, block):
 		raise NotImplementedError
@@ -245,7 +245,7 @@ class DiscBracketCorpusReader(CorpusReader):
 		return result, sent
 
 	def _word(self, block, orig=False):
-		sent = block.split("\t", 1)[1].rstrip("\n\r").split(" ")
+		sent = block.split("\t", 1)[1].rstrip("\n\r").split(' ')
 		if orig or self.punct != "remove":
 			return sent
 		return [a for a in sent if not ispunct(a, None)]
@@ -453,7 +453,7 @@ def writetree(tree, sent, n, fmt, headrules=None):
 		return indexre.sub(lambda x: ' %s)' % getword(x.group()),
 				"%s\n" % tree)
 	elif fmt == "discbracket":
-		return "%s\t%s\n" % (tree, " ".join(sent))
+		return "%s\t%s\n" % (tree, ' '.join(sent))
 	elif fmt == "export":
 		result = []
 		if n is not None:
@@ -726,7 +726,7 @@ def main():
 			precision = len(set(b1) & set(b2)) / len(set(b1))
 			recall = len(set(b1) & set(b2)) / len(set(b2))
 			if precision != 1.0 or recall != 1.0 or d == z:
-				print(d, " ".join(":".join((str(n),
+				print(d, ' '.join(":".join((str(n),
 					a.encode('unicode-escape'))) for n, a in enumerate(c)))
 				print("no match", precision, recall)
 				print(len(b1), len(b2), "gold-transformed", set(b2) - set(b1),

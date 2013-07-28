@@ -26,10 +26,6 @@ LCFRS_NONINT = re.compile(b"\t[0-9]+[./][0-9]+\n")
 BITPAR_NONINT = re.compile(b"(?:^|\n)[0-9]+\.[0-9]+[ \t]")
 LEXICON_NONINT = re.compile("[ \t][0-9]+[./][0-9]+[ \t\n]")
 
-LCFRS = re.compile(b"^([^ \t\n]+\t){2,3}[01,]+\t[0-9]+([./][0-9]+)?$")
-BITPAR = re.compile(b"^[0-9]+(\.[0-9]+)?[ \t]([^ \t\n]+[ \t]){2,3}$")
-LEXICON = re.compile("^[^ \t]+\t([^ \t\n]+[ \t][0-9]+([./][0-9]+)?)+$")
-
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
 	cdef UInt a = (<Rule *>p1).lhs, b = (<Rule *>p2).lhs
@@ -478,7 +474,7 @@ cdef class Grammar:
 			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
 				strlabel = self.tolabel[n]
 				if striplabelre is not None:
-					strlabel = striplabelre.sub(b"", strlabel, 1)
+					strlabel = striplabelre.sub(b'', strlabel, 1)
 				if self.fanout[n] == 1 or not splitprune:
 					self.mapping[n] = coarse.toid[strlabel]
 					seen.add(self.mapping[n])
@@ -540,12 +536,12 @@ cdef class Grammar:
 			self.tolabel[rule.lhs].decode('ascii'),
 			self.tolabel[rule.rhs1].decode('ascii'),
 			"  %s" % self.tolabel[rule.rhs2].decode('ascii')
-				if rule.rhs2 else "")
+				if rule.rhs2 else '')
 		return left.ljust(40) + self.yfrepr(rule)
 
 	cdef yfrepr(self, Rule rule):
 		cdef int n, m = 0
-		cdef result = ""
+		cdef result = ''
 		for n in range(8 * sizeof(rule.args)):
 			result += "1" if (rule.args >> n) & 1 else "0"
 			if (rule.lengths >> n) & 1:
@@ -1079,28 +1075,6 @@ cdef inline copynodes(tree, dict prods, Node *result):
 				result[n].right = a[1].idx
 			else:  # unary node
 				result[n].right = -1
-
-
-class DictObj(object):
-	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
-
-	def __init__(self, *a, **kw):
-		self.__dict__.update(*a, **kw)
-
-	def update(self, *a, **kw):
-		""" Update/add more attributes. """
-		self.__dict__.update(*a, **kw)
-
-	def __getattr__(self, name):
-		""" This is only called when the normal mechanism fails, so in practice
-		should never be called. It is only provided to satisfy pylint that it
-		is okay not to raise E1101 errors in the client code. """
-		raise AttributeError("%r instance has no attribute %r" % (
-				self.__class__.__name__, name))
-
-	def __repr__(self):
-		return "%s(%s)" % (self.__class__.__name__,
-			",\n".join("%s=%r" % a for a in self.__dict__.items()))
 
 
 # begin scratch

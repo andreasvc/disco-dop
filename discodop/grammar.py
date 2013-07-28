@@ -10,7 +10,7 @@ from math import exp
 from fractions import Fraction
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
-from .tree import ImmutableTree, Tree, DiscTree
+from .tree import ImmutableTree, Tree
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
@@ -274,7 +274,7 @@ def doubledop(fragments, debug=False, ewe=False):
 			print("fragment: %s\nprod:     %s" % (b[0], "\n\t".join(
 				printrule(r, yf, 0) for r, yf in a[0])))
 			print("template: %s\nfreq: %2d  sent: %s\n" % (
-					a[1], fragments[b], " ".join('_' if x is None
+					a[1], fragments[b], ' '.join('_' if x is None
 					else quotelabel(x) for x in b[1])))
 		print("backtransform:")
 		for a, b in backtransform.items():
@@ -361,7 +361,7 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	return n
 
 
-def decorate_with_ids(n, tree, sent):
+def decorate_with_ids(n, tree, _):
 	""" Auxiliary function for DOP reduction.
 	Adds unique identifiers to each internal non-terminal of a tree.
 	n should be an identifier of the sentence.
@@ -421,6 +421,45 @@ def decorate_with_ids_mem(n, tree, sent):
 			[recursive_decorate(child) for child in tree])
 
 
+class DiscTree(ImmutableTree):
+	""" Wrap an immutable tree with indices as leaves
+	and a sentence. """
+	def __init__(self, tree, sent):
+		super(DiscTree, self).__init__(tree.label,
+				tuple(DiscTree(a, sent) if isinstance(a, Tree) else a
+				for a in tree))
+		self.sent = sent
+
+	def __eq__(self, other):
+		return isinstance(other, Tree) and eqtree(self, self.sent,
+				other, other.sent)
+
+	def __hash__(self):
+		return hash((self.label, ) + tuple(a.__hash__()
+				if isinstance(a, Tree) else self.sent[a] for a in self))
+
+	def __repr__(self):
+		return "DisctTree(%r, %r)" % (
+				super(DiscTree, self).__repr__(), self.sent)
+
+
+def eqtree(tree1, sent1, tree2, sent2):
+	""" Test whether two discontinuous trees are equivalent;
+	assumes canonicalized() ordering. """
+	if tree1.label != tree2.label or len(tree1) != len(tree2):
+		return False
+	for a, b in zip(tree1, tree2):
+		istree = isinstance(a, Tree)
+		if istree != isinstance(b, Tree):
+			return False
+		elif istree:
+			if not a.__eq__(b):
+				return False
+		else:
+			return sent1[a] == sent2[b]
+	return True
+
+
 def quotelabel(label):
 	""" Escapes two things: parentheses and non-ascii characters.
 	Parentheses are replaced by square brackets. Also escapes non-ascii
@@ -464,13 +503,13 @@ def new_flatten(tree, sent, ids):
 		# (tag@word idx)
 		return "(%s@%s%s)" % (x.group(1), word, n)
 
-	if tree.count(" ") == 1:
+	if tree.count(' ') == 1:
 		return lcfrs_productions(addbitsets(tree), sent), ([str(tree)], [])
 	# give terminals unique POS tags
 	prod = FRONTIERORTERM.sub(repl, tree)
 	# remove internal nodes, reorder
-	prod = "%s %s)" % (prod[:prod.index(" ")],
-		" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+	prod = "%s %s)" % (prod[:prod.index(' ')],
+		' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
 		key=lambda x: int(x.group(2)))))
 	prods = lcfrs_productions(factorconstituent(addbitsets(prod),
 			"}", factor='left', markfanout=True, ids=ids, threshold=2), sent)
@@ -583,13 +622,13 @@ def flatten(tree, sent, ids):
 		# (tag@word idx)
 		return "(%s@%s%s)" % (x.group(1), word, n)
 
-	if tree.count(" ") == 1:
+	if tree.count(' ') == 1:
 		return lcfrs_productions(addbitsets(tree), sent), str(tree)
 	# give terminals unique POS tags
 	prod = FRONTIERORTERM.sub(repl, tree)
 	# remove internal nodes, reorder
-	prod = "%s %s)" % (prod[:prod.index(" ")],
-			" ".join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+	prod = "%s %s)" % (prod[:prod.index(' ')],
+			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
 			key=lambda x: int(x.group(2)))))
 	prods = lcfrs_productions(factorconstituent(addbitsets(prod), "}",
 			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2),
@@ -645,12 +684,12 @@ def defaultparse(wordstags, rightbranching=False):
 					wordstags[0][0], defaultparse(wordstags[1:], rightbranching))
 		else:
 			return "(NP (%s %s))" % wordstags[0][::-1]
-	return "(NOPARSE %s)" % " ".join("(%s %s)" % a[::-1] for a in wordstags)
+	return "(NOPARSE %s)" % ' '.join("(%s %s)" % a[::-1] for a in wordstags)
 
 
 def printrule(r, yf, w):
 	""" Return a string with a representation of a rule. """
-	return "%s %s --> %s\t %r" % (w, r[0], " ".join(x for x in r[1:]), list(yf))
+	return "%s %s --> %s\t %r" % (w, r[0], ' '.join(x for x in r[1:]), list(yf))
 
 
 def cartpi(seq):
@@ -661,54 +700,6 @@ def cartpi(seq):
 	if seq:
 		return (b + (a, ) for b in cartpi(seq[:-1]) for a in seq[-1])
 	return ((), )
-
-
-def read_rparse_grammar(filename):
-	""" Read a grammar in the format as produced by rparse. """
-	result = []
-	for line in open(filename):
-		yf = eval(line[line.index('[[['):].replace('false', '0').replace(
-			'true', '1'))[0]
-		line = line[:line.index('[[[')].split()
-		line.pop(0)  # freq?
-		prob, lhs = line.pop(0).split(':')
-		line.pop(0)  # -->
-		result.append(((tuple([lhs] + line), tuple(map(tuple, yf))),
-			float(prob)))
-	return result
-
-
-def exportrparsegrammar(grammar):
-	""" Export a grammar to rparse format. All frequencies are 1,
-	but probabilities are exported.  """
-	def repryf(yf):
-		""" >>> repryf(((0, 1), (0, )))
-		[[false, true], [false]]. """
-		return '[' + ', '.join('[' + ', '.join('true' if a == 1 else 'false'
-			for a in b) + ']' for b in yf) + ']'
-
-	def rewritelabel(a):
-		""" Rewrite binarization markers to alternate format. """
-		a = a.replace('ROOT', 'VROOT')
-		if '|' in a:
-			fanout = a.rsplit('_', 1)[-1] if '_' in a[a.rindex('>'):] else '1'
-			parent = (a[a.index('^') + 2:a.index('>', a.index('^'))]
-					if '^' in a else '')
-			parent = '^' + '-'.join(x.replace('_', '') if '_' in x else x + '1'
-					for x in parent.split('-'))
-			children = a[a.index('<') + 1:a.index('>')].split('-')
-			children = '-'.join(x.replace('_', '') if '_' in x else x + '1'
-					for x in children)
-			current = a.split('|')[0]
-			current = (''.join(current.split('_')) if '_' in current
-					else current + '1')
-			return '@^%s%s-%sX%s' % (current, parent, children, fanout)
-		return ''.join(a.split('_')) if '_' in a else a + '1'
-
-	for (r, yf), w in grammar:
-		if r[1] != 'Epsilon':
-			yield ('1 %s:%s --> %s [%s]' % (w, rewritelabel(r[0]),
-				' '.join(map(rewritelabel, r[1:])), repryf(yf)))
 
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
@@ -747,7 +738,7 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
 			rules.write(("%g\t%s\n" % (w.numerator if freqs else w,
 					"\t".join(x for x in r))).encode('ascii'))
 		else:
-			yfstr = ",".join("".join(map(str, a)) for a in yf)
+			yfstr = ",".join(''.join(map(str, a)) for a in yf)
 			rules.write(("%s\t%s\t%s\n" % (
 					"\t".join(x for x in r), yfstr,
 					w.numerator if freqs else w)).encode('ascii'))
@@ -761,21 +752,6 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
 			else:
 				lexicon.write(unicode("\t%s %s" % (tag, w)))
 		lexicon.write(unicode('\n'))
-
-
-def alterbinarization(tree):
-	"""converts the binarization of rparse to the format that NLTK expects
-	S1 is the constituent, CS1 the parent, CARD1 the current sibling/child
-	@^S1^CS1-CARD1X1   -->  S1|<CARD1>^CS1 """
-	#how to optionally add \2 if nonempty?
-	tree = re.sub(
-		r"@\^([A-Z.,()$]+)\d+(\^[A-Z.,()$]+\d+)*(?:-([A-Z.,()$]+)\d+)*X\d+",
-		r"\1|<\3>", tree)
-	# remove fanout markers
-	tree = re.sub(r"([A-Z.,()$]+)\d+", r"\1", tree)
-	tree = re.sub("VROOT", r"ROOT", tree)
-	assert "@" not in tree
-	return tree
 
 
 def subsetgrammar(a, b):
@@ -873,7 +849,7 @@ def test():
 	print(grammar)
 	assert grammar.testgrammar(), "DOP1 should sum to 1."
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
-		print("sentence:", " ".join(a.encode('unicode-escape').decode()
+		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
 				for a in sent))
 		chart, start, msg = plcfrs.parse(sent, grammar, exhaustive=True)
 		print('\n', msg, end='')
@@ -973,7 +949,7 @@ def main():
 					bitpar=bitpar, freqs=freqs)
 	if model == "doubledop":
 		backtransformfile = "%s.backtransform%s" % (grammarfile,
-			".gz" if '--gzip' in opts else "")
+			".gz" if '--gzip' in opts else '')
 		myopen(backtransformfile, "w").writelines(
 				"%s\n" % a for a in backtransform.values())
 		print("wrote backtransform to", backtransformfile)

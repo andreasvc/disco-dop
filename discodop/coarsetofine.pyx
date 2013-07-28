@@ -194,8 +194,8 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 					finecfg, agenda)
 
 cpdef filterchart(chart, ChartItem start):
-	""" remove all entries that do not contribute to a complete derivation
-	headed by "start" """
+	""" Remove all entries that do not contribute to a complete derivation
+	headed by 'start'. """
 	chart2 = {}
 	if isinstance(start, CFGChartItem):
 		start1 = (<CFGChartItem>start).start
@@ -208,6 +208,7 @@ cpdef filterchart(chart, ChartItem start):
 	return chart2
 
 cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
+	""" Recursively filter an LCFRS chart. """
 	cdef LCFRSEdge edge
 	cdef ChartItem item
 	chart2[start] = chart[start]
@@ -221,6 +222,7 @@ cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 
 cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 		bint fatitems):
+	""" Recursively filter a PCFG chart. """
 	cdef CFGEdge edge
 	cdef ChartItem newitem
 	if fatitems:
@@ -297,7 +299,7 @@ def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
 			* outside[:lensent, :lensent + 1, :]) / sentprob
 	inside[:lensent, :lensent + 1, :] = np.NAN
 	inside[posterior > threshold] = np.inf
-	#print >>stderr, " ", (posterior > threshold).sum(),
+	#print >>stderr, ' ', (posterior > threshold).sum(),
 	#print >>stderr, "of", (posterior != 0.0).sum(),
 	#print >>stderr, "nonzero coarse items left",
 	#labels, leftidx, rightidx = (posterior[:lensent, :lensent+1, :]

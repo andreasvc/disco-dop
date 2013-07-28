@@ -523,7 +523,7 @@ def printfragments(fragments, counts, out=None):
 			if PARAMS['alt']:
 				a = altrepr(a)
 			out.write("%s\n" % (("%s\t%s" % (a[0],
-					" ".join("%s" % x if x else "" for x in a[1])))
+					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a.decode('utf-8')))
 		return
 	# when comparing two treebanks, a frequency of 1 is normal;
@@ -538,7 +538,7 @@ def printfragments(fragments, counts, out=None):
 				a = altrepr(a)
 			if len(theindices) > threshold:
 				out.write("%s\t%r\n" % (("%s\t%s" % (a[0],
-					" ".join("%s" % x if x else "" for x in a[1])))
+					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a.decode('utf-8'),
 					list(sorted(theindices.elements()))))
 			elif threshold:
@@ -550,7 +550,7 @@ def printfragments(fragments, counts, out=None):
 			if PARAMS['alt']:
 				a = altrepr(a)
 			out.write("%s\t%d\n" % (("%s\t%s" % (a[0],
-				" ".join("%s" % x if x else "" for x in a[1])))
+				' '.join("%s" % x if x else '' for x in a[1])))
 				if PARAMS['disc'] else a, freq))
 		elif threshold:
 			raise ValueError("invalid fragment--frequency=1: %r" % a)

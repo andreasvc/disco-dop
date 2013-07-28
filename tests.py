@@ -20,7 +20,7 @@ if any(not attempted for fail, attempted in results.values()):
 for mod in modules:
 	if hasattr(mod, 'test'):
 		mod.test()
-	else:
+	elif hasattr(mod, 'main'):
 		mod.main()
 runexp.main(argv=['runexp.py', 'sample.prm'])
 for mod, (fail, attempted) in sorted(results.items(),

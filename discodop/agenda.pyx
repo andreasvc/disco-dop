@@ -15,15 +15,18 @@ DEF HEAP_ARITY = 4
 
 
 def getkey(Entry entry):
+	""" Get key of entry for non-Cython code. """
 	return entry.key
 
 
 cdef inline bint cmpfun(Entry a, Entry b):
+	""" Generic comparison function for Entry objects. """
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))
 
 
-# this is _significantly_ faster than going through __richcmp__ of objects
 cdef inline bint edgecmpfun(Entry a, Entry b):
+	""" Comparison function for Entry objects containing Edges. This is
+	_significantly_ faster than going through __richcmp__ of objects. """
 	return ((<LCFRSEdge>a.value).score < (<LCFRSEdge>b.value).score
 		or ((<LCFRSEdge>a.value).score == (<LCFRSEdge>b.value).score
 		and a.count < b.count))

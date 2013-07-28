@@ -77,7 +77,7 @@ def main():
 	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=',
 		'headrules=', 'functions=', 'morphology=')
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], "", flags + options)
+		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
 	except GetoptError as err:
 		print("error: %s\n%s" % (err, HELP))
 		sys.exit(2)
@@ -162,7 +162,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		lengpos = sum(1 for _, b in gpos
 			if b not in param["DELETE_LABEL_FOR_LENGTH"])
 		assert lencpos == lengpos, ("sentence length mismatch. "
-				"sents:\n%s\n%s" % (" ".join(csent), " ".join(gsent)))
+				"sents:\n%s\n%s" % (' '.join(csent), ' '.join(gsent)))
 		# massage the data (in-place modifications)
 		transform(ctree, csent, cpos, dict(gpos), param["DELETE_LABEL"],
 				param["DELETE_WORD"], param["EQ_LABEL"], param["EQ_WORD"])
@@ -171,7 +171,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		#if not gtree or not ctree:
 		#	continue
 		assert csent == gsent, ("candidate & gold sentences do not match:\n"
-			"%r // %r" % (" ".join(csent), " ".join(gsent)))
+			"%r // %r" % (' '.join(csent), ' '.join(gsent)))
 		cbrack = bracketings(ctree, param["LABELED"], param["DELETE_LABEL"],
 				param["DISC_ONLY"])
 		gbrack = bracketings(gtree, param["LABELED"], param["DELETE_LABEL"],
@@ -247,10 +247,10 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 				sum(1 for a, b in zip(gpos, cpos) if a == b),
 				nozerodiv(lambda: accuracy(gpos, cpos)),
 				100 * lascores[-1],
-				str(ted).rjust(3) if param["TED"] else "",
+				str(ted).rjust(3) if param["TED"] else '',
 				nozerodiv(lambda: accuracy(gdep, cdep)) if param['DEP'] else ''))
 		if param["DEBUG"] > 1:
-			print("Sentence:", " ".join(gsent))
+			print("Sentence:", ' '.join(gsent))
 			print("Gold tree:      %s\nCandidate tree: %s" % (gtree, ctree))
 			print("Gold brackets:      %s\nCandidate brackets: %s" % (
 				strbracketings(gbrack), strbracketings(cbrack)))
@@ -263,16 +263,16 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 				print("%6.3g  %s     %s : %s" % (
 						pathscore(goldpaths[leaf], candpaths[leaf]),
 						gsent[leaf].ljust(15),
-						" ".join(goldpaths[leaf][::-1]).rjust(20),
-						" ".join(candpaths[leaf][::-1])))
+						' '.join(goldpaths[leaf][::-1]).rjust(20),
+						' '.join(candpaths[leaf][::-1])))
 			print("%6.3g  average = leaf-ancestor score" % lascores[-1])
 			if param["TED"]:
 				print("Tree-dist: %g / %g = %g" % (
 					ted, denom, 1 - ted / denom))
 				newtreedist(gtree, ctree, True)
 			if param["DEP"]:
-				print("Sentence:", " ".join(gsent))
-				print("dependencies gold", " " * 35, "cand")
+				print("Sentence:", ' '.join(gsent))
+				print("dependencies gold", ' ' * 35, "cand")
 				for (_, a, b), (_, c, d) in zip(gdep, cdep):
 					# use original sentences because we don't delete
 					# punctuation for dependency evaluation
@@ -340,7 +340,7 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			for tag, mismatch in zip_longest(tags.most_common(10),
 					wrong.most_common(10)):
 				if tag is None:
-					print("".rjust(40), end='')
+					print(''.rjust(40), end='')
 				else:
 					goldtag = multiset(n for n, (w, t) in enumerate(goldpos)
 							if t == tag[0])
@@ -598,7 +598,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> bracketings(tree, dellabel=("S",))
 	Counter({('VP', (0, 2)): 1})
 	"""
-	return multiset((a.label if labeled else "", a.indices)
+	return multiset((a.label if labeled else '', a.indices)
 			for a in tree.subtrees()
 				if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
 					and a.label not in dellabel
