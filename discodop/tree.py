@@ -13,8 +13,7 @@ trees and morphological trees. """
 
 # This is an adaptation of the original tree.py file from NLTK.
 # Probabilistic trees have been removed, as well as the possibility
-# to read off CFG productions or draw trees
-# Remaining dependencies have been inlined.
+# to read off CFG productions. Remaining dependencies have been inlined.
 
 from __future__ import division, print_function, unicode_literals
 import re
@@ -54,9 +53,8 @@ class Tree(list):
 		p + (i,) specifies the ith child of d.
 
 	I.e., every tree position is either a single index i,
-	specifying self[i]; or a sequence (i1, i2, ...,
-	iN), specifying
-	self[i1][i2]...[iN]. """
+	specifying self[i]; or a sequence (i1, i2, ..., iN),
+	specifying self[i1][i2]...[iN]. """
 	def __new__(cls, label_or_str=None, children=None):
 		if label_or_str is None:
 			return list.__new__(cls)  # used by copy.deepcopy
@@ -293,86 +291,6 @@ class Tree(list):
 			if i == len(end_treepos) or start_treepos[i] != end_treepos[i]:
 				return start_treepos[:i]
 		return start_treepos
-
-	# === Transforms ============================================
-	def chomsky_normal_form(self, factor="right", horzmarkov=None,
-			vertmarkov=0, childchar="|", parentchar="^"):
-		""" This method can modify a tree in three ways:
-
-		1. Convert a tree into its Chomsky Normal Form (CNF)
-			equivalent -- Every subtree has either two non-terminals
-			or one terminal as its children.  This process requires
-			the creation of more"artificial" non-terminal nodes.
-		2. Markov (vertical) smoothing of children in new artificial
-			nodes
-		3. Horizontal (parent) annotation of nodes
-
-		@param factor: Right or left factoring method (default = "right")
-		@type  factor: string = [left|right]
-		@param horzmarkov: Markov order for sibling smoothing in
-			artificial nodes (None (default) = include all siblings)
-		@type  horzmarkov: int | None
-		@param vertmarkov: Markov order for parent smoothing
-			(0 (default) = no vertical annotation)
-		@type  vertmarkov: int | None
-		@param childchar: A string used in construction of the
-			artificial nodes, separating the head of the
-			original subtree from the child nodes that have yet to be
-			expanded (default = "|")
-		@type  childchar: string
-		@param parentchar: A string used to separate the node
-			representation from its vertical annotation
-		@type  parentchar: string """
-		from .treetransforms import binarize
-		binarize(self, factor, horzmarkov, vertmarkov + 1, childchar,
-				parentchar)
-
-	def un_chomsky_normal_form(self, expandunary=True, childchar="|",
-			parentchar="^", unarychar="+"):
-		""" This method modifies the tree in three ways:
-
-		1. Transforms a tree in Chomsky Normal Form back to its
-			original structure (branching greater than two)
-		2. Removes any parent annotation (if it exists)
-		3. (optional) expands unary subtrees (if previously
-			collapsed with collapseunary(...) )
-
-		@param expandunary: Flag to expand unary or not (default = True)
-		@type  expandunary: boolean
-		@param childchar: A string separating the head node from its
-			children in an artificial node (default = "|")
-		@type  childchar: string
-		@param parentchar: A sting separating the node label from its
-			parent annotation (default = "^")
-		@type  parentchar: string
-		@param unarychar: A string joining two non-terminals in a unary
-			production (default = "+")
-		@type  unarychar: string """
-		from .treetransforms import unbinarize
-		unbinarize(self, expandunary, childchar, parentchar, unarychar)
-
-	def collapse_unary(self, collapsepos=False, collapseroot=False,
-			joinchar="+"):
-		""" Collapse subtrees with a single child (ie. unary productions)
-		into a new non-terminal (Tree node) joined by 'joinchar'.
-		This is useful when working with algorithms that do not allow
-		unary productions, and completely removing the unary productions
-		would require loss of useful information.  The Tree is modified
-		directly (since it is passed by reference) and no value is returned.
-
-		@param collapsepos: 'False' (default) will not collapse the
-			parent of leaf nodes (ie., Part-of-Speech tags) since they
-			are always unary productions
-		@type  collapsepos: boolean
-		@param collapseroot: 'False' (default) will not modify the root
-			production if it is unary.  For the Penn WSJ treebank
-			corpus, this corresponds to the TOP -> productions.
-		@type collapseroot: boolean
-		@param joinchar: A string used to connect collapsed node values
-			(default = "+")
-		@type  joinchar: string """
-		from .treetransforms import collapse_unary
-		collapse_unary(self, collapsepos, collapseroot, joinchar)
 
 	# === Convert, copy =========================================
 	@classmethod

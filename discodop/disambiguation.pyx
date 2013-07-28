@@ -668,7 +668,7 @@ def main():
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
 		a d e""".splitlines()]
 	grammar = Grammar(dopreduction(trees, sents))
-	grammar.register(u'shortest', shortestderivmodel(grammar))
+	grammar.register(u'shortest', *shortestderivmodel(grammar))
 	print(grammar)
 	sent = "a b c".split()
 	chart, start, _ = plcfrs.parse(sent, grammar, None, True)

@@ -836,7 +836,8 @@ def test():
 	""" Run some tests. """
 	from . import plcfrs
 	from .treebank import NegraCorpusReader
-	from .treetransforms import unbinarize, removefanoutmarkers, addfanoutmarkers
+	from .treetransforms import binarize, unbinarize, \
+			addfanoutmarkers, removefanoutmarkers
 	from .disambiguation import recoverfragments
 	from .kbest import lazykbest
 	from .agenda import getkey
@@ -849,10 +850,8 @@ def test():
 		punct="move")
 	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
 	sents = list(corpus.sents().values())
-	trees = [a.copy(True) for a in list(corpus.parsed_sents().values())[:10]]
-	for a in trees:
-		a.chomsky_normal_form(horzmarkov=1)
-		addfanoutmarkers(a)
+	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
+			for a in list(corpus.parsed_sents().values())[:10]]
 
 	print('plcfrs')
 	lcfrs = Grammar(induce_plcfrs(trees, sents), start=trees[0].label)

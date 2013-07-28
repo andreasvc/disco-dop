@@ -361,19 +361,16 @@ cdef class Grammar:
 		# sentinel rule
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
-	def register(self, name, model):
-		""" Register a probabilistic model supplied as a name and a pair
-		(ruleprobs, lexprobs), where ruleprobs and lexprobs are sequences of
-		probabilities, in the same order as that of self.origrules and
-		self.origlexicon. """
+	def register(self, name, ruleprobs, lexprobs):
+		""" Register a probabilistic model given a name, and sequences of
+		probabilities ruleprobs & lexprobs, where ruleprobs and lexprobs are in
+		the same order as that of self.origrules and self.origlexicon. """
 		cdef int n, m
-		cdef list ruleprobs, lexprobs
 		cdef np.ndarray[np.double_t, ndim=3] models
-		ruleprobs, lexprobs = model
 		name = unicode(name)
 		assert name not in self.modelnames
 		assert len(self.modelnames) <= 255, (
-				'256 probabilistic models should be enuogh for anyone.')
+				'256 probabilistic models should be enough for anyone.')
 		assert len(ruleprobs) == self.numrules
 		assert len(lexprobs) == len(self.lexical)
 		m = len(self.modelnames)

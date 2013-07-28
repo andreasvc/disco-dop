@@ -5,7 +5,7 @@ import sys
 from discodop import runexp
 modules = """agenda bit coarsetofine demos disambiguation estimates eval
 		fragments _fragments gen grammar lexicon kbest plcfrs pcfg tree
-		treebank treedist treedraw treetransforms""".split()
+		treedist treedraw treebank treebanktransforms treetransforms""".split()
 modules = [__import__('discodop.%s' % mod, globals(), locals(), [mod])
 		for mod in modules]
 results = {}

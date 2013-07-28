@@ -87,9 +87,9 @@ Note: some of these transformations are specific to discontinuous treebanks,
 
 
 def binarize(tree, factor="right", horzmarkov=None, vertmarkov=1,
-	childchar="|", parentchar="^", headmarked=None, tailmarker="",
-	leftmostunary=False, rightmostunary=False, threshold=2,
-	pospa=False, artpa=True, reverse=False, ids=None):
+		childchar="|", parentchar="^", headmarked=None, tailmarker="",
+		leftmostunary=False, rightmostunary=False, threshold=2,
+		pospa=False, artpa=True, reverse=False, ids=None):
 	""" Binarize an NLTK Tree object. Parameters:
 	factor: "left" or "right". Determines whether binarization proceeds from
 			left to right or vice versa.
@@ -394,21 +394,10 @@ def getbits(bitset):
 		n += 1
 
 
-def slowfanout(tree):
-	""" Get the fan-out of a constituent. Slow because call to leaves() is
-	recursive and not cached. """
-	if isinstance(tree, Tree):
-		return len(list(ranges(sorted(tree.leaves()))))
-	else:
-		return 1
-
-
-def fastfanout(tree):
+def fanout(tree):
 	""" Get the fan-out of a constituent. Requires the presence of a bitset
 	attribute. """
 	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
-
-fanout = fastfanout
 
 
 def complexity(tree):
@@ -551,8 +540,7 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 
 	>>> tree = "(X (A 0) (B 1) (C 2) (D 3) (E 4))"
 	>>> tree1=addbitsets(tree)
-	>>> tree2=Tree.parse(tree, parse_leaf=int)
-	>>> tree2.chomsky_normal_form()
+	>>> tree2 = binarize(Tree.parse(tree, parse_leaf=int))
 	>>> minimalbinarization(tree1, complexityfanout, head=2) == tree2
 	True
 	>>> tree = "(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) \
@@ -669,7 +657,7 @@ def minimalbinarization(tree, score, sep="|", head=None, parentstr="", h=999):
 	raise ValueError
 
 
-def optimalbinarize(tree, sep="|", headdriven=False, h=None, v=1):
+def optimalbinarize(tree, sep='|', headdriven=False, h=None, v=1):
 	""" Recursively binarize a tree optimizing for complexity.
 	v=0 is not implemented.
 	Setting h to a nonzero integer restricts the possible binarizations
@@ -738,17 +726,6 @@ def canonicalize(tree):
 	for a in postorder(tree, lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
 	return tree
-
-
-def canonicalized(tree):
-	""" canonical linear precedence (of first component of each node) order.
-	returns a new tree. """
-	if not isinstance(tree, Tree):
-		return tree
-	children = list(map(canonicalized, tree))
-	if len(children) > 1:
-		children.sort(key=lambda n: n.leaves())
-	return Tree(tree.label, children)
 
 
 def contsets(nodes):
@@ -924,8 +901,7 @@ def testminbin():
 		# undo head-ordering to get a normal right-to-left binarization
 		for a in list(normbin.subtrees(lambda x: len(x) > 1))[::-1]:
 			a.sort(key=lambda x: x.leaves())
-		normbin.chomsky_normal_form()
-		normbin = addbitsets(normbin)
+		normbin = addbitsets(binarize(normbin))
 		if (max(map(complexityfanout, optbin.subtrees()))
 				> max(map(complexityfanout, normbin.subtrees()))):
 			print("non-hd")
@@ -991,12 +967,9 @@ def main():
 
 	# read input
 	Reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = Reader(".", infilename,
-			encoding=opts.get('--inputenc', 'utf-8'),
-			headrules=opts.get("--headrules"),
-			markheads='--markheads' in opts,
-			punct=opts.get("--punct"),
-			functions=opts.get('--functions'),
+	corpus = Reader(".", infilename, encoding=opts.get('--inputenc', 'utf-8'),
+			headrules=opts.get("--headrules"), markheads='--markheads' in opts,
+			punct=opts.get("--punct"), functions=opts.get('--functions'),
 			morphology=opts.get('--morphology'))
 	start, end = opts.get('--slice', ':').split(':')
 	start = int(start) if start else None
@@ -1011,31 +984,25 @@ def main():
 			"splitdisc mergedisc none").split()
 	assert action in actions, ("unrecognized action: %r\n"
 			"available actions: %r" % (action, actions))
-	if action == "binarize":
+	if action in ('binarize', 'optimalbinarize'):
 		factor = opts.get('--factor', 'right')
-		h = int(opts['-h']) if 'h' in opts else None
-		v = int(opts.get('-v', 1))
-		for a in trees:
-			binarize(a, factor, h, v)
-	elif action == "unbinarize":
-		for a in trees:
-			unbinarize(a, factor, h, v)
-	elif action == "optimalbinarize":
-		sep = "|"
 		headdriven = "--headrules" in opts
 		h = int(opts['-h']) if 'h' in opts else None
 		v = int(opts.get('-v', 1))
-		trees = [optimalbinarize(a, sep, h, v) for a in trees]
-	elif action == "introducepreterminals":
-		for a in trees:
-			introducepreterminals(a)
-	elif action == "splitdisc":
-		for a in trees:
-			splitdiscnodes(a, '--markorigin' in opts)
-	elif action == "mergedisc":
-		for a in trees:
-			mergediscnodes(a)
-	if action != "none":
+	for n, tree in enumerate(trees):
+		if action == 'binarize':
+			binarize(tree, factor, h, v)
+		elif action == 'optimalbinarize':
+			trees[n] = optimalbinarize(tree, '|', headdriven, h, v)
+		elif action == 'unbinarize':
+			unbinarize(tree)
+		elif action == 'introducepreterminals':
+			introducepreterminals(tree)
+		elif action == 'splitdisc':
+			splitdiscnodes(tree, '--markorigin' in opts)
+		elif action == 'mergedisc':
+			mergediscnodes(tree)
+	if action != 'none':
 		print("transformed %d trees with action %r" % (len(trees), action))
 
 	# write output

@@ -20,7 +20,8 @@ from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
 from .tree import Tree
 from .lexicon import replaceraretestwords, getunknownwordfun
-from .treebank import fold, saveheads, rrbacktransform
+from .treebank import saveheads
+from .treebanktransforms import reversetransform, rrbacktransform
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
 USAGE = """
@@ -303,7 +304,7 @@ class Parser(object):
 					parsetree = rrbacktransform(parsetree,
 							self.relationalrealizational['adjunctionlabel'])
 				if self.transformations:
-					fold(parsetree, self.transformations)
+					reversetransform(parsetree, self.transformations)
 			else:
 				parsetree = defaultparse([(n, t)
 						for n, t in enumerate(tags or (len(sent) * ['NONE']))])
@@ -332,7 +333,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		backtransform = None
 		if stage.dop:
 			assert stage.useestimates is None, "not supported"
-			grammar.register('shortest', shortestderivmodel(grammar))
+			grammar.register('shortest', *shortestderivmodel(grammar))
 			if stage.usedoubledop:
 				backtransform = dict(enumerate(
 						gzip.open("%s/%s.backtransform.gz" % (resultdir,

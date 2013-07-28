@@ -928,10 +928,8 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		if limit:
 			trees = trees[:limit]
 			sents = sents[:limit]
-		for tree in trees:
-			tree.chomsky_normal_form()
-		trees = [tolist(add_lcfrs_rules(canonicalize(tree), sent), sent)
-				for tree, sent in zip(trees, sents)]
+		trees = [tolist(add_lcfrs_rules(canonicalize(binarize(tree)),
+				sent), sent) for tree, sent in zip(trees, sents)]
 		getlabelsprods(trees, labels, prods)
 		if sort:
 			for tree in trees:
@@ -979,7 +977,7 @@ def main():
 (S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))\
 		""".splitlines()]
 	for tree in treebank:
-		tree.chomsky_normal_form()
+		binarize(tree)
 	sents = [tree.leaves() for tree in treebank]
 	for tree in treebank:
 		for n, idx in enumerate(tree.treepositions('leaves')):

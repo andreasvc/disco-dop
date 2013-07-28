@@ -25,10 +25,10 @@ from subprocess import Popen, PIPE
 import numpy as np
 from . import eval as evalmod
 from .tree import Tree
-from .treebank import getreader, writetree, rrtransform
-from .treetransforms import binarize, optimalbinarize, \
-		splitdiscnodes, canonicalize, \
-		addfanoutmarkers, addbitsets, fastfanout
+from .treebank import getreader, writetree
+from .treebanktransforms import transform, rrtransform
+from .treetransforms import binarize, optimalbinarize, canonicalize, \
+		splitdiscnodes, addfanoutmarkers, addbitsets, fanout
 from .fragments import getfragments
 from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
 		write_lcfrs_grammar, shortestderivmodel
@@ -144,18 +144,20 @@ def startexp(
 	if not rerun:
 		corpus = corpusreader(corpusdir, traincorpus, encoding=trainencoding,
 				headrules=headrules, headfinal=True, headreverse=False,
-				punct=punct, functions=functions, morphology=morphology,
-				transformations=transformations)
+				punct=punct, functions=functions, morphology=morphology)
 		logging.info("%d sentences in training corpus %s/%s",
 				len(corpus.parsed_sents()), corpusdir, traincorpus)
 		if isinstance(trainnumsents, float):
 			trainnumsents = int(trainnumsents * len(corpus.sents()))
 		trees = list(corpus.parsed_sents().values())[:trainnumsents]
-		if relationalrealizational:
-			trees = [rrtransform(a, **relationalrealizational)[0]
-					for a in trees]
 		sents = list(corpus.sents().values())[:trainnumsents]
-		train_tagged_sents = [[(a, b) for a, (_, b)
+		if transformations:
+			trees = [transform(tree, sent, transformations)
+					for tree, sent in zip(trees, sents)]
+		if relationalrealizational:
+			trees = [rrtransform(tree, **relationalrealizational)[0]
+					for tree in trees]
+		train_tagged_sents = [[(word, tag) for word, (_, tag)
 				in zip(sent, sorted(tree.pos()))]
 					for tree, sent in zip(trees, sents)]
 		blocks = list(corpus.blocks().values())[:trainnumsents]
@@ -299,9 +301,9 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		lexmodel, simplelexsmooth, top):
 	""" Apply binarization and read off the requested grammars. """
 	# fixme: this n should correspond to sentence id
-	fanout, n = treebankfanout(trees)
+	tbfanout, n = treebankfanout(trees)
 	logging.info("treebank fan-out before binarization: %d #%d\n%s\n%s",
-			fanout, n, trees[n], " ".join(sents[n]))
+			tbfanout, n, trees[n], " ".join(sents[n]))
 	# binarization
 	begin = time.clock()
 	if fanout_marks_before_bin:
@@ -355,7 +357,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			msg = grammarinfo(xgrammar)
 			grammar = Grammar(xgrammar, start=top)
 			if stage.objective in ('shortest', 'sl-dop', 'sl-dop-simple'):
-				grammar.register('shortest', shortestderivmodel(grammar))
+				grammar.register('shortest', *shortestderivmodel(grammar))
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals", len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
@@ -394,7 +396,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		else:  # not stage.dop
 			xgrammar = induce_plcfrs(traintrees, sents)
 			logging.info("induced %s based on %d sentences",
-				("PCFG" if fanout == 1 or stage.split else "PLCFRS"),
+				("PCFG" if tbfanout == 1 or stage.split else "PLCFRS"),
 				len(traintrees))
 			if stage.split or os.path.exists("%s/pcdist.txt" % resultdir):
 				logging.info(grammarinfo(xgrammar))
@@ -416,7 +418,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
 
-		bitpar = fanout == 1 or stage.split
+		bitpar = tbfanout == 1 or stage.split
 		# when grammar is LCFRS, write rational fractions.
 		# when grammar is PCFG, write frequencies if probabilities sum to 1,
 		# i.e., in that case probalities can be re-computed as relative
@@ -429,7 +431,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				write_lcfrs_grammar(xgrammar, rulesfile, lexiconfile,
 						bitpar=bitpar, freqs=bitpar and sumsto1)
 		if stage.mode == 'pcfg-bitpar':
-			assert fanout == 1 or stage.split
+			assert tbfanout == 1 or stage.split
 			stage.rulesfile = tempfile.NamedTemporaryFile()
 			stage.lexiconfile = tempfile.NamedTemporaryFile()
 			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
@@ -442,7 +444,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 
 		outside = None
 		if stage.getestimates == 'SX':
-			assert fanout == 1 or stage.split, "SX estimate requires PCFG."
+			assert tbfanout == 1 or stage.split, "SX estimate requires PCFG."
 			logging.info("computing PCFG estimates")
 			begin = time.clock()
 			outside = getpcfgestimates(grammar, testmaxwords,
@@ -452,7 +454,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			np.savez("pcfgoutside.npz", outside=outside)
 			logging.info("saved PCFG estimates")
 		elif stage.useestimates == 'SX':
-			assert fanout == 1 or stage.split, "SX estimate requires PCFG."
+			assert tbfanout == 1 or stage.split, "SX estimate requires PCFG."
 			assert stage.mode != 'pcfg', (
 					"estimates require agenda-based parser.")
 			outside = np.load("pcfgoutside.npz")['outside']
@@ -702,10 +704,13 @@ def parsetepacoc(
 				"tiger_release_aug07.export",
 				headrules="negra.headrules" if bintype == "binarize" else None,
 				headfinal=True, headreverse=False, punct="move",
-				encoding='iso-8859-1', transformations=transformations)
+				encoding='iso-8859-1')
 		corpus_sents = list(corpus.sents().values())
 		corpus_taggedsents = list(corpus.tagged_sents().values())
 		corpus_trees = list(corpus.parsed_sents().values())
+		if transformations:
+			corpus_trees = [transform(tree, sent, transformations)
+					for tree, sent in zip(corpus_trees, corpus_sents)]
 		corpus_blocks = list(corpus.blocks().values())
 		pickle.dump((corpus_sents, corpus_taggedsents, corpus_trees,
 			corpus_blocks), gzip.open("tiger.pickle.gz", "wb"), protocol=-1)
@@ -909,7 +914,7 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 
 def treebankfanout(trees):
 	""" Get maximal fan-out of a list of trees. """
-	return max((fastfanout(addbitsets(a)), n) for n, tree in enumerate(trees)
+	return max((fanout(addbitsets(a)), n) for n, tree in enumerate(trees)
 		for a in tree.subtrees(lambda x: len(x) > 1))
 
 

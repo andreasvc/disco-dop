@@ -3,7 +3,7 @@ items for a fine grammar. """
 from __future__ import print_function
 from collections import defaultdict
 from tree import Tree
-from treetransforms import mergediscnodes, unbinarize, slowfanout
+from treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
 from containers cimport ChartItem, Edge, RankedEdge, RankedCFGEdge, Grammar, \
 		CFGChartItem, CFGEdge, LCFRSEdge, new_CFGChartItem, ULLong, UInt, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
@@ -316,14 +316,13 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	cdef dict newchart = <dict>defaultdict(dict)
 	cdef list derivs = [Tree.parse(a, parse_leaf=int) for a, _
 				in lazykbest(chart, start, k, grammar.tolabel)[0]]
-	for a in derivs:
-		unbinarize(a, childchar=":", parentchar="!")
-		mergediscnodes(a)
 	for tree in derivs:
+		addbitsets(mergediscnodes(unbinarize(
+				tree, childchar=":", parentchar="!")))
 		for node in tree.subtrees():
-			fanout = slowfanout(node)
-			if fanout > 1:
-				label = "%s_%d" % (node.label, fanout)
+			f = fanout(node)
+			if f > 1:
+				label = "%s_%d" % (node.label, f)
 			else:
 				label = node.label
 			newchart[label][sum([1L << n for n in node.leaves()])] = 0.0
@@ -454,7 +453,6 @@ def main():
 		addfanoutmarkers(t)
 	cftrees = [splitdiscnodes(t.copy(True), markorigin=True) for t in trees]
 	for t in cftrees:
-		#t.chomsky_normal_form(childchar=":")
 		binarize(t, horzmarkov=2, tailmarker='', leftmostunary=True,
 			childchar=":")  # NB leftmostunary is important
 		addfanoutmarkers(t)
