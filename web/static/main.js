@@ -22,7 +22,7 @@ function toggletextbox() {
 	var state = document.queryform.textarea;
 	var cur = document.queryform.query;
 	var next = document.queryform.notquery;
-	var link = document.getElementById('textlink');
+	var link = document.getElementById('smallbig');
 	var text = link.innerHTML;
 	cur.name = 'notquery';
 	cur.disabled = true;
@@ -30,14 +30,14 @@ function toggletextbox() {
 	next.name = 'query';
 	next.disabled = false;
 	next.style.display = 'block';
-	if(/^0$/.test(state.value)) {
+	if(state.value == '0') {
 		state.value = '1';
 		next.innerHTML = cur.value;
-		link.innerHTML = text.replace('small', 'big');
+		link.innerHTML = 'big';
 	} else {
 		state.value = '0';
 		next.value = cur.value;
-		link.innerHTML = text.replace('big', 'small');
+		link.innerHTML = 'small';
 	}
 }
 
