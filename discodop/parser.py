@@ -221,8 +221,9 @@ class Parser(object):
 					if self.stages[n - 1].mode == 'pcfg-posterior':
 						(whitelist, sentprob, unfiltered,
 							numitems, numremain) = whitelistfromposteriors(
-								inside, outside, start, stage[n - 1].grammar,
-								stage.grammar, stage.k, stage.splitprune,
+								inside, outside, start,
+								self.stages[n - 1].grammar, stage.grammar,
+								stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin)
 						msg += ("coarse items before pruning=%d; filtered: %d; "
 								"pruned: %d; sentprob=%g\n\t" % (
