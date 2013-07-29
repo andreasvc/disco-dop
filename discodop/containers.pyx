@@ -70,6 +70,7 @@ cdef class Grammar:
 		self.bitpar = bitpar
 		self.numunary = self.numbinary = self.currentmodel = 0
 		self.modelnames = [u'default']
+		self.logprob = False
 
 		if isinstance(rule_tuples_or_bytes, bytes):
 			assert isinstance(lexicon, unicode), "expected lexicon"
@@ -532,7 +533,7 @@ cdef class Grammar:
 
 	cdef rulerepr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
-			exp(-rule.prob),
+			exp(-rule.prob) if self.logprob else rule.prob,
 			self.tolabel[rule.lhs].decode('ascii'),
 			self.tolabel[rule.rhs1].decode('ascii'),
 			"  %s" % self.tolabel[rule.rhs2].decode('ascii')
@@ -572,7 +573,8 @@ cdef class Grammar:
 		cdef LexicalRule lexrule
 		rules = "\n".join(filter(None,
 			[self.rulesrepr(lhs) for lhs in range(1, self.nonterminals)]))
-		lexical = "\n".join(["%.2f %s => %s" % (exp(-lexrule.prob),
+		lexical = "\n".join(["%.2f %s => %s" % (
+				exp(-lexrule.prob) if self.logprob else lexrule.prob,
 				self.tolabel[lexrule.lhs].decode('ascii'),
 				lexrule.word.encode('unicode-escape').decode('ascii'))
 			for word in sorted(self.lexicalbyword)

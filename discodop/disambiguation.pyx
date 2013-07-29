@@ -19,7 +19,7 @@ from grammar import induce_plcfrs, rangeheads
 from treetransforms import unbinarize, canonicalize
 from containers cimport Grammar, ChartItem, SmallChartItem, FatChartItem, \
 		CFGChartItem, Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, \
-		UChar, UInt, ULong, ULLong
+		LexicalRule, UChar, UInt, ULong, ULLong
 cimport cython
 
 from libc.string cimport memset
@@ -76,7 +76,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		derivations[:] = filteredderivations.keys()
 
 	if method == "sl-dop":
-		return sldop(dict(derivations), chart, start, sent, tags, grammar,
+		return sldop(dict(derivations), chart, sent, tags, grammar,
 				n, sldop_n, backtransform, D, entries, bitpar)
 	elif method == "sl-dop-simple":
 		return sldop_simple(dict(derivations), entries, n, sldop_n,
@@ -167,9 +167,8 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 	return parsetrees, derivs, msg
 
 
-cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
-		Grammar grammar, int m, int sldop_n,
-		dict backtransform, D, entries, bint bitpar):
+cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
+		int m, int sldop_n, dict backtransform, D, entries, bint bitpar):
 	""" `Proper' method for sl-dop. Parses sentence once more to find shortest
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees; we need to parse again because we have to consider
@@ -203,10 +202,11 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
 	grammar.switch(u'shortest', True)
-	shortestderivations, DD, msg1 = treeparsing(
+	shortestderivations, DD, msg, start = treeparsing(
 			nmostlikelytrees, sent, grammar, m, backtransform, tags)
-
 	result = {}
+	if not DD.get(start):
+		return result, derivs, msg
 	for (deriv, s), entry in zip(shortestderivations, DD[start]):
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
@@ -221,7 +221,7 @@ cdef sldop(dict derivations, chart, ChartItem start, list sent, list tags,
 						backtransform, derivs[treestr])
 			if len(result) > sldop_n:
 				break
-	else:
+	if not len(result):
 		logging.warning("no matching derivation found")  # error?
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 		len(derivations), min(sldop_n, len(parsetreeprob)), len(parsetreeprob))
@@ -388,7 +388,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 		plcfrs.pprint_chart(chart, sent, grammar.tolabel)
 		#return [], {}, "tree parsing failed"  # error?
 	assert start, "tree parsing failed"  # error!
-	return lazykbest(chart, start, m, grammar.tolabel)
+	return lazykbest(chart, start, m, grammar.tolabel) + (start, )
 
 
 cdef double getderivprob(deriv, D, sent, Grammar grammar):
@@ -406,7 +406,7 @@ cdef double getderivprob_lcfrs(RankedEdge deriv, dict D,
 	cdef double result
 	if deriv.edge.rule is NULL:  # is terminal
 		word = sent[deriv.edge.left.lexidx()]
-		return grammar.lexicalbylhs[deriv.head.label][word].prob
+		return (<LexicalRule>grammar.lexicalbylhs[deriv.head.label][word]).prob
 	result = grammar.bylhs[0][deriv.edge.rule.no].prob
 	result += getderivprob((<Entry>D[deriv.edge.left][deriv.left]).key,
 			D, sent, grammar)
@@ -421,7 +421,7 @@ cdef double getderivprob_cfg(RankedCFGEdge deriv, list D,
 	cdef double result
 	if deriv.edge.rule is NULL:  # is terminal
 		word = sent[deriv.start]
-		return grammar.lexicalbylhs[deriv.label][word].prob
+		return (<LexicalRule>grammar.lexicalbylhs[deriv.head.label][word]).prob
 	result = grammar.bylhs[0][deriv.edge.rule.no].prob
 	result += getderivprob((<Entry>D[deriv.edge.mid][deriv.end][
 			deriv.edge.rule.rhs2][deriv.right]).key, D, sent, grammar)

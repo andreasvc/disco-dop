@@ -83,6 +83,7 @@ cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
 
 
 cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
+	""" Get inside probability of 'ej'; try looking in D, or else use chart. """
 	cdef ChartItem ei
 	cdef Edge edge
 	cdef Entry entry
@@ -204,6 +205,7 @@ cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand,
 
 
 cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.:
+	""" Get inside probability of 'ej'; try looking in D, or else use chart. """
 	cdef CFGEdge ec, edge
 	cdef Entry entry
 	cdef double result, prob
@@ -429,6 +431,7 @@ cpdef tuple lazykbest(chart, ChartItem goal, int k, list tolabel=None,
 
 
 cpdef main():
+	""" Simple demonstration. """
 	from math import log
 	cdef SmallChartItem v, ci
 	cdef LCFRSEdge ed

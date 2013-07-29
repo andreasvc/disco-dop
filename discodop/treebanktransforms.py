@@ -4,7 +4,7 @@
 - Relational-realizational transform
 - reattaching punctuation """
 from __future__ import division, print_function, unicode_literals
-from itertools import count
+from itertools import count, islice
 from .tree import Tree, ParentedTree
 #from .treebank import TAG, MORPH, FUNC
 
@@ -140,7 +140,10 @@ def transform(tree, sent, transformations):
 					# NN -> NN -> word
 					tag[:] = [ParentedTree(tag.label, [tag[0]])]
 					# NP -> NN -> word
-					tag.label = tagtoconst[tag.label]
+					tag.source = 8 * ['--']
+					tag.source[TAG] = tag.label = tagtoconst[tag.label]
+					tag.source[FUNC] = tag[0].source[FUNC]
+					tag[0].source[FUNC] = 'NK'
 
 		# wsj
 		elif name == "S-WH":
@@ -624,7 +627,13 @@ def pop(a):
 		return a
 
 
-def puncttest():
+def bracketings(tree):
+	""" Labelled bracketings of a tree. """
+	return [(a.label, tuple(sorted(a.leaves())))
+		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
+
+
+def testpunct():
 	""" Verify that punctuation movement does not increase fan-out. """
 	from .treetransforms import addbitsets, fanout
 	from .treebank import NegraCorpusReader
@@ -653,10 +662,60 @@ def puncttest():
 				fanout(a), fanout(b), a, b)
 	print()
 
+def testtransforms():
+	"""" Test whether the Tiger transformations (transform / reversetransform)
+	are reversible. """
+	from .treetransforms import canonicalize
+	from .treebank import NegraCorpusReader, handlefunctions
+	headrules = None  # "negra.headrules"
+	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
+			headrules=headrules)
+	nn = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
+			headrules=headrules)
+	transformations = ('S-RC', 'VP-GF', 'NP')
+	trees = [transform(tree, sent, transformations)
+			for tree, sent in zip(nn.parsed_sents().values(),
+				nn.sents().values())]
+	print("\ntransformed")
+	correct = exact = d = 0
+	for a, b, c in islice(zip(n.parsed_sents().values(),
+			trees, n.sents().values()), 100):
+		transformb = reversetransform(b.copy(True), transformations)
+		b1 = bracketings(canonicalize(a))
+		b2 = bracketings(canonicalize(transformb))
+		z = -1  # 825
+		if b1 != b2 or d == z:
+			precision = len(set(b1) & set(b2)) / len(set(b1))
+			recall = len(set(b1) & set(b2)) / len(set(b2))
+			if precision != 1.0 or recall != 1.0 or d == z:
+				print(d, ' '.join(":".join((str(n),
+					a.encode('unicode-escape'))) for n, a in enumerate(c)))
+				print("no match", precision, recall)
+				print(len(b1), len(b2), "gold-transformed", set(b2) - set(b1),
+						"transformed-gold", set(b1) - set(b2))
+				print(a)
+				print(transformb)
+				handlefunctions('add', a)
+				print(a)
+				print(b)
+				print()
+			else:
+				correct += 1
+		else:
+			exact += 1
+			correct += 1
+		d += 1
+	print("matches", correct, "/", d, 100 * correct / d, "%")
+	print("exact", exact)
+
+if __name__ == '__main__':
+	main()
+
 
 def main():
 	""" Just tests. """
-	puncttest()
+	testpunct()
+	testtransforms()
 
 if __name__ == '__main__':
 	main()

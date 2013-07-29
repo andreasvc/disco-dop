@@ -6,9 +6,7 @@ Learning. """
 from __future__ import print_function
 import re
 import io
-import sys
 from collections import defaultdict, Counter as multiset
-from itertools import count
 from functools import partial
 from array import array
 from tree import Tree
@@ -17,9 +15,7 @@ from treetransforms import binarize, introducepreterminals
 
 cimport cython
 from libc.stdlib cimport malloc, free
-from libc.string cimport memcmp
 from cpython.array cimport array, clone
-from cpython.set cimport PySet_GET_SIZE
 from containers cimport ULong, UInt
 from containers cimport Node, NodeArray, Ctrees
 from bit cimport iteratesetbits, abitcount, subset, ulongcpy, ulongset, \
@@ -43,11 +39,6 @@ FRONTIERRE = re.compile(r' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
 LABEL = re.compile(' *\( *([^ ()]+) *')
 
 
-# used to generate values for defaultdicts
-def one():
-	return 1
-
-
 # bitsets representing fragments are ULong arrays with the number of elements
 # determined by SLOTS. While SLOTS is not a constant nor a global, it is
 # set just once for a treebank to fit its largest tree.
@@ -62,6 +53,7 @@ cdef packed struct BitsetTail:
 # we leave one byte for NUL-termination:
 # data (SLOTS * 8), id (4), root (2), NUL (1)
 cdef inline bytes wrap(ULong *data, short SLOTS):
+	""" Wrap bitset in bytes object for handling in Python space. """
 	return (<char *>data)[:SLOTS * sizeof(ULong) + sizeof(BitsetTail)]
 
 
@@ -69,18 +61,22 @@ cdef inline bytes wrap(ULong *data, short SLOTS):
 # of a python object, and with a struct the root & id fields must be in front
 # which seems to lead to bad hashing behavior (?)
 cdef inline ULong *getpointer(object wrapper):
+	""" Get pointer to bitset from wrapper. """
 	return <ULong *><char *><bytes>wrapper
 
 
 cdef inline UInt getid(ULong *data, short SLOTS):
+	""" Get id of fragment in a bitset. """
 	return (<BitsetTail *>&data[SLOTS]).id
 
 
 cdef inline short getroot(ULong *data, short SLOTS):
+	""" Get root of fragment in a bitset. """
 	return (<BitsetTail *>&data[SLOTS]).root
 
 
 cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
+	""" Set root and id of fragment in a bitset. """
 	cdef BitsetTail *tail = <BitsetTail *>&data[SLOTS]
 	tail.id = id
 	tail.root = root
@@ -964,6 +960,11 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		ctrees.addnodes(scratch, cnt, 0)
 	free(scratch)
 	return ctrees, sents
+
+
+def one():
+	""" used to generate the value 1 for defaultdicts. """
+	return 1
 
 
 def main():

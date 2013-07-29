@@ -60,6 +60,7 @@ cdef class Agenda:
 			heapify(self.heap, cmpfun)
 
 	cdef setitem(self, key, value):
+		""" Like agenda[key] = value, but bypass Python API. """
 		cdef Entry oldentry, entry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
@@ -81,7 +82,10 @@ cdef class Agenda:
 			heappush(self.heap, entry, cmpfun)
 
 	cdef setifbetter(self, key, value):
-		""" sets an item, but only if item is new or has lower score """
+		""" Sets an item, but only if item is new or has lower score.
+		Equivalent to:
+		if if key not in agenda or val < agenda[key]:
+			agenda[key] = val """
 		cdef Entry oldentry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
@@ -90,13 +94,14 @@ cdef class Agenda:
 		self.setitem(key, value)
 
 	cdef getitem(self, key):
+		""" Like agenda[key], but bypass Python API. """
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
 		return entry.value
 
 	cdef object replace(self, key, value):
-		""" return current value for key, and also change its value.
-		equivalent to vv = d[k]; d[k] = v; return vv """
+		""" Return current value for key, and also change its value.
+		Equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
 		entry.key = key
@@ -108,6 +113,7 @@ cdef class Agenda:
 		return oldentry.value
 
 	cdef Entry peekentry(self):
+		""" Get the current best entry, while keeping it on the agenda. """
 		cdef Entry entry
 		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
 		if n == 0:
@@ -135,14 +141,18 @@ cdef class Agenda:
 		return entry
 
 	cdef bint contains(self, key):
+		""" Like `key in agenda`, but bypass the Python API. """
 		return key in self.mapping
 
 	def peekitem(self):
+		""" Get the current best (key, value) pair, while keeping it on the
+		agenda. """
 		cdef Entry entry = self.peekentry()
 		return entry.key, entry.value
 
 	# standard dict() methods
 	def pop(self, key):
+		""" Return value for agenda[key] and remove it. """
 		cdef Entry entry
 		if key is None:
 			return self.popentry().value
@@ -152,15 +162,18 @@ cdef class Agenda:
 		return entry.value
 
 	def popitem(self):
+		""" Return best scoring (key, value) pair and remove from agenda. """
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
 
 	def __delitem__(self, key):
+		""" Remove key from heap. """
 		(<Entry>self.mapping[key]).count = INVALID
 		self.length -= 1
 		del self.mapping[key]
 
 	def update(self, *a, **kw):
+		""" Change score of items given a sequence of (key, value) pairs. """
 		for b in a:
 			for k, v in b:
 				self[k] = v
@@ -168,6 +181,7 @@ cdef class Agenda:
 			self[k] = v
 
 	def clear(self):
+		""" Remove all items from agenda. """
 		self.counter = 1
 		del self.heap[:]
 		self.mapping.clear()
@@ -199,12 +213,15 @@ cdef class Agenda:
 		return self.length != 0
 
 	def keys(self):
+		""" Return keys in agenda. """
 		return self.mapping.keys()
 
 	def values(self):
+		""" Return values in agenda. """
 		return map(getval, self.mapping.values())
 
 	def items(self):
+		""" Return (key, value) pairs in agenda. """
 		return zip(self.keys(), self.values())
 
 cdef class EdgeAgenda:
@@ -237,6 +254,7 @@ cdef class EdgeAgenda:
 			heapify(self.heap, edgecmpfun)
 
 	cdef LCFRSEdge getitem(self, key):
+		""" Like agenda[key], but bypass Python API. """
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
 		return <LCFRSEdge>entry.value
@@ -276,6 +294,7 @@ cdef class EdgeAgenda:
 		return entry
 
 	cdef Entry peekentry(self):
+		""" Get the current best entry, while keeping it on the agenda. """
 		cdef Entry entry
 		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
 		if n == 0:
@@ -293,6 +312,7 @@ cdef class EdgeAgenda:
 		return entry
 
 	cdef setitem(self, key, value):
+		""" Like agenda[key] = value, but bypass Python API. """
 		cdef Entry oldentry, entry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
@@ -317,9 +337,11 @@ cdef class EdgeAgenda:
 
 	# identical to Agenda() methods
 	cdef bint contains(self, key):
+		""" Like `key in agenda`, but bypass the Python API. """
 		return key in self.mapping
 
 	def pop(self, key):
+		""" Return value for agenda[key] and remove it. """
 		cdef Entry entry
 		if key is None:
 			return self.popentry().value
@@ -329,6 +351,7 @@ cdef class EdgeAgenda:
 		return entry.value
 
 	def popitem(self):
+		""" Return best scoring (key, value) pair and remove from agenda. """
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
 
@@ -338,6 +361,7 @@ cdef class EdgeAgenda:
 		del self.mapping[key]
 
 	def update(self, *a, **kw):
+		""" Change score of items given a sequence of (key, value) pairs. """
 		for b in a:
 			for k, v in b:
 				self[k] = v
@@ -345,6 +369,7 @@ cdef class EdgeAgenda:
 			self[k] = v
 
 	def clear(self):
+		""" Remove all items from agenda. """
 		self.counter = 1
 		del self.heap[:]
 		self.mapping.clear()
@@ -376,12 +401,15 @@ cdef class EdgeAgenda:
 		return self.length != 0
 
 	def keys(self):
+		""" Return keys in agenda. """
 		return self.mapping.keys()
 
 	def values(self):
+		""" Return values in agenda. """
 		return map(getval, self.mapping.values())
 
 	def items(self):
+		""" Return (key, value) pairs in agenda. """
 		return zip(self.keys(), self.values())
 
 
@@ -446,7 +474,7 @@ cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 
 
 cdef inline void heapify(list heap, CmpFun cmpfun):
-	"""Transform list into a heap, in-place, in O(len(heap)) time."""
+	""" Transform list into a heap, in-place, in O(len(heap)) time. """
 	cdef int i
 	for i in range(PyList_GET_SIZE(heap) // HEAP_ARITY, -1, -1):
 		siftdown(heap, i, cmpfun)
