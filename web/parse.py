@@ -4,9 +4,9 @@ Expects a series of grammars produced by runexp in subdirectories of grammar/
 Also usable from the command line:
 $ curl http://localhost:5000/parse -G --data-urlencode "sent=What's up?"
 """
+# TODO: only set CSS display: none; when JS is available.
 import os
 import re
-import cgi
 import glob
 import heapq
 import string  # pylint: disable=W0402
@@ -93,11 +93,11 @@ def parse():
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
 			' '.join('%gs' % a for a in elapsed), sum(elapsed))
-	info = Markup('\n'.join(('sentence length: %d; objfun=%s; marg=%s' % (
+	info = '\n'.join(('sentence length: %d; objfun=%s; marg=%s' % (
 			len(senttok), objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',
-			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), cgi.escape(tree))
-					for n, (tree, prob) in enumerate(parsetrees)) + '\n')))
+			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
+					for n, (tree, prob) in enumerate(parsetrees)) + '\n'))
 	if not html:
 		return Response('\n'.join((nbest, frags, info, result)),
 				mimetype='text/plain')

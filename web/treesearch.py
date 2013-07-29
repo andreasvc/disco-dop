@@ -27,6 +27,9 @@ MORPH_TAGS = re.compile(
 		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
+FRAGLIMIT = 1000  # max amount of search results for fragment extraction
+# 1. extract fragments from search results,
+# 2. get counts from whole text (pre-loaded)
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -139,11 +142,9 @@ def export(form, output):
 		results = counts(form, doexport=True)
 		filename = 'counts.csv'
 	else:
-		if output == 'brackets':
-			output = 'trees'
-		filename = '%s.txt' % output
 		results = (a[1] + '\n' for a in doqueries(form, lines=False,
 					doexport=output))
+		filename = '%s.txt' % output
 	resp = Response(results, mimetype='text/plain')
 	resp.headers['Content-Disposition'] = 'attachment; filename=' + filename
 	return resp
@@ -237,7 +238,9 @@ def trees(form):
 					form['query'], form['texts'])
 			yield ('Query: %s\n'
 					'Trees (showing up to 10 per text; '
-					'<a href="%s">download all</a>):\n' % (stderr, url))
+					'<a href="%s">download</a>; '
+					'<a href="%s">download with line numbers</a>):\n' % (
+						stderr, url, url + '&linenos=1'))
 		for m, line in enumerate(islice(results, 10)):
 			if m == 0:
 				gotresults = True
@@ -284,7 +287,9 @@ def sents(form, dobrackets=False):
 					form['query'], form['texts'])
 			yield ('Query: %s\n'
 					'Sentences (showing up to 1000 per text; '
-					'<a href="%s">download all</a>):\n' % (stderr, url))
+					'<a href="%s">download</a>; '
+					'<a href="%s">download with line numbers</a>):\n' % (
+						stderr, url, url + '&linenos=1'))
 		for m, line in enumerate(islice(results, 1000)):
 			if m == 0:
 				gotresults = True
@@ -322,13 +327,15 @@ def doqueries(form, lines=False, doexport=None):
 		if n not in selected:
 			continue
 		if doexport == 'sents':
-			fmt = r'%f:%s|%tw\n'
-		elif doexport == 'trees':
+			fmt = r'%f:%s|%tw\n' if form.get('linenos') else r'%tw\n'
+		elif doexport == 'trees' or doexport == 'brackets':
 			# NB: no distinction between trees from different texts
 			# (Does consttreeviewer support # comments?)
-			fmt = r"%w\n"
-		else:
+			fmt = r"%f:%s|%w\n" if form.get('linenos') else r"%w\n"
+		elif not doexport:
 			fmt = r'%s:::%f:::%w:::%h\n'
+		else:
+			raise ValueError
 		cmd = [which('tgrep2'), '-z', '-a',
 				'-m', fmt,
 				'-c', os.path.join(CORPUS_DIR, text + '.t2c.gz'),
@@ -346,6 +353,8 @@ def doqueries(form, lines=False, doexport=None):
 		proc.wait()  # pylint: disable=E1101
 		if lines:
 			yield text, filterlabels(form, out).splitlines(), err
+		elif doexport and form.get('linenos'):
+			yield text, out.lstrip('corpus/').replace('\ncorpus/', '\n'), err
 		else:
 			yield text, out, err
 
