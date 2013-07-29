@@ -51,9 +51,24 @@ span.tt { font-family: monospace; }
 </p></blockquote>
 
 <form action="/" method=get name=queryform onSubmit="mergecheckboxes(); "><table>
-    <tr><td><label for=f1>Query:</label></td>
-    <td><input type=text name=query id=f1 size=100 value="{{ form['query'] }}"></td>
-    <td><input type=submit></td></tr>
+    <tr valign=top><td><label for=f1>Query:</label></td>
+		<td>
+			<input type=text
+				name={{ 'notquery' if form.get('textarea') else 'query' }}
+				id=f1 size=100 value="{{ form['query'] }}"
+				{{ 'style="display: none; " disabled'|safe
+				if form.get('textarea') }}>
+			<textarea
+				name={{ 'query' if form.get('textarea') else 'notquery' }}
+				{{ '' if form.get('textarea')
+				else 'style="display: none; " disabled'|safe }}
+				rows=10 cols=80>{{ form['query'] }}</textarea>
+			<input type=hidden name=textarea id=f2
+				value={{ form.get('textarea', 0) }}>
+		</td>
+		<td><input type=submit>
+			<a href="javascript: toggletextbox(); " id=textlink>the textbox is too damn small!</a></td>
+	</tr>
     <tr><td style="vertical-align: text-top; ">
     Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') else 'block' }}; ">

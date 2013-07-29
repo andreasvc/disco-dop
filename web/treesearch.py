@@ -339,6 +339,7 @@ def doqueries(form, lines=False, doexport=None):
 		cmd = [which('tgrep2'), '-z', '-a',
 				'-m', fmt,
 				'-c', os.path.join(CORPUS_DIR, text + '.t2c.gz'),
+				'static/macros.txt',
 				form['query']]
 		proc = subprocess.Popen(args=cmd,
 				bufsize=-1, shell=False,

@@ -1,6 +1,6 @@
 function toggle(id) {
 	var el = document.getElementById(id);
-	if (el.style.display == 'none')
+	if(el.style.display == 'none')
 		el.style.display = 'block';
 	else
 		el.style.display = 'none';
@@ -9,7 +9,7 @@ function toggle(id) {
 function togglelink(id) {
 	var el = document.getElementById(id);
 	var link = document.getElementById('link' + id);
-	if (el.style.display == 'none') {
+	if(el.style.display == 'none') {
 		el.style.display = 'block';
 		link.innerHTML = 'hide' + link.innerHTML.substring(4);
 	} else {
@@ -18,9 +18,32 @@ function togglelink(id) {
 	}
 }
 
+function toggletextbox() {
+	var state = document.queryform.textarea;
+	var cur = document.queryform.query;
+	var next = document.queryform.notquery;
+	var link = document.getElementById('textlink');
+	var text = link.innerHTML;
+	cur.name = 'notquery';
+	cur.disabled = true;
+	cur.style.display = 'none';
+	next.name = 'query';
+	next.disabled = false;
+	next.style.display = 'block';
+	if(/^0$/.test(state.value)) {
+		state.value = '1';
+		next.innerHTML = cur.value;
+		link.innerHTML = text.replace('small', 'big');
+	} else {
+		state.value = '0';
+		next.value = cur.value;
+		link.innerHTML = text.replace('big', 'small');
+	}
+}
+
 function show(id, name) {
 	var el = document.getElementById(id);
-	if (el.style.visibility != 'visible')
+	if(el.style.visibility != 'visible')
 		el.style.visibility = 'visible';
 	var elems = document.getElementsByName(name);
 	for (var n in elems)
@@ -29,7 +52,7 @@ function show(id, name) {
 
 function hide(id, name) {
 	var el = document.getElementById(id);
-	if (el.style.visibility != 'hidden')
+	if(el.style.visibility != 'hidden')
 		el.style.visibility = 'hidden';
 	var elems = document.getElementsByName(name);
 	for (var n in elems)
@@ -41,9 +64,10 @@ function placeFocus() {
 }
 
 function triggerForm(name) {
+	/* restore the currently selected radio button according to GET param. */
 	var elems = document.getElementsByName('output')
 	for (var n in elems)
-		if (elems[n].value == name) {
+		if(elems[n].value == name) {
 			elems[n].onchange();
 			break;
 		}
@@ -61,10 +85,10 @@ function entsub(e) {
 
 function ajaxFunction() {
 	var xmlhttp;
-	if (window.XMLHttpRequest) {
+	if(window.XMLHttpRequest) {
 	  // code for IE7+, Firefox, Chrome, Opera, Safari
 	  xmlhttp=new XMLHttpRequest();
-	} else if (window.ActiveXObject) {
+	} else if(window.ActiveXObject) {
 	  // code for IE6, IE5
 	  xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
 	} else {
@@ -102,7 +126,7 @@ function numchecked() {
 	var checkboxes = document.getElementsByName('t');
 	var checked = 0;
 	for (var i in checkboxes)
-		if (checkboxes[i].checked)
+		if(checkboxes[i].checked)
 			checked++;
 	document.getElementById('numchecked').innerHTML = checked;
 }
@@ -118,8 +142,8 @@ function mergecheckboxes() {
 			checkboxes[n].disabled = true;
 			n++;
 		}
-		if (checkboxes[start].checked)
-			if (start == n - 1)
+		if(checkboxes[start].checked)
+			if(start == n - 1)
 				result += '.' + start;
 			else
 				result += '.' + start + '-' + n;
@@ -129,7 +153,7 @@ function mergecheckboxes() {
 	document.forms[0].texts.value = result.substring(1);
 	var radioboxes = document.getElementsByName('output');
 	for (n in radioboxes) {
-		if (radioboxes[n].checked) {
+		if(radioboxes[n].checked) {
 			document.forms[0].action = radioboxes[n].value;
 			radioboxes[n].disabled = true;
 			break;
