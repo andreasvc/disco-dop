@@ -42,8 +42,10 @@ class DrawTree(object):
 		if isinstance(tree, basestring):
 			self.tree = Tree(tree)
 		if sent is None:
-			if all(isinstance(a, int) for a in self.tree.leaves()):
-				self.sent = [str(a) for a in self.tree.leaves()]
+			leaves = self.tree.leaves()
+			if (leaves and not any(len(a) == 0 for a in self.tree.subtrees())
+					and all(isinstance(a, int) for a in leaves)):
+				self.sent = [str(a) for a in leaves]
 			else:
 				# this deals with empty nodes (frontier non-terminals)
 				# and multiple/mixed terminals under non-terminals.
@@ -57,7 +59,7 @@ class DrawTree(object):
 						for n, b in enumerate(a):
 							if not isinstance(b, Tree):
 								a[n] = len(self.sent)
-								self.sent.append(b)
+								self.sent.append(str(b))
 		self.highlight = set()
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				self.tree, self.sent, highlight)

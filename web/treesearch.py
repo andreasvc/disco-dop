@@ -3,6 +3,7 @@ Expects one or more treebanks in the directory corpus/ """
 # stdlib
 import os
 import re
+import cgi
 import glob
 import logging
 import tempfile
@@ -14,7 +15,7 @@ from itertools import islice, count
 from collections import Counter
 #from functools import wraps
 # Flask & co
-from flask import Flask, Markup, Response
+from flask import Flask, Response
 from flask import request, render_template
 from flask import send_from_directory
 #from werkzeug.contrib.cache import SimpleCache
@@ -276,7 +277,7 @@ def trees(form):
 				line = "#%s \nERROR: %s\n%s\n%s\n" % (lineno, err, treestr, tree)
 			else:
 				line = "#%s\n%s\n" % (lineno, treerepr)
-			yield Markup(line)
+			yield line
 		yield "</span>"
 	if not gotresults:
 		yield "No matches."
@@ -302,7 +303,7 @@ def sents(form, dobrackets=False):
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
 			lineno, text, treestr, match = line.rstrip().split(":::")
-			treestr = treestr.replace(" )", " -NONE-)")
+			treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
 			link = "<a href='/draw?tree=%s'>draw</a>" % (
 					quote(treestr.encode('utf8')))
 			if dobrackets:
@@ -315,7 +316,7 @@ def sents(form, dobrackets=False):
 						' '.join(GETLEAVES.findall(highlight))
 								if '(' in highlight else highlight,
 						' '.join(GETLEAVES.findall(post)))
-			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, Markup(out))
+			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, out)
 		yield "</ol>"
 	if not gotresults:
 		yield "No matches."
@@ -345,8 +346,8 @@ def fragmentsinresults(form):
 			if m == 0:
 				gotresults = True
 			_, _, treestr, _ = line.rstrip().split(":::")
-			treestr = treestr.replace(" )", " -NONE-)")
-			uniquetrees.add(treestr + '\n')
+			treestr = treestr.replace(" )", " -NONE-)") + '\n'
+			uniquetrees.add(treestr.encode('utf8'))
 	if not gotresults:
 		yield "No matches."
 		return
@@ -364,12 +365,17 @@ def fragmentsinresults(form):
 			if (2 * frag.count(')')
 				- frag.count(' (')
 				- frag.count(' )')) > MINNODES and freq > MINFREQ]
+	gotresults = False
 	yield "<ol>"
 	for treestr, freq in results:
+		gotresults = True
 		link = "<a href='/draw?tree=%s'>draw</a>" % (
 				quote(treestr.encode('utf8')))
-		yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
+		yield "<li>freq=%3d [%s] %s" % (freq, link, cgi.escape(treestr))
 	yield "</ol>"
+	if not gotresults:
+		yield "No fragments with freq > %d & nodes > %d." % (MINNODES, MINFREQ)
+		return
 
 
 def doqueries(form, lines=False, doexport=None):
