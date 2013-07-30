@@ -197,6 +197,9 @@ def dopreduction(trees, sents, ewe=False, packedgraph=False):
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1),
 			(fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
 
+	# sort lexical rules by word
+	rules = sorted(rules.items(), key=lambda rule:
+			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
 	if ewe:
 		probmodel = [bodewe(r) for r in rules.items()]
 	else:
@@ -210,11 +213,10 @@ def doubledop(fragments, debug=False, ewe=False):
 	individual productions needed to obtain full coverage.
 	Input trees need to be binarized. A second level of binarization (a normal
 	form) is needed when fragments are converted to individual grammar rules,
-	which occurs through the removal of internal nodes. When the remaining
-	nodes do not uniquely identify the fragment, an extra node with an
-	identifier is inserted: #n where n is an integer. In fragments with
-	terminals, we replace their POS tags with a tag uniquely identifying that
-	terminal and tag: tag@word.
+	which occurs through the removal of internal nodes. The binarization adds
+	unique identifiers so that each grammar rule can be mapped back to its
+	fragment. In fragments with terminals, we replace their POS tags with a tag
+	uniquely identifying that terminal and tag: tag@word.
 	When ewe is true, the equal weights estimate is applied. This requires that
 	the fragments are accompanied by indices instead of frequencies. """
 	def getprob(frag, terminals, ewe):
@@ -283,10 +285,10 @@ def doubledop(fragments, debug=False, ewe=False):
 	#sort grammar such that we have these clusters:
 	# 1. non-binarized rules or initial rules of a binarized constituent
 	# 2: non-initial binarized rules.
-	# 3: lexical productions
+	# 3: lexical productions sorted by word
 	# this is so that the backtransform aligns with the first part of the rules
 	grammar = sorted(grammar.items(), key=lambda rule: (
-				rule[0][0][1] == 'Epsilon',
+				rule[0][0][1] == 'Epsilon' and rule[0][1][0],
 				'}<' in rule[0][0][0],
 				rule))
 	# replace keys with numeric ids of rules, drop terminals.
@@ -721,7 +723,10 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 
 def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
 		escapeparens=False):
-	""" Writes a grammar to a simple text file format. Parameters:
+	""" Writes a grammar to a simple text file format. Rules are written in
+	the order as they appear in the sequence 'grammar', except that the lexicon
+	file lists words in sorted order (with tags for each word in the order of
+	'grammar'). Parameters:
 	- grammar: sequence of rule tuples, as produced by induce_plcfrs(),
 		dopreduction(), doubledop().
 	- rules: a file object with a write() method accepting ascii byte strings
@@ -742,11 +747,11 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
 			rules.write(("%s\t%s\t%s\n" % (
 					"\t".join(x for x in r), yfstr,
 					w.numerator if freqs else w)).encode('ascii'))
-	for word, lexrules in lexical.items():
+	for word in sorted(lexical):
 		if escapeparens:
 			word = word.replace('(', '-LRB-').replace(')', '-RRB-')
 		lexicon.write(word)
-		for tag, w in lexrules:
+		for tag, w in lexical[word]:
 			if freqs:
 				lexicon.write(unicode("\t%s %s" % (tag, w.numerator)))
 			else:
