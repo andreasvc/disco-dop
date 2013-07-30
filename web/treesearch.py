@@ -5,7 +5,9 @@ import os
 import re
 import glob
 import logging
+import tempfile
 import subprocess
+from heapq import nlargest
 from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, count
@@ -19,17 +21,20 @@ from flask import send_from_directory
 # disco-dop
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
+from discodop import fragments
 
 CORPUS_DIR = "corpus/"
+MINFREQ = 2  # filter out fragments which occur just once or twice
+MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
+TREELIMIT = 10  # max number of trees to draw in search resuluts
+FRAGLIMIT = 250  # max amount of search results for fragment extraction
+SENTLIMIT = 1000  # max number of sents/brackets in search results
 
 APP = Flask(__name__)
 MORPH_TAGS = re.compile(
 		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
-FRAGLIMIT = 1000  # max amount of search results for fragment extraction
-# 1. extract fragments from search results,
-# 2. get counts from whole text (pre-loaded)
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -48,6 +53,10 @@ ABBRPOS = {
 	'NOUN': 'NN',
 	'VERB': 'VB'}
 
+fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
+		quadratic=False, complement=False, quiet=True, nofreq=False,
+		approx=True, indices=False)
+
 
 def stream_template(template_name, **context):
 	""" From Flask documentation. """
@@ -63,6 +72,7 @@ def stream_template(template_name, **context):
 @APP.route('/trees')
 @APP.route('/sents')
 @APP.route('/brackets')
+@APP.route('/fragments')
 def main():
 	""" Main search form & results page. """
 	output = None
@@ -153,12 +163,8 @@ def export(form, output):
 @APP.route('/draw')
 def draw():
 	""" Produce a visualization of a tree on a separate page. """
-	cnt = count()
-	treestr = request.args['tree']
-	tree = Tree.parse(treestr, parse_leaf=lambda _: next(cnt))
-	sent = re.findall(r" +([^ ()]+)(?=[ )])", treestr)
-	return "<pre>%s</pre>" % DrawTree(tree, sent).text(
-				unicodelines=True, html=True)
+	return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
+			unicodelines=True, html=True)
 
 
 @APP.route('/favicon.ico')
@@ -237,11 +243,11 @@ def trees(form):
 			url = 'trees?query=%s&texts=%s&export=1' % (
 					form['query'], form['texts'])
 			yield ('Query: %s\n'
-					'Trees (showing up to 10 per text; '
-					'<a href="%s">download</a>; '
-					'<a href="%s">download with line numbers</a>):\n' % (
-						stderr, url, url + '&linenos=1'))
-		for m, line in enumerate(islice(results, 10)):
+					'Trees (showing up to %d per text; '
+					'export: <a href="%s">plain</a>, '
+					'<a href="%s">with line numbers</a>):\n' % (
+						stderr, TREELIMIT, url, url + '&linenos=1'))
+		for m, line in enumerate(islice(results, TREELIMIT)):
 			if m == 0:
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
@@ -286,15 +292,15 @@ def sents(form, dobrackets=False):
 					'trees' if dobrackets else 'sents',
 					form['query'], form['texts'])
 			yield ('Query: %s\n'
-					'Sentences (showing up to 1000 per text; '
-					'<a href="%s">download</a>; '
-					'<a href="%s">download with line numbers</a>):\n' % (
-						stderr, url, url + '&linenos=1'))
-		for m, line in enumerate(islice(results, 1000)):
+					'Sentences (showing up to %d per text; '
+					'export: <a href="%s">plain</a>, '
+					'<a href="%s">with line numbers</a>):\n' % (
+						stderr, SENTLIMIT, url, url + '&linenos=1'))
+		for m, line in enumerate(islice(results, SENTLIMIT)):
 			if m == 0:
 				gotresults = True
-				yield ("%s: [<a href=\"javascript: toggle('n%d'); \">toggle</a>]"
-						"<ol id=n%d>" % (text, n, n))
+				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
+						"toggle</a>] <ol id=n%d>" % (text, n, n))
 			lineno, text, treestr, match = line.rstrip().split(":::")
 			treestr = treestr.replace(" )", " -NONE-)")
 			link = "<a href='/draw?tree=%s'>draw</a>" % (
@@ -318,6 +324,52 @@ def sents(form, dobrackets=False):
 def brackets(form):
 	""" Wrapper. """
 	return sents(form, dobrackets=True)
+
+
+def fragmentsinresults(form):
+	""" Extract recurring fragments from search results. """
+	gotresults = False
+	uniquetrees = set()
+	for n, (_, results, stderr) in enumerate(
+			doqueries(form, lines=True)):
+		if n == 0:
+			#url = 'fragments?query=%s&texts=%s&export=1' % (
+			#		form['query'], form['texts'])
+			yield ('Query: %s\n'
+					'Fragments (showing up to %d fragments '
+					'in the first %d search results from selected texts) '
+					#'export: <a href="%s">plain</a>, '
+					#'<a href="%s">with line numbers</a>):\n'
+					% (stderr, FRAGLIMIT, SENTLIMIT))  # url, url + '&linenos=1'
+		for m, line in enumerate(islice(results, SENTLIMIT)):
+			if m == 0:
+				gotresults = True
+			_, _, treestr, _ = line.rstrip().split(":::")
+			treestr = treestr.replace(" )", " -NONE-)")
+			uniquetrees.add(treestr + '\n')
+	if not gotresults:
+		yield "No matches."
+		return
+	# TODO:
+	# - get fragments from search results, but counts from whole text (preload)
+	# - export fragments
+	with tempfile.NamedTemporaryFile(delete=True) as tmp:
+		tmp.writelines(uniquetrees)
+		tmp.flush()
+		results, approxcounts = fragments.regular((tmp.name, ), 1, 0, 'utf8')
+	results = nlargest(FRAGLIMIT, zip(results, approxcounts),
+			key=lambda ff: (2 * ff[0].count(')') - ff[0].count(' (')
+				- ff[0].count(' )')) * ff[1])
+	results = [(frag, freq) for frag, freq in results
+			if (2 * frag.count(')')
+				- frag.count(' (')
+				- frag.count(' )')) > MINNODES and freq > MINFREQ]
+	yield "<ol>"
+	for treestr, freq in results:
+		link = "<a href='/draw?tree=%s'>draw</a>" % (
+				quote(treestr.encode('utf8')))
+		yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
+	yield "</ol>"
 
 
 def doqueries(form, lines=False, doexport=None):
@@ -445,6 +497,7 @@ DISPATCH = {
 	'trees': trees,
 	'sents': sents,
 	'brackets': brackets,
+	'fragments': fragmentsinresults,
 }
 
 if __name__ == '__main__':
