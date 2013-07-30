@@ -2,7 +2,7 @@
 
 # python imports
 from __future__ import print_function
-from math import log, exp
+from math import exp, log as pylog
 from collections import defaultdict
 from subprocess import Popen, PIPE
 from itertools import count
@@ -34,20 +34,23 @@ DEF SXlrgaps = 2
 cdef CFGChartItem NONE = new_CFGChartItem(0, 0, 0)
 
 
-def parse(list sent, Grammar grammar, tags=None, start=1, chart=None):
+def parse(sent, Grammar grammar, tags=None, start=1, chart=None):
 	#assert all(grammar.fanout[a] == 1 for a in range(1, grammar.nonterminals))
 	if grammar.nonterminals < 20000 and chart is None:
 		return parse_dense(sent, grammar, start=start, tags=tags)
 	return parse_sparse(sent, grammar, start=start, tags=tags, chart=chart)
 
 
-def parse_dense(list sent, Grammar grammar, start=1, tags=None):
+def parse_dense(sent, Grammar grammar, start=1, tags=None, vitchart=None):
 	""" A CKY parser modeled after Bodenstab's `fast grammar loop'
 		and the Stanford parser. Tries to apply each grammar rule for all
 		spans. Tracks the viterbi scores in a separate array. For grammars with
 		up to 10,000 nonterminals.
 		Edges are kept in a dictionary for each labelled span:
-		chart[left][right][label] = {edge1: edge1, edge2: edge2} """
+		chart[left][right][label] = {edge1: edge1, edge2: edge2}
+		If the numpy matrix vitchart is given, it can be used to block certain
+		spans. Items in vitchart[:grammar.nonterminals, :lensent, :lensent+1]
+		should equal np.inf or NaN; items with NaN will be blocked. """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid
@@ -58,26 +61,22 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		list chart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
 		dict cell
-		# the viterbi chart is initially filled with infinite log probabilities,
-		# cells containing NaN are blocked.
-		np.ndarray[np.double_t, ndim=3] viterbi = np.empty(
-				(grammar.nonterminals, lensent, lensent + 1), dtype='d')
-		# matrices for the filter which gives minima and maxima for splits
-		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+		short [:, :] minleft, maxleft, minright, maxright
+		double [:, :, :] viterbi
+	if vitchart:
+		assert not np.isfinite(
+				vitchart[:grammar.nonterminals, :lensent, :lensent + 1]).any()
+		viterbi = vitchart
+	else:
+		viterbi = chartmatrix(grammar.nonterminals, lensent)
+	assert len(viterbi) >= grammar.nonterminals
+	assert len(viterbi[0]) >= lensent
+	assert len(viterbi[0][0]) >= lensent + 1
 	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert grammar.logprob
-	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
-	maxleft = np.empty_like(minleft)
-	minright = np.empty_like(minleft)
-	maxright = np.empty_like(minleft)
-	viterbi.fill(np.inf)
-	minleft.fill(-1)
-	maxleft.fill(lensent + 1)
-	minright.fill(lensent + 1)
-	maxright.fill(-1)
-
-	# assign POS tags
-	for left, word in enumerate(sent):
+	minleft, maxleft, minright, maxright = minmaxmatrices(
+			grammar.nonterminals, lensent)
+	for left, word in enumerate(sent):  # assign POS tags
 		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		cell = chart[left][right]
@@ -258,7 +257,7 @@ def parse_dense(list sent, Grammar grammar, start=1, tags=None):
 		return chart, NONE, "no parse " + msg
 
 
-def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
+def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 		list chart=None, int beamwidth=0):
 	""" A CKY parser modeled after Bodenstab's `fast grammar loop,' filtered by
 	the list of allowed items (if a pre-populated chart is given).
@@ -276,18 +275,11 @@ def parse_sparse(list sent, Grammar grammar, start=1, tags=None,
 		list viterbi = [[{} for _ in range(lensent + 1)]
 				for _ in range(lensent)]
 		dict cell, viterbicell
-		# matrices for the filter which gives minima and maxima for splits
-		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+		short [:, :] minleft, maxleft, minright, maxright
 	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert grammar.logprob, "Expecting grammar with log probabilities."
-	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
-	maxleft = np.empty_like(minleft)
-	minright = np.empty_like(minleft)
-	maxright = np.empty_like(minleft)
-	minleft.fill(-1)
-	maxleft.fill(lensent + 1)
-	minright.fill(lensent + 1)
-	maxright.fill(-1)
+	minleft, maxleft, minright, maxright = minmaxmatrices(
+			grammar.nonterminals, lensent)
 	if chart is None:
 		chart = [[None] * (lensent + 1) for _ in range(lensent)]
 		cell = dict.fromkeys(range(1, grammar.nonterminals))
@@ -500,19 +492,11 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None):
 		set unaryagenda = set()
 		list chart = [[{} for _ in range(lensent + 1)] for _ in range(lensent)]
 		dict cell
-		# matrices for the filter which gives minima and maxima for splits
-		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
+		short [:, :] minleft, maxleft, minright, maxright
 	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
-	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
-	maxleft = np.empty_like(minleft)
-	minright = np.empty_like(minleft)
-	maxright = np.empty_like(minleft)
-	minleft.fill(-1)
-	maxleft.fill(lensent + 1)
-	minright.fill(lensent + 1)
-	maxright.fill(-1)
-	# assign POS tags
-	for left, word in enumerate(sent):
+	minleft, maxleft, minright, maxright = minmaxmatrices(
+			grammar.nonterminals, lensent)
+	for left, word in enumerate(sent):  # assign POS tags
 		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		cell = chart[left][right]
@@ -658,7 +642,7 @@ def symbolicparse(sent, Grammar grammar, start=1, tags=None):
 		return chart, NONE, "no parse " + msg
 
 
-def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
+def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
 		tags=None):
 	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert not grammar.logprob, "Grammar must not have log probabilities."
@@ -675,7 +659,7 @@ def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 		outside[:len(sent), :len(sent) + 1, :] = 0.0
 	minmaxlr = insidescores(sent, grammar, inside, tags)
 	if inside[0, len(sent), 1]:
-		outside = outsidescores(grammar, sent, inside, outside, *minmaxlr)
+		outsidescores(grammar, sent, inside, outside, *minmaxlr)
 		start = new_CFGChartItem(1, 0, lensent)
 		msg = ''
 	else:
@@ -684,8 +668,7 @@ def doinsideoutside(list sent, Grammar grammar, inside=None, outside=None,
 	return inside, outside, start, msg
 
 
-def insidescores(list sent, Grammar grammar,
-		np.ndarray[np.double_t, ndim=3] inside, tags=None):
+def insidescores(sent, Grammar grammar, npinside, tags=None):
 	""" Compute inside scores. These are not viterbi scores, but sums of
 	all derivations headed by a certain nonterminal + span. """
 	cdef:
@@ -699,21 +682,12 @@ def insidescores(list sent, Grammar grammar,
 		unicode word
 		list cell = [{} for _ in grammar.toid]
 		EdgeAgenda unaryagenda = EdgeAgenda()
-		# matrices for the filter which give minima and maxima for splits
-		np.ndarray[np.int16_t, ndim=2] minleft, maxleft, minright, maxright
-		np.ndarray[np.double_t, ndim=1] unaryscores = np.empty((
-				grammar.nonterminals), dtype='double')
-	minleft = np.empty((grammar.nonterminals, lensent + 1), dtype='int16')
-	maxleft = np.empty_like(minleft)
-	minright = np.empty_like(minleft)
-	maxright = np.empty_like(minleft)
-	maxleft.fill(lensent + 1)
-	minright.fill(lensent + 1)
-	minleft.fill(-1)
-	maxright.fill(-1)
-	inside[:lensent, :lensent + 1, :] = 0.0
-	# assign POS tags
-	for left in range(lensent):
+		short [:, :] minleft, maxleft, minright, maxright
+		double [:] unaryscores = np.empty(grammar.nonterminals, dtype='d')
+		double [:, :, :] inside = npinside
+	minleft, maxleft, minright, maxright = minmaxmatrices(
+			grammar.nonterminals, lensent)
+	for left in range(lensent):  # assign POS tags
 		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		for lexrule in grammar.lexicalbyword.get(sent[left], []):
@@ -723,7 +697,7 @@ def insidescores(list sent, Grammar grammar,
 			if not tags or (grammar.tolabel[lhs] == tag
 					or grammar.tolabel[lhs].startswith(tag + b'@')):
 				inside[left, right, lhs] = lexrule.prob
-		if not inside[left, right].any():
+		if not npinside[left, right].any():
 			if tags is not None:
 				lhs = grammar.toid[tag]
 				if not tags or (grammar.tolabel[lhs] == tag
@@ -731,13 +705,13 @@ def insidescores(list sent, Grammar grammar,
 					inside[left, right, lhs] = 1.
 			else:
 				raise ValueError("not covered: %r" % (tag or sent[left]), )
-		# unary rules on POS tags
+		# unary rules on POS tags (NB: agenda is a min-heap, negate probs)
 		unaryagenda.update([(rhs1,
 			new_CFGEdge(-inside[left, right, rhs1], NULL, 0))
 			for rhs1 in range(grammar.nonterminals)
 			if inside[left, right, rhs1]
 			and grammar.unary[rhs1].rhs1 == rhs1])
-		unaryscores.fill(0.0)
+		unaryscores[:] = 0.0
 		while unaryagenda.length:
 			rhs1 = unaryagenda.popentry().key
 			for n in range(grammar.numrules):
@@ -813,7 +787,7 @@ def insidescores(list sent, Grammar grammar,
 				for rhs1 in range(grammar.nonterminals)
 				if inside[left, right, rhs1]
 				and grammar.unary[rhs1].rhs1 == rhs1])
-			unaryscores.fill(0.0)
+			unaryscores[:] = 0.0
 			while unaryagenda.length:
 				rhs1 = unaryagenda.popentry().key
 				for n in range(grammar.numrules):
@@ -843,13 +817,10 @@ def insidescores(list sent, Grammar grammar,
 	return minleft, maxleft, minright, maxright
 
 
-def outsidescores(Grammar grammar, list sent,
-		np.ndarray[np.double_t, ndim=3] inside,
-		np.ndarray[np.double_t, ndim=3] outside,
-		np.ndarray[np.int16_t, ndim=2] minleft,
-		np.ndarray[np.int16_t, ndim=2] maxleft,
-		np.ndarray[np.int16_t, ndim=2] minright,
-		np.ndarray[np.int16_t, ndim=2] maxright):
+def outsidescores(Grammar grammar, sent,
+		double [:, :, :] inside, double [:, :, :] outside,
+		short [:, :] minleft, short [:, :] maxleft,
+		short [:, :] minright, short [:, :] maxright):
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
@@ -860,8 +831,6 @@ def outsidescores(Grammar grammar, list sent,
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		list cell = [{} for _ in grammar.toid]
-		np.ndarray[np.double_t, ndim=1] unaryscores = np.empty((
-			grammar.nonterminals), dtype='double')
 	outside[0, lensent, 1] = 1.0
 	for span in range(lensent, 0, -1):
 		for left in range(1 + lensent - span):
@@ -871,7 +840,6 @@ def outsidescores(Grammar grammar, list sent,
 				new_CFGEdge(-outside[left, right, lhs], NULL, 0))
 				for lhs in range(grammar.nonterminals)
 				if outside[left, right, lhs]])
-			unaryscores.fill(0.0)
 			while unaryagenda.length:
 				lhs = unaryagenda.popentry().key
 				for n in range(grammar.numrules):
@@ -916,7 +884,6 @@ def outsidescores(Grammar grammar, list sent,
 					outside[split, right, rule.rhs2] += rule.prob * ls * os
 					assert 0.0 < outside[left, split, rule.rhs1] <= 1.0
 					assert 0.0 < outside[split, right, rule.rhs2] <= 1.0
-	return outside
 
 
 def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
@@ -1056,7 +1023,7 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 		return {}, None, '%s\n%s' % (results, msg)
 	start = new_CFGChartItem(1, 0, len(sent))
 	lines = UNESCAPE.sub(r'\1', results).replace(')(', ') (').splitlines()
-	return {renumber(deriv): -log(float(prob[prob.index('=') + 1:]))
+	return {renumber(deriv): -pylog(float(prob[prob.index('=') + 1:]))
 			for prob, deriv in zip(lines[::2], lines[1::2])}, start, msg
 
 
@@ -1070,9 +1037,20 @@ def renumber(deriv):
 	return re.sub(r' [^ )]+\)', closure, deriv)
 
 
-def sortfunc(CFGEdge e):
-	return e.inside
+def minmaxmatrices(nonterminals, lensent):
+	""" Create matrices for the filter which tracks minima and maxima for
+	splits of binary rules. """
+	minleft = np.empty((nonterminals, lensent + 1), dtype='int16')
+	maxleft = np.empty_like(minleft)
+	minleft[...], maxleft[...] = -1, lensent + 1
+	minright, maxright = maxleft.copy(), minleft.copy()
+	return minleft, maxleft, minright, maxright
 
+
+def chartmatrix(nonterminals, lensent):
+	viterbi = np.empty((nonterminals, lensent, lensent + 1), dtype='d')
+	viterbi[...] = np.inf
+	return viterbi
 
 def pprint_chart(chart, sent, tolabel):
 	cdef CFGEdge edge
@@ -1100,6 +1078,10 @@ def pprint_chart(chart, sent, tolabel):
 									edge.mid, right), end='')
 					print()
 				print()
+
+
+def sortfunc(CFGEdge e):
+	return e.inside
 
 
 def pprint_matrix(matrix, sent, tolabel, matrix2=None):

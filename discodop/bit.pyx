@@ -67,14 +67,14 @@ cpdef int fanout(arg):
 	"""
 	cdef UInt result = 0
 	cdef ULLong vec
-	if arg < ((1 << 63) - 1):
+	if arg < ((1 << (8 * sizeof(vec) - 1)) - 1):
 		vec = arg
 		while vec:
 			vec >>= __builtin_ctzll(vec)
 			vec >>= __builtin_ctzll(~vec)
 			result += 1
 	else:
-		# when the argument does not fit in a 64-bit int, resort to plain
+		# when the argument does not fit in unsigned long long, resort to plain
 		# Python code to use Python's bigints. This algorithm is based
 		# on a bit counting algorihm. It goes through as many iterations as
 		# there are set bits (while the other algorithm jumps over contiguous

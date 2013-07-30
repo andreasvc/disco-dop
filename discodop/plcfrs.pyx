@@ -69,7 +69,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		LCFRSEdge edge
 		SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
 		SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
-		np.ndarray[np.double_t, ndim=4] outside
+		double [:, :, :, :] outside
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
 		signed int lensent = len(sent), estimatetype = 0
@@ -387,21 +387,22 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False, estimates=None):
 	""" Parse a sentence longer than the machine word size. """
-	cdef dict chart = {}  # the full chart
-	cdef list viterbi = [{} for _ in grammar.toid]  # the viterbi probabilities
-	cdef EdgeAgenda agenda = EdgeAgenda()  # the agenda
-	cdef Rule *rule
-	cdef LexicalRule lexrule
-	cdef Entry entry
-	cdef LCFRSEdge edge
-	cdef FatChartItem item, sibling, newitem = new_FatChartItem(0)
-	cdef FatChartItem goal = new_FatChartItem(start)
-	cdef np.ndarray[np.double_t, ndim=4] outside
-	cdef double x = 0.0, y = 0.0, score, inside
-	cdef signed int length = 0, left = 0, right = 0, gaps = 0
-	cdef signed int lensent = len(sent), estimatetype = 0
-	cdef UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
-	cdef ULong maxA = 0
+	cdef:
+		dict chart = {}  # the full chart
+		list viterbi = [{} for _ in grammar.toid]  # the viterbi probabilities
+		EdgeAgenda agenda = EdgeAgenda()  # the agenda
+		Rule *rule
+		LexicalRule lexrule
+		Entry entry
+		LCFRSEdge edge
+		FatChartItem item, sibling, newitem = new_FatChartItem(0)
+		FatChartItem goal = new_FatChartItem(start)
+		double [:, :, :, :] outside
+		double x = 0.0, y = 0.0, score, inside
+		signed int length = 0, left = 0, right = 0, gaps = 0
+		signed int lensent = len(sent), estimatetype = 0
+		UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
+		ULong maxA = 0
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
 	goal.vec[BITSLOT(lensent)] = BITMASK(lensent) - 1
 	if len(sent) >= (sizeof(goal.vec) * 8):

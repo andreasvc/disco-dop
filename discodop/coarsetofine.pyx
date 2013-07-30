@@ -357,14 +357,14 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	import plcfrs
 	from disambiguation import marginalize
 	from treetransforms import canonicalize, removefanoutmarkers
-	from math import exp
+	from math import exp as pyexp
 	sent, tags = zip(*sent)
 	print(" C O A R S E ", end='')
 	p, start, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if start:
 		mpp, _, _ = marginalize("mpp", p, start, coarse, 10)
 		for t in mpp:
-			print(exp(-mpp[t]), end='')
+			print(pyexp(-mpp[t]), end='')
 			t = Tree.parse(t, parse_leaf=int)
 			if split:
 				unbinarize(t, childchar=":", parentchar="!")
@@ -401,7 +401,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	if start:
 		mpp, _, _ = marginalize("mpp", pp, start, fine, 10)
 		for t in mpp:
-			print(exp(-mpp[t]), end='')
+			print(pyexp(-mpp[t]), end='')
 			t = Tree.parse(t, parse_leaf=int)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))

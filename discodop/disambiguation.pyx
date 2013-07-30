@@ -5,7 +5,7 @@ from __future__ import print_function
 import re
 import logging
 from heapq import nlargest
-from math import fsum, exp, log
+from math import exp, log
 from random import random
 from bisect import bisect_right
 from operator import itemgetter, attrgetter

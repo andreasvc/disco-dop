@@ -2,16 +2,18 @@
 
 from __future__ import print_function
 from io import BytesIO, StringIO
+from math import exp as pyexp, log as pylog
 import re
 import logging
-from math import exp, log
 from collections import defaultdict
 from functools import partial
 from operator import getitem
 import numpy as np
+
+cimport cython
+from libc.math cimport log, exp
 from tree import Tree
 from agenda cimport EdgeAgenda, Entry
-cimport cython
 
 DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8
@@ -62,7 +64,7 @@ cdef class Grammar:
 		NB: by default the grammar is in logprob mode;
 		invoke grammar.switch('default', logprob=False) to switch. """
 		cdef LexicalRule lexrule
-		cdef np.ndarray[np.double_t, ndim=3] models = self.models
+		cdef double [:] tmp
 		self.mapping = self.splitmapping = self.bylhs = NULL
 		if not isinstance(start, bytes):
 			start = start.encode('ascii')
@@ -97,8 +99,7 @@ cdef class Grammar:
 		self._allocate()
 		# convert phrasal & lexical rules
 		self._convertlexicon(fanoutdict)
-		self.models = models = np.empty((1, 2,
-				self.numrules + len(self.lexical)), dtype='d')
+		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
 		self._convertrules(rulelines)
 		del rulelines
 		for n in range(self.nonterminals):
@@ -114,12 +115,11 @@ cdef class Grammar:
 		self._indexrules(self.unary, 1, 2)
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
+		tmp = self.models[0]
 		for n in range(self.numrules):
-			models[0][0][n] = self.bylhs[0][n].prob
-			models[0][1][n] = -log(self.bylhs[0][n].prob)
+			tmp[n] = self.bylhs[0][n].prob
 		for n, lexrule in enumerate(self.lexical, self.numrules):
-				models[0][0][n] = lexrule.prob
-				models[0][1][n] = -log(lexrule.prob)
+				tmp[n] = lexrule.prob
 		self.switch('default', True)
 
 	@cython.wraparound(True)
@@ -362,45 +362,39 @@ cdef class Grammar:
 		""" Register a probabilistic model given a name, and sequences of
 		probabilities ruleprobs & lexprobs, where ruleprobs and lexprobs are in
 		the same order as that of self.origrules and self.origlexicon. """
-		cdef int n, m
-		cdef np.ndarray[np.double_t, ndim=3] models
+		cdef int n, m = len(self.modelnames)
+		cdef double [:] tmp
+		cdef double w
 		name = unicode(name)
 		assert name not in self.modelnames
 		assert len(self.modelnames) <= 255, (
 				'256 probabilistic models should be enough for anyone.')
 		assert len(ruleprobs) == self.numrules
 		assert len(lexprobs) == len(self.lexical)
-		m = len(self.modelnames)
+		self.models.resize(m + 1, self.numrules + len(self.lexical))
 		self.modelnames.append(name)
-		self.models.resize(m + 1, 2, self.numrules + len(self.lexical))
-		models = self.models
-		for n, prob in enumerate(ruleprobs):
-			models[m][0][n] = prob
-			models[m][1][n] = -log(prob)
-		for n, prob in enumerate(lexprobs, self.numrules):
-			models[m][0][n] = prob
-			models[m][1][n] = -log(prob)
+		tmp = self.models[m]
+		for n, w in enumerate(ruleprobs + lexprobs):
+			tmp[n] = w
 
 	def switch(self, name, bint logprob=True):
 		""" Switch to a different probabilistic model;
 		use 'default' to swith back to model given during initialization. """
-		cdef int n, m
+		cdef int n, m = self.modelnames.index(name)
+		cdef double [:] tmp
 		cdef LexicalRule lexrule
-		cdef np.ndarray[np.double_t, ndim=3] models = self.models
-		m = self.modelnames.index(name)
 		if self.currentmodel == m and self.logprob == logprob:
 			return
+		tmp = -np.log(self.models[m]) if logprob else self.models[m]
 		for n in range(self.numrules):
-			self.bylhs[0][n].prob = models[m][logprob][self.bylhs[0][n].no]
+			self.bylhs[0][n].prob = tmp[self.bylhs[0][n].no]
 		for n in range(self.numbinary):
-			self.lbinary[0][n].prob = models[m][logprob][
-					self.lbinary[0][n].no]
-			self.rbinary[0][n].prob = models[m][logprob][
-					self.rbinary[0][n].no]
+			self.lbinary[0][n].prob = tmp[self.lbinary[0][n].no]
+			self.rbinary[0][n].prob = tmp[self.rbinary[0][n].no]
 		for n in range(self.numunary):
-			self.unary[0][n].prob = models[m][logprob][self.unary[0][n].no]
+			self.unary[0][n].prob = tmp[self.unary[0][n].no]
 		for n, lexrule in enumerate(self.lexical, self.numrules):
-			lexrule.prob = models[m][logprob][n]
+			lexrule.prob = tmp[n]
 		self.logprob = logprob
 		self.currentmodel = m
 
@@ -620,8 +614,15 @@ cdef class SmallChartItem:
 		self.vec = vec
 
 	def __hash__(SmallChartItem self):
-		# juxtapose bits of label and vec, rotating vec if > 33 words
-		return self.label ^ (self.vec << 31UL) ^ (self.vec >> 31UL)
+		""" juxtapose bits of label and vec, rotating vec if > 33 words:
+		64              32            0
+		|               ..........label
+		|vec[0] 1st half
+		|               vec[0] 2nd half
+		------------------------------- XOR """
+		return (self.label
+				^ (self.vec << (sizeof(self.vec) / 2 - 1))
+				^ (self.vec >> (sizeof(self.vec) / 2 - 1)))
 
 	def __richcmp__(SmallChartItem self, SmallChartItem other, int op):
 		if op == 2:
@@ -658,9 +659,17 @@ cdef class SmallChartItem:
 cdef class FatChartItem:
 	""" Item with fixed-with bitvector. """
 	def __hash__(self):
-		cdef long _hash = self.label, n
-		# juxtapose bits of label and first 32 bits of vec
-		_hash ^= (self.vec[0] << 31UL) ^ (self.vec[0] >> 31UL)
+		cdef long n, _hash
+		""" juxtapose bits of label and vec:
+		64              32            0
+		|               ..........label
+		|vec[0] 1st half
+		|               vec[0] 2nd half
+		|........ rest of vec .........
+		------------------------------- XOR """
+		_hash = (self.label
+				^ self.vec[0] << (8 * sizeof(self.vec[0]) / 2 - 1)
+				^ self.vec[0] >> (8 * sizeof(self.vec[0]) / 2 - 1))
 		# add remaining bits
 		for n in range(sizeof(self.vec[0]), sizeof(self.vec)):
 			_hash *= 33 ^ (<UChar *>self.vec)[n]
@@ -719,11 +728,12 @@ cdef class FatChartItem:
 cdef class CFGChartItem:
 	""" Item for CFG parsing; span is denoted with start and end indices. """
 	def __hash__(self):
-		cdef long _hash = self.label
-		# juxtapose bits of label and indices of span
-		_hash ^= <ULong>self.start << 32UL
-		_hash ^= <ULong>self.end << 40UL
-		return _hash
+		""" juxtapose bits of label and indices of span:
+		|....end...start...label
+		64    40      32       0 """
+		return (self.label
+				^ <ULong>self.start << (8 * sizeof(long) / 2)
+				^ <ULong>self.end << (8 * sizeof(long) / 2 + 8))
 
 	def __richcmp__(CFGChartItem self, CFGChartItem other, int op):
 		cdef bint labelmatch = self.label == other.label

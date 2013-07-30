@@ -119,7 +119,7 @@ For example::
 
 Usage: web interfaces
 ---------------------
-There are two web based tools in the ``web/`` directory. These require Flask to
+There are three web based tools in the ``web/`` directory. These require Flask to
 be installed.
 
 :``parse.py``: A web interface to the parser. Expects a series of grammars
@@ -130,6 +130,8 @@ be installed.
     the directory ``web/corpus/`` (sample included).
 :``treedraw.py``: A web interface for drawing discontinuous trees in various
     formats.
+
+See https://github.com/andreasvc/disco-dop/wiki for screenshots.
 
 Acknowledgments
 ---------------
