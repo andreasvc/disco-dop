@@ -998,6 +998,7 @@ def getgrammarmapping(Grammar coarse, Grammar fine):
 
 
 UNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
+BITPARPARSES = re.compile(r'vitprob=(.*)\n(\(.*\))\n')
 
 
 def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
@@ -1016,15 +1017,15 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	results, msg = proc.communicate('\n'.join([
 			word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
 			for word in (tags or sent)]) + '\n')
-	results = results.strip('\t\n ')  # decode or not?
+	# decode results or not?
 	if tags:
 		unlink(lexiconfile)
 	if not results or results.startswith("No parse"):
 		return {}, None, '%s\n%s' % (results, msg)
 	start = new_CFGChartItem(1, 0, len(sent))
-	lines = UNESCAPE.sub(r'\1', results).replace(')(', ') (').splitlines()
-	return {renumber(deriv): -pylog(float(prob[prob.index('=') + 1:]))
-			for prob, deriv in zip(lines[::2], lines[1::2])}, start, msg
+	lines = UNESCAPE.sub(r'\1', results).replace(')(', ') (')
+	return {renumber(deriv): -pylog(float(prob))
+			for prob, deriv in BITPARPARSES.findall(lines)}, start, msg
 
 
 def renumber(deriv):

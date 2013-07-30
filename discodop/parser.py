@@ -292,32 +292,47 @@ class Parser(object):
 				msg += "disambiguation: %s, %gs\n\t" % (
 						msg1, time.clock() - begindisamb)
 			if parsetrees:
-				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
-				fragments = derivs.get(resultstr)
+				try:
+					parsetree, prob, fragments, noparse = self.postprocess(
+							stage, parsetrees, derivs)
+				except ValueError as err:
+					logging.error("something's amiss: %r", err)
+					parsetree, prob, fragments, noparse = self.noparse(
+							stage, sent, tags)
+					noparse = True
 				msg += probstr(prob) + ' '
-				parsetree = Tree.parse(resultstr, parse_leaf=int)
-				if stage.split:
-					mergediscnodes(unbinarize(parsetree, childchar=":"))
-				saveheads(parsetree, self.tailmarker)
-				unbinarize(parsetree)
-				removefanoutmarkers(parsetree)
-				if self.relationalrealizational:
-					parsetree = rrbacktransform(parsetree,
-							self.relationalrealizational['adjunctionlabel'])
-				if self.transformations:
-					reversetransform(parsetree, self.transformations)
 			else:
-				parsetree = defaultparse([(n, t)
-						for n, t in enumerate(tags or (len(sent) * ['NONE']))])
-				parsetree = Tree.parse("(%s %s)" % (stage.grammar.tolabel[1],
-						parsetree), parse_leaf=int)
-				prob = 0.0
+				parsetree, prob, fragments, noparse = self.noparse(
+						stage, sent, tags)
 				noparse = True
 			elapsedtime = time.clock() - begin
 			msg += "%.2fs cpu time elapsed\n" % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
 					parsetrees=parsetrees, fragments=fragments,
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
+
+	def postprocess(self, stage, parsetrees, derivs):
+		resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
+		parsetree = Tree.parse(resultstr, parse_leaf=int)
+		if stage.split:
+			mergediscnodes(unbinarize(parsetree, childchar=":"))
+		saveheads(parsetree, self.tailmarker)
+		unbinarize(parsetree)
+		removefanoutmarkers(parsetree)
+		if self.relationalrealizational:
+			parsetree = rrbacktransform(parsetree,
+					self.relationalrealizational['adjunctionlabel'])
+		if self.transformations:
+			reversetransform(parsetree, self.transformations)
+		fragments = derivs.get(resultstr)
+		return parsetree, prob, fragments, False
+
+	def noparse(self, stage, sent, tags):
+		parsetree = defaultparse([(n, t)
+				for n, t in enumerate(tags or (len(sent) * ['NONE']))])
+		parsetree = Tree.parse("(%s %s)" % (stage.grammar.start,
+				parsetree), parse_leaf=int)
+		return parsetree, 0.0, None, True
 
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):

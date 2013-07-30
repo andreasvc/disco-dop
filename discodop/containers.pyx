@@ -504,9 +504,14 @@ cdef class Grammar:
 						'only in coarse: {%s}\nonly in fine: {%s}' % (
 						diff1, diff2))
 			elif coarse.nonterminals < self.nonterminals:
-				msg = 'grammar is a proper superset of coarse grammar'
+				msg = ('grammar is a proper superset of coarse grammar:\n'
+						'only in fine: {%s}' % diff2)
+			elif diff1 or diff2:
+				msg = ('equal number of nodes, but not equivalent:\n'
+						'only in coarse: {%s}\nonly in fine: {%s}' % (
+						diff1, diff2))
 			else:
-				msg = 'equal number of nodes, but not equivalent'
+				msg = ''  # should not happen?
 		if debug:
 			msg += "\n"
 			for n in range(self.nonterminals):

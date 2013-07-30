@@ -73,7 +73,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
 		signed int lensent = len(sent), estimatetype = 0
-		UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
+		UInt i, lhs, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 		ULLong vec = 0
 	if lensent >= sizeof(vec) * 8:
@@ -401,7 +401,7 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
 		signed int lensent = len(sent), estimatetype = 0
-		UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
+		UInt i, lhs, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
 	goal.vec[BITSLOT(lensent)] = BITMASK(lensent) - 1

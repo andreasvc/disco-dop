@@ -58,12 +58,12 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			entries = D[start]
 	elif kbest and bitpar:
 		derivations = sorted(chart.items(), key=itemgetter(1))
+		entries = [None] * len(derivations)
 		D = {}
+	elif isinstance(start, CFGChartItem):
+		D = [[{} for right in left] for left in chart]
 	else:
-		if isinstance(start, CFGChartItem):
-			D = [[{} for right in left] for left in chart]
-		else:
-			D = {}
+		D = {}
 	if sample:
 		if isinstance(start, CFGChartItem):
 			return (parsetrees, derivs,

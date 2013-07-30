@@ -277,7 +277,7 @@ def startexp(
 			relationalrealizational=relationalrealizational)
 	results = doparsing(parser=parser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
-			deleteword=deleteword, corpusfmt=corpusfmt)
+			deleteword=deleteword, corpusfmt=corpusfmt, morphology=morphology)
 	if numproc == 1:
 		logging.info("time elapsed during parsing: %gs", time.clock() - begin)
 	for result in results[0]:
@@ -371,7 +371,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					out.writelines("%s\n" % a for a in backtransform.values())
 				if n and stage.prune:
 					msg = grammar.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile(b'@.+$'),
+						striplabelre=None if stages[n - 1].dop
+							else re.compile(b'@.+$'),
 						neverblockre=re.compile(b'.+}<'),
 						# + stage.neverblockre?
 						splitprune=stage.splitprune and stages[n - 1].split,
@@ -387,7 +388,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
 				msg = grammar.getmapping(stages[n - 1].grammar,
-					striplabelre=re.compile(b'@[-0-9]+$'),
+					striplabelre=None if stages[n - 1].dop
+						else re.compile(b'@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
@@ -603,7 +605,8 @@ def writeresults(results, params):
 		corpusfmt = 'export'
 		io.open("%s/%sgold.%s" % (params.resultdir, category, ext[corpusfmt]),
 				"w", encoding='utf-8').writelines(
-				writetree(goldtree, [w for w, _ in goldsent], n, corpusfmt)
+				writetree(goldtree, [w for w, _ in goldsent], n, corpusfmt,
+					morph=params.morphology)
 			for n, (_, goldtree, goldsent, _) in params.testset.items())
 	else:
 		corpusfmt = params.corpusfmt
@@ -614,7 +617,7 @@ def writeresults(results, params):
 		io.open("%s/%s%s.%s" % (params.resultdir, category, res.name,
 				ext[corpusfmt]), "w", encoding='utf-8').writelines(
 				writetree(res.parsetrees[n], [w for w, _ in goldsent], n,
-				corpusfmt) for n, (_, _, goldsent, _) in
+				corpusfmt, morph=params.morphology) for n, (_, _, goldsent, _) in
 				params.testset.items())
 	with open("%s/parsetimes.txt" % params.resultdir, "w") as out:
 		out.write("#id\tlen\t%s\n" % "\t".join(res.name for res in results))

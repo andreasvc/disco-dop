@@ -74,6 +74,7 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 					whitelist[label] = kbestspans[fine.mapping[label]]
 	return whitelist, len(kbest)
 
+
 cpdef kbest_items(chart, ChartItem start, int k, bint finecfg, coarsetolabel):
 	""" produce a dictionary with ChartItems as keys (value is currently unused)
 	according to the k-best derivations in a chart. """
@@ -112,6 +113,7 @@ cpdef kbest_items(chart, ChartItem start, int k, bint finecfg, coarsetolabel):
 				#agenda.difference_update(items)
 	return items
 
+
 cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart,
 		dict items, set agenda):
 	""" Traverse a derivation (e, j), collecting all items belonging to it, and
@@ -137,6 +139,7 @@ cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart,
 			items[e.right] = rootprob - prob
 		if True or eejj in agenda:
 			traversekbest(eejj, rootprob, D, chart, items, agenda)
+
 
 cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 		items, bint fatitems, bint finecfg, agenda):
@@ -193,6 +196,7 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 			traversekbestcfg(eejj, rootprob, D, chart, items, fatitems,
 					finecfg, agenda)
 
+
 cpdef filterchart(chart, ChartItem start):
 	""" Remove all entries that do not contribute to a complete derivation
 	headed by 'start'. """
@@ -207,6 +211,7 @@ cpdef filterchart(chart, ChartItem start):
 		filter_subtree(start, chart, chart2)
 	return chart2
 
+
 cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 	""" Recursively filter an LCFRS chart. """
 	cdef LCFRSEdge edge
@@ -219,6 +224,7 @@ cdef void filter_subtree(ChartItem start, dict chart, dict chart2):
 		item = edge.right
 		if item.label and item not in chart2:
 			filter_subtree(edge.right, chart, chart2)
+
 
 cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 		bint fatitems):
@@ -337,7 +343,10 @@ def bitparkbestitems(dict derivs, Grammar coarse):
 	items = {}
 	fatitems = None
 	for deriv in derivs:
-		t = Tree.parse(deriv, parse_leaf=int)
+		try:
+			t = Tree.parse(deriv, parse_leaf=int)
+		except ValueError:  # FIXME shouldn't happen
+			continue
 		if fatitems is None:
 			fatitems = len(t.leaves()) >= (sizeof(ULLong) * 8)
 		for n in t.subtrees():

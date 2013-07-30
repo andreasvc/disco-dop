@@ -435,7 +435,7 @@ def getreader(fmt):
 indexre = re.compile(r" [0-9]+\)")
 
 
-def writetree(tree, sent, n, fmt, headrules=None):
+def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 	""" Convert a tree with indices as leafs and a sentence with the
 	corresponding non-terminals to a single string in the given format.
 	Formats are bracket, discbracket, and Negra's export format,
@@ -475,9 +475,12 @@ def writetree(tree, sent, n, fmt, headrules=None):
 						if len(idx) > 2 else 0))))
 		for idx in phrasalnodes:
 			a = tree[idx]
+			morphtag = a.source[MORPH] if hasattr(a, "source") else None
+			if not morphtag:
+				morphtag = a.label if morph == 'replace' else '--'
 			result.append("\t".join(("#%d" % (500 + phrasalnodes.index(idx)),
-					a.label,
-					(a.source[MORPH] or "--") if hasattr(a, "source") else "--",
+					a.label, (a.source[MORPH] if hasattr(a, 'source')
+						else (a.label if morph == 'replace' else '--')),
 					(a.source[FUNC] or "--") if hasattr(a, "source") else "--",
 					str(500 + phrasalnodes.index(idx[:-1])
 						if len(idx) > 1 else 0))))
