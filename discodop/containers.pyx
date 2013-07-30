@@ -65,6 +65,7 @@ cdef class Grammar:
 		invoke grammar.switch('default', logprob=False) to switch. """
 		cdef LexicalRule lexrule
 		cdef double [:] tmp
+		cdef int n
 		self.mapping = self.splitmapping = self.bylhs = NULL
 		if not isinstance(start, bytes):
 			start = start.encode('ascii')
@@ -364,7 +365,6 @@ cdef class Grammar:
 		the same order as that of self.origrules and self.origlexicon. """
 		cdef int n, m = len(self.modelnames)
 		cdef double [:] tmp
-		cdef double w
 		name = unicode(name)
 		assert name not in self.modelnames
 		assert len(self.modelnames) <= 255, (

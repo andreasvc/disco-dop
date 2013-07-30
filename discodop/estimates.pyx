@@ -78,7 +78,7 @@ def simpleinside(Grammar grammar, UInt maxlen, npinsidescores):
 	the constituent)
 	insidescores is a 2-dimensional matrix initialized with NaN to indicate
 	values that have yet to be computed. """
-	cdef double [:, :, :] insidescores = npinsidescores
+	cdef double [:, :] insidescores = npinsidescores
 	cdef double x
 	cdef Agenda agenda = Agenda()
 	cdef ChartItem I

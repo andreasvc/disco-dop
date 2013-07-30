@@ -67,7 +67,7 @@ cpdef int fanout(arg):
 	"""
 	cdef UInt result = 0
 	cdef ULLong vec
-	if arg < ((1 << (8 * sizeof(vec) - 1)) - 1):
+	if arg < ((1ULL << (8ULL * sizeof(ULLong) - 1ULL)) - 1ULL):
 		vec = arg
 		while vec:
 			vec >>= __builtin_ctzll(vec)
