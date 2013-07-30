@@ -15,11 +15,9 @@ import numpy as np
 from tree import Tree
 from agenda import EdgeAgenda
 
-
 # cython imports
 from libc.stdlib cimport malloc, calloc, free
 from cpython cimport PyDict_Contains, PyDict_GetItem
-cimport numpy as np
 from agenda cimport EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
 		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong, logprobadd
@@ -28,7 +26,6 @@ cdef extern from "math.h":
 	bint isinf(double x)
 	bint isfinite(double x)
 
-np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
 cdef CFGChartItem NONE = new_CFGChartItem(0, 0, 0)
@@ -668,7 +665,7 @@ def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
 	return inside, outside, start, msg
 
 
-def insidescores(sent, Grammar grammar, npinside, tags=None):
+def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 	""" Compute inside scores. These are not viterbi scores, but sums of
 	all derivations headed by a certain nonterminal + span. """
 	cdef:
@@ -684,7 +681,6 @@ def insidescores(sent, Grammar grammar, npinside, tags=None):
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		short [:, :] minleft, maxleft, minright, maxright
 		double [:] unaryscores = np.empty(grammar.nonterminals, dtype='d')
-		double [:, :, :] inside = npinside
 	minleft, maxleft, minright, maxright = minmaxmatrices(
 			grammar.nonterminals, lensent)
 	for left in range(lensent):  # assign POS tags
@@ -697,7 +693,7 @@ def insidescores(sent, Grammar grammar, npinside, tags=None):
 			if not tags or (grammar.tolabel[lhs] == tag
 					or grammar.tolabel[lhs].startswith(tag + b'@')):
 				inside[left, right, lhs] = lexrule.prob
-		if not npinside[left, right].any():
+		if not inside.base[left, right].any():
 			if tags is not None:
 				lhs = grammar.toid[tag]
 				if not tags or (grammar.tolabel[lhs] == tag

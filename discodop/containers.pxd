@@ -1,7 +1,6 @@
 from math import isinf as pyisinf, exp as pyexp, log as pylog
 from libc.stdlib cimport malloc, realloc, calloc, free, qsort
 from libc.string cimport memcmp, memset
-cimport numpy as np
 cimport cython
 
 ctypedef unsigned long long ULLong

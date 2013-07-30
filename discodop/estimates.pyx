@@ -8,7 +8,6 @@ from __future__ import print_function
 from math import exp
 import numpy as np
 
-cimport numpy as np
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint
 from agenda cimport Agenda, Entry
 from containers cimport Grammar, Rule, LexicalRule, SmallChartItem as ChartItem
@@ -18,7 +17,6 @@ cdef extern from "math.h":
 	bint isnan(double x)
 	bint isfinite(double x)
 
-np.import_array()
 INFINITY = float('infinity')
 
 cdef class Item:
@@ -72,13 +70,12 @@ cdef inline double getoutside(double [:, :, :, :] outside,
 	return outside[label, length, lr, gaps]
 
 
-def simpleinside(Grammar grammar, UInt maxlen, npinsidescores):
+def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 	""" Compute simple inside estimate in bottom-up fashion.
 	Here vec is actually the length (number of terminals in the yield of
 	the constituent)
 	insidescores is a 2-dimensional matrix initialized with NaN to indicate
 	values that have yet to be computed. """
-	cdef double [:, :] insidescores = npinsidescores
 	cdef double x
 	cdef Agenda agenda = Agenda()
 	cdef ChartItem I
@@ -135,7 +132,7 @@ def simpleinside(Grammar grammar, UInt maxlen, npinsidescores):
 						rule.prob + insidescores[rule.rhs1, vec] + x)
 
 	# anything not reached so far is still NaN and gets probability zero:
-	npinsidescores[np.isnan(npinsidescores)] = np.inf
+	insidescores.base[np.isnan(insidescores.base)] = np.inf
 
 
 def inside(Grammar grammar, UInt maxlen, dict insidescores):
@@ -337,8 +334,8 @@ cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
 			* (maxlen + 1) / 1024 ** 2), 'MB')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
-	insidescores.fill(np.NAN)
-	outside.fill(np.inf)
+	insidescores[...] = np.NAN
+	outside[...] = np.inf
 	print("getting inside estimates")
 	simpleinside(grammar, maxlen, insidescores)
 	print("getting outside estimates")
@@ -449,8 +446,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	cdef double x, insidescore, current, score
 	cdef int m, n, state, left, right
 	cdef size_t i, sibsize
-	cdef double [:, :, :, :] outside
-	npoutside = outside = np.empty(
+	cdef double [:, :, :, :] outside = np.empty(
 			(grammar.nonterminals, maxlen + 1, maxlen + 1, 1), dtype='d')
 	outside[...] = np.inf
 
@@ -499,7 +495,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 			rule = grammar.bylhs[state][i]
 		#end while rule.lhs == state:
 	#end while agenda.length:
-	return npoutside
+	return outside.base
 
 
 cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
@@ -544,7 +540,7 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 						end='')
 	outside = np.empty((grammar.nonterminals, maxlen + 1, maxlen + 1, 1),
 			dtype='d')
-	outside.fill(np.inf)
+	outside[...] = np.inf
 	#convert sparse dictionary to dense numpy array
 	for (state, lspan, rspan), prob in outsidescores.items():
 		outside[state, lspan, rspan, 0] = prob
@@ -681,7 +677,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 			#		exp(insidescores[a][b]))
 	print(len(insidescores) * sum(map(len, insidescores.values())), '\n')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
-	insidescores.fill(np.NAN)
+	insidescores[...] = np.NAN
 	simpleinside(grammar, maxlen, insidescores)
 	insidescores[np.isnan(insidescores)] = np.inf
 	print("inside")
@@ -697,7 +693,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 
 	print("getting outside")
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
-	outside.fill(np.inf)
+	outside[...] = np.inf
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
 	#print(outside)
 	cnt = 0

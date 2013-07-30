@@ -7,7 +7,6 @@ import logging
 import numpy as np
 from agenda import EdgeAgenda, Entry
 from cpython cimport PyDict_Contains
-cimport numpy as np
 from agenda cimport Entry, EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, LCFRSEdge, ChartItem, \
 	SmallChartItem, FatChartItem, new_LCFRSEdge, new_ChartItem, \
@@ -21,7 +20,6 @@ cdef extern from "macros.h":
 	int BITNSLOTS(int nb)
 	void SETBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
-np.import_array()
 DEF SX = 1
 DEF SXlrgaps = 2
 DEF SLOTS = 3

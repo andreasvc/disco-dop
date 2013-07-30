@@ -17,7 +17,6 @@ from agenda cimport EdgeAgenda, Entry
 
 DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8
-np.import_array()
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},
 YFBINARY = re.compile(
@@ -61,8 +60,11 @@ cdef class Grammar:
 			which will be used by default when parsing with this grammar
 		- bitpar: whether the rules are given in bitpar text format
 			(default PLCFRS format; not applicable with tuples).
-		NB: by default the grammar is in logprob mode;
-		invoke grammar.switch('default', logprob=False) to switch. """
+		By default the grammar is in logprob mode;
+		invoke grammar.switch('default', logprob=False) to switch.
+		If the grammar only contains integral weights (frequencies), they will
+		be normalized into relative frequencies; if the grammar contains any
+		non-integral weights, weights will be left untouched. """
 		cdef LexicalRule lexrule
 		cdef double [:] tmp
 		cdef int n
@@ -120,7 +122,7 @@ cdef class Grammar:
 		for n in range(self.numrules):
 			tmp[n] = self.bylhs[0][n].prob
 		for n, lexrule in enumerate(self.lexical, self.numrules):
-				tmp[n] = lexrule.prob
+			tmp[n] = lexrule.prob
 		self.switch('default', True)
 
 	@cython.wraparound(True)
@@ -219,7 +221,6 @@ cdef class Grammar:
 				rule = fields[1:]
 				yf = b'0' if len(rule) == 2 else b'01'
 				w = fields[0]
-				# FIXME: should do normalization for proper bitpar support
 			else:
 				rule = fields[:-2]
 				yf = fields[-2]

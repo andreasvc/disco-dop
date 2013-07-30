@@ -42,7 +42,7 @@ Requirements
 - Python 2.7+/3   http://www.python.org (need headers, e.g. python-dev package)
 - Cython 0.18+    http://www.cython.org
 - GCC             http://gcc.gnu.org/
-- Numpy           http://numpy.org/
+- Numpy 1.5+      http://numpy.org/
 
 For example, to install these dependencies and the latest stable release on
 `Ubuntu <http://www.ubuntu.com>`_

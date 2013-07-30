@@ -10,8 +10,6 @@ from containers cimport ChartItem, Edge, RankedEdge, RankedCFGEdge, Grammar, \
 from kbest import lazykbest
 from agenda cimport Entry
 import numpy as np
-cimport numpy as np
-np.import_array()
 
 
 cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
@@ -248,10 +246,8 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 					chart, chart2, fatitems)
 
 
-def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
-	np.ndarray[np.double_t, ndim=3] outside, ChartItem start,
-	Grammar coarse, Grammar fine, double threshold,
-	bint splitprune, bint markorigin):
+def whitelistfromposteriors(inside, outside, ChartItem start, Grammar coarse,
+		Grammar fine, double threshold, bint splitprune, bint markorigin):
 	""" compute posterior probabilities and prune away cells below some
 	threshold. this version is for use with parse_sparse(). """
 	cdef UInt label
@@ -290,10 +286,9 @@ def whitelistfromposteriors(np.ndarray[np.double_t, ndim=3] inside,
 	return whitelist, sentprob, unfiltered, numitems, numremain
 
 
-def whitelistfromposteriors_matrix(np.ndarray[np.double_t, ndim=3] inside,
-	np.ndarray[np.double_t, ndim=3] outside, ChartItem goal, Grammar coarse,
-	Grammar fine, np.ndarray[np.double_t, ndim=3] finechart, short maxlen,
-	double threshold):
+def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
+		Grammar coarse, Grammar fine, finechart, short maxlen,
+		double threshold):
 	""" compute posterior probabilities and prune away cells below some
 	threshold. this version produces a matrix with pruned spans having NaN as
 	value. """
