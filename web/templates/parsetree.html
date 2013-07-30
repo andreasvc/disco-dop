@@ -1,13 +1,14 @@
-<pre style="display: none;" id=n{{ randid }}>
+<!-- id={{ randid }} -->
+<pre style="display: block;" id=n{{ randid }}>
 {{ nbest }}
 </pre>
-<pre style="display: none;" id=f{{ randid }}>
+<pre style="display: block;" id=f{{ randid }}>
 {{ frags }}
 </pre>
-<pre style="display: none;" id=i{{ randid }}>
+<pre style="display: block;" id=i{{ randid }}>
 {{ info }}
 </pre>
 <pre>
 {{ result }}
-(<a href='javascript: togglelink("f{{ randid }}")' id=linkf{{ randid }}>show fragments</a>; <a href='javascript: togglelink("n{{ randid }}")' id=linkn{{ randid }}>show alternative analyses</a>; <a href='javascript: togglelink("i{{ randid }}")' id=linki{{ randid }}>show info</a>; <a href="/?sent={{ sent }}">link</a>)
+(<a href='javascript: togglelink("f{{ randid }}")' id=linkf{{ randid }}>hide fragments</a>; <a href='javascript: togglelink("n{{ randid }}")' id=linkn{{ randid }}>hide alternative analyses</a>; <a href='javascript: togglelink("i{{ randid }}")' id=linki{{ randid }}>hide info</a>; <a href="/?sent={{ sent }}">link</a>)
 </pre>

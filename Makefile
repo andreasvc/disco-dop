@@ -32,11 +32,11 @@ testdebug: debug valgrind-python.supp
 valgrind-python.supp:
 	wget http://codespeak.net/svn/lxml/trunk/valgrind-python.supp
 
-# R=refactor, C0103 == Invalid name
+# pylint: R=refactor, C0103 == Invalid name
 lint:
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py && \
-	pep8 --ignore=E1,W1,F,E901,E225,E227 \
+	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx && \
 	pylint \
 		--indent-string='\t' \

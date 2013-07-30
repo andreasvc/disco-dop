@@ -1049,6 +1049,7 @@ def chartmatrix(nonterminals, lensent):
 	viterbi[...] = np.inf
 	return viterbi
 
+
 def pprint_chart(chart, sent, tolabel):
 	cdef CFGEdge edge
 	print("chart:")

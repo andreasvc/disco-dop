@@ -662,6 +662,7 @@ def testpunct():
 				fanout(a), fanout(b), a, b)
 	print()
 
+
 def testtransforms():
 	"""" Test whether the Tiger transformations (transform / reversetransform)
 	are reversible. """

@@ -4,7 +4,6 @@ Expects a series of grammars produced by runexp in subdirectories of grammar/
 Also usable from the command line:
 $ curl http://localhost:5000/parse -G --data-urlencode "sent=What's up?"
 """
-# TODO: only set CSS display: none; when JS is available.
 import os
 import re
 import glob
@@ -26,11 +25,8 @@ from discodop.parser import Parser, readgrammars, probstr
 APP = Flask(__name__)
 morphtags = re.compile(
 		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
-limit = 40  # maximum sentence length
-prunek = 5000  # number of PLCFRS derivations to use for DOP parsing
-grammars = {}
-parsers = {}
-backtransforms = {}
+LIMIT = 40  # maximum sentence length
+PARSERS = {}
 
 
 @APP.route('/')
@@ -51,20 +47,20 @@ def parse():
 		return ''
 	frags = nbest = None
 	senttok = tokenize(sent)
-	if not senttok or not 1 <= len(senttok) <= limit:
-		return 'Sentence too long: %d words, maximum %d' % (len(senttok), limit)
+	if not senttok or not 1 <= len(senttok) <= LIMIT:
+		return 'Sentence too long: %d words, maximum %d' % (len(senttok), LIMIT)
 	lang = guesslang(senttok)
-	parsers[lang].stages[-1].objective = objfun
-	parsers[lang].stages[-1].kbest = marg in ('nbest', 'both')
-	parsers[lang].stages[-1].sample = marg in ('sample', 'both')
-	results = list(parsers[lang].parse(senttok))
+	PARSERS[lang].stages[-1].objective = objfun
+	PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
+	PARSERS[lang].stages[-1].sample = marg in ('sample', 'both')
+	results = list(PARSERS[lang].parse(senttok))
 	if results[-1].noparse:
 		parsetrees = {}
 		result = 'no parse!'
 		frags = nbest = ''
 		msg = ''
 	else:
-		if parsers[lang].relationalrealizational:
+		if PARSERS[lang].relationalrealizational:
 			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
 		tree = str(results[-1].parsetree)
 		prob = results[-1].prob
@@ -114,7 +110,7 @@ def favicon():
 
 def loadparsers():
 	""" Load grammars if necessary. """
-	if not parsers:
+	if not PARSERS:
 		for directory in glob.glob('grammars/*/'):
 			_, lang = os.path.split(os.path.dirname(directory))
 			APP.logger.info('Loading grammar %r', lang)
@@ -123,7 +119,7 @@ def loadparsers():
 			stages = params['stages']
 			postagging = params['postagging']
 			readgrammars(directory, stages, postagging)
-			parsers[lang] = Parser(stages,
+			PARSERS[lang] = Parser(stages,
 					transformations=params['transformations'],
 					tailmarker=params['tailmarker'], postagging=postagging
 					if postagging and postagging['method'] == 'unknownword'
@@ -193,8 +189,8 @@ def tokenize(text):
 
 def guesslang(sent):
 	""" simple heuristic: language that contains most words from input. """
-	lang = max(parsers, key=lambda x: len(set(sent).intersection(
-			parsers[x].stages[0].grammar.lexicalbyword)))
+	lang = max(PARSERS, key=lambda x: len(set(sent).intersection(
+			PARSERS[x].stages[0].grammar.lexicalbyword)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
 

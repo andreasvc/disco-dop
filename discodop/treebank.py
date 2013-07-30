@@ -5,7 +5,7 @@ import os
 import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
-from itertools import count, islice
+from itertools import count
 from collections import OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree

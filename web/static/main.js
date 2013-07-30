@@ -103,6 +103,12 @@ function ajaxFunction() {
 	xmlhttp.onreadystatechange=function() {
 		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
 		  div.innerHTML = xmlhttp.responseText;
+		  var id = div.innerHTML.match(/id=([^ ]+) /);
+		  // collapse togglable items from here so that non-JS browsers
+		  // may view the contents
+		  togglelink('n' + id[1]);
+		  togglelink('f' + id[1]);
+		  togglelink('i' + id[1]);
 		  window.scroll(0, document.height); // scroll to bottom of page
 	  }
 	};

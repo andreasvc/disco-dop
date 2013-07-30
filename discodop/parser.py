@@ -312,6 +312,7 @@ class Parser(object):
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
 
 	def postprocess(self, stage, parsetrees, derivs):
+		""" Take best scoring parse tree and apply  postprocessing. """
 		resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
 		parsetree = Tree.parse(resultstr, parse_leaf=int)
 		if stage.split:
@@ -328,6 +329,7 @@ class Parser(object):
 		return parsetree, prob, fragments, False
 
 	def noparse(self, stage, sent, tags):
+		""" Produce a dummy parse for evaluation purposes. """
 		parsetree = defaultparse([(n, t)
 				for n, t in enumerate(tags or (len(sent) * ['NONE']))])
 		parsetree = Tree.parse("(%s %s)" % (stage.grammar.start,
