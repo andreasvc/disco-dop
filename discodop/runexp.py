@@ -341,14 +341,12 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				# find recurring fragments in treebank,
 				# as well as depth-1 'cover' fragments
 				fragments = getfragments(traintrees, sents, numproc,
-						iterate=stage.iterate, complement=stage.complement,
-						indices=stage.estimator == "ewe")
-				xgrammar, backtransform = doubledop(fragments,
-						ewe=stage.estimator == "ewe")
+						iterate=stage.iterate, complement=stage.complement)
+				xgrammar, eweweights, backtransform = doubledop(fragments)
 			else:  # mpp or mpd
-				xgrammar = dopreduction(traintrees, sents,
-					ewe=(stage.estimator in ("ewe", "sl-dop",
-					"sl-dop-simple")), packedgraph=stage.packedgraph)
+				xgrammar, eweweights = dopreduction(traintrees, sents,
+						packedgraph=stage.packedgraph)
+				#ewe=(stage.estimator in ("ewe", "sl-dop", "sl-dop-simple"))
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
 			if lexmodel and simplelexsmooth:
 				xgrammar = simplesmoothlexicon(xgrammar, lexmodel)
@@ -356,8 +354,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)
 			grammar = Grammar(xgrammar, start=top)
-			if stage.objective in ('shortest', 'sl-dop', 'sl-dop-simple'):
-				grammar.register('shortest', *shortestderivmodel(grammar))
+			grammar.register('shortest', shortestderivmodel(grammar))
+			grammar.register(u'ewe', eweweights)
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals", len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
@@ -426,12 +424,18 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		# i.e., in that case probalities can be re-computed as relative
 		# frequencies. otherwise, resort to decimal floats (imprecise).
 		with gzip.open("%s/%s.rules.gz" % (
-				resultdir, stage.name), 'w') as rulesfile:
+				resultdir, stage.name), 'wb') as rulesfile:
 			with codecs.getwriter('utf-8')(gzip.open("%s/%s.lex.gz" % (
-					resultdir, stage.name), 'w')) as lexiconfile:
+					resultdir, stage.name), 'wb')) as lexiconfile:
 				# write output
 				write_lcfrs_grammar(xgrammar, rulesfile, lexiconfile,
 						bitpar=bitpar, freqs=bitpar and sumsto1)
+		if stage.dop:
+			# write prob models
+			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
+					**{name: mod for name, mod
+						in zip(grammar.modelnames, grammar.models)})
+		# if we're parsing with bitpar, write uncompressed grammar to tempfile
 		if stage.mode == 'pcfg-bitpar':
 			assert tbfanout == 1 or stage.split
 			stage.rulesfile = tempfile.NamedTemporaryFile()

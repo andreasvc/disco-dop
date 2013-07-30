@@ -475,9 +475,9 @@ def main():
 	for t, s in zip(cftrees, sents):
 		for (r, yf), w in induce_plcfrs([t], [s]):
 			assert len(yf) == 1
-	fine999x = dopreduction(trees, sents)
+	fine999x, _ = dopreduction(trees, sents)
 	fine999 = Grammar(fine999x)
-	fine1 = Grammar(dopreduction(dtrees, sents))
+	fine1 = Grammar(dopreduction(dtrees, sents)[0])
 	trees = list(corpus.parsed_sents().values())[train:train + test]
 	sents = list(corpus.tagged_sents().values())[train:train + test]
 	if subsetgrammar(normallcfrs, fine999x):

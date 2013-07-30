@@ -379,12 +379,12 @@ def workload(numtrees, mult, numproc):
 	return result
 
 
-def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
-		indices=False):  # TODO: add disc= option, optimize disc=False.
+def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	""" Get recurring fragments with exact counts in a single treebank.
 	Returns a dictionary whose keys are fragments as strings, and
 	frequencies / indices as values.
 	trees:  a sequence of binarized Tree objects. """
+	# TODO: add disc= option, optimize disc=False.
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)
@@ -393,7 +393,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False,
 	fragments = {}
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
-	PARAMS.update(disc=True, indices=indices, approx=False, complete=False,
+	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
 			quadratic=False, complement=complement)
 	if numproc == 1:
 		initworkersimple(trees, list(sents))

@@ -32,10 +32,11 @@ cdef class Grammar:
 	cdef Rule **unary, **lbinary, **rbinary, **bylhs
 	cdef ULong *chainvec
 	cdef UInt *mapping, **splitmapping
-	cdef UChar *fanout, currentmodel
-	cdef object models
+	cdef UChar *fanout
+	cdef readonly currentmodel
 	cdef readonly size_t nonterminals, numrules, numunary, numbinary, maxfanout
 	cdef readonly bint logprob, bitpar
+	cdef readonly object models
 	cdef readonly bytes origrules, start
 	cdef readonly unicode origlexicon
 	cdef readonly list tolabel, lexical, modelnames
@@ -261,33 +262,33 @@ cdef class MemoryPool:
 #                          INLINED FUNCTIONS
 # ---------------------------------------------------------------
 
-cdef inline long djb_hash(UChar *key, int size):
-	cdef unsigned long h = 5381UL
-	cdef int n
-	for n in range(size):
-		h *= 33UL ^ key[n]
-	return <long>h
-
-cdef inline long oat_hash(UChar *key, int size):
-	cdef unsigned long h = 0UL
-	cdef int n
-	for n in range(size):
-		h += key[n]
-		h += h << 10UL
-		h ^= h >> 6UL
-	h += h << 3UL
-	h ^= h >> 11UL
-	h += h << 15UL
-	return <long>h
-
-cdef inline long fnv_hash(UChar *key, int size):
-	""" FNV-1a hash; constants for 64 bit words. """
-	cdef unsigned long h = 14695981039346656037UL
-	cdef int n
-	for n in range(size):
-		h ^= key[n]
-		h *= 1099511628211UL
-	return h
+#cdef inline long djb_hash(UChar *key, int size):
+#	cdef unsigned long h = 5381UL
+#	cdef int n
+#	for n in range(size):
+#		h *= 33UL ^ key[n]
+#	return <long>h
+#
+#cdef inline long oat_hash(UChar *key, int size):
+#	cdef unsigned long h = 0UL
+#	cdef int n
+#	for n in range(size):
+#		h += key[n]
+#		h += h << 10UL
+#		h ^= h >> 6UL
+#	h += h << 3UL
+#	h ^= h >> 11UL
+#	h += h << 15UL
+#	return <long>h
+#
+#cdef inline long fnv_hash(UChar *key, int size):
+#	""" FNV-1a hash; constants for 64 bit words. """
+#	cdef unsigned long h = 14695981039346656037UL
+#	cdef int n
+#	for n in range(size):
+#		h ^= key[n]
+#		h *= 1099511628211UL
+#	return h
 
 cdef inline FatChartItem new_FatChartItem(UInt label):
 	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)

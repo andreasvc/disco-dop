@@ -148,13 +148,17 @@ def induce_plcfrs(trees, sents):
 		lhsfd[rule[0][0]] += freq
 	for rule, freq in grammar.items():
 		grammar[rule] = Fraction(freq, lhsfd[rule[0][0]])
-	return list(grammar.items())
+	# put lexical rules in the end and sort by word
+	return sorted(grammar.items(), key=lambda rule:
+			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
 
 
-def dopreduction(trees, sents, ewe=False, packedgraph=False):
+def dopreduction(trees, sents, packedgraph=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
-		ewe: apply the equal weights estimate.
+	Returns a set of rules with the relative frequency estimate as probilities,
+	and alternate weights following the equal weights estimate.
+	Parameters:
 		packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
 	"""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@12),
@@ -183,29 +187,26 @@ def dopreduction(trees, sents, ewe=False, packedgraph=False):
 	if packedgraph:
 		packedgraphs.clear()
 
-	# define probabilities
-	def rfe(rule):
-		""" relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996) """
+	def weights(rule):
+		""" Return rule with RFE and EWE probability. """
+		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996)
 		(r, yf), freq = rule
-		return (r, yf), Fraction((1 if any('@' in z for z in r) else freq) *
+		rfe = Fraction((1 if any('@' in z for z in r) else freq) *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
-
-	def bodewe(rule):
-		""" Bod (2003, figure 3) """
-		(r, yf), freq = rule
-		return (r, yf), Fraction((1 if '@' in r[0] else freq) *
+		# Bod (2003, figure 3)
+		ewe = Fraction((1 if '@' in r[0] else freq) *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1),
 			(fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
+		return ((r, yf), rfe), ewe
 
-	# sort lexical rules by word
+	# put lexical rules in the end and sort by word
 	rules = sorted(rules.items(), key=lambda rule:
 			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
-	if ewe:
-		return [bodewe(r) for r in rules]
-	return [rfe(r) for r in rules]
+	rules, ewe = zip(*(weights(r) for r in rules))
+	return rules, ewe
 
 
-def doubledop(fragments, debug=False, ewe=False):
+def doubledop(fragments, debug=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus all
 	individual productions needed to obtain full coverage.
@@ -215,27 +216,24 @@ def doubledop(fragments, debug=False, ewe=False):
 	unique identifiers so that each grammar rule can be mapped back to its
 	fragment. In fragments with terminals, we replace their POS tags with a tag
 	uniquely identifying that terminal and tag: tag@word.
-	When ewe is true, the equal weights estimate is applied. This requires that
-	the fragments are accompanied by indices instead of frequencies. """
-	def getprob(frag, terminals, ewe):
-		""" Apply EWE or return frequency. """
-		if ewe:
-			# Sangati & Zuidema (2011, eq. 5)
-			# FIXME: verify that this formula is equivalent to Bod (2003).
-			return sum(Fraction(v, fragmentcount[k])
-					for k, v in fragments[frag, terminals].items())
-		else:
-			return fragments[frag, terminals]
+	Returns a tuple (grammar, eweweights, backtransform)
+	eweweights are alternate weights following the equal weights estimate. """
+	def getweight(frag, terminals):
+		""" Return frequency and EWE. """
+		freq = len(fragments[frag, terminals])
+		# Sangati & Zuidema (2011, eq. 5)
+		# FIXME: verify that this formula is equivalent to Bod (2003).
+		ewe = sum(Fraction(v, fragmentcount[k])
+				for k, v in fragments[frag, terminals].items())
+		return freq, ewe
 	grammar = {}
 	backtransform = {}
-	ntfd = defaultdict(int)
 	ids = UniqueIDs()
-	if ewe:
-		# build an index to get the number of fragments extracted from a tree
-		fragmentcount = defaultdict(int)
-		for indices in fragments.values():
-			for index, cnt in indices.items():
-				fragmentcount[index] += cnt
+	# build index of the number of fragments extracted from a tree for ewe
+	fragmentcount = defaultdict(int)
+	for indices in fragments.values():
+		for index, cnt in indices.items():
+			fragmentcount[index] += cnt
 
 	# binarize, turn to lcfrs productions
 	# use artificial markers of binarization as disambiguation,
@@ -244,7 +242,7 @@ def doubledop(fragments, debug=False, ewe=False):
 		prods, newfrag = flatten(frag, terminals, ids)
 		prod = prods[0]
 		if prod[0][1] == 'Epsilon':  # lexical production
-			grammar[prod] = getprob(frag, terminals, ewe)
+			grammar[prod] = getweight(frag, terminals)
 			continue
 		elif prod in backtransform:
 			# normally, rules of fragments are disambiguated by binarization IDs
@@ -261,8 +259,8 @@ def doubledop(fragments, debug=False, ewe=False):
 			prods[:1] = [prod1, prod2]
 
 		# first binarized production gets prob. mass
-		grammar[prod] = getprob(frag, terminals, ewe)
-		grammar.update(zip(prods[1:], repeat(1)))
+		grammar[prod] = getweight(frag, terminals)
+		grammar.update(zip(prods[1:], repeat((1, 1))))
 		# & becomes key in backtransform
 		backtransform[prod] = newfrag
 	if debug:
@@ -274,13 +272,13 @@ def doubledop(fragments, debug=False, ewe=False):
 			print("fragment: %s\nprod:     %s" % (b[0], "\n\t".join(
 				printrule(r, yf, 0) for r, yf in a[0])))
 			print("template: %s\nfreq: %2d  sent: %s\n" % (
-					a[1], fragments[b], ' '.join('_' if x is None
+					a[1], len(fragments[b]), ' '.join('_' if x is None
 					else quotelabel(x) for x in b[1])))
 		print("backtransform:")
 		for a, b in backtransform.items():
 			print(a, b)
 
-	#sort grammar such that we have these clusters:
+	# order grammar such that we have these clusters:
 	# 1. non-binarized rules or initial rules of a binarized constituent
 	# 2: non-initial binarized rules.
 	# 3: lexical productions sorted by word
@@ -293,11 +291,16 @@ def doubledop(fragments, debug=False, ewe=False):
 	backtransform = {n: backtransform[r]
 		for n, (r, _) in enumerate(grammar) if r in backtransform}
 	# relative frequences as probabilities
-	for rule, freq in grammar:
+	ntfd = defaultdict(int)
+	ntfdewe = defaultdict(int)
+	for rule, (freq, ewe) in grammar:
 		ntfd[rule[0][0]] += freq
+		ntfdewe[rule[0][0]] += ewe  # FIXME: build a different ntfd for ewe?
+	eweweights = [(rule, Fraction(ewe, ntfdewe[rule[0][0]]))
+			for rule, (_, ewe) in grammar]
 	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
-			for rule, freq in grammar]
-	return grammar, backtransform
+			for rule, (freq, _) in grammar]
+	return grammar, eweweights, backtransform
 
 
 LCFRS = re.compile(b'(?:^|\n)([^ \t\n]+)\t')
@@ -311,12 +314,12 @@ def shortestderivmodel(grammar):
 	rules that introduce new fragments which receive a weight of 0.5. """
 	# any rule corresponding to the introduction of a
 	# fragment has a probability of 1/2, else 1.
-	ruleprobs = [1 if b'@' in lhs or b'{' in lhs else 0.5
+	probs = [1 if b'@' in lhs or b'{' in lhs else 0.5
 			for lhs in (BITPAR if grammar.bitpar else LCFRS).findall(
 				grammar.origrules)]
-	lexprobs = [1 if '@' in lhs or '{' in lhs else 0.5
-			for lhs in LEXICON.findall(grammar.origlexicon)]
-	return ruleprobs, lexprobs
+	probs.extend(1 if '@' in lhs or '{' in lhs else 0.5
+			for lhs in LEXICON.findall(grammar.origlexicon))
+	return probs
 
 
 def coarse_grammar(trees, sents, level=0):
@@ -837,13 +840,14 @@ def test():
 	print(lcfrs)
 
 	print('dop reduction')
-	grammar = Grammar(dopreduction(trees[:2], sents[:2]), start=trees[0].label)
+	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
+			start=trees[0].label)
 	print(grammar)
 	grammar.testgrammar()
 
 	fragments = getfragments(trees, sents, 1)
 	debug = '--debug' in sys.argv
-	grammarx, backtransform = doubledop(fragments, debug=debug)
+	grammarx, eweweights, backtransform = doubledop(fragments, debug=debug)
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
@@ -923,14 +927,14 @@ def main():
 	if model in ("pcfg", "plcfrs"):
 		grammar = induce_plcfrs(trees, sents)
 	elif model == "dopreduction":
-		estimator = opts.get('--dopestimator', 'dop1')
-		grammar = dopreduction(trees, sents, ewe=estimator == 'ewe',
+		grammar, eweweights = dopreduction(trees, sents,
 				packedgraph="--packed" in opts)
 	elif model == "doubledop":
-		assert opts.get('--dopestimator', 'dop1') == 'dop1'
 		numproc = int(opts.get('--numproc', 1))
 		fragments = getfragments(trees, sents, numproc)
-		grammar, backtransform = doubledop(fragments)
+		grammar, eweweights, backtransform = doubledop(fragments)
+	if opts.get('--dopestimator', 'dop1') == 'ewe':
+		grammar = [(rule, w) for (rule, _), w in zip(grammar, eweweights)]
 
 	print(grammarinfo(grammar))
 	if not freqs:

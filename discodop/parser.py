@@ -13,6 +13,7 @@ import string  # pylint: disable=W0402
 from math import exp
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
+import numpy as np
 from . import plcfrs, pcfg
 from .grammar import FORMAT, defaultparse, shortestderivmodel
 from .containers import Grammar
@@ -213,9 +214,14 @@ class Parser(object):
 			noparse = False
 			parsetrees = fragments = None
 			msg = "%s:\t" % stage.name.upper()
-			stage.grammar.switch(
-					u'shortest' if stage.dop and stage.objective == 'shortest'
-					else u'default', logprob=stage.mode != 'pcfg-posterior')
+			model = u'default'
+			if stage.dop:
+				if (stage.estimator == 'ewe'
+						or stage.objective.startswith('sl-dop')):
+					model = u'ewe'
+				if stage.objective == 'shortest':
+					model = u'shortest'
+			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
 			if not stage.prune or start:
 				if n != 0 and stage.prune:
 					if self.stages[n - 1].mode == 'pcfg-posterior':
@@ -338,9 +344,10 @@ class Parser(object):
 
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
-	""" Read the grammars from a previous experiment. Must have same parameters.
+	""" Read the grammars from a previous experiment.
 	Expects a directory 'resultdir' which contains the relevant grammars and
 	the parameter file 'params.prm', as produced by runexp. """
+	# TODO: read / produce ewe weights.
 	for n, stage in enumerate(stages):
 		logging.info("reading: %s", stage.name)
 		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name))
@@ -351,7 +358,6 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		backtransform = None
 		if stage.dop:
 			assert stage.useestimates is None, "not supported"
-			grammar.register('shortest', *shortestderivmodel(grammar))
 			if stage.usedoubledop:
 				backtransform = dict(enumerate(
 						gzip.open("%s/%s.backtransform.gz" % (resultdir,
@@ -374,6 +380,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
+			probmodels = np.load("%s/%s.probs.npz" % (resultdir, stage.name))
+			for name in probmodels.files:
+				grammar.register(name, probmodels[name])
 		else:  # not stage.dop
 			if n and stage.prune:
 				_ = grammar.getmapping(stages[n - 1].grammar,
