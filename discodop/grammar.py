@@ -201,10 +201,8 @@ def dopreduction(trees, sents, ewe=False, packedgraph=False):
 	rules = sorted(rules.items(), key=lambda rule:
 			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
 	if ewe:
-		probmodel = [bodewe(r) for r in rules.items()]
-	else:
-		probmodel = [rfe(r) for r in rules.items()]
-	return list(probmodel)
+		return [bodewe(r) for r in rules]
+	return [rfe(r) for r in rules]
 
 
 def doubledop(fragments, debug=False, ewe=False):
