@@ -1,6 +1,7 @@
 """ Evaluation of (discontinuous) parse trees, following EVALB as much as
 possible, as well as some alternative evaluation metrics.  """
 from __future__ import division, print_function
+import io
 import sys
 from getopt import gnu_getopt, GetoptError
 from itertools import count
@@ -48,8 +49,8 @@ and options may consist of:
                  'between': insert morphological node between POS tag and word.
 Example: %s sample2.export parses.export TEST.prm --goldenc iso-8859-1
 
-The parameter file supports the following additional options
-(in addition to those described in README of EVALB):
+The parameter file should be encoded in UTF-8 and supports the following
+options (in addition to those described in README of EVALB):
 
 DISC_ONLY        only consider discontinuous constituents for F-scores.
 TED              when enabled, give tree-edit distance scores; disabled by
@@ -107,11 +108,11 @@ def main():
 	gold = goldreader(*splitpath(goldfile),
 			encoding=opts.get('--goldenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
-            morphology=opts.get('--morphology'))
+			morphology=opts.get('--morphology'))
 	parses = parsesreader(*splitpath(parsesfile),
 			encoding=opts.get('--parsesenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
-            morphology=opts.get('--morphology'))
+			morphology=opts.get('--morphology'))
 	print(doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),
@@ -266,6 +267,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 						' '.join(goldpaths[leaf][::-1]).rjust(20),
 						' '.join(candpaths[leaf][::-1])))
 			print("%6.3g  average = leaf-ancestor score" % lascores[-1])
+			print('POS: ', ' '.join('%s/%s' % (a[1], b[1])
+					for a, b in zip(cpos, gpos)))
 			if param["TED"]:
 				print("Tree-dist: %g / %g = %g" % (
 					ted, denom, 1 - ted / denom))
@@ -279,6 +282,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 					print("%15s -> %15s           %15s -> %15s" % (
 						gold_sents[n][a - 1][0], gold_sents[n][b - 1][0],
 						cand_sents[n][c - 1][0], cand_sents[n][d - 1][0]))
+			print()
 	breakdowns(param, goldb40, candb40, goldpos40, candpos40, goldbcat40,
 			candbcat40, maxlenseen)
 	msg = summary(param, goldb, candb, goldpos, candpos, sentcount,
@@ -460,7 +464,7 @@ def readparam(filename):
 				'EQ_LABEL': set(), 'EQ_WORD': set(),
 				'DISC_ONLY': 0, 'TED': 0, 'DEP': 0}
 	seen = set()
-	for a in open(filename) if filename else ():
+	for a in io.open(filename, encoding='utf8') if filename else ():
 		line = a.strip()
 		if line and not line.startswith("#"):
 			key, val = line.split(None, 1)
@@ -540,7 +544,7 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 					bnodes = b[:]
 					b[:] = []
 					a[n:n + 1] = bnodes
-			elif gpos[b[0]] in dellabel or sent[b[0]] in delword:
+			elif gpos[b[0]][1] in dellabel or sent[b[0]] in delword:
 				# remove pre-terminal entirely, but only look at gold tree,
 				# to ensure the sentence lengths stay the same
 				leaves.remove(b[0])

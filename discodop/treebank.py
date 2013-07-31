@@ -467,21 +467,21 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 		for i, word in enumerate(sent):
 			idx = wordids[i]
 			a = tree[idx[:-1]]
+			morphtag = a.source[MORPH] if hasattr(a, 'source') else None
+			if not morphtag or morphthag == '--':
+				morphtag = a.label if morph == 'replace' else '--'
 			result.append("\t".join((word,
 					a.label.replace('$[', '$('),
-					a.source[MORPH] if hasattr(a, "source") else "--",
-					a.source[FUNC] if hasattr(a, "source") else "--",
+					morphtag,
+					(a.source[FUNC] or '--') if hasattr(a, 'source') else '--',
 					str(500 + phrasalnodes.index(idx[:-2])
 						if len(idx) > 2 else 0))))
 		for idx in phrasalnodes:
 			a = tree[idx]
-			morphtag = a.source[MORPH] if hasattr(a, "source") else None
-			if not morphtag:
-				morphtag = a.label if morph == 'replace' else '--'
 			result.append("\t".join(("#%d" % (500 + phrasalnodes.index(idx)),
-					a.label, (a.source[MORPH] if hasattr(a, 'source')
-						else (a.label if morph == 'replace' else '--')),
-					(a.source[FUNC] or "--") if hasattr(a, "source") else "--",
+					a.label,
+					(a.source[MORPH] or '--') if hasattr(a, 'source') else '--',
+					(a.source[FUNC] or '--') if hasattr(a, 'source') else '--',
 					str(500 + phrasalnodes.index(idx[:-1])
 						if len(idx) > 1 else 0))))
 		if n is not None:
