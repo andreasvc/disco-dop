@@ -31,7 +31,7 @@ from .treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers, addbitsets, fanout
 from .fragments import getfragments
 from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
-		write_lcfrs_grammar, shortestderivmodel
+		write_lcfrs_grammar
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from .parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
@@ -66,11 +66,11 @@ def startexp(
 		skiptrain=True,  # test set starts after training set
 		# (useful when they are in the same file)
 		skip=0,  # number of sentences to skip from test corpus
-		# postagging: pass None to use tags from treebank.
 		punct=None,  # choices: None, 'move', 'remove', 'root'
 		functions=None,  # choices None, 'add', 'remove', 'replace'
 		morphology=None,  # choices: None, 'add', 'replace', 'between'
 		transformations=None,  # apply treebank transformations
+		# postagging: pass None to use tags from treebank.
 		postagging=dict(
 			method="unknownword",
 			# choices: unknownword (assign during parsing),
@@ -342,19 +342,31 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				# as well as depth-1 'cover' fragments
 				fragments = getfragments(traintrees, sents, numproc,
 						iterate=stage.iterate, complement=stage.complement)
-				xgrammar, eweweights, backtransform = doubledop(fragments)
+				xgrammar, backtransform, eweweights, shortest = doubledop(
+						fragments)
 			else:  # mpp or mpd
-				xgrammar, eweweights = dopreduction(traintrees, sents,
+				xgrammar, eweweights, shortest = dopreduction(traintrees, sents,
 						packedgraph=stage.packedgraph)
-				#ewe=(stage.estimator in ("ewe", "sl-dop", "sl-dop-simple"))
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
 			if lexmodel and simplelexsmooth:
-				xgrammar = simplesmoothlexicon(xgrammar, lexmodel)
+				newrules = simplesmoothlexicon(xgrammar, lexmodel)
+				xgrammar.extend(newrules)
+				eweweights.extend(w for _, w in newrules)
+				shortest.extend(w for _, w in newrules)
+				def wordslast(m):
+					(r, yf), _ = xgrammar[m]
+					return r[1] == 'Epsilon' and yf[0]
+
+				idx = sorted(range(len(xgrammar)), key=wordslast)
+				eweweights = [eweweights[m] for m in idx]
+				shortest = [shortest[m] for m in idx]
+				xgrammar = [xgrammar[m] for m in idx]
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)
-			grammar = Grammar(xgrammar, start=top)
-			grammar.register('shortest', shortestderivmodel(grammar))
+			grammar = Grammar(xgrammar, start=top,
+					bitpar=stage.mode.startswith('pcfg'))
+			grammar.register(u'shortest', shortest)
 			grammar.register(u'ewe', eweweights)
 			logging.info("DOP model based on %d sentences, %d nodes, "
 				"%d nonterminals", len(traintrees), nodes, len(grammar.toid))
@@ -404,10 +416,14 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				logging.info(grammarinfo(xgrammar,
 						dump="%s/pcdist.txt" % resultdir))
 			if lexmodel and simplelexsmooth:
-				xgrammar = simplesmoothlexicon(xgrammar, lexmodel)
+				newrules = simplesmoothlexicon(xgrammar, lexmodel)
+				xgrammar.extend(newrules)
+				xgrammar.sort(key=lambda rule: rule[0][0][1] == 'Epsilon'
+						and rule[0][1][0])
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
-			grammar = Grammar(xgrammar, start=top)
+			grammar = Grammar(xgrammar, start=top,
+					bitpar=stage.mode.startswith('pcfg'))
 			sumsto1 = grammar.testgrammar()
 			if n and stage.prune:
 				msg = grammar.getmapping(stages[n - 1].grammar,
@@ -435,16 +451,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
 					**{name: mod for name, mod
 						in zip(grammar.modelnames, grammar.models)})
-		# if we're parsing with bitpar, write uncompressed grammar to tempfile
 		if stage.mode == 'pcfg-bitpar':
 			assert tbfanout == 1 or stage.split
-			stage.rulesfile = tempfile.NamedTemporaryFile()
-			stage.lexiconfile = tempfile.NamedTemporaryFile()
-			lexicon = codecs.getwriter('utf-8')(stage.lexiconfile)
-			write_lcfrs_grammar(xgrammar, stage.rulesfile, lexicon,
-					bitpar=bitpar, freqs=bitpar and sumsto1, escapeparens=True)
-			stage.rulesfile.flush()
-			lexicon.flush()
 		logging.info("wrote grammar to %s/%s.{rules,lex%s}.gz", resultdir,
 				stage.name, ",backtransform" if stage.usedoubledop else '')
 
@@ -628,8 +636,10 @@ def writeresults(results, params):
 		out.writelines("%s\t%d\t%s\n" % (n, len(params.testset[n][2]),
 				"\t".join(str(res.elapsedtime[n]) for res in results))
 				for n in params.testset)
-	logging.info("wrote results to %s/%s{%s}.%s", params.resultdir, category,
-			",".join(res.name for res in results), ext[corpusfmt])
+	logging.info("wrote results to %s/%s%s.%s", params.resultdir, category,
+			(('{%s}' % ",".join(res.name for res in results))
+			if len(results) > 1 else results[0].name),
+			ext[corpusfmt])
 
 
 def oldeval(results, goldbrackets):

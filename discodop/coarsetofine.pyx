@@ -475,7 +475,7 @@ def main():
 	for t, s in zip(cftrees, sents):
 		for (r, yf), w in induce_plcfrs([t], [s]):
 			assert len(yf) == 1
-	fine999x, _ = dopreduction(trees, sents)
+	fine999x = dopreduction(trees, sents)[0]
 	fine999 = Grammar(fine999x)
 	fine1 = Grammar(dopreduction(dtrees, sents)[0])
 	trees = list(corpus.parsed_sents().values())[train:train + test]

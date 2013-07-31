@@ -10,12 +10,11 @@ import codecs
 import logging
 import tempfile
 import string  # pylint: disable=W0402
-from math import exp
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 import numpy as np
 from . import plcfrs, pcfg
-from .grammar import FORMAT, defaultparse, shortestderivmodel
+from .grammar import FORMAT, defaultparse
 from .containers import Grammar
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
@@ -154,7 +153,7 @@ def doparsing(parser, infile, out, printprob):
 		if result.noparse:
 			unparsed += 1
 		if printprob:
-			out.writelines("vitprob=%.16g\n%s\n" % (exp(-prob), tree)
+			out.writelines("prob=%.16g\n%s\n" % (prob, tree)
 					for tree, prob in sorted(result.parsetrees.items(),
 						key=itemgetter(1)))
 		else:
@@ -195,6 +194,11 @@ class Parser(object):
 		self.tailmarker = tailmarker
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
+		for stage in self.stages:
+			if stage.mode == 'pcfg-bitpar': # uncompressed grammar in temp file
+				stage.rulesfile = tempfile.NamedTemporaryFile()
+				stage.lexiconfile = tempfile.NamedTemporaryFile()
+				exportbitpargrammar(stage)
 
 	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
@@ -221,7 +225,10 @@ class Parser(object):
 					model = u'ewe'
 				if stage.objective == 'shortest':
 					model = u'shortest'
+			x = stage.grammar.currentmodel
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
+			if stage.mode == 'pcfg-bitpar' and x != stage.grammar.currentmodel:
+				exportbitpargrammar(stage)
 			if not stage.prune or start:
 				if n != 0 and stage.prune:
 					if self.stages[n - 1].mode == 'pcfg-posterior':
@@ -382,7 +389,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					markorigin=stages[n - 1].markorigin)
 			probmodels = np.load("%s/%s.probs.npz" % (resultdir, stage.name))
 			for name in probmodels.files:
-				grammar.register(name, probmodels[name])
+				if name != 'default':
+					grammar.register(unicode(name), probmodels[name])
 		else:  # not stage.dop
 			if n and stage.prune:
 				_ = grammar.getmapping(stages[n - 1].grammar,
@@ -392,15 +400,6 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					markorigin=stages[n - 1].markorigin)
 		if stage.mode == 'pcfg-bitpar':
 			assert grammar.maxfanout == 1
-			stage.rulesfile = tempfile.NamedTemporaryFile()
-			stage.rulesfile.write(grammar.origrules)
-			stage.rulesfile.flush()
-			stage.lexiconfile = tempfile.NamedTemporaryFile()
-			lexicon = grammar.origlexicon.replace(  # pylint: disable=E1101
-					'(', '-LRB-').replace(')', '-RRB-')
-			lexiconfile = codecs.getwriter('utf-8')(stage.lexiconfile)
-			lexiconfile.write(lexicon)
-			lexiconfile.flush()
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging['method'] == 'unknownword':
@@ -409,6 +408,30 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				if not w.startswith("UNK")}
 		postagging['sigs'] = {w for w in stages[0].grammar.lexicalbyword
 				if w.startswith("UNK")}
+
+
+def exportbitpargrammar(stage):
+	""" (re-)export bitpar grammar with current weights. """
+	stage.rulesfile.seek(0)
+	stage.rulesfile.truncate()
+	stage.rulesfile.writelines(
+			'%g\t%s\n' % (weight, line.split(None, 1)[1])
+			for weight, line in
+			zip(stage.grammar.models[stage.grammar.currentmodel],
+				stage.grammar.origrules.splitlines()))
+	stage.rulesfile.flush()
+	stage.lexiconfile.seek(0)
+	stage.lexiconfile.truncate()
+	lexicon = stage.grammar.origlexicon.replace(
+			'(', '-LRB-').replace(')', '-RRB-')
+	lexiconfile = codecs.getwriter('utf-8')(stage.lexiconfile)
+	weights = iter(stage.grammar.models[stage.grammar.currentmodel,
+			stage.grammar.numrules:])
+	lexiconfile.writelines('%s\t%s\n' % (line.split(None, 1)[0],
+			'\t'.join('%s %g' % (tag, next(weights))
+				for tag in line.split()[1::2]))
+			for line in lexicon.splitlines())
+	stage.lexiconfile.flush()
 
 
 class DictObj(object):

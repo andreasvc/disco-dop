@@ -58,8 +58,7 @@ cdef class Grammar:
 			internally.
 		- start: a string identifying the unique start symbol of this grammar,
 			which will be used by default when parsing with this grammar
-		- bitpar: whether the rules are given in bitpar text format
-			(default PLCFRS format; not applicable with tuples).
+		- bitpar: whether to expect and use the bitpar grammar format
 		By default the grammar is in logprob mode;
 		invoke grammar.switch('default', logprob=False) to switch.
 		If the grammar only contains integral weights (frequencies), they will
@@ -86,12 +85,12 @@ cdef class Grammar:
 			# this is somewhat roundabout but avoids code duplication
 			from grammar import write_lcfrs_grammar
 			with BytesIO() as ruletmp, StringIO() as lexicontmp:
-				write_lcfrs_grammar(rule_tuples_or_bytes, ruletmp, lexicontmp)
+				write_lcfrs_grammar(rule_tuples_or_bytes, ruletmp, lexicontmp,
+						bitpar=bitpar)
 				ruletmp.seek(0)
 				lexicontmp.seek(0)
 				self.origrules = ruletmp.read()
 				self.origlexicon = lexicontmp.read()
-			self.bitpar = False
 		else:
 			raise ValueError("expected sequence of tuples or bytes string.")
 
@@ -360,23 +359,21 @@ cdef class Grammar:
 		# sentinel rule
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
-	def register(self, name, probs):
+	def register(self, unicode name, weights):
 		""" Register a probabilistic model given a name, and sequences of
-		probabilities 'probs', where probs are in the same order as that of
+		weights 'weights', where weights are in the same order as that of
 		self.origrules and self.origlexicon (which is an arbitrary order
 		except that words appear sorted). """
 		cdef int n, m = len(self.modelnames)
-		cdef double [:] tmp
-		name = unicode(name)
-		assert name not in self.modelnames
+		assert name not in self.modelnames, 'model %r already exists' % name
 		assert len(self.modelnames) <= 255, (
 				'256 probabilistic models should be enough for anyone.')
-		assert len(probs) == self.numrules + len(self.lexical)
+		assert len(weights) == self.numrules + len(self.lexical), (
+				'length mismatch: %d grammar rules, %d weights given.' % (
+					self.numrules + len(self.lexical), len(weights)))
 		self.models.resize(m + 1, self.numrules + len(self.lexical))
 		self.modelnames.append(name)
-		tmp = self.models[m]
-		for n, w in enumerate(probs):
-			tmp[n] = w
+		self.models[m, :] = weights
 
 	def switch(self, name, bint logprob=True):
 		""" Switch to a different probabilistic model;

@@ -5,11 +5,11 @@ import re
 import sys
 import codecs
 import logging
-from operator import mul, itemgetter
 from math import exp
+from operator import mul, itemgetter
 from fractions import Fraction
 from collections import defaultdict, Counter as multiset
-from itertools import count, islice, repeat
+from itertools import count, islice, repeat, chain
 from .tree import ImmutableTree, Tree
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
@@ -50,7 +50,7 @@ output is the base for the filenames to write the grammar to.
 options may consist of (* marks default option):
     --inputfmt [*export|discbracket|bracket]
     --inputenc [*UTF-8|ISO-8859-1|...]
-    --dopestimator [dop1|ewe|...]
+    --dopestimator [dop1|ewe|shortest|...]
     --freqs               produce frequencies instead of probabilities
     --numproc [1|2|...]   only relevant for double dop fragment extraction
     --gzip                compress output with gzip, view with zless &c.
@@ -194,16 +194,19 @@ def dopreduction(trees, sents, packedgraph=False):
 		rfe = Fraction((1 if any('@' in z for z in r) else freq) *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
 		# Bod (2003, figure 3)
-		ewe = Fraction((1 if '@' in r[0] else freq) *
-			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1),
-			(fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
-		return ((r, yf), rfe), ewe
+		ewe = (float((1 if '@' in r[0] else freq) *
+			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1))
+			/ (fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
+		# any rule corresponding to the introduction of a
+		# fragment has a probability of 1/2, else 1.
+		shortest = 1. if '@' in r[0] else 0.5
+		return ((r, yf), rfe), ewe, shortest
 
 	# put lexical rules in the end and sort by word
 	rules = sorted(rules.items(), key=lambda rule:
 			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
-	rules, ewe = zip(*(weights(r) for r in rules))
-	return rules, ewe
+	rules, ewe, shortest= zip(*(weights(r) for r in rules))
+	return list(rules), list(ewe), list(shortest)
 
 
 def doubledop(fragments, debug=False):
@@ -296,30 +299,13 @@ def doubledop(fragments, debug=False):
 	for rule, (freq, ewe) in grammar:
 		ntfd[rule[0][0]] += freq
 		ntfdewe[rule[0][0]] += ewe  # FIXME: build a different ntfd for ewe?
-	eweweights = [(rule, Fraction(ewe, ntfdewe[rule[0][0]]))
-			for rule, (_, ewe) in grammar]
+	eweweights = [float(ewe) / ntfdewe[rule[0][0]]
+			for _, (_, ewe) in grammar]
+	shortest = [1. if '@' in r[0] or '}' in r[0] else 0.5
+			for (r, _), _ in grammar]
 	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
 			for rule, (freq, _) in grammar]
-	return grammar, eweweights, backtransform
-
-
-LCFRS = re.compile(b'(?:^|\n)([^ \t\n]+)\t')
-BITPAR = re.compile(b'[0-9]+(?:\\.[0-9]+)?[ \t]([^ \t\n]])+\t')
-LEXICON = re.compile('[ \t]([^ \t\n]+)[ \t][0-9]+(?:[./][0-9]+)?\\b')
-
-
-def shortestderivmodel(grammar):
-	""" Given a probabilistic DOP grammar in the form of a Grammar object,
-	return a non-probabilistic model where all weights are 1, except for
-	rules that introduce new fragments which receive a weight of 0.5. """
-	# any rule corresponding to the introduction of a
-	# fragment has a probability of 1/2, else 1.
-	probs = [1 if b'@' in lhs or b'{' in lhs else 0.5
-			for lhs in (BITPAR if grammar.bitpar else LCFRS).findall(
-				grammar.origrules)]
-	probs.extend(1 if '@' in lhs or '{' in lhs else 0.5
-			for lhs in LEXICON.findall(grammar.origlexicon))
-	return probs
+	return grammar, backtransform, eweweights, shortest
 
 
 def coarse_grammar(trees, sents, level=0):
@@ -722,8 +708,7 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	io.open(out, 'w', encoding=encoding).writelines(grammar)
 
 
-def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
-		escapeparens=False):
+def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 	""" Writes a grammar to a simple text file format. Rules are written in
 	the order as they appear in the sequence 'grammar', except that the lexicon
 	file lists words in sorted order (with tags for each word in the order of
@@ -749,8 +734,6 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False,
 					"\t".join(x for x in r), yfstr,
 					w.numerator if freqs else w)).encode('ascii'))
 	for word in sorted(lexical):
-		if escapeparens:
-			word = word.replace('(', '-LRB-').replace(')', '-RRB-')
 		lexicon.write(word)
 		for tag, w in lexical[word]:
 			if freqs:
@@ -847,7 +830,7 @@ def test():
 
 	fragments = getfragments(trees, sents, 1)
 	debug = '--debug' in sys.argv
-	grammarx, eweweights, backtransform = doubledop(fragments, debug=debug)
+	grammarx, backtransform, _, _ = doubledop(fragments, debug=debug)
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
@@ -912,6 +895,8 @@ def main():
 	opts = dict(opts)
 	assert model in ("pcfg", "plcfrs", "dopreduction", "doubledop"), (
 		"unrecognized model: %r" % model)
+	assert opts.get('dopestimator', 'dop1') in ('dop1', 'ewe', 'shortest'), (
+		"unrecognized estimator: %r" % opts['dopestimator'])
 	freqs = opts.get('--freqs', False)
 
 	# read treebank
@@ -927,14 +912,16 @@ def main():
 	if model in ("pcfg", "plcfrs"):
 		grammar = induce_plcfrs(trees, sents)
 	elif model == "dopreduction":
-		grammar, eweweights = dopreduction(trees, sents,
+		grammar, eweweights, shortest = dopreduction(trees, sents,
 				packedgraph="--packed" in opts)
 	elif model == "doubledop":
 		numproc = int(opts.get('--numproc', 1))
 		fragments = getfragments(trees, sents, numproc)
-		grammar, eweweights, backtransform = doubledop(fragments)
+		grammar, backtransform, eweweights, shortest = doubledop(fragments)
 	if opts.get('--dopestimator', 'dop1') == 'ewe':
 		grammar = [(rule, w) for (rule, _), w in zip(grammar, eweweights)]
+	elif opts.get('--dopestimator', 'dop1') == 'shortest':
+		grammar = [(rule, w) for (rule, _), w in zip(grammar, shortest)]
 
 	print(grammarinfo(grammar))
 	if not freqs:

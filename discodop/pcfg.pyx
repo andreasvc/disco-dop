@@ -994,7 +994,8 @@ def getgrammarmapping(Grammar coarse, Grammar fine):
 
 
 UNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
-BITPARPARSES = re.compile(r'vitprob=(.*)\n(\(.*\))\n')
+BITPARPARSES = re.compile(r'(?:^|\n)vitprob=(.*)\n(\(.*\))\n')
+BITPARPARSESLOG = re.compile(r'(?:^|\n)logvitprob=(.*)\n(\(.*\))\n')
 
 
 def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
@@ -1007,12 +1008,12 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 		_, lexiconfile = tempfile.mkstemp()
 		with open(lexiconfile, 'w') as f:
 			f.writelines(['%s\t%s 1\n' % (t, t) for t in set(tags)])
+	tokens = [word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
+			for word in (tags or sent)]
 	proc = Popen(['bitpar', '-q', '-vp', '-b', str(n), '-s', startlabel,
 			rulesfile, lexiconfile],
 			shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-	results, msg = proc.communicate('\n'.join([
-			word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
-			for word in (tags or sent)]) + '\n')
+	results, msg = proc.communicate('\n'.join(tokens) + '\n')
 	# decode results or not?
 	if tags:
 		unlink(lexiconfile)
@@ -1020,8 +1021,12 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 		return {}, None, '%s\n%s' % (results, msg)
 	start = new_CFGChartItem(1, 0, len(sent))
 	lines = UNESCAPE.sub(r'\1', results).replace(')(', ') (')
-	return {renumber(deriv): -pylog(float(prob))
-			for prob, deriv in BITPARPARSES.findall(lines)}, start, msg
+	derivs = {renumber(deriv): -float(prob)
+			for prob, deriv in BITPARPARSESLOG.findall(lines)}, start, msg
+	if not derivs:
+		derivs = {renumber(deriv): -pylog(float(prob))
+				for prob, deriv in BITPARPARSES.findall(lines)}, start, msg
+	return derivs
 
 
 def renumber(deriv):

@@ -127,6 +127,7 @@ def loadparsers():
 					relationalrealizational=params.get(
 						'relationalrealizational'))
 			APP.logger.info('Grammar for %s loaded.' % lang)
+	assert PARSERS, 'no grammars found!'
 
 
 def cached(timeout=3600):

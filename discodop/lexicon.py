@@ -1,6 +1,27 @@
 # -*- coding: UTF-8 -*-
 """ Functions related to dealing with unknown words
-and smoothing of lexical probabilities. """
+and smoothing of lexical probabilities.
+
+Rare words in the training set are replaced with word signatures, such that
+unknown words can receive similar tags. Given a function to produce such
+signatures from words, the flow is as follows:
+
+Simple lexical smoothing:
+	getunknownwordmodel (get statistics)
+	replaceraretrainwords (adjust trees)
+	[ read off grammar ]
+	simplesmoothlexicon (add extra lexical productions)
+
+Non-simple (untested):
+	getunknownwordmodel
+	getlexmodel
+	replaceraretrainwords
+	[ read off grammar ]
+	smoothlexicon
+
+During parsing:
+	replaceraretestwords (only give known words and signatures to parser)
+"""
 from __future__ import division, print_function, unicode_literals
 import re
 from collections import defaultdict, Counter as multiset
@@ -95,24 +116,22 @@ def simplesmoothlexicon(grammar, lexmodel,
 	normalize: re-scale probabilities so that they sum to 1 again. """
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
+	newrules = []
 	# rare words as signature AND as word:
 	for word, tag in wordtags:
 		if word not in lexicon:  # and word in openclasswords:
 			# needs to be normalized later
-			grammar.append((((tag, 'Epsilon'), (word, )),
+			newrules.append((((tag, 'Epsilon'), (word, )),
 					Fraction(wordtags[word, tag], tags[tag])))
-			#print(>> sys.stderr, grammar[-1])
-	# open class tag-word pairs / unknown signatures
-	for tag in openclasstags:
+			#print(>> sys.stderr, newrules[-1])
+	for tag in openclasstags:  # open class tag-word pairs
 		epsilon1 = epsilon / tags[tag]
-		for word in {'UNK'} | openclasswords - wordsfortag[tag]:
-			grammar.append((((tag, 'Epsilon'), (word, )), epsilon1))
-	if normalize:  # normalize weights
-		mass = multiset()
-		for (r, _), w in grammar:
-			mass[r[0]] += w
-		return [(r, w / mass[r[0][0]]) for r, w in grammar]
-	return grammar
+		for word in openclasswords - wordsfortag[tag] - {'UNK'}:
+			newrules.append((((tag, 'Epsilon'), (word, )), epsilon1))
+	for tag in tags:  # catch all unknown signature
+		epsilon1 = epsilon / tags[tag]
+		newrules.append((((tag, 'Epsilon'), ('UNK', )), epsilon1))
+	return newrules
 
 
 def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,

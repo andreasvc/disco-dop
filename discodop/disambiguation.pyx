@@ -26,7 +26,6 @@ from libc.string cimport memset
 cdef extern from "macros.h":
 	void SETBIT(ULong a[], int b)
 
-INFINITY = float('infinity')
 REMOVEIDS = re.compile('@[-0-9]+')
 BREMOVEIDS = re.compile(b'@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
@@ -41,6 +40,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 	cdef bint mpd = method == "mpd"
 	cdef bint shortest = method == "shortest"
 	cdef Entry entry
+	cdef LexicalRule lexrule
 	cdef dict parsetrees = {}, derivs = {}
 	cdef list derivations = [], entries = []
 	cdef str treestr, deriv
@@ -56,7 +56,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					(<CFGChartItem>start).end][start.label]
 		else:
 			entries = D[start]
-	elif kbest and bitpar:
+	elif bitpar:
 		derivations = sorted(chart.items(), key=itemgetter(1))
 		entries = [None] * len(derivations)
 		D = {}
@@ -91,7 +91,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			derivations = [(deriv, prob) for deriv, prob in derivations
 					if prob == maxprob]
 
-	if backtransform is not None and not bitpar:
+	if backtransform is not None and not bitpar:  # Double-DOP
 		for entry in entries:
 			prob = entry.value
 			treestr = recoverfragments(entry.key, D,
@@ -118,7 +118,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					derivs[treestr] = []
 					extractfragments(entry.key, D, grammar,
 							backtransform, derivs[treestr])
-	else:  # DOP reduction
+	else:  # DOP reduction / bitpar
 		for (deriv, prob), entry in zip(derivations, entries):
 			if backtransform is None:
 				treestr = REMOVEIDS.sub('', deriv)
@@ -132,7 +132,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					# used, read off the rules from the derivation ...
 					tree = canonicalize(Tree.parse(deriv, parse_leaf=int))
 					grammar.switch(u'default', True)
-					newprob = 1.0
+					newprob = 0.0
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
 							if len(t) == 1:
@@ -140,16 +140,19 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 							elif len(t) == 2:
 								r = (t.label, t[0].label, t[1].label)
 							m = grammar.rulenos[r]
-							newprob *= grammar.bylhs[0][m].prob
+							newprob += grammar.bylhs[0][m].prob
 						else:
-							m = grammar.toid[tree.label]
-							word = sent[tree[0]]
-							newprob *= grammar.lexicalbylhs[m][word]
+							m = grammar.toid[t.label]
+							try:  # FIXME: bitpar smooths tags w/weight < 0.1!
+								lexrule = grammar.lexicalbylhs[m][sent[t[0]]]
+							except KeyError:
+								newprob += 30.0
+							else:
+								newprob += lexrule.prob
 				else:
 					grammar.switch(u'default', True)
-					newprob = exp(-getderivprob(entry.key, D,
-						sent, grammar))
-				score = (prob / log(0.5), newprob)
+					newprob = getderivprob(entry.key, D, sent, grammar)
+				score = (prob / log(0.5), exp(-newprob))
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
 			elif not mpd and treestr in parsetrees:
@@ -195,9 +198,8 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 			derivsfortree[recoverfragments((<Entry>entry).key, D,
 					grammar, backtransform)].add(deriv)
 	# sum over probs of derivations to get probs of parse trees
-	parsetreeprob = {}
-	for tree, ds in derivsfortree.items():
-		parsetreeprob[tree] = sum([exp(-derivations[d]) for d in ds])
+	parsetreeprob = {tree: sum([exp(-derivations[d]) for d in ds])
+			for tree, ds in derivsfortree.items()}
 
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
@@ -257,16 +259,15 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 			derivsfortree[tree].add(deriv)
 
 	# sum over derivations to get parse trees
-	parsetreeprob = {}
-	for tree, ds in derivsfortree.items():
-		parsetreeprob[tree] = sum([exp(-derivations[d]) for d in ds])
+	parsetreeprob = {tree: sum([exp(-derivations[d]) for d in ds])
+			for tree, ds in derivsfortree.items()}
 	selectedtrees = nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get)
 
 	# the number of fragments used is the number of
 	# nodes (open parens), minus the number of interior
 	# (addressed) nodes.
-	result = {tree: (-min([deriv.count("(") - (
-			deriv.count("@") + deriv.count("(#"))
+	result = {tree: (-min([
+		deriv.count("(") - (deriv.count("@") + deriv.count("(#"))
 		for deriv in derivsfortree[tree]]), parsetreeprob[tree])
 				for tree in selectedtrees}
 
@@ -382,12 +383,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 	chart, start, _ = plcfrs.parse(sent, grammar, tags=tags,
 			whitelist=whitelist)
 	if not start:
-		print(sent)
-		for a in trees:
-			print(a)
-		plcfrs.pprint_chart(chart, sent, grammar.tolabel)
-		#return [], {}, "tree parsing failed"  # error?
-	assert start, "tree parsing failed"  # error!
+		return [], {}, "tree parsing failed", None  # FIXME: error?
 	return lazykbest(chart, start, m, grammar.tolabel) + (start, )
 
 
@@ -632,7 +628,7 @@ cdef extractfragments(RankedEdge deriv, dict D,
 
 
 def main():
-	from grammar import dopreduction, shortestderivmodel
+	from grammar import dopreduction
 	from containers import Grammar
 	import plcfrs
 
@@ -668,8 +664,9 @@ def main():
 		"""d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
 		a d e""".splitlines()]
-	grammar = Grammar(dopreduction(trees, sents)[0])
-	grammar.register(u'shortest', shortestderivmodel(grammar))
+	xgrammar, _, shortest = dopreduction(trees, sents)
+	grammar = Grammar(xgrammar)
+	grammar.register(u'shortest', shortest)
 	print(grammar)
 	sent = "a b c".split()
 	chart, start, _ = plcfrs.parse(sent, grammar, None, True)

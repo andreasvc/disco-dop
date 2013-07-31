@@ -22,24 +22,6 @@ MORPH_TAGS = re.compile(
 		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
-
-# abbreviations for Alpino POS tags
-ABBRPOS = {
-	'PUNCT': 'PUNCT',
-	'COMPLEMENTIZER': 'COMP',
-	'PROPER_NAME': 'NAME',
-	'PREPOSITION': 'PREP',
-	'PRONOUN': 'PRON',
-	'DETERMINER': 'DET',
-	'ADJECTIVE': 'ADJ',
-	'ADVERB': 'ADV',
-	'HET_NOUN': 'HET',
-	'NUMBER': 'NUM',
-	'PARTICLE': 'PRT',
-	'ARTICLE': 'ART',
-	'NOUN': 'NN',
-	'VERB': 'VB'}
-
 PREAMBLE = r"""\documentclass{article}
 \usepackage[landscape]{geometry}
 \usepackage[utf8]{inputenc}
@@ -143,6 +125,10 @@ def gettrees(form):
 			tree, sent = exporttree(cur)
 			trees.append(tree)
 			sents.append(sent)
+	if form['abbr']:
+		for tree in trees:
+			for n in tree.subtrees():
+				n.label = n.label[:5]
 	return [DrawTree(tree, sent) for tree, sent in zip(trees, sents)]
 
 
