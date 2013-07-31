@@ -1022,11 +1022,11 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	start = new_CFGChartItem(1, 0, len(sent))
 	lines = UNESCAPE.sub(r'\1', results).replace(')(', ') (')
 	derivs = {renumber(deriv): -float(prob)
-			for prob, deriv in BITPARPARSESLOG.findall(lines)}, start, msg
+			for prob, deriv in BITPARPARSESLOG.findall(lines)}
 	if not derivs:
 		derivs = {renumber(deriv): -pylog(float(prob))
-				for prob, deriv in BITPARPARSES.findall(lines)}, start, msg
-	return derivs
+				for prob, deriv in BITPARPARSES.findall(lines)}
+	return derivs, start, msg
 
 
 def renumber(deriv):
