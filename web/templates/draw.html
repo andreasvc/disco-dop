@@ -1,0 +1,98 @@
+<!doctype html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>
+Discontinuous tree drawing
+</title>
+<script>
+function show(fmt) {
+	var tree = document.theform.tree
+	var sent = document.theform.sent
+	//var tree = document.getElementById('treefield');
+	//var sent = document.getElementById('sentfield');
+	sent.value = '';
+	tree.value = '';
+	if (fmt == 'bracket') {
+		tree.value = '(S (NP Mary) (VP (VB is) (JJ rich)) (. .))';
+	} else if (fmt == 'discbracket') {
+		tree.value = '(S (VP (VB 0) (JJ 2)) (NP 1) (? 3))';
+		sent.value = 'is John rich ?';
+	} else if (fmt == 'export') {
+		tree.value = '#BOS 0\nis\tVB\t--\t--\t500\nJohn\tNP\t--\t--\t0\nrich\tJJ\t--\t--\t500\n?\t?\t--\t--\t0\n#500\tVP\t--\t--\t0\n#EOS 0\n';
+	}
+};
+function switchopt(n) {
+	var el1 = document.getElementById('tikzoptions');
+	var el2 = document.getElementById('asciioptions');
+	if (n == 0) {
+		el1.style.display = 'inline';
+        el2.style.display = 'none';
+	} else if (n == 1) {
+        el1.style.display = 'none';
+		el2.style.display = 'inline';
+	}
+};
+</script>
+</head>
+<body>
+<div style="margin-left: auto;  margin-right: auto;  width: 80%; ">
+<h1>Discontinuous tree drawing</h1>
+
+
+<form name=theform action=draw>
+<table style="width: 1pt; ">
+<tr><td style="text-align: center;  width: 50%; ">
+Enter one or more syntax trees.
+</td>
+<td style="vertical-align: bottom; text-align: center; ">Sentence(s) (optional, only used for disc. trees):
+</td></tr>
+<tr><td style="text-align: center; ">
+<textarea name=tree rows=12 cols=60 id=treefield>
+</textarea>
+</td><td style="text-align: center;">
+<textarea name=sent rows=12 cols=60 id=sentfield>
+</textarea></td></tr>
+<tr><td colspan=2>
+<p>
+Output:
+<label><input type="radio" name="output" value="text" checked onClick="javascript:switchopt(1); "> ASCII art</label>
+<label><input type="radio" name="output" value="svg" onClick="javascript:switchopt(1); "> SVG</label>
+<label><input type="radio" name="output" value="png" onClick="javascript:switchopt(0); "> PNG</label>
+<label><input type="radio" name="output" value="pdf" onClick="javascript:switchopt(0); "> PDF</label>
+<label><input type="radio" name="output" value="latex" onClick="javascript:switchopt(0); "> LaTeX</label><br>
+Options:
+<label><input type="checkbox" name="color" value="1" checked> colors</label>
+<span id=asciioptions>
+	<label><input type="checkbox" name="unicode" value="1" checked> unicode</label>
+</span>
+<label><input type="checkbox" name="abbr" value="1">abbr. labels</label>
+<span id=tikzoptions style="display: none; ">
+	<label><input type="radio" name="type" value="matrix" checked> TiKZ matrix</label>
+	<label><input type="radio" name="type" value="nodes"> TiKZ nodes (easier to tweak manually)</label>
+	<label><input type="radio" name="type" value="qtree"> TiKZ-qtree (no discontinuity)</label>
+</span>
+<br>
+</p>
+<p><input type=submit></p>
+</td></tr>
+<tr><td style="width: 50%; ">
+<p>Notations accepted:</p>
+<ul>
+<li>Regular tree(s) in bracket notation (<a href="javascript: show('bracket')">example</a>)
+<li>Discontinuous tree(s) in bracket notation. Represent terminals with integer indices (<a href="javascript: show('discbracket')">example</a>).
+<li>Negra/Tiger export format tree (<a href="javascript: show('export')">example</a>); function &amp; morphology tags ignored; multiple trees may be given if wrapped in:
+<blockquote><pre>#BOS [number]
+[...]
+#EOS [number]</pre></blockquote>
+</ul>
+</td>
+<td style="padding: 2%;">
+<p style="text-align: justify;">
+NB: This code is experimental&mdash;discontinuous constituents may
+overlap. However, with some manual editing it can give good results
+(e.g., change coordinates of nodes with overlapping edges, tweak scale to save
+space). It is recommended to use a WYSIWYG editor like <a
+href="http://gummi.midnightcoding.org">Gummi</a> for this to get immediate
+feedback.</p></td></tr>
+</table></form></div></body></html>
