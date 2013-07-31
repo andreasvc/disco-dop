@@ -921,8 +921,11 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 
 def treebankfanout(trees):
 	""" Get maximal fan-out of a list of trees. """
-	return max((fanout(addbitsets(a)), n) for n, tree in enumerate(trees)
-		for a in tree.subtrees(lambda x: len(x) > 1))
+	try:
+		result = max((fanout(a), n) for n, tree in enumerate(trees)
+			for a in addbitsets(tree).subtrees(lambda x: len(x) > 1))
+	except ValueError:
+		return 0, 0  # a 'treebank' with only unary productions...
 
 
 def readparam(filename):

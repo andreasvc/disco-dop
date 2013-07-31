@@ -119,7 +119,7 @@ cdef class Grammar:
 		self._indexrules(self.rbinary, 2, 3)
 		tmp = self.models[0]
 		for n in range(self.numrules):
-			tmp[n] = self.bylhs[0][n].prob
+			tmp[self.bylhs[0][n].no] = self.bylhs[0][n].prob
 		for n, lexrule in enumerate(self.lexical, self.numrules):
 			tmp[n] = lexrule.prob
 		self.switch('default', True)
@@ -365,6 +365,7 @@ cdef class Grammar:
 		self.origrules and self.origlexicon (which is an arbitrary order
 		except that words appear sorted). """
 		cdef int n, m = len(self.modelnames)
+		cdef double [:] tmp
 		assert name not in self.modelnames, 'model %r already exists' % name
 		assert len(self.modelnames) <= 255, (
 				'256 probabilistic models should be enough for anyone.')
@@ -373,7 +374,11 @@ cdef class Grammar:
 					self.numrules + len(self.lexical), len(weights)))
 		self.models.resize(m + 1, self.numrules + len(self.lexical))
 		self.modelnames.append(name)
-		self.models[m, :] = weights
+		tmp = self.models[m]
+		for n in range(self.numrules):
+			tmp[self.bylhs[0][n].no] = weights[n]
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			tmp[n] = weights[n]
 
 	def switch(self, name, bint logprob=True):
 		""" Switch to a different probabilistic model;
