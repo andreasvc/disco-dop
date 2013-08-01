@@ -726,20 +726,21 @@ def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
 			lexical.setdefault(unicode(yf[0]), []).append((r[0], w))
 			continue
 		elif bitpar:
-			rules.write(("%g\t%s\n" % (w.numerator if freqs else w,
-					"\t".join(x for x in r))).encode('ascii'))
+			rules.write(('%g\t%s\n' % (w.numerator if freqs else w,
+					'\t'.join(x for x in r))).encode('ascii'))
 		else:
-			yfstr = ",".join(''.join(map(str, a)) for a in yf)
-			rules.write(("%s\t%s\t%s\n" % (
-					"\t".join(x for x in r), yfstr,
+			yfstr = ','.join(''.join(map(str, a)) for a in yf)
+			rules.write(('%s\t%s\t%s\n' % (
+					'\t'.join(x for x in r), yfstr,
 					w.numerator if freqs else w)).encode('ascii'))
 	for word in sorted(lexical):
 		lexicon.write(word)
 		for tag, w in lexical[word]:
 			if freqs:
-				lexicon.write(unicode("\t%s %s" % (tag, w.numerator)))
+				lexicon.write(unicode('\t%s %d' % (tag, w.numerator)))
 			else:
-				lexicon.write(unicode("\t%s %s" % (tag, w)))
+				lexicon.write(unicode('\t%s %s' % (tag,
+						(float(w) if bitpar else w))))
 		lexicon.write(unicode('\n'))
 
 
