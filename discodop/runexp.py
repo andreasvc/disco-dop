@@ -353,7 +353,9 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				xgrammar.extend(newrules)
 				eweweights.extend(w for _, w in newrules)
 				shortest.extend(w for _, w in newrules)
+
 				def wordslast(m):
+					""" Sort key. """
 					(r, yf), _ = xgrammar[m]
 					return r[1] == 'Epsilon' and yf[0]
 
@@ -927,6 +929,7 @@ def treebankfanout(trees):
 	except ValueError:
 		result = 0, 0  # a 'treebank' with only unary productions...
 	return result
+
 
 def readparam(filename):
 	""" Parse a parameter file:

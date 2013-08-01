@@ -5,7 +5,7 @@ import os
 import re
 from subprocess import Popen, PIPE
 try:
-	from itertools import zip_longest
+	from itertools import zip_longest  # pylint: disable=E0611
 except ImportError:
 	from itertools import izip_longest as zip_longest
 #from datetime import datetime, timedelta
@@ -93,7 +93,7 @@ def gettrees(form):
 				tree = noempty(Tree.parse(treestr, brackets=brackets))
 				sents.append(tree.leaves())
 				trees.append(renumber(tree))
-			else: # disc. trees with integer indices as terminals
+			else:  # disc. trees with integer indices as terminals
 				trees.append(Tree.parse(treestr, parse_leaf=int,
 					brackets=brackets))
 				sents.append(sent and sent.split())
@@ -146,8 +146,8 @@ def segmentbrackets(formtree, brackets):
 				start = n + 1
 			elif parens < 0:
 				return (), ()  # unbalanced parentheses
-	if parens == 0 and formtree[start:n + 1]:
-		rest.append(formtree[start:n + 1])
+	if parens == 0 and formtree[start:]:
+		rest.append(formtree[start:])
 	return results, rest
 
 

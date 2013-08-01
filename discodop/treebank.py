@@ -468,7 +468,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			idx = wordids[i]
 			a = tree[idx[:-1]]
 			morphtag = a.source[MORPH] if hasattr(a, 'source') else None
-			if not morphtag or morphthag == '--':
+			if not morphtag or morphtag == '--':
 				morphtag = a.label if morph == 'replace' else '--'
 			result.append("\t".join((word,
 					a.label.replace('$[', '$('),

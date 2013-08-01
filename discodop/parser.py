@@ -195,7 +195,7 @@ class Parser(object):
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
 		for stage in self.stages:
-			if stage.mode == 'pcfg-bitpar': # uncompressed grammar in temp file
+			if stage.mode == 'pcfg-bitpar':  # uncompressed grammar in temp file
 				stage.rulesfile = tempfile.NamedTemporaryFile()
 				stage.lexiconfile = tempfile.NamedTemporaryFile()
 				exportbitpargrammar(stage)
@@ -354,7 +354,6 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	""" Read the grammars from a previous experiment.
 	Expects a directory 'resultdir' which contains the relevant grammars and
 	the parameter file 'params.prm', as produced by runexp. """
-	# TODO: read / produce ewe weights.
 	for n, stage in enumerate(stages):
 		logging.info("reading: %s", stage.name)
 		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name))

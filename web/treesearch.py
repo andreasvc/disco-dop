@@ -273,7 +273,7 @@ def trees(form):
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True)
-			except Exception as err:
+			except ValueError as err:
 				line = "#%s \nERROR: %s\n%s\n%s\n" % (lineno, err, treestr, tree)
 			else:
 				line = "#%s\n%s\n" % (lineno, treerepr)
@@ -351,9 +351,7 @@ def fragmentsinresults(form):
 	if not gotresults:
 		yield "No matches."
 		return
-	# TODO:
-	# - get fragments from search results, but counts from whole text (preload)
-	# - export fragments
+	# TODO: get counts from whole text (preload); export fragments to file
 	with tempfile.NamedTemporaryFile(delete=True) as tmp:
 		tmp.writelines(uniquetrees)
 		tmp.flush()

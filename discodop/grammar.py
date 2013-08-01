@@ -9,7 +9,7 @@ from math import exp
 from operator import mul, itemgetter
 from fractions import Fraction
 from collections import defaultdict, Counter as multiset
-from itertools import count, islice, repeat, chain
+from itertools import count, islice, repeat
 from .tree import ImmutableTree, Tree
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
@@ -205,7 +205,7 @@ def dopreduction(trees, sents, packedgraph=False):
 	# put lexical rules in the end and sort by word
 	rules = sorted(rules.items(), key=lambda rule:
 			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
-	rules, ewe, shortest= zip(*(weights(r) for r in rules))
+	rules, ewe, shortest = zip(*(weights(r) for r in rules))
 	return list(rules), list(ewe), list(shortest)
 
 
@@ -300,9 +300,9 @@ def doubledop(fragments, debug=False):
 		ntfd[rule[0][0]] += freq
 		ntfdewe[rule[0][0]] += ewe  # FIXME: build a different ntfd for ewe?
 	eweweights = [float(ewe) / ntfdewe[rule[0][0]]
-			for _, (_, ewe) in grammar]
-	shortest = [1. if '@' in r[0] or '}' in r[0] else 0.5
-			for (r, _), _ in grammar]
+			for rule, (_, ewe) in grammar]
+	shortest = [1. if '@' in rule[0][0] or '}' in rule[0][0] else 0.5
+			for rule, _ in grammar]
 	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
 			for rule, (freq, _) in grammar]
 	return grammar, backtransform, eweweights, shortest
