@@ -30,7 +30,7 @@ def transform(tree, sent, transformations):
 		elif name == 'PUNCT':  # distinguish . ? !
 			for punct in tree.subtrees(lambda n: n.label.upper() in (
 					'$.', 'PUNCT', 'LET[]')):
-				punct.label += '+' + sent[punct[0]]
+				punct.label += '+' + sent[punct[0]].encode('unicode-escape')
 		elif name == 'PP-NP':  # un-flatten PPs by introducing NPs
 			addtopp = ('AC', )
 			for pp in tree.subtrees(lambda n: n.label == 'PP'):

@@ -256,6 +256,7 @@ def startexp(
 			test_parsed_sents[n].label for n in testset}
 	assert len(toplabels) == 1, 'expected unique ROOT label: %r' % toplabels
 	top = toplabels.pop()
+
 	if rerun:
 		readgrammars(resultdir, stages, postagging, top)
 	else:
@@ -293,6 +294,7 @@ def startexp(
 				for a in gold_sents.values()) else 14),
 				100.0 * (nsent - result.noparse) / nsent)
 		logging.info('\n'.join(('', header, evalsummary, coverage)))
+	return top
 
 
 def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
@@ -974,9 +976,8 @@ def main(argv=None):
 		parsetepacoc()
 	else:
 		params = readparam(argv[1])
-		params['resultdir'] = argv[1].rsplit(".", 1)[0]
-		params['rerun'] = '--rerun' in argv
-		startexp(**params)
-		if not params['rerun']:  # copy parameter file to result dir
-			open("%s/params.prm" % params['resultdir'], "w").write(
-					open(argv[1]).read())
+		resultdir = argv[1].rsplit('.', 1)[0]
+		top = startexp(resultdir=resultdir, rerun='--rerun' in argv, **params)
+		if 'rerun' not in argv:  # copy parameter file to result dir
+			open("%s/params.prm" % resultdir, "w").write(
+					"top='%s',\n%s" % (top, open(argv[1]).read()))

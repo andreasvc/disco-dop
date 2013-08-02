@@ -544,7 +544,7 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 					bnodes = b[:]
 					b[:] = []
 					a[n:n + 1] = bnodes
-			elif gpos[b[0]][1] in dellabel or sent[b[0]] in delword:
+			elif gpos[b[0]] in dellabel or sent[b[0]] in delword:
 				# remove pre-terminal entirely, but only look at gold tree,
 				# to ensure the sentence lengths stay the same
 				leaves.remove(b[0])
