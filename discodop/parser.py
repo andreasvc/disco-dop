@@ -26,8 +26,7 @@ from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
 USAGE = """
 usage: %s [options] rules lexicon [input [output]]
-or: %s [options] coarserules coarselexicon finerules finelexicon \
-[input [output]]
+or: [options] --ctf k coarserules coarselex finerules finelex [input [output]]
 
 Grammars need to be binarized, and are in bitpar or PLCFRS format.
 When no file is given, output is written to standard output;
@@ -40,14 +39,15 @@ through indices pointing to words in the original sentence.
     Options:
     -b k          Return the k-best parses instead of just 1.
     -s x          Use "x" as start symbol instead of default "TOP".
-    --kbestctf k  Use k-best coarse-to-fine;
-                  prune items not in k-best derivations (default 50).
+    -z            Input is one sentence per line, space-separated tokens.
+    --ctf k       Use k-best coarse-to-fine;
+                  prune items not in k-best derivations.
     --prob        Print probabilities as well as parse trees.
     --mpd         In coarse-to-fine mode, produce the most probable
                   derivation (MPD) instead of the most probable parse (MPP).
 
 %s
-""" % (sys.argv[0], sys.argv[0], FORMAT)
+""" % (sys.argv[0], FORMAT)
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames
@@ -68,39 +68,37 @@ DEFAULTSTAGE = dict(
 			# form the complement of the maximal recurring fragments extracted
 		sample=False, kbest=True,
 		m=10,  # number of derivations to sample/enumerate
-		estimator="ewe",  # choices: dop1, ewe
-		objective="mpp",  # choices: mpp, mpd, shortest, sl-dop[-simple]
+		estimator='ewe',  # choices: dop1, ewe
+		objective='mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
 			# NB: w/shortest derivation, estimator only affects tie breaking.
 		sldop_n=7)
 
 
 def main():
 	""" Handle command line arguments. """
-	print("PLCFRS parser - Andreas van Cranenburgh", file=sys.stderr)
-	options = "kbestctf= prob mpd".split()
+	print('PLCFRS parser - Andreas van Cranenburgh', file=sys.stderr)
+	options = 'ctf= prob mpd'.split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], "u:b:s:", options)
-		assert 2 <= len(args) <= 6, "incorrect number of arguments"
+		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
+		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
 	except (GetoptError, AssertionError) as err:
 		print(err, USAGE)
 		return
 	for n, filename in enumerate(args):
 		assert os.path.exists(filename), (
-				"file %d not found: %r" % (n + 1, filename))
+				'file %d not found: %r' % (n + 1, filename))
 	opts = dict(opts)
-	k = int(opts.get("-b", 1))
-	top = opts.get("-s", "TOP")
-	prob = "--prob" in opts
-	rules = (gzip.open if args[0].endswith(".gz") else open)(args[0]).read()
-	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith(".gz")
+	k = int(opts.get('-b', 1))
+	top = opts.get('-s', 'TOP')
+	threshold = int(opts.get('--ctf', 0))
+	prob = '--prob' in opts
+	oneline = '-z' in opts
+	rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
+	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
 			else open)(args[1])).read()
 	bitpar = rules[0] in string.digits
 	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar)
 	stages = []
-	infile = (io.open(args[2], encoding='utf-8')
-			if len(args) >= 3 else sys.stdin)
-	out = (io.open(args[3], "w", encoding='utf-8')
-			if len(args) == 4 else sys.stdout)
 	stage = DEFAULTSTAGE.copy()
 	stage.update(
 			name='coarse',
@@ -109,19 +107,14 @@ def main():
 			backtransform=None,
 			m=k)
 	stages.append(DictObj(stage))
-	if 4 <= len(args) <= 6:
-		threshold = int(opts.get("--kbestctf", 50))
-		rules = (gzip.open if args[2].endswith(".gz") else open)(args[2]).read()
+	if 4 <= len(args) <= 6 and threshold:
+		rules = (gzip.open if args[2].endswith('.gz') else open)(args[2]).read()
 		lexicon = codecs.getreader('utf-8')((gzip.open
-				if args[3].endswith(".gz") else open)(args[3])).read()
+				if args[3].endswith('.gz') else open)(args[3])).read()
 		# detect bitpar format
 		bitpar = rules[0] in string.digits
 		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar)
-		fine.getmapping(coarse, striplabelre=re.compile(b"@.+$"))
-		infile = (io.open(args[4], encoding='utf-8')
-				if len(args) >= 5 else sys.stdin)
-		out = (io.open(args[5], "w", encoding='utf-8')
-				if len(args) == 6 else sys.stdout)
+		fine.getmapping(coarse, striplabelre=re.compile(b'@.+$'))
 		stage = DEFAULTSTAGE.copy()
 		stage.update(
 				name='fine',
@@ -129,45 +122,57 @@ def main():
 				grammar=fine,
 				backtransform=None,
 				m=k,
+				prune=True,
 				k=threshold,
 				objective='mpd' if '--mpd' in opts else 'mpp')
 		stages.append(DictObj(stage))
-	doparsing(Parser(stages), infile, out, prob)
+		infile = (io.open(args[4], encoding='utf-8')
+				if len(args) >= 5 else sys.stdin)
+		out = (io.open(args[5], 'w', encoding='utf-8')
+				if len(args) == 6 else sys.stdout)
+	else:
+		infile = (io.open(args[2], encoding='utf-8')
+				if len(args) >= 3 else sys.stdin)
+		out = (io.open(args[3], 'w', encoding='utf-8')
+				if len(args) == 4 else sys.stdout)
+	doparsing(Parser(stages), infile, out, prob, oneline)
 
 
-def doparsing(parser, infile, out, printprob):
+def doparsing(parser, infile, out, printprob, oneline):
 	""" Parse sentences from file and write results to file, log to stdout. """
 	times = [time.clock()]
 	unparsed = 0
-	for n, a in enumerate(infile.read().split("\n\n")):
-		if not a.strip():
+	if not oneline:
+		infile = infile.read().split('\n\n')
+	for n, line in enumerate(infile):
+		if not line.strip():
 			continue
-		sent = a.splitlines()
+		sent = line.split() if oneline else line.splitlines()
 		lexicon = parser.stages[0].grammar.lexicalbyword
 		assert not set(sent) - set(lexicon), (
-			"unknown words and no open class tags supplied: %r" % (
+			'unknown words and no open class tags supplied: %r' % (
 			list(set(sent) - set(lexicon))))
-		print("parsing %d: %s" % (n, ' '.join(sent)), file=sys.stderr)
+		print('parsing %d: %s' % (n, ' '.join(sent)), file=sys.stderr)
 		sys.stdout.flush()
 		result = list(parser.parse(sent))[-1]
 		if result.noparse:
 			unparsed += 1
 		if printprob:
-			out.writelines("prob=%.16g\n%s\n" % (prob, tree)
+			out.writelines('prob=%.16g\n%s\n' % (prob, tree)
 					for tree, prob in sorted(result.parsetrees.items(),
-						key=itemgetter(1)))
+						key=itemgetter(1), reverse=True))
 		else:
-			out.writelines("%s\n" % tree
+			out.writelines('%s\n' % tree
 					for tree in sorted(result.parsetrees,
-						key=result.parsetrees.get))
+						key=result.parsetrees.get, reverse=True))
 		out.flush()
 		times.append(time.clock())
-		print(times[-1] - times[-2], "s", file=sys.stderr)
+		print(times[-1] - times[-2], 's', file=sys.stderr)
 	times = [a - b for a, b in zip(times[1::2], times[::2])]
-	print("raw cpu time", time.clock() - times[0],
-			"\naverage time per sentence", sum(times) / len(times),
-			"\nunparsed sentences:", unparsed,
-			"\nfinished",
+	print('raw cpu time', time.clock() - times[0],
+			'\naverage time per sentence', sum(times) / len(times),
+			'\nunparsed sentences:', unparsed,
+			'\nfinished',
 			file=sys.stderr)
 	out.close()
 
@@ -413,23 +418,30 @@ def exportbitpargrammar(stage):
 	""" (re-)export bitpar grammar with current weights. """
 	stage.rulesfile.seek(0)
 	stage.rulesfile.truncate()
-	stage.rulesfile.writelines(
-			'%g\t%s\n' % (weight, line.split(None, 1)[1])
-			for weight, line in
-			zip(stage.grammar.models[stage.grammar.currentmodel],
-				stage.grammar.origrules.splitlines()))
+	if stage.grammar.currentmodel == 0:
+		stage.rulesfile.write(stage.grammar.origrules)
+	else:
+		stage.rulesfile.writelines(
+				'%g\t%s\n' % (weight, line.split(None, 1)[1])
+				for weight, line in
+				zip(stage.grammar.models[stage.grammar.currentmodel],
+					stage.grammar.origrules.splitlines()))
 	stage.rulesfile.flush()
+
 	stage.lexiconfile.seek(0)
 	stage.lexiconfile.truncate()
 	lexicon = stage.grammar.origlexicon.replace(
 			'(', '-LRB-').replace(')', '-RRB-')
 	lexiconfile = codecs.getwriter('utf-8')(stage.lexiconfile)
-	weights = iter(stage.grammar.models[stage.grammar.currentmodel,
-			stage.grammar.numrules:])
-	lexiconfile.writelines('%s\t%s\n' % (line.split(None, 1)[0],
-			'\t'.join('%s %g' % (tag, next(weights))
-				for tag in line.split()[1::2]))
-			for line in lexicon.splitlines())
+	if stage.grammar.currentmodel == 0:
+		lexiconfile.writelines(lexicon)
+	else:
+		weights = iter(stage.grammar.models[stage.grammar.currentmodel,
+				stage.grammar.numrules:])
+		lexiconfile.writelines('%s\t%s\n' % (line.split(None, 1)[0],
+				'\t'.join('%s %g' % (tag, 0.1 + 0.9 * next(weights))
+					for tag in line.split()[1::2]))
+				for line in lexicon.splitlines())
 	stage.lexiconfile.flush()
 
 
