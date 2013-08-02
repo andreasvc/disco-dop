@@ -440,7 +440,7 @@ def exportbitpargrammar(stage):
 		weights = iter(stage.grammar.models[stage.grammar.currentmodel,
 				stage.grammar.numrules:])
 		lexiconfile.writelines('%s\t%s\n' % (line.split(None, 1)[0],
-				'\t'.join('%s %g' % (tag, 0.1 + 0.9 * next(weights))
+				'\t'.join('%s %g' % (tag, next(weights))
 					for tag in line.split()[1::2]))
 				for line in lexicon.splitlines())
 	stage.lexiconfile.flush()
