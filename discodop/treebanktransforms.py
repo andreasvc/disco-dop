@@ -14,7 +14,7 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 
 def transform(tree, sent, transformations):
 	""" Perform some transformations, specific to Negra and WSJ treebanks.
-	State-splits are preceded by '+'.
+	State-splits are preceded by '#'.
 	negra:  transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')
 	wsj:    transformations=('S-WH', 'VP-HD', 'S-INF')
 	alpino: transformations=('PUNCT', ) """
@@ -23,14 +23,14 @@ def transform(tree, sent, transformations):
 		if name == 'S-RC':  # relative clause => S becomes SRC
 			for s in tree.subtrees(lambda n: n.label == 'S'
 					and function(n) == 'RC'):
-				s.label = 'S+RC'
+				s.label += '#RC'
 		elif name == 'NP':  # case
 			for np in tree.subtrees(lambda n: n.label == 'NP'):
-				np.label += '+' + function(np)
+				np.label += '#' + function(np)
 		elif name == 'PUNCT':  # distinguish . ? !
 			for punct in tree.subtrees(lambda n: n.label.upper() in (
 					'$.', 'PUNCT', 'LET[]')):
-				punct.label += '+' + sent[punct[0]].replace(
+				punct.label += '#' + sent[punct[0]].replace(
 						'(', '[').replace(')', ']').encode('unicode-escape')
 		elif name == 'PP-NP':  # un-flatten PPs by introducing NPs
 			addtopp = ('AC', )
@@ -68,7 +68,7 @@ def transform(tree, sent, transformations):
 						np[1:] = [ParentedTree('NP', np1)]
 		elif name == 'VP-GF':  # VP category split based on head
 			for vp in tree.subtrees(lambda n: n.label == 'VP'):
-				vp.label += '+' + function(vp)
+				vp.label += '#' + function(vp)
 		elif name == 'VP-FIN_NEGRA':  # introduce finite VP at S level
 			# collect objects and modifiers
 			# introduce new S level for discourse markers
@@ -145,8 +145,8 @@ def transform(tree, sent, transformations):
 					# NP -> NN -> word
 					tag.source = 8 * ['--']
 					tag.source[TAG] = tag.label = tagtoconst[tag.label]
-					tag.source[FUNC] = tag[0].source[FUNC]
-					tag[0].source[FUNC] = 'NK'
+					tag.source[FUNC] = function(tag[0])
+					#tag[0].source[FUNC] = 'NK'
 
 		# wsj
 		elif name == 'S-WH':
@@ -154,21 +154,21 @@ def transform(tree, sent, transformations):
 				for s in sbar:
 					if (s.label == 'S'
 							and any(a.label.startswith('WH') for a in s)):
-						s.label += '+WH'
+						s.label += '#WH'
 		elif name == 'VP-HD':  # VP category split based on head
 			for vp in tree.subtrees(lambda n: n.label == 'VP'):
 				hd = [x for x in vp if ishead(x)].pop()
 				if hd.label == 'VB':
-					vp.label += '+HINF'
+					vp.label += '#HINF'
 				elif hd.label == 'TO':
-					vp.label += '+HTO'
+					vp.label += '#HTO'
 				elif hd.label in ('VBN', 'VBG'):
-					vp.label += '+HPART'
+					vp.label += '#HPART'
 		elif name == 'S-INF':
 			for s in tree.subtrees(lambda n: n.label == 'S'):
 				hd = [x for x in s if ishead(x)].pop()
-				if hd.label in ('VP+HINF', 'VP+HTO'):
-					s.label += '+INF'
+				if hd.label in ('VP#HINF', 'VP#HTO'):
+					s.label += '#INF'
 		elif name == 'VP-FIN_WSJ':  # add disc. finite VP when verb is under S
 			for s in tree.subtrees(lambda n: n.label == 'S'):
 				if not any(a.label.startswith('VP') for a in s):
@@ -187,8 +187,8 @@ def reversetransform(tree, transformations):
 	state splits. Do not apply twice (might remove VPs which shouldn't be). """
 	tagtoconst, _ = getgeneralizations()
 	# Generic state-split removal
-	for node in tree.subtrees(lambda n: '+' in n.label):
-		node.label = node.label[:node.label.index('+')]
+	for node in tree.subtrees(lambda n: '#' in n.label):
+		node.label = node.label[:node.label.index('#')]
 
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
