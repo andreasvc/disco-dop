@@ -564,30 +564,29 @@ def readheadrules(filename):
 	headrules = {}
 	for line in open(filename):
 		line = line.strip().upper()
-		if line and not line[0].startswith("%") and len(line.split()) > 2:
+		if line and not line.startswith("%") and len(line.split()) > 2:
 			label, lr, heads = line.split(None, 2)
 			headrules.setdefault(label, []).append((lr, heads.split()))
-	if "VROOT" in headrules:
-		headrules["ROOT"] = headrules["VROOT"]
 	return headrules
 
 
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	""" use head finding rules to select one child of tree as head. """
-	candidates = [a for a in tree if hasattr(a, "source")
-			and headlabels.intersection(a.source[FUNC].upper().split("-"))]
+	candidates = [a for a in tree if hasattr(a, 'source')
+			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
 		return candidates[0]
 	for lr, heads in headrules.get(tree.label, []):
-		if lr == "LEFT-TO-RIGHT":
+		if lr == 'LEFT-TO-RIGHT':
 			children = tree
-		elif lr == "RIGHT-TO-LEFT":
+		elif lr == 'RIGHT-TO-LEFT':
 			children = tree[::-1]
 		else:
 			raise ValueError
 		for head in heads:
 			for child in children:
-				if isinstance(child, Tree) and child.label == head:
+				if (isinstance(child, Tree)
+						and child.label.split('[')[0] == head):
 					return child
 	# default head is initial nonterminal
 	for child in tree:
