@@ -46,11 +46,18 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>SL-DOP: shortest derivation among derivations of n most probable parse trees (n=7; approximation)
 	</ul>
 
+	Estimators:
+	<ul>
+	<li>RFE: Relative Frequency Estimate
+	<li>EWE: Equal Weights Estimate
+	</ul>
+
 	Marginalization:
 	<ul>
 	<li>n-best: find the n most probable derivations.
 	<li>sample: sample derivations according to their probability distribution
 	</ul>
+
 </div>
 </blockquote>
 
@@ -67,6 +74,10 @@ Sentence:
 	<option value=shortest>MPSD</option>
 	<option value=sl-dop>SL-DOP</option>
 	<option value=sl-dop-simple>SL-DOP-simple</option>
+</select>
+<select name=est>
+	<option value=dop1>RFE</option>
+	<option value=ewe>EWE</option>
 </select>
 <select name=marg>
 	<option value=nbest>n-best</option>

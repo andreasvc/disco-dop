@@ -114,8 +114,10 @@ function ajaxFunction() {
 	};
 	var objfun = document.queryform.objfun;
 	var marg = document.queryform.marg;
+	var est = document.queryform.est;
 	url = "parse?html=1&sent=" + encodeURIComponent(document.queryform.sent.value)
 			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
+			+ "&est=" + encodeURIComponent(est.options[est.selectedIndex].value)
 			+ "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value);
 	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);

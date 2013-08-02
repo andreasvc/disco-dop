@@ -40,16 +40,18 @@ def parse():
 	""" Parse sentence and return a textual representation of a parse tree,
 	in a HTML fragment or plain text. To be invoked by an AJAX call."""
 	sent = request.args.get('sent', None)
-	objfun = request.args.get('objfun', 'mpp')
+	est = request.args.get('est', 'dop1')
 	marg = request.args.get('marg', 'nbest')
+	objfun = request.args.get('objfun', 'mpp')
 	html = request.args.get('html', False)
 	if not sent:
 		return ''
 	frags = nbest = None
 	senttok = tokenize(sent)
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
-		return 'Sentence too long: %d words, maximum %d' % (len(senttok), LIMIT)
+		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
 	lang = guesslang(senttok)
+	PARSERS[lang].stages[-1].estimator = est
 	PARSERS[lang].stages[-1].objective = objfun
 	PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
 	PARSERS[lang].stages[-1].sample = marg in ('sample', 'both')
@@ -89,8 +91,8 @@ def parse():
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
 			' '.join('%gs' % a for a in elapsed), sum(elapsed))
-	info = '\n'.join(('sentence length: %d; objfun=%s; marg=%s' % (
-			len(senttok), objfun, marg), msg, elapsed,
+	info = '\n'.join(('sentence length: %d; est=%s; objfun=%s; marg=%s' % (
+			len(senttok), est, objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',
 			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n'))
@@ -118,7 +120,8 @@ def loadparsers():
 			params['resultdir'] = directory
 			stages = params['stages']
 			postagging = params['postagging']
-			readgrammars(directory, stages, postagging)
+			readgrammars(directory, stages, postagging,
+					top=params.get('top', 'ROOT'))
 			PARSERS[lang] = Parser(stages,
 					transformations=params['transformations'],
 					tailmarker=params['tailmarker'], postagging=postagging
