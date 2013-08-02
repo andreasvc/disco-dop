@@ -23,7 +23,7 @@ def transform(tree, sent, transformations):
 		if name == 'S-RC':  # relative clause => S becomes SRC
 			for s in tree.subtrees(lambda n: n.label == 'S'
 					and function(n) == 'RC'):
-				s.label = 'S-RC'
+				s.label = 'S+RC'
 		elif name == 'NP':  # case
 			for np in tree.subtrees(lambda n: n.label == 'NP'):
 				np.label += '+' + function(np)
@@ -154,21 +154,21 @@ def transform(tree, sent, transformations):
 				for s in sbar:
 					if (s.label == 'S'
 							and any(a.label.startswith('WH') for a in s)):
-						s.label += '-WH'
+						s.label += '+WH'
 		elif name == 'VP-HD':  # VP category split based on head
 			for vp in tree.subtrees(lambda n: n.label == 'VP'):
 				hd = [x for x in vp if ishead(x)].pop()
 				if hd.label == 'VB':
-					vp.label += '-HINF'
+					vp.label += '+HINF'
 				elif hd.label == 'TO':
-					vp.label += '-HTO'
+					vp.label += '+HTO'
 				elif hd.label in ('VBN', 'VBG'):
-					vp.label += '-HPART'
+					vp.label += '+HPART'
 		elif name == 'S-INF':
 			for s in tree.subtrees(lambda n: n.label == 'S'):
 				hd = [x for x in s if ishead(x)].pop()
-				if hd.label in ('VP-HINF', 'VP-HTO'):
-					s.label += '-INF'
+				if hd.label in ('VP+HINF', 'VP+HTO'):
+					s.label += '+INF'
 		elif name == 'VP-FIN_WSJ':  # add disc. finite VP when verb is under S
 			for s in tree.subtrees(lambda n: n.label == 'S'):
 				if not any(a.label.startswith('VP') for a in s):

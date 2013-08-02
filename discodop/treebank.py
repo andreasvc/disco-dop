@@ -63,7 +63,8 @@ class CorpusReader(object):
 		if fileids == '':
 			fileids = '*'
 		self._filenames = sorted(glob(os.path.join(root, fileids)), key=numbase)
-		assert functions in (None, 'add', 'remove', 'replace'), functions
+		assert functions in (None, 'leave', 'add', 'remove', 'replace'), (
+				functions)
 		assert punct in (None, 'move', 'remove', 'root')
 		assert self._filenames, (
 				"no files matched pattern %s" % os.path.join(root, fileids))
