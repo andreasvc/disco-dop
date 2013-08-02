@@ -19,7 +19,7 @@ from .containers import Grammar
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
 from .tree import Tree
-from .lexicon import replaceraretestwords, getunknownwordfun
+from .lexicon import replaceraretestwords, getunknownwordfun, UNK
 from .treebank import saveheads
 from .treebanktransforms import reversetransform, rrbacktransform
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
@@ -410,9 +410,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	if postagging and postagging['method'] == 'unknownword':
 		postagging['unknownwordfun'] = getunknownwordfun(postagging['model'])
 		postagging['lexicon'] = {w for w in stages[0].grammar.lexicalbyword
-				if not w.startswith("UNK")}
+				if not w.startswith(UNK)}
 		postagging['sigs'] = {w for w in stages[0].grammar.lexicalbyword
-				if w.startswith("UNK")}
+				if w.startswith(UNK)}
 
 
 def exportbitpargrammar(stage):

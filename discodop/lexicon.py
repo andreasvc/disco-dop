@@ -27,6 +27,8 @@ import re
 from collections import defaultdict, Counter as multiset
 from fractions import Fraction
 
+UNK = '_UNK'
+
 
 def getunknownwordmodel(tagged_sents, unknownword,
 		unknownthreshold, openclassthreshold):
@@ -35,7 +37,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	tagged_sents: the sentences from the training set with the gold POS
 			tags from the treebank.
 	unknownword: a function that returns a signature for a given word;
-			e.g., "eschewed" => "UNK-L-d".
+			e.g., "eschewed" => "_UNK-L-d".
 	unknownthreshold: words with frequency lower than or equal to this are
 			replaced by their signature.
 	openclassthreshold: tags that rewrite to at least this much word types
@@ -104,14 +106,14 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 			if sig in sigs:
 				yield sig
 			else:
-				yield 'UNK'
+				yield UNK
 
 
 def simplesmoothlexicon(grammar, lexmodel,
 		epsilon=Fraction(1, 100), normalize=False):
 	""" given a grammar, introduce lexical productions for unobserved
 	combinations of known open class words and tags, as well as for unobserved
-	signatures which are mapped to 'UNK'.
+	signatures which are mapped to '_UNK'.
 	epsilon: 'frequency' of productions for unseen tag, word pair.
 	normalize: re-scale probabilities so that they sum to 1 again. """
 	(lexicon, wordsfortag, openclasstags,
@@ -126,11 +128,11 @@ def simplesmoothlexicon(grammar, lexmodel,
 			#print(>> sys.stderr, newrules[-1])
 	for tag in openclasstags:  # open class tag-word pairs
 		epsilon1 = epsilon / tags[tag]
-		for word in openclasswords - wordsfortag[tag] - {'UNK'}:
+		for word in openclasswords - wordsfortag[tag] - {UNK}:
 			newrules.append((((tag, 'Epsilon'), (word, )), epsilon1))
 	for tag in tags:  # catch all unknown signature
 		epsilon1 = epsilon / tags[tag]
-		newrules.append((((tag, 'Epsilon'), ('UNK', )), epsilon1))
+		newrules.append((((tag, 'Epsilon'), (UNK, )), epsilon1))
 	return newrules
 
 
@@ -148,8 +150,8 @@ def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 			words[word] += openclassoffset
 			tags[tag] += openclassoffset
 		# unseen signatures
-		sigs["UNK"] += 1
-		sigtag["UNK", tag] += 1
+		sigs[UNK] += 1
+		sigtag[UNK, tag] += 1
 	# Compute P(tag|sig)
 	tagtotal = sum(tags.values())
 	wordstotal = sum(words.values())
@@ -242,7 +244,7 @@ def unknownword6(word, loc, lexicon):
 	""" Model 6 of the Stanford parser (for WSJ treebank). """
 	wlen = len(word)
 	numcaps = 0
-	sig = "UNK"
+	sig = UNK
 	numcaps = len(hasupper.findall(word))
 	lowered = word.lower()
 	if numcaps > 1:
@@ -274,7 +276,7 @@ def unknownword6(word, loc, lexicon):
 
 def unknownword4(word, loc, _):
 	""" Model 4 of the Stanford parser. Relatively language agnostic. """
-	sig = "UNK"
+	sig = UNK
 
 	# letters
 	if word[0] in UPPER:
@@ -314,7 +316,7 @@ def unknownword4(word, loc, _):
 def unknownwordbase(word, _loc, _lexicon):
 	""" BaseUnknownWordModel of the Stanford parser.
 	Relatively language agnostic. """
-	sig = "UNK"
+	sig = UNK
 
 	# letters
 	if word[0] in UPPER:
@@ -362,7 +364,7 @@ ispunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 
 def unknownwordftb(word, loc, _):
 	""" Model 2 for French of the Stanford parser. """
-	sig = "UNK"
+	sig = UNK
 
 	if advsuffix.search(word):
 		sig += "-ADV"
