@@ -51,7 +51,6 @@ options may consist of (* marks default option):
     --inputfmt [*export|discbracket|bracket]
     --inputenc [*UTF-8|ISO-8859-1|...]
     --dopestimator [dop1|ewe|shortest|...]
-    --freqs               produce frequencies instead of probabilities
     --numproc [1|2|...]   only relevant for double dop fragment extraction
     --gzip                compress output with gzip, view with zless &c.
     --packed              use packed graph encoding for DOP reduction
@@ -708,41 +707,51 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 	io.open(out, 'w', encoding=encoding).writelines(grammar)
 
 
-def write_lcfrs_grammar(grammar, rules, lexicon, bitpar=False, freqs=False):
-	""" Writes a grammar to a simple text file format. Rules are written in
+def write_lcfrs_grammar(grammar, bitpar=False):
+	""" Writes a grammar in a simple text file format. Rules are written in
 	the order as they appear in the sequence 'grammar', except that the lexicon
 	file lists words in sorted order (with tags for each word in the order of
 	'grammar'). Parameters:
 	- grammar: sequence of rule tuples, as produced by induce_plcfrs(),
-		dopreduction(), doubledop().
-	- rules: a file object with a write() method accepting ascii byte strings
-	- lexicon: a file object with a write() method accepting unicode strings
+		dopreduction(), or doubledop().
+	Returns:
+	- rules, lexicon: bytes object & a unicode string, respectively
 	For a description of the file format, see grammar.FORMAT.
 	When bitpar is True, use bitpar format: for rules, put weight first (as
 	decimal fraction or frequency) and leave out the yield function. """
+	# when grammar is a PLCFRS, write rational fractions.
+	# when grammar is bitpar PCFG, write frequencies if probabilities sum to 1,
+	# i.e., in that case probalities can be re-computed as relative
+	# frequencies. otherwise, resort to decimal floats (imprecise).
+	rules, lexicon = [], []
 	lexical = {}
+	if bitpar:
+		ntfd = defaultdict(int)
+		for (r, _), w in grammar:
+			ntfd[r[0]] += w
+	freqs = bitpar and all(a == 1 for a in ntfd.values())
 	for (r, yf), w in grammar:
 		if len(r) == 2 and r[1] == 'Epsilon':
 			lexical.setdefault(unicode(yf[0]), []).append((r[0], w))
 			continue
 		elif bitpar:
-			rules.write(('%g\t%s\n' % (w.numerator if freqs else w,
-					'\t'.join(x for x in r))).encode('ascii'))
+			rules.append(('%g\t%s\n' % (w.numerator if freqs else w,
+					'\t'.join(x for x in r))))
 		else:
 			yfstr = ','.join(''.join(map(str, a)) for a in yf)
-			rules.write(('%s\t%s\t%s\n' % (
+			rules.append(('%s\t%s\t%s\n' % (
 					'\t'.join(x for x in r), yfstr,
-					w.numerator if freqs else w)).encode('ascii'))
+					w.numerator if freqs else w)))
 	for word in sorted(lexical):
-		lexicon.write(word)
+		lexicon.append(word)
 		for tag, w in lexical[word]:
 			if freqs:
-				lexicon.write(unicode('\t%s %d' % (tag, w.numerator)))
+				lexicon.append(unicode('\t%s %d' % (tag, w.numerator)))
 			else:
-				lexicon.write(unicode('\t%s %s' % (tag,
+				lexicon.append(unicode('\t%s %s' % (tag,
 						(float(w) if bitpar else w))))
-		lexicon.write(unicode('\n'))
-
+		lexicon.append(unicode('\n'))
+	return ''.join(rules).encode('ascii'), u''.join(lexicon)
 
 def subsetgrammar(a, b):
 	""" test whether grammar a is a subset of b. """
@@ -876,7 +885,7 @@ def test():
 
 
 def main():
-	"""" Command line interface to create grammars from treebanks. """
+	""" Command line interface to create grammars from treebanks. """
 	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from .treetransforms import addfanoutmarkers, canonicalize
@@ -885,24 +894,23 @@ def main():
 	from .containers import Grammar
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
-	flags = ("gzip", "freqs", "packed")
+	flags = ('gzip', 'packed')
 	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
 		model, treebankfile, grammarfile = args
 	except (GetoptError, ValueError) as err:
-		print("error: %r\n%s" % (err, USAGE))
+		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
-	assert model in ("pcfg", "plcfrs", "dopreduction", "doubledop"), (
-		"unrecognized model: %r" % model)
+	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop'), (
+		'unrecognized model: %r' % model)
 	assert opts.get('dopestimator', 'dop1') in ('dop1', 'ewe', 'shortest'), (
-		"unrecognized estimator: %r" % opts['dopestimator'])
-	freqs = opts.get('--freqs', False)
+		'unrecognized estimator: %r' % opts['dopestimator'])
 
 	# read treebank
 	reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = reader(".", treebankfile, encoding=opts.get('--inputenc', 'utf8'))
+	corpus = reader('.', treebankfile, encoding=opts.get('--inputenc', 'utf8'))
 	trees = list(corpus.parsed_sents().values())
 	sents = list(corpus.sents().values())
 	for a in trees:
@@ -910,12 +918,12 @@ def main():
 		addfanoutmarkers(a)
 
 	# read off grammar
-	if model in ("pcfg", "plcfrs"):
+	if model in ('pcfg', 'plcfrs'):
 		grammar = induce_plcfrs(trees, sents)
-	elif model == "dopreduction":
+	elif model == 'dopreduction':
 		grammar, eweweights, shortest = dopreduction(trees, sents,
-				packedgraph="--packed" in opts)
-	elif model == "doubledop":
+				packedgraph='--packed' in opts)
+	elif model == 'doubledop':
 		numproc = int(opts.get('--numproc', 1))
 		fragments = getfragments(trees, sents, numproc)
 		grammar, backtransform, eweweights, shortest = doubledop(fragments)
@@ -925,30 +933,30 @@ def main():
 		grammar = [(rule, w) for (rule, _), w in zip(grammar, shortest)]
 
 	print(grammarinfo(grammar))
-	if not freqs:
-		cgrammar = Grammar(grammar)
-		cgrammar.testgrammar()
-	rules = grammarfile + ".rules"
-	lexicon = grammarfile + ".lex"
+	rules = grammarfile + '.rules'
+	lexicon = grammarfile + '.lex'
 	if '--gzip' in opts:
 		myopen = gzip.open
-		rules += ".gz"
-		lexicon += ".gz"
+		rules += '.gz'
+		lexicon += '.gz'
 	else:
 		myopen = open
-	with codecs.getwriter('ascii')(myopen(rules, "w")) as rulesfile:
-		with codecs.getwriter('utf-8')(myopen(lexicon, "w")) as lexiconfile:
-			# write output
-			bitpar = model == "pcfg" or opts.get('--inputfmt') == 'bracket'
-			write_lcfrs_grammar(grammar, rulesfile, lexiconfile,
-					bitpar=bitpar, freqs=freqs)
-	if model == "doubledop":
-		backtransformfile = "%s.backtransform%s" % (grammarfile,
-			".gz" if '--gzip' in opts else '')
-		myopen(backtransformfile, "w").writelines(
-				"%s\n" % a for a in backtransform.values())
-		print("wrote backtransform to", backtransformfile)
-	print("wrote grammar to %s and %s." % (rules, lexicon))
+	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
+	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
+	cgrammar = Grammar(rules, lexicon)
+	cgrammar.testgrammar()
+	# write output
+	with myopen(rules, 'w') as rulesfile:
+		rulesfile.write(rules)
+	with codecs.getwriter('utf-8')(myopen(lexicon, 'w')) as lexiconfile:
+		lexiconfile.write(lexicon)
+	if model == 'doubledop':
+		backtransformfile = '%s.backtransform%s' % (grammarfile,
+			'.gz' if '--gzip' in opts else '')
+		myopen(backtransformfile, 'w').writelines(
+				'%s\n' % a for a in backtransform.values())
+		print('wrote backtransform to', backtransformfile)
+	print('wrote grammar to %s and %s.' % (rules, lexicon))
 
 if __name__ == '__main__':
 	if '--test' in sys.argv:

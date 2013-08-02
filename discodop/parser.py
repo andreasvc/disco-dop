@@ -157,7 +157,8 @@ def doparsing(parser, infile, out, printprob, oneline):
 		result = list(parser.parse(sent))[-1]
 		if result.noparse:
 			unparsed += 1
-		if printprob:
+			out.writelines('No parse for "%s"\n' % ' '.join(sent))
+		elif printprob:
 			out.writelines('prob=%.16g\n%s\n' % (prob, tree)
 					for tree, prob in sorted(result.parsetrees.items(),
 						key=itemgetter(1), reverse=True))

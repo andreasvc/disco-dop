@@ -84,13 +84,8 @@ cdef class Grammar:
 			# convert tuples to strings with text format
 			# this is somewhat roundabout but avoids code duplication
 			from grammar import write_lcfrs_grammar
-			with BytesIO() as ruletmp, StringIO() as lexicontmp:
-				write_lcfrs_grammar(rule_tuples_or_bytes, ruletmp, lexicontmp,
-						bitpar=bitpar)
-				ruletmp.seek(0)
-				lexicontmp.seek(0)
-				self.origrules = ruletmp.read()
-				self.origlexicon = lexicontmp.read()
+			self.origrules, self.origlexicon = write_lcfrs_grammar(
+					rule_tuples_or_bytes, bitpar=bitpar)
 		else:
 			raise ValueError("expected sequence of tuples or bytes string.")
 

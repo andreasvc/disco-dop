@@ -664,7 +664,7 @@ def testpunct():
 
 
 def testtransforms():
-	"""" Test whether the Tiger transformations (transform / reversetransform)
+	""" Test whether the Tiger transformations (transform / reversetransform)
 	are reversible. """
 	from .treetransforms import canonicalize
 	from .treebank import NegraCorpusReader, handlefunctions

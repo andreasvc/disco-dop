@@ -897,7 +897,7 @@ def testminbin():
 
 
 def testsplit():
-	"""" Verify that splitting and merging discontinuties gives the
+	""" Verify that splitting and merging discontinuties gives the
 	same trees for a treebank. """
 	from .treebank import NegraCorpusReader
 	correct = wrong = 0
