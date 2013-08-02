@@ -753,6 +753,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 		lexicon.append(unicode('\n'))
 	return ''.join(rules).encode('ascii'), u''.join(lexicon)
 
+
 def subsetgrammar(a, b):
 	""" test whether grammar a is a subset of b. """
 	difference = set(map(itemgetter(0), a)) - set(map(itemgetter(0), b))

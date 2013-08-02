@@ -444,10 +444,10 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					bitpar=stage.mode.startswith('pcfg'))
 			with gzip.open('%s/%s.rules.gz' % (
 					resultdir, stage.name), 'wb') as rulesfile:
-					rulesfile.write(rules)
+				rulesfile.write(rules)
 			with codecs.getwriter('utf-8')(gzip.open('%s/%s.lex.gz' % (
 					resultdir, stage.name), 'wb')) as lexiconfile:
-					lexiconfile.write(lexicon)
+				lexiconfile.write(lexicon)
 			_sumsto1 = grammar.testgrammar()
 			if n and stage.prune:
 				msg = grammar.getmapping(stages[n - 1].grammar,
