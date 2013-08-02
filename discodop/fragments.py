@@ -102,7 +102,7 @@ def main(argv=None):
 		assert not PARAMS['approx'] and not PARAMS['nofreq'], (
 				"--complete is incompatible with --nofreq and --approx")
 
-	level = logging.WARNING if PARAMS['quiet'] else logging.INFO
+	level = logging.WARNING if PARAMS['quiet'] else logging.DEBUG
 	logging.basicConfig(level=level, format='%(message)s')
 	if PARAMS['debug'] and numproc > 1:
 		logger = log_to_stderr()
@@ -322,7 +322,7 @@ def worker(interval):
 				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
 				discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
 				debug=PARAMS.get('debug'))
-	logging.info("finished %d--%d", offset, end)
+	logging.debug("finished %d--%d", offset, end)
 	return result
 
 
@@ -334,11 +334,11 @@ def exactcountworker(args):
 	results = exactcounts(trees1, PARAMS['trees2'] or trees1, bitsets,
 			fast=not PARAMS['quadratic'], indices=PARAMS['indices'])
 	if PARAMS['complete']:
-		logging.info("complete matches %d of %d", n + 1, m)
+		logging.debug("complete matches %d of %d", n + 1, m)
 	elif PARAMS['indices']:
-		logging.info("exact indices %d of %d", n + 1, m)
+		logging.debug("exact indices %d of %d", n + 1, m)
 	else:
-		logging.info("exact counts %d of %d", n + 1, m)
+		logging.debug("exact counts %d of %d", n + 1, m)
 	return results
 
 
