@@ -23,37 +23,38 @@ from .treetransforms import binarize, introducepreterminals
 from ._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
 
-USAGE = """Fast Fragment Seeker
-usage: %s [options] treebank1 [treebank2]
+USAGE = """Usage: %s <treebank1> [treebank2] [options]
+  or: %s --batch=<dir> <treebank1> <treebank2>... [options]
 If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
 Input is in Penn treebank format (S-expressions), one tree per line.
 Output contains lines of the form "tree<TAB>frequency".
 Frequencies refer to the last treebank by default.
 Output is sent to stdout; to save the results, redirect to a file.
---disc        work with discontinuous trees; input is in Negra export format.
-              output: tree<TAB>sentence<TAB>frequency
-              where "tree' has indices as leaves, referring to elements of
-              "sentence", a space separated list of words.
---indices     report sets of indices instead of frequencies.
---cover       include `cover' fragments corresponding to single productions.
---complete    find complete matches of fragments from treebank1 (needle) in
-              treebank2 (haystack).
---batch dir   enable batch mode; any number of treebanks > 1 can be given;
-              first treebank will be compared to all others, frequencies refer
-              to first treebank.
-              Results are written to filenames of the form dir/A_B.
---numproc n   use n independent processes, to enable multi-core usage.
-              The default is not to use multiprocessing; use 0 to use all CPUs.
---numtrees n  only read first n trees from first treebank
---encoding x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
---approx      report approximate frequencies (lower bound)
---nofreq      do not report frequencies.
---quadratic   use the slower, quadratic algorithm for finding fragments.
---alt         alternative output format: (NP (DT "a") NN)
-              default: (NP (DT a) (NN ))
---debug       extra debug information, ignored when numproc > 1.
---quiet       disable all messages.""" % sys.argv[0]
+Options:
+  --disc        work with discontinuous trees; input is in Negra export format.
+                output: tree<TAB>sentence<TAB>frequency
+                where "tree' has indices as leaves, referring to elements of
+                "sentence", a space separated list of words.
+  --indices     report sets of indices instead of frequencies.
+  --cover       include `cover' fragments corresponding to single productions.
+  --complete    find complete matches of fragments from treebank1 (needle) in
+                treebank2 (haystack).
+  --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
+                first treebank will be compared to all others, frequencies
+                refer to first treebank.
+                Results are written to filenames of the form dir/A_B.
+  --numproc=n   use n independent processes, to enable multi-core usage
+                (default: 1); use 0 to detect the number of CPUs.
+  --numtrees=n  only read first n trees from first treebank
+  --encoding=x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
+  --approx      report approximate frequencies (lower bound)
+  --nofreq      do not report frequencies.
+  --quadratic   use the slower, quadratic algorithm for finding fragments.
+  --alt         alternative output format: (NP (DT "a") NN)
+                default: (NP (DT a) (NN ))
+  --debug       extra debug information, ignored when numproc > 1.
+  --quiet       disable all messages.""" % (sys.argv[0], sys.argv[0])
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
 		'disc', 'quiet', 'debug', 'quadratic', 'cover', 'alt')

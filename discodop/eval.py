@@ -18,52 +18,49 @@ try:
 except ImportError:
 	from .treedist import newtreedist as newtreedist, newtreedist
 
-USAGE = "usage: %s gold parses [param] [options]" % sys.argv[0]
+USAGE = "Usage: %s <gold> <parses> [param] [options]" % sys.argv[0]
 HELP = """\
 Evaluation of (discontinuous) parse trees, following EVALB as much as possible.
 
 %s
-where gold and parses are files with parse trees, param is in EVALB format,
-and options may consist of:
+where gold and parses are files with parse trees, param is an EVALB parameter
+file, and options may consist of:
 
---cutofflen n    Overrides the sentence length cutoff of the parameter file.
---verbose        Print table with per sentence information.
---debug          Print debug information showing per sentence bracketings etc.
---disconly       Only evaluate bracketings of discontinuous constituents
-                 (only affects Parseval measures).
---goldenc enc    ...
---parsesenc enc  Specify a different encoding than the default UTF-8.
---goldfmt        ...
---parsesfmt      Specify a corpus format. Options: export, bracket, discbracket
---ted            Enable tree-edit distance evaluation.
---headrules x    Specify rules for head assignment of constituents that do not
-                 already have a child marked as head; this enables dependency
-                 evaluation.
---functions x    'remove'=default: strip hyphen-separated function from labels
-                 'leave': leave syntactic labels as is,
-                 'add': evaluate both syntactic categories and functions,
-                 'replace': only evaluate grammatical functions.
---morphology x   'no'=default: only evaluate POS tags,
-                 'add': concatenate morphology tags to POS tags,
-                 'replace': replace POS tags with morphology tags,
-                 'between': insert morphological node between POS tag and word.
-Example: %s sample2.export parses.export TEST.prm --goldenc iso-8859-1
+  --cutofflen=n    Overrides the sentence length cutoff of the parameter file.
+  --verbose        Print table with per sentence information.
+  --debug          Print debug information with per sentence bracketings etc.
+  --disconly       Only evaluate bracketings of discontinuous constituents
+                   (only affects Parseval measures).
+  --goldenc=enc    ...
+  --parsesenc=enc  Specify a different encoding than the default UTF-8.
+  --goldfmt        ...
+  --parsesfmt      Specify corpus format. Options: export, bracket, discbracket
+  --ted            Enable tree-edit distance evaluation.
+  --headrules=x    Specify rules for head assignment of constituents that do
+                   not already have a child marked as head; this enables
+                   dependency evaluation.
+  --functions=x    'remove'=default: strip functions off labels
+                   'leave': leave syntactic labels as is,
+                   'add': evaluate both syntactic categories and functions,
+                   'replace': only evaluate grammatical functions.
+  --morphology=x   'no'=default: only evaluate POS tags,
+                   'add': concatenate morphology tags to POS tags,
+                   'replace': replace POS tags with morphology tags,
+                   'between': add morphological node between POS tag and word.
 
 The parameter file should be encoded in UTF-8 and supports the following
-options (in addition to those described in README of EVALB):
-
-DISC_ONLY        only consider discontinuous constituents for F-scores.
-TED              when enabled, give tree-edit distance scores; disabled by
-                 default as these are slow to compute.
-DEBUG            -1 only print summary table
-                 0 additionally, print category / tag breakdowns (default)
-                   (after application of cutoff length).
-                 1 give per-sentence results ('--verbose')
-                 2 give detailed information for each sentence ('--debug')
-MAX_ERROR        this values is ignored, no errors are tolerated.
-                 the parameter is accepted to support usage of unmodified
-                 EVALB parameter files.
-""" % (USAGE, sys.argv[0],)
+options (in addition to those described in the README of EVALB):
+  DISC_ONLY        only consider discontinuous constituents for F-scores.
+  TED              when enabled, give tree-edit distance scores; disabled by
+                   default as these are slow to compute.
+  DEBUG            -1 only print summary table
+                   0 additionally, print category / tag breakdowns (default)
+                     (after application of cutoff length).
+                   1 give per-sentence results ('--verbose')
+                   2 give detailed information for each sentence ('--debug')
+  MAX_ERROR        this values is ignored, no errors are tolerated.
+                   the parameter is accepted to support usage of unmodified
+                   EVALB parameter files. """ % USAGE
 
 HEADER = """
    Sentence                 Matched   Brackets            Corr      Tag

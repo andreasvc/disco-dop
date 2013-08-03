@@ -25,8 +25,9 @@ from .treebanktransforms import reversetransform, rrbacktransform
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
 USAGE = """
-usage: %s [options] rules lexicon [input [output]]
-or: [options] --ctf k coarserules coarselex finerules finelex [input [output]]
+usage: %s [options] <rules> <lexicon> [input [output]]
+or:    %s [options] --ctf k <coarserules> <coarselex>
+          <finerules> <finelex> [input [output]]
 
 Grammars need to be binarized, and are in bitpar or PLCFRS format.
 When no file is given, output is written to standard output;
@@ -36,18 +37,17 @@ Input should contain one token per line, with sentences delimited by two
 newlines. Output consists of bracketed trees, with discontinuities indicated
 through indices pointing to words in the original sentence.
 
-    Options:
-    -b k          Return the k-best parses instead of just 1.
-    -s x          Use "x" as start symbol instead of default "TOP".
-    -z            Input is one sentence per line, space-separated tokens.
-    --ctf k       Use k-best coarse-to-fine;
-                  prune items not in k-best derivations.
-    --prob        Print probabilities as well as parse trees.
-    --mpd         In coarse-to-fine mode, produce the most probable
-                  derivation (MPD) instead of the most probable parse (MPP).
+Options:
+  -b k          Return the k-best parses instead of just 1.
+  -s x          Use "x" as start symbol instead of default "TOP".
+  -z            Input is one sentence per line, space-separated tokens.
+  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
+  --prob        Print probabilities as well as parse trees.
+  --mpd         In coarse-to-fine mode, produce the most probable
+                derivation (MPD) instead of the most probable parse (MPP).
 
 %s
-""" % (sys.argv[0], FORMAT)
+""" % (sys.argv[0], sys.argv[0], FORMAT)
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames

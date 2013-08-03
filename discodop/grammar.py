@@ -1,4 +1,4 @@
-""" Assorted functions to read grammars of treebanks. """
+""" Assorted functions to read off grammars from treebanks. """
 from __future__ import division, print_function
 import io
 import re
@@ -37,29 +37,27 @@ rules:   S	NP	VP	010	1/2
 lexicon: Haus	NN	3/10	JJ	1/9"""
 
 USAGE = """Read off grammars from treebanks.
-usage: %s [options] model input output
+Usage: %s pcfg <input> <output> [options]
+  %s plcfrs <input> <output> [options]
+  %s dopreduction <input> <output> [options]
+  %s doubledop <input> <output> [options]
 
-model is one of:
-    pcfg
-    plcfrs
-    dopreduction
-    doubledop
 input is a binarized treebank,
-output is the base for the filenames to write the grammar to.
+output is the base name for the filenames to write the grammar to.
 
-options may consist of (* marks default option):
-    --inputfmt [*export|discbracket|bracket]
-    --inputenc [*UTF-8|ISO-8859-1|...]
-    --dopestimator [dop1|ewe|shortest|...]
-    --numproc [1|2|...]   only relevant for double dop fragment extraction
-    --gzip                compress output with gzip, view with zless &c.
-    --packed              use packed graph encoding for DOP reduction
+Options (* marks default option):
+  --inputfmt=[*export|discbracket|bracket]
+  --inputenc=[*UTF-8|ISO-8859-1|...]
+  --dopestimator=[*dop1|ewe|shortest|...]
+  --numproc=[*1|2|...]  only relevant for double dop fragment extraction
+  --gzip                compress output with gzip, view with zless &c.
+  --packed              use packed graph encoding for DOP reduction
 
 When a PCFG is requested, or the input format is `bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
-\n%s\n""" % (sys.argv[0], FORMAT)
+\n%s\n""" % (sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0], FORMAT)
 
 
 def lcfrs_productions(tree, sent, frontiers=False):

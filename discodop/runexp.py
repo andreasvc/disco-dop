@@ -1,5 +1,5 @@
 # -*- coding: UTF-8 -*-
-""" Run an experiment given a parameter file. Reads of grammars, does parsing
+""" Run an experiment given a parameter file. Extracts grammars, does parsing
 and evaluation. """
 from __future__ import division, print_function
 import io
@@ -38,7 +38,7 @@ from .parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
 from .estimates import getestimates, getpcfgestimates
 from .containers import Grammar
 
-USAGE = """Usage: %s [--rerun] parameter file
+USAGE = """Usage: %s [--rerun] <parameter file>
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
 pass the option --rerun.""" % sys.argv[0]

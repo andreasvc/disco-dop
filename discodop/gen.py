@@ -11,10 +11,11 @@ from random import random
 USAGE = """
 Generate random sentences with a PLCFRS or PCFG.
 Reads grammar from a text file in PLCFRS or bitpar format.
-usage: %s rules lexicon | --test
+Usage: %s [--verbose] <rules> <lexicon>
+or: %s --test
 
 Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
-""" % sys.argv[0]
+""" % (sys.argv[0], sys.argv[0])
 
 Grammar = namedtuple("Grammar", ('numrules', 'unary', 'lbinary', 'rbinary',
 		'bylhs', 'lexicalbyword', 'lexicalbylhs', 'toid', 'tolabel', 'fanout'))
@@ -245,6 +246,9 @@ def test():
 
 def main():
 	""" Load a grammar from a text file and generate 20 sentences. """
+	if "--test" in sys.argv:
+		test()
+		return
 	start = "ROOT"
 	if "-s" in sys.argv:
 		i = sys.argv.index("-s")
@@ -269,7 +273,4 @@ def main():
 		print("[%g] %s" % (p, ' '.join(sent.pop())))
 
 if __name__ == '__main__':
-	if "--test" in sys.argv:
-		test()
-	else:
-		main()
+	main()

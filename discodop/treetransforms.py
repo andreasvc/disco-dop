@@ -39,10 +39,10 @@ except ImportError:
 		return result
 
 USAGE = """Treebank binarization and conversion
-usage: %s [options] action input output
+Usage: %s [options] <action> <input> <output>
 where input and output are treebanks, and action is one of:
     none
-    binarize [-h x] [-v x] [--factor left|right]
+    binarize [-h x] [-v x] [--factor=left|right]
     optimalbinarize [-h x] [-v x]
     unbinarize
     introducepreterminals
@@ -50,28 +50,28 @@ where input and output are treebanks, and action is one of:
     mergedisc
 
 options may consist of (* marks default option):
-  --inputfmt|--outputfmt [*export|discbracket|bracket|alpino]
-  --inputenc|--ounpuntenc [*UTF-8|ISO-8859-1|...]
-  --slice n:m    select a range of sentences from input starting with n,
+  --inputfmt|--outputfmt=[*export|discbracket|bracket|alpino]
+  --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
+  --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
                  out or negative, and the first index is 0.
-  --factor [left|*right]
+  --factor=[left|*right]
                  whether binarization factors to the left or right
   -h n           horizontal markovization. default: infinite
   -v n           vertical markovization. default: 1
-  --headrules x  turn on head finding; affects binarization.
+  --headrules=x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
   --markheads    mark heads with '^' in phrasal labels.
-  --punct x      possible options:
+  --punct=x      possible options:
                  remove: remove any punctuation.
                  move: re-attach punctuation to nearest constituent to minimize
                        discontinuity.
                  restore: attach punctuation under root node.
-  --functions x  'leave': (default): leave syntactic labels as is,
+  --functions=x  'leave': (default): leave syntactic labels as is,
                  'remove': strip away hyphen-separated function labels
                  'add': concatenate syntactic categories with functions,
                  'replace': replace syntactic labels w/grammatical functions.
-  --morphology x 'no' (default): use POS tags as preterminals
+  --morphology=x 'no' (default): use POS tags as preterminals
                  'add': concatenate morphological information to POS tags,
                      e.g., DET/sg.def
                  'replace': use morphological information as preterminal label
@@ -923,7 +923,7 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from .treebank import getreader, writetree, readheadrules
-	flags = ('markorigin', 'markheads')
+	flags = ['markorigin', 'markheads']
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()
 	try:
