@@ -506,7 +506,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 		raise ValueError("unrecognized format: %r" % fmt)
 
 
-def handlefunctions(action, tree, pos=False, top=False):
+def handlefunctions(action, tree, pos=True, top=False):
 	""" Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
 	action: one of {None, 'add', 'replace', 'remove'}
 	pos: whether to add function tags to POS tags.

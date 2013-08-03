@@ -109,13 +109,11 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 				yield UNK
 
 
-def simplesmoothlexicon(grammar, lexmodel,
-		epsilon=Fraction(1, 100), normalize=False):
-	""" given a grammar, introduce lexical productions for unobserved
+def simplesmoothlexicon(lexmodel, epsilon=Fraction(1, 100)):
+	""" introduce lexical productions for unobserved
 	combinations of known open class words and tags, as well as for unobserved
 	signatures which are mapped to '_UNK'.
-	epsilon: 'frequency' of productions for unseen tag, word pair.
-	normalize: re-scale probabilities so that they sum to 1 again. """
+	epsilon: 'frequency' of productions for unseen tag, word pair. """
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
 	newrules = []

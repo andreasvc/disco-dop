@@ -353,7 +353,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						traintrees, sents, packedgraph=stage.packedgraph)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
 			if lexmodel and simplelexsmooth:
-				newrules = simplesmoothlexicon(xgrammar, lexmodel)
+				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
 				eweweights.extend(w for _, w in newrules)
 				shortest.extend(w for _, w in newrules)
@@ -434,7 +434,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				logging.info(grammarinfo(xgrammar,
 						dump='%s/pcdist.txt' % resultdir))
 			if lexmodel and simplelexsmooth:
-				newrules = simplesmoothlexicon(xgrammar, lexmodel)
+				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
 				xgrammar.sort(key=lambda rule: rule[0][0][1] == 'Epsilon'
 						and rule[0][1][0])
