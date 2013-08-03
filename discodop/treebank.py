@@ -220,11 +220,11 @@ class DiscBracketCorpusReader(CorpusReader):
 	separately represented sentence; e.g.:
 	(S (NP 1) (VP (VB 0) (JJ 2)) (? 3))	is John rich ?
 	Note that the tree and the sentence are separated by a tab, while the words
-	in the sentence are separated by spaces. There is one tree plus sentence
+	in the sentence are separated by spaces. There is one tree and sentence
 	per line.
 	Compared to Negra's export format, this format lacks morphology, lemmas and
 	functional edges. On the other hand, it is very close to the internal
-	representation employed here, so it is quick to load. """
+	representation employed here, so it can be read efficiently. """
 	def sents(self):
 		return OrderedDict((n, self._word(line))
 				for n, line in self.blocks().items())

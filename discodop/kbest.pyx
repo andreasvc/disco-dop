@@ -306,7 +306,7 @@ cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
 			label = ej.edge.rule.rhs2
 			rankededge = (<Entry>D[ej.edge.mid][ej.end][label][ej.right]).key
 			getderivationcfg(result, rankededge, D, chart, tolabel, debin)
-	if debin is None or debin not in tolabel[ej.habel]:
+	if debin is None or debin not in tolabel[ej.label]:
 		result += b')'
 # --- end CFG specific
 

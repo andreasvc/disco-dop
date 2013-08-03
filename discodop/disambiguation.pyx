@@ -36,8 +36,8 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		bint bitpar=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
-	cdef bint mpd = method == "mpd"
-	cdef bint shortest = method == "shortest"
+	cdef bint mpd = method == 'mpd'
+	cdef bint shortest = method == 'shortest'
 	cdef Entry entry
 	cdef LexicalRule lexrule
 	cdef dict parsetrees = {}, derivs = {}
@@ -65,7 +65,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		D = {}
 	if sample:
 		if bitpar:
-			return parsetrees, derivs, "sampling not possible with bitpar."
+			return parsetrees, derivs, 'sampling not possible with bitpar.'
 		derivations.extend(
 				getsamples(D, chart, start, n, grammar.tolabel, None))
 		# filter out duplicate derivations
@@ -78,13 +78,13 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		entries[:] = filteredderivations.values()
 		derivations[:] = filteredderivations.keys()
 
-	if method == "sl-dop":
+	if method == 'sl-dop':
 		return sldop(dict(derivations), chart, sent, tags, grammar,
 				n, sldop_n, backtransform, D, entries, bitpar)
-	elif method == "sl-dop-simple":
+	elif method == 'sl-dop-simple':
 		return sldop_simple(dict(derivations), entries, n, sldop_n,
 				D, chart, start, grammar, backtransform, bitpar)
-	elif method == "shortest":
+	elif method == 'shortest':
 		# filter out all derivations which are not shortest
 		if backtransform is not None and not bitpar:
 			maxprob = min([entry.value for entry in entries])
@@ -160,7 +160,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 				parsetrees[treestr] = exp(-prob)
 				#parsetrees[treestr] = [-prob]
 
-	msg = "%d derivations, %d parsetrees" % (
+	msg = '%d derivations, %d parsetrees' % (
 			len(derivations if backtransform is None else entries),
 			len(parsetrees))
 	return parsetrees, derivs, msg
@@ -220,8 +220,8 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 			if len(result) > sldop_n:
 				break
 	if not len(result):
-		return {}, {}, "no matching derivation found"
-	msg = "(%d derivations, %d of %d parsetrees)" % (
+		return {}, {}, 'no matching derivation found'
+	msg = '(%d derivations, %d of %d parsetrees)' % (
 		len(derivations), min(sldop_n, len(parsetreeprob)), len(parsetreeprob))
 	return result, derivs, msg
 
@@ -248,7 +248,7 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 			derivsfortree[tree].add(deriv)
 	else:
 		for entry in entries:
-			deriv = getderiv(entry.key, D, chart, grammar.tolabel, "}<")
+			deriv = getderiv(entry.key, D, chart, grammar.tolabel, '}<')
 			tree = recoverfragments(entry.key, D, grammar, backtransform)
 			keys[deriv] = entry.key
 			derivations[deriv] = entry.value
@@ -262,22 +262,17 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 	# the number of fragments used is the number of
 	# nodes (open parens), minus the number of interior
 	# (addressed) nodes.
-	result = {tree: (-min([
-		deriv.count("(") - (deriv.count("@") + deriv.count("(#"))
-		for deriv in derivsfortree[tree]]), parsetreeprob[tree])
-				for tree in selectedtrees}
-
 	result = {}
 	for tree in selectedtrees:
 		score, deriv = min([(deriv.count('(') -
-				len([a for a in deriv.split() if '@' in a or '}' in a]),
+				len([a for a in deriv.split() if '@' in a or '}<' in a]),
 				deriv)
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
 		if backtransform is not None:
 			derivs[tree] = extractfragments(deriv if bitpar else keys[deriv],
 					D, grammar, backtransform)
-	msg = "(%d derivations, %d of %d parsetrees)" % (
+	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
 	return result, derivs, msg
 
@@ -324,7 +319,7 @@ cdef samplechart_lcfrs(dict D, dict chart, ChartItem start, list tolabel,
 	edge = chart[start][idx]
 	if edge.left.label == 0:  # == "Epsilon":
 		idx = edge.left.lexidx()
-		newedge = RankedEdge(start, edge, len(D[edge.left]), -1)
+		newedge = RankedEdge(start, edge, 0, -1)
 		D.setdefault(start, []).append(new_Entry(newedge, edge.inside, 0))
 		deriv = "(%s %d)" % (tolabel[start.label].decode('ascii'), idx)
 		return deriv, edge.inside
@@ -379,8 +374,7 @@ cdef samplechart_cfg(list D, list chart, tuple start, list tolabel,
 	idx = bisect_right(lst, rnd)
 	edge = chart[left][right][label][idx]
 	if edge.rule is NULL:  # == "Epsilon":
-		newedge = RankedCFGEdge(label, left, right, edge,
-				len(D[left][right].get(label, [])), -1)
+		newedge = RankedCFGEdge(label, left, right, edge, 0, -1)
 		D[left][right].setdefault(label, []).append(
 				new_Entry(newedge, edge.inside, 0))
 		deriv = "(%s %d)" % (tolabel[label].decode('ascii'), left)
@@ -429,15 +423,13 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 					SETBIT(fitem.vec, x)
 			whitelist[grammar.toid[n.label.encode('ascii')]][item] = 0.0
 
-	# project labels to all possible labels of DOP reduction
-	# we can't rely on mapping of grammar because grammar may be mapped to a
-	# different sort of grammar.
+	# Project labels to all possible labels that generate that label. For DOP
+	# reduction, all possible ids; for Double DOP, ignore artificial labels.
 	for label, n in grammar.toid.items():
-		if grammar.mapping is not NULL and grammar.mapping[n] == 0:
-			# do not prune item
-			whitelist[n] = None
-		elif backtransform is None:
+		if backtransform is None:
 			whitelist[n] = whitelist[grammar.toid[BREMOVEIDS.sub(b'', label)]]
+		elif b'@' in label or b'}<' in label:
+			whitelist[n] = None  # do not prune item
 		else:
 			whitelist[n] = whitelist[grammar.toid[label]]
 
