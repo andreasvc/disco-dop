@@ -7,10 +7,30 @@ Discontinuous DOP
 
 The aim of this project is to parse discontinuous constituents in natural
 language using Data-Oriented Parsing (DOP), with a focus on global world
-domination. Concretely, we build a DOP model with a Linear Context-Free
-Rewriting System (LCFRS) as the symbolic backbone.
-The grammar is extracted from a treebank of sentences annotated with
-(discontinuous) phrase-structure trees.
+domination. Concretely, this project provides a statistical constituency parser
+with support for discontinuous constituents and Data-Oriented Parsing (DOP).
+Discontinuous constituents are supported through the grammar formalism Linear
+Context-Free Rewriting System (LCFRS), which is a generalization of
+Probabilistic Context-Free Grammar (PCFG). Data-Oriented Parsing allows re-use
+of arbitrary-sized fragments from previously seen sentences. The grammar is
+extracted from a treebank of sentences annotated with (discontinuous)
+phrase-structure trees.
+
+Features:
+---------
+General statistical parsing:
+
+- grammar formalisms: PCFG, PLCFRS
+- coarse-to-fine pruning: k-best coarse-to-fine, posterior pruning (PCFG only)
+
+DOP specific:
+
+- implementations: Goodman's DOP reduction, Double-DOP.
+- estimators: relative frequency estimate (RFE), equal weights estimate.
+- objective functions: most probable parse (MPP),
+  most probable derivation (MPD), most probable shortest derivation (MPSD),
+  most likely tree with shortest derivation (SL-DOP).
+- marginalization: n-best derivations, sampled derivations.
 
 Background
 ----------
@@ -45,7 +65,7 @@ Requirements
 - Numpy 1.5+      http://numpy.org/
 
 For example, to install these dependencies and the latest stable release on
-`Ubuntu <http://www.ubuntu.com>`_
+an `Ubuntu <http://www.ubuntu.com>`_ system
 using `pip <http://http://www.pip-installer.org>`_,
 issue the following commands::
 
@@ -65,7 +85,7 @@ run the following sequence of commands::
 directory which does not require root privileges).
 
 To port the code to another compiler such as Visual C, replace the compiler
-intrinsics in ``macros.h``, ``bit.pyx``, and ``bit.pxd`` to their equivalents
+intrinsics in ``macros.h``, ``bit.pyx``, and ``bit.pxd`` with their equivalents
 for the compiler in question. This mainly concerns operations to scan for bits
 in integers, for which these compiler intrinsics provide the most efficient
 implementation on a given processor.
