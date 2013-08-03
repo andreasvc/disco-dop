@@ -273,16 +273,16 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 				for _ in range(lensent)]
 		dict cell, viterbicell
 		short [:, :] minleft, maxleft, minright, maxright
-	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
+	assert grammar.maxfanout == 1, 'Not a PCFG! fanout: %d' % grammar.maxfanout
 	assert grammar.logprob, "Expecting grammar with log probabilities."
 	minleft, maxleft, minright, maxright = minmaxmatrices(
 			grammar.nonterminals, lensent)
 	if chart is None:
 		chart = [[None] * (lensent + 1) for _ in range(lensent)]
-		cell = dict.fromkeys(range(1, grammar.nonterminals))
 		for left in range(lensent):
 			for right in range(left, lensent):
-				chart[left][right + 1] = cell.copy()
+				chart[left][right + 1] = {
+						n: {} for n in range(1, grammar.nonterminals)}
 	# assign POS tags
 	for left, word in enumerate(sent):
 		tag = tags[left].encode('ascii') if tags else None
@@ -377,6 +377,8 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 				rule = &(grammar.bylhs[lhs][n])
 				oldscore = ((<CFGEdge>viterbicell[lhs]).inside
 						if lhs in viterbicell else infinity)
+				if not cell[lhs]:
+					cell[lhs] = {}
 				while rule.lhs == lhs:
 					narrowr = minright[rule.rhs1, left]
 					narrowl = minleft[rule.rhs2, right]
@@ -388,8 +390,6 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 					minmid = narrowr if narrowr > widel else widel
 					wider = maxright[rule.rhs1, left]
 					maxmid = wider if wider < narrowl else narrowl
-					if lhs not in viterbicell:
-						cell[lhs] = {}
 					for mid in range(minmid, maxmid + 1):
 						if (rule.rhs1 in viterbi[left][mid]
 								and rule.rhs2 in viterbi[mid][right]):
@@ -409,7 +409,6 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 				# update filter
 				if isinf(oldscore):
 					if not cell[lhs]:
-						del cell[lhs]
 						continue
 					if left > minleft[lhs, right]:
 						minleft[lhs, right] = left
@@ -460,9 +459,9 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 				spans += 1
 				items += len(nonempty)
 				# clean up labelled spans that were whitelisted but not used:
-				#for label in cell:
-				#	if cell[label] is None:
-				#		del cell[label]
+				for label in list(cell):
+					if not cell[label]:
+						del cell[label]
 				edges += sum(map(len, nonempty))
 	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
 	if chart[0][lensent].get(start):

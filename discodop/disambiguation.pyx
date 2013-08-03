@@ -15,7 +15,6 @@ from tree import Tree
 from kbest import lazykbest, getderiv
 import plcfrs
 from agenda cimport Entry, new_Entry
-from grammar import induce_plcfrs, rangeheads
 from treetransforms import unbinarize, canonicalize
 from containers cimport Grammar, ChartItem, SmallChartItem, FatChartItem, \
 		CFGChartItem, Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, \
@@ -65,13 +64,17 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 	else:
 		D = {}
 	if sample:
-		if isinstance(start, CFGChartItem):
-			return (parsetrees, derivs,
-					"sampling not implemented for PCFG charts.")
+		if bitpar:
+			return parsetrees, derivs, "sampling not possible with bitpar."
 		derivations.extend(
 				getsamples(D, chart, start, n, grammar.tolabel, None))
 		# filter out duplicate derivations
-		filteredderivations = dict(zip(derivations, D[start]))
+		if isinstance(start, CFGChartItem):
+			entries = D[(<CFGChartItem>start).start][
+					(<CFGChartItem>start).end][start.label]
+		else:
+			entries = D[start]
+		filteredderivations = dict(zip(derivations, entries))
 		entries[:] = filteredderivations.values()
 		derivations[:] = filteredderivations.keys()
 
@@ -97,15 +100,12 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 			treestr = recoverfragments(entry.key, D,
 					grammar, backtransform)
 			if shortest:
-				grammar.switch(u'default', True)
 				newprob = exp(-getderivprob(entry.key, D, sent, grammar))
 				score = (prob / log(0.5), newprob)
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
-					if not isinstance(start, CFGChartItem):
-						derivs[treestr] = []
-						extractfragments(entry.key, D, grammar,
-								backtransform, derivs[treestr])
+					derivs[treestr] = extractfragments(
+							entry.key, D, grammar, backtransform)
 			elif not mpd and treestr in parsetrees:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr] += exp(-prob)
@@ -114,10 +114,8 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 						or exp(-prob) > parsetrees[treestr]):
 				parsetrees[treestr] = exp(-prob)
 				#parsetrees[treestr] = [-prob]
-				if not isinstance(start, CFGChartItem):
-					derivs[treestr] = []
-					extractfragments(entry.key, D, grammar,
-							backtransform, derivs[treestr])
+				derivs[treestr] = extractfragments(
+						entry.key, D, grammar, backtransform)
 	else:  # DOP reduction / bitpar
 		for (deriv, prob), entry in zip(derivations, entries):
 			if backtransform is None:
@@ -131,7 +129,6 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					# because with bitpar we don't know which rules have been
 					# used, read off the rules from the derivation ...
 					tree = canonicalize(Tree.parse(deriv, parse_leaf=int))
-					grammar.switch(u'default', True)
 					newprob = 0.0
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
@@ -150,7 +147,6 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 							else:
 								newprob += lexrule.prob
 				else:
-					grammar.switch(u'default', True)
 					newprob = getderivprob(entry.key, D, sent, grammar)
 				score = (prob / log(0.5), exp(-newprob))
 				if treestr not in parsetrees or score > parsetrees[treestr]:
@@ -206,9 +202,9 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 	grammar.switch(u'shortest', True)
 	shortestderivations, DD, msg, start = treeparsing(
 			nmostlikelytrees, sent, grammar, m, backtransform, tags)
-	result = {}
 	if not DD.get(start):
-		return result, derivs, msg
+		return {}, {}, msg
+	result = {}
 	for (deriv, s), entry in zip(shortestderivations, DD[start]):
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
@@ -218,13 +214,13 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (s / log(0.5), parsetreeprob[treestr])
 			if backtransform is not None:
-				derivs[treestr] = []
-				extractfragments((<Entry>entry).key, DD, grammar,
-						backtransform, derivs[treestr])
+				derivs[treestr] = extractfragments(
+						deriv if bitpar else (<Entry>entry).key,
+						DD, grammar, backtransform)
 			if len(result) > sldop_n:
 				break
 	if not len(result):
-		logging.warning("no matching derivation found")  # error?
+		return {}, {}, "no matching derivation found"
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 		len(derivations), min(sldop_n, len(parsetreeprob)), len(parsetreeprob))
 	return result, derivs, msg
@@ -278,10 +274,9 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 				deriv)
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
-		if backtransform is not None and not isinstance(start, CFGChartItem):
-			derivs[tree] = []
-			extractfragments(keys[deriv], D, grammar,
-					backtransform, derivs[tree])
+		if backtransform is not None:
+			derivs[tree] = extractfragments(deriv if bitpar else keys[deriv],
+					D, grammar, backtransform)
 	msg = "(%d derivations, %d of %d parsetrees)" % (
 			len(derivations), len(result), len(parsetreeprob))
 	return result, derivs, msg
@@ -289,13 +284,21 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 
 def getsamples(D, chart, start, n, tolabel, debin=None):
 	""" Samples n derivations from a chart. """
+	if isinstance(start, CFGChartItem):
+		return getsamples_cfg(D, chart, start, n, tolabel, debin)
+	else:
+		return getsamples_lcfrs(D, chart, start, n, tolabel, debin)
+
+
+def getsamples_lcfrs(D, chart, start, n, tolabel, debin=None):
 	cdef Edge edge
-	cdef dict tables = {}, chartcopy = {}
+	cdef dict tables = {}
+	chartcopy = {}
 	for item in chart:
 		#FIXME: work w/inside prob right?
-		#chart[item].sort(key=attrgetter('prob'))
 		# sort so that highest probability edges come first
 		chartcopy[item] = sorted(chart[item])
+	for item in chartcopy:
 		tables[item] = []
 		prev = 0.0
 		for edge in chartcopy[item]:
@@ -303,12 +306,13 @@ def getsamples(D, chart, start, n, tolabel, debin=None):
 			tables[item].append(prev)
 	result = []
 	for _ in range(n):
-		s, p = samplechart(<dict>D, chartcopy, start, tolabel, tables, debin)
+		s, p = samplechart_lcfrs(
+				D, chartcopy, start, tolabel, tables, debin)
 		result.append((str(s), p))
 	return result
 
 
-cdef samplechart(dict D, dict chart, ChartItem start, list tolabel,
+cdef samplechart_lcfrs(dict D, dict chart, ChartItem start, list tolabel,
 		dict tables, bytes debin):
 	""" Samples a derivation from a chart. """
 	cdef LCFRSEdge edge
@@ -320,23 +324,83 @@ cdef samplechart(dict D, dict chart, ChartItem start, list tolabel,
 	edge = chart[start][idx]
 	if edge.left.label == 0:  # == "Epsilon":
 		idx = edge.left.lexidx()
-		newedge = RankedEdge(start, edge, 0, -1)
+		newedge = RankedEdge(start, edge, len(D[edge.left]), -1)
 		D.setdefault(start, []).append(new_Entry(newedge, edge.inside, 0))
 		deriv = "(%s %d)" % (tolabel[start.label].decode('ascii'), idx)
 		return deriv, edge.inside
-	children = [samplechart(D, chart, child, tolabel, tables, debin)
-		for child in (edge.left, edge.right) if child.label]
+	children = [samplechart_lcfrs(D, chart, child, tolabel, tables, debin)
+			for child in (edge.left, edge.right) if child.label]
 	if debin is not None and debin in tolabel[start.label]:
 		tree = ' '.join([a for a, _ in children])
 	else:
-		tree = "(%s %s)" % (tolabel[start.label].decode('ascii'),
+		tree = '(%s %s)' % (tolabel[start.label].decode('ascii'),
 				' '.join([a for a, _ in children]))
 	# create an edge that has as children the edges that were just created
-	# by our recursive call
+	# by our recursive calls
 	newedge = RankedEdge(start, edge, len(D[edge.left]) - 1,
 			(len(D[edge.right]) - 1) if edge.right.label else -1)
 	prob = edge.rule.prob + sum([b for _, b in children])
 	D.setdefault(start, []).append(new_Entry(newedge, prob, 0))
+	return tree, prob
+
+
+def getsamples_cfg(list D, list chart, CFGChartItem start, int n, list tolabel,
+		debin=None):
+	cdef Edge edge
+	cdef dict tables = {}
+	chartcopy = [[{} for r in l] for l in chart]
+	for l in range(start.end):
+		for r in range(l + 1, start.end + 1):
+			for x in chart[l][r]:
+				chartcopy[l][r][x] = sorted(chart[l][r][x])
+				item = l, r, x
+				tables[item] = []
+				prev = 0.0
+				for edge in chartcopy[l][r][x]:
+					prev += exp(-edge.inside)
+					tables[item].append(prev)
+	result = []
+	for _ in range(n):
+		s, p = samplechart_cfg(
+				D, chartcopy, (start.start, start.end, start.label),
+						tolabel, tables, debin)
+		result.append((str(s), p))
+	return result
+
+
+cdef samplechart_cfg(list D, list chart, tuple start, list tolabel,
+		dict tables, bytes debin):
+	""" Samples a derivation from a chart. """
+	cdef CFGEdge edge
+	cdef double prob
+	left, right, label = start
+	lst = tables[left, right, label]
+	rnd = random() * lst[len(lst) - 1]
+	idx = bisect_right(lst, rnd)
+	edge = chart[left][right][label][idx]
+	if edge.rule is NULL:  # == "Epsilon":
+		newedge = RankedCFGEdge(label, left, right, edge,
+				len(D[left][right].get(label, [])), -1)
+		D[left][right].setdefault(label, []).append(
+				new_Entry(newedge, edge.inside, 0))
+		deriv = "(%s %d)" % (tolabel[label].decode('ascii'), left)
+		return deriv, edge.inside
+	children = [samplechart_cfg(D, chart, child, tolabel, tables, debin)
+			for child in ((left, edge.mid, edge.rule.rhs1),
+				(edge.mid, right, edge.rule.rhs2)) if child[2]]
+	if debin is not None and debin in tolabel[label]:
+		tree = ' '.join([a for a, _ in children])
+	else:
+		tree = '(%s %s)' % (tolabel[label].decode('ascii'),
+				' '.join([a for a, _ in children]))
+	# create an edge that has as children the edges that were just created
+	# by our recursive calls
+	newedge = RankedCFGEdge(label, left, right, edge,
+			len(D[left][edge.mid][edge.rule.rhs1]) - 1,
+			(len(D[edge.mid][right][edge.rule.rhs2]) - 1)
+				if edge.rule.rhs2 else -1)
+	prob = edge.rule.prob + sum([b for _, b in children])
+	D[left][right].setdefault(label, []).append(new_Entry(newedge, prob, 0))
 	return tree, prob
 
 
@@ -383,7 +447,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 	chart, start, _ = plcfrs.parse(sent, grammar, tags=tags,
 			whitelist=whitelist)
 	if not start:
-		return [], {}, "tree parsing failed", None  # FIXME: error?
+		return [], {}, "tree parsing failed", None
 	return lazykbest(chart, start, m, grammar.tolabel) + (start, )
 
 
@@ -417,13 +481,13 @@ cdef double getderivprob_cfg(RankedCFGEdge deriv, list D,
 	cdef double result
 	if deriv.edge.rule is NULL:  # is terminal
 		word = sent[deriv.start]
-		return (<LexicalRule>grammar.lexicalbylhs[deriv.head.label][word]).prob
+		return (<LexicalRule>grammar.lexicalbylhs[deriv.label][word]).prob
 	result = grammar.bylhs[0][deriv.edge.rule.no].prob
-	result += getderivprob((<Entry>D[deriv.edge.mid][deriv.end][
-			deriv.edge.rule.rhs2][deriv.right]).key, D, sent, grammar)
-	if deriv.edge.right:
-		result += getderivprob((<Entry>D[deriv.start][deriv.edge.mid][
-				deriv.edge.rule.rhs1][deriv.left]).key, D, sent, grammar)
+	result += getderivprob((<Entry>D[deriv.start][deriv.edge.mid][
+			deriv.edge.rule.rhs1][deriv.left]).key, D, sent, grammar)
+	if deriv.edge.rule.rhs2:
+		result += getderivprob((<Entry>D[deriv.edge.mid][deriv.end][
+				deriv.edge.rule.rhs2][deriv.right]).key, D, sent, grammar)
 	return result
 
 
@@ -447,23 +511,22 @@ cpdef str recoverfragments(deriv, D, Grammar grammar, dict backtransform):
 	(containing the string '}<'). Note that this means getmapping() has to have
 	been called on `grammar', even when not doing coarse-to-fine parsing. """
 	if isinstance(deriv, RankedEdge):
-		return REMOVEWORDTAGS.sub('', recoverfragments_lcfrs(
-				deriv, D, grammar, backtransform))
+		result = recoverfragments_lcfrs(deriv, D, grammar, backtransform)
 	elif isinstance(deriv, RankedCFGEdge):
-		return REMOVEWORDTAGS.sub('', recoverfragments_cfg(
-				deriv, D, grammar, backtransform))
+		result = recoverfragments_cfg(deriv, D, grammar, backtransform)
 	elif isinstance(deriv, basestring):
-		return REMOVEWORDTAGS.sub('', recoverfragments_str(
-				Tree.parse(deriv, parse_leaf=int),
-				grammar, backtransform))
-	raise ValueError("derivation should be RankedEdge or RankedCFGEdge.")
+		deriv = Tree.parse(deriv, parse_leaf=int)
+		result = recoverfragments_str(deriv, grammar, backtransform)
+	else:
+		raise ValueError
+	return REMOVEWORDTAGS.sub('', result)
 
 
 cdef str recoverfragments_lcfrs(RankedEdge deriv, dict D,
 		Grammar grammar, dict backtransform):
 	cdef RankedEdge child
 	cdef list children = []
-	cdef str frag = backtransform[(<LCFRSEdge>deriv.edge).rule.no]  # template
+	cdef str frag = backtransform[deriv.edge.rule.no]  # template
 
 	# collect all children w/on the fly left-factored debinarization
 	if deriv.edge.right.label:  # is there a right child?
@@ -484,11 +547,11 @@ cdef str recoverfragments_lcfrs(RankedEdge deriv, dict D,
 	children.append((<Entry>D[deriv.edge.left][deriv.left]).key)
 
 	# recursively expand all substitution sites
-	# FIXME: to avoid using str, we could use
+	# FIXME: to avoid using str + decoding, we could use
 	# PyObject* PyBytes_FromFormat(const char *format, ...)
 	# PyBytes_FromFormat('(%s %d)', <char *>..., ...)
 	children = [('(%s %d)' % (
-		str(grammar.tolabel[child.head.label].decode('ascii')),  # FIXME
+		str(grammar.tolabel[child.head.label].decode('ascii')),
 		child.edge.left.lexidx()))
 		if child.edge.rule is NULL else recoverfragments_lcfrs(
 				child, D, grammar, backtransform)
@@ -518,7 +581,7 @@ cdef str recoverfragments_cfg(RankedCFGEdge deriv, list D,
 		Grammar grammar, dict backtransform):
 	cdef RankedCFGEdge child
 	cdef list children = []
-	cdef str frag = backtransform[(<CFGEdge>deriv.edge).rule.no]  # template
+	cdef str frag = backtransform[deriv.edge.rule.no]  # template
 
 	# collect children w/on the fly left-factored debinarization
 	if deriv.edge.rule.rhs2:  # is there a right child?
@@ -589,11 +652,25 @@ cdef str recoverfragments_str(deriv, Grammar grammar, dict backtransform):
 	# substitute results in template
 	return frag.format(*children)
 
-cdef extractfragments(RankedEdge deriv, dict D,
+
+def extractfragments(deriv, D, Grammar grammar, dict backtransform):
+	result = []
+	if isinstance(deriv, RankedEdge):
+		extractfragments_lcfrs(deriv, D, grammar, backtransform, result)
+	elif isinstance(deriv, RankedCFGEdge):
+		extractfragments_cfg(deriv, D, grammar, backtransform, result)
+	elif isinstance(deriv, basestring):
+		extractfragments_str(deriv, grammar, backtransform, result)
+	else:
+		raise ValueError
+	return result
+
+
+cdef extractfragments_lcfrs(RankedEdge deriv, dict D,
 		Grammar grammar, dict backtransform, list result):
 	cdef RankedEdge child
 	cdef list children = [], labels = []
-	cdef str frag = backtransform[(<CFGEdge>deriv.edge).rule.no]  # template
+	cdef str frag = backtransform[deriv.edge.rule.no]  # template
 
 	# collect all children w/on the fly left-factored debinarization
 	if deriv.edge.right.label:  # is there a right child?
@@ -621,10 +698,94 @@ cdef extractfragments(RankedEdge deriv, dict D,
 	sent = [a[a.index('@') + 1:].decode('unicode-escape') if '@' in a else None
 			for a in reversed(labels)]
 	result.append((frag, sent))
-	# recursively expand all substitution sites
+	# recursively visit all substitution sites
 	for child in reversed(children):
 		if not child.edge.rule is NULL:
-			extractfragments(child, D, grammar, backtransform, result)
+			extractfragments_lcfrs(child, D, grammar, backtransform, result)
+
+
+cdef extractfragments_cfg(RankedCFGEdge deriv, list D,
+		Grammar grammar, dict backtransform, list result):
+	cdef RankedCFGEdge child
+	cdef list children = [], labels = []
+	cdef str frag = backtransform[deriv.edge.rule.no]  # template
+
+	# collect all children w/on the fly left-factored debinarization
+	if deriv.edge.rule.rhs2:  # is there a right child?
+		# keep going while left child is part of same binarized constituent
+		# instead of looking for a binarization marker in the label string, we
+		# use the fact that such labels do not have a mapping as proxy.
+		while grammar.mapping[deriv.edge.rule.rhs1] == 0:
+			# one of the right children
+			children.append((<Entry>D[deriv.edge.mid][deriv.end][
+					deriv.edge.rule.rhs2][deriv.right]).key)
+			labels.append(grammar.tolabel[deriv.edge.rule.rhs2])
+			# move on to next node in this binarized constituent
+			deriv = (<Entry>D[deriv.start][deriv.edge.mid][
+					deriv.edge.rule.rhs1][deriv.left]).key
+		# last right child
+		if deriv.edge.rule.rhs2:  # is there a right child?
+			children.append((<Entry>D[deriv.edge.mid][deriv.end][
+					deriv.edge.rule.rhs2][deriv.right]).key)
+			labels.append(grammar.tolabel[deriv.edge.rule.rhs2])
+	elif grammar.mapping[deriv.edge.rule.rhs1] == 0:
+		deriv = (<Entry>D[deriv.start][deriv.edge.mid][
+				deriv.edge.rule.rhs1][deriv.left]).key
+	# left-most child
+	children.append((<Entry>D[deriv.start][deriv.edge.mid][
+			deriv.edge.rule.rhs1][deriv.left]).key)
+	labels.append(grammar.tolabel[deriv.edge.rule.rhs1])
+
+	frag = frag.format(*['(%s %d)' % (a.split('@')[0], n)
+			for n, a in enumerate(reversed(labels))])
+	sent = [a[a.index('@') + 1:].decode('unicode-escape') if '@' in a else None
+			for a in reversed(labels)]
+	result.append((frag, sent))
+	# recursively visit all substitution sites
+	for child in reversed(children):
+		if not child.edge.rule is NULL:
+			extractfragments_cfg(child, D, grammar, backtransform, result)
+
+
+cdef str extractfragments_str(deriv, Grammar grammar,
+		dict backtransform, list result):
+	cdef list children = [], labels = []
+	cdef str frag
+	if len(deriv) == 1:
+		prod = (deriv.label, deriv[0].label)
+	elif len(deriv) == 2:
+		prod = (deriv.label, deriv[0].label, deriv[1].label)
+	frag = backtransform[grammar.rulenos[prod]]  # template
+	# collect children w/on the fly left-factored debinarization
+	if len(deriv) == 2:  # is there a right child?
+		# keep going while left child is part of same binarized constituent
+		# this shortcut assumes that neverblockre is only used to avoid
+		# blocking nonterminals from the double-dop binarization.
+		while '}<' in deriv[0].label:
+			# one of the right children
+			children.append(deriv[1])
+			labels.append(deriv[1].label)
+			# move on to next node in this binarized constituent
+			deriv = deriv[0]
+		# last right child
+		if len(deriv) == 2:  # is there a right child?
+			children.append(deriv[1])
+			labels.append(deriv[1].label)
+	elif '}<' in deriv[0].label:
+		deriv = deriv[0]
+	# left-most child
+	children.append(deriv[0])
+	labels.append(deriv[0].label)
+
+	frag = frag.format(*['(%s %d)' % (a.split('@')[0], n)
+			for n, a in enumerate(reversed(labels))])
+	sent = [a[a.index('@') + 1:].decode('unicode-escape') if '@' in a else None
+			for a in reversed(labels)]
+	result.append((frag, sent))
+	# recursively visit all substitution sites
+	for child in reversed(children):
+		if isinstance(child[0], Tree):
+			extractfragments_str(child, grammar, backtransform, result)
 
 
 def main():
@@ -678,8 +839,8 @@ def main():
 			sample=True, kbest=False)
 	sldop1, _, _ = marginalize("sl-dop", chart, start, grammar, 1000,
 			sldop_n=7, sent=sent)
-	sldopsimple, _, _ = marginalize("sl-dop-simple", chart, start, grammar, 1000,
-			sldop_n=7, sent=sent)
+	sldopsimple, _, _ = marginalize("sl-dop-simple", chart, start, grammar,
+			1000, sldop_n=7, sent=sent)
 	short, _, _ = marginalize("shortest", chart, start, grammar,
 		1000, sent=sent)
 	print("\nvit:\t\t%s %r" % e((REMOVEIDS.sub('', vitderiv), exp(-vitprob))),

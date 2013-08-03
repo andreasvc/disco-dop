@@ -38,7 +38,7 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 	d = <dict>defaultdict(dict)
 	# construct a list of the k-best nonterminals to prune with
 	if bitpar:
-		kbest = bitparkbestitems(chart, coarse)
+		kbest = bitparkbestitems(chart, coarse, finecfg)
 	else:
 		kbest = kbest_items(chart, goal, k, finecfg, coarse.tolabel)
 	if finecfg:
@@ -246,12 +246,13 @@ cdef void filter_subtreecfg(label, start, end, list chart, dict chart2,
 					chart, chart2, fatitems)
 
 
-def whitelistfromposteriors(inside, outside, ChartItem start, Grammar coarse,
-		Grammar fine, double threshold, bint splitprune, bint markorigin):
-	""" compute posterior probabilities and prune away cells below some
+def whitelistfromposteriors(inside, outside, CFGChartItem start,
+		Grammar coarse, Grammar fine, double threshold,
+		bint splitprune, bint markorigin, bint finecfg):
+	""" Compute posterior probabilities and prune away cells below some
 	threshold. this version is for use with parse_sparse(). """
 	cdef UInt label
-	cdef short lensent = (<CFGChartItem>start).end
+	cdef short lensent = start.end
 	assert 0 < threshold < 1, (
 			"threshold should be a cutoff for probabilities between 0 and 1.")
 	sentprob = inside[0, lensent, start.label]
@@ -265,21 +266,35 @@ def whitelistfromposteriors(inside, outside, ChartItem start, Grammar coarse,
 	kbestspans = [{} for _ in coarse.toid]
 	fatitems = lensent >= (sizeof(ULLong) * 8)
 	for label, left, right in zip(labels, leftidx, rightidx):
-		if fatitems:
+		if finecfg:
+			ei = left, right
+		elif fatitems:
 			ei = CFGtoFatChartItem(0, left, right)
 		else:
 			ei = CFGtoSmallChartItem(0, left, right)
 		kbestspans[label][ei] = 0.0
 
-	whitelist = [None] * fine.nonterminals
-	for label in range(fine.nonterminals):
-		if splitprune and markorigin and fine.fanout[label] != 1:
-			if fine.splitmapping[label] is not NULL:
-				whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
-					for n in range(fine.fanout[label])]
-		else:
-			if fine.mapping[label] != 0:
-				whitelist[label] = kbestspans[fine.mapping[label]]
+	if finecfg:
+		whitelist = [[{} for _ in range(start.end + 1)]
+				for _ in range(start.end)]
+		for left in range(start.end):
+			for right in range(left + 1, start.end + 1):
+				span = left, right
+				cell = whitelist[left][right]
+				for label in range(1, fine.nonterminals):
+					if (fine.mapping[label] == 0
+							or span in kbestspans[fine.mapping[label]]):
+						cell[label] = None
+	else:
+		whitelist = [None] * fine.nonterminals
+		for label in range(fine.nonterminals):
+			if splitprune and markorigin and fine.fanout[label] != 1:
+				if fine.splitmapping[label] is not NULL:
+					whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
+						for n in range(fine.fanout[label])]
+			else:
+				if fine.mapping[label] != 0:
+					whitelist[label] = kbestspans[fine.mapping[label]]
 	unfiltered = (outside != 0.0).sum()
 	numitems = (posterior != 0.0).sum()
 	numremain = (posterior > threshold).sum()
@@ -332,16 +347,13 @@ cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	return newchart
 
 
-def bitparkbestitems(dict derivs, Grammar coarse):
+def bitparkbestitems(dict derivs, Grammar coarse, bint finecfg):
 	""" Take a dictionary of CFG derivations as strings, and produce a list of
 	ChartItems occurring in those derivations. """
-	items = {}
+	items = [{} for _ in coarse.tolabel] if finecfg else {}
 	fatitems = None
 	for deriv in derivs:
-		try:
-			t = Tree.parse(deriv, parse_leaf=int)
-		except ValueError:  # FIXME shouldn't happen
-			continue
+		t = Tree.parse(deriv, parse_leaf=int)
 		if fatitems is None:
 			fatitems = len(t.leaves()) >= (sizeof(ULLong) * 8)
 		for n in t.subtrees():
@@ -349,11 +361,14 @@ def bitparkbestitems(dict derivs, Grammar coarse):
 			leaves = n.leaves()
 			start = min(leaves)
 			end = max(leaves) + 1
-			if fatitems:
+			if finecfg:
+				items[label][start, end] = 0.0
+			elif fatitems:
 				item = CFGtoFatChartItem(label, start, end)
+				items[item] = 0.0
 			else:
 				item = CFGtoSmallChartItem(label, start, end)
-			items[item] = 0.0
+				items[item] = 0.0
 	return items
 
 
@@ -432,7 +447,7 @@ def main():
 	import re
 	from treetransforms import splitdiscnodes, binarize, addfanoutmarkers
 	from treebank import NegraCorpusReader
-	from grammar import induce_plcfrs, dopreduction, subsetgrammar
+	from grammar import treebankgrammar, dopreduction, subsetgrammar
 	from time import clock
 	k = 50
 	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
@@ -468,12 +483,12 @@ def main():
 	for t in dtrees:
 		binarize(t, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(t)
-	normallcfrs = induce_plcfrs(trees, sents)
+	normallcfrs = treebankgrammar(trees, sents)
 	normal = Grammar(normallcfrs)
-	parent = Grammar(induce_plcfrs(parenttrees, sents))
-	splitg = Grammar(induce_plcfrs(cftrees, sents))
+	parent = Grammar(treebankgrammar(parenttrees, sents))
+	splitg = Grammar(treebankgrammar(cftrees, sents))
 	for t, s in zip(cftrees, sents):
-		for (r, yf), w in induce_plcfrs([t], [s]):
+		for (r, yf), w in treebankgrammar([t], [s]):
 			assert len(yf) == 1
 	fine999x = dopreduction(trees, sents)[0]
 	fine999 = Grammar(fine999x)

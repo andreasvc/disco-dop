@@ -137,9 +137,10 @@ def lcfrs_productions(tree, sent, frontiers=False):
 	return rules
 
 
-def induce_plcfrs(trees, sents):
-	""" Induce a probabilistic LCFRS, similar to how a PCFG is read off
-	from a treebank """
+def treebankgrammar(trees, sents):
+	""" Induce a probabilistic LCFRS with relative frequencies of productions.
+	When trees contain no discontinuities, the result is equivalent to a
+	treebank PCFG. """
 	grammar = multiset(rule for tree, sent in zip(trees, sents)
 			for rule in lcfrs_productions(tree, sent))
 	lhsfd = multiset()
@@ -316,7 +317,7 @@ def coarse_grammar(trees, sents, level=0):
 		for subtree in tree.subtrees():
 			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
 				subtree.label = label.sub(repl, subtree.label)
-	return induce_plcfrs(trees, sents)
+	return treebankgrammar(trees, sents)
 
 
 def nodefreq(tree, utree, subtreefd, nonterminalfd):
@@ -712,7 +713,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	the order as they appear in the sequence 'grammar', except that the lexicon
 	file lists words in sorted order (with tags for each word in the order of
 	'grammar'). Parameters:
-	- grammar: sequence of rule tuples, as produced by induce_plcfrs(),
+	- grammar: sequence of rule tuples, as produced by treebankgrammar(),
 		dopreduction(), or doubledop().
 	Returns:
 	- rules, lexicon: bytes object & a unicode string, respectively
@@ -830,7 +831,7 @@ def test():
 			for a in list(corpus.parsed_sents().values())[:10]]
 
 	print('plcfrs')
-	lcfrs = Grammar(induce_plcfrs(trees, sents), start=trees[0].label)
+	lcfrs = Grammar(treebankgrammar(trees, sents), start=trees[0].label)
 	print(lcfrs)
 
 	print('dop reduction')
@@ -882,7 +883,7 @@ def test():
 			plcfrs.pprint_chart(chart, sent, grammar.tolabel)
 		print()
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
-	Grammar(induce_plcfrs([tree], [list(range(10))]))
+	Grammar(treebankgrammar([tree], [list(range(10))]))
 
 
 def main():
@@ -920,7 +921,7 @@ def main():
 
 	# read off grammar
 	if model in ('pcfg', 'plcfrs'):
-		grammar = induce_plcfrs(trees, sents)
+		grammar = treebankgrammar(trees, sents)
 	elif model == 'dopreduction':
 		grammar, eweweights, shortest = dopreduction(trees, sents,
 				packedgraph='--packed' in opts)

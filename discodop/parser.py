@@ -200,11 +200,6 @@ class Parser(object):
 		self.tailmarker = tailmarker
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
-		for stage in self.stages:
-			if stage.mode == 'pcfg-bitpar':  # uncompressed grammar in temp file
-				stage.rulesfile = tempfile.NamedTemporaryFile()
-				stage.lexiconfile = tempfile.NamedTemporaryFile()
-				exportbitpargrammar(stage)
 
 	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
@@ -233,7 +228,9 @@ class Parser(object):
 					model = u'shortest'
 			x = stage.grammar.currentmodel
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
-			if stage.mode == 'pcfg-bitpar' and x != stage.grammar.currentmodel:
+			if stage.mode == 'pcfg-bitpar' and (
+					not hasattr(stage, 'rulesfile')
+					or x != stage.grammar.currentmodel):
 				exportbitpargrammar(stage)
 			if not stage.prune or start:
 				if n != 0 and stage.prune:
@@ -243,7 +240,8 @@ class Parser(object):
 								inside, outside, start,
 								self.stages[n - 1].grammar, stage.grammar,
 								stage.k, stage.splitprune,
-								self.stages[n - 1].markorigin)
+								self.stages[n - 1].markorigin,
+								stage.mode.startswith('pcfg'))
 						msg += ("coarse items before pruning=%d; filtered: %d; "
 								"pruned: %d; sentprob=%g\n\t" % (
 								unfiltered, numitems, numremain, sentprob))
@@ -252,7 +250,7 @@ class Parser(object):
 								chart, start, self.stages[n - 1].grammar,
 								stage.grammar, stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin,
-								stage.mode == 'pcfg',
+								stage.mode.startswith('pcfg'),
 								self.stages[n - 1].mode == 'pcfg-bitpar')
 						msg += "coarse items before pruning: %d; " % (
 								sum(len(a) for x in chart for a in x if a)
@@ -272,9 +270,9 @@ class Parser(object):
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, stage.grammar, tags=tags)
 				elif stage.mode == 'pcfg-bitpar':
-					chart, start, msg1 = pcfg.parse_bitpar(stage.rulesfile.name,
-							stage.lexiconfile.name, sent, stage.m,
-							stage.grammar.start, tags=tags)
+					chart, start, msg1 = pcfg.parse_bitpar(
+							stage.rulesfile.name, stage.lexiconfile.name,
+							sent, stage.m, stage.grammar.start, tags=tags)
 					msg1 += '%d derivations' % (len(chart) if start else 0)
 				elif stage.mode == 'plcfrs':
 					chart, start, msg1 = plcfrs.parse(
@@ -300,6 +298,9 @@ class Parser(object):
 			if start and stage.mode != 'pcfg-posterior' and not (
 					self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
+				if stage.objective == 'shortest':
+					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
+							else 'default', True)
 				parsetrees, derivs, msg1 = marginalize(stage.objective
 						if stage.dop else 'mpd',
 						chart, start, stage.grammar, stage.m,
@@ -417,6 +418,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 
 def exportbitpargrammar(stage):
 	""" (re-)export bitpar grammar with current weights. """
+	if not hasattr(stage, 'rulesfile'):
+		stage.rulesfile = tempfile.NamedTemporaryFile()
+		stage.lexiconfile = tempfile.NamedTemporaryFile()
 	stage.rulesfile.seek(0)
 	stage.rulesfile.truncate()
 	if stage.grammar.currentmodel == 0:
@@ -447,7 +451,7 @@ def exportbitpargrammar(stage):
 
 
 class DictObj(object):
-	""" A trivial class to wrap a dictionary for reasons of syntactic sugar. """
+	""" Trivial class to wrap a dictionary for reasons of syntactic sugar. """
 
 	def __init__(self, *a, **kw):
 		self.__dict__.update(*a, **kw)

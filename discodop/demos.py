@@ -3,7 +3,7 @@ from __future__ import print_function
 from math import exp
 from . import treetransforms, plcfrs, kbest
 from .tree import Tree
-from .grammar import induce_plcfrs
+from .grammar import treebankgrammar
 from .containers import Grammar
 
 
@@ -150,7 +150,7 @@ def bitext():
 	sents = [["0"] * len(a.leaves()) for a in trees]
 	for a in trees:
 		treetransforms.binarize(a)
-	compiled_scfg = Grammar(induce_plcfrs(trees, sents))
+	compiled_scfg = Grammar(treebankgrammar(trees, sents))
 	print("sentences:")
 	for tree in trees:
 		print(' '.join(w for _, w in sorted(tree.pos())))

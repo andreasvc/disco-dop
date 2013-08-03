@@ -713,7 +713,7 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 
 def main():
 	from treebank import NegraCorpusReader
-	from grammar import induce_plcfrs
+	from grammar import treebankgrammar
 	import plcfrs
 	from containers import Grammar
 	from treetransforms import addfanoutmarkers, binarize
@@ -723,7 +723,7 @@ def main():
 	for a in trees:
 		binarize(a, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(a)
-	grammar = Grammar(induce_plcfrs(trees, list(corpus.sents().values())))
+	grammar = Grammar(treebankgrammar(trees, list(corpus.sents().values())))
 	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
 			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
@@ -737,7 +737,7 @@ def main():
 	for a in trees:
 		print(a)
 	print("\ngrammar:")
-	grammar = Grammar(induce_plcfrs(trees, sents))
+	grammar = Grammar(treebankgrammar(trees, sents))
 	print(grammar, '\n')
 	testestimates(grammar, 4, grammar.toid[b"ROOT"])
 	outside = getestimates(grammar, 4, grammar.toid[b"ROOT"])
@@ -778,7 +778,7 @@ def main():
 	for a in trees:
 		print(a)
 	print("\npcfg grammar:")
-	grammar = Grammar(induce_plcfrs(trees, sents))
+	grammar = Grammar(treebankgrammar(trees, sents))
 	print(grammar, '\n')
 	outside = getpcfgestimates(grammar, 4, grammar.toid[b"ROOT"], debug=True)
 	sent = ["a", "b", "c"]

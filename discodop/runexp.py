@@ -30,7 +30,7 @@ from .treebanktransforms import transform, rrtransform
 from .treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers, addbitsets, fanout
 from .fragments import getfragments
-from .grammar import induce_plcfrs, dopreduction, doubledop, grammarinfo, \
+from .grammar import treebankgrammar, dopreduction, doubledop, grammarinfo, \
 		write_lcfrs_grammar
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
@@ -424,7 +424,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					**{name: mod for name, mod
 						in zip(grammar.modelnames, grammar.models)})
 		else:  # not stage.dop
-			xgrammar = induce_plcfrs(traintrees, sents)
+			xgrammar = treebankgrammar(traintrees, sents)
 			logging.info('induced %s based on %d sentences',
 				('PCFG' if tbfanout == 1 or stage.split else 'PLCFRS'),
 				len(traintrees))
