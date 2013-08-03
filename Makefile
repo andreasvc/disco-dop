@@ -10,7 +10,9 @@ clean:
 
 test: all sample2.export
 	rm -rf sample/
-	python -tt -3 tests.py
+	python -tt -3 tests.py && \
+	cd tests/ && \
+	sh run.sh
 
 test3: sample2.export
 	rm -rf sample/
