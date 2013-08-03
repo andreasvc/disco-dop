@@ -15,9 +15,26 @@ if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 
 
+USAGE = """Usage: %s <treebank> [options]
+Options:
+  --fmt=x          Specify corpus format. Options: export, bracket,
+                   discbracket, alpino.
+  --encoding=enc   Specify a different encoding than the default UTF-8.
+  --functions=x    'remove'=default: strip functions off labels
+                   'leave': leave syntactic labels as is,
+                   'add': evaluate both syntactic categories and functions,
+                   'replace': only evaluate grammatical functions.
+  --morphology=x   'no'=default: only evaluate POS tags,
+                   'add': concatenate morphology tags to POS tags,
+                   'replace': replace POS tags with morphology tags,
+                   'between': add morphological node between POS tag and word.
+  --abbr           abbreviate labels longer than 5 characters.
+Pipe the output through 'less -R' to preserve the colors. """ % sys.argv[0]
+
+
 class DrawTree(object):
 	""" Visualize a discontinuous tree in various formats. """
-	def __init__(self, tree, sent=None, highlight=()):
+	def __init__(self, tree, sent=None, highlight=(), abbr=False):
 		""" Create an object for a tree from which different visualizations
 		can be created.
 		- tree may be a Tree object or a string.
@@ -29,6 +46,7 @@ class DrawTree(object):
 			highlighted. Has the effect of only applying colors to nodes in
 			this sequence (nodes should be given as Tree objects, terminals as
 			indices).
+		- abbr: when True, abbreviate labels longer than 5 characters.
 
 		>>> print(DrawTree("(S (NP Mary) (VP walks))"))
 		      S
@@ -60,6 +78,11 @@ class DrawTree(object):
 							if not isinstance(b, Tree):
 								a[n] = len(self.sent)
 								self.sent.append(str(b))
+		if abbr:
+			if self.tree is tree:
+				self.tree = self.tree.copy(True)
+			for n in self.tree.subtrees():
+				n.label = n.label[:5]
 		self.highlight = set()
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				self.tree, self.sent, highlight)
@@ -330,14 +353,15 @@ class DrawTree(object):
 		result += ['</svg>']
 		return "\n".join(result)
 
-	def text(self, nodedist=1, unicodelines=False, html=False,
-				nodecolor="blue", leafcolor="red"):
+	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
+				nodecolor='blue', leafcolor='red'):
 		""" Return ASCII art for a discontinuous tree.
 		unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
 		html: whether to wrap output in html code (default plain text).
-		leafcolor, nodecolor: specify colors of leaves and phrasal nodes.
-			Only applicable when html is True (use ANSI codes?). """
+		ansi: whether to produce colors with ANSI escape sequences
+			(colors not configurable, only effective when html==False).
+		leafcolor, nodecolor: specify colors of leaves and phrasal nodes. """
 
 		if unicodelines:
 			horzline = u'\u2500'
@@ -417,8 +441,12 @@ class DrawTree(object):
 				if html:
 					text = htmllabel(text)
 					if n in self.highlight:
-						text = "<font color=%s>%s</font>" % ((nodecolor
-								if isinstance(node, Tree) else leafcolor), text)
+						text = "<font color=%s>%s</font>" % (
+								nodecolor if isinstance(node, Tree) else
+								leafcolor, text)
+				elif ansi and n in self.highlight:
+					text = '\x1b[%d;1m%s\x1b[0m' % (
+							34 if isinstance(node, Tree) else 31, text)
 				noderow[col] = text
 			# for each column, if there is a node below us which has a parent
 			# above us, draw a vertical branch in that column.
@@ -547,7 +575,7 @@ def latexlabel(label):
 	return newlabel
 
 
-def main():
+def test():
 	""" Do some tests. """
 	trees = """(ROOT (S (ADV 0) (VVFIN 1) (NP (PDAT 2) (NN 3)) (PTKNEG 4) \
 				(PP (APPRART 5) (NN 6) (NP (ART 7) (ADJA 8) (NN 9)))) ($. 10))
@@ -679,6 +707,43 @@ def main():
 			print(drawtree.text(unicodelines=True, html=False), sep='\n')
 		except (UnicodeDecodeError, UnicodeEncodeError):
 			print(drawtree.text(unicodelines=False, html=False), sep='\n')
+
+
+def main():
+	""" Text-based tree viewer. """
+	from .treebank import getreader
+	from getopt import gnu_getopt, GetoptError
+	flags = ('test', 'help', 'abbr')
+	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
+	try:
+		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
+	except GetoptError as err:
+		print("error: %s\n%s" % (err, USAGE))
+		sys.exit(2)
+	else:
+		opts = dict(opts)
+		if '--test' in opts:
+			test()
+			return
+	try:
+		path = args[0]
+	except:
+		print('No treebank specified\n%s' % USAGE)
+		return
+	reader = getreader(opts.get('--fmt', 'export'))
+	path, base = path.rsplit('/', 1) if '/' in path else ('.', path)
+	corpus = reader(path, base,
+			encoding=opts.get('--encoding', 'utf8'),
+			functions=opts.get('--functions'),
+			morphology=opts.get('--morphology'))
+	trees, sents = corpus.parsed_sents(), corpus.sents()
+	print('Viewing', base)
+	for n, sentid in enumerate(trees, 1):
+		tree, sent = trees[sentid], sents[sentid]
+		print('%d of %d (sentid=%s):' % (n, len(trees), sentid))
+		print(DrawTree(tree, sent, abbr='--abbr' in opts
+				).text(unicodelines=True, ansi=True))
+
 
 if __name__ == '__main__':
 	main()

@@ -116,11 +116,8 @@ def gettrees(form):
 			tree, sent = exporttree(cur)
 			trees.append(tree)
 			sents.append(sent)
-	if form.get('abbr', None):
-		for tree in trees:
-			for n in tree.subtrees():
-				n.label = n.label[:5]
-	return [DrawTree(tree, sent) for tree, sent in zip(trees, sents)]
+	return [DrawTree(tree, sent, abbr=form.get('abbr', False))
+			for tree, sent in zip(trees, sents)]
 
 
 def segmentbrackets(formtree, brackets):
