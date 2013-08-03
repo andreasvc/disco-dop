@@ -31,7 +31,7 @@ from .treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers, addbitsets, fanout
 from .fragments import getfragments
 from .grammar import treebankgrammar, dopreduction, doubledop, grammarinfo, \
-		write_lcfrs_grammar
+		write_lcfrs_grammar, sortgrammar
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from .parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
@@ -359,9 +359,9 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				shortest.extend(w for _, w in newrules)
 
 				def wordslast(m):
-					""" Sort key. """
+					""" Sort rules, but lexical rules sorted by word at end """
 					(r, yf), _ = xgrammar[m]
-					return r[1] == 'Epsilon' and yf[0]
+					return (yf[0], r) if r[1] == 'Epsilon' else ('', r)
 
 				idx = sorted(range(len(xgrammar)), key=wordslast)
 				eweweights = [eweweights[m] for m in idx]
@@ -436,8 +436,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			if lexmodel and simplelexsmooth:
 				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
-				xgrammar.sort(key=lambda rule: rule[0][0][1] == 'Epsilon'
-						and rule[0][1][0])
+				xgrammar = sortgrammar(xgrammar)
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			rules, lexicon = write_lcfrs_grammar(

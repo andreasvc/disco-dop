@@ -146,9 +146,7 @@ def treebankgrammar(trees, sents):
 		lhsfd[rule[0][0]] += freq
 	for rule, freq in grammar.items():
 		grammar[rule] = Fraction(freq, lhsfd[rule[0][0]])
-	# put lexical rules in the end and sort by word
-	return sorted(grammar.items(), key=lambda rule:
-			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
+	return sortgrammar(grammar.items())
 
 
 def dopreduction(trees, sents, packedgraph=False):
@@ -200,9 +198,7 @@ def dopreduction(trees, sents, packedgraph=False):
 		shortest = 1. if '@' in r[0] else 0.5
 		return ((r, yf), rfe), ewe, shortest
 
-	# put lexical rules in the end and sort by word
-	rules = sorted(rules.items(), key=lambda rule:
-			rule[0][0][1] == 'Epsilon' and rule[0][1][0])
+	rules = sortgrammar(rules.items())
 	rules, ewe, shortest = zip(*(weights(r) for r in rules))
 	return list(rules), list(ewe), list(shortest)
 
@@ -285,9 +281,9 @@ def doubledop(fragments, debug=False):
 	# 3: lexical productions sorted by word
 	# this is so that the backtransform aligns with the first part of the rules
 	grammar = sorted(grammar.items(), key=lambda rule: (
-				rule[0][0][1] == 'Epsilon' and rule[0][1][0],
+				rule[0][1][0] if rule[0][0][1] == 'Epsilon' else '',
 				'}<' in rule[0][0][0],
-				rule))
+				rule[0][0]))
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = {n: backtransform[r]
 		for n, (r, _) in enumerate(grammar) if r in backtransform}
@@ -304,6 +300,13 @@ def doubledop(fragments, debug=False):
 	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
 			for rule, (freq, _) in grammar]
 	return grammar, backtransform, eweweights, shortest
+
+
+def sortgrammar(grammar):
+	""" put lexical rules in the end and sort by word. """
+	return sorted(grammar, key=lambda rule:
+			(rule[0][1][0], rule[0][0]) if rule[0][0][1] == 'Epsilon'
+			else ('', rule[0][0]))
 
 
 def coarse_grammar(trees, sents, level=0):
@@ -881,7 +884,7 @@ def test():
 			plcfrs.pprint_chart(chart, sent, grammar.tolabel)
 		print()
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
-	Grammar(treebankgrammar([tree], [list(range(10))]))
+	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
 
 
 def main():

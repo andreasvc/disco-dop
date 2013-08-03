@@ -29,6 +29,7 @@ Options:
                    'replace': replace POS tags with morphology tags,
                    'between': add morphological node between POS tag and word.
   --abbr           abbreviate labels longer than 5 characters.
+  --plain          disable ANSI colors.
 Pipe the output through 'less -R' to preserve the colors. """ % sys.argv[0]
 
 
@@ -713,7 +714,7 @@ def main():
 	""" Text-based tree viewer. """
 	from .treebank import getreader
 	from getopt import gnu_getopt, GetoptError
-	flags = ('test', 'help', 'abbr')
+	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
@@ -738,11 +739,15 @@ def main():
 			morphology=opts.get('--morphology'))
 	trees, sents = corpus.parsed_sents(), corpus.sents()
 	print('Viewing', base)
-	for n, sentid in enumerate(trees, 1):
-		tree, sent = trees[sentid], sents[sentid]
-		print('%d of %d (sentid=%s):' % (n, len(trees), sentid))
-		print(DrawTree(tree, sent, abbr='--abbr' in opts
-				).text(unicodelines=True, ansi=True))
+	try:
+		for n, sentid in enumerate(trees, 1):
+			tree, sent = trees[sentid], sents[sentid]
+			print('%d of %d (sentid=%s; len=%d):' % (
+					n, len(trees), sentid, len(sent)))
+			print(DrawTree(tree, sent, abbr='--abbr' in opts
+					).text(unicodelines=True, ansi=not '--plain' in opts))
+	except IOError:
+		pass
 
 
 if __name__ == '__main__':

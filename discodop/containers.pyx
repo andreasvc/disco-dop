@@ -134,7 +134,7 @@ cdef class Grammar:
 			fields = line.split()
 			if self.bitpar:
 				rule = fields[1:]
-				yf = '0' if len(rule) == 2 else '01'
+				yf = b'0' if len(rule) == 2 else b'01'
 			else:
 				rule = fields[:-2]
 				yf = fields[-2]

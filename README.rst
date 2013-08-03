@@ -97,16 +97,17 @@ Aside from the parser there are some standalone tools:
 
 :``fragments``: Finds recurring or common fragments in one or more treebanks.
     It can be used with discontinuous as well as Penn-style bracketed treebanks.
-:``treetransforms``: A command line interface to perform transformations on
-     treebanks such as binarization.
-:``grammar``: A command line interface to read off grammars from (binarized)
-      treebanks.
-:``parser``: A basic command line interface to the parser comparable to bitpar.
-    Reads grammars from text files.
 :``eval``: Discontinuous evaluation. Reports F-scores and other metrics.
     Accepts ``EVALB`` parameter files::
 
     ``discodop eval sample/gold.export sample/dop.export proper.prm``
+:``treetransforms``: A command line interface to perform transformations on
+     treebanks such as binarization.
+:``grammar``: A command line interface to read off grammars from (binarized)
+      treebanks.
+:``treedraw``: Visualize (discontinuous) trees.
+:``parser``: A basic command line interface to the parser comparable to bitpar.
+    Reads grammars from text files.
 :``demos``: Contains examples of various formalisms encoded in LCFRS grammars.
 :``gen``: An experiment in generation with LCFRS.
 
