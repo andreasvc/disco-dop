@@ -361,7 +361,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				def wordslast(m):
 					""" Sort rules, but lexical rules sorted by word at end """
 					(r, yf), _ = xgrammar[m]
-					return (yf[0], r) if r[1] == 'Epsilon' else ('', r)
+					return (yf[0] if r[1] == 'Epsilon' else '',
+							'}<' in r[0], r)
 
 				idx = sorted(range(len(xgrammar)), key=wordslast)
 				eweweights = [eweweights[m] for m in idx]
