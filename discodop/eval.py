@@ -12,6 +12,7 @@ else:
 	from itertools import izip_longest as zip_longest
 
 from .tree import Tree
+from .treedraw import DrawTree
 from .treebank import getreader, readheadrules, dependencies
 try:
 	from .treedist import treedist, newtreedist
@@ -39,7 +40,7 @@ file, and options may consist of:
   --headrules=x    Specify rules for head assignment of constituents that do
                    not already have a child marked as head; this enables
                    dependency evaluation.
-  --functions=x    'remove'=default: strip functions off labels
+  --functions=x    'remove'=default: strip functions off labels,
                    'leave': leave syntactic labels as is,
                    'add': evaluate both syntactic categories and functions,
                    'replace': only evaluate grammatical functions.
@@ -64,16 +65,15 @@ options (in addition to those described in the README of EVALB):
 
 HEADER = """
    Sentence                 Matched   Brackets            Corr      Tag
-  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA
-______________________________________________________________________________\
-"""
+  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA\
+""".splitlines()
 
 
 def main():
 	""" Command line interface for evaluation. """
 	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
-	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'cutofflen=',
-		'headrules=', 'functions=', 'morphology=')
+	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=',
+			'cutofflen=', 'headrules=', 'functions=', 'morphology=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
 	except GetoptError as err:
@@ -122,11 +122,14 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 	Results are printed to standard output. """
 	assert gold_trees, 'no trees in gold file'
 	assert cand_trees, 'no trees in parses file'
-	if param['DEBUG'] > 0:
+	keylen = max(len(str(x)) for x in cand_trees)
+	if param['DEBUG'] == 1:
 		print('Parameters:')
 		for a in param:
 			print('%s\t%s' % (a, param[a]))
-		print(HEADER)
+		for a in HEADER:
+			print(' ' * (keylen - 4) + a)
+		print('', '_' * ((keylen - 5) + len(HEADER[-1])))
 	# the suffix '40' is for the length restricted results
 	maxlenseen = sentcount = maxlenseen40 = sentcount40 = 0
 	goldb = multiset()
@@ -233,7 +236,12 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			del lascores[-1]
 		if param['DEBUG'] <= 0:
 			continue
-		print('%4s  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f%s%s' % (
+		if param['DEBUG'] > 1:
+			for a in HEADER:
+				print(' ' * (keylen - 4) + a)
+			print('', '_' * ((keylen - 5) + len(HEADER[-1])))
+		print(('%' + str(keylen) +
+			's  %5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f%s%s') % (
 				n,
 				lengpos,
 				nozerodiv(lambda: recall(gbrack, cbrack)),
@@ -246,15 +254,20 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 				nozerodiv(lambda: accuracy(gpos, cpos)),
 				100 * lascores[-1],
 				str(ted).rjust(3) if param['TED'] else '',
-				nozerodiv(lambda: accuracy(gdep, cdep)) if param['DEP'] else ''))
+				nozerodiv(lambda: accuracy(gdep, cdep))
+						if param['DEP'] else ''))
 		if param['DEBUG'] > 1:
 			print('Sentence:', ' '.join(gsent))
-			print('Gold tree:      %s\nCandidate tree: %s' % (gtree, ctree))
+			print('Gold tree:\n%s\nCandidate tree:\n%s' % (
+					DrawTree(gtree, gsent, abbr=True).text(
+						unicodelines=True, ansi=True),
+					DrawTree(ctree, csent, abbr=True).text(
+						unicodelines=True, ansi=True)))
 			print('Gold brackets:      %s\nCandidate brackets: %s' % (
-				strbracketings(gbrack), strbracketings(cbrack)))
+					strbracketings(gbrack), strbracketings(cbrack)))
 			print('Matched brackets:      %s\nUnmatched brackets: %s' % (
-				strbracketings(gbrack & cbrack),
-				strbracketings((cbrack - gbrack) | (gbrack - cbrack))))
+					strbracketings(gbrack & cbrack),
+					strbracketings((cbrack - gbrack) | (gbrack - cbrack))))
 			goldpaths = leafancestorpaths(gtree, param['DELETE_LABEL'])
 			candpaths = leafancestorpaths(ctree, param['DELETE_LABEL'])
 			for leaf in goldpaths:
@@ -283,9 +296,10 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 	breakdowns(param, goldb40, candb40, goldpos40, candpos40, goldbcat40,
 			candbcat40, maxlenseen)
 	msg = summary(param, goldb, candb, goldpos, candpos, sentcount,
-			maxlenseen, exact, lascores, dicenoms, dicedenoms, golddep, canddep,
-			goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
-			exact40, lascores40, dicenoms40, dicedenoms40, golddep40, canddep40)
+			maxlenseen, exact, lascores, dicenoms, dicedenoms, golddep,
+			canddep, goldb40, candb40, goldpos40, candpos40, sentcount40,
+			maxlenseen40, exact40, lascores40, dicenoms40, dicedenoms40,
+			golddep40, canddep40)
 	return msg
 
 
@@ -319,8 +333,8 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 					100 * sum(goldbcat[cat].values()) / len(goldb),
 					nozerodiv(lambda: recall(goldbcat[cat], candbcat[cat])),
 					nozerodiv(lambda: precision(goldbcat[cat], candbcat[cat])),
-					nozerodiv(lambda: f_measure(goldbcat[cat], candbcat[cat]))),
-					end='')
+					nozerodiv(lambda: f_measure(goldbcat[cat], candbcat[cat])),
+					), end='')
 			if mismatch is not None:
 				print('       %s %7d' % (
 						'/'.join(mismatch[0]).rjust(12), mismatch[1]), end='')
@@ -453,8 +467,8 @@ def readparam(filename):
 	""" read an EVALB-style parameter file and return a dictionary. """
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
-	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED', 'DISC_ONLY',
-			'TED', 'DEP')
+	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED',
+			'DISC_ONLY', 'TED', 'DEP')
 	param = {'DEBUG': 0, 'MAX_ERROR': 10, 'CUTOFF_LEN': 40,
 				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': set(),
 				'DELETE_LABEL': set(), 'DELETE_WORD': set(),

@@ -466,25 +466,30 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 		wordids = {tree[a]: a for a in indices}
 		assert len(sent) == len(indices) == len(wordids)
 		for i, word in enumerate(sent):
+			assert word, 'empty word in sentence: %r' % sent
 			idx = wordids[i]
-			a = tree[idx[:-1]]
-			morphtag = a.source[MORPH] if hasattr(a, 'source') else None
-			if not morphtag or morphtag == '--':
-				morphtag = a.label if morph == 'replace' else '--'
-			result.append("\t".join((word,
-					a.label.replace('$[', '$('),
-					morphtag,
-					(a.source[FUNC] or '--') if hasattr(a, 'source') else '--',
-					str(500 + phrasalnodes.index(idx[:-2])
-						if len(idx) > 2 else 0))))
+			node = tree[idx[:-1]]
+			postag = node.label.replace('$[', '$(') or '--'
+			func = morph = '--'
+			if hasattr(node, 'source'):
+				morph = node.source[MORPH] or '--'
+				func = node.source[FUNC] or '--'
+			if morph == '--':
+				morph = node.label if morph == 'replace' else '--'
+			nodeid = str(500 + phrasalnodes.index(idx[:-2])
+				if len(idx) > 2 else 0)
+			result.append("\t".join((word, postag, morph, func, nodeid)))
 		for idx in phrasalnodes:
-			a = tree[idx]
-			result.append("\t".join(("#%d" % (500 + phrasalnodes.index(idx)),
-					a.label,
-					(a.source[MORPH] or '--') if hasattr(a, 'source') else '--',
-					(a.source[FUNC] or '--') if hasattr(a, 'source') else '--',
-					str(500 + phrasalnodes.index(idx[:-1])
-						if len(idx) > 1 else 0))))
+			node = tree[idx]
+			parent = '#%d' % (500 + phrasalnodes.index(idx))
+			label = node.label or '--'
+			func = morph = '--'
+			if hasattr(node, 'source'):
+				morph = node.source[MORPH] or '--'
+				func = node.source[FUNC] or '--'
+			nodeid = str(500 + phrasalnodes.index(idx[:-1])
+					if len(idx) > 1 else 0)
+			result.append('\t'.join((parent, node.label, morph, func, nodeid)))
 		if n is not None:
 			result.append("#EOS %s" % n)
 		return "%s\n" % "\n".join(result)

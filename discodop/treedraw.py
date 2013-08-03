@@ -8,6 +8,7 @@ T. Eschbach et al., Orth. Hypergraph Drawing, Journal of
 
 from __future__ import division, print_function, unicode_literals
 import sys
+from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from .tree import Tree
@@ -15,13 +16,13 @@ if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 
 
-USAGE = """Usage: %s <treebank> [options]
+USAGE = """Usage: %s <treebank>... [options]
 Options:
   --fmt=x          Specify corpus format. Options: export, bracket,
                    discbracket, alpino.
   --encoding=enc   Specify a different encoding than the default UTF-8.
-  --functions=x    'remove'=default: strip functions off labels
-                   'leave': leave syntactic labels as is,
+  --functions=x    'leave'=default: leave syntactic labels as is,
+                   'remove': strip functions off labels,
                    'add': evaluate both syntactic categories and functions,
                    'replace': only evaluate grammatical functions.
   --morphology=x   'no'=default: only evaluate POS tags,
@@ -30,8 +31,18 @@ Options:
                    'between': add morphological node between POS tag and word.
   --abbr           abbreviate labels longer than 5 characters.
   --plain          disable ANSI colors.
+If more than one treebank is specified, trees will be displayed interleaved.
 Pipe the output through 'less -R' to preserve the colors. """ % sys.argv[0]
-
+ANSICOLOR = {
+		'black': 30,
+		'red': 31,
+		'green': 32,
+		'yellow': 33,
+		'blue': 34,
+		'magenta': 35,
+		'cyan': 36,
+		'white': 37,
+}
 
 class DrawTree(object):
 	""" Visualize a discontinuous tree in various formats. """
@@ -49,7 +60,7 @@ class DrawTree(object):
 			indices).
 		- abbr: when True, abbreviate labels longer than 5 characters.
 
-		>>> print(DrawTree("(S (NP Mary) (VP walks))"))
+		>>> print(DrawTree('(S (NP Mary) (VP walks))'))
 		      S
 		  ____|____
 		 NP        VP
@@ -92,7 +103,7 @@ class DrawTree(object):
 		return self.text()
 
 	def __repr__(self):
-		return "\n".join("%d: coord=%r, parent=%r, node=%s" % (
+		return '\n'.join('%d: coord=%r, parent=%r, node=%s' % (
 						n, self.coords[n], self.edges.get(n), self.nodes[n])
 					for n in sorted(self.nodes))
 
@@ -110,17 +121,17 @@ class DrawTree(object):
 		- identify nodes which cannot be in the same column
 		- place nodes into a grid at (row, column)
 		- order child-parent edges with crossing edges last
-		Coordinates are (row, column); the origin (0, 0) is at the top left; the
-		root node is on row 0. Coordinates do not consider the size of a node
-		(which depends on font, &c), so the width of a column of the grid
+		Coordinates are (row, column); the origin (0, 0) is at the top left;
+		the root node is on row 0. Coordinates do not consider the size of a
+		node (which depends on font, &c), so the width of a column of the grid
 		should be automatically determined by the element with the greatest
 		width in that column. Alternatively, the integer coordinates could be
 		converted to coordinates in which the distances between adjacent nodes
 		are non-uniform.
 		Produces tuple (nodes, coords, edges) where:
-		- nodes[id] == Tree object for the node with this integer id
-		- coords[id] == (n, m) coordinate where to draw node with id in the grid
-		- edges[id] == parent id of node with this id (ordered dictionary)
+		- nodes[id]: Tree object for the node with this integer id
+		- coords[id]: (n, m) coordinate where to draw node with id in the grid
+		- edges[id]: parent id of node with this id (ordered dictionary)
 		"""
 		def findcell(m, matrix, startoflevel, children):
 			""" find vacant row, column index
@@ -134,8 +145,8 @@ class DrawTree(object):
 			for idx in range(startoflevel, len(matrix) + 1):
 				if idx == len(matrix):
 					# need to add a new row
-					matrix.append([vertline if a not in (corner, None) else None
-							for a in matrix[-1]])
+					matrix.append([vertline if a not in (corner, None)
+							else None for a in matrix[-1]])
 				row = matrix[idx]
 				i, j = initi, initj
 				# place unaries directly above child; no restrictions for root
@@ -152,16 +163,16 @@ class DrawTree(object):
 							return idx, j
 						i += 1
 						j -= 1
-			raise ValueError("could not find a free cell.")
+			raise ValueError('could not find a free cell.')
 
 		leaves = tree.leaves()
 		assert all(isinstance(n, int) for n in leaves), (
-				"All leaves must be integer indices.")
+				'All leaves must be integer indices.')
 		assert len(leaves) == len(set(leaves)), (
-				"Indices must occur at most once.")
+				'Indices must occur at most once.')
 		assert all(0 <= n < len(sent) for n in leaves), (
-					"All leaves must be in the interval 0..n with n=len(sent)"
-					"\nlength: %d leaves: %r\nsent: %s" % (
+					'All leaves must be in the interval 0..n with n=len(sent)'
+					'\nlength: %d leaves: %r\nsent: %s' % (
 					len(sent), tree.leaves(), sent))
 		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)
@@ -208,7 +219,7 @@ class DrawTree(object):
 			matrix[0][i] = ids[m]
 			nodes[ids[m]] = sent[tree[m]]
 			if nodes[ids[m]] is None:
-				nodes[ids[m]] = "..."
+				nodes[ids[m]] = '...'
 			positions.remove(m)
 			childcols[m[:-1]].add((0, i))
 
@@ -243,8 +254,8 @@ class DrawTree(object):
 				# add column to the set of children for its parent
 				if m != ():
 					childcols[m[:-1]].add((rowindex, i))
-			#print("level", n)
-			#for row in matrix: print(''.join(("%4s" % a)[-2:] for a in row))
+			#print('level', n)
+			#for row in matrix: print(''.join(('%4s' % a)[-2:] for a in row))
 		assert len(positions) == 0
 
 		# remove unused columns, right to left
@@ -275,7 +286,7 @@ class DrawTree(object):
 		for i in reversed(positions):
 			for j, _ in enumerate(tree[i]):
 				edges[ids[i + (j, )]] = ids[i]
-		#for row in matrix: print(", ".join("%4s" % a for a in row))
+		#for row in matrix: print(', '.join('%4s' % a for a in row))
 		return nodes, coords, edges
 
 	def svg(self, nodecolor='blue', leafcolor='red'):
@@ -331,8 +342,8 @@ class DrawTree(object):
 			childx += hstart
 			childy += vstart - fontsize
 			result.append(
-				'\t<polyline style="stroke:white; stroke-width:10; fill:none;" '
-				'points="%g,%g %g,%g" />' % (childx, childy, childx, y + 5))
+				'\t<polyline style="stroke:white; stroke-width:10; fill:none;"'
+				' points="%g,%g %g,%g" />' % (childx, childy, childx, y + 5))
 			result.append(
 				'\t<polyline style="stroke:black; stroke-width:1; fill:none;" '
 				'points="%g,%g %g,%g" />' % (childx, childy, childx, y))
@@ -349,10 +360,10 @@ class DrawTree(object):
 			result.append('\t<text style="text-anchor: middle; fill: %s; '
 					'font-size: %dpx;" x="%g" y="%g">%s</text>' % (
 					color, fontsize, x, y,
-					htmllabel(node.label if isinstance(node, Tree) else node)))
+					escape(node.label if isinstance(node, Tree) else node)))
 
 		result += ['</svg>']
-		return "\n".join(result)
+		return '\n'.join(result)
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red'):
@@ -361,7 +372,7 @@ class DrawTree(object):
 			instead of plain (7-bit) ASCII.
 		html: whether to wrap output in html code (default plain text).
 		ansi: whether to produce colors with ANSI escape sequences
-			(colors not configurable, only effective when html==False).
+			(only effective when html==False).
 		leafcolor, nodecolor: specify colors of leaves and phrasal nodes. """
 
 		if unicodelines:
@@ -373,11 +384,11 @@ class DrawTree(object):
 			bottom = horzline + u'\u2534' + horzline
 			cross = horzline + u'\u253c' + horzline
 		else:
-			horzline = "_"
+			horzline = '_'
 			leftcorner = rightcorner = ' '
-			vertline = " | "
+			vertline = ' | '
 			tee = 3 * horzline
-			cross = bottom = "_|_"
+			cross = bottom = '_|_'
 
 		def crosscell(cur, x=vertline):
 			""" Overwrite center of this cell with a vertical branch. """
@@ -400,7 +411,7 @@ class DrawTree(object):
 			maxnode[column] = max(maxnode[column], len(self.nodes[a].label
 					if isinstance(self.nodes[a], Tree) else self.nodes[a]))
 			if a not in self.edges:
-				continue  # e.g. root
+				continue  # e.g., root
 			parent = self.edges[a]
 			childcols[parent].add((row, column))
 			minchildcol[parent] = min(minchildcol.get(parent, column), column)
@@ -440,20 +451,22 @@ class DrawTree(object):
 					text = node
 				text = text.center(maxnode[col])
 				if html:
-					text = htmllabel(text)
+					text = escape(text)
 					if n in self.highlight:
-						text = "<font color=%s>%s</font>" % (
-								nodecolor if isinstance(node, Tree) else
-								leafcolor, text)
+						text = '<font color=%s>%s</font>' % (
+								nodecolor if isinstance(node, Tree)
+								else leafcolor, text)
 				elif ansi and n in self.highlight:
 					text = '\x1b[%d;1m%s\x1b[0m' % (
-							34 if isinstance(node, Tree) else 31, text)
+							ANSICOLOR[nodecolor] if isinstance(node, Tree)
+							else ANSICOLOR[leafcolor], text)
 				noderow[col] = text
 			# for each column, if there is a node below us which has a parent
 			# above us, draw a vertical branch in that column.
 			if row != max(matrix):
 				for n, (childrow, col) in self.coords.items():
-					if n > 0 and self.coords[self.edges[n]][0] < row < childrow:
+					if (n > 0 and
+							self.coords[self.edges[n]][0] < row < childrow):
 						branchrow[col] = crosscell(branchrow[col])
 						if col not in matrix[row]:
 							noderow[col] = crosscell(noderow[col])
@@ -463,18 +476,18 @@ class DrawTree(object):
 				result.append((' ' * nodedist).join(noderow))
 			else:
 				result.append((' ' * nodedist).join(noderow))
-		return "\n".join(reversed(result)) + "\n"
+		return '\n'.join(reversed(result)) + '\n'
 
-	def tikzmatrix(self, nodecolor="blue", leafcolor="red"):
+	def tikzmatrix(self, nodecolor='blue', leafcolor='red'):
 		""" Produce TiKZ code for use with LaTeX. PDF can be produced with
 		pdflatex. Uses TiKZ matrices meaning that nodes are put into a fixed
 		grid. Where the cells of each column all have the same width."""
-		result = ["%% %s\n%% %s" % (self.tree, ' '.join(self.sent)),
-			r"""\begin{tikzpicture}[scale=1, minimum height=1.25em,
+		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
+			r'''\begin{tikzpicture}[scale=1, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
-			inner sep=0mm, node distance=1mm]""",
-		r"\footnotesize\sffamily",
-		r"\matrix[row sep=0.5cm,column sep=0.1cm] {"]
+			inner sep=0mm, node distance=1mm]''',
+		r'\footnotesize\sffamily',
+		r'\matrix[row sep=0.5cm,column sep=0.1cm] {']
 
 		# write matrix with nodes
 		matrix = defaultdict(dict)
@@ -496,33 +509,33 @@ class DrawTree(object):
 					else:
 						color = leafcolor if i in self.highlight else 'black'
 						label = node
-					line.append(r"\node [%s] (n%d) { %s };" % (
+					line.append(r'\node [%s] (n%d) { %s };' % (
 							color, i, label))
-				line.append("&")
-			# new row: skip last column char "&", add newline
-			result.append(' '.join(line[:-1]) + r" \\")
-		result += ["};"]
+				line.append('&')
+			# new row: skip last column char '&', add newline
+			result.append(' '.join(line[:-1]) + r' \\')
+		result += ['};']
 
 		shift = -0.5
 		# write branches from node to node
 		for child, parent in self.edges.items():
 			result.append(
-				"\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
-				"	\\draw (n%d) -- +(0, %g) -| (n%d);" % (
+				'\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);'
+				'	\\draw (n%d) -- +(0, %g) -| (n%d);' % (
 				parent, shift, child, parent, shift, child))
 
-		result += [r"\end{tikzpicture}"]
-		return "\n".join(result)
+		result += [r'\end{tikzpicture}']
+		return '\n'.join(result)
 
-	def tikznode(self, nodecolor="blue", leafcolor="red"):
+	def tikznode(self, nodecolor='blue', leafcolor='red'):
 		""" Produce TiKZ code to draw a tree. Nodes are drawn with the
 		\\node command so they can have arbitrary coordinates. """
-		result = ["%% %s\n%% %s" % (self.tree, ' '.join(self.sent)),
-			r"""\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
+		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
+			r'''\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
-			inner sep=0mm, node distance=1mm]""",
-		r"\footnotesize\sffamily",
-		r"\path"]
+			inner sep=0mm, node distance=1mm]''',
+		r'\footnotesize\sffamily',
+		r'\path']
 
 		bottom = max(row for row, _ in self.coords.values())
 		# write nodes with coordinates
@@ -532,53 +545,48 @@ class DrawTree(object):
 				color = nodecolor if isinstance(node, Tree) else leafcolor
 			else:
 				color = 'black'
-			result.append("\t(%d, %d) node [%s] (n%d) {%s}"
+			result.append('\t(%d, %d) node [%s] (n%d) {%s}'
 					% (column, bottom - row,
 					color,
 					n, latexlabel(node.label)
 					if isinstance(node, Tree) else node))
-		result += [";"]
+		result += [';']
 
 		shift = -0.5
 		# write branches from node to node
 		for child, parent in self.edges.items():
 			result.append(
-				"\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);"
-				"	\\draw (n%d) -- +(0, %g) -| (n%d);" % (
+				'\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);'
+				'	\\draw (n%d) -- +(0, %g) -| (n%d);' % (
 				parent, shift, child, parent, shift, child))
 
-		result += [r"\end{tikzpicture}"]
-		return "\n".join(result)
-
-
-def htmllabel(label):
-	""" quote/format label for html """
-	return label.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+		result += [r'\end{tikzpicture}']
+		return '\n'.join(result)
 
 
 def latexlabel(label):
 	""" quote/format label for latex """
 	newlabel = label.replace('$', r'\$').replace('[', '(').replace('_', r'\_')
 	# turn binarization marker into subscripts in math mode
-	if "|" in newlabel:
-		cat, siblings = newlabel.split("|", 1)
-		siblings = siblings.replace("<", '').replace(">", '')
-		if "^" in siblings:
-			siblings, parents = siblings.split("^")
-			siblings = siblings[1:-1].replace("-", ",")
-			newlabel = "$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $" % (
+	if '|' in newlabel:
+		cat, siblings = newlabel.split('|', 1)
+		siblings = siblings.replace('<', '').replace('>', '')
+		if '^' in siblings:
+			siblings, parents = siblings.split('^')
+			siblings = siblings[1:-1].replace('-', ',')
+			newlabel = '$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $' % (
 					cat, siblings, parents)
 		else:
-			newlabel = "$ \\textsf{%s}_\\textsf{%s} $" % (
+			newlabel = '$ \\textsf{%s}_\\textsf{%s} $' % (
 					cat, siblings.replace('-', ','))
 	else:
-		newlabel = newlabel.replace("<", "$<$").replace(">", "$>$")
+		newlabel = newlabel.replace('<', '$<$').replace('>', '$>$')
 	return newlabel
 
 
 def test():
 	""" Do some tests. """
-	trees = """(ROOT (S (ADV 0) (VVFIN 1) (NP (PDAT 2) (NN 3)) (PTKNEG 4) \
+	trees = '''(ROOT (S (ADV 0) (VVFIN 1) (NP (PDAT 2) (NN 3)) (PTKNEG 4) \
 				(PP (APPRART 5) (NN 6) (NP (ART 7) (ADJA 8) (NN 9)))) ($. 10))
 			(S (NP (NN 1) (EX 3)) (VP (VB 0) (JJ 2)))
 			(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))
@@ -601,17 +609,17 @@ def test():
 				(prep 13) (np (det 14) (noun 15)))) (conj (vg 20) (ppres \
 				(adj 17) (pp (prep 22) (np (det 23) (adj 24) (noun 25)))) \
 				(ppres (adj 19)) (ppres (adj 21)))) (punct 26))
-			(top (punct 10) (punct 11) (punct 16) (smain (np (det 0) (noun 1)) \
-				(verb 2) (np (det 3) (noun 4)) (adv 5) (du (cp (comp 6) (ssub \
-				(noun 7) (verb 8) (inf (verb 9)))) (du (smain (noun 12) \
-				(verb 13) (adv 14) (part 15)) (noun 17)))) \
+			(top (punct 10) (punct 11) (punct 16) (smain (np (det 0) \
+				(noun 1)) (verb 2) (np (det 3) (noun 4)) (adv 5) (du (cp \
+				(comp 6) (ssub (noun 7) (verb 8) (inf (verb 9)))) (du \
+				(smain (noun 12) (verb 13) (adv 14) (part 15)) (noun 17)))) \
 				(punct 18) (punct 19))
 			(top (smain (noun 0) (verb 1) (inf (verb 8) (inf (verb 9) (inf \
 				(adv 2) (pp (prep 3) (noun 4)) (pp (prep 5) (np (det 6) \
 				(noun 7))) (verb 10))))) (punct 11))
 			(top (smain (noun 0) (verb 1) (pp (prep 2) (np (det 3) (adj 4) \
-				(noun 5) (rel (noun 6) (ssub (noun 7) (verb 10) (ppart (adj 8) \
-				(part 9) (verb 11))))))) (punct 12))
+				(noun 5) (rel (noun 6) (ssub (noun 7) (verb 10) (ppart \
+				(adj 8) (part 9) (verb 11))))))) (punct 12))
 			(top (smain (np (det 0) (noun 1)) (verb 2) (ap (adv 3) (num 4) \
 				(cp (comp 5) (np (det 6) (adj 7) (noun 8) (rel (noun 9) (ssub \
 				(noun 10) (verb 11) (pp (prep 12) (np (det 13) (adj 14) \
@@ -619,10 +627,11 @@ def test():
 			(top (smain (np (det 0) (noun 1)) (verb 2) (adv 3) (pp (prep 4) \
 				(np (det 5) (noun 6)) (part 7))) (punct 8))
 			(top (punct 7) (conj (smain (noun 0) (verb 1) (np (det 2) \
-				(noun 3)) (pp (prep 4) (np (det 5) (noun 6)))) (smain (verb 8) \
-				(np (det 9) (num 10) (noun 11)) (part 12)) (vg 13) (smain \
-				(verb 14) (noun 15) (pp (prep 16) (np (det 17) (noun 18) \
-				(pp (prep 19) (np (det 20) (noun 21))))))) (punct 22))
+				(noun 3)) (pp (prep 4) (np (det 5) (noun 6)))) (smain \
+				(verb 8) (np (det 9) (num 10) (noun 11)) (part 12)) (vg 13) \
+				(smain (verb 14) (noun 15) (pp (prep 16) (np (det 17) \
+				(noun 18) (pp (prep 19) (np (det 20) (noun 21))))))) \
+				(punct 22))
 			(top (smain (np (det 0) (noun 1) (rel (noun 2) (ssub (np (num 3) \
 				(noun 4)) (adj 5) (verb 6)))) (verb 7) (ppart (verb 8) (pp \
 				(prep 9) (noun 10)))) (punct 11))
@@ -638,8 +647,8 @@ def test():
 				(inf (verb 6) (conj (inf (pp (prep 2) (np (det 3) (noun 4))) \
 				(verb 7)) (inf (verb 9)) (vg 10) (inf (verb 11)))))) \
 				(punct 12))
-			(top (smain (verb 2) (noun 3) (adv 4) (ppart (np (det 0) (noun 1)) \
-				(verb 5))) (punct 6))
+			(top (smain (verb 2) (noun 3) (adv 4) (ppart (np (det 0) \
+				(noun 1)) (verb 5))) (punct 6))
 			(top (conj (smain (np (det 0) (noun 1)) (verb 2) (adj 3) (pp \
 				(prep 4) (np (det 5) (noun 6)))) (vg 7) (smain (np (det 8) \
 				(noun 9) (pp (prep 10) (np (det 11) (noun 12)))) (verb 13) \
@@ -655,8 +664,8 @@ def test():
 			(VP (VP 0 3) (NP (PRP 1) (NN 2)))
 			(ROOT (S (VP_2 (PP (APPR 0) (ART 1) (NN 2) (PP (APPR 3) (ART 4) \
 				(ADJA 5) (NN 6))) (ADJD 10) (PP (APPR 11) (NN 12)) (VVPP 13)) \
-				(VAFIN 7) (NP (ART 8) (NN 9))) ($. 14))"""
-	sents = """Leider stehen diese Fragen nicht im Vordergrund der \
+				(VAFIN 7) (NP (ART 8) (NN 9))) ($. 14))'''
+	sents = '''Leider stehen diese Fragen nicht im Vordergrund der \
 				augenblicklichen Diskussion .
 			is Mary happy there
 			das muss man jetzt machen
@@ -666,9 +675,9 @@ def test():
 			Cathy zag hen wild zwaaien .
 			Het was een spel geworden , zij en haar vriendinnen kozen iemand \
 				uit en probeerden zijn of haar nationaliteit te raden .
-			Elk jaar in het hoogseizoen trokken daar massa's toeristen voorbij \
-				, hun fototoestel in de aanslag , pratend , gillend en lachend \
-				in de vreemdste talen .
+			Elk jaar in het hoogseizoen trokken daar massa's toeristen \
+				voorbij , hun fototoestel in de aanslag , pratend , gillend \
+				en lachend in de vreemdste talen .
 			Haar vader stak zijn duim omhoog alsof hij wilde zeggen : " het \
 				komt wel goed , joch " .
 			Ze hadden languit naast elkaar op de strandstoelen kunnen gaan \
@@ -683,7 +692,8 @@ def test():
 			Haar neus werd platgedrukt en leek op een jonge champignon .
 			Cathy zag de BMW langzaam verdwijnen tot hij niet meer was dan \
 				een zilveren schijnsel tussen de bomen en struiken .
-			Ze had met haar moeder kunnen gaan winkelen , zwemmen of terrassen .
+			Ze had met haar moeder kunnen gaan winkelen , zwemmen of \
+				terrassen .
 			Dat werkwoord had ze zelf uitgevonden .
 			De middagzon hing klein tussen de takken en de schaduwen van de \
 				wolken drentelden over het gras .
@@ -693,21 +703,21 @@ def test():
 			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 			Mit einer Messe in der Sixtinischen Kapelle ist das Konklave \
-				offiziell zu Ende gegangen ."""
+				offiziell zu Ende gegangen .'''
 	trees = [Tree.parse(a, parse_leaf=int) for a in trees.splitlines()]
 	sents = [a.split() for a in sents.splitlines()]
 	sents.extend([['Wake', None, 'up'],
 		[None, 'your', 'friend', None]])
 	for n, (tree, sent) in enumerate(zip(trees, sents)):
 		drawtree = DrawTree(tree, sent)
-		print("\ntree, sent", n, tree,
-				' '.join("..." if a is None else a for a in sent),
+		print('\ntree, sent', n, tree,
+				' '.join('...' if a is None else a for a in sent),
 				repr(drawtree),
 				sep='\n')
 		try:
-			print(drawtree.text(unicodelines=True, html=False), sep='\n')
+			print(drawtree.text(unicodelines=True, ansi=True), sep='\n')
 		except (UnicodeDecodeError, UnicodeEncodeError):
-			print(drawtree.text(unicodelines=False, html=False), sep='\n')
+			print(drawtree.text(unicodelines=False, ansi=False), sep='\n')
 
 
 def main():
@@ -719,7 +729,7 @@ def main():
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
 	except GetoptError as err:
-		print("error: %s\n%s" % (err, USAGE))
+		print('error: %s\n%s' % (err, USAGE))
 		sys.exit(2)
 	else:
 		opts = dict(opts)
@@ -732,21 +742,25 @@ def main():
 		print('No treebank specified\n%s' % USAGE)
 		return
 	reader = getreader(opts.get('--fmt', 'export'))
-	path, base = path.rsplit('/', 1) if '/' in path else ('.', path)
-	corpus = reader(path, base,
-			encoding=opts.get('--encoding', 'utf8'),
-			functions=opts.get('--functions'),
-			morphology=opts.get('--morphology'))
-	trees, sents = corpus.parsed_sents(), corpus.sents()
-	print('Viewing', base)
+	corpora = []
+	for path in args:
+		path, base = path.rsplit('/', 1) if '/' in path else ('.', path)
+		corpus = reader(path, base,
+				encoding=opts.get('--encoding', 'utf8'),
+				functions=opts.get('--functions'),
+				morphology=opts.get('--morphology'))
+		corpora.append((corpus.parsed_sents(), corpus.sents()))
+	print('Viewing:', *args)
 	try:
-		for n, sentid in enumerate(trees, 1):
-			tree, sent = trees[sentid], sents[sentid]
+		for n, sentid in enumerate(corpora[0][0], 1):
 			print('%d of %d (sentid=%s; len=%d):' % (
-					n, len(trees), sentid, len(sent)))
-			print(DrawTree(tree, sent, abbr='--abbr' in opts
-					).text(unicodelines=True, ansi=not '--plain' in opts))
-	except IOError:
+					n, len(corpora[0][1]), sentid,
+					len(corpora[0][1][sentid])))
+			for trees, sents in corpora:
+				tree, sent = trees[sentid], sents[sentid]
+				print(DrawTree(tree, sent, abbr='--abbr' in opts
+						).text(unicodelines=True, ansi=not '--plain' in opts))
+	except (IOError, KeyboardInterrupt):
 		pass
 
 
