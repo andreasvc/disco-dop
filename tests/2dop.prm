@@ -1,0 +1,115 @@
+stages=[  # Double-DOP
+  # test each objective function separately:
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='mpp', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=False, complement=False,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator="dop1", objective="mpp",
+  ),
+
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='mpd', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=False, complement=False,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator="dop1", objective="mpd",
+  ),
+
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='short', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=False, complement=False,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator="dop1", objective="shortest",
+  ),
+
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='sldop', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=False, complement=False,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator="dop1", objective="sl-dop",
+  ),
+  
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='slsimp', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=False, complement=False,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator="dop1", objective="sl-dop-simple",
+  ),
+
+  # test rest of parameters together:
+  dict(
+	name='post', mode='pcfg-posterior',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='etc', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=True, complement=False,
+	k=1e-5, m=10000,
+	kbest=True, sample=True,
+	estimator="ewe", objective="mpp",
+  ),
+
+],
+
+# corpus options
+corpusfmt="discbracket", # choices: export, bracket, discbracket
+corpusdir=".",
+traincorpus="t2.dbr",
+testcorpus="t2.dbr",
+evalparam=None, # EVALB-style parameter file
+punct=None,
+functions=None,
+morphology=None,
+transformations=None,
+relationalrealizational=None,
+postagging=None,
+testmaxwords=100,
+trainmaxwords=100,
+trainnumsents=3,
+testnumsents=1,
+skiptrain=True,
+skip=0,
+headrules=None,
+
+bintype="binarize",
+factor="right",
+h=1,
+v=1,
+quiet=False, reallyquiet=False,
+numproc=1,

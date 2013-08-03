@@ -1,0 +1,4 @@
+(S (WRONG (X x) (Y y)))
+(S (RIGHT (X x) (Y y)))
+(S (RIGHT (X x) (Y y)))
+(S (RIGHT (X x) (Y y)))
