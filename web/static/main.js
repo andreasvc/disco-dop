@@ -112,13 +112,16 @@ function ajaxFunction() {
 		  window.scroll(0, document.height); // scroll to bottom of page
 	  }
 	};
+	var coarse = document.queryform.coarse;
 	var objfun = document.queryform.objfun;
 	var marg = document.queryform.marg;
 	var est = document.queryform.est;
 	url = "parse?html=1&sent=" + encodeURIComponent(document.queryform.sent.value)
+			+ "&coarse=" + encodeURIComponent(coarse.options[coarse.selectedIndex].value)
 			+ "&objfun=" + encodeURIComponent(objfun.options[objfun.selectedIndex].value)
+			+ "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value)
 			+ "&est=" + encodeURIComponent(est.options[est.selectedIndex].value)
-			+ "&marg=" + encodeURIComponent(marg.options[marg.selectedIndex].value);
+			;
 	xmlhttp.open("GET", url, true);
 	xmlhttp.send(null);
 	document.queryform.sent.value = '';

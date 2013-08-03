@@ -43,6 +43,7 @@ def parse():
 	est = request.args.get('est', 'dop1')
 	marg = request.args.get('marg', 'nbest')
 	objfun = request.args.get('objfun', 'mpp')
+	coarse = request.args.get('coarse', None)
 	html = request.args.get('html', False)
 	if not sent:
 		return ''
@@ -55,6 +56,10 @@ def parse():
 	PARSERS[lang].stages[-1].objective = objfun
 	PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
 	PARSERS[lang].stages[-1].sample = marg in ('sample', 'both')
+	if PARSERS[lang].stages[0].mode.startswith('pcfg') and coarse:
+		PARSERS[lang].stages[0].mode = coarse
+		PARSERS[lang].stages[1].k = 1e-5 if coarse == 'pcfg-posterior' else 50
+
 	results = list(PARSERS[lang].parse(senttok))
 	if results[-1].noparse:
 		parsetrees = {}
@@ -75,8 +80,8 @@ def parse():
 		tree = Tree.parse(tree, parse_leaf=int)
 		result = Markup(DrawTree(tree, senttok).text(
 				unicodelines=True, html=html))
-		frags = Markup('Phrasal fragments used in the most probable derivation '
-				'of the highest ranked parse tree:\n'
+		frags = Markup('Phrasal fragments used in the most probable derivation'
+				' of the highest ranked parse tree:\n'
 				+ '\n\n'.join(
 				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
 						unicodelines=True, html=html)

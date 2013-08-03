@@ -58,6 +58,12 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>sample: sample derivations according to their probability distribution
 	</ul>
 
+	Coarse stage parser:
+	<ul>
+	<li>CKY: Standard CKY parser
+	<li>posterior: Prune with posterior probabilities
+	<li>bitpar: Use the bitpar parser (max 1000 derivations)
+	</ul>
 </div>
 </blockquote>
 
@@ -83,6 +89,11 @@ Sentence:
 	<option value=nbest>n-best</option>
 	<option value=sample>sample</option>
 	<option value=both>both</option>
+</select>
+<select name=coarse>
+	<option value=pcfg>CKY</option>
+	<option value=pcfg-posterior>posterior</option>
+	<option value=pcfg-bitpar>bitpar</option>
 </select>
 <input type=hidden name=html value=1 />
 <input type=submit value=Parse />
