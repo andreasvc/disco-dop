@@ -285,8 +285,8 @@ def doubledop(fragments, debug=False):
 				'}<' in rule[0][0][0],
 				rule[0][0]))
 	# replace keys with numeric ids of rules, drop terminals.
-	backtransform = {n: backtransform[r]
-		for n, (r, _) in enumerate(grammar) if r in backtransform}
+	backtransform = [backtransform[r] for r, _ in grammar
+			if r in backtransform]
 	# relative frequences as probabilities
 	ntfd = defaultdict(int)
 	ntfdewe = defaultdict(int)
@@ -957,7 +957,7 @@ def main():
 		backtransformfile = '%s.backtransform%s' % (grammarfile,
 			'.gz' if '--gzip' in opts else '')
 		myopen(backtransformfile, 'w').writelines(
-				'%s\n' % a for a in backtransform.values())
+				'%s\n' % a for a in backtransform)
 		print('wrote backtransform to', backtransformfile)
 	print('wrote grammar to %s and %s.' % (rules, lexicon))
 

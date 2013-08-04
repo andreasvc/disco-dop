@@ -393,7 +393,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				# $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
 				with gzip.open('%s/%s.backtransform.gz' % (
 						resultdir, stage.name), 'w') as out:
-					out.writelines('%s\n' % a for a in backtransform.values())
+					out.writelines('%s\n' % a for a in backtransform)
 				if n and stage.prune:
 					msg = grammar.getmapping(stages[n - 1].grammar,
 						striplabelre=None if stages[n - 1].dop

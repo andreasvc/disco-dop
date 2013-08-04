@@ -32,7 +32,7 @@ REMOVEWORDTAGS = re.compile('@[^ )]+')
 
 cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		bint sample=False, bint kbest=True, list sent=None, list tags=None,
-		int sldop_n=7, dict backtransform=None,
+		int sldop_n=7, list backtransform=None,
 		bint bitpar=False):
 	""" approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
@@ -167,7 +167,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 
 
 cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
-		int m, int sldop_n, dict backtransform, D, entries, bint bitpar):
+		int m, int sldop_n, list backtransform, D, entries, bint bitpar):
 	""" `Proper' method for sl-dop. Parses sentence once more to find shortest
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees; we need to parse again because we have to consider
@@ -227,7 +227,7 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 
 
 cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
-		D, chart, start, Grammar grammar, dict backtransform, bint bitpar):
+		D, chart, start, Grammar grammar, list backtransform, bint bitpar):
 	""" simple sl-dop method; estimates shortest derivation directly from
 	number of addressed nodes in the k-best derivations. After selecting the n
 	best parse trees, the one with the shortest derivation is returned.
@@ -489,7 +489,7 @@ cpdef viterbiderivation(chart, ChartItem start, list tolabel):
 	return derivations[0]
 
 
-cpdef str recoverfragments(deriv, D, Grammar grammar, dict backtransform):
+cpdef str recoverfragments(deriv, D, Grammar grammar, list backtransform):
 	""" Reconstruct a DOP derivation from a DOP derivation with
 	flattened fragments which are left-binarized. `derivation' should be
 	a RankedEdge representing a derivation, and backtransform should contain
@@ -515,7 +515,7 @@ cpdef str recoverfragments(deriv, D, Grammar grammar, dict backtransform):
 
 
 cdef str recoverfragments_lcfrs(RankedEdge deriv, dict D,
-		Grammar grammar, dict backtransform):
+		Grammar grammar, list backtransform):
 	cdef RankedEdge child
 	cdef list children = []
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
@@ -570,7 +570,7 @@ cdef str recoverfragments_lcfrs(RankedEdge deriv, dict D,
 
 
 cdef str recoverfragments_cfg(RankedCFGEdge deriv, list D,
-		Grammar grammar, dict backtransform):
+		Grammar grammar, list backtransform):
 	cdef RankedCFGEdge child
 	cdef list children = []
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
@@ -609,7 +609,7 @@ cdef str recoverfragments_cfg(RankedCFGEdge deriv, list D,
 	return frag.format(*children)
 
 
-cdef str recoverfragments_str(deriv, Grammar grammar, dict backtransform):
+cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 	cdef list children = []
 	cdef str frag
 	if len(deriv) == 1:
@@ -645,7 +645,7 @@ cdef str recoverfragments_str(deriv, Grammar grammar, dict backtransform):
 	return frag.format(*children)
 
 
-def extractfragments(deriv, D, Grammar grammar, dict backtransform):
+def extractfragments(deriv, D, Grammar grammar, list backtransform):
 	result = []
 	if isinstance(deriv, RankedEdge):
 		extractfragments_lcfrs(deriv, D, grammar, backtransform, result)
@@ -659,7 +659,7 @@ def extractfragments(deriv, D, Grammar grammar, dict backtransform):
 
 
 cdef extractfragments_lcfrs(RankedEdge deriv, dict D,
-		Grammar grammar, dict backtransform, list result):
+		Grammar grammar, list backtransform, list result):
 	cdef RankedEdge child
 	cdef list children = [], labels = []
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
@@ -697,7 +697,7 @@ cdef extractfragments_lcfrs(RankedEdge deriv, dict D,
 
 
 cdef extractfragments_cfg(RankedCFGEdge deriv, list D,
-		Grammar grammar, dict backtransform, list result):
+		Grammar grammar, list backtransform, list result):
 	cdef RankedCFGEdge child
 	cdef list children = [], labels = []
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
@@ -740,7 +740,7 @@ cdef extractfragments_cfg(RankedCFGEdge deriv, list D,
 
 
 cdef str extractfragments_str(deriv, Grammar grammar,
-		dict backtransform, list result):
+		list backtransform, list result):
 	cdef list children = [], labels = []
 	cdef str frag
 	if len(deriv) == 1:
