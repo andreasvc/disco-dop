@@ -4,10 +4,6 @@ Optional: pdflatex, imagemagick. """
 import os
 import re
 from subprocess import Popen, PIPE
-try:
-	from itertools import zip_longest  # pylint: disable=E0611
-except ImportError:
-	from itertools import izip_longest as zip_longest
 #from datetime import datetime, timedelta
 #from functools import wraps
 # Flask & co
@@ -17,6 +13,7 @@ from flask import send_from_directory
 #from werkzeug.contrib.cache import SimpleCache
 # disco-dop
 from discodop.tree import Tree
+from discodop.treebank import freeformtrees
 from discodop.treedraw import DrawTree
 from discodop import treebank
 
@@ -69,83 +66,10 @@ def draw():
 	""" Wrapper to parse & draw tree(s). """
 	if len(request.args['tree']) > LIMIT:
 		return 'Too much data. Limit: %d bytes' % LIMIT
-	dts = gettrees(request.args)
-	return drawtrees(request.args, dts)
-
-
-def gettrees(form):
-	""" Detect format of trees and parse into DrawTree objects. """
-	brackets = ''
-	if form['tree'].lstrip().startswith('('):
-		brackets = '()'
-	elif form['tree'].lstrip().startswith('['):
-		brackets = '[]'
-	trees, sents = [], []
-	if brackets:  # bracket notation
-		# Parse trees presented in bracket format, whether with indices or not,
-		# and regardless of whitespace (multiple trees per line, trees spread
-		# over multiple lines, trees alternated with sentence, etc.).
-		brackettrees, rest = segmentbrackets(form['tree'], brackets)
-		strtermre = re.compile('[^0-9\\%s]\\%s' % (brackets[1], brackets[1]))
-		for treestr, sent in zip_longest(brackettrees,
-				form.get('sent', '').splitlines() or rest):
-			if strtermre.search(treestr):  # terminals are not (all) indices
-				tree = noempty(Tree.parse(treestr, brackets=brackets))
-				sents.append(tree.leaves())
-				trees.append(renumber(tree))
-			else:  # disc. trees with integer indices as terminals
-				trees.append(Tree.parse(treestr, parse_leaf=int,
-					brackets=brackets))
-				sents.append(sent and sent.split())
-		if trees and (not sents or not sents[0]):
-			# use indices as leaves
-			sents = [map(str, range(max(tree.leaves()) + 1)) for tree in trees]
-	if not trees:  # discontinuous, export format, one or more trees
-		cur = []
-		for line in form['tree'].splitlines():
-			if line.startswith('#BOS'):
-				cur = []
-			elif line.startswith('#EOS'):
-				tree, sent = exporttree(cur)
-				trees.append(tree)
-				sents.append(sent)
-				cur = []
-			elif line.strip():
-				cur.append(line)
-		if cur:
-			tree, sent = exporttree(cur)
-			trees.append(tree)
-			sents.append(sent)
-	return [DrawTree(tree, sent, abbr=form.get('abbr', False))
+	trees, sents = freeformtrees(request.args['tree'])
+	dts = [DrawTree(tree, sent, abbr=request.args.get('abbr', False))
 			for tree, sent in zip(trees, sents)]
-
-
-def segmentbrackets(formtree, brackets):
-	""" Segment a series of S-expressions of brackets into a list of strings,
-	along with a list of strings found outside of S-expressions. """
-	lb, rb = brackets
-	formtree = formtree.lstrip(' \t\n\r')
-	if formtree[0] != lb:
-		return (), ()
-	start = 0
-	parens = 0
-	results = []
-	rest = []
-	for n, char in enumerate(formtree):
-		if char == lb:
-			parens += 1
-			if n and parens == 0 and formtree[start:n + 1]:
-				rest.append(formtree[start:n + 1])
-		elif char == rb:
-			parens -= 1
-			if parens == 0:
-				results.append(formtree[start:n + 1])
-				start = n + 1
-			elif parens < 0:
-				return (), ()  # unbalanced parentheses
-	if parens == 0 and formtree[start:]:
-		rest.append(formtree[start:])
-	return results, rest
+	return drawtrees(request.args, dts)
 
 
 def drawtrees(form, dts):
@@ -249,31 +173,6 @@ def drawtrees(form, dts):
 					os.remove(filename)
 				except OSError:
 					break
-
-
-def exporttree(data):
-	""" Wrapper to get both tree and sentence for tree in export format given
-	as list of lines. """
-	data = [treebank.exportsplit(x) for x in data]
-	tree = treebank.exportparse(data)
-	sent = [a[treebank.WORD] for a in data
-			if not a[treebank.WORD].startswith('#')]
-	return tree, sent
-
-
-def noempty(tree):
-	""" Add sentinel child (None) to empty nodes. """
-	for a in tree.subtrees(lambda n: len(n) == 0):
-		a.append(None)
-	return tree
-
-
-def renumber(tree):
-	""" Replace leaves with indices. """
-	for n, a in enumerate(tree.subtrees(
-			lambda n: len(n) == 1 and not isinstance(n[0], Tree))):
-		a[0] = n
-	return tree
 
 
 if __name__ == '__main__':

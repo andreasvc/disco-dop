@@ -16,7 +16,7 @@ if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 
 
-USAGE = """Usage: %s <treebank>... [options]
+USAGE = """Usage: %s [<treebank>...] [options]
 Options:
   --fmt=x          Specify corpus format. Options: export, bracket,
                    discbracket, alpino.
@@ -31,7 +31,8 @@ Options:
                    'between': add morphological node between POS tag and word.
   --abbr           abbreviate labels longer than 5 characters.
   --plain          disable ANSI colors.
-If more than one treebank is specified, trees will be displayed interleaved.
+If no treebank is given, input is read from standard input; format is detected.
+If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through 'less -R' to preserve the colors. """ % sys.argv[0]
 ANSICOLOR = {
 		'black': 30,
@@ -722,7 +723,7 @@ def test():
 
 def main():
 	""" Text-based tree viewer. """
-	from .treebank import getreader
+	from .treebank import getreader, freeformtrees
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
@@ -731,26 +732,33 @@ def main():
 	except GetoptError as err:
 		print('error: %s\n%s' % (err, USAGE))
 		sys.exit(2)
-	else:
-		opts = dict(opts)
-		if '--test' in opts:
-			test()
-			return
-	try:
-		path = args[0]
-	except:
-		print('No treebank specified\n%s' % USAGE)
+	opts = dict(opts)
+	if '--test' in opts:
+		test()
 		return
-	reader = getreader(opts.get('--fmt', 'export'))
-	corpora = []
-	for path in args:
-		path, base = path.rsplit('/', 1) if '/' in path else ('.', path)
-		corpus = reader(path, base,
-				encoding=opts.get('--encoding', 'utf8'),
-				functions=opts.get('--functions'),
-				morphology=opts.get('--morphology'))
-		corpora.append((corpus.parsed_sents(), corpus.sents()))
-	print('Viewing:', *args)
+	elif '--help' in opts:
+		print(USAGE)
+		return
+	if args:
+		reader = getreader(opts.get('--fmt', 'export'))
+		corpora = []
+		for path in args:
+			path, base = path.rsplit('/', 1) if '/' in path else ('.', path)
+			corpus = reader(path, base,
+					encoding=opts.get('--encoding', 'utf8'),
+					functions=opts.get('--functions'),
+					morphology=opts.get('--morphology'))
+			corpora.append((corpus.parsed_sents(), corpus.sents()))
+		print('Viewing:', *args)
+	else:  # read from stdin + detect format
+		# TODO: read incrementally
+		trees, sents = freeformtrees(sys.stdin.read().decode(
+				opts.get('--encoding', 'utf-8')),
+				morphology=opts.get('--morphology'),
+				functions=opts.get('--functions'))
+		corpora = [(OrderedDict(zip(range(len(trees)), trees)),
+				OrderedDict(zip(range(len(trees)), sents)))]
+		print('Viewing: standard input')
 	try:
 		for n, sentid in enumerate(corpora[0][0], 1):
 			print('%d of %d (sentid=%s; len=%d):' % (

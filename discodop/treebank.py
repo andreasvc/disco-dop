@@ -5,7 +5,10 @@ import os
 import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
-from itertools import count
+try:
+	from itertools import count, zip_longest  # pylint: disable=E0611
+except ImportError:
+	from itertools import count, izip_longest as zip_longest
 from collections import OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree
@@ -701,3 +704,120 @@ def makedep(root, deps, headrules):
 		lexheadofchild = makedep(child, deps, headrules)
 		deps.append(("NONE", lexheadofchild, lexhead))
 	return lexhead
+
+
+def freeformtrees(treeinput, morphology=None, functions=None):
+	""" Given free form input 'treeinput' containing parse trees, detect format
+	of trees and parse into Tree objects and separate lists of terminals.
+	Supports trees bracketed with () and [], with terminals in the trees, or
+	with indices as terminals to denote discontinuity. In the later case trees
+	may be followed by their sentences. Also supports Negra's export format.
+	"""
+	# TODO: should be an iterator
+	brackets = ''
+	if treeinput.lstrip().startswith('('):
+		brackets = '()'
+	elif treeinput.lstrip().startswith('['):
+		brackets = '[]'
+	trees, sents = [], []
+	if brackets:  # bracket notation
+		# Parse trees presented in bracket format, whether with indices or not,
+		# and regardless of whitespace (multiple trees per line, trees spread
+		# over multiple lines, trees alternated with sentence, etc.).
+		brackettrees, rest = segmentbrackets(treeinput, brackets)
+		strtermre = re.compile('[^0-9\\%s]\\%s' % (brackets[1], brackets[1]))
+		for treestr, sent in zip_longest(brackettrees, rest):
+			if strtermre.search(treestr):  # terminals are not (all) indices
+				tree = noempty(Tree.parse(treestr, brackets=brackets))
+				sents.append(tree.leaves())
+				trees.append(renumber(tree))
+			else:  # disc. trees with integer indices as terminals
+				trees.append(Tree.parse(treestr, parse_leaf=int,
+					brackets=brackets))
+				sents.append(sent and sent.split())
+		if trees and (not sents or not sents[0]):
+			# use indices as leaves
+			sents = [map(str, range(max(tree.leaves()) + 1)) for tree in trees]
+	if not trees:  # discontinuous, export format, one or more trees
+		blocks = []
+		cur = []
+		delimiters = False
+		for line in treeinput.splitlines():
+			if line.startswith('#BOS'):
+				cur = []
+				delimiters = True
+			elif line.startswith('#EOS'):
+				blocks.append(cur)
+				cur = []
+			elif line.strip():
+				cur.append(line)
+		if not delimiters and cur:
+			blocks.append(cur)
+		for block in blocks:
+			tree, sent = exporttree(block, morphology)
+			handlefunctions(functions, tree)
+			trees.append(tree)
+			sents.append(sent)
+	#if not trees:  # try Alpino / Tiger XML
+	return trees, sents
+
+
+def segmentbrackets(trees, brackets):
+	r""" Segment a series of S-expressions of brackets into a list of strings,
+	along with a list of strings found between and after S-expressions
+	First non-whitespace character has to be an openining bracket.
+
+	>>> segmentbrackets('(X \n   (Y  z) )\tfoo (A (B b) (C c))\nbar', '()')
+	([u'(X \n   (Y  z) )', u'(A (B b) (C c))'], [u'\tfoo ', u'\nbar']) """
+	lb, rb = brackets
+	trees = trees.lstrip(' \t\n\r')
+	if trees[0] != lb:
+		return (), ()
+	start = 0
+	parens = 0
+	results = []
+	rest = []
+	for n, char in enumerate(trees):
+		if char == lb:
+			if n and parens == 0 and trees[start:n]:
+				rest.append(trees[start:n])
+				start = n
+			parens += 1
+		elif char == rb:
+			parens -= 1
+			if parens == 0:
+				results.append(trees[start:n + 1])
+				start = n + 1
+			elif parens < 0:
+				return (), ()  # unbalanced parentheses
+	if parens == 0 and trees[start:]:
+		rest.append(trees[start:])
+	return results, rest
+
+
+def exporttree(data, morphology):
+	""" Wrapper to get both tree and sentence for tree in export format given
+	as list of lines. """
+	data = [exportsplit(x) for x in data]
+	tree = exportparse(data, morphology)
+	sent = [a[WORD] for a in data if not a[WORD].startswith('#')]
+	return tree, sent
+
+
+def noempty(tree):
+	""" Add sentinel child (None) to empty nodes. """
+	for a in tree.subtrees(lambda n: len(n) == 0):
+		a.append(None)
+	return tree
+
+
+def renumber(tree):
+	""" Replace leaves with indices. """
+	for n, a in enumerate(tree.subtrees(
+			lambda n: len(n) == 1 and not isinstance(n[0], Tree))):
+		a[0] = n
+	return tree
+
+
+if __name__ == '__main__':
+	pass
