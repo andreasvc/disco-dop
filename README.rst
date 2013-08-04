@@ -1,3 +1,4 @@
+=================
 Discontinuous DOP
 =================
 
@@ -18,8 +19,8 @@ sentences using Tree-Substitution Grammar (TSG).
 
 .. contents::
 
-Features:
----------
+Features
+========
 General statistical parsing:
 
 - grammar formalisms: PCFG, PLCFRS
@@ -37,7 +38,7 @@ DOP specific (parsing with tree fragments):
 - marginalization: n-best derivations, sampled derivations.
 
 Background
-----------
+==========
 This work is partly described in the following publications:
 
 - van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
@@ -60,8 +61,10 @@ Some references to implemented algorithms:
 - optimal binarization: Gildea (2010), Optimal parsing strategies for linear
   context-free rewriting systems
 
-Requirements
-------------
+Installation
+============
+
+Requirements:
 
 - Python 2.7+/3   http://www.python.org (need headers, e.g. python-dev package)
 - Cython 0.18+    http://www.cython.org
@@ -94,8 +97,11 @@ for the compiler in question. This mainly concerns operations to scan for bits
 in integers, for which these compiler intrinsics provide the most efficient
 implementation on a given processor.
 
-Usage: parser
--------------
+Usage
+=====
+
+Parser
+------
 To run a full experiment from treebank to evaluation on a test set,
 make a copy of the file ``sample.prm`` and edit its parameters.
 These parameters can then be invoked by executing::
@@ -115,8 +121,8 @@ can be requested for non-commercial purposes, while the
 `Tiger corpus <http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_
 is freely available for download for research purposes.
 
-Usage: tools
-------------
+Tools
+-----
 Aside from the parser there are some standalone tools:
 
 :``fragments``: Finds recurring or common fragments in one or more treebanks.
@@ -142,8 +148,8 @@ For example::
 
 ... prints instructions for the fragment extractor.
 
-Usage: web interfaces
----------------------
+Web interfaces
+--------------
 There are three web based tools in the ``web/`` directory. These require Flask to
 be installed.
 
@@ -159,7 +165,7 @@ be installed.
 See https://github.com/andreasvc/disco-dop/wiki for screenshots.
 
 Acknowledgments
----------------
+===============
 
 The Tree data structures in ``tree.py`` and the simple binarization algorithm in
 ``treetransforms.py`` was taken from `NLTK <http://www.nltk.org>`_.

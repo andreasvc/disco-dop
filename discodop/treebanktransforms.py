@@ -188,8 +188,8 @@ def reversetransform(tree, transformations):
 	state splits. Do not apply twice (might remove VPs which shouldn't be). """
 	tagtoconst, _ = getgeneralizations()
 	# Generic state-split removal
-	for node in tree.subtrees(lambda n: STATESPLIT in n.label):
-		node.label = node.label[:node.label.index(STATESPLIT)]
+	for node in tree.subtrees(lambda n: STATESPLIT in n.label[1:]):
+		node.label = node.label[:node.label.index(STATESPLIT, 1)]
 
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
@@ -204,8 +204,9 @@ def reversetransform(tree, transformations):
 					#dp[1:] = dp1
 					dp[1][:], dp[1:] = [], dp[1][:]
 		elif name == 'NEST':  # flatten adjunctions
-			nkonly = set('PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT PRELS'
-					' PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER'.split())
+			nkonly = set('PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT '
+					'PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER'
+					''.split())
 			probably_nk = set('AP PIS'.split()) | nkonly
 			for np in tree.subtrees(lambda n: len(n) == 2
 					and n.label == 'NP'
@@ -355,8 +356,7 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 		if morphlevels:
 			return preterminal, morph, morphlevels
 		return preterminal, None, 0
-	# for each node, collect the functions of the closest non-adjunctive sibling
-	# fixme: auxiliaries should also be ignored
+	# for each node, collect the functions of closest non-adjunctive sibling
 	childfuncsl = (prevfunc, ) = ['']
 	for child in tree:
 		if (isinstance(child, Tree) and child.source[FUNC]
