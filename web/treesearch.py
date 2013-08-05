@@ -198,7 +198,7 @@ def draw():
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
 	filename = os.path.join(CORPUS_DIR, TEXTS[textno].replace('.t2c.gz', ''))
-	treestr = open(filename).readlines()[sentno - 1]
+	treestr = next(islice(open(filename), sentno - 1, sentno)).decode('utf8')
 	return '<pre id="t%s">%s</pre>' % (sentno, DrawTree(
 			filterlabels(treestr, nofunc, nomorph)).text(
 				unicodelines=True, html=True))
@@ -218,7 +218,7 @@ def browse():
 		nomorph = 'nomorph' in request.args
 		lines = islice(open(filename), start, maxtree)
 		trees = ['<pre id="t%s">%s</pre>' % (n + 1, DrawTree(
-				filterlabels(line, nofunc, nomorph)).text(
+				filterlabels(line.decode('utf8'), nofunc, nomorph)).text(
 					unicodelines=True, html=True))
 				for n, line in enumerate(lines, start)]
 		if 'ajax' in request.args:
