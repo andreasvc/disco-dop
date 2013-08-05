@@ -91,7 +91,7 @@ class DrawTree(object):
 						for n, b in enumerate(a):
 							if not isinstance(b, Tree):
 								a[n] = len(self.sent)
-								self.sent.append(str(b))
+								self.sent.append('%s' % b)
 		if abbr:
 			if self.tree is tree:
 				self.tree = self.tree.copy(True)
