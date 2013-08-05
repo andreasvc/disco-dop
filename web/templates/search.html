@@ -57,20 +57,20 @@ span.tt { font-family: monospace; }
     <tr valign=top><td><label for=f1>Query:</label></td>
 		<td>
 			<input type=text
-				name={{ 'notquery' if form.get('textarea') == '1' else 'query' }}
+				name={{ 'notquery' if 'textarea' in form else 'query' }}
 				id=f1 size=100 value="{{ form['query'] }}"
 				{{ 'style="display: none; " disabled'|safe
-				if form.get('textarea') == '1' }}>
+				if 'textarea' in form }}>
 			<textarea
-				name={{ 'query' if form.get('textarea') == '1' else 'notquery' }}
-				{{ '' if form.get('textarea') == '1'
+				name={{ 'query' if 'textarea' in form else 'notquery' }}
+				{{ '' if 'textarea' in form
 				else 'style="display: none; " disabled'|safe }}
 				id=f2 rows=10 cols=80>{{ form['query'] }}</textarea>
 			<input type=hidden name=textarea
-				value={{ form.get('textarea', 0) }}>
+				value=on {{ '' if 'textarea' in form else 'disabled' }}>
 		</td>
 		<td><input type=submit>
-			<a href="javascript: toggletextbox(); ">the textbox is too damn <span id=smallbig>{{ 'big' if form.get('textarea') == '1' else 'small' }}</span>!</a></td>
+			<a href="javascript: toggletextbox(); ">the textbox is too damn <span id=smallbig>{{ 'big' if 'textarea' in form else 'small' }}</span>!</a></td>
 	</tr>
     <tr><td style="vertical-align: text-top; ">
     Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>

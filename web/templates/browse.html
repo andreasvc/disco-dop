@@ -5,6 +5,7 @@ var selected = {{ sentno }};
 var mintree = {{ mintree }};
 var maxtree = {{ maxtree }};
 var totalsents = {{ totalsents }};
+var chunk = {{ chunk }};
 document.onkeydown = checkkey
 
 function init() {
@@ -23,24 +24,27 @@ function init() {
 
 function checkkey(e) {
 	e = e || window.event;
-    if (e.keyCode == '37' || e.keyCode == '8') { // left arrow; backspace
+	if (e.keyCode == '37' || e.keyCode == '8') { // left arrow; backspace
 		next(-1);
-    }
-    else if (e.keyCode == '39' || e.keyCode == '32' ) { // right arrow; space
+	} else if (e.keyCode == '39' || e.keyCode == '32' ) { // right arrow; space
 		next(1);
-    }  // FIXME: both space and right arrow interfere with scrolling
+	}  // FIXME: both space and right arrow interfere with scrolling
 }
 
 function next(dir) {
-	if (selected + dir < mintree && mintree <= 1)
+	// out of bounds or AJAX call hasn't returned yet
+	if (selected + dir < mintree || selected + dir > maxtree)
 		return;
-	else if (selected + dir > maxtree && maxtree >= totalsents)
-		return;
-	else if (selected + dir < mintree || selected + dir > maxtree) { // redirect
+	// detect if we're half way, if so, pre-load next chunk of trees
+	else if ((dir == -1 && mintree > 1
+				&& selected % chunk == Math.floor(chunk / 2))
+			|| (dir == 1 && maxtree < totalsents
+				&& selected % chunk == Math.floor(chunk / 2) + 1)) {
 		text = 'text={{ textno }}';
-		sent = '&sent=' + (selected + dir);
+		sent = '&sent=' + (selected + dir * Math.floor(chunk / 2));
 		prm = '{{ "&nomorph"|safe if nomorph }}{{ "&nofunc"|safe if nofunc }}';
-		window.location.href = 'browse?' + text + sent + prm;
+		url = 'browse?' + text + sent + prm;
+		ajaxFunction(url + '&ajax', dir);
 	}
 	var pre = document.getElementById('t' + selected);
 	pre.style.display = 'none';
@@ -49,6 +53,41 @@ function next(dir) {
 	pre2.style.display = 'block';
 	var sentno = document.getElementById('sentno');
 	sentno.innerHTML = selected;
+}
+
+function ajaxFunction(url, dir) {
+	var xmlhttp;
+	if(window.XMLHttpRequest) {
+	  // code for IE7+, Firefox, Chrome, Opera, Safari
+	  xmlhttp=new XMLHttpRequest();
+	} else if(window.ActiveXObject) {
+	  // code for IE6, IE5
+	  xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
+	} else {
+	  alert("Your browser does not support XMLHTTP!");
+	}
+	var div = document.getElementById('trees');
+
+	xmlhttp.onreadystatechange=function() {
+		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
+			// div.innerHTML = xmlhttp.responseText; // replace contents
+			if (dir == -1) {
+				div.innerHTML = xmlhttp.responseText + div.innerHTML;
+				mintree -= chunk;
+				if (mintree <= 0) mintree = 1;
+			} else {
+				div.innerHTML += xmlhttp.responseText;
+				maxtree += chunk;
+				if (maxtree > totalsents) maxtree = totalsents;
+			}
+			// hide all trees except requested one
+			var pres = document.getElementsByTagName('pre');
+			for (var n = 0; n < pres.length; n++)
+				pres[n].style.display = 'none';
+		}
+	};
+	xmlhttp.open("GET", url, true);
+	xmlhttp.send(null);
 }
 
 </script>

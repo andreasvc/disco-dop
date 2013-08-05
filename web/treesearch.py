@@ -54,9 +54,36 @@ ABBRPOS = {
 	'NOUN': 'NN',
 	'VERB': 'VB'}
 
+
+def preparecorpus():
+	""" Produce indexed versions of parse trees in .mrg files """
+	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	assert files, 'Expected one or more .mrg files with parse trees in corpus/'
+	for a in files:
+		if not os.path.exists(a + '.t2c.gz'):
+			subprocess.check_call(
+					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
+					shell=False,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE)
+
+
+def getcorpus():
+	""" Get list of files and number of lines in them. """
+	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	texts = [os.path.basename(a) for a in files]
+	numsents = [len(open(filename).readlines()) for filename in files]
+	numconst = [open(filename).read().count('(') for filename in files]
+	numwords = [len(GETLEAVES.findall(open(filename).read()))
+			for filename in files]
+	return texts, numsents, numconst, numwords
+
+
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False)
+preparecorpus()
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS = getcorpus()
 
 
 def stream_template(template_name, **context):
@@ -81,17 +108,17 @@ def main():
 		output = request.path.lstrip('/')
 	elif 'output' in request.args:
 		output = request.args['output']
-	texts, selected = selectedtexts(request.args)
+	selected = selectedtexts(request.args)
 	if output:
 		if output not in DISPATCH:
 			return 'Invalid argument', 404
 		elif request.args.get('export'):
 			return export(request.args, output)
 		return Response(stream_template('searchresults.html',
-				form=request.args, texts=texts, selectedtexts=selected,
+				form=request.args, texts=TEXTS, selectedtexts=selected,
 				output=output, results=DISPATCH[output](request.args)))
 	return render_template('search.html', form=request.args, output='counts',
-			texts=texts, selectedtexts=selected)
+			texts=TEXTS, selectedtexts=selected)
 
 
 @APP.route('/style')
@@ -167,68 +194,52 @@ def draw():
 	if 'tree' in request.args:
 		return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
 				unicodelines=True, html=True)
-	else:
-		textno, sentno = int(request.args['text']), int(request.args['sent'])
-		return gettrees(textno, [sentno],
-				'nofunc' in request.args, 'nomorph' in request.args)[0]
-
-
-def gettrees(textno, treenos, nofunc, nomorph):
-	""" Fetch tree and store its visualization. """
-	texts, _ = selectedtexts(request.args)
-	cmd = [which('tgrep2'), '-e',
-			'-c', os.path.join(CORPUS_DIR, texts[textno] + '.t2c.gz'),
-			'/dev/stdin']
-	proc = subprocess.Popen(args=cmd,
-			bufsize=-1, shell=False,
-			stdin=subprocess.PIPE,
-			stdout=subprocess.PIPE,
-			stderr=subprocess.PIPE)
-	inp = ''.join('%d:1\n' % a for a in treenos)
-	out, err = proc.communicate(inp)
-	out, err = out.decode('utf8'), err.decode('utf8')
-	proc.stdout.close()  # pylint: disable=E1101
-	proc.stderr.close()  # pylint: disable=E1101
-	proc.wait()  # pylint: disable=E1101
-	out = filterlabels(out, nofunc, nomorph)
-	results = ['<pre id="t%s">%s</pre>' % (sentno,
-			DrawTree(treestr).text(unicodelines=True, html=True))
-			for sentno, treestr in zip(treenos, out.splitlines())]
-	return results
+	textno, sentno = int(request.args['text']), int(request.args['sent'])
+	nofunc = 'nofunc' in request.args
+	nomorph = 'nomorph' in request.args
+	filename = os.path.join(CORPUS_DIR, TEXTS[textno].replace('.t2c.gz', ''))
+	treestr = open(filename).readlines()[sentno - 1]
+	return '<pre id="t%s">%s</pre>' % (sentno, DrawTree(
+			filterlabels(treestr, nofunc, nomorph)).text(
+				unicodelines=True, html=True))
 
 
 @APP.route('/browse')
 def browse():
-	texts, _ = selectedtexts(request.args)
-	chunk = 10  # number of trees to fetch
+	chunk = 10  # number of trees to fetch for one request
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
-		sentno = int(request.args['sent'])
+		sentno = int(request.args['sent']) - 1
 		filename = os.path.join(CORPUS_DIR,
-				texts[textno].replace('.t2c.gz', ''))
-		totalsents = len(open(filename).readlines())
-		prevlink = '<a id=prevlink>prev</a>'
-		nextlink = '<a id=nextlink>next</a>'
+				TEXTS[textno].replace('.t2c.gz', ''))
+		start = sentno - sentno % chunk
+		maxtree = min(start + chunk, NUMSENTS[textno])
+		nofunc = 'nofunc' in request.args
+		nomorph = 'nomorph' in request.args
+		lines = islice(open(filename), start, maxtree)
+		trees = ['<pre id="t%s">%s</pre>' % (n + 1, DrawTree(
+				filterlabels(line, nofunc, nomorph)).text(
+					unicodelines=True, html=True))
+				for n, line in enumerate(lines, start)]
+		if 'ajax' in request.args:
+			return '\n'.join(trees)
+
+		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
 					textno, sentno - chunk)
-		if sentno < totalsents - chunk:
+		nextlink = '<a id=next>next</a>'
+		if sentno < NUMSENTS[textno] - chunk:
 			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
 					textno, sentno + chunk)
-		start = sentno - ((sentno - 1) % chunk)
-		maxtree = min(start + chunk, totalsents + 1)
-		treenos = range(start, maxtree)
-		nofunc = 'nofunc' in request.args
-		nomorph = 'nomorph' in request.args
-		trees = gettrees(textno, treenos, nofunc, nomorph)
-		return render_template('browse.html', textno=textno, sentno=sentno,
-				text=texts[textno], totalsents=totalsents, trees=trees,
-				prevlink=prevlink, nextlink=nextlink,
+		return render_template('browse.html', textno=textno, sentno=sentno + 1,
+				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=trees,
+				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
 				nofunc=nofunc, nomorph=nomorph,
-				mintree=start, maxtree=maxtree - 1)
+				mintree=start + 1, maxtree=maxtree)
 	return '<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a>' % (
-			n, text) for n, text in enumerate(texts))
+			n, text) for n, text in enumerate(TEXTS))
 
 
 @APP.route('/favicon.ico')
@@ -245,7 +256,7 @@ def counts(form, doexport=False):
 	sumtotal = 0
 	norm = form.get('norm', 'sents')
 	gotresult = False
-	for n, (text, results, stderr) in enumerate(doqueries(form, lines=False)):
+	for n, (textno, results, stderr) in enumerate(doqueries(form, lines=False)):
 		if n == 0:
 			if doexport:
 				yield '"text","count","relfreq"\r\n'
@@ -260,14 +271,14 @@ def counts(form, doexport=False):
 		cnt = results.count('\n')
 		if cnt:
 			gotresult = True
-		text = text.replace('.t2c.gz', '')
+		text = TEXTS[textno].replace('.t2c.gz', '')
 		filename = os.path.join(CORPUS_DIR, text)
 		cnts[text] = cnt
-		total = totalsent = len(open(filename).readlines())
+		total = totalsent = NUMSENTS[textno]
 		if norm == 'consts':
-			total = open(filename).read().count('(')
+			total = NUMCONST[textno]
 		elif norm == 'words':
-			total = len(GETLEAVES.findall(open(filename).read()))
+			total = NUMWORDS[textno]
 		elif norm != 'sents':
 			raise ValueError
 		relfreq[text] = 100.0 * cnt / total
@@ -289,11 +300,11 @@ def counts(form, doexport=False):
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
 				100.0 * sum(cnts.values()) / sumtotal))
-		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern',
-		#		barstyle='chart1')
 		yield barplot(relfreq, max(relfreq.values()),
 				'Relative frequency of pattern: (count / num_%s * 100)' % norm,
-				barstyle='chart2')
+				barstyle='chart1', unit='%')
+		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern',
+		#		barstyle='chart2')
 
 
 def trees(form):
@@ -367,10 +378,10 @@ def sents(form, dobrackets=False):
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
 			treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
-			link = "<a href='/draw?text=%d&sent=%s%s%s'>draw</a>" % (
+			link = "<a href='/browse?text=%d&sent=%s%s%s'>draw</a>" % (
 					textno, lineno,
-					'&nofunc=1' if 'nofunc' in form else '',
-					'&nomorph=1' if 'nomorph' in form else '')
+					'&nofunc' if 'nofunc' in form else '',
+					'&nomorph' if 'nomorph' in form else '')
 			if dobrackets:
 				out = treestr.replace(match,
 						"<span class=r>%s</span>" % match)
@@ -443,8 +454,8 @@ def fragmentsinresults(form):
 
 def doqueries(form, lines=False, doexport=None):
 	""" Run tgrep2 on each text """
-	texts, selected = selectedtexts(form)
-	for n, text in enumerate(texts):
+	selected = selectedtexts(form)
+	for n, text in enumerate(TEXTS):
 		if n not in selected:
 			continue
 		if doexport == 'sents':
@@ -477,7 +488,7 @@ def doqueries(form, lines=False, doexport=None):
 		elif doexport and form.get('linenos'):
 			yield out.lstrip('corpus/').replace('\ncorpus/', '\n')
 		else:
-			yield text, out, err
+			yield n, out, err
 
 
 def filterlabels(line, nofunc, nomorph):
@@ -491,15 +502,15 @@ def filterlabels(line, nofunc, nomorph):
 	return line
 
 
-def barplot(data, total, title, barstyle='chart1', width=800.0):
+def barplot(data, total, title, barstyle='chart1', width=800.0, unit=''):
 	""" A HTML bar plot given a dictionary and max value. """
 	result = ['</pre><div class=chart>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
 	for key in sorted(data, key=data.get, reverse=True):
-		result.append('<div class=%s style="width: %gpx" >%s: %g</div>' % (
+		result.append('<div class=%s style="width: %gpx" >%s: %g %s</div>' % (
 				barstyle if data[key] else 'chart',
-				width * data[key] / total, key, data[key]))
+				width * data[key] / total, key, data[key], unit))
 	result.append('</div>\n<pre>')
 	return '\n'.join(result)
 
@@ -520,8 +531,6 @@ def concplot(indices, total, width=800.0):
 
 def selectedtexts(form):
 	""" Find available texts and parse selected texts argument. """
-	files = sorted(glob.glob(os.path.join(CORPUS_DIR, "*.mrg")))
-	texts = [os.path.basename(a) for a in files]
 	selected = set()
 	if 'texts' in form:
 		for a in filter(None, form['texts'].replace('.', ',').split(',')):
@@ -533,21 +542,8 @@ def selectedtexts(form):
 	elif 't' in form:
 		selected.update(int(n) for n in form.getlist('t'))
 	else:
-		selected.update(range(len(texts)))
-	return texts, selected
-
-
-def preparecorpus():
-	""" Produce indexed versions of parse trees in .mrg files """
-	files = glob.glob('corpus/*.mrg')
-	assert files, "Expected one or more .mrg files with parse trees in corpus/"
-	for a in files:
-		if not os.path.exists(a + '.t2c.gz'):
-			subprocess.check_call(
-					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
-					shell=False,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE)
+		selected.update(range(len(TEXTS)))
+	return selected
 
 
 def which(program):

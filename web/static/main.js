@@ -1,4 +1,5 @@
 function toggle(id) {
+	/* toggle element with id to be hidden or not. */
 	var el = document.getElementById(id);
 	if(el.style.display == 'none')
 		el.style.display = 'block';
@@ -7,6 +8,8 @@ function toggle(id) {
 }
 
 function togglelink(id) {
+	/* toggle element with id to be hidden or not, and also toggle
+	 * link with id 'link'+id to start with 'show' or 'hide'. */
 	var el = document.getElementById(id);
 	var link = document.getElementById('link' + id);
 	if(el.style.display == 'none') {
@@ -19,23 +22,23 @@ function togglelink(id) {
 }
 
 function toggletextbox() {
+	/* toggle a textbox to be single or multi line. */
 	var state = document.queryform.textarea;
 	var cur = document.queryform.query;
 	var next = document.queryform.notquery;
 	var link = document.getElementById('smallbig');
-	var text = link.innerHTML;
 	cur.name = 'notquery';
 	cur.disabled = true;
 	cur.style.display = 'none';
 	next.name = 'query';
 	next.disabled = false;
 	next.style.display = 'block';
-	if(state.value == '0') {
-		state.value = '1';
+	if(state.disabled) {
+		state.disabled = false;
 		next.innerHTML = cur.value;
 		link.innerHTML = 'big';
 	} else {
-		state.value = '0';
+		state.disabled = true;
 		next.value = cur.value;
 		link.innerHTML = 'small';
 	}
@@ -60,6 +63,7 @@ function hide(id, name) {
 }
 
 function placeFocus() {
+	/* place focus on first element of first form. */
 	document.forms[0].elements[0].focus();
 }
 
@@ -74,6 +78,7 @@ function triggerForm(name) {
 }
 
 function entsub(e) {
+	/* call function if enter is pressed on form. */
 	 var key;
 	 if(window.event)
 		  key = window.event.keyCode;	 //IE
@@ -104,7 +109,7 @@ function ajaxFunction() {
 		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
 		  div.innerHTML = xmlhttp.responseText;
 		  var id = div.innerHTML.match(/id=([^ ]+) /);
-		  // collapse togglable items from here so that non-JS browsers
+		  // collapse toggle-able items from here so that non-JS browsers
 		  // may view the contents
 		  togglelink('n' + id[1]);
 		  togglelink('f' + id[1]);
@@ -128,12 +133,15 @@ function ajaxFunction() {
 }	
 
 function checkall(name, val) {
+	/* check all / none checkboxes with 'name'. */
 	var checkboxes = document.getElementsByName(name);
 	for (var i in checkboxes)
 		checkboxes[i].checked = val;
 }
 
 function numchecked() {
+	/* update number of checked checkboxes and write to span
+	 * 'numchecked'. */
 	var checkboxes = document.getElementsByName('t');
 	var checked = 0;
 	for (var i in checkboxes)
@@ -143,6 +151,8 @@ function numchecked() {
 }
 
 function mergecheckboxes() {
+	/* given checkboxes identified by numbers, represent them succinctly
+	 * as a series of intervals, e.g., '1-5,8-9,12' */
 	var checkboxes = document.getElementsByName('t');
 	var n = 0;
 	var start = 0;
