@@ -224,6 +224,7 @@ def browse():
 		return render_template('browse.html', textno=textno, sentno=sentno,
 				text=texts[textno], totalsents=totalsents, trees=trees,
 				prevlink=prevlink, nextlink=nextlink,
+				nofunc=nofunc, nomorph=nomorph,
 				mintree=start, maxtree=maxtree - 1)
 	return '<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a>' % (

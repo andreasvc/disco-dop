@@ -36,8 +36,12 @@ function next(dir) {
 		return;
 	else if (selected + dir > maxtree && maxtree >= totalsents)
 		return;
-	else if (selected + dir < mintree || selected + dir > maxtree) // redirect
-		window.location.href = "browse?text={{ textno }}&sent=" + (selected + dir);
+	else if (selected + dir < mintree || selected + dir > maxtree) { // redirect
+		text = 'text={{ textno }}';
+		sent = '&sent=' + (selected + dir);
+		prm = '{{ "&nomorph"|safe if nomorph }}{{ "&nofunc"|safe if nofunc }}';
+		window.location.href = 'browse?' + text + sent + prm;
+	}
 	var pre = document.getElementById('t' + selected);
 	pre.style.display = 'none';
 	selected += dir;
