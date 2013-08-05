@@ -217,8 +217,10 @@ def browse():
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		lines = islice(open(filename), start, maxtree)
-		trees = ['<pre id="t%s">%s</pre>' % (n + 1, DrawTree(
-				filterlabels(line.decode('utf8'), nofunc, nomorph)).text(
+		trees = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
+				' style="display: none; "' if 'ajax' in request.args else '',
+				DrawTree(filterlabels(
+					line.decode('utf8'), nofunc, nomorph)).text(
 					unicodelines=True, html=True))
 				for n, line in enumerate(lines, start)]
 		if 'ajax' in request.args:
@@ -238,8 +240,9 @@ def browse():
 				nofunc=nofunc, nomorph=nomorph,
 				mintree=start + 1, maxtree=maxtree)
 	return '<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a>' % (
-			n, text) for n, text in enumerate(TEXTS))
+			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
+			'(%d sentences)' % (n, text, NUMSENTS[n])
+			for n, text in enumerate(TEXTS))
 
 
 @APP.route('/favicon.ico')

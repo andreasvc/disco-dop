@@ -80,10 +80,6 @@ function ajaxFunction(url, dir) {
 				maxtree += chunk;
 				if (maxtree > totalsents) maxtree = totalsents;
 			}
-			// hide all trees except requested one
-			var pres = document.getElementsByTagName('pre');
-			for (var n = 0; n < pres.length; n++)
-				pres[n].style.display = 'none';
 		}
 	};
 	xmlhttp.open("GET", url, true);

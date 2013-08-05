@@ -89,7 +89,7 @@ span.tt { font-family: monospace; }
 		' checked' if output == 'counts' }} onChange="show('normrow', 'norm'); hide('labelrow', 'nomorph'); " >
 		Counts;</label>
     <label><input type=radio name=output value=sents{{
-		' checked' if output == 'sents' }} onChange="hide('normrow', 'norm'); hide('labelrow', 'nomorph'); ">
+		' checked' if output == 'sents' }} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
 		Matching sentences (words only);</label>
     <label><input type=radio name=output value=trees{{
 		' checked' if output == 'trees' }} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
