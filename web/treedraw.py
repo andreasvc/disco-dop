@@ -12,10 +12,8 @@ from flask import request, render_template, redirect, url_for
 from flask import send_from_directory
 #from werkzeug.contrib.cache import SimpleCache
 # disco-dop
-from discodop.tree import Tree
 from discodop.treebank import freeformtrees
 from discodop.treedraw import DrawTree
-from discodop import treebank
 
 
 LIMIT = 1024 * 10  # ~10KB

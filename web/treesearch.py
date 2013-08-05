@@ -170,10 +170,11 @@ def draw():
 				unicodelines=True, html=True)
 	else:
 		textno, sentno = int(request.args['text']), int(request.args['sent'])
-		return cachetree(textno, sentno)
+		return cachetree(textno, sentno,
+				'nofunc' in request.args, 'nomorph' in request.args)
 
 
-def cachetree(textno, sentno):
+def cachetree(textno, sentno, nomorph, nofunc):
 	""" Fetch tree and store its visualization. """
 	if sentno not in drawntrees[textno]:
 		texts, _ = selectedtexts(request.args)
@@ -198,10 +199,10 @@ def cachetree(textno, sentno):
 		for a, treestr in zip(treenos, out.splitlines()):
 			drawntrees[textno][a] = DrawTree(treestr).text(
 					unicodelines=True, html=True)
-	result ='<pre id="t%s">%s</pre>' % (sentno, drawntrees[textno][sentno])
-	if 'nofunc' in request.args:
+	result = '<pre id="t%s">%s</pre>' % (sentno, drawntrees[textno][sentno])
+	if nofunc:
 		result = FUNC_TAGS.sub('', result)
-	if 'nomorph' in request.args:
+	if nomorph:
 		result = MORPH_TAGS.sub(lambda g: '%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), result)
 	return result
@@ -210,7 +211,7 @@ def cachetree(textno, sentno):
 @APP.route('/browse')
 def browse():
 	texts, _ = selectedtexts(request.args)
-	chunk = 10
+	chunk = 10  # number of trees to fetch
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent'])
@@ -220,23 +221,24 @@ def browse():
 		prevlink = '<a id=prevlink>prev</a>'
 		nextlink = '<a id=nextlink>next</a>'
 		if sentno > chunk:
-			prevlink = '<a href="browse?text=%d&sent=%d" id=prevlink>prev</a>' % (
+			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
 					textno, sentno - chunk)
 		if sentno < totalsents - chunk:
-			nextlink = '<a href="browse?text=%d&sent=%d" id=nextlink>next</a>' % (
+			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
 					textno, sentno + chunk)
 		start = sentno - ((sentno - 1) % chunk)
 		maxtree = min(start + chunk, totalsents + 1)
 		treenos = range(start, maxtree)
-		trees = [cachetree(textno, a) for a in treenos]
+		nofunc = 'nofunc' in request.args
+		nomorph = 'nomorph' in request.args
+		trees = [cachetree(textno, a, nofunc, nomorph) for a in treenos]
 		return render_template('browse.html', textno=textno, sentno=sentno,
 				text=texts[textno], totalsents=totalsents, trees=trees,
 				prevlink=prevlink, nextlink=nextlink,
 				mintree=start, maxtree=maxtree - 1)
 	return '<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browse?text=%d&sent=1">%s</a>' % (
+			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a>' % (
 			n, text) for n, text in enumerate(texts))
-
 
 
 @APP.route('/favicon.ico')

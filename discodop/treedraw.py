@@ -45,6 +45,7 @@ ANSICOLOR = {
 		'white': 37,
 }
 
+
 class DrawTree(object):
 	""" Visualize a discontinuous tree in various formats. """
 	def __init__(self, tree, sent=None, highlight=(), abbr=False):

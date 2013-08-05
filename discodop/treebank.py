@@ -492,7 +492,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 				func = node.source[FUNC] or '--'
 			nodeid = str(500 + phrasalnodes.index(idx[:-1])
 					if len(idx) > 1 else 0)
-			result.append('\t'.join((parent, node.label, morph, func, nodeid)))
+			result.append('\t'.join((parent, label, morph, func, nodeid)))
 		if n is not None:
 			result.append("#EOS %s" % n)
 		return "%s\n" % "\n".join(result)

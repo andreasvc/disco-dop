@@ -12,6 +12,7 @@ FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
 
+
 def transform(tree, sent, transformations):
 	""" Perform some transformations, specific to Negra and WSJ treebanks.
 	State-splits are preceded by '^'.
