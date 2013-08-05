@@ -12,7 +12,7 @@ from heapq import nlargest
 from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, count
-from collections import Counter
+from collections import Counter, defaultdict
 #from functools import wraps
 # Flask & co
 from flask import Flask, Response
@@ -33,7 +33,7 @@ SENTLIMIT = 1000  # max number of sents/brackets in search results
 
 APP = Flask(__name__)
 MORPH_TAGS = re.compile(
-		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
+		r'([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
 
@@ -57,6 +57,7 @@ ABBRPOS = {
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False)
+drawntrees = defaultdict(dict)
 
 
 def stream_template(template_name, **context):
@@ -87,9 +88,9 @@ def main():
 			return 'Invalid argument', 404
 		elif request.args.get('export'):
 			return export(request.args, output)
-		return Response(stream_template('searchresults.html', form=request.args,
-				texts=texts, selectedtexts=selected, output=output,
-				results=DISPATCH[output](request.args)))
+		return Response(stream_template('searchresults.html',
+				form=request.args, texts=texts, selectedtexts=selected,
+				output=output, results=DISPATCH[output](request.args)))
 	return render_template('search.html', form=request.args, output='counts',
 			texts=texts, selectedtexts=selected)
 
@@ -153,8 +154,8 @@ def export(form, output):
 		results = counts(form, doexport=True)
 		filename = 'counts.csv'
 	else:
-		results = (a[1] + '\n' for a in doqueries(form, lines=False,
-					doexport=output))
+		results = (a + '\n' for a in doqueries(
+				form, lines=False, doexport=output))
 		filename = '%s.txt' % output
 	resp = Response(results, mimetype='text/plain')
 	resp.headers['Content-Disposition'] = 'attachment; filename=' + filename
@@ -164,8 +165,78 @@ def export(form, output):
 @APP.route('/draw')
 def draw():
 	""" Produce a visualization of a tree on a separate page. """
-	return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
-			unicodelines=True, html=True)
+	if 'tree' in request.args:
+		return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
+				unicodelines=True, html=True)
+	else:
+		textno, sentno = int(request.args['text']), int(request.args['sent'])
+		return cachetree(textno, sentno)
+
+
+def cachetree(textno, sentno):
+	""" Fetch tree and store its visualization. """
+	if sentno not in drawntrees[textno]:
+		texts, _ = selectedtexts(request.args)
+		cmd = [which('tgrep2'), '-e',
+				'-c', os.path.join(CORPUS_DIR, texts[textno] + '.t2c.gz'),
+				'/dev/stdin']
+		proc = subprocess.Popen(args=cmd,
+				bufsize=-1, shell=False,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE)
+		# ask for a chunk of 10 trees including the requested one.
+		# should check for no of trees in text
+		start = sentno - (sentno % 10) + 1
+		treenos = range(start, start + 10)
+		inp = ''.join('%d:1\n' % a for a in treenos)
+		out, err = proc.communicate(inp)
+		out, err = out.decode('utf8'), err.decode('utf8')
+		proc.stdout.close()  # pylint: disable=E1101
+		proc.stderr.close()  # pylint: disable=E1101
+		proc.wait()  # pylint: disable=E1101
+		for a, treestr in zip(treenos, out.splitlines()):
+			drawntrees[textno][a] = DrawTree(treestr).text(
+					unicodelines=True, html=True)
+	result ='<pre id="t%s">%s</pre>' % (sentno, drawntrees[textno][sentno])
+	if 'nofunc' in request.args:
+		result = FUNC_TAGS.sub('', result)
+	if 'nomorph' in request.args:
+		result = MORPH_TAGS.sub(lambda g: '%s%s' % (
+				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), result)
+	return result
+
+
+@APP.route('/browse')
+def browse():
+	texts, _ = selectedtexts(request.args)
+	chunk = 10
+	if 'text' in request.args and 'sent' in request.args:
+		textno = int(request.args['text'])
+		sentno = int(request.args['sent'])
+		filename = os.path.join(CORPUS_DIR,
+				texts[textno].replace('.t2c.gz', ''))
+		totalsents = len(open(filename).readlines())
+		prevlink = '<a id=prevlink>prev</a>'
+		nextlink = '<a id=nextlink>next</a>'
+		if sentno > chunk:
+			prevlink = '<a href="browse?text=%d&sent=%d" id=prevlink>prev</a>' % (
+					textno, sentno - chunk)
+		if sentno < totalsents - chunk:
+			nextlink = '<a href="browse?text=%d&sent=%d" id=nextlink>next</a>' % (
+					textno, sentno + chunk)
+		start = sentno - ((sentno - 1) % chunk)
+		maxtree = min(start + chunk, totalsents + 1)
+		treenos = range(start, maxtree)
+		trees = [cachetree(textno, a) for a in treenos]
+		return render_template('browse.html', textno=textno, sentno=sentno,
+				text=texts[textno], totalsents=totalsents, trees=trees,
+				prevlink=prevlink, nextlink=nextlink,
+				mintree=start, maxtree=maxtree - 1)
+	return '<ol>\n%s</ol>\n' % '\n'.join(
+			'<li><a href="browse?text=%d&sent=1">%s</a>' % (
+			n, text) for n, text in enumerate(texts))
+
 
 
 @APP.route('/favicon.ico')
@@ -237,7 +308,7 @@ def trees(form):
 	""" Return visualization of parse trees in search results. """
 	# TODO: show context of x sentences around result, offer pagination.
 	gotresults = False
-	for n, (text, results, stderr) in enumerate(
+	for n, (_textno, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
 			# NB: we do not hide function or morphology tags when exporting
@@ -249,11 +320,11 @@ def trees(form):
 					'<a href="%s">with line numbers</a>):\n' % (
 						stderr, TREELIMIT, url, url + '&linenos=1'))
 		for m, line in enumerate(islice(results, TREELIMIT)):
+			lineno, text, treestr, match = line.split(":::")
 			if m == 0:
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			lineno, text, treestr, match = line.split(":::")
 			cnt = count()
 			treestr = treestr.replace(" )", " -NONE-)")
 			match = match.strip()
@@ -286,7 +357,7 @@ def trees(form):
 def sents(form, dobrackets=False):
 	""" Return search results as terminals or in bracket notation. """
 	gotresults = False
-	for n, (text, results, stderr) in enumerate(
+	for n, (textno, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
 			url = '%s?query=%s&texts=%s&export=1' % (
@@ -298,14 +369,16 @@ def sents(form, dobrackets=False):
 					'<a href="%s">with line numbers</a>):\n' % (
 						stderr, SENTLIMIT, url, url + '&linenos=1'))
 		for m, line in enumerate(islice(results, SENTLIMIT)):
+			lineno, text, treestr, match = line.rstrip().split(":::")
 			if m == 0:
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			lineno, text, treestr, match = line.rstrip().split(":::")
 			treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
-			link = "<a href='/draw?tree=%s'>draw</a>" % (
-					quote(treestr.encode('utf8')))
+			link = "<a href='/draw?text=%d&sent=%s%s%s'>draw</a>" % (
+					textno, lineno,
+					'&nofunc=1' if 'nofunc' in form else '',
+					'&nomorph=1' if 'nomorph' in form else '')
 			if dobrackets:
 				out = treestr.replace(match,
 						"<span class=r>%s</span>" % match)
@@ -401,17 +474,15 @@ def doqueries(form, lines=False, doexport=None):
 				bufsize=-1, shell=False,
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
-		if n == 0:
-			logging.debug(' '.join("'%s'" % x if ' ' in x else x for x in cmd))
 		out, err = proc.communicate()
 		out, err = out.decode('utf8'), err.decode('utf8')
 		proc.stdout.close()  # pylint: disable=E1101
 		proc.stderr.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101
 		if lines:
-			yield text, filterlabels(form, out).splitlines(), err
+			yield n, filterlabels(form, out).splitlines(), err
 		elif doexport and form.get('linenos'):
-			yield text, out.lstrip('corpus/').replace('\ncorpus/', '\n'), err
+			yield out.lstrip('corpus/').replace('\ncorpus/', '\n')
 		else:
 			yield text, out, err
 
@@ -422,8 +493,7 @@ def filterlabels(form, line):
 	if 'nofunc' in form:
 		line = FUNC_TAGS.sub('', line)
 	if 'nomorph' in form:
-		#line = MORPH_TAGS.sub(r'(\1\2', line)
-		line = MORPH_TAGS.sub(lambda g: '(%s%s' % (
+		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
 

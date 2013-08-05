@@ -1,0 +1,64 @@
+<!doctype html>
+<title>Browsing trees of {{ text }}</title>
+<script>
+var selected = {{ sentno }};
+var mintree = {{ mintree }};
+var maxtree = {{ maxtree }};
+var totalsents = {{ totalsents }};
+document.onkeydown = checkkey
+
+function init() {
+	// hide all trees except requested one
+	var pres = document.getElementsByTagName('pre');
+	for (var n = 0; n < pres.length; n++)
+		pres[n].style.display = 'none';
+	var pre = document.getElementById('t' + selected);
+	pre.style.display = 'block';
+	// turn prev/next links into javascript links
+	var lnk = document.getElementById('prevlink');
+	lnk.href = "javascript: next(-1); ";
+	var lnk = document.getElementById('nextlink');
+	lnk.href = "javascript: next(1); ";
+}
+
+function checkkey(e) {
+	e = e || window.event;
+    if (e.keyCode == '37' || e.keyCode == '8') { // left arrow; backspace
+		next(-1);
+    }
+    else if (e.keyCode == '39' || e.keyCode == '32' ) { // right arrow; space
+		next(1);
+    }  // FIXME: both space and right arrow interfere with scrolling
+}
+
+function next(dir) {
+	if (selected + dir < mintree && mintree <= 1)
+		return;
+	else if (selected + dir > maxtree && maxtree >= totalsents)
+		return;
+	else if (selected + dir < mintree || selected + dir > maxtree) // redirect
+		window.location.href = "browse?text={{ textno }}&sent=" + (selected + dir);
+	var pre = document.getElementById('t' + selected);
+	pre.style.display = 'none';
+	selected += dir;
+	var pre2 = document.getElementById('t' + selected);
+	pre2.style.display = 'block';
+	var sentno = document.getElementById('sentno');
+	sentno.innerHTML = selected;
+}
+
+</script>
+<body onLoad="init(); ">
+<center><tt>
+  {{ prevlink|safe }}
+| <span id=sentno>{{ sentno }}</span> of {{ totalsents }}
+| {{ nextlink|safe }}
+| {{ text }} | <font color=gray>(use left &amp; right arrow keys to browse)</font>
+</tt></center>
+
+<div id=trees>
+{% for tree in trees %}
+{{ tree|safe }}
+{% endfor %}
+</div>
+</body>
