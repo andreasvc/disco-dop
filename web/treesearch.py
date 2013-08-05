@@ -57,7 +57,6 @@ ABBRPOS = {
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False)
-drawntrees = defaultdict(dict)
 
 
 def stream_template(template_name, **context):
@@ -170,42 +169,32 @@ def draw():
 				unicodelines=True, html=True)
 	else:
 		textno, sentno = int(request.args['text']), int(request.args['sent'])
-		return cachetree(textno, sentno,
-				'nofunc' in request.args, 'nomorph' in request.args)
+		return gettrees(textno, [sentno],
+				'nofunc' in request.args, 'nomorph' in request.args)[0]
 
 
-def cachetree(textno, sentno, nomorph, nofunc):
+def gettrees(textno, treenos, nofunc, nomorph):
 	""" Fetch tree and store its visualization. """
-	if sentno not in drawntrees[textno]:
-		texts, _ = selectedtexts(request.args)
-		cmd = [which('tgrep2'), '-e',
-				'-c', os.path.join(CORPUS_DIR, texts[textno] + '.t2c.gz'),
-				'/dev/stdin']
-		proc = subprocess.Popen(args=cmd,
-				bufsize=-1, shell=False,
-				stdin=subprocess.PIPE,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.PIPE)
-		# ask for a chunk of 10 trees including the requested one.
-		# should check for no of trees in text
-		start = sentno - (sentno % 10) + 1
-		treenos = range(start, start + 10)
-		inp = ''.join('%d:1\n' % a for a in treenos)
-		out, err = proc.communicate(inp)
-		out, err = out.decode('utf8'), err.decode('utf8')
-		proc.stdout.close()  # pylint: disable=E1101
-		proc.stderr.close()  # pylint: disable=E1101
-		proc.wait()  # pylint: disable=E1101
-		for a, treestr in zip(treenos, out.splitlines()):
-			drawntrees[textno][a] = DrawTree(treestr).text(
-					unicodelines=True, html=True)
-	result = '<pre id="t%s">%s</pre>' % (sentno, drawntrees[textno][sentno])
-	if nofunc:
-		result = FUNC_TAGS.sub('', result)
-	if nomorph:
-		result = MORPH_TAGS.sub(lambda g: '%s%s' % (
-				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), result)
-	return result
+	texts, _ = selectedtexts(request.args)
+	cmd = [which('tgrep2'), '-e',
+			'-c', os.path.join(CORPUS_DIR, texts[textno] + '.t2c.gz'),
+			'/dev/stdin']
+	proc = subprocess.Popen(args=cmd,
+			bufsize=-1, shell=False,
+			stdin=subprocess.PIPE,
+			stdout=subprocess.PIPE,
+			stderr=subprocess.PIPE)
+	inp = ''.join('%d:1\n' % a for a in treenos)
+	out, err = proc.communicate(inp)
+	out, err = out.decode('utf8'), err.decode('utf8')
+	proc.stdout.close()  # pylint: disable=E1101
+	proc.stderr.close()  # pylint: disable=E1101
+	proc.wait()  # pylint: disable=E1101
+	out = filterlabels(out, nofunc, nomorph)
+	results = ['<pre id="t%s">%s</pre>' % (sentno,
+			DrawTree(treestr).text(unicodelines=True, html=True))
+			for sentno, treestr in zip(treenos, out.splitlines())]
+	return results
 
 
 @APP.route('/browse')
@@ -231,7 +220,7 @@ def browse():
 		treenos = range(start, maxtree)
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
-		trees = [cachetree(textno, a, nofunc, nomorph) for a in treenos]
+		trees = gettrees(textno, treenos, nofunc, nomorph)
 		return render_template('browse.html', textno=textno, sentno=sentno,
 				text=texts[textno], totalsents=totalsents, trees=trees,
 				prevlink=prevlink, nextlink=nextlink,
@@ -482,19 +471,20 @@ def doqueries(form, lines=False, doexport=None):
 		proc.stderr.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101
 		if lines:
-			yield n, filterlabels(form, out).splitlines(), err
+			yield n, filterlabels(out, 'nofunc' in form,
+					'nomorph' in form).splitlines(), err
 		elif doexport and form.get('linenos'):
 			yield out.lstrip('corpus/').replace('\ncorpus/', '\n')
 		else:
 			yield text, out, err
 
 
-def filterlabels(form, line):
+def filterlabels(line, nofunc, nomorph):
 	""" Optionally remove morphological and grammatical function labels
 	from parse tree. """
-	if 'nofunc' in form:
+	if nofunc:
 		line = FUNC_TAGS.sub('', line)
-	if 'nomorph' in form:
+	if nomorph:
 		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
