@@ -28,7 +28,7 @@ function init() {
 		target = 10 * selected % chunk;
 	}
 	target += (selected - selected % chunk) + dir;
-	if(target >= 1 || target <= totalsents) {
+	if(target >= 1 && target <= totalsents) {
 		sent = '&sent=' + target;
 		prm = '{{ "&nomorph"|safe if nomorph }}{{ "&nofunc"|safe if nofunc }}';
 		url = 'browse?text={{ textno }}' + sent + prm;

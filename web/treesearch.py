@@ -60,6 +60,7 @@ ABBRPOS = {
 	'ARTICLE': 'ART',
 	'NOUN': 'NN',
 	'VERB': 'VB'}
+TEXTS = NUMSENTS = NUMCONST = NUMWORDS = STYLETABLE = None
 
 
 def stream_template(template_name, **context):
@@ -607,11 +608,15 @@ def getcorpus():
 	return texts, numsents, numconst, numwords, styletable
 
 
-fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
-		quadratic=False, complement=False, quiet=True, nofreq=False,
-		approx=True, indices=False)
-preparecorpus()
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
+def main():
+	global TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE
+	fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
+			quadratic=False, complement=False, quiet=True, nofreq=False,
+			approx=True, indices=False)
+	if TEXTS is None:
+		preparecorpus()
+		TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
+
 
 # this is redundant but used to support both javascript-enabled /foo
 # as well as non-javascript fallback /?output=foo
@@ -630,5 +635,5 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	preparecorpus()
+	main()
 	APP.run(debug=True, host='0.0.0.0')
