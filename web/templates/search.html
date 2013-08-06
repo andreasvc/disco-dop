@@ -74,7 +74,7 @@ span.tt { font-family: monospace; }
 	</tr>
     <tr><td style="vertical-align: text-top; ">
     Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>
-    <div id=selecttexts style="display: {{ 'none' if form.get('query') else 'block' }}; ">
+    <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
     (Select <a href="javascript: checkall('t', true); numchecked(); ">all</a>; 
 	<a href="javascript: checkall('t', false); numchecked(); ">none</a>)<br>
 	<input type=hidden name=texts value="">

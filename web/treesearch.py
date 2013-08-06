@@ -31,6 +31,7 @@ FRAGLIMIT = 250  # max amount of search results for fragment extraction
 SENTLIMIT = 1000  # max number of sents/brackets in search results
 
 APP = Flask(__name__)
+
 MORPH_TAGS = re.compile(
 		r'([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
@@ -59,37 +60,6 @@ ABBRPOS = {
 	'ARTICLE': 'ART',
 	'NOUN': 'NN',
 	'VERB': 'VB'}
-
-
-def preparecorpus():
-	""" Produce indexed versions of parse trees in .mrg files """
-	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	assert files, 'Expected one or more .mrg files with parse trees in corpus/'
-	for a in files:
-		if not os.path.exists(a + '.t2c.gz'):
-			subprocess.check_call(
-					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
-					shell=False,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE)
-
-
-def getcorpus():
-	""" Get list of files and number of lines in them. """
-	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	texts = [os.path.basename(a) for a in files]
-	numsents = [len(open(filename).readlines()) for filename in files]
-	numconst = [open(filename).read().count('(') for filename in files]
-	numwords = [len(GETLEAVES.findall(open(filename).read()))
-			for filename in files]
-	return texts, numsents, numconst, numwords
-
-
-fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
-		quadratic=False, complement=False, quiet=True, nofreq=False,
-		approx=True, indices=False)
-preparecorpus()
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS = getcorpus()
 
 
 def stream_template(template_name, **context):
@@ -159,50 +129,24 @@ def style():
 						"Using sentences extracted from parse trees.\n"
 						"Supply text files with original formatting\n"
 						"to get meaningful paragraph information.\n\n")
-		table = {}
-		for n, filename in enumerate(sorted(files)):
-			if filename.endswith('.t2c.gz'):
-				tgrep = subprocess.Popen(
-						args=[which('tgrep2'), '-t', '-c', filename, '*'],
-						shell=False, bufsize=-1, stdout=subprocess.PIPE)
-				cmd = [which('style'), '--language', lang]
-				stdin = tgrep.stdout  # pylint: disable=E1101
-			else:
-				cmd = [which('style'), '--language', lang, filename]
-				stdin = None
-			if n == 0 and not doexport:
-				yield '<pre>' + ' '.join(cmd) + '\n\n'
-			proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
-					stdin=stdin, stdout=subprocess.PIPE,
-					stderr=subprocess.STDOUT)
-			if filename.endswith('.t2c.gz'):
-				tgrep.wait()  # pylint: disable=E1101
-			out = proc.stdout.read()  # pylint: disable=E1101
-			if proc.stdin:  # pylint: disable=E1101
-				proc.stdin.close()  # pylint: disable=E1101
-			proc.stdout.close()  # pylint: disable=E1101
-			proc.wait()  # pylint: disable=E1101
-			if filename.endswith('.t2c.gz'):
-				tgrep.stdout.close()  # pylint: disable=E1101
-				tgrep.wait()  # pylint: disable=E1101
+		for n, filename in enumerate(sorted(STYLETABLE)):
 			name = os.path.basename(filename)
-			table[name] = parsestyleoutput(out)
 			if doexport:
 				if n == 0:
 					yield 'text, %s\n' % ', '.join(
-							'"%s"' % key for key in sorted(table[name]))
+							'"%s"' % key for key in sorted(STYLETABLE[name]))
 				yield '"%s", %s\n' % (name, ', '.join('%s' % val
-						for _, val in sorted(table[name].items())))
-			else:
-				yield "%s\n%s\n%s\n\n" % (name, '=' * len(name), out)
+						for _, val in sorted(STYLETABLE[name].items())))
+			elif n == 0:
+				yield '<a href="style?export">Export to CSV</a>'
 		if not doexport:
 			yield '</pre>'
 		# produce a plot for each field
-		for a in table:
-			fields = sorted(table[a].keys())
+		for a in STYLETABLE:
+			fields = sorted(STYLETABLE[a].keys())
 			break
 		for field in () if doexport else fields:
-			data = {a: table[a][field] for a in table}
+			data = {a: STYLETABLE[a][field] for a in STYLETABLE}
 			total = max(data.values())
 			if total > 0:
 				yield barplot(data, total, field + ':', barstyle='chart1',
@@ -265,7 +209,7 @@ def browse():
 		sentno = int(request.args['sent']) - 1
 		filename = os.path.join(CORPUS_DIR,
 				TEXTS[textno].replace('.t2c.gz', ''))
-		start = sentno - sentno % chunk
+		start = max(0, sentno - sentno % chunk)
 		maxtree = min(start + chunk, NUMSENTS[textno])
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
@@ -608,6 +552,67 @@ def which(program):
 			return os.path.join(path, program)
 
 
+def preparecorpus():
+	""" Produce indexed versions of parse trees in .mrg files """
+	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	assert files, 'Expected one or more .mrg files with parse trees in corpus/'
+	for a in files:
+		if not os.path.exists(a + '.t2c.gz'):
+			subprocess.check_call(
+					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
+					shell=False,
+					stdout=subprocess.PIPE,
+					stderr=subprocess.PIPE)
+
+
+def getcorpus():
+	""" Get list of files and number of lines in them. """
+	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	texts = [os.path.basename(a) for a in files]
+	numsents = [len(open(filename).readlines()) for filename in files]
+	numconst = [open(filename).read().count('(') for filename in files]
+	numwords = [len(GETLEAVES.findall(open(filename).read()))
+			for filename in files]
+	# ------------
+	lang = 'nl'
+	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
+	if not files:
+		files = glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
+	styletable = {}
+	for n, filename in enumerate(sorted(files)):
+		if filename.endswith('.t2c.gz'):
+			tgrep = subprocess.Popen(
+					args=[which('tgrep2'), '-t', '-c', filename, '*'],
+					shell=False, bufsize=-1, stdout=subprocess.PIPE)
+			cmd = [which('style'), '--language', lang]
+			stdin = tgrep.stdout  # pylint: disable=E1101
+		else:
+			cmd = [which('style'), '--language', lang, filename]
+			stdin = None
+		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
+				stdin=stdin, stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT)
+		if filename.endswith('.t2c.gz'):
+			tgrep.wait()  # pylint: disable=E1101
+		out = proc.stdout.read()  # pylint: disable=E1101
+		if proc.stdin:  # pylint: disable=E1101
+			proc.stdin.close()  # pylint: disable=E1101
+		proc.stdout.close()  # pylint: disable=E1101
+		proc.wait()  # pylint: disable=E1101
+		if filename.endswith('.t2c.gz'):
+			tgrep.stdout.close()  # pylint: disable=E1101
+			tgrep.wait()  # pylint: disable=E1101
+		name = os.path.basename(filename)
+		styletable[name] = parsestyleoutput(out)
+	return texts, numsents, numconst, numwords, styletable
+
+
+fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
+		quadratic=False, complement=False, quiet=True, nofreq=False,
+		approx=True, indices=False)
+preparecorpus()
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
+
 # this is redundant but used to support both javascript-enabled /foo
 # as well as non-javascript fallback /?output=foo
 DISPATCH = {
@@ -617,6 +622,7 @@ DISPATCH = {
 	'brackets': brackets,
 	'fragments': fragmentsinresults,
 }
+
 
 if __name__ == '__main__':
 	logging.basicConfig()
