@@ -16,8 +16,7 @@ from collections import Counter
 #from functools import wraps
 # Flask & co
 from flask import Flask, Response
-from flask import request, render_template
-from flask import send_from_directory
+from flask import request, render_template, send_from_directory
 #from werkzeug.contrib.cache import SimpleCache
 # disco-dop
 from discodop.tree import Tree
@@ -36,6 +35,13 @@ MORPH_TAGS = re.compile(
 		r'([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
+READGRADERE = re.compile(r'([- A-Za-z]+): ([0-9]+(?:\.[0-9]+)?)[\n /]')
+AVERAGERE = re.compile(
+		r'([a-z]+), average length ([0-9]+(?:\.[0-9]+)?) ([A-Za-z]+)')
+PERCENTAGE1RE = re.compile(
+		r'([A-Za-z][A-Za-z ()]+) ([0-9]+(?:\.[0-9]+)?)% \([0-9]+\)')
+PERCENTAGE2RE = re.compile(
+		r'([0-9]+(?:\.[0-9]+)?)% \([0-9]+\) ([A-Za-z ()]+)\n')
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -121,21 +127,37 @@ def main():
 			texts=TEXTS, selectedtexts=selected)
 
 
+def parsestyleoutput(out):
+	""" Extract readability grades, averages, and percentages from style output
+	(i.e., all figures except for absolute counts). """
+	result = {}
+	for key, val in READGRADERE.findall(out):
+		result[key] = float(val)
+	for key1, val, key2 in AVERAGERE.findall(out):
+		result['average %s per %s' % (key2, key1[:-1])] = float(val)
+	for key, val in PERCENTAGE1RE.findall(out):
+		result['%% %s' % key] = float(val)
+	for val, key in PERCENTAGE2RE.findall(out):
+		result['%% %s' % key] = float(val)
+	return result
+
+
 @APP.route('/style')
 def style():
 	""" Use style(1) program to get staticstics for each text. """
-	# TODO: tabulate & plot
-	def generate(lang):
+	def generate(lang, doexport):
 		""" Generator for results. """
 		files = glob.glob('corpus/*.txt')
-		if files:
+		if files and not doexport:
 			yield "NB: formatting errors may distort paragraph counts etc.\n\n"
 		else:
 			files = glob.glob('corpus/*.t2c.gz')
-			yield ("No .txt files found in corpus/\n"
-					"Using sentences extracted from parse trees.\n"
-					"Supply text files with original formatting\n"
-					"to get meaningful paragraph information.\n\n")
+			if not doexport:
+				yield ("No .txt files found in corpus/\n"
+						"Using sentences extracted from parse trees.\n"
+						"Supply text files with original formatting\n"
+						"to get meaningful paragraph information.\n\n")
+		table = {}
 		for n, a in enumerate(sorted(files)):
 			if a.endswith('.t2c.gz'):
 				tgrep = subprocess.Popen(
@@ -146,13 +168,15 @@ def style():
 			else:
 				cmd = [which('style'), '--language', lang, a]
 				stdin = None
-			if n == 0:
-				yield ' '.join(cmd) + '\n\n'
+			if n == 0 and not doexport:
+				yield '<pre>' + ' '.join(cmd) + '\n\n'
 			proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 					stdin=stdin, stdout=subprocess.PIPE,
 					stderr=subprocess.STDOUT)
-			out = proc.communicate()[0]
-			if stdin:
+			if a.endswith('.t2c.gz'):
+				tgrep.wait()  # pylint: disable=E1101
+			out = proc.stdout.read()  # pylint: disable=E1101
+			if proc.stdin:  # pylint: disable=E1101
 				proc.stdin.close()  # pylint: disable=E1101
 			proc.stdout.close()  # pylint: disable=E1101
 			proc.wait()  # pylint: disable=E1101
@@ -160,10 +184,35 @@ def style():
 				tgrep.stdout.close()  # pylint: disable=E1101
 				tgrep.wait()  # pylint: disable=E1101
 			name = os.path.basename(a)
-			yield "%s\n%s\n%s\n\n" % (name, '=' * len(name), out)
-
-	resp = Response(generate(request.args.get('lang', 'en')),
-			mimetype='text/plain')
+			table[name] = parsestyleoutput(out)
+			if doexport:
+				if n == 0:
+					yield ','.join('"%s"' % key for key in sorted(table[name]))
+				yield ','.join('%s' % val
+						for _, val in sorted(table[name].items()))
+			else:
+				yield "%s\n%s\n%s\n\n" % (name, '=' * len(name), out)
+		if not doexport:
+			yield '</pre>'
+		# produce a plot for each field
+		for a in table:
+			fields = sorted(table[a].keys())
+			break
+		for field in () if doexport else fields:
+			data = {a: table[a][field] for a in table}
+			total = 100 if '%' in field else max(data.values())
+			if total > 0:
+				yield barplot(data, total, field + ':', barstyle='chart1',
+						unit='%' if '%' in field else '')
+	if 'export' in request.args:
+		resp = Response(generate(request.args.get('lang', 'en'), True),
+				mimetype='text/plain')
+		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
+	else:
+		resp = Response(stream_template('searchresults.html',
+				form=request.args, texts=TEXTS, selectedtexts=(),
+				output='style', results=generate(
+					request.args.get('lang', 'en'), False)))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
