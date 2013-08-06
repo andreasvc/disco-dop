@@ -13,7 +13,10 @@ from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, count
 from collections import Counter
-#from functools import wraps
+try:
+	import cPickle as pickle
+except ImportError:
+	import pickle
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
@@ -36,6 +39,7 @@ MORPH_TAGS = re.compile(
 		r'([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
+GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 READGRADERE = re.compile(r'([- A-Za-z]+): ([0-9]+(?:\.[0-9]+)?)[\n /]')
 AVERAGERE = re.compile(
 		r'([a-z]+), average length ([0-9]+(?:\.[0-9]+)?) ([A-Za-z]+)')
@@ -60,7 +64,6 @@ ABBRPOS = {
 	'ARTICLE': 'ART',
 	'NOUN': 'NN',
 	'VERB': 'VB'}
-TEXTS = NUMSENTS = NUMCONST = NUMWORDS = STYLETABLE = None
 
 
 def stream_template(template_name, **context):
@@ -152,6 +155,7 @@ def style():
 			if total > 0:
 				yield barplot(data, total, field + ':', barstyle='chart1',
 						unit='%' if '%' in field else '')
+
 	if 'export' in request.args:
 		resp = Response(generate(request.args.get('lang', 'en'), True),
 				mimetype='text/plain')
@@ -443,10 +447,12 @@ def fragmentsinresults(form):
 	gotresults = False
 	yield "<ol>"
 	for treestr, freq in results:
+		treestr = GETLEAVES.sub(' <font color=red>\\1</font>', cgi.escape(treestr))
+		treestr = GETFRONTIERNTS.sub('(<font color=blue>\\1</font> )', treestr)
 		gotresults = True
 		link = "<a href='/draw?tree=%s'>draw</a>" % (
 				quote(treestr.encode('utf8')))
-		yield "<li>freq=%3d [%s] %s" % (freq, link, cgi.escape(treestr))
+		yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
 	yield "</ol>"
 	if not gotresults:
 		yield "No fragments with freq > %d & nodes > %d." % (MINNODES, MINFREQ)
@@ -565,15 +571,7 @@ def preparecorpus():
 					stderr=subprocess.PIPE)
 
 
-def getcorpus():
-	""" Get list of files and number of lines in them. """
-	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	texts = [os.path.basename(a) for a in files]
-	numsents = [len(open(filename).readlines()) for filename in files]
-	numconst = [open(filename).read().count('(') for filename in files]
-	numwords = [len(GETLEAVES.findall(open(filename).read()))
-			for filename in files]
-	# ------------
+def getstyletable():
 	lang = 'nl'
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
@@ -604,17 +602,32 @@ def getcorpus():
 			tgrep.wait()  # pylint: disable=E1101
 		name = os.path.basename(filename)
 		styletable[name] = parsestyleoutput(out)
+	return styletable
+
+
+def getcorpus():
+	""" Get list of files and number of lines in them. """
+	texts = []
+	if os.path.exists('/tmp/treesearchcorpus.pickle'):
+		texts, numsents, numconst, numwords, styletable = pickle.load(
+				open('/tmp/treesearchcorpus.pickle'))
+	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	if set(texts) != {os.path.basename(file) for file in files}:
+		texts = [os.path.basename(a) for a in files]
+		numsents = [len(open(filename).readlines()) for filename in files]
+		numconst = [open(filename).read().count('(') for filename in files]
+		numwords = [len(GETLEAVES.findall(open(filename).read()))
+				for filename in files]
+		styletable = getstyletable()
+	pickle.dump((texts, numsents, numconst, numwords, styletable),
+			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
 	return texts, numsents, numconst, numwords, styletable
 
 
-def init():
-	global TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE
-	fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
-			quadratic=False, complement=False, quiet=True, nofreq=False,
-			approx=True, indices=False)
-	if TEXTS is None:
-		preparecorpus()
-		TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
+fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
+		quadratic=False, complement=False, quiet=True, nofreq=False,
+		approx=True, indices=False)
 
 
 # this is redundant but used to support both javascript-enabled /foo
@@ -634,5 +647,5 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	init()
+	preparecorpus()
 	APP.run(debug=True, host='0.0.0.0')
