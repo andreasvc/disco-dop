@@ -25,7 +25,7 @@ function init() {
 	var target = 0;
 	if(selected % chunk == 0 || selected % chunk > Math.floor(chunk / 2)) {
 		dir = 1;
-		target = 10 * selected % chunk;
+		target = chunk;
 	}
 	target += (selected - selected % chunk) + dir;
 	if(target >= 1 && target <= totalsents) {

@@ -158,7 +158,8 @@ def style():
 		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
 	else:
 		resp = Response(stream_template('searchresults.html',
-				form=request.args, texts=TEXTS, selectedtexts=(),
+				form=request.args, texts=TEXTS,
+				selectedtexts=selectedtexts(request.args),
 				output='style', results=generate(
 					request.args.get('lang', 'nl'), False)))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
@@ -204,7 +205,7 @@ def draw():
 @APP.route('/browse')
 def browse():
 	""" Browse through trees in a file. """
-	chunk = 10  # number of trees to fetch for one request
+	chunk = 20  # number of trees to fetch for one request
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent']) - 1
@@ -539,8 +540,6 @@ def selectedtexts(form):
 				selected.update(n for n in range(int(b), int(c)))
 			else:
 				selected.add(int(a))
-	elif 't' in form:
-		selected.update(int(n) for n in form.getlist('t'))
 	else:
 		selected.update(range(len(TEXTS)))
 	return selected
@@ -608,7 +607,7 @@ def getcorpus():
 	return texts, numsents, numconst, numwords, styletable
 
 
-def main():
+def init():
 	global TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE
 	fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 			quadratic=False, complement=False, quiet=True, nofreq=False,
@@ -635,5 +634,5 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	main()
+	init()
 	APP.run(debug=True, host='0.0.0.0')
