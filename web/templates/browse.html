@@ -23,6 +23,7 @@ function init() {
 }
 
 function checkkey(e) {
+	if(document.activeElement.name == 'sent') return;
 	e = e || window.event;
 	if (e.keyCode == '37' || e.keyCode == '8') { // left arrow; backspace
 		next(-1);
@@ -51,8 +52,7 @@ function next(dir) {
 	selected += dir;
 	var pre2 = document.getElementById('t' + selected);
 	pre2.style.display = 'block';
-	var sentno = document.getElementById('sentno');
-	sentno.innerHTML = selected;
+	document.frm.sent.value = selected;
 }
 
 function ajaxFunction(url, dir) {
@@ -88,12 +88,15 @@ function ajaxFunction(url, dir) {
 
 </script>
 <body onLoad="init(); ">
-<center><tt>
-  {{ prevlink|safe }}
-| <span id=sentno>{{ sentno }}</span> of {{ totalsents }}
-| {{ nextlink|safe }}
-| {{ text }} | <font color=gray>(use left &amp; right arrow keys to browse)</font>
-</tt></center>
+<form name=frm><tt>
+	<input type=hidden name=text value={{ textno }}>
+	<input type=hidden name=nomorph value=on {{ 'disabled' if not nomorph }}>
+	<input type=hidden name=nofunc value=on {{ 'disabled' if not nofunc }}>
+	{{ prevlink|safe }}
+	| <input type=text name=sent value={{ sentno }} size=3 style="text-align: right"> of {{ totalsents }}
+	| {{ nextlink|safe }}
+	| {{ text }} | <font color=gray>(use left &amp; right arrow keys to browse)</font>
+</tt></form>
 
 <div id=trees>
 {% for tree in trees %}

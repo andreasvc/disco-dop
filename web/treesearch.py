@@ -12,7 +12,7 @@ from heapq import nlargest
 from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, count
-from collections import Counter, defaultdict
+from collections import Counter
 #from functools import wraps
 # Flask & co
 from flask import Flask, Response
@@ -206,6 +206,7 @@ def draw():
 
 @APP.route('/browse')
 def browse():
+	""" Browse through trees in a file. """
 	chunk = 10  # number of trees to fetch for one request
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
@@ -217,25 +218,25 @@ def browse():
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		lines = islice(open(filename), start, maxtree)
-		trees = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
+		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
 				' style="display: none; "' if 'ajax' in request.args else '',
 				DrawTree(filterlabels(
 					line.decode('utf8'), nofunc, nomorph)).text(
 					unicodelines=True, html=True))
 				for n, line in enumerate(lines, start)]
 		if 'ajax' in request.args:
-			return '\n'.join(trees)
+			return '\n'.join(results)
 
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
-					textno, sentno - chunk)
+					textno, sentno - chunk + 1)
 		nextlink = '<a id=next>next</a>'
 		if sentno < NUMSENTS[textno] - chunk:
 			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
-					textno, sentno + chunk)
+					textno, sentno + chunk + 1)
 		return render_template('browse.html', textno=textno, sentno=sentno + 1,
-				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=trees,
+				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=results,
 				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
 				nofunc=nofunc, nomorph=nomorph,
 				mintree=start + 1, maxtree=maxtree)
@@ -275,7 +276,6 @@ def counts(form, doexport=False):
 		if cnt:
 			gotresult = True
 		text = TEXTS[textno].replace('.t2c.gz', '')
-		filename = os.path.join(CORPUS_DIR, text)
 		cnts[text] = cnt
 		total = totalsent = NUMSENTS[textno]
 		if norm == 'consts':

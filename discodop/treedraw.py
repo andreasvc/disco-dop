@@ -427,7 +427,6 @@ class DrawTree(object):
 				node = self.nodes[n]
 				if isinstance(node, Tree):
 					text = node.label
-					n = matrix[row][col]
 					# horizontal branch towards children for this node
 					if n in minchildcol and minchildcol[n] < maxchildcol[n]:
 						i, j = minchildcol[n], maxchildcol[n]
