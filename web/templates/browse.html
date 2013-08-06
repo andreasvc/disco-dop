@@ -20,6 +20,20 @@ function init() {
 	lnk.href = "javascript: next(-1); ";
 	var lnk = document.getElementById('next');
 	lnk.href = "javascript: next(1); ";
+	// pre-load next / previous chunk
+	var dir = -1;
+	var target = 0;
+	if(selected % chunk == 0 || selected % chunk > Math.floor(chunk / 2)) {
+		dir = 1;
+		target = 10 * selected % chunk;
+	}
+	target += (selected - selected % chunk) + dir;
+	if(target >= 1 || target <= totalsents) {
+		sent = '&sent=' + target;
+		prm = '{{ "&nomorph"|safe if nomorph }}{{ "&nofunc"|safe if nofunc }}';
+		url = 'browse?text={{ textno }}' + sent + prm;
+		ajaxFunction(url + '&ajax', dir);
+	}
 }
 
 function checkkey(e) {
@@ -41,10 +55,9 @@ function next(dir) {
 				&& selected % chunk == Math.floor(chunk / 2))
 			|| (dir == 1 && maxtree < totalsents
 				&& selected % chunk == Math.floor(chunk / 2) + 1)) {
-		text = 'text={{ textno }}';
 		sent = '&sent=' + (selected + dir * Math.floor(chunk / 2));
 		prm = '{{ "&nomorph"|safe if nomorph }}{{ "&nofunc"|safe if nofunc }}';
-		url = 'browse?' + text + sent + prm;
+		url = 'browse?text={{ textno }}' + sent + prm;
 		ajaxFunction(url + '&ajax', dir);
 	}
 	var pre = document.getElementById('t' + selected);
