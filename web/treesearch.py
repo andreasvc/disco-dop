@@ -109,8 +109,9 @@ def parsestyleoutput(out):
 		result[key.strip()] = float(val)
 	for key1, val, key2 in AVERAGERE.findall(out):
 		result['average %s per %s' % (key2, key1[:-1])] = float(val)
-	result['average syllables per word'] = float(re.search(
-			r'([0-9]+(?:\.[0-9]+)?) syllables', out).group(1))
+	m = re.search(r'([0-9]+(?:\.[0-9]+)?) syllables', out)
+	if m:
+		result['average syllables per word'] = float(m.group(1))
 	for key, val in PERCENTAGE1RE.findall(out):
 		result['%% %s' % key.strip()] = float(val)
 	for val, key in PERCENTAGE2RE.findall(out):
@@ -165,7 +166,7 @@ def style():
 				form=request.args, texts=TEXTS,
 				selectedtexts=selectedtexts(request.args),
 				output='style', results=generate(
-					request.args.get('lang', 'nl'), False)))
+					request.args.get('lang', 'en'), False)))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
@@ -181,6 +182,9 @@ def export(form, output):
 	if output == 'counts':
 		results = counts(form, doexport=True)
 		filename = 'counts.csv'
+	elif output == 'fragments':
+		results = fragmentsinresults(form, doexport=True)
+		filename = 'fragments.txt'
 	else:
 		results = (a + '\n' for a in doqueries(
 				form, lines=False, doexport=output))
@@ -408,31 +412,30 @@ def brackets(form):
 	return sents(form, dobrackets=True)
 
 
-def fragmentsinresults(form):
+def fragmentsinresults(form, doexport=False):
 	""" Extract recurring fragments from search results. """
 	gotresults = False
 	uniquetrees = set()
 	for n, (_, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
-		if n == 0:
-			#url = 'fragments?query=%s&texts=%s&export=1' % (
-			#		form['query'], form['texts'])
+		if n == 0 and not doexport:
+			url = 'fragments?query=%s&texts=%s&export=1' % (
+					form['query'], form['texts'])
 			yield ('Query: %s\n'
 					'Fragments (showing up to %d fragments '
-					'in the first %d search results from selected texts) '
-					#'export: <a href="%s">plain</a>, '
-					#'<a href="%s">with line numbers</a>):\n'
-					% (stderr, FRAGLIMIT, SENTLIMIT))  # url, url + '&linenos=1'
+					'in the first %d search results from selected texts; '
+					'<a href="%s">Export</a>):\n'
+					% (stderr, FRAGLIMIT, SENTLIMIT, url))
 		for m, line in enumerate(islice(results, SENTLIMIT)):
 			if m == 0:
 				gotresults = True
 			_, _, treestr, _ = line.rstrip().split(":::")
 			treestr = treestr.replace(" )", " -NONE-)") + '\n'
 			uniquetrees.add(treestr.encode('utf8'))
-	if not gotresults:
+	if not gotresults and not doexport:
 		yield "No matches."
 		return
-	# TODO: get counts from whole text (preload); export fragments to file
+	# TODO: get counts from whole text (preload)
 	with tempfile.NamedTemporaryFile(delete=True) as tmp:
 		tmp.writelines(uniquetrees)
 		tmp.flush()
@@ -445,18 +448,26 @@ def fragmentsinresults(form):
 				- frag.count(' (')
 				- frag.count(' )')) > MINNODES and freq > MINFREQ]
 	gotresults = False
-	yield "<ol>"
+	if not doexport:
+		yield "<ol>"
 	for treestr, freq in results:
-		treestr = GETLEAVES.sub(' <font color=red>\\1</font>', cgi.escape(treestr))
-		treestr = GETFRONTIERNTS.sub('(<font color=blue>\\1</font> )', treestr)
 		gotresults = True
-		link = "<a href='/draw?tree=%s'>draw</a>" % (
-				quote(treestr.encode('utf8')))
-		yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
-	yield "</ol>"
-	if not gotresults:
-		yield "No fragments with freq > %d & nodes > %d." % (MINNODES, MINFREQ)
-		return
+		if doexport:
+			yield '%s\t%s\n' % (treestr, freq)
+		else:
+			link = "<a href='/draw?tree=%s'>draw</a>" % (
+					quote(treestr.encode('utf8')))
+			treestr = GETLEAVES.sub(' <font color=red>\\1</font>',
+					cgi.escape(treestr))
+			treestr = GETFRONTIERNTS.sub('(<font color=blue>\\1</font> )',
+					treestr)
+			yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
+	if not doexport:
+		yield "</ol>"
+		if not gotresults:
+			yield "No fragments with freq > %d & nodes > %d." % (
+					MINNODES, MINFREQ)
+			return
 
 
 def doqueries(form, lines=False, doexport=None):
