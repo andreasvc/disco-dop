@@ -6,9 +6,9 @@ import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
 try:
-	from itertools import count, zip_longest  # pylint: disable=E0611
+	from itertools import count, chain, zip_longest  # pylint: disable=E0611
 except ImportError:
-	from itertools import count, izip_longest as zip_longest
+	from itertools import count, chain, izip_longest as zip_longest
 from collections import OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree
@@ -19,6 +19,8 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 POSRE = re.compile(r"\(([^() ]+) [^ ()]+\)")
 TERMINALSRE = re.compile(r" ([^ ()]+)\)")
 EXPORTNONTERMINAL = re.compile(r"^#([0-9]+)$")
+LEAVESRE = re.compile(r" ([^ ()]*)\)")
+FRONTIERNTRE = re.compile(r" \)")
 
 
 class CorpusReader(object):
@@ -163,13 +165,13 @@ class NegraCorpusReader(CorpusReader):
 		started = False
 		for filename in self._filenames:
 			for line in io.open(filename, encoding=self._encoding):
-				if line.startswith("#BOS"):
+				if line.startswith('#BOS '):
 					assert not started, ("beginning of sentence marker while "
 							"previous one still open: %s" % line)
 					started = True
 					sentid = line.strip().split()[1]
 					lines = []
-				elif line.startswith("#EOS"):
+				elif line.startswith('#EOS '):
 					assert started, "end of sentence marker while none started"
 					thissentid = line.strip().split()[1]
 					assert sentid == thissentid, ("unexpected sentence id: "
@@ -706,93 +708,132 @@ def makedep(root, deps, headrules):
 	return lexhead
 
 
-def freeformtrees(treeinput, morphology=None, functions=None):
-	""" Given free form input 'treeinput' containing parse trees, detect format
-	of trees and parse into Tree objects and separate lists of terminals.
-	Supports trees bracketed with () and [], with terminals in the trees, or
-	with indices as terminals to denote discontinuity. In the later case trees
-	may be followed by their sentences. Also supports Negra's export format.
+def incrementaltreereader(treeinput, morphology=None, functions=None):
+	""" Incremental corpus reader support brackets, discbrackets, and export
+	format. The format is autodetected. Expects an iterator giving one line at
+	a time. Yields tuples with a Tree object and a separate lists of terminals.
 	"""
-	# TODO: should be an iterator
-	brackets = ''
-	if treeinput.lstrip().startswith('('):
-		brackets = '()'
-	elif treeinput.lstrip().startswith('['):
-		brackets = '[]'
-	trees, sents = [], []
-	if brackets:  # bracket notation
-		# Parse trees presented in bracket format, whether with indices or not,
-		# and regardless of whitespace (multiple trees per line, trees spread
-		# over multiple lines, trees alternated with sentence, etc.).
-		brackettrees, rest = segmentbrackets(treeinput, brackets)
-		strtermre = re.compile('[^0-9\\%s]\\%s' % (brackets[1], brackets[1]))
-		for treestr, sent in zip_longest(brackettrees, rest):
-			if strtermre.search(treestr):  # terminals are not (all) indices
-				tree = noempty(Tree.parse(treestr, brackets=brackets))
-				sents.append(tree.leaves())
-				trees.append(renumber(tree))
-			else:  # disc. trees with integer indices as terminals
-				trees.append(Tree.parse(treestr, parse_leaf=int,
-					brackets=brackets))
-				sents.append(sent and sent.split())
-		if trees and (not sents or not sents[0]):
-			# use indices as leaves
-			sents = [map(str, range(max(tree.leaves()) + 1)) for tree in trees]
-	if not trees:  # discontinuous, export format, one or more trees
-		blocks = []
-		cur = []
-		delimiters = False
-		for line in treeinput.splitlines():
-			if line.startswith('#BOS'):
-				cur = []
-				delimiters = True
-			elif line.startswith('#EOS'):
-				blocks.append(cur)
-				cur = []
-			elif line.strip():
-				cur.append(line)
-		if not delimiters and cur:
-			blocks.append(cur)
-		for block in blocks:
-			tree, sent = exporttree(block, morphology)
-			handlefunctions(functions, tree)
-			trees.append(tree)
-			sents.append(sent)
-	#if not trees:  # try Alpino / Tiger XML
-	return trees, sents
+	treeinput = chain(iter(treeinput), ('(', None))  # hack
+	line = next(treeinput)
+	# try the following readers; on the first match the others are dropped.
+	readers = [segmentbrackets('()'), segmentbrackets('[]'),
+			segmentexport(morphology, functions)]
+	for reader in readers:
+		reader.send(None)
+	x = -1
+	while True:
+		# status 0: line not part of tree; status 1: waiting for end of tree.
+		res, status = None, 1
+		for n, reader in enumerate(readers if x == -1 else readers[x:x + 1]):
+			while res is None:
+				res, status = reader.send(line)
+				if status == 0:
+					# do not give this line to this reader anymore.
+					break
+				line = next(treeinput)
+			if res is not None:
+				if x == -1:
+					x = n
+				for tree, sent in res:
+					yield tree, sent
+				break
+		if line is None:  # this was the last line
+			return
+		if res is None:  # none of the readers accepted this line
+			line = next(treeinput)
 
 
-def segmentbrackets(trees, brackets):
-	r""" Segment a series of S-expressions of brackets into a list of strings,
-	along with a list of strings found between and after S-expressions
-	First non-whitespace character has to be an openining bracket.
-
-	>>> segmentbrackets('(X \n   (Y  z) )\tfoo (A (B b) (C c))\nbar', '()')
-	([u'(X \n   (Y  z) )', u'(A (B b) (C c))'], [u'\tfoo ', u'\nbar']) """
+def segmentbrackets(brackets):
+	""" Co-routine that accepts one line at a time;
+	yields tuples (result, status) where
+	result is None or one or more S-expressions as a list of
+		tuples (tree, rest), where rest is the string outside of brackets
+		between this S-expression and the next.
+	status is 1 if the line was consumed, else 0. """
 	lb, rb = brackets
-	trees = trees.lstrip(' \t\n\r')
-	if trees[0] != lb:
-		return (), ()
-	start = 0
-	parens = 0
-	results = []
-	rest = []
-	for n, char in enumerate(trees):
-		if char == lb:
-			if n and parens == 0 and trees[start:n]:
-				rest.append(trees[start:n])
-				start = n
-			parens += 1
-		elif char == rb:
-			parens -= 1
-			if parens == 0:
-				results.append(trees[start:n + 1])
-				start = n + 1
-			elif parens < 0:
-				return (), ()  # unbalanced parentheses
-	if parens == 0 and trees[start:]:
-		rest.append(trees[start:])
-	return results, rest
+	strtermre = re.compile('[^0-9\\%s]\\%s' % (rb, rb))
+	parens = 0  # number of open parens
+	prev = ''  # pass on if tree is not yet complete in current line
+	result = ''  # tree as string
+	results = []  # trees found in current line
+	line = (yield None, 1)
+	while True:
+		start = 0  # index where current tree starts
+		a, b = line.find(lb, len(prev)), line.find(rb, len(prev))
+		prev = line
+		while a != -1 or b != -1:
+			if a != -1 and (a < b or b == -1):  # left bracket
+				if parens == 0:
+					rest, prev = line[start:a], line[a:]
+					if result:
+						results.append(
+								brackettree(result, rest, brackets, strtermre))
+						result = ''
+						start = a
+				parens += 1
+				a = line.find(lb, a + 1)
+			elif b != -1 and (b < a or a == -1):  # right bracket
+				parens -= 1
+				if parens == 0:
+					result, prev = line[start:b + 1], line[b + 1:]
+					start = b + 1
+				elif parens < 0:
+					#raise ValueError('unbalanced parentheses')
+					parens = 0
+				b = line.find(rb, b + 1)
+		status = 1 if results or result or parens else 0
+		line = (yield results or None, status)
+		if results:
+			results = []
+		if parens or result or results:
+			line = prev + line
+		else:
+			prev = ''
+
+
+def segmentexport(morphology, functions):
+	""" Co-routine that accepts one line at a time.
+	Yields: tuples (result, status) where
+	result is None or a segment delimited by '#BOS ' and '#EOS '
+		as a list of lines;
+	status is 1 if the line was consumed, else 0. """
+	cur = []
+	inblock = False
+	line = (yield None, 1)
+	while line is not None:
+		if line.startswith('#BOS '):
+			cur = []
+			inblock = True
+			line = (yield None, 1)
+		elif line.startswith('#EOS '):
+			tree, sent = exporttree(cur, morphology)
+			handlefunctions(functions, tree)
+			line = (yield ((tree, sent), ), 1)
+			inblock = False
+			cur = []
+		elif line.strip():
+			if inblock:
+				cur.append(line)
+			line = (yield None, (1 if inblock else 0))
+		else:
+			line = (yield None, 0)
+
+
+def brackettree(treestr, sent, brackets, strtermre):
+	""" Parse a single tree presented in bracket format, whether with indices
+	or not; sent may be None / empty. """
+	if strtermre.search(treestr):  # terminals are not all indices
+		treestr = FRONTIERNTRE.sub(' ...)', treestr)
+		sent = TERMINALSRE.findall(treestr)
+		cnt = count()
+		tree = Tree.parse(treestr, brackets=brackets,
+				parse_leaf=lambda x: next(cnt))
+	else:  # disc. trees with integer indices as terminals
+		tree = Tree.parse(treestr, parse_leaf=int,
+			brackets=brackets)
+		sent = (sent.split() if sent.strip()
+				else map(str, range(max(tree.leaves()) + 1)))
+	return tree, sent
 
 
 def exporttree(data, morphology):
@@ -800,7 +841,11 @@ def exporttree(data, morphology):
 	as list of lines. """
 	data = [exportsplit(x) for x in data]
 	tree = exportparse(data, morphology)
-	sent = [a[WORD] for a in data if not a[WORD].startswith('#')]
+	sent = []
+	for a in data:
+		if EXPORTNONTERMINAL.match(a[WORD]):
+			break
+		sent.append(a[WORD])
 	return tree, sent
 
 

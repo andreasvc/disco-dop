@@ -8,12 +8,17 @@ T. Eschbach et al., Orth. Hypergraph Drawing, Journal of
 
 from __future__ import division, print_function, unicode_literals
 import sys
+import codecs
 from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
+from itertools import count
 from .tree import Tree
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
+	from builtins import zip as izip
+else:
+	from itertools import izip
 
 
 USAGE = """Usage: %s [<treebank>...] [options]
@@ -723,7 +728,7 @@ def test():
 
 def main():
 	""" Text-based tree viewer. """
-	from .treebank import getreader, freeformtrees
+	from .treebank import getreader, incrementaltreereader
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
@@ -748,28 +753,34 @@ def main():
 					encoding=opts.get('--encoding', 'utf8'),
 					functions=opts.get('--functions'),
 					morphology=opts.get('--morphology'))
-			corpora.append((corpus.parsed_sents(), corpus.sents()))
+			corpora.append(zip(corpus.parsed_sents(),
+					zip(corpus.parsed_sents().values(),
+						corpus.sents().values())))
+		numsents = len(corpus.sents())
 		print('Viewing:', *args)
-	else:  # read from stdin + detect format
-		# TODO: read incrementally
-		trees, sents = freeformtrees(sys.stdin.read().decode(
-				opts.get('--encoding', 'utf-8')),
-				morphology=opts.get('--morphology'),
-				functions=opts.get('--functions'))
-		corpora = [(OrderedDict(zip(range(len(trees)), trees)),
-				OrderedDict(zip(range(len(trees)), sents)))]
-		print('Viewing: standard input')
-	try:
-		for n, sentid in enumerate(corpora[0][0], 1):
-			print('%d of %d (sentid=%s; len=%d):' % (
-					n, len(corpora[0][1]), sentid,
-					len(corpora[0][1][sentid])))
+		for n, (sentid, (tree, sent)) in enumerate(corpora[0], 1):
+			print('%d of %s (sentid=%s; len=%d):' % (
+					n, numsents, sentid, len(sent)))
 			for trees, sents in corpora:
 				tree, sent = trees[sentid], sents[sentid]
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
 						).text(unicodelines=True, ansi=not '--plain' in opts))
-	except (IOError, KeyboardInterrupt):
-		pass
+	else:  # read from stdin + detect format
+		sys.stdin = codecs.getreader(opts.get('--encoding', 'utf-8'))(sys.stdin)
+		trees = incrementaltreereader(sys.stdin,
+				morphology=opts.get('--morphology'),
+				functions=opts.get('--functions'))
+		corpora = [izip(count(1), trees)]
+		numsents = 'unknown'
+		print('Viewing: standard input')
+		try:
+			for n, (sentid, (tree, sent)) in enumerate(corpora[0], 1):
+				print('%d of %s (sentid=%s; len=%d):' % (
+						n, numsents, sentid, len(sent)))
+				print(DrawTree(tree, sent, abbr='--abbr' in opts
+						).text(unicodelines=True, ansi=not '--plain' in opts))
+		except (IOError, KeyboardInterrupt):
+			pass
 
 
 if __name__ == '__main__':

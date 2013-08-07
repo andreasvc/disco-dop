@@ -12,7 +12,7 @@ from flask import request, render_template, redirect, url_for
 from flask import send_from_directory
 #from werkzeug.contrib.cache import SimpleCache
 # disco-dop
-from discodop.treebank import freeformtrees
+from discodop.treebank import incrementaltreereader
 from discodop.treedraw import DrawTree
 
 
@@ -64,9 +64,9 @@ def draw():
 	""" Wrapper to parse & draw tree(s). """
 	if len(request.args['tree']) > LIMIT:
 		return 'Too much data. Limit: %d bytes' % LIMIT
-	trees, sents = freeformtrees(request.args['tree'])
 	dts = [DrawTree(tree, sent, abbr=request.args.get('abbr', False))
-			for tree, sent in zip(trees, sents)]
+				for tree, sent in incrementaltreereader(
+					request.args['tree'].splitlines())]
 	return drawtrees(request.args, dts)
 
 
