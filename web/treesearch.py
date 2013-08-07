@@ -1,5 +1,5 @@
-""" Web interface to search a treebank. Requires Flask, tgrep2.
-Expects one or more treebanks in the directory corpus/ """
+""" Web interface to search a treebank. Requires Flask, tgrep2, style.
+Expects one or more treebanks with .mrg extension in the directory corpus/ """
 # stdlib
 import os
 import re
@@ -32,6 +32,7 @@ MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
 TREELIMIT = 10  # max number of trees to draw in search resuluts
 FRAGLIMIT = 250  # max amount of search results for fragment extraction
 SENTLIMIT = 1000  # max number of sents/brackets in search results
+STYLELANG = 'nl'  # language to use when running style(1)
 
 APP = Flask(__name__)
 
@@ -66,15 +67,6 @@ ABBRPOS = {
 	'VERB': 'VB'}
 
 
-def stream_template(template_name, **context):
-	""" From Flask documentation. """
-	APP.update_template_context(context)
-	templ = APP.jinja_env.get_template(template_name)
-	result = templ.stream(context)
-	result.enable_buffering(5)
-	return result
-
-
 @APP.route('/')
 @APP.route('/counts')
 @APP.route('/trees')
@@ -101,28 +93,10 @@ def main():
 			texts=TEXTS, selectedtexts=selected)
 
 
-def parsestyleoutput(out):
-	""" Extract readability grades, averages, and percentages from style output
-	(i.e., all figures except for absolute counts). """
-	result = {}
-	for key, val in READGRADERE.findall(out):
-		result[key.strip()] = float(val)
-	for key1, val, key2 in AVERAGERE.findall(out):
-		result['average %s per %s' % (key2, key1[:-1])] = float(val)
-	m = re.search(r'([0-9]+(?:\.[0-9]+)?) syllables', out)
-	if m:
-		result['average syllables per word'] = float(m.group(1))
-	for key, val in PERCENTAGE1RE.findall(out):
-		result['%% %s' % key.strip()] = float(val)
-	for val, key in PERCENTAGE2RE.findall(out):
-		result['%% %s' % key.strip()] = float(val)
-	return result
-
-
 @APP.route('/style')
 def style():
 	""" Use style(1) program to get staticstics for each text. """
-	def generate(lang, doexport):
+	def generate(doexport):
 		""" Generator for results. """
 		files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 		if files and not doexport:
@@ -158,15 +132,14 @@ def style():
 						unit='%' if '%' in field else '')
 
 	if 'export' in request.args:
-		resp = Response(generate(request.args.get('lang', 'en'), True),
+		resp = Response(generate(True),
 				mimetype='text/plain')
 		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
 	else:
 		resp = Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS,
 				selectedtexts=selectedtexts(request.args),
-				output='style', results=generate(
-					request.args.get('lang', 'en'), False)))
+				output='style', results=generate(False)))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
@@ -562,13 +535,6 @@ def selectedtexts(form):
 	return selected
 
 
-def which(program):
-	""" Return first match for program in search path. """
-	for path in os.environ.get('PATH', os.defpath).split(":"):
-		if path and os.path.exists(os.path.join(path, program)):
-			return os.path.join(path, program)
-
-
 def preparecorpus():
 	""" Produce indexed versions of parse trees in .mrg files """
 	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
@@ -583,20 +549,20 @@ def preparecorpus():
 
 
 def getstyletable():
-	lang = 'nl'
+	""" Run style(1) on all files and store results in a dictionary. """
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
 		files = glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
 	styletable = {}
-	for n, filename in enumerate(sorted(files)):
+	for filename in sorted(files):
 		if filename.endswith('.t2c.gz'):
 			tgrep = subprocess.Popen(
 					args=[which('tgrep2'), '-t', '-c', filename, '*'],
 					shell=False, bufsize=-1, stdout=subprocess.PIPE)
-			cmd = [which('style'), '--language', lang]
+			cmd = [which('style'), '--language', STYLELANG]
 			stdin = tgrep.stdout  # pylint: disable=E1101
 		else:
-			cmd = [which('style'), '--language', lang, filename]
+			cmd = [which('style'), '--language', STYLELANG, filename]
 			stdin = None
 		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 				stdin=stdin, stdout=subprocess.PIPE,
@@ -616,6 +582,24 @@ def getstyletable():
 	return styletable
 
 
+def parsestyleoutput(out):
+	""" Extract readability grades, averages, and percentages from style output
+	(i.e., all figures except for absolute counts). """
+	result = {}
+	for key, val in READGRADERE.findall(out):
+		result[key.strip()] = float(val)
+	for key1, val, key2 in AVERAGERE.findall(out):
+		result['average %s per %s' % (key2, key1[:-1])] = float(val)
+	m = re.search(r'([0-9]+(?:\.[0-9]+)?) syllables', out)
+	if m:
+		result['average syllables per word'] = float(m.group(1))
+	for key, val in PERCENTAGE1RE.findall(out):
+		result['%% %s' % key.strip()] = float(val)
+	for val, key in PERCENTAGE2RE.findall(out):
+		result['%% %s' % key.strip()] = float(val)
+	return result
+
+
 def getcorpus():
 	""" Get list of files and number of lines in them. """
 	texts = []
@@ -633,6 +617,22 @@ def getcorpus():
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
 	return texts, numsents, numconst, numwords, styletable
+
+
+def stream_template(template_name, **context):
+	""" From Flask documentation: pass an iterator to a template. """
+	APP.update_template_context(context)
+	templ = APP.jinja_env.get_template(template_name)
+	result = templ.stream(context)
+	result.enable_buffering(5)
+	return result
+
+
+def which(program):
+	""" Return first match for program in search path. """
+	for path in os.environ.get('PATH', os.defpath).split(":"):
+		if path and os.path.exists(os.path.join(path, program)):
+			return os.path.join(path, program)
 
 
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()

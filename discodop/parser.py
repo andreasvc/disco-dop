@@ -10,17 +10,20 @@ import codecs
 import logging
 import tempfile
 import string  # pylint: disable=W0402
+from math import log
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
+from itertools import count
+from subprocess import Popen, PIPE
 import numpy as np
 from . import plcfrs, pcfg
 from .grammar import FORMAT, defaultparse
-from .containers import Grammar
+from .containers import Grammar, CFGChartItem
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize
 from .tree import Tree
 from .lexicon import replaceraretestwords, getunknownwordfun, UNK
-from .treebank import saveheads
+from .treebank import saveheads, TERMINALSRE
 from .treebanktransforms import reversetransform, rrbacktransform
 from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
 
@@ -264,13 +267,13 @@ class Parser(object):
 							sent, stage.grammar, tags=tags,
 							chart=whitelist if stage.prune else None)
 				elif stage.mode == 'pcfg-symbolic':
-					chart, start, msg1 = pcfg.symbolicparse(
+					chart, start, msg1 = pcfg.parse_symbolic(
 							sent, stage.grammar, tags=tags)
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, stage.grammar, tags=tags)
 				elif stage.mode == 'pcfg-bitpar':
-					chart, start, msg1 = pcfg.parse_bitpar(
+					chart, start, msg1 = parse_bitpar(
 							stage.rulesfile.name, stage.lexiconfile.name,
 							sent, stage.m, stage.grammar.start, tags=tags)
 					msg1 += '%d derivations' % (len(chart) if start else 0)
@@ -477,6 +480,46 @@ def probstr(prob):
 	if isinstance(prob, tuple):
 		return "subtrees=%d, p=%.4e " % (abs(prob[0]), prob[1])
 	return "p=%.4e" % prob
+
+
+BITPARUNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
+BITPARPARSES = re.compile(r'(?:^|\n)vitprob=(.*)\n(\(.*\))\n')
+BITPARPARSESLOG = re.compile(r'(?:^|\n)logvitprob=(.*)\n(\(.*\))\n')
+
+
+def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
+	""" Parse a single sentence with bitpar, given filenames of rules and
+	lexicon. n is the number of derivations to ask for (max 1000).
+	Result is a dictionary of derivations with their probabilities. """
+	# TODO: get full viterbi parse forest, turn into chart w/ChartItems
+	assert 1 <= n <= 1000
+	if tags:
+		tmp = tempfile.NamedTemporaryFile()
+		tmp.writelines('%s\t%s 1\n' % (t, t) for t in set(tags))
+		lexiconfile = tmp.name
+	tokens = [word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
+			for word in (tags or sent)]
+	proc = Popen(['bitpar', '-q', '-vp', '-b', str(n), '-s', startlabel,
+			rulesfile, lexiconfile],
+			shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+	results, msg = proc.communicate('\n'.join(tokens) + '\n')
+	# decode results or not?
+	if not results or results.startswith("No parse"):
+		return {}, None, '%s\n%s' % (results, msg)
+	start = CFGChartItem(1, 0, len(sent))
+	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
+	derivs = {renumber(deriv): -float(prob)
+			for prob, deriv in BITPARPARSESLOG.findall(lines)}
+	if not derivs:
+		derivs = {renumber(deriv): -log(float(prob))
+				for prob, deriv in BITPARPARSES.findall(lines)}
+	return derivs, start, msg
+
+
+def renumber(deriv):
+	""" Replace terminals of CF-derivation (string) with indices. """
+	it = count()
+	return TERMINALSRE.sub(lambda _: ' %s)' % next(it), deriv)
 
 
 if __name__ == '__main__':

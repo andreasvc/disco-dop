@@ -5,10 +5,7 @@ import os
 import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
-try:
-	from itertools import count, chain, zip_longest  # pylint: disable=E0611
-except ImportError:
-	from itertools import count, chain, izip_longest as zip_longest
+from itertools import count, chain
 from collections import OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree
@@ -847,21 +844,6 @@ def exporttree(data, morphology):
 			break
 		sent.append(a[WORD])
 	return tree, sent
-
-
-def noempty(tree):
-	""" Add sentinel child (None) to empty nodes. """
-	for a in tree.subtrees(lambda n: len(n) == 0):
-		a.append(None)
-	return tree
-
-
-def renumber(tree):
-	""" Replace leaves with indices. """
-	for n, a in enumerate(tree.subtrees(
-			lambda n: len(n) == 1 and not isinstance(n[0], Tree))):
-		a[0] = n
-	return tree
 
 
 if __name__ == '__main__':

@@ -16,7 +16,7 @@ from itertools import count
 from .tree import Tree
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
-	from builtins import zip as izip
+	from builtins import zip as izip  # pylint: disable=F0401
 else:
 	from itertools import izip
 
@@ -254,8 +254,8 @@ class DrawTree(object):
 				for _, x in childcols[m]:
 					matrix[rowindex][x] = corner
 				# node itself
-				assert matrix[rowindex][i] in (None, corner), (
-						matrix[rowindex][i], m)
+				#FIXME: assert matrix[rowindex][i] in (None, corner), (
+				#		matrix[rowindex][i], m, str(tree), ' '.join(sent))
 				matrix[rowindex][i] = ids[m]
 				nodes[ids[m]] = tree[m]
 				# add column to the set of children for its parent
@@ -766,17 +766,15 @@ def main():
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
 						).text(unicodelines=True, ansi=not '--plain' in opts))
 	else:  # read from stdin + detect format
-		sys.stdin = codecs.getreader(opts.get('--encoding', 'utf-8'))(sys.stdin)
+		sys.stdin = codecs.getreader(opts.get('--encoding', 'utf8'))(sys.stdin)
 		trees = incrementaltreereader(sys.stdin,
 				morphology=opts.get('--morphology'),
 				functions=opts.get('--functions'))
 		corpora = [izip(count(1), trees)]
-		numsents = 'unknown'
-		print('Viewing: standard input')
 		try:
 			for n, (sentid, (tree, sent)) in enumerate(corpora[0], 1):
-				print('%d of %s (sentid=%s; len=%d):' % (
-						n, numsents, sentid, len(sent)))
+				print('%d (sentid=%s; len=%d):' % (
+						n, sentid, len(sent)))
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
 						).text(unicodelines=True, ansi=not '--plain' in opts))
 		except (IOError, KeyboardInterrupt):

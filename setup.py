@@ -2,7 +2,7 @@
 from distutils.core import setup
 from Cython.Build import cythonize
 from Cython.Distutils import build_ext
-#from Cython.Compiler import Options
+from Cython.Compiler import Options
 import numpy
 
 metadata = dict(name='disco-dop',
@@ -42,7 +42,7 @@ directives = dict(
 		embedsignature=True,
 )
 
-#Options.fast_fail = True
+Options.fast_fail = True
 #Options.extra_compile_args = ["-O3"]
 #Options.extra_link_args = ["-O3"]  #["-g"],
 if __name__ == '__main__':

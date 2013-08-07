@@ -16,8 +16,7 @@ from treetransforms import binarize, introducepreterminals
 cimport cython
 from libc.stdlib cimport malloc, free
 from cpython.array cimport array, clone
-from containers cimport ULong, UInt
-from containers cimport Node, NodeArray, Ctrees
+from containers cimport ULong, UInt, Node, NodeArray, Ctrees
 from bit cimport iteratesetbits, abitcount, subset, ulongcpy, ulongset, \
 		setunioninplace
 

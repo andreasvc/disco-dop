@@ -701,7 +701,7 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	return lpos == rpos == -1
 
 
-def symbolicparse(sent, Grammar grammar, tags=None, start=1,
+def parse_symbolic(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False):
 	""" parse sentence, a list of tokens, optionally with gold tags, and

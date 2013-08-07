@@ -1,19 +1,11 @@
 """ Data types for grammars, chart items, &c. """
-
-from __future__ import print_function
-from io import BytesIO, StringIO
 from math import exp as pyexp, log as pylog
 import re
 import logging
-from collections import defaultdict
-from functools import partial
-from operator import getitem
 import numpy as np
-
 cimport cython
 from libc.math cimport log, exp
 from tree import Tree
-from agenda cimport EdgeAgenda, Entry
 
 DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8
@@ -29,17 +21,14 @@ LEXICON_NONINT = re.compile("[ \t][0-9]+[./][0-9]+[ \t\n]")
 
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
-	cdef UInt a = (<Rule *>p1).lhs, b = (<Rule *>p2).lhs
-	return (a > b) - (a < b)
+	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
+	return (a.lhs > b.lhs) - (a.lhs < b.lhs)
 cdef int cmp1(const void *p1, const void *p2) nogil:
 	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
 	return (a.rhs1 > b.rhs1) - (a.rhs1 < b.rhs1)
 cdef int cmp2(const void *p1, const void *p2) nogil:
 	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
 	return (a.rhs2 > b.rhs2) - (a.rhs2 < b.rhs2)
-#ctypedef int (*CmpFun)(const void *a, const void *b) nogil
-#cdef CmpFun **cmpfun = [&cmp0, &cmp1, &cmp2]
-#cdef int (* cmpfun)(const void *, const void *) cmpfun = [&cmp0, &cmp1, &cmp2]
 
 
 cdef class Grammar:
@@ -48,8 +37,8 @@ cdef class Grammar:
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
-	def __init__(self, rule_tuples_or_bytes=None, lexicon=None,
-			start=b"ROOT", bitpar=False):
+	def __init__(self, rule_tuples_or_bytes, lexicon=None, start=b'ROOT',
+			bitpar=False):
 		""" Parameters:
 		- rule_tuples_or_bytes: either a sequence of tuples containing both
 			phrasal & lexical rules, or a bytes string containing the phrasal
@@ -63,7 +52,7 @@ cdef class Grammar:
 		invoke grammar.switch('default', logprob=False) to switch.
 		If the grammar only contains integral weights (frequencies), they will
 		be normalized into relative frequencies; if the grammar contains any
-		non-integral weights, weights will be left untouched. """
+		non-integral weights, weights will be left unchanged. """
 		cdef LexicalRule lexrule
 		cdef double [:] tmp
 		cdef int n
@@ -82,7 +71,6 @@ cdef class Grammar:
 			self.origlexicon = lexicon
 		elif isinstance(rule_tuples_or_bytes[0], tuple):
 			# convert tuples to strings with text format
-			# this is somewhat roundabout but avoids code duplication
 			from grammar import write_lcfrs_grammar
 			self.origrules, self.origlexicon = write_lcfrs_grammar(
 					rule_tuples_or_bytes, bitpar=bitpar)
@@ -96,11 +84,17 @@ cdef class Grammar:
 		self._allocate()
 		# convert phrasal & lexical rules
 		self._convertlexicon(fanoutdict)
-		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
 		self._convertrules(rulelines)
-		del rulelines
 		for n in range(self.nonterminals):
 			self.fanout[n] = fanoutdict[self.tolabel[n]]
+		del rulelines, fanoutdict
+		# store 'default' weights
+		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
+		tmp = self.models[0]
+		for n in range(self.numrules):
+			tmp[self.bylhs[0][n].no] = self.bylhs[0][n].prob
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			tmp[n] = lexrule.prob
 		# index & filter phrasal rules in different ways
 		self._indexrules(self.bylhs, 0, 0)
 		# if the grammar only contains integral values (frequencies),
@@ -112,12 +106,7 @@ cdef class Grammar:
 		self._indexrules(self.unary, 1, 2)
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
-		tmp = self.models[0]
-		for n in range(self.numrules):
-			tmp[self.bylhs[0][n].no] = self.bylhs[0][n].prob
-		for n, lexrule in enumerate(self.lexical, self.numrules):
-			tmp[n] = lexrule.prob
-		self.switch('default', True)
+		self.switch('default', True)  # enable log probabilities
 
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines):
@@ -180,9 +169,9 @@ cdef class Grammar:
 
 	def _allocate(self):
 		""" Allocate memory to store rules. """
-		# the strategy is to lay out all non-lexical rules in a contiguous array
-		# these arrays will contain pointers to relevant parts thereof
-		# (one index per nonterminal)
+		# store all non-lexical rules in a contiguous array
+		# the other arrays will contain pointers to relevant parts thereof
+		# (indexed on lhs, rhs1, and rhs2 of rules)
 		self.bylhs = <Rule **>malloc(sizeof(Rule *) * self.nonterminals * 4)
 		assert self.bylhs is not NULL
 		self.bylhs[0] = NULL
@@ -414,7 +403,7 @@ cdef class Grammar:
 		cdef Rule *rule
 		cdef LexicalRule lexrule
 		cdef UInt n
-		sums = defaultdict(list)
+		cdef dict sums = {n: [] for n in range(self.nonterminals)}
 		for n in range(self.numrules):
 			rule = &(self.bylhs[0][n])
 			sums[rule.lhs].append(rule.prob)
@@ -431,8 +420,7 @@ cdef class Grammar:
 		return True
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
-			neverblockre=None, bint splitprune=False, bint markorigin=False,
-			bint debug=False):
+			neverblockre=None, bint splitprune=False, bint markorigin=False):
 		""" Construct a mapping of fine non-terminal IDs to coarse non-terminal
 		IDS, by applying the regex striplabelre to the labels, used for
 		coarse-to-fine pruning. A secondary regex neverblockre is for items
@@ -490,9 +478,8 @@ cdef class Grammar:
 		if seen == set(range(coarse.nonterminals)):
 			msg = 'label sets are equal'
 		else:
-			l = [coarse.tolabel[a].decode('ascii') for a in sorted(
-					set(range(coarse.nonterminals)) - seen,
-					key=partial(getitem, coarse.tolabel))]
+			l = sorted([coarse.tolabel[a].decode('ascii') for a in
+						set(coarse.toid.values()) - seen])
 			diff1 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
 			l = [coarse.tolabel[a].decode('ascii') for a in seen -
 					set(range(coarse.nonterminals))]
@@ -510,34 +497,18 @@ cdef class Grammar:
 						diff1, diff2))
 			else:
 				msg = ''  # should not happen?
-		if debug:
-			msg += "\n"
-			for n in range(self.nonterminals):
-				if self.mapping[n]:
-					msg += "%s[%d] =>" % (
-							self.tolabel[n].decode('ascii'), self.fanout[n])
-					if self.fanout[n] == 1 or not (splitprune and markorigin):
-						msg += coarse.tolabel[self.mapping[n]].decode('ascii')
-					elif self.fanout[n] > 1:
-						for m in range(self.fanout[n]):
-							msg += coarse.tolabel[self.splitmapping[n][m]
-									].decode('ascii')
-					print()
-			print(dict(striplabelre=striplabelre.pattern,
-					neverblockre=neverblockre.pattern,
-					splitprune=splitprune, markorigin=markorigin))
 		return msg
 
-	cdef rulerepr(self, Rule rule):
+	cdef rulestr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
 			exp(-rule.prob) if self.logprob else rule.prob,
 			self.tolabel[rule.lhs].decode('ascii'),
 			self.tolabel[rule.rhs1].decode('ascii'),
 			"  %s" % self.tolabel[rule.rhs2].decode('ascii')
 				if rule.rhs2 else '')
-		return left.ljust(40) + self.yfrepr(rule)
+		return left.ljust(40) + self.yfstr(rule)
 
-	cdef yfrepr(self, Rule rule):
+	cdef yfstr(self, Rule rule):
 		cdef int n, m = 0
 		cdef result = ''
 		for n in range(8 * sizeof(rule.args)):
@@ -554,22 +525,18 @@ cdef class Grammar:
 				self.tolabel[rule.rhs2],
 				bin(rule.args), bin(rule.lengths)))
 
-	def rulesrepr(self, lhs):
+	def rulesstr(self, lhs):
 		cdef int n = 0
 		result = []
 		while self.bylhs[lhs][n].lhs == lhs:
-			result.append(self.rulerepr(self.bylhs[lhs][n]))
+			result.append(self.rulestr(self.bylhs[lhs][n]))
 			n += 1
 		return "\n".join(result)
-
-	def __repr__(self):
-		return "%s(\n%s,\n%s\n)" % (self.__class__.__name__,
-				self.origrules, self.origlexicon)
 
 	def __str__(self):
 		cdef LexicalRule lexrule
 		rules = "\n".join(filter(None,
-			[self.rulesrepr(lhs) for lhs in range(1, self.nonterminals)]))
+			[self.rulesstr(lhs) for lhs in range(1, self.nonterminals)]))
 		lexical = "\n".join(["%.2f %s => %s" % (
 				exp(-lexrule.prob) if self.logprob else lexrule.prob,
 				self.tolabel[lexrule.lhs].decode('ascii'),
@@ -581,6 +548,10 @@ cdef class Grammar:
 				for a, b in sorted(self.toid.items()))
 		return "rules:\n%s\nlexicon:\n%s\nlabels:\n%s" % (
 				rules, lexical, labels)
+
+	def __repr__(self):
+		return "%s(\n%s,\n%s\n)" % (self.__class__.__name__,
+				self.origrules, self.origlexicon)
 
 	def __reduce__(self):
 		""" Helper function for pickling. """
@@ -623,23 +594,22 @@ cdef class SmallChartItem:
 		|vec[0] 1st half
 		|               vec[0] 2nd half
 		------------------------------- XOR """
-		return (self.label
-				^ (self.vec << (sizeof(self.vec) / 2 - 1))
+		return (self.label ^ (self.vec << (sizeof(self.vec) / 2 - 1))
 				^ (self.vec >> (sizeof(self.vec) / 2 - 1)))
 
-	def __richcmp__(SmallChartItem self, SmallChartItem other, int op):
+	def __richcmp__(SmallChartItem self, SmallChartItem ob, int op):
 		if op == 2:
-			return self.label == other.label and self.vec == other.vec
+			return self.label == ob.label and self.vec == ob.vec
 		elif op == 3:
-			return self.label != other.label or self.vec != other.vec
+			return self.label != ob.label or self.vec != ob.vec
 		elif op == 5:
-			return self.label >= other.label or self.vec >= other.vec
+			return self.label >= ob.label or self.vec >= ob.vec
 		elif op == 1:
-			return self.label <= other.label or self.vec <= other.vec
+			return self.label <= ob.label or self.vec <= ob.vec
 		elif op == 0:
-			return self.label < other.label or self.vec < other.vec
+			return self.label < ob.label or self.vec < ob.vec
 		elif op == 4:
-			return self.label > other.label or self.vec > other.vec
+			return self.label > ob.label or self.vec > ob.vec
 
 	def __nonzero__(SmallChartItem self):
 		return self.label != 0 and self.vec != 0
@@ -670,30 +640,29 @@ cdef class FatChartItem:
 		|               vec[0] 2nd half
 		|........ rest of vec .........
 		------------------------------- XOR """
-		_hash = (self.label
-				^ self.vec[0] << (8 * sizeof(self.vec[0]) / 2 - 1)
+		_hash = (self.label ^ self.vec[0] << (8 * sizeof(self.vec[0]) / 2 - 1)
 				^ self.vec[0] >> (8 * sizeof(self.vec[0]) / 2 - 1))
 		# add remaining bits
 		for n in range(sizeof(self.vec[0]), sizeof(self.vec)):
 			_hash *= 33 ^ (<UChar *>self.vec)[n]
 		return _hash
 
-	def __richcmp__(FatChartItem self, FatChartItem other, int op):
-		cdef int cmp = memcmp(<UChar *>self.vec, <UChar *>other.vec,
+	def __richcmp__(FatChartItem self, FatChartItem ob, int op):
+		cdef int cmp = memcmp(<UChar *>self.vec, <UChar *>ob.vec,
 			sizeof(self.vec))
-		cdef bint labelmatch = self.label == other.label
+		cdef bint labelmatch = self.label == ob.label
 		if op == 2:
 			return labelmatch and cmp == 0
 		elif op == 3:
 			return not labelmatch or cmp != 0
 		elif op == 5:
-			return self.label >= other.label or (labelmatch and cmp >= 0)
+			return self.label >= ob.label or (labelmatch and cmp >= 0)
 		elif op == 1:
-			return self.label <= other.label or (labelmatch and cmp <= 0)
+			return self.label <= ob.label or (labelmatch and cmp <= 0)
 		elif op == 0:
-			return self.label < other.label or (labelmatch and cmp < 0)
+			return self.label < ob.label or (labelmatch and cmp < 0)
 		elif op == 4:
-			return self.label > other.label or (labelmatch and cmp > 0)
+			return self.label > ob.label or (labelmatch and cmp > 0)
 
 	def __nonzero__(self):
 		cdef int n
@@ -730,38 +699,37 @@ cdef class FatChartItem:
 
 cdef class CFGChartItem:
 	""" Item for CFG parsing; span is denoted with start and end indices. """
+	def __init__(self, label, start, end):
+		self.label = label
+		self.start = start
+		self.end = end
+
 	def __hash__(self):
 		""" juxtapose bits of label and indices of span:
 		|....end...start...label
 		64    40      32       0 """
-		return (self.label
-				^ <ULong>self.start << (8 * sizeof(long) / 2)
+		return (self.label ^ <ULong>self.start << (8 * sizeof(long) / 2)
 				^ <ULong>self.end << (8 * sizeof(long) / 2 + 8))
 
-	def __richcmp__(CFGChartItem self, CFGChartItem other, int op):
-		cdef bint labelmatch = self.label == other.label
+	def __richcmp__(CFGChartItem self, CFGChartItem ob, int op):
+		cdef bint labelmatch = self.label == ob.label
+		cdef bint startmatch = self.start == ob.start
 		if op == 2:
-			return (labelmatch and self.start == other.start
-				and self.end == other.end)
+			return labelmatch and startmatch and self.end == ob.end
 		elif op == 3:
-			return (not labelmatch or self.start != other.start
-				or self.end != other.end)
+			return not labelmatch or not startmatch or self.end != ob.end
 		elif op == 5:
-			return self.label >= other.label or (labelmatch
-			and (self.start >= other.start or (
-			self.start == other.start and self.end >= other.end)))
+			return self.label >= ob.label or (labelmatch and (self.start
+					>= ob.start or startmatch and self.end >= ob.end))
 		elif op == 1:
-			return self.label <= other.label or (labelmatch
-			and (self.start <= other.start or (
-			self.start == other.start and self.end <= other.end)))
+			return self.label <= ob.label or (labelmatch and (self.start
+					<= ob.start or (startmatch and self.end <= ob.end)))
 		elif op == 0:
-			return self.label < other.label or (labelmatch
-			and (self.start < other.start or (
-			self.start == other.start and self.end < other.end)))
+			return self.label < ob.label or (labelmatch and (self.start
+					< ob.start or (startmatch and self.end < ob.end)))
 		elif op == 4:
-			return self.label > other.label or (labelmatch
-			and (self.start > other.start or (
-			self.start == other.start and self.end > other.end)))
+			return self.label > ob.label or (labelmatch and (self.start
+					> ob.start or (startmatch and self.end > ob.end)))
 
 	def __nonzero__(self):
 		return self.label and self.end
@@ -797,41 +765,34 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 cdef class LCFRSEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
-	def __init__(self):
-		raise NotImplementedError
-
 	def __hash__(LCFRSEdge self):
 		cdef long _hash = 0x345678UL
 		# this condition could be avoided by using a dedicated sentinel Rule
 		if self.rule is not NULL:
 			_hash = (1000003UL * _hash) ^ <long>self.rule.no
-		# we only look at the left item, because this edge will only be compared
-		# to other edges for the same parent item
-		# unfortunately we cannot compute hash directly here, because
+		# we only look at the left item, because this edge will only be
+		# compared to other edges for the same parent item
+		# FIXME: we cannot compute hash directly here, because
 		# left can be of different subtypes.
 		_hash = (1000003UL * _hash) ^ <long>self.left.__hash__()
 		return _hash
 
-	def __richcmp__(LCFRSEdge self, LCFRSEdge other, int op):
+	def __richcmp__(LCFRSEdge self, LCFRSEdge ob, int op):
 		if op == 0:
-			return self.score < other.score
+			return self.score < ob.score
 		elif op == 1:
-			return self.score <= other.score
+			return self.score <= ob.score
 		elif op == 2 or op == 3:
-			# boolean trick: equality and inequality in one expression i.e., the
-			# equality between the two boolean expressions acts as biconditional
-			# since edges are only ever compared for the same cell,
 			# right matches iff left matches, so skip that check
-			return (op == 2) == (self.rule is other.rule
-				and self.left == other.left)
+			return (op == 2) == (self.rule is ob.rule and self.left == ob.left)
 		elif op == 4:
-			return self.score > other.score
+			return self.score > ob.score
 		elif op == 5:
-			return self.score >= other.score
+			return self.score >= ob.score
 		elif op == 1:
-			return self.score <= other.score
+			return self.score <= ob.score
 		elif op == 0:
-			return self.score < other.score
+			return self.score < ob.score
 
 	def __repr__(self):
 		return "%s(%g, %g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r, %r)" % (
@@ -848,31 +809,27 @@ cdef class LCFRSEdge:
 cdef class CFGEdge:
 	""" NB: hash / (in)equality considers all elements except inside score,
 	order is determined by inside score only. """
-	def __init__(self):
-		raise NotImplementedError
-
 	def __hash__(CFGEdge self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ <long>self.rule
 		_hash = (1000003UL * _hash) ^ <long>self.mid
 		return _hash
 
-	def __richcmp__(CFGEdge self, CFGEdge other, int op):
+	def __richcmp__(CFGEdge self, CFGEdge ob, int op):
 		if op == 0:
-			return self.inside < other.inside
+			return self.inside < ob.inside
 		elif op == 1:
-			return self.inside <= other.inside
+			return self.inside <= ob.inside
 		elif op == 2 or op == 3:
-			return (op == 2) == (
-					self.rule is other.rule and self.mid == other.mid)
+			return (op == 2) == (self.rule is ob.rule and self.mid == ob.mid)
 		elif op == 4:
-			return self.inside > other.inside
+			return self.inside > ob.inside
 		elif op == 5:
-			return self.inside >= other.inside
+			return self.inside >= ob.inside
 		elif op == 1:
-			return self.inside <= other.inside
+			return self.inside <= ob.inside
 		elif op == 0:
-			return self.inside < other.inside
+			return self.inside < ob.inside
 
 	def __repr__(self):
 		return "%s(%g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r)" % (
@@ -898,13 +855,10 @@ cdef class RankedEdge:
 		_hash = (1000003UL * _hash) ^ self.right
 		return _hash
 
-	def __richcmp__(RankedEdge self, RankedEdge other, int op):
+	def __richcmp__(RankedEdge self, RankedEdge ob, int op):
 		if op == 2 or op == 3:
-			return (op == 2) == (
-				self.left == other.left
-				and self.right == other.right
-				and self.head == other.head
-				and self.edge == other.edge)
+			return (op == 2) == (self.left == ob.left and self.right ==
+					ob.right and self.head == ob.head and self.edge == ob.edge)
 		return NotImplemented
 
 	def __repr__(self):
@@ -934,15 +888,11 @@ cdef class RankedCFGEdge:
 		_hash = (1000003UL * _hash) ^ self.right
 		return _hash
 
-	def __richcmp__(RankedCFGEdge self, RankedCFGEdge other, int op):
+	def __richcmp__(RankedCFGEdge self, RankedCFGEdge ob, int op):
 		if op == 2 or op == 3:
-			return (op == 2) == (
-				self.left == other.left
-				and self.right == other.right
-				and self.label == other.label
-				and self.start == other.start
-				and self.end == other.end
-				and self.edge == other.edge)
+			return (op == 2) == (self.left == ob.left and self.right ==
+					ob.right and self.label == ob.label and self.start ==
+					ob.start and self.end == ob.end and self.edge == ob.edge)
 		return NotImplemented
 
 	def __repr__(self):
@@ -963,8 +913,8 @@ cdef class LexicalRule:
 
 
 cdef class Ctrees:
-	""" Auxiliary class to be able to pass around collections of trees in
-	Python. """
+	""" Auxiliary class to be able to pass around collections of NodeArrays
+	in Python. """
 	def __cinit__(self):
 		self.trees = self.nodes = NULL
 
@@ -984,9 +934,8 @@ cdef class Ctrees:
 		""" Initialize an array of trees of nodes structs. """
 		self.max = numtrees
 		self.trees = <NodeArray *>malloc(numtrees * sizeof(NodeArray))
-		assert self.trees is not NULL
 		self.nodes = <Node *>malloc(numnodes * sizeof(Node))
-		assert self.nodes is not NULL
+		assert self.trees is not NULL and self.nodes is not NULL
 		self.nodesleft = numnodes
 
 	cdef realloc(self, int len):
@@ -1090,57 +1039,3 @@ cdef inline copynodes(tree, dict prods, Node *result):
 				result[n].right = a[1].idx
 			else:  # unary node
 				result[n].right = -1
-
-
-# begin scratch
-
-cdef class MemoryPool:
-	"""A memory pool that allocates chunks of poolsize, up to limit times.
-	Memory is automatically freed when object is deallocated
-	(and cannot be released before). """
-	def __cinit__(self, int poolsize, int limit):
-		cdef int x
-		self.poolsize = poolsize
-		self.limit = limit
-		self.n = 0
-		self.pool = <void **>malloc(limit * sizeof(void *))
-		assert self.pool is not NULL
-		for x in range(limit):
-			self.pool[x] = NULL
-		self.cur = self.pool[0] = <ULong *>malloc(self.poolsize)
-		assert self.cur is not NULL
-		self.leftinpool = self.poolsize
-
-	cdef void *alloc(self, int size):
-		cdef void *ptr
-		if size > self.poolsize:
-			return NULL
-		elif self.leftinpool < size:
-			self.n += 1
-			assert self.n < self.limit
-			if self.pool[self.n] is NULL:
-				self.pool[self.n] = <ULong *>malloc(self.poolsize)
-			self.cur = self.pool[self.n]
-			assert self.cur is not NULL
-			self.leftinpool = self.poolsize
-		ptr = self.cur
-		self.cur = &((<char *>self.cur)[size])
-		self.leftinpool -= size
-		return ptr
-
-	cdef void reset(self):
-		self.n = 0
-		self.cur = self.pool[0]
-		self.leftinpool = self.poolsize
-
-	def __dealloc__(MemoryPool self):
-		cdef int x
-		if self.pool is not NULL:
-			for x in range(self.n + 1):
-				if self.pool[x] is not NULL:
-					free(self.pool[x])
-					self.pool[x] = NULL
-			free(self.pool)
-			self.pool = NULL
-
-# end scratch

@@ -44,8 +44,7 @@ function switchopt(n) {
 	</tr>
 	<tr>
 		<td style="width: 50%; " >
-			<textarea name=tree rows=12 cols=60 id=treefield>
-			</textarea>
+			<textarea name=tree rows=12 cols=60 id=treefield></textarea>
 		</td>
 		<td>
 			<p>
@@ -77,7 +76,7 @@ function switchopt(n) {
 			<ul>
 			<li>Regular tree(s) in bracket notation (<a href="javascript: show('bracket')">example</a>)
 			<li>Discontinuous tree(s) in bracket notation. Represent terminals with integer indices, sentence on nextline (<a href="javascript: show('discbracket')">example</a>).
-			<li>Negra/Tiger export format tree (<a href="javascript: show('export')">example</a>); function &amp; morphology tags ignored; multiple trees may be given if wrapped in:
+			<li>Negra/Tiger export format tree (<a href="javascript: show('export')">example</a>); function &amp; morphology tags ignored; trees need to be wrapped in:
 			<blockquote>
 <pre>#BOS [number]
 [...]

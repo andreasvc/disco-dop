@@ -8,6 +8,7 @@ ctypedef unsigned long ULong
 ctypedef unsigned int UInt
 ctypedef unsigned char UChar
 
+
 cdef extern:
 	int __builtin_ffsll (ULLong)
 	int __builtin_ctzll (ULLong)
@@ -15,6 +16,7 @@ cdef extern:
 	int __builtin_ctzl (ULong)
 	int __builtin_popcountl (ULong)
 	int __builtin_popcountll (ULLong)
+
 
 cdef extern from "macros.h":
 	int BITSIZE
@@ -26,6 +28,7 @@ cdef extern from "macros.h":
 	#int SLOTS # doesn't work
 
 DEF SLOTS = 3 # FIXME: make this a constant, yet shared across modules.
+
 
 @cython.final
 cdef class Grammar:
@@ -43,8 +46,9 @@ cdef class Grammar:
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
 	cdef _convertrules(Grammar self, list rulelines)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
-	cdef rulerepr(self, Rule rule)
-	cdef yfrepr(self, Rule rule)
+	cdef rulestr(self, Rule rule)
+	cdef yfstr(self, Rule rule)
+
 
 cdef struct Rule:
 	double prob # 8 bytes
@@ -56,30 +60,41 @@ cdef struct Rule:
 	UInt no # 4 bytes
 	# total: 32 bytes.
 
+
 @cython.final
 cdef class LexicalRule:
 	cdef UInt lhs
 	cdef unicode word
 	cdef double prob
 
+
 cdef class ChartItem:
 	cdef UInt label
+
+
 @cython.final
 cdef class SmallChartItem(ChartItem):
 	cdef ULLong vec
+
+
 @cython.final
 cdef class FatChartItem(ChartItem):
 	cdef ULong vec[SLOTS]
+
+
 @cython.final
 cdef class CFGChartItem(ChartItem):
 	cdef UChar start, end
 
+
 cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)
 cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
+
 
 cdef class Edge:
 	cdef double inside
 	cdef Rule *rule
+
 
 @cython.final
 cdef class LCFRSEdge(Edge):
@@ -87,9 +102,11 @@ cdef class LCFRSEdge(Edge):
 	cdef ChartItem left
 	cdef ChartItem right
 
+
 @cython.final
 cdef class CFGEdge(Edge):
 	cdef UChar mid
+
 
 @cython.final
 cdef class RankedEdge:
@@ -97,6 +114,7 @@ cdef class RankedEdge:
 	cdef LCFRSEdge edge
 	cdef int left
 	cdef int right
+
 
 @cython.final
 cdef class RankedCFGEdge:
@@ -106,11 +124,12 @@ cdef class RankedCFGEdge:
 	cdef int left
 	cdef int right
 
+
 # start scratch
 #cdef union VecType:
 #	ULLong vec
 #	ULong *vecptr
-#
+
 #cdef class ParseForest:
 #	""" the chart representation of bitpar. seems to require parsing
 #	in 3 stages: recognizer, enumerate analyses, get probs. """
@@ -221,46 +240,122 @@ cdef class RankedCFGEdge:
 #	cdef CBitset leaves
 # end scratch
 
-
 # start fragments stuff
 
-cdef struct Node:
+cdef struct Node:  # a node of a binary tree
 	int prod # non-negative, ID of a phrasal or lexical production
 	short left # >= 0: array idx to child Node; <0: idx sent[-left - 1];
 	short right # >=0: array idx to child Node; -1: empty (unary Node)
 
-cdef struct NodeArray:
+
+cdef struct NodeArray:  # a tree as an array of Node structs
 	size_t offset # index to array of nodes in treebank where this tree starts
 	short len, root # number of nodes, index to root node
+
 
 @cython.final
 cdef class Ctrees:
 	cdef Node *nodes
 	cdef NodeArray *trees
-	cdef long nodesleft
+	cdef long nodesleft, max
 	cdef readonly size_t numnodes
 	cdef readonly short maxnodes
 	cdef readonly int len
-	cdef int max
 	cdef list treeswithprod
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int len)
 	cpdef add(self, list tree, dict prods)
-	cdef addnodes(self, Node *nodes, int cnt, int root)
+	cdef addnodes(self, Node *source, int cnt, int root)
 
 # end fragments stuff
 
-@cython.final
-cdef class MemoryPool:
-	cdef void reset(MemoryPool self)
-	cdef void *alloc(self, int size)
-	cdef void **pool
-	cdef void *cur
-	cdef int poolsize, limit, n, leftinpool
 
 # ---------------------------------------------------------------
 #                          INLINED FUNCTIONS
 # ---------------------------------------------------------------
+
+
+cdef inline FatChartItem new_FatChartItem(UInt label):
+	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
+	item.label = label
+	# NB: since item.vec is a static array, its elements are initialized to 0.
+	return item
+
+
+cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):
+	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
+	item.label = label
+	item.vec = vec
+	return item
+
+
+cdef inline CFGChartItem new_CFGChartItem(UInt label, UChar start, UChar end):
+	cdef CFGChartItem item = CFGChartItem.__new__(CFGChartItem)
+	item.label = label
+	item.start = start
+	item.end = end
+	return item
+
+
+cdef inline LCFRSEdge new_LCFRSEdge(double score, double inside, Rule *rule,
+		ChartItem left, ChartItem right):
+	cdef LCFRSEdge edge = LCFRSEdge.__new__(LCFRSEdge)
+	cdef long h = 0x345678UL
+	edge.score = score
+	edge.inside = inside
+	edge.rule = rule
+	edge.left = left
+	edge.right = right
+	return edge
+
+
+cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
+	cdef CFGEdge edge = CFGEdge.__new__(CFGEdge)
+	edge.inside = inside
+	edge.rule = rule
+	edge.mid = mid
+	return edge
+
+
+cdef object log1e200 = pylog(1e200)
+
+
+cdef inline logprobadd(x, y):
+	""" add two log probabilities in log space;
+	i.e., logprobadd(log(a), log(b)) == log(a + b)
+	NB: expect python floats, not C doubles """
+	if pyisinf(x):
+		return y
+	elif pyisinf(y):
+		return x
+	# If one value is much smaller than the other, keep the larger value.
+	elif x < (y - log1e200):
+		return y
+	elif y < (x - log1e200):
+		return x
+	diff = y - x
+	assert not pyisinf(diff)
+	if pyisinf(pyexp(diff)):	# difference is too large
+		return x if x > y else y
+	# otherwise return the sum.
+	return x + pylog(1.0 + pyexp(diff))
+
+
+cdef inline double logprobsum(list logprobs):
+	""" Takes a list of log probabilities and sums them producing a new
+	log probability;
+	NB: since the input is a Python list, this function works with python
+	floats, not C doubles.
+	i.e., logprobsum([log(a), log(b), ...]) == log(sum([a, b, ...]))
+
+	http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+	https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations """
+	maxprob = max(logprobs)
+	# fsum is supposedly more accurate.
+	#return pyexp(fsum([maxprob, log(fsum([pyexp(prob - maxprob)
+	#							for prob in logprobs]))]))
+	return maxprob + pylog(sum([pyexp(prob - maxprob) for prob in logprobs]))
+
 
 #cdef inline long djb_hash(UChar *key, int size):
 #	cdef unsigned long h = 5381UL
@@ -289,77 +384,3 @@ cdef class MemoryPool:
 #		h ^= key[n]
 #		h *= 1099511628211UL
 #	return h
-
-cdef inline FatChartItem new_FatChartItem(UInt label):
-	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
-	item.label = label
-	# NB: since item.vec is a static array, its elements are initialized to 0.
-	return item
-
-cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):
-	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
-	item.label = label
-	item.vec = vec
-	return item
-
-cdef inline CFGChartItem new_CFGChartItem(UInt label, UChar start, UChar end):
-	cdef CFGChartItem item = CFGChartItem.__new__(CFGChartItem)
-	item.label = label
-	item.start = start
-	item.end = end
-	return item
-
-cdef inline LCFRSEdge new_LCFRSEdge(double score, double inside, Rule *rule,
-		ChartItem left, ChartItem right):
-	cdef LCFRSEdge edge = LCFRSEdge.__new__(LCFRSEdge)
-	cdef long h = 0x345678UL
-	edge.score = score
-	edge.inside = inside
-	edge.rule = rule
-	edge.left = left
-	edge.right = right
-	return edge
-
-cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
-	cdef CFGEdge edge = CFGEdge.__new__(CFGEdge)
-	edge.inside = inside
-	edge.rule = rule
-	edge.mid = mid
-	return edge
-
-cdef object log1e200 = pylog(1e200)
-cdef inline logprobadd(x, y):
-	""" add two log probabilities in log space;
-	i.e., logprobadd(log(a), log(b)) == log(a + b)
-	NB: expect python floats, not C doubles """
-	if pyisinf(x):
-		return y
-	elif pyisinf(y):
-		return x
-	# If one value is much smaller than the other, keep the larger value.
-	elif x < (y - log1e200):
-		return y
-	elif y < (x - log1e200):
-		return x
-	diff = y - x
-	assert not pyisinf(diff)
-	if pyisinf(pyexp(diff)):	# difference is too large
-		return x if x > y else y
-	# otherwise return the sum.
-	return x + pylog(1.0 + pyexp(diff))
-
-cdef inline double logprobsum(list logprobs):
-	""" Takes a list of log probabilities and sums them producing a new
-	log probability;
-	NB: since the input is a Python list, this function works with python
-	floats, not C doubles.
-	i.e., logprobsum([log(a), log(b), ...]) == log(sum([a, b, ...]))
-
-	http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-	https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations """
-	maxprob = max(logprobs)
-	# fsum is supposedly more accurate.
-	#return pyexp(fsum([maxprob, log(fsum([pyexp(prob - maxprob)
-	#							for prob in logprobs]))]))
-	return maxprob + pylog(sum([pyexp(prob - maxprob) for prob in logprobs]))
-
