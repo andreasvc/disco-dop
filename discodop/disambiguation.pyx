@@ -172,8 +172,10 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees; we need to parse again because we have to consider
 	all derivations for the n most likely trees.
-	Returns the intersection of the most probable parse trees and their
-	shortest derivations, with probabilities of the form (subtrees, prob).
+
+	:returns: the intersection of the most probable parse trees and their
+		shortest derivations, with probabilities of the form (subtrees, prob).
+
 	NB: doesn't seem to work so well, so may contain a subtle bug.
 		does not support PCFG charts. """
 	cdef dict derivs = {}
@@ -494,8 +496,9 @@ cpdef str recoverfragments(deriv, D, Grammar grammar, list backtransform):
 	flattened fragments which are left-binarized. `derivation` should be
 	a RankedEdge representing a derivation, and backtransform should contain
 	rule numbers as keys and strings as values. Uses the first binarized
-	production as key, which map to string templates as values. Returns
-	expanded derivation as a string.
+	production as key, which map to string templates as values.
+
+	:returns: expanded derivation as a string.
 
 	Does on-the-fly debinarization following labels that are not mapped to a
 	label in the coarse grammar, i.e., it assumes that neverblockre is only

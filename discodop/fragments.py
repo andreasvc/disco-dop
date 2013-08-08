@@ -358,8 +358,9 @@ def workload(numtrees, mult, numproc):
 	n * (n - 1) total comparisons are made.
 	Each tree m has to be compared to all trees x such that m < x < n.
 	(meaning there are more comparisons for lower n).
-	This function returns a sequence of (start, end) intervals such that
-	the number of comparisons is approximately balanced. """
+
+	:returns: a sequence of (start, end) intervals such that
+		the number of comparisons is approximately balanced. """
 	# could base on number of nodes as well.
 	if numproc == 1:
 		return [(0, numtrees)]
@@ -382,9 +383,10 @@ def workload(numtrees, mult, numproc):
 
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	""" Get recurring fragments with exact counts in a single treebank.
-	Returns a dictionary whose keys are fragments as strings, and
-	frequencies / indices as values.
-	trees:  a sequence of binarized Tree objects. """
+
+	:returns: a dictionary whose keys are fragments as strings, and
+		frequencies / indices as values.
+	:param trees:  a sequence of binarized Tree objects. """
 	# TODO: add disc= option, optimize disc=False.
 	if numproc == 0:
 		numproc = cpu_count()

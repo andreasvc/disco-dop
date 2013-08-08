@@ -308,12 +308,12 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 
 def parse_symbolic(sent, Grammar grammar, start=1, tags=None):
 	""" Parse sentence, a list of tokens, and produce a chart, either
-	exhaustive or up until the first complete parse. Non-probabilistic version;
-	returns a CFG chart with each 'probability' 1. Other parameters:
+	exhaustive or up until the first complete parse. Non-probabilistic version.
 
-	- start: integer corresponding to the start symbol that analyses should
-		have, e.g., grammar.toid['ROOT']
-	- tags: optionally, a list with the corresponding POS tags
+	:returns: a CFG chart with each 'probability' 1.
+	:param start: integer corresponding to the start symbol that analyses
+		should have, e.g., grammar.toid['ROOT']
+	:param tags: optionally, a list with the corresponding POS tags
 		for the words in sent. """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
@@ -422,8 +422,9 @@ cdef populatepos(Grammar grammar, list chart, sent, tags,
 		short [:, :] minright, short [:, :] maxright):
 	""" Assign all possible POS tags for a word, and apply all possible
 	unary rules to them.
-	Returns a dictionary with the best scoring edges for each lhs,
-	or None if no POS tag was found for this word. """
+
+	:returns: a dictionary with the best scoring edges for each lhs,
+		or None if no POS tag was found for this word. """
 	cdef:
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		Rule *rule
@@ -919,8 +920,7 @@ def sortfunc(CFGEdge e):
 
 
 def pprint_matrix(matrix, sent, tolabel, matrix2=None):
-	""" Print a chart in a numpy matrix; optionally in parallel with another
-	matrix. """
+	""" Print a numpy matrix chart; optionally in parallel with another. """
 	for span in range(1, len(sent) + 1):
 		for left in range(len(sent) - span + 1):
 			right = left + span

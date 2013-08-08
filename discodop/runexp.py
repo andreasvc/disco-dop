@@ -567,8 +567,9 @@ def doparsing(**kwds):
 def worker(args):
 	""" Parse a sentence using a global Parser object,
 	and do incremental evaluation.
-	Returns diagnostic information in a string, as well as a list of
-	DictObj with the results for each stage. """
+
+	:returns: a string with diagnostic information, as well as a list of
+		DictObj with the results for each stage. """
 	nsent, (sent, goldtree, _, _) = args
 	prm = INTERNALPARAMS
 	evaltree = goldtree.copy(True)

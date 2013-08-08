@@ -152,8 +152,10 @@ class Tree(list):
 
 	# === Basic tree operations =================================
 	def leaves(self):
-		""" returns: a list containing this tree's leaves. The order reflects
-		the order of the leaves in the tree's hierarchical structure. """
+		"""
+
+		:returns: a list containing this tree's leaves. The order reflects
+			the order of the leaves in the tree's hierarchical structure. """
 		leaves = []
 		for child in self:
 			if isinstance(child, Tree):
@@ -163,15 +165,19 @@ class Tree(list):
 		return leaves
 
 	def flatten(self):
-		""" returns: a tree consisting of this tree's root connected directly
-		to its leaves, omitting all intervening non-terminal nodes. """
+		"""
+
+		:returns: a tree consisting of this tree's root connected directly
+			to its leaves, omitting all intervening non-terminal nodes. """
 		return Tree(self.label, self.leaves())
 
 	def height(self):
-		""" returns: The height of this tree. The height of a tree containing
-		no children is 1; the height of a tree containing only leaves is 2; and
-		the height of any other tree is one plus the maximum of its children's
-		heights. """
+		"""
+
+		:returns: The height of this tree. The height of a tree containing
+			no children is 1; the height of a tree containing only leaves is 2;
+			and the height of any other tree is one plus the maximum of its
+			children's heights. """
 		max_child_height = 0
 		for child in self:
 			if isinstance(child, Tree):
@@ -201,10 +207,10 @@ class Tree(list):
 
 	def subtrees(self, condition=None):
 		""" Generate all the subtrees of this tree, optionally restricted
-		to trees matching the condition function.
-		NB: if the condition does not match a subtree,
-		its children are still considered.
-		condition: the function to filter all local trees """
+		to trees matching the condition function. NB: if the condition does not
+		match a subtree, its children are still considered.
+
+		:param condition: the function to filter all local trees """
 		if condition is None or condition(self):
 			yield self
 		for child in self:
@@ -213,9 +219,9 @@ class Tree(list):
 					yield subtree
 
 	def pos(self):
-		""" returns: a list of tuples containing leaves and pre-terminals
-		(part-of-speech tags). The order reflects the order of the leaves in
-		the tree's hierarchical structure. """
+		""":returns: a list of tuples containing leaves and pre-terminals \
+			(part-of-speech tags). The order reflects the order of the leaves \
+			in the tree's hierarchical structure. """
 		pos = []
 		for child in self:
 			if isinstance(child, Tree):
@@ -225,9 +231,9 @@ class Tree(list):
 		return pos
 
 	def leaf_treeposition(self, index):
-		""" returns: The tree position of the index-th leaf in this tree;
+		""":returns: The tree position of the index-th leaf in this tree; \
 		i.e., if tp=self.leaf_treeposition(i), then self[tp]==self.leaves()[i].
-		Raises IndexError if this tree contains fewer than index+1 leaves,
+		:raises IndexError: if this tree contains fewer than index+1 leaves, \
 		or if index<0. """
 		if index < 0:
 			raise IndexError('index must be non-negative')
@@ -245,9 +251,9 @@ class Tree(list):
 		raise IndexError('index must be less than or equal to len(self)')
 
 	def treeposition_spanning_leaves(self, start, end):
-		""" returns: The tree position of the lowest descendant of this tree
-		that dominates self.leaves()[start:end].
-		Raises ValueError if end <= start """
+		""":returns: The tree position of the lowest descendant of this tree \
+			that dominates self.leaves()[start:end].
+		:raises ValueError: if end <= start """
 		if end <= start:
 			raise ValueError('end must be greater than start')
 		# Find the tree positions of the start & end leaves,
@@ -263,9 +269,10 @@ class Tree(list):
 	# === Convert, copy =========================================
 	@classmethod
 	def convert(cls, val):
-		""" Convert a tree between different subtypes of Tree. cls determines
-		which class will be used to encode the new tree.
-		val: The tree that should be converted. """
+		""" Convert a tree between different subtypes of Tree.
+
+		:param cls: the class that will be used for the new tree.
+		:param val: The tree that should be converted. """
 		if isinstance(val, Tree):
 			children = [cls.convert(child) for child in val]
 			return cls(val.label, children)
@@ -300,34 +307,27 @@ class Tree(list):
 			label_pattern=None, leaf_pattern=None,
 			remove_empty_top_bracketing=False):
 		""" Parse a bracketed tree string and return the resulting tree.
-		Trees are represented as nested brackettings, such as::
+		Trees are represented as nested brackettings, such as:
+		``(S (NP (NNP John)) (VP (V runs)))``
 
-			(S (NP (NNP John)) (VP (V runs)))
-
-		- s: The string to parse
-		- brackets: The two bracket characters used to mark the
+		:param s: The string to parse
+		:param brackets: The two bracket characters used to mark the
 			beginning and end of trees and subtrees.
-		- parse_label, parse_leaf: If specified, these functions are applied to
-			the substrings of s corresponding to labels and leaves
+		:param parse_label, parse_leaf: If specified, these functions are
+			applied to the substrings of s corresponding to labels and leaves
 			(respectively) to obtain the values for those labels and leaves.
 			They should have the following signature: parse_label(str) -> value
-			For example, these functions could be used to parse labels and
-			leaves whose values should be some type other than string (such as
-			FeatStruct <nltk.featstruct.FeatStruct>). Note that by default,
-			label strings and leaf strings are delimited by whitespace and
-			brackets; to override this default, use the label_pattern and
-			leaf_pattern arguments.
-		- label_pattern, leaf_pattern: Regular expression patterns used to find
-			label and leaf substrings in s. By default, both label and leaf
-			patterns are defined to match any sequence of non-whitespace
+		:param label_pattern, leaf_pattern: Regular expression patterns used to
+			find label and leaf substrings in s. By default, both label and
+			leaf patterns are defined to match any sequence of non-whitespace
 			non-bracket characters.
-		- remove_empty_top_bracketing: If the resulting tree has an empty node
-			label, and is length one, then return its single child instead.
-			This is useful for treebank trees, which sometimes contain an extra
-			level of bracketing.
-		- returns: A tree corresponding to the string representation s. If this
-			class method is called using a subclass of Tree, then it will
-			return a tree of that type. """
+		:param remove_empty_top_bracketing: If the resulting tree has an empty
+			node label, and is length one, then return its single child
+			instead. This is useful for treebank trees, which sometimes contain
+			an extra level of bracketing.
+		:returns: A tree corresponding to the string representation s.
+			If this class method is called using a subclass of Tree, then it
+			will return a tree of that type. """
 		if not isinstance(brackets, basestring) or len(brackets) != 2:
 			raise TypeError('brackets must be a length-2 string')
 		if re.search(r'\s', brackets):
@@ -384,9 +384,10 @@ class Tree(list):
 	@classmethod
 	def _parse_error(cls, s, match, expecting):
 		""" Display a friendly error message when parsing a tree string fails.
-		s: The string we're parsing.
-		match: regexp match of the problem token.
-		expecting: what we expected to see instead. """
+
+		:param s: The string we're parsing.
+		:param match: regexp match of the problem token.
+		:param expecting: what we expected to see instead. """
 		# Construct a basic error message
 		if match == 'end-of-string':
 			pos, token = len(s), 'end-of-string'
@@ -416,11 +417,11 @@ class Tree(list):
 	def pprint(self, margin=70, indent=0, labelsep='', brackets='()',
 			quotes=False):
 		"""
-		- returns: A pretty-printed string representation of this tree.
-		- margin: The right margin at which to do line-wrapping.
-		- indent: The indentation level at which printing begins. This number
-				is used to decide how far to indent subsequent lines.
-		- labelsep: A string that is used to separate the label from the
+		:returns: A pretty-printed string representation of this tree.
+		:param margin: The right margin at which to do line-wrapping.
+		:param indent: The indentation level at which printing begins. This
+			number is used to decide how far to indent subsequent lines.
+		:param labelsep: A string that is used to separate the label from the
 			children; e.g., the value ':' gives trees like::
 
 				(S: (NP: I) (VP: (V: saw) (NP: it))).
@@ -445,13 +446,6 @@ class Tree(list):
 			else:
 				s += '\n' + ' ' * (indent + 2) + '%r' % child
 		return s + brackets[1]
-
-	def pprint_latex_qtree(self):
-		r""" Returns a representation of the tree compatible with the LaTeX
-		qtree package. This consists of the string \Tree followed by the parse
-		tree represented in bracketed notation. """
-		return r'\Tree ' + self.pprint(indent=6, labelsep='',
-				brackets=('[.', ' ]'))
 
 	def _pprint_flat(self, labelsep, brackets, quotes):
 		""" pretty-printing helper function. """
@@ -561,12 +555,10 @@ class AbstractParentedTree(Tree):
 
 	- ParentedTree is used for tree structures where each subtree has at most
 		one parent. This class should be used in cases where there is
-		no"sharing" of subtrees.
+		no "sharing" of subtrees.
 	- MultiParentedTree is used for tree structures where a subtree may have
 		zero or more parents. This class should be used in cases where subtrees
 		may be shared.
-
-	Subclassing:
 
 	The AbstractParentedTree class redefines all operations that modify a
 	tree's structure to call two methods, which are used by subclasses to
@@ -592,14 +584,16 @@ class AbstractParentedTree(Tree):
 		called if child's type is Tree; i.e., it is not called when adding a
 		leaf to a tree. This method is always called before the child is
 		actually added to self's child list.
-		index: The index of child in self.
-		dry_run: If true, the don't actually set the child's parent pointer;
-			just check for any error conditions, and raise an exception if one
-			is found.
-		Raises TypeError: If child is a tree with an impropriate type.
-			Typically, if child is a tree, then its type needs to match self's
-			type. This prevents mixing of different tree types
-			(single-parented, multi-parented, and non-parented). """
+
+		:param index: The index of child in self.
+		:param dry_run: If true, the don't actually set the child's parent
+			pointer; just check for any error conditions, and raise an
+			exception if one is found.
+		:raises TypeError: if child is a tree with an inappropriate type.
+
+		Typically, if child is a tree, then its type needs to match self's
+		type. This prevents mixing of different tree types
+		(single-parented, multi-parented, and non-parented). """
 		raise AssertionError('Abstract base class')
 
 	def _delparent(self, _child, _index):
@@ -607,7 +601,8 @@ class AbstractParentedTree(Tree):
 		only called if child's type is Tree; i.e., it is not called when
 		removing a leaf from a tree. This method is always called before the
 		child is actually removed from self's child list.
-		index: The index of child in self. """
+
+		:param index: The index of child in self. """
 		raise AssertionError('Abstract base class')
 
 	# === Methods that add/remove children ======================
@@ -930,10 +925,12 @@ class MultiParentedTree(AbstractParentedTree):
 
 	def treepositions(self, root):
 		""" Return a list of all tree positions that can be used to reach this
-		multi-parented tree starting from root; i.e., the following holds::
+		multi-parented tree starting from root; i.e., the following holds
+		::
 
 			for treepos in ptree.treepositions(root):
-				root[treepos] is ptree """
+				root[treepos] is ptree
+		"""
 		if self is root:
 			return [()]
 		return [treepos + (index, ) for parent in self._parents
@@ -978,10 +975,10 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 	""" Given a slice, return the corresponding (start, stop) bounds, taking
 	into account None indices and negative indices. The following holds
 	for the returned start and stop values: 0 <= start <= stop <= len(seq).
-	Raises ValueError if slice_obj.step is not None.
 
-	allow_step: If true, then the slice object may have a non-None step.
-	If it does, then return a tuple (start, stop, step). """
+	:raises ValueError: if slice_obj.step is not None.
+	:param allow_step: If true, then the slice object may have a non-None step.
+		If it does, then return a tuple (start, stop, step). """
 	start, stop = (slice_obj.start, slice_obj.stop)
 	if allow_step:
 		slice_obj.step = 1 if slice_obj.step is None else slice_obj.step

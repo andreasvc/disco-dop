@@ -19,14 +19,14 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 	X and X@n-m in fine.toid, for possible values of n and m.
 	Modifies chart destructively.
 
-	- k: number of k-best derivations to consider. When k==0, the chart is
+	:param k: number of k-best derivations to consider. When k==0, the chart is
 		not pruned but filtered to contain only items that contribute to a
 		complete derivation.
-	- splitprune: coarse stage used a split-PCFG where discontinuous node
+	:param splitprune: coarse stage used a split-PCFG where discontinuous node
 		appear as multiple CFG nodes. Every discontinuous node will result
 		in multiple lookups into whitelist to see whether it should be
 		allowed on the agenda.
-	- markorigin: in combination with splitprune, coarse labels include an
+	:param markorigin: in combination with splitprune, coarse labels include an
 		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 		map to the discontinuous node NP_2. """
 	cdef dict d

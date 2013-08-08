@@ -305,7 +305,7 @@ def unifymorphfeat(feats, percolatefeatures=None):
 	""" Treat a sequence of strings as feature vectors, either
 	comma or dot separated, and produce the sorted union of their features.
 
-	- percolatefeatures: if a set is given, select only these features;
+	:param percolatefeatures: if a set is given, select only these features;
 		by default all features are used.
 
 	>>> print(unifymorphfeat({'Def.*.*', '*.Sg.*', '*.*.Akk'}))
@@ -333,23 +333,24 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 	3) for each child:
 		grammatical function + parent syntactic category, e.g., OBJ/S
 
-	(NP-SBJ (NN-HD ...)) => (NP (<HD>/NP (HD/NP (NN ...))))
+	Example::
 
-	Parameters:
+		(NP-SBJ (NN-HD ...)) => (NP (<HD>/NP (HD/NP (NN ...))))
 
-	- adjunctionlabel: a grammatical function label identifying adjunctions.
-		They will not be part of argument structures, and their grammatical
-		function will be replaced with their neighboring non-adjunctive
-		functions.
-	- ignorefunctions: function labels that do not go into argument structure,
-		but keep their function in their realization to make backtransform
-		possible.
-	- morphlevels: if nonzero, percolate morphological features this many
+	:param adjunctionlabel: a grammatical function label identifying
+		adjunctions. They will not be part of argument structures, and their
+		grammatical function will be replaced with their neighboring
+		non-adjunctive functions.
+	:param ignorefunctions: function labels that do not go into argument
+		structure, but keep their function in their realization to make
+		backtransform possible.
+	:param morphlevels: if nonzero, percolate morphological features this many
 		levels upwards. For a given node, the union of the features of its
 		children are collected, and the result is appended to its syntactic
 		category.
-	- percolatefeatures: if a sequence is given, percolate only these
-		morphological features; by default all features are used. """
+	:param percolatefeatures: if a sequence is given, percolate only these
+		morphological features; by default all features are used.
+	:returns: a new, transformed tree. """
 	def realize(child, prevfunc, nextfunc):
 		""" Generate realization of a child node by recursion. """
 		newchild, morph, lvl = rrtransform(child, morphlevels,
@@ -409,9 +410,10 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 	""" Reverse the relational-realizational transformation, conserving
 	grammatical functions.
 
-	- adjunctionlabel: used to assign a grammatical function to adjunctions
-			that have been converted to contextual labels 'next:prev'.
-	- func: used internally to percolate functional labels. """
+	:param adjunctionlabel: used to assign a grammatical function to
+		adjunctions that have been converted to contextual labels 'next:prev'.
+	:param func: used internally to percolate functional labels.
+	:returns: a new tree. """
 	morph = None
 	if not isinstance(tree[0], Tree):
 		tag, morph = tree.label.split('/')

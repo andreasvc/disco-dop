@@ -25,35 +25,37 @@ class CorpusReader(object):
 	def __init__(self, root, fileids, encoding='utf-8', headrules=None,
 				headfinal=True, headreverse=False, markheads=False, punct=None,
 				functions=None, morphology=None):
-		""" headrules: if given, read rules for assigning heads and apply them
-				by ordering constituents according to their heads
-			headfinal: whether to put the head in final or in frontal position
-			headreverse: the head is made final/frontal by reversing everything
-				before or after the head. When true, the side on which the head
-				is will be the reversed side.
-			markheads: add '^' to phrasal label of heads.
-			punct: one of ...
-				None: leave punctuation as is.
-				'move': move punctuation to appropriate constituents
-						using heuristics.
-				'remove': eliminate punctuation.
-				'root': attach punctuation directly to root
-						(as in original Negra/Tiger treebanks).
-			functions: one of ...
-				None: leave syntactic labels as is.
-				'add': concatenate grammatical function to syntactic label,
-					separated by a hypen: e.g., NP => NP-SBJ
-				'remove': strip away hyphen-separated grammatical function,
-					e.g., NP-SBJ => NP
-				'replace': replace syntactic label with grammatical function,
-					e.g., NP => SBJ
-			morphology: one of ...
-				None: use POS tags as preterminals
-				'add': concatenate morphological information to POS tags,
-					e.g., DET/sg.def
-				'replace': use morphological information as preterminal label
-				'between': add node with morphological information between
-					POS tag and word, e.g., (DET (sg.def the)) """
+		"""
+		:param headrules: if given, read rules for assigning heads and apply
+			them by ordering constituents according to their heads
+		:param headfinal: whether to put the head in final or in frontal
+			position
+		:param headreverse: the head is made final/frontal by reversing
+			everything before or after the head. When true, the side on which
+			the head is will be the reversed side.
+		:param markheads: add '^' to phrasal label of heads.
+		:param punct: one of ...
+			:None: leave punctuation as is.
+			:'move': move punctuation to appropriate constituents
+					using heuristics.
+			:'remove': eliminate punctuation.
+			:'root': attach punctuation directly to root
+					(as in original Negra/Tiger treebanks).
+		:param functions: one of ...
+			:None: leave syntactic labels as is.
+			:'add': concatenate grammatical function to syntactic label,
+				separated by a hypen: e.g., NP => NP-SBJ
+			:'remove': strip away hyphen-separated grammatical function,
+				e.g., NP-SBJ => NP
+			:'replace': replace syntactic label with grammatical function,
+				e.g., NP => SBJ
+		:param morphology: one of ...
+			:None: use POS tags as preterminals
+			:'add': concatenate morphological information to POS tags,
+				e.g., DET/sg.def
+			:'replace': use morphological information as preterminal label
+			:'between': add node with morphological information between
+				POS tag and word, e.g., (DET (sg.def the)) """
 		self.reverse = headreverse
 		self.headfinal = headfinal
 		self.markheads = markheads
@@ -515,9 +517,10 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 
 def handlefunctions(action, tree, pos=True, top=False):
 	""" Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
-	action: one of {None, 'add', 'replace', 'remove'}
-	pos: whether to add function tags to POS tags.
-	top: whether to add function tags to the top node."""
+
+	:param action: one of {None, 'add', 'replace', 'remove'}
+	:param pos: whether to add function tags to POS tags.
+	:param top: whether to add function tags to the top node."""
 	if action in (None, 'leave'):
 		return
 	for a in tree.subtrees():
@@ -791,7 +794,7 @@ def segmentbrackets(brackets):
 
 def segmentexport(morphology, functions):
 	""" Co-routine that accepts one line at a time.
-	Yields: tuples (result, status) where ...
+	Yields tuples (result, status) where ...
 
 	- result is None or a segment delimited by '#BOS ' and '#EOS '
 		as a list of lines;

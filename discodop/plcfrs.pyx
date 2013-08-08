@@ -35,27 +35,26 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 	"""
 	Parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse.
-	Other parameters:
 
-	- start: integer corresponding to the start symbol that analyses should
-		have, e.g., grammar.toid[b'ROOT']
-	- exhaustive: don't stop at viterbi parser, return a full chart
-	- whitelist: a whitelist of allowed ChartItems. Anything else is not
+	:param exhaustive: don't stop at viterbi parser, return a full chart
+	:param start: integer corresponding to the start symbol that analyses
+		should have, e.g., grammar.toid[b'ROOT']
+	:param whitelist: a whitelist of allowed ChartItems. Anything else is not
 		added to the agenda.
-	- splitprune: coarse stage used a split-PCFG where discontinuous node
+	:param splitprune: coarse stage used a split-PCFG where discontinuous node
 		appear as multiple CFG nodes. Every discontinuous node will result
 		in multiple lookups into whitelist to see whether it should be
 		allowed on the agenda.
-	- markorigin: in combination with splitprune, coarse labels include an
+	:param markorigin: in combination with splitprune, coarse labels include an
 		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 		map to the discontinuous node NP_2
-	- estimates: use context-summary estimates (heuristics, figures of
+	:param estimates: use context-summary estimates (heuristics, figures of
 		merit) to order agenda. should be a tuple with the kind of
 		estimates ('SX' or 'SXlrgaps'), and the estimates themselves in a
 		4-dimensional numpy matrix. If estimates are not consistent, it is
 		no longer guaranteed that the optimal parse will be found.
 		experimental.
-	- beamwidth: specify the maximum number of items that will be explored
+	:param beamwidth: specify the maximum number of items that will be explored
 		for each particular span, on a first-come-first-served basis.
 		setting to 0 disables this feature. experimental.
 	"""

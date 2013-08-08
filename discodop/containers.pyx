@@ -34,16 +34,15 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 cdef class Grammar:
 	"""
 	A grammar object which stores rules compactly, indexed in various ways.
-	Parameters:
 
-	- rule_tuples_or_bytes: either a sequence of tuples containing both
+	:param rule_tuples_or_bytes: either a sequence of tuples containing both
 		phrasal & lexical rules, or a bytes string containing the phrasal
 		rules in text format; in the latter case lexicon should be given.
 		The text format allows for more efficient loading and is used
 		internally.
-	- start: a string identifying the unique start symbol of this grammar,
+	:param start: a string identifying the unique start symbol of this grammar,
 		which will be used by default when parsing with this grammar
-	- bitpar: whether to expect and use the bitpar grammar format
+	:param bitpar: whether to expect and use the bitpar grammar format
 
 	By default the grammar is in logprob mode;
 	invoke grammar.switch('default', logprob=False) to switch.
@@ -430,10 +429,10 @@ cdef class Grammar:
 		The regexes should be compiled objects, i.e., re.compile(regex),
 		or None to leave labels unchanged.
 
-        - use "|<" to ignore nodes introduced by binarization;
+        - use ``|<`` to ignore nodes introduced by binarization;
             useful if coarse and fine stages employ different kinds of
             markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
-        - "_[0-9]+" to ignore discontinuous nodes X_n where X is a label
+        - ``_[0-9]+`` to ignore discontinuous nodes X_n where X is a label
 			and n is a fanout. """
 		cdef int n, m, components = 0
 		if coarse is None:

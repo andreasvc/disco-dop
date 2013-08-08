@@ -152,10 +152,10 @@ def treebankgrammar(trees, sents):
 def dopreduction(trees, sents, packedgraph=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
-	Returns a set of rules with the relative frequency estimate as probilities,
-	and alternate weights following the equal weights estimate.
-	Parameters:
-	packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
+
+	:param packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
+	:returns: a set of rules with the relative frequency estimate as
+		probilities, and alternate weights following the equal weights estimate.
 	"""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@12),
 	# 	counts of NP@... should sum to count of NP
@@ -213,8 +213,10 @@ def doubledop(fragments, debug=False):
 	unique identifiers so that each grammar rule can be mapped back to its
 	fragment. In fragments with terminals, we replace their POS tags with a tag
 	uniquely identifying that terminal and tag: tag@word.
-	Returns a tuple (grammar, eweweights, backtransform)
-	eweweights are alternate weights following the equal weights estimate. """
+
+	:returns: a tuple (grammar, eweweights, backtransform)
+		eweweights are alternate weights following the equal weights estimate.
+	"""
 	def getweight(frag, terminals):
 		""" Return frequency and EWE. """
 		freq = len(fragments[frag, terminals])
@@ -326,8 +328,9 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	Counts frequencies of nodes and calculate the number of
 	subtrees headed by each node. updates "subtreefd" and "nonterminalfd"
 	as a side effect. Expects a normal tree and a tree with IDs.
-	subtreefd: the multiset to store the counts of subtrees
-	nonterminalfd: the multiset to store the counts of non-terminals
+
+	:param subtreefd: the multiset to store the counts of subtrees
+	:param nonterminalfd: the multiset to store the counts of non-terminals
 
 	>>> fd = multiset()
 	>>> tree = Tree("(S (NP mary) (VP walks))")
@@ -718,7 +721,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	`grammar` is a sequence of rule tuples, as produced by treebankgrammar(),
 	dopreduction(), or doubledop().
 
-	Returns: rules, lexicon; bytes object & a unicode string, respectively
+	:returns: rules, lexicon; bytes object & a unicode string, respectively
 	For a description of the file format, see grammar.FORMAT.
 	When bitpar is True, use bitpar format: for rules, put weight first (as
 	decimal fraction or frequency) and leave out the yield function. """
@@ -770,8 +773,10 @@ def subsetgrammar(a, b):
 
 def grammarinfo(grammar, dump=None):
 	""" print(some statistics on a grammar, before it goes through Grammar().)
-	dump: if given a filename, will dump distribution of parsing complexity
-	to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120 times, etc. """
+
+	:param dump: if given a filename, will dump distribution of parsing
+		complexity to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120
+		times, etc.) """
 	from .eval import mean
 	lhs = {rule[0] for (rule, yf), w in grammar}
 	l = len(grammar)

@@ -57,16 +57,16 @@ class DrawTree(object):
 	``DrawTree(tree, sent=None, highlight=(), abbr=False)``
 	creates an object from which different visualizations can be created.
 
-	- tree may be a Tree object or a string.
-	- sent is a list of words (strings). If sent is not given, and the tree
+	:param tree: a Tree object or a string.
+	:param sent: a list of words (strings). If sent is not given, and the tree
 		contains non-integers as leaves, a continuous phrase-structure tree
 		is assumed. If sent is not given and the tree contains only indices
 		as leaves, the indices are displayed as placeholder terminals.
-	- Optionally, highlight is a sequence of Tree objects which should be
+	:param highlight: Optionally, a sequence of Tree objects which should be
 		highlighted. Has the effect of only applying colors to nodes in
 		this sequence (nodes should be given as Tree objects, terminals as
 		indices).
-	- abbr: when True, abbreviate labels longer than 5 characters.
+	:param abbr: when True, abbreviate labels longer than 5 characters.
 
 	>>> print(DrawTree('(S (NP Mary) (VP walks))'))
 		  S
@@ -383,12 +383,13 @@ class DrawTree(object):
 				nodecolor='blue', leafcolor='red'):
 		""" Return ASCII art for a discontinuous tree.
 
-		- unicodelines: whether to use Unicode line drawing characters
+		:param unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
-		- html: whether to wrap output in html code (default plain text).
-		- ansi: whether to produce colors with ANSI escape sequences
+		:param html: whether to wrap output in html code (default plain text).
+		:param ansi: whether to produce colors with ANSI escape sequences
 			(only effective when html==False).
-		- leafcolor, nodecolor: specify colors of leaves and phrasal nodes. """
+		:param leafcolor, nodecolor: specify colors of leaves and phrasal
+			nodes. """
 
 		if unicodelines:
 			horzline = u'\u2500'
@@ -495,7 +496,7 @@ class DrawTree(object):
 	def tikzmatrix(self, nodecolor='blue', leafcolor='red'):
 		""" Produce TiKZ code for use with LaTeX. PDF can be produced with
 		pdflatex. Uses TiKZ matrices meaning that nodes are put into a fixed
-		grid. Where the cells of each column all have the same width."""
+		grid. Where the cells of each column all have the same width. """
 		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
 			r'''\begin{tikzpicture}[scale=1, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,

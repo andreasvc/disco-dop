@@ -35,14 +35,14 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	""" Compute an unknown word model that smooths lexical probabilities
 	for unknown & rare words.
 
-	- tagged_sents: the sentences from the training set with the gold POS
+	:param tagged_sents: the sentences from the training set with the gold POS
 			tags from the treebank.
-	- unknownword: a function that returns a signature for a given word;
+	:param unknownword: a function that returns a signature for a given word;
 			e.g., "eschewed" => "_UNK-L-d".
-	- unknownthreshold: words with frequency lower than or equal to this are
-			replaced by their signature.
-	- openclassthreshold: tags that rewrite to at least this much word types
-			are considered to be open class categories. """
+	:param unknownthreshold: words with frequency lower than or equal to this
+			are replaced by their signature.
+	:param openclassthreshold: tags that rewrite to at least this much word
+			types are considered to be open class categories. """
 	wordsfortag = defaultdict(set)
 	tags = multiset()
 	wordtags = multiset()
@@ -114,7 +114,8 @@ def simplesmoothlexicon(lexmodel, epsilon=Fraction(1, 100)):
 	""" introduce lexical productions for unobserved
 	combinations of known open class words and tags, as well as for unobserved
 	signatures which are mapped to '_UNK'.
-	epsilon: 'frequency' of productions for unseen tag, word pair. """
+
+	:param epsilon: 'frequency' of productions for unseen tag, word pair. """
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
 	newrules = []
@@ -138,12 +139,12 @@ def simplesmoothlexicon(lexmodel, epsilon=Fraction(1, 100)):
 def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags, wordsig, sigtag,
 			openclassoffset=1, kappa=1):
-	""" Compute a smoothed lexical model. Returns a dictionary
-	giving P(word_or_sig | tag).
+	""" Compute a smoothed lexical model.
 
-	- openclassoffset: for words that only appear with open class tags, add
-		unseen combinations of open class (tag, word) with this count.
-	- kappa: FIXME; cf. Klein & Manning (2003). """
+	:returns: a dictionary giving P(word_or_sig | tag).
+	:param openclassoffset: for words that only appear with open class tags,
+		add unseen combinations of open class (tag, word) with this count.
+	:param kappa: FIXME; cf. Klein & Manning (2003). """
 	for tag in openclasstags:
 		for word in openclasswords - wordsfortag[tag]:
 			wordtags[word, tag] += openclassoffset

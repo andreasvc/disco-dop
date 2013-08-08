@@ -79,52 +79,49 @@ options may consist of (* marks default option):
                  'between': add node with morphological information between
                      POS tag and word, e.g., (DET (sg.def the))
 
-Note: some of these transformations are specific to discontinuous treebanks,
-    specifically the Negra/Tiger treebanks. In the output only POS & phrasal
-    labels are guaranteed to be retained.
-    The formats 'conll' and 'mst' do an unlabeled dependency conversion and
+Note: The formats 'conll' and 'mst' do an unlabeled dependency conversion and
     require all constituents to have a child with HD as one of its function
-    tags, or the use of heuristic head rules. """ % sys.argv[0]
+    labels, or the use of heuristic head rules. """ % sys.argv[0]
 
 
 def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 		childchar='|', parentchar='^', headmarked=None, tailmarker='',
 		leftmostunary=False, rightmostunary=False, threshold=2,
 		pospa=False, artpa=True, reverse=False, ids=None):
-	""" Binarize an NLTK Tree object. Parameters:
+	""" Binarize an NLTK Tree object.
 
-	- factor: "left" or "right". Determines whether binarization proceeds from
-			left to right or vice versa.
-	- horzmarkov: amount of horizontal context in labels. Default is infinity,
-			such that now new generalization are introduced by the
+	:param factor: "left" or "right". Determines whether binarization proceeds
+			from left to right or vice versa.
+	:param horzmarkov: amount of horizontal context in labels. Default is
+			infinity, such that now new generalization are introduced by the
 			binarization.
-	- vertmarkov: number of ancestors to include in labels.
+	:param vertmarkov: number of ancestors to include in labels.
 			NB: 1 means only the direct parent, as in a normal tree.
-	- headmarked: when given a string, signifies that a node is the head node;
-			the direction of binarization will be switched when it is
+	:param headmarked: when given a string, signifies that a node is the head
+			node; the direction of binarization will be switched when it is
 			encountered, to enable a head-outward binarization.
 			NB: for discontinuous trees this is not necessary, as the order of
 			children can be freely adjusted to achieve the same effect.
-	- leftmostunary, rightmostunary: introduce a unary production for the
+	:param leftmostunary, rightmostunary: introduce a unary production for the
 			first/last child. When h=1, this enables the same generalizations
 			for the first & last non-terminals as for other siblings.
-	- tailmarker: when given a non-empty string, add this to artificial nodes
-			introducing the last symbol. This is useful when the last symbol is
-			the head node, ensuring that it is not exchangeable with other
-			non-terminals.
-	- reverse: reverse direction of the horizontal markovization;
+	:param tailmarker: when given a non-empty string, add this to artificial
+			nodes introducing the last symbol. This is useful when the last
+			symbol is the head node, ensuring that it is not exchangeable with
+			other non-terminals.
+	:param reverse: reverse direction of the horizontal markovization;
 			e.g.: (A (B ) (C ) (D )) ...becomes:
 			left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
 			right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
 			in this way the markovization represents the history of the
 			nonterminals that have *already* been parsed, instead of those
 			still to come (assuming bottom-up parsing).
-	- pospa: whether to add parent annotation to POS nodes.
-	- artpa: whether to add parent annotation to the artificial nodes
+	:param pospa: whether to add parent annotation to POS nodes.
+	:param artpa: whether to add parent annotation to the artificial nodes
 			introduced by the binarization.
-	- ids: a function to provide artificial node labels, instead of combining
-			labels of sibling nodes. Disables Markovization.
-	- threshold: constituents with more than this number of children are
+	:param ids: a function to provide artificial node labels, instead of
+			combining labels of sibling nodes. Disables Markovization.
+	:param threshold: constituents with more than this number of children are
 			factored; i.e., for a value of 2, do a normal binarization; for a
 			value of 1, also factor binary productions to include an artificial
 			node, etc.
@@ -320,10 +317,12 @@ def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 	removing the unary productions would result in loss of useful information.
 	The tree is modified in-place.
 
-	- collapsepos: when False (default), do not collapse preterminals (POS tags)
-	- collapseroot: when False (default) do not modify the root production if
-			it is unary; e.g., TOP -> productions for the Penn WSJ treebank.
-	- joinchar: A string used to connect collapsed node values (default: '+')
+	:param collapsepos: when False (default), do not collapse preterminals (POS
+		tags)
+	:param collapseroot: when False (default) do not modify the root production
+		if it is unary; e.g., TOP -> productions for the Penn WSJ treebank.
+	:param joinchar: A string used to connect collapsed node values
+		(default: '+')
 	"""
 	agenda = [tree]
 	if not collapseroot and isinstance(tree, Tree) and len(tree) == 1:
@@ -514,12 +513,13 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	bitset attribute to avoid having to call leaves() repeatedly.
 	The bitset attribute can be added with addbitsets()
 
-	tree: the tree for which the optimal binarization of its top production
-		will be searched.
-	score: a function from binarized trees to some value, where lower is better
-		(the value can be numeric or anything else which supports comparisons).
-	head: an optional index of the head node, specifying it enables head-driven
-		binarization (which constrains the possible binarizations).
+	:param tree: the tree for which the optimal binarization of its top
+		production will be searched.
+	:param score: a function from binarized trees to some value, where lower is
+		better (the value can be numeric or anything else which supports
+		comparisons).
+	:param head: an optional index of the head node, specifying it enables
+		head-driven binarization (which constrains the possible binarizations).
 
 	>>> tree = '(X (A 0) (B 1) (C 2) (D 3) (E 4))'
 	>>> tree1 = addbitsets(tree)
@@ -858,10 +858,6 @@ class OrderedSet(Set):
 			return NotImplemented
 		return self._from_iterable(value for value in self if value in other)
 
-
-#################################################################
-# Tests
-#################################################################
 
 def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
