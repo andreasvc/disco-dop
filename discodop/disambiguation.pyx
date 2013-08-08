@@ -34,7 +34,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		bint sample=False, bint kbest=True, list sent=None, list tags=None,
 		int sldop_n=7, list backtransform=None,
 		bint bitpar=False):
-	""" approximate MPP or MPD by summing over n random/best derivations from
+	""" Approximate MPP or MPD by summing over n random/best derivations from
 	chart, return a dictionary mapping parsetrees to probabilities """
 	cdef bint mpd = method == 'mpd'
 	cdef bint shortest = method == 'shortest'
@@ -168,7 +168,7 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 
 cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 		int m, int sldop_n, list backtransform, D, entries, bint bitpar):
-	""" `Proper' method for sl-dop. Parses sentence once more to find shortest
+	""" 'Proper' method for sl-dop. Parses sentence once more to find shortest
 	derivations, pruning away any chart item not occurring in the n most
 	probable parse trees; we need to parse again because we have to consider
 	all derivations for the n most likely trees.
@@ -491,7 +491,7 @@ cpdef viterbiderivation(chart, ChartItem start, list tolabel):
 
 cpdef str recoverfragments(deriv, D, Grammar grammar, list backtransform):
 	""" Reconstruct a DOP derivation from a DOP derivation with
-	flattened fragments which are left-binarized. `derivation' should be
+	flattened fragments which are left-binarized. `derivation` should be
 	a RankedEdge representing a derivation, and backtransform should contain
 	rule numbers as keys and strings as values. Uses the first binarized
 	production as key, which map to string templates as values. Returns
@@ -501,7 +501,7 @@ cpdef str recoverfragments(deriv, D, Grammar grammar, list backtransform):
 	label in the coarse grammar, i.e., it assumes that neverblockre is only
 	used to avoid blocking nonterminals from the double-dop binarization
 	(containing the string '}<'). Note that this means getmapping() has to have
-	been called on `grammar', even when not doing coarse-to-fine parsing. """
+	been called on `grammar`, even when not doing coarse-to-fine parsing. """
 	if isinstance(deriv, RankedEdge):
 		result = recoverfragments_lcfrs(deriv, D, grammar, backtransform)
 	elif isinstance(deriv, RankedCFGEdge):

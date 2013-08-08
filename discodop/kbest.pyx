@@ -374,8 +374,8 @@ def getderiv(ej, D, chart, list tolabel, bytes debin):
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
 	vector [2, 1], this points to the derivation headed by S and having the 2nd
 	best NP and the 1st best VP as children.
-	If `debin' is specified, will perform on-the-fly debinarization of nodes
-	with labels containing `debin' an a substring. """
+	If `debin` is specified, will perform on-the-fly debinarization of nodes
+	with labels containing `debin` an a substring. """
 	result = bytearray()
 	if isinstance(ej, RankedEdge):
 		getderivationlcfrs(result, ej, D, chart, tolabel, debin)

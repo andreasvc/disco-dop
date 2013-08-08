@@ -86,10 +86,12 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		bint debug=False, bint discontinuous=False, bint complement=False):
 	""" Seeks the largest fragments in treebank(s) with a linear time tree
 	kernel
+
 	- scenario 1: recurring fragments in single treebank, use:
 		fastextractfragments(trees1, sents1, offset, end, labels)
 	- scenario 2: common fragments in two treebanks:
 		fastextractfragments(trees1, sents1, offset, end, trees2, sents2)
+
 	offset and end can be used to divide the work over multiple processes.
 	they are indices of trees1 to work on (default is all).
 	when debug is enabled a contingency table is shown for each pair of trees.
@@ -399,10 +401,12 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False):
 	""" Seeks the largest fragments in treebank(s)
+
 	- scenario 1: recurring fragments in single treebank, use:
 		extractfragments(trees1, sents1, offset, end)
 	- scenario 2: common fragments in two treebanks:
 		extractfragments(trees1, sents1, offset, end, trees2, sents2)
+
 	offset and end can be used to divide the work over multiple processes.
 	offset is the starting point in trees1, end is the number of trees from
 	trees1 to work on. When debug is enabled a contingency table is shown for
@@ -600,7 +604,7 @@ cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
 cdef inline yieldranges(Node *tree, int i):
 	""" For discontinuous trees, return a string with the intervals of indices
 	corresponding to the components in the yield of a node.
-	The intervals are of the form start:end, where `end' is part of the
+	The intervals are of the form start:end, where `end` is part of the
 	interval. e.g., "0:1 2:4" corresponds to (0, 1) and (2, 3, 4). """
 	cdef list yields = [], leaves = sorted(getyield(tree, i))
 	cdef int a, start = -2, prev = -2

@@ -31,12 +31,12 @@ def parse(sent, Grammar grammar, tags=None, start=1, chart=None):
 
 
 def parse_dense(sent, Grammar grammar, start=1, tags=None):
-	""" A CKY parser modeled after Bodenstab's `fast grammar loop'
-		and the Stanford parser. Tries to apply each grammar rule for all
-		spans. Tracks the viterbi scores in a separate array. For grammars with
-		up to 10,000 nonterminals.
-		Edges are kept in a dictionary for each labelled span:
-		chart[left][right][label] = {edge1: edge1, edge2: edge2} """
+	""" A CKY parser modeled after Bodenstab's 'fast grammar loop'
+	and the Stanford parser. Tries to apply each grammar rule for all
+	spans. Tracks the viterbi scores in a separate array. For grammars with
+	up to 10,000 nonterminals.
+	Edges are kept in a dictionary for each labelled span:
+	chart[left][right][label] = {edge1: edge1, edge2: edge2} """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid
@@ -168,7 +168,7 @@ def parse_dense(sent, Grammar grammar, start=1, tags=None):
 
 def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 		list chart=None, int beamwidth=0):
-	""" A CKY parser modeled after Bodenstab's `fast grammar loop,' filtered by
+	""" A CKY parser modeled after Bodenstab's 'fast grammar loop,' filtered by
 	the list of allowed items (if a pre-populated chart is given).
 	This version keeps the Viterbi probabilities and the rest of chart in
 	hash tables, useful for large grammars. The edge with the viterbi score
@@ -310,10 +310,11 @@ def parse_symbolic(sent, Grammar grammar, start=1, tags=None):
 	""" Parse sentence, a list of tokens, and produce a chart, either
 	exhaustive or up until the first complete parse. Non-probabilistic version;
 	returns a CFG chart with each 'probability' 1. Other parameters:
-		- start: integer corresponding to the start symbol that analyses should
-			have, e.g., grammar.toid['ROOT']
-		- tags: optionally, a list with the corresponding POS tags
-			for the words in sent. """
+
+	- start: integer corresponding to the start symbol that analyses should
+		have, e.g., grammar.toid['ROOT']
+	- tags: optionally, a list with the corresponding POS tags
+		for the words in sent. """
 	cdef:
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid

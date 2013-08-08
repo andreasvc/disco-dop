@@ -32,27 +32,29 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 
 
 cdef class Grammar:
-	""" A grammar object which stores rules compactly,
-	indexed in various ways. """
+	"""
+	A grammar object which stores rules compactly, indexed in various ways.
+	Parameters:
+
+	- rule_tuples_or_bytes: either a sequence of tuples containing both
+		phrasal & lexical rules, or a bytes string containing the phrasal
+		rules in text format; in the latter case lexicon should be given.
+		The text format allows for more efficient loading and is used
+		internally.
+	- start: a string identifying the unique start symbol of this grammar,
+		which will be used by default when parsing with this grammar
+	- bitpar: whether to expect and use the bitpar grammar format
+
+	By default the grammar is in logprob mode;
+	invoke grammar.switch('default', logprob=False) to switch.
+	If the grammar only contains integral weights (frequencies), they will
+	be normalized into relative frequencies; if the grammar contains any
+	non-integral weights, weights will be left unchanged. """
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
 	def __init__(self, rule_tuples_or_bytes, lexicon=None, start=b'ROOT',
 			bitpar=False):
-		""" Parameters:
-		- rule_tuples_or_bytes: either a sequence of tuples containing both
-			phrasal & lexical rules, or a bytes string containing the phrasal
-			rules in text format; in the latter case lexicon should be given.
-			The text format allows for more efficient loading and is used
-			internally.
-		- start: a string identifying the unique start symbol of this grammar,
-			which will be used by default when parsing with this grammar
-		- bitpar: whether to expect and use the bitpar grammar format
-		By default the grammar is in logprob mode;
-		invoke grammar.switch('default', logprob=False) to switch.
-		If the grammar only contains integral weights (frequencies), they will
-		be normalized into relative frequencies; if the grammar contains any
-		non-integral weights, weights will be left unchanged. """
 		cdef LexicalRule lexrule
 		cdef double [:] tmp
 		cdef int n
@@ -298,7 +300,7 @@ cdef class Grammar:
 		""" Auxiliary function to create Grammar objects. Copies certain
 		grammar rules and sorts them on the given index.
 		Resulting array is ordered by lhs, rhs1, or rhs2 depending on the value
-		of `idx' (0, 1, or 2); filterlen can be 0, 2, or 3 to get all, only
+		of `idx` (0, 1, or 2); filterlen can be 0, 2, or 3 to get all, only
 		unary, or only binary rules, respectively.
 		A separate array has a pointer for each non-terminal into this array;
 		e.g.: dest[NP][0] == the first rule with an NP in the idx position. """
@@ -403,7 +405,7 @@ cdef class Grammar:
 		cdef Rule *rule
 		cdef LexicalRule lexrule
 		cdef UInt n
-		cdef dict sums = {n: [] for n in range(self.nonterminals)}
+		cdef dict sums = {n: [] for n in range(1, self.nonterminals)}
 		for n in range(self.numrules):
 			rule = &(self.bylhs[0][n])
 			sums[rule.lhs].append(rule.prob)
@@ -427,6 +429,7 @@ cdef class Grammar:
 		that should never be pruned.
 		The regexes should be compiled objects, i.e., re.compile(regex),
 		or None to leave labels unchanged.
+
         - use "|<" to ignore nodes introduced by binarization;
             useful if coarse and fine stages employ different kinds of
             markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
@@ -913,15 +916,17 @@ cdef class LexicalRule:
 
 
 cdef class Ctrees:
-	""" Auxiliary class to be able to pass around collections of NodeArrays
-	in Python. """
+	"""
+	Auxiliary class to be able to pass around collections of NodeArrays
+	in Python.
+
+	When trees is given, prods should be given as well.
+	When trees is not given, the alloc() method should be called and
+	trees added one by one using the add() or addnodes() methods. """
 	def __cinit__(self):
 		self.trees = self.nodes = NULL
 
 	def __init__(self, list trees=None, dict prods=None):
-		""" When trees is given, prods should be given as well.
-		When trees is not given, the alloc() method should be called and
-		trees added one by one using the add() or addnodes() methods. """
 		self.len = self.max = 0
 		self.numnodes = self.maxnodes = self.nodesleft = 0
 		if trees is not None:

@@ -33,12 +33,13 @@ cdef inline bint edgecmpfun(Entry a, Entry b):
 
 
 cdef class Agenda:
-	""" Priority Queue based on binary heap which implements decrease-key and
-	remove by marking entries as invalid. Provides dictionary-like interface.
 	"""
+	Priority Queue based on binary heap which implements decrease-key and
+	remove by marking entries as invalid. Provides dictionary-like interface.
+
+	Can be initialized with an iterable; order of equivalent values remains and
+	the best priorities are retained on duplicate keys. """
 	def __init__(self, iterable=None):
-		""" Can be initialized with an iterable; order of equivalent values
-		remains and the best priorities are retained on duplicate keys. """
 		cdef Entry entry, oldentry
 		self.counter = 1
 		self.length = 0
@@ -225,14 +226,15 @@ cdef class Agenda:
 		return zip(self.keys(), self.values())
 
 cdef class EdgeAgenda:
-	""" Priority Queue based on binary heap which implements decrease-key and
+	"""
+	Priority Queue based on binary heap which implements decrease-key and
 	remove by marking entries as invalid. Provides dictionary-like interface.
 
-	This version is specialized to be used as agenda with edges.
-	"""
+	Can be initialized with an iterable; order of equivalent values
+	remains and the best priorities are retained on duplicate keys.
+
+	This version is specialized to be used as agenda with edges. """
 	def __init__(self, iterable=None):
-		""" Can be initialized with an iterable; order of equivalent values
-		remains and the best priorities are retained on duplicate keys. """
 		cdef Entry entry, oldentry
 		self.counter = 1
 		self.length = 0
@@ -282,7 +284,7 @@ cdef class EdgeAgenda:
 		oldentry.count = INVALID
 		return <LCFRSEdge>oldentry.value
 
-	# the following are identical except for `edgecmpfun'
+	# the following are identical except for `edgecmpfun`
 	cdef Entry popentry(self):
 		""" like popitem, but avoids tuple construction by returning an Entry
 		object """

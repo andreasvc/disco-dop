@@ -32,9 +32,11 @@ cdef FatChartItem FATCOMPONENT = new_FatChartItem(0)
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		list whitelist=None, bint splitprune=False, bint markorigin=False,
 		estimates=None, int beamwidth=0):
-	""" parse sentence, a list of tokens, optionally with gold tags, and
+	"""
+	Parse sentence, a list of tokens, optionally with gold tags, and
 	produce a chart, either exhaustive or up until the viterbi parse.
 	Other parameters:
+
 	- start: integer corresponding to the start symbol that analyses should
 		have, e.g., grammar.toid[b'ROOT']
 	- exhaustive: don't stop at viterbi parser, return a full chart
@@ -55,7 +57,8 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		experimental.
 	- beamwidth: specify the maximum number of items that will be explored
 		for each particular span, on a first-come-first-served basis.
-		setting to 0 disables this feature. experimental. """
+		setting to 0 disables this feature. experimental.
+	"""
 	cdef:
 		dict beam = <dict>defaultdict(int)  # histogram of spans
 		dict chart = {}  # the full chart
@@ -263,7 +266,7 @@ cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
 	cdef bint inchart
 	cdef list componentlist
 	cdef dict componentdict
-	# put item in `newitem'; if item ends up in chart, newitem will be replaced
+	# put item in `newitem`; if item ends up in chart, newitem will be replaced
 	# by a fresh object, otherwise, it can be re-used.
 	inagenda = agenda.contains(newitem)
 	inchart = PyDict_Contains(chart, newitem) == 1
@@ -384,7 +387,9 @@ cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False, estimates=None):
-	""" Parse a sentence longer than the machine word size. """
+	"""
+	Same as parse(), but accepts sentences longer than the machine word size.
+	"""
 	cdef:
 		dict chart = {}  # the full chart
 		list viterbi = [{} for _ in grammar.toid]  # the viterbi probabilities
@@ -704,22 +709,8 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 def parse_symbolic(sent, Grammar grammar, tags=None, start=1,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False):
-	""" parse sentence, a list of tokens, optionally with gold tags, and
-	produce a chart, either exhaustive or up until the first parse.
-	Non-probabilistic version.
-	Other parameters:
-	- start: integer corresponding to the start symbol that analyses should
-		have, e.g., grammar.toid['ROOT']
-	- exhaustive: don't stop at viterbi parser, return a full chart
-	- whitelist: a whitelist of allowed ChartItems. Anything else is not
-		added to the agenda.
-	- splitprune: coarse stage used a split-PCFG where discontinuous node
-		appear as multiple CFG nodes. Every discontinuous node will result
-		in multiple lookups into whitelist to see whether it should be
-		allowed on the agenda.
-	- markorigin: in combination with splitprune, coarse labels include an
-		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
-		map to the discontinuous node NP_2. """
+	"""
+	Like parse(), but disregards probabilities. """
 	cdef:
 		dict chart = {}  # the full chart
 		list items = [deque() for _ in grammar.toid]  # items for each label
@@ -908,7 +899,7 @@ def sortfunc(a):
 
 
 def pprint_chart(chart, sent, tolabel):
-	""" `pretty print' a chart. """
+	""" 'Pretty print' a chart. """
 	cdef ChartItem a
 	cdef LCFRSEdge edge
 	print('chart:')

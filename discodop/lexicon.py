@@ -34,13 +34,14 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		unknownthreshold, openclassthreshold):
 	""" Compute an unknown word model that smooths lexical probabilities
 	for unknown & rare words.
-	tagged_sents: the sentences from the training set with the gold POS
+
+	- tagged_sents: the sentences from the training set with the gold POS
 			tags from the treebank.
-	unknownword: a function that returns a signature for a given word;
+	- unknownword: a function that returns a signature for a given word;
 			e.g., "eschewed" => "_UNK-L-d".
-	unknownthreshold: words with frequency lower than or equal to this are
+	- unknownthreshold: words with frequency lower than or equal to this are
 			replaced by their signature.
-	openclassthreshold: tags that rewrite to at least this much word types
+	- openclassthreshold: tags that rewrite to at least this much word types
 			are considered to be open class categories. """
 	wordsfortag = defaultdict(set)
 	tags = multiset()
@@ -139,9 +140,10 @@ def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 			openclassoffset=1, kappa=1):
 	""" Compute a smoothed lexical model. Returns a dictionary
 	giving P(word_or_sig | tag).
-	openclassoffset: for words that only appear with open class tags, add
-			unseen combinations of open class (tag, word) with this count.
-	kappa: FIXME; cf. Klein & Manning (2003). """
+
+	- openclassoffset: for words that only appear with open class tags, add
+		unseen combinations of open class (tag, word) with this count.
+	- kappa: FIXME; cf. Klein & Manning (2003). """
 	for tag in openclasstags:
 		for word in openclasswords - wordsfortag[tag]:
 			wordtags[word, tag] += openclassoffset

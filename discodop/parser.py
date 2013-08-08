@@ -183,21 +183,21 @@ def doparsing(parser, infile, out, printprob, oneline):
 
 class Parser(object):
 	""" An object to parse sentences following parameters given as a sequence
-	of coarse-to-fine stages. """
+	of coarse-to-fine stages. Parameters:
+
+	- stages: a list of coarse-to-fine stages containing grammars and
+		parameters.
+	- transformations: treebank transformations to reverse on parses.
+	- tailmarker: if heads have been marked with a symbol, use this to
+		mark heads in the output.
+	- postagging: if given, an unknown word model is used, consisting of a
+		dictionary with three items:
+		- unknownwordfun: function to produces signatures for unknown words.
+		- lexicon: the set of known words in the grammar.
+		- sigs: the set of word signatures occurring in the grammar.
+	- relationalrealizational: whether to reverse the RR-transform. """
 	def __init__(self, stages, transformations=None, tailmarker=None,
 			relationalrealizational=None, postagging=None):
-		""" Parameters:
-		stages: a list of coarse-to-fine stages containing grammars and
-			parameters.
-		transformations: treebank transformations to reverse on parses.
-		tailmarker: if heads have been marked with a symbol, use this to
-			mark heads in the output.
-		postagging: if given, an unknown word model is used, consisting of a
-			dictionary with three items:
-			- unknownwordfun: function to produces signatures for unknown words.
-			- lexicon: the set of known words in the grammar.
-			- sigs: the set of word signatures occurring in the grammar.
-		relationalrealizational: whether to reverse the RR-transform. """
 		self.stages = stages
 		self.transformations = transformations
 		self.tailmarker = tailmarker
@@ -207,10 +207,12 @@ class Parser(object):
 	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
 		probabilities for each stage.
-		tags: if given, will be given to the parser instead of trying all
+
+		- tags: if given, will be given to the parser instead of trying all
 			possible tags. """
 		if self.postagging:
-			sent = replaceraretestwords(sent, self.postagging['unknownwordfun'],
+			sent = replaceraretestwords(sent,
+					self.postagging['unknownwordfun'],
 					self.postagging['lexicon'], self.postagging['sigs'])
 		sent = list(sent)
 		if tags is not None:

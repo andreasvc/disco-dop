@@ -12,9 +12,8 @@ def tree_adjoining_grammar():
 	Taken from: Chen & Vijay-Shanker (2000), Automated extraction of TAGs
 	from the Penn treebank.
 	Limitations:
-		- no epsilon productions
-	Non-terminals have identifiers to encode elementary trees of depth > 2
-	"""
+	- no epsilon productions
+	Non-terminals have identifiers to encode elementary trees of depth > 2. """
 	print("Tree-Adjoining Grammars in LCFRS")
 	print("""initial trees:
 (S (NP ) (VP (V fell)))
@@ -108,10 +107,9 @@ def dependencygrammar():
 	Taken from: Gildea (2011), Optimal Parsing Strategies for Linear
 	Context-Free Rewriting Systems.
 	Limitations:
-		- rules have to be binarized
-		- lexical rules have to be unary
-	These have been dealt with by introducing nodes w/underscores.
-	"""
+	- rules have to be binarized
+	- lexical rules have to be unary
+	These have been dealt with by introducing nodes w/underscores. """
 	print("A dependency grammar in an LCFRS:")
 	grammar = Grammar([
 			((('NMOD', '_A'), ((0, ), )), 1),

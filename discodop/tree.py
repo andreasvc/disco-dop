@@ -31,13 +31,22 @@ class Tree(list):
 	with phrase tags, such as "NP" and "VP".
 	Several Tree methods use tree positions to specify children or descendants
 	of a tree. Tree positions are defined as follows:
+
 	- The tree position i specifies a Tree's ith child.
 	- The tree position () specifies the Tree itself.
 	- If p is the tree position of descendant d, then
 		p + (i,) specifies the ith child of d.
+
 	i.e., every tree position is either a single index i,
 	specifying self[i]; or a sequence (i1, i2, ..., iN),
-	specifying self[i1][i2]...[iN]. """
+	specifying self[i1][i2]...[iN].
+
+	The constructor can be called in two ways:
+
+	- Tree(label, children) constructs a new tree with the specified label
+		and list of children.
+	- Tree(s) constructs a new tree by parsing the string s. Equivalent to
+		calling the class method Tree.parse(s). """
 	def __new__(cls, label_or_str=None, children=None):
 		if label_or_str is None:
 			return list.__new__(cls)  # used by copy.deepcopy
@@ -54,11 +63,6 @@ class Tree(list):
 			return list.__new__(cls, label_or_str, children)
 
 	def __init__(self, label_or_str, children=None):
-		""" Construct a new tree. This constructor can be called in two ways:
-		- Tree(label, children) constructs a new tree with the specified label
-			and list of children.
-		- Tree(s) constructs a new tree by parsing the string s. Equivalent to
-			calling the class method Tree.parse(s). """
 		# Because __new__ may delegate to Tree.parse(), the __init__
 		# method may end up getting called more than once (once when
 		# constructing the return value for Tree.parse; and again when
@@ -297,11 +301,13 @@ class Tree(list):
 			remove_empty_top_bracketing=False):
 		""" Parse a bracketed tree string and return the resulting tree.
 		Trees are represented as nested brackettings, such as::
+
 			(S (NP (NNP John)) (VP (V runs)))
-		s: The string to parse
-		brackets: The two bracket characters used to mark the
+
+		- s: The string to parse
+		- brackets: The two bracket characters used to mark the
 			beginning and end of trees and subtrees.
-		parse_label, parse_leaf: If specified, these functions are applied to
+		- parse_label, parse_leaf: If specified, these functions are applied to
 			the substrings of s corresponding to labels and leaves
 			(respectively) to obtain the values for those labels and leaves.
 			They should have the following signature: parse_label(str) -> value
@@ -311,15 +317,15 @@ class Tree(list):
 			label strings and leaf strings are delimited by whitespace and
 			brackets; to override this default, use the label_pattern and
 			leaf_pattern arguments.
-		label_pattern, leaf_pattern: Regular expression patterns used to find
+		- label_pattern, leaf_pattern: Regular expression patterns used to find
 			label and leaf substrings in s. By default, both label and leaf
 			patterns are defined to match any sequence of non-whitespace
 			non-bracket characters.
-		remove_empty_top_bracketing: If the resulting tree has an empty node
+		- remove_empty_top_bracketing: If the resulting tree has an empty node
 			label, and is length one, then return its single child instead.
 			This is useful for treebank trees, which sometimes contain an extra
 			level of bracketing.
-		returns: A tree corresponding to the string representation s. If this
+		- returns: A tree corresponding to the string representation s. If this
 			class method is called using a subclass of Tree, then it will
 			return a tree of that type. """
 		if not isinstance(brackets, basestring) or len(brackets) != 2:
@@ -409,13 +415,16 @@ class Tree(list):
 
 	def pprint(self, margin=70, indent=0, labelsep='', brackets='()',
 			quotes=False):
-		""" returns: A pretty-printed string representation of this tree.
-		margin: The right margin at which to do line-wrapping.
-		indent: The indentation level at which printing begins. This number is
-			used to decide how far to indent subsequent lines.
-		labelsep: A string that is used to separate the label from the
-			children; e.g., the value ':' gives trees like:
-			(S: (NP: I) (VP: (V: saw) (NP: it))). """
+		"""
+		- returns: A pretty-printed string representation of this tree.
+		- margin: The right margin at which to do line-wrapping.
+		- indent: The indentation level at which printing begins. This number
+				is used to decide how far to indent subsequent lines.
+		- labelsep: A string that is used to separate the label from the
+			children; e.g., the value ':' gives trees like::
+
+				(S: (NP: I) (VP: (V: saw) (NP: it))).
+		"""
 		# Try writing it on one line.
 		s = self._pprint_flat(labelsep, brackets, quotes)
 		if len(s) + indent < margin:
@@ -549,6 +558,7 @@ class AbstractParentedTree(Tree):
 	""" An abstract base class for Trees that automatically maintain pointers
 	to their parents. These parent pointers are updated whenever any change is
 	made to a tree's structure. Two subclasses are currently defined:
+
 	- ParentedTree is used for tree structures where each subtree has at most
 		one parent. This class should be used in cases where there is
 		no"sharing" of subtrees.
@@ -556,8 +566,8 @@ class AbstractParentedTree(Tree):
 		zero or more parents. This class should be used in cases where subtrees
 		may be shared.
 
-	Subclassing
-	===========
+	Subclassing:
+
 	The AbstractParentedTree class redefines all operations that modify a
 	tree's structure to call two methods, which are used by subclasses to
 	update parent information:
@@ -910,8 +920,9 @@ class MultiParentedTree(AbstractParentedTree):
 		""" Return a list of the indices where this tree occurs as a child of
 		parent. If this child does not occur as a child of parent, then the
 		empty list is returned. The following is always true::
-		for parent_index in ptree.parent_indices(parent):
-			parent[parent_index] is ptree """
+
+			for parent_index in ptree.parent_indices(parent):
+				parent[parent_index] is ptree """
 		if parent not in self._parents:
 			return []
 		return [index for (index, child) in enumerate(parent)
@@ -920,8 +931,9 @@ class MultiParentedTree(AbstractParentedTree):
 	def treepositions(self, root):
 		""" Return a list of all tree positions that can be used to reach this
 		multi-parented tree starting from root; i.e., the following holds::
-		for treepos in ptree.treepositions(root):
-			root[treepos] is ptree """
+
+			for treepos in ptree.treepositions(root):
+				root[treepos] is ptree """
 		if self is root:
 			return [()]
 		return [treepos + (index, ) for parent in self._parents
@@ -967,8 +979,9 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 	into account None indices and negative indices. The following holds
 	for the returned start and stop values: 0 <= start <= stop <= len(seq).
 	Raises ValueError if slice_obj.step is not None.
+
 	allow_step: If true, then the slice object may have a non-None step.
-		If it does, then return a tuple (start, stop, step). """
+	If it does, then return a tuple (start, stop, step). """
 	start, stop = (slice_obj.start, slice_obj.stop)
 	if allow_step:
 		slice_obj.step = 1 if slice_obj.step is None else slice_obj.step

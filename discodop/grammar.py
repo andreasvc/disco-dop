@@ -53,7 +53,7 @@ Options (* marks default option):
   --gzip                compress output with gzip, view with zless &c.
   --packed              use packed graph encoding for DOP reduction
 
-When a PCFG is requested, or the input format is `bracket' (Penn format), the
+When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
@@ -155,7 +155,7 @@ def dopreduction(trees, sents, packedgraph=False):
 	Returns a set of rules with the relative frequency estimate as probilities,
 	and alternate weights following the equal weights estimate.
 	Parameters:
-		packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
+	packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
 	"""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@12),
 	# 	counts of NP@... should sum to count of NP
@@ -326,8 +326,8 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	Counts frequencies of nodes and calculate the number of
 	subtrees headed by each node. updates "subtreefd" and "nonterminalfd"
 	as a side effect. Expects a normal tree and a tree with IDs.
-		@param subtreefd: the multiset to store the counts of subtrees
-		@param nonterminalfd: the multiset to store the counts of non-terminals
+	subtreefd: the multiset to store the counts of subtrees
+	nonterminalfd: the multiset to store the counts of non-terminals
 
 	>>> fd = multiset()
 	>>> tree = Tree("(S (NP mary) (VP walks))")
@@ -711,13 +711,14 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 
 def write_lcfrs_grammar(grammar, bitpar=False):
 	""" Writes a grammar in a simple text file format. Rules are written in
-	the order as they appear in the sequence 'grammar', except that the lexicon
+	the order as they appear in the sequence `grammar`, except that the lexicon
 	file lists words in sorted order (with tags for each word in the order of
-	'grammar'). Parameters:
-	- grammar: sequence of rule tuples, as produced by treebankgrammar(),
-		dopreduction(), or doubledop().
-	Returns:
-	- rules, lexicon: bytes object & a unicode string, respectively
+	`grammar`).
+
+	`grammar` is a sequence of rule tuples, as produced by treebankgrammar(),
+	dopreduction(), or doubledop().
+
+	Returns: rules, lexicon; bytes object & a unicode string, respectively
 	For a description of the file format, see grammar.FORMAT.
 	When bitpar is True, use bitpar format: for rules, put weight first (as
 	decimal fraction or frequency) and leave out the yield function. """

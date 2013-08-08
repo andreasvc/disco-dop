@@ -37,7 +37,7 @@ Options:
                 where "tree' has indices as leaves, referring to elements of
                 "sentence", a space separated list of words.
   --indices     report sets of indices instead of frequencies.
-  --cover       include `cover' fragments corresponding to single productions.
+  --cover       include 'cover' fragments corresponding to single productions.
   --complete    find complete matches of fragments from treebank1 (needle) in
                 treebank2 (haystack).
   --batch=dir   enable batch mode; any number of treebanks > 1 can be given;

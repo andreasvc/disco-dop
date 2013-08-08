@@ -742,11 +742,12 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 
 def segmentbrackets(brackets):
 	""" Co-routine that accepts one line at a time;
-	yields tuples (result, status) where
-	result is None or one or more S-expressions as a list of
+	yields tuples (result, status) where ...
+
+	- result is None or one or more S-expressions as a list of
 		tuples (tree, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
-	status is 1 if the line was consumed, else 0. """
+	- status is 1 if the line was consumed, else 0. """
 	lb, rb = brackets
 	strtermre = re.compile('[^0-9\\%s]\\%s' % (rb, rb))
 	parens = 0  # number of open parens
@@ -790,10 +791,11 @@ def segmentbrackets(brackets):
 
 def segmentexport(morphology, functions):
 	""" Co-routine that accepts one line at a time.
-	Yields: tuples (result, status) where
-	result is None or a segment delimited by '#BOS ' and '#EOS '
+	Yields: tuples (result, status) where ...
+
+	- result is None or a segment delimited by '#BOS ' and '#EOS '
 		as a list of lines;
-	status is 1 if the line was consumed, else 0. """
+	- status is 1 if the line was consumed, else 0. """
 	cur = []
 	inblock = False
 	line = (yield None, 1)

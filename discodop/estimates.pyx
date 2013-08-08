@@ -59,7 +59,7 @@ cdef inline Item new_Item(int state, int length, int lr, int gaps):
 cdef inline double getoutside(double [:, :, :, :] outside,
 		UInt maxlen, UInt slen, UInt label, ULLong vec):
 	""" Query for outside estimate. NB: if this would be used, it should be in
-	a .pxd with `inline.' However, passing the numpy array is slow. """
+	a .pxd with `inline`. However, passing the numpy array may be slow. """
 	cdef UInt length = bitcount(vec)
 	cdef UInt left = nextset(vec, 0)
 	cdef UInt gaps = bitlength(vec) - length - left

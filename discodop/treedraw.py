@@ -2,8 +2,8 @@
 
 Interesting reference (not used for this code):
 T. Eschbach et al., Orth. Hypergraph Drawing, Journal of
-	Graph Algorithms and Applications, 10(2) 141--157 (2006)149.
-	http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
+Graph Algorithms and Applications, 10(2) 141--157 (2006)149.
+http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
 """
 
 from __future__ import division, print_function, unicode_literals
@@ -52,28 +52,30 @@ ANSICOLOR = {
 
 
 class DrawTree(object):
-	""" Visualize a discontinuous tree in various formats. """
-	def __init__(self, tree, sent=None, highlight=(), abbr=False):
-		""" Create an object for a tree from which different visualizations
-		can be created.
-		- tree may be a Tree object or a string.
-		- sent is a list of words (strings). If sent is not given, and the tree
-			contains non-integers as leaves, a continuous phrase-structure tree
-			is assumed. If sent is not given and the tree contains only indices
-			as leaves, the indices are displayed as placeholder terminals.
-		- Optionally, highlight is a sequence of Tree objects which should be
-			highlighted. Has the effect of only applying colors to nodes in
-			this sequence (nodes should be given as Tree objects, terminals as
-			indices).
-		- abbr: when True, abbreviate labels longer than 5 characters.
+	""" Visualize a discontinuous tree in various formats.
 
-		>>> print(DrawTree('(S (NP Mary) (VP walks))'))
-		      S
-		  ____|____
-		 NP        VP
-		 |         |
-		Mary     walks
-		"""
+	``DrawTree(tree, sent=None, highlight=(), abbr=False)``
+	creates an object from which different visualizations can be created.
+
+	- tree may be a Tree object or a string.
+	- sent is a list of words (strings). If sent is not given, and the tree
+		contains non-integers as leaves, a continuous phrase-structure tree
+		is assumed. If sent is not given and the tree contains only indices
+		as leaves, the indices are displayed as placeholder terminals.
+	- Optionally, highlight is a sequence of Tree objects which should be
+		highlighted. Has the effect of only applying colors to nodes in
+		this sequence (nodes should be given as Tree objects, terminals as
+		indices).
+	- abbr: when True, abbreviate labels longer than 5 characters.
+
+	>>> print(DrawTree('(S (NP Mary) (VP walks))'))
+		  S
+	  ____|____
+	 NP        VP
+	 |         |
+	Mary     walks
+	"""
+	def __init__(self, tree, sent=None, highlight=(), abbr=False):
 		self.tree = tree
 		self.sent = sent
 		if isinstance(tree, basestring):
@@ -116,18 +118,21 @@ class DrawTree(object):
 
 	def nodecoords(self, tree, sent, highlight):
 		""" Resolve placement of nodes for drawing discontinuous trees
-		programmatically.
-		Objective:
+		programmatically. Objective:
+
 		- Produce coordinates for a non-overlapping placement of nodes and
 			horizontal lines.
 		- Order edges so that crossing edges cross a minimal number of previous
 			horizontal lines (never vertical lines).
+
 		Approach:
+
 		- bottom up level order traversal (start at terminals)
 		- at each level, identify nodes which cannot be on the same row
 		- identify nodes which cannot be in the same column
 		- place nodes into a grid at (row, column)
 		- order child-parent edges with crossing edges last
+
 		Coordinates are (row, column); the origin (0, 0) is at the top left;
 		the root node is on row 0. Coordinates do not consider the size of a
 		node (which depends on font, &c), so the width of a column of the grid
@@ -135,7 +140,9 @@ class DrawTree(object):
 		width in that column. Alternatively, the integer coordinates could be
 		converted to coordinates in which the distances between adjacent nodes
 		are non-uniform.
+
 		Produces tuple (nodes, coords, edges) where:
+
 		- nodes[id]: Tree object for the node with this integer id
 		- coords[id]: (n, m) coordinate where to draw node with id in the grid
 		- edges[id]: parent id of node with this id (ordered dictionary)
@@ -375,12 +382,13 @@ class DrawTree(object):
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red'):
 		""" Return ASCII art for a discontinuous tree.
-		unicodelines: whether to use Unicode line drawing characters
+
+		- unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
-		html: whether to wrap output in html code (default plain text).
-		ansi: whether to produce colors with ANSI escape sequences
+		- html: whether to wrap output in html code (default plain text).
+		- ansi: whether to produce colors with ANSI escape sequences
 			(only effective when html==False).
-		leafcolor, nodecolor: specify colors of leaves and phrasal nodes. """
+		- leafcolor, nodecolor: specify colors of leaves and phrasal nodes. """
 
 		if unicodelines:
 			horzline = u'\u2500'
