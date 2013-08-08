@@ -26,7 +26,9 @@ General statistical parsing:
 - grammar formalisms: PCFG, PLCFRS
 - extract treebank grammar: trees decomposed into productions, relative
   frequencies as probabilities
-- coarse-to-fine pruning: k-best coarse-to-fine, posterior pruning (PCFG only)
+- exact *k*-best list of derivations
+- coarse-to-fine pruning: posterior pruning (PCFG only),
+  *k*-best coarse-to-fine
 
 DOP specific (parsing with tree fragments):
 
@@ -36,30 +38,6 @@ DOP specific (parsing with tree fragments):
   most probable derivation (MPD), most probable shortest derivation (MPSD),
   most likely tree with shortest derivation (SL-DOP).
 - marginalization: n-best derivations, sampled derivations.
-
-Background
-==========
-This work is partly described in the following publications:
-
-- van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
-  systems. Proc. of EACL.
-  http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
-- van Cranenburgh, Scha, Sangati (2011). Discontinuous Data-Oriented Parsing:
-  A mildly context-sensitive all-fragments grammar. Proc. of SPMRL.
-  http://www.aclweb.org/anthology/W/W11/W11-3805.pdf
-
-Some references to implemented algorithms:
-
-- parser, estimates: Maier & Kallmeyer (2010), Data-driven parsing with
-  probabilistic linear context-free rewriting systems.
-- data-oriented parsing (DOP):
-
-  * Goodman (2002), Efficient parsing of DOP with PCFG-reductions
-  * Sangati & Zuidema (2011), Accurate parsing with compact tree-substitution grammars: Double-DOP
-
-- *k*-best list: Huang & Chiang (2005), Better *k*-best parsing
-- optimal binarization: Gildea (2010), Optimal parsing strategies for linear
-  context-free rewriting systems
 
 Installation
 ============
@@ -164,6 +142,10 @@ be installed.
 
 See https://github.com/andreasvc/disco-dop/wiki for screenshots.
 
+Documentation
+=============
+The API documentation can be perused at http://staff.science.uva.nl/~acranenb/discodop/
+
 Acknowledgments
 ===============
 
@@ -174,4 +156,15 @@ https://github.com/timtadh/zhang-shasha
 Elements of the PLCFRS parser and punctuation re-attachment are based on code from
 `rparse <http://wolfgang-maier.de/rparse>`_. Various other bits from the
 Stanford parser, Berkeley parser, Bubs parser, &c.
+
+References
+==========
+This work is partly described in the following publications:
+
+- van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
+  systems. Proc. of EACL.
+  http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
+- van Cranenburgh, Scha, Sangati (2011). Discontinuous Data-Oriented Parsing:
+  A mildly context-sensitive all-fragments grammar. Proc. of SPMRL.
+  http://www.aclweb.org/anthology/W/W11/W11-3805.pdf
 
