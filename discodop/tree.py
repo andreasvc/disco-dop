@@ -54,13 +54,12 @@ class Tree(list):
 			if not isinstance(label_or_str, basestring):
 				raise TypeError("%s: Expected a label and child list "
 						"or a single string" % cls.__name__)
-				return cls.parse(label_or_str)
-		else:
-			if (isinstance(children, basestring) or
-					not hasattr(children, '__iter__')):
-				raise TypeError("%s() argument 2 should be a list, not a "
-						"string" % cls.__name__)
-				return list.__new__(cls, label_or_str, children)
+			return cls.parse(label_or_str)
+		if (isinstance(children, basestring) or
+				not hasattr(children, '__iter__')):
+			raise TypeError("%s() argument 2 should be a list, not a "
+					"string" % cls.__name__)
+		return list.__new__(cls, label_or_str, children)
 
 	def __init__(self, label_or_str, children=None):
 		# Because __new__ may delegate to Tree.parse(), the __init__

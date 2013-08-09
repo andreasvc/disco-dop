@@ -294,7 +294,7 @@ class Parser(object):
 				elif stage.mode == 'dop-rerank':
 					if start:
 						parsetrees = doprerank(chart, start, sent, stage.k,
-								stages[n - 1].grammar, stage.grammar)
+								self.stages[n - 1].grammar, stage.grammar)
 				else:
 					raise ValueError
 				msg += '%s\n\t' % msg1

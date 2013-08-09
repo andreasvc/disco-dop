@@ -16,18 +16,18 @@ def pyintbitcount(a):
 cpdef bint testbitshort(unsigned short arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
 	>>> testbitshort(0b0011101, 0)
-	1
+	True
 	>>> testbitshort(0b0011101, 1)
-	0 """
+	False """
 	return (arg >> pos) & 1
 
 
 cpdef bint testbitc(UChar arg, UInt pos):
 	""" Mask a particular bit, return nonzero if set
 	>>> testbitc(0b0011101, 0)
-	1
+	True
 	>>> testbitc(0b0011101, 1)
-	0 """
+	False """
 	return (arg >> pos) & 1
 
 
