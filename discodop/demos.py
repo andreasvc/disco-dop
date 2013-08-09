@@ -138,7 +138,7 @@ def dependencygrammar():
 def bitext():
 	""" Bitext parsing with a synchronous CFG.
 	Translation would require a special decoder (instead of normal kbest
-	derivations where the whole sentence is given)."""
+	derivations where the whole sentence is given). """
 	print("bitext parsing with a synchronous CFG")
 	trees = [Tree.parse(a, parse_leaf=int) for a in """\
 	(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) (manque 5))\

@@ -304,7 +304,7 @@ class DrawTree(object):
 		return nodes, coords, edges
 
 	def svg(self, nodecolor='blue', leafcolor='red'):
-		""" Return SVG representation of a discontinuous tree. """
+		""" :returns: SVG representation of a discontinuous tree. """
 		fontsize = 12
 		hscale = 40
 		vscale = 25
@@ -381,7 +381,7 @@ class DrawTree(object):
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red'):
-		""" Return ASCII art for a discontinuous tree.
+		""" :returns: ASCII art for a discontinuous tree.
 
 		:param unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
@@ -585,15 +585,14 @@ def latexlabel(label):
 	# turn binarization marker into subscripts in math mode
 	if '|' in newlabel:
 		cat, siblings = newlabel.split('|', 1)
-		siblings = siblings.replace('<', '').replace('>', '')
+		siblings = siblings.strip('<>')
 		if '^' in siblings:
 			siblings, parents = siblings.split('^')
-			siblings = siblings[1:-1].replace('-', ',')
 			newlabel = '$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $' % (
-					cat, siblings, parents)
+					cat, siblings[1:-1], parents)
 		else:
 			newlabel = '$ \\textsf{%s}_\\textsf{%s} $' % (
-					cat, siblings.replace('-', ','))
+					cat, siblings)
 	else:
 		newlabel = newlabel.replace('<', '$<$').replace('>', '$>$')
 	return newlabel

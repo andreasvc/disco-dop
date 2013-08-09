@@ -11,7 +11,7 @@ from libc.stdlib cimport malloc, calloc, free
 from cpython cimport PyDict_Contains, PyDict_GetItem
 from agenda cimport EdgeAgenda
 from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
-		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong, logprobadd
+		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong
 
 cdef extern from "math.h":
 	bint isinf(double x)
@@ -23,6 +23,8 @@ cdef CFGChartItem NONE = new_CFGChartItem(0, 0, 0)
 
 
 def parse(sent, Grammar grammar, tags=None, start=1, chart=None):
+	""" Parse a sentence with a PCFG. Automatically decides whether to use
+	parse_dense or parse_sparse. """
 	assert grammar.maxfanout == 1, 'Not a PCFG! fanout: %d' % grammar.maxfanout
 	assert grammar.logprob, "Expecting grammar with log probabilities."
 	if grammar.nonterminals < 20000 and chart is None:
@@ -758,117 +760,6 @@ def outsidescores(Grammar grammar, sent,
 					outside[split, right, rule.rhs2] += rule.prob * ls * os
 					assert 0.0 < outside[left, split, rule.rhs1] <= 1.0
 					assert 0.0 < outside[split, right, rule.rhs2] <= 1.0
-
-
-def dopparseprob(tree, Grammar grammar, dict rulemapping, lexchart):
-	""" Given an NLTK tree, compute the exact DOP parse probability given
-	a DOP reduction.
-
-	This follows up on a suggestion made by Goodman (2003, p. 20)
-	of calculating DOP probabilities of given parse trees, although I'm not
-	sure it has complexity O(nP) as he suggests (with n as number of nodes in
-	input, and P as max number of rules consistent with a node in the input).
-	Furthermore, the idea of sampling trees "long enough" until we have the MPP
-	is no faster than sampling without applying this procedure, because to
-	determine that some probability p is the maximal probability, we need to
-	collect the probability mass p_seen of enough parse trees such that we have
-	some parsetree with probability p > (1 - p_seen), which requires first
-	seeing almost all parse trees, unless p is exceptionally high. Hence, this
-	method is mostly useful in a reranking framework where it is known in
-	advance that a small set of trees is of interest.
-
-	expects a mapping which gives a list of consistent rules from the reduction
-	(as Rule objects) given a rule as key (as a tuple of strings); e.g. ('NP',
-	'DT', 'NN') -> [Rule(...), Rule(...), ...]
-
-	NB: this algorithm could also be used to determine the probability of
-	derivations, but then the input would have to distinguish whether nodes are
-	internal nodes of fragments, or whether they join two fragments. """
-	neginf = float('-inf')
-	cdef dict chart = {}  # chart[left, right][label]
-	cdef tuple a, b, c
-	cdef Rule *rule
-	assert grammar.maxfanout == 1
-	assert grammar.logprob, "Grammar should have log probabilities."
-	# log probabilities are not ideal here because we do lots of additions,
-	# but the probabilities are very small. a possible alternative is to scale
-	# them somehow.
-
-	# add all possible POS tags
-	chart.update(lexchart)
-	for n, word in enumerate(tree.leaves()):
-		# replace leaves with indices so as to easily find spans
-		tree[tree.leaf_treeposition(n)] = n
-
-	# do post-order traversal (bottom-up)
-	for node in list(tree.subtrees())[::-1]:
-		if not isinstance(node[0], Tree):
-			continue
-		prod = (node.node,) + tuple(a.node for a in node)
-		left = min(node.leaves())
-		right = max(node.leaves()) + 1
-		if len(node) == 1:  # unary node
-			for ruleno in rulemapping[prod]:
-				rule = grammar.bylhs[ruleno]
-				b = (rule.rhs1, left, right)
-				if b in chart:
-					a = (rule.lhs, left, right)
-					if a in chart:
-						chart[a] = logprobadd(chart[a], -rule.prob + chart[b])
-					else:
-						chart[a] = (-rule.prob + chart[b])
-		elif len(node) == 2:  # binary node
-			split = min(node[1].leaves())
-			for ruleno in rulemapping[prod]:
-				rule = grammar.bylhs[ruleno]
-				b = (rule.rhs1, left, split)
-				c = (rule.rhs2, split, right)
-				if b in chart and c in chart:
-					a = (rule.lhs, left, right)
-					if a in chart:
-						chart[a] = logprobadd(chart[a],
-							(-rule.prob + chart[b] + chart[c]))
-					else:
-						chart[a] = -rule.prob + chart[b] + chart[c]
-		else:
-			raise ValueError("expected binary tree.")
-	return chart.get((grammar.toid[tree.node], 0, len(tree.leaves())), neginf)
-
-
-def doplexprobs(tree, Grammar grammar):
-	neginf = float('-inf')
-	cdef dict chart = <dict>defaultdict(lambda: neginf)
-	cdef LexicalRule lexrule
-
-	for n, word in enumerate(tree.leaves()):
-		for lexrule in grammar.lexicalbyword[word]:
-			chart[lexrule.lhs, n, n + 1] = logprobadd(
-				chart[lexrule.lhs, n, n + 1], -lexrule.prob)
-	return chart
-
-
-def getgrammarmapping(Grammar coarse, Grammar fine):
-	""" producing a mapping of coarse rules to sets of fine rules;
-	e.g. mapping["S", "NP", "VP"] == set(Rule(...), Rule(...), ...) """
-	mapping = {}
-	cdef Rule *rule
-	for ruleno in range(coarse.numrules):
-		rule = &(coarse.bylhs[0][ruleno])
-		if rule.rhs2:
-			mapping[coarse.tolabel[rule.lhs],
-				coarse.tolabel[rule.rhs1], coarse.tolabel[rule.rhs2]] = []
-		else:
-			mapping[coarse.tolabel[rule.lhs], coarse.tolabel[rule.rhs1]] = []
-	for ruleno in range(fine.numrules):
-		rule = &(fine.bylhs[0][ruleno])
-		if rule.rhs2:
-			mapping[fine.tolabel[rule.lhs].rsplit("@", 1)[0],
-				fine.tolabel[rule.rhs1].rsplit("@", 1)[0],
-				fine.tolabel[rule.rhs2].rsplit("@", 1)[0]].append(ruleno)
-		else:
-			mapping[fine.tolabel[rule.lhs].rsplit("@", 1)[0],
-				fine.tolabel[rule.rhs1].rsplit("@", 1)[0]].append(ruleno)
-	return mapping
 
 
 def minmaxmatrices(nonterminals, lensent):

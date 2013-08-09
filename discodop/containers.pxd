@@ -42,7 +42,7 @@ cdef class Grammar:
 	cdef readonly object models
 	cdef readonly bytes origrules, start
 	cdef readonly unicode origlexicon
-	cdef readonly list tolabel, lexical, modelnames
+	cdef readonly list tolabel, lexical, modelnames, rulemapping
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
 	cdef _convertrules(Grammar self, list rulelines)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)

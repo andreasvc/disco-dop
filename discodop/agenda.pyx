@@ -3,8 +3,7 @@ remove by marking entries as invalid. Provides dictionary-like interface. Based
 on notes in the documentation for heapq, see:
 http://docs.python.org/library/heapq.html
 
-There is a version specialized to be used as agenda with edges.
-"""
+There is a version specialized to be used as agenda with edges. """
 
 from __future__ import print_function
 from operator import itemgetter
@@ -101,7 +100,8 @@ cdef class Agenda:
 		return entry.value
 
 	cdef object replace(self, key, value):
-		""" Return current value for key, and also change its value.
+		""" :returns: current value for key, and also change its value.
+
 		Equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
 		entry = <Entry>Entry.__new__(Entry)
@@ -153,7 +153,7 @@ cdef class Agenda:
 
 	# standard dict() methods
 	def pop(self, key):
-		""" Return value for agenda[key] and remove it. """
+		""" :returns: value for agenda[key] and remove it. """
 		cdef Entry entry
 		if key is None:
 			return self.popentry().value
@@ -163,7 +163,7 @@ cdef class Agenda:
 		return entry.value
 
 	def popitem(self):
-		""" Return best scoring (key, value) pair and remove from agenda. """
+		""" :returns: best scoring (key, value) pair; removed from agenda. """
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
 
@@ -214,15 +214,15 @@ cdef class Agenda:
 		return self.length != 0
 
 	def keys(self):
-		""" Return keys in agenda. """
+		""" :returns: keys in agenda. """
 		return self.mapping.keys()
 
 	def values(self):
-		""" Return values in agenda. """
+		""" :returns: values in agenda. """
 		return map(getval, self.mapping.values())
 
 	def items(self):
-		""" Return (key, value) pairs in agenda. """
+		""" :returns: (key, value) pairs in agenda. """
 		return zip(self.keys(), self.values())
 
 cdef class EdgeAgenda:
@@ -343,7 +343,7 @@ cdef class EdgeAgenda:
 		return key in self.mapping
 
 	def pop(self, key):
-		""" Return value for agenda[key] and remove it. """
+		""" :returns: value for agenda[key] and remove it. """
 		cdef Entry entry
 		if key is None:
 			return self.popentry().value
@@ -353,7 +353,7 @@ cdef class EdgeAgenda:
 		return entry.value
 
 	def popitem(self):
-		""" Return best scoring (key, value) pair and remove from agenda. """
+		""" :returns: best scoring (key, value) pair, removed from agenda. """
 		cdef Entry entry = self.popentry()
 		return entry.key, entry.value
 
@@ -403,15 +403,15 @@ cdef class EdgeAgenda:
 		return self.length != 0
 
 	def keys(self):
-		""" Return keys in agenda. """
+		""" :returns: keys in agenda. """
 		return self.mapping.keys()
 
 	def values(self):
-		""" Return values in agenda. """
+		""" :returns: values in agenda. """
 		return map(getval, self.mapping.values())
 
 	def items(self):
-		""" Return (key, value) pairs in agenda. """
+		""" :returns: (key, value) pairs in agenda. """
 		return zip(self.keys(), self.values())
 
 

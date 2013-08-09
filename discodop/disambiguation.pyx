@@ -13,12 +13,13 @@ from itertools import count
 from collections import defaultdict, OrderedDict
 from tree import Tree
 from kbest import lazykbest, getderiv
+from grammar import lcfrs_productions
 import plcfrs
 from agenda cimport Entry, new_Entry
 from treetransforms import unbinarize, canonicalize
 from containers cimport Grammar, ChartItem, SmallChartItem, FatChartItem, \
 		CFGChartItem, Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, \
-		LexicalRule, UChar, UInt, ULong, ULLong
+		LexicalRule, Rule, UChar, UInt, ULong, ULLong, logprobadd
 cimport cython
 
 from libc.string cimport memset
@@ -133,9 +134,9 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
 							if len(t) == 1:
-								r = (t.label, t[0].label)
+								r = (b'0', t.label, t[0].label)
 							elif len(t) == 2:
-								r = (t.label, t[0].label, t[1].label)
+								r = (b'01', t.label, t[0].label, t[1].label)
 							m = grammar.rulenos[r]
 							newprob += grammar.bylhs[0][m].prob
 						else:
@@ -616,9 +617,9 @@ cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 	cdef list children = []
 	cdef str frag
 	if len(deriv) == 1:
-		prod = (deriv.label, deriv[0].label)
+		prod = (b'0', deriv.label, deriv[0].label)
 	elif len(deriv) == 2:
-		prod = (deriv.label, deriv[0].label, deriv[1].label)
+		prod = (b'01', deriv.label, deriv[0].label, deriv[1].label)
 	frag = backtransform[grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) == 2:  # is there a right child?
@@ -747,9 +748,9 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 	cdef list children = [], labels = []
 	cdef str frag
 	if len(deriv) == 1:
-		prod = (deriv.label, deriv[0].label)
+		prod = (b'0', deriv.label, deriv[0].label)
 	elif len(deriv) == 2:
-		prod = (deriv.label, deriv[0].label, deriv[1].label)
+		prod = (b'01', deriv.label, deriv[0].label, deriv[1].label)
 	frag = backtransform[grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) == 2:  # is there a right child?
@@ -781,6 +782,96 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 	for child in reversed(children):
 		if isinstance(child[0], Tree):
 			extractfragments_str(child, grammar, backtransform, result)
+
+
+def doprerank(chart, start, sent, n, Grammar coarse, Grammar fine):
+	""" Given a chart from a coarse stage, re-rank its n-best derivations with
+	DOP parse probabilities of a DOP reduction (cf. ``dopparseprob()``). """
+	cdef dict results = {}
+	derivations, _, _ = lazykbest(chart, start, n, coarse.tolabel,
+			None, derivs=True)
+	for deriv in derivations:
+		deriv = Tree.parse(deriv, parse_leaf=int)
+		results[deriv] = dopparseprob(deriv, sent, fine)
+	return results
+
+
+def dopparseprob(tree, sent, Grammar grammar):
+	""" Given a Tree and a DOP reduction, compute the exact DOP parse
+	probability.
+
+	This follows up on a suggestion made by Goodman (2003, p. 143)
+	of calculating DOP probabilities of given parse trees, although I'm not
+	sure it has complexity O(nP) as he suggests (with n as number of nodes in
+	input, and P as max number of rules consistent with a node in the input).
+	Furthermore, the idea of sampling trees "long enough" until we have the MPP
+	is no faster than sampling without applying this procedure, because to
+	determine that some probability p is the maximal probability, we need to
+	collect the probability mass p_seen of enough parse trees such that we have
+	some parsetree with probability p > (1 - p_seen), which requires first
+	seeing almost all parse trees, unless p is exceptionally high. Hence, this
+	method is mostly useful in a reranking framework where it is known in
+	advance that a small set of trees is of interest.
+
+	Expects a mapping which gives a list of consistent rules from the reduction
+	as produced by ``grammar.getrulemapping()``.
+
+	NB: this algorithm could also be used to determine the probability of
+	derivations, but then the input would have to distinguish whether nodes are
+	internal nodes of fragments, or whether they join two fragments. """
+	neginf = float('-inf')
+	cdef dict chart = {}  # chart[label, left, right] = prob
+	cdef tuple a, b, c
+	cdef Rule *rule
+	cdef LexicalRule lexrule
+	assert grammar.maxfanout == 1
+	assert grammar.logprob, "Grammar should have log probabilities."
+	# Log probabilities are not ideal here because we do lots of additions,
+	# but the probabilities are very small.
+	# A possible alternative is to scale them somehow.
+
+	# add all matching POS tags
+	for (n, pos), word in zip(tree.pos(), sent):
+		for lexrule in grammar.lexicalbyword[word]:
+			if (grammar.tolabel[lexrule.lhs] == pos
+					or grammar.tolabel[lexrule.lhs].startswith(pos + '@')):
+				chart[lexrule.lhs, n, n + 1] = logprobadd(
+					chart.get((lexrule.lhs, n, n + 1), neginf), -lexrule.prob)
+
+	# do post-order traversal (bottom-up)
+	for node, (prod, yf) in list(zip(tree.subtrees(),
+			lcfrs_productions(tree, sent)))[::-1]:
+		if not isinstance(node[0], Tree):
+			continue
+		yf = ','.join(''.join(map(str, a)) for a in yf)
+		prod = grammar.rulenos[(yf, ) + prod]
+		left, right = min(node.leaves()), max(node.leaves()) + 1
+		if len(node) == 1:  # unary node
+			for ruleno in grammar.rulemapping[prod]:
+				rule = grammar.bylhs[ruleno]
+				b = (rule.rhs1, left, right)
+				if b in chart:
+					a = (rule.lhs, left, right)
+					if a in chart:
+						chart[a] = logprobadd(chart[a], -rule.prob + chart[b])
+					else:
+						chart[a] = (-rule.prob + chart[b])
+		elif len(node) == 2:  # binary node
+			split = min(node[1].leaves())
+			for ruleno in grammar.rulemapping[prod]:
+				rule = grammar.bylhs[ruleno]
+				b = (rule.rhs1, left, split)
+				c = (rule.rhs2, split, right)
+				if b in chart and c in chart:
+					a = (rule.lhs, left, right)
+					if a in chart:
+						chart[a] = logprobadd(chart[a],
+							(-rule.prob + chart[b] + chart[c]))
+					else:
+						chart[a] = -rule.prob + chart[b] + chart[c]
+		else:
+			raise ValueError("expected binary tree without empty nodes.")
+	return chart.get((grammar.toid[tree.node], 0, len(tree.leaves())), neginf)
 
 
 def main():

@@ -150,19 +150,19 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 
 	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> print(binarize(tree, factor='left', horzmarkov=2, tailmarker=''))
-	(S (S|<PIS-VMFIN> (VP (VP|<ADV-VVINF> (PDS 0) (ADV 3)) (VVINF 4)) (PIS 2)) \
-		(VMFIN 1))
+	(S (S|<PIS,VMFIN> (VP (VP|<ADV,VVINF> (PDS 0) (ADV 3)) (VVINF 4)) \
+		(PIS 2)) (VMFIN 1))
 
 	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> print(binarize(tree, horzmarkov=1, vertmarkov=3, leftmostunary=True, \
 		rightmostunary=False, tailmarker='', pospa=True))
-	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP-S> 0) (VP|<ADV>^<S> \
-		(ADV^<VP-S> 3) (VVINF^<VP-S> 4)))) (S|<PIS> (PIS^<S> 2) (VMFIN^<S> 1))))
+	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP,S> 0) (VP|<ADV>^<S> (ADV^<VP,S> \
+		3) (VVINF^<VP,S> 4)))) (S|<PIS> (PIS^<S> 2) (VMFIN^<S> 1))))
 
 	>>> tree = Tree('(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))')
 	>>> print(binarize(tree, tailmarker='', reverse=False))
-	(S (A 0) (S|<B-C-D-E-F> (B 1) (S|<C-D-E-F> (C 2) (S|<D-E-F> (D 3) \
-		(S|<E-F> (E 4) (F 5)))))) """
+	(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> (D 3) \
+		(S|<E,F> (E 4) (F 5)))))) """
 	# assume all nodes have homogeneous children, terminals have no siblings
 	# A semi-hack to have elegant looking code below.  As a result, any subtree
 	# with a branching factor greater than 999 will be incorrectly truncated.
@@ -183,7 +183,7 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 		originallabel = node.label if vertmarkov else ''
 		if vertmarkov > 1 and node is not tree and (
 				pospa or isinstance(node[0], Tree)):
-			parentstring = '%s<%s>' % (parentchar, '-'.join(parent))
+			parentstring = '%s<%s>' % (parentchar, ','.join(parent))
 			node.label += parentstring
 			parent = [originallabel] + parent[:vertmarkov - 2]
 			if not artpa:
@@ -200,7 +200,7 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 				continue
 			# insert an initial artificial nonterminal
 			if ids is None:
-				siblings = '-'.join(child.label for child in node[:horzmarkov])
+				siblings = ','.join(child.label for child in node[:horzmarkov])
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
@@ -224,7 +224,7 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 						if reverse else horzmarkov)
 				end = numchildren
 			if ids is None:
-				siblings = '-'.join(childlabels[start:end])
+				siblings = ','.join(childlabels[start:end])
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
@@ -257,7 +257,7 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 					start = headidx + numchildren - i - 1
 					end = start + horzmarkov
 				if ids is None:
-					siblings = '-'.join(childlabels[start:end])
+					siblings = ','.join(childlabels[start:end])
 				else:
 					siblings = str(next(ids))
 				newnode.label = '%s%s<%s>%s%s' % (originallabel, childchar,
@@ -457,7 +457,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		return node
 	elif 1 <= len(node) <= 2:
 		if ids is None:
-			key = '%s%s' % ('-'.join(child.label for child in node[:h]),
+			key = '%s%s' % (','.join(child.label for child in node[:h]),
 					getyf(*node) if markyf else '')
 		else:
 			key = str(next(ids))
@@ -477,13 +477,13 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		for i in rng:
 			newbitset = node[i].bitset | prev.bitset
 			if factor == 'right' and (ids is None or i > 1):
-				key = '-'.join(child.label for child in node[i:i + h])
+				key = ','.join(child.label for child in node[i:i + h])
 				if markyf:
 					key += getyf(node[i], prev)
 				if ids is not None:
 					key = str(ids[key])
 			elif factor == 'left' and (ids is None or i < len(node) - 2):
-				key = '-'.join(child.label
+				key = ','.join(child.label
 						for child in node[max(0, i - h + 1):i + 1])
 				if markyf:
 					key += getyf(prev, node[i])
@@ -541,7 +541,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 		else:
 			siblings = getbits(nonterms[a] | nonterms[b])
 		newlabel = '%s%s<%s>%s' % (tree.label, sep,
-				'-'.join(labels[x] for x in siblings), parentstr)
+				','.join(labels[x] for x in siblings), parentstr)
 		new = ImmutableTree(newlabel, [a, b])
 		new.bitset = a.bitset | b.bitset
 		return new
@@ -656,7 +656,7 @@ def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
 	""" postorder / bottom-up binarization """
 	if not isinstance(tree, Tree):
 		return tree
-	parentstr = '^<%s>' % ('-'.join(ancestors[:v - 1])) if v > 1 else ''
+	parentstr = '^<%s>' % (','.join(ancestors[:v - 1])) if v > 1 else ''
 	newtree = ImmutableTree(tree.label + parentstr,
 		[recbinarizetree(t, sep, headdriven, h, v, (tree.label,) + ancestors)
 			for t in tree])

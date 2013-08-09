@@ -117,7 +117,7 @@ cdef traversekbest(RankedEdge ej, double rootprob, dict D, dict chart,
 		dict items, set agenda):
 	""" Traverse a derivation (e, j), collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
-	currently unused; only presence or absence in this list is exploited)"""
+	currently unused; only presence or absence in this list is exploited). """
 	cdef LCFRSEdge e = ej.edge
 	cdef RankedEdge eejj
 	cdef Entry entry
@@ -144,7 +144,7 @@ cdef traversekbestcfg(RankedCFGEdge ej, double rootprob, list D, list chart,
 		items, bint fatitems, bint finecfg, agenda):
 	""" Traverse a derivation (e, j), collecting all items belonging to it, and
 	noting (Viterbi) outside costs relative to its root edge (these costs are
-	currently unused; only presence or absence in this list is exploited)"""
+	currently unused; only presence or absence in this list is exploited). """
 	cdef ChartItem ei
 	cdef CFGEdge e = <CFGEdge>ej.edge
 	cdef RankedCFGEdge eejj
@@ -331,7 +331,7 @@ def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
 
 cpdef merged_kbest(dict chart, ChartItem start, int k, Grammar grammar):
 	""" Like kbest_items, but apply the reverse of the Boyd (2007)
-	transformation to the k-best derivations."""
+	transformation to the k-best derivations. """
 	cdef dict newchart = <dict>defaultdict(dict)
 	cdef list derivs = [Tree.parse(a, parse_leaf=int) for a, _
 				in lazykbest(chart, start, k, grammar.tolabel)[0]]

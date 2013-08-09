@@ -11,7 +11,7 @@ from containers cimport ChartItem, CFGChartItem, CFGEdge, new_LCFRSEdge, UInt,\
 cdef tuple unarybest = (0, ), binarybest = (0, 0)
 
 cdef inline getcandidates(dict chart, ChartItem v, int k):
-	""" Return a heap with up to k candidate arcs starting from vertex v """
+	""" :returns: a heap with up to k candidate arcs starting from vertex v """
 	# NB: the priority queue should either do a stable sort, or should
 	# sort on rank vector as well to have ties resolved in FIFO order;
 	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)
@@ -113,7 +113,7 @@ cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
 # --- start CFG specific
 cdef inline getcandidatescfg(list chart, UInt label,
 		UChar start, UChar end, int k):
-	""" Return a heap with up to k candidate arcs starting from vertex v """
+	""" :returns: a heap with up to k candidate arcs starting from vertex v """
 	# NB: the priority queue should either do a stable sort, or should
 	# sort on rank vector as well to have ties resolved in FIFO order;
 	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)

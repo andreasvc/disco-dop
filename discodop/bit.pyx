@@ -18,7 +18,7 @@ cpdef bint testbitshort(unsigned short arg, UInt pos):
 	>>> testbitshort(0b0011101, 0)
 	1
 	>>> testbitshort(0b0011101, 1)
-	0"""
+	0 """
 	return (arg >> pos) & 1
 
 
@@ -27,7 +27,7 @@ cpdef bint testbitc(UChar arg, UInt pos):
 	>>> testbitc(0b0011101, 0)
 	1
 	>>> testbitc(0b0011101, 1)
-	0"""
+	0 """
 	return (arg >> pos) & 1
 
 
@@ -42,8 +42,7 @@ cpdef int bitcount(ULLong vec):
 cpdef int pyintnextset(a, int pos):
 	""" First set bit, starting from pos
 	>>> pyintnextset(0b001101, 1)
-	2
-	"""
+	2 """
 	cdef ULong mask = -1
 	a >>= pos
 	if a == 0:

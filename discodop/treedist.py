@@ -66,7 +66,8 @@ class Terminal:
 
 def prepare(tree, includeterms=False):
 	""" Copy a tree object; sort children to have canonical order; merge
-	preterminals and terminals in single nodes (unless includeterms is True)."""
+	preterminals and terminals in single nodes (unless ``includeterms=True``).
+	"""
 	tree = tree.copy(True)
 	# canonical order of children
 	for a in tree.subtrees(lambda n: isinstance(n[0], Tree)):

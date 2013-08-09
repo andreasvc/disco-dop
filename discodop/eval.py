@@ -378,7 +378,7 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		exact, lascores, dicenoms, dicedenoms, golddep, canddep,
 		goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
 		exact40, lascores40, dicenoms40, dicedenoms40, golddep40, canddep40):
-	""" Return overview with scores for all sentences. """
+	""" :returns: overview with scores for all sentences. """
 	discbrackets = sum(1 for _, (_, a) in candb.elements()
 			if a != tuple(range(min(a), max(a) + 1)))
 	gdiscbrackets = sum(1 for _, (_, a) in goldb.elements()
@@ -590,12 +590,13 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 
 
 def bracketings(tree, labeled=True, dellabel=(), disconly=False):
-	""" Return the labeled set of bracketings for a tree:
-	for each nonterminal node, the set will contain a tuple with the label and
+	""" :returns: the labeled set of bracketings for a tree
+
+	For each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
-	Tree must have been processed by transform().
-	The argument 'dellabel' is only used to exclude the TOP/ROOT node from the
-	results (because it cannot be deleted by transform() when non-unary).
+	``tree`` must have been processed by ``transform()``.
+	The argument ``dellabel`` is only used to exclude the ROOT node from the
+	results (because it cannot be deleted by ``transform()`` when non-unary).
 
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
@@ -621,7 +622,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 
 
 def strbracketings(brackets):
-	""" Return a string with a concise representation of a bracketing.
+	""" :returns: a string with a concise representation of a bracketing.
 
 	>>> strbracketings({('S', (0, 1, 2)), ('VP', (0, 2))})
 	'S[0-2], VP[0,2]'
@@ -781,7 +782,7 @@ def intervals(seq):
 	such that a <= x <= b.
 
 	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
-	[(0, 1), (3, 4), (6, 8)]"""
+	[(0, 1), (3, 4), (6, 8)] """
 	start = prev = None
 	for a in seq:
 		if start is None:

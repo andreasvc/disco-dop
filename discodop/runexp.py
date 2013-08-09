@@ -419,6 +419,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
+				grammar.getrulemapping(stages[n - 1].grammar)
 				logging.info(msg)
 			# write prob models
 			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
@@ -951,9 +952,13 @@ def readparam(filename):
 	for n, stage in enumerate(params['stages']):
 		assert stage.mode in (
 				'plcfrs', 'pcfg', 'pcfg-posterior', 'pcfg-symbolic',
-				'pcfg-bitpar')
+				'pcfg-bitpar', 'dop-rerank')
 		assert n > 0 or not stage.prune, (
 				"need previous stage to prune, but this stage is first.")
+		if stage.mode == 'dop-rerank':
+			assert stage.prune and not stage.splitprune and stage.k > 1
+			assert (stage.dop and not stage.usedoubledop
+					and stage.objective == 'mpp')
 		if stage.dop:
 			assert stage.estimator in ("dop1", "ewe")
 			assert stage.objective in ("mpp", "mpd", "shortest",

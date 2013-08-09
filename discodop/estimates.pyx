@@ -20,6 +20,7 @@ cdef extern from "math.h":
 INFINITY = float('infinity')
 
 cdef class Item:
+	""" Item class used in agenda for computing the  outside LR estimate. """
 	cdef int state, length, lr, gaps
 
 	def __hash__(Item self):
@@ -137,7 +138,7 @@ def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 
 def inside(Grammar grammar, UInt maxlen, dict insidescores):
 	""" Compute inside estimate in bottom-up fashion, with
-	full bit vectors (not used)."""
+	full bit vectors (not used). """
 	cdef ChartItem I
 	cdef Entry entry
 	cdef LexicalRule lexrule
@@ -328,7 +329,8 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 	#end while agenda.length:
 
 
-cpdef getestimates(Grammar grammar, UInt maxlen, UInt goal):
+def getestimates(Grammar grammar, UInt maxlen, UInt goal):
+	""" Compute table of outside SX simple LR estimates for a PLCFRS. """
 	print("allocating outside matrix:",
 		(8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
 			* (maxlen + 1) / 1024 ** 2), 'MB')
@@ -357,6 +359,7 @@ cdef inline double getpcfgoutside(dict outsidescores,
 
 cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 		bint debug=False):
+	""" Compute table of outside SX estimates for a PCFG. """
 	insidescores = pcfginsidesx(grammar, maxlen)
 	outside = pcfgoutsidesx(grammar, insidescores, goal, maxlen)
 	if debug:
@@ -370,16 +373,16 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].items()):
 				if v == INFINITY:
-					print("%s[%d]" % (grammar.tolabel[k].decode('ascii'), span),
-							end='')
+					print("%s[%d]" % (grammar.tolabel[k].decode('ascii'),
+							span), end='')
 		print('\n\noutside:')
 		for lspan in range(maxlen + 1):
 			for rspan in range(maxlen - lspan + 1):
 				for lhs in range(grammar.nonterminals):
 					if outside[lhs, lspan, rspan] < INFINITY:
 						print("%s[%d-%d] %g" % (
-								grammar.tolabel[lhs].decode('ascii'),
-								lspan, rspan, exp(-outside[lhs, lspan, rspan])))
+								grammar.tolabel[lhs].decode('ascii'), lspan,
+								rspan, exp(-outside[lhs, lspan, rspan])))
 	return outside
 
 

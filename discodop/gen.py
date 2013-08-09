@@ -59,7 +59,7 @@ def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 
 def chooserule(rules, discount, prodcounts):
 	""" given a list of objects with probabilities,
-	choose one according to that distribution."""
+	choose one according to that distribution. """
 	weights = [rule.prob * discount ** prodcounts[rule.no] for rule in rules]
 	position = random() * sum(weights)
 	for r, w in zip(rules, weights):

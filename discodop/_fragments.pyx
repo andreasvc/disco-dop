@@ -651,7 +651,7 @@ cdef getsent(frag, list sent):
 	>>> getsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', "In Japan wird \
 	offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur \
 	gr\\xf6\\xdften Bank der Welt vorbereitet .".split(' '))
-	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))"""
+	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None)) """
 	cdef:
 		int n, m = 0, maxl
 		list newsent = []
@@ -738,6 +738,8 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 
 
 def add_lcfrs_rules(tree, sent):
+	""" Set attribute '.prod' on nodes of tree with the LCFRS production for
+	that node. """
 	for a, b in zip(tree.subtrees(),
 			lcfrs_productions(tree, sent, frontiers=True)):
 		a.prod = b
@@ -783,7 +785,7 @@ def getprodid(prods, node):
 
 
 def getctrees(trees, sents, trees2=None, sents2=None):
-	""" Return Ctrees object for a list of disc. trees and sentences. """
+	""" :returns: Ctrees object for disc. binary trees and sentences. """
 	# make deep copies to avoid side effects.
 	trees12 = trees = [tolist(add_lcfrs_rules(Tree.convert(a), b), b)
 			for a, b in zip(trees, sents)]
@@ -806,7 +808,7 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 		trees2 = Ctrees(trees2, prods)
 		trees2.indextrees(prods)
 	return dict(trees1=trees, sents1=sents, trees2=trees2, sents2=sents2,
-		prods=prods, labels=labels)
+			prods=prods, labels=labels)
 
 
 cdef readnode(line, list labels, dict prods, Node *result,
@@ -862,7 +864,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 						childlabels.append(match.group(1))
 		# not optimal, parsing this string can be avoided
 		# in fact we already have: label, child2, rest
-		child2 = ('(' + (origlabel or label) + '|<' + '-'.join(childlabels)
+		child2 = ('(' + (origlabel or label) + '|<' + ','.join(childlabels)
 				+ '> ' + rest[startchild2:])
 	assert parens == -1, "unbalanced parentheses: %d\n%r" % (parens, line)
 	match1 = LABEL.match(child1)
@@ -971,7 +973,7 @@ def one():
 
 
 def main():
-	treebank = [Tree(x) for x in """\
+	treebank = [binarize(Tree(x)) for x in """\
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
@@ -980,8 +982,6 @@ def main():
 (S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
 (S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))\
 		""".splitlines()]
-	for tree in treebank:
-		binarize(tree)
 	sents = [tree.leaves() for tree in treebank]
 	for tree in treebank:
 		for n, idx in enumerate(tree.treepositions('leaves')):
@@ -991,7 +991,6 @@ def main():
 			params['labels'], discontinuous=True, approx=False)
 	counts = exactcounts(params['trees1'], params['trees1'],
 			list(fragments.values()), fast=True)
-	print("number of fragments:", len(fragments))
 	assert len(fragments) == 25
 	for (a, b), c in sorted(zip(fragments, counts), key=repr):
 		print("%s\t%d" % (re.sub("[0-9]+", lambda x: b[int(x.group())], a), c))

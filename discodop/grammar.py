@@ -184,7 +184,7 @@ def dopreduction(trees, sents, packedgraph=False):
 		packedgraphs.clear()
 
 	def weights(rule):
-		""" Return rule with RFE and EWE probability. """
+		""" :returns: rule with RFE and EWE probability. """
 		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996)
 		(r, yf), freq = rule
 		rfe = Fraction((1 if any('@' in z for z in r) else freq) *
@@ -218,7 +218,7 @@ def doubledop(fragments, debug=False):
 		eweweights are alternate weights following the equal weights estimate.
 	"""
 	def getweight(frag, terminals):
-		""" Return frequency and EWE. """
+		""" :returns: frequency and EWE for fragment. """
 		freq = len(fragments[frag, terminals])
 		# Sangati & Zuidema (2011, eq. 5)
 		# FIXME: verify that this formula is equivalent to Bod (2003).
@@ -486,8 +486,9 @@ def new_flatten(tree, sent, ids):
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
-		frontiers => (label indices)
-		terminals => (tag@word idx)"""
+
+		:frontiers: ``(label indices)``
+		:terminals: ``(tag@word idx)`` """
 		n = x.group(2)  # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
@@ -523,7 +524,7 @@ class UniqueIDs(object):
 	>>> next(ids)
 	0
 	>>> ids['foo'], ids['bar'], ids['foo']
-	(1, 2, 1)"""
+	(1, 2, 1) """
 	def __init__(self):
 		self.cnt = 0  # next available ID
 		self.ids = {}  # IDs for labels seen
@@ -605,8 +606,9 @@ def flatten(tree, sent, ids):
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
-		frontiers => (label indices)
-		terminals => (tag@word idx)"""
+
+		:frontiers: ``(label indices)``
+		:terminals: ``(tag@word idx)`` """
 		n = x.group(2)  # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
@@ -649,7 +651,7 @@ def ranges(s):
 	""" Partition s into a sequence of lists corresponding to contiguous ranges
 
 	>>> list(ranges( (0, 1, 3, 4, 6) ))
-	[[0, 1], [3, 4], [6]]"""
+	[[0, 1], [3, 4], [6]] """
 	rng = []
 	for a in s:
 		if not rng or a == rng[-1] + 1:
@@ -681,7 +683,7 @@ def defaultparse(wordstags, rightbranching=False):
 
 
 def printrule(r, yf, w):
-	""" Return a string with a representation of a rule. """
+	""" :returns: a string with a representation of a rule. """
 	return "%s %s --> %s\t %r" % (w, r[0], ' '.join(x for x in r[1:]), list(yf))
 
 
@@ -716,15 +718,14 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	""" Writes a grammar in a simple text file format. Rules are written in
 	the order as they appear in the sequence `grammar`, except that the lexicon
 	file lists words in sorted order (with tags for each word in the order of
-	`grammar`).
+	`grammar`). For a description of the file format, see ``grammar.FORMAT``.
 
-	`grammar` is a sequence of rule tuples, as produced by treebankgrammar(),
-	dopreduction(), or doubledop().
-
-	:returns: rules, lexicon; bytes object & a unicode string, respectively
-	For a description of the file format, see grammar.FORMAT.
-	When bitpar is True, use bitpar format: for rules, put weight first (as
-	decimal fraction or frequency) and leave out the yield function. """
+	:param grammar:  a sequence of rule tuples, as produced by
+		treebankgrammar(), dopreduction(), or doubledop().
+	:param bitpar: when ``True``, use bitpar format: for rules, put weight
+		first (as decimal fraction or frequency) and leave out the yield
+		function.
+	:returns: rules, lexicon; bytes object & a unicode string, respectively """
 	# when grammar is a PLCFRS, write rational fractions.
 	# when grammar is bitpar PCFG, write frequencies if probabilities sum to 1,
 	# i.e., in that case probalities can be re-computed as relative

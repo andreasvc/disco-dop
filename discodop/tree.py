@@ -32,21 +32,21 @@ class Tree(list):
 	Several Tree methods use tree positions to specify children or descendants
 	of a tree. Tree positions are defined as follows:
 
-	- The tree position i specifies a Tree's ith child.
+	- The tree position ``i`` specifies a Tree's ith child.
 	- The tree position () specifies the Tree itself.
-	- If p is the tree position of descendant d, then
-		p + (i,) specifies the ith child of d.
+	- If ``p`` is the tree position of descendant d, then
+		``p + (i,)`` specifies the ith child of d.
 
-	i.e., every tree position is either a single index i,
-	specifying self[i]; or a sequence (i1, i2, ..., iN),
-	specifying self[i1][i2]...[iN].
+	i.e., every tree position is either a single index ``i``,
+	specifying ``self[i]``; or a sequence ``(i1, i2, ..., iN)``,
+	specifying ``self[i1][i2]...[iN]``.
 
 	The constructor can be called in two ways:
 
-	- Tree(label, children) constructs a new tree with the specified label
+	- ``Tree(label, children)`` constructs a new tree with the specified label
 		and list of children.
-	- Tree(s) constructs a new tree by parsing the string s. Equivalent to
-		calling the class method Tree.parse(s). """
+	- ``Tree(s)`` constructs a new tree by parsing the string s. Equivalent to
+		calling the class method ``Tree.parse(s)``. """
 	def __new__(cls, label_or_str=None, children=None):
 		if label_or_str is None:
 			return list.__new__(cls)  # used by copy.deepcopy
@@ -54,13 +54,13 @@ class Tree(list):
 			if not isinstance(label_or_str, basestring):
 				raise TypeError("%s: Expected a label and child list "
 						"or a single string" % cls.__name__)
-			return cls.parse(label_or_str)
+				return cls.parse(label_or_str)
 		else:
 			if (isinstance(children, basestring) or
-				not hasattr(children, '__iter__')):
+					not hasattr(children, '__iter__')):
 				raise TypeError("%s() argument 2 should be a list, not a "
 						"string" % cls.__name__)
-			return list.__new__(cls, label_or_str, children)
+				return list.__new__(cls, label_or_str, children)
 
 	def __init__(self, label_or_str, children=None):
 		# Because __new__ may delegate to Tree.parse(), the __init__
@@ -152,10 +152,8 @@ class Tree(list):
 
 	# === Basic tree operations =================================
 	def leaves(self):
-		"""
-
-		:returns: a list containing this tree's leaves. The order reflects
-			the order of the leaves in the tree's hierarchical structure. """
+		""" :returns: list containing this tree's leaves. The order reflects \
+		the order of the leaves in the tree's hierarchical structure. """
 		leaves = []
 		for child in self:
 			if isinstance(child, Tree):
@@ -165,19 +163,15 @@ class Tree(list):
 		return leaves
 
 	def flatten(self):
-		"""
-
-		:returns: a tree consisting of this tree's root connected directly
-			to its leaves, omitting all intervening non-terminal nodes. """
+		""" :returns: a tree consisting of this tree's root connected \
+		directly to its leaves, omitting all internal nodes. """
 		return Tree(self.label, self.leaves())
 
 	def height(self):
-		"""
-
-		:returns: The height of this tree. The height of a tree containing
-			no children is 1; the height of a tree containing only leaves is 2;
-			and the height of any other tree is one plus the maximum of its
-			children's heights. """
+		"""	:returns: The height of this tree. The height of a tree \
+		containing no children is 1; the height of a tree containing only \
+		leaves is 2; and the height of any other tree is one plus the maximum \
+		of its children's heights. """
 		max_child_height = 0
 		for child in self:
 			if isinstance(child, Tree):
@@ -191,7 +185,7 @@ class Tree(list):
 		return self.height() - 1
 
 	def treepositions(self, order='preorder'):
-		""" order: One of preorder, postorder, bothorder, leaves. """
+		""" :param order: One of preorder, postorder, bothorder, leaves. """
 		positions = []
 		if order in ('preorder', 'bothorder'):
 			positions.append(())
@@ -219,9 +213,9 @@ class Tree(list):
 					yield subtree
 
 	def pos(self):
-		""":returns: a list of tuples containing leaves and pre-terminals \
-			(part-of-speech tags). The order reflects the order of the leaves \
-			in the tree's hierarchical structure. """
+		""" :returns: a list of tuples containing leaves and pre-terminals \
+		(part-of-speech tags). The order reflects the order of the leaves in \
+		the tree's hierarchical structure. """
 		pos = []
 		for child in self:
 			if isinstance(child, Tree):
@@ -231,7 +225,7 @@ class Tree(list):
 		return pos
 
 	def leaf_treeposition(self, index):
-		""":returns: The tree position of the index-th leaf in this tree; \
+		""" :returns: The tree position of the index-th leaf in this tree; \
 		i.e., if tp=self.leaf_treeposition(i), then self[tp]==self.leaves()[i].
 		:raises IndexError: if this tree contains fewer than index+1 leaves, \
 		or if index<0. """
@@ -252,7 +246,7 @@ class Tree(list):
 
 	def treeposition_spanning_leaves(self, start, end):
 		""":returns: The tree position of the lowest descendant of this tree \
-			that dominates self.leaves()[start:end].
+		that dominates self.leaves()[start:end].
 		:raises ValueError: if end <= start """
 		if end <= start:
 			raise ValueError('end must be greater than start')
@@ -289,7 +283,7 @@ class Tree(list):
 		return ImmutableTree
 
 	def freeze(self, leaf_freezer=None):
-		""" Return an immutable version of this tree. """
+		""" :returns: an immutable version of this tree. """
 		frozen_class = self._frozen_class()
 		if leaf_freezer is None:
 			newcopy = frozen_class.convert(self)
@@ -372,8 +366,7 @@ class Tree(list):
 		elif len(stack[0][1]) == 0:
 			cls._parse_error(s, 'end-of-string', open_b)
 		else:
-			assert stack[0][0] is None
-			assert len(stack[0][1]) == 1
+			assert stack[0][0] is None and len(stack[0][1]) == 1
 		tree = stack[0][1][0]
 		# If the tree has an extra level with label='', then get rid of
 		# it. E.g.: "((S (NP ...) (VP ...)))"
@@ -416,16 +409,14 @@ class Tree(list):
 
 	def pprint(self, margin=70, indent=0, labelsep='', brackets='()',
 			quotes=False):
-		"""
-		:returns: A pretty-printed string representation of this tree.
+		"""	:returns: A pretty-printed string representation of this tree.
 		:param margin: The right margin at which to do line-wrapping.
 		:param indent: The indentation level at which printing begins. This
 			number is used to decide how far to indent subsequent lines.
 		:param labelsep: A string that is used to separate the label from the
 			children; e.g., the value ':' gives trees like::
 
-				(S: (NP: I) (VP: (V: saw) (NP: it))).
-		"""
+				(S: (NP: I) (VP: (V: saw) (NP: it))). """
 		# Try writing it on one line.
 		s = self._pprint_flat(labelsep, brackets, quotes)
 		if len(s) + indent < margin:
@@ -466,7 +457,7 @@ class Tree(list):
 								' '.join(childstrs), brackets[1])
 
 	def draw(self):
-		""" Return an ASCII art visualization of tree. """
+		""" :returns: an ASCII art visualization of tree. """
 		from .treedraw import DrawTree
 		return DrawTree(self, [str(a) for a in self.leaves()]).text()
 
@@ -536,8 +527,8 @@ class ImmutableTree(Tree):
 		return self._hash
 
 	def _set_label(self, label):
-		"""Set self._label. This will only succeed the first time the label is
-		set, which should occur in Tree.__init__()."""
+		""" Set self._label. This will only succeed the first time the label is
+		set, which should occur in Tree.__init__(). """
 		if hasattr(self, 'label'):
 			raise ValueError('ImmutableTrees may not be modified')
 		self._label = label
@@ -563,8 +554,9 @@ class AbstractParentedTree(Tree):
 	The AbstractParentedTree class redefines all operations that modify a
 	tree's structure to call two methods, which are used by subclasses to
 	update parent information:
-	- _setparent() is called whenever a new child is added.
-	- _delparent() is called whenever a child is removed. """
+
+	- ``_setparent()`` is called whenever a new child is added.
+	- ``_delparent()`` is called whenever a child is removed. """
 	def __init__(self, label_or_str, children=None):
 		if children is None:
 			return  # see note in Tree.__init__()
@@ -583,18 +575,16 @@ class AbstractParentedTree(Tree):
 		""" Update child's parent pointer to point to self. This method is only
 		called if child's type is Tree; i.e., it is not called when adding a
 		leaf to a tree. This method is always called before the child is
-		actually added to self's child list.
+		actually added to self's child list. Typically, if child is a tree,
+		then its type needs to match self's type. This prevents mixing of
+		different tree types (single-, multi-, and non-parented).
 
 		:param index: The index of child in self.
 		:param dry_run: If true, the don't actually set the child's parent
 			pointer; just check for any error conditions, and raise an
 			exception if one is found.
-		:raises TypeError: if child is a tree with an inappropriate type.
-
-		Typically, if child is a tree, then its type needs to match self's
-		type. This prevents mixing of different tree types
-		(single-parented, multi-parented, and non-parented). """
-		raise AssertionError('Abstract base class')
+		:raises TypeError: if child is a tree with an inappropriate type. """
+		raise NotImplementedError('Abstract base class')
 
 	def _delparent(self, _child, _index):
 		""" Update child's parent pointer to not point to self. This method is
@@ -603,7 +593,7 @@ class AbstractParentedTree(Tree):
 		child is actually removed from self's child list.
 
 		:param index: The index of child in self. """
-		raise AssertionError('Abstract base class')
+		raise NotImplementedError('Abstract base class')
 
 	# === Methods that add/remove children ======================
 	# Every method that adds or removes a child must make
@@ -772,7 +762,7 @@ class ParentedTree(AbstractParentedTree):
 		for i, child in enumerate(self._parent):
 			if child is self:
 				return i
-		assert False, 'expected to find self in self._parent!'
+		raise ValueError('expected to find self in self._parent!')
 
 	def _get_left_sibling(self):
 		""" The left sibling of this tree, or None if it has none. """
@@ -803,8 +793,8 @@ class ParentedTree(AbstractParentedTree):
 			return self
 		return self._parent._get_root()
 
-	parent = property(lambda self: self._parent, doc="""
-		The parent of this tree, or None if it has no parent.""")
+	parent = property(lambda self: self._parent, doc="""\
+		The parent of this tree, or None if it has no parent. """)
 	parent_index = property(_get_parent_index, doc=_get_parent_index.__doc__)
 	left_sibling = property(_get_left_sibling, doc=_get_left_sibling.__doc__)
 	right_sibling = property(_get_right_sibling, doc=_get_right_sibling.__doc__)
@@ -814,8 +804,7 @@ class ParentedTree(AbstractParentedTree):
 	# === Parent Management ==========================================
 	def _delparent(self, child, index):
 		assert isinstance(child, ParentedTree)
-		assert self[index] is child
-		assert child._parent is self
+		assert self[index] is child and child._parent is self
 		child._parent = None
 
 	def _setparent(self, child, _index, dry_run=False):
@@ -905,15 +894,17 @@ class MultiParentedTree(AbstractParentedTree):
 	parents = property(lambda self: list(self._parents), doc="""\
 		The set of parents of this tree. If this tree has no parents, then
 		parents is the empty set. To check if a tree is used as multiple
-		children of the same parent, use the parent_indices property.""")
+		children of the same parent, use the parent_indices property. """)
 	left_siblings = property(_get_left_siblings, doc=_get_left_siblings.__doc__)
 	right_siblings = property(_get_right_siblings,
 			doc=_get_right_siblings.__doc__)
 	roots = property(_get_roots, doc=_get_roots.__doc__)
 
 	def parent_indices(self, parent):
-		""" Return a list of the indices where this tree occurs as a child of
-		parent. If this child does not occur as a child of parent, then the
+		""" :returns: a list of the indices where this tree occurs as a child \
+		of parent.
+
+		If this child does not occur as a child of parent, then the
 		empty list is returned. The following is always true::
 
 			for parent_index in ptree.parent_indices(parent):
@@ -924,13 +915,13 @@ class MultiParentedTree(AbstractParentedTree):
 				if child is self]
 
 	def treepositions(self, root):
-		""" Return a list of all tree positions that can be used to reach this
-		multi-parented tree starting from root; i.e., the following holds
-		::
+		"""	:returns: a list of all tree positions that can be used to reach \
+			this multi-parented tree starting from root.
+
+		i.e., the following holds::
 
 			for treepos in ptree.treepositions(root):
-				root[treepos] is ptree
-		"""
+				root[treepos] is ptree """
 		if self is root:
 			return [()]
 		return [treepos + (index, ) for parent in self._parents
@@ -939,8 +930,7 @@ class MultiParentedTree(AbstractParentedTree):
 
 	# === Parent Management ==========================================
 	def _delparent(self, child, index):
-		assert isinstance(child, MultiParentedTree)
-		assert self[index] is child
+		assert isinstance(child, MultiParentedTree) and self[index] is child
 		assert len([p for p in child._parents if p is self]) == 1
 		# If the only copy of child in self is at index, then delete
 		# self from child's parent list.

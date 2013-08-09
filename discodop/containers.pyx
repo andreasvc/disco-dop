@@ -232,7 +232,7 @@ cdef class Grammar:
 				m += 1
 			cur.lengths |= 1 << (m - 1)
 			assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
-			self.rulenos[tuple(rule)] = n
+			self.rulenos[(yf, ) + tuple(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
 
@@ -500,6 +500,22 @@ cdef class Grammar:
 			else:
 				msg = ''  # should not happen?
 		return msg
+
+	def getrulemapping(Grammar self, Grammar coarse):
+		""" Produce a mapping of coarse rules to sets of fine rules;
+		e.g., ``mapping[12] == [34, 56, 78, ...]``.
+		For use with ``dopparseprob()``. """
+		cdef list mapping = [[] for _ in range(coarse.numrules)]
+		cdef Rule *rule
+		for ruleno in range(self.numrules):
+			rule = &(self.bylhs[0][ruleno])
+			key = (self.yfstr(rule[0]),
+					self.tolabel[rule.lhs].rsplit('@', 1)[0],
+					self.tolabel[rule.rhs1].rsplit('@', 1)[0])
+			if rule.rhs2:
+				key += (self.tolabel[rule.rhs2].rsplit('@', 1)[0], )
+			mapping[coarse.rulenos[key]].append(ruleno)
+		self.rulemapping = mapping
 
 	cdef rulestr(self, Rule rule):
 		left = "%.2f %s => %s%s" % (
@@ -953,7 +969,7 @@ cdef class Ctrees:
 
 	cpdef add(self, list tree, dict prods):
 		""" Trees can be incrementally added to the node array; useful
-		when dealing with large numbers of NLTK trees (say 100,000)."""
+		when dealing with large numbers of NLTK trees (say 100,000). """
 		assert self.len < self.max, ("either no space left (len >= max) or "
 			"alloc() has not been called (max=0). max = %d" % self.max)
 		if self.nodesleft < len(tree):

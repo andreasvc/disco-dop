@@ -78,15 +78,15 @@ class CorpusReader(object):
 		self._block_cache = self._read_blocks()
 
 	def parsed_sents(self):
-		""" Return an ordered dictionary of parse trees
-		(Tree objects with integer indices as leaves). """
+		""" :returns: an ordered dictionary of parse trees (``Tree`` objects \
+		with integer indices as leaves). """
 		if not self._parsed_sents_cache:
 			self._parsed_sents_cache = OrderedDict((a, self._parsetree(b))
 					for a, b in self._block_cache.items())
 		return self._parsed_sents_cache
 
 	def sents(self):
-		""" Return an ordered dictionary of sentences,
+		""" :returns: an ordered dictionary of sentences, \
 		each sentence being a list of words. """
 		if not self._sents_cache:
 			self._sents_cache = OrderedDict((a, self._word(b))
@@ -94,7 +94,7 @@ class CorpusReader(object):
 		return self._sents_cache
 
 	def tagged_sents(self):
-		""" Return an ordered dictionary of tagged sentences,
+		""" :returns: an ordered dictionary of tagged sentences, \
 		each tagged sentence being a list of (word, tag) pairs. """
 		if not self._tagged_sents_cache:
 			# for each sentence, zip its words & tags together in a list.
@@ -107,18 +107,18 @@ class CorpusReader(object):
 		return self._tagged_sents_cache
 
 	def blocks(self):
-		""" Return a list of strings containing the raw representation of
-		trees in the original treebank."""
+		""" :returns: a list of strings containing the raw representation of \
+		trees in the original treebank. """
 
 	def _read_blocks(self):
 		""" No-op. For line-oriented formats re-reading is cheaper than
 		caching. """
 
 	def _parse(self, block):
-		""" Return a parse tree given a string from the treebank file. """
+		""" :returns: a parse tree given a string from the treebank file. """
 
 	def _parsetree(self, block):
-		""" Return a transformed parse tree. """
+		""" :returns: a transformed parse tree. """
 		tree, sent = self._parse(block)
 		if not sent:
 			return tree
@@ -145,7 +145,7 @@ class CorpusReader(object):
 		return tree
 
 	def _word(self, block, orig=False):
-		""" Return a list of words given a string.
+		""" :returns: a list of words given a string.
 		When orig is True, return original sentence verbatim;
 		otherwise it will follow parameters for punctuation. """
 
@@ -159,7 +159,7 @@ class NegraCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		""" Read corpus and return list of blocks corresponding to each
-		sentence."""
+		sentence. """
 		result = OrderedDict()
 		started = False
 		for filename in self._filenames:
@@ -303,8 +303,8 @@ class AlpinoCorpusReader(CorpusReader):
 	""" Corpus reader for the Dutch Alpino treebank in XML format. """
 
 	def blocks(self):
-		""" Return a list of strings containing the raw representation of
-		trees in the treebank, verbatim or with transformations applied."""
+		""" :returns: a list of strings containing the raw representation of \
+		trees in the treebank, verbatim or with transformations applied. """
 		if self._block_cache is None:
 			self._block_cache = self._read_blocks()
 		return OrderedDict((n, unicode(ElementTree.tostring(a)))
@@ -312,7 +312,7 @@ class AlpinoCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		""" Read corpus and return list of blocks corresponding to each
-		sentence."""
+		sentence. """
 		results = OrderedDict()
 		assert self._encoding in (None, 'utf8', 'utf-8'), (
 				"Encoding specified in XML files.")
@@ -327,7 +327,7 @@ class AlpinoCorpusReader(CorpusReader):
 		return results
 
 	def _parse(self, block):
-		""" Return a parse tree given a string. """
+		""" :returns: a parse tree given a string. """
 		def getsubtree(node):
 			""" Traverse Alpino XML tree and create Tree object. """
 			# FIXME: proper representation for arbitrary features
@@ -369,7 +369,8 @@ class AlpinoCorpusReader(CorpusReader):
 		return result, sent
 
 	def _word(self, block, orig=False):
-		""" Return a list of words given a string.
+		""" :returns: a list of words given a string.
+
 		When orig is True, return original sentence verbatim;
 		otherwise it will follow parameters for punctuation. """
 		return block.find('sentence').text.split()
@@ -431,7 +432,7 @@ def exportparse(block, morphology=None):
 
 
 def getreader(fmt):
-	""" Return the appropriate corpus reader class given a format string. """
+	""" :returns: the corpus reader class with name ``fmt``. """
 	return {'export': NegraCorpusReader,
 		'discbracket': DiscBracketCorpusReader,
 		'bracket': BracketCorpusReader,
@@ -520,7 +521,7 @@ def handlefunctions(action, tree, pos=True, top=False):
 
 	:param action: one of {None, 'add', 'replace', 'remove'}
 	:param pos: whether to add function tags to POS tags.
-	:param top: whether to add function tags to the top node."""
+	:param top: whether to add function tags to the top node. """
 	if action in (None, 'leave'):
 		return
 	for a in tree.subtrees():

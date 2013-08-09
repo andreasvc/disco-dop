@@ -20,7 +20,7 @@ from . import plcfrs, pcfg
 from .grammar import FORMAT, defaultparse
 from .containers import Grammar, CFGChartItem
 from .coarsetofine import prunechart, whitelistfromposteriors
-from .disambiguation import marginalize
+from .disambiguation import marginalize, doprerank
 from .tree import Tree
 from .lexicon import replaceraretestwords, getunknownwordfun, UNK
 from .treebank import saveheads, TERMINALSRE
@@ -223,7 +223,7 @@ class Parser(object):
 			begin = time.clock()
 			noparse = False
 			parsetrees = fragments = None
-			msg = "%s:\t" % stage.name.upper()
+			msg = '%s:\t' % stage.name.upper()
 			model = u'default'
 			if stage.dop:
 				if (stage.estimator == 'ewe'
@@ -247,8 +247,8 @@ class Parser(object):
 								stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin,
 								stage.mode.startswith('pcfg'))
-						msg += ("coarse items before pruning=%d; filtered: %d; "
-								"pruned: %d; sentprob=%g\n\t" % (
+						msg += ('coarse items before pruning=%d; filtered: %d;'
+								' pruned: %d; sentprob=%g\n\t' % (
 								unfiltered, numitems, numremain, sentprob))
 					else:
 						whitelist, items = prunechart(
@@ -257,11 +257,11 @@ class Parser(object):
 								self.stages[n - 1].markorigin,
 								stage.mode.startswith('pcfg'),
 								self.stages[n - 1].mode == 'pcfg-bitpar')
-						msg += "coarse items before pruning: %d; " % (
+						msg += 'coarse items before pruning: %d; ' % (
 								sum(len(a) for x in chart for a in x if a)
 								if self.stages[n - 1].mode == 'pcfg'
 								else len(chart))
-						msg += "after: %d\n\t" % (items)
+						msg += 'after: %d\n\t' % (items)
 				else:
 					whitelist = None
 				if stage.mode == 'pcfg':
@@ -291,17 +291,21 @@ class Parser(object):
 							estimates=(stage.useestimates, stage.outside)
 								if stage.useestimates in ('SX', 'SXlrgaps')
 								else None)
+				elif stage.mode == 'dop-rerank':
+					if start:
+						parsetrees = doprerank(chart, start, sent, stage.k,
+								stages[n - 1].grammar, stage.grammar)
 				else:
 					raise ValueError
-				msg += "%s\n\t" % msg1
+				msg += '%s\n\t' % msg1
 				if (n != 0 and not start and not noparse
 						and stage.split == self.stages[n - 1].split):
-					logging.error("ERROR: expected successful parse. "
-							"sent: %s\nstage: %s.", ' '.join(sent), stage.name)
-					#raise ValueError("ERROR: expected successful parse. "
-					#		"sent %s, %s." % (nsent, stage.name))
-			if start and stage.mode != 'pcfg-posterior' and not (
-					self.relationalrealizational and stage.split):
+					logging.error('ERROR: expected successful parse. '
+							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
+					#raise ValueError('ERROR: expected successful parse. '
+					#		'sent %s, %s.' % (nsent, stage.name))
+			if start and stage.mode not in ('pcfg-posterior', 'dop-rerank'
+					) and not (self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
 				if stage.objective == 'shortest':
 					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
@@ -314,7 +318,7 @@ class Parser(object):
 						sldop_n=stage.sldop_n,
 						backtransform=stage.backtransform,
 						bitpar=stage.mode == 'pcfg-bitpar')
-				msg += "disambiguation: %s, %gs\n\t" % (
+				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 			if parsetrees:
 				try:
@@ -331,7 +335,7 @@ class Parser(object):
 						stage, sent, tags)
 				noparse = True
 			elapsedtime = time.clock() - begin
-			msg += "%.2fs cpu time elapsed\n" % (elapsedtime)
+			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
 					parsetrees=parsetrees, fragments=fragments,
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
@@ -341,7 +345,7 @@ class Parser(object):
 		resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
 		parsetree = Tree.parse(resultstr, parse_leaf=int)
 		if stage.split:
-			mergediscnodes(unbinarize(parsetree, childchar=":"))
+			mergediscnodes(unbinarize(parsetree, childchar=':'))
 		saveheads(parsetree, self.tailmarker)
 		unbinarize(parsetree)
 		removefanoutmarkers(parsetree)
@@ -357,7 +361,7 @@ class Parser(object):
 		""" Produce a dummy parse for evaluation purposes. """
 		parsetree = defaultparse([(n, t)
 				for n, t in enumerate(tags or (len(sent) * ['NONE']))])
-		parsetree = Tree.parse("(%s %s)" % (stage.grammar.start,
+		parsetree = Tree.parse('(%s %s)' % (stage.grammar.start,
 				parsetree), parse_leaf=int)
 		return parsetree, 0.0, None, True
 
@@ -367,18 +371,18 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	Expects a directory 'resultdir' which contains the relevant grammars and
 	the parameter file 'params.prm', as produced by runexp. """
 	for n, stage in enumerate(stages):
-		logging.info("reading: %s", stage.name)
-		rules = gzip.open("%s/%s.rules.gz" % (resultdir, stage.name))
-		lexicon = codecs.getreader('utf-8')(gzip.open("%s/%s.lex.gz" % (
+		logging.info('reading: %s', stage.name)
+		rules = gzip.open('%s/%s.rules.gz' % (resultdir, stage.name))
+		lexicon = codecs.getreader('utf-8')(gzip.open('%s/%s.lex.gz' % (
 				resultdir, stage.name)))
 		grammar = Grammar(rules.read(), lexicon.read(),
 				start=top, bitpar=stage.mode.startswith('pcfg'))
 		backtransform = None
 		if stage.dop:
-			assert stage.useestimates is None, "not supported"
+			assert stage.useestimates is None, 'not supported'
 			if stage.usedoubledop:
 				backtransform = dict(enumerate(
-						gzip.open("%s/%s.backtransform.gz" % (resultdir,
+						gzip.open('%s/%s.backtransform.gz' % (resultdir,
 						stage.name)).read().splitlines()))
 				if n and stage.prune:
 					_ = grammar.getmapping(stages[n - 1].grammar,
@@ -398,7 +402,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
-			probmodels = np.load("%s/%s.probs.npz" % (resultdir, stage.name))
+				grammar.getrulemapping(stages[n - 1].grammar)
+			probmodels = np.load('%s/%s.probs.npz' % (resultdir, stage.name))
 			for name in probmodels.files:
 				if name != 'default':
 					grammar.register(unicode(name), probmodels[name])
@@ -469,19 +474,19 @@ class DictObj(object):
 		""" This is only called when the normal mechanism fails, so in practice
 		should never be called. It is only provided to satisfy pylint that it
 		is okay not to raise E1101 errors in the client code. """
-		raise AttributeError("%r instance has no attribute %r" % (
+		raise AttributeError('%r instance has no attribute %r' % (
 				self.__class__.__name__, name))
 
 	def __repr__(self):
-		return "%s(%s)" % (self.__class__.__name__,
-			",\n".join("%s=%r" % a for a in self.__dict__.items()))
+		return '%s(%s)' % (self.__class__.__name__,
+			',\n'.join('%s=%r' % a for a in self.__dict__.items()))
 
 
 def probstr(prob):
 	""" Render probability / number of subtrees as string. """
 	if isinstance(prob, tuple):
-		return "subtrees=%d, p=%.4e " % (abs(prob[0]), prob[1])
-	return "p=%.4e" % prob
+		return 'subtrees=%d, p=%.4e ' % (abs(prob[0]), prob[1])
+	return 'p=%.4e' % prob
 
 
 BITPARUNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
@@ -506,7 +511,7 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 			shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 	results, msg = proc.communicate('\n'.join(tokens) + '\n')
 	# decode results or not?
-	if not results or results.startswith("No parse"):
+	if not results or results.startswith('No parse'):
 		return {}, None, '%s\n%s' % (results, msg)
 	start = CFGChartItem(1, 0, len(sent))
 	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')

@@ -503,7 +503,7 @@ def punctroot(tree, sent):
 def punctlower(tree, sent):
 	""" Find suitable constituent for punctuation marks and add it there;
 	removal at previous location is up to the caller.  Based on rparse code.
-	Initial candidate is the root node."""
+	Initial candidate is the root node. """
 	def lower(node, candidate):
 		""" Lower a specific instance of punctuation in tree,
 		recursing top-down on suitable candidates. """
@@ -608,7 +608,7 @@ def balancedpunctraise(tree, sent):
 
 
 def function(tree):
-	""" Return grammatical function for node, or an empty string. """
+	""" :returns: grammatical function for node, or an empty string. """
 	if hasattr(tree, 'source'):
 		return tree.source[FUNC].split('-')[0]
 	else:
@@ -629,13 +629,13 @@ def rindex(l, v):
 
 
 def labels(tree):
-	""" Return the labels of the children of this node. """
+	""" :returns: the labels of the children of this node. """
 	return [a.label for a in tree if isinstance(a, Tree)]
 
 
 def pop(a):
 	""" Remove this node from its parent node, if it has one.
-	Convenience function for ParentedTrees."""
+	Convenience function for ParentedTrees. """
 	try:
 		return a.parent.pop(a.parent_index)
 	except AttributeError:
