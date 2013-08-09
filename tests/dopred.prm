@@ -65,17 +65,6 @@ stages=[  # DOP reduction
 	estimator="dop1", objective="sl-dop-simple",
   ),
 
-  dict(
-	name='plcfrs', mode='plcfrs',
-  ),
-  dict(
-	name='mpp', mode='dop-rerank',
-	dop=True, usedoubledop=False,
-	k=50,
-	kbest=True, sample=False,
-	estimator="dop1", objective="mpp",
-  ),
-
   # test rest of parameters together:
   dict(
 	name='pcfg', mode='pcfg-posterior',
@@ -88,6 +77,17 @@ stages=[  # DOP reduction
 	k=1e-5, m=10000,
 	kbest=True, sample=True,
 	estimator="ewe", objective="mpp",
+  ),
+
+  dict(
+	name='plcfrs', mode='plcfrs',
+  ),
+  dict(
+	name='rerank', mode='dop-rerank',
+	dop=True, usedoubledop=False,
+	prune=True, k=50,
+	kbest=True, sample=False,
+	estimator="dop1", objective="mpp",
   ),
 
 ],

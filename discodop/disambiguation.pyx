@@ -5,7 +5,7 @@ from __future__ import print_function
 import re
 import logging
 from heapq import nlargest
-from math import exp, log
+from math import exp, log, isinf
 from random import random
 from bisect import bisect_right
 from operator import itemgetter, attrgetter
@@ -14,6 +14,7 @@ from collections import defaultdict, OrderedDict
 from tree import Tree
 from kbest import lazykbest, getderiv
 from grammar import lcfrs_productions
+from treetransforms import addbitsets
 import plcfrs
 from agenda cimport Entry, new_Entry
 from treetransforms import unbinarize, canonicalize
@@ -790,13 +791,13 @@ def doprerank(chart, start, sent, n, Grammar coarse, Grammar fine):
 	cdef dict results = {}
 	derivations, _, _ = lazykbest(chart, start, n, coarse.tolabel,
 			None, derivs=True)
-	for deriv in derivations:
-		deriv = Tree.parse(deriv, parse_leaf=int)
-		results[deriv] = dopparseprob(deriv, sent, fine)
+	for derivstr, _ in derivations:
+		deriv = addbitsets(derivstr)
+		results[derivstr] = exp(dopparseprob(deriv, sent, coarse, fine))
 	return results
 
 
-def dopparseprob(tree, sent, Grammar grammar):
+def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	""" Given a Tree and a DOP reduction, compute the exact DOP parse
 	probability.
 
@@ -814,7 +815,7 @@ def dopparseprob(tree, sent, Grammar grammar):
 	advance that a small set of trees is of interest.
 
 	Expects a mapping which gives a list of consistent rules from the reduction
-	as produced by ``grammar.getrulemapping()``.
+	as produced by ``fine.getrulemapping(coarse)``.
 
 	NB: this algorithm could also be used to determine the probability of
 	derivations, but then the input would have to distinguish whether nodes are
@@ -824,19 +825,20 @@ def dopparseprob(tree, sent, Grammar grammar):
 	cdef tuple a, b, c
 	cdef Rule *rule
 	cdef LexicalRule lexrule
-	assert grammar.maxfanout == 1
-	assert grammar.logprob, "Grammar should have log probabilities."
+	assert fine.logprob, 'Grammar should have log probabilities.'
 	# Log probabilities are not ideal here because we do lots of additions,
 	# but the probabilities are very small.
 	# A possible alternative is to scale them somehow.
 
 	# add all matching POS tags
-	for (n, pos), word in zip(tree.pos(), sent):
-		for lexrule in grammar.lexicalbyword[word]:
-			if (grammar.tolabel[lexrule.lhs] == pos
-					or grammar.tolabel[lexrule.lhs].startswith(pos + '@')):
-				chart[lexrule.lhs, n, n + 1] = logprobadd(
-					chart.get((lexrule.lhs, n, n + 1), neginf), -lexrule.prob)
+	for n, pos in tree.pos():
+		pos = pos.encode('ascii')
+		word = sent[n]
+		for lexrule in fine.lexicalbyword[word]:
+			if (fine.tolabel[lexrule.lhs] == pos
+					or fine.tolabel[lexrule.lhs].startswith(pos + b'@')):
+				chart[lexrule.lhs, 1 << n] = logprobadd(
+					chart.get((lexrule.lhs, 1 << n), neginf), -lexrule.prob)
 
 	# do post-order traversal (bottom-up)
 	for node, (prod, yf) in list(zip(tree.subtrees(),
@@ -844,34 +846,32 @@ def dopparseprob(tree, sent, Grammar grammar):
 		if not isinstance(node[0], Tree):
 			continue
 		yf = ','.join(''.join(map(str, a)) for a in yf)
-		prod = grammar.rulenos[(yf, ) + prod]
-		left, right = min(node.leaves()), max(node.leaves()) + 1
+		prod = coarse.rulenos[(yf, ) + prod]
 		if len(node) == 1:  # unary node
-			for ruleno in grammar.rulemapping[prod]:
-				rule = grammar.bylhs[ruleno]
-				b = (rule.rhs1, left, right)
+			for ruleno in fine.rulemapping[prod]:
+				rule = &(fine.bylhs[0][ruleno])
+				b = (rule.rhs1, node.bitset)
 				if b in chart:
-					a = (rule.lhs, left, right)
+					a = (rule.lhs, node.bitset)
 					if a in chart:
 						chart[a] = logprobadd(chart[a], -rule.prob + chart[b])
 					else:
 						chart[a] = (-rule.prob + chart[b])
 		elif len(node) == 2:  # binary node
-			split = min(node[1].leaves())
-			for ruleno in grammar.rulemapping[prod]:
-				rule = grammar.bylhs[ruleno]
-				b = (rule.rhs1, left, split)
-				c = (rule.rhs2, split, right)
+			for ruleno in fine.rulemapping[prod]:
+				rule = &(fine.bylhs[0][ruleno])
+				b = (rule.rhs1, node[0].bitset)
+				c = (rule.rhs2, node[1].bitset)
 				if b in chart and c in chart:
-					a = (rule.lhs, left, right)
+					a = (rule.lhs, node.bitset)
 					if a in chart:
 						chart[a] = logprobadd(chart[a],
 							(-rule.prob + chart[b] + chart[c]))
 					else:
 						chart[a] = -rule.prob + chart[b] + chart[c]
 		else:
-			raise ValueError("expected binary tree without empty nodes.")
-	return chart.get((grammar.toid[tree.node], 0, len(tree.leaves())), neginf)
+			raise ValueError('expected binary tree without empty nodes.')
+	return chart.get((fine.toid[tree.label], tree.bitset), neginf)
 
 
 def main():

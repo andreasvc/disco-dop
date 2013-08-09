@@ -238,7 +238,7 @@ class Parser(object):
 					or x != stage.grammar.currentmodel):
 				exportbitpargrammar(stage)
 			if not stage.prune or start:
-				if n != 0 and stage.prune:
+				if n != 0 and stage.prune and stage.mode != 'dop-rerank':
 					if self.stages[n - 1].mode == 'pcfg-posterior':
 						(whitelist, sentprob, unfiltered,
 							numitems, numremain) = whitelistfromposteriors(
@@ -295,8 +295,9 @@ class Parser(object):
 					if start:
 						parsetrees = doprerank(chart, start, sent, stage.k,
 								self.stages[n - 1].grammar, stage.grammar)
+						msg1 = 're-ranked %d parse trees. ' % len(parsetrees)
 				else:
-					raise ValueError
+					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
 				if (n != 0 and not start and not noparse
 						and stage.split == self.stages[n - 1].split):
@@ -402,7 +403,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
-				grammar.getrulemapping(stages[n - 1].grammar)
+				if stage.mode == 'dop-rerank':
+					grammar.getrulemapping(stages[n - 1].grammar)
 			probmodels = np.load('%s/%s.probs.npz' % (resultdir, stage.name))
 			for name in probmodels.files:
 				if name != 'default':
@@ -513,7 +515,7 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	# decode results or not?
 	if not results or results.startswith('No parse'):
 		return {}, None, '%s\n%s' % (results, msg)
-	start = CFGChartItem(1, 0, len(sent))
+	start = CFGChartItem(1, 0, len(sent))  # FIXME: 1 is not right.
 	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
 	derivs = {renumber(deriv): -float(prob)
 			for prob, deriv in BITPARPARSESLOG.findall(lines)}

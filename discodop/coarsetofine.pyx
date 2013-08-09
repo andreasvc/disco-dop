@@ -75,8 +75,8 @@ cpdef prunechart(chart, ChartItem goal, Grammar coarse, Grammar fine,
 
 
 cpdef kbest_items(chart, ChartItem start, int k, bint finecfg, coarsetolabel):
-	""" produce a dictionary with ChartItems as keys (value is currently unused)
-	according to the k-best derivations in a chart. """
+	""" Produce a dictionary with ChartItems as keys (value is currently
+	unused) according to the k-best derivations in a chart. """
 	cdef Entry entry
 	cdef CFGChartItem ci
 	if k == 0:

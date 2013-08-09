@@ -22,7 +22,7 @@ DEF SXlrgaps = 2
 cdef CFGChartItem NONE = new_CFGChartItem(0, 0, 0)
 
 
-def parse(sent, Grammar grammar, tags=None, start=1, chart=None):
+def parse(sent, Grammar grammar, tags=None, start=None, chart=None):
 	""" Parse a sentence with a PCFG. Automatically decides whether to use
 	parse_dense or parse_sparse. """
 	assert grammar.maxfanout == 1, 'Not a PCFG! fanout: %d' % grammar.maxfanout
@@ -32,7 +32,7 @@ def parse(sent, Grammar grammar, tags=None, start=1, chart=None):
 	return parse_sparse(sent, grammar, start=start, tags=tags, chart=chart)
 
 
-def parse_dense(sent, Grammar grammar, start=1, tags=None):
+def parse_dense(sent, Grammar grammar, start=None, tags=None):
 	""" A CKY parser modeled after Bodenstab's 'fast grammar loop'
 	and the Stanford parser. Tries to apply each grammar rule for all
 	spans. Tracks the viterbi scores in a separate array. For grammars with
@@ -57,6 +57,8 @@ def parse_dense(sent, Grammar grammar, start=1, tags=None):
 	assert len(viterbi[0][0]) >= lensent + 1
 	minleft, maxleft, minright, maxright = minmaxmatrices(
 			grammar.nonterminals, lensent)
+	if start is None:
+		start = grammar.toid[grammar.start]
 	for left, _ in enumerate(sent):
 		chart[left][left + 1] = dict.fromkeys(range(1, grammar.nonterminals))
 	viterbiedges, msg = populatepos(grammar, chart, sent, tags,
@@ -168,7 +170,7 @@ def parse_dense(sent, Grammar grammar, start=1, tags=None):
 		return chart, NONE, "no parse " + msg
 
 
-def parse_sparse(sent, Grammar grammar, start=1, tags=None,
+def parse_sparse(sent, Grammar grammar, start=None, tags=None,
 		list chart=None, int beamwidth=0):
 	""" A CKY parser modeled after Bodenstab's 'fast grammar loop,' filtered by
 	the list of allowed items (if a pre-populated chart is given).
@@ -189,6 +191,8 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 		short [:, :] minleft, maxleft, minright, maxright
 	minleft, maxleft, minright, maxright = minmaxmatrices(
 			grammar.nonterminals, lensent)
+	if start is None:
+		start = grammar.toid[grammar.start]
 	if chart is None:
 		chart = [[None] * (lensent + 1) for _ in range(lensent)]
 		for left in range(lensent):
@@ -308,7 +312,7 @@ def parse_sparse(sent, Grammar grammar, start=1, tags=None,
 		return chart, NONE, "no parse " + msg
 
 
-def parse_symbolic(sent, Grammar grammar, start=1, tags=None):
+def parse_symbolic(sent, Grammar grammar, start=None, tags=None):
 	""" Parse sentence, a list of tokens, and produce a chart, either
 	exhaustive or up until the first complete parse. Non-probabilistic version.
 
@@ -334,6 +338,8 @@ def parse_symbolic(sent, Grammar grammar, start=1, tags=None):
 	# assign POS tags
 	viterbiedges, msg = populatepos(grammar, chart, sent, tags,
 			minleft, maxleft, minright, maxright)
+	if start is None:
+		start = grammar.toid[grammar.start]
 	if not viterbiedges:
 		return chart, NONE, msg
 
@@ -520,10 +526,12 @@ cdef populatepos(Grammar grammar, list chart, sent, tags,
 
 
 def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
-		tags=None):
+		tags=None, start=None):
 	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
 	assert not grammar.logprob, "Grammar must not have log probabilities."
 	lensent = len(sent)
+	if start is None:
+		start = grammar.toid[grammar.start]
 	if inside is None:
 		inside = np.zeros((lensent, lensent + 1,
 				grammar.nonterminals), dtype='d')
@@ -535,10 +543,10 @@ def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
 	else:
 		outside[:len(sent), :len(sent) + 1, :] = 0.0
 	minmaxlr = insidescores(sent, grammar, inside, tags)
-	if inside[0, len(sent), 1]:
-		outsidescores(grammar, sent, inside, outside, *minmaxlr)
-		start = new_CFGChartItem(1, 0, lensent)
-		msg = ''
+	if inside[0, len(sent), start]:
+		outsidescores(grammar, sent, start, inside, outside, *minmaxlr)
+		msg = 'inside prob=%g' % inside[0, len(sent), start]
+		start = new_CFGChartItem(start, 0, lensent)
 	else:
 		start = NONE
 		msg = "no parse"
@@ -693,7 +701,7 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 	return minleft, maxleft, minright, maxright
 
 
-def outsidescores(Grammar grammar, sent,
+def outsidescores(Grammar grammar, sent, UInt start,
 		double [:, :, :] inside, double [:, :, :] outside,
 		short [:, :] minleft, short [:, :] maxleft,
 		short [:, :] minright, short [:, :] maxright):
@@ -707,7 +715,7 @@ def outsidescores(Grammar grammar, sent,
 		LexicalRule lexrule
 		EdgeAgenda unaryagenda = EdgeAgenda()
 		list cell = [{} for _ in grammar.toid]
-	outside[0, lensent, 1] = 1.0
+	outside[0, lensent, start] = 1.0
 	for span in range(lensent, 0, -1):
 		for left in range(1 + lensent - span):
 			right = left + span
@@ -730,6 +738,12 @@ def outsidescores(Grammar grammar, sent,
 						unaryagenda.setifbetter(rule.rhs1, <CFGEdge>edge)
 						cell[lhs][edge] = edge
 						outside[left, right, rule.rhs1] += prob
+						assert 0.0 < outside[left, right, rule.rhs1] <= 1.0, (
+								'illegal value: outside[%d, %d, %s] = %g' % (
+									left, right, grammar.tolabel[rule.rhs1],
+									outside[left, right, rule.rhs1]),
+								rule.prob, outside[left, right, lhs],
+								grammar.tolabel[rule.lhs])
 			for rhs1 in range(grammar.nonterminals):
 				cell[rhs1].clear()
 			# binary rules
@@ -758,8 +772,15 @@ def outsidescores(Grammar grammar, sent,
 						continue
 					outside[left, split, rule.rhs1] += rule.prob * rs * os
 					outside[split, right, rule.rhs2] += rule.prob * ls * os
-					assert 0.0 < outside[left, split, rule.rhs1] <= 1.0
-					assert 0.0 < outside[split, right, rule.rhs2] <= 1.0
+					assert 0.0 < outside[left, split, rule.rhs1] <= 1.0, (
+							'illegal value: outside[%d, %d, %s] = %g' % (
+								left, split, grammar.tolabel[rule.rhs1],
+								outside[left, split, rule.rhs1]),
+							rule.prob, rs, os, grammar.tolabel[rule.lhs])
+					assert 0.0 < outside[split, right, rule.rhs2] <= 1.0, (
+							'illegal value: outside[%d, %d, %s] = %g' % (
+								split, right, grammar.tolabel[rule.rhs2],
+								outside[split, right, rule.rhs2]))
 
 
 def minmaxmatrices(nonterminals, lensent):

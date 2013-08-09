@@ -81,7 +81,7 @@ stages=[  # Double-DOP
 	dop=True, usedoubledop=True,
 	iterate=True, complement=False,
 	k=1e-5, m=10000,
-	kbest=True, sample=True,
+	kbest=True, sample=False,
 	estimator="ewe", objective="mpp",
   ),
 

@@ -29,7 +29,7 @@ cdef FatChartItem FATNONE = new_FatChartItem(0)
 cdef FatChartItem FATCOMPONENT = new_FatChartItem(0)
 
 
-def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
+def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=None,
 		list whitelist=None, bint splitprune=False, bint markorigin=False,
 		estimates=None, int beamwidth=0):
 	"""
@@ -68,7 +68,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		Entry entry
 		LCFRSEdge edge
 		SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
-		SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
+		SmallChartItem goal
 		double [:, :, :, :] outside
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
@@ -80,6 +80,9 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=1,
 		return parse_longsent(sent, grammar, tags=tags, start=start,
 			exhaustive=exhaustive, whitelist=whitelist, splitprune=splitprune,
 			markorigin=markorigin, estimates=estimates)
+	if start is None:
+		start = grammar.toid[grammar.start]
+	goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
@@ -383,7 +386,7 @@ cdef inline bint concat(Rule *rule, ULLong lvec, ULLong rvec):
 	return lvec == rvec == 0
 
 
-def parse_longsent(sent, Grammar grammar, tags=None, start=1,
+def parse_longsent(sent, Grammar grammar, tags=None, start=None,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False, estimates=None):
 	"""
@@ -398,13 +401,16 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=1,
 		Entry entry
 		LCFRSEdge edge
 		FatChartItem item, sibling, newitem = new_FatChartItem(0)
-		FatChartItem goal = new_FatChartItem(start)
+		FatChartItem goal
 		double [:, :, :, :] outside
 		double x = 0.0, y = 0.0, score, inside
 		signed int length = 0, left = 0, right = 0, gaps = 0
 		signed int lensent = len(sent), estimatetype = 0
 		UInt i, lhs, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
+	if start is None:
+		start = grammar.toid[grammar.start]
+	goal = new_FatChartItem(start)
 	ulongset(goal.vec, ~0UL, BITNSLOTS(lensent) - 1)
 	goal.vec[BITSLOT(lensent)] = BITMASK(lensent) - 1
 	if len(sent) >= (sizeof(goal.vec) * 8):
@@ -705,7 +711,7 @@ cdef inline bint fatconcat(Rule *rule, ULong *lvec, ULong *rvec):
 	return lpos == rpos == -1
 
 
-def parse_symbolic(sent, Grammar grammar, tags=None, start=1,
+def parse_symbolic(sent, Grammar grammar, tags=None, start=None,
 		bint exhaustive=True, list whitelist=None, bint splitprune=False, bint
 		markorigin=False):
 	"""
@@ -719,13 +725,16 @@ def parse_symbolic(sent, Grammar grammar, tags=None, start=1,
 		Entry entry
 		LCFRSEdge edge
 		SmallChartItem item, sibling, newitem = new_ChartItem(0, 0)
-		SmallChartItem goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
+		SmallChartItem goal
 		signed int lensent = len(sent)
 		UInt i, blocked = 0, Epsilon = grammar.toid[b'Epsilon']
 		ULong maxA = 0
 		ULLong vec = 0
 	if lensent >= sizeof(vec) * 8:
 		raise NotImplementedError('sentence too long.')
+	if start is None:
+		start = grammar.toid[grammar.start]
+	goal = new_ChartItem(start, (1ULL << len(sent)) - 1)
 	for i, word in enumerate(sent):
 		recognized = False
 		tag = tags[i].encode('ascii') if tags else None
@@ -919,8 +928,8 @@ def pprint_chart(chart, sent, tolabel):
 						'%s[%s]' % (tolabel[edge.left.label].decode('ascii'),
 						edge.left.binrepr(len(sent))), end='')
 				if edge.right:
-					print('\t%s[%s]' % (tolabel[edge.right.label].decode('ascii'),
-							edge.right.binrepr(len(sent))), end='')
+					print('\t%s[%s]' % (tolabel[edge.right.label].decode(
+							'ascii'), edge.right.binrepr(len(sent))), end='')
 			print()
 		print()
 

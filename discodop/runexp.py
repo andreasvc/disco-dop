@@ -419,7 +419,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
-				grammar.getrulemapping(stages[n - 1].grammar)
+				if stage.mode == 'dop-rerank':
+					grammar.getrulemapping(stages[n - 1].grammar)
 				logging.info(msg)
 			# write prob models
 			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),

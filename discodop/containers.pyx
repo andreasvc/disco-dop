@@ -1,5 +1,5 @@
 """ Data types for grammars, chart items, &c. """
-from math import exp as pyexp, log as pylog
+from math import exp, log
 import re
 import logging
 import numpy as np
@@ -22,6 +22,8 @@ LEXICON_NONINT = re.compile("[ \t][0-9]+[./][0-9]+[ \t\n]")
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
 	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
+	if a.lhs == b.lhs:
+		return (a.no > b.no) - (a.no < b.no)
 	return (a.lhs > b.lhs) - (a.lhs < b.lhs)
 cdef int cmp1(const void *p1, const void *p2) nogil:
 	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
@@ -32,8 +34,7 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 
 
 cdef class Grammar:
-	"""
-	A grammar object which stores rules compactly, indexed in various ways.
+	""" A grammar object which stores rules compactly, indexed in various ways.
 
 	:param rule_tuples_or_bytes: either a sequence of tuples containing both
 		phrasal & lexical rules, or a bytes string containing the phrasal
@@ -89,13 +90,6 @@ cdef class Grammar:
 		for n in range(self.nonterminals):
 			self.fanout[n] = fanoutdict[self.tolabel[n]]
 		del rulelines, fanoutdict
-		# store 'default' weights
-		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
-		tmp = self.models[0]
-		for n in range(self.numrules):
-			tmp[self.bylhs[0][n].no] = self.bylhs[0][n].prob
-		for n, lexrule in enumerate(self.lexical, self.numrules):
-			tmp[n] = lexrule.prob
 		# index & filter phrasal rules in different ways
 		self._indexrules(self.bylhs, 0, 0)
 		# if the grammar only contains integral values (frequencies),
@@ -104,6 +98,13 @@ cdef class Grammar:
 		if not (nonint.search(self.origrules)
 				or LEXICON_NONINT.search(self.origlexicon)):
 			self._normalize()
+		# store 'default' weights
+		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
+		tmp = self.models[0]
+		for n in range(self.numrules):
+			tmp[self.bylhs[0][n].no] = self.bylhs[0][n].prob
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			tmp[n] = lexrule.prob
 		self._indexrules(self.unary, 1, 2)
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
@@ -114,9 +115,9 @@ cdef class Grammar:
 		""" Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs """
 		Epsilon = b'Epsilon'
-		# Epsilon and the start symbol get IDs 0 and 1 respectively.
+		# Epsilon gets IDs 0, can only occur in RHS of lexical rules.
 		self.toid = {Epsilon: 0}
-		count = 2  # used to assign IDs to non-terminal labels
+		count = 1  # used to assign IDs to non-terminal labels
 		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
 		for line in rulelines:
 			if not line:
@@ -151,11 +152,8 @@ cdef class Grammar:
 							"previous: %d; this non-terminal: %d.\nrule: %r" % (
 							nt, fanoutdict[nt], fanout, rule))
 				else:
-					if nt == self.start:
-						self.toid[nt] = 1
-					else:
-						self.toid[nt] = count
-						count += 1
+					self.toid[nt] = count
+					count += 1
 					fanoutdict[nt] = fanout
 					if fanoutdict[nt] > self.maxfanout:
 						self.maxfanout = fanoutdict[nt]
@@ -518,19 +516,19 @@ cdef class Grammar:
 		self.rulemapping = mapping
 
 	cdef rulestr(self, Rule rule):
-		left = "%.2f %s => %s%s" % (
+		left = '%.2f %s => %s%s' % (
 			exp(-rule.prob) if self.logprob else rule.prob,
 			self.tolabel[rule.lhs].decode('ascii'),
 			self.tolabel[rule.rhs1].decode('ascii'),
-			"  %s" % self.tolabel[rule.rhs2].decode('ascii')
+			'  %s' % self.tolabel[rule.rhs2].decode('ascii')
 				if rule.rhs2 else '')
-		return left.ljust(40) + self.yfstr(rule)
+		return '%s%s [%d]' % (left.ljust(40), self.yfstr(rule), rule.no)
 
 	cdef yfstr(self, Rule rule):
 		cdef int n, m = 0
 		cdef result = ''
 		for n in range(8 * sizeof(rule.args)):
-			result += "1" if (rule.args >> n) & 1 else "0"
+			result += '1' if (rule.args >> n) & 1 else '0'
 			if (rule.lengths >> n) & 1:
 				m += 1
 				if m == self.fanout[rule.lhs]:
@@ -543,18 +541,11 @@ cdef class Grammar:
 				self.tolabel[rule.rhs2],
 				bin(rule.args), bin(rule.lengths)))
 
-	def rulesstr(self, lhs):
-		cdef int n = 0
-		result = []
-		while self.bylhs[lhs][n].lhs == lhs:
-			result.append(self.rulestr(self.bylhs[lhs][n]))
-			n += 1
-		return "\n".join(result)
-
 	def __str__(self):
 		cdef LexicalRule lexrule
+		cdef size_t n
 		rules = "\n".join(filter(None,
-			[self.rulesstr(lhs) for lhs in range(1, self.nonterminals)]))
+			[self.rulestr(self.bylhs[0][n]) for n in range(self.numrules)]))
 		lexical = "\n".join(["%.2f %s => %s" % (
 				exp(-lexrule.prob) if self.logprob else lexrule.prob,
 				self.tolabel[lexrule.lhs].decode('ascii'),

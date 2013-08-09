@@ -1,4 +1,4 @@
-from math import isinf as pyisinf, exp as pyexp, log as pylog
+from math import isinf, exp, log
 from libc.stdlib cimport malloc, realloc, calloc, free, qsort
 from libc.string cimport memcmp, memset
 cimport cython
@@ -317,28 +317,28 @@ cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
 	return edge
 
 
-cdef object log1e200 = pylog(1e200)
+cdef object log1e200 = log(1e200)
 
 
 cdef inline logprobadd(x, y):
-	""" add two log probabilities in log space;
-	i.e., logprobadd(log(a), log(b)) == log(a + b)
+	""" Add two log probabilities in log space;
+	i.e., ``logprobadd(log(a), log(b)) == log(a + b)``
 	NB: expect python floats, not C doubles """
-	if pyisinf(x):
+	if isinf(x):
 		return y
-	elif pyisinf(y):
+	elif isinf(y):
 		return x
 	# If one value is much smaller than the other, keep the larger value.
-	elif x < (y - log1e200):
+	elif x < (y - 460):  # log(1e200)
 		return y
-	elif y < (x - log1e200):
+	elif y < (x - 460):  # log(1e200)
 		return x
 	diff = y - x
-	assert not pyisinf(diff)
-	if pyisinf(pyexp(diff)):	# difference is too large
+	assert not isinf(diff)
+	if isinf(exp(diff)):	# difference is too large
 		return x if x > y else y
 	# otherwise return the sum.
-	return x + pylog(1.0 + pyexp(diff))
+	return x + log(1.0 + exp(diff))
 
 
 cdef inline double logprobsum(list logprobs):
@@ -352,9 +352,9 @@ cdef inline double logprobsum(list logprobs):
 	https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations """
 	maxprob = max(logprobs)
 	# fsum is supposedly more accurate.
-	#return pyexp(fsum([maxprob, log(fsum([pyexp(prob - maxprob)
+	#return exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
 	#							for prob in logprobs]))]))
-	return maxprob + pylog(sum([pyexp(prob - maxprob) for prob in logprobs]))
+	return maxprob + log(sum([exp(prob - maxprob) for prob in logprobs]))
 
 
 #cdef inline long djb_hash(UChar *key, int size):
