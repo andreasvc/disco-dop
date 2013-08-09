@@ -599,18 +599,18 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	results (because it cannot be deleted by ``transform()`` when non-unary).
 
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (), \
-			(), {}, {})
+	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (),
+	... (), {}, {})
 	>>> sorted(bracketings(tree).items())
 	[(('S', (0, 1, 2)), 1), (('VP', (0, 2)), 1)]
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ('VP',), \
-			(), {}, {})
+	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ('VP',),
+	... (), {}, {})
 	>>> bracketings(tree)
 	Counter({('S', (0, 1, 2)): 1})
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ('S',), \
-			(), {}, {})
+	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ('S',),
+	... (), {}, {})
 	>>> bracketings(tree, dellabel=('S',))
 	Counter({('VP', (0, 2)): 1})
 	"""

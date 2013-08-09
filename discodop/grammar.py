@@ -667,11 +667,11 @@ def defaultparse(wordstags, rightbranching=False):
 	""" a default parse, either right branching NPs, or all words under a single
 	constituent 'NOPARSE'.
 
-	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'), \
-			('here','X')])
+	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
+	... ('here','X')])
 	'(NOPARSE (X like) (X this) (NN example) (X here))'
-	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'), \
-			('here','X')], True)
+	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
+	... ('here','X')], True)
 	'(NP (X like) (NP (X this) (NP (NN example) (NP (X here)))))' """
 	if rightbranching:
 		if wordstags[1:]:

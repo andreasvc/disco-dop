@@ -137,31 +137,31 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 
 	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, horzmarkov=1, leftmostunary=False, \
-			rightmostunary=True, tailmarker=''))
-	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS> \
+	>>> print(binarize(tree, horzmarkov=1, leftmostunary=False,
+	... rightmostunary=True, tailmarker=''))
+	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS>
 		(PIS 2) (S|<VMFIN> (VMFIN 1))))
 
 	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, horzmarkov=1, leftmostunary=True, \
-		rightmostunary=False, tailmarker=''))
-	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS> \
+	>>> print(binarize(tree, horzmarkov=1, leftmostunary=True,
+	... rightmostunary=False, tailmarker=''))
+	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS>
 		(PIS 2) (VMFIN 1))))
 
 	>>> tree = unbinarize(tree); assert tree == origtree
 	>>> print(binarize(tree, factor='left', horzmarkov=2, tailmarker=''))
-	(S (S|<PIS,VMFIN> (VP (VP|<ADV,VVINF> (PDS 0) (ADV 3)) (VVINF 4)) \
+	(S (S|<PIS,VMFIN> (VP (VP|<ADV,VVINF> (PDS 0) (ADV 3)) (VVINF 4))
 		(PIS 2)) (VMFIN 1))
 
 	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, horzmarkov=1, vertmarkov=3, leftmostunary=True, \
-		rightmostunary=False, tailmarker='', pospa=True))
-	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP,S> 0) (VP|<ADV>^<S> (ADV^<VP,S> \
+	>>> print(binarize(tree, horzmarkov=1, vertmarkov=3, leftmostunary=True,
+	... rightmostunary=False, tailmarker='', pospa=True))
+	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP,S> 0) (VP|<ADV>^<S> (ADV^<VP,S>
 		3) (VVINF^<VP,S> 4)))) (S|<PIS> (PIS^<S> 2) (VMFIN^<S> 1))))
 
 	>>> tree = Tree('(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))')
 	>>> print(binarize(tree, tailmarker='', reverse=False))
-	(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> (D 3) \
+	(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> (D 3)
 		(S|<E,F> (E 4) (F 5)))))) """
 	# assume all nodes have homogeneous children, terminals have no siblings
 	# A semi-hack to have elegant looking code below.  As a result, any subtree
@@ -526,10 +526,10 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	>>> tree2 = binarize(Tree.parse(tree, parse_leaf=int))
 	>>> minimalbinarization(tree1, complexityfanout, head=2) == tree2
 	True
-	>>> tree = '(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10))  (B3 (t 1) \
-		(t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))'
-	>>> a = minimalbinarization(addbitsets(tree), complexityfanout)
-	>>> b = minimalbinarization(addbitsets(tree), fanoutcomplexity)
+	>>> tree = addbitsets('(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10)) '
+	... '(B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))')
+	>>> a = minimalbinarization(tree, complexityfanout)
+	>>> b = minimalbinarization(tree, fanoutcomplexity)
 	>>> print(max(map(complexityfanout, a.subtrees())))
 	(14, 6)
 	>>> print(max(map(complexityfanout, b.subtrees())))
@@ -714,8 +714,8 @@ def canonicalize(tree):
 def contsets(nodes):
 	""" partition children into continuous subsets
 
-	>>> tree = Tree.parse( \
-		"(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
+	>>> tree = Tree.parse(
+	... "(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
 	>>> print(list(contsets(tree)))
 	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])],
 	[Tree('CARD', [4]), Tree('VVPP', [5])]] """
@@ -740,13 +740,13 @@ def splitdiscnodes(tree, markorigin=False):
 	markorigin=False: VP* (bare label)
 	markorigin=True: VP*1 (add index)
 
-	>>> tree = Tree.parse("(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) \
-		(VVPP 5)) (VAINF 6)) (VMFIN 3))", parse_leaf=int)
+	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
+	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
 	>>> print(splitdiscnodes(tree.copy(True)))
-	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4) \
+	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4)
 		(VVPP 5)) (VAINF 6)))
 	>>> print(splitdiscnodes(tree, markorigin=True))
-	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1 \
+	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1
 		(CARD 4) (VVPP 5)) (VAINF 6))) """
 	treeclass = tree.__class__
 	for node in postorder(tree):
@@ -769,13 +769,13 @@ SPLITLABEL = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
 def mergediscnodes(tree):
 	""" Reverse transformation of splitdiscnodes()
 
-	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) \
-		(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
+	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
+	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
 	>>> print(mergediscnodes(splitdiscnodes(tree)))
-	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) \
+	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6))
 		(VMFIN 3))
 	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
-	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6)) \
+	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6))
 		(VMFIN 3))
 	>>> tree = Tree.parse('(S (X (A 0) (A 2)) (X (A 1) (A 3)))', parse_leaf=int)
 	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))

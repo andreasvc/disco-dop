@@ -648,9 +648,9 @@ cdef getsent(frag, list sent):
 	('(ROOT (S 0) ($. 1))', (None, '.'))
 	>>> getsent('(ROOT (S 0) ($. 3))', ['Foo', 'bar', 'zed','.'])
 	('(ROOT (S 0) ($. 2))', ('Foo', None, '.'))
-	>>> getsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', "In Japan wird \
-	offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur \
-	gr\\xf6\\xdften Bank der Welt vorbereitet .".split(' '))
+	>>> getsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', '''In Japan wird
+	...  offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur
+	...  gr\\xf6\\xdften Bank der Welt vorbereitet .'''.split(' '))
 	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None)) """
 	cdef:
 		int n, m = 0, maxl
