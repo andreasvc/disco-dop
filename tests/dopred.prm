@@ -65,6 +65,19 @@ stages=[  # DOP reduction
 	estimator="dop1", objective="sl-dop-simple",
   ),
 
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='mpp', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=False,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator='bon', objective='mpp',
+  ),
+
   # test rest of parameters together:
   dict(
 	name='pcfg', mode='pcfg-posterior',

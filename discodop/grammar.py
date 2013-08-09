@@ -159,7 +159,7 @@ def dopreduction(trees, sents, packedgraph=False):
 	"""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@12),
 	# 	counts of NP@... should sum to count of NP
-	# ntfd: frequency of a node in corpus
+	# ntfd: frequency of a node in treebank
 	fd = defaultdict(int)
 	ntfd = defaultdict(int)
 	rules = defaultdict(int)
@@ -190,20 +190,24 @@ def dopreduction(trees, sents, packedgraph=False):
 		rfe = Fraction((1 if any('@' in z for z in r) else freq) *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
 		# Bod (2003, figure 3)
-		ewe = (float((1 if '@' in r[0] else freq) *
+		ewe = (float((1 if any('@' in z for z in r) else freq) *
 			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1))
 			/ (fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
-		# any rule corresponding to the introduction of a
+		# Goodman (2003). any rule corresponding to the introduction of a
 		# fragment has a probability of 1/2, else 1.
 		shortest = 1. if '@' in r[0] else 0.5
-		return ((r, yf), rfe), ewe, shortest
+		# Goodman (2003, p. 136). Prob. of fragment is reduced by factor of 2
+		# for each non-root non-terminal it contains.
+		bon = 0.25 if '@' in r[0] else (1 / (4 * ntfd[r[0]]))
+		return ((r, yf), rfe), ewe, shortest, bon
 
 	rules = sortgrammar(rules.items())
-	rules, ewe, shortest = zip(*(weights(r) for r in rules))
-	return list(rules), list(ewe), list(shortest)
+	rules, ewe, shortest, bon = zip(*(weights(r) for r in rules))
+	return list(rules), dict(
+			ewe=list(ewe), shortest=list(shortest), bon=list(bon))
 
 
-def doubledop(fragments, debug=False):
+def doubledop(trees, fragments, debug=False):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus all
 	individual productions needed to obtain full coverage.
@@ -218,13 +222,19 @@ def doubledop(fragments, debug=False):
 		eweweights are alternate weights following the equal weights estimate.
 	"""
 	def getweight(frag, terminals):
-		""" :returns: frequency and EWE for fragment. """
-		freq = len(fragments[frag, terminals])
+		""" :returns: frequency, EWE, and other weights for fragment. """
+		freq = sum(fragments[frag, terminals].values())
+		root = frag[1:frag.index(' ')]
+		nonterms = frag.count('(') - 1
 		# Sangati & Zuidema (2011, eq. 5)
 		# FIXME: verify that this formula is equivalent to Bod (2003).
 		ewe = sum(Fraction(v, fragmentcount[k])
 				for k, v in fragments[frag, terminals].items())
-		return freq, ewe
+		# Bonnema (2003, p. 34)
+		bon = 2 ** -nonterms * (freq / ntfd[root])
+		short = 0.5
+		return freq, ewe, bon, short
+	uniformweight = (1, 1, 1, 1)
 	grammar = {}
 	backtransform = {}
 	ids = UniqueIDs()
@@ -233,6 +243,8 @@ def doubledop(fragments, debug=False):
 	for indices in fragments.values():
 		for index, cnt in indices.items():
 			fragmentcount[index] += cnt
+	# ntfd: frequency of a non-terminal node in treebank
+	ntfd = multiset(node.label for tree in trees for node in tree.subtrees())
 
 	# binarize, turn to lcfrs productions
 	# use artificial markers of binarization as disambiguation,
@@ -259,7 +271,7 @@ def doubledop(fragments, debug=False):
 
 		# first binarized production gets prob. mass
 		grammar[prod] = getweight(frag, terminals)
-		grammar.update(zip(prods[1:], repeat((1, 1))))
+		grammar.update(zip(prods[1:], repeat(uniformweight)))
 		# & becomes key in backtransform
 		backtransform[prod] = newfrag
 	if debug:
@@ -289,19 +301,20 @@ def doubledop(fragments, debug=False):
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = [backtransform[r] for r, _ in grammar
 			if r in backtransform]
-	# relative frequences as probabilities
-	ntfd = defaultdict(int)
-	ntfdewe = defaultdict(int)
-	for rule, (freq, ewe) in grammar:
-		ntfd[rule[0][0]] += freq
-		ntfdewe[rule[0][0]] += ewe  # FIXME: build a different ntfd for ewe?
-	eweweights = [float(ewe) / ntfdewe[rule[0][0]]
-			for rule, (_, ewe) in grammar]
-	shortest = [1. if '@' in rule[0][0] or '}' in rule[0][0] else 0.5
-			for rule, _ in grammar]
-	grammar = [(rule, Fraction(freq, ntfd[rule[0][0]]))
-			for rule, (freq, _) in grammar]
-	return grammar, backtransform, eweweights, shortest
+	# relative frequences as probabilities (don't normalize shortest & bon)
+	ntsums = defaultdict(int)
+	ntsumsewe = defaultdict(int)
+	for rule, (freq, ewe, _, _) in grammar:
+		ntsums[rule[0][0]] += freq
+		ntsumsewe[rule[0][0]] += ewe
+	eweweights = [float(ewe) / ntsumsewe[rule[0][0]]
+			for rule, (_, ewe, _, _) in grammar]
+	bonweights = [bon for rule, (_, _, bon, _) in grammar]
+	shortest = [s for rule, (_, _, _, s) in grammar]
+	grammar = [(rule, Fraction(freq, ntsums[rule[0][0]]))
+			for rule, (freq, _, _, _) in grammar]
+	return grammar, backtransform, dict(
+			ewe=eweweights, bon=bonweights, shortest=shortest)
 
 
 def sortgrammar(grammar):
@@ -850,7 +863,7 @@ def test():
 
 	fragments = getfragments(trees, sents, 1)
 	debug = '--debug' in sys.argv
-	grammarx, backtransform, _, _ = doubledop(fragments, debug=debug)
+	grammarx, backtransform, _ = doubledop(trees, fragments, debug=debug)
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
@@ -931,16 +944,18 @@ def main():
 	if model in ('pcfg', 'plcfrs'):
 		grammar = treebankgrammar(trees, sents)
 	elif model == 'dopreduction':
-		grammar, eweweights, shortest = dopreduction(trees, sents,
+		grammar, altweights = dopreduction(trees, sents,
 				packedgraph='--packed' in opts)
 	elif model == 'doubledop':
 		numproc = int(opts.get('--numproc', 1))
 		fragments = getfragments(trees, sents, numproc)
-		grammar, backtransform, eweweights, shortest = doubledop(fragments)
+		grammar, backtransform, altweights = doubledop(trees, fragments)
 	if opts.get('--dopestimator', 'dop1') == 'ewe':
-		grammar = [(rule, w) for (rule, _), w in zip(grammar, eweweights)]
+		grammar = [(rule, w) for (rule, _), w in
+				zip(grammar, altweights['ewe'])]
 	elif opts.get('--dopestimator', 'dop1') == 'shortest':
-		grammar = [(rule, w) for (rule, _), w in zip(grammar, shortest)]
+		grammar = [(rule, w) for (rule, _), w in
+				zip(grammar, altweights['shortest'])]
 
 	print(grammarinfo(grammar))
 	rules = grammarfile + '.rules'

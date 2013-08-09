@@ -911,9 +911,9 @@ def main():
 		"""d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
 		a d e""".splitlines()]
-	xgrammar, _, shortest = dopreduction(trees, sents)
+	xgrammar, altweights = dopreduction(trees, sents)
 	grammar = Grammar(xgrammar)
-	grammar.register(u'shortest', shortest)
+	grammar.register(u'shortest', altweights['shortest'])
 	print(grammar)
 	sent = "a b c".split()
 	chart, start, _ = plcfrs.parse(sent, grammar, None, True)

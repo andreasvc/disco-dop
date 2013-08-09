@@ -346,17 +346,17 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				# as well as depth-1 'cover' fragments
 				fragments = getfragments(traintrees, sents, numproc,
 						iterate=stage.iterate, complement=stage.complement)
-				xgrammar, backtransform, eweweights, shortest = doubledop(
-						fragments)
+				xgrammar, backtransform, altweights = doubledop(
+						traintrees, fragments)
 			else:  # DOP reduction
-				xgrammar, eweweights, shortest = dopreduction(
+				xgrammar, altweights = dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
 			if lexmodel and simplelexsmooth:
 				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
-				eweweights.extend(w for _, w in newrules)
-				shortest.extend(w for _, w in newrules)
+				for weights in altweights.values():
+					weights.extend(w for _, w in newrules)
 
 				def wordslast(m):
 					""" Sort rules, but lexical rules sorted by word at end """
@@ -365,8 +365,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 							'}<' in r[0], r)
 
 				idx = sorted(range(len(xgrammar)), key=wordslast)
-				eweweights = [eweweights[m] for m in idx]
-				shortest = [shortest[m] for m in idx]
+				altweights = {name: [weights[m] for m in idx]
+						for name, weights in altweights.items()}
 				xgrammar = [xgrammar[m] for m in idx]
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
@@ -375,8 +375,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					xgrammar, bitpar=stage.mode.startswith('pcfg'))
 			grammar = Grammar(rules, lexicon, start=top,
 					bitpar=stage.mode.startswith('pcfg'))
-			grammar.register(u'shortest', shortest)
-			grammar.register(u'ewe', eweweights)
+			for name in altweights:
+				grammar.register(u'%s' % name, altweights[name])
 			with gzip.open('%s/%s.rules.gz' % (
 					resultdir, stage.name), 'wb') as rulesfile:
 				rulesfile.write(rules)
@@ -961,8 +961,8 @@ def readparam(filename):
 			assert (stage.dop and not stage.usedoubledop
 					and stage.objective == 'mpp')
 		if stage.dop:
-			assert stage.estimator in ("dop1", "ewe")
-			assert stage.objective in ("mpp", "mpd", "shortest",
+			assert stage.estimator in ('dop1', 'ewe', 'bon')
+			assert stage.objective in ('mpp', 'mpd', 'shortest',
 					"sl-dop", "sl-dop-simple")
 	return params
 
