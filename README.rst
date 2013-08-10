@@ -101,43 +101,63 @@ is freely available for download for research purposes.
 
 Tools
 -----
-Aside from the parser there are some standalone tools:
+Aside from the parser there are some standalone tools, invoked as ``discodop <cmd>``:
 
-:``fragments``: Finds recurring or common fragments in one or more treebanks.
+``fragments``
+    Finds recurring or common fragments in one or more treebanks.
     It can be used with discontinuous as well as Penn-style bracketed treebanks.
-:``eval``: Discontinuous evaluation. Reports F-scores and other metrics.
+    Example::
+
+        discodop fragments wsj-02-21.mrg > wsjfragments.txt
+
+``eval``
+    Discontinuous evaluation. Reports F-scores and other metrics.
     Accepts ``EVALB`` parameter files::
 
-    ``discodop eval sample/gold.export sample/dop.export proper.prm``
-:``treetransforms``: A command line interface to perform transformations on
+        discodop eval sample/gold.export sample/dop.export proper.prm
+
+``treetransforms``
+    A command line interface to perform transformations on
      treebanks such as binarization.
-:``grammar``: A command line interface to read off grammars from (binarized)
+
+``grammar``
+    A command line interface to read off grammars from (binarized)
       treebanks.
-:``treedraw``: Visualize (discontinuous) trees.
-:``parser``: A basic command line interface to the parser comparable to bitpar.
+
+``treedraw``
+    Visualize (discontinuous) trees. Command-line interface::
+
+       discodop treedraw < negra-corpus.export | less -R
+
+``parser``
+    A basic command line interface to the parser comparable to bitpar.
     Reads grammars from text files.
-:``demos``: Contains examples of various formalisms encoded in LCFRS grammars.
-:``gen``: An experiment in generation with LCFRS.
 
-All of these can be started with the ``discodop`` command.
-For example::
+``demos``
+    Contains examples of various formalisms encoded in LCFRS grammars.
 
-    discodop fragments --help
+``gen``
+    An experiment in generation with LCFRS.
 
-... prints instructions for the fragment extractor.
+For instructions, pass the ``--help`` option to a command.
 
 Web interfaces
 --------------
 There are three web based tools in the ``web/`` directory. These require Flask to
 be installed.
 
-:``parse.py``: A web interface to the parser. Expects a series of grammars
+``parse.py``
+    A web interface to the parser. Expects a series of grammars
     in subdirectories of ``web/grammars/``, each containing grammar files
     as produced by running ``discodop runexp``.
-:``treesearch.py``: A web interface for searching trough treebanks. Expects
+
+``treesearch.py``
+    A web interface for searching trough treebanks. Expects
     one or more (non-discontinuous) treebanks with the ``.mrg`` extension in
     the directory ``web/corpus/`` (sample included).
-:``treedraw.py``: A web interface for drawing discontinuous trees in various
+
+``treedraw.py``
+    A web interface for drawing discontinuous trees in various
     formats.
 
 See https://github.com/andreasvc/disco-dop/wiki for screenshots.
