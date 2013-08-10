@@ -17,7 +17,8 @@ generalization of Probabilistic Context-Free Grammar (PCFG). Data-Oriented
 Parsing allows re-use of arbitrary-sized fragments from previously seen
 sentences using Tree-Substitution Grammar (TSG).
 
-.. contents::
+.. contents:: Contents of this README:
+   :local:
 
 Features
 ========
@@ -118,16 +119,16 @@ Aside from the parser there are some standalone tools, invoked as ``discodop <cm
 
 ``treetransforms``
     A command line interface to perform transformations on
-     treebanks such as binarization.
+    treebanks such as binarization.
 
 ``grammar``
     A command line interface to read off grammars from (binarized)
-      treebanks.
+    treebanks.
 
 ``treedraw``
     Visualize (discontinuous) trees. Command-line interface::
 
-       discodop treedraw < negra-corpus.export | less -R
+        discodop treedraw < negra-corpus.export | less -R
 
 ``parser``
     A basic command line interface to the parser comparable to bitpar.
