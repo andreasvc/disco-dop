@@ -22,11 +22,12 @@ from discodop.treedraw import DrawTree
 from discodop.runexp import readparam
 from discodop.parser import Parser, readgrammars, probstr
 
-APP = Flask(__name__)
-morphtags = re.compile(
-		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 LIMIT = 40  # maximum sentence length
+APP = Flask(__name__)
+CACHE = SimpleCache()
 PARSERS = {}
+MORPHTAGS = re.compile(
+		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 
 
 @APP.route('/')
@@ -51,6 +52,9 @@ def parse():
 	senttok = tokenize(sent)
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
+	key = (senttok, est, marg, objfun, coarse, html)
+	if CACHE.get(key) is not None:
+		return CACHE.get(key)
 	lang = guesslang(senttok)
 	PARSERS[lang].stages[-1].estimator = est
 	PARSERS[lang].stages[-1].objective = objfun
@@ -76,7 +80,7 @@ def parse():
 		fragments = results[-1].fragments or ()
 		msg = '\n'.join(stage.msg for stage in results)
 		APP.logger.info('[%s] %s' % (probstr(prob), tree))
-		tree = morphtags.sub(r'(\1\2', tree)
+		tree = MORPHTAGS.sub(r'(\1\2', tree)
 		tree = Tree.parse(tree, parse_leaf=int)
 		result = Markup(DrawTree(tree, senttok).text(
 				unicodelines=True, html=html))
@@ -89,7 +93,7 @@ def parse():
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (
 				n + 1, probstr(prob),
 				DrawTree(treetransforms.removefanoutmarkers(
-					treetransforms.unbinarize(Tree.parse(morphtags.sub(
+					treetransforms.unbinarize(Tree.parse(MORPHTAGS.sub(
 						r'(\1\2', tree), parse_leaf=int))),
 					senttok).text(unicodelines=True, html=html))
 				for n, (tree, prob) in enumerate(parsetrees)))
@@ -102,11 +106,11 @@ def parse():
 			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n'))
 	if not html:
-		return Response('\n'.join((nbest, frags, info, result)),
-				mimetype='text/plain')
-	return render_template('parsetree.html', sent=sent, result=result,
-			frags=frags, nbest=nbest, info=info, randid=randid())
-
+		CACHE.set(key, Response('\n'.join((nbest, frags, info, result)),
+				mimetype='text/plain'), timeout=5000)
+	CACHE.set(key, render_template('parsetree.html', sent=sent, result=result,
+			frags=frags, nbest=nbest, info=info, randid=randid()), timeout=5000)
+	return CACHE.get(key)
 
 @APP.route('/favicon.ico')
 def favicon():
@@ -136,27 +140,6 @@ def loadparsers():
 						'relationalrealizational'))
 			APP.logger.info('Grammar for %s loaded.' % lang)
 	assert PARSERS, 'no grammars found!'
-
-
-def cached(timeout=3600):
-	""" Caching decorator from Flask documentation """
-	def decorator(func):
-		""" Wrapper """
-		func.cache = SimpleCache()
-
-		@wraps(func)
-		def decorated_function(*args, **kwargs):
-			""" memoize on function arguments. """
-			cache_key = args
-			result = func.cache.get(cache_key)
-			if result is not None:
-				return result
-			result = func(*args, **kwargs)
-			func.cache.set(cache_key, result, timeout=timeout)
-			return result
-
-		return decorated_function
-	return decorator
 
 
 def randid():

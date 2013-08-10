@@ -384,9 +384,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		if stage.dop:
 			assert stage.useestimates is None, 'not supported'
 			if stage.usedoubledop:
-				backtransform = dict(enumerate(
-						gzip.open('%s/%s.backtransform.gz' % (resultdir,
-						stage.name)).read().splitlines()))
+				backtransform = gzip.open('%s/%s.backtransform.gz' % (
+						resultdir, stage.name)).read().splitlines()
 				if n and stage.prune:
 					_ = grammar.getmapping(stages[n - 1].grammar,
 						striplabelre=re.compile(b'@.+$'),
