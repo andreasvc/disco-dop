@@ -229,7 +229,7 @@ class Parser(object):
 				if (stage.estimator == 'ewe'
 						or stage.objective.startswith('sl-dop')):
 					model = u'ewe'
-				elif stage.estimator == 'ewe':
+				elif stage.estimator == 'bon':
 					model = u'bon'
 				if stage.objective == 'shortest':
 					model = u'shortest'

@@ -414,6 +414,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			elif n and stage.prune:  # dop reduction
 				msg = grammar.getmapping(stages[n - 1].grammar,
 					striplabelre=None if stages[n - 1].dop
+						and not stages[n - 1].usedoubledop
 						else re.compile(b'@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
