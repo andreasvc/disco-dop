@@ -772,8 +772,7 @@ def splitpath(path):
 	""" Split path into a pair of (directory, filename). """
 	if '/' in path:
 		return path.rsplit('/', 1)
-	else:
-		return '.', path
+	return '.', path
 
 
 def intervals(seq):

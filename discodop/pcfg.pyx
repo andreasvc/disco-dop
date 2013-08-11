@@ -164,10 +164,9 @@ def parse_dense(sent, Grammar grammar, start=None, tags=None):
 				items += len(cell)
 				edges += sum(map(len, cell.values()))
 	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
-	if chart[0][lensent].get(start):
-		return chart, new_CFGChartItem(start, 0, lensent), msg
-	else:
+	if not chart[0][lensent].get(start):
 		return chart, NONE, "no parse " + msg
+	return chart, new_CFGChartItem(start, 0, lensent), msg
 
 
 def parse_sparse(sent, Grammar grammar, start=None, tags=None,
@@ -306,10 +305,9 @@ def parse_sparse(sent, Grammar grammar, start=None, tags=None,
 						del cell[label]
 				edges += sum(map(len, nonempty))
 	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
-	if chart[0][lensent].get(start):
-		return chart, new_CFGChartItem(start, 0, lensent), msg
-	else:
+	if not chart[0][lensent].get(start):
 		return chart, NONE, "no parse " + msg
+	return chart, new_CFGChartItem(start, 0, lensent), msg
 
 
 def parse_symbolic(sent, Grammar grammar, start=None, tags=None):
@@ -419,10 +417,9 @@ def parse_symbolic(sent, Grammar grammar, start=None, tags=None):
 				items += len(nonempty)
 				edges += sum(map(len, nonempty))
 	msg = "chart spans %d, items %d, edges %d" % (spans, items, edges)
-	if chart[0][lensent].get(start):
-		return chart, new_CFGChartItem(start, 0, lensent), msg
-	else:
+	if not chart[0][lensent].get(start):
 		return chart, NONE, "no parse " + msg
+	return chart, new_CFGChartItem(start, 0, lensent), msg
 
 
 cdef populatepos(Grammar grammar, list chart, sent, tags,
@@ -470,22 +467,21 @@ cdef populatepos(Grammar grammar, list chart, sent, tags,
 					maxright[lhs, left] = right
 		# NB: don't allow blocking of gold tags if given
 		if not recognized:
-			if tag is not None and tag in grammar.toid:
-				lhs = grammar.toid[tag]
-				edge = new_CFGEdge(0.0, NULL, right)
-				viterbicell[lhs] = edge
-				cell[lhs] = {edge: edge}
-				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-			else:
+			if tag is None or tag not in grammar.toid:
 				return None, "not covered: %r" % (tag or word, )
+			lhs = grammar.toid[tag]
+			edge = new_CFGEdge(0.0, NULL, right)
+			viterbicell[lhs] = edge
+			cell[lhs] = {edge: edge}
+			# update filter
+			if left > minleft[lhs, right]:
+				minleft[lhs, right] = left
+			if left < maxleft[lhs, right]:
+				maxleft[lhs, right] = left
+			if right < minright[lhs, left]:
+				minright[lhs, left] = right
+			if right > maxright[lhs, left]:
+				maxright[lhs, left] = right
 
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
@@ -852,17 +848,18 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 def main():
 	from containers import Grammar
 	cdef Rule rule
-	cfg = Grammar([((('S', 'D'), ((0, ), )), 0.5),
-		((('S', 'A'), ((0, ), )), 0.8), ((('A', 'A'), ((0, ), )), 0.7),
-		((('A', 'B'), ((0, ), )), 0.6), ((('A', 'C'), ((0, ), )), 0.5),
-		((('A', 'D'), ((0, ), )), 0.4), ((('B', 'A'), ((0, ), )), 0.3),
-		((('B', 'B'), ((0, ), )), 0.2), ((('B', 'C'), ((0, ), )), 0.1),
-		((('B', 'D'), ((0, ), )), 0.2), ((('B', 'C'), ((0, ), )), 0.3),
-		((('C', 'A'), ((0, ), )), 0.4), ((('C', 'B'), ((0, ), )), 0.5),
-		((('C', 'C'), ((0, ), )), 0.6), ((('C', 'D'), ((0, ), )), 0.7),
-		((('D', 'A'), ((0, ), )), 0.8), ((('D', 'NP', 'VP'), ((0, 1), )), 1),
-		((('D', 'B'), ((0, ), )), 0.9), ((('NP', 'Epsilon'), ('mary', )), 1),
-		((('D', 'C'), ((0, ), )), 0.8), ((('VP', 'Epsilon'), ('walks', )), 1)],
+	cfg = Grammar([
+		((('A', 'A'), ((0, ), )), 0.7), ((('A', 'B'), ((0, ), )), 0.6),
+		((('A', 'C'), ((0, ), )), 0.5), ((('A', 'D'), ((0, ), )), 0.4),
+		((('B', 'A'), ((0, ), )), 0.3), ((('B', 'B'), ((0, ), )), 0.2),
+		((('B', 'C'), ((0, ), )), 0.1), ((('B', 'D'), ((0, ), )), 0.2),
+		((('B', 'C'), ((0, ), )), 0.3), ((('C', 'A'), ((0, ), )), 0.4),
+		((('C', 'B'), ((0, ), )), 0.5), ((('C', 'C'), ((0, ), )), 0.6),
+		((('C', 'D'), ((0, ), )), 0.7), ((('D', 'A'), ((0, ), )), 0.8),
+		((('D', 'B'), ((0, ), )), 0.9), ((('D', 'NP', 'VP'), ((0, 1), )), 1),
+		((('D', 'C'), ((0, ), )), 0.8), ((('S', 'D'), ((0, ), )), 0.5),
+		((('S', 'A'), ((0, ), )), 0.8), ((('NP', 'Epsilon'), ('mary', )), 1),
+		((('VP', 'Epsilon'), ('walks', )), 1)],
 		start='S')
 	print(cfg)
 	print("cfg parsing; sentence: mary walks")
@@ -873,8 +870,8 @@ def main():
 	assert start, msg
 	pprint_chart(chart, "mary walks".split(), cfg.tolabel)
 	cfg1 = Grammar([
-		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('NP', 'Epsilon'), ('mary', )), 1),
+		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)], start='S')
 	cfg1.switch('default', False)
 	i, o, start, _ = doinsideoutside("mary walks".split(), cfg1)
@@ -883,18 +880,19 @@ def main():
 	i, o, start, _ = doinsideoutside("walks mary".split(), cfg1)
 	assert not start
 	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
-	rules = [((('S', 'NP', 'VP'), ((0, 1), )), 1),
+	rules = [
+		((('NP', 'NP', 'PP'), ((0, 1), )), 0.4),
 		((('PP', 'P', 'NP'), ((0, 1), )), 1),
+		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('VP', 'V', 'NP'), ((0, 1), )), 0.7),
 		((('VP', 'VP', 'PP'), ((0, 1), )), 0.3),
-		((('NP', 'NP', 'PP'), ((0, 1), )), 0.4),
-		((('P', 'Epsilon'), ('with', )), 1),
-		((('V', 'Epsilon'), ('saw', )), 1),
 		((('NP', 'Epsilon'), ('astronomers', )), 0.1),
 		((('NP', 'Epsilon'), ('ears', )), 0.18),
+		((('V', 'Epsilon'), ('saw', )), 1),
 		((('NP', 'Epsilon'), ('saw', )), 0.04),
 		((('NP', 'Epsilon'), ('stars', )), 0.18),
-		((('NP', 'Epsilon'), ('telescopes', )), 0.1)]
+		((('NP', 'Epsilon'), ('telescopes', )), 0.1),
+		((('P', 'Epsilon'), ('with', )), 1)]
 	cfg2 = Grammar(rules, start='S')
 	cfg2.switch('default', False)
 	sent = "astronomers saw stars with ears".split()

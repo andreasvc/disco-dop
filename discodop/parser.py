@@ -279,7 +279,8 @@ class Parser(object):
 				elif stage.mode == 'pcfg-bitpar':
 					chart, start, msg1 = parse_bitpar(
 							stage.rulesfile.name, stage.lexiconfile.name,
-							sent, stage.m, stage.grammar.start, tags=tags)
+							sent, stage.m, stage.grammar.start,
+							stage.grammar.toid[stage.grammar.start], tags=tags)
 					msg1 += '%d derivations' % (len(chart) if start else 0)
 				elif stage.mode == 'plcfrs':
 					chart, start, msg1 = plcfrs.parse(
@@ -497,7 +498,8 @@ BITPARPARSES = re.compile(r'(?:^|\n)vitprob=(.*)\n(\(.*\))\n')
 BITPARPARSESLOG = re.compile(r'(?:^|\n)logvitprob=(.*)\n(\(.*\))\n')
 
 
-def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
+def parse_bitpar(rulesfile, lexiconfile, sent, n,
+		startlabel, startid, tags=None):
 	""" Parse a single sentence with bitpar, given filenames of rules and
 	lexicon. n is the number of derivations to ask for (max 1000).
 	Result is a dictionary of derivations with their probabilities. """
@@ -516,7 +518,7 @@ def parse_bitpar(rulesfile, lexiconfile, sent, n, startlabel, tags=None):
 	# decode results or not?
 	if not results or results.startswith('No parse'):
 		return {}, None, '%s\n%s' % (results, msg)
-	start = CFGChartItem(1, 0, len(sent))  # FIXME: 1 is not right.
+	start = CFGChartItem(startid, 0, len(sent))
 	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
 	derivs = {renumber(deriv): -float(prob)
 			for prob, deriv in BITPARPARSESLOG.findall(lines)}

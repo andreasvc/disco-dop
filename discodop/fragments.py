@@ -62,6 +62,7 @@ OPTIONS = ('numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
 TERMRE = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
+APPLY = lambda x, _y: x()
 
 
 def main(argv=None):
@@ -136,7 +137,7 @@ def regular(filenames, numproc, limit, encoding):
 			limit, encoding)
 	if numproc == 1:
 		mymap = map
-		myapply = lambda x, y: x(*y)
+		myapply = APPLY
 	else:  # multiprocessing, start worker processes
 		pool = Pool(processes=numproc, initializer=initworker,
 			initargs=(filenames[0],
@@ -387,7 +388,6 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	:returns: a dictionary whose keys are fragments as strings, and
 		frequencies / indices as values.
 	:param trees:  a sequence of binarized Tree objects. """
-	# TODO: add disc= option, optimize disc=False.
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)
@@ -401,7 +401,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	if numproc == 1:
 		initworkersimple(trees, list(sents))
 		mymap = map
-		myapply = lambda x, y: x(*y)
+		myapply = APPLY
 	else:
 		logging.info("work division:\n%s", "\n".join("    %s: %r" % kv
 			for kv in sorted(dict(numchunks=len(work),

@@ -386,6 +386,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			logging.info('DOP model based on %d sentences, %d nodes, '
 				'%d nonterminals', len(traintrees), nodes, len(grammar.toid))
 			logging.info(msg)
+			if stage.estimator != 'dop1':
+				grammar.switch(u'%s' % stage.estimator)
 			_sumsto1 = grammar.testgrammar()
 			if stage.usedoubledop:
 				# backtransform keys are line numbers to rules file;

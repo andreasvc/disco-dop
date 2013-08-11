@@ -5,7 +5,7 @@ from __future__ import print_function
 import re
 import logging
 from heapq import nlargest
-from math import exp, log, isinf
+from math import exp, log, isinf, fsum
 from random import random
 from bisect import bisect_right
 from operator import itemgetter, attrgetter
@@ -20,7 +20,7 @@ from agenda cimport Entry, new_Entry
 from treetransforms import unbinarize, canonicalize
 from containers cimport Grammar, ChartItem, SmallChartItem, FatChartItem, \
 		CFGChartItem, Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, \
-		LexicalRule, Rule, UChar, UInt, ULong, ULLong, logprobadd
+		LexicalRule, Rule, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
 cimport cython
 
 from libc.string cimport memset
@@ -79,7 +79,6 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 		filteredderivations = dict(zip(derivations, entries))
 		entries[:] = filteredderivations.values()
 		derivations[:] = filteredderivations.keys()
-
 	if method == 'sl-dop':
 		return sldop(dict(derivations), chart, sent, tags, grammar,
 				n, sldop_n, backtransform, D, entries, bitpar)
@@ -109,13 +108,10 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					derivs[treestr] = extractfragments(
 							entry.key, D, grammar, backtransform)
 			elif not mpd and treestr in parsetrees:
-				# simple way of adding probabilities (too easy):
-				parsetrees[treestr] += exp(-prob)
-				#parsetrees[treestr].append(-prob)
+				parsetrees[treestr].append(-prob)
 			elif not mpd or (treestr not in parsetrees
-						or exp(-prob) > parsetrees[treestr]):
-				parsetrees[treestr] = exp(-prob)
-				#parsetrees[treestr] = [-prob]
+						or -prob > parsetrees[treestr][0]):
+				parsetrees[treestr] = [-prob]
 				derivs[treestr] = extractfragments(
 						entry.key, D, grammar, backtransform)
 	else:  # DOP reduction / bitpar
@@ -155,13 +151,13 @@ cpdef marginalize(method, chart, ChartItem start, Grammar grammar, int n,
 					parsetrees[treestr] = score
 			elif not mpd and treestr in parsetrees:
 				# simple way of adding probabilities (too easy):
-				parsetrees[treestr] += exp(-prob)
-				#parsetrees[treestr].append(-prob)
+				parsetrees[treestr].append(-prob)
 			elif not mpd or (treestr not in parsetrees
-						or exp(-prob) > parsetrees[treestr]):
-				parsetrees[treestr] = exp(-prob)
-				#parsetrees[treestr] = [-prob]
+						or -prob > parsetrees[treestr][0]):
+				parsetrees[treestr] = [-prob]
 
+	for treestr, probs in parsetrees.items() if not shortest else ():
+		parsetrees[treestr] = logprobsum(probs)
 	msg = '%d derivations, %d parsetrees' % (
 			len(derivations if backtransform is None else entries),
 			len(parsetrees))
@@ -198,7 +194,7 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 			derivsfortree[recoverfragments((<Entry>entry).key, D,
 					grammar, backtransform)].add(deriv)
 	# sum over probs of derivations to get probs of parse trees
-	parsetreeprob = {tree: sum([exp(-derivations[d]) for d in ds])
+	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
 			for tree, ds in derivsfortree.items()}
 
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
@@ -259,7 +255,7 @@ cdef sldop_simple(dict derivations, list entries, int m, int sldop_n,
 			derivsfortree[tree].add(deriv)
 
 	# sum over derivations to get parse trees
-	parsetreeprob = {tree: sum([exp(-derivations[d]) for d in ds])
+	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
 			for tree, ds in derivsfortree.items()}
 	selectedtrees = nlargest(sldop_n, parsetreeprob, key=parsetreeprob.get)
 
@@ -285,8 +281,7 @@ def getsamples(D, chart, start, n, tolabel, debin=None):
 	""" Samples n derivations from a chart. """
 	if isinstance(start, CFGChartItem):
 		return getsamples_cfg(D, chart, start, n, tolabel, debin)
-	else:
-		return getsamples_lcfrs(D, chart, start, n, tolabel, debin)
+	return getsamples_lcfrs(D, chart, start, n, tolabel, debin)
 
 
 def getsamples_lcfrs(D, chart, start, n, tolabel, debin=None):
@@ -338,7 +333,7 @@ cdef samplechart_lcfrs(dict D, dict chart, ChartItem start, list tolabel,
 	# by our recursive calls
 	newedge = RankedEdge(start, edge, len(D[edge.left]) - 1,
 			(len(D[edge.right]) - 1) if edge.right.label else -1)
-	prob = edge.rule.prob + sum([b for _, b in children])
+	prob = edge.rule.prob + fsum([b for _, b in children])
 	D.setdefault(start, []).append(new_Entry(newedge, prob, 0))
 	return tree, prob
 
@@ -397,7 +392,7 @@ cdef samplechart_cfg(list D, list chart, tuple start, list tolabel,
 			len(D[left][edge.mid][edge.rule.rhs1]) - 1,
 			(len(D[edge.mid][right][edge.rule.rhs2]) - 1)
 				if edge.rule.rhs2 else -1)
-	prob = edge.rule.prob + sum([b for _, b in children])
+	prob = edge.rule.prob + fsum([b for _, b in children])
 	D[left][right].setdefault(label, []).append(new_Entry(newedge, prob, 0))
 	return tree, prob
 

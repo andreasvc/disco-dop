@@ -1,4 +1,4 @@
-from math import isinf, exp, log
+from math import isinf, exp, log, fsum
 from libc.stdlib cimport malloc, realloc, calloc, free, qsort
 from libc.string cimport memcmp, memset
 cimport cython
@@ -44,7 +44,7 @@ cdef class Grammar:
 	cdef readonly unicode origlexicon
 	cdef readonly list tolabel, lexical, modelnames, rulemapping
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
-	cdef _convertrules(Grammar self, list rulelines)
+	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
 	cdef rulestr(self, Rule rule)
 	cdef yfstr(self, Rule rule)
@@ -321,9 +321,15 @@ cdef object log1e200 = log(1e200)
 
 
 cdef inline logprobadd(x, y):
-	""" Add two log probabilities in log space;
-	i.e., ``logprobadd(log(a), log(b)) == log(a + b)``
-	NB: expect python floats, not C doubles """
+	""" Add two log probabilities in log space; i.e.:
+
+	>>> a = b = 0.25
+	>>> logprobadd(log(a), log(b)) == log(a + b) == log(0.5)
+	True
+
+	:param x, y: Python floats with log probabilities; -inf <= x, y <= 0.
+	:source: https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations
+	"""
 	if isinf(x):
 		return y
 	elif isinf(y):
@@ -342,19 +348,21 @@ cdef inline logprobadd(x, y):
 
 
 cdef inline double logprobsum(list logprobs):
-	""" Takes a list of log probabilities and sums them producing a new
-	log probability;
-	NB: since the input is a Python list, this function works with python
-	floats, not C doubles.
-	i.e., logprobsum([log(a), log(b), ...]) == log(sum([a, b, ...]))
+	""" Takes a list of log probabilities and sums them producing a
+	normal probability 0 < p <= 1.0; i.e.:
 
-	http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
-	https://facwiki.cs.byu.edu/nlp/index.php/Log_Domain_Computations """
+	>>> a = b = c = 0.25
+	>>> logprobsum([log(a), log(b), log(c)]) == sum([a, b, c]) == 0.75
+	True
+
+	:param logprobs: a list of Python floats with negative log probilities,
+		s.t. 0 <= p <= inf for each p in ``logprobs``.
+	:source: http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+
+	Comparison of different methods: https://gist.github.com/andreasvc/6204982
+	"""
 	maxprob = max(logprobs)
-	# fsum is supposedly more accurate.
-	#return exp(fsum([maxprob, log(fsum([exp(prob - maxprob)
-	#							for prob in logprobs]))]))
-	return maxprob + log(sum([exp(prob - maxprob) for prob in logprobs]))
+	return exp(maxprob) * fsum([exp(prob - maxprob) for prob in logprobs])
 
 
 #cdef inline long djb_hash(UChar *key, int size):

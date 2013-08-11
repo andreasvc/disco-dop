@@ -11,7 +11,6 @@ import heapq
 import string  # pylint: disable=W0402
 import random
 import logging
-from functools import wraps
 from operator import itemgetter
 from flask import Flask, Markup, Response
 from flask import request, render_template, send_from_directory
@@ -111,6 +110,7 @@ def parse():
 	CACHE.set(key, render_template('parsetree.html', sent=sent, result=result,
 			frags=frags, nbest=nbest, info=info, randid=randid()), timeout=5000)
 	return CACHE.get(key)
+
 
 @APP.route('/favicon.ico')
 def favicon():

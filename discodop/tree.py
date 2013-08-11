@@ -471,9 +471,9 @@ class ImmutableTree(Tree):
 		# immutable. It also means we only have to calculate it once.
 		try:
 			self._hash = hash((self.label, tuple(self)))
-		except (TypeError, ValueError):
+		except (TypeError, ValueError) as err:
 			raise ValueError("ImmutableTree's label and children "
-					"must be immutable")
+					"must be immutable:\n%s %r\n%r" % (self.label, self, err))
 		else:
 			self._leaves = Tree.leaves(self)
 			self._subtrees = tuple(Tree.subtrees(self))

@@ -251,10 +251,9 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True, start=None,
 	msg = ('agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d'
 		% (maxA, len(agenda), len(list(filter(None, chart.values()))),
 		len(list(filter(None, viterbi))), sum(map(len, chart.values())), blocked))
-	if goal in chart:
-		return chart, goal, msg
-	else:
+	if goal not in chart:
 		return chart, NONE, 'no parse ' + msg
+	return chart, goal, msg
 
 
 cdef inline SmallChartItem process_edge(SmallChartItem newitem, double score,
@@ -578,10 +577,9 @@ def parse_longsent(sent, Grammar grammar, tags=None, start=None,
 	msg = ('agenda max %d, now %d, items %d (%d labels), edges %d, blocked %d'
 		% (maxA, len(agenda), len(list(filter(None, chart.values()))),
 		len(list(filter(None, viterbi))), sum(map(len, chart.values())), blocked))
-	if goal in chart:
-		return chart, goal, msg
-	else:
+	if goal not in chart:
 		return chart, FATNONE, 'no parse ' + msg
+	return chart, goal, msg
 
 
 cdef inline FatChartItem process_fatedge(FatChartItem newitem, double score,
@@ -819,10 +817,9 @@ def parse_symbolic(sent, Grammar grammar, tags=None, start=None,
 	msg = ('agenda max %d, now %d, items %d, edges %d, blocked %d' % (
 			maxA, len(agenda), len(list(filter(None, chart.values()))),
 			sum(map(len, chart.values())), blocked))
-	if goal in chart:
-		return chart, goal, msg
-	else:
+	if goal not in chart:
 		return chart, NONE, 'no parse ' + msg
+	return chart, goal, msg
 
 
 #def doinsideoutside(dict chart, ChartItem start):

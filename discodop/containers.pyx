@@ -1,5 +1,5 @@
 """ Data types for grammars, chart items, &c. """
-from math import exp, log
+from math import exp, log, fsum
 import re
 import logging
 import numpy as np
@@ -83,10 +83,11 @@ cdef class Grammar:
 		# for allocation purposes.
 		rulelines = self.origrules.splitlines()
 		fanoutdict = self._countrules(rulelines)
-		self._allocate()
-		# convert phrasal & lexical rules
 		self._convertlexicon(fanoutdict)
-		self._convertrules(rulelines)
+		self.tolabel = sorted(self.toid, key=self.toid.get)
+		self.nonterminals = len(self.toid)
+		self._allocate()
+		self._convertrules(rulelines, fanoutdict)
 		for n in range(self.nonterminals):
 			self.fanout[n] = fanoutdict[self.tolabel[n]]
 		del rulelines, fanoutdict
@@ -109,6 +110,8 @@ cdef class Grammar:
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
 		self.switch('default', True)  # enable log probabilities
+		for n in range(self.numrules):  # sanity check
+			assert self.bylhs[0][n].no == n, self.rulestr(self.bylhs[0][n])
 
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines):
@@ -117,7 +120,6 @@ cdef class Grammar:
 		Epsilon = b'Epsilon'
 		# Epsilon gets IDs 0, can only occur in RHS of lexical rules.
 		self.toid = {Epsilon: 0}
-		count = 1  # used to assign IDs to non-terminal labels
 		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
 		for line in rulelines:
 			if not line:
@@ -144,27 +146,57 @@ cdef class Grammar:
 				self.numbinary += 1
 			else:
 				raise ValueError("grammar not binarized:\n%s" % line)
-			for n, nt in enumerate(rule):
-				fanout = yf.count(b',01'[n:n + 1]) + (n == 0)
-				if nt in self.toid:
-					assert fanoutdict[nt] == fanout, (
-							"conflicting fanouts for symbol '%s'.\n"
-							"previous: %d; this non-terminal: %d.\nrule: %r" % (
-							nt, fanoutdict[nt], fanout, rule))
-				else:
-					self.toid[nt] = count
-					count += 1
-					fanoutdict[nt] = fanout
-					if fanoutdict[nt] > self.maxfanout:
-						self.maxfanout = fanoutdict[nt]
+			if rule[0] not in self.toid:
+				self.toid[rule[0]] = len(self.toid)
+				fanout = yf.count(b',') + 1
+				fanoutdict[rule[0]] = fanout
+				if fanout > self.maxfanout:
+					self.maxfanout = fanout
 
 		assert self.start in self.toid, ("Start symbol %r not in set of "
 				"non-terminal labels extracted from grammar rules." % self.start)
 		self.numrules = self.numunary + self.numbinary
 		assert self.numrules, "no rules found"
-		self.tolabel = sorted(self.toid, key=self.toid.get)
-		self.nonterminals = len(self.toid)
 		return fanoutdict
+
+	def _convertlexicon(self, fanoutdict):
+		""" Make objects for lexical rules. """
+		cdef int n, x
+		self.lexical = []
+		self.lexicalbyword = {}
+		self.lexicalbylhs = {}
+		for line in self.origlexicon.splitlines():
+			if not line:
+				continue
+			x = line.index('\t')
+			word = line[:x]
+			fields = line[x + 1:].encode('ascii').split()
+			assert word not in self.lexicalbyword, (
+					"word %r appears more than once in lexicon file" % word)
+			self.lexicalbyword[word] = []
+			for tag, w in zip(fields[::2], fields[1::2]):
+				if tag not in self.toid:
+					self.toid[tag] = len(self.toid)
+					fanoutdict[tag] = 1
+					#logging.warning("POS tag %r for word %r "
+					#		"not used in any phrasal rule", tag, word)
+					#continue
+				else:
+					assert fanoutdict[tag] == 1, (
+							"POS tag %r does not have fan-out 1." % tag)
+				# convert fraction to float
+				x = w.find(b'/')
+				w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
+				assert w > 0, (
+						"weights should be positive and non-zero:\n%r" % line)
+				lexrule = LexicalRule(self.toid[tag], word, w)
+				if lexrule.lhs not in self.lexicalbylhs:
+					self.lexicalbylhs[lexrule.lhs] = {}
+				self.lexical.append(lexrule)
+				self.lexicalbyword[word].append(lexrule)
+				self.lexicalbylhs[lexrule.lhs][word] = lexrule
+			assert self.lexical and self.lexicalbyword and self.lexicalbylhs, (
+					"no lexical rules found.")
 
 	def _allocate(self):
 		""" Allocate memory to store rules. """
@@ -189,7 +221,7 @@ cdef class Grammar:
 		assert self.fanout is not NULL
 
 	@cython.wraparound(True)
-	cdef _convertrules(Grammar self, list rulelines):
+	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict):
 		""" Auxiliary function to create Grammar objects. Copies grammar
 		rules from a text file to a contiguous array of structs. """
 		cdef UInt n = 0, m, prev = self.nonterminals
@@ -207,6 +239,15 @@ cdef class Grammar:
 				rule = fields[:-2]
 				yf = fields[-2]
 				w = fields[-1]
+			# check whether RHS labels have been seen as LHS and check fanout
+			for m, nt in enumerate(rule):
+				assert nt in self.toid, ('symbol %r has not been seen as LHS '
+						'in any rule: %s' % (nt, line))
+				fanout = yf.count(b',01'[m:m + 1]) + (m == 0)
+				assert fanoutdict[nt] == fanout, (
+						"conflicting fanouts for symbol '%s'.\n"
+						"previous: %d; this non-terminal: %d.\nrule: %r" % (
+						nt, fanoutdict[nt], fanout, rule))
 			# convert fraction to float
 			x = w.find(b'/')
 			w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
@@ -233,44 +274,6 @@ cdef class Grammar:
 			self.rulenos[(yf, ) + tuple(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
-
-	def _convertlexicon(self, fanoutdict):
-		""" Make objects for lexical rules. """
-		cdef int n, x
-		self.lexical = []
-		self.lexicalbyword = {}
-		self.lexicalbylhs = {}
-		for line in self.origlexicon.splitlines():
-			if not line:
-				continue
-			x = line.index('\t')
-			word = line[:x]
-			fields = line[x + 1:].encode('ascii').split()
-			assert word not in self.lexicalbyword, (
-					"word %r appears more than once in lexicon file" % word)
-			self.lexicalbyword[word] = []
-			for tag, w in zip(fields[::2], fields[1::2]):
-				if tag not in self.toid:
-					logging.warning("POS tag %r for word %r "
-							"not used in any phrasal rule", tag, word)
-					continue
-				if tag not in fanoutdict:
-					fanoutdict[tag] = 1
-				assert fanoutdict[tag] == 1, (
-						"POS tag %r does not have fan-out 1." % tag)
-				# convert fraction to float
-				x = w.find(b'/')
-				w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
-				assert w > 0, (
-						"weights should be positive and non-zero:\n%r" % line)
-				lexrule = LexicalRule(self.toid[tag], word, w)
-				if lexrule.lhs not in self.lexicalbylhs:
-					self.lexicalbylhs[lexrule.lhs] = {}
-				self.lexical.append(lexrule)
-				self.lexicalbyword[word].append(lexrule)
-				self.lexicalbylhs[lexrule.lhs][word] = lexrule
-			assert self.lexical and self.lexicalbyword and self.lexicalbylhs, (
-					"no lexical rules found.")
 
 	def _normalize(self):
 		""" Optionally normalize frequencies to relative frequencies.
@@ -395,44 +398,50 @@ cdef class Grammar:
 			rule = self.unary[n]
 			SETBIT(self.chainvec, rule.rhs1 * self.nonterminals + rule.lhs)
 
-	def testgrammar(self, epsilon=0):
-		""" Report whether all left-hand sides sum to 1 +/-epsilon. """
-		#We could be strict about separating POS tags and phrasal categories,
-		#but Negra contains at least one tag (--) used for both.
+	def testgrammar(self, epsilon=1e-100):
+		""" Report whether all left-hand sides sum to 1 +/-epsilon for the
+		currently selected weights. """
 		cdef Rule *rule
 		cdef LexicalRule lexrule
 		cdef UInt n
-		cdef dict sums = {n: [] for n in range(1, self.nonterminals)}
+		cdef list sums = [[] for _ in self.toid]
+		cdef double [:] tmp = self.models[self.currentmodel, :]
+		#We could be strict about separating POS tags and phrasal categories,
+		#but Negra contains at least one tag (--) used for both.
 		for n in range(self.numrules):
 			rule = &(self.bylhs[0][n])
-			sums[rule.lhs].append(rule.prob)
-		for n in self.lexicalbylhs:
-			for lexrule in self.lexicalbylhs[n].values():
-				sums[lexrule.lhs].append(lexrule.prob)
-		for lhs, probs in sums.items():
-			mass = logprobsum(probs) if self.logprob else sum(probs)
-			if 1 - epsilon < mass < 1 + epsilon:
-				logging.error("Does not sum to 1 +/- %g: %s; sums to %s",
-						epsilon, lhs, mass)
+			sums[rule.lhs].append(tmp[rule.no])
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			sums[lexrule.lhs].append(tmp[n])
+		for lhs, weights in enumerate(sums[1:], 1):
+			mass = fsum(weights)
+			if abs(mass - 1.0) > epsilon:
+				logging.error("Weights of rules with LHS '%s' "
+						"do not sum to 1 +/- %g: sum = %g; diff = %g",
+						self.tolabel[lhs], epsilon, mass, mass - 1.0)
 				return False
-		logging.info("All left hand sides sum to 1")
+		logging.info("All left hand sides sum to 1 +/- epsilon=%s", epsilon)
 		return True
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
 			neverblockre=None, bint splitprune=False, bint markorigin=False):
 		""" Construct a mapping of fine non-terminal IDs to coarse non-terminal
-		IDS, by applying the regex striplabelre to the labels, used for
-		coarse-to-fine pruning. A secondary regex neverblockre is for items
+		IDs, by applying the regex ``striplabelre`` to the fine labels, used
+		for coarse-to-fine pruning. A secondary regex neverblockre is for items
 		that should never be pruned.
-		The regexes should be compiled objects, i.e., re.compile(regex),
-		or None to leave labels unchanged.
+		The regexes should be compiled objects, i.e., ``re.compile(regex)``,
+		or ``None`` to leave labels unchanged. ``coarse`` may be ``None``, in
+		which case only ``neverblockre`` is effective, which is also used for
+		non-pruning purposes.
 
-        - use ``|<`` to ignore nodes introduced by binarization;
-            useful if coarse and fine stages employ different kinds of
-            markovization; e.g., NP and VP may be blocked, but not NP|<DT-NN>.
-        - ``_[0-9]+`` to ignore discontinuous nodes X_n where X is a label
-			and n is a fanout. """
+		- use ``|<`` to ignore nodes introduced by binarization;
+			useful if coarse and fine stages employ different kinds of
+			markovization; e.g., ``NP`` and ``VP`` may be blocked,
+			but not ``NP|<DT-NN>``.
+		- ``_[0-9]+`` to ignore discontinuous nodes ``X_n`` where ``X`` is a
+			label and *n* is a fanout. """
 		cdef int n, m, components = 0
+		cdef set seen = {0}
 		if coarse is None:
 			coarse = self
 		if self.mapping is not NULL:
@@ -450,53 +459,42 @@ cdef class Grammar:
 			self.splitmapping[0] = <UInt *>malloc(sizeof(UInt) *
 				sum([self.fanout[n] for n in range(self.nonterminals)
 					if self.fanout[n] > 1]))
-		seen = {0}
 		for n in range(self.nonterminals):
 			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
 				strlabel = self.tolabel[n]
 				if striplabelre is not None:
 					strlabel = striplabelre.sub(b'', strlabel, 1)
-				if self.fanout[n] == 1 or not splitprune:
+				if self.fanout[n] > 1 and splitprune:
+					strlabel += b'*'
+				if self.fanout[n] > 1 and splitprune and markorigin:
+					self.mapping[n] = self.nonterminals  # sentinel value
+					self.splitmapping[n] = &(self.splitmapping[0][components])
+					components += self.fanout[n]
+					for m in range(self.fanout[n]):
+						self.splitmapping[n][m] = coarse.toid[
+								strlabel + str(m).encode('ascii')]
+						seen.add(self.splitmapping[n][m])
+				else:
 					self.mapping[n] = coarse.toid[strlabel]
 					seen.add(self.mapping[n])
-				else:
-					strlabel += b'*'
-					if markorigin:
-						self.mapping[n] = self.nonterminals  # sentinel value
-						self.splitmapping[n] = &(
-								self.splitmapping[0][components])
-						components += self.fanout[n]
-						for m in range(self.fanout[n]):
-							self.splitmapping[n][m] = coarse.toid[
-								strlabel + str(m).encode('ascii')]
-							seen.add(self.splitmapping[n][m])
-					else:
-						self.mapping[n] = coarse.toid[strlabel]
-						seen.add(self.mapping[n])
 			else:
 				self.mapping[n] = 0
 		if seen == set(range(coarse.nonterminals)):
 			msg = 'label sets are equal'
 		else:
+			# NB: ALL fine symbols are mapped to some coarse symbol;
+			# we only check if all coarse symbols have received a mapping.
 			l = sorted([coarse.tolabel[a].decode('ascii') for a in
-						set(coarse.toid.values()) - seen])
-			diff1 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
-			l = [coarse.tolabel[a].decode('ascii') for a in seen -
-					set(range(coarse.nonterminals))]
-			diff2 = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
+					set(range(coarse.nonterminals)) - seen])
+			diff = ", ".join(l[:10]) + (', ...' if len(l) > 10 else '')
 			if coarse.nonterminals > self.nonterminals:
 				msg = ('grammar is not a superset of coarse grammar:\n'
-						'only in coarse: {%s}\nonly in fine: {%s}' % (
-						diff1, diff2))
+						'coarse labels without mapping: {%s}' % diff)
 			elif coarse.nonterminals < self.nonterminals:
-				msg = ('grammar is a proper superset of coarse grammar:\n'
-						'only in fine: {%s}' % diff2)
-			elif diff1 or diff2:
-				msg = ('equal number of nodes, but not equivalent:\n'
-						'only in coarse: {%s}\nonly in fine: {%s}' % (
-						diff1, diff2))
+				msg = 'grammar is a proper superset of coarse grammar.'
 			else:
-				msg = ''  # should not happen?
+				msg = ('equal number of nodes, but not equivalent:\n'
+						'coarse labels without mapping: {%s}' % diff)
 		return msg
 
 	def getrulemapping(Grammar self, Grammar coarse):
@@ -535,10 +533,8 @@ cdef class Grammar:
 					return result
 				else:
 					result += ","
-		raise ValueError("expected %d components for %s -> %s %s\n"
+		raise ValueError("illegal yield function expected %d components.\n"
 				"args: %s; lengths: %s" % (self.fanout[rule.lhs],
-				self.tolabel[rule.lhs], self.tolabel[rule.rhs1],
-				self.tolabel[rule.rhs2],
 				bin(rule.args), bin(rule.lengths)))
 
 	def __str__(self):
@@ -570,14 +566,12 @@ cdef class Grammar:
 	def __dealloc__(self):
 		if self.bylhs is NULL:
 			return
-		if self.bylhs[0] is not NULL:
-			free(self.bylhs[0])
-			self.bylhs[0] = NULL
+		free(self.bylhs[0])
+		self.bylhs[0] = NULL
 		free(self.bylhs)
 		self.bylhs = NULL
-		if self.fanout is not NULL:
-			free(self.fanout)
-			self.fanout = NULL
+		free(self.fanout)
+		self.fanout = NULL
 		if self.chainvec is not NULL:
 			free(self.chainvec)
 			self.chainvec = NULL

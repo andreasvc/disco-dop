@@ -153,50 +153,44 @@ def dopreduction(trees, sents, packedgraph=False):
 	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
 	reduces DOP1 to a PCFG.
 
-	:param packedgraph: packed graph encoding (Bansal & Klein 2010). TODO: verify.
+	:param packedgraph: packed graph encoding (Bansal & Klein 2010).
 	:returns: a set of rules with the relative frequency estimate as
-		probilities, and alternate weights following the equal weights estimate.
-	"""
-	# fd: how many subtrees are headed by node X (e.g. NP or NP@12),
+		probilities, and a dictionary with alternate weights. """
+	# fd: how many subtrees are headed by node X (e.g. NP or NP@1-2),
 	# 	counts of NP@... should sum to count of NP
 	# ntfd: frequency of a node in treebank
 	fd = defaultdict(int)
 	ntfd = defaultdict(int)
 	rules = defaultdict(int)
-	if packedgraph:
-		trees = [tree.freeze() for tree in trees]
-		decoratefun = decorate_with_ids_mem
-	else:
-		decoratefun = decorate_with_ids
+	decorater = TreeDecorator(memoize=packedgraph)
 
 	# collect rules
-	for n, t, sent in zip(count(), trees, sents):
-		prods = lcfrs_productions(t, sent)
-		ut = decoratefun(n, t, sent)
-		uprods = lcfrs_productions(ut, sent)
-		nodefreq(t, ut, fd, ntfd)
+	for tree, sent in zip(trees, sents):
+		prods = lcfrs_productions(tree, sent)
+		dectree = decorater.decorate(tree, sent)
+		uprods = lcfrs_productions(dectree, sent)
+		nodefreq(tree, dectree, fd, ntfd)
 		for (a, avar), (b, bvar) in zip(prods, uprods):
 			assert avar == bvar
 			for c in cartpi([(x, ) if x == y else (x, y) for x, y in zip(a, b)]):
 				rules[c, avar] += 1
 
-	if packedgraph:
-		packedgraphs.clear()
-
 	def weights(rule):
 		""" :returns: rule with RFE and EWE probability. """
-		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996)
+		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996, 2003)
 		(r, yf), freq = rule
-		rfe = Fraction((1 if any('@' in z for z in r) else freq) *
-			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
-		# Bod (2003, figure 3)
-		ewe = (float((1 if any('@' in z for z in r) else freq) *
-			reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1))
-			/ (fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
-		# Goodman (2003). any rule corresponding to the introduction of a
-		# fragment has a probability of 1/2, else 1.
+		rfe = Fraction((1 if '@' in r[0] else freq) *
+				reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
+		# Bod (2003, figure 3): correction factor for number of subtrees.
+		# Caveat: the original formula (Goodman 2003, eq. 8.23) has a_j in the
+		# denominator of all rules; this is probably a misprint.
+		ewe = (float((1 if '@' in r[0] else freq) *
+				reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1))
+				/ (fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
+		# Goodman (2003, p 135). any rule corresponding to the introduction of
+		# a fragment has a probability of 1/2, else 1.
 		shortest = 1. if '@' in r[0] else 0.5
-		# Goodman (2003, p. 136). Prob. of fragment is reduced by factor of 2
+		# Goodman (2003, eq. 8.22). Prob. of fragment is reduced by factor of 2
 		# for each non-root non-terminal it contains.
 		bon = 0.25 if '@' in r[0] else (1 / (4 * ntfd[r[0]]))
 		return ((r, yf), rfe), ewe, shortest, bon
@@ -218,8 +212,8 @@ def doubledop(trees, fragments, debug=False):
 	fragment. In fragments with terminals, we replace their POS tags with a tag
 	uniquely identifying that terminal and tag: tag@word.
 
-	:returns: a tuple (grammar, eweweights, backtransform)
-		eweweights are alternate weights following the equal weights estimate.
+	:returns: a tuple (grammar, altweights, backtransform)
+		altweights is a dictionary containing alternate weights.
 	"""
 	def getweight(frag, terminals):
 		""" :returns: frequency, EWE, and other weights for fragment. """
@@ -295,9 +289,9 @@ def doubledop(trees, fragments, debug=False):
 	# 3: lexical productions sorted by word
 	# this is so that the backtransform aligns with the first part of the rules
 	grammar = sorted(grammar.items(), key=lambda rule: (
-				rule[0][1][0] if rule[0][0][1] == 'Epsilon' else '',
-				'}<' in rule[0][0][0],
-				rule[0][0]))
+				rule[0][1][0] if rule[0][0][1] == 'Epsilon' else '',  # word?
+				'}<' in rule[0][0][0],  # fragment-internal production?
+				rule[0][0]))  # LHS
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = [backtransform[r] for r, _ in grammar
 			if r in backtransform]
@@ -320,8 +314,9 @@ def doubledop(trees, fragments, debug=False):
 def sortgrammar(grammar):
 	""" put lexical rules in the end and sort by word. """
 	return sorted(grammar, key=lambda rule:
-			(rule[0][1][0], rule[0][0]) if rule[0][0][1] == 'Epsilon'
-			else ('', rule[0][0]))
+			(rule[0][1][0], rule[0][0])  # word, LHS
+			if rule[0][0][1] == 'Epsilon'
+			else ('', rule[0][0]))  # phrasal rule: LHS
 
 
 def coarse_grammar(trees, sents, level=0):
@@ -336,7 +331,7 @@ def coarse_grammar(trees, sents, level=0):
 	return treebankgrammar(trees, sents)
 
 
-def nodefreq(tree, utree, subtreefd, nonterminalfd):
+def nodefreq(tree, dectree, subtreefd, nonterminalfd):
 	""" Auxiliary function for DOP reduction.
 	Counts frequencies of nodes and calculate the number of
 	subtrees headed by each node. updates "subtreefd" and "nonterminalfd"
@@ -346,103 +341,106 @@ def nodefreq(tree, utree, subtreefd, nonterminalfd):
 	:param nonterminalfd: the multiset to store the counts of non-terminals
 
 	>>> fd = multiset()
+	>>> d = TreeDecorator()
 	>>> tree = Tree("(S (NP mary) (VP walks))")
-	>>> utree = decorate_with_ids(1, tree, ['mary', 'walks'])
-	>>> nodefreq(tree, utree, fd, multiset())
+	>>> dectree = d.decorate(tree, ['mary', 'walks'])
+	>>> nodefreq(tree, dectree, fd, multiset())
 	4
 	>>> fd == multiset({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
 	True """
 	nonterminalfd[tree.label] += 1
-	nonterminalfd[utree.label] += 1
+	nonterminalfd[dectree.label] += 1
 	if isinstance(tree[0], Tree):
 		n = reduce(mul, (nodefreq(x, ux, subtreefd, nonterminalfd) + 1
-			for x, ux in zip(tree, utree)))
+			for x, ux in zip(tree, dectree)))
 	else:  # lexical production
 		n = 1
 	subtreefd[tree.label] += n
-	# only add counts when utree.label is actually an interior node,
+	# only add counts when dectree.label is actually an interior node,
 	# e.g., root node receives no ID so shouldn't be counted twice
-	if utree.label != tree.label:  # if subtreefd[utree.label] == 0:
-		subtreefd[utree.label] += n
+	if dectree.label != tree.label:  # if subtreefd[dectree.label] == 0:
+		# NB: assignment, not addition; addressed nodes should be unique, and
+		# with packed graph encoding we don't want duplicate counts.
+		subtreefd[dectree.label] = n
 	return n
 
 
-def decorate_with_ids(n, tree, _):
-	""" Auxiliary function for DOP reduction.
+class TreeDecorator(object):
+	""" Auxiliary class for DOP reduction.
 	Adds unique identifiers to each internal non-terminal of a tree.
-	n should be an identifier of the sentence.
+	If initialized with ``memoize=True``, equivalent subtrees will get the
+	same identifiers. """
+	def __init__(self, memoize=False):
+		self.ids = self.n = 0
+		self.packedgraphs = {}
+		self.memoize = memoize
 
-	>>> tree = Tree("(S (NP (DT the) (N dog)) (VP walks))")
-	>>> decorate_with_ids(1, tree, ['the', 'dog', 'walks'])
-	Tree('S', [Tree('NP@1-0', [Tree('DT@1-1', ['the']),
-			Tree('N@1-2', ['dog'])]), Tree('VP@1-3', ['walks'])])
-	"""
-	utree = Tree.convert(tree.copy(True))
-	ids = 0
-	#skip top node, should not get an ID
-	for a in islice(utree.subtrees(), 1, None):
-		a.label = "%s@%d-%d" % (a.label, n, ids)
-		ids += 1
-	return utree
+	def decorate(self, tree, sent):
+		""" Return a copy of tree with labels decorated with IDs.
 
-packed_graph_ids = 0
-packedgraphs = {}
+		>>> d = TreeDecorator()
+		>>> tree = Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))", parse_leaf=int)
+		>>> d.decorate(tree, ['the', 'dog', 'walks'])
+		Tree('S', [Tree('NP@1-0', [Tree('DT@1-1', [0]),
+				Tree('N@1-2', [1])]), Tree('VP@1-3', [2])])
+		>>> d = TreeDecorator(memoize=True)
+		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
+		...		parse_leaf=int), ['the', 'dog', 'walks']))
+		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@1-4 2))
+		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
+		...		parse_leaf=int), ['the', 'dog', 'barks']))
+		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@2-4 2)) """
+		self.n += 1  # sentence number
+		if self.memoize:
+			self.ids = 0  # node number
+			# wrap tree to get equality wrt sent
+			tree = DiscTree(tree.freeze(), sent)
+			dectree = ImmutableTree(tree.label, map(self._recdecorate, tree))
+		else:
+			dectree = Tree.convert(tree.copy(True))
+			#skip top node, should not get an ID
+			for m, a in enumerate(islice(dectree.subtrees(), 1, None)):
+				a.label = "%s@%d-%d" % (a.label, self.n, m)
+		return dectree
 
-
-def decorate_with_ids_mem(n, tree, sent):
-	""" Auxiliary function for DOP reduction.
-	Adds unique identifiers to each internal non-terminal of a tree.
-	This version does memoization, which means that equivalent subtrees
-	(including the yield) will get the same IDs. Experimental. """
-	def recursive_decorate(tree):
+	def _recdecorate(self, tree):
 		""" Traverse subtrees not yet seen. """
-		global packed_graph_ids
 		if isinstance(tree, int):
 			return tree
-		# this is wrong, should take sent into account.
-		# use (tree, sent) as key,
-		# but translate indices to start at 0, gaps to have length 1.
-		elif tree not in packedgraphs:
-			packed_graph_ids += 1
-			packedgraphs[tree] = ImmutableTree(("%s@%d-%d" % (
-					tree, n, packed_graph_ids)),
-					[recursive_decorate(child) for child in tree])
-			return packedgraphs[tree]
-		else:
-			return copyexceptindices(tree, packedgraphs[tree])
+		elif tree not in self.packedgraphs:
+			self.ids += 1
+			self.packedgraphs[tree] = ImmutableTree(("%s@%d-%d" % (
+					tree.label, self.n, self.ids)),
+					[self._recdecorate(child) for child in tree])
+			return self.packedgraphs[tree]
+		return self._copyexceptindices(tree, self.packedgraphs[tree])
 
-	def copyexceptindices(tree1, tree2):
+	def _copyexceptindices(self, tree1, tree2):
 		""" Copy the nonterminals from tree2, but take indices from tree1. """
 		if not isinstance(tree1, Tree):
 			return tree1
+		self.ids += 1
 		return ImmutableTree(tree2.label,
-			[copyexceptindices(a, b) for a, b in zip(tree1, tree2)])
-
-	global packed_graph_ids
-	packed_graph_ids = 0
-	# wrap tree to get equality wrt sent
-	tree = DiscTree(tree.freeze(), sent)
-	#skip top node, should not get an ID
-	return ImmutableTree(tree.label,
-			[recursive_decorate(child) for child in tree])
+			[self._copyexceptindices(a, b) for a, b in zip(tree1, tree2)])
 
 
 class DiscTree(ImmutableTree):
 	""" Wrap an immutable tree with indices as leaves
-	and a sentence. """
+	and a sentence. Provides hash & equality.  """
 	def __init__(self, tree, sent):
-		super(DiscTree, self).__init__(tree.label,
-				tuple(DiscTree(a, sent) if isinstance(a, Tree) else a
-				for a in tree))
-		self.sent = sent
+		self.sent = tuple(sent)
+		super(DiscTree, self).__init__(tree.label, tuple(
+				DiscTree(child, sent) if isinstance(child, Tree) else child
+				for child in tree))
 
 	def __eq__(self, other):
 		return isinstance(other, Tree) and eqtree(self, self.sent,
 				other, other.sent)
 
 	def __hash__(self):
-		return hash((self.label, ) + tuple(a.__hash__()
-				if isinstance(a, Tree) else self.sent[a] for a in self))
+		return hash((self.label, ) + tuple(child.__hash__()
+				if isinstance(child, Tree) else self.sent[child]
+				for child in self))
 
 	def __repr__(self):
 		return "DisctTree(%r, %r)" % (
@@ -458,11 +456,10 @@ def eqtree(tree1, sent1, tree2, sent2):
 		istree = isinstance(a, Tree)
 		if istree != isinstance(b, Tree):
 			return False
-		elif istree:
-			if not a.__eq__(b):
-				return False
-		else:
+		elif not istree:
 			return sent1[a] == sent2[b]
+		elif not a.__eq__(b):
+			return False
 	return True
 
 
@@ -690,8 +687,7 @@ def defaultparse(wordstags, rightbranching=False):
 		if wordstags[1:]:
 			return "(NP (%s %s) %s)" % (wordstags[0][1],
 					wordstags[0][0], defaultparse(wordstags[1:], rightbranching))
-		else:
-			return "(NP (%s %s))" % wordstags[0][::-1]
+		return "(NP (%s %s))" % wordstags[0][::-1]
 	return "(NOPARSE %s)" % ' '.join("(%s %s)" % a[::-1] for a in wordstags)
 
 
@@ -815,8 +811,7 @@ def grammarinfo(grammar, dump=None):
 		""" this sums the fanouts of LHS & RHS """
 		if isinstance(yf[0], tuple):
 			return len(yf) + sum(map(len, yf))
-		else:
-			return 1  # NB: a lexical production has complexity 1
+		return 1  # NB: a lexical production has complexity 1
 
 	pc = {(rule, yf, w): parsingcomplexity(yf)
 							for (rule, yf), w in grammar}
@@ -867,8 +862,8 @@ def test():
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
-		neverblockre=re.compile(b'^#[0-9]+|.+}<'),
-		splitprune=False, markorigin=False)
+			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
+			splitprune=False, markorigin=False)
 	print(grammar)
 	assert grammar.testgrammar(), "DOP1 should sum to 1."
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):

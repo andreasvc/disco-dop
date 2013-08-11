@@ -611,16 +611,14 @@ def function(tree):
 	""" :returns: grammatical function for node, or an empty string. """
 	if hasattr(tree, 'source'):
 		return tree.source[FUNC].split('-')[0]
-	else:
-		return ''
+	return ''
 
 
 def ishead(tree):
 	""" Test whether this node is the head of the parent constituent. """
 	if hasattr(tree, 'source'):
 		return 'HD' in tree.source[FUNC].upper().split('-')
-	else:
-		return False
+	return False
 
 
 def rindex(l, v):

@@ -53,8 +53,7 @@ def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 				arraytoyf(rule.args, rule.lengths), rule.prob))
 	if rule.rhs2:
 		return compose(rule, (p1, l1), (p2, l2), verbose)
-	else:
-		return (p1 * rule.prob, l1)
+	return (p1 * rule.prob, l1)
 
 
 def chooserule(rules, discount, prodcounts):
@@ -150,8 +149,7 @@ def read_bitpar_grammar(rules, lexicon):
 		grammar.extend((((t, 'Epsilon'), (word,)), p) for t, p in tags)
 	if integralweights:
 		return [(rule, p / ntfd[rule[0][0]]) for rule, p in grammar]
-	else:
-		return grammar
+	return grammar
 
 
 def splitgrammar(rules):

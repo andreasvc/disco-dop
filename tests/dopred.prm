@@ -80,7 +80,7 @@ stages=[  # DOP reduction
 
   # test rest of parameters together:
   dict(
-	name='pcfg', mode='pcfg-posterior',
+	name='post', mode='pcfg-posterior',
 	split=True, markorigin=True,
   ),
   dict(
@@ -88,7 +88,7 @@ stages=[  # DOP reduction
 	prune=True, splitprune=True,
 	dop=True, usedoubledop=False,
 	k=1e-5, m=10000,
-	kbest=True, sample=True,
+	kbest=True, sample=False,
 	estimator="ewe", objective="mpp",
   ),
 
@@ -103,6 +103,19 @@ stages=[  # DOP reduction
 	estimator="dop1", objective="mpp",
   ),
 
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='packed', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=False,
+	packedgraph=True,
+	k=50, m=10000,
+	kbest=True, sample=False,
+	estimator="dop1", objective="mpp",
+  ),
 ],
 
 # corpus options
