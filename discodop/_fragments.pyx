@@ -16,12 +16,12 @@ from treetransforms import binarize, introducepreterminals
 cimport cython
 from libc.stdlib cimport malloc, free
 from cpython.array cimport array, clone
-from containers cimport ULong, UInt, Node, NodeArray, Ctrees
+from _grammar cimport ULong, UInt
+from containers cimport Node, NodeArray, Ctrees
 from bit cimport iteratesetbits, abitcount, subset, ulongcpy, ulongset, \
 		setunioninplace
 
 cdef extern from "macros.h":
-	int BITSIZE
 	int BITNSLOTS(int nb)
 	void SETBIT(ULong a[], int b)
 	void CLEARBIT(ULong a[], int b)

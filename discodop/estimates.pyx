@@ -10,8 +10,8 @@ import numpy as np
 
 from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint
 from agenda cimport Agenda, Entry
-from containers cimport Grammar, Rule, LexicalRule, SmallChartItem as ChartItem
-from containers cimport UInt, ULLong, new_ChartItem
+from _grammar cimport Grammar, Rule, LexicalRule, UInt, ULLong
+from containers cimport new_ChartItem, SmallChartItem as ChartItem
 
 cdef extern from "math.h":
 	bint isnan(double x)
@@ -716,9 +716,8 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 
 def main():
 	from treebank import NegraCorpusReader
-	from grammar import treebankgrammar
+	from grammar import treebankgrammar, Grammar
 	import plcfrs
-	from containers import Grammar
 	from treetransforms import addfanoutmarkers, binarize
 	from tree import Tree
 	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")

@@ -3,8 +3,7 @@ from __future__ import print_function
 from math import exp
 from . import treetransforms, plcfrs, kbest
 from .tree import Tree
-from .grammar import treebankgrammar
-from .containers import Grammar
+from .grammar import treebankgrammar, Grammar
 
 
 def tree_adjoining_grammar():

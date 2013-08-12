@@ -5,8 +5,9 @@ from containers import ChartItem, Edge, RankedEdge
 
 cimport cython
 from agenda cimport Entry, Agenda, nsmallest
-from containers cimport ChartItem, CFGChartItem, CFGEdge, new_LCFRSEdge, UInt,\
-		UChar, RankedCFGEdge, Edge, LCFRSEdge, RankedEdge, Rule, SmallChartItem
+from containers cimport ChartItem, SmallChartItem, CFGChartItem, Edge, Rule, \
+		CFGEdge, LCFRSEdge, RankedEdge, RankedCFGEdge, new_LCFRSEdge, \
+		UInt, UChar
 
 cdef tuple unarybest = (0, ), binarybest = (0, 0)
 

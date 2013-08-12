@@ -17,8 +17,8 @@ from itertools import count
 from subprocess import Popen, PIPE
 import numpy as np
 from . import plcfrs, pcfg
-from .grammar import FORMAT, defaultparse
-from .containers import Grammar, CFGChartItem
+from .grammar import FORMAT, Grammar, defaultparse
+from .containers import CFGChartItem
 from .coarsetofine import prunechart, whitelistfromposteriors
 from .disambiguation import marginalize, doprerank
 from .tree import Tree

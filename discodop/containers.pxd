@@ -1,6 +1,6 @@
 from math import isinf, exp, log, fsum
-from libc.stdlib cimport malloc, realloc, calloc, free, qsort
-from libc.string cimport memcmp, memset
+from libc.stdlib cimport malloc, realloc, free
+from libc.string cimport memcmp
 cimport cython
 
 ctypedef unsigned long long ULLong
@@ -27,27 +27,8 @@ cdef extern from "macros.h":
 	ULong TESTBIT(ULong a[], int b)
 	#int SLOTS # doesn't work
 
+
 DEF SLOTS = 3 # FIXME: make this a constant, yet shared across modules.
-
-
-@cython.final
-cdef class Grammar:
-	cdef Rule **unary, **lbinary, **rbinary, **bylhs
-	cdef ULong *chainvec
-	cdef UInt *mapping, **splitmapping
-	cdef UChar *fanout
-	cdef readonly currentmodel
-	cdef readonly size_t nonterminals, numrules, numunary, numbinary, maxfanout
-	cdef readonly bint logprob, bitpar
-	cdef readonly object models
-	cdef readonly bytes origrules, start
-	cdef readonly unicode origlexicon
-	cdef readonly list tolabel, lexical, modelnames, rulemapping
-	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
-	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict)
-	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
-	cdef rulestr(self, Rule rule)
-	cdef yfstr(self, Rule rule)
 
 
 cdef struct Rule:

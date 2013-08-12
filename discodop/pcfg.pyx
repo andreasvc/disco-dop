@@ -10,8 +10,9 @@ from agenda import EdgeAgenda
 from libc.stdlib cimport malloc, calloc, free
 from cpython cimport PyDict_Contains, PyDict_GetItem
 from agenda cimport EdgeAgenda
-from containers cimport Grammar, Rule, LexicalRule, CFGEdge, CFGChartItem, \
-		new_CFGChartItem, new_CFGEdge, UChar, UInt, ULong, ULLong
+from _grammar cimport Grammar
+from containers cimport CFGEdge, CFGChartItem, new_CFGChartItem, new_CFGEdge, \
+		Rule, LexicalRule, UChar, UInt, ULong, ULLong
 
 cdef extern from "math.h":
 	bint isinf(double x)
@@ -846,7 +847,7 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 
 
 def main():
-	from containers import Grammar
+	from grammar import Grammar
 	cdef Rule rule
 	cfg = Grammar([
 		((('A', 'A'), ((0, ), )), 0.7), ((('A', 'B'), ((0, ), )), 0.6),

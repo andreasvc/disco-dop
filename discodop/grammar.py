@@ -11,6 +11,7 @@ from fractions import Fraction
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
 from .tree import ImmutableTree, Tree
+from ._grammar import Grammar
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
@@ -835,7 +836,6 @@ def test():
 	from .kbest import lazykbest
 	from .agenda import getkey
 	from .fragments import getfragments
-	from .containers import Grammar
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "sample2.export"
 	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
@@ -909,7 +909,6 @@ def main():
 	from .treetransforms import addfanoutmarkers, canonicalize
 	from .treebank import getreader
 	from .fragments import getfragments
-	from .containers import Grammar
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
 	flags = ('gzip', 'packed')

@@ -18,9 +18,10 @@ from treetransforms import addbitsets
 import plcfrs
 from agenda cimport Entry, new_Entry
 from treetransforms import unbinarize, canonicalize
-from containers cimport Grammar, ChartItem, SmallChartItem, FatChartItem, \
+from _grammar cimport Grammar
+from containers cimport ChartItem, SmallChartItem, FatChartItem, \
 		CFGChartItem, Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, \
-		LexicalRule, Rule, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
+		Rule, LexicalRule, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
 cimport cython
 
 from libc.string cimport memset
@@ -870,8 +871,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 
 
 def main():
-	from grammar import dopreduction
-	from containers import Grammar
+	from grammar import dopreduction, Grammar
 	import plcfrs
 
 	def e(x):

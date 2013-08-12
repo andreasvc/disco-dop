@@ -30,13 +30,12 @@ from .treebanktransforms import transform, rrtransform
 from .treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers, addbitsets, fanout
 from .fragments import getfragments
-from .grammar import treebankgrammar, dopreduction, doubledop, grammarinfo, \
-		write_lcfrs_grammar, sortgrammar
+from .grammar import Grammar, treebankgrammar, dopreduction, doubledop, \
+		grammarinfo, write_lcfrs_grammar, sortgrammar
 from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from .parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
 from .estimates import getestimates, getpcfgestimates
-from .containers import Grammar
 
 USAGE = """Usage: %s [--rerun] <parameter file>
 If a parameter file is given, an experiment is run. See the file sample.prm for
