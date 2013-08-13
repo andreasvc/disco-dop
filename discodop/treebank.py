@@ -6,13 +6,13 @@ import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
 from itertools import count, chain
-from collections import OrderedDict, Counter as multiset
+from collections import defaultdict, OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree
 from .treebanktransforms import punctremove, punctraise, balancedpunctraise, \
 		punctroot, ispunct
-FIELDS = tuple(range(8))
-WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
+FIELDS = tuple(range(6))
+WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 POSRE = re.compile(r"\(([^() ]+) [^ ()]+\)")
 TERMINALSRE = re.compile(r" ([^ ()]+)\)")
 EXPORTNONTERMINAL = re.compile(r"^#([0-9]+)$")
@@ -307,7 +307,7 @@ class AlpinoCorpusReader(CorpusReader):
 		trees in the treebank, verbatim or with transformations applied. """
 		if self._block_cache is None:
 			self._block_cache = self._read_blocks()
-		return OrderedDict((n, unicode(ElementTree.tostring(a)))
+		return OrderedDict((n, ElementTree.tostring(a, encoding='UTF-8'))
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
@@ -322,49 +322,56 @@ class AlpinoCorpusReader(CorpusReader):
 			# ../path/dir/file.xml => dir/file
 			path, filename = os.path.split(filename)
 			_, lastdir = os.path.split(path)
-			n = os.path.join(lastdir, filename).rstrip(".xml")
+			n = os.path.join(lastdir, filename)[:-len('.xml')]
 			results[n] = block
 		return results
 
 	def _parse(self, block):
 		""" :returns: a parse tree given a string. """
-		def getsubtree(node):
+		def getsubtree(node, parent):
 			""" Traverse Alpino XML tree and create Tree object. """
 			# FIXME: proper representation for arbitrary features
 			source = [''] * len(FIELDS)
 			source[WORD] = node.get('word') or ("#%s" % node.get('id'))
 			source[LEMMA] = node.get('lemma') or node.get('root')
 			source[MORPH] = node.get('postag') or node.get('frame')
+			source[FUNC] = node.get('rel')
 			if 'cat' in node.keys():
 				source[TAG] = node.get('cat')
-			else:
-				source[TAG] = node.get('pos')
-			source[FUNC] = node.get('rel')
-			if node.get('index'):
-				source[SECEDGEPARENT] = node.get('index')
-				source[SECEDGETAG] = node.get('rel')  # NB: same relation as head
-			if 'cat' in node.keys():
+				if node.get('index'):
+					coindexed[node.get('index')] = source
 				label = node.get('cat')
 				children = []
 				for child in node:
-					if 'word' in child.keys() or 'cat' in child.keys():
-						subtree = getsubtree(child)
+					subtree = getsubtree(child, node.get('id'))
+					if subtree and (
+							'word' in child.keys() or 'cat' in child.keys()):
 						subtree.source[PARENT] = node.get('id')
-						subtree.source = tuple(subtree.source)
 						children.append(subtree)
+				if not children:
+					return None
 				result = ParentedTree(label.upper(), children)
-			else:  # leaf node
-				assert 'word' in node.keys()
+			elif 'word' in node.keys():
+				source[TAG] = node.get('pt') or node.get('pos')
+				if node.get('index'):
+					coindexed[node.get('index')] = source
 				children = list(range(int(node.get('begin')),
 						int(node.get('end'))))
 				result = ParentedTree('', children)
 				handlemorphology(self.morphology, result, source)
-			assert children, node.tostring()
+			elif 'index' in node.keys():
+				coindexation[node.get('index')].extend(
+							(node.get('rel'), parent))
+				return None
 			result.source = source
 			return result
+		coindexed = {}
+		coindexation = defaultdict(list)
 		# NB: in contrast to Negra export format, don't need to add
 		# root/top node
-		result = getsubtree(block.find('node'))
+		result = getsubtree(block.find('node'), None)
+		for index, secedges in coindexation.items():
+			coindexed[index].extend(secedges)
 		sent = self._word(block)
 		return result, sent
 
@@ -469,7 +476,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 		phrasalnodes = [a for a in tree.treepositions('postorder')
 				if a not in wordsandpreterminals and a != ()]
 		wordids = {tree[a]: a for a in indices}
-		assert len(sent) == len(indices) == len(wordids)
+		assert len(sent) == len(indices) == len(wordids), (sent, wordids.keys())
 		for i, word in enumerate(sent):
 			assert word, 'empty word in sentence: %r' % sent
 			idx = wordids[i]
@@ -479,11 +486,13 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			if hasattr(node, 'source'):
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
+				secedges = tuple(node.source[6:])
 			if morph == '--':
 				morph = node.label if morph == 'replace' else '--'
 			nodeid = str(500 + phrasalnodes.index(idx[:-2])
 				if len(idx) > 2 else 0)
-			result.append("\t".join((word, postag, morph, func, nodeid)))
+			result.append("\t".join((word, postag, morph, func, nodeid)
+					+ secedges))
 		for idx in phrasalnodes:
 			node = tree[idx]
 			parent = '#%d' % (500 + phrasalnodes.index(idx))
@@ -492,9 +501,11 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			if hasattr(node, 'source'):
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
+				secedges = tuple(node.source[6:])
 			nodeid = str(500 + phrasalnodes.index(idx[:-1])
 					if len(idx) > 1 else 0)
-			result.append('\t'.join((parent, label, morph, func, nodeid)))
+			result.append('\t'.join((parent, label, morph, func, nodeid)
+					+ secedges))
 		if n is not None:
 			result.append("#EOS %s" % n)
 		return "%s\n" % "\n".join(result)
@@ -667,7 +678,6 @@ def saveheads(tree, tailmarker):
 
 def headstats(trees):
 	""" collects some information useful for writing headrules. """
-	from collections import defaultdict
 	heads = defaultdict(multiset)
 	pos1 = defaultdict(multiset)
 	pos2 = defaultdict(multiset)
