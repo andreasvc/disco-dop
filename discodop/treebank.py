@@ -341,27 +341,25 @@ class AlpinoCorpusReader(CorpusReader):
 				if node.get('index'):
 					coindexed[node.get('index')] = source
 				label = node.get('cat')
-				children = []
+				result = ParentedTree(label.upper(), [])
 				for child in node:
 					subtree = getsubtree(child, node.get('id'))
 					if subtree and (
 							'word' in child.keys() or 'cat' in child.keys()):
 						subtree.source[PARENT] = node.get('id')
-						children.append(subtree)
-				if not children:
+						result.append(subtree)
+				if not len(result):
 					return None
-				result = ParentedTree(label.upper(), children)
 			elif 'word' in node.keys():
 				source[TAG] = node.get('pt') or node.get('pos')
 				if node.get('index'):
 					coindexed[node.get('index')] = source
-				children = list(range(int(node.get('begin')),
-						int(node.get('end'))))
-				result = ParentedTree('', children)
+				result = ParentedTree('', list(
+						range(int(node.get('begin')), int(node.get('end')))))
 				handlemorphology(self.morphology, result, source)
 			elif 'index' in node.keys():
 				coindexation[node.get('index')].extend(
-							(node.get('rel'), parent))
+						(node.get('rel'), parent))
 				return None
 			result.source = source
 			return result
@@ -370,8 +368,9 @@ class AlpinoCorpusReader(CorpusReader):
 		# NB: in contrast to Negra export format, don't need to add
 		# root/top node
 		result = getsubtree(block.find('node'), None)
-		for index, secedges in coindexation.items():
-			coindexed[index].extend(secedges)
+		# FIXME: need MultipleParentedTree for secedges
+		#for index, secedges in coindexation.items():
+		#	coindexed[index].extend(secedges)
 		sent = self._word(block)
 		return result, sent
 
@@ -481,31 +480,34 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			assert word, 'empty word in sentence: %r' % sent
 			idx = wordids[i]
 			node = tree[idx[:-1]]
+			lemma = '--'
 			postag = node.label.replace('$[', '$(') or '--'
 			func = morph = '--'
-			if hasattr(node, 'source'):
+			if getattr(node, 'source'):
+				lemma = node.source[LEMMA] or '--'
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
-				secedges = tuple(node.source[6:])
+				secedges = node.source[6:]
 			if morph == '--':
 				morph = node.label if morph == 'replace' else '--'
 			nodeid = str(500 + phrasalnodes.index(idx[:-2])
-				if len(idx) > 2 else 0)
-			result.append("\t".join((word, postag, morph, func, nodeid)
-					+ secedges))
+					if len(idx) > 2 else 0)
+			result.append("\t".join((word, lemma, postag, morph, func, nodeid)
+					+ tuple(secedges)))
 		for idx in phrasalnodes:
 			node = tree[idx]
 			parent = '#%d' % (500 + phrasalnodes.index(idx))
+			lemma = '--'
 			label = node.label or '--'
 			func = morph = '--'
-			if hasattr(node, 'source'):
+			if getattr(node, 'source'):
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
-				secedges = tuple(node.source[6:])
+				secedges = node.source[6:]
 			nodeid = str(500 + phrasalnodes.index(idx[:-1])
 					if len(idx) > 1 else 0)
-			result.append('\t'.join((parent, label, morph, func, nodeid)
-					+ secedges))
+			result.append('\t'.join((parent, lemma, label, morph, func, nodeid)
+					+ tuple(secedges)))
 		if n is not None:
 			result.append("#EOS %s" % n)
 		return "%s\n" % "\n".join(result)
@@ -549,7 +551,7 @@ def handlefunctions(action, tree, pos=True, top=False):
 				continue
 			if pos or isinstance(a[0], Tree):
 				# test for non-empty function tag ("---" is considered empty)
-				if hasattr(a, "source") and any(a.source[FUNC].split("-")):
+				if getattr(a, 'source') and any(a.source[FUNC].split("-")):
 					func = a.source[FUNC].split("-")[0].upper()
 					if action == 'add':
 						a.label += "-%s" % func
@@ -595,7 +597,7 @@ def readheadrules(filename):
 
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	""" use head finding rules to select one child of tree as head. """
-	candidates = [a for a in tree if hasattr(a, 'source')
+	candidates = [a for a in tree if getattr(a, 'source')
 			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
 		return candidates[0]
@@ -631,7 +633,7 @@ def sethead(child):
 
 def headmark(tree):
 	""" add marker to label of head node. """
-	head = [a for a in tree if hasattr(a, 'source')
+	head = [a for a in tree if getattr(a, 'source')
 			and 'HD' in a.source[FUNC].upper().split('-')]
 	if not head:
 		return
@@ -642,7 +644,7 @@ def headorder(tree, headfinal, reverse):
 	""" change order of constituents based on head (identified with
 	function tag). """
 	head = [n for n, a in enumerate(tree)
-		if hasattr(a, "source") and 'HD' in a.source[FUNC].upper().split("-")]
+		if getattr(a, "source") and 'HD' in a.source[FUNC].upper().split("-")]
 	if not head:
 		return
 	headidx = head.pop()
