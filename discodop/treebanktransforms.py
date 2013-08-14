@@ -28,11 +28,10 @@ def transform(tree, sent, transformations):
 		elif name == 'NP':  # case
 			for np in tree.subtrees(lambda n: n.label == 'NP'):
 				np.label += STATESPLIT + function(np)
-		elif name == 'PUNCT':  # distinguish . ? !
-			for punct in tree.subtrees(lambda n: n.label.upper() in (
-					'$.', 'PUNCT', 'LET[]')):
-				punct.label += STATESPLIT + sent[punct[0]].replace(
-						'(', '[').replace(')', ']').encode('unicode-escape')
+		elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
+			for punct in tree.subtrees(lambda n: isinstance(n[0], int)
+					and sent[n[0]] in '.?!'):
+				punct.label += STATESPLIT + sent[punct[0]]
 		elif name == 'PP-NP':  # un-flatten PPs by introducing NPs
 			addtopp = ('AC', )
 			for pp in tree.subtrees(lambda n: n.label == 'PP'):
