@@ -633,6 +633,7 @@ def which(program):
 	for path in os.environ.get('PATH', os.defpath).split(":"):
 		if path and os.path.exists(os.path.join(path, program)):
 			return os.path.join(path, program)
+	raise ValueError('%r not found in path; please install it.' % program)
 
 
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
