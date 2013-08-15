@@ -343,7 +343,7 @@ class AlpinoCorpusReader(CorpusReader):
 				label = node.get('cat')
 				result = ParentedTree(label.upper(), [])
 				for child in node:
-					subtree = getsubtree(child, node.get('id'))
+					subtree = getsubtree(child, result)
 					if subtree and (
 							'word' in child.keys() or 'cat' in child.keys()):
 						subtree.source[PARENT] = node.get('id')
@@ -483,7 +483,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			lemma = '--'
 			postag = node.label.replace('$[', '$(') or '--'
 			func = morph = '--'
-			if getattr(node, 'source'):
+			if getattr(node, 'source', None):
 				lemma = node.source[LEMMA] or '--'
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
@@ -500,7 +500,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			lemma = '--'
 			label = node.label or '--'
 			func = morph = '--'
-			if getattr(node, 'source'):
+			if getattr(node, 'source', None):
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
 				secedges = node.source[6:]
@@ -551,7 +551,7 @@ def handlefunctions(action, tree, pos=True, top=False):
 				continue
 			if pos or isinstance(a[0], Tree):
 				# test for non-empty function tag ("---" is considered empty)
-				if getattr(a, 'source') and any(a.source[FUNC].split("-")):
+				if getattr(a, 'source', None) and any(a.source[FUNC].split("-")):
 					func = a.source[FUNC].split("-")[0].upper()
 					if action == 'add':
 						a.label += "-%s" % func
@@ -597,7 +597,7 @@ def readheadrules(filename):
 
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	""" use head finding rules to select one child of tree as head. """
-	candidates = [a for a in tree if getattr(a, 'source')
+	candidates = [a for a in tree if getattr(a, 'source', None)
 			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
 		return candidates[0]
@@ -633,7 +633,7 @@ def sethead(child):
 
 def headmark(tree):
 	""" add marker to label of head node. """
-	head = [a for a in tree if getattr(a, 'source')
+	head = [a for a in tree if getattr(a, 'source', None)
 			and 'HD' in a.source[FUNC].upper().split('-')]
 	if not head:
 		return
@@ -644,7 +644,8 @@ def headorder(tree, headfinal, reverse):
 	""" change order of constituents based on head (identified with
 	function tag). """
 	head = [n for n, a in enumerate(tree)
-		if getattr(a, "source") and 'HD' in a.source[FUNC].upper().split("-")]
+		if getattr(a, 'source', None)
+		and 'HD' in a.source[FUNC].upper().split("-")]
 	if not head:
 		return
 	headidx = head.pop()
