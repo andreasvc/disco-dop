@@ -22,7 +22,7 @@ test3: sample2.export
 
 sample2.export:
 	# kludge to restore original encoding & strip spurious HTML sent by server
-	curl http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/TIGERCorpus/annotation/sample2.export \
+	wget http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/TIGERCorpus/annotation/sample2.export -O - \
 	| iconv --from-code=utf8 --to-code=iso8859-1 \
 	| sed -e 's/\(<[^>]*>\)\+//' > sample2.export
 

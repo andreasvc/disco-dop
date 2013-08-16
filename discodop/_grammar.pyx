@@ -63,17 +63,19 @@ cdef class Grammar:
 		self.modelnames = [u'default']
 		self.logprob = False
 
-		if isinstance(rule_tuples_or_bytes, bytes):
+		if rule_tuples_or_bytes and isinstance(rule_tuples_or_bytes, bytes):
 			assert isinstance(lexicon, unicode), "expected lexicon"
 			self.origrules = rule_tuples_or_bytes
 			self.origlexicon = lexicon
-		elif isinstance(rule_tuples_or_bytes[0], tuple):
+		elif rule_tuples_or_bytes and isinstance(
+				rule_tuples_or_bytes[0], tuple):
 			# convert tuples to strings with text format
 			from grammar import write_lcfrs_grammar
 			self.origrules, self.origlexicon = write_lcfrs_grammar(
 					rule_tuples_or_bytes, bitpar=bitpar)
 		else:
-			raise ValueError("expected sequence of tuples or bytes string.")
+			raise ValueError(
+					'expected non-empty sequence of tuples or bytes string.')
 
 		# collect non-terminal labels; count number of rules in each category
 		# for allocation purposes.
