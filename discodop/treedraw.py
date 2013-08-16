@@ -102,8 +102,8 @@ class DrawTree(object):
 		if abbr:
 			if self.tree is tree:
 				self.tree = self.tree.copy(True)
-			for n in self.tree.subtrees():
-				n.label = n.label[:5]
+			for n in self.tree.subtrees(lambda x: len(x.label) > 5):
+				n.label = n.label[:4] + u'\u2026'  # unicode '...' ellipsis
 		self.highlight = set()
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				self.tree, self.sent, highlight)

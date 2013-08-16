@@ -196,28 +196,6 @@ class NegraCorpusReader(CorpusReader):
 			and not ispunct(a[WORD], a[TAG])]
 
 
-class TigerXMLCorpusReader(CorpusReader):
-	""" Corpus reader for the Tiger XML format. """
-	def blocks(self):
-		raise NotImplementedError
-
-	def _read_blocks(self):
-		raise NotImplementedError
-		#results = OrderedDict()
-		#for filename in self._filenames:
-		#	# use iterparse()
-		#	block = ElementTree.parse(filename).getroot()
-		#	for sent in block.get('body').findall('s'):
-		#		results[sent.get('id')] = sent
-		#return results
-
-	def _parse(self, block):
-		raise NotImplementedError
-
-	def _word(self, block, orig=False):
-		raise NotImplementedError
-
-
 class DiscBracketCorpusReader(CorpusReader):
 	""" A corpus reader where the phrase-structure is represented by a tree in
 	bracket notation, where the leaves are indices pointing to words in a
@@ -304,7 +282,7 @@ class AlpinoCorpusReader(CorpusReader):
 
 	def blocks(self):
 		""" :returns: a list of strings containing the raw representation of \
-		trees in the treebank, verbatim or with transformations applied. """
+		trees in the treebank. """
 		if self._block_cache is None:
 			self._block_cache = self._read_blocks()
 		return OrderedDict((n, ElementTree.tostring(a, encoding='UTF-8'))
@@ -375,11 +353,71 @@ class AlpinoCorpusReader(CorpusReader):
 		return result, sent
 
 	def _word(self, block, orig=False):
-		""" :returns: a list of words given a string.
+		if orig or self.punct != "remove":
+			return block.find('sentence').text.split()
+		return [word for word in block.find('sentence').text.split()
+				if not ispunct(word, None)]  # fixme: don't have tag
 
-		When orig is True, return original sentence verbatim;
-		otherwise it will follow parameters for punctuation. """
-		return block.find('sentence').text.split()
+
+class TigerXMLCorpusReader(CorpusReader):
+	""" Corpus reader for the Tiger XML format. """
+	def blocks(self):
+		""" :returns: a list of strings containing the raw representation of \
+		trees in the treebank. """
+		if self._block_cache is None:
+			self._block_cache = self._read_blocks()
+		return OrderedDict((n, ElementTree.tostring(a, encoding='UTF-8'))
+				for n, a in self._block_cache.items())
+
+	def _read_blocks(self):
+		results = OrderedDict()
+		for filename in self._filenames:
+			# todo: use iterparse()
+			block = ElementTree.parse(filename).getroot()
+			for sent in block.find('body').findall('s'):
+				results[sent.get('id')] = sent
+		return results
+
+	def _parse(self, block):
+		""" Translate Tiger XML structure to the fields of export format,
+		so that tree writing code for export format can be used. """
+		nodes = OrderedDict()
+		root = block.find('graph').get('root')
+		for term in block.find('graph').find('terminals'):
+			fields = nodes.setdefault(term.get('id'), 6 * [None])
+			fields[WORD] = term.get('word')
+			fields[LEMMA] = term.get('lemma')
+			fields[TAG] = term.get('pos')
+			fields[MORPH] = term.get('morph')
+			nodes[term.get('id')] = fields
+		for n, nt in enumerate(block.find('graph').find('nonterminals')):
+			if nt.get('id') == root:
+				ntid = '0'
+			else:
+				fields = nodes.setdefault(nt.get('id'), 6 * [None])
+				ntid = nt.get('id').split('_')[-1]
+				fields[WORD] = '#' + ntid
+				fields[TAG] = nt.get('cat')
+				fields[LEMMA] = fields[MORPH] = '--'
+			for edge in nt:
+				idref = edge.get('idref')
+				nodes.setdefault(idref, 6 * [None])
+				if nodes[idref][FUNC] is None:
+					nodes[idref][FUNC] = edge.get('label')
+					nodes[idref][PARENT] = ntid
+				else:  # secondary edge
+					nodes[idref].extend((edge.get('label'), ntid))
+		tree = exportparse(list(nodes.values()))
+		sent = self._word(block, orig=True)
+		return tree, sent
+
+	def _word(self, block, orig=False):
+		if orig or self.punct != "remove":
+			return [term.get('word')
+				for term in block.find('graph').find('terminals')]
+		return [term.get('word')
+			for term in block.find('graph').find('terminals')
+			if not ispunct(term.get('word'), term.get('pos'))]
 
 
 def numbase(key):
@@ -433,7 +471,7 @@ def exportparse(block, morphology=None):
 	children = {}
 	for n, source in enumerate(block):
 		children.setdefault(source[PARENT], []).append((n, source))
-	result = ParentedTree("ROOT", getchildren("0"))
+	result = ParentedTree('ROOT', getchildren('0'))
 	return result
 
 
@@ -483,6 +521,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			lemma = '--'
 			postag = node.label.replace('$[', '$(') or '--'
 			func = morph = '--'
+			secedges = []
 			if getattr(node, 'source', None):
 				lemma = node.source[LEMMA] or '--'
 				morph = node.source[MORPH] or '--'
@@ -500,6 +539,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			lemma = '--'
 			label = node.label or '--'
 			func = morph = '--'
+			secedges = []
 			if getattr(node, 'source', None):
 				morph = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'

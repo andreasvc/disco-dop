@@ -1,10 +1,11 @@
 all:
-	python setup.py build_ext --inplace
+	#python setup.py build_ext --inplace
 	python setup.py install --user
 
 .PHONY: clean test debug testdebug lint
 
 clean:
+	python setup.py clean
 	rm -rf build/
 	cd discodop; rm -rf *.c *.so *.html *.pyc __pycache__
 

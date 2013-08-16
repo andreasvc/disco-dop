@@ -72,6 +72,7 @@ class Tree(list):
 			return
 		list.__init__(self, children)
 		self.label = label_or_str
+		self.source = self.bitset = None
 
 	# === Comparison operators ==================================
 	def __eq__(self, other):
@@ -486,16 +487,16 @@ class ImmutableTree(Tree):
 			return self._subtrees
 		return filter(condition, self._subtrees)
 
-	def __setitem__(self):
+	def __setitem__(self, _index, _value):
 		raise ValueError('ImmutableTrees may not be modified')
 
-	def __setslice__(self):
+	def __setslice__(self, _start, _stop, _value):
 		raise ValueError('ImmutableTrees may not be modified')
 
-	def __delitem__(self):
+	def __delitem__(self, _index):
 		raise ValueError('ImmutableTrees may not be modified')
 
-	def __delslice__(self):
+	def __delslice__(self, _start, _stop):
 		raise ValueError('ImmutableTrees may not be modified')
 
 	def __iadd__(self):
@@ -528,9 +529,9 @@ class ImmutableTree(Tree):
 	def _set_label(self, label):
 		""" Set self._label. This will only succeed the first time the label is
 		set, which should occur in Tree.__init__(). """
-		if hasattr(self, 'label'):
+		if hasattr(self, '_label'):
 			raise ValueError('ImmutableTrees may not be modified')
-		self._label = label
+		self._label = label  # pylint: disable=W0201
 
 	def _get_label(self):
 		""" Get node label. """

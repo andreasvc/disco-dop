@@ -457,7 +457,7 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 #1/2467          $.      ·      # NB this is not a period but a \cdot ...
 
 
-PUNCTUATION = frozenset('.,():\'-";?/!*&```[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
+PUNCTUATION = frozenset('.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {'&bullet;', '..', '...', '....', '.....', '......', '!!', '!!!',
 		'??', '???', "''", '``', u',,', '--'}
 
@@ -465,7 +465,8 @@ PUNCTUATION = frozenset('.,():\'-";?/!*&```[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 def ispunct(word, tag):
 	""" Test whether a word and/or tag is punctuation. """
 	# fixme: treebank specific parameters for detecting punctuation.
-	return (tag in ('$,', '$.', '$[', '$(', 'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]')
+	return (tag in ('$,', '$.', '$[', '$(',
+			'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]')
 			or word in PUNCTUATION)
 
 
@@ -611,14 +612,14 @@ def balancedpunctraise(tree, sent):
 
 def function(tree):
 	""" :returns: grammatical function for node, or an empty string. """
-	if hasattr(tree, 'source'):
+	if getattr(tree, 'source', None):
 		return tree.source[FUNC].split('-')[0]
 	return ''
 
 
 def ishead(tree):
 	""" Test whether this node is the head of the parent constituent. """
-	if hasattr(tree, 'source'):
+	if getattr(tree, 'source', None):
 		return 'HD' in tree.source[FUNC].upper().split('-')
 	return False
 

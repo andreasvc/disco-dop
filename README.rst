@@ -155,7 +155,9 @@ be installed.
 ``treesearch.py``
     A web interface for searching trough treebanks. Expects
     one or more (non-discontinuous) treebanks with the ``.mrg`` extension in
-    the directory ``web/corpus/`` (sample included).
+    the directory ``web/corpus/`` (sample included). Depends on
+    `tgrep2 <tedlab.mit.edu/~dr/Tgrep2/>`_ and
+    `style <http://www.gnu.org/software/diction/diction.html>`_.
 
 ``treedraw.py``
     A web interface for drawing discontinuous trees in various
