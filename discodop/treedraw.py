@@ -62,9 +62,9 @@ class DrawTree(object):
 		contains non-integers as leaves, a continuous phrase-structure tree
 		is assumed. If sent is not given and the tree contains only indices
 		as leaves, the indices are displayed as placeholder terminals.
-	:param highlight: Optionally, a sequence of Tree objects which should be
-		highlighted. Has the effect of only applying colors to nodes in
-		this sequence (nodes should be given as Tree objects, terminals as
+	:param highlight: Optionally, a sequence of Tree objects in `tree` which
+		should be highlighted. Has the effect of only applying colors to nodes
+		in this sequence (nodes should be given as Tree objects, terminals as
 		indices).
 	:param abbr: when True, abbreviate labels longer than 5 characters.
 

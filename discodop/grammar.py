@@ -837,11 +837,8 @@ def test():
 	from .agenda import getkey
 	from .fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	filename = "sample2.export"
-	corpus = NegraCorpusReader(".", filename, encoding="iso-8859-1",
-		headrules=None, headfinal=True, headreverse=False,
-		punct="move")
-	#corpus = BracketCorpusReader(".", "treebankExample.mrg")
+	filename = "alpinosample.export"
+	corpus = NegraCorpusReader(".", filename, punct="move")
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
 			for a in list(corpus.parsed_sents().values())[:10]]

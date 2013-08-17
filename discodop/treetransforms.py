@@ -863,8 +863,7 @@ def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
 	to the complexities of right-to-left binarizations. """
 	from .treebank import NegraCorpusReader
-	corpus = NegraCorpusReader('.', 'sample2.export', encoding='iso-8859-1',
-			punct='move', headrules=None, headfinal=True, headreverse=False)
+	corpus = NegraCorpusReader('.', 'alpinosample.export', punct='move')
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), list(
 			corpus.parsed_sents().values())[:-2000], corpus.sents().values()):
@@ -901,7 +900,7 @@ def testsplit():
 	same trees for a treebank. """
 	from .treebank import NegraCorpusReader
 	correct = wrong = 0
-	n = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
+	n = NegraCorpusReader('.', 'alpinosample.export')
 	for tree in n.parsed_sents().values():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
 			correct += 1

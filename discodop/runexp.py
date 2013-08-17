@@ -25,10 +25,11 @@ from subprocess import Popen, PIPE
 import numpy as np
 from . import eval as evalmod
 from .tree import Tree
-from .treebank import getreader, writetree
+from .treebank import getreader, writetree, treebankfanout
 from .treebanktransforms import transform, rrtransform
 from .treetransforms import binarize, optimalbinarize, canonicalize, \
-		splitdiscnodes, addfanoutmarkers, addbitsets, fanout
+		splitdiscnodes, addfanoutmarkers
+from .treedraw import DrawTree
 from .fragments import getfragments
 from .grammar import Grammar, treebankgrammar, dopreduction, doubledop, \
 		grammarinfo, write_lcfrs_grammar, sortgrammar
@@ -56,8 +57,8 @@ def startexp(
 		corpusfmt='export',  # choices: export, discbracket, bracket
 		corpusdir='.',
 		# filenames may include globbing characters '*' and '?'.
-		traincorpus='sample2.export', trainencoding='iso-8859-1',
-		testcorpus='sample2.export', testencoding='iso-8859-1',
+		traincorpus='alpinosample.export', trainencoding='utf-8',
+		testcorpus='alpinosample.export', testencoding='utf-8',
 		testmaxwords=40,
 		trainmaxwords=40,
 		trainnumsents=2,
@@ -195,11 +196,11 @@ def startexp(
 			{word for word, tags in taglex.items() if tags == {tag}}
 			for tag in overridetags}
 		tagmap = {'$(': '$[', 'PAV': 'PROAV'}
-		test_tagged_sents = dotagging(postagging['method'], postagging['model'],
-				OrderedDict((a, b) for a, b
+		sents_to_tag = OrderedDict((a, b) for a, b
 				in islice(gold_sents.items(), skip, skip + testnumsents)
 				if len(b) <= testmaxwords),
-				overridetagdict, tagmap)
+		test_tagged_sents = externaltagging(postagging['method'],
+				postagging['model'], sents_to_tag, overridetagdict, tagmap)
 		# give these tags to parser
 		usetags = True
 	elif postagging and postagging['method'] == 'unknownword' and not rerun:
@@ -576,19 +577,22 @@ def worker(args):
 		DictObj with the results for each stage. """
 	nsent, (sent, goldtree, _, _) = args
 	prm = INTERNALPARAMS
-	evaltree = goldtree.copy(True)
-	evalmod.transform(evaltree, [w for w, _ in sent],
-			evaltree.pos(), dict(evaltree.pos()),
+	goldevaltree = goldtree.copy(True)
+	gpos = goldevaltree.pos()
+	evalmod.transform(goldevaltree, [w for w, _ in sent],
+			gpos, dict(goldevaltree.pos()),
 			prm.deletelabel, prm.deleteword, {}, {})
-	goldb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
+	goldb = evalmod.bracketings(goldevaltree, dellabel=prm.deletelabel)
 	results = []
 	msg = ''
 	for result in prm.parser.parse([w for w, _ in sent],
 			tags=[t for _, t in sent] if prm.usetags else None):
 		msg += result.msg
 		evaltree = result.parsetree.copy(True)
-		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-				dict(evaltree.pos()), prm.deletelabel, prm.deleteword, {}, {})
+		evalsent = [w for w, _ in sent]
+		cpos = evaltree.pos()
+		evalmod.transform(evaltree, evalsent, cpos, dict(goldevaltree.pos()),
+				prm.deletelabel, prm.deleteword, {}, {})
 		candb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
 		if goldb and candb:
 			prec = evalmod.precision(goldb, candb)
@@ -609,11 +613,19 @@ def worker(args):
 				msg += 'cand-gold=%s ' % evalmod.strbracketings(candb - goldb)
 			if goldb - candb:
 				msg += 'gold-cand=%s' % evalmod.strbracketings(goldb - candb)
-			#msg += '\n%s' % parsetree
 		msg += '\n'
 		result.update(dict(candb=candb, exact=exact))
 		results.append(result)
-	#msg += 'GOLD:   %s' % goldtree.pprint(margin=1000)
+	# visualization of last parse tree; highligh matching POS / bracketings
+	highlight = [a for a in evaltree.subtrees()
+				if evalmod.bracketing(a) in goldb]
+	highlight.extend(a for a in evaltree.subtrees()
+				if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
+	highlight.extend(range(len(cpos)))
+	msg += DrawTree(evaltree, evalsent, abbr=True,
+			highlight=highlight,
+			).text(
+				unicodelines=True, ansi=True)
 	return (nsent, msg, results)
 
 
@@ -784,7 +796,7 @@ def parsetepacoc(
 		tagmap = {'$(': '$[', 'PAV': 'PROAV', 'PIDAT': 'PIAT'}
 		# the sentences in the list allsents are modified in-place so that
 		# the relevant copy in testsets[cat][0] is updated as well.
-		dotagging(usetagger, '', allsents, overridetagdict, tagmap)
+		externaltagging(usetagger, '', allsents, overridetagdict, tagmap)
 
 	# training set
 	trees, sents, blocks = zip(*[sent for n, sent in
@@ -847,7 +859,7 @@ def parsetepacoc(
 			resultdir=resultdir, usetags=True, numproc=numproc, category=cat))
 
 
-def dotagging(usetagger, model, sents, overridetag, tagmap):
+def externaltagging(usetagger, model, sents, overridetag, tagmap):
 	""" Use an external tool to tag a list of tagged sentences. """
 	logging.info("Start tagging.")
 	goldtags = [t for sent in sents.values() for _, t in sent]
@@ -929,16 +941,6 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 		if word in overridetag[newtag]:
 			tag = newtag
 	return word, tagmap.get(tag, tag)
-
-
-def treebankfanout(trees):
-	""" Get maximal fan-out of a list of trees. """
-	try:
-		result = max((fanout(a), n) for n, tree in enumerate(trees)
-			for a in addbitsets(tree).subtrees(lambda x: len(x) > 1))
-	except ValueError:
-		result = 0, 0  # a 'treebank' with only unary productions...
-	return result
 
 
 def readparam(filename):

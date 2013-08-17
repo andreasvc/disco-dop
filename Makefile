@@ -1,30 +1,24 @@
-all:
-	#python setup.py build_ext --inplace
-	python setup.py install --user
-
 .PHONY: clean test debug testdebug lint
+
+all:
+	python setup.py build_ext --inplace
+	python setup.py install --user
 
 clean:
 	python setup.py clean
 	rm -rf build/
 	cd discodop; rm -rf *.c *.so *.html *.pyc __pycache__
 
-test: all sample2.export
+test: all
 	rm -rf sample/
 	python -tt -3 tests.py && \
 	cd tests/ && \
 	sh run.sh
 
-test3: sample2.export
+test3:
 	rm -rf sample/
 	python3 setup.py build_ext --inplace
 	PYTHONIOENCODING=utf-8 python3 -bb -tt tests.py
-
-sample2.export:
-	# kludge to restore original encoding & strip spurious HTML sent by server
-	wget http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/TIGERCorpus/annotation/sample2.export -O - \
-	| iconv --from-code=utf8 --to-code=iso8859-1 \
-	| sed -e 's/\(<[^>]*>\)\+//' > sample2.export
 
 debug:
 	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb

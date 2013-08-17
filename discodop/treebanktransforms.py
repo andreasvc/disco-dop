@@ -653,17 +653,16 @@ def testpunct():
 	""" Verify that punctuation movement does not increase fan-out. """
 	from .treetransforms import addbitsets, fanout
 	from .treebank import NegraCorpusReader
-	filename = 'sample2.export'  # 'negraproc.export'
-	mangledtrees = NegraCorpusReader('.', filename, headrules=None,
-			encoding='iso-8859-1', punct='move')
-	nopunct = list(NegraCorpusReader('.', filename, headrules=None,
-			encoding='iso-8859-1', punct='remove').parsed_sents().values())
+	filename = 'alpinosample.export'
+	mangledtrees = NegraCorpusReader('.', filename, punct='move')
+	nopunct = list(NegraCorpusReader('.', filename,
+			punct='remove').parsed_sents().values())
 	originals = list(NegraCorpusReader('.', filename, headrules=None,
 			encoding='iso-8859-1').parsed_sents().values())
 	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
-			mangledtrees.parsed_sents().values(), mangledtrees.sents().values(),
-			nopunct, originals):
+			mangledtrees.parsed_sents().values(),
+			mangledtrees.sents().values(), nopunct, originals):
 		print(n, end='')
 		for a, b in zip(sorted(addbitsets(mangled).subtrees(phrasal),
 				key=lambda n: min(n.leaves())),
@@ -684,11 +683,9 @@ def testtransforms():
 	are reversible. """
 	from .treetransforms import canonicalize
 	from .treebank import NegraCorpusReader, handlefunctions
-	headrules = None  # 'negra.headrules'
-	n = NegraCorpusReader('.', 'sample2.export', encoding='iso-8859-1',
-			headrules=headrules)
-	nn = NegraCorpusReader('.', 'sample2.export', encoding='iso-8859-1',
-			headrules=headrules)
+	headrules = None  # 'alpino.headrules'
+	n = NegraCorpusReader('.', 'alpinosample.export', headrules=headrules)
+	nn = NegraCorpusReader('.', 'alpinosample.export', headrules=headrules)
 	transformations = ('S-RC', 'VP-GF', 'NP')
 	trees = [transform(tree, sent, transformations)
 			for tree, sent in zip(nn.parsed_sents().values(),

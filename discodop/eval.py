@@ -614,11 +614,15 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> bracketings(tree, dellabel=('S',))
 	Counter({('VP', (0, 2)): 1})
 	"""
-	return multiset((a.label if labeled else '', a.indices)
-			for a in tree.subtrees()
-				if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
-					and a.label not in dellabel
-					and (not disconly or disc(a)))
+	return multiset(bracketing(a, labeled) for a in tree.subtrees()
+			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
+				and a.label not in dellabel
+				and (not disconly or disc(a)))
+
+
+def bracketing(node, labeled=True):
+	""" Generate bracketing ``(label, indices)`` for a given node. """
+	return (node.label if labeled else '', node.indices)
 
 
 def strbracketings(brackets):
@@ -853,8 +857,8 @@ def edit_distance(seq1, seq2):
 
 def test():
 	""" Simple sanity check; should give 100% score on all metrics. """
-	gold = getreader('export')('.', 'sample2.export', encoding='iso-8859-1')
-	parses = getreader('export')('.', 'sample2.export', encoding='iso-8859-1')
+	gold = getreader('export')('.', 'alpinosample.export')
+	parses = getreader('export')('.', 'alpinosample.export')
 	doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),

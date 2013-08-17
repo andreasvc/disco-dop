@@ -565,7 +565,7 @@ def printfragments(fragments, counts, out=None):
 
 def test():
 	""" Simple test. """
-	main("fragments.py --disc --encoding iso-8859-1 sample2.export".split())
+	main("fragments.py --disc alpinosample.export".split())
 
 if __name__ == '__main__':
 	main()

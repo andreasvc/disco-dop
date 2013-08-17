@@ -650,9 +650,9 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 						continue
 					foundbetter = True
 					inside[left, right, lhs] += rule.prob * ls * rs
-					assert 0.0 < inside[left, right, lhs] <= 1.0, (
-						inside[left, right, lhs],
-						left, right, grammar.tolabel[lhs])
+					#assert 0.0 < inside[left, right, lhs] <= 1.0, (
+					#	inside[left, right, lhs],
+					#	left, right, grammar.tolabel[lhs])
 				if foundbetter:  # and oldscore == 0.0:
 					if left > minleft[lhs, right]:
 						minleft[lhs, right] = left
@@ -735,12 +735,12 @@ def outsidescores(Grammar grammar, sent, UInt start,
 						unaryagenda.setifbetter(rule.rhs1, <CFGEdge>edge)
 						cell[lhs][edge] = edge
 						outside[left, right, rule.rhs1] += prob
-						assert 0.0 < outside[left, right, rule.rhs1] <= 1.0, (
-								'illegal value: outside[%d, %d, %s] = %g' % (
-									left, right, grammar.tolabel[rule.rhs1],
-									outside[left, right, rule.rhs1]),
-								rule.prob, outside[left, right, lhs],
-								grammar.tolabel[rule.lhs])
+						#assert 0.0 < outside[left, right, rule.rhs1] <= 1.0, (
+						#		'illegal value: outside[%d, %d, %s] = %g' % (
+						#			left, right, grammar.tolabel[rule.rhs1],
+						#			outside[left, right, rule.rhs1]),
+						#		rule.prob, outside[left, right, lhs],
+						#		grammar.tolabel[rule.lhs])
 			for rhs1 in range(grammar.nonterminals):
 				cell[rhs1].clear()
 			# binary rules
@@ -769,15 +769,15 @@ def outsidescores(Grammar grammar, sent, UInt start,
 						continue
 					outside[left, split, rule.rhs1] += rule.prob * rs * os
 					outside[split, right, rule.rhs2] += rule.prob * ls * os
-					assert 0.0 < outside[left, split, rule.rhs1] <= 1.0, (
-							'illegal value: outside[%d, %d, %s] = %g' % (
-								left, split, grammar.tolabel[rule.rhs1],
-								outside[left, split, rule.rhs1]),
-							rule.prob, rs, os, grammar.tolabel[rule.lhs])
-					assert 0.0 < outside[split, right, rule.rhs2] <= 1.0, (
-							'illegal value: outside[%d, %d, %s] = %g' % (
-								split, right, grammar.tolabel[rule.rhs2],
-								outside[split, right, rule.rhs2]))
+					#assert 0.0 < outside[left, split, rule.rhs1] <= 1.0, (
+					#		'illegal value: outside[%d, %d, %s] = %g' % (
+					#			left, split, grammar.tolabel[rule.rhs1],
+					#			outside[left, split, rule.rhs1]),
+					#		rule.prob, rs, os, grammar.tolabel[rule.lhs])
+					#assert 0.0 < outside[split, right, rule.rhs2] <= 1.0, (
+					#		'illegal value: outside[%d, %d, %s] = %g' % (
+					#			split, right, grammar.tolabel[rule.rhs2],
+					#			outside[split, right, rule.rhs2]))
 
 
 def minmaxmatrices(nonterminals, lensent):

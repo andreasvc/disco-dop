@@ -34,11 +34,11 @@ stages=[
 ],
 
 # corpus options
-corpusfmt="export", # choices: export, bracket, discbracket
-corpusdir=".",
-traincorpus="sample2.export", trainencoding="iso-8859-1",
-testcorpus="sample2.export", testencoding="iso-8859-1",
-evalparam="proper.prm", # EVALB-style parameter file
+corpusfmt='export', # choices: export, bracket, discbracket
+corpusdir='.',
+traincorpus='alpinosample.export', trainencoding='utf-8',
+testcorpus='alpinosample.export', testencoding='utf-8',
+evalparam='proper.prm', # EVALB-style parameter file
 
 punct=None, # options:
 #	None: leave punctuation as-is

@@ -459,8 +459,7 @@ def main():
 	#train = 400
 	#test = 40
 	#testmaxlen = 999
-	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1",
-		headrules=None, headfinal=True, headreverse=False)
+	corpus = NegraCorpusReader('.', 'alpinosample.export')
 	train = 0
 	test = 3
 	testmaxlen = 999

@@ -156,7 +156,7 @@ be installed.
     A web interface for searching trough treebanks. Expects
     one or more (non-discontinuous) treebanks with the ``.mrg`` extension in
     the directory ``web/corpus/`` (sample included). Depends on
-    `tgrep2 <tedlab.mit.edu/~dr/Tgrep2/>`_ and
+    `tgrep2 <http://tedlab.mit.edu/~dr/Tgrep2/>`_ and
     `style <http://www.gnu.org/software/diction/diction.html>`_.
 
 ``treedraw.py``

@@ -9,8 +9,10 @@ from itertools import count, chain
 from collections import defaultdict, OrderedDict, Counter as multiset
 from operator import itemgetter
 from .tree import Tree, ParentedTree
+from .treetransforms import addbitsets, fanout
 from .treebanktransforms import punctremove, punctraise, balancedpunctraise, \
 		punctroot, ispunct
+
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 POSRE = re.compile(r"\(([^() ]+) [^ ()]+\)")
@@ -390,7 +392,7 @@ class TigerXMLCorpusReader(CorpusReader):
 			fields[TAG] = term.get('pos')
 			fields[MORPH] = term.get('morph')
 			nodes[term.get('id')] = fields
-		for n, nt in enumerate(block.find('graph').find('nonterminals')):
+		for nt in block.find('graph').find('nonterminals'):
 			if nt.get('id') == root:
 				ntid = '0'
 			else:
@@ -903,6 +905,16 @@ def exporttree(data, morphology):
 			break
 		sent.append(a[WORD])
 	return tree, sent
+
+
+def treebankfanout(trees):
+	""" Get maximal fan-out of a list of trees. """
+	# avoid max over empty sequence: 'treebank' may only have unary productions
+	try:
+		return max((fanout(a), n) for n, tree in enumerate(trees)
+				for a in addbitsets(tree).subtrees(lambda x: len(x) > 1))
+	except ValueError:
+		return 1, 0
 
 
 if __name__ == '__main__':

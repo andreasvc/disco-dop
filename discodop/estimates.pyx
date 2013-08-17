@@ -720,7 +720,7 @@ def main():
 	import plcfrs
 	from treetransforms import addfanoutmarkers, binarize
 	from tree import Tree
-	corpus = NegraCorpusReader(".", "sample2.export", encoding="iso-8859-1")
+	corpus = NegraCorpusReader('.', 'alpinosample.export')
 	trees = list(corpus.parsed_sents().values())
 	for a in trees:
 		binarize(a, vertmarkov=1, horzmarkov=1)
