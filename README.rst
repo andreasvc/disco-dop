@@ -70,11 +70,18 @@ run the following sequence of commands::
 (the ``--user`` option means the packages will be installed to your home
 directory which does not require root privileges).
 
-To port the code to another compiler such as Visual C, replace the compiler
-intrinsics in ``macros.h``, ``bit.pyx``, and ``bit.pxd`` with their equivalents
-for the compiler in question. This mainly concerns operations to scan for bits
-in integers, for which these compiler intrinsics provide the most efficient
-implementation on a given processor.
+If you do not run Linux, it is possible to run the code inside a virtual machine.
+To do that, `install Vagrant <http://docs.vagrantup.com/v2/installation/>`_,
+and drop ``Vagrantfile`` in some directory. Run the command ``vagrant up`` from
+a command prompt in this directory, and the virtual machine will boot and run a
+script to install the above automatically. The command ``vagrant ssh`` can then
+be used to log in to the virtual machine.
+
+The code requires the GCC compiler. To port the code to another compiler such
+as Visual C, replace the compiler intrinsics in ``macros.h``, ``bit.pyx``, and
+``bit.pxd`` with their equivalents for the compiler in question. This mainly
+concerns operations to scan for bits in integers, for which these compiler
+intrinsics provide the most efficient implementation on a given processor.
 
 Usage
 =====
