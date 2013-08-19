@@ -125,7 +125,7 @@ def style():
 			fields = sorted(STYLETABLE[a].keys())
 			break
 		for field in () if doexport else fields:
-			data = {a: STYLETABLE[a][field] for a in STYLETABLE}
+			data = {a: STYLETABLE[a].get(field, 0) for a in STYLETABLE}
 			total = max(data.values())
 			if total > 0:
 				yield barplot(data, total, field + ':', barstyle='chart1',

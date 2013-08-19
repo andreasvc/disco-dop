@@ -30,7 +30,7 @@ which diction || (
 	cd /home/vagrant
 	sudo -u vagrant git clone --depth 1 git://github.com/andreasvc/diction.git
 	cd diction
-	sudo -u vagrant ./configure --prefix=/usr/local && sudo -u vagrant make && make install
+	sudo -u vagrant ./configure && sudo -u vagrant make && make install
 )
 
 SCRIPT
