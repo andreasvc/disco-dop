@@ -1,4 +1,4 @@
-from containers cimport Edge, ChartItem, LCFRSEdge
+from discodop.containers cimport Edge, ChartItem, LCFRSEdge
 from cpython cimport PyList_GET_ITEM, PyList_GET_SIZE
 cimport cython
 

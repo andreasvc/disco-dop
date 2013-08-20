@@ -13,7 +13,7 @@ from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from itertools import count
-from .tree import Tree
+from discodop.tree import Tree
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 	from builtins import zip as izip  # pylint: disable=F0401
@@ -736,7 +736,7 @@ def test():
 
 def main():
 	""" Text-based tree viewer. """
-	from .treebank import getreader, incrementaltreereader
+	from discodop.treebank import getreader, incrementaltreereader
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')

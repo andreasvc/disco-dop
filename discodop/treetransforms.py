@@ -23,10 +23,10 @@ from itertools import count
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
-from .tree import Tree, ImmutableTree
-from .grammar import ranges
+from discodop.tree import Tree, ImmutableTree
+from discodop.grammar import ranges
 try:
-	from .bit import fanout as bitfanout
+	from discodop.bit import fanout as bitfanout
 except ImportError:
 	def bitfanout(arg):
 		""" Slower version. """
@@ -551,7 +551,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	#do default right factored binarization instead
 	elif fanout(tree) == 1 and all(fanout(a) == 1 for a in tree):
 		return factorconstituent(tree, sep=sep, h=h)
-	from .agenda import Agenda
+	from discodop.agenda import Agenda
 	labels = [a.label for a in tree]
 	#the four main datastructures:
 	#the agenda is a priority queue of partial binarizations to explore
@@ -862,7 +862,7 @@ class OrderedSet(Set):
 def testminbin():
 	""" Verify that all optimal parsing complexities are lower than or equal
 	to the complexities of right-to-left binarizations. """
-	from .treebank import NegraCorpusReader
+	from discodop.treebank import NegraCorpusReader
 	corpus = NegraCorpusReader('.', 'alpinosample.export', punct='move')
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), list(
@@ -898,7 +898,7 @@ def testminbin():
 def testsplit():
 	""" Verify that splitting and merging discontinuties gives the
 	same trees for a treebank. """
-	from .treebank import NegraCorpusReader
+	from discodop.treebank import NegraCorpusReader
 	correct = wrong = 0
 	n = NegraCorpusReader('.', 'alpinosample.export')
 	for tree in n.parsed_sents().values():
@@ -921,7 +921,7 @@ def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
-	from .treebank import getreader, writetree, readheadrules
+	from discodop.treebank import getreader, writetree, readheadrules
 	flags = ['markorigin', 'markheads']
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()

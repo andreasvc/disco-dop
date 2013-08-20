@@ -1,7 +1,6 @@
 .PHONY: clean test debug testdebug lint
 
 all:
-	python setup.py build_ext --inplace
 	python setup.py install --user
 
 clean:
@@ -35,7 +34,7 @@ lint:
 		discodop/*.py web/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx && \
-	pylint \
+	cd web; pylint \
 		--indent-string='\t' \
 		--disable=R,C0103 \
-		discodop/*.py web/*.py
+		~/.local/lib/python2.7/site-packages/discodop/*py *.py

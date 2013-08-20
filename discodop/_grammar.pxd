@@ -1,6 +1,6 @@
 from libc.stdlib cimport malloc, calloc, free, qsort
 cimport cython
-from containers cimport ULLong, ULong, UInt, UChar, Rule, LexicalRule
+from discodop.containers cimport ULLong, ULong, UInt, UChar, Rule, LexicalRule
 
 cdef extern from "macros.h":
 	int BITNSLOTS(int nb)

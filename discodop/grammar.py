@@ -10,8 +10,7 @@ from operator import mul, itemgetter
 from fractions import Fraction
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
-from .tree import ImmutableTree, Tree
-from ._grammar import Grammar
+from discodop.tree import ImmutableTree, Tree
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
@@ -493,7 +492,7 @@ def new_flatten(tree, sent, ids):
 	#(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 	#'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
 	#['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
-	from .treetransforms import factorconstituent, addbitsets
+	from discodop.treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
@@ -613,7 +612,7 @@ def flatten(tree, sent, ids):
 	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
 	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
 	(S|<VAFIN> {1}))') """
-	from .treetransforms import factorconstituent, addbitsets
+	from discodop.treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
 		""" Add information to a frontier or terminal:
@@ -788,7 +787,7 @@ def grammarinfo(grammar, dump=None):
 	:param dump: if given a filename, will dump distribution of parsing
 		complexity to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120
 		times, etc.) """
-	from .eval import mean
+	from discodop.eval import mean
 	lhs = {rule[0] for (rule, yf), w in grammar}
 	l = len(grammar)
 	result = "labels: %d" % len({rule[a] for (rule, yf), w in grammar
@@ -828,14 +827,15 @@ def grammarinfo(grammar, dump=None):
 
 def test():
 	""" Run some tests. """
-	from . import plcfrs
-	from .treebank import NegraCorpusReader
-	from .treetransforms import binarize, unbinarize, \
+	from discodop import plcfrs
+	from discodop._grammar import Grammar
+	from discodop.treebank import NegraCorpusReader
+	from discodop.treetransforms import binarize, unbinarize, \
 			addfanoutmarkers, removefanoutmarkers
-	from .disambiguation import recoverfragments
-	from .kbest import lazykbest
-	from .agenda import getkey
-	from .fragments import getfragments
+	from discodop.disambiguation import recoverfragments
+	from discodop.kbest import lazykbest
+	from discodop.agenda import getkey
+	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "alpinosample.export"
 	corpus = NegraCorpusReader(".", filename, punct="move")
@@ -903,9 +903,9 @@ def main():
 	""" Command line interface to create grammars from treebanks. """
 	import gzip
 	from getopt import gnu_getopt, GetoptError
-	from .treetransforms import addfanoutmarkers, canonicalize
-	from .treebank import getreader
-	from .fragments import getfragments
+	from discodop.treetransforms import addfanoutmarkers, canonicalize
+	from discodop.treebank import getreader
+	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
 	flags = ('gzip', 'packed')
@@ -959,8 +959,13 @@ def main():
 		myopen = open
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
-	cgrammar = Grammar(rules, lexicon)
-	cgrammar.testgrammar()
+	try:
+		from discodop._grammar import Grammar
+	except ImportError:
+		pass
+	else:
+		cgrammar = Grammar(rules, lexicon)
+		cgrammar.testgrammar()
 	# write output
 	with myopen(rules, 'w') as rulesfile:
 		rulesfile.write(rules)

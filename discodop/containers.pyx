@@ -1,7 +1,7 @@
 """ Data types for chart items, edges, &c. """
 from math import exp, log, fsum
 from libc.math cimport log, exp
-from tree import Tree
+from discodop.tree import Tree
 
 DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8

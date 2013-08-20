@@ -11,13 +11,13 @@ if sys.version[0] >= '3':
 else:
 	from itertools import izip_longest as zip_longest
 
-from .tree import Tree
-from .treedraw import DrawTree
-from .treebank import getreader, readheadrules, dependencies
+from discodop.tree import Tree
+from discodop.treedraw import DrawTree
+from discodop.treebank import getreader, readheadrules, dependencies
 try:
-	from .treedist import treedist, newtreedist
+	from discodop.treedist import treedist, newtreedist
 except ImportError:
-	from .treedist import newtreedist as newtreedist, newtreedist
+	from discodop.treedist import newtreedist as newtreedist, newtreedist
 
 USAGE = 'Usage: %s <gold> <parses> [param] [options]' % sys.argv[0]
 HELP = """\

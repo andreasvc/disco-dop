@@ -8,10 +8,11 @@ from __future__ import print_function
 from math import exp
 import numpy as np
 
-from bit cimport nextset, nextunset, bitcount, bitlength, testbit, testbitint
-from agenda cimport Agenda, Entry
-from _grammar cimport Grammar, Rule, LexicalRule, UInt, ULLong
-from containers cimport new_ChartItem, SmallChartItem as ChartItem
+from discodop.bit cimport nextset, nextunset, bitcount, bitlength, testbit, \
+		testbitint
+from discodop.agenda cimport Agenda, Entry
+from discodop._grammar cimport Grammar, Rule, LexicalRule, UInt, ULLong
+from discodop.containers cimport new_ChartItem, SmallChartItem as ChartItem
 
 cdef extern from "math.h":
 	bint isnan(double x)
@@ -715,11 +716,12 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 
 
 def main():
-	from treebank import NegraCorpusReader
-	from grammar import treebankgrammar, Grammar
-	import plcfrs
-	from treetransforms import addfanoutmarkers, binarize
-	from tree import Tree
+	from discodop import plcfrs
+	from discodop.grammar import treebankgrammar
+	from discodop._grammar import Grammar
+	from discodop.tree import Tree
+	from discodop.treebank import NegraCorpusReader
+	from discodop.treetransforms import addfanoutmarkers, binarize
 	corpus = NegraCorpusReader('.', 'alpinosample.export')
 	trees = list(corpus.parsed_sents().values())
 	for a in trees:

@@ -1,13 +1,13 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing. """
 from __future__ import print_function
-from agenda import Agenda
-from containers import ChartItem, Edge, RankedEdge
+from discodop.agenda import Agenda
+from discodop.containers import ChartItem, Edge, RankedEdge
 
 cimport cython
-from agenda cimport Entry, Agenda, nsmallest
-from containers cimport ChartItem, SmallChartItem, CFGChartItem, Edge, Rule, \
-		CFGEdge, LCFRSEdge, RankedEdge, RankedCFGEdge, new_LCFRSEdge, \
-		UInt, UChar
+from discodop.agenda cimport Entry, Agenda, nsmallest
+from discodop.containers cimport ChartItem, SmallChartItem, CFGChartItem, \
+		Edge, Rule, CFGEdge, LCFRSEdge, RankedEdge, RankedCFGEdge, \
+		new_LCFRSEdge, UInt, UChar
 
 cdef tuple unarybest = (0, ), binarybest = (0, 0)
 
@@ -431,6 +431,7 @@ cpdef tuple lazykbest(chart, ChartItem goal, int k, list tolabel=None,
 cpdef main():
 	""" Simple demonstration. """
 	from math import log, exp
+	from pprint import pprint
 	cdef SmallChartItem v, ci
 	cdef LCFRSEdge ed
 	cdef RankedEdge re
@@ -488,7 +489,6 @@ cpdef main():
 				in zip((ed.left, ed.right), j)]),
 				exp(-ed.rule.prob), j, exp(-ip))
 		print()
-	from pprint import pprint
 	print("tolabel", end='')
 	pprint(tolabel)
 	print("candidates", end='')

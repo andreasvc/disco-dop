@@ -5,8 +5,7 @@
 - reattaching punctuation """
 from __future__ import division, print_function, unicode_literals
 from itertools import count, islice
-from .tree import Tree, ParentedTree
-#from .treebank import TAG, MORPH, FUNC
+from discodop.tree import Tree, ParentedTree
 
 FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
@@ -574,13 +573,13 @@ def balancedpunctraise(tree, sent):
 	... "ungewoehnliche Kombinationen .".split())
 	>>> punctraise(tree, sent)
 	>>> balancedpunctraise(tree, sent)
-	>>> from .treetransforms import addbitsets, fanout
+	>>> from discodop.treetransforms import addbitsets, fanout
 	>>> max(map(fanout, addbitsets(tree).subtrees()))
 	1
-	>>> nopunct = Tree.parse('(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 3)'
-	... ' (NN 4) (PP (APPR 5) (CNP (NN 6) (ADV 7)))) (S (PRELS 8) (MPN (NE 9) '
-	... '(NE 10)) (ADJD 11) (VVFIN 12))) (VVFIN 13) (ADV 14) (NP (ADJA 15) '
-	... '(NN 16))))', parse_leaf=int)
+	>>> nopunct = Tree.parse('(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP '
+	... '(CARD 3) (NN 4) (PP (APPR 5) (CNP (NN 6) (ADV 7)))) (S (PRELS 8) '
+	... '(MPN (NE 9) (NE 10)) (ADJD 11) (VVFIN 12))) (VVFIN 13) (ADV 14) '
+	... '(NP (ADJA 15) (NN 16))))', parse_leaf=int)
 	>>> max(map(fanout, addbitsets(nopunct).subtrees()))
 	1
 	"""
@@ -651,8 +650,8 @@ def bracketings(tree):
 
 def testpunct():
 	""" Verify that punctuation movement does not increase fan-out. """
-	from .treetransforms import addbitsets, fanout
-	from .treebank import NegraCorpusReader
+	from discodop.treetransforms import addbitsets, fanout
+	from discodop.treebank import NegraCorpusReader
 	filename = 'alpinosample.export'
 	mangledtrees = NegraCorpusReader('.', filename, punct='move')
 	nopunct = list(NegraCorpusReader('.', filename,
@@ -681,8 +680,8 @@ def testpunct():
 def testtransforms():
 	""" Test whether the Tiger transformations (transform / reversetransform)
 	are reversible. """
-	from .treetransforms import canonicalize
-	from .treebank import NegraCorpusReader, handlefunctions
+	from discodop.treetransforms import canonicalize
+	from discodop.treebank import NegraCorpusReader, handlefunctions
 	headrules = None  # 'alpino.headrules'
 	n = NegraCorpusReader('.', 'alpinosample.export', headrules=headrules)
 	nn = NegraCorpusReader('.', 'alpinosample.export', headrules=headrules)

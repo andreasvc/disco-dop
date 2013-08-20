@@ -70,7 +70,7 @@ cdef class Grammar:
 		elif rule_tuples_or_bytes and isinstance(
 				rule_tuples_or_bytes[0], tuple):
 			# convert tuples to strings with text format
-			from grammar import write_lcfrs_grammar
+			from discodop.grammar import write_lcfrs_grammar
 			self.origrules, self.origlexicon = write_lcfrs_grammar(
 					rule_tuples_or_bytes, bitpar=bitpar)
 		else:

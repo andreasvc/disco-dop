@@ -16,7 +16,7 @@ from operator import itemgetter
 from flask import Flask, Markup, Response
 from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
-from discodop import treetransforms, treebank
+from discodop import treebank
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.runexp import readparam
@@ -91,7 +91,7 @@ def parse():
 				for frag, terminals in fragments))
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
 					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok,
-						abbr=True).text( unicodelines=True, html=html))
+						abbr=True).text(unicodelines=True, html=html))
 				for n, (tree, prob) in enumerate(parsetrees)))
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (

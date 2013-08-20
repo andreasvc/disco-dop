@@ -1,16 +1,13 @@
 """ Web interface to draw trees. Requires Flask.
-Optional: pdflatex, imagemagick. """
+Optional: pdflatex, tikz, imagemagick. """
 # stdlib
 import os
 import re
 from subprocess import Popen, PIPE
-#from datetime import datetime, timedelta
-#from functools import wraps
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, redirect, url_for
 from flask import send_from_directory
-#from werkzeug.contrib.cache import SimpleCache
 # disco-dop
 from discodop.treebank import incrementaltreereader
 from discodop.treedraw import DrawTree
@@ -34,9 +31,8 @@ PREAMBLE = r"""\documentclass{article}
 """
 POSTAMBLE = r"""
 \end{preview}
-\end{document}"""
-
-
+\end{document}
+"""
 APP = Flask(__name__)
 
 

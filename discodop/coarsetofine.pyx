@@ -2,14 +2,15 @@
 items for a fine grammar. """
 from __future__ import print_function
 from collections import defaultdict
-from tree import Tree
-from treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
-from _grammar cimport Grammar
-from containers cimport ChartItem, CFGChartItem, Edge, LCFRSEdge, CFGEdge, \
-		RankedEdge, RankedCFGEdge, new_CFGChartItem, CFGtoSmallChartItem, \
-		CFGtoFatChartItem, ULLong, UInt
-from kbest import lazykbest
-from agenda cimport Entry
+from discodop.tree import Tree
+from discodop.treetransforms import mergediscnodes, unbinarize, fanout, \
+		addbitsets
+from discodop._grammar cimport Grammar
+from discodop.containers cimport ChartItem, CFGChartItem, Edge, LCFRSEdge, \
+		CFGEdge, RankedEdge, RankedCFGEdge, new_CFGChartItem, \
+		CFGtoSmallChartItem, CFGtoFatChartItem, ULLong, UInt
+from discodop.kbest import lazykbest
+from discodop.agenda cimport Entry
 import numpy as np
 
 

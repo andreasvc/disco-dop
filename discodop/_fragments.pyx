@@ -9,17 +9,17 @@ import io
 from collections import defaultdict, Counter as multiset
 from functools import partial
 from array import array
-from tree import Tree
-from grammar import lcfrs_productions
-from treetransforms import binarize, introducepreterminals
+from discodop.tree import Tree
+from discodop.grammar import lcfrs_productions
+from discodop.treetransforms import binarize, introducepreterminals
 
 cimport cython
 from libc.stdlib cimport malloc, free
 from cpython.array cimport array, clone
-from _grammar cimport ULong, UInt
-from containers cimport Node, NodeArray, Ctrees
-from bit cimport iteratesetbits, abitcount, subset, ulongcpy, ulongset, \
-		setunioninplace
+from discodop._grammar cimport ULong, UInt
+from discodop.containers cimport Node, NodeArray, Ctrees
+from discodop.bit cimport iteratesetbits, abitcount, subset, ulongcpy, \
+		ulongset, setunioninplace
 
 cdef extern from "macros.h":
 	int BITNSLOTS(int nb)
@@ -921,8 +921,8 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		return None, None
 	if discontinuous:
 		# no incremental reading w/disc trees
-		from treetransforms import canonicalize
-		from treebank import NegraCorpusReader
+		from discodop.treebank import NegraCorpusReader
+		from discodop.treetransforms import canonicalize
 		corpus = NegraCorpusReader(*pathsplit(treebankfile), encoding=encoding)
 		trees = list(corpus.parsed_sents().values())
 		sents = list(corpus.sents().values())

@@ -1,9 +1,10 @@
 """ Examples of various formalisms encoded in LCFRS grammars. """
 from __future__ import print_function
 from math import exp
-from . import treetransforms, plcfrs, kbest
-from .tree import Tree
-from .grammar import treebankgrammar, Grammar
+from discodop import treetransforms, plcfrs, kbest
+from discodop.tree import Tree
+from discodop.grammar import treebankgrammar
+from discodop._grammar import Grammar
 
 
 def tree_adjoining_grammar():

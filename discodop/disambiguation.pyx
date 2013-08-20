@@ -11,15 +11,14 @@ from bisect import bisect_right
 from operator import itemgetter, attrgetter
 from itertools import count
 from collections import defaultdict, OrderedDict
-from tree import Tree
-from kbest import lazykbest, getderiv
-from grammar import lcfrs_productions
-from treetransforms import addbitsets
-import plcfrs
-from agenda cimport Entry, new_Entry
-from treetransforms import unbinarize, canonicalize
-from _grammar cimport Grammar
-from containers cimport ChartItem, SmallChartItem, FatChartItem, \
+from discodop import plcfrs
+from discodop.tree import Tree
+from discodop.kbest import lazykbest, getderiv
+from discodop.grammar import lcfrs_productions
+from discodop.treetransforms import addbitsets, unbinarize, canonicalize
+from discodop.agenda cimport Entry, new_Entry
+from discodop._grammar cimport Grammar
+from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
 		CFGChartItem, Edge, LCFRSEdge, CFGEdge, RankedEdge, RankedCFGEdge, \
 		Rule, LexicalRule, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
 cimport cython
@@ -871,8 +870,9 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 
 
 def main():
-	from grammar import dopreduction, Grammar
-	import plcfrs
+	from discodop.grammar import dopreduction
+	from discodop._grammar import Grammar
+	from discodop import plcfrs
 
 	def e(x):
 		a, b = x

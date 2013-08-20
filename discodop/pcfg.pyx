@@ -4,15 +4,15 @@ from __future__ import print_function
 from math import exp, log as pylog
 from collections import defaultdict
 import numpy as np
-from tree import Tree
-from agenda import EdgeAgenda
+from discodop.tree import Tree
+from discodop.agenda import EdgeAgenda
 # cython imports
 from libc.stdlib cimport malloc, calloc, free
 from cpython cimport PyDict_Contains, PyDict_GetItem
-from agenda cimport EdgeAgenda
-from _grammar cimport Grammar
-from containers cimport CFGEdge, CFGChartItem, new_CFGChartItem, new_CFGEdge, \
-		Rule, LexicalRule, UChar, UInt, ULong, ULLong
+from discodop.agenda cimport EdgeAgenda
+from discodop._grammar cimport Grammar
+from discodop.containers cimport CFGEdge, CFGChartItem, new_CFGChartItem, \
+		new_CFGEdge, Rule, LexicalRule, UChar, UInt, ULong, ULLong
 
 cdef extern from "math.h":
 	bint isinf(double x)
@@ -847,7 +847,9 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 
 
 def main():
-	from grammar import Grammar
+	from discodop._grammar import Grammar
+	from discodop.disambiguation import marginalize
+	from operator import itemgetter
 	cdef Rule rule
 	cfg = Grammar([
 		((('A', 'A'), ((0, ), )), 0.7), ((('A', 'B'), ((0, ), )), 0.6),
@@ -902,8 +904,6 @@ def main():
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)
 	cfg2.switch('default', True)
 	chart, start, msg = parse(sent, cfg2)
-	from disambiguation import marginalize
-	from operator import itemgetter
 	mpp, _, _ = marginalize('mpp', chart, start, cfg2, 10)
 	for a, p in sorted(mpp.items(), key=itemgetter(1), reverse=True):
 		print(p, a)

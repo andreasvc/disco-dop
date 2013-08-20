@@ -458,7 +458,7 @@ class Tree(list):
 
 	def draw(self):
 		""" :returns: an ASCII art visualization of tree. """
-		from .treedraw import DrawTree
+		from discodop.treedraw import DrawTree
 		return DrawTree(self, [str(a) for a in self.leaves()]).text()
 
 

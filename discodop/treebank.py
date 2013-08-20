@@ -8,10 +8,10 @@ from glob import glob
 from itertools import count, chain
 from collections import defaultdict, OrderedDict, Counter as multiset
 from operator import itemgetter
-from .tree import Tree, ParentedTree
-from .treetransforms import addbitsets, fanout
-from .treebanktransforms import punctremove, punctraise, balancedpunctraise, \
-		punctroot, ispunct
+from discodop.tree import Tree, ParentedTree
+from discodop.treetransforms import addbitsets, fanout
+from discodop.treebanktransforms import punctremove, punctraise, \
+		balancedpunctraise, punctroot, ispunct
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS

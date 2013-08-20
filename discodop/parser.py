@@ -16,16 +16,18 @@ from operator import itemgetter
 from itertools import count
 from subprocess import Popen, PIPE
 import numpy as np
-from . import plcfrs, pcfg
-from .grammar import FORMAT, Grammar, defaultparse
-from .containers import CFGChartItem
-from .coarsetofine import prunechart, whitelistfromposteriors
-from .disambiguation import marginalize, doprerank
-from .tree import Tree
-from .lexicon import replaceraretestwords, getunknownwordfun, UNK
-from .treebank import saveheads, TERMINALSRE
-from .treebanktransforms import reversetransform, rrbacktransform
-from .treetransforms import mergediscnodes, unbinarize, removefanoutmarkers
+from discodop import plcfrs, pcfg
+from discodop.grammar import FORMAT, defaultparse
+from discodop._grammar import Grammar
+from discodop.containers import CFGChartItem
+from discodop.coarsetofine import prunechart, whitelistfromposteriors
+from discodop.disambiguation import marginalize, doprerank
+from discodop.tree import Tree
+from discodop.lexicon import replaceraretestwords, getunknownwordfun, UNK
+from discodop.treebank import saveheads, TERMINALSRE
+from discodop.treebanktransforms import reversetransform, rrbacktransform
+from discodop.treetransforms import mergediscnodes, unbinarize, \
+		removefanoutmarkers
 
 USAGE = """
 usage: %s [options] <rules> <lexicon> [input [output]]

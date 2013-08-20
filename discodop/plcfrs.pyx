@@ -5,14 +5,14 @@ from math import exp
 from collections import defaultdict, deque
 import logging
 import numpy as np
-from agenda import EdgeAgenda, Entry
+from discodop.agenda import EdgeAgenda, Entry
 from cpython cimport PyDict_Contains
-from agenda cimport Entry, EdgeAgenda
-from _grammar cimport Grammar
-from containers cimport LCFRSEdge, ChartItem, SmallChartItem, FatChartItem, \
-		new_LCFRSEdge, new_ChartItem, new_FatChartItem, Rule, LexicalRule, \
-		UInt, ULong, ULLong
-from bit cimport nextset, nextunset, bitcount, bitlength, \
+from discodop.agenda cimport Entry, EdgeAgenda
+from discodop._grammar cimport Grammar
+from discodop.containers cimport LCFRSEdge, ChartItem, SmallChartItem, \
+		FatChartItem, new_LCFRSEdge, new_ChartItem, new_FatChartItem, Rule, \
+		LexicalRule, UInt, ULong, ULLong
+from discodop.bit cimport nextset, nextunset, bitcount, bitlength, \
 	testbitint, anextset, anextunset, abitcount, abitlength, \
 	ulongset, ulongcpy, setunion
 cdef extern from "macros.h":
@@ -933,7 +933,7 @@ def pprint_chart(chart, sent, tolabel):
 
 
 def do(sent, grammar):
-	from disambiguation import marginalize
+	from discodop.disambiguation import marginalize
 	from operator import itemgetter
 	print('sentence', sent)
 	sent = sent.split()
@@ -952,7 +952,7 @@ def do(sent, grammar):
 
 
 def main():
-	from grammar import Grammar
+	from discodop._grammar import Grammar
 	cdef Rule rule
 	rule.args = 0b1010
 	rule.lengths = 0b1010

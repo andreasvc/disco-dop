@@ -33,7 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
 
 from __future__ import division, print_function
 from collections import deque
-from .tree import Tree
+from discodop.tree import Tree
 
 
 class Terminal:

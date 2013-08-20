@@ -1,4 +1,4 @@
-from _grammar cimport ULLong, ULong, UInt, UChar
+from discodop._grammar cimport ULLong, ULong, UInt, UChar
 from libc.string cimport memcpy
 
 cdef extern:

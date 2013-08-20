@@ -23,20 +23,21 @@ from collections import defaultdict, OrderedDict, Counter as multiset
 from operator import itemgetter
 from subprocess import Popen, PIPE
 import numpy as np
-from . import eval as evalmod
-from .tree import Tree
-from .treebank import getreader, writetree, treebankfanout
-from .treebanktransforms import transform, rrtransform
-from .treetransforms import binarize, optimalbinarize, canonicalize, \
+from discodop import eval as evalmod
+from discodop.tree import Tree
+from discodop.treebank import getreader, writetree, treebankfanout
+from discodop.treebanktransforms import transform, rrtransform
+from discodop.treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers
-from .treedraw import DrawTree
-from .fragments import getfragments
-from .grammar import Grammar, treebankgrammar, dopreduction, doubledop, \
-		grammarinfo, write_lcfrs_grammar, sortgrammar
-from .lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
+from discodop.treedraw import DrawTree
+from discodop.fragments import getfragments
+from discodop.grammar import treebankgrammar, dopreduction, \
+		doubledop, grammarinfo, write_lcfrs_grammar, sortgrammar
+from discodop._grammar import Grammar
+from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
-from .parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
-from .estimates import getestimates, getpcfgestimates
+from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
+from discodop.estimates import getestimates, getpcfgestimates
 
 USAGE = """Usage: %s [--rerun] <parameter file>
 If a parameter file is given, an experiment is run. See the file sample.prm for
