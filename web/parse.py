@@ -11,6 +11,7 @@ import heapq
 import string  # pylint: disable=W0402
 import random
 import logging
+from urllib import urlencode
 from operator import itemgetter
 from flask import Flask, Markup, Response
 from flask import request, render_template, send_from_directory
@@ -52,6 +53,8 @@ def parse():
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
 	key = (senttok, est, marg, objfun, coarse, html)
+	link = urlencode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
+			coarse=coarse, html=html))
 	if CACHE.get(key) is not None:
 		return CACHE.get(key)
 	lang = guesslang(senttok)
@@ -105,7 +108,8 @@ def parse():
 		CACHE.set(key, Response('\n'.join((nbest, frags, info, result)),
 				mimetype='text/plain'), timeout=5000)
 	CACHE.set(key, render_template('parsetree.html', sent=sent, result=result,
-			frags=frags, nbest=nbest, info=info, randid=randid()), timeout=5000)
+			frags=frags, nbest=nbest, info=info, link=link, randid=randid()),
+			timeout=5000)
 	return CACHE.get(key)
 
 
