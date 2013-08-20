@@ -325,30 +325,28 @@ class Parser(object):
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 			if parsetrees:
+				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
 				try:
-					parsetree, prob, fragments, noparse = self.postprocess(
-							stage, parsetrees, derivs)
+					parsetree, fragments, noparse = self.postprocess(
+							resultstr, n, derivs)
 				except ValueError as err:
 					logging.error("something's amiss: %r", err)
 					parsetree, prob, fragments, noparse = self.noparse(
 							stage, sent, tags)
-					noparse = True
 				msg += probstr(prob) + ' '
 			else:
 				parsetree, prob, fragments, noparse = self.noparse(
 						stage, sent, tags)
-				noparse = True
 			elapsedtime = time.clock() - begin
 			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
 					parsetrees=parsetrees, fragments=fragments,
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
 
-	def postprocess(self, stage, parsetrees, derivs):
-		""" Take best scoring parse tree and apply  postprocessing. """
-		resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
-		parsetree = Tree.parse(resultstr, parse_leaf=int)
-		if stage.split:
+	def postprocess(self, treestr, stage=-1, derivs=None):
+		""" Take parse tree and apply postprocessing. """
+		parsetree = Tree.parse(treestr, parse_leaf=int)
+		if self.stages[stage].split:
 			mergediscnodes(unbinarize(parsetree, childchar=':'))
 		saveheads(parsetree, self.tailmarker)
 		unbinarize(parsetree)
@@ -358,8 +356,8 @@ class Parser(object):
 					self.relationalrealizational['adjunctionlabel'])
 		if self.transformations:
 			reversetransform(parsetree, self.transformations)
-		fragments = derivs.get(resultstr)
-		return parsetree, prob, fragments, False
+		fragments = derivs.get(treestr) if derivs else None
+		return parsetree, fragments, False
 
 	def noparse(self, stage, sent, tags):
 		""" Produce a dummy parse for evaluation purposes. """
@@ -489,8 +487,8 @@ class DictObj(object):
 def probstr(prob):
 	""" Render probability / number of subtrees as string. """
 	if isinstance(prob, tuple):
-		return 'subtrees=%d, p=%.4e ' % (abs(prob[0]), prob[1])
-	return 'p=%.4e' % prob
+		return 'subtrees=%d, p=%.4g ' % (abs(prob[0]), prob[1])
+	return 'p=%.4g' % prob
 
 
 BITPARUNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")

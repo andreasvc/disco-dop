@@ -89,12 +89,9 @@ def parse():
 				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
 						unicodelines=True, html=html)
 				for frag, terminals in fragments))
-		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (
-				n + 1, probstr(prob),
-				DrawTree(treetransforms.removefanoutmarkers(
-					treetransforms.unbinarize(Tree.parse(MORPHTAGS.sub(
-						r'(\1\2', tree), parse_leaf=int))),
-					senttok).text(unicodelines=True, html=html))
+		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
+					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok).text(
+							unicodelines=True, html=html))
 				for n, (tree, prob) in enumerate(parsetrees)))
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
@@ -132,10 +129,10 @@ def loadparsers():
 			readgrammars(directory, stages, postagging,
 					top=params.get('top', 'ROOT'))
 			PARSERS[lang] = Parser(stages,
-					transformations=params['transformations'],
-					tailmarker=params['tailmarker'], postagging=postagging
-					if postagging and postagging['method'] == 'unknownword'
-					else None,
+					transformations=params.get('transformations'),
+					tailmarker=params.get('tailmarker'),
+					postagging=postagging if postagging and
+					postagging['method'] == 'unknownword' else None,
 					relationalrealizational=params.get(
 						'relationalrealizational'))
 			APP.logger.info('Grammar for %s loaded.' % lang)
@@ -180,7 +177,7 @@ def tokenize(text):
 
 
 def guesslang(sent):
-	""" simple heuristic: language that contains most words from input. """
+	""" Heuristic: pick language that contains most words from input. """
 	lang = max(PARSERS, key=lambda x: len(set(sent).intersection(
 			PARSERS[x].stages[0].grammar.lexicalbyword)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
