@@ -476,8 +476,11 @@ def doqueries(form, lines=False, doexport=None):
 		if lines:
 			yield n, filterlabels(out, 'nofunc' in form,
 					'nomorph' in form).splitlines(), err
-		elif doexport and form.get('linenos'):
-			yield out.lstrip('corpus/').replace('\ncorpus/', '\n')
+		elif doexport:
+			if form.get('linenos'):
+				yield re.sub(r'(^|\n)corpus/', '\\1', out)
+			else:
+				yield out
 		else:
 			yield n, out, err
 
