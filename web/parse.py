@@ -26,8 +26,6 @@ LIMIT = 40  # maximum sentence length
 APP = Flask(__name__)
 CACHE = SimpleCache()
 PARSERS = {}
-MORPHTAGS = re.compile(
-		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 
 
 @APP.route('/')
@@ -82,9 +80,8 @@ def parse():
 		fragments = results[-1].fragments or ()
 		msg = '\n'.join(stage.msg for stage in results)
 		APP.logger.info('[%s] %s' % (probstr(prob), tree))
-		tree = MORPHTAGS.sub(r'(\1\2', tree)
 		tree = Tree.parse(tree, parse_leaf=int)
-		result = Markup(DrawTree(tree, senttok).text(
+		result = Markup(DrawTree(tree, senttok, abbr=True).text(
 				unicodelines=True, html=html))
 		frags = Markup('Phrasal fragments used in the most probable derivation'
 				' of the highest ranked parse tree:\n'
@@ -93,8 +90,8 @@ def parse():
 						unicodelines=True, html=html)
 				for frag, terminals in fragments))
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
-					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok).text(
-							unicodelines=True, html=html))
+					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok,
+						abbr=True).text( unicodelines=True, html=html))
 				for n, (tree, prob) in enumerate(parsetrees)))
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
