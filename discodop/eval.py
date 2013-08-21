@@ -13,7 +13,7 @@ else:
 
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop.treebank import getreader, readheadrules, dependencies
+from discodop.treebank import getreader, readheadrules, dependencies, splitpath
 try:
 	from discodop.treedist import treedist, newtreedist
 except ImportError:
@@ -540,7 +540,11 @@ def transitiveclosure(eqpairs):
 def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 	""" Apply the transformations according to the parameter file,
 	except for deleting the root node, which is a special case because if there
-	is more than one child it cannot be deleted. """
+	is more than one child it cannot be deleted.
+
+	:param pos: a list with the contents of tree.pos(); modified in-place.
+	:param gpos: a dictionary of the POS tags of the original gold tree, before
+		any tags/words have been deleted. """
 	leaves = list(range(len(sent)))
 	posnodes = []
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
@@ -770,13 +774,6 @@ def mean(seq):
 	if not denominator:
 		return float('nan')
 	return numerator / denominator
-
-
-def splitpath(path):
-	""" Split path into a pair of (directory, filename). """
-	if '/' in path:
-		return path.rsplit('/', 1)
-	return '.', path
 
 
 def intervals(seq):

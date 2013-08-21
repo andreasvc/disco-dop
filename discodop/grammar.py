@@ -838,7 +838,7 @@ def test():
 	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "alpinosample.export"
-	corpus = NegraCorpusReader(".", filename, punct="move")
+	corpus = NegraCorpusReader('.', filename, punct='move')
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
 			for a in list(corpus.parsed_sents().values())[:10]]
@@ -904,7 +904,7 @@ def main():
 	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
-	from discodop.treebank import getreader
+	from discodop.treebank import getreader, splitpath
 	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
@@ -924,7 +924,8 @@ def main():
 
 	# read treebank
 	reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = reader('.', treebankfile, encoding=opts.get('--inputenc', 'utf8'))
+	corpus = reader(*splitpath(treebankfile),
+			encoding=opts.get('--inputenc', 'utf8'))
 	trees = list(corpus.parsed_sents().values())
 	sents = list(corpus.sents().values())
 	for a in trees:

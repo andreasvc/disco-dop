@@ -109,6 +109,7 @@ revmarkov=True, # reverse order for horizontal Markovization
 h=1, # horizontal Markovization: number of siblings of context
 v=1, # vertical Markovization; v=1 means no additional parent annotation.
 pospa=False, # when v > 1, add parent annotation to POS tags?
+markhead=True,  # prepend label of head node to siblings
 leftmostunary=True, #start binarization with unary node
 rightmostunary=True, #end binarization with unary node
 tailmarker="", # symbol to add to last node in a binarization, to mark head node

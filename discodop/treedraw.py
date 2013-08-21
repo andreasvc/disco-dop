@@ -736,7 +736,7 @@ def test():
 
 def main():
 	""" Text-based tree viewer. """
-	from discodop.treebank import getreader, incrementaltreereader
+	from discodop.treebank import getreader, incrementaltreereader, splitpath
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
@@ -756,8 +756,7 @@ def main():
 		reader = getreader(opts.get('--fmt', 'export'))
 		corpora = []
 		for path in args:
-			path, base = path.rsplit('/', 1) if '/' in path else ('.', path)
-			corpus = reader(path, base,
+			corpus = reader(*splitpath(path),
 					encoding=opts.get('--encoding', 'utf8'),
 					functions=opts.get('--functions'),
 					morphology=opts.get('--morphology'))

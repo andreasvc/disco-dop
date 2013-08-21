@@ -85,17 +85,18 @@ def startexp(
 			simplelexsmooth=True,  # disable sophisticated smoothing
 		),
 		relationalrealizational=None,  # do not apply RR-transform
+		headrules=None,  # rules for finding heads of constituents
 		bintype='binarize',  # choices: binarize, optimal, optimalhead
 		factor='right',
 		revmarkov=True,
 		v=1,
 		h=2,
+		pospa=False,  # when v > 1, add parent annotation to POS tags?
+		markhead=False,  # prepend head to siblings
 		leftmostunary=True,  # start binarization with unary node
 		rightmostunary=True,  # end binarization with unary node
-		pospa=False,  # when v > 1, add parent annotation to POS tags?
-		headrules=None,  # rules for finding heads of constituents
+		tailmarker='',  # with headrules, head is last node and can be marked
 		fanout_marks_before_bin=False,
-		tailmarker='',
 		evalparam='proper.prm',  # EVALB-style parameter file
 		quiet=False, reallyquiet=False,  # quiet=no per sentence results
 		numproc=1,  # increase to use multiple CPUs; None: use all CPUs.
@@ -263,7 +264,7 @@ def startexp(
 	else:
 		logging.info('read training & test corpus')
 		getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
-				revmarkov, leftmostunary, rightmostunary, pospa,
+				revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 				fanout_marks_before_bin, testmaxwords, resultdir, numproc,
 				lexmodel, simplelexsmooth, top)
 	evalparam = evalmod.readparam(evalparam)
@@ -299,7 +300,7 @@ def startexp(
 
 
 def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
-		tailmarker, revmarkov, leftmostunary, rightmostunary, pospa,
+		tailmarker, revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 		fanout_marks_before_bin, testmaxwords, resultdir, numproc,
 		lexmodel, simplelexsmooth, top):
 	""" Apply binarization and read off the requested grammars. """
@@ -318,7 +319,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			binarize(a, factor=factor, tailmarker=tailmarker,
 					horzmarkov=horzmarkov, vertmarkov=vertmarkov,
 					leftmostunary=leftmostunary, rightmostunary=rightmostunary,
-					reverse=revmarkov, pospa=pospa)
+					reverse=revmarkov, pospa=pospa,
+					headidx=-1 if markhead else None)
 	elif bintype == 'optimal':
 		trees = [Tree.convert(optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -580,9 +582,9 @@ def worker(args):
 	prm = INTERNALPARAMS
 	goldevaltree = goldtree.copy(True)
 	gpos = goldevaltree.pos()
+	gposdict = dict(gpos)
 	evalmod.transform(goldevaltree, [w for w, _ in sent],
-			gpos, dict(goldevaltree.pos()),
-			prm.deletelabel, prm.deleteword, {}, {})
+			gpos, gposdict, prm.deletelabel, prm.deleteword, {}, {})
 	goldb = evalmod.bracketings(goldevaltree, dellabel=prm.deletelabel)
 	results = []
 	msg = ''
@@ -592,7 +594,7 @@ def worker(args):
 		evaltree = result.parsetree.copy(True)
 		evalsent = [w for w, _ in sent]
 		cpos = evaltree.pos()
-		evalmod.transform(evaltree, evalsent, cpos, dict(goldevaltree.pos()),
+		evalmod.transform(evaltree, evalsent, cpos, gposdict,
 				prm.deletelabel, prm.deleteword, {}, {})
 		candb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
 		if goldb and candb:
@@ -715,7 +717,8 @@ def parsetepacoc(
 					sample=False, kbest=True)),
 		trainmaxwords=999, trainnumsents=25005, testmaxwords=999,
 		bintype='binarize', h=1, v=1, factor='right', tailmarker='',
-		revmarkov=False, leftmostunary=True, rightmostunary=True, pospa=False,
+		markhead=False, revmarkov=False, pospa=False,
+		leftmostunary=True, rightmostunary=True,
 		fanout_marks_before_bin=False, transformations=None,
 		usetagger='stanford', resultdir='tepacoc', numproc=1):
 	""" Parse the tepacoc test set. """
@@ -804,8 +807,8 @@ def parsetepacoc(
 				enumerate(zip(corpus_trees, corpus_sents,
 							corpus_blocks)) if len(sent[1]) <= trainmaxwords
 							and n not in tepacocids][:trainnumsents])
-	getgrammars(trees, sents, stages, bintype, h, v, factor,
-			tailmarker, revmarkov, leftmostunary, rightmostunary, pospa,
+	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
+			revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 			fanout_marks_before_bin, testmaxwords, resultdir,
 			numproc, None, False, trees[0].label)
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks

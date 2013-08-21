@@ -26,7 +26,7 @@ class CorpusReader(object):
 	""" Abstract corpus reader. """
 	def __init__(self, root, fileids, encoding='utf-8', headrules=None,
 				headfinal=True, headreverse=False, markheads=False, punct=None,
-				functions=None, morphology=None):
+				functions=None, morphology=None, lemmas=None):
 		"""
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads
@@ -57,13 +57,17 @@ class CorpusReader(object):
 				e.g., DET/sg.def
 			:'replace': use morphological information as preterminal label
 			:'between': add node with morphological information between
-				POS tag and word, e.g., (DET (sg.def the)) """
+				POS tag and word, e.g., (DET (sg.def the))
+		:param lemmas: one of ...
+			:None: ignore lemmas
+			:'between': insert lemma as node between POS tag and word. """
 		self.reverse = headreverse
 		self.headfinal = headfinal
 		self.markheads = markheads
 		self.functions = functions
 		self.punct = punct
 		self.morphology = morphology
+		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
 		if fileids == '':
@@ -186,7 +190,7 @@ class NegraCorpusReader(CorpusReader):
 		return result
 
 	def _parse(self, block):
-		tree = exportparse(block, self.morphology)
+		tree = exportparse(block, self.morphology, self.lemmas)
 		sent = self._word(block, orig=True)
 		return tree, sent
 
@@ -336,7 +340,7 @@ class AlpinoCorpusReader(CorpusReader):
 					coindexed[node.get('index')] = source
 				result = ParentedTree('', list(
 						range(int(node.get('begin')), int(node.get('end')))))
-				handlemorphology(self.morphology, result, source)
+				handlemorphology(self.morphology, self.lemmas, result, source)
 			elif 'index' in node.keys():
 				coindexation[node.get('index')].extend(
 						(node.get('rel'), parent))
@@ -409,7 +413,7 @@ class TigerXMLCorpusReader(CorpusReader):
 					nodes[idref][PARENT] = ntid
 				else:  # secondary edge
 					nodes[idref].extend((edge.get('label'), ntid))
-		tree = exportparse(list(nodes.values()))
+		tree = exportparse(list(nodes.values()), self.morphology, self.lemmas)
 		sent = self._word(block, orig=True)
 		return tree, sent
 
@@ -452,7 +456,7 @@ def exportsplit(line):
 	return fields
 
 
-def exportparse(block, morphology=None):
+def exportparse(block, morphology=None, lemmas=None):
 	""" Given a tree in export format as a list of lists,
 	construct a Tree object for it. """
 	def getchildren(parent):
@@ -465,7 +469,7 @@ def exportparse(block, morphology=None):
 				child = ParentedTree(source[TAG], getchildren(m.group(1)))
 			else:  # POS + terminal
 				child = ParentedTree('', [n])
-				handlemorphology(morphology, child, source)
+				handlemorphology(morphology, lemmas, child, source)
 			child.source = tuple(source)
 			results.append(child)
 		return results
@@ -483,6 +487,12 @@ def getreader(fmt):
 		'discbracket': DiscBracketCorpusReader,
 		'bracket': BracketCorpusReader,
 		'alpino': AlpinoCorpusReader}[fmt]
+
+
+def splitpath(path):
+	""" Split path into a pair of (directory, filename). """
+	return path.rsplit('/', 1) if '/' in path else ('.', path)
+
 
 indexre = re.compile(r" [0-9]+\)")
 
@@ -593,7 +603,8 @@ def handlefunctions(action, tree, pos=True, top=False):
 				continue
 			if pos or isinstance(a[0], Tree):
 				# test for non-empty function tag ("---" is considered empty)
-				if getattr(a, 'source', None) and any(a.source[FUNC].split("-")):
+				if (getattr(a, 'source', None)
+						and any(a.source[FUNC].split("-"))):
 					func = a.source[FUNC].split("-")[0].upper()
 					if action == 'add':
 						a.label += "-%s" % func
@@ -601,12 +612,24 @@ def handlefunctions(action, tree, pos=True, top=False):
 						a.label = func
 
 
-def handlemorphology(action, preterminal, source):
+def handlemorphology(action, lemmaaction, preterminal, source):
 	""" Given a preterminal, augment or replace its label with morphological
 	information. """
 	# escape any parentheses to avoid hassles w/bracket notation of trees
 	tag = source[TAG].replace('(', '[').replace(')', ']')
 	morph = source[MORPH].replace('(', '[').replace(')', ']')
+	lemma = source[LEMMA].replace('(', '[').replace(')', ']') or '--'
+	if lemmaaction == 'add':
+		raise NotImplementedError
+		#sent[preterminal[0]] = '%s|%s' % (word, lemma)
+	elif lemmaaction == 'replace':
+		raise NotImplementedError
+		#sent[preterminal[0]] = lemma
+	elif lemmaaction == 'between':
+		preterminal[:] = [preterminal.__class__(lemma, preterminal)]
+	elif lemmaaction not in (None, 'no'):
+		raise ValueError
+
 	if action in (None, 'no'):
 		preterminal.label = tag
 	elif action == 'add':
@@ -614,8 +637,8 @@ def handlemorphology(action, preterminal, source):
 	elif action == 'replace':
 		preterminal.label = morph
 	elif action == 'between':
-		preterminal[:] = preterminal.__class__(preterminal.label, preterminal)
-		preterminal.label = morph
+		preterminal[:] = [preterminal.__class__(morph, [preterminal.pop()])]
+		preterminal.label = tag
 	else:
 		raise ValueError
 	return preterminal

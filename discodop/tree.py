@@ -809,10 +809,10 @@ class ParentedTree(AbstractParentedTree):
 
 	def _setparent(self, child, _index, dry_run=False):
 		if not isinstance(child, ParentedTree):
-			raise TypeError('Can not insert a non-ParentedTree '
-							'into a ParentedTree')
+			raise TypeError('Cannot insert a non-ParentedTree '
+					'into a ParentedTree')
 		if child._parent is not None:
-			raise ValueError('Can not insert a subtree that already '
+			raise ValueError('Cannot insert a subtree that already '
 					'has a parent.')
 		if not dry_run:
 			child._parent = self
@@ -942,8 +942,8 @@ class MultiParentedTree(AbstractParentedTree):
 
 	def _setparent(self, child, _index, dry_run=False):
 		if not isinstance(child, MultiParentedTree):
-			raise TypeError('Can not insert a non-MultiParentedTree '
-							'into a MultiParentedTree')
+			raise TypeError('Cannot insert a non-MultiParentedTree '
+					'into a MultiParentedTree')
 		# Add self as a parent pointer if it's not already listed.
 		if not dry_run:
 			for parent in child._parents:

@@ -7,7 +7,6 @@ r""" This file contains three main transformations:
    context-free rewriting systems.
  - Converting discontinuous trees to continuous trees and back:
    splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited. """
-
 # Original notice:
 # Natural Language Toolkit: Tree Transformations
 #
@@ -15,7 +14,6 @@ r""" This file contains three main transformations:
 # Author: Nathan Bodenstab <bodenstab@cslu.ogi.edu>
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
-
 from __future__ import print_function
 import re
 import sys
@@ -30,8 +28,7 @@ try:
 except ImportError:
 	def bitfanout(arg):
 		""" Slower version. """
-		prev = arg
-		result = 0
+		prev, result = arg, 0
 		while arg:
 			arg &= arg - 1
 			if ((prev - arg) << 1) & prev == 0:
@@ -40,8 +37,9 @@ except ImportError:
 		return result
 
 USAGE = """Treebank binarization and conversion
-Usage: %s [options] <action> <input> <output>
-where input and output are treebanks, and action is one of:
+Usage: %s [options] <action> [input [output]]
+where input and output are treebanks; standard in/output is used if not given.
+action is one of:
     none
     binarize [-h x] [-v x] [--factor=left|right]
     optimalbinarize [-h x] [-v x]
@@ -50,15 +48,15 @@ where input and output are treebanks, and action is one of:
     splitdisc [--markorigin]
     mergedisc
 
+
 options may consist of (* marks default option):
   --inputfmt|--outputfmt=[*export|discbracket|bracket|alpino]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
                  out or negative, and the first index is 0.
-  --factor=[left|*right]
-                 whether binarization factors to the left or right
-  -h n           horizontal markovization. default: infinite
+  --factor=[left|*right]  whether binarization factors to the left or right
+  -h n           horizontal markovization. default: infinite (all siblings)
   -v n           vertical markovization. default: 1
   --headrules=x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
@@ -76,17 +74,18 @@ options may consist of (* marks default option):
                  'add': concatenate morphological information to POS tags,
                      e.g., DET/sg.def
                  'replace': use morphological information as preterminal label
-                 'between': add node with morphological information between
+                 'between': insert node with morphological information between
                      POS tag and word, e.g., (DET (sg.def the))
+  --lemmas       insert node with lemma between word and POS tag.
 
 Note: The formats 'conll' and 'mst' do an unlabeled dependency conversion and
     require all constituents to have a child with HD as one of its function
     labels, or the use of heuristic head rules. """ % sys.argv[0]
 
 
-def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
-		childchar='|', parentchar='^', headmarked=None, tailmarker='',
-		leftmostunary=False, rightmostunary=False, threshold=2,
+def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
+		childchar='|', parentchar='^', headmarked=None, headidx=None,
+		tailmarker='', leftmostunary=False, rightmostunary=False, threshold=2,
 		pospa=False, artpa=True, reverse=False, ids=None):
 	""" Binarize an NLTK Tree object.
 
@@ -97,11 +96,15 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 			binarization.
 	:param vertmarkov: number of ancestors to include in labels.
 			NB: 1 means only the direct parent, as in a normal tree.
-	:param headmarked: when given a string, signifies that a node is the head
-			node; the direction of binarization will be switched when it is
-			encountered, to enable a head-outward binarization.
-			NB: for discontinuous trees this is not necessary, as the order of
-			children can be freely adjusted to achieve the same effect.
+	:param headidx: if specified, the label of the head node is always included
+			as an additional horizontal sibling; use 0 or -1 for first or last
+			node respectively.
+	:param headmarked: when given a string, the occurrence of this string in a
+			label signifies that thte node is the head; the direction of
+			binarization will be switched when it is encountered, to enable a
+			head-outward binarization. NB: for discontinuous trees this is not
+			necessary, as the order of children can be freely adjusted to
+			achieve the same effect.
 	:param leftmostunary, rightmostunary: introduce a unary production for the
 			first/last child. When h=1, this enables the same generalizations
 			for the first & last non-terminals as for other siblings.
@@ -164,10 +167,6 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 	(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> (D 3)
 		(S|<E,F> (E 4) (F 5)))))) """
 	# assume all nodes have homogeneous children, terminals have no siblings
-	# A semi-hack to have elegant looking code below.  As a result, any subtree
-	# with a branching factor greater than 999 will be incorrectly truncated.
-	if horzmarkov is None:
-		horzmarkov = 999
 	assert factor in ('left', 'right')
 	treeclass = tree.__class__
 	leftmostunary = 1 if leftmostunary else 0
@@ -200,7 +199,8 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 				continue
 			# insert an initial artificial nonterminal
 			if ids is None:
-				siblings = ','.join(child.label for child in node[:horzmarkov])
+				siblings = '' if headidx is None else node[headidx].label + ';'
+				siblings += ','.join(child.label for child in node[:horzmarkov])
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
@@ -213,7 +213,8 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 				childlabels = []
 			childnodes = list(node)
 			numchildren = len(childnodes)
-			headidx = 0
+			assert not headmarked or headidx is None
+			headmarkedidx = 0
 
 			# insert an initial artificial nonterminal
 			if factor == 'right':
@@ -224,7 +225,8 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 						if reverse else horzmarkov)
 				end = numchildren
 			if ids is None:
-				siblings = ','.join(childlabels[start:end])
+				siblings = '' if headidx is None else childlabels[headidx] + ';'
+				siblings += ','.join(childlabels[start:end])
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
@@ -247,17 +249,18 @@ def binarize(tree, factor='right', horzmarkov=None, vertmarkov=1,
 						end = i + horzmarkov
 					curnode[:] = [childnodes.pop(0), newnode]
 				else:  # factor == 'left':
-					start = headidx + numchildren - i - 1
+					start = headmarkedidx + numchildren - i - 1
 					end = start + horzmarkov
 					curnode[:] = [newnode, childnodes.pop()]
 				# switch direction upon encountering the head
 				if headmarked and headmarked in childlabels[i]:
-					headidx = i
+					headmarkedidx = i
 					factor = 'right' if factor == 'left' else 'left'
-					start = headidx + numchildren - i - 1
+					start = headmarkedidx + numchildren - i - 1
 					end = start + horzmarkov
 				if ids is None:
-					siblings = ','.join(childlabels[start:end])
+					siblings = '' if headidx is None else childlabels[headidx] + ';'
+					siblings += ','.join(childlabels[start:end])
 				else:
 					siblings = str(next(ids))
 				newnode.label = '%s%s<%s>%s%s' % (originallabel, childchar,
@@ -317,13 +320,10 @@ def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 	removing the unary productions would result in loss of useful information.
 	The tree is modified in-place.
 
-	:param collapsepos: when False (default), do not collapse preterminals (POS
-		tags)
+	:param collapsepos: when False (default), do not collapse preterminals
 	:param collapseroot: when False (default) do not modify the root production
 		if it is unary; e.g., TOP -> productions for the Penn WSJ treebank.
-	:param joinchar: A string used to connect collapsed node values
-		(default: '+')
-	"""
+	:param joinchar: A string used to connect collapsed node values """
 	agenda = [tree]
 	if not collapseroot and isinstance(tree, Tree) and len(tree) == 1:
 		agenda = [tree[0]]
@@ -393,15 +393,13 @@ def complexity(tree):
 def complexityfanout(tree):
 	""" Combination of complexity and fan-out, where the latter is used
 	to break ties in the former. """
-	return (fanout(tree) + sum(map(fanout, tree)),
-			fanout(tree))
+	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
 
 
 def fanoutcomplexity(tree):
 	""" Combination of fan-out and complexity, where the latter is used
 	to break ties in the former. """
-	return (fanout(tree),
-			fanout(tree) + sum(map(fanout, tree)))
+	return (fanout(tree), fanout(tree) + sum(map(fanout, tree)))
 
 
 def addbitsets(tree):
@@ -692,15 +690,14 @@ def removefanoutmarkers(tree):
 	return tree
 
 
-def postorder(tree, f=None):
+def postorder(tree, f=lambda _: True):
 	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
 	but Tree.subtrees() does a preorder traversal. """
 	for child in tree:
 		if isinstance(child, Tree):
-			for a in postorder(child):
-				if not f or f(a):
-					yield a
-	if not f or f(tree):
+			for a in filter(f, postorder(child)):
+				yield a
+	if f(tree):
 		yield tree
 
 
@@ -719,8 +716,7 @@ def contsets(nodes):
 	>>> print(list(contsets(tree)))
 	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])],
 	[Tree('CARD', [4]), Tree('VVPP', [5])]] """
-	rng = -1
-	subset = []
+	rng, subset = -1, []
 	mins = {min(a.leaves()) if isinstance(a, Tree) else a: a for a in nodes}
 	leaves = [a for child in nodes for a in child.leaves()]
 
@@ -806,8 +802,7 @@ def mergediscnodes(tree):
 				node.append(merge[child.label][0])
 			merge[child.label][0].extend(grandchildren)
 			if match.group(2):
-				nextlabel = '%s*%d' % (
-						match.group(1), int(match.group(2)) + 1)
+				nextlabel = '%s*%d' % (match.group(1), int(match.group(2)) + 1)
 				merge[nextlabel].append(merge[child.label].pop(0))
 	return tree
 
@@ -847,9 +842,7 @@ class OrderedSet(Set):
 		return '%s(%r)' % (self.__class__.__name__, self.seq)
 
 	def __eq__(self, other):
-		#if isinstance(other, (OrderedSet, Sequence)):
-		#	return len(self) == len(other) and list(self) == list(other)
-		# equality is defined _without_ regard for order
+		""" equality is defined _without_ regard for order. """
 		return self.theset == set(other)
 
 	def __and__(self, other):
@@ -921,31 +914,36 @@ def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
-	from discodop.treebank import getreader, writetree, readheadrules
-	flags = ['markorigin', 'markheads']
+	from discodop.treebank import getreader, writetree, readheadrules, splitpath
+	flags = ['markorigin', 'markheads', 'lemmas']
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
-		action, infilename, outfilename = args
-	except (GetoptError, ValueError) as err:
+		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
+	except (GetoptError, AssertionError) as err:
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
+	action = args[0]
+	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
+	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
 	# read input
-	Reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = Reader('.', infilename, encoding=opts.get('--inputenc', 'utf-8'),
+	reader = getreader(opts.get('--inputfmt', 'export'))
+	corpus = reader(*splitpath(infilename),
+			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get('--headrules'), markheads='--markheads' in opts,
 			punct=opts.get('--punct'), functions=opts.get('--functions'),
-			morphology=opts.get('--morphology'))
+			morphology=opts.get('--morphology'),
+			lemmas='between' if '--lemmas' in opts else None)
 	start, end = opts.get('--slice', ':').split(':')
 	start = int(start) if start else None
 	end = int(end) if end else None
 	trees = list(corpus.parsed_sents().values())[start:end]
 	sents = list(corpus.sents().values())[start:end]
 	keys = list(corpus.sents())[start:end]
-	print('read %d trees from %s' % (len(trees), infilename))
+	print('read %d trees from %s' % (len(trees), infilename), file=sys.stderr)
 
 	# apply transformation
 	actions = ('binarize unbinarize optimalbinarize introducepreterminals '
@@ -971,7 +969,8 @@ def main():
 		elif action == 'mergedisc':
 			mergediscnodes(tree)
 	if action != 'none':
-		print('transformed %d trees with action %r' % (len(trees), action))
+		print('transformed %d trees with action %r' % (len(trees), action),
+				file=sys.stderr)
 
 	# write output
 	headrules = None
@@ -980,7 +979,8 @@ def main():
 				'need head rules for dependency conversion')
 		headrules = readheadrules(opts.get('--headrules'))
 
-	print('going to write %d trees to %s' % (len(trees), outfilename))
+	print('going to write %d trees to %s' % (len(trees), outfilename),
+			file=sys.stderr)
 	encoding = opts.get('outputenc', 'utf-8')
 	with io.open(outfilename, 'w', encoding=encoding) as outfile:
 		if action == 'none' and (None == opts.get('--headrules')
