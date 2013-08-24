@@ -344,32 +344,3 @@ cdef inline double logprobsum(list logprobs):
 	"""
 	maxprob = max(logprobs)
 	return exp(maxprob) * fsum([exp(prob - maxprob) for prob in logprobs])
-
-
-#cdef inline long djb_hash(UChar *key, int size):
-#	cdef unsigned long h = 5381UL
-#	cdef int n
-#	for n in range(size):
-#		h *= 33UL ^ key[n]
-#	return <long>h
-#
-#cdef inline long oat_hash(UChar *key, int size):
-#	cdef unsigned long h = 0UL
-#	cdef int n
-#	for n in range(size):
-#		h += key[n]
-#		h += h << 10UL
-#		h ^= h >> 6UL
-#	h += h << 3UL
-#	h ^= h >> 11UL
-#	h += h << 15UL
-#	return <long>h
-#
-#cdef inline long fnv_hash(UChar *key, int size):
-#	""" FNV-1a hash; constants for 64 bit words. """
-#	cdef unsigned long h = 14695981039346656037UL
-#	cdef int n
-#	for n in range(size):
-#		h ^= key[n]
-#		h *= 1099511628211UL
-#	return h

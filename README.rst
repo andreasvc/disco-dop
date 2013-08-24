@@ -71,13 +71,16 @@ run the following sequence of commands::
 directory which does not require root privileges).
 
 If you do not run Linux, it is possible to run the code inside a virtual machine.
-To do that, `install Vagrant <http://docs.vagrantup.com/v2/installation/>`_,
-and drop ``Vagrantfile`` in some directory. Run the command ``vagrant up`` from
-a command prompt in this directory, and the virtual machine will boot and run a
-script to install the above automatically. The command ``vagrant ssh`` can then
-be used to log in to the virtual machine.
+To do that, install `Virtualbox <https://www.virtualbox.org/wiki/Downloads>`_
+and `Vagrant <http://docs.vagrantup.com/v2/installation/>`_,
+and copy ``Vagrantfile`` from this repository to a new directory. Open a
+command prompt (terminal) in this directory, and run the command
+``vagrant up``. The virtual machine will boot and run a script to install the
+above prerequisites automatically. The command ``vagrant ssh`` can then be used
+to log in to the virtual machine (use ``vagrant halt`` to stop the virtual
+machine).
 
-The code requires the GCC compiler. To port the code to another compiler such
+Compilation requires the GCC compiler. To port the code to another compiler such
 as Visual C, replace the compiler intrinsics in ``macros.h``, ``bit.pyx``, and
 ``bit.pxd`` with their equivalents for the compiler in question. This mainly
 concerns operations to scan for bits in integers, for which these compiler
@@ -88,19 +91,23 @@ Usage
 
 Parser
 ------
-To run a full experiment from treebank to evaluation on a test set,
-make a copy of the file ``sample.prm`` and edit its parameters.
+To run an end-to-end experiment from grammar extraction to evaluation on a test
+set, make a copy of the file ``sample.prm`` and edit its parameters.
 These parameters can then be invoked by executing::
 
     discodop runexp filename.prm
 
-This will create a new directory with the basename of the parameter file, i.e.,
+This will create a new directory with the base name of the parameter file, i.e.,
 ``filename/`` in this case. This directory must not exist yet, to avoid
 accidentally overwriting previous results. The directory will contain the
 grammar rules and lexicon in a text format, as well as the parsing results and
 the gold standard file in Negra's export format.
 
-Corpora are expected to be in Negra's export format, or in the bracketed Penn
+Note that there is an option to utilize multiple processor cores by launching a
+specific number of processes. This greatly speeds up parsing, but note that for
+a nontrivial DOP grammar, each process may require anywhere from 4GB to 16GB.
+
+Corpora can be read in Negra's export format, or in the bracketed Penn
 treebank format. Access to the
 `Negra corpus <http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/>`_
 can be requested for non-commercial purposes, while the
@@ -117,6 +124,8 @@ Aside from the parser there are some standalone tools, invoked as ``discodop <cm
     Example::
 
         discodop fragments wsj-02-21.mrg > wsjfragments.txt
+
+    Specify the option ``--numproc n`` to use multiple processes, as with ``runexp``.
 
 ``eval``
     Discontinuous evaluation. Reports F-scores and other metrics.
@@ -175,6 +184,10 @@ See https://github.com/andreasvc/disco-dop/wiki for screenshots.
 Documentation
 =============
 The API documentation can be perused at http://staff.science.uva.nl/~acranenb/discodop/
+
+To generate a local copy install `Sphinx <http://sphinx-doc.org/>`_
+and issue ``make html`` in the ``docs/`` directory; the result will be in
+``_build/html``.
 
 Acknowledgments
 ===============
