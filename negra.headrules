@@ -1,0 +1,99 @@
+%/*******************************************************************************
+% * File negra.headrules
+% * 
+% * Authors:
+% *    Wolfgang Maier
+% *    
+% * Copyright:
+% *    Wolfgang Maier, 2011
+% * 
+% * This file is part of rparse, see <www.wolfgang-maier.net/rparse>.
+% * 
+% * TuLiPA is free software; you can redistribute it and/or modify it under
+% * the terms of the GNU General Public License as published by the Free 
+% * Software Foundation; either version 2 of the License, or (at your option) 
+% * any later version.
+% * 
+% * TuLiPA is distributed in the hope that it will be useful, but WITHOUT ANY 
+% * WARRANTY; without even the implied warranty of MERCHANTABILITY 
+% * or FITNESS FOR A PARTICULAR PURPOSE.  See the  GNU General Public 
+% * License for more details.
+% * 
+% * You should have received a copy of the GNU General Public License along 
+% * with this program.  If not, see <http://www.gnu.org/licenses/>.
+% ******************************************************************************/
+% edited by andreasvc: add apprart to pp
+
+% head rules for NeGra
+
+s right-to-left vvfin vvimp
+s right-to-left vp cvp
+s right-to-left vmfin vafin vaimp
+s right-to-left s cs
+
+% s right-to-left vmfin vvfin vafin vvimp vaimp
+% s right-to-left vp cvp
+% s right-to-left s cs
+
+vp right-to-left vvinf vvizu vvpp
+vp right-to-left vz vainf vminf vmpp vapp pp
+
+% vp right-to-left vvinf vvizu vvpp vmpp vapp pp
+
+vz right-to-left vvinf vainf vminf vvfin vvizu
+vz left-to-right prtzu appr ptkzu
+
+np right-to-left nn ne mpn np cnp pn car
+
+ap right-to-left adjd adja cap aa adv
+
+pp left-to-right kokom appr apprart proav
+
+co left-to-right 
+
+avp right-to-left adv avp adjd proav pp
+
+aa right-to-left adjd adja
+
+cnp right-to-left nn ne mpn np cnp pn car
+
+cap right-to-left adjd adja cap aa adv
+
+cpp right-to-left appr proav pp cpp
+
+cs right-to-left s cs
+
+cvp right-to-left vz
+ 
+cvz right-to-left vz
+
+cavp right-to-left adv avp adjd pwav appr ptkvz
+
+mpn right-to-left ne fm card
+
+nm right-to-left card nn
+
+cac right-to-left appr avp
+
+ch right-to-left
+
+mta right-to-left adja adjd nn
+
+ccp right-to-left avp
+
+dl left-to-right
+
+isu right-to-left
+
+ql right-to-left 
+
+- right-to-left pp
+
+cd right-to-left cd
+
+nn right-to-left nn
+
+nr right-to-left nr
+
+vroot left-to-right $. $, 
+root left-to-right $. $, 

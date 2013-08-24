@@ -1,0 +1,50 @@
+ %/*******************************************************************************
+ %* File ptb.headrules
+ %* 
+ %* Authors:
+ %*    Kilian Evang
+ %*    
+ %* Copyright:
+ %*    Kilian Evang, 2011
+ %* 
+ %* This file is part of rparse, see <www.wolfgang-maier.net/rparse>.
+ %* 
+ %* TuLiPA is free software; you can redistribute it and/or modify it under
+ %* the terms of the GNU General Public License as published by the Free 
+ %* Software Foundation; either version 2 of the License, or (at your option) 
+ %* any later version.
+ %* 
+ %* TuLiPA is distributed in the hope that it will be useful, but WITHOUT ANY 
+ %* WARRANTY; without even the implied warranty of MERCHANTABILITY 
+ %* or FITNESS FOR A PARTICULAR PURPOSE.  See the  GNU General Public 
+ %* License for more details.
+ %* 
+ %* You should have received a copy of the GNU General Public License along 
+ %* with this program.  If not, see <http://www.gnu.org/licenses/>.
+ %******************************************************************************/
+ 
+ % Head rules for PTB (WSJ) from Collins (1999, p. 240)
+
+adjp left-to-right nns qp nn $ advp jj vbn vbg adjp jjr np jjs dt fw rbr rbs sbar rb
+advp right-to-left rb rbr rbs fw advp to cd jjr jj in np jjs nn
+conjp right-to-left cc rb in
+frag right-to-left
+intj left-to-right
+lst right-to-left ls :
+nac left-to-right nn nns nnp nnps np nac ex $ cd qp prp vbg jj jjs jjr adjp fw
+pp right-to-left in to vbg vbn rp fw
+prn left-to-right
+prt right-to-left rp
+qp left-to-right $ in nns nn jj rb dt cd ncd qp jjr jjs
+rrc right-to-left vp np advp adjp pp
+s left-to-right to in vp s sbar adjp ucp np
+sbar left-to-right whnp whpp whadvp whadjp in dt s sq sinv sbar frag
+sbarq left-to-right sq s sinv sbarq frag
+sinv left-to-right vbz vbd vbp vb md vp s sinv adjp np
+sq left-to-right vbz vbd vbp vb md vp sq
+ucp right-to-left
+vp left-to-right to vbd vbn md vbz vb vbg vbp vp adjp nn nns np
+whadjp left-to-right cc wrb jj adjp
+whadvp right-to-left cc wrb
+whnp left-to-right wdt wp wp$ whadjp whpp whnp
+whpp right-to-left in to fw

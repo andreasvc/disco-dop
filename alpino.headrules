@@ -1,0 +1,52 @@
+% Head rules for the Alpino treebank.
+% NB: Two types of POS tags are included:
+% 1. "pos" attribute (lowercase)
+% 2. "pt" attribute or "postag" attribute without features (uppercase).
+
+
+% Based on empirical counts of 'hd' function label, minus hapaxes
+% ===============================================================
+PP left-to-right prep VZ MWU PP
+REL right-to-left noun N PP adv BW NP MWU
+SSUB right-to-left verb WW
+WHREL right-to-left noun N PP adv BW AP
+PPART right-to-left verb WW adj ADJ
+PPRES right-to-left adj ADJ
+AP right-to-left adj ADJ MWU
+WHQ right-to-left noun N adv BW PP NP AP
+SMAIN left-to-right verb WW
+NP right-to-left noun N MWU NUM adj ADJ det VNW LID verb WW adv BW
+DETP right-to-left NUM det VNW LID MWU
+INF right-to-left verb WW
+WHSUB right-to-left adv BW noun N PP NP AP adj ADJ
+ADVP right-to-left adv BW MWU adj ADJ
+SV1 left-to-right verb WW
+
+
+% heuristics, constituents sometimes without head label:
+% ======================================================
+PP left-to-right PP NP noun N
+NP right-to-left det VNW LID adj ADJ adv BW AP PP NUM
+INF right-to-left PP NP adv BW adj ADJ noun N
+SSUB right-to-left NP PPART adv BW noun N PP CONJ ADVP
+PPART right-to-left PP NP NUM
+SMAIN left-to-right NP PP adv BW PPART MWU noun N NUM AP INF CONJ CP PPRES ADVP TI
+SMAIN left-to-right adj ADJ prep VZ
+
+
+% heuristics, never with hd label:
+% ================================
+ROOT right-to-left LET PUNCT SMAIN
+TOP right-to-left LET PUNCT SMAIN
+DU right-to-left SMAIN comp VG NP PP SV1 DU adv BW CONJ noun N CP MWU adj ADJ NUM SSUB
+DU right-to-left TAG AP ADVP WHQ WHREL OTI PPART verb WW VG INF det VNW LID TI
+OTI right-to-left comp VG TI CONJ adv BW
+MWU right-to-left noun N prep VZ FIXED adv BW adj ADJ NUM det VNW LID comp VG VG PP comp VG TAG
+MWU right-to-left part VZ verb WW LET PUNCT name SPEC
+AHI right-to-left INF MWU
+TI right-to-left comp VG INF verb WW
+CP left-to-right comp VG SSUB NP COMPARATIVE noun N CONJ TI adv BW PP MWU adj ADJ SV1 CP
+CP left-to-right NUM DU verb WW ADVP PPART AP
+CONJ left-to-right VG NP SMAIN noun N PP adj ADJ SSUB MWU NUM AP PPART DU SV1 TI
+CONJ left-to-right INF CP CONJ REL adv BW DETP verb WW WHSUB PPRES ADVP OTI det VNW LID WHQ WHREL
+SVAN right-to-left adv BW comp VG
