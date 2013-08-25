@@ -11,11 +11,11 @@ import heapq
 import string  # pylint: disable=W0402
 import random
 import logging
-from urllib import urlencode
 from operator import itemgetter
 from flask import Flask, Markup, Response
 from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
+from werkzeug.urls import url_encode
 from discodop import treebank
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
@@ -51,7 +51,7 @@ def parse():
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
 	key = (senttok, est, marg, objfun, coarse, html)
-	link = urlencode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
+	link = url_encode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
 			coarse=coarse, html=html))
 	if CACHE.get(key) is not None:
 		return CACHE.get(key)

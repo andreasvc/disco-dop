@@ -6,7 +6,7 @@ from Cython.Compiler import Options
 import numpy
 
 metadata = dict(name='disco-dop',
-		version='0.3pre1',
+		version='0.3pre2',
 		description='Discontinuous Data-Oriented Parsing',
 		long_description=open('README.rst').read(),
 		author='Andreas van Cranenburgh',
