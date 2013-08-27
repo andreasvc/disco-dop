@@ -31,7 +31,7 @@ PARSERS = {}
 @APP.route('/')
 def main():
 	""" Serve the main form. """
-	return render_template('parse.html', result=Markup(parse()))
+	return render_template('parse.html', result=Markup(parse()), langs=PARSERS)
 
 
 @APP.route('/parse')
@@ -44,18 +44,22 @@ def parse():
 	objfun = request.args.get('objfun', 'mpp')
 	coarse = request.args.get('coarse', None)
 	html = request.args.get('html', False)
+	lang = request.args.get('lang')
 	if not sent:
 		return ''
 	frags = nbest = None
 	senttok = tokenize(sent)
 	if not senttok or not 1 <= len(senttok) <= LIMIT:
 		return 'Sentence too long: %d words, max %d' % (len(senttok), LIMIT)
-	key = (senttok, est, marg, objfun, coarse, html)
-	link = url_encode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
-			coarse=coarse, html=html))
+	if lang == 'detect':
+		lang = guesslang(senttok)
+	elif lang not in PARSERS:
+		raise ValueError('unknown language; languages: %r' % PARSERS.keys())
+	key = (senttok, est, marg, objfun, coarse, html, lang)
 	if CACHE.get(key) is not None:
 		return CACHE.get(key)
-	lang = guesslang(senttok)
+	link = url_encode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
+			coarse=coarse, html=html))
 	PARSERS[lang].stages[-1].estimator = est
 	PARSERS[lang].stages[-1].objective = objfun
 	PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
@@ -96,8 +100,8 @@ def parse():
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
 			' '.join('%gs' % a for a in elapsed), sum(elapsed))
-	info = '\n'.join(('sentence length: %d; est=%s; objfun=%s; marg=%s' % (
-			len(senttok), est, objfun, marg), msg, elapsed,
+	info = '\n'.join(('length: %d; lang=%s; est=%s; objfun=%s; marg=%s' % (
+			len(senttok), lang, est, objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',
 			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n'))

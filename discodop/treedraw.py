@@ -587,7 +587,7 @@ def latexlabel(label):
 		cat, siblings = newlabel.split('|', 1)
 		siblings = siblings.strip('<>')
 		if '^' in siblings:
-			siblings, parents = siblings.split('^', 1)
+			siblings, parents = siblings.rsplit('^', 1)
 			newlabel = '$ \\textsf{%s}_\\textsf{%s}^\\textsf{%s} $' % (
 					cat, siblings[1:-1], parents)
 		else:
