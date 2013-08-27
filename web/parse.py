@@ -44,7 +44,7 @@ def parse():
 	objfun = request.args.get('objfun', 'mpp')
 	coarse = request.args.get('coarse', None)
 	html = request.args.get('html', False)
-	lang = request.args.get('lang')
+	lang = request.args.get('lang', 'detect')
 	if not sent:
 		return ''
 	frags = nbest = None

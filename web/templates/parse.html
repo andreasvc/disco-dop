@@ -76,9 +76,9 @@ Sentence:
 <input type=text size=80 name=sent autofocus />
 <select name=lang>
 	<option value=detect>detect</option>
-{% for lang in langs %}
+{%- for lang in langs %}
 	<option value={{ lang }}>{{ lang }}</option>
-{% endfor %}
+{%- endfor -%}
 </select>
 <select name=objfun>
 	<option value=mpp>MPP</option>
