@@ -111,9 +111,11 @@ function ajaxFunction() {
 		  var id = div.innerHTML.match(/id=([^ ]+) /);
 		  // collapse toggle-able items from here so that non-JS browsers
 		  // may view the contents
-		  togglelink('n' + id[1]);
-		  togglelink('f' + id[1]);
-		  togglelink('i' + id[1]);
+		  if(id) {
+			  togglelink('n' + id[1]);
+			  togglelink('f' + id[1]);
+			  togglelink('i' + id[1]);
+		  }
 		  window.scroll(0, document.height); // scroll to bottom of page
 	  }
 	};

@@ -54,7 +54,7 @@ def parse():
 	if lang == 'detect':
 		lang = guesslang(senttok)
 	elif lang not in PARSERS:
-		raise ValueError('unknown language; languages: %r' % PARSERS.keys())
+		return 'unknown language %r; languages: %r' % (lang, PARSERS.keys())
 	key = (senttok, est, marg, objfun, coarse, html, lang)
 	if CACHE.get(key) is not None:
 		return CACHE.get(key)
