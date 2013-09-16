@@ -43,7 +43,7 @@ def parse():
 	marg = request.args.get('marg', 'nbest')
 	objfun = request.args.get('objfun', 'mpp')
 	coarse = request.args.get('coarse', None)
-	html = request.args.get('html', False)
+	html = 'html' in request.args
 	lang = request.args.get('lang', 'detect')
 	if not sent:
 		return ''
@@ -55,7 +55,7 @@ def parse():
 		lang = guesslang(senttok)
 	elif lang not in PARSERS:
 		return 'unknown language %r; languages: %r' % (lang, PARSERS.keys())
-	key = (senttok, est, marg, objfun, coarse, html, lang)
+	key = (senttok, est, marg, objfun, coarse, lang, html)
 	if CACHE.get(key) is not None:
 		return CACHE.get(key)
 	link = url_encode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
@@ -73,7 +73,6 @@ def parse():
 		parsetrees = {}
 		result = 'no parse!'
 		frags = nbest = ''
-		msg = ''
 	else:
 		if PARSERS[lang].relationalrealizational:
 			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
@@ -82,7 +81,6 @@ def parse():
 		parsetrees = results[-1].parsetrees or {}
 		parsetrees = heapq.nlargest(10, parsetrees.items(), key=itemgetter(1))
 		fragments = results[-1].fragments or ()
-		msg = '\n'.join(stage.msg for stage in results)
 		APP.logger.info('[%s] %s' % (probstr(prob), tree))
 		tree = Tree.parse(tree, parse_leaf=int)
 		result = Markup(DrawTree(tree, senttok, abbr=True).text(
@@ -97,6 +95,7 @@ def parse():
 					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok,
 						abbr=True).text(unicodelines=True, html=html))
 				for n, (tree, prob) in enumerate(parsetrees)))
+	msg = '\n'.join(stage.msg for stage in results)
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
 			' '.join('%gs' % a for a in elapsed), sum(elapsed))
@@ -105,12 +104,13 @@ def parse():
 			'10 most probable parse trees:',
 			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
 					for n, (tree, prob) in enumerate(parsetrees)) + '\n'))
-	if not html:
+	if html:
+		CACHE.set(key, render_template('parsetree.html', sent=sent,
+				result=result, frags=frags, nbest=nbest, info=info, link=link,
+				randid=randid()), timeout=5000)
+	else:
 		CACHE.set(key, Response('\n'.join((nbest, frags, info, result)),
 				mimetype='text/plain'), timeout=5000)
-	CACHE.set(key, render_template('parsetree.html', sent=sent, result=result,
-			frags=frags, nbest=nbest, info=info, link=link, randid=randid()),
-			timeout=5000)
 	return CACHE.get(key)
 
 

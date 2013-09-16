@@ -173,6 +173,10 @@ def transform(tree, sent, transformations):
 			for s in tree.subtrees(lambda n: n.label == 'S'):
 				if not any(a.label.startswith('VP') for a in s):
 					raise NotImplementedError
+		elif name == 'MARK-UNARY':  # add -U to unary nodes to avoid cycles
+			for unary in tree.subtrees(lambda n: len(n) == 1
+					and isinstance(n[0], Tree)):
+				unary.label += STATESPLIT + 'U'
 		# alpino?
 		# ...
 		else:
@@ -721,14 +725,11 @@ def testtransforms():
 	print('matches', correct, '/', d, 100 * correct / d, '%')
 	print('exact', exact)
 
-if __name__ == '__main__':
-	main()
 
-
-def main():
+def test():
 	""" Just tests. """
 	testpunct()
 	testtransforms()
 
 if __name__ == '__main__':
-	main()
+	test()

@@ -1,11 +1,13 @@
 from math import isinf, exp, log, fsum
-from libc.stdlib cimport malloc, realloc, free
+from libc.stdlib cimport malloc, calloc, realloc, free, qsort
 from libc.string cimport memcmp
 cimport cython
+include "constants.pxi"
 
 ctypedef unsigned long long ULLong
 ctypedef unsigned long ULong
 ctypedef unsigned int UInt
+ctypedef unsigned short UShort
 ctypedef unsigned char UChar
 
 
@@ -13,42 +15,105 @@ cdef extern:
 	int __builtin_ffsll (ULLong)
 	int __builtin_ctzll (ULLong)
 	int __builtin_clzll (ULLong)
+	int __builtin_popcountll (ULLong)
 	int __builtin_ctzl (ULong)
 	int __builtin_popcountl (ULong)
-	int __builtin_popcountll (ULLong)
 
 
 cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
-	ULong BITMASK(int b)
 	int BITNSLOTS(int nb)
 	void SETBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
-	#int SLOTS # doesn't work
+	ULong BITMASK(int b)
 
 
-DEF SLOTS = 3 # FIXME: make this a constant, yet shared across modules.
+@cython.final
+cdef class Grammar:
+	cdef Rule **bylhs, **unary, **lbinary, **rbinary
+	cdef UInt *mapping, **splitmapping
+	cdef UChar *fanout
+	cdef ULong *chainvec
+	cdef readonly currentmodel
+	cdef readonly size_t nonterminals, phrasalnonterminals
+	cdef readonly size_t numrules, numunary, numbinary, maxfanout
+	cdef readonly bint logprob, bitpar
+	cdef readonly object models
+	cdef readonly bytes origrules, start
+	cdef readonly unicode origlexicon
+	cdef readonly list tolabel, lexical, modelnames, rulemapping
+	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
+	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict)
+	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
+	cdef rulestr(self, Rule rule)
+	cdef yfstr(self, Rule rule)
 
 
-cdef struct Rule:
+# chart improvements done:
+# [x] only store probs for viterbi chart; parse forest is symbolic
+# [x] common API for CFG / LCFRS: CFG: key=integer index; LCFRS: key=ChartItem
+# [x] LCFRS for sent > 64 words
+# [X] for CFG: index vit. probs by [cell + lhs]; need efficient way to look up
+# 		vit. prob for lhs in given cell.
+#     for LCFRS: index vit. probs by [lhs][item]; iterate over items for lhs.
+# [x] pruning: either (1) in probs; return nan for blocked, inf for missing,
+#		or (2) prepopulate parse forest; advantage: non-probabilistic
+#		parsing can be pruned, viterbi probabilities can be obtained in
+#		separate stage.
+#		=> (3) external whitelist (current)
+
+# [x] sampling; not well tested.
+# [x] unroll list of edges in parse forest: list w/blocks of 1000 edges in arrays
+# chart improvements todo:
+# [ ] better to use e.g., C++ vector or other existing dynamic array for edges
+# [ ] inside-outside parsing; current numpy arrays can be replaced with compact
+# 		indexed arrays, to save 50%, and be consistent with chart API
+# [ ] symbolic parsing; separate viterbi stage
+# [ ] can we exploit bottom-up order of parser or previous ctf stages
+#		to pack the parse forest?
+# [ ] is it useful to have a recognition phase before making parse forest?
+cdef class Chart:
+	cdef dict parseforest # chartitem => [Edge(lvec, rule), ...]
+	cdef public dict rankededges  # [item][n] => Entry(RankedEdge, prob)
+	cdef Grammar grammar
+	cdef list sent
+	cdef UInt start
+	cdef short lensent
+	cdef public bint logprob  # False => 0 < p <= 1; True => 0 <= -log(p) < inf
+	cdef public bint viterbi  # False => inside probs; True => viterbi 1-best
+	cdef dict getitems(self)
+	cdef list getedges(self, item)
+	cdef double subtreeprob(self, item)
+	cdef lexidx(self, item, Edge *edge)
+	cdef edgestr(self, item, Edge *edge)
+	cdef _left(self, item, Edge *edge)
+	cdef _right(self, item, Edge *edge)
+	cdef left(self, RankedEdge edge)
+	cdef right(self, RankedEdge edge)
+	cdef copy(self, item)
+	cdef ChartItem asChartItem(self, item)
+	cdef size_t asCFGspan(self, item, size_t nonterminals)
+
+
+cdef struct Rule:  # total: 32 bytes.
 	double prob # 8 bytes
-	UInt args # 4 bytes => 32 max vars per rule
-	UInt lengths # 4 bytes => same
 	UInt lhs # 4 bytes
 	UInt rhs1 # 4 bytes
 	UInt rhs2 # 4 bytes
+	UInt args # 4 bytes => 32 max vars per rule
+	UInt lengths # 4 bytes => same
 	UInt no # 4 bytes
-	# total: 32 bytes.
 
 
 @cython.final
 cdef class LexicalRule:
+	cdef double prob
 	cdef UInt lhs
 	cdef unicode word
-	cdef double prob
 
 
+@cython.freelist(1000)
 cdef class ChartItem:
 	cdef UInt label
 
@@ -56,170 +121,76 @@ cdef class ChartItem:
 @cython.final
 cdef class SmallChartItem(ChartItem):
 	cdef ULLong vec
+	cdef SmallChartItem copy(SmallChartItem self)
 
 
 @cython.final
 cdef class FatChartItem(ChartItem):
 	cdef ULong vec[SLOTS]
-
-
-@cython.final
-cdef class CFGChartItem(ChartItem):
-	cdef UChar start, end
+	cdef FatChartItem copy(FatChartItem self)
 
 
 cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)
 cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
 
 
-cdef class Edge:
-	cdef double inside
-	cdef Rule *rule
+cdef union Position: # 8 bytes
+	short mid  # CFG, end index of left child
+	ULLong lvec  # LCFRS, bit vector of left child
+	ULong *lvec_fat  # LCFRS > 64 words, pointer to bit vector of left child;
+	# 		NB: this assumes left child is not garbage collected!
 
 
-@cython.final
-cdef class LCFRSEdge(Edge):
-	cdef double score # inside probability + estimate score
-	cdef ChartItem left
-	cdef ChartItem right
-
-
-@cython.final
-cdef class CFGEdge(Edge):
-	cdef UChar mid
+cdef struct Edge:  # 16 bytes
+	Rule *rule  # ruleno may take less space as pointer, but not convenient
+	Position pos
 
 
 @cython.final
 cdef class RankedEdge:
-	cdef ChartItem head
-	cdef LCFRSEdge edge
-	cdef int left
-	cdef int right
+	# NB: 'head' is unnecessary because the head will also be the dictionary
+	# key for a ranked edge, but having it as part of the object is convenient.
+	cdef Edge *edge  # rule / spans of children
+	cdef object head  # span / label of this node
+	cdef int left, right  # rank of left / right child
 
 
-@cython.final
-cdef class RankedCFGEdge:
-	cdef UInt label
-	cdef UChar start, end
-	cdef CFGEdge edge
-	cdef int left
-	cdef int right
+cdef class Edges:
+	cdef short len
+	cdef Edge data[EDGES_SIZE]
 
 
 # start scratch
-#cdef union VecType:
-#	ULLong vec
-#	ULong *vecptr
-
+#
+#
+#cdef struct CompactEdge:
+#	UInt ruleno  # => idx to grammar.bylhs; define sentinel.
+#	UInt posno  # => idx to an array of positions
+#	# 8 bytes, but more indirection, less convenience
+#
+#
 #cdef class ParseForest:
 #	""" the chart representation of bitpar. seems to require parsing
 #	in 3 stages: recognizer, enumerate analyses, get probs. """
 #	#keys
-#	cdef UInt *catnum			#lhs
-#	cdef size_t *firstanalysis	#idx to arrays below.
-#	# from firstanalysis[n] to firstanalysis[n+1] or end
-#	#values.
-#	cdef size_t *firstchild
+#	cdef UInt *catnum			# no. of chart item -> lhs
+#	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.
+#	# from firstanalysis[n] to firstanalysis[n+1] or end values.
+#	cdef size_t *firstchild     # idx to child array below
+#	cdef double *insideprobs	# no. of edge -> inside prob
 #	cdef UInt *ruleno
 #	#positive means index to lists above, negative means terminal index
 #	cdef UInt *child
 #
-# no, instead of explicitly recording ruleno & mid, record them as part of
-# indices / hashes
-#cdef struct PackedCFGEdge: # 18 bytes
-#	double inside # float here could help squeeze this in 16 bytes
-#	UInt ruleno
-#	short mid
-#
-#cdef struct PackedParseForest:
-#	PackedCFGEdge *edges
-#	size_t *celloffset
-#	size_t *labeloffset
-#	size_t *edgeoffset
-#	ULong numedges
-#	#celloffset[left * lensent + right] => idx to edges
-#	#labeloffset[left * lensent + right][lhs] => idx to edges
-#	#edgeoffset[left * lensent + right][mid][ruleno] => idx to edges
-#
-#cdef inline setedge(PackedParseForest forest, size_t celloffset,
-#		left, right, mid, lhs, ruleno, inside):
-#	cdef PackedCFGEdge *newedge
-#	if ...: # already in chart
-#		newedge = &(forest.edges[celloffset
-#				+ forest.edgeoffset[celloffset][mid][ruleno]])
-#	else:
-#		newedge =
-#		forest.edges += 1
-#	newedge.ruleno = ruleno
-#	newedge.inside = inside
-#	newedge.mid = mid
-#cdef inline PackedCFGEdge getviterbi(PackedParseForest forest,
-#		size_t celloffset, left, right, lhs):
-#	return forest.edges[celloffset + forest.labeloffset[celloffset][lhs]]
-#cdef inline PackedCFGEdge getedge(PackedParseForest forest, size_t celloffset,
-#		left, right, mid, ruleno, inside):
-#	return forest.edges[celloffset + forest.edgeoffset[celloffset][mid][ruleno]]
-#
-#@cython.final
-#cdef class ParseForest:
-#	""" A packed parse forest represented in contiguous arrays.
-#	This only works if for each cell, all rules for each lhs are added
-#	in order. """
-#	cdef PackedCFGEdge **edges
-#	#
-#	cdef UInt *rules
-#	cdef short *midpoints
-#	cdef double *inside
-#	# offset[lhs] contains the index where the edges for that label start.
-#	cdef size_t *offset
-#	# unaries are stored separately:
-#	# unaryrules[left * lensent + right][edgeno]
-#	# unaryinside[left * lensent + right]edgeno]
-#	cdef Rule **unaryrules
-#	cdef double **unaryinside
-#	#cdef __init__(self, Grammar grammar, short lensent):
-#	#	self.lensent = lensent
-#	#	self.numrules = grammar.numrules
-#	#	# this is for a dense array,
-#	#	# start with conservative estimate and then re-alloc along the way?
-#	#	self.midpoints = calloc(sizeof(self.midpoints), lensent * lensent)
-#	#	self.rules = calloc(sizeof(self.rules), lensent * lensent)
-#	#	self.inside = calloc(sizeof(self.inside), lensent * lensent)
-#	#	self.offset = calloc(sizeof(self.offset), len(grammar.tolabel))
-#	#	self.unaryrules = calloc(sizeof(self.unaryrules), lensent * lensent
-#	#			* len(grammar.numunary))
-#	#	self.unaryinside = calloc(sizeof(self.unaryinside), lensent * lensent
-#	#			* len(grammar.numunary))
-#	cdef inline getinside(self, short left, short right, UInt label):
-#		cdef size_t dest = self.offsets[label + 1]
-#		return self.inside[left * self.lensent + right][self.offset[label]]
-#	cdef inline getrule(self, short left, short right, UInt label):
-#		return self.rules[left * self.lensent + right][self.offset[label]]
-#	cdef inline getmidpoint(self, short left, short right, UInt label):
-#		return self.midpoints[left * self.lensent + right][self.offset[label]]
-#	cdef inline setitem(self, short left, short right, UInt label,
-#			UInt ruleno, short mid, double inside):
-#		cdef size_t dest = self.offsets[label + 1]
-#		self.rules[dest] = ruleno
-#		self.midpoints[dest] = mid
-#		self.inside[dest] = inside
-#		self.offsets[label + 1] += 1
-#	#cdef __dealloc__(self):
-#	#	if self.inside is not None:
-#	#		free(self.inside)
-#	#		self.inside = None
-#	#	if self.rules is not None:
-#	#		free(self.rules)
-#	#		self.rules = None
-#	#	if self.midpoints is not None:
-#	#		free(self.midpoints)
-#	#		self.midpoints = None
 #
 #cdef class DiscNode:
 #	cdef int label
 #	cdef tuple children
 #	cdef CBitset leaves
+#
+#
 # end scratch
+
 
 # start fragments stuff
 
@@ -263,39 +234,29 @@ cdef inline FatChartItem new_FatChartItem(UInt label):
 	return item
 
 
-cdef inline SmallChartItem new_ChartItem(UInt label, ULLong vec):
+cdef inline SmallChartItem new_SmallChartItem(UInt label, ULLong vec):
 	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
 	item.label = label
 	item.vec = vec
 	return item
 
 
-cdef inline CFGChartItem new_CFGChartItem(UInt label, UChar start, UChar end):
-	cdef CFGChartItem item = CFGChartItem.__new__(CFGChartItem)
-	item.label = label
-	item.start = start
-	item.end = end
-	return item
+cdef inline RankedEdge new_RankedEdge(
+		object head, Edge *edge, int left, int right):
+	cdef RankedEdge rankededge = RankedEdge.__new__(RankedEdge)
+	rankededge.head = head
+	rankededge.edge = edge
+	rankededge.left = left
+	rankededge.right = right
+	return rankededge
 
 
-cdef inline LCFRSEdge new_LCFRSEdge(double score, double inside, Rule *rule,
-		ChartItem left, ChartItem right):
-	cdef LCFRSEdge edge = LCFRSEdge.__new__(LCFRSEdge)
-	cdef long h = 0x345678UL
-	edge.score = score
-	edge.inside = inside
-	edge.rule = rule
-	edge.left = left
-	edge.right = right
-	return edge
-
-
-cdef inline CFGEdge new_CFGEdge(double inside, Rule *rule, UChar mid):
-	cdef CFGEdge edge = CFGEdge.__new__(CFGEdge)
-	edge.inside = inside
-	edge.rule = rule
-	edge.mid = mid
-	return edge
+# defined here because circular import.
+cdef inline size_t cellidx(short start, short end, short lensent,
+		UInt nonterminals):
+	""" Return an index for a regular three dimensional array:
+	``chart[start][end][0] => chart[idx]`` """
+	return (start * lensent + (end - 1)) * nonterminals
 
 
 cdef object log1e200 = log(1e200)

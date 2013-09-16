@@ -28,6 +28,8 @@ class CorpusReader(object):
 				headfinal=True, headreverse=False, markheads=False, punct=None,
 				functions=None, morphology=None, lemmas=None):
 		"""
+		:param root: directory of corpus
+		:param fileids: filename or pattern of corpus files; e.g., ``wsj*.mrg``
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads
 		:param headfinal: whether to put the head in final or in frontal
@@ -497,7 +499,7 @@ def splitpath(path):
 indexre = re.compile(r" [0-9]+\)")
 
 
-def writetree(tree, sent, n, fmt, headrules=None, morph=None):
+def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 	""" Convert a tree with indices as leafs and a sentence with the
 	corresponding non-terminals to a single string in the given format.
 	Formats are bracket, discbracket, and Negra's export format,
@@ -532,34 +534,34 @@ def writetree(tree, sent, n, fmt, headrules=None, morph=None):
 			node = tree[idx[:-1]]
 			lemma = '--'
 			postag = node.label.replace('$[', '$(') or '--'
-			func = morph = '--'
+			func = morphtag = '--'
 			secedges = []
 			if getattr(node, 'source', None):
 				lemma = node.source[LEMMA] or '--'
-				morph = node.source[MORPH] or '--'
+				morphtag = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
 				secedges = node.source[6:]
-			if morph == '--':
-				morph = node.label if morph == 'replace' else '--'
+			if morphtag == '--':
+				morphtag = node.label if morphology == 'replace' else '--'
 			nodeid = str(500 + phrasalnodes.index(idx[:-2])
 					if len(idx) > 2 else 0)
-			result.append("\t".join((word, lemma, postag, morph, func, nodeid)
-					+ tuple(secedges)))
+			result.append("\t".join((word, lemma, postag, morphtag, func,
+					nodeid) + tuple(secedges)))
 		for idx in phrasalnodes:
 			node = tree[idx]
 			parent = '#%d' % (500 + phrasalnodes.index(idx))
 			lemma = '--'
 			label = node.label or '--'
-			func = morph = '--'
+			func = morphtag = '--'
 			secedges = []
 			if getattr(node, 'source', None):
-				morph = node.source[MORPH] or '--'
+				morphtag = node.source[MORPH] or '--'
 				func = node.source[FUNC] or '--'
 				secedges = node.source[6:]
 			nodeid = str(500 + phrasalnodes.index(idx[:-1])
 					if len(idx) > 1 else 0)
-			result.append('\t'.join((parent, lemma, label, morph, func, nodeid)
-					+ tuple(secedges)))
+			result.append('\t'.join((parent, lemma, label, morphtag, func,
+					nodeid) + tuple(secedges)))
 		if n is not None:
 			result.append("#EOS %s" % n)
 		return "%s\n" % "\n".join(result)
@@ -940,5 +942,8 @@ def treebankfanout(trees):
 		return 1, 0
 
 
+def test():
+	""" Not implemented. """
+
 if __name__ == '__main__':
-	pass
+	test()

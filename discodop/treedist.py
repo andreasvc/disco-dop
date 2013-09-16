@@ -292,7 +292,7 @@ def geteditstats(forest1, forest2):
 geteditstats.mem = {}
 
 
-def main():
+def test():
 	""" Simple demonstration. """
 	a = Tree.parse("(f (d (a 0) (c (b 1))) (e 2))", parse_leaf=int)
 	b = Tree.parse("(f (c (d (a 0) (b 1)) (e 2)))", parse_leaf=int)
@@ -312,4 +312,4 @@ def main():
 	print('%s\n%s\ndistance: %d' % (a, b, result2))
 
 if __name__ == '__main__':
-	main()
+	test()

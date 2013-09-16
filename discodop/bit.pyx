@@ -1,4 +1,5 @@
 """ NB: most functions are in bit.pxd to facilitate function inlining. """
+from __future__ import print_function
 
 
 def pyintbitcount(a):
@@ -11,24 +12,6 @@ def pyintbitcount(a):
 		a &= a - 1
 		count += 1
 	return count
-
-
-cpdef bint testbitshort(unsigned short arg, UInt pos):
-	""" Mask a particular bit, return nonzero if set
-	>>> testbitshort(0b0011101, 0)
-	True
-	>>> testbitshort(0b0011101, 1)
-	False """
-	return (arg >> pos) & 1
-
-
-cpdef bint testbitc(UChar arg, UInt pos):
-	""" Mask a particular bit, return nonzero if set
-	>>> testbitc(0b0011101, 0)
-	True
-	>>> testbitc(0b0011101, 1)
-	False """
-	return (arg >> pos) & 1
 
 
 cpdef int bitcount(ULLong vec):
@@ -51,12 +34,6 @@ cpdef int pyintnextset(a, int pos):
 		a >>= (8 * sizeof(ULong))
 		pos += (8 * sizeof(ULong))
 	return pos + __builtin_ctzl(a & mask)
-
-
-cpdef bint bitminmax(ULLong a, ULLong b):
-	""" test whether the leftmost bit of b is adjacent to the first component
-	of a. """
-	return nextset(b, 0) == nextunset(a, nextset(a, 0))
 
 
 cpdef int fanout(arg):
@@ -88,7 +65,7 @@ cpdef int fanout(arg):
 	return result
 
 
-def main():
+def test():
 	cdef ULong ulongvec[2]
 	bigpyint = 0b11100110101111001101011111100110101001100110
 	assert nextset(0b001100110, 3) == 5
@@ -101,7 +78,6 @@ def main():
 	assert pyintnextset(bigpyint, 7) == 9
 	assert bitcount(0b001100110) == 4
 	assert bitlength(0b001100110) == 7
-	assert bitminmax(0b001100, 0b110000)
 	assert testbit(0b001100110, 1)
 	assert not testbit(0b001100110, 3)
 	assert fanout(0b0111100) == 1
@@ -128,6 +104,3 @@ def main():
 	assert anextunset(ulongvec, 0, 2) == sizeof(ULong) * 8, (
 		anextunset(ulongvec, 0, 2), sizeof(ULong) * 8)
 	print('it worked')
-
-if __name__ == '__main__':
-	main()

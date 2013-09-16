@@ -283,15 +283,9 @@ def doubledop(trees, fragments, debug=False):
 		for a, b in backtransform.items():
 			print(a, b)
 
-	# order grammar such that we have these clusters:
-	# 1. non-binarized rules or initial rules of a binarized constituent
-	# 2: non-initial binarized rules.
-	# 3: lexical productions sorted by word
-	# this is so that the backtransform aligns with the first part of the rules
-	grammar = sorted(grammar.items(), key=lambda rule: (
-				rule[0][1][0] if rule[0][0][1] == 'Epsilon' else '',  # word?
-				'}<' in rule[0][0][0],  # fragment-internal production?
-				rule[0][0]))  # LHS
+	# fix order of grammar rules; backtransform will mirror this order
+	grammar = sortgrammar(grammar.items())
+
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = [backtransform[r] for r, _ in grammar
 			if r in backtransform]
@@ -312,11 +306,19 @@ def doubledop(trees, fragments, debug=False):
 
 
 def sortgrammar(grammar):
-	""" put lexical rules in the end and sort by word. """
-	return sorted(grammar, key=lambda rule:
-			(rule[0][1][0], rule[0][0])  # word, LHS
-			if rule[0][0][1] == 'Epsilon'
-			else ('', rule[0][0]))  # phrasal rule: LHS
+	""" Order grammar such that there are three clusters:
+
+	1. normal phrasal rules, ordered by lhs symbol
+	2. non-initial binarized 2dop rules (to align the 2dop backtransform with
+		the rules in cluster 1 which introduce a new fragment)
+	3. lexical rules sorted by word """
+	def sortkey(rule):
+		""" Sort key ``(word or '', 2dop binarized rule?, lhs)``.  """
+		(r, yf), _p = rule
+		word = yf[0] if r[1] == 'Epsilon' else ''
+		return word, '}<' in r[0], r[0]
+
+	return sorted(grammar, key=sortkey)
 
 
 def coarse_grammar(trees, sents, level=0):
@@ -482,6 +484,8 @@ def new_flatten(tree, sent, ids):
 	Input is a tree and sentence, as well as an iterator which yields
 	unique IDs for non-terminals introdudced by the binarization;
 	output is a tuple (prods, frag). Trees are in the form of strings.
+
+	NB: this version is currently not used.
 
 	#>>> ids = count()
 	#>>> sent = [None, ',', None, '.']
@@ -732,13 +736,17 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	:param grammar:  a sequence of rule tuples, as produced by
 		treebankgrammar(), dopreduction(), or doubledop().
 	:param bitpar: when ``True``, use bitpar format: for rules, put weight
-		first (as decimal fraction or frequency) and leave out the yield
-		function.
-	:returns: rules, lexicon; bytes object & a unicode string, respectively """
-	# when grammar is a PLCFRS, write rational fractions.
-	# when grammar is bitpar PCFG, write frequencies if probabilities sum to 1,
-	# i.e., in that case probalities can be re-computed as relative
-	# frequencies. otherwise, resort to decimal floats (imprecise).
+		first and leave out the yield function.
+	:returns: rules, lexicon; bytes object & a unicode string, respectively
+
+	Weights are written in the following format:
+
+	- if ``bitpar`` is ``False``, write rational fractions; e.g., ``2/3``.
+	- if ``bitpar`` is ``True``, write frequencies if probabilities sum to 1
+		(e.g., ``2``), i.e., in that case probalities can be re-computed as
+		relative frequencies. Otherwise, resort to decimal floats
+		(e.g., ``0.666``, imprecise).
+	"""
 	rules, lexicon = [], []
 	lexical = {}
 	if bitpar:
@@ -828,13 +836,12 @@ def grammarinfo(grammar, dump=None):
 def test():
 	""" Run some tests. """
 	from discodop import plcfrs
-	from discodop._grammar import Grammar
+	from discodop.containers import Grammar
 	from discodop.treebank import NegraCorpusReader
 	from discodop.treetransforms import binarize, unbinarize, \
 			addfanoutmarkers, removefanoutmarkers
 	from discodop.disambiguation import recoverfragments
 	from discodop.kbest import lazykbest
-	from discodop.agenda import getkey
 	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "alpinosample.export"
@@ -866,17 +873,16 @@ def test():
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
 		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
 				for a in sent))
-		chart, start, msg = plcfrs.parse(sent, grammar, exhaustive=True)
+		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
 		print('\n', msg, end='')
 		print("\ngold ", tree)
 		print("double dop", end='')
-		if start:
+		if chart:
 			mpp = {}
 			parsetrees = {}
-			derivations, D, _ = lazykbest(chart, start, 1000,
-				grammar.tolabel, b'}<')
-			for d, (t, p) in zip(D[start], derivations):
-				r = Tree(recoverfragments(getkey(d), D,
+			derivations, _ = lazykbest(chart, 1000, b'}<')
+			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
+				r = Tree(recoverfragments(d.getkey(), chart,
 					grammar, backtransform))
 				r = str(removefanoutmarkers(unbinarize(r)))
 				mpp[r] = mpp.get(r, 0.0) + exp(-p)
@@ -893,7 +899,7 @@ def test():
 					print(' <= %6g %s' % (exp(-p), deriv))
 		else:
 			print("no parse")
-			plcfrs.pprint_chart(chart, sent, grammar.tolabel)
+			print(chart)
 		print()
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
@@ -961,7 +967,7 @@ def main():
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
 	try:
-		from discodop._grammar import Grammar
+		from discodop.containers import Grammar
 	except ImportError:
 		pass
 	else:

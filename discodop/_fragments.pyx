@@ -16,7 +16,7 @@ from discodop.treetransforms import binarize, introducepreterminals
 cimport cython
 from libc.stdlib cimport malloc, free
 from cpython.array cimport array, clone
-from discodop._grammar cimport ULong, UInt
+from discodop.containers cimport ULong, UInt
 from discodop.containers cimport Node, NodeArray, Ctrees
 from discodop.bit cimport iteratesetbits, abitcount, subset, ulongcpy, \
 		ulongset, setunioninplace
@@ -243,15 +243,15 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	The reason we need to do this separately from extracting maximal fragments
 	is that a fragment can occur in other trees where it was not a maximal. """
 	cdef:
-		array counts
-		list theindices
+		array counts = None
+		list theindices = None
+		object matches = None  # multiset()
 		set candidates
 		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 		UInt n, m, *countsp = NULL
-		ULong *bitset
 		NodeArray a, b
 		Node *anodes, *bnodes
-		ULong cur
+		ULong cur, *bitset
 		short idx
 	if indices:
 		theindices = [multiset() for _ in bitsets]
@@ -263,8 +263,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bitset = getpointer(wrapper)
 		a = trees1.trees[getid(bitset, SLOTS)]  # fragment came from this tree
 		anodes = &trees1.nodes[a.offset]
-		idx = 0
-		cur = bitset[idx]
+		cur, idx = bitset[0], 0
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 		assert i != -1
 		candidates = <set>(trees2.treeswithprod[anodes[i].prod]).copy()
@@ -957,7 +956,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	binfactor = 2  # conservative estimate to accommodate binarization
 	scratch = <Node *>malloc(ctrees.maxnodes * binfactor * sizeof(Node))
 	assert scratch is not NULL
-	for m, line in enumerate(lines):
+	for line in lines:
 		cnt = 0
 		sent = []
 		readnode(line, labels, prods, scratch, &cnt, sent, None)
@@ -972,7 +971,7 @@ def one():
 	return 1
 
 
-def main():
+def test():
 	treebank = [binarize(Tree(x)) for x in """\
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
@@ -994,6 +993,3 @@ def main():
 	assert len(fragments) == 25
 	for (a, b), c in sorted(zip(fragments, counts), key=repr):
 		print("%s\t%d" % (re.sub("[0-9]+", lambda x: b[int(x.group())], a), c))
-
-if __name__ == '__main__':
-	main()

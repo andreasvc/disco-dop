@@ -6,7 +6,7 @@ from Cython.Compiler import Options
 import numpy
 
 metadata = dict(name='disco-dop',
-		version='0.3pre2',
+		version='0.4pre1',
 		description='Discontinuous Data-Oriented Parsing',
 		long_description=open('README.rst').read(),
 		author='Andreas van Cranenburgh',
@@ -33,14 +33,20 @@ metadata = dict(name='disco-dop',
 
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
-directives = dict(
-		profile=False,
-		cdivision=True,
-		nonecheck=False,
-		wraparound=False,
-		boundscheck=False,
-		embedsignature=True,
-)
+directives = {
+		'profile': False,
+		'cdivision': True,
+		'nonecheck': False,
+		'wraparound': False,
+		'boundscheck': False,
+		'embedsignature': True,
+		'warn.unreachable': True,
+		'warn.unused': True,
+		'warn.maybe_uninitialized': True,
+		'warn.undeclared': False,
+		'warn.unused_arg': False,
+		'warn.unused_result': False,
+		}
 
 Options.fast_fail = True
 #Options.extra_compile_args = ["-O3"]

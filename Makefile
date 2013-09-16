@@ -16,7 +16,7 @@ test: all
 
 test3:
 	rm -rf sample/
-	python3 setup.py build_ext --inplace
+	python3 setup.py install --user
 	PYTHONIOENCODING=utf-8 python3 -bb -tt tests.py
 
 debug:
@@ -33,7 +33,7 @@ lint:
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
-		discodop/*.pyx && \
+		discodop/*.pyx discodop/*.pxi && \
 	cd web; pylint \
 		--indent-string='\t' \
 		--disable=R,C0103 \

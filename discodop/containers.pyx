@@ -1,11 +1,16 @@
 """ Data types for chart items, edges, &c. """
+from __future__ import print_function
 from math import exp, log, fsum
 from libc.math cimport log, exp
 from discodop.tree import Tree
+from discodop.bit cimport nextset, nextunset, anextset, anextunset
+cimport cython
+include "constants.pxi"
 
-DEF SLOTS = 3
 maxbitveclen = SLOTS * sizeof(ULong) * 8
+cdef double INFINITY = float('infinity')
 
+include "_grammar.pxi"
 
 cdef class LexicalRule:
 	""" A weighted rule of the form 'non-terminal --> word'. """
@@ -35,19 +40,21 @@ cdef class SmallChartItem:
 		return (self.label ^ (self.vec << (sizeof(self.vec) / 2 - 1))
 				^ (self.vec >> (sizeof(self.vec) / 2 - 1)))
 
-	def __richcmp__(SmallChartItem self, SmallChartItem ob, int op):
+	def __richcmp__(self, _ob, int op):
+		cdef SmallChartItem me = <SmallChartItem>self
+		cdef SmallChartItem ob = <SmallChartItem>_ob
 		if op == 2:
-			return self.label == ob.label and self.vec == ob.vec
+			return me.label == ob.label and me.vec == ob.vec
 		elif op == 3:
-			return self.label != ob.label or self.vec != ob.vec
+			return me.label != ob.label or me.vec != ob.vec
 		elif op == 5:
-			return self.label >= ob.label or self.vec >= ob.vec
+			return me.label >= ob.label or me.vec >= ob.vec
 		elif op == 1:
-			return self.label <= ob.label or self.vec <= ob.vec
+			return me.label <= ob.label or me.vec <= ob.vec
 		elif op == 0:
-			return self.label < ob.label or self.vec < ob.vec
+			return me.label < ob.label or me.vec < ob.vec
 		elif op == 4:
-			return self.label > ob.label or self.vec > ob.vec
+			return me.label > ob.label or me.vec > ob.vec
 
 	def __nonzero__(SmallChartItem self):
 		return self.label != 0 and self.vec != 0
@@ -60,15 +67,15 @@ cdef class SmallChartItem:
 		assert self.label == 0
 		return self.vec
 
-	def copy(SmallChartItem self):
-		return SmallChartItem(self.label, self.vec)
+	cdef SmallChartItem copy(SmallChartItem self):
+		return new_SmallChartItem(self.label, self.vec)
 
 	def binrepr(SmallChartItem self, int lensent=0):
 		return bin(self.vec)[2:].zfill(lensent)[::-1]
 
 
 cdef class FatChartItem:
-	""" Item with fixed-with bitvector. """
+	""" Item where bitvector is a fixed-width static array. """
 	def __hash__(self):
 		cdef long n, _hash
 		""" juxtapose bits of label and vec:
@@ -86,13 +93,14 @@ cdef class FatChartItem:
 		return _hash
 
 	def __richcmp__(FatChartItem self, FatChartItem ob, int op):
-		cdef int cmp = memcmp(<UChar *>self.vec, <UChar *>ob.vec,
-			sizeof(self.vec))
+		cdef int cmp = 0
 		cdef bint labelmatch = self.label == ob.label
+		cmp = memcmp(<UChar *>ob.vec, <UChar *>self.vec, sizeof(self.vec))
 		if op == 2:
 			return labelmatch and cmp == 0
 		elif op == 3:
 			return not labelmatch or cmp != 0
+		# NB: for a proper comparison, need to reverse memcmp
 		elif op == 5:
 			return self.label >= ob.label or (labelmatch and cmp >= 0)
 		elif op == 1:
@@ -118,80 +126,30 @@ cdef class FatChartItem:
 		assert self.label == 0
 		return self.vec[0]
 
-	def copy(FatChartItem self):
-		cdef FatChartItem a = FatChartItem(self.label)
+	cdef FatChartItem copy(FatChartItem self):
+		cdef int n
+		cdef FatChartItem a = new_FatChartItem(self.label)
 		for n in range(SLOTS):
 			a.vec[n] = self.vec[n]
 		return a
 
 	def binrepr(FatChartItem self, lensent=0):
-		cdef int m, n = SLOTS - 1
-		cdef str result
-		while n and self.vec[n] == 0:
-			n -= 1
-		result = bin(self.vec[n])
-		for m in range(n - 1, -1, -1):
-			result += bin(self.vec[m])[2:].zfill(BITSIZE)
-		return result.zfill(lensent)[::-1]
-
-
-cdef class CFGChartItem:
-	""" Item for CFG parsing; span is denoted with start and end indices. """
-	def __init__(self, label, start, end):
-		self.label = label
-		self.start = start
-		self.end = end
-
-	def __hash__(self):
-		""" juxtapose bits of label and indices of span:
-		|....end...start...label
-		64    40      32       0 """
-		return (self.label ^ <ULong>self.start << (8 * sizeof(long) / 2)
-				^ <ULong>self.end << (8 * sizeof(long) / 2 + 8))
-
-	def __richcmp__(CFGChartItem self, CFGChartItem ob, int op):
-		cdef bint labelmatch = self.label == ob.label
-		cdef bint startmatch = self.start == ob.start
-		if op == 2:
-			return labelmatch and startmatch and self.end == ob.end
-		elif op == 3:
-			return not labelmatch or not startmatch or self.end != ob.end
-		elif op == 5:
-			return self.label >= ob.label or (labelmatch and (self.start
-					>= ob.start or startmatch and self.end >= ob.end))
-		elif op == 1:
-			return self.label <= ob.label or (labelmatch and (self.start
-					<= ob.start or (startmatch and self.end <= ob.end)))
-		elif op == 0:
-			return self.label < ob.label or (labelmatch and (self.start
-					< ob.start or (startmatch and self.end < ob.end)))
-		elif op == 4:
-			return self.label > ob.label or (labelmatch and (self.start
-					> ob.start or (startmatch and self.end > ob.end)))
-
-	def __nonzero__(self):
-		return self.label and self.end
-
-	def __repr__(self):
-		return "%s(%d, %d, %d)" % (self.__class__.__name__,
-				self.label, self.start, self.end)
-
-	def lexidx(self):
-		assert self.label == 0
-		return self.start
-
-	def copy(CFGChartItem self):
-		return new_CFGChartItem(self.label, self.start, self.end)
+		cdef int n
+		cdef str result = ''
+		for n in range(SLOTS):
+			result += bin(self.vec[n])[2:].zfill(BITSIZE)[::-1]
+		return result[:lensent] if lensent else result.rstrip('0')
 
 
 cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end):
-	return new_ChartItem(label, (1ULL << end) - (1ULL << start))
+	return new_SmallChartItem(label, (1ULL << end) - (1ULL << start))
 
 
 cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 	cdef FatChartItem fci = new_FatChartItem(label)
+	cdef short n
 	if BITSLOT(start) == BITSLOT(end):
-		fci.vec[BITSLOT(start)] = (1ULL << end) - (1ULL << start)
+		fci.vec[BITSLOT(start)] = (1UL << end) - (1UL << start)
 	else:
 		fci.vec[BITSLOT(start)] = ~0UL << (start % BITSIZE)
 		for n in range(BITSLOT(start) + 1, BITSLOT(end)):
@@ -200,148 +158,227 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 	return fci
 
 
-cdef class LCFRSEdge:
-	""" NB: hash / (in)equality considers all elements except inside score,
-	order is determined by inside score only. """
-	def __hash__(LCFRSEdge self):
-		cdef long _hash = 0x345678UL
-		# this condition could be avoided by using a dedicated sentinel Rule
-		if self.rule is not NULL:
-			_hash = (1000003UL * _hash) ^ <long>self.rule.no
-		# we only look at the left item, because this edge will only be
-		# compared to other edges for the same parent item
-		# FIXME: we cannot compute hash directly here, because
-		# left can be of different subtypes.
-		_hash = (1000003UL * _hash) ^ <long>self.left.__hash__()
-		return _hash
-
-	def __richcmp__(LCFRSEdge self, LCFRSEdge ob, int op):
-		if op == 0:
-			return self.score < ob.score
-		elif op == 1:
-			return self.score <= ob.score
-		elif op == 2 or op == 3:
-			# right matches iff left matches, so skip that check
-			return (op == 2) == (self.rule is ob.rule and self.left == ob.left)
-		elif op == 4:
-			return self.score > ob.score
-		elif op == 5:
-			return self.score >= ob.score
-		elif op == 1:
-			return self.score <= ob.score
-		elif op == 0:
-			return self.score < ob.score
+cdef class Edges:
+	def __cinit__(self):
+		self.len = 0
 
 	def __repr__(self):
-		return "%s(%g, %g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r, %r)" % (
-				self.__class__.__name__, self.score, self.inside,
-				self.rule.prob, self.rule.args, self.rule.lengths,
-				self.rule.lhs, self.rule.rhs1, self.rule.rhs2, self.rule.no,
-				self.left, self.right)
-
-	def copy(self):
-		return new_LCFRSEdge(self.score, self.inside, self.rule,
-				self.left.copy(), self.right.copy())
-
-
-cdef class CFGEdge:
-	""" NB: hash / (in)equality considers all elements except inside score,
-	order is determined by inside score only. """
-	def __hash__(CFGEdge self):
-		cdef long _hash = 0x345678UL
-		_hash = (1000003UL * _hash) ^ <long>self.rule
-		_hash = (1000003UL * _hash) ^ <long>self.mid
-		return _hash
-
-	def __richcmp__(CFGEdge self, CFGEdge ob, int op):
-		if op == 0:
-			return self.inside < ob.inside
-		elif op == 1:
-			return self.inside <= ob.inside
-		elif op == 2 or op == 3:
-			return (op == 2) == (self.rule is ob.rule and self.mid == ob.mid)
-		elif op == 4:
-			return self.inside > ob.inside
-		elif op == 5:
-			return self.inside >= ob.inside
-		elif op == 1:
-			return self.inside <= ob.inside
-		elif op == 0:
-			return self.inside < ob.inside
-
-	def __repr__(self):
-		return "%s(%g, Rule(%g, 0x%x, 0x%x, %d, %d, %d, %d), %r)" % (
-			self.__class__.__name__, self.inside, self.rule.prob,
-			self.rule.args, self.rule.lengths, self.rule.lhs, self.rule.rhs1,
-			self.rule.rhs2, self.rule.no, self.mid)
-
+		return '<%d edges>' % self.len
 
 cdef class RankedEdge:
-	""" An edge, including the ChartItem to which it points, along with
-	ranks for its children, to denote a k-best derivation. """
-	def __cinit__(self, ChartItem head, LCFRSEdge edge, int j1, int j2):
-		self.head = head
-		self.edge = edge
-		self.left = j1
-		self.right = j2
-
+	""" An edge, including the chart item (head) to which it points,
+	along with ranks for its children, to denote a k-best derivation. """
 	def __hash__(self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ hash(self.head)
-		_hash = (1000003UL * _hash) ^ hash(self.edge)
+		_hash = (1000003UL * _hash) ^ hash(-1 if self.edge.rule is NULL
+				else self.edge.rule.no)
+		_hash = (1000003UL * _hash) ^ hash(self.edge.pos.lvec)
 		_hash = (1000003UL * _hash) ^ self.left
 		_hash = (1000003UL * _hash) ^ self.right
 		return _hash
 
 	def __richcmp__(RankedEdge self, RankedEdge ob, int op):
 		if op == 2 or op == 3:
-			return (op == 2) == (self.left == ob.left and self.right ==
-					ob.right and self.head == ob.head and self.edge == ob.edge)
+			return (op == 2) == (self.left == ob.left and self.right
+					== ob.right and self.head == ob.head
+					and memcmp(<UChar *>self.edge, <UChar *>ob.edge,
+						sizeof(ob.edge)) == 0)
 		return NotImplemented
 
 	def __repr__(self):
-		return "%s(%r, %r, %d, %d)" % (self.__class__.__name__,
-			self.head, self.edge, self.left, self.right)
+		return "%s(%r, %d, %d)" % (self.__class__.__name__,
+			self.head, self.left, self.right)
+
+cdef class Chart:
+	""" Base class for charts. Provides methods that available on all charts.
+
+	The subclass hierarchy for charts has three levels:
+
+		(0) base class, methods for chart traversal.
+		(1) formalism, methods specific to CFG vs. LCFRS parsers.
+		(2) data structurs optimized for short/long sentences, small/large
+		grammars.
+
+	Level 1/2 defines a type for labeled spans referred to as ``item``. """
+	def root(self):
+		""" Return the item for this chart, spanning the whole sentence, with
+		the grammar's distinguished root symbel as label. """
+		raise NotImplementedError
+
+	cdef _left(self, item, Edge *edge):
+		""" Given an item and an edge belonging to it, return the left item it
+		points to. """
+		raise NotImplementedError
+
+	cdef _right(self, item, Edge *edge):
+		""" Given an item and an edge belonging to it, return the right item it
+		points to. """
+		raise NotImplementedError
+
+	cdef double subtreeprob(self, item):
+		""" Return probability of subtree headed by item. """
+		raise NotImplementedError
+
+	cdef left(self, RankedEdge rankededge):
+		""" Given a ranked edge, return the left item it points to. """
+		return self._left(rankededge.head, rankededge.edge)
+
+	cdef right(self, RankedEdge rankededge):
+		""" Given a ranked edge, return the right item it points to. """
+		return self._right(rankededge.head, rankededge.edge)
+
+	cdef copy(self, item):
+		return item
+
+	cdef lexidx(self, item, Edge *edge):
+		""" Given an item and a lexical edge belonging to it, return the
+		sentence index of the terminal child. """
+		cdef short result = edge.pos.mid - 1
+		assert 0 <= result < self.lensent, (result, self.lensent)
+		return result
+
+	cdef dict getitems(self):
+		return self.parseforest
+
+	cdef list getedges(self, item):
+		""" Get edges for item. """
+		return self.parseforest[item] if item in self.parseforest else []
+
+	def __nonzero__(self):
+		""" Return true when the root item is in the chart, i.e., when sentence
+		has been parsed successfully. """
+		return self.root() in self.parseforest
+
+	cdef edgestr(Chart self, item, Edge *edge):
+		""" Given an item and an edge belonging to it, return a string
+		representation of it. """
+		if edge.rule is NULL:
+			return self.sent[self.lexidx(item, edge)]
+		else:
+			return ('%g %s %s' % (
+					exp(-edge.rule.prob) if self.logprob
+					else edge.rule.prob,
+					self.itemstr(self._left(item, edge)),
+					self.itemstr(self._right(item, edge))
+						if edge.rule.rhs2 else ''))
+
+	def filter(self):
+		""" Remove all entries in parse forest that do not contribute to a
+		complete derivation headed by root of chart. """
+		items = set()
+		_filtersubtree(self, self.root(), items)
+		for item in set(self.getitems()) - items:
+			del self.parseforest[item]
+
+	cdef ChartItem asChartItem(self, item):
+		""" Convert/copy item to ChartItem instance. """
+		cdef size_t itemx
+		if isinstance(item, SmallChartItem):
+			return (<SmallChartItem>item).copy()
+		if isinstance(item, FatChartItem):
+			return (<FatChartItem>item).copy()
+		itemx = <size_t>item
+		label = self.label(itemx)
+		itemx //= self.grammar.nonterminals
+		start = itemx // self.lensent
+		end = itemx % self.lensent + 1
+		if self.lensent < 8 * sizeof(ULLong):
+			return CFGtoSmallChartItem(label, start, end)
+		return CFGtoFatChartItem(label, start, end)
+
+	cdef size_t asCFGspan(self, item, size_t nonterminals):
+		""" Convert item to a span of a chart with a different number of
+		non-terminals. """
+		cdef size_t itemx
+		if isinstance(item, SmallChartItem):
+			start = nextset((<SmallChartItem>item).vec, 0)
+			end = nextunset((<SmallChartItem>item).vec, start)
+			assert nextset((<SmallChartItem>item).vec, end) == -1
+		elif isinstance(item, FatChartItem):
+			start = anextset((<FatChartItem>item).vec, 0, SLOTS)
+			end = anextunset((<FatChartItem>item).vec, start, SLOTS)
+			assert anextset((<FatChartItem>item).vec, end, SLOTS) == -1
+		else:
+			itemx = <size_t>item
+			itemx //= self.grammar.nonterminals
+			start = itemx // self.lensent
+			end = itemx % self.lensent + 1
+		return cellidx(start, end, self.lensent, nonterminals)
+
+	def stats(self):
+		""" Return a short string with counts of items, edges. """
+		return 'items %d, edges %d' % (
+				len(self.getitems()),
+				sum(map(numedges, self.parseforest.values())))
+		# more stats:
+		# labels: len({self.label(item) for item in self.getitems()}),
+		# spans: ...
+
+	def __str__(self):
+		""" Pretty-print chart and k-best derivations. """
+		cdef Edges edges
+		cdef RankedEdge rankededge
+		result = []
+		for item in sorted(self.parseforest):
+			result.append('%s\t%s=%10g' % (
+					self.itemstr(item),
+					'vitprob' if self.viterbi else 'insprob',
+					exp(-self.subtreeprob(item)) if self.logprob
+						else self.subtreeprob(item)))
+			for edges in self.parseforest[item]:
+				for n in range(edges.len):
+					result.append('\t=> %s'
+							% self.edgestr(item, &(edges.data[n])))
+			result.append('')
+		if self.rankededges:
+			result.append('ranked edges:')
+			for item in sorted(self.rankededges):
+				result.append(self.itemstr(item))
+				for n, entry in enumerate(self.rankededges[item]):
+					rankededge = entry.getkey()
+					result.append('%d: %10g => %s %d %d' % (n,
+							exp(-entry.getvalue()) if self.logprob
+								else entry.getvalue(),
+							self.edgestr(item, rankededge.edge),
+							rankededge.left, rankededge.right))
+				result.append('')
+		return '\n'.join(result)
 
 
-cdef class RankedCFGEdge:
-	""" An edge, including the ChartItem to which it points, along with
-	ranks for its children, to denote a k-best derivation. """
-	def __cinit__(self, UInt label, UChar start, UChar end, Edge edge,
-			int j1, int j2):
-		self.label = label
-		self.start = start
-		self.end = end
-		self.edge = edge
-		self.left = j1
-		self.right = j2
+def numedges(list edgeslist):
+	cdef Edges edges
+	cdef size_t result = 0
+	for edges in edgeslist:
+		result += edges.len
+	return result
 
-	def __hash__(self):
-		cdef long _hash = 0x345678UL
-		_hash = (1000003UL * _hash) ^ hash(self.edge)
-		_hash = (1000003UL * _hash) ^ self.label
-		_hash = (1000003UL * _hash) ^ self.start
-		_hash = (1000003UL * _hash) ^ self.end
-		_hash = (1000003UL * _hash) ^ self.left
-		_hash = (1000003UL * _hash) ^ self.right
-		return _hash
 
-	def __richcmp__(RankedCFGEdge self, RankedCFGEdge ob, int op):
-		if op == 2 or op == 3:
-			return (op == 2) == (self.left == ob.left and self.right ==
-					ob.right and self.label == ob.label and self.start ==
-					ob.start and self.end == ob.end and self.edge == ob.edge)
-		return NotImplemented
-
-	def __repr__(self):
-		return "%s(%r, %r, %r, %r, %d, %d)" % (self.__class__.__name__,
-			self.label, self.start, self.end, self.edge, self.left, self.right)
+cdef void _filtersubtree(Chart chart, item, set items):
+	""" Recursively filter chart. """
+	cdef Edge *edge
+	cdef Edges edges
+	item = chart.copy(item)
+	items.add(item)
+	for edges in chart.getedges(item):
+		for n in range(edges.len):
+			edge = &(edges.data[n])
+			if edge.rule is NULL:
+				continue
+			leftitem = chart._left(item, edge)
+			if leftitem not in items:
+				_filtersubtree(chart, leftitem, items)
+			if edge.rule.rhs2 == 0:
+				continue
+			rightitem = chart._right(item, edge)
+			if rightitem not in items:
+				_filtersubtree(chart, rightitem, items)
 
 
 cdef class Ctrees:
 	"""
-	Auxiliary class to be able to pass around collections of NodeArrays
-	in Python.
+	Auxiliary class to be able to pass around collections
+	of NodeArrays in Python.
 
 	When trees is given, prods should be given as well.
 	When trees is not given, the alloc() method should be called and
@@ -467,3 +504,7 @@ cdef inline copynodes(tree, dict prods, Node *result):
 				result[n].right = a[1].idx
 			else:  # unary node
 				result[n].right = -1
+
+
+def test():
+	""" Not implemented. """

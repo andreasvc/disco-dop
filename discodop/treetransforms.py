@@ -549,7 +549,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	#do default right factored binarization instead
 	elif fanout(tree) == 1 and all(fanout(a) == 1 for a in tree):
 		return factorconstituent(tree, sep=sep, h=h)
-	from discodop.agenda import Agenda
+	from discodop.plcfrs import Agenda
 	labels = [a.label for a in tree]
 	#the four main datastructures:
 	#the agenda is a priority queue of partial binarizations to explore
@@ -983,11 +983,12 @@ def main():
 			file=sys.stderr)
 	encoding = opts.get('outputenc', 'utf-8')
 	with io.open(outfilename, 'w', encoding=encoding) as outfile:
-		if action == 'none' and (None == opts.get('--headrules')
-				== opts.get('--markheads') == opts.get('--punct')
-				and opts.get('--inputfmt') == opts.get('--outputfmt')):
-			# copy treebank verbatim. useful when only taking a slice
-			# or converting encoding.
+		# copy treebank verbatim. useful when only taking a slice
+		# or converting encoding.
+		if (action == 'none' and opts.get('--inputfmt', 'export') ==
+				opts.get('--outputfmt', 'export')
+				and set(opts) < {'--slice', '--inputenc', '--outputenc',
+					'--inputfmt', '--outputfmt'}):
 			outfile.writelines(block for block in corpus.blocks().values())
 		else:
 			outfile.writelines(writetree(a, b, c,

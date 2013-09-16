@@ -1,36 +1,62 @@
 """ Implementation of Huang & Chiang (2005): Better k-best parsing. """
 from __future__ import print_function
-from discodop.agenda import Agenda
-from discodop.containers import ChartItem, Edge, RankedEdge
+from operator import itemgetter
+from discodop.plcfrs import Agenda
+from discodop.containers import ChartItem, RankedEdge, Grammar
 
 cimport cython
-from discodop.agenda cimport Entry, Agenda, nsmallest
-from discodop.containers cimport ChartItem, SmallChartItem, CFGChartItem, \
-		Edge, Rule, CFGEdge, LCFRSEdge, RankedEdge, RankedCFGEdge, \
-		new_LCFRSEdge, UInt, UChar
+from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
+		Grammar, Rule, Chart, Edges, Edge, RankedEdge, \
+		new_RankedEdge, UInt, UChar, \
+		CFGtoSmallChartItem, CFGtoFatChartItem
+from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
+from discodop.plcfrs cimport Entry, Agenda, nsmallest, \
+		LCFRSChart, SmallLCFRSChart, FatLCFRSChart
 
-cdef tuple unarybest = (0, ), binarybest = (0, 0)
+cdef extern from "Python.h":
+	double PyFloat_AS_DOUBLE(object pyfloat)
 
-cdef inline getcandidates(dict chart, ChartItem v, int k):
+
+cdef getcandidates(Chart chart, v, int k):
 	""" :returns: a heap with up to k candidate arcs starting from vertex v """
 	# NB: the priority queue should either do a stable sort, or should
 	# sort on rank vector as well to have ties resolved in FIFO order;
 	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)
 	# can occur (given that the first two have probability x and the latter
 	# three probability y), in which case insertion order should count.
-	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
-	# as a neighbor and puts it in cand[v] for a second time.
-	cdef LCFRSEdge el
-	if v not in chart:
-		return Agenda()  # raise error?
-	return Agenda([
-		(RankedEdge(v, el, 0, 0 if el.right.label else -1), el.inside)
-				for el in nsmallest(k, chart[v].values())])
+	# Otherwise (1, 1) ends up in chart.rankededges[v] after which (0. 1)
+	# generates it as a neighbor and puts it in cand[v] for a second time.
+	cdef Edges edges
+	cdef Edge *e
+	cdef double prob
+	results = []
+	# loop over blocks of edges
+	# compute viterbi prob from rule.prob + viterbi probs of children
+	for pyedges in chart.getedges(v):
+		edges = <Edges>pyedges
+		for n in range(edges.len):
+			e = &(edges.data[n])
+			if e.rule is NULL:
+				# there can only be one lexical edge for this combination of
+				# POS tag and terminal, use viterbi probability directly
+				prob = chart.subtreeprob(v)
+				left = right = -1
+			else:
+				left = right = 0
+				prob = e.rule.prob
+				prob += chart.subtreeprob(chart._left(v, e))
+				if e.rule.rhs2:  # unary rule?
+					prob += chart.subtreeprob(chart._right(v, e))
+				else:
+					right = -1
+			re = new_RankedEdge(v, e, left, right)
+			results.append((re, prob))
+	return Agenda([a for a in nsmallest(k, results, key=itemgetter(1))])
 
 
 @cython.wraparound(True)
-cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
-		dict chart, set explored):
+cpdef inline lazykthbest(v, int k, int k1, dict cand, Chart chart,
+		set explored):
 	cdef Entry entry
 	cdef RankedEdge ej
 	# k1 is the global k
@@ -38,338 +64,145 @@ cpdef inline lazykthbest(ChartItem v, int k, int k1, dict D, dict cand,
 	if v not in cand:
 		# initialize the heap
 		cand[v] = getcandidates(chart, v, k1)
-	while v not in D or len(D[v]) < k:
-		if v in D:
+	while v not in chart.rankededges or len(chart.rankededges[v]) < k:
+		if v in chart.rankededges:
 			# last derivation
-			entry = D[v][-1]
+			entry = chart.rankededges[v][-1]
 			ej = entry.key
 			# update the heap, adding the successors of last derivation
-			lazynext(ej, k1, D, cand, chart, explored)
+			lazynext(v, ej, k1, cand, chart, explored)
 		# get the next best derivation and delete it from the heap
 		if cand[v]:
-			D.setdefault(v, []).append((<Agenda>cand[v]).popentry())
+			chart.rankededges.setdefault(v, []).append(
+					(<Agenda>cand[v]).popentry())
 		else:
 			break
-	return D
 
 
-cdef inline lazynext(RankedEdge ej, int k1, dict D, dict cand, dict chart,
+cdef inline lazynext(v, RankedEdge ej, int k1, dict cand, Chart chart,
 		set explored):
 	cdef RankedEdge ej1
-	cdef double prob
 	# add the |e| neighbors
 	for i in range(2):
-		if i == 0:
-			ei = ej.edge.left
-			ej1 = RankedEdge(ej.head, ej.edge, ej.left + 1, ej.right)
-		elif i == 1 and ej.right >= 0:  # edge.right.label:
-			ei = ej.edge.right
-			ej1 = RankedEdge(ej.head, ej.edge, ej.left, ej.right + 1)
+		if i == 0 and ej.left >= 0:
+			ei = chart.copy(chart.left(ej))
+			ej1 = new_RankedEdge(v, ej.edge, ej.left + 1, ej.right)
+		elif i == 1 and ej.right >= 0:
+			ei = chart.copy(chart.right(ej))
+			ej1 = new_RankedEdge(v, ej.edge, ej.left, ej.right + 1)
 		else:
 			break
 		# recursively solve a subproblem
 		# NB: increment j1[i] again because j is zero-based and k is not
 		lazykthbest(ei, (ej1.right if i else ej1.left) + 1, k1,
-							D, cand, chart, explored)
+							cand, chart, explored)
 		# if it exists and is not in heap yet
-		if ((ei in D and (ej1.right if i else ej1.left) < len(D[ei]))
-			and ej1 not in explored):  # cand[ej1.head]): <= gives duplicates
-			prob = getprob(chart, D, ej1)
+		if ((ei in chart.rankededges and
+				(ej1.right if i else ej1.left) < len(chart.rankededges[ei]))
+				and ej1 not in explored):  # cand[ej1.head]): gives duplicates
 			# add it to the heap
-			cand[ej1.head][ej1] = prob
+			cand[v][ej1] = getprob(chart, v, ej1)
 			explored.add(ej1)
 
-
-cdef inline double getprob(dict chart, dict D, RankedEdge ej) except -1.0:
-	""" Get inside probability of 'ej'; try looking in D, or else use chart. """
-	cdef ChartItem ei
-	cdef Edge edge
-	cdef Entry entry
-	cdef double result, prob
-	ei = ej.edge.left
-	if ei in D:
-		entry = D[ei][ej.left]
-		prob = entry.value
-	elif ej.left == 0:
-		edge = min(chart[ei])
-		prob = edge.inside
+cdef inline double getprob(Chart chart, v, RankedEdge ej) except -1.0:
+	""" Get subtree probability of ej; try looking in rankededges, or else use
+	chart. """
+	cdef double prob = ej.edge.rule.prob
+	ei = chart.left(ej)
+	if ej.left == 0:
+		prob += chart.subtreeprob(ei)
+	elif ei in chart.rankededges:
+		prob += PyFloat_AS_DOUBLE(
+				(<Entry>(<list>chart.rankededges[ei])[ej.left]).value)
 	else:
-		raise ValueError("non-zero rank vector not part of explored derivations")
-	result = ej.edge.rule.prob + prob
-	if ej.right >= 0:  # if e.right.label:
-		ei = ej.edge.right
-		if ei in D:
-			entry = D[ei][ej.right]
-			prob = entry.value
-		elif ej.right == 0:
-			edge = min(chart[ei])
-			prob = edge.inside
-		else:
-			raise ValueError(
-			"non-zero rank vector not part of explored derivations")
-		result += prob
-	return result
-
-
-# --- start CFG specific
-cdef inline getcandidatescfg(list chart, UInt label,
-		UChar start, UChar end, int k):
-	""" :returns: a heap with up to k candidate arcs starting from vertex v """
-	# NB: the priority queue should either do a stable sort, or should
-	# sort on rank vector as well to have ties resolved in FIFO order;
-	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)
-	# can occur (given that the first two have probability x and the latter
-	# three probability y), in which case insertion order should count.
-	# Otherwise (1, 1) ends up in D[v] after which (0. 1) generates it
-	# as a neighbor and puts it in cand[v] for a second time.
-	cdef CFGEdge ec
-	cell = chart[start][end]
-	if not cell.get(label):
-		return Agenda()
-	return Agenda(
-		[(RankedCFGEdge(label, start, end, ec, 0, 0 if ec.rule is not NULL
-						and ec.rule.rhs2 else -1), ec.inside)
-						for ec in nsmallest(k, cell[label].values())])
-
-
-@cython.wraparound(True)
-cpdef inline lazykthbestcfg(UInt label, UChar start, UChar end, int k, int k1,
-		list D, list cand, list chart, set explored):
-	cdef Entry entry
-	cdef RankedCFGEdge ej
-	# k1 is the global k
-	# first visit of vertex v?
-	if label not in cand[start][end]:
-		# initialize the heap
-		cand[start][end][label] = getcandidatescfg(chart, label, start, end, k1)
-	while label not in D[start][end] or len(D[start][end][label]) < k:
-		if label in D[start][end]:
-			# last derivation
-			entry = D[start][end][label][-1]
-			ej = entry.key
-			# update the heap, adding the successors of last derivation
-			lazynextcfg(ej, k1, D, cand, chart, explored)
-		# get the next best derivation and delete it from the heap
-		if cand[start][end][label]:
-			D[start][end].setdefault(label, []).append(
-				(<Agenda>cand[start][end][label]).popentry())
-		else:
-			break
-	return D
-
-
-cdef inline lazynextcfg(RankedCFGEdge ej, int k1, list D, list cand,
-		list chart, set explored):
-	cdef RankedCFGEdge ej1
-	cdef CFGEdge ec = ej.edge
-	cdef double prob
-	cdef UInt label
-	cdef UChar start, end
-	# add the |e| neighbors
-	# left child
-	label = 0 if ec.rule is NULL else ec.rule.rhs1
-	start = ej.start
-	end = ec.mid
-	ej1 = RankedCFGEdge(ej.label, ej.start, ej.end, ej.edge,
-			ej.left + 1, ej.right)
-	# recursively solve a subproblem
-	# NB: increment j1[i] again because j is zero-based and k is not
-	lazykthbestcfg(label, start, end, ej1.left + 1, k1,
-						D, cand, chart, explored)
-	# if it exists and is not in heap yet
-	if ((label in D[start][end] and ej1.left < len(D[start][end][label]))
-		and ej1 not in explored):  # cand[ej1.head]): <= gives duplicates
-		prob = getprobcfg(chart, D, ej1)
-		# add it to the heap
-		cand[ej1.start][ej1.end][ej1.label][ej1] = prob
-		explored.add(ej1)
-	# right child?
+		raise ValueError('non-zero rank vector %d not in explored '
+				'derivations for %s' % (ej.right, chart.itemstr(v)))
 	if ej.right == -1:
-		return
-	label = 0 if ec.rule is NULL else ec.rule.rhs2
-	start = ec.mid
-	end = ej.end
-	ej1 = RankedCFGEdge(ej.label, ej.start, ej.end, ej.edge,
-			ej.left, ej.right + 1)
-	lazykthbestcfg(label, start, end, ej1.right + 1, k1,
-						D, cand, chart, explored)
-	# if it exists and is not in heap yet
-	if ((label in D[start][end] and ej1.right < len(D[start][end][label]))
-		and ej1 not in explored):  # cand[ej1.head]): <= gives duplicates
-		prob = getprobcfg(chart, D, ej1)
-		# add it to the heap
-		cand[ej1.start][ej1.end][ej1.label][ej1] = prob
-		explored.add(ej1)
-
-
-cdef inline double getprobcfg(list chart, list D, RankedCFGEdge ej) except -1.:
-	""" Get inside probability of 'ej'; try looking in D, or else use chart. """
-	cdef CFGEdge ec, edge
-	cdef Entry entry
-	cdef double result, prob
-	ec = ej.edge
-	label = 0 if ec.rule is NULL else ec.rule.rhs1
-	start = ej.start
-	end = ec.mid
-	if label in D[start][end]:
-		entry = D[start][end][label][ej.left]
-		prob = entry.value
-	elif ej.left == 0:
-		edge = min(chart[start][end][label])
-		prob = edge.inside
+		return prob
+	ei = chart.right(ej)
+	if ej.right == 0:
+		prob += chart.subtreeprob(ei)
+	elif ei in chart.rankededges:
+		prob += PyFloat_AS_DOUBLE(
+				(<Entry>(<list>chart.rankededges[ei])[ej.right]).value)
 	else:
-		raise ValueError("non-zero rank vector not part of explored derivations")
-	# NB: edge.inside if preterminal, 0.0 for terminal
-	result = (0.0 if ec.rule is NULL else ec.rule.prob) + prob
-	if ej.right >= 0:  # if e.right.label:
-		label = 0 if ec.rule is NULL else ec.rule.rhs2
-		start = ec.mid
-		end = ej.end
-		if label in D[start][end]:
-			entry = D[start][end][label][ej.right]
-			prob = entry.value
-		elif ej.right == 0:
-			edge = min(chart[start][end][label])
-			prob = edge.inside
-		else:
-			raise ValueError(
-					"non-zero rank vector not part of explored derivations")
-		result += prob
-	return result
+		raise ValueError('non-zero rank vector %d not in explored '
+				'derivations for %s' % (ej.right, chart.itemstr(v)))
+	return prob
 
 
-cpdef list lazykbestcfg(list chart, CFGChartItem goal, int k):
-	""" wrapper function to run lazykthbestcfg.
-	does not give actual derivations, but the ranked chart D. """
+cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
+		int depthlimit):
+	""" Traverse a derivation to ensure all 1-best RankedEdges are present
+	for every edge.
+	:returns: True when ``ej`` is a valid, complete derivation."""
 	cdef Entry entry
-	cdef list D = [[{} for _ in x] for x in chart]
-	cdef list cand = [[{} for _ in x] for x in chart]
-	cdef set explored = set()
-	lazykthbestcfg(goal.label, goal.start, goal.end, k, k, D, cand,
-			chart, explored)
-	return D
-
-
-cdef inline bint explorederivationcfg(RankedCFGEdge ej,
-		list D, list chart, set explored, int n):
-	""" Traverse a derivation to ensured RankedEdges are present in D
-	for every edge. """
-	cdef Entry entry
-	cdef RankedCFGEdge rankededge
-	cdef UInt label
-	if n > 100:
-		return False  # hardcoded limit to prevent cycles
-	elif ej.edge.rule is NULL:
+	if depthlimit <= 0:  # to prevent cycles
+		return False
+	if ej.edge.rule is NULL:
 		return True
-	label = ej.edge.rule.rhs1
-	if ej.left != -1 and label in chart[ej.start][ej.edge.mid]:
-		if label not in D[ej.start][ej.edge.mid]:
-			assert ej.left == 0, "non-best edge missing in derivations"
-			entry = (<Agenda>getcandidatescfg(chart, label, ej.start,
-					ej.edge.mid, 1)).popentry()
-			D[ej.start][ej.edge.mid][label] = [entry]
+	leftitem = chart.left(ej)
+	if ej.left != -1:
+		leftitem = chart.copy(leftitem)
+		if leftitem not in chart.rankededges:
+			assert ej.left == 0, '%d-best edge for %s of left item missing' % (
+						ej.left, chart.itemstr(v))
+			entry = (<Agenda>getcandidates(chart, leftitem, 1)).popentry()
+			chart.rankededges[leftitem] = [entry]
 			explored.add(entry.key)
-		if not explorederivationcfg(<RankedCFGEdge>
-				(<Entry>D[ej.start][ej.edge.mid][label][ej.left]).key,
-				D, chart, explored, n + 1):
+		if not explorederivation(leftitem,
+				<RankedEdge>(<Entry>chart.rankededges[leftitem][ej.left]).key,
+				chart, explored, depthlimit - 1):
 			return False
-	label = ej.edge.rule.rhs2
-	if ej.right != -1 and label in chart[ej.edge.mid][ej.end]:
-		if label not in D[ej.edge.mid][ej.end]:
-			assert ej.right == 0, "non-best edge missing in derivations"
-			entry = (<Agenda>getcandidatescfg(chart, label, ej.edge.mid,
-					ej.end, 1)).popentry()
-			explored.add(entry.key)
-			D[ej.edge.mid][ej.end][label] = [entry]
-		return explorederivationcfg(<RankedCFGEdge>
-				(<Entry>D[ej.edge.mid][ej.end][label][ej.right]).key,
-				D, chart, explored, n + 1)
-	return True
-
-
-cdef inline getderivationcfg(result, RankedCFGEdge ej, list  D,
-		list chart, list tolabel, bytes debin):
-	cdef Entry entry
-	cdef RankedCFGEdge rankededge
-	cdef UInt label
-	if debin is None or debin not in tolabel[ej.label]:
-		result += b'('
-		result += tolabel[ej.label]
-		result += b' '
-	if ej.edge.rule is NULL:  # this must be a terminal
-		result += str(ej.start).encode('ascii')
-	elif ej.left != -1:
-		label = ej.edge.rule.rhs1
-		rankededge = (<Entry>D[ej.start][ej.edge.mid][label][ej.left]).key
-		getderivationcfg(result, rankededge, D, chart, tolabel, debin)
-		if ej.right != -1:
-			result += b' '
-			label = ej.edge.rule.rhs2
-			rankededge = (<Entry>D[ej.edge.mid][ej.end][label][ej.right]).key
-			getderivationcfg(result, rankededge, D, chart, tolabel, debin)
-	if debin is None or debin not in tolabel[ej.label]:
-		result += b')'
-# --- end CFG specific
-
-cdef bint explorederivation(RankedEdge ej, dict D, dict chart, set explored,
-		int n):
-	""" Traverse a derivation to ensure RankedEdges are present
-	in D for every edge. """
-	cdef Entry entry
-	cdef RankedEdge rankededge
-	if n > 100:
-		return False  # hardcoded limit to prevent cycles
-	if ej.left != -1 and ej.edge.left in chart:
-		if ej.edge.left not in D:
-			assert ej.left == 0, "non-best edge missing in derivations"
-			entry = (<Agenda>getcandidates(chart, ej.edge.left, 1)).popentry()
-			D[ej.edge.left] = [entry]
-			explored.add(entry.key)
-		if not explorederivation(
-				<RankedEdge>(<Entry>D[ej.edge.left][ej.left]).key,
-				D, chart, explored, n + 1):
-			return False
-	if ej.right != -1 and ej.edge.right in chart:
-		if ej.edge.right not in D:
-			assert ej.right == 0, "non-best edge missing in derivations"
-			entry = (<Agenda>getcandidates(chart, ej.edge.right, 1)).popentry()
-			D[ej.edge.right] = [entry]
-			explored.add(entry.key)
-		return explorederivation(
-				<RankedEdge>(<Entry>D[ej.edge.right][ej.right]).key,
-				D, chart, explored, n + 1)
-	return True
-
-
-cdef inline getderivationlcfrs(result, RankedEdge ej, dict D,
-		dict chart, list tolabel, bytes debin):
-	cdef Entry entry
-	cdef RankedEdge rankededge
-	cdef ChartItem item
-	if debin is None or debin not in tolabel[ej.head.label]:
-		result += b'('
-		result += tolabel[ej.head.label]
-		result += b' '
-	item = ej.edge.left
-	if item not in chart:
-		# this must be a terminal
-		result += str(item.lexidx()).encode('ascii')
-	else:
-		rankededge = (<Entry>D[item][ej.left]).key
-		getderivationlcfrs(result, rankededge, D, chart, tolabel, debin)
+	rightitem = chart.right(ej)
 	if ej.right != -1:
-		item = ej.edge.right
+		rightitem = chart.copy(rightitem)
+		if rightitem not in chart.rankededges:
+			assert ej.right == 0, '%d-best edge for %s of right item missing' % (
+						ej.right, chart.itemstr(v))
+			entry = (<Agenda>getcandidates(chart, rightitem, 1)).popentry()
+			chart.rankededges[rightitem] = [entry]
+			explored.add(entry.key)
+		return explorederivation(rightitem,
+				<RankedEdge>(<Entry>chart.rankededges[rightitem][ej.right]).key,
+				chart, explored, depthlimit - 1)
+	return True
+
+
+cpdef inline getderivation(result, v, RankedEdge ej, Chart chart,
+		bytes debin):
+	"""
+	Translate the ``(e, j)`` notation ('derivation with backpointers') to an
+	actual tree string in bracket notation. ``e`` is an edge, ``j`` is a vector
+	prescribing the rank of the corresponding tail node. For example, given the
+	edge ``<S, [NP, VP]>`` and vector ``[2, 1]``, this points to the derivation
+	headed by S and having the 2nd best NP and the 1st best VP as children.
+
+	:param result: provide an empty ``bytearray()`` for the initial call
+	:param debin: perform on-the-fly debinarization, identify intermediate
+		nodes using the substring ``debin``. """
+	cdef RankedEdge rankededge
+	label = chart.label(v)
+	if debin is None or debin not in chart.grammar.tolabel[label]:
+		result += b'('
+		result += chart.grammar.tolabel[label]
 		result += b' '
-		if item in chart:
-			rankededge = (<Entry>D[item][ej.right]).key
-			getderivationlcfrs(result, rankededge, D, chart, tolabel, debin)
-		else:
-			result += str(item.lexidx()).encode('ascii')
-	if debin is None or debin not in tolabel[ej.head.label]:
+	if ej.edge.rule is NULL:  # lexical rule, left child is terminal
+		result += str(chart.lexidx(v, ej.edge)).encode('ascii')
+	else:
+		item = chart.left(ej)
+		rankededge = (<Entry>chart.rankededges[item][ej.left]).key
+		getderivation(result, item, rankededge, chart, debin)
+		if ej.right != -1:
+			item = chart.right(ej)
+			result += b' '
+			rankededge = (<Entry>chart.rankededges[item][ej.right]).key
+			getderivation(result, item, rankededge, chart, debin)
+	if debin is None or debin not in chart.grammar.tolabel[label]:
 		result += b')'
 
 
-def getderiv(ej, D, chart, list tolabel, bytes debin):
+def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
 	""" Translate the (e, j) notation to an actual tree string in
 	bracket notation.  e is an edge, j is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
@@ -378,131 +211,209 @@ def getderiv(ej, D, chart, list tolabel, bytes debin):
 	If `debin` is specified, will perform on-the-fly debinarization of nodes
 	with labels containing `debin` an a substring. """
 	result = bytearray()
-	if isinstance(ej, RankedEdge):
-		getderivationlcfrs(result, ej, D, chart, tolabel, debin)
-	elif isinstance(ej, RankedCFGEdge):
-		getderivationcfg(result, ej, D, chart, tolabel, debin)
+	getderivation(result, v, ej, chart, debin)
 	return str(result.decode('ascii'))
 
 
-cpdef tuple lazykbest(chart, ChartItem goal, int k, list tolabel=None,
-		bytes debin=None, bint derivs=True):
-	""" wrapper function to run lazykthbest and get the actual derivations,
-	(except when derivs is False) as well as the ranked chart.
+def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
+	""" Wrapper function to run lazykthbest and produce the ranked chart,
+	as well as derivations as strings (when ``derivs`` is True).
 	chart is a monotone hypergraph; should be acyclic unless probabilities
 	resolve the cycles (maybe nonzero weights for unary productions are
 	sufficient?).
-	maps ChartItems to lists of tuples with ChartItems and a weight. The
-	items in each list are to be ordered as they were added by the viterbi
-	parse, with the best item first.
-	goal is a ChartItem that is to be the root node of the derivations.
-	k is the number of derivations desired.
-	tolabel is a dictionary mapping numeric IDs to the original nonterminal
-	labels.  """
+
+	:param k: the number of derivations to enumerate.
+	:param debin: debinarize derivations. """
 	cdef Entry entry
 	cdef set explored = set()
+	#assert not chart.rankededges, 'kbest derivations already extracted?'
+	chart.rankededges = {}
 	derivations = []
-	if isinstance(goal, CFGChartItem):
-		D = [[{} for _ in x] for x in chart]
-		cand = [[{} for _ in x] for x in chart]
-		start = (<CFGChartItem>goal).start
-		end = (<CFGChartItem>goal).end
-		lazykthbestcfg(goal.label, start, end, k, k, D, cand, chart, explored)
-		D[start][end][goal.label] = [entry
-				for entry in D[start][end][goal.label][:k]
-				if explorederivationcfg(entry.key, D, chart, explored, 0)]
-		if derivs:
-			derivations = [(getderiv(
-					entry.key, D, chart, tolabel, debin), entry.value)
-					for entry in D[start][end][goal.label]]
-	else:
-		D = {}
-		cand = {}
-		lazykthbest(goal, k, k, D, cand, chart, explored)
-		D[goal] = [entry for entry in D[goal][:k]
-				if explorederivation(entry.key, D, chart, explored, 0)]
-		if derivs:
-			derivations = [(getderiv(
-					entry.key, D, chart, tolabel, debin), entry.value)
-					for entry in D[goal]]
-	return derivations, D, explored
+	cand = {}
+	root = chart.root()
+	lazykthbest(root, k, k, cand, chart, explored)
+	chart.rankededges[root] = [entry for entry
+			in chart.rankededges[root][:k]
+			if explorederivation(root, entry.key, chart, explored, 100)]
+	if derivs:
+		root = chart.root()
+		derivations = [(getderiv(root, entry.key, chart, debin), entry.value)
+				for entry in chart.rankededges[root]]
+	return derivations, explored
 
 
-cpdef main():
+def fi(n):
+	cdef FatChartItem x = CFGtoFatChartItem(0, 0, 1)  # dummy span
+	x.vec[0] = n
+	return x
+
+
+def test():
 	""" Simple demonstration. """
 	from math import log, exp
-	from pprint import pprint
-	cdef SmallChartItem v, ci
-	cdef LCFRSEdge ed
-	cdef RankedEdge re
-	cdef Entry entry
-	cdef Rule rules[11]
-	tolabel = b"Epsilon S NP V ADV VP VP2 PN".split()
-	toid = {a: n for n, a in enumerate(tolabel)}
-	NONE = (b"Epsilon", 0)			# sentinel node
-	chart = {
-			(b"S", 0b111): [
-				((0.7 * 0.9 * 0.5), 0.7,
-						(b"NP", 0b100), (b"VP2", 0b011)),
-				((0.4 * 0.9 * 0.5), 0.4,
-						(b"NP", 0b100), (b"VP", 0b011))],
-			(b"VP", 0b011): [
-				(0.5, 0.5, (b"V", 0b010), (b"ADV", 0b001)),
-				(0.4, 0.4, ("walks", 1), (b"ADV", 0b001))],
-			(b"VP2", 0b011): [
-				(0.5, 0.5, (b"V", 0b010), (b"ADV", 0b001)),
-				(0.4, 0.4, ("walks", 1), (b"ADV", 0b001))],
-			(b"NP", 0b100): [(0.5, 0.5, ("Mary", 0), NONE),
-							(0.9, 0.9, (b"PN", 0b100), NONE)],
-			(b"PN", 0b100): [(1.0, 1.0, ("Mary", 0), NONE),
-							(0.9, 0.9, (b"NP", 0b100), NONE)],
-			(b"V", 0b010): [(1.0, 1.0, ("walks", 1), NONE)],
-			(b"ADV", 0b001): [(1.0, 1.0, ("quickly", 2), NONE)]
-		}
-	# a hack to make Rule structs with the right probabilities.
-	# rules[7] will be a Rule with probability 0.7
-	for a in range(1, 11):
-		rules[a].prob = -log(a / 10.0)
-	for a in list(chart):
-		chart[SmallChartItem(toid[a[0]], a[1])] = {x: x
-			for x in [new_LCFRSEdge(-log(c), -log(c), &(rules[int(d * 10)]),
-			SmallChartItem(toid.get(e, 0), f),
-			SmallChartItem(toid.get(g, 0), h))
-			for c, d, (e, f), (g, h) in chart.pop(a)]}
-	assert SmallChartItem(toid[b"NP"], 0b100) == SmallChartItem(
-			toid[b"NP"], 0b100)
-	cand = {}
-	D = {}
+	cdef DenseCFGChart dcchart
+	cdef SparseCFGChart scchart
+	cdef SmallLCFRSChart slchart
+	cdef FatLCFRSChart flchart
+	cdef Grammar gr
 	k = 10
-	goal = SmallChartItem(toid[b"S"], 0b111)
-	for v, b in lazykthbest(goal, k, k, D, cand, chart, set()).items():
-		print(tolabel[v.label].decode('ascii'), bin(v.vec)[2:])
-		for entry in b:
-			re = entry.key
-			ed = re.edge
-			j = (re.left, )
-			if re.right != -1:
-				j += (re.right, )
-			ip = entry.value
-			print(tolabel[v.label].decode('ascii'), ":",
-				' '.join([tolabel[ci.label].decode('ascii') for ci, _
-				in zip((ed.left, ed.right), j)]),
-				exp(-ed.rule.prob), j, exp(-ip))
-		print()
-	print("tolabel", end='')
-	pprint(tolabel)
-	print("candidates", end='')
-	for a in cand:
-		print(a, len(cand[a]), end='')
-		pprint(list(cand[a].items()))
+	gr = Grammar([
+			((('NP', 'NP', 'PP'), ((0, 1), )), 0.4),
+			((('PP', 'P', 'NP'), ((0, 1), )), 1),
+			((('S', 'NP', 'VP'), ((0, 1), )), 1),
+			((('VP', 'V', 'NP'), ((0, 1), )), 0.7),
+			((('VP', 'VP', 'PP'), ((0, 1), )), 0.3),
+			((('NP', 'Epsilon'), ('astronomers', )), 0.1),
+			((('NP', 'Epsilon'), ('ears', )), 0.18),
+			((('V', 'Epsilon'), ('saw', )), 1),
+			((('NP', 'Epsilon'), ('saw', )), 0.04),
+			((('NP', 'Epsilon'), ('stars', )), 0.18),
+			((('NP', 'Epsilon'), ('telescopes', )), 0.1),
+			((('P', 'Epsilon'), ('with', )), 1)], start='S')
+	sent = "astronomers saw stars with telescopes".split()
 
-	print("\n%d derivations" % (len(D[goal])))
-	derivations = lazykbest(chart, goal, k, tolabel)[0]
+	print('\ndense pcfg chart')
+	dcchart = DenseCFGChart(gr, sent)
+	dcchart.addedge(3, 0, 3, 1, &(gr.bylhs[0][2]))
+	dcchart.addedge(3, 0, 5, 1, &(gr.bylhs[0][2]))
+	dcchart.addedge(4, 1, 3, 2, &(gr.bylhs[0][3]))
+	dcchart.addedge(4, 1, 5, 2, &(gr.bylhs[0][3]))
+	dcchart.addedge(4, 1, 5, 3, &(gr.bylhs[0][4]))
+	dcchart.addedge(1, 2, 5, 3, &(gr.bylhs[0][0]))
+	dcchart.addedge(2, 3, 5, 4, &(gr.bylhs[0][1]))
+	dcchart.addedge(1, 0, 1, 1, NULL)
+	dcchart.addedge(1, 1, 2, 2, NULL)
+	dcchart.addedge(5, 1, 2, 2, NULL)
+	dcchart.addedge(1, 2, 3, 3, NULL)
+	dcchart.addedge(6, 3, 4, 4, NULL)
+	dcchart.addedge(1, 4, 5, 5, NULL)
+	dcchart.updateprob(3, 0, 3, -log(0.0126000))
+	dcchart.updateprob(3, 0, 5, -log(0.0005040))
+	dcchart.updateprob(4, 1, 3, -log(0.1260000))
+	dcchart.updateprob(4, 1, 5, -log(0.0050400))
+	dcchart.updateprob(4, 1, 5, -log(0.0037800))
+	dcchart.updateprob(1, 2, 5, -log(0.0072000))
+	dcchart.updateprob(2, 3, 5, -log(0.1000000))
+	dcchart.updateprob(1, 0, 1, -log(0.1))   # 'astronomers'
+	dcchart.updateprob(1, 1, 2, -log(0.04))  # NP => 'saw'
+	dcchart.updateprob(5, 1, 2, -log(1))     # V => 'saw'
+	dcchart.updateprob(1, 2, 3, -log(0.18))  # 'stars'
+	dcchart.updateprob(6, 3, 4, -log(1))     # 'with'
+	dcchart.updateprob(1, 4, 5, -log(0.1))   # 'telescopes'
+	derivations = lazykbest(dcchart, k)[0]
+	print(dcchart)
 	for a, p in derivations:
-		print(exp(-p), a)
-	assert len(D[goal]) == len(set(D[goal]))
-	assert len(derivations) == len(set(derivations))
-	assert len(set(derivations)) == len(dict(derivations))
+		print('%f %s' % (exp(-p), a))
 
-if __name__ == '__main__':
-	main()
+	print('\nsparse pcfg chart')
+	scchart = SparseCFGChart(gr, sent)
+	scchart.addedge(3, 0, 3, 1, &(gr.bylhs[0][2]))
+	scchart.addedge(3, 0, 5, 1, &(gr.bylhs[0][2]))
+	scchart.addedge(4, 1, 3, 2, &(gr.bylhs[0][3]))
+	scchart.addedge(4, 1, 5, 2, &(gr.bylhs[0][3]))
+	scchart.addedge(4, 1, 5, 3, &(gr.bylhs[0][4]))
+	scchart.addedge(1, 2, 5, 3, &(gr.bylhs[0][0]))
+	scchart.addedge(2, 3, 5, 4, &(gr.bylhs[0][1]))
+	scchart.addedge(1, 0, 1, 1, NULL)
+	scchart.addedge(1, 1, 2, 2, NULL)
+	scchart.addedge(5, 1, 2, 2, NULL)
+	scchart.addedge(1, 2, 3, 3, NULL)
+	scchart.addedge(6, 3, 4, 4, NULL)
+	scchart.addedge(1, 4, 5, 5, NULL)
+	scchart.updateprob(3, 0, 3, -log(0.0126000))
+	scchart.updateprob(3, 0, 5, -log(0.0005040))
+	scchart.updateprob(4, 1, 3, -log(0.1260000))
+	scchart.updateprob(4, 1, 5, -log(0.0050400))
+	scchart.updateprob(4, 1, 5, -log(0.0037800))
+	scchart.updateprob(1, 2, 5, -log(0.0072000))
+	scchart.updateprob(2, 3, 5, -log(0.1000000))
+	scchart.updateprob(1, 0, 1, -log(0.1))   # 'astronomers'
+	scchart.updateprob(1, 1, 2, -log(0.04))  # NP => 'saw'
+	scchart.updateprob(5, 1, 2, -log(1))     # V => 'saw'
+	scchart.updateprob(1, 2, 3, -log(0.18))  # 'stars'
+	scchart.updateprob(6, 3, 4, -log(1))     # 'with'
+	scchart.updateprob(1, 4, 5, -log(0.1))   # 'telescopes'
+	derivations = lazykbest(scchart, k)[0]
+	#print(scchart)
+	for a, p in derivations:
+		print('%f %s' % (exp(-p), a))
+
+	print('\nsmall lcfrs chart')
+	slchart = SmallLCFRSChart(gr, sent)
+	slchart.addedge(CFGtoSmallChartItem(3, 0, 3), CFGtoSmallChartItem(0, 0, 1),
+			&(gr.bylhs[0][2]))
+	slchart.addedge(CFGtoSmallChartItem(3, 0, 5), CFGtoSmallChartItem(0, 0, 1),
+			&(gr.bylhs[0][2]))
+	slchart.addedge(CFGtoSmallChartItem(4, 1, 3), CFGtoSmallChartItem(0, 1, 2),
+			&(gr.bylhs[0][3]))
+	slchart.addedge(CFGtoSmallChartItem(4, 1, 5), CFGtoSmallChartItem(0, 1, 2),
+			&(gr.bylhs[0][3]))
+	slchart.addedge(CFGtoSmallChartItem(4, 1, 5), CFGtoSmallChartItem(0, 1, 3),
+			&(gr.bylhs[0][4]))
+	slchart.addedge(CFGtoSmallChartItem(1, 2, 5), CFGtoSmallChartItem(0, 2, 3),
+			&(gr.bylhs[0][0]))
+	slchart.addedge(CFGtoSmallChartItem(2, 3, 5), CFGtoSmallChartItem(0, 3, 4),
+			&(gr.bylhs[0][1]))
+	slchart.addedge(CFGtoSmallChartItem(1, 0, 1), SmallChartItem(0, 0), NULL)
+	slchart.addedge(CFGtoSmallChartItem(1, 1, 2), SmallChartItem(0, 1), NULL)
+	slchart.addedge(CFGtoSmallChartItem(5, 1, 2), SmallChartItem(0, 1), NULL)
+	slchart.addedge(CFGtoSmallChartItem(1, 2, 3), SmallChartItem(0, 2), NULL)
+	slchart.addedge(CFGtoSmallChartItem(6, 3, 4), SmallChartItem(0, 3), NULL)
+	slchart.addedge(CFGtoSmallChartItem(1, 4, 5), SmallChartItem(0, 4), NULL)
+	slchart.updateprob(CFGtoSmallChartItem(3, 0, 3), -log(0.0126000))
+	slchart.updateprob(CFGtoSmallChartItem(3, 0, 5), -log(0.0005040))
+	slchart.updateprob(CFGtoSmallChartItem(4, 1, 3), -log(0.1260000))
+	slchart.updateprob(CFGtoSmallChartItem(4, 1, 5), -log(0.0050400))
+	slchart.updateprob(CFGtoSmallChartItem(4, 1, 5), -log(0.0037800))
+	slchart.updateprob(CFGtoSmallChartItem(1, 2, 5), -log(0.0072000))
+	slchart.updateprob(CFGtoSmallChartItem(2, 3, 5), -log(0.1000000))
+	slchart.updateprob(CFGtoSmallChartItem(1, 0, 1), -log(0.1))   # 'astronomers'
+	slchart.updateprob(CFGtoSmallChartItem(1, 1, 2), -log(0.04))  # NP => 'saw'
+	slchart.updateprob(CFGtoSmallChartItem(5, 1, 2), -log(1))     # V => 'saw'
+	slchart.updateprob(CFGtoSmallChartItem(1, 2, 3), -log(0.18))  # 'stars'
+	slchart.updateprob(CFGtoSmallChartItem(6, 3, 4), -log(1))     # 'with'
+	slchart.updateprob(CFGtoSmallChartItem(1, 4, 5), -log(0.1))   # 'telescopes'
+	derivations = lazykbest(slchart, k)[0]
+	#print(slchart)
+	for a, p in derivations:
+		print('%f %s' % (exp(-p), a))
+
+	print('\nfat lcfrs chart')
+	# this hack is needed because fatchart keeps pointers to spans of items,
+	# so garbage collection needs to be prevented.
+	items = {a: CFGtoFatChartItem(0, a[0], a[1]) for a in
+			((1, 2), (0, 1), (3, 4), (2, 3), (1, 2), (1, 3), (0, 1))}
+	flchart = FatLCFRSChart(gr, sent)
+	flchart.addedge(CFGtoFatChartItem(3, 0, 3), items[0, 1], &(gr.bylhs[0][2]))
+	flchart.addedge(CFGtoFatChartItem(3, 0, 5), items[0, 1], &(gr.bylhs[0][2]))
+	flchart.addedge(CFGtoFatChartItem(4, 1, 3), items[1, 2], &(gr.bylhs[0][3]))
+	flchart.addedge(CFGtoFatChartItem(4, 1, 5), items[1, 2], &(gr.bylhs[0][3]))
+	flchart.addedge(CFGtoFatChartItem(4, 1, 5), items[1, 3], &(gr.bylhs[0][4]))
+	flchart.addedge(CFGtoFatChartItem(1, 2, 5), items[2, 3], &(gr.bylhs[0][0]))
+	flchart.addedge(CFGtoFatChartItem(2, 3, 5), items[3, 4], &(gr.bylhs[0][1]))
+	flchart.addedge(CFGtoFatChartItem(1, 0, 1), fi(0), NULL)
+	flchart.addedge(CFGtoFatChartItem(1, 1, 2), fi(1), NULL)
+	flchart.addedge(CFGtoFatChartItem(5, 1, 2), fi(1), NULL)
+	flchart.addedge(CFGtoFatChartItem(1, 2, 3), fi(2), NULL)
+	flchart.addedge(CFGtoFatChartItem(6, 3, 4), fi(3), NULL)
+	flchart.addedge(CFGtoFatChartItem(1, 4, 5), fi(4), NULL)
+	flchart.updateprob(CFGtoFatChartItem(3, 0, 3), -log(0.0126000))
+	flchart.updateprob(CFGtoFatChartItem(3, 0, 5), -log(0.0005040))
+	flchart.updateprob(CFGtoFatChartItem(4, 1, 3), -log(0.1260000))
+	flchart.updateprob(CFGtoFatChartItem(4, 1, 5), -log(0.0050400))
+	flchart.updateprob(CFGtoFatChartItem(4, 1, 5), -log(0.0037800))
+	flchart.updateprob(CFGtoFatChartItem(1, 2, 5), -log(0.0072000))
+	flchart.updateprob(CFGtoFatChartItem(2, 3, 5), -log(0.1000000))
+	flchart.updateprob(CFGtoFatChartItem(1, 0, 1), -log(0.1))   # 'astronomers'
+	flchart.updateprob(CFGtoFatChartItem(1, 1, 2), -log(0.04))  # NP => 'saw'
+	flchart.updateprob(CFGtoFatChartItem(5, 1, 2), -log(1))     # V => 'saw'
+	flchart.updateprob(CFGtoFatChartItem(1, 2, 3), -log(0.18))  # 'stars'
+	flchart.updateprob(CFGtoFatChartItem(6, 3, 4), -log(1))     # 'with'
+	flchart.updateprob(CFGtoFatChartItem(1, 4, 5), -log(0.1))   # 'telescopes'
+	derivations = lazykbest(flchart, k)[0]
+	#print(lchart)
+	for a, p in derivations:
+		print('%f %s' % (exp(-p), a))
+	assert (len(flchart.rankededges[flchart.root()])
+			== len(set(flchart.rankededges[flchart.root()])))
+	assert len(derivations) == len(set(derivations))

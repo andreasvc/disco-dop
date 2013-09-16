@@ -5,17 +5,17 @@ http://docs.python.org/library/heapq.html
 
 There is a version specialized to be used as agenda with edges. """
 
-from __future__ import print_function
 from operator import itemgetter
+include "constants.pxi"
 
 DEF INVALID = 0
-DEF HEAP_ARITY = 4
-# 2 for binary heap, 4 for quadtree heap
 
+cdef class Entry:
+	def getkey(self):
+		return self.key
 
-def getkey(Entry entry):
-	""" Get key of entry for non-Cython code. """
-	return entry.key
+	def getvalue(self):
+		return self.value
 
 
 cdef inline bint cmpfun(Entry a, Entry b):
@@ -23,14 +23,15 @@ cdef inline bint cmpfun(Entry a, Entry b):
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))
 
 
-cdef inline bint edgecmpfun(Entry a, Entry b):
-	""" Comparison function for Entry objects containing Edges. This is
-	_significantly_ faster than going through __richcmp__ of objects. """
-	return ((<LCFRSEdge>a.value).score < (<LCFRSEdge>b.value).score
-		or ((<LCFRSEdge>a.value).score == (<LCFRSEdge>b.value).score
+cdef inline bint doublecmpfun(Entry a, Entry b):
+	""" Comparison function for Entry objects containing C doubles.
+	Faster than going through __richcmp__ of Python object. """
+	return (PyFloat_AS_DOUBLE(a.value) < PyFloat_AS_DOUBLE(b.value)
+		or (PyFloat_AS_DOUBLE(a.value) == PyFloat_AS_DOUBLE(b.value)
 		and a.count < b.count))
 
 
+@cython.final
 cdef class Agenda:
 	"""
 	Priority Queue based on binary heap which implements decrease-key and
@@ -59,7 +60,7 @@ cdef class Agenda:
 			self.length = len(self.mapping)
 			heapify(self.heap, cmpfun)
 
-	cdef setitem(self, key, value):
+	cdef void setitem(self, key, value):
 		""" Like agenda[key] = value, but bypass Python API. """
 		cdef Entry oldentry, entry
 		if key in self.mapping:
@@ -81,7 +82,7 @@ cdef class Agenda:
 			self.mapping[key] = entry
 			heappush(self.heap, entry, cmpfun)
 
-	cdef setifbetter(self, key, value):
+	cdef void setifbetter(self, key, value):
 		""" Sets an item, but only if item is new or has lower score.
 		Equivalent to:
 		if if key not in agenda or val < agenda[key]:
@@ -225,7 +226,9 @@ cdef class Agenda:
 		""" :returns: (key, value) pairs in agenda. """
 		return zip(self.keys(), self.values())
 
-cdef class EdgeAgenda:
+
+@cython.final
+cdef class DoubleAgenda:
 	"""
 	Priority Queue based on binary heap which implements decrease-key and
 	remove by marking entries as invalid. Provides dictionary-like interface.
@@ -233,7 +236,8 @@ cdef class EdgeAgenda:
 	Can be initialized with an iterable; order of equivalent values
 	remains and the best priorities are retained on duplicate keys.
 
-	This version is specialized to be used as agenda with edges. """
+	This version is specialized to be used as agenda with C doubles as
+	priorities (values); keys are hashable Python objects. """
 	def __init__(self, iterable=None):
 		cdef Entry entry, oldentry
 		self.counter = 1
@@ -245,7 +249,7 @@ cdef class EdgeAgenda:
 				entry = new_Entry(k, v, self.counter)
 				if k in self.mapping:
 					oldentry = <Entry>self.mapping[k]
-					if edgecmpfun(entry, oldentry):
+					if doublecmpfun(entry, oldentry):
 						oldentry.count = INVALID
 						self.mapping[k] = entry
 				else:
@@ -253,24 +257,24 @@ cdef class EdgeAgenda:
 					self.counter += 1
 				self.heap.append(entry)
 			self.length = len(self.mapping)
-			heapify(self.heap, edgecmpfun)
+			heapify(self.heap, doublecmpfun)
 
-	cdef LCFRSEdge getitem(self, key):
+	cdef double getitem(self, key):
 		""" Like agenda[key], but bypass Python API. """
 		cdef Entry entry
 		entry = <Entry>self.mapping[key]
-		return <LCFRSEdge>entry.value
+		return PyFloat_AS_DOUBLE(entry.value)
 
-	cdef setifbetter(self, key, value):
+	cdef inline void setifbetter(self, key, double value):
 		""" sets an item, but only if item is new or has lower score """
 		cdef Entry oldentry
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
-			if (<LCFRSEdge>value).score >= (<LCFRSEdge>oldentry.value).score:
+			if value >= PyFloat_AS_DOUBLE(oldentry.value):
 				return
-		self.setitem(key, <LCFRSEdge>value)
+		self.setitem(key, value)
 
-	cdef LCFRSEdge replace(self, key, value):
+	cdef double replace(self, key, double value):
 		""" return current value for key, and also change its value.
 		equivalent to vv = d[k]; d[k] = v; return vv """
 		cdef Entry entry, oldentry = <Entry>self.mapping[key]
@@ -280,17 +284,17 @@ cdef class EdgeAgenda:
 		entry.count = oldentry.count
 		self.mapping[key] = entry
 		self.heap.append(entry)
-		siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
+		siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
 		oldentry.count = INVALID
-		return <LCFRSEdge>oldentry.value
+		return PyFloat_AS_DOUBLE(oldentry.value)
 
-	# the following are identical except for `edgecmpfun`
+	# the following are identical except for `doublecmpfun`
 	cdef Entry popentry(self):
 		""" like popitem, but avoids tuple construction by returning an Entry
 		object """
-		cdef Entry entry = <Entry>heappop(self.heap, edgecmpfun)
+		cdef Entry entry = <Entry>heappop(self.heap, doublecmpfun)
 		while not entry.count:
-			entry = <Entry>heappop(self.heap, edgecmpfun)
+			entry = <Entry>heappop(self.heap, doublecmpfun)
 		del self.mapping[entry.key]
 		self.length -= 1
 		return entry
@@ -308,12 +312,12 @@ cdef class EdgeAgenda:
 			#replace first element with last element
 			self.heap[0] = self.heap.pop()
 			#and restore heap invariant
-			siftdown(self.heap, 0, edgecmpfun)
+			siftdown(self.heap, 0, doublecmpfun)
 			n -= 1
 			entry = <Entry>(self.heap[0])
 		return entry
 
-	cdef setitem(self, key, value):
+	cdef inline void setitem(self, key, double value):
 		""" Like agenda[key] = value, but bypass Python API. """
 		cdef Entry oldentry, entry
 		if key in self.mapping:
@@ -324,7 +328,7 @@ cdef class EdgeAgenda:
 			entry.count = oldentry.count
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
+			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
 			oldentry.count = INVALID
 		else:
 			self.counter += 1
@@ -335,7 +339,7 @@ cdef class EdgeAgenda:
 			entry.count = self.counter
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, edgecmpfun)
+			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
 
 	# identical to Agenda() methods
 	cdef bint contains(self, key):
@@ -415,37 +419,41 @@ cdef class EdgeAgenda:
 		return zip(self.keys(), self.values())
 
 
-#a more efficient nsmallest implementation. Assumes items are Edge objects.
-cdef list nsmallest(int n, object iterable):
-	""" return an _unsorted_ list of the n best items in a list """
+def f(x):
+	return x
+
+
+#A quicksort nsmallest implementation.
+cdef list nsmallest(int n, object iterable, key=f):
+	""" Return an _unsorted_ list of the n smallest items in a list. """
 	cdef list items = list(iterable)
 	if len(items) > 1:
-		quickfindfirstk(items, 0, len(items) - 1, n)
+		quickfindfirstk(items, 0, len(items) - 1, n, key)
 	return items[:n]
 
 
-cdef inline void quickfindfirstk(list items, int left, int right, int k):
+cdef inline void quickfindfirstk(list items, int left, int right, int k, key):
 	""" quicksort k-best selection """
 	# select pivot index between left and right
 	# middle between left & right
 	cdef int pivot = left + (right - left) // 2
-	cdef int pivotnewindex = partition(items, left, right, pivot)
+	cdef int pivotnewindex = partition(items, left, right, pivot, key)
 	if pivotnewindex > k:
 		if pivotnewindex - 1 > left:
 			# new condition
-			quickfindfirstk(items, left, pivotnewindex - 1, k)
+			quickfindfirstk(items, left, pivotnewindex - 1, k, key)
 	elif pivotnewindex < k:
 		if right > pivotnewindex + 1:
-			quickfindfirstk(items, pivotnewindex + 1, right, k)
+			quickfindfirstk(items, pivotnewindex + 1, right, k, key)
 
 
-cdef inline int partition(list items, int left, int right, int pivot):
-	cdef Edge pivotvalue = <Edge>(items[pivot])
+cdef inline int partition(list items, int left, int right, int pivot, key):
+	pivotvalue = key(items[pivot])
 	# Move pivot to end
 	items[pivot], items[right] = items[right], items[pivot]
 	cdef int i, storeindex = left
 	for i in range(left, right):
-		if (<Edge>items[i]).inside < pivotvalue.inside:
+		if key(items[i]) < pivotvalue:
 			items[i], items[storeindex] = items[storeindex], items[i]
 			storeindex += 1
 	# Move pivot to its final place
@@ -546,7 +554,7 @@ class TestHeap(TestCase):
 
 	def make_data(self):
 		from random import random
-		pairs = [(random(), random()) for i in range(testN)]
+		pairs = [(random(), random()) for _ in range(testN)]
 		h = Agenda()
 		d = {}
 		for k, v in pairs:
@@ -559,11 +567,11 @@ class TestHeap(TestCase):
 	def test_contains(self):
 		h, pairs, d = self.make_data()
 		h, pairs2, d = self.make_data()
-		for k, v in pairs + pairs2:
+		for k, _ in pairs + pairs2:
 			self.assertEqual(k in h, k in d)
 
 	def test_len(self):
-		h, pairs, d = self.make_data()
+		h, _, d = self.make_data()
 		self.assertEqual(len(h), len(d))
 
 	def test_popitem(self):
@@ -582,7 +590,7 @@ class TestHeap(TestCase):
 		for i in range(testN):
 			h[i] = 0.
 		for i in range(testN):
-			k, v = h.popitem()
+			_, v = h.popitem()
 			self.assertEqual(v, 0.)
 			self.check_invariants(h)
 
@@ -597,7 +605,7 @@ class TestHeap(TestCase):
 			self.check_invariants(h)
 
 	def test_peek(self):
-		h, pairs, d = self.make_data()
+		h, pairs, _ = self.make_data()
 		while pairs:
 			v = h.peekitem()[0]
 			h.popitem()
@@ -606,27 +614,29 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_iter(self):
-		h, pairs, d = self.make_data()
+		h, _, d = self.make_data()
 		self.assertEqual(list(h), list(d))
 
 	def test_keys(self):
-		h, pairs, d = self.make_data()
+		h, _, d = self.make_data()
 		self.assertEqual(sorted(h.keys()), sorted(d.keys()))
 
 	def test_values(self):
-		h, pairs, d = self.make_data()
+		h, _, d = self.make_data()
 		self.assertEqual(sorted(h.values()), sorted(d.values()))
 
 	def test_items(self):
-		h, pairs, d = self.make_data()
+		h, _, d = self.make_data()
 		self.assertEqual(sorted(h.items()), sorted(d.items()))
 
 	def test_del(self):
 		h, pairs, d = self.make_data()
 		while pairs:
-			k, v = pairs.pop(len(pairs) // 2)
+			k, _ = pairs.pop(len(pairs) // 2)
 			del h[k]
 			del d[k]
+			self.assertEqual(k in h, False)
+			self.assertEqual(k in d, False)
 			self.assertEqual(len(h), len(d))
 			self.assertEqual(set(h.items()), set(d.items()))
 		self.assertEqual(len(h), 0)
@@ -644,7 +654,7 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_change(self):
-		h, pairs, d = self.make_data()
+		h, pairs, _ = self.make_data()
 		k, v = pairs[testN // 2]
 		h[k] = 0.5
 		pairs[testN // 2] = (k, 0.5)
@@ -675,7 +685,7 @@ class TestHeap(TestCase):
 		self.assertEqual(d, eval(dstr))
 
 
-def test(verbose=False):
+def testagenda(verbose=False):
 	import sys
 	if sys.version[0] >= '3':
 		import test.support as test_support  # Python 3

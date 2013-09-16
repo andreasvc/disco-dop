@@ -1,6 +1,6 @@
 #!/bin/sh
 RESULT=0
-for a in pcfg dopred 2dop
+for a in pcfg dopred 2dop longsent
 do
 	rm -rf $a
 	out=`discodop runexp $a.prm 2>&1 | grep -v 'pcfg \|post \|ex 100.0' | grep 'ex \|Error'`

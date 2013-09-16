@@ -1,7 +1,7 @@
 """ Classes for representing hierarchical language structures, such as syntax
 trees and morphological trees. This is an adaptation of the original tree.py
-file from NLTK. Probabilistic trees have been removed, as well as the
-possibility to read off CFG productions. """
+file from NLTK. Removed: probabilistic trees, binarization, tree drawing,
+reading off CFG productions, &c. """
 # Original notice:
 # Natural Language Toolkit: Text Trees
 #
@@ -11,7 +11,6 @@ possibility to read off CFG productions. """
 #         Nathan Bodenstab <bodenstab@cslu.ogi.edu> (tree transforms)
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
-
 from __future__ import division, print_function, unicode_literals
 import re
 import sys
@@ -162,11 +161,6 @@ class Tree(list):
 				leaves.append(child)
 		return leaves
 
-	def flatten(self):
-		""" :returns: a tree consisting of this tree's root connected \
-		directly to its leaves, omitting all internal nodes. """
-		return Tree(self.label, self.leaves())
-
 	def height(self):
 		"""	:returns: The height of this tree. The height of a tree \
 		containing no children is 1; the height of a tree containing only \
@@ -179,10 +173,6 @@ class Tree(list):
 			else:
 				max_child_height = max(max_child_height, 1)
 		return 1 + max_child_height
-
-	def depth(self):
-		""" The depth of a tree is its height - 1. """
-		return self.height() - 1
 
 	def treepositions(self, order='preorder'):
 		""" :param order: One of preorder, postorder, bothorder, leaves. """
@@ -996,3 +986,7 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 			stop = len(seq)
 	start = min(start, stop)
 	return start, stop
+
+
+def test():
+	""" Not implemented. """

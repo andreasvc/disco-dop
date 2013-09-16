@@ -1,0 +1,47 @@
+stages=[  # Double-DOP
+  # test sentences >32 and >64 words
+  dict(
+    name='pcfg', mode='pcfg',
+    split=True, markorigin=True,
+  ),
+  dict(
+    name='plcfrs', mode='plcfrs',
+    prune=True, splitprune=True,
+    k=10000,
+  ),
+  dict(
+    name='dop', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=True,
+    k=50, m=10000,
+    kbest=True, sample=False,
+    estimator="dop1", objective="mpp",
+  ),
+],
+
+# corpus options
+corpusfmt="discbracket",  # choices: export, bracket, discbracket
+corpusdir=".",
+traincorpus="longsent.dbr",
+testcorpus="longsent.dbr",
+evalparam=None,  # EVALB-style parameter file
+punct=None,
+functions=None,
+morphology=None,
+transformations=None,
+relationalrealizational=None,
+postagging=None,
+testmaxwords=100,
+trainmaxwords=100,
+trainnumsents=6,
+testnumsents=2,
+skiptrain=True,
+skip=0,
+headrules=None,
+
+bintype="binarize",
+factor="right",
+h=1,
+v=1,
+quiet=False, reallyquiet=False,
+numproc=1,

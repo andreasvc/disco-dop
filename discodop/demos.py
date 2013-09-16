@@ -4,7 +4,7 @@ from math import exp
 from discodop import treetransforms, plcfrs, kbest
 from discodop.tree import Tree
 from discodop.grammar import treebankgrammar
-from discodop._grammar import Grammar
+from discodop.containers import Grammar
 
 
 def tree_adjoining_grammar():
@@ -207,13 +207,13 @@ def bitext():
 
 def parse(compiledgrammar, testsent, testtags=None):
 	""" Parse a sentence with a grammar. """
-	chart, start, _ = plcfrs.parse(testsent,
+	chart, _ = plcfrs.parse(testsent,
 		compiledgrammar, tags=testtags, exhaustive=True)
 	print("input:", ' '.join("%d:%s" % a
 			for a in enumerate(testtags if testtags else testsent)), end=' ')
-	if start:
+	if chart:
 		print()
-		results = kbest.lazykbest(chart, start, 10, compiledgrammar.tolabel)[0]
+		results = kbest.lazykbest(chart, 10)[0]
 		for tree, prob in results:
 			tree = Tree(tree)
 			treetransforms.unbinarize(tree)
@@ -222,11 +222,11 @@ def parse(compiledgrammar, testsent, testtags=None):
 		return True
 	else:
 		print("no parse!\n")
-		#parser.pprint_chart(chart, testsent, compiledgrammar.tolabel)
+		#print(chart)
 		return False
 
 
-def main():
+def test():
 	""" Run all examples. """
 	bitext()
 	dependencygrammar()
@@ -234,4 +234,4 @@ def main():
 	bitext()
 
 if __name__ == '__main__':
-	main()
+	test()

@@ -79,8 +79,9 @@ def getunknownwordmodel(tagged_sents, unknownword,
 				sigs[sig] += 1
 	msg = "known words: %d, signature types seen: %d\n" % (
 			len(lexicon), len(sigs))
-	msg += "open class tags: {%s}" % ", ".join(
+	msg += "open class tags: {%s}\n" % ", ".join(
 			"%s:%d" % a for a in openclasstags.items())
+	msg += "closed class tags: {%s}" % ", ".join(a for a in closedclasstags)
 	return (sigs, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags,
 			wordsig, sigtag), msg
@@ -392,8 +393,8 @@ def unknownwordftb(word, loc, _):
 	return sig
 
 
-def main():
+def test():
 	""" Not implemented. """
 
 if __name__ == '__main__':
-	main()
+	test()

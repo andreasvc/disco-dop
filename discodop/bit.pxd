@@ -1,13 +1,21 @@
-from discodop._grammar cimport ULLong, ULong, UInt, UChar
+from discodop.containers cimport ULLong, ULong, UInt, UShort, UChar
 from libc.string cimport memcpy
 
+# See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
 cdef extern:
-	int __builtin_ffsll (ULLong)
-	int __builtin_ctzll (ULLong)
-	int __builtin_clzll (ULLong)
-	int __builtin_ctzl (ULong)
-	int __builtin_popcountl (ULong)
-	int __builtin_popcountll (ULLong)
+	int __builtin_ffsll(ULLong)
+	int __builtin_ctzll(ULLong)
+	int __builtin_clzll(ULLong)
+	int __builtin_ctzl(ULong)
+	int __builtin_popcountl(ULong)
+	int __builtin_popcountll(ULLong)
+
+# ctz equivalents:
+# - visual studio 2005:
+#   unsigned long _BitScanForward(&result, unsigned __int64 val)
+# - llvm: llvm.ctlz(i64 val, 1)
+# - POSIX (no 64 bit): ffs(int val)
+# Cf. http://en.wikipedia.org/wiki/Find_first_set
 
 cdef extern from "macros.h":
 	int BITSIZE
@@ -16,25 +24,29 @@ cdef extern from "macros.h":
 	ULong TESTBIT(ULong a[], int b)
 	void CLEARBIT(ULong a[], int b)
 
+
+ctypedef fused unsigned_fused:
+	UChar
+	UShort
+	UInt
+	ULong
+	ULLong
+
+
 # cpdef functions defined in bit.pyx
 #on python integers
 cpdef int fanout(arg)
 cpdef int pyintnextset(a, int pos)
-
-#on ULLongs
+#on C integers
 cpdef int bitcount(ULLong vec)
-cpdef bint bitminmax(ULLong a, ULLong b)
-cpdef bint testbitc(UChar arg, UInt pos)
-cpdef bint testbitshort(unsigned short arg, UInt pos)
 
 # cdef inline functions defined here:
+#on C integers
+#cdef inline bint testbit(unsigned_fused vec, UInt pos)
 #on ULLongs
-#cdef inline bint testbit(ULLong vec, UInt pos)
-#cdef inline bint testbitint(UInt arg, UInt pos)
 #cdef inline int nextset(ULLong vec, UInt pos)
 #cdef inline int nextunset(ULLong vec, UInt pos)
 #cdef inline int bitlength(ULLong vec)
-
 #on arrays of unsigned long
 #cdef inline int abitcount(ULong *vec, short slots)
 #cdef inline int anextset(ULong *vec, UInt pos, short slots)
@@ -45,7 +57,23 @@ cpdef bint testbitshort(unsigned short arg, UInt pos)
 #cdef inline void ulongcpy(ULong *dest, ULong *src, short slots)
 
 
-# See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
+cdef inline bint testbit(unsigned_fused vec, UInt pos):
+	""" Mask a particular bit, return nonzero if set
+	>>> testbit(0b0011101, 0)
+	True
+	>>> testbit(0b0011101, 1)
+	False
+	>>> testbit(0b100000000000000000000000000000000, 32) != 0
+	True
+	"""
+	if (unsigned_fused is UChar
+			or unsigned_fused is UShort
+			or unsigned_fused is UInt):
+		return vec & (1U << pos)
+	else:
+		return vec & ((<unsigned_fused>1U) << pos) != 0
+
+
 cdef inline int nextset(ULLong vec, UInt pos):
 	""" Return next set bit starting from pos, -1 if there is none.
 	>>> nextset(0b001101, 1)
@@ -71,29 +99,8 @@ cdef inline int nextunset(ULLong vec, UInt pos):
 	return __builtin_ctzll(x) if x else (sizeof(ULLong) * 8)
 
 
-cdef inline bint testbit(ULLong vec, UInt pos):
-	""" Mask a particular bit, return nonzero if set
-	>>> testbit(0b0011101, 0)
-	True
-	>>> testbit(0b0011101, 1)
-	False
-	>>> testbit(0b100000000000000000000000000000000, 32) != 0
-	True
-	"""
-	return vec & (1ULL << pos) != 0
-
-
-cdef inline bint testbitint(UInt arg, UInt pos):
-	""" Mask a particular bit, return nonzero if set
-	>>> testbit(0b0011101, 0)
-	1
-	>>> testbit(0b0011101, 1)
-	0"""
-	return arg & (1ULL << pos)
-
-
 cdef inline int bitlength(ULLong vec):
-	""" number of bits needed to represent vector
+	""" Return number of bits needed to represent vector
 	(equivalently: index of most significant set bit, plus one)
 	>>> bitlength(0b0011101)
 	5"""
@@ -101,7 +108,7 @@ cdef inline int bitlength(ULLong vec):
 
 
 cdef inline int abitcount(ULong *vec, short slots):
-	""" number of set bits in variable length bitvector """
+	""" Return number of set bits in variable length bitvector """
 	cdef short a
 	cdef int result = 0
 	for a in range(slots):
@@ -110,8 +117,8 @@ cdef inline int abitcount(ULong *vec, short slots):
 
 
 cdef inline int abitlength(ULong *vec, short slots):
-	""" number of bits needed to represent vector
-	(equivalently: index of most significant set bit, plus one)"""
+	""" Return number of bits needed to represent vector
+	(equivalently: index of most significant set bit, plus one). """
 	cdef short a = slots - 1
 	while a and not vec[a]:
 		a -= 1
@@ -119,7 +126,7 @@ cdef inline int abitlength(ULong *vec, short slots):
 
 
 cdef inline int anextset(ULong *vec, UInt pos, short slots):
-	""" return next set bit starting from pos, -1 if there is none. """
+	""" Return next set bit starting from pos, -1 if there is none. """
 	cdef short a = BITSLOT(pos)
 	cdef ULong x
 	if a >= slots:
@@ -134,7 +141,7 @@ cdef inline int anextset(ULong *vec, UInt pos, short slots):
 
 
 cdef inline int anextunset(ULong *vec, UInt pos, short slots):
-	""" return next unset bit starting from pos. """
+	""" Return next unset bit starting from pos. """
 	cdef short a = BITSLOT(pos)
 	cdef ULong x
 	if a >= slots:
@@ -150,17 +157,22 @@ cdef inline int anextunset(ULong *vec, UInt pos, short slots):
 
 cdef inline short iteratesetbits(ULong *vec, short slots,
 		ULong *cur, short *idx):
-	""" iterate over set bits in an array of unsigned long with 'slots'
-	elements. cur and idx are pointers to variables to maintain state, idx
-	should be initialized to 0, and cur to the first element of the bit array
-	vec. returns the index of a set bit, returns -1 if there are no more set
-	bits. result of calling stopped iterator is undefined.
-	e.g.,
-	ULong vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
-	short idx = 0
-	iteratesetbits(vec, 0, 4, &cur, &idx) # returns 0
-	iteratesetbits(vec, 0, 4, &cur, &idx) # returns 4
-	iteratesetbits(vec, 0, 4, &cur, &idx) # returns -1 """
+	""" Iterate over set bits in an array of unsigned long with ``slots``
+	elements. ``cur`` and ``idx`` are pointers to variables to maintain state,
+	``idx`` should be initialized to 0, and ``cur`` to the first element of the
+	bit array ``vec``, i.e., ``cur = vec[idx]``.
+
+	:returns: the index of a set bit, or -1 if there are no more set
+		bits. The result of calling stopped iterator is undefined.
+
+	e.g.::
+
+		ULong vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
+		short idx = 0
+		iteratesetbits(vec, 0, 4, &cur, &idx) # returns 0
+		iteratesetbits(vec, 0, 4, &cur, &idx) # returns 4
+		iteratesetbits(vec, 0, 4, &cur, &idx) # returns -1
+	"""
 	cdef short tmp
 	while not cur[0]:
 		idx[0] += 1
@@ -168,6 +180,20 @@ cdef inline short iteratesetbits(ULong *vec, short slots,
 			return -1
 		cur[0] = vec[idx[0]]
 	tmp = __builtin_ctzl(cur[0])  # index of bit in current slot
+	CLEARBIT(cur, tmp)
+	return idx[0] * BITSIZE + tmp
+
+
+cdef inline short iterateunsetbits(ULong *vec, short slots,
+		ULong *cur, short *idx):
+	""" Like ``iteratesetbits``, but return indices of zero bits. """
+	cdef short tmp
+	while not ~cur[0]:
+		idx[0] += 1
+		if idx[0] >= slots:
+			return -1
+		cur[0] = vec[idx[0]]
+	tmp = __builtin_ctzl(~cur[0])  # index of bit in current slot
 	CLEARBIT(cur, tmp)
 	return idx[0] * BITSIZE + tmp
 
@@ -223,4 +249,3 @@ cdef inline bint subset(ULong *vec1, ULong *vec2, short slots):
 		if (vec1[a] & vec2[a]) != vec1[a]:
 			return False
 	return True
-

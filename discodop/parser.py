@@ -10,21 +10,17 @@ import codecs
 import logging
 import tempfile
 import string  # pylint: disable=W0402
-from math import log
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
-from itertools import count
-from subprocess import Popen, PIPE
 import numpy as np
 from discodop import plcfrs, pcfg
 from discodop.grammar import FORMAT, defaultparse
-from discodop._grammar import Grammar
-from discodop.containers import CFGChartItem
+from discodop.containers import Grammar
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import marginalize, doprerank
 from discodop.tree import Tree
 from discodop.lexicon import replaceraretestwords, getunknownwordfun, UNK
-from discodop.treebank import saveheads, TERMINALSRE
+from discodop.treebank import saveheads
 from discodop.treebanktransforms import reversetransform, rrbacktransform
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
@@ -219,8 +215,7 @@ class Parser(object):
 		sent = list(sent)
 		if tags is not None:
 			tags = list(tags)
-		chart = {}
-		start = inside = outside = None
+		chart = start = inside = outside = lastsuccessfulparse = None
 		for n, stage in enumerate(self.stages):
 			begin = time.clock()
 			noparse = False
@@ -241,51 +236,44 @@ class Parser(object):
 					not hasattr(stage, 'rulesfile')
 					or x != stage.grammar.currentmodel):
 				exportbitpargrammar(stage)
-			if not stage.prune or start:
+			if not stage.prune or chart:
 				if n != 0 and stage.prune and stage.mode != 'dop-rerank':
+					beginprune = time.clock()
 					if self.stages[n - 1].mode == 'pcfg-posterior':
-						(whitelist, sentprob, unfiltered,
-							numitems, numremain) = whitelistfromposteriors(
+						whitelist, msg1 = whitelistfromposteriors(
 								inside, outside, start,
 								self.stages[n - 1].grammar, stage.grammar,
 								stage.k, stage.splitprune,
 								self.stages[n - 1].markorigin,
 								stage.mode.startswith('pcfg'))
-						msg += ('coarse items before pruning=%d; filtered: %d;'
-								' pruned: %d; sentprob=%g\n\t' % (
-								unfiltered, numitems, numremain, sentprob))
 					else:
-						whitelist, items = prunechart(
-								chart, start, self.stages[n - 1].grammar,
-								stage.grammar, stage.k, stage.splitprune,
+						whitelist, msg1 = prunechart(
+								chart, stage.grammar, stage.k,
+								stage.splitprune,
 								self.stages[n - 1].markorigin,
 								stage.mode.startswith('pcfg'),
 								self.stages[n - 1].mode == 'pcfg-bitpar')
-						msg += 'coarse items before pruning: %d; ' % (
-								sum(len(a) for x in chart for a in x if a)
-								if self.stages[n - 1].mode == 'pcfg'
-								else len(chart))
-						msg += 'after: %d\n\t' % (items)
+					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
 				if stage.mode == 'pcfg':
-					chart, start, msg1 = pcfg.parse(
+					chart, msg1 = pcfg.parse(
 							sent, stage.grammar, tags=tags,
-							chart=whitelist if stage.prune else None)
-				elif stage.mode == 'pcfg-symbolic':
-					chart, start, msg1 = pcfg.parse_symbolic(
-							sent, stage.grammar, tags=tags)
+							whitelist=whitelist if stage.prune else None)
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, stage.grammar, tags=tags)
+					chart = bool(start)
 				elif stage.mode == 'pcfg-bitpar':
-					chart, start, msg1 = parse_bitpar(
+					chart, msg1 = pcfg.parse_bitpar(stage.grammar,
 							stage.rulesfile.name, stage.lexiconfile.name,
-							sent, stage.m, stage.grammar.start,
+							sent, 1000,  # orig: stage.m; fixed for ctf
+							stage.grammar.start,
 							stage.grammar.toid[stage.grammar.start], tags=tags)
-					msg1 += '%d derivations' % (len(chart) if start else 0)
+					msg1 += '%d derivations' % (
+							len(chart.rankededges[chart.root()]))
 				elif stage.mode == 'plcfrs':
-					chart, start, msg1 = plcfrs.parse(
+					chart, msg1 = plcfrs.parse(
 							sent, stage.grammar, tags=tags,
 							exhaustive=stage.dop or (n + 1 != len(self.stages)
 								and self.stages[n + 1].prune),
@@ -297,20 +285,20 @@ class Parser(object):
 								if stage.useestimates in ('SX', 'SXlrgaps')
 								else None)
 				elif stage.mode == 'dop-rerank':
-					if start:
-						parsetrees = doprerank(chart, start, sent, stage.k,
+					if chart:
+						parsetrees = doprerank(chart, sent, stage.k,
 								self.stages[n - 1].grammar, stage.grammar)
 						msg1 = 're-ranked %d parse trees. ' % len(parsetrees)
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
-				if (n != 0 and not start and not noparse
+				if (n != 0 and not chart and not noparse
 						and stage.split == self.stages[n - 1].split):
 					logging.error('ERROR: expected successful parse. '
 							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
 					#raise ValueError('ERROR: expected successful parse. '
 					#		'sent %s, %s.' % (nsent, stage.name))
-			if start and stage.mode not in ('pcfg-posterior', 'dop-rerank'
+			if chart and stage.mode not in ('pcfg-posterior', 'dop-rerank'
 					) and not (self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
 				if stage.objective == 'shortest':
@@ -318,7 +306,7 @@ class Parser(object):
 							else 'default', True)
 				parsetrees, derivs, msg1 = marginalize(stage.objective
 						if stage.dop else 'mpd',
-						chart, start, stage.grammar, stage.m,
+						chart, stage.grammar, stage.m,
 						sample=stage.sample, kbest=stage.kbest,
 						sent=sent, tags=tags,
 						sldop_n=stage.sldop_n,
@@ -334,11 +322,13 @@ class Parser(object):
 				except ValueError as err:
 					logging.error("something's amiss: %r", err)
 					parsetree, prob, fragments, noparse = self.noparse(
-							stage, sent, tags)
+							stage, sent, tags, lastsuccessfulparse)
+				else:
+					lastsuccessfulparse = parsetree
 				msg += probstr(prob) + ' '
 			else:
 				parsetree, prob, fragments, noparse = self.noparse(
-						stage, sent, tags)
+						stage, sent, tags, lastsuccessfulparse)
 			elapsedtime = time.clock() - begin
 			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,
@@ -361,13 +351,20 @@ class Parser(object):
 		fragments = derivs.get(treestr) if derivs else None
 		return parsetree, fragments, False
 
-	def noparse(self, stage, sent, tags):
-		""" Produce a dummy parse for evaluation purposes. """
-		parsetree = defaultparse([(n, t)
-				for n, t in enumerate(tags or (len(sent) * ['NONE']))])
-		parsetree = Tree.parse('(%s %s)' % (stage.grammar.start,
-				parsetree), parse_leaf=int)
-		return parsetree, 0.0, None, True
+	def noparse(self, stage, sent, tags, lastsuccessfulparse):
+		""" Return parse from previous stage or a dummy parse.  """
+		# use successful parse from earlier stage if available
+		if lastsuccessfulparse is not None:
+			parsetree = lastsuccessfulparse.copy(True)
+		else:  # Produce a dummy parse for evaluation purposes.
+			default = defaultparse([(n, t) for n, t
+					in enumerate(tags or (len(sent) * ['NONE']))])
+			parsetree = Tree.parse('(%s %s)' % (stage.grammar.start,
+					default), parse_leaf=int)
+		noparse = True
+		fragments = None
+		prob = 0.0
+		return parsetree, prob, fragments, noparse
 
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
@@ -493,46 +490,8 @@ def probstr(prob):
 	return 'p=%.4g' % prob
 
 
-BITPARUNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
-BITPARPARSES = re.compile(r'(?:^|\n)vitprob=(.*)\n(\(.*\))\n')
-BITPARPARSESLOG = re.compile(r'(?:^|\n)logvitprob=(.*)\n(\(.*\))\n')
-
-
-def parse_bitpar(rulesfile, lexiconfile, sent, n,
-		startlabel, startid, tags=None):
-	""" Parse a single sentence with bitpar, given filenames of rules and
-	lexicon. n is the number of derivations to ask for (max 1000).
-	Result is a dictionary of derivations with their probabilities. """
-	# TODO: get full viterbi parse forest, turn into chart w/ChartItems
-	assert 1 <= n <= 1000
-	if tags:
-		tmp = tempfile.NamedTemporaryFile()
-		tmp.writelines('%s\t%s 1\n' % (t, t) for t in set(tags))
-		lexiconfile = tmp.name
-	tokens = [word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
-			for word in (tags or sent)]
-	proc = Popen(['bitpar', '-q', '-vp', '-b', str(n), '-s', startlabel,
-			rulesfile, lexiconfile],
-			shell=False, stdin=PIPE, stdout=PIPE, stderr=PIPE)
-	results, msg = proc.communicate('\n'.join(tokens) + '\n')
-	# decode results or not?
-	if not results or results.startswith('No parse'):
-		return {}, None, '%s\n%s' % (results, msg)
-	start = CFGChartItem(startid, 0, len(sent))
-	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
-	derivs = {renumber(deriv): -float(prob)
-			for prob, deriv in BITPARPARSESLOG.findall(lines)}
-	if not derivs:
-		derivs = {renumber(deriv): -log(float(prob))
-				for prob, deriv in BITPARPARSES.findall(lines)}
-	return derivs, start, msg
-
-
-def renumber(deriv):
-	""" Replace terminals of CF-derivation (string) with indices. """
-	it = count()
-	return TERMINALSRE.sub(lambda _: ' %s)' % next(it), deriv)
-
+def test():
+	""" Not implemented. """
 
 if __name__ == '__main__':
 	main()

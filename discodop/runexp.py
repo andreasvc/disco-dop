@@ -32,8 +32,8 @@ from discodop.treetransforms import binarize, optimalbinarize, canonicalize, \
 from discodop.treedraw import DrawTree
 from discodop.fragments import getfragments
 from discodop.grammar import treebankgrammar, dopreduction, \
-		doubledop, grammarinfo, write_lcfrs_grammar, sortgrammar
-from discodop._grammar import Grammar
+		doubledop, grammarinfo, write_lcfrs_grammar
+from discodop.containers import Grammar
 from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun
 from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
@@ -136,9 +136,10 @@ def startexp(
 	else:
 		logging.basicConfig(level=logging.DEBUG, format=formatstr)
 
-	# log up to INFO to a results log file
+	# also log to a file
 	fileobj = logging.FileHandler(filename='%s/output.log' % resultdir)
-	fileobj.setLevel(logging.INFO)
+	#fileobj.setLevel(logging.INFO)
+	fileobj.setLevel(logging.DEBUG)
 	fileobj.setFormatter(logging.Formatter(formatstr))
 	logging.getLogger('').addHandler(fileobj)
 
@@ -346,7 +347,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		if stage.dop:
 			if stage.usedoubledop:
 				# find recurring fragments in treebank,
-				# as well as depth-1 'cover' fragments
+				# as well as depth 1 'cover' fragments
 				fragments = getfragments(traintrees, sents, numproc,
 						iterate=stage.iterate, complement=stage.complement)
 				xgrammar, backtransform, altweights = doubledop(
@@ -360,17 +361,6 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				xgrammar.extend(newrules)
 				for weights in altweights.values():
 					weights.extend(w for _, w in newrules)
-
-				def wordslast(m):
-					""" Sort rules, but lexical rules sorted by word at end """
-					(r, yf), _ = xgrammar[m]
-					return (yf[0] if r[1] == 'Epsilon' else '',
-							'}<' in r[0], r)
-
-				idx = sorted(range(len(xgrammar)), key=wordslast)
-				altweights = {name: [weights[m] for m in idx]
-						for name, weights in altweights.items()}
-				xgrammar = [xgrammar[m] for m in idx]
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)
@@ -396,15 +386,15 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				# backtransform keys are line numbers to rules file;
 				# to see them together do:
 				# $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
-				with gzip.open('%s/%s.backtransform.gz' % (
-						resultdir, stage.name), 'w') as out:
+				with codecs.getwriter('ascii')(gzip.open(
+						'%s/%s.backtransform.gz' % (resultdir, stage.name),
+						'w')) as out:
 					out.writelines('%s\n' % a for a in backtransform)
 				if n and stage.prune:
 					msg = grammar.getmapping(stages[n - 1].grammar,
 						striplabelre=None if stages[n - 1].dop
 							else re.compile(b'@.+$'),
 						neverblockre=re.compile(b'.+}<'),
-						# + stage.neverblockre?
 						splitprune=stage.splitprune and stages[n - 1].split,
 						markorigin=stages[n - 1].markorigin)
 				else:
@@ -413,7 +403,6 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					msg = grammar.getmapping(None,
 						striplabelre=None,
 						neverblockre=re.compile(b'.+}<'),
-						# + stage.neverblockre?
 						splitprune=False, markorigin=False)
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
@@ -445,7 +434,6 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			if lexmodel and simplelexsmooth:
 				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
-				xgrammar = sortgrammar(xgrammar)
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			rules, lexicon = write_lcfrs_grammar(
@@ -467,7 +455,6 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
-
 		logging.info('wrote grammar to %s/%s.{rules,lex%s}.gz', resultdir,
 				stage.name, ',backtransform' if stage.usedoubledop else '')
 
@@ -586,8 +573,7 @@ def worker(args):
 	evalmod.transform(goldevaltree, [w for w, _ in sent],
 			gpos, gposdict, prm.deletelabel, prm.deleteword, {}, {})
 	goldb = evalmod.bracketings(goldevaltree, dellabel=prm.deletelabel)
-	results = []
-	msg = ''
+	results, msg = [], ''
 	for result in prm.parser.parse([w for w, _ in sent],
 			tags=[t for _, t in sent] if prm.usetags else None):
 		msg += result.msg
@@ -597,12 +583,11 @@ def worker(args):
 		evalmod.transform(evaltree, evalsent, cpos, gposdict,
 				prm.deletelabel, prm.deleteword, {}, {})
 		candb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
+		prec = rec = f1score = 0
 		if goldb and candb:
 			prec = evalmod.precision(goldb, candb)
 			rec = evalmod.recall(goldb, candb)
 			f1score = evalmod.f_measure(goldb, candb)
-		else:
-			prec = rec = f1score = 0
 		if f1score == 1.0:
 			exact = True
 			msg += '\texact match'
@@ -625,9 +610,8 @@ def worker(args):
 	highlight.extend(a for a in evaltree.subtrees()
 				if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
 	highlight.extend(range(len(cpos)))
-	msg += DrawTree(evaltree, evalsent, abbr=True,
-			highlight=highlight,
-			).text(
+	msg += DrawTree(evaltree, evalsent,
+			abbr=True, highlight=highlight).text(
 				unicodelines=True, ansi=True)
 	return (nsent, msg, results)
 
@@ -635,17 +619,15 @@ def worker(args):
 def writeresults(results, params):
 	""" Write parsing results to files in same format as the original corpus.
 	(or export if writer not implemented) """
-	ext = {'export': 'export',
-			'bracket': 'mrg',
-			'discbracket': 'dbr',
-			'alpino': 'xml'}
+	ext = {'export': 'export', 'bracket': 'mrg',
+			'discbracket': 'dbr', 'alpino': 'xml'}
 	category = (params.category + '.') if params.category else ''
 	if params.corpusfmt == 'alpino':
 		corpusfmt = 'export'
 		io.open('%s/%sgold.%s' % (params.resultdir, category, ext[corpusfmt]),
 				'w', encoding='utf-8').writelines(
 				writetree(goldtree, [w for w, _ in goldsent], n, corpusfmt,
-					morph=params.morphology)
+					morphology=params.morphology)
 			for n, (_, goldtree, goldsent, _) in params.testset.items())
 	else:
 		corpusfmt = params.corpusfmt
@@ -655,9 +637,9 @@ def writeresults(results, params):
 	for res in results:
 		io.open('%s/%s%s.%s' % (params.resultdir, category, res.name,
 				ext[corpusfmt]), 'w', encoding='utf-8').writelines(
-				writetree(res.parsetrees[n], [w for w, _ in goldsent], n,
-				corpusfmt, morph=params.morphology) for n, (_, _, goldsent, _) in
-				params.testset.items())
+					writetree(res.parsetrees[n], [w for w, _ in goldsent], n,
+						corpusfmt, morphology=params.morphology)
+				for n, (_, _, goldsent, _) in params.testset.items())
 	with open('%s/parsetimes.txt' % params.resultdir, 'w') as out:
 		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
 		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
@@ -672,18 +654,18 @@ def writeresults(results, params):
 def oldeval(results, goldbrackets):
 	""" Simple evaluation. """
 	nsent = len(results[0].parsetrees)
-	if nsent == 0:
-		return
-	for result in results:
-		logging.info('%s lp %5.2f lr %5.2f lf %5.2f\n'
-			'coverage %d / %d = %5.2f %%  exact match %d / %d = %5.2f %%\n',
-				result.name,
-				100 * evalmod.precision(goldbrackets, result.brackets),
-				100 * evalmod.recall(goldbrackets, result.brackets),
-				100 * evalmod.f_measure(goldbrackets, result.brackets),
-				nsent - result.noparse, nsent,
-				100 * (nsent - result.noparse) / nsent,
-				result.exact, nsent, 100 * result.exact / nsent)
+	if nsent:
+		for result in results:
+			logging.info('%s lp %5.2f lr %5.2f lf %5.2f\n'
+					'coverage %d / %d = %5.2f %%  '
+					'exact match %d / %d = %5.2f %%\n',
+					result.name,
+					100 * evalmod.precision(goldbrackets, result.brackets),
+					100 * evalmod.recall(goldbrackets, result.brackets),
+					100 * evalmod.f_measure(goldbrackets, result.brackets),
+					nsent - result.noparse, nsent,
+					100 * (nsent - result.noparse) / nsent,
+					result.exact, nsent, 100 * result.exact / nsent)
 
 
 def readtepacoc():
@@ -868,7 +850,8 @@ def externaltagging(usetagger, model, sents, overridetag, tagmap):
 	logging.info("Start tagging.")
 	goldtags = [t for sent in sents.values() for _, t in sent]
 	if usetagger == "treetagger":  # Tree-tagger
-		installation = """tree tagger not found. commands to install:
+		assert os.path.exists("tree-tagger/bin/tree-tagger"), """\
+tree tagger not found. commands to install:
 mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
 tar -xzf tree-tagger-linux-3.2.tar.gz
@@ -877,18 +860,16 @@ tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
 mkdir lib && cd lib && wget \
 ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
 gunzip german-par-linux-3.2-utf8.bin.gz"""
-		assert os.path.exists("tree-tagger/bin/tree-tagger"), installation
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
 				infile.write("\n".join(w.encode('utf-8')
 					for n, w in enumerate(sent)) + "\n<S>\n")
+		filtertags = ''
 		if not model:
 			model = "tree-tagger/lib/german-par-linux-3.2-utf8.bin"
 			filtertags = "| tree-tagger/cmd/filter-german-tags"
-		else:
-			filtertags = ''
 		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
 				" %s %s %s" % (model, inname, filtertags),
 				stdout=PIPE, shell=True)
@@ -899,10 +880,10 @@ gunzip german-par-linux-3.2-utf8.bin.gz"""
 					for a in tags.splitlines() if a.strip()])
 					for n, tags in zip(sents, tagout))
 	elif usetagger == "stanford":  # Stanford Tagger
-		install = """Stanford tagger not found. Commands to install:
+		assert os.path.exists("stanford-postagger-full-2012-07-09"), """\
+Stanford tagger not found. Commands to install:
 wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
 tar -xzf stanford-postagger-full-2012-07-09.tgz"""
-		assert os.path.exists("stanford-postagger-full-2012-07-09"), install
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
@@ -935,8 +916,6 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
 	return taggedsents
 
-SENTEND = "(\"'!?..."  # ";/-"
-
 
 def tagmangle(a, splitchar, overridetag, tagmap):
 	""" Function to filter tags after they are produced by the tagger. """
@@ -960,7 +939,7 @@ def readparam(filename):
 				for stage in params['stages']]
 	for n, stage in enumerate(params['stages']):
 		assert stage.mode in (
-				'plcfrs', 'pcfg', 'pcfg-posterior', 'pcfg-symbolic',
+				'plcfrs', 'pcfg', 'pcfg-posterior',
 				'pcfg-bitpar', 'dop-rerank')
 		assert n > 0 or not stage.prune, (
 				"need previous stage to prune, but this stage is first.")
@@ -975,14 +954,17 @@ def readparam(filename):
 	return params
 
 
+def test():
+	""" Not implemented. """
+
+
 def main(argv=None):
 	""" Parse command line arguments. """
 	try:
-		# report backtrace on segfaults &c. pip install faulthandler
 		import faulthandler
 		faulthandler.enable()
 	except ImportError:
-		pass
+		print('run "pip install faulthandler" to get backtraces on segfaults')
 	if argv is None:
 		argv = sys.argv
 	if len(argv) == 1:
@@ -996,3 +978,6 @@ def main(argv=None):
 		if 'rerun' not in argv:  # copy parameter file to result dir
 			open("%s/params.prm" % resultdir, "w").write(
 					"top='%s',\n%s" % (top, open(argv[1]).read()))
+
+if __name__ == '__main__':
+	main()
