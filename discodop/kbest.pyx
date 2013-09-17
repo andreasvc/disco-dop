@@ -242,12 +242,6 @@ def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
 	return derivations, explored
 
 
-def fi(n):
-	cdef FatChartItem x = CFGtoFatChartItem(0, 0, 1)  # dummy span
-	x.vec[0] = n
-	return x
-
-
 def test():
 	""" Simple demonstration. """
 	from math import log, exp
@@ -354,12 +348,12 @@ def test():
 			&(gr.bylhs[0][0]))
 	slchart.addedge(CFGtoSmallChartItem(2, 3, 5), CFGtoSmallChartItem(0, 3, 4),
 			&(gr.bylhs[0][1]))
-	slchart.addedge(CFGtoSmallChartItem(1, 0, 1), SmallChartItem(0, 0), NULL)
-	slchart.addedge(CFGtoSmallChartItem(1, 1, 2), SmallChartItem(0, 1), NULL)
-	slchart.addedge(CFGtoSmallChartItem(5, 1, 2), SmallChartItem(0, 1), NULL)
-	slchart.addedge(CFGtoSmallChartItem(1, 2, 3), SmallChartItem(0, 2), NULL)
-	slchart.addedge(CFGtoSmallChartItem(6, 3, 4), SmallChartItem(0, 3), NULL)
-	slchart.addedge(CFGtoSmallChartItem(1, 4, 5), SmallChartItem(0, 4), NULL)
+	slchart.addlexedge(CFGtoSmallChartItem(1, 0, 1), 0)
+	slchart.addlexedge(CFGtoSmallChartItem(1, 1, 2), 1)
+	slchart.addlexedge(CFGtoSmallChartItem(5, 1, 2), 1)
+	slchart.addlexedge(CFGtoSmallChartItem(1, 2, 3), 2)
+	slchart.addlexedge(CFGtoSmallChartItem(6, 3, 4), 3)
+	slchart.addlexedge(CFGtoSmallChartItem(1, 4, 5), 4)
 	slchart.updateprob(CFGtoSmallChartItem(3, 0, 3), -log(0.0126000))
 	slchart.updateprob(CFGtoSmallChartItem(3, 0, 5), -log(0.0005040))
 	slchart.updateprob(CFGtoSmallChartItem(4, 1, 3), -log(0.1260000))
@@ -391,12 +385,12 @@ def test():
 	flchart.addedge(CFGtoFatChartItem(4, 1, 5), items[1, 3], &(gr.bylhs[0][4]))
 	flchart.addedge(CFGtoFatChartItem(1, 2, 5), items[2, 3], &(gr.bylhs[0][0]))
 	flchart.addedge(CFGtoFatChartItem(2, 3, 5), items[3, 4], &(gr.bylhs[0][1]))
-	flchart.addedge(CFGtoFatChartItem(1, 0, 1), fi(0), NULL)
-	flchart.addedge(CFGtoFatChartItem(1, 1, 2), fi(1), NULL)
-	flchart.addedge(CFGtoFatChartItem(5, 1, 2), fi(1), NULL)
-	flchart.addedge(CFGtoFatChartItem(1, 2, 3), fi(2), NULL)
-	flchart.addedge(CFGtoFatChartItem(6, 3, 4), fi(3), NULL)
-	flchart.addedge(CFGtoFatChartItem(1, 4, 5), fi(4), NULL)
+	flchart.addlexedge(CFGtoFatChartItem(1, 0, 1), 0)
+	flchart.addlexedge(CFGtoFatChartItem(1, 1, 2), 1)
+	flchart.addlexedge(CFGtoFatChartItem(5, 1, 2), 1)
+	flchart.addlexedge(CFGtoFatChartItem(1, 2, 3), 2)
+	flchart.addlexedge(CFGtoFatChartItem(6, 3, 4), 3)
+	flchart.addlexedge(CFGtoFatChartItem(1, 4, 5), 4)
 	flchart.updateprob(CFGtoFatChartItem(3, 0, 3), -log(0.0126000))
 	flchart.updateprob(CFGtoFatChartItem(3, 0, 5), -log(0.0005040))
 	flchart.updateprob(CFGtoFatChartItem(4, 1, 3), -log(0.1260000))

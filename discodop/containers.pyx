@@ -67,7 +67,7 @@ cdef class SmallChartItem:
 		assert self.label == 0
 		return self.vec
 
-	cdef SmallChartItem copy(SmallChartItem self):
+	cdef copy(self):
 		return new_SmallChartItem(self.label, self.vec)
 
 	def binrepr(SmallChartItem self, int lensent=0):
@@ -126,7 +126,7 @@ cdef class FatChartItem:
 		assert self.label == 0
 		return self.vec[0]
 
-	cdef FatChartItem copy(FatChartItem self):
+	cdef copy(self):
 		cdef int n
 		cdef FatChartItem a = new_FatChartItem(self.label)
 		for n in range(SLOTS):
@@ -165,6 +165,7 @@ cdef class Edges:
 	def __repr__(self):
 		return '<%d edges>' % self.len
 
+
 cdef class RankedEdge:
 	""" An edge, including the chart item (head) to which it points,
 	along with ranks for its children, to denote a k-best derivation. """
@@ -190,6 +191,7 @@ cdef class RankedEdge:
 		return "%s(%r, %d, %d)" % (self.__class__.__name__,
 			self.head, self.left, self.right)
 
+
 cdef class Chart:
 	""" Base class for charts. Provides methods that available on all charts.
 
@@ -198,7 +200,7 @@ cdef class Chart:
 		(0) base class, methods for chart traversal.
 		(1) formalism, methods specific to CFG vs. LCFRS parsers.
 		(2) data structurs optimized for short/long sentences, small/large
-		grammars.
+			grammars.
 
 	Level 1/2 defines a type for labeled spans referred to as ``item``. """
 	def root(self):
@@ -238,18 +240,6 @@ cdef class Chart:
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
-	cdef dict getitems(self):
-		return self.parseforest
-
-	cdef list getedges(self, item):
-		""" Get edges for item. """
-		return self.parseforest[item] if item in self.parseforest else []
-
-	def __nonzero__(self):
-		""" Return true when the root item is in the chart, i.e., when sentence
-		has been parsed successfully. """
-		return self.root() in self.parseforest
-
 	cdef edgestr(Chart self, item, Edge *edge):
 		""" Given an item and an edge belonging to it, return a string
 		representation of it. """
@@ -263,20 +253,12 @@ cdef class Chart:
 					self.itemstr(self._right(item, edge))
 						if edge.rule.rhs2 else ''))
 
-	def filter(self):
-		""" Remove all entries in parse forest that do not contribute to a
-		complete derivation headed by root of chart. """
-		items = set()
-		_filtersubtree(self, self.root(), items)
-		for item in set(self.getitems()) - items:
-			del self.parseforest[item]
-
 	cdef ChartItem asChartItem(self, item):
 		""" Convert/copy item to ChartItem instance. """
 		cdef size_t itemx
 		if isinstance(item, SmallChartItem):
 			return (<SmallChartItem>item).copy()
-		if isinstance(item, FatChartItem):
+		elif isinstance(item, FatChartItem):
 			return (<FatChartItem>item).copy()
 		itemx = <size_t>item
 		label = self.label(itemx)
@@ -306,21 +288,12 @@ cdef class Chart:
 			end = itemx % self.lensent + 1
 		return cellidx(start, end, self.lensent, nonterminals)
 
-	def stats(self):
-		""" Return a short string with counts of items, edges. """
-		return 'items %d, edges %d' % (
-				len(self.getitems()),
-				sum(map(numedges, self.parseforest.values())))
-		# more stats:
-		# labels: len({self.label(item) for item in self.getitems()}),
-		# spans: ...
-
 	def __str__(self):
 		""" Pretty-print chart and k-best derivations. """
 		cdef Edges edges
 		cdef RankedEdge rankededge
 		result = []
-		for item in sorted(self.parseforest):
+		for item in sorted(self.getitems()):
 			result.append('%s\t%s=%10g' % (
 					self.itemstr(item),
 					'vitprob' if self.viterbi else 'insprob',
@@ -344,6 +317,47 @@ cdef class Chart:
 							rankededge.left, rankededge.right))
 				result.append('')
 		return '\n'.join(result)
+
+	def __nonzero__(self):
+		""" Return true when the root item is in the chart, i.e., when sentence
+		has been parsed successfully. """
+		return self.root() in self.parseforest
+
+	cdef getitems(self):
+		return self.parseforest
+
+	cdef list getedges(self, item):
+		""" Get edges for item. """
+		return self.parseforest[item] if item in self.parseforest else []
+
+	def filter(self):
+		""" Remove all entries in parse forest that do not contribute to a
+		complete derivation headed by root of chart. """
+		items = set()
+		_filtersubtree(self, self.root(), items)
+		if isinstance(self.parseforest, dict):
+			for item in set(self.getitems()) - items:
+				del self.parseforest[item]
+		elif isinstance(self.parseforest, list):
+			for item in set(self.getitems()) - items:
+				self.parseforest[item] = None
+		else:
+			raise ValueError('parseforest: expected list or dict')
+
+	def stats(self):
+		""" Return a short string with counts of items, edges. """
+		if isinstance(self.parseforest, dict):
+			alledges = self.parseforest.values()
+		elif isinstance(self.parseforest, list):
+			alledges = filter(None, self.parseforest)
+		else:
+			raise ValueError('parseforest: expected list or dict')
+		return 'items %d, edges %d' % (
+				len(self.getitems()),
+				sum(map(numedges, alledges)))
+		# more stats:
+		# labels: len({self.label(item) for item in self.getitems()}),
+		# spans: ...
 
 
 def numedges(list edgeslist):

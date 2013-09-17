@@ -31,8 +31,10 @@ ctypedef fused LCFRSItem_fused:
 
 
 cdef class LCFRSChart(Chart):
+	cdef readonly dict parseforest # chartitem => [Edge(lvec, rule), ...]
 	cdef list probs, itemsinorder
 	cdef dict outside
+	cdef void addlexedge(self, item, short wordidx)
 	cdef void updateprob(self, ChartItem item, double prob)
 	cdef void addprob(self, ChartItem item, double prob)
 	cdef double _subtreeprob(self, ChartItem item)

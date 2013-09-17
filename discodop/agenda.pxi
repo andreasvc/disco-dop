@@ -34,8 +34,9 @@ cdef inline bint doublecmpfun(Entry a, Entry b):
 @cython.final
 cdef class Agenda:
 	"""
-	Priority Queue based on binary heap which implements decrease-key and
-	remove by marking entries as invalid. Provides dictionary-like interface.
+	Priority Queue implemented with array-based n-ary heap that implements
+	decrease-key and remove operations by marking entries as invalid.
+	Provides dictionary-like interface.
 
 	Can be initialized with an iterable; order of equivalent values remains and
 	the best priorities are retained on duplicate keys. """
@@ -230,8 +231,9 @@ cdef class Agenda:
 @cython.final
 cdef class DoubleAgenda:
 	"""
-	Priority Queue based on binary heap which implements decrease-key and
-	remove by marking entries as invalid. Provides dictionary-like interface.
+	Priority Queue implemented with array-based n-ary heap that implements
+	decrease-key and remove operations by marking entries as invalid.
+	Provides dictionary-like interface.
 
 	Can be initialized with an iterable; order of equivalent values
 	remains and the best priorities are retained on duplicate keys.

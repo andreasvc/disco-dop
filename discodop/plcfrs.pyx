@@ -33,6 +33,25 @@ cdef class LCFRSChart(Chart):
 		self.parseforest = {}
 		self.itemsinorder = []
 
+	cdef void addlexedge(self, item, short wordidx):
+		""" Add lexical edge. """
+		cdef Edges edges
+		cdef Edge *edge
+		cdef size_t block
+		if item in self.parseforest:
+			block = len(<list>self.parseforest[item]) - 1
+			edges = self.parseforest[item][block]
+			if edges.len == EDGES_SIZE:
+				edges = Edges()
+				self.parseforest[item].append(edges)
+		else:
+			edges = Edges()
+			self.parseforest[item] = [edges]
+		edge = &(edges.data[edges.len])
+		edge.rule = NULL
+		edge.pos.mid = wordidx + 1
+		edges.len += 1
+
 	cdef void updateprob(self, ChartItem item, double prob):
 		cdef dict probs = <dict>self.probs[item.label]
 		if item not in probs or prob < PyFloat_AS_DOUBLE(probs[item]):
@@ -67,23 +86,22 @@ cdef class SmallLCFRSChart(LCFRSChart):
 
 	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
 			Rule *rule):
-		""" Add new edge and update viterbi probability. """
+		""" Add new edge. """
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block
-		if item not in self.parseforest:
-			self.parseforest[item] = [Edges()]
-		block = len(self.parseforest[item]) - 1
-		edges = self.parseforest[item][block]
-		if edges.len == EDGES_SIZE:
+		if item in self.parseforest:
+			block = len(<list>self.parseforest[item]) - 1
+			edges = self.parseforest[item][block]
+			if edges.len == EDGES_SIZE:
+				edges = Edges()
+				self.parseforest[item].append(edges)
+		else:
 			edges = Edges()
-			self.parseforest[item].append(edges)
+			self.parseforest[item] = [edges]
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
-		if rule is NULL:
-			edge.pos.mid = <short>left.vec + 1
-		else:
-			edge.pos.lvec = left.vec
+		edge.pos.lvec = left.vec
 		edges.len += 1
 
 	cdef _left(self, item, Edge *edge):
@@ -101,7 +119,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		return self.tmpright
 
 	cdef copy(self, item):
-		return (<SmallChartItem?>item).copy()
+		return (<SmallChartItem>item).copy()
 
 	def root(self):
 		return new_SmallChartItem(
@@ -122,22 +140,19 @@ cdef class FatLCFRSChart(LCFRSChart):
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block
-		if item not in self.parseforest:
-			self.parseforest[item] = [Edges()]
-		block = len(self.parseforest[item]) - 1
-		edges = self.parseforest[item][block]
-		if edges.len == EDGES_SIZE:
+		if item in self.parseforest:
+			block = len(<list>self.parseforest[item]) - 1
+			edges = self.parseforest[item][block]
+			if edges.len == EDGES_SIZE:
+				edges = Edges()
+				self.parseforest[item].append(edges)
+		else:
 			edges = Edges()
-			self.parseforest[item].append(edges)
+			self.parseforest[item] = [edges]
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
-		if rule is NULL:
-			# put index of terminal in edge so that we don't need a
-			# chartitem for the terminal
-			edge.pos.mid = <short>left.vec[0] + 1
-		else:
-			# NB: this breaks when 'left' is garbage collected
-			edge.pos.lvec_fat = left.vec
+		# NB: store pointer; breaks when `left` is garbage collected!
+		edge.pos.lvec_fat = left.vec
 		edges.len += 1
 
 	cdef _left(self, item, Edge *edge):
@@ -274,9 +289,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				elif LCFRSItem_fused is FatChartItem:
 					ulongset(newitem.vec, 0UL, SLOTS)
 					SETBIT(newitem.vec, wordidx)
-				# POS tags cannot be discontinuous => splitprune &c == False.
-				if process_edge(newitem, score, lexrule.prob, NULL,
-						item, agenda, chart, whitelist, False, False):
+				if process_lexedge(newitem, score, lexrule.prob, wordidx,
+						agenda, chart, whitelist):
 					if LCFRSItem_fused is SmallChartItem:
 						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 								SmallChartItem)
@@ -304,8 +318,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				ulongset(newitem.vec, 0UL, SLOTS)
 				SETBIT(newitem.vec, wordidx)
 			# prevent pruning of provided tags => whitelist == None
-			if process_edge(newitem, 0.0, 0.0, NULL,
-					item, agenda, chart, None, False, False):
+			if process_lexedge(newitem, 0.0, 0.0, wordidx,
+					agenda, chart, None):
 				if LCFRSItem_fused is SmallChartItem:
 					newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 							SmallChartItem)
@@ -316,16 +330,12 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 			else:
 				raise ValueError
 		elif not recognized:
-			if tag is None:
-				if word not in grammar.lexicalbyword:
-					return chart, 'no parse: %r not in lexicon' % word
-				elif whitelist is not None:
-					return chart, 'no parse: all tags for %r blocked' % word
-			else:
-				if tag not in grammar.toid:
-					return chart, 'no parse: unknown tag %r' % tag
-				elif whitelist is not None:
-					return chart, 'no parse: all tags for %r blocked' % word
+			if tag is None and word not in grammar.lexicalbyword:
+				return chart, 'no parse: %r not in lexicon' % word
+			elif tag is not None and tag not in grammar.toid:
+				return chart, 'no parse: unknown tag %r' % tag
+			elif whitelist is not None:
+				return chart, 'no parse: all tags for %r blocked' % word
 			raise ValueError
 	while agenda.length:  # main parsing loop
 		entry = agenda.popentry()
@@ -530,16 +540,13 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist,
 		bint splitprune, bint markorigin):
 	""" Decide what to do with a newly derived edge.
-	:returns: True when edge is accepted in the chart, False when blocked. """
+	:returns: ``True`` when edge is accepted in the chart, ``False`` when
+		blocked. When ``False``, ``newitem`` may be reused. """
 	cdef UInt a, b, n, cnt, label
-	cdef bint inagenda
-	cdef bint inchart
+	cdef bint inagenda = agenda.contains(newitem)
+	cdef bint inchart = newitem in chart.parseforest
 	cdef list componentlist = None
 	cdef dict componentdict = None
-	# put item in `newitem`; if item ends up in chart, newitem will be replaced
-	# by a fresh object, otherwise, it can be re-used.
-	inagenda = agenda.contains(newitem)
-	inchart = newitem in chart.parseforest
 	if not inagenda and not inchart:
 		#if score > 300.0:
 		#	return False
@@ -599,6 +606,38 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 		agenda.setitem(newitem, score)
 		chart.addedge(newitem, left, rule)
 		logging.warning('WARN: updating score in agenda: %r', newitem)
+	return True
+
+
+cdef inline bint process_lexedge(LCFRSItem_fused newitem,
+		double score, double prob, short wordidx,
+		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist):
+	""" Decide whether to accept a lexical edge (POS, word), which is assumed
+	not to be discontinuous.
+	:returns: ``True`` when edge is accepted in the chart, ``False`` when
+		blocked. When ``False``, ``newitem`` may be reused. """
+	cdef UInt label
+	cdef bint inagenda = agenda.contains(newitem)
+	cdef bint inchart = newitem in chart.parseforest
+	if inagenda:
+		raise ValueError('lexical edge already in agenda: %s' %
+				chart.itemstr(newitem))
+	elif inchart:
+		raise ValueError('lexical edge already in chart: %s' %
+				chart.itemstr(newitem))
+	else:
+		#if score > 300.0:
+		#	return False
+		# check if we need to prune this item
+		if whitelist is not None and whitelist[newitem.label] is not None:
+			label = newitem.label
+			newitem.label = 0
+			if PyDict_Contains(whitelist[label], newitem) != 1:
+				return False
+			newitem.label = label
+		# haven't seen this item before, won't prune, add to agenda
+		agenda.setitem(newitem, score)
+		chart.addlexedge(newitem, wordidx)
 	return True
 
 

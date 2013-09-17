@@ -74,7 +74,6 @@ cdef class Grammar:
 #		to pack the parse forest?
 # [ ] is it useful to have a recognition phase before making parse forest?
 cdef class Chart:
-	cdef dict parseforest # chartitem => [Edge(lvec, rule), ...]
 	cdef public dict rankededges  # [item][n] => Entry(RankedEdge, prob)
 	cdef Grammar grammar
 	cdef list sent
@@ -82,8 +81,6 @@ cdef class Chart:
 	cdef short lensent
 	cdef public bint logprob  # False => 0 < p <= 1; True => 0 <= -log(p) < inf
 	cdef public bint viterbi  # False => inside probs; True => viterbi 1-best
-	cdef dict getitems(self)
-	cdef list getedges(self, item)
 	cdef double subtreeprob(self, item)
 	cdef lexidx(self, item, Edge *edge)
 	cdef edgestr(self, item, Edge *edge)
@@ -94,6 +91,8 @@ cdef class Chart:
 	cdef copy(self, item)
 	cdef ChartItem asChartItem(self, item)
 	cdef size_t asCFGspan(self, item, size_t nonterminals)
+	cdef getitems(self)
+	cdef list getedges(self, item)
 
 
 cdef struct Rule:  # total: 32 bytes.
@@ -121,13 +120,13 @@ cdef class ChartItem:
 @cython.final
 cdef class SmallChartItem(ChartItem):
 	cdef ULLong vec
-	cdef SmallChartItem copy(SmallChartItem self)
+	cdef copy(self)
 
 
 @cython.final
 cdef class FatChartItem(ChartItem):
 	cdef ULong vec[SLOTS]
-	cdef FatChartItem copy(FatChartItem self)
+	cdef copy(self)
 
 
 cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)

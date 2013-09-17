@@ -9,6 +9,7 @@ import numpy as np
 from discodop.tree import Tree
 from discodop.plcfrs import DoubleAgenda
 from discodop.treebank import TERMINALSRE
+
 include "constants.pxi"
 
 cdef double INFINITY = float('infinity')
@@ -63,31 +64,37 @@ cdef class DenseCFGChart(CFGChart):
 		self.start = grammar.toid[grammar.start if start is None else start]
 		self.logprob = logprob
 		self.viterbi = viterbi
-		entries = (compactcellidx(self.lensent - 1, self.lensent, self.lensent,
-				grammar.nonterminals) + grammar.nonterminals)
+		entries = compactcellidx(self.lensent - 1, self.lensent, self.lensent,
+				grammar.nonterminals) + grammar.nonterminals
 		self.probs = <double *>malloc(entries * sizeof(double))
 		assert self.probs is not NULL
-		# could store parse forest in list instead of dict, but not clear if it
-		# is worth the trouble.
-		self.parseforest = {}  # [None] * entries
 		for n in range(entries):
 			self.probs[n] = INFINITY
+		# store parse forest in list instead of dict
+		entries = cellidx(self.lensent - 1, self.lensent, self.lensent,
+				grammar.nonterminals) + grammar.nonterminals
+		self.parseforest = [None] * entries
+
+	def __dealloc__(self):
+		if self.probs is not NULL:
+			free(self.probs)
 
 	cdef void addedge(self, UInt lhs, UChar start, UChar end, UChar mid,
 			Rule *rule):
 		""" Add new edge to parse forest. """
 		cdef Edges edges
 		cdef Edge *edge
-		cdef size_t item = cellidx(
+		cdef size_t block, item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
-		cdef size_t block
-		if item not in self.parseforest:
-			self.parseforest[item] = [Edges()]
-		block = len(self.parseforest[item]) - 1
-		edges = self.parseforest[item][block]
-		if edges.len == EDGES_SIZE:
+		if self.parseforest[item] is None:
 			edges = Edges()
-			self.parseforest[item].append(edges)
+			self.parseforest[item] = [edges]
+		else:
+			block = len(<list>self.parseforest[item]) - 1
+			edges = self.parseforest[item][block]
+			if edges.len == EDGES_SIZE:
+				edges = Edges()
+				self.parseforest[item].append(edges)
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
 		edge.pos.mid = mid
@@ -117,6 +124,22 @@ cdef class DenseCFGChart(CFGChart):
 	cdef double subtreeprob(self, item):
 		return self._subtreeprob(<size_t>item)
 
+	cdef getitems(self):
+		return [n for n, a in enumerate(self.parseforest) if a is not None]
+
+	cdef list getedges(self, item):
+		""" Get edges for item. """
+		return self.parseforest[item] if item is not None else []
+
+	cdef bint hasitem(self, size_t item):
+		""" Test if item is in chart. """
+		return self.parseforest[item] is not None
+
+	def __nonzero__(self):
+		""" Return true when the root item is in the chart, i.e., when sentence
+		has been parsed successfully. """
+		return self.parseforest[self.root()] is not None
+
 
 cdef class SparseCFGChart(CFGChart):
 	def __init__(self, Grammar grammar, list sent,
@@ -138,13 +161,15 @@ cdef class SparseCFGChart(CFGChart):
 		cdef size_t item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
 		cdef size_t block
-		if item not in self.parseforest:
-			self.parseforest[item] = [Edges()]
-		block = len(self.parseforest[item]) - 1
-		edges = self.parseforest[item][block]
-		if edges.len == EDGES_SIZE:
+		if item in self.parseforest:
+			block = len(<list>self.parseforest[item]) - 1
+			edges = self.parseforest[item][block]
+			if edges.len == EDGES_SIZE:
+				edges = Edges()
+				self.parseforest[item].append(edges)
+		else:
 			edges = Edges()
-			self.parseforest[item].append(edges)
+			self.parseforest[item] = [edges]
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
 		edge.pos.mid = mid
@@ -165,6 +190,10 @@ cdef class SparseCFGChart(CFGChart):
 
 	cdef double subtreeprob(self, item):
 		return self._subtreeprob(item)
+
+	cdef bint hasitem(self, size_t item):
+		""" Test if item is in chart. """
+		return item in self.parseforest
 
 
 def parse(sent, Grammar grammar, tags=None, start=None, dict whitelist=None):
@@ -187,7 +216,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 	cdef:
 		short [:, :] minleft, maxleft, minright, maxright
 		DoubleAgenda unaryagenda = DoubleAgenda()
-		dict parseforest = chart.parseforest, cellwhitelist = None
+		dict cellwhitelist = None
 		Rule *rule
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid
@@ -215,7 +244,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 			#for lhs in cellwhitelist:
 			# only loop over labels which occur on LHS of a phrasal rule.
 			for lhs in range(1, grammar.phrasalnonterminals):
-				if cellwhitelist is not None and lhs not in cellwhitelist:
+				if whitelist is not None and lhs not in cellwhitelist:
 					continue
 				n = 0
 				rule = &(grammar.bylhs[lhs][n])
@@ -236,8 +265,8 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 								lensent, grammar.nonterminals) + rule.rhs1
 						rightitem = cellidx(mid, right,
 								lensent, grammar.nonterminals) + rule.rhs2
-						if (leftitem in parseforest
-								and rightitem in parseforest):
+						if (chart.hasitem(leftitem)
+								and chart.hasitem(rightitem)):
 							prob = (rule.prob + chart._subtreeprob(leftitem)
 									+ chart._subtreeprob(rightitem))
 							chart.addedge(lhs, left, right, mid, rule)
@@ -247,7 +276,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 
 				# update filter
 				if isinf(oldscore):
-					if cell + lhs not in parseforest:
+					if not chart.hasitem(cell + lhs):
 						continue
 					if left > minleft[lhs, right]:
 						minleft[lhs, right] = left
@@ -260,24 +289,26 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 
 			# unary rules
 			# FIXME: efficiently fetch labels in current cell: getitems(cell)
+			# or: chart.itemsinorder[lastidx:]
 			unaryagenda.update([(lhs, chart._subtreeprob(cell + lhs))
 					for lhs in range(1, grammar.phrasalnonterminals)
-					if cell + lhs in parseforest])
+					if chart.hasitem(cell + lhs)])
 			while unaryagenda.length:
 				rhs1 = unaryagenda.popentry().key
 				for n in range(grammar.numrules):
 					rule = &(grammar.unary[rhs1][n])
 					if rule.rhs1 != rhs1:
 						break
-					elif whitelist is not None and rule.lhs not in whitelist[cell]:
+					elif (whitelist is not None
+							and rule.lhs not in cellwhitelist):
 						continue
 					lhs = rule.lhs
 					prob = rule.prob + chart._subtreeprob(cell + rhs1)
-					if (cell + lhs not in parseforest
-							or prob < chart._subtreeprob(cell + lhs)):
-						unaryagenda.setifbetter(lhs, prob)
 					chart.addedge(lhs, left, right, right, rule)
-					chart.updateprob(lhs, left, right, prob)
+					if (not chart.hasitem(cell + lhs)
+							or prob < chart._subtreeprob(cell + lhs)):
+						chart.updateprob(lhs, left, right, prob)
+						unaryagenda.setifbetter(lhs, prob)
 					# update filter
 					if left > minleft[lhs, right]:
 						minleft[lhs, right] = left
@@ -359,16 +390,12 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 			if right > maxright[lhs, left]:
 				maxright[lhs, left] = right
 		elif not recognized:
-			if tag is None:
-				if word not in grammar.lexicalbyword:
-					return False, 'no parse: %r not in lexicon' % word
-				elif whitelist is not None:
-					return False, 'no parse: all tags for %r blocked' % word
-			else:
-				if tag not in grammar.toid:
-					return False, 'no parse: unknown tag %r' % tag
-				elif whitelist is not None:
-					return False, 'no parse: all tags for %r blocked' % word
+			if tag is None and word not in grammar.lexicalbyword:
+				return chart, 'no parse: %r not in lexicon' % word
+			elif tag is not None and tag not in grammar.toid:
+				return chart, 'no parse: unknown tag %r' % tag
+			elif whitelist is not None:
+				return chart, 'no parse: all tags for %r blocked' % word
 			raise ValueError
 
 		# unary rules on the span of this POS tag
@@ -388,7 +415,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 				#prob = rule.prob + entry.value
 				prob = rule.prob + chart._subtreeprob(cellidx(
 						left, right, lensent, grammar.nonterminals) + rhs1)
-				if (item not in chart.parseforest or
+				if (not chart.hasitem(item) or
 						prob < chart._subtreeprob(item)):
 					unaryagenda.setifbetter(lhs, prob)
 				chart.addedge(lhs, left, right, right, rule)
@@ -708,8 +735,8 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 				for prob, deriv in BITPARPARSES.findall(lines)]
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
-	chart.parseforest[chart.root()] = None  # dummy so that bool(chart) == True
-	chart.rankededges[chart.root()] = derivs
+	chart.parseforest = {chart.root(): None}  # dummy so bool(chart) == True
+	chart.rankededges = {chart.root(): derivs}
 	return chart, msg
 
 
