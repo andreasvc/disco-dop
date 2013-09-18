@@ -156,7 +156,6 @@ cdef class FatLCFRSChart(LCFRSChart):
 		edges.len += 1
 
 	cdef _left(self, item, Edge *edge):
-		cdef FatChartItem result
 		cdef size_t n
 		if edge.rule is NULL:
 			return None
@@ -166,7 +165,6 @@ cdef class FatLCFRSChart(LCFRSChart):
 		return self.tmpleft
 
 	cdef _right(self, item, Edge *edge):
-		cdef FatChartItem result
 		cdef size_t n
 		if edge.rule is NULL:
 			return None
@@ -797,7 +795,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 				elif LCFRSItem_fused is FatChartItem:
 					SETBIT(newitem.vec, i)
 				agenda.append(newitem)
-				chart.itemsinorder.append(item)
 				chart.addedge(newitem, item, NULL)
 				items[newitem.label].append(newitem)
 				if LCFRSItem_fused is SmallChartItem:
@@ -813,7 +810,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 			elif LCFRSItem_fused is FatChartItem:
 				SETBIT(newitem.vec, i)
 			agenda.append(newitem)
-			chart.itemsinorder.append(item)
 			chart.addedge(newitem, item, NULL)
 			items[newitem.label].append(newitem)
 			newitem = SmallChartItem.__new__(SmallChartItem)
@@ -825,6 +821,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		if item in chart.parseforest:
 			continue
 		items[item.label].append(item)
+		chart.itemsinorder.append(item)
 		if item.label == goal.label and item == goal:
 			pass
 		else:
@@ -841,7 +838,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 				chart.addedge(newitem, item, rule)
 				if newitem not in chart.parseforest:
 					agenda.append(newitem)
-					chart.itemsinorder.append(item)
 					if LCFRSItem_fused is SmallChartItem:
 						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 								SmallChartItem)
@@ -861,7 +857,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 						chart.addedge(newitem, sibling, rule)
 						if newitem not in chart.parseforest:
 							agenda.append(newitem)
-							chart.itemsinorder.append(item)
 							if LCFRSItem_fused is SmallChartItem:
 								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 										SmallChartItem)
@@ -881,7 +876,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 						chart.addedge(newitem, item, rule)
 						if newitem not in chart.parseforest:
 							agenda.append(newitem)
-							chart.itemsinorder.append(item)
 							if LCFRSItem_fused is SmallChartItem:
 								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 										SmallChartItem)
@@ -890,13 +884,10 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 										FatChartItem)
 		if agenda.length > maxA:
 			maxA = agenda.length
-	msg = ('agenda max %d, now %d, items %d, edges %d, blocked %d' % (
-			maxA, len(agenda),
-			0,  # len(list(filter(None, chart.values()))),
-			0,  # sum(map(len, chart.values())),
-			blocked))
+	msg = ('agenda max %d, now %d, %s, blocked %d' % (
+			maxA, len(agenda), chart.stats(), blocked))
 	if goal not in chart:
-		return chart, 'no parse ' + msg
+		msg = 'no parse ' + msg
 	return chart, msg
 
 
@@ -981,12 +972,6 @@ def getoutside(Chart chart):
 							* chart.outside[item])
 
 
-#def doinsideoutside(dict chart, ChartItem start):
-#	cdef dict result = dict.fromkeys(chart)
-#	getinside(result, chart, start)
-#
-#cdef getinside(dict result, chart, start):
-#
 #def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=True,
 #		list whitelist=None, bint splitprune=False, bint markorigin=False,
 #		estimates=None, int beamwidth=0):

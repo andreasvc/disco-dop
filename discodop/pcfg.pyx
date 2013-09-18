@@ -290,9 +290,10 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 			# unary rules
 			# FIXME: efficiently fetch labels in current cell: getitems(cell)
 			# or: chart.itemsinorder[lastidx:]
-			unaryagenda.update([(lhs, chart._subtreeprob(cell + lhs))
-					for lhs in range(1, grammar.phrasalnonterminals)
-					if chart.hasitem(cell + lhs)])
+			unaryagenda.update([(rhs1, chart._subtreeprob(cell + rhs1))
+					for rhs1 in range(1, grammar.phrasalnonterminals)
+					if chart.hasitem(cell + rhs1)
+					and grammar.unary[rhs1].rhs1 == rhs1])
 			while unaryagenda.length:
 				rhs1 = unaryagenda.popentry().key
 				for n in range(grammar.numrules):
