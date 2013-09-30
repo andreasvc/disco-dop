@@ -100,7 +100,7 @@ cdef class FatChartItem:
 			return labelmatch and cmp == 0
 		elif op == 3:
 			return not labelmatch or cmp != 0
-		# NB: for a proper comparison, need to reverse memcmp
+		# NB: for a proper ordering, need to reverse memcmp
 		elif op == 5:
 			return self.label >= ob.label or (labelmatch and cmp >= 0)
 		elif op == 1:
@@ -247,7 +247,7 @@ cdef class Chart:
 			return self.sent[self.lexidx(item, edge)]
 		else:
 			return ('%g %s %s' % (
-					exp(-edge.rule.prob) if self.logprob
+					exp(-edge.rule.prob) if self.grammar.logprob
 					else edge.rule.prob,
 					self.itemstr(self._left(item, edge)),
 					self.itemstr(self._right(item, edge))
@@ -294,11 +294,15 @@ cdef class Chart:
 		cdef RankedEdge rankededge
 		result = []
 		for item in sorted(self.getitems()):
-			result.append('%s\t%s=%10g' % (
-					self.itemstr(item),
-					'vitprob' if self.viterbi else 'insprob',
-					exp(-self.subtreeprob(item)) if self.logprob
-						else self.subtreeprob(item)))
+			result.append(' '.join((
+					self.itemstr(item).ljust(20),
+					('vitprob=%g' % (
+						exp(-self.subtreeprob(item)) if self.logprob
+						else self.subtreeprob(item))).ljust(17),
+					((' ins=%g' % self.inside[item]).ljust(14)
+						if self.inside else ''),
+					((' out=%g' % self.outside[item]).ljust(14)
+						if self.outside else ''))))
 			for edges in self.parseforest[item]:
 				for n in range(edges.len):
 					result.append('\t=> %s'

@@ -19,13 +19,13 @@ stages=[
     name='dop',
     mode='plcfrs',
     prune=True,  #whether to use previous chart to prune parsing of this stage
-    k = 50,  #number of coarse plcfrs derivations to prune with; k=0 => filter only
+    k=50,  #number of coarse plcfrs derivations to prune with; k=0 => filter only
     dop=True,  # enable DOP mode
     usedoubledop=False,  # when Fales, use dop reduction, otherwise use Double-DOP
     iterate=False,  #for double dop, whether to include fragments of fragments
     complement=False,  #for double dop, whether to include fragments which form
         #the complement of the maximal recurring fragments extracted
-    m = 10000,  #number of derivations to sample/enumerate
+    m=10000,  #number of derivations to sample/enumerate
     sample=False, kbest=True,  #use sampling and/or kbest during marginalization
     estimator="dop1",  #choices: dop1, ewe, bon
     objective = "mpp",  # choices: mpp, mpd, shortest, sl-dop[-simple]

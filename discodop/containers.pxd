@@ -75,8 +75,10 @@ cdef class Grammar:
 # [ ] is it useful to have a recognition phase before making parse forest?
 cdef class Chart:
 	cdef public dict rankededges  # [item][n] => Entry(RankedEdge, prob)
+	cdef list itemsinorder
 	cdef Grammar grammar
 	cdef list sent
+	cdef dict inside, outside
 	cdef UInt start
 	cdef short lensent
 	cdef public bint logprob  # False => 0 < p <= 1; True => 0 <= -log(p) < inf

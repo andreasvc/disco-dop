@@ -19,6 +19,14 @@ cdef double INFINITY = float('infinity')
 
 include "agenda.pxi"
 
+cdef inline bint equalitems(LCFRSItem_fused op1, LCFRSItem_fused op2):
+	if LCFRSItem_fused is SmallChartItem:
+		return op1.label == op2.label and op1.vec == op2.vec
+	else:
+		return op1.label == op2.label and (
+			memcmp(<UChar *>op1.vec, <UChar *>op2.vec, sizeof(op1.vec)) == 0)
+
+
 cdef class LCFRSChart(Chart):
 	""" item is a ChartItem object. """
 	def __init__(self, Grammar grammar, list sent,
@@ -38,6 +46,7 @@ cdef class LCFRSChart(Chart):
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block
+		# NB: lexical edges should always be unique, but just in case ...
 		if item in self.parseforest:
 			block = len(<list>self.parseforest[item]) - 1
 			edges = self.parseforest[item][block]
@@ -47,6 +56,7 @@ cdef class LCFRSChart(Chart):
 		else:
 			edges = Edges()
 			self.parseforest[item] = [edges]
+			self.itemsinorder.append(item)
 		edge = &(edges.data[edges.len])
 		edge.rule = NULL
 		edge.pos.mid = wordidx + 1
@@ -99,6 +109,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		else:
 			edges = Edges()
 			self.parseforest[item] = [edges]
+			self.itemsinorder.append(item)
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
 		edge.pos.lvec = left.vec
@@ -149,6 +160,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 		else:
 			edges = Edges()
 			self.parseforest[item] = [edges]
+			self.itemsinorder.append(item)
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
 		# NB: store pointer; breaks when `left` is garbage collected!
@@ -355,7 +367,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 			elif estimatetype == SXlrgaps:
 				itemprob -= outside[item.label, length, left + right, gaps]
 		chart.updateprob(item, itemprob)
-		if item.label == goal.label and item == goal:
+		if equalitems(item, goal):
 			if not exhaustive:
 				break
 		else:
@@ -764,8 +776,8 @@ def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
 def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		sent, Grammar grammar, tags=None, start=None):
 	cdef:
-		list items = [deque() for _ in grammar.toid]  # items for each label
 		object agenda = deque()  # the agenda
+		list items = [deque() for _ in grammar.toid]  # items for each label
 		Rule *rule
 		LexicalRule lexrule
 		LCFRSItem_fused item, sibling, newitem
@@ -821,10 +833,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		if item in chart.parseforest:
 			continue
 		items[item.label].append(item)
-		chart.itemsinorder.append(item)
-		if item.label == goal.label and item == goal:
-			pass
-		else:
+		if not equalitems(item, goal):
 			# unary
 			for i in range(grammar.numrules):
 				rule = &(grammar.unary[item.label][i])
@@ -889,87 +898,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 	if goal not in chart:
 		msg = 'no parse ' + msg
 	return chart, msg
-
-
-def doinsideoutside(Chart chart):
-	""" Given a chart containing a parse forest, compute inside and outside
-	probabilities. Results will be stored in the chart. """
-	assert not chart.grammar.logprob, 'grammar must not be in logprob mode.'
-	getinside(chart)
-	getoutside(chart)
-
-
-def getinside(Chart chart):
-	cdef size_t n
-	cdef Edges edges
-	cdef Edge *edge
-	# this needs to be bottom up, so need order in which items were added
-	# currently separate list, maintained only by parse_symbolic
-	# NB: sorting items by length is not enough,
-	# unaries have to be in the right order...
-
-	# choices for probs:
-	# - normal => underflow (current)
-	# - logprobs => loss of precision
-	# - normal, scaled => how?
-
-	# packing parse forest:
-	# revitems = {item: n for n, item in self.itemsinorder}
-	# now self.inside[n] and self.outside[n] can be double arrays.
-	#chart.inside = <dict>defaultdict(float)
-
-	# traverse items in bottom-up order
-	for item in chart.itemsinorder:
-		for edges in chart.getedges(item):
-			for n in range(edges.len):
-				edge = &(edges.data[n])
-				if edge.rule is NULL:
-					label = chart.label(item)
-					word = chart.sent[chart.lexidx(item, edge)]
-					prob = (<LexicalRule>chart.grammar.lexicalbylhs[
-							label][word]).prob
-				elif edge.rule.rhs2 == 0:
-					leftitem = chart._left(item, edge)
-					prob = (edge.rule.prob
-							* chart._subtreeprob(leftitem))
-				else:
-					leftitem = chart._left(item, edge)
-					rightitem = chart._right(item, edge)
-					prob = (edge.rule.prob
-							* chart._subtreeprob(leftitem)
-							* chart._subtreeprob(rightitem))
-				chart.addprob(item, prob)
-
-
-def getoutside(Chart chart):
-	cdef size_t n
-	cdef Edges edges
-	cdef Edge *edge
-	#cdef double sentprob = chart._subtreeprob(chart.root())
-	# traverse items in top-down order
-	# could use list with idx of item in itemsinorder
-	chart.outside = {chart.root(): 1.0}
-	for item in reversed(chart.itemsinorder):
-		# can we define outside[item] simply as sentprob - inside[item] ?
-		# chart.outside[item] = sentprob - chart._subtreeprob(item)
-		for edges in chart.getedges(item):
-			for n in range(edges.len):
-				edge = &(edges.data[n])
-				if edge.rule is NULL:
-					pass
-				elif edge.rule.rhs2 == 0:
-					leftitem = chart._left(item, edge)
-					chart.outside[leftitem] += (edge.rule.prob
-							* chart.outside[item])
-				else:
-					leftitem = chart._left(item, edge)
-					rightitem = chart._right(item, edge)
-					chart.outside[leftitem] += (edge.rule.prob
-							* chart._subtreeprob(rightitem)
-							* chart.outside[item])
-					chart.outside[rightitem] += (edge.rule.prob
-							* chart._subtreeprob(leftitem)
-							* chart.outside[item])
 
 
 #def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=True,

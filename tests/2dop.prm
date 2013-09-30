@@ -99,6 +99,20 @@ stages=[  # Double-DOP
 	estimator="ewe", objective="mpp",
   ),
 
+  dict(
+	name='pcfg', mode='pcfg',
+	split=True, markorigin=True,
+  ),
+  dict(
+	name='etc2', mode='plcfrs',
+	prune=True, splitprune=True,
+	dop=True, usedoubledop=True,
+	iterate=True, complement=False,
+	k=1e-5, m=10000,
+	kbest=True, sample=False,
+	estimator="ewe", objective="mpp",
+  ),
+
 ],
 
 # corpus options

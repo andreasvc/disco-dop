@@ -1,4 +1,4 @@
-r""" This file contains three main transformations:
+""" This file contains three main transformations:
 
  - A straightforward binarization: binarize(), based on NLTK code.
    Provides some additional Markovization options.
@@ -48,7 +48,6 @@ action is one of:
     splitdisc [--markorigin]
     mergedisc
 
-
 options may consist of (* marks default option):
   --inputfmt|--outputfmt=[*export|discbracket|bracket|alpino]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
@@ -78,16 +77,16 @@ options may consist of (* marks default option):
                      POS tag and word, e.g., (DET (sg.def the))
   --lemmas       insert node with lemma between word and POS tag.
 
-Note: The formats 'conll' and 'mst' do an unlabeled dependency conversion and
-    require all constituents to have a child with HD as one of its function
-    labels, or the use of heuristic head rules. """ % sys.argv[0]
+Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
+	conversion and requires all constituents to have a child with HD as one of
+	its function labels, or the use of heuristic head rules. """ % sys.argv[0]
 
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		childchar='|', parentchar='^', headmarked=None, headidx=None,
 		tailmarker='', leftmostunary=False, rightmostunary=False, threshold=2,
-		pospa=False, artpa=True, reverse=False, ids=None):
-	""" Binarize an NLTK Tree object.
+		pospa=False, artpa=True, reverse=False, ids=None, filterfuncs=()):
+	""" Binarize a Tree object.
 
 	:param factor: "left" or "right". Determines whether binarization proceeds
 			from left to right or vice versa.
@@ -128,6 +127,11 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			factored; i.e., for a value of 2, do a normal binarization; for a
 			value of 1, also factor binary productions to include an artificial
 			node, etc.
+	:param filterfuncs: n-ary branches contain children with grammatical
+			functions for labels (optionally with parent annotation of the form
+			``FUNC/PARENT``). Any function in the sequence ``filterfuncs`` will
+			not become part of the horizontal context of the labels. Can be
+			used to filter out adjunctions from this context.
 
 	>>> sent = 'das muss man jetzt machen'.split()
 	>>> treestr = '(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))'
@@ -200,7 +204,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			# insert an initial artificial nonterminal
 			if ids is None:
 				siblings = '' if headidx is None else node[headidx].label + ';'
-				siblings += ','.join(child.label for child in node[:horzmarkov])
+				siblings += ','.join(child.label for child in node[:horzmarkov]
+						if child.label.split('/', 1)[0] not in filterfuncs)
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
@@ -209,6 +214,9 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		else:
 			if isinstance(node[0], Tree):
 				childlabels = [child.label for child in node]
+				if filterfuncs:
+					childlabels = [label.split('/', 1)[0] for label in childlabels
+							if label.split('/', 1)[0] not in filterfuncs]
 			else:
 				childlabels = []
 			childnodes = list(node)
@@ -230,7 +238,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
-											siblings, parentstring), [])
+					siblings, parentstring), [])
 			node[:] = []
 			if leftmostunary:
 				node.append(newnode)
@@ -315,10 +323,7 @@ def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 
 def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 	""" Collapse subtrees with a single child (i.e., unary productions) into a
-	new non-terminal (Tree node) joined by 'joinchar'. This is useful when
-	working with algorithms that do not allow unary productions, and completely
-	removing the unary productions would result in loss of useful information.
-	The tree is modified in-place.
+	new non-terminal node joined by 'joinchar'. The tree is modified in-place.
 
 	:param collapsepos: when False (default), do not collapse preterminals
 	:param collapseroot: when False (default) do not modify the root production
@@ -379,8 +384,7 @@ def getbits(bitset):
 
 
 def fanout(tree):
-	""" Get the fan-out of a constituent. Requires the presence of a bitset
-	attribute. """
+	""" Return fan-out of constituent. Requires ``bitset`` attribute. """
 	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
 
 
@@ -513,9 +517,8 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 
 	:param tree: the tree for which the optimal binarization of its top
 		production will be searched.
-	:param score: a function from binarized trees to some value, where lower is
-		better (the value can be numeric or anything else which supports
-		comparisons).
+	:param score: a function from binarized trees to scores, where lower is
+		better (the scores can be anything else which supports comparisons).
 	:param head: an optional index of the head node, specifying it enables
 		head-driven binarization (which constrains the possible binarizations).
 
@@ -545,25 +548,25 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 		return new
 	if len(tree) <= 2:
 		return tree
-	#don't bother with optimality if this particular node is not discontinuous
-	#do default right factored binarization instead
+	# don't bother with optimality if this particular node is not discontinuous
+	# do default right factored binarization instead
 	elif fanout(tree) == 1 and all(fanout(a) == 1 for a in tree):
 		return factorconstituent(tree, sep=sep, h=h)
 	from discodop.plcfrs import Agenda
 	labels = [a.label for a in tree]
-	#the four main datastructures:
-	#the agenda is a priority queue of partial binarizations to explore
-	#the first complete binarization that is dequeued is the optimal one
+	# the four main datastructures:
+	# the agenda is a priority queue of partial binarizations to explore
+	# the first complete binarization that is dequeued is the optimal one
 	agenda = Agenda()
-	#the working set contains all the optimal partial binarizations
-	#keys are binarizations, values are their scores
+	# the working set contains all the optimal partial binarizations
+	# keys are binarizations, values are their scores
 	workingset = {}
-	#for each of the optimal partial binarizations, this dictionary has
-	#a bitset that describes which non-terminals from the input it covers
+	# for each of the optimal partial binarizations, this dictionary has
+	# a bitset that describes which non-terminals from the input it covers
 	nonterms = {}
 	# reverse lookup table for nonterms (from bitsets to binarizations)
 	revnonterms = {}
-	#the goal is a bitset that covers all non-terminals of the input
+	# the goal is a bitset that covers all non-terminals of the input
 	goal = (1 << len(tree)) - 1
 	if head is None:
 		for n, a in enumerate(tree):
@@ -623,7 +626,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 			x2 = max((scorep2, y[:-1], x[:-1]))
 			# add the sum of all previous parsing complexities as last item
 			x2 += (scorep2[0] + x[-1] + y[-1],)
-			#if new or better:
+			# if new or better:
 			# should we allow item when score is equal?
 			if (p2nonterms not in revnonterms
 				or workingset[revnonterms[p2nonterms]] > x2):
@@ -639,10 +642,9 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 
 
 def optimalbinarize(tree, sep='|', headdriven=False, h=None, v=1):
-	""" Recursively binarize a tree optimizing for complexity.
-	v=0 is not implemented.
-	Setting h to a nonzero integer restricts the possible binarizations
-	to head driven binarizations. """
+	""" Recursively binarize a tree, optimizing for complexity.
+	v=0 is not implemented. Setting h to a nonzero integer restricts the
+	possible binarizations to head driven binarizations. """
 	if h is None:
 		tree = Tree.convert(tree)
 		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
@@ -664,9 +666,8 @@ def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
 
 
 def disc(node):
-	""" Test whether a particular node is locally discontinuous, i.e., whether
-	its yield consists of two or more non-adjacent strings. Nodes can be
-	continuous even if some of their children are discontinuous. """
+	""" Test whether a particular node is discontinuous, i.e., whether its
+	yield consists of two or more non-adjacent strings. """
 	if not isinstance(node, Tree):
 		return False
 	return len(list(ranges(sorted(node.leaves())))) > 1
@@ -924,8 +925,7 @@ def main():
 	except (GetoptError, AssertionError) as err:
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
-	opts = dict(opts)
-	action = args[0]
+	opts, action = dict(opts), args[0]
 	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
@@ -992,8 +992,8 @@ def main():
 			outfile.writelines(block for block in corpus.blocks().values())
 		else:
 			outfile.writelines(writetree(a, b, c,
-					opts.get('--outputfmt', 'export'), headrules) for a, b, c
-					in zip(trees, sents, keys))
+					opts.get('--outputfmt', 'export'), headrules)
+					for a, b, c in zip(trees, sents, keys))
 
 if __name__ == '__main__':
 	main()

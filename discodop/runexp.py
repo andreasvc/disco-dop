@@ -267,7 +267,7 @@ def startexp(
 		getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 				revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 				fanout_marks_before_bin, testmaxwords, resultdir, numproc,
-				lexmodel, simplelexsmooth, top)
+				lexmodel, simplelexsmooth, top, relationalrealizational)
 	evalparam = evalmod.readparam(evalparam)
 	evalparam['DEBUG'] = -1
 	evalparam['CUTOFF_LEN'] = 40
@@ -303,7 +303,7 @@ def startexp(
 def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		tailmarker, revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 		fanout_marks_before_bin, testmaxwords, resultdir, numproc,
-		lexmodel, simplelexsmooth, top):
+		lexmodel, simplelexsmooth, top, relationalrealizational):
 	""" Apply binarization and read off the requested grammars. """
 	# fixme: this n should correspond to sentence id
 	tbfanout, n = treebankfanout(trees)
@@ -321,7 +321,10 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 					horzmarkov=horzmarkov, vertmarkov=vertmarkov,
 					leftmostunary=leftmostunary, rightmostunary=rightmostunary,
 					reverse=revmarkov, pospa=pospa,
-					headidx=-1 if markhead else None)
+					headidx=-1 if markhead else None,
+					filterfuncs=(relationalrealizational['ignorefunctions']
+						+ (relationalrealizational['adjunctionlabel'], ))
+						if relationalrealizational else ())
 	elif bintype == 'optimal':
 		trees = [Tree.convert(optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -792,7 +795,7 @@ def parsetepacoc(
 	getgrammars(trees, sents, stages, bintype, h, v, factor, tailmarker,
 			revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 			fanout_marks_before_bin, testmaxwords, resultdir,
-			numproc, None, False, trees[0].label)
+			numproc, None, False, trees[0].label, None)
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0

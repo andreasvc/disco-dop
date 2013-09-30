@@ -1,11 +1,12 @@
 cimport cython
+from libc.string cimport memcmp
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
 from cpython.dict cimport PyDict_Contains
 #from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \
 		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem, \
-		UInt, ULong, ULLong
+		UChar, UInt, ULong, ULLong
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, \
 	testbit, anextset, anextunset, abitcount, abitlength, \
 	ulongset, ulongcpy, setunion
@@ -32,8 +33,7 @@ ctypedef fused LCFRSItem_fused:
 
 cdef class LCFRSChart(Chart):
 	cdef readonly dict parseforest # chartitem => [Edge(lvec, rule), ...]
-	cdef list probs, itemsinorder
-	cdef dict outside
+	cdef list probs
 	cdef void addlexedge(self, item, short wordidx)
 	cdef void updateprob(self, ChartItem item, double prob)
 	cdef void addprob(self, ChartItem item, double prob)

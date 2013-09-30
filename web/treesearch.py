@@ -469,7 +469,8 @@ def doqueries(form, lines=False, doexport=None):
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
 		out, err = proc.communicate()
-		out, err = out.decode('utf8'), err.decode('utf8')
+		out = out.decode('utf8')  # pylint: disable=E1103
+		err = err.decode('utf8')  # pylint: disable=E1103
 		proc.stdout.close()  # pylint: disable=E1101
 		proc.stderr.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101

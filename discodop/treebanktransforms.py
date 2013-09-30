@@ -326,7 +326,8 @@ def unifymorphfeat(feats, percolatefeatures=None):
 
 
 def rrtransform(tree, morphlevels=0, percolatefeatures=None,
-		adjunctionlabel=None, ignorefunctions=None, ignorecategories=None):
+		adjunctionlabel=None, ignorefunctions=None, ignorecategories=None,
+		adjleft=True, adjright=True):
 	""" Relational-realizational tree transformation.
 	Every constituent node is expanded to three levels:
 
@@ -340,26 +341,30 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 		(NP-SBJ (NN-HD ...)) => (NP (<HD>/NP (HD/NP (NN ...))))
 
 	:param adjunctionlabel: a grammatical function label identifying
-		adjunctions. They will not be part of argument structures, and their
-		grammatical function will be replaced with their neighboring
-		non-adjunctive functions.
+			adjunctions. They will not be part of argument structures, and
+			their grammatical function will be replaced with their neighboring
+			non-adjunctive functions.
+	:param adjleft, adjright: whether to include the left and right sibling,
+			respectively, when replacing the function label for
+			``adjunctionlabel``.
 	:param ignorefunctions: function labels that do not go into argument
-		structure, but keep their function in their realization to make
-		backtransform possible.
+			structure, but keep their function in their realization to make
+			backtransform possible.
 	:param morphlevels: if nonzero, percolate morphological features this many
-		levels upwards. For a given node, the union of the features of its
-		children are collected, and the result is appended to its syntactic
-		category.
+			levels upwards. For a given node, the union of the features of its
+			children are collected, and the result is appended to its syntactic
+			category.
 	:param percolatefeatures: if a sequence is given, percolate only these
-		morphological features; by default all features are used.
+			morphological features; by default all features are used.
 	:returns: a new, transformed tree. """
 	def realize(child, prevfunc, nextfunc):
 		""" Generate realization of a child node by recursion. """
 		newchild, morph, lvl = rrtransform(child, morphlevels,
 				percolatefeatures, adjunctionlabel, ignorefunctions,
-				ignorecategories)
+				ignorecategories, adjleft, adjright)
 		result = tree.__class__('%s/%s' % (('%s:%s' % (prevfunc, nextfunc)
 				if child.source[FUNC] == adjunctionlabel
+				and (prevfunc or nextfunc)
 				else child.source[FUNC]), tree.label), [newchild])
 		return result, morph, lvl
 
@@ -393,7 +398,9 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 					and child.label not in ignorecategories))
 	children, feats, levels = [], [], []
 	for child, prevfunc, nextfunc in zip(tree, childfuncsl, childfuncsr):
-		newchild, morph, lvl = realize(child, prevfunc, nextfunc)
+		newchild, morph, lvl = realize(child,
+				prevfunc if adjleft else '',
+				nextfunc if adjright else '')
 		children.append(newchild)
 		if morph and lvl:
 			feats.append(morph)

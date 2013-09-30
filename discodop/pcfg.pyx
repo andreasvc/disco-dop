@@ -74,6 +74,7 @@ cdef class DenseCFGChart(CFGChart):
 		entries = cellidx(self.lensent - 1, self.lensent, self.lensent,
 				grammar.nonterminals) + grammar.nonterminals
 		self.parseforest = [None] * entries
+		self.itemsinorder = []
 
 	def __dealloc__(self):
 		if self.probs is not NULL:
@@ -89,6 +90,7 @@ cdef class DenseCFGChart(CFGChart):
 		if self.parseforest[item] is None:
 			edges = Edges()
 			self.parseforest[item] = [edges]
+			self.itemsinorder.append(item)
 		else:
 			block = len(<list>self.parseforest[item]) - 1
 			edges = self.parseforest[item][block]
@@ -152,6 +154,7 @@ cdef class SparseCFGChart(CFGChart):
 		self.viterbi = viterbi
 		self.probs = {}
 		self.parseforest = {}  # [None] * entries
+		self.itemsinorder = []
 
 	cdef void addedge(self, UInt lhs, UChar start, UChar end, UChar mid,
 			Rule *rule):
@@ -170,6 +173,7 @@ cdef class SparseCFGChart(CFGChart):
 		else:
 			edges = Edges()
 			self.parseforest[item] = [edges]
+			self.itemsinorder.append(item)
 		edge = &(edges.data[edges.len])
 		edge.rule = rule
 		edge.pos.mid = mid
