@@ -1,6 +1,10 @@
-# The number of unsigned longs in the bitvector of a FatChartItem
+# The number of unsigned longs in the bitvector of a FatChartItem.
 # The maximum sentence length will be: SLOTS * sizeof(unsigned long) * 8
-DEF SLOTS = 2
+# These values give a maximum length of 128 bits on 32 and 64 bit systems.
+IF UNAME_MACHINE == 'x86_64':
+	DEF SLOTS = 2
+ELSE:
+	DEF SLOTS = 4
 
 # The number of edges allocated at once
 # (higher number means less overhead during allocation, but more space wasted)
