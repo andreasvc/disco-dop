@@ -314,51 +314,9 @@ class AlpinoCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		""" :returns: a parse tree given a string. """
-		def getsubtree(node, parent):
-			""" Traverse Alpino XML tree and create Tree object. """
-			# FIXME: proper representation for arbitrary features
-			source = [''] * len(FIELDS)
-			source[WORD] = node.get('word') or ("#%s" % node.get('id'))
-			source[LEMMA] = node.get('lemma') or node.get('root')
-			source[MORPH] = node.get('postag') or node.get('frame')
-			source[FUNC] = node.get('rel')
-			if 'cat' in node.keys():
-				source[TAG] = node.get('cat')
-				if node.get('index'):
-					coindexed[node.get('index')] = source
-				label = node.get('cat')
-				result = ParentedTree(label.upper(), [])
-				for child in node:
-					subtree = getsubtree(child, result)
-					if subtree and (
-							'word' in child.keys() or 'cat' in child.keys()):
-						subtree.source[PARENT] = node.get('id')
-						result.append(subtree)
-				if not len(result):
-					return None
-			elif 'word' in node.keys():
-				source[TAG] = node.get('pt') or node.get('pos')
-				if node.get('index'):
-					coindexed[node.get('index')] = source
-				result = ParentedTree('', list(
-						range(int(node.get('begin')), int(node.get('end')))))
-				handlemorphology(self.morphology, self.lemmas, result, source)
-			elif 'index' in node.keys():
-				coindexation[node.get('index')].extend(
-						(node.get('rel'), parent))
-				return None
-			result.source = source
-			return result
-		coindexed = {}
-		coindexation = defaultdict(list)
-		# NB: in contrast to Negra export format, don't need to add
-		# root/top node
-		result = getsubtree(block.find('node'), None)
-		# FIXME: need MultipleParentedTree for secedges
-		#for index, secedges in coindexation.items():
-		#	coindexed[index].extend(secedges)
+		tree = alpinoparse(block, self.morphology, self.lemmas)
 		sent = self._word(block)
-		return result, sent
+		return tree, sent
 
 	def _word(self, block, orig=False):
 		if orig or self.punct != "remove":
@@ -480,6 +438,55 @@ def exportparse(block, morphology=None, lemmas=None):
 	for n, source in enumerate(block):
 		children.setdefault(source[PARENT], []).append((n, source))
 	result = ParentedTree('ROOT', getchildren('0'))
+	return result
+
+
+def alpinoparse(node, morphology=None, lemmas=None):
+	""" Given an Alpino tree as an etree XML object, construct a Tree object
+	for it. """
+	def getsubtree(node, parent, morphology, lemmas):
+		""" Parse a subtree of an Alpino tree. """
+		# FIXME: proper representation for arbitrary features
+		source = [''] * len(FIELDS)
+		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
+		source[LEMMA] = node.get('lemma') or node.get('root')
+		source[MORPH] = node.get('postag') or node.get('frame')
+		source[FUNC] = node.get('rel')
+		if 'cat' in node.keys():
+			source[TAG] = node.get('cat')
+			if node.get('index'):
+				coindexed[node.get('index')] = source
+			label = node.get('cat')
+			result = ParentedTree(label.upper(), [])
+			for child in node:
+				subtree = getsubtree(child, result, morphology, lemmas)
+				if subtree and (
+						'word' in child.keys() or 'cat' in child.keys()):
+					subtree.source[PARENT] = node.get('id')
+					result.append(subtree)
+			if not len(result):
+				return None
+		elif 'word' in node.keys():
+			source[TAG] = node.get('pt') or node.get('pos')
+			if node.get('index'):
+				coindexed[node.get('index')] = source
+			result = ParentedTree('', list(
+					range(int(node.get('begin')), int(node.get('end')))))
+			handlemorphology(morphology, lemmas, result, source)
+		elif 'index' in node.keys():
+			coindexation[node.get('index')].extend(
+					(node.get('rel'), parent))
+			return None
+		result.source = source
+		return result
+	coindexed = {}
+	coindexation = defaultdict(list)
+	# NB: in contrast to Negra export format, don't need to add
+	# root/top node
+	result = getsubtree(node.find('node'), None, morphology, lemmas)
+	# FIXME: need MultipleParentedTree for secedges
+	#for index, secedges in coindexation.items():
+	#	coindexed[index].extend(secedges)
 	return result
 
 
@@ -809,8 +816,7 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 			while res is None:
 				res, status = reader.send(line)
 				if status == 0:
-					# do not give this line to this reader anymore.
-					break
+					break  # there was no tree, or a complete tree was read
 				line = next(treeinput)
 			if res is not None:
 				if x == -1:
@@ -929,6 +935,14 @@ def exporttree(data, morphology):
 		if EXPORTNONTERMINAL.match(a[WORD]):
 			break
 		sent.append(a[WORD])
+	return tree, sent
+
+
+def alpinotree(block, morphology=None, lemmas=None):
+	""" Wrapper to get both tree and sentence for tree in Alpino format given
+	as an etree XML object. """
+	tree = alpinoparse(block, morphology, lemmas)
+	sent = block.find('sentence').text.split()
 	return tree, sent
 
 

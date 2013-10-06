@@ -252,6 +252,7 @@ def posteriorthreshold(Chart chart, double threshold):
 
 
 def getinside(Chart chart):
+	""" Compute inside probabilities for a chart given its parse forest. """
 	cdef size_t n
 	cdef Edges edges
 	cdef Edge *edge
@@ -295,6 +296,7 @@ def getinside(Chart chart):
 
 
 def getoutside(Chart chart):
+	""" Compute outside probabilities for a chart given its parse forest. """
 	cdef size_t n
 	cdef Edges edges
 	cdef Edge *edge
@@ -329,6 +331,7 @@ def getoutside(Chart chart):
 
 
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
+	""" Test coarse-to-fine methods on a sentence. """
 	import plcfrs
 	from disambiguation import marginalize
 	from treetransforms import canonicalize, removefanoutmarkers

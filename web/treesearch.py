@@ -1,5 +1,6 @@
-""" Web interface to search a treebank. Requires Flask, tgrep2, style.
-Expects one or more treebanks with .mrg extension in the directory corpus/ """
+""" Web interface to search a treebank. Requires Flask, tgrep2
+or alpinocorpus-python (for xpath queries), style. Expects one or more
+treebanks with .mrg or .dact extension in the directory corpus/ """
 # stdlib
 import os
 import re
@@ -20,26 +21,33 @@ except ImportError:
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
-#from werkzeug.contrib.cache import SimpleCache
+# alpinocorpus
+try:
+	import alpinocorpus
+	import xml.etree.cElementTree as ElementTree
+	ALPINOCORPUSLIB = True
+except ImportError:
+	ALPINOCORPUSLIB = False
 # disco-dop
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop import fragments
+from discodop import fragments, treebank
 
-CORPUS_DIR = "corpus/"
 MINFREQ = 2  # filter out fragments which occur just once or twice
 MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
 TREELIMIT = 10  # max number of trees to draw in search resuluts
 FRAGLIMIT = 250  # max amount of search results for fragment extraction
 SENTLIMIT = 1000  # max number of sents/brackets in search results
 STYLELANG = 'nl'  # language to use when running style(1)
+CORPUS_DIR = "corpus/"
 
 APP = Flask(__name__)
 
 MORPH_TAGS = re.compile(
-		r'([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
+		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
+ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 READGRADERE = re.compile(r'([- A-Za-z]+): ([0-9]+(?:\.[0-9]+)?)[\n /]')
 AVERAGERE = re.compile(
@@ -88,9 +96,10 @@ def main():
 			return export(request.args, output)
 		return Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS, selectedtexts=selected,
-				output=output, results=DISPATCH[output](request.args)))
+				output=output, results=DISPATCH[output](request.args),
+				havexpath=ALPINOCORPUSLIB))
 	return render_template('search.html', form=request.args, output='counts',
-			texts=TEXTS, selectedtexts=selected)
+			texts=TEXTS, selectedtexts=selected, havexpath=ALPINOCORPUSLIB)
 
 
 @APP.route('/style')
@@ -103,6 +112,7 @@ def style():
 			yield "NB: formatting errors may distort paragraph counts etc.\n\n"
 		else:
 			files = glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
+			# FIXME: extract from .dact files if no tgrep2 files available.
 			if not doexport:
 				yield ("No .txt files found in corpus/\n"
 						"Using sentences extracted from parse trees.\n"
@@ -148,25 +158,6 @@ def style():
 	return resp
 
 
-def export(form, output):
-	""" Export search results to a file for download. """
-	# NB: no distinction between trees from different texts
-	# (Does consttreeviewer support # comments?)
-	if output == 'counts':
-		results = counts(form, doexport=True)
-		filename = 'counts.csv'
-	elif output == 'fragments':
-		results = fragmentsinresults(form, doexport=True)
-		filename = 'fragments.txt'
-	else:
-		results = (a + '\n' for a in doqueries(
-				form, lines=False, doexport=output))
-		filename = '%s.txt' % output
-	resp = Response(results, mimetype='text/plain')
-	resp.headers['Content-Disposition'] = 'attachment; filename=' + filename
-	return resp
-
-
 @APP.route('/draw')
 def draw():
 	""" Produce a visualization of a tree on a separate page. """
@@ -176,11 +167,19 @@ def draw():
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
-	filename = os.path.join(CORPUS_DIR, TEXTS[textno].replace('.t2c.gz', ''))
-	treestr = next(islice(open(filename), sentno - 1, sentno)).decode('utf8')
-	return '<pre id="t%s">%s</pre>' % (sentno, DrawTree(
-			filterlabels(treestr, nofunc, nomorph)).text(
-				unicodelines=True, html=True))
+	filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+	if os.path.exists(filename):
+		treestr = next(islice(open(filename),
+				sentno - 1, sentno)).decode('utf8')
+		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
+					unicodelines=True, html=True)
+	elif ALPINOCORPUSLIB:
+		treestr = XMLCORPORA[textno].read('%d.xml' % (sentno - 1, ))
+		tree, sent = treebank.alpinotree(treestr)
+		result = DrawTree(tree, sent).text(unicodelines=True, html=True)
+	else:
+		raise ValueError
+	return '<pre id="t%s">%s</pre>' % (sentno, result)
 
 
 @APP.route('/browse')
@@ -190,19 +189,25 @@ def browse():
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent']) - 1
-		filename = os.path.join(CORPUS_DIR,
-				TEXTS[textno].replace('.t2c.gz', ''))
 		start = max(0, sentno - sentno % chunk)
 		maxtree = min(start + chunk, NUMSENTS[textno])
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
-		lines = islice(open(filename), start, maxtree)
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+		if os.path.exists(filename):
+			drawntrees = [DrawTree(filterlabels(
+					line.decode('utf8'), nofunc, nomorph)).text(
+					unicodelines=True, html=True)
+					for line in islice(open(filename), start, maxtree)]
+		elif ALPINOCORPUSLIB:
+			drawntrees = [DrawTree(*treebank.alpinotree(
+						XMLCORPORA[textno].read('%d.xml' % n)))
+					for n in range(start, maxtree)]
+		else:
+			raise ValueError
 		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
 				' style="display: none; "' if 'ajax' in request.args else '',
-				DrawTree(filterlabels(
-					line.decode('utf8'), nofunc, nomorph)).text(
-					unicodelines=True, html=True))
-				for n, line in enumerate(lines, start)]
+				tree) for n, tree in enumerate(drawntrees, start)]
 		if 'ajax' in request.args:
 			return '\n'.join(results)
 
@@ -232,6 +237,25 @@ def favicon():
 			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
+def export(form, output):
+	""" Export search results to a file for download. """
+	# NB: no distinction between trees from different texts
+	# (Does consttreeviewer support # comments?)
+	if output == 'counts':
+		results = counts(form, doexport=True)
+		filename = 'counts.csv'
+	elif output == 'fragments':
+		results = fragmentsinresults(form, doexport=True)
+		filename = 'fragments.txt'
+	else:
+		results = (a + '\n' for a in doqueries(
+				form, lines=False, doexport=output))
+		filename = '%s.txt' % output
+	resp = Response(results, mimetype='text/plain')
+	resp.headers['Content-Disposition'] = 'attachment; filename=' + filename
+	return resp
+
+
 def counts(form, doexport=False):
 	""" Produce counts of matches for each text. """
 	cnts = Counter()
@@ -244,8 +268,9 @@ def counts(form, doexport=False):
 			if doexport:
 				yield '"text","count","relfreq"\r\n'
 			else:
-				url = 'counts?query=%s&norm=%s&texts=%s&export=1' % (
-						form['query'], form['norm'], form['texts'])
+				url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
+						form['query'], form['norm'], form['texts'],
+						form.get('engine', 'tgrep2'))
 				yield ('Query: %s\n'
 						'NB: the counts reflect the total number of '
 						'times a pattern matches for each tree.\n\n'
@@ -254,7 +279,7 @@ def counts(form, doexport=False):
 		cnt = results.count('\n')
 		if cnt:
 			gotresult = True
-		text = TEXTS[textno].replace('.t2c.gz', '')
+		text = TEXTS[textno]
 		cnts[text] = cnt
 		total = totalsent = NUMSENTS[textno]
 		if norm == 'consts':
@@ -270,7 +295,7 @@ def counts(form, doexport=False):
 		else:
 			line = "%s%6d    %5.2f %%" % (
 					text.ljust(40)[:40], cnt, relfreq[text])
-			indices = {int(line[:line.index(':::')])
+			indices = {int(line[:line.index(':::')]) + 1
 					for line in results.splitlines()}
 			plot = concplot(indices, totalsent)
 			if cnt:
@@ -297,8 +322,9 @@ def trees(form):
 			doqueries(form, lines=True)):
 		if n == 0:
 			# NB: we do not hide function or morphology tags when exporting
-			url = 'trees?query=%s&texts=%s&export=1' % (
-					form['query'], form['texts'])
+			url = 'trees?query=%s&texts=%s&engine=%s&export=1' % (
+					quote(form['query']), form['texts'],
+					form.get('engine', 'tgrep2'))
 			yield ('Query: %s\n'
 					'Trees (showing up to %d per text; '
 					'export: <a href="%s">plain</a>, '
@@ -310,27 +336,40 @@ def trees(form):
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			cnt = count()
-			treestr = treestr.replace(" )", " -NONE-)")
-			match = match.strip()
-			if match.startswith('('):
-				treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
-						match.split(None, 1)))
-			else:
-				match = ' %s)' % match
-				treestr = treestr.replace(match, '_HIGH%s' % match)
-			tree = Tree.parse(treestr, parse_leaf=lambda _: next(cnt))
-			sent = re.findall(r" +([^ ()]+)(?=[ )])", treestr)
-			high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
-			if high:
-				high = high.pop()
-				high.label = high.label.rsplit("_", 1)[0]
-				high = list(high.subtrees()) + high.leaves()
+			if form.get('engine', 'tgrep2') == 'tgrep2':
+				cnt = count()
+				treestr = treestr.replace(" )", " -NONE-)")
+				match = match.strip()
+				if match.startswith('('):
+					treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
+							match.split(None, 1)))
+				else:
+					match = ' %s)' % match
+					treestr = treestr.replace(match, '_HIGH%s' % match)
+				tree = Tree.parse(treestr, parse_leaf=lambda _: next(cnt))
+				sent = re.findall(r" +([^ ()]+)(?=[ )])", treestr)
+				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
+				if high:
+					high = high.pop()
+					high.label = high.label.rsplit("_", 1)[0]
+					high = list(high.subtrees()) + high.leaves()
+			elif form.get('engine', 'tgrep2') == 'xpath':
+				tree, sent = treebank.alpinotree(
+						ElementTree.fromstring(treestr))
+						# morphology='replace')
+				highwords = re.findall('<node[^>]*begin="([0-9]+)"[^>]*/>',
+						match)
+				high = set(re.findall(r'\bid="(.+?)"', match))
+				high = list(tree.subtrees(lambda n:
+						n.source[treebank.PARENT] in high or
+						n.source[treebank.WORD].lstrip('#') in high))
+				high += [int(a) for a in highwords]
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True)
 			except ValueError as err:
-				line = "#%s \nERROR: %s\n%s\n%s\n" % (lineno, err, treestr, tree)
+				line = "#%s \nERROR: %s\n%s\n%s\n" % (
+						lineno, err, treestr, tree)
 			else:
 				line = "#%s\n%s\n" % (lineno, treerepr)
 			yield line
@@ -345,9 +384,10 @@ def sents(form, dobrackets=False):
 	for n, (textno, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
-			url = '%s?query=%s&texts=%s&export=1' % (
+			url = '%s?query=%s&texts=%s&engine=%s&export=1' % (
 					'trees' if dobrackets else 'sents',
-					form['query'], form['texts'])
+					quote(form['query']), form['texts'],
+					form.get('engine', 'tgrep2'))
 			yield ('Query: %s\n'
 					'Sentences (showing up to %d per text; '
 					'export: <a href="%s">plain</a>, '
@@ -359,21 +399,31 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
 			link = "<a href='/browse?text=%d&sent=%s%s%s'>draw</a>" % (
 					textno, lineno,
 					'&nofunc' if 'nofunc' in form else '',
 					'&nomorph' if 'nomorph' in form else '')
 			if dobrackets:
+				treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
 				out = treestr.replace(match,
 						"<span class=r>%s</span>" % match)
 			else:
-				pre, highlight, post = treestr.partition(match)
-				out = "%s <span class=r>%s</span> %s " % (
-						' '.join(GETLEAVES.findall(pre)),
-						' '.join(GETLEAVES.findall(highlight))
-								if '(' in highlight else highlight,
-						' '.join(GETLEAVES.findall(post)))
+				if form.get('engine', 'tgrep2') == 'tgrep2':
+					treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
+					pre, highlight, post = treestr.partition(match)
+					out = "%s <span class=r>%s</span> %s " % (
+							' '.join(GETLEAVES.findall(pre)),
+							' '.join(GETLEAVES.findall(highlight))
+									if '(' in highlight else highlight,
+							' '.join(GETLEAVES.findall(post)))
+				elif form.get('engine', 'tgrep2') == 'xpath':
+					out = ALPINOLEAVES.search(treestr).group(1)
+					# extract starting index of highlighted words
+					high = set(re.findall(
+							'<node[^>]*begin="([0-9]+)"[^>]*/>', match))
+					out = ' '.join('<span class=r>%s</span>' % word
+							if str(n) in high
+							else word for n, word in enumerate(out.split()))
 			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, out)
 		yield "</ol>"
 	if not gotresults:
@@ -387,13 +437,17 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	""" Extract recurring fragments from search results. """
+	if form.get('engine', 'tgrep2') == 'xpath':
+		yield "Not implemented for XPath queries."
+		return
 	gotresults = False
 	uniquetrees = set()
 	for n, (_, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0 and not doexport:
-			url = 'fragments?query=%s&texts=%s&export=1' % (
-					form['query'], form['texts'])
+			url = 'fragments?query=%s&texts=%s&engine=%s&export=1' % (
+					quote(form['query']), form['texts'],
+					form.get('engine', 'tgrep2'))
 			yield ('Query: %s\n'
 					'Fragments (showing up to %d fragments '
 					'in the first %d search results from selected texts; '
@@ -444,25 +498,37 @@ def fragmentsinresults(form, doexport=False):
 
 
 def doqueries(form, lines=False, doexport=None):
-	""" Run tgrep2 on each text """
+	""" Run query engine on each text. """
+	engine = form.get('engine', 'tgrep2')
+	if engine == 'tgrep2':
+		return dotgrep2queries(form, lines, doexport)
+	elif engine == 'xpath':
+		return doxpathqueries(form, lines, doexport)
+	raise ValueError('unexpected query engine: %s' % engine)
+
+
+def dotgrep2queries(form, lines=False, doexport=None):
+	""" Run tgrep2 on each text. """
 	selected = selectedtexts(form)
+	if doexport == 'sents':
+		fmt = r'%f:%s|%tw\n' if form.get('linenos') else r'%tw\n'
+	elif doexport == 'trees' or doexport == 'brackets':
+		fmt = r"%f:%s|%w\n" if form.get('linenos') else r"%w\n"
+	elif doexport is None:
+		# %s the sentence number
+		# %f the corpus name
+		# %w complete tree in bracket notation
+		# %h the matched subtree in bracket notation
+		fmt = r'%s:::%f:::%w:::%h\n'
+	else:
+		raise ValueError
 	for n, text in enumerate(TEXTS):
 		if n not in selected:
 			continue
-		if doexport == 'sents':
-			fmt = r'%f:%s|%tw\n' if form.get('linenos') else r'%tw\n'
-		elif doexport == 'trees' or doexport == 'brackets':
-			# NB: no distinction between trees from different texts
-			# (Does consttreeviewer support # comments?)
-			fmt = r"%f:%s|%w\n" if form.get('linenos') else r"%w\n"
-		elif not doexport:
-			fmt = r'%s:::%f:::%w:::%h\n'
-		else:
-			raise ValueError
 		cmd = [which('tgrep2'), '-z', '-a',
 				'-m', fmt,
-				'-c', os.path.join(CORPUS_DIR, text + '.t2c.gz'),
-				'static/macros.txt',
+				'-c', os.path.join(CORPUS_DIR, text + '.mrg.t2c.gz'),
+				'static/tgrepmacros.txt',
 				form['query']]
 		proc = subprocess.Popen(args=cmd,
 				bufsize=-1, shell=False,
@@ -477,13 +543,56 @@ def doqueries(form, lines=False, doexport=None):
 		if lines:
 			yield n, filterlabels(out, 'nofunc' in form,
 					'nomorph' in form).splitlines(), err
-		elif doexport:
+		elif doexport is None:
+			yield n, out, err
+		else:
 			if form.get('linenos'):
 				yield re.sub(r'(^|\n)corpus/', '\\1', out)
 			else:
 				yield out
-		else:
-			yield n, out, err
+
+
+def doxpathqueries(form, lines=False, doexport=None):
+	""" Run xpath query on each text. """
+	selected = selectedtexts(form)
+	for n, text in enumerate(TEXTS):
+		if n not in selected:
+			continue
+		out = err = ''
+		try:
+			out = XMLCORPORA[n].xpath(form['query'])
+		except RuntimeError as err:
+			err = str(err)
+		try:  # FIXME: catching errors here doesn't seem to work
+			if lines:
+				yield n, (('%d:::%s:::%s:::%s' % (
+							int(match.name().split('.')[0]) - 1,
+							text,
+							XMLCORPORA[n].read(match.name()),
+							match.contents())).decode('utf8')
+						for match in out), err
+			elif doexport is None:
+				yield n, ''.join(match.name().replace('.xml', ':::\n')
+						for match in out).decode('utf8'), err
+			elif doexport == 'sents':
+				yield ''.join(('%s%s\n' % (
+							(('%s:%d|' % (text,
+								int(match.name().split('.')[0]) - 1))
+							if form.get('linenos') else ''),
+							ALPINOLEAVES.search(
+								XMLCORPORA[n].read(match.name())).group(1)))
+							for match in out).decode('utf8')
+			elif doexport == 'trees' or doexport == 'brackets':
+				yield ''.join(('%s%s' % (
+						(('<!-- %s:%s -->\n' % (text, match.name()))
+						if form.get('linenos') else ''),
+						XMLCORPORA[n].read(match.name())))
+						for match in out).decode('utf8')
+		except RuntimeError as err:
+			if lines or doexport is None:
+				yield n, (), str(err)
+			else:
+				yield str(err)
 
 
 def filterlabels(line, nofunc, nomorph):
@@ -556,6 +665,7 @@ def getstyletable():
 	""" Run style(1) on all files and store results in a dictionary. """
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
+		# FIXME: extract from .dact files if no tgrep2 files available.
 		files = glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
 	styletable = {}
 	for filename in sorted(files):
@@ -607,20 +717,49 @@ def parsestyleoutput(out):
 def getcorpus():
 	""" Get list of files and number of lines in them. """
 	texts = []
+	xmlcorpora = []
 	if os.path.exists('/tmp/treesearchcorpus.pickle'):
 		texts, numsents, numconst, numwords, styletable = pickle.load(
 				open('/tmp/treesearchcorpus.pickle'))
 	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	if set(texts) != {os.path.basename(file) for file in files}:
-		texts = [os.path.basename(a) for a in files]
-		numsents = [len(open(filename).readlines()) for filename in files]
-		numconst = [open(filename).read().count('(') for filename in files]
-		numwords = [len(GETLEAVES.findall(open(filename).read()))
-				for filename in files]
+	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
+	if ALPINOCORPUSLIB:
+		assert len(files or afiles) == len(afiles), (
+				'expected either .mrg or .dact files, '
+				'or corresponding .mrg and .dact files')
+		try:
+			xmlcorpora = [alpinocorpus.CorpusReader(
+					filename,
+					macrosFilename='static/xpathmacros.txt')
+					for filename in afiles]
+		except TypeError:
+			xmlcorpora = [alpinocorpus.CorpusReader(
+					filename + '.dact')
+					for filename in afiles]
+	if set(texts) != {os.path.splitext(os.path.basename(filename))[0]
+			for filename in files + afiles}:
+		if files:
+			numsents = [len(open(filename).readlines()) for filename in files
+					if filename.endswith('.mrg')]
+			numconst = [open(filename).read().count('(') for filename in files
+					if filename.endswith('.mrg')]
+			numwords = [len(GETLEAVES.findall(open(filename).read()))
+					for filename in files if filename.endswith('.mrg')]
+		elif ALPINOCORPUSLIB:
+			numsents = [len(corpus) for corpus in xmlcorpora]
+			numconst = [sum(entry.contents().count('<node ')
+					for entry in corpus.xpath(''))
+						for corpus in xmlcorpora]
+			numwords = [sum(ALPINOLEAVES.search(
+						entry.contents()).group(1).count(' ')
+					for entry in corpus.xpath(''))
+						for corpus in xmlcorpora]
+		texts = [os.path.splitext(os.path.basename(a))[0]
+				for a in files or afiles]
 		styletable = getstyletable()
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
-	return texts, numsents, numconst, numwords, styletable
+	return texts, numsents, numconst, numwords, styletable, xmlcorpora
 
 
 def stream_template(template_name, **context):
@@ -640,7 +779,7 @@ def which(program):
 	raise ValueError('%r not found in path; please install it.' % program)
 
 
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE = getcorpus()
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False)

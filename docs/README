@@ -1,0 +1,9 @@
+To build the API documention, run the following commands from this
+directory:
+
+	pip install sphinx
+	mkdir -p _static/
+	python genrst.py
+	make html
+
+Open _build/html/index.html to browse the documentation.

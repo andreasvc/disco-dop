@@ -972,7 +972,6 @@ def do(sent, grammar):
 			print(exp(-p), a)
 		print()
 		return True
-	print(chart)
 	print('no parse')
 	return False
 

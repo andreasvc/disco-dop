@@ -773,15 +773,14 @@ def main():
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
 						).text(unicodelines=True, ansi=not '--plain' in opts))
 	else:  # read from stdin + detect format
-		sys.stdin = codecs.getreader(opts.get('--encoding', 'utf8'))(sys.stdin)
-		trees = incrementaltreereader(sys.stdin,
+		stdin = codecs.getreader(opts.get('--encoding', 'utf8'))(sys.stdin)
+		trees = incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),
 				functions=opts.get('--functions'))
 		corpora = [izip(count(1), trees)]
 		try:
-			for n, (sentid, (tree, sent)) in enumerate(corpora[0], 1):
-				print('%d (sentid=%s; len=%d):' % (
-						n, sentid, len(sent)))
+			for n, (tree, sent) in enumerate(trees, 1):
+				print('%d (len=%d):' % (n, len(sent)))
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
 						).text(unicodelines=True, ansi=not '--plain' in opts))
 		except (IOError, KeyboardInterrupt):

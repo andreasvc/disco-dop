@@ -72,18 +72,7 @@ def startexp(
 		morphology=None,  # choices: None, 'add', 'replace', 'between'
 		transformations=None,  # apply treebank transformations
 		# postagging: pass None to use tags from treebank.
-		postagging=dict(
-			method='unknownword',
-			# choices: unknownword (assign during parsing),
-			# 		treetagger, stanford (external taggers)
-			# choices unknownword: 4, 6, base,
-			# for treetagger / stanford: [filename of external tagger model]
-			model='4',
-			# options for unknown word models:
-			unknownthreshold=1,  # use probs of rare words for unknown words
-			openclassthreshold=50,  # add unseen tags for known words; 0=disable
-			simplelexsmooth=True,  # disable sophisticated smoothing
-		),
+		postagging=None,
 		relationalrealizational=None,  # do not apply RR-transform
 		headrules=None,  # rules for finding heads of constituents
 		bintype='binarize',  # choices: binarize, optimal, optimalhead

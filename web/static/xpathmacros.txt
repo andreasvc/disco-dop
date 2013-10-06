@@ -1,0 +1,131 @@
+b = """number(@begin)"""
+e = """number(@end)"""
+i = """number(@index)"""
+
+headrel = """ ( @rel="hd" or @rel="cmp" or @rel="mwp" or
+                @rel="crd" or @rel="rhd" or @rel="whd" or
+                @rel="nucl" or @rel="dp" ) """
+
+begin_of_head = """ node[%headrel%]/%b% """
+end_of_head   = """ node[%headrel%]/%e% """
+
+begin_of_hd   = """ node[@rel="hd"]/%b% """
+end_of_hd     = """ node[@rel="hd"]/%e% """
+
+precedes_head_of_smain = """
+(  ancestor::node[@cat="smain"]/
+             node[@rel="hd"]/%b%
+           > %begin_of_head%
+   or
+   ancestor::node[@cat="smain"]/
+             node[@rel="hd"]/%b%
+           > %b% and @word
+)
+"""
+
+vorfeld = """
+( %precedes_head_of_smain% and not (ancestor::node[%precedes_head_of_smain%]) )
+"""
+
+vorfeld2 = """
+( %precedes_head_of_smain% and not (parent::node[%precedes_head_of_smain%]) )
+"""
+
+single_name = """( @ntype = 'eigen' or @postag='SPEC(deeleigen)'  )"""
+
+multi_name =  """( @cat='mwu' and node[@rel='mwp' and %single_name% ] ) """
+
+name =        """( %single_name% or %multi_name% )"""
+
+name_phrase=  """( %name% or node[@rel="hd"  and %name%]  )"""
+
+vp = """ (@cat="inf" or @cat="ti" or @cat="ssub" or @cat="oti" or @cat="ppart") """
+
+follows_head_of_vp = """(
+  ancestor::node[%vp%]/node[@rel="hd"]/%b%
+          < %begin_of_head%
+  or
+  ancestor::node[%vp%]/node[@rel="hd"]/%b%
+          < %b% and @word
+)
+"""
+
+verbcluster = """
+( @rel="vc" and
+  (@cat="ti" or @cat="inf" or @cat="ppart") and
+  node/%b% < ../node[@rel="hd" and @pt="ww"]/%b%
+)
+"""
+
+cross_serial_verbcluster = """ (
+            //node[%verbcluster% and @cat="inf" and
+                   ../node[@rel="obj1"]/%i% = node[@rel="su"]/%i%
+                  ]
+)"""
+
+nachfeld = """
+( not(%verbcluster%) and
+  not(@rel="hd" and parent::node[%verbcluster%]) and
+  ( some $v in (
+                 ancestor::node[%vp%]/node[@rel="hd"]
+           ) satisfies
+           (
+                (  $v/%b% < %begin_of_head%
+                or (  $v/%b%  < %b% and @word )
+                )
+                and not( parent::node[$v/%b% < %begin_of_head%] )
+           )
+  )
+)
+"""
+
+nfc = """
+( not(%verbcluster%) and
+  not(@rel="hd" and parent::node[%verbcluster%]) and
+  ( some $v in (
+                 ancestor::node[%vp%]/node[@rel="hd"]
+           ) satisfies
+           (
+                (  $v/%b% < %begin_of_head%
+                or (  $v/%b%  < %b% and @word )
+                )
+           )
+  )
+)
+"""
+
+obj1_drinken_lexical = """
+( @rel="obj1" and
+  @word and
+  ../node[@rel="hd" and
+          @lemma="drinken"]
+)"""
+
+obj1_drinken_phrase = """
+( @rel="hd" and
+  ../@rel="obj1" and
+  ../../node[@rel="hd" and
+             @lemma="drinken"]
+)"""
+
+obj1_drinken_lexical_nonlocal = """
+( (@cat or @word) and
+  %i% = //node[@rel="obj1" and
+               ../node[@rel="hd" and
+                       @lemma="drinken"]]/%i%
+)"""
+
+obj1_drinken_phrase_nonlocal = """
+( @rel="hd" and
+  ../%i% = //node[@rel="obj1" and
+                  ../node[@rel="hd" and
+                  @lemma="drinken"]]/%i%
+)"""
+
+obj1_drinken = """
+(  %obj1_drinken_lexical%
+or %obj1_drinken_phrase%
+or %obj1_drinken_lexical_nonlocal%
+or %obj1_drinken_phrase_nonlocal%
+)
+"""
