@@ -25,7 +25,7 @@ from subprocess import Popen, PIPE
 import numpy as np
 from discodop import eval as evalmod
 from discodop.tree import Tree
-from discodop.treebank import getreader, writetree, treebankfanout
+from discodop.treebank import READERS, writetree, treebankfanout
 from discodop.treebanktransforms import transform, rrtransform
 from discodop.treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers
@@ -55,7 +55,7 @@ def initworker(params):
 
 def startexp(
 		stages=(DEFAULTSTAGE, ),  # see above
-		corpusfmt='export',  # choices: export, discbracket, bracket
+		corpusfmt='export',  # choices: export, (disc)bracket, alpino, tiger
 		corpusdir='.',
 		# filenames may include globbing characters '*' and '?'.
 		traincorpus='alpinosample.export', trainencoding='utf-8',
@@ -132,7 +132,7 @@ def startexp(
 	fileobj.setFormatter(logging.Formatter(formatstr))
 	logging.getLogger('').addHandler(fileobj)
 
-	corpusreader = getreader(corpusfmt)
+	corpusreader = READERS[corpusfmt]
 	if not rerun:
 		corpus = corpusreader(corpusdir, traincorpus, encoding=trainencoding,
 				headrules=headrules, headfinal=True, headreverse=False,
@@ -614,7 +614,8 @@ def writeresults(results, params):
 	ext = {'export': 'export', 'bracket': 'mrg',
 			'discbracket': 'dbr', 'alpino': 'xml'}
 	category = (params.category + '.') if params.category else ''
-	if params.corpusfmt == 'alpino':
+	if params.corpusfmt in ('alpino', 'tiger'):
+		# convert gold corpus because writing these formats is unsupported
 		corpusfmt = 'export'
 		io.open('%s/%sgold.%s' % (params.resultdir, category, ext[corpusfmt]),
 				'w', encoding='utf-8').writelines(
@@ -716,7 +717,7 @@ def parsetepacoc(
 				corpus_trees, corpus_blocks) = pickle.load(
 					gzip.open('tiger.pickle.gz', 'rb'))
 	except IOError:  # file not found
-		corpus = getreader('export')('../tiger/corpus',
+		corpus = READERS['export']('../tiger/corpus',
 				'tiger_release_aug07.export',
 				headrules='negra.headrules' if bintype == 'binarize' else None,
 				headfinal=True, headreverse=False, punct='move',

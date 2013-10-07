@@ -11,6 +11,7 @@ from fractions import Fraction
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
 from discodop.tree import ImmutableTree, Tree
+from discodop.treebank import READERS, splitpath
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
@@ -37,16 +38,16 @@ rules:   S	NP	VP	010	1/2
 lexicon: Haus	NN	3/10	JJ	1/9"""
 
 USAGE = """Read off grammars from treebanks.
-Usage: %s pcfg <input> <output> [options]
-  %s plcfrs <input> <output> [options]
-  %s dopreduction <input> <output> [options]
-  %s doubledop <input> <output> [options]
+Usage: %(cmd)s pcfg <input> <output> [options]
+  %(cmd)s plcfrs <input> <output> [options]
+  %(cmd)s dopreduction <input> <output> [options]
+  %(cmd)s doubledop <input> <output> [options]
 
 input is a binarized treebank,
 output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
-  --inputfmt=[*export|discbracket|bracket]
+  --inputfmt=[*%(corpusfmts)s]
   --inputenc=[*UTF-8|ISO-8859-1|...]
   --dopestimator=[*dop1|ewe|shortest|...]
   --numproc=[*1|2|...]  only relevant for double dop fragment extraction
@@ -57,7 +58,8 @@ When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
-\n%s\n""" % (sys.argv[0], sys.argv[0], sys.argv[0], sys.argv[0], FORMAT)
+\n%(grammarformat)s\n""" % dict(cmd=sys.argv[0], grammarformat=FORMAT,
+		corpusfmts='|'.join(READERS.keys()))
 
 
 def lcfrs_productions(tree, sent, frontiers=False):
@@ -910,7 +912,6 @@ def main():
 	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
-	from discodop.treebank import getreader, splitpath
 	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
@@ -929,8 +930,8 @@ def main():
 		'unrecognized estimator: %r' % opts['dopestimator'])
 
 	# read treebank
-	reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = reader(*splitpath(treebankfile),
+	corpus = READERS[opts.get('--inputfmt', 'export')](
+			*splitpath(treebankfile),
 			encoding=opts.get('--inputenc', 'utf8'))
 	trees = list(corpus.parsed_sents().values())
 	sents = list(corpus.sents().values())

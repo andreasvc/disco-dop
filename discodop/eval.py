@@ -13,7 +13,7 @@ else:
 
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop.treebank import getreader, readheadrules, dependencies, splitpath
+from discodop.treebank import READERS, readheadrules, dependencies, splitpath
 try:
 	from discodop.treedist import treedist, newtreedist
 except ImportError:
@@ -32,14 +32,14 @@ file, and options may consist of:
   --debug          Print debug information with per sentence bracketings etc.
   --disconly       Only evaluate bracketings of discontinuous constituents
                    (only affects Parseval measures).
-  --goldfmt        ...
-  --parsesfmt      Specify corpus format. Options: export, bracket, discbracket
-  --goldenc=enc    ...
-  --parsesenc=enc  Specify a different encoding than the default UTF-8.
+  --goldfmt|--parsesfmt=[*%s]
+                   Specify corpus format.
+  --goldenc|--parsesenc=[*UTF-8|ISO-8859-1|...]
+                   Specify a different encoding than the default UTF-8.
   --ted            Enable tree-edit distance evaluation.
-  --headrules=x    Specify rules for head assignment of constituents that do
-                   not already have a child marked as head; this enables
-                   dependency evaluation.
+  --headrules=x    Specify file with rules for head assignment of constituents
+                   that do not already have a child marked as head; this
+                   enables dependency evaluation.
   --functions=x    'remove'=default: strip functions off labels,
                    'leave': leave syntactic labels as is,
                    'add': evaluate both syntactic categories and functions,
@@ -61,7 +61,8 @@ options (in addition to those described in the README of EVALB):
                    2 give detailed information for each sentence ('--debug')
   MAX_ERROR        this values is ignored, no errors are tolerated.
                    the parameter is accepted to support usage of unmodified
-                   EVALB parameter files. """ % USAGE
+                   EVALB parameter files. """ % (
+        USAGE, '|'.join(READERS.keys()))
 
 HEADER = """
    Sentence                 Matched   Brackets            Corr      Tag
@@ -100,8 +101,8 @@ def main():
 	except AssertionError as err:
 		print('error: %s' % err)
 		sys.exit(2)
-	goldreader = getreader(opts.get('--goldfmt', 'export'))
-	parsesreader = getreader(opts.get('--parsesfmt', 'export'))
+	goldreader = READERS[opts.get('--goldfmt', 'export')]
+	parsesreader = READERS[opts.get('--parsesfmt', 'export')]
 	gold = goldreader(*splitpath(goldfile),
 			encoding=opts.get('--goldenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
@@ -854,8 +855,8 @@ def edit_distance(seq1, seq2):
 
 def test():
 	""" Simple sanity check; should give 100% score on all metrics. """
-	gold = getreader('export')('.', 'alpinosample.export')
-	parses = getreader('export')('.', 'alpinosample.export')
+	gold = READERS['export']('.', 'alpinosample.export')
+	parses = READERS['export']('.', 'alpinosample.export')
 	doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),

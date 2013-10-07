@@ -9,7 +9,6 @@ from itertools import count, chain
 from collections import defaultdict, OrderedDict, Counter as multiset
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
-from discodop.treetransforms import addbitsets, fanout
 from discodop.treebanktransforms import punctremove, punctraise, \
 		balancedpunctraise, punctroot, ispunct
 
@@ -490,14 +489,6 @@ def alpinoparse(node, morphology=None, lemmas=None):
 	return result
 
 
-def getreader(fmt):
-	""" :returns: the corpus reader class with name ``fmt``. """
-	return {'export': NegraCorpusReader,
-		'discbracket': DiscBracketCorpusReader,
-		'bracket': BracketCorpusReader,
-		'alpino': AlpinoCorpusReader}[fmt]
-
-
 def splitpath(path):
 	""" Split path into a pair of (directory, filename). """
 	return path.rsplit('/', 1) if '/' in path else ('.', path)
@@ -948,6 +939,7 @@ def alpinotree(block, morphology=None, lemmas=None):
 
 def treebankfanout(trees):
 	""" Get maximal fan-out of a list of trees. """
+	from discodop.treetransforms import addbitsets, fanout
 	# avoid max over empty sequence: 'treebank' may only have unary productions
 	try:
 		return max((fanout(a), n) for n, tree in enumerate(trees)
@@ -958,6 +950,15 @@ def treebankfanout(trees):
 
 def test():
 	""" Not implemented. """
+
+
+READERS = OrderedDict((
+			('export', NegraCorpusReader),
+			('bracket', BracketCorpusReader),
+			('discbracket', DiscBracketCorpusReader),
+			('tiger', TigerXMLCorpusReader),
+			('alpino', AlpinoCorpusReader),
+		))
 
 if __name__ == '__main__':
 	test()

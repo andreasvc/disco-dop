@@ -34,7 +34,7 @@ stages=[
 ],
 
 # train / test sets
-corpusfmt='export',  # choices: export, bracket, discbracket
+corpusfmt='export',  # choices: export, bracket, discbracket, alpino, tiger
 corpusdir='.',
 traincorpus='alpinosample.export', trainencoding='utf-8',
 testcorpus='alpinosample.export', testencoding='utf-8',

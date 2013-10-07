@@ -14,6 +14,7 @@ from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from itertools import count
 from discodop.tree import Tree
+from discodop.treebank import READERS, incrementaltreereader, splitpath
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 	from builtins import zip as izip  # pylint: disable=F0401
@@ -22,9 +23,9 @@ else:
 
 
 USAGE = """Usage: %s [<treebank>...] [options]
-Options:
-  --fmt=x          Specify corpus format. Options: export, bracket,
-                   discbracket, alpino.
+Options (* marks default option):
+  --fmt=[*%s]
+                   Specify corpus format.
   --encoding=enc   Specify a different encoding than the default UTF-8.
   --functions=x    'leave'=default: leave syntactic labels as is,
                    'remove': strip functions off labels,
@@ -38,7 +39,8 @@ Options:
   --plain          disable ANSI colors.
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
-Pipe the output through 'less -R' to preserve the colors. """ % sys.argv[0]
+Pipe the output through 'less -R' to preserve the colors. """ % (
+		sys.argv[0], '|'.join(READERS.keys()))
 ANSICOLOR = {
 		'black': 30,
 		'red': 31,
@@ -736,7 +738,6 @@ def test():
 
 def main():
 	""" Text-based tree viewer. """
-	from discodop.treebank import getreader, incrementaltreereader, splitpath
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
@@ -753,21 +754,19 @@ def main():
 		print(USAGE)
 		return
 	if args:
-		reader = getreader(opts.get('--fmt', 'export'))
+		reader = READERS[opts.get('--fmt', 'export')]
 		corpora = []
 		for path in args:
 			corpus = reader(*splitpath(path),
 					encoding=opts.get('--encoding', 'utf8'),
 					functions=opts.get('--functions'),
 					morphology=opts.get('--morphology'))
-			corpora.append(zip(corpus.parsed_sents(),
-					zip(corpus.parsed_sents().values(),
-						corpus.sents().values())))
+			corpora.append((corpus.parsed_sents(), corpus.sents()))
 		numsents = len(corpus.sents())
 		print('Viewing:', *args)
-		for n, (sentid, (tree, sent)) in enumerate(corpora[0], 1):
+		for n, sentid in enumerate(corpora[0][0], 1):
 			print('%d of %s (sentid=%s; len=%d):' % (
-					n, numsents, sentid, len(sent)))
+					n, numsents, sentid, len(corpora[0][1][sentid])))
 			for trees, sents in corpora:
 				tree, sent = trees[sentid], sents[sentid]
 				print(DrawTree(tree, sent, abbr='--abbr' in opts

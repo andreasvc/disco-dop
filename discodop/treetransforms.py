@@ -22,6 +22,7 @@ from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
+from discodop.treebank import READERS, writetree, readheadrules, splitpath
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -49,7 +50,7 @@ action is one of:
     mergedisc
 
 options may consist of (* marks default option):
-  --inputfmt|--outputfmt=[*export|discbracket|bracket|alpino]
+  --inputfmt|--outputfmt=[*%s]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
@@ -79,7 +80,8 @@ options may consist of (* marks default option):
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
 	conversion and requires all constituents to have a child with HD as one of
-	its function labels, or the use of heuristic head rules. """ % sys.argv[0]
+	its function labels, or the use of heuristic head rules. """ % (
+			sys.argv[0], '|'.join(READERS.keys()))
 
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
@@ -915,7 +917,6 @@ def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
-	from discodop.treebank import getreader, writetree, readheadrules, splitpath
 	flags = ['markorigin', 'markheads', 'lemmas']
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()
@@ -930,8 +931,7 @@ def main():
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
 	# read input
-	reader = getreader(opts.get('--inputfmt', 'export'))
-	corpus = reader(*splitpath(infilename),
+	corpus = READERS[opts.get('--inputfmt', 'export')](*splitpath(infilename),
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get('--headrules'), markheads='--markheads' in opts,
 			punct=opts.get('--punct'), functions=opts.get('--functions'),
