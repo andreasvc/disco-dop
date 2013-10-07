@@ -24,7 +24,7 @@ from flask import request, render_template, send_from_directory
 # alpinocorpus
 try:
 	import alpinocorpus
-	import xml.etree.cElementTree as ElementTree
+	import lxml.etree as ElementTree
 	ALPINOCORPUSLIB = True
 except ImportError:
 	ALPINOCORPUSLIB = False
