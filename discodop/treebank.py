@@ -3,7 +3,7 @@ from __future__ import division, print_function, unicode_literals
 import io
 import os
 import re
-import xml.etree.cElementTree as ElementTree
+import lxml.etree as ElementTree
 from glob import glob
 from itertools import count, chain
 from collections import defaultdict, OrderedDict, Counter as multiset
