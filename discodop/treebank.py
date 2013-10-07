@@ -293,7 +293,7 @@ class AlpinoCorpusReader(CorpusReader):
 		trees in the treebank. """
 		if self._block_cache is None:
 			self._block_cache = self._read_blocks()
-		return OrderedDict((n, ElementTree.tostring(a, encoding='UTF-8'))
+		return OrderedDict((n, ElementTree.tostring(a))
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
@@ -332,7 +332,7 @@ class TigerXMLCorpusReader(CorpusReader):
 		trees in the treebank. """
 		if self._block_cache is None:
 			self._block_cache = self._read_blocks()
-		return OrderedDict((n, ElementTree.tostring(a, encoding='UTF-8'))
+		return OrderedDict((n, ElementTree.tostring(a))
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
