@@ -929,11 +929,12 @@ def exporttree(data, morphology):
 	return tree, sent
 
 
-def alpinotree(block, morphology=None, lemmas=None):
+def alpinotree(block, morphology=None, lemmas=None, functions=None):
 	""" Wrapper to get both tree and sentence for tree in Alpino format given
 	as an etree XML object. """
 	tree = alpinoparse(block, morphology, lemmas)
 	sent = block.find('sentence').text.split()
+	handlefunctions(functions, tree)
 	return tree, sent
 
 

@@ -175,7 +175,10 @@ def draw():
 					unicodelines=True, html=True)
 	elif ALPINOCORPUSLIB:
 		treestr = XMLCORPORA[textno].read('%d.xml' % (sentno - 1, ))
-		tree, sent = treebank.alpinotree(treestr)
+		tree, sent = treebank.alpinotree(
+				ElementTree.fromstring(treestr),
+				functions=None if nofunc else 'add',
+				morphology=None if nomorph else 'replace')
 		result = DrawTree(tree, sent).text(unicodelines=True, html=True)
 	else:
 		raise ValueError
@@ -201,7 +204,11 @@ def browse():
 					for line in islice(open(filename), start, maxtree)]
 		elif ALPINOCORPUSLIB:
 			drawntrees = [DrawTree(*treebank.alpinotree(
-						XMLCORPORA[textno].read('%d.xml' % n)))
+					ElementTree.fromstring(
+						XMLCORPORA[textno].read('%d.xml' % n)),
+					functions=None if nofunc else 'add',
+					morphology=None if nomorph else 'replace')).text(
+					unicodelines=True, html=True)
 					for n in range(start, maxtree)]
 		else:
 			raise ValueError
@@ -353,10 +360,11 @@ def trees(form):
 					high = high.pop()
 					high.label = high.label.rsplit("_", 1)[0]
 					high = list(high.subtrees()) + high.leaves()
-			elif form.get('engine', 'tgrep2') == 'xpath':
+			elif form.get('engine') == 'xpath':
 				tree, sent = treebank.alpinotree(
-						ElementTree.fromstring(treestr))
-						# morphology='replace')
+						ElementTree.fromstring(treestr),
+						functions=None if 'nofunc' in form else 'add',
+						morphology=None if 'nomorph' in form else 'replace')
 				highwords = re.findall('<node[^>]*begin="([0-9]+)"[^>]*/>',
 						match)
 				high = set(re.findall(r'\bid="(.+?)"', match))
@@ -416,7 +424,7 @@ def sents(form, dobrackets=False):
 							' '.join(GETLEAVES.findall(highlight))
 									if '(' in highlight else highlight,
 							' '.join(GETLEAVES.findall(post)))
-				elif form.get('engine', 'tgrep2') == 'xpath':
+				elif form.get('engine') == 'xpath':
 					out = ALPINOLEAVES.search(treestr).group(1)
 					# extract starting index of highlighted words
 					high = set(re.findall(
@@ -437,7 +445,7 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	""" Extract recurring fragments from search results. """
-	if form.get('engine', 'tgrep2') == 'xpath':
+	if form.get('engine') == 'xpath':
 		yield "Not implemented for XPath queries."
 		return
 	gotresults = False
@@ -566,7 +574,7 @@ def doxpathqueries(form, lines=False, doexport=None):
 		try:  # FIXME: catching errors here doesn't seem to work
 			if lines:
 				yield n, (('%d:::%s:::%s:::%s' % (
-							int(match.name().split('.')[0]) - 1,
+							int(match.name().split('.')[0]) + 1,
 							text,
 							XMLCORPORA[n].read(match.name()),
 							match.contents())).decode('utf8')
@@ -577,7 +585,7 @@ def doxpathqueries(form, lines=False, doexport=None):
 			elif doexport == 'sents':
 				yield ''.join(('%s%s\n' % (
 							(('%s:%d|' % (text,
-								int(match.name().split('.')[0]) - 1))
+								int(match.name().split('.')[0]) + 1))
 							if form.get('linenos') else ''),
 							ALPINOLEAVES.search(
 								XMLCORPORA[n].read(match.name())).group(1)))
@@ -651,7 +659,6 @@ def selectedtexts(form):
 def preparecorpus():
 	""" Produce indexed versions of parse trees in .mrg files """
 	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	assert files, 'Expected one or more .mrg files with parse trees in corpus/'
 	for a in files:
 		if not os.path.exists(a + '.t2c.gz'):
 			subprocess.check_call(
@@ -746,7 +753,7 @@ def getcorpus():
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
 					for filename in files if filename.endswith('.mrg')]
 		elif ALPINOCORPUSLIB:
-			numsents = [len(corpus) for corpus in xmlcorpora]
+			numsents = [corpus.size() for corpus in xmlcorpora]
 			numconst = [sum(entry.contents().count('<node ')
 					for entry in corpus.xpath(''))
 						for corpus in xmlcorpora]
