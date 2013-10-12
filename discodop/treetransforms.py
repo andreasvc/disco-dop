@@ -17,7 +17,7 @@
 from __future__ import print_function
 import re
 import sys
-from itertools import count
+from itertools import count, islice
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
@@ -940,10 +940,7 @@ def main():
 	start, end = opts.get('--slice', ':').split(':')
 	start = int(start) if start else None
 	end = int(end) if end else None
-	trees = list(corpus.parsed_sents().values())[start:end]
-	sents = list(corpus.sents().values())[start:end]
-	keys = list(corpus.sents())[start:end]
-	print('read %d trees from %s' % (len(trees), infilename), file=sys.stderr)
+	trees = islice(corpus.parsed_sents_iter(), start, end)
 
 	# apply transformation
 	actions = ('binarize unbinarize optimalbinarize introducepreterminals '
@@ -955,22 +952,23 @@ def main():
 		headdriven = '--headrules' in opts
 		h = int(opts['-h']) if 'h' in opts else None
 		v = int(opts.get('-v', 1))
-	for n, tree in enumerate(trees):
-		if action == 'binarize':
-			binarize(tree, factor, h, v)
-		elif action == 'optimalbinarize':
-			trees[n] = optimalbinarize(tree, '|', headdriven, h, v)
-		elif action == 'unbinarize':
-			unbinarize(tree)
-		elif action == 'introducepreterminals':
-			introducepreterminals(tree)
-		elif action == 'splitdisc':
-			splitdiscnodes(tree, '--markorigin' in opts)
-		elif action == 'mergedisc':
-			mergediscnodes(tree)
-	if action != 'none':
-		print('transformed %d trees with action %r' % (len(trees), action),
-				file=sys.stderr)
+
+	transform = None
+	if action == 'binarize':
+		transform = lambda tree: binarize(tree, factor, h, v)
+	elif action == 'optimalbinarize':
+		transform = lambda tree: optimalbinarize(tree, '|', headdriven, h, v)
+	elif action == 'unbinarize':
+		transform = unbinarize
+	elif action == 'introducepreterminals':
+		transform = introducepreterminals
+	elif action == 'splitdisc':
+		transform = lambda tree: splitdiscnodes(tree, '--markorigin' in opts)
+	elif action == 'mergedisc':
+		transform = mergediscnodes
+	if transform is not None:  # NB: transform cannot affect (no. of) terminals
+		trees = ((key, transform(action, tree), sent)
+				for key, tree, sent in trees)
 
 	# write output
 	headrules = None
@@ -979,21 +977,24 @@ def main():
 				'need head rules for dependency conversion')
 		headrules = readheadrules(opts.get('--headrules'))
 
-	print('going to write %d trees to %s' % (len(trees), outfilename),
-			file=sys.stderr)
 	encoding = opts.get('outputenc', 'utf-8')
+	cnt = 0
 	with io.open(outfilename, 'w', encoding=encoding) as outfile:
-		# copy treebank verbatim. useful when only taking a slice
-		# or converting encoding.
-		if (action == 'none' and opts.get('--inputfmt', 'export') ==
-				opts.get('--outputfmt', 'export')
+		if (action == 'none' and opts.get('--inputfmt') == opts.get('--outputfmt')
 				and set(opts) < {'--slice', '--inputenc', '--outputenc',
 					'--inputfmt', '--outputfmt'}):
-			outfile.writelines(block for block in corpus.blocks().values())
+			# copy treebank verbatim. useful when only taking a slice
+			# or converting encoding.
+			for block in islice(corpus.blocks().values(), start, end):
+				outfile.write(block)
+				cnt += 1
 		else:
-			outfile.writelines(writetree(a, b, c,
-					opts.get('--outputfmt', 'export'), headrules)
-					for a, b, c in zip(trees, sents, keys))
+			for key, tree, sent in trees:
+				outfile.write(writetree(tree, sent, key,
+						opts.get('--outputfmt', 'export'), headrules))
+				cnt += 1
+	print('%sed %d trees with action %r' % ('convert' if action == 'none'
+			else 'transform', cnt, action))
 
 if __name__ == '__main__':
 	main()

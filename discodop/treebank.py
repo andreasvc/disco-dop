@@ -82,20 +82,31 @@ class CorpusReader(object):
 		self._sents_cache = None
 		self._tagged_sents_cache = None
 		self._parsed_sents_cache = None
-		self._block_cache = self._read_blocks()
+		self._block_cache = None
 
 	def parsed_sents(self):
 		""" :returns: an ordered dictionary of parse trees (``Tree`` objects \
 		with integer indices as leaves). """
 		if not self._parsed_sents_cache:
+			if self._block_cache is None:
+				self._block_cache = OrderedDict(self._read_blocks())
 			self._parsed_sents_cache = OrderedDict((a, self._parsetree(b))
 					for a, b in self._block_cache.items())
 		return self._parsed_sents_cache
+
+	def parsed_sents_iter(self):
+		""" :returns: an iterator returning tuples (key, tree, sent) of
+		sentences in corpus. Useful when the dictionary of all trees in corpus
+		would not fit in memory. """
+		for a, b in self._read_blocks():
+			yield a, self._parsetree(b), self._word(b)
 
 	def sents(self):
 		""" :returns: an ordered dictionary of sentences, \
 		each sentence being a list of words. """
 		if not self._sents_cache:
+			if self._block_cache is None:
+				self._block_cache = OrderedDict(self._read_blocks())
 			self._sents_cache = OrderedDict((a, self._word(b))
 					for a, b in self._block_cache.items())
 		return self._sents_cache
@@ -104,6 +115,8 @@ class CorpusReader(object):
 		""" :returns: an ordered dictionary of tagged sentences, \
 		each tagged sentence being a list of (word, tag) pairs. """
 		if not self._tagged_sents_cache:
+			if self._block_cache is None:
+				self._block_cache = OrderedDict(self._read_blocks())
 			# for each sentence, zip its words & tags together in a list.
 			# this assumes that .sents() and .parsed_sents() correctly remove
 			# punctuation if requested.
@@ -118,8 +131,8 @@ class CorpusReader(object):
 		trees in the original treebank. """
 
 	def _read_blocks(self):
-		""" No-op. For line-oriented formats re-reading is cheaper than
-		caching. """
+		""" An iterator over blocks from corpus file that correspond to
+		individual annotated sentences. """
 
 	def _parse(self, block):
 		""" :returns: a parse tree given a string from the treebank file. """
@@ -160,14 +173,15 @@ class CorpusReader(object):
 class NegraCorpusReader(CorpusReader):
 	""" Read a corpus in the Negra export format. """
 	def blocks(self):
+		if self._block_cache is None:
+			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((a, "#BOS %s\n%s\n#EOS %s\n" % (a,
 				"\n".join("\t".join(c) for c in b), a))
 				for a, b in self._block_cache.items())
 
 	def _read_blocks(self):
-		""" Read corpus and return list of blocks corresponding to each
-		sentence. """
-		result = OrderedDict()
+		""" Read corpus and yield blocks corresponding to each sentence. """
+		results = set()
 		started = False
 		for filename in self._filenames:
 			for line in io.open(filename, encoding=self._encoding):
@@ -183,12 +197,12 @@ class NegraCorpusReader(CorpusReader):
 					assert sentid == thissentid, ("unexpected sentence id: "
 							"start=%s, end=%s" % (sentid, thissentid))
 					started = False
-					assert sentid not in result, (
+					assert sentid not in results, (
 							"duplicate sentence ID: %s" % sentid)
-					result[sentid] = lines
+					results.add(sentid)
+					yield sentid, lines
 				elif started:
 					lines.append(exportsplit(line))
-		return result
 
 	def _parse(self, block):
 		tree = exportparse(block, self.morphology, self.lemmas)
@@ -225,9 +239,13 @@ class DiscBracketCorpusReader(CorpusReader):
 		return self._parsed_sents_cache
 
 	def blocks(self):
-		return OrderedDict(enumerate(filter(None,
-			(line for filename in self._filenames
-			for line in io.open(filename, encoding=self._encoding))), 1))
+		return OrderedDict(self._read_blocks())
+
+	def _read_blocks(self):
+		for n, block in enumerate((line for filename in self._filenames
+				for line in io.open(filename, encoding=self._encoding)
+				if line), 1):
+			yield n, block
 
 	def _parse(self, block):
 		result = ParentedTree.parse(block.split("\t", 1)[0], parse_leaf=int)
@@ -266,8 +284,13 @@ class BracketCorpusReader(CorpusReader):
 		return self._parsed_sents_cache
 
 	def blocks(self):
-		return OrderedDict(enumerate((line for filename in self._filenames
-			for line in io.open(filename, encoding=self._encoding) if line), 1))
+		return OrderedDict(self._read_blocks())
+
+	def _read_blocks(self):
+		for n, block in enumerate((line for filename in self._filenames
+				for line in io.open(filename, encoding=self._encoding)
+				if line), 1):
+			yield n, block
 
 	def _parse(self, block):
 		c = count()
@@ -285,22 +308,22 @@ class BracketCorpusReader(CorpusReader):
 
 
 class AlpinoCorpusReader(CorpusReader):
-	""" Corpus reader for the Dutch Alpino treebank in XML format. """
+	""" Corpus reader for the Dutch Alpino treebank in XML format.
+	Expects a corpus in directory format, where every sentence is in a single
+	``.xml`` file. """
 
 	def blocks(self):
 		""" :returns: a list of strings containing the raw representation of \
 		trees in the treebank. """
 		if self._block_cache is None:
-			self._block_cache = self._read_blocks()
+			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((n, ElementTree.tostring(a))
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
-		""" Read corpus and return list of blocks corresponding to each
-		sentence. """
-		results = OrderedDict()
+		""" Read corpus and yield blocks corresponding to each sentence. """
 		assert self._encoding in (None, 'utf8', 'utf-8'), (
-				"Encoding specified in XML files.")
+				'Encoding specified in XML files, cannot be overriden.')
 		for filename in self._filenames:
 			block = ElementTree.parse(filename).getroot()
 			#n = s.find('comments')[0].text.split('|', 1)[0], s
@@ -308,8 +331,7 @@ class AlpinoCorpusReader(CorpusReader):
 			path, filename = os.path.split(filename)
 			_, lastdir = os.path.split(path)
 			n = os.path.join(lastdir, filename)[:-len('.xml')]
-			results[n] = block
-		return results
+			yield n, block
 
 	def _parse(self, block):
 		""" :returns: a parse tree given a string. """
@@ -330,18 +352,20 @@ class TigerXMLCorpusReader(CorpusReader):
 		""" :returns: a list of strings containing the raw representation of \
 		trees in the treebank. """
 		if self._block_cache is None:
-			self._block_cache = self._read_blocks()
+			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((n, ElementTree.tostring(a))
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
-		results = OrderedDict()
 		for filename in self._filenames:
-			# todo: use iterparse()
-			block = ElementTree.parse(filename).getroot()
-			for sent in block.find('body').findall('s'):
-				results[sent.get('id')] = sent
-		return results
+			# iterator over elements in XML  file
+			context = ElementTree.iterparse(filename,
+					events=(b'start', b'end'))
+			_, root = next(context)  # event == 'start' of root element
+			for event, elem in context:
+				if event == 'end' and elem.tag == 's':
+					yield elem.get('id'), elem
+				root.clear()
 
 	def _parse(self, block):
 		""" Translate Tiger XML structure to the fields of export format,
@@ -354,6 +378,7 @@ class TigerXMLCorpusReader(CorpusReader):
 			fields[LEMMA] = term.get('lemma')
 			fields[TAG] = term.get('pos')
 			fields[MORPH] = term.get('morph')
+			fields[PARENT] = '0' if term.get('id') == root else None
 			nodes[term.get('id')] = fields
 		for nt in block.find('graph').find('nonterminals'):
 			if nt.get('id') == root:
@@ -367,11 +392,14 @@ class TigerXMLCorpusReader(CorpusReader):
 			for edge in nt:
 				idref = edge.get('idref')
 				nodes.setdefault(idref, 6 * [None])
-				if nodes[idref][FUNC] is None:
+				if edge.tag == 'edge':
+					assert nodes[idref][FUNC] is None
 					nodes[idref][FUNC] = edge.get('label')
 					nodes[idref][PARENT] = ntid
-				else:  # secondary edge
+				elif edge.tag == 'secedge':
 					nodes[idref].extend((edge.get('label'), ntid))
+				else:
+					raise ValueError
 		tree = exportparse(list(nodes.values()), self.morphology, self.lemmas)
 		sent = self._word(block, orig=True)
 		return tree, sent
@@ -525,7 +553,8 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 		phrasalnodes = [a for a in tree.treepositions('postorder')
 				if a not in wordsandpreterminals and a != ()]
 		wordids = {tree[a]: a for a in indices}
-		assert len(sent) == len(indices) == len(wordids), (sent, wordids.keys())
+		assert len(sent) == len(indices) == len(wordids), (
+				n, str(tree), sent, wordids.keys())
 		for i, word in enumerate(sent):
 			assert word, 'empty word in sentence: %r' % sent
 			idx = wordids[i]
@@ -953,13 +982,11 @@ def test():
 	""" Not implemented. """
 
 
-READERS = OrderedDict((
-			('export', NegraCorpusReader),
-			('bracket', BracketCorpusReader),
-			('discbracket', DiscBracketCorpusReader),
-			('tiger', TigerXMLCorpusReader),
-			('alpino', AlpinoCorpusReader),
-		))
+READERS = OrderedDict((('export', NegraCorpusReader),
+		('bracket', BracketCorpusReader),
+		('discbracket', DiscBracketCorpusReader),
+		('tiger', TigerXMLCorpusReader),
+		('alpino', AlpinoCorpusReader)))
 
 if __name__ == '__main__':
 	test()
