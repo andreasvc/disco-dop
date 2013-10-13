@@ -42,7 +42,7 @@ Usage: %s [options] <action> [input [output]]
 where input and output are treebanks; standard in/output is used if not given.
 action is one of:
     none
-    binarize [-h x] [-v x] [--factor=left|right]
+    binarize [-h x] [-v x] [--factor=left|*right]
     optimalbinarize [-h x] [-v x]
     unbinarize
     introducepreterminals
@@ -50,14 +50,15 @@ action is one of:
     mergedisc
 
 options may consist of (* marks default option):
-  --inputfmt|--outputfmt=[*%s]
+  --inputfmt=[*%s]
+  --outputfmt=[*export|bracket|discbracket|conll|mst]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
                  out or negative, and the first index is 0.
   --factor=[left|*right]  whether binarization factors to the left or right
   -h n           horizontal markovization. default: infinite (all siblings)
-  -v n           vertical markovization. default: 1
+  -v n           vertical markovization. default: 1 (immediate parent only)
   --headrules=x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
   --markheads    mark heads with '^' in phrasal labels.
@@ -79,8 +80,8 @@ options may consist of (* marks default option):
   --lemmas       insert node with lemma between word and POS tag.
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
-	conversion and requires all constituents to have a child with HD as one of
-	its function labels, or the use of heuristic head rules. """ % (
+	conversion and requires the use of heuristic head rules (--headrules),
+	to ensure that all constituents have a child marked as head. """ % (
 			sys.argv[0], '|'.join(READERS.keys()))
 
 
@@ -924,13 +925,13 @@ def main():
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
 	except (GetoptError, AssertionError) as err:
-		print('error: %r\n%s' % (err, USAGE))
+		print('error: %r\n%s' % (err, USAGE), file=sys.stderr)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
 	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
-	# read input
+	# open corpus
 	corpus = READERS[opts.get('--inputfmt', 'export')](*splitpath(infilename),
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get('--headrules'), markheads='--markheads' in opts,
@@ -942,35 +943,34 @@ def main():
 	end = int(end) if end else None
 	trees = islice(corpus.parsed_sents_iter(), start, end)
 
-	# apply transformation
+	# select transformation
 	actions = ('binarize unbinarize optimalbinarize introducepreterminals '
 			'splitdisc mergedisc none').split()
 	assert action in actions, ('unrecognized action: %r\n'
 			'available actions: %r' % (action, actions))
-	if action in ('binarize', 'optimalbinarize'):
-		factor = opts.get('--factor', 'right')
-		headdriven = '--headrules' in opts
-		h = int(opts['-h']) if 'h' in opts else None
-		v = int(opts.get('-v', 1))
-
 	transform = None
-	if action == 'binarize':
-		transform = lambda tree: binarize(tree, factor, h, v)
-	elif action == 'optimalbinarize':
-		transform = lambda tree: optimalbinarize(tree, '|', headdriven, h, v)
+	if action in ('binarize', 'optimalbinarize'):
+		h = int(opts.get('-h', 999))
+		v = int(opts.get('-v', 1))
+		if action == 'binarize':
+			factor = opts.get('--factor', 'right')
+			transform = lambda t: binarize(t, factor, h, v)
+		elif action == 'optimalbinarize':
+			headdriven = '--headrules' in opts
+			transform = lambda t: optimalbinarize(t, '|', headdriven, h, v)
 	elif action == 'unbinarize':
 		transform = unbinarize
 	elif action == 'introducepreterminals':
 		transform = introducepreterminals
 	elif action == 'splitdisc':
-		transform = lambda tree: splitdiscnodes(tree, '--markorigin' in opts)
+		transform = lambda t: splitdiscnodes(t, '--markorigin' in opts)
 	elif action == 'mergedisc':
 		transform = mergediscnodes
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
-		trees = ((key, transform(action, tree), sent)
+		trees = ((key, transform(tree), sent)
 				for key, tree, sent in trees)
 
-	# write output
+	# read, transform, & write trees
 	headrules = None
 	if opts.get('--outputfmt') in ('mst', 'conll'):
 		assert opts.get('--headrules'), (
@@ -980,11 +980,10 @@ def main():
 	encoding = opts.get('outputenc', 'utf-8')
 	cnt = 0
 	with io.open(outfilename, 'w', encoding=encoding) as outfile:
-		if (action == 'none' and opts.get('--inputfmt') == opts.get('--outputfmt')
-				and set(opts) < {'--slice', '--inputenc', '--outputenc',
-					'--inputfmt', '--outputfmt'}):
-			# copy treebank verbatim. useful when only taking a slice
-			# or converting encoding.
+		# copy treebank verbatim when only taking slice or converting encoding
+		if (action == 'none' and opts.get('--inputfmt') ==
+				opts.get('--outputfmt') and set(opts) < {'--slice',
+					'--inputenc', '--outputenc', '--inputfmt', '--outputfmt'}):
 			for block in islice(corpus.blocks().values(), start, end):
 				outfile.write(block)
 				cnt += 1
@@ -994,7 +993,7 @@ def main():
 						opts.get('--outputfmt', 'export'), headrules))
 				cnt += 1
 	print('%sed %d trees with action %r' % ('convert' if action == 'none'
-			else 'transform', cnt, action))
+			else 'transform', cnt, action), file=sys.stderr)
 
 if __name__ == '__main__':
 	main()
