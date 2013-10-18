@@ -20,6 +20,7 @@ from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
 from discodop.tree import Tree
+from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals
 from discodop._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
@@ -33,8 +34,10 @@ Output contains lines of the form "tree<TAB>frequency".
 Frequencies refer to the last treebank by default.
 Output is sent to stdout; to save the results, redirect to a file.
 Options:
-  --disc        work with discontinuous trees; input is in Negra export format.
-                output: tree<TAB>sentence<TAB>frequency
+  --fmt=[%s]
+                when format is not 'bracket', work with discontinuous trees;
+                output is in 'discbracket' format:
+				tree<TAB>sentence<TAB>frequency
                 where "tree' has indices as leaves, referring to elements of
                 "sentence", a space separated list of words.
   --indices     report sets of indices instead of frequencies.
@@ -55,11 +58,12 @@ Options:
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
   --debug       extra debug information, ignored when numproc > 1.
-  --quiet       disable all messages.""" % (sys.argv[0], sys.argv[0])
+  --quiet       disable all messages.""" % (sys.argv[0], sys.argv[0],
+			'|'.join(READERS.keys()))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
-		'disc', 'quiet', 'debug', 'quadratic', 'cover', 'alt')
-OPTIONS = ('numproc=', 'numtrees=', 'encoding=', 'batch=')
+		'quiet', 'debug', 'quadratic', 'cover', 'alt')
+OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
 TERMRE = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
@@ -79,10 +83,12 @@ def main(argv=None):
 
 	for flag in FLAGS:
 		PARAMS[flag] = '--' + flag in opts
+	PARAMS['disc'] = opts.get('--fmt', 'bracket') != 'bracket'
+	PARAMS['fmt'] = opts.get('--fmt', 'bracket')
 	numproc = int(opts.get("--numproc", 1))
 	if numproc == 0:
 		numproc = cpu_count()
-	limit = int(opts.get('--numtrees', 0))
+	limit = int(opts.get('--numtrees', 0)) or None
 	encoding = opts.get("--encoding", "UTF-8")
 	batchdir = opts.get("--batch")
 
@@ -145,7 +151,7 @@ def regular(filenames, numproc, limit, encoding):
 				filenames[1] if len(filenames) == 2 else None, limit, encoding))
 		mymap = pool.imap
 		myapply = pool.apply
-	numtrees = (PARAMS['trees1'].len if limit == 0
+	numtrees = (PARAMS['trees1'].len if limit is None
 			else min(PARAMS['trees1'].len, limit))
 
 	if PARAMS['complete']:
@@ -215,7 +221,7 @@ def batch(outputdir, filenames, limit, encoding):
 		fragments = {}
 	for filename in filenames[1:]:
 		PARAMS.update(read2ndtreebank(filename, PARAMS['labels'],
-			PARAMS['prods'], PARAMS['disc'], limit, encoding))
+			PARAMS['prods'], PARAMS['fmt'], limit, encoding))
 		trees2 = PARAMS['trees2']
 		sents2 = PARAMS['sents2']
 		if PARAMS['complete']:
@@ -249,27 +255,27 @@ def batch(outputdir, filenames, limit, encoding):
 		logging.info("wrote to %s", outputfilename)
 
 
-def readtreebanks(treebank1, treebank2=None, discontinuous=False,
-		limit=0, encoding="utf-8"):
+def readtreebanks(treebank1, treebank2=None, fmt='bracket',
+		limit=None, encoding='utf-8'):
 	""" Read one or two treebanks.  """
 	labels = []
 	prods = {}
 	trees1, sents1 = readtreebank(treebank1, labels, prods,
-			not PARAMS['quadratic'], discontinuous, limit, encoding)
+			not PARAMS['quadratic'], fmt, limit, encoding)
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
-			not PARAMS['quadratic'], discontinuous, limit, encoding)
+			not PARAMS['quadratic'], fmt, limit, encoding)
 	trees1.indextrees(prods)
 	if trees2:
 		trees2.indextrees(prods)
 	return dict(trees1=trees1, sents1=sents1, trees2=trees2, sents2=sents2,
-		prods=prods, labels=labels)
+			prods=prods, labels=labels)
 
 
-def read2ndtreebank(treebank2, labels, prods, discontinuous=False,
-	limit=0, encoding="utf-8"):
+def read2ndtreebank(treebank2, labels, prods, fmt='bracket',
+		limit=None, encoding='utf-8'):
 	""" Read a second treebank.  """
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
-		not PARAMS['quadratic'], discontinuous, limit, encoding)
+		not PARAMS['quadratic'], fmt, limit, encoding)
 	logging.info("%r: %d trees; %d nodes (max %d). "
 			"labels: %d, prods: %d",
 			treebank2, len(trees2), trees2.numnodes, trees2.maxnodes,
@@ -281,7 +287,7 @@ def initworker(treebank1, treebank2, limit, encoding):
 	""" Read treebanks for this worker. We do this separately for each process
 	under the assumption that this is advantageous with a NUMA architecture. """
 	PARAMS.update(readtreebanks(treebank1, treebank2,
-		limit=limit, discontinuous=PARAMS['disc'], encoding=encoding))
+		limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
 	if PARAMS['debug']:
 		print("\nproductions:")
 		for a, b in sorted(PARAMS['prods'].items(), key=lambda x: x[1]):

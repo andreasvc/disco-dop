@@ -751,7 +751,7 @@ def getlabelsprods(trees, labels, prods):
 	for tree in trees:
 		for st in tree:
 			if st.prod not in prods:
-				labels.append(st.label)
+				labels.append(st.label)  # LHS label associated with this prod
 				prods[st.prod] = pnum
 				pnum += 1
 
@@ -906,7 +906,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 
 
 def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
-		bint discontinuous=False, int limit=0, encoding="utf-8"):
+		fmt='bracket', limit=None, encoding="utf-8"):
 	""" Read a treebank from a given filename. labels and prods should be a
 	list and a dictionary, with the same ones used when reading multiple
 	treebanks. """
@@ -918,51 +918,53 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	cdef Ctrees ctrees
 	if treebankfile is None:
 		return None, None
-	if discontinuous:
-		# no incremental reading w/disc trees
-		from discodop.treebank import NegraCorpusReader
+	if fmt != 'bracket':
+		from itertools import islice
+		from discodop.treebank import READERS
 		from discodop.treetransforms import canonicalize
-		corpus = NegraCorpusReader(*pathsplit(treebankfile), encoding=encoding)
-		trees = list(corpus.parsed_sents().values())
-		sents = list(corpus.sents().values())
-		if limit:
-			trees = trees[:limit]
-			sents = sents[:limit]
-		trees = [tolist(add_lcfrs_rules(canonicalize(binarize(tree)),
-				sent), sent) for tree, sent in zip(trees, sents)]
-		getlabelsprods(trees, labels, prods)
-		if sort:
-			for tree in trees:
+		corpus = READERS[fmt](*pathsplit(treebankfile), encoding=encoding)
+		ctrees = Ctrees()
+		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
+		ctrees.maxnodes = 512
+		sents = []
+		for _, tree, sent in islice(corpus.parsed_sents_iter(), limit):
+			tree = tolist(add_lcfrs_rules(
+					canonicalize(binarize(tree)), sent), sent)
+			for st in tree:
+				if st.prod not in prods:
+					labels.append(st.label)
+					prods[st.prod] = len(prods)
+			if sort:
 				root = tree[0]
 				tree.sort(key=partial(getprodid, prods))
 				for n, a in enumerate(tree):
 					a.idx = n
 				tree[0].rootidx = root.idx
-		trees = Ctrees(trees, prods)
-		return trees, sents
-	# do incremental reading of bracket trees
-	data = io.open(treebankfile, encoding=encoding).read()
-	if limit:
-		data = re.match(r'(?:[^\n\r]+[\n\r]+){0,%d}' % limit, data).group()
-	lines = [line for line in data.splitlines() if line.strip()]
-	numtrees = len(lines)
-	assert numtrees, "%r appears to be empty" % treebankfile
-	sents = []
-	nodesperline = [line.count('(') for line in lines]
-	numnodes = sum(nodesperline)
-	ctrees = Ctrees()
-	ctrees.alloc(numtrees, numnodes)
-	ctrees.maxnodes = max(nodesperline)
-	binfactor = 2  # conservative estimate to accommodate binarization
-	scratch = <Node *>malloc(ctrees.maxnodes * binfactor * sizeof(Node))
-	assert scratch is not NULL
-	for line in lines:
-		cnt = 0
-		sent = []
-		readnode(line, labels, prods, scratch, &cnt, sent, None)
-		sents.append(sent)
-		ctrees.addnodes(scratch, cnt, 0)
-	free(scratch)
+			ctrees.add(tree, prods)
+			sents.append(sent)
+	else:  # do incremental reading of bracket trees
+		data = io.open(treebankfile, encoding=encoding).read()
+		if limit:
+			data = re.match(r'(?:[^\n\r]+[\n\r]+){0,%d}' % limit, data).group()
+		lines = [line for line in data.splitlines() if line.strip()]
+		numtrees = len(lines)
+		assert numtrees, "%r appears to be empty" % treebankfile
+		sents = []
+		nodesperline = [line.count('(') for line in lines]
+		numnodes = sum(nodesperline)
+		ctrees = Ctrees()
+		ctrees.alloc(numtrees, numnodes)
+		ctrees.maxnodes = max(nodesperline)
+		binfactor = 2  # conservative estimate to accommodate binarization
+		scratch = <Node *>malloc(ctrees.maxnodes * binfactor * sizeof(Node))
+		assert scratch is not NULL
+		for line in lines:
+			cnt = 0
+			sent = []
+			readnode(line, labels, prods, scratch, &cnt, sent, None)
+			ctrees.addnodes(scratch, cnt, 0)
+			sents.append(sent)
+		free(scratch)
 	return ctrees, sents
 
 

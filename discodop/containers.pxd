@@ -216,7 +216,7 @@ cdef class Ctrees:
 	cdef readonly int len
 	cdef list treeswithprod
 	cpdef alloc(self, int numtrees, long numnodes)
-	cdef realloc(self, int len)
+	cdef realloc(self, int numtrees, int extranodes)
 	cpdef add(self, list tree, dict prods)
 	cdef addnodes(self, Node *source, int cnt, int root)
 

@@ -421,22 +421,33 @@ cdef class Ctrees:
 		assert self.trees is not NULL and self.nodes is not NULL
 		self.nodesleft = numnodes
 
-	cdef realloc(self, int len):
+	cdef realloc(self, int numtrees, int extranodes):
 		""" Increase size of array (handy with incremental binarization) """
-		self.nodesleft += len
-		#estimate how many new nodes will be needed
-		self.nodesleft += (self.max - self.len) * (self.numnodes / self.len)
-		self.nodes = <Node *>realloc(self.nodes,
-				(self.numnodes + self.nodesleft) * sizeof(Node))
-		assert self.nodes is not NULL
+		# based on Python's listobject.c list_resize()
+		cdef numnodes
+		if numtrees > self.max:
+			# overallocate to get linear-time amortized behavior
+			numtrees += (numtrees >> 3) + (3 if numtrees < 9 else 6)
+			self.trees = <NodeArray *>realloc(self.trees,
+					numtrees * sizeof(NodeArray))
+			assert self.trees is not NULL
+			self.max = numtrees
+		if extranodes > self.nodesleft:
+			numnodes = self.numnodes + extranodes
+			# estimate how many new nodes will be needed
+			#self.nodesleft += (self.max - self.len) * (self.numnodes / self.len)
+			# overallocate to get linear-time amortized behavior
+			numnodes += (numnodes >> 3) + (3 if numnodes < 9 else 6)
+			self.nodes = <Node *>realloc(self.nodes, numnodes * sizeof(Node))
+			assert self.nodes is not NULL
+			self.nodesleft = numnodes - self.numnodes
 
 	cpdef add(self, list tree, dict prods):
 		""" Trees can be incrementally added to the node array; useful
 		when dealing with large numbers of NLTK trees (say 100,000). """
-		assert self.len < self.max, ("either no space left (len >= max) or "
-			"alloc() has not been called (max=0). max = %d" % self.max)
-		if self.nodesleft < len(tree):
-			self.realloc(len(tree))
+		assert self.max, 'alloc() has not been called (max=0).'
+		if self.len >= self.max or self.nodesleft < len(tree):
+			self.realloc(self.len + 1, len(tree))
 		self.trees[self.len].len = len(tree)
 		self.trees[self.len].offset = self.numnodes
 		copynodes(tree, prods, &self.nodes[self.numnodes])
@@ -452,11 +463,9 @@ cdef class Ctrees:
 		cdef dict prodsintree, sortidx
 		cdef int n, m
 		cdef Node *dest
-		assert self.len < self.max, ("either no space left (len >= max) or "
-				"alloc() has not been called (max=0).\n"
-				"len = %d, max = %d" % (self.len, self.max))
-		if self.nodesleft < cnt:
-			self.realloc(cnt)
+		assert self.max, 'alloc() has not been called (max=0).'
+		if self.len >= self.max or self.nodesleft < cnt:
+			self.realloc(self.len + 1, cnt)
 		prodsintree = {n: source[n].prod for n in range(cnt)}
 		sortidx = {m: n for n, m in enumerate(
 				sorted(range(cnt), key=prodsintree.get))}
