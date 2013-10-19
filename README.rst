@@ -187,8 +187,8 @@ Documentation
 The API documentation can be perused at http://staff.science.uva.nl/~acranenb/discodop/
 
 To generate a local copy install `Sphinx <http://sphinx-doc.org/>`_
-and issue ``make html`` in the ``docs/`` directory; the result will be in
-``_build/html``.
+and issue ``python genrst.py && make html`` in the ``docs/`` directory; the
+result will be in ``_build/html``.
 
 Acknowledgments
 ===============

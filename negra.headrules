@@ -43,7 +43,7 @@ vp right-to-left vz vainf vminf vmpp vapp pp
 vz right-to-left vvinf vainf vminf vvfin vvizu
 vz left-to-right prtzu appr ptkzu
 
-np right-to-left nn ne mpn np cnp pn car
+np right-to-left nn ne mpn np cnp pn card
 
 ap right-to-left adjd adja cap aa adv
 
@@ -55,7 +55,7 @@ avp right-to-left adv avp adjd proav pp
 
 aa right-to-left adjd adja
 
-cnp right-to-left nn ne mpn np cnp pn car
+cnp right-to-left nn ne mpn np cnp pn card
 
 cap right-to-left adjd adja cap aa adv
 

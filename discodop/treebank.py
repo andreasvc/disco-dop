@@ -675,8 +675,6 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 
 def readheadrules(filename):
 	""" Read a file containing heuristic rules for head assigment.
-	The file containing head assignment rules for negra is part of rparse,
-	under src/de/tuebingen/rparse/treebank/constituent/negra/
 	Example line: "s right-to-left vmfin vafin vaimp", which means
 	traverse siblings of an S constituent from right to left, the first child
 	with a label of vmfin, vafin, or vaimp will be marked as head. """
