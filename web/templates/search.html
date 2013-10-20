@@ -77,9 +77,9 @@ span.tt { font-family: monospace; }
 	{% if havexpath %}
 	Query engine:
 	<label><input type=radio name=engine value=tgrep2{{
-		' checked' if form.get('engine', 'tgrep2') == 'tgrep2' }}>TGrep2</label>
+		' checked' if form.get('engine') == 'tgrep2' or not havexpath }}>TGrep2</label>
 	<label><input type=radio name=engine value=xpath{{
-		' checked' if form.get('engine', 'tgrep2') == 'xpath' }}>XPath</label>
+		' checked' if havexpath and (form.get('engine') == 'xpath' or 'engine' not in form) }}>XPath</label>
 	{% endif %}
 	<div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
     (Select <a href="javascript: checkall('t', true); numchecked(); ">all</a>; 

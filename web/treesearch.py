@@ -174,7 +174,7 @@ def draw():
 		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
 					unicodelines=True, html=True)
 	elif ALPINOCORPUSLIB:
-		treestr = XMLCORPORA[textno].read('%d.xml' % (sentno - 1, ))
+		treestr = XMLCORPORA[textno].read('%d.xml' % (sentno, ))
 		tree, sent = treebank.alpinotree(
 				ElementTree.fromstring(treestr),
 				functions=None if nofunc else 'add',
@@ -205,7 +205,7 @@ def browse():
 		elif ALPINOCORPUSLIB:
 			drawntrees = [DrawTree(*treebank.alpinotree(
 					ElementTree.fromstring(
-						XMLCORPORA[textno].read('%d.xml' % n)),
+						XMLCORPORA[textno].read('%d.xml' % (n + 1, ))),
 					functions=None if nofunc else 'add',
 					morphology=None if nomorph else 'replace')).text(
 					unicodelines=True, html=True)
@@ -574,7 +574,7 @@ def doxpathqueries(form, lines=False, doexport=None):
 		try:  # FIXME: catching errors here doesn't seem to work
 			if lines:
 				yield n, (('%d:::%s:::%s:::%s' % (
-							int(match.name().split('.')[0]) + 1,
+							int(match.name().split('.')[0]),
 							text,
 							XMLCORPORA[n].read(match.name()),
 							match.contents())).decode('utf8')
@@ -585,7 +585,7 @@ def doxpathqueries(form, lines=False, doexport=None):
 			elif doexport == 'sents':
 				yield ''.join(('%s%s\n' % (
 							(('%s:%d|' % (text,
-								int(match.name().split('.')[0]) + 1))
+								int(match.name().split('.')[0])))
 							if form.get('linenos') else ''),
 							ALPINOLEAVES.search(
 								XMLCORPORA[n].read(match.name())).group(1)))
@@ -735,32 +735,37 @@ def getcorpus():
 				'expected either .mrg or .dact files, '
 				'or corresponding .mrg and .dact files')
 		try:
-			xmlcorpora = [alpinocorpus.CorpusReader(
-					filename,
+			xmlcorpora = [alpinocorpus.CorpusReader(filename,
 					macrosFilename='static/xpathmacros.txt')
 					for filename in afiles]
 		except TypeError:
-			xmlcorpora = [alpinocorpus.CorpusReader(
-					filename + '.dact')
+			xmlcorpora = [alpinocorpus.CorpusReader(filename)
 					for filename in afiles]
 	if set(texts) != {os.path.splitext(os.path.basename(filename))[0]
 			for filename in files + afiles}:
 		if files:
-			numsents = [len(open(filename).readlines()) for filename in files
-					if filename.endswith('.mrg')]
-			numconst = [open(filename).read().count('(') for filename in files
-					if filename.endswith('.mrg')]
+			numsents = [len(open(filename).readlines())
+					for filename in files if filename.endswith('.mrg')]
+			numconst = [open(filename).read().count('(')
+					for filename in files if filename.endswith('.mrg')]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
 					for filename in files if filename.endswith('.mrg')]
 		elif ALPINOCORPUSLIB:
 			numsents = [corpus.size() for corpus in xmlcorpora]
-			numconst = [sum(entry.contents().count('<node ')
-					for entry in corpus.xpath(''))
-						for corpus in xmlcorpora]
-			numwords = [sum(ALPINOLEAVES.search(
-						entry.contents()).group(1).count(' ')
-					for entry in corpus.xpath(''))
-						for corpus in xmlcorpora]
+			numconst, numwords = [], []
+			for n, corpus in enumerate(xmlcorpora):
+				const = words = 0
+				for entry in corpus.entries():
+					const += entry.contents().count('<node ')
+					words += entry.contents().count('word=')
+				numconst.append(const)
+				numwords.append(words)
+				try:  # overwrite previous instance as garbage collection kludge
+					xmlcorpora[n] = alpinocorpus.CorpusReader(filename,
+								macrosFilename='static/xpathmacros.txt')
+				except TypeError:
+					xmlcorpora[n] = alpinocorpus.CorpusReader(filename)
+				print(afiles[n])
 		texts = [os.path.splitext(os.path.basename(a))[0]
 				for a in files or afiles]
 		styletable = getstyletable()
