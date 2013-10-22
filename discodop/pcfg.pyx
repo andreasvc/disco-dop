@@ -342,8 +342,8 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 	""" Assign all possible POS tags for a word, and apply all possible
 	unary rules to them.
 
-	:returns: a dictionary with the best scoring edges for each lhs,
-		or None if no POS tag was found for this word. """
+	:returns: a tuple ``(success, msg)`` where ``success`` is True if a POS tag
+	was found for every word in the sentence. """
 	cdef:
 		DoubleAgenda unaryagenda = DoubleAgenda()
 		Entry entry
@@ -351,7 +351,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		LexicalRule lexrule
 		UInt n, lhs, rhs1
 		short left, right, lensent = len(sent)
-	for left, word in enumerate(sent):  # assign POS tags
+	for left, word in enumerate(sent):
 		tag = tags[left].encode('ascii') if tags else None
 		right = left + 1
 		cell = cellidx(left, right, lensent, grammar.nonterminals)

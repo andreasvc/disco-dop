@@ -51,7 +51,7 @@ cdef getcandidates(Chart chart, v, int k):
 					right = -1
 			re = new_RankedEdge(v, e, left, right)
 			results.append((re, prob))
-	return Agenda([a for a in nsmallest(k, results, key=itemgetter(1))])
+	return Agenda(nsmallest(k, results, key=itemgetter(1)))
 
 
 @cython.wraparound(True)

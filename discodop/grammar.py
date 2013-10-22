@@ -745,23 +745,32 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 
 	- if ``bitpar`` is ``False``, write rational fractions; e.g., ``2/3``.
 	- if ``bitpar`` is ``True``, write frequencies if probabilities sum to 1
-		(e.g., ``2``), i.e., in that case probalities can be re-computed as
+		(e.g., ``2``), i.e., in that case probabilities can be re-computed as
 		relative frequencies. Otherwise, resort to decimal floats
 		(e.g., ``0.666``, imprecise).
 	"""
-	rules, lexicon = [], []
-	lexical = {}
+	rules, lexicon, lexical = [], [], {}
+	freqs = False
 	if bitpar:
-		ntfd = defaultdict(int)
+		probmass, maxdenom = defaultdict(int), defaultdict(int)
+		# collect common denominator of each non-terminal. NB: maxdenom values
+		# may be less than original frequency mass, due to fractions getting
+		# simplified, but the relative frequencies should be equivalent.
 		for (r, _), w in grammar:
-			ntfd[r[0]] += w
-	freqs = bitpar and all(a == 1 for a in ntfd.values())
+			probmass[r[0]] += w
+			if w.denominator > maxdenom[r[0]]:
+				maxdenom[r[0]] = w.denominator
+		# threshold based on probablity mass from lexical smoothing
+		freqs = all(mass - 1 <= Fraction(1, maxdenom[nt])
+				for nt, mass in probmass.items())
 	for (r, yf), w in grammar:
 		if len(r) == 2 and r[1] == 'Epsilon':
 			lexical.setdefault(unicode(yf[0]), []).append((r[0], w))
 			continue
 		elif bitpar:
-			rules.append(('%g\t%s\n' % (w.numerator if freqs else w,
+			rules.append(('%g\t%s\n' % (
+					(w.numerator * (maxdenom[r[0]] // w.denominator))
+					if freqs else w,
 					'\t'.join(x for x in r))))
 		else:
 			yfstr = ','.join(''.join(map(str, a)) for a in yf)
@@ -851,10 +860,7 @@ def test():
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
 			for a in list(corpus.parsed_sents().values())[:10]]
-
-	print('plcfrs')
-	lcfrs = Grammar(treebankgrammar(trees, sents), start=trees[0].label)
-	print(lcfrs)
+	print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
 
 	print('dop reduction')
 	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
@@ -876,9 +882,7 @@ def test():
 		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
 				for a in sent))
 		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
-		print('\n', msg, end='')
-		print("\ngold ", tree)
-		print("double dop", end='')
+		print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
 		if chart:
 			mpp = {}
 			parsetrees = {}
