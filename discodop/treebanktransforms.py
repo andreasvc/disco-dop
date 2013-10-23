@@ -550,7 +550,7 @@ def punctraise(tree, sent):
 	while punct:
 		node = punct.pop()
 		# dedicated punctation node (??)
-		if all(isinstance(a[0], int) and ispunct(sent[a[0]], a)
+		if all(isinstance(a[0], int) and ispunct(sent[a[0]], a.label)
 				for a in node.parent):
 			continue
 		node.parent.pop(node.parent_index)
