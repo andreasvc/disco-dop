@@ -37,7 +37,7 @@ Options:
   --fmt=[%s]
                 when format is not 'bracket', work with discontinuous trees;
                 output is in 'discbracket' format:
-				tree<TAB>sentence<TAB>frequency
+                tree<TAB>sentence<TAB>frequency
                 where "tree' has indices as leaves, referring to elements of
                 "sentence", a space separated list of words.
   --indices     report sets of indices instead of frequencies.
@@ -175,7 +175,7 @@ def regular(filenames, numproc, limit, encoding):
 				fragments.update(results)
 	if PARAMS['cover']:
 		assert not PARAMS['trees2'], "only supported for single treebank."
-		cover = myapply(coverfragworker, ()).get()
+		cover = myapply(coverfragworker, ())
 		if PARAMS['approx']:
 			fragments.update(zip(cover,
 					exactcounts(PARAMS['trees1'], PARAMS['trees1'],

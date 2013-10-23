@@ -361,7 +361,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 				SETBIT(scratch, i)
 		setrootid(scratch, trees.trees[n].root, n, SLOTS)
 		if discontinuous:
-			frag = (strtree(nodes, labels, trees.trees[n].root), sent)
+			frag = (strtree(nodes, labels, trees.trees[n].root), tuple(sent))
 		else:
 			frag = unicodetree(nodes, labels, sent, trees.trees[n].root)
 		result[frag] = wrap(scratch, SLOTS)

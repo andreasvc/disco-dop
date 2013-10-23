@@ -56,17 +56,11 @@ options may consist of (* marks default option):
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
                  out or negative, and the first index is 0.
-  --factor=[left|*right]  whether binarization factors to the left or right
-  -h n           horizontal markovization. default: infinite (all siblings)
-  -v n           vertical markovization. default: 1 (immediate parent only)
-  --headrules=x  turn on head finding; affects binarization.
-                 reads rules from file "x" (e.g., "negra.headrules").
-  --markheads    mark heads with '^' in phrasal labels.
   --punct=x      possible options:
-                 remove: remove any punctuation.
-                 move: re-attach punctuation to nearest constituent to minimize
+                 'remove': remove any punctuation.
+                 'move': re-attach punctuation to nearest constituent to minimize
                        discontinuity.
-                 restore: attach punctuation under root node.
+                 'restore': attach punctuation under root node.
   --functions=x  'leave': (default): leave syntactic labels as is,
                  'remove': strip away hyphen-separated function labels
                  'add': concatenate syntactic categories with functions,
@@ -78,10 +72,21 @@ options may consist of (* marks default option):
                  'between': insert node with morphological information between
                      POS tag and word, e.g., (DET (sg.def the))
   --lemmas       insert node with lemma between word and POS tag.
+  --factor=[left|*right]  whether binarization factors to the left or right
+  -h n           horizontal markovization. default: infinite (all siblings)
+  -v n           vertical markovization. default: 1 (immediate parent only)
+  --leftunary    make initial / final productions of binarized constituents
+  --rightunary   ... unary productions.
+  --tailmarker   mark rightmost child (the head if headrules are applied), to
+                 avoid cyclic rules when --leftunary and --rightunary are used.
+  --headrules=x  turn on head finding; affects binarization.
+                 reads rules from file "x" (e.g., "negra.headrules").
+  --markheads    mark heads with '^' in phrasal labels.
+
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
-	conversion and requires the use of heuristic head rules (--headrules),
-	to ensure that all constituents have a child marked as head. """ % (
+    conversion and requires the use of heuristic head rules (--headrules),
+    to ensure that all constituents have a child marked as head. """ % (
 			sys.argv[0], '|'.join(READERS.keys()))
 
 
@@ -856,9 +861,10 @@ class OrderedSet(Set):
 		return self._from_iterable(value for value in self if value in other)
 
 
-def testminbin():
-	""" Verify that all optimal parsing complexities are lower than or equal
-	to the complexities of right-to-left binarizations. """
+def test():
+	""" Verify (1) that all optimal parsing complexities are lower than or
+	equal to the complexities of right-to-left binarizations; and (2) that
+	splitting and merging discontinuties gives the same trees. """
 	from discodop.treebank import NegraCorpusReader
 	corpus = NegraCorpusReader('.', 'alpinosample.export', punct='move')
 	total = violations = violationshd = 0
@@ -887,38 +893,28 @@ def testminbin():
 			print(max(map(complexityfanout, optbin.subtrees())), optbin)
 			print(max(map(complexityfanout, normbin.subtrees())), normbin, '\n')
 			violationshd += 1
-	print('violations normal: %d / %d;  hd: %d / %d' % (
+	print('opt. bin. violations normal: %d / %d;  hd: %d / %d' % (
 			violations, total, violationshd, total))
 	assert violations == violationshd == 0
 
-
-def testsplit():
-	""" Verify that splitting and merging discontinuties gives the
-	same trees for a treebank. """
-	from discodop.treebank import NegraCorpusReader
 	correct = wrong = 0
-	n = NegraCorpusReader('.', 'alpinosample.export')
-	for tree in n.parsed_sents().values():
+	corpus = NegraCorpusReader('.', 'alpinosample.export')
+	for tree in corpus.parsed_sents().values():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
 			correct += 1
 		else:
 			wrong += 1
-	total = len(n.sents())
-	print("correct", correct, "=", 100 * correct / total, "%")
-	print("wrong", wrong, "=", 100 * wrong / total, "%")
-
-
-def test():
-	""" Run all examples. """
-	testminbin()
-	testsplit()
+	total = len(corpus.sents())
+	print("disc. split-merge: correct", correct, "=", 100 * correct / total, "%")
+	print("disc. split-merge: wrong", wrong, "=", 100 * wrong / total, "%")
 
 
 def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
-	flags = ['markorigin', 'markheads', 'lemmas']
+	flags = ['markorigin', 'markheads', 'lemmas',
+			'leftunary', 'rightunary', 'tailmarker']
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()
 	try:
@@ -954,7 +950,10 @@ def main():
 		v = int(opts.get('-v', 1))
 		if action == 'binarize':
 			factor = opts.get('--factor', 'right')
-			transform = lambda t: binarize(t, factor, h, v)
+			transform = lambda t: binarize(t, factor, h, v,
+					leftmostunary='--leftunary' in opts,
+					rightmostunary='--rightunary' in opts,
+					tailmarker='$' if '--tailmarker' in opts else '')
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
 			transform = lambda t: optimalbinarize(t, '|', headdriven, h, v)
@@ -967,8 +966,7 @@ def main():
 	elif action == 'mergedisc':
 		transform = mergediscnodes
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
-		trees = ((key, transform(tree), sent)
-				for key, tree, sent in trees)
+		trees = ((key, transform(tree), sent) for key, tree, sent in trees)
 
 	# read, transform, & write trees
 	headrules = None
