@@ -32,6 +32,7 @@ frag right-to-left
 intj left-to-right
 lst right-to-left ls :
 nac left-to-right nn nns nnp nnps np nac ex $ cd qp prp vbg jj jjs jjr adjp fw
+np right-to-left nn nns nnp nnps np nac ex $ cd qp prp vbg jj jjs jjr adjp dt fw rb sym prp$
 pp right-to-left in to vbg vbn rp fw
 prn left-to-right
 prt right-to-left rp

@@ -58,8 +58,8 @@ options may consist of (* marks default option):
                  out or negative, and the first index is 0.
   --punct=x      possible options:
                  'remove': remove any punctuation.
-                 'move': re-attach punctuation to nearest constituent to minimize
-                       discontinuity.
+                 'move': re-attach punctuation to nearest constituent
+                       to minimize discontinuity.
                  'restore': attach punctuation under root node.
   --functions=x  'leave': (default): leave syntactic labels as is,
                  'remove': strip away hyphen-separated function labels

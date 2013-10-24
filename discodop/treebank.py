@@ -693,6 +693,7 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
 		return candidates[0]
+	children = tree
 	for lr, heads in headrules.get(tree.label, []):
 		if lr == 'LEFT-TO-RIGHT':
 			children = tree
@@ -705,8 +706,8 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 				if (isinstance(child, Tree)
 						and child.label.split('[')[0] == head):
 					return child
-	# default head is initial nonterminal
-	for child in tree:
+	# default head is initial/last nonterminal (depending on direction lr)
+	for child in children:
 		if isinstance(child, Tree):
 			return child
 

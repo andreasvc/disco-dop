@@ -22,7 +22,7 @@
 % * You should have received a copy of the GNU General Public License along 
 % * with this program.  If not, see <http://www.gnu.org/licenses/>.
 % ******************************************************************************/
-% edited by andreasvc: add apprart to pp
+% edited by andreasvc: add apprart to pp; car => card; - => --
 
 % head rules for NeGra
 
@@ -87,13 +87,15 @@ isu right-to-left
 
 ql right-to-left 
 
-- right-to-left pp
+-- right-to-left pp
 
 cd right-to-left cd
 
 nn right-to-left nn
 
 nr right-to-left nr
+
+dl right-to-left s np
 
 vroot left-to-right $. $, 
 root left-to-right $. $, 
