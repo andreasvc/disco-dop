@@ -11,6 +11,7 @@ import gzip
 import codecs
 import logging
 import tempfile
+import traceback
 import multiprocessing
 from itertools import islice
 if sys.version[0] >= '3':
@@ -497,7 +498,7 @@ def doparsing(**kwds):
 	else:
 		pool = multiprocessing.Pool(processes=params.numproc,
 				initializer=initworker, initargs=(params,))
-		dowork = pool.imap_unordered(worker, params.testset.items())
+		dowork = pool.imap_unordered(workertb, params.testset.items())
 	logging.info('going to parse %d sentences.', len(params.testset))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
@@ -545,6 +546,16 @@ def doparsing(**kwds):
 
 	writeresults(results, params)
 	return results, goldbrackets
+
+
+def workertb(args):
+	""" Wrapper for use with multiprocessing; passes full traceback in case of
+	an exception in a worker process. """
+	try:
+		return worker(args)
+	except:
+		# Put all exception text into an exception and raise that
+		raise Exception(''.join(traceback.format_exception(*sys.exc_info())))
 
 
 def worker(args):
