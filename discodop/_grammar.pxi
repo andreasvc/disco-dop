@@ -88,9 +88,6 @@ cdef class Grammar:
 		self.nonterminals = len(self.toid)
 		self._allocate()
 		self._convertrules(rulelines, fanoutdict)
-		weights = self.models[0]
-		for n, lexrule in enumerate(self.lexical, self.numrules):
-			weights[n] = lexrule.prob
 		for n in range(self.nonterminals):
 			self.fanout[n] = fanoutdict[self.tolabel[n]]
 		del rulelines, fanoutdict
@@ -105,6 +102,12 @@ cdef class Grammar:
 		if not (nonint.search(self.origrules)
 				or LEXICON_NONINT.search(self.origlexicon)):
 			self._normalize()
+		# store 'default' weights
+		weights = self.models[0]
+		for n in range(self.numrules):
+			weights[self.bylhs[0][n].no] = self.bylhs[0][n].prob
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			weights[n] = lexrule.prob
 		self.switch('default', True)  # enable log probabilities
 
 	@cython.wraparound(True)
@@ -224,7 +227,6 @@ cdef class Grammar:
 		rules from a text file to a contiguous array of structs. """
 		cdef UInt n = 0, m
 		cdef Rule *cur
-		cdef double [:] weights = self.models[0]
 		self.rulenos = {}
 		for line in rulelines:
 			if not line.strip():
@@ -257,7 +259,7 @@ cdef class Grammar:
 			cur.lhs = self.toid[rule[0]]
 			cur.rhs1 = self.toid[rule[1]]
 			cur.rhs2 = self.toid[rule[2]] if len(rule) == 3 else 0
-			cur.prob = weights[n] = w
+			cur.prob = w
 			cur.lengths = cur.args = m = 0
 			for a in yf.decode('ascii'):
 				if a == ',':
