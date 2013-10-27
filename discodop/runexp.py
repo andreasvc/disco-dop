@@ -39,10 +39,12 @@ from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
 from discodop.estimates import getestimates, getpcfgestimates
 
-USAGE = """Usage: %s [--rerun] <parameter file>
+USAGE = """Usage: %s <parameter file> [--rerun]
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
-pass the option --rerun.""" % sys.argv[0]
+pass the option --rerun. The directory with the name of the parameter file
+without extension must exist in the current path; its results will be
+overwritten.""" % sys.argv[0]
 
 INTERNALPARAMS = None
 
@@ -451,34 +453,28 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				stage.name, ',backtransform' if stage.usedoubledop else '')
 
 		outside = None
-		if stage.getestimates == 'SX':
+		if 'SX' in (stage.getestimates, stage.useestimates):
 			assert tbfanout == 1 or stage.split, 'SX estimate requires PCFG.'
-			logging.info('computing PCFG estimates')
+			assert stage.mode != 'pcfg', 'estimates require parser w/agenda.'
+		if stage.getestimates in ('SX', 'SXlrgaps'):
 			begin = time.clock()
-			outside = getpcfgestimates(grammar, testmaxwords,
-					grammar.toid[trees[0].label])
+			logging.info('computing %s estimates', stage.getestimates)
+			if stage.getestimates == 'SX':
+				outside = getpcfgestimates(grammar, testmaxwords,
+						grammar.toid[trees[0].label])
+			elif stage.getestimates == 'SXlrgaps':
+				outside = getestimates(grammar, testmaxwords,
+						grammar.toid[trees[0].label])
 			logging.info('estimates done. cpu time elapsed: %gs',
 					time.clock() - begin)
-			np.savez('pcfgoutside.npz', outside=outside)
-			logging.info('saved PCFG estimates')
-		elif stage.useestimates == 'SX':
-			assert tbfanout == 1 or stage.split, 'SX estimate requires PCFG.'
-			assert stage.mode != 'pcfg', (
-					'estimates require agenda-based parser.')
-			outside = np.load('pcfgoutside.npz')['outside']
-			logging.info('loaded PCFG estimates')
-		if stage.getestimates == 'SXlrgaps':
-			logging.info('computing PLCFRS estimates')
-			begin = time.clock()
-			outside = getestimates(grammar, testmaxwords,
-					grammar.toid[trees[0].label])
-			logging.info('estimates done. cpu time elapsed: %gs',
-						time.clock() - begin)
-			np.savez('outside.npz', outside=outside)
-			logging.info('saved estimates')
-		elif stage.useestimates == 'SXlrgaps':
-			outside = np.load('outside.npz')['outside']
-			logging.info('loaded PLCFRS estimates')
+			np.savez_compressed('%s/%s.outside.npz' % (resultdir, stage.name),
+					outside=outside)
+			logging.info('saved %s estimates', stage.getestimates)
+		elif stage.useestimates in ('SX', 'SXlrgaps'):
+			outside = np.load('%s/%s.outside.npz' % (
+					resultdir, stage.name))['outside']
+			logging.info('loaded %s estimates', stage.useestimates)
+
 		stage.update(grammar=grammar, backtransform=backtransform,
 				outside=outside)
 

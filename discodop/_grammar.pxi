@@ -36,7 +36,7 @@ cdef class Grammar:
 
 	:param rule_tuples_or_bytes: either a sequence of tuples containing both
 		phrasal & lexical rules, or a bytes string containing the phrasal
-		rules in text format; in the latter case lexicon should be given.
+		rules in text format; in the latter case ``lexicon`` should be given.
 		The text format allows for more efficient loading and is used
 		internally.
 	:param start: a string identifying the unique start symbol of this grammar,
@@ -44,7 +44,7 @@ cdef class Grammar:
 	:param bitpar: whether to expect and use the bitpar grammar format
 
 	By default the grammar is in logprob mode;
-	invoke grammar.switch('default', logprob=False) to switch.
+	invoke ``grammar.switch('default', logprob=False)`` to switch.
 	If the grammar only contains integral weights (frequencies), they will
 	be normalized into relative frequencies; if the grammar contains any
 	non-integral weights, weights will be left unchanged. """
@@ -54,7 +54,7 @@ cdef class Grammar:
 	def __init__(self, rule_tuples_or_bytes, lexicon=None, start=b'ROOT',
 			bitpar=False):
 		cdef LexicalRule lexrule
-		cdef double [:] tmp
+		cdef double [:] weights
 		cdef int n
 		self.mapping = self.splitmapping = self.bylhs = NULL
 		if not isinstance(start, bytes):
@@ -88,37 +88,31 @@ cdef class Grammar:
 		self.nonterminals = len(self.toid)
 		self._allocate()
 		self._convertrules(rulelines, fanoutdict)
+		weights = self.models[0]
+		for n, lexrule in enumerate(self.lexical, self.numrules):
+			weights[n] = lexrule.prob
 		for n in range(self.nonterminals):
 			self.fanout[n] = fanoutdict[self.tolabel[n]]
 		del rulelines, fanoutdict
 		# index & filter phrasal rules in different ways
 		self._indexrules(self.bylhs, 0, 0)
+		self._indexrules(self.unary, 1, 2)
+		self._indexrules(self.lbinary, 1, 3)
+		self._indexrules(self.rbinary, 2, 3)
 		# if the grammar only contains integral values (frequencies),
 		# normalize them into relative frequencies.
 		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
 		if not (nonint.search(self.origrules)
 				or LEXICON_NONINT.search(self.origlexicon)):
 			self._normalize()
-		# store 'default' weights
-		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
-		tmp = self.models[0]
-		for n in range(self.numrules):
-			tmp[self.bylhs[0][n].no] = self.bylhs[0][n].prob
-		for n, lexrule in enumerate(self.lexical, self.numrules):
-			tmp[n] = lexrule.prob
-		self._indexrules(self.unary, 1, 2)
-		self._indexrules(self.lbinary, 1, 3)
-		self._indexrules(self.rbinary, 2, 3)
 		self.switch('default', True)  # enable log probabilities
-		for n in range(self.numrules):  # sanity check
-			assert self.bylhs[0][n].no == n, self.rulestr(self.bylhs[0][n])
 
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines):
 		""" Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs """
 		Epsilon = b'Epsilon'
-		# Epsilon gets IDs 0, can only occur in RHS of lexical rules.
+		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
 		self.toid = {Epsilon: 0}
 		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
 		for line in rulelines:
@@ -222,6 +216,7 @@ cdef class Grammar:
 		self.rbinary[0] = &(self.lbinary[0][self.numbinary + 1])
 		self.fanout = <UChar *>malloc(sizeof(UChar) * self.nonterminals)
 		assert self.fanout is not NULL
+		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
 
 	@cython.wraparound(True)
 	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict):
@@ -229,6 +224,7 @@ cdef class Grammar:
 		rules from a text file to a contiguous array of structs. """
 		cdef UInt n = 0, m
 		cdef Rule *cur
+		cdef double [:] weights = self.models[0]
 		self.rulenos = {}
 		for line in rulelines:
 			if not line.strip():
@@ -261,7 +257,7 @@ cdef class Grammar:
 			cur.lhs = self.toid[rule[0]]
 			cur.rhs1 = self.toid[rule[1]]
 			cur.rhs2 = self.toid[rule[2]] if len(rule) == 3 else 0
-			cur.prob = w
+			cur.prob = weights[n] = w
 			cur.lengths = cur.args = m = 0
 			for a in yf.decode('ascii'):
 				if a == ',':
@@ -325,7 +321,7 @@ cdef class Grammar:
 			assert m == self.numunary, (m, self.numunary)
 		elif filterlen == 3:
 			assert m == self.numbinary, (m, self.numbinary)
-		# sort rules by idx
+		# sort rules by idx (NB: qsort is not stable, use appropriate cmp func)
 		if idx == 0:
 			qsort(dest[0], m, sizeof(Rule), &cmp0)
 		elif idx == 1:
@@ -349,10 +345,10 @@ cdef class Grammar:
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
 	def register(self, unicode name, weights):
-		""" Register a probabilistic model given a name, and sequences of
-		weights 'weights', where weights are in the same order as that of
-		self.origrules and self.origlexicon (which is an arbitrary order
-		except that words appear sorted). """
+		""" Register a probabilistic model given a name, and a sequence of
+		floats ``weights``, with weights  in the same order as
+		``self.origrules`` and ``self.origlexicon`` (which is an arbitrary
+		order except that tags for each word are clustered together). """
 		cdef int n, m = len(self.modelnames)
 		cdef double [:] tmp
 		assert name not in self.modelnames, 'model %r already exists' % name
@@ -365,7 +361,7 @@ cdef class Grammar:
 		self.modelnames.append(name)
 		tmp = self.models[m]
 		for n in range(self.numrules):
-			tmp[self.bylhs[0][n].no] = weights[n]
+			tmp[n] = weights[n]
 		for n in range(self.numrules, self.numrules + len(self.lexical)):
 			tmp[n] = weights[n]
 

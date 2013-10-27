@@ -22,7 +22,8 @@ metadata = dict(name='disco-dop',
 				'Programming Language :: Python',
 				'Programming Language :: Python :: 3',
 				'Programming Language :: Cython',
-				'Topic :: Text Processing :: Linguistic'],
+				'Topic :: Text Processing :: Linguistic',
+		],
 		requires=[
 				'cython (>=0.18)',
 				'numpy',
@@ -40,8 +41,8 @@ directives = {
 		'wraparound': False,
 		'boundscheck': False,
 		'embedsignature': True,
-		'warn.unreachable': True,
 		'warn.unused': True,
+		'warn.unreachable': True,
 		'warn.maybe_uninitialized': True,
 		'warn.undeclared': False,
 		'warn.unused_arg': False,
@@ -53,9 +54,9 @@ Options.fast_fail = True
 #Options.extra_link_args = ["-O3"]  #["-g"],
 if __name__ == '__main__':
 	setup(
-			include_dirs = [numpy.get_include()],
-			cmdclass = dict(build_ext=build_ext),
-			ext_modules = cythonize(
+			include_dirs=[numpy.get_include()],
+			cmdclass=dict(build_ext=build_ext),
+			ext_modules=cythonize(
 					'discodop/*.pyx',
 					#nthreads=4,
 					annotate=True,

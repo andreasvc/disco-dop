@@ -466,13 +466,13 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 #1/513           XY      -
 #1/2467          $.      ·      # NB this is not a period but a \cdot ...
 
-
 # fixme: treebank specific parameters for detecting punctuation.
 PUNCTTAGS = {'$,', '$.', '$[', '$(',
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}
 PUNCTUATION = frozenset('.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {'&bullet;', '..', '...', '....', '.....', '......', '!!', '!!!',
 		'??', '???', "''", '``', u',,', '--'}
+
 
 def ispunct(word, tag):
 	""" Test whether a word and/or tag is punctuation. """

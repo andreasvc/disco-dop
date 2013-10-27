@@ -83,8 +83,11 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 	if backtransform is not None and not bitpar:  # Double-DOP
 		for entry in entries:
 			prob = entry.value
-			treestr = recoverfragments(entry.key, chart,
-					grammar, backtransform)
+			try:
+				treestr = recoverfragments(entry.key, chart,
+						grammar, backtransform)
+			except:
+				continue
 			if shortest:
 				newprob = exp(-getderivprob(entry.key, chart, sent))
 				score = (prob / log(0.5), newprob)
@@ -104,7 +107,11 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 			if backtransform is None:
 				treestr = REMOVEIDS.sub('', deriv)
 			else:
-				treestr = recoverfragments(deriv, chart, grammar, backtransform)
+				try:
+					treestr = recoverfragments(deriv, chart, grammar,
+							backtransform)
+				except:
+					continue
 			if shortest:
 				# for purposes of tie breaking, calculate the derivation
 				# probability in a different model.
@@ -282,7 +289,7 @@ cpdef str recoverfragments(deriv, Chart chart,
 		deriv = Tree.parse(deriv, parse_leaf=int)
 		result = recoverfragments_str(deriv, grammar, backtransform)
 	else:
-		raise ValueError
+		raise ValueError('derivation has unexpected type %r.' % type(deriv))
 	return REMOVEWORDTAGS.sub('', result)
 
 

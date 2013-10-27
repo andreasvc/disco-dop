@@ -315,8 +315,8 @@ class Parser(object):
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 			if parsetrees:
-				resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
 				try:
+					resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
 					parsetree, fragments, noparse = self.postprocess(
 							resultstr, n, derivs)
 				except ValueError as err:
@@ -404,10 +404,12 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					markorigin=stages[n - 1].markorigin)
 				if stage.mode == 'dop-rerank':
 					grammar.getrulemapping(stages[n - 1].grammar)
-			probmodels = np.load('%s/%s.probs.npz' % (resultdir, stage.name))
-			for name in probmodels.files:
-				if name != 'default':
-					grammar.register(unicode(name), probmodels[name])
+			probmodelsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
+			if os.path.exists(probmodelsfile):
+				probmodels = np.load(probmodelsfile)
+				for name in probmodels.files:
+					if name != 'default':
+						grammar.register(unicode(name), probmodels[name])
 		else:  # not stage.dop
 			if n and stage.prune:
 				_ = grammar.getmapping(stages[n - 1].grammar,

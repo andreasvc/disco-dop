@@ -236,6 +236,7 @@ class DrawTree(object):
 			nodes[ids[m]] = sent[tree[m]]
 			if nodes[ids[m]] is None:
 				nodes[ids[m]] = '...'
+				self.highlight.discard(ids[m])
 			positions.remove(m)
 			childcols[m[:-1]].add((0, i))
 

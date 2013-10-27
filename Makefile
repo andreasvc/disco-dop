@@ -1,12 +1,15 @@
-.PHONY: clean test debug testdebug lint
+.PHONY: clean test testdebug lint
 
 all:
 	python setup.py install --user
 
 clean:
-	python setup.py clean
 	rm -rf build/
-	cd discodop; rm -rf *.c *.so *.html *.pyc __pycache__
+	find discodop -name '*.c' -delete
+	find discodop -name '*.so' -delete
+	find discodop -name '*.pyc' -delete
+	find discodop -name '*.html' -delete
+	rm -rf discodop/__pycache__
 
 test: all
 	rm -rf sample/
@@ -23,18 +26,19 @@ debug:
 	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb
 
 testdebug: debug valgrind-python.supp
-	valgrind --tool=memcheck --leak-check=full --num-callers=30 --suppressions=valgrind-python.supp python-dbg -tt -3 tests.py
+	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
+		--suppressions=valgrind-python.supp python-dbg -tt -3 tests.py
 
 valgrind-python.supp:
 	wget http://codespeak.net/svn/lxml/trunk/valgrind-python.supp
 
+inplace:
+	python setup.py build_ext --inplace
+
 # pylint: R=refactor, C0103 == Invalid name
-lint:
+lint: inplace
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi && \
-	cd web; pylint \
-		--indent-string='\t' \
-		--disable=R,C0103 \
-		~/.local/lib/python2.7/site-packages/discodop/*py *.py
+	pylint --indent-string='\t' --disable=R,C0103 discodop/*.py web/*.py
