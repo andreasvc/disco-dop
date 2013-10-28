@@ -604,14 +604,14 @@ def worker(args):
 		result.update(dict(candb=candb, exact=exact))
 		results.append(result)
 	# visualization of last parse tree; highligh matching POS / bracketings
-	highlight = [a for a in evaltree.subtrees()
-				if evalmod.bracketing(a) in goldb]
-	highlight.extend(a for a in evaltree.subtrees()
-				if a and isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
-	highlight.extend(range(len(cpos)))
-	msg += DrawTree(evaltree, evalsent,
-			abbr=True, highlight=highlight).text(
-				unicodelines=True, ansi=True)
+	if evaltree:  # trees with only punctuation would end up empty here
+		highlight = [a for a in evaltree.subtrees()
+					if evalmod.bracketing(a) in goldb]
+		highlight.extend(a for a in evaltree.subtrees()
+					if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
+		highlight.extend(range(len(cpos)))
+		msg += DrawTree(evaltree, evalsent, abbr=True,
+				highlight=highlight).text(unicodelines=True, ansi=True)
 	return (nsent, msg, results)
 
 
