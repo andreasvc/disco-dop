@@ -319,7 +319,9 @@ class Parser(object):
 					resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
 					parsetree, fragments, noparse = self.postprocess(
 							resultstr, n, derivs)
-				except ValueError as err:
+					assert all(a for a in parsetree.subtrees()), (
+							'tree has empty nodes: %s' % parsetree)
+				except Exception as err:
 					logging.error("something's amiss: %r", err)
 					parsetree, prob, fragments, noparse = self.noparse(
 							stage, sent, tags, lastsuccessfulparse)
