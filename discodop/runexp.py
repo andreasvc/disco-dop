@@ -607,7 +607,7 @@ def worker(args):
 	highlight = [a for a in evaltree.subtrees()
 				if evalmod.bracketing(a) in goldb]
 	highlight.extend(a for a in evaltree.subtrees()
-				if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
+				if a and isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
 	highlight.extend(range(len(cpos)))
 	msg += DrawTree(evaltree, evalsent,
 			abbr=True, highlight=highlight).text(
