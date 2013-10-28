@@ -322,17 +322,95 @@ def sortgrammar(grammar):
 
 	return sorted(grammar, key=sortkey)
 
+FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
-def coarse_grammar(trees, sents, level=0):
-	""" collapse all labels to X except ROOT and POS tags. """
-	if level == 0:
-		repl = lambda x: "X"
-	label = re.compile("[^^|<>-]+")
-	for tree in trees:
-		for subtree in tree.subtrees():
-			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
-				subtree.label = label.sub(repl, subtree.label)
-	return treebankgrammar(trees, sents)
+
+def flatten(tree, sent, ids):
+	""" Auxiliary function for Double-DOP.
+	Remove internal nodes from a tree and read off the binarized
+	productions of the resulting flattened tree. Aside from returning
+	productions, also return tree with lexical and frontier nodes replaced by a
+	templating symbol '{n}' where n is an index.
+	Input is a tree and sentence, as well as an iterator which yields
+	unique IDs for non-terminals introdudced by the binarization;
+	output is a tuple (prods, frag). Trees are in the form of strings.
+
+	>>> ids = UniqueIDs()
+	>>> sent = [None, ',', None, '.']
+	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
+	>>> flatten(tree, sent, ids)
+	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
+	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
+	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
+	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
+	>>> flatten("(NN 0)", ["foo"], ids)
+	([(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
+	>>> flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
+	... "(TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> "
+	... "(VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7)) "
+	... "(VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))",
+	... ['Das', 'Garten-', 'und', 'Friedhofsamt', 'hatte', 'kuerzlich',
+	... 'dem', 'Ortsbeirat', None, None, None], ids)
+	([(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
+	(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
+	(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
+	(('S}<6>', 'S}<5>', 'ART@dem'), ((0, 1),)),
+	(('S}<5>', 'S}<4>', 'ADV@kuerzlich'), ((0, 1),)),
+	(('S}<4>', 'S}<3>', 'VAFIN@hatte'), ((0, 1),)),
+	(('S}<3>', 'S}<2>', 'NN@Friedhofsamt'), ((0, 1),)),
+	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)),
+	(('S}<1>', 'ART@Das', 'TRUNC@Garten-'), ((0, 1),)),
+	(('ART@Das', 'Epsilon'), ('Das',)),
+	(('TRUNC@Garten-', 'Epsilon'), ('Garten-',)),
+	(('KON@und', 'Epsilon'), ('und',)),
+	(('NN@Friedhofsamt', 'Epsilon'), ('Friedhofsamt',)),
+	(('VAFIN@hatte', 'Epsilon'), ('hatte',)),
+	(('ADV@kuerzlich', 'Epsilon'), ('kuerzlich',)),
+	(('ART@dem', 'Epsilon'), ('dem',)),
+	(('NN@Ortsbeirat', 'Epsilon'), ('Ortsbeirat',))],
+	'(S (S|<VP> (S|<NP> (NP {0} (CNP (CNP|<TRUNC> {1} (CNP|<KON> {2} \
+	(CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} (VP|<NP> \
+	(NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
+	>>> flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
+	... "(ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
+	... (None, None, None, None, None), ids)
+	([(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
+	(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
+	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
+	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
+	(S|<VAFIN> {1}))') """
+	from discodop.treetransforms import factorconstituent, addbitsets
+
+	def repl(x):
+		""" Add information to a frontier or terminal:
+
+		:frontiers: ``(label indices)``
+		:terminals: ``(tag@word idx)`` """
+		n = x.group(2)  # index w/leading space
+		nn = int(n)
+		if sent[nn] is None:
+			return x.group(0)  # (label indices)
+		word = quotelabel(sent[nn])
+		# (tag@word idx)
+		return "(%s@%s%s)" % (x.group(1), word, n)
+
+	if tree.count(' ') == 1:
+		return lcfrs_productions(addbitsets(tree), sent), str(tree)
+	# give terminals unique POS tags
+	prod = FRONTIERORTERM.sub(repl, tree)
+	# remove internal nodes, reorder
+	prod = "%s %s)" % (prod[:prod.index(' ')],
+			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+			key=lambda x: int(x.group(2)))))
+	prods = lcfrs_productions(factorconstituent(addbitsets(prod), "}",
+			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2),
+			sent)
+	# remember original order of frontiers / terminals for template
+	order = {x.group(2): "{%d}" % n
+			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
+	# mark substitution sites and ensure string.
+	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], tree)
+	return prods, str(newtree)
 
 
 def nodefreq(tree, dectree, subtreefd, nonterminalfd):
@@ -475,62 +553,6 @@ def quotelabel(label):
 	# juggling to get str in both Python 2 and Python 3.
 	return str(newlabel.encode('unicode-escape').decode('ascii'))
 
-FRONTIERORTERM_new = re.compile(r"\([^ ]+(?: [0-9]+)+\)")
-
-
-def new_flatten(tree, sent, ids):
-	""" Auxiliary function for Double-DOP.
-	Remove internal nodes from a tree and read off its binarized
-	productions. Aside from returning productions, also return tree with
-	lexical and frontier nodes replaced by a templating symbol '%s'.
-	Input is a tree and sentence, as well as an iterator which yields
-	unique IDs for non-terminals introdudced by the binarization;
-	output is a tuple (prods, frag). Trees are in the form of strings.
-
-	NB: this version is currently not used.
-
-	#>>> ids = count()
-	#>>> sent = [None, ',', None, '.']
-	#>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	#>>> new_flatten(tree, sent, ids)
-	#([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
-	#(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
-	#(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	#'(S_2 {0}) (ROOT|<$,>_2 ($, {1}) ($. {2}))',
-	#['(S_2 ', 0, ') (ROOT|<$,>_2 ($, ', 1, ') ($. ', 2 '))']) """
-	from discodop.treetransforms import factorconstituent, addbitsets
-
-	def repl(x):
-		""" Add information to a frontier or terminal:
-
-		:frontiers: ``(label indices)``
-		:terminals: ``(tag@word idx)`` """
-		n = x.group(2)  # index w/leading space
-		nn = int(n)
-		if sent[nn] is None:
-			return x.group(0)  # (label indices)
-		word = quotelabel(sent[nn])
-		# (tag@word idx)
-		return "(%s@%s%s)" % (x.group(1), word, n)
-
-	if tree.count(' ') == 1:
-		return lcfrs_productions(addbitsets(tree), sent), ([str(tree)], [])
-	# give terminals unique POS tags
-	prod = FRONTIERORTERM.sub(repl, tree)
-	# remove internal nodes, reorder
-	prod = "%s %s)" % (prod[:prod.index(' ')],
-		' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
-		key=lambda x: int(x.group(2)))))
-	prods = lcfrs_productions(factorconstituent(addbitsets(prod),
-			"}", factor='left', markfanout=True, ids=ids, threshold=2), sent)
-
-	# remember original order of frontiers / terminals for template
-	order = [int(x.group(2)) for x in FRONTIERORTERM.finditer(prod)]
-	# ensure string, split around substitution sites.
-	#lambda x: order[x.group(2)],
-	treeparts = FRONTIERORTERM_new.split(str(tree))
-	return prods, (treeparts, order)
-
 
 class UniqueIDs(object):
 	""" Produce numeric IDs. Can be used as iterator (ID will not be re-used)
@@ -561,96 +583,6 @@ class UniqueIDs(object):
 
 	next = __next__
 
-FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
-
-
-def flatten(tree, sent, ids):
-	""" Auxiliary function for Double-DOP.
-	Remove internal nodes from a tree and read off the binarized
-	productions of the resulting flattened tree. Aside from returning
-	productions, also return tree with lexical and frontier nodes replaced by a
-	templating symbol '{n}' where n is an index.
-	Input is a tree and sentence, as well as an iterator which yields
-	unique IDs for non-terminals introdudced by the binarization;
-	output is a tuple (prods, frag). Trees are in the form of strings.
-
-	>>> ids = UniqueIDs()
-	>>> sent = [None, ',', None, '.']
-	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> flatten(tree, sent, ids)
-	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
-	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
-	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
-	>>> flatten("(NN 0)", ["foo"], ids)
-	([(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
-	>>> flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
-	... "(TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> "
-	... "(VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7)) "
-	... "(VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))",
-	... ['Das', 'Garten-', 'und', 'Friedhofsamt', 'hatte', 'kuerzlich',
-	... 'dem', 'Ortsbeirat', None, None, None], ids)
-	([(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
-	(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
-	(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
-	(('S}<6>', 'S}<5>', 'ART@dem'), ((0, 1),)),
-	(('S}<5>', 'S}<4>', 'ADV@kuerzlich'), ((0, 1),)),
-	(('S}<4>', 'S}<3>', 'VAFIN@hatte'), ((0, 1),)),
-	(('S}<3>', 'S}<2>', 'NN@Friedhofsamt'), ((0, 1),)),
-	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)),
-	(('S}<1>', 'ART@Das', 'TRUNC@Garten-'), ((0, 1),)),
-	(('ART@Das', 'Epsilon'), ('Das',)),
-	(('TRUNC@Garten-', 'Epsilon'), ('Garten-',)),
-	(('KON@und', 'Epsilon'), ('und',)),
-	(('NN@Friedhofsamt', 'Epsilon'), ('Friedhofsamt',)),
-	(('VAFIN@hatte', 'Epsilon'), ('hatte',)),
-	(('ADV@kuerzlich', 'Epsilon'), ('kuerzlich',)),
-	(('ART@dem', 'Epsilon'), ('dem',)),
-	(('NN@Ortsbeirat', 'Epsilon'), ('Ortsbeirat',))],
-	'(S (S|<VP> (S|<NP> (NP {0} (CNP (CNP|<TRUNC> {1} (CNP|<KON> {2} \
-	(CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} (VP|<NP> \
-	(NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
-	>>> flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
-	... "(ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
-	... (None, None, None, None, None), ids)
-	([(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
-	(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
-	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
-	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
-	(S|<VAFIN> {1}))') """
-	from discodop.treetransforms import factorconstituent, addbitsets
-
-	def repl(x):
-		""" Add information to a frontier or terminal:
-
-		:frontiers: ``(label indices)``
-		:terminals: ``(tag@word idx)`` """
-		n = x.group(2)  # index w/leading space
-		nn = int(n)
-		if sent[nn] is None:
-			return x.group(0)  # (label indices)
-		word = quotelabel(sent[nn])
-		# (tag@word idx)
-		return "(%s@%s%s)" % (x.group(1), word, n)
-
-	if tree.count(' ') == 1:
-		return lcfrs_productions(addbitsets(tree), sent), str(tree)
-	# give terminals unique POS tags
-	prod = FRONTIERORTERM.sub(repl, tree)
-	# remove internal nodes, reorder
-	prod = "%s %s)" % (prod[:prod.index(' ')],
-			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
-			key=lambda x: int(x.group(2)))))
-	prods = lcfrs_productions(factorconstituent(addbitsets(prod), "}",
-			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2),
-			sent)
-	# remember original order of frontiers / terminals for template
-	order = {x.group(2): "{%d}" % n
-			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
-	# mark substitution sites and ensure string.
-	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], tree)
-	return prods, str(newtree)
-
 
 def rangeheads(s):
 	""" Iterate over a sequence of numbers and return first element of each
@@ -677,6 +609,18 @@ def ranges(s):
 			rng = [a]
 	if rng:
 		yield rng
+
+
+def coarse_grammar(trees, sents, level=0):
+	""" collapse all labels to X except ROOT and POS tags. """
+	if level == 0:
+		repl = lambda x: "X"
+	label = re.compile("[^^|<>-]+")
+	for tree in trees:
+		for subtree in tree.subtrees():
+			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
+				subtree.label = label.sub(repl, subtree.label)
+	return treebankgrammar(trees, sents)
 
 
 def defaultparse(wordstags, rightbranching=False):
