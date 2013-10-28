@@ -363,11 +363,11 @@ def coverfragworker():
 
 def workload(numtrees, mult, numproc):
 	""" Get an even workload. When n trees are compared against themselves,
-	n * (n - 1) total comparisons are made.
-	Each tree m has to be compared to all trees x such that m < x < n.
-	(meaning there are more comparisons for lower n).
+	``n * (n - 1)`` total comparisons are made.
+	Each tree m has to be compared to all trees ``x`` such that ``m < x < n``.
+	(meaning there are more comparisons for lower ``n``).
 
-	:returns: a sequence of (start, end) intervals such that
+	:returns: a sequence of ``(start, end)`` intervals such that
 		the number of comparisons is approximately balanced. """
 	# could base on number of nodes as well.
 	if numproc == 1:

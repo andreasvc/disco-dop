@@ -513,6 +513,7 @@ def transitiveclosure(eqpairs):
 	i.e., given a sequence of pairs denoting an equivalence relation,
 	produce a dictionary with equivalence classes as values and
 	arbitrary members of those classes as keys.
+
 	>>> result = transitiveclosure({('A', 'B'), ('B', 'C')})
 	>>> len(result)
 	1
@@ -734,7 +735,7 @@ def precision(reference, candidate):
 
 def f_measure(reference, candidate, alpha=0.5):
 	""" Get F-measure of precision and recall for two multisets.
-	The default weight alpha=0.5 corresponds to the F_1-measure. """
+	The default weight ``alpha=0.5`` corresponds to the F_1-measure. """
 	p = precision(reference, candidate)
 	r = recall(reference, candidate)
 	if p == 0 or r == 0:
@@ -746,7 +747,7 @@ def accuracy(reference, candidate):
 	""" Given a sequence of reference values and a corresponding sequence of
 	test values, return the fraction of corresponding values that are equal.
 	In particular, return the fraction of indices
-	0<i<=len(test) such that test[i] == reference[i]. """
+	``0<i<=len(test)`` such that ``test[i] == reference[i]``. """
 	assert len(reference) == len(candidate), (
 		'Sequences must have the same length.')
 	return sum(1 for a, b in zip(reference, candidate)
@@ -779,8 +780,8 @@ def mean(seq):
 
 def intervals(seq):
 	""" Partition seq into a sequence of intervals corresponding to contiguous
-	ranges. An interval is a pair (a, b), with a <= b denoting terminals x
-	such that a <= x <= b.
+	ranges. An interval is a pair ``(a, b)``, with ``a <= b`` denoting
+	terminals ``x`` such that ``a <= x <= b``.
 
 	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
 	[(0, 1), (3, 4), (6, 8)] """
@@ -815,11 +816,12 @@ def disc(node):
 	return False
 
 
-def nozerodiv(a):
-	""" Convenience function to catch zero division or None as a result,
-	and otherwise format as a percentage with two decimals. """
+def nozerodiv(func):
+	""" Convenience function to catch zero division or ``None`` as a result
+	from evaluating ``func()``; otherwise format its return value as a
+	percentage with two decimals; the result is a 6-character string. """
 	try:
-		result = a()
+		result = func()
 	except ZeroDivisionError:
 		return ' 0DIV!'
 	return '  None' if result is None else '%6.2f' % (100 * result)

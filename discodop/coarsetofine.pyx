@@ -18,9 +18,9 @@ import numpy as np
 
 def prunechart(Chart coarsechart, Grammar fine, k,
 		bint splitprune, bint markorigin, bint finecfg, bint bitpar):
-	""" Produce a white list of chart items occurring in the k-best derivations
-	of ``chart``, or with posterior probability > k. Labels ``X`` in
-	``coarse.toid`` are projected to the labels in the mapping of the fine
+	""" Produce a white list of chart items occurring in the `k`-best
+	derivations of ``chart``, or with posterior probability > `k`. Labels ``X``
+	in ``coarse.toid`` are projected to the labels in the mapping of the fine
 	grammar, e.g., to ``X`` and ``X@n-m`` for a DOP reduction.
 
 	:param coarsechart: a Chart object produced by the PCFG or PLCFRS parser,
@@ -28,11 +28,11 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	:param coarse: the grammar with which ``chart`` was produced.
 	:param fine: the grammar to map labels to after pruning. must have a
 		mapping to the coarse grammar established by ``fine.getmapping()``.
-	:param k: when k >= 1: number of k-best derivations to consider; when k==0,
-		the chart is not pruned but filtered to contain only items that
-		contribute to a complete derivation;
-		when 0 < k < 1, inside-outside probabilities are computed and items
-		with a posterior probabilities < k are pruned.
+	:param k: when ``k >= 1``: number of `k`-best derivations to consider;
+		when ``k==0``, the chart is not pruned but filtered to contain only
+		items that contribute to a complete derivation;
+		when ``0 < k < 1``, inside-outside probabilities are computed and items
+		with a posterior probabilities < `k` are pruned.
 	:param splitprune: coarse stage used a split-PCFG where discontinuous node
 		appear as multiple CFG nodes. Every discontinuous node will result
 		in multiple lookups into whitelist to see whether it should be
@@ -193,7 +193,7 @@ def whitelistfromposteriors(inside, outside, start,
 def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
 		Grammar coarse, Grammar fine, finechart, short maxlen,
 		double threshold):
-	""" compute posterior probabilities and prune away cells below some
+	""" Compute posterior probabilities and prune away cells below some
 	threshold. this version produces a matrix with pruned spans having NaN as
 	value. """
 	cdef long label

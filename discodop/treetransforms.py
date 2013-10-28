@@ -119,10 +119,12 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			nodes introducing the last symbol. This is useful when the last
 			symbol is the head node, ensuring that it is not exchangeable with
 			other non-terminals.
-	:param reverse: reverse direction of the horizontal markovization;
-			e.g.: (A (B ) (C ) (D )) ...becomes:
-			left:  (A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))
-			right: (A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))
+	:param reverse: reverse direction of the horizontal markovization; e.g.:
+			``(A (B ) (C ) (D ))`` ...becomes:
+
+			:left:  ``(A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))``
+			:right: ``(A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))``
+
 			in this way the markovization represents the history of the
 			nonterminals that have *already* been parsed, instead of those
 			still to come (assuming bottom-up parsing).
@@ -291,7 +293,7 @@ def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 		unarychar='+'):
 	""" Restore a binarized tree to the original n-ary tree.
 	Modifies tree in-place.
-	NB: a malformed node such as (X|<Y> ) which is not supposed to be empty
+	NB: a malformed node such as ``(X|<Y> )`` which is not supposed to be empty
 	will be silently discarded. """
 	# increase robustness
 	childchar += '<'
@@ -455,7 +457,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2):
 	""" Binarize one constituent with a left/right factored binarization.
 	Children remain unmodified. Bottom-up version. Nodes must be immutable
-	and contain bitsets; use addbitsets().
+	and contain bitsets; use ``addbitsets()``.
 	By default construct artificial labels using labels of child nodes.
 	When markyf is True, each artificial label will include the yield function;
 	this is necessary for a 'normal form' binarization that is equivalent to the
@@ -520,8 +522,8 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	""" Implementation of Gildea (2010): Optimal parsing strategies for
 	linear context-free rewriting systems.  Expects an immutable tree where
 	the terminals are integers corresponding to indices, with a special
-	bitset attribute to avoid having to call leaves() repeatedly.
-	The bitset attribute can be added with addbitsets()
+	bitset attribute to avoid having to call ``leaves()`` repeatedly.
+	The bitset attribute can be added with ``addbitsets()``
 
 	:param tree: the tree for which the optimal binarization of its top
 		production will be searched.
@@ -651,7 +653,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 
 def optimalbinarize(tree, sep='|', headdriven=False, h=None, v=1):
 	""" Recursively binarize a tree, optimizing for complexity.
-	v=0 is not implemented. Setting h to a nonzero integer restricts the
+	``v=0`` is not implemented. Setting h to a nonzero integer restricts the
 	possible binarizations to head driven binarizations. """
 	if h is None:
 		tree = Tree.convert(tree)

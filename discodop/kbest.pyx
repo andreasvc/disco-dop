@@ -203,12 +203,12 @@ cpdef inline getderivation(result, v, RankedEdge ej, Chart chart,
 
 
 def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
-	""" Translate the (e, j) notation to an actual tree string in
-	bracket notation.  e is an edge, j is a vector prescribing the rank of the
+	""" Translate the ``(e, j)`` notation to an actual tree string in bracket
+	notation.  ``e is an edge, ``j`` is a vector prescribing the rank of the
 	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
 	vector [2, 1], this points to the derivation headed by S and having the 2nd
 	best NP and the 1st best VP as children.
-	If `debin` is specified, will perform on-the-fly debinarization of nodes
+	If ``debin`` is specified, will perform on-the-fly debinarization of nodes
 	with labels containing `debin` an a substring. """
 	result = bytearray()
 	getderivation(result, v, ej, chart, debin)
@@ -216,7 +216,7 @@ def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
 
 
 def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
-	""" Wrapper function to run lazykthbest and produce the ranked chart,
+	""" Wrapper function to run ``lazykthbest`` and produce the ranked chart,
 	as well as derivations as strings (when ``derivs`` is True).
 	chart is a monotone hypergraph; should be acyclic unless probabilities
 	resolve the cycles (maybe nonzero weights for unary productions are

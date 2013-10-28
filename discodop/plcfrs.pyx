@@ -28,7 +28,7 @@ cdef inline bint equalitems(LCFRSItem_fused op1, LCFRSItem_fused op2):
 
 
 cdef class LCFRSChart(Chart):
-	""" item is a ChartItem object. """
+	""" A chart for LCFRS grammars. An item is a ChartItem object. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		self.grammar = grammar
@@ -87,6 +87,7 @@ cdef class LCFRSChart(Chart):
 
 
 cdef class SmallLCFRSChart(LCFRSChart):
+	""" For sentences that fit into a single machine word. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		super(SmallLCFRSChart, self).__init__(
@@ -139,6 +140,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 
 
 cdef class FatLCFRSChart(LCFRSChart):
+	""" LCFRS chart that supports longer sentences. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		super(FatLCFRSChart, self).__init__(
@@ -899,7 +901,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		msg = 'no parse ' + msg
 	return chart, msg
 
-
 #def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=True,
 #		list whitelist=None, bint splitprune=False, bint markorigin=False,
 #		estimates=None, int beamwidth=0):
@@ -957,7 +958,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 #		if not candidates:
 #			break
 #	return candidates if pos == -1 else set()
-
 
 def do(sent, grammar):
 	from kbest import lazykbest

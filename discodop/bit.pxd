@@ -59,6 +59,7 @@ cpdef int bitcount(ULLong vec)
 
 cdef inline bint testbit(unsigned_fused vec, UInt pos):
 	""" Mask a particular bit, return nonzero if set
+
 	>>> testbit(0b0011101, 0)
 	True
 	>>> testbit(0b0011101, 1)
@@ -76,6 +77,7 @@ cdef inline bint testbit(unsigned_fused vec, UInt pos):
 
 cdef inline int nextset(ULLong vec, UInt pos):
 	""" Return next set bit starting from pos, -1 if there is none.
+
 	>>> nextset(0b001101, 1)
 	2
 	"""
@@ -90,6 +92,7 @@ cdef inline int nextset(ULLong vec, UInt pos):
 
 cdef inline int nextunset(ULLong vec, UInt pos):
 	""" Return next unset bit starting from pos.
+
 	>> nextunset(0b001101, 2)
 	4
 	>> nextunset((1<<64)-1, 0)
@@ -102,6 +105,7 @@ cdef inline int nextunset(ULLong vec, UInt pos):
 cdef inline int bitlength(ULLong vec):
 	""" Return number of bits needed to represent vector
 	(equivalently: index of most significant set bit, plus one)
+
 	>>> bitlength(0b0011101)
 	5"""
 	return sizeof(vec) * 8 - __builtin_clzll(vec)

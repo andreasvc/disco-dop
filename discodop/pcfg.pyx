@@ -16,7 +16,9 @@ cdef double INFINITY = float('infinity')
 
 
 cdef class CFGChart(Chart):
-	""" item is an integer made up of start, end, lhs. """
+	"""
+	A Chart for context-free grammars (CFG). An item is a Python integer
+	made up of ``start``, ``end``, ``lhs`` indices. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		raise NotImplementedError
@@ -56,6 +58,12 @@ cdef class CFGChart(Chart):
 
 
 cdef class DenseCFGChart(CFGChart):
+	"""
+	A CFG chart in which edges and probabilities are stored in a dense
+	array; i.e., array is contiguous and all valid combinations of indices
+	``0 <= start <= mid <= end`` and ``label`` can be addressed. Whether it is
+	feasible to use this chart depends on the grammar constant, specifically
+	the number of non-terminal labels. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		self.grammar = grammar
@@ -144,6 +152,9 @@ cdef class DenseCFGChart(CFGChart):
 
 
 cdef class SparseCFGChart(CFGChart):
+	"""
+	A CFG chart which uses a dictionary for each cell so that grammars
+	with a large number of non-terminal labels can be handled. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		self.grammar = grammar

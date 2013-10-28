@@ -114,7 +114,7 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 def simplesmoothlexicon(lexmodel, epsilon=Fraction(1, 100)):
 	""" introduce lexical productions for unobserved
 	combinations of known open class words and tags, as well as for unobserved
-	signatures which are mapped to '_UNK'.
+	signatures which are mapped to ``'_UNK'``.
 
 	:param epsilon: 'frequency' of productions for unseen tag, word pair. """
 	(lexicon, wordsfortag, openclasstags,

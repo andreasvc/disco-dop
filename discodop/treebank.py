@@ -95,9 +95,9 @@ class CorpusReader(object):
 		return self._parsed_sents_cache
 
 	def parsed_sents_iter(self):
-		""" :returns: an iterator returning tuples (key, tree, sent) of
-		sentences in corpus. Useful when the dictionary of all trees in corpus
-		would not fit in memory. """
+		""" :returns: an iterator returning tuples (key, tree, sent) of \
+		sentences in corpus. Useful when the dictionary of all trees in \
+		corpus would not fit in memory. """
 		for a, b in self._read_blocks():
 			yield a, self._parsetree(b), self._word(b)
 
@@ -221,7 +221,7 @@ class DiscBracketCorpusReader(CorpusReader):
 	""" A corpus reader where the phrase-structure is represented by a tree in
 	bracket notation, where the leaves are indices pointing to words in a
 	separately represented sentence; e.g.:
-	(S (NP 1) (VP (VB 0) (JJ 2)) (? 3))	is John rich ?
+	``(S (NP 1) (VP (VB 0) (JJ 2)) (? 3))	is John rich ?``
 	Note that the tree and the sentence are separated by a tab, while the words
 	in the sentence are separated by spaces. There is one tree and sentence
 	per line.
@@ -262,7 +262,7 @@ class DiscBracketCorpusReader(CorpusReader):
 class BracketCorpusReader(CorpusReader):
 	""" A standard corpus reader where the phrase-structure is represented by a
 	tree in bracket notation; e.g.:
-	(S (NP John) (VP (VB is) (JJ rich)) (. .))
+	``(S (NP John) (VP (VB is) (JJ rich)) (. .))``
 	TODO: support traces & empty nodes. """
 	def sents(self):
 		if not self._sents_cache:
@@ -675,7 +675,7 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 
 def readheadrules(filename):
 	""" Read a file containing heuristic rules for head assigment.
-	Example line: "s right-to-left vmfin vafin vaimp", which means
+	Example line: ``s right-to-left vmfin vafin vaimp``, which means
 	traverse siblings of an S constituent from right to left, the first child
 	with a label of vmfin, vafin, or vaimp will be marked as head. """
 	headrules = {}
@@ -857,6 +857,8 @@ def segmentbrackets(brackets):
 		tuples (tree, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0. """
+	# FIXME: for 'rest' to be able to contain parens, would need constraint
+	# that trees can e.g. only start at start of line
 	lb, rb = brackets
 	strtermre = re.compile('[^0-9\\%s]\\%s' % (rb, rb))
 	parens = 0  # number of open parens
@@ -900,10 +902,10 @@ def segmentbrackets(brackets):
 
 def segmentexport(morphology, functions):
 	""" Co-routine that accepts one line at a time.
-	Yields tuples (result, status) where ...
+	Yields tuples ``(result, status)`` where ...
 
-	- result is None or a segment delimited by '#BOS ' and '#EOS '
-		as a list of lines;
+	- result is ``None`` or a segment delimited by
+		``#BOS `` and ``#EOS `` as a list of lines;
 	- status is 1 if the line was consumed, else 0. """
 	cur = []
 	inblock = False

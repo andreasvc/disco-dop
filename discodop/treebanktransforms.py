@@ -15,9 +15,10 @@ STATESPLIT = '^'
 def transform(tree, sent, transformations):
 	""" Perform some transformations, specific to Negra and WSJ treebanks.
 	State-splits are preceded by '^'.
-	negra:  transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')
-	wsj:    transformations=('S-WH', 'VP-HD', 'S-INF')
-	alpino: transformations=('PUNCT', ) """
+
+	:negra:  transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')
+	:wsj:    transformations=('S-WH', 'VP-HD', 'S-INF')
+	:alpino: transformations=('PUNCT', ) """
 	for name in transformations:
 		# negra / tiger
 		if name == 'S-RC':  # relative clause => S becomes SRC
@@ -187,8 +188,9 @@ def transform(tree, sent, transformations):
 
 
 def reversetransform(tree, transformations):
-	""" Undo specified transformations, as well as removing any hyphen-marked
-	state splits. Do not apply twice (might remove VPs which shouldn't be). """
+	""" Undo specified transformations, as well as removing any state splits
+	introduced by ``^``.
+	Do not apply twice (might remove VPs which shouldn't be). """
 	tagtoconst, _ = getgeneralizations()
 	# Generic state-split removal
 	for node in tree.subtrees(lambda n: STATESPLIT in n.label[1:]):

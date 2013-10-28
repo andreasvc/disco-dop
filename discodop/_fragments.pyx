@@ -88,15 +88,15 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	kernel
 
 	- scenario 1: recurring fragments in single treebank, use:
-		fastextractfragments(trees1, sents1, offset, end, labels)
+		``fastextractfragments(trees1, sents1, offset, end, labels)``
 	- scenario 2: common fragments in two treebanks:
-		fastextractfragments(trees1, sents1, offset, end, trees2, sents2)
+		``fastextractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
 
-	offset and end can be used to divide the work over multiple processes.
-	they are indices of trees1 to work on (default is all).
-	when debug is enabled a contingency table is shown for each pair of trees.
-	when complement is true, the complement of the recurring fragments in each
-	pair of trees is extracted as well. """
+	``offset`` and ``end`` can be used to divide the work over multiple
+	processes; they are indices of ``trees1`` to work on (default is all); when
+	``debug`` is enabled a contingency table is shown for each pair of trees;
+	when ``complement`` is true, the complement of the recurring fragments in
+	each pair of trees is extracted as well. """
 	cdef:
 		int n, m, start = 0, end2
 		short SLOTS  # the number of bitsets needed to cover the largest tree
@@ -402,14 +402,15 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	""" Seeks the largest fragments in treebank(s)
 
 	- scenario 1: recurring fragments in single treebank, use:
-		extractfragments(trees1, sents1, offset, end)
+		``fastextractfragments(trees1, sents1, offset, end)``
 	- scenario 2: common fragments in two treebanks:
-		extractfragments(trees1, sents1, offset, end, trees2, sents2)
+		``fastextractfragments(trees1, sents1, offset, end, trees2, sents2)``
 
-	offset and end can be used to divide the work over multiple processes.
-	offset is the starting point in trees1, end is the number of trees from
-	trees1 to work on. When debug is enabled a contingency table is shown for
-	each pair of trees. """
+	``offset`` and ``end`` can be used to divide the work over multiple
+	processes; they are indices of ``trees1`` to work on (default is all); when
+	``debug`` is enabled a contingency table is shown for each pair of trees;
+	when ``complement`` is true, the complement of the recurring fragments in
+	each pair of trees is extracted as well. """
 	cdef:
 		int n, m, aa, bb, start = 0
 		short SLOTS
@@ -737,7 +738,7 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 
 
 def add_lcfrs_rules(tree, sent):
-	""" Set attribute '.prod' on nodes of tree with the LCFRS production for
+	""" Set attribute ``.prod`` on nodes of tree with the LCFRS production for
 	that node. """
 	for a, b in zip(tree.subtrees(),
 			lcfrs_productions(tree, sent, frontiers=True)):
@@ -746,7 +747,7 @@ def add_lcfrs_rules(tree, sent):
 
 
 def getlabelsprods(trees, labels, prods):
-	""" collect label/prod attributes from 'trees' and index them. """
+	""" collect label/prod attributes from ``trees`` and index them. """
 	pnum = len(prods)
 	for tree in trees:
 		for st in tree:

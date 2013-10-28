@@ -212,7 +212,7 @@ def doubledop(trees, fragments, debug=False):
 	which occurs through the removal of internal nodes. The binarization adds
 	unique identifiers so that each grammar rule can be mapped back to its
 	fragment. In fragments with terminals, we replace their POS tags with a tag
-	uniquely identifying that terminal and tag: tag@word.
+	uniquely identifying that terminal and tag: ``tag@word``.
 
 	:returns: a tuple (grammar, altweights, backtransform)
 		altweights is a dictionary containing alternate weights.
@@ -416,7 +416,7 @@ def flatten(tree, sent, ids):
 def nodefreq(tree, dectree, subtreefd, nonterminalfd):
 	""" Auxiliary function for DOP reduction.
 	Counts frequencies of nodes and calculate the number of
-	subtrees headed by each node. updates "subtreefd" and "nonterminalfd"
+	subtrees headed by each node. updates ``subtreefd`` and ``nonterminalfd``
 	as a side effect. Expects a normal tree and a tree with IDs.
 
 	:param subtreefd: the multiset to store the counts of subtrees
@@ -680,10 +680,11 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	`grammar`). For a description of the file format, see ``grammar.FORMAT``.
 
 	:param grammar:  a sequence of rule tuples, as produced by
-		treebankgrammar(), dopreduction(), or doubledop().
+		``treebankgrammar()``, ``dopreduction()``, or ``doubledop()``.
 	:param bitpar: when ``True``, use bitpar format: for rules, put weight
 		first and leave out the yield function.
-	:returns: rules, lexicon; bytes object & a unicode string, respectively
+	:returns: tuple ``(rules, lexicon)``; bytes object & a unicode string,
+		respectively.
 
 	Weights are written in the following format:
 

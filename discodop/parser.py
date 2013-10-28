@@ -371,8 +371,8 @@ class Parser(object):
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	""" Read the grammars from a previous experiment.
-	Expects a directory 'resultdir' which contains the relevant grammars and
-	the parameter file 'params.prm', as produced by runexp. """
+	Expects a directory ``resultdir`` which contains the relevant grammars and
+	the parameter file ``params.prm``, as produced by ``runexp``. """
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
 		rules = gzip.open('%s/%s.rules.gz' % (resultdir, stage.name))
