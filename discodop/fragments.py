@@ -155,8 +155,10 @@ def regular(filenames, numproc, limit, encoding):
 			else min(PARAMS['trees1'].len, limit))
 
 	if PARAMS['complete']:
-		fragments = completebitsets(PARAMS['trees1'], PARAMS['sents1'],
-				PARAMS['labels'], PARAMS['disc'])
+		trees1, trees2 = PARAMS['trees1'], PARAMS['trees2']
+		fragments = completebitsets(trees1, PARAMS['sents1'], PARAMS['labels'],
+				max(trees1.maxnodes, (trees2 or trees1).maxnodes),
+				PARAMS['disc'])
 	else:
 		if len(filenames) == 1:
 			work = workload(numtrees, mult, numproc)
@@ -225,8 +227,9 @@ def batch(outputdir, filenames, limit, encoding):
 		trees2 = PARAMS['trees2']
 		sents2 = PARAMS['sents2']
 		if PARAMS['complete']:
-			fragments = completebitsets(PARAMS['trees2'], sents2,
-					PARAMS['labels'], PARAMS['disc'])
+			fragments = completebitsets(trees2, sents2, PARAMS['labels'],
+					max(trees1.maxnodes, (trees2 or trees1).maxnodes),
+					PARAMS['disc'])
 		elif PARAMS['quadratic']:
 			fragments = extractfragments(trees2, sents2, 0, 0,
 					PARAMS['labels'], trees1, sents1,
@@ -287,7 +290,7 @@ def initworker(treebank1, treebank2, limit, encoding):
 	""" Read treebanks for this worker. We do this separately for each process
 	under the assumption that this is advantageous with a NUMA architecture. """
 	PARAMS.update(readtreebanks(treebank1, treebank2,
-		limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
+			limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
 	if PARAMS['debug']:
 		print("\nproductions:")
 		for a, b in sorted(PARAMS['prods'].items(), key=lambda x: x[1]):
@@ -295,14 +298,14 @@ def initworker(treebank1, treebank2, limit, encoding):
 	trees1 = PARAMS['trees1']
 	assert trees1
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
-		trees1.len, trees1.numnodes, trees1.maxnodes)
+			trees1.len, trees1.numnodes, trees1.maxnodes)
 	if treebank2:
 		trees2 = PARAMS['trees2']
 		assert trees2
 		m += " treebank2: %d trees; %d nodes (max %d);" % (
-			trees2.len, trees2.numnodes, trees2.maxnodes)
+				trees2.len, trees2.numnodes, trees2.maxnodes)
 	logging.info("%s labels: %d, prods: %d", m, len(set(PARAMS['labels'])),
-		len(PARAMS['prods']))
+			len(PARAMS['prods']))
 
 
 def initworkersimple(trees, sents, trees2=None, sents2=None):

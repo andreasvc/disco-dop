@@ -959,6 +959,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 #			break
 #	return candidates if pos == -1 else set()
 
+
 def do(sent, grammar):
 	from kbest import lazykbest
 	print('len', len(sent.split()), 'sentence:', sent)

@@ -310,7 +310,9 @@ cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 
 cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		short maxnodes, bint discontinuous):
-	""" Utility function to generate one bitset for each type of production. """
+	""" Utility function to generate one bitset for each type of production.
+	Important: if multiple treebanks are used, maxnodes should equal
+	``max(trees1.maxnodes, trees2.maxnodes)`` """
 	cdef:
 		dict result = {}
 		int p, i, n = -1
@@ -342,14 +344,16 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 
 
 cpdef dict completebitsets(Ctrees trees, list sents, list labels,
-		bint discontinuous=False):
+		short maxnodes, bint discontinuous=False):
 	""" Utility function to generate bitsets corresponding to whole trees
-	in the input. """
+	in the input.
+	Important: if multiple treebanks are used, maxnodes should equal
+	``max(trees1.maxnodes, trees2.maxnodes)`` """
 	cdef:
 		dict result = {}
 		list sent
 		int n, i
-		short SLOTS = BITNSLOTS(trees.maxnodes + 1)
+		short SLOTS = BITNSLOTS(maxnodes + 1)
 		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		Node *nodes
 	for n in range(trees.len):
@@ -814,8 +818,8 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 cdef readnode(line, list labels, dict prods, Node *result,
 		size_t *idx, list sent, origlabel):
 	""" Parse an s-expression in a string, and store in an array of Node
-	structs (pre-allocated). idx is a counters to keep track of the numer
-	of Node structs used, sent collects the terminals encountered. """
+	structs (pre-allocated). ``idx`` is a counter to keep track of the number
+	of Node structs used; ``sent`` collects the terminals encountered. """
 	cdef:
 		int n, parens = 0, start = 0, startchild2 = 0, left = -1, right = -1
 		list childlabels = None
@@ -926,7 +930,6 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		corpus = READERS[fmt](*pathsplit(treebankfile), encoding=encoding)
 		ctrees = Ctrees()
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
-		ctrees.maxnodes = 512
 		sents = []
 		for _, tree, sent in islice(corpus.parsed_sents_iter(), limit):
 			tree = tolist(add_lcfrs_rules(
