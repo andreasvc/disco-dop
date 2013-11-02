@@ -369,7 +369,7 @@ class TigerXMLCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		""" Translate Tiger XML structure to the fields of export format,
-		so that tree writing code for export format can be used. """
+		so that code for export format can be used. """
 		nodes = OrderedDict()
 		root = block.find('graph').get('root')
 		for term in block.find('graph').find('terminals'):
@@ -393,13 +393,17 @@ class TigerXMLCorpusReader(CorpusReader):
 				idref = edge.get('idref')
 				nodes.setdefault(idref, 6 * [None])
 				if edge.tag == 'edge':
-					assert nodes[idref][FUNC] is None
+					assert nodes[idref][FUNC] is None, ('%s already has '
+							'a parent: %r' % (idref, nodes[idref]))
 					nodes[idref][FUNC] = edge.get('label')
 					nodes[idref][PARENT] = ntid
 				elif edge.tag == 'secedge':
 					nodes[idref].extend((edge.get('label'), ntid))
 				else:
 					raise ValueError
+		for idref in nodes:
+			assert nodes[idref][PARENT] is not None, (
+					'%s does not have a parent: %r' % (idref, nodes[idref]))
 		tree = exportparse(list(nodes.values()), self.morphology, self.lemmas)
 		sent = self._word(block, orig=True)
 		return tree, sent
