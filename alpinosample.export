@@ -1,129 +1,129 @@
 #BOS RSTCode_EE01/4
-Ter	prep	VZ(versm)	hd	514
-vergelijking	noun	N(soort,ev,basis,zijd,stan)	obj1	514
-,	punct	LET()	--	0
-de	det	LID(bep,stan,rest)	det	512
-op	prep	VZ(init)	hd	507
-de	det	LID(bep,stan,rest)	det	505
-zon	noun	N(soort,ev,basis,zijd,stan)	hd	505
-na	part	VZ(fin)	hdf	507
-meest	adj	VNW(onbep,grad,stan,vrij,zonder,sup)	mod	509
-nabije	adj	ADJ(prenom,basis,met-e,stan)	hd	509
-ster	noun	N(soort,ev,basis,zijd,stan)	hd	512
-,	punct	LET()	--	0
-Proxima	name	SPEC(deeleigen)	mwp	510
-Centauri	name	SPEC(deeleigen)	mwp	510
-,	punct	LET()	--	0
-staat	verb	WW(pv,tgw,met-t)	hd	515
-op	prep	VZ(init)	hd	513
-een	det	LID(onbep,stan,agr)	det	511
-afstand	noun	N(soort,ev,basis,zijd,stan)	hd	511
-waar	adv	VNW(vb,adv-pron,obl,vol,3o,getal)	rhd	508
-het	det	LID(bep,stan,evon)	det	502
-licht	noun	N(soort,ev,basis,onz,stan)	hd	502
-vier	num	TW(hoofd,prenom,stan)	det	500
-jaar	noun	N(soort,ev,basis,onz,stan)	hd	500
-en	vg	VG(neven)	crd	503
-vier	num	TW(hoofd,prenom,stan)	det	501
-maanden	noun	N(soort,mv,basis)	hd	501
-over	prep	VZ(fin)	hd	504
-doet	verb	WW(pv,tgw,met-t)	hd	506
-.	punct	LET()	--	0
-#500	NP	--	cnj	503
-#501	NP	--	cnj	503
-#502	NP	--	su	506
-#503	CONJ	--	me	506
-#504	PP	--	pc	506
-#505	NP	--	obj1	507
-#506	SSUB	--	body	508
-#507	PP	--	mod	509
-#508	REL	--	mod	511
-#509	AP	--	mod	512
-#510	MWU	--	app	512
-#511	NP	--	obj1	513
-#512	NP	--	su	515
-#513	PP	--	ld	515
-#514	PP	--	sat	516
-#515	SMAIN	--	nucl	516
-#516	DU	--	--	0
+Ter	te	vz	VZ(versm)	hd	500
+vergelijking	vergelijking	n	N(soort,ev,basis,zijd,stan)	obj1	500
+,	,	let	LET()	--	0
+de	de	lid	LID(bep,stan,rest)	det	505
+op	op	vz	VZ(init)	hd	502
+de	de	lid	LID(bep,stan,rest)	det	501
+zon	zon	n	N(soort,ev,basis,zijd,stan)	hd	501
+na	na	vz	VZ(fin)	hdf	502
+meest	veel	vnw	VNW(onbep,grad,stan,vrij,zonder,sup)	mod	503
+nabije	nabij	adj	ADJ(prenom,basis,met-e,stan)	hd	503
+ster	ster	n	N(soort,ev,basis,zijd,stan)	hd	505
+,	,	let	LET()	--	0
+Proxima	Proxima	spec	SPEC(deeleigen)	mwp	504
+Centauri	Centauri	spec	SPEC(deeleigen)	mwp	504
+,	,	let	LET()	--	0
+staat	staan	ww	WW(pv,tgw,met-t)	hd	515
+op	op	vz	VZ(init)	hd	514
+een	een	lid	LID(onbep,stan,agr)	det	513
+afstand	afstand	n	N(soort,ev,basis,zijd,stan)	hd	513
+waar	waar	vnw	VNW(vb,adv-pron,obl,vol,3o,getal)	rhd	512
+het	het	lid	LID(bep,stan,evon)	det	506
+licht	licht	n	N(soort,ev,basis,onz,stan)	hd	506
+vier	vier	tw	TW(hoofd,prenom,stan)	det	507
+jaar	jaar	n	N(soort,ev,basis,onz,stan)	hd	507
+en	en	vg	VG(neven)	crd	509
+vier	vier	tw	TW(hoofd,prenom,stan)	det	508
+maanden	maanden	n	N(soort,mv,basis)	hd	508
+over	over	vz	VZ(fin)	hd	510
+doet	doen	ww	WW(pv,tgw,met-t)	hd	511
+.	.	let	LET()	--	0
+#500	--	PP	--	sat	516
+#501	--	NP	--	obj1	502
+#502	--	PP	--	mod	503
+#503	--	AP	--	mod	505
+#504	--	MWU	--	app	505
+#505	--	NP	--	su	515
+#506	--	NP	--	su	511
+#507	--	NP	--	cnj	509
+#508	--	NP	--	cnj	509
+#509	--	CONJ	--	me	511
+#510	--	PP	--	pc	511
+#511	--	SSUB	--	body	512
+#512	--	REL	--	mod	513
+#513	--	NP	--	obj1	514
+#514	--	PP	--	ld	515
+#515	--	SMAIN	--	nucl	516
+#516	--	DU	--	--	0
 #EOS RSTCode_EE01/4
 #BOS RSTCode_EE01/5
-Na	prep	VZ(init)	hd	508
-vorming	noun	N(soort,ev,basis,zijd,stan)	hd	506
-van	prep	VZ(init)	hd	504
-de	det	LID(bep,stan,rest)	det	500
-zon	noun	N(soort,ev,basis,zijd,stan)	hd	500
-en	vg	VG(neven)	crd	502
-het	det	LID(bep,stan,evon)	det	501
-zonnestelsel	noun	N(soort,ev,basis,onz,stan)	hd	501
-is	verb	WW(pv,tgw,ev)	hd	512
-onze	det	VNW(bez,det,stan,vol,1,mv,prenom,met-e,rest)	det	510
-ster	noun	N(soort,ev,basis,zijd,stan)	hd	510
-begonnen	verb	WW(vd,vrij,zonder)	hd	511
-aan	prep	VZ(init)	hd	509
-een	det	LID(onbep,stan,agr)	det	507
-lang	adj	ADJ(vrij,basis,zonder)	mod	507
-bestaan	noun	WW(inf,vrij,zonder)	hd	507
-als	comp	VZ(init)	cmp	505
-zogenaamde	adj	ADJ(prenom,basis,met-e,stan)	mod	503
-dwergster	noun	N(soort,ev,basis,zijd,stan)	hd	503
-.	punct	LET()	--	0
-#500	NP	--	cnj	502
-#501	NP	--	cnj	502
-#502	CONJ	--	obj1	504
-#503	NP	--	body	505
-#504	PP	--	mod	506
-#505	CP	--	mod	507
-#506	NP	--	obj1	508
-#507	NP	--	obj1	509
-#508	PP	--	mod	511
-#509	PP	--	pc	511
-#510	NP	--	su	512
-#511	PPART	--	vc	512
-#512	SMAIN	--	--	0
+Na	na	vz	VZ(init)	hd	505
+vorming	vorming	n	N(soort,ev,basis,zijd,stan)	hd	504
+van	van	vz	VZ(init)	hd	503
+de	de	lid	LID(bep,stan,rest)	det	500
+zon	zon	n	N(soort,ev,basis,zijd,stan)	hd	500
+en	en	vg	VG(neven)	crd	502
+het	het	lid	LID(bep,stan,evon)	det	501
+zonnestelsel	zonnestelsel	n	N(soort,ev,basis,onz,stan)	hd	501
+is	zijn	ww	WW(pv,tgw,ev)	hd	512
+onze	ons	vnw	VNW(bez,det,stan,vol,1,mv,prenom,met-e,rest)	det	511
+ster	ster	n	N(soort,ev,basis,zijd,stan)	hd	511
+begonnen	beginnen	ww	WW(vd,vrij,zonder)	hd	510
+aan	aan	vz	VZ(init)	hd	509
+een	een	lid	LID(onbep,stan,agr)	det	508
+lang	lang	adj	ADJ(vrij,basis,zonder)	mod	508
+bestaan	bestaan	ww	WW(inf,vrij,zonder)	hd	508
+als	als	vz	VZ(init)	cmp	507
+zogenaamde	zogenaamd	adj	ADJ(prenom,basis,met-e,stan)	mod	506
+dwergster	dwergster	n	N(soort,ev,basis,zijd,stan)	hd	506
+.	.	let	LET()	--	0
+#500	--	NP	--	cnj	502
+#501	--	NP	--	cnj	502
+#502	--	CONJ	--	obj1	503
+#503	--	PP	--	mod	504
+#504	--	NP	--	obj1	505
+#505	--	PP	--	mod	510
+#506	--	NP	--	body	507
+#507	--	CP	--	mod	508
+#508	--	NP	--	obj1	509
+#509	--	PP	--	pc	510
+#510	--	PPART	--	vc	512
+#511	--	NP	--	su	512
+#512	--	SMAIN	--	--	0
 #EOS RSTCode_EE01/5
 #BOS RSTCode_EE01/6
-In	prep	VZ(init)	hd	511
-de	det	LID(bep,stan,rest)	det	507
-dwergfase	noun	N(soort,ev,basis,zijd,stan)	hd	507
-van	prep	VZ(init)	hd	503
-het	det	LID(bep,stan,evon)	det	502
-leven	noun	N(soort,ev,basis,onz,stan)	hd	502
-van	prep	VZ(init)	hd	501
-de	det	LID(bep,stan,rest)	det	500
-zon	noun	N(soort,ev,basis,zijd,stan)	hd	500
-wordt	verb	WW(pv,tgw,met-t)	hd	516
-de	det	LID(bep,stan,rest)	det	514
-energie	noun	N(soort,ev,basis,zijd,stan)	hd	514
-die	pron	VNW(betr,pron,stan,vol,persoon,getal)	rhd	510
-ze	pron	VNW(pers,pron,stan,red,3,ev,fem)	su	506
-uitstraalt	verb	WW(pv,tgw,met-t)	hd	506
-in	prep	VZ(init)	hd	512
-het	det	LID(bep,stan,evon)	det	508
-centrum	noun	N(soort,ev,basis,onz,stan)	hd	508
-geproduceerd	verb	WW(vd,vrij,zonder)	hd	515
-door	prep	VZ(init)	hd	513
-fusie	noun	N(soort,ev,basis,zijd,stan)	hd	509
-van	prep	VZ(init)	hd	504
-waterstof	noun	N(soort,ev,basis,zijd,stan)	obj1	504
-tot	prep	VZ(init)	hd	505
-helium	noun	N(soort,ev,basis,onz,stan)	obj1	505
-.	punct	LET()	--	0
-#500	NP	--	obj1	501
-#501	PP	--	mod	502
-#502	NP	--	obj1	503
-#503	PP	--	mod	507
-#504	PP	--	mod	509
-#505	PP	--	mod	509
-#506	SSUB	--	body	510
-#507	NP	--	obj1	511
-#508	NP	--	obj1	512
-#509	NP	--	obj1	513
-#510	REL	--	mod	514
-#511	PP	--	mod	515
-#512	PP	--	mod	515
-#513	PP	--	mod	515
-#514	NP	--	su	516
-#515	PPART	--	vc	516
-#516	SMAIN	--	--	0
+In	in	vz	VZ(init)	hd	505
+de	de	lid	LID(bep,stan,rest)	det	504
+dwergfase	dwergfase	n	N(soort,ev,basis,zijd,stan)	hd	504
+van	van	vz	VZ(init)	hd	503
+het	het	lid	LID(bep,stan,evon)	det	502
+leven	leven	n	N(soort,ev,basis,onz,stan)	hd	502
+van	van	vz	VZ(init)	hd	501
+de	de	lid	LID(bep,stan,rest)	det	500
+zon	zon	n	N(soort,ev,basis,zijd,stan)	hd	500
+wordt	worden	ww	WW(pv,tgw,met-t)	hd	516
+de	de	lid	LID(bep,stan,rest)	det	515
+energie	energie	n	N(soort,ev,basis,zijd,stan)	hd	515
+die	die	vnw	VNW(betr,pron,stan,vol,persoon,getal)	rhd	514
+ze	ze	vnw	VNW(pers,pron,stan,red,3,ev,fem)	su	513
+uitstraalt	uitstralen	ww	WW(pv,tgw,met-t)	hd	513
+in	in	vz	VZ(init)	hd	507
+het	het	lid	LID(bep,stan,evon)	det	506
+centrum	centrum	n	N(soort,ev,basis,onz,stan)	hd	506
+geproduceerd	produceren	ww	WW(vd,vrij,zonder)	hd	512
+door	door	vz	VZ(init)	hd	511
+fusie	fusie	n	N(soort,ev,basis,zijd,stan)	hd	510
+van	van	vz	VZ(init)	hd	508
+waterstof	waterstof	n	N(soort,ev,basis,zijd,stan)	obj1	508
+tot	tot	vz	VZ(init)	hd	509
+helium	helium	n	N(soort,ev,basis,onz,stan)	obj1	509
+.	.	let	LET()	--	0
+#500	--	NP	--	obj1	501
+#501	--	PP	--	mod	502
+#502	--	NP	--	obj1	503
+#503	--	PP	--	mod	504
+#504	--	NP	--	obj1	505
+#505	--	PP	--	mod	512
+#506	--	NP	--	obj1	507
+#507	--	PP	--	mod	512
+#508	--	PP	--	mod	510
+#509	--	PP	--	mod	510
+#510	--	NP	--	obj1	511
+#511	--	PP	--	mod	512
+#512	--	PPART	--	vc	516
+#513	--	SSUB	--	body	514
+#514	--	REL	--	mod	515
+#515	--	NP	--	su	516
+#516	--	SMAIN	--	--	0
 #EOS RSTCode_EE01/6
