@@ -40,6 +40,9 @@ DOP specific (parsing with tree fragments):
   most likely tree with shortest derivation (SL-DOP).
 - marginalization: n-best derivations, sampled derivations.
 
+.. image:: http://staff.science.uva.nl/~acranenb/runexp.png
+   :alt: screenshot of parse tree produced by parser
+
 Installation
 ============
 
@@ -180,7 +183,11 @@ be installed.
     A web interface for drawing discontinuous trees in various
     formats.
 
-See https://github.com/andreasvc/disco-dop/wiki for screenshots.
+.. image:: http://staff.science.uva.nl/~acranenb/treesearch1.png
+   :alt: screenshot of treesearch showing counts of pattern
+
+.. image:: http://staff.science.uva.nl/~acranenb/treesearch2.png
+   :alt: screenshot of treesearch showing bar plot of pattern
 
 Documentation
 =============
