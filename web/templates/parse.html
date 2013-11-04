@@ -20,7 +20,7 @@ The sentence will be parsed and the most probable parse tree will be shown
 	Linear Context-Free Rewriting Systems (LCFRS) allow for parsing with
 	discontinuous constituents. The Data-Oriented Parsing (DOP) framework
 	entails constructing analyses from fragments of past experience.
-	Double-DOP operationalizes this as the set of fragments that occur at least twice
+	Double-DOP operationalizes this with a subset of fragments that occur at least twice
 	in the training data.
 	For efficiency, sentences are parsed with the following coarse-to-fine
 	pipeline: </p>
@@ -33,8 +33,8 @@ The sentence will be parsed and the most probable parse tree will be shown
 	Training data:
 	<ul>
 	<li>English: WSJ section of Penn treebank
-	<li>German: Negra treebank
-	<li>Dutch: Alpino treebank
+	<li>German: Tiger treebank
+	<li>Dutch: Lassy treebank
 	</ul>
 
 	Objective functions:
@@ -43,7 +43,7 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>MPD: most probable derivation
 	<li>MPSD: most probable shortest derivation
 	<li>SL-DOP: shortest derivation among n most probable parse trees (n=7)
-	<li>SL-DOP: shortest derivation among derivations of n most probable parse trees (n=7; approximation)
+	<li>SL-DOP-simple: shortest derivation among derivations of n most probable parse trees (n=7; approximation)
 	</ul>
 
 	Estimators:

@@ -12,22 +12,6 @@ div.chart {
     margin: 1px;
     color: black;
 }
-div.chart1 {
-    font: 10px sans-serif;
-    text-align: left;
-    padding: 3px;
-    margin: 1px;
-    color: black;
-    background-color: lightblue;
-}
-div.chart2 {
-    font: 10px sans-serif;
-    text-align: left;
-    padding: 3px;
-    margin: 1px;
-    color: black;
-    background-color: red;
-}
 body { font-family: Helvetica, Arial, sans-serif; }
 blockquote { width: 600px; text-align: justify;  }
 span.r { color: red; }
@@ -39,13 +23,16 @@ span.tt { font-family: monospace; }
 <h3>Treebank Search</h3>
 
 <blockquote><p>
-    A web-interface to TGrep2 on a corpus of parse trees.
-    Enter a <a href="http://tedlab.mit.edu/~dr/Tgrep2/">TGrep2 pattern</a>
+    A web-interface to query a corpus of parse trees.
+    Enter a <a href="http://tedlab.mit.edu/~dr/Tgrep2/">TGrep2</a>
     (<a href="javascript: toggle('tgrephelp'); ">toggle TGrep overview</a>)
-    to search the corpus. Results can be displayed in various ways and
-	morphological tags of the form <tt>TAG[MORPH1,...]</tt> and grammatical
-	functions of the form <tt>LABEL-FUNC</tt> can optionally be filtered out.
-	There is a <a href="static/macros.txt">list of available macros</a>.</p>
+	or an <a href="http://rug-compling.github.io/dact/cookbook/">XPath</a> query
+	to search the corpus. Results can be displayed in various ways or exported
+	to a file. Morphological tags of the form
+	<tt>TAG[MORPH1,...]</tt> and grammatical functions of the form
+	<tt>LABEL-FUNC</tt> can optionally be filtered out. There is a list of
+	available macros (<a href="static/tgrepmacros.txt">TGrep2</a>,
+	<a href="static/xpathmacros.txt">XPath</a>).</p>
 
 	<p>
 	<a href="/browse">Browse through corpus</a> |

@@ -110,14 +110,11 @@ def style():
 		files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 		if files and not doexport:
 			yield "NB: formatting errors may distort paragraph counts etc.\n\n"
-		else:
-			files = glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
-			# FIXME: extract from .dact files if no tgrep2 files available.
-			if not doexport:
-				yield ("No .txt files found in corpus/\n"
-						"Using sentences extracted from parse trees.\n"
-						"Supply text files with original formatting\n"
-						"to get meaningful paragraph information.\n\n")
+		elif not doexport:
+			yield ("No .txt files found in corpus/\n"
+					"Using sentences extracted from parse trees.\n"
+					"Supply text files with original formatting\n"
+					"to get meaningful paragraph information.\n\n")
 		for n, filename in enumerate(sorted(STYLETABLE)):
 			name = os.path.basename(filename)
 			if doexport:
@@ -131,14 +128,15 @@ def style():
 		if not doexport:
 			yield '</pre>'
 		# produce a plot for each field
+		fields = ()
 		for a in STYLETABLE:
 			fields = sorted(STYLETABLE[a].keys())
 			break
-		for field in () if doexport else fields:
+		for field in fields:
 			data = {a: STYLETABLE[a].get(field, 0) for a in STYLETABLE}
 			total = max(data.values())
 			if total > 0:
-				yield barplot(data, total, field + ':', barstyle='chart1',
+				yield barplot(data, total, field + ':',
 						unit='%' if '%' in field else '')
 
 	if 'export' in request.args:
@@ -148,8 +146,8 @@ def style():
 	else:
 		resp = Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS,
-				selectedtexts=selectedtexts(request.args),
-				output='style', results=generate(False)))
+				selectedtexts=selectedtexts(request.args), output='style',
+				results=generate(False), havexpath=ALPINOCORPUSLIB))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
@@ -316,9 +314,8 @@ def counts(form, doexport=False):
 				100.0 * sum(cnts.values()) / sumtotal))
 		yield barplot(relfreq, max(relfreq.values()),
 				'Relative frequency of pattern: (count / num_%s * 100)' % norm,
-				barstyle='chart1', unit='%')
-		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern',
-		#		barstyle='chart2')
+				unit='%')
+		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern')
 
 
 def trees(form):
@@ -362,7 +359,7 @@ def trees(form):
 					high = list(high.subtrees()) + high.leaves()
 			elif form.get('engine') == 'xpath':
 				tree, sent = treebank.alpinotree(
-						ElementTree.fromstring(treestr),
+						ElementTree.fromstring(treestr.encode('utf-8')),
 						functions=None if 'nofunc' in form else 'add',
 						morphology=None if 'nomorph' in form else 'replace')
 				highwords = re.findall('<node[^>]*begin="([0-9]+)"[^>]*/>',
@@ -614,15 +611,22 @@ def filterlabels(line, nofunc, nomorph):
 	return line
 
 
-def barplot(data, total, title, barstyle='chart1', width=800.0, unit=''):
+def barplot(data, total, title, width=800.0, unit=''):
 	""" A HTML bar plot given a dictionary and max value. """
 	result = ['</pre><div class=chart>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
+	firstletters = {key[0] for key in data}
+	colornames = ['lightblue', 'lightcoral', 'lightpink', 'wheat', 'khaki']
+	color = {}
+	if len(firstletters) <= len(colornames):
+		color.update(zip(firstletters, colornames))
 	for key in sorted(data, key=data.get, reverse=True):
-		result.append('<div class=%s style="width: %gpx" >%s: %g %s</div>' % (
-				barstyle if data[key] else 'chart',
-				width * data[key] / total, key, data[key], unit))
+		result.append('<div class=chart style="width: %gpx; '
+				'background-color: %s;" >%s: %g %s</div>' % (
+				width * data[key] / total,
+				color.get(key[0], colornames[0]) if data[key] else 'transparant',
+				key, data[key], unit))
 	result.append('</div>\n<pre>')
 	return '\n'.join(result)
 
@@ -672,27 +676,33 @@ def getstyletable():
 	""" Run style(1) on all files and store results in a dictionary. """
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
-		# FIXME: extract from .dact files if no tgrep2 files available.
-		files = glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
+		files = (glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
+				or glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
 	styletable = {}
 	for filename in sorted(files):
+		cmd = [which('style'), '--language', STYLELANG]
 		if filename.endswith('.t2c.gz'):
 			tgrep = subprocess.Popen(
 					args=[which('tgrep2'), '-t', '-c', filename, '*'],
 					shell=False, bufsize=-1, stdout=subprocess.PIPE)
-			cmd = [which('style'), '--language', STYLELANG]
 			stdin = tgrep.stdout  # pylint: disable=E1101
+		elif filename.endswith('.dact'):
+			stdin = subprocess.PIPE
 		else:
-			cmd = [which('style'), '--language', STYLELANG, filename]
+			cmd.append(filename)
 			stdin = None
 		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 				stdin=stdin, stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT)
 		if filename.endswith('.t2c.gz'):
 			tgrep.wait()  # pylint: disable=E1101
-		out = proc.stdout.read()  # pylint: disable=E1101
+		elif filename.endswith('.dact'):
+			proc.stdin.writelines(  # pylint: disable=E1101
+					'%s\n' % ALPINOLEAVES.search(entry.contents()).group(1)
+					for entry in alpinocorpus.CorpusReader(filename).entries())
 		if proc.stdin:  # pylint: disable=E1101
 			proc.stdin.close()  # pylint: disable=E1101
+		out = proc.stdout.read()  # pylint: disable=E1101
 		proc.stdout.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101
 		if filename.endswith('.t2c.gz'):
@@ -728,12 +738,18 @@ def getcorpus():
 	if os.path.exists('/tmp/treesearchcorpus.pickle'):
 		texts, numsents, numconst, numwords, styletable = pickle.load(
 				open('/tmp/treesearchcorpus.pickle'))
-	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
-	if ALPINOCORPUSLIB:
-		assert len(files or afiles) == len(afiles), (
+	assert tfiles or afiles, 'no .mrg or .dact files found in %s' % CORPUS_DIR
+	if tfiles and afiles:
+		assert len(tfiles) == len(afiles) and all(
+				t.rsplit('.', 1)[0] == a.rsplit('.', 1)[0]
+				for a, t in zip(tfiles, afiles)), (
 				'expected either .mrg or .dact files, '
 				'or corresponding .mrg and .dact files')
+	if afiles:
+		assert ALPINOCORPUSLIB, ('.dact files found in corpus '
+				'but could not import alpinocorpus library.')
 		try:
 			xmlcorpora = [alpinocorpus.CorpusReader(filename,
 					macrosFilename='static/xpathmacros.txt')
@@ -742,14 +758,14 @@ def getcorpus():
 			xmlcorpora = [alpinocorpus.CorpusReader(filename)
 					for filename in afiles]
 	if set(texts) != {os.path.splitext(os.path.basename(filename))[0]
-			for filename in files + afiles}:
-		if files:
+			for filename in tfiles + afiles}:
+		if tfiles:
 			numsents = [len(open(filename).readlines())
-					for filename in files if filename.endswith('.mrg')]
+					for filename in tfiles if filename.endswith('.mrg')]
 			numconst = [open(filename).read().count('(')
-					for filename in files if filename.endswith('.mrg')]
+					for filename in tfiles if filename.endswith('.mrg')]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
-					for filename in files if filename.endswith('.mrg')]
+					for filename in tfiles if filename.endswith('.mrg')]
 		elif ALPINOCORPUSLIB:
 			numsents = [corpus.size() for corpus in xmlcorpora]
 			numconst, numwords = [], []
@@ -767,7 +783,7 @@ def getcorpus():
 					xmlcorpora[n] = alpinocorpus.CorpusReader(filename)
 				print(afiles[n])
 		texts = [os.path.splitext(os.path.basename(a))[0]
-				for a in files or afiles]
+				for a in tfiles or afiles]
 		styletable = getstyletable()
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
@@ -792,6 +808,7 @@ def which(program):
 
 
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
+ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False)
