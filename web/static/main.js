@@ -137,7 +137,7 @@ function ajaxFunction() {
 }	
 
 function checkall(name, val) {
-	/* check all / none checkboxes with 'name'. */
+	/* check / uncheck all checkboxes with 'name'. */
 	var checkboxes = document.getElementsByName(name);
 	for (var i in checkboxes)
 		checkboxes[i].checked = val;
@@ -146,10 +146,10 @@ function checkall(name, val) {
 function numchecked() {
 	/* update number of checked checkboxes and write to span
 	 * 'numchecked'. */
-	var checkboxes = document.getElementsByName('t');
+	var checkboxes = document.getElementsByName('textcheck');
 	var checked = 0;
 	for (var i in checkboxes)
-		if(checkboxes[i].checked)
+		if(checkboxes[i].name == 'textcheck' && checkboxes[i].checked)
 			checked++;
 	document.getElementById('numchecked').innerHTML = checked;
 }
@@ -157,7 +157,7 @@ function numchecked() {
 function mergecheckboxes() {
 	/* given checkboxes identified by numbers, represent them succinctly
 	 * as a series of intervals, e.g., '1-5,8-9,12' */
-	var checkboxes = document.getElementsByName('t');
+	var checkboxes = document.getElementsByName('textcheck');
 	var n = 0;
 	var start = 0;
 	var result = ''

@@ -5,6 +5,7 @@ treebanks with .mrg or .dact extension in the directory corpus/ """
 import os
 import re
 import cgi
+import sys
 import glob
 import logging
 import tempfile
@@ -94,6 +95,12 @@ def main():
 			return 'Invalid argument', 404
 		elif request.args.get('export'):
 			return export(request.args, output)
+		# For debugging purposes:
+		#return render_template('searchresults.html',
+		#		form=request.args, texts=TEXTS, selectedtexts=selected,
+		#		output=output, results=DISPATCH[output](request.args),
+		#		havexpath=ALPINOCORPUSLIB)
+		# To send results incrementally:
 		return Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS, selectedtexts=selected,
 				output=output, results=DISPATCH[output](request.args),
@@ -286,12 +293,17 @@ def counts(form, doexport=False):
 			gotresult = True
 		text = TEXTS[textno]
 		cnts[text] = cnt
-		total = totalsent = NUMSENTS[textno]
+		totalsent = NUMSENTS[textno]
 		if norm == 'consts':
 			total = NUMCONST[textno]
 		elif norm == 'words':
 			total = NUMWORDS[textno]
-		elif norm != 'sents':
+		elif norm == 'sents':
+			total = NUMSENTS[textno]
+		elif norm == 'query':
+			total = next(doqueries_(form.get('engine', 'tgrep2'),
+					form['normquery'], {textno}))[1].count('\n') or 1
+		else:
 			raise ValueError
 		relfreq[text] = 100.0 * cnt / total
 		sumtotal += total
@@ -300,7 +312,7 @@ def counts(form, doexport=False):
 		else:
 			line = "%s%6d    %5.2f %%" % (
 					text.ljust(40)[:40], cnt, relfreq[text])
-			indices = {int(line[:line.index(':::')]) + 1
+			indices = {int(line[:line.index(':::')])
 					for line in results.splitlines()}
 			plot = concplot(indices, totalsent)
 			if cnt:
@@ -503,22 +515,31 @@ def fragmentsinresults(form, doexport=False):
 
 
 def doqueries(form, lines=False, doexport=None):
+	""" Wrapper. """
+	return doqueries_(form.get('engine', 'tgrep2'), form['query'],
+			selectedtexts(form), lines, doexport, form.get('linenos'),
+			form.get('nofunc'), form.get('nomorph'))
+
+
+def doqueries_(engine, query, selected, lines=False, doexport=None,
+		linenos=False, nofunc=False, nomorph=False):
 	""" Run query engine on each text. """
-	engine = form.get('engine', 'tgrep2')
 	if engine == 'tgrep2':
-		return dotgrep2queries(form, lines, doexport)
+		return dotgrep2queries(query, selected, lines, doexport,
+				linenos, nofunc, nomorph)
 	elif engine == 'xpath':
-		return doxpathqueries(form, lines, doexport)
+		return doxpathqueries(query, selected, lines, doexport,
+				linenos)
 	raise ValueError('unexpected query engine: %s' % engine)
 
 
-def dotgrep2queries(form, lines=False, doexport=None):
+def dotgrep2queries(query, selected, lines=False, doexport=None,
+		linenos=False, nofunc=False, nomorph=False):
 	""" Run tgrep2 on each text. """
-	selected = selectedtexts(form)
 	if doexport == 'sents':
-		fmt = r'%f:%s|%tw\n' if form.get('linenos') else r'%tw\n'
+		fmt = r'%f:%s|%tw\n' if linenos else r'%tw\n'
 	elif doexport == 'trees' or doexport == 'brackets':
-		fmt = r"%f:%s|%w\n" if form.get('linenos') else r"%w\n"
+		fmt = r"%f:%s|%w\n" if linenos else r"%w\n"
 	elif doexport is None:
 		# %s the sentence number
 		# %f the corpus name
@@ -534,7 +555,7 @@ def dotgrep2queries(form, lines=False, doexport=None):
 				'-m', fmt,
 				'-c', os.path.join(CORPUS_DIR, text + '.mrg.t2c.gz'),
 				'static/tgrepmacros.txt',
-				form['query']]
+				query]
 		proc = subprocess.Popen(args=cmd,
 				bufsize=-1, shell=False,
 				stdout=subprocess.PIPE,
@@ -546,32 +567,28 @@ def dotgrep2queries(form, lines=False, doexport=None):
 		proc.stderr.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101
 		if lines:
-			yield n, filterlabels(out, 'nofunc' in form,
-					'nomorph' in form).splitlines(), err
+			yield n, filterlabels(out, nofunc, nomorph).splitlines(), err
 		elif doexport is None:
 			yield n, out, err
 		else:
-			if form.get('linenos'):
+			if linenos:
 				yield re.sub(r'(^|\n)corpus/', '\\1', out)
 			else:
 				yield out
 
 
-def doxpathqueries(form, lines=False, doexport=None):
+def doxpathqueries(query, selected, lines=False, doexport=None,
+		linenos=False):
 	""" Run xpath query on each text. """
-	selected = selectedtexts(form)
 	for n, text in enumerate(TEXTS):
 		if n not in selected:
 			continue
 		out = err = ''
 		try:
-			out = XMLCORPORA[n].xpath(form['query'])
-		except RuntimeError as err:
-			err = str(err)
-		try:  # FIXME: catching errors here doesn't seem to work
+			out = XMLCORPORA[n].xpath(query)
 			if lines:
-				yield n, (('%d:::%s:::%s:::%s' % (
-							int(match.name().split('.')[0]),
+				yield n, (('%s:::%s:::%s:::%s' % (
+							match.name().rsplit('.', 1)[0],
 							text,
 							XMLCORPORA[n].read(match.name()),
 							match.contents())).decode('utf8')
@@ -581,16 +598,16 @@ def doxpathqueries(form, lines=False, doexport=None):
 						for match in out).decode('utf8'), err
 			elif doexport == 'sents':
 				yield ''.join(('%s%s\n' % (
-							(('%s:%d|' % (text,
-								int(match.name().split('.')[0])))
-							if form.get('linenos') else ''),
+							(('%s:%s|' % (text,
+								match.name().rsplit('.', 1)[0]))
+							if linenos else ''),
 							ALPINOLEAVES.search(
 								XMLCORPORA[n].read(match.name())).group(1)))
 							for match in out).decode('utf8')
 			elif doexport == 'trees' or doexport == 'brackets':
 				yield ''.join(('%s%s' % (
 						(('<!-- %s:%s -->\n' % (text, match.name()))
-						if form.get('linenos') else ''),
+						if linenos else ''),
 						XMLCORPORA[n].read(match.name())))
 						for match in out).decode('utf8')
 		except RuntimeError as err:
@@ -613,7 +630,7 @@ def filterlabels(line, nofunc, nomorph):
 
 def barplot(data, total, title, width=800.0, unit=''):
 	""" A HTML bar plot given a dictionary and max value. """
-	result = ['</pre><div class=chart>',
+	result = ['</pre><div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
 	firstletters = {key[0] for key in data}
@@ -622,11 +639,12 @@ def barplot(data, total, title, width=800.0, unit=''):
 	if len(firstletters) <= len(colornames):
 		color.update(zip(firstletters, colornames))
 	for key in sorted(data, key=data.get, reverse=True):
-		result.append('<div class=chart style="width: %gpx; '
-				'background-color: %s;" >%s: %g %s</div>' % (
-				width * data[key] / total,
-				color.get(key[0], colornames[0]) if data[key] else 'transparant',
-				key, data[key], unit))
+		result.append('<div class=barlabel>%s: %g %s</div>\n'
+				'<div class=bar style="width: %gpx; '
+				'background-color: %s;" >&nbsp;</div>' % (
+				cgi.escape(key), data[key], unit, width * data[key] / total,
+				color.get(key[0], colornames[0])
+					if data[key] else 'transparant'))
 	result.append('</div>\n<pre>')
 	return '\n'.join(result)
 
@@ -639,9 +657,20 @@ def concplot(indices, total, width=800.0):
 			'<rect x=0 y=0 width="%dpx" height=10 '
 			'fill=white stroke=black />\n' % (width, width))
 	if indices:
+		strokes = []
+		start = 0
+		seq = [-1] + sorted(indices) + [-1]
+		for prev, idx, nextidx in zip(seq, seq[1:], seq[2:]):
+			if idx != prev + 1 and idx != nextidx - 1:
+				strokes.append('M %d 0v 10' % idx)
+			elif idx != prev + 1:
+				start = idx
+			elif idx != nextidx - 1:
+				strokes.append(  # draw a rectangle covering start:idx
+						'M %d 0l 0 10 %d 0 0 -10' % (start, idx - start))
 		result += ('<g transform="scale(%g, 1)">\n'
-				'<path stroke=black d="%s" /></g>') % (width / total,
-				''.join('M %d 0v 10' % idx for idx in sorted(indices)))
+				'<path stroke=black d="%s" /></g>' % (
+				width / total, ''.join(strokes)))
 	return result + '</svg>'
 
 
@@ -662,14 +691,18 @@ def selectedtexts(form):
 
 def preparecorpus():
 	""" Produce indexed versions of parse trees in .mrg files """
-	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	for a in files:
+	for a in sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg'))):
 		if not os.path.exists(a + '.t2c.gz'):
 			subprocess.check_call(
 					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
-					shell=False,
-					stdout=subprocess.PIPE,
-					stderr=subprocess.PIPE)
+					shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	#for a in sorted(glob.glob(os.path.join(CORPUS_DIR, '*.export'))):
+	#	if not os.path.exists(a + '.dact'):
+	#		writer = alpinocorpus.CorpusWriter(a + '.dact')
+	#		for n, (tree, sent) in treebank.NegraCorpusReader(
+	#				*treebank.splitpath(a)).parsed_sents_iter().items():
+	#			writer.write(n, treebank.writetree(tree, sent, n, 'alpino'))
+	#		writer.close()
 
 
 def getstyletable():
@@ -757,8 +790,13 @@ def getcorpus():
 		except TypeError:
 			xmlcorpora = [alpinocorpus.CorpusReader(filename)
 					for filename in afiles]
-	if set(texts) != {os.path.splitext(os.path.basename(filename))[0]
-			for filename in tfiles + afiles}:
+	picklemtime = os.stat('/tmp/treesearchcorpus.pickle').st_mtime
+	scriptmtime = (os.stat(sys.argv[0]).st_mtime
+			if os.path.exists(sys.argv[0]) else 0)
+	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
+		for filename in tfiles + afiles}
+	if (scriptmtime > picklemtime or set(texts) != currentfiles or
+			any(os.stat(a).st_mtime > picklemtime for a in tfiles + afiles)):
 		if tfiles:
 			numsents = [len(open(filename).readlines())
 					for filename in tfiles if filename.endswith('.mrg')]
@@ -807,6 +845,7 @@ def which(program):
 	raise ValueError('%r not found in path; please install it.' % program)
 
 
+preparecorpus()
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
 ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
@@ -831,5 +870,4 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	preparecorpus()
 	APP.run(debug=True, host='0.0.0.0')
