@@ -790,7 +790,9 @@ def getcorpus():
 		except TypeError:
 			xmlcorpora = [alpinocorpus.CorpusReader(filename)
 					for filename in afiles]
-	picklemtime = os.stat('/tmp/treesearchcorpus.pickle').st_mtime
+	picklemtime = 0
+	if os.path.exists('/tmp/treesearchcorpus.pickle'):
+		picklemtime = os.stat('/tmp/treesearchcorpus.pickle').st_mtime
 	scriptmtime = (os.stat(sys.argv[0]).st_mtime
 			if os.path.exists(sys.argv[0]) else 0)
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]

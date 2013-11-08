@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <title>
-{{ 'tgrep ' + form['query'] if 'query' in form else 'Treebank Search' }}
+{{ form.get('engine', 'tgrep2') + ' ' + form['query'] if 'query' in form else 'Treebank Search' }}
 </title>
 <script src="static/main.js"></script>
 <style>

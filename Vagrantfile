@@ -33,6 +33,17 @@ which diction || (
 	sudo -u vagrant ./configure && sudo -u vagrant make && make install
 )
 
+# install alpinocorpus library
+python -c 'import alpinocorpus' || (
+	apt-get install -y python-software-properties
+	add-apt-repository ppa:danieldk/dact
+	apt-get update
+	apt-get install -y libalpino-corpus2.0 libalpino-corpus-dev libxslt1-dev libxml2-dev libdbxml-dev libboost-all-dev
+	sudo -u vagrant git clone https://github.com/andreasvc/alpinocorpus-python.git
+	cd alpinocorpus-python
+	sudo -u vagrant sed -i 's/-mt//g' setup.py
+	sudo -u vagrant python setup.py config && sudo -u vagrant python setup.py build && python setup.py install
+)
 SCRIPT
 
 
