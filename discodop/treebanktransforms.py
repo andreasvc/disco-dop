@@ -5,6 +5,7 @@
 - reattaching punctuation """
 from __future__ import division, print_function, unicode_literals
 from itertools import count, islice
+from collections import defaultdict, Counter as multiset
 from discodop.tree import Tree, ParentedTree
 
 FIELDS = tuple(range(8))
@@ -658,6 +659,124 @@ def bracketings(tree):
 	""" Labelled bracketings of a tree. """
 	return [(a.label, tuple(sorted(a.leaves())))
 		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
+
+
+def readheadrules(filename):
+	""" Read a file containing heuristic rules for head assigment.
+	Example line: ``s right-to-left vmfin vafin vaimp``, which means
+	traverse siblings of an S constituent from right to left, the first child
+	with a label of vmfin, vafin, or vaimp will be marked as head. """
+	headrules = {}
+	for line in open(filename):
+		line = line.strip().upper()
+		if line and not line.startswith("%") and len(line.split()) > 2:
+			label, lr, heads = line.split(None, 2)
+			headrules.setdefault(label, []).append((lr, heads.split()))
+	return headrules
+
+
+def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
+	""" use head finding rules to select one child of tree as head. """
+	candidates = [a for a in tree if getattr(a, 'source', None)
+			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
+	if candidates:
+		return candidates[0]
+	children = tree
+	for lr, heads in headrules.get(tree.label, []):
+		if lr == 'LEFT-TO-RIGHT':
+			children = tree
+		elif lr == 'RIGHT-TO-LEFT':
+			children = tree[::-1]
+		else:
+			raise ValueError
+		for head in heads:
+			for child in children:
+				if (isinstance(child, Tree)
+						and child.label.split('[')[0] == head):
+					return child
+	# default head is initial/last nonterminal (depending on direction lr)
+	for child in children:
+		if isinstance(child, Tree):
+			return child
+
+
+def sethead(child):
+	""" mark node as head in an auxiliary field. """
+	child.source = getattr(child, "source", 6 * [''])
+	if 'HD' not in child.source[FUNC].upper().split("-"):
+		x = list(child.source)
+		if child.source[FUNC] in (None, '', '--'):
+			x[FUNC] = '-HD'
+		else:
+			x[FUNC] = x[FUNC] + '-HD'
+		child.source = tuple(x)
+
+
+def headmark(tree):
+	""" add marker to label of head node. """
+	head = [a for a in tree if getattr(a, 'source', None)
+			and 'HD' in a.source[FUNC].upper().split('-')]
+	if not head:
+		return
+	head[-1].label += '-HD'
+
+
+def headorder(tree, headfinal, reverse):
+	""" Change order of constituents based on head (identified with
+	function tag). """
+	head = [n for n, a in enumerate(tree)
+		if getattr(a, 'source', None)
+		and 'HD' in a.source[FUNC].upper().split("-")]
+	if not head:
+		return
+	headidx = head.pop()
+	# everything until the head is reversed and prepended to the rest,
+	# leaving the head as the first element
+	nodes = tree[:]
+	tree[:] = []
+	if headfinal:
+		if reverse:  # head final, reverse rhs: A B C^ D E => A B E D C^
+			tree[:] = nodes[:headidx] + nodes[headidx:][::-1]
+		else:  # head final, reverse lhs:  A B C^ D E => E D A B C^
+			tree[:] = nodes[headidx + 1:][::-1] + nodes[:headidx + 1]
+	else:
+		if reverse:  # head first, reverse lhs: A B C^ D E => C^ B A D E
+			tree[:] = nodes[:headidx + 1][::-1] + nodes[headidx + 1:]
+		else:  # head first, reverse rhs: A B C^ D E => C^ D E B A
+			tree[:] = nodes[headidx:] + nodes[:headidx][::-1]
+
+
+def saveheads(tree, tailmarker):
+	""" When a head-outward binarization is used, this function ensures the
+	head is known when the tree is converted to export format. """
+	if not tailmarker:
+		return
+	for node in tree.subtrees(lambda n: tailmarker in n.label):
+		node.source = ['--'] * 6
+		node.source[FUNC] = 'HD'
+
+
+def headstats(trees):
+	""" Collects some information useful for writing headrules:
+
+	- ``heads['NP']['NN'] ==`` number of times NN occurs as head of NP.
+	- ``pos1['NP'][1] ==`` number of times head of NP is at position 1.
+	- ``pos2`` is like pos1, but position is from the right.
+	- ``unknown['NP']['NN'] == number of times NP that does not have a head
+		dominates an NN. """
+	heads, unknown = defaultdict(multiset), defaultdict(multiset)
+	pos1, pos2 = defaultdict(multiset), defaultdict(multiset)
+	for tree in trees:
+		for a in tree.subtrees(lambda x: len(x) > 1):
+			for n, b in enumerate(a):
+				if 'hd' in b.source[FUNC].lower():
+					heads[a.label][b.label] += 1
+					pos1[a.label][n] += 1
+					pos2[a.label][len(a) - (n + 2)] += 1
+					break
+			else:
+				unknown[a.label].update(b.label for b in a)
+	return heads, unknown, pos1, pos2
 
 
 def testpunct():

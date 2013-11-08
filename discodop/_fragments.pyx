@@ -28,8 +28,7 @@ cdef extern from "macros.h":
 	ULong TESTBIT(ULong a[], int b)
 	int IDX(int i, int j, int jmax, int kmax)
 
-# template to create arrays of this type.
-cdef array uintarray = array('I', ())
+cdef array uintarray = array('I', ())  # template to create arrays of this type
 
 # NB: (?: ) is a non-grouping operator; the second ':' is part of what we match
 FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
@@ -915,9 +914,6 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	""" Read a treebank from a given filename. labels and prods should be a
 	list and a dictionary, with the same ones used when reading multiple
 	treebanks. """
-	# this could use BracketCorpusReader or expect trees/sents as input,
-	# but this version reads the treebank incrementally which reduces memory
-	# requirements.
 	cdef size_t cnt
 	cdef Node *scratch
 	cdef Ctrees ctrees
@@ -947,6 +943,8 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 			ctrees.add(tree, prods)
 			sents.append(sent)
 	else:  # do incremental reading of bracket trees
+		# could use BracketCorpusReader or expect trees/sents as input, but
+		# incremental reading reduces memory requirements.
 		data = io.open(treebankfile, encoding=encoding).read()
 		if limit:
 			data = re.match(r'(?:[^\n\r]+[\n\r]+){0,%d}' % limit, data).group()

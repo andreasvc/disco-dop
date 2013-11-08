@@ -13,7 +13,8 @@ else:
 
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop.treebank import READERS, readheadrules, dependencies, splitpath
+from discodop.treebank import READERS, dependencies, splitpath
+from discodop.treebanktransforms import readheadrules
 try:
 	from discodop.treedist import treedist, newtreedist
 except ImportError:

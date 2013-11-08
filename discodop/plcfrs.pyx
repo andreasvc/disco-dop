@@ -1,7 +1,6 @@
 """ Probabilistic CKY parser for monotone, string-rewriting
 Linear Context-Free Rewriting Systems. """
 from __future__ import print_function
-from math import exp
 from collections import defaultdict, deque
 import logging
 import numpy as np
@@ -255,8 +254,6 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		UInt lhs
 		size_t blocked = 0, maxA = 0, n
 		bint recognized
-		#unicode word
-		#bytes tag
 	if start is None:
 		start = grammar.toid[grammar.start]
 	if estimates is not None:
@@ -560,8 +557,6 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 	cdef list componentlist = None
 	cdef dict componentdict = None
 	if not inagenda and not inchart:
-		#if score > 300.0:
-		#	return False
 		# check if we need to prune this item
 		if whitelist is not None and whitelist[newitem.label] is not None:
 			if splitprune:  # disc. item to be treated as several split items?
@@ -638,8 +633,6 @@ cdef inline bint process_lexedge(LCFRSItem_fused newitem,
 		raise ValueError('lexical edge already in chart: %s' %
 				chart.itemstr(newitem))
 	else:
-		#if score > 300.0:
-		#	return False
 		# check if we need to prune this item
 		if whitelist is not None and whitelist[newitem.label] is not None:
 			label = newitem.label
@@ -961,6 +954,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 
 
 def do(sent, grammar):
+	from math import exp
 	from kbest import lazykbest
 	print('len', len(sent.split()), 'sentence:', sent)
 	sent = sent.split()

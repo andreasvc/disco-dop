@@ -20,8 +20,8 @@ from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import marginalize, doprerank
 from discodop.tree import Tree
 from discodop.lexicon import replaceraretestwords, getunknownwordfun, UNK
-from discodop.treebank import saveheads
-from discodop.treebanktransforms import reversetransform, rrbacktransform
+from discodop.treebanktransforms import reversetransform, rrbacktransform, \
+		saveheads
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
@@ -321,7 +321,7 @@ class Parser(object):
 							resultstr, n, derivs)
 					assert all(a for a in parsetree.subtrees()), (
 							'tree has empty nodes: %s' % parsetree)
-				except Exception as err:
+				except Exception as err:  # pylint: disable=W0703
 					logging.error("something's amiss: %r", err)
 					parsetree, prob, fragments, noparse = self.noparse(
 							stage, sent, tags, lastsuccessfulparse)

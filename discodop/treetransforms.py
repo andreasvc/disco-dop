@@ -22,7 +22,8 @@ from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
-from discodop.treebank import READERS, writetree, readheadrules, splitpath
+from discodop.treebank import READERS, writetree, splitpath
+from discodop.treebanktransforms import readheadrules
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -51,7 +52,7 @@ action is one of:
 
 options may consist of (* marks default option):
   --inputfmt=[*%s]
-  --outputfmt=[*export|bracket|discbracket|conll|mst]
+  --outputfmt=[*export|bracket|discbracket|dact|conll|mst]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
@@ -88,6 +89,7 @@ Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     conversion and requires the use of heuristic head rules (--headrules),
     to ensure that all constituents have a child marked as head. """ % (
 			sys.argv[0], '|'.join(READERS.keys()))
+SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
 
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
@@ -460,9 +462,9 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 	and contain bitsets; use ``addbitsets()``.
 	By default construct artificial labels using labels of child nodes.
 	When markyf is True, each artificial label will include the yield function;
-	this is necessary for a 'normal form' binarization that is equivalent to the
-	original. When ids is given, it is used both as an interator (for new unique
-	labels) and as a dictionary (to re-use labels). The first ID in a
+	this is necessary for a 'normal form' binarization that is equivalent to
+	the original. When ids is given, it is used both as an interator (for new
+	unique labels) and as a dictionary (to re-use labels). The first ID in a
 	binarization will always be unique, while the others will be re-used for
 	the same combination of labels and yield function. """
 	if len(node) <= threshold:
@@ -770,8 +772,6 @@ def splitdiscnodes(tree, markorigin=False):
 				node.append(child)
 	return canonicalize(tree)
 
-SPLITLABEL = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
-
 
 def mergediscnodes(tree):
 	""" Reverse transformation of splitdiscnodes()
@@ -802,7 +802,7 @@ def mergediscnodes(tree):
 			if not isinstance(child, Tree):
 				node.append(child)
 				continue
-			match = SPLITLABEL.search(child.label)
+			match = SPLITLABELRE.search(child.label)
 			if not match:
 				node.append(child)
 				continue
@@ -907,16 +907,15 @@ def test():
 		else:
 			wrong += 1
 	total = len(corpus.sents())
-	print("disc. split-merge: correct", correct, "=", 100 * correct / total, "%")
-	print("disc. split-merge: wrong", wrong, "=", 100 * wrong / total, "%")
+	print('disc. split-merge: correct', correct, '=', 100. * correct / total, '%')
+	print('disc. split-merge: wrong', wrong, '=', 100. * wrong / total, '%')
 
 
 def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
-	flags = ['markorigin', 'markheads', 'lemmas',
-			'leftunary', 'rightunary', 'tailmarker']
+	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()
 	try:
@@ -937,16 +936,16 @@ def main():
 			morphology=opts.get('--morphology'),
 			lemmas='between' if '--lemmas' in opts else None)
 	start, end = opts.get('--slice', ':').split(':')
-	start = int(start) if start else None
-	end = int(end) if end else None
+	start, end = (int(start) if start else None), (int(end) if end else None)
 	trees = islice(corpus.parsed_sents_iter(), start, end)
 
 	# select transformation
-	actions = ('binarize unbinarize optimalbinarize introducepreterminals '
-			'splitdisc mergedisc none').split()
+	actions = {'none': None, 'introducepreterminals': introducepreterminals,
+			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
+			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
 	assert action in actions, ('unrecognized action: %r\n'
-			'available actions: %r' % (action, actions))
-	transform = None
+			'available actions: %r' % (action, list(actions)))
+	transform = actions[action]
 	if action in ('binarize', 'optimalbinarize'):
 		h = int(opts.get('-h', 999))
 		v = int(opts.get('-v', 1))
@@ -959,14 +958,8 @@ def main():
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
 			transform = lambda t: optimalbinarize(t, '|', headdriven, h, v)
-	elif action == 'unbinarize':
-		transform = unbinarize
-	elif action == 'introducepreterminals':
-		transform = introducepreterminals
 	elif action == 'splitdisc':
 		transform = lambda t: splitdiscnodes(t, '--markorigin' in opts)
-	elif action == 'mergedisc':
-		transform = mergediscnodes
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
 		trees = ((key, transform(tree), sent) for key, tree, sent in trees)
 
@@ -977,13 +970,20 @@ def main():
 				'need head rules for dependency conversion')
 		headrules = readheadrules(opts.get('--headrules'))
 
-	encoding = opts.get('outputenc', 'utf-8')
 	cnt = 0
-	with io.open(outfilename, 'w', encoding=encoding) as outfile:
-		# copy treebank verbatim when only taking slice or converting encoding
-		if (action == 'none' and opts.get('--inputfmt') ==
-				opts.get('--outputfmt') and set(opts) < {'--slice',
-					'--inputenc', '--outputenc', '--inputfmt', '--outputfmt'}):
+	if opts.get('--outputfmt') == 'dact':
+		import alpinocorpus
+		outfile = alpinocorpus.CorpusWriter(outfilename)
+		for key, tree, sent in trees:
+			outfile.write(key, writetree(tree, sent, key, 'alpino'))
+			cnt += 1
+	else:
+		encoding = opts.get('outputenc', 'utf-8')
+		outfile = io.open(outfilename, 'w', encoding=encoding)
+		# copy trees verbatim when only taking slice or converting encoding
+		if (action == 'none' and opts.get('--inputfmt') == opts.get(
+				'--outputfmt') and set(opts) < {'--slice', '--inputenc',
+				'--outputenc', '--inputfmt', '--outputfmt'}):
 			for block in islice(corpus.blocks().values(), start, end):
 				outfile.write(block)
 				cnt += 1

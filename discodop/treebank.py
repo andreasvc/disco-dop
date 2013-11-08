@@ -6,11 +6,12 @@ import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
 from itertools import count, chain
-from collections import defaultdict, OrderedDict, Counter as multiset
+from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
 from discodop.treebanktransforms import punctremove, punctraise, \
-		balancedpunctraise, punctroot, ispunct
+		balancedpunctraise, punctroot, ispunct, readheadrules, headfinder, \
+		sethead, headmark, headorder
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -19,6 +20,7 @@ TERMINALSRE = re.compile(r" ([^ ()]+)\)")
 EXPORTNONTERMINAL = re.compile(r"^#([0-9]+)$")
 LEAVESRE = re.compile(r" ([^ ()]*)\)")
 FRONTIERNTRE = re.compile(r" \)")
+INDEXRE = re.compile(r" [0-9]+\)")
 
 
 class CorpusReader(object):
@@ -26,8 +28,7 @@ class CorpusReader(object):
 	def __init__(self, root, fileids, encoding='utf-8', headrules=None,
 				headfinal=True, headreverse=False, markheads=False, punct=None,
 				functions=None, morphology=None, lemmas=None):
-		"""
-		:param root: directory of corpus
+		""":param root: directory of corpus
 		:param fileids: filename or pattern of corpus files; e.g., ``wsj*.mrg``
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads
@@ -307,45 +308,6 @@ class BracketCorpusReader(CorpusReader):
 		return [a for a in sent if not ispunct(a, None)]
 
 
-class AlpinoCorpusReader(CorpusReader):
-	""" Corpus reader for the Dutch Alpino treebank in XML format.
-	Expects a corpus in directory format, where every sentence is in a single
-	``.xml`` file. """
-
-	def blocks(self):
-		""" :returns: a list of strings containing the raw representation of \
-		trees in the treebank. """
-		if self._block_cache is None:
-			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((n, ElementTree.tostring(a))
-				for n, a in self._block_cache.items())
-
-	def _read_blocks(self):
-		""" Read corpus and yield blocks corresponding to each sentence. """
-		assert self._encoding in (None, 'utf8', 'utf-8'), (
-				'Encoding specified in XML files, cannot be overriden.')
-		for filename in self._filenames:
-			block = ElementTree.parse(filename).getroot()
-			#n = s.find('comments')[0].text.split('|', 1)[0], s
-			# ../path/dir/file.xml => dir/file
-			path, filename = os.path.split(filename)
-			_, lastdir = os.path.split(path)
-			n = os.path.join(lastdir, filename)[:-len('.xml')]
-			yield n, block
-
-	def _parse(self, block):
-		""" :returns: a parse tree given a string. """
-		tree = alpinoparse(block, self.morphology, self.lemmas)
-		sent = self._word(block)
-		return tree, sent
-
-	def _word(self, block, orig=False):
-		if orig or self.punct != "remove":
-			return block.find('sentence').text.split()
-		return [word for word in block.find('sentence').text.split()
-				if not ispunct(word, None)]  # fixme: don't have tag
-
-
 class TigerXMLCorpusReader(CorpusReader):
 	""" Corpus reader for the Tiger XML format. """
 	def blocks(self):
@@ -405,6 +367,7 @@ class TigerXMLCorpusReader(CorpusReader):
 			assert nodes[idref][PARENT] is not None, (
 					'%s does not have a parent: %r' % (idref, nodes[idref]))
 		tree = exportparse(list(nodes.values()), self.morphology, self.lemmas)
+		tree.label = nodes[root][TAG]
 		sent = self._word(block, orig=True)
 		return tree, sent
 
@@ -417,19 +380,63 @@ class TigerXMLCorpusReader(CorpusReader):
 			if not ispunct(term.get('word'), term.get('pos'))]
 
 
-def numbase(key):
-	""" Turn a file name into a numeric sorting key if possible. """
-	path, base = os.path.split(key)
-	base = base.split(".", 1)
-	try:
-		base[0] = int(base[0])
-	except ValueError:
-		pass
-	return [path] + base
+class AlpinoCorpusReader(CorpusReader):
+	""" Corpus reader for the Dutch Alpino treebank in XML format.
+	Expects a corpus in directory format, where every sentence is in a single
+	``.xml`` file. """
+
+	def blocks(self):
+		""" :returns: a list of strings containing the raw representation of \
+		trees in the treebank. """
+		if self._block_cache is None:
+			self._block_cache = OrderedDict(self._read_blocks())
+		return OrderedDict((n, ElementTree.tostring(a))
+				for n, a in self._block_cache.items())
+
+	def _read_blocks(self):
+		""" Read corpus and yield blocks corresponding to each sentence. """
+		assert self._encoding in (None, 'utf8', 'utf-8'), (
+				'Encoding specified in XML files, cannot be overriden.')
+		for filename in self._filenames:
+			block = ElementTree.parse(filename).getroot()
+			#n = s.find('comments')[0].text.split('|', 1)[0], s
+			# ../path/dir/file.xml => dir/file
+			path, filename = os.path.split(filename)
+			_, lastdir = os.path.split(path)
+			n = os.path.join(lastdir, filename)[:-len('.xml')]
+			yield n, block
+
+	def _parse(self, block):
+		""" :returns: a parse tree given a string. """
+		tree = alpinoparse(block, self.morphology, self.lemmas)
+		sent = self._word(block)
+		return tree, sent
+
+	def _word(self, block, orig=False):
+		if orig or self.punct != "remove":
+			return block.find('sentence').text.split()
+		return [word for word in block.find('sentence').text.split()
+				if not ispunct(word, None)]  # fixme: don't have tag
+
+
+class DactCorpusReader(AlpinoCorpusReader):
+	""" Corpus reader for the Dutch Alpino treebank in Dact format,
+	which consists of an XML database. """
+	def _read_blocks(self):
+		import alpinocorpus
+		assert self._encoding in (None, 'utf8', 'utf-8'), (
+				'Encoding specified in XML files, cannot be overriden.')
+		for filename in self._filenames:
+			corpus = alpinocorpus.CorpusReader(filename)
+			for entry in corpus.entries():
+				key = entry.name()
+				if key.endswith('.xml'):
+					key = key[:-len('.xml')]
+				yield key, ElementTree.fromstring(entry.contents())
 
 
 def exportsplit(line):
-	""" take a line in export format and split into fields,
+	""" Take a line in export format and split into fields,
 	add dummy fields lemma, sec. edge if those fields are absent. """
 	if "%%" in line:  # we don't want comments.
 		line = line[:line.index("%%")]
@@ -473,8 +480,7 @@ def exportparse(block, morphology=None, lemmas=None):
 
 
 def alpinoparse(node, morphology=None, lemmas=None):
-	""" Given an Alpino tree as an etree XML object, construct a Tree object
-	for it. """
+	""" Construct a Tree object for an ElementTree with an Alpino XML tree. """
 	def getsubtree(node, parent, morphology, lemmas):
 		""" Parse a subtree of an Alpino tree. """
 		# FIXME: proper representation for arbitrary features
@@ -512,8 +518,7 @@ def alpinoparse(node, morphology=None, lemmas=None):
 		return result
 	coindexed = {}
 	coindexation = defaultdict(list)
-	# NB: in contrast to Negra export format, don't need to add
-	# root/top node
+	# NB: in contrast to Negra export format, don't need to add root/top node
 	result = getsubtree(node.find('node'), None, morphology, lemmas)
 	# FIXME: need MultipleParentedTree for secedges
 	#for index, secedges in coindexation.items():
@@ -521,81 +526,28 @@ def alpinoparse(node, morphology=None, lemmas=None):
 	return result
 
 
-def splitpath(path):
-	""" Split path into a pair of (directory, filename). """
-	return path.rsplit('/', 1) if '/' in path else ('.', path)
-
-
-indexre = re.compile(r" [0-9]+\)")
-
-
 def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 	""" Convert a tree with indices as leafs and a sentence with the
 	corresponding non-terminals to a single string in the given format.
-	Formats are bracket, discbracket, and Negra's export format,
-	as well unlabelled dependency conversion into mst or conll format
-	(requires head rules). Lemmas, functions, and morphology information will
-	be empty unless nodes contain a 'source' attribute with such information.
+	Formats are ``bracket``, ``discbracket``, Negra's ``export`` format,
+	and ``alpino`` XML format, as well unlabeled dependency conversion into
+	``mst`` or ``conll`` format (requires head rules). Lemmas, functions, and
+	morphology information will be empty unless nodes contain a 'source'
+	attribute with such information.
 	"""
 	def getword(idx):
 		""" Get word given an index and restore parentheses. """
 		return sent[int(idx[:-1])].replace('(', '-LRB-').replace(')', '-RRB-')
-	if fmt == "alpino":
-		fmt = "export"  # FIXME implement Alpino XML output?
 
 	if fmt == "bracket":
-		return indexre.sub(lambda x: ' %s)' % getword(x.group()),
+		return INDEXRE.sub(lambda x: ' %s)' % getword(x.group()),
 				"%s\n" % tree)
 	elif fmt == "discbracket":
 		return "%s\t%s\n" % (tree, ' '.join(sent))
 	elif fmt == "export":
-		result = []
-		if n is not None:
-			result.append("#BOS %s" % n)
-		indices = tree.treepositions('leaves')
-		wordsandpreterminals = indices + [a[:-1] for a in indices]
-		phrasalnodes = [a for a in tree.treepositions('postorder')
-				if a not in wordsandpreterminals and a != ()]
-		wordids = {tree[a]: a for a in indices}
-		assert len(sent) == len(indices) == len(wordids), (
-				n, str(tree), sent, wordids.keys())
-		for i, word in enumerate(sent):
-			assert word, 'empty word in sentence: %r' % sent
-			idx = wordids[i]
-			node = tree[idx[:-1]]
-			lemma = '--'
-			postag = node.label.replace('$[', '$(') or '--'
-			func = morphtag = '--'
-			secedges = []
-			if getattr(node, 'source', None):
-				lemma = node.source[LEMMA] or '--'
-				morphtag = node.source[MORPH] or '--'
-				func = node.source[FUNC] or '--'
-				secedges = node.source[6:]
-			if morphtag == '--':
-				morphtag = node.label if morphology == 'replace' else '--'
-			nodeid = str(500 + phrasalnodes.index(idx[:-2])
-					if len(idx) > 2 else 0)
-			result.append("\t".join((word, lemma, postag, morphtag, func,
-					nodeid) + tuple(secedges)))
-		for idx in phrasalnodes:
-			node = tree[idx]
-			parent = '#%d' % (500 + phrasalnodes.index(idx))
-			lemma = '--'
-			label = node.label or '--'
-			func = morphtag = '--'
-			secedges = []
-			if getattr(node, 'source', None):
-				morphtag = node.source[MORPH] or '--'
-				func = node.source[FUNC] or '--'
-				secedges = node.source[6:]
-			nodeid = str(500 + phrasalnodes.index(idx[:-1])
-					if len(idx) > 1 else 0)
-			result.append('\t'.join((parent, lemma, label, morphtag, func,
-					nodeid) + tuple(secedges)))
-		if n is not None:
-			result.append("#EOS %s" % n)
-		return "%s\n" % "\n".join(result)
+		return writeexporttree(tree, sent, n, morphology)
+	elif fmt == "alpino":
+		return writealpinotree(tree, sent, n)
 	elif fmt in ("conll", "mst"):
 		assert headrules, "dependency conversion requires head rules."
 		deps = dependencies(tree, headrules)
@@ -612,6 +564,93 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 				in zip(sent, sorted(tree.pos()), deps)) + "\n\n"
 	else:
 		raise ValueError("unrecognized format: %r" % fmt)
+
+
+def writeexporttree(tree, sent, n, morphology):
+	""" Return string with given tree in Negra's export format. """
+	result = []
+	if n is not None:
+		result.append("#BOS %s" % n)
+	indices = tree.treepositions('leaves')
+	wordsandpreterminals = indices + [a[:-1] for a in indices]
+	phrasalnodes = [a for a in tree.treepositions('postorder')
+			if a not in wordsandpreterminals and a != ()]
+	wordids = {tree[a]: a for a in indices}
+	assert len(sent) == len(indices) == len(wordids), (
+			n, str(tree), sent, wordids.keys())
+	for i, word in enumerate(sent):
+		assert word, 'empty word in sentence: %r' % sent
+		idx = wordids[i]
+		node = tree[idx[:-1]]
+		lemma = '--'
+		postag = node.label.replace('$[', '$(') or '--'
+		func = morphtag = '--'
+		secedges = []
+		if getattr(node, 'source', None):
+			lemma = node.source[LEMMA] or '--'
+			morphtag = node.source[MORPH] or '--'
+			func = node.source[FUNC] or '--'
+			secedges = node.source[6:]
+		if morphtag == '--':
+			morphtag = node.label if morphology == 'replace' else '--'
+		nodeid = str(500 + phrasalnodes.index(idx[:-2])
+				if len(idx) > 2 else 0)
+		result.append("\t".join((word, lemma, postag, morphtag, func,
+				nodeid) + tuple(secedges)))
+	for idx in phrasalnodes:
+		node = tree[idx]
+		parent = '#%d' % (500 + phrasalnodes.index(idx))
+		lemma = '--'
+		label = node.label or '--'
+		func = morphtag = '--'
+		secedges = []
+		if getattr(node, 'source', None):
+			morphtag = node.source[MORPH] or '--'
+			func = node.source[FUNC] or '--'
+			secedges = node.source[6:]
+		nodeid = str(500 + phrasalnodes.index(idx[:-1])
+				if len(idx) > 1 else 0)
+		result.append('\t'.join((parent, lemma, label, morphtag, func,
+				nodeid) + tuple(secedges)))
+	if n is not None:
+		result.append("#EOS %s" % n)
+	return "%s\n" % "\n".join(result)
+
+
+def writealpinotree(tree, sent, n):
+	""" Return XML string with tree in AlpinoXML format."""
+	def addchildren(tree, sent, parent, cnt):
+		""" Recursively add children of ``tree`` to XML object ``node`` """
+		node = ElementTree.SubElement(parent, 'node')
+		node.set('id', str(next(cnt)))
+		node.set('begin', str(min(tree.leaves())))
+		node.set('end', str(max(tree.leaves()) + 1))
+		if getattr(tree, 'source', None):
+			node.set('rel', tree.source[FUNC] or '--')
+		if isinstance(tree[0], Tree):
+			node.set('cat', tree.label.lower())
+		else:
+			assert isinstance(tree[0], int)
+			node.set('pos', tree.label.lower())
+			node.set('word', sent[tree[0]])
+			if getattr(tree, 'source', None):
+				node.set('lemma', tree.source[LEMMA] or '--')
+				node.set('postag', tree.source[MORPH] or '--')
+				# TODO: decompose postag into individual morphological features
+				# could give 'frame' and 'root' attributes
+				# with data from 'postag' and 'lemma'.
+		for child in tree:
+			if isinstance(child, Tree):
+				addchildren(child, sent, node, cnt)
+
+	result = ElementTree.Element('alpino_ds')
+	result.set('version', '1.3')
+	addchildren(tree, sent, result, count())
+	sentence = ElementTree.SubElement(result, 'sentence')
+	sentence.text = ' '.join(sent)
+	comment = ElementTree.SubElement(result, 'comment')
+	comment.text = str(n)
+	return ElementTree.tostring(result).decode('utf-8')  # hack
 
 
 def handlefunctions(action, tree, pos=True, top=False):
@@ -677,131 +716,11 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 	return preterminal
 
 
-def readheadrules(filename):
-	""" Read a file containing heuristic rules for head assigment.
-	Example line: ``s right-to-left vmfin vafin vaimp``, which means
-	traverse siblings of an S constituent from right to left, the first child
-	with a label of vmfin, vafin, or vaimp will be marked as head. """
-	headrules = {}
-	for line in open(filename):
-		line = line.strip().upper()
-		if line and not line.startswith("%") and len(line.split()) > 2:
-			label, lr, heads = line.split(None, 2)
-			headrules.setdefault(label, []).append((lr, heads.split()))
-	return headrules
-
-
-def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
-	""" use head finding rules to select one child of tree as head. """
-	candidates = [a for a in tree if getattr(a, 'source', None)
-			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
-	if candidates:
-		return candidates[0]
-	children = tree
-	for lr, heads in headrules.get(tree.label, []):
-		if lr == 'LEFT-TO-RIGHT':
-			children = tree
-		elif lr == 'RIGHT-TO-LEFT':
-			children = tree[::-1]
-		else:
-			raise ValueError
-		for head in heads:
-			for child in children:
-				if (isinstance(child, Tree)
-						and child.label.split('[')[0] == head):
-					return child
-	# default head is initial/last nonterminal (depending on direction lr)
-	for child in children:
-		if isinstance(child, Tree):
-			return child
-
-
-def sethead(child):
-	""" mark node as head in an auxiliary field. """
-	child.source = getattr(child, "source", 6 * [''])
-	if 'HD' not in child.source[FUNC].upper().split("-"):
-		x = list(child.source)
-		if child.source[FUNC] in (None, '', '--'):
-			x[FUNC] = '-HD'
-		else:
-			x[FUNC] = x[FUNC] + '-HD'
-		child.source = tuple(x)
-
-
-def headmark(tree):
-	""" add marker to label of head node. """
-	head = [a for a in tree if getattr(a, 'source', None)
-			and 'HD' in a.source[FUNC].upper().split('-')]
-	if not head:
-		return
-	head[-1].label += '-HD'
-
-
-def headorder(tree, headfinal, reverse):
-	""" change order of constituents based on head (identified with
-	function tag). """
-	head = [n for n, a in enumerate(tree)
-		if getattr(a, 'source', None)
-		and 'HD' in a.source[FUNC].upper().split("-")]
-	if not head:
-		return
-	headidx = head.pop()
-	# everything until the head is reversed and prepended to the rest,
-	# leaving the head as the first element
-	nodes = tree[:]
-	tree[:] = []
-	if headfinal:
-		if reverse:
-			# head final, reverse rhs: A B C^ D E => A B E D C^
-			tree[:] = nodes[:headidx] + nodes[headidx:][::-1]
-		else:
-			# head final, reverse lhs:  A B C^ D E => E D A B C^
-			tree[:] = nodes[headidx + 1:][::-1] + nodes[:headidx + 1]
-	else:
-		if reverse:
-			# head first, reverse lhs: A B C^ D E => C^ B A D E
-			tree[:] = nodes[:headidx + 1][::-1] + nodes[headidx + 1:]
-		else:
-			# head first, reverse rhs: A B C^ D E => C^ D E B A
-			tree[:] = nodes[headidx:] + nodes[:headidx][::-1]
-
-
-def saveheads(tree, tailmarker):
-	""" When a head-outward binarization is used, this function ensures the
-	head is known when the tree is converted to export format. """
-	if not tailmarker:
-		return
-	for node in tree.subtrees(lambda n: tailmarker in n.label):
-		node.source = ['--'] * 6
-		node.source[FUNC] = 'HD'
-
-
-def headstats(trees):
-	""" collects some information useful for writing headrules. """
-	heads = defaultdict(multiset)
-	pos1 = defaultdict(multiset)
-	pos2 = defaultdict(multiset)
-	pos3 = defaultdict(multiset)
-	unknown = defaultdict(multiset)
-	for tree in trees:
-		for a in tree.subtrees(lambda x: len(x) > 1):
-			for n, b in enumerate(a):
-				if 'hd' in b.source[FUNC]:
-					heads[a.label][b.label] += 1
-					pos1[a.label][n] += 1
-					pos2[a.label][len(a) - (n + 2)] += 1
-					pos3[a.label][len(a)] += 1
-					break
-			else:
-				unknown[a.label].update(b.label for b in a)
-	return heads, unknown, pos1, pos2, pos3
-
-
 def dependencies(root, headrules):
 	""" Lin (1995): A Dependency-based Method
 	for Evaluating Broad-Coverage Parser """
 	deps = []
-	deps.append(("ROOT", makedep(root, deps, headrules), 0))
+	deps.append(('ROOT', makedep(root, deps, headrules), 0))
 	return sorted(deps)
 
 
@@ -983,6 +902,22 @@ def treebankfanout(trees):
 		return 1, 0
 
 
+def splitpath(path):
+	""" Split path into a pair of (directory, filename). """
+	return path.rsplit('/', 1) if '/' in path else ('.', path)
+
+
+def numbase(key):
+	""" Turn a file name into a numeric sorting key if possible. """
+	path, base = os.path.split(key)
+	base = base.split(".", 1)
+	try:
+		base[0] = int(base[0])
+	except ValueError:
+		pass
+	return [path] + base
+
+
 def test():
 	""" Not implemented. """
 
@@ -991,7 +926,7 @@ READERS = OrderedDict((('export', NegraCorpusReader),
 		('bracket', BracketCorpusReader),
 		('discbracket', DiscBracketCorpusReader),
 		('tiger', TigerXMLCorpusReader),
-		('alpino', AlpinoCorpusReader)))
+		('alpino', AlpinoCorpusReader), ('dact', DactCorpusReader)))
 
 if __name__ == '__main__':
 	test()
