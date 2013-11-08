@@ -57,6 +57,7 @@ PERCENTAGE1RE = re.compile(
 		r'([A-Za-z][A-Za-z ()]+) ([0-9]+(?:\.[0-9]+)?)% \([0-9]+\)')
 PERCENTAGE2RE = re.compile(
 		r'([0-9]+(?:\.[0-9]+)?)% \([0-9]+\) ([A-Za-z ()]+)\n')
+WHITESPACE = re.compile(r'^(.*[ \n\r].*)$')
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -112,28 +113,17 @@ def main():
 @APP.route('/style')
 def style():
 	""" Use style(1) program to get staticstics for each text. """
-	def generate(doexport):
-		""" Generator for results. """
-		files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
-		if files and not doexport:
+	def generate():
+		""" Generate plots from results. """
+		if glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
 			yield "NB: formatting errors may distort paragraph counts etc.\n\n"
-		elif not doexport:
+		else:
 			yield ("No .txt files found in corpus/\n"
 					"Using sentences extracted from parse trees.\n"
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
-		for n, filename in enumerate(sorted(STYLETABLE)):
-			name = os.path.basename(filename)
-			if doexport:
-				if n == 0:
-					yield 'text, %s\n' % ', '.join(
-							'"%s"' % key for key in sorted(STYLETABLE[name]))
-				yield '"%s", %s\n' % (name, ', '.join('%s' % val
-						for _, val in sorted(STYLETABLE[name].items())))
-			elif n == 0:
-				yield '<a href="style?export">Export to CSV</a>'
-		if not doexport:
-			yield '</pre>'
+		yield '<a href="style?export">Export to CSV</a>'
+		yield '</pre>'
 		# produce a plot for each field
 		fields = ()
 		for a in STYLETABLE:
@@ -146,15 +136,24 @@ def style():
 				yield barplot(data, total, field + ':',
 						unit='%' if '%' in field else '')
 
+	def generatecsv():
+		""" Generate CSV file. """
+		for n, filename in enumerate(sorted(STYLETABLE)):
+			name = os.path.basename(filename)
+			if n == 0:
+				yield 'text,%s\r\n' % ','.join(quotespace(key)
+						for key in sorted(STYLETABLE[name]))
+			yield '%s,%s\r\n' % (quotespace(name), ','.join('%s' % val
+					for _, val in sorted(STYLETABLE[name].items())))
+
 	if 'export' in request.args:
-		resp = Response(generate(True),
-				mimetype='text/plain')
+		resp = Response(generatecsv(), mimetype='text/plain')
 		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
 	else:
 		resp = Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS,
 				selectedtexts=selectedtexts(request.args), output='style',
-				results=generate(False), havexpath=ALPINOCORPUSLIB))
+				results=generate(), havexpath=ALPINOCORPUSLIB))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
@@ -179,7 +178,8 @@ def draw():
 		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
 					unicodelines=True, html=True)
 	elif ALPINOCORPUSLIB:
-		treestr = XMLCORPORA[textno].read('%d.xml' % (sentno, ))
+		treestr = next(islice(XMLCORPORA[textno].entries(),
+				sentno - 1)).contents()
 		tree, sent = treebank.alpinotree(
 				ElementTree.fromstring(treestr),
 				functions=None if nofunc else 'add',
@@ -209,12 +209,12 @@ def browse():
 					for line in islice(open(filename), start, maxtree)]
 		elif ALPINOCORPUSLIB:
 			drawntrees = [DrawTree(*treebank.alpinotree(
-					ElementTree.fromstring(
-						XMLCORPORA[textno].read('%d.xml' % (n + 1, ))),
+					ElementTree.fromstring(entry.contents()),
 					functions=None if nofunc else 'add',
 					morphology=None if nomorph else 'replace')).text(
 					unicodelines=True, html=True)
-					for n in range(start, maxtree)]
+					for entry in islice(XMLCORPORA[textno].entries(),
+						start, maxtree)]
 		else:
 			raise ValueError
 		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
@@ -278,7 +278,7 @@ def counts(form, doexport=False):
 	for n, (textno, results, stderr) in enumerate(doqueries(form, lines=False)):
 		if n == 0:
 			if doexport:
-				yield '"text","count","relfreq"\r\n'
+				yield 'text,count,relfreq\r\n'
 			else:
 				url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
 						form['query'], form['norm'], form['texts'],
@@ -308,7 +308,7 @@ def counts(form, doexport=False):
 		relfreq[text] = 100.0 * cnt / total
 		sumtotal += total
 		if doexport:
-			yield '"%s",%d,%g\r\n' % (text, cnt, relfreq[text])
+			yield '%s,%d,%g\r\n' % (quotespace(text), cnt, relfreq[text])
 		else:
 			line = "%s%6d    %5.2f %%" % (
 					text.ljust(40)[:40], cnt, relfreq[text])
@@ -844,6 +844,10 @@ def which(program):
 			return os.path.join(path, program)
 	raise ValueError('%r not found in path; please install it.' % program)
 
+
+def quotespace(s):
+	""" Double-quote string if it contains a space or newline. """
+	return WHITESPACE.sub(r'"\1"', s)
 
 preparecorpus()
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
