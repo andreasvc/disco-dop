@@ -1,8 +1,6 @@
 {% extends "search.html" %}
 {% block result %}
-<pre>
 {%- for line in results -%}
 {{ line|safe }}
 {%- endfor -%}
-</pre>
 {% endblock %}

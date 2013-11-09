@@ -36,7 +36,7 @@ which diction || (
 # install alpinocorpus library
 python -c 'import alpinocorpus' || (
 	apt-get install -y python-software-properties
-	add-apt-repository ppa:danieldk/dact
+	add-apt-repository -y ppa:danieldk/dact
 	apt-get update
 	apt-get install -y libalpino-corpus2.0 libalpino-corpus-dev libxslt1-dev libxml2-dev libdbxml-dev libboost-all-dev
 	sudo -u vagrant git clone https://github.com/andreasvc/alpinocorpus-python.git

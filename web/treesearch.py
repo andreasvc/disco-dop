@@ -116,15 +116,12 @@ def style():
 	""" Use style(1) program to get staticstics for each text. """
 	def generate():
 		""" Generate plots from results. """
-		if glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
-			yield "NB: formatting errors may distort paragraph counts etc.\n\n"
-		else:
+		if not glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
 			yield ("No .txt files found in corpus/\n"
 					"Using sentences extracted from parse trees.\n"
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
 		yield '<a href="style?export">Export to CSV</a>'
-		yield '</pre>'
 		# produce a plot for each field
 		fields = ()
 		for a in STYLETABLE:
@@ -331,7 +328,7 @@ def counts(form, doexport=False):
 				url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
 						form['query'], form['norm'], form['texts'],
 						form.get('engine', 'tgrep2'))
-				yield ('Query: %s\n'
+				yield ('<pre>Query: %s\n'
 						'NB: the counts reflect the total number of '
 						'times a pattern matches for each tree.\n\n'
 						'Counts (<a href="%s">export to CSV</a>):\n' % (
@@ -367,6 +364,7 @@ def counts(form, doexport=False):
 				yield line + plot + '\n'
 			else:
 				yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
+	yield '</pre>'
 	if gotresult and not doexport:
 		yield ("%s%6d    %5.2f %%\n</span>\n" % (
 				"TOTAL".ljust(40),
@@ -388,7 +386,7 @@ def trees(form):
 			url = 'trees?query=%s&texts=%s&engine=%s&export=1' % (
 					quote(form['query']), form['texts'],
 					form.get('engine', 'tgrep2'))
-			yield ('Query: %s\n'
+			yield ('<pre>Query: %s\n'
 					'Trees (showing up to %d per text; '
 					'export: <a href="%s">plain</a>, '
 					'<a href="%s">with line numbers</a>):\n' % (
@@ -444,8 +442,7 @@ def trees(form):
 				line = "#%s [%s]\n%s\n" % (lineno, link, treerepr)
 			yield line
 		yield "</span>"
-	if not gotresults:
-		yield "No matches."
+	yield '</pre>' if gotresults else "No matches."
 
 
 def sents(form, dobrackets=False):
@@ -458,7 +455,7 @@ def sents(form, dobrackets=False):
 					'trees' if dobrackets else 'sents',
 					quote(form['query']), form['texts'],
 					form.get('engine', 'tgrep2'))
-			yield ('Query: %s\n'
+			yield ('<pre>Query: %s\n'
 					'Sentences (showing up to %d per text; '
 					'export: <a href="%s">plain</a>, '
 					'<a href="%s">with line numbers</a>):\n' % (
@@ -498,8 +495,7 @@ def sents(form, dobrackets=False):
 							else word for n, word in enumerate(out.split()))
 			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, out)
 		yield "</ol>"
-	if not gotresults:
-		yield "No matches."
+	yield '</pre>' if gotresults else 'No matches.'
 
 
 def brackets(form):
@@ -520,7 +516,7 @@ def fragmentsinresults(form, doexport=False):
 			url = 'fragments?query=%s&texts=%s&engine=%s&export=1' % (
 					quote(form['query']), form['texts'],
 					form.get('engine', 'tgrep2'))
-			yield ('Query: %s\n'
+			yield ('<pre>Query: %s\n'
 					'Fragments (showing up to %d fragments '
 					'in the first %d search results from selected texts; '
 					'<a href="%s">Export</a>):\n'
@@ -563,10 +559,11 @@ def fragmentsinresults(form, doexport=False):
 			yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
 	if not doexport:
 		yield "</ol>"
-		if not gotresults:
+		if gotresults:
+			yield '</pre>'
+		else:
 			yield "No fragments with freq > %d & nodes > %d." % (
 					MINNODES, MINFREQ)
-			return
 
 
 def doqueries(form, lines=False, doexport=None):
@@ -685,22 +682,19 @@ def filterlabels(line, nofunc, nomorph):
 
 def barplot(data, total, title, width=800.0, unit=''):
 	""" A HTML bar plot given a dictionary and max value. """
-	result = ['</pre><div class=barplot>',
+	result = ['<div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
 	firstletters = {key[0] for key in data}
-	colornames = ['lightblue', 'lightcoral', 'lightpink', 'wheat', 'khaki']
 	color = {}
-	if len(firstletters) <= len(colornames):
-		color.update(zip(firstletters, colornames))
+	if len(firstletters) <= 5:
+		color.update(zip(firstletters, range(5)))
 	for key in sorted(data, key=data.get, reverse=True):
-		result.append('<div class=barlabel>%s: %g %s</div>\n'
-				'<div class=bar style="width: %gpx; '
-				'background-color: %s;" >&nbsp;</div>' % (
-				cgi.escape(key), data[key], unit, width * data[key] / total,
-				color.get(key[0], colornames[0])
-					if data[key] else 'transparant'))
-	result.append('</div>\n<pre>')
+		result.append('<br><div style="width:%dpx;" class=b%d></div>'
+				'<span>%s: %g %s</span>' % (round(width * data[key] / total),
+				color.get(key[0], 0) if data[key] else 'transparant',
+				cgi.escape(key), data[key], unit,))
+	result.append('</div>\n')
 	return '\n'.join(result)
 
 
@@ -751,13 +745,6 @@ def preparecorpus():
 			subprocess.check_call(
 					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
 					shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-	#for a in sorted(glob.glob(os.path.join(CORPUS_DIR, '*.export'))):
-	#	if not os.path.exists(a + '.dact'):
-	#		writer = alpinocorpus.CorpusWriter(a + '.dact')
-	#		for n, (tree, sent) in treebank.NegraCorpusReader(
-	#				*treebank.splitpath(a)).parsed_sents_iter().items():
-	#			writer.write(n, treebank.writetree(tree, sent, n, 'alpino'))
-	#		writer.close()
 
 
 def getstyletable():
@@ -777,8 +764,7 @@ def getstyletable():
 		elif filename.endswith('.dact'):
 			stdin = subprocess.PIPE
 		else:
-			cmd.append(filename)
-			stdin = None
+			stdin = subprocess.PIPE
 		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 				stdin=stdin, stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT)
@@ -788,6 +774,10 @@ def getstyletable():
 			proc.stdin.writelines(  # pylint: disable=E1101
 					'%s\n' % ALPINOLEAVES.search(entry.contents()).group(1)
 					for entry in alpinocorpus.CorpusReader(filename).entries())
+		else:
+			# .txt files may have one paragraph per line;
+			# style expects paragraphs separated by two linebreaks.
+			proc.stdin.write(open(filename).read().replace('\n', '\n\n'))
 		if proc.stdin:  # pylint: disable=E1101
 			proc.stdin.close()  # pylint: disable=E1101
 		out = proc.stdout.read()  # pylint: disable=E1101
@@ -930,5 +920,5 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	APP.logger.info('ready')
+	#APP.logger.info('ready')
 	APP.run(debug=True, host='0.0.0.0')

@@ -5,36 +5,40 @@
 </title>
 <script src="static/main.js"></script>
 <style>
-div.barplot {
+.barplot {
     page-break-inside:avoid;
     page-break-after:auto;
     padding: 3px;
     margin: 1px;
-    position: relative;
 }
-div.barlabel {
+.barplot div, span {
     font: 10px sans-serif;
-    text-align: left;
     padding: 3px;
     margin: 1px;
-    color: black;
-    position: absolute;
-    left: 1.5em;
-    margin-top: 0.25em;
-    z-index: 1;
 }
-div.bar {
+.barplot span {
     position: relative;
-    left: 0em;
-    z-index: 0;
-    padding: 3px;
-    margin: 1px;
-    height: 1em;
+    z-index: 1;
+    left: .5em;
 }
+.b0, .b1, .b2, .b3, .b4 {
+    position: absolute;
+    z-index: 0;
+    height: 1.1em;
+    left: 1em;
+}
+.b0 { background-color: lightblue; }
+.b1 { background-color: lightcoral; }
+.b2 { background-color: lightpink; }
+.b3 { background-color: wheat; }
+.b4 { background-color: khaki; }
 body { font-family: Helvetica, Arial, sans-serif; }
 blockquote { width: 600px; text-align: justify;  }
 span.r { color: red; }
 span.tt { font-family: monospace; }
+:root { /* include the colored bars in plots when printing (to pdf) with Chrome */
+	-webkit-print-color-adjust: exact;
+}
 </style>
 
 <body onLoad="placeFocus(); triggerForm('{{ output }}'); " >
