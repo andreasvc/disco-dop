@@ -2,6 +2,7 @@
 or alpinocorpus-python (for xpath queries), style. Expects one or more
 treebanks with .mrg or .dact extension in the directory corpus/ """
 # stdlib
+import io
 import os
 import re
 import cgi
@@ -178,8 +179,7 @@ def draw():
 		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
 					unicodelines=True, html=True)
 	elif ALPINOCORPUSLIB:
-		treestr = next(islice(XMLCORPORA[textno].entries(),
-				sentno - 1)).contents()
+		treestr = XMLCORPORA[textno].read('%d.xml' % sentno)
 		tree, sent = treebank.alpinotree(
 				ElementTree.fromstring(treestr),
 				functions=None if nofunc else 'add',
@@ -188,6 +188,51 @@ def draw():
 	else:
 		raise ValueError
 	return '<pre id="t%s">%s</pre>' % (sentno, result)
+
+
+@APP.route('/browsesents')
+def browsesents():
+	""" Browse through sentences in a file. """
+	chunk = 20  # number of sentences per page
+	if 'text' in request.args and 'sent' in request.args:
+		textno = int(request.args['text'])
+		sentno = int(request.args['sent']) - 1
+		highlight = int(request.args.get('highlight', 0)) - 1
+		start = max(0, sentno - chunk // 2)
+		maxtree = min(start + chunk, NUMSENTS[textno])
+		nofunc = 'nofunc' in request.args
+		nomorph = 'nomorph' in request.args
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+		if os.path.exists(filename):
+			sents = [' '.join(GETLEAVES.findall(a)) for a
+					in islice(io.open(filename, encoding='utf8'),
+					start, maxtree)]
+		elif ALPINOCORPUSLIB:
+			sents = [ALPINOLEAVES.search(XMLCORPORA[textno].read(
+					'%d.xml' % (n + 1, ))).group(1)
+					for n in range(start, maxtree)]
+		else:
+			raise ValueError
+		sents = [('<font color=red>%s</font>' % cgi.escape(a))
+				if n == highlight else cgi.escape(a)
+				for n, a in enumerate(sents, start)]
+		prevlink = '<a id=prev>prev</a>'
+		if sentno > chunk:
+			prevlink = '<a href="browsesents?text=%d&sent=%d" id=prev>prev</a>' % (
+					textno, sentno - chunk + 1)
+		nextlink = '<a id=next>next</a>'
+		if sentno < NUMSENTS[textno] - chunk:
+			nextlink = '<a href="browsesents?text=%d&sent=%d" id=next>next</a>' % (
+					textno, sentno + chunk + 1)
+		return render_template('browsesents.html', textno=textno,
+				sentno=sentno + 1, text=TEXTS[textno],
+				totalsents=NUMSENTS[textno], sents=sents, prevlink=prevlink,
+				nextlink=nextlink, chunk=chunk, mintree=start + 1,
+				maxtree=maxtree)
+	return '<ol>\n%s</ol>\n' % '\n'.join(
+			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
+			'(%d sentences)' % (n, text, NUMSENTS[n])
+			for n, text in enumerate(TEXTS))
 
 
 @APP.route('/browse')
@@ -202,19 +247,22 @@ def browse():
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		if os.path.exists(filename):
+		if ALPINOCORPUSLIB:
+			drawntrees = [DrawTree(*treebank.alpinotree(
+					ElementTree.fromstring(XMLCORPORA[textno].read(
+						'%d.xml' % (n + 1, ))),
+					functions=None if nofunc else 'add',
+					morphology=None if nomorph else 'replace')).text(
+					unicodelines=True, html=True)
+					for n in range(start, maxtree)]
+			sents = [ALPINOLEAVES.search(XMLCORPORA[textno].read(
+					'%d.xml' % (n + 1, ))).group(1)
+					for n in range(start, maxtree)]
+		elif os.path.exists(filename):
 			drawntrees = [DrawTree(filterlabels(
 					line.decode('utf8'), nofunc, nomorph)).text(
 					unicodelines=True, html=True)
 					for line in islice(open(filename), start, maxtree)]
-		elif ALPINOCORPUSLIB:
-			drawntrees = [DrawTree(*treebank.alpinotree(
-					ElementTree.fromstring(entry.contents()),
-					functions=None if nofunc else 'add',
-					morphology=None if nomorph else 'replace')).text(
-					unicodelines=True, html=True)
-					for entry in islice(XMLCORPORA[textno].entries(),
-						start, maxtree)]
 		else:
 			raise ValueError
 		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
@@ -332,9 +380,8 @@ def counts(form, doexport=False):
 
 def trees(form):
 	""" Return visualization of parse trees in search results. """
-	# TODO: show context of x sentences around result, offer pagination.
 	gotresults = False
-	for n, (_textno, results, stderr) in enumerate(
+	for n, (textno, results, stderr) in enumerate(
 			doqueries(form, lines=True)):
 		if n == 0:
 			# NB: we do not hide function or morphology tags when exporting
@@ -381,6 +428,12 @@ def trees(form):
 						n.source[treebank.PARENT] in high or
 						n.source[treebank.WORD].lstrip('#') in high))
 				high += [int(a) for a in highwords]
+			link = ('<a href="/browse?text=%d&sent=%s%s%s">browse</a>'
+					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">context</a>' % (
+					textno, lineno,
+					'&nofunc' if 'nofunc' in form else '',
+					'&nomorph' if 'nomorph' in form else '',
+					textno, lineno, lineno))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True)
@@ -388,7 +441,7 @@ def trees(form):
 				line = "#%s \nERROR: %s\n%s\n%s\n" % (
 						lineno, err, treestr, tree)
 			else:
-				line = "#%s\n%s\n" % (lineno, treerepr)
+				line = "#%s [%s]\n%s\n" % (lineno, link, treerepr)
 			yield line
 		yield "</span>"
 	if not gotresults:
@@ -416,10 +469,12 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			link = "<a href='/browse?text=%d&sent=%s%s%s'>draw</a>" % (
+			link = ('<a href="/browse?text=%d&sent=%s%s%s">draw</a>'
+					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">context</a>' % (
 					textno, lineno,
 					'&nofunc' if 'nofunc' in form else '',
-					'&nomorph' if 'nomorph' in form else '')
+					'&nomorph' if 'nomorph' in form else '',
+					textno, lineno, lineno))
 			if dobrackets:
 				treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
 				out = treestr.replace(match,
@@ -858,7 +913,6 @@ fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False)
 
-
 # this is redundant but used to support both javascript-enabled /foo
 # as well as non-javascript fallback /?output=foo
 DISPATCH = {
@@ -876,4 +930,5 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+	APP.logger.info('ready')
 	APP.run(debug=True, host='0.0.0.0')

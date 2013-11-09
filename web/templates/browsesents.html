@@ -1,0 +1,24 @@
+<!doctype html>
+<title>Browsing sentences of {{ text }}</title>
+<style>
+#sents {
+	margin: 1em;
+}
+</style>
+<body>
+<form name=frm><tt>
+	<input type=hidden name=text value={{ textno }}>
+	{{ prevlink|safe }}
+	| <input type=text name=sent value={{ sentno }} size=3 style="text-align: right"> of {{ totalsents }}
+	| {{ nextlink|safe }}
+	| {{ text }} 
+</tt></form>
+
+<div id=sents>
+<ol start={{ mintree }}>
+{% for sent in sents %}
+<li>{{ sent|safe }}
+{% endfor %}
+</ol>
+</div>
+</body>
