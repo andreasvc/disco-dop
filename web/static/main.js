@@ -45,21 +45,27 @@ function toggletextbox() {
 }
 
 function show(id, name) {
+	/* show element with 'id' and enable (un-disable) all form elements with 'name'. */
 	var el = document.getElementById(id);
 	if(el.style.visibility != 'visible')
 		el.style.visibility = 'visible';
-	var elems = document.getElementsByName(name);
-	for (var n in elems)
-		elems[n].disabled = false;
+	if(name != '') {
+		var elems = document.getElementsByName(name);
+		for (var n in elems)
+			elems[n].disabled = false;
+	}
 }
 
 function hide(id, name) {
+	/* hide element with 'id' and disable all form elements with 'name'. */
 	var el = document.getElementById(id);
 	if(el.style.visibility != 'hidden')
 		el.style.visibility = 'hidden';
-	var elems = document.getElementsByName(name);
-	for (var n in elems)
-		elems[n].disabled = true;
+	if(name != '') {
+		var elems = document.getElementsByName(name);
+		for (var n in elems)
+			elems[n].disabled = true;
+	}
 }
 
 function placeFocus() {
@@ -67,11 +73,12 @@ function placeFocus() {
 	document.forms[0].elements[0].focus();
 }
 
-function triggerForm(name) {
-	/* restore the currently selected radio button according to GET param. */
-	var elems = document.getElementsByName('output')
+function triggerForm(name, val) {
+	/* call the onChange event of the form element with 'name' and value 'val',
+	 * so that the appropriate form elements may be shown/hidden. */
+	var elems = document.getElementsByName(name)
 	for (var n in elems)
-		if(elems[n].value == name) {
+		if(elems[n].value == val) {
 			elems[n].onchange();
 			break;
 		}
@@ -89,6 +96,8 @@ function entsub(e) {
 }
 
 function ajaxFunction() {
+	/* function to send request to parse a sentence and append the result to
+	 * the current document. */
 	var xmlhttp;
 	if(window.XMLHttpRequest) {
 	  // code for IE7+, Firefox, Chrome, Opera, Safari

@@ -500,8 +500,8 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	""" Extract recurring fragments from search results. """
-	if form.get('engine') == 'xpath':
-		yield "Not implemented for XPath queries."
+	if form.get('engine', 'tgrep2') != 'tgrep2':
+		yield "Only implemented for TGrep2 queries."
 		return
 	gotresults = False
 	uniquetrees = set()
@@ -669,31 +669,33 @@ def doxpathqueries(query, selected, lines=False, doexport=None,
 
 def doregexqueries(query, selected, lines=False, doexport=None,
 		linenos=False):
-	""" Run regex query on .txt files. """
+	""" Run regex query on tokenized sentences. """
 	for n, text in enumerate(TEXTS):
 		if n not in selected:
 			continue
 		out = err = ''
 		try:
 			regex = re.compile(query)
-			out = enumerate(regex.search(line) for line in tokenized(text))
+			out = enumerate((regex.search(a) for a in tokenized(text)), 1)
 			if lines:
-				yield n, (('%d:::%s:::%s:::%s' % (n + 1, text,
+				yield n, (('%d:::%s:::%s:::%s' % (n, text,
 						match.string, match.group())).decode('utf8')
 						for n, match in out if match is not None), err
 			elif doexport is None:
-				yield n, ''.join('%d:::\n' % (n + 1)
+				yield n, ''.join('%d:::\n' % n
 						for n, match in out if match is not None), err
 			elif doexport == 'sents':
 				yield ''.join('%s%s\n' % (
-						('%s:%d|' % (text, n + 1)) if linenos else '',
+						('%s:%d|' % (text, n)) if linenos else '',
 						match.string)
 						for n, match in out if match is not None)
 			else:
 				raise NotImplementedError
 		except Exception as err:
-			if lines or doexport is None:
+			if lines:
 				yield n, (), str(err)
+			elif doexport is None:
+				yield n, '', str(err)
 			else:
 				yield str(err)
 
@@ -938,7 +940,7 @@ TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
 ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
-		approx=True, indices=False)
+		approx=True, indices=False, fmt='bracket')
 
 # this is redundant but used to support both javascript-enabled /foo
 # as well as non-javascript fallback /?output=foo
