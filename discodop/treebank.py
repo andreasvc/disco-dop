@@ -72,8 +72,7 @@ class CorpusReader(object):
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
-		if fileids == '':
-			fileids = '*'
+		fileids = fileids or '*'
 		self._filenames = sorted(glob(os.path.join(root, fileids)), key=numbase)
 		assert functions in (None, 'leave', 'add', 'remove', 'replace'), (
 				functions)
@@ -399,7 +398,6 @@ class AlpinoCorpusReader(CorpusReader):
 				'Encoding specified in XML files, cannot be overriden.')
 		for filename in self._filenames:
 			block = ElementTree.parse(filename).getroot()
-			#n = s.find('comments')[0].text.split('|', 1)[0], s
 			# ../path/dir/file.xml => dir/file
 			path, filename = os.path.split(filename)
 			_, lastdir = os.path.split(path)

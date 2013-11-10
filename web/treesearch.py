@@ -48,7 +48,7 @@ APP = Flask(__name__)
 MORPH_TAGS = re.compile(
 		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
-GETLEAVES = re.compile(r" ([^ ()]+)(?=[ )])")
+GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 READGRADERE = re.compile(r'([- A-Za-z]+): ([0-9]+(?:\.[0-9]+)?)[\n /]')
@@ -197,22 +197,20 @@ def browsesents():
 		highlight = int(request.args.get('highlight', 0)) - 1
 		start = max(0, sentno - chunk // 2)
 		maxtree = min(start + chunk, NUMSENTS[textno])
-		nofunc = 'nofunc' in request.args
-		nomorph = 'nomorph' in request.args
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 		if os.path.exists(filename):
-			sents = [' '.join(GETLEAVES.findall(a)) for a
+			results = [' '.join(GETLEAVES.findall(a)) for a
 					in islice(io.open(filename, encoding='utf8'),
 					start, maxtree)]
 		elif ALPINOCORPUSLIB:
-			sents = [ALPINOLEAVES.search(XMLCORPORA[textno].read(
+			results = [ALPINOLEAVES.search(XMLCORPORA[textno].read(
 					'%d.xml' % (n + 1, ))).group(1)
 					for n in range(start, maxtree)]
 		else:
 			raise ValueError
-		sents = [('<font color=red>%s</font>' % cgi.escape(a))
+		results = [('<font color=red>%s</font>' % cgi.escape(a))
 				if n == highlight else cgi.escape(a)
-				for n, a in enumerate(sents, start)]
+				for n, a in enumerate(results, start)]
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = '<a href="browsesents?text=%d&sent=%d" id=prev>prev</a>' % (
@@ -223,7 +221,7 @@ def browsesents():
 					textno, sentno + chunk + 1)
 		return render_template('browsesents.html', textno=textno,
 				sentno=sentno + 1, text=TEXTS[textno],
-				totalsents=NUMSENTS[textno], sents=sents, prevlink=prevlink,
+				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
 				nextlink=nextlink, chunk=chunk, mintree=start + 1,
 				maxtree=maxtree)
 	return '<ol>\n%s</ol>\n' % '\n'.join(
@@ -251,9 +249,6 @@ def browse():
 					functions=None if nofunc else 'add',
 					morphology=None if nomorph else 'replace')).text(
 					unicodelines=True, html=True)
-					for n in range(start, maxtree)]
-			sents = [ALPINOLEAVES.search(XMLCORPORA[textno].read(
-					'%d.xml' % (n + 1, ))).group(1)
 					for n in range(start, maxtree)]
 		elif os.path.exists(filename):
 			drawntrees = [DrawTree(filterlabels(
@@ -427,8 +422,8 @@ def trees(form):
 						n.source[treebank.WORD].lstrip('#') in high))
 				high += [int(a) for a in highwords]
 			link = ('<a href="/browse?text=%d&sent=%s%s%s">browse</a>'
-					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">context</a>' % (
-					textno, lineno,
+					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
+					'context</a>' % (textno, lineno,
 					'&nofunc' if 'nofunc' in form else '',
 					'&nomorph' if 'nomorph' in form else '',
 					textno, lineno, lineno))
@@ -467,8 +462,8 @@ def sents(form, dobrackets=False):
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
 			link = ('<a href="/browse?text=%d&sent=%s%s%s">draw</a>'
-					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">context</a>' % (
-					textno, lineno,
+					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
+					'context</a>' % (textno, lineno,
 					'&nofunc' if 'nofunc' in form else '',
 					'&nomorph' if 'nomorph' in form else '',
 					textno, lineno, lineno))
@@ -477,15 +472,7 @@ def sents(form, dobrackets=False):
 				out = treestr.replace(match,
 						"<span class=r>%s</span>" % match)
 			else:
-				if form.get('engine', 'tgrep2') == 'tgrep2':
-					treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
-					pre, highlight, post = treestr.partition(match)
-					out = "%s <span class=r>%s</span> %s " % (
-							' '.join(GETLEAVES.findall(pre)),
-							' '.join(GETLEAVES.findall(highlight))
-									if '(' in highlight else highlight,
-							' '.join(GETLEAVES.findall(post)))
-				elif form.get('engine') == 'xpath':
+				if form.get('engine') == 'xpath':
 					out = ALPINOLEAVES.search(treestr).group(1)
 					# extract starting index of highlighted words
 					high = set(re.findall(
@@ -493,6 +480,14 @@ def sents(form, dobrackets=False):
 					out = ' '.join('<span class=r>%s</span>' % word
 							if str(n) in high
 							else word for n, word in enumerate(out.split()))
+				else:
+					treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
+					pre, highlight, post = treestr.partition(match)
+					out = "%s <span class=r>%s</span> %s " % (
+							' '.join(GETLEAVES.findall(pre)),
+							' '.join(GETLEAVES.findall(highlight))
+									if '(' in highlight else highlight,
+							' '.join(GETLEAVES.findall(post)))
 			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, out)
 		yield "</ol>"
 	yield '</pre>' if gotresults else 'No matches.'
@@ -582,6 +577,9 @@ def doqueries_(engine, query, selected, lines=False, doexport=None,
 	elif engine == 'xpath':
 		return doxpathqueries(query, selected, lines, doexport,
 				linenos)
+	elif engine == 'regex':
+		return doregexqueries(query, selected, lines, doexport,
+				linenos)
 	raise ValueError('unexpected query engine: %s' % engine)
 
 
@@ -669,6 +667,37 @@ def doxpathqueries(query, selected, lines=False, doexport=None,
 				yield str(err)
 
 
+def doregexqueries(query, selected, lines=False, doexport=None,
+		linenos=False):
+	""" Run regex query on .txt files. """
+	for n, text in enumerate(TEXTS):
+		if n not in selected:
+			continue
+		out = err = ''
+		try:
+			regex = re.compile(query)
+			out = enumerate(regex.search(line) for line in tokenized(text))
+			if lines:
+				yield n, (('%d:::%s:::%s:::%s' % (n + 1, text,
+						match.string, match.group())).decode('utf8')
+						for n, match in out if match is not None), err
+			elif doexport is None:
+				yield n, ''.join('%d:::\n' % (n + 1)
+						for n, match in out if match is not None), err
+			elif doexport == 'sents':
+				yield ''.join('%s%s\n' % (
+						('%s:%d|' % (text, n + 1)) if linenos else '',
+						match.string)
+						for n, match in out if match is not None)
+			else:
+				raise NotImplementedError
+		except Exception as err:
+			if lines or doexport is None:
+				yield n, (), str(err)
+			else:
+				yield str(err)
+
+
 def filterlabels(line, nofunc, nomorph):
 	""" Optionally remove morphological and grammatical function labels
 	from parse tree. """
@@ -688,11 +717,11 @@ def barplot(data, total, title, width=800.0, unit=''):
 	firstletters = {key[0] for key in data}
 	color = {}
 	if len(firstletters) <= 5:
-		color.update(zip(firstletters, range(5)))
+		color.update(zip(firstletters, range(1, 6)))
 	for key in sorted(data, key=data.get, reverse=True):
 		result.append('<br><div style="width:%dpx;" class=b%d></div>'
 				'<span>%s: %g %s</span>' % (round(width * data[key] / total),
-				color.get(key[0], 0) if data[key] else 'transparant',
+				color.get(key[0], 1) if data[key] else 0,
 				cgi.escape(key), data[key], unit,))
 	result.append('</div>\n')
 	return '\n'.join(result)
@@ -747,39 +776,47 @@ def preparecorpus():
 					shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
+def tokenized(text):
+	""" Return iterable with tokenized sentences of a text, one sentence at a
+	time, in the form of a byte string (with newline). """
+	base = os.path.join(CORPUS_DIR, text)
+	if os.path.exists(base + '.tok'):
+		return open(base + '.tok')
+	elif os.path.exists(base + '.mrg.t2c.gz'):
+		tgrep = subprocess.Popen(
+				args=[which('tgrep2'), '-t', '-c', base + '.mrg.t2c.gz', '*'],
+				shell=False, bufsize=-1, stdout=subprocess.PIPE)
+		return tgrep.stdout
+	elif os.path.exists(base + '.mrg'):
+		return (' '.join(GETLEAVES.findall(line)) + '\n'
+				for line in open(base + '.mrg'))
+	elif os.path.exists(base + '.dact'):
+		# may be in arbitrary order, so sort
+		result = {entry.name(): ALPINOLEAVES.search(
+				entry.contents()).group(1) + '\n' for entry
+				in alpinocorpus.CorpusReader(base + '.dact').entries()}
+		return [result[a] for a in sorted(result, key=treebank.numbase)]
+
+
 def getstyletable():
 	""" Run style(1) on all files and store results in a dictionary. """
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
-		files = (glob.glob(os.path.join(CORPUS_DIR, '*.t2c.gz'))
-				or glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
+		files = TEXTS
 	styletable = {}
 	for filename in sorted(files):
 		cmd = [which('style'), '--language', STYLELANG]
-		if filename.endswith('.t2c.gz'):
-			tgrep = subprocess.Popen(
-					args=[which('tgrep2'), '-t', '-c', filename, '*'],
-					shell=False, bufsize=-1, stdout=subprocess.PIPE)
-			stdin = tgrep.stdout  # pylint: disable=E1101
-		elif filename.endswith('.dact'):
-			stdin = subprocess.PIPE
-		else:
-			stdin = subprocess.PIPE
+		stdin = subprocess.PIPE
 		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 				stdin=stdin, stdout=subprocess.PIPE,
 				stderr=subprocess.STDOUT)
-		if filename.endswith('.t2c.gz'):
-			tgrep.wait()  # pylint: disable=E1101
-		elif filename.endswith('.dact'):
-			proc.stdin.writelines(  # pylint: disable=E1101
-					'%s\n' % ALPINOLEAVES.search(entry.contents()).group(1)
-					for entry in alpinocorpus.CorpusReader(filename).entries())
-		else:
+		if filename.endswith('.txt'):
 			# .txt files may have one paragraph per line;
 			# style expects paragraphs separated by two linebreaks.
 			proc.stdin.write(open(filename).read().replace('\n', '\n\n'))
-		if proc.stdin:  # pylint: disable=E1101
-			proc.stdin.close()  # pylint: disable=E1101
+		else:
+			proc.stdin.writelines(tokenized(filename))  # pylint: disable=E1101
+		proc.stdin.close()  # pylint: disable=E1101
 		out = proc.stdout.read()  # pylint: disable=E1101
 		proc.stdout.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101

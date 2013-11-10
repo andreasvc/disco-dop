@@ -5,33 +5,34 @@
 </title>
 <script src="static/main.js"></script>
 <style>
-.barplot {
+div.barplot {
     page-break-inside:avoid;
     page-break-after:auto;
     padding: 3px;
     margin: 1px;
 }
-.barplot div, span {
+div.barplot div+span {
     font: 10px sans-serif;
     padding: 3px;
     margin: 1px;
 }
-.barplot span {
+div.barplot span {
     position: relative;
     z-index: 1;
     left: .5em;
 }
-.b0, .b1, .b2, .b3, .b4 {
+.b0, .b1, .b2, .b3, .b4, .b5 {
     position: absolute;
     z-index: 0;
     height: 1.1em;
     left: 1em;
 }
-.b0 { background-color: lightblue; }
-.b1 { background-color: lightcoral; }
-.b2 { background-color: lightpink; }
+.b0 { background-color: transparent; }
+.b1 { background-color: lightblue; }
+.b2 { background-color: lightcoral; }
 .b3 { background-color: wheat; }
 .b4 { background-color: khaki; }
+.b5 { background-color: lightpink; }
 body { font-family: Helvetica, Arial, sans-serif; }
 blockquote { width: 600px; text-align: justify;  }
 span.r { color: red; }
@@ -49,18 +50,17 @@ span.tt { font-family: monospace; }
     A web-interface to query a corpus of parse trees.
     Enter a <a href="http://tedlab.mit.edu/~dr/Tgrep2/">TGrep2</a>
     (<a href="javascript: toggle('tgrephelp'); ">toggle TGrep overview</a>)
-    or an <a href="http://rug-compling.github.io/dact/cookbook/">XPath</a> query
-    to search the corpus. Results can be displayed in various ways or exported
-    to a file. Morphological tags of the form
-    <tt>TAG[MORPH1,...]</tt> and grammatical functions of the form
-    <tt>LABEL-FUNC</tt> can optionally be filtered out. There is a list of
-    available macros (<a href="static/tgrepmacros.txt">TGrep2</a>,
+	or <a href="http://rug-compling.github.io/dact/cookbook/">XPath</a> query
+	to search through the parse trees. Alternatively, enter a
+	<a href="http://docs.python.org/2/library/re.html#regular-expression-syntax">regex</a> query
+	to search the plain text files. Results can be displayed in various ways or
+	exported to a file. There is a list of available macros
+	(<a href="static/tgrepmacros.txt">TGrep2</a>,
     <a href="static/xpathmacros.txt">XPath</a>).</p>
 
-    <p>
-    <a href="/browse">Browse through corpus</a> |
-    <a href="/style">Show surface characteristics of texts</a>
-    (using <span class=tt><a href="http://manpages.ubuntu.com/manpages/precise/en/man1/style.1.html">style(1)</a></span>)
+	<p>Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
+	| <a href="/style">Stastistics &amp; readability measures</a> from
+    <span class=tt><a href="http://manpages.ubuntu.com/manpages/precise/en/man1/style.1.html">style(1)</a></span>
 </p></blockquote>
 
 <form action="/" method=get name=queryform onSubmit="mergecheckboxes(); "><table>
@@ -90,6 +90,8 @@ span.tt { font-family: monospace; }
         ' checked' if form.get('engine') == 'tgrep2' or not havexpath }}>TGrep2</label>
     <label><input type=radio name=engine value=xpath{{
         ' checked' if havexpath and (form.get('engine') == 'xpath' or 'engine' not in form) }}>XPath</label>
+    <label><input type=radio name=engine value=regex{{
+        ' checked' if form.get('engine') == 'regex' }}>regex</label>
     {% endif %}
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
     (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
