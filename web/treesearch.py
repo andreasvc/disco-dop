@@ -58,7 +58,7 @@ PERCENTAGE1RE = re.compile(
 		r'([A-Za-z][A-Za-z ()]+) ([0-9]+(?:\.[0-9]+)?)% \([0-9]+\)')
 PERCENTAGE2RE = re.compile(
 		r'([0-9]+(?:\.[0-9]+)?)% \([0-9]+\) ([A-Za-z ()]+)\n')
-WHITESPACE = re.compile(r'^(.*[ \n\r].*)$')
+CSQUOTE = re.compile(r'^(.*[ ,\n\r].*)$')
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -139,9 +139,9 @@ def style():
 		for n, filename in enumerate(sorted(STYLETABLE)):
 			name = os.path.basename(filename)
 			if n == 0:
-				yield 'text,%s\r\n' % ','.join(quotespace(key)
+				yield 'text,%s\r\n' % ','.join(csvquote(key)
 						for key in sorted(STYLETABLE[name]))
-			yield '%s,%s\r\n' % (quotespace(name), ','.join('%s' % val
+			yield '%s,%s\r\n' % (csvquote(name), ','.join('%s' % val
 					for _, val in sorted(STYLETABLE[name].items())))
 
 	if 'export' in request.args:
@@ -348,7 +348,7 @@ def counts(form, doexport=False):
 		relfreq[text] = 100.0 * cnt / total
 		sumtotal += total
 		if doexport:
-			yield '%s,%d,%g\r\n' % (quotespace(text), cnt, relfreq[text])
+			yield '%s,%d,%g\r\n' % (csvquote(text), cnt, relfreq[text])
 		else:
 			line = "%s%6d    %5.2f %%" % (
 					text.ljust(40)[:40], cnt, relfreq[text])
@@ -931,9 +931,9 @@ def which(program):
 	raise ValueError('%r not found in path; please install it.' % program)
 
 
-def quotespace(s):
+def csvquote(s):
 	""" Double-quote string if it contains a space or newline. """
-	return WHITESPACE.sub(r'"\1"', s)
+	return CSQUOTE.sub(r'"\1"', s)
 
 preparecorpus()
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
