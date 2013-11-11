@@ -6,6 +6,7 @@ import io
 import os
 import re
 import cgi
+import csv
 import sys
 import glob
 import logging
@@ -58,7 +59,6 @@ PERCENTAGE1RE = re.compile(
 		r'([A-Za-z][A-Za-z ()]+) ([0-9]+(?:\.[0-9]+)?)% \([0-9]+\)')
 PERCENTAGE2RE = re.compile(
 		r'([0-9]+(?:\.[0-9]+)?)% \([0-9]+\) ([A-Za-z ()]+)\n')
-CSQUOTE = re.compile(r'^(.*[ ,\n\r].*)$')
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -136,13 +136,13 @@ def style():
 
 	def generatecsv():
 		""" Generate CSV file. """
-		for n, filename in enumerate(sorted(STYLETABLE)):
-			name = os.path.basename(filename)
-			if n == 0:
-				yield 'text,%s\r\n' % ','.join(csvquote(key)
-						for key in sorted(STYLETABLE[name]))
-			yield '%s,%s\r\n' % (csvquote(name), ','.join('%s' % val
-					for _, val in sorted(STYLETABLE[name].items())))
+		tmp = io.BytesIO()
+		keys = sorted(next(iter(STYLETABLE.values()))) if STYLETABLE else []
+		writer = csv.writer(tmp)
+		writer.writerow(['text'] + keys)
+		writer.writerows([name] + [row[key] for key in keys]
+				for name, row in sorted(STYLETABLE.items()))
+		return tmp.getvalue()
 
 	if 'export' in request.args:
 		resp = Response(generatecsv(), mimetype='text/plain')
@@ -317,9 +317,7 @@ def counts(form, doexport=False):
 	gotresult = False
 	for n, (textno, results, stderr) in enumerate(doqueries(form, lines=False)):
 		if n == 0:
-			if doexport:
-				yield 'text,count,relfreq\r\n'
-			else:
+			if not doexport:
 				url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
 						form['query'], form['norm'], form['texts'],
 						form.get('engine', 'tgrep2'))
@@ -347,9 +345,7 @@ def counts(form, doexport=False):
 			raise ValueError
 		relfreq[text] = 100.0 * cnt / total
 		sumtotal += total
-		if doexport:
-			yield '%s,%d,%g\r\n' % (csvquote(text), cnt, relfreq[text])
-		else:
+		if not doexport:
 			line = "%s%6d    %5.2f %%" % (
 					text.ljust(40)[:40], cnt, relfreq[text])
 			indices = {int(line[:line.index(':::')])
@@ -359,8 +355,15 @@ def counts(form, doexport=False):
 				yield line + plot + '\n'
 			else:
 				yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
-	yield '</pre>'
-	if gotresult and not doexport:
+	if not doexport:
+		yield '</pre>'
+	if doexport:
+		tmp = io.BytesIO()
+		csvexport = csv.writer(tmp)
+		csvexport.writerow(['text', 'count', 'relfreq'])
+		csvexport.writerows([text, cnts[text], relfreq[text]] for text in cnts)
+		yield tmp.getvalue()
+	elif gotresult:
 		yield ("%s%6d    %5.2f %%\n</span>\n" % (
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
@@ -691,7 +694,7 @@ def doregexqueries(query, selected, lines=False, doexport=None,
 						for n, match in out if match is not None)
 			else:
 				raise NotImplementedError
-		except Exception as err:
+		except re.error as err:
 			if lines:
 				yield n, (), str(err)
 			elif doexport is None:
@@ -822,9 +825,6 @@ def getstyletable():
 		out = proc.stdout.read()  # pylint: disable=E1101
 		proc.stdout.close()  # pylint: disable=E1101
 		proc.wait()  # pylint: disable=E1101
-		if filename.endswith('.t2c.gz'):
-			tgrep.stdout.close()  # pylint: disable=E1101
-			tgrep.wait()  # pylint: disable=E1101
 		name = os.path.basename(filename)
 		styletable[name] = parsestyleoutput(out)
 	return styletable
@@ -929,11 +929,6 @@ def which(program):
 		if path and os.path.exists(os.path.join(path, program)):
 			return os.path.join(path, program)
 	raise ValueError('%r not found in path; please install it.' % program)
-
-
-def csvquote(s):
-	""" Double-quote string if it contains a space or newline. """
-	return CSQUOTE.sub(r'"\1"', s)
 
 preparecorpus()
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
