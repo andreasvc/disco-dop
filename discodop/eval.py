@@ -4,6 +4,7 @@ from __future__ import division, print_function
 import io
 import sys
 from getopt import gnu_getopt, GetoptError
+from decimal import Decimal
 from itertools import count
 from collections import defaultdict, Counter as multiset
 if sys.version[0] >= '3':
@@ -133,7 +134,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 			print(' ' * (keylen - 4) + a)
 		print('', '_' * ((keylen - 5) + len(HEADER[-1])))
 	# the suffix '40' is for the length restricted results
-	maxlenseen = sentcount = maxlenseen40 = sentcount40 = 0
+	maxlenseen = sentcount = maxlenseen40 = sentcount40 = Decimal(0)
 	goldb = multiset()
 	candb = multiset()
 	goldb40 = multiset()
@@ -152,8 +153,8 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 	candpos = []
 	goldpos40 = []
 	candpos40 = []
-	exact = exact40 = 0.0
-	dicenoms = dicedenoms = dicenoms40 = dicedenoms40 = 0
+	exact = exact40 = Decimal(0)
+	dicenoms = dicedenoms = dicenoms40 = dicedenoms40 = Decimal(0)
 	for n, ctree in cand_trees.items():
 		gtree = gold_trees[n]
 		cpos = sorted(ctree.pos())
@@ -283,7 +284,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 					for a, b in zip(cpos, gpos)))
 			if param['TED']:
 				print('Tree-dist: %g / %g = %g' % (
-					ted, denom, 1 - ted / denom))
+					ted, denom, 1 - ted / Decimal(denom)))
 				newtreedist(gtree, ctree, True)
 			if param['DEP']:
 				print('Sentence:', ' '.join(gsent))
@@ -684,7 +685,7 @@ def leafancestorpaths(tree, dellabel):
 
 def pathscore(gold, cand):
 	""" Get edit distance for two leaf-ancestor paths. """
-	return 1.0 - (edit_distance(cand, gold)
+	return 1 - (Decimal(edit_distance(cand, gold))
 					/ max(len(gold) + len(cand), 1))
 
 
@@ -721,27 +722,27 @@ def treedisteval(a, b, includeroot=False, debug=False):
 def recall(reference, candidate):
 	""" Get recall score for two multisets. """
 	if not reference:
-		return float('nan')
-	return sum(min(reference[a], candidate[a])
-			for a in reference & candidate) / sum(reference.values())
+		return Decimal('NaN')
+	return Decimal(sum(min(reference[a], candidate[a])
+			for a in reference & candidate)) / sum(reference.values())
 
 
 def precision(reference, candidate):
 	""" Get precision score for two multisets. """
 	if not candidate:
-		return float('nan')
-	return sum(min(reference[a], candidate[a])
-			for a in reference & candidate) / sum(candidate.values())
+		return Decimal('NaN')
+	return Decimal(sum(min(reference[a], candidate[a])
+			for a in reference & candidate)) / sum(candidate.values())
 
 
-def f_measure(reference, candidate, alpha=0.5):
+def f_measure(reference, candidate, alpha=Decimal(0.5)):
 	""" Get F-measure of precision and recall for two multisets.
 	The default weight ``alpha=0.5`` corresponds to the F_1-measure. """
 	p = precision(reference, candidate)
 	r = recall(reference, candidate)
 	if p == 0 or r == 0:
-		return float('nan')
-	return 1.0 / (alpha / p + (1 - alpha) / r)
+		return Decimal('NaN')
+	return Decimal(1) / (alpha / p + (1 - alpha) / r)
 
 
 def accuracy(reference, candidate):
@@ -751,31 +752,33 @@ def accuracy(reference, candidate):
 	``0<i<=len(test)`` such that ``test[i] == reference[i]``. """
 	assert len(reference) == len(candidate), (
 		'Sequences must have the same length.')
-	return sum(1 for a, b in zip(reference, candidate)
-			if a == b) / len(reference)
+	return Decimal(sum(1 for a, b in zip(reference, candidate)
+			if a == b)) / len(reference)
 
 
 def harmean(seq):
-	""" Compute harmonic mean of a sequence of non-zero numbers. """
-	numerator = denominator = 0
+	""" Compute harmonic mean of a sequence of numbers; returns NaN on zero
+	value. """
+	numerator = denominator = Decimal(0)
 	for a in seq:
 		if not a:
-			return float('nan')
+			return Decimal('NaN')
 		numerator += 1
-		denominator += 1 / a
+		denominator += Decimal(1) / a
 	if not denominator:
-		return float('nan')
+		return Decimal('NaN')
 	return numerator / denominator
 
 
 def mean(seq):
-	""" Compute arithmetic mean of a sequence. """
-	numerator = denominator = 0
+	""" Compute arithmetic mean of a sequence; returns NaN when seq is empty.
+	"""
+	numerator = denominator = Decimal(0)
 	for a in seq:
 		numerator += a
 		denominator += 1
 	if not denominator:
-		return float('nan')
+		return Decimal('NaN')
 	return numerator / denominator
 
 
