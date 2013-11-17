@@ -541,7 +541,7 @@ cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 
 #==============================================================================
 from unittest import TestCase
-testN = 1000
+testN = 100
 
 
 def getval(Entry entry):
@@ -584,7 +584,7 @@ class TestHeap(TestCase):
 			self.assertEqual(v, v2)
 			d.pop(v[0])
 			self.assertEqual(len(h), len(d))
-			self.assertEqual(set(h.items()), set(d.items()))
+			self.assertTrue(set(h.items()) == set(d.items()))
 		self.assertEqual(len(h), 0)
 
 	def test_popitem_ties(self):
@@ -640,7 +640,7 @@ class TestHeap(TestCase):
 			self.assertEqual(k in h, False)
 			self.assertEqual(k in d, False)
 			self.assertEqual(len(h), len(d))
-			self.assertEqual(set(h.items()), set(d.items()))
+			self.assertTrue(set(h.items()) == set(d.items()))
 		self.assertEqual(len(h), 0)
 
 	def test_pop(self):
@@ -652,7 +652,7 @@ class TestHeap(TestCase):
 			self.assertEqual(v, v2)
 			self.assertEqual(v, v3)
 			self.assertEqual(len(h), len(d))
-			self.assertEqual(set(h.items()), set(d.items()))
+			self.assertTrue(set(h.items()) == set(d.items()))
 		self.assertEqual(len(h), 0)
 
 	def test_change(self):
