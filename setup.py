@@ -27,6 +27,7 @@ metadata = dict(name='disco-dop',
 		requires=[
 				'cython (>=0.18)',
 				'numpy (>=1.5)',
+				'pytest',
 		],
 		packages=['discodop'],
 		scripts=['bin/discodop'],

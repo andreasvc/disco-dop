@@ -972,8 +972,6 @@ def do(sent, grammar):
 
 
 def test():
-	cdef Grammar grammar
-	testagenda()
 	grammar = Grammar([
 		((('S', 'VP_2', 'VMFIN'), ((0, 1, 0), )), 1),
 		((('VP_2', 'VP_2', 'VAINF'), ((0, ), (0, 1))), 0.5),

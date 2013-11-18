@@ -574,28 +574,7 @@ BALANCEDPUNCTMATCH = {'"': '"', '[': ']', '(': ')', '-': '-', "'": "'",
 
 def balancedpunctraise(tree, sent):
 	""" Move balanced punctuation marks " ' - ( ) [ ] together in the same
-	constituent. Based on rparse code.
-
-	>>> tree = ParentedTree.parse('(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20)'
-	... ' (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP (APPR 6) '
-	... '(CNP (NN 8) (ADV 9) (ISU ($. 10) ($. 11) ($. 12))))) (S (PRELS 15) '
-	... '(MPN (NE 16) (NE 17)) (ADJD 18) (VVFIN 19))) (VVFIN 21) (ADV 22) '
-	... '(NP (ADJA 23) (NN 24))) ($. 25))', parse_leaf=int)
-	>>> sent = ("Die zweite Konzertreihe , sechs Abende mit ' Orgel plus "
-	... ". . . ' , die Hayko Siemens musikalisch leitet , bietet wieder "
-	... "ungewoehnliche Kombinationen .".split())
-	>>> punctraise(tree, sent)
-	>>> balancedpunctraise(tree, sent)
-	>>> from discodop.treetransforms import addbitsets, fanout
-	>>> max(map(fanout, addbitsets(tree).subtrees()))
-	1
-	>>> nopunct = Tree.parse('(ROOT (S (NP (ART 0) (ADJA 1) (NN 2) (NP '
-	... '(CARD 3) (NN 4) (PP (APPR 5) (CNP (NN 6) (ADV 7)))) (S (PRELS 8) '
-	... '(MPN (NE 9) (NE 10)) (ADJD 11) (VVFIN 12))) (VVFIN 13) (ADV 14) '
-	... '(NP (ADJA 15) (NN 16))))', parse_leaf=int)
-	>>> max(map(fanout, addbitsets(nopunct).subtrees()))
-	1
-	"""
+	constituent. Based on rparse code. """
 	assert isinstance(tree, ParentedTree)
 	# right punct str as key, mapped to left index as value
 	punctmap = {}

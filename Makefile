@@ -13,6 +13,7 @@ clean:
 
 test: all
 	rm -rf sample/
+	py.test -q tests/unittests.py && \
 	python -tt -3 tests.py && \
 	cd tests/ && \
 	sh run.sh
@@ -41,4 +42,4 @@ lint: inplace
 		discodop/*.py web/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi && \
-	pylint --indent-string='\t' --disable=R,C0103 discodop/*.py web/*.py
+	cd web; pylint --indent-string='\t' --disable=R,C0103 ../discodop/*.py *.py

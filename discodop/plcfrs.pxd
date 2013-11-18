@@ -74,7 +74,7 @@ cdef inline Entry new_Entry(object k, object v, unsigned long c):
 @cython.final
 cdef class Agenda:
 	cdef unsigned long length, counter
-	cdef list heap
+	cdef readonly list heap
 	cdef dict mapping
 	cdef void setitem(self, key, object value)
 	cdef void setifbetter(self, key, object value)

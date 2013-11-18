@@ -1,3 +1,4 @@
 cython>=0.18
 numpy>=1.5
+pytest
 Flask

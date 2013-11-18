@@ -145,43 +145,11 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			not become part of the horizontal context of the labels. Can be
 			used to filter out adjunctions from this context.
 
+	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))')
 	>>> sent = 'das muss man jetzt machen'.split()
-	>>> treestr = '(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))'
-	>>> origtree = Tree(treestr); tree = Tree(treestr)
-	>>> print(binarize(tree, horzmarkov=0, tailmarker=''))
-	(S (VP (PDS 0) (VP|<> (ADV 3) (VVINF 4))) (S|<> (PIS 2) (VMFIN 1)))
-	>>> tree = unbinarize(tree); assert tree == origtree
-
 	>>> print(binarize(tree, horzmarkov=1, tailmarker=''))
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
-
-	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, horzmarkov=1, leftmostunary=False,
-	... rightmostunary=True, tailmarker=''))
-	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) (S|<PIS>
-		(PIS 2) (S|<VMFIN> (VMFIN 1))))
-
-	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, horzmarkov=1, leftmostunary=True,
-	... rightmostunary=False, tailmarker=''))
-	(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4)))) (S|<PIS>
-		(PIS 2) (VMFIN 1))))
-
-	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, factor='left', horzmarkov=2, tailmarker=''))
-	(S (S|<PIS,VMFIN> (VP (VP|<ADV,VVINF> (PDS 0) (ADV 3)) (VVINF 4))
-		(PIS 2)) (VMFIN 1))
-
-	>>> tree = unbinarize(tree); assert tree == origtree
-	>>> print(binarize(tree, horzmarkov=1, vertmarkov=3, leftmostunary=True,
-	... rightmostunary=False, tailmarker='', pospa=True))
-	(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP,S> 0) (VP|<ADV>^<S> (ADV^<VP,S>
-		3) (VVINF^<VP,S> 4)))) (S|<PIS> (PIS^<S> 2) (VMFIN^<S> 1))))
-
-	>>> tree = Tree('(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))')
-	>>> print(binarize(tree, tailmarker='', reverse=False))
-	(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> (D 3)
-		(S|<E,F> (E 4) (F 5)))))) """
+	"""
 	# assume all nodes have homogeneous children, terminals have no siblings
 	assert factor in ('left', 'right')
 	treeclass = tree.__class__
@@ -774,25 +742,7 @@ def splitdiscnodes(tree, markorigin=False):
 
 
 def mergediscnodes(tree):
-	""" Reverse transformation of splitdiscnodes()
-
-	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
-	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
-	>>> print(mergediscnodes(splitdiscnodes(tree)))
-	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6))
-		(VMFIN 3))
-	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
-	(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5)) (VAINF 6))
-		(VMFIN 3))
-	>>> tree = Tree.parse('(S (X (A 0) (A 2)) (X (A 1) (A 3)))', parse_leaf=int)
-	>>> print(mergediscnodes(splitdiscnodes(tree, markorigin=True)))
-	(S (X (A 0) (A 2)) (X (A 1) (A 3)))
-	>>> tree = Tree.parse('(S (X (A 0) (A 2)) (X (A 1) (A 3)))', parse_leaf=int)
-	>>> print(splitdiscnodes(tree, markorigin=True))
-	(S (X*0 (A 0)) (X*0 (A 1)) (X*1 (A 2)) (X*1 (A 3)))
-	>>> tree = Tree.parse('(S (X (A 0) (A 2)) (X (A 1) (A 3)))', parse_leaf=int)
-	>>> print(mergediscnodes(splitdiscnodes(tree)))
-	(S (X (A 0) (A 1) (A 2) (A 3))) """
+	""" Reverse transformation of ``splitdiscnodes()``. """
 	treeclass = tree.__class__
 	for node in tree.subtrees():
 		merge = defaultdict(list)

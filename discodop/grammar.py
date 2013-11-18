@@ -81,15 +81,15 @@ def lcfrs_productions(tree, sent, frontiers=False):
 	"""
 	leaves = tree.leaves()
 	assert len(set(leaves)) == len(leaves), (
-		"indices should be unique. indices: %r\ntree: %s" % (leaves, tree))
+			"indices should be unique. indices: %r\ntree: %s" % (leaves, tree))
 	assert sent, ("no sentence.\n"
-		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
+			"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
 	assert all(isinstance(a, int) for a in leaves), (
-		"indices should be integers.\ntree: %s\nindices: %r\nsent: %r" % (
-		tree.pprint(), leaves, sent))
+			"indices should be integers.\ntree: %s\nindices: %r\nsent: %r" % (
+			tree.pprint(), leaves, sent))
 	assert all(0 <= a < len(sent) for a in leaves), (
-		"indices should point to a word in the sentence.\n"
-		"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
+			"indices should point to a word in the sentence.\n"
+			"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
 	rules = []
 	for st in tree.subtrees():
 		if not st:
@@ -342,43 +342,7 @@ def flatten(tree, sent, ids):
 	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
-	>>> flatten("(NN 0)", ["foo"], ids)
-	([(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
-	>>> flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP (CNP|<TRUNC> "
-	... "(TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> (NN 3)))))) (S|<VAFIN> "
-	... "(VAFIN 4))) (VP (VP|<ADV> (ADV 5) (VP|<NP> (NP (ART 6) (NN 7)) "
-	... "(VP|<NP> (NP_2 8 10) (VP|<VVPP> (VVPP 9))))))))",
-	... ['Das', 'Garten-', 'und', 'Friedhofsamt', 'hatte', 'kuerzlich',
-	... 'dem', 'Ortsbeirat', None, None, None], ids)
-	([(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
-	(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
-	(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
-	(('S}<6>', 'S}<5>', 'ART@dem'), ((0, 1),)),
-	(('S}<5>', 'S}<4>', 'ADV@kuerzlich'), ((0, 1),)),
-	(('S}<4>', 'S}<3>', 'VAFIN@hatte'), ((0, 1),)),
-	(('S}<3>', 'S}<2>', 'NN@Friedhofsamt'), ((0, 1),)),
-	(('S}<2>', 'S}<1>', 'KON@und'), ((0, 1),)),
-	(('S}<1>', 'ART@Das', 'TRUNC@Garten-'), ((0, 1),)),
-	(('ART@Das', 'Epsilon'), ('Das',)),
-	(('TRUNC@Garten-', 'Epsilon'), ('Garten-',)),
-	(('KON@und', 'Epsilon'), ('und',)),
-	(('NN@Friedhofsamt', 'Epsilon'), ('Friedhofsamt',)),
-	(('VAFIN@hatte', 'Epsilon'), ('hatte',)),
-	(('ADV@kuerzlich', 'Epsilon'), ('kuerzlich',)),
-	(('ART@dem', 'Epsilon'), ('dem',)),
-	(('NN@Ortsbeirat', 'Epsilon'), ('Ortsbeirat',))],
-	'(S (S|<VP> (S|<NP> (NP {0} (CNP (CNP|<TRUNC> {1} (CNP|<KON> {2} \
-	(CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} (VP|<NP> \
-	(NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
-	>>> flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
-	... "(ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
-	... (None, None, None, None, None), ids)
-	([(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
-	(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
-	(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
-	'(S|<VP>_2 (VP_3 (VP|<NP>_3 {0} (VP|<ADV>_2 {2} (VP|<VVPP> {3})))) \
-	(S|<VAFIN> {1}))') """
+	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))') """
 	from discodop.treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
