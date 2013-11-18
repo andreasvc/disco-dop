@@ -72,13 +72,12 @@ def lcfrs_productions(tree, sent, frontiers=False):
 
 	>>> tree = Tree.parse("(S (VP_2 (V 0) (ADJ 2)) (NP 1))", parse_leaf=int)
 	>>> sent = "is Mary happy".split()
-	>>> lcfrs_productions(tree, sent)
-	[(('S', 'VP_2', 'NP'), ((0, 1, 0),)),
-	(('VP_2', 'V', 'ADJ'), ((0,), (1,))),
-	(('V', 'Epsilon'), ('is',)),
-	(('ADJ', 'Epsilon'), ('happy',)),
-	(('NP', 'Epsilon'), ('Mary',))]
-	"""
+	>>> for p in lcfrs_productions(tree, sent): print(p)
+	(('S', 'VP_2', 'NP'), ((0, 1, 0),))
+	(('VP_2', 'V', 'ADJ'), ((0,), (1,)))
+	(('V', 'Epsilon'), ('is',))
+	(('ADJ', 'Epsilon'), ('happy',))
+	(('NP', 'Epsilon'), ('Mary',))"""
 	leaves = tree.leaves()
 	assert len(set(leaves)) == len(leaves), (
 			"indices should be unique. indices: %r\ntree: %s" % (leaves, tree))
@@ -338,11 +337,11 @@ def flatten(tree, sent, ids):
 	>>> ids = UniqueIDs()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> flatten(tree, sent, ids)
+	>>> flatten(tree, sent, ids)  # doctest: +NORMALIZE_WHITESPACE
 	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))') """
+	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')"""
 	from discodop.treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
@@ -393,7 +392,7 @@ def nodefreq(tree, dectree, subtreefd, nonterminalfd):
 	>>> nodefreq(tree, dectree, fd, multiset())
 	4
 	>>> fd == multiset({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
-	True """
+	True"""
 	nonterminalfd[tree.label] += 1
 	nonterminalfd[dectree.label] += 1
 	if isinstance(tree[0], Tree):
@@ -427,15 +426,16 @@ class TreeDecorator(object):
 		>>> d = TreeDecorator()
 		>>> tree = Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))", parse_leaf=int)
 		>>> d.decorate(tree, ['the', 'dog', 'walks'])
+		... # doctest: +NORMALIZE_WHITESPACE
 		Tree('S', [Tree('NP@1-0', [Tree('DT@1-1', [0]),
-				Tree('N@1-2', [1])]), Tree('VP@1-3', [2])])
+			Tree('N@1-2', [1])]), Tree('VP@1-3', [2])])
 		>>> d = TreeDecorator(memoize=True)
 		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
 		...		parse_leaf=int), ['the', 'dog', 'walks']))
 		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@1-4 2))
 		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
 		...		parse_leaf=int), ['the', 'dog', 'barks']))
-		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@2-4 2)) """
+		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@2-4 2))"""
 		self.n += 1  # sentence number
 		if self.memoize:
 			self.ids = 0  # node number
@@ -526,7 +526,7 @@ class UniqueIDs(object):
 	>>> next(ids)
 	0
 	>>> ids['foo'], ids['bar'], ids['foo']
-	(1, 2, 1) """
+	(1, 2, 1)"""
 	def __init__(self):
 		self.cnt = 0  # next available ID
 		self.ids = {}  # IDs for labels seen
@@ -563,7 +563,7 @@ def ranges(s):
 	""" Partition s into a sequence of lists corresponding to contiguous ranges
 
 	>>> list(ranges( (0, 1, 3, 4, 6) ))
-	[[0, 1], [3, 4], [6]] """
+	[[0, 1], [3, 4], [6]]"""
 	rng = []
 	for a in s:
 		if not rng or a == rng[-1] + 1:
@@ -596,7 +596,7 @@ def defaultparse(wordstags, rightbranching=False):
 	'(NOPARSE (X like) (X this) (NN example) (X here))'
 	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
 	... ('here','X')], True)
-	'(NP (X like) (NP (X this) (NP (NN example) (NP (X here)))))' """
+	'(NP (X like) (NP (X this) (NP (NN example) (NP (X here)))))'"""
 	if rightbranching:
 		if wordstags[1:]:
 			return "(NP (%s %s) %s)" % (wordstags[0][1],
@@ -614,7 +614,7 @@ def cartpi(seq):
 	""" itertools.product doesn't support infinite sequences!
 
 	>>> list(islice(cartpi([count(), count(0)]), 9))
-	[(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)] """
+	[(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)]"""
 	if seq:
 		return (b + (a, ) for b in cartpi(seq[:-1]) for a in seq[-1])
 	return ((), )

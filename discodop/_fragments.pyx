@@ -636,25 +636,31 @@ def repl(d):
 	return f
 
 
+def pygetsent(frag, list sent):
+	"""
+	>>> pygetsent('(S (NP 2) (VP 4))',
+	... ['The', 'tall', 'man', 'there', 'walks'])
+	('(S (NP 0) (VP 2))', ('man', None, 'walks'))
+	>>> pygetsent('(VP (VB 0) (PRT 3))', ['Wake', 'your', 'friend', 'up'])
+	('(VP (VB 0) (PRT 2))', ('Wake', None, 'up'))
+	>>> pygetsent('(S (NP 2:2 4:4) (VP 1:1 3:3))',
+	... ['Walks','the','quickly','man'])
+	('(S (NP 1 3) (VP 0 2))', (None, None, None, None))
+	>>> pygetsent('(ROOT (S 0:2) ($. 3))', ['Foo', 'bar', 'zed', '.'])
+	('(ROOT (S 0) ($. 1))', (None, '.'))
+	>>> pygetsent('(ROOT (S 0) ($. 3))', ['Foo', 'bar', 'zed','.'])
+	('(ROOT (S 0) ($. 2))', ('Foo', None, '.'))
+	>>> pygetsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', '''In Japan
+	...  wird offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur
+	...  gr\\xf6\\xdften Bank der Welt vorbereitet .'''.split())
+	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))"""
+	return getsent(frag, sent)
+
+
 cdef getsent(frag, list sent):
 	""" Select the words that occur in the fragment and renumber terminals in
 	fragment such that the first index is 0 and any gaps have a width of 1.
-	Expects a tree as string where frontier nodes are marked with intervals.
-
-	>>> getsent('(S (NP 2) (VP 4))', ['The', 'tall', 'man', 'there', 'walks'])
-	('(S (NP 0) (VP 2))', ('man', None, 'walks'))
-	>>> getsent('(VP (VB 0) (PRT 3))', ['Wake', 'your', 'friend', 'up'])
-	('(VP (VB 0) (PRT 2))', ('Wake', None, 'up'))
-	>>> getsent('(S (NP 2:2 4:4) (VP 1:1 3:3))',['Walks','the','quickly','man'])
-	('(S (NP 1 3) (VP 0 2))', (None, None, None, None))
-	>>> getsent('(ROOT (S 0:2) ($. 3))', ['Foo', 'bar', 'zed', '.'])
-	('(ROOT (S 0) ($. 1))', (None, '.'))
-	>>> getsent('(ROOT (S 0) ($. 3))', ['Foo', 'bar', 'zed','.'])
-	('(ROOT (S 0) ($. 2))', ('Foo', None, '.'))
-	>>> getsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', '''In Japan wird
-	...  offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur
-	...  gr\\xf6\\xdften Bank der Welt vorbereitet .'''.split(' '))
-	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None)) """
+	Expects a tree as string where frontier nodes are marked with intervals."""
 	cdef:
 		int n, m = 0, maxl
 		list newsent = []

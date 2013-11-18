@@ -335,7 +335,7 @@ def introducepreterminals(tree, ids=None):
 
 	>>> tree = Tree('(S (X a b (CD c d) e))')
 	>>> print(introducepreterminals(tree))
-	(S (X (X/a a) (X/b b) (CD (CD/c c) (CD/d d)) (X/e e))) """
+	(S (X (X/a a) (X/b b) (CD (CD/c c) (CD/d d)) (X/e e)))"""
 	assert isinstance(tree, Tree)
 	treeclass = tree.__class__
 	agenda = [tree]
@@ -514,7 +514,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	>>> print(max(map(complexityfanout, a.subtrees())))
 	(14, 6)
 	>>> print(max(map(complexityfanout, b.subtrees())))
-	(15, 5) """
+	(15, 5)"""
 	def newproduction(a, b):
 		""" return a new 'production' (here a tree) combining a and b """
 		if head is not None:
@@ -694,9 +694,9 @@ def contsets(nodes):
 
 	>>> tree = Tree.parse(
 	... "(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
-	>>> print(list(contsets(tree)))
+	>>> print(list(contsets(tree)))  # doctest: +NORMALIZE_WHITESPACE
 	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])],
-	[Tree('CARD', [4]), Tree('VVPP', [5])]] """
+	[Tree('CARD', [4]), Tree('VVPP', [5])]]"""
 	rng, subset = -1, []
 	mins = {min(a.leaves()) if isinstance(a, Tree) else a: a for a in nodes}
 	leaves = [a for child in nodes for a in child.leaves()]
@@ -720,9 +720,11 @@ def splitdiscnodes(tree, markorigin=False):
 	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
 	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
 	>>> print(splitdiscnodes(tree.copy(True)))
+	...  # doctest: +NORMALIZE_WHITESPACE
 	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4)
 		(VVPP 5)) (VAINF 6)))
 	>>> print(splitdiscnodes(tree, markorigin=True))
+	...  # doctest: +NORMALIZE_WHITESPACE
 	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1
 		(CARD 4) (VVPP 5)) (VAINF 6))) """
 	treeclass = tree.__class__

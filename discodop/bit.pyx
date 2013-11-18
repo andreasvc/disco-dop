@@ -5,8 +5,7 @@ from __future__ import print_function
 def pyintbitcount(a):
 	""" Number of set bits (1s)
 	>>> bitcount(0b0011101)
-	4
-	"""
+	4"""
 	count = 0
 	while a:
 		a &= a - 1
@@ -17,15 +16,14 @@ def pyintbitcount(a):
 cpdef int bitcount(ULLong vec):
 	""" Number of set bits (1s)
 	>>> bitcount(0b0011101)
-	4
-	"""
+	4"""
 	return __builtin_popcountll(vec)
 
 
 cpdef int pyintnextset(a, int pos):
 	""" First set bit, starting from pos
 	>>> pyintnextset(0b001101, 1)
-	2 """
+	2"""
 	cdef ULong mask = -1
 	a >>= pos
 	if a == 0:
@@ -39,8 +37,7 @@ cpdef int pyintnextset(a, int pos):
 cpdef int fanout(arg):
 	""" number of contiguous components in bit vector (gaps plus one)
 	>>> fanout(0b011011011)
-	3
-	"""
+	3"""
 	cdef UInt result = 0
 	cdef ULLong vec
 	if arg < ((1ULL << (8ULL * sizeof(ULLong) - 1ULL)) - 1ULL):

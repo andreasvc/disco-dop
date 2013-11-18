@@ -11,9 +11,8 @@ clean:
 	find discodop -name '*.html' -delete
 	rm -rf discodop/__pycache__
 
-test: all
-	rm -rf sample/
-	py.test -q tests/unittests.py && \
+test: all inplace
+	py.test --doctest-modules discodop/ tests/unittests.py && \
 	python -tt -3 tests.py && \
 	cd tests/ && \
 	sh run.sh

@@ -316,7 +316,7 @@ def unifymorphfeat(feats, percolatefeatures=None):
 	>>> print(unifymorphfeat({'Def.*.*', '*.Sg.*', '*.*.Akk'}))
 	Akk.Def.Sg
 	>>> print(unifymorphfeat({'LID[bep,stan,rest]', 'N[soort,ev,zijd,stan]'}))
-	bep,ev,rest,soort,stan,zijd """
+	bep,ev,rest,soort,stan,zijd"""
 	sep = '.' if any('.' in a for a in feats) else ','
 	result = set()
 	for a in feats:

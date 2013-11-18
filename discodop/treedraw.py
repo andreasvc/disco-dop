@@ -71,7 +71,8 @@ class DrawTree(object):
 	:param abbr: when True, abbreviate labels longer than 5 characters.
 
 	>>> print(DrawTree('(S (NP Mary) (VP walks))'))
-		  S
+	... # doctest: +NORMALIZE_WHITESPACE
+	      S
 	  ____|____
 	 NP        VP
 	 |         |

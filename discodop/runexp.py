@@ -955,7 +955,11 @@ def readparam(filename):
 
 
 def test():
-	""" Not implemented. """
+	""" Run ``sample.prm``. """
+	import shutil
+	if os.path.exists('sample.prm') and os.path.exists('sample/'):
+		shutil.rmtree('sample/')
+	main(['runexp.py', 'sample.prm'])
 
 
 def main(argv=None):

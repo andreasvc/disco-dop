@@ -521,7 +521,7 @@ def transitiveclosure(eqpairs):
 	1
 	>>> k, v = result.popitem()
 	>>> k in ('A', 'B', 'C') and v == {'A', 'B', 'C'}
-	True """
+	True"""
 	edges = defaultdict(set)
 	for a, b in eqpairs:
 		edges[a].add(b)
@@ -788,7 +788,7 @@ def intervals(seq):
 	terminals ``x`` such that ``a <= x <= b``.
 
 	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
-	[(0, 1), (3, 4), (6, 8)] """
+	[(0, 1), (3, 4), (6, 8)]"""
 	start = prev = None
 	for a in seq:
 		if start is None:
