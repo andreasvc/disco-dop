@@ -1,3 +1,4 @@
+import re
 from unittest import TestCase
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
@@ -6,6 +7,7 @@ from discodop.treetransforms import binarize, unbinarize, \
 		addbitsets, fanout
 from discodop.treebanktransforms import punctraise, balancedpunctraise
 from discodop.grammar import flatten, UniqueIDs
+# FIXME only import for relevant test:
 from discodop.plcfrs import Agenda, getparent
 
 class Test_treetransforms:
@@ -293,3 +295,30 @@ class TestHeap(TestCase):
 		#strip off class name
 		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
 		self.assertEqual(d, eval(dstr))
+
+
+def test_fragments():
+	from discodop._fragments import getctrees, fastextractfragments, \
+			exactcounts
+	treebank = [binarize(Tree(x)) for x in """\
+(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
+(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
+(S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
+(S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (JJ yellow) (NN cat))))
+(S (NP (DT The) (JJ little) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
+(S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
+(S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))\
+		""".splitlines()]
+	sents = [tree.leaves() for tree in treebank]
+	for tree in treebank:
+		for n, idx in enumerate(tree.treepositions('leaves')):
+			tree[idx] = n
+	params = getctrees(treebank, sents)
+	fragments = fastextractfragments(params['trees1'], params['sents1'], 0, 0,
+			params['labels'], discontinuous=True, approx=False)
+	counts = exactcounts(params['trees1'], params['trees1'],
+			list(fragments.values()), fast=True)
+	assert len(fragments) == 25
+	assert sum(counts) == 100
+	for (a, b), c in sorted(zip(fragments, counts), key=repr):
+		print("%s\t%d" % (re.sub("[0-9]+", lambda x: b[int(x.group())], a), c))

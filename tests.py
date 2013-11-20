@@ -22,7 +22,8 @@ for mod in MODULES:
 			optionflags=NORMALIZE_WHITESPACE | REPORT_NDIFF)
 	assert fail == 0, modname
 for mod in MODULES:
-	mod.test()
+	if hasattr(mod, 'test'):
+		mod.test()
 for modname, (fail, attempted) in sorted(results.items(), key=itemgetter(1)):
 	if attempted:
 		print('%s: %d doctests succeeded!' % (modname, attempted))
