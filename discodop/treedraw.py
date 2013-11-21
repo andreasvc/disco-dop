@@ -29,9 +29,9 @@ Options (* marks default option):
   --encoding=enc   Specify a different encoding than the default UTF-8.
   --functions=x    'leave'=default: leave syntactic labels as is,
                    'remove': strip functions off labels,
-                   'add': evaluate both syntactic categories and functions,
-                   'replace': only evaluate grammatical functions.
-  --morphology=x   'no'=default: only evaluate POS tags,
+                   'add': show both syntactic categories and functions,
+                   'replace': only show grammatical functions.
+  --morphology=x   'no'=default: only show POS tags,
                    'add': concatenate morphology tags to POS tags,
                    'replace': replace POS tags with morphology tags,
                    'between': add morphological node between POS tag and word.
@@ -151,33 +151,32 @@ class DrawTree(object):
 		- edges[id]: parent id of node with this id (ordered dictionary)
 		"""
 		def findcell(m, matrix, startoflevel, children):
-			""" find vacant row, column index
-			iterate over current rows for this level (try lowest first)
+			""" Find vacant row, column index.
+			Iterate over current rows for this level (try lowest first)
 			and look for cell between first and last child of this node,
 			add new row to level if no free row available. """
 			candidates = [a for _, a in children[m]]
 			center = min(candidates) + (max(candidates) - min(candidates)) // 2
-			initi = initj = i = j = center
 
-			for idx in range(startoflevel, len(matrix) + 1):
-				if idx == len(matrix):
+			for rowidx in range(startoflevel, len(matrix) + 1):
+				if rowidx == len(matrix):
 					# need to add a new row
 					matrix.append([vertline if a not in (corner, None)
 							else None for a in matrix[-1]])
-				row = matrix[idx]
-				i, j = initi, initj
+				row = matrix[rowidx]
+				i = j = center
 				# place unaries directly above child; no restrictions for root
 				if len(children[m]) == 1 or ids[m] == 0:
-					return idx, i
+					return rowidx, i
 				elif all(a in (None, vertline) for a in
-						row[min(children[m], key=itemgetter(1))[1]:
-								max(children[m], key=itemgetter(1))[1] + 1]):
+						row[min(children[m], key=itemgetter(1))[1]:max(
+								children[m], key=itemgetter(1))[1] + 1]):
 					# find free column
 					while zeroindex < j or i < scale * len(sent):
-						if scale * len(sent) > i and matrix[idx][i] is None:
-							return idx, i
-						elif zeroindex < j and matrix[idx][j] is None:
-							return idx, j
+						if scale * len(sent) > i and matrix[rowidx][i] is None:
+							return rowidx, i
+						elif zeroindex < j and matrix[rowidx][j] is None:
+							return rowidx, j
 						i += 1
 						j -= 1
 			raise ValueError('could not find a free cell.')
@@ -187,10 +186,9 @@ class DrawTree(object):
 				'All leaves must be integer indices.')
 		assert len(leaves) == len(set(leaves)), (
 				'Indices must occur at most once.')
-		assert all(0 <= n < len(sent) for n in leaves), (
-					'All leaves must be in the interval 0..n with n=len(sent)'
-					'\nlength: %d leaves: %r\nsent: %s' % (
-					len(sent), tree.leaves(), sent))
+		assert all(0 <= n < len(sent) for n in leaves), ('All leaves must be '
+				'in the interval 0..n with n=len(sent)\nlength: %d leaves: '
+				'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
 		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)
 		for a in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
@@ -222,8 +220,7 @@ class DrawTree(object):
 				terminals.append(a)
 
 		for n in levels:
-			levels[n].sort(key=lambda n: (max(tree[n].leaves())
-					- min(tree[n].leaves()), len(n)), reverse=True)
+			levels[n].sort(key=lambda n: len(tree[n].leaves()))
 		preterminals.sort()
 		levels[max(levels) + 1] = preterminals
 		terminals.sort()
@@ -272,8 +269,6 @@ class DrawTree(object):
 				# add column to the set of children for its parent
 				if m != ():
 					childcols[m[:-1]].add((rowindex, i))
-			#print('level', n)
-			#for row in matrix: print(''.join(('%4s' % a)[-2:] for a in row))
 		assert len(positions) == 0
 
 		# remove unused columns, right to left
@@ -304,7 +299,7 @@ class DrawTree(object):
 		for i in reversed(positions):
 			for j, _ in enumerate(tree[i]):
 				edges[ids[i + (j, )]] = ids[i]
-		#for row in matrix: print(', '.join('%4s' % a for a in row))
+
 		return nodes, coords, edges
 
 	def svg(self, nodecolor='blue', leafcolor='red'):
@@ -765,7 +760,7 @@ def main():
 					morphology=opts.get('--morphology'))
 			corpora.append((corpus.parsed_sents(), corpus.sents()))
 		numsents = len(corpus.sents())
-		print('Viewing:', *args)
+		print('Viewing:', ' '.join(args))
 		for n, sentid in enumerate(corpora[0][0], 1):
 			print('%d of %s (sentid=%s; len=%d):' % (
 					n, numsents, sentid, len(corpora[0][1][sentid])))
