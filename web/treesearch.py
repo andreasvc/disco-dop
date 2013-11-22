@@ -947,16 +947,15 @@ DISPATCH = {
 	'brackets': brackets,
 	'fragments': fragmentsinresults,
 }
+logging.basicConfig()
+for log in (logging.getLogger(), APP.logger):
+	log.setLevel(logging.DEBUG)
+	log.handlers[0].setFormatter(logging.Formatter(
+			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+preparecorpus()
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
+ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
 
 
 if __name__ == '__main__':
-	logging.basicConfig()
-	for log in (logging.getLogger(), APP.logger):
-		log.setLevel(logging.DEBUG)
-		log.handlers[0].setFormatter(logging.Formatter(
-				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	preparecorpus()
-	TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
-	ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
-	APP.logger.info('ready')
 	APP.run(debug=True, host='0.0.0.0')
