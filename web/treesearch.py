@@ -803,24 +803,28 @@ def tokenized(text):
 		return [result[a] for a in sorted(result, key=treebank.numbase)]
 
 
-def getstyletable():
+def getstyletable(texts):
 	""" Run style(1) on all files and store results in a dictionary. """
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
-		files = TEXTS
+		files = texts
 	styletable = {}
 	for filename in sorted(files):
 		cmd = [which('style'), '--language', STYLELANG]
 		stdin = subprocess.PIPE
 		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 				stdin=stdin, stdout=subprocess.PIPE,
-				stderr=subprocess.STDOUT)
-		if filename.endswith('.txt'):
-			# .txt files may have one paragraph per line;
-			# style expects paragraphs separated by two linebreaks.
-			proc.stdin.write(open(filename).read().replace('\n', '\n\n'))
-		else:
-			proc.stdin.writelines(tokenized(filename))  # pylint: disable=E1101
+				stderr=subprocess.PIPE)
+		try:
+			if filename.endswith('.txt'):
+				# .txt files may have one paragraph per line;
+				# style expects paragraphs separated by two linebreaks.
+				proc.stdin.write(open(filename).read().replace('\n', '\n\n'))
+			else:
+				proc.stdin.writelines(tokenized(filename))  # pylint: disable=E1101
+		except IOError as err:
+			APP.logger.error('%s\n%s', err, proc.stderr.read())
+			return {}
 		proc.stdin.close()  # pylint: disable=E1101
 		out = proc.stdout.read()  # pylint: disable=E1101
 		proc.stdout.close()  # pylint: disable=E1101
@@ -908,7 +912,7 @@ def getcorpus():
 				print(afiles[n])
 		texts = [os.path.splitext(os.path.basename(a))[0]
 				for a in tfiles or afiles]
-		styletable = getstyletable()
+		styletable = getstyletable(texts)
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
 	return texts, numsents, numconst, numwords, styletable, xmlcorpora
@@ -930,9 +934,6 @@ def which(program):
 			return os.path.join(path, program)
 	raise ValueError('%r not found in path; please install it.' % program)
 
-preparecorpus()
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
-ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
 		approx=True, indices=False, fmt='bracket')
@@ -954,5 +955,8 @@ if __name__ == '__main__':
 		log.setLevel(logging.DEBUG)
 		log.handlers[0].setFormatter(logging.Formatter(
 				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	#APP.logger.info('ready')
+	preparecorpus()
+	TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
+	ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
+	APP.logger.info('ready')
 	APP.run(debug=True, host='0.0.0.0')
