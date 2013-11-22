@@ -156,8 +156,11 @@ class DrawTree(object):
 			and look for cell between first and last child of this node,
 			add new row to level if no free row available. """
 			candidates = [a for _, a in children[m]]
-			center = min(candidates) + (max(candidates) - min(candidates)) // 2
-
+			center = sum(candidates) // len(candidates)  # center of gravity
+			if max(candidates) - min(candidates) > 2 * scale:
+				center -= center % scale  # round to unscaled coordinate
+			if ids[m] == 0:
+				startoflevel = len(matrix)
 			for rowidx in range(startoflevel, len(matrix) + 1):
 				if rowidx == len(matrix):
 					# need to add a new row
@@ -168,18 +171,23 @@ class DrawTree(object):
 				# place unaries directly above child; no restrictions for root
 				if len(children[m]) == 1 or ids[m] == 0:
 					return rowidx, i
-				elif all(a in (None, vertline) for a in
-						row[min(children[m], key=itemgetter(1))[1]:max(
-								children[m], key=itemgetter(1))[1] + 1]):
+				elif all(a in (None, vertline) for a
+						in row[min(candidates):max(candidates) + 1]):
 					# find free column
-					while zeroindex < j or i < scale * len(sent):
-						if scale * len(sent) > i and matrix[rowidx][i] is None:
+					while j > zeroindex or i < lastindex:
+						if i < lastindex and matrix[rowidx][i] is None:
 							return rowidx, i
-						elif zeroindex < j and matrix[rowidx][j] is None:
+						elif j > zeroindex and matrix[rowidx][j] is None:
 							return rowidx, j
 						i += 1
 						j -= 1
 			raise ValueError('could not find a free cell.')
+
+		def dumpmatrix():
+			""" Dump matrix contents for debugging purposes. """
+			for n, _ in enumerate(matrix):
+				print(n, ':', ' '.join(('%2r' % i)[:2] for i in matrix[n]))
+			print()
 
 		leaves = tree.leaves()
 		assert all(isinstance(n, int) for n in leaves), (
@@ -193,19 +201,20 @@ class DrawTree(object):
 		tree = tree.copy(True)
 		for a in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
 			a.sort(key=lambda n: min(n.leaves()))
-		scale = 10
+		scale = 2
 		crossed = set()
-		zeroindex = min(tree.leaves())
+		zeroindex = scale * min(tree.leaves())
+		lastindex = scale * len(sent)
 		# internal nodes and lexical nodes (no frontiers)
 		positions = tree.treepositions()
-		depth = max(map(len, positions)) + 1
+		maxdepth = max(map(len, positions)) + 1
 		childcols = defaultdict(set)
 		matrix = [[None] * (len(sent) * scale)]
 		nodes = {}
 		ids = {a: n for n, a in enumerate(positions)}
 		self.highlight.update(n for a, n in ids.items()
 				if not highlight or tree[a] in highlight)
-		levels = {n: [] for n in range(depth)}
+		levels = {n: [] for n in range(maxdepth)}
 		preterminals = []
 		terminals = []
 		for a in positions:
@@ -215,12 +224,13 @@ class DrawTree(object):
 						and sent[node[0]] is not None):
 					preterminals.append(a)
 				else:
-					levels[len(a)].append(a)
+					levels[maxdepth - node.height()].append(a)
 			else:
 				terminals.append(a)
 
 		for n in levels:
-			levels[n].sort(key=lambda n: len(tree[n].leaves()))
+			levels[n].sort(key=lambda n: (  # len(tree[n].leaves()),
+					max(tree[n].leaves()) - min(tree[n].leaves())))
 		preterminals.sort()
 		levels[max(levels) + 1] = preterminals
 		terminals.sort()
@@ -247,7 +257,7 @@ class DrawTree(object):
 			matrix.append([vertline if a not in (corner, None) else None
 					for a in matrix[-1]])
 			for m in nodesatdepth:  # [::-1]:
-				if n < depth - 1 and childcols[m]:
+				if n < maxdepth - 1 and childcols[m]:
 					_, pivot = min(childcols[m], key=itemgetter(1))
 					if ({a[:-1] for row in matrix[:-1] for a in row[:pivot]
 							if isinstance(a, tuple)} &
@@ -255,20 +265,22 @@ class DrawTree(object):
 							if isinstance(a, tuple)}):
 						crossed.add(m)
 
-				rowindex, i = findcell(m, matrix, startoflevel, childcols)
+				rowidx, i = findcell(m, matrix, startoflevel, childcols)
 				positions.remove(m)
 
 				# block positions where children of this node branch out
 				for _, x in childcols[m]:
-					matrix[rowindex][x] = corner
+					matrix[rowidx][x] = corner
 				# node itself
-				#FIXME: assert matrix[rowindex][i] in (None, corner), (
-				#		matrix[rowindex][i], m, str(tree), ' '.join(sent))
-				matrix[rowindex][i] = ids[m]
+				assert m == () or matrix[rowidx][i] in (None, corner), (
+						matrix[rowidx][i], m, str(tree), ' '.join(sent))
+				matrix[rowidx][i] = ids[m]
 				nodes[ids[m]] = tree[m]
 				# add column to the set of children for its parent
 				if m != ():
-					childcols[m[:-1]].add((rowindex, i))
+					childcols[m[:-1]].add((rowidx, i))
+				#print(ids[m], str(tree[m]), startoflevel, n)
+				#dumpmatrix()
 		assert len(positions) == 0
 
 		# remove unused columns, right to left
