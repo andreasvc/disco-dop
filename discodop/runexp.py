@@ -873,7 +873,7 @@ gunzip german-par-linux-3.2-utf8.bin.gz"""
 		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
 				" %s %s %s" % (model, inname, filtertags),
 				stdout=PIPE, shell=True)
-		tagout = tagger.stdout.read(  # pylint: disable=E1101
+		tagout = tagger.stdout.read(
 				).decode('utf-8').split("<S>")[:-1]
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, None, overridetag, tagmap)
@@ -899,7 +899,7 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz"""
 				" -model %s -textFile %s" % (model, inname)).split(),
 				cwd="stanford-postagger-full-2012-07-09",
 				shell=False, stdout=PIPE)
-		tagout = tagger.stdout.read(  # pylint: disable=E1101
+		tagout = tagger.stdout.read(
 				).decode('utf-8').splitlines()
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, "_", overridetag, tagmap)

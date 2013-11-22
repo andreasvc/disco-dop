@@ -138,7 +138,7 @@ def drawtrees(form, dts):
 	os.chdir('/tmp')
 	proc = Popen('/usr/bin/pdflatex -halt-on-error  /tmp/dtree.tex'.split(),
 			stdin=None, stdout=PIPE, stderr=PIPE, shell=False)
-	proc.wait()  # pylint: disable=E1101
+	proc.wait()
 	if form.get('output', 'text') == 'pdf':
 		try:
 			return send_from_directory('/tmp', 'dtree.pdf',
@@ -151,7 +151,7 @@ def drawtrees(form, dts):
 		proc = Popen('/usr/bin/convert -density 125 /tmp/dtree.pdf \
 				/tmp/dtree.png'.split(),  # -trim
 				stdin=None, stdout=PIPE, stderr=PIPE, shell=False)
-		proc.wait()  # pylint: disable=E1101
+		proc.wait()
 		#set Expires one day ahead (according to server time)
 		#req.headers_out['Expires'] = (
 		#	datetime.utcnow() + timedelta( 1, 0 )

@@ -616,9 +616,9 @@ def dotgrep2queries(query, selected, lines=False, doexport=None,
 		out, err = proc.communicate()
 		out = out.decode('utf8')  # pylint: disable=E1103
 		err = err.decode('utf8')  # pylint: disable=E1103
-		proc.stdout.close()  # pylint: disable=E1101
-		proc.stderr.close()  # pylint: disable=E1101
-		proc.wait()  # pylint: disable=E1101
+		proc.stdout.close()
+		proc.stderr.close()
+		proc.wait()
 		if lines:
 			yield n, filterlabels(out, nofunc, nomorph).splitlines(), err
 		elif doexport is None:
@@ -821,14 +821,14 @@ def getstyletable(texts):
 				# style expects paragraphs separated by two linebreaks.
 				proc.stdin.write(open(filename).read().replace('\n', '\n\n'))
 			else:
-				proc.stdin.writelines(tokenized(filename))  # pylint: disable=E1101
+				proc.stdin.writelines(tokenized(filename))
 		except IOError as err:
 			APP.logger.error('%s\n%s', err, proc.stderr.read())
 			return {}
-		proc.stdin.close()  # pylint: disable=E1101
-		out = proc.stdout.read()  # pylint: disable=E1101
-		proc.stdout.close()  # pylint: disable=E1101
-		proc.wait()  # pylint: disable=E1101
+		proc.stdin.close()
+		out = proc.stdout.read()
+		proc.stdout.close()
+		proc.wait()
 		name = os.path.basename(filename)
 		styletable[name] = parsestyleoutput(out)
 	return styletable
