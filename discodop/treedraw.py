@@ -156,7 +156,8 @@ class DrawTree(object):
 			and look for cell between first and last child of this node,
 			add new row to level if no free row available. """
 			candidates = [a for _, a in children[m]]
-			center = sum(candidates) // len(candidates)  # center of gravity
+			leaves = tree[m].leaves()
+			center = scale * sum(leaves) // len(leaves)  # center of gravity
 			if max(candidates) - min(candidates) > 2 * scale:
 				center -= center % scale  # round to unscaled coordinate
 			if ids[m] == 0:
