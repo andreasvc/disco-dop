@@ -25,11 +25,12 @@ INDEXRE = re.compile(r" [0-9]+\)")
 
 class CorpusReader(object):
 	""" Abstract corpus reader. """
-	def __init__(self, root, fileids, encoding='utf-8', headrules=None,
-				headfinal=True, headreverse=False, markheads=False, punct=None,
-				functions=None, morphology=None, lemmas=None):
+	def __init__(self, root, fileids, encoding='utf-8', ensureroot=None,
+			headrules=None, headfinal=True, headreverse=False, markheads=False,
+			punct=None, functions=None, morphology=None, lemmas=None):
 		""":param root: directory of corpus
 		:param fileids: filename or pattern of corpus files; e.g., ``wsj*.mrg``
+		:param ensureroot: add root node with given label if necessary
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads
 		:param headfinal: whether to put the head in final or in frontal
@@ -63,6 +64,7 @@ class CorpusReader(object):
 		:param lemmas: one of ...
 			:None: ignore lemmas
 			:'between': insert lemma as node between POS tag and word. """
+		self.ensureroot = ensureroot
 		self.reverse = headreverse
 		self.headfinal = headfinal
 		self.markheads = markheads
@@ -142,6 +144,8 @@ class CorpusReader(object):
 		tree, sent = self._parse(block)
 		if not sent:
 			return tree
+		if self.ensureroot and tree.label != self.ensureroot:
+			tree = ParentedTree(self.ensureroot, [tree])
 		# roughly order constituents by order in sentence
 		for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
 			a.sort(key=Tree.leaves)
@@ -294,14 +298,13 @@ class BracketCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		c = count()
-		result = ParentedTree.parse(block, parse_leaf=lambda _: next(c))
-		if result.label not in ('TOP', 'ROOT'):
-			result = ParentedTree('TOP', [result])
+		result = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
+				block), parse_leaf=int)
 		sent = self._word(block, orig=True)
 		return result, sent
 
 	def _word(self, block, orig=False):
-		sent = TERMINALSRE.findall(block)
+		sent = [a or None for a in LEAVESRE.findall(block)]
 		if orig or self.punct != "remove":
 			return sent
 		return [a for a in sent if not ispunct(a, None)]
@@ -737,40 +740,35 @@ def makedep(root, deps, headrules):
 
 
 def incrementaltreereader(treeinput, morphology=None, functions=None):
-	""" Incremental corpus reader support brackets, discbrackets, and export
+	""" Incremental corpus reader; supports brackets, discbrackets, and export
 	format. The format is autodetected. Expects an iterator giving one line at
 	a time. Yields tuples with a Tree object and a separate lists of terminals.
 	"""
-	treeinput = chain(iter(treeinput), ('(', None))  # hack
+	treeinput = chain(iter(treeinput), ('(', None, None))  # hack
 	line = next(treeinput)
-	# try the following readers; on the first match the others are dropped.
+	# try the following readers on each line in this order
 	readers = [segmentbrackets('()'), segmentbrackets('[]'),
 			segmentexport(morphology, functions)]
 	for reader in readers:
 		reader.send(None)
-	x = -1
 	while True:
 		# status 0: line not part of tree; status 1: waiting for end of tree.
 		res, status = None, 1
-		for n, reader in enumerate(readers if x == -1 else readers[x:x + 1]):
+		for reader in readers:
 			while res is None:
 				res, status = reader.send(line)
 				if status == 0:
 					break  # there was no tree, or a complete tree was read
 				line = next(treeinput)
 			if res is not None:
-				if x == -1:
-					x = n
 				for tree, sent in res:
 					yield tree, sent
 				break
-		if line is None:  # this was the last line
-			return
 		if res is None:  # none of the readers accepted this line
 			line = next(treeinput)
 
 
-def segmentbrackets(brackets):
+def segmentbrackets(brackets, strict=False):
 	""" Co-routine that accepts one line at a time;
 	yields tuples (result, status) where ...
 
@@ -778,18 +776,21 @@ def segmentbrackets(brackets):
 		tuples (tree, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0. """
-	# FIXME: for 'rest' to be able to contain parens, would need constraint
-	# that trees can e.g. only start at start of line
 	lb, rb = brackets
-	strtermre = re.compile('[^0-9\\%s]\\%s' % (rb, rb))
+	# regex to check if the tree contains any terminals (as opposed to indices)
+	strtermre = re.compile('[^0-9%(rb)s]%(rb)s' % {'rb': re.escape(rb)})
+	newlb = re.compile(r'(?:.*[\n\r])?\s*%(lb)s' % {'lb': re.escape(lb)})
 	parens = 0  # number of open parens
-	prev = ''  # pass on if tree is not yet complete in current line
-	result = ''  # tree as string
+	prev = ''  # incomplete tree currently being read
+	result = ''  # string of complete tree
 	results = []  # trees found in current line
 	line = (yield None, 1)
 	while True:
 		start = 0  # index where current tree starts
 		a, b = line.find(lb, len(prev)), line.find(rb, len(prev))
+		# ignore first left bracket when not preceded by whitespace
+		if parens == 0 and a > 0 and newlb.match(prev) is None:
+			a = -1
 		prev = line
 		while a != -1 or b != -1:
 			if a != -1 and (a < b or b == -1):  # left bracket
@@ -808,11 +809,18 @@ def segmentbrackets(brackets):
 					result, prev = line[start:b + 1], line[b + 1:]
 					start = b + 1
 				elif parens < 0:
-					#raise ValueError('unbalanced parentheses')
+					if strict:
+						raise ValueError('unbalanced parentheses')
 					parens = 0
 				b = line.find(rb, b + 1)
 		status = 1 if results or result or parens else 0
 		line = (yield results or None, status)
+		if line is None:
+			if result:
+				results.append(brackettree(result, rest, brackets, strtermre))
+			status = 1 if results or result or parens else 0
+			yield results or None, status
+			line = ''
 		if results:
 			results = []
 		if parens or result or results:
@@ -852,15 +860,15 @@ def segmentexport(morphology, functions):
 
 def brackettree(treestr, sent, brackets, strtermre):
 	""" Parse a single tree presented in bracket format, whether with indices
-	or not; sent may be None / empty. """
+	or not; in the latter case ``sent`` is ignored. """
 	if strtermre.search(treestr):  # terminals are not all indices
-		treestr = FRONTIERNTRE.sub(' ...)', treestr)
-		sent = TERMINALSRE.findall(treestr)
 		cnt = count()
-		tree = Tree.parse(treestr, brackets=brackets,
-				parse_leaf=lambda x: next(cnt))
+		tree = ParentedTree.parse(
+				LEAVESRE.sub(lambda _: ' %d)' % next(cnt), treestr),
+				parse_leaf=int, brackets=brackets)
+		sent = [a or None for a in LEAVESRE.findall(treestr)]
 	else:  # disc. trees with integer indices as terminals
-		tree = Tree.parse(treestr, parse_leaf=int,
+		tree = ParentedTree.parse(treestr, parse_leaf=int,
 			brackets=brackets)
 		sent = (sent.split() if sent.strip()
 				else map(str, range(max(tree.leaves()) + 1)))

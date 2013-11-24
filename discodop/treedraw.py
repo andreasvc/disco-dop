@@ -12,7 +12,7 @@ import codecs
 from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
-from itertools import count
+from itertools import count, chain
 from discodop.tree import Tree
 from discodop.treebank import READERS, incrementaltreereader, splitpath
 if sys.version[0] >= '3':
@@ -215,24 +215,17 @@ class DrawTree(object):
 		self.highlight.update(n for a, n in ids.items()
 				if not highlight or tree[a] in highlight)
 		levels = {n: [] for n in range(maxdepth)}
-		preterminals = []
 		terminals = []
 		for a in positions:
 			node = tree[a]
 			if isinstance(node, Tree):
-				if (node and isinstance(node[0], int)
-						and sent[node[0]] is not None):
-					preterminals.append(a)
-				else:
-					levels[maxdepth - node.height()].append(a)
+				levels[maxdepth - node.height()].append(a)
 			else:
 				terminals.append(a)
 
 		for n in levels:
 			levels[n].sort(key=lambda n: (  # len(tree[n].leaves()),
 					max(tree[n].leaves()) - min(tree[n].leaves())))
-		preterminals.sort()
-		levels[max(levels) + 1] = preterminals
 		terminals.sort()
 		positions = set(positions)
 
@@ -303,8 +296,7 @@ class DrawTree(object):
 
 		# move crossed edges last
 		positions = sorted([a for level in levels.values()
-				for a in level] + preterminals,
-				key=lambda a: a[:-1] in crossed)
+				for a in level], key=lambda a: a[:-1] in crossed)
 
 		# collect edges from node to node
 		edges = OrderedDict()
@@ -762,7 +754,7 @@ def main():
 	elif '--help' in opts:
 		print(USAGE)
 		return
-	if args:
+	if args and opts.get('--fmt', 'export') != 'auto':
 		reader = READERS[opts.get('--fmt', 'export')]
 		corpora = []
 		for path in args:
@@ -781,7 +773,9 @@ def main():
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
 						).text(unicodelines=True, ansi=not '--plain' in opts))
 	else:  # read from stdin + detect format
-		stdin = codecs.getreader(opts.get('--encoding', 'utf8'))(sys.stdin)
+		reader = codecs.getreader(opts.get('--encoding', 'utf8'))
+		stdin = (chain.from_iterable(reader(open(a)) for a in args)
+				if args else reader(sys.stdin))
 		trees = incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),
 				functions=opts.get('--functions'))
