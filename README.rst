@@ -171,12 +171,15 @@ be installed.
     A web interface to the parser. Expects a series of grammars
     in subdirectories of ``web/grammars/``, each containing grammar files
     as produced by running ``discodop runexp``.
+    `Download grammars <http://staff.science.uva.nl/~acranenb/grammars/>`_
+    for English, German, and Dutch, as used in the 2013 IWPT paper.
 
 ``treesearch.py``
-    A web interface for searching trough treebanks. Expects
-    one or more (non-discontinuous) treebanks with the ``.mrg`` extension in
-    the directory ``web/corpus/`` (sample included). Depends on
-    `tgrep2 <http://tedlab.mit.edu/~dr/Tgrep2/>`_ and
+    A web interface for searching through treebanks. Expects
+    one or more treebanks with the ``.mrg`` or ``.dact`` extension in the
+    directory ``web/corpus/`` (sample included). Depends on
+    `tgrep2 <http://tedlab.mit.edu/~dr/Tgrep2/>`_,
+    `alpinocorpus <https://github.com/rug-compling/alpinocorpus-python>`_, and
     `style <http://www.gnu.org/software/diction/diction.html>`_.
 
 ``treedraw.py``
@@ -212,6 +215,9 @@ References
 ==========
 This work is partly described in the following publications:
 
+- van Cranenburgh, Bod (2013). Discontinuous Parsing with an Efficient and Accurate DOP Model.
+  Proc. of IWPT.
+  http://acl.cs.qc.edu/iwpt2013/proceedings/Splits/9_pdfsam_IWPTproceedings.pdf
 - van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
   systems. Proc. of EACL.
   http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
