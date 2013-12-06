@@ -57,6 +57,7 @@ DEFAULTSTAGE = dict(
 		split=False,  # split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
 		splitprune=False,  # treat VP_2[101] as {VP*[100], VP*[001]} for pruning
 		markorigin=False,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
+		collapselabels=None,  # options: None, 'head', 'all'. TODO.
 		k=50,  # no. of coarse pcfg derivations to prune with; k=0: filter only
 		neverblockre=None,  # do not prune nodes with label that match regex
 		getestimates=None,  # compute & store estimates
@@ -365,7 +366,7 @@ class Parser(object):
 					default), parse_leaf=int)
 		noparse = True
 		fragments = None
-		prob = 0.0
+		prob = 1.0
 		return parsetree, prob, fragments, noparse
 
 

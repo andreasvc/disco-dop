@@ -13,6 +13,7 @@ import logging
 import tempfile
 import traceback
 import multiprocessing
+from math import log
 from itertools import islice
 if sys.version[0] >= '3':
 	import pickle
@@ -489,9 +490,10 @@ def doparsing(**kwds):
 	totaltokens = 0
 	results = [DictObj(name=stage.name) for stage in params.parser.stages]
 	for result in results:
-		result.update(elapsedtime=dict.fromkeys(params.testset),
-				parsetrees=dict.fromkeys(params.testset), brackets=multiset(),
-				tagscorrect=0, exact=0, noparse=0)
+		result.update(parsetrees=dict.fromkeys(params.testset),
+				probs=dict.fromkeys(params.testset, float('nan')),
+				elapsedtime=dict.fromkeys(params.testset),
+				brackets=multiset(), tagscorrect=0, exact=0, noparse=0)
 	if params.numproc == 1:
 		initworker(params)
 		dowork = (worker(a) for a in params.testset.items())
@@ -521,6 +523,10 @@ def doparsing(**kwds):
 			assert (results[n].parsetrees[sentid] is None
 					and results[n].elapsedtime[sentid] is None)
 			results[n].parsetrees[sentid] = result.parsetree
+			if isinstance(result.prob, float):
+				results[n].probs[sentid] = log(result.prob)
+			else:
+				results[n].probs[sentid] = float('nan')
 			results[n].elapsedtime[sentid] = result.elapsedtime
 			if result.noparse:
 				results[n].noparse += 1
@@ -644,6 +650,11 @@ def writeresults(results, params):
 		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
 		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
 				'\t'.join(str(res.elapsedtime[n]) for res in results))
+				for n in params.testset)
+	with open('%s/logprobs.txt' % params.resultdir, 'w') as out:
+		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
+		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
+				'\t'.join(str(res.probs[n]) for res in results))
 				for n in params.testset)
 	logging.info('wrote results to %s/%s%s.%s', params.resultdir, category,
 			(('{%s}' % ','.join(res.name for res in results))
