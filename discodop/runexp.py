@@ -326,7 +326,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				h=horzmarkov, v=vertmarkov)) for n, tree in enumerate(trees)]
 	trees = [addfanoutmarkers(t) for t in trees]
 	logging.info('binarized %s cpu time elapsed: %gs',
-						bintype, time.clock() - begin)
+			bintype, time.clock() - begin)
 	logging.info('binarized treebank fan-out: %d #%d', *treebankfanout(trees))
 	trees = [canonicalize(a).freeze() for a in trees]
 
@@ -492,6 +492,7 @@ def doparsing(**kwds):
 	for result in results:
 		result.update(parsetrees=dict.fromkeys(params.testset),
 				probs=dict.fromkeys(params.testset, float('nan')),
+				frags=dict.fromkeys(params.testset, 0),
 				elapsedtime=dict.fromkeys(params.testset),
 				brackets=multiset(), tagscorrect=0, exact=0, noparse=0)
 	if params.numproc == 1:
@@ -525,8 +526,8 @@ def doparsing(**kwds):
 			results[n].parsetrees[sentid] = result.parsetree
 			if isinstance(result.prob, float):
 				results[n].probs[sentid] = log(result.prob)
-			else:
-				results[n].probs[sentid] = float('nan')
+			if result.fragments is not None:
+				results[n].frags[sentid] = len(result.fragments)
 			results[n].elapsedtime[sentid] = result.elapsedtime
 			if result.noparse:
 				results[n].noparse += 1
@@ -656,6 +657,16 @@ def writeresults(results, params):
 		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
 				'\t'.join(str(res.probs[n]) for res in results))
 				for n in params.testset)
+	names = [res.name for res, stage in zip(results, params.parser.stages)
+			if stage.usedoubledop]
+	if names:
+		with open('%s/numfrags.txt' % params.resultdir, 'w') as out:
+			out.write('#id\tlen\t%s\n' % '\t'.join(names))
+			out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
+					'\t'.join(str(res.frags[n]) for res, stage
+						in zip(results, params.parser.stages)
+						if stage.usedoubledop))
+					for n in params.testset)
 	logging.info('wrote results to %s/%s%s.%s', params.resultdir, category,
 			(('{%s}' % ','.join(res.name for res in results))
 			if len(results) > 1 else results[0].name),
