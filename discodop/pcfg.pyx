@@ -730,7 +730,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	assert 1 <= n <= 1000
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
-	chart.rankededges = {}
+	chart.rankededges = {chart.root(): []}
 	if tags:
 		import tempfile
 		tmp = tempfile.NamedTemporaryFile()
@@ -753,7 +753,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		derivs = [(renumber(deriv), -pylog(float(prob)))
 				for prob, deriv in BITPARPARSES.findall(lines)]
 	chart.parseforest = {chart.root(): None}  # dummy so bool(chart) == True
-	chart.rankededges = {chart.root(): derivs}
+	chart.rankededges[chart.root()] = derivs
 	return chart, msg
 
 
