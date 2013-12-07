@@ -717,8 +717,8 @@ def chartmatrix(nonterminals, lensent):
 
 
 BITPARUNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
-BITPARPARSES = re.compile(r'(?:^|\n)vitprob=(.*)\n(\(.*\))\n')
-BITPARPARSESLOG = re.compile(r'(?:^|\n)logvitprob=(.*)\n(\(.*\))\n')
+BITPARPARSES = re.compile(r'^vitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
+BITPARPARSESLOG = re.compile(r'^logvitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
 
 
 def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
