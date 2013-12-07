@@ -730,6 +730,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	assert 1 <= n <= 1000
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
+	chart.rankededges = {}
 	if tags:
 		import tempfile
 		tmp = tempfile.NamedTemporaryFile()
