@@ -728,6 +728,8 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	Result is a dictionary of derivations with their probabilities. """
 	# TODO: get full viterbi parse forest, turn into chart w/ChartItems
 	assert 1 <= n <= 1000
+	chart = SparseCFGChart(grammar, sent, start=startlabel,
+			logprob=True, viterbi=True)
 	if tags:
 		import tempfile
 		tmp = tempfile.NamedTemporaryFile()
@@ -742,15 +744,13 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	results, msg = proc.communicate('\n'.join(tokens) + '\n')
 	# decode results or not?
 	if not results or results.startswith('No parse'):
-		return False, '%s\n%s' % (results, msg)
+		return chart, '%s\n%s' % (results, msg)
 	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
 	derivs = [(renumber(deriv), -float(prob))
 			for prob, deriv in BITPARPARSESLOG.findall(lines)]
 	if not derivs:
 		derivs = [(renumber(deriv), -pylog(float(prob)))
 				for prob, deriv in BITPARPARSES.findall(lines)]
-	chart = SparseCFGChart(grammar, sent, start=startlabel,
-			logprob=True, viterbi=True)
 	chart.parseforest = {chart.root(): None}  # dummy so bool(chart) == True
 	chart.rankededges = {chart.root(): derivs}
 	return chart, msg
