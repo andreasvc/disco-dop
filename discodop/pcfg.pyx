@@ -750,7 +750,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	derivs = [(renumber(deriv), -float(prob))
 			for prob, deriv in BITPARPARSESLOG.findall(lines)]
 	if not derivs:
-		derivs = [(renumber(deriv), -pylog(float(prob)))
+		derivs = [(renumber(deriv), -pylog(float(prob) or 5.e-130))
 				for prob, deriv in BITPARPARSES.findall(lines)]
 	chart.parseforest = {chart.root(): None}  # dummy so bool(chart) == True
 	chart.rankededges[chart.root()] = derivs
