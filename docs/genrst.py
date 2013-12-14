@@ -64,10 +64,10 @@ Contents:
 
 
 
-with open('index.rst', 'w') as out:
+with open('api.rst', 'w') as out:
 	out.write("""\
-Disco-DOP documentation
-=======================
+API documentation
+=================
 .. automodule:: discodop.__init__
     :members:
     :undoc-members:
