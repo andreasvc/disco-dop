@@ -1,7 +1,7 @@
 Discontinuous Data-Oriented Parsing: disco-dop
 ==============================================
 
-.. image:: http://staff.science.uva.nl/~acranenb/disco-dop.png
+.. image:: images/disco-dop.png
    :align: right
    :alt: contrived discontinuous constituent for expository purposes.
 
@@ -152,8 +152,8 @@ be installed.
     A web interface for drawing discontinuous trees in various
     formats.
 
-.. image:: http://staff.science.uva.nl/~acranenb/treesearch1.png
+.. image:: images/treesearch1.png
    :alt: screenshot of treesearch showing counts of pattern
 
-.. image:: http://staff.science.uva.nl/~acranenb/treesearch2.png
+.. image:: images/treesearch2.png
    :alt: screenshot of treesearch showing bar plot of pattern

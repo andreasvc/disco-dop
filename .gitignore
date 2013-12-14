@@ -7,10 +7,12 @@
 !discodop/*.py
 !web/
 !web/*.py
-!bin/
 !web/static/
 !web/templates/
+!bin/
 !tests/
+!docs/*.rst
+!docs/*.py
 !tests.py
 !setup.py
 !LICENSE

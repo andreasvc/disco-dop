@@ -2,7 +2,7 @@
 Discontinuous DOP
 =================
 
-.. image:: http://staff.science.uva.nl/~acranenb/disco-dop.png
+.. image:: docs/images/disco-dop.png
    :align: right
    :alt: contrived discontinuous constituent for expository purposes.
 
@@ -40,7 +40,7 @@ DOP specific (parsing with tree fragments):
   most likely tree with shortest derivation (SL-DOP).
 - marginalization: n-best derivations, sampled derivations.
 
-.. image:: http://staff.science.uva.nl/~acranenb/runexp.png
+.. image:: docs/images/runexp.png
    :alt: screenshot of parse tree produced by parser
 
 Installation
@@ -93,7 +93,7 @@ intrinsics provide the most efficient implementation on a given processor.
 
 Documentation
 =============
-The documentation can be found at http://staff.science.uva.nl/~acranenb/discodop/
+The documentation can be found at http://discodop.readthedocs.org/
 
 To generate a local copy install `Sphinx <http://sphinx-doc.org/>`_
 and issue ``python genrst.py && make html`` in the ``docs/`` directory; the
