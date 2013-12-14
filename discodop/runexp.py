@@ -609,10 +609,13 @@ def worker(args):
 					100 * prec, 100 * rec, 100 * f1score)
 			if (candb - goldb) or (goldb - candb):
 				msg += '\t'
-			if candb - goldb:
-				msg += 'cand-gold=%s ' % evalmod.strbracketings(candb - goldb)
-			if goldb - candb:
-				msg += 'gold-cand=%s' % evalmod.strbracketings(goldb - candb)
+			try:
+				if candb - goldb:
+					msg += 'cand-gold=%s ' % evalmod.strbracketings(candb - goldb)
+				if goldb - candb:
+					msg += 'gold-cand=%s' % evalmod.strbracketings(goldb - candb)
+			except:
+				msg += 'PROBLEM %r' % str(evaltree)
 		msg += '\n'
 		result.update(dict(candb=candb, exact=exact))
 		results.append(result)
@@ -623,8 +626,11 @@ def worker(args):
 		highlight.extend(a for a in evaltree.subtrees()
 					if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
 		highlight.extend(range(len(cpos)))
-		msg += DrawTree(evaltree, evalsent, abbr=True,
-				highlight=highlight).text(unicodelines=True, ansi=True)
+		try:
+			msg += DrawTree(evaltree, evalsent, abbr=True,
+					highlight=highlight).text(unicodelines=True, ansi=True)
+		except:
+			msg += 'PROBLEM %r' % str(evaltree)
 	return (nsent, msg, results)
 
 

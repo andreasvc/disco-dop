@@ -324,6 +324,9 @@ class Parser(object):
 							resultstr, n, derivs)
 					assert all(a for a in parsetree.subtrees()), (
 							'tree has empty nodes: %s' % parsetree)
+					assert len(parsetree.leaves()) == len(sent), (
+							'leaves missing. original tree: %s\n'
+							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception as err:  # pylint: disable=W0703
 					logging.error("something's amiss: %r", err)
 					parsetree, prob, fragments, noparse = self.noparse(
