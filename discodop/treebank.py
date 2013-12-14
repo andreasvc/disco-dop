@@ -76,9 +76,12 @@ class CorpusReader(object):
 		self._encoding = encoding
 		fileids = fileids or '*'
 		self._filenames = sorted(glob(os.path.join(root, fileids)), key=numbase)
-		assert functions in (None, 'leave', 'add', 'remove', 'replace'), (
-				functions)
-		assert punct in (None, 'move', 'remove', 'root')
+		for opts, opt in {
+				(None, 'leave', 'add', 'remove', 'replace'): functions,
+				(None, 'leave', 'add', 'replace', 'between'): morphology,
+				(None, 'move', 'remove', 'root'): punct,
+				(None, 'leave', 'between'): lemmas}.items():
+			assert opt in opts, 'Expected one of %r. Got: %r' (opts, opt)
 		assert self._filenames, (
 				"no files matched pattern %s" % os.path.join(root, fileids))
 		self._sents_cache = None
@@ -675,10 +678,10 @@ def handlefunctions(action, tree, pos=True, top=False):
 			if not top and a is tree:  # skip TOP label
 				continue
 			if pos or isinstance(a[0], Tree):
-				# test for non-empty function tag ("---" is considered empty)
+				# test for non-empty function tag ("--" is considered empty)
 				if (getattr(a, 'source', None)
 						and any(a.source[FUNC].split("-"))):
-					func = a.source[FUNC].split("-")[0].upper()
+					func = a.source[FUNC].split("-")[0].upper() or '--'
 					if action == 'add':
 						a.label += "-%s" % func
 					elif action == 'replace':

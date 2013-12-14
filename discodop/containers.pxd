@@ -38,7 +38,7 @@ cdef class Grammar:
 	cdef readonly currentmodel
 	cdef readonly size_t nonterminals, phrasalnonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
-	cdef readonly bint logprob, bitpar
+	cdef readonly bint logprob, bitpar, binarized
 	cdef readonly object models
 	cdef readonly bytes origrules, start
 	cdef readonly unicode origlexicon

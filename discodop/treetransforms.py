@@ -89,7 +89,6 @@ Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     conversion and requires the use of heuristic head rules (--headrules),
     to ensure that all constituents have a child marked as head. """ % (
 			sys.argv[0], '|'.join(READERS.keys()))
-SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
 
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
@@ -742,14 +741,20 @@ def splitdiscnodes(tree, markorigin=False):
 				node.append(child)
 	return canonicalize(tree)
 
+# e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
+SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
+
 
 def mergediscnodes(tree):
 	""" Reverse transformation of ``splitdiscnodes()``. """
 	treeclass = tree.__class__
 	for node in tree.subtrees():
-		merge = defaultdict(list)
-		nodes = list(node)
-		node[:] = []
+		merge = defaultdict(list)  # a series of queues of nodes
+		# e.g. merge['VP_2*'] = [Tree('VP_2', []), ...]
+		# when origin is present (index after *), the node is moved to where
+		# the next one is expected, e.g., VP_2*1 after VP_2*0 is added.
+		nodes = list(node)  # the original, unmerged children
+		node[:] = []  # the new, merged children
 		for child in nodes:
 			if not isinstance(child, Tree):
 				node.append(child)
@@ -758,14 +763,15 @@ def mergediscnodes(tree):
 			if not match:
 				node.append(child)
 				continue
+			label, part, _ = match.groups()
 			grandchildren = list(child)
 			child[:] = []
 			if not merge[child.label]:
-				merge[child.label].append(treeclass(match.group(1), []))
+				merge[child.label].append(treeclass(label, []))
 				node.append(merge[child.label][0])
 			merge[child.label][0].extend(grandchildren)
-			if match.group(2):
-				nextlabel = '%s*%d' % (match.group(1), int(match.group(2)) + 1)
+			if part:
+				nextlabel = '%s*%d' % (label, int(part) + 1)
 				merge[nextlabel].append(merge[child.label].pop(0))
 	return tree
 

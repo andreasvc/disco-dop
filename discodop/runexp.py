@@ -347,7 +347,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				fragments = getfragments(traintrees, sents, numproc,
 						iterate=stage.iterate, complement=stage.complement)
 				xgrammar, backtransform, altweights = doubledop(
-						traintrees, fragments)
+						traintrees, fragments, binarized=stage.binarized)
 			else:  # DOP reduction
 				xgrammar, altweights = dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph)
@@ -363,7 +363,8 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 			rules, lexicon = write_lcfrs_grammar(
 					xgrammar, bitpar=stage.mode.startswith('pcfg'))
 			grammar = Grammar(rules, lexicon, start=top,
-					bitpar=stage.mode.startswith('pcfg'))
+					bitpar=stage.mode.startswith('pcfg'),
+					binarized=stage.binarized)
 			for name in altweights:
 				grammar.register(u'%s' % name, altweights[name])
 			with gzip.open('%s/%s.rules.gz' % (
@@ -524,7 +525,12 @@ def doparsing(**kwds):
 			assert (results[n].parsetrees[sentid] is None
 					and results[n].elapsedtime[sentid] is None)
 			results[n].parsetrees[sentid] = result.parsetree
-			if isinstance(result.prob, float):
+			if isinstance(result.prob, tuple):
+				results[n].probs[sentid] = [log(a) for a in result.prob
+						if isinstance(a, float)][0]
+				results[n].frags[sentid] = [abs(a) for a in result.prob
+						if isinstance(a, int)][0]
+			elif isinstance(result.prob, float):
 				results[n].probs[sentid] = log(result.prob)
 			if result.fragments is not None:
 				results[n].frags[sentid] = len(result.fragments)

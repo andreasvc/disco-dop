@@ -14,7 +14,7 @@ from collections import defaultdict, OrderedDict
 from discodop import plcfrs
 from discodop.tree import Tree
 from discodop.kbest import lazykbest, getderiv
-from discodop.grammar import lcfrs_productions
+from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import addbitsets, unbinarize, canonicalize
 from discodop.plcfrs cimport Entry, new_Entry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
@@ -90,7 +90,7 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 				continue
 			if shortest:
 				newprob = exp(-getderivprob(entry.key, chart, sent))
-				score = (prob / log(0.5), newprob)
+				score = (abs(int(prob / log(0.5))), newprob)
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
 					derivs[treestr] = extractfragments(
@@ -123,8 +123,8 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
 							assert 1 <= len(t) <= 2
-							r = ((b'0', t.label, t[0].label) if len(t) == 1
-								else (b'01', t.label, t[0].label, t[1].label))
+							r = (('0', t.label, t[0].label) if len(t) == 1
+								else ('01', t.label, t[0].label, t[1].label))
 							m = grammar.rulenos[r]
 							newprob += grammar.bylhs[0][m].prob
 						else:
@@ -137,7 +137,7 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 								newprob += lexrule.prob
 				else:
 					newprob = getderivprob(entry.key, chart, sent)
-				score = (prob / log(0.5), exp(-newprob))
+				score = (abs(int(prob / log(0.5))), exp(-newprob))
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
 			elif not mpd and treestr in parsetrees:
@@ -203,7 +203,7 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 			treestr = recoverfragments(deriv if bitpar else (<Entry>entry).key,
 					chart2, grammar, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
-			result[treestr] = (s / log(0.5), parsetreeprob[treestr])
+			result[treestr] = (abs(int(s / log(0.5))), parsetreeprob[treestr])
 			if backtransform is not None:
 				derivs[treestr] = extractfragments(
 						deriv if bitpar else (<Entry>entry).key,
@@ -357,23 +357,23 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 	cdef list children = []
 	cdef str frag
-	assert 1 <= len(deriv) <= 2
-	prod = (b'0', deriv.label, deriv[0].label) if len(deriv) == 1 else (
-			b'01', deriv.label, deriv[0].label, deriv[1].label)
+	# e.g.: (b'0123', 'X', 'A', 'B', 'C', 'D')
+	prod = (''.join(map(str, range(len(deriv)))),
+			deriv.label) + tuple([a.label for a in deriv])
 	frag = backtransform[grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
-	if len(deriv) == 2:  # is there a right child?
+	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
 		# this shortcut assumes that neverblockre is only used to avoid
 		# blocking nonterminals from the double-dop binarization.
 		while '}<' in deriv[0].label:
 			# one of the right children
-			children.append(deriv[1])
+			children.extend(deriv[1:])
 			# move on to next node in this binarized constituent
 			deriv = deriv[0]
 		# last right child
 		if len(deriv) == 2:  # is there a right child?
-			children.append(deriv[1])
+			children.extend(deriv[1:])
 	elif '}<' in deriv[0].label:
 		deriv = deriv[0]
 	# left-most child
@@ -448,8 +448,8 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 	cdef list children = [], labels = []
 	cdef str frag
 	assert 1 <= len(deriv) <= 2
-	prod = (b'0', deriv.label, deriv[0].label) if len(deriv) == 1 else (
-			b'01', deriv.label, deriv[0].label, deriv[1].label)
+	prod = ('0', deriv.label, deriv[0].label) if len(deriv) == 1 else (
+			'01', deriv.label, deriv[0].label, deriv[1].label)
 	frag = backtransform[grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) == 2:  # is there a right child?
@@ -685,7 +685,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 
 	# do post-order traversal (bottom-up)
 	for node, (prod, yf) in list(zip(tree.subtrees(),
-			lcfrs_productions(tree, sent)))[::-1]:
+			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
 		yf = ','.join([''.join(map(str, a)) for a in yf])

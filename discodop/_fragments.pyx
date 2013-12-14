@@ -10,7 +10,7 @@ from collections import defaultdict, Counter as multiset
 from functools import partial
 from array import array
 from discodop.tree import Tree
-from discodop.grammar import lcfrs_productions
+from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import binarize, introducepreterminals
 
 cimport cython
@@ -750,7 +750,7 @@ def add_lcfrs_rules(tree, sent):
 	""" Set attribute ``.prod`` on nodes of tree with the LCFRS production for
 	that node. """
 	for a, b in zip(tree.subtrees(),
-			lcfrs_productions(tree, sent, frontiers=True)):
+			lcfrsproductions(tree, sent, frontiers=True)):
 		a.prod = b
 	return tree
 

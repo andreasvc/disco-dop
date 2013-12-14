@@ -265,9 +265,9 @@ class DrawTree(object):
 				# block positions where children of this node branch out
 				for _, x in childcols[m]:
 					matrix[rowidx][x] = corner
+				#assert m == () or matrix[rowidx][i] in (None, corner), (
+				#		matrix[rowidx][i], m, str(tree), ' '.join(sent))
 				# node itself
-				assert m == () or matrix[rowidx][i] in (None, corner), (
-						matrix[rowidx][i], m, str(tree), ' '.join(sent))
 				matrix[rowidx][i] = ids[m]
 				nodes[ids[m]] = tree[m]
 				# add column to the set of children for its parent

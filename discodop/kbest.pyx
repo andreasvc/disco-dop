@@ -182,7 +182,7 @@ cpdef inline getderivation(result, v, RankedEdge ej, Chart chart,
 	:param debin: perform on-the-fly debinarization, identify intermediate
 		nodes using the substring ``debin``. """
 	cdef RankedEdge rankededge
-	label = chart.label(v)
+	cdef UInt label = chart.label(v)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
 		result += b'('
 		result += chart.grammar.tolabel[label]

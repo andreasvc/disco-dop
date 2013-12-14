@@ -4,6 +4,7 @@
 - Relational-realizational transform
 - reattaching punctuation """
 from __future__ import division, print_function, unicode_literals
+import re
 from itertools import count, islice
 from collections import defaultdict, Counter as multiset
 from discodop.tree import Tree, ParentedTree
@@ -11,6 +12,7 @@ from discodop.tree import Tree, ParentedTree
 FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
+LABELRE = re.compile("[^^|<>-]+")
 
 
 def transform(tree, sent, transformations):
@@ -181,6 +183,20 @@ def transform(tree, sent, transformations):
 				unary.label += STATESPLIT + 'U'
 		# alpino?
 		# ...
+		# general
+		elif name == 'APPEND-FUNC':  # add function to phrasal label
+			for a in tree.subtrees():
+				func = function(a)
+				if func and func != '--':
+					a.label += '-' + func
+		elif name == 'FUNC-NODE':  # insert node with function above phrasal label
+			from treetransforms import postorder
+			for a in postorder(tree):
+				func = function(a)
+				if func and func != '--':
+					a[:] = [a.__class__(a.label,
+							[a.pop() for _ in range(len(a))][::-1])]
+					a.label = '-' + func
 		else:
 			raise ValueError('unrecognized transformation %r' % name)
 	for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
@@ -271,10 +287,46 @@ def reversetransform(tree, transformations):
 						and const.label == tagtoconst[tag.label]):
 					parent[a[-3]] = const.pop(0)
 					del const
+		elif name == 'APPEND-FUNC':  # functions appended to phrasal labels
+			for a in tree.subtrees():
+				if '-' in a.label:
+					label, func = a.label.split('-', 1)
+					a.source = ['--'] * 8
+					a.source[TAG] = a.label = label
+					a.source[FUNC] = func
+		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
+			from treetransforms import postorder
+			for a in postorder(tree, lambda n: n.label.startswith('-')):
+				a.source = ['--'] * 8
+				a.source[FUNC] = a.label[1:]
+				a.source[TAG] = a.label = a[0].label
+				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
 	return tree
+
+
+def collapselabels(trees, sents, mapping=None):
+	"""Collapse non-root phrasal labels with specified mapping of the form
+	``{coarselabel1: {finelabel1, finelabel2, ...}, ...}``
+	For example following Charniak et al (2006), multi-level coarse-to-fine
+	parsing:
+	:level 0: single label P
+	:level 1: HP, MP (arguments, modifiers)
+	:level 2: S, N, A, P (verbal, nominal, adjectival, prepositional)
+	:level 3: no-op, return original treebank labels """
+	def collapse(orig):
+		tree = orig.copy(True)
+		for subtree in tree.subtrees():
+			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
+				subtree.label = LABELRE.sub(revmapping.get, subtree.label)
+
+	# FIXME: Should we do this _before_ binarization?
+	# need to generate regexps for this for getmapping()
+	revmapping = {finelabel: coarselabel for coarselabel in mapping
+			for finelabel in mapping[coarselabel]}
+	return [collapse(tree) for tree in trees]
 
 
 def getgeneralizations():

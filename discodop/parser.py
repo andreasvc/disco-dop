@@ -65,6 +65,8 @@ DEFAULTSTAGE = dict(
 		dop=False,  # enable DOP mode (DOP reduction / double DOP)
 		packedgraph=False,  # use packed graph encoding for DOP reduction
 		usedoubledop=False,  # when False, use DOP reduction instead
+		binarized=True,  # for double dop, whether to binarize extracted grammar
+			# (False requires use of bitpar)
 		iterate=False,  # for double dop, whether to add fragments of fragments
 		complement=False,  # for double dop, whether to include fragments which
 			# form the complement of the maximal recurring fragments extracted

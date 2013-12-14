@@ -42,6 +42,7 @@ cdef class Grammar:
 	:param start: a string identifying the unique start symbol of this grammar,
 		which will be used by default when parsing with this grammar
 	:param bitpar: whether to expect and use the bitpar grammar format
+	:param binarized: whether to require a binarized grammar
 
 	By default the grammar is in logprob mode;
 	invoke ``grammar.switch('default', logprob=False)`` to switch.
@@ -52,7 +53,7 @@ cdef class Grammar:
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
 	def __init__(self, rule_tuples_or_bytes, lexicon=None, start=b'ROOT',
-			bitpar=False):
+			bitpar=False, binarized=True):
 		cdef LexicalRule lexrule
 		cdef double [:] weights
 		cdef int n
@@ -61,6 +62,7 @@ cdef class Grammar:
 			start = start.encode('ascii')
 		self.start = start
 		self.bitpar = bitpar
+		self.binarized = binarized
 		self.numunary = self.numbinary = self.currentmodel = 0
 		self.modelnames = [u'default']
 		self.logprob = False
@@ -118,6 +120,7 @@ cdef class Grammar:
 		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
 		self.toid = {Epsilon: 0}
 		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
+		numother = 0
 		for line in rulelines:
 			if not line.strip():
 				continue
@@ -141,8 +144,10 @@ cdef class Grammar:
 				assert b'0' in yf and b'1' in yf, ('mismatch between '
 						'non-terminals and yield function: %r\t%r' % (rule, yf))
 				self.numbinary += 1
-			else:
+			elif self.binarized:
 				raise ValueError('grammar not binarized:\n%s' % line)
+			else:
+				numother += 1
 			if rule[0] not in self.toid:
 				self.toid[rule[0]] = len(self.toid)
 				fanout = yf.count(b',') + 1
@@ -152,7 +157,7 @@ cdef class Grammar:
 
 		assert self.start in self.toid, ('Start symbol %r not in set of '
 				'non-terminal labels extracted from grammar rules.' % self.start)
-		self.numrules = self.numunary + self.numbinary
+		self.numrules = self.numunary + self.numbinary + numother
 		self.phrasalnonterminals = len(self.toid)
 		assert self.numrules, 'no rules found'
 		return fanoutdict
@@ -234,21 +239,22 @@ cdef class Grammar:
 			fields = line.split()
 			if self.bitpar:
 				rule = fields[1:]
-				yf = b'0' if len(rule) == 2 else b'01'
+				yf = ''.join(map(str, range(len(rule) - 1)))
 				w = fields[0]
 			else:
 				rule = fields[:-2]
-				yf = fields[-2]
+				yf = fields[-2].decode('ascii')
 				w = fields[-1]
 			# check whether RHS labels have been seen as LHS and check fanout
 			for m, nt in enumerate(rule):
 				assert nt in self.toid, ('symbol %r has not been seen as LHS '
 						'in any rule: %s' % (nt, line))
-				fanout = yf.count(b',01'[m:m + 1]) + (m == 0)
+				fanout = (yf.count(',') + 1) if m == 0 else yf.count(str(m - 1))
 				assert fanoutdict[nt] == fanout, (
 						"conflicting fanouts for symbol '%s'.\n"
-						"previous: %d; this non-terminal: %d.\nrule: %r" % (
-						nt, fanoutdict[nt], fanout, rule))
+						"previous: %d; this non-terminal: %d.\n"
+						"yf: %s; rule: %s" % (
+						nt, fanoutdict[nt], fanout, yf, line))
 			# convert fraction to float
 			x = w.find(b'/')
 			w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
@@ -267,7 +273,7 @@ cdef class Grammar:
 					continue
 				elif a == '1':
 					cur.args += 1 << m
-				elif a != '0':
+				elif a != '0' and self.binarized:
 					raise ValueError('expected: %r; got: %r' % ('0', a))
 				m += 1
 			cur.lengths |= 1 << (m - 1)
@@ -319,9 +325,9 @@ cdef class Grammar:
 					dest[0][m] = self.bylhs[0][n]
 					assert dest[0][m].no < self.numrules
 					m += 1
-		if filterlen == 2:
+		if self.binarized and filterlen == 2:
 			assert m == self.numunary, (m, self.numunary)
-		elif filterlen == 3:
+		elif self.binarized and filterlen == 3:
 			assert m == self.numbinary, (m, self.numbinary)
 		# sort rules by idx (NB: qsort is not stable, use appropriate cmp func)
 		if idx == 0:

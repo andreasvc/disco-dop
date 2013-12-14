@@ -62,7 +62,7 @@ ASCII for the rules, and UTF-8 for the lexicon.
 		corpusfmts='|'.join(READERS.keys()))
 
 
-def lcfrs_productions(tree, sent, frontiers=False):
+def lcfrsproductions(tree, sent, frontiers=False):
 	""" Given a tree with integer indices as terminals, and a sentence
 	with the corresponding words for these indices, produce a sequence
 	of LCFRS productions. Always produces monotone LCFRS rules.
@@ -72,7 +72,7 @@ def lcfrs_productions(tree, sent, frontiers=False):
 
 	>>> tree = Tree.parse("(S (VP_2 (V 0) (ADJ 2)) (NP 1))", parse_leaf=int)
 	>>> sent = "is Mary happy".split()
-	>>> for p in lcfrs_productions(tree, sent): print(p)
+	>>> for p in lcfrsproductions(tree, sent): print(p)
 	(('S', 'VP_2', 'NP'), ((0, 1, 0),))
 	(('VP_2', 'V', 'ADJ'), ((0,), (1,)))
 	(('V', 'Epsilon'), ('is',))
@@ -141,7 +141,7 @@ def treebankgrammar(trees, sents):
 	When trees contain no discontinuities, the result is equivalent to a
 	treebank PCFG. """
 	grammar = multiset(rule for tree, sent in zip(trees, sents)
-			for rule in lcfrs_productions(tree, sent))
+			for rule in lcfrsproductions(tree, sent))
 	lhsfd = multiset()
 	for rule, freq in grammar.items():
 		lhsfd[rule[0][0]] += freq
@@ -167,9 +167,9 @@ def dopreduction(trees, sents, packedgraph=False):
 
 	# collect rules
 	for tree, sent in zip(trees, sents):
-		prods = lcfrs_productions(tree, sent)
+		prods = lcfrsproductions(tree, sent)
 		dectree = decorater.decorate(tree, sent)
-		uprods = lcfrs_productions(dectree, sent)
+		uprods = lcfrsproductions(dectree, sent)
 		nodefreq(tree, dectree, fd, ntfd)
 		for (a, avar), (b, bvar) in zip(prods, uprods):
 			assert avar == bvar
@@ -202,7 +202,7 @@ def dopreduction(trees, sents, packedgraph=False):
 			ewe=list(ewe), shortest=list(shortest), bon=list(bon))
 
 
-def doubledop(trees, fragments, debug=False):
+def doubledop(trees, fragments, debug=False, binarized=True):
 	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
 	grammar containing all fragments that occur at least twice, plus all
 	individual productions needed to obtain full coverage.
@@ -244,25 +244,13 @@ def doubledop(trees, fragments, debug=False):
 	# binarize, turn to lcfrs productions
 	# use artificial markers of binarization as disambiguation,
 	# construct a mapping of productions to fragments
+	flattenfunc = flattenbin if binarized else flatten
 	for frag, terminals in fragments:
-		prods, newfrag = flatten(frag, terminals, ids)
+		prods, newfrag = flattenfunc(frag, terminals, ids, backtransform)
 		prod = prods[0]
 		if prod[0][1] == 'Epsilon':  # lexical production
 			grammar[prod] = getweight(frag, terminals)
 			continue
-		elif prod in backtransform:
-			# normally, rules of fragments are disambiguated by binarization IDs
-			# in case there's a fragment with only one or two frontier nodes,
-			# we add an artficial node.
-			newlabel = "%s}<%d>%s" % (prod[0][0], next(ids),
-					'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
-			prod1 = ((prod[0][0], newlabel) + prod[0][2:], prod[1])
-			# we have to determine fanout of the first nonterminal
-			# on the right hand side
-			prod2 = ((newlabel, prod[0][1]),
-				tuple((0,) for component in prod[1]
-				for a in component if a == 0))
-			prods[:1] = [prod1, prod2]
 
 		# first binarized production gets prob. mass
 		grammar[prod] = getweight(frag, terminals)
@@ -324,7 +312,7 @@ def sortgrammar(grammar):
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
 
-def flatten(tree, sent, ids):
+def flattenbin(tree, sent, ids, backtransform):
 	""" Auxiliary function for Double-DOP.
 	Remove internal nodes from a tree and read off the binarized
 	productions of the resulting flattened tree. Aside from returning
@@ -337,7 +325,7 @@ def flatten(tree, sent, ids):
 	>>> ids = UniqueIDs()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> flatten(tree, sent, ids)  # doctest: +NORMALIZE_WHITESPACE
+	>>> flattenbin(tree, sent, ids, {})  # doctest: +NORMALIZE_WHITESPACE
 	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
@@ -358,14 +346,14 @@ def flatten(tree, sent, ids):
 		return "(%s@%s%s)" % (x.group(1), word, n)
 
 	if tree.count(' ') == 1:
-		return lcfrs_productions(addbitsets(tree), sent), str(tree)
+		return lcfrsproductions(addbitsets(tree), sent), str(tree)
 	# give terminals unique POS tags
 	prod = FRONTIERORTERM.sub(repl, tree)
 	# remove internal nodes, reorder
 	prod = "%s %s)" % (prod[:prod.index(' ')],
 			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
 			key=lambda x: int(x.group(2)))))
-	prods = lcfrs_productions(factorconstituent(addbitsets(prod), "}",
+	prods = lcfrsproductions(factorconstituent(addbitsets(prod), "}",
 			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2),
 			sent)
 	# remember original order of frontiers / terminals for template
@@ -373,6 +361,76 @@ def flatten(tree, sent, ids):
 			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
 	# mark substitution sites and ensure string.
 	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], tree)
+	prod = prods[0]
+	if prod in backtransform:
+		# normally, rules of fragments are disambiguated by binarization IDs.
+		# In case there's a fragment with only one or two frontier nodes,
+		# we add an artficial node.
+		newlabel = "%s}<%d>%s" % (prod[0][0], next(ids),
+				'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
+		prod1 = ((prod[0][0], newlabel) + prod[0][2:], prod[1])
+		# we have to determine fanout of the first nonterminal
+		# on the right hand side
+		prod2 = ((newlabel, prod[0][1]),
+			tuple((0,) for component in prod[1]
+			for a in component if a == 0))
+		prods[:1] = [prod1, prod2]
+	return prods, str(newtree)
+
+
+def flatten(tree, sent, ids, backtransform):
+	""" Auxiliary function for Double-DOP.
+	Like flattenbin(), but doesn't apply binarization.
+
+	>>> ids = UniqueIDs()
+	>>> sent = [None, ',', None, '.']
+	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
+	>>> flatten(tree, sent, ids, {})  # doctest: +NORMALIZE_WHITESPACE
+	([(('ROOT', 'S_2', '$,@,', '$.@.'), ((0, 1, 0, 2),)),
+		 (('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
+	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')"""
+	from discodop.treetransforms import addbitsets
+
+	def repl(x):
+		""" Add information to a frontier or terminal:
+
+		:frontiers: ``(label indices)``
+		:terminals: ``(tag@word idx)`` """
+		n = x.group(2)  # index w/leading space
+		nn = int(n)
+		if sent[nn] is None:
+			return x.group(0)  # (label indices)
+		word = quotelabel(sent[nn])
+		# (tag@word idx)
+		return "(%s@%s%s)" % (x.group(1), word, n)
+
+	if tree.count(' ') == 1:
+		return lcfrsproductions(addbitsets(tree), sent), str(tree)
+	# give terminals unique POS tags
+	prod = FRONTIERORTERM.sub(repl, tree)
+	# remove internal nodes, reorder
+	prod = "%s %s)" % (prod[:prod.index(' ')],
+			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
+			key=lambda x: int(x.group(2)))))
+	prods = lcfrsproductions(addbitsets(prod), sent)
+	# remember original order of frontiers / terminals for template
+	order = {x.group(2): "{%d}" % n
+			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
+	# mark substitution sites and ensure string.
+	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], tree)
+	prod = prods[0]
+	if prod in backtransform:
+		# In case there's a fragment with a conflicting signature,
+		# we add an artficial node.
+		newlabel = "%s}<%d>%s" % (prod[0][0], next(ids),
+				'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
+		prod1 = ((prod[0][0], newlabel) + prod[0][2:], prod[1])
+		# we have to determine fanout of the first nonterminal
+		# on the right hand side
+		prod2 = ((newlabel, prod[0][1]),
+			tuple((0,) for component in prod[1]
+			for a in component if a == 0))
+		prods[:1] = [prod1, prod2]
 	return prods, str(newtree)
 
 
@@ -573,18 +631,6 @@ def ranges(s):
 			rng = [a]
 	if rng:
 		yield rng
-
-
-def coarse_grammar(trees, sents, level=0):
-	""" collapse all labels to X except ROOT and POS tags. """
-	if level == 0:
-		repl = lambda x: "X"
-	label = re.compile("[^^|<>-]+")
-	for tree in trees:
-		for subtree in tree.subtrees():
-			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
-				subtree.label = label.sub(repl, subtree.label)
-	return treebankgrammar(trees, sents)
 
 
 def defaultparse(wordstags, rightbranching=False):
