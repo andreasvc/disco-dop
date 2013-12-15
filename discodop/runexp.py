@@ -985,6 +985,9 @@ def readparam(filename):
 			assert stage.estimator in ('dop1', 'ewe', 'bon')
 			assert stage.objective in ('mpp', 'mpd', 'shortest',
 					"sl-dop", "sl-dop-simple")
+		if not stage.binarized:
+			assert stage.mode == 'pcfg-bitpar', (
+					'non-binarized grammar requires use of bitpar')
 	return params
 
 

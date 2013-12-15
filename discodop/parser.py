@@ -242,6 +242,8 @@ class Parser(object):
 					not hasattr(stage, 'rulesfile')
 					or x != stage.grammar.currentmodel):
 				exportbitpargrammar(stage)
+			assert stage.binarized or stage.mode == 'pcfg-bitpar', (
+					'non-binarized grammar requires use of bitpar')
 			if not stage.prune or chart:
 				if n != 0 and stage.prune and stage.mode != 'dop-rerank':
 					beginprune = time.clock()
@@ -388,7 +390,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		lexicon = codecs.getreader('utf-8')(gzip.open('%s/%s.lex.gz' % (
 				resultdir, stage.name)))
 		grammar = Grammar(rules.read(), lexicon.read(),
-				start=top, bitpar=stage.mode.startswith('pcfg'))
+				start=top, bitpar=stage.mode.startswith('pcfg'),
+				binarized=stage.binarized)
 		backtransform = None
 		if stage.dop:
 			assert stage.useestimates is None, 'not supported'
