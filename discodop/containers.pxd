@@ -62,9 +62,9 @@ cdef class Grammar:
 #		parsing can be pruned, viterbi probabilities can be obtained in
 #		separate stage.
 #		=> (3) external whitelist (current)
-
 # [x] sampling; not well tested.
 # [x] unroll list of edges in parse forest: list w/blocks of 1000 edges in arrays
+
 # chart improvements todo:
 # [ ] better to use e.g., C++ vector or other existing dynamic array for edges
 # [ ] inside-outside parsing; current numpy arrays can be replaced with compact
@@ -81,8 +81,8 @@ cdef class Chart:
 	cdef dict inside, outside
 	cdef UInt start
 	cdef short lensent
-	cdef public bint logprob  # False => 0 < p <= 1; True => 0 <= -log(p) < inf
-	cdef public bint viterbi  # False => inside probs; True => viterbi 1-best
+	cdef public bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
+	cdef public bint viterbi  # False: inside probs; True: viterbi 1-best
 	cdef double subtreeprob(self, item)
 	cdef lexidx(self, item, Edge *edge)
 	cdef edgestr(self, item, Edge *edge)

@@ -42,7 +42,8 @@ cdef class Grammar:
 	:param start: a string identifying the unique start symbol of this grammar,
 		which will be used by default when parsing with this grammar
 	:param bitpar: whether to expect and use the bitpar grammar format
-	:param binarized: whether to require a binarized grammar
+	:param binarized: whether to require a binarized grammar;
+		a non-binarized grammar can only be used by bitpar.
 
 	By default the grammar is in logprob mode;
 	invoke ``grammar.switch('default', logprob=False)`` to switch.
@@ -116,11 +117,11 @@ cdef class Grammar:
 	def _countrules(self, list rulelines):
 		""" Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs """
+		cdef int numother = 0
 		Epsilon = b'Epsilon'
 		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
 		self.toid = {Epsilon: 0}
 		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
-		numother = 0
 		for line in rulelines:
 			if not line.strip():
 				continue
@@ -325,7 +326,7 @@ cdef class Grammar:
 					dest[0][m] = self.bylhs[0][n]
 					assert dest[0][m].no < self.numrules
 					m += 1
-		if self.binarized and filterlen == 2:
+		if filterlen == 2:
 			assert m == self.numunary, (m, self.numunary)
 		elif self.binarized and filterlen == 3:
 			assert m == self.numbinary, (m, self.numbinary)
@@ -353,7 +354,7 @@ cdef class Grammar:
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
 	def register(self, unicode name, weights):
-		""" Register a probabilistic model given a name, and a sequence of
+		""" Register a probabilistic model given a name and a sequence of
 		floats ``weights``, with weights  in the same order as
 		``self.origrules`` and ``self.origlexicon`` (which is an arbitrary
 		order except that tags for each word are clustered together). """

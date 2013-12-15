@@ -204,6 +204,9 @@ class Parser(object):
 		self.tailmarker = tailmarker
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
+		for stage in stages:
+			if stage.mode == 'pcfg-bitpar':
+				exportbitpargrammar(stage)
 
 	def parse(self, sent, tags=None):
 		""" Parse a sentence and yield a dictionary from parse trees to
