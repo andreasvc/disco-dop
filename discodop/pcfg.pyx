@@ -727,6 +727,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	Result is a dictionary of derivations with their probabilities. """
 	# TODO: get full viterbi parse forest, turn into chart w/ChartItems
 	assert 1 <= n <= 1000
+	log10 = pylog(10)
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
 	chart.rankededges = {chart.root(): []}
@@ -737,16 +738,18 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		lexiconfile = tmp.name
 	tokens = [word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
 			for word in (tags or sent)]
-	proc = subprocess.Popen(['bitpar', '-q', '-vp', '-b', str(n),
-			'-s', startlabel, rulesfile, lexiconfile],
+	# pass empty 'unkwown word file' to disable bitpar's smoothing
+	proc = subprocess.Popen(['bitpar', '-b', str(n), '-s', startlabel,
+			'-u', '/dev/null', '-q', '-vp', rulesfile, lexiconfile],
 			shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
 	results, msg = proc.communicate('\n'.join(tokens) + '\n')
+	msg = msg.replace('Warning: Word class 0 did not occur!\n', '')
 	# decode results or not?
 	if not results or results.startswith('No parse'):
 		return chart, '%s\n%s' % (results, msg)
 	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
-	derivs = [(renumber(deriv), -float(prob))
+	derivs = [(renumber(deriv), -float(prob) * log10)
 			for prob, deriv in BITPARPARSESLOG.findall(lines)]
 	if not derivs:
 		derivs = [(renumber(deriv), -pylog(float(prob) or 5.e-130))
