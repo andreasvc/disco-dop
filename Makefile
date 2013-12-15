@@ -30,7 +30,7 @@ testdebug: debug valgrind-python.supp
 		--suppressions=valgrind-python.supp python-dbg -tt -3 tests.py
 
 valgrind-python.supp:
-	wget http://codespeak.net/svn/lxml/trunk/valgrind-python.supp
+	wget http://svn.python.org/projects/python/trunk/Misc/valgrind-python.supp
 
 inplace:
 	python setup.py build_ext --inplace
