@@ -265,7 +265,7 @@ cdef class Grammar:
 			cur = &(self.bylhs[0][n])
 			cur.no = n
 			cur.lhs = self.toid[rule[0]]
-			cur.rhs1 = self.toid[rule[1]]
+			cur.rhs1 = 0 if len(rule) > 3 else self.toid[rule[1]]
 			cur.rhs2 = 0 if len(rule) == 2 else self.toid[rule[2]]
 			cur.prob = w
 			cur.lengths = cur.args = m = 0
@@ -324,7 +324,8 @@ cdef class Grammar:
 		else:
 			for n in range(self.numrules):
 				if ((filterlen == 2 and self.bylhs[0][n].rhs2 == 0)
-					or (filterlen == 3 and self.bylhs[0][n].rhs2 != 0)):
+						or (filterlen == 3 and self.bylhs[0][n].rhs1
+						and self.bylhs[0][n].rhs2)):
 					# copy this rule
 					dest[0][m] = self.bylhs[0][n]
 					assert dest[0][m].no < self.numrules
