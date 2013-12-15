@@ -715,8 +715,7 @@ def chartmatrix(nonterminals, lensent):
 	viterbi[...] = np.inf
 	return viterbi
 
-
-BITPARUNESCAPE = re.compile(r"\\([#{}\[\]<>\^$'])")
+BITPARUNESCAPE = re.compile(r"\\([\"\\ $\^'()\[\]{}=<>#])")
 BITPARPARSES = re.compile(r'^vitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
 BITPARPARSESLOG = re.compile(r'^logvitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
 
