@@ -251,7 +251,7 @@ cdef class Grammar:
 				assert nt in self.toid, ('symbol %r has not been seen as LHS '
 						'in any rule: %s' % (nt, line))
 				fanout = (yf.count(',') + 1) if m == 0 else yf.count(str(m - 1))
-				assert fanoutdict[nt] == fanout, (
+				assert not self.binarized or fanoutdict[nt] == fanout, (
 						"conflicting fanouts for symbol '%s'.\n"
 						"previous: %d; this non-terminal: %d.\n"
 						"yf: %s; rule: %s" % (
@@ -278,7 +278,8 @@ cdef class Grammar:
 					raise ValueError('expected: %r; got: %r' % ('0', a))
 				m += 1
 			cur.lengths |= 1 << (m - 1)
-			assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
+			if self.binarized:
+				assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
 			self.rulenos[(yf, ) + tuple(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
