@@ -266,7 +266,7 @@ cdef class Grammar:
 			cur.no = n
 			cur.lhs = self.toid[rule[0]]
 			cur.rhs1 = self.toid[rule[1]]
-			cur.rhs2 = self.toid[rule[2]] if len(rule) == 3 else 0
+			cur.rhs2 = 0 if len(rule) == 2 else self.toid[rule[2]]
 			cur.prob = w
 			cur.lengths = cur.args = m = 0
 			for a in yf.decode('ascii'):
