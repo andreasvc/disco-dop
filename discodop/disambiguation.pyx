@@ -372,7 +372,7 @@ cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 			# move on to next node in this binarized constituent
 			deriv = deriv[0]
 		# last right child
-		if len(deriv) == 2:  # is there a right child?
+		if len(deriv) >= 2:  # is there a right child?
 			children.extend(deriv[1:])
 	elif '}<' in deriv[0].label:
 		deriv = deriv[0]
