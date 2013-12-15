@@ -240,6 +240,7 @@ cdef class Grammar:
 			fields = line.split()
 			if self.bitpar:
 				rule = fields[1:]
+				# NB: this is wrong when len(rule) > 10
 				yf = ''.join(map(str, range(len(rule) - 1)))
 				w = fields[0]
 			else:
@@ -322,14 +323,15 @@ cdef class Grammar:
 			m = self.numrules
 		else:
 			for n in range(self.numrules):
-				if (filterlen == 2) == (self.bylhs[0][n].rhs2 == 0):
+				if ((filterlen == 2 and self.bylhs[0][n].rhs2 == 0)
+					or (filterlen == 3 and self.bylhs[0][n].rhs2 != 0)):
 					# copy this rule
 					dest[0][m] = self.bylhs[0][n]
 					assert dest[0][m].no < self.numrules
 					m += 1
 		if filterlen == 2:
 			assert m == self.numunary, (m, self.numunary)
-		elif self.binarized and filterlen == 3:
+		elif filterlen == 3:
 			assert m == self.numbinary, (m, self.numbinary)
 		# sort rules by idx (NB: qsort is not stable, use appropriate cmp func)
 		if idx == 0:

@@ -701,7 +701,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	- if ``bitpar`` is ``False``, write rational fractions; e.g., ``2/3``.
 	- if ``bitpar`` is ``True``, write frequencies if probabilities sum to 1
 		(e.g., ``2``), i.e., in that case probabilities can be re-computed as
-		relative frequencies. Otherwise, resort to decimal floats
+		relative frequencies. Otherwise, resort to floating point numbers
 		(e.g., ``0.666``, imprecise).
 	"""
 	rules, lexicon, lexical = [], [], {}
