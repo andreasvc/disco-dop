@@ -163,14 +163,14 @@ class DrawTree(object):
 			if ids[m] == 0:
 				startoflevel = len(matrix)
 			for rowidx in range(startoflevel, len(matrix) + 1):
-				if rowidx == len(matrix):
-					# need to add a new row
+				if rowidx == len(matrix):  # need to add a new row
 					matrix.append([vertline if a not in (corner, None)
 							else None for a in matrix[-1]])
 				row = matrix[rowidx]
 				i = j = center
-				# place unaries directly above child; no restrictions for root
-				if len(children[m]) == 1 or ids[m] == 0:
+				if len(children[m]) == 1:  # place unaries directly above child
+					return rowidx, next(iter(children[m]))[1]
+				elif ids[m] == 0:  # no restrictions for root
 					return rowidx, i
 				elif all(a in (None, vertline) for a
 						in row[min(candidates):max(candidates) + 1]):
