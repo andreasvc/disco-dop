@@ -782,7 +782,7 @@ def segmentbrackets(brackets, strict=False):
 	lb, rb = brackets
 	# regex to check if the tree contains any terminals (as opposed to indices)
 	strtermre = re.compile('[^0-9%(rb)s]%(rb)s' % {'rb': re.escape(rb)})
-	newlb = re.compile(r'(?:.*[\n\r])?\s*%(lb)s' % {'lb': re.escape(lb)})
+	newlb = re.compile(r'(?:.*[\n\r])?\s*')
 	parens = 0  # number of open parens
 	prev = ''  # incomplete tree currently being read
 	result = ''  # string of complete tree
@@ -818,15 +818,17 @@ def segmentbrackets(brackets, strict=False):
 				b = line.find(rb, b + 1)
 		status = 1 if results or result or parens else 0
 		line = (yield results or None, status)
+		if results:
+			results = []
 		if line is None:
 			if result:
 				results.append(brackettree(result, rest, brackets, strtermre))
 			status = 1 if results or result or parens else 0
 			yield results or None, status
 			line = ''
-		if results:
-			results = []
-		if parens or result or results:
+			if results:
+				results = []
+		if parens or result:
 			line = prev + line
 		else:
 			prev = ''
@@ -927,15 +929,8 @@ def numbase(key):
 	return [path] + base
 
 
-def test():
-	""" Not implemented. """
-
-
 READERS = OrderedDict((('export', NegraCorpusReader),
 		('bracket', BracketCorpusReader),
 		('discbracket', DiscBracketCorpusReader),
 		('tiger', TigerXMLCorpusReader),
 		('alpino', AlpinoCorpusReader), ('dact', DactCorpusReader)))
-
-if __name__ == '__main__':
-	test()

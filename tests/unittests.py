@@ -2,6 +2,7 @@ import re
 from unittest import TestCase
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
+from discodop.treebank import incrementaltreereader
 from discodop.treetransforms import binarize, unbinarize, \
 		splitdiscnodes, mergediscnodes, \
 		addbitsets, fanout
@@ -76,6 +77,20 @@ class Test_treetransforms:
 		tree = Tree.parse('(S (X (A 0) (A 2)) (X (A 1) (A 3)))', parse_leaf=int)
 		assert str(mergediscnodes(splitdiscnodes(tree))) == (
 				'(S (X (A 0) (A 1) (A 2) (A 3)))')
+
+
+class Test_treebank:
+	def test_incrementaltreereader(self):
+		data = """
+		(top (smain (noun 0) (verb 1) (inf (verb 5) (inf (np (det 2) \
+				(adj 3) (noun 4)) (verb 6) (pp (prep 7) (noun 8))))) (punct 9))
+		Het had een prachtige dag kunnen zijn in Londen .
+		"""
+		result = list(incrementaltreereader([data]))
+		assert len(result) == 1
+		for tree, sent in result:
+			assert sent[0] == u'Het', sent[0]
+			assert len(sent) == 10
 
 
 class Test_treebanktransforms:
