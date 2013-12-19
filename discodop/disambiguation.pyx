@@ -368,7 +368,7 @@ cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 		# blocking nonterminals from the double-dop binarization.
 		while '}<' in deriv[0].label:
 			# one of the right children
-			children.extend(reversed(deriv[1:])
+			children.extend(reversed(deriv[1:]))
 			# move on to next node in this binarized constituent
 			deriv = deriv[0]
 		# last right child
