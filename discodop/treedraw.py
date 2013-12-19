@@ -156,10 +156,15 @@ class DrawTree(object):
 			and look for cell between first and last child of this node,
 			add new row to level if no free row available. """
 			candidates = [a for _, a in children[m]]
+			minidx, maxidx = min(candidates), max(candidates)
 			leaves = tree[m].leaves()
 			center = scale * sum(leaves) // len(leaves)  # center of gravity
+			if minidx < maxidx and not minidx < center < maxidx:
+				center = sum(candidates) // len(candidates)
 			if max(candidates) - min(candidates) > 2 * scale:
 				center -= center % scale  # round to unscaled coordinate
+				if minidx < maxidx and not minidx < center < maxidx:
+					center += scale
 			if ids[m] == 0:
 				startoflevel = len(matrix)
 			for rowidx in range(startoflevel, len(matrix) + 1):
@@ -170,25 +175,28 @@ class DrawTree(object):
 				i = j = center
 				if len(children[m]) == 1:  # place unaries directly above child
 					return rowidx, next(iter(children[m]))[1]
-				elif ids[m] == 0:  # no restrictions for root
-					return rowidx, i
 				elif all(a in (None, vertline) for a
 						in row[min(candidates):max(candidates) + 1]):
 					# find free column
-					while j > zeroindex or i < lastindex:
-						if i < lastindex and matrix[rowidx][i] is None:
-							return rowidx, i
-						elif j > zeroindex and matrix[rowidx][j] is None:
-							return rowidx, j
-						i += 1
-						j -= 1
-			raise ValueError('could not find a free cell.')
+					for n in range(scale):
+						i = j = center + n
+						while j > minidx or i < maxidx:
+							if i < maxidx and (matrix[rowidx][i] is None
+									or i in candidates):
+								return rowidx, i
+							elif j > minidx and (matrix[rowidx][j] is None
+									or j in candidates):
+								return rowidx, j
+							i += scale
+							j -= scale
+			raise ValueError('could not find a free cell for:\n%s\n%s'
+					'min=%d; max=%d' % (tree[m], minidx, maxidx, dumpmatrix()))
 
 		def dumpmatrix():
 			""" Dump matrix contents for debugging purposes. """
-			for n, _ in enumerate(matrix):
-				print(n, ':', ' '.join(('%2r' % i)[:2] for i in matrix[n]))
-			print()
+			return '\n'.join(
+				'%2d: %s' % (n, ' '.join(('%2r' % i)[:2] for i in row))
+				for n, row in enumerate(matrix))
 
 		leaves = tree.leaves()
 		assert all(isinstance(n, int) for n in leaves), (
@@ -274,7 +282,7 @@ class DrawTree(object):
 				if m != ():
 					childcols[m[:-1]].add((rowidx, i))
 				#print(ids[m], str(tree[m]), startoflevel, n)
-				#dumpmatrix()
+				#print(dumpmatrix())
 		assert len(positions) == 0
 
 		# remove unused columns, right to left
