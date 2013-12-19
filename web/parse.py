@@ -189,11 +189,13 @@ def guesslang(sent):
 	return lang
 
 
+logging.basicConfig()
+for log in (logging.getLogger(), APP.logger):
+	log.setLevel(logging.DEBUG)
+	log.handlers[0].setFormatter(logging.Formatter(
+			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+loadparsers()
+
+
 if __name__ == '__main__':
-	logging.basicConfig()
-	for log in (logging.getLogger(), APP.logger):
-		log.setLevel(logging.DEBUG)
-		log.handlers[0].setFormatter(logging.Formatter(
-				fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-	loadparsers()
 	APP.run(debug=False, host='0.0.0.0')
