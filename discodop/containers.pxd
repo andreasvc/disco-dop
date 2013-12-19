@@ -1,5 +1,5 @@
 from math import isinf, exp, log, fsum
-from libc.stdlib cimport malloc, calloc, realloc, free, qsort
+from libc.stdlib cimport malloc, calloc, realloc, free, qsort, atol, strtod
 from libc.string cimport memcmp
 cimport cython
 include "constants.pxi"

@@ -166,6 +166,7 @@ cdef class Grammar:
 	def _convertlexicon(self, fanoutdict):
 		""" Make objects for lexical rules. """
 		cdef int x
+		cdef double w
 		self.lexical = []
 		self.lexicalbyword = {}
 		self.lexicalbylhs = {}
@@ -178,7 +179,7 @@ cdef class Grammar:
 			assert word not in self.lexicalbyword, (
 					'word %r appears more than once in lexicon file' % word)
 			self.lexicalbyword[word] = []
-			for tag, w in zip(fields[::2], fields[1::2]):
+			for tag, weight in zip(fields[::2], fields[1::2]):
 				if tag not in self.toid:
 					self.toid[tag] = len(self.toid)
 					fanoutdict[tag] = 1
@@ -190,9 +191,7 @@ cdef class Grammar:
 					assert fanoutdict[tag] == 1, (
 							'POS tag %r has fan-out %d, may only be 1.' % (
 							fanoutdict[tag], tag))
-				# convert fraction to float
-				x = w.find(b'/')
-				w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
+				w = convertweight(weight)
 				assert w > 0, (
 						'weights should be positive and non-zero:\n%r' % line)
 				lexrule = LexicalRule(self.toid[tag], word, w)
@@ -232,6 +231,7 @@ cdef class Grammar:
 		""" Auxiliary function to create Grammar objects. Copies grammar
 		rules from a text file to a contiguous array of structs. """
 		cdef UInt n = 0, m
+		cdef double w
 		cdef Rule *cur
 		self.rulenos = {}
 		for line in rulelines:
@@ -242,11 +242,11 @@ cdef class Grammar:
 				rule = fields[1:]
 				# NB: this is wrong when len(rule) > 10
 				yf = ''.join(map(str, range(len(rule) - 1)))
-				w = fields[0]
+				weight = fields[0]
 			else:
 				rule = fields[:-2]
 				yf = fields[-2].decode('ascii')
-				w = fields[-1]
+				weight = fields[-1]
 			# check whether RHS labels have been seen as LHS and check fanout
 			for m, nt in enumerate(rule):
 				assert nt in self.toid, ('symbol %r has not been seen as LHS '
@@ -257,9 +257,7 @@ cdef class Grammar:
 						"previous: %d; this non-terminal: %d.\n"
 						"yf: %s; rule: %s" % (
 						nt, fanoutdict[nt], fanout, yf, line))
-			# convert fraction to float
-			x = w.find(b'/')
-			w = float(w[:x]) / float(w[x + 1:]) if x > 0 else float(w)
+			w = convertweight(weight)
 			assert w > 0, 'weights should be positive and non-zero:\n%r' % line
 			# n is the rule index in the array, and will be the ID for the rule
 			cur = &(self.bylhs[0][n])
@@ -418,8 +416,8 @@ cdef class Grammar:
 		cdef UInt n
 		cdef list sums = [[] for _ in self.toid]
 		cdef double [:] tmp = self.models[self.currentmodel, :]
-		#We could be strict about separating POS tags and phrasal categories,
-		#but Negra contains at least one tag (--) used for both.
+		# We could be strict about separating POS tags and phrasal categories,
+		# but Negra contains at least one tag (--) used for both.
 		for n in range(self.numrules):
 			rule = &(self.bylhs[0][n])
 			sums[rule.lhs].append(tmp[rule.no])
@@ -594,3 +592,15 @@ cdef class Grammar:
 			free(self.splitmapping[0])
 			free(self.splitmapping)
 			self.splitmapping = NULL
+
+
+cdef inline double convertweight(const char *weight):
+	""" Convert weight to double; weight may be a fraction '1/2',
+	decimal float '0.5' or hex float '0x1.0p-1'. Returns 0 on error. """
+	cdef char *endptr = NULL
+	cdef double w = strtod(weight, &endptr)
+	if endptr[0] == b'/':
+		w /= atol(&endptr[1])
+	elif endptr[0]:
+		return 0
+	return w
