@@ -81,7 +81,7 @@ class CorpusReader(object):
 				(None, 'leave', 'add', 'replace', 'between'): morphology,
 				(None, 'move', 'remove', 'root'): punct,
 				(None, 'leave', 'between'): lemmas}.items():
-			assert opt in opts, 'Expected one of %r. Got: %r' (opts, opt)
+			assert opt in opts, 'Expected one of %r. Got: %r' % (opts, opt)
 		assert self._filenames, (
 				"no files matched pattern %s" % os.path.join(root, fileids))
 		self._sents_cache = None

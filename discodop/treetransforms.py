@@ -23,7 +23,6 @@ if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
 from discodop.treebank import READERS, writetree, splitpath
-from discodop.treebanktransforms import readheadrules
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -873,6 +872,7 @@ def main():
 	""" Command line interface for applying tree(bank) transforms. """
 	import io
 	from getopt import gnu_getopt, GetoptError
+	from discodop.treebanktransforms import readheadrules
 	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()

@@ -190,7 +190,7 @@ def transform(tree, sent, transformations):
 				if func and func != '--':
 					a.label += '-' + func
 		elif name == 'FUNC-NODE':  # insert node with function above phrasal label
-			from treetransforms import postorder
+			from discodop.treetransforms import postorder
 			for a in postorder(tree):
 				func = function(a)
 				if func and func != '--':
@@ -295,7 +295,7 @@ def reversetransform(tree, transformations):
 					a.source[TAG] = a.label = label
 					a.source[FUNC] = func
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
-			from treetransforms import postorder
+			from discodop.treetransforms import postorder
 			for a in postorder(tree, lambda n: n.label.startswith('-')):
 				a.source = ['--'] * 8
 				a.source[FUNC] = a.label[1:]
@@ -317,6 +317,7 @@ def collapselabels(trees, sents, mapping=None):
 	:level 2: S, N, A, P (verbal, nominal, adjectival, prepositional)
 	:level 3: no-op, return original treebank labels """
 	def collapse(orig):
+		""" Collapse labels of a single tree; returns a new Tree object. """
 		tree = orig.copy(True)
 		for subtree in tree.subtrees():
 			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):

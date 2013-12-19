@@ -259,7 +259,7 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 		backtransform[prod] = newfrag
 	if debug:
 		ids = count()
-		flatfrags = [flatten(frag, terminals, ids)
+		flatfrags = [flattenfunc(frag, terminals, ids, {})
 				for frag, terminals in fragments]
 		print("recurring fragments:")
 		for a, b in zip(flatfrags, fragments):
