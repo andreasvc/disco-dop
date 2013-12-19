@@ -718,6 +718,7 @@ def chartmatrix(nonterminals, lensent):
 BITPARUNESCAPE = re.compile(r"\\([\"\\ $\^'()\[\]{}=<>#])")
 BITPARPARSES = re.compile(r'^vitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
 BITPARPARSESLOG = re.compile(r'^logvitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
+CPUTIME = re.compile('^raw cpu time (.+)$', re.MULTILINE)
 
 
 def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
@@ -740,14 +741,17 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 			for word in (tags or sent)]
 	# pass empty 'unkwown word file' to disable bitpar's smoothing
 	proc = subprocess.Popen(['bitpar', '-b', str(n), '-s', startlabel,
-			'-u', '/dev/null', '-q', '-vp', rulesfile, lexiconfile],
+			'-u', '/dev/null', '-vp', rulesfile, lexiconfile],
 			shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
 	results, msg = proc.communicate('\n'.join(tokens) + '\n')
-	msg = msg.replace('Warning: Word class 0 did not occur!\n', '')
+	msg = msg.replace('Warning: Word class 0 did not occur!\n',
+			'').decode('utf8').strip()
+	match = CPUTIME.search(msg)
+	cputime = float(match.group(1)) if match else 0.0
 	# decode results or not?
 	if not results or results.startswith('No parse'):
-		return chart, '%s\n%s' % (results, msg)
+		return chart, cputime, '%s\n%s' % (results.decode('utf8').strip(), msg)
 	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
 	derivs = [(renumber(deriv), -float(prob) * log10)
 			for prob, deriv in BITPARPARSESLOG.findall(lines)]
@@ -756,7 +760,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 				for prob, deriv in BITPARPARSES.findall(lines)]
 	chart.parseforest = {chart.root(): None}  # dummy so bool(chart) == True
 	chart.rankededges[chart.root()] = derivs
-	return chart, msg
+	return chart, cputime, ''
 
 
 def renumber(deriv):

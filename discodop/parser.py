@@ -273,13 +273,12 @@ class Parser(object):
 							sent, stage.grammar, tags=tags)
 					chart = bool(start)
 				elif stage.mode == 'pcfg-bitpar':
-					chart, msg1 = pcfg.parse_bitpar(stage.grammar,
+					chart, cputime, msg1 = pcfg.parse_bitpar(stage.grammar,
 							stage.rulesfile.name, stage.lexiconfile.name,
 							sent, 1000,  # orig: stage.m; fixed for ctf
 							stage.grammar.start,
 							stage.grammar.toid[stage.grammar.start], tags=tags)
-					msg1 += '%d derivations' % (
-							len(chart.rankededges[chart.root()]))
+					begin -= cputime
 				elif stage.mode == 'plcfrs':
 					chart, msg1 = plcfrs.parse(
 							sent, stage.grammar, tags=tags,
@@ -466,7 +465,7 @@ def exportbitpargrammar(stage):
 			'(', '-LRB-').replace(')', '-RRB-')
 	lexiconfile = codecs.getwriter('utf-8')(stage.lexiconfile)
 	if stage.grammar.currentmodel == 0:
-		lexiconfile.writelines(lexicon)
+		lexiconfile.write(lexicon)
 	else:
 		weights = iter(stage.grammar.models[stage.grammar.currentmodel,
 				stage.grammar.numrules:])
