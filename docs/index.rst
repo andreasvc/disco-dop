@@ -16,19 +16,15 @@ generalization of Probabilistic Context-Free Grammar (PCFG). Data-Oriented
 Parsing allows re-use of arbitrary-sized fragments from previously seen
 sentences using Tree-Substitution Grammar (TSG).
 
-Contents:
-
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
+   discodop
    params
    api
 
-.. contents:: Contents:
-   :local:
-
-Usage
-=====
+Overview
+========
 
 Parser
 ------
@@ -72,6 +68,9 @@ This will create a new directory with the base name of the parameter file, i.e.,
 accidentally overwriting previous results. The directory will contain the
 grammar rules and lexicon in a text format, as well as the parsing results and
 the gold standard file in Negra's export format.
+
+.. image:: images/runexp.png
+   :alt: screenshot of runexp showing a parse tree
 
 Note that there is an option to utilize multiple processor cores by launching a
 specific number of processes. This greatly speeds up parsing, but note that for

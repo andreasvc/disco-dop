@@ -11,6 +11,7 @@
 !web/templates/
 !bin/
 !tests/
+!docs/
 !docs/*.rst
 !docs/*.py
 !tests.py

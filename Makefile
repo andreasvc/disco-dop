@@ -1,6 +1,6 @@
 .PHONY: clean test testdebug lint
 
-all:
+all: man
 	python setup.py install --user
 
 clean:
@@ -10,6 +10,11 @@ clean:
 	find discodop -name '*.pyc' -delete
 	find discodop -name '*.html' -delete
 	rm -rf discodop/__pycache__
+	cd docs && make clean
+
+man:
+	mkdir -p ~/.local/man/man1
+	cd docs && make man && cp _build/man/discodop.1 ~/.local/man/man1/
 
 test: all inplace
 	py.test --doctest-modules discodop/ tests/unittests.py && \
