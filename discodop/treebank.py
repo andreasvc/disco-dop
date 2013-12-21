@@ -839,7 +839,7 @@ def segmentexport(morphology, functions):
 	Yields tuples ``(result, status)`` where ...
 
 	- result is ``None`` or a segment delimited by
-		``#BOS `` and ``#EOS `` as a list of lines;
+		``#BOS`` and ``#EOS`` as a list of lines;
 	- status is 1 if the line was consumed, else 0. """
 	cur = []
 	inblock = False

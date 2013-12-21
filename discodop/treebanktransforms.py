@@ -794,7 +794,7 @@ def headstats(trees):
 	- ``heads['NP']['NN'] ==`` number of times NN occurs as head of NP.
 	- ``pos1['NP'][1] ==`` number of times head of NP is at position 1.
 	- ``pos2`` is like pos1, but position is from the right.
-	- ``unknown['NP']['NN'] == number of times NP that does not have a head
+	- ``unknown['NP']['NN'] ==`` number of times NP that does not have a head
 		dominates an NN. """
 	heads, unknown = defaultdict(multiset), defaultdict(multiset)
 	pos1, pos2 = defaultdict(multiset), defaultdict(multiset)
