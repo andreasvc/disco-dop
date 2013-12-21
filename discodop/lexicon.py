@@ -6,21 +6,20 @@ Rare words in the training set are replaced with word signatures, such that
 unknown words can receive similar tags. Given a function to produce such
 signatures from words, the flow is as follows:
 
-Simple lexical smoothing:
-	getunknownwordmodel (get statistics)
-	replaceraretrainwords (adjust trees)
-	[ read off grammar ]
-	simplesmoothlexicon (add extra lexical productions)
-
-Non-simple (untested):
-	getunknownwordmodel
-	getlexmodel
-	replaceraretrainwords
-	[ read off grammar ]
-	smoothlexicon
-
-During parsing:
-	replaceraretestwords (only give known words and signatures to parser)
+- Simple lexical smoothing:
+  # getunknownwordmodel (get statistics)
+  # replaceraretrainwords (adjust trees)
+  # [ read off grammar ]
+  # simplesmoothlexicon (add extra lexical productions)
+- Sophisticated smoothing (untested):
+  # getunknownwordmodel
+  # getlexmodel
+  # replaceraretrainwords
+  # [ read off grammar ]
+  # smoothlexicon
+- During parsing:
+  - replaceraretestwords (only give known words and signatures to parser)
+  - restore original words in derivations
 """
 from __future__ import division, print_function, unicode_literals
 import re
