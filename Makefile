@@ -1,7 +1,6 @@
-.PHONY: clean test testdebug lint
+.PHONY: clean test testdebug lint man discodop
 
-all: man
-	python setup.py install --user
+all: discodop man
 
 clean:
 	rm -rf build/
@@ -11,6 +10,9 @@ clean:
 	find discodop -name '*.html' -delete
 	rm -rf discodop/__pycache__
 	cd docs && make clean
+
+discodop:
+	python setup.py install --user
 
 man:
 	mkdir -p ~/.local/man/man1

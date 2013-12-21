@@ -38,12 +38,15 @@ Where the keys and values are:
     :'plcfrs': use the agenda-based PLCFRS parser
     :'pcfg-posterior': Compute inside-outside probabilities (does not produce
         parse trees, can only be used for pruning of next stage).
-    :'pcfg-bitpar': Use external bitpar parser (experimental).
+    :'pcfg-bitpar-nbest': Use external bitpar parser. Produces n-best list
+        (up to n=1000) without producing a parse forest; works with
+        non-binarized grammars. (experimental).
+    :'pcfg-bitpar-forest': Use external bitpar parser (experimental).
     :'dop-rerank': Rerank parse trees from previous stage with DOP reduction (experimental).
 :prune: whether to use previous chart to prune this stage
-:split: split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
-:splitprune: treat VP_2[101] as {VP*[100], VP*[001]} for pruning
-:markorigin: mark origin of split nodes: VP_2 : > {VP*1, VP*2}
+:split: split disc. nodes ``VP_2[101]`` as ``{ VP*[100], VP*[001] }``
+:splitprune: treat ``VP_2[101]`` as ``{VP*[100], VP*[001]}`` for pruning
+:markorigin: mark origin of split nodes: ``VP_2 => {VP*1, VP*2}``
 :k: pruning parameter:
 
     :k > 1: no. of coarse pcfg derivations to prune with
@@ -52,6 +55,8 @@ Where the keys and values are:
 :neverblockre: do not prune nodes with label that match this regex
 :getestimates: compute & store context-summary estimates
 :useestimates: load & use estimates
+:binarized: when using ``mode='pcfg-bitpar-nbest'``, this option can be set to
+    ``False``, to disable the two auxiliary binarizations needed for Double-DOP.
 :dop: enable DOP mode (DOP reduction / double DOP)
 :packedgraph: use packed graph encoding for DOP reduction
 :usedoubledop: when True, use Double-DOP instead of DOP reduction

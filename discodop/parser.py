@@ -205,7 +205,7 @@ class Parser(object):
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
 		for stage in stages:
-			if stage.mode == 'pcfg-bitpar':
+			if stage.mode.startswith('pcfg-bitpar'):
 				exportbitpargrammar(stage)
 
 	def parse(self, sent, tags=None):
@@ -238,11 +238,11 @@ class Parser(object):
 					model = u'shortest'
 			x = stage.grammar.currentmodel
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
-			if stage.mode == 'pcfg-bitpar' and (
+			if stage.mode.startswith('pcfg-bitpar') and (
 					not hasattr(stage, 'rulesfile')
 					or x != stage.grammar.currentmodel):
 				exportbitpargrammar(stage)
-			assert stage.binarized or stage.mode == 'pcfg-bitpar', (
+			assert stage.binarized or stage.mode.startswith('pcfg-bitpar'), (
 					'non-binarized grammar requires use of bitpar')
 			if not stage.prune or chart:
 				if n != 0 and stage.prune and stage.mode != 'dop-rerank':
@@ -260,7 +260,7 @@ class Parser(object):
 								stage.splitprune,
 								self.stages[n - 1].markorigin,
 								stage.mode.startswith('pcfg'),
-								self.stages[n - 1].mode == 'pcfg-bitpar')
+								self.stages[n - 1].mode == 'pcfg-bitpar-nbest')
 					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
@@ -272,10 +272,12 @@ class Parser(object):
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, stage.grammar, tags=tags)
 					chart = bool(start)
-				elif stage.mode == 'pcfg-bitpar':
+				elif stage.mode.startswith('pcfg-bitpar'):
 					chart, cputime, msg1 = pcfg.parse_bitpar(stage.grammar,
 							stage.rulesfile.name, stage.lexiconfile.name,
-							sent, 1000,  # orig: stage.m; fixed for ctf
+							sent,
+							# always request 1000 nbest parses for CTF pruning
+							0 if stage.mode == 'pcfg-bitpar-forest' else 1000,
 							stage.grammar.start,
 							stage.grammar.toid[stage.grammar.start], tags=tags)
 					begin -= cputime
@@ -318,7 +320,7 @@ class Parser(object):
 						sent=sent, tags=tags,
 						sldop_n=stage.sldop_n,
 						backtransform=stage.backtransform,
-						bitpar=stage.mode == 'pcfg-bitpar')
+						bitpar=stage.mode == 'pcfg-bitpar-nbest')
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 			if parsetrees:
@@ -430,7 +432,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
-		if stage.mode == 'pcfg-bitpar':
+		if stage.mode.startswith('pcfg-bitpar'):
 			assert grammar.maxfanout == 1
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)

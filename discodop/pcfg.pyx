@@ -719,19 +719,22 @@ BITPARUNESCAPE = re.compile(r"\\([\"\\ $\^'()\[\]{}=<>#])")
 BITPARPARSES = re.compile(r'^vitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
 BITPARPARSESLOG = re.compile(r'^logvitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
 CPUTIME = re.compile('^raw cpu time (.+)$', re.MULTILINE)
+LOG10 = pylog(10)
 
 
 def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		startlabel, startid, tags=None):
 	""" Parse a single sentence with bitpar, given filenames of rules and
-	lexicon. n is the number of derivations to ask for (max 1000).
+	lexicon. n is the number of derivations to return (max 1000); if n == 0,
+	return parse forest instead of n-best list (requires binarized grammar).
 	Result is a dictionary of derivations with their probabilities. """
-	# TODO: get full viterbi parse forest, turn into chart w/ChartItems
-	assert 1 <= n <= 1000
-	log10 = pylog(10)
+	assert 0 <= n <= 1000
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
-	chart.rankededges = {chart.root(): []}
+	if n == 0:
+		assert chart.grammar.binarized
+	else:
+		chart.rankededges = {chart.root(): []}
 	if tags:
 		import tempfile
 		tmp = tempfile.NamedTemporaryFile()
@@ -740,8 +743,9 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	tokens = [word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
 			for word in (tags or sent)]
 	# pass empty 'unkwown word file' to disable bitpar's smoothing
-	proc = subprocess.Popen(['bitpar', '-b', str(n), '-s', startlabel,
-			'-u', '/dev/null', '-vp', rulesfile, lexiconfile],
+	args = ['-y'] if n == 0 else ['-b', str(n)]
+	args += ['-s', startlabel, '-vp', '-u', '/dev/null', rulesfile, lexiconfile]
+	proc = subprocess.Popen(['bitpar'] + args,
 			shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
 	results, msg = proc.communicate('\n'.join(tokens) + '\n')
@@ -752,15 +756,64 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	# decode results or not?
 	if not results or results.startswith('No parse'):
 		return chart, cputime, '%s\n%s' % (results.decode('utf8').strip(), msg)
-	lines = BITPARUNESCAPE.sub(r'\1', results).replace(')(', ') (')
-	derivs = [(renumber(deriv), -float(prob) * log10)
+	elif n == 0:
+		bitpar_yap_forest(results, chart)
+	else:
+		bitpar_nbest(results, chart)
+	return chart, cputime, ''
+
+
+def bitpar_yap_forest(forest, SparseCFGChart chart):
+	""" Read bitpar YAP parse forest (-y option) into a Chart object.
+
+	The forest has lines of the form::
+		label start end     prob [edge1] % prob [edge2] % .. %%
+
+	where an edge is either a quoted "word", or a rule number and one or two
+	line numbers in the parse forest referring to children.
+	Assumes binarized grammar. Assumes chart's Grammar object has same order of
+	grammar rules as the grammar that was presented to bitpar. """
+	cdef Rule *rule
+	cdef UInt lhs
+	cdef UChar left, right, mid
+	cdef size_t ruleno, child1
+	cdef double prob
+	assert chart.grammar.binarized
+	forest = forest.strip().splitlines()
+	midpoints = [int(line.split(None, 3)[2]) for line in forest]
+	for line in forest:
+		a, b, c, fields = line.rstrip('% ').split(None, 3)
+		lhs, left, right = chart.grammar.toid[a], int(b), int(c)
+		# store 1-best probability, other probabilities can be ignored.
+		prob = -pylog(float(fields.split(None, 1)[0]))
+		chart.updateprob(lhs, left, right, prob)
+		for n, edge in enumerate(fields.split(' % ')):
+			_prob, rest = edge.split(None, 1)
+			if rest.startswith('"'):
+				mid = right
+				rule = NULL
+			else:
+				restsplit = rest.split(None, 2)
+				ruleno = int(restsplit[0])
+				child1 = int(restsplit[1])
+				#ignore second child: (midpoint + end of current node suffices)
+				#child2 = restsplit[2] if len(restsplit) > 2 else None
+				mid = midpoints[child1]
+				rule = &(chart.grammar.bylhs[0][ruleno])
+			chart.addedge(lhs, left, right, mid, rule)
+
+
+def bitpar_nbest(nbest, SparseCFGChart chart):
+	""" Put bitpar's list of n-best derivations into the chart.
+	Parse forest is not converted. """
+	lines = BITPARUNESCAPE.sub(r'\1', nbest).replace(')(', ') (')
+	derivs = [(renumber(deriv), -float(prob) * LOG10)
 			for prob, deriv in BITPARPARSESLOG.findall(lines)]
 	if not derivs:
 		derivs = [(renumber(deriv), -pylog(float(prob) or 5.e-130))
 				for prob, deriv in BITPARPARSES.findall(lines)]
 	chart.parseforest = {chart.root(): None}  # dummy so bool(chart) == True
 	chart.rankededges[chart.root()] = derivs
-	return chart, cputime, ''
 
 
 def renumber(deriv):

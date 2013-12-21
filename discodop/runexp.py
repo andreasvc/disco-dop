@@ -974,7 +974,8 @@ def readparam(filename):
 	for n, stage in enumerate(params['stages']):
 		assert stage.mode in (
 				'plcfrs', 'pcfg', 'pcfg-posterior',
-				'pcfg-bitpar', 'dop-rerank')
+				'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
+				'dop-rerank')
 		assert n > 0 or not stage.prune, (
 				"need previous stage to prune, but this stage is first.")
 		if stage.mode == 'dop-rerank':
@@ -985,9 +986,8 @@ def readparam(filename):
 			assert stage.estimator in ('dop1', 'ewe', 'bon')
 			assert stage.objective in ('mpp', 'mpd', 'shortest',
 					"sl-dop", "sl-dop-simple")
-		if not stage.binarized:
-			assert stage.mode == 'pcfg-bitpar', (
-					'non-binarized grammar requires use of bitpar')
+		assert stage.binarized or stage.mode == 'pcfg-bitpar-nbest', (
+				'non-binarized grammar requires mode "pcfg-bitpar-nbest"')
 	return params
 
 

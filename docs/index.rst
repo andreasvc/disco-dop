@@ -92,15 +92,15 @@ Aside from the parser there are some standalone tools, invoked as ``discodop <cm
     It can be used with discontinuous as well as Penn-style bracketed treebanks.
     Example::
 
-        discodop fragments wsj-02-21.mrg > wsjfragments.txt
+    $ discodop fragments wsj-02-21.mrg > wsjfragments.txt
 
     Specify the option ``--numproc n`` to use multiple processes, as with ``runexp``.
 
 ``eval``
     Discontinuous evaluation. Reports F-scores and other metrics.
-    Accepts ``EVALB`` parameter files::
+    Accepts ``EVALB`` parameter files:
 
-        discodop eval sample/gold.export sample/dop.export proper.prm
+    ``$ discodop eval sample/gold.export sample/dop.export proper.prm``
 
 ``treetransforms``
     A command line interface to perform transformations on
@@ -111,9 +111,9 @@ Aside from the parser there are some standalone tools, invoked as ``discodop <cm
     treebanks.
 
 ``treedraw``
-    Visualize (discontinuous) trees. Command-line interface::
+    Visualize (discontinuous) trees. Command-line interface:
 
-        discodop treedraw < negra-corpus.export | less -R
+    ``$ discodop treedraw < negra-corpus.export | less -R``
 
 ``parser``
     A basic command line interface to the parser comparable to bitpar.
