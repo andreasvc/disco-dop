@@ -614,8 +614,8 @@ def worker(args):
 					msg += 'cand-gold=%s ' % evalmod.strbracketings(candb - goldb)
 				if goldb - candb:
 					msg += 'gold-cand=%s' % evalmod.strbracketings(goldb - candb)
-			except:
-				msg += 'PROBLEM %r' % str(evaltree)
+			except Exception as err:
+				msg += 'PROBLEM bracketings:\n%s\n%s' % (evaltree, err)
 		msg += '\n'
 		result.update(dict(candb=candb, exact=exact))
 		results.append(result)
@@ -629,8 +629,8 @@ def worker(args):
 		try:
 			msg += DrawTree(evaltree, evalsent, abbr=True,
 					highlight=highlight).text(unicodelines=True, ansi=True)
-		except:
-			msg += 'PROBLEM %r' % str(evaltree)
+		except Exception as err:
+			msg += 'PROBLEM drawing tree:\n%s\n%s' % (evaltree, err)
 	return (nsent, msg, results)
 
 
