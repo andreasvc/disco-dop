@@ -93,7 +93,7 @@ intrinsics provide the most efficient implementation on a given processor.
 
 Documentation
 =============
-The documentation can be found at http://discodop.readthedocs.org/
+The documentation can be found at http://staff.science.uva.nl/~acranenb/discodop/
 
 To generate a local copy install `Sphinx <http://sphinx-doc.org/>`_
 and issue ``python genrst.py && make html`` in the ``docs/`` directory; the

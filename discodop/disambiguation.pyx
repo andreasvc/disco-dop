@@ -35,8 +35,33 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 		bint sample=False, bint kbest=True, list sent=None, list tags=None,
 		int sldop_n=7, list backtransform=None,
 		bint bitpar=False):
-	""" Approximate MPP or MPD by summing over n random/best derivations from
-	chart, return a dictionary mapping parsetrees to probabilities """
+	""" Extract list of derivations and turn into dictionary of parse trees
+	using specified objective function.
+
+	:param method:
+		Available objective functions:
+
+		:'mpp': Most Probable Parse
+		:'mpd': Most Probable Derivation
+		:'shortest': Most Probable Shortest Derivation
+		:'sl-dop': Simplicity-Likelihood DOP; select most likely parse from the
+			``sldop_n`` parse trees with the shortest derivations.
+		:'sl-dop-simple': Approximation of Simplicity-Likelihood DOP
+	:param n: number of derivations to extract from chart
+	:param sample: whether to sample from chart
+	:param kbest: whether to extract k-best derivations from chart (with k=n)
+	:param backtransform:
+		Dependending on the value of this parameter, one of two ways is
+		employed to turn derivations into parse trees:
+
+		:list of strings: assume Double-DOP and recover derivations by
+			substituting fragments in this list for flattened rules in
+			derivations.
+		:``None``: assume derivations are from DOP reduction and strip
+			annotations of the form ``@123`` from labels.
+	:returns: a dictionary mapping parsetrees (as strings) to probabilities
+		(0 < p <= 1).
+	"""
 	cdef bint mpd = method == 'mpd'
 	cdef bint shortest = method == 'shortest'
 	cdef Entry entry
