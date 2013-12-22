@@ -7,7 +7,6 @@ import codecs
 import logging
 from math import exp
 from operator import mul, itemgetter
-from fractions import Fraction
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
 from discodop.tree import ImmutableTree, Tree
@@ -145,9 +144,8 @@ def treebankgrammar(trees, sents):
 	lhsfd = multiset()
 	for rule, freq in grammar.items():
 		lhsfd[rule[0][0]] += freq
-	for rule, freq in grammar.items():
-		grammar[rule] = Fraction(freq, lhsfd[rule[0][0]])
-	return sortgrammar(grammar.items())
+	return sortgrammar((rule, (freq, lhsfd[rule[0][0]]))
+			for rule, freq in grammar.items())
 
 
 def dopreduction(trees, sents, packedgraph=False):
@@ -180,8 +178,8 @@ def dopreduction(trees, sents, packedgraph=False):
 		""" :returns: rule with RFE and EWE probability. """
 		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996, 2003)
 		(r, yf), freq = rule
-		rfe = Fraction((1 if '@' in r[0] else freq) *
-				reduce(mul, (fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
+		rfe = ((1 if '@' in r[0] else freq) * reduce(mul,
+				(fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])
 		# Bod (2003, figure 3): correction factor for number of subtrees.
 		# Caveat: the original formula (Goodman 2003, eq. 8.23) has a_j in the
 		# denominator of all rules; this is probably a misprint.
@@ -190,10 +188,10 @@ def dopreduction(trees, sents, packedgraph=False):
 				/ (fd[r[0]] * (ntfd[r[0]] if '@' not in r[0] else 1)))
 		# Goodman (2003, p 135). any rule corresponding to the introduction of
 		# a fragment has a probability of 1/2, else 1.
-		shortest = 1. if '@' in r[0] else 0.5
+		shortest = 1 if '@' in r[0] else 1 / 2
 		# Goodman (2003, eq. 8.22). Prob. of fragment is reduced by factor of 2
 		# for each non-root non-terminal it contains.
-		bon = 0.25 if '@' in r[0] else (1 / (4 * ntfd[r[0]]))
+		bon = 1 / 4 if '@' in r[0] else 1 / (4 * ntfd[r[0]])
 		return ((r, yf), rfe), ewe, shortest, bon
 
 	rules = sortgrammar(rules.items())
@@ -223,7 +221,7 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 		nonterms = frag.count('(') - 1
 		# Sangati & Zuidema (2011, eq. 5)
 		# FIXME: verify that this formula is equivalent to Bod (2003).
-		ewe = sum(Fraction(v, fragmentcount[k])
+		ewe = sum(v / fragmentcount[k]
 				for k, v in fragments[frag, terminals].items())
 		# Bonnema (2003, p. 34)
 		bon = 2 ** -nonterms * (freq / ntfd[root])
@@ -288,7 +286,7 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 			for rule, (_, ewe, _, _) in grammar]
 	bonweights = [bon for rule, (_, _, bon, _) in grammar]
 	shortest = [s for rule, (_, _, _, s) in grammar]
-	grammar = [(rule, Fraction(freq, ntsums[rule[0][0]]))
+	grammar = [(rule, (freq, ntsums[rule[0][0]]))
 			for rule, (freq, _, _, _) in grammar]
 	return grammar, backtransform, dict(
 			ewe=eweweights, bon=bonweights, shortest=shortest)
@@ -666,23 +664,6 @@ def cartpi(seq):
 	return ((), )
 
 
-def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
-	""" Takes a bitpar grammar and converts it to the format of
-	Mark Jonhson's cky parser. """
-	grammar = []
-	for a in io.open(rules, encoding=encoding):
-		a = a.split()
-		p, rule = a[0], a[1:]
-		grammar.append('%s %s --> %s\n' % (p, rule[0], ' '.join(rule[1:])))
-	for a in io.open(lexicon, encoding=encoding):
-		a = a.split()
-		word, tags = a[0], a[1:]
-		tags = zip(tags[::2], tags[1::2])
-		grammar.extend('%s %s --> %s\n' % (p, t, word) for t, p in tags)
-	assert 'VROOT' in grammar[0]
-	io.open(out, 'w', encoding=encoding).writelines(grammar)
-
-
 def write_lcfrs_grammar(grammar, bitpar=False):
 	""" Writes a grammar in a simple text file format. Rules are written in
 	the order as they appear in the sequence `grammar`, except that the lexicon
@@ -699,49 +680,70 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	Weights are written in the following format:
 
 	- if ``bitpar`` is ``False``, write rational fractions; e.g., ``2/3``.
-	- if ``bitpar`` is ``True``, write frequencies if probabilities sum to 1
-		(e.g., ``2``), i.e., in that case probabilities can be re-computed as
-		relative frequencies. Otherwise, resort to floating point numbers
-		(e.g., ``0.666``, imprecise).
+	- if ``bitpar`` is ``True``, write frequencies (e.g., ``2``)
+		if probabilities sum to 1, i.e., in that case probabilities can be
+		re-computed as relative frequencies. Otherwise, resort to floating
+		point numbers (e.g., ``0.666``, imprecise).
 	"""
 	rules, lexicon, lexical = [], [], {}
 	freqs = False
 	if bitpar:
-		probmass, maxdenom = defaultdict(int), defaultdict(int)
-		# collect common denominator of each non-terminal. NB: maxdenom values
-		# may be less than original frequency mass, due to fractions getting
-		# simplified, but the relative frequencies should be equivalent.
+		freqmass, denom = defaultdict(int), defaultdict(int)
 		for (r, _), w in grammar:
-			probmass[r[0]] += w
-			if w.denominator > maxdenom[r[0]]:
-				maxdenom[r[0]] = w.denominator
-		# threshold based on probablity mass from lexical smoothing
-		freqs = all(mass - 1 <= Fraction(1, maxdenom[nt])
-				for nt, mass in probmass.items())
+			if isinstance(w, tuple):
+				freqmass[r[0]] += w[0]
+				denom[r[0]] = w[1]
+			elif w != 1:
+				break
+		else:
+			freqs = all(-1 <= denom[nt] - mass <= 1
+					for nt, mass in freqmass.items())
 	for (r, yf), w in grammar:
+		if isinstance(w, tuple):
+			if freqs:
+				w = w[0]
+			else:
+				w1, w2 = w
+				if w1 == w2:
+					w = '1'
+				elif bitpar:
+					w = '%g' % (w1 / w2)  # .hex()
+				else:
+					w = '%g/%d' % (w1, w2)
+		elif isinstance(w, float):
+			w = w.hex()
 		if len(r) == 2 and r[1] == 'Epsilon':
 			lexical.setdefault(unicode(yf[0]), []).append((r[0], w))
 			continue
 		elif bitpar:
-			rules.append(('%g\t%s\n' % (
-					(w.numerator * (maxdenom[r[0]] // w.denominator))
-					if freqs else w,
-					'\t'.join(x for x in r))))
+			rules.append(('%s\t%s\n' % (w, '\t'.join(x for x in r))))
 		else:
 			yfstr = ','.join(''.join(map(str, a)) for a in yf)
 			rules.append(('%s\t%s\t%s\n' % (
-					'\t'.join(x for x in r), yfstr,
-					w.numerator if freqs else w)))
+					'\t'.join(x for x in r), yfstr, w)))
 	for word in sorted(lexical):
 		lexicon.append(word)
 		for tag, w in lexical[word]:
-			if freqs:
-				lexicon.append(unicode('\t%s %d' % (tag, w.numerator)))
-			else:
-				lexicon.append(unicode('\t%s %s' % (tag,
-						(float(w) if bitpar else w))))
+			lexicon.append(unicode('\t%s %s' % (tag, w)))
 		lexicon.append(unicode('\n'))
 	return ''.join(rules).encode('ascii'), u''.join(lexicon)
+
+
+def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
+	""" Takes a bitpar grammar and converts it to the format of
+	Mark Jonhson's cky parser. """
+	grammar = []
+	for a in io.open(rules, encoding=encoding):
+		a = a.split()
+		p, rule = a[0], a[1:]
+		grammar.append('%s %s --> %s\n' % (p, rule[0], ' '.join(rule[1:])))
+	for a in io.open(lexicon, encoding=encoding):
+		a = a.split()
+		word, tags = a[0], a[1:]
+		tags = zip(tags[::2], tags[1::2])
+		grammar.extend('%s %s --> %s\n' % (p, t, word) for t, p in tags)
+	assert 'VROOT' in grammar[0]
+	io.open(out, 'w', encoding=encoding).writelines(grammar)
 
 
 def subsetgrammar(a, b):

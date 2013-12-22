@@ -116,7 +116,7 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 				yield UNK
 
 
-def simplesmoothlexicon(lexmodel, epsilon=Fraction(1, 100)):
+def simplesmoothlexicon(lexmodel, epsilon=1./100):
 	""" introduce lexical productions for unobserved
 	combinations of known open class words and tags, as well as for unobserved
 	signatures which are mapped to ``'_UNK'``.
@@ -130,15 +130,13 @@ def simplesmoothlexicon(lexmodel, epsilon=Fraction(1, 100)):
 		if word not in lexicon:  # and word in openclasswords:
 			# needs to be normalized later
 			newrules.append((((tag, 'Epsilon'), (word, )),
-					Fraction(wordtags[word, tag], tags[tag])))
+					(wordtags[word, tag], tags[tag])))
 			#print(>> sys.stderr, newrules[-1])
 	for tag in openclasstags:  # open class tag-word pairs
-		epsilon1 = epsilon / tags[tag]
 		for word in openclasswords - wordsfortag[tag] - {UNK}:
-			newrules.append((((tag, 'Epsilon'), (word, )), epsilon1))
+			newrules.append((((tag, 'Epsilon'), (word, )), (epsilon, tags[tag])))
 	for tag in tags:  # catch all unknown signature
-		epsilon1 = epsilon / tags[tag]
-		newrules.append((((tag, 'Epsilon'), (UNK, )), epsilon1))
+		newrules.append((((tag, 'Epsilon'), (UNK, )), (epsilon, tags[tag])))
 	return newrules
 
 

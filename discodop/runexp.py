@@ -356,7 +356,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
 				for weights in altweights.values():
-					weights.extend(w for _, w in newrules)
+					weights.extend(w1 / w2 for _, (w1, w2) in newrules)
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)
