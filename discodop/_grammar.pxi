@@ -241,17 +241,17 @@ cdef class Grammar:
 			if self.bitpar:
 				rule = fields[1:]
 				# NB: this is wrong when len(rule) > 10
-				yf = ''.join(map(str, range(len(rule) - 1)))
+				yf = ''.join(map(str, range(len(rule) - 1))).encode('ascii')
 				weight = fields[0]
 			else:
 				rule = fields[:-2]
-				yf = fields[-2].decode('ascii')
+				yf = fields[-2]
 				weight = fields[-1]
 			# check whether RHS labels have been seen as LHS and check fanout
 			for m, nt in enumerate(rule):
 				assert nt in self.toid, ('symbol %r has not been seen as LHS '
 						'in any rule: %s' % (nt, line))
-				fanout = (yf.count(',') + 1) if m == 0 else yf.count(str(m - 1))
+				fanout = yf.count(ord(b'0') + m - 1) if m else yf.count(b',') + 1
 				assert not self.binarized or fanoutdict[nt] == fanout, (
 						"conflicting fanouts for symbol '%s'.\n"
 						"previous: %d; this non-terminal: %d.\n"
@@ -267,13 +267,13 @@ cdef class Grammar:
 			cur.rhs2 = 0 if len(rule) == 2 else self.toid[rule[2]]
 			cur.prob = w
 			cur.lengths = cur.args = m = 0
-			for a in yf.decode('ascii'):
-				if a == ',':
+			for a in yf:
+				if a == ord(b','):
 					cur.lengths |= 1 << (m - 1)
 					continue
-				elif a == '1':
+				elif a == ord(b'1'):
 					cur.args += 1 << m
-				elif a != '0' and self.binarized:
+				elif a != ord(b'0') and self.binarized:
 					raise ValueError('expected: %r; got: %r' % ('0', a))
 				m += 1
 			cur.lengths |= 1 << (m - 1)

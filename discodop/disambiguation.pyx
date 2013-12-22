@@ -148,8 +148,11 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
 							assert 1 <= len(t) <= 2
-							r = (('0', t.label, t[0].label) if len(t) == 1
-								else ('01', t.label, t[0].label, t[1].label))
+							r = ((b'0', t.label.encode('ascii'),
+								t[0].label.encode('ascii')) if len(t) == 1 else
+								(b'01', t.label.encode('ascii'),
+									t[0].label.encode('ascii'),
+									t[1].label.encode('ascii')))
 							m = grammar.rulenos[r]
 							newprob += grammar.bylhs[0][m].prob
 						else:
@@ -382,9 +385,9 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 	cdef list children = []
 	cdef str frag
-	# e.g.: (b'0123', 'X', 'A', 'B', 'C', 'D')
-	prod = (''.join(map(str, range(len(deriv)))),
-			deriv.label) + tuple([a.label for a in deriv])
+	# e.g.: ('0123', 'X', 'A', 'B', 'C', 'D')
+	prod = (''.join(map(str, range(len(deriv)))).encode('ascii'),
+			deriv.label) + tuple([a.label.encode('ascii') for a in deriv])
 	frag = backtransform[grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
@@ -472,8 +475,10 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 	cdef list children = [], labels = []
 	cdef str frag
 	assert 1 <= len(deriv) <= 2
-	prod = ('0', deriv.label, deriv[0].label) if len(deriv) == 1 else (
-			'01', deriv.label, deriv[0].label, deriv[1].label)
+	prod = (b'0', deriv.label.encode('ascii'), deriv[0].label.encode('ascii')
+			) if len(deriv) == 1 else (b'01', deriv.label.encode('ascii'),
+			deriv[0].label.encode('ascii'),
+			deriv[1].label.encode('ascii'))
 	frag = backtransform[grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) == 2:  # is there a right child?
@@ -712,8 +717,8 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
-		yf = ','.join([''.join(map(str, a)) for a in yf])
-		prod = coarse.rulenos[(yf, ) + prod]
+		yf = ','.join([''.join(map(str, a)) for a in yf]).encode('ascii')
+		prod = coarse.rulenos[(yf, ) + tuple([a.encode('ascii') for a in prod])]
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
 				rule = &(fine.bylhs[0][ruleno])
