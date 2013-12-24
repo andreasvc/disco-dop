@@ -28,9 +28,15 @@ signatures from words, the flow is as follows:
 
 """
 from __future__ import division, print_function, unicode_literals
+import os
 import re
-from collections import defaultdict, Counter as multiset
+import logging
+import tempfile
+from operator import itemgetter
+from subprocess import Popen, PIPE
+from collections import defaultdict, OrderedDict, Counter as multiset
 from fractions import Fraction
+import discodop.eval
 
 UNK = '_UNK'
 
@@ -396,8 +402,83 @@ def unknownwordftb(word, loc, _):
 	return sig
 
 
-def test():
-	""" Not implemented. """
+# === Performing POS tagging with external tools ============
+def externaltagging(usetagger, model, sents, overridetag, tagmap):
+	""" Use an external tool to tag a list of sentences. """
+	logging.info("Start tagging.")
+	goldtags = [t for sent in sents.values() for _, t in sent]
+	if usetagger == "treetagger":  # Tree-tagger
+		assert os.path.exists("tree-tagger/bin/tree-tagger"), """\
+tree tagger not found. commands to install:
+mkdir tree-tagger && cd tree-tagger
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
+tar -xzf tree-tagger-linux-3.2.tar.gz
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+mkdir lib && cd lib && wget \
+ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
+gunzip german-par-linux-3.2-utf8.bin.gz"""
+		infile, inname = tempfile.mkstemp(text=True)
+		with os.fdopen(infile, 'w') as infile:
+			for tagsent in sents.values():
+				sent = map(itemgetter(0), tagsent)
+				infile.write("\n".join(w.encode('utf-8')
+					for n, w in enumerate(sent)) + "\n<S>\n")
+		filtertags = ''
+		if not model:
+			model = "tree-tagger/lib/german-par-linux-3.2-utf8.bin"
+			filtertags = "| tree-tagger/cmd/filter-german-tags"
+		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
+				" %s %s %s" % (model, inname, filtertags),
+				stdout=PIPE, shell=True)
+		tagout = tagger.stdout.read(
+				).decode('utf-8').split("<S>")[:-1]
+		os.unlink(inname)
+		taggedsents = OrderedDict((n, [tagmangle(a, None, overridetag, tagmap)
+					for a in tags.splitlines() if a.strip()])
+					for n, tags in zip(sents, tagout))
+	elif usetagger == "stanford":  # Stanford Tagger
+		assert os.path.exists("stanford-postagger-full-2012-07-09"), """\
+Stanford tagger not found. Commands to install:
+wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
+tar -xzf stanford-postagger-full-2012-07-09.tgz"""
+		infile, inname = tempfile.mkstemp(text=True)
+		with os.fdopen(infile, 'w') as infile:
+			for tagsent in sents.values():
+				sent = map(itemgetter(0), tagsent)
+				infile.write(' '.join(w.encode('utf-8')
+					for n, w in enumerate(sent)) + "\n")
+		if not model:
+			model = "models/german-hgc.tagger"
+		tagger = Popen(args=(
+				"/usr/bin/java -mx2G -classpath stanford-postagger.jar"
+				" edu.stanford.nlp.tagger.maxent.MaxentTagger"
+				" -tokenize false -encoding utf-8"
+				" -model %s -textFile %s" % (model, inname)).split(),
+				cwd="stanford-postagger-full-2012-07-09",
+				shell=False, stdout=PIPE)
+		tagout = tagger.stdout.read(
+				).decode('utf-8').splitlines()
+		os.unlink(inname)
+		taggedsents = OrderedDict((n, [tagmangle(a, "_", overridetag, tagmap)
+			for a in tags.split()]) for n, tags in zip(sents, tagout))
+	assert len(taggedsents) == len(sents), (
+			"mismatch in number of sentences after tagging.")
+	for n, tags in taggedsents.items():
+		assert len(sents[n]) == len(tags), (
+				"mismatch in number of tokens after tagging.\n"
+				"before: %r\nafter: %r" % (sents[n], tags))
+	newtags = [t for sent in taggedsents.values() for _, t in sent]
+	logging.info("Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r",
+		(100 * discodop.eval.accuracy(goldtags, newtags)),
+		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
+	return taggedsents
 
-if __name__ == '__main__':
-	test()
+
+def tagmangle(a, splitchar, overridetag, tagmap):
+	"""Function to filter tags after they are produced by the tagger."""
+	word, tag = a.rsplit(splitchar, 1)
+	for newtag in overridetag:
+		if word in overridetag[newtag]:
+			tag = newtag
+	return word, tagmap.get(tag, tag)
