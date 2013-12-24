@@ -36,7 +36,7 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 		bint bitpar=False):
 	"""Extract parse trees from a chart optimizing a given objective function.
 
-	Extracts $k$-best or sampled derivations and produces a dictionary of parse
+	Extracts *k*-best or sampled derivations and produces a dictionary of parse
 	trees scored by a given objective function.
 
 	:param method:
@@ -669,7 +669,7 @@ cdef samplechart(item, Chart chart,
 
 
 def doprerank(chart, sent, k, Grammar coarse, Grammar fine):
-	"""Rerank $k$-best coarse trees w/parse probabilities of DOP reduction.
+	"""Rerank *k*-best coarse trees w/parse probabilities of DOP reduction.
 
 	cf. ``dopparseprob()``."""
 	cdef dict results = {}
@@ -690,11 +690,11 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	Furthermore, the idea of sampling trees "long enough" until we have the MPP
 	is no faster than sampling without applying this procedure, because to
 	determine that some probability *p* is the maximal probability, we need to
-	collect the probability mass *p_seen* of enough parse trees such that we have
-	some parsetree with probability *p* > (1 - *p_seen*), which requires first
-	seeing almost all parse trees, unless *p* is exceptionally high. Hence,
-	this method is mostly useful in a reranking framework where it is known in
-	advance that a small set of trees is of interest.
+	collect the probability mass *p_seen* of enough parse trees such that we
+	have some parsetree with probability *p* > (1 - *p_seen*), which requires
+	first seeing almost all parse trees, unless *p* is exceptionally high.
+	Hence, this method is mostly useful in a reranking framework where it is
+	known in advance that a small set of trees is of interest.
 
 	Expects a mapping which gives a list of consistent rules from the reduction
 	as produced by ``fine.getrulemapping(coarse)``.
