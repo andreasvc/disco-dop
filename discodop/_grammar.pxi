@@ -251,12 +251,13 @@ cdef class Grammar:
 			for m, nt in enumerate(rule):
 				assert nt in self.toid, ('symbol %r has not been seen as LHS '
 						'in any rule: %s' % (nt, line))
-				fanout = yf.count(ord(b'0') + m - 1) if m else yf.count(b',') + 1
-				assert not self.binarized or fanoutdict[nt] == fanout, (
-						"conflicting fanouts for symbol '%s'.\n"
-						"previous: %d; this non-terminal: %d.\n"
-						"yf: %s; rule: %s" % (
-						nt, fanoutdict[nt], fanout, yf, line))
+				if self.binarized:
+					fanout = yf.count(b',01'[m]) + (m == 0)
+					assert fanoutdict[nt] == fanout, (
+							"conflicting fanouts for symbol '%s'.\n"
+							"previous: %d; this non-terminal: %d.\n"
+							"yf: %s; rule: %s" % (
+							nt, fanoutdict[nt], fanout, yf, line))
 			w = convertweight(weight)
 			assert w > 0, 'weights should be positive and non-zero:\n%r' % line
 			# n is the rule index in the array, and will be the ID for the rule
@@ -267,13 +268,13 @@ cdef class Grammar:
 			cur.rhs2 = 0 if len(rule) == 2 else self.toid[rule[2]]
 			cur.prob = w
 			cur.lengths = cur.args = m = 0
-			for a in yf:
-				if a == ord(b','):
+			for a in yf.decode('ascii'):  # required for 2/3 compatibility
+				if a == ',':
 					cur.lengths |= 1 << (m - 1)
 					continue
-				elif a == ord(b'1'):
+				elif a == '1':
 					cur.args += 1 << m
-				elif a != ord(b'0') and self.binarized:
+				elif a != '0' and self.binarized:
 					raise ValueError('expected: %r; got: %r' % ('0', a))
 				m += 1
 			cur.lengths |= 1 << (m - 1)

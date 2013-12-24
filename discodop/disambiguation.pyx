@@ -717,8 +717,8 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
-		yf = ','.join([''.join(map(str, a)) for a in yf]).encode('ascii')
-		prod = coarse.rulenos[(yf, ) + tuple([a.encode('ascii') for a in prod])]
+		yf = ','.join([''.join(map(str, x)) for x in yf]).encode('ascii')
+		prod = coarse.rulenos[(yf, ) + tuple([x.encode('ascii') for x in prod])]
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
 				rule = &(fine.bylhs[0][ruleno])
