@@ -1,4 +1,6 @@
-""" Implementation of Huang & Chiang (2005): Better k-best parsing. """
+"""Extract the k-best derivations from a probabilistic parse forest.
+
+Implementation of Huang & Chiang (2005): Better k-best parsing."""
 from __future__ import print_function
 from operator import itemgetter
 from discodop.plcfrs import Agenda
@@ -18,7 +20,7 @@ cdef extern from "Python.h":
 
 
 cdef getcandidates(Chart chart, v, int k):
-	""" :returns: a heap with up to k candidate arcs starting from vertex v """
+	""":returns: a heap with up to k candidate arcs starting from vertex v."""
 	# NB: the priority queue should either do a stable sort, or should
 	# sort on rank vector as well to have ties resolved in FIFO order;
 	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)
@@ -105,8 +107,9 @@ cdef inline lazynext(v, RankedEdge ej, int k1, dict cand, Chart chart,
 			explored.add(ej1)
 
 cdef inline double getprob(Chart chart, v, RankedEdge ej) except -1.0:
-	""" Get subtree probability of ej; try looking in rankededges, or else use
-	chart. """
+	"""Get subtree probability of ``ej``.
+
+	Try looking in ``chart.rankededges``, or else use viterbi probability."""
 	cdef double prob = ej.edge.rule.prob
 	ei = chart.left(ej)
 	if ej.left == 0:
@@ -133,8 +136,8 @@ cdef inline double getprob(Chart chart, v, RankedEdge ej) except -1.0:
 
 cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 		int depthlimit):
-	""" Traverse a derivation to ensure all 1-best RankedEdges are present
-	for every edge.
+	"""Traverse derivation to ensure all 1-best RankedEdges are present.
+
 	:returns: True when ``ej`` is a valid, complete derivation."""
 	cdef Entry entry
 	if depthlimit <= 0:  # to prevent cycles
@@ -169,18 +172,11 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 	return True
 
 
-cpdef inline getderivation(result, v, RankedEdge ej, Chart chart,
+cpdef inline _getderiv(result, v, RankedEdge ej, Chart chart,
 		bytes debin):
-	"""
-	Translate the ``(e, j)`` notation ('derivation with backpointers') to an
-	actual tree string in bracket notation. ``e`` is an edge, ``j`` is a vector
-	prescribing the rank of the corresponding tail node. For example, given the
-	edge ``<S, [NP, VP]>`` and vector ``[2, 1]``, this points to the derivation
-	headed by S and having the 2nd best NP and the 1st best VP as children.
+	"""Auxiliary function for ``getderiv()``.
 
-	:param result: provide an empty ``bytearray()`` for the initial call
-	:param debin: perform on-the-fly debinarization, identify intermediate
-		nodes using the substring ``debin``. """
+	:param result: provide an empty ``bytearray()`` for the initial call."""
 	cdef RankedEdge rankededge
 	cdef UInt label = chart.label(v)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
@@ -192,38 +188,41 @@ cpdef inline getderivation(result, v, RankedEdge ej, Chart chart,
 	else:
 		item = chart.left(ej)
 		rankededge = (<Entry>chart.rankededges[item][ej.left]).key
-		getderivation(result, item, rankededge, chart, debin)
+		_getderiv(result, item, rankededge, chart, debin)
 		if ej.right != -1:
 			item = chart.right(ej)
 			result += b' '
 			rankededge = (<Entry>chart.rankededges[item][ej.right]).key
-			getderivation(result, item, rankededge, chart, debin)
+			_getderiv(result, item, rankededge, chart, debin)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
 		result += b')'
 
 
 def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
-	""" Translate the ``(e, j)`` notation to an actual tree string in bracket
-	notation.  ``e is an edge, ``j`` is a vector prescribing the rank of the
-	corresponding tail node. For example, given the edge <S, [NP, VP], 1.0> and
-	vector [2, 1], this points to the derivation headed by S and having the 2nd
-	best NP and the 1st best VP as children.
-	If ``debin`` is specified, will perform on-the-fly debinarization of nodes
-	with labels containing `debin` an a substring. """
+	"""Convert a RankedEdge to a string with a tree in bracket notation.
+
+	A RankedEdge consists of an edge and a rank tuple: ``(e, j)`` notation
+	('derivation with backpointers'). For example, given an edge based on the
+	rule ``S => NP VP`` and the tuple ``(2, 1)``, this identifies a derivation
+	headed by S and having the 2nd best NP and the 1st best VP as children.
+
+	:param debin: perform on-the-fly debinarization, identify intermediate
+		nodes using the substring ``debin``."""
 	result = bytearray()
-	getderivation(result, v, ej, chart, debin)
+	_getderiv(result, v, ej, chart, debin)
 	return str(result.decode('ascii'))
 
 
 def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
-	""" Wrapper function to run ``lazykthbest`` and produce the ranked chart,
-	as well as derivations as strings (when ``derivs`` is True).
-	chart is a monotone hypergraph; should be acyclic unless probabilities
-	resolve the cycles (maybe nonzero weights for unary productions are
-	sufficient?).
+	"""Wrapper function to run ``lazykthbest``.
+
+	Produces the ranked chart, as well as derivations as strings (when
+	``derivs`` is True). chart is a monotone hypergraph; should be acyclic
+	unless probabilities resolve the cycles (maybe nonzero weights for unary
+	productions are sufficient?).
 
 	:param k: the number of derivations to enumerate.
-	:param debin: debinarize derivations. """
+	:param debin: debinarize derivations."""
 	cdef Entry entry
 	cdef set explored = set()
 	#assert not chart.rankededges, 'kbest derivations already extracted?'
@@ -243,7 +242,7 @@ def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
 
 
 def test():
-	""" Simple demonstration. """
+	"""Demonstration of k-best algorithm."""
 	from math import log, exp
 	cdef DenseCFGChart dcchart
 	cdef SparseCFGChart scchart

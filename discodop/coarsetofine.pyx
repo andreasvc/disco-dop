@@ -1,5 +1,5 @@
-""" Assorted functions to project items from a coarse chart to corresponding
-items for a fine grammar. """
+"""Project selected items from a chart to corresponding items in next grammar.
+"""
 from __future__ import print_function
 from discodop.tree import Tree
 from discodop.treetransforms import mergediscnodes, unbinarize, fanout, \
@@ -18,10 +18,12 @@ import numpy as np
 
 def prunechart(Chart coarsechart, Grammar fine, k,
 		bint splitprune, bint markorigin, bint finecfg, bint bitpar):
-	""" Produce a white list of chart items occurring in the `k`-best
-	derivations of ``chart``, or with posterior probability > `k`. Labels ``X``
-	in ``coarse.toid`` are projected to the labels in the mapping of the fine
-	grammar, e.g., to ``X`` and ``X@n-m`` for a DOP reduction.
+	"""Produce a white list of selected chart items.
+
+	The criterion is that they occur in the `k`-best derivations of ``chart``,
+	or with posterior probability > `k`. Labels ``X`` in ``coarse.toid`` are
+	projected to the labels in the mapping of the fine grammar, e.g., to ``X``
+	and ``X@n-m`` for a DOP reduction.
 
 	:param coarsechart: a Chart object produced by the PCFG or PLCFRS parser,
 		or derivations from bitpar.
@@ -109,8 +111,11 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 
 
 def bitparkbestitems(Chart chart, int k, bint finecfg):
-	""" Take a dictionary of CFG derivations as strings, and produce a list of
-	ChartItems occurring in those derivations. """
+	"""Produce ChartItems occurring in a dictionary of derivations.
+
+	:param chart: a chart where rankededges is a dictionary of CFG derivations.
+	:returns: a dictionary of ChartItems (mapping to None) occurring in the
+		derivations."""
 	cdef bint fatitems = chart.lensent >= (sizeof(ULLong) * 8)
 	cdef list derivs = chart.rankededges[chart.root()]
 	cdef dict items = {}
@@ -137,8 +142,7 @@ def bitparkbestitems(Chart chart, int k, bint finecfg):
 def whitelistfromposteriors(inside, outside, start,
 		Grammar coarse, Grammar fine, double threshold,
 		bint splitprune, bint markorigin, bint finecfg):
-	""" Compute posterior probabilities and prune away cells below some
-	threshold. """
+	"""Compute posterior probabilities & prune away cells below a threshold."""
 	cdef UInt label
 	cdef short lensent = start[2]
 	assert 0 < threshold < 1, (
@@ -193,9 +197,9 @@ def whitelistfromposteriors(inside, outside, start,
 def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
 		Grammar coarse, Grammar fine, finechart, short maxlen,
 		double threshold):
-	""" Compute posterior probabilities and prune away cells below some
-	threshold. this version produces a matrix with pruned spans having NaN as
-	value. """
+	"""Compute posterior probabilities & prune away cells below a threshold.
+
+	This version produces a matrix with pruned spans having NaN as value."""
 	cdef long label
 	cdef short lensent = goal.right
 	sentprob = inside[0, lensent, goal.label]
@@ -218,9 +222,7 @@ def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
 
 
 def posteriorthreshold(Chart chart, double threshold):
-	""" Given a chart containing a parse forest, compute inside and outside
-	probabilities. Results are stored in the chart.
-	Compute posterior probabilities and prune away cells below some threshold.
+	"""Get posterior prob. for parse forest & prune away cells below threshold.
 
 	:returns: dictionary of remaining items
 	"""
@@ -252,7 +254,7 @@ def posteriorthreshold(Chart chart, double threshold):
 
 
 def getinside(Chart chart):
-	""" Compute inside probabilities for a chart given its parse forest. """
+	"""Compute inside probabilities for a chart given its parse forest."""
 	cdef size_t n
 	cdef Edges edges
 	cdef Edge *edge
@@ -296,7 +298,7 @@ def getinside(Chart chart):
 
 
 def getoutside(Chart chart):
-	""" Compute outside probabilities for a chart given its parse forest. """
+	"""Compute outside probabilities for a chart given its parse forest."""
 	cdef size_t n
 	cdef Edges edges
 	cdef Edge *edge
@@ -331,7 +333,7 @@ def getoutside(Chart chart):
 
 
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
-	""" Test coarse-to-fine methods on a sentence. """
+	"""Test coarse-to-fine methods on a sentence."""
 	import plcfrs
 	from disambiguation import marginalize
 	from treetransforms import canonicalize, removefanoutmarkers

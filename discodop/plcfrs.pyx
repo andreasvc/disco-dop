@@ -1,5 +1,6 @@
-""" Probabilistic CKY parser for monotone, string-rewriting
-Linear Context-Free Rewriting Systems. """
+"""Parser for string-rewriting Linear Context-Free Rewriting Systems.
+
+Expects binarized, epsilon-free, monotone LCFRS grammars."""
 from __future__ import print_function
 from collections import defaultdict, deque
 import logging
@@ -27,7 +28,7 @@ cdef inline bint equalitems(LCFRSItem_fused op1, LCFRSItem_fused op2):
 
 
 cdef class LCFRSChart(Chart):
-	""" A chart for LCFRS grammars. An item is a ChartItem object. """
+	"""A chart for LCFRS grammars. An item is a ChartItem object."""
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		self.grammar = grammar
@@ -41,7 +42,7 @@ cdef class LCFRSChart(Chart):
 		self.itemsinorder = []
 
 	cdef void addlexedge(self, item, short wordidx):
-		""" Add lexical edge. """
+		"""Add lexical edge."""
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block
@@ -86,7 +87,7 @@ cdef class LCFRSChart(Chart):
 
 
 cdef class SmallLCFRSChart(LCFRSChart):
-	""" For sentences that fit into a single machine word. """
+	"""For sentences that fit into a single machine word."""
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		super(SmallLCFRSChart, self).__init__(
@@ -96,7 +97,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 
 	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
 			Rule *rule):
-		""" Add new edge. """
+		"""Add new edge."""
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block
@@ -139,7 +140,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 
 
 cdef class FatLCFRSChart(LCFRSChart):
-	""" LCFRS chart that supports longer sentences. """
+	"""LCFRS chart that supports longer sentences."""
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		super(FatLCFRSChart, self).__init__(
@@ -148,7 +149,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 		self.tmpright = new_FatChartItem(0)
 
 	cdef void addedge(self, FatChartItem item, FatChartItem left, Rule *rule):
-		""" Add new edge and update viterbi probability. """
+		"""Add new edge and update viterbi probability."""
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block
@@ -198,9 +199,13 @@ cdef class FatLCFRSChart(LCFRSChart):
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		start=None, list whitelist=None, bint splitprune=False,
 		bint markorigin=False, estimates=None, int beamwidth=0):
-	""" Parse sentence, a list of tokens, optionally with gold tags, and
-	produce a chart, either exhaustive or up until the viterbi parse.
+	"""Parse sentence and produce a chart.
 
+	:param sent: a sequence of tokens
+	:param grammar: a ``Grammar`` object.
+	:returns: a ``Chart`` object.
+	:param tags: optionally, a sequence of gold tags, which will be used
+		instead of trying all possible tags.
 	:param exhaustive: don't stop at viterbi parse, return a full chart
 	:param start: integer corresponding to the start symbol that analyses
 		should have, e.g., grammar.toid[b'ROOT']
@@ -548,9 +553,9 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 		double score, double prob, Rule *rule, LCFRSItem_fused left,
 		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist,
 		bint splitprune, bint markorigin):
-	""" Decide what to do with a newly derived edge.
+	"""Decide what to do with a newly derived edge.
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
-		blocked. When ``False``, ``newitem`` may be reused. """
+		blocked. When ``False``, ``newitem`` may be reused."""
 	cdef UInt a, b, n, cnt, label
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = newitem in chart.parseforest
@@ -619,10 +624,10 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 cdef inline bint process_lexedge(LCFRSItem_fused newitem,
 		double score, double prob, short wordidx,
 		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist):
-	""" Decide whether to accept a lexical edge (POS, word), which is assumed
-	not to be discontinuous.
+	"""Decide whether to accept a lexical edge ``(POS, word)``.
+
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
-		blocked. When ``False``, ``newitem`` may be reused. """
+		blocked. When ``False``, ``newitem`` may be reused."""
 	cdef UInt label
 	cdef bint inagenda = agenda.contains(newitem)
 	cdef bint inchart = newitem in chart.parseforest
@@ -656,12 +661,13 @@ cdef inline void combine_item(LCFRSItem_fused newitem,
 
 cdef inline bint concat(Rule *rule,
 		LCFRSItem_fused left, LCFRSItem_fused right):
-	""" Determine the compatibility of two bitvectors according to the given
-	yield function. Ranges should be non-overlapping, continuous when they are
-	concatenated, and adhere to the ordering in the yield function.
-	The yield function indicates for each span whether it should come from the
-	left or right non-terminal (0 meaning left and 1 right), and whether it is
-	contiguous with the previous span.
+	"""Test whether two bitvectors combine according to a given rule.
+
+	Ranges should be non-overlapping, continuous when they are concatenated,
+	and adhere to the ordering in the yield function. The yield function
+	indicates for each span whether it should come from the left or right
+	non-terminal (0 meaning left and 1 right), and whether it is contiguous
+	with the previous span.
 
 	>>> lvec = 0b0011; rvec = 0b1000
 	>>> concat(((0, ), (1, )), lvec, rvec)
@@ -676,7 +682,7 @@ cdef inline bint concat(Rule *rule,
 		((0, 1, 0), (1, 0)) ==> args=0b10010; lengths=0b00101
 		NB: note reversal due to the way binary numbers are represented
 		the least significant bit (rightmost) corresponds to the lowest
-		index in the sentence / constituent (leftmost). """
+		index in the sentence / constituent (leftmost)."""
 	cdef ULLong lvec, rvec, mask
 	cdef ULong *alvec, *arvec
 	cdef int lpos, rpos, n
@@ -756,8 +762,8 @@ cdef inline bint concat(Rule *rule,
 
 
 def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
-	""" Like parse(), but only compute parse forest, disregard probabilities.
-	The agenda is a O(1) queue instead of a O(log n) priority queue. """
+	"""Like parse(), but only compute parse forest, disregard probabilities.
+	The agenda is a O(1) queue instead of a O(log n) priority queue."""
 	if len(sent) < sizeof(COMPONENT.vec) * 8:
 		chart = SmallLCFRSChart(grammar, list(sent))
 		return parse_symbolic_main(<SmallLCFRSChart>chart,
@@ -908,9 +914,10 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 #
 #cdef inline set candidateitems(Rule rule, ChartItem item, dict chart,
 #		bint left=True):
-#	""" For a given rule and item, find all potential sibling items which are
-#	compatible with them. Uses lookup tables with set of items for every
-#	start/end point of components in items. """
+#	"""Find all compatible siblings for an item given a rule.
+#
+#	Uses lookup tables with set of items for every start/end point of
+#	components in items."""
 #	cdef size_t n
 #	cdef short pos = nextset(item.vec, 0), prevpos, x, y
 #	cdef set candidates = None, temp

@@ -1,4 +1,6 @@
-""" Simple command line interface to parse with grammar(s) in text format.  """
+"""Parser object that performs coarse-to-fine and postprocessing.
+
+Additionally, a simple command line interface similar to bitpar."""
 from __future__ import print_function
 import io
 import os
@@ -25,7 +27,7 @@ from discodop.treebanktransforms import reversetransform, rrbacktransform, \
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
-USAGE = """
+USAGE = '''\
 usage: %s [options] <rules> <lexicon> [input [output]]
 or:    %s [options] --ctf k <coarserules> <coarselex>
           <finerules> <finelex> [input [output]]
@@ -48,7 +50,7 @@ Options:
                 derivation (MPD) instead of the most probable parse (MPP).
 
 %s
-""" % (sys.argv[0], sys.argv[0], FORMAT)
+''' % (sys.argv[0], sys.argv[0], FORMAT)
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames
@@ -79,7 +81,7 @@ DEFAULTSTAGE = dict(
 
 
 def main():
-	""" Handle command line arguments. """
+	"""Handle command line arguments."""
 	print('PLCFRS parser - Andreas van Cranenburgh', file=sys.stderr)
 	options = 'ctf= prob mpd'.split()
 	try:
@@ -143,7 +145,7 @@ def main():
 
 
 def doparsing(parser, infile, out, printprob, oneline):
-	""" Parse sentences from file and write results to file, log to stdout. """
+	"""Parse sentences from file and write results to file, log to stdout."""
 	times = [time.clock()]
 	unparsed = 0
 	if not oneline:
@@ -183,8 +185,7 @@ def doparsing(parser, infile, out, printprob, oneline):
 
 
 class Parser(object):
-	""" An object to parse sentences following parameters given as a sequence
-	of coarse-to-fine stages.
+	"""A coarse-to-fine parser based on a given set of parameters.
 
 	:param stages: a list of coarse-to-fine stages containing grammars and
 		parameters.
@@ -196,7 +197,7 @@ class Parser(object):
 		- unknownwordfun: function to produces signatures for unknown words.
 		- lexicon: the set of known words in the grammar.
 		- sigs: the set of word signatures occurring in the grammar.
-	:param relationalrealizational: whether to reverse the RR-transform. """
+	:param relationalrealizational: whether to reverse the RR-transform."""
 	def __init__(self, stages, transformations=None, tailmarker=None,
 			relationalrealizational=None, postagging=None):
 		self.stages = stages
@@ -209,11 +210,13 @@ class Parser(object):
 				exportbitpargrammar(stage)
 
 	def parse(self, sent, tags=None):
-		""" Parse a sentence and yield a dictionary from parse trees to
-		probabilities for each stage.
+		"""Parse a sentence and perform postprocessing.
 
+		Yields a dictionary from parse trees to probabilities for each stage.
+
+		:param sent: a sequence of tokens.
 		:param tags: if given, will be given to the parser instead of trying
-			all possible tags. """
+			all possible tags."""
 		if self.postagging:
 			sent = replaceraretestwords(sent,
 					self.postagging['unknownwordfun'],
@@ -350,7 +353,7 @@ class Parser(object):
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
 
 	def postprocess(self, treestr, stage=-1, derivs=None):
-		""" Take parse tree and apply postprocessing. """
+		"""Take parse tree and apply postprocessing."""
 		parsetree = Tree.parse(treestr, parse_leaf=int)
 		if self.stages[stage].split:
 			mergediscnodes(unbinarize(parsetree, childchar=':'))
@@ -366,7 +369,7 @@ class Parser(object):
 		return parsetree, fragments, False
 
 	def noparse(self, stage, sent, tags, lastsuccessfulparse):
-		""" Return parse from previous stage or a dummy parse.  """
+		"""Return parse from previous stage or a dummy parse."""
 		# use successful parse from earlier stage if available
 		if lastsuccessfulparse is not None:
 			parsetree = lastsuccessfulparse.copy(True)
@@ -382,9 +385,10 @@ class Parser(object):
 
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
-	""" Read the grammars from a previous experiment.
+	"""Read the grammars from a previous experiment.
+
 	Expects a directory ``resultdir`` which contains the relevant grammars and
-	the parameter file ``params.prm``, as produced by ``runexp``. """
+	the parameter file ``params.prm``, as produced by ``runexp``."""
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
 		rules = gzip.open('%s/%s.rules.gz' % (resultdir, stage.name))
@@ -445,7 +449,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 
 
 def exportbitpargrammar(stage):
-	""" (re-)export bitpar grammar with current weights. """
+	"""(re-)export bitpar grammar with current weights."""
 	if not hasattr(stage, 'rulesfile'):
 		stage.rulesfile = tempfile.NamedTemporaryFile()
 		stage.lexiconfile = tempfile.NamedTemporaryFile()
@@ -479,19 +483,17 @@ def exportbitpargrammar(stage):
 
 
 class DictObj(object):
-	""" Trivial class to wrap a dictionary for reasons of syntactic sugar. """
+	"""Trivial class to wrap a dictionary for reasons of syntactic sugar."""
 
 	def __init__(self, *a, **kw):
 		self.__dict__.update(*a, **kw)
 
 	def update(self, *a, **kw):
-		""" Update/add more attributes. """
+		"""Update/add more attributes."""
 		self.__dict__.update(*a, **kw)
 
 	def __getattr__(self, name):
-		""" This is only called when the normal mechanism fails, so in practice
-		should never be called. It is only provided to satisfy pylint that it
-		is okay not to raise E1101 errors in the client code. """
+		"""Dummy function for suppressing pylint E1101 errors."""
 		raise AttributeError('%r instance has no attribute %r' % (
 				self.__class__.__name__, name))
 
@@ -501,14 +503,10 @@ class DictObj(object):
 
 
 def probstr(prob):
-	""" Render probability / number of subtrees as string. """
+	"""Render probability / number of subtrees as string."""
 	if isinstance(prob, tuple):
 		return 'subtrees=%d, p=%.4g ' % (abs(prob[0]), prob[1])
 	return 'p=%.4g' % prob
-
-
-def test():
-	""" Not implemented. """
 
 if __name__ == '__main__':
 	main()

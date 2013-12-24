@@ -1,8 +1,9 @@
 # -*- coding: UTF-8 -*-
-""" Treebank transformations:
+"""Treebank transformations.
+
 - generic transforms listed by name
 - Relational-realizational transform
-- reattaching punctuation """
+- reattaching punctuation"""
 from __future__ import division, print_function, unicode_literals
 import re
 from itertools import count, islice
@@ -16,12 +17,14 @@ LABELRE = re.compile("[^^|<>-]+")
 
 
 def transform(tree, sent, transformations):
-	""" Perform some transformations, specific to Negra and WSJ treebanks.
-	State-splits are preceded by '^'.
+	"""Perform specified sequence of transformations on a tree.
+
+	State-splits are preceded by '^'. Examples of transformations for
+	particular treebanks:
 
 	:negra:  transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')
 	:wsj:    transformations=('S-WH', 'VP-HD', 'S-INF')
-	:alpino: transformations=('PUNCT', ) """
+	:alpino: transformations=('PUNCT', )"""
 	for name in transformations:
 		# negra / tiger
 		if name == 'S-RC':  # relative clause => S becomes SRC
@@ -79,7 +82,7 @@ def transform(tree, sent, transformations):
 			addtovp = 'HD AC DA MO NG OA OA2 OC OG PD VO SVP'.split()
 
 			def finitevp(s):
-				""" Introduce finite VPs grouping verbs and their objects. """
+				"""Introduce finite VPs grouping verbs and their objects."""
 				if any(x.label.startswith('V') and x.label.endswith('FIN')
 						for x in s if isinstance(x, Tree)):
 					vp = [a for a in s if function(a) in addtovp]
@@ -205,9 +208,10 @@ def transform(tree, sent, transformations):
 
 
 def reversetransform(tree, transformations):
-	""" Undo specified transformations, as well as removing any state splits
-	introduced by ``^``.
-	Do not apply twice (might remove VPs which shouldn't be). """
+	"""
+	Undo specified transformations and remove any state splits marked by ``^``.
+
+	Do not apply twice (might remove VPs which shouldn't be)."""
 	tagtoconst, _ = getgeneralizations()
 	# Generic state-split removal
 	for node in tree.subtrees(lambda n: STATESPLIT in n.label[1:]):
@@ -253,7 +257,7 @@ def reversetransform(tree, transformations):
 					sbar[:] = sbar[:1] + sbar[1][:]
 		elif name == 'VP-FIN_NEGRA':
 			def mergevp(s):
-				""" merge finite VP with S level """
+				"""Merge finite VP with S level."""
 				for vp in (n for n, a in enumerate(s) if a.label == 'VP'):
 					if any(a.label.endswith('FIN') for a in s[vp]):
 						s[vp][:], s[vp:vp + 1] = [], s[vp][:]
@@ -308,16 +312,20 @@ def reversetransform(tree, transformations):
 
 
 def collapselabels(trees, sents, mapping=None):
-	"""Collapse non-root phrasal labels with specified mapping of the form
-	``{coarselabel1: {finelabel1, finelabel2, ...}, ...}``
+	"""Collapse non-root phrasal labels with specified mapping.
+
+	The mapping is of the form::
+
+		{coarselabel1: {finelabel1, finelabel2, ...}, ...}
+
 	For example following Charniak et al (2006), multi-level coarse-to-fine
 	parsing:
 	:level 0: single label P
 	:level 1: HP, MP (arguments, modifiers)
 	:level 2: S, N, A, P (verbal, nominal, adjectival, prepositional)
-	:level 3: no-op, return original treebank labels """
+	:level 3: no-op, return original treebank labels"""
 	def collapse(orig):
-		""" Collapse labels of a single tree; returns a new Tree object. """
+		"""Collapse labels of a single tree; returns a new Tree object."""
 		tree = orig.copy(True)
 		for subtree in tree.subtrees():
 			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
@@ -331,7 +339,7 @@ def collapselabels(trees, sents, mapping=None):
 
 
 def getgeneralizations():
-	""" Some tree transforms for Negra/Tiger.  """
+	"""Some tree transforms for Negra/Tiger."""
 	# generalizations suggested by SyntaxGeneralizer of TigerAPI
 	# however, instead of renaming, we introduce unary productions
 	# POS tags
@@ -360,7 +368,7 @@ def getgeneralizations():
 
 
 def unifymorphfeat(feats, percolatefeatures=None):
-	""" Treat a sequence of strings as feature vectors, either
+	"""Treat a sequence of strings as feature vectors, either
 	comma or dot separated, and produce the sorted union of their features.
 
 	:param percolatefeatures: if a set is given, select only these features;
@@ -384,7 +392,8 @@ def unifymorphfeat(feats, percolatefeatures=None):
 def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 		adjunctionlabel=None, ignorefunctions=None, ignorecategories=None,
 		adjleft=True, adjright=True):
-	""" Relational-realizational tree transformation.
+	"""Relational-realizational tree transformation.
+
 	Every constituent node is expanded to three levels:
 
 	1) syntactic category, e.g., S
@@ -412,9 +421,9 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 			category.
 	:param percolatefeatures: if a sequence is given, percolate only these
 			morphological features; by default all features are used.
-	:returns: a new, transformed tree. """
+	:returns: a new, transformed tree."""
 	def realize(child, prevfunc, nextfunc):
-		""" Generate realization of a child node by recursion. """
+		"""Generate realization of a child node by recursion."""
 		newchild, morph, lvl = rrtransform(child, morphlevels,
 				percolatefeatures, adjunctionlabel, ignorefunctions,
 				ignorecategories, adjleft, adjright)
@@ -472,13 +481,13 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 
 
 def rrbacktransform(tree, adjunctionlabel=None, func=None):
-	""" Reverse the relational-realizational transformation, conserving
+	"""Reverse the relational-realizational transformation, conserving
 	grammatical functions.
 
 	:param adjunctionlabel: used to assign a grammatical function to
 		adjunctions that have been converted to contextual labels 'next:prev'.
 	:param func: used internally to percolate functional labels.
-	:returns: a new tree. """
+	:returns: a new tree."""
 	morph = None
 	if not isinstance(tree[0], Tree):
 		tag, morph = tree.label.split('/')
@@ -531,12 +540,12 @@ PUNCTUATION = frozenset('.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 
 
 def ispunct(word, tag):
-	""" Test whether a word and/or tag is punctuation. """
+	"""Test whether a word and/or tag is punctuation."""
 	return tag in PUNCTTAGS or word in PUNCTUATION
 
 
 def punctremove(tree, sent):
-	""" Remove any punctuation nodes, and any empty ancestors. """
+	"""Remove any punctuation nodes, and any empty ancestors."""
 	for a in reversed(tree.treepositions('leaves')):
 		if ispunct(sent[tree[a]], tree[a[:-1]].label):
 			# remove this punctuation node and any empty ancestors
@@ -553,8 +562,8 @@ def punctremove(tree, sent):
 
 
 def punctroot(tree, sent):
-	""" Move punctuation directly under the ROOT node, as in the
-	original Negra/Tiger treebanks. """
+	"""Move punctuation directly under the ROOT node, as in the
+	original Negra/Tiger treebanks."""
 	punct = []
 	for a in reversed(tree.treepositions('leaves')):
 		if ispunct(sent[tree[a]], tree[a[:-1]].label):
@@ -569,12 +578,13 @@ def punctroot(tree, sent):
 
 
 def punctlower(tree, sent):
-	""" Find suitable constituent for punctuation marks and add it there;
-	removal at previous location is up to the caller.  Based on rparse code.
-	Initial candidate is the root node. """
+	"""Find suitable constituent for punctuation marks and add it there;
+	removal at previous location is up to the caller.
+
+	Based on rparse code. Initial candidate is the root node."""
 	def lower(node, candidate):
-		""" Lower a specific instance of punctuation in tree,
-		recursing top-down on suitable candidates. """
+		"""Lower a specific instance of punctuation in tree,
+		recursing top-down on suitable candidates."""
 		num = node.leaves()[0]
 		for i, child in enumerate(sorted(candidate, key=lambda x: x.leaves())):
 			if not isinstance(child[0], Tree):
@@ -596,10 +606,12 @@ def punctlower(tree, sent):
 
 
 def punctraise(tree, sent):
-	""" Trees in the Negra corpus have punctuation attached to the root;
-	i.e., it is not part of the phrase-structure.  This function attaches
-	punctuation nodes (that is, a POS tag with punctuation terminal) to an
-	appropriate constituent. """
+	"""Attach punctuation nodes to an appropriate constituent.
+
+	Trees in the Negra corpus have punctuation attached to the root;
+	i.e., it is not part of the phrase-structure. This function moves the
+	punctuation to an appropriate level in the tree. A punctuation node is a
+	POS tag with a punctuation terminal."""
 	#punct = [node for node in tree.subtrees() if isinstance(node[0], int)
 	punct = [node for node in tree if isinstance(node[0], int)
 			and ispunct(sent[node[0]], node.label)]
@@ -626,8 +638,8 @@ BALANCEDPUNCTMATCH = {'"': '"', '[': ']', '(': ')', '-': '-', "'": "'",
 
 
 def balancedpunctraise(tree, sent):
-	""" Move balanced punctuation marks " ' - ( ) [ ] together in the same
-	constituent. Based on rparse code. """
+	"""Move balanced punctuation marks " ' - ( ) [ ] together in the same
+	constituent. Based on rparse code."""
 	assert isinstance(tree, ParentedTree)
 	# right punct str as key, mapped to left index as value
 	punctmap = {}
@@ -655,32 +667,32 @@ def balancedpunctraise(tree, sent):
 
 
 def function(tree):
-	""" :returns: grammatical function for node, or an empty string. """
+	""":returns: grammatical function for node, or an empty string."""
 	if getattr(tree, 'source', None):
 		return tree.source[FUNC].split('-')[0]
 	return ''
 
 
 def ishead(tree):
-	""" Test whether this node is the head of the parent constituent. """
+	"""Test whether this node is the head of the parent constituent."""
 	if getattr(tree, 'source', None):
 		return 'HD' in tree.source[FUNC].upper().split('-')
 	return False
 
 
 def rindex(l, v):
-	""" Like list.index(), but go from right to left. """
+	"""Like list.index(), but go from right to left."""
 	return len(l) - 1 - l[::-1].index(v)
 
 
 def labels(tree):
-	""" :returns: the labels of the children of this node. """
+	""":returns: the labels of the children of this node."""
 	return [a.label for a in tree if isinstance(a, Tree)]
 
 
 def pop(a):
-	""" Remove this node from its parent node, if it has one.
-	Convenience function for ParentedTrees. """
+	"""Remove this node from its parent node, if it has one.
+	Convenience function for ParentedTrees."""
 	try:
 		return a.parent.pop(a.parent_index)
 	except AttributeError:
@@ -688,16 +700,17 @@ def pop(a):
 
 
 def bracketings(tree):
-	""" Labelled bracketings of a tree. """
+	"""Labelled bracketings of a tree."""
 	return [(a.label, tuple(sorted(a.leaves())))
 		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
 
 
 def readheadrules(filename):
-	""" Read a file containing heuristic rules for head assigment.
+	"""Read a file containing heuristic rules for head assignment.
+
 	Example line: ``s right-to-left vmfin vafin vaimp``, which means
 	traverse siblings of an S constituent from right to left, the first child
-	with a label of vmfin, vafin, or vaimp will be marked as head. """
+	with a label of vmfin, vafin, or vaimp will be marked as head."""
 	headrules = {}
 	for line in open(filename):
 		line = line.strip().upper()
@@ -708,7 +721,7 @@ def readheadrules(filename):
 
 
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
-	""" use head finding rules to select one child of tree as head. """
+	"""Use head finding rules to select one child of tree as head."""
 	candidates = [a for a in tree if getattr(a, 'source', None)
 			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
@@ -733,7 +746,7 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 
 
 def sethead(child):
-	""" mark node as head in an auxiliary field. """
+	"""Mark node as head in an auxiliary field."""
 	child.source = getattr(child, "source", 6 * [''])
 	if 'HD' not in child.source[FUNC].upper().split("-"):
 		x = list(child.source)
@@ -745,7 +758,7 @@ def sethead(child):
 
 
 def headmark(tree):
-	""" add marker to label of head node. """
+	"""Add marker to label of head node."""
 	head = [a for a in tree if getattr(a, 'source', None)
 			and 'HD' in a.source[FUNC].upper().split('-')]
 	if not head:
@@ -754,8 +767,8 @@ def headmark(tree):
 
 
 def headorder(tree, headfinal, reverse):
-	""" Change order of constituents based on head (identified with
-	function tag). """
+	"""Change order of constituents based on head (identified with
+	function tag)."""
 	head = [n for n, a in enumerate(tree)
 		if getattr(a, 'source', None)
 		and 'HD' in a.source[FUNC].upper().split("-")]
@@ -779,8 +792,8 @@ def headorder(tree, headfinal, reverse):
 
 
 def saveheads(tree, tailmarker):
-	""" When a head-outward binarization is used, this function ensures the
-	head is known when the tree is converted to export format. """
+	"""When a head-outward binarization is used, this function ensures the
+	head is known when the tree is converted to export format."""
 	if not tailmarker:
 		return
 	for node in tree.subtrees(lambda n: tailmarker in n.label):
@@ -789,13 +802,13 @@ def saveheads(tree, tailmarker):
 
 
 def headstats(trees):
-	""" Collects some information useful for writing headrules:
+	"""Collect some information useful for writing headrules.
 
 	- ``heads['NP']['NN'] ==`` number of times NN occurs as head of NP.
 	- ``pos1['NP'][1] ==`` number of times head of NP is at position 1.
 	- ``pos2`` is like pos1, but position is from the right.
 	- ``unknown['NP']['NN'] ==`` number of times NP that does not have a head
-		dominates an NN. """
+		dominates an NN."""
 	heads, unknown = defaultdict(multiset), defaultdict(multiset)
 	pos1, pos2 = defaultdict(multiset), defaultdict(multiset)
 	for tree in trees:
@@ -812,7 +825,7 @@ def headstats(trees):
 
 
 def testpunct():
-	""" Verify that punctuation movement does not increase fan-out. """
+	"""Verify that punctuation movement does not increase fan-out."""
 	from discodop.treetransforms import addbitsets, fanout
 	from discodop.treebank import NegraCorpusReader
 	filename = 'alpinosample.export'
@@ -841,8 +854,8 @@ def testpunct():
 
 
 def testtransforms():
-	""" Test whether the Tiger transformations (transform / reversetransform)
-	are reversible. """
+	"""Test whether the Tiger transformations (transform / reversetransform)
+	are reversible."""
 	from discodop.treetransforms import canonicalize
 	from discodop.treebank import NegraCorpusReader, handlefunctions
 	headrules = None  # 'alpino.headrules'
@@ -886,7 +899,7 @@ def testtransforms():
 
 
 def test():
-	""" Just tests. """
+	"""Run punctuation and transforms test."""
 	testpunct()
 	testtransforms()
 

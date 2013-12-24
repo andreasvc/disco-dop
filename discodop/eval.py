@@ -1,5 +1,7 @@
-""" Evaluation of (discontinuous) parse trees, following EVALB as much as
-possible, as well as some alternative evaluation metrics.  """
+"""Evaluation of (discontinuous) parse trees.
+
+Follows EVALB as much as possible, and provides some alternative evaluation
+metrics."""
 from __future__ import division, print_function
 import io
 import sys
@@ -22,7 +24,7 @@ except ImportError:
 	from discodop.treedist import newtreedist as newtreedist, newtreedist
 
 USAGE = 'Usage: %s <gold> <parses> [param] [options]' % sys.argv[0]
-HELP = """\
+HELP = '''\
 Evaluation of (discontinuous) parse trees, following EVALB as much as possible.
 
 %s
@@ -63,17 +65,17 @@ options (in addition to those described in the README of EVALB):
                    2 give detailed information for each sentence ('--debug')
   MAX_ERROR        this values is ignored, no errors are tolerated.
                    the parameter is accepted to support usage of unmodified
-                   EVALB parameter files. """ % (
+                   EVALB parameter files. ''' % (
         USAGE, '|'.join(READERS.keys()))
 
-HEADER = """
+HEADER = '''
    Sentence                 Matched   Brackets            Corr      Tag
   ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA\
-""".splitlines()
+'''.splitlines()
 
 
 def main():
-	""" Command line interface for evaluation. """
+	"""Command line interface for evaluation."""
 	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
 	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=',
 			'cutofflen=', 'headrules=', 'functions=', 'morphology=')
@@ -121,8 +123,8 @@ def main():
 
 
 def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
-	""" Do the actual evaluation on given parse trees and parameters.
-	Results are printed to standard output. """
+	"""Do the actual evaluation on given parse trees and parameters.
+	Results are printed to standard output."""
 	assert gold_trees, 'no trees in gold file'
 	assert cand_trees, 'no trees in parses file'
 	keylen = max(len(str(x)) for x in cand_trees)
@@ -308,7 +310,7 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 
 def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		maxlenseen):
-	""" Print breakdowns for the most frequent labels / tags. """
+	"""Print breakdowns for the most frequent labels / tags."""
 	if param['LABELED'] and param['DEBUG'] != -1:
 		print()
 		print(' Category Statistics (10 most frequent categories / errors)',
@@ -381,7 +383,7 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 		exact, lascores, dicenoms, dicedenoms, golddep, canddep,
 		goldb40, candb40, goldpos40, candpos40, sentcount40, maxlenseen40,
 		exact40, lascores40, dicenoms40, dicedenoms40, golddep40, canddep40):
-	""" :returns: overview with scores for all sentences. """
+	""":returns: overview with scores for all sentences."""
 	discbrackets = sum(1 for _, (_, a) in candb.elements()
 			if a != tuple(range(min(a), max(a) + 1)))
 	gdiscbrackets = sum(1 for _, (_, a) in goldb.elements()
@@ -467,7 +469,7 @@ def summary(param, goldb, candb, goldpos, candpos, sentcount, maxlenseen,
 
 
 def readparam(filename):
-	""" read an EVALB-style parameter file and return a dictionary. """
+	"""Read an EVALB-style parameter file and return a dictionary."""
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED',
@@ -511,8 +513,9 @@ def readparam(filename):
 
 
 def transitiveclosure(eqpairs):
-	""" Transitive closure of (undirected) EQ relations with DFS;
-	i.e., given a sequence of pairs denoting an equivalence relation,
+	"""Transitive closure of (undirected) EQ relations with DFS.
+
+	Given a sequence of pairs denoting an equivalence relation,
 	produce a dictionary with equivalence classes as values and
 	arbitrary members of those classes as keys.
 
@@ -542,13 +545,14 @@ def transitiveclosure(eqpairs):
 
 
 def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
-	""" Apply the transformations according to the parameter file,
-	except for deleting the root node, which is a special case because if there
-	is more than one child it cannot be deleted.
+	"""Apply the transformations according to the parameter file.
+
+	Does not delete the root node, which is a special case because if there is
+	more than one child it cannot be deleted.
 
 	:param pos: a list with the contents of tree.pos(); modified in-place.
 	:param gpos: a dictionary of the POS tags of the original gold tree, before
-		any tags/words have been deleted. """
+		any tags/words have been deleted."""
 	leaves = list(range(len(sent)))
 	posnodes = []
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
@@ -598,7 +602,7 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 
 
 def bracketings(tree, labeled=True, dellabel=(), disconly=False):
-	""" :returns: the labeled set of bracketings for a tree
+	"""Return the labeled set of bracketings for a tree.
 
 	For each nonterminal node, the set will contain a tuple with the label and
 	the set of terminals which it dominates.
@@ -629,12 +633,12 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 
 
 def bracketing(node, labeled=True):
-	""" Generate bracketing ``(label, indices)`` for a given node. """
+	"""Generate bracketing ``(label, indices)`` for a given node."""
 	return (node.label if labeled else '', node.indices)
 
 
 def strbracketings(brackets):
-	""" :returns: a string with a concise representation of a bracketing.
+	"""Return a string with a concise representation of a bracketing.
 
 	>>> strbracketings({('S', (0, 1, 2)), ('VP', (0, 2))})
 	'S[0-2], VP[0,2]'
@@ -647,7 +651,7 @@ def strbracketings(brackets):
 
 
 def leafancestorpaths(tree, dellabel):
-	""" Generate a list of ancestors for each leaf node in a tree. """
+	"""Generate a list of ancestors for each leaf node in a tree."""
 	#uses [] to mark components, and () to mark constituent boundaries
 	#deleted words/tags should not affect boundary detection
 	paths = {a: [] for a in tree.indices}
@@ -684,21 +688,20 @@ def leafancestorpaths(tree, dellabel):
 
 
 def pathscore(gold, cand):
-	""" Get edit distance for two leaf-ancestor paths. """
+	"""Get edit distance for two leaf-ancestor paths."""
 	return 1 - (Decimal(edit_distance(cand, gold))
 					/ max(len(gold) + len(cand), 1))
 
 
 def leafancestor(goldtree, candtree, dellabel):
-	""" Geoffrey Sampson, Anna Babarcz (2003):
-	A test of the leaf-ancestor metric for parse accuracy """
+	"""Sampson, Babarcz (2003): A test of the leaf-ancestor metric [...]."""
 	gold = leafancestorpaths(goldtree, dellabel)
 	cand = leafancestorpaths(candtree, dellabel)
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])
 
 
 def treedisteval(a, b, includeroot=False, debug=False):
-	""" Get tree-distance for two trees and compute the Dice normalization. """
+	"""Get tree-distance for two trees and compute the Dice normalization."""
 	ted = treedist(a, b, debug)
 	# Dice denominator
 	denom = len(list(a.subtrees()) + list(b.subtrees()))
@@ -720,7 +723,7 @@ def treedisteval(a, b, includeroot=False, debug=False):
 #
 # iii) If n==m, recall and precision are both 100%.
 def recall(reference, candidate):
-	""" Get recall score for two multisets. """
+	"""Get recall score for two multisets."""
 	if not reference:
 		return Decimal('NaN')
 	return Decimal(sum(min(reference[a], candidate[a])
@@ -728,7 +731,7 @@ def recall(reference, candidate):
 
 
 def precision(reference, candidate):
-	""" Get precision score for two multisets. """
+	"""Get precision score for two multisets."""
 	if not candidate:
 		return Decimal('NaN')
 	return Decimal(sum(min(reference[a], candidate[a])
@@ -736,8 +739,9 @@ def precision(reference, candidate):
 
 
 def f_measure(reference, candidate, alpha=Decimal(0.5)):
-	""" Get F-measure of precision and recall for two multisets.
-	The default weight ``alpha=0.5`` corresponds to the F_1-measure. """
+	"""Get F-measure of precision and recall for two multisets.
+
+	The default weight ``alpha=0.5`` corresponds to the F_1-measure."""
 	p = precision(reference, candidate)
 	r = recall(reference, candidate)
 	if p == 0 or r == 0:
@@ -746,10 +750,10 @@ def f_measure(reference, candidate, alpha=Decimal(0.5)):
 
 
 def accuracy(reference, candidate):
-	""" Given a sequence of reference values and a corresponding sequence of
-	test values, return the fraction of corresponding values that are equal.
+	"""Compute fraction of equivalent pairs in two sequences.
+
 	In particular, return the fraction of indices
-	``0<i<=len(test)`` such that ``test[i] == reference[i]``. """
+	``0<i<=len(test)`` such that ``test[i] == reference[i]``."""
 	assert len(reference) == len(candidate), (
 		'Sequences must have the same length.')
 	return Decimal(sum(1 for a, b in zip(reference, candidate)
@@ -757,8 +761,9 @@ def accuracy(reference, candidate):
 
 
 def harmean(seq):
-	""" Compute harmonic mean of a sequence of numbers; returns NaN on zero
-	value. """
+	"""Compute harmonic mean of a sequence of numbers.
+
+	Returns NaN when ``seq`` contains zero."""
 	numerator = denominator = Decimal(0)
 	for a in seq:
 		if not a:
@@ -771,8 +776,9 @@ def harmean(seq):
 
 
 def mean(seq):
-	""" Compute arithmetic mean of a sequence; returns NaN when seq is empty.
-	"""
+	"""Compute arithmetic mean of a sequence.
+
+	Returns NaN when ``seq`` is empty."""
 	numerator = denominator = Decimal(0)
 	for a in seq:
 		numerator += a
@@ -783,9 +789,11 @@ def mean(seq):
 
 
 def intervals(seq):
-	""" Partition seq into a sequence of intervals corresponding to contiguous
-	ranges. An interval is a pair ``(a, b)``, with ``a <= b`` denoting
-	terminals ``x`` such that ``a <= x <= b``.
+	"""Return a sequence of intervals corresponding to contiguous ranges.
+
+	``seq`` is a sorted list of integers. An interval is a pair ``(a, b)``,
+	with ``a <= b`` denoting indices ``x`` in ``seq``
+	such that ``a <= x <= b``.
 
 	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
 	[(0, 1), (3, 4), (6, 8)]"""
@@ -803,10 +811,10 @@ def intervals(seq):
 
 
 def disc(node):
-	""" This function evaluates whether a particular node is locally
-	discontinuous. The root node will, by definition, be continuous.
-	Nodes can be continuous even if some of their children are discontinuous.
-	"""
+	"""Evaluate whether a particular node is locally discontinuous.
+
+	The root node  of a complete tree will, by definition, be continuous. Nodes
+	can be continuous even if some of their children are discontinuous."""
 	if not isinstance(node, Tree):
 		return False
 	start = prev = None
@@ -821,9 +829,10 @@ def disc(node):
 
 
 def nozerodiv(func):
-	""" Convenience function to catch zero division or ``None`` as a result
-	from evaluating ``func()``; otherwise format its return value as a
-	percentage with two decimals; the result is a 6-character string. """
+	"""Evaluate ``func()`` but catch zero division or ``None`` as a result.
+
+	Format its return value as a percentage with two decimals; the result is a
+	6-character string."""
 	try:
 		result = func()
 	except ZeroDivisionError:
@@ -832,13 +841,14 @@ def nozerodiv(func):
 
 
 def edit_distance(seq1, seq2):
-	""" Calculate the Levenshtein edit-distance between two strings. The edit
-	distance is the number of characters that need to be substituted, inserted,
-	or deleted, to transform seq1 into seq2.  For example, transforming 'rain'
-	to 'shine' requires three steps, consisting of two substitutions and one
-	insertion: 'rain' -> 'sain' -> 'shin' -> 'shine'.  These operations could
-	have been done in other orders, but at least three steps are needed.
-	"""
+	"""Calculate the Levenshtein edit-distance between two strings.
+
+	The edit distance is the number of characters that need to be substituted,
+	inserted, or deleted, to transform seq1 into seq2.  For example,
+	transforming 'rain' to 'shine' requires three steps, consisting of two
+	substitutions and one insertion: 'rain' -> 'sain' -> 'shin' -> 'shine'.
+	These operations could have been done in other orders, but at least three
+	steps are needed."""
 	# set up a 2-D array
 	len1 = len(seq1)
 	len2 = len(seq2)
@@ -860,7 +870,7 @@ def edit_distance(seq1, seq2):
 
 
 def test():
-	""" Simple sanity check; should give 100% score on all metrics. """
+	"""Simple sanity check; should give 100% score on all metrics."""
 	gold = READERS['export']('.', 'alpinosample.export')
 	parses = READERS['export']('.', 'alpinosample.export')
 	doeval(gold.parsed_sents(),

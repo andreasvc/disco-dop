@@ -1,8 +1,10 @@
-""" Implementation of outside estimates:
+"""Computation of outside estimates for best-first or A* parsing.
+
 - PCFG A* estimate (Klein & Manning 2003),
 - PLCFRS LR context-summary estimate (Kallmeyer & Maier 2010).
+
 The latter ported almost directly from rparse
-(except for sign reversal of log probs). """
+(except for sign reversal of log probs)."""
 
 from __future__ import print_function
 from math import exp
@@ -20,7 +22,7 @@ cdef extern from "math.h":
 INFINITY = float('infinity')
 
 cdef class Item:
-	""" Item class used in agenda for computing the  outside LR estimate. """
+	"""Item class used in agenda for computing the  outside LR estimate."""
 	cdef int state, length, lr, gaps
 
 	def __hash__(Item self):
@@ -59,8 +61,10 @@ cdef inline Item new_Item(int state, int length, int lr, int gaps):
 
 cdef inline double getoutside(double [:, :, :, :] outside,
 		UInt maxlen, UInt slen, UInt label, ULLong vec):
-	""" Query for outside estimate. NB: if this would be used, it should be in
-	a .pxd with `inline`. However, passing the numpy array may be slow. """
+	"""Query for outside estimate.
+
+	NB: if this would be used, it should be in a .pxd with `inline`.
+	However, passing the numpy array may be slow."""
 	cdef UInt length = bitcount(vec)
 	cdef UInt left = nextset(vec, 0)
 	cdef UInt gaps = bitlength(vec) - length - left
@@ -72,11 +76,11 @@ cdef inline double getoutside(double [:, :, :, :] outside,
 
 
 def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
-	""" Compute simple inside estimate in bottom-up fashion.
+	"""Compute simple inside estimate in bottom-up fashion.
 	Here vec is actually the length (number of terminals in the yield of
 	the constituent)
 	insidescores is a 2-dimensional matrix initialized with NaN to indicate
-	values that have yet to be computed. """
+	values that have yet to be computed."""
 	cdef double x
 	cdef Agenda agenda = Agenda()
 	cdef SmallChartItem I
@@ -139,8 +143,9 @@ def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 
 
 def inside(Grammar grammar, UInt maxlen, dict insidescores):
-	""" Compute inside estimate in bottom-up fashion, with
-	full bit vectors (not used). """
+	"""Compute inside estimate in bottom-up fashion, with full bit vectors.
+
+	(not used)."""
 	cdef SmallChartItem I
 	cdef Entry entry
 	cdef LexicalRule lexrule
@@ -222,7 +227,7 @@ cdef inline ULLong insideconcat(ULLong a, ULLong b, Rule rule, Grammar grammar,
 
 def outsidelr(Grammar grammar, double [:, :] insidescores,
 		UInt maxlen, UInt goal, double [:, :, :, :] outside):
-	""" Compute the outside SX simple LR estimate in top down fashion. """
+	"""Compute the outside SX simple LR estimate in top down fashion."""
 	cdef Agenda agenda = Agenda()
 	cdef Entry entry
 	cdef Item I
@@ -331,7 +336,7 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 
 
 def getestimates(Grammar grammar, UInt maxlen, UInt goal):
-	""" Compute table of outside SX simple LR estimates for a PLCFRS. """
+	"""Compute table of outside SX simple LR estimates for a PLCFRS."""
 	print("allocating outside matrix:",
 		(8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
 			* (maxlen + 1) / 1024 ** 2), 'MB')
@@ -348,7 +353,7 @@ def getestimates(Grammar grammar, UInt maxlen, UInt goal):
 
 cdef inline double getpcfgoutside(dict outsidescores,
 		UInt maxlen, UInt slen, UInt label, ULLong vec):
-	""" Query for a PCFG A* estimate. For documentation purposes. """
+	"""Query for a PCFG A* estimate. For documentation purposes."""
 	cdef UInt length = bitcount(vec)
 	cdef UInt left = nextset(vec, 0)
 	cdef UInt right = slen - length - left
@@ -359,7 +364,7 @@ cdef inline double getpcfgoutside(dict outsidescores,
 
 cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 		bint debug=False):
-	""" Compute table of outside SX estimates for a PCFG. """
+	"""Compute table of outside SX estimates for a PCFG."""
 	insidescores = pcfginsidesx(grammar, maxlen)
 	outside = pcfgoutsidesx(grammar, insidescores, goal, maxlen)
 	if debug:
@@ -387,8 +392,10 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 
 
 cdef pcfginsidesx(Grammar grammar, UInt maxlen):
-	""" insideSX estimate for a PCFG using agenda. Adapted from:
-	Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse Selection. """
+	"""Compute insideSX estimate for a PCFG using agenda.
+
+	Adapted from: Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse
+	Selection."""
 	cdef size_t n
 	cdef ULLong vec
 	cdef SmallChartItem I
@@ -442,7 +449,7 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 
 
 cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
-	""" outsideSX estimate for a PCFG, agenda-based version. """
+	"""outsideSX estimate for a PCFG, agenda-based version."""
 	cdef Agenda agenda = Agenda()
 	cdef Entry entry
 	cdef tuple I
@@ -552,8 +559,10 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 
 
 cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
-	""" insideSX estimate for a PCFG. Straight from Klein & Manning (2003),
-	A* parsing: Fast Exact Viterbi Parse Selection. """
+	"""Compute insideSX estimate for a PCFG.
+
+	Straight from Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse
+	Selection."""
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, split
 	cdef Rule rule
@@ -602,7 +611,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 
 cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 		UInt goal, UInt state, int lspan, int rspan):
-	""" outsideSX estimate for a PCFG. """
+	"""outsideSX estimate for a PCFG."""
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, sibsize
 	cdef Rule rule
@@ -764,14 +773,14 @@ def test():
 		print(item)
 	print()
 
-	trees = [Tree.parse(a, parse_leaf=int) for a in """\
+	trees = [Tree.parse(a, parse_leaf=int) for a in '''\
 			(ROOT (A (a 0) (b 1)))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
-			(ROOT (C (a 0) (b 1)) (c 2))""".splitlines()]
+			(ROOT (C (a 0) (b 1)) (c 2))'''.splitlines()]
 	sents =[["a", "b"],
 			["a", "b", "c"],
 			["a", "b", "c"],

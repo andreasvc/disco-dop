@@ -1,4 +1,4 @@
-""" Assorted functions to read off grammars from treebanks. """
+"""Assorted functions to read off grammars from treebanks."""
 from __future__ import division, print_function
 import io
 import re
@@ -15,7 +15,8 @@ if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
 
-FORMAT = """The PLCFRS format is as follows. Rules are delimited by newlines.
+FORMAT = '''\
+The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are:
 
 LHS	RHS1	[RHS2]	yield-function	weight
@@ -34,9 +35,11 @@ Example:
 rules:   S	NP	VP	010	1/2
          VP_2	VB	NP	0,1	2/3
          NP	NN	0	1/4
-lexicon: Haus	NN	3/10	JJ	1/9"""
+lexicon: Haus	NN	3/10	JJ	1/9\
+'''
 
-USAGE = """Read off grammars from treebanks.
+USAGE = '''\
+Read off grammars from treebanks.
 Usage: %(cmd)s pcfg <input> <output> [options]
   %(cmd)s plcfrs <input> <output> [options]
   %(cmd)s dopreduction <input> <output> [options]
@@ -57,17 +60,19 @@ When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
-\n%(grammarformat)s\n""" % dict(cmd=sys.argv[0], grammarformat=FORMAT,
+\n%(grammarformat)s
+''' % dict(cmd=sys.argv[0], grammarformat=FORMAT,
 		corpusfmts='|'.join(READERS.keys()))
 
 
 def lcfrsproductions(tree, sent, frontiers=False):
-	""" Given a tree with integer indices as terminals, and a sentence
-	with the corresponding words for these indices, produce a sequence
-	of LCFRS productions. Always produces monotone LCFRS rules.
-	For best results, tree should be canonicalized.
-	When frontiers is true, frontier nodes will generate empty productions,
-	by default they are ignored.
+	"""Read off LCFRS productions from a tree with indices and a sentence.
+
+	Tree should contain integer indices as terminals, and a sentence with the
+	corresponding words for these indices. Always produces monotone LCFRS
+	rules. For best results, tree should be canonicalized. When ``frontiers``
+	is ``True``, frontier nodes will generate empty productions, by default
+	they are ignored.
 
 	>>> tree = Tree.parse("(S (VP_2 (V 0) (ADJ 2)) (NP 1))", parse_leaf=int)
 	>>> sent = "is Mary happy".split()
@@ -136,9 +141,10 @@ def lcfrsproductions(tree, sent, frontiers=False):
 
 
 def treebankgrammar(trees, sents):
-	""" Induce a probabilistic LCFRS with relative frequencies of productions.
+	"""Induce a probabilistic LCFRS with relative frequencies of productions.
+
 	When trees contain no discontinuities, the result is equivalent to a
-	treebank PCFG. """
+	treebank PCFG."""
 	grammar = multiset(rule for tree, sent in zip(trees, sents)
 			for rule in lcfrsproductions(tree, sent))
 	lhsfd = multiset()
@@ -149,12 +155,13 @@ def treebankgrammar(trees, sents):
 
 
 def dopreduction(trees, sents, packedgraph=False):
-	""" Induce a reduction of DOP to an LCFRS, similar to how Goodman (1996)
-	reduces DOP1 to a PCFG.
+	"""Induce a reduction of DOP to an LCFRS.
+
+	Similar to how Goodman (1996, 2003) reduces DOP1 to a PCFG.
 
 	:param packedgraph: packed graph encoding (Bansal & Klein 2010).
 	:returns: a set of rules with the relative frequency estimate as
-		probilities, and a dictionary with alternate weights. """
+		probilities, and a dictionary with alternate weights."""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@1-2),
 	# 	counts of NP@... should sum to count of NP
 	# ntfd: frequency of a node in treebank
@@ -175,7 +182,7 @@ def dopreduction(trees, sents, packedgraph=False):
 				rules[c, avar] += 1
 
 	def weights(rule):
-		""" :returns: rule with RFE and EWE probability. """
+		""":returns: rule with RFE and EWE probability."""
 		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996, 2003)
 		(r, yf), freq = rule
 		rfe = ((1 if '@' in r[0] else freq) * reduce(mul,
@@ -201,9 +208,10 @@ def dopreduction(trees, sents, packedgraph=False):
 
 
 def doubledop(trees, fragments, debug=False, binarized=True):
-	""" Extract a Double-DOP grammar from a treebank. That is, a fragment
-	grammar containing all fragments that occur at least twice, plus all
-	individual productions needed to obtain full coverage.
+	"""Extract a Double-DOP grammar from a treebank given a set of fragments.
+
+	That is, a fragment grammar containing all fragments that occur at least
+	twice, plus all individual productions needed to obtain full coverage.
 	Input trees need to be binarized. A second level of binarization (a normal
 	form) is needed when fragments are converted to individual grammar rules,
 	which occurs through the removal of internal nodes. The binarization adds
@@ -212,10 +220,9 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 	uniquely identifying that terminal and tag: ``tag@word``.
 
 	:returns: a tuple (grammar, altweights, backtransform)
-		altweights is a dictionary containing alternate weights.
-	"""
+		altweights is a dictionary containing alternate weights."""
 	def getweight(frag, terminals):
-		""" :returns: frequency, EWE, and other weights for fragment. """
+		""":returns: frequency, EWE, and other weights for fragment."""
 		freq = sum(fragments[frag, terminals].values())
 		root = frag[1:frag.index(' ')]
 		nonterms = frag.count('(') - 1
@@ -293,14 +300,14 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 
 
 def sortgrammar(grammar):
-	""" Order grammar such that there are three clusters:
+	"""Sort grammar productions in three clusters: phrasal, binarized, lexical.
 
 	1. normal phrasal rules, ordered by lhs symbol
 	2. non-initial binarized 2dop rules (to align the 2dop backtransform with
 		the rules in cluster 1 which introduce a new fragment)
-	3. lexical rules sorted by word """
+	3. lexical rules sorted by word"""
 	def sortkey(rule):
-		""" Sort key ``(word or '', 2dop binarized rule?, lhs)``.  """
+		"""Sort key ``(word or '', 2dop binarized rule?, lhs)``."""
 		(r, yf), _p = rule
 		word = yf[0] if r[1] == 'Epsilon' else ''
 		return word, '}<' in r[0], r[0]
@@ -311,7 +318,8 @@ FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
 
 def flattenbin(tree, sent, ids, backtransform):
-	""" Auxiliary function for Double-DOP.
+	"""Auxiliary function for Double-DOP.
+
 	Remove internal nodes from a tree and read off the binarized
 	productions of the resulting flattened tree. Aside from returning
 	productions, also return tree with lexical and frontier nodes replaced by a
@@ -331,10 +339,10 @@ def flattenbin(tree, sent, ids, backtransform):
 	from discodop.treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
-		""" Add information to a frontier or terminal:
+		"""Add information to a frontier or terminal node.
 
 		:frontiers: ``(label indices)``
-		:terminals: ``(tag@word idx)`` """
+		:terminals: ``(tag@word idx)``"""
 		n = x.group(2)  # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
@@ -377,7 +385,8 @@ def flattenbin(tree, sent, ids, backtransform):
 
 
 def flatten(tree, sent, ids, backtransform):
-	""" Auxiliary function for Double-DOP.
+	"""Auxiliary function for Double-DOP.
+
 	Like flattenbin(), but doesn't apply binarization.
 
 	>>> ids = UniqueIDs()
@@ -390,10 +399,10 @@ def flatten(tree, sent, ids, backtransform):
 	from discodop.treetransforms import addbitsets
 
 	def repl(x):
-		""" Add information to a frontier or terminal:
+		"""Add information to a frontier or terminal node.
 
 		:frontiers: ``(label indices)``
-		:terminals: ``(tag@word idx)`` """
+		:terminals: ``(tag@word idx)``"""
 		n = x.group(2)  # index w/leading space
 		nn = int(n)
 		if sent[nn] is None:
@@ -433,7 +442,8 @@ def flatten(tree, sent, ids, backtransform):
 
 
 def nodefreq(tree, dectree, subtreefd, nonterminalfd):
-	""" Auxiliary function for DOP reduction.
+	"""Auxiliary function for DOP reduction.
+
 	Counts frequencies of nodes and calculate the number of
 	subtrees headed by each node. updates ``subtreefd`` and ``nonterminalfd``
 	as a side effect. Expects a normal tree and a tree with IDs.
@@ -467,17 +477,18 @@ def nodefreq(tree, dectree, subtreefd, nonterminalfd):
 
 
 class TreeDecorator(object):
-	""" Auxiliary class for DOP reduction.
+	"""Auxiliary class for DOP reduction.
+
 	Adds unique identifiers to each internal non-terminal of a tree.
 	If initialized with ``memoize=True``, equivalent subtrees will get the
-	same identifiers. """
+	same identifiers."""
 	def __init__(self, memoize=False):
 		self.ids = self.n = 0
 		self.packedgraphs = {}
 		self.memoize = memoize
 
 	def decorate(self, tree, sent):
-		""" Return a copy of tree with labels decorated with IDs.
+		"""Return a copy of tree with labels decorated with IDs.
 
 		>>> d = TreeDecorator()
 		>>> tree = Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))", parse_leaf=int)
@@ -506,7 +517,7 @@ class TreeDecorator(object):
 		return dectree
 
 	def _recdecorate(self, tree):
-		""" Traverse subtrees not yet seen. """
+		"""Traverse subtrees not yet seen."""
 		if isinstance(tree, int):
 			return tree
 		elif tree not in self.packedgraphs:
@@ -518,7 +529,7 @@ class TreeDecorator(object):
 		return self._copyexceptindices(tree, self.packedgraphs[tree])
 
 	def _copyexceptindices(self, tree1, tree2):
-		""" Copy the nonterminals from tree2, but take indices from tree1. """
+		"""Copy the nonterminals from tree2, but take indices from tree1."""
 		if not isinstance(tree1, Tree):
 			return tree1
 		self.ids += 1
@@ -527,8 +538,8 @@ class TreeDecorator(object):
 
 
 class DiscTree(ImmutableTree):
-	""" Wrap an immutable tree with indices as leaves
-	and a sentence. Provides hash & equality.  """
+	"""Wrap an immutable tree with indices as leaves
+	and a sentence. Provides hash & equality."""
 	def __init__(self, tree, sent):
 		self.sent = tuple(sent)
 		super(DiscTree, self).__init__(tree.label, tuple(
@@ -550,8 +561,8 @@ class DiscTree(ImmutableTree):
 
 
 def eqtree(tree1, sent1, tree2, sent2):
-	""" Test whether two discontinuous trees are equivalent;
-	assumes canonicalized() ordering. """
+	"""Test whether two discontinuous trees are equivalent;
+	assumes canonicalized() ordering."""
 	if tree1.label != tree2.label or len(tree1) != len(tree2):
 		return False
 	for a, b in zip(tree1, tree2):
@@ -566,17 +577,20 @@ def eqtree(tree1, sent1, tree2, sent2):
 
 
 def quotelabel(label):
-	""" Escapes two things: parentheses and non-ascii characters.
+	"""Escapes two things: parentheses and non-ascii characters.
+
 	Parentheses are replaced by square brackets. Also escapes non-ascii
-	characters, so that phrasal labels can remain ascii-only. """
+	characters, so that phrasal labels can remain ascii-only."""
 	newlabel = label.replace('(', '[').replace(')', ']')
 	# juggling to get str in both Python 2 and Python 3.
 	return str(newlabel.encode('unicode-escape').decode('ascii'))
 
 
 class UniqueIDs(object):
-	""" Produce numeric IDs. Can be used as iterator (ID will not be re-used)
-	and dictionary (ID will be re-used for same key).
+	"""Produce numeric IDs.
+
+	Can be used as iterator (ID will not be re-used) and dictionary (ID will be
+	re-used for same key).
 
 	>>> ids = UniqueIDs()
 	>>> next(ids)
@@ -605,18 +619,17 @@ class UniqueIDs(object):
 
 
 def rangeheads(s):
-	""" Iterate over a sequence of numbers and return first element of each
+	"""Iterate over a sequence of numbers and return first element of each
 	contiguous range. Input should be shorted.
 
 	>>> rangeheads( (0, 1, 3, 4, 6) )
-	[0, 3, 6]
-	"""
+	[0, 3, 6]"""
 	sset = set(s)
 	return [a for a in s if a - 1 not in sset]
 
 
 def ranges(s):
-	""" Partition s into a sequence of lists corresponding to contiguous ranges
+	"""Partition s into a sequence of lists corresponding to contiguous ranges.
 
 	>>> list(ranges( (0, 1, 3, 4, 6) ))
 	[[0, 1], [3, 4], [6]]"""
@@ -632,7 +645,7 @@ def ranges(s):
 
 
 def defaultparse(wordstags, rightbranching=False):
-	""" a default parse, either right branching NPs, or all words under a single
+	"""A default parse, either right branching NPs, or all words under a single
 	constituent 'NOPARSE'.
 
 	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
@@ -650,12 +663,14 @@ def defaultparse(wordstags, rightbranching=False):
 
 
 def printrule(r, yf, w):
-	""" :returns: a string with a representation of a rule. """
+	""":returns: a string with a representation of a rule."""
 	return "%s %s --> %s\t %r" % (w, r[0], ' '.join(x for x in r[1:]), list(yf))
 
 
 def cartpi(seq):
-	""" itertools.product doesn't support infinite sequences!
+	"""The cartesian product of a sequence of iterables.
+
+	itertools.product doesn't support infinite sequences!
 
 	>>> list(islice(cartpi([count(), count(0)]), 9))
 	[(0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6), (0, 7), (0, 8)]"""
@@ -665,10 +680,12 @@ def cartpi(seq):
 
 
 def write_lcfrs_grammar(grammar, bitpar=False):
-	""" Writes a grammar in a simple text file format. Rules are written in
-	the order as they appear in the sequence `grammar`, except that the lexicon
-	file lists words in sorted order (with tags for each word in the order of
-	`grammar`). For a description of the file format, see ``grammar.FORMAT``.
+	"""Write a grammar in a simple text file format.
+
+	Rules are written in the order as they appear in the sequence `grammar`,
+	except that the lexicon file lists words in sorted order (with tags for
+	each word in the order of `grammar`). For a description of the file format,
+	see ``grammar.FORMAT``.
 
 	:param grammar:  a sequence of rule tuples, as produced by
 		``treebankgrammar()``, ``dopreduction()``, or ``doubledop()``.
@@ -683,8 +700,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	- if ``bitpar`` is ``True``, write frequencies (e.g., ``2``)
 		if probabilities sum to 1, i.e., in that case probabilities can be
 		re-computed as relative frequencies. Otherwise, resort to floating
-		point numbers (e.g., ``0.666``, imprecise).
-	"""
+		point numbers (e.g., ``0.666``, imprecise)."""
 	rules, lexicon, lexical = [], [], {}
 	freqs = False
 	if bitpar:
@@ -730,8 +746,8 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
-	""" Takes a bitpar grammar and converts it to the format of
-	Mark Jonhson's cky parser. """
+	"""Takes a bitpar grammar and converts it to the format of
+	Mark Jonhson's cky parser."""
 	grammar = []
 	for a in io.open(rules, encoding=encoding):
 		a = a.split()
@@ -747,7 +763,7 @@ def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
 
 
 def subsetgrammar(a, b):
-	""" test whether grammar a is a subset of b. """
+	"""Test whether grammar a is a subset of b."""
 	difference = set(map(itemgetter(0), a)) - set(map(itemgetter(0), b))
 	if not difference:
 		return True
@@ -758,11 +774,11 @@ def subsetgrammar(a, b):
 
 
 def grammarinfo(grammar, dump=None):
-	""" print(some statistics on a grammar, before it goes through Grammar().)
+	"""Print some statistics on a grammar, before it goes through Grammar().
 
 	:param dump: if given a filename, will dump distribution of parsing
 		complexity to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120
-		times, etc.) """
+		times, etc.)"""
 	from discodop.eval import mean
 	lhs = {rule[0] for (rule, yf), w in grammar}
 	l = len(grammar)
@@ -784,7 +800,7 @@ def grammarinfo(grammar, dump=None):
 	result += "max variables: %d in %s\n" % (n, printrule(r, yf, w))
 
 	def parsingcomplexity(yf):
-		""" this sums the fanouts of LHS & RHS """
+		"""Sum the fanouts of LHS & RHS."""
 		if isinstance(yf[0], tuple):
 			return len(yf) + sum(map(len, yf))
 		return 1  # NB: a lexical production has complexity 1
@@ -802,7 +818,7 @@ def grammarinfo(grammar, dump=None):
 
 
 def test():
-	""" Run some tests. """
+	"""Demonstrate grammar extraction."""
 	from discodop import plcfrs
 	from discodop.containers import Grammar
 	from discodop.treebank import NegraCorpusReader
@@ -869,7 +885,7 @@ def test():
 
 
 def main():
-	""" Command line interface to create grammars from treebanks. """
+	"""Command line interface to create grammars from treebanks."""
 	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize

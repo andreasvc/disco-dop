@@ -1,4 +1,4 @@
-""" Discontinuous tree drawing.
+"""Discontinuous tree drawing.
 
 Interesting reference (not used for this code):
 T. Eschbach et al., Orth. Hypergraph Drawing, Journal of
@@ -22,7 +22,8 @@ else:
 	from itertools import izip
 
 
-USAGE = """Usage: %s [<treebank>...] [options]
+USAGE = '''\
+Usage: %s [<treebank>...] [options]
 Options (* marks default option):
   --fmt=[*%s]
                    Specify corpus format.
@@ -39,8 +40,8 @@ Options (* marks default option):
   --plain          disable ANSI colors.
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
-Pipe the output through 'less -R' to preserve the colors. """ % (
-		sys.argv[0], '|'.join(READERS.keys()))
+Pipe the output through 'less -R' to preserve the colors.\
+''' % (sys.argv[0], '|'.join(READERS.keys()))
 ANSICOLOR = {
 		'black': 30,
 		'red': 31,
@@ -54,7 +55,7 @@ ANSICOLOR = {
 
 
 class DrawTree(object):
-	""" Visualize a discontinuous tree in various formats.
+	"""Visualize a discontinuous tree in various formats.
 
 	``DrawTree(tree, sent=None, highlight=(), abbr=False)``
 	creates an object from which different visualizations can be created.
@@ -120,8 +121,9 @@ class DrawTree(object):
 					for n in sorted(self.nodes))
 
 	def nodecoords(self, tree, sent, highlight):
-		""" Resolve placement of nodes for drawing discontinuous trees
-		programmatically. Objective:
+		"""Produce coordinates of nodes on a grid.
+
+		Objective:
 
 		- Produce coordinates for a non-overlapping placement of nodes and
 			horizontal lines.
@@ -151,10 +153,11 @@ class DrawTree(object):
 		- edges[id]: parent id of node with this id (ordered dictionary)
 		"""
 		def findcell(m, matrix, startoflevel, children):
-			""" Find vacant row, column index.
+			"""Find vacant row, column index for node ``m``.
+
 			Iterate over current rows for this level (try lowest first)
 			and look for cell between first and last child of this node,
-			add new row to level if no free row available. """
+			add new row to level if no free row available."""
 			candidates = [a for _, a in children[m]]
 			minidx, maxidx = min(candidates), max(candidates)
 			leaves = tree[m].leaves()
@@ -193,7 +196,7 @@ class DrawTree(object):
 					'min=%d; max=%d' % (tree[m], minidx, maxidx, dumpmatrix()))
 
 		def dumpmatrix():
-			""" Dump matrix contents for debugging purposes. """
+			"""Dump matrix contents for debugging purposes."""
 			return '\n'.join(
 				'%2d: %s' % (n, ' '.join(('%2r' % i)[:2] for i in row))
 				for n, row in enumerate(matrix))
@@ -212,8 +215,6 @@ class DrawTree(object):
 			a.sort(key=lambda n: min(n.leaves()))
 		scale = 2
 		crossed = set()
-		zeroindex = scale * min(tree.leaves())
-		lastindex = scale * len(sent)
 		# internal nodes and lexical nodes (no frontiers)
 		positions = tree.treepositions()
 		maxdepth = max(map(len, positions)) + 1
@@ -316,7 +317,7 @@ class DrawTree(object):
 		return nodes, coords, edges
 
 	def svg(self, nodecolor='blue', leafcolor='red'):
-		""" :returns: SVG representation of a discontinuous tree. """
+		""":returns: SVG representation of a discontinuous tree."""
 		fontsize = 12
 		hscale = 40
 		vscale = 25
@@ -393,7 +394,7 @@ class DrawTree(object):
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red'):
-		""" :returns: ASCII art for a discontinuous tree.
+		""":returns: ASCII art for a discontinuous tree.
 
 		:param unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
@@ -401,7 +402,7 @@ class DrawTree(object):
 		:param ansi: whether to produce colors with ANSI escape sequences
 			(only effective when html==False).
 		:param leafcolor, nodecolor: specify colors of leaves and phrasal
-			nodes. """
+			nodes."""
 
 		if unicodelines:
 			horzline = u'\u2500'
@@ -419,7 +420,7 @@ class DrawTree(object):
 			cross = bottom = '_|_'
 
 		def crosscell(cur, x=vertline):
-			""" Overwrite center of this cell with a vertical branch. """
+			"""Overwrite center of this cell with a vertical branch."""
 			splitl = len(cur) - len(cur) // 2 - len(x) // 2 - 1
 			lst = list(cur)
 			lst[splitl:splitl + len(x)] = list(x)
@@ -506,9 +507,11 @@ class DrawTree(object):
 		return '\n'.join(reversed(result)) + '\n'
 
 	def tikzmatrix(self, nodecolor='blue', leafcolor='red'):
-		""" Produce TiKZ code for use with LaTeX. PDF can be produced with
-		pdflatex. Uses TiKZ matrices meaning that nodes are put into a fixed
-		grid. Where the cells of each column all have the same width. """
+		"""Produce TiKZ code for use with LaTeX.
+
+		PDF can be produced with pdflatex. Uses TiKZ matrices meaning that
+		nodes are put into a fixed grid. Where the cells of each column all
+		have the same width."""
 		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
 			r'''\begin{tikzpicture}[scale=1, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
@@ -555,8 +558,10 @@ class DrawTree(object):
 		return '\n'.join(result)
 
 	def tikznode(self, nodecolor='blue', leafcolor='red'):
-		""" Produce TiKZ code to draw a tree. Nodes are drawn with the
-		\\node command so they can have arbitrary coordinates. """
+		"""Produce TiKZ code to draw a tree.
+
+		Nodes are drawn with the \\node command so they can have arbitrary
+		coordinates."""
 		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
 			r'''\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
@@ -592,7 +597,7 @@ class DrawTree(object):
 
 
 def latexlabel(label):
-	""" quote/format label for latex """
+	"""Quote/format label for latex."""
 	newlabel = label.replace('$', r'\$').replace('[', '(').replace('_', r'\_')
 	# turn binarization marker into subscripts in math mode
 	if '|' in newlabel:
@@ -611,7 +616,7 @@ def latexlabel(label):
 
 
 def test():
-	""" Do some tests. """
+	"""Do some tests."""
 	trees = '''(ROOT (S (ADV 0) (VVFIN 1) (NP (PDAT 2) (NN 3)) (PTKNEG 4) \
 				(PP (APPRART 5) (NN 6) (NP (ART 7) (ADJA 8) (NN 9)))) ($. 10))
 			(S (NP (NN 1) (EX 3)) (VP (VB 0) (JJ 2)))
@@ -747,7 +752,7 @@ def test():
 
 
 def main():
-	""" Text-based tree viewer. """
+	"""Text-based tree viewer."""
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')

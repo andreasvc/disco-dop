@@ -1,5 +1,6 @@
-""" Generate random sentences with an LCFRS. Reads grammar from a
-text file. """
+"""Generate random sentences with an LCFRS.
+
+Reads grammar from a text file."""
 from __future__ import print_function
 import sys
 import gzip
@@ -8,14 +9,14 @@ from collections import namedtuple, defaultdict
 from array import array
 from random import random
 
-USAGE = """
+USAGE = '''\
 Generate random sentences with a PLCFRS or PCFG.
 Reads grammar from a text file in PLCFRS or bitpar format.
 Usage: %s [--verbose] <rules> <lexicon>
 or: %s --test
 
 Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
-""" % (sys.argv[0], sys.argv[0])
+''' % (sys.argv[0], sys.argv[0])
 
 Grammar = namedtuple("Grammar", ('numrules', 'unary', 'lbinary', 'rbinary',
 		'bylhs', 'lexicalbyword', 'lexicalbylhs', 'toid', 'tolabel', 'fanout'))
@@ -26,11 +27,13 @@ LexicalRule = namedtuple("LexicalRule",
 
 
 def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
-	""" generate a random sentence in top-down fashion.
-	discount is a factor between 0 and 1.0; 1.0 means no discount,
-	lower values introduce increasingly larger discount for repeated rules.
+	"""Generate a random sentence in top-down fashion.
+
+	:param discount: a factor between 0 and 1.0; 1.0 means no discount, lower
+		values introduce increasingly larger discount for repeated rules.
+
 	Cf. http://eli.thegreenplace.net/2010/01/28/generating-random-sentences\
--from-a-context-free-grammar/ """
+-from-a-context-free-grammar/"""
 	if prodcounts is None:
 		prodcounts = [1] * grammar.numrules
 	if not grammar.bylhs[start]:
@@ -56,8 +59,7 @@ def gen(grammar, start=1, discount=0.75, prodcounts=None, verbose=False):
 
 
 def chooserule(rules, discount, prodcounts):
-	""" given a list of objects with probabilities,
-	choose one according to that distribution. """
+	"""Given a list of weighted rules, choose one following the distribution."""
 	weights = [rule.prob * discount ** prodcounts[rule.no] for rule in rules]
 	position = random() * sum(weights)
 	for r, w in zip(rules, weights):
@@ -68,8 +70,8 @@ def chooserule(rules, discount, prodcounts):
 
 
 def compose(rule, left, right, verbose):
-	""" Combine the results of two generated non-terminals into a single
-	non-terminal, as specified by the given rule. """
+	"""Combine the results of two generated non-terminals into a single
+	non-terminal, as specified by the given rule."""
 	(p1, l1), (p2, l2) = left, right
 	result = []
 	if verbose:
@@ -88,8 +90,9 @@ def compose(rule, left, right, verbose):
 
 
 def parsefrac(a):
-	""" Parse a string of a fraction into a float ('1/2' => 0.5).
-	Substitute for creating Fraction objects (which is slow). """
+	"""Parse a string of a fraction into a float ('1/2' => 0.5).
+
+	Substitute for creating Fraction objects (which is slow)."""
 	n = a.find('/')
 	if n == -1:
 		return float(a)
@@ -97,8 +100,7 @@ def parsefrac(a):
 
 
 def read_lcfrs_grammar(rules, lexicon):
-	""" Reads a grammar as produced by write_lcfrs_grammar from two file
-	objects. """
+	"""Read a grammar produced by write_lcfrs_grammar from two file objects."""
 	rules = (a.strip().split('\t') for a in rules)
 	grammar = [((tuple(a[:-2]), tuple(tuple(map(int, b))
 			for b in a[-2].split(","))), parsefrac(a[-1])) for a in rules]
@@ -110,9 +112,10 @@ def read_lcfrs_grammar(rules, lexicon):
 
 
 def read_bitpar_grammar(rules, lexicon):
-	""" Read a bitpar grammar given two file objects. Must be a binarized
-	grammar. Integer frequencies will be converted to exact relative
-	frequencies; otherwise weights are kept as-is. """
+	"""Read a bitpar grammar given two file objects.
+
+	Must be a binarized grammar. Integer frequencies will be converted to exact
+	relative frequencies; otherwise weights are kept as-is."""
 	grammar = []
 	integralweights = True
 	ntfd = defaultdict(int)
@@ -152,9 +155,11 @@ def read_bitpar_grammar(rules, lexicon):
 
 
 def splitgrammar(rules):
-	""" split the grammar into various lookup tables, mapping nonterminal
-	labels to numeric identifiers. Also turns probabilities into negative
-	log-probabilities. Can only represent binary, monotone LCFRS rules. """
+	"""Split a grammar into various lookup tables, mapping nonterminal
+	labels to numeric identifiers.
+
+	Also turns probabilities into negative log-probabilities. Can only
+	represent binary, monotone LCFRS rules."""
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 	# and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
@@ -205,8 +210,8 @@ def splitgrammar(rules):
 
 
 def yfarray(yf):
-	""" convert a yield function represented as a 2D sequence to an array
-	object. """
+	"""Convert a yield function represented as a 2D sequence to an array
+	object."""
 	# I for 32 bits (int), H for 16 bits (short), B for 8 bits (char)
 	# obviously, all related static declarations should match these types
 	lentype = 'H'
@@ -220,13 +225,13 @@ def yfarray(yf):
 
 
 def arraytoyf(args, lengths):
-	""" Inverse of yfarray(). """
+	"""Inverse of yfarray()."""
 	return tuple(tuple(1 if a & (1 << m) else 0 for m in range(n))
 							for n, a in zip(lengths, args))
 
 
 def test():
-	""" Demonstration on an example grammar. """
+	"""Demonstration on an example grammar."""
 	rules = [
 		((('S', 'VP2', 'VMFIN'), ((0, 1, 0), )), 1),
 		((('VP2', 'VP2', 'VAINF'), ((0, ), (0, 1))), 1. / 2),
@@ -242,7 +247,7 @@ def test():
 
 
 def main():
-	""" Load a grammar from a text file and generate 20 sentences. """
+	"""Load a grammar from a text file and generate 20 sentences."""
 	if "--test" in sys.argv:
 		test()
 		return

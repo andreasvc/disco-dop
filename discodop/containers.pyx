@@ -1,4 +1,4 @@
-""" Data types for chart items, edges, &c. """
+"""Data types for chart items, edges, &c."""
 from __future__ import print_function
 from math import exp, log, fsum
 from libc.math cimport log, exp
@@ -13,7 +13,7 @@ cdef double INFINITY = float('infinity')
 include "_grammar.pxi"
 
 cdef class LexicalRule:
-	""" A weighted rule of the form 'non-terminal --> word'. """
+	"""A weighted rule of the form 'non-terminal --> word'."""
 	def __init__(self, lhs, word, prob):
 		self.lhs = lhs
 		self.word = word
@@ -25,18 +25,19 @@ cdef class LexicalRule:
 
 
 cdef class SmallChartItem:
-	""" Item with word sized bitvector """
+	"""Item with word sized bitvector."""
 	def __init__(SmallChartItem self, label, vec):
 		self.label = label
 		self.vec = vec
 
 	def __hash__(SmallChartItem self):
-		""" juxtapose bits of label and vec, rotating vec if > 33 words:
+		"""Juxtapose bits of label and vec, rotating vec if > 33 words.
+
 		64              32            0
 		|               ..........label
 		|vec[0] 1st half
 		|               vec[0] 2nd half
-		------------------------------- XOR """
+		------------------------------- XOR"""
 		return (self.label ^ (self.vec << (sizeof(self.vec) / 2 - 1))
 				^ (self.vec >> (sizeof(self.vec) / 2 - 1)))
 
@@ -75,16 +76,17 @@ cdef class SmallChartItem:
 
 
 cdef class FatChartItem:
-	""" Item where bitvector is a fixed-width static array. """
+	"""Item where bitvector is a fixed-width static array."""
 	def __hash__(self):
 		cdef long n, _hash
-		""" juxtapose bits of label and vec:
+		"""Juxtapose bits of label and vec.
+
 		64              32            0
 		|               ..........label
 		|vec[0] 1st half
 		|               vec[0] 2nd half
 		|........ rest of vec .........
-		------------------------------- XOR """
+		------------------------------- XOR"""
 		_hash = (self.label ^ self.vec[0] << (8 * sizeof(self.vec[0]) / 2 - 1)
 				^ self.vec[0] >> (8 * sizeof(self.vec[0]) / 2 - 1))
 		# add remaining bits
@@ -159,6 +161,7 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 
 
 cdef class Edges:
+	"""A static array with a fixed number of Edge structs."""
 	def __cinit__(self):
 		self.len = 0
 
@@ -167,8 +170,8 @@ cdef class Edges:
 
 
 cdef class RankedEdge:
-	""" An edge, including the chart item (head) to which it points,
-	along with ranks for its children, to denote a k-best derivation. """
+	"""An edge, including the chart item (head) to which it points,
+	along with ranks for its children, to denote a *k*-best derivation."""
 	def __hash__(self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ hash(self.head)
@@ -193,56 +196,56 @@ cdef class RankedEdge:
 
 
 cdef class Chart:
-	""" Base class for charts. Provides methods that available on all charts.
+	"""Base class for charts. Provides methods available on all charts.
 
 	The subclass hierarchy for charts has three levels:
 
 		(0) base class, methods for chart traversal.
 		(1) formalism, methods specific to CFG vs. LCFRS parsers.
-		(2) data structurs optimized for short/long sentences, small/large
+		(2) data structures optimized for short/long sentences, small/large
 			grammars.
 
-	Level 1/2 defines a type for labeled spans referred to as ``item``. """
+	Level 1/2 defines a type for labeled spans referred to as ``item``."""
 	def root(self):
-		""" Return the item for this chart, spanning the whole sentence, with
-		the grammar's distinguished root symbel as label. """
+		"""Return the item for this chart, spanning the whole sentence, with
+		the grammar's distinguished root symbol as label."""
 		raise NotImplementedError
 
 	cdef _left(self, item, Edge *edge):
-		""" Given an item and an edge belonging to it, return the left item it
-		points to. """
+		"""Given an item and an edge belonging to it, return the left item it
+		points to."""
 		raise NotImplementedError
 
 	cdef _right(self, item, Edge *edge):
-		""" Given an item and an edge belonging to it, return the right item it
-		points to. """
+		"""Given an item and an edge belonging to it, return the right item it
+		points to."""
 		raise NotImplementedError
 
 	cdef double subtreeprob(self, item):
-		""" Return probability of subtree headed by item. """
+		"""Return probability of subtree headed by item."""
 		raise NotImplementedError
 
 	cdef left(self, RankedEdge rankededge):
-		""" Given a ranked edge, return the left item it points to. """
+		"""Given a ranked edge, return the left item it points to."""
 		return self._left(rankededge.head, rankededge.edge)
 
 	cdef right(self, RankedEdge rankededge):
-		""" Given a ranked edge, return the right item it points to. """
+		"""Given a ranked edge, return the right item it points to."""
 		return self._right(rankededge.head, rankededge.edge)
 
 	cdef copy(self, item):
 		return item
 
 	cdef lexidx(self, item, Edge *edge):
-		""" Given an item and a lexical edge belonging to it, return the
-		sentence index of the terminal child. """
+		"""Given an item and a lexical edge belonging to it, return the
+		sentence index of the terminal child."""
 		cdef short result = edge.pos.mid - 1
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
 	cdef edgestr(Chart self, item, Edge *edge):
-		""" Given an item and an edge belonging to it, return a string
-		representation of it. """
+		"""Given an item and an edge belonging to it, return a string
+		representation of it."""
 		if edge.rule is NULL:
 			return self.sent[self.lexidx(item, edge)]
 		else:
@@ -254,7 +257,7 @@ cdef class Chart:
 						if edge.rule.rhs2 else ''))
 
 	cdef ChartItem asChartItem(self, item):
-		""" Convert/copy item to ChartItem instance. """
+		"""Convert/copy item to ChartItem instance."""
 		cdef size_t itemx
 		if isinstance(item, SmallChartItem):
 			return (<SmallChartItem>item).copy()
@@ -270,8 +273,8 @@ cdef class Chart:
 		return CFGtoFatChartItem(label, start, end)
 
 	cdef size_t asCFGspan(self, item, size_t nonterminals):
-		""" Convert item to a span of a chart with a different number of
-		non-terminals. """
+		"""Convert item to a span of a chart with a different number of
+		non-terminals."""
 		cdef size_t itemx
 		if isinstance(item, SmallChartItem):
 			start = nextset((<SmallChartItem>item).vec, 0)
@@ -289,7 +292,7 @@ cdef class Chart:
 		return cellidx(start, end, self.lensent, nonterminals)
 
 	def __str__(self):
-		""" Pretty-print chart and k-best derivations. """
+		"""Pretty-print chart and *k*-best derivations."""
 		cdef Edges edges
 		cdef RankedEdge rankededge
 		result = []
@@ -323,20 +326,20 @@ cdef class Chart:
 		return '\n'.join(result)
 
 	def __nonzero__(self):
-		""" Return true when the root item is in the chart, i.e., when sentence
-		has been parsed successfully. """
+		"""Return true when the root item is in the chart, i.e., when sentence
+		has been parsed successfully."""
 		return self.root() in self.parseforest
 
 	cdef getitems(self):
 		return self.parseforest
 
 	cdef list getedges(self, item):
-		""" Get edges for item. """
+		"""Get edges for item."""
 		return self.parseforest[item] if item in self.parseforest else []
 
 	def filter(self):
-		""" Remove all entries in parse forest that do not contribute to a
-		complete derivation headed by root of chart. """
+		"""Remove all entries in parse forest that do not contribute to a
+		complete derivation headed by root of chart."""
 		items = set()
 		_filtersubtree(self, self.root(), items)
 		if isinstance(self.parseforest, dict):
@@ -349,7 +352,7 @@ cdef class Chart:
 			raise ValueError('parseforest: expected list or dict')
 
 	def stats(self):
-		""" Return a short string with counts of items, edges. """
+		"""Return a short string with counts of items, edges."""
 		if isinstance(self.parseforest, dict):
 			alledges = self.parseforest.values()
 		elif isinstance(self.parseforest, list):
@@ -373,7 +376,7 @@ def numedges(list edgeslist):
 
 
 cdef void _filtersubtree(Chart chart, item, set items):
-	""" Recursively filter chart. """
+	"""Recursively filter chart."""
 	cdef Edge *edge
 	cdef Edges edges
 	item = chart.copy(item)
@@ -394,13 +397,11 @@ cdef void _filtersubtree(Chart chart, item, set items):
 
 
 cdef class Ctrees:
-	"""
-	Auxiliary class to be able to pass around collections
-	of NodeArrays in Python.
+	"""Auxiliary class to pass around collections of NodeArrays in Python.
 
 	When trees is given, prods should be given as well.
 	When trees is not given, the alloc() method should be called and
-	trees added one by one using the add() or addnodes() methods. """
+	trees added one by one using the add() or addnodes() methods."""
 	def __cinit__(self):
 		self.trees = self.nodes = NULL
 
@@ -414,7 +415,7 @@ cdef class Ctrees:
 				self.add(tree, prods)
 
 	cpdef alloc(self, int numtrees, long numnodes):
-		""" Initialize an array of trees of nodes structs. """
+		"""Initialize an array of trees of nodes structs."""
 		self.max = numtrees
 		self.trees = <NodeArray *>malloc(numtrees * sizeof(NodeArray))
 		self.nodes = <Node *>malloc(numnodes * sizeof(Node))
@@ -422,7 +423,7 @@ cdef class Ctrees:
 		self.nodesleft = numnodes
 
 	cdef realloc(self, int numtrees, int extranodes):
-		""" Increase size of array (handy with incremental binarization) """
+		"""Increase size of array (handy with incremental binarization)."""
 		# based on Python's listobject.c list_resize()
 		cdef numnodes
 		if numtrees > self.max:
@@ -443,8 +444,10 @@ cdef class Ctrees:
 			self.nodesleft = numnodes - self.numnodes
 
 	cpdef add(self, list tree, dict prods):
-		""" Trees can be incrementally added to the node array; useful
-		when dealing with large numbers of NLTK trees (say 100,000). """
+		"""Incrementally add tree to the node array.
+
+		Useful when dealing with large numbers of Tree objects (say 100,000).
+		"""
 		assert self.max, 'alloc() has not been called (max=0).'
 		if self.len >= self.max or self.nodesleft < len(tree):
 			self.realloc(self.len + 1, len(tree))
@@ -458,8 +461,10 @@ cdef class Ctrees:
 		self.maxnodes = max(self.maxnodes, len(tree))
 
 	cdef addnodes(self, Node *source, int cnt, int root):
-		""" Trees can be incrementally added to the node array; this version
-		copies a tree that has already been converted to an array of nodes. """
+		"""Incrementally add tree to the node array.
+
+		This version copies a tree that has already been converted to an array
+		of nodes."""
 		cdef dict prodsintree, sortidx
 		cdef int n, m
 		cdef Node *dest
@@ -487,9 +492,10 @@ cdef class Ctrees:
 			self.maxnodes = cnt
 
 	def indextrees(self, dict prods):
-		""" Create an index from specific productions to trees containing that
-		production. Productions are represented as integer IDs, trees are given
-		as sets of integer indices. """
+		"""Create index from productions to trees containing that production.
+
+		Productions are represented as integer IDs, trees are given as sets of
+		integer indices."""
 		cdef:
 			list result = [set() for _ in prods]
 			NodeArray a
@@ -515,7 +521,7 @@ cdef class Ctrees:
 
 
 cdef inline copynodes(tree, dict prods, Node *result):
-	""" Convert NLTK tree to an array of Node structs. """
+	"""Convert NLTK tree to an array of Node structs."""
 	cdef int n
 	for n, a in enumerate(tree):
 		assert isinstance(a, Tree), (
@@ -531,7 +537,3 @@ cdef inline copynodes(tree, dict prods, Node *result):
 				result[n].right = a[1].idx
 			else:  # unary node
 				result[n].right = -1
-
-
-def test():
-	""" Not implemented. """

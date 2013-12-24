@@ -1,4 +1,4 @@
-""" Read and write treebanks. """
+"""Read and write treebanks."""
 from __future__ import division, print_function, unicode_literals
 import io
 import os
@@ -24,7 +24,7 @@ INDEXRE = re.compile(r" [0-9]+\)")
 
 
 class CorpusReader(object):
-	""" Abstract corpus reader. """
+	"""Abstract corpus reader."""
 	def __init__(self, root, fileids, encoding='utf-8', ensureroot=None,
 			headrules=None, headfinal=True, headreverse=False, markheads=False,
 			punct=None, functions=None, morphology=None, lemmas=None):
@@ -63,7 +63,7 @@ class CorpusReader(object):
 				POS tag and word, e.g., (DET (sg.def the))
 		:param lemmas: one of ...
 			:None: ignore lemmas
-			:'between': insert lemma as node between POS tag and word. """
+			:'between': insert lemma as node between POS tag and word."""
 		self.ensureroot = ensureroot
 		self.reverse = headreverse
 		self.headfinal = headfinal
@@ -90,8 +90,8 @@ class CorpusReader(object):
 		self._block_cache = None
 
 	def parsed_sents(self):
-		""" :returns: an ordered dictionary of parse trees (``Tree`` objects \
-		with integer indices as leaves). """
+		""":returns: an ordered dictionary of parse trees \
+			(``Tree`` objects with integer indices as leaves)."""
 		if not self._parsed_sents_cache:
 			if self._block_cache is None:
 				self._block_cache = OrderedDict(self._read_blocks())
@@ -100,15 +100,15 @@ class CorpusReader(object):
 		return self._parsed_sents_cache
 
 	def parsed_sents_iter(self):
-		""" :returns: an iterator returning tuples (key, tree, sent) of \
-		sentences in corpus. Useful when the dictionary of all trees in \
-		corpus would not fit in memory. """
+		""":returns: an iterator returning tuples (key, tree, sent) of \
+			sentences in corpus. Useful when the dictionary of all trees in \
+			corpus would not fit in memory."""
 		for a, b in self._read_blocks():
 			yield a, self._parsetree(b), self._word(b)
 
 	def sents(self):
-		""" :returns: an ordered dictionary of sentences, \
-		each sentence being a list of words. """
+		""":returns: an ordered dictionary of sentences, \
+			each sentence being a list of words."""
 		if not self._sents_cache:
 			if self._block_cache is None:
 				self._block_cache = OrderedDict(self._read_blocks())
@@ -117,8 +117,8 @@ class CorpusReader(object):
 		return self._sents_cache
 
 	def tagged_sents(self):
-		""" :returns: an ordered dictionary of tagged sentences, \
-		each tagged sentence being a list of (word, tag) pairs. """
+		""":returns: an ordered dictionary of tagged sentences, \
+			each tagged sentence being a list of (word, tag) pairs."""
 		if not self._tagged_sents_cache:
 			if self._block_cache is None:
 				self._block_cache = OrderedDict(self._read_blocks())
@@ -132,18 +132,18 @@ class CorpusReader(object):
 		return self._tagged_sents_cache
 
 	def blocks(self):
-		""" :returns: a list of strings containing the raw representation of \
-		trees in the original treebank. """
+		""":returns: a list of strings containing the raw representation of \
+			trees in the original treebank."""
 
 	def _read_blocks(self):
-		""" An iterator over blocks from corpus file that correspond to
-		individual annotated sentences. """
+		"""An iterator over blocks from corpus file that correspond to
+		individual annotated sentences."""
 
 	def _parse(self, block):
-		""" :returns: a parse tree given a string from the treebank file. """
+		""":returns: a parse tree given a string from the treebank file."""
 
 	def _parsetree(self, block):
-		""" :returns: a transformed parse tree. """
+		""":returns: a transformed parse tree."""
 		tree, sent = self._parse(block)
 		if not sent:
 			return tree
@@ -172,13 +172,14 @@ class CorpusReader(object):
 		return tree
 
 	def _word(self, block, orig=False):
-		""" :returns: a list of words given a string.
+		""":returns: a list of words given a string.
+
 		When orig is True, return original sentence verbatim;
-		otherwise it will follow parameters for punctuation. """
+		otherwise it will follow parameters for punctuation."""
 
 
 class NegraCorpusReader(CorpusReader):
-	""" Read a corpus in the Negra export format. """
+	"""Read a corpus in the Negra export format."""
 	def blocks(self):
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
@@ -187,7 +188,7 @@ class NegraCorpusReader(CorpusReader):
 				for a, b in self._block_cache.items())
 
 	def _read_blocks(self):
-		""" Read corpus and yield blocks corresponding to each sentence. """
+		"""Read corpus and yield blocks corresponding to each sentence."""
 		results = set()
 		started = False
 		for filename in self._filenames:
@@ -225,16 +226,18 @@ class NegraCorpusReader(CorpusReader):
 
 
 class DiscBracketCorpusReader(CorpusReader):
-	""" A corpus reader where the phrase-structure is represented by a tree in
-	bracket notation, where the leaves are indices pointing to words in a
-	separately represented sentence; e.g.:
-	``(S (NP 1) (VP (VB 0) (JJ 2)) (? 3))	is John rich ?``
+	"""A corpus reader for discontinuous trees in bracket notation, where the
+	leaves are indices pointing to words in a separately specified sentence.
+
+	For example::
+
+		(S (NP 1) (VP (VB 0) (JJ 2)) (? 3))	is John rich ?
+
 	Note that the tree and the sentence are separated by a tab, while the words
 	in the sentence are separated by spaces. There is one tree and sentence
-	per line.
-	Compared to Negra's export format, this format lacks morphology, lemmas and
-	functional edges. On the other hand, it is very close to the internal
-	representation employed here, so it can be read efficiently. """
+	per line. Compared to Negra's export format, this format lacks morphology,
+	lemmas and functional edges. On the other hand, it is very close to the
+	internal representation employed here, so it can be read efficiently."""
 	def sents(self):
 		return OrderedDict((n, self._word(line))
 				for n, line in self.blocks().items())
@@ -267,10 +270,13 @@ class DiscBracketCorpusReader(CorpusReader):
 
 
 class BracketCorpusReader(CorpusReader):
-	""" A standard corpus reader where the phrase-structure is represented by a
-	tree in bracket notation; e.g.:
-	``(S (NP John) (VP (VB is) (JJ rich)) (. .))``
-	TODO: support traces & empty nodes. """
+	"""Corpus reader for phrase-structures in bracket notation.
+
+	For example::
+
+		(S (NP John) (VP (VB is) (JJ rich)) (. .))
+
+	TODO: support traces & empty nodes."""
 	def sents(self):
 		if not self._sents_cache:
 			self._sents_cache = OrderedDict((n, self._word(tree))
@@ -314,10 +320,10 @@ class BracketCorpusReader(CorpusReader):
 
 
 class TigerXMLCorpusReader(CorpusReader):
-	""" Corpus reader for the Tiger XML format. """
+	"""Corpus reader for the Tiger XML format."""
 	def blocks(self):
-		""" :returns: a list of strings containing the raw representation of \
-		trees in the treebank. """
+		""":returns: a list of strings containing the raw representation of \
+		trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((n, ElementTree.tostring(a))
@@ -335,8 +341,8 @@ class TigerXMLCorpusReader(CorpusReader):
 				root.clear()
 
 	def _parse(self, block):
-		""" Translate Tiger XML structure to the fields of export format,
-		so that code for export format can be used. """
+		"""Translate Tiger XML structure to the fields of export format,
+		so that code for export format can be used."""
 		nodes = OrderedDict()
 		root = block.find('graph').get('root')
 		for term in block.find('graph').find('terminals'):
@@ -386,20 +392,20 @@ class TigerXMLCorpusReader(CorpusReader):
 
 
 class AlpinoCorpusReader(CorpusReader):
-	""" Corpus reader for the Dutch Alpino treebank in XML format.
-	Expects a corpus in directory format, where every sentence is in a single
-	``.xml`` file. """
+	"""Corpus reader for the Dutch Alpino treebank in XML format.
 
+	Expects a corpus in directory format, where every sentence is in a single
+	``.xml`` file."""
 	def blocks(self):
-		""" :returns: a list of strings containing the raw representation of \
-		trees in the treebank. """
+		""":returns: a list of strings containing the raw representation of \
+		trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((n, ElementTree.tostring(a))
 				for n, a in self._block_cache.items())
 
 	def _read_blocks(self):
-		""" Read corpus and yield blocks corresponding to each sentence. """
+		"""Read corpus and yield blocks corresponding to each sentence."""
 		assert self._encoding in (None, 'utf8', 'utf-8'), (
 				'Encoding specified in XML files, cannot be overriden.')
 		for filename in self._filenames:
@@ -411,7 +417,7 @@ class AlpinoCorpusReader(CorpusReader):
 			yield n, block
 
 	def _parse(self, block):
-		""" :returns: a parse tree given a string. """
+		""":returns: a parse tree given a string."""
 		tree = alpinoparse(block, self.morphology, self.lemmas)
 		sent = self._word(block)
 		return tree, sent
@@ -424,8 +430,8 @@ class AlpinoCorpusReader(CorpusReader):
 
 
 class DactCorpusReader(AlpinoCorpusReader):
-	""" Corpus reader for the Dutch Alpino treebank in Dact format,
-	which consists of an XML database. """
+	"""Corpus reader for the Dutch Alpino treebank in Dact format,
+	which consists of an XML database."""
 	def _read_blocks(self):
 		import alpinocorpus
 		assert self._encoding in (None, 'utf8', 'utf-8'), (
@@ -440,8 +446,8 @@ class DactCorpusReader(AlpinoCorpusReader):
 
 
 def exportsplit(line):
-	""" Take a line in export format and split into fields,
-	add dummy fields lemma, sec. edge if those fields are absent. """
+	"""Take a line in export format and split into fields,
+	add dummy fields lemma, sec. edge if those fields are absent."""
 	if "%%" in line:  # we don't want comments.
 		line = line[:line.index("%%")]
 	fields = line.split()
@@ -459,10 +465,10 @@ def exportsplit(line):
 
 
 def exportparse(block, morphology=None, lemmas=None):
-	""" Given a tree in export format as a list of lists,
-	construct a Tree object for it. """
+	"""Given a tree in export format as a list of lists,
+	construct a Tree object for it."""
 	def getchildren(parent):
-		""" Traverse tree in export format and create Tree object. """
+		"""Traverse tree in export format and create Tree object."""
 		results = []
 		for n, source in children[parent]:
 			# n is the index in the block to record word indices
@@ -484,9 +490,9 @@ def exportparse(block, morphology=None, lemmas=None):
 
 
 def alpinoparse(node, morphology=None, lemmas=None):
-	""" Construct a Tree object for an ElementTree with an Alpino XML tree. """
+	"""Construct a Tree object for an ElementTree with an Alpino XML tree."""
 	def getsubtree(node, parent, morphology, lemmas):
-		""" Parse a subtree of an Alpino tree. """
+		"""Parse a subtree of an Alpino tree."""
 		# FIXME: proper representation for arbitrary features
 		source = [''] * len(FIELDS)
 		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
@@ -531,16 +537,19 @@ def alpinoparse(node, morphology=None, lemmas=None):
 
 
 def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
-	""" Convert a tree with indices as leafs and a sentence with the
-	corresponding non-terminals to a single string in the given format.
-	Formats are ``bracket``, ``discbracket``, Negra's ``export`` format,
-	and ``alpino`` XML format, as well unlabeled dependency conversion into
-	``mst`` or ``conll`` format (requires head rules). Lemmas, functions, and
-	morphology information will be empty unless nodes contain a 'source'
-	attribute with such information.
-	"""
+	"""Convert a tree to a string representation in the given treebank format.
+
+	:param tree: should have indices as terminals
+	:param sent: contains the words corresponding to the indices in ``tree``
+	:param n: an identifier for this tree; part of the output with some formats
+	:param fmt: Formats are ``bracket``, ``discbracket``, Negra's ``export``
+		format, and ``alpino`` XML format, as well unlabeled dependency
+		conversion into ``mst`` or ``conll`` format (requires head rules).
+
+	Lemmas, functions, and morphology information will be empty unless nodes
+	contain a 'source' attribute with such information."""
 	def getword(idx):
-		""" Get word given an index and restore parentheses. """
+		"""Get word given an index and restore parentheses."""
 		return sent[int(idx[:-1])].replace('(', '-LRB-').replace(')', '-RRB-')
 
 	if fmt == "bracket":
@@ -571,7 +580,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 
 
 def writeexporttree(tree, sent, n, morphology):
-	""" Return string with given tree in Negra's export format. """
+	"""Return string with given tree in Negra's export format."""
 	result = []
 	if n is not None:
 		result.append("#BOS %s" % n)
@@ -622,9 +631,9 @@ def writeexporttree(tree, sent, n, morphology):
 
 
 def writealpinotree(tree, sent, n):
-	""" Return XML string with tree in AlpinoXML format."""
+	"""Return XML string with tree in AlpinoXML format."""
 	def addchildren(tree, sent, parent, cnt):
-		""" Recursively add children of ``tree`` to XML object ``node`` """
+		"""Recursively add children of ``tree`` to XML object ``node``"""
 		node = ElementTree.SubElement(parent, 'node')
 		node.set('id', str(next(cnt)))
 		node.set('begin', str(min(tree.leaves())))
@@ -658,11 +667,11 @@ def writealpinotree(tree, sent, n):
 
 
 def handlefunctions(action, tree, pos=True, top=False):
-	""" Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
+	"""Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
 
 	:param action: one of {None, 'add', 'replace', 'remove'}
 	:param pos: whether to add function tags to POS tags.
-	:param top: whether to add function tags to the top node. """
+	:param top: whether to add function tags to the top node."""
 	if action in (None, 'leave'):
 		return
 	for a in tree.subtrees():
@@ -689,8 +698,8 @@ def handlefunctions(action, tree, pos=True, top=False):
 
 
 def handlemorphology(action, lemmaaction, preterminal, source):
-	""" Given a preterminal, augment or replace its label with morphological
-	information. """
+	"""Given a preterminal, augment or replace its label with morphological
+	information."""
 	# escape any parentheses to avoid hassles w/bracket notation of trees
 	tag = source[TAG].replace('(', '[').replace(')', ']')
 	morph = source[MORPH].replace('(', '[').replace(')', ']')
@@ -721,15 +730,15 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 
 
 def dependencies(root, headrules):
-	""" Lin (1995): A Dependency-based Method
-	for Evaluating Broad-Coverage Parser """
+	"""Lin (1995): A Dependency-based Method
+	for Evaluating Broad-Coverage Parser."""
 	deps = []
 	deps.append(('ROOT', makedep(root, deps, headrules), 0))
 	return sorted(deps)
 
 
 def makedep(root, deps, headrules):
-	""" Traverse a tree marking heads and extracting dependencies. """
+	"""Traverse a tree marking heads and extracting dependencies."""
 	if not isinstance(root[0], Tree):
 		return root[0] + 1
 	headchild = headfinder(root, headrules)
@@ -743,10 +752,11 @@ def makedep(root, deps, headrules):
 
 
 def incrementaltreereader(treeinput, morphology=None, functions=None):
-	""" Incremental corpus reader; supports brackets, discbrackets, and export
-	format. The format is autodetected. Expects an iterator giving one line at
-	a time. Yields tuples with a Tree object and a separate lists of terminals.
-	"""
+	"""Incremental corpus reader.
+
+	Supports brackets, discbrackets, and export format. The format is
+	autodetected. Expects an iterator giving one line at a time. Yields tuples
+	with a Tree object and a separate lists of terminals."""
 	treeinput = chain(iter(treeinput), ('(', None, None))  # hack
 	line = next(treeinput)
 	# try the following readers on each line in this order
@@ -772,13 +782,14 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 
 
 def segmentbrackets(brackets, strict=False):
-	""" Co-routine that accepts one line at a time;
-	yields tuples (result, status) where ...
+	"""Co-routine that accepts one line at a time.
+
+	Yields tuples (result, status) where ...
 
 	- result is None or one or more S-expressions as a list of
 		tuples (tree, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
-	- status is 1 if the line was consumed, else 0. """
+	- status is 1 if the line was consumed, else 0."""
 	lb, rb = brackets
 	# regex to check if the tree contains any terminals (as opposed to indices)
 	strtermre = re.compile('[^0-9%(rb)s]%(rb)s' % {'rb': re.escape(rb)})
@@ -835,12 +846,12 @@ def segmentbrackets(brackets, strict=False):
 
 
 def segmentexport(morphology, functions):
-	""" Co-routine that accepts one line at a time.
+	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
 
 	- result is ``None`` or a segment delimited by
 		``#BOS`` and ``#EOS`` as a list of lines;
-	- status is 1 if the line was consumed, else 0. """
+	- status is 1 if the line was consumed, else 0."""
 	cur = []
 	inblock = False
 	line = (yield None, 1)
@@ -864,8 +875,8 @@ def segmentexport(morphology, functions):
 
 
 def brackettree(treestr, sent, brackets, strtermre):
-	""" Parse a single tree presented in bracket format, whether with indices
-	or not; in the latter case ``sent`` is ignored. """
+	"""Parse a single tree presented in bracket format, whether with indices
+	or not; in the latter case ``sent`` is ignored."""
 	if strtermre.search(treestr):  # terminals are not all indices
 		cnt = count()
 		tree = ParentedTree.parse(
@@ -881,8 +892,9 @@ def brackettree(treestr, sent, brackets, strtermre):
 
 
 def exporttree(data, morphology):
-	""" Wrapper to get both tree and sentence for tree in export format given
-	as list of lines. """
+	"""
+	Extract tree and sentence from tree in export format given as list of lines.
+	"""
 	data = [exportsplit(x) for x in data]
 	tree = exportparse(data, morphology)
 	sent = []
@@ -894,8 +906,8 @@ def exporttree(data, morphology):
 
 
 def alpinotree(block, morphology=None, lemmas=None, functions=None):
-	""" Wrapper to get both tree and sentence for tree in Alpino format given
-	as an etree XML object. """
+	"""Get tree and sentence from tree in Alpino format given as an etree XML
+	object."""
 	tree = alpinoparse(block, morphology, lemmas)
 	sent = block.find('sentence').text.split()
 	handlefunctions(functions, tree)
@@ -903,7 +915,7 @@ def alpinotree(block, morphology=None, lemmas=None, functions=None):
 
 
 def treebankfanout(trees):
-	""" Get maximal fan-out of a list of trees. """
+	"""Get maximal fan-out of a list of trees."""
 	from discodop.treetransforms import addbitsets, fanout
 	# avoid max over empty sequence: 'treebank' may only have unary productions
 	try:
@@ -914,12 +926,12 @@ def treebankfanout(trees):
 
 
 def splitpath(path):
-	""" Split path into a pair of (directory, filename). """
+	"""Split path into a pair of (directory, filename)."""
 	return path.rsplit('/', 1) if '/' in path else ('.', path)
 
 
 def numbase(key):
-	""" Turn a file name into a numeric sorting key if possible. """
+	"""Turn a file name into a numeric sorting key if possible."""
 	path, base = os.path.split(key)
 	base = base.split(".", 1)
 	try:

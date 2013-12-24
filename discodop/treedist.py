@@ -1,35 +1,39 @@
 # -*- coding: utf-8 -*-
-""" Zhang-Shasha Tree Edit Distance Implementation is licensed under a BSD
-style license
+"""Tree edit distance implementations.
 
-Copyright (c) 2012, Tim Henderson and Stephen Johnson
-All rights reserved.
+- Implementation following Zhang & Shasha (1989);
+  Licensed under a BSD style license.
+- Implementation following Billie (2005); records edit script.
+"""
 
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-    * Redistributions of source code must retain the above copyright notice,
-      this list of conditions and the following disclaimer.
-    * Redistributions in binary form must reproduce the above copyright notice,
-      this list of conditions and the following disclaimer in the documentation
-      and/or other materials provided with the distribution.
-    * Neither the name of this software nor the names of its contributors may
-      be used to endorse or promote products derived from this software without
-      specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. """
-# andreasvc:
-# - modified to work with NLTK Tree objects.
-# - added implementation as in Billie (2005), which records edit script.
+# Notice for the Zhang-Shasha implementation:
+#
+# Copyright (c) 2012, Tim Henderson and Stephen Johnson
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#     * Redistributions of source code must retain the above copyright notice,
+#       this list of conditions and the following disclaimer.
+#     * Redistributions in binary form must reproduce the above copyright
+#       notice, this list of conditions and the following disclaimer in the
+#       documentation and/or other materials provided with the distribution.
+#     * Neither the name of this software nor the names of its contributors may
+#       be used to endorse or promote products derived from this software
+#       without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
 
 from __future__ import division, print_function
 from collections import deque
@@ -37,8 +41,7 @@ from discodop.tree import Tree
 
 
 class Terminal:
-	""" Auxiliary class to be able to add indices to terminal nodes of NLTK
-	trees. """
+	"""Auxiliary class to add indices to terminal nodes of Tree objects."""
 	def __init__(self, node):
 		self.prod = self.label = node
 
@@ -65,9 +68,11 @@ class Terminal:
 
 
 def prepare(tree, includeterms=False):
-	""" Copy a tree object; sort children to have canonical order; merge
-	preterminals and terminals in single nodes (unless ``includeterms=True``).
-	"""
+	"""Return a copy of tree prepared for tree edit distance calculation.
+
+	- sort children to have canonical order
+	- merge preterminals and terminals in single nodes
+		(unless ``includeterms=True``)."""
 	tree = tree.copy(True)
 	# canonical order of children
 	for a in tree.subtrees(lambda n: isinstance(n[0], Tree)):
@@ -84,7 +89,7 @@ def prepare(tree, includeterms=False):
 
 # begin Zhang-Shasha Tree Edit Distance Implementation.
 class AnnotatedTree:
-	""" Wrap a tree to add some extra information. """
+	"""Wrap a tree to add some extra information."""
 	def __init__(self, root):
 		self.root = root
 		self.nodes = []  # a pre-order enumeration of the nodes in the tree
@@ -128,12 +133,12 @@ class AnnotatedTree:
 
 
 def strdist(a, b):
-	""" Default categorical distance function. """
+	"""Default categorical distance function."""
 	return 0 if a == b else 1
 
 
 def treedist(tree1, tree2, debug=False):
-	""" Zhang-Shasha tree edit distance. """
+	"""Zhang-Shasha tree edit distance."""
 	tree1 = AnnotatedTree(prepare(tree1))
 	tree2 = AnnotatedTree(prepare(tree2))
 	tree1lmd = tree1.leftmostdescendents
@@ -201,9 +206,11 @@ def treedist(tree1, tree2, debug=False):
 
 
 def newtreedist(tree1, tree2, debug=False):
-	""" implementation as in Billie (2005), based on rparse code.
-	slower but records edit script. should be converted to use a set of
-	matrices as dynamic programming tables. """
+	"""Tree edit distance implementation as in Billie (2005).
+
+	Based on rparse code. Slower than ``treedist()`` but records edit script.
+	Should be rewritten to use a set of matrices as dynamic programming
+	tables."""
 	tree1 = prepare(tree1).freeze()
 	tree2 = prepare(tree2).freeze()
 	for n, a in enumerate(tree1.subtrees()):
@@ -218,7 +225,7 @@ def newtreedist(tree1, tree2, debug=False):
 
 
 class EditStats(object):
-	""" Collect edit operations on a tree. """
+	"""Collect edit operations on a tree."""
 	__slots__ = ('distance', 'matched', 'editscript')
 
 	def __init__(self, distance=0, matched=0, editscript=None):
@@ -248,7 +255,7 @@ class EditStats(object):
 
 
 def geteditstats(forest1, forest2):
-	""" Recursively get edit distance. """
+	"""Recursively get edit distance."""
 	try:
 		return geteditstats.mem[forest1, forest2]
 	except KeyError:
@@ -293,7 +300,7 @@ geteditstats.mem = {}
 
 
 def test():
-	""" Simple demonstration. """
+	"""Tree edit distance demonstration."""
 	a = Tree.parse("(f (d (a 0) (c (b 1))) (e 2))", parse_leaf=int)
 	b = Tree.parse("(f (c (d (a 0) (b 1)) (e 2)))", parse_leaf=int)
 	result1 = treedist(a, b, debug=True)

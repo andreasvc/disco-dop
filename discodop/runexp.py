@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
-""" Run an experiment given a parameter file. Extracts grammars, does parsing
-and evaluation. """
+"""Run an experiment given a parameter file.
+
+Does grammar extraction, parsing, and evaluation."""
 from __future__ import division, print_function
 import io
 import os
@@ -39,18 +40,19 @@ from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
 from discodop.estimates import getestimates, getpcfgestimates
 
-USAGE = """Usage: %s <parameter file> [--rerun]
+USAGE = '''\
+Usage: %s <parameter file> [--rerun]
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
 pass the option --rerun. The directory with the name of the parameter file
 without extension must exist in the current path; its results will be
-overwritten.""" % sys.argv[0]
+overwritten.''' % sys.argv[0]
 
 INTERNALPARAMS = None
 
 
 def initworker(params):
-	""" Set global parameter object """
+	"""Set global parameter object."""
 	global INTERNALPARAMS
 	INTERNALPARAMS = params
 
@@ -93,7 +95,7 @@ def startexp(
 		numproc=1,  # increase to use multiple CPUs; None: use all CPUs.
 		resultdir='results',
 		rerun=False):
-	""" Execute an experiment. """
+	"""Execute an experiment."""
 	assert bintype in ('optimal', 'optimalhead', 'binarize')
 	if postagging is not None:
 		assert set(postagging).issubset({'method', 'model',
@@ -295,7 +297,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 		tailmarker, revmarkov, leftmostunary, rightmostunary, pospa, markhead,
 		fanout_marks_before_bin, testmaxwords, resultdir, numproc,
 		lexmodel, simplelexsmooth, top, relationalrealizational):
-	""" Apply binarization and read off the requested grammars. """
+	"""Apply binarization and read off the requested grammars."""
 	# fixme: this n should correspond to sentence id
 	tbfanout, n = treebankfanout(trees)
 	logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
@@ -481,7 +483,7 @@ def getgrammars(trees, sents, stages, bintype, horzmarkov, vertmarkov, factor,
 
 
 def doparsing(**kwds):
-	""" Parse a set of sentences using worker processes. """
+	"""Parse a set of sentences using worker processes."""
 	params = DictObj(usetags=True, numproc=None, tailmarker='',
 		category=None, deletelabel=(), deleteword=(), corpusfmt='export')
 	params.update(kwds)
@@ -560,8 +562,9 @@ def doparsing(**kwds):
 
 
 def workertb(args):
-	""" Wrapper for use with multiprocessing; passes full traceback in case of
-	an exception in a worker process. """
+	"""Wrapper of ``worker()`` for use with multiprocessing.
+
+	Passes full traceback in case of an exception in a worker process."""
 	try:
 		return worker(args)
 	except:
@@ -570,11 +573,10 @@ def workertb(args):
 
 
 def worker(args):
-	""" Parse a sentence using a global Parser object,
-	and do incremental evaluation.
+	"""Parse a sentence using global Parser object, and evaluate incrementally.
 
 	:returns: a string with diagnostic information, as well as a list of
-		DictObj with the results for each stage. """
+		DictObj instances with the results for each stage."""
 	nsent, (sent, goldtree, _, _) = args
 	prm = INTERNALPARAMS
 	goldevaltree = goldtree.copy(True)
@@ -633,8 +635,8 @@ def worker(args):
 
 
 def writeresults(results, params):
-	""" Write parsing results to files in same format as the original corpus.
-	(or export if writer not implemented) """
+	"""Write parsing results to files in same format as the original corpus.
+	(Or export if writer not implemented)."""
 	ext = {'export': 'export', 'bracket': 'mrg',
 			'discbracket': 'dbr', 'alpino': 'xml'}
 	category = (params.category + '.') if params.category else ''
@@ -684,7 +686,7 @@ def writeresults(results, params):
 
 
 def oldeval(results, goldbrackets):
-	""" Simple evaluation. """
+	"""Simple evaluation."""
 	nsent = len(results[0].parsetrees)
 	if nsent:
 		for result in results:
@@ -701,7 +703,7 @@ def oldeval(results, goldbrackets):
 
 
 def readtepacoc():
-	""" Read the tepacoc test set. """
+	"""Read the tepacoc test set."""
 	tepacocids = set()
 	tepacocsents = defaultdict(list)
 	cat = 'undefined'
@@ -735,7 +737,7 @@ def parsetepacoc(
 		leftmostunary=True, rightmostunary=True,
 		fanout_marks_before_bin=False, transformations=None,
 		usetagger='stanford', resultdir='tepacoc', numproc=1):
-	""" Parse the tepacoc test set. """
+	"""Parse the tepacoc test set."""
 	for stage in stages:
 		for key in stage:
 			assert key in DEFAULTSTAGE, 'unrecognized option: %r' % key
@@ -878,10 +880,11 @@ def parsetepacoc(
 
 
 def readparam(filename):
-	""" Parse a parameter file:
-		a list of of attribute=value pairs treated as a dict(). """
-	paramstr = open(filename).read()
-	params = eval("dict(%s)" % paramstr)
+	"""Parse a parameter file.
+
+	The file should contain a list of comma-separated ``attribute=value`` pairs
+	and will be read using ``eval('dict(%s)' % open(file).read())``."""
+	params = eval('dict(%s)' % open(filename).read())
 	for stage in params['stages']:
 		for key in stage:
 			assert key in DEFAULTSTAGE, "unrecognized option: %r" % key
@@ -909,7 +912,7 @@ def readparam(filename):
 
 
 def test():
-	""" Run ``sample.prm``. """
+	"""Run ``sample.prm``."""
 	import shutil
 	if os.path.exists('sample.prm') and os.path.exists('sample/'):
 		shutil.rmtree('sample/')
@@ -917,7 +920,7 @@ def test():
 
 
 def main(argv=None):
-	""" Parse command line arguments. """
+	"""Parse command line arguments."""
 	try:
 		import faulthandler
 		faulthandler.enable()

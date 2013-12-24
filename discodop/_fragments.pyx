@@ -1,7 +1,11 @@
-""" Implementation of Sangati et al. (2010), Efficiently extract recurring tree
-fragments from large treebanks.
-Moschitti (2006): Making Tree Kernels practical for Natural Language
-Learning. """
+"""Fragment extraction with tree kernels.
+
+Implements:
+
+- Sangati et al. (2010), Efficiently extract recurring tree fragments from
+  large treebanks.
+- Moschitti (2006): Making Tree Kernels practical for Natural Language Learning
+"""
 
 from __future__ import print_function
 import re
@@ -51,7 +55,7 @@ cdef packed struct BitsetTail:
 # we leave one byte for NUL-termination:
 # data (SLOTS * 8), id (4), root (2), NUL (1)
 cdef inline bytes wrap(ULong *data, short SLOTS):
-	""" Wrap bitset in bytes object for handling in Python space. """
+	"""Wrap bitset in bytes object for handling in Python space."""
 	return (<char *>data)[:SLOTS * sizeof(ULong) + sizeof(BitsetTail)]
 
 
@@ -59,22 +63,22 @@ cdef inline bytes wrap(ULong *data, short SLOTS):
 # of a python object, and with a struct the root & id fields must be in front
 # which seems to lead to bad hashing behavior (?)
 cdef inline ULong *getpointer(object wrapper):
-	""" Get pointer to bitset from wrapper. """
+	"""Get pointer to bitset from wrapper."""
 	return <ULong *><char *><bytes>wrapper
 
 
 cdef inline UInt getid(ULong *data, short SLOTS):
-	""" Get id of fragment in a bitset. """
+	"""Get id of fragment in a bitset."""
 	return (<BitsetTail *>&data[SLOTS]).id
 
 
 cdef inline short getroot(ULong *data, short SLOTS):
-	""" Get root of fragment in a bitset. """
+	"""Get root of fragment in a bitset."""
 	return (<BitsetTail *>&data[SLOTS]).root
 
 
 cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
-	""" Set root and id of fragment in a bitset. """
+	"""Set root and id of fragment in a bitset."""
 	cdef BitsetTail *tail = <BitsetTail *>&data[SLOTS]
 	tail.id = id
 	tail.root = root
@@ -83,8 +87,7 @@ cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
 cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False, bint complement=False):
-	""" Seeks the largest fragments in treebank(s) with a linear time tree
-	kernel
+	"""Find the largest fragments in treebank(s) with a linear time tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
 		``fastextractfragments(trees1, sents1, offset, end, labels)``
@@ -95,7 +98,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	processes; they are indices of ``trees1`` to work on (default is all); when
 	``debug`` is enabled a contingency table is shown for each pair of trees;
 	when ``complement`` is true, the complement of the recurring fragments in
-	each pair of trees is extracted as well. """
+	each pair of trees is extracted as well."""
 	cdef:
 		int n, m, start = 0, end2
 		short SLOTS  # the number of bitsets needed to cover the largest tree
@@ -171,10 +174,12 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 
 cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
 		ULong *CST, short SLOTS):
-	""" Fast Tree Kernel (average case linear time). Expects trees to be sorted
-	according to their productions (in descending order, with terminals as -1).
+	"""Fast Tree Kernel (average case linear time).
+
+	Expects trees to be sorted according to their productions (in descending
+	order, with terminals as -1). This algorithm is from the pseudocode in
 	Moschitti (2006): Making Tree Kernels practical for Natural Language
-	Learning. """
+	Learning."""
 	# i as an index to a, j to b, and jj is a temp index starting at j.
 	cdef int i = 0, j = 0, jj = 0
 	while i < alen and j < blen:
@@ -193,11 +198,12 @@ cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
 
 cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
 		short j, int n, set results, ULong *scratch, short SLOTS):
-	""" Visit nodes of 'b' in pre-order traversal. store bitsets of connected
-	subsets of 'a' as they are encountered, following the common nodes
-	specified in CST. j is the node in 'b' to start with, which changes with
-	each recursive step. 'n' is the identifier of this tree which is stored
-	with extracted fragments. """
+	"""Visit nodes of ``b`` top-down and store bitsets of common nodes.
+
+	Stores bitsets of connected subsets of ``a`` as they are encountered,
+	following the common nodes specified in CST. ``j`` is the node in ``b`` to
+	start with, which changes with each recursive step. ``n`` is the identifier
+	of this tree which is stored with extracted fragments."""
 	cdef ULong *bitset = &CST[j * SLOTS]
 	cdef ULong cur = bitset[0]
 	cdef short idx = 0
@@ -216,7 +222,8 @@ cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
 
 cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
-	""" Traverse tree a and b in parallel to extract a connected subset """
+	"""Traverse tree ``a`` and ``b`` in parallel to extract a connected subset.
+	"""
 	SETBIT(result, i)
 	CLEARBIT(&CST[j * SLOTS], i)
 	if a[i].left < 0:
@@ -231,16 +238,19 @@ cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bint fast=True, bint indices=False):
-	""" Given a set of fragments from trees1 as bitsets, find all occurences
-	of those fragments in trees2 (which may be equal to trees1).
-	By default, exact counts are collected. When indices is True, a multiset
-	of indices is returned for each fragment; the indices point to the trees
-	where the fragments (described by the bitsets) occur. This is useful to
-	look up the contexts of fragments, or when the order of sentences has
+	"""Get exact counts or indices of occurrence for fragments.
+
+	Given a set of fragments from ``trees1`` as bitsets, find all occurrences
+	of those fragments in ``trees2`` (which may be equal to ``trees1``).
+
+	By default, exact counts are collected. When ``indices`` is ``True``, a
+	multiset of indices is returned for each fragment; the indices point to the
+	trees where the fragments (described by the bitsets) occur. This is useful
+	to look up the contexts of fragments, or when the order of sentences has
 	significance which makes it possible to interpret the set of indices as
-	time-series data.
-	The reason we need to do this separately from extracting maximal fragments
-	is that a fragment can occur in other trees where it was not a maximal. """
+	time-series data. The reason we need to do this separately from extracting
+	maximal fragments is that a fragment can occur in other trees where it was
+	not a maximal."""
 	cdef:
 		array counts = None
 		list theindices = None
@@ -291,8 +301,9 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 
 cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 		short i, short j):
-	""" Recursively check whether fragment starting from a[i] described by
-	bitset is equal to b[j], i.e., whether b contains that fragment from a. """
+	"""Recursively check whether fragment starting from ``a[i]`` described by
+	bitset is equal to ``b[j]``, i.e., whether ``b`` contains that fragment
+	from ``a``."""
 	if a[i].prod != b[j].prod:
 		return 0
 	elif a[i].left < 0:
@@ -309,9 +320,9 @@ cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 
 cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		short maxnodes, bint discontinuous):
-	""" Utility function to generate one bitset for each type of production.
+	"""Utility function to generate one bitset for each type of production.
 	Important: if multiple treebanks are used, maxnodes should equal
-	``max(trees1.maxnodes, trees2.maxnodes)`` """
+	``max(trees1.maxnodes, trees2.maxnodes)``"""
 	cdef:
 		dict result = {}
 		int p, i, n = -1
@@ -344,10 +355,10 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 
 cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		short maxnodes, bint discontinuous=False):
-	""" Utility function to generate bitsets corresponding to whole trees
-	in the input.
+	"""Generate bitsets corresponding to whole trees in the input.
+
 	Important: if multiple treebanks are used, maxnodes should equal
-	``max(trees1.maxnodes, trees2.maxnodes)`` """
+	``max(trees1.maxnodes, trees2.maxnodes)``"""
 	cdef:
 		dict result = {}
 		list sent
@@ -373,11 +384,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 
 cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 		int i, int n, set results, short SLOTS, ULong *scratch):
-	""" Visit nodes of 'a' in pre-order traversal. store bitsets of connected
-	subsets of 'a' as they are encountered, following the nodes specified in
-	the complement of 'bitset'. i is the node in 'a' to start with, which
-	changes with each recursive step. 'n' is the identifier of this tree which
-	is stored with extracted fragments. """
+	"""Like ``extractbitsets()`` but following complement of ``bitset``."""
 	cdef bint start = scratch is NULL and not TESTBIT(bitset, i)
 	if start:  # start extracting a fragment
 		# need to create a new array because further down in the recursion
@@ -402,7 +409,7 @@ cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False):
-	""" Seeks the largest fragments in treebank(s)
+	"""Find the largest fragments in treebank(s) with quadratic tree kernel..
 
 	- scenario 1: recurring fragments in single treebank, use:
 		``fastextractfragments(trees1, sents1, offset, end)``
@@ -413,7 +420,7 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	processes; they are indices of ``trees1`` to work on (default is all); when
 	``debug`` is enabled a contingency table is shown for each pair of trees;
 	when ``complement`` is true, the complement of the recurring fragments in
-	each pair of trees is extracted as well. """
+	each pair of trees is extracted as well."""
 	cdef:
 		int n, m, aa, bb, start = 0
 		short SLOTS
@@ -479,7 +486,7 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 
 cdef inline void getCST(Node *a, Node *b, int alen, int blen, ULong *CST,
 		int i, int j, short SLOTS):
-	""" Recursively build common subtree table (CST) for subtrees a[i], b[j]. """
+	"""Build common subtree table (CST) for subtrees ``a[i]``, ``b[j]``."""
 	cdef ULong *child, *bitset = &CST[IDX(i, j, blen, SLOTS)]
 	SETBIT(bitset, alen)  # mark cell as visited
 	# compare label & arity / terminal; assume presence of arity markers.
@@ -505,8 +512,7 @@ cdef inline void getCST(Node *a, Node *b, int alen, int blen, ULong *CST,
 
 cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
 		ULong *scratch, short SLOTS):
-	""" Extract the largest, connected bitsets from the common subtree
-	table (CST). """
+	"""Extract the largest, connected bitsets from ``CST``."""
 	cdef:
 		ULong *bitset
 		int i, j
@@ -536,13 +542,12 @@ cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
 
 
 cdef inline short termidx(x):
-	""" Translate representation for terminal indices. """
+	"""Translate representation for terminal indices."""
 	return -x - 1
 
 
 cdef inline str strtree(Node *tree, list labels, int i):
-	""" produce string representation of (complete) tree, with indices as
-	terminals. """
+	"""Represent a (complete) tree as a string, with indices as terminals."""
 	if tree[i].left < 0:
 		return "(%s %d)" % (labels[tree[i].prod], termidx(tree[i].left))
 	elif tree[i].right < 0:
@@ -554,8 +559,7 @@ cdef inline str strtree(Node *tree, list labels, int i):
 
 
 cdef inline unicode unicodetree(Node *tree, list labels, list sent, int i):
-	""" produce string representation of (complete) tree, with words as
-	terminals. """
+	"""Represent a (complete) tree as a string, with words as terminals."""
 	if tree[i].left < 0:
 		return u"(%s %s)" % (labels[tree[i].prod],
 				(u"%d" % termidx(tree[i].left)
@@ -570,8 +574,7 @@ cdef inline unicode unicodetree(Node *tree, list labels, list sent, int i):
 
 
 cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, int i):
-	""" Turn bitset into string representation of tree,
-	with indices as terminals. """
+	"""Get string of tree fragment denoted by bitset; indices as terminals."""
 	if TESTBIT(bitset, i):
 		if tree[i].left < 0:
 			return "(%s %d)" % (labels[tree[i].prod], termidx(tree[i].left))
@@ -587,8 +590,7 @@ cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, int i):
 
 cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
 		list sent, int i):
-	""" Turn bitset into string representation of tree,
-	with words as terminals. """
+	"""Get string of tree fragment denoted by bitset; words as terminals."""
 	if TESTBIT(bitset, i):
 		if tree[i].left < 0:
 			return u"(%s %s)" % (labels[tree[i].prod],
@@ -605,10 +607,12 @@ cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
 
 
 cdef inline yieldranges(Node *tree, int i):
-	""" For discontinuous trees, return a string with the intervals of indices
-	corresponding to the components in the yield of a node.
-	The intervals are of the form start:end, where `end` is part of the
-	interval. e.g., "0:1 2:4" corresponds to (0, 1) and (2, 3, 4). """
+	"""Return a string with the intervals of indices corresponding to the
+	components in the yield of node ``i``.
+
+	Intended for discontinuous trees. The intervals are of the form
+	``start:end``, where ``end`` is part of the interval. e.g., ``"0:1 2:4"``
+	corresponds to ``(0, 1)`` and ``(2, 3, 4)``."""
 	cdef list yields = [], leaves = sorted(getyield(tree, i))
 	cdef int a, start = -2, prev = -2
 	for a in leaves:
@@ -622,7 +626,7 @@ cdef inline yieldranges(Node *tree, int i):
 
 
 cdef inline list getyield(Node *tree, int i):
-	""" Recursively collect indices of terminals under a node. """
+	"""Recursively collect indices of terminals under a node."""
 	if tree[i].left < 0:
 		return [termidx(tree[i].left)]
 	elif tree[i].right < 0:
@@ -637,7 +641,8 @@ def repl(d):
 
 
 def pygetsent(frag, list sent):
-	"""
+	"""Wrapper of ``getsent()`` to make doctests possible.
+
 	>>> pygetsent('(S (NP 2) (VP 4))',
 	... ['The', 'tall', 'man', 'there', 'walks'])
 	('(S (NP 0) (VP 2))', ('man', None, 'walks'))
@@ -658,9 +663,12 @@ def pygetsent(frag, list sent):
 
 
 cdef getsent(frag, list sent):
-	""" Select the words that occur in the fragment and renumber terminals in
-	fragment such that the first index is 0 and any gaps have a width of 1.
-	Expects a tree as string where frontier nodes are marked with intervals."""
+	"""Renumber indices in fragment and select terminals it contains.
+
+	Returns a transformed copy of fragment and sentence. Replace words that do
+	not occur in the fragment with None and renumber terminals in fragment such
+	that the first index is 0 and any gaps have a width of 1. Expects a tree as
+	string where frontier nodes are marked with intervals."""
 	cdef:
 		int n, m = 0, maxl
 		list newsent = []
@@ -686,8 +694,8 @@ cdef getsent(frag, list sent):
 
 
 cdef dumptree(NodeArray a, Node *anodes, list asent, list labels):
-	""" dump the node structs of a tree showing numeric IDs as well
-	as a strings representation of the tree in bracket notation. """
+	"""Dump the node structs of a tree showing numeric IDs as well
+	as a strings representation of the tree in bracket notation."""
 	cdef int n
 	for n in range(a.len):
 		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
@@ -707,7 +715,7 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, list labels):
 
 cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 		list asent, list bsent, list labels, short SLOTS, bint bitmatrix=False):
-	""" dump a table of the common subtrees of two trees. """
+	"""Dump a table of the common subtrees of two trees."""
 	cdef int n, m
 	cdef Node aa, bb
 	dumptree(a, anodes, asent, labels)
@@ -747,8 +755,8 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 
 
 def add_lcfrs_rules(tree, sent):
-	""" Set attribute ``.prod`` on nodes of tree with the LCFRS production for
-	that node. """
+	"""Set attribute ``.prod`` on nodes of tree with the LCFRS production for
+	that node."""
 	for a, b in zip(tree.subtrees(),
 			lcfrsproductions(tree, sent, frontiers=True)):
 		a.prod = b
@@ -756,7 +764,7 @@ def add_lcfrs_rules(tree, sent):
 
 
 def getlabelsprods(trees, labels, prods):
-	""" collect label/prod attributes from ``trees`` and index them. """
+	"""Collect label/prod attributes from ``trees`` and index them."""
 	pnum = len(prods)
 	for tree in trees:
 		for st in tree:
@@ -773,8 +781,8 @@ def nonfrontier(sent):
 
 
 def tolist(tree, sent):
-	""" Convert Tree object to list of non-terminal nodes in pre-order
-	traversal; add indices to nodes reflecting their position in the list. """
+	"""Convert Tree object to list of non-terminal nodes in pre-order
+	traversal; add indices to nodes reflecting their position in the list."""
 	result = list(tree.subtrees(nonfrontier(sent)))
 	for n in reversed(range(len(result))):
 		a = result[n]
@@ -794,7 +802,7 @@ def getprodid(prods, node):
 
 
 def getctrees(trees, sents, trees2=None, sents2=None):
-	""" :returns: Ctrees object for disc. binary trees and sentences. """
+	""":returns: Ctrees object for disc. binary trees and sentences."""
 	# make deep copies to avoid side effects.
 	trees12 = trees = [tolist(add_lcfrs_rules(Tree.convert(a), b), b)
 			for a, b in zip(trees, sents)]
@@ -822,9 +830,9 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 
 cdef readnode(line, list labels, dict prods, Node *result,
 		size_t *idx, list sent, origlabel):
-	""" Parse an s-expression in a string, and store in an array of Node
+	"""Parse an s-expression in a string, and store in an array of Node
 	structs (pre-allocated). ``idx`` is a counter to keep track of the number
-	of Node structs used; ``sent`` collects the terminals encountered. """
+	of Node structs used; ``sent`` collects the terminals encountered."""
 	cdef:
 		int n, parens = 0, start = 0, startchild2 = 0, left = -1, right = -1
 		list childlabels = None
@@ -917,9 +925,10 @@ cdef readnode(line, list labels, dict prods, Node *result,
 
 def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		fmt='bracket', limit=None, encoding="utf-8"):
-	""" Read a treebank from a given filename. labels and prods should be a
-	list and a dictionary, with the same ones used when reading multiple
-	treebanks. """
+	"""Read a treebank from a given filename.
+
+	labels and prods should be a list and a dictionary, with the same ones used
+	when reading multiple treebanks."""
 	cdef size_t cnt
 	cdef Node *scratch
 	cdef Ctrees ctrees
@@ -977,5 +986,5 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 
 
 def one():
-	""" used to generate the value 1 for defaultdicts. """
+	"""Used to generate the value 1 for defaultdicts."""
 	return 1

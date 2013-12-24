@@ -1,9 +1,12 @@
-""" NB: most functions are in bit.pxd to facilitate function inlining. """
+"""Functions for working with bitvectors.
+
+NB: most functions are in bit.pxd to facilitate function inlining."""
 from __future__ import print_function
 
 
 def pyintbitcount(a):
-	""" Number of set bits (1s)
+	"""Return number of set bits (1s) in a Python integer.
+
 	>>> bitcount(0b0011101)
 	4"""
 	count = 0
@@ -14,14 +17,16 @@ def pyintbitcount(a):
 
 
 cpdef int bitcount(ULLong vec):
-	""" Number of set bits (1s)
+	"""Return number of set bits (1s).
+
 	>>> bitcount(0b0011101)
 	4"""
 	return __builtin_popcountll(vec)
 
 
 cpdef int pyintnextset(a, int pos):
-	""" First set bit, starting from pos
+	"""Return index of first set bit, starting from pos.
+
 	>>> pyintnextset(0b001101, 1)
 	2"""
 	cdef ULong mask = -1
@@ -35,7 +40,8 @@ cpdef int pyintnextset(a, int pos):
 
 
 cpdef int fanout(arg):
-	""" number of contiguous components in bit vector (gaps plus one)
+	"""Return number of contiguous components in bit vector (gaps plus one).
+
 	>>> fanout(0b011011011)
 	3"""
 	cdef UInt result = 0

@@ -1,5 +1,4 @@
-""" Extract parse tree(s) from a chart following a particular objective
-function. """
+"""Disambiguate parse forests with various methods for parse selection."""
 
 from __future__ import print_function
 import re
@@ -35,8 +34,10 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 		bint sample=False, bint kbest=True, list sent=None, list tags=None,
 		int sldop_n=7, list backtransform=None,
 		bint bitpar=False):
-	""" Extract list of derivations and turn into dictionary of parse trees
-	using specified objective function.
+	"""Extract parse trees from a chart optimizing a given objective function.
+
+	Extracts $k$-best or sampled derivations and produces a dictionary of parse
+	trees scored by a given objective function.
 
 	:param method:
 		Available objective functions:
@@ -185,16 +186,18 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 
 cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 		int m, int sldop_n, list backtransform, entries, bint bitpar):
-	""" 'Proper' method for sl-dop. Parses sentence once more to find shortest
-	derivations, pruning away any chart item not occurring in the n most
-	probable parse trees; we need to parse again because we have to consider
-	all derivations for the n most likely trees.
+	"""'Proper' method for sl-dop.
+
+	Parses sentence once more to find shortest derivations, pruning away any
+	chart item not occurring in the *n* most probable parse trees; we need to
+	parse again because we have to consider all derivations for the *n* most
+	likely trees.
 
 	:returns: the intersection of the most probable parse trees and their
 		shortest derivations, with probabilities of the form (subtrees, prob).
 
 	NB: doesn't seem to work so well, so may contain a subtle bug.
-		does not support PCFG charts. """
+		Does not support PCFG charts."""
 	cdef dict derivs = {}
 	# collect derivations for each parse tree
 	derivsfortree = defaultdict(set)
@@ -247,12 +250,13 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 
 cdef sldop_simple(dict derivations, list entries, int sldop_n,
 		chart, Grammar grammar, list backtransform, bint bitpar):
-	""" simple sl-dop method; estimates shortest derivation directly from
-	number of addressed nodes in the k-best derivations. After selecting the n
-	best parse trees, the one with the shortest derivation is returned.
-	In other words, selects shortest derivation among the list of available
-	derivations, instead of finding the shortest among all possible derivations
-	using Viterbi. """
+	"""Simple sl-dop method.
+
+	Estimates shortest derivation directly from number of addressed nodes in
+	the *k*-best derivations. After selecting the *n* best parse trees, the one
+	with the shortest derivation is returned. In other words, selects shortest
+	derivation among the list of available derivations, instead of finding the
+	shortest among all possible derivations using Viterbi."""
 	cdef Entry entry
 	cdef dict derivs = {}, keys = {}
 	derivsfortree = defaultdict(set)
@@ -298,19 +302,22 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 
 cpdef str recoverfragments(deriv, Chart chart,
 		Grammar grammar, list backtransform):
-	""" Reconstruct a DOP derivation from a DOP derivation with
-	flattened fragments which are left-binarized. `derivation` should be
-	a RankedEdge representing a derivation, and backtransform should contain
-	rule numbers as keys and strings as values. Uses the first binarized
-	production as key, which map to string templates as values.
+	"""Reconstruct a DOP derivation from a derivation with flattened fragments.
 
+	:param deriv: a RankedEdge or a string representing a derivation.
+	:param backtransform: a list with fragments (as string templates)
+		corresponding to grammar rules.
 	:returns: expanded derivation as a string.
+
+	The flattened fragments in the derivation should be left-binarized, expect
+	when ``deriv`` is a string in which case the derivation does not have to be
+	binarized.
 
 	Does on-the-fly debinarization following labels that are not mapped to a
 	label in the coarse grammar, i.e., it assumes that neverblockre is only
 	used to avoid blocking nonterminals from the double-dop binarization
 	(containing the string '}<'). Note that this means getmapping() has to have
-	been called on `grammar`, even when not doing coarse-to-fine parsing. """
+	been called on `grammar`, even when not doing coarse-to-fine parsing."""
 	if isinstance(deriv, RankedEdge):
 		result = recoverfragments_(deriv, chart, backtransform)
 	elif isinstance(deriv, basestring):
@@ -513,9 +520,10 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
-	""" Given a sequence of trees (as strings), parse them with a DOP grammar
-	to get parse tree probabilities; i.e., will consider multiple derivations.
-	"""
+	"""Assign probabilities to a sequence of trees with a DOP grammar.
+
+	Given a sequence of trees (as strings), parse them with a DOP grammar
+	to get parse tree probabilities; will consider multiple derivations."""
 	# Parsing & pruning inside the disambiguation module is rather kludgy,
 	# but the problem is that we need to get probabilities of trees,
 	# not just of derivations. Therefore the coarse-to-fine methods
@@ -557,9 +565,10 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 
 
 cdef double getderivprob(RankedEdge deriv, Chart chart, list sent):
-	""" Given a derivation as a ranked edge, recursively calculate its
-	probability according to a grammar, which has to have matching rules & rule
-	numbers. """
+	"""Recursively calculate probability of a derivation.
+
+	Useful to obtain probability of derivation under different probability
+	model of the same grammar."""
 	cdef double result
 	if deriv.edge.rule is NULL:  # is terminal
 		label = chart.label(deriv.head)
@@ -576,13 +585,14 @@ cdef double getderivprob(RankedEdge deriv, Chart chart, list sent):
 	return result
 
 cpdef viterbiderivation(Chart chart):
+	"""Wrapper to get Viterbi derivation from chart."""
 	# Ask for at least 10 derivations because unary cycles.
 	derivations = lazykbest(chart, 10)[0]
 	return derivations[0]
 
 
 def getsamples(Chart chart, k, debin=None):
-	""" Samples k derivations from a chart. """
+	"""Samples *k* derivations from a chart."""
 	cdef dict tables = {}
 	cdef Edges edges
 	cdef Edge *edge
@@ -620,7 +630,7 @@ def getsamples(Chart chart, k, debin=None):
 
 cdef samplechart(item, Chart chart,
 		dict chartidx, dict tables, bytes debin):
-	""" Samples a derivation from a chart. """
+	"""Samples a derivation from a chart."""
 	cdef Edge *edge
 	cdef double prob
 	cdef RankedEdge rankededge
@@ -658,11 +668,12 @@ cdef samplechart(item, Chart chart,
 	return tree, prob
 
 
-def doprerank(chart, sent, n, Grammar coarse, Grammar fine):
-	""" Given a chart from a coarse stage, re-rank its n-best derivations with
-	DOP parse probabilities of a DOP reduction (cf. ``dopparseprob()``). """
+def doprerank(chart, sent, k, Grammar coarse, Grammar fine):
+	"""Rerank $k$-best coarse trees w/parse probabilities of DOP reduction.
+
+	cf. ``dopparseprob()``."""
 	cdef dict results = {}
-	derivations, _ = lazykbest(chart, n, derivs=True)
+	derivations, _ = lazykbest(chart, k, derivs=True)
 	for derivstr, _ in derivations:
 		deriv = addbitsets(derivstr)
 		results[derivstr] = exp(dopparseprob(deriv, sent, coarse, fine))
@@ -670,20 +681,19 @@ def doprerank(chart, sent, n, Grammar coarse, Grammar fine):
 
 
 def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
-	""" Given a Tree and a DOP reduction, compute the exact DOP parse
-	probability.
+	"""Compute the exact DOP parse probability of a Tree in a DOP reduction.
 
-	This follows up on a suggestion made by Goodman (2003, p. 143)
-	of calculating DOP probabilities of given parse trees, although I'm not
-	sure it has complexity O(nP) as he suggests (with n as number of nodes in
-	input, and P as max number of rules consistent with a node in the input).
+	This follows up on a suggestion made by Goodman (2003, p. 143) of
+	calculating DOP probabilities of given parse trees, although I'm not sure
+	it has complexity *O(nP)* as he suggests (with *n* as number of nodes in
+	input, and *P* as max number of rules consistent with a node in the input).
 	Furthermore, the idea of sampling trees "long enough" until we have the MPP
 	is no faster than sampling without applying this procedure, because to
-	determine that some probability p is the maximal probability, we need to
-	collect the probability mass p_seen of enough parse trees such that we have
-	some parsetree with probability p > (1 - p_seen), which requires first
-	seeing almost all parse trees, unless p is exceptionally high. Hence, this
-	method is mostly useful in a reranking framework where it is known in
+	determine that some probability *p* is the maximal probability, we need to
+	collect the probability mass *p_seen* of enough parse trees such that we have
+	some parsetree with probability *p* > (1 - *p_seen*), which requires first
+	seeing almost all parse trees, unless *p* is exceptionally high. Hence,
+	this method is mostly useful in a reranking framework where it is known in
 	advance that a small set of trees is of interest.
 
 	Expects a mapping which gives a list of consistent rules from the reduction
@@ -691,7 +701,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 
 	NB: this algorithm could also be used to determine the probability of
 	derivations, but then the input would have to distinguish whether nodes are
-	internal nodes of fragments, or whether they join two fragments. """
+	internal nodes of fragments, or whether they join two fragments."""
 	neginf = float('-inf')
 	cdef dict chart = {}  # chart[label, left, right] = prob
 	cdef tuple a, b, c
@@ -761,7 +771,7 @@ def test():
 		return max(d.items(), key=itemgetter(1))
 
 	trees = [Tree.parse(t, parse_leaf=int) for t in
-		"""(ROOT (A (A 0) (B 1)) (C 2))
+		'''(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
 		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (B (A 0) (B 1)) (C 2))
@@ -778,11 +788,11 @@ def test():
 		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (A 0) (C (B 1) (C 2)))
-		(ROOT (A 0) (C (B 1) (C 2)))""".splitlines()]
+		(ROOT (A 0) (C (B 1) (C 2)))'''.splitlines()]
 	sents = [a.split() for a in
-		"""d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
+		'''d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
-		a d e""".splitlines()]
+		a d e'''.splitlines()]
 	xgrammar, altweights = dopreduction(trees, sents)
 	grammar = Grammar(xgrammar)
 	grammar.register(u'shortest', altweights['shortest'])

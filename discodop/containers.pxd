@@ -171,8 +171,10 @@ cdef class Edges:
 #
 #
 #cdef class ParseForest:
-#	""" the chart representation of bitpar. seems to require parsing
-#	in 3 stages: recognizer, enumerate analyses, get probs. """
+#	""" the chart representation of bitpar.
+#
+#	seems to require parsing in 3 stages: recognizer, enumerate analyses,
+#	get probs. """
 #	#keys
 #	cdef UInt *catnum			# no. of chart item -> lhs
 #	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.
@@ -255,7 +257,8 @@ cdef inline RankedEdge new_RankedEdge(
 # defined here because circular import.
 cdef inline size_t cellidx(short start, short end, short lensent,
 		UInt nonterminals):
-	""" Return an index for a regular three dimensional array:
+	"""Return an index for a regular three dimensional array.
+
 	``chart[start][end][0] => chart[idx]`` """
 	return (start * lensent + (end - 1)) * nonterminals
 
@@ -264,7 +267,7 @@ cdef object log1e200 = log(1e200)
 
 
 cdef inline logprobadd(x, y):
-	""" Add two log probabilities in log space; i.e.:
+	""" Add two log probabilities in log space.
 
 	>>> a = b = 0.25
 	>>> logprobadd(log(a), log(b)) == log(a + b) == log(0.5)
@@ -291,8 +294,7 @@ cdef inline logprobadd(x, y):
 
 
 cdef inline double logprobsum(list logprobs):
-	""" Takes a list of log probabilities and sums them producing a
-	normal probability 0 < p <= 1.0; i.e.:
+	"""Sum a list of log probabilities producing a normal probability.
 
 	>>> a = b = c = 0.25
 	>>> logprobsum([log(a), log(b), log(c)]) == sum([a, b, c]) == 0.75
@@ -300,6 +302,7 @@ cdef inline double logprobsum(list logprobs):
 
 	:param logprobs: a list of Python floats with negative log probilities,
 		s.t. 0 <= p <= inf for each p in ``logprobs``.
+	:returns: a probability p with 0 < p <= 1.0
 	:source: http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
 
 	Comparison of different methods: https://gist.github.com/andreasvc/6204982

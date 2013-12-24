@@ -1,4 +1,4 @@
-""" Probabilistic Context-Free Grammar (PCFG) parser using CKY. """
+"""CKY parser for Probabilistic Context-Free Grammar (PCFG)."""
 from __future__ import print_function
 import re
 import subprocess
@@ -16,9 +16,10 @@ cdef double INFINITY = float('infinity')
 
 
 cdef class CFGChart(Chart):
+	"""A Chart for context-free grammars (CFG).
+
+	An item is a Python integer made up of ``start``, ``end``, ``lhs`` indices.
 	"""
-	A Chart for context-free grammars (CFG). An item is a Python integer
-	made up of ``start``, ``end``, ``lhs`` indices. """
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		raise NotImplementedError
@@ -63,7 +64,7 @@ cdef class DenseCFGChart(CFGChart):
 	array; i.e., array is contiguous and all valid combinations of indices
 	``0 <= start <= mid <= end`` and ``label`` can be addressed. Whether it is
 	feasible to use this chart depends on the grammar constant, specifically
-	the number of non-terminal labels. """
+	the number of non-terminal labels."""
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		self.grammar = grammar
@@ -90,7 +91,7 @@ cdef class DenseCFGChart(CFGChart):
 
 	cdef void addedge(self, UInt lhs, UChar start, UChar end, UChar mid,
 			Rule *rule):
-		""" Add new edge to parse forest. """
+		"""Add new edge to parse forest."""
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t block, item = cellidx(
@@ -111,15 +112,15 @@ cdef class DenseCFGChart(CFGChart):
 		edges.len += 1
 
 	cdef void updateprob(self, UInt lhs, UChar start, UChar end, double prob):
-		""" Update probability for item if better than current one. """
+		"""Update probability for item if better than current one."""
 		cdef size_t idx = compactcellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
 		if prob < self.probs[idx]:
 			self.probs[idx] = prob
 
 	cdef double _subtreeprob(self, size_t item):
-		""" Get viterbi / inside probability of a subtree headed by 'item'
-		defined by (lhs, start, end). """
+		"""Get viterbi / inside probability of a subtree headed by 'item'
+		defined by (lhs, start, end)."""
 		cdef short start, end
 		cdef UInt lhs
 		cdef size_t idx
@@ -138,23 +139,23 @@ cdef class DenseCFGChart(CFGChart):
 		return [n for n, a in enumerate(self.parseforest) if a is not None]
 
 	cdef list getedges(self, item):
-		""" Get edges for item. """
+		"""Get edges for item."""
 		return self.parseforest[item] if item is not None else []
 
 	cdef bint hasitem(self, size_t item):
-		""" Test if item is in chart. """
+		"""Test if item is in chart."""
 		return self.parseforest[item] is not None
 
 	def __nonzero__(self):
-		""" Return true when the root item is in the chart, i.e., when sentence
-		has been parsed successfully. """
+		"""Return true when the root item is in the chart, i.e., when sentence
+		has been parsed successfully."""
 		return self.parseforest[self.root()] is not None
 
 
 cdef class SparseCFGChart(CFGChart):
 	"""
 	A CFG chart which uses a dictionary for each cell so that grammars
-	with a large number of non-terminal labels can be handled. """
+	with a large number of non-terminal labels can be handled."""
 	def __init__(self, Grammar grammar, list sent,
 			start=None, logprob=True, viterbi=True):
 		self.grammar = grammar
@@ -169,7 +170,7 @@ cdef class SparseCFGChart(CFGChart):
 
 	cdef void addedge(self, UInt lhs, UChar start, UChar end, UChar mid,
 			Rule *rule):
-		""" Add new edge to parse forest. """
+		"""Add new edge to parse forest."""
 		cdef Edges edges
 		cdef Edge *edge
 		cdef size_t item = cellidx(
@@ -191,15 +192,15 @@ cdef class SparseCFGChart(CFGChart):
 		edges.len += 1
 
 	cdef void updateprob(self, UInt lhs, UChar start, UChar end, double prob):
-		""" Update probability for item if better than current one. """
+		"""Update probability for item if better than current one."""
 		cdef size_t item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
 		if item not in self.probs or prob < self.probs[item]:
 			self.probs[item] = prob
 
 	cdef double _subtreeprob(self, size_t item):
-		""" Get viterbi / inside probability of a subtree headed by 'item'
-		defined by (lhs, start, end). """
+		"""Get viterbi / inside probability of a subtree headed by 'item'
+		defined by (lhs, start, end)."""
 		return (PyFloat_AS_DOUBLE(self.probs[item])
 				if item in self.probs else INFINITY)
 
@@ -207,13 +208,13 @@ cdef class SparseCFGChart(CFGChart):
 		return self._subtreeprob(item)
 
 	cdef bint hasitem(self, size_t item):
-		""" Test if item is in chart. """
+		"""Test if item is in chart."""
 		return item in self.parseforest
 
 
 def parse(sent, Grammar grammar, tags=None, start=None, dict whitelist=None):
-	""" A CKY parser modeled after Bodenstab's 'fast grammar loop,' filtered by
-	the list of allowed items (if ``whitelist`` is given). """
+	"""A CKY parser modeled after Bodenstab's 'fast grammar loop,' filtered by
+	the list of allowed items (if ``whitelist`` is given)."""
 	assert grammar.maxfanout == 1, 'Not a PCFG! fanout: %d' % grammar.maxfanout
 	assert grammar.logprob, "Expecting grammar with log probabilities."
 	if grammar.nonterminals < 20000:
@@ -341,20 +342,19 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 
 
 def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
-	""" Currently this calls the normal probabilistic CKY parser producing
-	viterbi probabilities, but a more efficient non-probabilistics algorithm
-	for producing a parse forest may be possible. """
+	"""Currently this calls the normal probabilistic CKY parser producing
+	viterbi probabilities, but a more efficient non-probabilistic algorithm
+	for producing a parse forest may be possible."""
 	return parse(sent, grammar, tags=tags, start=start, whitelist=None)
 
 
 cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		short [:, :] minleft, short [:, :] maxleft,
 		short [:, :] minright, short [:, :] maxright):
-	""" Assign all possible POS tags for a word, and apply all possible
-	unary rules to them.
+	"""Apply all possible lexical and unary rules on each lexical span.
 
 	:returns: a tuple ``(success, msg)`` where ``success`` is True if a POS tag
-	was found for every word in the sentence. """
+	was found for every word in the sentence."""
 	cdef:
 		DoubleAgenda unaryagenda = DoubleAgenda()
 		Entry entry
@@ -477,8 +477,10 @@ def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
 
 
 def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
-	""" Compute inside scores. These are not viterbi scores, but sums of
-	all derivations headed by a certain nonterminal + span. """
+	"""Compute inside scores.
+
+	NB: These are not Viterbi scores, but sums of all derivations headed by a
+	certain ``(label, span)``."""
 	cdef:
 		short left, right, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
@@ -701,8 +703,8 @@ def outsidescores(Grammar grammar, sent, UInt start,
 
 
 def minmaxmatrices(nonterminals, lensent):
-	""" Create matrices for the filter which tracks minima and maxima for
-	splits of binary rules. """
+	"""Create matrices for the filter which tracks minima and maxima for
+	splits of binary rules."""
 	minleft = np.empty((nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minleft[...], maxleft[...] = -1, lensent + 1
@@ -724,10 +726,11 @@ LOG10 = pylog(10)
 
 def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		startlabel, startid, tags=None):
-	""" Parse a single sentence with bitpar, given filenames of rules and
-	lexicon. n is the number of derivations to return (max 1000); if n == 0,
-	return parse forest instead of n-best list (requires binarized grammar).
-	Result is a dictionary of derivations with their probabilities. """
+	"""Parse a sentence with bitpar, given filenames of rules and lexicon.
+
+	:param n: the number of derivations to return (max 1000); if n == 0, return
+		parse forest instead of n-best list (requires binarized grammar).
+	:returns: a dictionary of derivations with their probabilities."""
 	assert 0 <= n <= 1000
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
@@ -764,7 +767,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 
 
 def bitpar_yap_forest(forest, SparseCFGChart chart):
-	""" Read bitpar YAP parse forest (-y option) into a Chart object.
+	"""Read bitpar YAP parse forest (-y option) into a Chart object.
 
 	The forest has lines of the form::
 		label start end     prob [edge1] % prob [edge2] % .. %%
@@ -772,7 +775,7 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 	where an edge is either a quoted "word", or a rule number and one or two
 	line numbers in the parse forest referring to children.
 	Assumes binarized grammar. Assumes chart's Grammar object has same order of
-	grammar rules as the grammar that was presented to bitpar. """
+	grammar rules as the grammar that was presented to bitpar."""
 	cdef Rule *rule
 	cdef UInt lhs
 	cdef UChar left, right, mid
@@ -804,8 +807,8 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 
 
 def bitpar_nbest(nbest, SparseCFGChart chart):
-	""" Put bitpar's list of n-best derivations into the chart.
-	Parse forest is not converted. """
+	"""Put bitpar's list of n-best derivations into the chart.
+	Parse forest is not converted."""
 	lines = BITPARUNESCAPE.sub(r'\1', nbest).replace(')(', ') (')
 	derivs = [(renumber(deriv), -float(prob) * LOG10)
 			for prob, deriv in BITPARPARSESLOG.findall(lines)]
@@ -817,13 +820,13 @@ def bitpar_nbest(nbest, SparseCFGChart chart):
 
 
 def renumber(deriv):
-	""" Replace terminals of CF-derivation (string) with indices. """
+	"""Replace terminals of CF-derivation (string) with indices."""
 	it = count()
 	return TERMINALSRE.sub(lambda _: ' %s)' % next(it), deriv)
 
 
 def pprint_matrix(matrix, sent, tolabel, matrix2=None):
-	""" Print a numpy matrix chart; optionally in parallel with another. """
+	"""Print a numpy matrix chart; optionally in parallel with another."""
 	for span in range(1, len(sent) + 1):
 		for left in range(len(sent) - span + 1):
 			right = left + span

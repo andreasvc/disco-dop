@@ -1,4 +1,6 @@
-""" This file contains three main transformations:
+"""Treebank-indenpendent tree transformations.
+
+This file contains three main transformations:
 
  - A straightforward binarization: binarize(), based on NLTK code.
    Provides some additional Markovization options.
@@ -6,7 +8,7 @@
    Cf. Gildea (2010): Optimal parsing strategies for linear
    context-free rewriting systems.
  - Converting discontinuous trees to continuous trees and back:
-   splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited. """
+   splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited."""
 # Original notice:
 # Natural Language Toolkit: Tree Transformations
 #
@@ -28,7 +30,7 @@ try:
 	from discodop.bit import fanout as bitfanout
 except ImportError:
 	def bitfanout(arg):
-		""" Slower version. """
+		"""Slower version."""
 		prev, result = arg, 0
 		while arg:
 			arg &= arg - 1
@@ -37,7 +39,8 @@ except ImportError:
 			prev = arg
 		return result
 
-USAGE = """Treebank binarization and conversion
+USAGE = '''\
+Treebank binarization and conversion
 Usage: %s [options] <action> [input [output]]
 where input and output are treebanks; standard in/output is used if not given.
 action is one of:
@@ -86,7 +89,7 @@ options may consist of (* marks default option):
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     conversion and requires the use of heuristic head rules (--headrules),
-    to ensure that all constituents have a child marked as head. """ % (
+    to ensure that all constituents have a child marked as head. ''' % (
 			sys.argv[0], '|'.join(READERS.keys()))
 
 
@@ -94,7 +97,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		childchar='|', parentchar='^', headmarked=None, headidx=None,
 		tailmarker='', leftmostunary=False, rightmostunary=False, threshold=2,
 		pospa=False, artpa=True, reverse=False, ids=None, filterfuncs=()):
-	""" Binarize a Tree object.
+	"""Binarize a Tree object.
 
 	:param factor: "left" or "right". Determines whether binarization proceeds
 			from left to right or vice versa.
@@ -259,10 +262,10 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 
 def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 		unarychar='+'):
-	""" Restore a binarized tree to the original n-ary tree.
+	"""Restore a binarized tree to the original n-ary tree.
 	Modifies tree in-place.
 	NB: a malformed node such as ``(X|<Y> )`` which is not supposed to be empty
-	will be silently discarded. """
+	will be silently discarded."""
 	# increase robustness
 	childchar += '<'
 	parentchar += '<'
@@ -300,13 +303,15 @@ def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 
 
 def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
-	""" Collapse subtrees with a single child (i.e., unary productions) into a
-	new non-terminal node joined by 'joinchar'. The tree is modified in-place.
+	"""Collapse unary nodes into a new node indicated by 'joinchar'.
+
+	For example``(NP (NN John))`` becomes ``(NP+NN John)``.
+	The tree is modified in-place.
 
 	:param collapsepos: when False (default), do not collapse preterminals
 	:param collapseroot: when False (default) do not modify the root production
-		if it is unary; e.g., TOP -> productions for the Penn WSJ treebank.
-	:param joinchar: A string used to connect collapsed node values """
+		if it is unary; e.g., TOP -> productions for the Penn WSJ treebank
+	:param joinchar: A string used to connect collapsed node values"""
 	agenda = [tree]
 	if not collapseroot and isinstance(tree, Tree) and len(tree) == 1:
 		agenda = [tree[0]]
@@ -328,8 +333,7 @@ def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 
 
 def introducepreterminals(tree, ids=None):
-	""" Introduce preterminals with artificial POS-tags where needed
-	(i.e., for every terminal with siblings.)
+	"""Add preterminals with artificial POS-tags for terminals with siblings.
 
 	>>> tree = Tree('(S (X a b (CD c d) e))')
 	>>> print(introducepreterminals(tree))
@@ -350,7 +354,7 @@ def introducepreterminals(tree, ids=None):
 
 
 def getbits(bitset):
-	""" Iterate over the indices of set bits in a bitset. """
+	"""Iterate over the indices of set bits in a bitset."""
 	n = 0
 	while bitset:
 		if bitset & 1:
@@ -362,31 +366,29 @@ def getbits(bitset):
 
 
 def fanout(tree):
-	""" Return fan-out of constituent. Requires ``bitset`` attribute. """
+	"""Return fan-out of constituent. Requires ``bitset`` attribute."""
 	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
 
 
 def complexity(tree):
-	""" The degree of the time complextiy of parsing with this rule.
-	Cf. Gildea (2011). """
+	"""The degree of the time complextiy of parsing with this rule.
+	Cf. Gildea (2011)."""
 	return fanout(tree) + sum(map(fanout, tree))
 
 
 def complexityfanout(tree):
-	""" Combination of complexity and fan-out, where the latter is used
-	to break ties in the former. """
+	"""Return a tuble with the complexity and fan-out of a subtree."""
 	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
 
 
 def fanoutcomplexity(tree):
-	""" Combination of fan-out and complexity, where the latter is used
-	to break ties in the former. """
+	"""Return a tuble with the fan-out and complexity of a subtree."""
 	return (fanout(tree), fanout(tree) + sum(map(fanout, tree)))
 
 
 def addbitsets(tree):
-	""" Turn tree into an ImmutableTree and add a bitset attribute to each
-	constituent to avoid slow calls to leaves(). """
+	"""Turn tree into an ImmutableTree and add a bitset attribute to each
+	constituent to avoid slow calls to leaves()."""
 	if isinstance(tree, basestring):
 		result = ImmutableTree.parse(tree, parse_leaf=int)
 	elif isinstance(tree, ImmutableTree):
@@ -401,8 +403,8 @@ def addbitsets(tree):
 
 
 def getyf(left, right):
-	""" Given two trees with bitsets, return a string representation of
-	their yield function, e.g., ';01,10'. """
+	"""Given two trees with bitsets, return a string representation of their
+	yield function, e.g., ';01,10'."""
 	result = [';']
 	cur = ','
 	for n in range(max(left.bitset.bit_length(), right.bitset.bit_length())):
@@ -423,7 +425,7 @@ def getyf(left, right):
 
 def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2):
-	""" Binarize one constituent with a left/right factored binarization.
+	"""Binarize one constituent with a left/right factored binarization.
 	Children remain unmodified. Bottom-up version. Nodes must be immutable
 	and contain bitsets; use ``addbitsets()``.
 	By default construct artificial labels using labels of child nodes.
@@ -432,7 +434,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 	the original. When ids is given, it is used both as an interator (for new
 	unique labels) and as a dictionary (to re-use labels). The first ID in a
 	binarization will always be unique, while the others will be re-used for
-	the same combination of labels and yield function. """
+	the same combination of labels and yield function."""
 	if len(node) <= threshold:
 		return node
 	elif 1 <= len(node) <= 2:
@@ -487,11 +489,15 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 
 
 def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
-	""" Implementation of Gildea (2010): Optimal parsing strategies for
-	linear context-free rewriting systems.  Expects an immutable tree where
-	the terminals are integers corresponding to indices, with a special
-	bitset attribute to avoid having to call ``leaves()`` repeatedly.
-	The bitset attribute can be added with ``addbitsets()``
+	"""Find optimal binarization according to a scoring function.
+
+	Implementation of Gildea (2010): Optimal parsing strategies for linear
+	context-free rewriting systems.
+
+	Expects an immutable tree where the terminals are integers corresponding to
+	indices, with a special bitset attribute to avoid having to call
+	``leaves()`` repeatedly. The bitset attribute can be added with
+	``addbitsets()``
 
 	:param tree: the tree for which the optimal binarization of its top
 		production will be searched.
@@ -514,7 +520,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	>>> print(max(map(complexityfanout, b.subtrees())))
 	(15, 5)"""
 	def newproduction(a, b):
-		""" return a new 'production' (here a tree) combining a and b """
+		"""Return a new 'production' (here a tree) combining a and b."""
 		if head is not None:
 			siblings = (nonterms[a] | nonterms[b])[:h]
 		else:
@@ -620,9 +626,9 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 
 
 def optimalbinarize(tree, sep='|', headdriven=False, h=None, v=1):
-	""" Recursively binarize a tree, optimizing for complexity.
+	"""Recursively binarize a tree, optimizing for complexity.
 	``v=0`` is not implemented. Setting h to a nonzero integer restricts the
-	possible binarizations to head driven binarizations. """
+	possible binarizations to head driven binarizations."""
 	if h is None:
 		tree = Tree.convert(tree)
 		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
@@ -631,7 +637,7 @@ def optimalbinarize(tree, sep='|', headdriven=False, h=None, v=1):
 
 
 def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
-	""" postorder / bottom-up binarization """
+	"""Postorder / bottom-up binarization."""
 	if not isinstance(tree, Tree):
 		return tree
 	parentstr = '^<%s>' % (','.join(ancestors[:v - 1])) if v > 1 else ''
@@ -644,16 +650,17 @@ def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
 
 
 def disc(node):
-	""" Test whether a particular node is discontinuous, i.e., whether its
-	yield consists of two or more non-adjacent strings. """
+	"""Test whether a particular node is discontinuous.
+
+	i.e., test whether its yield contains two or more non-adjacent strings."""
 	if not isinstance(node, Tree):
 		return False
 	return len(list(ranges(sorted(node.leaves())))) > 1
 
 
 def addfanoutmarkers(tree):
-	""" Modifies tree so that the label of each node with a fanout > 1 contains
-	a marker "_n" indicating its fanout. """
+	"""Modifies tree so that the label of each node with a fanout > 1 contains
+	a marker "_n" indicating its fanout."""
 	for st in tree.subtrees():
 		leaves = set(st.leaves())
 		thisfanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
@@ -663,15 +670,16 @@ def addfanoutmarkers(tree):
 
 
 def removefanoutmarkers(tree):
-	""" Remove fanout marks. """
+	"""Remove fanout marks."""
 	for a in tree.subtrees(lambda x: '_' in x.label):
 		a.label = a.label.rsplit('_', 1)[0]
 	return tree
 
 
 def postorder(tree, f=lambda _: True):
-	""" Do a postorder traversal of tree; similar to Tree.subtrees(),
-	but Tree.subtrees() does a preorder traversal. """
+	"""A generator that does a postorder traversal of tree.
+
+	Similar to Tree.subtrees() which does a preorder traversal."""
 	for child in tree:
 		if isinstance(child, Tree):
 			for a in filter(f, postorder(child)):
@@ -681,14 +689,14 @@ def postorder(tree, f=lambda _: True):
 
 
 def canonicalize(tree):
-	""" restore canonical linear precedence order. tree modified in-place. """
+	"""Restore canonical linear precedence order; tree is modified in-place."""
 	for a in postorder(tree, lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
 	return tree
 
 
 def contsets(nodes):
-	""" partition children into continuous subsets
+	"""Partition children into continuous subsets.
 
 	>>> tree = Tree.parse(
 	... "(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
@@ -711,7 +719,7 @@ def contsets(nodes):
 
 
 def splitdiscnodes(tree, markorigin=False):
-	""" Boyd (2007): Discontinuity revisited.
+	"""Boyd (2007): Discontinuity revisited.
 	markorigin=False: VP* (bare label)
 	markorigin=True: VP*1 (add index)
 
@@ -724,7 +732,7 @@ def splitdiscnodes(tree, markorigin=False):
 	>>> print(splitdiscnodes(tree, markorigin=True))
 	...  # doctest: +NORMALIZE_WHITESPACE
 	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1
-		(CARD 4) (VVPP 5)) (VAINF 6))) """
+		(CARD 4) (VVPP 5)) (VAINF 6)))"""
 	treeclass = tree.__class__
 	for node in postorder(tree):
 		nodes = list(node)
@@ -745,7 +753,7 @@ SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
 
 
 def mergediscnodes(tree):
-	""" Reverse transformation of ``splitdiscnodes()``. """
+	"""Reverse transformation of ``splitdiscnodes()``."""
 	treeclass = tree.__class__
 	for node in tree.subtrees():
 		merge = defaultdict(list)  # a series of queues of nodes
@@ -776,8 +784,8 @@ def mergediscnodes(tree):
 
 
 class OrderedSet(Set):
-	""" A frozen, ordered set which maintains a regular list/tuple and set.
-	The set is indexable. Equality is defined _without_ regard for order. """
+	"""A frozen, ordered set which maintains a regular list/tuple and set.
+	The set is indexable. Equality is defined _without_ regard for order."""
 	def __init__(self, iterable=None):
 		if iterable:
 			self.seq = tuple(iterable)
@@ -810,20 +818,20 @@ class OrderedSet(Set):
 		return '%s(%r)' % (self.__class__.__name__, self.seq)
 
 	def __eq__(self, other):
-		""" equality is defined _without_ regard for order. """
+		"""equality is defined _without_ regard for order."""
 		return self.theset == set(other)
 
 	def __and__(self, other):
-		""" maintain the order of the left operand. """
+		"""maintain the order of the left operand."""
 		if not isinstance(other, Iterable):
 			return NotImplemented
 		return self._from_iterable(value for value in self if value in other)
 
 
 def test():
-	""" Verify (1) that all optimal parsing complexities are lower than or
+	"""Verify (1) that all optimal parsing complexities are lower than or
 	equal to the complexities of right-to-left binarizations; and (2) that
-	splitting and merging discontinuties gives the same trees. """
+	splitting and merging discontinuties gives the same trees."""
 	from discodop.treebank import NegraCorpusReader
 	corpus = NegraCorpusReader('.', 'alpinosample.export', punct='move')
 	total = violations = violationshd = 0
@@ -869,7 +877,7 @@ def test():
 
 
 def main():
-	""" Command line interface for applying tree(bank) transforms. """
+	"""Command line interface for applying tree(bank) transforms."""
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treebanktransforms import readheadrules

@@ -1,6 +1,5 @@
 # -*- coding: UTF-8 -*-
-""" Functions related to dealing with unknown words
-and smoothing of lexical probabilities.
+"""Add rules to handle unknown words and smooth lexical probabilities.
 
 Rare words in the training set are replaced with word signatures, such that
 unknown words can receive similar tags. Given a function to produce such
@@ -43,8 +42,7 @@ UNK = '_UNK'
 
 def getunknownwordmodel(tagged_sents, unknownword,
 		unknownthreshold, openclassthreshold):
-	""" Compute an unknown word model that smooths lexical probabilities
-	for unknown & rare words.
+	"""Collect statistics for an unknown word model.
 
 	:param tagged_sents: the sentences from the training set with the gold POS
 			tags from the treebank.
@@ -53,7 +51,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	:param unknownthreshold: words with frequency lower than or equal to this
 			are replaced by their signature.
 	:param openclassthreshold: tags that rewrite to at least this much word
-			types are considered to be open class categories. """
+			types are considered to be open class categories."""
 	wordsfortag = defaultdict(set)
 	tags = multiset()
 	wordtags = multiset()
@@ -99,18 +97,18 @@ def getunknownwordmodel(tagged_sents, unknownword,
 
 
 def replaceraretrainwords(tagged_sents, unknownword, lexicon):
-	""" Given a training set, replace all terminals not part of the lexicon
+	"""Given a training set, replace all terminals not part of the lexicon
 	with a signature of features as returned by unknownword(),
-	before a grammar is read of from the training set. """
+	before a grammar is read of from the training set."""
 	return [[word if word in lexicon else unknownword(word, n, lexicon)
 			for n, (word, _) in enumerate(sent)]
 			for sent in tagged_sents]
 
 
 def replaceraretestwords(sent, unknownword, lexicon, sigs):
-	""" Given a test sentence, replace words not part of the lexicon
+	"""Given a test sentence, replace words not part of the lexicon
 	with a signature of features as returned by unknownword(),
-	if that signature is part of the grammar. """
+	if that signature is part of the grammar."""
 	for n, word in enumerate(sent):
 		if word in lexicon:
 			yield word
@@ -122,12 +120,12 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 				yield UNK
 
 
-def simplesmoothlexicon(lexmodel, epsilon=1./100):
-	""" introduce lexical productions for unobserved
-	combinations of known open class words and tags, as well as for unobserved
-	signatures which are mapped to ``'_UNK'``.
+def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
+	"""Introduce lexical productions for unobserved combinations of known open
+	class words and tags, as well as for unobserved signatures which are mapped
+	to ``'_UNK'``.
 
-	:param epsilon: 'frequency' of productions for unseen tag, word pair. """
+	:param epsilon: 'frequency' of productions for unseen tag, word pair."""
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
 	newrules = []
@@ -149,12 +147,12 @@ def simplesmoothlexicon(lexmodel, epsilon=1./100):
 def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags, wordsig, sigtag,
 			openclassoffset=1, kappa=1):
-	""" Compute a smoothed lexical model.
+	"""Compute a smoothed lexical model.
 
 	:returns: a dictionary giving P(word_or_sig | tag).
 	:param openclassoffset: for words that only appear with open class tags,
 		add unseen combinations of open class (tag, word) with this count.
-	:param kappa: FIXME; cf. Klein & Manning (2003). """
+	:param kappa: FIXME; cf. Klein & Manning (2003)."""
 	for tag in openclasstags:
 		for word in openclasswords - wordsfortag[tag]:
 			wordtags[word, tag] += openclassoffset
@@ -203,9 +201,9 @@ def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 
 
 def smoothlexicon(grammar, P_wordtag):
-	""" Replace lexical probabilities using given unknown word model.
+	"""Replace lexical probabilities using given unknown word model.
 	Ignores lexical productions of known subtrees (tag contains '@')
-	introduced by DOP, i.e., we only modify lexical depth 1 subtrees. """
+	introduced by DOP, i.e., we only modify lexical depth 1 subtrees."""
 	newrules = []
 	for (rule, yf), w in grammar:
 		if rule[1] == 'Epsilon' and '@' not in rule[0]:
@@ -220,9 +218,8 @@ def smoothlexicon(grammar, P_wordtag):
 
 
 # === functions for unknown word signatures ============
-# resolve name to function assigning unknown word signatures
 def getunknownwordfun(model):
-	""" Resolve name of unknown word model into function for that model. """
+	"""Resolve name of unknown word model into function for that model."""
 	return {"4": unknownword4,
 		"6": unknownword6,
 		"base": unknownwordbase,
@@ -252,7 +249,7 @@ LOWERUPPER = LOWER + UPPER
 
 
 def unknownword6(word, loc, lexicon):
-	""" Model 6 of the Stanford parser (for WSJ treebank). """
+	"""Model 6 of the Stanford parser (for WSJ treebank)."""
 	wlen = len(word)
 	numcaps = 0
 	sig = UNK
@@ -286,7 +283,7 @@ def unknownword6(word, loc, lexicon):
 
 
 def unknownword4(word, loc, _):
-	""" Model 4 of the Stanford parser. Relatively language agnostic. """
+	"""Model 4 of the Stanford parser. Relatively language agnostic."""
 	sig = UNK
 
 	# letters
@@ -325,8 +322,8 @@ def unknownword4(word, loc, _):
 
 
 def unknownwordbase(word, _loc, _lexicon):
-	""" BaseUnknownWordModel of the Stanford parser.
-	Relatively language agnostic. """
+	"""BaseUnknownWordModel of the Stanford parser.
+	Relatively language agnostic."""
 	sig = UNK
 
 	# letters
@@ -374,7 +371,7 @@ ispunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 
 
 def unknownwordftb(word, loc, _):
-	""" Model 2 for French of the Stanford parser. """
+	"""Model 2 for French of the Stanford parser."""
 	sig = UNK
 
 	if advsuffix.search(word):
@@ -404,11 +401,11 @@ def unknownwordftb(word, loc, _):
 
 # === Performing POS tagging with external tools ============
 def externaltagging(usetagger, model, sents, overridetag, tagmap):
-	""" Use an external tool to tag a list of sentences. """
+	"""Use an external tool to tag a list of sentences."""
 	logging.info("Start tagging.")
 	goldtags = [t for sent in sents.values() for _, t in sent]
 	if usetagger == "treetagger":  # Tree-tagger
-		assert os.path.exists("tree-tagger/bin/tree-tagger"), """\
+		assert os.path.exists("tree-tagger/bin/tree-tagger"), '''\
 tree tagger not found. commands to install:
 mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
@@ -417,7 +414,7 @@ wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
 tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
 mkdir lib && cd lib && wget \
 ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
-gunzip german-par-linux-3.2-utf8.bin.gz"""
+gunzip german-par-linux-3.2-utf8.bin.gz'''
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
@@ -438,10 +435,10 @@ gunzip german-par-linux-3.2-utf8.bin.gz"""
 					for a in tags.splitlines() if a.strip()])
 					for n, tags in zip(sents, tagout))
 	elif usetagger == "stanford":  # Stanford Tagger
-		assert os.path.exists("stanford-postagger-full-2012-07-09"), """\
+		assert os.path.exists("stanford-postagger-full-2012-07-09"), '''\
 Stanford tagger not found. Commands to install:
 wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
-tar -xzf stanford-postagger-full-2012-07-09.tgz"""
+tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():

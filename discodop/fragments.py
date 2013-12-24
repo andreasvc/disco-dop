@@ -1,12 +1,11 @@
-""" Fast Fragment Seeker
-Extracts recurring tree fragments from constituency treebanks.
+"""Extract recurring tree fragments from constituency treebanks.
 
 NB: there is a known bug in multiprocessing which makes it impossible to detect
 Ctrl-C or fatal errors like segmentation faults in child processes which causes
 the master program to wait forever for output from its children. Therefore if
 you want to abort, kill the program manually (e.g., press Ctrl-Z and issue
 'kill %1'). If the program seems stuck, re-run without multiprocessing
-(pass --numproc 1) to see if there might be a bug. """
+(pass --numproc 1) to see if there might be a bug."""
 
 from __future__ import division, print_function
 import io
@@ -25,7 +24,8 @@ from discodop.treetransforms import binarize, introducepreterminals
 from discodop._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
 
-USAGE = """Usage: %s <treebank1> [treebank2] [options]
+USAGE = '''\
+Usage: %s <treebank1> [treebank2] [options]
   or: %s --batch=<dir> <treebank1> <treebank2>... [options]
 If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
@@ -58,8 +58,8 @@ Options:
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
   --debug       extra debug information, ignored when numproc > 1.
-  --quiet       disable all messages.""" % (sys.argv[0], sys.argv[0],
-			'|'.join(READERS.keys()))
+  --quiet       disable all messages.\
+''' % (sys.argv[0], sys.argv[0], '|'.join(READERS.keys()))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
 		'quiet', 'debug', 'quadratic', 'cover', 'alt')
@@ -71,7 +71,7 @@ APPLY = lambda x, _y: x()
 
 
 def main(argv=None):
-	""" Command line interface to fragment extraction. """
+	"""Command line interface to fragment extraction."""
 	if argv is None:
 		argv = sys.argv
 	try:
@@ -133,7 +133,7 @@ def main(argv=None):
 
 
 def regular(filenames, numproc, limit, encoding):
-	""" non-batch processing. multiprocessing optional. """
+	"""non-batch processing. multiprocessing optional."""
 	mult = 1
 	if PARAMS['approx']:
 		fragments = defaultdict(int)
@@ -210,10 +210,10 @@ def regular(filenames, numproc, limit, encoding):
 
 
 def batch(outputdir, filenames, limit, encoding):
-	""" batch processing: three or more treebanks specified.
+	"""batch processing: three or more treebanks specified.
 	The use case for this is when you have one big treebank which you want to
 	compare to lots of smaller sets of trees, and get the results for each
-	comparison in a separate file. """
+	comparison in a separate file."""
 	initworker(filenames[0], None, limit, encoding)
 	trees1 = PARAMS['trees1']
 	sents1 = PARAMS['sents1']
@@ -260,7 +260,7 @@ def batch(outputdir, filenames, limit, encoding):
 
 def readtreebanks(treebank1, treebank2=None, fmt='bracket',
 		limit=None, encoding='utf-8'):
-	""" Read one or two treebanks.  """
+	"""Read one or two treebanks."""
 	labels = []
 	prods = {}
 	trees1, sents1 = readtreebank(treebank1, labels, prods,
@@ -276,7 +276,7 @@ def readtreebanks(treebank1, treebank2=None, fmt='bracket',
 
 def read2ndtreebank(treebank2, labels, prods, fmt='bracket',
 		limit=None, encoding='utf-8'):
-	""" Read a second treebank.  """
+	"""Read a second treebank."""
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
 		not PARAMS['quadratic'], fmt, limit, encoding)
 	logging.info("%r: %d trees; %d nodes (max %d). "
@@ -287,8 +287,10 @@ def read2ndtreebank(treebank2, labels, prods, fmt='bracket',
 
 
 def initworker(treebank1, treebank2, limit, encoding):
-	""" Read treebanks for this worker. We do this separately for each process
-	under the assumption that this is advantageous with a NUMA architecture. """
+	"""Read treebanks for this worker.
+
+	We do this separately for each process under the assumption that this is
+	advantageous with a NUMA architecture."""
 	PARAMS.update(readtreebanks(treebank1, treebank2,
 			limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
 	if PARAMS['debug']:
@@ -309,15 +311,13 @@ def initworker(treebank1, treebank2, limit, encoding):
 
 
 def initworkersimple(trees, sents, trees2=None, sents2=None):
-	""" A simpler initialization for a worker in which a treebank has already
-	been loaded. """
+	"""Initialization for a worker in which a treebank was already loaded."""
 	PARAMS.update(getctrees(trees, sents, trees2, sents2))
 	assert PARAMS['trees1']
 
 
 def worker(interval):
-	""" Worker function that initiates the extraction of fragments
-	in each process. """
+	"""Worker function for fragment extraction."""
 	offset, end = interval
 	trees1 = PARAMS['trees1']
 	trees2 = PARAMS['trees2']
@@ -339,8 +339,7 @@ def worker(interval):
 
 
 def exactcountworker(args):
-	""" Worker function that initiates the counting of fragments
-	in each process. """
+	"""Worker function for counting of fragments."""
 	n, m, bitsets = args
 	trees1 = PARAMS['trees1']
 	results = exactcounts(trees1, PARAMS['trees2'] or trees1, bitsets,
@@ -355,8 +354,10 @@ def exactcountworker(args):
 
 
 def coverfragworker():
-	""" Worker function that gets depth-1 fragments. Does not need
-	multiprocessing but using it avoids reading the treebank again. """
+	"""Worker function that gets depth-1 fragments.
+
+	Does not need multiprocessing but using it avoids reading the treebank
+	again."""
 	trees1 = PARAMS['trees1']
 	trees2 = PARAMS['trees2']
 	return coverbitsets(trees1, PARAMS['sents1'], PARAMS['labels'],
@@ -365,13 +366,15 @@ def coverfragworker():
 
 
 def workload(numtrees, mult, numproc):
-	""" Get an even workload. When n trees are compared against themselves,
-	``n * (n - 1)`` total comparisons are made.
-	Each tree m has to be compared to all trees ``x`` such that ``m < x < n``.
-	(meaning there are more comparisons for lower ``n``).
+	"""Calculate an even workload.
+
+	When *n* trees are compared against themselves, ``n * (n - 1)`` total
+	comparisons are made. Each tree *m* has to be compared to all trees *x*
+	such that ``m < x < n``
+	(meaning there are more comparisons for lower *n*).
 
 	:returns: a sequence of ``(start, end)`` intervals such that
-		the number of comparisons is approximately balanced. """
+		the number of comparisons is approximately balanced."""
 	# could base on number of nodes as well.
 	if numproc == 1:
 		return [(0, numtrees)]
@@ -393,11 +396,11 @@ def workload(numtrees, mult, numproc):
 
 
 def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
-	""" Get recurring fragments with exact counts in a single treebank.
+	"""Get recurring fragments with exact counts in a single treebank.
 
 	:returns: a dictionary whose keys are fragments as strings, and
 		frequencies / indices as values.
-	:param trees:  a sequence of binarized Tree objects. """
+	:param trees:  a sequence of binarized Tree objects."""
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)
@@ -473,7 +476,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 
 
 def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
-	""" Get fragments of fragments. """
+	"""Get fragments of fragments."""
 	numtrees = len(newtrees)
 	assert numtrees
 	if numproc == 1:  # set fragments as input
@@ -512,7 +515,8 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 
 
 def altrepr(a):
-	""" Alternative format
+	"""Rewrite bracketed tree to alternative format.
+
 	Replace double quotes with double single quotes: " -> ''
 	Quote terminals with double quotes terminal: -> "terminal"
 	Remove parentheses around frontier nodes: (NN ) -> NN
@@ -524,7 +528,7 @@ def altrepr(a):
 
 
 def printfragments(fragments, counts, out=None):
-	""" Dump fragments to standard output or some other file object. """
+	"""Dump fragments to standard output or some other file object."""
 	if out is None:
 		out = sys.stdout
 		if sys.stdout.encoding is None:
@@ -573,7 +577,7 @@ def printfragments(fragments, counts, out=None):
 
 
 def test():
-	""" Simple test. """
+	"""Demonstration of fragment extractor."""
 	main("fragments.py --disc alpinosample.export".split())
 
 if __name__ == '__main__':

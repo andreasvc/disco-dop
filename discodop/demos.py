@@ -1,4 +1,4 @@
-""" Examples of various formalisms encoded in LCFRS grammars. """
+"""Examples of various formalisms encoded in LCFRS grammars."""
 from __future__ import print_function
 from math import exp
 from discodop import treetransforms, plcfrs, kbest
@@ -8,19 +8,19 @@ from discodop.containers import Grammar
 
 
 def tree_adjoining_grammar():
-	""" Example of a tree-adjoining grammar (TAG) encoded as an LCFRS.
+	"""Example of a tree-adjoining grammar (TAG) encoded as an LCFRS.
 	Taken from: Chen & Vijay-Shanker (2000), Automated extraction of TAGs
 	from the Penn treebank.
 	Limitations:
 	- no epsilon productions
-	Non-terminals have identifiers to encode elementary trees of depth > 2. """
+	Non-terminals have identifiers to encode elementary trees of depth > 2."""
 	print("Tree-Adjoining Grammars in LCFRS")
-	print("""initial trees:
+	print('''initial trees:
 (S (NP ) (VP (V fell)))
 (NP (NN prices))
 auxiliary trees:
 (S (ADVP (RB Later) (S* ))
-(VP (ADVP (RB drastically)) (VP* ))""")
+(VP (ADVP (RB drastically)) (VP* ))''')
 	grammar = Grammar([
 			((('ADVP#1', 'RB#1'), ((0, ), )), 1),
 			((('ADVP#2', 'RB#2'), ((0, ), )), 1),
@@ -44,11 +44,11 @@ auxiliary trees:
 	# Mildly Context-Sensitive Grammar Formalisms:
 	# LCFRS: Relations to other Formalisms
 	print("the language {d} + {a**n b**m c**m d **n} with n>0, m>=0")
-	print("""initial trees:
+	print('''initial trees:
 (S a (S Epsilon) F)
 (F d)
 auxiliary trees:
-(S b S* c)""")
+(S b S* c)''')
 	grammar = Grammar([
 			((('ROOT', 'a1'), ((0, ), )), 1),
 			((('ROOT', 'a2'), ((0, ), )), 1),
@@ -75,12 +75,12 @@ auxiliary trees:
 	# Context-Sensitive Formalisms.
 	# Epsilon replaced with '|', added preterminal rules w/underscores
 	print("the language { ww | w in {a,b}* }")
-	print("""initial trees:
+	print('''initial trees:
 		(S (A Epsilon))
 		auxiliary trees:
 		(A a (A A*) a)
 		(A b (A A*) b)
-		(A (A A*))""")
+		(A (A A*))''')
 	grammar = Grammar([
 			((('_aa', '_a', '_a'), ((0, ), (1, ))), 1),
 			((('_bb', '_b', '_b'), ((0, ), (1, ))), 1),
@@ -103,13 +103,14 @@ auxiliary trees:
 
 
 def dependencygrammar():
-	""" An example dependency structure encoded in an LCFRS grammar.
+	"""An example dependency structure encoded in an LCFRS grammar.
+
 	Taken from: Gildea (2011), Optimal Parsing Strategies for Linear
 	Context-Free Rewriting Systems.
 	Limitations:
 	- rules have to be binarized
 	- lexical rules have to be unary
-	These have been dealt with by introducing nodes w/underscores. """
+	These have been dealt with by introducing nodes w/underscores."""
 	print("A dependency grammar in an LCFRS:")
 	grammar = Grammar([
 			((('NMOD', '_A'), ((0, ), )), 1),
@@ -136,15 +137,16 @@ def dependencygrammar():
 
 
 def bitext():
-	""" Bitext parsing with a synchronous CFG.
+	"""Bitext parsing with a synchronous CFG.
+
 	Translation would require a special decoder (instead of normal kbest
-	derivations where the whole sentence is given). """
+	derivations where the whole sentence is given)."""
 	print("bitext parsing with a synchronous CFG")
-	trees = [Tree.parse(a, parse_leaf=int) for a in """\
+	trees = [Tree.parse(a, parse_leaf=int) for a in '''\
 	(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) (manque 5))\
 		(PP (IN (a` 6)) (NP (NNP (Mary 2) (Mary 4)))))) (SEP (| 3)))
 	(ROOT (S (NP (NNP (Mary 0) (Mary 4))) (VP (VB (likes 1) (aimes 5))\
-		(NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) (SEP (| 3)))""".split('\n')]
+		(NP (DT (la 6)) (NN (pizza 2) (pizza 7))))) (SEP (| 3)))'''.split('\n')]
 	sents = [["0"] * len(a.leaves()) for a in trees]
 	for a in trees:
 		treetransforms.binarize(a)
@@ -206,7 +208,7 @@ def bitext():
 
 
 def parse(compiledgrammar, testsent, testtags=None):
-	""" Parse a sentence with a grammar. """
+	"""Parse a sentence with a grammar."""
 	chart, _ = plcfrs.parse(testsent,
 		compiledgrammar, tags=testtags, exhaustive=True)
 	print("input:", ' '.join("%d:%s" % a
@@ -227,7 +229,7 @@ def parse(compiledgrammar, testsent, testtags=None):
 
 
 def test():
-	""" Run all examples. """
+	"""Run all examples."""
 	bitext()
 	dependencygrammar()
 	tree_adjoining_grammar()

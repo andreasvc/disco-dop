@@ -44,8 +44,12 @@ inplace:
 
 # pylint: R=refactor, C0103 == Invalid name
 lint: inplace
+	#Any files with more than 999 lines?
+	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}'
+	#Docstrings without single line summaries?
+	cd discodop; egrep -n '""".*[^.\"\\]$$' *.pxd *.pyx *.py
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi && \
-	cd web; pylint --indent-string='\t' --disable=R,C0103 ../discodop/*.py *.py
+	pylint --indent-string='\t' --disable=R,C0103 discodop/*.py web/*.py
