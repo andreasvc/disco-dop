@@ -938,7 +938,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		ctrees = Ctrees()
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		sents = []
-		for _, tree, sent in islice(corpus.parsed_sents_iter(), limit):
+		for _, tree, sent in islice(corpus.itertrees(), limit):
 			tree = tolist(add_lcfrs_rules(
 					canonicalize(binarize(tree)), sent), sent)
 			for st in tree:

@@ -777,7 +777,7 @@ def main():
 					encoding=opts.get('--encoding', 'utf8'),
 					functions=opts.get('--functions'),
 					morphology=opts.get('--morphology'))
-			corpora.append((corpus.parsed_sents(), corpus.sents()))
+			corpora.append((corpus.trees(), corpus.sents()))
 		numsents = len(corpus.sents())
 		print('Viewing:', ' '.join(args))
 		for n, sentid in enumerate(corpora[0][0], 1):

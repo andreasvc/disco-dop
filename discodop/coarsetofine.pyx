@@ -421,9 +421,9 @@ def test():
 	train = 0
 	test = 3
 	testmaxlen = 999
-	#trees = corpus.parsed_sents().values()[:train]
+	#trees = corpus.trees().values()[:train]
 	#sents = corpus.sents().values()[:train]
-	trees = list(corpus.parsed_sents().values())
+	trees = list(corpus.trees().values())
 	sents = list(corpus.sents().values())
 
 	dtrees = [t.copy(True) for t in trees]
@@ -452,7 +452,7 @@ def test():
 	fine999x = dopreduction(trees, sents)[0]
 	fine999 = Grammar(fine999x)
 	fine1 = Grammar(dopreduction(dtrees, sents)[0])
-	trees = list(corpus.parsed_sents().values())[train:train + test]
+	trees = list(corpus.trees().values())[train:train + test]
 	sents = list(corpus.tagged_sents().values())[train:train + test]
 	if subsetgrammar(normallcfrs, fine999x):
 		print("DOP grammar is a superset")

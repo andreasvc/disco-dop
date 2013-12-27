@@ -159,13 +159,13 @@ def startexp(
 				headfinal=True, headreverse=False,
 				punct=punct, functions=functions, morphology=morphology)
 		logging.info('%d sentences in training corpus %s',
-				len(thetraincorpus.parsed_sents()), traincorpus.path)
+				len(thetraincorpus.trees()), traincorpus.path)
 		if isinstance(traincorpus.numsents, float):
 			trainnumsents = int(traincorpus.numsents
 					* len(thetraincorpus.sents()))
 		else:
 			trainnumsents = traincorpus.numsents
-		trees = list(thetraincorpus.parsed_sents().values())[:trainnumsents]
+		trees = list(thetraincorpus.trees().values())[:trainnumsents]
 		sents = list(thetraincorpus.sents().values())[:trainnumsents]
 		if transformations:
 			trees = [transform(tree, sent, transformations)
@@ -189,11 +189,11 @@ def startexp(
 			testcorpus.path, encoding=testcorpus.encoding,
 			punct=punct, morphology=morphology, functions=functions)
 	gold_sents = testset.tagged_sents()
-	test_parsed_sents = testset.parsed_sents()
+	test_trees = testset.trees()
 	if testcorpus.skiptrain:
 		testcorpus.skip += traincorpus.numsents  # pylint: disable=E1103
 	logging.info('%d sentences in test corpus %s',
-			len(testset.parsed_sents()), testcorpus.path)
+			len(testset.trees()), testcorpus.path)
 	logging.info('%d test sentences before length restriction',
 			len(list(gold_sents)[testcorpus.skip:  # pylint: disable=E1103
 				testcorpus.skip + testcorpus.numsents]))  # pylint: disable=E1103
@@ -261,7 +261,7 @@ def startexp(
 	#   model
 	# 3: blocks from treebank file to reproduce the relevant part of the
 	#   original treebank verbatim.
-	testset = OrderedDict((a, (test_tagged_sents[a], test_parsed_sents[a],
+	testset = OrderedDict((a, (test_tagged_sents[a], test_trees[a],
 			gold_sents[a], block)) for a, block
 			in islice(testset.blocks().items(),
 				testcorpus.skip,  # pylint: disable=E1103
@@ -275,7 +275,7 @@ def startexp(
 		trees = []
 		sents = []
 	toplabels = {tree.label for tree in trees} | {
-			test_parsed_sents[n].label for n in testset}
+			test_trees[n].label for n in testset}
 	assert len(toplabels) == 1, 'expected unique ROOT label: %r' % toplabels
 	top = toplabels.pop()
 
@@ -307,7 +307,7 @@ def startexp(
 		nsent = len(result.parsetrees)
 		header = (' ' + result.name.upper() + ' ').center(35, '=')
 		evalsummary = evalmod.doeval(OrderedDict((a, b.copy(True))
-				for a, b in test_parsed_sents.items()), gold_sents,
+				for a, b in test_trees.items()), gold_sents,
 				result.parsetrees, test_tagged_sents if usetags else gold_sents,
 				evalparam)
 		coverage = 'coverage: %s = %6.2f' % (
@@ -799,7 +799,7 @@ def parsetepacoc(
 				encoding='iso-8859-1')
 		corpus_sents = list(corpus.sents().values())
 		corpus_taggedsents = list(corpus.tagged_sents().values())
-		corpus_trees = list(corpus.parsed_sents().values())
+		corpus_trees = list(corpus.trees().values())
 		if transformations:
 			corpus_trees = [transform(tree, sent, transformations)
 					for tree, sent in zip(corpus_trees, corpus_sents)]

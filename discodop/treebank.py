@@ -85,20 +85,20 @@ class CorpusReader(object):
 				"no files matched pattern %s" % path)
 		self._sents_cache = None
 		self._tagged_sents_cache = None
-		self._parsed_sents_cache = None
+		self._trees_cache = None
 		self._block_cache = None
 
-	def parsed_sents(self):
+	def trees(self):
 		""":returns: an ordered dictionary of parse trees \
 			(``Tree`` objects with integer indices as leaves)."""
-		if not self._parsed_sents_cache:
+		if not self._trees_cache:
 			if self._block_cache is None:
 				self._block_cache = OrderedDict(self._read_blocks())
-			self._parsed_sents_cache = OrderedDict((a, self._parsetree(b))
+			self._trees_cache = OrderedDict((a, self._parsetree(b))
 					for a, b in self._block_cache.items())
-		return self._parsed_sents_cache
+		return self._trees_cache
 
-	def parsed_sents_iter(self):
+	def itertrees(self):
 		""":returns: an iterator returning tuples (key, tree, sent) of \
 			sentences in corpus. Useful when the dictionary of all trees in \
 			corpus would not fit in memory."""
@@ -122,12 +122,12 @@ class CorpusReader(object):
 			if self._block_cache is None:
 				self._block_cache = OrderedDict(self._read_blocks())
 			# for each sentence, zip its words & tags together in a list.
-			# this assumes that .sents() and .parsed_sents() correctly remove
+			# this assumes that .sents() and .trees() correctly remove
 			# punctuation if requested.
 			self._tagged_sents_cache = OrderedDict((n,
 				list(zip(sent, map(itemgetter(1), sorted(tree.pos())))))
 				for (n, sent), tree in zip(self.sents().items(),
-						self.parsed_sents().values()))
+						self.trees().values()))
 		return self._tagged_sents_cache
 
 	def blocks(self):
@@ -241,11 +241,11 @@ class DiscBracketCorpusReader(CorpusReader):
 		return OrderedDict((n, self._word(line))
 				for n, line in self.blocks().items())
 
-	def parsed_sents(self):
-		if not self._parsed_sents_cache:
-			self._parsed_sents_cache = OrderedDict(enumerate(
+	def trees(self):
+		if not self._trees_cache:
+			self._trees_cache = OrderedDict(enumerate(
 					map(self._parsetree, self.blocks().values()), 1))
-		return self._parsed_sents_cache
+		return self._trees_cache
 
 	def blocks(self):
 		return OrderedDict(self._read_blocks())
@@ -289,11 +289,11 @@ class BracketCorpusReader(CorpusReader):
 				in zip(self.sents().items(), self.blocks().values()))
 		return self._tagged_sents_cache
 
-	def parsed_sents(self):
-		if not self._parsed_sents_cache:
-			self._parsed_sents_cache = OrderedDict(enumerate(
+	def trees(self):
+		if not self._trees_cache:
+			self._trees_cache = OrderedDict(enumerate(
 					map(self._parsetree, self.blocks().values()), 1))
-		return self._parsed_sents_cache
+		return self._trees_cache
 
 	def blocks(self):
 		return OrderedDict(self._read_blocks())

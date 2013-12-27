@@ -831,12 +831,12 @@ def testpunct():
 	filename = 'alpinosample.export'
 	mangledtrees = NegraCorpusReader(filename, punct='move')
 	nopunct = list(NegraCorpusReader(filename,
-			punct='remove').parsed_sents().values())
+			punct='remove').trees().values())
 	originals = list(NegraCorpusReader(filename, headrules=None,
-			encoding='iso-8859-1').parsed_sents().values())
+			encoding='iso-8859-1').trees().values())
 	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
-			mangledtrees.parsed_sents().values(),
+			mangledtrees.trees().values(),
 			mangledtrees.sents().values(), nopunct, originals):
 		print(n, end='')
 		for a, b in zip(sorted(addbitsets(mangled).subtrees(phrasal),
@@ -863,11 +863,11 @@ def testtransforms():
 	nn = NegraCorpusReader('alpinosample.export', headrules=headrules)
 	transformations = ('S-RC', 'VP-GF', 'NP')
 	trees = [transform(tree, sent, transformations)
-			for tree, sent in zip(nn.parsed_sents().values(),
+			for tree, sent in zip(nn.trees().values(),
 				nn.sents().values())]
 	print('\ntransformed')
 	correct = exact = d = 0
-	for a, b, c in islice(zip(n.parsed_sents().values(),
+	for a, b, c in islice(zip(n.trees().values(),
 			trees, n.sents().values()), 100):
 		transformb = reversetransform(b.copy(True), transformations)
 		b1 = bracketings(canonicalize(a))

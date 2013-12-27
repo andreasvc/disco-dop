@@ -836,7 +836,7 @@ def test():
 	corpus = NegraCorpusReader('alpinosample.export', punct='move')
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), list(
-			corpus.parsed_sents().values())[:-2000], corpus.sents().values()):
+			corpus.trees().values())[:-2000], corpus.sents().values()):
 		t = addbitsets(tree)
 		if all(fanout(x) == 1 for x in t.subtrees()):
 			continue
@@ -866,7 +866,7 @@ def test():
 
 	correct = wrong = 0
 	corpus = NegraCorpusReader('alpinosample.export')
-	for tree in corpus.parsed_sents().values():
+	for tree in corpus.trees().values():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
 			correct += 1
 		else:
@@ -904,7 +904,7 @@ def main():
 			lemmas='between' if '--lemmas' in opts else None)
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
-	trees = islice(corpus.parsed_sents_iter(), start, end)
+	trees = islice(corpus.itertrees(), start, end)
 
 	# select transformation
 	actions = {'none': None, 'introducepreterminals': introducepreterminals,

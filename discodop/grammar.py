@@ -832,7 +832,7 @@ def test():
 	corpus = NegraCorpusReader(filename, punct='move')
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
-			for a in list(corpus.parsed_sents().values())[:10]]
+			for a in list(corpus.trees().values())[:10]]
 	print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
 
 	print('dop reduction')
@@ -851,7 +851,7 @@ def test():
 			splitprune=False, markorigin=False)
 	print(grammar)
 	assert grammar.testgrammar(), "RFE should sum to 1."
-	for tree, sent in zip(corpus.parsed_sents().values(), sents):
+	for tree, sent in zip(corpus.trees().values(), sents):
 		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
 				for a in sent))
 		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
@@ -909,7 +909,7 @@ def main():
 	corpus = READERS[opts.get('--inputfmt', 'export')](
 			treebankfile,
 			encoding=opts.get('--inputenc', 'utf8'))
-	trees = list(corpus.parsed_sents().values())
+	trees = list(corpus.trees().values())
 	sents = list(corpus.sents().values())
 	for a in trees:
 		canonicalize(a)

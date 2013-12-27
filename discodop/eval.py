@@ -117,9 +117,9 @@ def main():
 			encoding=opts.get('--parsesenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
 			morphology=opts.get('--morphology'))
-	print(doeval(gold.parsed_sents(),
+	print(doeval(gold.trees(),
 			gold.tagged_sents(),
-			parses.parsed_sents(),
+			parses.trees(),
 			parses.tagged_sents(),
 			param))
 
@@ -875,9 +875,9 @@ def test():
 	"""Simple sanity check; should give 100% score on all metrics."""
 	gold = READERS['export']('alpinosample.export')
 	parses = READERS['export']('alpinosample.export')
-	doeval(gold.parsed_sents(),
+	doeval(gold.trees(),
 			gold.tagged_sents(),
-			parses.parsed_sents(),
+			parses.trees(),
 			parses.tagged_sents(),
 			readparam(None))
 
