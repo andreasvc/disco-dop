@@ -21,7 +21,7 @@ if len(sys.argv) <= 1 or sys.argv[1] not in dict(COMMANDS):
 	print('usage: %s <command> [arguments]' % thiscmd)
 	print('Command is one of:')
 	for a, b in COMMANDS:
-		print('  %s  %s' % (a.ljust(15), b))
+		print('   %s  %s' % (a.ljust(15), b))
 	print('for additional instructions issue: %s <command> --help' % thiscmd)
 else:
 	cmd = sys.argv[1]

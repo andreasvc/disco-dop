@@ -54,7 +54,7 @@ Binarization
 ------------
 :binarization: a dictionary with the following keys:
 
-    :method Binarization method; choices:
+    :method: Binarization method; choices:
 
         :default: basic binarization (recommended).
         :optimal: binarization which optimizes for lowest fan-out or parsing complexity.

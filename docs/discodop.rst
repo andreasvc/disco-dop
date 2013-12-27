@@ -97,32 +97,32 @@ Usage: discodop eval <gold> <parses> [param] [options]
 where gold and parses are files with parse trees, param is an EVALB parameter
 file, and options may consist of:
 
-  --cutofflen=n    Overrides the sentence length cutoff of the parameter file.
-  --verbose        Print table with per sentence information.
-  --debug          Print debug information with per sentence bracketings etc.
-  --disconly       Only evaluate bracketings of discontinuous constituents
-                   (only affects Parseval measures).
+--cutofflen=n    Overrides the sentence length cutoff of the parameter file.
+--verbose        Print table with per sentence information.
+--debug          Print debug information with per sentence bracketings etc.
+--disconly       Only evaluate bracketings of discontinuous constituents
+                 (only affects Parseval measures).
 
-  --goldfmt|--parsesfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
-                   Specify corpus format.
+--goldfmt|--parsesfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+                 Specify corpus format.
 
-  --goldenc|--parsesenc=[\*UTF-8|ISO-8859-1|...]
-                   Specify a different encoding than the default UTF-8.
+--goldenc|--parsesenc=[\*UTF-8|ISO-8859-1|...]
+                 Specify a different encoding than the default UTF-8.
 
-  --ted            Enable tree-edit distance evaluation.
-  --headrules=x    Specify file with rules for head assignment of constituents
-                   that do not already have a child marked as head; this
-                   enables dependency evaluation.
+--ted            Enable tree-edit distance evaluation.
+--headrules=x    Specify file with rules for head assignment of constituents
+                 that do not already have a child marked as head; this
+                 enables dependency evaluation.
 
-  --functions=x    'remove'=default: strip functions off labels,
-                   'leave': leave syntactic labels as is,
-                   'add': evaluate both syntactic categories and functions,
-                   'replace': only evaluate grammatical functions.
+--functions=x    'remove'=default: strip functions off labels,
+                 'leave': leave syntactic labels as is,
+                 'add': evaluate both syntactic categories and functions,
+                 'replace': only evaluate grammatical functions.
 
-  --morphology=x   'no'=default: only evaluate POS tags,
-                   'add': concatenate morphology tags to POS tags,
-                   'replace': replace POS tags with morphology tags,
-                   'between': add morphological node between POS tag and word.
+--morphology=x   'no'=default: only evaluate POS tags,
+                 'add': concatenate morphology tags to POS tags,
+                 'replace': replace POS tags with morphology tags,
+                 'between': add morphological node between POS tag and word.
 
 The parameter file should be encoded in UTF-8 and supports the following
 options (in addition to those described in the README of EVALB):
@@ -160,50 +160,50 @@ action is one of::
 
 options may consist of (* marks default option):
 
-  --inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
-  --outputfmt=[\*export|bracket|discbracket|dact|conll|mst]
-  --inputenc|--outputenc=[\*UTF-8|ISO-8859-1|...]
+--inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+--outputfmt=[\*export|bracket|discbracket|dact|conll|mst]
+--inputenc|--outputenc=[\*UTF-8|ISO-8859-1|...]
 
-  --slice=n:m    select a range of sentences from input starting with n,
-                 up to but not including m; as in Python, n or m can be left
-                 out or negative, and the first index is 0.
+--slice=n:m    select a range of sentences from input starting with n,
+               up to but not including m; as in Python, n or m can be left
+               out or negative, and the first index is 0.
 
-  --punct=x      possible options:
+--punct=x      possible options:
 
-                 :'remove': remove any punctuation.
-                 :'move': re-attach punctuation to nearest constituent
-                       to minimize discontinuity.
-                 :'restore': attach punctuation under root node.
+               :'remove': remove any punctuation.
+               :'move': re-attach punctuation to nearest constituent
+                     to minimize discontinuity.
+               :'restore': attach punctuation under root node.
 
-  --functions=x  :'leave': (default): leave syntactic labels as is,
-                 :'remove': strip away hyphen-separated function labels
-                 :'add': concatenate syntactic categories with functions,
-                 :'replace': replace syntactic labels w/grammatical functions.
+--functions=x  :'leave': (default): leave syntactic labels as is,
+               :'remove': strip away hyphen-separated function labels
+               :'add': concatenate syntactic categories with functions,
+               :'replace': replace syntactic labels w/grammatical functions.
 
-  --morphology=x :'no' (default): use POS tags as preterminals
-                 :'add': concatenate morphological information to POS tags,
-                     e.g., DET/sg.def
-                 :'replace': use morphological information as preterminal label
-                 :'between': insert node with morphological information between
-                     POS tag and word, e.g., (DET (sg.def the))
+--morphology=x :'no' (default): use POS tags as preterminals
+               :'add': concatenate morphological information to POS tags,
+                   e.g., DET/sg.def
+               :'replace': use morphological information as preterminal label
+               :'between': insert node with morphological information between
+                   POS tag and word, e.g., (DET (sg.def the))
 
-  --lemmas       insert node with lemma between word and POS tag.
+--lemmas       insert node with lemma between word and POS tag.
 
-  --factor=[left|*right]
-                 whether binarization factors to the left or right
+--factor=[left|*right]
+               whether binarization factors to the left or right
 
-  -h n           horizontal markovization. default: infinite (all siblings)
-  -v n           vertical markovization. default: 1 (immediate parent only)
-  --leftunary    make initial / final productions of binarized constituents
-  --rightunary   ... unary productions.
+-h n           horizontal markovization. default: infinite (all siblings)
+-v n           vertical markovization. default: 1 (immediate parent only)
+--leftunary    make initial / final productions of binarized constituents
+--rightunary   ... unary productions.
 
-  --tailmarker   mark rightmost child (the head if headrules are applied), to
-                 avoid cyclic rules when --leftunary and --rightunary are used.
+--tailmarker   mark rightmost child (the head if headrules are applied), to
+               avoid cyclic rules when --leftunary and --rightunary are used.
 
-  --headrules=x  turn on head finding; affects binarization.
-                 reads rules from file "x" (e.g., "negra.headrules").
+--headrules=x  turn on head finding; affects binarization.
+               reads rules from file "x" (e.g., "negra.headrules").
 
-  --markheads    mark heads with '^' in phrasal labels.
+--markheads    mark heads with '^' in phrasal labels.
 
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
@@ -227,12 +227,24 @@ output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
 
-  --inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
-  --inputenc=[\*UTF-8|ISO-8859-1|...]
-  --dopestimator=[\*rfe|ewe|shortest|...]
-  --numproc=[\*1|2|...]  only relevant for double dop fragment extraction
-  --gzip                 compress output with gzip, view with zless &c.
-  --packed               use packed graph encoding for DOP reduction
+--inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+          The treebank format.
+
+--inputenc=[\*UTF-8|ISO-8859-1|...]
+          Treebank encoding.
+
+--dopestimator=[\*rfe|ewe|shortest|...]
+          The DOP estimator to use with dopreduction/doubledop.
+
+--numproc=[\*1|2|...]
+          only relevant for double dop fragment extraction
+
+--gzip
+          compress output with gzip, view with zless &c.
+
+--packed
+          use packed graph encoding for DOP reduction
+
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
@@ -268,22 +280,22 @@ Usage: discodop treedraw [<treebank>...] [options]
 
 Options (* marks default option):
 
-  --fmt=[\*export|bracket|discbracket|tiger|alpino|dact]
-                   Specify corpus format.
+--fmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+                 Specify corpus format.
 
-  --encoding=enc   Specify a different encoding than the default UTF-8.
-  --functions=x    :'leave'=default: leave syntactic labels as is,
-                   :'remove': strip functions off labels,
-                   :'add': show both syntactic categories and functions,
-                   :'replace': only show grammatical functions.
+--encoding=enc   Specify a different encoding than the default UTF-8.
+--functions=x    :'leave'=default: leave syntactic labels as is,
+                 :'remove': strip functions off labels,
+                 :'add': show both syntactic categories and functions,
+                 :'replace': only show grammatical functions.
 
-  --morphology=x   :'no'=default: only show POS tags,
-                   :'add': concatenate morphology tags to POS tags,
-                   :'replace': replace POS tags with morphology tags,
-                   :'between': add morphological node between POS tag and word.
+--morphology=x   :'no'=default: only show POS tags,
+                 :'add': concatenate morphology tags to POS tags,
+                 :'replace': replace POS tags with morphology tags,
+                 :'between': add morphological node between POS tag and word.
 
-  --abbr           abbreviate labels longer than 5 characters.
-  --plain          disable ANSI colors.
+--abbr           abbreviate labels longer than 5 characters.
+--plain          disable ANSI colors.
 
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
@@ -309,13 +321,13 @@ through indices pointing to words in the original sentence.
 
 Options:
 
-  -b k          Return the k-best parses instead of just 1.
-  -s x          Use "x" as start symbol instead of default "TOP".
-  -z            Input is one sentence per line, space-separated tokens.
-  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
-  --prob        Print probabilities as well as parse trees.
-  --mpd         In coarse-to-fine mode, produce the most probable
-                derivation (MPD) instead of the most probable parse (MPP).
+-b k          Return the k-best parses instead of just 1.
+-s x          Use "x" as start symbol instead of default "TOP".
+-z            Input is one sentence per line, space-separated tokens.
+--ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
+--prob        Print probabilities as well as parse trees.
+--mpd         In coarse-to-fine mode, produce the most probable
+              derivation (MPD) instead of the most probable parse (MPP).
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are::
