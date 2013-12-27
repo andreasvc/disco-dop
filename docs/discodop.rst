@@ -56,36 +56,31 @@ Output is sent to stdout; to save the results, redirect to a file.
 
 Options:
 
---fmt=[export|bracket|discbracket|tiger|alpino|dact]
-              when format is not 'bracket', work with discontinuous trees;
-              output is in 'discbracket' format:
-              tree<TAB>sentence<TAB>frequency
-              where "tree' has indices as leaves, referring to elements of
-              "sentence", a space separated list of words.
-
---indices     report sets of indices instead of frequencies.
---cover       include 'cover' fragments corresponding to single productions.
---complete    find complete matches of fragments from treebank1 (needle) in
-              treebank2 (haystack).
-
---batch=dir   enable batch mode; any number of treebanks > 1 can be given;
-              first treebank will be compared to all others, frequencies
-              refer to first treebank.
-              Results are written to filenames of the form dir/A_B.
-
---numproc=n   use n independent processes, to enable multi-core usage
-              (default: 1); use 0 to detect the number of CPUs.
-
---numtrees=n  only read first n trees from first treebank
---encoding=x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
---approx      report approximate frequencies (lower bound)
---nofreq      do not report frequencies.
---quadratic   use the slower, quadratic algorithm for finding fragments.
---alt         alternative output format: (NP (DT "a") NN)
-              default: (NP (DT a) (NN ))
-
---debug       extra debug information, ignored when numproc > 1.
---quiet       disable all messages.
+  --fmt=<export|bracket|discbracket|tiger|alpino|dact>
+                when format is not 'bracket', work with discontinuous trees;
+                output is in 'discbracket' format:
+                tree<TAB>sentence<TAB>frequency
+                where "tree' has indices as leaves, referring to elements of
+                "sentence", a space separated list of words.
+  --indices     report sets of indices instead of frequencies.
+  --cover       include 'cover' fragments corresponding to single productions.
+  --complete    find complete matches of fragments from treebank1 (needle) in
+                treebank2 (haystack).
+  --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
+                first treebank will be compared to all others, frequencies
+                refer to first treebank.
+                Results are written to filenames of the form dir/A_B.
+  --numproc=n   use n independent processes, to enable multi-core usage
+                (default: 1); use 0 to detect the number of CPUs.
+  --numtrees=n  only read first n trees from first treebank
+  --encoding=x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
+  --approx      report approximate frequencies (lower bound)
+  --nofreq      do not report frequencies.
+  --quadratic   use the slower, quadratic algorithm for finding fragments.
+  --alt         alternative output format: (NP (DT "a") NN)
+                default: (NP (DT a) (NN ))
+  --debug       extra debug information, ignored when numproc > 1.
+  --quiet       disable all messages.
 
 
 eval
@@ -103,10 +98,10 @@ file, and options may consist of:
 --disconly       Only evaluate bracketings of discontinuous constituents
                  (only affects Parseval measures).
 
---goldfmt|--parsesfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+--goldfmt, --parsesfmt=<*export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format.
 
---goldenc|--parsesenc=[\*UTF-8|ISO-8859-1|...]
+--goldenc, --parsesenc=<*UTF-8|ISO-8859-1|...>
                  Specify a different encoding than the default UTF-8.
 
 --ted            Enable tree-edit distance evaluation.
@@ -160,50 +155,43 @@ action is one of::
 
 options may consist of (* marks default option):
 
---inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
---outputfmt=[\*export|bracket|discbracket|dact|conll|mst]
---inputenc|--outputenc=[\*UTF-8|ISO-8859-1|...]
+--inputfmt=<*export|bracket|discbracket|tiger|alpino|dact>
+                Input treebank format.
+--outputfmt=<*export|bracket|discbracket|dact|conll|mst>
+                Output treebank format.
+--inputenc, --outputenc=<*UTF-8|ISO-8859-1|...>
+                Treebank encoding.
+--slice=<n:m>   select a range of sentences from input starting with n,
+                up to but not including m; as in Python, n or m can be left
+                out or negative, and the first index is 0.
+--punct=x       possible options:
 
---slice=n:m    select a range of sentences from input starting with n,
-               up to but not including m; as in Python, n or m can be left
-               out or negative, and the first index is 0.
-
---punct=x      possible options:
-
-               :'remove': remove any punctuation.
-               :'move': re-attach punctuation to nearest constituent
-                     to minimize discontinuity.
-               :'restore': attach punctuation under root node.
-
---functions=x  :'leave': (default): leave syntactic labels as is,
-               :'remove': strip away hyphen-separated function labels
-               :'add': concatenate syntactic categories with functions,
-               :'replace': replace syntactic labels w/grammatical functions.
-
---morphology=x :'no' (default): use POS tags as preterminals
-               :'add': concatenate morphological information to POS tags,
-                   e.g., DET/sg.def
-               :'replace': use morphological information as preterminal label
-               :'between': insert node with morphological information between
-                   POS tag and word, e.g., (DET (sg.def the))
-
---lemmas       insert node with lemma between word and POS tag.
-
---factor=[left|*right]
-               whether binarization factors to the left or right
-
--h n           horizontal markovization. default: infinite (all siblings)
--v n           vertical markovization. default: 1 (immediate parent only)
---leftunary    make initial / final productions of binarized constituents
---rightunary   ... unary productions.
-
---tailmarker   mark rightmost child (the head if headrules are applied), to
-               avoid cyclic rules when --leftunary and --rightunary are used.
-
---headrules=x  turn on head finding; affects binarization.
-               reads rules from file "x" (e.g., "negra.headrules").
-
---markheads    mark heads with '^' in phrasal labels.
+                :'remove': remove any punctuation.
+                :'move': re-attach punctuation to nearest constituent
+                      to minimize discontinuity.
+                :'restore': attach punctuation under root node.
+--functions=x   :'leave': (default): leave syntactic labels as is,
+                :'remove': strip away hyphen-separated function labels
+                :'add': concatenate syntactic categories with functions,
+                :'replace': replace syntactic labels w/grammatical functions.
+--morphology=x  :'no' (default): use POS tags as preterminals
+                :'add': concatenate morphological information to POS tags,
+                    e.g., DET/sg.def
+                :'replace': use morphological information as preterminal label
+                :'between': insert node with morphological information between
+                    POS tag and word, e.g., (DET (sg.def the))
+--lemmas        insert node with lemma between word and POS tag.
+--factor=<left|*right>
+                whether binarization factors to the left or right
+-h n            horizontal markovization. default: infinite (all siblings)
+-v n            vertical markovization. default: 1 (immediate parent only)
+--leftunary     make initial / final productions of binarized constituents
+--rightunary    ... unary productions.
+--tailmarker    mark rightmost child (the head if headrules are applied), to
+                avoid cyclic rules when --leftunary and --rightunary are used.
+--headrules=x   turn on head finding; affects binarization.
+                reads rules from file "x" (e.g., "negra.headrules").
+--markheads     mark heads with '^' in phrasal labels.
 
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
@@ -227,16 +215,16 @@ output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
 
---inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+--inputfmt=<*export|bracket|discbracket|tiger|alpino|dact>
           The treebank format.
 
---inputenc=[\*UTF-8|ISO-8859-1|...]
+--inputenc=<\*UTF-8|ISO-8859-1|...>
           Treebank encoding.
 
---dopestimator=[\*rfe|ewe|shortest|...]
+--dopestimator=<*rfe|ewe|shortest|...>
           The DOP estimator to use with dopreduction/doubledop.
 
---numproc=[\*1|2|...]
+--numproc=<*1|2|...>
           only relevant for double dop fragment extraction
 
 --gzip
@@ -280,7 +268,7 @@ Usage: discodop treedraw [<treebank>...] [options]
 
 Options (* marks default option):
 
---fmt=[\*export|bracket|discbracket|tiger|alpino|dact]
+--fmt=<*export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format.
 
 --encoding=enc   Specify a different encoding than the default UTF-8.
