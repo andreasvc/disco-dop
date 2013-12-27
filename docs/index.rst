@@ -34,28 +34,28 @@ set, make a copy of the file ``sample.prm`` and edit its parameters. For example
 .. code-block:: python
 
     stages=[
-      dict(name='pcfg', mode='pcfg',
-        split=True, markorigin=True),
-      dict(name='plcfrs', mode='plcfrs',
-        prune=True, splitprune=True, k=1000),
-      dict(name='dop', mode='plcfrs',
-        prune=True, k=50, m=1000,
-        dop=True, usedoubledop=False,
-        estimator="dop1", objective = "mpp")
+        dict(name='pcfg', mode='pcfg',
+            split=True, markorigin=True),
+        dict(name='plcfrs', mode='plcfrs',
+            prune=True, splitprune=True, k=1000),
+        dict(name='dop', mode='plcfrs',
+            prune=True, k=50, m=1000,
+            dop=True, usedoubledop=False,
+            estimator='rfe', objective = 'mpp')
     ],
-    corpusdir='.',
-    traincorpus='alpinosample.export', trainencoding='utf-8',
-    testcorpus='alpinosample.export', testencoding='utf-8',
-    testmaxwords=100, trainmaxwords=100,
-    trainnumsents=3, testnumsents=3, skiptrain=False,
+    traincorpus=dict(
+        path='alpinosample.export', encoding='utf-8',
+        numsents=3, maxwords=100),
+    testcorpus=dict(
+        path='alpinosample.export', encoding='utf-8',
+        numsents=3, maxwords=100),
     postagging=dict(
-        method="unknownword", model="4",
+        method='unknownword', model='4',
         unknownthreshold=1, openclassthreshold=50,
-        simplelexsmooth=True,
-    ),
-    bintype="binarize",
-    factor="right",
-    h=1, v=1,
+        simplelexsmooth=True),
+    binarization=dict(
+        method='default', factor='right',
+        h=1, v=1),
     numproc=1,
 
 See the documentation on the available :ref:`parameters <params>`.

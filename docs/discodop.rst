@@ -229,7 +229,7 @@ Options (* marks default option):
 
   --inputfmt=[\*export|bracket|discbracket|tiger|alpino|dact]
   --inputenc=[\*UTF-8|ISO-8859-1|...]
-  --dopestimator=[\*dop1|ewe|shortest|...]
+  --dopestimator=[\*rfe|ewe|shortest|...]
   --numproc=[\*1|2|...]  only relevant for double dop fragment extraction
   --gzip                 compress output with gzip, view with zless &c.
   --packed               use packed graph encoding for DOP reduction

@@ -16,7 +16,7 @@ else:
 
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop.treebank import READERS, dependencies, splitpath
+from discodop.treebank import READERS, dependencies
 from discodop.treebanktransforms import readheadrules
 try:
 	from discodop.treedist import treedist, newtreedist
@@ -107,11 +107,13 @@ def main():
 		sys.exit(2)
 	goldreader = READERS[opts.get('--goldfmt', 'export')]
 	parsesreader = READERS[opts.get('--parsesfmt', 'export')]
-	gold = goldreader(*splitpath(goldfile),
+	gold = goldreader(
+			goldfile,
 			encoding=opts.get('--goldenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
 			morphology=opts.get('--morphology'))
-	parses = parsesreader(*splitpath(parsesfile),
+	parses = parsesreader(
+			parsesfile,
 			encoding=opts.get('--parsesenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
 			morphology=opts.get('--morphology'))
@@ -871,8 +873,8 @@ def edit_distance(seq1, seq2):
 
 def test():
 	"""Simple sanity check; should give 100% score on all metrics."""
-	gold = READERS['export']('.', 'alpinosample.export')
-	parses = READERS['export']('.', 'alpinosample.export')
+	gold = READERS['export']('alpinosample.export')
+	parses = READERS['export']('alpinosample.export')
 	doeval(gold.parsed_sents(),
 			gold.tagged_sents(),
 			parses.parsed_sents(),

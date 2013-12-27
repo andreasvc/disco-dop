@@ -24,7 +24,7 @@ from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
-from discodop.treebank import READERS, writetree, splitpath
+from discodop.treebank import READERS, writetree
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -833,7 +833,7 @@ def test():
 	equal to the complexities of right-to-left binarizations; and (2) that
 	splitting and merging discontinuties gives the same trees."""
 	from discodop.treebank import NegraCorpusReader
-	corpus = NegraCorpusReader('.', 'alpinosample.export', punct='move')
+	corpus = NegraCorpusReader('alpinosample.export', punct='move')
 	total = violations = violationshd = 0
 	for n, tree, sent in zip(count(), list(
 			corpus.parsed_sents().values())[:-2000], corpus.sents().values()):
@@ -865,7 +865,7 @@ def test():
 	assert violations == violationshd == 0
 
 	correct = wrong = 0
-	corpus = NegraCorpusReader('.', 'alpinosample.export')
+	corpus = NegraCorpusReader('alpinosample.export')
 	for tree in corpus.parsed_sents().values():
 		if mergediscnodes(splitdiscnodes(tree)) == tree:
 			correct += 1
@@ -895,7 +895,8 @@ def main():
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
 	# open corpus
-	corpus = READERS[opts.get('--inputfmt', 'export')](*splitpath(infilename),
+	corpus = READERS[opts.get('--inputfmt', 'export')](
+			infilename,
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get('--headrules'), markheads='--markheads' in opts,
 			punct=opts.get('--punct'), functions=opts.get('--functions'),

@@ -10,7 +10,7 @@ from operator import mul, itemgetter
 from collections import defaultdict, Counter as multiset
 from itertools import count, islice, repeat
 from discodop.tree import ImmutableTree, Tree
-from discodop.treebank import READERS, splitpath
+from discodop.treebank import READERS
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
@@ -51,7 +51,7 @@ output is the base name for the filenames to write the grammar to.
 Options (* marks default option):
   --inputfmt=[*%(corpusfmts)s]
   --inputenc=[*UTF-8|ISO-8859-1|...]
-  --dopestimator=[*dop1|ewe|shortest|...]
+  --dopestimator=[*rfe|ewe|shortest|...]
   --numproc=[*1|2|...]  only relevant for double dop fragment extraction
   --gzip                compress output with gzip, view with zless &c.
   --packed              use packed graph encoding for DOP reduction
@@ -157,7 +157,7 @@ def treebankgrammar(trees, sents):
 def dopreduction(trees, sents, packedgraph=False):
 	"""Induce a reduction of DOP to an LCFRS.
 
-	Similar to how Goodman (1996, 2003) reduces DOP1 to a PCFG.
+	Similar to how Goodman (1996, 2003) reduces DOP to a PCFG.
 
 	:param packedgraph: packed graph encoding (Bansal & Klein 2010).
 	:returns: a set of rules with the relative frequency estimate as
@@ -829,7 +829,7 @@ def test():
 	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "alpinosample.export"
-	corpus = NegraCorpusReader('.', filename, punct='move')
+	corpus = NegraCorpusReader(filename, punct='move')
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
 			for a in list(corpus.parsed_sents().values())[:10]]
@@ -850,7 +850,7 @@ def test():
 			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
 			splitprune=False, markorigin=False)
 	print(grammar)
-	assert grammar.testgrammar(), "DOP1 should sum to 1."
+	assert grammar.testgrammar(), "RFE should sum to 1."
 	for tree, sent in zip(corpus.parsed_sents().values(), sents):
 		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
 				for a in sent))
@@ -861,8 +861,7 @@ def test():
 			parsetrees = {}
 			derivations, _ = lazykbest(chart, 1000, b'}<')
 			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
-				r = Tree(recoverfragments(d.getkey(), chart,
-					grammar, backtransform))
+				r = Tree(recoverfragments(d.getkey(), chart, backtransform))
 				r = str(removefanoutmarkers(unbinarize(r)))
 				mpp[r] = mpp.get(r, 0.0) + exp(-p)
 				parsetrees.setdefault(r, []).append((t, p))
@@ -903,12 +902,12 @@ def main():
 	opts = dict(opts)
 	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop'), (
 		'unrecognized model: %r' % model)
-	assert opts.get('dopestimator', 'dop1') in ('dop1', 'ewe', 'shortest'), (
+	assert opts.get('dopestimator', 'rfe') in ('rfe', 'ewe', 'shortest'), (
 		'unrecognized estimator: %r' % opts['dopestimator'])
 
 	# read treebank
 	corpus = READERS[opts.get('--inputfmt', 'export')](
-			*splitpath(treebankfile),
+			treebankfile,
 			encoding=opts.get('--inputenc', 'utf8'))
 	trees = list(corpus.parsed_sents().values())
 	sents = list(corpus.sents().values())
@@ -926,10 +925,10 @@ def main():
 		numproc = int(opts.get('--numproc', 1))
 		fragments = getfragments(trees, sents, numproc)
 		grammar, backtransform, altweights = doubledop(trees, fragments)
-	if opts.get('--dopestimator', 'dop1') == 'ewe':
+	if opts.get('--dopestimator', 'rfe') == 'ewe':
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights['ewe'])]
-	elif opts.get('--dopestimator', 'dop1') == 'shortest':
+	elif opts.get('--dopestimator', 'rfe') == 'shortest':
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights['shortest'])]
 

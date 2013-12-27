@@ -10,7 +10,7 @@ stages=[  # DOP reduction
 	dop=True, usedoubledop=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="mpp",
+	estimator="rfe", objective="mpp",
   ),
 
   dict(
@@ -23,7 +23,7 @@ stages=[  # DOP reduction
 	dop=True, usedoubledop=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="mpd",
+	estimator="rfe", objective="mpd",
   ),
 
   dict(
@@ -36,7 +36,7 @@ stages=[  # DOP reduction
 	dop=True, usedoubledop=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="shortest",
+	estimator="rfe", objective="shortest",
   ),
 
   dict(
@@ -49,7 +49,7 @@ stages=[  # DOP reduction
 	dop=True, usedoubledop=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="sl-dop",
+	estimator="rfe", objective="sl-dop",
   ),
   
   dict(
@@ -62,7 +62,7 @@ stages=[  # DOP reduction
 	dop=True, usedoubledop=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="sl-dop-simple",
+	estimator="rfe", objective="sl-dop-simple",
   ),
 
   dict(
@@ -100,7 +100,7 @@ stages=[  # DOP reduction
 	dop=True, usedoubledop=False,
 	prune=True, k=50,
 	kbest=True, sample=False,
-	estimator="dop1", objective="mpp",
+	estimator="rfe", objective="mpp",
   ),
 
   dict(
@@ -114,33 +114,36 @@ stages=[  # DOP reduction
 	packedgraph=True,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="mpp",
+	estimator="rfe", objective="mpp",
   ),
 ],
 
-# corpus options
-corpusfmt="discbracket", # choices: export, bracket, discbracket
-corpusdir=".",
-traincorpus="t2.dbr",
-testcorpus="t2.dbr",
 evalparam=None, # EVALB-style parameter file
+corpusfmt="discbracket", # choices: export, bracket, discbracket
+traincorpus=dict(
+	path="t2.dbr",
+	maxwords=100,
+	numsents=3,
+),
+testcorpus=dict(
+	path="t2.dbr",
+	maxwords=100,
+	numsents=1,
+	skiptrain=True,
+	skip=0,
+),
 punct=None,
 functions=None,
 morphology=None,
 transformations=None,
 relationalrealizational=None,
 postagging=None,
-testmaxwords=100,
-trainmaxwords=100,
-trainnumsents=3,
-testnumsents=1,
-skiptrain=True,
-skip=0,
-headrules=None,
-
-bintype="binarize",
-factor="right",
-h=1,
-v=1,
-quiet=False, reallyquiet=False,
+binarization=dict(
+	method="default",
+	factor="right",
+	headrules=None,
+	h=1,
+	v=1,
+),
+verbosity=2,
 numproc=1,

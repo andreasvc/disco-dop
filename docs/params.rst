@@ -3,7 +3,8 @@
 Parameters for specifying a parsing experiment (runexp)
 =======================================================
 
-A parsing experiment consists of a sequence of stages, and a set of global options:
+A parsing experiment is defined by a sequence of stages, and a set of
+global options:
 
 .. code-block:: python
 
@@ -11,13 +12,71 @@ A parsing experiment consists of a sequence of stages, and a set of global optio
         stage1,
         stage2,
     ],
+    corpusfmt='...',
+    traincorpus=dict(...),
+    testcorpus=dict(...),
+    binarization=dict(...),
     key1=val1,
     key2=val2,
 
-The parameters consist of a Python expression surrounded by an implicit 'dict(' and ')'.
+The parameters consist of a Python expression surrounded by an implicit
+``'dict('`` and ``')'``.
+
+Corpora
+-------
+
+:corpusfmt: The corpus format; choices:
+
+    :export: Negra export format
+    :bracket: Penn treebank style bracketed trees.
+    :discbracket: Bracketed parse trees with numeric indices and words of
+        sentence specified separately.
+    :alpino: Alpino XML format
+    :tiger: Tiger XML format
+:traincorpus: a dictionary with the following keys:
+
+    :path: filename of training corpus; may include globbing characters \* and ?.
+    :encoding: encoding of training corpus (defaults to 'utf-8')
+    :maxwords: maximum sentence length to base grammar on
+    :numsents: number of sentence to use from training corpus
+:testcorpus: a dictionary with the following keys:
+
+    :path: filename of test corpus (may be same as traincorpus, set
+        `skiptrain` to True in that case).
+    :encoding: encoding of test corpus (defaults to 'utf-8')
+    :maxwords: maximum sentence length to parse from test set
+    :numsents: number of sentences to parse
+    :skiptrain: when training & test corpus are from same file, start reading
+        test set after training set sentences
+    :skip: number of (additional) sentences to skip before test corpus starts
+
+Binarization
+------------
+:binarization: a dictionary with the following keys:
+
+    :method Binarization method; choices:
+
+        :default: basic binarization (recommended).
+        :optimal: binarization which optimizes for lowest fan-out or parsing complexity.
+        :optimalhead: like ``optimal``, but only considers head-driven binarizations.
+    :factor: 'left' or 'right'. The direction of binarization when using ``default``.
+    :headrules: file with rules for finding heads of constituents
+    :revmarkov: whether to reverse the horizontal markovization context when using ``default``.
+    :v: vertical markovization context; default 1; 2 means 1 extra level of parent annotation.
+    :h: horizontal markovization context
+    :pospa: when v > 1, whether to add parent annotation to POS tags?
+    :markhead: whether to prepend head to siblings labels
+    :leftmostunary: whether to start binarization with unary node
+    :rightmostunary: whether to end binarization with unary node
+    :tailmarker: with headrules, head is last node and can be marked
+    :fanout_marks_before_bin: whether to add fanout markers before binarization
+
 
 Stages
 ------
+
+Through the use of stages it is possible to run multiple parsers on the
+same test set, or to exploit coarse-to-fine pruning.
 
 A stage has the form:
 
@@ -64,11 +123,11 @@ Where the keys and values are:
 :complement: for Double-DOP, whether to include fragments which
     form the complement of the maximal recurring fragments extracted
 :m: number of derivations to sample / enumerate.
-:sample: sample `m` derivations from chart
-:kbest: extract `m`-best derivations from chart
+:sample: sample *m* derivations from chart
+:kbest: extract *m*-best derivations from chart
 :estimator: DOP estimator. Choices:
 
-    :dop1: relative frequencies.
+    :rfe: relative frequencies.
     :ewe: equal weights estimate; relative frequencies with correction factor
         to remove bias for larger fragments; useful with DOP reduction.
     :bon: Bonnema estimator; another correction factor approach.
@@ -84,31 +143,28 @@ Where the keys and values are:
 :sldop_n: When using sl-dop or sl-dop-simple,
     number of most likely parse trees to consider.
 
-Global options
+Other options
 --------------
 
-:stages: see above
-:corpusfmt: The corpus format; choices:
+:postagging: POS tagging; see :mod:`discodop.lexicon`
 
-    :export: Negra export format
-    :bracket: Penn treebank style bracketed trees.
-    :discbracket: Bracketed parse trees with numeric indices and words of
-        sentence specified separately.
-    :alpino: Alpino XML format
-    :tiger: Tiger XML format
-:corpusdir: root directory for corpora
-:traincorpus: filename of training corpus.
-:trainencoding: encoding of training corpus (defaults to 'utf-8')
-:testcorpus: filename of test corpus (may be same as traincorpus, set
-    `skiptrain` to True in that case).
-:testencoding: encoding of test corpus (defaults to 'utf-8')
-:testmaxwords: maximum sentence length to parse from test set
-:trainmaxwords: maximum sentence length to base grammar on
-:trainnumsents: number of sentence to use from training corpus
-:testnumsents: number of sentences to parse
-:skiptrain: when training & test corpus are from same file, start reading
-    test set after training set sentences
-:skip: number of (additional) sentences to skip before test corpus starts
+    :method: one of:
+
+        :'unknownword': incorporate unknown word model in grammar
+        :'stanford': use external Stanford tagger
+        :'treetagger': use external tagger 'treetagger'
+    :model:
+
+        :with unknownword: 4, 6, base
+        :with other taggers: filename of tagger model
+    :unknownthreshold: use probabilities of words that occur this number of times or less for unknown words
+    :openclassthreshold: add unseen tags for known words when tag rewrites
+        at least this number of words. 0 to disable.
+    :simplelexsmooth: enable/disable sophisticated smoothing (untested)
+
+:transformations: apply treebank transformations;
+    see source of :func:`discodop.treebanktransforms.transform`
+:relationalrealizational: apply RR-transform; see :func:`discodop.treebanktransforms.rrtransform`
 :punct: one of ...
 
     :None: leave punctuation as is.
@@ -137,27 +193,14 @@ Global options
 
     :None: ignore lemmas
     :'between': insert lemma as node between POS tag and word.
-:transformations: apply treebank transformations; see :func:`discodop.treebanktransforms.transform`
-:postagging: POS tagging; see :mod:`discodop.lexicon`
-:relationalrealizational: apply RR-transform; see :func:`discodop.treebanktransforms.rrtransform`
-:headrules: file with rules for finding heads of constituents
-:bintype: Binarization; choices:
-
-    :binarize: basic binarization (recommended).
-    :optimal: binarization which optimizes for lowest fan-out or parsing complexity.
-    :optimalhead: like ``optimal``, but only considers head-driven binarizations.
-:factor: 'left' or 'right'. The direction of binarization when using ``binarize``.
-:revmarkov: whether to reverse the horizontal markovization context when using ``binarize``.
-:v: vertical markovization context; default 1; 2 means 1 extra level of parent annotation.
-:h: horizontal markovization context
-:pospa: when v > 1, whether to add parent annotation to POS tags?
-:markhead: whether to prepend head to siblings labels
-:leftmostunary: whether to start binarization with unary node
-:rightmostunary: whether to end binarization with unary node
-:tailmarker: with headrules, head is last node and can be marked
-:fanout_marks_before_bin: whether to add fanout markers before binarization
 :evalparam: EVALB-style parameter file to use for reporting F-scores
-:quiet: default False; True: no per sentence results.
-:reallyquiet: default False; True: no summary reports either.
+:verbosity: control the amount of output to console;
+    a logfile ``output.log`` is also kept with a fixed log level of 2.
+
+    :0: silent
+    :1: summary report
+    :2: per sentence results
+    :3: dump derivations/parse trees
+
 :numproc: default 1; increase to use multiple CPUs; None: use all CPUs.
 

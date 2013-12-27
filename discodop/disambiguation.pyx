@@ -2,7 +2,6 @@
 
 from __future__ import print_function
 import re
-import logging
 from heapq import nlargest
 from math import exp, log, isinf, fsum
 from random import random
@@ -30,14 +29,43 @@ BREMOVEIDS = re.compile(b'@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
 
 
-cpdef marginalize(method, chart, Grammar grammar, int n,
-		bint sample=False, bint kbest=True, list sent=None, list tags=None,
-		int sldop_n=7, list backtransform=None,
-		bint bitpar=False):
-	"""Extract parse trees from a chart optimizing a given objective function.
+cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
+		derivstrings=True):
+	"""Get *k*-best and/or sampled derivations from chart.
 
-	Extracts *k*-best or sampled derivations and produces a dictionary of parse
-	trees scored by a given objective function.
+	:param k: number of derivations to extract from chart
+	:param sample: whether to *k* derivations sample from chart
+	:param kbest: whether to extract *k*-best derivations from chart
+	:param derivstrings: whether to create derivations as strings
+	:returns: tuple ``(derivations, entries)``; two lists of equal length:
+
+		:derivations: list of tuples ``(deriv, logprob)`` where deriv is a
+			string; or list of None if ``derivstrings==False``
+		:entries: list of RankedEdge objects.
+	"""
+	cdef list derivations = [], entries = []
+	assert kbest or sample
+	if kbest:
+		derivations, _ = lazykbest(chart, k, derivs=derivstrings)
+		entries = chart.rankededges[chart.root()]
+	if sample:
+		derivations.extend(
+				getsamples(chart, k, None))
+		# filter out duplicate derivations
+		entries = chart.rankededges[chart.root()]
+		filteredderivations = dict(zip(derivations, entries))
+		entries[:] = filteredderivations.values()
+		derivations[:] = filteredderivations.keys()
+	return derivations, entries
+
+
+cpdef marginalize(method, list derivations, list entries, Chart chart,
+		list backtransform=None, list sent=None, list tags=None,
+		int k=1000, int sldop_n=7, bint bitpar=False):
+	"""Take a list of derivations and optimize a given objective function.
+
+	Produces a dictionary of parse trees from derivations, scored by a given
+	objective function.
 
 	:param method:
 		Available objective functions:
@@ -48,9 +76,6 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 		:'sl-dop': Simplicity-Likelihood DOP; select most likely parse from the
 			``sldop_n`` parse trees with the shortest derivations.
 		:'sl-dop-simple': Approximation of Simplicity-Likelihood DOP
-	:param n: number of derivations to extract from chart
-	:param sample: whether to sample from chart
-	:param kbest: whether to extract k-best derivations from chart (with k=n)
 	:param backtransform:
 		Dependending on the value of this parameter, one of two ways is
 		employed to turn derivations into parse trees:
@@ -60,6 +85,8 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 			derivations.
 		:``None``: assume derivations are from DOP reduction and strip
 			annotations of the form ``@123`` from labels.
+	:param k: when ``method='sl-dop``, number of derivations to consider.
+	:param bitpar: whether bitpar was used in nbest mode.
 	:returns: a dictionary mapping parsetrees (as strings) to probabilities
 		(0 < p <= 1).
 	"""
@@ -68,34 +95,16 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 	cdef Entry entry
 	cdef LexicalRule lexrule
 	cdef dict parsetrees = {}, derivs = {}
-	cdef list derivations = [], entries = []
 	cdef str treestr, deriv
 	cdef double prob, maxprob
 	cdef int m
 
-	assert kbest or sample
-	if kbest and not bitpar:
-		derivations, _ = lazykbest(chart, n, derivs=backtransform is None)
-		entries = chart.rankededges[chart.root()]
-	elif bitpar:
-		derivations = chart.rankededges[chart.root()]
-		entries = [None] * len(derivations)
-	if sample:
-		if bitpar:
-			return parsetrees, derivs, 'sampling not possible with bitpar.'
-		derivations.extend(
-				getsamples(chart, n, None))
-		# filter out duplicate derivations
-		entries = chart.rankededges[chart.root()]
-		filteredderivations = dict(zip(derivations, entries))
-		entries[:] = filteredderivations.values()
-		derivations[:] = filteredderivations.keys()
 	if method == 'sl-dop':
-		return sldop(dict(derivations), chart, sent, tags, grammar,
-				n, sldop_n, backtransform, entries, bitpar)
+		return sldop(dict(derivations), chart, sent, tags, k, sldop_n,
+				backtransform, entries, bitpar)
 	elif method == 'sl-dop-simple':
-		return sldop_simple(dict(derivations), entries, sldop_n,
-				chart, grammar, backtransform, bitpar)
+		return sldop_simple(dict(derivations), entries, sldop_n, chart,
+				backtransform, bitpar)
 	elif method == 'shortest':
 		# filter out all derivations which are not shortest
 		if backtransform is not None and not bitpar:
@@ -110,8 +119,7 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 		for entry in entries:
 			prob = entry.value
 			try:
-				treestr = recoverfragments(entry.key, chart,
-						grammar, backtransform)
+				treestr = recoverfragments(entry.key, chart, backtransform)
 			except:
 				continue
 			if shortest:
@@ -120,22 +128,21 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
 					derivs[treestr] = extractfragments(
-							entry.key, chart, grammar, backtransform)
+							entry.key, chart, backtransform)
 			elif not mpd and treestr in parsetrees:
 				parsetrees[treestr].append(-prob)
 			elif not mpd or (treestr not in parsetrees
 						or -prob > parsetrees[treestr][0]):
 				parsetrees[treestr] = [-prob]
 				derivs[treestr] = extractfragments(
-						entry.key, chart, grammar, backtransform)
+						entry.key, chart, backtransform)
 	else:  # DOP reduction / bitpar
 		for (deriv, prob), entry in zip(derivations, entries):
 			if backtransform is None:
 				treestr = REMOVEIDS.sub('', deriv)
 			else:
 				try:
-					treestr = recoverfragments(deriv, chart, grammar,
-							backtransform)
+					treestr = recoverfragments(deriv, chart, backtransform)
 				except:
 					continue
 			if shortest:
@@ -154,12 +161,12 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 								(b'01', t.label.encode('ascii'),
 									t[0].label.encode('ascii'),
 									t[1].label.encode('ascii')))
-							m = grammar.rulenos[r]
-							newprob += grammar.bylhs[0][m].prob
+							m = chart.grammar.rulenos[r]
+							newprob += chart.grammar.bylhs[0][m].prob
 						else:
-							m = grammar.toid[t.label]
-							try:  # FIXME: bitpar smooths tags w/weight < 0.1!
-								lexrule = grammar.lexicalbylhs[m][sent[t[0]]]
+							m = chart.grammar.toid[t.label]
+							try:
+								lexrule = chart.grammar.lexicalbylhs[m][sent[t[0]]]
 							except KeyError:
 								newprob += 30.0
 							else:
@@ -184,7 +191,7 @@ cpdef marginalize(method, chart, Grammar grammar, int n,
 	return parsetrees, derivs, msg
 
 
-cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
+cdef sldop(dict derivations, Chart chart, list sent, list tags,
 		int m, int sldop_n, list backtransform, entries, bint bitpar):
 	"""'Proper' method for sl-dop.
 
@@ -207,22 +214,22 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 	elif bitpar:
 		for deriv in derivations:
 			derivsfortree[recoverfragments(deriv, chart,
-					grammar, backtransform)].add(deriv)
+					backtransform)].add(deriv)
 	else:
 		for entry in entries:
 			deriv = getderiv(chart.root(), (<Entry>entry).key, chart, None)
 			derivations[deriv] = (<Entry>entry).value
 			derivsfortree[recoverfragments((<Entry>entry).key, chart,
-					grammar, backtransform)].add(deriv)
+					backtransform)].add(deriv)
 	# sum over probs of derivations to get probs of parse trees
 	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
 			for tree, ds in derivsfortree.items()}
 
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
-	grammar.switch(u'shortest', True)
+	chart.grammar.switch(u'shortest', True)
 	shortestderivations, msg, chart2 = treeparsing(
-			nmostlikelytrees, sent, grammar, m, backtransform, tags)
+			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
 	if not chart2.rankededges.get(chart2.root()):
 		return {}, {}, msg
 	result = {}
@@ -232,13 +239,13 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 			treestr = REMOVEIDS.sub('', deriv)
 		else:
 			treestr = recoverfragments(deriv if bitpar else (<Entry>entry).key,
-					chart2, grammar, backtransform)
+					chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (abs(int(s / log(0.5))), parsetreeprob[treestr])
 			if backtransform is not None:
 				derivs[treestr] = extractfragments(
 						deriv if bitpar else (<Entry>entry).key,
-						chart2, grammar, backtransform)
+						chart2, backtransform)
 			if len(result) > sldop_n:
 				break
 	if not len(result):
@@ -249,7 +256,7 @@ cdef sldop(dict derivations, chart, list sent, list tags, Grammar grammar,
 
 
 cdef sldop_simple(dict derivations, list entries, int sldop_n,
-		chart, Grammar grammar, list backtransform, bint bitpar):
+		Chart chart, list backtransform, bint bitpar):
 	"""Simple sl-dop method.
 
 	Estimates shortest derivation directly from number of addressed nodes in
@@ -267,12 +274,12 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 			derivsfortree[tree].add(deriv)
 	elif bitpar:
 		for deriv in derivations:
-			tree = recoverfragments(deriv, chart, grammar, backtransform)
+			tree = recoverfragments(deriv, chart, backtransform)
 			derivsfortree[tree].add(deriv)
 	else:
 		for entry in entries:
 			deriv = getderiv(chart.root(), entry.key, chart, '}<')
-			tree = recoverfragments(entry.key, chart, grammar, backtransform)
+			tree = recoverfragments(entry.key, chart, backtransform)
 			keys[deriv] = entry.key
 			derivations[deriv] = entry.value
 			derivsfortree[tree].add(deriv)
@@ -294,14 +301,13 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 		result[tree] = (-score, parsetreeprob[tree])
 		if backtransform is not None:
 			derivs[tree] = extractfragments(deriv if bitpar else keys[deriv],
-					chart, grammar, backtransform)
+					chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
 	return result, derivs, msg
 
 
-cpdef str recoverfragments(deriv, Chart chart,
-		Grammar grammar, list backtransform):
+cpdef str recoverfragments(deriv, Chart chart, list backtransform):
 	"""Reconstruct a DOP derivation from a derivation with flattened fragments.
 
 	:param deriv: a RankedEdge or a string representing a derivation.
@@ -317,12 +323,13 @@ cpdef str recoverfragments(deriv, Chart chart,
 	label in the coarse grammar, i.e., it assumes that neverblockre is only
 	used to avoid blocking nonterminals from the double-dop binarization
 	(containing the string '}<'). Note that this means getmapping() has to have
-	been called on `grammar`, even when not doing coarse-to-fine parsing."""
+	been called on `chart.grammar`, even when not doing coarse-to-fine
+	parsing."""
 	if isinstance(deriv, RankedEdge):
 		result = recoverfragments_(deriv, chart, backtransform)
 	elif isinstance(deriv, basestring):
 		deriv = Tree.parse(deriv, parse_leaf=int)
-		result = recoverfragments_str(deriv, grammar, backtransform)
+		result = recoverfragments_str(deriv, chart, backtransform)
 	else:
 		raise ValueError('derivation has unexpected type %r.' % type(deriv))
 	return REMOVEWORDTAGS.sub('', result)
@@ -389,13 +396,13 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 	#	result += frag[n + 1]
 
 
-cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
+cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	cdef list children = []
 	cdef str frag
 	# e.g.: ('0123', 'X', 'A', 'B', 'C', 'D')
 	prod = (''.join(map(str, range(len(deriv)))).encode('ascii'),
 			deriv.label) + tuple([a.label.encode('ascii') for a in deriv])
-	frag = backtransform[grammar.rulenos[prod]]  # template
+	frag = backtransform[chart.grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -414,7 +421,7 @@ cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 	children.append(deriv[0])
 
 	# recursively expand all substitution sites
-	children = [recoverfragments_str(child, grammar, backtransform)
+	children = [recoverfragments_str(child, chart, backtransform)
 			if isinstance(child[0], Tree)
 			else ('(%s %d)' % (child.label, child[0]))
 			for child in reversed(children)]
@@ -423,12 +430,12 @@ cdef str recoverfragments_str(deriv, Grammar grammar, list backtransform):
 	return frag.format(*children)
 
 
-def extractfragments(deriv, chart, Grammar grammar, list backtransform):
+def extractfragments(deriv, chart, list backtransform):
 	result = []
 	if isinstance(deriv, RankedEdge):
 		extractfragments_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, basestring):
-		extractfragments_str(deriv, grammar, backtransform, result)
+		extractfragments_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError
 	return result
@@ -477,7 +484,7 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 			extractfragments_(child, chart, backtransform, result)
 
 
-cdef str extractfragments_str(deriv, Grammar grammar,
+cdef str extractfragments_str(deriv, Chart chart,
 		list backtransform, list result):
 	cdef list children = [], labels = []
 	cdef str frag
@@ -486,7 +493,7 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 			) if len(deriv) == 1 else (b'01', deriv.label.encode('ascii'),
 			deriv[0].label.encode('ascii'),
 			deriv[1].label.encode('ascii'))
-	frag = backtransform[grammar.rulenos[prod]]  # template
+	frag = backtransform[chart.grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) == 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -516,7 +523,7 @@ cdef str extractfragments_str(deriv, Grammar grammar,
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if isinstance(child[0], Tree):
-			extractfragments_str(child, grammar, backtransform, result)
+			extractfragments_str(child, chart, backtransform, result)
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
@@ -801,20 +808,21 @@ def test():
 	chart, _ = plcfrs.parse(sent, grammar, None, True)
 	assert chart
 	vitderiv, vitprob = viterbiderivation(chart)
-	mpd, _, _ = marginalize("mpd", chart, grammar, 1000)
-	mpp, _, _ = marginalize("mpp", chart, grammar, 1000)
-	mppsampled, _, _ = marginalize("mpp", chart, grammar, 1000,
-			sample=True, kbest=False)
-	sldop1, _, _ = marginalize("sl-dop", chart, grammar, 1000,
+	derivations, entries = getderivations(chart, 1000, True, False, True)
+	mpd, _, _ = marginalize("mpd", derivations, entries, chart)
+	mpp, _, _ = marginalize("mpp", derivations, entries, chart)
+	sldop_, _, _ = marginalize("sl-dop", derivations, entries, chart, k=1000,
 			sldop_n=7, sent=sent)
-	sldopsimple, _, _ = marginalize("sl-dop-simple", chart, grammar,
-			1000, sldop_n=7, sent=sent)
-	short, _, _ = marginalize("shortest", chart, grammar,
-		1000, sent=sent)
+	sldopsimple, _, _ = marginalize("sl-dop-simple", derivations, entries,
+			chart, k=1000, sldop_n=7, sent=sent)
+	short, _, _ = marginalize("shortest", derivations, entries, chart,
+			sent=sent)
+	derivations, entries = getderivations(chart, 1000, False, True, True)
+	mppsampled, _, _ = marginalize("mpp", derivations, entries, chart)
 	print("\nvit:\t\t%s %r" % e((REMOVEIDS.sub('', vitderiv), exp(-vitprob))),
 		"MPD:\t\t%s %r" % e(maxitem(mpd)),
 		"MPP:\t\t%s %r" % e(maxitem(mpp)),
 		"MPP sampled:\t%s %r" % e(maxitem(mppsampled)),
-		"SL-DOP n=7:\t%s %r" % e(maxitem(sldop1)),
+		"SL-DOP n=7:\t%s %r" % e(maxitem(sldop_)),
 		"simple SL-DOP:\t%s %r" % e(maxitem(sldopsimple)),
 		"shortest:\t%s %r" % e(maxitem(short)), sep='\n')

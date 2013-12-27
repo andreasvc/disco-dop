@@ -845,7 +845,7 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 
 def test():
 	from discodop.containers import Grammar
-	from discodop.disambiguation import marginalize
+	from discodop.disambiguation import getderivations, marginalize
 	from operator import itemgetter
 	cfg = Grammar([
 		((('A', 'A'), ((0, ), )), 0.7), ((('A', 'B'), ((0, ), )), 0.6),
@@ -902,7 +902,8 @@ def test():
 	chart, msg = parse(sent, cfg2)
 	print(msg)
 	print(chart)
-	mpp, _, _ = marginalize('mpp', chart, cfg2, 10)
+	derivations, entries = getderivations(chart, 10, True, False, True)
+	mpp, _, _ = marginalize('mpp', derivations, entries, chart)
 	for a, p in sorted(mpp.items(), key=itemgetter(1), reverse=True):
 		print(p, a)
 	#chart1, msg1 = parse_symbolic(sent, cfg2)

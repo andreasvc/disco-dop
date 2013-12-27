@@ -829,10 +829,10 @@ def testpunct():
 	from discodop.treetransforms import addbitsets, fanout
 	from discodop.treebank import NegraCorpusReader
 	filename = 'alpinosample.export'
-	mangledtrees = NegraCorpusReader('.', filename, punct='move')
-	nopunct = list(NegraCorpusReader('.', filename,
+	mangledtrees = NegraCorpusReader(filename, punct='move')
+	nopunct = list(NegraCorpusReader(filename,
 			punct='remove').parsed_sents().values())
-	originals = list(NegraCorpusReader('.', filename, headrules=None,
+	originals = list(NegraCorpusReader(filename, headrules=None,
 			encoding='iso-8859-1').parsed_sents().values())
 	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
@@ -859,8 +859,8 @@ def testtransforms():
 	from discodop.treetransforms import canonicalize
 	from discodop.treebank import NegraCorpusReader, handlefunctions
 	headrules = None  # 'alpino.headrules'
-	n = NegraCorpusReader('.', 'alpinosample.export', headrules=headrules)
-	nn = NegraCorpusReader('.', 'alpinosample.export', headrules=headrules)
+	n = NegraCorpusReader('alpinosample.export', headrules=headrules)
+	nn = NegraCorpusReader('alpinosample.export', headrules=headrules)
 	transformations = ('S-RC', 'VP-GF', 'NP')
 	trees = [transform(tree, sent, transformations)
 			for tree, sent in zip(nn.parsed_sents().values(),

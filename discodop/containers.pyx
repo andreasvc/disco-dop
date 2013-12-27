@@ -170,8 +170,10 @@ cdef class Edges:
 
 
 cdef class RankedEdge:
-	"""An edge, including the chart item (head) to which it points,
-	along with ranks for its children, to denote a *k*-best derivation."""
+	"""A derivation with backpointers.
+
+	Denotes a *k*-best derivation defined by an edge, including the chart
+	item (head) to which it points, along with ranks for its children."""
 	def __hash__(self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ hash(self.head)
@@ -207,8 +209,8 @@ cdef class Chart:
 
 	Level 1/2 defines a type for labeled spans referred to as ``item``."""
 	def root(self):
-		"""Return the item for this chart, spanning the whole sentence, with
-		the grammar's distinguished root symbol as label."""
+		"""Return the item labeled by the grammar's distinguished root symbol
+		spanning the whole sentence."""
 		raise NotImplementedError
 
 	cdef _left(self, item, Edge *edge):

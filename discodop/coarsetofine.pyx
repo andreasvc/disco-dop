@@ -335,14 +335,15 @@ def getoutside(Chart chart):
 def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	"""Test coarse-to-fine methods on a sentence."""
 	import plcfrs
-	from disambiguation import marginalize
+	from disambiguation import getderivations, marginalize
 	from treetransforms import canonicalize, removefanoutmarkers
 	from math import exp as pyexp
 	sent, tags = zip(*sent)
 	print(" C O A R S E ", end='')
 	chart, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if chart:
-		mpp, _, _ = marginalize("mpp", chart, coarse, 10)
+		derivations, entries = getderivations(chart, 10, True, False, True)
+		mpp, _, _ = marginalize("mpp", derivations, entries, chart)
 		for t in mpp:
 			print(pyexp(-mpp[t]), end='')
 			t = Tree.parse(t, parse_leaf=int)
@@ -374,7 +375,8 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	chart2, _ = plcfrs.parse(sent, fine, tags=tags, whitelist=l,
 			splitprune=split, markorigin=True)
 	if chart2:
-		mpp, _, _ = marginalize("mpp", chart2, fine, 10)
+		derivations, entries = getderivations(chart2, 10, True, False, True)
+		mpp, _, _ = marginalize("mpp", derivations, entries, chart2)
 		for t in mpp:
 			print(pyexp(-mpp[t]), end='')
 			t = Tree.parse(t, parse_leaf=int)
@@ -408,14 +410,14 @@ def test():
 	from grammar import treebankgrammar, dopreduction, subsetgrammar
 	from time import clock
 	k = 50
-	#corpus = NegraCorpusReader(".", "toytb.export", encoding="iso-8859-1")
-	#corpus = NegraCorpusReader("../rparse", "negraproc.export",
+	#corpus = NegraCorpusReader("toytb.export", encoding="iso-8859-1")
+	#corpus = NegraCorpusReader("negraproc.export",
 	#	encoding="utf-8", headrules="negra.headrules", headfinal=True,
 	#   headreverse=False)
 	#train = 400
 	#test = 40
 	#testmaxlen = 999
-	corpus = NegraCorpusReader('.', 'alpinosample.export')
+	corpus = NegraCorpusReader('alpinosample.export')
 	train = 0
 	test = 3
 	testmaxlen = 999

@@ -14,7 +14,7 @@ from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from itertools import count, chain
 from discodop.tree import Tree
-from discodop.treebank import READERS, incrementaltreereader, splitpath
+from discodop.treebank import READERS, incrementaltreereader
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 	from builtins import zip as izip  # pylint: disable=F0401
@@ -772,7 +772,8 @@ def main():
 		reader = READERS[opts.get('--fmt', 'export')]
 		corpora = []
 		for path in args:
-			corpus = reader(*splitpath(path),
+			corpus = reader(
+					path,
 					encoding=opts.get('--encoding', 'utf8'),
 					functions=opts.get('--functions'),
 					morphology=opts.get('--morphology'))

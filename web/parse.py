@@ -1,5 +1,7 @@
-""" Web interface to the disco-dop parser. Requires Flask.
-Expects a series of grammars produced by runexp in subdirectories of grammar/
+""" Web interface to the disco-dop parser.
+
+Requires Flask. Expects a series of grammars produced by runexp in
+subdirectories of ``grammar/``
 
 Also usable from the command line:
 $ curl http://localhost:5000/parse -G --data-urlencode "sent=What's up?"
@@ -30,16 +32,18 @@ PARSERS = {}
 
 @APP.route('/')
 def main():
-	""" Serve the main form. """
+	"""Serve the main form."""
 	return render_template('parse.html', result=Markup(parse()), langs=PARSERS)
 
 
 @APP.route('/parse')
 def parse():
-	""" Parse sentence and return a textual representation of a parse tree,
-	in a HTML fragment or plain text. To be invoked by an AJAX call."""
+	"""Parse sentence and return a textual representation of a parse tree.
+
+	Output is either in a HTML fragment or in plain text. To be invoked by an
+	AJAX call."""
 	sent = request.args.get('sent', None)
-	est = request.args.get('est', 'dop1')
+	est = request.args.get('est', 'rfe')
 	marg = request.args.get('marg', 'nbest')
 	objfun = request.args.get('objfun', 'mpp')
 	coarse = request.args.get('coarse', None)
@@ -122,7 +126,7 @@ def favicon():
 
 
 def loadparsers():
-	""" Load grammars if necessary. """
+	"""Load grammars if necessary."""
 	if not PARSERS:
 		for directory in glob.glob('grammars/*/'):
 			_, lang = os.path.split(os.path.dirname(directory))
@@ -135,9 +139,9 @@ def loadparsers():
 					top=params.get('top', 'ROOT'))
 			PARSERS[lang] = Parser(stages,
 					transformations=params.get('transformations'),
-					tailmarker=params.get('tailmarker'),
+					binarization=params['binarization'],
 					postagging=postagging if postagging and
-					postagging['method'] == 'unknownword' else None,
+					postagging.method == 'unknownword' else None,
 					relationalrealizational=params.get(
 						'relationalrealizational'))
 			APP.logger.info('Grammar for %s loaded.' % lang)
@@ -145,7 +149,7 @@ def loadparsers():
 
 
 def randid():
-	""" return a string with 6 random letters. """
+	"""Return a string with 6 random letters."""
 	return ''.join(random.choice(string.ascii_letters)
 		for _ in range(6))
 
@@ -168,7 +172,9 @@ CONTRACTIONS3 = re.compile(r"(?i)\b(?:(Whad)(dd)(ya)|(Wha)(t)(cha))\b")
 
 
 def tokenize(text):
-	""" Adapted from nltk.tokenize.TreebankTokenizer. """
+	"""A tokenizer with specific support for splitting English contractions.
+
+	Adapted from nltk.tokenize.TreebankTokenizer."""
 	text = CONTRACTIONS2.sub(r'\1 \2', text)
 	text = CONTRACTIONS3.sub(r'\1 \2 \3', text)
 	# Separate most punctuation
@@ -182,7 +188,7 @@ def tokenize(text):
 
 
 def guesslang(sent):
-	""" Heuristic: pick language that contains most words from input. """
+	"""Heuristic: pick language that contains most words from input."""
 	lang = max(PARSERS, key=lambda x: len(set(sent).intersection(
 			PARSERS[x].stages[0].grammar.lexicalbyword)))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))

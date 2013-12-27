@@ -12,6 +12,7 @@ import codecs
 import logging
 import tempfile
 import string  # pylint: disable=W0402
+from math import exp
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 import numpy as np
@@ -19,7 +20,7 @@ from discodop import plcfrs, pcfg
 from discodop.grammar import FORMAT, defaultparse
 from discodop.containers import Grammar
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
-from discodop.disambiguation import marginalize, doprerank
+from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import Tree
 from discodop.lexicon import replaceraretestwords, getunknownwordfun, UNK
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
@@ -74,7 +75,7 @@ DEFAULTSTAGE = dict(
 			# form the complement of the maximal recurring fragments extracted
 		sample=False, kbest=True,
 		m=10,  # number of derivations to sample/enumerate
-		estimator='ewe',  # choices: dop1, ewe
+		estimator='rfe',  # choices: rfe, ewe
 		objective='mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
 			# NB: w/shortest derivation, estimator only affects tie breaking.
 		sldop_n=7)
@@ -190,21 +191,24 @@ class Parser(object):
 	:param stages: a list of coarse-to-fine stages containing grammars and
 		parameters.
 	:param transformations: treebank transformations to reverse on parses.
-	:param tailmarker: if heads have been marked with a symbol, use this to
-		mark heads in the output.
-	:param postagging: if given, an unknown word model is used, consisting of a
-		dictionary with three items:
+	:param binarization: settings used for binarization; used for the
+		tailmarker attribute which identifies heads in parser output.
+	:param postagging: if given, an unknown word model is used to assign POS
+		tags during parsing. The model consists of a DictObj with (at least)
+		the following attributes:
+
 		- unknownwordfun: function to produces signatures for unknown words.
 		- lexicon: the set of known words in the grammar.
 		- sigs: the set of word signatures occurring in the grammar.
 	:param relationalrealizational: whether to reverse the RR-transform."""
-	def __init__(self, stages, transformations=None, tailmarker=None,
-			relationalrealizational=None, postagging=None):
+	def __init__(self, stages, transformations=None, binarization=None,
+			relationalrealizational=None, postagging=None, verbosity=2):
 		self.stages = stages
 		self.transformations = transformations
-		self.tailmarker = tailmarker
+		self.binarization = binarization
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
+		self.verbosity = verbosity
 		for stage in stages:
 			if stage.mode.startswith('pcfg-bitpar'):
 				exportbitpargrammar(stage)
@@ -219,8 +223,8 @@ class Parser(object):
 			all possible tags."""
 		if self.postagging:
 			sent = replaceraretestwords(sent,
-					self.postagging['unknownwordfun'],
-					self.postagging['lexicon'], self.postagging['sigs'])
+					self.postagging.unknownwordfun,
+					self.postagging.lexicon, self.postagging.sigs)
 		sent = list(sent)
 		if tags is not None:
 			tags = list(tags)
@@ -313,19 +317,37 @@ class Parser(object):
 			if chart and stage.mode not in ('pcfg-posterior', 'dop-rerank'
 					) and not (self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
+				if stage.mode == 'pcfg-bitpar-nbest':
+					assert stage.kbest and not stage.sample, (
+							'sampling not possible with bitpar in nbest mode.')
+					derivations = chart.rankededges[chart.root()]  # pylint: disable=E1103
+					entries = [None] * len(derivations)
+				else:
+					derivations, entries = getderivations(chart, stage.m,
+							kbest=stage.kbest, sample=stage.sample,
+							derivstrings=not stage.usedoubledop
+									or self.verbosity >= 3)
+				if self.verbosity >= 3:
+					print('derivations:\n%s\n' % '\n'.join(
+						'%d. p=%g %s' % (n + 1, exp(-prob), deriv)
+						for n, (deriv, prob) in enumerate(derivations)))
 				if stage.objective == 'shortest':
 					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
 							else 'default', True)
-				parsetrees, derivs, msg1 = marginalize(stage.objective
-						if stage.dop else 'mpd',
-						chart, stage.grammar, stage.m,
-						sample=stage.sample, kbest=stage.kbest,
+				parsetrees, derivs, msg1 = marginalize(
+						stage.objective if stage.dop else 'mpd',
+						derivations, entries, chart,
 						sent=sent, tags=tags,
-						sldop_n=stage.sldop_n,
 						backtransform=stage.backtransform,
+						k=stage.m, sldop_n=stage.sldop_n,
 						bitpar=stage.mode == 'pcfg-bitpar-nbest')
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
+				if self.verbosity >= 3:
+					print('parse trees:\n%s\n' % '\n'.join(
+							'%d. %s %s' % (n + 1, probstr(prob), treestr)
+							for n, (treestr, prob)
+							in enumerate(parsetrees.items())))
 			if parsetrees:
 				try:
 					resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
@@ -357,7 +379,7 @@ class Parser(object):
 		parsetree = Tree.parse(treestr, parse_leaf=int)
 		if self.stages[stage].split:
 			mergediscnodes(unbinarize(parsetree, childchar=':'))
-		saveheads(parsetree, self.tailmarker)
+		saveheads(parsetree, self.binarization.tailmarker)
 		unbinarize(parsetree)
 		removefanoutmarkers(parsetree)
 		if self.relationalrealizational:
@@ -440,11 +462,11 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			assert grammar.maxfanout == 1
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
-	if postagging and postagging['method'] == 'unknownword':
-		postagging['unknownwordfun'] = getunknownwordfun(postagging['model'])
-		postagging['lexicon'] = {w for w in stages[0].grammar.lexicalbyword
+	if postagging and postagging.method == 'unknownword':
+		postagging.unknownwordfun = getunknownwordfun(postagging.model)
+		postagging.lexicon = {w for w in stages[0].grammar.lexicalbyword
 				if not w.startswith(UNK)}
-		postagging['sigs'] = {w for w in stages[0].grammar.lexicalbyword
+		postagging.sigs = {w for w in stages[0].grammar.lexicalbyword
 				if w.startswith(UNK)}
 
 

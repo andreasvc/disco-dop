@@ -793,10 +793,6 @@ def tolist(tree, sent):
 	return result
 
 
-def pathsplit(p):
-	return p.rsplit('/', 1) if '/' in p else ('.', p)
-
-
 def getprodid(prods, node):
 	return prods.get(node.prod, -1)
 
@@ -938,7 +934,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		from itertools import islice
 		from discodop.treebank import READERS
 		from discodop.treetransforms import canonicalize
-		corpus = READERS[fmt](*pathsplit(treebankfile), encoding=encoding)
+		corpus = READERS[fmt](treebankfile, encoding=encoding)
 		ctrees = Ctrees()
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		sents = []

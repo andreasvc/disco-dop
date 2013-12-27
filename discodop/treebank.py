@@ -25,11 +25,11 @@ INDEXRE = re.compile(r" [0-9]+\)")
 
 class CorpusReader(object):
 	"""Abstract corpus reader."""
-	def __init__(self, root, fileids, encoding='utf-8', ensureroot=None,
+	def __init__(self, path, encoding='utf-8', ensureroot=None,
 			headrules=None, headfinal=True, headreverse=False, markheads=False,
 			punct=None, functions=None, morphology=None, lemmas=None):
-		""":param root: directory of corpus
-		:param fileids: filename or pattern of corpus files; e.g., ``wsj*.mrg``
+		"""
+		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``
 		:param ensureroot: add root node with given label if necessary
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads
@@ -74,8 +74,7 @@ class CorpusReader(object):
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
-		fileids = fileids or '*'
-		self._filenames = sorted(glob(os.path.join(root, fileids)), key=numbase)
+		self._filenames = sorted(glob(path), key=numbase)
 		for opts, opt in {
 				(None, 'leave', 'add', 'remove', 'replace'): functions,
 				(None, 'leave', 'add', 'replace', 'between'): morphology,
@@ -83,7 +82,7 @@ class CorpusReader(object):
 				(None, 'leave', 'between'): lemmas}.items():
 			assert opt in opts, 'Expected one of %r. Got: %r' % (opts, opt)
 		assert self._filenames, (
-				"no files matched pattern %s" % os.path.join(root, fileids))
+				"no files matched pattern %s" % path)
 		self._sents_cache = None
 		self._tagged_sents_cache = None
 		self._parsed_sents_cache = None
@@ -923,11 +922,6 @@ def treebankfanout(trees):
 				for a in addbitsets(tree).subtrees(lambda x: len(x) > 1))
 	except ValueError:
 		return 1, 0
-
-
-def splitpath(path):
-	"""Split path into a pair of (directory, filename)."""
-	return path.rsplit('/', 1) if '/' in path else ('.', path)
 
 
 def numbase(key):

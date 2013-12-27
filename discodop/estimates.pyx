@@ -732,7 +732,7 @@ def test():
 	from discodop.tree import Tree
 	from discodop.treebank import NegraCorpusReader
 	from discodop.treetransforms import addfanoutmarkers, binarize
-	corpus = NegraCorpusReader('.', 'alpinosample.export')
+	corpus = NegraCorpusReader('alpinosample.export')
 	trees = list(corpus.parsed_sents().values())
 	for a in trees:
 		binarize(a, vertmarkov=1, horzmarkov=1)

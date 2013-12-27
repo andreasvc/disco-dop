@@ -11,7 +11,7 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
 	iterate=False, complement=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="mpp",
+	estimator="rfe", objective="mpp",
   ),
 
   dict(
@@ -25,7 +25,7 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
 	iterate=False, complement=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="mpd",
+	estimator="rfe", objective="mpd",
   ),
 
   dict(
@@ -39,7 +39,7 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
 	iterate=False, complement=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="shortest",
+	estimator="rfe", objective="shortest",
   ),
 
   dict(
@@ -53,7 +53,7 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
 	iterate=False, complement=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="sl-dop",
+	estimator="rfe", objective="sl-dop",
   ),
   
   dict(
@@ -67,7 +67,7 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
 	iterate=False, complement=False,
 	k=50, m=10000,
 	kbest=True, sample=False,
-	estimator="dop1", objective="sl-dop-simple",
+	estimator="rfe", objective="sl-dop-simple",
   ),
 
   # test rest of parameters together:
@@ -86,29 +86,32 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   ),
 ],
 
-# corpus options
-corpusfmt="bracket", # choices: export, bracket, discbracket
-corpusdir=".",
-traincorpus="t1.mrg",
-testcorpus="t1.mrg",
 evalparam=None, # EVALB-style parameter file
+corpusfmt="bracket", # choices: export, bracket, discbracket
+traincorpus=dict(
+	path="t1.mrg",
+	maxwords=100,
+	numsents=3,
+),
+testcorpus=dict(
+	path="t1.mrg",
+	maxwords=100,
+	numsents=1,
+	skiptrain=True,
+	skip=0,
+),
 punct=None,
 functions=None,
 morphology=None,
 transformations=None,
 relationalrealizational=None,
 postagging=None,
-testmaxwords=100,
-trainmaxwords=100,
-trainnumsents=3,
-testnumsents=1,
-skiptrain=True,
-skip=0,
-headrules=None,
-
-bintype="binarize",
-factor="right",
-h=1,
-v=1,
-quiet=False, reallyquiet=False,
+binarization=dict(
+	method="default",
+	factor="right",
+	headrules=None,
+	h=1,
+	v=1,
+),
+verbosity=2,
 numproc=1,
