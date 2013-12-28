@@ -22,7 +22,7 @@ from discodop import treebank
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.runexp import readparam
-from discodop.parser import Parser, readgrammars, probstr
+from discodop.parser import Parser, DictObj, readgrammars, probstr
 
 LIMIT = 40  # maximum sentence length
 APP = Flask(__name__)
@@ -134,7 +134,7 @@ def loadparsers():
 			params = readparam(os.path.join(directory, 'params.prm'))
 			params['resultdir'] = directory
 			stages = params['stages']
-			postagging = params['postagging']
+			postagging = DictObj(params['postagging'])
 			readgrammars(directory, stages, postagging,
 					top=params.get('top', 'ROOT'))
 			PARSERS[lang] = Parser(stages,
