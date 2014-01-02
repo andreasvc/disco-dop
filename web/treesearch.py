@@ -664,8 +664,10 @@ def doxpathqueries(query, selected, lines=False, doexport=None,
 						XMLCORPORA[n].read(match.name())))
 						for match in out).decode('utf8')
 		except RuntimeError as err:
-			if lines or doexport is None:
+			if lines:
 				yield n, (), str(err)
+			elif doexport is None:
+				yield n, '', str(err)
 			else:
 				yield str(err)
 
