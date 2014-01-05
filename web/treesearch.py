@@ -325,7 +325,8 @@ def counts(form, doexport=False):
 						'NB: the counts reflect the total number of '
 						'times a pattern matches for each tree.\n\n'
 						'Counts (<a href="%s">export to CSV</a>):\n' % (
-						stderr, url))
+						stderr if len(stderr) < 128 else stderr[:128] + '...',
+						url))
 		cnt = results.count('\n')
 		if cnt:
 			gotresult = True
