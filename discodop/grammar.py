@@ -893,12 +893,11 @@ def main():
 
 	# read treebank
 	if model == 'tsg':
-		fragments = {(fields[0] if len(fields) == 2
-					else (fields[0], [a or None for a in fields[1].split(' ')])):
-					float(fields[-1])
-				for fields in
-				(line.split('\t') for line in io.open(treebankfile,
-					encoding=opts.get('--inputenc', 'utf8')))}
+		splittedlines = (line.split('\t') for line in io.open(treebankfile,
+					encoding=opts.get('--inputenc', 'utf8')))
+		fragments = {(fields[0] if len(fields) == 2 else
+				(fields[0], [a or None for a in fields[1].split(' ')])):
+					float(fields[-1]) for fields in splittedlines}
 	else:
 		corpus = READERS[opts.get('--inputfmt', 'export')](
 				treebankfile,
