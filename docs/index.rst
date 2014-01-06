@@ -23,13 +23,51 @@ sentences using Tree-Substitution Grammar (TSG).
    params
    api
 
-Overview
-========
+Getting started
+===============
 
-Parser
-------
+Simple example
+--------------
+
+Suppose we have the following treebank in the file ``treebankExample.mrg``::
+
+    (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
+    (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
+    (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
+    (S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (JJ yellow) (NN cat))))
+    (S (NP (DT The) (JJ little) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
+    (S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
+    (S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))
+
+Before inducing a grammar, we need to binarize the treebank::
+
+    $ discodop treetransforms binarize --inputfmt=bracket --outputfmt=bracket treebankExample.mrg /tmp/bintrees
+
+We can then induce a Double-DOP grammar with the following command::
+
+    $ discodop grammar doubledop --inputfmt=bracket /tmp/bintrees /tmp/example
+
+This produces a grammar consisting of a series of text files in ``/tmp``, which
+can be used as follows::
+
+    $ echo 'The cat saw the hungry dog' | discodop parser /tmp/example.rules /tmp/example.lex --bt=/tmp/example.backtransform -s S -b 5 -z
+    parsing 0: The cat saw the hungry dog
+    (S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NP|<JJ,NN> (JJ 4) (NN 5)))))
+    0.0 s
+    raw cpu time 0.16 
+    average time per sentence 0.0 
+    unparsed sentences: 0 
+    finished
+
+Run an experiment
+-----------------
+To parse with large treebanks, it may be necessary to apply pruning, and it
+is useful to specify the configuration for an experiment in a single file.
+This can be done with the ``discodop runexp`` command.
+
 To run an end-to-end experiment from grammar extraction to evaluation on a test
-set, make a copy of the file ``sample.prm`` and edit its parameters. For example:
+set, make a copy of the file ``sample.prm`` and edit its parameters. For
+example:
 
 .. code-block:: python
 
@@ -56,12 +94,11 @@ set, make a copy of the file ``sample.prm`` and edit its parameters. For example
     binarization=dict(
         method='default', factor='right',
         h=1, v=1),
-    numproc=1,
 
 See the documentation on the available :ref:`parameters <params>`.
 These parameters can be invoked by executing::
 
-    discodop runexp filename.prm
+    $ discodop runexp filename.prm
 
 This will create a new directory with the base name of the parameter file, i.e.,
 ``filename/`` in this case. This directory must not exist yet, to avoid
@@ -82,6 +119,10 @@ treebank format. Access to the
 can be requested for non-commercial purposes, while the
 `Tiger corpus <http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_
 is freely available for download for research purposes.
+
+
+Overview
+========
 
 Tools
 -----
