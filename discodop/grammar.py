@@ -44,8 +44,9 @@ Usage: %(cmd)s pcfg <input> <output> [options]
   %(cmd)s plcfrs <input> <output> [options]
   %(cmd)s dopreduction <input> <output> [options]
   %(cmd)s doubledop <input> <output> [options]
+  %(cmd)s tsg <input> <output> [options]
 
-input is a binarized treebank,
+input is a binarized treebank, or weighted fragments in the tsg case,
 output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
@@ -207,11 +208,12 @@ def dopreduction(trees, sents, packedgraph=False):
 			ewe=list(ewe), shortest=list(shortest), bon=list(bon))
 
 
-def doubledop(trees, fragments, debug=False, binarized=True):
-	"""Extract a Double-DOP grammar from a treebank given a set of fragments.
+def doubledop(trees, sents, debug=False, binarized=True,
+		complement=False, iterate=False, numproc=None):
+	"""Extract a Double-DOP grammar from a treebank
 
-	That is, a fragment grammar containing all fragments that occur at least
-	twice, plus all individual productions needed to obtain full coverage.
+	That is, a fragment grammar containing fragments that occur at least twice,
+	plus all individual productions needed to obtain full coverage.
 	Input trees need to be binarized. A second level of binarization (a normal
 	form) is needed when fragments are converted to individual grammar rules,
 	which occurs through the removal of internal nodes. The binarization adds
@@ -219,6 +221,8 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 	fragment. In fragments with terminals, we replace their POS tags with a tag
 	uniquely identifying that terminal and tag: ``tag@word``.
 
+	:param binarized: Whether the resulting grammar should be binarized.
+	:param iterate, complement, numproc: cf. fragments.getfragments()
 	:returns: a tuple (grammar, altweights, backtransform)
 		altweights is a dictionary containing alternate weights."""
 	def getweight(frag, terminals):
@@ -234,10 +238,14 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 		bon = 2 ** -nonterms * (freq / ntfd[root])
 		short = 0.5
 		return freq, ewe, bon, short
+
+	from discodop.fragments import getfragments
 	uniformweight = (1, 1, 1, 1)
 	grammar = {}
 	backtransform = {}
 	ids = UniqueIDs()
+	fragments = getfragments(trees, sents, numproc,
+			iterate=iterate, complement=complement)
 	# build index of the number of fragments extracted from a tree for ewe
 	fragmentcount = defaultdict(int)
 	for indices in fragments.values():
@@ -246,12 +254,11 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 	# ntfd: frequency of a non-terminal node in treebank
 	ntfd = multiset(node.label for tree in trees for node in tree.subtrees())
 
-	# binarize, turn to lcfrs productions
+	# binarize, turn into LCFRS productions
 	# use artificial markers of binarization as disambiguation,
 	# construct a mapping of productions to fragments
-	flattenfunc = flattenbin if binarized else flatten
 	for frag, terminals in fragments:
-		prods, newfrag = flattenfunc(frag, terminals, ids, backtransform)
+		prods, newfrag = flatten(frag, terminals, ids, backtransform, binarized)
 		prod = prods[0]
 		if prod[0][1] == 'Epsilon':  # lexical production
 			grammar[prod] = getweight(frag, terminals)
@@ -264,7 +271,7 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 		backtransform[prod] = newfrag
 	if debug:
 		ids = count()
-		flatfrags = [flattenfunc(frag, terminals, ids, {})
+		flatfrags = [flatten(frag, terminals, ids, {}, binarized)
 				for frag, terminals in fragments]
 		print("recurring fragments:")
 		for a, b in zip(flatfrags, fragments):
@@ -281,8 +288,8 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 	grammar = sortgrammar(grammar.items())
 
 	# replace keys with numeric ids of rules, drop terminals.
-	backtransform = [backtransform[r] for r, _ in grammar
-			if r in backtransform]
+	backtransform = [backtransform[rule] for rule, _ in grammar
+			if rule in backtransform]
 	# relative frequences as probabilities (don't normalize shortest & bon)
 	ntsums = defaultdict(int)
 	ntsumsewe = defaultdict(int)
@@ -299,6 +306,39 @@ def doubledop(trees, fragments, debug=False, binarized=True):
 			ewe=eweweights, bon=bonweights, shortest=shortest)
 
 
+def compiletsg(fragments, binarized=True):
+	"""Compile a set of weighted fragments (i.e., a TSG) into a grammar.
+
+	:param fragments: a dictionary of fragments mapped to weights. The
+		fragments may either consist of bracketed strings, or discontinuous
+		bracketed strings as tuples of the form ``(frag, terminals)``.
+	:param binarized: Whether the resulting grammar should be binarized.
+	:returns: a ``(grammar, backtransform, altweights)`` tuple similar to what
+		``doubledop()`` returns; altweights will be empty."""
+	from discodop.treebank import LEAVESRE
+	grammar = {}
+	backtransform = {}
+	ids = UniqueIDs()
+	for frag, weight in fragments.items():
+		if isinstance(frag, tuple):
+			frag, terminals = frag
+		else:  # convert to frag, terminal notation on the fly.
+			cnt = count()
+			terminals = [a or None for a in LEAVESRE.findall(frag)]
+			frag = LEAVESRE.sub(lambda _: ' %d)' % next(cnt), frag)
+		prods, newfrag = flatten(frag, terminals, ids, backtransform, binarized)
+		if prods[0][0][1] == 'Epsilon':  # lexical production
+			grammar[prods[0]] = weight
+			continue
+		grammar[prods[0]] = weight
+		grammar.update(zip(prods[1:], repeat(1)))
+		backtransform[prods[0]] = newfrag
+	grammar = sortgrammar(grammar.items())
+	backtransform = [backtransform[rule] for rule, _ in grammar
+			if rule in backtransform]
+	return grammar, backtransform, {}
+
+
 def sortgrammar(grammar):
 	"""Sort grammar productions in three clusters: phrasal, binarized, lexical.
 
@@ -308,19 +348,19 @@ def sortgrammar(grammar):
 	3. lexical rules sorted by word"""
 	def sortkey(rule):
 		"""Sort key ``(word or '', 2dop binarized rule?, lhs)``."""
-		(r, yf), _p = rule
-		word = yf[0] if r[1] == 'Epsilon' else ''
-		return word, '}<' in r[0], r[0]
+		(nts, yf), _p = rule
+		word = yf[0] if nts[1] == 'Epsilon' else ''
+		return word, '}<' in nts[0], nts[0]
 
 	return sorted(grammar, key=sortkey)
 
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
 
-def flattenbin(tree, sent, ids, backtransform):
+def flatten(tree, sent, ids, backtransform, binarized):
 	"""Auxiliary function for Double-DOP.
 
-	Remove internal nodes from a tree and read off the binarized
+	Remove internal nodes from a tree and read off the (binarized)
 	productions of the resulting flattened tree. Aside from returning
 	productions, also return tree with lexical and frontier nodes replaced by a
 	templating symbol '{n}' where n is an index.
@@ -331,10 +371,14 @@ def flattenbin(tree, sent, ids, backtransform):
 	>>> ids = UniqueIDs()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> flattenbin(tree, sent, ids, {})  # doctest: +NORMALIZE_WHITESPACE
+	>>> flatten(tree, sent, ids, {}, True)  # doctest: +NORMALIZE_WHITESPACE
 	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
+	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
+	>>> flatten(tree, sent, ids, {}, False)  # doctest: +NORMALIZE_WHITESPACE
+	([(('ROOT', 'S_2', '$,@,', '$.@.'), ((0, 1, 0, 2),)),
+		 (('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')"""
 	from discodop.treetransforms import factorconstituent, addbitsets
 
@@ -359,9 +403,11 @@ def flattenbin(tree, sent, ids, backtransform):
 	prod = "%s %s)" % (prod[:prod.index(' ')],
 			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
 			key=lambda x: int(x.group(2)))))
-	prods = lcfrsproductions(factorconstituent(addbitsets(prod), "}",
-			factor='left', markfanout=True, markyf=True, ids=ids, threshold=2),
-			sent)
+	tmp = addbitsets(prod)
+	if binarized:
+		tmp = factorconstituent(tmp, "}", factor='left', markfanout=True,
+				markyf=True, ids=ids, threshold=2)
+	prods = lcfrsproductions(tmp, sent)
 	# remember original order of frontiers / terminals for template
 	order = {x.group(2): "{%d}" % n
 			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
@@ -371,63 +417,6 @@ def flattenbin(tree, sent, ids, backtransform):
 	if prod in backtransform:
 		# normally, rules of fragments are disambiguated by binarization IDs.
 		# In case there's a fragment with only one or two frontier nodes,
-		# we add an artficial node.
-		newlabel = "%s}<%d>%s" % (prod[0][0], next(ids),
-				'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
-		prod1 = ((prod[0][0], newlabel) + prod[0][2:], prod[1])
-		# we have to determine fanout of the first nonterminal
-		# on the right hand side
-		prod2 = ((newlabel, prod[0][1]),
-			tuple((0,) for component in prod[1]
-			for a in component if a == 0))
-		prods[:1] = [prod1, prod2]
-	return prods, str(newtree)
-
-
-def flatten(tree, sent, ids, backtransform):
-	"""Auxiliary function for Double-DOP.
-
-	Like flattenbin(), but doesn't apply binarization.
-
-	>>> ids = UniqueIDs()
-	>>> sent = [None, ',', None, '.']
-	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> flatten(tree, sent, ids, {})  # doctest: +NORMALIZE_WHITESPACE
-	([(('ROOT', 'S_2', '$,@,', '$.@.'), ((0, 1, 0, 2),)),
-		 (('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')"""
-	from discodop.treetransforms import addbitsets
-
-	def repl(x):
-		"""Add information to a frontier or terminal node.
-
-		:frontiers: ``(label indices)``
-		:terminals: ``(tag@word idx)``"""
-		n = x.group(2)  # index w/leading space
-		nn = int(n)
-		if sent[nn] is None:
-			return x.group(0)  # (label indices)
-		word = quotelabel(sent[nn])
-		# (tag@word idx)
-		return "(%s@%s%s)" % (x.group(1), word, n)
-
-	if tree.count(' ') == 1:
-		return lcfrsproductions(addbitsets(tree), sent), str(tree)
-	# give terminals unique POS tags
-	prod = FRONTIERORTERM.sub(repl, tree)
-	# remove internal nodes, reorder
-	prod = "%s %s)" % (prod[:prod.index(' ')],
-			' '.join(x.group(0) for x in sorted(FRONTIERORTERM.finditer(prod),
-			key=lambda x: int(x.group(2)))))
-	prods = lcfrsproductions(addbitsets(prod), sent)
-	# remember original order of frontiers / terminals for template
-	order = {x.group(2): "{%d}" % n
-			for n, x in enumerate(FRONTIERORTERM.finditer(prod))}
-	# mark substitution sites and ensure string.
-	newtree = FRONTIERORTERM.sub(lambda x: order[x.group(2)], tree)
-	prod = prods[0]
-	if prod in backtransform:
-		# In case there's a fragment with a conflicting signature,
 		# we add an artficial node.
 		newlabel = "%s}<%d>%s" % (prod[0][0], next(ids),
 				'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
@@ -826,7 +815,6 @@ def test():
 			addfanoutmarkers, removefanoutmarkers
 	from discodop.disambiguation import recoverfragments
 	from discodop.kbest import lazykbest
-	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	filename = "alpinosample.export"
 	corpus = NegraCorpusReader(filename, punct='move')
@@ -841,9 +829,8 @@ def test():
 	print(grammar)
 	grammar.testgrammar()
 
-	fragments = getfragments(trees, sents, 1)
 	debug = '--debug' in sys.argv
-	grammarx, backtransform, _ = doubledop(trees, fragments, debug=debug)
+	grammarx, backtransform, _ = doubledop(trees, sents, debug=debug, numproc=1)
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
@@ -888,7 +875,6 @@ def main():
 	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
-	from discodop.fragments import getfragments
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = ''
 	flags = ('gzip', 'packed')
@@ -900,20 +886,28 @@ def main():
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
-	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop'), (
+	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'tsg'), (
 		'unrecognized model: %r' % model)
 	assert opts.get('dopestimator', 'rfe') in ('rfe', 'ewe', 'shortest'), (
 		'unrecognized estimator: %r' % opts['dopestimator'])
 
 	# read treebank
-	corpus = READERS[opts.get('--inputfmt', 'export')](
-			treebankfile,
-			encoding=opts.get('--inputenc', 'utf8'))
-	trees = list(corpus.trees().values())
-	sents = list(corpus.sents().values())
-	for a in trees:
-		canonicalize(a)
-		addfanoutmarkers(a)
+	if model == 'tsg':
+		fragments = {(fields[0] if len(fields) == 2
+					else (fields[0], [a or None for a in fields[1].split(' ')])):
+					float(fields[-1])
+				for fields in
+				(line.split('\t') for line in io.open(treebankfile,
+					encoding=opts.get('--inputenc', 'utf8')))}
+	else:
+		corpus = READERS[opts.get('--inputfmt', 'export')](
+				treebankfile,
+				encoding=opts.get('--inputenc', 'utf8'))
+		trees = list(corpus.trees().values())
+		sents = list(corpus.sents().values())
+		for a in trees:
+			canonicalize(a)
+			addfanoutmarkers(a)
 
 	# read off grammar
 	if model in ('pcfg', 'plcfrs'):
@@ -922,9 +916,10 @@ def main():
 		grammar, altweights = dopreduction(trees, sents,
 				packedgraph='--packed' in opts)
 	elif model == 'doubledop':
-		numproc = int(opts.get('--numproc', 1))
-		fragments = getfragments(trees, sents, numproc)
-		grammar, backtransform, altweights = doubledop(trees, fragments)
+		grammar, backtransform, altweights = doubledop(trees, sents,
+				numproc=int(opts.get('--numproc', 1)))
+	elif model == 'tsg':
+		grammar, backtransform, altweights = compiletsg(fragments)
 	if opts.get('--dopestimator', 'rfe') == 'ewe':
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights['ewe'])]
@@ -932,36 +927,37 @@ def main():
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights['shortest'])]
 
-	print(grammarinfo(grammar))
-	rules = grammarfile + '.rules'
-	lexicon = grammarfile + '.lex'
+	rulesname = grammarfile + '.rules'
+	lexiconname = grammarfile + '.lex'
+	myopen = open
 	if '--gzip' in opts:
 		myopen = gzip.open
-		rules += '.gz'
-		lexicon += '.gz'
-	else:
-		myopen = open
+		rulesname += '.gz'
+		lexiconname += '.gz'
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
+	if model == 'tsg':
+		bitpar = not isinstance(next(iter(fragments)), tuple)
+
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
-	try:
-		from discodop.containers import Grammar
-	except ImportError:
-		pass
-	else:
-		cgrammar = Grammar(rules, lexicon)
-		cgrammar.testgrammar()
 	# write output
-	with myopen(rules, 'w') as rulesfile:
+	with myopen(rulesname, 'w') as rulesfile:
 		rulesfile.write(rules)
-	with codecs.getwriter('utf-8')(myopen(lexicon, 'w')) as lexiconfile:
+	with codecs.getwriter('utf-8')(myopen(lexiconname, 'w')) as lexiconfile:
 		lexiconfile.write(lexicon)
-	if model == 'doubledop':
+	if model in ('doubledop', 'tsg'):
 		backtransformfile = '%s.backtransform%s' % (grammarfile,
 			'.gz' if '--gzip' in opts else '')
 		myopen(backtransformfile, 'w').writelines(
 				'%s\n' % a for a in backtransform)
 		print('wrote backtransform to', backtransformfile)
-	print('wrote grammar to %s and %s.' % (rules, lexicon))
+	print('wrote grammar to %s and %s.' % (rulesname, lexiconname))
+	print(grammarinfo(grammar))
+	try:
+		from discodop.containers import Grammar
+		cgrammar = Grammar(rules, lexicon)
+		cgrammar.testgrammar()
+	except (ImportError, AssertionError) as err:
+		print(err)
 
 if __name__ == '__main__':
 	if '--test' in sys.argv:

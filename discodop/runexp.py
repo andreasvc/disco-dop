@@ -30,7 +30,6 @@ from discodop.treebanktransforms import transform, rrtransform
 from discodop.treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers
 from discodop.treedraw import DrawTree
-from discodop.fragments import getfragments
 from discodop.grammar import treebankgrammar, dopreduction, \
 		doubledop, grammarinfo, write_lcfrs_grammar
 from discodop.containers import Grammar
@@ -373,12 +372,10 @@ def getgrammars(trees, sents, stages, binarization, testmaxwords, resultdir,
 		backtransform = None
 		if stage.dop:
 			if stage.usedoubledop:
-				# find recurring fragments in treebank,
-				# as well as depth 1 'cover' fragments
-				fragments = getfragments(traintrees, sents, numproc,
-						iterate=stage.iterate, complement=stage.complement)
 				xgrammar, backtransform, altweights = doubledop(
-						traintrees, fragments, binarized=stage.binarized)
+						traintrees, sents, binarized=stage.binarized,
+						iterate=stage.iterate, complement=stage.complement,
+						numproc=numproc)
 			else:  # DOP reduction
 				xgrammar, altweights = dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph)

@@ -7,7 +7,7 @@ from discodop.treetransforms import binarize, unbinarize, \
 		splitdiscnodes, mergediscnodes, \
 		addbitsets, fanout
 from discodop.treebanktransforms import punctraise, balancedpunctraise
-from discodop.grammar import flattenbin, UniqueIDs
+from discodop.grammar import flatten, UniqueIDs
 # FIXME only import for relevant test:
 from discodop.plcfrs import Agenda, getparent
 
@@ -120,22 +120,22 @@ class Test_grammar:
 		ids = UniqueIDs()
 		sent = [None, ',', None, '.']
 		tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-		assert flattenbin(tree, sent, ids, {}) == (
+		assert flatten(tree, sent, ids, {}, True) == (
 				[(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 				(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 				(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 				'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
 
-		assert flattenbin("(NN 0)", ["foo"], ids, {}) == (
+		assert flatten("(NN 0)", ["foo"], ids, {}, True) == (
 				[(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
 
-		prods, frag = flattenbin(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP "
+		prods, frag = flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP "
 				"(CNP|<TRUNC> (TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> "
 				"(NN 3)))))) (S|<VAFIN> (VAFIN 4))) (VP (VP|<ADV> (ADV 5) "
 				"(VP|<NP> (NP (ART 6) (NN 7)) (VP|<NP> (NP_2 8 10) (VP|<VVPP> "
 				"(VVPP 9))))))))",
 				['Das', 'Garten-', 'und', 'Friedhofsamt', 'hatte', 'kuerzlich',
-				'dem', 'Ortsbeirat', None, None, None], ids, {})
+				'dem', 'Ortsbeirat', None, None, None], ids, {}, True)
 		assert prods == [(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
 				(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
 				(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
@@ -158,9 +158,9 @@ class Test_grammar:
 				'{2} (CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} '
 				'(VP|<NP> (NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
 
-		assert flattenbin("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
+		assert flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
 				"(ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
-				(None, None, None, None, None), ids, {}) == (
+				(None, None, None, None, None), ids, {}, True) == (
 				[(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 				(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
 				(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],

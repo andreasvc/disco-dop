@@ -49,6 +49,7 @@ Options:
   --prob        Print probabilities as well as parse trees.
   --mpd         In coarse-to-fine mode, produce the most probable
                 derivation (MPD) instead of the most probable parse (MPP).
+  --bt=file     backtransform table to recover TSG derivations.
 
 %s
 ''' % (sys.argv[0], sys.argv[0], FORMAT)
@@ -60,7 +61,7 @@ DEFAULTSTAGE = dict(
 		split=False,  # split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
 		splitprune=False,  # treat VP_2[101] as {VP*[100], VP*[001]} for pruning
 		markorigin=False,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
-		collapselabels=None,  # options: None, 'head', 'all'. TODO.
+		collapselabels=None,  # options: None, 'head', 'all'. TODO: implement.
 		k=50,  # no. of coarse pcfg derivations to prune with; k=0: filter only
 		neverblockre=None,  # do not prune nodes with label that match regex
 		getestimates=None,  # compute & store estimates
@@ -81,10 +82,29 @@ DEFAULTSTAGE = dict(
 		sldop_n=7)
 
 
+class DictObj(object):
+	"""Trivial class to wrap a dictionary for reasons of syntactic sugar."""
+
+	def __init__(self, *a, **kw):
+		self.__dict__.update(*a, **kw)
+
+	def update(self, *a, **kw):
+		"""Update/add more attributes."""
+		self.__dict__.update(*a, **kw)
+
+	def __getattr__(self, name):
+		"""Dummy function for suppressing pylint E1101 errors."""
+		raise AttributeError('%r instance has no attribute %r' % (
+				self.__class__.__name__, name))
+
+	def __repr__(self):
+		return '%s(%s)' % (self.__class__.__name__,
+			',\n'.join('%s=%r' % a for a in self.__dict__.items()))
+
+
 def main():
 	"""Handle command line arguments."""
-	print('PLCFRS parser - Andreas van Cranenburgh', file=sys.stderr)
-	options = 'ctf= prob mpd'.split()
+	options = 'ctf= prob mpd bt='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
 		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
@@ -107,11 +127,15 @@ def main():
 	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar)
 	stages = []
 	stage = DEFAULTSTAGE.copy()
+	backtransform = None
+	if opts.get('--bt'):
+		backtransform = (gzip.open if opts.get('--bt').endswith('.gz')
+				else open)(opts.get('--bt')).read().splitlines()
 	stage.update(
 			name='coarse',
 			mode='pcfg' if bitpar else 'plcfrs',
 			grammar=coarse,
-			backtransform=None,
+			backtransform=backtransform if len(args) < 4 else None,
 			m=k)
 	stages.append(DictObj(stage))
 	if 4 <= len(args) <= 6 and threshold:
@@ -127,7 +151,7 @@ def main():
 				name='fine',
 				mode='pcfg' if bitpar else 'plcfrs',
 				grammar=fine,
-				backtransform=None,
+				backtransform=backtransform,
 				m=k,
 				prune=True,
 				k=threshold,
@@ -142,6 +166,9 @@ def main():
 				if len(args) >= 3 else sys.stdin)
 		out = (io.open(args[3], 'w', encoding='utf-8')
 				if len(args) == 4 else sys.stdout)
+	if backtransform:
+		_ = stages[-1].grammar.getmapping(None,
+			neverblockre=re.compile(b'.+}<'))
 	doparsing(Parser(stages), infile, out, prob, oneline)
 
 
@@ -201,8 +228,9 @@ class Parser(object):
 		- lexicon: the set of known words in the grammar.
 		- sigs: the set of word signatures occurring in the grammar.
 	:param relationalrealizational: whether to reverse the RR-transform."""
-	def __init__(self, stages, transformations=None, binarization=None,
-			relationalrealizational=None, postagging=None, verbosity=2):
+	def __init__(self, stages, transformations=None, postagging=None,
+			binarization=DictObj(tailmarker=None),
+			relationalrealizational=None, verbosity=2):
 		self.stages = stages
 		self.transformations = transformations
 		self.binarization = binarization
@@ -502,26 +530,6 @@ def exportbitpargrammar(stage):
 					for tag in line.split()[1::2]))
 				for line in lexicon.splitlines())
 	stage.lexiconfile.flush()
-
-
-class DictObj(object):
-	"""Trivial class to wrap a dictionary for reasons of syntactic sugar."""
-
-	def __init__(self, *a, **kw):
-		self.__dict__.update(*a, **kw)
-
-	def update(self, *a, **kw):
-		"""Update/add more attributes."""
-		self.__dict__.update(*a, **kw)
-
-	def __getattr__(self, name):
-		"""Dummy function for suppressing pylint E1101 errors."""
-		raise AttributeError('%r instance has no attribute %r' % (
-				self.__class__.__name__, name))
-
-	def __repr__(self):
-		return '%s(%s)' % (self.__class__.__name__,
-			',\n'.join('%s=%r' % a for a in self.__dict__.items()))
 
 
 def probstr(prob):

@@ -205,12 +205,14 @@ grammar
 Read off grammars from treebanks.
 Usage::
 
-  discodop grammar pcfg <input> <output> [options]
-  discodop grammar plcfrs <input> <output> [options]
-  discodop grammar dopreduction <input> <output> [options]
-  discodop grammar doubledop <input> <output> [options]
+   discodop grammar pcfg <input> <output> [options]
+   discodop grammar plcfrs <input> <output> [options]
+   discodop grammar dopreduction <input> <output> [options]
+   discodop grammar doubledop <input> <output> [options]
+   discodop grammar tsg <input> <output> [options]
 
-input is a binarized treebank,
+
+input is a binarized treebank, or weighted fragments in the tsg case,
 output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
@@ -262,6 +264,57 @@ Example::
     lexicon: Haus	NN	3/10	JJ	1/9
 
 
+parser
+------
+A basic command line interface to the parser comparable to bitpar.
+Reads grammars from text files.
+
+usage: discodop parser [options] <rules> <lexicon> [input [output]]
+
+or:    discodop parser [options] --ctf k <coarserules> <coarselex>
+          <finerules> <finelex> [input [output]]
+
+Grammars need to be binarized, and are in bitpar or PLCFRS format.
+When no file is given, output is written to standard output;
+when additionally no input is given, it is read from standard input.
+Files must be encoded in UTF-8.
+Input should contain one token per line, with sentences delimited by two
+newlines. Output consists of bracketed trees, with discontinuities indicated
+through indices pointing to words in the original sentence.
+
+Options:
+
+  -b k          Return the k-best parses instead of just 1.
+  -s x          Use "x" as start symbol instead of default "TOP".
+  -z            Input is one sentence per line, space-separated tokens.
+  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
+  --prob        Print probabilities as well as parse trees.
+  --mpd         In coarse-to-fine mode, produce the most probable
+                derivation (MPD) instead of the most probable parse (MPP).
+  --bt=file     backtransform table to recover TSG derivations.
+
+The PLCFRS format is as follows. Rules are delimited by newlines.
+Fields are separated by tabs. The fields are::
+
+    LHS	RHS1	[RHS2]	yield-function	weight
+
+The yield function defines how the spans of the RHS nonterminals
+are combined to form the spans of the LHS nonterminal. Components of the yield
+function are comma-separated, 0 refers to a component of the first RHS
+nonterminal, and 1 from the second. Weights are expressed as rational
+fractions.
+The lexicon is defined in a separate file. Lines start with a single word,
+followed by pairs of possible tags and their probabilities::
+
+    WORD	TAG1	PROB1	[TAG2	PROB2 ...]
+
+Example::
+
+    rules:   S	NP	VP	010	1/2
+             VP_2	VB	NP	0,1	2/3
+             NP	NN	0	1/4
+    lexicon: Haus	NN	3/10	JJ	1/9
+
 treedraw
 --------
 Usage: discodop treedraw [<treebank>...] [options]
@@ -288,57 +341,6 @@ Options (* marks default option):
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through 'less -R' to preserve the colors.
-
-parser
-------
-A basic command line interface to the parser comparable to bitpar.
-Reads grammars from text files.
-
-usage: discodop parser [options] <rules> <lexicon> [input [output]]
-
-or:    discodop parser [options] --ctf k <coarserules> <coarselex>
-          <finerules> <finelex> [input [output]]
-
-Grammars need to be binarized, and are in bitpar or PLCFRS format.
-When no file is given, output is written to standard output;
-when additionally no input is given, it is read from standard input.
-Files must be encoded in UTF-8.
-Input should contain one token per line, with sentences delimited by two
-newlines. Output consists of bracketed trees, with discontinuities indicated
-through indices pointing to words in the original sentence.
-
-Options:
-
--b k          Return the k-best parses instead of just 1.
--s x          Use "x" as start symbol instead of default "TOP".
--z            Input is one sentence per line, space-separated tokens.
---ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
---prob        Print probabilities as well as parse trees.
---mpd         In coarse-to-fine mode, produce the most probable
-              derivation (MPD) instead of the most probable parse (MPP).
-
-The PLCFRS format is as follows. Rules are delimited by newlines.
-Fields are separated by tabs. The fields are::
-
-    LHS	RHS1	[RHS2]	yield-function	weight
-
-The yield function defines how the spans of the RHS nonterminals
-are combined to form the spans of the LHS nonterminal. Components of the yield
-function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as rational
-fractions.
-The lexicon is defined in a separate file. Lines start with a single word,
-followed by pairs of possible tags and their probabilities::
-
-    WORD	TAG1	PROB1	[TAG2	PROB2 ...]
-
-Example::
-
-    rules:   S	NP	VP	010	1/2
-             VP_2	VB	NP	0,1	2/3
-             NP	NN	0	1/4
-    lexicon: Haus	NN	3/10	JJ	1/9
-
 
 gen
 ---
