@@ -953,7 +953,8 @@ def main():
 	print(grammarinfo(grammar))
 	try:
 		from discodop.containers import Grammar
-		cgrammar = Grammar(rules, lexicon)
+		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
+				start=b'ROOT' if model == 'tsg' else trees[0].label)
 		cgrammar.testgrammar()
 	except (ImportError, AssertionError) as err:
 		print(err)

@@ -42,10 +42,17 @@ Suppose we have the following treebank in the file ``treebankExample.mrg``::
 Before inducing a grammar, we need to binarize the treebank::
 
     $ discodop treetransforms binarize --inputfmt=bracket --outputfmt=bracket treebankExample.mrg /tmp/bintrees
+    transformed 7 trees with action 'binarize'
 
 We can then induce a Double-DOP grammar with the following command::
 
     $ discodop grammar doubledop --inputfmt=bracket /tmp/bintrees /tmp/example
+    extracting recurring fragments
+    [...]
+    found 34 fragments
+    wrote backtransform to /tmp/example.backtransform
+    wrote grammar to /tmp/example.rules and /tmp/example.lex.
+    [...]
 
 This produces a grammar consisting of a series of text files in ``/tmp``, which
 can be used as follows::
