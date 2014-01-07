@@ -782,7 +782,7 @@ def getlabelsprods(trees, labels, prods):
 	for tree in trees:
 		for st in tree:
 			if st.prod not in prods:
-				labels.append(st.label)  # LHS label associated with this prod
+				labels.append(str(st.label))  # LHS label associated with this prod
 				prods[st.prod] = pnum
 				pnum += 1
 
