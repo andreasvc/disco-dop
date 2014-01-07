@@ -31,8 +31,12 @@ cdef extern from "macros.h":
 
 @cython.final
 cdef class Grammar:
-	cdef Rule **bylhs, **unary, **lbinary, **rbinary
-	cdef UInt *mapping, **splitmapping
+	cdef Rule **bylhs
+	cdef Rule **unary
+	cdef Rule **lbinary
+	cdef Rule **rbinary
+	cdef UInt *mapping
+	cdef UInt **splitmapping
 	cdef UChar *fanout
 	cdef ULong *chainvec
 	cdef readonly currentmodel

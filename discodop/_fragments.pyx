@@ -103,9 +103,13 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		int n, m, start = 0, end2
 		short SLOTS  # the number of bitsets needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
-		ULong *scratch, *bitset  # temporary variables
-		NodeArray a, b, *ctrees1, *ctrees2
-		Node *anodes, *bnodes
+		ULong *scratch
+		ULong *bitset
+		NodeArray a, b
+		NodeArray *ctrees1
+		NodeArray *ctrees2
+		Node *anodes
+		Node *bnodes
 		list asent
 		dict fragments = {}
 		set inter = set()
@@ -257,10 +261,13 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		object matches = None  # multiset()
 		set candidates
 		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-		UInt n, m, *countsp = NULL
+		UInt n, m
+		UInt *countsp = NULL
 		NodeArray a, b
-		Node *anodes, *bnodes
-		ULong cur, *bitset
+		Node *anodes
+		Node *bnodes
+		ULong cur
+		ULong *bitset
 		short idx
 	if indices:
 		theindices = [multiset() for _ in bitsets]
@@ -424,9 +431,14 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	cdef:
 		int n, m, aa, bb, start = 0
 		short SLOTS
-		ULong *CST, *scratch, *bitset
-		NodeArray *ctrees1, *ctrees2, a, b
-		Node *anodes, *bnodes
+		ULong *CST
+		ULong *scratch
+		ULong *bitset
+		NodeArray *ctrees1
+		NodeArray *ctrees2
+		NodeArray a, b
+		Node *anodes
+		Node *bnodes
 		list asent
 		dict fragments = {}
 		set inter = set()
@@ -487,7 +499,8 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 cdef inline void getCST(Node *a, Node *b, int alen, int blen, ULong *CST,
 		int i, int j, short SLOTS):
 	"""Build common subtree table (CST) for subtrees ``a[i]``, ``b[j]``."""
-	cdef ULong *child, *bitset = &CST[IDX(i, j, blen, SLOTS)]
+	cdef ULong *child
+	cdef ULong *bitset = &CST[IDX(i, j, blen, SLOTS)]
 	SETBIT(bitset, alen)  # mark cell as visited
 	# compare label & arity / terminal; assume presence of arity markers.
 	if a[i].prod == b[j].prod:

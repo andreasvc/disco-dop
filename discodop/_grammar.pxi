@@ -15,17 +15,20 @@ LEXICON_NONINT = re.compile('[ \t][0-9]+[./][0-9]+[ \t\n]')
 
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
-	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
+	cdef Rule *a = <Rule *>p1
+	cdef Rule *b = <Rule *>p2
 	if a.lhs == b.lhs:
 		return (a.no > b.no) - (a.no < b.no)
 	return (a.lhs > b.lhs) - (a.lhs < b.lhs)
 cdef int cmp1(const void *p1, const void *p2) nogil:
-	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
+	cdef Rule *a = <Rule *>p1
+	cdef Rule *b = <Rule *>p2
 	if a.rhs1 == b.rhs1:
 		return (a.prob < b.prob) - (a.prob > b.prob)
 	return (a.rhs1 > b.rhs1) - (a.rhs1 < b.rhs1)
 cdef int cmp2(const void *p1, const void *p2) nogil:
-	cdef Rule *a = <Rule *>p1, *b = <Rule *>p2
+	cdef Rule *a = <Rule *>p1
+	cdef Rule *b = <Rule *>p2
 	if a.rhs2 == b.rhs2:
 		return (a.prob < b.prob) - (a.prob > b.prob)
 	return (a.rhs2 > b.rhs2) - (a.rhs2 < b.rhs2)

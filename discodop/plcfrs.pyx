@@ -684,7 +684,8 @@ cdef inline bint concat(Rule *rule,
 		the least significant bit (rightmost) corresponds to the lowest
 		index in the sentence / constituent (leftmost)."""
 	cdef ULLong lvec, rvec, mask
-	cdef ULong *alvec, *arvec
+	cdef ULong *alvec
+	cdef ULong *arvec
 	cdef int lpos, rpos, n
 	if LCFRSItem_fused is SmallChartItem:
 		lvec = left.vec
@@ -904,7 +905,6 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 #		list whitelist=None, bint splitprune=False, bint markorigin=False,
 #		estimates=None, int beamwidth=0):
 #	# assign POS tags, unaries on POS tags
-#	# parse
 #	for length in range(2, len(sent) + 1):
 #		for leftlength in range(1, length):
 #			for left in chart[leftlength]
