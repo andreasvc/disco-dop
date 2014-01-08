@@ -437,7 +437,8 @@ class DactCorpusReader(AlpinoCorpusReader):
 				'Encoding specified in XML files, cannot be overriden.')
 		for filename in self._filenames:
 			corpus = alpinocorpus.CorpusReader(filename)
-			for entry in corpus.entries():
+			for entry in sorted(corpus.entries(),
+					key=lambda entry: numbase(entry.name())):
 				key = entry.name()
 				if key.endswith('.xml'):
 					key = key[:-len('.xml')]
@@ -548,7 +549,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
 	def getword(idx):
-		"""Get word given an index and restore parentheses."""
+		"""Get word given an index and quote parentheses."""
 		return sent[int(idx[:-1])].replace('(', '-LRB-').replace(')', '-RRB-')
 
 	if fmt == "bracket":
@@ -701,8 +702,9 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 	information."""
 	# escape any parentheses to avoid hassles w/bracket notation of trees
 	tag = source[TAG].replace('(', '[').replace(')', ']')
-	morph = source[MORPH].replace('(', '[').replace(')', ']')
-	lemma = source[LEMMA].replace('(', '[').replace(')', ']') or '--'
+	morph = source[MORPH].replace('(', '[').replace(')', ']').replace(' ', '_')
+	lemma = (source[LEMMA].replace('(', '[').replace(')', ']').replace(' ', '_')
+			or '--')
 	if lemmaaction == 'add':
 		raise NotImplementedError
 		#sent[preterminal[0]] = '%s|%s' % (word, lemma)

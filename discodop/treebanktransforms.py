@@ -617,9 +617,9 @@ def punctraise(tree, sent):
 			and ispunct(sent[node[0]], node.label)]
 	while punct:
 		node = punct.pop()
-		# dedicated punctation node (??)
-		if all(isinstance(a[0], int) and ispunct(sent[a[0]], a.label)
-				for a in node.parent):
+		while node is not tree and len(node.parent) == 1:
+			node = node.parent
+		if node is tree:
 			continue
 		node.parent.pop(node.parent_index)
 		phrasalnode = lambda x: len(x) and isinstance(x[0], Tree)
@@ -651,9 +651,15 @@ def balancedpunctraise(tree, sent):
 		# do we know the matching punctuation mark for this one?
 		if sent[terminal] in punctmap:
 			right = terminal
-			left = punctmap[sent[right]]
 			rightparent = preterminal.parent
+			while len(rightparent.parent) == 1:
+				rightparent = rightparent.parent
+			rightparent = rightparent.parent
+			left = punctmap[sent[right]]
 			leftparent = termparent[left].parent
+			while len(leftparent.parent) == 1:
+				leftparent = leftparent.parent
+			leftparent = leftparent.parent
 			if max(leftparent.leaves()) == right - 1:
 				node = termparent[right]
 				leftparent.append(node.parent.pop(node.parent_index))
