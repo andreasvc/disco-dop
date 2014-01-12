@@ -500,8 +500,9 @@ class DrawTree(object):
 					text = ['\x1b[%d;1m%s\x1b[0m' % (
 							ANSICOLOR[nodecolor] if isinstance(node, Tree)
 							else ANSICOLOR[leafcolor], a) for a in text]
-				for x, a in enumerate(text):
-					noderows[x][col] = a
+				for x in range(maxnodeheight[row]):
+					noderows[x][col] = (text[x] if x < len(text)
+							else vertline.center(maxnodewith[col], ' '))
 			# for each column, if there is a node below us which has a parent
 			# above us, draw a vertical branch in that column.
 			if row != max(matrix):
