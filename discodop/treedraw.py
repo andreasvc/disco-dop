@@ -7,6 +7,7 @@ http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
 """
 
 from __future__ import division, print_function, unicode_literals
+import re
 import sys
 import codecs
 from cgi import escape
@@ -393,7 +394,7 @@ class DrawTree(object):
 		return '\n'.join(result)
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
-				nodecolor='blue', leafcolor='red'):
+				nodecolor='blue', leafcolor='red', maxwidth=16):
 		""":returns: ASCII art for a discontinuous tree.
 
 		:param unicodelines: whether to use Unicode line drawing characters
@@ -402,8 +403,9 @@ class DrawTree(object):
 		:param ansi: whether to produce colors with ANSI escape sequences
 			(only effective when html==False).
 		:param leafcolor, nodecolor: specify colors of leaves and phrasal
-			nodes."""
-
+			nodes; effective when either html or ansi is True.
+		:param maxwidth: maximum number of characters before a label starts to
+			wrap; pass None to disable."""
 		if unicodelines:
 			horzline = u'\u2500'
 			leftcorner = u'\u250c'
@@ -428,17 +430,28 @@ class DrawTree(object):
 
 		result = []
 		matrix = defaultdict(dict)
-		maxnode = defaultdict(lambda: 3)
+		maxnodewith = defaultdict(lambda: 3)
+		maxnodeheight = defaultdict(lambda: 1)
 		maxcol = 0
 		minchildcol = {}
 		maxchildcol = {}
 		childcols = defaultdict(set)
+		labels = {}
+		wrapre = re.compile('(.{%d,%d}\\b\\W*|.{%d})' % (
+				maxwidth - 4, maxwidth, maxwidth))
+		# collect labels and coordinates
 		for a in self.nodes:
 			row, column = self.coords[a]
 			matrix[row][column] = a
 			maxcol = max(maxcol, column)
-			maxnode[column] = max(maxnode[column], len(self.nodes[a].label
-					if isinstance(self.nodes[a], Tree) else self.nodes[a]))
+			label = (self.nodes[a].label if isinstance(self.nodes[a], Tree)
+						else self.nodes[a])
+			if maxwidth and len(label) > maxwidth:
+				label = wrapre.sub(r'\1\n', label).strip()
+			label = label.split('\n')
+			maxnodeheight[row] = max(maxnodeheight[row], len(label))
+			maxnodewith[column] = max(maxnodewith[column], max(map(len, label)))
+			labels[a] = label
 			if a not in self.edges:
 				continue  # e.g., root
 			parent = self.edges[a]
@@ -447,21 +460,22 @@ class DrawTree(object):
 			maxchildcol[parent] = max(maxchildcol.get(parent, column), column)
 		# bottom up level order traversal
 		for row in sorted(matrix, reverse=True):
-			noderow = [''.center(maxnode[col]) for col in range(maxcol + 1)]
-			branchrow = [''.center(maxnode[col]) for col in range(maxcol + 1)]
+			noderows = [[''.center(maxnodewith[col]) for col in range(maxcol + 1)]
+					for _ in range(maxnodeheight[row])]
+			branchrow = [''.center(maxnodewith[col]) for col in range(maxcol + 1)]
 			for col in matrix[row]:
 				n = matrix[row][col]
 				node = self.nodes[n]
+				text = labels[n]
 				if isinstance(node, Tree):
-					text = node.label
-					# horizontal branch towards children for this node
+					# draw horizontal branch towards children for this node
 					if n in minchildcol and minchildcol[n] < maxchildcol[n]:
 						i, j = minchildcol[n], maxchildcol[n]
-						a, b = (maxnode[i] + 1) // 2 - 1, maxnode[j] // 2
+						a, b = (maxnodewith[i] + 1) // 2 - 1, maxnodewith[j] // 2
 						branchrow[i] = ((' ' * a) + leftcorner).ljust(
-								maxnode[i], horzline)
+								maxnodewith[i], horzline)
 						branchrow[j] = (rightcorner + (' ' * b)).rjust(
-								maxnode[j], horzline)
+								maxnodewith[j], horzline)
 						for i in range(minchildcol[n] + 1, maxchildcol[n]):
 							if i == col and any(
 									a == i for _, a in childcols[n]):
@@ -472,23 +486,22 @@ class DrawTree(object):
 								line = tee
 							else:
 								line = horzline
-							branchrow[i] = line.center(maxnode[i], horzline)
+							branchrow[i] = line.center(maxnodewith[i], horzline)
 					else:  # if n and n in minchildcol:
 						branchrow[col] = crosscell(branchrow[col])
-				else:
-					text = node
-				text = text.center(maxnode[col])
+				text = [a.center(maxnodewith[col]) for a in text]
 				if html:
-					text = escape(text)
+					text = [escape(a) for a in text]
 					if n in self.highlight:
-						text = '<font color=%s>%s</font>' % (
+						text = ['<font color=%s>%s</font>' % (
 								nodecolor if isinstance(node, Tree)
-								else leafcolor, text)
+								else leafcolor, a) for a in text]
 				elif ansi and n in self.highlight:
-					text = '\x1b[%d;1m%s\x1b[0m' % (
+					text = ['\x1b[%d;1m%s\x1b[0m' % (
 							ANSICOLOR[nodecolor] if isinstance(node, Tree)
-							else ANSICOLOR[leafcolor], text)
-				noderow[col] = text
+							else ANSICOLOR[leafcolor], a) for a in text]
+				for x, a in enumerate(text):
+					noderows[x][col] = a
 			# for each column, if there is a node below us which has a parent
 			# above us, draw a vertical branch in that column.
 			if row != max(matrix):
@@ -497,13 +510,13 @@ class DrawTree(object):
 							self.coords[self.edges[n]][0] < row < childrow):
 						branchrow[col] = crosscell(branchrow[col])
 						if col not in matrix[row]:
-							noderow[col] = crosscell(noderow[col])
+							for noderow in noderows:
+								noderow[col] = crosscell(noderow[col])
 				branchrow = [a + ((a[-1] if a[-1] != ' ' else b[0]) * nodedist)
 						for a, b in zip(branchrow, branchrow[1:] + [' '])]
 				result.append(''.join(branchrow))
-				result.append((' ' * nodedist).join(noderow))
-			else:
-				result.append((' ' * nodedist).join(noderow))
+			result.extend((' ' * nodedist).join(noderow)
+					for noderow in reversed(noderows))
 		return '\n'.join(reversed(result)) + '\n'
 
 	def tikzmatrix(self, nodecolor='blue', leafcolor='red'):
