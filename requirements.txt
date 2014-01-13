@@ -3,3 +3,5 @@ numpy>=1.5
 pytest
 Flask
 sphinx
+futures
+lru-dict
