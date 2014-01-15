@@ -193,4 +193,7 @@ function mergecheckboxes() {
 			break;
 		}
 	}
+	limit = document.getElementsByName('limit');
+	if (!limit.value)
+		limit.disabled == true;
 }

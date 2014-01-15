@@ -1,13 +1,12 @@
-""" Web interface to search a treebank. Requires Flask, tgrep2
+"""Web interface to search a treebank. Requires Flask, tgrep2
 or alpinocorpus-python (for xpath queries), style. Expects one or more
-treebanks with .mrg or .dact extension in the directory corpus/ """
+treebanks with .mrg or .dact extension in the directory corpus/"""
 # stdlib
 import io
 import os
 import re
 import cgi
 import csv
-import sys
 import glob
 import logging
 import tempfile
@@ -15,7 +14,8 @@ import subprocess
 from heapq import nlargest
 from urllib import quote
 from datetime import datetime, timedelta
-from itertools import islice, count
+from itertools import islice, groupby
+from operator import itemgetter
 from collections import Counter
 try:
 	import cPickle as pickle
@@ -32,9 +32,10 @@ try:
 except ImportError:
 	ALPINOCORPUSLIB = False
 # disco-dop
-from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop import fragments, treebank
+from discodop import treebank, fragments
+from discodop.treesearch import TgrepSearcher, DactSearcher, RegexSearcher, \
+		filterlabels
 
 MINFREQ = 2  # filter out fragments which occur just once or twice
 MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
@@ -59,23 +60,18 @@ PERCENTAGE1RE = re.compile(
 		r'([A-Za-z][A-Za-z ()]+) ([0-9]+(?:\.[0-9]+)?)% \([0-9]+\)')
 PERCENTAGE2RE = re.compile(
 		r'([0-9]+(?:\.[0-9]+)?)% \([0-9]+\) ([A-Za-z ()]+)\n')
+# the extensions for corpus files for each query engine:
+EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact$)$')
+EXT = {
+		'tgrep2': '.mrg.t2c.gz',
+		'xpath': '.dact',
+		'regex': '.tok'
+	}
 
-# abbreviations for Alpino POS tags
-ABBRPOS = {
-	'PUNCT': 'PUNCT',
-	'COMPLEMENTIZER': 'COMP',
-	'PROPER_NAME': 'NAME',
-	'PREPOSITION': 'PREP',
-	'PRONOUN': 'PRON',
-	'DETERMINER': 'DET',
-	'ADJECTIVE': 'ADJ',
-	'ADVERB': 'ADV',
-	'HET_NOUN': 'HET',
-	'NUMBER': 'NUM',
-	'PARTICLE': 'PRT',
-	'ARTICLE': 'ART',
-	'NOUN': 'NN',
-	'VERB': 'VB'}
+# TODO: add 'batch' action to web interface:
+# given a list of queries, each given `as 'key: query\n',
+# return report: one overview with totals (per category);
+# one graph for each query (maybe one for each text as well).
 
 
 @APP.route('/')
@@ -85,7 +81,7 @@ ABBRPOS = {
 @APP.route('/brackets')
 @APP.route('/fragments')
 def main():
-	""" Main search form & results page. """
+	"""Main search form & results page."""
 	output = None
 	if request.path != '/':
 		output = request.path.lstrip('/')
@@ -98,241 +94,81 @@ def main():
 		elif request.args.get('export'):
 			return export(request.args, output)
 		# For debugging purposes:
-		#return render_template('searchresults.html',
-		#		form=request.args, texts=TEXTS, selectedtexts=selected,
-		#		output=output, results=DISPATCH[output](request.args),
-		#		havexpath=ALPINOCORPUSLIB)
-		# To send results incrementally:
-		return Response(stream_template('searchresults.html',
+		return render_template('searchresults.html',
 				form=request.args, texts=TEXTS, selectedtexts=selected,
 				output=output, results=DISPATCH[output](request.args),
-				havexpath=ALPINOCORPUSLIB))
+				havexpath=ALPINOCORPUSLIB)
+		# To send results incrementally:
+		#return Response(stream_template('searchresults.html',
+		#		form=request.args, texts=TEXTS, selectedtexts=selected,
+		#		output=output, results=DISPATCH[output](request.args),
+		#		havexpath=ALPINOCORPUSLIB))
 	return render_template('search.html', form=request.args, output='counts',
 			texts=TEXTS, selectedtexts=selected, havexpath=ALPINOCORPUSLIB)
 
 
-@APP.route('/style')
-def style():
-	""" Use style(1) program to get staticstics for each text. """
-	def generate():
-		""" Generate plots from results. """
-		if not glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
-			yield ("No .txt files found in corpus/\n"
-					"Using sentences extracted from parse trees.\n"
-					"Supply text files with original formatting\n"
-					"to get meaningful paragraph information.\n\n")
-		yield '<a href="style?export">Export to CSV</a>'
-		# produce a plot for each field
-		fields = ()
-		for a in STYLETABLE:
-			fields = sorted(STYLETABLE[a].keys())
-			break
-		for field in fields:
-			data = {a: STYLETABLE[a].get(field, 0) for a in STYLETABLE}
-			total = max(data.values())
-			if total > 0:
-				yield barplot(data, total, field + ':',
-						unit='%' if '%' in field else '')
-
-	def generatecsv():
-		""" Generate CSV file. """
-		tmp = io.BytesIO()
-		keys = sorted(next(iter(STYLETABLE.values()))) if STYLETABLE else []
-		writer = csv.writer(tmp)
-		writer.writerow(['text'] + keys)
-		writer.writerows([name] + [row[key] for key in keys]
-				for name, row in sorted(STYLETABLE.items()))
-		return tmp.getvalue()
-
-	if 'export' in request.args:
-		resp = Response(generatecsv(), mimetype='text/plain')
-		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
-	else:
-		resp = Response(stream_template('searchresults.html',
-				form=request.args, texts=TEXTS,
-				selectedtexts=selectedtexts(request.args), output='style',
-				results=generate(), havexpath=ALPINOCORPUSLIB))
-	resp.headers['Cache-Control'] = 'max-age=604800, public'
-	#set Expires one day ahead (according to server time)
-	resp.headers['Expires'] = (
-		datetime.utcnow() + timedelta(7, 0)).strftime(
-		'%a, %d %b %Y %H:%M:%S UTC')
-	return resp
-
-
-@APP.route('/draw')
-def draw():
-	""" Produce a visualization of a tree on a separate page. """
-	if 'tree' in request.args:
-		return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
-				unicodelines=True, html=True)
-	textno, sentno = int(request.args['text']), int(request.args['sent'])
-	nofunc = 'nofunc' in request.args
-	nomorph = 'nomorph' in request.args
-	filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-	if os.path.exists(filename):
-		treestr = next(islice(open(filename),
-				sentno - 1, sentno)).decode('utf8')
-		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
-					unicodelines=True, html=True)
-	elif ALPINOCORPUSLIB:
-		treestr = XMLCORPORA[textno].read('%d.xml' % sentno)
-		tree, sent = treebank.alpinotree(
-				ElementTree.fromstring(treestr),
-				functions=None if nofunc else 'add',
-				morphology=None if nomorph else 'replace')
-		result = DrawTree(tree, sent).text(unicodelines=True, html=True)
-	else:
-		raise ValueError
-	return '<pre id="t%s">%s</pre>' % (sentno, result)
-
-
-@APP.route('/browsesents')
-def browsesents():
-	""" Browse through sentences in a file. """
-	chunk = 20  # number of sentences per page
-	if 'text' in request.args and 'sent' in request.args:
-		textno = int(request.args['text'])
-		sentno = int(request.args['sent']) - 1
-		highlight = int(request.args.get('highlight', 0)) - 1
-		start = max(0, sentno - chunk // 2)
-		maxtree = min(start + chunk, NUMSENTS[textno])
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		if os.path.exists(filename):
-			results = [' '.join(GETLEAVES.findall(a)) for a
-					in islice(io.open(filename, encoding='utf8'),
-					start, maxtree)]
-		elif ALPINOCORPUSLIB:
-			results = [ALPINOLEAVES.search(XMLCORPORA[textno].read(
-					'%d.xml' % (n + 1, ))).group(1)
-					for n in range(start, maxtree)]
-		else:
-			raise ValueError
-		results = [('<font color=red>%s</font>' % cgi.escape(a))
-				if n == highlight else cgi.escape(a)
-				for n, a in enumerate(results, start)]
-		prevlink = '<a id=prev>prev</a>'
-		if sentno > chunk:
-			prevlink = '<a href="browsesents?text=%d&sent=%d" id=prev>prev</a>' % (
-					textno, sentno - chunk + 1)
-		nextlink = '<a id=next>next</a>'
-		if sentno < NUMSENTS[textno] - chunk:
-			nextlink = '<a href="browsesents?text=%d&sent=%d" id=next>next</a>' % (
-					textno, sentno + chunk + 1)
-		return render_template('browsesents.html', textno=textno,
-				sentno=sentno + 1, text=TEXTS[textno],
-				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
-				nextlink=nextlink, chunk=chunk, mintree=start + 1,
-				maxtree=maxtree)
-	return '<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
-			'(%d sentences)' % (n, text, NUMSENTS[n])
-			for n, text in enumerate(TEXTS))
-
-
-@APP.route('/browse')
-def browse():
-	""" Browse through trees in a file. """
-	chunk = 20  # number of trees to fetch for one request
-	if 'text' in request.args and 'sent' in request.args:
-		textno = int(request.args['text'])
-		sentno = int(request.args['sent']) - 1
-		start = max(0, sentno - sentno % chunk)
-		maxtree = min(start + chunk, NUMSENTS[textno])
-		nofunc = 'nofunc' in request.args
-		nomorph = 'nomorph' in request.args
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		if ALPINOCORPUSLIB:
-			drawntrees = [DrawTree(*treebank.alpinotree(
-					ElementTree.fromstring(XMLCORPORA[textno].read(
-						'%d.xml' % (n + 1, ))),
-					functions=None if nofunc else 'add',
-					morphology=None if nomorph else 'replace')).text(
-					unicodelines=True, html=True)
-					for n in range(start, maxtree)]
-		elif os.path.exists(filename):
-			drawntrees = [DrawTree(filterlabels(
-					line.decode('utf8'), nofunc, nomorph)).text(
-					unicodelines=True, html=True)
-					for line in islice(open(filename), start, maxtree)]
-		else:
-			raise ValueError
-		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
-				' style="display: none; "' if 'ajax' in request.args else '',
-				tree) for n, tree in enumerate(drawntrees, start)]
-		if 'ajax' in request.args:
-			return '\n'.join(results)
-
-		prevlink = '<a id=prev>prev</a>'
-		if sentno > chunk:
-			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
-					textno, sentno - chunk + 1)
-		nextlink = '<a id=next>next</a>'
-		if sentno < NUMSENTS[textno] - chunk:
-			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
-					textno, sentno + chunk + 1)
-		return render_template('browse.html', textno=textno, sentno=sentno + 1,
-				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=results,
-				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
-				nofunc=nofunc, nomorph=nomorph,
-				mintree=start + 1, maxtree=maxtree)
-	return '<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
-			'(%d sentences)' % (n, text, NUMSENTS[n])
-			for n, text in enumerate(TEXTS))
-
-
-@APP.route('/favicon.ico')
-def favicon():
-	""" Serve the favicon. """
-	return send_from_directory(os.path.join(APP.root_path, 'static'),
-			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
-
-
 def export(form, output):
-	""" Export search results to a file for download. """
+	"""Export search results to a file for download."""
 	# NB: no distinction between trees from different texts
-	# (Does consttreeviewer support # comments?)
+	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+			selectedtexts(request.args)}
 	if output == 'counts':
 		results = counts(form, doexport=True)
 		filename = 'counts.csv'
 	elif output == 'fragments':
 		results = fragmentsinresults(form, doexport=True)
 		filename = 'fragments.txt'
+	elif output in ('sents', 'brackets', 'trees'):
+		if form.get('engine') == 'xpath' and output != 'sents':
+			fmt = '<!-- %s:%s -->\n%s\n\n'
+		else:
+			fmt = '%s:%s|%s\n'
+		results = ((fmt % (a[0], a[1], (a[2]))
+				if form.get('linenos') else (a[2] + '\n')).encode('utf-8')
+				for a in CORPORA[form.get('engine', 'tgrep2')].sents(
+					form['query'], selected, maxresults=SENTLIMIT,
+					brackets=output in ('brackets', 'trees')))
+		filename = output + '.txt'
 	else:
-		results = (a + '\n' for a in doqueries(
-				form, lines=False, doexport=output))
-		filename = '%s.txt' % output
+		raise ValueError('cannot export %s' % output)
 	resp = Response(results, mimetype='text/plain')
 	resp.headers['Content-Disposition'] = 'attachment; filename=' + filename
 	return resp
 
 
 def counts(form, doexport=False):
-	""" Produce counts of matches for each text. """
+	"""Produce counts of matches for each text."""
 	cnts = Counter()
 	relfreq = {}
 	sumtotal = 0
 	norm = form.get('norm', 'sents')
 	gotresult = False
-	for n, (textno, results, stderr) in enumerate(doqueries(form, lines=False)):
-		if n == 0:
-			if not doexport:
-				url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
-						form['query'], form['norm'], form['texts'],
-						form.get('engine', 'tgrep2'))
-				yield ('<pre>Query: %s\n'
-						'NB: the counts reflect the total number of '
-						'times a pattern matches for each tree.\n\n'
-						'Counts (<a href="%s">export to CSV</a>):\n' % (
-						stderr if len(stderr) < 128 else stderr[:128] + '...',
-						url))
-		cnt = results.count('\n')
-		if cnt:
+	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+			selectedtexts(form)}
+	if not doexport:
+		url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
+				form['query'], form['norm'], form['texts'],
+				form.get('engine', 'tgrep2'))
+		yield ('<pre>Query: %s\n'
+				'NB: the counts reflect the total number of '
+				'times a pattern matches for each tree.\n\n'
+				'Counts (<a href="%s">export to CSV</a>):\n' % (
+				form['query'] if len(form['query']) < 128
+				else form['query'][:128] + '...', url))
+	if norm == 'query':
+		normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
+				form['normquery'], selected)
+	for filename, indices in sorted(CORPORA[form.get(
+			'engine', 'tgrep2')].counts(
+				form['query'], selected, indices=True).items()):
+		textno = selected[filename]
+		limit = (int(form.get('limit')) if form.get('limit')
+				else NUMSENTS[textno])
+		if indices:
 			gotresult = True
 		text = TEXTS[textno]
+		cnt = sum(indices.values())
 		cnts[text] = cnt
-		totalsent = NUMSENTS[textno]
 		if norm == 'consts':
 			total = NUMCONST[textno]
 		elif norm == 'words':
@@ -340,8 +176,7 @@ def counts(form, doexport=False):
 		elif norm == 'sents':
 			total = NUMSENTS[textno]
 		elif norm == 'query':
-			total = next(doqueries_(form.get('engine', 'tgrep2'),
-					form['normquery'], {textno}))[1].count('\n') or 1
+			total = normresults[filename] or 1
 		else:
 			raise ValueError
 		relfreq[text] = 100.0 * cnt / total
@@ -349,15 +184,11 @@ def counts(form, doexport=False):
 		if not doexport:
 			line = "%s%6d    %5.2f %%" % (
 					text.ljust(40)[:40], cnt, relfreq[text])
-			indices = {int(line[:line.index(':::')])
-					for line in results.splitlines()}
-			plot = concplot(indices, totalsent)
+			plot = concplot(indices, limit or NUMSENTS[textno])
 			if cnt:
 				yield line + plot + '\n'
 			else:
 				yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
-	if not doexport:
-		yield '</pre>'
 	if doexport:
 		tmp = io.BytesIO()
 		csvexport = csv.writer(tmp)
@@ -369,163 +200,143 @@ def counts(form, doexport=False):
 				"TOTAL".ljust(40),
 				sum(cnts.values()),
 				100.0 * sum(cnts.values()) / sumtotal))
+		if not doexport:
+			yield '</pre>'
 		yield barplot(relfreq, max(relfreq.values()),
 				'Relative frequency of pattern: (count / num_%s * 100)' % norm,
 				unit='%')
 		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern')
+	else:
+		yield '</pre>'
 
 
 def trees(form):
-	""" Return visualization of parse trees in search results. """
+	"""Return visualization of parse trees in search results."""
 	gotresults = False
-	for n, (textno, results, stderr) in enumerate(
-			doqueries(form, lines=True)):
-		if n == 0:
-			# NB: we do not hide function or morphology tags when exporting
-			url = 'trees?query=%s&texts=%s&engine=%s&export=1' % (
-					quote(form['query']), form['texts'],
-					form.get('engine', 'tgrep2'))
-			yield ('<pre>Query: %s\n'
-					'Trees (showing up to %d per text; '
-					'export: <a href="%s">plain</a>, '
-					'<a href="%s">with line numbers</a>):\n' % (
-						stderr, TREELIMIT, url, url + '&linenos=1'))
-		for m, line in enumerate(islice(results, TREELIMIT)):
-			lineno, text, treestr, match = line.split(":::")
+	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+			selectedtexts(form)}
+	# NB: we do not hide function or morphology tags when exporting
+	url = 'trees?query=%s&texts=%s&engine=%s&export=1' % (
+			quote(form['query']), form['texts'],
+			form.get('engine', 'tgrep2'))
+	yield ('<pre>Query: %s\n'
+			'Trees (showing up to %d per text; '
+			'export: <a href="%s">plain</a>, '
+			'<a href="%s">with line numbers</a>):\n' % (
+				form['query'] if len(form['query']) < 128
+				else form['query'][:128] + '...',
+				TREELIMIT, url, url + '&linenos=1'))
+	for n, (filename, results) in enumerate(groupby(CORPORA[form.get(
+			'engine', 'tgrep2')].trees(form['query'], selected,
+			maxresults=TREELIMIT, nomorph='nomorph' in form,
+			nofunc='nofunc' in form), itemgetter(0))):
+		textno = selected[filename]
+		text = TEXTS[textno]
+		for m, (filename, sentno, tree, sent, high) in enumerate(results):
 			if m == 0:
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			if form.get('engine', 'tgrep2') == 'tgrep2':
-				cnt = count()
-				treestr = treestr.replace(" )", " -NONE-)")
-				match = match.strip()
-				if match.startswith('('):
-					treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
-							match.split(None, 1)))
-				else:
-					match = ' %s)' % match
-					treestr = treestr.replace(match, '_HIGH%s' % match)
-				tree = Tree.parse(treestr, parse_leaf=lambda _: next(cnt))
-				sent = re.findall(r" +([^ ()]+)(?=[ )])", treestr)
-				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
-				if high:
-					high = high.pop()
-					high.label = high.label.rsplit("_", 1)[0]
-					high = list(high.subtrees()) + high.leaves()
-			elif form.get('engine') == 'xpath':
-				tree, sent = treebank.alpinotree(
-						ElementTree.fromstring(treestr.encode('utf-8')),
-						functions=None if 'nofunc' in form else 'add',
-						morphology=None if 'nomorph' in form else 'replace')
-				highwords = re.findall('<node[^>]*begin="([0-9]+)"[^>]*/>',
-						match)
-				high = set(re.findall(r'\bid="(.+?)"', match))
-				high = list(tree.subtrees(lambda n:
-						n.source[treebank.PARENT] in high or
-						n.source[treebank.WORD].lstrip('#') in high))
-				high += [int(a) for a in highwords]
 			link = ('<a href="/browse?text=%d&sent=%s%s%s">browse</a>'
 					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
-					'context</a>' % (textno, lineno,
+					'context</a>' % (textno, sentno,
 					'&nofunc' if 'nofunc' in form else '',
 					'&nomorph' if 'nomorph' in form else '',
-					textno, lineno, lineno))
+					textno, sentno, sentno))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True)
 			except ValueError as err:
 				line = "#%s \nERROR: %s\n%s\n%s\n" % (
-						lineno, err, treestr, tree)
+						sentno, err, tree, sent)
 			else:
-				line = "#%s [%s]\n%s\n" % (lineno, link, treerepr)
+				line = "#%s [%s]\n%s\n" % (sentno, link, treerepr)
 			yield line
 		yield "</span>"
 	yield '</pre>' if gotresults else "No matches."
 
 
 def sents(form, dobrackets=False):
-	""" Return search results as terminals or in bracket notation. """
+	"""Return search results as terminals or in bracket notation."""
 	gotresults = False
-	for n, (textno, results, stderr) in enumerate(
-			doqueries(form, lines=True)):
-		if n == 0:
-			url = '%s?query=%s&texts=%s&engine=%s&export=1' % (
-					'trees' if dobrackets else 'sents',
-					quote(form['query']), form['texts'],
-					form.get('engine', 'tgrep2'))
-			yield ('<pre>Query: %s\n'
-					'Sentences (showing up to %d per text; '
-					'export: <a href="%s">plain</a>, '
-					'<a href="%s">with line numbers</a>):\n' % (
-						stderr, SENTLIMIT, url, url + '&linenos=1'))
-		for m, line in enumerate(islice(results, SENTLIMIT)):
-			lineno, text, treestr, match = line.rstrip().split(":::")
+	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+			selectedtexts(form)}
+	url = '%s?query=%s&texts=%s&engine=%s&export=1' % (
+			'trees' if dobrackets else 'sents',
+			quote(form['query']), form['texts'],
+			form.get('engine', 'tgrep2'))
+	yield ('<pre>Query: %s\n'
+			'Sentences (showing up to %d per text; '
+			'export: <a href="%s">plain</a>, '
+			'<a href="%s">with line numbers</a>):\n' % (
+				form['query'] if len(form['query']) < 128
+				else form['query'][:128] + '...',
+				SENTLIMIT, url, url + '&linenos=1'))
+	for n, (filename, results) in enumerate(groupby(CORPORA[form.get(
+			'engine', 'tgrep2')].sents(form['query'], selected,
+			maxresults=SENTLIMIT, brackets=dobrackets), itemgetter(0))):
+		textno = selected[filename]
+		text = TEXTS[textno]
+		for m, (filename, sentno, sent, high) in enumerate(results):
 			if m == 0:
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
 			link = ('<a href="/browse?text=%d&sent=%s%s%s">draw</a>'
 					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
-					'context</a>' % (textno, lineno,
+					'context</a>' % (textno, sentno,
 					'&nofunc' if 'nofunc' in form else '',
 					'&nomorph' if 'nomorph' in form else '',
-					textno, lineno, lineno))
+					textno, sentno, sentno))
 			if dobrackets:
-				treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
-				out = treestr.replace(match,
-						"<span class=r>%s</span>" % match)
+				sent = cgi.escape(sent.replace(" )", " -NONE-)"))
+				out = sent.replace(high, "<span class=r>%s</span>" % high)
 			else:
-				if form.get('engine') == 'xpath':
-					out = ALPINOLEAVES.search(treestr).group(1)
-					# extract starting index of highlighted words
-					high = set(re.findall(
-							'<node[^>]*begin="([0-9]+)"[^>]*/>', match))
-					out = ' '.join('<span class=r>%s</span>' % word
-							if str(n) in high
-							else word for n, word in enumerate(out.split()))
-				else:
-					treestr = cgi.escape(treestr.replace(" )", " -NONE-)"))
-					pre, highlight, post = treestr.partition(match)
-					out = "%s <span class=r>%s</span> %s " % (
-							' '.join(GETLEAVES.findall(pre)),
-							' '.join(GETLEAVES.findall(highlight))
-									if '(' in highlight else highlight,
-							' '.join(GETLEAVES.findall(post)))
-			yield "<li>#%s [%s] %s" % (lineno.rjust(6), link, out)
+				out = ' '.join('<span class=r>%s</span>' % word
+						if x in high else word
+						for x, word in enumerate(sent.split()))
+			yield "<li>#%s [%s] %s" % (str(sentno).rjust(6), link, out)
 		yield "</ol>"
 	yield '</pre>' if gotresults else 'No matches.'
 
 
 def brackets(form):
-	""" Wrapper. """
+	"""Wrapper."""
 	return sents(form, dobrackets=True)
 
 
 def fragmentsinresults(form, doexport=False):
-	""" Extract recurring fragments from search results. """
+	"""Extract recurring fragments from search results."""
 	if form.get('engine', 'tgrep2') != 'tgrep2':
 		yield "Only implemented for TGrep2 queries."
 		return
 	gotresults = False
+	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+			selectedtexts(form)}
 	uniquetrees = set()
-	for n, (_, results, stderr) in enumerate(
-			doqueries(form, lines=True)):
-		if n == 0 and not doexport:
-			url = 'fragments?query=%s&texts=%s&engine=%s&export=1' % (
-					quote(form['query']), form['texts'],
-					form.get('engine', 'tgrep2'))
-			yield ('<pre>Query: %s\n'
-					'Fragments (showing up to %d fragments '
-					'in the first %d search results from selected texts; '
-					'<a href="%s">Export</a>):\n'
-					% (stderr, FRAGLIMIT, SENTLIMIT, url))
-		for m, line in enumerate(islice(results, SENTLIMIT)):
-			if m == 0:
-				gotresults = True
-			_, _, treestr, _ = line.rstrip().split(":::")
+	if not doexport:
+		url = 'fragments?query=%s&texts=%s&engine=%s&export=1' % (
+				quote(form['query']), form['texts'],
+				form.get('engine', 'tgrep2'))
+		yield ('<pre>Query: %s\n'
+				'Fragments (showing up to %d fragments '
+				'in the first %d search results from selected texts; '
+				'<a href="%s">Export</a>):\n'
+				% (form['query'] if len(form['query']) < 128
+					else form['query'][:128] + '...',
+					FRAGLIMIT, SENTLIMIT, url))
+	for n, (_, _, treestr, _) in enumerate(CORPORA[form.get(
+			'engine', 'tgrep2')].sents(form['query'], selected,
+			maxresults=SENTLIMIT, brackets=True)):
+		if n == 0:
+			gotresults = True
+		if form.get('engine', 'tgrep2') == 'xpath':
+			tree, sent = treebank.alpinotree(treestr)
+			treestr = '%s\t%s' % (str(tree), ' '.join(sent))
+			# FIXME: enable disc. bracketings in fragment extractor
+		else:
 			treestr = treestr.replace(" )", " -NONE-)") + '\n'
-			uniquetrees.add(treestr.encode('utf8'))
+		uniquetrees.add(treestr.encode('utf8'))
 	if not gotresults and not doexport:
 		yield "No matches."
 		return
@@ -565,160 +376,191 @@ def fragmentsinresults(form, doexport=False):
 					MINNODES, MINFREQ)
 
 
-def doqueries(form, lines=False, doexport=None):
-	""" Wrapper. """
-	return doqueries_(form.get('engine', 'tgrep2'), form['query'],
-			selectedtexts(form), lines, doexport, form.get('linenos'),
-			form.get('nofunc'), form.get('nomorph'))
+@APP.route('/style')
+def style():
+	"""Use style(1) program to get staticstics for each text."""
+	def generate():
+		"""Generate plots from results."""
+		if not glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
+			yield ("No .txt files found in corpus/\n"
+					"Using sentences extracted from parse trees.\n"
+					"Supply text files with original formatting\n"
+					"to get meaningful paragraph information.\n\n")
+		yield '<a href="style?export">Export to CSV</a>'
+		# produce a plot for each field
+		fields = ()
+		for a in STYLETABLE:
+			fields = sorted(STYLETABLE[a].keys())
+			break
+		for field in fields:
+			data = {a: STYLETABLE[a].get(field, 0) for a in STYLETABLE}
+			total = max(data.values())
+			if total > 0:
+				yield barplot(data, total, field + ':',
+						unit='%' if '%' in field else '')
+
+	def generatecsv():
+		"""Generate CSV file."""
+		tmp = io.BytesIO()
+		keys = sorted(next(iter(STYLETABLE.values()))) if STYLETABLE else []
+		writer = csv.writer(tmp)
+		writer.writerow(['text'] + keys)
+		writer.writerows([name] + [row[key] for key in keys]
+				for name, row in sorted(STYLETABLE.items()))
+		return tmp.getvalue()
+
+	if 'export' in request.args:
+		resp = Response(generatecsv(), mimetype='text/plain')
+		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
+	else:
+		resp = Response(stream_template('searchresults.html',
+				form=request.args, texts=TEXTS,
+				selectedtexts=selectedtexts(request.args), output='style',
+				results=generate(), havexpath=ALPINOCORPUSLIB))
+	resp.headers['Cache-Control'] = 'max-age=604800, public'
+	#set Expires one day ahead (according to server time)
+	resp.headers['Expires'] = (
+		datetime.utcnow() + timedelta(7, 0)).strftime(
+		'%a, %d %b %Y %H:%M:%S UTC')
+	return resp
 
 
-def doqueries_(engine, query, selected, lines=False, doexport=None,
-		linenos=False, nofunc=False, nomorph=False):
-	""" Run query engine on each text. """
-	if engine == 'tgrep2':
-		return dotgrep2queries(query, selected, lines, doexport,
-				linenos, nofunc, nomorph)
-	elif engine == 'xpath':
-		return doxpathqueries(query, selected, lines, doexport,
-				linenos)
-	elif engine == 'regex':
-		return doregexqueries(query, selected, lines, doexport,
-				linenos)
-	raise ValueError('unexpected query engine: %s' % engine)
-
-
-def dotgrep2queries(query, selected, lines=False, doexport=None,
-		linenos=False, nofunc=False, nomorph=False):
-	""" Run tgrep2 on each text. """
-	if doexport == 'sents':
-		fmt = r'%f:%s|%tw\n' if linenos else r'%tw\n'
-	elif doexport == 'trees' or doexport == 'brackets':
-		fmt = r"%f:%s|%w\n" if linenos else r"%w\n"
-	elif doexport is None:
-		# %s the sentence number
-		# %f the corpus name
-		# %w complete tree in bracket notation
-		# %h the matched subtree in bracket notation
-		fmt = r'%s:::%f:::%w:::%h\n'
+@APP.route('/draw')
+def draw():
+	"""Produce a visualization of a tree on a separate page."""
+	if 'tree' in request.args:
+		return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
+				unicodelines=True, html=True)
+	textno, sentno = int(request.args['text']), int(request.args['sent'])
+	nofunc = 'nofunc' in request.args
+	nomorph = 'nomorph' in request.args
+	filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+	if os.path.exists(filename):
+		treestr = next(islice(open(filename),
+				sentno - 1, sentno)).decode('utf8')
+		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
+					unicodelines=True, html=True)
+	elif ALPINOCORPUSLIB:
+		filename = CORPUS_DIR + TEXTS[textno] + '.dact'
+		sentid = CORPORA['xpath'].ids[filename][sentno]
+		treestr = CORPORA['xpath'].files[filename].read(sentid)
+		tree, sent = treebank.alpinotree(
+				ElementTree.fromstring(treestr),
+				functions=None if nofunc else 'add',
+				morphology=None if nomorph else 'replace')
+		result = DrawTree(tree, sent).text(unicodelines=True, html=True)
 	else:
 		raise ValueError
-	for n, text in enumerate(TEXTS):
-		if n not in selected:
-			continue
-		cmd = [which('tgrep2'), '-z', '-a',
-				'-m', fmt,
-				'-c', os.path.join(CORPUS_DIR, text + '.mrg.t2c.gz'),
-				'static/tgrepmacros.txt',
-				query]
-		proc = subprocess.Popen(args=cmd,
-				bufsize=-1, shell=False,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.PIPE)
-		out, err = proc.communicate()
-		out = out.decode('utf8')  # pylint: disable=E1103
-		err = err.decode('utf8')  # pylint: disable=E1103
-		proc.stdout.close()
-		proc.stderr.close()
-		proc.wait()
-		if lines:
-			yield n, filterlabels(out, nofunc, nomorph).splitlines(), err
-		elif doexport is None:
-			yield n, out, err
+	return '<pre id="t%s">%s</pre>' % (sentno, result)
+
+
+@APP.route('/browsesents')
+def browsesents():
+	"""Browse through sentences in a file."""
+	chunk = 20  # number of sentences per page
+	if 'text' in request.args and 'sent' in request.args:
+		textno = int(request.args['text'])
+		sentno = int(request.args['sent']) - 1
+		highlight = int(request.args.get('highlight', 0)) - 1
+		start = max(0, sentno - chunk // 2)
+		maxtree = min(start + chunk, NUMSENTS[textno])
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+		if os.path.exists(filename):
+			results = [' '.join(GETLEAVES.findall(a)) for a
+					in islice(io.open(filename, encoding='utf8'),
+					start, maxtree)]
+		elif ALPINOCORPUSLIB:
+			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
+			results = [ALPINOLEAVES.search(
+					CORPORA['xpath'].files[filename].read(
+						CORPORA['xpath'].ids[filename][n + 1])).group(1)
+					for n in range(start, maxtree)]
 		else:
-			if linenos:
-				yield re.sub(r'(^|\n)corpus/', '\\1', out)
-			else:
-				yield out
+			raise ValueError
+		results = [('<font color=red>%s</font>' % cgi.escape(a))
+				if n == highlight else cgi.escape(a)
+				for n, a in enumerate(results, start)]
+		prevlink = '<a id=prev>prev</a>'
+		if sentno > chunk:
+			prevlink = '<a href="browsesents?text=%d&sent=%d" id=prev>prev</a>' % (
+					textno, sentno - chunk + 1)
+		nextlink = '<a id=next>next</a>'
+		if sentno < NUMSENTS[textno] - chunk:
+			nextlink = '<a href="browsesents?text=%d&sent=%d" id=next>next</a>' % (
+					textno, sentno + chunk + 1)
+		return render_template('browsesents.html', textno=textno,
+				sentno=sentno + 1, text=TEXTS[textno],
+				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
+				nextlink=nextlink, chunk=chunk, mintree=start + 1,
+				maxtree=maxtree)
+	return '<ol>\n%s</ol>\n' % '\n'.join(
+			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
+			'(%d sentences)' % (n, text, NUMSENTS[n])
+			for n, text in enumerate(TEXTS))
 
 
-def doxpathqueries(query, selected, lines=False, doexport=None,
-		linenos=False):
-	""" Run xpath query on each text. """
-	for n, text in enumerate(TEXTS):
-		if n not in selected:
-			continue
-		out = err = ''
-		try:
-			out = XMLCORPORA[n].xpath(query)
-			if lines:
-				yield n, (('%s:::%s:::%s:::%s' % (
-							match.name().rsplit('.', 1)[0],
-							text,
-							XMLCORPORA[n].read(match.name()),
-							match.contents())).decode('utf8')
-						for match in out), err
-			elif doexport is None:
-				yield n, ''.join(match.name().replace('.xml', ':::\n')
-						for match in out).decode('utf8'), err
-			elif doexport == 'sents':
-				yield ''.join(('%s%s\n' % (
-							(('%s:%s|' % (text,
-								match.name().rsplit('.', 1)[0]))
-							if linenos else ''),
-							ALPINOLEAVES.search(
-								XMLCORPORA[n].read(match.name())).group(1)))
-							for match in out).decode('utf8')
-			elif doexport == 'trees' or doexport == 'brackets':
-				yield ''.join(('%s%s' % (
-						(('<!-- %s:%s -->\n' % (text, match.name()))
-						if linenos else ''),
-						XMLCORPORA[n].read(match.name())))
-						for match in out).decode('utf8')
-		except RuntimeError as err:
-			if lines:
-				yield n, (), str(err)
-			elif doexport is None:
-				yield n, '', str(err)
-			else:
-				yield str(err)
+@APP.route('/browse')
+def browse():
+	"""Browse through trees in a file."""
+	chunk = 20  # number of trees to fetch for one request
+	if 'text' in request.args and 'sent' in request.args:
+		textno = int(request.args['text'])
+		sentno = int(request.args['sent']) - 1
+		start = max(0, sentno - sentno % chunk)
+		maxtree = min(start + chunk, NUMSENTS[textno])
+		nofunc = 'nofunc' in request.args
+		nomorph = 'nomorph' in request.args
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+		if ALPINOCORPUSLIB:
+			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
+			drawntrees = [DrawTree(*treebank.alpinotree(
+					ElementTree.fromstring(CORPORA['xpath'].files[
+						filename].read(CORPORA['xpath'].ids[filename][n + 1])),
+					functions=None if nofunc else 'add',
+					morphology=None if nomorph else 'replace')).text(
+					unicodelines=True, html=True)
+					for n in range(start, maxtree)]
+		elif os.path.exists(filename):
+			drawntrees = [DrawTree(filterlabels(
+					line.decode('utf8'), nofunc, nomorph)).text(
+					unicodelines=True, html=True)
+					for line in islice(open(filename), start, maxtree)]
+		else:
+			raise ValueError
+		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
+				' style="display: none; "' if 'ajax' in request.args else '',
+				tree) for n, tree in enumerate(drawntrees, start)]
+		if 'ajax' in request.args:
+			return '\n'.join(results)
+
+		prevlink = '<a id=prev>prev</a>'
+		if sentno > chunk:
+			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
+					textno, sentno - chunk + 1)
+		nextlink = '<a id=next>next</a>'
+		if sentno < NUMSENTS[textno] - chunk:
+			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
+					textno, sentno + chunk + 1)
+		return render_template('browse.html', textno=textno, sentno=sentno + 1,
+				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=results,
+				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
+				nofunc=nofunc, nomorph=nomorph,
+				mintree=start + 1, maxtree=maxtree)
+	return '<ol>\n%s</ol>\n' % '\n'.join(
+			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
+			'(%d sentences)' % (n, text, NUMSENTS[n])
+			for n, text in enumerate(TEXTS))
 
 
-def doregexqueries(query, selected, lines=False, doexport=None,
-		linenos=False):
-	""" Run regex query on tokenized sentences. """
-	for n, text in enumerate(TEXTS):
-		if n not in selected:
-			continue
-		out = err = ''
-		try:
-			regex = re.compile(query)
-			out = enumerate((regex.search(a) for a in tokenized(text)), 1)
-			if lines:
-				yield n, (('%d:::%s:::%s:::%s' % (n, text,
-						match.string, match.group())).decode('utf8')
-						for n, match in out if match is not None), err
-			elif doexport is None:
-				yield n, ''.join('%d:::\n' % n
-						for n, match in out if match is not None), err
-			elif doexport == 'sents':
-				yield ''.join('%s%s\n' % (
-						('%s:%d|' % (text, n)) if linenos else '',
-						match.string)
-						for n, match in out if match is not None)
-			else:
-				raise NotImplementedError
-		except re.error as err:
-			if lines:
-				yield n, (), str(err)
-			elif doexport is None:
-				yield n, '', str(err)
-			else:
-				yield str(err)
-
-
-def filterlabels(line, nofunc, nomorph):
-	""" Optionally remove morphological and grammatical function labels
-	from parse tree. """
-	if nofunc:
-		line = FUNC_TAGS.sub('', line)
-	if nomorph:
-		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
-				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
-	return line
+@APP.route('/favicon.ico')
+def favicon():
+	"""Serve the favicon."""
+	return send_from_directory(os.path.join(APP.root_path, 'static'),
+			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
 def barplot(data, total, title, width=800.0, unit=''):
-	""" A HTML bar plot given a dictionary and max value. """
+	"""A HTML bar plot given a dictionary and max value."""
 	result = ['<div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
@@ -736,8 +578,8 @@ def barplot(data, total, title, width=800.0, unit=''):
 
 
 def concplot(indices, total, width=800.0):
-	""" Draw a concordance plot from a sequence of indices and the total number
-	of items. """
+	"""Draw a concordance plot from a sequence of indices and the total number
+	of items."""
 	result = ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
 			' width="%dpx" height="10px" >\n'
 			'<rect x=0 y=0 width="%dpx" height=10 '
@@ -761,7 +603,7 @@ def concplot(indices, total, width=800.0):
 
 
 def selectedtexts(form):
-	""" Find available texts and parse selected texts argument. """
+	"""Find available texts and parse selected texts argument."""
 	selected = set()
 	if 'texts' in form:
 		for a in filter(None, form['texts'].replace('.', ',').split(',')):
@@ -775,19 +617,10 @@ def selectedtexts(form):
 	return selected
 
 
-def preparecorpus():
-	""" Produce indexed versions of parse trees in .mrg files """
-	for a in sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg'))):
-		if not os.path.exists(a + '.t2c.gz'):
-			subprocess.check_call(
-					args=[which('tgrep2'), '-p', a, a + '.t2c.gz'],
-					shell=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-
 def tokenized(text):
-	""" Return iterable with tokenized sentences of a text, one sentence at a
-	time, in the form of a byte string (with newline). """
-	base = os.path.join(CORPUS_DIR, text)
+	"""Return iterable with tokenized sentences of a text, one sentence at a
+	time, in the form of a byte string (with newline)."""
+	base = EXTRE.sub('', text)
 	if os.path.exists(base + '.tok'):
 		return open(base + '.tok')
 	elif os.path.exists(base + '.mrg.t2c.gz'):
@@ -804,13 +637,14 @@ def tokenized(text):
 				entry.contents()).group(1) + '\n' for entry
 				in alpinocorpus.CorpusReader(base + '.dact').entries()}
 		return [result[a] for a in sorted(result, key=treebank.numbase)]
+	raise ValueError('no file found for %s' % text)
 
 
 def getstyletable(texts):
-	""" Run style(1) on all files and store results in a dictionary. """
+	"""Run style(1) on all files and store results in a dictionary."""
 	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	if not files:
-		files = texts
+		files = [os.path.join(CORPUS_DIR, a) for a in texts]
 	styletable = {}
 	for filename in sorted(files):
 		cmd = [which('style'), '--language', STYLELANG]
@@ -838,8 +672,8 @@ def getstyletable(texts):
 
 
 def parsestyleoutput(out):
-	""" Extract readability grades, averages, and percentages from style output
-	(i.e., all figures except for absolute counts). """
+	"""Extract readability grades, averages, and percentages from style output
+	(i.e., all figures except for absolute counts)."""
 	result = {}
 	for key, val in READGRADERE.findall(out):
 		result[key.strip()] = float(val)
@@ -856,14 +690,35 @@ def parsestyleoutput(out):
 
 
 def getcorpus():
-	""" Get list of files and number of lines in them. """
+	"""Get list of files and number of lines in them."""
 	texts = []
-	xmlcorpora = []
+	corpora = {}
 	if os.path.exists('/tmp/treesearchcorpus.pickle'):
-		texts, numsents, numconst, numwords, styletable = pickle.load(
-				open('/tmp/treesearchcorpus.pickle'))
+		try:
+			texts, numsents, numconst, numwords, styletable, ids = pickle.load(
+					open('/tmp/treesearchcorpus.pickle'))
+		except ValueError:
+			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
+	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
+	if not tokfiles:
+		# extract tokenized sentences from trees
+		for filename in tfiles or afiles:
+			newfile = EXTRE.sub('.tok', filename)
+			converted = tokenized(filename)
+			with open(newfile, 'w') as out:
+				out.writelines(converted)
+		tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
+
+	# FIXME: only reload corpora if necessary here?
+	if tfiles:
+		corpora['tgrep2'] = TgrepSearcher(tfiles, 'static/tgrepmacros.txt')
+	if afiles and ALPINOCORPUSLIB:
+		corpora['xpath'] = DactSearcher(afiles, 'static/xpathmacros.txt')
+	if tokfiles:
+		corpora['regex'] = RegexSearcher(tokfiles)
+
 	assert tfiles or afiles, 'no .mrg or .dact files found in %s' % CORPUS_DIR
 	if tfiles and afiles:
 		assert len(tfiles) == len(afiles) and all(
@@ -871,24 +726,12 @@ def getcorpus():
 				for a, t in zip(tfiles, afiles)), (
 				'expected either .mrg or .dact files, '
 				'or corresponding .mrg and .dact files')
-	if afiles:
-		assert ALPINOCORPUSLIB, ('.dact files found in corpus '
-				'but could not import alpinocorpus library.')
-		try:
-			xmlcorpora = [alpinocorpus.CorpusReader(filename,
-					macrosFilename='static/xpathmacros.txt')
-					for filename in afiles]
-		except TypeError:
-			xmlcorpora = [alpinocorpus.CorpusReader(filename)
-					for filename in afiles]
 	picklemtime = 0
 	if os.path.exists('/tmp/treesearchcorpus.pickle'):
 		picklemtime = os.stat('/tmp/treesearchcorpus.pickle').st_mtime
-	scriptmtime = (os.stat(sys.argv[0]).st_mtime
-			if os.path.exists(sys.argv[0]) else 0)
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
 		for filename in tfiles + afiles}
-	if (scriptmtime > picklemtime or set(texts) != currentfiles or
+	if (set(texts) != currentfiles or
 			any(os.stat(a).st_mtime > picklemtime for a in tfiles + afiles)):
 		if tfiles:
 			numsents = [len(open(filename).readlines())
@@ -897,32 +740,40 @@ def getcorpus():
 					for filename in tfiles if filename.endswith('.mrg')]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
 					for filename in tfiles if filename.endswith('.mrg')]
-		elif ALPINOCORPUSLIB:
-			numsents = [corpus.size() for corpus in xmlcorpora]
+		elif ALPINOCORPUSLIB and afiles:
+			numsents = [corpus.size() for corpus
+					in corpora['xpath'].files.values()]
 			numconst, numwords = [], []
-			for n, corpus in enumerate(xmlcorpora):
+			for filename in afiles:
+				tmp = alpinocorpus.CorpusReader(filename)
 				const = words = 0
-				for entry in corpus.entries():
+				for entry in tmp.entries():
 					const += entry.contents().count('<node ')
 					words += entry.contents().count('word=')
 				numconst.append(const)
 				numwords.append(words)
-				try:  # overwrite previous instance as garbage collection kludge
-					xmlcorpora[n] = alpinocorpus.CorpusReader(filename,
-								macrosFilename='static/xpathmacros.txt')
-				except TypeError:
-					xmlcorpora[n] = alpinocorpus.CorpusReader(filename)
-				print(afiles[n])
+				print(filename)
+		else:
+			raise ValueError
+		if ALPINOCORPUSLIB:
+			ids = {}
+			for filename in afiles:
+				# FIXME: memory leak here?
+				tmp = alpinocorpus.CorpusReader(filename)
+				ids[filename] = [None] + sorted((entry.name() for entry
+						in tmp.entries()), key=treebank.numbase)
 		texts = [os.path.splitext(os.path.basename(a))[0]
 				for a in tfiles or afiles]
 		styletable = getstyletable(texts)
-	pickle.dump((texts, numsents, numconst, numwords, styletable),
+	for filename in afiles:
+		corpora['xpath'].updateindex(filename, ids[filename])
+	pickle.dump((texts, numsents, numconst, numwords, styletable, ids),
 			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
-	return texts, numsents, numconst, numwords, styletable, xmlcorpora
+	return texts, numsents, numconst, numwords, styletable, corpora
 
 
 def stream_template(template_name, **context):
-	""" From Flask documentation: pass an iterator to a template. """
+	"""Pass an iterator to a template; from Flask documentation."""
 	APP.update_template_context(context)
 	templ = APP.jinja_env.get_template(template_name)
 	result = templ.stream(context)
@@ -931,11 +782,12 @@ def stream_template(template_name, **context):
 
 
 def which(program):
-	""" Return first match for program in search path. """
+	"""Return first match for program in search path."""
 	for path in os.environ.get('PATH', os.defpath).split(":"):
 		if path and os.path.exists(os.path.join(path, program)):
 			return os.path.join(path, program)
 	raise ValueError('%r not found in path; please install it.' % program)
+
 
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
@@ -955,9 +807,8 @@ for log in (logging.getLogger(), APP.logger):
 	log.setLevel(logging.DEBUG)
 	log.handlers[0].setFormatter(logging.Formatter(
 			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-preparecorpus()
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, XMLCORPORA = getcorpus()
-ALPINOCORPUSLIB = ALPINOCORPUSLIB and XMLCORPORA
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
+ALPINOCORPUSLIB = ALPINOCORPUSLIB and CORPORA.get('xpath')
 
 
 if __name__ == '__main__':

@@ -1,15 +1,20 @@
 """Objects for searching through collections of trees."""
+
+# Possible improvements:
+# - cache raw results from _query() before conversion?
+# - return/cache trees as strings?
+
 import io
 import os
 import re
-import glob
 import concurrent.futures
 import subprocess
+from collections import Counter, OrderedDict
 from itertools import islice, count, takewhile
 try:
-	from multiprocessing import cpu_count
+	from multiprocessing import cpu_count  # pylint: disable=E0611
 except ImportError:
-	from os import cpu_count
+	from os import cpu_count  # pylint: disable=E0611
 from lru import LRU
 try:
 	import alpinocorpus
@@ -27,40 +32,50 @@ MORPH_TAGS = re.compile(
 		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 
-# Goals:
-# [x] incrementality; per text, per sentence
-# [x] multithreading
-# [x] caching
-# [x] usable from Python console
-# [x] tgrep2
-# [x] XPath
-# [x] regex
-# [ ] brackets output
-# [ ] export results to file
-# [ ] fragment queries?
-# [ ] CLI
-# Issues:
-# - caching? what about partially iterated results etc.
-#   cache each result of _query before conversion? or after?
-# - highlighting? return tree + list of highlighted nodes / sent + slice.
-# - how to select from corpus: integers, or names? filenames.
-# - what to return? Trees / lists of tokens.
+# abbreviations for Alpino POS tags
+ABBRPOS = {
+	'PUNCT': 'PUNCT',
+	'COMPLEMENTIZER': 'COMP',
+	'PROPER_NAME': 'NAME',
+	'PREPOSITION': 'PREP',
+	'PRONOUN': 'PRON',
+	'DETERMINER': 'DET',
+	'ADJECTIVE': 'ADJ',
+	'ADVERB': 'ADV',
+	'HET_NOUN': 'HET',
+	'NUMBER': 'NUM',
+	'PARTICLE': 'PRT',
+	'ARTICLE': 'ART',
+	'NOUN': 'NN',
+	'VERB': 'VB'}
+
+
 class CorpusSearcher(object):
-	"""Abstract base class of a set of corpus files that can be queried.
+	"""Abstract base class to wrap a set of corpus files that can be queried."""
+	def __init__(self, files, macros=None, numthreads=None):
+		"""
+		:param files: a sequence of filenames of corpora
+		:param macros: a filename with macros that can be used in queries.
+		:param numthreads: the number of concurrent threads to use;
+			None to disable threading."""
+		self.files = OrderedDict.fromkeys(files)
+		self.macros = macros
+		self.numthreads = numthreads
+		self.cache = LRU(CACHESIZE)
+		self.pool = concurrent.futures.ThreadPoolExecutor(
+				numthreads or cpu_count())
+		assert self.files, 'no files found matching ' + files
 
-	:param path: a pattern describing the corpus files; e.g., '*.txt'
-	:param macros: a filename with macros that can be used in queries.
-	:param numthreads: the number of concurrent threads to use;
-		None to disable threading."""
-
-	def counts(self, query, subset=None, limit=None):
+	def counts(self, query, subset=None, limit=None, indices=False):
 		"""Run query and return a dict of the form {corpus1: nummatches, ...}.
 
 		:param query: the search query
 		:param subset: an iterable of filenames to run the query on; by default
 			all filenames are used.
 		:param limit: the maximum number of sentences to query per corpus; by
-			default, all sentences are queried."""
+			default, all sentences are queried.
+		:param indices: if True, return a multiset of indices of matching
+			occurrences, instead of an integer count."""
 
 	def trees(self, query, subset=None, maxresults=10,
 			nofunc=False, nomorph=False):
@@ -71,43 +86,53 @@ class CorpusSearcher(object):
 			``(corpus, sentno, tree, sent, highlight)``
 			highlight is a set of nodes from tree."""
 
-	def sents(self, query, subset=None, maxresults=100):
+	def sents(self, query, subset=None, maxresults=100, brackets=False):
 		"""Run query and yield matching sentences.
 
 		:param maxresults: the maximum number of matches to return.
+		:param brackets: if True, return trees as they appear in the treebank;
+			by default sentences are returned as a sequence of tokens.
 		:returns: list of tuples of the form
-			``(corpus, sentno, sent, highlight)``
-			highlight is a set of indices."""
-
-	def export(self, query, output, linenos, subset=None):
-		"""Run tgrep2 on each text, yield results as single string."""
+			``(corpus, sentno, sent, highlight)``\
+			sent is a single string with space-separated tokens;
+			highlight is a set of integer indices."""
 
 
 class TgrepSearcher(CorpusSearcher):
 	"""Search a corpus with tgrep2."""
-	def __init__(self, path, macros, numthreads=None):
-		self.files = tuple(glob.glob(path))
-		# TODO: autoconvert .mrg to .t2c.gz
-		self.macros = macros
-		self.numthreads = numthreads
-		self.cache = LRU(CACHESIZE)
-		self.pool = concurrent.futures.ThreadPoolExecutor(
-				numthreads or cpu_count())
-		assert self.files, 'no files found matching ' + path
+	def __init__(self, files, macros=None, numthreads=None):
+		def convert(filename):
+			"""Convert files not ending in .t2c.gz to tgrep2 format."""
+			if (not filename.endswith('.t2c.gz')
+					and not os.path.exists(filename + '.t2c.gz')):
+				subprocess.check_call(
+						args=[which('tgrep2'), '-p', filename,
+							filename + '.t2c.gz'], shell=False,
+						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				return filename + '.t2c.gz'
+			return filename
 
-	def counts(self, query, subset=None, limit=None):
-		subset = self.files if subset is None else tuple(subset)
+		super(TgrepSearcher, self).__init__(files, macros, numthreads)
+		self.files = {convert(filename): None for filename in self.files}
+
+	def counts(self, query, subset=None, limit=None, indices=False):
+		subset = tuple(subset or self.files)
 		try:
 			result = self.cache['counts', query, subset, limit]
 		except KeyError:
-			result = {}
+			result = OrderedDict()
 		else:
 			return result
 		# %s the sentence number
 		fmt = r'%s:::\n'
-		jobs = {self.pool.submit(lambda x: sum(1 for _ in self._query(
-				query, x, fmt, None, limit)), filename):
-				filename for filename in subset}
+		if indices:
+			jobs = {self.pool.submit(lambda x: Counter(n for n, _
+					in self._query(query, x, fmt, None, limit)), filename):
+					filename for filename in subset}
+		else:
+			jobs = {self.pool.submit(lambda x: sum(1 for _ in self._query(
+					query, x, fmt, None, limit)), filename):
+					filename for filename in subset}
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = future.result()
@@ -116,9 +141,10 @@ class TgrepSearcher(CorpusSearcher):
 
 	def trees(self, query, subset=None, maxresults=10,
 			nofunc=False, nomorph=False):
-		subset = self.files if subset is None else tuple(subset)
+		subset = tuple(subset or self.files)
 		try:
-			result, maxresults2 = self.cache['trees', query, subset]
+			result, maxresults2 = self.cache['trees', query, subset,
+					nofunc, nomorph]
 			if maxresults <= maxresults2:
 				return result[:maxresults]
 		except KeyError:
@@ -151,13 +177,13 @@ class TgrepSearcher(CorpusSearcher):
 					high.label = high.label.rsplit("_", 1)[0]
 					high = list(high.subtrees()) + high.leaves()
 				result.append((filename, sentno, tree, sent, high))
-		self.cache['trees', query, subset] = result, maxresults
+		self.cache['trees', query, subset, nofunc, nomorph] = result, maxresults
 		return result
 
-	def sents(self, query, subset=None, maxresults=100):
-		subset = self.files if subset is None else tuple(subset)
+	def sents(self, query, subset=None, maxresults=100, brackets=False):
+		subset = tuple(subset or self.files)
 		try:
-			result, maxresults2 = self.cache['sents', query, subset]
+			result, maxresults2 = self.cache['sents', query, subset, brackets]
 			if maxresults <= maxresults2:
 				return result[:maxresults]
 		except KeyError:
@@ -172,30 +198,17 @@ class TgrepSearcher(CorpusSearcher):
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
 			for sentno, line in future.result():
-				treestr, match = line.split(':::')
-				pre, highlight, post = treestr.partition(match)
-				pre = GETLEAVES.findall(pre)
-				match = (GETLEAVES.findall(highlight)
-						if '(' in highlight else [highlight])
-				post = GETLEAVES.findall(post)
-				sent = pre + match + post
-				highlight = range(len(pre), len(pre) + len(match))
-				result.append((filename, sentno, sent, highlight))
-		self.cache['sents', query, subset] = result, maxresults
+				sent, match = line.split(':::')
+				if not brackets:
+					idx = sent.index(match)
+					prelen = len(GETLEAVES.findall(sent[:idx]))
+					sent = ' '.join(GETLEAVES.findall(sent))
+					match = GETLEAVES.findall(
+							match) if '(' in match else [match]
+					match = set(range(prelen, prelen + len(match)))
+				result.append((filename, sentno, sent, match))
+		self.cache['sents', query, subset, brackets] = result, maxresults
 		return result
-
-	def export(self, query, output, linenos, subset=None):
-		raise NotImplementedError
-		subset = self.files if subset is None else tuple(subset)
-		if output == 'sents':
-			fmt = r'%f:%s|%tw\n' if linenos else r'%tw\n'
-		elif output == 'trees' or output == 'brackets':
-			fmt = r"%f:%s|%w\n" if linenos else r"%w\n"
-		else:
-			raise ValueError
-		for filename in subset:
-			out, err = self._query(query, filename, fmt)
-			yield filename, out, err
 
 	def _query(self, query, filename, fmt, maxresults=None, limit=None):
 		"""Run a query on a single file."""
@@ -210,12 +223,13 @@ class TgrepSearcher(CorpusSearcher):
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
 		out, err = proc.communicate()
-		# TODO: check for err, raise if fatal.
 		out = out.decode('utf8')  # pylint: disable=E1103
 		err = err.decode('utf8')  # pylint: disable=E1103
 		proc.stdout.close()
 		proc.stderr.close()
 		proc.wait()
+		if proc.returncode != 0:
+			raise ValueError(err)
 		# TODO: can we do this without reading stdout completely?
 		results = ((int(match.group(1)), match.group(2)) for match
 				in re.finditer(r'([0-9]+):::([^\n]*)\n', out))
@@ -225,33 +239,49 @@ class TgrepSearcher(CorpusSearcher):
 
 
 class DactSearcher(CorpusSearcher):
-	def __init__(self, path, macros, numthreads=None):
-		try:
-			self.files = {filename: alpinocorpus.CorpusReader(
-				filename, macrosFilename=macros)
-				for filename in glob.glob(path)}
-		except TypeError:
-			assert macros is None, 'macros not supported'
-			self.files = {filename: alpinocorpus.CorpusReader(filename)
-				for filename in glob.glob(path)}
-		self.macros = macros
-		self.numthreads = numthreads
-		self.cache = LRU(CACHESIZE)
-		self.pool = concurrent.futures.ThreadPoolExecutor(
-				numthreads or cpu_count())
-		assert self.files, 'no files found matching ' + path
+	"""Search a dact corpus with xpath."""
+	def __init__(self, files, macros=None, numthreads=None):
+		super(DactSearcher, self).__init__(files, macros, numthreads)
+		self.ids = {}
+		self.indices = {}
+		for filename in self.files:
+			try:
+				self.files[filename] = alpinocorpus.CorpusReader(
+					filename, macrosFilename=macros)
+			except TypeError:
+				assert macros is None, 'macros not supported'
+				self.files[filename] = alpinocorpus.CorpusReader(filename)
+			# NB: this is wrong but reading the IDs is expensive
+			# so better to cache the information somewhere else,
+			# and call updateindex again
+			self.updateindex(filename, [None] + ['%d.xml' % (n + 1)
+					for n in range(self.files[filename].size())])
 
-	def counts(self, query, subset=None, limit=None):
+	def updateindex(self, filename, ids):
+		"""Store mapping of sentence numbers to IDs.
+
+		:param ids: a list of sentence IDs occurring in file"""
+		self.ids[filename] = ids
+		# store reverse mapping
+		self.indices[filename] = {a: n for n, a
+				in enumerate(self.ids[filename])}
+
+	def counts(self, query, subset=None, limit=None, indices=False):
 		subset = tuple(subset or self.files)
 		try:
 			result = self.cache['counts', query, subset, limit]
 		except KeyError:
-			result = {}
+			result = OrderedDict()
 		else:
 			return result
-		jobs = {self.pool.submit(lambda x: sum(1 for _ in self._query(
-				query, x, None, limit)), filename):
-				filename for filename in subset}
+		if indices:
+			jobs = {self.pool.submit(lambda x: Counter(n for n, _
+					in self._query(query, x, None, limit)), filename):
+					filename for filename in subset}
+		else:
+			jobs = {self.pool.submit(lambda x: sum(1 for _ in self._query(
+					query, x, None, limit)), filename):
+					filename for filename in subset}
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = future.result()
@@ -262,7 +292,8 @@ class DactSearcher(CorpusSearcher):
 			nofunc=False, nomorph=False):
 		subset = tuple(subset or self.files)
 		try:
-			result, maxresults2 = self.cache['trees', query, subset]
+			result, maxresults2 = self.cache['trees', query, subset,
+					nofunc, nomorph]
 			if maxresults <= maxresults2:
 				return result[:maxresults]
 		except KeyError:
@@ -271,10 +302,9 @@ class DactSearcher(CorpusSearcher):
 				maxresults)), filename): filename for filename in subset}
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
-			for match in future.result():
-				sentno = int(match.name().rsplit('.', 1)[0])
+			for sentno, match in future.result():
 				treestr = self.files[filename].read(match.name())
-				match = match.contents()  # .decode('utf8')
+				match = match.contents().decode('utf8')
 				tree, sent = treebank.alpinotree(
 						ElementTree.fromstring(treestr),
 						functions=None if nofunc else 'add',
@@ -287,14 +317,15 @@ class DactSearcher(CorpusSearcher):
 						n.source[treebank.WORD].lstrip('#') in high))
 				high += [int(a) for a in highwords]
 				result.append((filename, sentno, tree, sent, high))
-		self.cache['trees', query, subset] = result, maxresults
+		self.cache['trees', query, subset,
+				nofunc, nomorph] = result, maxresults
 		return result
 
-	def sents(self, query, subset=None, maxresults=100):
+	def sents(self, query, subset=None, maxresults=100, brackets=False):
 		subset = tuple(subset or self.files)
 		try:
 			result, maxresults2 = self.cache[
-					'sents', query, subset]
+					'sents', query, subset, brackets]
 			if maxresults <= maxresults2:
 				return result[:maxresults]
 		except KeyError:
@@ -303,50 +334,56 @@ class DactSearcher(CorpusSearcher):
 				maxresults)), filename): filename for filename in subset}
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
-			for match in future.result():
-				sentno = int(match.name().rsplit('.', 1)[0])
-				treestr = self.files[filename].read(match.name())
-				sent = ALPINOLEAVES.search(treestr).group(1).split()
-				# extract starting index of highlighted words
-				match = match.contents()  # .decode('utf8')
-				highlight = set(re.findall(
-						'<node[^>]*begin="([0-9]+)"[^>]*/>', match))
-				result.append((filename, sentno, sent, highlight))
-		self.cache['sents', query, subset] = result, maxresults
+			for sentno, match in future.result():
+				treestr = self.files[filename].read(match.name()).decode('utf8')
+				match = match.contents().decode('utf8')
+				if not brackets:
+					treestr = ALPINOLEAVES.search(treestr).group(1)
+					# extract starting index of highlighted words
+					match = set(int(a) for a in re.findall(
+							'<node[^>]*begin="([0-9]+)"[^>]*/>', match))
+				result.append((filename, sentno, treestr, match))
+		self.cache['sents', query, subset, brackets] = result, maxresults
 		return result
 
 	def _query(self, query, filename, maxresults=None, limit=None):
+		"""Run a query on a single file."""
 		# NB: results aren't sorted, so we need to iterate exhaustively
-		results = (entry for entry in self.files[filename].xpath(query)
-				if limit is None or int(entry.name().split('.')[0]) < limit)
+		indices = self.indices[filename]
+		results = ((n, entry) for n, entry
+				in ((indices[entry.name()], entry)
+					for entry in self.files[filename].xpath(query))
+				if limit is None or n < limit)
 		return islice(results, maxresults)
 
 
-
 class RegexSearcher(CorpusSearcher):
-	def __init__(self, path, macros, numthreads=None):
+	"""Search a plain text file in UTF-8 with regular expressions.
+
+	Assumes that lines correspond to sentences."""
+	def __init__(self, files, macros=None, numthreads=None):
+		super(RegexSearcher, self).__init__(files, macros, numthreads)
 		if macros:
 			raise NotImplementedError
-		# TODO: autoconvert treebank files to tokenized sents files
-		self.files = {filename: list(io.open(filename, encoding='utf-8'))
-				for filename in glob.glob(path)}
-		self.numthreads = numthreads
-		self.cache = LRU(CACHESIZE)
-		self.pool = concurrent.futures.ThreadPoolExecutor(
-				numthreads or cpu_count())
-		assert self.files, 'no files found matching ' + path
+		for filename in self.files:
+			self.files[filename] = list(io.open(filename, encoding='utf-8'))
 
-	def counts(self, query, subset=None, limit=None):
+	def counts(self, query, subset=None, limit=None, indices=False):
 		subset = tuple(subset or self.files)
 		try:
 			result = self.cache['counts', query, subset, limit]
 		except KeyError:
-			result = {}
+			result = OrderedDict()
 		else:
 			return result
-		jobs = {self.pool.submit(lambda x: sum(1 for _ in self._query(
-				query, x, None, limit)), filename):
-				filename for filename in subset}
+		if indices:
+			jobs = {self.pool.submit(lambda x: Counter(n for n, _
+					in self._query(query, x, None, limit)), filename):
+					filename for filename in subset}
+		else:
+			jobs = {self.pool.submit(lambda x: sum(1 for _ in self._query(
+					query, x, None, limit)), filename):
+					filename for filename in subset}
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = future.result()
@@ -355,9 +392,11 @@ class RegexSearcher(CorpusSearcher):
 
 	def trees(self, query, subset=None, maxresults=10,
 			nofunc=False, nomorph=False):
-		raise NotImplementedError
+		raise ValueError
 
-	def sents(self, query, subset=None, maxresults=100):
+	def sents(self, query, subset=None, maxresults=100, brackets=False):
+		if brackets:
+			raise ValueError
 		subset = tuple(subset or self.files)
 		try:
 			result, maxresults2 = self.cache['sents', query, subset]
@@ -370,25 +409,24 @@ class RegexSearcher(CorpusSearcher):
 				filename for filename in subset}
 		for future in concurrent.futures.as_completed(jobs):
 			filename = jobs[future]
-			for sentno, sent, match in future.result():
-				pre, highlight, post = sent.partition(match)
-				pre = GETLEAVES.findall(pre)
-				match = (GETLEAVES.findall(highlight)
-						if '(' in highlight else [highlight])
-				post = GETLEAVES.findall(post)
-				sent = pre + match + post
-				highlight = range(len(pre), len(pre) + len(match))
-				result.append((filename, sentno, sent, highlight))
+			for sentno, match in future.result():
+				sent = match.string
+				start, end = match.span()
+				prelen = len(sent[:start].split())
+				matchlen = len(sent[start:end].split())
+				highlight = set(range(prelen, prelen + matchlen))
+				result.append((filename, sentno, sent.rstrip(), highlight))
 		self.cache['sents', query, subset] = result, maxresults
 		return result
 
 	def _query(self, query, filename, maxresults=None, limit=None):
+		"""Run a query on a single file."""
 		regex = re.compile(query)
-		results = ((n, match.string, match.group()) for n, match in
+		results = ((n, match) for n, match in
 				enumerate((regex.search(a) for a in self.files[filename]), 1)
 				if match is not None)
 		if limit is not None:
-			results = takewhile(lambda x: x < limit, results)
+			results = takewhile(lambda x: x[0] < limit, results)
 		return islice(results, maxresults)
 
 
@@ -397,9 +435,8 @@ def filterlabels(line, nofunc, nomorph):
 	if nofunc:
 		line = FUNC_TAGS.sub('', line)
 	if nomorph:
-		line = MORPH_TAGS.sub(
-				lambda g: '%s%s' % (g.group(1), g.group(2)),
-				line)
+		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
+				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
 
 

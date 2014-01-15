@@ -42,7 +42,7 @@ span.tt { font-family: monospace; }
 }
 </style>
 
-<body onLoad="placeFocus(); triggerForm('output', '{{ output }}'); triggerForm('norm', '{{
+<body onLoad="triggerForm('output', '{{ output }}'); triggerForm('norm', '{{
 	form.get('norm', 'sents') }}'); triggerForm('engine', '{{ form.get('engine',
 	'xpath' if havexpath else 'tgrep2') }}'); " >
 <div class="content">
@@ -70,7 +70,7 @@ span.tt { font-family: monospace; }
         <td>
             <input type=text
                 name={{ 'notquery' if 'textarea' in form else 'query' }}
-                id=f1 size=100 value="{{ form['query'] }}"
+                id=f1 size=80 value="{{ form['query'] }}"
                 {{ 'style="display: none; " disabled'|safe
                 if 'textarea' in form }}>
             <textarea
@@ -98,7 +98,9 @@ span.tt { font-family: monospace; }
     <label><input type=radio name=engine value=regex{{
         ' checked' if form.get('engine') == 'regex' }} onChange="hide('treesoutput', '');">regex</label>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
-    (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
+		<label>Limit number of sentences (leave empty for no limit):
+			<input type=text name=limit value="{{ form['limit'] }}" size=10></label><br>
+	(Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
     <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)<br>
     <input type=hidden name=texts value="">
     {% for text in texts -%}
@@ -142,9 +144,9 @@ span.tt { font-family: monospace; }
     <br>
     <label><input type=radio name=norm value=query{{
         ' checked' if form.get('norm') == 'query' }} onChange="show('nqid', 'normquery');">
-        custom query:</label>
+        custom query:
 			<span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
-				form['normquery'] }}"></span>
+				form['normquery'] }}"></span></label>
     </td><td></td></tr>
     <tr id=labelrow>
     <td>Labels</td><td>
