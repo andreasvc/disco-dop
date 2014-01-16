@@ -433,16 +433,14 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 
 
 def extractfragments(deriv, chart, list backtransform):
+	"""Turn a derivation into a list of fragments."""
 	result = []
 	if isinstance(deriv, RankedEdge):
 		extractfragments_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, basestring) and backtransform is None:
 		deriv = Tree.parse(deriv, parse_leaf=int)
-		result = [(str(splitfrag(node)),
-				[chart.sent[n] if '@' in pos else None
-					for n, pos in deriv.pos()])
-				for node in deriv.subtrees(
-					lambda n: '@' not in n.label and isinstance(n[0], Tree))]
+		result = [splitfrag(node, chart.sent)
+				for node in deriv.subtrees(frontiernt)]
 	elif isinstance(deriv, basestring):
 		deriv = Tree.parse(deriv, parse_leaf=int)
 		extractfragments_str(deriv, chart, backtransform, result)
@@ -451,17 +449,32 @@ def extractfragments(deriv, chart, list backtransform):
 	return result
 
 
-def splitfrag(node):
+def frontiernt(node):
+	"""Test whether node from a DOP derivation is a frontier nonterminal."""
+	return '@' not in node.label and isinstance(node[0], Tree)
+
+
+def splitfrag(node, sent):
 	"""Return a copy of a tree with subtrees labeled without '@' removed."""
+	frag = splitfrag_(node)
+	pos = dict(frag.pos())
+	sent = [word if n in pos and '@' in pos[n] else None
+			for n, word in enumerate(sent)]
+	frag = REMOVEIDS.sub('', str(frag))
+	return frag, sent
+
+
+def splitfrag_(node):
+	"""Recursive helper for splitfrag()."""
 	children = []
 	for child in node:
 		if not isinstance(child, Tree):
 			children.append(child)
 		elif '@' in child.label:
-			children.append(splitfrag(child))
+			children.append(splitfrag_(child))
 		else:
 			children.append(Tree(child.label, [min(child.leaves())]))
-	return Tree(node.label.split('@')[0], children)
+	return Tree(node.label, children)
 
 
 cdef extractfragments_(RankedEdge deriv, Chart chart,
