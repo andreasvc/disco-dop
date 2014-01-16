@@ -14,7 +14,7 @@ import string  # pylint: disable=W0402
 import random
 import logging
 from operator import itemgetter
-from flask import Flask, Markup, Response
+from flask import Flask, Markup, Response, redirect, url_for
 from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 from werkzeug.urls import url_encode
@@ -32,11 +32,17 @@ PARSERS = {}
 
 @APP.route('/')
 def main():
+	"""Redirect to main page."""
+	return redirect(url_for('index'))
+
+
+@APP.route('/parser/')
+def index():
 	"""Serve the main form."""
 	return render_template('parse.html', result=Markup(parse()), langs=PARSERS)
 
 
-@APP.route('/parse')
+@APP.route('/parser/parse')
 def parse():
 	"""Parse sentence and return a textual representation of a parse tree.
 
@@ -62,8 +68,8 @@ def parse():
 	key = (senttok, est, marg, objfun, coarse, lang, html)
 	if CACHE.get(key) is not None:
 		return CACHE.get(key)
-	link = url_encode(dict(sent=sent, est=est, marg=marg, objfun=objfun,
-			coarse=coarse, html=html))
+	link = 'parse?' + url_encode(dict(sent=sent, est=est, marg=marg,
+			objfun=objfun, coarse=coarse, html=html))
 	PARSERS[lang].stages[-1].estimator = est
 	PARSERS[lang].stages[-1].objective = objfun
 	PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
@@ -118,11 +124,18 @@ def parse():
 	return CACHE.get(key)
 
 
-@APP.route('/favicon.ico')
+@APP.route('/parser/favicon.ico')
 def favicon():
 	""" Serve the favicon. """
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'parse.ico', mimetype='image/vnd.microsoft.icon')
+
+
+@APP.route('/parser/static/main.js')
+def favicon():
+	""" Serve javascript. """
+	return send_from_directory(os.path.join(APP.root_path, 'static'),
+			'main.js', mimetype='text/javascript')
 
 
 def loadparsers():
