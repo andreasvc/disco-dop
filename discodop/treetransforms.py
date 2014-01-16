@@ -881,6 +881,9 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treebanktransforms import readheadrules
+	actions = {'none': None, 'introducepreterminals': introducepreterminals,
+			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
+			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
 	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
 			'headrules= functions= morphology= factor= markorigin=').split()
@@ -891,6 +894,8 @@ def main():
 		print('error: %r\n%s' % (err, USAGE), file=sys.stderr)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
+	assert action in actions, ('unrecognized action: %r\n'
+			'available actions: %r' % (action, list(actions)))
 	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
@@ -907,11 +912,6 @@ def main():
 	trees = islice(corpus.itertrees(), start, end)
 
 	# select transformation
-	actions = {'none': None, 'introducepreterminals': introducepreterminals,
-			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
-			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
-	assert action in actions, ('unrecognized action: %r\n'
-			'available actions: %r' % (action, list(actions)))
 	transform = actions[action]
 	if action in ('binarize', 'optimalbinarize'):
 		h = int(opts.get('-h', 999))
