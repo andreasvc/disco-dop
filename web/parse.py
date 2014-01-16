@@ -132,7 +132,7 @@ def favicon():
 
 
 @APP.route('/parser/static/main.js')
-def favicon():
+def javascript():
 	""" Serve javascript. """
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'main.js', mimetype='text/javascript')

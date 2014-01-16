@@ -249,7 +249,6 @@ class Parser(object):
 					model = u'bon'
 				if stage.objective == 'shortest':
 					model = u'shortest'
-			x = stage.grammar.currentmodel
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
 			if verbosity >= 3:
 				logging.debug(stage.name)

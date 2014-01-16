@@ -462,7 +462,7 @@ def getgrammars(trees, sents, stages, binarization, testmaxwords, resultdir,
 						dump='%s/pcdist.txt' % resultdir))
 			if lexmodel and simplelexsmooth:
 				newrules = simplesmoothlexicon(lexmodel)
-				xgrammar.extend(newrules)
+				xgrammar.extend(newrules)  # pylint: disable=E1103
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			rules, lexicon = write_lcfrs_grammar(
