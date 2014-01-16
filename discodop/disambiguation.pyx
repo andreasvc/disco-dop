@@ -244,10 +244,10 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 					chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (abs(int(s / log(0.5))), parsetreeprob[treestr])
-			if backtransform is not None:
-				derivs[treestr] = extractfragments(
-						deriv if bitpar else (<Entry>entry).key,
-						chart2, backtransform)
+			derivs[treestr] = extractfragments(
+					deriv if bitpar or backtransform is None
+					else (<Entry>entry).key,
+					chart2, backtransform)
 			if len(result) > sldop_n:
 				break
 	if not len(result):
@@ -301,9 +301,9 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 				deriv)
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
-		if backtransform is not None:
-			derivs[tree] = extractfragments(deriv if bitpar else keys[deriv],
-					chart, backtransform)
+		derivs[tree] = extractfragments(
+				deriv if bitpar or backtransform is None
+				else keys[deriv], chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
 	return result, derivs, msg
@@ -441,7 +441,8 @@ def extractfragments(deriv, chart, list backtransform):
 		result = [(str(splitfrag(node)),
 				[chart.sent[n] if '@' in pos else None
 					for n, pos in deriv.pos()])
-				for node in deriv.subtrees(lambda n: '@' not in n.label)]
+				for node in deriv.subtrees(
+					lambda n: '@' not in n.label and isinstance(n[0], Tree))]
 	elif isinstance(deriv, basestring):
 		deriv = Tree.parse(deriv, parse_leaf=int)
 		extractfragments_str(deriv, chart, backtransform, result)
