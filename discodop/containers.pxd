@@ -78,15 +78,15 @@ cdef class Grammar:
 #		to pack the parse forest?
 # [ ] is it useful to have a recognition phase before making parse forest?
 cdef class Chart:
-	cdef public dict rankededges  # [item][n] => Entry(RankedEdge, prob)
+	cdef readonly dict rankededges  # [item][n] => Entry(RankedEdge, prob)
 	cdef list itemsinorder
 	cdef Grammar grammar
-	cdef list sent
+	cdef readonly list sent
 	cdef dict inside, outside
 	cdef UInt start
 	cdef short lensent
-	cdef public bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
-	cdef public bint viterbi  # False: inside probs; True: viterbi 1-best
+	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
+	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
 	cdef double subtreeprob(self, item)
 	cdef lexidx(self, item, Edge *edge)
 	cdef edgestr(self, item, Edge *edge)

@@ -40,18 +40,22 @@ lexicon: Haus	NN	3/10	JJ	1/9\
 
 USAGE = '''\
 Read off grammars from treebanks.
-Usage: %(cmd)s pcfg <input> <output> [options]
-  %(cmd)s plcfrs <input> <output> [options]
-  %(cmd)s dopreduction <input> <output> [options]
-  %(cmd)s doubledop <input> <output> [options]
-  %(cmd)s tsg <input> <output> [options]
+Usage: %(cmd)s <type> <input> <output> [options]
 
-input is a binarized treebank, or weighted fragments in the tsg case,
+type is one of:
+   pcfg
+   plcfrs
+   ptsg
+   dopreduction
+   doubledop
+
+input is a binarized treebank, or in the ptsg case, weighted fragments
+in the same format as the output of the discodop fragments command;
 output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
   --inputfmt=[*%(corpusfmts)s]
-  --inputenc=[*UTF-8|ISO-8859-1|...]
+  --inputenc=[*utf-8|iso-8859-1|...]
   --dopestimator=[*rfe|ewe|shortest|...]
   --numproc=[*1|2|...]  only relevant for double dop fragment extraction
   --gzip                compress output with gzip, view with zless &c.
@@ -60,7 +64,7 @@ Options (* marks default option):
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
-ASCII for the rules, and UTF-8 for the lexicon.
+ASCII for the rules, and utf-8 for the lexicon.
 \n%(grammarformat)s
 ''' % dict(cmd=sys.argv[0], grammarformat=FORMAT,
 		corpusfmts='|'.join(READERS.keys()))
@@ -806,6 +810,19 @@ def grammarinfo(grammar, dump=None):
 	return result
 
 
+def convertweight(weight):
+	"""Convert a weight in a string to a float.
+
+	>>> [convertweight(a) for a in ('0.5', '0x1.0000000000000p-1', '1/2')]
+	[0.5, 0.5, 0.5]"""
+	if '/' in weight:
+		a, b = weight.split('/')
+		return int(a) / float(b)
+	elif weight.startswith('0x'):
+		return float.fromhex(weight)
+	return float(weight)
+
+
 def test():
 	"""Demonstrate grammar extraction."""
 	from discodop import plcfrs
@@ -886,19 +903,18 @@ def main():
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
-	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'tsg'), (
+	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg'), (
 		'unrecognized model: %r' % model)
 	assert opts.get('dopestimator', 'rfe') in ('rfe', 'ewe', 'shortest'), (
 		'unrecognized estimator: %r' % opts['dopestimator'])
 
-	# read treebank
-	if model == 'tsg':
+	if model == 'ptsg':  # read fragments
 		splittedlines = (line.split('\t') for line in io.open(treebankfile,
 					encoding=opts.get('--inputenc', 'utf8')))
 		fragments = {(fields[0] if len(fields) == 2 else
 				(fields[0], [a or None for a in fields[1].split(' ')])):
-					float(fields[-1]) for fields in splittedlines}
-	else:
+					convertweight(fields[-1]) for fields in splittedlines}
+	else:  # read treebank
 		corpus = READERS[opts.get('--inputfmt', 'export')](
 				treebankfile,
 				encoding=opts.get('--inputenc', 'utf8'))
@@ -917,7 +933,7 @@ def main():
 	elif model == 'doubledop':
 		grammar, backtransform, altweights = doubledop(trees, sents,
 				numproc=int(opts.get('--numproc', 1)))
-	elif model == 'tsg':
+	elif model == 'ptsg':
 		grammar, backtransform, altweights = compiletsg(fragments)
 	if opts.get('--dopestimator', 'rfe') == 'ewe':
 		grammar = [(rule, w) for (rule, _), w in
@@ -934,7 +950,7 @@ def main():
 		rulesname += '.gz'
 		lexiconname += '.gz'
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
-	if model == 'tsg':
+	if model == 'ptsg':
 		bitpar = not isinstance(next(iter(fragments)), tuple)
 
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
@@ -943,7 +959,7 @@ def main():
 		rulesfile.write(rules)
 	with codecs.getwriter('utf-8')(myopen(lexiconname, 'w')) as lexiconfile:
 		lexiconfile.write(lexicon)
-	if model in ('doubledop', 'tsg'):
+	if model in ('doubledop', 'ptsg'):
 		backtransformfile = '%s.backtransform%s' % (grammarfile,
 			'.gz' if '--gzip' in opts else '')
 		myopen(backtransformfile, 'w').writelines(
@@ -954,7 +970,7 @@ def main():
 	try:
 		from discodop.containers import Grammar
 		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
-				start=b'ROOT' if model == 'tsg' else trees[0].label)
+				start=b'ROOT' if model == 'ptsg' else trees[0].label)
 		cgrammar.testgrammar()
 	except (ImportError, AssertionError) as err:
 		print(err)

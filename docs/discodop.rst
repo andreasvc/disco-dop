@@ -51,7 +51,7 @@ If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
 Input is in Penn treebank format (S-expressions), one tree per line.
 Output contains lines of the form "tree<TAB>frequency".
-Frequencies refer to the last treebank by default.
+Frequencies refer to the first treebank by default.
 Output is sent to stdout; to save the results, redirect to a file.
 
 Options:
@@ -63,19 +63,20 @@ Options:
                 where "tree' has indices as leaves, referring to elements of
                 "sentence", a space separated list of words.
   --indices     report sets of indices instead of frequencies.
-  --cover       include 'cover' fragments corresponding to single productions.
+  --cover       include all depth-1 fragments of first treebank corresponding
+                to single productions.
   --complete    find complete matches of fragments from treebank1 (needle) in
-                treebank2 (haystack).
+                treebank2 (haystack); frequencies are from haystack.
   --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
-                first treebank will be compared to all others, frequencies
-                refer to first treebank.
+                first treebank will be compared to all others.
                 Results are written to filenames of the form dir/A_B.
   --numproc=n   use n independent processes, to enable multi-core usage
                 (default: 1); use 0 to detect the number of CPUs.
   --numtrees=n  only read first n trees from first treebank
-  --encoding=x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
+  --encoding=x  use x as treebank encoding, e.g. utf-8, iso-8859-1, etc.
   --approx      report approximate frequencies (lower bound)
   --nofreq      do not report frequencies.
+  --relfreq     report relative frequencies wrt. root node of fragments.
   --quadratic   use the slower, quadratic algorithm for finding fragments.
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
@@ -101,8 +102,8 @@ file, and options may consist of:
 --goldfmt, --parsesfmt=<*export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format.
 
---goldenc, --parsesenc=<*UTF-8|ISO-8859-1|...>
-                 Specify a different encoding than the default UTF-8.
+--goldenc, --parsesenc=<*utf-8|iso-8859-1|...>
+                 Specify a different encoding than the default utf-8.
 
 --ted            Enable tree-edit distance evaluation.
 --headrules=x    Specify file with rules for head assignment of constituents
@@ -119,7 +120,7 @@ file, and options may consist of:
                  'replace': replace POS tags with morphology tags,
                  'between': add morphological node between POS tag and word.
 
-The parameter file should be encoded in UTF-8 and supports the following
+The parameter file should be encoded in utf-8 and supports the following
 options (in addition to those described in the README of EVALB):
 
 :DISC_ONLY:      only consider discontinuous constituents for F-scores.
@@ -159,7 +160,7 @@ options may consist of (* marks default option):
                 Input treebank format.
 --outputfmt=<*export|bracket|discbracket|dact|conll|mst>
                 Output treebank format.
---inputenc, --outputenc=<*UTF-8|ISO-8859-1|...>
+--inputenc, --outputenc=<*utf-8|iso-8859-1|...>
                 Treebank encoding.
 --slice=<n:m>   select a range of sentences from input starting with n,
                 up to but not including m; as in Python, n or m can be left
@@ -205,14 +206,17 @@ grammar
 Read off grammars from treebanks.
 Usage::
 
-   discodop grammar pcfg <input> <output> [options]
-   discodop grammar plcfrs <input> <output> [options]
-   discodop grammar dopreduction <input> <output> [options]
-   discodop grammar doubledop <input> <output> [options]
-   discodop grammar tsg <input> <output> [options]
+   discodop grammar <type> <input> <output> [options]
 
+type is one of:
+   pcfg
+   plcfrs
+   ptsg
+   dopreduction
+   doubledop
 
-input is a binarized treebank, or weighted fragments in the tsg case,
+input is a binarized treebank, or in the ptsg case, weighted fragments
+in the same format as the output of the discodop fragments command;
 output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
@@ -220,7 +224,7 @@ Options (* marks default option):
 --inputfmt=<*export|bracket|discbracket|tiger|alpino|dact>
           The treebank format.
 
---inputenc=<\*UTF-8|ISO-8859-1|...>
+--inputenc=<\*utf-8|iso-8859-1|...>
           Treebank encoding.
 
 --dopestimator=<*rfe|ewe|shortest|...>
@@ -239,7 +243,7 @@ Options (* marks default option):
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
-ASCII for the rules, and UTF-8 for the lexicon.
+ASCII for the rules, and utf-8 for the lexicon.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are::
@@ -277,7 +281,7 @@ or:    discodop parser [options] --ctf k <coarserules> <coarselex>
 Grammars need to be binarized, and are in bitpar or PLCFRS format.
 When no file is given, output is written to standard output;
 when additionally no input is given, it is read from standard input.
-Files must be encoded in UTF-8.
+Files must be encoded in utf-8.
 Input should contain one token per line, with sentences delimited by two
 newlines. Output consists of bracketed trees, with discontinuities indicated
 through indices pointing to words in the original sentence.
@@ -324,7 +328,7 @@ Options (* marks default option):
 --fmt=<*export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format.
 
---encoding=enc   Specify a different encoding than the default UTF-8.
+--encoding=enc   Specify a different encoding than the default utf-8.
 --functions=x    :'leave'=default: leave syntactic labels as is,
                  :'remove': strip functions off labels,
                  :'add': show both syntactic categories and functions,
@@ -349,7 +353,7 @@ Reads grammar from a text file in PLCFRS or bitpar format.
 Usage: discodop gen [--verbose] <rules> <lexicon>
 or: discodop gen --test
 
-Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
+Grammar is assumed to be in utf-8; may be gzip'ed (.gz extension).
 
 
 Web interfaces

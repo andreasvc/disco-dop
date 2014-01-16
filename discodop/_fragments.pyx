@@ -339,10 +339,14 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 	assert scratch is not NULL
 	assert SLOTS, SLOTS
 	for p, treeindices in enumerate(trees.treeswithprod):
-		ulongset(scratch, 0UL, SLOTS)
-		# slightly convoluted way of getting an arbitrary set member:
-		n = next(iter(treeindices))
+		try:  # slightly convoluted way of getting an arbitrary set member:
+			n = next(iter(treeindices))
+		except StopIteration:
+			# when using multiple treebanks, there may be a production which
+			# doesn't occur in this treebank
+			continue
 		nodes = &trees.nodes[trees.trees[n].offset]
+		ulongset(scratch, 0UL, SLOTS)
 		for i in range(trees.trees[n].len):
 			if nodes[i].prod == p:
 				SETBIT(scratch, i)

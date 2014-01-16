@@ -31,7 +31,7 @@ If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
 Input is in Penn treebank format (S-expressions), one tree per line.
 Output contains lines of the form "tree<TAB>frequency".
-Frequencies refer to the last treebank by default.
+Frequencies refer to the first treebank by default.
 Output is sent to stdout; to save the results, redirect to a file.
 Options:
   --fmt=[%s]
@@ -41,12 +41,12 @@ Options:
                 where "tree' has indices as leaves, referring to elements of
                 "sentence", a space separated list of words.
   --indices     report sets of indices instead of frequencies.
-  --cover       include 'cover' fragments corresponding to single productions.
+  --cover       include all depth-1 fragments of first treebank corresponding
+                to single productions.
   --complete    find complete matches of fragments from treebank1 (needle) in
-                treebank2 (haystack).
+                treebank2 (haystack); frequencies are from haystack.
   --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
-                first treebank will be compared to all others, frequencies
-                refer to first treebank.
+                first treebank will be compared to all others.
                 Results are written to filenames of the form dir/A_B.
   --numproc=n   use n independent processes, to enable multi-core usage
                 (default: 1); use 0 to detect the number of CPUs.
@@ -54,6 +54,7 @@ Options:
   --encoding=x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
   --approx      report approximate frequencies (lower bound)
   --nofreq      do not report frequencies.
+  --relfreq     report relative frequencies wrt. root node of fragments.
   --quadratic   use the slower, quadratic algorithm for finding fragments.
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
@@ -62,7 +63,7 @@ Options:
 ''' % (sys.argv[0], sys.argv[0], '|'.join(READERS.keys()))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
-		'quiet', 'debug', 'quadratic', 'cover', 'alt')
+		'quiet', 'debug', 'quadratic', 'cover', 'alt', 'relfreq')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -176,7 +177,6 @@ def regular(filenames, numproc, limit, encoding):
 			else:
 				fragments.update(results)
 	if PARAMS['cover']:
-		assert not PARAMS['trees2'], "only supported for single treebank."
 		cover = myapply(coverfragworker, ())
 		if PARAMS['approx']:
 			fragments.update(zip(cover,
@@ -342,11 +342,14 @@ def exactcountworker(args):
 	"""Worker function for counting of fragments."""
 	n, m, bitsets = args
 	trees1 = PARAMS['trees1']
-	results = exactcounts(trees1, PARAMS['trees2'] or trees1, bitsets,
-			fast=not PARAMS['quadratic'], indices=PARAMS['indices'])
 	if PARAMS['complete']:
+		results = exactcounts(trees1, PARAMS['trees2'], bitsets,
+				fast=not PARAMS['quadratic'], indices=PARAMS['indices'])
 		logging.debug("complete matches %d of %d", n + 1, m)
-	elif PARAMS['indices']:
+		return results
+	results = exactcounts(trees1, trees1, bitsets,
+			fast=not PARAMS['quadratic'], indices=PARAMS['indices'])
+	if PARAMS['indices']:
 		logging.debug("exact indices %d of %d", n + 1, m)
 	else:
 		logging.debug("exact counts %d of %d", n + 1, m)
@@ -533,47 +536,61 @@ def printfragments(fragments, counts, out=None):
 		out = sys.stdout
 		if sys.stdout.encoding is None:
 			out = codecs.getwriter('utf-8')(out)
+	if PARAMS['alt']:
+		for n, a in enumerate(fragments):
+			fragments[n] = altrepr(a)
 	if PARAMS['complete']:
 		logging.info("total number of matches: %d", sum(counts))
 	else:
 		logging.info("number of fragments: %d", len(fragments))
 	if PARAMS['nofreq']:
 		for a in fragments:
-			if PARAMS['alt']:
-				a = altrepr(a)
 			out.write("%s\n" % (("%s\t%s" % (a[0],
 					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a.decode('utf-8')))
 		return
-	# when comparing two treebanks, a frequency of 1 is normal;
-	# otherwise, raise alarm.
-	if PARAMS.get('trees2') or PARAMS['cover'] or PARAMS['complement']:
+	# a frequency of 0 is normal when counting occurrences of given fragments
+	# in a second treebank
+	if PARAMS['complete']:
 		threshold = 0
-	else:
+		zeroinvalid = False
+	# a frequency of 1 is normal when comparing two treebanks
+	# or when non-recurring fragments are added
+	elif PARAMS.get('trees2') or PARAMS['cover'] or PARAMS['complement']:
+		threshold = 0
+		zeroinvalid = True
+	else:  # otherwise, raise alarm.
 		threshold = 1
+		zeroinvalid = True
 	if PARAMS['indices']:
 		for a, theindices in zip(fragments, counts):
-			if PARAMS['alt']:
-				a = altrepr(a)
 			if len(theindices) > threshold:
 				out.write("%s\t%r\n" % (("%s\t%s" % (a[0],
 					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a.decode('utf-8'),
 					list(sorted(theindices.elements()))))
-			elif threshold:
+			elif zeroinvalid:
 				raise ValueError("invalid fragment--frequency=1: %r" % a)
-				#logging.warning("invalid fragment--frequency=1: %r", a)
-		return
-	for a, freq in zip(fragments, counts):
-		if freq > threshold:
-			if PARAMS['alt']:
-				a = altrepr(a)
-			out.write("%s\t%d\n" % (("%s\t%s" % (a[0],
+	elif PARAMS['relfreq']:
+		sums = defaultdict(int)
+		for a, freq in zip(fragments, counts):
+			if freq > threshold:
+				sums[a[1:a.index(' ')]] += freq
+			elif zeroinvalid:
+				raise ValueError("invalid fragment--frequency=%d: %r" % (
+					freq, a))
+		for a, freq in zip(fragments, counts):
+			out.write("%s\t%d/%d\n" % (("%s\t%s" % (a[0],
 				' '.join("%s" % x if x else '' for x in a[1])))
-				if PARAMS['disc'] else a, freq))
-		elif threshold:
-			raise ValueError("invalid fragment--frequency=1: %r" % a)
-			#logging.warning("invalid fragment--frequency=1: %r", a)
+				if PARAMS['disc'] else a, freq, sums[a[1:a.index(' ')]]))
+	else:
+		for a, freq in zip(fragments, counts):
+			if freq > threshold:
+				out.write("%s\t%d\n" % (("%s\t%s" % (a[0],
+					' '.join("%s" % x if x else '' for x in a[1])))
+					if PARAMS['disc'] else a, freq))
+			elif zeroinvalid:
+				raise ValueError("invalid fragment--frequency=1: %r" % a)
 
 
 def test():

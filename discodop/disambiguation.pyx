@@ -176,12 +176,16 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 				score = (abs(int(prob / log(0.5))), exp(-newprob))
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
+					derivs[treestr] = extractfragments(
+							deriv, chart, backtransform)
 			elif not mpd and treestr in parsetrees:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr].append(-prob)
 			elif not mpd or (treestr not in parsetrees
 						or -prob > parsetrees[treestr][0]):
 				parsetrees[treestr] = [-prob]
+				derivs[treestr] = extractfragments(
+						deriv, chart, backtransform)
 
 	for treestr, probs in parsetrees.items() if not shortest else ():
 		parsetrees[treestr] = logprobsum(probs)
@@ -434,11 +438,31 @@ def extractfragments(deriv, chart, list backtransform):
 	result = []
 	if isinstance(deriv, RankedEdge):
 		extractfragments_(deriv, chart, backtransform, result)
+	elif isinstance(deriv, basestring) and backtransform is None:
+		deriv = Tree.parse(deriv, parse_leaf=int)
+		result = [(str(getfrag(node)),
+				[chart.sent[n] if '@' in pos else None
+					for n, pos in deriv.pos()])
+				for node in deriv.subtrees(lambda n: '@' not in n.label)]
 	elif isinstance(deriv, basestring):
+		deriv = Tree.parse(deriv, parse_leaf=int)
 		extractfragments_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError
 	return result
+
+
+def getfrag(node):
+	"""Return a copy of a tree with subtrees labeled without '@' removed."""
+	children = []
+	for child in node:
+		if not isinstance(child, Tree):
+			children.append(child)
+		elif '@' in child.label:
+			children.append(getfrag(child))
+		else:
+			children.append(Tree(child.label, [min(child.leaves())]))
+	return Tree(node.label.split('@')[0], children)
 
 
 cdef extractfragments_(RankedEdge deriv, Chart chart,
@@ -558,14 +582,11 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 			whitelist[n] = whitelist[grammar.toid[BREMOVEIDS.sub(b'', label)]]
 		elif b'@' in label or b'}<' in label:
 			whitelist[n] = None  # do not prune item
-		else:
-			whitelist[n] = whitelist[grammar.toid[label]]
 
 	# finally, we parse with the small set of allowed labeled spans.
-	# we do parse with PCFG even if possible, because that requires a different
-	# way of pruning.
-	chart, _ = plcfrs.parse(sent, grammar, tags=tags,
-			whitelist=whitelist)
+	# we do not parse with PCFG even if possible, because that requires a
+	# different way of pruning.
+	chart, _ = plcfrs.parse(sent, grammar, tags=tags, whitelist=whitelist)
 	if not chart:
 		return [], "tree parsing failed", None
 	return lazykbest(chart, m) + (chart, )
