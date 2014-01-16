@@ -31,7 +31,7 @@ from discodop.treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers
 from discodop.treedraw import DrawTree
 from discodop.grammar import treebankgrammar, dopreduction, \
-		doubledop, grammarinfo, write_lcfrs_grammar
+		doubledop, grammarinfo, sortgrammar, write_lcfrs_grammar
 from discodop.containers import Grammar
 from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun, \
@@ -383,8 +383,12 @@ def getgrammars(trees, sents, stages, binarization, testmaxwords, resultdir,
 			if lexmodel and simplelexsmooth:
 				newrules = simplesmoothlexicon(lexmodel)
 				xgrammar.extend(newrules)
-				for weights in altweights.values():
-					weights.extend(w1 / w2 for _, (w1, w2) in newrules)
+				for model, weights in altweights.items():
+					if model == u'shortest':
+						weights.extend(0.5 for _ in newrules)
+					else:
+						weights.extend(w1 / w2 for _, (w1, w2) in newrules)
+				sortgrammar(xgrammar, altweights)
 			elif lexmodel:
 				xgrammar = smoothlexicon(xgrammar, lexmodel)
 			msg = grammarinfo(xgrammar)

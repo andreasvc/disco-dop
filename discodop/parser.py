@@ -12,7 +12,7 @@ import codecs
 import logging
 import tempfile
 import string  # pylint: disable=W0402
-from math import exp
+from math import exp, log
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 import numpy as np
@@ -240,6 +240,20 @@ class Parser(object):
 		for stage in stages:
 			if stage.mode.startswith('pcfg-bitpar'):
 				exportbitpargrammar(stage)
+			if stage.dop:
+				model = u'default'
+				if (stage.estimator == 'ewe'
+						or stage.objective.startswith('sl-dop')):
+					model = u'ewe'
+				elif stage.estimator == 'bon':
+					model = u'bon'
+				if stage.objective == 'shortest':
+					model = u'shortest'
+			x = stage.grammar.currentmodel
+			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
+			if verbosity >= 3:
+				logging.debug(stage.name)
+				logging.debug(stage.grammar)
 
 	def parse(self, sent, tags=None):
 		"""Parse a sentence and perform postprocessing.
@@ -357,7 +371,11 @@ class Parser(object):
 									or self.verbosity >= 3)
 				if self.verbosity >= 3:
 					print('derivations:\n%s\n' % '\n'.join(
-						'%d. p=%g %s' % (n + 1, exp(-prob), deriv)
+						'%d. %s %s' % (n + 1,
+							('subtrees=%d' % abs(int(prob / log(0.5))))
+							if stage.objective == 'shortest'
+							else ('p=%g' % exp(-prob)),
+							deriv)
 						for n, (deriv, prob) in enumerate(derivations)))
 				if stage.objective == 'shortest':
 					stage.grammar.switch('ewe' if stage.estimator == 'ewe'

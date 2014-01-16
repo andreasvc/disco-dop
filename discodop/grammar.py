@@ -7,7 +7,7 @@ import codecs
 import logging
 from math import exp
 from operator import mul, itemgetter
-from collections import defaultdict, Counter as multiset
+from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import count, islice, repeat
 from discodop.tree import ImmutableTree, Tree
 from discodop.treebank import READERS
@@ -343,7 +343,7 @@ def compiletsg(fragments, binarized=True):
 	return grammar, backtransform, {}
 
 
-def sortgrammar(grammar):
+def sortgrammar(grammar, altweights=None):
 	"""Sort grammar productions in three clusters: phrasal, binarized, lexical.
 
 	1. normal phrasal rules, ordered by lhs symbol
@@ -356,7 +356,14 @@ def sortgrammar(grammar):
 		word = yf[0] if nts[1] == 'Epsilon' else ''
 		return word, '}<' in nts[0], nts[0]
 
-	return sorted(grammar, key=sortkey)
+	if altweights is None:
+		return sorted(grammar, key=sortkey)
+
+	idx = sorted(range(len(grammar)), key=lambda n: sortkey(grammar[n]))
+	altweights = {name: [weights[n] for n in idx]
+			for name, weights in altweights.items()}
+	grammar = [grammar[n] for n in idx]
+	return grammar, altweights
 
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
@@ -694,7 +701,8 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 		if probabilities sum to 1, i.e., in that case probabilities can be
 		re-computed as relative frequencies. Otherwise, resort to floating
 		point numbers (e.g., ``0.666``, imprecise)."""
-	rules, lexicon, lexical = [], [], {}
+	rules, lexicon = [], []
+	lexical = OrderedDict()
 	freqs = False
 	if bitpar:
 		freqmass, denom = defaultdict(int), defaultdict(int)
@@ -730,7 +738,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 			yfstr = ','.join(''.join(map(str, a)) for a in yf)
 			rules.append(('%s\t%s\t%s\n' % (
 					'\t'.join(x for x in r), yfstr, w)))
-	for word in sorted(lexical):
+	for word in lexical:
 		lexicon.append(word)
 		for tag, w in lexical[word]:
 			lexicon.append(unicode('\t%s %s' % (tag, w)))
