@@ -127,15 +127,13 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 				score = (abs(int(prob / log(0.5))), newprob)
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
-					derivs[treestr] = extractfragments(
-							entry.key, chart, backtransform)
+					derivs[treestr] = entry.key
 			elif not mpd and treestr in parsetrees:
 				parsetrees[treestr].append(-prob)
 			elif not mpd or (treestr not in parsetrees
 						or -prob > parsetrees[treestr][0]):
 				parsetrees[treestr] = [-prob]
-				derivs[treestr] = extractfragments(
-						entry.key, chart, backtransform)
+				derivs[treestr] = entry.key
 	else:  # DOP reduction / bitpar
 		for (deriv, prob), entry in zip(derivations, entries):
 			if backtransform is None:
@@ -176,19 +174,19 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 				score = (abs(int(prob / log(0.5))), exp(-newprob))
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
-					derivs[treestr] = extractfragments(
-							deriv, chart, backtransform)
+					derivs[treestr] = deriv
 			elif not mpd and treestr in parsetrees:
 				# simple way of adding probabilities (too easy):
 				parsetrees[treestr].append(-prob)
 			elif not mpd or (treestr not in parsetrees
 						or -prob > parsetrees[treestr][0]):
 				parsetrees[treestr] = [-prob]
-				derivs[treestr] = extractfragments(
-						deriv, chart, backtransform)
+				derivs[treestr] = deriv
 
 	for treestr, probs in parsetrees.items() if not shortest else ():
 		parsetrees[treestr] = logprobsum(probs)
+	for treestr, deriv_ in derivs.items():
+		derivs[treestr] = extractfragments(deriv_, chart, backtransform)
 	msg = '%d derivations, %d parsetrees' % (
 			len(derivations if backtransform is None else entries),
 			len(parsetrees))
@@ -440,7 +438,7 @@ def extractfragments(deriv, chart, list backtransform):
 		extractfragments_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, basestring) and backtransform is None:
 		deriv = Tree.parse(deriv, parse_leaf=int)
-		result = [(str(getfrag(node)),
+		result = [(str(splitfrag(node)),
 				[chart.sent[n] if '@' in pos else None
 					for n, pos in deriv.pos()])
 				for node in deriv.subtrees(lambda n: '@' not in n.label)]
@@ -452,14 +450,14 @@ def extractfragments(deriv, chart, list backtransform):
 	return result
 
 
-def getfrag(node):
+def splitfrag(node):
 	"""Return a copy of a tree with subtrees labeled without '@' removed."""
 	children = []
 	for child in node:
 		if not isinstance(child, Tree):
 			children.append(child)
 		elif '@' in child.label:
-			children.append(getfrag(child))
+			children.append(splitfrag(child))
 		else:
 			children.append(Tree(child.label, [min(child.leaves())]))
 	return Tree(node.label.split('@')[0], children)
