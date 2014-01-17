@@ -520,11 +520,11 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 			extractfragments_(child, chart, backtransform, result)
 
 
-cdef str extractfragments_str(deriv, Chart chart,
+cdef extractfragments_str(deriv, Chart chart,
 		list backtransform, list result):
 	cdef list children = [], labels = []
 	cdef str frag
-	assert 1 <= len(deriv) <= 2
+	assert 1 <= len(deriv) <= 2, deriv
 	prod = (b'0', deriv.label.encode('ascii'), deriv[0].label.encode('ascii')
 			) if len(deriv) == 1 else (b'01', deriv.label.encode('ascii'),
 			deriv[0].label.encode('ascii'),
