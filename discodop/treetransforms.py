@@ -75,6 +75,7 @@ options may consist of (* marks default option):
                  'between': insert node with morphological information between
                      POS tag and word, e.g., (DET (sg.def the))
   --lemmas       insert node with lemma between word and POS tag.
+  --ensureroot=x add root node labeled 'x' to trees if not already present.
   --factor=[left|*right]  whether binarization factors to the left or right
   -h n           horizontal markovization. default: infinite (all siblings)
   -v n           vertical markovization. default: 1 (immediate parent only)
@@ -886,7 +887,7 @@ def main():
 			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
 	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
-			'headrules= functions= morphology= factor= markorigin=').split()
+			'headrules= functions= morphology= factor= markorigin= ensureroot=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
@@ -904,7 +905,8 @@ def main():
 			infilename,
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get('--headrules'), markheads='--markheads' in opts,
-			punct=opts.get('--punct'), functions=opts.get('--functions'),
+			ensureroot=opts.get('--ensureroot'), punct=opts.get('--punct'),
+			functions=opts.get('--functions'),
 			morphology=opts.get('--morphology'),
 			lemmas='between' if '--lemmas' in opts else None)
 	start, end = opts.get('--slice', ':').split(':')

@@ -974,11 +974,13 @@ def main():
 				'%s\n' % a for a in backtransform)
 		print('wrote backtransform to', backtransformfile)
 	print('wrote grammar to %s and %s.' % (rulesname, lexiconname))
-	print(grammarinfo(grammar))
+	if len(grammar) < 10000:  # this is very slow so skip with large grammars
+		print(grammarinfo(grammar))
 	try:
 		from discodop.containers import Grammar
 		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
-				start=b'ROOT' if model == 'ptsg' else trees[0].label)
+				start=next(iter(grammar))[0][0][0]  # pick arbitrary label
+				if model == 'ptsg' else trees[0].label)
 		cgrammar.testgrammar()
 	except (ImportError, AssertionError) as err:
 		print(err)

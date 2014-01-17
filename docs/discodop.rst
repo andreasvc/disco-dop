@@ -182,6 +182,7 @@ options may consist of (* marks default option):
                 :'between': insert node with morphological information between
                     POS tag and word, e.g., (DET (sg.def the))
 --lemmas        insert node with lemma between word and POS tag.
+--ensureroot=x  add root node labeled 'x' to trees if not already present.
 --factor=<left|*right>
                 whether binarization factors to the left or right
 -h n            horizontal markovization. default: infinite (all siblings)

@@ -145,7 +145,8 @@ def main():
 		# detect bitpar format
 		bitpar = rules[0] in string.digits
 		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar)
-		fine.getmapping(coarse, striplabelre=re.compile(b'@.+$'))
+		fine.getmapping(coarse, striplabelre=re.compile(b'@.+$'),
+				neverblockre=re.compile(b'.+}<') if backtransform else None)
 		stage = DEFAULTSTAGE.copy()
 		stage.update(
 				name='fine',
@@ -166,9 +167,9 @@ def main():
 				if len(args) >= 3 else sys.stdin)
 		out = (io.open(args[3], 'w', encoding='utf-8')
 				if len(args) == 4 else sys.stdout)
-	if backtransform:
-		_ = stages[-1].grammar.getmapping(None,
-			neverblockre=re.compile(b'.+}<'))
+		if backtransform:
+			_ = stages[-1].grammar.getmapping(None,
+				neverblockre=re.compile(b'.+}<'))
 	doparsing(Parser(stages), infile, out, prob, oneline)
 
 
@@ -240,8 +241,8 @@ class Parser(object):
 		for stage in stages:
 			if stage.mode.startswith('pcfg-bitpar'):
 				exportbitpargrammar(stage)
+			model = u'default'
 			if stage.dop:
-				model = u'default'
 				if (stage.estimator == 'ewe'
 						or stage.objective.startswith('sl-dop')):
 					model = u'ewe'

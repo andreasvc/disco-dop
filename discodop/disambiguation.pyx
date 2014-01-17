@@ -230,10 +230,10 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
 	chart.grammar.switch(u'shortest', True)
-	shortestderivations, msg, chart2 = treeparsing(
+	shortestderivations, _explored, chart2 = treeparsing(
 			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
 	if not chart2.rankededges.get(chart2.root()):
-		return {}, {}, msg
+		return {}, {}, 'SL-DOP couldn\'t find parse for tree'
 	result = {}
 	for (deriv, s), entry in zip(shortestderivations,
 			chart2.rankededges[chart2.root()]):
