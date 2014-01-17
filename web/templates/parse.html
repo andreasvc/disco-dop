@@ -9,7 +9,7 @@ span.tt { font-family: monospace; }
 </style>
 
 <body onLoad="placeFocus();" >
-<h1>Discontinuous parsing</h1>
+<h1>Data-Oriented Parsing demo</h1>
 
 <blockquote><p>
 Enter a sentence in Dutch, English, or German (auto-detected).
@@ -17,11 +17,12 @@ The sentence will be parsed and the most probable parse tree will be shown
 (<a href="javascript: togglelink('tech'); " id=linktech>show technical details</a>).</p>
 
 <div id=tech style="display: none; "><p>
+	The Data-Oriented Parsing (DOP) framework entails constructing analyses
+	from fragments of past experience. Double-DOP operationalizes this with a
+	subset of fragments that occur at least twice in the training data.
+	This demo incorporates discontinuous constituents as part of the model.
 	Linear Context-Free Rewriting Systems (LCFRS) allow for parsing with
-	discontinuous constituents. The Data-Oriented Parsing (DOP) framework
-	entails constructing analyses from fragments of past experience.
-	Double-DOP operationalizes this with a subset of fragments that occur at least twice
-	in the training data.
+	discontinuous constituents.
 	For efficiency, sentences are parsed with the following coarse-to-fine
 	pipeline: </p>
 	<ol>
@@ -65,9 +66,16 @@ The sentence will be parsed and the most probable parse tree will be shown
 	<li>bitpar: Use the bitpar parser (max 1000 derivations)
 	</ul>
 
-	The source code is available at
-	<a href="http://github.com/andreasvc/disco-dop/">
-	http://github.com/andreasvc/disco-dop/</a>
+	<p>
+	The source code is available at <a href="https://github.com/andreasvc/disco-dop/#readme">http://github.com/andreasvc/disco-dop/</a>
+	and documented at <a href="http://staff.science.uva.nl/~acranenb/discodop/">http://staff.science.uva.nl/~acranenb/discodop/</a>
+	</p>
+
+	<p>
+	Reference: Andreas van Cranenburgh, Rens Bod (2013). Discontinuous Parsing with an
+		Efficient and Accurate DOP Model. Proc. of IWPT.
+		<a href="http://acl.cs.qc.edu/iwpt2013/proceedings/Splits/9_pdfsam_IWPTproceedings.pdf">http://acl.cs.qc.edu/iwpt2013/proceedings/Splits/9_pdfsam_IWPTproceedings.pdf</a>
+	</p>
 </div>
 </blockquote>
 
