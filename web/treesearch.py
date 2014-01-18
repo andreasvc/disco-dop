@@ -136,9 +136,14 @@ def export(form, output):
 def counts(form, doexport=False):
 	"""Produce graphs and tables for a set of queries given as 'key: query'.
 
-	return report: one overview with totals (per category);
-	one graph for each query (maybe one for each text as well).
+	returns one graph for each query, and an overview with totals (optionally
+	per category, if the first letters of each corpus name form a small set);
 	"""
+	# TODO:
+	# - offer graph for individual texts with all queries together.
+	# - show multiple colors in combined results concordance plot
+	# - side-by-side comparison of two passages, with matching queries
+	#   highlighted in different colors
 	norm = form.get('norm', 'sents')
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
@@ -152,7 +157,6 @@ def counts(form, doexport=False):
 	combined = defaultdict(Counter)
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
-	print(repr(form['query']))
 	for n, line in enumerate(form['query'].splitlines() + [None], 1):
 		cnts = Counter()
 		sumtotal = 0
@@ -207,15 +211,17 @@ def counts(form, doexport=False):
 					sum(cnts.values()),
 					100.0 * sum(cnts.values()) / sumtotal))
 			yield '</pre>'
-			if limit:
+			if max(cnts.values()) == 0:
+				continue
+			elif limit:
 				# show absolute counts when all texts have been limited to same
 				# number of sentences
 				yield barplot(cnts, max(cnts.values()),
-						'Absolute counts of pattern:', unit='matches')
+						'Absolute counts of %s:' % name, unit='matches')
 			else:
 				yield barplot(relfreq, max(relfreq.values()),
-						'Relative frequency of pattern: '
-						'(count / num_%s * 100)' % norm, unit='%')
+						'Relative frequency of %s: '
+						'(count / num_%s * 100)' % (name, norm), unit='%')
 	if doexport:
 		tmp = io.BytesIO()
 		df.to_csv(tmp)
