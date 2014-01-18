@@ -98,8 +98,6 @@ span.tt { font-family: monospace; }
     <label><input type=radio name=engine value=regex{{
         ' checked' if form.get('engine') == 'regex' }} onChange="hide('treesoutput', '');">regex</label>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
-		<label>Limit number of sentences (leave empty for no limit):
-			<input type=text name=limit value="{{ form['limit'] }}" size=10></label><br>
 	(Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
     <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)<br>
     <input type=hidden name=texts value="">
@@ -108,23 +106,27 @@ span.tt { font-family: monospace; }
         ' checked' if loop.index0 in selectedtexts }} onChange="numchecked(); ">{{ text }}</label><br>
     {% endfor -%}
     </div>
+	<br>
+	<label>Limit number of sentences (leave empty for no limit):
+		<input type=text name=limit value="{{ form['limit'] }}" size=10></label><br>
     </td><td></td></tr>
     <tr>
 	<td style="vertical-align:top;">Output:</td>
-    <td><label><input type=radio name=output value=counts{{ ' checked' if output == 'counts'
+    <td>
+	<label><input type=radio name=output value=counts{{ ' checked' if output == 'counts'
 		}} onChange="show('normrow', 'norm'); hide('labelrow', 'nomorph'); " >
         Counts;</label>
     <label><input type=radio name=output value=sents{{ ' checked' if output == 'sents'
 		}} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
-        Matching sentences (words only);</label>
+        Sentences;</label>
 	<span id=treesoutput>
 	<label><input type=radio name=output value=trees{{ ' checked' if output == 'trees'
 		}} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
-		Draw matching trees;</label>
+		Trees;</label>
 	<br>
 	<label><input type=radio name=output value=brackets{{ ' checked' if output == 'brackets'
 		}}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
-        Matches in bracket notation;</label>
+        Raw trees;</label>
     <label><input type=radio name=output value=fragments{{ ' checked' if output == 'fragments'
 		}}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
         Extract fragments from matches;</label>

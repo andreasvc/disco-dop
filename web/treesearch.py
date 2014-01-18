@@ -16,14 +16,16 @@ from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, groupby
 from operator import itemgetter
-from collections import Counter
+from collections import Counter, OrderedDict, defaultdict
 try:
 	import cPickle as pickle
 except ImportError:
 	import pickle
+import pandas
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
+from werkzeug.urls import url_encode
 # alpinocorpus
 try:
 	import alpinocorpus
@@ -67,11 +69,6 @@ EXT = {
 		'xpath': '.dact',
 		'regex': '.tok'
 	}
-
-# TODO: add 'batch' action to web interface:
-# given a list of queries, each given `as 'key: query\n',
-# return report: one overview with totals (per category);
-# one graph for each query (maybe one for each text as well).
 
 
 @APP.route('/')
@@ -137,77 +134,108 @@ def export(form, output):
 
 
 def counts(form, doexport=False):
-	"""Produce counts of matches for each text."""
-	cnts = Counter()
-	relfreq = {}
-	sumtotal = 0
+	"""Produce graphs and tables for a set of queries given as 'key: query'.
+
+	return report: one overview with totals (per category);
+	one graph for each query (maybe one for each text as well).
+	"""
 	norm = form.get('norm', 'sents')
-	gotresult = False
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
 	if not doexport:
-		url = 'counts?query=%s&norm=%s&texts=%s&engine=%s&export=1' % (
-				form['query'], form['norm'], form['texts'],
-				form.get('engine', 'tgrep2'))
-		yield ('<pre>Query: %s\n'
-				'NB: the counts reflect the total number of '
-				'times a pattern matches for each tree.\n\n'
-				'Counts (<a href="%s">export to CSV</a>):\n' % (
-				form['query'] if len(form['query']) < 128
-				else form['query'][:128] + '...', url))
+		url = 'counts?' + url_encode(dict(export=1, **form))
+		yield ('Counts from queries '
+				'(<a href="%s">export to CSV</a>):\n' % url)
 	if norm == 'query':
 		normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
 				form['normquery'], selected)
-	for filename, indices in sorted(CORPORA[form.get(
-			'engine', 'tgrep2')].counts(
-				form['query'], selected, indices=True).items()):
-		textno = selected[filename]
-		limit = (int(form.get('limit')) if form.get('limit')
-				else NUMSENTS[textno])
-		if indices:
-			gotresult = True
-		text = TEXTS[textno]
-		cnt = sum(indices.values())
-		cnts[text] = cnt
-		if norm == 'consts':
-			total = NUMCONST[textno]
-		elif norm == 'words':
-			total = NUMWORDS[textno]
-		elif norm == 'sents':
-			total = NUMSENTS[textno]
-		elif norm == 'query':
-			total = normresults[filename] or 1
+	combined = defaultdict(Counter)
+	index = [TEXTS[n] for n in selected.values()]
+	df = pandas.DataFrame(index=index)
+	print(repr(form['query']))
+	for n, line in enumerate(form['query'].splitlines() + [None], 1):
+		cnts = Counter()
+		sumtotal = 0
+		relfreq = {}
+		if line is None:
+			if len(df.columns) == 1:
+				break
+			name = 'Combined results'
+			results = combined
 		else:
-			raise ValueError
-		relfreq[text] = 100.0 * cnt / total
-		sumtotal += total
-		if not doexport:
-			line = "%s%6d    %5.2f %%" % (
-					text.ljust(40)[:40], cnt, relfreq[text])
-			plot = concplot(indices, limit or NUMSENTS[textno])
-			if cnt:
-				yield line + plot + '\n'
+			if ':' in line:
+				name, query = line.split(':', 1)
 			else:
-				yield '<span style="color: gray; ">%s%s</span>\n' % (line, plot)
+				name, query = 'Query %d' % n, line
+			results = CORPORA[form.get('engine', 'tgrep2')].counts(
+					query, selected, indices=True)
+		if not doexport:
+			yield '<h3>%s</h3>\n<pre>\n%s\n' % (name, query)
+		for filename, indices in sorted(results.items()):
+			combined[filename].update(indices)
+			textno = selected[filename]
+			limit = (int(form.get('limit')) if form.get('limit')
+					else NUMSENTS[textno])
+			text = TEXTS[textno]
+			cnt = sum(indices.values())
+			cnts[text] = cnt
+			if norm == 'consts':
+				total = NUMCONST[textno]
+			elif norm == 'words':
+				total = NUMWORDS[textno]
+			elif norm == 'sents':
+				total = NUMSENTS[textno]
+			elif norm == 'query':
+				total = normresults[filename] or 1
+			else:
+				raise ValueError
+			relfreq[text] = 100.0 * cnt / total
+			sumtotal += total
+			if not doexport:
+				line = "%s%6d    %5.2f %%" % (
+						text.ljust(40)[:40], cnt, relfreq[text])
+				plot = concplot(indices, limit or NUMSENTS[textno])
+				if cnt:
+					yield line + plot + '\n'
+				else:
+					yield '<span style="color: gray; ">%s%s</span>\n' % (
+							line, plot)
+		df[name] = pandas.Series(relfreq)
+		if not doexport:
+			yield ("%s%6d    %5.2f %%\n</span>\n" % (
+					"TOTAL".ljust(40),
+					sum(cnts.values()),
+					100.0 * sum(cnts.values()) / sumtotal))
+			yield '</pre>'
+			if limit:
+				# show absolute counts when all texts have been limited to same
+				# number of sentences
+				yield barplot(cnts, max(cnts.values()),
+						'Absolute counts of pattern:', unit='matches')
+			else:
+				yield barplot(relfreq, max(relfreq.values()),
+						'Relative frequency of pattern: '
+						'(count / num_%s * 100)' % norm, unit='%')
 	if doexport:
 		tmp = io.BytesIO()
-		csvexport = csv.writer(tmp)
-		csvexport.writerow(['text', 'count', 'relfreq'])
-		csvexport.writerows([text, cnts[text], relfreq[text]] for text in cnts)
+		df.to_csv(tmp)
 		yield tmp.getvalue()
-	elif gotresult:
-		yield ("%s%6d    %5.2f %%\n</span>\n" % (
-				"TOTAL".ljust(40),
-				sum(cnts.values()),
-				100.0 * sum(cnts.values()) / sumtotal))
-		if not doexport:
-			yield '</pre>'
-		yield barplot(relfreq, max(relfreq.values()),
-				'Relative frequency of pattern: (count / num_%s * 100)' % norm,
-				unit='%')
-		#yield barplot(cnts, max(cnts.values()), 'Absolute counts of pattern')
 	else:
-		yield '</pre>'
+		# collate stats
+		firstletters = {key[0] for key in df.index}
+		if len(firstletters) <= 5:
+			overview = OrderedDict(('%s_%s' % (letter, query),
+					df[query].ix[[key for key in df.index
+						if key[0] == letter]].mean())
+					for query in df.columns
+						for letter in firstletters)
+		else:
+			overview = OrderedDict((query, df[query].mean())
+				for query in df.columns)
+		yield '<h3>Overview of patterns</h3>\n'
+		yield barplot(overview, max(overview.values()),
+				'Relative frequencies of patterns: '
+				'(count / num_%s * 100)' % norm, unit='%', dosort=False)
 
 
 def trees(form):
@@ -216,9 +244,7 @@ def trees(form):
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
 	# NB: we do not hide function or morphology tags when exporting
-	url = 'trees?query=%s&texts=%s&engine=%s&export=1' % (
-			quote(form['query']), form['texts'],
-			form.get('engine', 'tgrep2'))
+	url = 'trees?' + url_encode(dict(export=1, **form))
 	yield ('<pre>Query: %s\n'
 			'Trees (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
@@ -261,10 +287,8 @@ def sents(form, dobrackets=False):
 	gotresults = False
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
-	url = '%s?query=%s&texts=%s&engine=%s&export=1' % (
-			'trees' if dobrackets else 'sents',
-			quote(form['query']), form['texts'],
-			form.get('engine', 'tgrep2'))
+	url = '%s?%s' % ('trees' if dobrackets else 'sents',
+			url_encode(dict(export=1, **form)))
 	yield ('<pre>Query: %s\n'
 			'Sentences (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
@@ -315,9 +339,7 @@ def fragmentsinresults(form, doexport=False):
 			selectedtexts(form)}
 	uniquetrees = set()
 	if not doexport:
-		url = 'fragments?query=%s&texts=%s&engine=%s&export=1' % (
-				quote(form['query']), form['texts'],
-				form.get('engine', 'tgrep2'))
+		url = 'fragments?' + url_encode(dict(export=1, **form))
 		yield ('<pre>Query: %s\n'
 				'Fragments (showing up to %d fragments '
 				'in the first %d search results from selected texts; '
@@ -493,7 +515,7 @@ def browsesents():
 				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
 				nextlink=nextlink, chunk=chunk, mintree=start + 1,
 				maxtree=maxtree)
-	return '<ol>\n%s</ol>\n' % '\n'.join(
+	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences)' % (n, text, NUMSENTS[n])
 			for n, text in enumerate(TEXTS))
@@ -546,7 +568,7 @@ def browse():
 				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
 				nofunc=nofunc, nomorph=nomorph,
 				mintree=start + 1, maxtree=maxtree)
-	return '<ol>\n%s</ol>\n' % '\n'.join(
+	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences)' % (n, text, NUMSENTS[n])
 			for n, text in enumerate(TEXTS))
@@ -559,7 +581,7 @@ def favicon():
 			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
-def barplot(data, total, title, width=800.0, unit=''):
+def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	"""A HTML bar plot given a dictionary and max value."""
 	result = ['<div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
@@ -568,7 +590,8 @@ def barplot(data, total, title, width=800.0, unit=''):
 	color = {}
 	if len(firstletters) <= 5:
 		color.update(zip(firstletters, range(1, 6)))
-	for key in sorted(data, key=data.get, reverse=True):
+	keys = sorted(data, key=data.get, reverse=True) if dosort else data
+	for key in keys:
 		result.append('<br><div style="width:%dpx;" class=b%d></div>'
 				'<span>%s: %g %s</span>' % (round(width * data[key] / total),
 				color.get(key[0], 1) if data[key] else 0,
