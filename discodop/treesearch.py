@@ -25,7 +25,7 @@ except ImportError:
 from discodop.tree import Tree
 from discodop import treebank
 
-CACHESIZE = 100
+CACHESIZE = 500
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 MORPH_TAGS = re.compile(

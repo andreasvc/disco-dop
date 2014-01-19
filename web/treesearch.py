@@ -134,7 +134,12 @@ def export(form, output):
 
 
 def counts(form, doexport=False):
-	"""Produce graphs and tables for a set of queries given as 'key: query'.
+	"""Produce graphs and tables for a set of queries.
+
+	Queries should be given one per line, optionally prefixed by a name and
+	a normalization query::
+
+		[name: ][normquery<tab>]query
 
 	returns one graph for each query, and an overview with totals (optionally
 	per category, if the first letters of each corpus name form a small set);
@@ -157,6 +162,9 @@ def counts(form, doexport=False):
 	combined = defaultdict(Counter)
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
+	yield '<ol>%s</ol>\n' % '\n'.join(
+			'<li><a href="#q%d">%s</a>' % (n, line.split(':')[0])
+			for n, line in enumerate(form['query'].splitlines(), 1))
 	for n, line in enumerate(form['query'].splitlines() + [None], 1):
 		cnts = Counter()
 		sumtotal = 0
@@ -171,10 +179,17 @@ def counts(form, doexport=False):
 				name, query = line.split(':', 1)
 			else:
 				name, query = 'Query %d' % n, line
+			if '\t' in query:
+				normquery, query = query.split('\t', 1)
+				norm = 'query'
+				normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
+						normquery, selected)
+			else:
+				norm = form.get('norm', 'sents')
 			results = CORPORA[form.get('engine', 'tgrep2')].counts(
 					query, selected, indices=True)
 		if not doexport:
-			yield '<h3>%s</h3>\n<pre>\n%s\n' % (name, query)
+			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (n, name, query)
 		for filename, indices in sorted(results.items()):
 			combined[filename].update(indices)
 			textno = selected[filename]
@@ -204,7 +219,8 @@ def counts(form, doexport=False):
 				else:
 					yield '<span style="color: gray; ">%s%s</span>\n' % (
 							line, plot)
-		df[name] = pandas.Series(relfreq)
+		if not doexport or line is not None:
+			df[name] = pandas.Series(relfreq)
 		if not doexport:
 			yield ("%s%6d    %5.2f %%\n</span>\n" % (
 					"TOTAL".ljust(40),
@@ -213,7 +229,7 @@ def counts(form, doexport=False):
 			yield '</pre>'
 			if max(cnts.values()) == 0:
 				continue
-			elif limit:
+			elif form.get('limit'):
 				# show absolute counts when all texts have been limited to same
 				# number of sentences
 				yield barplot(cnts, max(cnts.values()),
