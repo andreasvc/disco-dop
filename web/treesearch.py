@@ -69,6 +69,8 @@ EXT = {
 		'xpath': '.dact',
 		'regex': '.tok'
 	}
+COLORS = dict(enumerate(
+		'black red orange blue wheat khaki'.split()))
 
 
 @APP.route('/')
@@ -160,11 +162,13 @@ def counts(form, doexport=False):
 		normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
 				form['normquery'], selected)
 	combined = defaultdict(Counter)
+	combined1 = defaultdict(list)
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
+	queries = [line.split(':')[0] for line in form['query'].splitlines()]
 	yield '<ol>%s</ol>\n' % '\n'.join(
-			'<li><a href="#q%d">%s</a>' % (n, line.split(':')[0])
-			for n, line in enumerate(form['query'].splitlines(), 1))
+			'<li><a href="#q%d">%s</a>' % (n, query)
+			for n, query in enumerate(queries, 1))
 	for n, line in enumerate(form['query'].splitlines() + [None], 1):
 		cnts = Counter()
 		sumtotal = 0
@@ -173,7 +177,10 @@ def counts(form, doexport=False):
 			if len(df.columns) == 1:
 				break
 			name = 'Combined results'
-			results = combined
+			results = combined1
+			query = '%sLegend:\t%s' % (64 * ' ', '\t'.join(
+					'<font color=%s>%s</font>' % (COLORS[n], query)
+					for n, query in enumerate(queries)))
 		else:
 			if ':' in line:
 				name, query = line.split(':', 1)
@@ -191,12 +198,16 @@ def counts(form, doexport=False):
 		if not doexport:
 			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (n, name, query)
 		for filename, indices in sorted(results.items()):
-			combined[filename].update(indices)
+			if line is None:
+				cnt = sum(combined[filename].values())
+			else:
+				combined[filename].update(indices)
+				combined1[filename].append(indices)
+				cnt = sum(indices.values())
 			textno = selected[filename]
 			limit = (int(form.get('limit')) if form.get('limit')
 					else NUMSENTS[textno])
 			text = TEXTS[textno]
-			cnt = sum(indices.values())
 			cnts[text] = cnt
 			if norm == 'consts':
 				total = NUMCONST[textno]
@@ -211,14 +222,14 @@ def counts(form, doexport=False):
 			relfreq[text] = 100.0 * cnt / total
 			sumtotal += total
 			if not doexport:
-				line = "%s%6d    %5.2f %%" % (
+				out = "%s%6d    %5.2f %%" % (
 						text.ljust(40)[:40], cnt, relfreq[text])
 				plot = concplot(indices, limit or NUMSENTS[textno])
 				if cnt:
-					yield line + plot + '\n'
+					yield out + plot + '\n'
 				else:
 					yield '<span style="color: gray; ">%s%s</span>\n' % (
-							line, plot)
+							out, plot)
 		if not doexport or line is not None:
 			df[name] = pandas.Series(relfreq)
 		if not doexport:
@@ -243,6 +254,9 @@ def counts(form, doexport=False):
 		df.to_csv(tmp)
 		yield tmp.getvalue()
 	else:
+		def fmt(x):
+			return '%g' % round(x, 1)
+		yield '<h3>Overview of patterns</h3>\n'
 		# collate stats
 		firstletters = {key[0] for key in df.index}
 		if len(firstletters) <= 5:
@@ -251,10 +265,13 @@ def counts(form, doexport=False):
 						if key[0] == letter]].mean())
 					for query in df.columns
 						for letter in firstletters)
+			df['category'] = [key[0] for key in df.index]
+			yield '<pre>\n%s\n</pre>' % (df.groupby('category'
+					).describe().to_string(float_format=fmt))
 		else:
 			overview = OrderedDict((query, df[query].mean())
 				for query in df.columns)
-		yield '<h3>Overview of patterns</h3>\n'
+			yield '<pre>\n%s\n</pre>' % df.describe().to_string(float_format=fmt)
 		yield barplot(overview, max(overview.values()),
 				'Relative frequencies of patterns: '
 				'(count / num_%s * 100)' % norm, unit='%', dosort=False)
@@ -623,16 +640,22 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 
 
 def concplot(indices, total, width=800.0):
-	"""Draw a concordance plot from a sequence of indices and the total number
-	of items."""
+	"""Draw a concordance plot from a list of indices.
+
+	:param indices: a list of sets or Counter objects, where each element is
+		a sentence number. Each element of indices will be drawn in a
+		different color.
+	:param total: the total number of sentences."""
 	result = ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
 			' width="%dpx" height="10px" >\n'
 			'<rect x=0 y=0 width="%dpx" height=10 '
 			'fill=white stroke=black />\n' % (width, width))
-	if indices:
+	for n, a in enumerate(indices if isinstance(indices, list) else [indices]):
+		if not a:
+			continue
 		strokes = []
 		start = 0
-		seq = [-1] + sorted(indices) + [-1]
+		seq = [-1] + sorted(a) + [-1]
 		for prev, idx, nextidx in zip(seq, seq[1:], seq[2:]):
 			if idx != prev + 1 and idx != nextidx - 1:
 				strokes.append('M %d 0v 10' % idx)
@@ -642,8 +665,8 @@ def concplot(indices, total, width=800.0):
 				strokes.append(  # draw a rectangle covering start:idx
 						'M %d 0l 0 10 %d 0 0 -10' % (start, idx - start))
 		result += ('<g transform="scale(%g, 1)">\n'
-				'<path stroke=black d="%s" /></g>' % (
-				width / total, ''.join(strokes)))
+				'<path stroke=%s d="%s" /></g>' % (
+				width / total, COLORS.get(n, 'black'), ''.join(strokes)))
 	return result + '</svg>'
 
 
@@ -757,6 +780,7 @@ def getcorpus():
 		tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 
 	# FIXME: only reload corpora if necessary here?
+	# TODO: make trees optional, accept .txt and tokenize into .tok
 	if tfiles:
 		corpora['tgrep2'] = TgrepSearcher(tfiles, 'static/tgrepmacros.txt')
 	if afiles and ALPINOCORPUSLIB:
