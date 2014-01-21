@@ -585,7 +585,10 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 				fitem = item = FatChartItem(0)
 				for x in leaves:
 					SETBIT(fitem.vec, x)
-			whitelist[grammar.toid[n.label.encode('ascii')]][item] = 0.0
+			try:
+				whitelist[grammar.toid[n.label.encode('ascii')]][item] = 0.0
+			except KeyError:
+				return [], "'%s' not in grammar" % n.label, None
 
 	# Project labels to all possible labels that generate that label. For DOP
 	# reduction, all possible ids; for Double DOP, ignore artificial labels.
