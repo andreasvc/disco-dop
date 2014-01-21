@@ -179,7 +179,7 @@ def counts(form, doexport=False):
 			name = 'Combined results'
 			results = combined1
 			query = '%sLegend:\t%s' % (64 * ' ', '\t'.join(
-					'<font color=%s>%s</font>' % (COLORS[n], query)
+					'<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
 					for n, query in enumerate(queries)))
 		else:
 			if ':' in line:
