@@ -557,6 +557,8 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 				"%s\n" % tree)
 	elif fmt == "discbracket":
 		return "%s\t%s\n" % (tree, ' '.join(sent))
+	elif fmt == "tokens":
+		return "%s\n" % ' '.join(sent)
 	elif fmt == "export":
 		return writeexporttree(tree, sent, n, morphology)
 	elif fmt == "alpino":
@@ -775,8 +777,8 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 					break  # there was no tree, or a complete tree was read
 				line = next(treeinput)
 			if res is not None:
-				for tree, sent in res:
-					yield tree, sent
+				for tree in res:
+					yield tree
 				break
 		if res is None:  # none of the readers accepted this line
 			line = next(treeinput)
@@ -883,18 +885,24 @@ def brackettree(treestr, sent, brackets, strtermre):
 		tree = ParentedTree.parse(
 				LEAVESRE.sub(lambda _: ' %d)' % next(cnt), treestr),
 				parse_leaf=int, brackets=brackets)
+		rest = sent.strip()
 		sent = [a or None for a in LEAVESRE.findall(treestr)]
 	else:  # disc. trees with integer indices as terminals
 		tree = ParentedTree.parse(treestr, parse_leaf=int,
 			brackets=brackets)
-		sent = (sent.split() if sent.strip()
-				else map(str, range(max(tree.leaves()) + 1)))
-	return tree, sent
+		if sent.strip():
+			maxleaf = max(tree.leaves())
+			sent = sent.split(None, maxleaf + 1)
+			sent, rest = sent[:-1], sent[-1].strip()
+		else:
+			sent = map(str, range(max(tree.leaves()) + 1))
+			rest = ''
+	return tree, sent, rest
 
 
 def exporttree(data, morphology):
 	"""
-	Extract tree and sentence from tree in export format given as list of lines.
+	Get tree and sentence from tree in export format given as list of lines.
 	"""
 	data = [exportsplit(x) for x in data]
 	tree = exportparse(data, morphology)

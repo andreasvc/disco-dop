@@ -54,7 +54,7 @@ action is one of:
 
 options may consist of (* marks default option):
   --inputfmt=[*%s]
-  --outputfmt=[*export|bracket|discbracket|dact|conll|mst]
+  --outputfmt=[*export|bracket|discbracket|dact|conll|mst|tokens]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left

@@ -810,10 +810,10 @@ def main():
 				functions=opts.get('--functions'))
 		corpora = [izip(count(1), trees)]
 		try:
-			for n, (tree, sent) in enumerate(trees, 1):
-				print('%d (len=%d):' % (n, len(sent)))
-				print(DrawTree(tree, sent, abbr='--abbr' in opts
-						).text(unicodelines=True, ansi=not '--plain' in opts))
+			for n, (tree, sent, rest) in enumerate(trees, 1):
+				print('%d. (len=%d): %s' % (n, len(sent), rest))
+				print(DrawTree(tree, sent, abbr='--abbr' in opts).text(
+						unicodelines=True, ansi=not '--plain' in opts))
 		except (IOError, KeyboardInterrupt):
 			pass
 
