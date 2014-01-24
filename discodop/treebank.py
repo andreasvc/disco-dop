@@ -167,6 +167,8 @@ class CorpusReader(object):
 				headorder(node, self.headfinal, self.reverse)
 				if self.markheads:
 					headmark(node)
+		for node in list(tree.subtrees(lambda n: isinstance(n[0], int))):
+			handlemorphology(self.morphology, self.lemmas, node, node.source)
 		handlefunctions(self.functions, tree)
 		return tree
 
@@ -212,7 +214,7 @@ class NegraCorpusReader(CorpusReader):
 					lines.append(exportsplit(line))
 
 	def _parse(self, block):
-		tree = exportparse(block, self.morphology, self.lemmas)
+		tree = exportparse(block)
 		sent = self._word(block, orig=True)
 		return tree, sent
 
@@ -376,7 +378,7 @@ class TigerXMLCorpusReader(CorpusReader):
 		for idref in nodes:
 			assert nodes[idref][PARENT] is not None, (
 					'%s does not have a parent: %r' % (idref, nodes[idref]))
-		tree = exportparse(list(nodes.values()), self.morphology, self.lemmas)
+		tree = exportparse(list(nodes.values()))
 		tree.label = nodes[root][TAG]
 		sent = self._word(block, orig=True)
 		return tree, sent
@@ -417,7 +419,7 @@ class AlpinoCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		""":returns: a parse tree given a string."""
-		tree = alpinoparse(block, self.morphology, self.lemmas)
+		tree = alpinoparse(block)
 		sent = self._word(block)
 		return tree, sent
 
@@ -476,7 +478,7 @@ def exportparse(block, morphology=None, lemmas=None):
 			if m:
 				child = ParentedTree(source[TAG], getchildren(m.group(1)))
 			else:  # POS + terminal
-				child = ParentedTree('', [n])
+				child = ParentedTree(source[TAG], [n])
 				handlemorphology(morphology, lemmas, child, source)
 			child.source = tuple(source)
 			results.append(child)
@@ -517,7 +519,7 @@ def alpinoparse(node, morphology=None, lemmas=None):
 			source[TAG] = node.get('pt') or node.get('pos')
 			if node.get('index'):
 				coindexed[node.get('index')] = source
-			result = ParentedTree('', list(
+			result = ParentedTree(source[TAG], list(
 					range(int(node.get('begin')), int(node.get('end')))))
 			handlemorphology(morphology, lemmas, result, source)
 		elif 'index' in node.keys():

@@ -591,7 +591,6 @@ def punctlower(tree, sent):
 				continue
 			termdom = child.leaves()
 			if num < min(termdom):
-				print('moving', node, 'under', candidate.label)
 				candidate.insert(i + 1, node)
 				break
 			elif num < max(termdom):
@@ -611,7 +610,7 @@ def punctraise(tree, sent):
 	Trees in the Negra corpus have punctuation attached to the root;
 	i.e., it is not part of the phrase-structure. This function moves the
 	punctuation to an appropriate level in the tree. A punctuation node is a
-	POS tag with a punctuation terminal."""
+	POS tag with a punctuation terminal. Modifies trees in-place."""
 	#punct = [node for node in tree.subtrees() if isinstance(node[0], int)
 	punct = [node for node in tree if isinstance(node[0], int)
 			and ispunct(sent[node[0]], node.label)]
@@ -651,15 +650,9 @@ def balancedpunctraise(tree, sent):
 		# do we know the matching punctuation mark for this one?
 		if sent[terminal] in punctmap:
 			right = terminal
-			rightparent = preterminal.parent
-			while len(rightparent.parent) == 1:
-				rightparent = rightparent.parent
-			rightparent = rightparent.parent
 			left = punctmap[sent[right]]
+			rightparent = preterminal.parent
 			leftparent = termparent[left].parent
-			while len(leftparent.parent) == 1:
-				leftparent = leftparent.parent
-			leftparent = leftparent.parent
 			if max(leftparent.leaves()) == right - 1:
 				node = termparent[right]
 				leftparent.append(node.parent.pop(node.parent_index))
