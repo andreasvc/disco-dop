@@ -704,6 +704,8 @@ def handlefunctions(action, tree, pos=True, top=False):
 def handlemorphology(action, lemmaaction, preterminal, source):
 	"""Given a preterminal, augment or replace its label with morphological
 	information."""
+	if not source:
+		return
 	# escape any parentheses to avoid hassles w/bracket notation of trees
 	tag = source[TAG].replace('(', '[').replace(')', ']')
 	morph = source[MORPH].replace('(', '[').replace(')', ']').replace(' ', '_')

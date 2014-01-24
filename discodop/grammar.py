@@ -943,12 +943,9 @@ def main():
 				numproc=int(opts.get('--numproc', 1)))
 	elif model == 'ptsg':
 		grammar, backtransform, altweights = compiletsg(fragments)
-	if opts.get('--dopestimator', 'rfe') == 'ewe':
+	if opts.get('--dopestimator', 'rfe') != 'rfe':
 		grammar = [(rule, w) for (rule, _), w in
-				zip(grammar, altweights['ewe'])]
-	elif opts.get('--dopestimator', 'rfe') == 'shortest':
-		grammar = [(rule, w) for (rule, _), w in
-				zip(grammar, altweights['shortest'])]
+				zip(grammar, altweights[opts['--dopestimator']])]
 
 	rulesname = grammarfile + '.rules'
 	lexiconname = grammarfile + '.lex'
