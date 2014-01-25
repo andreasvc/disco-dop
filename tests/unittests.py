@@ -88,7 +88,7 @@ class Test_treebank:
 		"""
 		result = list(incrementaltreereader([data]))
 		assert len(result) == 1
-		for tree, sent in result:
+		for tree, sent, _rest in result:
 			assert sent[0] == u'Het', sent[0]
 			assert len(sent) == 10
 

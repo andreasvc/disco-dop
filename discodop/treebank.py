@@ -763,7 +763,8 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 
 	Supports brackets, discbrackets, and export format. The format is
 	autodetected. Expects an iterator giving one line at a time. Yields tuples
-	with a Tree object and a separate lists of terminals."""
+	with a Tree object, a separate lists of terminals, and a string with any
+	other data following the tree."""
 	treeinput = chain(iter(treeinput), ('(', None, None))  # hack
 	line = next(treeinput)
 	# try the following readers on each line in this order
@@ -870,7 +871,7 @@ def segmentexport(morphology, functions):
 		elif line.startswith('#EOS '):
 			tree, sent = exporttree(cur, morphology)
 			handlefunctions(functions, tree)
-			line = (yield ((tree, sent), ), 1)
+			line = (yield ((tree, sent, ''), ), 1)
 			inblock = False
 			cur = []
 		elif line.strip():
@@ -897,7 +898,8 @@ def brackettree(treestr, sent, brackets, strtermre):
 		if sent.strip():
 			maxleaf = max(tree.leaves())
 			sent = sent.split(None, maxleaf + 1)
-			sent, rest = sent[:-1], sent[-1].strip()
+			sent = sent[:maxleaf + 1]
+			rest = sent[maxleaf + 1].strip() if len(sent) > maxleaf + 1 else ''
 		else:
 			sent = map(str, range(max(tree.leaves()) + 1))
 			rest = ''

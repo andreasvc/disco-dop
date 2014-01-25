@@ -87,7 +87,7 @@ cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
 cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False, bint complement=False):
-	"""Find the largest fragments in treebank(s) with a linear time tree kernel.
+	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
 		``fastextractfragments(trees1, sents1, offset, end, labels)``
