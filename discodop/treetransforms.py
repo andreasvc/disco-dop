@@ -931,6 +931,8 @@ def main():
 			transform = lambda t: optimalbinarize(t, '|', headdriven, h, v)
 	elif action == 'splitdisc':
 		transform = lambda t: splitdiscnodes(t, '--markorigin' in opts)
+	elif action == 'unbinarize':
+		transform = lambda t: unbinarize(Tree.convert(t))
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
 		trees = ((key, transform(tree), sent) for key, tree, sent in trees)
 

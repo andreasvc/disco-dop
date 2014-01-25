@@ -203,13 +203,16 @@ def doparsing(parser, infile, out, printprob, oneline, usetags):
 		result = list(parser.parse(sent, tags=tags))[-1]
 		if result.noparse:
 			unparsed += 1
-			out.writelines('No parse for "%s"\n' % ' '.join(sent))
+			print('No parse for', ' '.join(sent), file=sys.stderr)
+			if printprob:
+				out.write('prob=%.16g\n' % result.prob)
+			out.write('%s\t%s\n' % (result.parsetree, ' '.join(sent)))
 		elif printprob:
-			out.writelines('prob=%.16g\n%s\n' % (prob, tree)
+			out.writelines('prob=%.16g\n%s\t%s\n' % (prob, tree, ' '.join(sent))
 					for tree, prob in sorted(result.parsetrees.items(),
 						key=itemgetter(1), reverse=True))
 		else:
-			out.writelines('%s\n' % tree
+			out.writelines('%s\t%s\n' % (tree, ' '.join(sent))
 					for tree in sorted(result.parsetrees,
 						key=result.parsetrees.get, reverse=True))
 		out.flush()
@@ -227,7 +230,7 @@ def doparsing(parser, infile, out, printprob, oneline, usetags):
 def readinputbitparstyle(infile):
 	"""Yields lists of tokens, where '\\n\\n' identifies a sentence break.
 
-	Lazy version of ``infile.read().split('\n\n')``."""
+	Lazy version of ``infile.read().split('\\n\\n')``."""
 	sent = []
 	for line in infile:
 		line = line.strip()
