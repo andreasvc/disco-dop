@@ -54,7 +54,7 @@ action is one of:
 
 options may consist of (* marks default option):
   --inputfmt=[*%s]
-  --outputfmt=[*export|bracket|discbracket|dact|conll|mst|tokens]
+  --outputfmt=[*export|bracket|discbracket|dact|conll|mst|tokens|wordpos]
   --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
@@ -886,8 +886,8 @@ def main():
 			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
 			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
 	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
-	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= punct= '
-			'headrules= functions= morphology= factor= markorigin= ensureroot=').split()
+	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
+			'punct= headrules= functions= morphology= factor= markorigin=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
@@ -895,8 +895,10 @@ def main():
 		print('error: %r\n%s' % (err, USAGE), file=sys.stderr)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
-	assert action in actions, ('unrecognized action: %r\n'
-			'available actions: %r' % (action, list(actions)))
+	if action not in actions:
+		print('unrecognized action: %r\navailable actions: %s' % (
+				action, ', '.join(actions)), file=sys.stderr)
+		sys.exit(2)
 	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
 
@@ -911,7 +913,7 @@ def main():
 			lemmas='between' if '--lemmas' in opts else None)
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
-	trees = islice(corpus.itertrees(), start, end)
+	trees = corpus.itertrees(start, end)
 
 	# select transformation
 	transform = actions[action]

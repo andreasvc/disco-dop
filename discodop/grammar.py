@@ -60,6 +60,7 @@ Options (* marks default option):
   --numproc=[*1|2|...]  only relevant for double dop fragment extraction
   --gzip                compress output with gzip, view with zless &c.
   --packed              use packed graph encoding for DOP reduction
+  -s X                  start symbol to use for PTSG.
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
@@ -825,7 +826,7 @@ def convertweight(weight):
 	[0.5, 0.5, 0.5]"""
 	if '/' in weight:
 		a, b = weight.split('/')
-		return int(a) / float(b)
+		return float(a) / float(b)
 	elif weight.startswith('0x'):
 		return float.fromhex(weight)
 	return float(weight)
@@ -901,7 +902,7 @@ def main():
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	shortoptions = ''
+	shortoptions = 's:'
 	flags = ('gzip', 'packed')
 	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
 	try:
@@ -976,7 +977,7 @@ def main():
 	try:
 		from discodop.containers import Grammar
 		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
-				start=next(iter(grammar))[0][0][0]  # pick arbitrary label
+				start=opts.get('-s', next(iter(grammar))[0][0][0])
 				if model == 'ptsg' else trees[0].label)
 		cgrammar.testgrammar()
 	except (ImportError, AssertionError) as err:

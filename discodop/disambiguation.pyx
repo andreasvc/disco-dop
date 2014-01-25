@@ -9,14 +9,14 @@ from bisect import bisect_right
 from operator import itemgetter, attrgetter
 from itertools import count
 from collections import defaultdict, OrderedDict
-from discodop import plcfrs
+from discodop import plcfrs, _fragments
 from discodop.tree import Tree
 from discodop.kbest import lazykbest, getderiv
 from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import addbitsets, unbinarize, canonicalize
 from discodop.plcfrs cimport Entry, new_Entry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
-		SmallChartItem, FatChartItem, Edge, RankedEdge, \
+		SmallChartItem, FatChartItem, Edge, RankedEdge, yieldranges, \
 		new_RankedEdge, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
 cimport cython
 
@@ -433,54 +433,50 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 
 
 def extractfragments(deriv, chart, list backtransform):
-	"""Turn a derivation into a list of fragments."""
+	"""Extract the list of fragments that were used in a given derivation.
+
+	:returns: a list of fragments of the form ``(frag, sent)`` where frag is a
+		string and sent is a list of tokens; in ``sent``, ``None`` indicates a
+		frontier non-terminal, and a string indicates a token. """
 	result = []
 	if isinstance(deriv, RankedEdge):
 		extractfragments_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, basestring) and backtransform is None:
 		deriv = Tree.parse(deriv, parse_leaf=int)
-		result = [splitfrag(node, chart.sent)
+		result = [REMOVEIDS.sub('', str(splitfrag(node)))
 				for node in deriv.subtrees(frontiernt)]
 	elif isinstance(deriv, basestring):
 		deriv = Tree.parse(deriv, parse_leaf=int)
 		extractfragments_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError
-	return result
+	return [_fragments.pygetsent(frag, chart.sent) for frag in result]
 
 
 def frontiernt(node):
 	"""Test whether node from a DOP derivation is a frontier nonterminal."""
-	return '@' not in node.label and isinstance(node[0], Tree)
+	return '@' not in node.label
 
 
-def splitfrag(node, sent):
+def splitfrag(node):
 	"""Return a copy of a tree with subtrees labeled without '@' removed."""
-	frag = splitfrag_(node)
-	pos = dict(frag.pos())
-	sent = [word if n in pos and '@' in pos[n] else None
-			for n, word in enumerate(sent)]
-	frag = REMOVEIDS.sub('', str(frag))
-	return frag, sent
-
-
-def splitfrag_(node):
-	"""Recursive helper for splitfrag()."""
 	children = []
 	for child in node:
 		if not isinstance(child, Tree):
 			children.append(child)
 		elif '@' in child.label:
-			children.append(splitfrag_(child))
+			children.append(child if isinstance(child[0], int)
+					else splitfrag(child))
 		else:
-			children.append(Tree(child.label, [min(child.leaves())]))
+			children.append(Tree(child.label, ['%d:%d' % (
+					min(child.leaves()), max(child.leaves()))]))
 	return Tree(node.label, children)
 
 
 cdef extractfragments_(RankedEdge deriv, Chart chart,
 		list backtransform, list result):
 	cdef RankedEdge child
-	cdef list children = [], labels = []
+	cdef list children = []
 	cdef str frag = backtransform[deriv.edge.rule.no]  # template
 
 	# collect all children w/on the fly left-factored debinarization
@@ -492,7 +488,6 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 			# one of the right children
 			children.append((<Entry>chart.rankededges[
 					chart.right(deriv)][deriv.right]).key)
-			labels.append(chart.grammar.tolabel[deriv.edge.rule.rhs2])
 			# move on to next node in this binarized constituent
 			deriv = (<Entry>chart.rankededges[
 					chart.left(deriv)][deriv.left]).key
@@ -500,29 +495,32 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 		if deriv.edge.rule.rhs2:  # is there a right child?
 			children.append((<Entry>chart.rankededges[
 					chart.right(deriv)][deriv.right]).key)
-			labels.append(chart.grammar.tolabel[deriv.edge.rule.rhs2])
 	elif chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
 		deriv = (<Entry>chart.rankededges[
 				chart.left(deriv)][deriv.left]).key
 	# left-most child
 	children.append((<Entry>chart.rankededges[
 			chart.left(deriv)][deriv.left]).key)
-	labels.append(chart.grammar.tolabel[deriv.edge.rule.rhs1])
 
-	frag = frag.format(*['(%s %d)' % (a.split('@')[0], n)
-			for n, a in enumerate(reversed(labels))])
-	sent = [a[a.index('@') + 1:].decode('unicode-escape') if '@' in a else None
-			for a in reversed(labels)]
-	result.append((frag, sent))
+	result.append(frag.format(*['(%s %s)' % (
+			chart.grammar.tolabel[chart.label(deriv.head)].split('@')[0],
+			(chart.lexidx(deriv.head, deriv.edge)
+				if '@' in chart.grammar.tolabel[chart.label(deriv.head)]
+				else yieldranges(chart.indices(deriv.head))))
+			for deriv in reversed(children)]))
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if not child.edge.rule is NULL:
 			extractfragments_(child, chart, backtransform, result)
+		elif '@' not in chart.grammar.tolabel[chart.label(deriv.head)]:
+			result.append('(%s %d)' % (
+					chart.grammar.tolabel[chart.label(deriv.head)],
+					chart.lexidx(deriv.head, deriv.edge)))
 
 
 cdef extractfragments_str(deriv, Chart chart,
 		list backtransform, list result):
-	cdef list children = [], labels = []
+	cdef list children = []
 	cdef str frag
 	assert 1 <= len(deriv) <= 2, deriv
 	prod = (b'0', deriv.label.encode('ascii'), deriv[0].label.encode('ascii')
@@ -538,28 +536,27 @@ cdef extractfragments_str(deriv, Chart chart,
 		while '}<' in deriv[0].label:
 			# one of the right children
 			children.append(deriv[1])
-			labels.append(deriv[1].label)
 			# move on to next node in this binarized constituent
 			deriv = deriv[0]
 		# last right child
 		if len(deriv) == 2:  # is there a right child?
 			children.append(deriv[1])
-			labels.append(deriv[1].label)
 	elif '}<' in deriv[0].label:
 		deriv = deriv[0]
 	# left-most child
 	children.append(deriv[0])
-	labels.append(deriv[0].label)
 
-	frag = frag.format(*['(%s %d)' % (a.split('@')[0], n)
-			for n, a in enumerate(reversed(labels))])
-	sent = [a[a.index('@') + 1:].decode('unicode-escape') if '@' in a else None
-			for a in reversed(labels)]
-	result.append((frag, sent))
+	result.append(frag.format(*['(%s %s)' % (
+			child.label.split('@')[0],
+			(child[0] if '@' in child.label
+				else _fragments.yieldranges(sorted(child.leaves()))))
+			for child in reversed(children)]))
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if isinstance(child[0], Tree):
 			extractfragments_str(child, chart, backtransform, result)
+		elif '@' not in chart.label:
+			result.append('(%s %d)' % (chart.label, chart[0]))
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):

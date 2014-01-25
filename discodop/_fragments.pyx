@@ -20,8 +20,8 @@ from discodop.treetransforms import binarize, introducepreterminals
 cimport cython
 from libc.stdlib cimport malloc, free
 from cpython.array cimport array, clone
-from discodop.containers cimport ULong, UInt
-from discodop.containers cimport Node, NodeArray, Ctrees
+from discodop.containers cimport ULong, UInt, Node, NodeArray, Ctrees, \
+		yieldranges
 from discodop.bit cimport iteratesetbits, abitcount, subset, ulongcpy, \
 		ulongset, setunioninplace
 
@@ -602,7 +602,8 @@ cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, int i):
 				getsubtree(tree, bitset, labels, tree[i].left),
 				getsubtree(tree, bitset, labels, tree[i].right))
 	# node not in bitset, frontier non-terminal
-	return "(%s %s)" % (labels[tree[i].prod], yieldranges(tree, i))
+	return "(%s %s)" % (labels[tree[i].prod],
+			yieldranges(sorted(getyield(tree, i))))
 
 
 cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
@@ -621,25 +622,6 @@ cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
 			getsubtreeunicode(tree, bitset, labels, sent, tree[i].right))
 	# node not in bitset, frontier non-terminal
 	return u"(%s )" % labels[tree[i].prod]
-
-
-cdef inline yieldranges(Node *tree, int i):
-	"""Return a string with the intervals of indices corresponding to the
-	components in the yield of node ``i``.
-
-	Intended for discontinuous trees. The intervals are of the form
-	``start:end``, where ``end`` is part of the interval. e.g., ``"0:1 2:4"``
-	corresponds to ``(0, 1)`` and ``(2, 3, 4)``."""
-	cdef list yields = [], leaves = sorted(getyield(tree, i))
-	cdef int a, start = -2, prev = -2
-	for a in leaves:
-		if a - 1 != prev:
-			if prev != -2:
-				yields.append("%d:%d" % (start, prev))
-			start = a
-		prev = a
-	yields.append("%d:%d" % (start, prev))
-	return ' '.join(yields)
 
 
 cdef inline list getyield(Node *tree, int i):
@@ -676,7 +658,11 @@ def pygetsent(frag, list sent):
 	...  wird offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur
 	...  gr\\xf6\\xdften Bank der Welt vorbereitet .'''.split())
 	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))"""
-	return getsent(frag, sent)
+	try:
+		return getsent(frag, sent)
+	except:
+		print(frag)
+		raise
 
 
 cdef getsent(frag, list sent):
@@ -948,14 +934,13 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	if treebankfile is None:
 		return None, None
 	if fmt != 'bracket':
-		from itertools import islice
 		from discodop.treebank import READERS
 		from discodop.treetransforms import canonicalize
 		corpus = READERS[fmt](treebankfile, encoding=encoding)
 		ctrees = Ctrees()
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		sents = []
-		for _, tree, sent in islice(corpus.itertrees(), limit):
+		for _, tree, sent in corpus.itertrees(0, limit):
 			tree = tolist(add_lcfrs_rules(
 					canonicalize(binarize(tree)), sent), sent)
 			for st in tree:

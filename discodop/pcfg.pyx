@@ -49,11 +49,15 @@ cdef class CFGChart(Chart):
 	def label(self, item):
 		return <size_t>item % self.grammar.nonterminals
 
+	def indices(self, item):
+		cdef short start = (item // self.grammar.nonterminals) // self.lensent
+		cdef short end = (item // self.grammar.nonterminals) % self.lensent + 1
+		return list(range(start, end))
+
 	def itemstr(self, item):
-		lhs = self.label(item)
-		item //= self.grammar.nonterminals
-		start = item // self.lensent
-		end = item % self.lensent + 1
+		cdef UInt lhs = self.label(item)
+		cdef short start = (item // self.grammar.nonterminals) // self.lensent
+		cdef short end = (item // self.grammar.nonterminals) % self.lensent + 1
 		return '%s[%d:%d]' % (
 				self.grammar.tolabel[lhs].decode('ascii'), start, end)
 

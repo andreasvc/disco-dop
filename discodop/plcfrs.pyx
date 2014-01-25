@@ -130,6 +130,10 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		self.tmpright.vec = (<SmallChartItem>item).vec ^ edge.pos.lvec
 		return self.tmpright
 
+	def indices(self, SmallChartItem item):
+		cdef short n
+		return [n for n in range(len(self.sent)) if testbit(item.vec, n)]
+
 	cdef copy(self, item):
 		return (<SmallChartItem>item).copy()
 
@@ -187,6 +191,10 @@ cdef class FatLCFRSChart(LCFRSChart):
 			self.tmpright.vec[n] = (
 					<FatChartItem>item).vec[n] ^ edge.pos.lvec_fat[n]
 		return self.tmpright
+
+	def indices(self, FatChartItem item):
+		cdef short n
+		return [n for n in range(len(self.sent)) if TESTBIT(item.vec, n)]
 
 	cdef copy(self, item):
 		return (<FatChartItem>item).copy()

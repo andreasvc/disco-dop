@@ -5,7 +5,7 @@ import os
 import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
-from itertools import count, chain
+from itertools import count, chain, islice
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
@@ -98,11 +98,11 @@ class CorpusReader(object):
 					for a, b in self._block_cache.items())
 		return self._trees_cache
 
-	def itertrees(self):
+	def itertrees(self, start=None, end=None):
 		""":returns: an iterator returning tuples (key, tree, sent) of \
 			sentences in corpus. Useful when the dictionary of all trees in \
 			corpus would not fit in memory."""
-		for a, b in self._read_blocks():
+		for a, b in islice(self._read_blocks(), start, end):
 			yield a, self._parsetree(b), self._word(b)
 
 	def sents(self):
@@ -547,6 +547,8 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 	:param fmt: Formats are ``bracket``, ``discbracket``, Negra's ``export``
 		format, and ``alpino`` XML format, as well unlabeled dependency
 		conversion into ``mst`` or ``conll`` format (requires head rules).
+		The formats ``tokens`` and ``wordpos`` are to strip away tree structure
+		and leave only lines with tokens or ``token/POS``.
 
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
@@ -561,6 +563,9 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 		return "%s\t%s\n" % (tree, ' '.join(sent))
 	elif fmt == "tokens":
 		return "%s\n" % ' '.join(sent)
+	elif fmt == "wordpos":
+		return "%s\n" % ' '.join('%s/%s' % (word, pos) for word, (_, pos)
+				in zip(sent, sorted(tree.pos())))
 	elif fmt == "export":
 		return writeexporttree(tree, sent, n, morphology)
 	elif fmt == "alpino":

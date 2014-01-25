@@ -45,11 +45,15 @@ Options:
   -b k          Return the k-best parses instead of just 1.
   -s x          Use "x" as start symbol instead of default "TOP".
   -z            Input is one sentence per line, space-separated tokens.
-  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
+  --tags        Tokens are of the form "word/POS"; give both to parser.
   --prob        Print probabilities as well as parse trees.
-  --mpd         In coarse-to-fine mode, produce the most probable
-                derivation (MPD) instead of the most probable parse (MPP).
-  --bt=file     backtransform table to recover TSG derivations.
+  --mpp         By default, the output consists of derivations, with the most
+                probable derivation (MPD) ranked highest. With a PTSG such as
+                DOP, it is possible to aim for the most probable parse (MPP)
+                instead, whose probability is the sum of any number of
+                derivations.
+  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
+  --bt=file     apply backtransform table to recover TSG derivations.
 
 %s
 ''' % (sys.argv[0], sys.argv[0], FORMAT)
@@ -104,7 +108,7 @@ class DictObj(object):
 
 def main():
 	"""Handle command line arguments."""
-	options = 'ctf= prob mpd bt='.split()
+	options = 'prob mpp tags ctf= bt='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
 		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
@@ -119,6 +123,7 @@ def main():
 	top = opts.get('-s', 'TOP')
 	threshold = int(opts.get('--ctf', 0))
 	prob = '--prob' in opts
+	tags = '--tags' in opts
 	oneline = '-z' in opts
 	rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
 	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
@@ -137,6 +142,8 @@ def main():
 			grammar=coarse,
 			backtransform=backtransform if len(args) < 4 else None,
 			m=k)
+	if '--mpp' in opts and (len(args) < 4 or not threshold):
+		stage.update(dop=True, objective='mpp')
 	stages.append(DictObj(stage))
 	if 4 <= len(args) <= 6 and threshold:
 		rules = (gzip.open if args[2].endswith('.gz') else open)(args[2]).read()
@@ -156,7 +163,8 @@ def main():
 				m=k,
 				prune=True,
 				k=threshold,
-				objective='mpd' if '--mpd' in opts else 'mpp')
+				dop=True,
+				objective='mpp' if '--mpp' in opts else 'mpd')
 		stages.append(DictObj(stage))
 		infile = (io.open(args[4], encoding='utf-8')
 				if len(args) >= 5 else sys.stdin)
@@ -170,26 +178,29 @@ def main():
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
-	doparsing(Parser(stages), infile, out, prob, oneline)
+	doparsing(Parser(stages), infile, out, prob, oneline, tags)
 
 
-def doparsing(parser, infile, out, printprob, oneline):
+def doparsing(parser, infile, out, printprob, oneline, usetags):
 	"""Parse sentences from file and write results to file, log to stdout."""
 	times = [time.clock()]
 	unparsed = 0
 	if not oneline:
-		infile = infile.read().split('\n\n')
+		infile = readinputbitparstyle(infile)
 	for n, line in enumerate(infile):
 		if not line.strip():
 			continue
-		sent = line.split() if oneline else line.splitlines()
+		sent = line.split()
+		tags = None
+		if usetags:
+			sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
 		lexicon = parser.stages[0].grammar.lexicalbyword
-		assert not set(sent) - set(lexicon), (
-			'unknown words and no open class tags supplied: %r' % (
+		assert usetags or not set(sent) - set(lexicon), (
+			'unknown words and no tags supplied: %r' % (
 			list(set(sent) - set(lexicon))))
 		print('parsing %d: %s' % (n, ' '.join(sent)), file=sys.stderr)
 		sys.stdout.flush()
-		result = list(parser.parse(sent))[-1]
+		result = list(parser.parse(sent, tags=tags))[-1]
 		if result.noparse:
 			unparsed += 1
 			out.writelines('No parse for "%s"\n' % ' '.join(sent))
@@ -211,6 +222,21 @@ def doparsing(parser, infile, out, printprob, oneline):
 			'\nfinished',
 			file=sys.stderr)
 	out.close()
+
+
+def readinputbitparstyle(infile):
+	"""Yields lists of tokens, where '\\n\\n' identifies a sentence break.
+
+	Lazy version of ``infile.read().split('\n\n')``."""
+	sent = []
+	for line in infile:
+		line = line.strip()
+		if not line:
+			yield ' '.join(sent)
+			sent = []
+		sent.append(line)
+	if sent:
+		yield ' '.join(sent)
 
 
 class Parser(object):

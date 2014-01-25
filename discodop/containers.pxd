@@ -313,3 +313,23 @@ cdef inline double logprobsum(list logprobs):
 	"""
 	maxprob = max(logprobs)
 	return exp(maxprob) * fsum([exp(prob - maxprob) for prob in logprobs])
+
+
+cdef inline yieldranges(list leaves):
+	"""Convert a sorted list of indices into a string with intervals.
+
+	Intended for discontinuous trees. The intervals are of the form
+	``start:end``, where ``end`` is part of the interval. e.g.:
+
+	>>> yieldranges([0, 1, 2, 3, 4])
+	'0:1 2:4'"""
+	cdef list yields = []
+	cdef int a, start = -2, prev = -2
+	for a in leaves:
+		if a - 1 != prev:
+			if prev != -2:
+				yields.append("%d:%d" % (start, prev))
+			start = a
+		prev = a
+	yields.append("%d:%d" % (start, prev))
+	return ' '.join(yields)

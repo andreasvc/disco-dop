@@ -158,7 +158,7 @@ options may consist of (* marks default option):
 
 --inputfmt=<*export|bracket|discbracket|tiger|alpino|dact>
                 Input treebank format.
---outputfmt=<*export|bracket|discbracket|dact|conll|mst>
+--outputfmt=<*export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
                 Output treebank format.
 --inputenc, --outputenc=<*utf-8|iso-8859-1|...>
                 Treebank encoding.
@@ -240,6 +240,8 @@ Options (* marks default option):
 --packed
           use packed graph encoding for DOP reduction
 
+-s X
+          start symbol to use for PTSG.
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
@@ -294,8 +296,11 @@ Options:
   -z            Input is one sentence per line, space-separated tokens.
   --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
   --prob        Print probabilities as well as parse trees.
-  --mpd         In coarse-to-fine mode, produce the most probable
-                derivation (MPD) instead of the most probable parse (MPP).
+  --mpp         By default, the output consists of derivations, with the most
+                probable derivation (MPD) ranked highest. With a PTSG such as
+                DOP, it is possible to aim for the most probable parse (MPP)
+                instead, whose probability is the sum of any number of
+                derivations.
   --bt=file     backtransform table to recover TSG derivations.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.

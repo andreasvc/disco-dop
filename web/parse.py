@@ -100,7 +100,8 @@ def parse():
 				+ '\n\n'.join(
 				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
 						unicodelines=True, html=html)
-				for frag, terminals in fragments))
+				for frag, terminals in fragments
+				if frag.count('(') > 1))
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
 					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok,
 						abbr=True).text(unicodelines=True, html=html))

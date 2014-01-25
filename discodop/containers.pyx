@@ -238,6 +238,10 @@ cdef class Chart:
 	cdef copy(self, item):
 		return item
 
+	def indices(self, item):
+		"""Return a list of indices dominated by ``item``."""
+		raise NotImplementedError
+
 	cdef lexidx(self, item, Edge *edge):
 		"""Given an item and a lexical edge belonging to it, return the
 		sentence index of the terminal child."""
