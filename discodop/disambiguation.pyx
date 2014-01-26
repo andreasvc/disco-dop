@@ -512,10 +512,10 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 	for child in reversed(children):
 		if not child.edge.rule is NULL:
 			extractfragments_(child, chart, backtransform, result)
-		elif '@' not in chart.grammar.tolabel[chart.label(deriv.head)]:
+		elif '@' not in chart.grammar.tolabel[chart.label(child.head)]:
 			result.append('(%s %d)' % (
-					chart.grammar.tolabel[chart.label(deriv.head)],
-					chart.lexidx(deriv.head, deriv.edge)))
+					chart.grammar.tolabel[chart.label(child.head)],
+					chart.lexidx(child.head, child.edge)))
 
 
 cdef extractfragments_str(deriv, Chart chart,
@@ -556,7 +556,7 @@ cdef extractfragments_str(deriv, Chart chart,
 		if isinstance(child[0], Tree):
 			extractfragments_str(child, chart, backtransform, result)
 		elif '@' not in chart.label:
-			result.append('(%s %d)' % (chart.label, chart[0]))
+			result.append('(%s %d)' % (child.label, child[0]))
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
