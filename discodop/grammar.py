@@ -60,6 +60,7 @@ Options (* marks default option):
   --numproc=[*1|2|...]  only relevant for double dop fragment extraction
   --gzip                compress output with gzip, view with zless &c.
   --packed              use packed graph encoding for DOP reduction
+  --unbinarized         produce an unbinarized grammar for use with bitpar
   -s X                  start symbol to use for PTSG.
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
@@ -823,10 +824,10 @@ def convertweight(weight):
 	"""Convert a weight in a string to a float.
 
 	>>> [convertweight(a) for a in ('0.5', '0x1.0000000000000p-1', '1/2')]
-	[0.5, 0.5, 0.5]"""
+	[0.5, 0.5, (1, 2)]"""
 	if '/' in weight:
 		a, b = weight.split('/')
-		return float(a) / float(b)
+		return (float(a), float(b))
 	elif weight.startswith('0x'):
 		return float.fromhex(weight)
 	return float(weight)
@@ -903,7 +904,7 @@ def main():
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 's:'
-	flags = ('gzip', 'packed')
+	flags = ('gzip', 'packed', 'unbinarized')
 	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
@@ -941,9 +942,11 @@ def main():
 				packedgraph='--packed' in opts)
 	elif model == 'doubledop':
 		grammar, backtransform, altweights = doubledop(trees, sents,
-				numproc=int(opts.get('--numproc', 1)))
+				numproc=int(opts.get('--numproc', 1)),
+				binarized='--unbinarized' not in opts)
 	elif model == 'ptsg':
-		grammar, backtransform, altweights = compiletsg(fragments)
+		grammar, backtransform, altweights = compiletsg(fragments,
+				binarized='--unbinarized' not in opts)
 	if opts.get('--dopestimator', 'rfe') != 'rfe':
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights[opts['--dopestimator']])]
@@ -958,6 +961,8 @@ def main():
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
 	if model == 'ptsg':
 		bitpar = not isinstance(next(iter(fragments)), tuple)
+	if '--unbinarized' not in opts:
+		assert bitpar
 
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
 	# write output
@@ -978,7 +983,8 @@ def main():
 		from discodop.containers import Grammar
 		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
 				start=opts.get('-s', next(iter(grammar))[0][0][0])
-				if model == 'ptsg' else trees[0].label)
+				if model == 'ptsg' else trees[0].label,
+				binarized='--unbinarized' not in opts)
 		cgrammar.testgrammar()
 	except (ImportError, AssertionError) as err:
 		print(err)

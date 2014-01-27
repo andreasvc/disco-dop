@@ -13,6 +13,7 @@ import logging
 import tempfile
 import string  # pylint: disable=W0402
 from math import exp, log
+from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
 import numpy as np
@@ -42,18 +43,20 @@ newlines. Output consists of bracketed trees, with discontinuities indicated
 through indices pointing to words in the original sentence.
 
 Options:
-  -b k          Return the k-best parses instead of just 1.
-  -s x          Use "x" as start symbol instead of default "TOP".
-  -z            Input is one sentence per line, space-separated tokens.
-  --tags        Tokens are of the form "word/POS"; give both to parser.
-  --prob        Print probabilities as well as parse trees.
-  --mpp         By default, the output consists of derivations, with the most
-                probable derivation (MPD) ranked highest. With a PTSG such as
-                DOP, it is possible to aim for the most probable parse (MPP)
-                instead, whose probability is the sum of any number of
-                derivations.
-  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
-  --bt=file     apply backtransform table to recover TSG derivations.
+  -b k           Return the k-best parses instead of just 1.
+  -s x           Use "x" as start symbol instead of default "TOP".
+  -z             Input is one sentence per line, space-separated tokens.
+  --tags         Tokens are of the form "word/POS"; give both to parser.
+  --prob         Print probabilities as well as parse trees.
+  --mpp=k        By default, the output consists of derivations, with the most
+                 probable derivation (MPD) ranked highest. With a PTSG such as
+                 DOP, it is possible to aim for the most probable parse (MPP)
+                 instead, whose probability is the sum of any number of the
+                 k-best derivations.
+  --ctf=k        Use k-best coarse-to-fine; prune items not in the k-best
+                 derivations.
+  --bt=file      apply backtransform table to recover TSG derivations.
+  --unbinarized  use bitpar to parse with an unbinarized grammar.
 
 %s
 ''' % (sys.argv[0], sys.argv[0], FORMAT)
@@ -108,7 +111,7 @@ class DictObj(object):
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob mpp tags ctf= bt='.split()
+	options = 'prob tags unbinarized mpp= ctf= bt='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
 		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
@@ -119,7 +122,7 @@ def main():
 		assert os.path.exists(filename), (
 				'file %d not found: %r' % (n + 1, filename))
 	opts = dict(opts)
-	k = int(opts.get('-b', 1))
+	numparses = int(opts.get('-b', 1))
 	top = opts.get('-s', 'TOP')
 	threshold = int(opts.get('--ctf', 0))
 	prob = '--prob' in opts
@@ -129,7 +132,13 @@ def main():
 	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
 			else open)(args[1])).read()
 	bitpar = rules[0] in string.digits
-	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar)
+	if '--unbinarized' in opts:
+		assert bitpar
+		mode = 'pcfg-bitpar-nbest'
+	else:
+		mode = 'pcfg' if bitpar else 'plcfrs'
+	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar,
+			binarized='--unbinarized' not in opts)
 	stages = []
 	stage = DEFAULTSTAGE.copy()
 	backtransform = None
@@ -138,12 +147,13 @@ def main():
 				else open)(opts.get('--bt')).read().splitlines()
 	stage.update(
 			name='coarse',
-			mode='pcfg' if bitpar else 'plcfrs',
+			mode=mode,
 			grammar=coarse,
+			binarized='--unbinarized' not in opts,
 			backtransform=backtransform if len(args) < 4 else None,
-			m=k)
+			m=numparses)
 	if '--mpp' in opts and (len(args) < 4 or not threshold):
-		stage.update(dop=True, objective='mpp')
+		stage.update(dop=True, objective='mpp', m=int(opts['--mpp']))
 	stages.append(DictObj(stage))
 	if 4 <= len(args) <= 6 and threshold:
 		rules = (gzip.open if args[2].endswith('.gz') else open)(args[2]).read()
@@ -151,16 +161,23 @@ def main():
 				if args[3].endswith('.gz') else open)(args[3])).read()
 		# detect bitpar format
 		bitpar = rules[0] in string.digits
-		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar)
+		if '--unbinarized' in opts:
+			assert bitpar
+			mode = 'pcfg-bitpar-nbest'
+		else:
+			mode = 'pcfg' if bitpar else 'plcfrs'
+		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar,
+				binarized='--unbinarized' not in opts)
 		fine.getmapping(coarse, striplabelre=re.compile(b'@.+$'),
 				neverblockre=re.compile(b'.+}<') if backtransform else None)
 		stage = DEFAULTSTAGE.copy()
 		stage.update(
 				name='fine',
-				mode='pcfg' if bitpar else 'plcfrs',
+				mode=mode,
+				binarized='--unbinarized' not in opts,
 				grammar=fine,
 				backtransform=backtransform,
-				m=k,
+				m=int(opts.get('--mpp', numparses)),
 				prune=True,
 				k=threshold,
 				dop=True,
@@ -178,10 +195,10 @@ def main():
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
-	doparsing(Parser(stages), infile, out, prob, oneline, tags)
+	doparsing(Parser(stages), infile, out, prob, oneline, tags, numparses)
 
 
-def doparsing(parser, infile, out, printprob, oneline, usetags):
+def doparsing(parser, infile, out, printprob, oneline, usetags, numparses):
 	"""Parse sentences from file and write results to file, log to stdout."""
 	times = [time.clock()]
 	unparsed = 0
@@ -209,12 +226,12 @@ def doparsing(parser, infile, out, printprob, oneline, usetags):
 			out.write('%s\t%s\n' % (result.parsetree, ' '.join(sent)))
 		elif printprob:
 			out.writelines('prob=%.16g\n%s\t%s\n' % (prob, tree, ' '.join(sent))
-					for tree, prob in sorted(result.parsetrees.items(),
-						key=itemgetter(1), reverse=True))
+					for tree, prob in nlargest(numparses,
+						result.parsetrees.items(), key=itemgetter(1)))
 		else:
 			out.writelines('%s\t%s\n' % (tree, ' '.join(sent))
-					for tree in sorted(result.parsetrees,
-						key=result.parsetrees.get, reverse=True))
+					for tree in nlargest(numparses, result.parsetrees,
+						key=result.parsetrees.get))
 		out.flush()
 		times.append(time.clock())
 		print(times[-1] - times[-2], 's', file=sys.stderr)

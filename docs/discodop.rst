@@ -240,6 +240,9 @@ Options (* marks default option):
 --packed
           use packed graph encoding for DOP reduction
 
+--unbinarized
+          produce an unbinarized grammar for use with bitpar
+
 -s X
           start symbol to use for PTSG.
 
@@ -296,12 +299,13 @@ Options:
   -z            Input is one sentence per line, space-separated tokens.
   --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
   --prob        Print probabilities as well as parse trees.
-  --mpp         By default, the output consists of derivations, with the most
+  --mpp=k       By default, the output consists of derivations, with the most
                 probable derivation (MPD) ranked highest. With a PTSG such as
                 DOP, it is possible to aim for the most probable parse (MPP)
-                instead, whose probability is the sum of any number of
-                derivations.
+                instead, whose probability is the sum of any number of the
+                k-best derivations.
   --bt=file     backtransform table to recover TSG derivations.
+  --unbinarized  use bitpar to parse with an unbinarized grammar.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are::

@@ -1,5 +1,6 @@
 """CKY parser for Probabilistic Context-Free Grammar (PCFG)."""
 from __future__ import print_function
+from os import unlink
 import re
 import subprocess
 from math import exp, log as pylog
@@ -744,11 +745,16 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		chart.rankededges = {chart.root(): []}
 	if tags:
 		import tempfile
-		tmp = tempfile.NamedTemporaryFile()
-		tmp.writelines(['%s\t%s 1\n' % (t, t) for t in set(tags)])
+		tmp = tempfile.NamedTemporaryFile(delete=False)
+		# NB: this doesn't work with the tags from the DOP reduction
+		tmp.writelines(set(['%s@%s\t%s@%s 1\t%s 1\n' % (t, w, t, w, t)
+				for t, w in zip(tags, sent)]))
+		tmp.close()
 		lexiconfile = tmp.name
 	tokens = [word.replace('(', '-LRB-').replace(')', '-RRB-').encode('utf8')
-			for word in (tags or sent)]
+			for word in sent]
+	if tags:
+		tokens = ['%s@%s' % (tag, token) for tag, token in zip(tags, tokens)]
 	# pass empty 'unkwown word file' to disable bitpar's smoothing
 	args = ['-y'] if n == 0 else ['-b', str(n)]
 	args += ['-s', startlabel, '-vp', '-u', '/dev/null', rulesfile, lexiconfile]
@@ -760,6 +766,8 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 			'').decode('utf8').strip()
 	match = CPUTIME.search(msg)
 	cputime = float(match.group(1)) if match else 0.0
+	if tags:
+		unlink(tmp.name)
 	# decode results or not?
 	if not results or results.startswith('No parse'):
 		return chart, cputime, '%s\n%s' % (results.decode('utf8').strip(), msg)
