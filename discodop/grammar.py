@@ -824,7 +824,7 @@ def convertweight(weight):
 	"""Convert a weight in a string to a float.
 
 	>>> [convertweight(a) for a in ('0.5', '0x1.0000000000000p-1', '1/2')]
-	[0.5, 0.5, (1, 2)]"""
+	[0.5, 0.5, (1.0, 2.0)]"""
 	if '/' in weight:
 		a, b = weight.split('/')
 		return (float(a), float(b))

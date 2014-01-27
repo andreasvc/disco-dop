@@ -225,7 +225,7 @@ def startexp(
 		# give these tags to parser
 		usetags = True
 	elif postagging and postagging.method == 'unknownword' and not rerun:
-		postagging.unknownwordfun = getunknownwordfun(postagging.model)
+		postagging.update(unknownwordfun=getunknownwordfun(postagging.model))
 		# get smoothed probalities for lexical productions
 		lexresults, msg = getunknownwordmodel(
 				train_tagged_sents, postagging.unknownwordfun,
@@ -242,7 +242,7 @@ def startexp(
 		# for training purposes we work with the subset, at test time we
 		# exploit the full set of known words from the training set.
 		sigs, knownwords, lexicon = lexresults[:3]
-		postagging.sigs, postagging.lexicon = sigs, knownwords
+		postagging.update(sigs=sigs, lexicon=knownwords)
 		# replace rare train words with signatures
 		sents = replaceraretrainwords(train_tagged_sents,
 				postagging.unknownwordfun, lexicon)
@@ -608,7 +608,7 @@ def workerfunc(func):
 			print('run "pip install faulthandler" to get backtraces on segfaults')
 		try:
 			return func(*args, **kwds)
-		except Exception as err:
+		except Exception:  # pylint: disable=W0703
 			# Put all exception text into an exception and raise that
 			raise Exception('in worker process\n%s' %
 					''.join(traceback.format_exception(*sys.exc_info())))
