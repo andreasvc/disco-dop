@@ -14,6 +14,7 @@ import logging
 import traceback
 import multiprocessing
 from math import log
+from functools import wraps
 from itertools import islice
 from collections import defaultdict, OrderedDict, Counter as multiset
 if sys.version[0] >= '3':
@@ -534,7 +535,7 @@ def doparsing(**kwds):
 	else:
 		pool = multiprocessing.Pool(processes=params.numproc,
 				initializer=initworker, initargs=(params,))
-		dowork = pool.imap_unordered(workertb, params.testset.items())
+		dowork = pool.imap_unordered(worker, params.testset.items())
 	logging.info('going to parse %d sentences.', len(params.testset))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
@@ -594,17 +595,27 @@ def doparsing(**kwds):
 	return results, goldbrackets
 
 
-def workertb(args):
-	"""Wrapper of ``worker()`` for use with multiprocessing.
+def workerfunc(func):
+	"""Wrap a multiprocessing worker function to produce a full traceback."""
+	@wraps(func)
+	def wrapper(*args, **kwds):
+		"""Apply decorated function."""
+		try:
+			import faulthandler
+			faulthandler.enable()  # Dump information on segfault.
+			# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
+		except ImportError:
+			print('run "pip install faulthandler" to get backtraces on segfaults')
+		try:
+			return func(*args, **kwds)
+		except Exception as err:
+			# Put all exception text into an exception and raise that
+			raise Exception('in worker process\n%s' %
+					''.join(traceback.format_exception(*sys.exc_info())))
+	return wrapper
 
-	Passes full traceback in case of an exception in a worker process."""
-	try:
-		return worker(args)
-	except:
-		# Put all exception text into an exception and raise that
-		raise Exception(''.join(traceback.format_exception(*sys.exc_info())))
 
-
+@workerfunc
 def worker(args):
 	"""Parse a sentence using global Parser object, and evaluate incrementally.
 

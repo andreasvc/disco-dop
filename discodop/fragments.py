@@ -23,6 +23,7 @@ from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals
 from discodop._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
+from discodop.runexp import workerfunc
 
 USAGE = '''\
 Usage: %s <treebank1> [treebank2] [options]
@@ -316,6 +317,7 @@ def initworkersimple(trees, sents, trees2=None, sents2=None):
 	assert PARAMS['trees1']
 
 
+@workerfunc
 def worker(interval):
 	"""Worker function for fragment extraction."""
 	offset, end = interval
@@ -338,6 +340,7 @@ def worker(interval):
 	return result
 
 
+@workerfunc
 def exactcountworker(args):
 	"""Worker function for counting of fragments."""
 	n, m, bitsets = args
@@ -356,6 +359,7 @@ def exactcountworker(args):
 	return results
 
 
+@workerfunc
 def coverfragworker():
 	"""Worker function that gets depth-1 fragments.
 
