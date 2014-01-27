@@ -1,9 +1,13 @@
 """ Generic setup.py for Cython code. """
 from distutils.core import setup
-from Cython.Build import cythonize
-from Cython.Distutils import build_ext
-from Cython.Compiler import Options
-import numpy
+try:
+	from Cython.Build import cythonize
+	from Cython.Distutils import build_ext
+	from Cython.Compiler import Options
+	import numpy
+	havecython = True
+except ImportError:
+	havecython = False
 
 metadata = dict(name='disco-dop',
 		version='0.4.1pre1',
@@ -57,15 +61,19 @@ Options.fast_fail = True
 #Options.extra_compile_args = ["-O3"]
 #Options.extra_link_args = ["-O3"]  #["-g"],
 if __name__ == '__main__':
-	setup(
-			include_dirs=[numpy.get_include()],
-			cmdclass=dict(build_ext=build_ext),
-			ext_modules=cythonize(
-					'discodop/*.pyx',
-					#nthreads=4,
-					annotate=True,
-					compiler_directives=directives,
-					#language_level=3, # FIXME make this work ...
-			),
-			#test_suite = 'tests'
-			**metadata)
+	if havecython:
+		setup(
+				include_dirs=[numpy.get_include()],
+				cmdclass=dict(build_ext=build_ext),
+				ext_modules=cythonize(
+						'discodop/*.pyx',
+						#nthreads=4,
+						annotate=True,
+						compiler_directives=directives,
+						#language_level=3, # FIXME make this work ...
+				),
+				#test_suite = 'tests'
+				**metadata)
+	else:
+		setup(**metadata)
+		print('Warning: Cython not found.')
