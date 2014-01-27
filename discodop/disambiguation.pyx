@@ -518,29 +518,24 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 					chart.lexidx(child.head, child.edge)))
 
 
-cdef extractfragments_str(deriv, Chart chart,
-		list backtransform, list result):
+cdef extractfragments_str(deriv, Chart chart, list backtransform, list result):
 	cdef list children = []
 	cdef str frag
-	assert 1 <= len(deriv) <= 2, deriv
-	prod = (b'0', deriv.label.encode('ascii'), deriv[0].label.encode('ascii')
-			) if len(deriv) == 1 else (b'01', deriv.label.encode('ascii'),
-			deriv[0].label.encode('ascii'),
-			deriv[1].label.encode('ascii'))
+	prod = (''.join(map(str, range(len(deriv)))).encode('ascii'),
+			deriv.label) + tuple([a.label.encode('ascii') for a in deriv])
 	frag = backtransform[chart.grammar.rulenos[prod]]  # template
 	# collect children w/on the fly left-factored debinarization
-	if len(deriv) == 2:  # is there a right child?
+	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
 		# this shortcut assumes that neverblockre is only used to avoid
 		# blocking nonterminals from the double-dop binarization.
 		while '}<' in deriv[0].label:
 			# one of the right children
-			children.append(deriv[1])
+			children.extend(reversed(deriv[1:]))
 			# move on to next node in this binarized constituent
 			deriv = deriv[0]
 		# last right child
-		if len(deriv) == 2:  # is there a right child?
-			children.append(deriv[1])
+		children.extend(reversed(deriv[1:]))
 	elif '}<' in deriv[0].label:
 		deriv = deriv[0]
 	# left-most child
@@ -549,13 +544,13 @@ cdef extractfragments_str(deriv, Chart chart,
 	result.append(frag.format(*['(%s %s)' % (
 			child.label.split('@')[0],
 			(child[0] if '@' in child.label
-				else _fragments.yieldranges(sorted(child.leaves()))))
+				else yieldranges(sorted(child.leaves()))))
 			for child in reversed(children)]))
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if isinstance(child[0], Tree):
 			extractfragments_str(child, chart, backtransform, result)
-		elif '@' not in chart.label:
+		elif '@' not in child.label:
 			result.append('(%s %d)' % (child.label, child[0]))
 
 
