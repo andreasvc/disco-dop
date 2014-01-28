@@ -22,9 +22,9 @@ try:
 	ALPINOCORPUSLIB = True
 except ImportError:
 	ALPINOCORPUSLIB = False
-from discodop.tree import Tree
 from discodop import treebank
-from discodop.runexp import workerfunc
+from discodop.tree import Tree
+from discodop.parser import workerfunc
 
 CACHESIZE = 500
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')

@@ -294,18 +294,19 @@ through indices pointing to words in the original sentence.
 
 Options:
 
-  -b k          Return the k-best parses instead of just 1.
-  -s x          Use "x" as start symbol instead of default "TOP".
-  -z            Input is one sentence per line, space-separated tokens.
-  --ctf=k       Use k-best coarse-to-fine; prune items not in top k derivations
-  --prob        Print probabilities as well as parse trees.
-  --mpp=k       By default, the output consists of derivations, with the most
-                probable derivation (MPD) ranked highest. With a PTSG such as
-                DOP, it is possible to aim for the most probable parse (MPP)
-                instead, whose probability is the sum of any number of the
-                k-best derivations.
-  --bt=file     backtransform table to recover TSG derivations.
+  -b k           Return the k-best parses instead of just 1.
+  -s x           Use "x" as start symbol instead of default "TOP".
+  -z             Input is one sentence per line, space-separated tokens.
+  --ctf=k        Use k-best coarse-to-fine; prune items not in top k derivations
+  --prob         Print probabilities as well as parse trees.
+  --mpp=k        By default, the output consists of derivations, with the most
+                 probable derivation (MPD) ranked highest. With a PTSG such as
+                 DOP, it is possible to aim for the most probable parse (MPP)
+                 instead, whose probability is the sum of any number of the
+                 k-best derivations.
+  --bt=file      backtransform table to recover TSG derivations.
   --unbinarized  use bitpar to parse with an unbinarized grammar.
+  --numproc=k    launch k processes, to exploit multiple cores.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are::

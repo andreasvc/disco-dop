@@ -14,7 +14,6 @@ import logging
 import traceback
 import multiprocessing
 from math import log
-from functools import wraps
 from itertools import islice
 from collections import defaultdict, OrderedDict, Counter as multiset
 if sys.version[0] >= '3':
@@ -37,7 +36,8 @@ from discodop.containers import Grammar
 from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
 		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun, \
 		externaltagging
-from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj
+from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj, \
+		workerfunc
 from discodop.estimates import getestimates, getpcfgestimates
 
 USAGE = '''\
@@ -593,26 +593,6 @@ def doparsing(**kwds):
 
 	writeresults(results, params)
 	return results, goldbrackets
-
-
-def workerfunc(func):
-	"""Wrap a multiprocessing worker function to produce a full traceback."""
-	@wraps(func)
-	def wrapper(*args, **kwds):
-		"""Apply decorated function."""
-		try:
-			import faulthandler
-			faulthandler.enable()  # Dump information on segfault.
-			# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
-		except ImportError:
-			print('run "pip install faulthandler" to get backtraces on segfaults')
-		try:
-			return func(*args, **kwds)
-		except Exception:  # pylint: disable=W0703
-			# Put all exception text into an exception and raise that
-			raise Exception('in worker process\n%s' %
-					''.join(traceback.format_exception(*sys.exc_info())))
-	return wrapper
 
 
 @workerfunc

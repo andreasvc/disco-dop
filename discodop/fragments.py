@@ -23,7 +23,7 @@ from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals
 from discodop._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
-from discodop.runexp import workerfunc
+from discodop.parser import workerfunc
 
 USAGE = '''\
 Usage: %s <treebank1> [treebank2] [options]

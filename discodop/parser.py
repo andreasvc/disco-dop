@@ -12,10 +12,12 @@ import codecs
 import logging
 import tempfile
 import string  # pylint: disable=W0402
+import multiprocessing
 from math import exp, log
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
+from functools import wraps
 import numpy as np
 from discodop import plcfrs, pcfg
 from discodop.grammar import FORMAT, defaultparse
@@ -46,6 +48,8 @@ Options:
   -b k           Return the k-best parses instead of just 1.
   -s x           Use "x" as start symbol instead of default "TOP".
   -z             Input is one sentence per line, space-separated tokens.
+  --ctf=k        Use k-best coarse-to-fine; prune items not in the k-best
+                 derivations.
   --tags         Tokens are of the form "word/POS"; give both to parser.
   --prob         Print probabilities as well as parse trees.
   --mpp=k        By default, the output consists of derivations, with the most
@@ -53,10 +57,9 @@ Options:
                  DOP, it is possible to aim for the most probable parse (MPP)
                  instead, whose probability is the sum of any number of the
                  k-best derivations.
-  --ctf=k        Use k-best coarse-to-fine; prune items not in the k-best
-                 derivations.
   --bt=file      apply backtransform table to recover TSG derivations.
   --unbinarized  use bitpar to parse with an unbinarized grammar.
+  --numproc=k    launch k processes, to exploit multiple cores.
 
 %s
 ''' % (sys.argv[0], sys.argv[0], FORMAT)
@@ -109,9 +112,12 @@ class DictObj(object):
 			',\n'.join('%s=%r' % a for a in self.__dict__.items()))
 
 
+PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
+
+
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags unbinarized mpp= ctf= bt='.split()
+	options = 'prob tags unbinarized mpp= ctf= bt= numproc='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
 		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
@@ -195,53 +201,100 @@ def main():
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
-	doparsing(Parser(stages), infile, out, prob, oneline, tags, numparses)
+	doparsing(Parser(stages), infile, out, prob, oneline, tags, numparses,
+			int(opts.get('--numproc', 1)))
 
 
-def doparsing(parser, infile, out, printprob, oneline, usetags, numparses):
+def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
+		numproc):
 	"""Parse sentences from file and write results to file, log to stdout."""
 	times = [time.clock()]
 	unparsed = 0
 	if not oneline:
 		infile = readinputbitparstyle(infile)
-	for n, line in enumerate(infile):
-		if not line.strip():
-			continue
-		sent = line.split()
-		tags = None
-		if usetags:
-			sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
-		lexicon = parser.stages[0].grammar.lexicalbyword
-		assert usetags or not set(sent) - set(lexicon), (
-			'unknown words and no tags supplied: %r' % (
-			list(set(sent) - set(lexicon))))
-		print('parsing %d: %s' % (n, ' '.join(sent)), file=sys.stderr)
-		sys.stdout.flush()
-		result = list(parser.parse(sent, tags=tags))[-1]
-		if result.noparse:
-			unparsed += 1
-			print('No parse for', ' '.join(sent), file=sys.stderr)
-			if printprob:
-				out.write('prob=%.16g\n' % result.prob)
-			out.write('%s\t%s\n' % (result.parsetree, ' '.join(sent)))
-		elif printprob:
-			out.writelines('prob=%.16g\n%s\t%s\n' % (prob, tree, ' '.join(sent))
-					for tree, prob in nlargest(numparses,
-						result.parsetrees.items(), key=itemgetter(1)))
-		else:
-			out.writelines('%s\t%s\n' % (tree, ' '.join(sent))
-					for tree in nlargest(numparses, result.parsetrees,
-						key=result.parsetrees.get))
-		out.flush()
-		times.append(time.clock())
-		print(times[-1] - times[-2], 's', file=sys.stderr)
-	times = [a - b for a, b in zip(times[1::2], times[::2])]
-	print('raw cpu time', time.clock() - times[0],
-			'\naverage time per sentence', sum(times) / len(times),
+	if numproc == 1:
+		initworker(parser, printprob, usetags, numparses)
+		mymap = map
+	else:
+		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
+				initargs=(parser, printprob, usetags, numparses))
+		mymap = pool.imap
+	for output, noparse, sec, msg in mymap(worker, enumerate(infile)):
+		if output:
+			print(msg, file=sys.stderr)
+			out.write(output)
+			if noparse:
+				unparsed += 1
+			times.append(sec)
+			sys.stderr.flush()
+			out.flush()
+	print('average time per sentence', sum(times) / len(times),
 			'\nunparsed sentences:', unparsed,
 			'\nfinished',
 			file=sys.stderr)
 	out.close()
+
+
+def initworker(parser, printprob, usetags, numparses):
+	"""Load parser for a worker process."""
+	PARAMS.update(parser=parser, printprob=printprob,
+			usetags=usetags, numparses=numparses)
+
+
+def workerfunc(func):
+	"""Wrap a multiprocessing worker function to produce a full traceback."""
+	@wraps(func)
+	def wrapper(*args, **kwds):
+		"""Apply decorated function."""
+		try:
+			import faulthandler
+			faulthandler.enable()  # Dump information on segfault.
+			# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
+		except ImportError:
+			print('run "pip install faulthandler" to get backtraces on segfaults')
+		try:
+			return func(*args, **kwds)
+		except Exception:  # pylint: disable=W0703
+			# Put all exception text into an exception and raise that
+			raise Exception('in worker process\n%s' %
+					''.join(traceback.format_exception(*sys.exc_info())))
+	return wrapper
+
+
+@workerfunc
+def worker(args):
+	"""Parse a single sentence."""
+	n, line = args
+	if not line.strip():
+		return '', True, 0, ''
+	begin = time.clock()
+	sent = line.split()
+	tags = None
+	if PARAMS.usetags:
+		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
+	lexicon = PARAMS.parser.stages[0].grammar.lexicalbyword
+	assert PARAMS.usetags or not set(sent) - set(lexicon), (
+		'unknown words and no tags supplied: %r' % (
+		list(set(sent) - set(lexicon))))
+	msg = 'parsing %d: %s' % (n, ' '.join(sent))
+	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
+	output = ''
+	if result.noparse:
+		msg += '\nNo parse for', ' '.join(sent)
+		if PARAMS.printprob:
+			output += 'prob=%.16g\n' % result.prob
+		output += '%s\t%s\n' % (result.parsetree, ' '.join(sent))
+	elif PARAMS.printprob:
+		output += ''.join('prob=%.16g\n%s\t%s\n' % (prob, tree, ' '.join(sent))
+				for tree, prob in nlargest(PARAMS.numparses,
+					result.parsetrees.items(), key=itemgetter(1)))
+	else:
+		output += ''.join('%s\t%s\n' % (tree, ' '.join(sent))
+				for tree in nlargest(PARAMS.numparses, result.parsetrees,
+					key=result.parsetrees.get))
+	sec = time.clock() - begin
+	msg += '\n%g s' % sec
+	return output, result.noparse, sec, msg
 
 
 def readinputbitparstyle(infile):
