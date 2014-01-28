@@ -60,7 +60,7 @@ Options (* marks default option):
   --numproc=[*1|2|...]  only relevant for double dop fragment extraction
   --gzip                compress output with gzip, view with zless &c.
   --packed              use packed graph encoding for DOP reduction
-  --unbinarized         produce an unbinarized grammar for use with bitpar
+  --bitpar              produce an unbinarized grammar for use with bitpar
   -s X                  start symbol to use for PTSG.
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
@@ -904,7 +904,7 @@ def main():
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 's:'
-	flags = ('gzip', 'packed', 'unbinarized')
+	flags = ('gzip', 'packed', 'bitpar')
 	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
@@ -945,10 +945,10 @@ def main():
 	elif model == 'doubledop':
 		grammar, backtransform, altweights = doubledop(trees, sents,
 				numproc=int(opts.get('--numproc', 1)),
-				binarized='--unbinarized' not in opts)
+				binarized='--bitpar' not in opts)
 	elif model == 'ptsg':
 		grammar, backtransform, altweights = compiletsg(fragments,
-				binarized='--unbinarized' not in opts)
+				binarized='--bitpar' not in opts)
 	if opts.get('--dopestimator', 'rfe') != 'rfe':
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights[opts['--dopestimator']])]
@@ -963,7 +963,7 @@ def main():
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
 	if model == 'ptsg':
 		bitpar = not isinstance(next(iter(fragments)), tuple)
-	if '--unbinarized' not in opts:
+	if '--bitpar' not in opts:
 		assert bitpar
 
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
@@ -986,7 +986,7 @@ def main():
 		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
 				start=opts.get('-s', next(iter(grammar))[0][0][0])
 				if model == 'ptsg' else trees[0].label,
-				binarized='--unbinarized' not in opts)
+				binarized='--bitpar' not in opts)
 		cgrammar.testgrammar()
 	except (ImportError, AssertionError) as err:
 		print(err)

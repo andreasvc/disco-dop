@@ -59,7 +59,7 @@ Options:
                  instead, whose probability is the sum of any number of the
                  k-best derivations.
   --bt=file      apply backtransform table to recover TSG derivations.
-  --unbinarized  use bitpar to parse with an unbinarized grammar.
+  --bitpar       use bitpar to parse with an unbinarized grammar.
   --numproc=k    launch k processes, to exploit multiple cores.
 
 %s
@@ -118,7 +118,7 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags unbinarized mpp= ctf= bt= numproc='.split()
+	options = 'prob tags bitpar mpp= ctf= bt= numproc='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
 		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
@@ -139,13 +139,13 @@ def main():
 	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
 			else open)(args[1])).read()
 	bitpar = rules[0] in string.digits
-	if '--unbinarized' in opts:
+	if '--bitpar' in opts:
 		assert bitpar
 		mode = 'pcfg-bitpar-nbest'
 	else:
 		mode = 'pcfg' if bitpar else 'plcfrs'
 	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar,
-			binarized='--unbinarized' not in opts)
+			binarized='--bitpar' not in opts)
 	stages = []
 	stage = DEFAULTSTAGE.copy()
 	backtransform = None
@@ -156,7 +156,7 @@ def main():
 			name='coarse',
 			mode=mode,
 			grammar=coarse,
-			binarized='--unbinarized' not in opts,
+			binarized='--bitpar' not in opts,
 			backtransform=backtransform if len(args) < 4 else None,
 			m=numparses)
 	if '--mpp' in opts and (len(args) < 4 or not threshold):
@@ -168,20 +168,20 @@ def main():
 				if args[3].endswith('.gz') else open)(args[3])).read()
 		# detect bitpar format
 		bitpar = rules[0] in string.digits
-		if '--unbinarized' in opts:
+		if '--bitpar' in opts:
 			assert bitpar
 			mode = 'pcfg-bitpar-nbest'
 		else:
 			mode = 'pcfg' if bitpar else 'plcfrs'
 		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar,
-				binarized='--unbinarized' not in opts)
+				binarized='--bitpar' not in opts)
 		fine.getmapping(coarse, striplabelre=re.compile(b'@.+$'),
 				neverblockre=re.compile(b'.+}<') if backtransform else None)
 		stage = DEFAULTSTAGE.copy()
 		stage.update(
 				name='fine',
 				mode=mode,
-				binarized='--unbinarized' not in opts,
+				binarized='--bitpar' not in opts,
 				grammar=fine,
 				backtransform=backtransform,
 				m=int(opts.get('--mpp', numparses)),

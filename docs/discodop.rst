@@ -240,7 +240,7 @@ Options (* marks default option):
 --packed
           use packed graph encoding for DOP reduction
 
---unbinarized
+--bitpar
           produce an unbinarized grammar for use with bitpar
 
 -s X
@@ -305,7 +305,7 @@ Options:
                  instead, whose probability is the sum of any number of the
                  k-best derivations.
   --bt=file      backtransform table to recover TSG derivations.
-  --unbinarized  use bitpar to parse with an unbinarized grammar.
+  --bitpar       use bitpar to parse with an unbinarized grammar.
   --numproc=k    launch k processes, to exploit multiple cores.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
