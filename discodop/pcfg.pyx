@@ -321,7 +321,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 					rule = &(grammar.unary[rhs1][n])
 					if rule.rhs1 != rhs1:
 						break
-					elif (whitelist is not None
+					elif (cellwhitelist is not None
 							and rule.lhs not in cellwhitelist):
 						continue
 					lhs = rule.lhs
