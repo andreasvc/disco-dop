@@ -258,14 +258,14 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 			right = left + span
 			cell = cellidx(left, right, lensent, grammar.nonterminals)
 			if whitelist is not None:
-				cellwhitelist = <dict>whitelist[cell]
+				cellwhitelist = <dict>whitelist.get(cell)
 			# apply binary rules
 			# FIXME: if whitelist is given, loop only over whitelisted labels
 			# for cell
 			#for lhs in cellwhitelist:
 			# only loop over labels which occur on LHS of a phrasal rule.
 			for lhs in range(1, grammar.phrasalnonterminals):
-				if whitelist is not None and lhs not in cellwhitelist:
+				if cellwhitelist is not None and lhs not in cellwhitelist:
 					continue
 				n = 0
 				rule = &(grammar.bylhs[lhs][n])
