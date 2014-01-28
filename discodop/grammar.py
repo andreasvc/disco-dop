@@ -930,6 +930,8 @@ def main():
 				encoding=opts.get('--inputenc', 'utf8'))
 		trees = list(corpus.trees().values())
 		sents = list(corpus.sents().values())
+		if not trees:
+			raise ValueError('no trees; is --inputfmt correct?')
 		for a in trees:
 			canonicalize(a)
 			addfanoutmarkers(a)
