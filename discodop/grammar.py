@@ -720,7 +720,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	for (r, yf), w in grammar:
 		if isinstance(w, tuple):
 			if freqs:
-				w = w[0]
+				w = '%g' % w[0]
 			else:
 				w1, w2 = w
 				if w1 == w2:
