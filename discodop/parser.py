@@ -11,6 +11,7 @@ import gzip
 import codecs
 import logging
 import tempfile
+import traceback
 import string  # pylint: disable=W0402
 import multiprocessing
 from math import exp, log

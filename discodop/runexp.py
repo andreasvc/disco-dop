@@ -11,7 +11,6 @@ import time
 import gzip
 import codecs
 import logging
-import traceback
 import multiprocessing
 from math import log
 from itertools import islice
