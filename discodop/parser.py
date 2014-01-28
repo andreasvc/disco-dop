@@ -209,7 +209,7 @@ def main():
 def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 		numproc):
 	"""Parse sentences from file and write results to file, log to stdout."""
-	times = [time.clock()]
+	times = []
 	unparsed = 0
 	if not oneline:
 		infile = readinputbitparstyle(infile)
