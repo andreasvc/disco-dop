@@ -281,7 +281,7 @@ def worker(args):
 	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
 	output = ''
 	if result.noparse:
-		msg += '\nNo parse for', ' '.join(sent)
+		msg += '\nNo parse for "%s"' % ' '.join(sent)
 		if PARAMS.printprob:
 			output += 'prob=%.16g\n' % result.prob
 		output += '%s\t%s\n' % (result.parsetree, ' '.join(sent))
