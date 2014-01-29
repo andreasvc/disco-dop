@@ -152,8 +152,7 @@ span.tt { font-family: monospace; }
     </td><td></td></tr>
     <tr id=labelrow>
     <td>Labels</td><td>
-    <label><input type=checkbox name=nomorph{{
-        ' checked' if 'nomorph' in form or 'query' not in form or output not in ('trees', 'brackets') }}>
+	<label><input type=checkbox name=nomorph{{ ' checked' if 'nomorph' in form }}>
         Hide morphology tags</label>
     <label><input type=checkbox name=nofunc{{ ' checked' if 'nofunc' in form }}>
         Hide function tags</label><br>

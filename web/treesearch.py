@@ -166,9 +166,10 @@ def counts(form, doexport=False):
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
 	queries = [line.split(':')[0] for line in form['query'].splitlines()]
-	yield '<ol>%s</ol>\n' % '\n'.join(
-			'<li><a href="#q%d">%s</a>' % (n, query)
-			for n, query in enumerate(queries, 1))
+	if not doexport:
+		yield '<ol>%s</ol>\n' % '\n'.join(
+				'<li><a href="#q%d">%s</a>' % (n, query)
+				for n, query in enumerate(queries, 1))
 	for n, line in enumerate(form['query'].splitlines() + [None], 1):
 		cnts = Counter()
 		sumtotal = 0
@@ -254,8 +255,7 @@ def counts(form, doexport=False):
 		df.to_csv(tmp)
 		yield tmp.getvalue()
 	else:
-		def fmt(x):
-			return '%g' % round(x, 1)
+		fmt = lambda x: '%g' % round(x, 1)
 		yield '<h3>Overview of patterns</h3>\n'
 		# collate stats
 		firstletters = {key[0] for key in df.index}
@@ -266,8 +266,9 @@ def counts(form, doexport=False):
 					for query in df.columns
 						for letter in firstletters)
 			df['category'] = [key[0] for key in df.index]
-			yield '<pre>\n%s\n</pre>' % (df.groupby('category'
-					).describe().to_string(float_format=fmt))
+			yield '<pre>\n%s\n</pre>' % (
+				df.groupby('category').describe().to_string(
+				float_format=fmt))
 		else:
 			overview = OrderedDict((query, df[query].mean())
 				for query in df.columns)
@@ -381,7 +382,8 @@ def fragmentsinresults(form, doexport=False):
 		url = 'fragments?' + url_encode(dict(export=1, **form))
 		yield ('<pre>Query: %s\n'
 				'Fragments (showing up to %d fragments '
-				'in the first %d search results from selected texts; '
+				'in the first %d search results from selected texts;\n'
+				'ordered by (freq ** 0.5 * numwords ** 2) '
 				'<a href="%s">Export</a>):\n'
 				% (form['query'] if len(form['query']) < 128
 					else form['query'][:128] + '...',
@@ -407,12 +409,12 @@ def fragmentsinresults(form, doexport=False):
 		tmp.flush()
 		results, approxcounts = fragments.regular((tmp.name, ), 1, 0, 'utf8')
 	results = nlargest(FRAGLIMIT, zip(results, approxcounts),
-			key=lambda ff: (2 * ff[0].count(')') - ff[0].count(' (')
-				- ff[0].count(' )')) * ff[1])
-	results = [(frag, freq) for frag, freq in results
-			if (2 * frag.count(')')
-				- frag.count(' (')
-				- frag.count(' )')) > MINNODES and freq > MINFREQ]
+			key=lambda ff: sum(1 for _
+			in re.finditer(r'[^ ()]\)', ff[0])) ** 2 * ff[1] ** 0.5)
+	#results = [(frag, freq) for frag, freq in results
+	#		if (2 * frag.count(')')
+	#			- frag.count(' (')
+	#			- frag.count(' )')) > MINNODES and freq > MINFREQ]
 	gotresults = False
 	if not doexport:
 		yield "<ol>"
