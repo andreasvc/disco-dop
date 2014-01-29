@@ -45,20 +45,23 @@ Usage: %s [options] <action> [input [output]]
 where input and output are treebanks; standard in/output is used if not given.
 action is one of:
     none
-    binarize [-h x] [-v x] [--factor=left|*right]
+    binarize [-h x] [-v x] [--factor=left|right]
     optimalbinarize [-h x] [-v x]
     unbinarize
     introducepreterminals
     splitdisc [--markorigin]
     mergedisc
 
-options may consist of (* marks default option):
-  --inputfmt=[*%s]
-  --outputfmt=[*export|bracket|discbracket|dact|conll|mst|tokens|wordpos]
-  --inputenc|--outputenc=[*UTF-8|ISO-8859-1|...]
+options may consist of:
+  --inputfmt=[%s]
+  --outputfmt=[export|bracket|discbracket|dact|conll|mst|tokens|wordpos]
+                 Treebank format [default: export].
+  --inputenc|--outputenc=[utf-8|iso-8859-1|...]
+                 Treebank encoding [default: utf-8].
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
                  out or negative, and the first index is 0.
+  --maxlen=n     only select sentences with up to n tokens.
   --punct=x      possible options:
                  'remove': remove any punctuation.
                  'move': re-attach punctuation to nearest constituent
@@ -76,7 +79,8 @@ options may consist of (* marks default option):
                      POS tag and word, e.g., (DET (sg.def the))
   --lemmas       insert node with lemma between word and POS tag.
   --ensureroot=x add root node labeled 'x' to trees if not already present.
-  --factor=[left|*right]  whether binarization factors to the left or right
+  --factor=[left|right]
+                 specify left- or right-factored binarization [default: right].
   -h n           horizontal markovization. default: infinite (all siblings)
   -v n           vertical markovization. default: 1 (immediate parent only)
   --leftunary    make initial / final productions of binarized constituents
@@ -887,7 +891,8 @@ def main():
 			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
 	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
-			'punct= headrules= functions= morphology= factor= markorigin=').split()
+			'punct= headrules= functions= morphology= factor= markorigin= '
+			'maxlen=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
@@ -914,6 +919,10 @@ def main():
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
 	trees = corpus.itertrees(start, end)
+	if '--maxlen' in opts:
+		maxlen = int(opts['--maxlen'])
+		trees = ((key, tree, sent) for key, tree, sent in trees
+				if len(sent) <= maxlen)
 
 	# select transformation
 	transform = actions[action]

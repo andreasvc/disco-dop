@@ -25,9 +25,9 @@ else:
 
 USAGE = '''\
 Usage: %s [<treebank>...] [options]
-Options (* marks default option):
-  --fmt=[*%s]
-                   Specify corpus format.
+Options:
+  --fmt=[%s]
+                   Specify corpus format [default: export].
   --encoding=enc   Specify a different encoding than the default UTF-8.
   --functions=x    'leave'=default: leave syntactic labels as is,
                    'remove': strip functions off labels,

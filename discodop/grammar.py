@@ -15,8 +15,7 @@ if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
 
-FORMAT = '''\
-The PLCFRS format is as follows. Rules are delimited by newlines.
+FORMAT = '''The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are:
 
 LHS	RHS1	[RHS2]	yield-function	weight
@@ -35,11 +34,9 @@ Example:
 rules:   S	NP	VP	010	1/2
          VP_2	VB	NP	0,1	2/3
          NP	NN	0	1/4
-lexicon: Haus	NN	3/10	JJ	1/9\
-'''
+lexicon: Haus	NN	3/10	JJ	1/9'''
 
-USAGE = '''\
-Read off grammars from treebanks.
+USAGE = '''Read off grammars from treebanks.
 Usage: %(cmd)s <type> <input> <output> [options]
 
 type is one of:
@@ -53,22 +50,27 @@ input is a binarized treebank, or in the ptsg case, weighted fragments
 in the same format as the output of the discodop fragments command;
 output is the base name for the filenames to write the grammar to.
 
-Options (* marks default option):
-  --inputfmt=[*%(corpusfmts)s]
-  --inputenc=[*utf-8|iso-8859-1|...]
-  --dopestimator=[*rfe|ewe|shortest|...]
-  --numproc=[*1|2|...]  only relevant for double dop fragment extraction
-  --gzip                compress output with gzip, view with zless &c.
-  --packed              use packed graph encoding for DOP reduction
-  --bitpar              produce an unbinarized grammar for use with bitpar
-  -s X                  start symbol to use for PTSG.
+Options:
+  --inputfmt=[%(corpusfmts)s]
+             Input treebank format [default: export].
+  --inputenc=[utf-8|iso-8859-1|...]
+             Treebank encoding [default: utf-8].
+  --dopestimator=[rfe|ewe|shortest|...]
+             When extracting a DOP grammar, the estimator to use for
+             assigning weights.
+  --numproc=[1|2|...]
+             Number of processes to start [default: 1].
+             Only relevant for double dop fragment extraction.
+  --gzip     Compress output with gzip, view with zless &c.
+  --packed   Use packed graph encoding for DOP reduction
+  --bitpar   Produce an unbinarized grammar for use with bitpar
+  -s X       Start symbol to use for PTSG.
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and utf-8 for the lexicon.
-\n%(grammarformat)s
-''' % dict(cmd=sys.argv[0], grammarformat=FORMAT,
+\n%(grammarformat)s\n''' % dict(cmd=sys.argv[0], grammarformat=FORMAT,
 		corpusfmts='|'.join(READERS.keys()))
 
 
@@ -983,11 +985,9 @@ def main():
 		print(grammarinfo(grammar))
 	try:
 		from discodop.containers import Grammar
-		cgrammar = Grammar(rules, lexicon, bitpar=bitpar,
-				start=opts.get('-s', next(iter(grammar))[0][0][0])
-				if model == 'ptsg' else trees[0].label,
-				binarized='--bitpar' not in opts)
-		cgrammar.testgrammar()
+		Grammar(rules, lexicon, bitpar=bitpar, binarized='--bitpar' not in opts,
+                start=opts.get('-s', next(iter(grammar))[0][0][0]
+                    if model == 'ptsg' else trees[0].label)).testgrammar()
 	except (ImportError, AssertionError) as err:
 		print(err)
 

@@ -99,11 +99,11 @@ file, and options may consist of:
 --disconly       Only evaluate bracketings of discontinuous constituents
                  (only affects Parseval measures).
 
---goldfmt, --parsesfmt=<*export|bracket|discbracket|tiger|alpino|dact>
-                 Specify corpus format.
+--goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino|dact>
+                 Specify corpus format [default: export].
 
---goldenc, --parsesenc=<*utf-8|iso-8859-1|...>
-                 Specify a different encoding than the default utf-8.
+--goldenc, --parsesenc=<utf-8|iso-8859-1|...>
+                 Specify encoding [default: utf-8].
 
 --ted            Enable tree-edit distance evaluation.
 --headrules=x    Specify file with rules for head assignment of constituents
@@ -147,24 +147,25 @@ where input and output are treebanks; standard in/output is used if not given.
 action is one of::
 
     none
-    binarize [-h x] [-v x] [--factor=left|*right]
+    binarize [-h x] [-v x] [--factor=left|right]
     optimalbinarize [-h x] [-v x]
     unbinarize
     introducepreterminals
     splitdisc [--markorigin]
     mergedisc
 
-options may consist of (* marks default option):
+options may consist of:
 
---inputfmt=<*export|bracket|discbracket|tiger|alpino|dact>
-                Input treebank format.
---outputfmt=<*export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
-                Output treebank format.
---inputenc, --outputenc=<*utf-8|iso-8859-1|...>
-                Treebank encoding.
---slice=<n:m>   select a range of sentences from input starting with n,
-                up to but not including m; as in Python, n or m can be left
+--inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
+                Input treebank format [default: export].
+--outputfmt=<export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
+                Output treebank format [default: export].
+--inputenc, --outputenc=<utf-8|iso-8859-1|...>
+                Treebank encoding [default: utf-8].
+--slice=<n:m>   select a range of sentences from input starting with *n*,
+                up to but not including *m*; as in Python, *n* or *m* can be left
                 out or negative, and the first index is 0.
+--maxlen=n      only select sentences with up to *n* tokens.
 --punct=x       possible options:
 
                 :'remove': remove any punctuation.
@@ -183,8 +184,8 @@ options may consist of (* marks default option):
                     POS tag and word, e.g., (DET (sg.def the))
 --lemmas        insert node with lemma between word and POS tag.
 --ensureroot=x  add root node labeled 'x' to trees if not already present.
---factor=<left|*right>
-                whether binarization factors to the left or right
+--factor=<left|right>
+                specify left- or right-factored binarization [default: right].
 -h n            horizontal markovization. default: infinite (all siblings)
 -v n            vertical markovization. default: 1 (immediate parent only)
 --leftunary     make initial / final productions of binarized constituents
@@ -222,17 +223,18 @@ output is the base name for the filenames to write the grammar to.
 
 Options (* marks default option):
 
---inputfmt=<*export|bracket|discbracket|tiger|alpino|dact>
-          The treebank format.
+--inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
+          The treebank format [default: export].
 
---inputenc=<\*utf-8|iso-8859-1|...>
-          Treebank encoding.
+--inputenc=<utf-8|iso-8859-1|...>
+          Treebank encoding [default: utf-8].
 
---dopestimator=<*rfe|ewe|shortest|...>
-          The DOP estimator to use with dopreduction/doubledop.
+--dopestimator=<rfe|ewe|shortest|...>
+          The DOP estimator to use with dopreduction/doubledop [default: rfe].
 
---numproc=<*1|2|...>
-          only relevant for double dop fragment extraction
+--numproc=<1|2|...>
+          Number of processes to start [default: 1].
+          Only relevant for double dop fragment extraction.
 
 --gzip
           compress output with gzip, view with zless &c.
@@ -336,8 +338,8 @@ Usage: discodop treedraw [<treebank>...] [options]
 
 Options (* marks default option):
 
---fmt=<*export|bracket|discbracket|tiger|alpino|dact>
-                 Specify corpus format.
+--fmt=<export|bracket|discbracket|tiger|alpino|dact>
+                 Specify corpus format [default: export].
 
 --encoding=enc   Specify a different encoding than the default utf-8.
 --functions=x    :'leave'=default: leave syntactic labels as is,

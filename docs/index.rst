@@ -21,6 +21,7 @@ sentences using Tree-Substitution Grammar (TSG).
 
    discodop
    params
+   fileformats
    api
 
 Getting started
