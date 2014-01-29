@@ -14,6 +14,8 @@ import tempfile
 import traceback
 import string  # pylint: disable=W0402
 import multiprocessing
+if sys.version[0] < '3':
+	from itertools import imap as map
 from math import exp, log
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
@@ -32,7 +34,7 @@ from discodop.treebanktransforms import reversetransform, rrbacktransform, \
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
-USAGE = '''\
+USAGE = '''
 usage: %s [options] <rules> <lexicon> [input [output]]
 or:    %s [options] --ctf k <coarserules> <coarselex>
           <finerules> <finelex> [input [output]]

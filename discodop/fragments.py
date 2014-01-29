@@ -14,6 +14,8 @@ import re
 import sys
 import codecs
 import logging
+if sys.version[0] < '3':
+	from itertools import imap as map
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
