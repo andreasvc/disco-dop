@@ -4,6 +4,7 @@
 {{ form.get('engine', 'tgrep2') + ' ' + form['query'] if 'query' in form else 'Treebank Search' }}
 </title>
 <script src="static/main.js"></script>
+<link type="text/css" rel="stylesheet" href="static/style.css">
 <style>
 div.barplot {
     page-break-inside:avoid;
@@ -33,10 +34,6 @@ div.barplot span {
 .b3 { background-color: wheat; }
 .b4 { background-color: khaki; }
 .b5 { background-color: lightpink; }
-body { font-family: Helvetica, Arial, sans-serif; }
-blockquote { width: 600px; text-align: justify;  }
-span.r { color: red; }
-span.tt { font-family: monospace; }
 :root { /* include the colored bars in plots when printing (to pdf) with Chrome */
 	-webkit-print-color-adjust: exact;
 }

@@ -1,0 +1,17 @@
+body { font-family: Helvetica, Arial, sans-serif; }
+blockquote { width: 600px; text-align: justify;  }
+span.r { color: red; }
+span.tt { font-family: monospace; }
+
+tt, pre {
+	font-family:
+		"Liberation Mono",
+		"Ubuntu Monospace",
+		monaco,
+		"Lucida Console",
+		"Droid Sans Mono",
+		"DejaVu Sans Mono",
+		monospace;
+	font-size: 10pt;
+}
+
