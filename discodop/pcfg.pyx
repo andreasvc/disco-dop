@@ -736,6 +736,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	:param n: the number of derivations to return (max 1000); if n == 0, return
 		parse forest instead of n-best list (requires binarized grammar).
 	:returns: a dictionary of derivations with their probabilities."""
+	from discodop.parser import which
 	assert 0 <= n <= 1000
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
@@ -758,7 +759,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	# pass empty 'unkwown word file' to disable bitpar's smoothing
 	args = ['-y'] if n == 0 else ['-b', str(n)]
 	args += ['-s', startlabel, '-vp', '-u', '/dev/null', rulesfile, lexiconfile]
-	proc = subprocess.Popen(['bitpar'] + args,
+	proc = subprocess.Popen([which('bitpar')] + args,
 			shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
 	results, msg = proc.communicate('\n'.join(tokens) + '\n')
@@ -766,7 +767,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 			'').decode('utf8').strip()
 	match = CPUTIME.search(msg)
 	cputime = float(match.group(1)) if match else 0.0
-	if tags:
+	if tmp:
 		unlink(tmp.name)
 	# decode results or not?
 	if not results or results.startswith('No parse'):

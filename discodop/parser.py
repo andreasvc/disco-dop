@@ -35,9 +35,8 @@ from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
 USAGE = '''
-usage: %s [options] <rules> <lexicon> [input [output]]
-or:    %s [options] --ctf k <coarserules> <coarselex>
-          <finerules> <finelex> [input [output]]
+usage: %(cmd)s [options] <rules> <lexicon> [input [output]]
+or:    %(cmd)s [options] --batch <grammar/> [input files]
 
 Grammars need to be binarized, and are in bitpar or PLCFRS format.
 When no file is given, output is written to standard output;
@@ -48,24 +47,25 @@ newlines. Output consists of bracketed trees, with discontinuities indicated
 through indices pointing to words in the original sentence.
 
 Options:
-  -b k           Return the k-best parses instead of just 1.
-  -s x           Use "x" as start symbol instead of default "TOP".
-  -z             Input is one sentence per line, space-separated tokens.
-  --ctf=k        Use k-best coarse-to-fine; prune items not in the k-best
-                 derivations.
-  --tags         Tokens are of the form "word/POS"; give both to parser.
-  --prob         Print probabilities as well as parse trees.
-  --mpp=k        By default, the output consists of derivations, with the most
-                 probable derivation (MPD) ranked highest. With a PTSG such as
-                 DOP, it is possible to aim for the most probable parse (MPP)
-                 instead, whose probability is the sum of any number of the
-                 k-best derivations.
-  --bt=file      apply backtransform table to recover TSG derivations.
-  --bitpar       use bitpar to parse with an unbinarized grammar.
-  --numproc=k    launch k processes, to exploit multiple cores.
+  -b k         Return the k-best parses instead of just 1.
+  -s x         Use "x" as start symbol instead of default "TOP".
+  -z           Input is one sentence per line, space-separated tokens.
+  --prob       Print probabilities as well as parse trees.
+  --tags       Tokens are of the form "word/POS"; give both to parser.
+  --bt=file    apply backtransform table to recover TSG derivations.
+  --mpp=k      By default, the output consists of derivations, with the most
+               probable derivation (MPD) ranked highest. With a PTSG such as
+               DOP, it is possible to aim for the most probable parse (MPP)
+               instead, whose probability is the sum of any number of the
+               k-best derivations.
+  --batch      Specify directory with a model as produced by "discodop runexp";
+               If one or more filenames are given, the parse trees for each
+               file are written to a file with '.dbr' added to the original
+               filename; otherwise, standard input and output are used.
+  --bitpar     use bitpar to parse with an unbinarized grammar.
+  --numproc=k  launch k processes, to exploit multiple cores.
 
-%s
-''' % (sys.argv[0], sys.argv[0], FORMAT)
+''' % dict(cmd=sys.argv[0])
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames
@@ -120,10 +120,10 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags bitpar mpp= ctf= bt= numproc='.split()
+	options = 'prob tags bitpar batch mpp= bt= numproc='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
-		assert 2 <= len(args) <= 6, 'incorrect number of arguments'
+		assert 1 <= len(args) <= 4, 'incorrect number of arguments'
 	except (GetoptError, AssertionError) as err:
 		print(err, USAGE)
 		return
@@ -133,78 +133,64 @@ def main():
 	opts = dict(opts)
 	numparses = int(opts.get('-b', 1))
 	top = opts.get('-s', 'TOP')
-	threshold = int(opts.get('--ctf', 0))
 	prob = '--prob' in opts
 	tags = '--tags' in opts
 	oneline = '-z' in opts
-	rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
-	lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
-			else open)(args[1])).read()
-	bitpar = rules[0] in string.digits
-	if '--bitpar' in opts:
-		assert bitpar
-		mode = 'pcfg-bitpar-nbest'
+	if '--batch' in opts:
+		from discodop.runexp import readparam
+		directory = args[0]
+		assert os.path.isdir(directory), (
+				'expected directory producted by "discodop runexp".')
+		params = readparam(os.path.join(directory, 'params.prm'))
+		params['resultdir'] = directory
+		stages = params['stages']
+		postagging = DictObj(params['postagging'])
+		readgrammars(directory, stages, postagging,
+				top=params.get('top', 'ROOT'))
+		parser = Parser(stages,
+				transformations=params.get('transformations'),
+				binarization=params['binarization'],
+				postagging=postagging if postagging and
+				postagging.method == 'unknownword' else None,
+				relationalrealizational=params.get('relationalrealizational'))
 	else:
-		mode = 'pcfg' if bitpar else 'plcfrs'
-	coarse = Grammar(rules, lexicon, start=top, bitpar=bitpar,
-			binarized='--bitpar' not in opts)
-	stages = []
-	stage = DEFAULTSTAGE.copy()
-	backtransform = None
-	if opts.get('--bt'):
-		backtransform = (gzip.open if opts.get('--bt').endswith('.gz')
-				else open)(opts.get('--bt')).read().splitlines()
-	stage.update(
-			name='coarse',
-			mode=mode,
-			grammar=coarse,
-			binarized='--bitpar' not in opts,
-			backtransform=backtransform if len(args) < 4 else None,
-			m=numparses)
-	if '--mpp' in opts and (len(args) < 4 or not threshold):
-		stage.update(dop=True, objective='mpp', m=int(opts['--mpp']))
-	stages.append(DictObj(stage))
-	if 4 <= len(args) <= 6 and threshold:
-		rules = (gzip.open if args[2].endswith('.gz') else open)(args[2]).read()
-		lexicon = codecs.getreader('utf-8')((gzip.open
-				if args[3].endswith('.gz') else open)(args[3])).read()
-		# detect bitpar format
+		assert 2 <= len(args) <= 4, 'incorrect number of arguments'
+		rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
+		lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
+				else open)(args[1])).read()
 		bitpar = rules[0] in string.digits
 		if '--bitpar' in opts:
-			assert bitpar
+			assert bitpar, 'bitpar requires bitpar grammar format.'
 			mode = 'pcfg-bitpar-nbest'
 		else:
 			mode = 'pcfg' if bitpar else 'plcfrs'
-		fine = Grammar(rules, lexicon, start=top, bitpar=bitpar,
+		grammar = Grammar(rules, lexicon, start=top, bitpar=bitpar,
 				binarized='--bitpar' not in opts)
-		fine.getmapping(coarse, striplabelre=re.compile(b'@.+$'),
-				neverblockre=re.compile(b'.+}<') if backtransform else None)
+		stages = []
 		stage = DEFAULTSTAGE.copy()
+		backtransform = None
+		if opts.get('--bt'):
+			backtransform = (gzip.open if opts.get('--bt').endswith('.gz')
+					else open)(opts.get('--bt')).read().splitlines()
 		stage.update(
-				name='fine',
+				name='grammar',
 				mode=mode,
+				grammar=grammar,
 				binarized='--bitpar' not in opts,
-				grammar=fine,
-				backtransform=backtransform,
-				m=int(opts.get('--mpp', numparses)),
-				prune=True,
-				k=threshold,
-				dop=True,
-				objective='mpp' if '--mpp' in opts else 'mpd')
+				backtransform=backtransform if len(args) < 4 else None,
+				m=numparses)
+		if '--mpp' in opts:
+			stage.update(dop=True, objective='mpp', m=int(opts['--mpp']))
 		stages.append(DictObj(stage))
-		infile = (io.open(args[4], encoding='utf-8')
-				if len(args) >= 5 else sys.stdin)
-		out = (io.open(args[5], 'w', encoding='utf-8')
-				if len(args) == 6 else sys.stdout)
-	else:
-		infile = (io.open(args[2], encoding='utf-8')
-				if len(args) >= 3 else sys.stdin)
-		out = (io.open(args[3], 'w', encoding='utf-8')
-				if len(args) == 4 else sys.stdout)
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
-	doparsing(Parser(stages), infile, out, prob, oneline, tags, numparses,
+		parser = Parser(stages)
+	infile = (io.open(args[2], encoding='utf-8')
+			if len(args) >= 3 else sys.stdin)
+	out = (io.open(args[3], 'w', encoding='utf-8')
+			if len(args) == 4 else sys.stdout)
+	doparsing(parser, infile, out, prob, oneline, tags, numparses,
 			int(opts.get('--numproc', 1)))
 
 
@@ -657,6 +643,14 @@ def probstr(prob):
 	if isinstance(prob, tuple):
 		return 'subtrees=%d, p=%.4g ' % (abs(prob[0]), prob[1])
 	return 'p=%.4g' % prob
+
+
+def which(program):
+	"""Return first match for program in search path."""
+	for path in os.environ.get('PATH', os.defpath).split(":"):
+		if path and os.path.exists(os.path.join(path, program)):
+			return os.path.join(path, program)
+	raise ValueError('%r not found in path; please install it.' % program)
 
 if __name__ == '__main__':
 	main()
