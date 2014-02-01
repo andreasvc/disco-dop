@@ -56,32 +56,32 @@ Output is sent to stdout; to save the results, redirect to a file.
 
 Options:
 
-  --fmt=<export|bracket|discbracket|tiger|alpino|dact>
-                when format is not 'bracket', work with discontinuous trees;
-                output is in 'discbracket' format:
-                tree<TAB>sentence<TAB>frequency
-                where "tree' has indices as leaves, referring to elements of
-                "sentence", a space separated list of words.
-  --indices     report sets of indices instead of frequencies.
-  --cover       include all depth-1 fragments of first treebank corresponding
-                to single productions.
-  --complete    find complete matches of fragments from treebank1 (needle) in
-                treebank2 (haystack); frequencies are from haystack.
-  --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
-                first treebank will be compared to all others.
-                Results are written to filenames of the form dir/A_B.
-  --numproc=n   use n independent processes, to enable multi-core usage
-                (default: 1); use 0 to detect the number of CPUs.
-  --numtrees=n  only read first n trees from first treebank
-  --encoding=x  use x as treebank encoding, e.g. utf-8, iso-8859-1, etc.
-  --approx      report approximate frequencies (lower bound)
-  --nofreq      do not report frequencies.
-  --relfreq     report relative frequencies wrt. root node of fragments.
-  --quadratic   use the slower, quadratic algorithm for finding fragments.
-  --alt         alternative output format: (NP (DT "a") NN)
-                default: (NP (DT a) (NN ))
-  --debug       extra debug information, ignored when numproc > 1.
-  --quiet       disable all messages.
+--fmt=<export|bracket|discbracket|tiger|alpino|dact>
+              when format is not 'bracket', work with discontinuous trees;
+              output is in 'discbracket' format:
+              tree<TAB>sentence<TAB>frequency
+              where "tree' has indices as leaves, referring to elements of
+              "sentence", a space separated list of words.
+--indices     report sets of indices instead of frequencies.
+--cover       include all depth-1 fragments of first treebank corresponding
+              to single productions.
+--complete    find complete matches of fragments from treebank1 (needle) in
+              treebank2 (haystack); frequencies are from haystack.
+--batch=dir   enable batch mode; any number of treebanks > 1 can be given;
+              first treebank will be compared to all others.
+              Results are written to filenames of the form dir/A_B.
+--numproc=n   use n independent processes, to enable multi-core usage
+              (default: 1); use 0 to detect the number of CPUs.
+--numtrees=n  only read first n trees from first treebank
+--encoding=x  use x as treebank encoding, e.g. utf-8, iso-8859-1, etc.
+--approx      report approximate frequencies (lower bound)
+--nofreq      do not report frequencies.
+--relfreq     report relative frequencies wrt. root node of fragments.
+--quadratic   use the slower, quadratic algorithm for finding fragments.
+--alt         alternative output format: (NP (DT "a") NN)
+              default: (NP (DT a) (NN ))
+--debug       extra debug information, ignored when numproc > 1.
+--quiet       disable all messages.
 
 
 eval
