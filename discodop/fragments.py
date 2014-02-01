@@ -14,8 +14,10 @@ import re
 import sys
 import codecs
 import logging
-if sys.version[0] < '3':
-	from itertools import imap as map
+if sys.version[0] > '2':
+	imap = map
+else:
+	from itertools import imap
 from multiprocessing import Pool, cpu_count, log_to_stderr, SUBDEBUG
 from collections import defaultdict
 from itertools import count
@@ -147,7 +149,7 @@ def regular(filenames, numproc, limit, encoding):
 	initworker(filenames[0], filenames[1] if len(filenames) == 2 else None,
 			limit, encoding)
 	if numproc == 1:
-		mymap = map
+		mymap = imap
 		myapply = APPLY
 	else:  # multiprocessing, start worker processes
 		pool = Pool(processes=numproc, initializer=initworker,

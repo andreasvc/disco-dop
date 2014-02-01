@@ -14,8 +14,10 @@ import tempfile
 import traceback
 import string  # pylint: disable=W0402
 import multiprocessing
-if sys.version[0] < '3':
-	from itertools import imap as map
+if sys.version[0] > '2':
+	imap = map
+else:
+	from itertools import imap
 from math import exp, log
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
@@ -23,7 +25,7 @@ from operator import itemgetter
 from functools import wraps
 import numpy as np
 from discodop import plcfrs, pcfg
-from discodop.grammar import FORMAT, defaultparse
+from discodop.grammar import defaultparse
 from discodop.containers import Grammar
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import getderivations, marginalize, doprerank
@@ -207,7 +209,7 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 	infile = (line for line in infile if line.strip())
 	if numproc == 1:
 		initworker(parser, printprob, usetags, numparses)
-		mymap = map
+		mymap = imap
 	else:
 		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
 				initargs=(parser, printprob, usetags, numparses))

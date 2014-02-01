@@ -14,3 +14,7 @@ DEF EDGES_SIZE = 100
 # Higher values result in a heap with a smaller depth,
 # but increase the number of comparisons between siblings that need to be done.
 DEF HEAP_ARITY = 4
+
+# context summary estimates
+DEF SX = 1
+DEF SXlrgaps = 2

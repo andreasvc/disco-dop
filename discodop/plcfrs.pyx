@@ -7,9 +7,7 @@ import logging
 import numpy as np
 cimport cython
 include "constants.pxi"
-
-DEF SX = 1
-DEF SXlrgaps = 2
+include "agenda.pxi"
 
 cdef SmallChartItem COMPONENT = new_SmallChartItem(0, 0)
 cdef SmallChartItem NONE = new_SmallChartItem(0, 0)
@@ -17,14 +15,11 @@ cdef FatChartItem FATNONE = new_FatChartItem(0)
 cdef FatChartItem FATCOMPONENT = new_FatChartItem(0)
 cdef double INFINITY = float('infinity')
 
-include "agenda.pxi"
-
 cdef inline bint equalitems(LCFRSItem_fused op1, LCFRSItem_fused op2):
 	if LCFRSItem_fused is SmallChartItem:
 		return op1.label == op2.label and op1.vec == op2.vec
-	else:
-		return op1.label == op2.label and (
-			memcmp(<UChar *>op1.vec, <UChar *>op2.vec, sizeof(op1.vec)) == 0)
+	return op1.label == op2.label and (
+		memcmp(<UChar *>op1.vec, <UChar *>op2.vec, sizeof(op1.vec)) == 0)
 
 
 cdef class LCFRSChart(Chart):
@@ -138,8 +133,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		return (<SmallChartItem>item).copy()
 
 	def root(self):
-		return new_SmallChartItem(
-				self.grammar.toid[self.grammar.start],
+		return new_SmallChartItem(self.grammar.toid[self.grammar.start],
 				(1ULL << self.lensent) - 1)
 
 
@@ -234,18 +228,16 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		experimental.
 	:param beamwidth: specify the maximum number of items that will be explored
 		for each particular span, on a first-come-first-served basis.
-		setting to 0 disables this feature. experimental.
-	"""
+		setting to 0 disables this feature. experimental."""
 	if len(sent) < sizeof(COMPONENT.vec) * 8:
 		chart = SmallLCFRSChart(grammar, list(sent), start)
 		return parse_main(<SmallLCFRSChart>chart, <SmallChartItem>chart.root(),
 				sent, grammar, tags, exhaustive, start, whitelist, splitprune,
 				markorigin, estimates, beamwidth)
-	else:
-		chart = FatLCFRSChart(grammar, list(sent), start)
-		return parse_main(<FatLCFRSChart>chart, <FatChartItem>chart.root(),
-				sent, grammar, tags, exhaustive, start, whitelist, splitprune,
-				markorigin, estimates, beamwidth)
+	chart = FatLCFRSChart(grammar, list(sent), start)
+	return parse_main(<FatLCFRSChart>chart, <FatChartItem>chart.root(),
+			sent, grammar, tags, exhaustive, start, whitelist, splitprune,
+			markorigin, estimates, beamwidth)
 
 
 cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
@@ -618,7 +610,6 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 		# lower score? => decrease-key in agenda
 		agenda.setifbetter(newitem, score)
 		chart.addedge(newitem, left, rule)
-
 	# not in agenda => must be in chart
 	elif not inagenda and prob < chart._subtreeprob(newitem):
 		#re-add to agenda because we found a better score.
@@ -685,12 +676,12 @@ cdef inline bint concat(Rule *rule,
 	>>> concat(((1, ), (0, )), lvec, rvec)
 	False		# rvec's span should come after lvec's span
 
-	The actual yield functions are encoded in a binary format;
-		cf. containers.pyx
+	The actual yield functions are encoded in a binary format
+	(cf. containers.pyx)::
 		((0, 1, 0), (1, 0)) ==> args=0b10010; lengths=0b00101
-		NB: note reversal due to the way binary numbers are represented
-		the least significant bit (rightmost) corresponds to the lowest
-		index in the sentence / constituent (leftmost)."""
+	NB: note reversal due to the way binary numbers are represented
+	the least significant bit (rightmost) corresponds to the lowest
+	index in the sentence / constituent (leftmost)."""
 	cdef ULLong lvec, rvec, mask
 	cdef ULong *alvec
 	cdef ULong *arvec
@@ -777,10 +768,9 @@ def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
 		chart = SmallLCFRSChart(grammar, list(sent))
 		return parse_symbolic_main(<SmallLCFRSChart>chart,
 				<SmallChartItem>chart.root(), sent, grammar, tags, start)
-	else:
-		chart = FatLCFRSChart(grammar, list(sent))
-		return parse_symbolic_main(<FatLCFRSChart>chart,
-				<FatChartItem>chart.root(), sent, grammar, tags, start)
+	chart = FatLCFRSChart(grammar, list(sent))
+	return parse_symbolic_main(<FatLCFRSChart>chart,
+			<FatChartItem>chart.root(), sent, grammar, tags, start)
 
 
 def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
@@ -877,11 +867,11 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 						if newitem not in chart.parseforest:
 							agenda.append(newitem)
 							if LCFRSItem_fused is SmallChartItem:
-								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-										SmallChartItem)
+								newitem = (<LCFRSItem_fused>
+										SmallChartItem.__new__(SmallChartItem))
 							elif LCFRSItem_fused is FatChartItem:
-								newitem = <LCFRSItem_fused>FatChartItem.__new__(
-										FatChartItem)
+								newitem = (<LCFRSItem_fused>
+										FatChartItem.__new__(FatChartItem))
 			# binary left
 			for i in range(grammar.numrules):
 				rule = &(grammar.lbinary[item.label][i])
@@ -896,11 +886,11 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 						if newitem not in chart.parseforest:
 							agenda.append(newitem)
 							if LCFRSItem_fused is SmallChartItem:
-								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-										SmallChartItem)
+								newitem = (<LCFRSItem_fused>
+										SmallChartItem.__new__(SmallChartItem))
 							elif LCFRSItem_fused is FatChartItem:
-								newitem = <LCFRSItem_fused>FatChartItem.__new__(
-										FatChartItem)
+								newitem = (<LCFRSItem_fused>
+										FatChartItem.__new__(FatChartItem))
 		if agenda.length > maxA:
 			maxA = agenda.length
 	msg = ('agenda max %d, now %d, %s, blocked %d' % (
@@ -969,6 +959,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 
 
 def do(sent, grammar):
+	"""Parse sentence with grammar and print 10 best derivations."""
 	from math import exp
 	from kbest import lazykbest
 	print('len', len(sent.split()), 'sentence:', sent)
