@@ -35,36 +35,39 @@ from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
 USAGE = '''
-usage: %(cmd)s [options] <rules> <lexicon> [input [output]]
-or:    %(cmd)s [options] --batch <grammar/> [input files]
+usage: %(cmd)s [options] <grammar/> [input files]
+or:    %(cmd)s --simple [options] <rules> <lexicon> [input [output]]
 
-Grammars need to be binarized, and are in bitpar or PLCFRS format.
-When no file is given, output is written to standard output;
-when additionally no input is given, it is read from standard input.
+'grammar/' is a directory with a model produced by "discodop runexp".
+If one or more filenames are given, the parse trees for each file are written
+to a file with '.dbr' added to the original filename.
+When no filename is given, input is read from standard input and the results
+are written to standard output. Input should contain one token per line, with
+sentences delimited by two newlines. Output consists of bracketed trees in
+'discbracket' format, i.e., terminals are indices pointing to words in the
+original sentence, to represent any discontinuties.
 Files must be encoded in UTF-8.
-Input should contain one token per line, with sentences delimited by two
-newlines. Output consists of bracketed trees, with discontinuities indicated
-through indices pointing to words in the original sentence.
 
-Options:
+General options:
+  -x           Input is one token per line, sentences separated by two
+               newlines (like bitpar).
   -b k         Return the k-best parses instead of just 1.
-  -s x         Use "x" as start symbol instead of default "TOP".
-  -z           Input is one sentence per line, space-separated tokens.
   --prob       Print probabilities as well as parse trees.
   --tags       Tokens are of the form "word/POS"; give both to parser.
-  --bt=file    apply backtransform table to recover TSG derivations.
+  --numproc=k  Launch k processes, to exploit multiple cores.
+  --simple     Parse with a single grammar and input file; similar interface
+               to bitpar. The files 'rules' and 'lexicon' define a binarized
+               grammar in bitpar or PLCFRS format.
+
+Options for simple mode:
+  -s x         Use "x" as start symbol instead of default "TOP".
+  --bt=file    Apply backtransform table to recover TSG derivations.
   --mpp=k      By default, the output consists of derivations, with the most
                probable derivation (MPD) ranked highest. With a PTSG such as
                DOP, it is possible to aim for the most probable parse (MPP)
                instead, whose probability is the sum of any number of the
                k-best derivations.
-  --batch      Specify directory with a model as produced by "discodop runexp";
-               If one or more filenames are given, the parse trees for each
-               file are written to a file with '.dbr' added to the original
-               filename; otherwise, standard input and output are used.
-  --bitpar     use bitpar to parse with an unbinarized grammar.
-  --numproc=k  launch k processes, to exploit multiple cores.
-
+  --bitpar     Use bitpar to parse with an unbinarized grammar.
 ''' % dict(cmd=sys.argv[0])
 
 DEFAULTSTAGE = dict(
@@ -120,9 +123,9 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags bitpar batch mpp= bt= numproc='.split()
+	options = 'prob tags bitpar simple mpp= bt= numproc='.split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'u:b:s:z', options)
+		opts, args = gnu_getopt(sys.argv[1:], 'b:s:x', options)
 		assert 1 <= len(args) <= 4, 'incorrect number of arguments'
 	except (GetoptError, AssertionError) as err:
 		print(err, USAGE)
@@ -135,25 +138,8 @@ def main():
 	top = opts.get('-s', 'TOP')
 	prob = '--prob' in opts
 	tags = '--tags' in opts
-	oneline = '-z' in opts
-	if '--batch' in opts:
-		from discodop.runexp import readparam
-		directory = args[0]
-		assert os.path.isdir(directory), (
-				'expected directory producted by "discodop runexp".')
-		params = readparam(os.path.join(directory, 'params.prm'))
-		params['resultdir'] = directory
-		stages = params['stages']
-		postagging = DictObj(params['postagging'])
-		readgrammars(directory, stages, postagging,
-				top=params.get('top', 'ROOT'))
-		parser = Parser(stages,
-				transformations=params.get('transformations'),
-				binarization=params['binarization'],
-				postagging=postagging if postagging and
-				postagging.method == 'unknownword' else None,
-				relationalrealizational=params.get('relationalrealizational'))
-	else:
+	oneline = '-x' not in opts
+	if '--simple' in opts:
 		assert 2 <= len(args) <= 4, 'incorrect number of arguments'
 		rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
 		lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
@@ -186,6 +172,23 @@ def main():
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
 		parser = Parser(stages)
+	else:
+		from discodop.runexp import readparam
+		directory = args[0]
+		assert os.path.isdir(directory), (
+				'expected directory producted by "discodop runexp".')
+		params = readparam(os.path.join(directory, 'params.prm'))
+		params['resultdir'] = directory
+		stages = params['stages']
+		postagging = DictObj(params['postagging'])
+		readgrammars(directory, stages, postagging,
+				top=params.get('top', top))
+		parser = Parser(stages,
+				transformations=params.get('transformations'),
+				binarization=params['binarization'],
+				postagging=postagging if postagging and
+				postagging.method == 'unknownword' else None,
+				relationalrealizational=params.get('relationalrealizational'))
 	infile = (io.open(args[2], encoding='utf-8')
 			if len(args) >= 3 else sys.stdin)
 	out = (io.open(args[3], 'w', encoding='utf-8')
@@ -201,6 +204,7 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 	unparsed = 0
 	if not oneline:
 		infile = readinputbitparstyle(infile)
+	infile = (line for line in infile if line.strip())
 	if numproc == 1:
 		initworker(parser, printprob, usetags, numparses)
 		mymap = map

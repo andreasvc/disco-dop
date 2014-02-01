@@ -27,8 +27,19 @@ sentences using Tree-Substitution Grammar (TSG).
 Getting started
 ===============
 
-Simple example
+Parsing a text
 --------------
+The parser can be used as an off-the-shelf parser using an existing grammar model,
+either one of the `grammars used in the 2013 IWPT paper
+<http://staff.science.uva.nl/~acranenb/grammars/>`_ for English, German, and
+Dutch, or a model produced by ``discodop runexp``. The text needs to be
+tokenized, for example using `ucto <http://ilk.uvt.nl/ucto>`_, the output of
+which can be passed to the parser::
+
+    $  ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser wsj/
+
+Inducing a simple grammar
+-------------------------
 
 Suppose we have the following treebank in the file ``treebankExample.mrg``::
 
@@ -62,10 +73,7 @@ can be used as follows::
     parsing 0: The cat saw the hungry dog
     (S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NP|<JJ,NN> (JJ 4) (NN 5)))))
     0.0 s
-    raw cpu time 0.16 
-    average time per sentence 0.0 
-    unparsed sentences: 0 
-    finished
+    [...]
 
 Run an experiment
 -----------------

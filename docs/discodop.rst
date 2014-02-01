@@ -276,40 +276,43 @@ Example::
 
 parser
 ------
-A basic command line interface to the parser comparable to bitpar.
-Reads grammars from text files.
+A command line interface for parsing new texts with an existing grammar.
 
-usage: ``discodop parser [options] <rules> <lexicon> [input [output]]``
+usage: ``discodop parser [options] <grammar/> [input files]``
+or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``
 
-or:    ``discodop parser [options] --batch <grammar/> [input files]``
+``grammar/`` is a directory with a model produced by ``discodop runexp``.
+If one or more filenames are given, the parse trees for each
+file are written to a file with ``.dbr`` added to the original filename.
+When no filename is given, input is read from standard input and the results
+are written to standard output. Input should contain one token per line, with
+sentences delimited by two newlines. Output consists of bracketed trees in
+``discbracket`` format, i.e., terminals are indices pointing to words in the
+original sentence, to represent any discontinuties.
+Files must be encoded in UTF-8.
 
-Grammars need to be binarized, and are in bitpar or PLCFRS format.
-When no file is given, output is written to standard output;
-when additionally no input is given, it is read from standard input.
-Files must be encoded in utf-8.
-Input should contain one token per line, with sentences delimited by two
-newlines. Output consists of bracketed trees, with discontinuities indicated
-through indices pointing to words in the original sentence.
+General options:
 
-Options:
-
+-x           Input is one token per line, sentences separated by two
+             newlines (like bitpar).
 -b k         Return the k-best parses instead of just 1.
--s x         Use "x" as start symbol instead of default "TOP".
--z           Input is one sentence per line, space-separated tokens.
 --prob       Print probabilities as well as parse trees.
 --tags       Tokens are of the form "word/POS"; give both to parser.
---bt=file    apply backtransform table to recover TSG derivations.
+--numproc=k  Launch k processes, to exploit multiple cores.
+--simple     Parse with a single grammar and input file; similar interface
+             to bitpar. The files ``rules`` and ``lexicon`` define a binarized
+             grammar in bitpar or PLCFRS format.
+
+Options for simple mode:
+
+-s x         Use "x" as start symbol instead of default "TOP".
+--bt=file    Apply backtransform table to recover TSG derivations.
 --mpp=k      By default, the output consists of derivations, with the most
              probable derivation (MPD) ranked highest. With a PTSG such as
              DOP, it is possible to aim for the most probable parse (MPP)
              instead, whose probability is the sum of any number of the
              k-best derivations.
---batch      Specify directory with a model as produced by "discodop runexp";
-             If one or more filenames are given, the parse trees for each
-             file are written to a file with '.dbr' added to the original
-             filename; otherwise, standard input and output are used.
---bitpar     use bitpar to parse with an unbinarized grammar.
---numproc=k  launch k processes, to exploit multiple cores.
+--bitpar     Use bitpar to parse with an unbinarized grammar.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are::
