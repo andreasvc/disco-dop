@@ -279,6 +279,7 @@ parser
 A command line interface for parsing new texts with an existing grammar.
 
 usage: ``discodop parser [options] <grammar/> [input files]``
+
 or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``
 
 ``grammar/`` is a directory with a model produced by ``discodop runexp``.
