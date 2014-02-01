@@ -65,8 +65,7 @@ options (in addition to those described in the README of EVALB):
                    2 give detailed information for each sentence ('--debug')
   MAX_ERROR        this values is ignored, no errors are tolerated.
                    the parameter is accepted to support usage of unmodified
-                   EVALB parameter files. ''' % (
-        USAGE, '|'.join(READERS.keys()))
+                   EVALB parameter files. ''' % (USAGE, '|'.join(READERS))
 
 HEADER = '''
    Sentence                 Matched   Brackets            Corr      Tag

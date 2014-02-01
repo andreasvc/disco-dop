@@ -24,7 +24,7 @@ except ImportError:
 	ALPINOCORPUSLIB = False
 from discodop import treebank
 from discodop.tree import Tree
-from discodop.parser import workerfunc
+from discodop.parser import workerfunc, which
 
 CACHESIZE = 500
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
@@ -441,11 +441,3 @@ def filterlabels(line, nofunc, nomorph):
 		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
-
-
-def which(program):
-	"""Return first match for program in search path."""
-	for path in os.environ.get('PATH', os.defpath).split(":"):
-		if path and os.path.exists(os.path.join(path, program)):
-			return os.path.join(path, program)
-	raise ValueError('%r not found in path; please install it.' % program)

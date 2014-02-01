@@ -28,8 +28,8 @@ from discodop._fragments import extractfragments, fastextractfragments, \
 from discodop.parser import workerfunc
 
 USAGE = '''\
-Usage: %s <treebank1> [treebank2] [options]
-  or: %s --batch=<dir> <treebank1> <treebank2>... [options]
+Usage: %(cmd)s <treebank1> [treebank2] [options]
+  or: %(cmd)s --batch=<dir> <treebank1> <treebank2>... [options]
 If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
 Input is in Penn treebank format (S-expressions), one tree per line.
@@ -37,7 +37,7 @@ Output contains lines of the form "tree<TAB>frequency".
 Frequencies refer to the first treebank by default.
 Output is sent to stdout; to save the results, redirect to a file.
 Options:
-  --fmt=[%s]
+  --fmt=[%(fmts)s]
                 when format is not 'bracket', work with discontinuous trees;
                 output is in 'discbracket' format:
                 tree<TAB>sentence<TAB>frequency
@@ -63,7 +63,7 @@ Options:
                 default: (NP (DT a) (NN ))
   --debug       extra debug information, ignored when numproc > 1.
   --quiet       disable all messages.\
-''' % (sys.argv[0], sys.argv[0], '|'.join(READERS.keys()))
+''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
 		'quiet', 'debug', 'quadratic', 'cover', 'alt', 'relfreq')

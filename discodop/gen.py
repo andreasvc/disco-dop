@@ -12,11 +12,11 @@ from random import random
 USAGE = '''\
 Generate random sentences with a PLCFRS or PCFG.
 Reads grammar from a text file in PLCFRS or bitpar format.
-Usage: %s [--verbose] <rules> <lexicon>
-or: %s --test
+Usage: %(cmd)s [--verbose] <rules> <lexicon>
+or: %(cmd)s --test
 
 Grammar is assumed to be in UTF-8; may be gzip'ed (.gz extension).
-''' % (sys.argv[0], sys.argv[0])
+''' % dict(cmd=sys.argv[0])
 
 Grammar = namedtuple("Grammar", ('numrules', 'unary', 'lbinary', 'rbinary',
 		'bylhs', 'lexicalbyword', 'lexicalbylhs', 'toid', 'tolabel', 'fanout'))

@@ -51,7 +51,7 @@ in the same format as the output of the discodop fragments command;
 output is the base name for the filenames to write the grammar to.
 
 Options:
-  --inputfmt=[%(corpusfmts)s]
+  --inputfmt=[%(fmts)s]
              Input treebank format [default: export].
   --inputenc=[utf-8|iso-8859-1|...]
              Treebank encoding [default: utf-8].
@@ -69,9 +69,8 @@ Options:
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
-ASCII for the rules, and utf-8 for the lexicon.
-\n%(grammarformat)s\n''' % dict(cmd=sys.argv[0], grammarformat=FORMAT,
-		corpusfmts='|'.join(READERS.keys()))
+ASCII for the rules, and utf-8 for the lexicon.\n
+''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 
 def lcfrsproductions(tree, sent, frontiers=False):

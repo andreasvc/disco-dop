@@ -5,7 +5,7 @@ A parser for Probalistic Linear Context-Free Rewriting Systems (LCFRS) and
 Probabilistic Context-Free Grammars (PCFG), as well as facilities to extract
 and parse with data-oriented parsing (DOP) grammars.
 
-Usage: discodop <command> [arguments]
+Usage: ``discodop <command> [arguments]``
 
 Command is one of:
 
@@ -19,11 +19,11 @@ Command is one of:
 :demos:            Show some demonstrations of formalisms encoded in LCFRS.
 :gen:              Generate sentences from a PLCFRS.
 
-for additional instructions issue: discodop <command> --help
+for additional instructions issue: ``discodop <command> --help``
 
 runexp
 ------
-Usage: discodop runexp <parameter file> [--rerun]
+Usage: ``discodop runexp <parameter file> [--rerun]``
 
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
@@ -43,9 +43,9 @@ the gold standard file in Negra's export format.
 
 fragments
 ---------
-Usage: discodop fragments <treebank1> [treebank2] [options]
+Usage: ``discodop fragments <treebank1> [treebank2] [options]``
 
-or: discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]
+or: ``discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]``
 
 If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
@@ -88,7 +88,7 @@ eval
 ----
 Evaluation of (discontinuous) parse trees, following EVALB as much as possible.
 
-Usage: discodop eval <gold> <parses> [param] [options]
+Usage: ``discodop eval <gold> <parses> [param] [options]``
 
 where gold and parses are files with parse trees, param is an EVALB parameter
 file, and options may consist of:
@@ -141,7 +141,7 @@ treetransforms
 --------------
 Treebank binarization and conversion
 
-Usage: discodop treetransforms [options] <action> [input [output]]
+Usage: ``discodop treetransforms [options] <action> [input [output]]``
 
 where input and output are treebanks; standard in/output is used if not given.
 action is one of::
@@ -206,9 +206,7 @@ Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
 grammar
 -------
 Read off grammars from treebanks.
-Usage::
-
-   discodop grammar <type> <input> <output> [options]
+Usage: ``discodop grammar <type> <input> <output> [options]``
 
 type is one of:
    pcfg
@@ -281,10 +279,9 @@ parser
 A basic command line interface to the parser comparable to bitpar.
 Reads grammars from text files.
 
-usage: discodop parser [options] <rules> <lexicon> [input [output]]
+usage: ``discodop parser [options] <rules> <lexicon> [input [output]]``
 
-or:    discodop parser [options] --ctf k <coarserules> <coarselex>
-          <finerules> <finelex> [input [output]]
+or:    ``discodop parser [options] --ctf k <coarserules> <coarselex> <finerules> <finelex> [input [output]]``
 
 Grammars need to be binarized, and are in bitpar or PLCFRS format.
 When no file is given, output is written to standard output;
@@ -334,7 +331,7 @@ Example::
 
 treedraw
 --------
-Usage: discodop treedraw [<treebank>...] [options]
+Usage: ``discodop treedraw [<treebank>...] [options]``
 
 Options (* marks default option):
 
@@ -363,8 +360,9 @@ gen
 ---
 Generate random sentences with a PLCFRS or PCFG.
 Reads grammar from a text file in PLCFRS or bitpar format.
-Usage: discodop gen [--verbose] <rules> <lexicon>
-or: discodop gen --test
+Usage: ``discodop gen [--verbose] <rules> <lexicon>``
+
+or: ``discodop gen --test``
 
 Grammar is assumed to be in utf-8; may be gzip'ed (.gz extension).
 

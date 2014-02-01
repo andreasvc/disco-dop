@@ -24,7 +24,7 @@ from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
-from discodop.treebank import READERS, writetree
+from discodop.treebank import READERS, WRITERS, writetree
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -40,7 +40,7 @@ except ImportError:
 		return result
 
 USAGE = '''\
-Treebank binarization and conversion
+Treebank binarization and conversion.
 Usage: %s [options] <action> [input [output]]
 where input and output are treebanks; standard in/output is used if not given.
 action is one of:
@@ -54,7 +54,7 @@ action is one of:
 
 options may consist of:
   --inputfmt=[%s]
-  --outputfmt=[export|bracket|discbracket|dact|conll|mst|tokens|wordpos]
+  --outputfmt=[%s]
                  Treebank format [default: export].
   --inputenc|--outputenc=[utf-8|iso-8859-1|...]
                  Treebank encoding [default: utf-8].
@@ -95,7 +95,7 @@ options may consist of:
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     conversion and requires the use of heuristic head rules (--headrules),
     to ensure that all constituents have a child marked as head. ''' % (
-			sys.argv[0], '|'.join(READERS.keys()))
+			sys.argv[0], '|'.join(READERS), '|'.join(WRITERS))
 
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
@@ -903,6 +903,10 @@ def main():
 	if action not in actions:
 		print('unrecognized action: %r\navailable actions: %s' % (
 				action, ', '.join(actions)), file=sys.stderr)
+		sys.exit(2)
+	if opts.get('--outputfmt', WRITERS[0]) not in WRITERS:
+		print('unrecognized output format: %r\navailable formats: %s' % (
+				opts.get('--outputfmt'), ' '.join(WRITERS)), file=sys.stderr)
 		sys.exit(2)
 	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
 	outfilename = args[2] if len(args) == 3 else '/dev/stdout'

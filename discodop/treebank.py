@@ -961,3 +961,5 @@ READERS = OrderedDict((('export', NegraCorpusReader),
 		('discbracket', DiscBracketCorpusReader),
 		('tiger', TigerXMLCorpusReader),
 		('alpino', AlpinoCorpusReader), ('dact', DactCorpusReader)))
+WRITERS = ('export', 'bracket', 'discbracket', 'dact',
+		'conll', 'mst', 'tokens', 'wordpos')

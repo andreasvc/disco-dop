@@ -42,7 +42,7 @@ Options:
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through 'less -R' to preserve the colors.\
-''' % (sys.argv[0], '|'.join(READERS.keys()))
+''' % (sys.argv[0], '|'.join(READERS))
 ANSICOLOR = {
 		'black': 30,
 		'red': 31,
