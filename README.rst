@@ -59,7 +59,7 @@ using `pip <http://http://www.pip-installer.org>`_,
 issue the following commands::
 
     sudo apt-get install build-essential python-dev python-numpy python-pip
-    pip install --user Cython
+    pip install --user -r requirements.txt
     pip install --user disco-dop
 
 To compile the latest development version on Ubuntu,

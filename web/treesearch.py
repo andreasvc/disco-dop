@@ -826,8 +826,8 @@ def getcorpus():
 				print(filename)
 		else:
 			raise ValueError
+		ids = {}
 		if ALPINOCORPUSLIB:
-			ids = {}
 			for filename in afiles:
 				# FIXME: memory leak here?
 				tmp = alpinocorpus.CorpusReader(filename)

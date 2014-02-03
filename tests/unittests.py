@@ -81,26 +81,46 @@ class Test_treetransforms:
 
 class Test_treebank:
 	def test_incrementaltreereader(self):
-		data = """
-		(top (smain (noun 0) (verb 1) (inf (verb 5) (inf (np (det 2) \
+		data = '''
+		(top (smain (noun 0) (verb 1) (inf (verb 5) (inf (np (det 2)
 				(adj 3) (noun 4)) (verb 6) (pp (prep 7) (noun 8))))) (punct 9))
 		Het had een prachtige dag kunnen zijn in Londen .
-		"""
+		'''
 		result = list(incrementaltreereader([data]))
 		assert len(result) == 1
-		for tree, sent, _rest in result:
-			assert sent[0] == u'Het', sent[0]
-			assert len(sent) == 10
+		tree, sent, _rest = result[0]
+		assert sent[0] == u'Het', sent[0]
+		assert len(sent) == 10
+
+		data = '''
+#BOS 0
+is	VB	--	--	500
+John	NP	--	--	0
+rich	JJ	--	--	500
+?	?	--	--	0
+#500	VP	--	--	0
+#EOS 0
+		'''
+		result = list(incrementaltreereader(data.splitlines()))
+		assert len(result) == 1
+		tree, sent, _rest = result[0]
+		assert sent[0] == u'is', sent[0]
+		assert len(sent) == 4
+
+		data = '''(S (NP Mary) (VP
+			(VB is) (JJ rich)) (. .))'''
+		result = list(incrementaltreereader(data.splitlines()))
+		assert len(result) == 1
 
 
 class Test_treebanktransforms:
 	def test_balancedpunctraise(self):
-		tree = ParentedTree.parse('(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20) '
-				'(S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP '
-				'(APPR 6) (CNP (NN 8) (ADV 9) (ISU ($. 10) ($. 11) '
-				'($. 12))))) (S (PRELS 15) (MPN (NE 16) (NE 17)) (ADJD 18) '
-				'(VVFIN 19))) (VVFIN 21) (ADV 22) (NP (ADJA 23) (NN 24))) '
-				'($. 25))', parse_leaf=int)
+		tree = ParentedTree.parse('(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20)'
+				' (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP'
+				' (APPR 6) (CNP (NN 8) (ADV 9) (ISU ($. 10) ($. 11)'
+				' ($. 12))))) (S (PRELS 15) (MPN (NE 16) (NE 17)) (ADJD 18)'
+				' (VVFIN 19))) (VVFIN 21) (ADV 22) (NP (ADJA 23) (NN 24)))'
+				' ($. 25))', parse_leaf=int)
 		sent = ("Die zweite Konzertreihe , sechs Abende mit ' Orgel plus "
 				". . . ' , die Hayko Siemens musikalisch leitet , bietet "
 				"wieder ungewoehnliche Kombinationen .".split())
