@@ -805,7 +805,8 @@ def segmentbrackets(brackets, strict=False):
 	- status is 1 if the line was consumed, else 0."""
 	lb, rb = brackets
 	# regex to check if the tree contains any terminals (as opposed to indices)
-	strtermre = re.compile('[^0-9%(rb)s]%(rb)s' % {'rb': re.escape(rb)})
+	strtermre = re.compile(' [^%(rb)s]*[^0-9%(rb)s][^%(rb)s]*%(rb)s' %
+			{'rb': re.escape(rb)})
 	newlb = re.compile(r'(?:.*[\n\r])?\s*')
 	parens = 0  # number of open parens
 	prev = ''  # incomplete tree currently being read
