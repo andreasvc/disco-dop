@@ -98,6 +98,27 @@ class CorpusSearcher(object):
 			sent is a single string with space-separated tokens;
 			highlight is a set of integer indices."""
 
+	def _submit(self, func, filename):
+		"""Submit a job to the thread pool."""
+		if self.numthreads == 1:
+			return NoFuture(func, filename), filename
+		return self.pool.submit(workerfunc(func), filename), filename
+
+	def _as_completed(self, jobs):
+		"""Return jobs as they are completed."""
+		if self.numthreads == 1:
+			return jobs
+		return concurrent.futures.as_completed(jobs)
+
+
+class NoFuture(object):
+	"""A non-asynchronous version of concurrent.futures.Future."""
+	def __init__(self, func, arg):
+		self._result = func(arg)
+
+	def result(self, timeout=None):
+		return self._result
+
 
 class TgrepSearcher(CorpusSearcher):
 	"""Search a corpus with tgrep2."""
@@ -127,14 +148,14 @@ class TgrepSearcher(CorpusSearcher):
 		# %s the sentence number
 		fmt = r'%s:::\n'
 		if indices:
-			jobs = {self.pool.submit(workerfunc(lambda x: Counter(n for n, _
-					in self._query(query, x, fmt, None, limit))), filename):
-					filename for filename in subset}
+			jobs = dict(self._submit(lambda x: Counter(n for n, _
+					in self._query(query, x, fmt, None, limit)), filename)
+					for filename in subset)
 		else:
-			jobs = {self.pool.submit(workerfunc(lambda x: sum(1 for _
-					in self._query(query, x, fmt, None, limit))), filename):
-					filename for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+			jobs = dict(self._submit(lambda x: sum(1 for _
+					in self._query(query, x, fmt, None, limit)), filename)
+					for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = future.result()
 		self.cache['counts', query, subset, limit] = result
@@ -154,10 +175,10 @@ class TgrepSearcher(CorpusSearcher):
 		# %w complete tree in bracket notation
 		# %h the matched subtree in bracket notation
 		fmt = r'%s:::%w:::%h\n'
-		jobs = {self.pool.submit(workerfunc(lambda x: list(self._query(
-				query, x, fmt, maxresults))), filename):
-				filename for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+		jobs = dict(self._submit(lambda x: list(self._query(
+				query, x, fmt, maxresults)), filename)
+				for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			for sentno, line in future.result():
 				treestr, match = line.split(':::')
@@ -193,10 +214,10 @@ class TgrepSearcher(CorpusSearcher):
 		# %w complete tree in bracket notation
 		# %h the matched subtree in bracket notation
 		fmt = r'%s:::%w:::%h\n'
-		jobs = {self.pool.submit(workerfunc(lambda x: list(self._query(
-				query, x, fmt, maxresults))), filename):
-				filename for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+		jobs = dict(self._submit(lambda x: list(self._query(
+				query, x, fmt, maxresults)), filename)
+				for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			for sentno, line in future.result():
 				sent, match = line.split(':::')
@@ -276,14 +297,14 @@ class DactSearcher(CorpusSearcher):
 		else:
 			return result
 		if indices:
-			jobs = {self.pool.submit(workerfunc(lambda x: Counter(n for n, _
-					in self._query(query, x, None, limit))), filename):
-					filename for filename in subset}
+			jobs = dict(self._submit(lambda x: Counter(n for n, _
+					in self._query(query, x, None, limit)), filename)
+					for filename in subset)
 		else:
-			jobs = {self.pool.submit(workerfunc(lambda x: sum(1 for _
-					in self._query(query, x, None, limit))), filename):
-					filename for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+			jobs = dict(self._submit(lambda x: sum(1 for _
+					in self._query(query, x, None, limit)), filename)
+					for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = future.result()
 		self.cache['counts', query, subset, limit] = result
@@ -299,10 +320,10 @@ class DactSearcher(CorpusSearcher):
 				return result[:maxresults]
 		except KeyError:
 			result = []
-		jobs = {self.pool.submit(workerfunc(lambda x: list(
-				self._query(query, x, maxresults))), filename): filename
-				for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+		jobs = dict(self._submit(lambda x: list(
+				self._query(query, x, maxresults)), filename)
+				for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			for sentno, match in future.result():
 				treestr = self.files[filename].read(match.name())
@@ -332,10 +353,10 @@ class DactSearcher(CorpusSearcher):
 				return result[:maxresults]
 		except KeyError:
 			result = []
-		jobs = {self.pool.submit(workerfunc(lambda x: list(
-				self._query(query, x, maxresults))), filename): filename
-				for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+		jobs = dict(self._submit(lambda x: list(
+				self._query(query, x, maxresults)), filename)
+				for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			for sentno, match in future.result():
 				treestr = self.files[filename].read(match.name()).decode('utf8')
@@ -380,14 +401,14 @@ class RegexSearcher(CorpusSearcher):
 		else:
 			return result
 		if indices:
-			jobs = {self.pool.submit(workerfunc(lambda x: Counter(n for n, _
-					in self._query(query, x, None, limit))), filename):
-					filename for filename in subset}
+			jobs = dict(self._submit(lambda x: Counter(n for n, _
+					in self._query(query, x, None, limit)), filename)
+					for filename in subset)
 		else:
-			jobs = {self.pool.submit(workerfunc(lambda x: sum(1 for _
-					in self._query(query, x, None, limit))), filename):
-					filename for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+			jobs = dict(self._submit(lambda x: sum(1 for _
+					in self._query(query, x, None, limit)), filename)
+					for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = future.result()
 		self.cache['counts', query, subset, limit] = result
@@ -407,10 +428,10 @@ class RegexSearcher(CorpusSearcher):
 				return result[:maxresults]
 		except KeyError:
 			result = []
-		jobs = {self.pool.submit(workerfunc(lambda x: list(self._query(
-				query, x, maxresults))), filename):
-				filename for filename in subset}
-		for future in concurrent.futures.as_completed(jobs):
+		jobs = dict(self._submit(lambda x: list(self._query(
+				query, x, maxresults)), filename)
+				for filename in subset)
+		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			for sentno, match in future.result():
 				sent = match.string
