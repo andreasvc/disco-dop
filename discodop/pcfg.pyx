@@ -767,7 +767,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 			'').decode('utf8').strip()
 	match = CPUTIME.search(msg)
 	cputime = float(match.group(1)) if match else 0.0
-	if tmp:
+	if tags:
 		unlink(tmp.name)
 	# decode results or not?
 	if not results or results.startswith('No parse'):
