@@ -15,40 +15,25 @@ if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
 	unicode = str  # pylint: disable=W0622,C0103
 
-FORMAT = '''The PLCFRS format is as follows. Rules are delimited by newlines.
-Fields are separated by tabs. The fields are:
-
-LHS	RHS1	[RHS2]	yield-function	weight
-
-The yield function defines how the spans of the RHS nonterminals
-are combined to form the spans of the LHS nonterminal. Components of the yield
-function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as rational
-fractions.
-The lexicon is defined in a separate file. Lines start with a single word,
-followed by pairs of possible tags and their probabilities:
-
-WORD	TAG1	PROB1	[TAG2	PROB2 ...]
-
-Example:
-rules:   S	NP	VP	010	1/2
-         VP_2	VB	NP	0,1	2/3
-         NP	NN	0	1/4
-lexicon: Haus	NN	3/10	JJ	1/9'''
-
 USAGE = '''Read off grammars from treebanks.
 Usage: %(cmd)s <type> <input> <output> [options]
 
 type is one of:
-   pcfg
-   plcfrs
-   ptsg
-   dopreduction
-   doubledop
+   pcfg            Probabilistic Context-Free Grammar (treebank grammar)
+   plcfrs          Probabilistic Linear Context-Free Rewriting System
+                   (discontinuous treebank grammar)
+   ptsg            Probabilistic Tree-Substitution Grammar
+   dopreduction    All-fragments PTSG using Goodman's reduction
+   doubledop       PTSG from recurring fragmensts
+   param           Extract a series of grammars according to parameters
 
-input is a binarized treebank, or in the ptsg case, weighted fragments
-in the same format as the output of the discodop fragments command;
+input is a binarized treebank, or in the 'ptsg' case, weighted fragments in the
+same format as the output of the discodop fragments command;
+input may contain discontinuous constituents, except for the 'pcfg' case.
 output is the base name for the filenames to write the grammar to.
+When type is 'param', extract a series of grammars; input is a parameter file,
+output is the directory to create and write the results to; options and input
+treebank are not applicable as they are set in the parameter file.
 
 Options:
   --inputfmt=[%(fmts)s]
@@ -68,8 +53,7 @@ Options:
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
-The encoding of the input treebank may be specified. Output encoding will be
-ASCII for the rules, and utf-8 for the lexicon.\n
+Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\n
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 
@@ -290,10 +274,8 @@ def doubledop(trees, sents, debug=False, binarized=True,
 		print("backtransform:")
 		for a, b in backtransform.items():
 			print(a, b)
-
 	# fix order of grammar rules; backtransform will mirror this order
 	grammar = sortgrammar(grammar.items())
-
 	# replace keys with numeric ids of rules, drop terminals.
 	backtransform = [backtransform[rule] for rule, _ in grammar
 			if rule in backtransform]
@@ -688,7 +670,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	Rules are written in the order as they appear in the sequence `grammar`,
 	except that the lexicon file lists words in sorted order (with tags for
 	each word in the order of `grammar`). For a description of the file format,
-	see ``grammar.FORMAT``.
+	see ``docs/fileformats.rst``.
 
 	:param grammar:  a sequence of rule tuples, as produced by
 		``treebankgrammar()``, ``dopreduction()``, or ``doubledop()``.
@@ -809,8 +791,7 @@ def grammarinfo(grammar, dump=None):
 			return len(yf) + sum(map(len, yf))
 		return 1  # NB: a lexical production has complexity 1
 
-	pc = {(rule, yf, w): parsingcomplexity(yf)
-							for (rule, yf), w in grammar}
+	pc = {(rule, yf, w): parsingcomplexity(yf) for (rule, yf), w in grammar}
 	r, yf, w = max(pc, key=pc.get)
 	result += "max parsing complexity: %d in %s" % (
 			pc[r, yf, w], printrule(r, yf, w))
@@ -844,13 +825,11 @@ def test():
 	from discodop.disambiguation import recoverfragments
 	from discodop.kbest import lazykbest
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	filename = "alpinosample.export"
-	corpus = NegraCorpusReader(filename, punct='move')
+	corpus = NegraCorpusReader('alpinosample.export', punct='move')
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
 			for a in list(corpus.trees().values())[:10]]
 	print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
-
 	print('dop reduction')
 	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
 			start=trees[0].label)
@@ -872,8 +851,7 @@ def test():
 		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
 		print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
 		if chart:
-			mpp = {}
-			parsetrees = {}
+			mpp, parsetrees = {}, {}
 			derivations, _ = lazykbest(chart, 1000, b'}<')
 			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
 				r = Tree(recoverfragments(d.getkey(), chart, backtransform))
@@ -886,13 +864,11 @@ def test():
 				print(tp, '\n', t, end='')
 				print("match:", t == str(tree))
 				assert len(set(parsetrees[t])) == len(parsetrees[t])
-				if not debug:
-					continue
-				for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
-					print(' <= %6g %s' % (exp(-p), deriv))
+				if debug:
+					for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
+						print(' <= %6g %s' % (exp(-p), deriv))
 		else:
-			print("no parse")
-			print(chart)
+			print('no parse\n', chart)
 		print()
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
@@ -905,21 +881,38 @@ def main():
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 's:'
-	flags = ('gzip', 'packed', 'bitpar')
-	options = ('inputfmt=', 'inputenc=', 'dopestimator=', 'numproc=')
+	options = 'gzip packed bitpar inputfmt= inputenc= dopestimator= numproc='
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], shortoptions, flags + options)
+		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
 		model, treebankfile, grammarfile = args
 	except (GetoptError, ValueError) as err:
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
-	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg'), (
-		'unrecognized model: %r' % model)
+	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
+			'param'), ('unrecognized model: %r' % model)
 	assert opts.get('dopestimator', 'rfe') in ('rfe', 'ewe', 'shortest'), (
-		'unrecognized estimator: %r' % opts['dopestimator'])
+			'unrecognized estimator: %r' % opts['dopestimator'])
 
-	if model == 'ptsg':  # read fragments
+	if model == 'param':
+		import os
+		from discodop.runexp import readparam, loadtraincorpus, getposmodel
+		from discodop.parser import DictObj
+		assert not opts, 'all options should be set in parameter file.'
+		prm = DictObj(readparam(args[1]))
+		resultdir = args[2]
+		assert not os.path.exists(resultdir), (
+				'Directory %r already exists.\n' % resultdir)
+		os.mkdir(resultdir)
+		trees, sents, train_tagged_sents = loadtraincorpus(
+				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
+				prm.functions, prm.morphology, prm.transformations,
+				prm.relationalrealizational)
+		simplelexsmooth = False
+		if prm.postagging and prm.postagging.method == 'unknownword':
+			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
+			simplelexsmooth = prm.postagging.simplelexsmooth
+	elif model == 'ptsg':  # read fragments
 		splittedlines = (line.split('\t') for line in io.open(treebankfile,
 					encoding=opts.get('--inputenc', 'utf8')))
 		fragments = {(fields[0] if len(fields) == 2 else
@@ -950,6 +943,15 @@ def main():
 	elif model == 'ptsg':
 		grammar, backtransform, altweights = compiletsg(fragments,
 				binarized='--bitpar' not in opts)
+	elif model == 'param':
+		from discodop.runexp import dobinarization, getgrammars
+		getgrammars(dobinarization(trees, sents, prm.binarization,
+				prm.relationalrealizational),
+				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
+				prm.numproc, lexmodel, simplelexsmooth, trees[0].label)
+		open(os.path.join(resultdir, 'params.prm'), "w").write(
+				"top='%s',\n%s" % (trees[0].label, open(args[1]).read()))
+		return  # grammars have already been written
 	if opts.get('--dopestimator', 'rfe') != 'rfe':
 		grammar = [(rule, w) for (rule, _), w in
 				zip(grammar, altweights[opts['--dopestimator']])]

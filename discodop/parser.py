@@ -117,7 +117,7 @@ class DictObj(object):
 
 	def __repr__(self):
 		return '%s(%s)' % (self.__class__.__name__,
-			',\n'.join('%s=%r' % a for a in self.__dict__.items()))
+			',\n\t'.join('%s=%r' % a for a in self.__dict__.items()))
 
 
 PARAMS = DictObj()  # used for multiprocessing when using CLI of this module

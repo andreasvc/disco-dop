@@ -105,18 +105,6 @@ def startexp(
 		resultdir='results',
 		rerun=False):
 	"""Execute an experiment."""
-	assert binarization.method in ('default', 'optimal', 'optimalhead')
-	if postagging is not None:
-		assert set(postagging).issubset({'method', 'model',
-				'unknownthreshold', 'openclassthreshold', 'simplelexsmooth'})
-		postagging = DictObj(postagging)
-		if postagging.method == 'unknownword':
-			assert postagging.model in ('4', '6', 'base')
-			assert postagging.unknownthreshold >= 1
-			assert postagging.openclassthreshold >= 0
-		else:
-			assert postagging.method in ('treetagger', 'stanford')
-
 	if rerun:
 		assert os.path.exists(resultdir), (
 				'Directory %r does not exist.'
@@ -149,42 +137,12 @@ def startexp(
 	fileobj.setFormatter(logging.Formatter(formatstr))
 	logging.getLogger('').addHandler(fileobj)
 
-	corpusreader = READERS[corpusfmt]
 	if not rerun:
-		thetraincorpus = corpusreader(
-				traincorpus.path,
-				encoding=traincorpus.encoding,
-				headrules=binarization.headrules,
-				headfinal=True, headreverse=False,
-				punct=punct, functions=functions, morphology=morphology)
-		logging.info('%d sentences in training corpus %s',
-				len(thetraincorpus.trees()), traincorpus.path)
-		if isinstance(traincorpus.numsents, float):
-			trainnumsents = int(traincorpus.numsents
-					* len(thetraincorpus.sents()))
-		else:
-			trainnumsents = traincorpus.numsents
-		trees = list(thetraincorpus.trees().values())[:trainnumsents]
-		sents = list(thetraincorpus.sents().values())[:trainnumsents]
-		if transformations:
-			trees = [transform(tree, sent, transformations)
-					for tree, sent in zip(trees, sents)]
-		if relationalrealizational:
-			trees = [rrtransform(tree, **relationalrealizational)[0]
-					for tree in trees]
-		train_tagged_sents = [[(word, tag) for word, (_, tag)
-				in zip(sent, sorted(tree.pos()))]
-					for tree, sent in zip(trees, sents)]
-		blocks = list(thetraincorpus.blocks().values())[:trainnumsents]
-		assert trees, 'training corpus should be non-empty'
-		logging.info('%d training sentences before length restriction',
-				len(trees))
-		trees, sents, blocks = zip(*[sent for sent in zip(trees, sents, blocks)
-			if len(sent[1]) <= traincorpus.maxwords])
-		logging.info('%d training sentences after length restriction <= %d',
-			len(trees), traincorpus.maxwords)
+		trees, sents, train_tagged_sents = loadtraincorpus(
+				corpusfmt, traincorpus, binarization, punct, functions,
+				morphology, transformations, relationalrealizational)
 
-	testset = corpusreader(
+	testset = READERS[corpusfmt](
 			testcorpus.path, encoding=testcorpus.encoding,
 			punct=punct, morphology=morphology, functions=functions)
 	gold_sents = testset.tagged_sents()
@@ -224,27 +182,8 @@ def startexp(
 		# give these tags to parser
 		usetags = True
 	elif postagging and postagging.method == 'unknownword' and not rerun:
-		postagging.update(unknownwordfun=getunknownwordfun(postagging.model))
-		# get smoothed probalities for lexical productions
-		lexresults, msg = getunknownwordmodel(
-				train_tagged_sents, postagging.unknownwordfun,
-				postagging.unknownthreshold, postagging.openclassthreshold)
-		logging.info(msg)
+		sents, lexmodel = getposmodel(postagging, train_tagged_sents)
 		simplelexsmooth = postagging.simplelexsmooth
-		if simplelexsmooth:
-			lexmodel = lexresults[2:8]
-		else:
-			lexmodel, msg = getlexmodel(*lexresults)
-			logging.info(msg)
-		# NB: knownwords are all words in training set, lexicon is the subset
-		# of words that are above the frequency threshold.
-		# for training purposes we work with the subset, at test time we
-		# exploit the full set of known words from the training set.
-		sigs, knownwords, lexicon = lexresults[:3]
-		postagging.update(sigs=sigs, lexicon=knownwords)
-		# replace rare train words with signatures
-		sents = replaceraretrainwords(train_tagged_sents,
-				postagging.unknownwordfun, lexicon)
 		# make sure gold POS tags are not given to parser
 		usetags = False
 	elif postagging and postagging.method == 'unknownword' and rerun:
@@ -256,8 +195,7 @@ def startexp(
 
 	# 0: test sentences as they should be handed to the parser,
 	# 1: gold trees for evaluation purposes
-	# 2: gold sentence because test sentences may be mangled by unknown word
-	#   model
+	# 2: gold sents because test sentences may be mangled by unknown word model
 	# 3: blocks from treebank file to reproduce the relevant part of the
 	#   original treebank verbatim.
 	testset = OrderedDict((a, (test_tagged_sents[a], test_trees[a],
@@ -282,9 +220,10 @@ def startexp(
 		readgrammars(resultdir, stages, postagging, top)
 	else:
 		logging.info('read training & test corpus')
-		getgrammars(trees, sents, stages, binarization, testcorpus.maxwords,
-				resultdir, numproc, lexmodel, simplelexsmooth, top,
-				relationalrealizational)
+		getgrammars(dobinarization(trees, sents, binarization,
+					relationalrealizational),
+				sents, stages, testcorpus.maxwords, resultdir, numproc,
+				lexmodel, simplelexsmooth, top)
 	evalparam = evalmod.readparam(evalparam)
 	evalparam['DEBUG'] = -1
 	evalparam['CUTOFF_LEN'] = 40
@@ -318,9 +257,72 @@ def startexp(
 	return top
 
 
-def getgrammars(trees, sents, stages, binarization, testmaxwords, resultdir,
-		numproc, lexmodel, simplelexsmooth, top, relationalrealizational):
-	"""Apply binarization and read off the requested grammars."""
+def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
+		morphology, transformations, relationalrealizational):
+	"""Load the training corpus."""
+	thetraincorpus = READERS[corpusfmt](
+			traincorpus.path,
+			encoding=traincorpus.encoding,
+			headrules=binarization.headrules,
+			headfinal=True, headreverse=False,
+			punct=punct, functions=functions, morphology=morphology)
+	logging.info('%d sentences in training corpus %s',
+			len(thetraincorpus.trees()), traincorpus.path)
+	if isinstance(traincorpus.numsents, float):
+		trainnumsents = int(traincorpus.numsents
+				* len(thetraincorpus.sents()))
+	else:
+		trainnumsents = traincorpus.numsents
+	trees = list(thetraincorpus.trees().values())[:trainnumsents]
+	sents = list(thetraincorpus.sents().values())[:trainnumsents]
+	if transformations:
+		trees = [transform(tree, sent, transformations)
+				for tree, sent in zip(trees, sents)]
+	if relationalrealizational:
+		trees = [rrtransform(tree, **relationalrealizational)[0]
+				for tree in trees]
+	train_tagged_sents = [[(word, tag) for word, (_, tag)
+			in zip(sent, sorted(tree.pos()))]
+				for tree, sent in zip(trees, sents)]
+	assert trees, 'training corpus should be non-empty'
+	logging.info('%d training sentences before length restriction',
+			len(trees))
+	trees, sents = zip(*[sent for sent in zip(trees, sents)
+		if len(sent[1]) <= traincorpus.maxwords])
+	logging.info('%d training sentences after length restriction <= %d',
+		len(trees), traincorpus.maxwords)
+
+	return trees, sents, train_tagged_sents
+
+
+def getposmodel(postagging, train_tagged_sents):
+	"""Apply unknown word model to sentences before extracting grammar."""
+	postagging.update(unknownwordfun=getunknownwordfun(postagging.model))
+	# get smoothed probalities for lexical productions
+	lexresults, msg = getunknownwordmodel(
+			train_tagged_sents, postagging.unknownwordfun,
+			postagging.unknownthreshold, postagging.openclassthreshold)
+	logging.info(msg)
+	simplelexsmooth = postagging.simplelexsmooth
+	if simplelexsmooth:
+		lexmodel = lexresults[2:8]
+	else:
+		lexmodel, msg = getlexmodel(*lexresults)
+		logging.info(msg)
+	# NB: knownwords are all words in training set, lexicon is the subset
+	# of words that are above the frequency threshold.
+	# for training purposes we work with the subset, at test time we
+	# exploit the full set of known words from the training set.
+	sigs, knownwords, lexicon = lexresults[:3]
+	postagging.update(sigs=sigs, lexicon=knownwords)
+	# replace rare train words with signatures
+	sents = replaceraretrainwords(train_tagged_sents,
+			postagging.unknownwordfun, lexicon)
+	return sents, lexmodel
+
+
+def dobinarization(trees, sents, binarization, relationalrealizational):
+	"""Apply binarization."""
 	# fixme: this n should correspond to sentence id
 	tbfanout, n = treebankfanout(trees)
 	logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
@@ -357,9 +359,15 @@ def getgrammars(trees, sents, stages, binarization, testmaxwords, resultdir,
 	trees = [addfanoutmarkers(t) for t in trees]
 	logging.info('%s; cpu time elapsed: %gs',
 			msg, time.clock() - begin)
-	logging.info('binarized treebank fan-out: %d #%d', *treebankfanout(trees))
 	trees = [canonicalize(a).freeze() for a in trees]
+	return trees
 
+
+def getgrammars(trees, sents, stages, testmaxwords, resultdir,
+		numproc, lexmodel, simplelexsmooth, top):
+	"""Read off the requested grammars."""
+	tbfanout, n = treebankfanout(trees)
+	logging.info('binarized treebank fan-out: %d #%d', tbfanout, n)
 	for n, stage in enumerate(stages):
 		if stage.split:
 			traintrees = [binarize(splitdiscnodes(Tree.convert(a),
@@ -848,9 +856,9 @@ def parsetepacoc(
 				enumerate(zip(corpus_trees, corpus_sents,
 							corpus_blocks)) if len(sent[1]) <= trainmaxwords
 							and n not in tepacocids][:trainnumsents])
-	getgrammars(trees, sents, stages, binarization,
-			testmaxwords, resultdir,
-			numproc, None, False, trees[0].label, None)
+	getgrammars(dobinarization(trees, sents, binarization, False),
+			sents, stages, testmaxwords, resultdir,
+			numproc, None, False, trees[0].label)
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
@@ -937,6 +945,19 @@ def readparam(filename):
 					"sl-dop", "sl-dop-simple")
 		assert stage.binarized or stage.mode == 'pcfg-bitpar-nbest', (
 				'non-binarized grammar requires mode "pcfg-bitpar-nbest"')
+	assert params['binarization'].method in (
+			'default', 'optimal', 'optimalhead')
+	postagging = params['postagging']
+	if postagging is not None:
+		assert set(postagging).issubset({'method', 'model',
+				'unknownthreshold', 'openclassthreshold', 'simplelexsmooth'})
+		postagging = params['postagging'] = DictObj(postagging)
+		if postagging.method == 'unknownword':
+			assert postagging.model in ('4', '6', 'base')
+			assert postagging.unknownthreshold >= 1
+			assert postagging.openclassthreshold >= 0
+		else:
+			assert postagging.method in ('treetagger', 'stanford')
 	return params
 
 
@@ -967,7 +988,7 @@ def main(argv=None):
 		resultdir = argv[1].rsplit('.', 1)[0]
 		top = startexp(resultdir=resultdir, rerun='--rerun' in argv, **params)
 		if 'rerun' not in argv:  # copy parameter file to result dir
-			open("%s/params.prm" % resultdir, "w").write(
+			open(os.path.join(resultdir, 'params.prm'), "w").write(
 					"top='%s',\n%s" % (top, open(argv[1]).read()))
 
 if __name__ == '__main__':

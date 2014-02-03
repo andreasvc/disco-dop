@@ -208,18 +208,26 @@ grammar
 Read off grammars from treebanks.
 Usage: ``discodop grammar <type> <input> <output> [options]``
 
-type is one of:
-   pcfg
-   plcfrs
-   ptsg
-   dopreduction
-   doubledop
+``type`` is one of:
 
-input is a binarized treebank, or in the ptsg case, weighted fragments
-in the same format as the output of the discodop fragments command;
-output is the base name for the filenames to write the grammar to.
+:pcfg:            Probabilistic Context-Free Grammar (treebank grammar)
+:plcfrs:
+                  Probabilistic Linear Context-Free Rewriting System
+                  (discontinuous treebank grammar)
+:ptsg:            Probabilistic Tree-Substitution Grammar
+:dopreduction:    All-fragments PTSG using Goodman's reduction
+:doubledop:       PTSG from recurring fragmensts
+:param:           Extract a series of grammars according to parameters
 
-Options (* marks default option):
+``input`` is a binarized treebank, or in the ``ptsg`` case, weighted fragments
+in the same format as the output of the ``discodop fragments`` command;
+``input`` may contain discontinuous constituents, except for the ``pcfg`` case.
+``output`` is the base name for the filenames to write the grammar to.
+When type is ``param``, extract a series of grammars; input is a parameter file,
+output is the directory to create and write the results to; options and input
+treebank are not applicable as they are set in the parameter file.
+
+Options:
 
 --inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
           The treebank format [default: export].
@@ -235,7 +243,7 @@ Options (* marks default option):
           Only relevant for double dop fragment extraction.
 
 --gzip
-          compress output with gzip, view with zless &c.
+          compress output with gzip, view with ``zless`` &c.
 
 --packed
           use packed graph encoding for DOP reduction
