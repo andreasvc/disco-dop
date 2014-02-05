@@ -35,12 +35,14 @@ which diction || (
 
 # install alpinocorpus library
 python -c 'import alpinocorpus' || (
-	apt-get install -y python-software-properties
 	add-apt-repository -y ppa:danieldk/dact
 	apt-get update
-	apt-get install -y libalpino-corpus2.0 libalpino-corpus-dev libxslt1-dev libxml2-dev libdbxml-dev libboost-all-dev
-	sudo -u vagrant git clone https://github.com/andreasvc/alpinocorpus-python.git
-	cd alpinocorpus-python
+	apt-get install -y libalpino-corpus2.0 libalpino-corpus-dev libxslt1-dev \
+		libxml2-dev libdbxml-dev libboost-all-dev
+	cd alpinocorpus-python || (
+		sudo -u vagrant git clone https://github.com/andreasvc/alpinocorpus-python.git
+		cd alpinocorpus-python
+	)
 	sudo -u vagrant sed -i 's/-mt//g' setup.py
 	sudo -u vagrant python setup.py config && sudo -u vagrant python setup.py build && python setup.py install
 )
@@ -56,11 +58,11 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # please see the online documentation at vagrantup.com.
 
   # Every Vagrant virtual environment requires a box to build off of.
-  config.vm.box = "precise64"
+  config.vm.box = "vagrant-ubuntu-saucy-64"
 
   # The url from where the 'config.vm.box' box will be fetched if it
   # doesn't already exist on the user's system.
-  config.vm.box_url = "http://files.vagrantup.com/precise64.box"
+  config.vm.box_url = "https://bitbucket.org/williamium/vagrant-boxes/downloads/vagrant-ubuntu-saucy-64.box"
 
   # Provisioning
   config.vm.provision :shell, :inline => $script
@@ -78,14 +80,17 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # backing providers for Vagrant. These expose provider-specific options.
   # Example for VirtualBox:
   #
-  # config.vm.provider :virtualbox do |vb|
-  #   # Don't boot with headless mode
-  #   vb.gui = true
-  #
-  #   # Use VBoxManage to customize the VM. For example to change memory:
-  #   vb.customize ["modifyvm", :id, "--memory", "1024"]
-  # end
+  config.vm.provider :virtualbox do |vb|
+     # Don't boot with headless mode
+     #vb.gui = true
+
+
+     # Use VBoxManage to customize the VM
+     vb.customize ["modifyvm", :id, "--memory", "1024"]
+     vb.customize ["modifyvm", :id, "--usbehci", "off"]
+  end
   #
   # View the documentation for the provider you're using for more
   # information on available options.
+  I18n.enforce_available_locales = true
 end
