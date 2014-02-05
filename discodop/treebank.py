@@ -655,6 +655,8 @@ def writealpinotree(tree, sent, n):
 			assert isinstance(tree[0], int)
 			node.set('pos', tree.label.lower())
 			node.set('word', sent[tree[0]])
+			node.set('lemma', '--')
+			node.set('postag', '--')
 			if getattr(tree, 'source', None):
 				node.set('lemma', tree.source[LEMMA] or '--')
 				node.set('postag', tree.source[MORPH] or '--')

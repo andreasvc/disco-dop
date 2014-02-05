@@ -961,7 +961,7 @@ def main():
 		import alpinocorpus
 		outfile = alpinocorpus.CorpusWriter(outfilename)
 		for key, tree, sent in trees:
-			outfile.write(key, writetree(tree, sent, key, 'alpino'))
+			outfile.write(str(key), writetree(tree, sent, key, 'alpino'))
 			cnt += 1
 	else:
 		encoding = opts.get('outputenc', 'utf-8')

@@ -116,7 +116,8 @@ class NoFuture(object):
 	def __init__(self, func, arg):
 		self._result = func(arg)
 
-	def result(self, timeout=None):
+	def result(self, timeout=None):  # pylint: disable=W0613
+		"""Return the precomputed result."""
 		return self._result
 
 
