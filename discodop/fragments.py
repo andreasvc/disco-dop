@@ -43,8 +43,9 @@ Options:
                 when format is not 'bracket', work with discontinuous trees;
                 output is in 'discbracket' format:
                 tree<TAB>sentence<TAB>frequency
-                where "tree' has indices as leaves, referring to elements of
-                "sentence", a space separated list of words.
+                where 'tree' has indices as leaves, referring to elements of
+                'sentence', a space separated list of words.
+  -o file       Write output to 'file' instead of stdout.
   --indices     report sets of indices instead of frequencies.
   --cover       include all depth-1 fragments of first treebank corresponding
                 to single productions.
@@ -81,7 +82,7 @@ def main(argv=None):
 	if argv is None:
 		argv = sys.argv
 	try:
-		opts, args = gnu_getopt(argv[1:], '', FLAGS + OPTIONS)
+		opts, args = gnu_getopt(argv[1:], 'o:', FLAGS + OPTIONS)
 	except GetoptError as err:
 		print("%s\n%s" % (err, USAGE))
 		return
@@ -123,7 +124,7 @@ def main(argv=None):
 		logger = log_to_stderr()
 		logger.setLevel(SUBDEBUG)
 
-	logging.info("Fast Fragment Seeker")
+	logging.info("Disco-DOP Fragment Extractor")
 
 	assert numproc
 	logging.info("parameters:\n%s", "\n".join("    %s:\t%r" % kv
@@ -135,7 +136,9 @@ def main(argv=None):
 		batch(batchdir, args, limit, encoding)
 	else:
 		fragmentkeys, counts = regular(args, numproc, limit, encoding)
-		printfragments(fragmentkeys, counts)
+		out = (io.open(opts['-o'], 'w', encoding=encoding)
+				if '-o' in opts else None)
+		printfragments(fragmentkeys, counts, out=out)
 
 
 def regular(filenames, numproc, limit, encoding):
@@ -251,14 +254,14 @@ def batch(outputdir, filenames, limit, encoding):
 			counts = fragments.values()
 		elif not PARAMS['nofreq']:
 			bitsets = [fragments[a] for a in fragmentkeys]
-			logging.info("getting %s for %d fragments",
-					"indices of occurrence" if PARAMS['indices']
-					else "exact counts", len(bitsets))
+			logging.info('getting %s for %d fragments',
+					'indices of occurrence' if PARAMS['indices']
+					else 'exact counts', len(bitsets))
 			counts = exactcounts(trees2, trees1, bitsets,
 					indices=PARAMS['indices'], fast=not PARAMS['quadratic'])
-		outputfilename = "%s/%s_%s" % (outputdir,
+		outputfilename = '%s/%s_%s' % (outputdir,
 				os.path.basename(filenames[0]), os.path.basename(filename))
-		out = io.open(outputfilename, "w", encoding=encoding)
+		out = io.open(outputfilename, 'w', encoding=encoding)
 		printfragments(fragmentkeys, counts, out=out)
 		logging.info("wrote to %s", outputfilename)
 

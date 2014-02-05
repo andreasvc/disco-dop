@@ -60,8 +60,9 @@ Options:
               when format is not 'bracket', work with discontinuous trees;
               output is in 'discbracket' format:
               tree<TAB>sentence<TAB>frequency
-              where "tree' has indices as leaves, referring to elements of
-              "sentence", a space separated list of words.
+              where 'tree' has indices as leaves, referring to elements of
+              'sentence', a space separated list of words.
+-o file       Write output to 'file' instead of stdout.
 --indices     report sets of indices instead of frequencies.
 --cover       include all depth-1 fragments of first treebank corresponding
               to single productions.
