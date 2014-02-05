@@ -66,9 +66,9 @@ To compile the latest development version on Ubuntu,
 run the following sequence of commands::
 
     sudo apt-get install build-essential python-dev python-numpy python-pip git
-    pip install cython --user
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
+    pip install --user -r requirements.txt
     python setup.py install --user
 
 (the ``--user`` option means the packages will be installed to your home
