@@ -420,7 +420,7 @@ gunzip german-par-linux-3.2-utf8.bin.gz'''
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
 				infile.write('\n'.join(w.encode('utf-8')
-					for n, w in enumerate(sent)) + '\n<S>\n')
+					for w in sent) + '\n<S>\n')
 		filtertags = ''
 		if not model:
 			model = 'tree-tagger/lib/german-par-linux-3.2-utf8.bin'
@@ -444,7 +444,7 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
 				infile.write(' '.join(w.encode('utf-8')
-					for n, w in enumerate(sent)) + '\n')
+					for w in sent) + '\n')
 		if not model:
 			model = 'models/german-hgc.tagger'
 		tagger = Popen(args=(
@@ -463,9 +463,8 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 		tagger = Popen(args='frog -n --skip=tacmnp -t /dev/stdin'.split(),
 				shell=False, stdin=PIPE, stdout=PIPE)
 		tagout, stderr = tagger.communicate(''.join(
-				' '.join(w.encode('utf-8') for n, w
-					in enumerate(map(itemgetter(0), tagsent))) + '\n'
-				for tagsent in sents.values()))
+				' '.join(w for w in map(itemgetter(0), tagsent)) + '\n'
+				for tagsent in sents.values()).encode('utf-8'))
 		logging.info(stderr)
 		# lines consist of: 'idx token lemma POS score'
 		taggedsents = OrderedDict((n,

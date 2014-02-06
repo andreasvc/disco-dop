@@ -6,7 +6,6 @@ $script = <<SCRIPT
 which cython || (
 	apt-get update
 	apt-get install -y build-essential python-dev python-numpy python-pip python-flask git
-	pip install cython
 )
 
 # install disco-dop
@@ -14,6 +13,7 @@ which discodop || (
 	cd /home/vagrant
 	sudo -u vagrant git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
+	pip install -r requirements.txt
 	python setup.py install
 )
 

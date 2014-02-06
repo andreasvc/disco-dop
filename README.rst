@@ -59,6 +59,7 @@ using `pip <http://http://www.pip-installer.org>`_,
 issue the following commands::
 
     sudo apt-get install build-essential python-dev python-numpy python-pip
+    wget https://github.com/andreasvc/disco-dop/raw/master/requirements.txt
     pip install --user -r requirements.txt
     pip install --user disco-dop
 
