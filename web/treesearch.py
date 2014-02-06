@@ -764,10 +764,11 @@ def getcorpus():
 	"""Get list of files and number of lines in them."""
 	texts = []
 	corpora = {}
-	if os.path.exists('/tmp/treesearchcorpus.pickle'):
+	picklefile = os.path.join(CORPUS_DIR, 'treesearchcorpus.pickle')
+	if os.path.exists(picklefile):
 		try:
 			texts, numsents, numconst, numwords, styletable, ids = pickle.load(
-					open('/tmp/treesearchcorpus.pickle'))
+					open(picklefile))
 		except ValueError:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
@@ -799,8 +800,8 @@ def getcorpus():
 				'expected either .mrg or .dact files, '
 				'or corresponding .mrg and .dact files')
 	picklemtime = 0
-	if os.path.exists('/tmp/treesearchcorpus.pickle'):
-		picklemtime = os.stat('/tmp/treesearchcorpus.pickle').st_mtime
+	if os.path.exists(picklefile):
+		picklemtime = os.stat(picklefile).st_mtime
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
 		for filename in tfiles + afiles}
 	if (set(texts) != currentfiles or
@@ -840,7 +841,7 @@ def getcorpus():
 	for filename in afiles:
 		corpora['xpath'].updateindex(filename, ids[filename])
 	pickle.dump((texts, numsents, numconst, numwords, styletable, ids),
-			open('/tmp/treesearchcorpus.pickle', 'wb'), protocol=-1)
+			open(picklefile, 'wb'), protocol=-1)
 	return texts, numsents, numconst, numwords, styletable, corpora
 
 

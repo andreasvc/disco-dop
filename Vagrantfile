@@ -5,7 +5,7 @@ $script = <<SCRIPT
 # install prerequisites
 which cython || (
 	apt-get update
-	apt-get install -y build-essential python-dev python-numpy python-pip python-flask git
+	apt-get install -y build-essential git python-dev python-pip python-numpy python-pandas
 )
 
 # install disco-dop
