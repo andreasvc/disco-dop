@@ -265,9 +265,9 @@ def doeval(gold_trees, gold_sents, cand_trees, cand_sents, param):
 		if param['DEBUG'] > 1:
 			print('Sentence:', ' '.join(gsent))
 			print('Gold tree:\n%s\nCandidate tree:\n%s' % (
-					DrawTree(gtree, gsent, abbr=True).text(
+					DrawTree(gtree, gsent).text(
 						unicodelines=True, ansi=True),
-					DrawTree(ctree, csent, abbr=True).text(
+					DrawTree(ctree, csent).text(
 						unicodelines=True, ansi=True)))
 			print('Gold brackets:      %s\nCandidate brackets: %s' % (
 					strbracketings(gbrack), strbracketings(cbrack)))

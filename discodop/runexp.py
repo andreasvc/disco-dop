@@ -155,14 +155,17 @@ def startexp(
 			len(list(gold_sents)[testcorpus.skip:  # pylint: disable=E1103
 				testcorpus.skip + testcorpus.numsents]))  # pylint: disable=E1103
 	lexmodel = None
+	simplelexsmooth = False
 	test_tagged_sents = gold_sents
-	if postagging and postagging.method in ('treetagger', 'stanford'):
+	if postagging and postagging.method in ('treetagger', 'stanford', 'frog'):
 		if postagging.method == 'treetagger':
 			# these two tags are never given by tree-tagger,
 			# so collect words whose tag needs to be overriden
 			overridetags = ('PTKANT', 'PIDAT')
 		elif postagging.method == 'stanford':
 			overridetags = ('PTKANT', )
+		elif postagging.method == 'frog':
+			overridetags = ()
 		taglex = defaultdict(set)
 		for sent in train_tagged_sents:
 			for word, tag in sent:
@@ -176,7 +179,7 @@ def startexp(
 					testcorpus.skip,  # pylint: disable=E1103
 					testcorpus.skip  # pylint: disable=E1103
 						+ testcorpus.numsents)
-				if len(b) <= testcorpus.maxwords),
+				if len(b) <= testcorpus.maxwords)
 		test_tagged_sents = externaltagging(postagging.method,
 				postagging.model, sents_to_tag, overridetagdict, tagmap)
 		# give these tags to parser
@@ -189,7 +192,6 @@ def startexp(
 	elif postagging and postagging.method == 'unknownword' and rerun:
 		usetags = False
 	else:
-		simplelexsmooth = False
 		# give gold POS tags to parser
 		usetags = True
 
@@ -246,8 +248,7 @@ def startexp(
 		header = (' ' + result.name.upper() + ' ').center(35, '=')
 		evalsummary = evalmod.doeval(OrderedDict((a, b.copy(True))
 				for a, b in test_trees.items()), gold_sents,
-				result.parsetrees, test_tagged_sents if usetags else gold_sents,
-				evalparam)
+				result.parsetrees, gold_sents, evalparam)
 		coverage = 'coverage: %s = %6.2f' % (
 				('%d / %d' % (nsent - result.noparse, nsent)).rjust(
 				25 if any(len(a) > evalparam['CUTOFF_LEN']
@@ -658,8 +659,8 @@ def worker(args):
 					if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
 		highlight.extend(range(len(cpos)))
 		try:
-			msg += DrawTree(evaltree, evalsent, abbr=True,
-					highlight=highlight).text(unicodelines=True, ansi=True)
+			msg += DrawTree(evaltree, evalsent, highlight=highlight).text(
+					unicodelines=True, ansi=True)
 		except Exception as err:
 			msg += 'PROBLEM drawing tree:\n%s\n%s' % (evaltree, err)
 	return (nsent, msg, results)
@@ -957,7 +958,7 @@ def readparam(filename):
 			assert postagging.unknownthreshold >= 1
 			assert postagging.openclassthreshold >= 0
 		else:
-			assert postagging.method in ('treetagger', 'stanford')
+			assert postagging.method in ('treetagger', 'stanford', 'frog')
 	return params
 
 

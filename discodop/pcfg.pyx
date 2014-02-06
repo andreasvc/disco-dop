@@ -395,7 +395,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
 		# NB: don't allow blocking of gold tags if given
-		if not recognized and tag is not None:
+		if not recognized and tag is not None and tag in grammar.toid:
 			lhs = grammar.toid[tag]
 			chart.addedge(lhs, left, right, right, NULL)
 			chart.updateprob(lhs, left, right, 0.0)

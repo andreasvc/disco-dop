@@ -402,10 +402,10 @@ def unknownwordftb(word, loc, _):
 # === Performing POS tagging with external tools ============
 def externaltagging(usetagger, model, sents, overridetag, tagmap):
 	"""Use an external tool to tag a list of sentences."""
-	logging.info("Start tagging.")
+	logging.info('Start tagging.')
 	goldtags = [t for sent in sents.values() for _, t in sent]
-	if usetagger == "treetagger":  # Tree-tagger
-		assert os.path.exists("tree-tagger/bin/tree-tagger"), '''\
+	if usetagger == 'treetagger':  # Tree-tagger
+		assert os.path.exists('tree-tagger/bin/tree-tagger'), '''\
 tree tagger not found. commands to install:
 mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
@@ -419,23 +419,23 @@ gunzip german-par-linux-3.2-utf8.bin.gz'''
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
-				infile.write("\n".join(w.encode('utf-8')
-					for n, w in enumerate(sent)) + "\n<S>\n")
+				infile.write('\n'.join(w.encode('utf-8')
+					for n, w in enumerate(sent)) + '\n<S>\n')
 		filtertags = ''
 		if not model:
-			model = "tree-tagger/lib/german-par-linux-3.2-utf8.bin"
-			filtertags = "| tree-tagger/cmd/filter-german-tags"
-		tagger = Popen("tree-tagger/bin/tree-tagger -token -sgml"
-				" %s %s %s" % (model, inname, filtertags),
+			model = 'tree-tagger/lib/german-par-linux-3.2-utf8.bin'
+			filtertags = '| tree-tagger/cmd/filter-german-tags'
+		tagger = Popen('tree-tagger/bin/tree-tagger -token -sgml'
+				' %s %s %s' % (model, inname, filtertags),
 				stdout=PIPE, shell=True)
 		tagout = tagger.stdout.read(
-				).decode('utf-8').split("<S>")[:-1]
+				).decode('utf-8').split('<S>')[:-1]
 		os.unlink(inname)
 		taggedsents = OrderedDict((n, [tagmangle(a, None, overridetag, tagmap)
 					for a in tags.splitlines() if a.strip()])
 					for n, tags in zip(sents, tagout))
-	elif usetagger == "stanford":  # Stanford Tagger
-		assert os.path.exists("stanford-postagger-full-2012-07-09"), '''\
+	elif usetagger == 'stanford':  # Stanford Tagger
+		assert os.path.exists('stanford-postagger-full-2012-07-09'), '''\
 Stanford tagger not found. Commands to install:
 wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
 tar -xzf stanford-postagger-full-2012-07-09.tgz'''
@@ -444,29 +444,43 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 			for tagsent in sents.values():
 				sent = map(itemgetter(0), tagsent)
 				infile.write(' '.join(w.encode('utf-8')
-					for n, w in enumerate(sent)) + "\n")
+					for n, w in enumerate(sent)) + '\n')
 		if not model:
-			model = "models/german-hgc.tagger"
+			model = 'models/german-hgc.tagger'
 		tagger = Popen(args=(
-				"/usr/bin/java -mx2G -classpath stanford-postagger.jar"
-				" edu.stanford.nlp.tagger.maxent.MaxentTagger"
-				" -tokenize false -encoding utf-8"
-				" -model %s -textFile %s" % (model, inname)).split(),
-				cwd="stanford-postagger-full-2012-07-09",
+				'/usr/bin/java -mx2G -classpath stanford-postagger.jar'
+				' edu.stanford.nlp.tagger.maxent.MaxentTagger'
+				' -tokenize false -encoding utf-8'
+				' -model %s -textFile %s' % (model, inname)).split(),
+				cwd='stanford-postagger-full-2012-07-09',
 				shell=False, stdout=PIPE)
 		tagout = tagger.stdout.read(
 				).decode('utf-8').splitlines()
 		os.unlink(inname)
-		taggedsents = OrderedDict((n, [tagmangle(a, "_", overridetag, tagmap)
+		taggedsents = OrderedDict((n, [tagmangle(a, '_', overridetag, tagmap)
 			for a in tags.split()]) for n, tags in zip(sents, tagout))
+	elif usetagger == 'frog':  # Dutch 'frog' tagger
+		tagger = Popen(args='frog -n --skip=tacmnp -t /dev/stdin'.split(),
+				shell=False, stdin=PIPE, stdout=PIPE)
+		tagout, stderr = tagger.communicate(''.join(
+				' '.join(w.encode('utf-8') for n, w
+					in enumerate(map(itemgetter(0), tagsent))) + '\n'
+				for tagsent in sents.values()))
+		logging.info(stderr)
+		# lines consist of: 'idx token lemma POS score'
+		taggedsents = OrderedDict((n,
+				[(line.split()[1],
+					line.split()[3].replace('(', '[').replace(')', ']'))
+					for line in lines.splitlines()]) for n, lines
+				in zip(sents, tagout.decode('utf-8').split('\n\n')))
 	assert len(taggedsents) == len(sents), (
-			"mismatch in number of sentences after tagging.")
+			'mismatch in number of sentences after tagging.')
 	for n, tags in taggedsents.items():
 		assert len(sents[n]) == len(tags), (
-				"mismatch in number of tokens after tagging.\n"
-				"before: %r\nafter: %r" % (sents[n], tags))
+				'mismatch in number of tokens after tagging.\n'
+				'before: %r\nafter: %r' % (sents[n], tags))
 	newtags = [t for sent in taggedsents.values() for _, t in sent]
-	logging.info("Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r",
+	logging.info('Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r',
 		(100 * discodop.eval.accuracy(goldtags, newtags)),
 		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
 	return taggedsents

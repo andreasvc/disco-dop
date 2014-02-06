@@ -153,6 +153,7 @@ Other options
         :'unknownword': incorporate unknown word model in grammar
         :'stanford': use external Stanford tagger
         :'treetagger': use external tagger 'treetagger'
+        :'frog': use external tagger 'frog' for Dutch; produces CGN tags, use morphology='replace'.
     :model:
 
         :with unknownword: 4, 6, base
