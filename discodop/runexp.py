@@ -192,18 +192,14 @@ def startexp(
 				for node in tree.subtrees(
 						lambda n: len(n) == 1 and isinstance(n[0], int)):
 					node.label = tagged[node[0]][1]
-		# give these tags to parser
-		usetags = True
-	elif postagging and postagging.method == 'unknownword' and not rerun:
-		sents, lexmodel = getposmodel(postagging, train_tagged_sents)
-		simplelexsmooth = postagging.simplelexsmooth
-		# make sure gold POS tags are not given to parser
-		usetags = False
-	elif postagging and postagging.method == 'unknownword' and rerun:
-		usetags = False
+		usetags = True  # give these tags to parser
+	elif postagging and postagging.method == 'unknownword':
+		if not rerun:
+			sents, lexmodel = getposmodel(postagging, train_tagged_sents)
+			simplelexsmooth = postagging.simplelexsmooth
+		usetags = False  # make sure gold POS tags are not given to parser
 	else:
-		# give gold POS tags to parser
-		usetags = True
+		usetags = True  # give gold POS tags to parser
 
 	# 0: test sentences as they should be handed to the parser,
 	# 1: gold trees for evaluation purposes
@@ -222,12 +218,10 @@ def startexp(
 			len(testset), testcorpus.maxwords)
 
 	if rerun:
-		trees = []
-		sents = []
-	toplabels = {tree.label for tree in trees} | {
-			test_trees[n].label for n in testset}
-	assert len(toplabels) == 1, 'expected unique ROOT label: %r' % toplabels
-	top = toplabels.pop()
+		trees, sents = [], []
+	roots = {t.label for t in trees} | {test_trees[n].label for n in testset}
+	assert len(roots) == 1, 'expected unique ROOT label: %r' % roots
+	top = roots.pop()
 
 	if rerun:
 		readgrammars(resultdir, stages, postagging, top)
@@ -272,21 +266,18 @@ def startexp(
 def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		morphology, transformations, relationalrealizational):
 	"""Load the training corpus."""
-	thetraincorpus = READERS[corpusfmt](
-			traincorpus.path,
-			encoding=traincorpus.encoding,
-			headrules=binarization.headrules,
-			headfinal=True, headreverse=False,
-			punct=punct, functions=functions, morphology=morphology)
+	train = READERS[corpusfmt](traincorpus.path, encoding=traincorpus.encoding,
+			headrules=binarization.headrules, headfinal=True,
+			headreverse=False, punct=punct, functions=functions,
+			morphology=morphology)
 	logging.info('%d sentences in training corpus %s',
-			len(thetraincorpus.trees()), traincorpus.path)
+			len(train.trees()), traincorpus.path)
 	if isinstance(traincorpus.numsents, float):
-		trainnumsents = int(traincorpus.numsents
-				* len(thetraincorpus.sents()))
+		trainnumsents = int(traincorpus.numsents * len(train.sents()))
 	else:
 		trainnumsents = traincorpus.numsents
-	trees = list(thetraincorpus.trees().values())[:trainnumsents]
-	sents = list(thetraincorpus.sents().values())[:trainnumsents]
+	trees = list(train.trees().values())[:trainnumsents]
+	sents = list(train.sents().values())[:trainnumsents]
 	if transformations:
 		trees = [transform(tree, sent, transformations)
 				for tree, sent in zip(trees, sents)]
@@ -303,7 +294,6 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		if len(sent[1]) <= traincorpus.maxwords])
 	logging.info('%d training sentences after length restriction <= %d',
 		len(trees), traincorpus.maxwords)
-
 	return trees, sents, train_tagged_sents
 
 

@@ -36,6 +36,7 @@ from subprocess import Popen, PIPE
 from collections import defaultdict, OrderedDict, Counter as multiset
 from fractions import Fraction
 import discodop.eval
+from discodop.parser import which
 
 UNK = '_UNK'
 
@@ -460,7 +461,8 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 		taggedsents = OrderedDict((n, [tagmangle(a, '_', overridetag, tagmap)
 			for a in tags.split()]) for n, tags in zip(sents, tagout))
 	elif usetagger == 'frog':  # Dutch 'frog' tagger
-		tagger = Popen(args='frog -n --skip=tacmnp -t /dev/stdin'.split(),
+		tagger = Popen(args=[which('frog')] +
+					'-n --skip=tacmnp -t /dev/stdin'.split(),
 				shell=False, stdin=PIPE, stdout=PIPE)
 		tagout, stderr = tagger.communicate(''.join(
 				' '.join(w for w in map(itemgetter(0), tagsent)) + '\n'
