@@ -158,6 +158,7 @@ Other options
 
         :with unknownword: 4, 6, base
         :with other taggers: filename of tagger model
+    :retag: if True, re-tag the training corpus using the external tagger.
     :unknownthreshold: use probabilities of words that occur this number of times or less for unknown words
     :openclassthreshold: add unseen tags for known words when tag rewrites
         at least this number of words. 0 to disable.

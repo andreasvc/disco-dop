@@ -182,6 +182,16 @@ def startexp(
 				if len(b) <= testcorpus.maxwords)
 		test_tagged_sents = externaltagging(postagging.method,
 				postagging.model, sents_to_tag, overridetagdict, tagmap)
+		if postagging.retag:
+			logging.info('re-tagging training corpus')
+			sents_to_tag = OrderedDict(enumerate(train_tagged_sents))
+			train_tagged_sents = externaltagging(postagging.method,
+					postagging.model, sents_to_tag, overridetagdict,
+					tagmap).values()
+			for tree, tagged in zip(trees, train_tagged_sents):
+				for node in tree.subtrees(
+						lambda n: len(n) == 1 and isinstance(n[0], int)):
+					node.label = tagged[node[0]][1]
 		# give these tags to parser
 		usetags = True
 	elif postagging and postagging.method == 'unknownword' and not rerun:
@@ -950,8 +960,9 @@ def readparam(filename):
 			'default', 'optimal', 'optimalhead')
 	postagging = params['postagging']
 	if postagging is not None:
-		assert set(postagging).issubset({'method', 'model',
+		assert set(postagging).issubset({'method', 'model', 'retag',
 				'unknownthreshold', 'openclassthreshold', 'simplelexsmooth'})
+		postagging.setdefault('retag', False)
 		postagging = params['postagging'] = DictObj(postagging)
 		if postagging.method == 'unknownword':
 			assert postagging.model in ('4', '6', 'base')
