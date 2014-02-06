@@ -36,7 +36,6 @@ from subprocess import Popen, PIPE
 from collections import defaultdict, OrderedDict, Counter as multiset
 from fractions import Fraction
 import discodop.eval
-from discodop.parser import which
 
 UNK = '_UNK'
 
@@ -403,6 +402,7 @@ def unknownwordftb(word, loc, _):
 # === Performing POS tagging with external tools ============
 def externaltagging(usetagger, model, sents, overridetag, tagmap):
 	"""Use an external tool to tag a list of sentences."""
+	from discodop.parser import which
 	logging.info('Start tagging.')
 	goldtags = [t for sent in sents.values() for _, t in sent]
 	if usetagger == 'treetagger':  # Tree-tagger
