@@ -215,7 +215,8 @@ def startexp(
 			in islice(testset.blocks().items(),
 				testcorpus.skip,  # pylint: disable=E1103
 				testcorpus.skip + testcorpus.numsents)  # pylint: disable=E1103
-			if len(test_tagged_sents[a]) <= testcorpus.maxwords)
+			if a in test_tagged_sents and
+				len(test_tagged_sents[a]) <= testcorpus.maxwords)
 	assert test_tagged_sents, 'test corpus should be non-empty'
 	logging.info('%d test sentences after length restriction <= %d',
 			len(testset), testcorpus.maxwords)
