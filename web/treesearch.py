@@ -634,7 +634,8 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	keys = sorted(data, key=data.get, reverse=True) if dosort else data
 	for key in keys:
 		result.append('<br><div style="width:%dpx;" class=b%d></div>'
-				'<span>%s: %g %s</span>' % (round(width * data[key] / total),
+				'<span>%s: %g %s</span>' % (
+				round(width * data[key] / total) if data[key] else 0,
 				color.get(key[0], 1) if data[key] else 0,
 				cgi.escape(key), data[key], unit,))
 	result.append('</div>\n')
