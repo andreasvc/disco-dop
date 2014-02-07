@@ -8,7 +8,7 @@
 <form name=frm><tt>
 	<input type=hidden name=text value={{ textno }}>
 	{{ prevlink|safe }}
-	| <input type=text name=sent value={{ sentno }} size=3 style="text-align: right"> of {{ totalsents }}
+	| <input type=text name=sent size=3 style="text-align: right" value={{ sentno }}> of {{ totalsents }}
 	| {{ nextlink|safe }}
 	| {{ text }} 
 </tt></form>

@@ -107,7 +107,7 @@ function ajaxFunction(url, dir) {
 	<input type=hidden name=nomorph value=on {{ 'disabled' if not nomorph }}>
 	<input type=hidden name=nofunc value=on {{ 'disabled' if not nofunc }}>
 	{{ prevlink|safe }}
-	| <input type=text name=sent value={{ sentno }} size=3 style="text-align: right"> of {{ totalsents }}
+	| <input type=text name=sent size=3 style="text-align: right" value={{ sentno }}> of {{ totalsents }}
 	| {{ nextlink|safe }}
 	| {{ text }} | <font color=gray>(use left &amp; right arrow keys to browse)</font>
 </tt></form>

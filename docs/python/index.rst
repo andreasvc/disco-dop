@@ -19,4 +19,5 @@ Contents:
    treebanktransforms
    treedist
    treedraw
+   treesearch
    treetransforms
