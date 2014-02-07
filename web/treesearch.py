@@ -70,7 +70,7 @@ EXT = {
 		'regex': '.tok'
 	}
 COLORS = dict(enumerate(
-		'black red orange blue wheat khaki'.split()))
+		'black red orange blue green turquoise slategray peru teal'.split()))
 
 
 @APP.route('/')
@@ -148,7 +148,6 @@ def counts(form, doexport=False):
 	"""
 	# TODO:
 	# - offer graph for individual texts with all queries together.
-	# - show multiple colors in combined results concordance plot
 	# - side-by-side comparison of two passages, with matching queries
 	#   highlighted in different colors
 	norm = form.get('norm', 'sents')
@@ -169,7 +168,8 @@ def counts(form, doexport=False):
 	if not doexport:
 		yield '<ol>%s</ol>\n' % '\n'.join(
 				'<li><a href="#q%d">%s</a>' % (n, query)
-				for n, query in enumerate(queries, 1))
+				for n, query in enumerate(queries + [
+					'Combined results', 'Overview'], 1))
 	for n, line in enumerate(form['query'].splitlines() + [None], 1):
 		cnts = Counter()
 		sumtotal = 0
@@ -251,12 +251,13 @@ def counts(form, doexport=False):
 						'Relative frequency of %s: '
 						'(count / num_%s * 100)' % (name, norm), unit='%')
 	if doexport:
-		tmp = io.BytesIO()
-		df.to_csv(tmp)
-		yield tmp.getvalue()
+		with io.BytesIO() as tmp:
+			df.to_csv(tmp)
+			yield tmp.getvalue()
 	else:
 		fmt = lambda x: '%g' % round(x, 1)
-		yield '<h3>Overview of patterns</h3>\n'
+		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
+				len(queries) + 2)
 		# collate stats
 		firstletters = {key[0] for key in df.index}
 		if len(firstletters) <= 5:
@@ -642,13 +643,14 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	return '\n'.join(result)
 
 
-def concplot(indices, total, width=800.0):
+def concplot(indices, total, width=800.0, runle=False):
 	"""Draw a concordance plot from a list of indices.
 
 	:param indices: a list of sets or Counter objects, where each element is
 		a sentence number. Each element of indices will be drawn in a
 		different color.
-	:param total: the total number of sentences."""
+	:param total: the total number of sentences.
+	:param runle: use a more compact, run-length encoded representation."""
 	result = ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
 			' width="%dpx" height="10px" >\n'
 			'<rect x=0 y=0 width="%dpx" height=10 '
@@ -656,17 +658,21 @@ def concplot(indices, total, width=800.0):
 	for n, a in enumerate(indices if isinstance(indices, list) else [indices]):
 		if not a:
 			continue
-		strokes = []
-		start = 0
-		seq = [-1] + sorted(a) + [-1]
-		for prev, idx, nextidx in zip(seq, seq[1:], seq[2:]):
-			if idx != prev + 1 and idx != nextidx - 1:
-				strokes.append('M %d 0v 10' % idx)
-			elif idx != prev + 1:
-				start = idx
-			elif idx != nextidx - 1:
-				strokes.append(  # draw a rectangle covering start:idx
-						'M %d 0l 0 10 %d 0 0 -10' % (start, idx - start))
+		if runle:
+			strokes = []
+			start = 0
+			seq = [-1] + sorted(a) + [-1]
+			for prev, idx, nextidx in zip(seq, seq[1:], seq[2:]):
+				if idx != prev + 1 and idx != nextidx - 1:
+					strokes.append('M %d 0v 10' % idx)
+				elif idx != prev + 1:
+					start = idx
+				elif idx != nextidx - 1:
+					strokes.append(  # draw a rectangle covering start:idx
+							'M %d 0l 0 10 %d 0 0 -10' % (
+								start - 1, idx - start - 1))
+		else:
+			strokes = ['M %d 0v 10' % (idx - 1) for idx in sorted(a)]
 		result += ('<g transform="scale(%g, 1)">\n'
 				'<path stroke=%s d="%s" /></g>' % (
 				width / total, COLORS.get(n, 'black'), ''.join(strokes)))
