@@ -127,16 +127,23 @@ def parse():
 
 @APP.route('/parser/favicon.ico')
 def favicon():
-	""" Serve the favicon. """
+	"""Serve the favicon."""
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'parse.ico', mimetype='image/vnd.microsoft.icon')
 
 
 @APP.route('/parser/static/main.js')
 def javascript():
-	""" Serve javascript. """
+	"""Serve javascript."""
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'main.js', mimetype='text/javascript')
+
+
+@APP.route('/parser/static/style.css')
+def javascript():
+	"""Serve style.css."""
+	return send_from_directory(os.path.join(APP.root_path, 'static'),
+			'style.css', mimetype='text/css')
 
 
 def loadparsers():
