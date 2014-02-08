@@ -7,6 +7,8 @@
 <body>
 <form name=frm><tt>
 	<input type=hidden name=text value={{ textno }}>
+	<input type=hidden name=query value="{{ query }}">
+	<input type=hidden name=engine value={{ engine }}>
 	{{ prevlink|safe }}
 	| <input type=text name=sent size=3 style="text-align: right" value={{ sentno }}> of {{ totalsents }}
 	| {{ nextlink|safe }}

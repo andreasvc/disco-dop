@@ -161,18 +161,18 @@ def counts(form, doexport=False):
 	combined1 = defaultdict(list)
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
-	queries = [line[:line.index(':')] if ':' in line else ('query %d' % n)
-			for n, line in enumerate(form['query'].splitlines(), 1)]
+	queries = querydict(form['query'])
 	if not doexport:
 		yield '<ol>%s</ol>\n' % '\n'.join(
 				'<li><a href="#q%d">%s</a>' % (n, query)
 				for n, query in enumerate(queries + [
 					'Combined results', 'Overview'], 1))
-	for n, line in enumerate(form['query'].splitlines() + [None], 1):
+	for n, (name, (normquery, query)) in enumerate(
+			list(queries.iteritems()) + [('', None)], 1):
 		cnts = Counter()
 		sumtotal = 0
 		relfreq = {}
-		if line is None:
+		if query is None:
 			if len(df.columns) == 1:
 				break
 			name = 'Combined results'
@@ -181,11 +181,7 @@ def counts(form, doexport=False):
 					'<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
 					for n, query in enumerate(queries)))
 		else:
-			if ':' in line:
-				name, query = line.split(':', 1)
-			else:
-				name, query = 'Query %d' % n, line
-			if '\t' in query:
+			if normquery:
 				normquery, query = query.split('\t', 1)
 				norm = 'query'
 				normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
@@ -197,7 +193,7 @@ def counts(form, doexport=False):
 		if not doexport:
 			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (n, name, query)
 		for filename, indices in sorted(results.items()):
-			if line is None:
+			if query is None:
 				cnt = sum(combined[filename].values())
 			else:
 				combined[filename].update(indices)
@@ -224,7 +220,7 @@ def counts(form, doexport=False):
 				out = '%s (<a href="browsesents?%s">browse</a>)    %5d %5.2f %%' % (
 						text.ljust(40)[:40],
 						url_encode(dict(text=textno, sent=1,
-							query=line or form['query'],
+							query=query or form['query'],
 							engine=form.get('engine', 'tgrep2'))),
 						cnt, relfreq[text])
 				plot = concplot(indices, limit or NUMSENTS[textno])
@@ -233,7 +229,7 @@ def counts(form, doexport=False):
 				else:
 					yield '<span style="color: gray; ">%s%s</span>\n' % (
 							out, plot)
-		if not doexport or line is not None:
+		if not doexport or query is not None:
 			df[name] = pandas.Series(relfreq)
 		if not doexport:
 			yield ("%s%6d    %5.2f %%\n</span>\n" % (
@@ -522,7 +518,7 @@ def draw():
 
 @APP.route('/browsesents')
 def browsesents():
-	"""Browse through sentences in a file."""
+	"""Browse through sentences in a file; optionally highlight matches."""
 	chunk = 20  # number of sentences per page
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
@@ -547,26 +543,26 @@ def browsesents():
 				if n == highlight else cgi.escape(a)
 				for n, a in enumerate(results, start)]
 		legend = queryparams = ''
-		if 'query' in request.args:
-			filename = CORPUS_DIR + TEXTS[textno] + EXT[request.args['engine']]
-			queries = [line[:line.index(':')] if ':' in line else ('query %d' % n)
-					for n, line in enumerate(request.args['query'].splitlines(), 1)]
+		if request.args.get('query', ''):
+			queryparams = '&' + url_encode(dict(
+					query=request.args['query'],
+					engine=request.args.get('engine', 'tgrep2')))
+			filename = CORPUS_DIR + TEXTS[textno] + EXT[
+					request.args.get('engine', 'tgrep2')]
+			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s' % ('\t'.join(
 					'<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
 					for n, query in enumerate(queries, 1)))
-			queryparams = '&' + url_encode(dict(
-					query=request.args['query'], engine=request.args['engine']))
-			for n, query in enumerate(request.args['query'].splitlines(), 1):
-				query = query.split(':', 1)[-1].split('\t', 1)[-1]
+			for n, (_, query) in enumerate(queries.values()):
 				matches = CORPORA[request.args['engine']].sents(
-						query, subset=(filename,))
+						query, subset=(filename,), maxresults=None)
 				for _, m, sent, high in matches:
 					if start <= m < maxtree:
 						sent = sent.split()
 						match = ' '.join(sent[a] for a in high)
 						results[m - start - 1] = results[m - start - 1].replace(
 								match, '<font color=%s>%s</font>' % (
-								COLORS.get(n, 'gray'), cgi.escape(match)))
+								COLORS.get(n + 1, 'gray'), cgi.escape(match)))
 					elif m > maxtree:
 						break
 		prevlink = '<a id=prev>prev</a>'
@@ -581,7 +577,9 @@ def browsesents():
 				sentno=sentno + 1, text=TEXTS[textno],
 				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
 				nextlink=nextlink, chunk=chunk, mintree=start + 1,
-				maxtree=maxtree, legend=legend)
+				maxtree=maxtree, legend=legend,
+				query=request.args.get('query', ''),
+				engine=request.args.get('engine', ''))
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences)' % (n, text, NUMSENTS[n])
@@ -719,6 +717,26 @@ def selectedtexts(form):
 	return selected
 
 
+def querydict(queries):
+	"""Return an OrderedDict of names and queries.
+
+	name is abbreviated query if not given."""
+	result = OrderedDict()
+	for n, line in enumerate((x for x in queries.splitlines() if x.strip()), 1):
+		if ':' in line:
+			name, query = line.split(':', 1)
+		else:
+			#name, query = ('query %d' % n), line
+			name = line[:100] + ('' if len(line) < 100 else '...')
+			query = line
+		if '\t' in query:
+			normquery, query = query.split('\t')
+		else:
+			normquery, query = None, query
+			result[name] = normquery, query
+	return result
+
+
 def tokenized(text):
 	"""Return iterable with tokenized sentences of a text, one sentence at a
 	time, in the form of a byte string (with newline)."""
@@ -805,25 +823,29 @@ def getcorpus():
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
-	if not tokfiles:
-		# extract tokenized sentences from trees
+	if (tfiles or afiles) and not tokfiles:  # get tokenized sents from trees
 		for filename in tfiles or afiles:
 			newfile = EXTRE.sub('.tok', filename)
 			converted = tokenized(filename)
 			with open(newfile, 'w') as out:
 				out.writelines(converted)
-		tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
-
-	# FIXME: only reload corpora if necessary here?
-	# TODO: make trees optional, accept .txt and tokenize into .tok
-	if tfiles:
+	elif not tokfiles:  # use plain .txt files and tokenize into .tok
+		for filename in glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
+			newfile = filename[:filename.rindex('.txt')] + '.tok'
+			proc = Popen(args=[which('ucto'), '-L', STYLELANG, '-s', '', '-n',
+					filename, newfile], shell=False)
+			proc.wait()
+	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
+	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
 		corpora['tgrep2'] = TgrepSearcher(tfiles, 'static/tgrepmacros.txt')
-	if afiles and ALPINOCORPUSLIB:
+	if afiles and ALPINOCORPUSLIB and set(afiles) != set(
+			corpora.get('xpath', ())):
 		corpora['xpath'] = DactSearcher(afiles, 'static/xpathmacros.txt')
-	if tokfiles:
+	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
 		corpora['regex'] = RegexSearcher(tokfiles)
 
-	assert tfiles or afiles, 'no .mrg or .dact files found in %s' % CORPUS_DIR
+	assert tfiles or afiles or tokfiles, ('no files with extension '
+			'.mrg, .dact, or .txt found in %s' % CORPUS_DIR)
 	if tfiles and afiles:
 		assert len(tfiles) == len(afiles) and all(
 				t.rsplit('.', 1)[0] == a.rsplit('.', 1)[0]

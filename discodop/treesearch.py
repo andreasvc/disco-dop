@@ -179,7 +179,7 @@ class TgrepSearcher(CorpusSearcher):
 						nofunc, nomorph]
 			except KeyError:
 				maxresults2 = 0
-			if maxresults > maxresults2:
+			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
 						query, x, fmt, maxresults)), filename)] = filename
 			else:
@@ -224,7 +224,7 @@ class TgrepSearcher(CorpusSearcher):
 				x, maxresults2 = self.cache['sents', query, filename, brackets]
 			except KeyError:
 				maxresults2 = 0
-			if maxresults > maxresults2:
+			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
 						query, x, fmt, maxresults)), filename)] = filename
 			else:
@@ -262,20 +262,30 @@ class TgrepSearcher(CorpusSearcher):
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
 		linere = re.compile(r'([0-9]+):::([^\n]*)')
-		results = []
-		for n, line in enumerate(iter(proc.stdout.readline, b'')):
-			match = linere.match(line.decode('utf-8'))
-			m, a = int(match.group(1)), match.group(2)
-			if (limit and m >= limit) or (maxresults and n >= maxresults):
+		if limit or maxresults:
+			results = []
+			for n, line in enumerate(iter(proc.stdout.readline, b'')):
+				match = linere.match(line.decode('utf-8'))
+				m, a = int(match.group(1)), match.group(2)
+				if (limit and m >= limit) or (maxresults and n >= maxresults):
+					proc.stdout.close()
+					proc.stderr.close()
+					proc.terminate()
+					return results
+				results.append((m, a))
+			if proc.wait() != 0:
 				proc.stdout.close()
+				err = proc.stderr.read().decode('utf-8')
 				proc.stderr.close()
-				proc.terminate()
-				return results
-			results.append((m, a))
-		if proc.wait() != 0:
+		else:
+			out, err = proc.communicate()
+			out = out.decode('utf8')  # pylint: disable=E1103
+			err = err.decode('utf8')  # pylint: disable=E1103
 			proc.stdout.close()
-			err = proc.stderr.read().decode('utf-8')
 			proc.stderr.close()
+			results = ((int(match.group(1)), match.group(2)) for match
+					in re.finditer(r'([0-9]+):::([^\n]*)\n', out))
+		if proc.returncode != 0:
 			raise ValueError(err)
 		return results
 
@@ -342,7 +352,7 @@ class DactSearcher(CorpusSearcher):
 						nofunc, nomorph]
 			except KeyError:
 				maxresults2 = 0
-			if maxresults > maxresults2:
+			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
 						query, x, maxresults)), filename)] = filename
 			else:
@@ -379,7 +389,7 @@ class DactSearcher(CorpusSearcher):
 				x, maxresults2 = self.cache['sents', query, filename, brackets]
 			except KeyError:
 				maxresults2 = 0
-			if maxresults > maxresults2:
+			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
 						query, x, maxresults)), filename)] = filename
 			else:
@@ -460,7 +470,7 @@ class RegexSearcher(CorpusSearcher):
 				x, maxresults2 = self.cache['sents', query, filename]
 			except KeyError:
 				maxresults2 = 0
-			if maxresults > maxresults2:
+			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(lambda x: list(self._query(
 						query, x, maxresults)), filename)] = filename
 			else:
