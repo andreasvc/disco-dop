@@ -558,7 +558,7 @@ def printfragments(fragments, counts, out=None):
 		for a in fragments:
 			out.write("%s\n" % (("%s\t%s" % (a[0],
 					' '.join("%s" % x if x else '' for x in a[1])))
-					if PARAMS['disc'] else a.decode('utf-8')))
+					if PARAMS['disc'] else a))
 		return
 	# a frequency of 0 is normal when counting occurrences of given fragments
 	# in a second treebank
@@ -578,7 +578,7 @@ def printfragments(fragments, counts, out=None):
 			if len(theindices) > threshold:
 				out.write("%s\t%r\n" % (("%s\t%s" % (a[0],
 					' '.join("%s" % x if x else '' for x in a[1])))
-					if PARAMS['disc'] else a.decode('utf-8'),
+					if PARAMS['disc'] else a,
 					list(sorted(theindices.elements()))))
 			elif zeroinvalid:
 				raise ValueError("invalid fragment--frequency=1: %r" % a)
