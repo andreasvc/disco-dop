@@ -140,7 +140,7 @@ def javascript():
 
 
 @APP.route('/parser/static/style.css')
-def javascript():
+def stylecss():
 	"""Serve style.css."""
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'style.css', mimetype='text/css')
