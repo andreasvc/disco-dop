@@ -146,10 +146,7 @@ def counts(form, doexport=False):
 	returns one graph for each query, and an overview with totals (optionally
 	per category, if the first letters of each corpus name form a small set);
 	"""
-	# TODO:
-	# - offer graph for individual texts with all queries together.
-	# - side-by-side comparison of two passages, with matching queries
-	#   highlighted in different colors
+	# TODO: option to arrange graphs by text instead of by query
 	norm = form.get('norm', 'sents')
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
@@ -164,7 +161,8 @@ def counts(form, doexport=False):
 	combined1 = defaultdict(list)
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
-	queries = [line.split(':')[0] for line in form['query'].splitlines()]
+	queries = [line[:line.index(':')] if ':' in line else ('query %d' % n)
+			for n, line in enumerate(form['query'].splitlines(), 1)]
 	if not doexport:
 		yield '<ol>%s</ol>\n' % '\n'.join(
 				'<li><a href="#q%d">%s</a>' % (n, query)
@@ -223,8 +221,12 @@ def counts(form, doexport=False):
 			relfreq[text] = 100.0 * cnt / total
 			sumtotal += total
 			if not doexport:
-				out = "%s%6d    %5.2f %%" % (
-						text.ljust(40)[:40], cnt, relfreq[text])
+				out = '%s (<a href="browsesents?%s">browse</a>)    %5d %5.2f %%' % (
+						text.ljust(40)[:40],
+						url_encode(dict(text=textno, sent=1,
+							query=line or form['query'],
+							engine=form.get('engine', 'tgrep2'))),
+						cnt, relfreq[text])
 				plot = concplot(indices, limit or NUMSENTS[textno])
 				if cnt:
 					yield out + plot + '\n'
@@ -544,19 +546,42 @@ def browsesents():
 		results = [('<font color=red>%s</font>' % cgi.escape(a))
 				if n == highlight else cgi.escape(a)
 				for n, a in enumerate(results, start)]
+		legend = queryparams = ''
+		if 'query' in request.args:
+			filename = CORPUS_DIR + TEXTS[textno] + EXT[request.args['engine']]
+			queries = [line[:line.index(':')] if ':' in line else ('query %d' % n)
+					for n, line in enumerate(request.args['query'].splitlines(), 1)]
+			legend = 'Legend:\t%s' % ('\t'.join(
+					'<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
+					for n, query in enumerate(queries, 1)))
+			queryparams = '&' + url_encode(dict(
+					query=request.args['query'], engine=request.args['engine']))
+			for n, query in enumerate(request.args['query'].splitlines(), 1):
+				query = query.split(':', 1)[-1].split('\t', 1)[-1]
+				matches = CORPORA[request.args['engine']].sents(
+						query, subset=(filename,))
+				for _, m, sent, high in matches:
+					if start <= m < maxtree:
+						sent = sent.split()
+						match = ' '.join(sent[a] for a in high)
+						results[m - start - 1] = results[m - start - 1].replace(
+								match, '<font color=%s>%s</font>' % (
+								COLORS.get(n, 'gray'), cgi.escape(match)))
+					elif m > maxtree:
+						break
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
-			prevlink = '<a href="browsesents?text=%d&sent=%d" id=prev>prev</a>' % (
-					textno, sentno - chunk + 1)
+			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
+					'prev</a>' % (textno, sentno - chunk + 1, queryparams))
 		nextlink = '<a id=next>next</a>'
 		if sentno < NUMSENTS[textno] - chunk:
-			nextlink = '<a href="browsesents?text=%d&sent=%d" id=next>next</a>' % (
-					textno, sentno + chunk + 1)
+			nextlink = ('<a href="browsesents?text=%d&sent=%d%s" id=next>'
+					'next</a>' % (textno, sentno + chunk + 1, queryparams))
 		return render_template('browsesents.html', textno=textno,
 				sentno=sentno + 1, text=TEXTS[textno],
 				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
 				nextlink=nextlink, chunk=chunk, mintree=start + 1,
-				maxtree=maxtree)
+				maxtree=maxtree, legend=legend)
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences)' % (n, text, NUMSENTS[n])

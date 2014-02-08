@@ -235,7 +235,8 @@ class TgrepSearcher(CorpusSearcher):
 			for sentno, line in future.result():
 				sent, match = line.split(':::')
 				if not brackets:
-					idx = sent.index(match)
+					idx = sent.index(match if match.startswith('(')
+							else ' %s)' % match)
 					prelen = len(GETLEAVES.findall(sent[:idx]))
 					sent = ' '.join(GETLEAVES.findall(sent))
 					match = GETLEAVES.findall(
@@ -261,21 +262,22 @@ class TgrepSearcher(CorpusSearcher):
 				stdout=subprocess.PIPE,
 				stderr=subprocess.PIPE)
 		linere = re.compile(r'([0-9]+):::([^\n]*)')
+		results = []
 		for n, line in enumerate(iter(proc.stdout.readline, b'')):
 			match = linere.match(line.decode('utf-8'))
 			m, a = int(match.group(1)), match.group(2)
-			if (limit is not None and m >= limit) or (
-					maxresults and n >= maxresults):
+			if (limit and m >= limit) or (maxresults and n >= maxresults):
 				proc.stdout.close()
 				proc.stderr.close()
 				proc.terminate()
-				return
-			yield m, a
+				return results
+			results.append((m, a))
 		if proc.wait() != 0:
 			proc.stdout.close()
 			err = proc.stderr.read().decode('utf-8')
 			proc.stderr.close()
 			raise ValueError(err)
+		return results
 
 
 class DactSearcher(CorpusSearcher):
