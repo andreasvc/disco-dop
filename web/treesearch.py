@@ -44,7 +44,7 @@ MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
 TREELIMIT = 10  # max number of trees to draw in search resuluts
 FRAGLIMIT = 250  # max amount of search results for fragment extraction
 SENTLIMIT = 1000  # max number of sents/brackets in search results
-STYLELANG = 'nl'  # language to use when running style(1)
+LANG = 'nl'  # language to use when running style(1) or ucto(1)
 CORPUS_DIR = "corpus/"
 
 APP = Flask(__name__)
@@ -96,14 +96,15 @@ def main():
 		return render_template('searchresults.html',
 				form=request.args, texts=TEXTS, selectedtexts=selected,
 				output=output, results=DISPATCH[output](request.args),
-				havexpath=ALPINOCORPUSLIB)
+				havexpath='xpath' in CORPORA, havetgrep='tgrep2' in CORPORA)
 		# To send results incrementally:
 		#return Response(stream_template('searchresults.html',
 		#		form=request.args, texts=TEXTS, selectedtexts=selected,
 		#		output=output, results=DISPATCH[output](request.args),
-		#		havexpath=ALPINOCORPUSLIB))
+		#		havexpath='xpath' in CORPORA))
 	return render_template('search.html', form=request.args, output='counts',
-			texts=TEXTS, selectedtexts=selected, havexpath=ALPINOCORPUSLIB)
+			texts=TEXTS, selectedtexts=selected,
+			havexpath='xpath' in CORPORA, havetgrep='tgrep2' in CORPORA)
 
 
 def export(form, output):
@@ -165,22 +166,22 @@ def counts(form, doexport=False):
 	if not doexport:
 		yield '<ol>%s</ol>\n' % '\n'.join(
 				'<li><a href="#q%d">%s</a>' % (n, query)
-				for n, query in enumerate(queries + [
+				for n, query in enumerate(list(queries) + [
 					'Combined results', 'Overview'], 1))
 	for n, (name, (normquery, query)) in enumerate(
-			list(queries.iteritems()) + [('', None)], 1):
+			list(queries.iteritems()) + [('Combined results', ('', None))], 1):
 		cnts = Counter()
 		sumtotal = 0
 		relfreq = {}
 		if query is None:
 			if len(df.columns) == 1:
 				break
-			name = 'Combined results'
 			results = combined1
-			query = '%sLegend:\t%s' % (64 * ' ', '\t'.join(
+			legend = '%sLegend:\t%s' % (64 * ' ', '\t'.join(
 					'<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
 					for n, query in enumerate(queries)))
 		else:
+			legend = ''
 			if normquery:
 				normquery, query = query.split('\t', 1)
 				norm = 'query'
@@ -191,7 +192,8 @@ def counts(form, doexport=False):
 			results = CORPORA[form.get('engine', 'tgrep2')].counts(
 					query, selected, indices=True)
 		if not doexport:
-			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (n, name, query)
+			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (
+					n, name, query or legend)
 		for filename, indices in sorted(results.items()):
 			if query is None:
 				cnt = sum(combined[filename].values())
@@ -478,7 +480,7 @@ def style():
 		resp = Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS,
 				selectedtexts=selectedtexts(request.args), output='style',
-				results=generate(), havexpath=ALPINOCORPUSLIB))
+				results=generate(), havexpath='xpath' in CORPORA))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	#set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
@@ -502,7 +504,7 @@ def draw():
 				sentno - 1, sentno)).decode('utf8')
 		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
 					unicodelines=True, html=True)
-	elif ALPINOCORPUSLIB:
+	elif 'xpath' in CORPORA:
 		filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 		sentid = CORPORA['xpath'].ids[filename][sentno]
 		treestr = CORPORA['xpath'].files[filename].read(sentid)
@@ -512,7 +514,7 @@ def draw():
 				morphology=None if nomorph else 'replace')
 		result = DrawTree(tree, sent).text(unicodelines=True, html=True)
 	else:
-		raise ValueError
+		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 	return '<pre id="t%s">%s</pre>' % (sentno, result)
 
 
@@ -531,14 +533,14 @@ def browsesents():
 			results = [' '.join(GETLEAVES.findall(a)) for a
 					in islice(io.open(filename, encoding='utf8'),
 					start, maxtree)]
-		elif ALPINOCORPUSLIB:
+		elif 'xpath' in CORPORA:
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 			results = [ALPINOLEAVES.search(
 					CORPORA['xpath'].files[filename].read(
 						CORPORA['xpath'].ids[filename][n + 1])).group(1)
 					for n in range(start, maxtree)]
 		else:
-			raise ValueError
+			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = [('<font color=red>%s</font>' % cgi.escape(a))
 				if n == highlight else cgi.escape(a)
 				for n, a in enumerate(results, start)]
@@ -598,7 +600,7 @@ def browse():
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		if ALPINOCORPUSLIB:
+		if 'xpath' in CORPORA:
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 			drawntrees = [DrawTree(*treebank.alpinotree(
 					ElementTree.fromstring(CORPORA['xpath'].files[
@@ -613,7 +615,7 @@ def browse():
 					unicodelines=True, html=True)
 					for line in islice(open(filename), start, maxtree)]
 		else:
-			raise ValueError
+			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
 				' style="display: none; "' if 'ajax' in request.args else '',
 				tree) for n, tree in enumerate(drawntrees, start)]
@@ -767,7 +769,7 @@ def getstyletable(texts):
 		files = [os.path.join(CORPUS_DIR, a) for a in texts]
 	styletable = {}
 	for filename in sorted(files):
-		cmd = [which('style'), '--language', STYLELANG]
+		cmd = [which('style'), '--language', LANG]
 		stdin = subprocess.PIPE
 		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
 				stdin=stdin, stdout=subprocess.PIPE,
@@ -832,7 +834,8 @@ def getcorpus():
 	elif not tokfiles:  # use plain .txt files and tokenize into .tok
 		for filename in glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
 			newfile = filename[:filename.rindex('.txt')] + '.tok'
-			proc = Popen(args=[which('ucto'), '-L', STYLELANG, '-s', '', '-n',
+			proc = subprocess.Popen(args=[which('ucto'),
+					'-L', LANG, '-s', '', '-n',
 					filename, newfile], shell=False)
 			proc.wait()
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
@@ -856,17 +859,17 @@ def getcorpus():
 	if os.path.exists(picklefile):
 		picklemtime = os.stat(picklefile).st_mtime
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
-		for filename in tfiles + afiles}
-	if (set(texts) != currentfiles or
-			any(os.stat(a).st_mtime > picklemtime for a in tfiles + afiles)):
-		if tfiles:
+		for filename in tfiles + afiles + tokfiles}
+	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
+				for a in tfiles + afiles + tokfiles)):
+		if corpora.get('tgrep2'):
 			numsents = [len(open(filename).readlines())
 					for filename in tfiles if filename.endswith('.mrg')]
 			numconst = [open(filename).read().count('(')
 					for filename in tfiles if filename.endswith('.mrg')]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
 					for filename in tfiles if filename.endswith('.mrg')]
-		elif ALPINOCORPUSLIB and afiles:
+		elif corpora.get('xpath'):
 			numsents = [corpus.size() for corpus
 					in corpora['xpath'].files.values()]
 			numconst, numwords = [], []
@@ -879,17 +882,23 @@ def getcorpus():
 				numconst.append(const)
 				numwords.append(words)
 				print(filename)
+		elif corpora.get('regex'):  # only tokenized sentences, no trees
+			numsents = [len(open(filename).readlines())
+					for filename in tokfiles]
+			numwords = [1 + open(filename).read().count(' ')
+					for filename in tokfiles]
+			numconst = [0 for filename in tokfiles]
 		else:
-			raise ValueError
+			raise ValueError('no texts found.')
 		ids = {}
-		if ALPINOCORPUSLIB:
+		if 'xpath' in corpora:
 			for filename in afiles:
 				# FIXME: memory leak here?
 				tmp = alpinocorpus.CorpusReader(filename)
 				ids[filename] = [None] + sorted((entry.name() for entry
 						in tmp.entries()), key=treebank.numbase)
 		texts = [os.path.splitext(os.path.basename(a))[0]
-				for a in tfiles or afiles]
+				for a in tfiles or afiles or tokfiles]
 		styletable = getstyletable(texts)
 	for filename in afiles:
 		corpora['xpath'].updateindex(filename, ids[filename])
@@ -934,7 +943,6 @@ for log in (logging.getLogger(), APP.logger):
 	log.handlers[0].setFormatter(logging.Formatter(
 			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
-ALPINOCORPUSLIB = ALPINOCORPUSLIB and CORPORA.get('xpath')
 
 
 if __name__ == '__main__':
