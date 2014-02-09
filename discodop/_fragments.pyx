@@ -136,9 +136,8 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		short SLOTS  # the number of bitsets needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
 		ULong *scratch
-		NodeArray a, b
+		NodeArray a
 		NodeArray *ctrees1
-		NodeArray *ctrees2
 		Node *anodes
 		list asent
 		dict fragments = {}
@@ -152,7 +151,6 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	if trees2 is None:
 		trees2 = trees1
 	ctrees1 = trees1.trees
-	ctrees2 = trees2.trees
 	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 	CST = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
 	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
@@ -169,8 +167,6 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 					continue
 				elif m < 0 or m >= trees2.len:
 					raise ValueError('illegal index %d' % m)
-				b = ctrees2[m]
-				bnodes = &trees2.nodes[b.offset]
 				extractfrompair(a, anodes, trees2, n, m,
 						complement, debug, asent, sents2 or sents1,
 						labels, inter, minterms, CST, scratch, SLOTS)
