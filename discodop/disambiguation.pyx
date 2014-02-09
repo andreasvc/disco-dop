@@ -1,4 +1,11 @@
-"""Disambiguate parse forests with various methods for parse selection."""
+"""Disambiguate parse forests with various methods for parse selection.
+
+Use as follows:
+
+>>> derivations, entries = getderivations(chart, 1000)  #doctest: +SKIP
+>>> parses, derivs, msg = marginalize("mpp", derivations, entries, chart)
+... #doctest: +SKIP
+"""
 
 from __future__ import print_function
 import re
@@ -87,8 +94,14 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 			annotations of the form ``@123`` from labels.
 	:param k: when ``method='sl-dop``, number of derivations to consider.
 	:param bitpar: whether bitpar was used in nbest mode.
-	:returns: a dictionary mapping parsetrees (as strings) to probabilities
-		(0 < p <= 1).
+	:returns:
+		``(parses, derivs, msg)``.
+
+		:parses: a dictionary mapping parsetrees (as strings) to probabilities
+			(0 < p <= 1).
+		:derivs: a list of fragments in the most probable derivation
+			of each parse.
+		:msg: a message reporting the number of derivations / parses.
 	"""
 	cdef bint mpd = method == 'mpd'
 	cdef bint shortest = method == 'shortest'

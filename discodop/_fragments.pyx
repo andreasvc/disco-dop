@@ -87,16 +87,8 @@ cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
 	tail.root = root
 
 
-def allpairs(Ctrees trees1, Ctrees trees2=None):
-	"""Produce indices of all non-identical tree pairs.
-
-	if trees2 is None, pairs (n, m) are such that n < m."""
-	if trees2 is None:
-		return {n: xrange(n + 1, trees1.len) for n in range(trees1.len)}
-	return {n: xrange(trees2.len) for n in range(trees1.len)}
-
-
-def twoterminals(Ctrees trees1, list labels, Ctrees trees2=None):
+cdef set twoterminals(NodeArray a, Node *anodes,
+		Ctrees trees2, set contentwordprods):
 	"""Produce tree pairs that share at least two words.
 
 	Specifically, tree pairs sharing one content word and one additional word,
@@ -105,49 +97,32 @@ def twoterminals(Ctrees trees1, list labels, Ctrees trees2=None):
 
 	if trees2 is None, pairs (n, m) are such that n < m."""
 	cdef:
-		int n, i, j
-		NodeArray a
-		NodeArray *ctrees1
-		Node *anodes
-		set tmp, candidates
+		int i, j
+		set tmp, candidates = set()
 		dict result = {}
-		bint trees2none = trees2 is None
-	if trees2none:
-		trees2 = trees1
-	ctrees1 = trees1.trees
-	contentword = re.compile('NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
-	for n in range(trees1.len):
-		a = ctrees1[n]
-		anodes = &trees1.nodes[a.offset]
-		candidates = set()
-		# select candidates from 'trees2' that share productions with tree 'a'
-		# want to select at least 1 content POS tag, 1 other lexical prod
-		for i in range(a.len):
-			if (anodes[i].left >= 0 or
-					not contentword.match(labels[anodes[i].prod])):
+	# select candidates from 'trees2' that share productions with tree 'a'
+	# want to select at least 1 content POS tag, 1 other lexical prod
+	for i in range(a.len):
+		if anodes[i].left >= 0 or anodes[i].prod not in contentwordprods:
+			continue
+		tmp = <set>(trees2.treeswithprod[anodes[i].prod])
+		for j in range(a.len):
+			if i == j or anodes[j].left >= 0:
 				continue
-			tmp = <set>(trees2.treeswithprod[anodes[i].prod])
-			for j in range(a.len):
-				if i == j or anodes[j].left >= 0:
-					continue
-				candidates |= tmp & <set>(trees2.treeswithprod[anodes[j].prod])
-		if trees2none:
-			result[n] = {i for i in candidates if i > n}
-		else:
-			result[n] = candidates
-	return result
+			candidates |= tmp & <set>(trees2.treeswithprod[anodes[j].prod])
+	return candidates
 
 
-cpdef fastextractfragments(Ctrees trees1, list sents1,
-		dict comparisons, list labels, Ctrees trees2=None, list sents2=None,
-		bint approx=True, bint debug=False, bint discontinuous=False,
-		bint complement=False, int minterms=0):
+cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
+		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
+		bint debug=False, bint discontinuous=False, bint complement=False,
+		bint twoterms=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
-		``fastextractfragments(trees1, sents1, comparisons, labels)``
+		``fastextractfragments(trees1, sents1, offset, end, labels)``
 	- scenario 2: common fragments in two treebanks:
-		``fastextractfragments(trees1, sents1, comparisons, labels, trees2, sents2)``
+		``fastextractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
 
 	``comparisons`` is a dictionary mapping sentence numbers (referring to
 	trees1) to sequences of other sentences to compare to (referring to either
@@ -157,7 +132,8 @@ cpdef fastextractfragments(Ctrees trees1, list sents1,
 	trees; when ``complement`` is true, the complement of the recurring
 	fragments in each pair of trees is extracted as well."""
 	cdef:
-		int n, m
+		int n, m, start = 0, end2
+		short minterms = 2 if twoterms else 0
 		short SLOTS  # the number of bitsets needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
 		ULong *scratch
@@ -169,7 +145,11 @@ cpdef fastextractfragments(Ctrees trees1, list sents1,
 		Node *bnodes
 		list asent
 		dict fragments = {}
-		set inter = set()
+		set inter = set(), contentwordprods
+	if twoterms:
+		contentword = re.compile('NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
+		contentwordprods = {n for n, label in enumerate(labels)
+				if contentword.match(labels[n])}
 	if approx:
 		fragments = <dict>defaultdict(one)
 	if trees2 is None:
@@ -180,55 +160,84 @@ cpdef fastextractfragments(Ctrees trees1, list sents1,
 	CST = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
 	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 	assert CST is not NULL and scratch is not NULL
+	end2 = trees2.len
 	# loop over tree pairs to extract fragments from
-	for n, candidates in comparisons.items():
+	for n in range(offset, min(end or trees1.len, trees1.len)):
 		a = ctrees1[n]
 		asent = <list>(sents1[n])
 		anodes = &trees1.nodes[a.offset]
-		for m in candidates:
-			if m < 0 or m >= trees2.len:
-				raise ValueError('illegal index %d' % m)
-			b = ctrees2[m]
-			bnodes = &trees2.nodes[b.offset]
-			# initialize table
-			ulongset(CST, 0UL, b.len * SLOTS)
-			# fill table
-			fasttreekernel(anodes, bnodes, a.len, b.len, CST, SLOTS)
-			# dump table
-			if debug:
-				print(n, m)
-				dumpCST(CST, a, b, anodes, bnodes, asent,
-						(sents2 or sents1)[m], labels, SLOTS, True)
-			# extract results
-			extractbitsets(CST, anodes, bnodes, b.root, n,
-					inter, minterms, scratch, SLOTS)
-			# extract complementary fragments?
-			if complement:
-				# combine bitsets of inter together with bitwise or
-				ulongset(scratch, 0UL, SLOTS)
-				for wrapper in inter:
-					setunioninplace(scratch, getpointer(wrapper), SLOTS)
-				# extract bitsets in A from result, without regard for B
-				extractcompbitsets(scratch, anodes, a.root, n, inter,
-						SLOTS, NULL)
-		# collect string representations of fragments
-		for wrapper in inter:
-			bitset = getpointer(wrapper)
-			if discontinuous:
-				frag = getsubtree(anodes, bitset, labels,
-						getroot(bitset, SLOTS))
-				frag = getsent(frag, asent)
-			else:
-				frag = getsubtreeunicode(anodes, bitset, labels, asent,
-						getroot(bitset, SLOTS))
-			if approx:
-				fragments[frag] += 1
-			elif frag not in fragments:
-				fragments[frag] = wrapper
-		inter.clear()
+		if twoterms:
+			for m in twoterminals(a, anodes, trees2, contentwordprods):
+				if sents2 is None and m <= n:
+					continue
+				elif m < 0 or m >= trees2.len:
+					raise ValueError('illegal index %d' % m)
+				b = ctrees2[m]
+				bnodes = &trees2.nodes[b.offset]
+				extractfrompair(a, anodes, trees2, n, m,
+						complement, debug, asent, sents2 or sents1,
+						labels, inter, minterms, CST, scratch, SLOTS)
+		else:  # all pairs
+			if sents2 is None:
+				start = n + 1
+			for m in range(start, end2):
+				extractfrompair(a, anodes, trees2, n, m,
+						complement, debug, asent, sents2 or sents1,
+						labels, inter, minterms, CST, scratch, SLOTS)
+		collectfragments(fragments, inter, anodes, asent, labels,
+				discontinuous, approx, SLOTS)
 	free(CST)
 	free(scratch)
 	return fragments
+
+
+cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
+		int n, int m, bint complement, bint debug, list asent, list sents,
+		list labels, set inter, short minterms, ULong *CST, ULong *scratch,
+		short SLOTS):
+	"""Extract the bitsets of maximal overlapping fragments for a tree pair."""
+	cdef NodeArray b = trees2.trees[m]
+	cdef Node *bnodes = &trees2.nodes[b.offset]
+	# initialize table
+	ulongset(CST, 0UL, b.len * SLOTS)
+	# fill table
+	fasttreekernel(anodes, bnodes, a.len, b.len, CST, SLOTS)
+	# dump table
+	if debug:
+		print(n, m)
+		dumpCST(CST, a, b, anodes, bnodes, asent, sents[m], labels, SLOTS, True)
+	# extract results
+	extractbitsets(CST, anodes, bnodes, b.root, n,
+			inter, minterms, scratch, SLOTS)
+	# extract complementary fragments?
+	if complement:
+		# combine bitsets of inter together with bitwise or
+		ulongset(scratch, 0UL, SLOTS)
+		for wrapper in inter:
+			setunioninplace(scratch, getpointer(wrapper), SLOTS)
+		# extract bitsets in A from result, without regard for B
+		extractcompbitsets(scratch, anodes, a.root, n, inter,
+				SLOTS, NULL)
+
+
+cdef inline collectfragments(dict fragments, set inter, Node *anodes,
+		list asent, list labels, bint discontinuous, bint approx, short SLOTS):
+	"""Collect string representations of fragments given as bitsets."""
+	cdef ULong *bitset
+	for wrapper in inter:
+		bitset = getpointer(wrapper)
+		if discontinuous:
+			frag = getsubtree(anodes, bitset, labels,
+					getroot(bitset, SLOTS))
+			frag = getsent(frag, asent)
+		else:
+			frag = getsubtreeunicode(anodes, bitset, labels, asent,
+					getroot(bitset, SLOTS))
+		if approx:
+			fragments[frag] += 1
+		elif frag not in fragments:
+			fragments[frag] = wrapper
+	inter.clear()
 
 
 cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,

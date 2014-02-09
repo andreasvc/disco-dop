@@ -26,8 +26,7 @@ from discodop.tree import Tree
 from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals
 from discodop._fragments import extractfragments, fastextractfragments, \
-		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets, \
-		allpairs, twoterminals
+		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
 from discodop.parser import workerfunc
 
 USAGE = '''\
@@ -153,12 +152,6 @@ def regular(filenames, numproc, limit, encoding):
 	# detect corpus reading errors in this process (e.g., wrong encoding)
 	initworker(filenames[0], filenames[1] if len(filenames) == 2 else None,
 			limit, encoding)
-	if not PARAMS['quadratic'] and not PARAMS['complete']:
-		if PARAMS.get('twoterms'):
-			PARAMS['comparisons'] = twoterminals(PARAMS['trees1'],
-					PARAMS['labels'], PARAMS['trees2'])
-		else:
-			PARAMS['comparisons'] = allpairs(PARAMS['trees1'], PARAMS['trees2'])
 	if numproc == 1:
 		mymap = imap
 		myapply = APPLY
@@ -252,10 +245,11 @@ def batch(outputdir, filenames, limit, encoding):
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'])
 		else:
-			fragments = fastextractfragments(trees2, sents2,
-					allpairs(trees2, trees1), PARAMS['labels'], trees1, sents1,
+			fragments = fastextractfragments(trees2, sents2, 0, 0,
+					PARAMS['labels'], trees1, sents1,
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
-					approx=PARAMS['approx'])
+					approx=PARAMS['approx'],
+					twoterms=PARAMS.get('twoterms', False))
 		counts = None
 		fragmentkeys = list(fragments)
 		if PARAMS['approx'] or not fragments:
@@ -347,13 +341,11 @@ def worker(interval):
 				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
 				discontinuous=PARAMS['disc'], debug=PARAMS['debug'])
 	else:
-		comparisons = {a: b for a, b in PARAMS['comparisons'].items()
-					if offset <= a < end}
-		result = fastextractfragments(trees1, sents1, comparisons,
+		result = fastextractfragments(trees1, sents1, offset, end,
 				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
 				discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
 				debug=PARAMS.get('debug'),
-				minterms=2 if PARAMS.get('twoterms') else 0)
+				twoterms=PARAMS.get('twoterms', False))
 	logging.debug("finished %d--%d", offset, end)
 	return result
 
@@ -438,7 +430,6 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
 			quadratic=False, complement=complement)
 	initworkersimple(trees, list(sents))
-	PARAMS['comparisons'] = allpairs(PARAMS['trees1'], None)
 	if numproc == 1:
 		mymap = map
 		myapply = APPLY
