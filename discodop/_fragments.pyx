@@ -99,7 +99,6 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 	cdef:
 		int i, j
 		set tmp, candidates = set()
-		dict result = {}
 	# select candidates from 'trees2' that share productions with tree 'a'
 	# want to select at least 1 content POS tag, 1 other lexical prod
 	for i in range(a.len):
@@ -137,19 +136,17 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		short SLOTS  # the number of bitsets needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
 		ULong *scratch
-		ULong *bitset
 		NodeArray a, b
 		NodeArray *ctrees1
 		NodeArray *ctrees2
 		Node *anodes
-		Node *bnodes
 		list asent
 		dict fragments = {}
-		set inter = set(), contentwordprods
+		set inter = set(), contentwordprods = None
 	if twoterms:
 		contentword = re.compile('NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
 		contentwordprods = {n for n, label in enumerate(labels)
-				if contentword.match(labels[n])}
+				if contentword.match(label)}
 	if approx:
 		fragments = <dict>defaultdict(one)
 	if trees2 is None:
