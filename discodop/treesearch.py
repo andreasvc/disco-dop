@@ -7,7 +7,6 @@
 import io
 import os
 import re
-import codecs
 import concurrent.futures
 import subprocess
 from collections import Counter, OrderedDict

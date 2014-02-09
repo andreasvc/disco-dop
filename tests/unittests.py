@@ -1,3 +1,5 @@
+"""Unit tests for discodop modules."""
+# pylint: disable=C0111,W0232
 import re
 from unittest import TestCase
 from operator import itemgetter
@@ -8,8 +10,7 @@ from discodop.treetransforms import binarize, unbinarize, \
 		addbitsets, fanout
 from discodop.treebanktransforms import punctraise, balancedpunctraise
 from discodop.grammar import flatten, UniqueIDs
-# FIXME only import for relevant test:
-from discodop.plcfrs import Agenda, getparent
+
 
 class Test_treetransforms:
 	def test_binarize(self):
@@ -88,7 +89,7 @@ class Test_treebank:
 		'''
 		result = list(incrementaltreereader([data]))
 		assert len(result) == 1
-		tree, sent, _rest = result[0]
+		_tree, sent, _rest = result[0]
 		assert sent[0] == u'Het', sent[0]
 		assert len(sent) == 10
 
@@ -103,7 +104,7 @@ rich	JJ	--	--	500
 		'''
 		result = list(incrementaltreereader(data.splitlines()))
 		assert len(result) == 1
-		tree, sent, _rest = result[0]
+		_tree, sent, _rest = result[0]
 		assert sent[0] == u'is', sent[0]
 		assert len(sent) == 4
 
@@ -192,6 +193,7 @@ class TestHeap(TestCase):
 	testN = 100
 
 	def check_invariants(self, h):
+		from discodop.plcfrs import getparent
 		for i in range(len(h)):
 			if i > 0:
 				self.assertTrue(h.heap[getparent(i)].getvalue()
@@ -199,6 +201,7 @@ class TestHeap(TestCase):
 
 	def make_data(self):
 		from random import random
+		from discodop.plcfrs import Agenda
 		pairs = [(random(), random()) for _ in range(TestHeap.testN)]
 		h = Agenda()
 		d = {}
@@ -231,6 +234,7 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_popitem_ties(self):
+		from discodop.plcfrs import Agenda
 		h = Agenda()
 		for i in range(TestHeap.testN):
 			h[i] = 0.
@@ -240,6 +244,7 @@ class TestHeap(TestCase):
 			self.check_invariants(h)
 
 	def test_popitem_ties_fifo(self):
+		from discodop.plcfrs import Agenda
 		h = Agenda()
 		for i in range(TestHeap.testN):
 			h[i] = 0.
@@ -311,6 +316,7 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_init(self):
+		from discodop.plcfrs import Agenda
 		h, pairs, d = self.make_data()
 		h = Agenda(d.items())
 		while pairs:
@@ -322,7 +328,7 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), 0)
 
 	def test_repr(self):
-		h, pairs, d = self.make_data()
+		h, _pairs, d = self.make_data()
 		#self.assertEqual(h, eval(repr(h)))
 		tmp = repr(h)  # 'Agenda({....})'
 		#strip off class name
@@ -331,8 +337,8 @@ class TestHeap(TestCase):
 
 
 def test_fragments():
-	from discodop._fragments import getctrees, fastextractfragments, \
-			exactcounts
+	from discodop._fragments import getctrees, allpairs, \
+			fastextractfragments, exactcounts
 	treebank = [binarize(Tree(x)) for x in """\
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
@@ -347,7 +353,8 @@ def test_fragments():
 		for n, idx in enumerate(tree.treepositions('leaves')):
 			tree[idx] = n
 	params = getctrees(treebank, sents)
-	fragments = fastextractfragments(params['trees1'], params['sents1'], 0, 0,
+	fragments = fastextractfragments(params['trees1'], params['sents1'],
+			allpairs(params['trees1'], None),
 			params['labels'], discontinuous=True, approx=False)
 	counts = exactcounts(params['trees1'], params['trees1'],
 			list(fragments.values()), fast=True)

@@ -724,11 +724,10 @@ def querydict(queries):
 
 	name is abbreviated query if not given."""
 	result = OrderedDict()
-	for n, line in enumerate((x for x in queries.splitlines() if x.strip()), 1):
+	for line in (x for x in queries.splitlines() if x.strip()):
 		if ':' in line:
 			name, query = line.split(':', 1)
 		else:
-			#name, query = ('query %d' % n), line
 			name = line[:100] + ('' if len(line) < 100 else '...')
 			query = line
 		if '\t' in query:

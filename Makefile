@@ -49,7 +49,7 @@ lint: inplace
 	#Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^.\"\\]$$' *.pxd *.pyx *.py
 	pep8 --ignore=E1,W1 \
-		discodop/*.py web/*.py && \
+		discodop/*.py web/*.py tests/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi && \
-	pylint --indent-string='\t' --disable=R,C0103 discodop/*.py web/*.py
+	pylint --indent-string='\t' --disable=R,C0103 discodop/*.py web/*.py tests/*.py

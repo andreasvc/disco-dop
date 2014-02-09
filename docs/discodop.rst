@@ -78,6 +78,7 @@ Options:
 --approx      report approximate frequencies (lower bound)
 --nofreq      do not report frequencies.
 --relfreq     report relative frequencies wrt. root node of fragments.
+--twoterms    only consider fragments with at least two lexical terminals.
 --quadratic   use the slower, quadratic algorithm for finding fragments.
 --alt         alternative output format: (NP (DT "a") NN)
               default: (NP (DT a) (NN ))

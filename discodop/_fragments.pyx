@@ -10,9 +10,12 @@ Implements:
 from __future__ import print_function
 import re
 import io
+import sys
 from collections import defaultdict, Counter as multiset
 from functools import partial
 from array import array
+if sys.version[0] >= '3':
+	xrange = range
 from discodop.tree import Tree
 from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import binarize, introducepreterminals
@@ -84,23 +87,77 @@ cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
 	tail.root = root
 
 
-cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
-		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
-		bint debug=False, bint discontinuous=False, bint complement=False):
+def allpairs(Ctrees trees1, Ctrees trees2=None):
+	"""Produce indices of all non-identical tree pairs.
+
+	if trees2 is None, pairs (n, m) are such that n < m."""
+	if trees2 is None:
+		return {n: xrange(n + 1, trees1.len) for n in range(trees1.len)}
+	return {n: xrange(trees2.len) for n in range(trees1.len)}
+
+
+def twoterminals(Ctrees trees1, list labels, Ctrees trees2=None):
+	"""Produce tree pairs that share at least two words.
+
+	Specifically, tree pairs sharing one content word and one additional word,
+	where content words are recognized by a POS tag from the Penn treebank tag
+	set.
+
+	if trees2 is None, pairs (n, m) are such that n < m."""
+	cdef:
+		int n, i, j
+		NodeArray a
+		NodeArray *ctrees1
+		Node *anodes
+		set tmp, candidates
+		dict result = {}
+		bint trees2none = trees2 is None
+	if trees2none:
+		trees2 = trees1
+	ctrees1 = trees1.trees
+	contentword = re.compile('NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
+	for n in range(trees1.len):
+		a = ctrees1[n]
+		anodes = &trees1.nodes[a.offset]
+		candidates = set()
+		# select candidates from 'trees2' that share productions with tree 'a'
+		# want to select at least 1 content POS tag, 1 other lexical prod
+		for i in range(a.len):
+			if (anodes[i].left >= 0 or
+					not contentword.match(labels[anodes[i].prod])):
+				continue
+			tmp = <set>(trees2.treeswithprod[anodes[i].prod])
+			for j in range(a.len):
+				if i == j or anodes[j].left >= 0:
+					continue
+				candidates |= tmp & <set>(trees2.treeswithprod[anodes[j].prod])
+		if trees2none:
+			result[n] = {i for i in candidates if i > n}
+		else:
+			result[n] = candidates
+	return result
+
+
+cpdef fastextractfragments(Ctrees trees1, list sents1,
+		dict comparisons, list labels, Ctrees trees2=None, list sents2=None,
+		bint approx=True, bint debug=False, bint discontinuous=False,
+		bint complement=False, int minterms=0):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
-		``fastextractfragments(trees1, sents1, offset, end, labels)``
+		``fastextractfragments(trees1, sents1, comparisons, labels)``
 	- scenario 2: common fragments in two treebanks:
-		``fastextractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
+		``fastextractfragments(trees1, sents1, comparisons, labels, trees2, sents2)``
 
-	``offset`` and ``end`` can be used to divide the work over multiple
-	processes; they are indices of ``trees1`` to work on (default is all); when
-	``debug`` is enabled a contingency table is shown for each pair of trees;
-	when ``complement`` is true, the complement of the recurring fragments in
-	each pair of trees is extracted as well."""
+	``comparisons`` is a dictionary mapping sentence numbers (referring to
+	trees1) to sequences of other sentences to compare to (referring to either
+	trees2 or trees1); e.g., comparisons={0: {1, 2}} specifies that tree 0
+	should be compared to tree 1 and 2.
+	when ``debug`` is enabled a contingency table is shown for each pair of
+	trees; when ``complement`` is true, the complement of the recurring
+	fragments in each pair of trees is extracted as well."""
 	cdef:
-		int n, m, start = 0, end2
+		int n, m
 		short SLOTS  # the number of bitsets needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
 		ULong *scratch
@@ -115,7 +172,6 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		set inter = set()
 	if approx:
 		fragments = <dict>defaultdict(one)
-
 	if trees2 is None:
 		trees2 = trees1
 	ctrees1 = trees1.trees
@@ -124,15 +180,14 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	CST = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
 	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 	assert CST is not NULL and scratch is not NULL
-	end2 = trees2.len
-	# find recurring fragments
-	for n in range(offset, min(end or trees1.len, trees1.len)):
+	# loop over tree pairs to extract fragments from
+	for n, candidates in comparisons.items():
 		a = ctrees1[n]
 		asent = <list>(sents1[n])
 		anodes = &trees1.nodes[a.offset]
-		if sents2 is None:
-			start = n + 1
-		for m in range(start, end2):
+		for m in candidates:
+			if m < 0 or m >= trees2.len:
+				raise ValueError('illegal index %d' % m)
 			b = ctrees2[m]
 			bnodes = &trees2.nodes[b.offset]
 			# initialize table
@@ -142,11 +197,11 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 			# dump table
 			if debug:
 				print(n, m)
-				dumpCST(CST, a, b, anodes, bnodes, asent, (sents2 or sents1)[m],
-					labels, SLOTS, True)
+				dumpCST(CST, a, b, anodes, bnodes, asent,
+						(sents2 or sents1)[m], labels, SLOTS, True)
 			# extract results
-			extractbitsets(CST, anodes, bnodes, b.root, n, inter,
-					scratch, SLOTS)
+			extractbitsets(CST, anodes, bnodes, b.root, n,
+					inter, minterms, scratch, SLOTS)
 			# extract complementary fragments?
 			if complement:
 				# combine bitsets of inter together with bitwise or
@@ -200,8 +255,8 @@ cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
 				i += 1
 
 
-cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
-		short j, int n, set results, ULong *scratch, short SLOTS):
+cdef inline extractbitsets(ULong *CST, Node *a, Node *b, short j, int n,
+		set results, int minterms, ULong *scratch, short SLOTS):
 	"""Visit nodes of ``b`` top-down and store bitsets of common nodes.
 
 	Stores bitsets of connected subsets of ``a`` as they are encountered,
@@ -210,35 +265,39 @@ cdef inline extractbitsets(ULong *CST, Node *a, Node *b,
 	of this tree which is stored with extracted fragments."""
 	cdef ULong *bitset = &CST[j * SLOTS]
 	cdef ULong cur = bitset[0]
-	cdef short idx = 0
+	cdef short idx = 0, terms
 	cdef short i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	while i != -1:
 		ulongset(scratch, 0UL, SLOTS)
-		extractat(CST, scratch, a, b, i, j, SLOTS)
-		setrootid(scratch, i, n, SLOTS)
-		results.add(wrap(scratch, SLOTS))
+		terms = extractat(CST, scratch, a, b, i, j, SLOTS)
+		if terms >= minterms:
+			setrootid(scratch, i, n, SLOTS)
+			results.add(wrap(scratch, SLOTS))
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	if b[j].left >= 0:
-		extractbitsets(CST, a, b, b[j].left, n, results, scratch, SLOTS)
+		extractbitsets(CST, a, b, b[j].left, n,
+				results, minterms, scratch, SLOTS)
 		if b[j].right >= 0:
-			extractbitsets(CST, a, b, b[j].right, n, results, scratch, SLOTS)
+			extractbitsets(CST, a, b, b[j].right, n,
+					results, minterms, scratch, SLOTS)
 
 
-cdef inline void extractat(ULong *CST, ULong *result, Node *a, Node *b,
+cdef inline short extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
 	"""Traverse tree ``a`` and ``b`` in parallel to extract a connected subset.
 	"""
+	cdef short terms = 0
 	SETBIT(result, i)
 	CLEARBIT(&CST[j * SLOTS], i)
 	if a[i].left < 0:
-		return
+		return 1
 	elif TESTBIT(&CST[b[j].left * SLOTS], a[i].left):
-		extractat(CST, result, a, b, a[i].left, b[j].left, SLOTS)
+		terms += extractat(CST, result, a, b, a[i].left, b[j].left, SLOTS)
 	if a[i].right < 0:
-		return
+		return 0
 	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
-		extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
-
+		terms += extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
+	return terms
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bint fast=True, bint indices=False):
@@ -420,12 +479,12 @@ cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False):
-	"""Find the largest fragments in treebank(s) with quadratic tree kernel..
+	"""Find the largest fragments in treebank(s) with quadratic tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
-		``fastextractfragments(trees1, sents1, offset, end)``
+		``extractfragments(trees1, sents1, offset, end)``
 	- scenario 2: common fragments in two treebanks:
-		``fastextractfragments(trees1, sents1, offset, end, trees2, sents2)``
+		``extractfragments(trees1, sents1, offset, end, trees2, sents2)``
 
 	``offset`` and ``end`` can be used to divide the work over multiple
 	processes; they are indices of ``trees1`` to work on (default is all); when

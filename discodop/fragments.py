@@ -26,7 +26,8 @@ from discodop.tree import Tree
 from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals
 from discodop._fragments import extractfragments, fastextractfragments, \
-		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
+		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets, \
+		allpairs, twoterminals
 from discodop.parser import workerfunc
 
 USAGE = '''\
@@ -61,6 +62,7 @@ Options:
   --approx      report approximate frequencies (lower bound)
   --nofreq      do not report frequencies.
   --relfreq     report relative frequencies wrt. root node of fragments.
+  --twoterms    only consider fragments with at least two lexical terminals.
   --quadratic   use the slower, quadratic algorithm for finding fragments.
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
@@ -69,7 +71,7 @@ Options:
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
-		'quiet', 'debug', 'quadratic', 'cover', 'alt', 'relfreq')
+		'quiet', 'debug', 'quadratic', 'cover', 'alt', 'relfreq', 'twoterms')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -151,6 +153,12 @@ def regular(filenames, numproc, limit, encoding):
 	# detect corpus reading errors in this process (e.g., wrong encoding)
 	initworker(filenames[0], filenames[1] if len(filenames) == 2 else None,
 			limit, encoding)
+	if not PARAMS['quadratic'] and not PARAMS['complete']:
+		if PARAMS.get('twoterms'):
+			PARAMS['comparisons'] = twoterminals(PARAMS['trees1'],
+					PARAMS['labels'], PARAMS['trees2'])
+		else:
+			PARAMS['comparisons'] = allpairs(PARAMS['trees1'], PARAMS['trees2'])
 	if numproc == 1:
 		mymap = imap
 		myapply = APPLY
@@ -244,8 +252,8 @@ def batch(outputdir, filenames, limit, encoding):
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'])
 		else:
-			fragments = fastextractfragments(trees2, sents2, 0, 0,
-					PARAMS['labels'], trees1, sents1,
+			fragments = fastextractfragments(trees2, sents2,
+					allpairs(trees2, trees1), PARAMS['labels'], trees1, sents1,
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'])
 		counts = None
@@ -339,10 +347,13 @@ def worker(interval):
 				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
 				discontinuous=PARAMS['disc'], debug=PARAMS['debug'])
 	else:
-		result = fastextractfragments(trees1, sents1, offset, end,
+		comparisons = {a: b for a, b in PARAMS['comparisons'].items()
+					if offset <= a < end}
+		result = fastextractfragments(trees1, sents1, comparisons,
 				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
 				discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
-				debug=PARAMS.get('debug'))
+				debug=PARAMS.get('debug'),
+				minterms=2 if PARAMS.get('twoterms') else 0)
 	logging.debug("finished %d--%d", offset, end)
 	return result
 
@@ -372,6 +383,7 @@ def coverfragworker():
 
 	Does not need multiprocessing but using it avoids reading the treebank
 	again."""
+	# TODO: expand this to extract all depth-n fragments for arbitrary n.
 	trees1 = PARAMS['trees1']
 	trees2 = PARAMS['trees2']
 	return coverbitsets(trees1, PARAMS['sents1'], PARAMS['labels'],
@@ -384,7 +396,7 @@ def workload(numtrees, mult, numproc):
 
 	When *n* trees are compared against themselves, ``n * (n - 1)`` total
 	comparisons are made. Each tree *m* has to be compared to all trees *x*
-	such that ``m < x < n``
+	such that ``m < x <= n``
 	(meaning there are more comparisons for lower *n*).
 
 	:returns: a sequence of ``(start, end)`` intervals such that
@@ -425,8 +437,9 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	work = workload(numtrees, mult, numproc)
 	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
 			quadratic=False, complement=complement)
+	initworkersimple(trees, list(sents))
+	PARAMS['comparisons'] = allpairs(PARAMS['trees1'], None)
 	if numproc == 1:
-		initworkersimple(trees, list(sents))
 		mymap = map
 		myapply = APPLY
 	else:
