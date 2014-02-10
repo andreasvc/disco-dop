@@ -115,7 +115,7 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False, bint complement=False,
-		bint twoterms=False):
+		bint twoterms=False, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
@@ -123,17 +123,15 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 	- scenario 2: common fragments in two treebanks:
 		``fastextractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
 
-	``comparisons`` is a dictionary mapping sentence numbers (referring to
-	trees1) to sequences of other sentences to compare to (referring to either
-	trees2 or trees1); e.g., comparisons={0: {1, 2}} specifies that tree 0
-	should be compared to tree 1 and 2.
+	``offset`` and ``end`` can be used to divide the work over multiple
+	processes; they are indices of ``trees1`` to work on (default is all);
 	when ``debug`` is enabled a contingency table is shown for each pair of
 	trees; when ``complement`` is true, the complement of the recurring
 	fragments in each pair of trees is extracted as well."""
 	cdef:
 		int n, m, start = 0, end2
 		short minterms = 2 if twoterms else 0
-		short SLOTS  # the number of bitsets needed to cover the largest tree
+		short SLOTS  # the number of UInts needed to cover the largest tree
 		ULong *CST = NULL  # Common Subtree Table
 		ULong *scratch
 		NodeArray a
@@ -161,7 +159,13 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		a = ctrees1[n]
 		asent = <list>(sents1[n])
 		anodes = &trees1.nodes[a.offset]
-		if twoterms:
+		if adjacent:
+			m = n + 1
+			if m < trees2.len:
+				extractfrompair(a, anodes, trees2, n, m,
+						complement, debug, asent, sents2 or sents1,
+						labels, inter, minterms, CST, scratch, SLOTS)
+		elif twoterms:
 			for m in twoterminals(a, anodes, trees2, contentwordprods):
 				if sents2 is None and m <= n:
 					continue

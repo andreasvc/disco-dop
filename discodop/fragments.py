@@ -62,6 +62,7 @@ Options:
   --nofreq      do not report frequencies.
   --relfreq     report relative frequencies wrt. root node of fragments.
   --twoterms    only consider fragments with at least two lexical terminals.
+  --adjacent    only consider pairs of adjacent fragments (n, n + 1).
   --quadratic   use the slower, quadratic algorithm for finding fragments.
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
@@ -69,8 +70,8 @@ Options:
   --quiet       disable all messages.\
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
-FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement',
-		'quiet', 'debug', 'quadratic', 'cover', 'alt', 'relfreq', 'twoterms')
+FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'quadratic',
+		'cover', 'alt', 'relfreq', 'twoterms', 'adjacent', 'debug', 'quiet')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -113,6 +114,10 @@ def main(argv=None):
 		args[0] = '/dev/stdin'
 	for a in args:
 		assert os.path.exists(a), "not found: %r" % a
+	if PARAMS['complete'] or PARAMS['quadratic']:
+		assert not PARAMS['twoterms'] and not PARAMS['adjacent'], (
+				'--twoterms and --adjacent are incompatible '
+				'with --complete and --quadratic.')
 	if PARAMS['complete']:
 		assert len(args) == 2 or batchdir, (
 				"need at least two treebanks with --complete.")
@@ -249,7 +254,8 @@ def batch(outputdir, filenames, limit, encoding):
 					PARAMS['labels'], trees1, sents1,
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'],
-					twoterms=PARAMS.get('twoterms', False))
+					twoterms=PARAMS['twoterms'],
+					adjacent=PARAMS['adjacent'])
 		counts = None
 		fragmentkeys = list(fragments)
 		if PARAMS['approx'] or not fragments:
@@ -344,8 +350,8 @@ def worker(interval):
 		result = fastextractfragments(trees1, sents1, offset, end,
 				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
 				discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
-				debug=PARAMS.get('debug'),
-				twoterms=PARAMS.get('twoterms', False))
+				debug=PARAMS['debug'], twoterms=PARAMS['twoterms'],
+				adjacent=PARAMS['adjacent'])
 	logging.debug("finished %d--%d", offset, end)
 	return result
 
@@ -428,7 +434,8 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
 	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
-			quadratic=False, complement=complement)
+			quadratic=False, complement=complement, debug=False,
+			adjacent=False, twoterms=False)
 	initworkersimple(trees, list(sents))
 	if numproc == 1:
 		mymap = map

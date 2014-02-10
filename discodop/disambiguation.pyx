@@ -3,8 +3,7 @@
 Use as follows:
 
 >>> derivations, entries = getderivations(chart, 1000)  #doctest: +SKIP
->>> parses, derivs, msg = marginalize("mpp", derivations, entries, chart)
-... #doctest: +SKIP
+>>> parses, derivs, msg = marginalize("mpp", derivations, entries, chart)  #doctest: +SKIP
 """
 
 from __future__ import print_function
