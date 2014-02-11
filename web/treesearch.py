@@ -925,7 +925,8 @@ def which(program):
 
 fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
 		quadratic=False, complement=False, quiet=True, nofreq=False,
-		approx=True, indices=False, fmt='bracket')
+		debug=False, ajacent=False, twoterms=False, approx=True, indices=False,
+		fmt='bracket')
 
 # this is redundant but used to support both javascript-enabled /foo
 # as well as non-javascript fallback /?output=foo
