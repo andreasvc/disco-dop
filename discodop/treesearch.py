@@ -111,16 +111,6 @@ class CorpusSearcher(object):
 		return concurrent.futures.as_completed(jobs)
 
 
-class NoFuture(object):
-	"""A non-asynchronous version of concurrent.futures.Future."""
-	def __init__(self, func, arg):
-		self._result = func(arg)
-
-	def result(self, timeout=None):  # pylint: disable=W0613
-		"""Return the precomputed result."""
-		return self._result
-
-
 class TgrepSearcher(CorpusSearcher):
 	"""Search a corpus with tgrep2."""
 	def __init__(self, files, macros=None, numthreads=None):
@@ -293,8 +283,6 @@ class DactSearcher(CorpusSearcher):
 	"""Search a dact corpus with xpath."""
 	def __init__(self, files, macros=None, numthreads=None):
 		super(DactSearcher, self).__init__(files, macros, numthreads)
-		self.ids = {}
-		self.indices = {}
 		for filename in self.files:
 			try:
 				self.files[filename] = alpinocorpus.CorpusReader(
@@ -302,20 +290,6 @@ class DactSearcher(CorpusSearcher):
 			except TypeError:
 				assert macros is None, 'macros not supported'
 				self.files[filename] = alpinocorpus.CorpusReader(filename)
-			# NB: this is wrong but reading the IDs is expensive
-			# so better to cache the information somewhere else,
-			# and call updateindex again
-			self.updateindex(filename, [None] + ['%d.xml' % (n + 1)
-					for n in range(self.files[filename].size())])
-
-	def updateindex(self, filename, ids):
-		"""Store mapping of sentence numbers to IDs.
-
-		:param ids: a list of sentence IDs occurring in file"""
-		self.ids[filename] = ids
-		# store reverse mapping
-		self.indices[filename] = {a: n for n, a
-				in enumerate(self.ids[filename])}
 
 	def counts(self, query, subset=None, limit=None, indices=False):
 		subset = subset or self.files
@@ -411,10 +385,8 @@ class DactSearcher(CorpusSearcher):
 
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
-		# NB: results aren't sorted, so we need to iterate exhaustively
-		indices = self.indices[filename]
 		results = ((n, entry) for n, entry
-				in ((indices[entry.name()], entry)
+				in ((entry.name(), entry)
 					for entry in self.files[filename].xpath(query))
 				if limit is None or n < limit)
 		return islice(results, maxresults)
@@ -423,13 +395,19 @@ class DactSearcher(CorpusSearcher):
 class RegexSearcher(CorpusSearcher):
 	"""Search a plain text file in UTF-8 with regular expressions.
 
-	Assumes that lines correspond to sentences."""
+	Assumes that non-empty lines correspond to sentences.
+
+	:param macros: a file containing lines of the form 'name=regex',
+		and will be substituted when '{name}' appears in a query.
+	"""
 	def __init__(self, files, macros=None, numthreads=None):
 		super(RegexSearcher, self).__init__(files, macros, numthreads)
+		self.macros = {}
 		if macros:
-			raise NotImplementedError
+			self.macros = dict(line.split('=', 1) for line
+					in io.open(macros, encoding='utf-8'))
 		for filename in self.files:
-			self.files[filename] = list(io.open(filename, encoding='utf-8'))
+			self.files[filename] = None
 
 	def counts(self, query, subset=None, limit=None, indices=False):
 		subset = subset or self.files
@@ -490,13 +468,24 @@ class RegexSearcher(CorpusSearcher):
 
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
-		regex = re.compile(query)
+		regex = re.compile(query.format(**self.macros))
 		results = ((n, match) for n, match in
-				enumerate((regex.search(a) for a in self.files[filename]), 1)
+				enumerate((regex.search(a) for a in filter(None,
+					io.open(filename, encoding='utf-8'))), 1)
 				if match is not None)
 		if limit is not None:
 			results = takewhile(lambda x: x[0] < limit, results)
 		return islice(results, maxresults)
+
+
+class NoFuture(object):
+	"""A non-asynchronous version of concurrent.futures.Future."""
+	def __init__(self, func, arg):
+		self._result = func(arg)
+
+	def result(self, timeout=None):  # pylint: disable=W0613
+		"""Return the precomputed result."""
+		return self._result
 
 
 def filterlabels(line, nofunc, nomorph):

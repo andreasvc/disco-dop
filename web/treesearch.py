@@ -53,17 +53,9 @@ MORPH_TAGS = re.compile(
 		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
 FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
-ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
-READGRADERE = re.compile(r'([- A-Za-z]+): ([0-9]+(?:\.[0-9]+)?)[\n /]')
-AVERAGERE = re.compile(
-		r'([a-z]+), average length ([0-9]+(?:\.[0-9]+)?) ([A-Za-z]+)')
-PERCENTAGE1RE = re.compile(
-		r'([A-Za-z][A-Za-z ()]+) ([0-9]+(?:\.[0-9]+)?)% \([0-9]+\)')
-PERCENTAGE2RE = re.compile(
-		r'([0-9]+(?:\.[0-9]+)?)% \([0-9]+\) ([A-Za-z ()]+)\n')
 # the extensions for corpus files for each query engine:
-EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact$)$')
+EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|txt)$')
 EXT = {
 		'tgrep2': '.mrg.t2c.gz',
 		'xpath': '.dact',
@@ -293,10 +285,10 @@ def trees(form):
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
 				TREELIMIT, url, url + '&linenos=1'))
-	for n, (filename, results) in enumerate(groupby(CORPORA[form.get(
-			'engine', 'tgrep2')].trees(form['query'], selected,
-			maxresults=TREELIMIT, nomorph='nomorph' in form,
-			nofunc='nofunc' in form), itemgetter(0))):
+	for n, (filename, results) in enumerate(groupby(sorted(
+			CORPORA[form.get('engine', 'tgrep2')].trees(form['query'],
+			selected, maxresults=TREELIMIT, nomorph='nomorph' in form,
+			nofunc='nofunc' in form)), itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
 		for m, (filename, sentno, tree, sent, high) in enumerate(results):
@@ -337,9 +329,10 @@ def sents(form, dobrackets=False):
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
 				SENTLIMIT, url, url + '&linenos=1'))
-	for n, (filename, results) in enumerate(groupby(CORPORA[form.get(
-			'engine', 'tgrep2')].sents(form['query'], selected,
-			maxresults=SENTLIMIT, brackets=dobrackets), itemgetter(0))):
+	for n, (filename, results) in enumerate(groupby(sorted(
+			CORPORA[form.get('engine', 'tgrep2')].sents(form['query'],
+				selected, maxresults=SENTLIMIT, brackets=dobrackets)),
+			itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
 		for m, (filename, sentno, sent, high) in enumerate(results):
@@ -442,7 +435,7 @@ def fragmentsinresults(form, doexport=False):
 
 @APP.route('/style')
 def style():
-	"""Use style(1) program to get staticstics for each text."""
+	"""Show simple surface characteristics of texts."""
 	def generate():
 		"""Generate plots from results."""
 		if not glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
@@ -450,7 +443,9 @@ def style():
 					"Using sentences extracted from parse trees.\n"
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
-		yield '<a href="style?export">Export to CSV</a>'
+		yield '<a href="style?export">Export to CSV</a><br>'
+		yield 'Results based on first %d sentences.' % min(NUMSENTS)
+
 		# produce a plot for each field
 		fields = ()
 		for a in STYLETABLE:
@@ -506,7 +501,7 @@ def draw():
 					unicodelines=True, html=True)
 	elif 'xpath' in CORPORA:
 		filename = CORPUS_DIR + TEXTS[textno] + '.dact'
-		sentid = CORPORA['xpath'].ids[filename][sentno]
+		sentid = '%d' % sentno
 		treestr = CORPORA['xpath'].files[filename].read(sentid)
 		tree, sent = treebank.alpinotree(
 				ElementTree.fromstring(treestr),
@@ -535,9 +530,9 @@ def browsesents():
 					start, maxtree)]
 		elif 'xpath' in CORPORA:
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
-			results = [ALPINOLEAVES.search(
-					CORPORA['xpath'].files[filename].read(
-						CORPORA['xpath'].ids[filename][n + 1])).group(1)
+			results = [ElementTree.fromstring(
+					CORPORA['xpath'].files[filename].read('%8d' % (n + 1))
+					).find('sentence').text.split()
 					for n in range(start, maxtree)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
@@ -604,7 +599,7 @@ def browse():
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 			drawntrees = [DrawTree(*treebank.alpinotree(
 					ElementTree.fromstring(CORPORA['xpath'].files[
-						filename].read(CORPORA['xpath'].ids[filename][n + 1])),
+						filename].read('%8d' % (n + 1))),
 					functions=None if nofunc else 'add',
 					morphology=None if nomorph else 'replace')).text(
 					unicodelines=True, html=True)
@@ -738,76 +733,65 @@ def querydict(queries):
 	return result
 
 
-def tokenized(text):
-	"""Return iterable with tokenized sentences of a text, one sentence at a
-	time, in the form of a byte string (with newline)."""
-	base = EXTRE.sub('', text)
+def tokenize(filename):
+	"""Create a tokenized copy of a text, one sentence per line."""
+	base = EXTRE.sub('', filename)
+	try:
+		ucto = which('ucto')
+	except ValueError:
+		ucto = None
 	if os.path.exists(base + '.tok'):
-		return open(base + '.tok')
+		return
+	elif ucto and filename.endswith('.txt'):
+		newfile = base + '.tok'
+		proc = subprocess.Popen(args=[which('ucto'),
+				'-L', LANG, '-s', '', '-n',
+				filename, newfile], shell=False)
+		proc.wait()
+		return
 	elif os.path.exists(base + '.mrg.t2c.gz'):
 		tgrep = subprocess.Popen(
 				args=[which('tgrep2'), '-t', '-c', base + '.mrg.t2c.gz', '*'],
 				shell=False, bufsize=-1, stdout=subprocess.PIPE)
-		return tgrep.stdout
+		converted = tgrep.stdout
 	elif os.path.exists(base + '.mrg'):
-		return (' '.join(GETLEAVES.findall(line)) + '\n'
+		converted = (' '.join(GETLEAVES.findall(line)) + '\n'
 				for line in open(base + '.mrg'))
 	elif os.path.exists(base + '.dact'):
-		# may be in arbitrary order, so sort
-		result = {entry.name(): ALPINOLEAVES.search(
-				entry.contents()).group(1) + '\n' for entry
+		result = {entry.name(): ElementTree.fromstring(
+				entry.contents()).find('sentence').text + '\n' for entry
 				in alpinocorpus.CorpusReader(base + '.dact').entries()}
-		return [result[a] for a in sorted(result, key=treebank.numbase)]
-	raise ValueError('no file found for %s' % text)
+		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
+	else:
+		raise ValueError('no file found for "%s" and ucto not installed.'
+				% filename)
+	newfile = EXTRE.sub('.tok', filename)
+	with open(newfile, 'w') as out:
+		out.writelines(converted)
 
 
-def getstyletable(texts):
-	"""Run style(1) on all files and store results in a dictionary."""
-	files = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
-	if not files:
-		files = [os.path.join(CORPUS_DIR, a) for a in texts]
-	styletable = {}
+def getreadabilitymeasures(texts, numsents):
+	"""Get readability of all files and store results in a dictionary."""
+	try:
+		import readability
+	except ImportError:
+		APP.logger.warning(
+			'readability module not found; install with:\npip install'
+			' https://github.com/andreasvc/readability/tarball/master')
+		return {}
+	files = glob.glob(os.path.join(CORPUS_DIR, '*.tok'))
+	results = {}
+	# consider a fixed number of sentences to get comparable results
+	cutoff = min(numsents)
 	for filename in sorted(files):
-		cmd = [which('style'), '--language', LANG]
-		stdin = subprocess.PIPE
-		proc = subprocess.Popen(args=cmd, shell=False, bufsize=-1,
-				stdin=stdin, stdout=subprocess.PIPE,
-				stderr=subprocess.PIPE)
-		try:
-			if filename.endswith('.txt'):
-				# .txt files may have one paragraph per line;
-				# style expects paragraphs separated by two linebreaks.
-				proc.stdin.write(open(filename).read().replace('\n', '\n\n'))
-			else:
-				proc.stdin.writelines(tokenized(filename))
-		except IOError as err:
-			APP.logger.error('%s\n%s', err, proc.stderr.read())
-			return {}
-		proc.stdin.close()
-		out = proc.stdout.read()
-		proc.stdout.close()
-		proc.wait()
 		name = os.path.basename(filename)
-		styletable[name] = parsestyleoutput(out)
-	return styletable
-
-
-def parsestyleoutput(out):
-	"""Extract readability grades, averages, and percentages from style output
-	(i.e., all figures except for absolute counts)."""
-	result = {}
-	for key, val in READGRADERE.findall(out):
-		result[key.strip()] = float(val)
-	for key1, val, key2 in AVERAGERE.findall(out):
-		result['average %s per %s' % (key2, key1[:-1])] = float(val)
-	m = re.search(r'([0-9]+(?:\.[0-9]+)?) syllables', out)
-	if m:
-		result['average syllables per word'] = float(m.group(1))
-	for key, val in PERCENTAGE1RE.findall(out):
-		result['%% %s' % key.strip()] = float(val)
-	for val, key in PERCENTAGE2RE.findall(out):
-		result['%% %s' % key.strip()] = float(val)
-	return result
+		# flatten results into a single dictionary of (key, value) pairs.
+		results[name] = {key: value
+				for data in readability.getmeasures(
+						islice(io.open(filename, encoding='utf-8'), cutoff),
+						lang=LANG).values()
+					for key, value in data.items()}
+	return results
 
 
 def getcorpus():
@@ -817,26 +801,16 @@ def getcorpus():
 	picklefile = os.path.join(CORPUS_DIR, 'treesearchcorpus.pickle')
 	if os.path.exists(picklefile):
 		try:
-			texts, numsents, numconst, numwords, styletable, ids = pickle.load(
+			texts, numsents, numconst, numwords, styletable = pickle.load(
 					open(picklefile))
 		except ValueError:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
-	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
-	if (tfiles or afiles) and not tokfiles:  # get tokenized sents from trees
-		for filename in tfiles or afiles:
-			newfile = EXTRE.sub('.tok', filename)
-			converted = tokenized(filename)
-			with open(newfile, 'w') as out:
-				out.writelines(converted)
-	elif not tokfiles:  # use plain .txt files and tokenize into .tok
-		for filename in glob.glob(os.path.join(CORPUS_DIR, '*.txt')):
-			newfile = filename[:filename.rindex('.txt')] + '.tok'
-			proc = subprocess.Popen(args=[which('ucto'),
-					'-L', LANG, '-s', '', '-n',
-					filename, newfile], shell=False)
-			proc.wait()
+	txtfiles = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
+	# get tokenized sents from trees or ucto
+	for filename in tfiles or afiles or txtfiles:
+		tokenize(filename)
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
 		corpora['tgrep2'] = TgrepSearcher(tfiles, 'static/tgrepmacros.txt')
@@ -844,7 +818,7 @@ def getcorpus():
 			corpora.get('xpath', ())):
 		corpora['xpath'] = DactSearcher(afiles, 'static/xpathmacros.txt')
 	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
-		corpora['regex'] = RegexSearcher(tokfiles)
+		corpora['regex'] = RegexSearcher(tokfiles, 'static/regexmacros.txt')
 
 	assert tfiles or afiles or tokfiles, ('no files with extension '
 			'.mrg, .dact, or .txt found in %s' % CORPUS_DIR)
@@ -889,19 +863,10 @@ def getcorpus():
 			numconst = [0 for filename in tokfiles]
 		else:
 			raise ValueError('no texts found.')
-		ids = {}
-		if 'xpath' in corpora:
-			for filename in afiles:
-				# FIXME: memory leak here?
-				tmp = alpinocorpus.CorpusReader(filename)
-				ids[filename] = [None] + sorted((entry.name() for entry
-						in tmp.entries()), key=treebank.numbase)
 		texts = [os.path.splitext(os.path.basename(a))[0]
 				for a in tfiles or afiles or tokfiles]
-		styletable = getstyletable(texts)
-	for filename in afiles:
-		corpora['xpath'].updateindex(filename, ids[filename])
-	pickle.dump((texts, numsents, numconst, numwords, styletable, ids),
+		styletable = getreadabilitymeasures(texts, numsents)
+	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open(picklefile, 'wb'), protocol=-1)
 	return texts, numsents, numconst, numwords, styletable, corpora
 
@@ -923,9 +888,9 @@ def which(program):
 	raise ValueError('%r not found in path; please install it.' % program)
 
 
-fragments.PARAMS.update(disc=False, debug=False, cover=False, complete=False,
-		quadratic=False, complement=False, quiet=True, nofreq=False,
-		debug=False, ajacent=False, twoterms=False, approx=True, indices=False,
+fragments.PARAMS.update(quiet=True, debug=False, disc=False, complete=False,
+		cover=False, quadratic=False, complement=False, adjacent=False,
+		twoterms=False, nofreq=False, approx=True, indices=False,
 		fmt='bracket')
 
 # this is redundant but used to support both javascript-enabled /foo

@@ -402,15 +402,14 @@ class AlpinoCorpusReader(CorpusReader):
 		trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((n, ElementTree.tostring(a))
-				for n, a in self._block_cache.items())
+		return self._block_cache
 
 	def _read_blocks(self):
 		"""Read corpus and yield blocks corresponding to each sentence."""
 		assert self._encoding in (None, 'utf8', 'utf-8'), (
 				'Encoding specified in XML files, cannot be overriden.')
 		for filename in self._filenames:
-			block = ElementTree.parse(filename).getroot()
+			block = open(filename).read()
 			# ../path/dir/file.xml => dir/file
 			path, filename = os.path.split(filename)
 			_, lastdir = os.path.split(path)
@@ -419,14 +418,23 @@ class AlpinoCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		""":returns: a parse tree given a string."""
-		tree = alpinoparse(block)
-		sent = self._word(block)
+		if ElementTree.iselement(block):
+			xmlblock = block
+		else:  # NB: parse because raw XML might contain entities etc.
+			xmlblock = ElementTree.fromstring(block)
+		tree = alpinoparse(xmlblock)
+		sent = self._word(xmlblock)
 		return tree, sent
 
 	def _word(self, block, orig=False):
+		if ElementTree.iselement(block):
+			xmlblock = block
+		else:
+			xmlblock = ElementTree.fromstring(block)
+		sent = xmlblock.find('sentence').text.split()
 		if orig or self.punct != "remove":
-			return block.find('sentence').text.split()
-		return [word for word in block.find('sentence').text.split()
+			return sent
+		return [word for word in sent
 				if not ispunct(word, None)]  # fixme: don't have tag
 
 
@@ -439,12 +447,8 @@ class DactCorpusReader(AlpinoCorpusReader):
 				'Encoding specified in XML files, cannot be overriden.')
 		for filename in self._filenames:
 			corpus = alpinocorpus.CorpusReader(filename)
-			for entry in sorted(corpus.entries(),
-					key=lambda entry: numbase(entry.name())):
-				key = entry.name()
-				if key.endswith('.xml'):
-					key = key[:-len('.xml')]
-				yield key, ElementTree.fromstring(entry.contents())
+			for entry in corpus.entries():
+				yield entry.name(), entry.contents()
 
 
 def exportsplit(line):

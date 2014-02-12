@@ -1,0 +1,2 @@
+pronoun=\b(?:i|me|we|us|you|he|him|she|her|it|they|them|thou|thee|ye|myself|yourself|himself|herself|itself|ourselves|yourselves|themselves|oneself|my|mine|his|hers|yours|ours|theirs|its|our|that|their|these|this|those|your)\b
+auxverb=\b(?:will|shall|cannot|may|need to|would|should|could|might|must|ought|ought to|can't|can)\b

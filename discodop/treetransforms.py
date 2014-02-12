@@ -61,6 +61,8 @@ options may consist of:
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
                  out or negative, and the first index is 0.
+  --renumber     Replace sentence IDs with numbers starting from 1,
+                 padded with 8 spaces.
   --maxlen=n     only select sentences with up to n tokens.
   --punct=x      possible options:
                  'remove': remove any punctuation.
@@ -889,7 +891,8 @@ def main():
 	actions = {'none': None, 'introducepreterminals': introducepreterminals,
 			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
 			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
-	flags = 'markorigin markheads lemmas leftunary rightunary tailmarker'.split()
+	flags = ('markorigin markheads lemmas leftunary rightunary tailmarker '
+			'renumber'.split())
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= factor= markorigin= '
 			'maxlen=').split()
@@ -927,6 +930,9 @@ def main():
 		maxlen = int(opts['--maxlen'])
 		trees = ((key, tree, sent) for key, tree, sent in trees
 				if len(sent) <= maxlen)
+	if '--renumber' in opts:
+		trees = (('%8d' % n, tree, sent)
+				for n, (_, tree, sent) in enumerate(trees, 1))
 
 	# select transformation
 	transform = actions[action]
@@ -960,9 +966,17 @@ def main():
 	if opts.get('--outputfmt') == 'dact':
 		import alpinocorpus
 		outfile = alpinocorpus.CorpusWriter(outfilename)
-		for key, tree, sent in trees:
-			outfile.write(str(key), writetree(tree, sent, key, 'alpino'))
-			cnt += 1
+		if (action == 'none' and opts.get('--inputfmt') in ('alpino', 'dact')
+				and set(opts) < {'--slice', '--inputfmt', '--outputfmt',
+				'--renumber'}):
+			for n, (key, block) in islice(enumerate(
+					corpus.blocks().items(), 1), start, end):
+				outfile.write('%8d' % n if '--renumber' in opts else key, block)
+				cnt += 1
+		else:
+			for key, tree, sent in trees:
+				outfile.write(key, writetree(tree, sent, key, 'alpino'))
+				cnt += 1
 	else:
 		encoding = opts.get('outputenc', 'utf-8')
 		outfile = io.open(outfilename, 'w', encoding=encoding)

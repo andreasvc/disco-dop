@@ -168,6 +168,8 @@ options may consist of:
 --slice=<n:m>   select a range of sentences from input starting with *n*,
                 up to but not including *m*; as in Python, *n* or *m* can be left
                 out or negative, and the first index is 0.
+--renumber      Replace sentence IDs with numbers starting from 1,
+                padded with 8 spaces.
 --maxlen=n      only select sentences with up to *n* tokens.
 --punct=x       possible options:
 
