@@ -29,7 +29,7 @@ metadata = dict(name='disco-dop',
 				'Topic :: Text Processing :: Linguistic',
 		],
 		requires=[
-				'cython (>=0.18)',
+				'cython (>=0.20)',
 				'numpy (>=1.5)',
 				'pytest',
 				'sphinx',

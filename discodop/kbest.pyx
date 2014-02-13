@@ -172,7 +172,7 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 	return True
 
 
-cpdef inline _getderiv(result, v, RankedEdge ej, Chart chart,
+cpdef inline _getderiv(bytearray result, v, RankedEdge ej, Chart chart,
 		bytes debin):
 	"""Auxiliary function for ``getderiv()``.
 
@@ -208,7 +208,7 @@ def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
 
 	:param debin: perform on-the-fly debinarization, identify intermediate
 		nodes using the substring ``debin``."""
-	result = bytearray()
+	cdef bytearray result = bytearray()
 	_getderiv(result, v, ej, chart, debin)
 	return str(result.decode('ascii'))
 

@@ -218,8 +218,9 @@ cdef class SparseCFGChart(CFGChart):
 
 
 def parse(sent, Grammar grammar, tags=None, start=None, dict whitelist=None):
-	"""A CKY parser modeled after Bodenstab's 'fast grammar loop,' filtered by
-	the list of allowed items (if ``whitelist`` is given)."""
+	"""A CKY parser modeled after Bodenstab's 'fast grammar loop'.
+
+	If ``whitelist`` is given, the loop is filtered by the allowed items."""
 	assert grammar.maxfanout == 1, 'Not a PCFG! fanout: %d' % grammar.maxfanout
 	assert grammar.logprob, "Expecting grammar with log probabilities."
 	if grammar.nonterminals < 20000:

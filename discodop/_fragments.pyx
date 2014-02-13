@@ -10,17 +10,13 @@ Implements:
 from __future__ import print_function
 import re
 import io
-import sys
 from collections import defaultdict, Counter as multiset
 from functools import partial
 from array import array
-if sys.version[0] >= '3':
-	xrange = range
 from discodop.tree import Tree
 from discodop.grammar import lcfrsproductions
-from discodop.treetransforms import binarize, introducepreterminals
+from discodop.treetransforms import binarize
 
-cimport cython
 from libc.stdlib cimport malloc, free
 from cpython.array cimport array, clone
 from discodop.containers cimport ULong, UInt, Node, NodeArray, Ctrees, \
@@ -39,7 +35,7 @@ cdef array uintarray = array('I', ())  # template to create arrays of this type
 
 # NB: (?: ) is a non-grouping operator; the second ':' is part of what we match
 FRONTIERORTERMRE = re.compile(br' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
-TERMINDICESRE = re.compile(br'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term. indices
+TERMINDICESRE = re.compile(br'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term.indices
 FRONTIERRE = re.compile(br' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
 LABEL = re.compile(r' *\( *([^ ()]+) *')
 
@@ -96,9 +92,8 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 	set.
 
 	if trees2 is None, pairs (n, m) are such that n < m."""
-	cdef:
-		int i, j
-		set tmp, candidates = set()
+	cdef int i, j
+	cdef set tmp, candidates = set()
 	# select candidates from 'trees2' that share productions with tree 'a'
 	# want to select at least 1 content POS tag, 1 other lexical prod
 	for i in range(a.len):
@@ -229,10 +224,8 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 		getsubtree(tmp, anodes, bitset, labels,
 				<list>(None if discontinuous else asent),
 				getroot(bitset, SLOTS))
-		frag = bytes(tmp)
+		frag = getsent(bytes(tmp), asent) if discontinuous else bytes(tmp)
 		del tmp[:]
-		if discontinuous:
-			frag = getsent(frag, asent)
 		if approx:
 			fragments[frag] += 1
 		elif frag not in fragments:  # FIXME: is this condition useful?
@@ -293,8 +286,7 @@ cdef inline extractbitsets(ULong *CST, Node *a, Node *b, short j, int n,
 
 cdef inline short extractat(ULong *CST, ULong *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
-	"""Traverse tree ``a`` and ``b`` in parallel to extract a connected subset.
-	"""
+	"""Traverse tree `a` and `b` in parallel to extract a connected subset."""
 	cdef short terms = 0
 	SETBIT(result, i)
 	CLEARBIT(&CST[j * SLOTS], i)
@@ -426,10 +418,8 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 			raise ValueError("production not found. wrong index?")
 		getsubtree(tmp, nodes, scratch, labels,
 				None if discontinuous else sents[n], i)
-		frag = bytes(tmp)
+		frag = getsent(bytes(tmp), sents[n]) if discontinuous else bytes(tmp)
 		del tmp[:]
-		if discontinuous:
-			frag = getsent(frag, sents[n])
 		result[frag] = wrap(scratch, SLOTS)
 	return result
 
@@ -458,10 +448,8 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		setrootid(scratch, trees.trees[n].root, n, SLOTS)
 		getsubtree(tmp, nodes, scratch, labels,
 				None if discontinuous else sent, trees.trees[n].root)
-		frag = bytes(tmp)
+		frag = (bytes(tmp), tuple(sent)) if discontinuous else bytes(tmp)
 		del tmp[:]
-		if discontinuous:
-			frag = (frag, tuple(sent))
 		result[frag] = wrap(scratch, SLOTS)
 	return result
 
@@ -660,7 +648,7 @@ def repl(d):
 	return f
 
 
-def pygetsent(frag, list sent):
+def pygetsent(bytes frag, list sent):
 	"""Wrapper of ``getsent()`` to make doctests possible.
 
 	>>> pygetsent(b'(S (NP 2) (VP 4))',
@@ -687,7 +675,7 @@ def pygetsent(frag, list sent):
 		raise
 
 
-cdef getsent(frag, list sent):
+cdef getsent(bytes frag, list sent):
 	"""Renumber indices in fragment and select terminals it contains.
 
 	Returns a transformed copy of fragment and sentence. Replace words that do
