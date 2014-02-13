@@ -38,10 +38,10 @@ cdef extern from "macros.h":
 cdef array uintarray = array('I', ())  # template to create arrays of this type
 
 # NB: (?: ) is a non-grouping operator; the second ':' is part of what we match
-FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
-TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term. indices
-FRONTIERRE = re.compile(r' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
-LABEL = re.compile(' *\( *([^ ()]+) *')
+FRONTIERORTERMRE = re.compile(br' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
+TERMINDICESRE = re.compile(br'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term. indices
+FRONTIERRE = re.compile(br' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
+LABEL = re.compile(r' *\( *([^ ()]+) *')
 
 
 # bitsets representing fragments are ULong arrays with the number of elements
@@ -140,12 +140,13 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list asent
 		dict fragments = {}
 		set inter = set(), contentwordprods = None
+		bytearray tmp = bytearray()
 	if twoterms:
-		contentword = re.compile('NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
+		contentword = re.compile(br'NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
 		contentwordprods = {n for n, label in enumerate(labels)
 				if contentword.match(label)}
 	if approx:
-		fragments = <dict>defaultdict(one)
+		fragments = <dict>defaultdict(int)
 	if trees2 is None:
 		trees2 = trees1
 	ctrees1 = trees1.trees
@@ -182,7 +183,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 						complement, debug, asent, sents2 or sents1,
 						labels, inter, minterms, CST, scratch, SLOTS)
 		collectfragments(fragments, inter, anodes, asent, labels,
-				discontinuous, approx, SLOTS)
+				discontinuous, approx, tmp, SLOTS)
 	free(CST)
 	free(scratch)
 	return fragments
@@ -202,7 +203,8 @@ cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 	# dump table
 	if debug:
 		print(n, m)
-		dumpCST(CST, a, b, anodes, bnodes, asent, sents[m], labels, SLOTS, True)
+		dumpCST(CST, a, b, anodes, bnodes, asent, sents[m], labels,
+				scratch, SLOTS, True)
 	# extract results
 	extractbitsets(CST, anodes, bnodes, b.root, n,
 			inter, minterms, scratch, SLOTS)
@@ -218,21 +220,22 @@ cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 
 
 cdef inline collectfragments(dict fragments, set inter, Node *anodes,
-		list asent, list labels, bint discontinuous, bint approx, short SLOTS):
+		list asent, list labels, bint discontinuous, bint approx,
+		bytearray tmp, short SLOTS):
 	"""Collect string representations of fragments given as bitsets."""
 	cdef ULong *bitset
 	for wrapper in inter:
 		bitset = getpointer(wrapper)
+		getsubtree(tmp, anodes, bitset, labels,
+				<list>(None if discontinuous else asent),
+				getroot(bitset, SLOTS))
+		frag = bytes(tmp)
+		del tmp[:]
 		if discontinuous:
-			frag = getsubtree(anodes, bitset, labels,
-					getroot(bitset, SLOTS))
 			frag = getsent(frag, asent)
-		else:
-			frag = getsubtreeunicode(anodes, bitset, labels, asent,
-					getroot(bitset, SLOTS))
 		if approx:
 			fragments[frag] += 1
-		elif frag not in fragments:
+		elif frag not in fragments:  # FIXME: is this condition useful?
 			fragments[frag] = wrapper
 	inter.clear()
 
@@ -304,6 +307,7 @@ cdef inline short extractat(ULong *CST, ULong *result, Node *a, Node *b,
 	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
 		terms += extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
 	return terms
+
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bint fast=True, bint indices=False):
@@ -401,6 +405,7 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		short SLOTS = BITNSLOTS(maxnodes + 1)
 		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		Node *nodes
+		bytearray tmp = bytearray()
 	assert scratch is not NULL
 	assert SLOTS, SLOTS
 	for p, treeindices in enumerate(trees.treeswithprod):
@@ -419,12 +424,12 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 				break
 		else:
 			raise ValueError("production not found. wrong index?")
+		getsubtree(tmp, nodes, scratch, labels,
+				None if discontinuous else sents[n], i)
+		frag = bytes(tmp)
+		del tmp[:]
 		if discontinuous:
-			frag = getsubtree(nodes, scratch, labels, i)
 			frag = getsent(frag, sents[n])
-		else:
-			frag = getsubtreeunicode(nodes, scratch, labels,
-					sents[n], i)
 		result[frag] = wrap(scratch, SLOTS)
 	return result
 
@@ -442,6 +447,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		short SLOTS = BITNSLOTS(maxnodes + 1)
 		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		Node *nodes
+		bytearray tmp = bytearray()
 	for n in range(trees.len):
 		ulongset(scratch, 0UL, SLOTS)
 		nodes = &trees.nodes[trees.trees[n].offset]
@@ -450,10 +456,12 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 			if nodes[i].left >= 0 or sent[termidx(nodes[i].left)] is not None:
 				SETBIT(scratch, i)
 		setrootid(scratch, trees.trees[n].root, n, SLOTS)
+		getsubtree(tmp, nodes, scratch, labels,
+				None if discontinuous else sent, trees.trees[n].root)
+		frag = bytes(tmp)
+		del tmp[:]
 		if discontinuous:
-			frag = (strtree(nodes, labels, trees.trees[n].root), tuple(sent))
-		else:
-			frag = unicodetree(nodes, labels, sent, trees.trees[n].root)
+			frag = (frag, tuple(sent))
 		result[frag] = wrap(scratch, SLOTS)
 	return result
 
@@ -511,9 +519,10 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list asent
 		dict fragments = {}
 		set inter = set()
+		bytearray tmp = bytearray()
 
 	if approx:
-		fragments = <dict>defaultdict(one)
+		fragments = <dict>defaultdict(int)
 	if trees2 is None:
 		trees2 = trees1
 	ctrees1 = trees1.trees
@@ -534,33 +543,19 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		for m in range(start, trees2.len):
 			b = ctrees2[m]
 			bnodes = &trees2.nodes[b.offset]
-			# initialize table
 			ulongset(CST, 0UL, a.len * b.len * SLOTS)
-			# fill table
-			for aa in range(a.len):
+			for aa in range(a.len):  # fill table
 				for bb in range(b.len):
 					if not TESTBIT(&CST[IDX(aa, bb, b.len, SLOTS)], a.len):
 						getCST(anodes, bnodes, a.len, b.len, CST, aa, bb, SLOTS)
-			# dump table
-			if debug:
+			if debug:  # dump table
 				print(n, m)
 				dumpCST(CST, a, b, anodes, bnodes, asent,
-					(sents2[m] if sents2 else sents1[m]), labels, SLOTS)
+					(sents2[m] if sents2 else sents1[m]), labels, scratch, SLOTS)
 			# extract results
 			inter.update(getnodeset(CST, a.len, b.len, n, scratch, SLOTS))
-		for wrapper in inter:
-			bitset = getpointer(wrapper)
-			if discontinuous:
-				frag = getsubtree(anodes, bitset, labels, getroot(bitset, SLOTS))
-				frag = getsent(frag, asent)
-			else:
-				frag = getsubtreeunicode(anodes, bitset, labels, asent,
-						getroot(bitset, SLOTS))
-			if approx:
-				fragments[frag] += 1
-			else:
-				fragments[frag] = wrapper
-		inter.clear()
+		collectfragments(fragments, inter, anodes, asent, labels,
+				discontinuous, approx, tmp, SLOTS)
 	free(CST)
 	return fragments
 
@@ -617,8 +612,7 @@ cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
 					finalnodeset.remove(bs)
 					finalnodeset.add(tmp)
 					break
-			else:
-				# completely new (disjunct) bitset
+			else:  # completely new (disjunct) bitset
 				finalnodeset.add(tmp)
 	return finalnodeset
 
@@ -628,65 +622,27 @@ cdef inline short termidx(x):
 	return -x - 1
 
 
-cdef inline str strtree(Node *tree, list labels, int i):
-	"""Represent a (complete) tree as a string, with indices as terminals."""
-	if tree[i].left < 0:
-		return "(%s %d)" % (labels[tree[i].prod], termidx(tree[i].left))
-	elif tree[i].right < 0:
-		return "(%s %s)" % (labels[tree[i].prod],
-				strtree(tree, labels, tree[i].left))
-	return "(%s %s %s)" % (labels[tree[i].prod],
-			strtree(tree, labels, tree[i].left),
-			strtree(tree, labels, tree[i].right))
+cdef inline getsubtree(bytearray result, Node *tree, ULong *bitset,
+		list labels, list sent, int i):
+	"""Get string of tree fragment denoted by bitset; indices as terminals.
 
-
-cdef inline unicode unicodetree(Node *tree, list labels, list sent, int i):
-	"""Represent a (complete) tree as a string, with words as terminals."""
-	if tree[i].left < 0:
-		return u"(%s %s)" % (labels[tree[i].prod],
-				(u"%d" % termidx(tree[i].left)
-				if sent is None else
-				sent[termidx(tree[i].left)] or u''))
-	elif tree[i].right < 0:
-		return u"(%s %s)" % (labels[tree[i].prod],
-				unicodetree(tree, labels, sent, tree[i].left))
-	return u"(%s %s %s)" % (labels[tree[i].prod],
-			unicodetree(tree, labels, sent, tree[i].left),
-			unicodetree(tree, labels, sent, tree[i].right))
-
-
-cdef inline str getsubtree(Node *tree, ULong *bitset, list labels, int i):
-	"""Get string of tree fragment denoted by bitset; indices as terminals."""
+	:param result: provide an empty ``bytearray()`` for the initial call."""
+	result += b'('
+	result += labels[tree[i].prod]
+	result += b' '
 	if TESTBIT(bitset, i):
-		if tree[i].left < 0:
-			return "(%s %d)" % (labels[tree[i].prod], termidx(tree[i].left))
-		elif tree[i].right < 0:
-			return "(%s %s)" % (labels[tree[i].prod],
-					getsubtree(tree, bitset, labels, tree[i].left))
-		return "(%s %s %s)" % (labels[tree[i].prod],
-				getsubtree(tree, bitset, labels, tree[i].left),
-				getsubtree(tree, bitset, labels, tree[i].right))
-	# node not in bitset, frontier non-terminal
-	return "(%s %s)" % (labels[tree[i].prod],
-			yieldranges(sorted(getyield(tree, i))))
-
-
-cdef inline unicode getsubtreeunicode(Node *tree, ULong *bitset, list labels,
-		list sent, int i):
-	"""Get string of tree fragment denoted by bitset; words as terminals."""
-	if TESTBIT(bitset, i):
-		if tree[i].left < 0:
-			return u"(%s %s)" % (labels[tree[i].prod],
-				(u"%d" % termidx(tree[i].left) if sent is None
-				else sent[termidx(tree[i].left)]))
-		elif tree[i].right < 0:
-			return u"(%s %s)" % (labels[tree[i].prod],
-				getsubtreeunicode(tree, bitset, labels, sent, tree[i].left))
-		return u"(%s %s %s)" % (labels[tree[i].prod],
-			getsubtreeunicode(tree, bitset, labels, sent, tree[i].left),
-			getsubtreeunicode(tree, bitset, labels, sent, tree[i].right))
-	# node not in bitset, frontier non-terminal
-	return u"(%s )" % labels[tree[i].prod]
+		if tree[i].left >= 0:
+			getsubtree(result, tree, bitset, labels, sent, tree[i].left)
+			if tree[i].right >= 0:
+				result += b' '
+				getsubtree(result, tree, bitset, labels, sent, tree[i].right)
+		elif sent is None:
+			result += str(termidx(tree[i].left)).encode('ascii')
+		else:
+			result += sent[termidx(tree[i].left)].encode('utf-8')
+	elif sent is None:  # node not in bitset, frontier non-terminal
+		result += yieldranges(sorted(getyield(tree, i))).encode('ascii')
+	result += b')'
 
 
 cdef inline list getyield(Node *tree, int i):
@@ -707,24 +663,25 @@ def repl(d):
 def pygetsent(frag, list sent):
 	"""Wrapper of ``getsent()`` to make doctests possible.
 
-	>>> pygetsent('(S (NP 2) (VP 4))',
+	>>> pygetsent(b'(S (NP 2) (VP 4))',
 	... ['The', 'tall', 'man', 'there', 'walks'])
 	('(S (NP 0) (VP 2))', ('man', None, 'walks'))
-	>>> pygetsent('(VP (VB 0) (PRT 3))', ['Wake', 'your', 'friend', 'up'])
+	>>> pygetsent(b'(VP (VB 0) (PRT 3))', ['Wake', 'your', 'friend', 'up'])
 	('(VP (VB 0) (PRT 2))', ('Wake', None, 'up'))
-	>>> pygetsent('(S (NP 2:2 4:4) (VP 1:1 3:3))',
+	>>> pygetsent(b'(S (NP 2:2 4:4) (VP 1:1 3:3))',
 	... ['Walks','the','quickly','man'])
 	('(S (NP 1 3) (VP 0 2))', (None, None, None, None))
-	>>> pygetsent('(ROOT (S 0:2) ($. 3))', ['Foo', 'bar', 'zed', '.'])
+	>>> pygetsent(b'(ROOT (S 0:2) ($. 3))', ['Foo', 'bar', 'zed', '.'])
 	('(ROOT (S 0) ($. 1))', (None, '.'))
-	>>> pygetsent('(ROOT (S 0) ($. 3))', ['Foo', 'bar', 'zed','.'])
+	>>> pygetsent(b'(ROOT (S 0) ($. 3))', ['Foo', 'bar', 'zed','.'])
 	('(ROOT (S 0) ($. 2))', ('Foo', None, '.'))
-	>>> pygetsent('(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', '''In Japan
+	>>> pygetsent(b'(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))', '''In Japan
 	...  wird offenbar die Fusion der Geldkonzerne Daiwa und Sumitomo zur
 	...  gr\\xf6\\xdften Bank der Welt vorbereitet .'''.split())
 	('(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))', (None, 'wird', None, None, None))"""
 	try:
-		return getsent(frag, sent)
+		a, b = getsent(frag, sent)
+		return str(a.decode('ascii')), b
 	except:
 		print(frag)
 		raise
@@ -752,7 +709,7 @@ cdef getsent(frag, list sent):
 			newsent.append(sent[n])  # a terminal
 		else:
 			newsent.append(None)  # a frontier node
-		leafmap[n] = " %d" % m
+		leafmap[n] = (" %d" % m).encode('ascii')
 		m += 1
 		if spans[n] not in spans and n != maxl:  # a gap
 			newsent.append(None)
@@ -761,33 +718,14 @@ cdef getsent(frag, list sent):
 	return frag, tuple(newsent)
 
 
-cdef dumptree(NodeArray a, Node *anodes, list asent, list labels):
-	"""Dump the node structs of a tree showing numeric IDs as well
-	as a strings representation of the tree in bracket notation."""
-	cdef int n
-	for n in range(a.len):
-		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
-				termidx(anodes[n].left) if anodes[n].left < 0
-				else anodes[n].left,
-				anodes[n].right, anodes[n].prod, labels[anodes[n].prod]),
-				end='')
-		if anodes[n].left < 0:
-			if asent[termidx(anodes[n].left)]:
-				print('\t%s=%s' % ('terminal', asent[termidx(anodes[n].left)]))
-			else:
-				print('\tfrontier non-terminal')
-		else:
-			print()
-	print(unicodetree(anodes, labels, asent, a.root), '\n', asent, '\n')
-
-
 cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
-		list asent, list bsent, list labels, short SLOTS, bint bitmatrix=False):
+		list asent, list bsent, list labels, ULong *scratch,
+		short SLOTS, bint bitmatrix=False):
 	"""Dump a table of the common subtrees of two trees."""
 	cdef int n, m
 	cdef Node aa, bb
-	dumptree(a, anodes, asent, labels)
-	dumptree(b, bnodes, bsent, labels)
+	dumptree(a, anodes, asent, labels, scratch)
+	dumptree(b, bnodes, bsent, labels, scratch)
 	print('\t'.join([''] + ["%2d" % x for x in range(b.len)
 		if bnodes[x].prod != -1]))
 	for m in range(b.len):
@@ -822,9 +760,32 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 			for m in range(b.len)]) for n in range(a.len)]))
 
 
+cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
+		ULong *scratch):
+	"""Dump the node structs of a tree showing numeric IDs as well
+	as a strings representation of the tree in bracket notation."""
+	cdef int n
+	for n in range(a.len):
+		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
+				termidx(anodes[n].left) if anodes[n].left < 0
+				else anodes[n].left,
+				anodes[n].right, anodes[n].prod, labels[anodes[n].prod]),
+				end='')
+		if anodes[n].left < 0:
+			if asent[termidx(anodes[n].left)]:
+				print('\t%s=%s' % ('terminal', asent[termidx(anodes[n].left)]))
+			else:
+				print('\tfrontier non-terminal')
+		else:
+			print()
+	tmp = bytearray()
+	ulongset(scratch, ~0UL, BITNSLOTS(a.len))
+	getsubtree(tmp, anodes, scratch, labels, None, a.root)
+	print(tmp.decode('utf-8'), '\n', asent, '\n')
+
+
 def add_lcfrs_rules(tree, sent):
-	"""Set attribute ``.prod`` on nodes of tree with the LCFRS production for
-	that node."""
+	"""Set ``.prod`` attribute on nodes of tree to their LCFRS productions."""
 	for a, b in zip(tree.subtrees(),
 			lcfrsproductions(tree, sent, frontiers=True)):
 		a.prod = b
@@ -832,12 +793,12 @@ def add_lcfrs_rules(tree, sent):
 
 
 def getlabelsprods(trees, labels, prods):
-	"""Collect label/prod attributes from ``trees`` and index them."""
+	"""Collect ``label`` / ``prod`` attributes from ``trees`` and index them."""
 	pnum = len(prods)
 	for tree in trees:
 		for st in tree:
 			if st.prod not in prods:
-				labels.append(str(st.label))  # LHS label associated with this prod
+				labels.append(st.label.encode('ascii'))  # LHS label of prod
 				prods[st.prod] = pnum
 				pnum += 1
 
@@ -971,7 +932,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 		prod = (label, labelchild1, labelchild2)
 	if prod not in prods:  # assign new ID?
 		prods[prod] = len(prods)
-		labels.append(label)
+		labels.append(label.encode('ascii'))
 	n = idx[0]
 	idx[0] += 1
 	if match1 is not None or child2 is not None:
@@ -1010,7 +971,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 					canonicalize(binarize(tree)), sent), sent)
 			for st in tree:
 				if st.prod not in prods:
-					labels.append(st.label)
+					labels.append(st.label.encode('ascii'))
 					prods[st.prod] = len(prods)
 			if sort:
 				root = tree[0]
@@ -1046,8 +1007,3 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 			sents.append(sent)
 		free(scratch)
 	return ctrees, sents
-
-
-def one():
-	"""Used to generate the value 1 for defaultdicts."""
-	return 1

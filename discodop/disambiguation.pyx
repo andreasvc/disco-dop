@@ -3,7 +3,8 @@
 Use as follows:
 
 >>> derivations, entries = getderivations(chart, 1000)  #doctest: +SKIP
->>> parses, derivs, msg = marginalize("mpp", derivations, entries, chart)  #doctest: +SKIP
+>>> parses, frags, msg = marginalize(
+...			"mpp", derivations, entries, chart)  #doctest: +SKIP
 """
 
 from __future__ import print_function
@@ -462,7 +463,8 @@ def extractfragments(deriv, chart, list backtransform):
 		extractfragments_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError
-	return [_fragments.pygetsent(frag, chart.sent) for frag in result]
+	return [_fragments.pygetsent(frag.encode('utf-8'), chart.sent)
+			for frag in result]
 
 
 def frontiernt(node):

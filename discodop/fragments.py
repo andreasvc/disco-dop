@@ -58,8 +58,8 @@ Options:
                 (default: 1); use 0 to detect the number of CPUs.
   --numtrees=n  only read first n trees from first treebank
   --encoding=x  use x as treebank encoding, e.g. UTF-8, ISO-8859-1, etc.
-  --approx      report approximate frequencies (lower bound)
   --nofreq      do not report frequencies.
+  --approx      report counts of occurrence as maximal fragment (lower bound)
   --relfreq     report relative frequencies wrt. root node of fragments.
   --twoterms    only consider fragments with at least two lexical terminals.
   --adjacent    only consider pairs of adjacent fragments (n, n + 1).
@@ -497,7 +497,7 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 			counts.extend(newcounts)
 			fragments.update(zip(newfrags, newcounts))
 	logging.info("found %d fragments", len(fragmentkeys))
-	return dict(zip(fragmentkeys, counts))
+	return dict(zip(((a.decode('ascii'), b) for a, b in fragmentkeys), counts))
 
 
 def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
