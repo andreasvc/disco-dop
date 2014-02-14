@@ -9,7 +9,8 @@ COMMANDS = (
 		('eval', 'Evaluate discontinuous parse trees; similar to EVALB.'),
 		('treetransforms', 'Apply tree transformations '
 			'and convert between formats.'),
-		('treedraw', 'Visualize (discontinuous) trees '),
+		('treedraw', 'Visualize (discontinuous) trees.'),
+		('treesearch', 'Query treebanks.'),
 		('grammar', 'Read off grammars from treebanks.'),
 		('parser', 'Simple command line parser.'),
 		('demos', 'Show some demonstrations of formalisms encoded in LCFRS.'),

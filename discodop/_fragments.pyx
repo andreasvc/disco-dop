@@ -710,7 +710,6 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 		list asent, list bsent, list labels, ULong *scratch,
 		short SLOTS, bint bitmatrix=False):
 	"""Dump a table of the common subtrees of two trees."""
-	cdef int n, m
 	cdef Node aa, bb
 	dumptree(a, anodes, asent, labels, scratch)
 	dumptree(b, bnodes, bsent, labels, scratch)
@@ -752,7 +751,6 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
 		ULong *scratch):
 	"""Dump the node structs of a tree showing numeric IDs as well
 	as a strings representation of the tree in bracket notation."""
-	cdef int n
 	for n in range(a.len):
 		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
 				termidx(anodes[n].left) if anodes[n].left < 0
@@ -937,8 +935,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		fmt='bracket', limit=None, encoding='utf-8'):
 	"""Read a treebank from a given filename.
 
-	labels and prods should be a list and a dictionary, with the same ones used
-	when reading multiple treebanks."""
+	labels and prods should be re-used when reading multiple treebanks."""
 	cdef size_t cnt
 	cdef Node *scratch
 	cdef Ctrees ctrees

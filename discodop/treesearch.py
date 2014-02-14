@@ -7,6 +7,7 @@
 import io
 import os
 import re
+import sys
 import concurrent.futures
 import subprocess
 from collections import Counter, OrderedDict
@@ -25,7 +26,26 @@ except ImportError:
 from discodop import treebank
 from discodop.tree import Tree
 from discodop.parser import workerfunc, which
+from discodop.treedraw import ANSICOLOR, DrawTree
 
+USAGE = """Search through treebanks with queries.
+Usage: %(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...
+
+options:
+  --engine=<x>, -e <x>
+                 Selecte query engine; possible options:
+                 tgrep2  tgrep2 queries; files are bracket corpora
+                         (optionally precompiled into tgrep2 format).
+                 xpath   dact XML corpora; arbitrary xpath queries.
+                 regex   search through tokenized sentences with Python regexps
+  --counts, -c   report counts
+  --sents, -s    report sentences (default)
+  --trees, -t    report raw trees in the original corpus format
+  --macros=<x>, -m <x>
+                 file with macros
+  --numthreads=<x>
+                 Number of concurrent threads to use.
+""" % dict(cmd=sys.argv[0])
 CACHESIZE = 1024
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
@@ -116,14 +136,14 @@ class TgrepSearcher(CorpusSearcher):
 	def __init__(self, files, macros=None, numthreads=None):
 		def convert(filename):
 			"""Convert files not ending in .t2c.gz to tgrep2 format."""
-			if (not filename.endswith('.t2c.gz')
-					and not os.path.exists(filename + '.t2c.gz')):
+			if filename.endswith('.t2c.gz'):
+				return filename
+			elif not os.path.exists(filename + '.t2c.gz'):
 				subprocess.check_call(
 						args=[which('tgrep2'), '-p', filename,
 							filename + '.t2c.gz'], shell=False,
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-				return filename + '.t2c.gz'
-			return filename
+			return filename + '.t2c.gz'
 
 		super(TgrepSearcher, self).__init__(files, macros, numthreads)
 		self.files = {convert(filename): None for filename in self.files}
@@ -496,3 +516,62 @@ def filterlabels(line, nofunc, nomorph):
 		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
+
+
+def main():
+	"""CLI."""
+	from getopt import gnu_getopt, GetoptError
+	shortoptions = 'stcbmh'
+	options = 'engine= macros= numthreads= trees sents brackets counts help'
+	try:
+		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
+		query, corpora = args[0], args[1:]
+		assert corpora
+	except (GetoptError, IndexError, ValueError, AssertionError) as err:
+		print('error: %r\n%s' % (err, USAGE))
+		sys.exit(2)
+	opts = dict(opts)
+	if '--help' in opts or '-h' in opts:
+		print(USAGE)
+		return
+	macros = opts.get('--macros', opts.get('-m'))
+	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
+	if engine == 'tgrep2':
+		searcher = TgrepSearcher(corpora, macros=macros,
+				numthreads=opts.get('--numthreads'))
+	elif engine == 'xpath':
+		searcher = DactSearcher(corpora, macros=macros,
+				numthreads=opts.get('--numthreads'))
+	elif engine == 'regex':
+		searcher = RegexSearcher(corpora, macros=macros,
+				numthreads=opts.get('--numthreads'))
+	else:
+		raise ValueError('incorrect --engine value: %r' % engine)
+	if '--counts' in opts or '-c' in opts:
+		for a, b in searcher.counts(query).items():
+			print('\x1b[%dm%s\x1b[0m:%s`' % (
+				ANSICOLOR['magenta'], a, b))
+	elif '--trees' in opts or '-t' in opts:
+		for a, b, tree, sent, high in searcher.trees(query):
+			print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:\n%s' % (
+					ANSICOLOR['magenta'], a, ANSICOLOR['green'], b,
+					DrawTree(tree, sent, highlight=high).text(
+						unicodelines=True, ansi=True)))
+	else:
+		brackets = '--brackets' in opts or '-b' in opts
+		for a, b, sent, high in searcher.sents(query,
+				brackets=brackets):
+			if brackets:
+				out = sent.replace(high, "\x1b[%d;1m%s\x1b[0m" % (
+						ANSICOLOR['red'], high))
+			else:
+				out = ' '.join(
+						'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['red'], word)
+						if x in high else word
+						for x, word in enumerate(sent.split()))
+			print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:%s'
+					% (ANSICOLOR['magenta'], a, ANSICOLOR['green'], b, out))
+
+
+if __name__ == '__main__':
+	main()

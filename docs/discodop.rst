@@ -14,6 +14,7 @@ Command is one of:
 :eval:             Evaluate discontinuous parse trees; similar to EVALB.
 :treetransforms:   Apply tree transformations and convert between formats.
 :treedraw:         Visualize (discontinuous) trees
+:treesearch:       Search through treebanks with queries.
 :grammar:          Read off grammars from treebanks.
 :parser:           Simple command line parser.
 :demos:            Show some demonstrations of formalisms encoded in LCFRS.
@@ -376,6 +377,28 @@ Options (* marks default option):
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through 'less -R' to preserve the colors.
+
+treesearch
+----------
+Search through treebanks with queries.
+
+Usage: ``%(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...``
+
+Options:
+
+--engine=<x>, -e <x>
+               Selecte query engine; possible options:
+               :tgrep2:  tgrep2 queries; files are bracket corpora
+                         (optionally precompiled into tgrep2 format).
+               :xpath:   dact XML corpora; arbitrary xpath queries.
+               :regex:   search through tokenized sentences with Python regexps
+--counts, -c   report counts
+--sents, -s    report sentences (default)
+--trees, -t    report raw trees in the original corpus format
+--macros=<x>, -m <x>
+               file with macros
+--numthreads=<x>
+               Number of concurrent threads to use.
 
 gen
 ---

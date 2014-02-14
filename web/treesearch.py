@@ -36,6 +36,7 @@ except ImportError:
 # disco-dop
 from discodop.treedraw import DrawTree
 from discodop import treebank, fragments
+from discodop.parser import which
 from discodop.treesearch import TgrepSearcher, DactSearcher, RegexSearcher, \
 		filterlabels
 
@@ -878,14 +879,6 @@ def stream_template(template_name, **context):
 	result = templ.stream(context)
 	result.enable_buffering(5)
 	return result
-
-
-def which(program):
-	"""Return first match for program in search path."""
-	for path in os.environ.get('PATH', os.defpath).split(":"):
-		if path and os.path.exists(os.path.join(path, program)):
-			return os.path.join(path, program)
-	raise ValueError('%r not found in path; please install it.' % program)
 
 
 fragments.PARAMS.update(quiet=True, debug=False, disc=False, complete=False,
