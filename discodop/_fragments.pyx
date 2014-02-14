@@ -9,15 +9,16 @@ Implements:
 
 from __future__ import print_function
 import re
-import io
+import codecs
 from collections import defaultdict, Counter as multiset
 from functools import partial
+from itertools import islice
 from array import array
 from discodop.tree import Tree
 from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import binarize
 
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, realloc, free
 from cpython.array cimport array, clone
 from discodop.containers cimport ULong, UInt, Node, NodeArray, Ctrees, \
 		yieldranges
@@ -37,7 +38,7 @@ cdef array uintarray = array('I', ())  # template to create arrays of this type
 FRONTIERORTERMRE = re.compile(br' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
 TERMINDICESRE = re.compile(br'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term.indices
 FRONTIERRE = re.compile(br' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
-LABEL = re.compile(r' *\( *([^ ()]+) *')
+LABEL = re.compile(br' *\( *([^ ()]+) *')
 
 
 # bitsets representing fragments are ULong arrays with the number of elements
@@ -498,7 +499,6 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		short SLOTS
 		ULong *CST
 		ULong *scratch
-		ULong *bitset
 		NodeArray *ctrees1
 		NodeArray *ctrees2
 		NodeArray a, b
@@ -605,7 +605,7 @@ cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
 	return finalnodeset
 
 
-cdef inline short termidx(x):
+cdef inline short termidx(short x):
 	"""Translate representation for terminal indices."""
 	return -x - 1
 
@@ -615,14 +615,14 @@ cdef inline getsubtree(bytearray result, Node *tree, ULong *bitset,
 	"""Get string of tree fragment denoted by bitset; indices as terminals.
 
 	:param result: provide an empty ``bytearray()`` for the initial call."""
-	result += b'('
+	result.append(b'(')
 	result += labels[tree[i].prod]
-	result += b' '
+	result.append(b' ')
 	if TESTBIT(bitset, i):
 		if tree[i].left >= 0:
 			getsubtree(result, tree, bitset, labels, sent, tree[i].left)
 			if tree[i].right >= 0:
-				result += b' '
+				result.append(b' ')
 				getsubtree(result, tree, bitset, labels, sent, tree[i].right)
 		elif sent is None:
 			result += str(termidx(tree[i].left)).encode('ascii')
@@ -630,7 +630,7 @@ cdef inline getsubtree(bytearray result, Node *tree, ULong *bitset,
 			result += sent[termidx(tree[i].left)].encode('utf-8')
 	elif sent is None:  # node not in bitset, frontier non-terminal
 		result += yieldranges(sorted(getyield(tree, i))).encode('ascii')
-	result += b')'
+	result.append(b')')
 
 
 cdef inline list getyield(Node *tree, int i):
@@ -841,94 +841,91 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 			prods=prods, labels=labels)
 
 
-cdef readnode(line, list labels, dict prods, Node *result,
-		size_t *idx, list sent, origlabel):
+cdef readnode(bytes label, bytes line, char *cline, short start, short end,
+		list labels, dict prods, Node *result, size_t *idx, list sent,
+		bytes origlabel):
 	"""Parse an s-expression in a string, and store in an array of Node
 	structs (pre-allocated). ``idx`` is a counter to keep track of the number
 	of Node structs used; ``sent`` collects the terminals encountered."""
 	cdef:
-		int n, parens = 0, start = 0, startchild2 = 0, left = -1, right = -1
+		short n, parens = 0, left = -1, right = -1
+		short startchild1 = 0, startchild2 = 0, endchild1 = 0, endchild2 = 0
 		list childlabels = None
-		#bytes a, label, rest, labelchild1, labelchild2
-		#bytes child1 = None, child2 = None
-	match = LABEL.match(line)
-	if match is None:
-		raise ValueError('malformed tree:\n%s' % line)
-	label = match.group(1)
-	rest = line[match.end():]
-	child1 = child2 = labelchild2 = None
+		bytes labelchild1 = None, labelchild2 = None
 	# walk through the string and find the first two children
-	for n, a in enumerate(rest):
-		if a == '(':
+	for n in range(start, end):
+		if cline[n] == '(':
 			if parens == 0:
 				start = n
 			parens += 1
-		elif a == ')':
+		elif cline[n] == ')':
 			parens -= 1
 			if parens == -1:
-				if child1 is None:
-					child1 = rest[start:n]
+				if startchild1 == 0:
+					startchild1, endchild1 = start, n
 			elif parens == 0:
-				if child1 is None:
-					child1 = rest[start:n + 1]
-				elif child2 is None:
-					child2 = rest[start:n + 1]
-					startchild2 = start
+				if startchild1 == 0:
+					startchild1, endchild1 = start, n + 1
+				elif startchild2 == 0:
+					startchild2, endchild2 = start, n + 1
 				else:  # will do on the fly binarization
 					childlabels = []
 					break
 	# if there were more children, collect labels for a binarized constituent
 	if childlabels is not None:
-		for n, a in enumerate(rest[startchild2:], startchild2):
-			if a == '(':
+		for n in range(startchild2, end):
+			if cline[n] == '(':
 				if parens == 0:
 					start = n
 				parens += 1
-			elif a == ')':
+			elif cline[n] == ')':
 				parens -= 1
 				if parens == 0:
-					match = LABEL.match(rest, start)
+					match = LABEL.match(line, start)
 					if match is None:  # introduce preterminal
-						childlabels.append('/'.join((label, rest[start:n + 1])))
+						childlabels.append(
+								b'/'.join((label, line[start:n + 1])))
 					else:
 						childlabels.append(match.group(1))
-		# not optimal, parsing this string can be avoided
-		# in fact we already have: label, child2, rest
-		child2 = ('(' + (origlabel or label) + '|<' + ','.join(childlabels)
-				+ '> ' + rest[startchild2:])
+		labelchild2 = ((origlabel or label) + b'|<' + b','.join(childlabels) + b'>')
+		endchild2 = end
 	assert parens == -1, "unbalanced parentheses: %d\n%r" % (parens, line)
-	match1 = LABEL.match(child1)
+	match1 = LABEL.match(line, startchild1)
 	if match1 is not None:  # non-terminal label
 		labelchild1 = match1.group(1)
-	elif child2 is not None:  # insert preterminal
-		labelchild1 = '/'.join((label, child1))
-		child1 = '(' + ' '.join((labelchild1, child1)) + ')'
+		startchild1 = match1.end()
+	elif startchild2 != 0:  # insert preterminal
+		labelchild1 = b'/'.join((label, line[startchild1:endchild1]))
 	else:  # terminal following pre-terminal; store terminal
 		# leading space distinguishes terminal from non-terminal
-		labelchild1 = ' ' + child1
+		labelchild1 = b' ' + line[startchild1:endchild1]
 		left = termidx(len(sent))
-		sent.append(child1 or None)
-	if child2 is None:
-		prod = (label, labelchild1) if child1 else (label, )
+		sent.append(line[startchild1:endchild1].decode('utf-8')
+				if startchild1 < endchild1 else None)
+	if startchild2 == 0:
+		prod = (label, labelchild1) if startchild1 else (label, )
 	else:
-		match = LABEL.match(child2)
-		if match is not None:
-			labelchild2 = match.group(1)
-		else:  # insert preterminal
-			labelchild2 = '/'.join((label, child2))
-			child2 = '(' + ' '.join((labelchild2, child2)) + ')'
+		if labelchild2 is None:
+			match = LABEL.match(line, startchild2)
+			if match is not None:
+				labelchild2 = match.group(1)
+				startchild2 = match.end()
+			else:  # insert preterminal
+				labelchild2 = b'/'.join((label, line[startchild2:endchild2]))
 		prod = (label, labelchild1, labelchild2)
 	if prod not in prods:  # assign new ID?
 		prods[prod] = len(prods)
-		labels.append(label.encode('ascii'))
+		labels.append(label)
 	n = idx[0]
 	idx[0] += 1
-	if match1 is not None or child2 is not None:
+	if match1 is not None or startchild2 != 0:
 		left = idx[0]
-		readnode(child1, labels, prods, result, idx, sent, None)
-		if child2 is not None:
+		readnode(labelchild1, line, cline, startchild1, endchild1, labels,
+				prods, result, idx, sent, None)
+		if startchild2 != 0:
 			right = idx[0]
-			readnode(child2, labels, prods, result, idx, sent,
+			readnode(labelchild2, line, cline, startchild2, endchild2, labels,
+					prods, result, idx, sent,
 					childlabels and (origlabel or label))
 	# store node
 	result[n].prod = prods[prod]
@@ -937,7 +934,7 @@ cdef readnode(line, list labels, dict prods, Node *result,
 
 
 def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
-		fmt='bracket', limit=None, encoding="utf-8"):
+		fmt='bracket', limit=None, encoding='utf-8'):
 	"""Read a treebank from a given filename.
 
 	labels and prods should be a list and a dictionary, with the same ones used
@@ -972,26 +969,33 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	else:  # do incremental reading of bracket trees
 		# could use BracketCorpusReader or expect trees/sents as input, but
 		# incremental reading reduces memory requirements.
-		data = io.open(treebankfile, encoding=encoding).read()
-		if limit:
-			data = re.match(r'(?:[^\n\r]+[\n\r]+){0,%d}' % limit, data).group()
-		lines = [line for line in data.splitlines() if line.strip()]
-		numtrees = len(lines)
-		assert numtrees, "%r appears to be empty" % treebankfile
 		sents = []
-		nodesperline = [line.count('(') for line in lines]
-		numnodes = sum(nodesperline)
+		maxnodes = 512
 		ctrees = Ctrees()
-		ctrees.alloc(numtrees, numnodes)
-		ctrees.maxnodes = max(nodesperline)
+		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		binfactor = 2  # conservative estimate to accommodate binarization
-		scratch = <Node *>malloc(ctrees.maxnodes * binfactor * sizeof(Node))
+		scratch = <Node *>malloc(maxnodes * binfactor * sizeof(Node))
 		assert scratch is not NULL
-		for line in lines:
+		if encoding.lower() in ('utf8', 'utf-8'):
+			data = open(treebankfile)
+		else:  # a kludge; better use UTF-8!
+			data = codecs.iterencode(codecs.open(treebankfile,
+					encoding=encoding), 'utf-8')
+		for line in islice(data, limit):
+			if line.count(b'(') > maxnodes:
+				maxnodes = 2 * line.count(b'(')
+				scratch = <Node *>realloc(scratch,
+						maxnodes * binfactor * sizeof(Node))
+				assert scratch is not NULL
 			cnt = 0
 			sent = []
-			readnode(line, labels, prods, scratch, &cnt, sent, None)
+			match = LABEL.match(line)
+			if match is None:
+				raise ValueError('malformed tree:\n%s' % line)
+			readnode(match.group(1), line, line, match.end(), len(line),
+					labels, prods, scratch, &cnt, sent, None)
 			ctrees.addnodes(scratch, cnt, 0)
 			sents.append(sent)
+		assert sents, "%r appears to be empty" % treebankfile
 		free(scratch)
 	return ctrees, sents
