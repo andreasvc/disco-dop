@@ -9,16 +9,16 @@ Usage: ``discodop <command> [arguments]``
 
 Command is one of:
 
-:runexp:           Run experiment: grammar extraction, parsing & evaluation.
-:fragments:        Extract recurring fragments from treebanks.
-:eval:             Evaluate discontinuous parse trees; similar to EVALB.
-:treetransforms:   Apply tree transformations and convert between formats.
-:treedraw:         Visualize (discontinuous) trees
-:treesearch:       Search through treebanks with queries.
-:grammar:          Read off grammars from treebanks.
-:parser:           Simple command line parser.
-:demos:            Show some demonstrations of formalisms encoded in LCFRS.
-:gen:              Generate sentences from a PLCFRS.
+:`runexp`_:           Run experiment: grammar extraction, parsing & evaluation.
+:`fragments`_:        Extract recurring fragments from treebanks.
+:`eval`_:             Evaluate discontinuous parse trees; similar to EVALB.
+:`treetransforms`_:   Apply tree transformations and convert between formats.
+:`treedraw`_:         Visualize (discontinuous) trees
+:`treesearch`_:       Search through treebanks with queries.
+:`grammar`_:          Read off grammars from treebanks.
+:`parser`_:           Simple command line parser.
+:demos:               Show some demonstrations of formalisms encoded in LCFRS.
+:`gen`_:              Generate sentences from a PLCFRS.
 
 for additional instructions issue: ``discodop <command> --help``
 
@@ -387,18 +387,21 @@ Usage: ``%(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...``
 Options:
 
 --engine=<x>, -e <x>
-               Selecte query engine; possible options:
-               :tgrep2:  tgrep2 queries; files are bracket corpora
+                Selecte query engine; possible options:
+
+                :tgrep2:
+                         tgrep2 queries; files are bracket corpora
                          (optionally precompiled into tgrep2 format).
-               :xpath:   dact XML corpora; arbitrary xpath queries.
-               :regex:   search through tokenized sentences with Python regexps
---counts, -c   report counts
---sents, -s    report sentences (default)
---trees, -t    report raw trees in the original corpus format
+                :xpath:  dact XML corpora; arbitrary xpath queries.
+                :regex:  search through tokenized sentences with Python regexps
+--counts, -c    report counts
+--sents, -s     output sentences (default)
+--trees, -t     output visualizations of trees
+--brackets, -b  output raw trees in the original corpus format
 --macros=<x>, -m <x>
-               file with macros
+                file with macros
 --numthreads=<x>
-               Number of concurrent threads to use.
+                Number of concurrent threads to use.
 
 gen
 ---

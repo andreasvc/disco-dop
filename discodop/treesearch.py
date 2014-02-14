@@ -31,20 +31,21 @@ from discodop.treedraw import ANSICOLOR, DrawTree
 USAGE = """Search through treebanks with queries.
 Usage: %(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...
 
-options:
+Options:
   --engine=<x>, -e <x>
-                 Selecte query engine; possible options:
-                 tgrep2  tgrep2 queries; files are bracket corpora
-                         (optionally precompiled into tgrep2 format).
-                 xpath   dact XML corpora; arbitrary xpath queries.
-                 regex   search through tokenized sentences with Python regexps
-  --counts, -c   report counts
-  --sents, -s    report sentences (default)
-  --trees, -t    report raw trees in the original corpus format
+                  Selecte query engine; possible options:
+                  tgrep2: tgrep2 queries; files are bracket corpora
+                          (optionally precompiled into tgrep2 format).
+                  xpath: dact XML corpora; arbitrary xpath queries.
+                  regex: search through tokenized sentences with Python regexps
+  --counts, -c    report counts
+  --sents, -s     output sentences (default)
+  --trees, -t     output visualizations of trees
+  --brackets, -b  output raw trees in the original corpus format
   --macros=<x>, -m <x>
-                 file with macros
+                  file with macros
   --numthreads=<x>
-                 Number of concurrent threads to use.
+                  Number of concurrent threads to use.
 """ % dict(cmd=sys.argv[0])
 CACHESIZE = 1024
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
