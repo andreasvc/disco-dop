@@ -831,8 +831,14 @@ def segmentbrackets(brackets, strict=False):
 				if parens == 0:
 					rest, prev = line[start:a], line[a:]
 					if result:
-						results.append(
-								brackettree(result, rest, brackets, strtermre))
+						try:
+							results.append(brackettree(
+									result, rest, brackets, strtermre))
+						except:
+							print('error in:')
+							print(result)
+							print(rest)
+							raise
 						result = ''
 						start = a
 				parens += 1
@@ -853,7 +859,14 @@ def segmentbrackets(brackets, strict=False):
 			results = []
 		if line is None:
 			if result:
-				results.append(brackettree(result, rest, brackets, strtermre))
+				try:
+					results.append(brackettree(
+							result, rest, brackets, strtermre))
+				except:
+					print('error in:')
+					print(result)
+					print(rest)
+					raise
 			status = 1 if results or result or parens else 0
 			yield results or None, status
 			line = ''
@@ -910,8 +923,8 @@ def brackettree(treestr, sent, brackets, strtermre):
 		if sent.strip():
 			maxleaf = max(tree.leaves())
 			sent = sent.split(None, maxleaf + 1)
-			sent = sent[:maxleaf + 1]
 			rest = sent[maxleaf + 1].strip() if len(sent) > maxleaf + 1 else ''
+			sent = sent[:maxleaf + 1]
 		else:
 			sent = map(str, range(max(tree.leaves()) + 1))
 			rest = ''
