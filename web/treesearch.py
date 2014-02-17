@@ -790,7 +790,7 @@ def tokenize(filename):
 		out.writelines(converted)
 
 
-def getreadabilitymeasures(texts, numsents):
+def getreadabilitymeasures(numsents):
 	"""Get readability of all files and store results in a dictionary."""
 	try:
 		import readability
@@ -885,7 +885,7 @@ def getcorpus():
 			raise ValueError('no texts found.')
 		texts = [os.path.splitext(os.path.basename(a))[0]
 				for a in tfiles or afiles or tokfiles]
-		styletable = getreadabilitymeasures(texts, numsents)
+		styletable = getreadabilitymeasures(numsents)
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open(picklefile, 'wb'), protocol=-1)
 	return texts, numsents, numconst, numwords, styletable, corpora
