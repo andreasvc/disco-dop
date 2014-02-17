@@ -366,8 +366,8 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	"""Extract recurring fragments from search results."""
-	if form.get('engine', 'tgrep2') != 'tgrep2':
-		yield "Only implemented for TGrep2 queries."
+	if form.get('engine', 'tgrep2') == 'regex':
+		yield "Only implemented for tgrep2 and xpath queries."
 		return
 	gotresults = False
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
@@ -383,18 +383,23 @@ def fragmentsinresults(form, doexport=False):
 				% (form['query'] if len(form['query']) < 128
 					else form['query'][:128] + '...',
 					FRAGLIMIT, SENTLIMIT, url))
+	disc = form.get('engine', 'tgrep2') == 'xpath'
+	if disc:
+		fragments.PARAMS.update(disc=True, fmt='discbracket')
+	else:
+		fragments.PARAMS.update(disc=False, fmt='bracket')
 	for n, (_, _, treestr, _) in enumerate(CORPORA[form.get(
 			'engine', 'tgrep2')].sents(form['query'], selected,
 			maxresults=SENTLIMIT, brackets=True)):
 		if n == 0:
 			gotresults = True
-		if form.get('engine', 'tgrep2') == 'xpath':
-			tree, sent = treebank.alpinotree(treestr)
-			treestr = '%s\t%s' % (str(tree), ' '.join(sent))
-			# FIXME: enable disc. bracketings in fragment extractor
+		if disc:
+			tree, sent = treebank.alpinotree(
+					ElementTree.fromstring(treestr.encode('utf-8')))
+			line = '%s\t%s\n' % (str(tree), ' '.join(sent))
 		else:
-			treestr = treestr.replace(" )", " -NONE-)") + '\n'
-		uniquetrees.add(treestr.encode('utf8'))
+			line = treestr.replace(" )", " -NONE-)") + '\n'
+		uniquetrees.add(line.encode('utf8'))
 	if not gotresults and not doexport:
 		yield "No matches."
 		return
@@ -402,29 +407,41 @@ def fragmentsinresults(form, doexport=False):
 	with tempfile.NamedTemporaryFile(delete=True) as tmp:
 		tmp.writelines(uniquetrees)
 		tmp.flush()
-		results, approxcounts = fragments.regular((tmp.name, ), 1, 0, 'utf8')
-	results = nlargest(FRAGLIMIT, zip(results, approxcounts),
-			key=lambda ff: sum(1 for _
-			in re.finditer(r'[^ ()]\)', ff[0])) ** 2 * ff[1] ** 0.5)
-	#results = [(frag, freq) for frag, freq in results
-	#		if (2 * frag.count(')')
-	#			- frag.count(' (')
-	#			- frag.count(' )')) > MINNODES and freq > MINFREQ]
+		results, approxcounts = fragments.regular([tmp.name], 1, None, 'utf8')
+	if disc:
+		results = nlargest(FRAGLIMIT, zip(results, approxcounts), key=lambda ff:
+				sum(1 for a in ff[0][1] if a) ** 2 * ff[1] ** 0.5)
+	else:
+		results = nlargest(FRAGLIMIT, zip(results, approxcounts),
+				key=lambda ff: sum(1 for _
+				in re.finditer(r'[^ ()]\)', ff[0])) ** 2 * ff[1] ** 0.5)
 	gotresults = False
 	if not doexport:
 		yield "<ol>"
-	for treestr, freq in results:
+	for tree, freq in results:
 		gotresults = True
+		if disc:
+			tree, sent = tree
+			sent = ' '.join(a or '' for a in sent)
 		if doexport:
-			yield '%s\t%s\n' % (treestr, freq)
+			if disc:
+				yield '%s\t%s\t%s\n' % (tree, sent, freq)
+			else:
+				yield '%s\t%s\n' % (tree, freq)
 		else:
-			link = "<a href='/draw?tree=%s'>draw</a>" % (
-					quote(treestr.encode('utf8')))
-			treestr = GETLEAVES.sub(' <font color=red>\\1</font>',
-					cgi.escape(treestr))
-			treestr = GETFRONTIERNTS.sub('(<font color=blue>\\1</font> )',
-					treestr)
-			yield "<li>freq=%3d [%s] %s" % (freq, link, treestr)
+			if disc:
+				link = "<a href='/draw?tree=%s&sent=%s'>draw</a>" % (
+						quote(tree.encode('utf8')), quote(sent.encode('utf8')))
+				sent = GETLEAVES.sub(' <font color=red>\\1</font>',
+						cgi.escape(' ' + sent + ' '))
+				tree = cgi.escape(tree) + ' ' + sent
+			else:
+				link = "<a href='/draw?tree=%s'>draw</a>" % (
+						quote(tree.encode('utf8')))
+				tree = GETLEAVES.sub(' <font color=red>\\1</font>',
+						cgi.escape(tree))
+			tree = GETFRONTIERNTS.sub('(<font color=blue>\\1</font> )', tree)
+			yield "<li>freq=%3d [%s] %s" % (freq, link, tree)
 	if not doexport:
 		yield "</ol>"
 		if gotresults:
@@ -489,7 +506,9 @@ def style():
 def draw():
 	"""Produce a visualization of a tree on a separate page."""
 	if 'tree' in request.args:
-		return "<pre>%s</pre>" % DrawTree(request.args['tree']).text(
+		return "<pre>%s</pre>" % DrawTree(request.args['tree'],
+				[a or None for a in request.args['sent'].split(' ')]
+				if 'sent' in request.args else None).text(
 				unicodelines=True, html=True)
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args

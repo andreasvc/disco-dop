@@ -84,7 +84,10 @@ class DrawTree(object):
 		self.tree = tree
 		self.sent = sent
 		if isinstance(tree, basestring):
-			self.tree = Tree(tree)
+			try:
+				self.tree = Tree.parse(tree, parse_leaf=int)
+			except ValueError:
+				self.tree = Tree(tree)
 		if sent is None:
 			leaves = self.tree.leaves()
 			if (leaves and not any(len(a) == 0 for a in self.tree.subtrees())
