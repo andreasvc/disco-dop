@@ -122,7 +122,7 @@ class CorpusSearcher(object):
 	def _submit(self, func, filename):
 		"""Submit a job to the thread pool."""
 		if self.numthreads == 1:
-			return NoFuture(func, filename), filename
+			return NoFuture(func, filename)
 		return self.pool.submit(workerfunc(func), filename)
 
 	def _as_completed(self, jobs):
