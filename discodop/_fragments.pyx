@@ -85,7 +85,7 @@ cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
 
 
 cdef set twoterminals(NodeArray a, Node *anodes,
-		Ctrees trees2, set contentwordprods):
+		Ctrees trees2, set contentwordprods, set lexicalprods):
 	"""Produce tree pairs that share at least two words.
 
 	Specifically, tree pairs sharing one content word and one additional word,
@@ -102,9 +102,9 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 			continue
 		tmp = <set>(trees2.treeswithprod[anodes[i].prod])
 		for j in range(a.len):
-			if i == j or anodes[j].left >= 0:
-				continue
-			candidates |= tmp & <set>(trees2.treeswithprod[anodes[j].prod])
+			if (i != j and anodes[j].left < 0 and
+					anodes[j].prod in lexicalprods):
+				candidates |= tmp & <set>(trees2.treeswithprod[anodes[j].prod])
 	return candidates
 
 
@@ -135,12 +135,16 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		Node *anodes
 		list asent
 		dict fragments = {}
-		set inter = set(), contentwordprods = None
+		set inter = set(), contentwordprods = None, lexicalprods = None
 		bytearray tmp = bytearray()
 	if twoterms:
-		contentword = re.compile(br'NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ]')
+		contentword = re.compile(
+				br'^(?:NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ])$')
 		contentwordprods = {n for n, label in enumerate(labels)
 				if contentword.match(label)}
+		lexical = re.compile(br'^[A-Z]+$')
+		lexicalprods = {n for n, label in enumerate(labels)
+				if lexical.match(label)}
 	if approx:
 		fragments = <dict>defaultdict(int)
 	if trees2 is None:
@@ -163,7 +167,8 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 						complement, debug, asent, sents2 or sents1,
 						labels, inter, minterms, CST, scratch, SLOTS)
 		elif twoterms:
-			for m in twoterminals(a, anodes, trees2, contentwordprods):
+			for m in twoterminals(a, anodes, trees2,
+					contentwordprods, lexicalprods):
 				if sents2 is None and m <= n:
 					continue
 				elif m < 0 or m >= trees2.len:
