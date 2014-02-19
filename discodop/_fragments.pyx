@@ -941,7 +941,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 	"""Read a treebank from a given filename.
 
 	labels and prods should be re-used when reading multiple treebanks."""
-	cdef size_t cnt
+	cdef size_t cnt, n
 	cdef Node *scratch
 	cdef Ctrees ctrees
 	if treebankfile is None:
@@ -983,7 +983,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		else:  # a kludge; better use UTF-8!
 			data = codecs.iterencode(codecs.open(treebankfile,
 					encoding=encoding), 'utf-8')
-		for line in islice(data, limit):
+		for n, line in enumerate(islice(data, limit), 1):
 			if line.count(b'(') > maxnodes:
 				maxnodes = 2 * line.count(b'(')
 				scratch = <Node *>realloc(scratch,
@@ -993,7 +993,8 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 			sent = []
 			match = LABEL.match(line)
 			if match is None:
-				raise ValueError('malformed tree:\n%s' % line)
+				raise ValueError('malformed tree in %r line %d:\n%r' % (
+						treebankfile, n, line))
 			readnode(match.group(1), line, line, match.end(), len(line),
 					labels, prods, scratch, &cnt, sent, None)
 			ctrees.addnodes(scratch, cnt, 0)

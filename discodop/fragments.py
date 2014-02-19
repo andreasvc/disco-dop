@@ -578,7 +578,8 @@ def printfragments(fragments, counts, out=None):
 		zeroinvalid = False
 	# a frequency of 1 is normal when comparing two treebanks
 	# or when non-recurring fragments are added
-	elif PARAMS.get('trees2') or PARAMS['cover'] or PARAMS['complement']:
+	elif (PARAMS.get('trees2') or PARAMS['cover']
+			or PARAMS['complement'] or PARAMS['approx']):
 		threshold = 0
 		zeroinvalid = True
 	else:  # otherwise, raise alarm.
