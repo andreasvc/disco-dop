@@ -14,6 +14,8 @@ FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
+HEADRULERE = re.compile(
+		'^(\w+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
 
 
 def transform(tree, sent, transformations):
@@ -714,7 +716,9 @@ def readheadrules(filename):
 	for line in open(filename):
 		line = line.strip().upper()
 		if line and not line.startswith("%") and len(line.split()) > 2:
-			label, lr, heads = line.split(None, 2)
+			label, lr, heads = HEADRULERE.match(line).groups()
+			if heads is None:
+				heads = ''
 			headrules.setdefault(label, []).append((lr, heads.split()))
 	return headrules
 

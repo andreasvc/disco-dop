@@ -1,0 +1,36 @@
+% Head rules for FTB from Dybro-Johansen master's thesis,
+% as implemented in the Stanford Parser.
+
+ROOT right-to-left VN AP NP Srel VPpart AdP I SSub VPinf PP ADV
+SENT right-to-left VN AP NP Srel VPpart AdP I Ssub VPinf PP ADV
+
+AP right-to-left A ET V ADV
+AdP right-to-left ADV
+COORD left-to-right C
+COORD left-to-right CC
+COORD left-to-right CS
+NP left-to-right N
+NP left-to-right PRO
+NP left-to-right NP A AP I VPpart ADV AdP ET D
+PP left-to-right P
+VN right-to-left V VPinf
+VPinf left-to-right VN V
+VPpart left-to-right V VN
+Srel right-to-left VN AP NP
+Ssub right-to-left VN AP NP PP VPinf Ssub VPpart A ADV
+Sint right-to-left VN AP NP PP VPinf Ssub VPpart A ADV
+
+MWD left-to-right D
+MWA left-to-right P
+MWA left-to-right N
+MWA right-to-left A 
+MWC left-to-right C CS
+MWN right-to-left N ET
+MWV left-to-right V
+MWP left-to-right P ADV PRO
+MWPRO left-to-right PRO CL N A
+MWCL left-to-right CL
+MWCL right-to-left
+MWADV left-to-right P ADV
+MWI left-to-right N ADV P
+MWET left-to-right ET N
