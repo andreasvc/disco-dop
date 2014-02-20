@@ -750,7 +750,9 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 
 def sethead(child):
 	"""Mark node as head in an auxiliary field."""
-	child.source = getattr(child, "source", 6 * [''])
+	child.source = getattr(child, "source")
+	if child.source is None:
+		child.source = 6 * ['']
 	if 'HD' not in child.source[FUNC].upper().split("-"):
 		x = list(child.source)
 		if child.source[FUNC] in (None, '', '--'):
