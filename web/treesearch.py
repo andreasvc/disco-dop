@@ -1,6 +1,7 @@
 """Web interface to search a treebank. Requires Flask, tgrep2
 or alpinocorpus-python (for xpath queries), style. Expects one or more
 treebanks with .mrg or .dact extension in the directory corpus/"""
+from __future__ import print_function
 # stdlib
 import io
 import os
@@ -915,7 +916,9 @@ def stream_template(template_name, **context):
 
 
 class JsonSetEncoder(json.JSONEncoder):
-	def default(self, obj):
+	"""Convert sets to lists for JSON encoding."""
+	def default(self, obj):  # pylint: disable=method-hidden
+		"""Do conversion."""
 		if isinstance(obj, set):
 			return list(obj)
 		return json.JSONEncoder.default(self, obj)

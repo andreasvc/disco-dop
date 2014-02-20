@@ -324,9 +324,9 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		print('_______________________________________',
 				'       ____________________')
 		gmismatch = {(n, indices): label
-					for n, (label, indices) in (goldb - candb)}
+					for n, (label, indices) in goldb - candb}
 		wrong = multiset((label, gmismatch[n, indices])
-					for n, (label, indices) in (candb - goldb)
+					for n, (label, indices) in candb - goldb
 					if (n, indices) in gmismatch)
 		freqcats = sorted(set(goldbcat) | set(candbcat),
 				key=lambda x: len(goldbcat[x]), reverse=True)

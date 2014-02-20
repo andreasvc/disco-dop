@@ -15,7 +15,7 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
 HEADRULERE = re.compile(
-		'^(\w+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
+		r'^(\w+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
 
 
 def transform(tree, sent, transformations):
@@ -313,7 +313,7 @@ def reversetransform(tree, transformations):
 	return tree
 
 
-def collapselabels(trees, sents, mapping=None):
+def collapselabels(trees, _sents, mapping=None):
 	"""Collapse non-root phrasal labels with specified mapping.
 
 	The mapping is of the form::

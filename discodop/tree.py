@@ -81,7 +81,7 @@ class Tree(list):
 		return self.label == other.label and list.__eq__(self, other)
 
 	def __ne__(self, other):
-		return not (self == other)
+		return not self == other
 
 	def __lt__(self, other):
 		if not isinstance(other, Tree):
@@ -597,7 +597,7 @@ class AbstractParentedTree(Tree):
 
 	def __delitem__(self, index):
 		if isinstance(index, slice):  # del ptree[start:stop]
-			start, stop = slice_bounds(self, index)
+			start, stop, _ = slice_bounds(self, index)
 			# Clear all the children pointers.
 			for i in range(start, stop):
 				if isinstance(self[i], Tree):
@@ -623,7 +623,7 @@ class AbstractParentedTree(Tree):
 
 	def __setitem__(self, index, value):
 		if isinstance(index, slice):  # ptree[start:stop] = value
-			start, stop = slice_bounds(self, index)
+			start, stop, _ = slice_bounds(self, index)
 			# make a copy of value, in case it's an iterator
 			if not isinstance(value, (list, tuple)):
 				value = list(value)
@@ -966,7 +966,7 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 
 	Takes into account ``None`` indices and negative indices.
 
-	:returns: ``(start, stop)`` tuple, where ``0 <= start <= stop <= len(seq)``
+	:returns: tuple ``(start, stop, 1)``, s.t. ``0 <= start <= stop <= len(seq)``
 	:raises ValueError: if slice_obj.step is not None.
 	:param allow_step: If true, then the slice object may have a non-None step.
 		If it does, then return a tuple (start, stop, step)."""
@@ -977,9 +977,9 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 		# bounds. If step is negative, then the roles of start and
 		# stop (in terms of default values, etc), are swapped.
 		if slice_obj.step < 0:
-			start, stop = slice_bounds(seq, slice(stop, start))
+			start, stop, _ = slice_bounds(seq, slice(stop, start))
 		else:
-			start, stop = slice_bounds(seq, slice(start, stop))
+			start, stop, _ = slice_bounds(seq, slice(start, stop))
 		return start, stop, slice_obj.step
 	elif slice_obj.step not in (None, 1):
 		raise ValueError('slices with steps are not supported by %s' %
@@ -996,4 +996,4 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 		except IndexError:
 			stop = len(seq)
 	start = min(start, stop)
-	return start, stop
+	return start, stop, 1

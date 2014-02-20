@@ -1,5 +1,6 @@
 """Unit tests for discodop modules."""
 # pylint: disable=C0111,W0232
+from __future__ import print_function
 import re
 from unittest import TestCase
 from operator import itemgetter
@@ -12,7 +13,7 @@ from discodop.treebanktransforms import punctraise, balancedpunctraise
 from discodop.grammar import flatten, UniqueIDs
 
 
-class Test_treetransforms:
+class Test_treetransforms(object):
 	def test_binarize(self):
 		treestr = '(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))'
 		origtree = Tree(treestr)
@@ -80,7 +81,7 @@ class Test_treetransforms:
 				'(S (X (A 0) (A 1) (A 2) (A 3)))')
 
 
-class Test_treebank:
+class Test_treebank(object):
 	def test_incrementaltreereader(self):
 		data = '''
 		(top (smain (noun 0) (verb 1) (inf (verb 5) (inf (np (det 2)
@@ -114,7 +115,7 @@ rich	JJ	--	--	500
 		assert len(result) == 1
 
 
-class Test_treebanktransforms:
+class Test_treebanktransforms(object):
 	def test_balancedpunctraise(self):
 		tree = ParentedTree.parse('(ROOT ($, 3) ($[ 7) ($[ 13) ($, 14) ($, 20)'
 				' (S (NP (ART 0) (ADJA 1) (NN 2) (NP (CARD 4) (NN 5) (PP'
@@ -136,7 +137,7 @@ class Test_treebanktransforms:
 		assert max(map(fanout, addbitsets(nopunct).subtrees())) == 1
 
 
-class Test_grammar:
+class Test_grammar(object):
 	def test_flatten(self):
 		ids = UniqueIDs()
 		sent = [None, ',', None, '.']

@@ -698,10 +698,7 @@ cdef getsent(bytes frag, list sent):
 		spans[n] = n + 1
 	maxl = max(spans)
 	for n in sorted(spans):
-		if n in leaves:
-			newsent.append(sent[n])  # a terminal
-		else:
-			newsent.append(None)  # a frontier node
+		newsent.append(sent[n] if n in leaves else None)
 		leafmap[n] = (" %d" % m).encode('ascii')
 		m += 1
 		if spans[n] not in spans and n != maxl:  # a gap
@@ -715,17 +712,14 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 		list asent, list bsent, list labels, ULong *scratch,
 		short SLOTS, bint bitmatrix=False):
 	"""Dump a table of the common subtrees of two trees."""
-	cdef Node aa, bb
 	dumptree(a, anodes, asent, labels, scratch)
 	dumptree(b, bnodes, bsent, labels, scratch)
 	print('\t'.join([''] + ["%2d" % x for x in range(b.len)
 		if bnodes[x].prod != -1]))
 	for m in range(b.len):
-		bb = bnodes[m]
-		print('\t', labels[bb.prod][:3], end='')
+		print('\t', labels[(<Node>bnodes[m]).prod][:3], end='')
 	for n in range(a.len):
-		aa = anodes[n]
-		print("\n%2d" % n, labels[aa.prod][:3], end='')
+		print("\n%2d" % n, labels[(<Node>anodes[n]).prod][:3], end='')
 		for m in range(b.len):
 			print('\t', end='')
 			if bitmatrix:
