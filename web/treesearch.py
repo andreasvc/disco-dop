@@ -472,7 +472,7 @@ def style():
 					"Using sentences extracted from parse trees.\n"
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
-		yield '<a href="style?export">Export to CSV</a><br>'
+		yield '<a href="style?export=csv">Export to CSV</a><br>'
 		yield 'Results based on first %d sentences.' % min(NUMSENTS)
 
 		# produce a plot for each field
@@ -497,9 +497,12 @@ def style():
 				for name, row in sorted(STYLETABLE.items()))
 		return tmp.getvalue()
 
-	if 'export' in request.args:
+	if request.args.get('export') == 'csv':
 		resp = Response(generatecsv(), mimetype='text/plain')
 		resp.headers['Content-Disposition'] = 'attachment; filename=style.csv'
+	elif request.args.get('export') == 'json':
+		resp = Response(json.dumps(STYLETABLE, indent=2),
+				mimetype='application/json')
 	else:
 		resp = Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS,
