@@ -252,12 +252,12 @@ def counts(form, doexport=False):
 						'Relative frequency of %s: '
 						'(count / num_%s * 100)' % (name, norm), unit='%')
 	if doexport:
-		with io.BytesIO() as tmp:
-			if form.get('export') == 'json':
-				df.to_json(tmp)
-			else:
+		if form.get('export') == 'json':
+			yield json.dumps(df.to_dict(), indent=2)
+		else:
+			with io.BytesIO() as tmp:
 				df.to_csv(tmp)
-			yield tmp.getvalue()
+				yield tmp.getvalue()
 	else:
 		fmt = lambda x: '%g' % round(x, 1)
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
