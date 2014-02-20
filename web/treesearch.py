@@ -7,6 +7,7 @@ import os
 import re
 import cgi
 import csv
+import json
 import glob
 import logging
 import tempfile
@@ -107,20 +108,27 @@ def export(form, output):
 			selectedtexts(request.args)}
 	if output == 'counts':
 		results = counts(form, doexport=True)
+		if form.get('export') == 'json':
+			resp = Response(results, mimetype='application/json')
+			return resp
 		filename = 'counts.csv'
 	elif output == 'fragments':
 		results = fragmentsinresults(form, doexport=True)
 		filename = 'fragments.txt'
 	elif output in ('sents', 'brackets', 'trees'):
 		if form.get('engine') == 'xpath' and output != 'sents':
-			fmt = '<!-- %s:%s -->\n%s\n\n'
+			fmt = '<!-- %s:%s -->\n%s\n\n'  # hack
 		else:
 			fmt = '%s:%s|%s\n'
+		results = CORPORA[form.get('engine', 'tgrep2')].sents(
+					form['query'], selected, maxresults=SENTLIMIT,
+					brackets=output in ('brackets', 'trees'))
+		if form.get('export') == 'json':
+			return Response(json.dumps(results, cls=JsonSetEncoder, indent=2),
+					mimetype='application/json')
 		results = ((fmt % (a[0], a[1], (a[2]))
 				if form.get('linenos') else (a[2] + '\n')).encode('utf-8')
-				for a in CORPORA[form.get('engine', 'tgrep2')].sents(
-					form['query'], selected, maxresults=SENTLIMIT,
-					brackets=output in ('brackets', 'trees')))
+				for a in results)
 		filename = output + '.txt'
 	else:
 		raise ValueError('cannot export %s' % output)
@@ -145,7 +153,7 @@ def counts(form, doexport=False):
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
 	if not doexport:
-		url = 'counts?' + url_encode(dict(export=1, **form))
+		url = 'counts?' + url_encode(dict(export='csv', **form))
 		yield ('Counts from queries '
 				'(<a href="%s">export to CSV</a>):\n' % url)
 	if norm == 'query':
@@ -245,7 +253,10 @@ def counts(form, doexport=False):
 						'(count / num_%s * 100)' % (name, norm), unit='%')
 	if doexport:
 		with io.BytesIO() as tmp:
-			df.to_csv(tmp)
+			if form.get('export') == 'json':
+				df.to_json(tmp)
+			else:
+				df.to_csv(tmp)
 			yield tmp.getvalue()
 	else:
 		fmt = lambda x: '%g' % round(x, 1)
@@ -278,7 +289,7 @@ def trees(form):
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
 	# NB: we do not hide function or morphology tags when exporting
-	url = 'trees?' + url_encode(dict(export=1, **form))
+	url = 'trees?' + url_encode(dict(export='csv', **form))
 	yield ('<pre>Query: %s\n'
 			'Trees (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
@@ -322,7 +333,7 @@ def sents(form, dobrackets=False):
 	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
 			selectedtexts(form)}
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
-			url_encode(dict(export=1, **form)))
+			url_encode(dict(export='csv', **form)))
 	yield ('<pre>Query: %s\n'
 			'Sentences (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
@@ -374,7 +385,7 @@ def fragmentsinresults(form, doexport=False):
 			selectedtexts(form)}
 	uniquetrees = set()
 	if not doexport:
-		url = 'fragments?' + url_encode(dict(export=1, **form))
+		url = 'fragments?' + url_encode(dict(export='csv', **form))
 		yield ('<pre>Query: %s\n'
 				'Fragments (showing up to %d fragments '
 				'in the first %d search results from selected texts;\n'
@@ -898,6 +909,13 @@ def stream_template(template_name, **context):
 	result = templ.stream(context)
 	result.enable_buffering(5)
 	return result
+
+
+class JsonSetEncoder(json.JSONEncoder):
+	def default(self, obj):
+		if isinstance(obj, set):
+			return list(obj)
+		return json.JSONEncoder.default(self, obj)
 
 
 fragments.PARAMS.update(quiet=True, debug=False, disc=False, complete=False,
