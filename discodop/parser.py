@@ -30,7 +30,7 @@ from discodop.containers import Grammar
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import Tree
-from discodop.lexicon import replaceraretestwords, getunknownwordfun, UNK
+from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
 		saveheads
 from discodop.treetransforms import mergediscnodes, unbinarize, \
@@ -603,7 +603,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		grammar.testgrammar()
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging.method == 'unknownword':
-		postagging.unknownwordfun = getunknownwordfun(postagging.model)
+		postagging.unknownwordfun = UNKNOWNWORDFUNC[postagging.model]
 		postagging.lexicon = {w for w in stages[0].grammar.lexicalbyword
 				if not w.startswith(UNK)}
 		postagging.sigs = {w for w in stages[0].grammar.lexicalbyword

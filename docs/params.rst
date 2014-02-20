@@ -156,8 +156,12 @@ Other options
         :'frog': use external tagger 'frog' for Dutch; produces CGN tags, use morphology='replace'.
     :model:
 
-        :with unknownword: 4, 6, base
-        :with other taggers: filename of tagger model
+        :with 'unknownword', one of:
+            :4: Stanford model 4; language agnostic
+            :6: Stanford model 6, for Penn treebank
+            :base: Stanford 'base' model; language agnostic
+            :ftb: Stanford model 2 for French treebank
+        :with external taggers: filename of tagger model (not applicable to 'frog')
     :retag: if True, re-tag the training corpus using the external tagger.
     :unknownthreshold: use probabilities of words that occur this number of times or less for unknown words
     :openclassthreshold: add unseen tags for known words when tag rewrites

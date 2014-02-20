@@ -33,8 +33,8 @@ from discodop.grammar import treebankgrammar, dopreduction, \
 		doubledop, grammarinfo, sortgrammar, write_lcfrs_grammar
 from discodop.containers import Grammar
 from discodop.lexicon import getunknownwordmodel, getlexmodel, smoothlexicon, \
-		simplesmoothlexicon, replaceraretrainwords, getunknownwordfun, \
-		externaltagging
+		simplesmoothlexicon, replaceraretrainwords, externaltagging, \
+		UNKNOWNWORDFUNC
 from discodop.parser import DEFAULTSTAGE, readgrammars, Parser, DictObj, \
 		workerfunc
 from discodop.estimates import getestimates, getpcfgestimates
@@ -299,7 +299,7 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 
 def getposmodel(postagging, train_tagged_sents):
 	"""Apply unknown word model to sentences before extracting grammar."""
-	postagging.update(unknownwordfun=getunknownwordfun(postagging.model))
+	postagging.update(unknownwordfun=UNKNOWNWORDFUNC[postagging.model])
 	# get smoothed probalities for lexical productions
 	lexresults, msg = getunknownwordmodel(
 			train_tagged_sents, postagging.unknownwordfun,
@@ -956,7 +956,7 @@ def readparam(filename):
 		postagging.setdefault('retag', False)
 		postagging = params['postagging'] = DictObj(postagging)
 		if postagging.method == 'unknownword':
-			assert postagging.model in ('4', '6', 'base')
+			assert postagging.model in UNKNOWNWORDFUNC
 			assert postagging.unknownthreshold >= 1
 			assert postagging.openclassthreshold >= 0
 		else:

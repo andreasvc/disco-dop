@@ -218,26 +218,19 @@ def smoothlexicon(grammar, P_wordtag):
 
 
 # === functions for unknown word signatures ============
-def getunknownwordfun(model):
-	"""Resolve name of unknown word model into function for that model."""
-	return {"4": unknownword4,
-		"6": unknownword6,
-		"base": unknownwordbase,
-		"ftb": unknownwordftb,
-		}[model]
 
-hasdigit = re.compile(r"\d", re.UNICODE)
-hasnondigit = re.compile(r"\D", re.UNICODE)
+HASDIGIT = re.compile(r"\d", re.UNICODE)
+HASNONDIGIT = re.compile(r"\D", re.UNICODE)
 #NB: includes '-', hyphen, non-breaking hyphen
 # does NOT include: figure-dash, em-dash, en-dash (these are punctuation,
 # not word-combining) u2012-u2015; nb: these are hex values.
-hasdash = re.compile(u"[-\u2010\u2011]", re.UNICODE)
+HASDASH = re.compile(u"[-\u2010\u2011]", re.UNICODE)
 # FIXME: exclude accented characters for model 6?
-haslower = re.compile(u'[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
+HASLOWER = re.compile(u'[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
 		u'\xef\xfc\xff\u0153\xe6]', re.UNICODE)
-hasupper = re.compile(u'[A-Z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
+HASUPPER = re.compile(u'[A-Z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
 		u'\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
-hasletter = re.compile(u'[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
+HASLETTER = re.compile(u'[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
 		u'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
 		u'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
 # Cf. http://en.wikipedia.org/wiki/French_alphabet
@@ -253,7 +246,7 @@ def unknownword6(word, loc, lexicon):
 	wlen = len(word)
 	numcaps = 0
 	sig = UNK
-	numcaps = len(hasupper.findall(word))
+	numcaps = len(HASUPPER.findall(word))
 	lowered = word.lower()
 	if numcaps > 1:
 		sig += "-CAPS"
@@ -264,17 +257,17 @@ def unknownword6(word, loc, lexicon):
 				sig += "-KNOWNLC"
 		else:
 			sig += "-CAP"
-	elif haslower.search(word):
+	elif HASLOWER.search(word):
 		sig += "-LC"
-	if hasdigit.search(word):
+	if HASDIGIT.search(word):
 		sig += "-NUM"
-	if hasdash.search(word):
+	if HASDASH.search(word):
 		sig += "-DASH"
 	if lowered.endswith("s") and wlen >= 3:
 		if lowered[-2] not in "siu":
 			sig += "-s"
-	elif wlen >= 5 and not hasdash.search(word) and not (
-			hasdigit.search(word) and numcaps > 0):
+	elif wlen >= 5 and not HASDASH.search(word) and not (
+			HASDIGIT.search(word) and numcaps > 0):
 		suffixes = ("ed", "ing", "ion", "er", "est", "ly", "ity", "y", "al")
 		for a in suffixes:
 			if lowered.endswith(a):
@@ -288,22 +281,22 @@ def unknownword4(word, loc, _):
 
 	# letters
 	if word[0] in UPPER:
-		if not haslower:
+		if not HASLOWER.search(word):
 			sig += "-AC"
 		elif loc == 0:
 			sig += "-SC"
 		else:
 			sig += "-C"
-	elif haslower.search(word):
+	elif HASLOWER.search(word):
 		sig += "-L"
-	elif hasletter.search(word):
+	elif HASLETTER.search(word):
 		sig += "-U"
 	else:
 		sig += "-S"  # no letter
 
 	# digits
-	if hasdigit.search(word):
-		if hasnondigit.search(word):
+	if HASDIGIT.search(word):
+		if HASNONDIGIT.search(word):
 			sig += "-n"
 		else:
 			sig += "-N"
@@ -333,8 +326,8 @@ def unknownwordbase(word, _loc, _lexicon):
 		sig += "-c"
 
 	# digits
-	if hasdigit.search(word):
-		if hasnondigit.search(word):
+	if HASDIGIT.search(word):
+		if HASNONDIGIT.search(word):
 			sig += "-n"
 		else:
 			sig += "-N"
@@ -351,21 +344,21 @@ def unknownwordbase(word, _loc, _lexicon):
 			sig += "-%s" % word[-2].lower()
 	return sig
 
-nounsuffix = re.compile(u"(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
+NOUNSUFFIX = re.compile(u"(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
 		u"|ence|eau|erie|ng|ette|age|ade|ance|ude|ogue|aphe|ate|duc|anthe"
 		u"|archie|coque|érèse|ergie|ogie|lithe|mètre|métrie|odie|pathie|phie"
 		u"|phone|phore|onyme|thèque|scope|some|pole|ôme|chromie|pie)s?$")
-adjsuffix = re.compile(u"(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
+ADJSUFFIX = re.compile(u"(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
 		u"|ible|atif|ique|if|ive|eux|aise|ent|ois|oise|ante|el|elle|ente|oire"
 		u"|ain|aine)s?$")
-possibleplural = re.compile(u"(s|ux)$")
-verbsuffix = re.compile(u"(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras"
+POSSIBLEPLURAL = re.compile(u"(s|ux)$")
+VERBSUFFIX = re.compile(u"(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras"
 		u"|é|és|ées|isse|it)$")
-advsuffix = re.compile("(iment|ement|emment|amment)$")
-haspunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
+ADVSUFFIX = re.compile("(iment|ement|emment|amment)$")
+HASPUNC = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
 		u"\u20A0-\u20B5])+")
-ispunc = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
+ISPUNC = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
 		u"\u20A0-\u20B5])+$")
 
@@ -374,29 +367,37 @@ def unknownwordftb(word, loc, _):
 	"""Model 2 for French of the Stanford parser."""
 	sig = UNK
 
-	if advsuffix.search(word):
+	if ADVSUFFIX.search(word):
 		sig += "-ADV"
-	elif verbsuffix.search(word):
+	elif VERBSUFFIX.search(word):
 		sig += "-VB"
-	elif nounsuffix.search(word):
+	elif NOUNSUFFIX.search(word):
 		sig += "-NN"
 
-	if adjsuffix.search(word):
+	if ADJSUFFIX.search(word):
 		sig += "-ADV"
-	if hasdigit.search(word):
+	if HASDIGIT.search(word):
 		sig += "-NUM"
-	if possibleplural.search(word):
+	if POSSIBLEPLURAL.search(word):
 		sig += "-PL"
 
-	if ispunc.search(word):
+	if ISPUNC.search(word):
 		sig += "-ISPUNC"
-	elif haspunc.search(word):
+	elif HASPUNC.search(word):
 		sig += "-HASPUNC"
 
 	if loc > 0 and len(word) > 0 and word[0] in UPPER:
 		sig += "-UP"
 
 	return sig
+
+
+UNKNOWNWORDFUNC = {
+		"4": unknownword4,
+		"6": unknownword6,
+		"base": unknownwordbase,
+		"ftb": unknownwordftb,
+		}
 
 
 # === Performing POS tagging with external tools ============
