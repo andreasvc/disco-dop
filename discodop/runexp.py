@@ -24,7 +24,7 @@ else:
 import numpy as np
 from discodop import eval as evalmod
 from discodop.tree import Tree
-from discodop.treebank import READERS, writetree, treebankfanout
+from discodop.treebank import READERS, writetree, treebankfanout, LEAVESRE
 from discodop.treebanktransforms import transform, rrtransform
 from discodop.treetransforms import binarize, optimalbinarize, canonicalize, \
 		splitdiscnodes, addfanoutmarkers
@@ -381,10 +381,24 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		backtransform = None
 		if stage.dop:
 			if stage.usedoubledop:
-				xgrammar, backtransform, altweights = doubledop(
+				xgrammar, backtransform, altweights, fragments = doubledop(
 						traintrees, sents, binarized=stage.binarized,
 						iterate=stage.iterate, complement=stage.complement,
 						numproc=numproc)
+				# dump fragments
+				with codecs.getwriter('ascii')(gzip.open(
+						'%s/%s.fragments.gz' % (resultdir, stage.name),
+						'w')) as out:
+					if stage.mode.startswith('pcfg'):
+						out.writelines('%s\t%d\n' % (LEAVESRE.sub(lambda x:
+								' %s)' % (b[int(x.group(1))] or '').replace(
+									'(', '-LRB-').replace(')', '-RRB-'), a),
+								sum(c.values()))
+								for (a, b), c in fragments.items())
+					else:
+						out.writelines('%s\t%s\t%d\n' % (a,
+								' '.join(x or '' for x in b), sum(c.values()))
+								for (a, b), c in fragments.items())
 			else:  # DOP reduction
 				xgrammar, altweights = dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph)
@@ -974,11 +988,8 @@ def test():
 
 def main(argv=None):
 	"""Parse command line arguments."""
-	try:
-		import faulthandler
-		faulthandler.enable()
-	except ImportError:
-		print('run "pip install faulthandler" to get backtraces on segfaults')
+	import faulthandler
+	faulthandler.enable()
 	if argv is None:
 		argv = sys.argv
 	if len(argv) == 1:

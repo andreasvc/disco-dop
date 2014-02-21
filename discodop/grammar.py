@@ -292,7 +292,7 @@ def doubledop(trees, sents, debug=False, binarized=True,
 	grammar = [(rule, (freq, ntsums[rule[0][0]]))
 			for rule, (freq, _, _, _) in grammar]
 	return grammar, backtransform, dict(
-			ewe=eweweights, bon=bonweights, shortest=shortest)
+			ewe=eweweights, bon=bonweights, shortest=shortest), fragments
 
 
 def compiletsg(fragments, binarized=True):
@@ -838,7 +838,7 @@ def test():
 	grammar.testgrammar()
 
 	debug = '--debug' in sys.argv
-	grammarx, backtransform, _ = doubledop(trees, sents, debug=debug, numproc=1)
+	grammarx, backtransform, _, _ = doubledop(trees, sents, debug=debug, numproc=1)
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
@@ -938,7 +938,7 @@ def main():
 		grammar, altweights = dopreduction(trees, sents,
 				packedgraph='--packed' in opts)
 	elif model == 'doubledop':
-		grammar, backtransform, altweights = doubledop(trees, sents,
+		grammar, backtransform, altweights, _ = doubledop(trees, sents,
 				numproc=int(opts.get('--numproc', 1)),
 				binarized='--bitpar' not in opts)
 	elif model == 'ptsg':

@@ -241,16 +241,13 @@ def workerfunc(func):
 	@wraps(func)
 	def wrapper(*args, **kwds):
 		"""Apply decorated function."""
-		try:
-			import faulthandler
-			faulthandler.enable()  # Dump information on segfault.
-			# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
-		except ImportError:
-			print('run "pip install faulthandler" to get backtraces on segfaults')
+		import faulthandler
+		faulthandler.enable()  # Dump information on segfault.
+		# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
 		try:
 			return func(*args, **kwds)
 		except Exception:  # pylint: disable=W0703
-			# Put all exception text into an exception and raise that
+			# Put traceback as string into an exception and raise that
 			raise Exception('in worker process\n%s' %
 					''.join(traceback.format_exception(*sys.exc_info())))
 	return wrapper
