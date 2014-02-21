@@ -386,7 +386,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						iterate=stage.iterate, complement=stage.complement,
 						numproc=numproc)
 				# dump fragments
-				with codecs.getwriter('ascii')(gzip.open(
+				with codecs.getwriter('utf-8')(gzip.open(
 						'%s/%s.fragments.gz' % (resultdir, stage.name),
 						'w')) as out:
 					if stage.mode.startswith('pcfg'):
