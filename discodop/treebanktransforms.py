@@ -753,6 +753,7 @@ def sethead(child):
 	child.source = getattr(child, "source")
 	if child.source is None:
 		child.source = 6 * ['']
+		child.source[TAG] = child.label
 	if 'HD' not in child.source[FUNC].upper().split("-"):
 		x = list(child.source)
 		if child.source[FUNC] in (None, '', '--'):
