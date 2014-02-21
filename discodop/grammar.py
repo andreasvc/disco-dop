@@ -690,16 +690,17 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	lexical = OrderedDict()
 	freqs = False
 	if bitpar:
-		freqmass, denom = defaultdict(int), defaultdict(int)
-		for (r, _), w in grammar:
-			if isinstance(w, tuple):
-				freqmass[r[0]] += w[0]
-				denom[r[0]] = w[1]
-			elif w != 1:
-				break
-		else:
-			freqs = all(-1 <= denom[nt] - mass <= 1
-					for nt, mass in freqmass.items())
+		freqs = True
+		#freqmass, denom = defaultdict(int), defaultdict(int)
+		#for (r, _), w in grammar:
+		#	if isinstance(w, tuple):
+		#		freqmass[r[0]] += w[0]
+		#		denom[r[0]] = w[1]
+		#	elif w != 1:
+		#		break
+		#else:
+		#	freqs = all(-1 <= denom[nt] - mass <= 1
+		#			for nt, mass in freqmass.items())
 	for (r, yf), w in grammar:
 		if isinstance(w, tuple):
 			if freqs:
