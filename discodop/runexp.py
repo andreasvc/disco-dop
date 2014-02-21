@@ -278,22 +278,21 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		trainnumsents = traincorpus.numsents
 	trees = list(train.trees().values())[:trainnumsents]
 	sents = list(train.sents().values())[:trainnumsents]
+	assert trees, 'training corpus should be non-empty'
+	logging.info('%d training sentences before length restriction', len(trees))
+	trees, sents = zip(*[sent for sent in zip(trees, sents)
+		if len(sent[1]) <= traincorpus.maxwords])
+	logging.info('%d training sentences after length restriction <= %d',
+			len(trees), traincorpus.maxwords)
+	train_tagged_sents = [[(word, tag) for word, (_, tag)
+			in zip(sent, sorted(tree.pos()))]
+				for tree, sent in zip(trees, sents)]
 	if transformations:
 		trees = [transform(tree, sent, transformations)
 				for tree, sent in zip(trees, sents)]
 	if relationalrealizational:
 		trees = [rrtransform(tree, **relationalrealizational)[0]
 				for tree in trees]
-	train_tagged_sents = [[(word, tag) for word, (_, tag)
-			in zip(sent, sorted(tree.pos()))]
-				for tree, sent in zip(trees, sents)]
-	assert trees, 'training corpus should be non-empty'
-	logging.info('%d training sentences before length restriction',
-			len(trees))
-	trees, sents = zip(*[sent for sent in zip(trees, sents)
-		if len(sent[1]) <= traincorpus.maxwords])
-	logging.info('%d training sentences after length restriction <= %d',
-		len(trees), traincorpus.maxwords)
 	return trees, sents, train_tagged_sents
 
 
