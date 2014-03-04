@@ -60,9 +60,13 @@ def draw():
 	""" Wrapper to parse & draw tree(s). """
 	if len(request.args['tree']) > LIMIT:
 		return 'Too much data. Limit: %d bytes' % LIMIT
-	dts = [DrawTree(tree, sent, abbr='abbr' in request.args)
-				for tree, sent, _rest in incrementaltreereader(
-					request.args['tree'].splitlines())]
+	dts = []
+	for tree, sent, _rest in incrementaltreereader(
+			request.args['tree'].splitlines()):
+		try:
+			dts.append(DrawTree(tree, sent, abbr='abbr' in request.args))
+		except Exception as err:
+			return Response(str(err), mimetype='text/plain')
 	return drawtrees(request.args, dts)
 
 
