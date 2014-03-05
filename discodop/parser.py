@@ -260,7 +260,7 @@ def worker(args):
 	if not line.strip():
 		return '', True, 0, ''
 	begin = time.clock()
-	sent = line.split()
+	sent = line.split(' ')
 	tags = None
 	if PARAMS.usetags:
 		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))

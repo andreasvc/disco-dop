@@ -793,8 +793,8 @@ def tokenize(filename):
 		converted = (' '.join(GETLEAVES.findall(line)) + '\n'
 				for line in open(base + '.mrg'))
 	elif os.path.exists(base + '.dact'):
-		result = {entry.name(): ElementTree.fromstring(
-				entry.contents()).find('sentence').text + '\n' for entry
+		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
+				'sentence').text.encode('utf-8') + '\n' for entry
 				in alpinocorpus.CorpusReader(base + '.dact').entries()}
 		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
 	else:

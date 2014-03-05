@@ -567,7 +567,7 @@ def printfragments(fragments, counts, out=None):
 		logging.info("number of fragments: %d", len(fragments))
 	if PARAMS['nofreq']:
 		for a in fragments:
-			out.write("%s\n" % (("%s\t%s" % (a[0],
+			out.write("%s\n" % (("%s\t%s" % (a[0].decode('ascii'),
 					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a))
 		return
@@ -588,7 +588,7 @@ def printfragments(fragments, counts, out=None):
 	if PARAMS['indices']:
 		for a, theindices in zip(fragments, counts):
 			if len(theindices) > threshold:
-				out.write("%s\t%r\n" % (("%s\t%s" % (a[0],
+				out.write("%s\t%r\n" % (("%s\t%s" % (a[0].decode('ascii'),
 					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a,
 					[n for n in sorted(theindices.elements())
@@ -606,13 +606,13 @@ def printfragments(fragments, counts, out=None):
 				raise ValueError("invalid fragment--frequency=%d: %r" % (
 					freq, a))
 		for a, freq in zip(fragments, counts):
-			out.write("%s\t%d/%d\n" % (("%s\t%s" % (a[0],
+			out.write("%s\t%d/%d\n" % (("%s\t%s" % (a[0].decode('ascii'),
 				' '.join("%s" % x if x else '' for x in a[1])))
 				if PARAMS['disc'] else a, freq, sums[a[1:a.index(' ')]]))
 	else:
 		for a, freq in zip(fragments, counts):
 			if freq > threshold:
-				out.write("%s\t%d\n" % (("%s\t%s" % (a[0],
+				out.write("%s\t%d\n" % (("%s\t%s" % (a[0].decode('ascii'),
 					' '.join("%s" % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a, freq))
 			elif zeroinvalid:

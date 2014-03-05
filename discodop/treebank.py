@@ -436,7 +436,7 @@ class AlpinoCorpusReader(CorpusReader):
 			xmlblock = block
 		else:
 			xmlblock = ElementTree.fromstring(block)
-		sent = xmlblock.find('sentence').text.split()
+		sent = xmlblock.find('sentence').text.split(' ')
 		if orig or self.punct != "remove":
 			return sent
 		return [word for word in sent
@@ -709,8 +709,8 @@ def handlefunctions(action, tree, pos=True, top=False):
 			if pos or isinstance(a[0], Tree):
 				# test for non-empty function tag ("--" is considered empty)
 				if (getattr(a, 'source', None)
-						and any(a.source[FUNC].split("-"))):
-					func = a.source[FUNC].split("-")[0].upper() or '--'
+						and a.source[FUNC] and a.source[FUNC] != '--'):
+					func = a.source[FUNC].split("-")[0].upper()
 					if action == 'add':
 						a.label += "-%s" % func
 					elif action == 'replace':
@@ -954,7 +954,7 @@ def alpinotree(block, morphology=None, lemmas=None, functions=None):
 	"""Get tree and sentence from tree in Alpino format given as an etree XML
 	object."""
 	tree = alpinoparse(block, morphology, lemmas)
-	sent = block.find('sentence').text.split()
+	sent = block.find('sentence').text.split(' ')
 	handlefunctions(functions, tree)
 	return tree, sent
 
