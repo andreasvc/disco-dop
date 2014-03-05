@@ -365,7 +365,7 @@ def sents(form, dobrackets=False):
 			else:
 				out = ' '.join('<span class=r>%s</span>' % word
 						if x in high else word
-						for x, word in enumerate(sent.split()))
+						for x, word in enumerate(sent.split(' ')))
 			yield "<li>#%s [%s] %s" % (str(sentno).rjust(6), link, out)
 		yield "</ol>"
 	yield '</pre>' if gotresults else 'No matches.'
@@ -567,7 +567,7 @@ def browsesents():
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 			results = [ElementTree.fromstring(
 					CORPORA['xpath'].files[filename].read('%8d' % (n + 1))
-					).find('sentence').text.split()
+					).find('sentence').text
 					for n in range(start, maxtree)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
@@ -590,7 +590,7 @@ def browsesents():
 						query, subset=(filename,), maxresults=None)
 				for _, m, sent, high in matches:
 					if start <= m < maxtree:
-						sent = sent.split()
+						sent = sent.split(' ')
 						match = ' '.join(sent[a] for a in high)
 						results[m - start - 1] = results[m - start - 1].replace(
 								match, '<font color=%s>%s</font>' % (
