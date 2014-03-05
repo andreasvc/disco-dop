@@ -211,7 +211,7 @@ class DrawTree(object):
 		assert len(leaves) == len(set(leaves)), (
 				'Indices must occur at most once.')
 		assert all(0 <= n < len(sent) for n in leaves), ('All leaves must be '
-				'in the interval 0..n with n=len(sent)\nlength: %d leaves: '
+				'in the interval 0..n with n=len(sent)\ntokens: %d indices: '
 				'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
 		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)

@@ -259,9 +259,14 @@ class DiscBracketCorpusReader(CorpusReader):
 			yield n, block
 
 	def _parse(self, block):
-		result = ParentedTree.parse(block.split("\t", 1)[0], parse_leaf=int)
+		treestr = block.split("\t", 1)[0]
+		tree = ParentedTree.parse(treestr, parse_leaf=int)
 		sent = self._word(block, orig=True)
-		return result, sent
+		assert all(0 <= n < len(sent) for n in tree.leaves()), (
+				'All leaves must be in the interval 0..n with '
+				'n=len(sent)\ntokens: %d indices: %r\nsent: %s' % (
+				len(sent), tree.leaves(), sent))
+		return tree, sent
 
 	def _word(self, block, orig=False):
 		sent = block.split("\t", 1)[1].rstrip("\n\r").split(' ')
@@ -308,10 +313,10 @@ class BracketCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		c = count()
-		result = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
+		tree = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
 				block), parse_leaf=int)
 		sent = self._word(block, orig=True)
-		return result, sent
+		return tree, sent
 
 	def _word(self, block, orig=False):
 		sent = [a or None for a in LEAVESRE.findall(block)]
@@ -922,7 +927,7 @@ def brackettree(treestr, sent, brackets, strtermre):
 			brackets=brackets)
 		if sent.strip():
 			maxleaf = max(tree.leaves())
-			sent = sent.split(None, maxleaf + 1)
+			sent = sent.split(' ', maxleaf + 1)
 			rest = sent[maxleaf + 1].strip() if len(sent) > maxleaf + 1 else ''
 			sent = sent[:maxleaf + 1]
 		else:

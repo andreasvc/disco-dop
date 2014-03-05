@@ -975,7 +975,7 @@ def main():
 				cnt += 1
 		else:
 			for key, tree, sent in trees:
-				outfile.write(key, writetree(tree, sent, key, 'alpino'))
+				outfile.write(str(key), writetree(tree, sent, key, 'alpino'))
 				cnt += 1
 	else:
 		encoding = opts.get('outputenc', 'utf-8')
