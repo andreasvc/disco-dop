@@ -280,7 +280,7 @@ def unknownword4(word, loc, _):
 	sig = UNK
 
 	# letters
-	if word[0] in UPPER:
+	if word and word[0] in UPPER:
 		if not HASLOWER.search(word):
 			sig += "-AC"
 		elif loc == 0:

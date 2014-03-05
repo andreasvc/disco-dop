@@ -273,11 +273,9 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	logging.info('%d sentences in training corpus %s',
 			len(train.trees()), traincorpus.path)
 	if isinstance(traincorpus.numsents, float):
-		trainnumsents = int(traincorpus.numsents * len(train.sents()))
-	else:
-		trainnumsents = traincorpus.numsents
-	trees = list(train.trees().values())[:trainnumsents]
-	sents = list(train.sents().values())[:trainnumsents]
+		traincorpus.numsents = int(traincorpus.numsents * len(train.sents()))
+	trees = list(train.trees().values())[:traincorpus.numsents]
+	sents = list(train.sents().values())[:traincorpus.numsents]
 	assert trees, 'training corpus should be non-empty'
 	logging.info('%d training sentences before length restriction', len(trees))
 	trees, sents = zip(*[sent for sent in zip(trees, sents)

@@ -116,7 +116,7 @@ binarization=dict(
 	leftmostunary=False,  # start binarization with unary node
 	rightmostunary=False,  # end binarization with unary node
 	tailmarker='',  # symbol to add to last node in a binarization, to mark head node
-	revmarkov=True,  # reverse order for horizontal Markovization
+	revmarkov=False,  # reverse order for horizontal Markovization
 	fanout_marks_before_bin=False,  # whether to add fanout markers before
 		# binarization, to distinguish them for markovization,
 		# e.g., VP|<NP_2-VVFIN> instead of VP|<NP-VVFIN>
