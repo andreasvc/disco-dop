@@ -53,9 +53,11 @@ Requirements:
 - GCC             http://gcc.gnu.org/
 - Numpy 1.5+      http://numpy.org/
 
+Debian, Ubuntu based systems
+----------------------------
 For example, to install these dependencies and the latest stable release on
 an `Ubuntu <http://www.ubuntu.com>`_ system
-using `pip <http://http://www.pip-installer.org>`_,
+using `pip <http://www.pip-installer.org>`_,
 issue the following commands::
 
     sudo apt-get install build-essential python-dev python-numpy python-pip
@@ -75,6 +77,47 @@ run the following sequence of commands::
 (the ``--user`` option means the packages will be installed to your home
 directory which does not require root privileges).
 
+Other Linux systems
+-------------------
+This assumes no root access, but assumes that ``gcc`` is installed.
+
+Add local installation directory to PATH
+(replace with equivalent for your shell if you do not use bash)::
+
+    mkdir -p ~/.local
+    echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
+    export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
+
+Install Python 2.7 from source, if not installed already.
+Python may require some libraries such as ``zlib`` and ``readline``;
+installation steps are similar to the ones below.
+
+::
+
+    wget http://www.python.org/ftp/python/2.7.6/Python-2.7.6.tgz
+    tar -xzf Python-2.7.6.tgz
+    cd Python-2.7.6
+    ./configure --prefix=$HOME/.local --enable-shared
+    make && make install
+
+Check by running ``python`` that version 2.7.6 was installed successfully and
+is the default.
+
+Install pip::
+
+    wget https://raw.github.com/pypa/pip/master/contrib/get-pip.py
+    python get-pip.py --user
+
+Install the latest development version of discodop::
+
+    wget https://github.com/andreasvc/disco-dop/archive/master.zip
+    unzip disco-dop-master.zip
+    cd disco-dop-master
+    pip install --user -r requirements.txt
+    python setup.py install --user
+
+Other systems
+-------------
 If you do not run Linux, it is possible to run the code inside a virtual machine.
 To do that, install `Virtualbox <https://www.virtualbox.org/wiki/Downloads>`_
 and `Vagrant <http://docs.vagrantup.com/v2/installation/>`_,
