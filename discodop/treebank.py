@@ -927,9 +927,11 @@ def brackettree(treestr, sent, brackets, strtermre):
 			brackets=brackets)
 		if sent.strip():
 			maxleaf = max(tree.leaves())
-			sent = sent.lstrip('\t').split(' ', maxleaf + 1)
-			rest = sent[maxleaf + 1].strip() if len(sent) > maxleaf + 1 else ''
-			sent = sent[:maxleaf + 1]
+			sent = sent.strip('\n\r\t').split(' ', maxleaf)
+			rest = ''
+			lastword = sent[-1].split(None, 1)
+			if len(lastword) > 1:
+				sent[-1], rest = lastword
 		else:
 			sent = map(str, range(max(tree.leaves()) + 1))
 			rest = ''
