@@ -523,13 +523,14 @@ def filterlabels(line, nofunc, nomorph):
 def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
-	shortoptions = 'stcbmh'
+	shortoptions = 'e:m:stcbh'
 	options = 'engine= macros= numthreads= trees sents brackets counts help'
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
-		assert corpora
-	except (GetoptError, IndexError, ValueError, AssertionError) as err:
+		if not corpora:
+			raise ValueError('enter one or more corpus files')
+	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)

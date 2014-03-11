@@ -168,10 +168,12 @@ def counts(form, doexport=False):
 	if not doexport:
 		yield '<ol>%s</ol>\n' % '\n'.join(
 				'<li><a href="#q%d">%s</a>' % (n, query)
-				for n, query in enumerate(list(queries) + [
-					'Combined results', 'Overview'], 1))
+				for n, query in enumerate(list(queries)
+					# + ['Combined results', 'Overview']
+					, 1))
 	for n, (name, (normquery, query)) in enumerate(
-			list(queries.iteritems()) + [('Combined results', ('', None))], 1):
+			list(queries.iteritems())  # + [('Combined results', ('', None))]
+			, 1):
 		cnts = Counter()
 		sumtotal = 0
 		relfreq = {}
@@ -185,7 +187,6 @@ def counts(form, doexport=False):
 		else:
 			legend = ''
 			if normquery:
-				normquery, query = query.split('\t', 1)
 				norm = 'query'
 				normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
 						normquery, selected)
@@ -764,7 +765,7 @@ def querydict(queries):
 			normquery, query = query.split('\t')
 		else:
 			normquery, query = None, query
-			result[name] = normquery, query
+		result[name] = normquery, query
 	return result
 
 
