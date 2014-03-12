@@ -116,6 +116,17 @@ Install the latest development version of discodop::
     pip install --user -r requirements.txt
     python setup.py install --user
 
+Mac OS X (untested)
+-------------------
+- Install `Xcode <https://developer.apple.com/>`_ and `Homebrew <http://brew.sh>`_
+- Install dependencies using Homebrew::
+
+    brew install python git
+    git clone --depth 1 git://github.com/andreasvc/disco-dop.git
+    cd disco-dop
+    pip install --user --install-option="--prefix=" -r requirements.txt
+    python setup.py install --user
+
 Other systems
 -------------
 If you do not run Linux, it is possible to run the code inside a virtual machine.
