@@ -837,8 +837,8 @@ def test():
 	print(grammar)
 	grammar.testgrammar()
 
-	debug = '--debug' in sys.argv
-	grammarx, backtransform, _, _ = doubledop(trees, sents, debug=debug, numproc=1)
+	grammarx, backtransform, _, _ = doubledop(trees, sents,
+			debug='--debug' in sys.argv, numproc=1)
 	print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
@@ -865,7 +865,7 @@ def test():
 				print(tp, '\n', t, end='')
 				print("match:", t == str(tree))
 				assert len(set(parsetrees[t])) == len(parsetrees[t])
-				if debug:
+				if '--debug' in sys.argv:
 					for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
 						print(' <= %6g %s' % (exp(-p), deriv))
 		else:

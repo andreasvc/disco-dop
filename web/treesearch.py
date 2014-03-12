@@ -169,11 +169,9 @@ def counts(form, doexport=False):
 		yield '<ol>%s</ol>\n' % '\n'.join(
 				'<li><a href="#q%d">%s</a>' % (n, query)
 				for n, query in enumerate(list(queries)
-					# + ['Combined results', 'Overview']
-					, 1))
+				+ ['Combined results', 'Overview'], 1))
 	for n, (name, (normquery, query)) in enumerate(
-			list(queries.iteritems())  # + [('Combined results', ('', None))]
-			, 1):
+			list(queries.iteritems()) + [('Combined results', ('', None))], 1):
 		cnts = Counter()
 		sumtotal = 0
 		relfreq = {}
@@ -557,6 +555,7 @@ def browsesents():
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent']) - 1
 		highlight = int(request.args.get('highlight', 0)) - 1
+		sentno = min(max(chunk // 2, sentno), NUMSENTS[textno] - chunk // 2)
 		start = max(0, sentno - chunk // 2)
 		maxtree = min(start + chunk, NUMSENTS[textno])
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
