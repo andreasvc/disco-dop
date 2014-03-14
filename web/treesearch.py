@@ -235,7 +235,7 @@ def counts(form, doexport=False):
 		if not doexport or query is not None:
 			df[name] = pandas.Series(relfreq)
 		if not doexport:
-			yield ("%s%6d    %5.2f %%\n</span>\n" % (
+			yield ("%s%6d            %5.2f %%\n</span>\n" % (
 					"TOTAL".ljust(40),
 					sum(cnts.values()),
 					100.0 * sum(cnts.values()) / sumtotal))
