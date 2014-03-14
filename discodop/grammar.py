@@ -112,7 +112,6 @@ def lcfrsproductions(tree, sent, frontiers=False):
 			leaves = [(idx, n) for n, child in enumerate(childleaves)
 					for idx in child]
 			leaves.sort(key=itemgetter(0), reverse=True)
-			#tmpleaves = leaves[:]
 			previdx, prevparent = leaves.pop()
 			yf = [[prevparent]]
 			while leaves:
