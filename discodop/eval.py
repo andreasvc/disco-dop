@@ -313,9 +313,10 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 		maxlenseen):
 	"""Print breakdowns for the most frequent labels / tags."""
 	if param['LABELED'] and param['DEBUG'] != -1:
+		limit = 10 if param['DEBUG'] <= 0 else None
 		print()
-		print(' Category Statistics (10 most frequent categories / errors)',
-				end='')
+		print(' Category Statistics (%s categories / errors)' % (
+				('%d most frequent ' % limit) if limit else 'all'), end='')
 		if maxlenseen > param['CUTOFF_LEN']:
 			print(' for length <= %d' % param['CUTOFF_LEN'], end='')
 		print()
@@ -330,7 +331,8 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 					if (n, indices) in gmismatch)
 		freqcats = sorted(set(goldbcat) | set(candbcat),
 				key=lambda x: len(goldbcat[x]), reverse=True)
-		for cat, mismatch in zip_longest(freqcats[:10], wrong.most_common(10)):
+		for cat, mismatch in zip_longest(freqcats[:limit],
+				wrong.most_common(limit)):
 			if cat is None:
 				print('                                       ', end='')
 			else:
@@ -348,7 +350,8 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 
 		if accuracy(goldpos, candpos) != 1:
 			print()
-			print(' Tag Statistics (10 most frequent tags / errors)', end='')
+			print(' Tag Statistics (%s tags / errors)' % (
+				('%d most frequent ' % limit) if limit else 'all'), end='')
 			if maxlenseen > param['CUTOFF_LEN']:
 				print(' for length <= %d' % param['CUTOFF_LEN'], end='')
 			print('\n    tag  % gold  recall   prec.      F1',
@@ -358,8 +361,8 @@ def breakdowns(param, goldb, candb, goldpos, candpos, goldbcat, candbcat,
 			tags = multiset(tag for _, tag in goldpos)
 			wrong = multiset((c, g)
 					for (_, g), (_, c) in zip(goldpos, candpos) if g != c)
-			for tag, mismatch in zip_longest(tags.most_common(10),
-					wrong.most_common(10)):
+			for tag, mismatch in zip_longest(tags.most_common(limit),
+					wrong.most_common(limit)):
 				if tag is None:
 					print(''.rjust(40), end='')
 				else:
