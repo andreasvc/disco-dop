@@ -590,7 +590,7 @@ def printfragments(fragments, counts, out=None):
 			if len(theindices) > threshold:
 				out.write("%s\t%r\n" % (("%s\t%s" % (a[0].decode('ascii'),
 					' '.join("%s" % x if x else '' for x in a[1])))
-					if PARAMS['disc'] else a,
+					if PARAMS['disc'] else a.decode('utf-8'),
 					[n for n in sorted(theindices.elements())
 						if n - 1 in theindices or n + 1 in theindices]
 					if PARAMS['adjacent'] else
@@ -608,13 +608,14 @@ def printfragments(fragments, counts, out=None):
 		for a, freq in zip(fragments, counts):
 			out.write("%s\t%d/%d\n" % (("%s\t%s" % (a[0].decode('ascii'),
 				' '.join("%s" % x if x else '' for x in a[1])))
-				if PARAMS['disc'] else a, freq, sums[a[1:a.index(' ')]]))
+				if PARAMS['disc'] else a.decode('utf-8'),
+				freq, sums[a[1:a.index(' ')]]))
 	else:
 		for a, freq in zip(fragments, counts):
 			if freq > threshold:
 				out.write("%s\t%d\n" % (("%s\t%s" % (a[0].decode('ascii'),
 					' '.join("%s" % x if x else '' for x in a[1])))
-					if PARAMS['disc'] else a, freq))
+					if PARAMS['disc'] else a.decode('utf-8'), freq))
 			elif zeroinvalid:
 				raise ValueError("invalid fragment--frequency=1: %r" % a)
 
