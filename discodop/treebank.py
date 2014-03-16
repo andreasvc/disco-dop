@@ -917,11 +917,16 @@ def brackettree(treestr, sent, brackets, strtermre):
 	or not; in the latter case ``sent`` is ignored."""
 	if strtermre.search(treestr):  # terminals are not all indices
 		cnt = count()
-		tree = ParentedTree.parse(
-				LEAVESRE.sub(lambda _: ' %d)' % next(cnt), treestr),
-				parse_leaf=int, brackets=brackets)
+
+		def substleaf(x):
+			"""Collect word and return index."""
+			sent.append(x or None)
+			return next(cnt)
+
 		rest = sent.strip()
-		sent = [a or None for a in LEAVESRE.findall(treestr)]
+		sent = []
+		tree = ParentedTree.parse(treestr,
+				parse_leaf=substleaf, brackets=brackets)
 	else:  # disc. trees with integer indices as terminals
 		tree = ParentedTree.parse(treestr, parse_leaf=int,
 			brackets=brackets)
