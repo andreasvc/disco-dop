@@ -213,8 +213,8 @@ class DrawTree(object):
 				'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
 		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)
-		for a in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
-			a.sort(key=lambda n: min(n.leaves()))
+		for a in tree.subtrees():
+			a.sort(key=lambda n: min(n.leaves()) if isinstance(n, Tree) else n)
 		scale = 2
 		crossed = set()
 		# internal nodes and lexical nodes (no frontiers)

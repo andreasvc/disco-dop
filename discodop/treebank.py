@@ -569,7 +569,10 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 	contain a 'source' attribute with such information."""
 	def getword(idx):
 		"""Get word given an index and quote parentheses."""
-		return sent[int(idx[:-1])].replace('(', '-LRB-').replace(')', '-RRB-')
+		word = sent[int(idx[:-1])]
+		if word is None:
+			return ''
+		return word.replace('(', '-LRB-').replace(')', '-RRB-')
 
 	if fmt == "bracket":
 		return INDEXRE.sub(lambda x: ' %s)' % getword(x.group()),
@@ -926,12 +929,12 @@ def brackettree(treestr, sent, brackets, strtermre):
 
 		def substleaf(x):
 			"""Collect word and return index."""
-			sent.append(x or None)
+			sent.append(None if x == '-NONE-' else x)
 			return next(cnt)
 
 		rest = sent.strip()
 		sent = []
-		tree = ParentedTree.parse(treestr,
+		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -NONE-)', treestr),
 				parse_leaf=substleaf, brackets=brackets)
 	else:  # disc. trees with integer indices as terminals
 		tree = ParentedTree.parse(treestr, parse_leaf=int,
