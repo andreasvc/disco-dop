@@ -77,6 +77,7 @@ def startexp(
 		traincorpus=parser.DictObj(DEFAULTS['traincorpus']),
 		testcorpus=parser.DictObj(DEFAULTS['testcorpus']),
 		binarization=parser.DictObj(DEFAULTS['binarization']),
+		removeempty=False,  # whether to remove empty terminals
 		punct=None,  # choices: None, 'move', 'remove', 'root'
 		functions=None,  # choices None, 'add', 'remove', 'replace'
 		morphology=None,  # choices: None, 'add', 'replace', 'between'
@@ -124,11 +125,13 @@ def startexp(
 	if not rerun:
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				corpusfmt, traincorpus, binarization, punct, functions,
-				morphology, transformations, relationalrealizational)
+				morphology, removeempty, transformations,
+				relationalrealizational)
 
 	testset = treebank.READERS[corpusfmt](
-			testcorpus.path, encoding=testcorpus.encoding,
-			punct=punct, morphology=morphology, functions=functions)
+			testcorpus.path, encoding=testcorpus.encoding, punct=punct,
+			removeempty=removeempty, morphology=morphology,
+			functions=functions)
 	gold_sents = testset.tagged_sents()
 	test_trees = testset.trees()
 	if testcorpus.skiptrain:
@@ -248,12 +251,12 @@ def startexp(
 
 
 def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
-		morphology, transformations, relationalrealizational):
+		morphology, removeempty, transformations, relationalrealizational):
 	"""Load the training corpus."""
 	train = treebank.READERS[corpusfmt](traincorpus.path,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
-			headfinal=True, headreverse=False, punct=punct,
-			functions=functions, morphology=morphology)
+			headfinal=True, headreverse=False, removeempty=removeempty,
+			punct=punct, functions=functions, morphology=morphology)
 	logging.info('%d sentences in training corpus %s',
 			len(train.trees()), traincorpus.path)
 	if isinstance(traincorpus.numsents, float):
@@ -266,15 +269,15 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		if len(sent[1]) <= traincorpus.maxwords])
 	logging.info('%d training sentences after length restriction <= %d',
 			len(trees), traincorpus.maxwords)
-	train_tagged_sents = [[(word, tag) for word, (_, tag)
-			in zip(sent, sorted(tree.pos()))]
-				for tree, sent in zip(trees, sents)]
 	if transformations:
 		trees = [treebanktransforms.transform(tree, sent, transformations)
 				for tree, sent in zip(trees, sents)]
 	if relationalrealizational:
 		trees = [treebanktransforms.rrtransform(
 				tree, **relationalrealizational)[0] for tree in trees]
+	train_tagged_sents = [[(word, tag) for word, (_, tag)
+			in zip(sent, sorted(tree.pos()))]
+				for tree, sent in zip(trees, sents)]
 	return trees, sents, train_tagged_sents
 
 

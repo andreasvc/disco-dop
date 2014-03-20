@@ -32,7 +32,7 @@ from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import Tree
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
-		saveheads
+		saveheads, NUMBERRE
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
@@ -355,6 +355,8 @@ class Parser(object):
 		:param tags: if given, will be given to the parser instead of trying
 			all possible tags."""
 		if self.postagging:
+			if 'FOLD-NUMBERS' in (self.transformations or ()):
+				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
 					self.postagging.lexicon, self.postagging.sigs)
@@ -413,11 +415,16 @@ class Parser(object):
 							sent, stage.grammar, tags=tags)
 					chart = bool(start)
 				elif stage.mode.startswith('pcfg-bitpar'):
+					if stage.mode == 'pcfg-bitpar-forest':
+						numderivs = 0
+					elif (n == len(self.stages) - 1
+							or not self.stages[n + 1].prune):
+						numderivs = stage.m
+					else:  # request 1000 nbest parses for CTF pruning
+						numderivs = 1000
 					chart, cputime, msg1 = pcfg.parse_bitpar(stage.grammar,
 							stage.rulesfile.name, stage.lexiconfile.name,
-							sent,
-							# always request 1000 nbest parses for CTF pruning
-							0 if stage.mode == 'pcfg-bitpar-forest' else 1000,
+							sent, numderivs,
 							stage.grammar.start,
 							stage.grammar.toid[stage.grammar.start], tags=tags)
 					begin -= cputime

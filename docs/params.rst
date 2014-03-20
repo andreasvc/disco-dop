@@ -199,6 +199,7 @@ Other options
 
     :None: ignore lemmas
     :'between': insert lemma as node between POS tag and word.
+:removeempty: True or False; whether to remove empty terminals from train, test sets.
 :evalparam: EVALB-style parameter file to use for reporting F-scores
 :verbosity: control the amount of output to console;
     a logfile ``output.log`` is also kept with a fixed log level of 2.

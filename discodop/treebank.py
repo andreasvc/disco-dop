@@ -11,7 +11,7 @@ from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
 from discodop.treebanktransforms import punctremove, punctraise, \
 		balancedpunctraise, punctroot, ispunct, readheadrules, headfinder, \
-		sethead, headmark, headorder
+		sethead, headmark, headorder, removeemptynodes
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -25,16 +25,19 @@ INDEXRE = re.compile(r" [0-9]+\)")
 
 class CorpusReader(object):
 	"""Abstract corpus reader."""
-	def __init__(self, path, encoding='utf-8', ensureroot=None,
+	def __init__(self, path, encoding='utf-8', ensureroot=None, punct=None,
 			headrules=None, headfinal=True, headreverse=False, markheads=False,
-			punct=None, functions=None, morphology=None, lemmas=None):
+			removeempty=False, functions=None, morphology=None, lemmas=None):
 		"""
-		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``
-		:param ensureroot: add root node with given label if necessary
+		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
+		:param ensureroot: add root node with given label if necessary.
+		:param removeempty:
+			remove empty nodes and any empty ancestors; a terminal is empty if
+			it is equal to None, '', or '-NONE-'.
 		:param headrules: if given, read rules for assigning heads and apply
-			them by ordering constituents according to their heads
+			them by ordering constituents according to their heads.
 		:param headfinal: whether to put the head in final or in frontal
-			position
+			position.
 		:param headreverse: the head is made final/frontal by reversing
 			everything before or after the head. When true, the side on which
 			the head is will be the reversed side.
@@ -64,6 +67,7 @@ class CorpusReader(object):
 		:param lemmas: one of ...
 			:None: ignore lemmas
 			:'between': insert lemma as node between POS tag and word."""
+		self.removeempty = removeempty
 		self.ensureroot = ensureroot
 		self.reverse = headreverse
 		self.headfinal = headfinal
@@ -144,8 +148,10 @@ class CorpusReader(object):
 	def _parsetree(self, block):
 		""":returns: a transformed parse tree."""
 		tree, sent = self._parse(block)
-		if not sent:
+		if not sent:  # ??3
 			return tree
+		if self.removeempty:
+			removeemptynodes(tree, sent)
 		if self.ensureroot and tree.label != self.ensureroot:
 			tree = ParentedTree(self.ensureroot, [tree])
 		# roughly order constituents by order in sentence
