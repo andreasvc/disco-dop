@@ -226,7 +226,7 @@ def counts(form, doexport=False):
 							query=query or form['query'],
 							engine=form.get('engine', 'tgrep2'))),
 						cnt, relfreq[text])
-				plot = concplot(indices, limit or NUMSENTS[textno])
+				plot = dispplot(indices, limit or NUMSENTS[textno])
 				if cnt:
 					yield out + plot + '\n'
 				else:
@@ -698,8 +698,8 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	return '\n'.join(result)
 
 
-def concplot(indices, total, width=800.0, runle=False):
-	"""Draw a concordance plot from a list of indices.
+def dispplot(indices, total, width=800.0, runle=False):
+	"""Draw a dispersion plot from a list of indices.
 
 	:param indices: a list of sets or Counter objects, where each element is
 		a sentence number. Each element of indices will be drawn in a
