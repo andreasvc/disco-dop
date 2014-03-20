@@ -623,11 +623,13 @@ def removeemptynodes(tree, sent):
 
 
 # fixme: treebank specific parameters for detecting punctuation.
-PUNCTTAGS = {'$,', '$.', '$[', '$(',
-		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}
+PUNCTTAGS = {"''", "``", "-LRB-", "-RRB-", ".", ":", ",",  # PTB
+		'$,', '$.', '$[', '$(',  # Negra/Tiger
+		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}  # Alpino/Lassy
 PUNCTUATION = frozenset('.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {'&bullet;', '..', '...', '....', '.....', '......', '!!', '!!!',
-		'??', '???', "''", '``', u',,', '--'}
+		'??', '???', "''", '``', u',,', '--',
+		'-LRB-', '-RRB-', '-LCB-', '-RCB-'}
 
 
 def ispunct(word, tag):

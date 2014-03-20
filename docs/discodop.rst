@@ -402,7 +402,7 @@ Options:
 --only-matching, -o
                 only output the matching portion
                 with --sents, --trees, and --brackets
--n, --line-number
+--line-number, -n
                 Prefix each line of output with the sentence number within
                 its input file.
 --macros=<x>, -m <x>
