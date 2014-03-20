@@ -390,14 +390,21 @@ Options:
                 Selecte query engine; possible options:
 
                 :tgrep2:
-                         tgrep2 queries; files are bracket corpora
-                         (optionally precompiled into tgrep2 format).
-                :xpath:  dact XML corpora; arbitrary xpath queries.
-                :regex:  search through tokenized sentences with Python regexps
+                    tgrep2 queries; files are bracket corpora
+                    (optionally precompiled into tgrep2 format).
+
+                :xpath: dact XML corpora; arbitrary xpath queries.
+                :regex: search through tokenized sentences with Python regexps
 --counts, -c    report counts
 --sents, -s     output sentences (default)
 --trees, -t     output visualizations of trees
 --brackets, -b  output raw trees in the original corpus format
+--only-matching, -o
+                only output the matching portion
+                with --sents, --trees, and --brackets
+-n, --line-number
+                Prefix each line of output with the sentence number within
+                its input file.
 --macros=<x>, -m <x>
                 file with macros
 --numthreads=<x>

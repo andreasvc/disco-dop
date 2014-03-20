@@ -43,6 +43,12 @@ Options:
   --sents, -s     output sentences (default)
   --trees, -t     output visualizations of trees
   --brackets, -b  output raw trees in the original corpus format
+  --only-matching, -o
+                  only output the matching portion
+                  with --sents, --trees, and --brackets
+  -n, --line-number
+                  Prefix each line of output with the sentence number within
+                  its input file.
   --macros=<x>, -m <x>
                   file with macros
   --numthreads=<x>
@@ -523,8 +529,9 @@ def filterlabels(line, nofunc, nomorph):
 def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
-	shortoptions = 'e:m:stcbh'
-	options = 'engine= macros= numthreads= trees sents brackets counts help'
+	shortoptions = 'e:m:stcbnoh'
+	options = ('engine= macros= numthreads= trees sents brackets counts '
+			'only-matching line-number help')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
@@ -551,29 +558,51 @@ def main():
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
 	if '--counts' in opts or '-c' in opts:
-		for a, b in searcher.counts(query).items():
-			print('\x1b[%dm%s\x1b[0m:%s`' % (
-				ANSICOLOR['magenta'], a, b))
+		for filename, cnt in searcher.counts(query).items():
+			print('\x1b[%dm%s\x1b[0m:%s' % (
+				ANSICOLOR['magenta'], filename, cnt))
 	elif '--trees' in opts or '-t' in opts:
-		for a, b, tree, sent, high in searcher.trees(query):
-			print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:\n%s' % (
-					ANSICOLOR['magenta'], a, ANSICOLOR['green'], b,
-					DrawTree(tree, sent, highlight=high).text(
-						unicodelines=True, ansi=True)))
+		for filename, sentno, tree, sent, high in searcher.trees(query):
+			if '--only-matching' in opts or '-o' in opts:
+				tree = max(high, key=lambda x:
+						len(x.leaves()) if isinstance(x, Tree) else 1)
+			if '--line-number' in opts or '-n' in opts:
+				print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:\n%s' % (
+						ANSICOLOR['magenta'], filename,
+						ANSICOLOR['green'], sentno,
+						DrawTree(tree, sent, highlight=high).text(
+							unicodelines=True, ansi=True)))
+			else:
+				print('\x1b[%dm%s\x1b[0m:\n%s' % (
+						ANSICOLOR['magenta'], filename,
+						DrawTree(tree, sent, highlight=high).text(
+							unicodelines=True, ansi=True)))
 	else:
 		brackets = '--brackets' in opts or '-b' in opts
-		for a, b, sent, high in searcher.sents(query,
+		for filename, sentno, sent, high in searcher.sents(query,
 				brackets=brackets):
 			if brackets:
-				out = sent.replace(high, "\x1b[%d;1m%s\x1b[0m" % (
-						ANSICOLOR['red'], high))
+				if '--only-matching' in opts or '-o' in opts:
+					out = high
+				else:
+					out = sent.replace(high, "\x1b[%d;1m%s\x1b[0m" % (
+							ANSICOLOR['red'], high))
 			else:
-				out = ' '.join(
-						'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['red'], word)
-						if x in high else word
-						for x, word in enumerate(sent.split()))
-			print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:%s'
-					% (ANSICOLOR['magenta'], a, ANSICOLOR['green'], b, out))
+				if '--only-matching' in opts or '-o' in opts:
+					out = ' '.join(word if n in high else ''
+							for n, word in enumerate(sent.split())).strip()
+				else:
+					out = ' '.join(
+							'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['red'], word)
+							if x in high else word
+							for x, word in enumerate(sent.split()))
+			if '--line-number' in opts or '-n' in opts:
+				print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:%s'
+						% (ANSICOLOR['magenta'], filename,
+							ANSICOLOR['green'], sentno, out))
+			else:
+				print('\x1b[%dm%s\x1b[0m:%s' % (
+						ANSICOLOR['magenta'], filename, out))
 
 
 if __name__ == '__main__':
