@@ -38,6 +38,7 @@ file, and options may consist of:
                    (only affects Parseval measures).
   --goldfmt|--parsesfmt=[%s]
                    Specify corpus format [default: export].
+  --fmt=[...]      Shorthand for --goldfmt and -parsesfmt.
   --goldenc|--parsesenc=[utf-8|iso-8859-1|...]
                    Specify encoding [default: utf-8].
   --ted            Enable tree-edit distance evaluation.
@@ -76,7 +77,7 @@ HEADER = '''
 def main():
 	"""Command line interface for evaluation."""
 	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
-	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=',
+	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'fmt=',
 			'cutofflen=', 'headrules=', 'functions=', 'morphology=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
@@ -104,6 +105,8 @@ def main():
 	except AssertionError as err:
 		print('error: %s' % err)
 		sys.exit(2)
+	if '--fmt' in opts:
+		opts['--goldfmt'] = opts['--parsesfmt'] = opts['--fmt']
 	goldreader = READERS[opts.get('--goldfmt', 'export')]
 	parsesreader = READERS[opts.get('--parsesfmt', 'export')]
 	gold = goldreader(
