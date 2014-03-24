@@ -946,8 +946,8 @@ def readparam(filename):
 					and stage.objective == 'mpp')
 		if stage.dop:
 			assert stage.estimator in ('rfe', 'ewe', 'bon')
-			assert stage.objective in ('mpp', 'mpd', 'shortest',
-					"sl-dop", "sl-dop-simple")
+			assert stage.objective in ('mpp', 'mpd', 'mcc', 'shortest',
+					'sl-dop', 'sl-dop-simple')
 		assert stage.binarized or stage.mode == 'pcfg-bitpar-nbest', (
 				'non-binarized grammar requires mode "pcfg-bitpar-nbest"')
 	assert params['binarization'].method in (

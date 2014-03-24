@@ -466,7 +466,8 @@ class Parser(object):
 					derivations, entries = getderivations(chart, stage.m,
 							kbest=stage.kbest, sample=stage.sample,
 							derivstrings=not stage.usedoubledop
-									or self.verbosity >= 3)
+									or self.verbosity >= 3
+									or stage.objective == 'mcc')
 				if self.verbosity >= 3:
 					print('derivations:\n%s\n' % '\n'.join(
 						'%d. %s %s' % (n + 1,
@@ -503,7 +504,7 @@ class Parser(object):
 							'leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception as err:  # pylint: disable=W0703
-					logging.error("something's amiss: %r", err)
+					logging.error("something's amiss. %s", err)
 					parsetree, prob, fragments, noparse = self.noparse(
 							stage, sent, tags, lastsuccessfulparse)
 				else:

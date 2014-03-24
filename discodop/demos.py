@@ -229,6 +229,11 @@ def parse(compiledgrammar, testsent, testtags=None):
 
 
 def test():
+	"""Alias for main()."""
+	main()
+
+
+def main():
 	"""Run all examples."""
 	bitext()
 	dependencygrammar()

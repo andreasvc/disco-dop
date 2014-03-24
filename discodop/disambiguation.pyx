@@ -15,12 +15,15 @@ from random import random
 from bisect import bisect_right
 from operator import itemgetter, attrgetter
 from itertools import count
+from functools import partial
 from collections import defaultdict, OrderedDict
 from discodop import plcfrs, _fragments
 from discodop.tree import Tree
 from discodop.kbest import lazykbest, getderiv
 from discodop.grammar import lcfrsproductions
-from discodop.treetransforms import addbitsets, unbinarize, canonicalize
+from discodop.treetransforms import addbitsets, unbinarize, canonicalize, \
+		collapse_unary, mergediscnodes, binarize
+from discodop.bit import pyintnextset, pyintbitcount
 from discodop.plcfrs cimport Entry, new_Entry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
 		SmallChartItem, FatChartItem, Edge, RankedEdge, yieldranges, \
@@ -34,7 +37,8 @@ cdef extern from "macros.h":
 REMOVEIDS = re.compile('@[-0-9]+')
 BREMOVEIDS = re.compile(b'@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
-
+cdef str NONCONSTLABEL = ''
+cdef str NEGATIVECONSTLABEL = '-#-'
 
 cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
 		derivstrings=True):
@@ -68,7 +72,7 @@ cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
 
 cpdef marginalize(method, list derivations, list entries, Chart chart,
 		list backtransform=None, list sent=None, list tags=None,
-		int k=1000, int sldop_n=7, bint bitpar=False):
+		int k=1000, int sldop_n=7, double mcc_labda=1.0, bint bitpar=False):
 	"""Take a list of derivations and optimize a given objective function.
 
 	Produces a dictionary of parse trees from derivations, scored by a given
@@ -127,6 +131,9 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 			_, maxprob = min(derivations, key=itemgetter(1))
 			derivations = [(deriv, prob) for deriv, prob in derivations
 					if prob == maxprob]
+	elif method == 'mcc':
+		return maxconstituentscorrect(derivations, chart,
+				backtransform, mcc_labda)
 
 	if backtransform is not None and not bitpar:  # Double-DOP
 		for entry in entries:
@@ -204,6 +211,116 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 			len(derivations if backtransform is None else entries),
 			len(parsetrees))
 	return parsetrees, derivs, msg
+
+
+cdef maxconstituentscorrect(list derivations, Chart chart,
+		list backtransform, double labda, set labels=None):
+	"""Approximate the parse tree with the Most Constituents Correct (MCC)
+	using an n-best list.
+
+	:param derivations: list of derivations as strings
+	:param chart: the chart
+	:param backtransform: table of rules mapped to fragments
+	:param labda:
+		weight to assign to recall rate vs. the mistake rate;
+		the default 1.0 assigns equal weight to both.
+	:param labels:
+		if given, the set of labels to optimize for;
+		by default, all labels are optimized.
+	"""
+	# NB: this requires derivations not entries.
+	cdef double sentprob = 0.0, maxscore = 0.0
+	cdef double prob, score, maxcombscore, contribution
+	cdef short start, spanlen
+	cdef object span, leftspan, rightspan, maxleft  # bitsets as Python ints
+	# table[start][spanlen][span][label] = prob
+	table = [[defaultdict(dict)
+				for _ in range(len(chart.sent) - n + 1)]
+			for n in range(len(chart.sent))]
+	# get marginal probabilities
+	for deriv, prob in derivations:
+		if backtransform is None:
+			treestr = REMOVEIDS.sub('', deriv)
+		else:
+			treestr = recoverfragments(deriv, chart, backtransform)
+		# rebinarize, collapse unaries, because we optimize only
+		# for constituents in the tree as it will be evaluated.
+		tree = addbitsets(
+				binarize(
+				collapse_unary(unbinarize(
+					mergediscnodes(unbinarize(
+						Tree.parse(treestr, parse_leaf=int),
+						childchar=':')))),
+					leftmostunary=True))
+		sentprob += exp(-prob)
+		for t in tree.subtrees():
+			span = t.bitset
+			start = pyintnextset(span, 0)
+			spanlen = pyintbitcount(span)
+			tablecell = table[start][spanlen][span]
+			tablecell.setdefault(t.label, 0.0)
+			if '|<' not in t.label and (labels is None or t.label in labels):
+				tablecell[t.label] += exp(-prob)
+
+	cells = defaultdict(dict)  # cells[span] = (label, score, leftspan)
+	# select best derivation
+	for spanlen in range(1, len(chart.sent) + 1):
+		for start, _ in enumerate(table):
+			if len(table[start]) <= spanlen:
+				continue
+			for span, tablecell in table[start][spanlen].items():
+				maxlabel, maxscore = NONCONSTLABEL, 0.0
+				if tablecell:
+					maxlabel, maxscore = max(tablecell.items(),
+							key=itemgetter(1))
+					maxcombscore = 0.0
+				maxleft = None
+				for spans in table[start][1:spanlen]:
+					for leftspan in spans:
+						if (span & leftspan != leftspan
+								or cells[leftspan][0] == NONCONSTLABEL):
+							continue
+						rightspan = span & ~leftspan
+						if (rightspan in cells
+								and cells[rightspan][0] != NONCONSTLABEL):
+							score = cells[leftspan][1] + cells[rightspan][1]
+							if score > maxcombscore:
+								maxcombscore = score
+								maxleft = leftspan
+				score = maxscore / sentprob
+				contribution = score - labda * (1 - score)
+				if contribution < 0:
+					cells[span] = (NEGATIVECONSTLABEL
+							if 1 < pyintbitcount(span) < len(chart.sent)
+							else maxlabel,
+							maxcombscore, maxleft)
+				else:
+					maxcombscore += contribution
+					cells[span] = (maxlabel, maxcombscore, maxleft)
+
+	# reconstruct tree
+	tmp = ''
+	try:
+		tmp = gettree(cells, tree.bitset)
+		result = unbinarize(Tree.parse(tmp, parse_leaf=int), childchar='NONE')
+	except (ValueError, UnboundLocalError):
+		return {}, {}, 'MCC failed. %s' % tmp
+	else:
+		return {str(result): maxscore}, {}, 'sentprob: %g' % sentprob
+
+
+def gettree(cells, span):
+	"""Extract parse tree from most constituents correct table."""
+	if span not in cells:
+		raise ValueError
+	label, _score, leftspan = cells[span]
+	if leftspan not in cells:
+		return '(%s %d)' % (label, pyintnextset(span, 0))
+	rightspan = span & ~leftspan
+	if label in (NONCONSTLABEL, NEGATIVECONSTLABEL):
+		return '%s %s' % (gettree(cells, leftspan), gettree(cells, rightspan))
+	return '(%s %s %s)' % (label,
+			gettree(cells, leftspan), gettree(cells, rightspan))
 
 
 cdef sldop(dict derivations, Chart chart, list sent, list tags,
@@ -752,7 +869,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	derivations, but then the input would have to distinguish whether nodes are
 	internal nodes of fragments, or whether they join two fragments."""
 	neginf = float('-inf')
-	cdef dict chart = {}  # chart[label, left, right] = prob
+	cdef dict chart = {}  # chart[label, bitset] = prob
 	cdef tuple a, b, c
 	cdef Rule *rule
 	cdef LexicalRule lexrule
@@ -853,6 +970,7 @@ def test():
 	derivations, entries = getderivations(chart, 1000, True, False, True)
 	mpd, _, _ = marginalize("mpd", derivations, entries, chart)
 	mpp, _, _ = marginalize("mpp", derivations, entries, chart)
+	mcc, _, _ = marginalize("mcc", derivations, entries, chart)
 	sldop_, _, _ = marginalize("sl-dop", derivations, entries, chart, k=1000,
 			sldop_n=7, sent=sent)
 	sldopsimple, _, _ = marginalize("sl-dop-simple", derivations, entries,
@@ -863,6 +981,7 @@ def test():
 	mppsampled, _, _ = marginalize("mpp", derivations, entries, chart)
 	print("\nvit:\t\t%s %r" % e((REMOVEIDS.sub('', vitderiv), exp(-vitprob))),
 		"MPD:\t\t%s %r" % e(maxitem(mpd)),
+		"MCC:\t\t%s %r" % e(maxitem(mcc)),
 		"MPP:\t\t%s %r" % e(maxitem(mpp)),
 		"MPP sampled:\t%s %r" % e(maxitem(mppsampled)),
 		"SL-DOP n=7:\t%s %r" % e(maxitem(sldop_)),
