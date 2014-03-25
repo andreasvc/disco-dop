@@ -99,7 +99,7 @@ Where the keys and values are:
         parse trees, can only be used for pruning of next stage).
     :'pcfg-bitpar-nbest': Use external bitpar parser. Produces n-best list
         (up to n=1000) without producing a parse forest; works with
-        non-binarized grammars. (experimental).
+        non-binarized grammars (experimental).
     :'pcfg-bitpar-forest': Use external bitpar parser (experimental).
     :'dop-rerank': Rerank parse trees from previous stage with DOP reduction (experimental).
 :prune: whether to use previous chart to prune this stage
@@ -138,6 +138,9 @@ Where the keys and values are:
     :shortest: Most Probable Shortest Derivation; i.e., shortest derivation
         (with minimal number of fragments), where ties are broken using
         probabilities specified by ``estimator``.
+    :mcc:
+        Maximum Constituents Parse (Goodman 1996);
+        approximation as in Sangati & Zuidema (2011); experimental.
     :sl-dop: Simplicity-Likelihood. Simplest Tree from the n most Likely trees.
     :sl-dop-simple: An approximation which does not require parsing the sentence twice.
 :sldop_n: When using sl-dop or sl-dop-simple,

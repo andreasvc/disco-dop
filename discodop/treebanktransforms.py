@@ -234,8 +234,9 @@ def wsjtransforms(name, tree, _sent):
 
 
 def ftbtransforms(name, tree, sent):
-	"""Port of manual enrichments of the FTB specified in
-	FrenchTreebankParserParams.java of the Stanford parser."""
+	"""Port of manual FTB enrichments specified in Stanford parser.
+
+	cf. ``FrenchTreebankParserParams.java``"""
 	if name == 'markinf':
 		for t in tree.subtrees(lambda n: strip(n.label) == "V"
 				and isinstance(n.parent, Tree)
@@ -326,8 +327,7 @@ def ftbtransforms(name, tree, sent):
 
 
 def reversetransform(tree, transformations):
-	"""
-	Undo specified transformations and remove any state splits marked by ``^``.
+	"""Undo specified transformations and remove state splits marked by ``^``.
 
 	Do not apply twice (might remove VPs which shouldn't be)."""
 	# Generic state-split removal
@@ -456,9 +456,9 @@ def collapselabels(trees, _sents, mapping=None):
 
 
 def unifymorphfeat(feats, percolatefeatures=None):
-	"""Treat a sequence of strings as feature vectors, either
-	comma or dot separated, and produce the sorted union of their features.
+	"""Get the sorted union of features for a sequence of feature vectors.
 
+	:param feats: a sequence of strings of comma/dot separated feature vectors.
 	:param percolatefeatures: if a set is given, select only these features;
 		by default all features are used.
 
@@ -569,8 +569,7 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 
 
 def rrbacktransform(tree, adjunctionlabel=None, func=None):
-	"""Reverse the relational-realizational transformation, conserving
-	grammatical functions.
+	"""Reverse relational-realizational transformation.
 
 	:param adjunctionlabel: used to assign a grammatical function to
 		adjunctions that have been converted to contextual labels 'next:prev'.
@@ -643,8 +642,7 @@ def punctremove(tree, sent):
 
 
 def punctroot(tree, sent):
-	"""Move punctuation directly under the ROOT node, as in the
-	original Negra/Tiger treebanks."""
+	"""Move punctuation directly under ROOT, as in the Negra annotation."""
 	punct = []
 	for a in reversed(tree.treepositions('leaves')):
 		if ispunct(sent[tree[a]], tree[a[:-1]].label):
@@ -659,10 +657,10 @@ def punctroot(tree, sent):
 
 
 def punctlower(tree, sent):
-	"""Find suitable constituent for punctuation marks and add it there;
-	removal at previous location is up to the caller.
+	"""Find suitable constituent for punctuation marks and add it there.
 
-	Based on rparse code. Initial candidate is the root node."""
+	Initial candidate is the root node. Note that ``punctraise()`` performs
+	better. Based on rparse code."""
 	def lower(node, candidate):
 		"""Lower a specific instance of punctuation in tree,
 		recursing top-down on suitable candidates."""
@@ -718,8 +716,9 @@ BALANCEDPUNCTMATCH = {'"': '"', '[': ']', '(': ')', '-': '-', "'": "'",
 
 
 def balancedpunctraise(tree, sent):
-	"""Move balanced punctuation marks " ' - ( ) [ ] together in the same
-	constituent. Based on rparse code."""
+	"""Move balanced punctuation ``" ' - ( ) [ ]`` to a common constituent.
+
+	Based on rparse code."""
 	assert isinstance(tree, ParentedTree)
 	# right punct str as key, mapped to left index as value
 	punctmap = {}
@@ -772,6 +771,7 @@ def labels(tree):
 
 def pop(a):
 	"""Remove this node from its parent node, if it has one.
+
 	Convenience function for ParentedTrees."""
 	try:
 		return a.parent.pop(a.parent_index)
@@ -780,7 +780,7 @@ def pop(a):
 
 
 def strip(label):
-	""" equivalent to the effect of the @ operator in tregex. """
+	"""Equivalent to the effect of the @ operator in tregex."""
 	return label[:label.index("^")] if "^" in label else label
 
 
@@ -792,7 +792,7 @@ def ancestors(node):
 
 
 def bracketings(tree):
-	"""Labelled bracketings of a tree."""
+	"""Labeled bracketings of a tree."""
 	return [(a.label, tuple(sorted(a.leaves())))
 		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
 
@@ -864,8 +864,7 @@ def headmark(tree):
 
 
 def headorder(tree, headfinal, reverse):
-	"""Change order of constituents based on head (identified with
-	function tag)."""
+	"""Order constituents based on head (identified with function tag)."""
 	head = [n for n, a in enumerate(tree)
 		if getattr(a, 'source', None)
 		and 'HD' in a.source[FUNC].upper().split("-")]
@@ -889,8 +888,7 @@ def headorder(tree, headfinal, reverse):
 
 
 def saveheads(tree, tailmarker):
-	"""When a head-outward binarization is used, this function ensures the
-	head is known when the tree is converted to export format."""
+	"""Store head as grammatical function when inferrable from binarization."""
 	if not tailmarker:
 		return
 	for node in tree.subtrees(lambda n: tailmarker in n.label):
@@ -951,8 +949,7 @@ def testpunct():
 
 
 def testtransforms():
-	"""Test whether the Tiger transformations (transform / reversetransform)
-	are reversible."""
+	"""Test reversibility of Tiger transformations."""
 	from discodop.treetransforms import canonicalize
 	from discodop.treebank import NegraCorpusReader, handlefunctions
 	headrules = None  # 'alpino.headrules'
@@ -982,9 +979,7 @@ def testtransforms():
 				print(a)
 				print(transformb)
 				handlefunctions('add', a)
-				print(a)
-				print(b)
-				print()
+				print(a, '\n', b, '\n\n')
 			else:
 				correct += 1
 		else:

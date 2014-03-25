@@ -450,8 +450,7 @@ class AlpinoCorpusReader(CorpusReader):
 
 
 class DactCorpusReader(AlpinoCorpusReader):
-	"""Corpus reader for the Dutch Alpino treebank in Dact format,
-	which consists of an XML database."""
+	"""Corpus reader for Alpino trees in Dact format (DB XML)."""
 	def _read_blocks(self):
 		import alpinocorpus
 		assert self._encoding in (None, 'utf8', 'utf-8'), (
@@ -727,8 +726,7 @@ def handlefunctions(action, tree, pos=True, top=False):
 
 
 def handlemorphology(action, lemmaaction, preterminal, source):
-	"""Given a preterminal, augment or replace its label with morphological
-	information."""
+	"""Augment/replace preterminal label with morphological information."""
 	if not source:
 		return
 	# escape any parentheses to avoid hassles w/bracket notation of trees
@@ -925,15 +923,14 @@ def brackettree(treestr, sent, brackets, strtermre):
 	"""Parse a single tree presented in bracket format, whether with indices
 	or not; in the latter case ``sent`` is ignored."""
 	if strtermre.search(treestr):  # terminals are not all indices
-		cnt = count()
+		rest = sent.strip()
+		sent, cnt = [], count()
 
 		def substleaf(x):
 			"""Collect word and return index."""
 			sent.append(None if x == '-NONE-' else x)
 			return next(cnt)
 
-		rest = sent.strip()
-		sent = []
 		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -NONE-)', treestr),
 				parse_leaf=substleaf, brackets=brackets)
 	else:  # disc. trees with integer indices as terminals
@@ -953,9 +950,7 @@ def brackettree(treestr, sent, brackets, strtermre):
 
 
 def exporttree(data, morphology):
-	"""
-	Get tree and sentence from tree in export format given as list of lines.
-	"""
+	"""Get tree, sentence from tree in export format given as list of lines."""
 	data = [exportsplit(x) for x in data]
 	tree = exportparse(data, morphology)
 	sent = []
@@ -967,8 +962,7 @@ def exporttree(data, morphology):
 
 
 def alpinotree(block, morphology=None, lemmas=None, functions=None):
-	"""Get tree and sentence from tree in Alpino format given as an etree XML
-	object."""
+	"""Get tree, sent from tree in Alpino format given as etree XML object."""
 	tree = alpinoparse(block, morphology, lemmas)
 	sent = block.find('sentence').text.split(' ')
 	handlefunctions(functions, tree)
@@ -978,8 +972,7 @@ def alpinotree(block, morphology=None, lemmas=None, functions=None):
 def treebankfanout(trees):
 	"""Get maximal fan-out of a list of trees."""
 	from discodop.treetransforms import addbitsets, fanout
-	# avoid max over empty sequence: 'treebank' may only have unary productions
-	try:
+	try:  # avoid max over empty sequence: 'treebank' may only have unary prods
 		return max((fanout(a), n) for n, tree in enumerate(trees)
 				for a in addbitsets(tree).subtrees(lambda x: len(x) > 1))
 	except ValueError:

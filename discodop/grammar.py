@@ -906,8 +906,8 @@ def main():
 		os.mkdir(resultdir)
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
-				prm.functions, prm.morphology, prm.transformations,
-				prm.relationalrealizational)
+				prm.functions, prm.morphology, prm.removeempty,
+				prm.transformations, prm.relationalrealizational)
 		simplelexsmooth = False
 		if prm.postagging and prm.postagging.method == 'unknownword':
 			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)

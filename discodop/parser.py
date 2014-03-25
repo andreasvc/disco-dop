@@ -97,7 +97,10 @@ DEFAULTSTAGE = dict(
 		estimator='rfe',  # choices: rfe, ewe
 		objective='mpp',  # choices: mpp, mpd, shortest, sl-dop[-simple]
 			# NB: w/shortest derivation, estimator only affects tie breaking.
-		sldop_n=7)
+		sldop_n=7,  # number of trees to consider when using sl-dop[-simple]
+		mcc_labda=1.0,  # weight to assign to recall vs. mistake rate with mcc
+		mcc_labels=None,  # optionally, set of labels to optimize for with mcc
+		)
 
 
 class DictObj(object):
@@ -355,7 +358,7 @@ class Parser(object):
 		:param tags: if given, will be given to the parser instead of trying
 			all possible tags."""
 		if self.postagging:
-			if 'FOLD-NUMBERS' in (self.transformations or ()):
+			if self.transformations and 'FOLD-NUMBERS' in self.transformations:
 				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
@@ -485,6 +488,7 @@ class Parser(object):
 						sent=sent, tags=tags,
 						backtransform=stage.backtransform,
 						k=stage.m, sldop_n=stage.sldop_n,
+						mcc_labda=stage.mcc_labda, mcc_labels=stage.mcc_labels,
 						bitpar=stage.mode == 'pcfg-bitpar-nbest')
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)

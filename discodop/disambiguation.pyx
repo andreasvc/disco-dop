@@ -72,7 +72,8 @@ cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
 
 cpdef marginalize(method, list derivations, list entries, Chart chart,
 		list backtransform=None, list sent=None, list tags=None,
-		int k=1000, int sldop_n=7, double mcc_labda=1.0, bint bitpar=False):
+		int k=1000, int sldop_n=7, double mcc_labda=1.0, set mcc_labels=None,
+		bint bitpar=False):
 	"""Take a list of derivations and optimize a given objective function.
 
 	Produces a dictionary of parse trees from derivations, scored by a given
@@ -133,7 +134,7 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 					if prob == maxprob]
 	elif method == 'mcc':
 		return maxconstituentscorrect(derivations, chart,
-				backtransform, mcc_labda)
+				backtransform, mcc_labda, mcc_labels)
 
 	if backtransform is not None and not bitpar:  # Double-DOP
 		for entry in entries:
@@ -273,7 +274,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 				if tablecell:
 					maxlabel, maxscore = max(tablecell.items(),
 							key=itemgetter(1))
-					maxcombscore = 0.0
+				maxcombscore = 0.0
 				maxleft = None
 				for spans in table[start][1:spanlen]:
 					for leftspan in spans:
