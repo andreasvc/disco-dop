@@ -55,17 +55,7 @@ Requirements:
 
 Debian, Ubuntu based systems
 ----------------------------
-For example, to install these dependencies and the latest stable release on
-an `Ubuntu <http://www.ubuntu.com>`_ system
-using `pip <http://www.pip-installer.org>`_,
-issue the following commands::
-
-    sudo apt-get install build-essential python-dev python-numpy python-pip
-    wget https://github.com/andreasvc/disco-dop/raw/master/requirements.txt
-    pip install --user -r requirements.txt
-    pip install --user disco-dop
-
-To compile the latest development version on Ubuntu,
+To compile the latest development version on an `Ubuntu <http://www.ubuntu.com>`_ system,
 run the following sequence of commands::
 
     sudo apt-get install build-essential python-dev python-numpy python-pip git
@@ -77,6 +67,15 @@ run the following sequence of commands::
 (the ``--user`` option means the packages will be installed to your home
 directory which does not require root privileges).
 
+To install the latest stable release using `pip <http://www.pip-installer.org>`_,
+issue the following commands::
+
+    sudo apt-get install build-essential python-dev python-numpy python-pip
+    pip install --user cython
+    pip install --user disco-dop
+
+However, note that the stable release may be several months behind the development version.
+
 Other Linux systems
 -------------------
 This assumes no root access, but assumes that ``gcc`` is installed.
@@ -87,6 +86,8 @@ Add local installation directory to PATH
     mkdir -p ~/.local
     echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
     export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
+    export PYTHONPATH=$HOME/.local/lib/python2.7/site-packages
+    export PYTHONIOENCODING="utf-8"
 
 Install Python 2.7 from source, if not installed already.
 Python may require some libraries such as ``zlib`` and ``readline``;

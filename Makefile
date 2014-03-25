@@ -1,6 +1,6 @@
-.PHONY: clean test testdebug lint man discodop
+.PHONY: clean test testdebug lint docs discodop
 
-all: discodop man
+all: discodop
 
 clean:
 	rm -rf build/
@@ -14,9 +14,10 @@ clean:
 discodop:
 	python setup.py install --user
 
-man:
+docs:
 	mkdir -p ~/.local/man/man1
 	cd docs && make man && cp _build/man/discodop.1 ~/.local/man/man1/
+	cd docs && make html
 
 test: all inplace
 	py.test --doctest-modules discodop/ tests/unittests.py && \
