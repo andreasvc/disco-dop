@@ -360,21 +360,22 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
 Options (* marks default option):
 
 --fmt=<export|bracket|discbracket|tiger|alpino|dact>
-                 Specify corpus format [default: export].
+                  Specify corpus format [default: export].
 
---encoding=enc   Specify a different encoding than the default utf-8.
---functions=x    :'leave'=default: leave syntactic labels as is,
-                 :'remove': strip functions off labels,
-                 :'add': show both syntactic categories and functions,
-                 :'replace': only show grammatical functions.
+--encoding=enc    Specify a different encoding than the default utf-8.
+--functions=x     :'leave'=default: leave syntactic labels as is,
+                  :'remove': strip functions off labels,
+                  :'add': show both syntactic categories and functions,
+                  :'replace': only show grammatical functions.
 
---morphology=x   :'no'=default: only show POS tags,
-                 :'add': concatenate morphology tags to POS tags,
-                 :'replace': replace POS tags with morphology tags,
-                 :'between': add morphological node between POS tag and word.
+--morphology=x    :'no'=default: only show POS tags,
+                  :'add': concatenate morphology tags to POS tags,
+                  :'replace': replace POS tags with morphology tags,
+                  :'between': add morphological node between POS tag and word.
 
---abbr           abbreviate labels longer than 5 characters.
---plain          disable ANSI colors.
+--abbr            abbreviate labels longer than 5 characters.
+--plain           disable ANSI colors.
+-n, --numtrees=x  only display the first x trees from the input.
 
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.

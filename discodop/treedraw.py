@@ -13,7 +13,7 @@ import codecs
 from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
-from itertools import count, chain
+from itertools import count, chain, islice
 from discodop.tree import Tree
 from discodop.treebank import READERS, incrementaltreereader
 if sys.version[0] >= '3':
@@ -26,19 +26,19 @@ else:
 USAGE = '''\
 Usage: %s [<treebank>...] [options]
 Options:
-  --fmt=[%s]
-                   Specify corpus format [default: export].
-  --encoding=enc   Specify a different encoding than the default UTF-8.
-  --functions=x    'leave'=default: leave syntactic labels as is,
-                   'remove': strip functions off labels,
-                   'add': show both syntactic categories and functions,
-                   'replace': only show grammatical functions.
-  --morphology=x   'no'=default: only show POS tags,
-                   'add': concatenate morphology tags to POS tags,
-                   'replace': replace POS tags with morphology tags,
-                   'between': add morphological node between POS tag and word.
-  --abbr           abbreviate labels longer than 5 characters.
-  --plain          disable ANSI colors.
+  --fmt=[%s]        Specify corpus format [default: export].
+  --encoding=enc    Specify a different encoding than the default UTF-8.
+  --functions=x     'leave'=default: leave syntactic labels as is,
+                    'remove': strip functions off labels,
+                    'add': show both syntactic categories and functions,
+                    'replace': only show grammatical functions.
+  --morphology=x    'no'=default: only show POS tags,
+                    'add': concatenate morphology tags to POS tags,
+                    'replace': replace POS tags with morphology tags,
+                    'between': add morphological node between POS tag and word.
+  --abbr            abbreviate labels longer than 5 characters.
+  --plain           disable ANSI colors.
+  -n, --numtrees=x  only display the first x trees from the input.
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through 'less -R' to preserve the colors.\
@@ -770,9 +770,9 @@ def main():
 	"""Text-based tree viewer."""
 	from getopt import gnu_getopt, GetoptError
 	flags = ('test', 'help', 'abbr', 'plain')
-	options = ('fmt=', 'encoding=', 'functions=', 'morphology=')
+	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=')
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
+		opts, args = gnu_getopt(sys.argv[1:], 'n:', flags + options)
 	except GetoptError as err:
 		print('error: %s\n%s' % (err, USAGE))
 		sys.exit(2)
@@ -783,6 +783,8 @@ def main():
 	elif '--help' in opts:
 		print(USAGE)
 		return
+	limit = opts.get('--numtrees', opts.get('-n'))
+	limit = int(limit) if limit else None
 	if args and opts.get('--fmt', 'export') != 'auto':
 		reader = READERS[opts.get('--fmt', 'export')]
 		corpora = []
@@ -795,7 +797,7 @@ def main():
 			corpora.append((corpus.trees(), corpus.sents()))
 		numsents = len(corpus.sents())
 		print('Viewing:', ' '.join(args))
-		for n, sentid in enumerate(corpora[0][0], 1):
+		for n, sentid in enumerate(islice(corpora[0][0], 0, limit), 1):
 			print('%d of %s (sentid=%s; len=%d):' % (
 					n, numsents, sentid, len(corpora[0][1][sentid])))
 			for trees, sents in corpora:
@@ -806,10 +808,10 @@ def main():
 		reader = codecs.getreader(opts.get('--encoding', 'utf8'))
 		stdin = (chain.from_iterable(reader(open(a)) for a in args)
 				if args else reader(sys.stdin))
-		trees = incrementaltreereader(stdin,
+		trees = islice(incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),
-				functions=opts.get('--functions'))
-		corpora = [izip(count(1), trees)]
+				functions=opts.get('--functions')),
+				0, limit)
 		try:
 			for n, (tree, sent, rest) in enumerate(trees, 1):
 				print('%d. (len=%d): %s' % (n, len(sent), rest))
