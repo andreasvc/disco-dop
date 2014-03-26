@@ -1,4 +1,4 @@
-""" Generic setup.py for Cython code. """
+"""Generic setup.py for Cython code."""
 from distutils.core import setup
 try:
 	from Cython.Build import cythonize

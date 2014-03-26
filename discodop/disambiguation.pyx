@@ -22,7 +22,7 @@ from discodop.tree import Tree
 from discodop.kbest import lazykbest, getderiv
 from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import addbitsets, unbinarize, canonicalize, \
-		collapse_unary, mergediscnodes, binarize
+		collapseunary, mergediscnodes, binarize
 from discodop.bit import pyintnextset, pyintbitcount
 from discodop.plcfrs cimport Entry, new_Entry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
@@ -248,7 +248,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 		# for constituents in the tree as it will be evaluated.
 		tree = addbitsets(
 				binarize(
-				collapse_unary(unbinarize(
+				collapseunary(unbinarize(
 					mergediscnodes(unbinarize(
 						Tree.parse(treestr, parse_leaf=int),
 						childchar=':')))),
@@ -307,6 +307,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	except (ValueError, UnboundLocalError):
 		return {}, {}, 'MCC failed. %s' % tmp
 	else:
+		result.label = tree.label  # fix root label
 		return {str(result): maxscore}, {}, 'sentprob: %g' % sentprob
 
 

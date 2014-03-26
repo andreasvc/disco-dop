@@ -435,8 +435,8 @@ def collapselabels(trees, _sents, mapping=None):
 
 		{coarselabel1: {finelabel1, finelabel2, ...}, ...}
 
-	For example following Charniak et al (2006), multi-level coarse-to-fine
-	parsing:
+	For example following Charniak et al. (2006),
+	multi-level coarse-to-fine parsing:
 	:level 0: single label P
 	:level 1: HP, MP (arguments, modifiers)
 	:level 2: S, N, A, P (verbal, nominal, adjectival, prepositional)
@@ -448,7 +448,7 @@ def collapselabels(trees, _sents, mapping=None):
 			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
 				subtree.label = LABELRE.sub(revmapping.get, subtree.label)
 
-	# FIXME: Should we do this _before_ binarization?
+	# FIXME: Should we do this _before_ binarization? probably.
 	# need to generate regexps for this for getmapping()
 	revmapping = {finelabel: coarselabel for coarselabel in mapping
 			for finelabel in mapping[coarselabel]}
@@ -627,7 +627,7 @@ PUNCTTAGS = {"''", "``", "-LRB-", "-RRB-", ".", ":", ",",  # PTB
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}  # Alpino/Lassy
 PUNCTUATION = frozenset('.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {'&bullet;', '..', '...', '....', '.....', '......', '!!', '!!!',
-		'??', '???', "''", '``', u',,', '--',
+		'??', '???', "''", '``', u',,', '--', '---', '----',
 		'-LRB-', '-RRB-', '-LCB-', '-RCB-'}
 
 

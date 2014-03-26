@@ -309,7 +309,7 @@ def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 	return tree
 
 
-def collapse_unary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
+def collapseunary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 	"""Collapse unary nodes into a new node indicated by 'joinchar'.
 
 	For example``(NP (NN John))`` becomes ``(NP+NN John)``.

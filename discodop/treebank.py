@@ -50,7 +50,7 @@ class CorpusReader(object):
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
 		:param functions: one of ...
-			:None: leave syntactic labels as is.
+			:None, 'leave': leave syntactic labels as is.
 			:'add': concatenate grammatical function to syntactic label,
 				separated by a hypen: e.g., NP => NP-SBJ
 			:'remove': strip away hyphen-separated grammatical function,
@@ -58,7 +58,7 @@ class CorpusReader(object):
 			:'replace': replace syntactic label with grammatical function,
 				e.g., NP => SBJ
 		:param morphology: one of ...
-			:None: use POS tags as preterminals
+			:None, 'no': use POS tags as preterminals
 			:'add': concatenate morphological information to POS tags,
 				e.g., DET/sg.def
 			:'replace': use morphological information as preterminal label
@@ -79,11 +79,12 @@ class CorpusReader(object):
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
 		self._filenames = sorted(glob(path), key=numbase)
-		for opts, opt in {
-				(None, 'leave', 'add', 'remove', 'replace'): functions,
-				(None, 'leave', 'add', 'replace', 'between'): morphology,
-				(None, 'move', 'remove', 'root'): punct,
-				(None, 'leave', 'between'): lemmas}.items():
+		for opts, opt in (
+				((None, 'leave', 'add', 'replace', 'remove', 'between'),
+					functions),
+				((None, 'no', 'add', 'replace', 'between'), morphology),
+				((None, 'no', 'move', 'remove', 'root'), punct),
+				((None, 'no', 'between'), lemmas)):
 			assert opt in opts, 'Expected one of %r. Got: %r' % (opts, opt)
 		assert self._filenames, (
 				"no files matched pattern %s" % path)
@@ -704,25 +705,28 @@ def handlefunctions(action, tree, pos=True, top=False):
 		return
 	for a in tree.subtrees():
 		if action == 'remove':
-			# e.g., NP-SUBJ or NP=2 => NP, but don't touch -NONE-
-			x = a.label.find('-')
-			if x > 0:
-				a.label = a.label[:x]
-			x = a.label.find('=')
-			if x > 0:
-				a.label = a.label[:x]
-		else:
-			if not top and a is tree:  # skip TOP label
-				continue
-			if pos or isinstance(a[0], Tree):
-				# test for non-empty function tag ("--" is considered empty)
-				if (getattr(a, 'source', None)
-						and a.source[FUNC] and a.source[FUNC] != '--'):
-					func = a.source[FUNC].split("-")[0].upper()
-					if action == 'add':
-						a.label += "-%s" % func
-					elif action == 'replace':
-						a.label = func
+			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
+				x = a.label.find(char)
+				if x > 0:
+					a.label = a.label[:x]
+		elif (not top or action == 'between') and a is tree:  # skip TOP label
+			continue
+		elif pos or isinstance(a[0], Tree):
+			# test for non-empty function tag ("--" is considered empty)
+			func = None
+			if (getattr(a, 'source', None)
+					and a.source[FUNC] and a.source[FUNC] != '--'):
+				func = a.source[FUNC].split("-")[0].upper()
+			if func and action == 'add':
+				a.label += "-%s" % func
+			elif func and action == 'replace':
+				a.label = func
+			elif action == 'between':
+				parent, idx = a.parent, a.parent_index
+				newnode = ParentedTree(func or '--', [parent.pop(idx)])
+				parent.insert(idx, newnode)
+			elif func:
+				raise ValueError('unrecognized action: %r' % action)
 
 
 def handlemorphology(action, lemmaaction, preterminal, source):
@@ -743,7 +747,7 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 	elif lemmaaction == 'between':
 		preterminal[:] = [preterminal.__class__(lemma, preterminal)]
 	elif lemmaaction not in (None, 'no'):
-		raise ValueError
+		raise ValueError('unrecognized action: %r' % lemmaaction)
 
 	if action in (None, 'no'):
 		preterminal.label = tag
@@ -754,8 +758,8 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 	elif action == 'between':
 		preterminal[:] = [preterminal.__class__(morph, [preterminal.pop()])]
 		preterminal.label = tag
-	else:
-		raise ValueError
+	elif action not in (None, 'no'):
+		raise ValueError('unrecognized action: %r' % action)
 	return preterminal
 
 
@@ -847,12 +851,9 @@ def segmentbrackets(brackets, strict=False):
 							results.append(brackettree(
 									result, rest, brackets, strtermre))
 						except:
-							print('error in:')
-							print(result)
-							print(rest)
+							print('error in:\n', result, '\n', rest)
 							raise
-						result = ''
-						start = a
+						result, start = '', a
 				parens += 1
 				a = line.find(lb, a + 1)
 			elif b != -1 and (b < a or a == -1):  # right bracket
@@ -875,9 +876,7 @@ def segmentbrackets(brackets, strict=False):
 					results.append(brackettree(
 							result, rest, brackets, strtermre))
 				except:
-					print('error in:')
-					print(result)
-					print(rest)
+					print('error in:\n', result, '\n', rest)
 					raise
 			status = 1 if results or result or parens else 0
 			yield results or None, status
@@ -938,14 +937,12 @@ def brackettree(treestr, sent, brackets, strtermre):
 			brackets=brackets)
 		if sent.strip():
 			maxleaf = max(tree.leaves())
-			sent = sent.strip('\n\r\t').split(' ', maxleaf)
-			rest = ''
+			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''
 			lastword = sent[-1].split(None, 1)
 			if len(lastword) > 1:
 				sent[-1], rest = lastword
 		else:
-			sent = map(str, range(max(tree.leaves()) + 1))
-			rest = ''
+			sent, rest = map(str, range(max(tree.leaves()) + 1)), ''
 	return tree, sent, rest
 
 

@@ -194,7 +194,7 @@ class Tree(list):
 		return positions
 
 	def subtrees(self, condition=None):
-		"""Traverse and generate the subtrees of this tree in depth-first order.
+		"""Traverse and generate subtrees of this tree in depth-first order.
 
 		:param condition: a function to filter which nodes are generated."""
 		if condition is None or condition(self):
