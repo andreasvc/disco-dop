@@ -113,9 +113,9 @@ cdef struct Rule:  # total: 32 bytes.
 
 @cython.final
 cdef class LexicalRule:
-	cdef double prob
-	cdef UInt lhs
-	cdef unicode word
+	cdef readonly double prob
+	cdef readonly UInt lhs
+	cdef readonly unicode word
 
 
 @cython.freelist(1000)

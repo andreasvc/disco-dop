@@ -13,6 +13,7 @@ import heapq
 import string  # pylint: disable=W0402
 import random
 import logging
+import math
 from operator import itemgetter
 from flask import Flask, Markup, Response, redirect, url_for
 from flask import request, render_template, send_from_directory
@@ -208,10 +209,23 @@ def tokenize(text):
 	return tuple(text.split())
 
 
+def unigramprob(model, sent):
+	"""Simple smoothed unigram probability of sentence given grammar.
+
+	:returns: a logprob for the sentence given lexical probabilities in first
+		grammar of ``model``."""
+	if model.stages[0].grammar.logprob:
+		logprobs = [getattr(model.stages[0].grammar.lexicalbyword.get(word),
+				'.prob', -math.log(0.01)) for word in sent]
+	else:
+		logprobs = [-math.log(getattr(
+				model.stages[0].grammar.lexicalbyword.get(word),
+				'.prob', 0.01)) for word in sent]
+	return sum(logprobs)
+
 def guesslang(sent):
 	"""Heuristic: pick language that contains most words from input."""
-	lang = max(PARSERS, key=lambda x: len(set(sent).intersection(
-			PARSERS[x].stages[0].grammar.lexicalbyword)))
+	lang = min(PARSERS, key=lambda x: unigramprob(PARSERS[x], sent))
 	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
 	return lang
 
