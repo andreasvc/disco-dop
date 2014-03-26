@@ -13,14 +13,11 @@ import codecs
 from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
-from itertools import count, chain, islice
+from itertools import chain, islice
 from discodop.tree import Tree
 from discodop.treebank import READERS, incrementaltreereader
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
-	from builtins import zip as izip  # pylint: disable=F0401
-else:
-	from itertools import izip
 
 
 USAGE = '''\
@@ -502,8 +499,11 @@ class DrawTree(object):
 							ANSICOLOR[nodecolor] if isinstance(node, Tree)
 							else ANSICOLOR[leafcolor], a) for a in text]
 				for x in range(maxnodeheight[row]):
+					# draw vertical lines in partially filled multiline node
+					# labels, but only if it's not a frontier node.
 					noderows[x][col] = (text[x] if x < len(text)
-							else vertline.center(maxnodewith[col], ' '))
+							else (vertline if childcols[n] else ' ').center(
+								maxnodewith[col], ' '))
 			# for each column, if there is a node below us which has a parent
 			# above us, draw a vertical branch in that column.
 			if row != max(matrix):
