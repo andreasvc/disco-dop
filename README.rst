@@ -62,7 +62,7 @@ run the following sequence of commands::
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip install --user -r requirements.txt
-    python setup.py install --user
+    make install
 
 (the ``--user`` option means the packages will be installed to your home
 directory which does not require root privileges).
@@ -80,14 +80,14 @@ Other Linux systems
 -------------------
 This assumes no root access, but assumes that ``gcc`` is installed.
 
-Add local installation directory to PATH
+Set environment variables so that software can be installed to the home directory.
 (replace with equivalent for your shell if you do not use bash)::
 
     mkdir -p ~/.local
     echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
-    export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
-    export PYTHONPATH=$HOME/.local/lib/python2.7/site-packages
-    export PYTHONIOENCODING="utf-8"
+    echo export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
+    echo export PYTHONPATH=$HOME/.local/lib/python2.7/site-packages
+    echo export PYTHONIOENCODING="utf-8"
 
 Install Python 2.7 from source, if not installed already.
 Python may require some libraries such as ``zlib`` and ``readline``;
@@ -115,7 +115,7 @@ Install the latest development version of discodop::
     unzip disco-dop-master.zip
     cd disco-dop-master
     pip install --user -r requirements.txt
-    python setup.py install --user
+    make install
 
 Mac OS X (untested)
 -------------------
@@ -126,7 +126,7 @@ Mac OS X (untested)
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip install --user --install-option="--prefix=" -r requirements.txt
-    python setup.py install --user
+    make install
 
 Other systems
 -------------
@@ -149,7 +149,9 @@ intrinsics provide the most efficient implementation on a given processor.
 
 Documentation
 =============
-The documentation can be found at http://staff.science.uva.nl/~acranenb/discodop/
+A manual page for the ``discodop`` command is installed as part of the
+installation: ``man discodop``. Further documentation can be found at
+http://staff.science.uva.nl/~acranenb/discodop/
 
 To generate a local copy install `Sphinx <http://sphinx-doc.org/>`_
 and issue ``python genrst.py && make html`` in the ``docs/`` directory; the

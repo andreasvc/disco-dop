@@ -1,4 +1,4 @@
-.PHONY: clean test testdebug lint docs discodop
+.PHONY: clean install test testdebug lint docs discodop
 
 all: discodop
 
@@ -42,6 +42,8 @@ valgrind-python.supp:
 
 inplace:
 	python setup.py build_ext --inplace
+
+install: discodop docs
 
 # pylint: R=refactor, C0103 == Invalid name
 lint: inplace
