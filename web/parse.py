@@ -209,25 +209,27 @@ def tokenize(text):
 	return tuple(text.split())
 
 
-def unigramprob(model, sent):
+def unigramprob(model, sent, smooth=1e-20):
 	"""Simple smoothed unigram probability of sentence given grammar.
 
 	:returns: a logprob for the sentence given lexical probabilities in first
-		grammar of ``model``."""
+		grammar of ``model`` of the most likely POS tag for each word;
+		or ``smooth`` if the word is not in the lexicon."""
+	lexicon = model.stages[0].grammar.lexicalbyword
 	if model.stages[0].grammar.logprob:
-		logprobs = [getattr(model.stages[0].grammar.lexicalbyword.get(word),
-				'.prob', -math.log(0.01)) for word in sent]
+		logprobs = [min(pos.prob for pos in lexicon[word]) if word in lexicon
+				else -math.log(smooth) for word in sent]
 	else:
-		logprobs = [-math.log(getattr(
-				model.stages[0].grammar.lexicalbyword.get(word),
-				'.prob', 0.01)) for word in sent]
-	return sum(logprobs)
+		logprobs = [-math.log(max(pos.prob for pos in lexicon[word])
+				if word in lexicon else smooth) for word in sent]
+	return math.exp(-sum(logprobs))
+
 
 def guesslang(sent):
 	"""Heuristic: pick language that contains most words from input."""
-	lang = min(PARSERS, key=lambda x: unigramprob(PARSERS[x], sent))
-	APP.logger.info('Lang: %s; Sent: %s' % (lang, ' '.join(sent)))
-	return lang
+	probs = {lang: unigramprob(PARSERS[lang], sent) for lang in PARSERS}
+	APP.logger.info('Lang: %r; Sent: %s' % (probs, ' '.join(sent)))
+	return max(probs, key=probs.get)
 
 
 logging.basicConfig()
