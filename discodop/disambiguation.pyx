@@ -238,6 +238,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	table = [[defaultdict(dict)
 				for _ in range(len(chart.sent) - n + 1)]
 			for n in range(len(chart.sent))]
+	tree = None
 	# get marginal probabilities
 	for deriv, prob in derivations:
 		if backtransform is None:
@@ -304,7 +305,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	try:
 		tmp = gettree(cells, tree.bitset)
 		result = unbinarize(Tree.parse(tmp, parse_leaf=int), childchar='NONE')
-	except (ValueError, UnboundLocalError):
+	except (ValueError, AttributeError):
 		return {}, {}, 'MCC failed. %s' % tmp
 	else:
 		result.label = tree.label  # fix root label

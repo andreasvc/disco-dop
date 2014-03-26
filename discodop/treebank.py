@@ -31,18 +31,17 @@ class CorpusReader(object):
 		"""
 		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
 		:param ensureroot: add root node with given label if necessary.
-		:param removeempty:
-			remove empty nodes and any empty ancestors; a terminal is empty if
-			it is equal to None, '', or '-NONE-'.
+		:param removeempty: remove empty nodes and any empty ancestors; a
+			terminal is empty if it is equal to None, '', or '-NONE-'.
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads.
-		:param headfinal: whether to put the head in final or in frontal
-			position.
+		:param headfinal: put head in final position (default: frontal).
 		:param headreverse: the head is made final/frontal by reversing
-			everything before or after the head. When true, the side on which
+			everything before or after the head. When True, the side on which
 			the head is will be the reversed side.
 		:param markheads: add '^' to phrasal label of heads.
 		:param punct: one of ...
+
 			:None: leave punctuation as is.
 			:'move': move punctuation to appropriate constituents
 					using heuristics.
@@ -50,6 +49,7 @@ class CorpusReader(object):
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
 		:param functions: one of ...
+
 			:None, 'leave': leave syntactic labels as is.
 			:'add': concatenate grammatical function to syntactic label,
 				separated by a hypen: e.g., NP => NP-SBJ
@@ -58,6 +58,7 @@ class CorpusReader(object):
 			:'replace': replace syntactic label with grammatical function,
 				e.g., NP => SBJ
 		:param morphology: one of ...
+
 			:None, 'no': use POS tags as preterminals
 			:'add': concatenate morphological information to POS tags,
 				e.g., DET/sg.def
@@ -65,6 +66,7 @@ class CorpusReader(object):
 			:'between': add node with morphological information between
 				POS tag and word, e.g., (DET (sg.def the))
 		:param lemmas: one of ...
+
 			:None: ignore lemmas
 			:'between': insert lemma as node between POS tag and word."""
 		self.removeempty = removeempty
@@ -979,7 +981,7 @@ def treebankfanout(trees):
 def numbase(key):
 	"""Turn a file name into a numeric sorting key if possible."""
 	path, base = os.path.split(key)
-	base = base.split(".", 1)
+	base = base.split('.', 1)
 	try:
 		base[0] = int(base[0])
 	except ValueError:

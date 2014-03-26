@@ -281,3 +281,6 @@ epub_copyright = u'2013, Andreas van Cranenburgh'
 
 # Allow duplicate toc entries.
 #epub_tocdup = True
+
+# append __init__ docstring to docstring of class
+autoclass_content = 'both'
