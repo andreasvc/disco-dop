@@ -45,13 +45,6 @@ class Test_treetransforms(object):
 				'(VVINF 4)) (PIS 2)) (VMFIN 1))')
 		assert unbinarize(tree) == origtree
 
-		assert str(binarize(tree, horzmarkov=1, vertmarkov=3, tailmarker='',
-				leftmostunary=True, rightmostunary=False, pospa=True)) == (
-				'(S (S|<VP> (VP^<S> (VP|<PDS>^<S> (PDS^<VP,S> 0) '
-				'(VP|<ADV>^<S> (ADV^<VP,S> 3) (VVINF^<VP,S> 4)))) (S|<PIS> '
-				'(PIS^<S> 2) (VMFIN^<S> 1))))')
-		assert unbinarize(tree) == origtree
-
 		tree = Tree('(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))')
 		assert str(binarize(tree, tailmarker='', reverse=False)) == (
 				'(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> '

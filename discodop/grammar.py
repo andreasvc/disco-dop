@@ -95,7 +95,6 @@ def lcfrsproductions(tree, sent, frontiers=False):
 		elif isinstance(st[0], int):
 			if len(st) == 1 and sent[st[0]] is not None:  # terminal node
 				rule = ((st.label, 'Epsilon'), (sent[st[0]], ))
-			#elif all(sent[a] is None for a in st): # frontier node
 			elif frontiers:
 				rule = ((st.label, ), ())
 			else:
@@ -834,7 +833,7 @@ def test():
 	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
 			start=trees[0].label)
 	print(grammar)
-	grammar.testgrammar()
+	_ = grammar.testgrammar()
 
 	grammarx, backtransform, _, _ = doubledop(trees, sents,
 			debug='--debug' in sys.argv, numproc=1)
@@ -844,7 +843,7 @@ def test():
 			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
 			splitprune=False, markorigin=False)
 	print(grammar)
-	assert grammar.testgrammar(), "RFE should sum to 1."
+	assert grammar.testgrammar()[0], "RFE should sum to 1."
 	for tree, sent in zip(corpus.trees().values(), sents):
 		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
 				for a in sent))
@@ -986,9 +985,10 @@ def main():
 		print(grammarinfo(grammar))
 	try:
 		from discodop.containers import Grammar
-		Grammar(rules, lexicon, bitpar=bitpar, binarized='--bitpar' not in opts,
-                start=opts.get('-s', next(iter(grammar))[0][0][0]
-                    if model == 'ptsg' else trees[0].label)).testgrammar()
+		print(Grammar(rules, lexicon, bitpar=bitpar,
+				binarized='--bitpar' not in opts, start=opts.get('-s',
+					next(iter(grammar))[0][0][0] if model == 'ptsg'
+					else trees[0].label)).testgrammar()[1])
 	except (ImportError, AssertionError) as err:
 		print(err)
 

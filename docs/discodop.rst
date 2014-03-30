@@ -299,11 +299,11 @@ usage: ``discodop parser [options] <grammar/> [input files]``
 or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``
 
 ``grammar/`` is a directory with a model produced by ``discodop runexp``.
-If one or more filenames are given, the parse trees for each
-file are written to a file with ``.dbr`` added to the original filename.
+If one or more filenames are given, the parse trees for each file are written
+to a file with ``.dbr`` added to the original filename.
 When no filename is given, input is read from standard input and the results
-are written to standard output. Input should contain one token per line, with
-sentences delimited by two newlines. Output consists of bracketed trees in
+are written to standard output. Input should contain one sentence per line
+with space-delimited tokens. Output consists of bracketed trees in
 ``discbracket`` format, i.e., terminals are indices pointing to words in the
 original sentence, to represent any discontinuties.
 Files must be encoded in UTF-8.

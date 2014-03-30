@@ -19,6 +19,7 @@ This file contains three main transformations:
 from __future__ import print_function
 import re
 import sys
+from operator import attrgetter
 from itertools import count, islice
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
@@ -99,11 +100,15 @@ Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     to ensure that all constituents have a child marked as head. ''' % (
 			sys.argv[0], '|'.join(READERS), '|'.join(WRITERS))
 
+# e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
+SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
+
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		childchar='|', parentchar='^', headmarked=None, headidx=None,
 		tailmarker='', leftmostunary=False, rightmostunary=False, threshold=2,
-		pospa=False, artpa=True, reverse=False, ids=None, filterfuncs=()):
+		artpa=True, reverse=False, ids=None, filterfuncs=(),
+		labelfun=attrgetter('label'), dot=False, abbrrepetition=False):
 	"""Binarize a Tree object.
 
 	:param factor: "left" or "right". Determines whether binarization proceeds
@@ -138,7 +143,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			in this way the markovization represents the history of the
 			nonterminals that have *already* been parsed, instead of those
 			still to come (assuming bottom-up parsing).
-	:param pospa: whether to add parent annotation to POS nodes.
+	:param dot: if True, horizontal context will include all siblings not yet
+			generated, separated with a dot from the siblings that have been.
 	:param artpa: whether to add parent annotation to the artificial nodes
 			introduced by the binarization.
 	:param ids: a function to provide artificial node labels, instead of
@@ -152,6 +158,11 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			``FUNC/PARENT``). Any function in the sequence ``filterfuncs`` will
 			not become part of the horizontal context of the labels. Can be
 			used to filter out adjunctions from this context.
+	:param labelfun: a function to derive a label from a node to be used for
+			the horizontal markovization context; the default is to use
+			``child.label`` for a given child node.
+	:param abbrrepetition: in horizontal context, reduce sequences of
+			identical labels: e.g., <mwp,mwp,mwp,mwp> becomes <mwp+>
 
 	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))')
 	>>> sent = 'das muss man jetzt machen'.split()
@@ -172,8 +183,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		# parent annotation
 		parentstring = ''
 		originallabel = node.label if vertmarkov else ''
-		if vertmarkov > 1 and node is not tree and (
-				pospa or isinstance(node[0], Tree)):
+		if vertmarkov > 1 and node is not tree and isinstance(node[0], Tree):
 			parentstring = '%s<%s>' % (parentchar, ','.join(parent))
 			node.label += parentstring
 			parent = [originallabel] + parent[:vertmarkov - 2]
@@ -190,21 +200,25 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			if not isinstance(node[0], Tree):
 				continue
 			# insert an initial artificial nonterminal
-			if ids is None:
+			if ids is None:  # use sibling labels as context
 				siblings = '' if headidx is None else node[headidx].label + ';'
-				siblings += ','.join(child.label for child in node[:horzmarkov]
-						if child.label.split('/', 1)[0] not in filterfuncs)
-			else:
+				siblings += ','.join(labelfun(child) for child in node[:horzmarkov]
+						if labelfun(child).split('/', 1)[0] not in filterfuncs)
+				if dot:
+					siblings += '.'
+			else:  # numeric identifier
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
 					siblings, parentstring), node)
 			node[:] = [newnode]
 		else:
 			if isinstance(node[0], Tree):
-				childlabels = [child.label for child in node]
+				childlabels = [labelfun(child) for child in node]
 				if filterfuncs:
-					childlabels = [label.split('/', 1)[0] for label in childlabels
-							if label.split('/', 1)[0] not in filterfuncs]
+					childlabels = [x.split('/', 1)[0] for x in childlabels
+							if x.split('/', 1)[0] not in filterfuncs]
+				if abbrrepetition:
+					childlabels = abbr(childlabels)
 			else:
 				childlabels = []
 			childnodes = list(node)
@@ -223,6 +237,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			if ids is None:
 				siblings = '' if headidx is None else childlabels[headidx] + ';'
 				siblings += ','.join(childlabels[start:end])
+				if dot:
+					siblings += '.'
 			else:
 				siblings = str(next(ids))
 			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
@@ -256,7 +272,11 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 					end = start + horzmarkov
 				if ids is None:
 					siblings = '' if headidx is None else childlabels[headidx] + ';'
+					if dot and not reverse:
+						siblings += ','.join(childlabels[:start]) + '.'
 					siblings += ','.join(childlabels[start:end])
+					if dot and reverse:
+						siblings += '.' + ','.join(childlabels[end:])
 				else:
 					siblings = str(next(ids))
 				newnode.label = '%s%s<%s>%s%s' % (originallabel, childchar,
@@ -360,79 +380,10 @@ def introducepreterminals(tree, ids=None):
 	return tree
 
 
-def getbits(bitset):
-	"""Iterate over the indices of set bits in a bitset."""
-	n = 0
-	while bitset:
-		if bitset & 1:
-			yield n
-		elif not bitset:
-			break
-		bitset >>= 1
-		n += 1
-
-
-def fanout(tree):
-	"""Return fan-out of constituent. Requires ``bitset`` attribute."""
-	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
-
-
-def complexity(tree):
-	"""The degree of the time complextiy of parsing with this rule.
-	Cf. Gildea (2011)."""
-	return fanout(tree) + sum(map(fanout, tree))
-
-
-def complexityfanout(tree):
-	"""Return a tuble with the complexity and fan-out of a subtree."""
-	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
-
-
-def fanoutcomplexity(tree):
-	"""Return a tuble with the fan-out and complexity of a subtree."""
-	return (fanout(tree), fanout(tree) + sum(map(fanout, tree)))
-
-
-def addbitsets(tree):
-	"""Turn tree into an ImmutableTree and add a bitset attribute to each
-	constituent to avoid slow calls to leaves()."""
-	if isinstance(tree, basestring):
-		result = ImmutableTree.parse(tree, parse_leaf=int)
-	elif isinstance(tree, ImmutableTree):
-		result = tree
-	elif isinstance(tree, Tree):
-		result = tree.freeze()
-	else:
-		raise ValueError('expected string or tree object')
-	for a in result.subtrees():
-		a.bitset = sum(1 << n for n in a.leaves())
-	return result
-
-
-def getyf(left, right):
-	"""Given two trees with bitsets, return a string representation of their
-	yield function, e.g., ';01,10'."""
-	result = [';']
-	cur = ','
-	for n in range(max(left.bitset.bit_length(), right.bitset.bit_length())):
-		mask = 1 << n
-		if left.bitset & mask:
-			if cur != '0':
-				cur = '0'
-				result.append(cur)
-		elif right.bitset & mask:
-			if cur != '1':
-				cur = '1'
-				result.append(cur)
-		elif cur != ',':
-			cur = ','
-			result.append(cur)
-	return ''.join(result)
-
-
 def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2):
 	"""Binarize one constituent with a left/right factored binarization.
+
 	Children remain unmodified. Bottom-up version. Nodes must be immutable
 	and contain bitsets; use ``addbitsets()``.
 	By default construct artificial labels using labels of child nodes.
@@ -493,6 +444,122 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		result.bitset = (node[0].bitset if factor == 'right'
 				else node[-1].bitset) | prev.bitset
 	return result
+
+
+def splitdiscnodes(tree, markorigin=False):
+	"""Boyd (2007): Discontinuity revisited.
+	markorigin=False: VP* (bare label)
+	markorigin=True: VP*1 (add index)
+
+	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
+	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
+	>>> print(splitdiscnodes(tree.copy(True)))
+	...  # doctest: +NORMALIZE_WHITESPACE
+	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4)
+		(VVPP 5)) (VAINF 6)))
+	>>> print(splitdiscnodes(tree, markorigin=True))
+	...  # doctest: +NORMALIZE_WHITESPACE
+	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1
+		(CARD 4) (VVPP 5)) (VAINF 6)))"""
+	treeclass = tree.__class__
+	for node in postorder(tree):
+		nodes = list(node)
+		node[:] = []
+		for child in nodes:
+			if disc(child):
+				childnodes = list(child)
+				child[:] = []
+				node.extend(treeclass(('%s*%d' % (child.label, n)
+						if markorigin else '%s*' % child.label), childsubset)
+						for n, childsubset in enumerate(contsets(childnodes)))
+			else:
+				node.append(child)
+	return canonicalize(tree)
+
+
+def mergediscnodes(tree):
+	"""Reverse transformation of ``splitdiscnodes()``."""
+	treeclass = tree.__class__
+	for node in tree.subtrees():
+		merge = defaultdict(list)  # a series of queues of nodes
+		# e.g. merge['VP_2*'] = [Tree('VP_2', []), ...]
+		# when origin is present (index after *), the node is moved to where
+		# the next one is expected, e.g., VP_2*1 after VP_2*0 is added.
+		nodes = list(node)  # the original, unmerged children
+		node[:] = []  # the new, merged children
+		for child in nodes:
+			if not isinstance(child, Tree):
+				node.append(child)
+				continue
+			match = SPLITLABELRE.search(child.label)
+			if not match:
+				node.append(child)
+				continue
+			label, part, _ = match.groups()
+			grandchildren = list(child)
+			child[:] = []
+			if not merge[child.label]:
+				merge[child.label].append(treeclass(label, []))
+				node.append(merge[child.label][0])
+			merge[child.label][0].extend(grandchildren)
+			if part:
+				nextlabel = '%s*%d' % (label, int(part) + 1)
+				merge[nextlabel].append(merge[child.label].pop(0))
+	return tree
+
+
+def addfanoutmarkers(tree):
+	"""Modifies tree so that the label of each node with a fanout > 1 contains
+	a marker "_n" indicating its fanout."""
+	for st in tree.subtrees():
+		leaves = set(st.leaves())
+		thisfanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
+		if thisfanout > 1 and not st.label.endswith('_%d' % thisfanout):
+			st.label += '_%d' % thisfanout
+	return tree
+
+
+def removefanoutmarkers(tree):
+	"""Remove fanout marks."""
+	for a in tree.subtrees(lambda x: '_' in x.label):
+		a.label = a.label.rsplit('_', 1)[0]
+	return tree
+
+
+def canonicalize(tree):
+	"""Restore canonical linear precedence order; tree is modified in-place."""
+	for a in postorder(tree, lambda n: len(n) > 1):
+		a.sort(key=lambda n: n.leaves())
+	return tree
+
+
+def optimalbinarize(tree, sep='|', headdriven=False,
+		h=None, v=1, fun=None):
+	"""Recursively binarize a tree, optimizing for given function.
+
+	``v=0`` is not implemented. Setting h to a nonzero integer restricts the
+	possible binarizations to head driven binarizations."""
+	if h is None:
+		tree = Tree.convert(tree)
+		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
+			a.sort(key=lambda x: x.leaves())
+	if fun is None:
+		fun = complexityfanout
+	return optimalbinarize_(addbitsets(tree), fun, sep, headdriven,
+			h or 999, v, ())
+
+
+def optimalbinarize_(tree, fun, sep, headdriven, h, v, ancestors):
+	"""Helper function for postorder / bottom-up binarization."""
+	if not isinstance(tree, Tree):
+		return tree
+	parentstr = '^<%s>' % (','.join(ancestors[:v - 1])) if v > 1 else ''
+	newtree = ImmutableTree(tree.label + parentstr,
+		[optimalbinarize_(t, fun, sep, headdriven, h, v,
+			(tree.label,) + ancestors) for t in tree])
+	newtree.bitset = tree.bitset
+	return minimalbinarization(newtree, fun, sep, parentstr=parentstr, h=h,
+			head=(len(tree) - 1) if headdriven else None)
 
 
 def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
@@ -632,74 +699,25 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	raise ValueError
 
 
-def optimalbinarize(tree, sep='|', headdriven=False, h=None, v=1):
-	"""Recursively binarize a tree, optimizing for complexity.
-	``v=0`` is not implemented. Setting h to a nonzero integer restricts the
-	possible binarizations to head driven binarizations."""
-	if h is None:
-		tree = Tree.convert(tree)
-		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
-			a.sort(key=lambda x: x.leaves())
-	return recbinarizetree(addbitsets(tree), sep, headdriven, h or 999, v, ())
+def fanout(tree):
+	"""Return fan-out of constituent. Requires ``bitset`` attribute."""
+	return bitfanout(tree.bitset) if isinstance(tree, Tree) else 1
 
 
-def recbinarizetree(tree, sep, headdriven, h, v, ancestors):
-	"""Postorder / bottom-up binarization."""
-	if not isinstance(tree, Tree):
-		return tree
-	parentstr = '^<%s>' % (','.join(ancestors[:v - 1])) if v > 1 else ''
-	newtree = ImmutableTree(tree.label + parentstr,
-		[recbinarizetree(t, sep, headdriven, h, v, (tree.label,) + ancestors)
-			for t in tree])
-	newtree.bitset = tree.bitset
-	return minimalbinarization(newtree, complexityfanout, sep,
-		parentstr=parentstr, h=h, head=(len(tree) - 1) if headdriven else None)
+def complexity(tree):
+	"""The degree of the time complexity of parsing with this rule.
+	Cf. Gildea (2011)."""
+	return fanout(tree) + sum(map(fanout, tree))
 
 
-def disc(node):
-	"""Test whether a particular node is discontinuous.
-
-	i.e., test whether its yield contains two or more non-adjacent strings."""
-	if not isinstance(node, Tree):
-		return False
-	return len(list(ranges(sorted(node.leaves())))) > 1
+def complexityfanout(tree):
+	"""Return a tuple with the complexity and fan-out of a subtree."""
+	return (fanout(tree) + sum(map(fanout, tree)), fanout(tree))
 
 
-def addfanoutmarkers(tree):
-	"""Modifies tree so that the label of each node with a fanout > 1 contains
-	a marker "_n" indicating its fanout."""
-	for st in tree.subtrees():
-		leaves = set(st.leaves())
-		thisfanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
-		if thisfanout > 1 and not st.label.endswith('_%d' % thisfanout):
-			st.label += '_%d' % thisfanout
-	return tree
-
-
-def removefanoutmarkers(tree):
-	"""Remove fanout marks."""
-	for a in tree.subtrees(lambda x: '_' in x.label):
-		a.label = a.label.rsplit('_', 1)[0]
-	return tree
-
-
-def postorder(tree, f=lambda _: True):
-	"""A generator that does a postorder traversal of tree.
-
-	Similar to Tree.subtrees() which does a preorder traversal."""
-	for child in tree:
-		if isinstance(child, Tree):
-			for a in filter(f, postorder(child)):
-				yield a
-	if f(tree):
-		yield tree
-
-
-def canonicalize(tree):
-	"""Restore canonical linear precedence order; tree is modified in-place."""
-	for a in postorder(tree, lambda n: len(n) > 1):
-		a.sort(key=lambda n: n.leaves())
-	return tree
+def fanoutcomplexity(tree):
+	"""Return a tuple with the fan-out and complexity of a subtree."""
+	return (fanout(tree), fanout(tree) + sum(map(fanout, tree)))
 
 
 def contsets(nodes):
@@ -725,69 +743,91 @@ def contsets(nodes):
 		yield subset
 
 
-def splitdiscnodes(tree, markorigin=False):
-	"""Boyd (2007): Discontinuity revisited.
-	markorigin=False: VP* (bare label)
-	markorigin=True: VP*1 (add index)
+def postorder(tree, f=lambda _: True):
+	"""A generator that does a postorder traversal of tree.
 
-	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
-	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
-	>>> print(splitdiscnodes(tree.copy(True)))
-	...  # doctest: +NORMALIZE_WHITESPACE
-	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4)
-		(VVPP 5)) (VAINF 6)))
-	>>> print(splitdiscnodes(tree, markorigin=True))
-	...  # doctest: +NORMALIZE_WHITESPACE
-	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1
-		(CARD 4) (VVPP 5)) (VAINF 6)))"""
-	treeclass = tree.__class__
-	for node in postorder(tree):
-		nodes = list(node)
-		node[:] = []
-		for child in nodes:
-			if disc(child):
-				childnodes = list(child)
-				child[:] = []
-				node.extend(treeclass(('%s*%d' % (child.label, n)
-						if markorigin else '%s*' % child.label), childsubset)
-						for n, childsubset in enumerate(contsets(childnodes)))
-			else:
-				node.append(child)
-	return canonicalize(tree)
-
-# e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
-SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
+	Similar to Tree.subtrees() which does a preorder traversal."""
+	for child in tree:
+		if isinstance(child, Tree):
+			for a in filter(f, postorder(child)):
+				yield a
+	if f(tree):
+		yield tree
 
 
-def mergediscnodes(tree):
-	"""Reverse transformation of ``splitdiscnodes()``."""
-	treeclass = tree.__class__
-	for node in tree.subtrees():
-		merge = defaultdict(list)  # a series of queues of nodes
-		# e.g. merge['VP_2*'] = [Tree('VP_2', []), ...]
-		# when origin is present (index after *), the node is moved to where
-		# the next one is expected, e.g., VP_2*1 after VP_2*0 is added.
-		nodes = list(node)  # the original, unmerged children
-		node[:] = []  # the new, merged children
-		for child in nodes:
-			if not isinstance(child, Tree):
-				node.append(child)
-				continue
-			match = SPLITLABELRE.search(child.label)
-			if not match:
-				node.append(child)
-				continue
-			label, part, _ = match.groups()
-			grandchildren = list(child)
-			child[:] = []
-			if not merge[child.label]:
-				merge[child.label].append(treeclass(label, []))
-				node.append(merge[child.label][0])
-			merge[child.label][0].extend(grandchildren)
-			if part:
-				nextlabel = '%s*%d' % (label, int(part) + 1)
-				merge[nextlabel].append(merge[child.label].pop(0))
-	return tree
+def abbr(childlabels):
+	"""Reduce sequences of identical labels.
+
+	>>> abbr(['mwp', 'mwp', 'mwp', 'mwp'])
+	['mwp+']"""
+	result, inrun = [], ''
+	for a, b in zip(childlabels, childlabels[1:] + [None]):
+		if a == b:
+			inrun = '+'
+		else:
+			result.append(a + inrun)
+			inrun = ''
+	return result
+
+
+def getbits(bitset):
+	"""Iterate over the indices of set bits in a bitset."""
+	n = 0
+	while bitset:
+		if bitset & 1:
+			yield n
+		elif not bitset:
+			break
+		bitset >>= 1
+		n += 1
+
+
+def addbitsets(tree):
+	"""Turn tree into an ImmutableTree and add a bitset attribute to each
+	constituent to avoid slow calls to leaves()."""
+	if isinstance(tree, basestring):
+		result = ImmutableTree.parse(tree, parse_leaf=int)
+	elif isinstance(tree, ImmutableTree):
+		result = tree
+	elif isinstance(tree, Tree):
+		result = tree.freeze()
+	else:
+		raise ValueError('expected string or tree object')
+	for a in result.subtrees():
+		a.bitset = sum(1 << n for n in a.leaves())
+	return result
+
+
+def getyf(left, right):
+	"""Given two trees with bitsets, return a string representation of their
+	yield function, e.g., ';01,10'."""
+	result = [';']
+	cur = ','
+	for n in range(max(left.bitset.bit_length(), right.bitset.bit_length())):
+		mask = 1 << n
+		if left.bitset & mask:
+			if cur != '0':
+				cur = '0'
+				result.append(cur)
+		elif right.bitset & mask:
+			if cur != '1':
+				cur = '1'
+				result.append(cur)
+		elif cur != ',':
+			cur = ','
+			result.append(cur)
+	return ''.join(result)
+
+
+def disc(node):
+	"""Test whether a particular node is discontinuous.
+
+	i.e., test whether its yield contains two or more non-adjacent strings."""
+	if not isinstance(node, Tree):
+		return False
+	elif getattr(node, 'bitset'):
+		return bitfanout(node.bitset) > 1
+	return len(list(ranges(sorted(node.leaves())))) > 1
 
 
 class OrderedSet(Set):

@@ -105,8 +105,8 @@ cdef class Grammar:
 		# if the grammar only contains integral values (frequencies),
 		# normalize them into relative frequencies.
 		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
-		if not (nonint.search(self.origrules)
-				or LEXICON_NONINT.search(self.origlexicon)):
+		if not nonint.search(self.origrules):
+			#	or LEXICON_NONINT.search(self.origlexicon)):
 			self._normalize()
 		# store 'default' weights
 		weights = self.models[0]
@@ -413,8 +413,8 @@ cdef class Grammar:
 			SETBIT(self.chainvec, rule.rhs1 * self.nonterminals + rule.lhs)
 
 	def testgrammar(self, epsilon=np.finfo(np.double).eps):  # machine epsilon
-		""" Report whether all left-hand sides sum to 1 +/-epsilon for the
-		currently selected weights. """
+		"""Test whether all left-hand sides sum to 1 +/-epsilon for the
+		currently selected weights."""
 		cdef Rule *rule
 		cdef LexicalRule lexrule
 		cdef UInt n
@@ -430,12 +430,11 @@ cdef class Grammar:
 		for lhs, weights in enumerate(sums[1:], 1):
 			mass = fsum(weights)
 			if abs(mass - 1.0) > epsilon:
-				logging.error("Weights of rules with LHS '%s' "
-						"do not sum to 1 +/- %g: sum = %g; diff = %g",
-						self.tolabel[lhs], epsilon, mass, mass - 1.0)
-				return False
-		logging.info('All left hand sides sum to 1 +/- epsilon=%s', epsilon)
-		return True
+				msg = ("Weights of rules with LHS '%s' "
+						"do not sum to 1 +/- %g: sum = %g; diff = %g" % (
+						self.tolabel[lhs], epsilon, mass, mass - 1.0))
+				return False, msg
+		return True, 'All left hand sides sum to 1 +/- epsilon=%s' % epsilon
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
 			neverblockre=None, bint splitprune=False, bint markorigin=False):

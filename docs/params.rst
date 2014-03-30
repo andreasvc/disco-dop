@@ -64,7 +64,6 @@ Binarization
     :revmarkov: whether to reverse the horizontal markovization context when using ``default``.
     :v: vertical markovization context; default 1; 2 means 1 extra level of parent annotation.
     :h: horizontal markovization context
-    :pospa: when v > 1, whether to add parent annotation to POS tags?
     :markhead: whether to prepend head to siblings labels
     :leftmostunary: whether to start binarization with unary node
     :rightmostunary: whether to end binarization with unary node

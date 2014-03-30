@@ -44,8 +44,8 @@ or:    %(cmd)s --simple [options] <rules> <lexicon> [input [output]]
 If one or more filenames are given, the parse trees for each file are written
 to a file with '.dbr' added to the original filename.
 When no filename is given, input is read from standard input and the results
-are written to standard output. Input should contain one token per line, with
-sentences delimited by two newlines. Output consists of bracketed trees in
+are written to standard output. Input should contain one sentence per line
+with space-delimited tokens. Output consists of bracketed trees in
 'discbracket' format, i.e., terminals are indices pointing to words in the
 original sentence, to represent any discontinuties.
 Files must be encoded in UTF-8.
@@ -185,7 +185,7 @@ def main():
 		params = readparam(os.path.join(directory, 'params.prm'))
 		params['resultdir'] = directory
 		stages = params['stages']
-		postagging = DictObj(params['postagging'])
+		postagging = params['postagging']
 		readgrammars(directory, stages, postagging,
 				top=params.get('top', top))
 		parser = Parser(stages,
@@ -260,7 +260,8 @@ def workerfunc(func):
 def worker(args):
 	"""Parse a single sentence."""
 	n, line = args
-	if not line.strip():
+	line = line.strip()
+	if not line:
 		return '', True, 0, ''
 	begin = time.clock()
 	sent = line.split(' ')
@@ -269,8 +270,9 @@ def worker(args):
 		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
 	lexicon = PARAMS.parser.stages[0].grammar.lexicalbyword
 	assert PARAMS.usetags or not set(sent) - set(lexicon), (
-		'unknown words and no tags supplied: %r' % (
-		list(set(sent) - set(lexicon))))
+			'unknown words and no tags or unknown word model supplied.\n'
+			'sentence: %r\nunknown words:%r' % (
+			sent, list(set(sent) - set(lexicon))))
 	msg = 'parsing %d: %s' % (n, ' '.join(sent))
 	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
 	output = ''
@@ -280,11 +282,13 @@ def worker(args):
 			output += 'prob=%.16g\n' % result.prob
 		output += '%s\t%s\n' % (result.parsetree, ' '.join(sent))
 	elif PARAMS.printprob:
-		output += ''.join('prob=%.16g\n%s\t%s\n' % (prob, tree, ' '.join(sent))
+		output += ''.join('prob=%.16g\n%s\t%s\n' % (
+				prob, PARAMS.parser.postprocess(tree)[0], ' '.join(sent))
 				for tree, prob in nlargest(PARAMS.numparses,
 					result.parsetrees.items(), key=itemgetter(1)))
 	else:
-		output += ''.join('%s\t%s\n' % (tree, ' '.join(sent))
+		output += ''.join('%s\t%s\n' % (
+				PARAMS.parser.postprocess(tree)[0], ' '.join(sent))
 				for tree in nlargest(PARAMS.numparses, result.parsetrees,
 					key=result.parsetrees.get))
 	sec = time.clock() - begin
@@ -609,7 +613,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					markorigin=stages[n - 1].markorigin)
 		if stage.mode.startswith('pcfg-bitpar'):
 			assert grammar.maxfanout == 1
-		grammar.testgrammar()
+		_sumsto1, msg = grammar.testgrammar()
+		print('%s: %s' % (stage.name, msg))
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging.method == 'unknownword':
 		postagging.unknownwordfun = UNKNOWNWORDFUNC[postagging.model]

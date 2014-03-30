@@ -56,7 +56,6 @@ DEFAULTS = dict(
 		headrules=None,  # rules for finding heads of constituents
 		v=1,
 		h=2,
-		pospa=False,  # when v > 1, add parent annotation to POS tags?
 		markhead=False,  # prepend head to siblings
 		leftmostunary=True,  # start binarization with unary node
 		rightmostunary=True,  # end binarization with unary node
@@ -328,7 +327,7 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 					horzmarkov=binarization.h, vertmarkov=binarization.v,
 					leftmostunary=binarization.leftmostunary,
 					rightmostunary=binarization.rightmostunary,
-					reverse=binarization.revmarkov, pospa=binarization.pospa,
+					reverse=binarization.revmarkov,
 					headidx=-1 if binarization.markhead else None,
 					filterfuncs=(relationalrealizational['ignorefunctions']
 						+ (relationalrealizational['adjunctionlabel'], ))
@@ -419,7 +418,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			logging.info(msg)
 			if stage.estimator != 'rfe':
 				gram.switch(u'%s' % stage.estimator)
-			_sumsto1 = gram.testgrammar()
+			logging.info(gram.testgrammar()[1])
 			if stage.usedoubledop:
 				# backtransform keys are line numbers to rules file;
 				# to see them together do:
@@ -484,7 +483,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			with codecs.getwriter('utf-8')(gzip.open('%s/%s.lex.gz' % (
 					resultdir, stage.name), 'wb')) as lexiconfile:
 				lexiconfile.write(lex)
-			_sumsto1 = gram.testgrammar()
+			logging.info(gram.testgrammar()[1])
 			if n and stage.prune:
 				msg = gram.getmapping(stages[n - 1].grammar,
 					striplabelre=None,
@@ -768,7 +767,7 @@ def parsetepacoc(
 		trainmaxwords=999, trainnumsents=25005, testmaxwords=999,
 		binarization=parser.DictObj(
 			method='default', h=1, v=1, factor='right', tailmarker='',
-			headrules='negra.headrules', pospa=False,
+			headrules='negra.headrules',
 			leftmostunary=True, rightmostunary=True,
 			markhead=False, revmarkov=False, fanout_marks_before_bin=False),
 		transformations=None, usetagger='stanford', resultdir='tepacoc',
