@@ -1,9 +1,9 @@
 .. _params:
 
-Parameters for specifying a parsing experiment (runexp)
-=======================================================
+Parser parameters
+=================
 
-A parsing experiment is defined by a sequence of stages, and a set of
+A parser is defined by a sequence of stages, and a set of
 global options:
 
 .. code-block:: python

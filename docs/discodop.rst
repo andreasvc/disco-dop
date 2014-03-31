@@ -1,5 +1,5 @@
-discodop command line options
-=============================
+Command line options
+====================
 
 A parser for Probalistic Linear Context-Free Rewriting Systems (LCFRS) and
 Probabilistic Context-Free Grammars (PCFG), as well as facilities to extract

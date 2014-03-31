@@ -19,6 +19,13 @@ For example::
     #500    VP  --  --  0
     #EOS 0
 
+An optional lemma field is supported. Secondary edges are ignored.
+The preamble listing the tag sets is ignored and not reproduced
+when trees are written in this format.
+
+This format is supported when input is read incrementally from
+standard input with the ``treedraw`` and ``treetransforms`` commands.
+
 Cf. http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/exformat3.ps
 
 bracket
@@ -28,6 +35,9 @@ Penn treebank style bracketed trees, one tree per line.
 For example::
 
     (S (NP John) (VP (VB is) (JJ rich)) (. .))
+
+This format is supported when input is read incrementally from
+standard input with the ``treedraw`` and ``treetransforms`` commands.
 
 discbracket
 ^^^^^^^^^^^
@@ -44,13 +54,24 @@ per line. Compared to Negra's export format, this format lacks morphology,
 lemmas and functional edges. On the other hand, it is very close to the
 internal representation employed here, so it can be read efficiently.
 
+This format is supported when input is read incrementally from
+standard input with the ``treedraw`` and ``treetransforms`` commands.
+
 Read-only formats
 ^^^^^^^^^^^^^^^^^
-:``alpino``: Alpino XML format. One file per sentence.
+:``alpino``:
+    Alpino XML format. One file per sentence.
+    The hierarchical tree structure is mirrored in the XML
+    structure, which makes it possible to query trees in this
+    format with XPath (as opposed to TigerXML which maintains
+    the tabular structure of the Negra export format).
+
+    Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
 :``dact``:
     Alpino XML trees in an XML database as used by Dact.
     Cf. http://rug-compling.github.io/dact/
 :``tiger``: Tiger XML format.
+    Cf. http://www.ims.uni-stuttgart.de/forschung/ressourcen/werkzeuge/TIGERSearch/doc/html/TigerXML.html
 
 write-only formats
 ^^^^^^^^^^^^^^^^^^

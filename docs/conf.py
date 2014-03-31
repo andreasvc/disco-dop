@@ -66,7 +66,7 @@ release = '0.4.1pre1'
 # directories to ignore when looking for source files.
 exclude_patterns = ['_build']
 
-# The reST default role (used for this markup: `text`) to use for all documents.
+# The reST default role (used for this markup: `text`) to use for all documents
 #default_role = None
 
 # If true, '()' will be appended to :func: etc. cross-reference text.
@@ -129,23 +129,29 @@ html_static_path = ['_static']
 #html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-#html_sidebars = {}
+html_sidebars = {'**': [
+		'globaltoc.html',
+		'searchbox.html',
+		#'localtoc.html',
+		#'relations.html',
+		#'sourcelink.html',
+		], }
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
 #html_additional_pages = {}
 
 # If false, no module index is generated.
-#html_domain_indices = True
+html_domain_indices = False
 
 # If false, no index is generated.
-#html_use_index = True
+html_use_index = False
 
 # If true, the index is split into individual pages for each letter.
 #html_split_index = False
 
 # If true, links to the reST sources are added to the pages.
-#html_show_sourcelink = True
+html_show_sourcelink = False
 
 # If true, "Created using Sphinx" is shown in the HTML footer. Default is True.
 #html_show_sphinx = True
@@ -165,7 +171,7 @@ html_static_path = ['_static']
 htmlhelp_basename = 'Disco-DOPdoc'
 
 
-# -- Options for LaTeX output --------------------------------------------------
+# -- Options for LaTeX output -------------------------------------------------
 
 latex_elements = {
 # The paper size ('letterpaper' or 'a4paper').
@@ -179,7 +185,7 @@ latex_elements = {
 }
 
 # Grouping the document tree into LaTeX files. List of tuples
-# (source start file, target name, title, author, documentclass [howto/manual]).
+# (source start file, target name, title, author, documentclass [howto/manual])
 latex_documents = [
   ('index', 'Disco-DOP.tex', u'Disco-DOP Documentation',
    u'Andreas van Cranenburgh', 'manual'),
@@ -206,7 +212,7 @@ latex_documents = [
 #latex_domain_indices = True
 
 
-# -- Options for manual page output --------------------------------------------
+# -- Options for manual page output -------------------------------------------
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
@@ -219,7 +225,7 @@ man_pages = [
 #man_show_urls = False
 
 
-# -- Options for Texinfo output ------------------------------------------------
+# -- Options for Texinfo output -----------------------------------------------
 
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
@@ -240,7 +246,7 @@ texinfo_documents = [
 #texinfo_show_urls = 'footnote'
 
 
-# -- Options for Epub output ---------------------------------------------------
+# -- Options for Epub output --------------------------------------------------
 
 # Bibliographic Dublin Core info.
 epub_title = u'Disco-DOP'
