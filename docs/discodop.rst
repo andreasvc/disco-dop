@@ -422,28 +422,3 @@ Usage: ``discodop gen [--verbose] <rules> <lexicon>``
 or: ``discodop gen --test``
 
 Grammar is assumed to be in utf-8; may be gzip'ed (.gz extension).
-
-
-Web interfaces
---------------
-There are three web based tools in the ``web/`` directory. These require Flask to
-be installed.
-
-``parse.py``
-    A web interface to the parser. Expects a series of grammars
-    in subdirectories of ``web/grammars/``, each containing grammar files
-    as produced by running ``discodop runexp``.
-    `Download grammars <http://staff.science.uva.nl/~acranenb/grammars/>`_
-    for English, German, and Dutch, as used in the 2013 IWPT paper.
-
-``treesearch.py``
-    A web interface for searching through treebanks. Expects
-    one or more treebanks with the ``.mrg`` or ``.dact`` extension in the
-    directory ``web/corpus/`` (sample included). Depends on
-    `tgrep2 <http://tedlab.mit.edu/~dr/Tgrep2/>`_,
-    `alpinocorpus <https://github.com/rug-compling/alpinocorpus-python>`_, and
-    `style <http://www.gnu.org/software/diction/diction.html>`_.
-
-``treedraw.py``
-    A web interface for drawing discontinuous trees in various
-    formats.
