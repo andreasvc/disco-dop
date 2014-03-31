@@ -152,10 +152,7 @@ Documentation
 A manual page for the ``discodop`` command is installed as part of the
 installation: ``man discodop``. Further documentation can be found at
 http://staff.science.uva.nl/~acranenb/discodop/
-
-To generate a local copy install `Sphinx <http://sphinx-doc.org/>`_
-and issue ``python genrst.py && make html`` in the ``docs/`` directory; the
-result will be in ``_build/html``.
+To generate a local copy see the ``docs/README`` file.
 
 Acknowledgments
 ===============
