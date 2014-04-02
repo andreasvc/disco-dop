@@ -738,7 +738,9 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		parse forest instead of n-best list (requires binarized grammar).
 	:returns: a dictionary of derivations with their probabilities."""
 	from discodop.parser import which
-	assert 0 <= n <= 1000
+	if n < 1 or n > 1000:
+		raise ValueError('with bitpar number of derivations n should be '
+				'1 <= n <= 1000. got: n = %d' % n)
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
 	if n == 0:
