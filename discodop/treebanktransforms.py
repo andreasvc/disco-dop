@@ -625,10 +625,10 @@ def removeemptynodes(tree, sent):
 PUNCTTAGS = {"''", "``", "-LRB-", "-RRB-", ".", ":", ",",  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}  # Alpino/Lassy
-PUNCTUATION = frozenset('.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
-		) | {'&bullet;', '..', '...', '....', '.....', '......', '!!', '!!!',
-		'??', '???', "''", '``', u',,', '--', '---', '----',
-		'-LRB-', '-RRB-', '-LCB-', '-RCB-'}
+PUNCTUATION = frozenset(u'.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
+		) | {u'&bullet;', u'..', u'...', u'....', u'.....', u'......',
+		u'!!', u'!!!', u'??', u'???', u"''", u'``', u',,',
+		u'--', u'---', u'----', u'-LRB-', u'-RRB-', u'-LCB-', u'-RCB-'}
 
 
 def ispunct(word, tag):
