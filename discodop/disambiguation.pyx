@@ -252,7 +252,9 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 				collapseunary(unbinarize(
 					mergediscnodes(unbinarize(
 						Tree.parse(treestr, parse_leaf=int),
-						childchar=':')))),
+						childchar=':', expandunary=False)),
+					expandunary=False),
+					unarychar='++'),
 					leftmostunary=True))
 		sentprob += exp(-prob)
 		for t in tree.subtrees():
@@ -304,7 +306,8 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	tmp = ''
 	try:
 		tmp = gettree(cells, tree.bitset)
-		result = unbinarize(Tree.parse(tmp, parse_leaf=int), childchar='NONE')
+		result = unbinarize(Tree.parse(tmp, parse_leaf=int),
+				childchar='NONE', unarychar='++')
 	except (ValueError, AttributeError):
 		return {}, {}, 'MCC failed. %s' % tmp
 	else:

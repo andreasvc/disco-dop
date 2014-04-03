@@ -531,9 +531,10 @@ class Parser(object):
 		"""Take parse tree and apply postprocessing."""
 		parsetree = Tree.parse(treestr, parse_leaf=int)
 		if self.stages[stage].split:
-			mergediscnodes(unbinarize(parsetree, childchar=':'))
+			mergediscnodes(unbinarize(parsetree, childchar=':',
+					expandunary=False))
 		saveheads(parsetree, self.binarization.tailmarker)
-		unbinarize(parsetree)
+		unbinarize(parsetree, expandunary=False)
 		removefanoutmarkers(parsetree)
 		if self.relationalrealizational:
 			parsetree = rrbacktransform(parsetree,
