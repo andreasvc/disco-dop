@@ -1,5 +1,5 @@
 body { font-family: Helvetica, Arial, sans-serif; }
-blockquote { width: 600px; text-align: justify;  }
+blockquote.intro { width: 600px; text-align: justify;  }
 span.r { color: red; }
 span.tt { font-family: monospace; }
 
