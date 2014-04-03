@@ -747,6 +747,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 		assert chart.grammar.binarized
 	else:
 		chart.rankededges = {chart.root(): []}
+	tmp = None
 	if tags:
 		import tempfile
 		tmp = tempfile.NamedTemporaryFile(delete=False)

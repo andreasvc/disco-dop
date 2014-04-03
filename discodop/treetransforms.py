@@ -290,6 +290,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 		unarychar='+'):
 	"""Restore a binarized tree to the original n-ary tree.
+
 	Modifies tree in-place.
 	NB: a malformed node such as ``(X|<Y> )`` which is not supposed to be empty
 	will be silently discarded."""
