@@ -807,7 +807,7 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 		# store 1-best probability, other probabilities can be ignored.
 		prob = -pylog(float(fields.split(None, 1)[0]))
 		chart.updateprob(lhs, left, right, prob)
-		for n, edge in enumerate(fields.split(' % ')):
+		for edge in fields.split(' % '):
 			_prob, rest = edge.split(None, 1)
 			if rest.startswith('"'):
 				mid = right

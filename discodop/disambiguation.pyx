@@ -254,7 +254,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 						Tree.parse(treestr, parse_leaf=int),
 						childchar=':', expandunary=False)),
 					expandunary=False),
-					unarychar='++'),
+					joinchar='++'),
 					leftmostunary=True))
 		sentprob += exp(-prob)
 		for t in tree.subtrees():
