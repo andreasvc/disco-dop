@@ -45,9 +45,9 @@ function switchopt(n) {
 	</tr>
 	<tr>
 		<td style="width: 50%; " >
-			<textarea name=tree rows=12 cols=60 id=treefield></textarea>
+			<textarea name=tree rows=12 cols=60 id=treefield style="width: 90%; "></textarea>
 		</td>
-		<td>
+		<td style="width: 50%; ">
 			<p>
 			Output:
 			<label><input type="radio" name="output" value="text" checked onClick="javascript:switchopt(1); "> ASCII art</label>
@@ -75,14 +75,17 @@ function switchopt(n) {
 		<td style="width: 50%; ">
 			<p>Notations accepted:</p>
 			<ul>
-			<li>Regular tree(s) in bracket notation (<a href="javascript: show('bracket')">example</a>)
-			<li>Discontinuous tree(s) in bracket notation. Represent terminals with integer indices, sentence on nextline (<a href="javascript: show('discbracket')">example</a>).
-			<li>Negra/Tiger export format tree (<a href="javascript: show('export')">example</a>); function &amp; morphology tags ignored; trees need to be wrapped in:
-			<blockquote>
-<pre>#BOS [number]
-[...]
-#EOS [number]</pre>
-			</blockquote>
+			<li>Regular tree(s) in bracket notation (<a href="javascript: show('bracket'); ">example</a>)
+			<li>Discontinuous tree(s) in bracket notation.
+				Represent terminals with integer indices,
+				sentence on next line (<a href="javascript: show('discbracket'); ">example</a>).
+			<li>Negra export format tree (<a href="javascript: show('export'); ">example</a>);
+				function &amp; morphology tags ignored; trees need to be wrapped in:
+			<blockquote><code>
+					#BOS [number]<br>
+					[...]<br>
+					#EOS [number]<br>
+			</code></blockquote>
 			</ul>
 		</td>
 		<td style="padding: 2%;">
