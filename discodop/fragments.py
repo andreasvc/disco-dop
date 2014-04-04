@@ -24,7 +24,7 @@ from itertools import count
 from getopt import gnu_getopt, GetoptError
 from discodop.tree import Tree
 from discodop.treebank import READERS
-from discodop.treetransforms import binarize, introducepreterminals
+from discodop.treetransforms import binarize, introducepreterminals, unbinarize
 from discodop._fragments import extractfragments, fastextractfragments, \
 		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
 from discodop.parser import workerfunc
@@ -61,6 +61,7 @@ Options:
   --nofreq      do not report frequencies.
   --approx      report counts of occurrence as maximal fragment (lower bound)
   --relfreq     report relative frequencies wrt. root node of fragments.
+  --debin       debinarize fragments.
   --twoterms    only consider fragments with at least two lexical terminals.
   --adjacent    only consider pairs of adjacent fragments (n, n + 1).
   --quadratic   use the slower, quadratic algorithm for finding fragments.
@@ -71,7 +72,8 @@ Options:
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'quadratic',
-		'cover', 'alt', 'relfreq', 'twoterms', 'adjacent', 'debug', 'quiet')
+		'cover', 'alt', 'relfreq', 'twoterms', 'adjacent', 'debin',
+		'debug', 'quiet')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -139,11 +141,13 @@ def main(argv=None):
 		for n, a in enumerate(args)))
 
 	if numproc == 1 and batchdir:
-		batch(batchdir, args, limit, encoding)
+		batch(batchdir, args, limit, encoding, '--debin' in opts)
 	else:
 		fragmentkeys, counts = regular(args, numproc, limit, encoding)
 		out = (io.open(opts['-o'], 'w', encoding=encoding)
 				if '-o' in opts else None)
+		if '--debin' in opts:
+			fragmentkeys, counts = debinarize(fragmentkeys, counts)
 		printfragments(fragmentkeys, counts, out=out)
 
 
@@ -223,7 +227,7 @@ def regular(filenames, numproc, limit, encoding):
 	return fragmentkeys, counts
 
 
-def batch(outputdir, filenames, limit, encoding):
+def batch(outputdir, filenames, limit, encoding, debin):
 	"""batch processing: three or more treebanks specified.
 	The use case for this is when you have one big treebank which you want to
 	compare to lots of smaller sets of trees, and get the results for each
@@ -270,6 +274,8 @@ def batch(outputdir, filenames, limit, encoding):
 		outputfilename = '%s/%s_%s' % (outputdir,
 				os.path.basename(filenames[0]), os.path.basename(filename))
 		out = io.open(outputfilename, 'w', encoding=encoding)
+		if debin:
+			fragmentkeys, counts = debinarize(fragmentkeys, counts)
 		printfragments(fragmentkeys, counts, out=out)
 		logging.info("wrote to %s", outputfilename)
 
@@ -550,6 +556,20 @@ def altrepr(a):
 	'(NP (DT "a") NN)'
 	"""
 	return FRONTIERRE.sub(r'\1', TERMRE.sub(r'(\1 "\2")', a.replace('"', "''")))
+
+
+def debinarize(fragments, counts):
+	"""Debinarize fragments and return corresponding counts."""
+	result1, result2 = [], []
+	for frag, cnt in zip(fragments, counts):
+		try:
+			frag = str(unbinarize(Tree(frag)))
+		except:
+			pass
+		else:
+			result1.append(frag)
+			result2.append(cnt)
+	return result1, result2
 
 
 def printfragments(fragments, counts, out=None):

@@ -949,7 +949,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		sents = []
 		for _, tree, sent in corpus.itertrees(0, limit):
 			tree = tolist(add_lcfrs_rules(
-					canonicalize(binarize(tree)), sent), sent)
+					canonicalize(binarize(tree, dot=True)), sent), sent)
 			for st in tree:
 				if st.prod not in prods:
 					labels.append(st.label.encode('ascii'))
