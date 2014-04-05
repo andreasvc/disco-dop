@@ -52,6 +52,10 @@ def transform(tree, sent, transformations):
 					a[:] = [a.__class__(a.label,
 							[a.pop() for _ in range(len(a))][::-1])]
 					a.label = '-' + func
+		elif name == 'NP-PP':  # mark PPs under NPs
+			for pp in tree.subtrees(lambda n: n.label == 'PP'
+					and n.parent.label == 'NP'):
+				pp.label += STATESPLIT + 'NP'
 		elif name == 'FOLD-NUMBERS':
 			sent[:] = ['000' if NUMBERRE.match(a) else a for a in sent]
 		elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
