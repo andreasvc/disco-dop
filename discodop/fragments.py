@@ -562,12 +562,14 @@ def debinarize(fragments, counts):
 	"""Debinarize fragments and return corresponding counts."""
 	result1, result2 = [], []
 	for frag, cnt in zip(fragments, counts):
+		if PARAMS['disc']:
+			frag, sent = frag
 		try:
 			frag = str(unbinarize(Tree(frag)))
 		except:
 			pass
 		else:
-			result1.append(frag)
+			result1.append((frag, sent) if PARAMS['disc'] else frag)
 			result2.append(cnt)
 	return result1, result2
 
