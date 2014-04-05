@@ -599,9 +599,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					markorigin=stages[n - 1].markorigin)
 				if stage.mode == 'dop-rerank':
 					grammar.getrulemapping(stages[n - 1].grammar)
-			probmodelsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
-			if os.path.exists(probmodelsfile):
-				probmodels = np.load(probmodelsfile)
+			probsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
+			if os.path.exists(probsfile):
+				probmodels = np.load(probsfile)  # pylint: disable=no-member
 				for name in probmodels.files:
 					if name != 'default':
 						grammar.register(unicode(name), probmodels[name])

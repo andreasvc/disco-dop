@@ -107,7 +107,7 @@ file, and options may consist of:
 --goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format [default: export].
 
---fmt=[...]      Shorthand for --goldfmt and -parsesfmt.
+--fmt=[...]      Shorthand for setting both --goldfmt and -parsesfmt.
 
 --goldenc, --parsesenc=<utf-8|iso-8859-1|...>
                  Specify encoding [default: utf-8].
@@ -167,7 +167,8 @@ options may consist of:
                 Input treebank format [default: export].
 --outputfmt=<export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
                 Output treebank format [default: export].
---inputenc, --outputenc=<utf-8|iso-8859-1|...>
+--fmt=x         Shortcut to specify both input and output format.
+--inputenc, --outputenc, --enc=<utf-8|iso-8859-1|...>
                 Treebank encoding [default: utf-8].
 --slice=<n:m>   select a range of sentences from input starting with *n*,
                 up to but not including *m*; as in Python, *n* or *m* can be left

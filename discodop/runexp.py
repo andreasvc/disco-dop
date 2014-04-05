@@ -22,9 +22,9 @@ else:
 	from itertools import izip_longest as zip_longest
 import numpy as np
 from discodop import eval as evalmod
-from discodop import treebank, treebanktransforms, treedraw, treetransforms, \
+from discodop import treebank, treebanktransforms, treetransforms, \
 		grammar, lexicon, parser, estimates
-from discodop.tree import Tree
+from discodop.tree import Tree, ParentedTree
 from discodop.containers import Grammar
 
 USAGE = '''Usage: %s <parameter file> [--rerun]
@@ -231,19 +231,20 @@ def startexp(
 			verbosity=verbosity)
 	results = doparsing(parser=theparser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
-			deleteword=deleteword, corpusfmt=corpusfmt, morphology=morphology)
+			deleteword=deleteword, corpusfmt=corpusfmt, morphology=morphology,
+			evalparam=evalparam)
 	if numproc == 1:
 		logging.info('time elapsed during parsing: %gs', time.clock() - begin)
-	for result in results[0]:
+	for result in results:
 		nsent = len(result.parsetrees)
-		header = (' ' + result.name.upper() + ' ').center(35, '=')
-		evalsummary = evalmod.doeval(OrderedDict((a, b.copy(True))
-				for a, b in test_trees.items()), gold_sents,
-				result.parsetrees, gold_sents, evalparam)
+		overcutoff = any(len(a) > evalparam['CUTOFF_LEN']
+				for a in gold_sents.values())
+		header = (' ' + result.name.upper() + ' ').center(
+				44 if overcutoff else 35, '=')
+		evalsummary = result.evaluator.summary()
 		coverage = 'coverage: %s = %6.2f' % (
 				('%d / %d' % (nsent - result.noparse, nsent)).rjust(
-				25 if any(len(a) > evalparam['CUTOFF_LEN']
-				for a in gold_sents.values()) else 14),
+				25 if overcutoff else 14),
 				100.0 * (nsent - result.noparse) / nsent)
 		logging.info('\n'.join(('', header, evalsummary, coverage)))
 	return top
@@ -455,7 +456,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					gram.getrulemapping(stages[n - 1].grammar)
 				logging.info(msg)
 			# write prob models
-			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
+			np.savez_compressed(  # pylint: disable=no-member
+					'%s/%s.probs.npz' % (resultdir, stage.name),
 					**{name: mod for name, mod
 						in zip(gram.modelnames, gram.models)})
 		else:  # not stage.dop
@@ -510,12 +512,13 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						gram.toid[trees[0].label])
 			logging.info('estimates done. cpu time elapsed: %gs',
 					time.clock() - begin)
-			np.savez_compressed('%s/%s.outside.npz' % (resultdir, stage.name),
+			np.savez_compressed(  # pylint: disable=no-member
+					'%s/%s.outside.npz' % (resultdir, stage.name),
 					outside=outside)
 			logging.info('saved %s estimates', stage.getestimates)
 		elif stage.useestimates in ('SX', 'SXlrgaps'):
-			outside = np.load('%s/%s.outside.npz' % (
-					resultdir, stage.name))['outside']
+			outside = np.load(  # pylint: disable=no-member
+					'%s/%s.outside.npz' % (resultdir, stage.name))['outside']
 			logging.info('loaded %s estimates', stage.useestimates)
 
 		stage.update(grammar=gram, backtransform=backtransform,
@@ -527,8 +530,6 @@ def doparsing(**kwds):
 	params = parser.DictObj(usetags=True, numproc=None, tailmarker='',
 		category=None, deletelabel=(), deleteword=(), corpusfmt='export')
 	params.update(kwds)
-	goldbrackets = multiset()
-	totaltokens = 0
 	results = [parser.DictObj(name=stage.name)
 			for stage in params.parser.stages]
 	for result in results:
@@ -536,7 +537,7 @@ def doparsing(**kwds):
 				probs=dict.fromkeys(params.testset, float('nan')),
 				frags=dict.fromkeys(params.testset, 0),
 				elapsedtime=dict.fromkeys(params.testset),
-				brackets=multiset(), tagscorrect=0, exact=0, noparse=0)
+				evaluator=evalmod.Evaluator(params.evalparam), noparse=0)
 	if params.numproc == 1:
 		initworker(params)
 		dowork = (worker(a) for a in params.testset.items())
@@ -547,23 +548,13 @@ def doparsing(**kwds):
 	logging.info('going to parse %d sentences.', len(params.testset))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
-		sentid, msg, sentresults = data
+		sentid, sentresults = data
 		sent, goldtree, goldsent, _ = params.testset[sentid]
-		logging.debug('%d/%d (%s). [len=%d] %s\n%s', nsent,
+		goldsent = [w for w, _t in goldsent]
+		msg = '%d/%d (%s). [len=%d] %s\n' % (nsent,
 				len(params.testset), sentid, len(sent),
-				' '.join(a[0] for a in goldsent), msg)
-		evaltree = goldtree.copy(True)
-		evalmod.transform(evaltree, [w for w, _ in sent], evaltree.pos(),
-				dict(evaltree.pos()), params.deletelabel, params.deleteword,
-				{}, {})
-		goldb = evalmod.bracketings(evaltree, dellabel=params.deletelabel)
-		goldbrackets.update((sentid, (label, span)) for label, span
-				in goldb.elements())
-		totaltokens += sum(1 for _, t in goldsent
-				if t not in params.deletelabel)
+				' '.join(goldsent))
 		for n, result in enumerate(sentresults):
-			results[n].brackets.update((sentid, (label, span)) for label, span
-					in result.candb.elements())
 			assert (results[n].parsetrees[sentid] is None
 					and results[n].elapsedtime[sentid] is None)
 			results[n].parsetrees[sentid] = result.parsetree
@@ -579,28 +570,38 @@ def doparsing(**kwds):
 			results[n].elapsedtime[sentid] = result.elapsedtime
 			if result.noparse:
 				results[n].noparse += 1
-			if result.exact:
-				results[n].exact += 1
-			results[n].tagscorrect += sum(1 for (_, a), (_, b)
-					in zip(goldsent, sorted(result.parsetree.pos()))
-					if b not in params.deletelabel and a == b)
-			logging.debug(
-				'%s cov %5.2f tag %5.2f ex %5.2f lp %5.2f lr %5.2f lf %5.2f%s',
-					result.name.ljust(7),
-					100 * (1 - results[n].noparse / nsent),
-					100 * (results[n].tagscorrect / totaltokens),
-					100 * (results[n].exact / nsent),
-					100 * evalmod.precision(goldbrackets, results[n].brackets),
-					100 * evalmod.recall(goldbrackets, results[n].brackets),
-					100 * evalmod.f_measure(goldbrackets, results[n].brackets),
-					('' if n + 1 < len(sentresults) else '\n'))
+
+			sentmetrics = results[n].evaluator.add(sentid,
+					goldtree.copy(True), goldsent,
+					ParentedTree.convert(result.parsetree), goldsent)
+			msg += result.msg
+			if sentmetrics.scores()['LF'] == '100.00':
+				msg += '\texact match'
+			else:
+				msg += '\tLP %(LP)s LR %(LR)s LF %(LF)s' % sentmetrics.scores()
+				try:
+					msg += '\n\t' + sentmetrics.bracketings()
+				except Exception as err:
+					msg += 'PROBLEM bracketings:\n%s\n%s' % (
+							result.parsetree, err)
+			msg += '\n'
+			if n + 1 == len(sentresults):
+				msg += sentmetrics.visualize()
+		for n, result in enumerate(sentresults):
+			metrics = results[n].evaluator.acc.scores()
+			msg += ('%(name)s cov %(cov)s tag %(tag)s ex %(ex)s '
+					'lp %(lp)s lr %(lr)s lf %(lf)s\n' % dict(
+					name=result.name.ljust(7),
+					cov=100 * (1 - results[n].noparse / nsent),
+					**metrics))
+		logging.debug(msg)
 	if params.numproc != 1:
 		pool.terminate()
 		pool.join()
 		del dowork, pool
 
 	writeresults(results, params)
-	return results, goldbrackets
+	return results
 
 
 @parser.workerfunc
@@ -609,61 +610,11 @@ def worker(args):
 
 	:returns: a string with diagnostic information, as well as a list of
 		DictObj instances with the results for each stage."""
-	nsent, (sent, goldtree, _, _) = args
+	nsent, (sent, _, _, _) = args
 	prm = INTERNALPARAMS
-	goldevaltree = goldtree.copy(True)
-	gpos = goldevaltree.pos()
-	gposdict = dict(gpos)
-	evalmod.transform(goldevaltree, [w for w, _ in sent],
-			gpos, gposdict, prm.deletelabel, prm.deleteword, {}, {})
-	goldb = evalmod.bracketings(goldevaltree, dellabel=prm.deletelabel)
-	results, msg = [], ''
-	for result in prm.parser.parse([w for w, _ in sent],
-			tags=[t for _, t in sent] if prm.usetags else None):
-		msg += result.msg
-		evaltree = result.parsetree.copy(True)
-		evalsent = [w for w, _ in sent]
-		cpos = evaltree.pos()
-		evalmod.transform(evaltree, evalsent, cpos, gposdict,
-				prm.deletelabel, prm.deleteword, {}, {})
-		candb = evalmod.bracketings(evaltree, dellabel=prm.deletelabel)
-		prec = rec = f1score = 0
-		if goldb and candb:
-			prec = evalmod.precision(goldb, candb)
-			rec = evalmod.recall(goldb, candb)
-			f1score = evalmod.f_measure(goldb, candb)
-		if f1score == 1.0:
-			exact = True
-			msg += '\texact match'
-		else:
-			exact = False
-			msg += '\tLP %5.2f LR %5.2f LF %5.2f\n' % (
-					100 * prec, 100 * rec, 100 * f1score)
-			if (candb - goldb) or (goldb - candb):
-				msg += '\t'
-			try:
-				if candb - goldb:
-					msg += 'cand-gold=%s ' % evalmod.strbracketings(candb - goldb)
-				if goldb - candb:
-					msg += 'gold-cand=%s' % evalmod.strbracketings(goldb - candb)
-			except Exception as err:
-				msg += 'PROBLEM bracketings:\n%s\n%s' % (evaltree, err)
-		msg += '\n'
-		result.update(dict(candb=candb, exact=exact))
-		results.append(result)
-	# visualization of last parse tree; highligh matching POS / bracketings
-	if evaltree:  # trees with only punctuation would end up empty here
-		highlight = [a for a in evaltree.subtrees()
-					if evalmod.bracketing(a) in goldb]
-		highlight.extend(a for a in evaltree.subtrees()
-					if isinstance(a[0], int) and gpos[a[0]] == cpos[a[0]])
-		highlight.extend(range(len(cpos)))
-		try:
-			msg += treedraw.DrawTree(evaltree, evalsent, highlight=highlight
-					).text(unicodelines=True, ansi=True)
-		except Exception as err:
-			msg += 'PROBLEM drawing tree:\n%s\n%s' % (evaltree, err)
-	return (nsent, msg, results)
+	results = list(prm.parser.parse([w for w, _ in sent],
+			tags=[t for _, t in sent] if prm.usetags else None))
+	return (nsent, results)
 
 
 def writeresults(results, params):
@@ -890,6 +841,7 @@ def parsetepacoc(
 		result.exact = result.noparse = 0
 	goldblocks = []
 	goldsents = []
+	# FIXME
 	for cat, res in results.items():
 		logging.info('category: %s', cat)
 		goldbrackets |= res[2]

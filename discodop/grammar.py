@@ -645,9 +645,9 @@ def defaultparse(wordstags, rightbranching=False):
 	return "(NOPARSE %s)" % ' '.join("(%s %s)" % a[::-1] for a in wordstags)
 
 
-def printrule(r, yf, w):
-	""":returns: a string with a representation of a rule."""
-	return "%s %s --> %s\t %r" % (w, r[0], ' '.join(x for x in r[1:]), list(yf))
+def printrule(r, yf, w=''):
+	""":returns: a string representation of a rule."""
+	return '%s %r\t%s => %s' % (w, list(yf), r[0], ' '.join(x for x in r[1:]))
 
 
 def cartpi(seq):

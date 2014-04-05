@@ -57,7 +57,8 @@ options may consist of:
   --inputfmt=[%s]
   --outputfmt=[%s]
                  Treebank format [default: export].
-  --inputenc|--outputenc=[utf-8|iso-8859-1|...]
+  --fmt=x        Shortcut to specify both input and output formats.
+  --inputenc|--outputenc|--enc=[utf-8|iso-8859-1|...]
                  Treebank encoding [default: utf-8].
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
@@ -394,6 +395,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 	unique labels) and as a dictionary (to re-use labels). The first ID in a
 	binarization will always be unique, while the others will be re-used for
 	the same combination of labels and yield function."""
+	# FIXME: markyf does not work with unaries.
 	if len(node) <= threshold:
 		return node
 	elif 1 <= len(node) <= 2:
@@ -449,8 +451,9 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 
 def splitdiscnodes(tree, markorigin=False):
 	"""Boyd (2007): Discontinuity revisited.
-	markorigin=False: VP* (bare label)
-	markorigin=True: VP*1 (add index)
+
+	:markorigin=False: VP* (bare label)
+	:markorigin=True: VP*1 (add index)
 
 	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
 	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
@@ -936,7 +939,7 @@ def main():
 			'renumber'.split())
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= factor= markorigin= '
-			'maxlen=').split()
+			'maxlen= fmt= enc=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
@@ -948,6 +951,10 @@ def main():
 		print('unrecognized action: %r\navailable actions: %s' % (
 				action, ', '.join(actions)), file=sys.stderr)
 		sys.exit(2)
+	if '--fmt' in opts:
+		opts['--inputfmt'] = opts['--outputfmt'] = opts['--fmt']
+	if '--enc' in opts:
+		opts['--inputenc'] = opts['--outputenc'] = opts['--enc']
 	if opts.get('--outputfmt', WRITERS[0]) not in WRITERS:
 		print('unrecognized output format: %r\navailable formats: %s' % (
 				opts.get('--outputfmt'), ' '.join(WRITERS)), file=sys.stderr)

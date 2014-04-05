@@ -54,6 +54,10 @@ def transform(tree, sent, transformations):
 					a.label = '-' + func
 		elif name == 'FOLD-NUMBERS':
 			sent[:] = ['000' if NUMBERRE.match(a) else a for a in sent]
+		elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
+			for punct in tree.subtrees(lambda n: isinstance(n[0], int)
+					and sent[n[0]] in '.?!'):
+				punct.label += STATESPLIT + sent[punct[0]]
 		elif (negratransforms(name, tree, sent)
 				or wsjtransforms(name, tree, sent)
 				or ftbtransforms(name, tree, sent)):
@@ -74,10 +78,6 @@ def negratransforms(name, tree, sent):
 	elif name == 'NP':  # case
 		for np in tree.subtrees(lambda n: n.label == 'NP'):
 			np.label += STATESPLIT + function(np)
-	elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
-		for punct in tree.subtrees(lambda n: isinstance(n[0], int)
-				and sent[n[0]] in '.?!'):
-			punct.label += STATESPLIT + sent[punct[0]]
 	elif name == 'PP-NP':  # un-flatten PPs by introducing NPs
 		addtopp = ('AC', )
 		for pp in tree.subtrees(lambda n: n.label == 'PP'):

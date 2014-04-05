@@ -146,12 +146,13 @@ def treedist(tree1, tree2, debug=False):
 	tree1nodes = tree1.nodes
 	tree2nodes = tree2.nodes
 	import numpy
-	treedists = numpy.zeros((len(tree1.nodes), len(tree2.nodes)), int)
+	treedists = numpy.zeros(  # pylint: disable=no-member
+			(len(tree1.nodes), len(tree2.nodes)), int)
 	for i in tree1.keyroots:
 		for j in tree2.keyroots:
 			m = i - tree1lmd[i] + 2
 			n = j - tree2lmd[j] + 2
-			table = numpy.zeros((m, n), int)
+			table = numpy.zeros((m, n), int)  # pylint: disable=no-member
 			ioff = tree1lmd[i] - 1
 			joff = tree2lmd[j] - 1
 
