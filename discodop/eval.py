@@ -111,7 +111,7 @@ class Evaluator(object):
 				print(' ' * (self.keylen - 4) + a)
 			print('', '_' * ((self.keylen - 5) + len(HEADER[-1])))
 		if self.param['DEBUG'] >= 1:
-			treepair.info('%%%dd  ' % self.keylen)
+			treepair.info('%%%ds  ' % self.keylen)
 		return treepair
 
 	def breakdowns(self):
