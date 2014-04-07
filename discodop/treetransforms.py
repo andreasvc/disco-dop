@@ -20,7 +20,7 @@ from __future__ import print_function
 import re
 import sys
 from operator import attrgetter
-from itertools import count, islice
+from itertools import islice
 from collections import defaultdict, Set, Iterable
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
@@ -40,8 +40,7 @@ except ImportError:
 			prev = arg
 		return result
 
-USAGE = '''\
-Treebank binarization and conversion.
+USAGE = '''Treebank binarization and conversion.
 Usage: %s [options] <action> [input [output]]
 where input and output are treebanks; standard in/output is used if not given.
 action is one of:
@@ -98,7 +97,7 @@ options may consist of:
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     conversion and requires the use of heuristic head rules (--headrules),
-    to ensure that all constituents have a child marked as head. ''' % (
+    to ensure that all constituents have a child marked as head.''' % (
 			sys.argv[0], '|'.join(READERS), '|'.join(WRITERS))
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
@@ -513,8 +512,7 @@ def mergediscnodes(tree):
 
 
 def addfanoutmarkers(tree):
-	"""Modifies tree so that the label of each node with a fanout > 1 contains
-	a marker "_n" indicating its fanout."""
+	"""Mark discontinuous constituents with '_n' where n = # gaps + 1."""
 	for st in tree.subtrees():
 		leaves = set(st.leaves())
 		thisfanout = len([a for a in sorted(leaves) if a - 1 not in leaves])
@@ -787,8 +785,10 @@ def getbits(bitset):
 
 
 def addbitsets(tree):
-	"""Turn tree into an ImmutableTree and add a bitset attribute to each
-	constituent to avoid slow calls to leaves()."""
+	"""Turn tree into an ImmutableTree and add bitset attribute.
+
+	The bitset attribute is a Python integer corresponding to the information
+	that leaves() would return for that node."""
 	if isinstance(tree, basestring):
 		result = ImmutableTree.parse(tree, parse_leaf=int)
 	elif isinstance(tree, ImmutableTree):
@@ -803,8 +803,9 @@ def addbitsets(tree):
 
 
 def getyf(left, right):
-	"""Given two trees with bitsets, return a string representation of their
-	yield function, e.g., ';01,10'."""
+	"""Return the yield function for two subtrees with bitsets.
+
+	:returns: string representation of yield function; e.g., ';01,10'."""
 	result = [';']
 	cur = ','
 	for n in range(max(left.bitset.bit_length(), right.bitset.bit_length())):
@@ -836,6 +837,7 @@ def disc(node):
 
 class OrderedSet(Set):
 	"""A frozen, ordered set which maintains a regular list/tuple and set.
+
 	The set is indexable. Equality is defined _without_ regard for order."""
 	def __init__(self, iterable=None):
 		if iterable:
@@ -877,54 +879,6 @@ class OrderedSet(Set):
 		if not isinstance(other, Iterable):
 			return NotImplemented
 		return self._from_iterable(value for value in self if value in other)
-
-
-def test():
-	"""Verify (1) that all optimal parsing complexities are lower than or
-	equal to the complexities of right-to-left binarizations; and (2) that
-	splitting and merging discontinuties gives the same trees."""
-	from discodop.treebank import NegraCorpusReader
-	corpus = NegraCorpusReader('alpinosample.export', punct='move')
-	total = violations = violationshd = 0
-	for n, tree, sent in zip(count(), list(
-			corpus.trees().values())[:-2000], corpus.sents().values()):
-		t = addbitsets(tree)
-		if all(fanout(x) == 1 for x in t.subtrees()):
-			continue
-		print(n, tree, '\n', ' '.join(sent))
-		total += 1
-		optbin = optimalbinarize(tree.copy(True), headdriven=False, h=None, v=1)
-		# undo head-ordering to get a normal right-to-left binarization
-		normbin = addbitsets(binarize(canonicalize(Tree.convert(tree))))
-		if (max(map(complexityfanout, optbin.subtrees()))
-				> max(map(complexityfanout, normbin.subtrees()))):
-			print('non-hd\n', tree)
-			print(max(map(complexityfanout, optbin.subtrees())), optbin)
-			print(max(map(complexityfanout, normbin.subtrees())), normbin, '\n')
-			violations += 1
-
-		optbin = optimalbinarize(tree.copy(True), headdriven=True, h=1, v=1)
-		normbin = addbitsets(binarize(Tree.convert(tree), horzmarkov=1))
-		if (max(map(complexityfanout, optbin.subtrees()))
-				> max(map(complexityfanout, normbin.subtrees()))):
-			print('hd\n', tree)
-			print(max(map(complexityfanout, optbin.subtrees())), optbin)
-			print(max(map(complexityfanout, normbin.subtrees())), normbin, '\n')
-			violationshd += 1
-	print('opt. bin. violations normal: %d / %d;  hd: %d / %d' % (
-			violations, total, violationshd, total))
-	assert violations == violationshd == 0
-
-	correct = wrong = 0
-	corpus = NegraCorpusReader('alpinosample.export')
-	for tree in corpus.trees().values():
-		if mergediscnodes(splitdiscnodes(tree)) == tree:
-			correct += 1
-		else:
-			wrong += 1
-	total = len(corpus.sents())
-	print('disc. split-merge: correct', correct, '=', 100. * correct / total, '%')
-	print('disc. split-merge: wrong', wrong, '=', 100. * wrong / total, '%')
 
 
 def main():

@@ -3,9 +3,9 @@ from __future__ import division, print_function
 import io
 import re
 import sys
+import gzip
 import codecs
 import logging
-from math import exp
 from operator import mul, itemgetter
 from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import count, islice, repeat
@@ -13,10 +13,13 @@ from discodop.tree import ImmutableTree, Tree
 from discodop.treebank import READERS
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622
-	unicode = str  # pylint: disable=W0622,C0103
+	unicode = str  # pylint: disable=redefined-builtin
 
 USAGE = '''Read off grammars from treebanks.
 Usage: %(cmd)s <type> <input> <output> [options]
+or: %(cmd)s param <parameter-file> <output-directory>
+or: %(cmd)s info <rules-file>
+or: %(cmd)s merge (rules|lexicon|fragments) <input1> <input2>... <output>
 
 type is one of:
    pcfg            Probabilistic Context-Free Grammar (treebank grammar)
@@ -26,14 +29,17 @@ type is one of:
    dopreduction    All-fragments PTSG using Goodman's reduction
    doubledop       PTSG from recurring fragmensts
    param           Extract a series of grammars according to parameters
+   info            Print statistics for PLCFRS/bitpar rules.
+   merge           Interpolate given grammars into a single grammar
+                   Input can be a rules, lexicon or fragment file.
 
 input is a binarized treebank, or in the 'ptsg' case, weighted fragments in the
 same format as the output of the discodop fragments command;
 input may contain discontinuous constituents, except for the 'pcfg' case.
-output is the base name for the filenames to write the grammar to.
-When type is 'param', extract a series of grammars; input is a parameter file,
-output is the directory to create and write the results to; options and input
-treebank are not applicable as they are set in the parameter file.
+output is the base name for the filenames to write the grammar to;
+the filenames will be '<output>.rules' and '<output>.lex'.
+NB: both the info and merge commands expect grammars to be sorted by LHS,
+such as the ones created by this tool.
 
 Options:
   --inputfmt=[%(fmts)s]
@@ -55,6 +61,10 @@ When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\n
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
+
+RULERE = re.compile(
+		r'(?P<RULE1>(?P<LHS1>\w+).*)\t(?P<FREQ1>[0-9]+)(?:\/(?P<DENOM>[0-9]+))?$'
+		r'|(?P<FREQ2>[0-9]+)\t(?P<RULE2>(?P<LHS2>\w+).*)$')
 
 
 def lcfrsproductions(tree, sent, frontiers=False):
@@ -199,7 +209,7 @@ def dopreduction(trees, sents, packedgraph=False):
 
 def doubledop(trees, sents, debug=False, binarized=True,
 		complement=False, iterate=False, numproc=None):
-	"""Extract a Double-DOP grammar from a treebank
+	"""Extract a Double-DOP grammar from a treebank.
 
 	That is, a fragment grammar containing fragments that occur at least twice,
 	plus all individual productions needed to obtain full coverage.
@@ -521,8 +531,9 @@ class TreeDecorator(object):
 
 
 class DiscTree(ImmutableTree):
-	"""Wrap an immutable tree with indices as leaves
-	and a sentence. Provides hash & equality."""
+	"""Wrap an immutable tree with indices as leaves and a sentence.
+
+	Provides hash & equality."""
 	def __init__(self, tree, sent):
 		self.sent = tuple(sent)
 		super(DiscTree, self).__init__(tree.label, tuple(
@@ -544,8 +555,9 @@ class DiscTree(ImmutableTree):
 
 
 def eqtree(tree1, sent1, tree2, sent2):
-	"""Test whether two discontinuous trees are equivalent;
-	assumes canonicalized() ordering."""
+	"""Test whether two discontinuous trees are equivalent.
+
+	Assumes canonicalized() ordering."""
 	if tree1.label != tree2.label or len(tree1) != len(tree2):
 		return False
 	for a, b in zip(tree1, tree2):
@@ -602,8 +614,7 @@ class UniqueIDs(object):
 
 
 def rangeheads(s):
-	"""Iterate over a sequence of numbers and return first element of each
-	contiguous range. Input should be shorted.
+	"""Return first element of each range in a sorted sequence of numbers.
 
 	>>> rangeheads( (0, 1, 3, 4, 6) )
 	[0, 3, 6]"""
@@ -628,8 +639,11 @@ def ranges(s):
 
 
 def defaultparse(wordstags, rightbranching=False):
-	"""A default parse, either right branching NPs, or all words under a single
-	constituent 'NOPARSE'.
+	"""A default parse to generate when parsing fails.
+
+	:param rightbranching:
+		when True, return a right branching tree with NPs,
+		otherwise return all words under a single constituent 'NOPARSE'.
 
 	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
 	... ('here','X')])
@@ -686,19 +700,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 		point numbers (e.g., ``0.666``, imprecise)."""
 	rules, lexicon = [], []
 	lexical = OrderedDict()
-	freqs = False
-	if bitpar:
-		freqs = True
-		#freqmass, denom = defaultdict(int), defaultdict(int)
-		#for (r, _), w in grammar:
-		#	if isinstance(w, tuple):
-		#		freqmass[r[0]] += w[0]
-		#		denom[r[0]] = w[1]
-		#	elif w != 1:
-		#		break
-		#else:
-		#	freqs = all(-1 <= denom[nt] - mass <= 1
-		#			for nt, mass in freqmass.items())
+	freqs = bitpar
 	for (r, yf), w in grammar:
 		if isinstance(w, tuple):
 			if freqs:
@@ -731,8 +733,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
-	"""Takes a bitpar grammar and converts it to the format of
-	Mark Jonhson's cky parser."""
+	"""Convert a bitpar grammar to the format of Mark Jonhson's cky parser."""
 	grammar = []
 	for a in io.open(rules, encoding=encoding):
 		a = a.split()
@@ -814,68 +815,119 @@ def convertweight(weight):
 	return float(weight)
 
 
-def test():
-	"""Demonstrate grammar extraction."""
-	from discodop import plcfrs
-	from discodop.containers import Grammar
-	from discodop.treebank import NegraCorpusReader
-	from discodop.treetransforms import binarize, unbinarize, \
-			addfanoutmarkers, removefanoutmarkers
-	from discodop.disambiguation import recoverfragments
-	from discodop.kbest import lazykbest
-	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	corpus = NegraCorpusReader('alpinosample.export', punct='move')
-	sents = list(corpus.sents().values())
-	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
-			for a in list(corpus.trees().values())[:10]]
-	print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
-	print('dop reduction')
-	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
-			start=trees[0].label)
-	print(grammar)
-	_ = grammar.testgrammar()
+def grammarstats(filename):
+	"""Print statistics for PLCFRS/bitpar grammar (sorted by LHS)."""
+	print('LHS\t# rules\tfreq. mass')
+	label = cnt = freq = None
+	for line in (gzip.open if filename.endswith('.gz') else open)(filename):
+		match = RULERE.match(line)
+		if (match.group('LHS1') or match.group('LHS2')) != label:
+			if label is not None:
+				print('%s\t%d\t%d' % (label, cnt, freq))
+			cnt = freq = 0
+			label = (match.group('LHS1') or match.group('LHS2'))
+		cnt += 1
+		freq += int((match.group('FREQ1') or match.group('FREQ2')))
+	if label is not None:
+		print('%s\t%d\t%d\n' % (label, cnt, freq))
 
-	grammarx, backtransform, _, _ = doubledop(trees, sents,
-			debug='--debug' in sys.argv, numproc=1)
-	print('\ndouble dop grammar')
-	grammar = Grammar(grammarx, start=trees[0].label)
-	grammar.getmapping(grammar, striplabelre=None,
-			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
-			splitprune=False, markorigin=False)
-	print(grammar)
-	assert grammar.testgrammar()[0], "RFE should sum to 1."
-	for tree, sent in zip(corpus.trees().values(), sents):
-		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
-				for a in sent))
-		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
-		print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
-		if chart:
-			mpp, parsetrees = {}, {}
-			derivations, _ = lazykbest(chart, 1000, b'}<')
-			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
-				r = Tree(recoverfragments(d.getkey(), chart, backtransform))
-				r = str(removefanoutmarkers(unbinarize(r)))
-				mpp[r] = mpp.get(r, 0.0) + exp(-p)
-				parsetrees.setdefault(r, []).append((t, p))
-			print(len(mpp), 'parsetrees', end='')
-			print(sum(map(len, parsetrees.values())), 'derivations')
-			for t, tp in sorted(mpp.items(), key=itemgetter(1)):
-				print(tp, '\n', t, end='')
-				print("match:", t == str(tree))
-				assert len(set(parsetrees[t])) == len(parsetrees[t])
-				if '--debug' in sys.argv:
-					for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
-						print(' <= %6g %s' % (exp(-p), deriv))
+
+def stripweight(line):
+	"""Extract rule without weight."""
+	match = RULERE.match(line)
+	return match.group('RULE1') or match.group('RULE2')
+
+
+def sumrules(iterable):
+	"""Given a sorted iterable of rules, sum weights of identical rules."""
+	prev = num = denom = None
+	for line in iterable:
+		match = RULERE.match(line)
+		rule = match.group('RULE1') or match.group('RULE2')
+		if rule != prev:
+			if prev is not None:
+				if match.group('RULE1') is not None:
+					if num == denom:
+						yield '%s\t1\n' % prev
+					else:
+						yield '%s\t%d/%d\n' % (prev, num, denom)
+				else:
+					yield '%d\n%s\n' % (num, prev)
+			prev = rule
+			num = denom = 0
+		num += int(match.group('FREQ1') or match.group('FREQ2'))
+		if match.group('RULE1') is not None:
+			denom += int(match.group('DENOM') or 1)
+	if match.group('RULE1') is not None:
+		if num == denom:
+			yield '%s\t1\n' % rule
 		else:
-			print('no parse\n', chart)
-		print()
-	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
-	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
+			yield '%s\t%d/%d\n' % (rule, num, denom)
+	else:
+		yield '%d\n%s\n' % (num, rule)
+
+
+def sumlex(iterable):
+	"""Given a sorted iterable of rules, sum weights of identical rules."""
+	prev = tags = None
+	for line in iterable:
+		word, rest = line.split(None, 1)
+		rest = rest.split()
+		if word != prev:
+			if tags:
+				yield '%s\t%s\n' % (prev, '\t'.join(
+						'%s %s' % (a, '%g/%d' % (b, c)
+						if c else str(b)) for a, (b, c) in tags.items()))
+			prev = word
+			tags = {}
+		for tag, weight in zip(rest[::2], rest[1::2]):
+			if tag not in tags:
+				tags[tag] = [0, 0]
+			for n, a in enumerate(weight.split('/')):
+				tags[tag][n] += float(a)
+	if tags:
+		yield '%s\t%s\n' % (prev, '\t'.join(
+				'%s %s' % (a, '%g/%d' % (b, c)
+				if c else str(b)) for a, (b, c) in tags.items()))
+
+
+def sumfrags(iterable):
+	"""Sum weights for runs of identical fragments."""
+	prev = num = denom = None
+	for line in iterable:
+		frag, weight = line.rsplit('\t', 1)
+		if frag != prev:
+			if prev is not None:
+				if denom:
+					yield '%s\t%g/%d\n' % (prev, num, denom)
+				else:
+					yield '%s\t%g\n' % (prev, num)
+			prev = frag
+			num = denom = 0
+		weight = weight.split('/')
+		num += int(weight[0])
+		if len(weight) == 2:
+			denom += int(weight[1])
+	if prev is not None:
+		if denom:
+			yield '%s\t%g/%d\n' % (prev, num, denom)
+		else:
+			yield '%s\t%g\n' % (prev, num)
+
+
+def merge(filenames, outfilename, sumfunc, key):
+	"""Interpolate weights of given files."""
+
+	from discodop.plcfrs import nwaymerge
+	openfiles = [iter((gzip.open if filename.endswith('.gz') else
+			open)(filename)) for filename in filenames]
+	with codecs.getwriter('utf-8')((gzip.open if outfilename.endswith('.gz')
+			else open)(outfilename, 'w')) as out:
+		out.writelines(sumfunc(nwaymerge(openfiles, key=key)))
 
 
 def main():
 	"""Command line interface to create grammars from treebanks."""
-	import gzip
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
@@ -883,17 +935,30 @@ def main():
 	options = 'gzip packed bitpar inputfmt= inputenc= dopestimator= numproc='
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
-		model, treebankfile, grammarfile = args
+		model = args[0]
+		if model not in ('info', 'merge'):
+			treebankfile, grammarfile = args[1:]
 	except (GetoptError, ValueError) as err:
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
 	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
-			'param'), ('unrecognized model: %r' % model)
+			'param', 'info', 'merge'), ('unrecognized model: %r' % model)
 	assert opts.get('dopestimator', 'rfe') in ('rfe', 'ewe', 'shortest'), (
 			'unrecognized estimator: %r' % opts['dopestimator'])
 
-	if model == 'param':
+	if model == 'info':
+		grammarstats(args[1])
+		return
+	elif model == 'merge':
+		if args[1] == 'rules':
+			merge(args[2:-1], args[-1], sumrules, stripweight)
+		elif args[1] == 'lexicon':
+			merge(args[2:-1], args[-1], sumlex, lambda x: x.split(None, 1)[0])
+		elif args[1] == 'fragments':
+			merge(args[2:-1], args[-1], sumfrags, lambda x: x.rsplit('\t', 1)[0])
+		return
+	elif model == 'param':
 		import os
 		from discodop.runexp import readparam, loadtraincorpus, getposmodel
 		from discodop.parser import DictObj
@@ -993,7 +1058,4 @@ def main():
 		print(err)
 
 if __name__ == '__main__':
-	if '--test' in sys.argv:
-		test()
-	else:
-		main()
+	main()

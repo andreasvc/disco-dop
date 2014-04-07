@@ -118,8 +118,38 @@ class Evaluator(object):
 		"""Print breakdowns for the most frequent labels / tags."""
 		acc = self.acc
 		limit = 10 if self.param['DEBUG'] <= 0 else None
-		print()
-		print(' Attachment errors (correct labeled bracketing, wrong parent)')
+
+		# NB: unary nodes not handled properly
+		gmismatch = {(n, indices): rule
+					for n, indices, rule in acc.goldrule - acc.candrule}
+		cmismatch = {(n, indices): rule
+					for n, indices, rule in acc.candrule - acc.goldrule}
+		wrong = multiset((rule, gmismatch[n, indices]) for n, indices, rule
+				in acc.candrule - acc.goldrule
+				if len(indices) > 1 and (n, indices) in gmismatch)
+		print('\n Rewrite rule mismatches (for given span)')
+		print('   count   test / gold rules')
+		for (crule, grule), cnt in wrong.most_common(limit):
+			print(' %7d  %s' % (cnt, grammar.printrule(*crule)))
+			print(' %7s  %s' % (' ', grammar.printrule(*grule)))
+
+		wrong = multiset(rule for n, indices, rule
+				in acc.candrule - acc.goldrule
+				if len(indices) > 1 and (n, indices) not in gmismatch)
+		print('\n Rewrite rules (span not in gold)')
+		print('   count   rule in candidate trees')
+		for crule, cnt in wrong.most_common(limit):
+			print(' %7d  %s' % (cnt, grammar.printrule(*crule)))
+
+		wrong = multiset(rule for n, indices, rule
+				in acc.goldrule - acc.candrule
+				if len(indices) > 1 and (n, indices) not in cmismatch)
+		print('\n Rewrite rules (span missing from test)')
+		print('   count   rule in gold standard set')
+		for grule, cnt in wrong.most_common(limit):
+			print(' %7d  %s' % (cnt, grammar.printrule(*grule)))
+
+		print('\n Attachment errors (correct labeled bracketing, wrong parent)')
 		print('  label     test     gold    count')
 		print(' _________________________________')
 		gmismatch = dict(acc.goldbatt - acc.candbatt)
@@ -130,29 +160,13 @@ class Evaluator(object):
 		for (cat, gparent, cparent), cnt in wrong.most_common(limit):
 			print('%s  %s  %s  %7d' % (cat.rjust(7), gparent.rjust(7),
 					cparent.rjust(7), cnt))
-		wrong = multiset(rule for n, indices, rule
-				in acc.candrule - acc.goldrule if len(indices) > 1)
-		print()
-		print(' Rewrite rules (for given span)')
-		print('   count   rule in candidate but not in gold tree')
-		for rule, cnt in wrong.most_common(limit):
-			print(' %7d  %s' % (cnt, grammar.printrule(*rule)))
-		wrong = multiset(rule for n, indices, rule
-				in acc.goldrule - acc.candrule if len(indices) > 1)
-		print()
-		print(' Rewrite rules (for given span)')
-		print('   count   rule in gold tree but not in candidate tree')
-		for rule, cnt in wrong.most_common(limit):
-			print(' %7d  %s' % (cnt, grammar.printrule(*rule)))
-		print()
 
-		print(' Category Statistics (%s categories / errors)' % (
-				('%d most frequent ' % limit) if limit else 'all'), end='')
-		print()
+		print('\n Category Statistics (%s categories / errors)' % (
+				('%d most frequent ' % limit) if limit else 'all'))
 		print('  label  % gold  recall    prec.     F1',
-				'          test/gold   count')
+				'          test gold       count')
 		print(' ______________________________________',
-				'       ____________________')
+				'       ________________________')
 		gmismatch = {(n, indices): label
 					for n, (label, indices) in acc.goldb - acc.candb}
 		wrong = multiset((label, gmismatch[n, indices])
@@ -176,16 +190,15 @@ class Evaluator(object):
 							acc.goldbcat[cat], acc.candbcat[cat])),
 					), end='')
 			if mismatch is not None:
-				print('       %s %7d' % (
-						'/'.join(mismatch[0]).rjust(12), mismatch[1]), end='')
+				print('       %s %7d' % (' '.join((mismatch[0][0].rjust(8),
+						mismatch[0][1].ljust(8))), mismatch[1]), end='')
 			print()
 
 		if accuracy(acc.goldpos, acc.candpos) != 1:
-			print()
-			print(' Tag Statistics (%s tags / errors)' % (
+			print('\n Tag Statistics (%s tags / errors)' % (
 				('%d most frequent ' % limit) if limit else 'all'), end='')
 			print('\n    tag  % gold  recall   prec.      F1',
-					'          test/gold   count')
+					'          test gold   count')
 			print(' ______________________________________',
 					'       ____________________')
 			tags = multiset(tag for _, tag in acc.goldpos)
@@ -207,8 +220,9 @@ class Evaluator(object):
 							100 * precision(goldtag, candtag),
 							100 * f_measure(goldtag, candtag)), end='')
 				if mismatch is not None:
-					print('       %s %7d' % (
-						'/'.join(mismatch[0]).rjust(12), mismatch[1]), end='')
+					print('       %s %7d' % (' '.join((mismatch[0][0].rjust(8),
+							mismatch[0][1].ljust(8))).rjust(12), mismatch[1]),
+							end='')
 				print()
 		print()
 
@@ -449,11 +463,8 @@ class TreePairResult(object):
 						if isinstance(a[0], int)
 						and self.gpos[a[0]] == self.cpos[a[0]])
 			highlight.extend(range(len(self.cpos)))
-			try:
-				vistree = DrawTree(self.ctree, self.csent, highlight=highlight
-						).text(unicodelines=True, ansi=True)
-			except Exception as err:
-				vistree = 'PROBLEM drawing tree:\n%s\n%s' % (self.ctree, err)
+			vistree = DrawTree(self.ctree, self.csent, highlight=highlight
+					).text(unicodelines=True, ansi=True)
 		return vistree
 
 
@@ -513,8 +524,7 @@ class EvalAccumulator(object):
 
 	def scores(self):
 		"""Return a dictionary with running scores for all added sentences."""
-		return dict(
-				lr=nozerodiv(lambda: recall(self.goldb, self.candb)),
+		return dict(lr=nozerodiv(lambda: recall(self.goldb, self.candb)),
 				lp=nozerodiv(lambda: precision(self.goldb, self.candb)),
 				lf=nozerodiv(lambda: f_measure(self.goldb, self.candb)),
 				ex=nozerodiv(lambda: self.exact / self.sentcount),
@@ -533,9 +543,6 @@ def main():
 		sys.exit(2)
 	else:
 		opts = dict(opts)
-		if '--test' in opts:
-			test()
-			return
 	try:
 		assert 2 <= len(args) <= 3, 'Wrong number of arguments.\n%s' % (
 				USAGE if len(args) else HELP)
@@ -982,18 +989,6 @@ def edit_distance(seq1, seq2):
 			c = lev[i + 1][j] + 1               # skip seq2[j]
 			lev[i + 1][j + 1] = min(a, b, c)    # pick the cheapest
 	return lev[len1][len2]
-
-
-def test():
-	"""Simple sanity check; should give 100% score on all metrics."""
-	gold = READERS['export']('alpinosample.export')
-	parses = READERS['export']('alpinosample.export')
-	goldtrees, goldsents, candsents = gold.trees(), gold.sents(), parses.sents()
-	evaluator = Evaluator(readparam(None))
-	for n, ctree in parses.trees().items():
-		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
-	evaluator.breakdowns()
-	print(evaluator.summary())
 
 if __name__ == '__main__':
 	main()

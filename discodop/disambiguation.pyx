@@ -216,8 +216,7 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 
 cdef maxconstituentscorrect(list derivations, Chart chart,
 		list backtransform, double labda, set labels=None):
-	"""Approximate the parse tree with the Most Constituents Correct (MCC)
-	using an n-best list.
+	"""Approximate the Most Constituents Correct (MCC) parse from n-best list.
 
 	:param derivations: list of derivations as strings
 	:param chart: the chart

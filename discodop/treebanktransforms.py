@@ -16,8 +16,7 @@ STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
 HEADRULERE = re.compile(r'^(\w+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
 NEGRATAGUNARY = dict(zip(
-		'NN NNE PNC PRF PDS PIS PPER PPOS PRELS PWS'.split(),
-		repeat('NP')))
+		'NN NNE PNC PRF PDS PIS PPER PPOS PRELS PWS'.split(), repeat('NP')))
 NEGRACONSTUNARY = dict(zip('CNP NM PN'.split(), repeat('NP')))
 NUMBERRE = re.compile('^[0-9]+(?:[,.][0-9]+)*$')
 DERE = re.compile("^([Dd]es?|du|d')$")
@@ -38,7 +37,6 @@ def transform(tree, sent, transformations):
 			``transformations=('markinf markpart de2 markp1 mwadvs mwadvsel1 '
 			'mwadvsel2 mwnsel1 mwnsel2 PUNCT tagpa').split()``"""
 	for name in transformations:
-		# general
 		if name == 'APPEND-FUNC':  # add function to phrasal label
 			for a in tree.subtrees():
 				func = function(a)
@@ -73,7 +71,7 @@ def transform(tree, sent, transformations):
 	return tree
 
 
-def negratransforms(name, tree, sent):
+def negratransforms(name, tree, _sent):
 	"""Negra / Tiger transforms."""
 	if name == 'S-RC':  # relative clause => S becomes SRC
 		for s in tree.subtrees(lambda n: n.label == 'S'
@@ -452,8 +450,6 @@ def collapselabels(trees, _sents, mapping=None):
 			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
 				subtree.label = LABELRE.sub(revmapping.get, subtree.label)
 
-	# FIXME: Should we do this _before_ binarization? probably.
-	# need to generate regexps for this for getmapping()
 	revmapping = {finelabel: coarselabel for coarselabel in mapping
 			for finelabel in mapping[coarselabel]}
 	return [collapse(tree) for tree in trees]

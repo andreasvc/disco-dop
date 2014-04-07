@@ -8,7 +8,7 @@ from discodop.tree import Tree, ParentedTree
 from discodop.treebank import incrementaltreereader
 from discodop.treetransforms import binarize, unbinarize, \
 		splitdiscnodes, mergediscnodes, \
-		addbitsets, fanout
+		addbitsets, fanout, canonicalize
 from discodop.treebanktransforms import punctraise, balancedpunctraise
 from discodop.grammar import flatten, UniqueIDs
 
@@ -355,3 +355,130 @@ def test_fragments():
 	assert sum(counts) == 100
 	for (a, b), c in sorted(zip(fragments, counts), key=repr):
 		print("%s\t%d" % (re.sub("[0-9]+", lambda x: b[int(x.group())], a), c))
+
+
+def test_grammar(debug=False):
+	"""Demonstrate grammar extraction."""
+	from discodop.grammar import treebankgrammar, dopreduction, doubledop
+	from discodop import plcfrs
+	from discodop.containers import Grammar
+	from discodop.treebank import NegraCorpusReader
+	from discodop.treetransforms import addfanoutmarkers, removefanoutmarkers
+	from discodop.disambiguation import recoverfragments
+	from discodop.kbest import lazykbest
+	from math import exp
+	corpus = NegraCorpusReader('alpinosample.export', punct='move')
+	sents = list(corpus.sents().values())
+	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
+			for a in list(corpus.trees().values())[:10]]
+	print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
+	print('dop reduction')
+	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
+			start=trees[0].label)
+	print(grammar)
+	_ = grammar.testgrammar()
+
+	grammarx, backtransform, _, _ = doubledop(trees, sents,
+			debug=debug, numproc=1)
+	print('\ndouble dop grammar')
+	grammar = Grammar(grammarx, start=trees[0].label)
+	grammar.getmapping(grammar, striplabelre=None,
+			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
+			splitprune=False, markorigin=False)
+	print(grammar)
+	assert grammar.testgrammar()[0], "RFE should sum to 1."
+	for tree, sent in zip(corpus.trees().values(), sents):
+		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
+				for a in sent))
+		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
+		print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
+		if chart:
+			mpp, parsetrees = {}, {}
+			derivations, _ = lazykbest(chart, 1000, b'}<')
+			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
+				r = Tree(recoverfragments(d.getkey(), chart, backtransform))
+				r = str(removefanoutmarkers(unbinarize(r)))
+				mpp[r] = mpp.get(r, 0.0) + exp(-p)
+				parsetrees.setdefault(r, []).append((t, p))
+			print(len(mpp), 'parsetrees', end='')
+			print(sum(map(len, parsetrees.values())), 'derivations')
+			for t, tp in sorted(mpp.items(), key=itemgetter(1)):
+				print(tp, '\n', t, end='')
+				print("match:", t == str(tree))
+				assert len(set(parsetrees[t])) == len(parsetrees[t])
+				if debug:
+					for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
+						print(' <= %6g %s' % (exp(-p), deriv))
+		else:
+			print('no parse\n', chart)
+		print()
+	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
+	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
+
+
+def test_optimalbinarize():
+	"""Verify that all optimal parsing complexities are lower than or
+	equal to the complexities of right-to-left binarizations."""
+	from discodop.treetransforms import optimalbinarize, complexityfanout
+	from discodop.treebank import NegraCorpusReader
+	corpus = NegraCorpusReader('alpinosample.export', punct='move')
+	total = violations = violationshd = 0
+	for n, (tree, sent) in enumerate(zip(list(
+			corpus.trees().values())[:-2000], corpus.sents().values())):
+		t = addbitsets(tree)
+		if all(fanout(x) == 1 for x in t.subtrees()):
+			continue
+		print(n, tree, '\n', ' '.join(sent))
+		total += 1
+		optbin = optimalbinarize(tree.copy(True), headdriven=False, h=None, v=1)
+		# undo head-ordering to get a normal right-to-left binarization
+		normbin = addbitsets(binarize(canonicalize(Tree.convert(tree))))
+		if (max(map(complexityfanout, optbin.subtrees()))
+				> max(map(complexityfanout, normbin.subtrees()))):
+			print('non-hd\n', tree)
+			print(max(map(complexityfanout, optbin.subtrees())), optbin)
+			print(max(map(complexityfanout, normbin.subtrees())), normbin, '\n')
+			violations += 1
+
+		optbin = optimalbinarize(tree.copy(True), headdriven=True, h=1, v=1)
+		normbin = addbitsets(binarize(Tree.convert(tree), horzmarkov=1))
+		if (max(map(complexityfanout, optbin.subtrees()))
+				> max(map(complexityfanout, normbin.subtrees()))):
+			print('hd\n', tree)
+			print(max(map(complexityfanout, optbin.subtrees())), optbin)
+			print(max(map(complexityfanout, normbin.subtrees())), normbin, '\n')
+			violationshd += 1
+	print('opt. bin. violations normal: %d / %d;  hd: %d / %d' % (
+			violations, total, violationshd, total))
+	assert violations == violationshd == 0
+
+
+def test_splitdisc():
+	"""Verify that splitting and merging discontinuities gives the same
+	trees."""
+	from discodop.treebank import NegraCorpusReader
+	correct = wrong = 0
+	corpus = NegraCorpusReader('alpinosample.export')
+	for tree in corpus.trees().values():
+		if mergediscnodes(splitdiscnodes(tree)) == tree:
+			correct += 1
+		else:
+			wrong += 1
+	total = len(corpus.sents())
+	print('disc. split-merge: correct', correct, '=', 100. * correct / total, '%')
+	print('disc. split-merge: wrong', wrong, '=', 100. * wrong / total, '%')
+	assert wrong == 0
+
+
+def test_eval():
+	"""Simple sanity check; should give 100% score on all metrics."""
+	from discodop.treebank import READERS
+	from discodop.eval import Evaluator, readparam
+	gold = READERS['export']('alpinosample.export')
+	parses = READERS['export']('alpinosample.export')
+	goldtrees, goldsents, candsents = gold.trees(), gold.sents(), parses.sents()
+	evaluator = Evaluator(readparam(None))
+	for n, ctree in parses.trees().items():
+		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
+	evaluator.breakdowns()
+	print(evaluator.summary())

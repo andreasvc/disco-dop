@@ -217,9 +217,11 @@ grammar
 -------
 Read off grammars from treebanks.
 Usage: ``discodop grammar <type> <input> <output> [options]``
+or: ``discodop param <parameter-file> <output-directory>``
+or: ``discodop info <rules-file>``
+or: ``discodop merge (rules|lexicon|fragments) <input1> <input2>... <output>``
 
 ``type`` is one of:
-
 :pcfg:            Probabilistic Context-Free Grammar (treebank grammar)
 :plcfrs:
                   Probabilistic Linear Context-Free Rewriting System
@@ -228,14 +230,18 @@ Usage: ``discodop grammar <type> <input> <output> [options]``
 :dopreduction:    All-fragments PTSG using Goodman's reduction
 :doubledop:       PTSG from recurring fragmensts
 :param:           Extract a series of grammars according to parameters
+:info:            Print statistics for PLCFRS/bitpar rules.
+:merge:
+                  Interpolate given grammars into a single grammar
+                  Input can be a rules, lexicon or fragment file.
 
 ``input`` is a binarized treebank, or in the ``ptsg`` case, weighted fragments
 in the same format as the output of the ``discodop fragments`` command;
 ``input`` may contain discontinuous constituents, except for the ``pcfg`` case.
-``output`` is the base name for the filenames to write the grammar to.
-When type is ``param``, extract a series of grammars; input is a parameter file,
-output is the directory to create and write the results to; options and input
-treebank are not applicable as they are set in the parameter file.
+``output`` is the base name for the filenames to write the grammar to; the
+filenames will be ``<output>.rules`` and ``<output>.lex``. NB: both the
+``info`` and ``merge`` commands expect grammars to be sorted by LHS, such as
+the ones created by this tool.
 
 Options:
 

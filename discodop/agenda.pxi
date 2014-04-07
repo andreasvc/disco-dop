@@ -1,9 +1,7 @@
-""" Priority Queue based on binary heap which implements decrease-key and
-remove by marking entries as invalid. Provides dictionary-like interface. Based
-on notes in the documentation for heapq, see:
-http://docs.python.org/library/heapq.html
+"""Priority Queues, quicksort selection and n-way merge based on binary heaps.
 
-There is a version specialized to be used as agenda with edges. """
+Based on source and notes in the documentation of ``heapq``, see:
+http://docs.python.org/library/heapq.html"""
 
 from operator import itemgetter
 include "constants.pxi"
@@ -33,10 +31,10 @@ cdef inline bint doublecmpfun(Entry a, Entry b):
 
 @cython.final
 cdef class Agenda:
-	"""
-	Priority Queue implemented with array-based n-ary heap that implements
-	decrease-key and remove operations by marking entries as invalid.
-	Provides dictionary-like interface.
+	"""Priority Queue implemented with array-based n-ary heap.
+
+	Implements decrease-key and remove operations by marking entries as
+	invalid. Provides dictionary-like interface.
 
 	Can be initialized with an iterable; order of equivalent values remains and
 	the best priorities are retained on duplicate keys. """
@@ -230,16 +228,16 @@ cdef class Agenda:
 
 @cython.final
 cdef class DoubleAgenda:
-	"""
-	Priority Queue implemented with array-based n-ary heap that implements
-	decrease-key and remove operations by marking entries as invalid.
-	Provides dictionary-like interface.
+	"""Priority Queue where priorities are C doubles.
+
+	Implements decrease-key and remove operations by marking entries as
+	invalid. Provides dictionary-like interface.
 
 	Can be initialized with an iterable; order of equivalent values
 	remains and the best priorities are retained on duplicate keys.
 
 	This version is specialized to be used as agenda with C doubles as
-	priorities (values); keys are hashable Python objects. """
+	priorities (values); keys are hashable Python objects."""
 	def __init__(self, iterable=None):
 		cdef Entry entry, oldentry
 		self.counter = 1
@@ -542,3 +540,46 @@ cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
 		heap[pos] = parent
 		pos = parentpos
 	heap[pos] = newitem
+
+
+def identity(x):
+	return x
+
+
+def nwaymerge(iterables, key=None):
+	"""Generator that performs an n-way merge of sorted iterables.
+
+	NB: while a sort key may be specified, the individual iterables must
+	already be sorted with this key.
+
+	Algorithm based on:
+	http://stackoverflow.com/questions/5055909/algorithm-for-n-way-merge"""
+	cdef list heap = []
+	cdef unsigned long cnt = 1
+	if key is None:
+		key = identity
+	iterables = [iter(it) for it in iterables]
+
+	for items in iterables:
+		try:
+			item = next(items)
+		except StopIteration:
+			pass
+		else:
+			heappush(heap,
+					new_Entry((item, items), key(item), cnt),
+					cmpfun)
+			cnt += 1
+
+	while(heap):
+		smallest = heappop(heap, cmpfun)
+		yield smallest.getkey()[0]
+		try:
+			item = next(smallest.getkey()[1])
+		except StopIteration:
+			pass
+		else:  # add next element from current iterable
+			heappush(heap,
+					new_Entry((item, smallest.getkey()[1]), key(item), cnt),
+					cmpfun)
+			cnt += 1

@@ -586,10 +586,14 @@ def doparsing(**kwds):
 							result.parsetree, err)
 			msg += '\n'
 			if n + 1 == len(sentresults):
-				msg += sentmetrics.visualize()
+				try:
+					msg += sentmetrics.visualize()
+				except Exception as err:
+					msg += 'PROBLEM drawing tree:\n%s\n%s' % (
+							sentmetrics.ctree, err)
 		for n, result in enumerate(sentresults):
 			metrics = results[n].evaluator.acc.scores()
-			msg += ('%(name)s cov %(cov)s tag %(tag)s ex %(ex)s '
+			msg += ('%(name)s cov %(cov)5.2f tag %(tag)s ex %(ex)s '
 					'lp %(lp)s lr %(lr)s lf %(lf)s\n' % dict(
 					name=result.name.ljust(7),
 					cov=100 * (1 - results[n].noparse / nsent),

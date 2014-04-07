@@ -29,8 +29,8 @@ from discodop.tree import Tree
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 
-USAGE = """Search through treebanks with queries.
-Usage: %(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...
+USAGE = '''Search through treebanks with queries.
+Usage: %s [--engine=<x>] [-t|-s|-c] <query> <treebank>...
 
 Options:
   --engine=<x>, -e <x>
@@ -53,7 +53,7 @@ Options:
                   file with macros
   --numthreads=<x>
                   Number of concurrent threads to use.
-""" % dict(cmd=sys.argv[0])
+''' % sys.argv[0]
 CACHESIZE = 1024
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
