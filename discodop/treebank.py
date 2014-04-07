@@ -940,9 +940,11 @@ def brackettree(treestr, sent, brackets, strtermre):
 		if sent.strip():
 			maxleaf = max(tree.leaves())
 			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''
-			idx = max(sent[-1].rfind(a) for a in '\t\n\r')
+			idx = min(a for a in (sent[-1].find(b) for b in '\t\n\r')
+					if a != -1)
 			if idx != -1:
 				sent[-1], rest = sent[-1][:idx], sent[-1][idx + 1:]
+			sent = [a or None for a in sent]
 		else:
 			sent, rest = map(str, range(max(tree.leaves()) + 1)), ''
 	return tree, sent, rest
