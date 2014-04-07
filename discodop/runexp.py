@@ -372,19 +372,12 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						iterate=stage.iterate, complement=stage.complement,
 						numproc=numproc)
 				# dump fragments
-				with codecs.getwriter('utf-8')(gzip.open(
-						'%s/%s.fragments.gz' % (resultdir, stage.name),
-						'w')) as out:
-					if stage.mode.startswith('pcfg'):
-						out.writelines('%s\t%d\n' % (treebank.LEAVESRE.sub(
-								lambda x: ' %s)' % (b[int(x.group(1))] or
-									'').replace('(', '-LRB-').replace(')',
-									'-RRB-'), a), sum(c.values()))
-								for (a, b), c in fragments.items())
-					else:
-						out.writelines('%s\t%s\t%d\n' % (a,
-								' '.join(x or '' for x in b), sum(c.values()))
-								for (a, b), c in fragments.items())
+				with codecs.getwriter('utf-8')(gzip.open('%s/%s.fragments.gz' %
+						(resultdir, stage.name), 'w')) as out:
+					out.writelines('%s\t%d\n' % (treebank.writetree(a, b, 0,
+							'bracket' if stage.mode.startswith('pcfg')
+							else 'discbracket').rstrip(), sum(c.values()))
+							for (a, b), c in fragments.items())
 			else:  # DOP reduction
 				xgrammar, altweights = grammar.dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph)

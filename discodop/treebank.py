@@ -279,6 +279,7 @@ class DiscBracketCorpusReader(CorpusReader):
 
 	def _word(self, block, orig=False):
 		sent = block.split("\t", 1)[1].rstrip("\n\r").split(' ')
+		sent = [unquote(word) for word in sent]
 		if orig or self.punct != "remove":
 			return sent
 		return [a for a in sent if not ispunct(a, None)]
@@ -569,43 +570,37 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
-	def getword(idx):
-		"""Get word given an index and quote parentheses."""
-		word = sent[int(idx[:-1])]
-		if word is None:
-			return ''
-		return word.replace('(', '-LRB-').replace(')', '-RRB-')
-
-	if fmt == "bracket":
-		return INDEXRE.sub(lambda x: ' %s)' % getword(x.group()),
+	if fmt == 'bracket':
+		return INDEXRE.sub(
+				lambda x: ' %s)' % quote(sent[int(x.group()[:-1])]),
 				"%s\n" % tree)
-	elif fmt == "discbracket":
-		return "%s\t%s\n" % (tree, ' '.join(sent))
-	elif fmt == "tokens":
+	elif fmt == 'discbracket':
+		return "%s\t%s\n" % (tree, ' '.join(map(quote, sent)))
+	elif fmt == 'tokens':
 		return "%s\n" % ' '.join(sent)
-	elif fmt == "wordpos":
+	elif fmt == 'wordpos':
 		return "%s\n" % ' '.join('%s/%s' % (word, pos) for word, (_, pos)
 				in zip(sent, sorted(tree.pos())))
-	elif fmt == "export":
+	elif fmt == 'export':
 		return writeexporttree(tree, sent, n, morphology)
-	elif fmt == "alpino":
+	elif fmt == 'alpino':
 		return writealpinotree(tree, sent, n)
-	elif fmt in ("conll", "mst"):
-		assert headrules, "dependency conversion requires head rules."
+	elif fmt in ('conll', 'mst'):
+		assert headrules, 'dependency conversion requires head rules.'
 		deps = dependencies(tree, headrules)
 		if fmt == "mst":  # MST parser can read this format
 			# fourth line with function tags is left empty.
 			return "\n".join((
-				"\t".join(word for word in sent),
-				"\t".join(tag for _, tag in sorted(tree.pos())),
-				"\t".join(str(head) for _, _, head in deps))) + "\n\n"
-		elif fmt == "conll":
-			return "\n".join("%d\t%s\t_\t%s\t%s\t_\t%d\t%s\t_\t_" % (
+				'\t'.join(word for word in sent),
+				'\t'.join(tag for _, tag in sorted(tree.pos())),
+				'\t'.join(str(head) for _, _, head in deps))) + '\n\n'
+		elif fmt == 'conll':
+			return '\n'.join('%d\t%s\t_\t%s\t%s\t_\t%d\t%s\t_\t_' % (
 				n, word, tag, tag, head, rel)
 				for word, (_, tag), (rel, n, head)
-				in zip(sent, sorted(tree.pos()), deps)) + "\n\n"
+				in zip(sent, sorted(tree.pos()), deps)) + '\n\n'
 	else:
-		raise ValueError("unrecognized format: %r" % fmt)
+		raise ValueError('unrecognized format: %r' % fmt)
 
 
 def writeexporttree(tree, sent, n, morphology):
@@ -920,6 +915,20 @@ def segmentexport(morphology, functions):
 			line = (yield None, 0)
 
 
+def quote(word):
+	"""Quote parentheses and replace None with ''."""
+	if word is None:
+		return ''
+	return word.replace('(', '-LRB-').replace(')', '-RRB-')
+
+
+def unquote(word):
+	"""Reverse quoting of parentheses, frontier spans."""
+	if word in ('', '-FRONTIER-'):
+		return None
+	return word.replace('-LRB-', '(').replace('-RRB-', ')')
+
+
 def brackettree(treestr, sent, brackets, strtermre):
 	"""Parse a single tree presented in bracket format, whether with indices
 	or not; in the latter case ``sent`` is ignored."""
@@ -929,10 +938,10 @@ def brackettree(treestr, sent, brackets, strtermre):
 
 		def substleaf(x):
 			"""Collect word and return index."""
-			sent.append(None if x == '-NONE-' else x)
+			sent.append(x)
 			return next(cnt)
 
-		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -NONE-)', treestr),
+		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)', treestr),
 				parse_leaf=substleaf, brackets=brackets)
 	else:  # disc. trees with integer indices as terminals
 		tree = ParentedTree.parse(treestr, parse_leaf=int,
@@ -940,13 +949,13 @@ def brackettree(treestr, sent, brackets, strtermre):
 		if sent.strip():
 			maxleaf = max(tree.leaves())
 			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''
-			idx = min(a for a in (sent[-1].find(b) for b in '\t\n\r')
-					if a != -1)
-			if idx != -1:
+			sep = [sent[-1].find(b) for b in '\t\n\r' if b in sent[-1]]
+			if sep:
+				idx = min(sep)
 				sent[-1], rest = sent[-1][:idx], sent[-1][idx + 1:]
-			sent = [a or None for a in sent]
 		else:
 			sent, rest = map(str, range(max(tree.leaves()) + 1)), ''
+	sent = [unquote(a) for a in sent]
 	return tree, sent, rest
 
 
