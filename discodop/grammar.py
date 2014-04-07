@@ -63,8 +63,8 @@ Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\n
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 RULERE = re.compile(
-		r'(?P<RULE1>(?P<LHS1>\w+).*)\t(?P<FREQ1>[0-9]+)(?:\/(?P<DENOM>[0-9]+))?$'
-		r'|(?P<FREQ2>[0-9]+)\t(?P<RULE2>(?P<LHS2>\w+).*)$')
+		r'(?P<RULE1>(?P<LHS1>[^ \t]+).*)\t(?P<FREQ1>[0-9]+)(?:\/(?P<DENOM>[0-9]+))?$'
+		r'|(?P<FREQ2>[0-9]+)\t(?P<RULE2>(?P<LHS2>[^ \t]+).*)$')
 
 
 def lcfrsproductions(tree, sent, frontiers=False):
