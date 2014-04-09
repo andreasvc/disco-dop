@@ -57,19 +57,22 @@ internal representation employed here, so it can be read efficiently.
 This format is supported when input is read incrementally from
 standard input with the ``treedraw`` and ``treetransforms`` commands.
 
+alpino
+~~~~~~
+Alpino XML format. One file per sentence. The hierarchical tree structure is
+mirrored in the XML structure, which makes it possible to query trees in this
+format with XPath (as opposed to TigerXML which maintains the tabular structure
+of the Negra export format).
+
+Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
+
+dact
+~~~~
+Alpino XML trees in an XML database as used by Dact.
+Cf. http://rug-compling.github.io/dact/
+
 Read-only formats
 ^^^^^^^^^^^^^^^^^
-:``alpino``:
-    Alpino XML format. One file per sentence.
-    The hierarchical tree structure is mirrored in the XML
-    structure, which makes it possible to query trees in this
-    format with XPath (as opposed to TigerXML which maintains
-    the tabular structure of the Negra export format).
-
-    Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
-:``dact``:
-    Alpino XML trees in an XML database as used by Dact.
-    Cf. http://rug-compling.github.io/dact/
 :``tiger``: Tiger XML format.
     Cf. http://www.ims.uni-stuttgart.de/forschung/ressourcen/werkzeuge/TIGERSearch/doc/html/TigerXML.html
 
