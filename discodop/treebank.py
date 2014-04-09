@@ -128,9 +128,6 @@ class CorpusReader(object):
 		if not self._tagged_sents_cache:
 			if self._block_cache is None:
 				self._block_cache = OrderedDict(self._read_blocks())
-			# for each sentence, zip its words & tags together in a list.
-			# this assumes that .sents() and .trees() correctly remove
-			# punctuation if requested.
 			self._tagged_sents_cache = OrderedDict((n,
 				list(zip(sent, map(itemgetter(1), sorted(tree.pos())))))
 				for (n, sent), tree in zip(self.sents().items(),
@@ -142,8 +139,7 @@ class CorpusReader(object):
 			trees in the original treebank."""
 
 	def _read_blocks(self):
-		"""An iterator over blocks from corpus file that correspond to
-		individual annotated sentences."""
+		"""Iterate over blocks in corpus file corresponding to parse trees."""
 
 	def _parse(self, block):
 		""":returns: a parse tree given a string from the treebank file."""
@@ -236,9 +232,9 @@ class NegraCorpusReader(CorpusReader):
 
 
 class DiscBracketCorpusReader(CorpusReader):
-	"""A corpus reader for discontinuous trees in bracket notation, where the
-	leaves are indices pointing to words in a separately specified sentence.
+	"""A corpus reader for discontinuous trees in bracket notation.
 
+	Leaves are indices pointing to words in a separately specified sentence.
 	For example::
 
 		(S (NP 1) (VP (VB 0) (JJ 2)) (? 3))	is John rich ?
@@ -357,8 +353,7 @@ class TigerXMLCorpusReader(CorpusReader):
 				root.clear()
 
 	def _parse(self, block):
-		"""Translate Tiger XML structure to the fields of export format,
-		so that code for export format can be used."""
+		"""Translate Tiger XML structure to the fields of export format."""
 		nodes = OrderedDict()
 		root = block.find('graph').get('root')
 		for term in block.find('graph').find('terminals'):
@@ -466,8 +461,9 @@ class DactCorpusReader(AlpinoCorpusReader):
 
 
 def exportsplit(line):
-	"""Take a line in export format and split into fields,
-	add dummy fields lemma, sec. edge if those fields are absent."""
+	"""Take a line in export format and split into fields.
+
+	Add dummy fields lemma, sec. edge if those fields are absent."""
 	if "%%" in line:  # we don't want comments.
 		line = line[:line.index("%%")]
 	fields = line.split()
@@ -485,8 +481,7 @@ def exportsplit(line):
 
 
 def exportparse(block, morphology=None, lemmas=None):
-	"""Given a tree in export format as a list of lists,
-	construct a Tree object for it."""
+	"""Return a Tree object for tree in export format given as list of lists."""
 	def getchildren(parent):
 		"""Traverse tree in export format and create Tree object."""
 		results = []
@@ -675,9 +670,6 @@ def writealpinotree(tree, sent, n):
 			if getattr(tree, 'source', None):
 				node.set('lemma', tree.source[LEMMA] or '--')
 				node.set('postag', tree.source[MORPH] or '--')
-				# TODO: decompose postag into individual morphological features
-				# could give 'frame' and 'root' attributes
-				# with data from 'postag' and 'lemma'.
 		for child in tree:
 			if isinstance(child, Tree):
 				addchildren(child, sent, node, cnt)
@@ -761,8 +753,7 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 
 
 def dependencies(root, headrules):
-	"""Lin (1995): A Dependency-based Method
-	for Evaluating Broad-Coverage Parser."""
+	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers."""
 	deps = []
 	deps.append(('ROOT', makedep(root, deps, headrules), 0))
 	return sorted(deps)
@@ -930,8 +921,9 @@ def unquote(word):
 
 
 def brackettree(treestr, sent, brackets, strtermre):
-	"""Parse a single tree presented in bracket format, whether with indices
-	or not; in the latter case ``sent`` is ignored."""
+	"""Parse a single tree presented in (disc)bracket format.
+
+	in the 'bracket' case ``sent`` is ignored."""
 	if strtermre.search(treestr):  # terminals are not all indices
 		rest = sent.strip()
 		sent, cnt = [], count()
@@ -949,10 +941,9 @@ def brackettree(treestr, sent, brackets, strtermre):
 		if sent.strip():
 			maxleaf = max(tree.leaves())
 			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''
-			sep = [sent[-1].find(b) for b in '\t\n\r' if b in sent[-1]]
+			sep = [sent[-1].index(b) for b in '\t\n\r' if b in sent[-1]]
 			if sep:
-				idx = min(sep)
-				sent[-1], rest = sent[-1][:idx], sent[-1][idx + 1:]
+				sent[-1], rest = sent[-1][:min(sep)], sent[-1][min(sep) + 1:]
 		else:
 			sent, rest = map(str, range(max(tree.leaves()) + 1)), ''
 	sent = [unquote(a) for a in sent]
@@ -962,13 +953,11 @@ def brackettree(treestr, sent, brackets, strtermre):
 def exporttree(data, morphology):
 	"""Get tree, sentence from tree in export format given as list of lines."""
 	data = [exportsplit(x) for x in data]
-	tree = exportparse(data, morphology)
-	sent = []
+	tree, sent = exportparse(data, morphology), []
 	for a in data:
 		if EXPORTNONTERMINAL.match(a[WORD]):
-			break
+			return tree, sent
 		sent.append(a[WORD])
-	return tree, sent
 
 
 def alpinotree(block, morphology=None, lemmas=None, functions=None):

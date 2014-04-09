@@ -97,7 +97,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 
 
 def replaceraretrainwords(tagged_sents, unknownword, lexicon):
-	"""Given a training set, replace all terminals not part of the lexicon
+	"""Given a training set, replace all terminals not in the lexicon
 	with a signature of features as returned by unknownword(),
 	before a grammar is read of from the training set."""
 	return [[word if word in lexicon else unknownword(word, n, lexicon)
@@ -106,7 +106,7 @@ def replaceraretrainwords(tagged_sents, unknownword, lexicon):
 
 
 def replaceraretestwords(sent, unknownword, lexicon, sigs):
-	"""Given a test sentence, replace words not part of the lexicon
+	"""Given a test sentence, replace words not in the lexicon
 	with a signature of features as returned by unknownword(),
 	if that signature is part of the grammar."""
 	for n, word in enumerate(sent):

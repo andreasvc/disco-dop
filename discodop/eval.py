@@ -71,7 +71,7 @@ options (in addition to those described in the README of EVALB):
 
 HEADER = '''
    Sentence                 Matched   Brackets            Corr      Tag
-  ID Length  Recall  Precis Bracket   gold   test  Words  Tags Accuracy    LA\
+  ID Length  Recall  Precis Bracket   gold   cand  Words  Tags Accuracy    LA\
 '''.splitlines()
 
 
@@ -115,10 +115,17 @@ class Evaluator(object):
 		return treepair
 
 	def breakdowns(self):
-		"""Print breakdowns for the most frequent labels / tags."""
-		acc = self.acc
+		"""Print breakdowns for the most frequent rules, labels, tags."""
 		limit = 10 if self.param['DEBUG'] <= 0 else None
+		self.rulebreakdowns(limit)
+		self.catbreakdown(limit)
+		if accuracy(self.acc.goldpos, self.acc.candpos) != 1:
+			self.tagbreakdown(limit)
+		print()
 
+	def rulebreakdowns(self, limit=10):
+		"""Print breakdowns for the most frequent rule mismatches."""
+		acc = self.acc
 		# NB: unary nodes not handled properly
 		gmismatch = {(n, indices): rule
 					for n, indices, rule in acc.goldrule - acc.candrule}
@@ -128,30 +135,33 @@ class Evaluator(object):
 				in acc.candrule - acc.goldrule
 				if len(indices) > 1 and (n, indices) in gmismatch)
 		print('\n Rewrite rule mismatches (for given span)')
-		print('   count   test / gold rules')
+		print('   count   cand / gold rules')
 		for (crule, grule), cnt in wrong.most_common(limit):
 			print(' %7d  %s' % (cnt, grammar.printrule(*crule)))
 			print(' %7s  %s' % (' ', grammar.printrule(*grule)))
-
+		gspans = {(n, indices) for n, indices, _ in acc.goldrule}
 		wrong = multiset(rule for n, indices, rule
 				in acc.candrule - acc.goldrule
-				if len(indices) > 1 and (n, indices) not in gmismatch)
-		print('\n Rewrite rules (span not in gold)')
-		print('   count   rule in candidate trees')
+				if len(indices) > 1 and (n, indices) not in gspans)
+		print('\n Rewrite rules (span not in gold trees)')
+		print('   count   rule in candidate parses')
 		for crule, cnt in wrong.most_common(limit):
 			print(' %7d  %s' % (cnt, grammar.printrule(*crule)))
-
+		cspans = {(n, indices) for n, indices, _ in acc.candrule}
 		wrong = multiset(rule for n, indices, rule
 				in acc.goldrule - acc.candrule
-				if len(indices) > 1 and (n, indices) not in cmismatch)
-		print('\n Rewrite rules (span missing from test)')
+				if len(indices) > 1 and (n, indices) not in cspans)
+		print('\n Rewrite rules (span missing from candidate parses)')
 		print('   count   rule in gold standard set')
 		for grule, cnt in wrong.most_common(limit):
 			print(' %7d  %s' % (cnt, grammar.printrule(*grule)))
 
+	def catbreakdown(self, limit=10):
+		"""Print breakdowns for the most frequent labels."""
+		acc = self.acc
 		print('\n Attachment errors (correct labeled bracketing, wrong parent)')
-		print('  label     test     gold    count')
-		print(' _________________________________')
+		print('  label     cand     gold    count')
+		print(' ' + 33 * '_')
 		gmismatch = dict(acc.goldbatt - acc.candbatt)
 		wrong = multiset((label, cparent, gmismatch[n, label, indices])
 					for (n, label, indices), cparent
@@ -160,13 +170,11 @@ class Evaluator(object):
 		for (cat, gparent, cparent), cnt in wrong.most_common(limit):
 			print('%s  %s  %s  %7d' % (cat.rjust(7), gparent.rjust(7),
 					cparent.rjust(7), cnt))
-
 		print('\n Category Statistics (%s categories / errors)' % (
 				('%d most frequent ' % limit) if limit else 'all'))
 		print('  label  % gold  recall    prec.     F1',
-				'          test gold       count')
-		print(' ______________________________________',
-				'       ________________________')
+				'          cand gold       count')
+		print(' ' + 38 * '_' + 7 * ' ' + 24 * '_')
 		gmismatch = {(n, indices): label
 					for n, (label, indices) in acc.goldb - acc.candb}
 		wrong = multiset((label, gmismatch[n, indices])
@@ -177,7 +185,7 @@ class Evaluator(object):
 		for cat, mismatch in zip_longest(freqcats[:limit],
 				wrong.most_common(limit)):
 			if cat is None:
-				print('                                       ', end='')
+				print(39 * ' ', end='')
 			else:
 				print('%s  %6.2f  %s  %s  %s' % (
 					cat.rjust(7),
@@ -194,37 +202,37 @@ class Evaluator(object):
 						mismatch[0][1].ljust(8))), mismatch[1]), end='')
 			print()
 
-		if accuracy(acc.goldpos, acc.candpos) != 1:
-			print('\n Tag Statistics (%s tags / errors)' % (
-				('%d most frequent ' % limit) if limit else 'all'), end='')
-			print('\n    tag  % gold  recall   prec.      F1',
-					'          test gold   count')
-			print(' ______________________________________',
-					'       ____________________')
-			tags = multiset(tag for _, tag in acc.goldpos)
-			wrong = multiset((c, g) for (_, g), (_, c)
-					in zip(acc.goldpos, acc.candpos) if g != c)
-			for tag, mismatch in zip_longest(tags.most_common(limit),
-					wrong.most_common(limit)):
-				if tag is None:
-					print(''.rjust(40), end='')
-				else:
-					goldtag = multiset(n for n, (w, t)
-							in enumerate(acc.goldpos) if t == tag[0])
-					candtag = multiset(n for n, (w, t)
-							in enumerate(acc.candpos) if t == tag[0])
-					print('%s  %6.2f  %6.2f  %6.2f  %6.2f' % (
-							tag[0].rjust(7),
-							100 * len(goldtag) / len(acc.goldpos),
-							100 * recall(goldtag, candtag),
-							100 * precision(goldtag, candtag),
-							100 * f_measure(goldtag, candtag)), end='')
-				if mismatch is not None:
-					print('       %s %7d' % (' '.join((mismatch[0][0].rjust(8),
-							mismatch[0][1].ljust(8))).rjust(12), mismatch[1]),
-							end='')
-				print()
-		print()
+	def tagbreakdown(self, limit=10):
+		"""Print breakdowns for the most frequent tags."""
+		acc = self.acc
+		print('\n Tag Statistics (%s tags / errors)' % (
+			('%d most frequent ' % limit) if limit else 'all'), end='')
+		print('\n    tag  % gold  recall   prec.      F1',
+				'          cand gold   count')
+		print(' ' + 38 * '_' + 7 * ' ' + 20 * '_')
+		tags = multiset(tag for _, tag in acc.goldpos)
+		wrong = multiset((c, g) for (_, g), (_, c)
+				in zip(acc.goldpos, acc.candpos) if g != c)
+		for tag, mismatch in zip_longest(tags.most_common(limit),
+				wrong.most_common(limit)):
+			if tag is None:
+				print(''.rjust(40), end='')
+			else:
+				goldtag = multiset(n for n, (w, t)
+						in enumerate(acc.goldpos) if t == tag[0])
+				candtag = multiset(n for n, (w, t)
+						in enumerate(acc.candpos) if t == tag[0])
+				print('%s  %6.2f  %6.2f  %6.2f  %6.2f' % (
+						tag[0].rjust(7),
+						100 * len(goldtag) / len(acc.goldpos),
+						100 * recall(goldtag, candtag),
+						100 * precision(goldtag, candtag),
+						100 * f_measure(goldtag, candtag)), end='')
+			if mismatch is not None:
+				print('       %s %7d' % (' '.join((mismatch[0][0].rjust(8),
+						mismatch[0][1].ljust(8))).rjust(12), mismatch[1]),
+						end='')
+			print()
 
 	def summary(self):
 		""":returns: a string with an overview of scores for all sentences."""
@@ -310,8 +318,7 @@ class Evaluator(object):
 			msg.append('unlabeled dependencies:    %s     %s  (%d / %d)' % (
 					nozerodiv(lambda: accuracy(acc40.golddep, acc40.canddep)),
 					nozerodiv(lambda: accuracy(acc.golddep, acc.canddep)),
-					len([a for a in zip(acc.golddep, acc.canddep)
-							if a[0] == a[1]]),
+					sum(a[0] == a[1] for a in zip(acc.golddep, acc.canddep)),
 					len(acc.golddep)))
 		msg.append('tagging accuracy:          %s     %s' % (
 				nozerodiv(lambda: accuracy(acc40.goldpos, acc40.candpos)),
@@ -330,9 +337,9 @@ class TreePairResult(object):
 		self.csent, self.gsent = csent[:], gsent[:]
 		self.cpos, self.gpos = sorted(ctree.pos()), sorted(gtree.pos())
 		self.lencpos = sum(1 for _, b in self.cpos
-			if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
+				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
 		self.lengpos = sum(1 for _, b in self.gpos
-			if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
+				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
 		assert self.lencpos == self.lengpos, ('sentence length mismatch. '
 				'sents:\n%s\n%s' % (' '.join(self.csent), ' '.join(self.gsent)))
 		# massage the data (in-place modifications)
@@ -382,13 +389,11 @@ class TreePairResult(object):
 	def info(self, fmt='%8s  '):
 		"""Print one line with evaluation results."""
 		print((fmt + '%5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f%s%s') % (
-				self.n,
-				self.lengpos,
+				self.n, self.lengpos,
 				nozerodiv(lambda: recall(self.gbrack, self.cbrack)),
 				nozerodiv(lambda: precision(self.gbrack, self.cbrack)),
 				sum((self.gbrack & self.cbrack).values()),
-				sum(self.gbrack.values()),
-				sum(self.cbrack.values()),
+				sum(self.gbrack.values()), sum(self.cbrack.values()),
 				len(self.gpos),
 				sum(1 for a, b in zip(self.gpos, self.cpos) if a == b),
 				nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
@@ -401,10 +406,7 @@ class TreePairResult(object):
 		"""Print detailed information."""
 		print('Sentence:', ' '.join(self.gsent))
 		print('Gold tree:\n%s\nCandidate tree:\n%s' % (
-				DrawTree(self.gtree, self.gsent).text(
-					unicodelines=True, ansi=True),
-				DrawTree(self.ctree, self.csent).text(
-					unicodelines=True, ansi=True)))
+				self.visualize(gold=True), self.visualize(gold=False)))
 		print('Gold brackets:      %s\nCandidate brackets: %s' % (
 				strbracketings(self.gbrack), strbracketings(self.cbrack)))
 		print('Matched brackets:      %s\nUnmatched brackets: %s' % (
@@ -453,19 +455,24 @@ class TreePairResult(object):
 			msg += 'gold-cand=%s' % strbracketings(self.gbrack - self.cbrack)
 		return msg
 
-	def visualize(self):
-		"""Visualize candidate parse, highlight matching POS, bracketings."""
-		vistree = ''
-		if self.ctree:  # avoid empty trees with just punctuation
-			highlight = [a for a in self.ctree.subtrees()
-						if bracketing(a) in self.gbrack]
-			highlight.extend(a for a in self.ctree.subtrees()
+	def visualize(self, gold=False):
+		"""Visualize candidate parse, highlight matching POS, bracketings.
+
+		:param gold: by default, the candidate tree is visualized; if True,
+			visualize the gold tree instead."""
+		tree, brack, pos = self.ctree, self.gbrack, self.gpos
+		if gold:
+			tree, brack, pos = self.gtree, self.cbrack, self.cpos
+		if tree:  # avoid empty trees with just punctuation
+			highlight = [a for a in tree.subtrees()
+						if bracketing(a) in brack]
+			highlight.extend(a for a in tree.subtrees()
 						if isinstance(a[0], int)
-						and self.gpos[a[0]] == self.cpos[a[0]])
-			highlight.extend(range(len(self.cpos)))
-			vistree = DrawTree(self.ctree, self.csent, highlight=highlight
+						and a.label == pos[a[0]])
+			highlight.extend(range(len(pos)))
+			return DrawTree(tree, self.csent, highlight=highlight
 					).text(unicodelines=True, ansi=True)
-		return vistree
+		return ''
 
 
 class EvalAccumulator(object):
@@ -533,11 +540,11 @@ class EvalAccumulator(object):
 
 def main():
 	"""Command line interface for evaluation."""
-	flags = ('test', 'verbose', 'debug', 'disconly', 'ted')
-	options = ('goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'fmt=',
-			'cutofflen=', 'headrules=', 'functions=', 'morphology=')
+	flags = {'verbose', 'debug', 'disconly', 'ted'}
+	options = {'goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'fmt=',
+			'cutofflen=', 'headrules=', 'functions=', 'morphology='}
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], '', flags + options)
+		opts, args = gnu_getopt(sys.argv[1:], '', flags | options)
 	except GetoptError as err:
 		print('error: %s\n%s' % (err, HELP))
 		sys.exit(2)
@@ -817,8 +824,7 @@ def leafancestorpaths(tree, dellabel):
 
 def pathscore(gold, cand):
 	"""Get edit distance for two leaf-ancestor paths."""
-	return 1 - (Decimal(edit_distance(cand, gold))
-					/ max(len(gold) + len(cand), 1))
+	return 1 - Decimal(editdistance(cand, gold)) / max(len(gold + cand), 1)
 
 
 def leafancestor(goldtree, candtree, dellabel):
@@ -831,10 +837,8 @@ def leafancestor(goldtree, candtree, dellabel):
 def treedisteval(a, b, includeroot=False, debug=False):
 	"""Get tree-distance for two trees and compute the Dice normalization."""
 	ted = treedist(a, b, debug)
-	# Dice denominator
-	denom = len(list(a.subtrees()) + list(b.subtrees()))
-	# optionally discount ROOT nodes and preterminals
-	if not includeroot:
+	denom = len(list(a.subtrees()) + list(b.subtrees()))  # Dice denominator
+	if not includeroot:  # optionally discount ROOT nodes and preterminals
 		denom -= 2
 	#if not includepreterms:
 	#	denom -= len(a.leaves() + b.leaves())
@@ -965,7 +969,7 @@ def nozerodiv(func):
 	return '  None' if result is None else '%6.2f' % (100 * result)
 
 
-def edit_distance(seq1, seq2):
+def editdistance(seq1, seq2):
 	"""Calculate the Levenshtein edit-distance between two strings.
 
 	The edit distance is the number of characters that need to be substituted,

@@ -385,22 +385,20 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2):
 	"""Binarize one constituent with a left/right factored binarization.
 
-	Children remain unmodified. Bottom-up version. Nodes must be immutable
-	and contain bitsets; use ``addbitsets()``.
-	By default construct artificial labels using labels of child nodes.
-	When markyf is True, each artificial label will include the yield function;
-	this is necessary for a 'normal form' binarization that is equivalent to
-	the original. When ids is given, it is used both as an interator (for new
-	unique labels) and as a dictionary (to re-use labels). The first ID in a
-	binarization will always be unique, while the others will be re-used for
-	the same combination of labels and yield function."""
-	# FIXME: markyf does not work with unaries.
+	Children remain unmodified. Nodes must be immutable and contain bitsets;
+	use ``addbitsets()``. By default construct artificial labels using labels
+	of child nodes. When markyf is True, each artificial label will include the
+	yield function; this is necessary for a 'normal form' binarization that is
+	equivalent to the original. When ids is given, it is used both as an
+	interator (for new unique labels) and as a dictionary (to re-use labels).
+	The first ID in a binarization will always be unique, while the others will
+	be re-used for the same combination of labels and yield function."""
 	if len(node) <= threshold:
 		return node
 	elif 1 <= len(node) <= 2:
-		if ids is None:
+		if ids is None:  # FIXME: markyf does not work with unaries.
 			key = '%s%s' % (','.join(child.label for child in node[:h]),
-					getyf(*node) if markyf else '')
+					getyf(node[0], node[1]) if markyf else '')
 		else:
 			key = str(next(ids))
 		newlabel = '%s%s<%s>' % (node.label, sep, key)
