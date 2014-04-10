@@ -256,7 +256,8 @@ def doubledop(trees, sents, debug=False, binarized=True,
 	# binarize, turn into LCFRS productions
 	# use artificial markers of binarization as disambiguation,
 	# construct a mapping of productions to fragments
-	for frag, terminals in fragments:
+	for origfrag in fragments:
+		frag, terminals = origfrag
 		prods, newfrag = flatten(frag, terminals, ids, backtransform, binarized)
 		prod = prods[0]
 		if prod[0][1] == 'Epsilon':  # lexical production
@@ -267,7 +268,7 @@ def doubledop(trees, sents, debug=False, binarized=True,
 		grammar[prod] = getweight(frag, terminals)
 		grammar.update(zip(prods[1:], repeat(uniformweight)))
 		# & becomes key in backtransform
-		backtransform[prod] = newfrag
+		backtransform[prod] = origfrag, newfrag
 	if debug:
 		ids = count()
 		flatfrags = [flatten(frag, terminals, ids, {}, binarized)
@@ -282,10 +283,13 @@ def doubledop(trees, sents, debug=False, binarized=True,
 		print("backtransform:")
 		for a, b in backtransform.items():
 			print(a, b)
-	# fix order of grammar rules; backtransform will mirror this order
+	# fix order of grammar rules
 	grammar = sortgrammar(grammar.items())
-	# replace keys with numeric ids of rules, drop terminals.
-	backtransform = [backtransform[rule] for rule, _ in grammar
+	# align fragments and backtransform with corresponding grammar rules
+	fragments = OrderedDict((frag, fragments[frag]) for frag in
+			(backtransform[rule][0] for rule, _ in grammar if rule in
+				backtransform))
+	backtransform = [backtransform[rule][1] for rule, _ in grammar
 			if rule in backtransform]
 	# relative frequences as probabilities (don't normalize shortest & bon)
 	ntsums = defaultdict(int)

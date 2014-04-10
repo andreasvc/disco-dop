@@ -956,8 +956,9 @@ def exporttree(data, morphology):
 	tree, sent = exportparse(data, morphology), []
 	for a in data:
 		if EXPORTNONTERMINAL.match(a[WORD]):
-			return tree, sent
+			break
 		sent.append(a[WORD])
+	return tree, sent
 
 
 def alpinotree(block, morphology=None, lemmas=None, functions=None):

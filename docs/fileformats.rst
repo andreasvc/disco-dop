@@ -58,7 +58,7 @@ This format is supported when input is read incrementally from
 standard input with the ``treedraw`` and ``treetransforms`` commands.
 
 alpino
-~~~~~~
+^^^^^^
 Alpino XML format. One file per sentence. The hierarchical tree structure is
 mirrored in the XML structure, which makes it possible to query trees in this
 format with XPath (as opposed to TigerXML which maintains the tabular structure
@@ -67,7 +67,7 @@ of the Negra export format).
 Cf. http://www.let.rug.nl/~vannoord/Lassy/alpino_ds.dtd
 
 dact
-~~~~
+^^^^
 Alpino XML trees in an XML database as used by Dact.
 Cf. http://rug-compling.github.io/dact/
 
@@ -117,12 +117,17 @@ followed by pairs of possible tags and their probabilities::
 
     WORD    TAG1    PROB1   [TAG2   PROB2 ...]
 
-Example::
+Example, rules file::
 
-    rules:   S  NP  VP  010 1/2
-             VP_2   VB  NP  0,1 2/3
-             NP NN  0   1/4
-    lexicon: Haus   NN  3/10    JJ  1/9
+    S  NP  VP  010 1/2
+    VP_2   VB  NP  0,1 2/3
+    NP NN  0   1/4
+
+lexicon file::
+
+    is  VB  1/3
+    John    NN 1/2
+    rich    JJ 1/5
 
 backtransform
 ^^^^^^^^^^^^^
@@ -133,14 +138,21 @@ for each grammar rule.
 
 The backtransform file contains one fragment per line, with the lines
 corresponding to the lines of the grammar rule file. Frontier non-terminals
-are indicated as ``{0}``, ``{1}``, etc. To view the grammar rules together
-with the corresponding fragments, issue the following command::
+are indicated as ``{0}``, ``{1}``, etc.
+The fragments which this backtransform is based on is also saved, with a
+filename of the form ``.fragments.gz``.
+To view the grammar rules together with the corresponding fragments, issue the
+following command::
 
-    $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
-    NP^<NP> NP^<NP> NNS@gains       01      1/267481        (NP^<NP> {0} {1})
-    NP^<NP> NP^<NP>}<592850>        SBAR^<NP>       01      3/534962        (NP^<NP> (NP^<NP> {0} (NP|<NNS;NN>^<NP> {1} {2})) {3})
-    NP^<NP> NNP@Eugene      NNP     01      3/534962        (NP^<NP> {0} {1})
-    NP^<NP> NP^<NP>}<202929>        NN@agency       01      1/267481        (NP^<NP> {0} (NP|<NN;JJ>^<NP> {1} (NP|<NN;NN>^<NP> {2} {3})))
+    $ paste <(zcat dop.rules.gz) <(zcat dop.fragments.gz)
+    A       X       Y       01      1       (A (X 0) (Y 1)) 1
+    A_2     X       Z       0,1     1       (A_2 (X 0) (Z 2))       2
+    RIGHT   A_2     Y       010     1       (RIGHT (A_2 0 2) (Y 1)) 2
+    S       S}<0>   Z@z     01      2/5     (S (RIGHT (A_2 (X 0) (Z 2)) (Y 1)))     x y z   2
+    S       RIGHT   0       2/5     (S (RIGHT 0))   2
+    S       WRONG   0       1/5     (S (WRONG 0))   1
+    WRONG   A       Z       01      1       (WRONG (A 0) (Z 1))     1
+    S}<0>   X@x     Y@y     01      1
 
 alternate weights
 ^^^^^^^^^^^^^^^^^

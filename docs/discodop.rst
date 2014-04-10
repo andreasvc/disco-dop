@@ -398,13 +398,13 @@ Usage: ``%(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...``
 Options:
 
 --engine=<x>, -e <x>
-                Selecte query engine; possible options:
+                Select query engine; possible options:
 
                 :tgrep2:
-                    tgrep2 queries; files are bracket corpora
+                    tgrep2 queries (default); files are bracket corpora
                     (optionally precompiled into tgrep2 format).
 
-                :xpath: dact XML corpora; arbitrary xpath queries.
+                :xpath: arbitrary xpath queries; files are dact XML corpora.
                 :regex: search through tokenized sentences with Python regexps
 --counts, -c    report counts
 --sents, -s     output sentences (default)
