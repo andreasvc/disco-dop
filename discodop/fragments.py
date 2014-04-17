@@ -429,8 +429,10 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	"""Get recurring fragments with exact counts in a single treebank.
 
 	:returns: a dictionary whose keys are fragments as strings, and
-		frequencies / indices as values.
-	:param trees:  a sequence of binarized Tree objects."""
+		indices as values.
+	:param trees: a sequence of binarized Tree objects.
+	:param numproc: number of process to use; pass 0 to use all detected CPUs.
+	:param iterate, complement: see :func:`_fragments.extractfragments`"""
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)

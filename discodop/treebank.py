@@ -153,9 +153,10 @@ class CorpusReader(object):
 			removeemptynodes(tree, sent)
 		if self.ensureroot and tree.label != self.ensureroot:
 			tree = ParentedTree(self.ensureroot, [tree])
-		# roughly order constituents by order in sentence
-		for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
-			a.sort(key=Tree.leaves)
+		if not isinstance(self, BracketCorpusReader):
+			# roughly order constituents by order in sentence
+			for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
+				a.sort(key=Tree.leaves)
 		if self.punct == "remove":
 			punctremove(tree, sent)
 		elif self.punct == "move":
@@ -172,9 +173,11 @@ class CorpusReader(object):
 				headorder(node, self.headfinal, self.reverse)
 				if self.markheads:
 					headmark(node)
-		for node in list(tree.subtrees(lambda n: isinstance(n[0], int))):
-			handlemorphology(self.morphology, self.lemmas, node, node.source)
-		handlefunctions(self.functions, tree)
+		if self.morphology and self.morphology != 'no':
+			for node in list(tree.subtrees(lambda n: isinstance(n[0], int))):
+				handlemorphology(self.morphology, self.lemmas, node, node.source)
+		if self.functions and self.functions != 'leave':
+			handlefunctions(self.functions, tree)
 		return tree
 
 	def _word(self, block, orig=False):
