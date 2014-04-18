@@ -840,7 +840,7 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 
 cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 		list labels, dict prods, Node *result, size_t *idx, list sent,
-		bytes origlabel):
+		bytes binlabel):
 	"""Parse an s-expression in a string, and store in an array of Node
 	structs (pre-allocated). ``idx`` is a counter to keep track of the number
 	of Node structs used; ``sent`` collects the terminals encountered."""
@@ -868,6 +868,19 @@ cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 				else:  # will do on the fly binarization
 					childlabels = []
 					break
+	# get left child label
+	match1 = LABEL.match(line, startchild1)
+	if match1 is not None:  # non-terminal label
+		labelchild1 = match1.group(1)
+		startchild1 = match1.end()
+	elif startchild2 != 0:  # insert preterminal
+		labelchild1 = b'/'.join((label, line[startchild1:endchild1]))
+	else:  # terminal following pre-terminal; store terminal
+		# leading space distinguishes terminal from non-terminal
+		labelchild1 = b' ' + line[startchild1:endchild1]
+		left = termidx(len(sent))
+		sent.append(line[startchild1:endchild1].decode('utf-8')
+				if startchild1 < endchild1 else None)
 	# if there were more children, collect labels for a binarized constituent
 	if childlabels is not None:
 		for n in range(startchild2, end):
@@ -884,21 +897,14 @@ cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 								b'/'.join((label, line[start:n + 1])))
 					else:
 						childlabels.append(match.group(1))
-		labelchild2 = ((origlabel or label) + b'|<' + b','.join(childlabels) + b'>')
+		if not binlabel:
+			binlabel = label + b'|<' + labelchild1
+			labelchild2 = binlabel + b'.' + b','.join(childlabels) + b'>'
+		else:
+			binlabel += b',' + labelchild1
+			labelchild2 = binlabel + b'.' + b','.join(childlabels) + b'>'
 		endchild2 = end
-	assert parens == -1, "unbalanced parentheses: %d\n%r" % (parens, line)
-	match1 = LABEL.match(line, startchild1)
-	if match1 is not None:  # non-terminal label
-		labelchild1 = match1.group(1)
-		startchild1 = match1.end()
-	elif startchild2 != 0:  # insert preterminal
-		labelchild1 = b'/'.join((label, line[startchild1:endchild1]))
-	else:  # terminal following pre-terminal; store terminal
-		# leading space distinguishes terminal from non-terminal
-		labelchild1 = b' ' + line[startchild1:endchild1]
-		left = termidx(len(sent))
-		sent.append(line[startchild1:endchild1].decode('utf-8')
-				if startchild1 < endchild1 else None)
+	assert parens == -1, 'unbalanced parentheses: %d\n%r' % (parens, line)
 	if startchild2 == 0:
 		prod = (label, labelchild1) if startchild1 else (label, )
 	else:
@@ -922,8 +928,7 @@ cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 		if startchild2 != 0:
 			right = idx[0]
 			readnode(labelchild2, line, cline, startchild2, endchild2, labels,
-					prods, result, idx, sent,
-					childlabels and (origlabel or label))
+					prods, result, idx, sent, childlabels and binlabel)
 	# store node
 	result[n].prod = prods[prod]
 	result[n].left = left

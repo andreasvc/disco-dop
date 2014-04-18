@@ -318,7 +318,7 @@ def initworker(treebank1, treebank2, limit, encoding):
 	if PARAMS['debug']:
 		print("\nproductions:")
 		for a, b in sorted(PARAMS['prods'].items(), key=lambda x: x[1]):
-			print(b, a[0], '=>', ' '.join(a[1:]))
+			print(b, *a)
 	trees1 = PARAMS['trees1']
 	assert trees1
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
