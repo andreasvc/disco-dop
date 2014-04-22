@@ -3,6 +3,7 @@
 from __future__ import print_function
 import re
 from unittest import TestCase
+from itertools import count, islice
 from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
 from discodop.treebank import incrementaltreereader
@@ -482,3 +483,74 @@ def test_eval():
 		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
 	evaluator.breakdowns()
 	print(evaluator.summary())
+
+
+def test_punct():
+	"""Verify that punctuation movement does not increase fan-out."""
+	from discodop.treebank import NegraCorpusReader
+	filename = 'alpinosample.export'
+	mangledtrees = NegraCorpusReader(filename, punct='move')
+	nopunct = list(NegraCorpusReader(filename,
+			punct='remove').trees().values())
+	originals = list(NegraCorpusReader(filename, headrules=None,
+			encoding='iso-8859-1').trees().values())
+	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
+	for n, mangled, sent, nopunct, original in zip(count(),
+			mangledtrees.trees().values(),
+			mangledtrees.sents().values(), nopunct, originals):
+		print(n, end='')
+		for a, b in zip(sorted(addbitsets(mangled).subtrees(phrasal),
+				key=lambda n: min(n.leaves())),
+				sorted(addbitsets(nopunct).subtrees(phrasal),
+				key=lambda n: min(n.leaves()))):
+			if fanout(a) != fanout(b):
+				print(' '.join(sent))
+				print(mangled)
+				print(nopunct)
+				print(original)
+			assert fanout(a) == fanout(b), '%d %d\n%s\n%s' % (
+				fanout(a), fanout(b), a, b)
+	print()
+
+
+def test_transforms():
+	"""Test reversibility of Tiger transformations."""
+	from discodop.treebanktransforms import transform, reversetransform, \
+			bracketings
+	from discodop.treebank import NegraCorpusReader, handlefunctions
+	headrules = None  # 'alpino.headrules'
+	n = NegraCorpusReader('alpinosample.export', headrules=headrules)
+	nn = NegraCorpusReader('alpinosample.export', headrules=headrules)
+	transformations = ('S-RC', 'VP-GF', 'NP')
+	trees = [transform(tree, sent, transformations)
+			for tree, sent in zip(nn.trees().values(),
+				nn.sents().values())]
+	print('\ntransformed')
+	correct = exact = d = 0
+	for a, b, c in islice(zip(n.trees().values(),
+			trees, n.sents().values()), 100):
+		transformb = reversetransform(b.copy(True), transformations)
+		b1 = bracketings(canonicalize(a))
+		b2 = bracketings(canonicalize(transformb))
+		z = -1  # 825
+		if b1 != b2 or d == z:
+			precision = len(set(b1) & set(b2)) / len(set(b1))
+			recall = len(set(b1) & set(b2)) / len(set(b2))
+			if precision != 1.0 or recall != 1.0 or d == z:
+				print(d, ' '.join(':'.join((str(n),
+					a.encode('unicode-escape'))) for n, a in enumerate(c)))
+				print('no match', precision, recall)
+				print(len(b1), len(b2), 'gold-transformed', set(b2) - set(b1),
+						'transformed-gold', set(b1) - set(b2))
+				print(a)
+				print(transformb)
+				handlefunctions('add', a)
+				print(a, '\n', b, '\n\n')
+			else:
+				correct += 1
+		else:
+			exact += 1
+			correct += 1
+		d += 1
+	print('matches', correct, '/', d, 100 * correct / d, '%')
+	print('exact', exact)

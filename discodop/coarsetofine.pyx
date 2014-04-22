@@ -280,7 +280,7 @@ def getinside(Chart chart):
 				edge = &(edges.data[n])
 				if edge.rule is NULL:
 					label = chart.label(item)
-					word = chart.sent[chart.lexidx(item, edge)]
+					word = chart.sent[chart.lexidx(edge)]
 					prob = (<LexicalRule>chart.grammar.lexicalbylhs[
 							label][word]).prob
 				elif edge.rule.rhs2 == 0:

@@ -209,18 +209,15 @@ cdef class Chart:
 
 	Level 1/2 defines a type for labeled spans referred to as ``item``."""
 	def root(self):
-		"""Return the item labeled by the grammar's distinguished root symbol
-		spanning the whole sentence."""
+		"""Return item with root label spanning the whole sentence."""
 		raise NotImplementedError
 
 	cdef _left(self, item, Edge *edge):
-		"""Given an item and an edge belonging to it, return the left item it
-		points to."""
+		"""Return the left item that edge points to."""
 		raise NotImplementedError
 
 	cdef _right(self, item, Edge *edge):
-		"""Given an item and an edge belonging to it, return the right item it
-		points to."""
+		"""Return the right item that edge points to."""
 		raise NotImplementedError
 
 	cdef double subtreeprob(self, item):
@@ -242,18 +239,16 @@ cdef class Chart:
 		"""Return a list of indices dominated by ``item``."""
 		raise NotImplementedError
 
-	cdef lexidx(self, item, Edge *edge):
-		"""Given an item and a lexical edge belonging to it, return the
-		sentence index of the terminal child."""
+	cdef lexidx(self, Edge *edge):
+		"""Return sentence index of the terminal child given a lexical edge."""
 		cdef short result = edge.pos.mid - 1
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
 	cdef edgestr(Chart self, item, Edge *edge):
-		"""Given an item and an edge belonging to it, return a string
-		representation of it."""
+		"""Return string representation of item and edge belonging to it."""
 		if edge.rule is NULL:
-			return self.sent[self.lexidx(item, edge)]
+			return self.sent[self.lexidx(edge)]
 		else:
 			return ('%g %s %s' % (
 					exp(-edge.rule.prob) if self.grammar.logprob
@@ -279,8 +274,7 @@ cdef class Chart:
 		return CFGtoFatChartItem(label, start, end)
 
 	cdef size_t asCFGspan(self, item, size_t nonterminals):
-		"""Convert item to a span of a chart with a different number of
-		non-terminals."""
+		"""Convert item for chart with different number of non-terminals."""
 		cdef size_t itemx
 		if isinstance(item, SmallChartItem):
 			start = nextset((<SmallChartItem>item).vec, 0)
@@ -332,8 +326,9 @@ cdef class Chart:
 		return '\n'.join(result)
 
 	def __nonzero__(self):
-		"""Return true when the root item is in the chart, i.e., when sentence
-		has been parsed successfully."""
+		"""Return true when the root item is in the chart.
+
+		i.e., test whether sentence has been parsed successfully."""
 		return self.root() in self.parseforest
 
 	cdef getitems(self):
@@ -344,8 +339,7 @@ cdef class Chart:
 		return self.parseforest[item] if item in self.parseforest else []
 
 	def filter(self):
-		"""Remove all entries in parse forest that do not contribute to a
-		complete derivation headed by root of chart."""
+		"""Drop entries not part of a derivation headed by root of chart."""
 		items = set()
 		_filtersubtree(self, self.root(), items)
 		if isinstance(self.parseforest, dict):

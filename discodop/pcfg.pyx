@@ -124,8 +124,7 @@ cdef class DenseCFGChart(CFGChart):
 			self.probs[idx] = prob
 
 	cdef double _subtreeprob(self, size_t item):
-		"""Get viterbi / inside probability of a subtree headed by 'item'
-		defined by (lhs, start, end)."""
+		"""Get viterbi / inside probability of a subtree headed by `item`."""
 		cdef short start, end
 		cdef UInt lhs
 		cdef size_t idx
@@ -152,8 +151,9 @@ cdef class DenseCFGChart(CFGChart):
 		return self.parseforest[item] is not None
 
 	def __nonzero__(self):
-		"""Return true when the root item is in the chart, i.e., when sentence
-		has been parsed successfully."""
+		"""Return true when the root item is in the chart.
+
+		i.e., test whether sentence has been parsed successfully."""
 		return self.parseforest[self.root()] is not None
 
 
@@ -204,8 +204,7 @@ cdef class SparseCFGChart(CFGChart):
 			self.probs[item] = prob
 
 	cdef double _subtreeprob(self, size_t item):
-		"""Get viterbi / inside probability of a subtree headed by 'item'
-		defined by (lhs, start, end)."""
+		"""Get viterbi / inside probability of a subtree headed by `item`."""
 		return (PyFloat_AS_DOUBLE(self.probs[item])
 				if item in self.probs else INFINITY)
 
@@ -348,7 +347,9 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 
 
 def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
-	"""Currently this calls the normal probabilistic CKY parser producing
+	"""Parse sentence without regard for probabilities.
+
+	Currently this calls the normal probabilistic CKY parser producing
 	viterbi probabilities, but a more efficient non-probabilistic algorithm
 	for producing a parse forest may be possible."""
 	return parse(sent, grammar, tags=tags, start=start, whitelist=None)
@@ -709,8 +710,7 @@ def outsidescores(Grammar grammar, sent, UInt start,
 
 
 def minmaxmatrices(nonterminals, lensent):
-	"""Create matrices for the filter which tracks minima and maxima for
-	splits of binary rules."""
+	"""Create matrices to track minima and maxima for binary splits."""
 	minleft = np.empty((nonterminals, lensent + 1), dtype='int16')
 	maxleft = np.empty_like(minleft)
 	minleft[...], maxleft[...] = -1, lensent + 1

@@ -70,8 +70,7 @@ def chooserule(rules, discount, prodcounts):
 
 
 def compose(rule, left, right, verbose):
-	"""Combine the results of two generated non-terminals into a single
-	non-terminal, as specified by the given rule."""
+	"""Use rule to compose two non-terminals into a new non-terminal."""
 	(p1, l1), (p2, l2) = left, right
 	result = []
 	if verbose:
@@ -155,11 +154,11 @@ def read_bitpar_grammar(rules, lexicon):
 
 
 def splitgrammar(rules):
-	"""Split a grammar into various lookup tables, mapping nonterminal
-	labels to numeric identifiers.
+	"""Split a grammar into various lookup tables.
 
-	Also turns probabilities into negative log-probabilities. Can only
-	represent binary, monotone LCFRS rules."""
+	Also maps nonterminal labels to numeric identifiers, and turns
+	probabilities into negative log-probabilities. Can only represent binary,
+	monotone LCFRS rules."""
 	# get a list of all nonterminals; make sure Epsilon and ROOT are first,
 	# and assign them unique IDs
 	nonterminals = list(enumerate(["Epsilon", "ROOT"]
@@ -210,8 +209,8 @@ def splitgrammar(rules):
 
 
 def yfarray(yf):
-	"""Convert a yield function represented as a 2D sequence to an array
-	object."""
+	"""Convert yield function represented as a 2D sequence to an array object.
+	"""
 	# I for 32 bits (int), H for 16 bits (short), B for 8 bits (char)
 	# obviously, all related static declarations should match these types
 	lentype = 'H'

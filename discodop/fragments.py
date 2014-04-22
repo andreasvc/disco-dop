@@ -147,7 +147,7 @@ def main(argv=None):
 		out = (io.open(opts['-o'], 'w', encoding=encoding)
 				if '-o' in opts else None)
 		if '--debin' in opts:
-			fragmentkeys, counts = debinarize(fragmentkeys, counts)
+			fragmentkeys = debinarize(fragmentkeys)
 		printfragments(fragmentkeys, counts, out=out)
 
 
@@ -275,7 +275,7 @@ def batch(outputdir, filenames, limit, encoding, debin):
 				os.path.basename(filenames[0]), os.path.basename(filename))
 		out = io.open(outputfilename, 'w', encoding=encoding)
 		if debin:
-			fragmentkeys, counts = debinarize(fragmentkeys, counts)
+			fragmentkeys = debinarize(fragmentkeys)
 		printfragments(fragmentkeys, counts, out=out)
 		logging.info("wrote to %s", outputfilename)
 
@@ -332,9 +332,9 @@ def initworker(treebank1, treebank2, limit, encoding):
 			len(PARAMS['prods']))
 
 
-def initworkersimple(trees, sents, trees2=None, sents2=None):
+def initworkersimple(trees, sents, disc, trees2=None, sents2=None):
 	"""Initialization for a worker in which a treebank was already loaded."""
-	PARAMS.update(getctrees(trees, sents, trees2, sents2))
+	PARAMS.update(getctrees(trees, sents, disc, trees2, sents2))
 	assert PARAMS['trees1']
 
 
@@ -425,13 +425,15 @@ def workload(numtrees, mult, numproc):
 	return result
 
 
-def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
+def getfragments(trees, sents, numproc=1, disc=True,
+		iterate=False, complement=False, indices=True, cover=True):
 	"""Get recurring fragments with exact counts in a single treebank.
 
 	:returns: a dictionary whose keys are fragments as strings, and
 		indices as values.
 	:param trees: a sequence of binarized Tree objects.
-	:param numproc: number of process to use; pass 0 to use all detected CPUs.
+	:param numproc: number of processes to use; pass 0 to use detected # CPUs.
+	:param disc: when disc=True, assume trees with discontinuous constituents.
 	:param iterate, complement: see :func:`_fragments.extractfragments`"""
 	if numproc == 0:
 		numproc = cpu_count()
@@ -441,20 +443,20 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	fragments = {}
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
-	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
+	PARAMS.update(disc=disc, indices=indices, approx=False, complete=False,
 			quadratic=False, complement=complement, debug=False,
 			adjacent=False, twoterms=False)
-	initworkersimple(trees, list(sents))
+	initworkersimple(trees, list(sents), disc)
 	if numproc == 1:
 		mymap = map
 		myapply = APPLY
 	else:
 		logging.info("work division:\n%s", "\n".join("    %s: %r" % kv
-			for kv in sorted(dict(numchunks=len(work),
-				numproc=numproc).items())))
+				for kv in sorted(dict(numchunks=len(work),
+					numproc=numproc).items())))
 		# start worker processes
 		pool = Pool(processes=numproc, initializer=initworkersimple,
-			initargs=(trees, list(sents)))
+				initargs=(trees, list(sents), disc))
 		mymap = pool.map
 		myapply = pool.apply
 	# collect recurring fragments
@@ -462,10 +464,11 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 	for a in mymap(worker, work):
 		fragments.update(a)
 	# add 'cover' fragments corresponding to single productions
-	cover = myapply(coverfragworker, ())
-	before = len(fragments)
-	fragments.update(cover)
-	logging.info("merged %d unseen cover fragments", len(fragments) - before)
+	if cover:
+		cover = myapply(coverfragworker, ())
+		before = len(fragments)
+		fragments.update(cover)
+		logging.info("merged %d unseen cover fragments", len(fragments) - before)
 	fragmentkeys = list(fragments)
 	bitsets = [fragments[a] for a in fragmentkeys]
 	countchunk = len(bitsets) // numproc + 1
@@ -505,6 +508,8 @@ def getfragments(trees, sents, numproc=1, iterate=False, complement=False):
 			counts.extend(newcounts)
 			fragments.update(zip(newfrags, newcounts))
 	logging.info("found %d fragments", len(fragmentkeys))
+	if not disc:
+		return dict(zip(fragmentkeys, counts))
 	return dict(zip(((a.decode('ascii'), b) for a, b in fragmentkeys), counts))
 
 
@@ -513,12 +518,12 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	numtrees = len(newtrees)
 	assert numtrees
 	if numproc == 1:  # set fragments as input
-		initworkersimple(newtrees, newsents, trees, sents)
+		initworkersimple(newtrees, newsents, PARAMS['disc'], trees, sents)
 		mymap = map
 	else:
 		# since the input trees change, we need a new pool each time
 		pool = Pool(processes=numproc, initializer=initworkersimple,
-			initargs=(newtrees, newsents, trees, sents))
+				initargs=(newtrees, newsents, PARAMS['disc'], trees, sents))
 		mymap = pool.imap
 	newfragments = {}
 	for a in mymap(worker, workload(numtrees, 1, numproc)):
@@ -560,20 +565,21 @@ def altrepr(a):
 	return FRONTIERRE.sub(r'\1', TERMRE.sub(r'(\1 "\2")', a.replace('"', "''")))
 
 
-def debinarize(fragments, counts):
-	"""Debinarize fragments and return corresponding counts."""
-	result1, result2 = [], []
-	for frag, cnt in zip(fragments, counts):
+def debinarize(fragments):
+	"""Debinarize fragments; fragments that fail to debinarize left as-is."""
+	result = []
+	for origfrag in fragments:
 		if PARAMS['disc']:
-			frag, sent = frag
+			frag, sent = origfrag
+		else:
+			frag = origfrag
 		try:
 			frag = str(unbinarize(Tree(frag)))
 		except:
-			pass
+			result.append(origfrag)
 		else:
-			result1.append((frag, sent) if PARAMS['disc'] else frag)
-			result2.append(cnt)
-	return result1, result2
+			result.append((frag, sent) if PARAMS['disc'] else frag)
+	return result
 
 
 def printfragments(fragments, counts, out=None):

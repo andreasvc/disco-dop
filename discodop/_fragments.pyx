@@ -375,9 +375,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 
 cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 		short i, short j):
-	"""Recursively check whether fragment starting from ``a[i]`` described by
-	bitset is equal to ``b[j]``, i.e., whether ``b`` contains that fragment
-	from ``a``."""
+	"""Test whether the fragment ``bitset`` at ``a[i]`` occurs at ``b[j]``."""
 	if a[i].prod != b[j].prod:
 		return 0
 	elif a[i].left < 0:
@@ -395,6 +393,7 @@ cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
 cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		short maxnodes, bint discontinuous):
 	"""Utility function to generate one bitset for each type of production.
+
 	Important: if multiple treebanks are used, maxnodes should equal
 	``max(trees1.maxnodes, trees2.maxnodes)``"""
 	cdef:
@@ -748,8 +747,7 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 
 cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
 		ULong *scratch):
-	"""Dump the node structs of a tree showing numeric IDs as well
-	as a strings representation of the tree in bracket notation."""
+	"""Print debug information of a given tree."""
 	for n in range(a.len):
 		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
 				termidx(anodes[n].left) if anodes[n].left < 0
@@ -769,16 +767,30 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
 	print(tmp.decode('utf-8'), '\n', asent, '\n')
 
 
-def add_lcfrs_rules(tree, sent):
-	"""Set ``.prod`` attribute on nodes of tree to their LCFRS productions."""
-	for a, b in zip(tree.subtrees(),
-			lcfrsproductions(tree, sent, frontiers=True)):
-		a.prod = b
+def addprods(tree, sent, disc=True):
+	"""Set ``.prod`` attribute on nodes of tree to their LCFRS productions.
+
+	:param disc: pass disc=False to get CFG productions instead."""
+	if disc:
+		for a, b in zip(tree.subtrees(),
+				lcfrsproductions(tree, sent, frontiers=True)):
+			a.prod = b
+	else:
+		for a in tree.subtrees():
+			if len(a) == 0:
+				a.prod = (a.label, )
+			elif len(a) == 1:
+				a.prod = (a.label,
+						a[0].label if isinstance(a[0], Tree) else a[0])
+			elif len(a) == 2:
+				a.prod = (a.label, a[0].label, a[1].label)
+			else:
+				raise ValueError
 	return tree
 
 
 def getlabelsprods(trees, labels, prods):
-	"""Collect ``label`` / ``prod`` attributes from ``trees`` and index them."""
+	"""Collect ``label``, ``prod`` attributes from ``trees`` and index them."""
 	pnum = len(prods)
 	for tree in trees:
 		for st in tree:
@@ -795,8 +807,10 @@ def nonfrontier(sent):
 
 
 def tolist(tree, sent):
-	"""Convert Tree object to list of non-terminal nodes in pre-order
-	traversal; add indices to nodes reflecting their position in the list."""
+	"""Convert Tree object to list of non-terminal nodes in preorder traversal.
+
+	Also adds indices to nodes reflecting their position in the list;
+	i.e., ``tolist(tree, sent)[n].idx == n``"""
 	result = list(tree.subtrees(nonfrontier(sent)))
 	for n in reversed(range(len(result))):
 		a = result[n]
@@ -811,13 +825,13 @@ def getprodid(prods, node):
 	return prods.get(node.prod, -1)
 
 
-def getctrees(trees, sents, trees2=None, sents2=None):
+def getctrees(trees, sents, disc=True, trees2=None, sents2=None):
 	""":returns: Ctrees object for disc. binary trees and sentences."""
 	# make deep copies to avoid side effects.
-	trees12 = trees = [tolist(add_lcfrs_rules(Tree.convert(a), b), b)
+	trees12 = trees = [tolist(addprods(Tree.convert(a), b, disc), b)
 			for a, b in zip(trees, sents)]
 	if trees2:
-		trees2 = [tolist(add_lcfrs_rules(Tree.convert(a), b), b)
+		trees2 = [tolist(addprods(Tree.convert(a), b, disc), b)
 					for a, b in zip(trees2, sents2)]
 		trees12 = trees + trees2
 	labels = []
@@ -841,9 +855,11 @@ def getctrees(trees, sents, trees2=None, sents2=None):
 cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 		list labels, dict prods, Node *result, size_t *idx, list sent,
 		bytes binlabel):
-	"""Parse an s-expression in a string, and store in an array of Node
-	structs (pre-allocated). ``idx`` is a counter to keep track of the number
-	of Node structs used; ``sent`` collects the terminals encountered."""
+	"""Parse tree in bracket format into pre-allocated array of Node structs.
+
+	:param idx: a counter to keep track of the number of Node structs used.
+	:param sent: collects the terminals encountered.
+	:param binlabel: used for on-the-fly binarization, pass None initially."""
 	cdef:
 		short n, parens = 0, left = -1, right = -1
 		short startchild1 = 0, startchild2 = 0, endchild1 = 0, endchild2 = 0
@@ -953,7 +969,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		sents = []
 		for _, tree, sent in corpus.itertrees(0, limit):
-			tree = tolist(add_lcfrs_rules(
+			tree = tolist(addprods(
 					canonicalize(binarize(tree, dot=True)), sent), sent)
 			for st in tree:
 				if st.prod not in prods:

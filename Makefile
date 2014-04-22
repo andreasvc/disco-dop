@@ -50,7 +50,7 @@ lint: inplace
 	#Any files with more than 999 lines?
 	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}'
 	#Docstrings without single line summaries?
-	cd discodop; egrep -n '""".*[^.\"\\]$$' *.pxd *.pyx *.py
+	cd discodop; egrep -n '""".*[^.\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py tests/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \

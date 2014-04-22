@@ -432,7 +432,8 @@ cdef class Grammar:
 			if abs(mass - 1.0) > epsilon:
 				msg = ("Weights of rules with LHS '%s' "
 						"do not sum to 1 +/- %g: sum = %g; diff = %g" % (
-						self.tolabel[lhs], epsilon, mass, mass - 1.0))
+						self.tolabel[lhs].decode('ascii'),
+						epsilon, mass, mass - 1.0))
 				return False, msg
 		return True, 'All left hand sides sum to 1 +/- epsilon=%s' % epsilon
 

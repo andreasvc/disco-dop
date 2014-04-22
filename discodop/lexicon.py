@@ -97,18 +97,17 @@ def getunknownwordmodel(tagged_sents, unknownword,
 
 
 def replaceraretrainwords(tagged_sents, unknownword, lexicon):
-	"""Given a training set, replace all terminals not in the lexicon
-	with a signature of features as returned by unknownword(),
-	before a grammar is read of from the training set."""
+	"""Replace train set words not in lexicon w/signature from unknownword()."""
 	return [[word if word in lexicon else unknownword(word, n, lexicon)
 			for n, (word, _) in enumerate(sent)]
 			for sent in tagged_sents]
 
 
 def replaceraretestwords(sent, unknownword, lexicon, sigs):
-	"""Given a test sentence, replace words not in the lexicon
-	with a signature of features as returned by unknownword(),
-	if that signature is part of the grammar."""
+	"""Replace test set words not in lexicon w/signature from unknownword().
+
+	If the returned signatured is not part of the grammar, a default one is
+	returnend."""
 	for n, word in enumerate(sent):
 		if word in lexicon:
 			yield word
@@ -121,9 +120,10 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 
 
 def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
-	"""Introduce lexical productions for unobserved combinations of known open
-	class words and tags, as well as for unobserved signatures which are mapped
-	to ``'_UNK'``.
+	"""Collect new lexical productions.
+
+	- unobserved combinations of tags with known open class words.
+	- unobserved signatures which are mapped to ``'_UNK'``.
 
 	:param epsilon: 'frequency' of productions for unseen tag, word pair."""
 	(lexicon, wordsfortag, openclasstags,

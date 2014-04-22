@@ -184,7 +184,7 @@ cpdef inline _getderiv(bytearray result, v, RankedEdge ej, Chart chart,
 		result += chart.grammar.tolabel[label]
 		result += b' '
 	if ej.edge.rule is NULL:  # lexical rule, left child is terminal
-		result += str(chart.lexidx(v, ej.edge)).encode('ascii')
+		result += str(chart.lexidx(ej.edge)).encode('ascii')
 	else:
 		item = chart.left(ej)
 		rankededge = (<Entry>chart.rankededges[item][ej.left]).key

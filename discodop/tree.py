@@ -537,12 +537,7 @@ class AbstractParentedTree(Tree):
 	"""An abstract base class for Trees that maintain parent pointers.
 
 	The parent pointers are updated whenever any change is made to a tree's
-	structure. Two subclasses are defined:
-
-	- ParentedTree is for tree structures where each subtree has at most one
-		parent. Should be used when there is no "sharing" of subtrees.
-	- MultiParentedTree is for tree structures where a subtree may have zero or
-		more parents. Should be used in cases where subtrees may be shared.
+	structure. Two subclasses are defined: ParentedTree, MultiParentedTree
 
 	The AbstractParentedTree class redefines all operations that modify a
 	tree's structure to call two methods, which are used by subclasses to
@@ -594,7 +589,6 @@ class AbstractParentedTree(Tree):
 	# === Methods that add/remove children ======================
 	# Every method that adds or removes a child must make
 	# appropriate calls to _setparent() and _delparent().
-
 	def __delitem__(self, index):
 		if isinstance(index, slice):  # del ptree[start:stop]
 			start, stop, _ = slice_bounds(self, index)
@@ -748,7 +742,8 @@ class ParentedTree(AbstractParentedTree):
 
 	# === Properties =================================================
 	def _get_parent_index(self):
-		"""The index of this tree in its parent;
+		"""The index of this tree in its parent.
+
 		i.e., ptree.parent[ptree.parent_index] is ptree.
 		Note that ptree.parent_index is not necessarily equal to
 		ptree.parent.index(ptree), since the index() method
@@ -775,22 +770,25 @@ class ParentedTree(AbstractParentedTree):
 		return None  # no right sibling
 
 	def _get_treeposition(self):
-		"""The tree position of this tree, relative to the root of the
-		tree; i.e., ptree.root[ptree.treeposition] is ptree."""
+		"""The tree position of this tree, relative to the root of the tree.
+
+		i.e., ptree.root[ptree.treeposition] is ptree."""
 		if self._parent is None:
 			return ()
 		return (self._parent._get_treeposition() +
 				(self._get_parent_index(), ))
 
 	def _get_root(self):
-		"""The root of this tree; i.e., the unique ancestor of this tree whose
-		parent is None. If ptree.parent is None, then ptree is its own root."""
+		"""The root of this tree.
+
+		i.e., the unique ancestor of this tree whose parent is None.
+		If ptree.parent is None, then ptree is its own root."""
 		if self._parent is None:
 			return self
 		return self._parent._get_root()
 
-	parent = property(lambda self: self._parent, doc="""\
-		The parent of this tree, or None if it has no parent.""")
+	parent = property(lambda self: self._parent, doc=
+		"""The parent of this tree, or None if it has no parent.""")
 	parent_index = property(_get_parent_index, doc=_get_parent_index.__doc__)
 	left_sibling = property(_get_left_sibling, doc=_get_left_sibling.__doc__)
 	right_sibling = property(_get_right_sibling, doc=_get_right_sibling.__doc__)
@@ -891,10 +889,12 @@ class MultiParentedTree(AbstractParentedTree):
 			result[id(self)] = self
 		return result
 
-	parents = property(lambda self: list(self._parents), doc="""\
-		The set of parents of this tree. If this tree has no parents, then
-		parents is the empty set. To check if a tree is used as multiple
-		children of the same parent, use the parent_indices property.""")
+	parents = property(lambda self: list(self._parents), doc=
+		"""The set of parents of this tree.
+
+		If this tree has no parents, then parents is the empty set. To check if
+		a tree is used as multiple children of the same parent, use the
+		parent_indices property.""")
 	left_siblings = property(_get_left_siblings, doc=_get_left_siblings.__doc__)
 	right_siblings = property(_get_right_siblings,
 			doc=_get_right_siblings.__doc__)

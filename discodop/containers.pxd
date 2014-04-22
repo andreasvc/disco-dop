@@ -88,7 +88,7 @@ cdef class Chart:
 	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
 	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
 	cdef double subtreeprob(self, item)
-	cdef lexidx(self, item, Edge *edge)
+	cdef lexidx(self, Edge *edge)
 	cdef edgestr(self, item, Edge *edge)
 	cdef _left(self, item, Edge *edge)
 	cdef _right(self, item, Edge *edge)

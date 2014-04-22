@@ -508,7 +508,7 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 	# PyBytes_FromFormat('(%s %d)', <char *>..., ...)
 	children = [('(%s %d)' % (
 		str(chart.grammar.tolabel[chart.label(child.head)].decode('ascii')),
-		chart.lexidx(child.head, child.edge)))
+		chart.lexidx(child.edge)))
 		if child.edge.rule is NULL
 		else recoverfragments_(child, chart, backtransform)
 				for child in reversed(children)]
@@ -640,7 +640,7 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 
 	result.append(frag.format(*['(%s %s)' % (
 			chart.grammar.tolabel[chart.label(deriv.head)].split('@')[0],
-			(chart.lexidx(deriv.head, deriv.edge)
+			(chart.lexidx(deriv.edge)
 				if '@' in chart.grammar.tolabel[chart.label(deriv.head)]
 				else yieldranges(chart.indices(deriv.head))))
 			for deriv in reversed(children)]))
@@ -651,7 +651,7 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 		elif '@' not in chart.grammar.tolabel[chart.label(child.head)]:
 			result.append('(%s %d)' % (
 					chart.grammar.tolabel[chart.label(child.head)],
-					chart.lexidx(child.head, child.edge)))
+					chart.lexidx(child.edge)))
 
 
 cdef extractfragments_str(deriv, Chart chart, list backtransform, list result):
@@ -743,7 +743,7 @@ cdef double getderivprob(RankedEdge deriv, Chart chart, list sent):
 	cdef double result
 	if deriv.edge.rule is NULL:  # is terminal
 		label = chart.label(deriv.head)
-		word = sent[chart.lexidx(deriv.head, deriv.edge)]
+		word = sent[chart.lexidx(deriv.edge)]
 		return (<LexicalRule>chart.grammar.lexicalbylhs[label][word]).prob
 	result = chart.grammar.bylhs[0][deriv.edge.rule.no].prob
 	result += getderivprob((<Entry>chart.rankededges[
@@ -812,7 +812,7 @@ cdef samplechart(item, Chart chart,
 	edge = &((<Edges>chart.parseforest[item][n]).data[m])
 	label = chart.label(item)
 	if edge.rule is NULL:  # terminal
-		idx = chart.lexidx(item, edge)
+		idx = chart.lexidx(edge)
 		rankededge = new_RankedEdge(item, edge, 0, -1)
 		chart.rankededges.setdefault(item, []).append(
 				new_Entry(rankededge, chart.subtreeprob(item), 0))

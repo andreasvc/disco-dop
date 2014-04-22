@@ -175,7 +175,8 @@ class CorpusReader(object):
 					headmark(node)
 		if self.morphology and self.morphology != 'no':
 			for node in list(tree.subtrees(lambda n: isinstance(n[0], int))):
-				handlemorphology(self.morphology, self.lemmas, node, node.source)
+				handlemorphology(self.morphology, self.lemmas,
+						node, node.source)
 		if self.functions and self.functions != 'leave':
 			handlefunctions(self.functions, tree)
 		return tree
@@ -289,9 +290,7 @@ class BracketCorpusReader(CorpusReader):
 
 	For example::
 
-		(S (NP John) (VP (VB is) (JJ rich)) (. .))
-
-	TODO: support traces & empty nodes."""
+		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
 	def sents(self):
 		if not self._sents_cache:
 			self._sents_cache = OrderedDict((n, self._word(tree))
@@ -548,9 +547,6 @@ def alpinoparse(node, morphology=None, lemmas=None):
 	coindexation = defaultdict(list)
 	# NB: in contrast to Negra export format, don't need to add root/top node
 	result = getsubtree(node.find('node'), None, morphology, lemmas)
-	# FIXME: need MultipleParentedTree for secedges
-	#for index, secedges in coindexation.items():
-	#	coindexed[index].extend(secedges)
 	return result
 
 
@@ -728,8 +724,8 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 	# escape any parentheses to avoid hassles w/bracket notation of trees
 	tag = source[TAG].replace('(', '[').replace(')', ']')
 	morph = source[MORPH].replace('(', '[').replace(')', ']').replace(' ', '_')
-	lemma = (source[LEMMA].replace('(', '[').replace(')', ']').replace(' ', '_')
-			or '--')
+	lemma = (source[LEMMA].replace('(', '[').replace(')', ']').replace(
+			' ', '_') or '--')
 	if lemmaaction == 'add':
 		raise NotImplementedError
 		#sent[preterminal[0]] = '%s|%s' % (word, lemma)
