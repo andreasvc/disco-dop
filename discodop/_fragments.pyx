@@ -968,7 +968,7 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		ctrees = Ctrees()
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		sents = []
-		for _, tree, sent in corpus.itertrees(0, limit):
+		for _, (tree, sent) in corpus.itertrees(0, limit):
 			tree = tolist(addprods(
 					canonicalize(binarize(tree, dot=True)), sent), sent)
 			for st in tree:

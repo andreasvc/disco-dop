@@ -129,8 +129,6 @@ class Evaluator(object):
 		# NB: unary nodes not handled properly
 		gmismatch = {(n, indices): rule
 					for n, indices, rule in acc.goldrule - acc.candrule}
-		cmismatch = {(n, indices): rule
-					for n, indices, rule in acc.candrule - acc.goldrule}
 		wrong = multiset((rule, gmismatch[n, indices]) for n, indices, rule
 				in acc.candrule - acc.goldrule
 				if len(indices) > 1 and (n, indices) in gmismatch)

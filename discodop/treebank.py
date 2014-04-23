@@ -7,7 +7,6 @@ import xml.etree.cElementTree as ElementTree
 from glob import glob
 from itertools import count, chain, islice
 from collections import defaultdict, OrderedDict
-from operator import itemgetter
 from discodop.tree import Tree, ParentedTree
 from discodop.treebanktransforms import punctremove, punctraise, \
 		balancedpunctraise, punctroot, ispunct, readheadrules, headfinder, \
@@ -68,6 +67,8 @@ class CorpusReader(object):
 		:param lemmas: one of ...
 
 			:None: ignore lemmas
+			:'add': concatenate lemma to terminals, e.g., men/man
+			:'replace': use lemmas as terminals
 			:'between': insert lemma as node between POS tag and word."""
 		self.removeempty = removeempty
 		self.ensureroot = ensureroot
@@ -86,53 +87,45 @@ class CorpusReader(object):
 					functions),
 				((None, 'no', 'add', 'replace', 'between'), morphology),
 				((None, 'no', 'move', 'remove', 'root'), punct),
-				((None, 'no', 'between'), lemmas)):
+				((None, 'no', 'add', 'replace', 'between'), lemmas)):
 			assert opt in opts, 'Expected one of %r. Got: %r' % (opts, opt)
 		assert self._filenames, (
 				"no files matched pattern %s" % path)
-		self._sents_cache = None
-		self._tagged_sents_cache = None
-		self._trees_cache = None
 		self._block_cache = None
+		self._trees_cache = None
+
+	def itertrees(self, start=None, end=None):
+		""":returns: an iterator returning tuples (key, (tree, sent)) of \
+			sentences in corpus. Useful when the dictionary of all trees in \
+			corpus would not fit in memory."""
+		for n, a in islice(self._read_blocks(), start, end):
+			yield n, self._parsetree(a)
 
 	def trees(self):
 		""":returns: an ordered dictionary of parse trees \
 			(``Tree`` objects with integer indices as leaves)."""
 		if not self._trees_cache:
-			if self._block_cache is None:
-				self._block_cache = OrderedDict(self._read_blocks())
-			self._trees_cache = OrderedDict((a, self._parsetree(b))
-					for a, b in self._block_cache.items())
-		return self._trees_cache
-
-	def itertrees(self, start=None, end=None):
-		""":returns: an iterator returning tuples (key, tree, sent) of \
-			sentences in corpus. Useful when the dictionary of all trees in \
-			corpus would not fit in memory."""
-		for a, b in islice(self._read_blocks(), start, end):
-			yield a, self._parsetree(b), self._word(b)
+			self._trees_cache = OrderedDict((n, self._parsetree(a))
+					for n, a in self._read_blocks())
+		return OrderedDict((n, a) for n, (a, _) in self._trees_cache.items())
 
 	def sents(self):
 		""":returns: an ordered dictionary of sentences, \
 			each sentence being a list of words."""
-		if not self._sents_cache:
-			if self._block_cache is None:
-				self._block_cache = OrderedDict(self._read_blocks())
-			self._sents_cache = OrderedDict((a, self._word(b))
-					for a, b in self._block_cache.items())
-		return self._sents_cache
+		if not self._trees_cache:
+			self._trees_cache = OrderedDict((n, self._parsetree(a))
+					for n, a in self._read_blocks())
+		return OrderedDict((n, b) for n, (_, b) in self._trees_cache.items())
 
 	def tagged_sents(self):
 		""":returns: an ordered dictionary of tagged sentences, \
 			each tagged sentence being a list of (word, tag) pairs."""
-		if not self._tagged_sents_cache:
-			if self._block_cache is None:
-				self._block_cache = OrderedDict(self._read_blocks())
-			self._tagged_sents_cache = OrderedDict((n,
-				list(zip(sent, map(itemgetter(1), sorted(tree.pos())))))
-				for (n, sent), tree in zip(self.sents().items(),
-						self.trees().values()))
-		return self._tagged_sents_cache
+		if not self._trees_cache:
+			self._trees_cache = OrderedDict((n, self._parsetree(a))
+					for n, a in self._read_blocks())
+		return OrderedDict(
+				(n, [(w, t) for w, (_, t) in zip(sent, sorted(tree.pos()))])
+				for n, (tree, sent) in self._trees_cache.items())
 
 	def blocks(self):
 		""":returns: a list of strings containing the raw representation of \
@@ -145,7 +138,7 @@ class CorpusReader(object):
 		""":returns: a parse tree given a string from the treebank file."""
 
 	def _parsetree(self, block):
-		""":returns: a transformed parse tree."""
+		""":returns: a transformed parse tree and sentence."""
 		tree, sent = self._parse(block)
 		if not sent:  # ??3
 			return tree
@@ -173,13 +166,7 @@ class CorpusReader(object):
 				headorder(node, self.headfinal, self.reverse)
 				if self.markheads:
 					headmark(node)
-		if self.morphology and self.morphology != 'no':
-			for node in list(tree.subtrees(lambda n: isinstance(n[0], int))):
-				handlemorphology(self.morphology, self.lemmas,
-						node, node.source)
-		if self.functions and self.functions != 'leave':
-			handlefunctions(self.functions, tree)
-		return tree
+		return tree, sent
 
 	def _word(self, block, orig=False):
 		""":returns: a list of words given a string.
@@ -188,51 +175,33 @@ class CorpusReader(object):
 		otherwise it will follow parameters for punctuation."""
 
 
-class NegraCorpusReader(CorpusReader):
-	"""Read a corpus in the Negra export format."""
+class BracketCorpusReader(CorpusReader):
+	"""Corpus reader for phrase-structures in bracket notation.
+
+	For example::
+
+		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
 	def blocks(self):
-		if self._block_cache is None:
-			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((a, "#BOS %s\n%s\n#EOS %s\n" % (a,
-				"\n".join("\t".join(c) for c in b), a))
-				for a, b in self._block_cache.items())
+		return OrderedDict(self._read_blocks())
 
 	def _read_blocks(self):
-		"""Read corpus and yield blocks corresponding to each sentence."""
-		results = set()
-		started = False
-		for filename in self._filenames:
-			for line in io.open(filename, encoding=self._encoding):
-				if line.startswith('#BOS '):
-					assert not started, ("beginning of sentence marker while "
-							"previous one still open: %s" % line)
-					started = True
-					sentid = line.strip().split()[1]
-					lines = []
-				elif line.startswith('#EOS '):
-					assert started, "end of sentence marker while none started"
-					thissentid = line.strip().split()[1]
-					assert sentid == thissentid, ("unexpected sentence id: "
-							"start=%s, end=%s" % (sentid, thissentid))
-					started = False
-					assert sentid not in results, (
-							"duplicate sentence ID: %s" % sentid)
-					results.add(sentid)
-					yield sentid, lines
-				elif started:
-					lines.append(exportsplit(line))
+		for n, block in enumerate((line for filename in self._filenames
+				for line in io.open(filename, encoding=self._encoding)
+				if line), 1):
+			yield n, block
 
 	def _parse(self, block):
-		tree = exportparse(block)
+		c = count()
+		tree = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
+				block), parse_leaf=int)
 		sent = self._word(block, orig=True)
 		return tree, sent
 
 	def _word(self, block, orig=False):
+		sent = [a or None for a in LEAVESRE.findall(block)]
 		if orig or self.punct != "remove":
-			return [a[WORD] for a in block
-					if not EXPORTNONTERMINAL.match(a[WORD])]
-		return [a[WORD] for a in block if not EXPORTNONTERMINAL.match(a[WORD])
-			and not ispunct(a[WORD], a[TAG])]
+			return sent
+		return [a for a in sent if not ispunct(a, None)]
 
 
 class DiscBracketCorpusReader(CorpusReader):
@@ -248,16 +217,6 @@ class DiscBracketCorpusReader(CorpusReader):
 	per line. Compared to Negra's export format, this format lacks morphology,
 	lemmas and functional edges. On the other hand, it is very close to the
 	internal representation employed here, so it can be read efficiently."""
-	def sents(self):
-		return OrderedDict((n, self._word(line))
-				for n, line in self.blocks().items())
-
-	def trees(self):
-		if not self._trees_cache:
-			self._trees_cache = OrderedDict(enumerate(
-					map(self._parsetree, self.blocks().values()), 1))
-		return self._trees_cache
-
 	def blocks(self):
 		return OrderedDict(self._read_blocks())
 
@@ -285,52 +244,50 @@ class DiscBracketCorpusReader(CorpusReader):
 		return [a for a in sent if not ispunct(a, None)]
 
 
-class BracketCorpusReader(CorpusReader):
-	"""Corpus reader for phrase-structures in bracket notation.
-
-	For example::
-
-		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
-	def sents(self):
-		if not self._sents_cache:
-			self._sents_cache = OrderedDict((n, self._word(tree))
-				for n, tree in self.blocks().items())
-		return self._sents_cache
-
-	def tagged_sents(self):
-		if not self._tagged_sents_cache:
-			self._tagged_sents_cache = OrderedDict(
-				(n, list(zip(sent, POSRE.findall(block)))) for (n, sent), block
-				in zip(self.sents().items(), self.blocks().values()))
-		return self._tagged_sents_cache
-
-	def trees(self):
-		if not self._trees_cache:
-			self._trees_cache = OrderedDict(enumerate(
-					map(self._parsetree, self.blocks().values()), 1))
-		return self._trees_cache
-
+class NegraCorpusReader(CorpusReader):
+	"""Read a corpus in the Negra export format."""
 	def blocks(self):
-		return OrderedDict(self._read_blocks())
+		if self._block_cache is None:
+			self._block_cache = OrderedDict(self._read_blocks())
+		return OrderedDict((a, "#BOS %s\n%s\n#EOS %s\n" % (a,
+				'\n'.join(b), a))
+				for a, b in self._block_cache.items())
 
 	def _read_blocks(self):
-		for n, block in enumerate((line for filename in self._filenames
-				for line in io.open(filename, encoding=self._encoding)
-				if line), 1):
-			yield n, block
+		"""Read corpus and yield blocks corresponding to each sentence."""
+		results = set()
+		started = False
+		for filename in self._filenames:
+			for line in io.open(filename, encoding=self._encoding):
+				if line.startswith('#BOS '):
+					assert not started, ("beginning of sentence marker while "
+							"previous one still open: %s" % line)
+					started = True
+					sentid = line.strip().split()[1]
+					lines = []
+				elif line.startswith('#EOS '):
+					assert started, "end of sentence marker while none started"
+					thissentid = line.strip().split()[1]
+					assert sentid == thissentid, ("unexpected sentence id: "
+							"start=%s, end=%s" % (sentid, thissentid))
+					started = False
+					assert sentid not in results, (
+							"duplicate sentence ID: %s" % sentid)
+					results.add(sentid)
+					yield sentid, lines
+				elif started:
+					lines.append(line)
 
 	def _parse(self, block):
-		c = count()
-		tree = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
-				block), parse_leaf=int)
-		sent = self._word(block, orig=True)
-		return tree, sent
+		return exporttree(block, self.functions, self.morphology, self.lemmas)
 
 	def _word(self, block, orig=False):
-		sent = [a or None for a in LEAVESRE.findall(block)]
 		if orig or self.punct != "remove":
-			return sent
-		return [a for a in sent if not ispunct(a, None)]
+			return [a.split(None, 1)[0] for a in block
+					if not EXPORTNONTERMINAL.match(a)]
+		return [a[WORD] for a in (exportsplit(x) for x in block)
+				if not EXPORTNONTERMINAL.match(a[WORD])
+				and not ispunct(a[WORD], a[TAG])]
 
 
 class TigerXMLCorpusReader(CorpusReader):
@@ -390,9 +347,9 @@ class TigerXMLCorpusReader(CorpusReader):
 		for idref in nodes:
 			assert nodes[idref][PARENT] is not None, (
 					'%s does not have a parent: %r' % (idref, nodes[idref]))
-		tree = exportparse(list(nodes.values()))
+		tree, sent = exporttree(['\t'.join(a) for a in nodes.values()],
+				self.functions, self.morphology, self.lemmas)
 		tree.label = nodes[root][TAG]
-		sent = self._word(block, orig=True)
 		return tree, sent
 
 	def _word(self, block, orig=False):
@@ -434,9 +391,8 @@ class AlpinoCorpusReader(CorpusReader):
 			xmlblock = block
 		else:  # NB: parse because raw XML might contain entities etc.
 			xmlblock = ElementTree.fromstring(block)
-		tree = alpinoparse(xmlblock)
-		sent = self._word(xmlblock)
-		return tree, sent
+		return alpinotree(xmlblock,
+				self.functions, self.morphology, self.lemmas)
 
 	def _word(self, block, orig=False):
 		if ElementTree.iselement(block):
@@ -462,6 +418,67 @@ class DactCorpusReader(AlpinoCorpusReader):
 				yield entry.name(), entry.contents()
 
 
+def brackettree(treestr, sent, brackets, strtermre):
+	"""Parse a single tree presented in (disc)bracket format.
+
+	in the 'bracket' case ``sent`` is ignored."""
+	if strtermre.search(treestr):  # terminals are not all indices
+		rest = sent.strip()
+		sent, cnt = [], count()
+
+		def substleaf(x):
+			"""Collect word and return index."""
+			sent.append(x)
+			return next(cnt)
+
+		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)', treestr),
+				parse_leaf=substleaf, brackets=brackets)
+	else:  # disc. trees with integer indices as terminals
+		tree = ParentedTree.parse(treestr, parse_leaf=int,
+			brackets=brackets)
+		if sent.strip():
+			maxleaf = max(tree.leaves())
+			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''
+			sep = [sent[-1].index(b) for b in '\t\n\r' if b in sent[-1]]
+			if sep:
+				sent[-1], rest = sent[-1][:min(sep)], sent[-1][min(sep) + 1:]
+		else:
+			sent, rest = map(str, range(max(tree.leaves()) + 1)), ''
+	sent = [unquote(a) for a in sent]
+	return tree, sent, rest
+
+
+def exporttree(block, functions=None, morphology=None, lemmas=None):
+	"""Get tree, sentence from tree in export format given as list of lines."""
+	def getchildren(parent):
+		"""Traverse tree in export format and create Tree object."""
+		results = []
+		for n, source in children[parent]:
+			# n is the index in the block to record word indices
+			m = EXPORTNONTERMINAL.match(source[WORD])
+			if m:
+				child = ParentedTree(source[TAG], getchildren(m.group(1)))
+			else:  # POS + terminal
+				child = ParentedTree(source[TAG], [n])
+				handlemorphology(morphology, lemmas, child, source, sent)
+			child.source = tuple(source)
+			results.append(child)
+		return results
+
+	block = [exportsplit(x) for x in block]
+	sent = []
+	for a in block:
+		if EXPORTNONTERMINAL.match(a[WORD]):
+			break
+		sent.append(a[WORD])
+	children = {}
+	for n, source in enumerate(block):
+		children.setdefault(source[PARENT], []).append((n, source))
+	tree = ParentedTree('ROOT', getchildren('0'))
+	handlefunctions(functions, tree)
+	return tree, sent
+
+
 def exportsplit(line):
 	"""Take a line in export format and split into fields.
 
@@ -482,32 +499,8 @@ def exportsplit(line):
 	return fields
 
 
-def exportparse(block, morphology=None, lemmas=None):
-	"""Return a Tree object for tree in export format given as list of lists."""
-	def getchildren(parent):
-		"""Traverse tree in export format and create Tree object."""
-		results = []
-		for n, source in children[parent]:
-			# n is the index in the block to record word indices
-			m = EXPORTNONTERMINAL.match(source[WORD])
-			if m:
-				child = ParentedTree(source[TAG], getchildren(m.group(1)))
-			else:  # POS + terminal
-				child = ParentedTree(source[TAG], [n])
-				handlemorphology(morphology, lemmas, child, source)
-			child.source = tuple(source)
-			results.append(child)
-		return results
-
-	children = {}
-	for n, source in enumerate(block):
-		children.setdefault(source[PARENT], []).append((n, source))
-	result = ParentedTree('ROOT', getchildren('0'))
-	return result
-
-
-def alpinoparse(node, morphology=None, lemmas=None):
-	"""Construct a Tree object for an ElementTree with an Alpino XML tree."""
+def alpinotree(block, functions=None, morphology=None, lemmas=None):
+	"""Get tree, sent from tree in Alpino format given as etree XML object."""
 	def getsubtree(node, parent, morphology, lemmas):
 		"""Parse a subtree of an Alpino tree."""
 		# FIXME: proper representation for arbitrary features
@@ -536,18 +529,20 @@ def alpinoparse(node, morphology=None, lemmas=None):
 				coindexed[node.get('index')] = source
 			result = ParentedTree(source[TAG], list(
 					range(int(node.get('begin')), int(node.get('end')))))
-			handlemorphology(morphology, lemmas, result, source)
+			handlemorphology(morphology, lemmas, result, source, sent)
 		elif 'index' in node.keys():
 			coindexation[node.get('index')].extend(
 					(node.get('rel'), parent))
 			return None
 		result.source = source
 		return result
+
 	coindexed = {}
 	coindexation = defaultdict(list)
-	# NB: in contrast to Negra export format, don't need to add root/top node
-	result = getsubtree(node.find('node'), None, morphology, lemmas)
-	return result
+	sent = block.find('sentence').text.split(' ')
+	tree = getsubtree(block.find('node'), None, morphology, lemmas)
+	handlefunctions(functions, tree)
+	return tree, sent
 
 
 def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
@@ -717,7 +712,7 @@ def handlefunctions(action, tree, pos=True, top=False):
 				raise ValueError('unrecognized action: %r' % action)
 
 
-def handlemorphology(action, lemmaaction, preterminal, source):
+def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 	"""Augment/replace preterminal label with morphological information."""
 	if not source:
 		return
@@ -727,11 +722,13 @@ def handlemorphology(action, lemmaaction, preterminal, source):
 	lemma = (source[LEMMA].replace('(', '[').replace(')', ']').replace(
 			' ', '_') or '--')
 	if lemmaaction == 'add':
-		raise NotImplementedError
-		#sent[preterminal[0]] = '%s|%s' % (word, lemma)
+		if sent is None:
+			raise ValueError
+		sent[preterminal[0]] += '/' + lemma
 	elif lemmaaction == 'replace':
-		raise NotImplementedError
-		#sent[preterminal[0]] = lemma
+		if sent is None:
+			raise ValueError
+		sent[preterminal[0]] = lemma
 	elif lemmaaction == 'between':
 		preterminal[:] = [preterminal.__class__(lemma, preterminal)]
 	elif lemmaaction not in (None, 'no'):
@@ -892,8 +889,7 @@ def segmentexport(morphology, functions):
 			inblock = True
 			line = (yield None, 1)
 		elif line.startswith('#EOS '):
-			tree, sent = exporttree(cur, morphology)
-			handlefunctions(functions, tree)
+			tree, sent = exporttree(cur, functions, morphology)
 			line = (yield ((tree, sent, ''), ), 1)
 			inblock = False
 			cur = []
@@ -917,55 +913,6 @@ def unquote(word):
 	if word in ('', '-FRONTIER-'):
 		return None
 	return word.replace('-LRB-', '(').replace('-RRB-', ')')
-
-
-def brackettree(treestr, sent, brackets, strtermre):
-	"""Parse a single tree presented in (disc)bracket format.
-
-	in the 'bracket' case ``sent`` is ignored."""
-	if strtermre.search(treestr):  # terminals are not all indices
-		rest = sent.strip()
-		sent, cnt = [], count()
-
-		def substleaf(x):
-			"""Collect word and return index."""
-			sent.append(x)
-			return next(cnt)
-
-		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)', treestr),
-				parse_leaf=substleaf, brackets=brackets)
-	else:  # disc. trees with integer indices as terminals
-		tree = ParentedTree.parse(treestr, parse_leaf=int,
-			brackets=brackets)
-		if sent.strip():
-			maxleaf = max(tree.leaves())
-			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''
-			sep = [sent[-1].index(b) for b in '\t\n\r' if b in sent[-1]]
-			if sep:
-				sent[-1], rest = sent[-1][:min(sep)], sent[-1][min(sep) + 1:]
-		else:
-			sent, rest = map(str, range(max(tree.leaves()) + 1)), ''
-	sent = [unquote(a) for a in sent]
-	return tree, sent, rest
-
-
-def exporttree(data, morphology):
-	"""Get tree, sentence from tree in export format given as list of lines."""
-	data = [exportsplit(x) for x in data]
-	tree, sent = exportparse(data, morphology), []
-	for a in data:
-		if EXPORTNONTERMINAL.match(a[WORD]):
-			break
-		sent.append(a[WORD])
-	return tree, sent
-
-
-def alpinotree(block, morphology=None, lemmas=None, functions=None):
-	"""Get tree, sent from tree in Alpino format given as etree XML object."""
-	tree = alpinoparse(block, morphology, lemmas)
-	sent = block.find('sentence').text.split(' ')
-	handlefunctions(functions, tree)
-	return tree, sent
 
 
 def treebankfanout(trees):

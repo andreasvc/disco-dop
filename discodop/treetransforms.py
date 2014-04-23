@@ -80,7 +80,11 @@ options may consist of:
                  'replace': use morphological information as preterminal label
                  'between': insert node with morphological information between
                      POS tag and word, e.g., (DET (sg.def the))
-  --lemmas       insert node with lemma between word and POS tag.
+  --lemmas=x     'no' (default): do not use lemmas.
+                 'add': concatenate lemmas to terminals, e.g., word/lemma
+                 'replace': use lemma instead of terminals
+                 'between': insert node with lemma between POS tag and word,
+                     e.g., (NN (man men))
   --ensureroot=x add root node labeled 'x' to trees if not already present.
   --factor=[left|right]
                  specify left- or right-factored binarization [default: right].
@@ -189,10 +193,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			parent = [originallabel] + parent[:vertmarkov - 2]
 			if not artpa:
 				parentstring = ''
-
 		# add children to the agenda before we mess with them
 		agenda.extend((child, parent) for child in node)
-
 		# binary form factorization
 		if len(node) <= threshold:
 			continue
@@ -202,7 +204,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			# insert an initial artificial nonterminal
 			if ids is None:  # use sibling labels as context
 				siblings = '' if headidx is None else node[headidx].label + ';'
-				siblings += ','.join(labelfun(child) for child in node[:horzmarkov]
+				siblings += ','.join(labelfun(child)
+						for child in node[:horzmarkov]
 						if labelfun(child).split('/', 1)[0] not in filterfuncs)
 				if dot:
 					siblings += '.'
@@ -271,7 +274,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 					start = headmarkedidx + numchildren - i - 1
 					end = start + horzmarkov
 				if ids is None:
-					siblings = '' if headidx is None else childlabels[headidx] + ';'
+					siblings = ('' if headidx is None
+							else childlabels[headidx] + ';')
 					if dot and not reverse:
 						siblings += ','.join(childlabels[:start]) + '.'
 					siblings += ','.join(childlabels[start:end])
@@ -343,7 +347,6 @@ def collapseunary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 	agenda = [tree]
 	if not collapseroot and isinstance(tree, Tree) and len(tree) == 1:
 		agenda = [tree[0]]
-
 	# depth-first traversal of tree
 	while agenda:
 		node = agenda.pop()
@@ -396,13 +399,13 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 	if len(node) <= threshold:
 		return node
 	elif 1 <= len(node) <= 2:
-		if ids is None:  # FIXME: markyf does not work with unaries.
+		if ids is None:
 			key = '%s%s' % (','.join(child.label for child in node[:h]),
-					getyf(node[0], node[1]) if markyf else '')
+					getyf(node[0], node[1] if len(node) > 1 else None)
+					if markyf else '')
 		else:
 			key = str(next(ids))
 		newlabel = '%s%s<%s>' % (node.label, sep, key)
-
 		result = ImmutableTree(node.label, [ImmutableTree(newlabel, node)])
 		result.bitset = node.bitset
 	else:
@@ -543,10 +546,8 @@ def optimalbinarize(tree, sep='|', headdriven=False,
 		tree = Tree.convert(tree)
 		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
 			a.sort(key=lambda x: x.leaves())
-	if fun is None:
-		fun = complexityfanout
-	return optimalbinarize_(addbitsets(tree), fun, sep, headdriven,
-			h or 999, v, ())
+	return optimalbinarize_(addbitsets(tree), fun or complexityfanout, sep,
+			headdriven, h or 999, v, ())
 
 
 def optimalbinarize_(tree, fun, sep, headdriven, h, v, ancestors):
@@ -568,22 +569,17 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	Implementation of Gildea (2010): Optimal parsing strategies for linear
 	context-free rewriting systems.
 
-	Expects an immutable tree where the terminals are integers corresponding to
-	indices, with a special bitset attribute to avoid having to call
-	``leaves()`` repeatedly. The bitset attribute can be added with
-	``addbitsets()``
-
-	:param tree: the tree for which the optimal binarization of its top
-		production will be searched.
+	:param tree: ImmutableTree for which the optimal binarization of its top
+		production will be searched. Nodes need to have a .bitset attribute,
+		as produced by ``addbitsets()``.
 	:param score: a function from binarized trees to scores, where lower is
 		better (the scores can be anything else which supports comparisons).
 	:param head: an optional index of the head node, specifying it enables
 		head-driven binarization (which constrains the possible binarizations).
 
 	>>> tree = '(X (A 0) (B 1) (C 2) (D 3) (E 4))'
-	>>> tree1 = addbitsets(tree)
 	>>> tree2 = binarize(Tree.parse(tree, parse_leaf=int))
-	>>> minimalbinarization(tree1, complexityfanout, head=2) == tree2
+	>>> minimalbinarization(addbitsets(tree), complexityfanout, head=2) == tree2
 	True
 	>>> tree = addbitsets('(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10)) '
 	... '(B3 (t 1) (t 9) (t 11) (t 14) (t 16)) (B4 (t 0) (t 5) (t 8)))')
@@ -731,7 +727,6 @@ def contsets(nodes):
 	rng, subset = -1, []
 	mins = {min(a.leaves()) if isinstance(a, Tree) else a: a for a in nodes}
 	leaves = [a for child in nodes for a in child.leaves()]
-
 	for a in sorted(leaves):
 		if rng >= 0 and a != rng + 1:
 			yield subset
@@ -806,7 +801,10 @@ def getyf(left, right):
 	:returns: string representation of yield function; e.g., ';01,10'."""
 	result = [';']
 	cur = ','
-	for n in range(max(left.bitset.bit_length(), right.bitset.bit_length())):
+	bits = left.bitset.bit_length()
+	if right is not None:
+		bits = max(bits, right.bitset.bit_length())
+	for n in range(bits):
 		mask = 1 << n
 		if left.bitset & mask:
 			if cur != '0':
@@ -887,11 +885,11 @@ def main():
 	actions = {'none': None, 'introducepreterminals': introducepreterminals,
 			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
 			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
-	flags = ('markorigin markheads lemmas leftunary rightunary tailmarker '
+	flags = ('markorigin markheads leftunary rightunary tailmarker '
 			'renumber'.split())
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
-			'punct= headrules= functions= morphology= factor= markorigin= '
-			'maxlen= fmt= enc=').split()
+			'punct= headrules= functions= morphology= lemmas= factor= '
+			'markorigin= maxlen= fmt= enc=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
@@ -922,17 +920,17 @@ def main():
 			ensureroot=opts.get('--ensureroot'), punct=opts.get('--punct'),
 			functions=opts.get('--functions'),
 			morphology=opts.get('--morphology'),
-			lemmas='between' if '--lemmas' in opts else None)
+			lemmas=opts.get('--lemmas'))
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
 	trees = corpus.itertrees(start, end)
 	if '--maxlen' in opts:
 		maxlen = int(opts['--maxlen'])
-		trees = ((key, tree, sent) for key, tree, sent in trees
+		trees = ((key, (tree, sent)) for key, (tree, sent) in trees
 				if len(sent) <= maxlen)
 	if '--renumber' in opts:
-		trees = (('%8d' % n, tree, sent)
-				for n, (_, tree, sent) in enumerate(trees, 1))
+		trees = (('%8d' % n, treesent)
+				for n, (_, treesent) in enumerate(trees, 1))
 
 	# select transformation
 	transform = actions[action]
@@ -953,7 +951,7 @@ def main():
 	elif action == 'unbinarize':
 		transform = lambda t: unbinarize(Tree.convert(t))
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
-		trees = ((key, transform(tree), sent) for key, tree, sent in trees)
+		trees = ((key, (transform(tree), sent)) for key, (tree, sent) in trees)
 
 	# read, transform, & write trees
 	headrules = None
@@ -961,7 +959,6 @@ def main():
 		assert opts.get('--headrules'), (
 				'need head rules for dependency conversion')
 		headrules = readheadrules(opts.get('--headrules'))
-
 	cnt = 0
 	if opts.get('--outputfmt') == 'dact':
 		import alpinocorpus
@@ -974,7 +971,7 @@ def main():
 				outfile.write('%8d' % n if '--renumber' in opts else key, block)
 				cnt += 1
 		else:
-			for key, tree, sent in trees:
+			for key, (tree, sent) in trees:
 				outfile.write(str(key), writetree(tree, sent, key, 'alpino'))
 				cnt += 1
 	else:
@@ -988,7 +985,7 @@ def main():
 				outfile.write(block)
 				cnt += 1
 		else:
-			for key, tree, sent in trees:
+			for key, (tree, sent) in trees:
 				outfile.write(writetree(tree, sent, key,
 						opts.get('--outputfmt', 'export'), headrules))
 				cnt += 1

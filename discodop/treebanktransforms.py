@@ -6,7 +6,7 @@
 - reattaching punctuation"""
 from __future__ import division, print_function
 import re
-from itertools import count, islice, repeat
+from itertools import islice, repeat
 from collections import defaultdict, Counter as multiset
 from discodop.tree import Tree, ParentedTree
 
