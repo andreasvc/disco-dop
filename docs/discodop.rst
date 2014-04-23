@@ -192,7 +192,11 @@ options may consist of:
                 :'replace': use morphological information as preterminal label
                 :'between': insert node with morphological information between
                     POS tag and word, e.g., (DET (sg.def the))
---lemmas        insert node with lemma between word and POS tag.
+--lemmas=x      :'no' (default): do not use lemmas.
+                :'add': concatenate lemmas to terminals, e.g., word/lemma
+                :'replace': use lemma instead of terminals
+                :'between': insert node with lemma between POS tag and word,
+                    e.g., (NN (man men))
 --ensureroot=x  add root node labeled 'x' to trees if not already present.
 --factor=<left|right>
                 specify left- or right-factored binarization [default: right].
@@ -224,8 +228,10 @@ or: ``discodop merge (rules|lexicon|fragments) <input1> <input2>... <output>``
 ``type`` is one of:
 :pcfg:            Probabilistic Context-Free Grammar (treebank grammar)
 :plcfrs:
+
                   Probabilistic Linear Context-Free Rewriting System
                   (discontinuous treebank grammar)
+
 :ptsg:            Probabilistic Tree-Substitution Grammar
 :dopreduction:    All-fragments PTSG using Goodman's reduction
 :doubledop:       PTSG from recurring fragmensts
