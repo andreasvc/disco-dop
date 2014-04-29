@@ -385,7 +385,8 @@ def introducepreterminals(tree, ids=None):
 
 
 def factorconstituent(node, sep='|', h=999, factor='right',
-		markfanout=False, markyf=False, ids=None, threshold=2):
+		markfanout=False, markyf=False, ids=None, threshold=2,
+		filterfuncs=(), labelfun=attrgetter('label')):
 	"""Binarize one constituent with a left/right factored binarization.
 
 	Children remain unmodified. Nodes must be immutable and contain bitsets;
@@ -400,7 +401,8 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		return node
 	elif 1 <= len(node) <= 2:
 		if ids is None:
-			key = '%s%s' % (','.join(child.label for child in node[:h]),
+			key = '%s%s' % (','.join(labelfun(child) for child in node[:h]
+					if labelfun(child) not in filterfuncs),
 					getyf(node[0], node[1] if len(node) > 1 else None)
 					if markyf else '')
 		else:
@@ -420,14 +422,16 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 		for i in rng:
 			newbitset = node[i].bitset | prev.bitset
 			if factor == 'right' and (ids is None or i > 1):
-				key = ','.join(child.label for child in node[i:i + h])
+				key = ','.join(labelfun(child) for child in node[i:i + h]
+						if labelfun(child) not in filterfuncs)
 				if markyf:
 					key += getyf(node[i], prev)
 				if ids is not None:
 					key = str(ids[key])
 			elif factor == 'left' and (ids is None or i < len(node) - 2):
-				key = ','.join(child.label
-						for child in node[max(0, i - h + 1):i + 1])
+				key = ','.join(labelfun(child)
+						for child in node[max(0, i - h + 1):i + 1]
+						if labelfun(child) not in filterfuncs)
 				if markyf:
 					key += getyf(prev, node[i])
 				if ids is not None:
@@ -788,6 +792,9 @@ def addbitsets(tree):
 		result = tree
 	elif isinstance(tree, Tree):
 		result = tree.freeze()
+		for a, b in zip(result.subtrees(), tree.subtrees()):
+			if hasattr(b, 'source'):
+				a.source = b.source
 	else:
 		raise ValueError('expected string or tree object')
 	for a in result.subtrees():
