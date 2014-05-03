@@ -593,9 +593,9 @@ class UniqueIDs(object):
 
 	>>> ids = UniqueIDs()
 	>>> next(ids)
-	0
+	'0'
 	>>> ids['foo'], ids['bar'], ids['foo']
-	(1, 2, 1)"""
+	('1', '2', '1')"""
 	def __init__(self):
 		self.cnt = 0  # next available ID
 		self.ids = {}  # IDs for labels seen
@@ -603,13 +603,13 @@ class UniqueIDs(object):
 	def __getitem__(self, key):
 		val = self.ids.get(key)
 		if val is None:
-			val = self.ids[key] = self.cnt
+			val = self.ids[key] = str(self.cnt)
 			self.cnt += 1
 		return val
 
 	def __next__(self):
 		self.cnt += 1
-		return self.cnt - 1
+		return str(self.cnt - 1)
 
 	def __iter__(self):
 		return self

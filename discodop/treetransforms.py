@@ -151,8 +151,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			generated, separated with a dot from the siblings that have been.
 	:param artpa: whether to add parent annotation to the artificial nodes
 			introduced by the binarization.
-	:param ids: a function to provide artificial node labels, instead of
-			combining labels of sibling nodes. Disables Markovization.
+	:param ids: abbreviate artificial node labels using numeric IDs from this
+			object; must have dictionary-like interface.
 	:param threshold: constituents with more than this number of children are
 			factored; i.e., for a value of 2, do a normal binarization; for a
 			value of 1, also factor binary productions to include an artificial
@@ -185,14 +185,14 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		if not isinstance(node, Tree):
 			continue
 		# parent annotation
-		parentstring = ''
-		originallabel = node.label if vertmarkov else ''
+		parents = ''
+		origlabel = node.label if vertmarkov else ''
 		if vertmarkov > 1 and node is not tree and isinstance(node[0], Tree):
-			parentstring = '%s<%s>' % (parentchar, ','.join(parent))
-			node.label += parentstring
-			parent = [originallabel] + parent[:vertmarkov - 2]
+			parents = '%s<%s>' % (parentchar, ','.join(parent))
+			node.label += parents
+			parent = [origlabel] + parent[:vertmarkov - 2]
 			if not artpa:
-				parentstring = ''
+				parents = ''
 		# add children to the agenda before we mess with them
 		agenda.extend((child, parent) for child in node)
 		# binary form factorization
@@ -202,17 +202,15 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			if not isinstance(node[0], Tree):
 				continue
 			# insert an initial artificial nonterminal
-			if ids is None:  # use sibling labels as context
-				siblings = '' if headidx is None else node[headidx].label + ';'
-				siblings += ','.join(labelfun(child)
-						for child in node[:horzmarkov]
-						if labelfun(child).split('/', 1)[0] not in filterfuncs)
-				if dot:
-					siblings += '.'
-			else:  # numeric identifier
-				siblings = str(next(ids))
-			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
-					siblings, parentstring), node)
+			siblings = '' if headidx is None else node[headidx].label + ';'
+			siblings += ','.join(labelfun(child) for child in node[:horzmarkov]
+					if labelfun(child).split('/', 1)[0] not in filterfuncs)
+			if dot:
+				siblings += '.'
+			mark = '<%s>%s' % (siblings, parents)
+			if ids is not None:  # numeric identifier
+				mark = '<%s>' % ids[mark]
+			newnode = treeclass('%s%s%s' % (origlabel, childchar, mark), node)
 			node[:] = [newnode]
 		else:
 			if isinstance(node[0], Tree):
@@ -230,24 +228,23 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			headmarkedidx = 0
 
 			# insert an initial artificial nonterminal
-			if factor == 'right':
-				start = 0
-				end = min(1, horzmarkov) if reverse else horzmarkov
-			else:  # factor == 'left'
-				start = ((numchildren - min(1, horzmarkov))
-						if reverse else horzmarkov)
-				end = numchildren
-			if ids is None:
+			node[:] = []
+			if leftmostunary:
+				if factor == 'right':
+					start = 0
+					end = min(1, horzmarkov) if reverse else horzmarkov
+				else:  # factor == 'left'
+					start = ((numchildren - min(1, horzmarkov))
+							if reverse else horzmarkov)
+					end = numchildren
 				siblings = '' if headidx is None else childlabels[headidx] + ';'
 				siblings += ','.join(childlabels[start:end])
 				if dot:
 					siblings += '.'
-			else:
-				siblings = str(next(ids))
-			newnode = treeclass('%s%s<%s>%s' % (originallabel, childchar,
-					siblings, parentstring), [])
-			node[:] = []
-			if leftmostunary:
+				mark = '<%s>%s' % (siblings, parents)
+				if ids is not None:  # numeric identifier
+					mark = '<%s>' % ids[mark]
+				newnode = treeclass('%s%s%s' % (origlabel, childchar, mark), [])
 				node.append(newnode)
 				node = newnode
 			curnode = node
@@ -273,18 +270,17 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 					factor = 'right' if factor == 'left' else 'left'
 					start = headmarkedidx + numchildren - i - 1
 					end = start + horzmarkov
-				if ids is None:
-					siblings = ('' if headidx is None
-							else childlabels[headidx] + ';')
-					if dot and not reverse:
-						siblings += ','.join(childlabels[:start]) + '.'
-					siblings += ','.join(childlabels[start:end])
-					if dot and reverse:
-						siblings += '.' + ','.join(childlabels[end:])
-				else:
-					siblings = str(next(ids))
-				newnode.label = '%s%s<%s>%s%s' % (originallabel, childchar,
-						siblings, parentstring, marktail)
+				siblings = ('' if headidx is None
+						else childlabels[headidx] + ';')
+				if dot and not reverse:
+					siblings += ','.join(childlabels[:start]) + '.'
+				siblings += ','.join(childlabels[start:end])
+				if dot and reverse:
+					siblings += '.' + ','.join(childlabels[end:])
+				mark = '<%s>%s' % (siblings, parents)
+				if ids is not None:  # numeric identifier
+					mark = '<%s>' % ids[mark]
+				newnode.label = ''.join((origlabel, childchar, marktail, mark))
 				curnode = newnode
 			assert len(childnodes) == 1 + (not rightmostunary)
 			curnode.extend(childnodes)
@@ -406,7 +402,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 					getyf(node[0], node[1] if len(node) > 1 else None)
 					if markyf else '')
 		else:
-			key = str(next(ids))
+			key = next(ids)
 		newlabel = '%s%s<%s>' % (node.label, sep, key)
 		result = ImmutableTree(node.label, [ImmutableTree(newlabel, node)])
 		result.bitset = node.bitset
@@ -427,7 +423,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 				if markyf:
 					key += getyf(node[i], prev)
 				if ids is not None:
-					key = str(ids[key])
+					key = ids[key]
 			elif factor == 'left' and (ids is None or i < len(node) - 2):
 				key = ','.join(labelfun(child)
 						for child in node[max(0, i - h + 1):i + 1]
@@ -435,9 +431,9 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 				if markyf:
 					key += getyf(prev, node[i])
 				if ids is not None:
-					key = str(ids[key])
+					key = ids[key]
 			else:
-				key = str(next(ids))
+				key = next(ids)
 			newlabel = '%s%s<%s>' % (node.label, sep, key)
 			if markfanout:
 				nodefanout = bitfanout(newbitset)

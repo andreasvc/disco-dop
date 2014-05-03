@@ -356,8 +356,10 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 	logging.info('binarized treebank fan-out: %d #%d', tbfanout, n)
 	for n, stage in enumerate(stages):
 		if stage.split:
-			traintrees = [treetransforms.binarize(treetransforms.splitdiscnodes(
-					Tree.convert(a), stage.markorigin), childchar=':').freeze()
+			traintrees = [treetransforms.binarize(
+					treetransforms.splitdiscnodes(
+						Tree.convert(a), stage.markorigin),
+					childchar=':', dot=True, ids=grammar.UniqueIDs()).freeze()
 					for a in trees]
 			logging.info('splitted discontinuous nodes')
 		else:
@@ -367,7 +369,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		backtransform = None
 		if stage.dop:
 			if stage.usedoubledop:
-				xgrammar, backtransform, altweights, fragments = grammar.doubledop(
+				(xgrammar, backtransform, altweights, fragments
+					) = grammar.doubledop(
 						traintrees, sents, binarized=stage.binarized,
 						iterate=stage.iterate, complement=stage.complement,
 						numproc=numproc)

@@ -52,7 +52,7 @@ testcorpus=dict(
 	skip=0,  # skip (additional) sentences between train & test set
 ),
 
-punct=None,  # options:
+punct='move',  # options:
 #	None: leave punctuation as-is
 #	'move': re-attach punctuation to appropriate constituents
 #	'remove': remove all punctuation
