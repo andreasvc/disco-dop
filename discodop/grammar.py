@@ -426,7 +426,7 @@ def flatten(tree, sent, ids, backtransform, binarized):
 		# normally, rules of fragments are disambiguated by binarization IDs.
 		# In case there's a fragment with only one or two frontier nodes,
 		# we add an artficial node.
-		newlabel = "%s}<%d>%s" % (prod[0][0], next(ids),
+		newlabel = "%s}<%s>%s" % (prod[0][0], next(ids),
 				'' if len(prod[1]) == 1 else '_%d' % len(prod[1]))
 		prod1 = ((prod[0][0], newlabel) + prod[0][2:], prod[1])
 		# we have to determine fanout of the first nonterminal
