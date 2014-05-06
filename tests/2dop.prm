@@ -121,7 +121,7 @@ corpusfmt="discbracket", # choices: export, bracket, discbracket
 traincorpus=dict(
 	path="t2.dbr",
 	maxwords=100,
-	numsents=3,
+	numsents=5,
 ),
 testcorpus=dict(
 	path="t2.dbr",

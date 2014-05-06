@@ -1,21 +1,22 @@
 #!/bin/sh
-RESULT=0
-for a in pcfg dopred 2dop longsent
+for a in pcfg 2dop dopred longsent
 do
 	rm -rf $a
-	TMP=`mktemp`
-	out=`discodop runexp $a.prm 2>&1 | tee $TMP | grep -v 'pcfg \|post \|ex 100.0' | grep 'ex \|Error'`
-	# FIXME: test exit code of runexp as well as grep
-	if [ $? = 0 ]; then
+	# run parser, if that succeeds,
+	# check that we find a perfect exact match score.
+	out=`discodop runexp $a.prm 2>&1`
+	if [ $? -ne 0 ]; then
+		echo "$out"
+		echo "Nonzero exit code in $a:"
+		exit $?
+	fi
+	line=`! grep -v 'pcfg \|post \|ex 100.0' $a/output.log | grep 'ex \|Error'`
+	if [ $? -ne 0 ]; then
+		cat $a/output.log
 		echo "Failure in $a:"
-		echo $out
-		echo
-		cat $TMP
-		RESULT=1
+		echo "$line"
+		exit $?
 	fi
 done
-if [ $RESULT = 0 ]; then
-	echo "Success!"
-fi
-rm $TMP
-exit $RESULT
+echo "Success!"
+exit 0

@@ -169,7 +169,8 @@ def main():
 				grammar=grammar,
 				binarized='--bitpar' not in opts,
 				backtransform=backtransform if len(args) < 4 else None,
-				m=numparses)
+				m=numparses,
+				objective='mpd')
 		if '--mpp' in opts:
 			stage.update(dop=True, objective='mpp', m=int(opts['--mpp']))
 		stages.append(DictObj(stage))
@@ -193,7 +194,8 @@ def main():
 				binarization=params['binarization'],
 				postagging=postagging if postagging and
 				postagging.method == 'unknownword' else None,
-				relationalrealizational=params.get('relationalrealizational'))
+				relationalrealizational=params.get('relationalrealizational'),
+				verbosity=params.get('verbosity', 2))
 	infile = (io.open(args[2], encoding='utf-8')
 			if len(args) >= 3 else sys.stdin)
 	out = (io.open(args[3], 'w', encoding='utf-8')
@@ -284,13 +286,13 @@ def worker(args):
 	elif PARAMS.printprob:
 		output += ''.join('prob=%.16g\n%s\t%s\n' % (
 				prob, PARAMS.parser.postprocess(tree)[0], ' '.join(sent))
-				for tree, prob in nlargest(PARAMS.numparses,
-					result.parsetrees.items(), key=itemgetter(1)))
+				for tree, prob, _ in nlargest(PARAMS.numparses,
+					result.parsetrees, key=itemgetter(1)))
 	else:
 		output += ''.join('%s\t%s\n' % (
 				PARAMS.parser.postprocess(tree)[0], ' '.join(sent))
-				for tree in nlargest(PARAMS.numparses, result.parsetrees,
-					key=result.parsetrees.get))
+				for tree, _, _ in nlargest(PARAMS.numparses,
+					result.parsetrees, key=itemgetter(1)))
 	sec = time.clock() - begin
 	msg += '\n%g s' % sec
 	return output, result.noparse, sec, msg
@@ -420,7 +422,7 @@ class Parser(object):
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
 							sent, stage.grammar, tags=tags)
-					chart = bool(start)
+					chart = start
 				elif stage.mode.startswith('pcfg-bitpar'):
 					if stage.mode == 'pcfg-bitpar-forest':
 						numderivs = 0
@@ -467,7 +469,7 @@ class Parser(object):
 				if stage.mode == 'pcfg-bitpar-nbest':
 					assert stage.kbest and not stage.sample, (
 							'sampling not possible with bitpar in nbest mode.')
-					derivations = chart.rankededges[chart.root()]  # pylint: disable=E1103
+					derivations = chart.rankededges[chart.root()]
 					entries = [None] * len(derivations)
 				else:
 					derivations, entries = getderivations(chart, stage.m,
@@ -476,17 +478,17 @@ class Parser(object):
 									or self.verbosity >= 3
 									or stage.objective == 'mcc')
 				if self.verbosity >= 3:
-					print('derivations:\n%s\n' % '\n'.join(
+					print('sent: %s\nstage: %s' % (' '.join(sent), stage.name))
+					print('100-best derivations:\n%s\n' % '\n'.join(
 						'%d. %s %s' % (n + 1,
 							('subtrees=%d' % abs(int(prob / log(0.5))))
 							if stage.objective == 'shortest'
-							else ('p=%g' % exp(-prob)),
-							deriv)
-						for n, (deriv, prob) in enumerate(derivations)))
+							else ('p=%g' % exp(-prob)), deriv)
+						for n, (deriv, prob) in enumerate(derivations[:100])))
 				if stage.objective == 'shortest':
 					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
 							else 'default', True)
-				parsetrees, derivs, msg1 = marginalize(
+				parsetrees, msg1 = marginalize(
 						stage.objective if stage.dop else 'mpd',
 						derivations, entries, chart,
 						sent=sent, tags=tags,
@@ -497,15 +499,16 @@ class Parser(object):
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 				if self.verbosity >= 3:
-					print('parse trees:\n%s\n' % '\n'.join(
+					print('100-best parse trees:\n%s\n' % '\n'.join(
 							'%d. %s %s' % (n + 1, probstr(prob), treestr)
-							for n, (treestr, prob)
-							in enumerate(parsetrees.items())))
+							for n, (treestr, prob, _) in enumerate(
+								nlargest(100, parsetrees,
+									key=itemgetter(1)))))
 			if parsetrees:
 				try:
-					resultstr, prob = max(parsetrees.items(), key=itemgetter(1))
-					parsetree, fragments, noparse = self.postprocess(
-							resultstr, n, derivs)
+					resultstr, prob, fragments = max(
+							parsetrees, key=itemgetter(1))
+					parsetree, noparse = self.postprocess(resultstr, n)
 					assert all(a for a in parsetree.subtrees()), (
 							'tree has empty nodes: %s' % parsetree)
 					assert len(parsetree.leaves()) == len(sent), (
@@ -513,13 +516,14 @@ class Parser(object):
 							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception as err:  # pylint: disable=W0703
 					logging.error("something's amiss. %s", err)
-					parsetree, prob, fragments, noparse = self.noparse(
+					parsetree, prob, noparse = self.noparse(
 							stage, sent, tags, lastsuccessfulparse)
 				else:
 					lastsuccessfulparse = parsetree
 				msg += probstr(prob) + ' '
 			else:
-				parsetree, prob, fragments, noparse = self.noparse(
+				fragments = None
+				parsetree, prob, noparse = self.noparse(
 						stage, sent, tags, lastsuccessfulparse)
 			elapsedtime = time.clock() - begin
 			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
@@ -527,7 +531,7 @@ class Parser(object):
 					parsetrees=parsetrees, fragments=fragments,
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
 
-	def postprocess(self, treestr, stage=-1, derivs=None):
+	def postprocess(self, treestr, stage=-1):
 		"""Take parse tree and apply postprocessing."""
 		parsetree = Tree.parse(treestr, parse_leaf=int)
 		if self.stages[stage].split:
@@ -541,8 +545,7 @@ class Parser(object):
 					self.relationalrealizational['adjunctionlabel'])
 		if self.transformations:
 			reversetransform(parsetree, self.transformations)
-		fragments = derivs.get(treestr) if derivs else None
-		return parsetree, fragments, False
+		return parsetree, False
 
 	def noparse(self, stage, sent, tags, lastsuccessfulparse):
 		"""Return parse from previous stage or a dummy parse."""
@@ -555,9 +558,8 @@ class Parser(object):
 			parsetree = Tree.parse('(%s %s)' % (stage.grammar.start,
 					default), parse_leaf=int)
 		noparse = True
-		fragments = None
 		prob = 1.0
-		return parsetree, prob, fragments, noparse
+		return parsetree, prob, noparse
 
 
 def readgrammars(resultdir, stages, postagging=None, top='ROOT'):

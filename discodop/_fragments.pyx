@@ -647,6 +647,8 @@ cdef inline list getyield(Node *tree, int i):
 
 
 def repl(d):
+	"""A function for use with re.sub that looks up numeric IDs in a dict.
+	"""
 	def f(x):
 		return d[int(x.group(1))]
 	return f

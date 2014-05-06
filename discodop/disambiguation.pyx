@@ -2,9 +2,8 @@
 
 Use as follows:
 
->>> derivations, entries = getderivations(chart, 1000)  #doctest: +SKIP
->>> parses, frags, msg = marginalize(
-...			"mpp", derivations, entries, chart)  #doctest: +SKIP
+>>> derivs, entries = getderivations(chart, 1000)  #doctest: +SKIP
+>>> parses, msg = marginalize("mpp", derivs, entries, chart)  #doctest: +SKIP
 """
 
 from __future__ import print_function
@@ -100,16 +99,18 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 	:param k: when ``method='sl-dop``, number of derivations to consider.
 	:param bitpar: whether bitpar was used in nbest mode.
 	:returns:
-		``(parses, derivs, msg)``.
+		``(parses, msg)``.
 
-		:parses: a dictionary mapping parsetrees (as strings) to probabilities
-			(0 < p <= 1).
-		:derivs: a list of fragments in the most probable derivation
-			of each parse.
+		:parses: a list of tuples ``(parsetree, probability, fragments)``
+			where ``parsetree`` is a string, probabilities is a float
+			(0 < p <= 1), or a tuple for shortest derivation parsing, and
+			fragments is a list of fragments in the most probable derivation
+			for this parse.
 		:msg: a message reporting the number of derivations / parses.
 	"""
 	cdef bint mpd = method == 'mpd'
 	cdef bint shortest = method == 'shortest'
+	cdef bint dopreduction = backtransform is None
 	cdef Entry entry
 	cdef LexicalRule lexrule
 	cdef dict parsetrees = {}, derivs = {}
@@ -125,7 +126,7 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 				backtransform, bitpar)
 	elif method == 'shortest':
 		# filter out all derivations which are not shortest
-		if backtransform is not None and not bitpar:
+		if not dopreduction and not bitpar:
 			maxprob = min([entry.value for entry in entries])
 			entries = [entry for entry in entries if entry.value == maxprob]
 		elif derivations:
@@ -136,7 +137,7 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 		return maxconstituentscorrect(derivations, chart,
 				backtransform, mcc_labda, mcc_labels)
 
-	if backtransform is not None and not bitpar:  # Double-DOP
+	if not dopreduction and not bitpar:  # Double-DOP
 		for entry in entries:
 			prob = entry.value
 			try:
@@ -144,8 +145,10 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 			except:
 				continue
 			if shortest:
+				# for purposes of tie breaking, calculate the derivation
+				# probability in a different model.
 				newprob = exp(-getderivprob(entry.key, chart, sent))
-				score = (abs(int(prob / log(0.5))), newprob)
+				score = (int(prob / log(0.5)), newprob)
 				if treestr not in parsetrees or score > parsetrees[treestr]:
 					parsetrees[treestr] = score
 					derivs[treestr] = entry.key
@@ -157,16 +160,14 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 				derivs[treestr] = entry.key
 	else:  # DOP reduction / bitpar
 		for (deriv, prob), entry in zip(derivations, entries):
-			if backtransform is None:
-				treestr = REMOVEIDS.sub('', deriv)
+			if dopreduction:
+				treestr = REMOVEIDS.sub('@1' if mpd or shortest else '', deriv)
 			else:
 				try:
 					treestr = recoverfragments(deriv, chart, backtransform)
 				except:
 					continue
 			if shortest:
-				# for purposes of tie breaking, calculate the derivation
-				# probability in a different model.
 				if bitpar:
 					# because with bitpar we don't know which rules have been
 					# used, read off the rules from the derivation ...
@@ -192,26 +193,42 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 								newprob += lexrule.prob
 				else:
 					newprob = getderivprob(entry.key, chart, sent)
-				score = (abs(int(prob / log(0.5))), exp(-newprob))
-				if treestr not in parsetrees or score > parsetrees[treestr]:
+				score = (int(prob / log(0.5)), exp(-newprob))
+				if treestr not in parsetrees or (not dopreduction
+						and score > parsetrees[treestr]):
 					parsetrees[treestr] = score
 					derivs[treestr] = deriv
-			elif not mpd and treestr in parsetrees:
-				# simple way of adding probabilities (too easy):
-				parsetrees[treestr].append(-prob)
-			elif not mpd or (treestr not in parsetrees
-						or -prob > parsetrees[treestr][0]):
+				elif dopreduction:
+					oldscore = parsetrees[treestr]
+					parsetrees[treestr] = oldscore[0], oldscore[1] + score[1]
+			elif treestr not in parsetrees or (not dopreduction and mpd
+					and -prob > parsetrees[treestr][0]):
 				parsetrees[treestr] = [-prob]
 				derivs[treestr] = deriv
+			elif treestr in parsetrees and (dopreduction or not mpd):
+				parsetrees[treestr].append(-prob)
 
-	for treestr, probs in parsetrees.items() if not shortest else ():
-		parsetrees[treestr] = logprobsum(probs)
-	for treestr, deriv_ in derivs.items():
-		derivs[treestr] = extractfragments(deriv_, chart, backtransform)
+	if mpd and dopreduction:
+		results = [(REMOVEIDS.sub('', treestr), logprobsum(probs),
+				extractfragments(derivs[treestr], chart, backtransform))
+				for treestr, probs in parsetrees.items()]
+	elif shortest and dopreduction:
+		results = [(REMOVEIDS.sub('', treestr), (-a, b),
+				extractfragments(derivs[treestr], chart, backtransform))
+				for treestr, (a, b) in parsetrees.items()]
+	elif shortest:
+		results = [(treestr, (-a, b),
+				extractfragments(derivs[treestr], chart, backtransform))
+				for treestr, (a, b) in parsetrees.items()]
+	else:
+		results = [(treestr, logprobsum(probs),
+				extractfragments(derivs[treestr], chart, backtransform))
+				for treestr, probs in parsetrees.items()]
+
 	msg = '%d derivations, %d parsetrees' % (
-			len(derivations if backtransform is None else entries),
+			len(derivations if dopreduction else entries),
 			len(parsetrees))
-	return parsetrees, derivs, msg
+	return results, msg
 
 
 cdef maxconstituentscorrect(list derivations, Chart chart,
@@ -308,10 +325,10 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 		result = unbinarize(Tree.parse(tmp, parse_leaf=int),
 				childchar='NONE', unarychar='++')
 	except (ValueError, AttributeError):
-		return {}, {}, 'MCC failed. %s' % tmp
+		return [], 'MCC failed. %s' % tmp
 	else:
 		result.label = tree.label  # fix root label
-		return {str(result): maxscore}, {}, 'sentprob: %g' % sentprob
+		return [(str(result), maxscore, None)], 'sentprob: %g' % sentprob
 
 
 def gettree(cells, span):
@@ -368,7 +385,7 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 	shortestderivations, _explored, chart2 = treeparsing(
 			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
 	if not chart2.rankededges.get(chart2.root()):
-		return {}, {}, 'SL-DOP couldn\'t find parse for tree'
+		return [], 'SL-DOP couldn\'t find parse for tree'
 	result = {}
 	for (deriv, s), entry in zip(shortestderivations,
 			chart2.rankededges[chart2.root()]):
@@ -386,10 +403,10 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 			if len(result) > sldop_n:
 				break
 	if not len(result):
-		return {}, {}, 'no matching derivation found'
+		return [], 'no matching derivation found'
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 		len(derivations), min(sldop_n, len(parsetreeprob)), len(parsetreeprob))
-	return result, derivs, msg
+	return [(tree, result[tree], derivs[tree]) for tree in result], msg
 
 
 cdef sldop_simple(dict derivations, list entries, int sldop_n,
@@ -441,7 +458,7 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 				else keys[deriv], chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
-	return result, derivs, msg
+	return [(tree, result[tree], derivs[tree]) for tree in result], msg
 
 
 cpdef str recoverfragments(deriv, Chart chart, list backtransform):
@@ -843,11 +860,12 @@ def doprerank(chart, sent, k, Grammar coarse, Grammar fine):
 	"""Rerank *k*-best coarse trees w/parse probabilities of DOP reduction.
 
 	cf. ``dopparseprob()``."""
-	cdef dict results = {}
+	cdef list results = []
 	derivations, _ = lazykbest(chart, k, derivs=True)
 	for derivstr, _ in derivations:
 		deriv = addbitsets(derivstr)
-		results[derivstr] = exp(dopparseprob(deriv, sent, coarse, fine))
+		results.append((derivstr, exp(dopparseprob(deriv, sent, coarse, fine)),
+				None))
 	return results
 
 
@@ -933,33 +951,18 @@ def test():
 	from discodop import plcfrs
 
 	def e(x):
-		a, b = x
+		a, b, _ = max(x, key=itemgetter(1))
 		if isinstance(b, tuple):
-			return (a.replace("@", ''), (int(abs(b[0])), b[1]))
-		return a.replace("@", ''), b
+			return (a, (int(abs(b[0])), b[1]))
+		return a, b
 
-	def maxitem(d):
-		return max(d.items(), key=itemgetter(1))
 
 	trees = [Tree.parse(t, parse_leaf=int) for t in
 		'''(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
-		(ROOT (B (A 0) (B 1)) (C 2))
 		(ROOT (A 0) (C (B 1) (C 2)))
-		(ROOT (A 0) (C (B 1) (C 2)))'''.splitlines()]
+		(ROOT (A 0) (C (B 1) (C 2)))'''.splitlines()
+		+ 14 * ['(ROOT (B (A 0) (B 1)) (C 2))']]
 	sents = [a.split() for a in
 		'''d b c\n c a b\n a e f\n a e f\n a e f\n a e f\n d b f\n d b f
 		d b f\n d b g\n e f c\n e f c\n e f c\n e f c\n e f c\n e f c\n f b c
@@ -973,22 +976,22 @@ def test():
 	assert chart
 	vitderiv, vitprob = viterbiderivation(chart)
 	derivations, entries = getderivations(chart, 1000, True, False, True)
-	mpd, _, _ = marginalize("mpd", derivations, entries, chart)
-	mpp, _, _ = marginalize("mpp", derivations, entries, chart)
-	mcc, _, _ = marginalize("mcc", derivations, entries, chart)
-	sldop_, _, _ = marginalize("sl-dop", derivations, entries, chart, k=1000,
+	mpd, _ = marginalize("mpd", derivations, entries, chart)
+	mpp, _ = marginalize("mpp", derivations, entries, chart)
+	mcc, _ = marginalize("mcc", derivations, entries, chart)
+	sldop_, _ = marginalize("sl-dop", derivations, entries, chart, k=1000,
 			sldop_n=7, sent=sent)
-	sldopsimple, _, _ = marginalize("sl-dop-simple", derivations, entries,
+	sldopsimple, _ = marginalize("sl-dop-simple", derivations, entries,
 			chart, k=1000, sldop_n=7, sent=sent)
-	short, _, _ = marginalize("shortest", derivations, entries, chart,
+	short, _ = marginalize("shortest", derivations, entries, chart,
 			sent=sent)
 	derivations, entries = getderivations(chart, 1000, False, True, True)
-	mppsampled, _, _ = marginalize("mpp", derivations, entries, chart)
-	print("\nvit:\t\t%s %r" % e((REMOVEIDS.sub('', vitderiv), exp(-vitprob))),
-		"MPD:\t\t%s %r" % e(maxitem(mpd)),
-		"MCC:\t\t%s %r" % e(maxitem(mcc)),
-		"MPP:\t\t%s %r" % e(maxitem(mpp)),
-		"MPP sampled:\t%s %r" % e(maxitem(mppsampled)),
-		"SL-DOP n=7:\t%s %r" % e(maxitem(sldop_)),
-		"simple SL-DOP:\t%s %r" % e(maxitem(sldopsimple)),
-		"shortest:\t%s %r" % e(maxitem(short)), sep='\n')
+	mppsampled, _ = marginalize("mpp", derivations, entries, chart)
+	print("\nvit:\t\t%s %r" % (REMOVEIDS.sub('', vitderiv), exp(-vitprob)),
+		"MPD:\t\t%s %r" % e(mpd),
+		"MCC:\t\t%s %r" % e(mcc),
+		"MPP:\t\t%s %r" % e(mpp),
+		"MPP sampled:\t%s %r" % e(mppsampled),
+		"SL-DOP n=7:\t%s %r" % e(sldop_),
+		"simple SL-DOP:\t%s %r" % e(sldopsimple),
+		"shortest:\t%s %r" % e(short), sep='\n')

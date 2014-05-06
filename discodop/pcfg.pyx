@@ -920,8 +920,8 @@ def test():
 	print(msg)
 	print(chart)
 	derivations, entries = getderivations(chart, 10, True, False, True)
-	mpp, _, _ = marginalize('mpp', derivations, entries, chart)
-	for a, p in sorted(mpp.items(), key=itemgetter(1), reverse=True):
+	mpp, _ = marginalize('mpp', derivations, entries, chart)
+	for a, p, _ in sorted(mpp, key=itemgetter(1), reverse=True):
 		print(p, a)
 	#chart1, msg1 = parse_symbolic(sent, cfg2)
 	#print(msg, '\n', msg1)

@@ -1,16 +1,16 @@
 stages=[  # DOP reduction
   # test each objective function separately:
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
+    name='pcfg', mode='pcfg',
+    split=True, markorigin=True,
   ),
   dict(
-	name='mpp', mode='plcfrs',
-	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
-	k=50, m=10000,
-	kbest=True, sample=False,
-	estimator="rfe", objective="mpp",
+    name='mpp', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=False,
+    k=50, m=10000,
+    kbest=True, sample=False,
+    estimator="rfe", objective="mpp",
   ),
 
   dict(
@@ -40,81 +40,81 @@ stages=[  # DOP reduction
   ),
 
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
+    name='pcfg', mode='pcfg',
+    split=True, markorigin=True,
   ),
   dict(
-	name='sldop', mode='plcfrs',
-	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
-	k=50, m=10000,
-	kbest=True, sample=False,
-	estimator="rfe", objective="sl-dop",
+    name='sldop', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=False,
+    k=50, m=10000,
+    kbest=True, sample=False,
+    estimator="rfe", objective="sl-dop",
   ),
   
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
+    name='pcfg', mode='pcfg',
+    split=True, markorigin=True,
   ),
   dict(
-	name='slsimp', mode='plcfrs',
-	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
-	k=50, m=10000,
-	kbest=True, sample=False,
-	estimator="rfe", objective="sl-dop-simple",
+    name='slsimp', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=False,
+    k=50, m=10000,
+    kbest=True, sample=False,
+    estimator="rfe", objective="sl-dop-simple",
   ),
 
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
+    name='pcfg', mode='pcfg',
+    split=True, markorigin=True,
   ),
   dict(
-	name='mpp', mode='plcfrs',
-	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
-	k=50, m=10000,
-	kbest=True, sample=False,
-	estimator='bon', objective='mpp',
+    name='bon', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=False,
+    k=50, m=10000,
+    kbest=True, sample=False,
+    estimator='bon', objective='mpp',
   ),
 
   # test rest of parameters together:
   dict(
-	name='post', mode='pcfg-posterior',
-	split=True, markorigin=True,
+    name='post', mode='pcfg-posterior',
+    split=True, markorigin=True,
   ),
   dict(
-	name='etc', mode='plcfrs',
-	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
-	k=1e-5, m=10000,
-	kbest=True, sample=False,
-	estimator="ewe", objective="mpp",
-  ),
-
-  dict(
-	name='plcfrs', mode='plcfrs',
-  ),
-  dict(
-	name='rerank', mode='dop-rerank',
-	dop=True, usedoubledop=False,
-	prune=True, k=50,
-	kbest=True, sample=False,
-	estimator="rfe", objective="mpp",
+    name='etc', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=False,
+    k=1e-5, m=10000,
+    kbest=True, sample=False,
+    estimator="ewe", objective="mpp",
   ),
 
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
+    name='plcfrs', mode='plcfrs',
   ),
   dict(
-	name='packed', mode='plcfrs',
-	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
-	packedgraph=True,
-	k=50, m=10000,
-	kbest=True, sample=False,
-	estimator="rfe", objective="mpp",
+    name='rerank', mode='dop-rerank',
+    dop=True, usedoubledop=False,
+    prune=True, k=50,
+    kbest=True, sample=False,
+    estimator="rfe", objective="mpp",
+  ),
+
+  dict(
+    name='pcfg', mode='pcfg',
+    split=True, markorigin=True,
+  ),
+  dict(
+    name='packed', mode='plcfrs',
+    prune=True, splitprune=True,
+    dop=True, usedoubledop=False,
+    packedgraph=True,
+    k=50, m=10000,
+    kbest=True, sample=False,
+    estimator="rfe", objective="mpp",
   ),
 ],
 
@@ -123,7 +123,7 @@ corpusfmt="discbracket", # choices: export, bracket, discbracket
 traincorpus=dict(
 	path="t2.dbr",
 	maxwords=100,
-	numsents=3,
+	numsents=5,
 ),
 testcorpus=dict(
 	path="t2.dbr",
@@ -145,5 +145,5 @@ binarization=dict(
 	h=1,
 	v=1,
 ),
-verbosity=2,
+verbosity=3,
 numproc=1,

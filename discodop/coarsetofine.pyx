@@ -343,9 +343,9 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	chart, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if chart:
 		derivations, entries = getderivations(chart, 10, True, False, True)
-		mpp, _, _ = marginalize("mpp", derivations, entries, chart)
-		for t in mpp:
-			print(pyexp(-mpp[t]), end='')
+		mpp, _ = marginalize("mpp", derivations, entries, chart)
+		for t, p, _ in mpp:
+			print(pyexp(-p), end='')
 			t = Tree.parse(t, parse_leaf=int)
 			if split:
 				unbinarize(t, childchar=":", parentchar="!")
@@ -376,9 +376,9 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 			splitprune=split, markorigin=True)
 	if chart2:
 		derivations, entries = getderivations(chart2, 10, True, False, True)
-		mpp, _, _ = marginalize("mpp", derivations, entries, chart2)
-		for t in mpp:
-			print(pyexp(-mpp[t]), end='')
+		mpp, _ = marginalize("mpp", derivations, entries, chart2)
+		for t, p, _ in mpp:
+			print(pyexp(-p), end='')
 			t = Tree.parse(t, parse_leaf=int)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))

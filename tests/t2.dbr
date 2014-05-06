@@ -1,4 +1,6 @@
-(S (WRONG (A (X 0) (Y 1)) (Z 2)))	x y z
-(S (RIGHT (A (X 0) (Z 2)) (Y 1)))	x y z
-(S (RIGHT (A (X 0) (Z 2)) (Y 1)))	x y z
-(S (RIGHT (A (X 0) (Z 2)) (Y 1)))	x y z
+(S (WRONG (X (A 0) (B 1)) (C 2) (X (Z (D 3) (E 4)))))	a b c d e
+(S (WRONG2 (X (A 0) (B 1)) (C 2) (X (Z (D 3) (E 4)))))	a b c e f
+(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
+(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
+(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
+(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e

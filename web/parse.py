@@ -81,7 +81,7 @@ def parse():
 
 	results = list(PARSERS[lang].parse(senttok))
 	if results[-1].noparse:
-		parsetrees = {}
+		parsetrees = []
 		result = 'no parse!'
 		frags = nbest = ''
 	else:
@@ -89,8 +89,8 @@ def parse():
 			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
 		tree = str(results[-1].parsetree)
 		prob = results[-1].prob
-		parsetrees = results[-1].parsetrees or {}
-		parsetrees = heapq.nlargest(10, parsetrees.items(), key=itemgetter(1))
+		parsetrees = results[-1].parsetrees or []
+		parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
 		fragments = results[-1].fragments or ()
 		APP.logger.info('[%s] %s' % (probstr(prob), tree))
 		tree = Tree.parse(tree, parse_leaf=int)
@@ -106,7 +106,7 @@ def parse():
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
 					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok).text(
 						unicodelines=True, html=html))
-				for n, (tree, prob) in enumerate(parsetrees)))
+				for n, (tree, prob, _) in enumerate(parsetrees)))
 	msg = '\n'.join(stage.msg for stage in results)
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
@@ -115,7 +115,7 @@ def parse():
 			len(senttok), lang, est, objfun, marg), msg, elapsed,
 			'10 most probable parse trees:',
 			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
-					for n, (tree, prob) in enumerate(parsetrees)) + '\n'))
+					for n, (tree, prob, _) in enumerate(parsetrees)) + '\n'))
 	if html:
 		CACHE.set(key, render_template('parsetree.html', sent=sent,
 				result=result, frags=frags, nbest=nbest, info=info, link=link,
