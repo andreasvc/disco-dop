@@ -88,11 +88,11 @@ function entsub(e) {
 	/* call function if enter is pressed on form. */
 	 var key;
 	 if(window.event)
-		  key = window.event.keyCode;	 //IE
+		key = window.event.keyCode;  // IE
 	 else
-		  key = e.which;	 //firefox
+		key = e.which;  // firefox
 	 if(key == 13)
-		  ajaxFunction();
+		ajaxFunction();
 }
 
 function ajaxFunction() {
@@ -100,13 +100,13 @@ function ajaxFunction() {
 	 * the current document. */
 	var xmlhttp;
 	if(window.XMLHttpRequest) {
-	  // code for IE7+, Firefox, Chrome, Opera, Safari
-	  xmlhttp=new XMLHttpRequest();
+		// code for IE7+, Firefox, Chrome, Opera, Safari
+		xmlhttp=new XMLHttpRequest();
 	} else if(window.ActiveXObject) {
-	  // code for IE6, IE5
-	  xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
+		// code for IE6, IE5
+		xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
 	} else {
-	  alert("Your browser does not support XMLHTTP!");
+		alert("Your browser does not support XMLHTTP!");
 	}
 
 	var div = document.createElement('div');
@@ -116,17 +116,18 @@ function ajaxFunction() {
 
 	xmlhttp.onreadystatechange=function() {
 		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
-		  div.innerHTML = xmlhttp.responseText;
-		  var id = div.innerHTML.match(/id=([^ ]+) /);
-		  // collapse toggle-able items from here so that non-JS browsers
-		  // may view the contents
-		  if(id) {
-			  togglelink('n' + id[1]);
-			  togglelink('f' + id[1]);
-			  togglelink('i' + id[1]);
-		  }
-		  window.scroll(0, document.height); // scroll to bottom of page
-	  }
+			div.innerHTML = xmlhttp.responseText;
+			var id = div.innerHTML.match(/id=([^ ]+) /);
+			// collapse toggle-able items from here so that non-JS browsers
+			// may view the contents
+			if(id) {
+				togglelink('n' + id[1]);
+				togglelink('f' + id[1]);
+				togglelink('i' + id[1]);
+			}
+			// scroll to bottom of page
+			window.scrollTo(0, document.body.scrollHeight);
+		}
 	};
 	var coarse = document.queryform.coarse;
 	var objfun = document.queryform.objfun;
