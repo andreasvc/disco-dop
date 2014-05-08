@@ -810,6 +810,7 @@ def getsamples(Chart chart, k, debin=None):
 			prev += exp(-prob)
 			tables[item].append(prev)
 	result = []
+	chart.rankededges = {}
 	for _ in range(k):
 		treestr, p = samplechart(chart.root(), chart, chartidx, tables, debin)
 		result.append((str(treestr), p))

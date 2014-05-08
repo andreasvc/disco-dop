@@ -112,7 +112,8 @@ function ajaxFunction() {
 	var div = document.createElement('div');
 	div.innerHTML = '[...wait for it...]';
 	document.getElementById('result').appendChild(div);
-	window.scroll(0, document.height); // scroll to bottom of page
+	// scroll to bottom of page
+	window.scrollTo(0, document.body.scrollHeight);
 
 	xmlhttp.onreadystatechange=function() {
 		if(xmlhttp.readyState==4) { // && xmlhttp.status==200) {
