@@ -430,7 +430,10 @@ def getfragments(trees, sents, numproc=1, disc=True,
 	"""Get recurring fragments with exact counts in a single treebank.
 
 	:returns: a dictionary whose keys are fragments as strings, and
-		indices as values.
+		indices as values. When ``disc`` is ``True``, keys are of the form
+		``(frag, sent)`` where ``frag`` is a unicode string, and ``sent``
+		is a list of words as unicode strings; when ``disc`` is ``False``, keys
+		are of the form ``frag`` where ``frag`` is a unicode string.
 	:param trees: a sequence of binarized Tree objects.
 	:param numproc: number of processes to use; pass 0 to use detected # CPUs.
 	:param disc: when disc=True, assume trees with discontinuous constituents.
@@ -509,8 +512,9 @@ def getfragments(trees, sents, numproc=1, disc=True,
 			fragments.update(zip(newfrags, newcounts))
 	logging.info("found %d fragments", len(fragmentkeys))
 	if not disc:
-		return dict(zip(fragmentkeys, counts))
-	return dict(zip(((a.decode('ascii'), b) for a, b in fragmentkeys), counts))
+		return {a.decode('utf-8'): b for a, b in zip(fragmentkeys, counts)}
+	return {(a.decode('utf-8'), b): c
+			for (a, b), c in zip(fragmentkeys, counts)}
 
 
 def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):

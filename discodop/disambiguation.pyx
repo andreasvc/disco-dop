@@ -957,7 +957,6 @@ def test():
 			return (a, (int(abs(b[0])), b[1]))
 		return a, b
 
-
 	trees = [Tree.parse(t, parse_leaf=int) for t in
 		'''(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))

@@ -65,6 +65,7 @@ Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\n
 RULERE = re.compile(
 		r'(?P<RULE1>(?P<LHS1>[^ \t]+).*)\t(?P<FREQ1>[0-9]+)(?:\/(?P<DENOM>[0-9]+))?$'
 		r'|(?P<FREQ2>[0-9]+)\t(?P<RULE2>(?P<LHS2>[^ \t]+).*)$')
+FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
 
 def lcfrsproductions(tree, sent, frontiers=False):
@@ -361,8 +362,6 @@ def sortgrammar(grammar, altweights=None):
 			for name, weights in altweights.items()}
 	grammar = [grammar[n] for n in idx]
 	return grammar, altweights
-
-FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
 
 def flatten(tree, sent, ids, backtransform, binarized):

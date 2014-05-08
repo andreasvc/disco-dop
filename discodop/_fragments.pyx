@@ -121,8 +121,8 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 
 	``offset`` and ``end`` can be used to divide the work over multiple
 	processes; they are indices of ``trees1`` to work on (default is all);
-	when ``debug`` is enabled a contingency table is shown for each pair of
-	trees; when ``complement`` is true, the complement of the recurring
+	when ``debug`` is enabled a table of common productions is shown for each
+	pair of trees; when ``complement`` is true, the complement of the recurring
 	fragments in each pair of trees is extracted as well."""
 	cdef:
 		int n, m, start = 0, end2
