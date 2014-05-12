@@ -55,6 +55,7 @@ cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
 	"""
 	cdef list derivations = [], entries = []
 	assert kbest or sample
+	chart.rankededges = {}
 	if kbest:
 		derivations, _ = lazykbest(chart, k, derivs=derivstrings)
 		entries = chart.rankededges[chart.root()]
@@ -810,7 +811,6 @@ def getsamples(Chart chart, k, debin=None):
 			prev += exp(-prob)
 			tables[item].append(prev)
 	result = []
-	chart.rankededges = {}
 	for _ in range(k):
 		treestr, p = samplechart(chart.root(), chart, chartidx, tables, debin)
 		result.append((str(treestr), p))
@@ -821,8 +821,8 @@ cdef samplechart(item, Chart chart,
 		dict chartidx, dict tables, bytes debin):
 	"""Samples a derivation from a chart."""
 	cdef Edge *edge
-	cdef double prob
 	cdef RankedEdge rankededge
+	cdef double prob
 	cdef list lst = tables[item]
 	rnd = random() * lst[len(lst) - 1]
 	idx = bisect_right(lst, rnd)
@@ -831,26 +831,27 @@ cdef samplechart(item, Chart chart,
 	label = chart.label(item)
 	if edge.rule is NULL:  # terminal
 		idx = chart.lexidx(edge)
-		rankededge = new_RankedEdge(item, edge, 0, -1)
+		rankededge = new_RankedEdge(item, edge, -1, -1)
 		chart.rankededges.setdefault(item, []).append(
 				new_Entry(rankededge, chart.subtreeprob(item), 0))
 		deriv = "(%s %d)" % (chart.grammar.tolabel[label].decode('ascii'), idx)
 		return deriv, chart.subtreeprob(item)
-	children = [samplechart(chart.copy(child), chart, chartidx, tables, debin)
-			for child in (chart._left(item, edge), chart._right(item, edge))
-				if child is not None]
-	if debin is not None and debin in chart.grammar.tolabel[label]:
-		tree = ' '.join([a for a, _ in children])
-	else:
-		tree = '(%s %s)' % (chart.grammar.tolabel[label].decode('ascii'),
-				' '.join([a for a, _ in children]))
+	tree, p1 = samplechart(chart.copy(chart._left(item, edge)),
+			chart, chartidx, tables, debin)
+	prob = edge.rule.prob + p1
+	if edge.rule.rhs2:
+		tree2, p2 = samplechart(chart.copy(chart._right(item, edge)),
+					chart, chartidx, tables, debin)
+		tree += ' ' + tree2
+		prob += p2
+	if debin is None or debin not in chart.grammar.tolabel[label]:
+		tree = '(%s %s)' % (chart.grammar.tolabel[label].decode('ascii'), tree)
 	# create an edge that has as children the edges that were just created
 	# by our recursive calls
 	rankededge = new_RankedEdge(item, edge,
 			len(chart.rankededges[chart._left(item, edge)]) - 1,
 			(len(chart.rankededges[chart._right(item, edge)]) - 1)
 				if edge.rule.rhs2 else -1)
-	prob = edge.rule.prob + fsum([b for _, b in children])
 	# NB: this is actually 'samplededges', not 'rankededges'
 	chart.rankededges.setdefault(item, []).append(
 			new_Entry(rankededge, prob, 0))
