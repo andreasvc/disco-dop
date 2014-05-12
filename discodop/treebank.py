@@ -276,7 +276,7 @@ class NegraCorpusReader(CorpusReader):
 					results.add(sentid)
 					yield sentid, lines
 				elif started:
-					lines.append(line)
+					lines.append(line.strip())
 
 	def _parse(self, block):
 		return exporttree(block, self.functions, self.morphology, self.lemmas)
