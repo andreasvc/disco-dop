@@ -277,6 +277,7 @@ class NegraCorpusReader(CorpusReader):
 					yield sentid, lines
 				elif started:
 					lines.append(line.strip())
+				# other lines are ignored, such as #FORMAT x, %% comments, ...
 
 	def _parse(self, block):
 		return exporttree(block, self.functions, self.morphology, self.lemmas)
@@ -487,15 +488,14 @@ def exportsplit(line):
 		line = line[:line.index("%%")]
 	fields = line.split()
 	fieldlen = len(fields)
-	if fieldlen == 5:
-		fields[1:1] = ['']
-		fields.extend(['', ''])
-	elif fieldlen == 6:
-		fields.extend(['', ''])
-	elif fieldlen < 8 or fieldlen & 1:
-		# NB: zero or more sec. edges come in pairs of parent id and label
+	if fieldlen < 5:
 		raise ValueError(
-				'expected 5 or 6+ even number of columns: %r' % fields)
+				'expected at least 5 columns: %r' % fields)
+	elif fieldlen & 1:  # odd number of fields?
+		fields[1:1] = ['']  # add empty lemma field
+	if fieldlen <= 6:
+		# NB: zero or more sec. edges come in pairs of parent id and label
+		fields.extend(['', ''])  # add empty sec. edge
 	return fields
 
 
@@ -779,8 +779,11 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 	treeinput = chain(iter(treeinput), ('(', None, None))  # hack
 	line = next(treeinput)
 	# try the following readers on each line in this order
-	readers = [segmentbrackets('()'), segmentbrackets('[]'),
-			segmentexport(morphology, functions)]
+	readers = [
+			segmentexport(morphology, functions),
+			segmentbrackets('()'),
+			#segmentbrackets('[]'),
+			]
 	for reader in readers:
 		reader.send(None)
 	while True:
@@ -896,7 +899,11 @@ def segmentexport(morphology, functions):
 		elif line.strip():
 			if inblock:
 				cur.append(line)
-			line = (yield None, (1 if inblock else 0))
+			line = line.lstrip()
+			line = (yield None, (1 if inblock
+					or line.startswith('%%')
+					or line.startswith('#FORMAT ')
+				else 0))
 		else:
 			line = (yield None, 0)
 

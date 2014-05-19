@@ -367,21 +367,21 @@ class Tree(list):
 		return tree
 
 	@classmethod
-	def _parse_error(cls, s, match, expecting):
+	def _parse_error(cls, orig, match, expecting):
 		"""Display a friendly error message when parsing a tree string fails.
 
-		:param s: The string we're parsing.
+		:param orig: The string we're parsing.
 		:param match: regexp match of the problem token.
 		:param expecting: what we expected to see instead."""
 		# Construct a basic error message
 		if match == 'end-of-string':
-			pos, token = len(s), 'end-of-string'
+			pos, token = len(orig), 'end-of-string'
 		else:
 			pos, token = match.start(), match.group()
 		msg = '%s.parse(): expected %r but got %r\n%sat index %d.' % (
 			cls.__name__, expecting, token, ' ' * 12, pos)
-		# Add a display showing the error token itsels:
-		s = s.replace('\n', ' ').replace('\t', ' ')
+		# Add a display showing the error token itself:
+		s = orig.replace('\n', ' ').replace('\t', ' ')
 		offset = pos
 		if len(s) > pos + 10:
 			s = s[:pos + 10] + '...'
@@ -389,6 +389,7 @@ class Tree(list):
 			s = '...' + s[pos - 10:]
 			offset = 13
 		msg += '\n%s"%s"\n%s^' % (' ' * 16, s, ' ' * (17 + offset))
+		msg += '\n%s' % orig
 		raise ValueError(msg)
 
 	# === String Representation =================================
