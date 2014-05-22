@@ -170,3 +170,63 @@ stored in a NumPy array::
 In this case, we see the model for shortest derivation parsing, where
 every fragment is assigned a uniform weight of 0.5.
 
+Miscellaneous
+-------------
+head assignment rules
+^^^^^^^^^^^^^^^^^^^^^
+This file specifies a set of heuristic rules to pick for every constituent
+one of its children as being the head of the constituent, based on
+syntactic categories.
+
+The file is case insensitive. Lines starting with ``%`` are treated as comments
+and ignored. Each line specifies a rule of the form::
+
+    CAT left-to-right child1 child2...
+
+Or::
+
+    CAT right-to-left child1 child2...
+
+This rule specifies how a head is assigned for a constituent labeled as ``CAT``.
+The second argument specifies whether the children of the constituent should
+be considered starting from the left or from the right (corresponding to whether
+a category is head-first head-final).
+There may be multiple rules for a category, for example if they go in opposite
+directions. The rules are applied in the order as they appear in the file.
+
+The list of children may be empty; in that case the leftmost (or rightmost, in
+the second case) child will be chosen as head.
+If the list of possible children is non-empty, the children of the constituents
+are iterated over for each possible child, and the first matching child is
+picked as the head.
+
+See also: http://www.cs.columbia.edu/~mcollins/papers/heads
+
+evaluation parameters
+^^^^^^^^^^^^^^^^^^^^^
+The format of this file is a superset of the parameters for EVALB,
+cf. http://nlp.cs.nyu.edu/evalb/
+
+The parameter file should be encoded in UTF-8 and supports the following
+options in addition to those supported by EVALB:
+
+  :DISC_ONLY:        only consider discontinuous constituents for F-scores.
+
+  :TED:
+                     when enabled, give tree-edit distance scores; disabled by
+                     default as these are slow to compute.
+
+  :DEBUG:
+                     :-1: only print summary table
+                     :0:
+                          additionally, print category / tag breakdowns (default)
+                          (after application of cutoff length).
+
+                     :1: give per-sentence results ('--verbose')
+                     :2: give detailed information for each sentence ('--debug')
+
+  :MAX_ERROR:
+                     this values is ignored, no errors are tolerated.
+                     the parameter is accepted to support usage of unmodified
+                     EVALB parameter files.
+
