@@ -137,7 +137,7 @@ def drawtrees(form, dts):
 				POSTAMBLE))
 	if form.get('output', 'text') == 'latex':
 		return Response(latexcode, mimetype='text/plain')
-	with open('/tmp/dtree.tex', 'w') as tex:
+	with io.open('/tmp/dtree.tex', 'w', encoding='utf8') as tex:
 		tex.write(latexcode)
 	os.chdir('/tmp')
 	proc = Popen('/usr/bin/pdflatex -halt-on-error  /tmp/dtree.tex'.split(),
