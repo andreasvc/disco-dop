@@ -169,8 +169,10 @@ For instructions, pass the ``--help`` option to a command.
 
 Web interfaces
 --------------
-There are three web based tools in the ``web/`` directory. These require Flask to
-be installed.
+There are three web based tools in the ``web/`` directory. These require
+Flask & pandas to be installed::
+
+    pip install --user -r web/requirements.txt
 
 ``parse.py``
     A web interface to the parser. Expects a series of grammars

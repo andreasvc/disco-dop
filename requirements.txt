@@ -1,9 +1,7 @@
 cython>=0.20
-numpy>=1.5
+numpy>=1.6.1
 pytest
 sphinx
 futures
 lru-dict
 faulthandler
-Flask
-pandas

@@ -86,9 +86,10 @@ Set environment variables so that software can be installed to the home director
     mkdir -p ~/.local
     echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
     echo export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
-    echo export PYTHONPATH=$HOME/.local/lib/python2.7/site-packages
-    echo export PYTHONIOENCODING="utf-8"
+    echo export PYTHONPATH=$HOME/.local/lib/python2.7/site-packages >>~/.bashrc
+    echo export PYTHONIOENCODING="utf-8" >>~/.bashrc
 
+After this, re-login or restart the shell to activate these settings.
 Install Python 2.7 from source, if not installed already.
 Python may require some libraries such as ``zlib`` and ``readline``;
 installation steps are similar to the ones below.
@@ -99,7 +100,7 @@ installation steps are similar to the ones below.
     tar -xzf Python-2.7.6.tgz
     cd Python-2.7.6
     ./configure --prefix=$HOME/.local --enable-shared
-    make && make install
+    make && make install && cd ..
 
 Check by running ``python`` that version 2.7.6 was installed successfully and
 is the default.

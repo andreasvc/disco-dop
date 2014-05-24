@@ -6,7 +6,8 @@ try:
 	from Cython.Compiler import Options
 	import numpy
 	havecython = True
-except ImportError:
+except ImportError as err:
+	print(err)
 	havecython = False
 
 metadata = dict(name='disco-dop',
@@ -57,7 +58,7 @@ directives = {
 		'warn.unused_result': False,
 		}
 
-Options.fast_fail = True
+#Options.fast_fail = True
 #Options.extra_compile_args = ["-O3"]
 #Options.extra_link_args = ["-O3"]  #["-g"],
 if __name__ == '__main__':
@@ -67,9 +68,9 @@ if __name__ == '__main__':
 				cmdclass=dict(build_ext=build_ext),
 				ext_modules=cythonize(
 						'discodop/*.pyx',
-						#nthreads=4,
 						annotate=True,
 						compiler_directives=directives,
+						#nthreads=4,
 						#language_level=3, # FIXME make this work ...
 				),
 				#test_suite = 'tests'
