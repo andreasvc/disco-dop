@@ -194,6 +194,9 @@ class BracketCorpusReader(CorpusReader):
 		c = count()
 		tree = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
 				block), parse_leaf=int)
+		# TODO: parse Penn TB functions and traces, put into .source attribute
+		if self.functions == 'remove':
+			handlefunctions(self.functions, tree)
 		sent = self._word(block, orig=True)
 		return tree, sent
 
@@ -348,7 +351,8 @@ class TigerXMLCorpusReader(CorpusReader):
 		for idref in nodes:
 			assert nodes[idref][PARENT] is not None, (
 					'%s does not have a parent: %r' % (idref, nodes[idref]))
-		tree, sent = exporttree(['\t'.join(a) for a in nodes.values()],
+		tree, sent = exporttree(
+				['\t'.join(a) for a in nodes.values()],
 				self.functions, self.morphology, self.lemmas)
 		tree.label = nodes[root][TAG]
 		return tree, sent
@@ -392,8 +396,8 @@ class AlpinoCorpusReader(CorpusReader):
 			xmlblock = block
 		else:  # NB: parse because raw XML might contain entities etc.
 			xmlblock = ElementTree.fromstring(block)
-		return alpinotree(xmlblock,
-				self.functions, self.morphology, self.lemmas)
+		return alpinotree(
+				xmlblock, self.functions, self.morphology, self.lemmas)
 
 	def _word(self, block, orig=False):
 		if ElementTree.iselement(block):
@@ -876,7 +880,7 @@ def segmentbrackets(brackets, strict=False):
 			prev = ''
 
 
-def segmentexport(morphology, functions):
+def segmentexport(morphology, functions, strict=False):
 	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
 
@@ -884,20 +888,22 @@ def segmentexport(morphology, functions):
 		``#BOS`` and ``#EOS`` as a list of lines;
 	- status is 1 if the line was consumed, else 0."""
 	cur = []
-	inblock = False
+	inblock = 0
 	line = (yield None, 1)
 	while line is not None:
-		if line.startswith('#BOS '):
+		if line.startswith('#BOS ') or line.startswith('#BOT '):
+			if strict and inblock != 0:
+				raise ValueError('nested #BOS or #BOT')
 			cur = []
-			inblock = True
+			inblock = 1 if line.startswith('#BOS ') else 2
 			line = (yield None, 1)
-		elif line.startswith('#EOS '):
+		elif line.startswith('#EOS ') or line.startswith('#EOS '):
 			tree, sent = exporttree(cur, functions, morphology)
 			line = (yield ((tree, sent, ''), ), 1)
-			inblock = False
+			inblock = 0
 			cur = []
 		elif line.strip():
-			if inblock:
+			if inblock == 1:
 				cur.append(line)
 			line = line.lstrip()
 			line = (yield None, (1 if inblock

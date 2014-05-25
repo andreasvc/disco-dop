@@ -107,7 +107,7 @@ is the default.
 
 Install pip::
 
-    wget https://raw.github.com/pypa/pip/master/contrib/get-pip.py
+    wget https://bootstrap.pypa.io/get-pip.py
     python get-pip.py --user
 
 Install the latest development version of discodop::

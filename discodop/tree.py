@@ -1,8 +1,7 @@
 """Various Tree objects for representing syntax or morphological trees.
 
 This is an adaptation of the original tree.py file from NLTK.
-Removed: probabilistic trees, binarization, tree drawing, reading off CFG
-productions, &c."""
+Removed: probabilistic trees, binarization, reading off CFG productions, &c."""
 # Original notice:
 # Natural Language Toolkit: Text Trees
 #
@@ -28,7 +27,7 @@ class Tree(list):
 	other properties that a Tree defines are known as node properties, and are
 	used to add information about individual hierarchical groupings. For
 	example, syntax trees use a label property to label syntactic constituents
-	with phrase tags, such as "NP" and "VP".
+	with phrase labels, such as "NP" and "VP".
 	Several Tree methods use tree positions to specify children or descendants
 	of a tree. Tree positions are defined as follows:
 
