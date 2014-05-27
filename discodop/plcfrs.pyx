@@ -301,7 +301,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				if LCFRSItem_fused is SmallChartItem:
 					newitem.vec = 1ULL << wordidx
 				elif LCFRSItem_fused is FatChartItem:
-					ulongset(newitem.vec, 0UL, SLOTS)
+					memset(<void *>newitem.vec, 0, SLOTS * sizeof(ULong))
 					SETBIT(newitem.vec, wordidx)
 				if process_lexedge(newitem, score, lexrule.prob, wordidx,
 						agenda, chart, whitelist):
@@ -329,7 +329,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 			if LCFRSItem_fused is SmallChartItem:
 				newitem.vec = 1ULL << wordidx
 			elif LCFRSItem_fused is FatChartItem:
-				ulongset(newitem.vec, 0UL, SLOTS)
+				memset(<void *>newitem.vec, 0, SLOTS * sizeof(ULong))
 				SETBIT(newitem.vec, wordidx)
 			# prevent pruning of provided tags => whitelist == None
 			if process_lexedge(newitem, 0.0, 0.0, wordidx,
@@ -397,7 +397,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 			if LCFRSItem_fused is SmallChartItem:
 				newitem.vec = item.vec
 			elif LCFRSItem_fused is FatChartItem:
-				ulongcpy(newitem.vec, item.vec, SLOTS)
+				memcpy(<void *>newitem.vec, <void *>item.vec,
+						SLOTS * sizeof(ULong))
 			for n in range(grammar.numrules):
 				rule = &(grammar.unary[item.label][n])
 				if rule.rhs1 != item.label:
@@ -424,7 +425,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					elif LCFRSItem_fused is FatChartItem:
 						newitem = <LCFRSItem_fused>FatChartItem.__new__(
 								FatChartItem)
-						ulongcpy(newitem.vec, item.vec, SLOTS)
+						memcpy(<void *>newitem.vec, <void *>item.vec,
+								SLOTS * sizeof(ULong))
 				else:
 					blocked += 1
 			# binary production, child is on the right
@@ -582,7 +584,7 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 					elif LCFRSItem_fused is FatChartItem:
 						b = anextunset(newitem.vec, a, SLOTS)
 						#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-						ulongset(FATCOMPONENT.vec, 0UL, SLOTS)
+						memset(<void *>FATCOMPONENT.vec, 0, SLOTS * sizeof(ULong))
 						for n in range(a, b):
 							SETBIT(FATCOMPONENT.vec, n)
 					if markorigin:
@@ -843,7 +845,8 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 				if LCFRSItem_fused is SmallChartItem:
 					newitem.vec = item.vec
 				elif LCFRSItem_fused is FatChartItem:
-					ulongcpy(newitem.vec, item.vec, SLOTS)
+					memcpy(<void *>newitem.vec, <void *>item.vec,
+							SLOTS * sizeof(ULong))
 				chart.addedge(newitem, item, rule)
 				if newitem not in chart.parseforest:
 					agenda.append(newitem)

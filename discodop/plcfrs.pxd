@@ -8,8 +8,8 @@ from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem, \
 		UChar, UInt, ULong, ULLong
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, \
-	testbit, anextset, anextunset, abitcount, abitlength, \
-	ulongset, ulongcpy, setunion
+	testbit, anextset, anextunset, abitcount, abitlength, setunion
+from libc.string cimport memset, memcpy
 
 cdef extern from "Python.h":
 	double PyFloat_AS_DOUBLE(object pyfloat)
