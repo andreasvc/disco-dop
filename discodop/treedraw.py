@@ -223,7 +223,7 @@ class DrawTree(object):
 		ids = {a: n for n, a in enumerate(positions)}
 		self.highlight.update(n for a, n in ids.items()
 				if not highlight or tree[a] in highlight)
-		levels = {n: [] for n in range(maxdepth)}
+		levels = {n: [] for n in range(maxdepth - 1)}
 		terminals = []
 		for a in positions:
 			node = tree[a]
@@ -233,8 +233,8 @@ class DrawTree(object):
 				terminals.append(a)
 
 		for n in levels:
-			levels[n].sort(key=lambda n: (  # len(tree[n].leaves()),
-					max(tree[n].leaves()) - min(tree[n].leaves())))
+			levels[n].sort(key=lambda n: max(tree[n].leaves())
+					- min(tree[n].leaves()))
 		terminals.sort()
 		positions = set(positions)
 
@@ -281,8 +281,6 @@ class DrawTree(object):
 				# add column to the set of children for its parent
 				if m != ():
 					childcols[m[:-1]].add((rowidx, i))
-				#print(ids[m], str(tree[m]), startoflevel, n)
-				#print(dumpmatrix())
 		assert len(positions) == 0
 
 		# remove unused columns, right to left
