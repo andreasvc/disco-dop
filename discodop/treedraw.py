@@ -16,6 +16,7 @@ from operator import itemgetter
 from itertools import chain, islice
 from discodop.tree import Tree
 from discodop.treebank import READERS, incrementaltreereader
+from discodop.treetransforms import disc
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 
@@ -558,16 +559,7 @@ class DrawTree(object):
 			# new row: skip last column char '&', add newline
 			result.append(' '.join(line[:-1]) + r' \\')
 		result += ['};']
-
-		shift = -0.5
-		# write branches from node to node
-		for child, parent in self.edges.items():
-			result.append(
-				'\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);'
-				'	\\draw (n%d) -- +(0, %g) -| (n%d);' % (
-				parent, shift, child, parent, shift, child))
-
-		result += [r'\end{tikzpicture}']
+		result.extend(self._tikzedges())
 		return '\n'.join(result)
 
 	def tikznode(self, nodecolor='blue', leafcolor='red'):
@@ -596,22 +588,29 @@ class DrawTree(object):
 					n, latexlabel(node.label)
 					if isinstance(node, Tree) else node))
 		result += [';']
+		result.extend(self._tikzedges())
+		return '\n'.join(result)
 
+	def _tikzedges(self):
+		result = []
 		shift = -0.5
 		# write branches from node to node
 		for child, parent in self.edges.items():
+			if disc(self.nodes[parent]):
+				result.append(
+						'\\draw [white, -, line width=6pt] '
+						'(n%d)  +(0, %g) -| (n%d);' % (parent, shift, child))
 			result.append(
-				'\\draw [white, -, line width=6pt] (n%d)  +(0, %g) -| (n%d);'
-				'	\\draw (n%d) -- +(0, %g) -| (n%d);' % (
-				parent, shift, child, parent, shift, child))
+					'\\draw (n%d) -- +(0, %g) -| (n%d);' % (
+					parent, shift, child))
 
 		result += [r'\end{tikzpicture}']
-		return '\n'.join(result)
+		return result
 
 
 def latexlabel(label):
 	"""Quote/format label for latex."""
-	newlabel = label.replace('$', r'\$').replace('[', '(').replace('_', r'\_')
+	newlabel = label.replace('$', r'\$').replace('_', r'\_')
 	# turn binarization marker into subscripts in math mode
 	if '|' in newlabel:
 		cat, siblings = newlabel.split('|', 1)
