@@ -177,7 +177,7 @@ class DrawTree(object):
 				i = j = center
 				if len(children[m]) == 1:  # place unaries directly above child
 					return rowidx, next(iter(children[m]))[1]
-				elif all(a in (None, vertline) for a
+				elif all(a is None or a == vertline for a
 						in row[min(candidates):max(candidates) + 1]):
 					# find free column
 					for n in range(scale):
@@ -290,9 +290,9 @@ class DrawTree(object):
 				for row in matrix:
 					del row[m]
 
-		# remove unused rows
-		matrix = [row for row in matrix
-				if not all(a is None for a in row)][::-1]
+		# remove unused rows, reverse
+		matrix = [row for row in reversed(matrix)
+				if not all(a is None or a == vertline for a in row)]
 
 		# collect coordinates of nodes
 		coords = {}
