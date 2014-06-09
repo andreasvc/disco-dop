@@ -4,7 +4,7 @@ Requires Flask. Expects a series of grammars produced by runexp in
 subdirectories of ``grammar/``
 
 Also usable from the command line:
-$ curl http://localhost:5000/parse -G --data-urlencode "sent=What's up?"
+$ curl http://localhost:5000/parser/parse -G --data-urlencode "sent=What's up?"
 """
 import os
 import re
