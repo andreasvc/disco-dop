@@ -130,6 +130,29 @@ class Test_treebanktransforms(object):
 				'(VVFIN 13) (ADV 14) (NP (ADJA 15) (NN 16))))', parse_leaf=int)
 		assert max(map(fanout, addbitsets(nopunct).subtrees())) == 1
 
+	def test_transform(self):
+		from discodop.treebanktransforms import transform, reversetransform, \
+				bracketings
+		from discodop.treebank import NegraCorpusReader
+		n = NegraCorpusReader('alpinosample.export')
+		for transformations in (
+				('FUNC-NODE', ),
+				('MORPH-NODE', ),
+				('LEMMA-NODE', ),
+				('FUNC-NODE', 'MORPH-NODE', 'LEMMA-NODE')):
+			nn = NegraCorpusReader('alpinosample.export')
+			trees = [transform(tree, sent, transformations)
+					for tree, sent in zip(nn.trees().values(),
+						nn.sents().values())]
+			for a, b, c in islice(zip(n.trees().values(),
+					trees, n.sents().values()), 100):
+				before = bracketings(canonicalize(a))
+				transformb = reversetransform(b.copy(True), transformations)
+				after = bracketings(canonicalize(transformb))
+				assert before == after, (
+						'mismatch with %r\nbefore: %r\nafter: %r' % (
+						transformations, before, after))
+
 
 class Test_grammar(object):
 	def test_flatten(self):

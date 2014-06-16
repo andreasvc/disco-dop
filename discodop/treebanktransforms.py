@@ -50,6 +50,24 @@ def transform(tree, sent, transformations):
 					a[:] = [a.__class__(a.label,
 							[a.pop() for _ in range(len(a))][::-1])]
 					a.label = '-' + func
+		elif name == 'MORPH-NODE':  # insert node w/morph. features above POS
+			from discodop.treetransforms import postorder
+			for a in postorder(tree, lambda n: n and isinstance(n[0], int)):
+				morph = '--'
+				if getattr(a, 'source', None):
+					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
+				a[:] = [a.__class__(a.label,
+						[a.pop() for _ in range(len(a))][::-1])]
+				a.label = morph
+		elif name == 'LEMMA-NODE':  # insert node w/lemma above terminal
+			from discodop.treetransforms import postorder
+			from discodop.treebank import quote
+			for a in postorder(tree, lambda n: n and isinstance(n[0], int)):
+				lemma = '--'
+				if getattr(a, 'source', None):
+					lemma = quote(a.source[LEMMA])
+				a[:] = [a.__class__(lemma,
+						[a.pop() for _ in range(len(a))][::-1])]
 		elif name == 'NP-PP':  # mark PPs under NPs
 			for pp in tree.subtrees(lambda n: n.label == 'PP'
 					and n.parent.label == 'NP'):
@@ -423,6 +441,23 @@ def reversetransform(tree, transformations):
 				a.source = ['--'] * 8
 				a.source[FUNC] = a.label[1:]
 				a.source[TAG] = a.label = a[0].label
+				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
+		elif name == 'MORPH-NODE':  # nodes with morph. above preterminals
+			from discodop.treetransforms import postorder
+			for a in postorder(tree, lambda n: n and isinstance(n[0], Tree)
+					and n[0] and isinstance(n[0][0], int)):
+				a.source = ['--'] * 8
+				a.source[MORPH] = a.label
+				a.source[TAG] = a.label = a[0].label
+				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
+		elif name == 'LEMMA-NODE':  # nodes with lemmas above words
+			from discodop.treetransforms import postorder
+			from discodop.treebank import unquote
+			for a in postorder(tree, lambda n: n and isinstance(n[0], Tree)
+					and n[0] and isinstance(n[0][0], int)):
+				a.source = ['--'] * 8
+				a.source[LEMMA] = unquote(a[0].label)
+				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):

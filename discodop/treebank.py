@@ -621,8 +621,10 @@ def writeexporttree(tree, sent, n, morphology):
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
 			secedges = node.source[6:]
-		if morphtag == '--':
-			morphtag = node.label if morphology == 'replace' else '--'
+		if morphtag == '--' and morphology == 'replace':
+			morphtag = postag
+		elif morphtag == '--' and morphology == 'add':
+			postag, morphtag = postag.split('/', 1)
 		nodeid = str(500 + phrasalnodes.index(idx[:-2])
 				if len(idx) > 2 else 0)
 		result.append("\t".join((word, lemma, postag, morphtag, func,
