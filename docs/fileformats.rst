@@ -210,6 +210,10 @@ cf. http://nlp.cs.nyu.edu/evalb/
 The parameter file should be encoded in UTF-8 and supports the following
 options in addition to those supported by EVALB:
 
+  :DELETE_ROOT_PRETERMS:
+                     when enabled, preterminals directly under the root in
+                     gold trees are ignored for scoring purposes.
+
   :DISC_ONLY:        only consider discontinuous constituents for F-scores.
 
   :TED:
@@ -226,7 +230,7 @@ options in addition to those supported by EVALB:
                      :2: give detailed information for each sentence ('--debug')
 
   :MAX_ERROR:
-                     this values is ignored, no errors are tolerated.
+                     this value is ignored, no errors are tolerated.
                      the parameter is accepted to support usage of unmodified
                      EVALB parameter files.
 

@@ -44,6 +44,8 @@ class CorpusReader(object):
 			:None: leave punctuation as is.
 			:'move': move punctuation to appropriate constituents
 					using heuristics.
+			:'moveall': same as 'move', but moves all preterminals under root,
+					instead of only recognized punctuation.
 			:'remove': eliminate punctuation.
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
@@ -86,7 +88,7 @@ class CorpusReader(object):
 				((None, 'leave', 'add', 'replace', 'remove', 'between'),
 					functions),
 				((None, 'no', 'add', 'replace', 'between'), morphology),
-				((None, 'no', 'move', 'remove', 'root'), punct),
+				((None, 'no', 'move', 'moveall', 'remove', 'root'), punct),
 				((None, 'no', 'add', 'replace', 'between'), lemmas)):
 			assert opt in opts, 'Expected one of %r. Got: %r' % (opts, opt)
 		assert self._filenames, (
@@ -150,15 +152,15 @@ class CorpusReader(object):
 			# roughly order constituents by order in sentence
 			for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
 				a.sort(key=Tree.leaves)
-		if self.punct == "remove":
+		if self.punct == 'remove':
 			punctremove(tree, sent)
-		elif self.punct == "move":
-			punctraise(tree, sent)
+		elif self.punct == 'move' or self.punct == 'moveall':
+			punctraise(tree, sent, self.punct == 'moveall')
 			balancedpunctraise(tree, sent)
 			# restore order
 			for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
 				a.sort(key=Tree.leaves)
-		elif self.punct == "root":
+		elif self.punct == 'root':
 			punctroot(tree, sent)
 		if self.headrules:
 			for node in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):

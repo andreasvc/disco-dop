@@ -57,6 +57,9 @@ file, and options may consist of:
 
 The parameter file should be encoded in UTF-8 and supports the following
 options (in addition to those described in the README of EVALB):
+  DELETE_ROOT_PRETERMS
+                   when enabled, preterminals directly under the root in
+                   gold trees are ignored for scoring purposes.
   DISC_ONLY        only consider discontinuous constituents for F-scores.
   TED              when enabled, give tree-edit distance scores; disabled by
                    default as these are slow to compute.
@@ -65,7 +68,7 @@ options (in addition to those described in the README of EVALB):
                      (after application of cutoff length).
                    1 give per-sentence results ('--verbose')
                    2 give detailed information for each sentence ('--debug')
-  MAX_ERROR        this values is ignored, no errors are tolerated.
+  MAX_ERROR        this value is ignored, no errors are tolerated.
                    the parameter is accepted to support usage of unmodified
                    EVALB parameter files. ''' % (USAGE, '|'.join(READERS))
 
@@ -340,13 +343,12 @@ class TreePairResult(object):
 				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
 		assert self.lencpos == self.lengpos, ('sentence length mismatch. '
 				'sents:\n%s\n%s' % (' '.join(self.csent), ' '.join(self.gsent)))
+		grootpos = {child[0] for child in gtree if isinstance(child[0], int)}
 		# massage the data (in-place modifications)
 		transform(self.ctree, self.csent, self.cpos, dict(self.gpos),
-				self.param['DELETE_LABEL'], self.param['DELETE_WORD'],
-				self.param['EQ_LABEL'], self.param['EQ_WORD'])
+				self.param, grootpos)
 		transform(self.gtree, self.gsent, self.gpos, dict(self.gpos),
-				self.param['DELETE_LABEL'], self.param['DELETE_WORD'],
-				self.param['EQ_LABEL'], self.param['EQ_WORD'])
+				self.param, grootpos)
 		#if not gtree or not ctree:
 		#	return dict(LP=0, LR=0, LF=0)
 		assert self.csent == self.gsent, (
@@ -593,12 +595,12 @@ def readparam(filename):
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED',
-			'DISC_ONLY', 'TED', 'DEP')
+			'DISC_ONLY', 'TED', 'DEP', 'DELETE_ROOT_PRETERMS')
 	param = {'DEBUG': 0, 'MAX_ERROR': 10, 'CUTOFF_LEN': 40,
 				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': set(),
 				'DELETE_LABEL': set(), 'DELETE_WORD': set(),
 				'EQ_LABEL': set(), 'EQ_WORD': set(),
-				'DISC_ONLY': 0, 'TED': 0, 'DEP': 0}
+				'DISC_ONLY': 0, 'TED': 0, 'DEP': 0, 'DELETE_ROOT_PRETERMS': 0}
 	seen = set()
 	for a in io.open(filename, encoding='utf8') if filename else ():
 		line = a.strip()
@@ -664,7 +666,7 @@ def transitiveclosure(eqpairs):
 	return eqclasses
 
 
-def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
+def transform(tree, sent, pos, gpos, param, grootpos):
 	"""Apply the transformations according to the parameter file.
 
 	Does not delete the root node, which is a special case because if there is
@@ -672,22 +674,27 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 
 	:param pos: a list with the contents of tree.pos(); modified in-place.
 	:param gpos: a dictionary of the POS tags of the original gold tree, before
-		any tags/words have been deleted."""
+		any tags/words have been deleted.
+	:param param: the parameters specifing which labels / words to delete
+	:param grootpos: the set of indices with preterminals directly under the
+		root node of the gold tree."""
 	leaves = list(range(len(sent)))
 	posnodes = []
 	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
 		for n, b in list(zip(count(), a))[::-1]:
-			b.label = eqlabel.get(b.label, b.label)
+			b.label = param['EQ_LABEL'].get(b.label, b.label)
 			if not b:
 				a.pop(n)  # remove empty nodes
 			elif isinstance(b[0], Tree):
-				if b.label in dellabel:
+				if b.label in param['DELETE_LABEL']:
 					# replace phrasal node with its children
 					# (must remove nodes from b first because ParentedTree)
 					bnodes = b[:]
 					b[:] = []
 					a[n:n + 1] = bnodes
-			elif gpos[b[0]] in dellabel or sent[b[0]] in delword:
+			elif (gpos[b[0]] in param['DELETE_LABEL']
+					or sent[b[0]] in param['DELETE_WORD']
+					or (param['DELETE_ROOT_PRETERMS'] and b[0] in grootpos)):
 				# remove pre-terminal entirely, but only look at gold tree,
 				# to ensure the sentence lengths stay the same
 				leaves.remove(b[0])
@@ -703,8 +710,8 @@ def transform(tree, sent, pos, gpos, dellabel, delword, eqlabel, eqword):
 	for a in posnodes:
 		a[0] = leafmap[a[0]]
 		a.indices = [a[0]]
-		if sent[a[0]] in eqword:
-			sent[a[0]] = eqword[sent[a[0]]]
+		if sent[a[0]] in param['EQ_WORD']:
+			sent[a[0]] = param['EQ_WORD'][sent[a[0]]]
 	# cache spans
 	for a in reversed(list(tree.subtrees())):
 		indices = []
@@ -744,18 +751,23 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	results (because it cannot be deleted by ``transform()`` when non-unary).
 
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), (),
-	... (), {}, {})
+	>>> params = {'DELETE_LABEL': set(), 'DELETE_WORD': set(),
+	... 'EQ_LABEL': {}, 'EQ_WORD': {},
+	... 'DELETE_ROOT_PRETERMS': 0}
+	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
+	... params, set())
 	>>> sorted(bracketings(tree).items())
 	[(('S', (0, 1, 2)), 1), (('VP', (0, 2)), 1)]
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ('VP',),
-	... (), {}, {})
+	>>> params['DELETE_LABEL'] = {'VP'}
+	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
+	... params, set())
 	>>> bracketings(tree)
 	Counter({('S', (0, 1, 2)): 1})
 	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()), ('S',),
-	... (), {}, {})
+	>>> params['DELETE_LABEL'] = {'S'}
+	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
+	... params, set())
 	>>> bracketings(tree, dellabel=('S',))
 	Counter({('VP', (0, 2)): 1})
 	"""

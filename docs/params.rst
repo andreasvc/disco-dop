@@ -177,6 +177,8 @@ Other options
 
     :None: leave punctuation as is.
     :'move': move punctuation to appropriate constituents using heuristics.
+    :'moveall': same as 'move', but moves all preterminals under root,
+        instead of only recognized punctuation.
     :'remove': eliminate punctuation.
     :'root': attach punctuation directly to root (as in original Negra/Tiger
         treebanks).

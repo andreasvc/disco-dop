@@ -130,6 +130,9 @@ file, and options may consist of:
 The parameter file should be encoded in utf-8 and supports the following
 options (in addition to those described in the README of EVALB):
 
+:DELETE_ROOT_PRETERMS:
+                 when enabled, preterminals directly under the root in
+                 gold trees are ignored for scoring purposes.
 :DISC_ONLY:      only consider discontinuous constituents for F-scores.
 :TED:            when enabled, give tree-edit distance scores; disabled by
                  default as these are slow to compute.
