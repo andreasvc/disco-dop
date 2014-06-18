@@ -6,7 +6,7 @@ This file contains three main transformations:
    Provides some additional Markovization options.
  - An optimal binarization for LCFRS: optimalbinarize()
    Cf. Gildea (2010): Optimal parsing strategies for linear
-   context-free rewriting systems.
+   context-free rewriting systems. Proc. of NAACL.
  - Converting discontinuous trees to continuous trees and back:
    splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited."""
 # Original notice:
@@ -702,7 +702,7 @@ def fanout(tree):
 
 def complexity(tree):
 	"""The degree of the time complexity of parsing with this rule.
-	Cf. Gildea (2011)."""
+	Cf. Gildea (2010)."""
 	return fanout(tree) + sum(map(fanout, tree))
 
 

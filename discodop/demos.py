@@ -105,7 +105,7 @@ auxiliary trees:
 def dependencygrammar():
 	"""An example dependency structure encoded in an LCFRS grammar.
 
-	Taken from: Gildea (2011), Optimal Parsing Strategies for Linear
+	Taken from: Gildea (2010, fig. 4), Optimal Parsing Strategies for Linear
 	Context-Free Rewriting Systems.
 	Limitations:
 	- rules have to be binarized
