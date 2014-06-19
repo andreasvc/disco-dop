@@ -291,7 +291,7 @@ def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 		unarychar='+'):
 	"""Restore a binarized tree to the original n-ary tree.
 
-	Modifies tree in-place.
+	Modifies tree in-place. Tree should not be a ParentedTree.
 	NB: a malformed node such as ``(X|<Y> )`` which is not supposed to be empty
 	will be silently discarded."""
 	# increase robustness

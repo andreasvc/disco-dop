@@ -155,7 +155,7 @@ class CorpusReader(object):
 		if self.punct == 'remove':
 			punctremove(tree, sent)
 		elif self.punct == 'move' or self.punct == 'moveall':
-			punctraise(tree, sent, self.punct == 'moveall')
+			punctraise(tree, sent, self.punct=='moveall')
 			balancedpunctraise(tree, sent)
 			# restore order
 			for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):

@@ -77,4 +77,4 @@ if __name__ == '__main__':
 				**metadata)
 	else:
 		setup(**metadata)
-		print('Warning: Cython not found.')
+		print('\nWarning: Cython not found.\n')

@@ -113,7 +113,9 @@ class DrawTree(object):
 				self.tree, self.sent, highlight)
 
 	def __str__(self):
-		return self.text()
+		if sys.version[0] >= '3':
+			return self.text(unicodelines=True)
+		return self.text(unicodelines=True).encode('utf8')
 
 	def __repr__(self):
 		return '\n'.join('%d: coord=%r, parent=%r, node=%s' % (

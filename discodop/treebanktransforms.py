@@ -657,7 +657,7 @@ def removeemptynodes(tree, sent):
 
 
 # fixme: treebank specific parameters for detecting punctuation.
-PUNCTTAGS = {"''", "``", "-LRB-", "-RRB-", ".", ":", ",",  # PTB
+PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}  # Alpino/Lassy
 PUNCTUATION = frozenset(u'.,():\'-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
@@ -741,8 +741,7 @@ def punctraise(tree, sent, rootpreterms=False):
 		node.parent.pop(node.parent_index)
 		phrasalnode = lambda x: len(x) and isinstance(x[0], Tree)
 		for candidate in tree.subtrees(phrasalnode):
-			# add punctuation mark next to biggest constituent which it borders
-			#if any(node[0] - 1 in borders(sorted(a.leaves())) for a in candidate):
+			# add punctuation mark to highest left/right neighbor
 			#if any(node[0] - 1 == max(a.leaves()) for a in candidate):
 			if any(node[0] + 1 == min(a.leaves()) for a in candidate):
 				candidate.append(node)
@@ -750,8 +749,8 @@ def punctraise(tree, sent, rootpreterms=False):
 		else:
 			tree.append(node)
 
-BALANCEDPUNCTMATCH = {'"': '"', '[': ']', '(': ')', '-': '-', "'": "'",
-		'\xc2\xab': '\xc2\xbb'}  # the last ones are unicode for << and >>.
+BALANCEDPUNCTMATCH = {'"': '"', '[': ']', '(': ')', '-LRB-': '-RRB-',
+		'-': '-', "'": "'", '\xc2\xab': '\xc2\xbb'}  # unicode << and >>
 
 
 def balancedpunctraise(tree, sent):
