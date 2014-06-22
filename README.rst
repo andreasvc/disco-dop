@@ -48,7 +48,7 @@ Installation
 
 Requirements:
 
-- Python 2.7+/3   http://www.python.org (need headers, e.g. python-dev package)
+- Python 2.7+/3   http://www.python.org (headers required, e.g. python-dev package)
 - Cython 0.20+    http://www.cython.org
 - GCC             http://gcc.gnu.org/
 - Numpy 1.5+      http://numpy.org/
@@ -80,7 +80,7 @@ Other Linux systems
 -------------------
 This assumes no root access, but assumes that ``gcc`` is installed.
 
-Set environment variables so that software can be installed to the home directory.
+Set environment variables so that software can be installed to the home directory
 (replace with equivalent for your shell if you do not use bash)::
 
     mkdir -p ~/.local
@@ -170,9 +170,9 @@ References
 ==========
 This work is partly described in the following publications:
 
-- van Cranenburgh, Bod (2013). Discontinuous Parsing with an Efficient and Accurate DOP Model.
-  Proc. of IWPT.
-  http://acl.cs.qc.edu/iwpt2013/proceedings/Splits/9_pdfsam_IWPTproceedings.pdf
+- van Cranenburgh, Bod (2013). Discontinuous Parsing with an Efficient and Accurate
+  DOP Model. Proc. of IWPT.
+  http://www.illc.uva.nl/LaCo/CLS/papers/iwpt2013parser_final.pdf
 - van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
   systems. Proc. of EACL.
   http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
