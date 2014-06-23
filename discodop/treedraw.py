@@ -70,7 +70,7 @@ class DrawTree(object):
 		indices).
 	:param abbr: when True, abbreviate labels longer than 5 characters.
 
-	>>> print(DrawTree('(S (NP Mary) (VP walks))'))
+	>>> print(DrawTree('(S (NP Mary) (VP walks))').text())
 	... # doctest: +NORMALIZE_WHITESPACE
 	      S
 	  ____|____

@@ -128,7 +128,7 @@ def startexp(
 				relationalrealizational)
 
 	testset = treebank.READERS[corpusfmt](
-			testcorpus.path, encoding=testcorpus.encoding, punct=punct,
+			testcorpus.path, encoding=testcorpus.encoding,  # punct=punct,
 			removeempty=removeempty, morphology=morphology,
 			functions=functions)
 	gold_sents = testset.tagged_sents()
