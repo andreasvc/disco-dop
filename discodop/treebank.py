@@ -820,15 +820,25 @@ def segmentbrackets(brackets, strict=False):
 		tuples (tree, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0."""
+	def tryappend(result, rest):
+		"""Add a tree to the results list."""
+		try:
+			results.append(brackettree(result, rest, brackets, strtermre))
+		except:
+			print('error:\n', dict(result=result, rest=rest, parens=parens,
+					depth=depth, prev=prev))
+			raise
 	lb, rb = brackets
 	# regex to check if the tree contains any terminals (as opposed to indices)
 	strtermre = re.compile(' (?:[^ %(br)s]*[^ 0-9%(br)s][^ %(br)s]*)?%(rb)s' %
 			dict(br=re.escape(brackets), rb=re.escape(rb)))
 	newlb = re.compile(r'(?:.*[\n\r])?\s*')
 	parens = 0  # number of open parens
+	depth = 0  # max. number of open parens
 	prev = ''  # incomplete tree currently being read
 	result = ''  # string of complete tree
 	results = []  # trees found in current line
+	rest = ''  # any non-tree data after a tree
 	line = (yield None, 1)
 	while True:
 		start = 0  # index where current tree starts
@@ -839,23 +849,21 @@ def segmentbrackets(brackets, strict=False):
 		prev = line
 		while a != -1 or b != -1:
 			if a != -1 and (a < b or b == -1):  # left bracket
-				if parens == 0:
+				# look ahead to see whether this will be a tree with depth > 1
+				if parens == 0 and (b == -1 or 0 <= line.find(lb, a + 1) < b):
 					rest, prev = line[start:a], line[a:]
 					if result:
-						try:
-							results.append(brackettree(
-									result, rest, brackets, strtermre))
-						except:
-							print('error in:\n', result, '\n', rest)
-							raise
+						tryappend(result, rest)
 						result, start = '', a
 				parens += 1
+				depth = max(depth, parens)
 				a = line.find(lb, a + 1)
 			elif b != -1 and (b < a or a == -1):  # right bracket
 				parens -= 1
-				if parens == 0:
+				if parens == 0 and depth > 1:
 					result, prev = line[start:b + 1], line[b + 1:]
 					start = b + 1
+					depth = 0
 				elif parens < 0:
 					if strict:
 						raise ValueError('unbalanced parentheses')
@@ -867,12 +875,7 @@ def segmentbrackets(brackets, strict=False):
 			results = []
 		if line is None:
 			if result:
-				try:
-					results.append(brackettree(
-							result, rest, brackets, strtermre))
-				except:
-					print('error in:\n', result, '\n', rest)
-					raise
+				tryappend(result, rest)
 			status = 1 if results or result or parens else 0
 			yield results or None, status
 			line = ''
