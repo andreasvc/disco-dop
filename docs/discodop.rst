@@ -28,7 +28,7 @@ Usage: ``discodop runexp <parameter file> [--rerun]``
 
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
-pass the option --rerun. The directory with the name of the parameter file
+pass the option ``--rerun``. The directory with the name of the parameter file
 without extension must exist in the current path; its results will be
 overwritten.
 
@@ -58,12 +58,12 @@ Output is sent to stdout; to save the results, redirect to a file.
 Options:
 
 --fmt=<export|bracket|discbracket|tiger|alpino|dact>
-              when format is not 'bracket', work with discontinuous trees;
-              output is in 'discbracket' format:
+              when format is not ``bracket``, work with discontinuous trees;
+              output is in ``discbracket`` format:
               tree<TAB>sentence<TAB>frequency
-              where 'tree' has indices as leaves, referring to elements of
-              'sentence', a space separated list of words.
--o file       Write output to 'file' instead of stdout.
+              where ``tree`` has indices as leaves, referring to elements of
+              ``sentence``, a space separated list of words.
+-o file       Write output to ``file`` instead of stdout.
 --indices     report sets of indices instead of frequencies.
 --cover       include all depth-1 fragments of first treebank corresponding
               to single productions.
@@ -107,7 +107,7 @@ file, and options may consist of:
 --goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format [default: export].
 
---fmt=[...]      Shorthand for setting both --goldfmt and -parsesfmt.
+--fmt=[...]      Shorthand for setting both ``--goldfmt`` and ``--parsesfmt``.
 
 --goldenc, --parsesenc=<utf-8|iso-8859-1|...>
                  Specify encoding [default: utf-8].
@@ -140,8 +140,8 @@ options (in addition to those described in the README of EVALB):
                  :-1: only print summary table
                  :0: additionally, print category / tag breakdowns (default)
                    (after application of cutoff length).
-                 :1: give per-sentence results ('--verbose')
-                 :2: give detailed information for each sentence ('--debug')
+                 :1: give per-sentence results (``--verbose``)
+                 :2: give detailed information for each sentence (``--debug``)
 :MAX_ERROR:      this values is ignored, no errors are tolerated.
                  the parameter is accepted to support usage of unmodified
                  EVALB parameter files.
@@ -201,7 +201,7 @@ options may consist of:
                 :'replace': use lemma instead of terminals
                 :'between': insert node with lemma between POS tag and word,
                     e.g., (NN (man men))
---ensureroot=x  add root node labeled 'x' to trees if not already present.
+--ensureroot=x  add root node labeled ``x`` to trees if not already present.
 --factor=<left|right>
                 specify left- or right-factored binarization [default: right].
 -h n            horizontal markovization. default: infinite (all siblings)
@@ -209,19 +209,21 @@ options may consist of:
 --leftunary     make initial / final productions of binarized constituents
 --rightunary    ... unary productions.
 --tailmarker    mark rightmost child (the head if headrules are applied), to
-                avoid cyclic rules when --leftunary and --rightunary are used.
+                avoid cyclic rules when ``--leftunary`` and ``--rightunary``
+                are used.
 --headrules=x   turn on head finding; affects binarization.
-                reads rules from file "x" (e.g., "negra.headrules").
---markheads     mark heads with '^' in phrasal labels.
---reverse       reverse the transformations given by --transform
+                reads rules from file ``x`` (e.g., "negra.headrules").
+--markheads     mark heads with ``^`` in phrasal labels.
+--reverse       reverse the transformations given by ``--transform``
 --transforms    specify names of tree transformations to apply; for possible
-                names, cf. treebanktransforms module.
+                names, cf. :mod:`discodop.treebanktransforms` module.
 
-Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
-    conversion and requires the use of heuristic head rules (--headrules),
-    to ensure that all constituents have a child marked as head.
-    A command line interface to perform transformations on
-    treebanks such as binarization.
+.. note::
+    selecting the formats ``conll`` or ``mst`` results in an unlabeled
+    dependency conversion and requires the use of heuristic head rules
+    (``--headrules``), to ensure that all constituents have a child marked as
+    head. A command line interface to perform transformations on treebanks such
+    as binarization.
 
 grammar
 -------
@@ -282,7 +284,7 @@ Options:
 -s X
           start symbol to use for PTSG.
 
-When a PCFG is requested, or the input format is 'bracket' (Penn format), the
+When a PCFG is requested, or the input format is ``bracket`` (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and utf-8 for the lexicon.
@@ -399,7 +401,7 @@ Options (* marks default option):
 
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
-Pipe the output through 'less -R' to preserve the colors.
+Pipe the output through ``less -R`` to preserve the colors.
 
 treesearch
 ----------
@@ -424,7 +426,7 @@ Options:
 --brackets, -b  output raw trees in the original corpus format
 --only-matching, -o
                 only output the matching portion
-                with --sents, --trees, and --brackets
+                with ``--sents``, ``--trees``, and ``--brackets``
 --line-number, -n
                 Prefix each line of output with the sentence number within
                 its input file.
