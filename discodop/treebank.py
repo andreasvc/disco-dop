@@ -482,7 +482,7 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 	for n, source in enumerate(block):
 		children.setdefault(source[PARENT], []).append((n, source))
 	tree = ParentedTree('ROOT', getchildren('0'))
-	handlefunctions(functions, tree)
+	handlefunctions(functions, tree, morphology=morphology)
 	return tree, sent
 
 
@@ -547,7 +547,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	coindexation = defaultdict(list)
 	sent = block.find('sentence').text.split(' ')
 	tree = getsubtree(block.find('node'), None, morphology, lemmas)
-	handlefunctions(functions, tree)
+	handlefunctions(functions, tree, morphology=morphology)
 	return tree, sent
 
 
@@ -583,7 +583,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 	elif fmt in ('conll', 'mst'):
 		assert headrules, 'dependency conversion requires head rules.'
 		deps = dependencies(tree, headrules)
-		if fmt == "mst":  # MST parser can read this format
+		if fmt == 'mst':  # MST parser can read this format
 			# fourth line with function tags is left empty.
 			return "\n".join((
 				'\t'.join(word for word in sent),
@@ -686,7 +686,7 @@ def writealpinotree(tree, sent, n):
 	return ElementTree.tostring(result).decode('utf-8')  # hack
 
 
-def handlefunctions(action, tree, pos=True, top=False):
+def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 	"""Add function tags to phrasal labels e.g., 'VP' => 'VP-HD'.
 
 	:param action: one of {None, 'add', 'replace', 'remove'}
@@ -700,6 +700,8 @@ def handlefunctions(action, tree, pos=True, top=False):
 				x = a.label.find(char)
 				if x > 0:
 					a.label = a.label[:x]
+		elif morphology == 'between' and not isinstance(a[0], Tree):
+			continue
 		elif (not top or action == 'between') and a is tree:  # skip TOP label
 			continue
 		elif pos or isinstance(a[0], Tree):
