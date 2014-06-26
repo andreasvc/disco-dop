@@ -56,9 +56,8 @@ def transform(tree, sent, transformations):
 				morph = '--'
 				if getattr(a, 'source', None):
 					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
-				a[:] = [a.__class__(a.label,
+				a[:] = [a.__class__(morph,
 						[a.pop() for _ in range(len(a))][::-1])]
-				a.label = morph
 		elif name == 'LEMMA-NODE':  # insert node w/lemma above terminal
 			from discodop.treetransforms import postorder
 			from discodop.treebank import quote
