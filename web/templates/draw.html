@@ -15,7 +15,7 @@ function show(fmt) {
 	} else if (fmt == 'discbracket') {
 		tree.value = '(S (VP (VB 0) (JJ 2)) (NP 1) (? 3))\nis John rich ?';
 	} else if (fmt == 'export') {
-		tree.value = '#BOS 0\nis\tVB\t--\t--\t500\nJohn\tNP\t--\t--\t0\nrich\tJJ\t--\t--\t500\n?\t?\t--\t--\t0\n#500\tVP\t--\t--\t0\n#EOS 0\n';
+		tree.value = '#BOS 0\nis\tVB\tpres\tHD\t500\nJohn\tNP\t--\tSBJ\t0\nrich\tJJ\t--\tPRED\t500\n?\t?\t--\tPUNC\t0\n#500\tVP\t--\t--\t0\n#EOS 0\n';
 	}
 };
 function switchopt(n) {
@@ -61,6 +61,8 @@ function switchopt(n) {
 				<label><input type="checkbox" name="unicode" value="1" checked> unicode</label>
 			</span>
 			<label><input type="checkbox" name="abbr" value="1">abbr. labels</label>
+			<label><input type="checkbox" name="morph" value="0">morphology</label>
+			<label><input type="checkbox" name="func" value="0">functions</label>
 			<span id=tikzoptions style="display: none; ">
 				<label><input type="radio" name="type" value="matrix" checked> TiKZ matrix</label>
 				<label><input type="radio" name="type" value="nodes"> TiKZ nodes (easier to tweak manually)</label>
@@ -80,7 +82,7 @@ function switchopt(n) {
 				Represent terminals with integer indices,
 				sentence on next line (<a href="javascript: show('discbracket'); ">example</a>).
 			<li>Negra export format tree (<a href="javascript: show('export'); ">example</a>);
-				function &amp; morphology tags ignored; trees need to be wrapped in:
+				optionally shows function &amp; morphology tags; trees need to be wrapped in:
 			<blockquote><code>
 					#BOS [number]<br>
 					[...]<br>

@@ -705,18 +705,18 @@ def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 		elif (not top or action == 'between') and a is tree:  # skip TOP label
 			continue
 		elif pos or isinstance(a[0], Tree):
-			# test for non-empty function tag ("--" is considered empty)
+			# test for non-empty function tag ('--' is considered empty)
 			func = None
 			if (getattr(a, 'source', None)
 					and a.source[FUNC] and a.source[FUNC] != '--'):
-				func = a.source[FUNC].split("-")[0].upper()
+				func = a.source[FUNC].split('-')[0]
 			if func and action == 'add':
-				a.label += "-%s" % func
+				a.label += '-%s' % func
 			elif func and action == 'replace':
 				a.label = func
 			elif action == 'between':
 				parent, idx = a.parent, a.parent_index
-				newnode = ParentedTree(func or '--', [parent.pop(idx)])
+				newnode = ParentedTree('-' + (func or '--'), [parent.pop(idx)])
 				parent.insert(idx, newnode)
 			elif func:
 				raise ValueError('unrecognized action: %r' % action)

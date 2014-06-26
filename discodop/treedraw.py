@@ -316,7 +316,7 @@ class DrawTree(object):
 
 		return nodes, coords, edges
 
-	def svg(self, nodecolor='blue', leafcolor='red'):
+	def svg(self, nodecolor='blue', leafcolor='red', funccolor='green'):
 		""":returns: SVG representation of a discontinuous tree."""
 		fontsize = 12
 		hscale = 40
@@ -382,6 +382,8 @@ class DrawTree(object):
 			y = row * vscale + vstart
 			if n in self.highlight:
 				color = nodecolor if isinstance(node, Tree) else leafcolor
+				if isinstance(node, Tree) and node.label.startswith('-'):
+					color = funccolor
 			else:
 				color = 'black'
 			result.append('\t<text style="text-anchor: middle; fill: %s; '
@@ -393,7 +395,8 @@ class DrawTree(object):
 		return '\n'.join(result)
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
-				nodecolor='blue', leafcolor='red', maxwidth=16):
+				nodecolor='blue', leafcolor='red', funccolor='green',
+				maxwidth=16):
 		""":returns: ASCII art for a discontinuous tree.
 
 		:param unicodelines: whether to use Unicode line drawing characters
@@ -489,16 +492,17 @@ class DrawTree(object):
 					else:  # if n and n in minchildcol:
 						branchrow[col] = crosscell(branchrow[col])
 				text = [a.center(maxnodewith[col]) for a in text]
+				color = nodecolor if isinstance(node, Tree) else leafcolor
+				if isinstance(node, Tree) and node.label.startswith('-'):
+					color = funccolor
 				if html:
 					text = [escape(a) for a in text]
 					if n in self.highlight:
 						text = ['<font color=%s>%s</font>' % (
-								nodecolor if isinstance(node, Tree)
-								else leafcolor, a) for a in text]
+								color, a) for a in text]
 				elif ansi and n in self.highlight:
 					text = ['\x1b[%d;1m%s\x1b[0m' % (
-							ANSICOLOR[nodecolor] if isinstance(node, Tree)
-							else ANSICOLOR[leafcolor], a) for a in text]
+							ANSICOLOR[color], a) for a in text]
 				for x in range(maxnodeheight[row]):
 					# draw vertical lines in partially filled multiline node
 					# labels, but only if it's not a frontier node.
@@ -522,7 +526,8 @@ class DrawTree(object):
 					for noderow in reversed(noderows))
 		return '\n'.join(reversed(result)) + '\n'
 
-	def tikzmatrix(self, nodecolor='blue', leafcolor='red'):
+	def tikzmatrix(self, nodecolor='blue', leafcolor='red',
+			funccolor='green'):
 		"""Produce TiKZ code for use with LaTeX.
 
 		PDF can be produced with pdflatex. Uses TiKZ matrices meaning that
@@ -547,16 +552,21 @@ class DrawTree(object):
 			line = []
 			for col in range(maxcol + 1):
 				if col in matrix[row]:
-					i = matrix[row][col]
-					node = self.nodes[i]
+					n = matrix[row][col]
+					node = self.nodes[n]
 					if isinstance(node, Tree):
-						color = nodecolor if i in self.highlight else 'black'
+						if node.label.startswith('-'):
+							color = funccolor
+						else:
+							color = nodecolor
 						label = latexlabel(node.label)
 					else:
-						color = leafcolor if i in self.highlight else 'black'
+						color = leafcolor
 						label = node
+					if n not in self.highlight:
+						color = 'black'
 					line.append(r'\node [%s] (n%d) { %s };' % (
-							color, i, label))
+							color, n, label))
 				line.append('&')
 			# new row: skip last column char '&', add newline
 			result.append(' '.join(line[:-1]) + r' \\')
@@ -564,7 +574,7 @@ class DrawTree(object):
 		result.extend(self._tikzedges())
 		return '\n'.join(result)
 
-	def tikznode(self, nodecolor='blue', leafcolor='red'):
+	def tikznode(self, nodecolor='blue', leafcolor='red', funccolor='green'):
 		"""Produce TiKZ code to draw a tree.
 
 		Nodes are drawn with the \\node command so they can have arbitrary
@@ -580,15 +590,19 @@ class DrawTree(object):
 		# write nodes with coordinates
 		for n, (row, column) in self.coords.items():
 			node = self.nodes[n]
-			if n in self.highlight:
-				color = nodecolor if isinstance(node, Tree) else leafcolor
+			if isinstance(node, Tree):
+				if node.label.startswith('-'):
+					color = funccolor
+				else:
+					color = nodecolor
+				label = latexlabel(node.label)
 			else:
+				color = leafcolor
+				label = node
+			if n not in self.highlight:
 				color = 'black'
 			result.append('\t(%d, %d) node [%s] (n%d) {%s}'
-					% (column, bottom - row,
-					color,
-					n, latexlabel(node.label)
-					if isinstance(node, Tree) else node))
+					% (column, bottom - row, color, n, label))
 		result += [';']
 		result.extend(self._tikzedges())
 		return '\n'.join(result)
