@@ -44,9 +44,8 @@ the gold standard file in Negra's export format.
 
 fragments
 ---------
-Usage: ``discodop fragments <treebank1> [treebank2] [options]``
-
-or: ``discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]``
+| Usage: ``discodop fragments <treebank1> [treebank2] [options]``
+| or: ``discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]``
 
 If only one treebank is given, fragments occurring at least twice are sought.
 If two treebanks are given, finds common fragments between first & second.
@@ -228,15 +227,16 @@ options may consist of:
 grammar
 -------
 Read off grammars from treebanks.
-Usage: ``discodop grammar <type> <input> <output> [options]``
-or: ``discodop param <parameter-file> <output-directory>``
-or: ``discodop info <rules-file>``
-or: ``discodop merge (rules|lexicon|fragments) <input1> <input2>... <output>``
+
+| Usage: ``discodop grammar <type> <input> <output> [options]``
+| or: ``discodop param <parameter-file> <output-directory>``
+| or: ``discodop info <rules-file>``
+| or: ``discodop merge (rules|lexicon|fragments) <input1> <input2>... <output>``
 
 ``type`` is one of:
+
 :pcfg:            Probabilistic Context-Free Grammar (treebank grammar)
 :plcfrs:
-
                   Probabilistic Linear Context-Free Rewriting System
                   (discontinuous treebank grammar)
 
@@ -316,9 +316,8 @@ parser
 ------
 A command line interface for parsing new texts with an existing grammar.
 
-usage: ``discodop parser [options] <grammar/> [input files]``
-
-or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``
+| Usage: ``discodop parser [options] <grammar/> [input files]``
+| or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``
 
 ``grammar/`` is a directory with a model produced by ``discodop runexp``.
 If one or more filenames are given, the parse trees for each file are written
@@ -439,8 +438,8 @@ gen
 ---
 Generate random sentences with a PLCFRS or PCFG.
 Reads grammar from a text file in PLCFRS or bitpar format.
-Usage: ``discodop gen [--verbose] <rules> <lexicon>``
 
-or: ``discodop gen --test``
+| Usage: ``discodop gen [--verbose] <rules> <lexicon>``
+| or: ``discodop gen --test``
 
 Grammar is assumed to be in utf-8; may be gzip'ed (.gz extension).
