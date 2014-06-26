@@ -763,18 +763,10 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
 	... params, set())
 	>>> bracketings(tree)
-	Counter({('S', (0, 1, 2)): 1})
-	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
-	>>> params['DELETE_LABEL'] = {'S'}
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
-	... params, set())
-	>>> bracketings(tree, dellabel=('S',))
-	Counter({('VP', (0, 2)): 1})
-	"""
+	Counter({('S', (0, 1, 2)): 1})"""
 	return multiset(bracketing(a, labeled) for a in tree.subtrees()
 			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
-				and a.label not in dellabel
-				and (not disconly or disc(a)))
+				and a.label not in dellabel and (not disconly or disc(a)))
 
 
 def bracketing(node, labeled=True):
@@ -850,8 +842,6 @@ def treedisteval(a, b, includeroot=False, debug=False):
 	denom = len(list(a.subtrees()) + list(b.subtrees()))  # Dice denominator
 	if not includeroot:  # optionally discount ROOT nodes and preterminals
 		denom -= 2
-	#if not includepreterms:
-	#	denom -= len(a.leaves() + b.leaves())
 	return ted, denom
 
 
@@ -953,7 +943,7 @@ def intervals(seq):
 def disc(node):
 	"""Evaluate whether a particular node is locally discontinuous.
 
-	The root node  of a complete tree will, by definition, be continuous. Nodes
+	The root node of a complete tree will, by definition, be continuous. Nodes
 	can be continuous even if some of their children are discontinuous."""
 	if not isinstance(node, Tree):
 		return False
@@ -969,9 +959,7 @@ def disc(node):
 
 
 def nozerodiv(func):
-	"""Evaluate ``func()`` but catch zero division or ``None`` as a result.
-
-	Format its return value into a 6-character string as a percentage."""
+	"""Return ``func()`` as 6-character string but catch zero division."""
 	try:
 		result = func()
 	except (ZeroDivisionError, InvalidOperation):

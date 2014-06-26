@@ -699,12 +699,12 @@ cdef inline bint concat(Rule *rule,
 				if rvec & mask == 0:
 					return False  # check for expected component
 				rvec |= rvec - 1  # trailing 0 bits => 1 bits
-				mask = rvec & (~rvec - 1)  # everything before first 0 bit => 1 bits
+				mask = rvec & (~rvec - 1)  # mask of 1 bits up to first 0 bit
 			else:  # component from left vector
 				if lvec & mask == 0:
 					return False  # check for expected component
 				lvec |= lvec - 1  # trailing 0 bits => 1 bits
-				mask = lvec & (~lvec - 1)  # everything before first 0 bit => 1 bits
+				mask = lvec & (~lvec - 1)  # mask of 1 bits up to first 0 bit
 			# zero out component
 			lvec &= ~mask
 			rvec &= ~mask
@@ -836,8 +836,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 			continue
 		items[item.label].append(item)
 		if not equalitems(item, goal):
-			# unary
-			for i in range(grammar.numrules):
+			for i in range(grammar.numrules):  # unary
 				rule = &(grammar.unary[item.label][i])
 				if rule.rhs1 != item.label:
 					break
@@ -856,8 +855,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 					elif LCFRSItem_fused is FatChartItem:
 						newitem = <LCFRSItem_fused>FatChartItem.__new__(
 								FatChartItem)
-			# binary right
-			for i in range(grammar.numrules):
+			for i in range(grammar.numrules):  # binary right
 				rule = &(grammar.rbinary[item.label][i])
 				if rule.rhs2 != item.label:
 					break
@@ -875,8 +873,7 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 							elif LCFRSItem_fused is FatChartItem:
 								newitem = (<LCFRSItem_fused>
 										FatChartItem.__new__(FatChartItem))
-			# binary left
-			for i in range(grammar.numrules):
+			for i in range(grammar.numrules):  # binary left
 				rule = &(grammar.lbinary[item.label][i])
 				if rule.rhs1 != item.label:
 					break

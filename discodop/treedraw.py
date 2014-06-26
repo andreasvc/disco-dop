@@ -594,6 +594,7 @@ class DrawTree(object):
 		return '\n'.join(result)
 
 	def _tikzedges(self):
+		"""Generate TiKZ code for drawing edges between nodes."""
 		result = []
 		shift = -0.5
 		# write branches from node to node

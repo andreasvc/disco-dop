@@ -144,8 +144,7 @@ class Test_treebanktransforms(object):
 			trees = [transform(tree, sent, transformations)
 					for tree, sent in zip(nn.trees().values(),
 						nn.sents().values())]
-			for a, b, c in islice(zip(n.trees().values(),
-					trees, n.sents().values()), 100):
+			for a, b in islice(zip(n.trees().values(), trees), 100):
 				before = bracketings(canonicalize(a))
 				transformb = reversetransform(b.copy(True), transformations)
 				after = bracketings(canonicalize(transformb))
