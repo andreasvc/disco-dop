@@ -163,6 +163,7 @@ action is one of::
     introducepreterminals
     splitdisc [--markorigin]
     mergedisc
+    transform [--reverse] [--transforms=<NAME1,NAME2...>]
 
 options may consist of:
 
@@ -212,7 +213,9 @@ options may consist of:
 --headrules=x   turn on head finding; affects binarization.
                 reads rules from file "x" (e.g., "negra.headrules").
 --markheads     mark heads with '^' in phrasal labels.
-
+--reverse       reverse the transformations given by --transform
+--transforms    specify names of tree transformations to apply; for possible
+                names, cf. treebanktransforms module.
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
     conversion and requires the use of heuristic head rules (--headrules),

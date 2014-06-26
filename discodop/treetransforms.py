@@ -51,6 +51,7 @@ action is one of:
     introducepreterminals
     splitdisc [--markorigin]
     mergedisc
+    transform [--reverse] [--transforms=<NAME1,NAME2...>]
 
 options may consist of:
   --inputfmt=[%s]
@@ -97,6 +98,9 @@ options may consist of:
   --headrules=x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
   --markheads    mark heads with '^' in phrasal labels.
+  --reverse      reverse the transformations given by --transform;
+  --transforms   specify names of tree transformations to apply; for possible
+                 names, cf. treebanktransforms module.
 
 
 Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
@@ -884,15 +888,15 @@ def main():
 	"""Command line interface for applying tree(bank) transforms."""
 	import io
 	from getopt import gnu_getopt, GetoptError
-	from discodop.treebanktransforms import readheadrules
+	from discodop import treebanktransforms
 	actions = {'none': None, 'introducepreterminals': introducepreterminals,
-			'unbinarize': unbinarize, 'mergedisc': mergediscnodes,
-			'binarize': None, 'optimalbinarize': None, 'splitdisc': None}
+			'splitdisc': None, 'mergedisc': mergediscnodes, 'transform': None,
+			'unbinarize': unbinarize, 'binarize': None, 'optimalbinarize': None}
 	flags = ('markorigin markheads leftunary rightunary tailmarker '
-			'renumber'.split())
+			'renumber reverse'.split())
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= '
-			'markorigin= maxlen= fmt= enc=').split()
+			'markorigin= maxlen= fmt= enc= transforms=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
 		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
@@ -942,26 +946,31 @@ def main():
 		v = int(opts.get('-v', 1))
 		if action == 'binarize':
 			factor = opts.get('--factor', 'right')
-			transform = lambda t: binarize(t, factor, h, v,
+			transform = lambda t, _: binarize(t, factor, h, v,
 					leftmostunary='--leftunary' in opts,
 					rightmostunary='--rightunary' in opts,
 					tailmarker='$' if '--tailmarker' in opts else '')
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
-			transform = lambda t: optimalbinarize(t, '|', headdriven, h, v)
+			transform = lambda t, _: optimalbinarize(t, '|', headdriven, h, v)
 	elif action == 'splitdisc':
-		transform = lambda t: splitdiscnodes(t, '--markorigin' in opts)
+		transform = lambda t, _: splitdiscnodes(t, '--markorigin' in opts)
 	elif action == 'unbinarize':
-		transform = lambda t: unbinarize(Tree.convert(t))
+		transform = lambda t, _: unbinarize(Tree.convert(t))
+	elif action == 'transform':
+		tfs = opts['--transforms'].split(',')
+		transform = lambda t, s: (treebanktransforms.reversetransform(t, tfs)
+				if '--reverse' in opts
+				else treebanktransforms.transform(t, s, tfs))
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
-		trees = ((key, (transform(tree), sent)) for key, (tree, sent) in trees)
+		trees = ((key, (transform(tree, sent), sent)) for key, (tree, sent) in trees)
 
 	# read, transform, & write trees
 	headrules = None
 	if opts.get('--outputfmt') in ('mst', 'conll'):
 		assert opts.get('--headrules'), (
 				'need head rules for dependency conversion')
-		headrules = readheadrules(opts.get('--headrules'))
+		headrules = treebanktransforms.readheadrules(opts.get('--headrules'))
 	cnt = 0
 	if opts.get('--outputfmt') == 'dact':
 		import alpinocorpus
