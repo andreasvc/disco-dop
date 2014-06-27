@@ -50,23 +50,23 @@ function switchopt(n) {
 		<td style="width: 50%; ">
 			<p>
 			Output:
-			<label><input type="radio" name="output" value="text" checked onClick="javascript:switchopt(1); "> ASCII art</label>
-			<label><input type="radio" name="output" value="svg" onClick="javascript:switchopt(1); "> SVG</label>
-			<label><input type="radio" name="output" value="png" onClick="javascript:switchopt(0); "> PNG</label>
-			<label><input type="radio" name="output" value="pdf" onClick="javascript:switchopt(0); "> PDF</label>
-			<label><input type="radio" name="output" value="latex" onClick="javascript:switchopt(0); "> LaTeX</label><br>
+			<div class=item><label><input type="radio" name="output" value="text" checked onClick="javascript:switchopt(1); "> ASCII art</label></div>
+			<div class=item><label><input type="radio" name="output" value="svg" onClick="javascript:switchopt(1); "> SVG</label></div>
+			<div class=item><label><input type="radio" name="output" value="png" onClick="javascript:switchopt(0); "> PNG</label></div>
+			<div class=item><label><input type="radio" name="output" value="pdf" onClick="javascript:switchopt(0); "> PDF</label></div>
+			<div class=item><label><input type="radio" name="output" value="latex" onClick="javascript:switchopt(0); "> LaTeX</label></div><br>
 			Options:
-			<label><input type="checkbox" name="color" value="1" checked> colors</label>
+			<div class=item><label><input type="checkbox" name="color" value="1" checked> colors</label></div>
 			<span id=asciioptions>
-				<label><input type="checkbox" name="unicode" value="1" checked> unicode</label>
+				<div class=item><label><input type="checkbox" name="unicode" value="1" checked> unicode</label></div>
 			</span>
-			<label><input type="checkbox" name="abbr" value="1">abbr. labels</label>
-			<label><input type="checkbox" name="morph" value="0">morphology</label>
-			<label><input type="checkbox" name="func" value="0">functions</label>
+			<div class=item><label><input type="checkbox" name="abbr" value="1"> abbr. labels</label></div>
+			<div class=item><label><input type="checkbox" name="morph" value="0"> morphology</label></div>
+			<div class=item><label><input type="checkbox" name="func" value="0"> functions</label></div>
 			<span id=tikzoptions style="display: none; ">
-				<label><input type="radio" name="type" value="matrix" checked> TiKZ matrix</label>
-				<label><input type="radio" name="type" value="nodes"> TiKZ nodes (easier to tweak manually)</label>
-				<label><input type="radio" name="type" value="qtree"> TiKZ-qtree (no discontinuity)</label>
+				<div class=item><label><input type="radio" name="type" value="matrix" checked> TiKZ matrix</label></div>
+				<div class=item><label><input type="radio" name="type" value="nodes"> TiKZ nodes (easier to tweak manually)</label></div>
+				<div class=item><label><input type="radio" name="type" value="qtree"> TiKZ-qtree (no discontinuity)</label></div>
 			</span>
 			<br>
 			</p>
