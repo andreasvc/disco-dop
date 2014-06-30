@@ -25,7 +25,8 @@ import sys, os
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
-extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode']
+extensions = ['sphinx.ext.autodoc', 'sphinx.ext.viewcode',
+		'sphinx.ext.autosummary']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -87,6 +88,8 @@ pygments_style = 'sphinx'
 #modindex_common_prefix = []
 
 autodoc_member_order = 'bysource'
+autodoc_default_flags = ['members']
+autosummary_generate = True
 
 # -- Options for HTML output --------------------------------------------------
 
@@ -98,6 +101,8 @@ autodoc_member_order = 'bysource'
 #	html_theme = 'sphinx_rtd_theme'
 #	html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 ## otherwise, readthedocs.org uses their theme by default, so no need to specify it
+
+html_theme = 'nature'
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".

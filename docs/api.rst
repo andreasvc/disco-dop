@@ -1,17 +1,47 @@
 API documentation
 =================
-.. automodule:: discodop.__init__
+.. automodule:: discodop
     :members:
     :undoc-members:
     :show-inheritance:
 
-Contents:
+Python modules
+--------------
 
-.. toctree::
-   :maxdepth: 4
+.. autosummary::
+   :toctree: api/
 
-   python/index
-   cython/index
+   demos
+   eval
+   fragments
+   gen
+   grammar
+   lexicon
+   parser
+   runexp
+   tree
+   treebank
+   treebanktransforms
+   treedist
+   treedraw
+   treesearch
+   treetransforms
+
+Cython modules
+--------------
+
+.. autosummary::
+   :toctree: api/
+
+   _fragments
+   bit
+   coarsetofine
+   containers
+   disambiguation
+   estimates
+   kbest
+   pcfg
+   plcfrs
 
 Indices and tables
 ==================
