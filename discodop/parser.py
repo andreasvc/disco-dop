@@ -617,7 +617,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		if stage.mode.startswith('pcfg-bitpar'):
 			assert grammar.maxfanout == 1
 		_sumsto1, msg = grammar.testgrammar()
-		print('%s: %s' % (stage.name, msg))
+		logging.info('%s: %s', stage.name, msg)
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
 	if postagging and postagging.method == 'unknownword':
 		postagging.unknownwordfun = UNKNOWNWORDFUNC[postagging.model]
