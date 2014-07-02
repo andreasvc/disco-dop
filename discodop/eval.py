@@ -431,7 +431,7 @@ class TreePairResult(object):
 		if self.param['DEP']:
 			print('Sentence:', ' '.join(self.gsent))
 			print('dependencies gold', ' ' * 35, 'cand')
-			for (_, a, b), (_, c, d) in zip(self.gdep, self.cdep):
+			for (a, _, b), (c, _, d) in zip(self.gdep, self.cdep):
 				# use original sentences because we don't delete
 				# punctuation for dependency evaluation
 				print('%15s -> %15s           %15s -> %15s' % (

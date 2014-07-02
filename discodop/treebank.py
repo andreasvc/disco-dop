@@ -592,7 +592,7 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 		elif fmt == 'conll':
 			return '\n'.join('%d\t%s\t_\t%s\t%s\t_\t%d\t%s\t_\t_' % (
 				n, word, tag, tag, head, rel)
-				for word, (_, tag), (rel, n, head)
+				for word, (_, tag), (n, rel, head)
 				in zip(sent, sorted(tree.pos()), deps)) + '\n\n'
 	else:
 		raise ValueError('unrecognized format: %r' % fmt)
@@ -761,7 +761,7 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 def dependencies(root, headrules):
 	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers."""
 	deps = []
-	deps.append(('ROOT', makedep(root, deps, headrules), 0))
+	deps.append((makedep(root, deps, headrules), 'ROOT', 0))
 	return sorted(deps)
 
 
@@ -775,7 +775,7 @@ def makedep(root, deps, headrules):
 		if child is headchild:
 			continue
 		lexheadofchild = makedep(child, deps, headrules)
-		deps.append(("NONE", lexheadofchild, lexhead))
+		deps.append((lexheadofchild, 'NONE', lexhead))
 	return lexhead
 
 
