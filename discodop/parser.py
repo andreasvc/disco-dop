@@ -31,24 +31,21 @@ from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import Tree
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
+from discodop.treebank import WRITERS, writetree
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
-		saveheads, NUMBERRE
+		saveheads, NUMBERRE, readheadrules
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers
 
 USAGE = '''
-usage: %(cmd)s [options] <grammar/> [input files]
+usage: %(cmd)s [options] <grammar/> [input [output]]
 or:    %(cmd)s --simple [options] <rules> <lexicon> [input [output]]
 
 'grammar/' is a directory with a model produced by "discodop runexp".
-If one or more filenames are given, the parse trees for each file are written
-to a file with '.dbr' added to the original filename.
 When no filename is given, input is read from standard input and the results
 are written to standard output. Input should contain one sentence per line
 with space-delimited tokens. Output consists of bracketed trees in
-'discbracket' format, i.e., terminals are indices pointing to words in the
-original sentence, to represent any discontinuties.
-Files must be encoded in UTF-8.
+selected format. Files must be encoded in UTF-8.
 
 General options:
   -x           Input is one token per line, sentences separated by two
@@ -56,6 +53,8 @@ General options:
   -b k         Return the k-best parses instead of just 1.
   --prob       Print probabilities as well as parse trees.
   --tags       Tokens are of the form "word/POS"; give both to parser.
+  --fmt=[export|bracket|discbracket|alpino|conll|mst|wordpos]
+               Format of output [default: discbracket].
   --numproc=k  Launch k processes, to exploit multiple cores.
   --simple     Parse with a single grammar and input file; similar interface
                to bitpar. The files 'rules' and 'lexicon' define a binarized
@@ -70,7 +69,7 @@ Options for simple mode:
                instead, whose probability is the sum of any number of the
                k-best derivations.
   --bitpar     Use bitpar to parse with an unbinarized grammar.
-''' % dict(cmd=sys.argv[0])
+''' % dict(cmd=sys.argv[0], fmt=','.join(WRITERS))
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames
@@ -128,7 +127,7 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags bitpar simple mpp= bt= numproc='.split()
+	options = 'prob tags bitpar simple mpp= bt= numproc= fmt='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'b:s:x', options)
 		assert 1 <= len(args) <= 4, 'incorrect number of arguments'
@@ -201,11 +200,12 @@ def main():
 	out = (io.open(args[3], 'w', encoding='utf-8')
 			if len(args) == 4 else sys.stdout)
 	doparsing(parser, infile, out, prob, oneline, tags, numparses,
-			int(opts.get('--numproc', 1)))
+			int(opts.get('--numproc', 1)), opts.get('--fmt', 'discbracket'),
+			params['morphology'])
 
 
 def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
-		numproc):
+		numproc, fmt, morphology):
 	"""Parse sentences from file and write results to file, log to stdout."""
 	times = []
 	unparsed = 0
@@ -213,11 +213,12 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 		infile = readinputbitparstyle(infile)
 	infile = (line for line in infile if line.strip())
 	if numproc == 1:
-		initworker(parser, printprob, usetags, numparses)
+		initworker(parser, printprob, usetags, numparses, fmt, morphology)
 		mymap = imap
 	else:
 		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
-				initargs=(parser, printprob, usetags, numparses))
+				initargs=(parser, printprob, usetags, numparses, fmt,
+					morphology))
 		mymap = pool.imap
 	for output, noparse, sec, msg in mymap(worker, enumerate(infile)):
 		if output:
@@ -235,10 +236,15 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 	out.close()
 
 
-def initworker(parser, printprob, usetags, numparses):
+def initworker(parser, printprob, usetags, numparses,
+		fmt, morphology):
 	"""Load parser for a worker process."""
+	headrules = None
+	if fmt in ('mst', 'conll'):
+		headrules = readheadrules(parser.binarization.headrules)
 	PARAMS.update(parser=parser, printprob=printprob,
-			usetags=usetags, numparses=numparses)
+			usetags=usetags, numparses=numparses, fmt=fmt,
+			morphology=morphology, headrules=headrules)
 
 
 def workerfunc(func):
@@ -283,16 +289,16 @@ def worker(args):
 		if PARAMS.printprob:
 			output += 'prob=%.16g\n' % result.prob
 		output += '%s\t%s\n' % (result.parsetree, ' '.join(sent))
-	elif PARAMS.printprob:
-		output += ''.join('prob=%.16g\n%s\t%s\n' % (
-				prob, PARAMS.parser.postprocess(tree)[0], ' '.join(sent))
-				for tree, prob, _ in nlargest(PARAMS.numparses,
-					result.parsetrees, key=itemgetter(1)))
 	else:
-		output += ''.join('%s\t%s\n' % (
-				PARAMS.parser.postprocess(tree)[0], ' '.join(sent))
-				for tree, _, _ in nlargest(PARAMS.numparses,
-					result.parsetrees, key=itemgetter(1)))
+		output += ''.join(
+				writetree(
+					PARAMS.parser.postprocess(tree)[0], sent,
+					n if PARAMS.numparses == 1 else ('%d-%d' % (n, k)),
+					PARAMS.fmt, headrules=PARAMS.headrules,
+					morphology=PARAMS.morphology,
+					comment=('prob=%.16g' % prob) if PARAMS.printprob else None)
+				for k, (tree, prob, _) in enumerate(nlargest(
+					PARAMS.numparses, result.parsetrees, key=itemgetter(1))))
 	sec = time.clock() - begin
 	msg += '\n%g s' % sec
 	return output, result.noparse, sec, msg

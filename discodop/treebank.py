@@ -551,7 +551,8 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	return tree, sent
 
 
-def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
+def writetree(tree, sent, n, fmt,
+		comment=None, headrules=None, morphology=None):
 	"""Convert a tree to a string representation in the given treebank format.
 
 	:param tree: should have indices as terminals
@@ -562,47 +563,46 @@ def writetree(tree, sent, n, fmt, headrules=None, morphology=None):
 		conversion into ``mst`` or ``conll`` format (requires head rules).
 		The formats ``tokens`` and ``wordpos`` are to strip away tree structure
 		and leave only lines with tokens or ``token/POS``.
+	:param comment: optionally, a string that will go in the format's comment
+		field (supported by ``export`` and ``alpino``), at the end of the line
+		preceded by a tab (``bracket`` and ``discbracket``), or that will be
+		prepended on a line starting with '%% ' (other formats).
 
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
 	if fmt == 'bracket':
-		return INDEXRE.sub(
+		result = INDEXRE.sub(
 				lambda x: ' %s)' % quote(sent[int(x.group()[:-1])]),
-				"%s\n" % tree)
+				'%s\n' % tree)
 	elif fmt == 'discbracket':
-		return "%s\t%s\n" % (tree, ' '.join(map(quote, sent)))
+		result = '%s\t%s\n' % (tree, ' '.join(map(quote, sent)))
 	elif fmt == 'tokens':
-		return "%s\n" % ' '.join(sent)
+		result = '%s\n' % ' '.join(sent)
 	elif fmt == 'wordpos':
-		return "%s\n" % ' '.join('%s/%s' % (word, pos) for word, (_, pos)
+		result = '%s\n' % ' '.join('%s/%s' % (word, pos) for word, (_, pos)
 				in zip(sent, sorted(tree.pos())))
 	elif fmt == 'export':
-		return writeexporttree(tree, sent, n, morphology)
+		return writeexporttree(tree, sent, n, comment, morphology)
 	elif fmt == 'alpino':
-		return writealpinotree(tree, sent, n)
+		return writealpinotree(tree, sent, n, comment)
 	elif fmt in ('conll', 'mst'):
 		assert headrules, 'dependency conversion requires head rules.'
-		deps = dependencies(tree, headrules)
-		if fmt == 'mst':  # MST parser can read this format
-			# fourth line with function tags is left empty.
-			return "\n".join((
-				'\t'.join(word for word in sent),
-				'\t'.join(tag for _, tag in sorted(tree.pos())),
-				'\t'.join(str(head) for _, _, head in deps))) + '\n\n'
-		elif fmt == 'conll':
-			return '\n'.join('%d\t%s\t_\t%s\t%s\t_\t%d\t%s\t_\t_' % (
-				n, word, tag, tag, head, rel)
-				for word, (_, tag), (n, rel, head)
-				in zip(sent, sorted(tree.pos()), deps)) + '\n\n'
+		result = writedependencies(tree, sent, fmt, headrules)
 	else:
 		raise ValueError('unrecognized format: %r' % fmt)
+	if comment and fmt in ('bracket', 'discbracket'):
+		return '%s\t%s\n' % (result.rstrip('\n'), comment)
+	elif comment:
+		return '%%%% %s\n%s' % (comment, result)
+	return result
 
 
-def writeexporttree(tree, sent, n, morphology):
+def writeexporttree(tree, sent, n, comment, morphology):
 	"""Return string with given tree in Negra's export format."""
 	result = []
 	if n is not None:
-		result.append("#BOS %s" % n)
+		cmt = (' %% ' + comment) if comment else ''
+		result.append('#BOS %s%s' % (n, cmt))
 	indices = tree.treepositions('leaves')
 	wordsandpreterminals = indices + [a[:-1] for a in indices]
 	phrasalnodes = [a for a in tree.treepositions('postorder')
@@ -651,9 +651,9 @@ def writeexporttree(tree, sent, n, morphology):
 	return "%s\n" % "\n".join(result)
 
 
-def writealpinotree(tree, sent, n):
+def writealpinotree(tree, sent, n, commentstr):
 	"""Return XML string with tree in AlpinoXML format."""
-	def addchildren(tree, sent, parent, cnt):
+	def addchildren(tree, sent, parent, cnt, depth=1, last=False):
 		"""Recursively add children of ``tree`` to XML object ``node``"""
 		node = ElementTree.SubElement(parent, 'node')
 		node.set('id', str(next(cnt)))
@@ -663,6 +663,7 @@ def writealpinotree(tree, sent, n):
 			node.set('rel', tree.source[FUNC] or '--')
 		if isinstance(tree[0], Tree):
 			node.set('cat', tree.label.lower())
+			node.text = '\n  ' + '  ' * depth
 		else:
 			assert isinstance(tree[0], int)
 			node.set('pos', tree.label.lower())
@@ -672,9 +673,10 @@ def writealpinotree(tree, sent, n):
 			if getattr(tree, 'source', None):
 				node.set('lemma', tree.source[LEMMA] or '--')
 				node.set('postag', tree.source[MORPH] or '--')
-		for child in tree:
+		node.tail = '\n' + '  ' * (depth - last)
+		for x, child in enumerate(tree, 1):
 			if isinstance(child, Tree):
-				addchildren(child, sent, node, cnt)
+				addchildren(child, sent, node, cnt, depth + 1, x == len(tree))
 
 	result = ElementTree.Element('alpino_ds')
 	result.set('version', '1.3')
@@ -682,8 +684,47 @@ def writealpinotree(tree, sent, n):
 	sentence = ElementTree.SubElement(result, 'sentence')
 	sentence.text = ' '.join(sent)
 	comment = ElementTree.SubElement(result, 'comment')
-	comment.text = str(n)
+	comment.text = ('%s|%s' % (n, commentstr)) if commentstr else str(n)
+	result.text = sentence.tail = '\n  '
+	result.tail = comment.tail = '\n'
 	return ElementTree.tostring(result).decode('utf-8')  # hack
+
+
+def writedependencies(tree, sent, fmt, headrules):
+	"""Convert tree to unlabeled dependencies in `mst` or `conll` format."""
+	deps = dependencies(tree, headrules)
+	if fmt == 'mst':  # MST parser can read this format
+		# fourth line with function tags is left empty.
+		return "\n".join((
+			'\t'.join(word for word in sent),
+			'\t'.join(tag for _, tag in sorted(tree.pos())),
+			'\t'.join(str(head) for _, _, head in deps))) + '\n\n'
+	elif fmt == 'conll':
+		return '\n'.join('%d\t%s\t_\t%s\t%s\t_\t%d\t%s\t_\t_' % (
+			n, word, tag, tag, head, rel)
+			for word, (_, tag), (n, rel, head)
+			in zip(sent, sorted(tree.pos()), deps)) + '\n\n'
+
+
+def dependencies(root, headrules):
+	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers."""
+	deps = []
+	deps.append((makedep(root, deps, headrules), 'ROOT', 0))
+	return sorted(deps)
+
+
+def makedep(root, deps, headrules):
+	"""Traverse a tree marking heads and extracting dependencies."""
+	if not isinstance(root[0], Tree):
+		return root[0] + 1
+	headchild = headfinder(root, headrules)
+	lexhead = makedep(headchild, deps, headrules)
+	for child in root:
+		if child is headchild:
+			continue
+		lexheadofchild = makedep(child, deps, headrules)
+		deps.append((lexheadofchild, 'NONE', lexhead))
+	return lexhead
 
 
 def handlefunctions(action, tree, pos=True, top=False, morphology=None):
@@ -756,27 +797,6 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 	elif action not in (None, 'no'):
 		raise ValueError('unrecognized action: %r' % action)
 	return preterminal
-
-
-def dependencies(root, headrules):
-	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers."""
-	deps = []
-	deps.append((makedep(root, deps, headrules), 'ROOT', 0))
-	return sorted(deps)
-
-
-def makedep(root, deps, headrules):
-	"""Traverse a tree marking heads and extracting dependencies."""
-	if not isinstance(root[0], Tree):
-		return root[0] + 1
-	headchild = headfinder(root, headrules)
-	lexhead = makedep(headchild, deps, headrules)
-	for child in root:
-		if child is headchild:
-			continue
-		lexheadofchild = makedep(child, deps, headrules)
-		deps.append((lexheadofchild, 'NONE', lexhead))
-	return lexhead
 
 
 def incrementaltreereader(treeinput, morphology=None, functions=None):
@@ -899,16 +919,18 @@ def segmentexport(morphology, functions, strict=False):
 	cur = []
 	inblock = 0
 	line = (yield None, 1)
+	rest = ''
 	while line is not None:
 		if line.startswith('#BOS ') or line.startswith('#BOT '):
 			if strict and inblock != 0:
 				raise ValueError('nested #BOS or #BOT')
 			cur = []
 			inblock = 1 if line.startswith('#BOS ') else 2
+			rest = line[5:]
 			line = (yield None, 1)
 		elif line.startswith('#EOS ') or line.startswith('#EOS '):
 			tree, sent = exporttree(cur, functions, morphology)
-			line = (yield ((tree, sent, ''), ), 1)
+			line = (yield ((tree, sent, rest), ), 1)
 			inblock = 0
 			cur = []
 		elif line.strip():

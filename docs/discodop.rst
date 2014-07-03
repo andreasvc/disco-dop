@@ -320,14 +320,10 @@ A command line interface for parsing new texts with an existing grammar.
 | or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``
 
 ``grammar/`` is a directory with a model produced by ``discodop runexp``.
-If one or more filenames are given, the parse trees for each file are written
-to a file with ``.dbr`` added to the original filename.
 When no filename is given, input is read from standard input and the results
 are written to standard output. Input should contain one sentence per line
 with space-delimited tokens. Output consists of bracketed trees in
-``discbracket`` format, i.e., terminals are indices pointing to words in the
-original sentence, to represent any discontinuties.
-Files must be encoded in UTF-8.
+selected format. Files must be encoded in UTF-8.
 
 General options:
 
@@ -335,7 +331,9 @@ General options:
              newlines (like bitpar).
 -b k         Return the k-best parses instead of just 1.
 --prob       Print probabilities as well as parse trees.
---tags       Tokens are of the form "word/POS"; give both to parser.
+--tags       Tokens are of the form ``word/POS``; give both to parser.
+--fmt=[export|bracket|discbracket|alpino|conll|mst|wordpos]
+             Format of output [default: discbracket].
 --numproc=k  Launch k processes, to exploit multiple cores.
 --simple     Parse with a single grammar and input file; similar interface
              to bitpar. The files ``rules`` and ``lexicon`` define a binarized
@@ -343,7 +341,7 @@ General options:
 
 Options for simple mode:
 
--s x         Use "x" as start symbol instead of default "TOP".
+-s x         Use ``x`` as start symbol instead of default ``TOP``.
 --bt=file    Apply backtransform table to recover TSG derivations.
 --mpp=k      By default, the output consists of derivations, with the most
              probable derivation (MPD) ranked highest. With a PTSG such as
@@ -352,27 +350,6 @@ Options for simple mode:
              k-best derivations.
 --bitpar     Use bitpar to parse with an unbinarized grammar.
 
-The PLCFRS format is as follows. Rules are delimited by newlines.
-Fields are separated by tabs. The fields are::
-
-    LHS	RHS1	[RHS2]	yield-function	weight
-
-The yield function defines how the spans of the RHS nonterminals
-are combined to form the spans of the LHS nonterminal. Components of the yield
-function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as rational
-fractions.
-The lexicon is defined in a separate file. Lines start with a single word,
-followed by pairs of possible tags and their probabilities::
-
-    WORD	TAG1	PROB1	[TAG2	PROB2 ...]
-
-Example::
-
-    rules:   S	NP	VP	010	1/2
-             VP_2	VB	NP	0,1	2/3
-             NP	NN	0	1/4
-    lexicon: Haus	NN	3/10	JJ	1/9
 
 treedraw
 --------

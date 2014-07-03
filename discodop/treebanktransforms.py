@@ -436,7 +436,8 @@ def reversetransform(tree, transformations):
 					a.source[FUNC] = func
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
 			from discodop.treetransforms import postorder
-			for a in postorder(tree, lambda n: n.label.startswith('-')):
+			for a in postorder(tree, lambda n: n.label.startswith('-')
+					and n and isinstance(n[0], Tree)):
 				a.source = ['--'] * 8
 				a.source[FUNC] = a.label[1:]
 				a.source[TAG] = a.label = a[0].label
