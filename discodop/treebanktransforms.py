@@ -959,3 +959,12 @@ def headstats(trees):
 			else:
 				unknown[a.label].update(b.label for b in a)
 	return heads, unknown, pos1, pos2
+
+
+__all__ = ['transform', 'negratransforms', 'wsjtransforms', 'ftbtransforms',
+		'reversetransform', 'collapselabels', 'unifymorphfeat', 'rrtransform',
+		'rrbacktransform', 'removeterminals', 'removeemptynodes', 'ispunct',
+		'punctremove', 'punctremove', 'punctlower', 'punctraise',
+		'balancedpunctraise', 'function', 'ishead', 'rindex', 'labels', 'pop',
+		'strip', 'ancestors', 'bracketings', 'readheadrules', 'headfinder',
+		'sethead', 'headmark', 'headorder', 'saveheads', 'headstats']

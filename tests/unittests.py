@@ -354,8 +354,7 @@ class TestHeap(TestCase):
 
 
 def test_fragments():
-	from discodop._fragments import getctrees, \
-			fastextractfragments, exactcounts
+	from discodop._fragments import getctrees, extractfragments, exactcounts
 	treebank = [binarize(Tree(x)) for x in """\
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
 (S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
@@ -370,10 +369,10 @@ def test_fragments():
 		for n, idx in enumerate(tree.treepositions('leaves')):
 			tree[idx] = n
 	params = getctrees(treebank, sents)
-	fragments = fastextractfragments(params['trees1'], params['sents1'],
+	fragments = extractfragments(params['trees1'], params['sents1'],
 			0, 0, params['labels'], discontinuous=True, approx=False)
 	counts = exactcounts(params['trees1'], params['trees1'],
-			list(fragments.values()), fast=True)
+			list(fragments.values()))
 	assert len(fragments) == 25
 	assert sum(counts) == 100
 	for (a, b), c in sorted(zip(fragments, counts), key=repr):

@@ -945,5 +945,10 @@ def main(argv=None):
 			open(os.path.join(resultdir, 'params.prm'), "w").write(
 					"top='%s',\n%s" % (top, open(argv[1]).read()))
 
+
+__all__ = ['initworker', 'startexp', 'loadtraincorpus', 'getposmodel',
+		'dobinarization', 'getgrammars', 'doparsing', 'worker', 'writeresults',
+		'oldeval', 'readtepacoc', 'parsetepacoc', 'readparam']
+
 if __name__ == '__main__':
 	main()

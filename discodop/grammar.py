@@ -1061,5 +1061,14 @@ def main():
 	except (ImportError, AssertionError) as err:
 		print(err)
 
+
+__all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
+		'compiletsg', 'sortgrammar', 'flatten', 'nodefreq', 'TreeDecorator',
+		'DiscTree', 'eqtree', 'quotelabel', 'UniqueIDs', 'rangeheads',
+		'ranges', 'defaultparse', 'printrule', 'cartpi', 'write_lcfrs_grammar',
+		'write_lncky_grammar', 'subsetgrammar', 'grammarinfo', 'convertweight',
+		'grammarstats', 'stripweight', 'sumrules', 'sumlex', 'sumfrags',
+		'merge']
+
 if __name__ == '__main__':
 	main()

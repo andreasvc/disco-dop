@@ -20,7 +20,4 @@ sentences using Tree-Substitution Grammar (TSG).
    :maxdepth: 2
 
    intro
-   discodop
-   params
-   fileformats
-   api
+   ref

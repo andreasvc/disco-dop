@@ -987,3 +987,11 @@ READERS = OrderedDict((('export', NegraCorpusReader),
 		('alpino', AlpinoCorpusReader), ('dact', DactCorpusReader)))
 WRITERS = ('export', 'bracket', 'discbracket', 'dact',
 		'conll', 'mst', 'tokens', 'wordpos')
+
+__all__ = ['CorpusReader', 'BracketCorpusReader', 'DiscBracketCorpusReader',
+		'NegraCorpusReader', 'AlpinoCorpusReader', 'TigerXMLCorpusReader',
+		'DactCorpusReader', 'brackettree', 'exporttree', 'exportsplit',
+		'alpinotree', 'writetree', 'writeexporttree', 'writealpinotree',
+		'writedependencies', 'dependencies', 'makedep', 'handlefunctions',
+		'handlemorphology', 'incrementaltreereader', 'segmentbrackets',
+		'segmentexport', 'quote', 'unquote', 'treebankfanout', 'numbase']

@@ -925,3 +925,8 @@ def test():
 		print(p, a)
 	#chart1, msg1 = parse_symbolic(sent, cfg2)
 	#print(msg, '\n', msg1)
+
+__all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'bitpar_nbest',
+		'bitpar_yap_forest', 'chartmatrix', 'doinsideoutside', 'insidescores',
+		'minmaxmatrices', 'outsidescores', 'parse', 'parse_bitpar',
+		'parse_symbolic', 'pprint_matrix', 'renumber']

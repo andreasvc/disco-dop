@@ -235,10 +235,12 @@ def test():
 
 def main():
 	"""Run all examples."""
-	bitext()
 	dependencygrammar()
 	tree_adjoining_grammar()
 	bitext()
+
+
+__all__ = ['tree_adjoining_grammar', 'dependencygrammar', 'bitext']
 
 if __name__ == '__main__':
 	test()

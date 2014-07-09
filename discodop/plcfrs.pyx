@@ -765,6 +765,7 @@ cdef inline bint concat(Rule *rule,
 
 def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
 	"""Like parse(), but only compute parse forest, disregard probabilities.
+
 	The agenda is a O(1) queue instead of a O(log n) priority queue."""
 	if len(sent) < sizeof(COMPONENT.vec) * 8:
 		chart = SmallLCFRSChart(grammar, list(sent))
@@ -988,11 +989,11 @@ def test():
 		((('VVPP', 'Epsilon'), ('nachgedacht', )), 1)], start='S')
 	print(grammar)
 	assert do('Daruber muss nachgedacht werden', grammar)
-	assert do('Daruber muss nachgedacht werden werden', grammar)
 	assert do('Daruber muss nachgedacht werden werden werden', grammar)
-	print('ungrammatical sentence:')
-	assert not do('muss Daruber nachgedacht werden', grammar)  # no parse
-	print('(as expected)\nlong sentence (%d words):' % 35)
+	print('ungrammatical sentence (\'no parse\' expected):')
+	assert not do('muss Daruber nachgedacht werden', grammar)
 	assert do('Daruber muss nachgedacht ' + ' '.join(32 * ['werden']), grammar)
-	print('(as expected)\nlong sentence (%d words):' % 67)
 	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)
+
+__all__ = ['Agenda', 'DoubleAgenda', 'FatLCFRSChart', 'LCFRSChart',
+		'SmallLCFRSChart', 'getparent', 'nwaymerge', 'parse', 'parse_symbolic']

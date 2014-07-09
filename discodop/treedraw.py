@@ -835,5 +835,7 @@ def main():
 			pass
 
 
+__all__ = ['DrawTree', 'latexlabel']
+
 if __name__ == '__main__':
 	main()

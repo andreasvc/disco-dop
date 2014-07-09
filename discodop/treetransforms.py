@@ -1004,5 +1004,14 @@ def main():
 	print('%sed %d trees with action %r' % ('convert' if action == 'none'
 			else 'transform', cnt, action), file=sys.stderr)
 
+
+__all__ = ['OrderedSet', 'abbr', 'addbitsets', 'addfanoutmarkers', 'binarize',
+		'unbinarize', 'canonicalize', 'collapseunary', 'complexity',
+		'complexityfanout', 'contsets', 'disc', 'factorconstituent',
+		'fanout', 'fanoutcomplexity', 'getbits', 'getyf',
+		'introducepreterminals', 'mergediscnodes', 'minimalbinarization',
+		'optimalbinarize', 'postorder', 'removefanoutmarkers',
+		'splitdiscnodes']
+
 if __name__ == '__main__':
 	main()

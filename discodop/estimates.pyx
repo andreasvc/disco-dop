@@ -807,3 +807,6 @@ def test():
 	print('items avoided:')
 	for item in set(chart.getitems()) - set(estchart.getitems()):
 		print(item)
+
+__all__ = ['Item', 'getestimates', 'getpcfgestimates', 'getpcfgestimates',
+		'inside', 'outsidelr', 'simpleinside']

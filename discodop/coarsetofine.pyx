@@ -475,3 +475,7 @@ def test():
 			print(n, end='')
 			doctf(coarse, fine, sent, tree, k, split, verbose=False)
 		print("time elapsed", clock() - begin, "s")
+
+__all__ = ['bitparkbestitems', 'doctf', 'getinside', 'getoutside',
+		'posteriorthreshold', 'prunechart', 'whitelistfromposteriors',
+		'whitelistfromposteriors_matrix']

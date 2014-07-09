@@ -441,8 +441,7 @@ class TreePairResult(object):
 
 	def scores(self):
 		"""Return precision, recall, f-measure for sentence pair."""
-		return dict(
-				LP=nozerodiv(lambda: precision(self.gbrack, self.cbrack)),
+		return dict(LP=nozerodiv(lambda: precision(self.gbrack, self.cbrack)),
 				LR=nozerodiv(lambda: recall(self.gbrack, self.cbrack)),
 				LF=nozerodiv(lambda: f_measure(self.gbrack, self.cbrack)))
 
@@ -480,8 +479,7 @@ class EvalAccumulator(object):
 	def __init__(self, disconly=False):
 		""":param disconly: if True, only collect discontinuous bracketings."""
 		self.disconly = disconly
-		self.maxlenseen = Decimal(0)
-		self.sentcount = Decimal(0)
+		self.maxlenseen, self.sentcount = Decimal(0), Decimal(0)
 		self.exact = Decimal(0)
 		self.dicenoms, self.dicedenoms = Decimal(0), Decimal(0)
 		self.goldb, self.candb = multiset(), multiset()  # all brackets
@@ -548,24 +546,21 @@ def main():
 	except GetoptError as err:
 		print('error: %s\n%s' % (err, HELP))
 		sys.exit(2)
-	else:
-		opts = dict(opts)
-	try:
-		assert 2 <= len(args) <= 3, 'Wrong number of arguments.\n%s' % (
-				USAGE if len(args) else HELP)
-		goldfile, parsesfile = args[:2]
-		param = readparam(args[2] if len(args) == 3 else None)
-		param['CUTOFF_LEN'] = int(opts.get('--cutofflen', param['CUTOFF_LEN']))
-		param['DISC_ONLY'] = '--disconly' in opts
-		param['DEBUG'] = max(param['DEBUG'],
-				'--verbose' in opts, 2 * ('--debug' in opts))
-		param['TED'] |= '--ted' in opts
-		param['DEP'] = '--headrules' in opts
-		if '--headrules' in opts:
-			param['HEADRULES'] = readheadrules(opts['--headrules'])
-	except AssertionError as err:
-		print('error: %s' % err)
+	opts = dict(opts)
+	if len(args) < 2 or len(args) > 3:
+		print('error: Wrong number of arguments.\n%s' % (
+			USAGE if len(args) else HELP))
 		sys.exit(2)
+	goldfile, parsesfile = args[:2]
+	param = readparam(args[2] if len(args) == 3 else None)
+	param['CUTOFF_LEN'] = int(opts.get('--cutofflen', param['CUTOFF_LEN']))
+	param['DISC_ONLY'] = '--disconly' in opts
+	param['DEBUG'] = max(param['DEBUG'],
+			'--verbose' in opts, 2 * ('--debug' in opts))
+	param['TED'] |= '--ted' in opts
+	param['DEP'] = '--headrules' in opts
+	if '--headrules' in opts:
+		param['HEADRULES'] = readheadrules(opts['--headrules'])
 	if '--fmt' in opts:
 		opts['--goldfmt'] = opts['--parsesfmt'] = opts['--fmt']
 	goldreader = READERS[opts.get('--goldfmt', 'export')]
@@ -991,6 +986,14 @@ def editdistance(seq1, seq2):
 			c = lev[i + 1][j] + 1               # skip seq2[j]
 			lev[i + 1][j + 1] = min(a, b, c)    # pick the cheapest
 	return lev[len1][len2]
+
+
+__all__ = ['EvalAccumulator', 'Evaluator', 'TreePairResult', 'accuracy',
+		'bracketings', 'bracketing', 'disc', 'editdistance', 'f_measure',
+		'harmean', 'intervals', 'leafancestor', 'leafancestorpaths', 'mean',
+		'nozerodiv', 'parentedbracketings', 'pathscore', 'precision',
+		'readparam', 'recall', 'strbracketings', 'transform',
+		'transitiveclosure', 'treedisteval']
 
 if __name__ == '__main__':
 	main()

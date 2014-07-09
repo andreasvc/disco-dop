@@ -273,5 +273,10 @@ def main():
 		p, sent = gen(grammar, start=grammar.toid[start], verbose=verbose)
 		print("[%g] %s" % (p, ' '.join(sent.pop())))
 
+
+__all__ = ['Grammar', 'LexicalRule', 'Rule', 'arraytoyf', 'chooserule',
+		'compose', 'gen', 'parsefrac', 'read_bitpar_grammar',
+		'read_lcfrs_grammar', 'splitgrammar', 'yfarray']
+
 if __name__ == '__main__':
 	main()

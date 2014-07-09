@@ -681,5 +681,10 @@ def which(program):
 			return os.path.join(path, program)
 	raise ValueError('%r not found in path; please install it.' % program)
 
+
+__all__ = ['DictObj', 'Parser', 'doparsing', 'exportbitpargrammar',
+		'initworker', 'probstr', 'readgrammars', 'readinputbitparstyle',
+		'which', 'worker', 'workerfunc']
+
 if __name__ == '__main__':
 	main()

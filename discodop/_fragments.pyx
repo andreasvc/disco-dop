@@ -108,16 +108,16 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 	return candidates
 
 
-cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
+cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
 		bint debug=False, bint discontinuous=False, bint complement=False,
 		bint twoterms=False, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use:
-		``fastextractfragments(trees1, sents1, offset, end, labels)``
+		``extractfragments(trees1, sents1, offset, end, labels)``
 	- scenario 2: common fragments in two treebanks:
-		``fastextractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
+		``extractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
 
 	``offset`` and ``end`` can be used to divide the work over multiple
 	processes; they are indices of ``trees1`` to work on (default is all);
@@ -128,7 +128,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		int n, m, start = 0, end2
 		short minterms = 2 if twoterms else 0
 		short SLOTS  # the number of UInts needed to cover the largest tree
-		ULong *CST = NULL  # Common Subtree Table
+		ULong *matrix = NULL  # bit matrix of common productions in tree pair
 		ULong *scratch
 		NodeArray a
 		NodeArray *ctrees1
@@ -151,9 +151,9 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 		trees2 = trees1
 	ctrees1 = trees1.trees
 	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-	CST = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
+	matrix = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
 	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
-	assert CST is not NULL and scratch is not NULL
+	assert matrix is not NULL and scratch is not NULL
 	end2 = trees2.len
 	# loop over tree pairs to extract fragments from
 	for n in range(offset, min(end or trees1.len, trees1.len)):
@@ -165,7 +165,7 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 			if m < trees2.len:
 				extractfrompair(a, anodes, trees2, n, m,
 						complement, debug, asent, sents2 or sents1,
-						labels, inter, minterms, CST, scratch, SLOTS)
+						labels, inter, minterms, matrix, scratch, SLOTS)
 		elif twoterms:
 			for m in twoterminals(a, anodes, trees2,
 					contentwordprods, lexicalprods):
@@ -175,39 +175,39 @@ cpdef fastextractfragments(Ctrees trees1, list sents1, int offset, int end,
 					raise ValueError('illegal index %d' % m)
 				extractfrompair(a, anodes, trees2, n, m,
 						complement, debug, asent, sents2 or sents1,
-						labels, inter, minterms, CST, scratch, SLOTS)
+						labels, inter, minterms, matrix, scratch, SLOTS)
 		else:  # all pairs
 			if sents2 is None:
 				start = n + 1
 			for m in range(start, end2):
 				extractfrompair(a, anodes, trees2, n, m,
 						complement, debug, asent, sents2 or sents1,
-						labels, inter, minterms, CST, scratch, SLOTS)
+						labels, inter, minterms, matrix, scratch, SLOTS)
 		collectfragments(fragments, inter, anodes, asent, labels,
 				discontinuous, approx, tmp, SLOTS)
-	free(CST)
+	free(matrix)
 	free(scratch)
 	return fragments
 
 
 cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 		int n, int m, bint complement, bint debug, list asent, list sents,
-		list labels, set inter, short minterms, ULong *CST, ULong *scratch,
+		list labels, set inter, short minterms, ULong *matrix, ULong *scratch,
 		short SLOTS):
 	"""Extract the bitsets of maximal overlapping fragments for a tree pair."""
 	cdef NodeArray b = trees2.trees[m]
 	cdef Node *bnodes = &trees2.nodes[b.offset]
 	# initialize table
-	memset(<void *>CST, 0, b.len * SLOTS * sizeof(ULong))
+	memset(<void *>matrix, 0, b.len * SLOTS * sizeof(ULong))
 	# fill table
-	fasttreekernel(anodes, bnodes, a.len, b.len, CST, SLOTS)
+	fasttreekernel(anodes, bnodes, a.len, b.len, matrix, SLOTS)
 	# dump table
 	if debug:
 		print(n, m)
-		dumpCST(CST, a, b, anodes, bnodes, asent, sents[m], labels,
-				scratch, SLOTS, True)
+		dumpmatrix(matrix, a, b, anodes, bnodes, asent, sents[m], labels,
+				scratch, SLOTS)
 	# extract results
-	extractbitsets(CST, anodes, bnodes, b.root, n,
+	extractbitsets(matrix, anodes, bnodes, b.root, n,
 			inter, minterms, scratch, SLOTS)
 	# extract complementary fragments?
 	if complement:
@@ -240,75 +240,83 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 
 
 cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
-		ULong *CST, short SLOTS):
+		ULong *matrix, short SLOTS):
 	"""Fast Tree Kernel (average case linear time).
 
 	Expects trees to be sorted according to their productions (in descending
 	order, with terminals as -1). This algorithm is from the pseudocode in
 	Moschitti (2006): Making Tree Kernels practical for Natural Language
 	Learning."""
-	# i as an index to a, j to b, and jj is a temp index starting at j.
-	cdef int i = 0, j = 0, jj = 0
-	while i < alen and j < blen:
+	# i is an index to a, j to b, and ii is a temp index starting at i.
+	cdef int i = 0, j = 0, ii = 0
+	while True:
 		if a[i].prod < b[j].prod:
 			i += 1
+			if i >= alen:
+				return
 		elif a[i].prod > b[j].prod:
 			j += 1
+			if j >= blen:
+				return
 		else:
-			while i < alen and a[i].prod == b[j].prod:
-				jj = j
-				while jj < blen and a[i].prod == b[jj].prod:
-					SETBIT(&CST[jj * SLOTS], i)
-					jj += 1
-				i += 1
+			while a[i].prod == b[j].prod:
+				ii = i
+				while a[ii].prod == b[j].prod:
+					SETBIT(&matrix[j * SLOTS], ii)
+					ii += 1
+					if ii >= alen:
+						break
+				j += 1
+				if j >= blen:
+					return
 
 
-cdef inline extractbitsets(ULong *CST, Node *a, Node *b, short j, int n,
+cdef inline extractbitsets(ULong *matrix, Node *a, Node *b, short j, int n,
 		set results, int minterms, ULong *scratch, short SLOTS):
 	"""Visit nodes of ``b`` top-down and store bitsets of common nodes.
 
 	Stores bitsets of connected subsets of ``a`` as they are encountered,
-	following the common nodes specified in CST. ``j`` is the node in ``b`` to
-	start with, which changes with each recursive step. ``n`` is the identifier
-	of this tree which is stored with extracted fragments."""
-	cdef ULong *bitset = &CST[j * SLOTS]
+	following the common nodes specified in bit matrix. ``j`` is the node in
+	``b`` to start with, which changes with each recursive step. ``n`` is the
+	identifier of this tree which is stored with extracted fragments."""
+	cdef ULong *bitset = &matrix[j * SLOTS]
 	cdef ULong cur = bitset[0]
 	cdef int idx = 0, terms
 	cdef int i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	while i != -1:
 		memset(<void *>scratch, 0, SLOTS * sizeof(ULong))
-		terms = extractat(CST, scratch, a, b, i, j, SLOTS)
+		terms = extractat(matrix, scratch, a, b, i, j, SLOTS)
 		if terms >= minterms:
 			setrootid(scratch, i, n, SLOTS)
 			results.add(wrap(scratch, SLOTS))
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	if b[j].left >= 0:
-		extractbitsets(CST, a, b, b[j].left, n,
+		extractbitsets(matrix, a, b, b[j].left, n,
 				results, minterms, scratch, SLOTS)
 		if b[j].right >= 0:
-			extractbitsets(CST, a, b, b[j].right, n,
+			extractbitsets(matrix, a, b, b[j].right, n,
 					results, minterms, scratch, SLOTS)
 
 
-cdef inline int extractat(ULong *CST, ULong *result, Node *a, Node *b,
+cdef inline int extractat(ULong *matrix, ULong *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
 	"""Traverse tree `a` and `b` in parallel to extract a connected subset."""
 	cdef int terms = 0
 	SETBIT(result, i)
-	CLEARBIT(&CST[j * SLOTS], i)
+	CLEARBIT(&matrix[j * SLOTS], i)
 	if a[i].left < 0:
 		return 1
-	elif TESTBIT(&CST[b[j].left * SLOTS], a[i].left):
-		terms += extractat(CST, result, a, b, a[i].left, b[j].left, SLOTS)
+	elif TESTBIT(&matrix[b[j].left * SLOTS], a[i].left):
+		terms += extractat(matrix, result, a, b, a[i].left, b[j].left, SLOTS)
 	if a[i].right < 0:
 		return 0
-	elif TESTBIT(&CST[b[j].right * SLOTS], a[i].right):
-		terms += extractat(CST, result, a, b, a[i].right, b[j].right, SLOTS)
+	elif TESTBIT(&matrix[b[j].right * SLOTS], a[i].right):
+		terms += extractat(matrix, result, a, b, a[i].right, b[j].right, SLOTS)
 	return terms
 
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
-		bint fast=True, bint indices=False):
+		bint indices=False):
 	"""Get exact counts or indices of occurrence for fragments.
 
 	Given a set of fragments from ``trees1`` as bitsets, find all occurrences
@@ -368,7 +376,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 							matches[m] += 1
 						else:
 							countsp[n] += 1
-				elif fast and anodes[i].prod < bnodes[j].prod:
+				elif anodes[i].prod < bnodes[j].prod:
 					break
 	return theindices if indices else counts
 
@@ -483,133 +491,6 @@ cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 		free(scratch)
 
 
-cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
-		list labels, Ctrees trees2=None, list sents2=None, bint approx=True,
-		bint debug=False, bint discontinuous=False):
-	"""Find the largest fragments in treebank(s) with quadratic tree kernel.
-
-	- scenario 1: recurring fragments in single treebank, use:
-		``extractfragments(trees1, sents1, offset, end)``
-	- scenario 2: common fragments in two treebanks:
-		``extractfragments(trees1, sents1, offset, end, trees2, sents2)``
-
-	``offset`` and ``end`` can be used to divide the work over multiple
-	processes; they are indices of ``trees1`` to work on (default is all); when
-	``debug`` is enabled a contingency table is shown for each pair of trees;
-	when ``complement`` is true, the complement of the recurring fragments in
-	each pair of trees is extracted as well."""
-	cdef:
-		int n, m, i, j, start = 0
-		short SLOTS
-		ULong *CST
-		ULong *scratch
-		NodeArray *ctrees1
-		NodeArray *ctrees2
-		NodeArray a, b
-		Node *anodes
-		Node *bnodes
-		list asent
-		dict fragments = {}
-		set inter = set()
-		bytearray tmp = bytearray()
-
-	if approx:
-		fragments = <dict>defaultdict(int)
-	if trees2 is None:
-		trees2 = trees1
-	ctrees1 = trees1.trees
-	ctrees2 = trees2.trees
-	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-	CST = <ULong *>malloc(trees1.maxnodes * trees2.maxnodes
-		* SLOTS * sizeof(ULong))
-	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
-	assert CST is not NULL and scratch is not NULL
-
-	# find recurring fragments
-	for n in range(offset, min(end or trees1.len, trees1.len)):
-		a = ctrees1[n]
-		anodes = &trees1.nodes[a.offset]
-		asent = <list>(sents1[n])
-		if sents2 is None:
-			start = n + 1
-		for m in range(start, trees2.len):
-			b = ctrees2[m]
-			bnodes = &trees2.nodes[b.offset]
-			memset(<void *>CST, 0, a.len * b.len * SLOTS * sizeof(ULong))
-			for i in range(a.len):  # fill table
-				for j in range(b.len):
-					if not TESTBIT(&CST[IDX(i, j, b.len, SLOTS)], a.len):
-						getCST(anodes, bnodes, a.len, b.len, CST, i, j, SLOTS)
-			if debug:  # dump table
-				print(n, m)
-				dumpCST(CST, a, b, anodes, bnodes, asent,
-					(sents2[m] if sents2 else sents1[m]), labels, scratch, SLOTS)
-			# extract results
-			inter.update(getnodeset(CST, a.len, b.len, n, scratch, SLOTS))
-		collectfragments(fragments, inter, anodes, asent, labels,
-				discontinuous, approx, tmp, SLOTS)
-	free(CST)
-	return fragments
-
-
-cdef inline void getCST(Node *a, Node *b, int alen, int blen, ULong *CST,
-		int i, int j, short SLOTS):
-	"""Build common subtree table (CST) for subtrees ``a[i]``, ``b[j]``."""
-	cdef ULong *child
-	cdef ULong *bitset = &CST[IDX(i, j, blen, SLOTS)]
-	SETBIT(bitset, alen)  # mark cell as visited
-	# compare label & arity / terminal; assume presence of arity markers.
-	if a[i].prod == b[j].prod:
-		SETBIT(bitset, i)
-		# lexical production, no recursion
-		if a[i].left < 0:
-			return
-		# normal production, recurse or use cached value
-		child = &CST[IDX(a[i].left, b[j].left, blen, SLOTS)]
-		if not TESTBIT(child, alen):
-			getCST(a, b, alen, blen, CST, a[i].left, b[j].left, SLOTS)
-		for n in range(SLOTS):
-			bitset[n] |= child[n]
-		if a[i].right < 0:  # unary node
-			return
-		child = &CST[IDX(a[i].right, b[j].right, blen, SLOTS)]
-		if not TESTBIT(child, alen):
-			getCST(a, b, alen, blen, CST, a[i].right, b[j].right, SLOTS)
-		for n in range(SLOTS):
-			bitset[n] |= child[n]
-
-
-cdef inline set getnodeset(ULong *CST, int alen, int blen, int n,
-		ULong *scratch, short SLOTS):
-	"""Extract the largest, connected bitsets from ``CST``."""
-	cdef:
-		ULong *bitset
-		int i, j
-		set finalnodeset = set()
-	for i in range(alen):
-		for j in range(blen):
-			bitset = &CST[IDX(i, j, blen, SLOTS)]
-			# at least 1 common production, plus the 'visited' bit
-			if not TESTBIT(bitset, alen) or abitcount(bitset, SLOTS) < 2:
-				continue
-			memcpy(<void *>scratch, <void *>bitset, SLOTS * sizeof(ULong))
-			CLEARBIT(scratch, alen)
-			setrootid(scratch, i, n, SLOTS)
-			tmp = wrap(scratch, SLOTS)
-			if tmp in finalnodeset:
-				continue
-			for bs in finalnodeset:
-				if subset(scratch, getpointer(bs), SLOTS):
-					break
-				elif subset(getpointer(bs), scratch, SLOTS):
-					finalnodeset.remove(bs)
-					finalnodeset.add(tmp)
-					break
-			else:  # completely new (disjunct) bitset
-				finalnodeset.add(tmp)
-	return finalnodeset
-
-
 cdef inline short termidx(short x):
 	"""Translate representation for terminal indices."""
 	return -x - 1
@@ -710,10 +591,10 @@ cdef getsent(bytes frag, list sent):
 	return frag, tuple(newsent)
 
 
-cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
-		list asent, list bsent, list labels, ULong *scratch,
-		short SLOTS, bint bitmatrix=False):
-	"""Dump a table of the common subtrees of two trees."""
+cdef dumpmatrix(ULong *matrix, NodeArray a, NodeArray b, Node *anodes,
+		Node *bnodes, list asent, list bsent, list labels, ULong *scratch,
+		short SLOTS):
+	"""Dump a table of the common productions of a tree pair."""
 	dumptree(a, anodes, asent, labels, scratch)
 	dumptree(b, bnodes, bsent, labels, scratch)
 	print('\t'.join([''] + ['%2d' % x for x in range(b.len)
@@ -724,24 +605,16 @@ cdef dumpCST(ULong *CST, NodeArray a, NodeArray b, Node *anodes, Node *bnodes,
 		print('\n%2d' % n, labels[(<Node>anodes[n]).prod][:3], end='')
 		for m in range(b.len):
 			print('\t', end='')
-			if bitmatrix:
-				print('1' if TESTBIT(&CST[m * SLOTS], n) else ' ', end='')
-			else:
-				print((abitcount(&CST[IDX(n, m, b.len, SLOTS)],
-						SLOTS) - 1) or ' ', end='')
+			print('1' if TESTBIT(&matrix[m * SLOTS], n) else ' ', end='')
 	print('\ncommon productions:', end='')
 	print(len({anodes[n].prod for n in range(a.len)} &
 			{bnodes[n].prod for n in range(b.len)}))
 	print('found:', end='')
-	if bitmatrix:
-		print('horz', sum([abitcount(&CST[n * SLOTS], SLOTS) > 0
-				for n in range(b.len)]),
-			'vert', sum([any([TESTBIT(&CST[n * SLOTS], m)
-				for n in range(b.len)]) for m in range(a.len)]),
-			'both', abitcount(CST, b.len * SLOTS))
-	else:
-		print(sum([any([abitcount(&CST[IDX(n, m, b.len, SLOTS)], SLOTS) > 1
-			for m in range(b.len)]) for n in range(a.len)]))
+	print('horz', sum([abitcount(&matrix[n * SLOTS], SLOTS) > 0
+			for n in range(b.len)]),
+		'vert', sum([any([TESTBIT(&matrix[n * SLOTS], m)
+			for n in range(b.len)]) for m in range(a.len)]),
+		'both', abitcount(matrix, b.len * SLOTS))
 
 
 cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
@@ -950,7 +823,7 @@ cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 	result[n].right = right
 
 
-def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
+def readtreebank(treebankfile, list labels, dict prods,
 		fmt='bracket', limit=None, encoding='utf-8'):
 	"""Read a treebank from a given filename.
 
@@ -974,12 +847,11 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 				if st.prod not in prods:
 					labels.append(st.label.encode('ascii'))
 					prods[st.prod] = len(prods)
-			if sort:
-				root = tree[0]
-				tree.sort(key=partial(getprodid, prods))
-				for n, a in enumerate(tree):
-					a.idx = n
-				tree[0].rootidx = root.idx
+			root = tree[0]
+			tree.sort(key=partial(getprodid, prods))
+			for n, a in enumerate(tree):
+				a.idx = n
+			tree[0].rootidx = root.idx
 			ctrees.add(tree, prods)
 			sents.append(sent)
 	else:  # do incremental reading of bracket trees
@@ -1016,3 +888,8 @@ def readtreebank(treebankfile, list labels, dict prods, bint sort=True,
 		assert sents, '%r appears to be empty' % treebankfile
 		free(scratch)
 	return ctrees, sents
+
+
+__all__ = ['addprods', 'completebitsets', 'coverbitsets', 'exactcounts',
+		'extractfragments', 'getctrees', 'getlabelsprods', 'getprodid',
+		'nonfrontier', 'pygetsent', 'readtreebank', 'repl', 'tolist']

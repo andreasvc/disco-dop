@@ -107,3 +107,5 @@ def test():
 	assert anextunset(ulongvec, 0, 2) == sizeof(ULong) * 8, (
 		anextunset(ulongvec, 0, 2), sizeof(ULong) * 8)
 	print('it worked')
+
+__all__ = ['bitcount', 'fanout', 'pyintbitcount', 'pyintnextset']

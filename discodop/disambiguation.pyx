@@ -211,19 +211,19 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 
 	if mpd and dopreduction:
 		results = [(REMOVEIDS.sub('', treestr), logprobsum(probs),
-				extractfragments(derivs[treestr], chart, backtransform))
+				fragmentsinderiv(derivs[treestr], chart, backtransform))
 				for treestr, probs in parsetrees.items()]
 	elif shortest and dopreduction:
 		results = [(REMOVEIDS.sub('', treestr), (-a, b),
-				extractfragments(derivs[treestr], chart, backtransform))
+				fragmentsinderiv(derivs[treestr], chart, backtransform))
 				for treestr, (a, b) in parsetrees.items()]
 	elif shortest:
 		results = [(treestr, (-a, b),
-				extractfragments(derivs[treestr], chart, backtransform))
+				fragmentsinderiv(derivs[treestr], chart, backtransform))
 				for treestr, (a, b) in parsetrees.items()]
 	else:
 		results = [(treestr, logprobsum(probs),
-				extractfragments(derivs[treestr], chart, backtransform))
+				fragmentsinderiv(derivs[treestr], chart, backtransform))
 				for treestr, probs in parsetrees.items()]
 
 	msg = '%d derivations, %d parsetrees' % (
@@ -397,7 +397,7 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 					chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (abs(int(s / log(0.5))), parsetreeprob[treestr])
-			derivs[treestr] = extractfragments(
+			derivs[treestr] = fragmentsinderiv(
 					deriv if bitpar or backtransform is None
 					else (<Entry>entry).key,
 					chart2, backtransform)
@@ -454,7 +454,7 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 				deriv)
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
-		derivs[tree] = extractfragments(
+		derivs[tree] = fragmentsinderiv(
 				deriv if bitpar or backtransform is None
 				else keys[deriv], chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
@@ -585,7 +585,7 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	return frag.format(*children)
 
 
-def extractfragments(deriv, chart, list backtransform):
+def fragmentsinderiv(deriv, chart, list backtransform):
 	"""Extract the list of fragments that were used in a given derivation.
 
 	:returns: a list of fragments of the form ``(frag, sent)`` where frag is a
@@ -593,14 +593,14 @@ def extractfragments(deriv, chart, list backtransform):
 		frontier non-terminal, and a string indicates a token. """
 	result = []
 	if isinstance(deriv, RankedEdge):
-		extractfragments_(deriv, chart, backtransform, result)
+		fragmentsinderiv_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, basestring) and backtransform is None:
 		deriv = Tree.parse(deriv, parse_leaf=int)
 		result = [REMOVEIDS.sub('', str(splitfrag(node)))
 				for node in deriv.subtrees(frontiernt)]
 	elif isinstance(deriv, basestring):
 		deriv = Tree.parse(deriv, parse_leaf=int)
-		extractfragments_str(deriv, chart, backtransform, result)
+		fragmentsinderiv_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError
 	return [_fragments.pygetsent(frag.encode('utf-8'), chart.sent)
@@ -627,7 +627,7 @@ def splitfrag(node):
 	return Tree(node.label, children)
 
 
-cdef extractfragments_(RankedEdge deriv, Chart chart,
+cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 		list backtransform, list result):
 	cdef RankedEdge child
 	cdef list children = []
@@ -665,14 +665,14 @@ cdef extractfragments_(RankedEdge deriv, Chart chart,
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if not child.edge.rule is NULL:
-			extractfragments_(child, chart, backtransform, result)
+			fragmentsinderiv_(child, chart, backtransform, result)
 		elif '@' not in chart.grammar.tolabel[chart.label(child.head)]:
 			result.append('(%s %d)' % (
 					chart.grammar.tolabel[chart.label(child.head)],
 					chart.lexidx(child.edge)))
 
 
-cdef extractfragments_str(deriv, Chart chart, list backtransform, list result):
+cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 	cdef list children = []
 	cdef str frag
 	prod = (''.join(map(str, range(len(deriv)))).encode('ascii'),
@@ -703,7 +703,7 @@ cdef extractfragments_str(deriv, Chart chart, list backtransform, list result):
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if isinstance(child[0], Tree):
-			extractfragments_str(child, chart, backtransform, result)
+			fragmentsinderiv_str(child, chart, backtransform, result)
 		elif '@' not in child.label:
 			result.append('(%s %d)' % (child.label, child[0]))
 
@@ -954,9 +954,7 @@ def test():
 
 	def e(x):
 		a, b, _ = max(x, key=itemgetter(1))
-		if isinstance(b, tuple):
-			return (a, (int(abs(b[0])), b[1]))
-		return a, b
+		return (a, (int(abs(b[0])), b[1])) if isinstance(b, tuple) else a, b
 
 	trees = [Tree.parse(t, parse_leaf=int) for t in
 		'''(ROOT (A (A 0) (B 1)) (C 2))
@@ -972,27 +970,28 @@ def test():
 	grammar = Grammar(xgrammar)
 	grammar.register(u'shortest', altweights['shortest'])
 	print(grammar)
-	sent = "a b c".split()
+	sent = 'a b c'.split()
 	chart, _ = plcfrs.parse(sent, grammar, None, True)
 	assert chart
 	vitderiv, vitprob = viterbiderivation(chart)
 	derivations, entries = getderivations(chart, 1000, True, False, True)
-	mpd, _ = marginalize("mpd", derivations, entries, chart)
-	mpp, _ = marginalize("mpp", derivations, entries, chart)
-	mcc, _ = marginalize("mcc", derivations, entries, chart)
-	sldop_, _ = marginalize("sl-dop", derivations, entries, chart, k=1000,
+	mpd, _ = marginalize('mpd', derivations, entries, chart)
+	mpp, _ = marginalize('mpp', derivations, entries, chart)
+	mcc, _ = marginalize('mcc', derivations, entries, chart)
+	sldop_, _ = marginalize('sl-dop', derivations, entries, chart, k=1000,
 			sldop_n=7, sent=sent)
-	sldopsimple, _ = marginalize("sl-dop-simple", derivations, entries,
+	sldopsimple, _ = marginalize('sl-dop-simple', derivations, entries,
 			chart, k=1000, sldop_n=7, sent=sent)
-	short, _ = marginalize("shortest", derivations, entries, chart,
-			sent=sent)
+	short, _ = marginalize('shortest', derivations, entries, chart, sent=sent)
 	derivations, entries = getderivations(chart, 1000, False, True, True)
-	mppsampled, _ = marginalize("mpp", derivations, entries, chart)
-	print("\nvit:\t\t%s %r" % (REMOVEIDS.sub('', vitderiv), exp(-vitprob)),
-		"MPD:\t\t%s %r" % e(mpd),
-		"MCC:\t\t%s %r" % e(mcc),
-		"MPP:\t\t%s %r" % e(mpp),
-		"MPP sampled:\t%s %r" % e(mppsampled),
-		"SL-DOP n=7:\t%s %r" % e(sldop_),
-		"simple SL-DOP:\t%s %r" % e(sldopsimple),
-		"shortest:\t%s %r" % e(short), sep='\n')
+	mppsampled, _ = marginalize('mpp', derivations, entries, chart)
+	print('\nvit:\t\t%s %r' % (REMOVEIDS.sub('', vitderiv), exp(-vitprob)),
+		'MPD:\t\t%s %r' % e(mpd), 'MCC:\t\t%s %r' % e(mcc),
+		'MPP:\t\t%s %r' % e(mpp), 'MPP sampled:\t%s %r' % e(mppsampled),
+		'SL-DOP n=7:\t%s %r' % e(sldop_),
+		'simple SL-DOP:\t%s %r' % e(sldopsimple),
+		'shortest:\t%s %r' % e(short), sep='\n')
+
+__all__ = ['dopparseprob', 'doprerank', 'fragmentsinderiv', 'frontiernt',
+		'getderivations', 'getsamples', 'gettree', 'marginalize',
+		'recoverfragments', 'splitfrag', 'treeparsing', 'viterbiderivation']

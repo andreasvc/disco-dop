@@ -25,8 +25,9 @@ from getopt import gnu_getopt, GetoptError
 from discodop.tree import Tree
 from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals, unbinarize
-from discodop._fragments import extractfragments, fastextractfragments, \
-		exactcounts, readtreebank, getctrees, completebitsets, coverbitsets
+from discodop._fragments import readtreebank, getctrees, \
+		extractfragments, exactcounts, \
+		completebitsets, coverbitsets
 from discodop.parser import workerfunc
 
 USAGE = '''\
@@ -64,16 +65,14 @@ Options:
   --debin       debinarize fragments.
   --twoterms    only consider fragments with at least two lexical terminals.
   --adjacent    only consider pairs of adjacent fragments (n, n + 1).
-  --quadratic   use the slower, quadratic algorithm for finding fragments.
   --alt         alternative output format: (NP (DT "a") NN)
                 default: (NP (DT a) (NN ))
   --debug       extra debug information, ignored when numproc > 1.
   --quiet       disable all messages.\
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
-FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'quadratic',
-		'cover', 'alt', 'relfreq', 'twoterms', 'adjacent', 'debin',
-		'debug', 'quiet')
+FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'cover',
+		'alt', 'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -116,10 +115,9 @@ def main(argv=None):
 		args[0] = '/dev/stdin'
 	for a in args:
 		assert os.path.exists(a), "not found: %r" % a
-	if PARAMS['complete'] or PARAMS['quadratic']:
+	if PARAMS['complete']:
 		assert not PARAMS['twoterms'] and not PARAMS['adjacent'], (
-				'--twoterms and --adjacent are incompatible '
-				'with --complete and --quadratic.')
+				'--twoterms and --adjacent are incompatible with --complete.')
 	if PARAMS['complete']:
 		assert len(args) == 2 or batchdir, (
 				"need at least two treebanks with --complete.")
@@ -199,7 +197,7 @@ def regular(filenames, numproc, limit, encoding):
 		if PARAMS['approx']:
 			fragments.update(zip(cover,
 					exactcounts(PARAMS['trees1'], PARAMS['trees1'],
-					cover.values(), fast=not PARAMS['quadratic'])))
+					cover.values())))
 		else:
 			fragments.update(cover)
 		logging.info("merged %d cover fragments", len(cover))
@@ -248,13 +246,8 @@ def batch(outputdir, filenames, limit, encoding, debin):
 			fragments = completebitsets(trees2, sents2, PARAMS['labels'],
 					max(trees1.maxnodes, (trees2 or trees1).maxnodes),
 					PARAMS['disc'])
-		elif PARAMS['quadratic']:
-			fragments = extractfragments(trees2, sents2, 0, 0,
-					PARAMS['labels'], trees1, sents1,
-					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
-					approx=PARAMS['approx'])
 		else:
-			fragments = fastextractfragments(trees2, sents2, 0, 0,
+			fragments = extractfragments(trees2, sents2, 0, 0,
 					PARAMS['labels'], trees1, sents1,
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'],
@@ -270,7 +263,7 @@ def batch(outputdir, filenames, limit, encoding, debin):
 					'indices of occurrence' if PARAMS['indices']
 					else 'exact counts', len(bitsets))
 			counts = exactcounts(trees2, trees1, bitsets,
-					indices=PARAMS['indices'], fast=not PARAMS['quadratic'])
+					indices=PARAMS['indices'])
 		outputfilename = '%s/%s_%s' % (outputdir,
 				os.path.basename(filenames[0]), os.path.basename(filename))
 		out = io.open(outputfilename, 'w', encoding=encoding)
@@ -286,9 +279,9 @@ def readtreebanks(treebank1, treebank2=None, fmt='bracket',
 	labels = []
 	prods = {}
 	trees1, sents1 = readtreebank(treebank1, labels, prods,
-			not PARAMS['quadratic'], fmt, limit, encoding)
+			fmt, limit, encoding)
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
-			not PARAMS['quadratic'], fmt, limit, encoding)
+			fmt, limit, encoding)
 	trees1.indextrees(prods)
 	if trees2:
 		trees2.indextrees(prods)
@@ -300,7 +293,7 @@ def read2ndtreebank(treebank2, labels, prods, fmt='bracket',
 		limit=None, encoding='utf-8'):
 	"""Read a second treebank."""
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
-		not PARAMS['quadratic'], fmt, limit, encoding)
+			fmt, limit, encoding)
 	logging.info("%r: %d trees; %d nodes (max %d). "
 			"labels: %d, prods: %d",
 			treebank2, len(trees2), trees2.numnodes, trees2.maxnodes,
@@ -348,16 +341,11 @@ def worker(interval):
 	sents2 = PARAMS['sents2']
 	assert offset < trees1.len
 	result = {}
-	if PARAMS['quadratic']:
-		result = extractfragments(trees1, sents1, offset, end,
-				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
-				discontinuous=PARAMS['disc'], debug=PARAMS['debug'])
-	else:
-		result = fastextractfragments(trees1, sents1, offset, end,
-				PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
-				discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
-				debug=PARAMS['debug'], twoterms=PARAMS['twoterms'],
-				adjacent=PARAMS['adjacent'])
+	result = extractfragments(trees1, sents1, offset, end,
+			PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
+			discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
+			debug=PARAMS['debug'], twoterms=PARAMS['twoterms'],
+			adjacent=PARAMS['adjacent'])
 	logging.debug("finished %d--%d", offset, end)
 	return result
 
@@ -369,11 +357,10 @@ def exactcountworker(args):
 	trees1 = PARAMS['trees1']
 	if PARAMS['complete']:
 		results = exactcounts(trees1, PARAMS['trees2'], bitsets,
-				fast=not PARAMS['quadratic'], indices=PARAMS['indices'])
+				indices=PARAMS['indices'])
 		logging.debug("complete matches %d of %d", n + 1, m)
 		return results
-	results = exactcounts(trees1, trees1, bitsets,
-			fast=not PARAMS['quadratic'], indices=PARAMS['indices'])
+	results = exactcounts(trees1, trees1, bitsets, indices=PARAMS['indices'])
 	if PARAMS['indices']:
 		logging.debug("exact indices %d of %d", n + 1, m)
 	else:
@@ -447,8 +434,7 @@ def getfragments(trees, sents, numproc=1, disc=True,
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
 	PARAMS.update(disc=disc, indices=indices, approx=False, complete=False,
-			quadratic=False, complement=complement, debug=False,
-			adjacent=False, twoterms=False)
+			complement=complement, debug=False, adjacent=False, twoterms=False)
 	initworkersimple(trees, list(sents), disc)
 	if numproc == 1:
 		mymap = map
@@ -657,6 +643,12 @@ def printfragments(fragments, counts, out=None):
 def test():
 	"""Demonstration of fragment extractor."""
 	main("fragments.py --disc alpinosample.export".split())
+
+
+__all__ = ['altrepr', 'batch', 'coverfragworker', 'debinarize',
+		'exactcountworker', 'getfragments', 'initworker', 'initworkersimple',
+		'iteratefragments', 'printfragments', 'read2ndtreebank',
+		'readtreebanks', 'regular', 'worker', 'workload']
 
 if __name__ == '__main__':
 	main()

@@ -537,3 +537,6 @@ cdef inline copynodes(tree, dict prods, Node *result):
 				result[n].right = a[1].idx
 			else:  # unary node
 				result[n].right = -1
+
+__all__ = ['Chart', 'Ctrees', 'Edges', 'FatChartItem', 'Grammar',
+		'LexicalRule', 'RankedEdge', 'SmallChartItem', 'numedges']

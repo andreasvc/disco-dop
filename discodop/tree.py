@@ -289,8 +289,7 @@ class Tree(list):
 	# === Parsing ===============================================
 	@classmethod
 	def parse(cls, s, brackets='()', parse_label=None, parse_leaf=None,
-			label_pattern=None, leaf_pattern=None,
-			remove_empty_top_bracketing=False):
+			label_pattern=None, leaf_pattern=None):
 		"""Parse a bracketed tree string and return the resulting tree.
 		Trees are represented as nested brackettings, such as:
 		``(S (NP (NNP John)) (VP (V runs)))``
@@ -306,10 +305,6 @@ class Tree(list):
 			find label and leaf substrings in s. By default, both label and
 			leaf patterns are defined to match any sequence of non-whitespace
 			non-bracket characters.
-		:param remove_empty_top_bracketing: If the resulting tree has an empty
-			node label, and is length one, then return its single child
-			instead. This is useful for treebank trees, which sometimes contain
-			an extra level of bracketing.
 		:returns: A tree corresponding to the string representation s.
 			If this class method is called using a subclass of Tree, then it
 			will return a tree of that type."""
@@ -359,10 +354,6 @@ class Tree(list):
 		else:
 			assert stack[0][0] is None and len(stack[0][1]) == 1
 		tree = stack[0][1][0]
-		# If the tree has an extra level with label='', then get rid of
-		# it. E.g.: "((S (NP ...) (VP ...)))"
-		if remove_empty_top_bracketing and tree.label == '' and len(tree) == 1:
-			tree = tree[0]
 		return tree
 
 	@classmethod
@@ -989,11 +980,12 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 	start = max(0, len(seq) + start) if start < 0 else start
 	stop = max(0, len(seq) + stop) if stop < 0 else stop
 	if stop > 0:  # Make sure stop doesn't go past the end of the list.
-		# Try to avoid calculating len(seq), since that can be expensive for
-		# lazy sequences.
-		try:
+		try:  # Avoid calculating len(seq), may be expensive for lazy sequences
 			seq[stop - 1]
 		except IndexError:
 			stop = len(seq)
 	start = min(start, stop)
 	return start, stop, 1
+
+__all__ = ['Tree', 'ImmutableTree', 'ParentedTree', 'ImmutableParentedTree',
+		'MultiParentedTree', 'ImmutableMultiParentedTree', 'slice_bounds']

@@ -42,7 +42,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Disco-DOP'
-copyright = u'2013, Andreas van Cranenburgh'
+copyright = u'2014, Andreas van Cranenburgh'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -257,7 +257,7 @@ texinfo_documents = [
 epub_title = u'Disco-DOP'
 epub_author = u'Andreas van Cranenburgh'
 epub_publisher = u'Andreas van Cranenburgh'
-epub_copyright = u'2013, Andreas van Cranenburgh'
+epub_copyright = u'2014, Andreas van Cranenburgh'
 
 # The language of the text. It defaults to the language option
 # or en if the language is not set.

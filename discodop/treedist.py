@@ -319,5 +319,9 @@ def test():
 	assert result2 == 3
 	print('%s\n%s\ndistance: %d' % (a, b, result2))
 
+
+__all__ = ['Terminal', 'prepare', 'AnnotatedTree', 'strdist', 'treedist',
+		'newtreedist', 'EditStats', 'geteditstats']
+
 if __name__ == '__main__':
 	test()

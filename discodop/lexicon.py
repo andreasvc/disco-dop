@@ -495,3 +495,9 @@ def tagmangle(a, splitchar, overridetag, tagmap):
 		if word in overridetag[newtag]:
 			tag = newtag
 	return word, tagmap.get(tag, tag)
+
+
+__all__ = ['getunknownwordmodel', 'replaceraretrainwords',
+		'replaceraretestwords', 'simplesmoothlexicon', 'getlexmodel',
+		'smoothlexicon', 'unknownword6', 'unknownword4', 'unknownwordbase',
+		'unknownwordftb', 'externaltagging', 'tagmangle']

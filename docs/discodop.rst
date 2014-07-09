@@ -81,7 +81,6 @@ Options:
 --debin       debinarize fragments.
 --twoterms    only consider fragments with at least two lexical terminals.
 --adjacent    only consider pairs of adjacent fragments (n, n + 1).
---quadratic   use the slower, quadratic algorithm for finding fragments.
 --alt         alternative output format: (NP (DT "a") NN)
               default: (NP (DT a) (NN ))
 --debug       extra debug information, ignored when numproc > 1.
@@ -332,8 +331,10 @@ General options:
 -b k         Return the k-best parses instead of just 1.
 --prob       Print probabilities as well as parse trees.
 --tags       Tokens are of the form ``word/POS``; give both to parser.
+
 --fmt=[export|bracket|discbracket|alpino|conll|mst|wordpos]
              Format of output [default: discbracket].
+
 --numproc=k  Launch k processes, to exploit multiple cores.
 --simple     Parse with a single grammar and input file; similar interface
              to bitpar. The files ``rules`` and ``lexicon`` define a binarized

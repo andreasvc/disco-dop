@@ -410,3 +410,5 @@ def test():
 	assert (len(flchart.rankededges[flchart.root()])
 			== len(set(flchart.rankededges[flchart.root()])))
 	assert len(derivations) == len(set(derivations))
+
+__all__ = ['getderiv', 'lazykbest', 'lazykthbest']

@@ -605,5 +605,8 @@ def main():
 						ANSICOLOR['magenta'], filename, out))
 
 
+__all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',
+		'NoFuture', 'filterlabels']
+
 if __name__ == '__main__':
 	main()
