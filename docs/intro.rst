@@ -14,6 +14,10 @@ The text needs to be tokenized, for example using `ucto
 
     $  ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser wsj/
 
+To parse sentences in bracketed format::
+
+    $ discodop treetransforms none treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser wsj/
+
 Inducing a simple grammar
 -------------------------
 
@@ -78,7 +82,7 @@ example:
         numsents=3, maxwords=100),
     testcorpus=dict(
         path='alpinosample.export', encoding='utf-8',
-        numsents=3, maxwords=100),
+        numsents=3, maxwords=100, skiptrain=False),
     postagging=dict(
         method='unknownword', model='4',
         unknownthreshold=1, openclassthreshold=50,
@@ -116,9 +120,8 @@ Alternatively, it is possible to achieve similar results with separate commands:
 
     $ discodop grammar param filename.prm filename/
     $ discodop none alpinosample.export sentences.txt --inputfmt=export --outputfmt=tokens
-    $ discodop parser filename/ sentences.txt
-    $ cd filename/
-    $ discodop eval gold.export dop.export ../proper.prm
+    $ discodop parser filename/ sentences.txt --fmt=export >filename/dop.export
+    $ discodop eval alpinosample.export filename/dop.export proper.prm
 
 Overview
 ========
