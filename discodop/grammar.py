@@ -155,12 +155,14 @@ def treebankgrammar(trees, sents):
 			for rule, freq in grammar.items())
 
 
-def dopreduction(trees, sents, packedgraph=False):
+def dopreduction(trees, sents, packedgraph=False, decorater=None):
 	"""Induce a reduction of DOP to an LCFRS.
 
 	Similar to how Goodman (1996, 2003) reduces DOP to a PCFG.
 
 	:param packedgraph: packed graph encoding (Bansal & Klein 2010).
+	:param decorator: a TreeDecorator instance (packedgraph is ignored if this
+		is passed) .
 	:returns: a set of rules with the relative frequency estimate as
 		probilities, and a dictionary with alternate weights."""
 	# fd: how many subtrees are headed by node X (e.g. NP or NP@1-2),
@@ -169,7 +171,8 @@ def dopreduction(trees, sents, packedgraph=False):
 	fd = defaultdict(int)
 	ntfd = defaultdict(int)
 	rules = defaultdict(int)
-	decorater = TreeDecorator(memoize=packedgraph)
+	if decorater is None:
+		decorater = TreeDecorator(memoize=packedgraph)
 
 	# collect rules
 	for tree, sent in zip(trees, sents):
@@ -476,12 +479,16 @@ class TreeDecorator(object):
 	"""Auxiliary class for DOP reduction.
 
 	Adds unique identifiers to each internal non-terminal of a tree.
-	If initialized with ``memoize=True``, equivalent subtrees will get the
-	same identifiers."""
-	def __init__(self, memoize=False):
-		self.ids = self.n = 0
-		self.packedgraphs = {}
+
+	:param memoize: if ``True``, identifiers will be reused for equivalent
+		subtrees (including all terminals).
+	:param n: the initial sentence number.
+	"""
+	def __init__(self, memoize=False, n=1):
+		self.n = n  # sentence number
+		self.ids = 0  # node number
 		self.memoize = memoize
+		self.packedgraphs = {}
 
 	def decorate(self, tree, sent):
 		"""Return a copy of tree with labels decorated with IDs.
@@ -499,17 +506,17 @@ class TreeDecorator(object):
 		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
 		...		parse_leaf=int), ['the', 'dog', 'barks']))
 		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@2-4 2))"""
-		self.n += 1  # sentence number
 		if self.memoize:
-			self.ids = 0  # node number
+			self.ids = 0
 			# wrap tree to get equality wrt sent
 			tree = DiscTree(tree.freeze(), sent)
 			dectree = ImmutableTree(tree.label, map(self._recdecorate, tree))
 		else:
 			dectree = Tree.convert(tree.copy(True))
-			#skip top node, should not get an ID
+			# skip top node, should not get an ID
 			for m, a in enumerate(islice(dectree.subtrees(), 1, None)):
 				a.label = "%s@%d-%d" % (a.label, self.n, m)
+		self.n += 1
 		return dectree
 
 	def _recdecorate(self, tree):
