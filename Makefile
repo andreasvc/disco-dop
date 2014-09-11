@@ -40,19 +40,21 @@ testdebug: debug valgrind-python.supp
 valgrind-python.supp:
 	wget http://svn.python.org/projects/python/trunk/Misc/valgrind-python.supp
 
-inplace:
-	python setup.py build_ext --inplace
+inplace: discodop
+	# python setup.py build_ext --inplace
+	cp --update build/lib.*/discodop/*.so discodop/
 
 install: discodop docs
 
 # pylint: R=refactor, C0103 == Invalid name
 lint: inplace
-	#Any files with more than 999 lines?
+	# Any files with more than 999 lines?
 	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}'
-	#Docstrings without single line summaries?
+	# Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^.\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py tests/*.py && \
 	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi && \
-	pylint --indent-string='\t' --disable=R,C0103 discodop/*.py web/*.py tests/*.py
+	pylint --indent-string='\t' --disable=R,bad-continuation,invalid-name \
+		discodop/*.py web/*.py tests/*.py
