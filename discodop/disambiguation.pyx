@@ -76,8 +76,9 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 		bint bitpar=False):
 	"""Take a list of derivations and optimize a given objective function.
 
-	Produces a dictionary of parse trees from derivations, scored by a given
-	objective function.
+	1. Rewrites derivations into the intended parse trees.
+	2. Marginalizes (sum / combine) weights of derivations for same parse tree.
+	3. Applies objective function (scoring criterion) for ranking parse trees.
 
 	:param method:
 		Available objective functions:
@@ -92,11 +93,13 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 		Dependending on the value of this parameter, one of two ways is
 		employed to turn derivations into parse trees:
 
+		:``None``: assume derivations are from DOP reduction and strip
+			annotations of the form ``@123`` from labels. This option is also
+			applicable when the grammar is not a TSG and derivations already
+			coincide with parse trees.
 		:list of strings: assume Double-DOP and recover derivations by
 			substituting fragments in this list for flattened rules in
 			derivations.
-		:``None``: assume derivations are from DOP reduction and strip
-			annotations of the form ``@123`` from labels.
 	:param k: when ``method='sl-dop``, number of derivations to consider.
 	:param bitpar: whether bitpar was used in nbest mode.
 	:returns:
