@@ -10,14 +10,11 @@ from __future__ import print_function
 from math import exp
 import numpy as np
 
+from libc.math cimport isnan, isfinite
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, testbit
 from discodop.plcfrs cimport Agenda, Entry
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		new_SmallChartItem, SmallChartItem, UInt, ULLong
-
-cdef extern from "math.h":
-	bint isnan(double x)
-	bint isfinite(double x)
 
 INFINITY = float('infinity')
 

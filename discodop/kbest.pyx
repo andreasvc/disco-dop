@@ -7,6 +7,7 @@ from discodop.plcfrs import Agenda
 from discodop.containers import ChartItem, RankedEdge, Grammar
 
 cimport cython
+from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
 		Grammar, Rule, Chart, Edges, Edge, RankedEdge, \
 		new_RankedEdge, UInt, UChar, \
@@ -14,9 +15,6 @@ from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
 from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
 from discodop.plcfrs cimport Entry, Agenda, nsmallest, \
 		LCFRSChart, SmallLCFRSChart, FatLCFRSChart
-
-cdef extern from "Python.h":
-	double PyFloat_AS_DOUBLE(object pyfloat)
 
 
 cdef getcandidates(Chart chart, v, int k):

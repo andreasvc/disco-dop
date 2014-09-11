@@ -2,7 +2,7 @@ cimport cython
 from libc.string cimport memcmp
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
 from cpython.dict cimport PyDict_Contains
-#from cpython.float cimport PyFloat_AS_DOUBLE
+from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \
 		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem, \
@@ -10,9 +10,6 @@ from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, \
 	testbit, anextset, anextunset, abitcount, abitlength, setunion
 from libc.string cimport memset, memcpy
-
-cdef extern from "Python.h":
-	double PyFloat_AS_DOUBLE(object pyfloat)
 
 cdef extern from "macros.h":
 	int BITSLOT(int b)
