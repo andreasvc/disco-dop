@@ -97,14 +97,16 @@ class CorpusReader(object):
 		self._trees_cache = None
 
 	def itertrees(self, start=None, end=None):
-		""":returns: an iterator returning tuples (key, (tree, sent)) of \
-			sentences in corpus. Useful when the dictionary of all trees in \
+		"""
+		:returns: an iterator returning tuples (key, (tree, sent)) of
+			sentences in corpus. Useful when the dictionary of all trees in
 			corpus would not fit in memory."""
 		for n, a in islice(self._read_blocks(), start, end):
 			yield n, self._parsetree(a)
 
 	def trees(self):
-		""":returns: an ordered dictionary of parse trees \
+		"""
+		:returns: an ordered dictionary of parse trees
 			(``Tree`` objects with integer indices as leaves)."""
 		if not self._trees_cache:
 			self._trees_cache = OrderedDict((n, self._parsetree(a))
@@ -112,7 +114,8 @@ class CorpusReader(object):
 		return OrderedDict((n, a) for n, (a, _) in self._trees_cache.items())
 
 	def sents(self):
-		""":returns: an ordered dictionary of sentences, \
+		"""
+		:returns: an ordered dictionary of sentences,
 			each sentence being a list of words."""
 		if not self._trees_cache:
 			self._trees_cache = OrderedDict((n, self._parsetree(a))
@@ -120,7 +123,8 @@ class CorpusReader(object):
 		return OrderedDict((n, b) for n, (_, b) in self._trees_cache.items())
 
 	def tagged_sents(self):
-		""":returns: an ordered dictionary of tagged sentences, \
+		"""
+		:returns: an ordered dictionary of tagged sentences,
 			each tagged sentence being a list of (word, tag) pairs."""
 		if not self._trees_cache:
 			self._trees_cache = OrderedDict((n, self._parsetree(a))
@@ -130,7 +134,8 @@ class CorpusReader(object):
 				for n, (tree, sent) in self._trees_cache.items())
 
 	def blocks(self):
-		""":returns: a list of strings containing the raw representation of \
+		"""
+		:returns: a list of strings containing the raw representation of
 			trees in the original treebank."""
 
 	def _read_blocks(self):
@@ -299,8 +304,9 @@ class NegraCorpusReader(CorpusReader):
 class TigerXMLCorpusReader(CorpusReader):
 	"""Corpus reader for the Tiger XML format."""
 	def blocks(self):
-		""":returns: a list of strings containing the raw representation of \
-		trees in the treebank."""
+		"""
+		:returns: a list of strings containing the raw representation of
+			trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
 		return OrderedDict((n, ElementTree.tostring(a))
@@ -374,8 +380,9 @@ class AlpinoCorpusReader(CorpusReader):
 	Expects a corpus in directory format, where every sentence is in a single
 	``.xml`` file."""
 	def blocks(self):
-		""":returns: a list of strings containing the raw representation of \
-		trees in the treebank."""
+		"""
+		:returns: a list of strings containing the raw representation of
+			trees in the treebank."""
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
 		return self._block_cache
@@ -846,10 +853,10 @@ def segmentbrackets(brackets, strict=False):
 		"""Add a tree to the results list."""
 		try:
 			results.append(brackettree(result, rest, brackets, strtermre))
-		except:
-			print('error:\n', dict(result=result, rest=rest, parens=parens,
-					depth=depth, prev=prev))
-			raise
+		except Exception as err:
+			raise ValueError('%r\nwhile parsing:\n%r' % (
+					err, dict(result=result, rest=rest, parens=parens,
+						depth=depth, prev=prev)))
 	lb, rb = brackets
 	# regex to check if the tree contains any terminals (as opposed to indices)
 	strtermre = re.compile(' (?:[^ %(br)s]*[^ 0-9%(br)s][^ %(br)s]*)?%(rb)s' %

@@ -102,7 +102,7 @@ def lcfrsproductions(tree, sent, frontiers=False):
 			raise ValueError(("Empty node. Frontier nodes should designate "
 				"which part(s) of the sentence they contribute to.\ntree:"
 				"%s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent)))
-		#elif all(isinstance(a, int) for a in st):
+		# elif all(isinstance(a, int) for a in st):
 		elif isinstance(st[0], int):
 			if len(st) == 1 and sent[st[0]] is not None:  # terminal node
 				rule = ((st.label, 'Epsilon'), (sent[st[0]], ))
@@ -110,11 +110,11 @@ def lcfrsproductions(tree, sent, frontiers=False):
 				rule = ((st.label, ), ())
 			else:
 				continue
-			#else:
-			#	raise ValueError(("Preterminals should dominate a single "
-			#		"terminal; frontier nodes should dominate a sequence of "
-			#		"indices that are None in the sentence.\n"
-			#		"subtree: %s\nsent: %r" % (st, sent)))
+			# else:
+			# 	raise ValueError(("Preterminals should dominate a single "
+			# 		"terminal; frontier nodes should dominate a sequence of "
+			# 		"indices that are None in the sentence.\n"
+			# 		"subtree: %s\nsent: %r" % (st, sent)))
 		elif all(isinstance(a, Tree) for a in st):  # isinstance(st[0], Tree):
 			# convert leaves() to bitsets
 			childleaves = [a.leaves() if isinstance(a, Tree) else [a]

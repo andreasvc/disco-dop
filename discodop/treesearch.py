@@ -122,7 +122,7 @@ class CorpusSearcher(object):
 		:param brackets: if True, return trees as they appear in the treebank;
 			by default sentences are returned as a sequence of tokens.
 		:returns: list of tuples of the form
-			``(corpus, sentno, sent, highlight)``\
+			``(corpus, sentno, sent, highlight)``
 			sent is a single string with space-separated tokens;
 			highlight is a set of integer indices."""
 

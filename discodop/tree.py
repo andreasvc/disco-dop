@@ -204,8 +204,9 @@ class Tree(list):
 					yield subtree
 
 	def pos(self):
-		""":returns: a list of tuples containing leaves and pre-terminals \
-			(part-of-speech tags). The order reflects the order of the tree's \
+		"""
+		:returns: a list of tuples containing leaves and pre-terminals
+			(part-of-speech tags). The order reflects the order of the tree's
 			hierarchical structure."""
 		pos = []
 		for child in self:
@@ -216,10 +217,12 @@ class Tree(list):
 		return pos
 
 	def leaf_treeposition(self, index):
-		""":returns: The tree position of the index-th leaf in this tree; \
-			i.e., if tp=self.leaf_treeposition(i), then \
-			self[tp]==self.leaves()[i]. :raises IndexError: if this tree \
-			contains fewer than index+1 leaves, or if index<0."""
+		"""
+		:returns: The tree position of the index-th leaf in this tree;
+			i.e., if ``tp=self.leaf_treeposition(i)``, then
+			``self[tp]==self.leaves()[i]``.
+		:raises IndexError: if this tree contains fewer than ``index + 1``
+			leaves, or if ``index < 0``."""
 		if index < 0:
 			raise IndexError('index must be non-negative')
 		stack = [(self, ())]
@@ -236,9 +239,10 @@ class Tree(list):
 		raise IndexError('index must be less than or equal to len(self)')
 
 	def treeposition_spanning_leaves(self, start, end):
-		""":returns: The tree position of the lowest descendant of this tree \
-			that dominates self.leaves()[start:end].
-		:raises ValueError: if end <= start"""
+		"""
+		:returns: The tree position of the lowest descendant of this tree
+			that dominates ``self.leaves()[start:end]``.
+		:raises ValueError: if ``end <= start``."""
 		if end <= start:
 			raise ValueError('end must be greater than start')
 		# Find the tree positions of the start & end leaves,
@@ -778,8 +782,8 @@ class ParentedTree(AbstractParentedTree):
 			return self
 		return self._parent._get_root()
 
-	parent = property(lambda self: self._parent, doc=
-		"""The parent of this tree, or None if it has no parent.""")
+	parent = property(lambda self: self._parent,
+			doc="""The parent of this tree, or None if it has no parent.""")
 	parent_index = property(_get_parent_index, doc=_get_parent_index.__doc__)
 	left_sibling = property(_get_left_sibling, doc=_get_left_sibling.__doc__)
 	right_sibling = property(_get_right_sibling, doc=_get_right_sibling.__doc__)
@@ -880,8 +884,8 @@ class MultiParentedTree(AbstractParentedTree):
 			result[id(self)] = self
 		return result
 
-	parents = property(lambda self: list(self._parents), doc=
-		"""The set of parents of this tree.
+	parents = property(lambda self: list(self._parents),
+		doc="""The set of parents of this tree.
 
 		If this tree has no parents, then parents is the empty set. To check if
 		a tree is used as multiple children of the same parent, use the
@@ -905,7 +909,8 @@ class MultiParentedTree(AbstractParentedTree):
 				if child is self]
 
 	def treepositions(self, root):
-		""":returns: a list of all tree positions that can be used to reach \
+		"""
+		:returns: a list of all tree positions that can be used to reach
 			this multi-parented tree starting from root.
 
 		i.e., the following holds::
