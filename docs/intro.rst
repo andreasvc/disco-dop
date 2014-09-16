@@ -49,7 +49,7 @@ We can then induce a Double-DOP grammar with the following command::
 This produces a grammar consisting of a series of text files in ``/tmp``, which
 can be used as follows::
 
-    $ echo 'The cat saw the hungry dog' | discodop parser /tmp/example.rules /tmp/example.lex --bt=/tmp/example.backtransform -s S -b 5 -z
+    $ echo 'The cat saw the hungry dog' | discodop parser --simple /tmp/example.rules /tmp/example.lex --bt=/tmp/example.backtransform -s S -b 5
     parsing 0: The cat saw the hungry dog
     (S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NP|<JJ,NN> (JJ 4) (NN 5)))))
     0.0 s

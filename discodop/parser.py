@@ -177,6 +177,7 @@ def main():
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
 		parser = Parser(stages)
+		morph = None
 	else:
 		from discodop.runexp import readparam
 		directory = args[0]
@@ -195,13 +196,14 @@ def main():
 				postagging.method == 'unknownword' else None,
 				relationalrealizational=params.get('relationalrealizational'),
 				verbosity=params.get('verbosity', 2))
+		morph = params['morphology']
 	infile = (io.open(args[2], encoding='utf-8')
 			if len(args) >= 3 else sys.stdin)
 	out = (io.open(args[3], 'w', encoding='utf-8')
 			if len(args) == 4 else sys.stdout)
 	doparsing(parser, infile, out, prob, oneline, tags, numparses,
 			int(opts.get('--numproc', 1)), opts.get('--fmt', 'discbracket'),
-			params['morphology'])
+			morph)
 
 
 def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
