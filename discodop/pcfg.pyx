@@ -889,7 +889,7 @@ def test():
 		((('NP', 'Epsilon'), ('mary', )), 1),
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)], start='S')
-	cfg1.switch('default', False)
+	cfg1.switch(u'default', False)
 	i, o, start, _ = doinsideoutside("mary walks".split(), cfg1)
 	assert start
 	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
@@ -910,12 +910,12 @@ def test():
 		((('NP', 'Epsilon'), ('telescopes', )), 0.1),
 		((('P', 'Epsilon'), ('with', )), 1)]
 	cfg2 = Grammar(rules, start='S')
-	cfg2.switch('default', False)
+	cfg2.switch(u'default', False)
 	sent = "astronomers saw stars with telescopes".split()
 	inside, outside, _, msg = doinsideoutside(sent, cfg2)
 	print(msg)
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)
-	cfg2.switch('default', True)
+	cfg2.switch(u'default', True)
 	chart, msg = parse(sent, cfg2)
 	print(msg)
 	print(chart)

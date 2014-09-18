@@ -49,10 +49,10 @@ cdef class Grammar:
 		a non-binarized grammar can only be used by bitpar.
 
 	By default the grammar is in logprob mode;
-	invoke ``grammar.switch('default', logprob=False)`` to switch.
+	invoke ``grammar.switch(u'default', logprob=False)`` to switch.
 	If the grammar only contains integral weights (frequencies), they will
 	be normalized into relative frequencies; if the grammar contains any
-	non-integral weights, weights will be left unchanged. """
+	non-integral weights, weights will be left unchanged."""
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
@@ -114,7 +114,7 @@ cdef class Grammar:
 			weights[self.bylhs[0][n].no] = self.bylhs[0][n].prob
 		for n, lexrule in enumerate(self.lexical, self.numrules):
 			weights[n] = lexrule.prob
-		self.switch('default', True)  # enable log probabilities
+		self.switch(u'default', True)  # enable log probabilities
 
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines):
@@ -380,9 +380,9 @@ cdef class Grammar:
 		for n in range(self.numrules, self.numrules + len(self.lexical)):
 			tmp[n] = weights[n]
 
-	def switch(self, name, bint logprob=True):
-		""" Switch to a different probabilistic model;
-		use 'default' to swith back to model given during initialization. """
+	def switch(self, unicode name, bint logprob=True):
+		"""Switch to a different probabilistic model;
+		use u'default' to swith back to model given during initialization."""
 		cdef int n, m = self.modelnames.index(name)
 		cdef double [:] tmp
 		cdef LexicalRule lexrule

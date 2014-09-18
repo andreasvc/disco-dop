@@ -494,8 +494,8 @@ class Parser(object):
 							else ('p=%g' % exp(-prob)), deriv)
 						for n, (deriv, prob) in enumerate(derivations[:100])))
 				if stage.objective == 'shortest':
-					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
-							else 'default', True)
+					stage.grammar.switch(u'ewe' if stage.estimator == 'ewe'
+							else u'default', True)
 				parsetrees, msg1 = marginalize(
 						stage.objective if stage.dop else 'mpd',
 						derivations, entries, chart,
