@@ -136,7 +136,7 @@ def startexp(
 	if testcorpus.skiptrain:
 		testcorpus.skip += traincorpus.numsents  # pylint: disable=E1103
 	logging.info('%d sentences in test corpus %s',
-			len(testset.trees()), testcorpus.path)
+			len(test_trees), testcorpus.path)
 	logging.info('%d test sentences before length restriction',
 			len(list(gold_sents)[testcorpus.skip:  # pylint: disable=E1103
 				testcorpus.skip + testcorpus.numsents]))  # pylint: disable=E1103
@@ -257,13 +257,16 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
 			headfinal=True, headreverse=False, removeempty=removeempty,
 			punct=punct, functions=functions, morphology=morphology)
+	traintrees = train.trees()
+	trainsents = train.sents()
 	logging.info('%d sentences in training corpus %s',
-			len(train.trees()), traincorpus.path)
+			len(traintrees), traincorpus.path)
 	if isinstance(traincorpus.numsents, float):
-		traincorpus.numsents = int(traincorpus.numsents * len(train.sents()))
-	trees = list(train.trees().values())[:traincorpus.numsents]
-	sents = list(train.sents().values())[:traincorpus.numsents]
-	assert trees, 'training corpus should be non-empty'
+		traincorpus.numsents = int(traincorpus.numsents * len(trainsents))
+	trees = list(traintrees.values())[:traincorpus.numsents]
+	sents = list(trainsents.values())[:traincorpus.numsents]
+	if not trees:
+		raise ValueError('training corpus should be non-empty.')
 	logging.info('%d training sentences before length restriction', len(trees))
 	trees, sents = zip(*[sent for sent in zip(trees, sents)
 		if len(sent[1]) <= traincorpus.maxwords])
