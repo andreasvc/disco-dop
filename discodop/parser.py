@@ -608,7 +608,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 				if stage.mode == 'dop-rerank':
-					grammar.getrulemapping(stages[n - 1].grammar)
+					grammar.getrulemapping(
+							stages[n - 1].grammar, re.compile(br'@[-0-9]+\b'))
 			probsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
 			if os.path.exists(probsfile):
 				probmodels = np.load(probsfile)  # pylint: disable=no-member

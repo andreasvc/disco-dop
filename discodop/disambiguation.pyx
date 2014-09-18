@@ -179,14 +179,14 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 					newprob = 0.0
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
-							assert 1 <= len(t) <= 2
-							r = ((b'0', t.label.encode('ascii'),
-								t[0].label.encode('ascii')) if len(t) == 1 else
-								(b'01', t.label.encode('ascii'),
-									t[0].label.encode('ascii'),
-									t[1].label.encode('ascii')))
-							m = chart.grammar.rulenos[r]
-							newprob += chart.grammar.bylhs[0][m].prob
+							if not 1 <= len(t) <= 2:
+								raise ValueError('expected binarized tree.')
+							r = (('0 %s %s' % (t.label, t[0].label))
+								if len(t) == 1 else ('01 %s %s %s' % (
+									t.label, t[0].label, t[1].label)))
+							m = chart.grammar.rulenos[r.encode('ascii')]
+							newprob += chart.grammar.bylhs[0][
+									chart.grammar.revmap[m]].prob
 						else:
 							m = chart.grammar.toid[t.label]
 							try:
@@ -558,9 +558,9 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	cdef list children = []
 	cdef str frag
 	# e.g.: ('0123', 'X', 'A', 'B', 'C', 'D')
-	prod = (''.join(map(str, range(len(deriv)))).encode('ascii'),
-			deriv.label) + tuple([a.label.encode('ascii') for a in deriv])
-	frag = backtransform[chart.grammar.rulenos[prod]]  # template
+	prod = '%s %s %s' % (''.join(map(str, range(len(deriv)))),
+			deriv.label, ' '.join([a.label for a in deriv]))
+	frag = backtransform[chart.grammar.rulenos[prod.encode('ascii')]]
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -678,9 +678,9 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 	cdef list children = []
 	cdef str frag
-	prod = (''.join(map(str, range(len(deriv)))).encode('ascii'),
-			deriv.label) + tuple([a.label.encode('ascii') for a in deriv])
-	frag = backtransform[chart.grammar.rulenos[prod]]  # template
+	prod = '%s %s %s' % (''.join(map(str, range(len(deriv)))),
+			deriv.label, ' '.join([a.label for a in deriv]))
+	frag = backtransform[chart.grammar.rulenos[prod.encode('ascii')]]
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -766,7 +766,7 @@ cdef double getderivprob(RankedEdge deriv, Chart chart, list sent):
 		label = chart.label(deriv.head)
 		word = sent[chart.lexidx(deriv.edge)]
 		return (<LexicalRule>chart.grammar.lexicalbylhs[label][word]).prob
-	result = chart.grammar.bylhs[0][deriv.edge.rule.no].prob
+	result = deriv.edge.rule.prob
 	result += getderivprob((<Entry>chart.rankededges[
 			chart.left(deriv)][deriv.left]).key,
 			chart, sent)
@@ -891,7 +891,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	known in advance that a small set of trees is of interest.
 
 	Expects a mapping which gives a list of consistent rules from the reduction
-	as produced by ``fine.getrulemapping(coarse)``.
+	as produced by ``fine.getrulemapping(coarse, re.compile(b'@[-0-9]+$'))``.
 
 	NB: this algorithm could also be used to determine the probability of
 	derivations, but then the input would have to distinguish whether nodes are
@@ -917,15 +917,15 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 				chart[lexrule.lhs, 1 << n] = -lexrule.prob
 
 	# do post-order traversal (bottom-up)
-	for node, (prod, yf) in list(zip(tree.subtrees(),
+	for node, (r, yf) in list(zip(tree.subtrees(),
 			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
-		yf = ','.join([''.join(map(str, x)) for x in yf]).encode('ascii')
-		prod = coarse.rulenos[(yf, ) + tuple([x.encode('ascii') for x in prod])]
+		yf = ','.join([''.join(map(str, x)) for x in yf])
+		prod = coarse.rulenos[('%s %s' % (yf, ' '.join(r))).encode('ascii')]
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
-				rule = &(fine.bylhs[0][ruleno])
+				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
 				b = (rule.rhs1, node.bitset)
 				if b in chart:
 					a = (rule.lhs, node.bitset)
@@ -935,7 +935,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 						chart[a] = (-rule.prob + chart[b])
 		elif len(node) == 2:  # binary node
 			for ruleno in fine.rulemapping[prod]:
-				rule = &(fine.bylhs[0][ruleno])
+				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
 				b = (rule.rhs1, node[0].bitset)
 				c = (rule.rhs2, node[1].bitset)
 				if b in chart and c in chart:

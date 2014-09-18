@@ -36,10 +36,11 @@ cdef class Grammar:
 	cdef Rule **lbinary
 	cdef Rule **rbinary
 	cdef UInt *mapping
+	cdef UInt *revmap
 	cdef UInt **splitmapping
 	cdef UChar *fanout
 	cdef ULong *chainvec
-	cdef readonly currentmodel
+	cdef readonly int currentmodel
 	cdef readonly size_t nonterminals, phrasalnonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
 	cdef readonly bint logprob, bitpar, binarized
@@ -147,7 +148,7 @@ cdef union Position: # 8 bytes
 
 
 cdef struct Edge:  # 16 bytes
-	Rule *rule  # ruleno may take less space as pointer, but not convenient
+	Rule *rule  # ruleno may take less space than pointer, but not convenient
 	Position pos
 
 

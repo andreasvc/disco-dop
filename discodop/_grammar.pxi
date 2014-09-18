@@ -102,6 +102,10 @@ cdef class Grammar:
 		self._indexrules(self.unary, 1, 2)
 		self._indexrules(self.lbinary, 1, 3)
 		self._indexrules(self.rbinary, 2, 3)
+		# indexing requires sorting; this map gives the new index
+		# given an original rule number (useful with the rulestr method).
+		for n in range(self.numrules):
+			self.revmap[self.bylhs[0][n].no] = n
 		# if the grammar only contains integral values (frequencies),
 		# normalize them into relative frequencies.
 		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
@@ -228,6 +232,9 @@ cdef class Grammar:
 		self.fanout = <UChar *>malloc(sizeof(UChar) * self.nonterminals)
 		assert self.fanout is not NULL
 		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
+		self.revmap = <UInt *>malloc(self.numrules * sizeof(UInt))
+		if self.revmap is NULL:
+			raise MemoryError('allocation error')
 
 	@cython.wraparound(True)
 	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict):
@@ -282,8 +289,9 @@ cdef class Grammar:
 				m += 1
 			cur.lengths |= 1 << (m - 1)
 			if self.binarized:
-				assert m < (8 * sizeof(cur.args)), (m, (8 * sizeof(cur.args)))
-			self.rulenos[(yf, ) + tuple(rule)] = n
+				assert m < (8 * sizeof(cur.args)), (
+						m, (8 * sizeof(cur.args)), line)
+			self.rulenos[yf + b' ' + b' '.join(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
 
@@ -511,21 +519,28 @@ cdef class Grammar:
 						'coarse labels without mapping: {%s}' % diff)
 		return msg
 
-	def getrulemapping(Grammar self, Grammar coarse):
-		""" Produce a mapping of coarse rules to sets of fine rules;
-		e.g., ``mapping[12] == [34, 56, 78, ...]``.
-		For use with ``dopparseprob()``. """
-		cdef list mapping = [[] for _ in range(coarse.numrules)]
+	def getrulemapping(Grammar self, Grammar coarse, striplabelre):
+		"""Produce a mapping of coarse rules to sets of fine rules.
+
+		A coarse rule for a given fine rule is found by applying the regex
+		``striplabelre`` to labels. NB: this regex is applied to strings with
+		multiple non-terminal labels at once, it should not match on the end of
+		string ``$``. The mapping uses the rule numbers (``rule.no``) derived
+		from the original order of the rules when the Grammar object was
+		created; e.g., ``self.rulemapping[12] == [34, 56, 78, ...]``
+		where 12 refers to a rule in the given coarse grammar, and the other
+		IDs to rules in this grammar."""
+		cdef int n
 		cdef Rule *rule
-		for ruleno in range(self.numrules):
-			rule = &(self.bylhs[0][ruleno])
-			key = (self.yfstr(rule[0]),
-					self.tolabel[rule.lhs].rsplit('@', 1)[0],
-					self.tolabel[rule.rhs1].rsplit('@', 1)[0])
+		self.rulemapping = [[] for _ in range(coarse.numrules)]
+		for n in range(self.numrules):
+			rule = &(self.bylhs[0][n])
+			key = '%s %s %s' % (self.yfstr(rule[0]),
+					self.tolabel[rule.lhs], self.tolabel[rule.rhs1])
 			if rule.rhs2:
-				key += (self.tolabel[rule.rhs2].rsplit('@', 1)[0], )
-			mapping[coarse.rulenos[key]].append(ruleno)
-		self.rulemapping = mapping
+				key += ' ' + self.tolabel[rule.rhs2]
+			key = striplabelre.sub(b'', key.encode('ascii'))
+			self.rulemapping[coarse.rulenos[key]].append(rule.no)
 
 	cdef rulestr(self, Rule rule):
 		left = '%.2f %s => %s%s' % (
@@ -586,6 +601,7 @@ cdef class Grammar:
 		self.bylhs = NULL
 		free(self.fanout)
 		self.fanout = NULL
+		free(self.revmap)
 		if self.chainvec is not NULL:
 			free(self.chainvec)
 			self.chainvec = NULL

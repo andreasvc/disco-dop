@@ -819,7 +819,7 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 				#ignore second child: (midpoint + end of current node suffices)
 				#child2 = restsplit[2] if len(restsplit) > 2 else None
 				mid = midpoints[child1]
-				rule = &(chart.grammar.bylhs[0][ruleno])
+				rule = &(chart.grammar.bylhs[0][chart.grammar.revmap[ruleno]])
 			chart.addedge(lhs, left, right, mid, rule)
 
 

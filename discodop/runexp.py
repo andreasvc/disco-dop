@@ -452,7 +452,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 				if stage.mode == 'dop-rerank':
-					gram.getrulemapping(stages[n - 1].grammar)
+					gram.getrulemapping(
+							stages[n - 1].grammar, re.compile(br'@[-0-9]+\b'))
 				logging.info(msg)
 			# write prob models
 			np.savez_compressed(  # pylint: disable=no-member
