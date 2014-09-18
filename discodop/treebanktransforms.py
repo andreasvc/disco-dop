@@ -77,6 +77,9 @@ def transform(tree, sent, transformations):
 			for punct in tree.subtrees(lambda n: isinstance(n[0], int)
 					and sent[n[0]] in '.?!'):
 				punct.label += STATESPLIT + sent[punct[0]]
+		elif name == 'FANOUT':  # add fan-out markers
+			from discodop.treetransforms import addfanoutmarkers
+			addfanoutmarkers(tree)
 		elif (negratransforms(name, tree, sent)
 				or wsjtransforms(name, tree, sent)
 				or ftbtransforms(name, tree, sent)):
@@ -357,7 +360,10 @@ def reversetransform(tree, transformations):
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
 	for name in reversed(transformations):
-		if name == 'DP':  # remove DPs
+		if name == 'FANOUT':
+			from discodop.treetransforms import removefanoutmarkers
+			removefanoutmarkers(tree)
+		elif name == 'DP':  # remove DPs
 			for dp in tree.subtrees(lambda n: n.label == 'DP'):
 				dp.label = 'NP'
 				if len(dp) > 1 and dp[1].label == 'NP':
