@@ -224,7 +224,7 @@ def parse(compiledgrammar, testsent, testtags=None):
 		return True
 	else:
 		print("no parse!\n")
-		#print(chart)
+		# print(chart)
 		return False
 
 

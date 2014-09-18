@@ -113,8 +113,8 @@ def negratransforms(name, tree, _sent):
 					ac[:0] = pp[:functions.index('AC')]
 				if rindex(functions, 'AC') > rindex(functions, 'NK'):
 					ac += pp[rindex(functions, 'AC') + 1:]
-			#else:
-			#	print('PP but no AC or NK', ' '.join(functions))
+			# else:
+			# 	print('PP but no AC or NK', ' '.join(functions))
 			nk = [a for a in pp if a not in ac]
 			# introduce a PP unless there is already an NP in the PP
 			# (annotation mistake?), or there is a PN and we want to avoid
@@ -124,8 +124,8 @@ def negratransforms(name, tree, _sent):
 				pp[:] = []
 				pp[:] = ac + [ParentedTree('NP', nk)]
 	elif name == 'DP':  # introduce determiner phrases (DPs)
-		#determiners = set('ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT '
-		#	'PWS PWAT PWAV'.split())
+		# determiners = set('ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT '
+		# 	'PWS PWAT PWAV'.split())
 		determiners = {'ART'}
 		for np in list(tree.subtrees(lambda n: n.label == 'NP')):
 			if np[0].label in determiners:
@@ -213,7 +213,7 @@ def negratransforms(name, tree, _sent):
 				tag.source = 8 * ['--']
 				tag.source[TAG] = tag.label = NEGRATAGUNARY[tag.label]
 				tag.source[FUNC] = function(tag[0])
-				#tag[0].source[FUNC] = 'NK'
+				# tag[0].source[FUNC] = 'NK'
 	else:
 		return False
 	return True
@@ -367,9 +367,9 @@ def reversetransform(tree, transformations):
 			for dp in tree.subtrees(lambda n: n.label == 'DP'):
 				dp.label = 'NP'
 				if len(dp) > 1 and dp[1].label == 'NP':
-					#dp1 = dp[1][:]
-					#dp[1][:] = []
-					#dp[1:] = dp1
+					# dp1 = dp[1][:]
+					# dp[1][:] = []
+					# dp[1:] = dp1
 					dp[1][:], dp[1:] = [], dp[1][:]
 		elif name == 'NEST':  # flatten adjunctions
 			nkonly = set('PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT '
@@ -403,11 +403,11 @@ def reversetransform(tree, transformations):
 				for vp in (n for n, a in enumerate(s) if a.label == 'VP'):
 					if any(a.label.endswith('FIN') for a in s[vp]):
 						s[vp][:], s[vp:vp + 1] = [], s[vp][:]
-			#if any(a.label == 'S' for a in tree):
-			#	map(mergevp, [a for a in tree if a.label == 'S'])
-			#elif any(a.label == 'CS' for a in tree):
-			#	map(mergevp, [s for cs in tree for s in cs if cs.label == 'CS'
-			#		and s.label == 'S'])
+			# if any(a.label == 'S' for a in tree):
+			# 	map(mergevp, [a for a in tree if a.label == 'S'])
+			# elif any(a.label == 'CS' for a in tree):
+			# 	map(mergevp, [s for cs in tree for s in cs if cs.label == 'CS'
+			# 		and s.label == 'S'])
 			for s in tree.subtrees(lambda n: n.label == 'S'):
 				mergevp(s)
 		elif name == 'POS-PART':
@@ -642,7 +642,7 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 
 
 def removeterminals(tree, sent, func):
-	"""Remove any empty nodes, and any empty ancestors."""
+	"""Remove any terminals for which func is True, and any empty ancestors."""
 	for a in reversed(tree.treepositions('leaves')):
 		if func(sent[tree[a]], tree[a[:-1]].label):
 			for n in range(1, len(a)):
@@ -735,7 +735,7 @@ def punctraise(tree, sent, rootpreterms=False):
 
 	:param rootpreterms: if True, move all preterminals under root,
 		instead of only recognized punctuation."""
-	#punct = [node for node in tree.subtrees() if isinstance(node[0], int)
+	# punct = [node for node in tree.subtrees() if isinstance(node[0], int)
 	punct = [node for node in tree if isinstance(node[0], int)
 			and (rootpreterms or ispunct(sent[node[0]], node.label))]
 	while punct:
@@ -748,7 +748,7 @@ def punctraise(tree, sent, rootpreterms=False):
 		phrasalnode = lambda x: len(x) and isinstance(x[0], Tree)
 		for candidate in tree.subtrees(phrasalnode):
 			# add punctuation mark to highest left/right neighbor
-			#if any(node[0] - 1 == max(a.leaves()) for a in candidate):
+			# if any(node[0] - 1 == max(a.leaves()) for a in candidate):
 			if any(node[0] + 1 == min(a.leaves()) for a in candidate):
 				candidate.append(node)
 				break

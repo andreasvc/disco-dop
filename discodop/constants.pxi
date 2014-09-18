@@ -18,3 +18,6 @@ DEF HEAP_ARITY = 4
 # context summary estimates
 DEF SX = 1
 DEF SXlrgaps = 2
+
+# Any logprob above this is considerd 0.0
+DEF MAX_LOGPROB = 300.0

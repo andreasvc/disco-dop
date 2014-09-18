@@ -223,7 +223,7 @@ def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
 	:param debin: debinarize derivations."""
 	cdef Entry entry
 	cdef set explored = set()
-	#assert not chart.rankededges, 'kbest derivations already extracted?'
+	# assert not chart.rankededges, 'kbest derivations already extracted?'
 	chart.rankededges = {}
 	derivations = []
 	cand = {}
@@ -325,7 +325,7 @@ def test():
 	scchart.updateprob(6, 3, 4, -log(1))     # 'with'
 	scchart.updateprob(1, 4, 5, -log(0.1))   # 'telescopes'
 	derivations = lazykbest(scchart, k)[0]
-	#print(scchart)
+	# print(scchart)
 	for a, p in derivations:
 		print('%f %s' % (exp(-p), a))
 
@@ -365,7 +365,7 @@ def test():
 	slchart.updateprob(CFGtoSmallChartItem(6, 3, 4), -log(1))     # 'with'
 	slchart.updateprob(CFGtoSmallChartItem(1, 4, 5), -log(0.1))   # 'telescopes'
 	derivations = lazykbest(slchart, k)[0]
-	#print(slchart)
+	# print(slchart)
 	for a, p in derivations:
 		print('%f %s' % (exp(-p), a))
 
@@ -402,7 +402,7 @@ def test():
 	flchart.updateprob(CFGtoFatChartItem(6, 3, 4), -log(1))     # 'with'
 	flchart.updateprob(CFGtoFatChartItem(1, 4, 5), -log(0.1))   # 'telescopes'
 	derivations = lazykbest(flchart, k)[0]
-	#print(lchart)
+	# print(lchart)
 	for a, p in derivations:
 		print('%f %s' % (exp(-p), a))
 	assert (len(flchart.rankededges[flchart.root()])

@@ -90,16 +90,15 @@ def startexp(
 		rerun=False):
 	"""Execute an experiment."""
 	if rerun:
-		assert os.path.exists(resultdir), (
-				'Directory %r does not exist.'
-				'--rerun requires a directory '
-				'with the grammar(s) of a previous experiment.'
-				% resultdir)
+		if not os.path.exists(resultdir):
+			raise ValueError('Directory %r does not exist.\n--rerun requires a'
+					' directory with the grammar(s) of a previous experiment.'
+					% resultdir)
 	else:
-		assert not os.path.exists(resultdir), (
-			'Directory %r exists.\n'
-			'Use --rerun to parse with existing grammar '
-			'and overwrite previous results.' % resultdir)
+		if os.path.exists(resultdir):
+			raise ValueError('Directory %r exists.\n'
+					'Use --rerun to parse with existing grammar '
+					'and overwrite previous results.' % resultdir)
 		os.mkdir(resultdir)
 
 	# Log everything, and send it to stderr, in a format with just the message.
@@ -199,14 +198,16 @@ def startexp(
 				testcorpus.skip + testcorpus.numsents)  # pylint: disable=E1103
 			if a in test_tagged_sents and
 				len(test_tagged_sents[a]) <= testcorpus.maxwords)
-	assert test_tagged_sents, 'test corpus should be non-empty'
+	if not test_tagged_sents:
+		raise ValueError('test corpus should be non-empty.')
 	logging.info('%d test sentences after length restriction <= %d',
 			len(testset), testcorpus.maxwords)
 
 	if rerun:
 		trees, sents = [], []
 	roots = {t.label for t in trees} | {test_trees[n].label for n in testset}
-	assert len(roots) == 1, 'expected unique ROOT label: %r' % roots
+	if len(roots) != 1:
+		raise ValueError('expected unique ROOT label: %r' % roots)
 	top = roots.pop()
 
 	if rerun:
@@ -368,7 +369,9 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		else:
 			traintrees = trees
 		if stage.mode.startswith('pcfg'):
-			assert tbfanout == 1 or stage.split
+			if tbfanout != 1 and not stage.split:
+				raise ValueError('Cannot extract PCFG from treebank '
+						'with discontinuities.')
 		backtransform = None
 		if stage.dop:
 			if stage.usedoubledop:
@@ -499,8 +502,10 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 
 		outside = None
 		if 'SX' in (stage.getestimates, stage.useestimates):
-			assert tbfanout == 1 or stage.split, 'SX estimate requires PCFG.'
-			assert stage.mode != 'pcfg', 'estimates require parser w/agenda.'
+			if tbfanout != 1 and not stage.split:
+				raise ValueError('SX estimate requires PCFG.')
+			if stage.mode != 'plcfrs':
+				raise ValueError('estimates require parser w/agenda.')
 		if stage.getestimates in ('SX', 'SXlrgaps'):
 			begin = time.clock()
 			logging.info('computing %s estimates', stage.getestimates)
@@ -730,7 +735,8 @@ def parsetepacoc(
 	"""Parse the tepacoc test set."""
 	for stage in stages:
 		for key in stage:
-			assert key in parser.DEFAULTSTAGE, 'unrecognized option: %r' % key
+			if key not in parser.DEFAULTSTAGE:
+				raise ValueError('unrecognized option: %r' % key)
 	stages = [parser.DictObj({k: stage.get(k, v) for k, v
 			in parser.DEFAULTSTAGE.items()}) for stage in stages]
 	os.mkdir(resultdir)
@@ -835,7 +841,7 @@ def parsetepacoc(
 		if numproc == 1:
 			logging.info('time elapsed during parsing: %g',
 					time.clock() - begin)
-		#else:  # wall clock time here
+		# else:  # wall clock time here
 	goldbrackets = multiset()
 	totresults = [parser.DictObj(name=stage.name) for stage in stages]
 	for result in totresults:
@@ -878,10 +884,12 @@ def readparam(filename):
 	and will be read using ``eval('dict(%s)' % open(file).read())``."""
 	params = eval('dict(%s)' % open(filename).read())
 	for key in DEFAULTS:
-		assert key in params, '%r not in parameters.' % key
+		if key not in params:
+			raise ValueError('%r not in parameters.' % key)
 	for stage in params['stages']:
 		for key in stage:
-			assert key in parser.DEFAULTSTAGE, "unrecognized option: %r" % key
+			if key not in parser.DEFAULTSTAGE:
+				raise ValueError('unrecognized option: %r' % key)
 	params['stages'] = [parser.DictObj({k: stage.get(k, v)
 			for k, v in parser.DEFAULTSTAGE.items()})
 				for stage in params['stages']]
@@ -889,12 +897,14 @@ def readparam(filename):
 		params[key] = parser.DictObj({k: params[key].get(k, v)
 				for k, v in DEFAULTS[key].items()})
 	for n, stage in enumerate(params['stages']):
-		assert stage.mode in (
+		if stage.mode not in (
 				'plcfrs', 'pcfg', 'pcfg-posterior',
 				'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
-				'dop-rerank')
-		assert n > 0 or not stage.prune, (
-				"need previous stage to prune, but this stage is first.")
+				'dop-rerank'):
+			raise ValueError('unrecognized mode argument.')
+		if n == 0 and stage.prune:
+			raise ValueError('need previous stage to prune, '
+					'but this stage is first.')
 		if stage.mode == 'dop-rerank':
 			assert stage.prune and not stage.splitprune and stage.k > 1
 			assert (stage.dop and not stage.usedoubledop

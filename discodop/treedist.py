@@ -169,7 +169,7 @@ def treedist(tree1, tree2, debug=False):
 							and tree2lmd[j] == tree2lmd[y + joff]):
 						#                 +-
 						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
-						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
+						# δ(F1, F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
 						#                 | δ(l(i1)..i-1, l(j1)..j-1) + γ(v → w)
 						#                 +-
 						labeldist = strdist(tree1nodes[x + ioff].label,
@@ -181,7 +181,7 @@ def treedist(tree1, tree2, debug=False):
 					else:
 						#                 +-
 						#                 | δ(l(i1)..i-1, l(j1)..j) + γ(v → λ)
-						#δ(F1 , F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
+						# δ(F1, F2) = min-+ δ(l(i1)..i , l(j1)..j-1) + γ(λ → w)
 						#                 | δ(l(i1)..l(i)-1, l(j1)..l(j)-1)
 						#                 |                   + treedist(i1,j1)
 						#                 +-

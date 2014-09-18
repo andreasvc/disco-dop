@@ -1,6 +1,6 @@
 from math import isinf, exp, log, fsum
 from libc.stdlib cimport malloc, calloc, realloc, free, qsort, atol, strtod
-from libc.string cimport memcmp
+from libc.string cimport memcmp, memset
 cimport cython
 include "constants.pxi"
 
@@ -25,6 +25,7 @@ cdef extern from "macros.h":
 	int BITSLOT(int b)
 	int BITNSLOTS(int nb)
 	void SETBIT(ULong a[], int b)
+	void CLEARBIT(ULong a[], int b)
 	ULong TESTBIT(ULong a[], int b)
 	ULong BITMASK(int b)
 

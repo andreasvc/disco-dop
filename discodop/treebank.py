@@ -90,9 +90,10 @@ class CorpusReader(object):
 				((None, 'no', 'add', 'replace', 'between'), morphology),
 				((None, 'no', 'move', 'moveall', 'remove', 'root'), punct),
 				((None, 'no', 'add', 'replace', 'between'), lemmas)):
-			assert opt in opts, 'Expected one of %r. Got: %r' % (opts, opt)
-		assert self._filenames, (
-				"no files matched pattern %s" % path)
+			if opt not in opts:
+				raise ValueError('Expected one of %r. Got: %r' % (opts, opt))
+		if not self._filenames:
+			raise ValueError('no files matched pattern %s' % path)
 		self._block_cache = None
 		self._trees_cache = None
 
@@ -240,10 +241,10 @@ class DiscBracketCorpusReader(CorpusReader):
 		treestr = block.split("\t", 1)[0]
 		tree = ParentedTree.parse(treestr, parse_leaf=int)
 		sent = self._word(block, orig=True)
-		assert all(0 <= n < len(sent) for n in tree.leaves()), (
-				'All leaves must be in the interval 0..n with '
-				'n=len(sent)\ntokens: %d indices: %r\nsent: %s' % (
-				len(sent), tree.leaves(), sent))
+		if not all(0 <= n < len(sent) for n in tree.leaves()):
+			raise ValueError('All leaves must be in the interval 0..n with '
+					'n=len(sent)\ntokens: %d indices: %r\nsent: %s' % (
+					len(sent), tree.leaves(), sent))
 		return tree, sent
 
 	def _word(self, block, orig=False):
@@ -270,19 +271,23 @@ class NegraCorpusReader(CorpusReader):
 		for filename in self._filenames:
 			for line in io.open(filename, encoding=self._encoding):
 				if line.startswith('#BOS '):
-					assert not started, ("beginning of sentence marker while "
-							"previous one still open: %s" % line)
+					if started:
+						raise ValueError('beginning of sentence marker while '
+								'previous one still open: %s' % line)
 					started = True
 					sentid = line.strip().split()[1]
 					lines = []
 				elif line.startswith('#EOS '):
-					assert started, "end of sentence marker while none started"
+					if not started:
+						raise ValueError('end of sentence marker while '
+								'none started')
 					thissentid = line.strip().split()[1]
-					assert sentid == thissentid, ("unexpected sentence id: "
-							"start=%s, end=%s" % (sentid, thissentid))
+					if sentid != thissentid:
+						raise ValueError('unexpected sentence id: '
+							'start=%s, end=%s' % (sentid, thissentid))
 					started = False
-					assert sentid not in results, (
-							"duplicate sentence ID: %s" % sentid)
+					if sentid in results:
+						raise ValueError('duplicate sentence ID: %s' % sentid)
 					results.add(sentid)
 					yield sentid, lines
 				elif started:
@@ -348,8 +353,9 @@ class TigerXMLCorpusReader(CorpusReader):
 				idref = edge.get('idref')
 				nodes.setdefault(idref, 6 * [None])
 				if edge.tag == 'edge':
-					assert nodes[idref][FUNC] is None, ('%s already has '
-							'a parent: %r' % (idref, nodes[idref]))
+					if nodes[idref][FUNC] is not None:
+						raise ValueError('%s already has a parent: %r'
+								% (idref, nodes[idref]))
 					nodes[idref][FUNC] = edge.get('label')
 					nodes[idref][PARENT] = ntid
 				elif edge.tag == 'secedge':
@@ -357,8 +363,9 @@ class TigerXMLCorpusReader(CorpusReader):
 				else:
 					raise ValueError
 		for idref in nodes:
-			assert nodes[idref][PARENT] is not None, (
-					'%s does not have a parent: %r' % (idref, nodes[idref]))
+			if nodes[idref][PARENT] is None:
+				raise ValueError('%s does not have a parent: %r' % (
+						idref, nodes[idref]))
 		tree, sent = exporttree(
 				['\t'.join(a) for a in nodes.values()],
 				self.functions, self.morphology, self.lemmas)
@@ -389,8 +396,9 @@ class AlpinoCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		"""Read corpus and yield blocks corresponding to each sentence."""
-		assert self._encoding in (None, 'utf8', 'utf-8'), (
-				'Encoding specified in XML files, cannot be overriden.')
+		if self._encoding not in (None, 'utf8', 'utf-8'):
+			raise ValueError('Encoding specified in XML files, '
+					'cannot be overriden.')
 		for filename in self._filenames:
 			block = open(filename).read()
 			# ../path/dir/file.xml => dir/file
@@ -424,8 +432,9 @@ class DactCorpusReader(AlpinoCorpusReader):
 	"""Corpus reader for Alpino trees in Dact format (DB XML)."""
 	def _read_blocks(self):
 		import alpinocorpus
-		assert self._encoding in (None, 'utf8', 'utf-8'), (
-				'Encoding specified in XML files, cannot be overriden.')
+		if self._encoding not in (None, 'utf8', 'utf-8'):
+			raise ValueError('Encoding specified in XML files, '
+					'cannot be overriden.')
 		for filename in self._filenames:
 			corpus = alpinocorpus.CorpusReader(filename)
 			for entry in corpus.entries():
@@ -593,7 +602,8 @@ def writetree(tree, sent, n, fmt,
 	elif fmt == 'alpino':
 		return writealpinotree(tree, sent, n, comment)
 	elif fmt in ('conll', 'mst'):
-		assert headrules, 'dependency conversion requires head rules.'
+		if not headrules:
+			raise ValueError('dependency conversion requires head rules.')
 		result = writedependencies(tree, sent, fmt, headrules)
 	else:
 		raise ValueError('unrecognized format: %r' % fmt)
@@ -618,7 +628,8 @@ def writeexporttree(tree, sent, n, comment, morphology):
 	assert len(sent) == len(indices) == len(wordids), (
 			n, str(tree), sent, wordids.keys())
 	for i, word in enumerate(sent):
-		assert word, 'empty word in sentence: %r' % sent
+		if not word:
+			raise ValueError('empty word in sentence: %r' % sent)
 		idx = wordids[i]
 		node = tree[idx[:-1]]
 		lemma = '--'
@@ -819,7 +830,7 @@ def incrementaltreereader(treeinput, morphology=None, functions=None):
 	readers = [
 			segmentexport(morphology, functions),
 			segmentbrackets('()'),
-			#segmentbrackets('[]'),
+			# segmentbrackets('[]'),
 			]
 	for reader in readers:
 		reader.send(None)

@@ -130,13 +130,16 @@ def main():
 	options = 'prob tags bitpar simple mpp= bt= numproc= fmt='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'b:s:x', options)
-		assert 1 <= len(args) <= 4, 'incorrect number of arguments'
-	except (GetoptError, AssertionError) as err:
+	except GetoptError as err:
 		print(err, USAGE)
 		return
+	if not 1 <= len(args) <= 4:
+		print('ERROR: incorrect number of arguments')
+		print(USAGE)
+		return
 	for n, filename in enumerate(args):
-		assert os.path.exists(filename), (
-				'file %d not found: %r' % (n + 1, filename))
+		if not os.path.exists(filename):
+			raise ValueError('file %d not found: %r' % (n + 1, filename))
 	opts = dict(opts)
 	numparses = int(opts.get('-b', 1))
 	top = opts.get('-s', 'TOP')
@@ -144,13 +147,17 @@ def main():
 	tags = '--tags' in opts
 	oneline = '-x' not in opts
 	if '--simple' in opts:
-		assert 2 <= len(args) <= 4, 'incorrect number of arguments'
+		if not 2 <= len(args) <= 4:
+			print('ERROR: incorrect number of arguments')
+			print(USAGE)
+			return
 		rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
 		lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
 				else open)(args[1])).read()
 		bitpar = rules[0] in string.digits
 		if '--bitpar' in opts:
-			assert bitpar, 'bitpar requires bitpar grammar format.'
+			if not bitpar:
+				raise ValueError('bitpar requires bitpar grammar format.')
 			mode = 'pcfg-bitpar-nbest'
 		else:
 			mode = 'pcfg' if bitpar else 'plcfrs'
@@ -181,8 +188,8 @@ def main():
 	else:
 		from discodop.runexp import readparam
 		directory = args[0]
-		assert os.path.isdir(directory), (
-				'expected directory producted by "discodop runexp".')
+		if not os.path.isdir(directory):
+			raise ValueError('expected directory produced by "discodop runexp"')
 		params = readparam(os.path.join(directory, 'params.prm'))
 		params['resultdir'] = directory
 		stages = params['stages']
@@ -279,10 +286,10 @@ def worker(args):
 	if PARAMS.usetags:
 		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
 	lexicon = PARAMS.parser.stages[0].grammar.lexicalbyword
-	assert PARAMS.usetags or not set(sent) - set(lexicon), (
-			'unknown words and no tags or unknown word model supplied.\n'
-			'sentence: %r\nunknown words:%r' % (
-			sent, list(set(sent) - set(lexicon))))
+	if not PARAMS.usetags and set(sent) - set(lexicon):
+		raise ValueError('unknown words and no tags or unknown word model '
+				'supplied.\nsentence: %r\nunknown words:%r' % (
+				sent, list(set(sent) - set(lexicon))))
 	msg = 'parsing %d: %s' % (n, ' '.join(sent))
 	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
 	output = ''
@@ -401,8 +408,8 @@ class Parser(object):
 					not hasattr(stage, 'rulesfile')
 					or x != stage.grammar.currentmodel):
 				exportbitpargrammar(stage)
-			assert stage.binarized or stage.mode.startswith('pcfg-bitpar'), (
-					'non-binarized grammar requires use of bitpar')
+			if not stage.binarized and not stage.mode.startswith('pcfg-bitpar'):
+				raise ValueError('non-binarized grammar requires use of bitpar')
 			if not stage.prune or chart:
 				if n != 0 and stage.prune and stage.mode != 'dop-rerank':
 					beginprune = time.clock()
@@ -469,14 +476,15 @@ class Parser(object):
 						and stage.split == self.stages[n - 1].split):
 					logging.error('ERROR: expected successful parse. '
 							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
-					#raise ValueError('ERROR: expected successful parse. '
-					#		'sent %s, %s.' % (nsent, stage.name))
+					# raise ValueError('ERROR: expected successful parse. '
+					# 		'sent %s, %s.' % (nsent, stage.name))
 			if chart and stage.mode not in ('pcfg-posterior', 'dop-rerank'
 					) and not (self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
 				if stage.mode == 'pcfg-bitpar-nbest':
-					assert stage.kbest and not stage.sample, (
-							'sampling not possible with bitpar in nbest mode.')
+					if not stage.kbest or stage.sample:
+						raise ValueError('sampling not possible with bitpar '
+								'in nbest mode.')
 					derivations = chart.rankededges[chart.root()]
 					entries = [None] * len(derivations)
 				else:
@@ -517,10 +525,10 @@ class Parser(object):
 					resultstr, prob, fragments = max(
 							parsetrees, key=itemgetter(1))
 					parsetree, noparse = self.postprocess(resultstr, n)
-					assert all(a for a in parsetree.subtrees()), (
-							'tree has empty nodes: %s' % parsetree)
-					assert len(parsetree.leaves()) == len(sent), (
-							'leaves missing. original tree: %s\n'
+					if not all(a for a in parsetree.subtrees()):
+						raise ValueError('tree has empty nodes: %s' % parsetree)
+					if not len(parsetree.leaves()) == len(sent):
+						raise ValueError('leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception as err:  # pylint: disable=W0703
 					logging.error("something's amiss. %s", err)
@@ -585,7 +593,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				binarized=stage.binarized)
 		backtransform = None
 		if stage.dop:
-			assert stage.useestimates is None, 'not supported'
+			if stage.useestimates is not None:
+				raise ValueError('not supported')
 			if stage.usedoubledop:
 				backtransform = gzip.open('%s/%s.backtransform.gz' % (
 						resultdir, stage.name)).read().splitlines()
@@ -624,7 +633,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 		if stage.mode.startswith('pcfg-bitpar'):
-			assert grammar.maxfanout == 1
+			if grammar.maxfanout != 1:
+				raise ValueError('bitpar requires a PCFG.')
 		_sumsto1, msg = grammar.testgrammar()
 		logging.info('%s: %s', stage.name, msg)
 		stage.update(grammar=grammar, backtransform=backtransform, outside=None)

@@ -2,8 +2,8 @@
 
 Use as follows:
 
->>> derivs, entries = getderivations(chart, 1000)  #doctest: +SKIP
->>> parses, msg = marginalize("mpp", derivs, entries, chart)  #doctest: +SKIP
+>>> derivs, entries = getderivations(chart, 1000)  # doctest: +SKIP
+>>> parses, msg = marginalize("mpp", derivs, entries, chart)  # doctest: +SKIP
 """
 
 from __future__ import print_function
@@ -15,7 +15,7 @@ from bisect import bisect_right
 from operator import itemgetter, attrgetter
 from itertools import count
 from functools import partial
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from discodop import plcfrs, _fragments
 from discodop.tree import Tree
 from discodop.kbest import lazykbest, getderiv
@@ -54,7 +54,8 @@ cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
 		:entries: list of RankedEdge objects.
 	"""
 	cdef list derivations = [], entries = []
-	assert kbest or sample
+	if not (kbest or sample):
+		raise ValueError('at least one of kbest or sample needs to be True.')
 	chart.rankededges = {}
 	if kbest:
 		derivations, _ = lazykbest(chart, k, derivs=derivstrings)
@@ -540,18 +541,18 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 	# even better: build result incrementally; use bytearray,
 	# extended in recursive calls w/strings from backtransform.
 	# step 1: collect RankedEdges in a list (children);
-	#		i.e., exctract nodes from binarized constituent.
+	# 		i.e., exctract nodes from binarized constituent.
 	# step 2: iterate over parts of template, alternately adding string from it
-	#		and making a recursive call to insert the relevant child RankedEdge
+	# 		and making a recursive call to insert the relevant child RankedEdge
 	# new backtransform format:
-	#backtransform[prod] = (list_of_strs, list_of_idx)
-	#backtransform[34] = ([b'(NP (DT ', b') (NN ', b'))'], [0, 1])
-	#alternatively: (better locality?)
-	#frag = backtransform[34] = [b'(NP (DT ', 0, b') (NN ', 1, b'))']
-	#result += frag[0]
-	#for n in range(1, len(result), 2):
-	#	foo(result, children[frag[n]])
-	#	result += frag[n + 1]
+	# backtransform[prod] = (list_of_strs, list_of_idx)
+	# backtransform[34] = ([b'(NP (DT ', b') (NN ', b'))'], [0, 1])
+	# alternatively: (better locality?)
+	# frag = backtransform[34] = [b'(NP (DT ', 0, b') (NN ', 1, b'))']
+	# result += frag[0]
+	# for n in range(1, len(result), 2):
+	# 	foo(result, children[frag[n]])
+	# 	result += frag[n + 1]
 
 
 cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
@@ -667,7 +668,7 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 			for deriv in reversed(children)]))
 	# recursively visit all substitution sites
 	for child in reversed(children):
-		if not child.edge.rule is NULL:
+		if child.edge.rule is not NULL:
 			fragmentsinderiv_(child, chart, backtransform, result)
 		elif '@' not in chart.grammar.tolabel[chart.label(child.head)]:
 			result.append('(%s %d)' % (
@@ -801,9 +802,9 @@ def getsamples(Chart chart, k, debin=None):
 				else:
 					prob = edge.rule.prob
 					# FIXME: work w/inside prob?
-					#prob += chart.subtreeprob(chart._left(item, edge))
-					#if edge.rule.rhs2:
-					#	prob += chart.subtreeprob(chart._right(item, edge))
+					# prob += chart.subtreeprob(chart._left(item, edge))
+					# if edge.rule.rhs2:
+					# 	prob += chart.subtreeprob(chart._right(item, edge))
 					chartidx[item].append((prob, n, m))
 		# sort edges so that highest prob (=lowest neglogprob) comes first
 		chartidx[item].sort()
@@ -902,7 +903,8 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	cdef Rule *rule
 	cdef LexicalRule lexrule
 	cdef object n  # pyint
-	assert fine.logprob, 'Grammar should have log probabilities.'
+	if not fine.logprob:
+		raise ValueError('Grammar should have log probabilities.')
 	# Log probabilities are not ideal here because we do lots of additions,
 	# but the probabilities are very small.
 	# A possible alternative is to scale them somehow.

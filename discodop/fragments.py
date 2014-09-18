@@ -98,6 +98,8 @@ def main(argv=None):
 	numproc = int(opts.get("--numproc", 1))
 	if numproc == 0:
 		numproc = cpu_count()
+	if not numproc:
+		raise ValueError('numproc should be an integer > 0. got: %r' % numproc)
 	limit = int(opts.get('--numtrees', 0)) or None
 	encoding = opts.get("--encoding", "UTF-8")
 	batchdir = opts.get("--batch")
@@ -109,20 +111,24 @@ def main(argv=None):
 		print(USAGE)
 		return
 	if batchdir:
-		assert numproc == 1, ("Batch mode only supported in single-process "
-				"mode. Use the xargs command for multi-processing.")
+		if numproc != 1:
+			raise ValueError('Batch mode only supported in single-process '
+				'mode. Use the xargs command for multi-processing.')
 	if args[0] == '-':
 		args[0] = '/dev/stdin'
 	for a in args:
-		assert os.path.exists(a), "not found: %r" % a
+		if not os.path.exists(a):
+			raise ValueError('not found: %r' % a)
 	if PARAMS['complete']:
-		assert not PARAMS['twoterms'] and not PARAMS['adjacent'], (
-				'--twoterms and --adjacent are incompatible with --complete.')
+		if PARAMS['twoterms'] or PARAMS['adjacent']:
+			raise ValueError('--twoterms and --adjacent are incompatible '
+					'with --complete.')
 	if PARAMS['complete']:
-		assert len(args) == 2 or batchdir, (
-				"need at least two treebanks with --complete.")
-		assert not PARAMS['approx'] and not PARAMS['nofreq'], (
-				"--complete is incompatible with --nofreq and --approx")
+		if len(args) != 2 and not batchdir:
+			raise ValueError('need at least two treebanks with --complete.')
+		if PARAMS['approx'] or PARAMS['nofreq']:
+			raise ValueError('--complete is incompatible with --nofreq '
+					'and --approx')
 
 	level = logging.WARNING if PARAMS['quiet'] else logging.DEBUG
 	logging.basicConfig(level=level, format='%(message)s')
@@ -132,7 +138,6 @@ def main(argv=None):
 
 	logging.info("Disco-DOP Fragment Extractor")
 
-	assert numproc
 	logging.info("parameters:\n%s", "\n".join("    %s:\t%r" % kv
 		for kv in sorted(PARAMS.items())))
 	logging.info("\n".join("treebank%d: %s" % (n + 1, a)
@@ -313,12 +318,14 @@ def initworker(treebank1, treebank2, limit, encoding):
 		for a, b in sorted(PARAMS['prods'].items(), key=lambda x: x[1]):
 			print(b, *a)
 	trees1 = PARAMS['trees1']
-	assert trees1
+	if not trees1:
+		raise ValueError('treebank1 empty.')
 	m = "treebank1: %d trees; %d nodes (max: %d);" % (
 			trees1.len, trees1.numnodes, trees1.maxnodes)
 	if treebank2:
 		trees2 = PARAMS['trees2']
-		assert trees2
+		if not trees2:
+			raise ValueError('treebank2 empty.')
 		m += " treebank2: %d trees; %d nodes (max %d);" % (
 				trees2.len, trees2.numnodes, trees2.maxnodes)
 	logging.info("%s labels: %d, prods: %d", m, len(set(PARAMS['labels'])),
@@ -428,7 +435,8 @@ def getfragments(trees, sents, numproc=1, disc=True,
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)
-	assert numtrees
+	if not numtrees:
+		raise ValueError('no trees.')
 	mult = 1  # 3 if numproc > 1 else 1
 	fragments = {}
 	trees = trees[:]
@@ -506,7 +514,8 @@ def getfragments(trees, sents, numproc=1, disc=True,
 def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	"""Get fragments of fragments."""
 	numtrees = len(newtrees)
-	assert numtrees
+	if not numtrees:
+		raise ValueError('no trees.')
 	if numproc == 1:  # set fragments as input
 		initworkersimple(newtrees, newsents, PARAMS['disc'], trees, sents)
 		mymap = map

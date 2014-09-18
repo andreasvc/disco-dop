@@ -346,9 +346,9 @@ class TestHeap(TestCase):
 
 	def test_repr(self):
 		h, _pairs, d = self.make_data()
-		#self.assertEqual(h, eval(repr(h)))
+		# self.assertEqual(h, eval(repr(h)))
 		tmp = repr(h)  # 'Agenda({....})'
-		#strip off class name
+		# strip off class name
 		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
 		self.assertEqual(d, eval(dstr))
 

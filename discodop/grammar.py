@@ -86,16 +86,18 @@ def lcfrsproductions(tree, sent, frontiers=False):
 	(('ADJ', 'Epsilon'), ('happy',))
 	(('NP', 'Epsilon'), ('Mary',))"""
 	leaves = tree.leaves()
-	assert len(set(leaves)) == len(leaves), (
-			"indices should be unique. indices: %r\ntree: %s" % (leaves, tree))
-	assert sent, ("no sentence.\n"
-			"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
-	assert all(isinstance(a, int) for a in leaves), (
-			"indices should be integers.\ntree: %s\nindices: %r\nsent: %r" % (
-			tree.pprint(), leaves, sent))
-	assert all(0 <= a < len(sent) for a in leaves), (
-			"indices should point to a word in the sentence.\n"
-			"tree: %s\nindices: %r\nsent: %r" % (tree.pprint(), leaves, sent))
+	if len(set(leaves)) != len(leaves):
+		raise ValueError('indices should be unique. indices: %r\ntree: %s'
+				% (leaves, tree))
+	if not sent:
+		raise ValueError('no sentence.\ntree: %s\nindices: %r\nsent: %r'
+				% (tree.pprint(), leaves, sent))
+	if not all(isinstance(a, int) for a in leaves):
+		raise ValueError('indices should be integers.\ntree: %s\nindices: %r\n'
+				'sent: %r' % (tree.pprint(), leaves, sent))
+	if not all(0 <= a < len(sent) for a in leaves):
+		raise ValueError('indices should point to a word in the sentence.\n'
+			'tree: %s\nindices: %r\nsent: %r' % (tree.pprint(), leaves, sent))
 	rules = []
 	for st in tree.subtrees():
 		if not st:
@@ -953,10 +955,11 @@ def main():
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)
-	assert model in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
-			'param', 'info', 'merge'), ('unrecognized model: %r' % model)
-	assert opts.get('dopestimator', 'rfe') in ('rfe', 'ewe', 'shortest'), (
-			'unrecognized estimator: %r' % opts['dopestimator'])
+	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
+			'param', 'info', 'merge'):
+		raise ValueError('unrecognized model: %r' % model)
+	if opts.get('dopestimator', 'rfe') not in ('rfe', 'ewe', 'shortest'):
+		raise ValueError('unrecognized estimator: %r' % opts['dopestimator'])
 
 	if model == 'info':
 		grammarstats(args[1])
@@ -973,11 +976,12 @@ def main():
 		import os
 		from discodop.runexp import readparam, loadtraincorpus, getposmodel
 		from discodop.parser import DictObj
-		assert not opts, 'all options should be set in parameter file.'
+		if opts:
+			raise ValueError('all options should be set in parameter file.')
 		prm = DictObj(readparam(args[1]))
 		resultdir = args[2]
-		assert not os.path.exists(resultdir), (
-				'Directory %r already exists.\n' % resultdir)
+		if os.path.exists(resultdir):
+			raise ValueError('Directory %r already exists.\n' % resultdir)
 		os.mkdir(resultdir)
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,

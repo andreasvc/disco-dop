@@ -290,12 +290,12 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				score = lexrule.prob
 				if estimatetype == SX:
 					score += outside[lexrule.lhs, left, right, 0]
-					if score > 300.0:
+					if score > MAX_LOGPROB:
 						continue
 				elif estimatetype == SXlrgaps:
 					score += outside[
 							lexrule.lhs, length, left + right, gaps]
-					if score > 300.0:
+					if score > MAX_LOGPROB:
 						continue
 				newitem.label = lexrule.lhs
 				if LCFRSItem_fused is SmallChartItem:
@@ -319,11 +319,11 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 			score = 0.0
 			if estimatetype == SX:
 				score += outside[lhs, left, right, 0]
-				if score > 300.0:
+				if score > MAX_LOGPROB:
 					continue
 			elif estimatetype == SXlrgaps:
 				score += outside[lhs, length, left + right, gaps]
-				if score > 300.0:
+				if score > MAX_LOGPROB:
 					continue
 			newitem.label = lhs
 			if LCFRSItem_fused is SmallChartItem:
@@ -406,12 +406,12 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				score = newitemprob = itemprob + rule.prob
 				if estimatetype == SX:
 					score += outside[rule.lhs, left, right, 0]
-					if score > 300.0:
+					if score > MAX_LOGPROB:
 						continue
 				elif estimatetype == SXlrgaps:
 					score += outside[
 							rule.lhs, length, left + right, gaps]
-					if score > 300.0:
+					if score > MAX_LOGPROB:
 						continue
 				newitem.label = rule.lhs
 				if process_edge(newitem, score, newitemprob,
@@ -459,7 +459,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 						if estimatetype == SX:
 							right = lensent - length - left
 							score += outside[rule.lhs, left, right, 0]
-							if score > 300.0:
+							if score > MAX_LOGPROB:
 								continue
 						elif estimatetype == SXlrgaps:
 							if LCFRSItem_fused is SmallChartItem:
@@ -470,7 +470,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 							right = lensent - length - left - gaps
 							score += outside[
 									rule.lhs, length, left + right, gaps]
-							if score > 300.0:
+							if score > MAX_LOGPROB:
 								continue
 						if process_edge(newitem, score, newitemprob,
 								rule, <LCFRSItem_fused>sib, agenda, chart,
@@ -490,7 +490,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.lbinary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
-				#for sib, sibprob in (<dict>probs[rule.rhs2]).iteritems():
+				# for sib, sibprob in (<dict>probs[rule.rhs2]).iteritems():
 				for sib in <dict>probs[rule.rhs2]:
 					newitem.label = rule.lhs
 					combine_item(newitem, item, <LCFRSItem_fused>sib)
@@ -516,7 +516,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 						if estimatetype == SX:
 							right = lensent - length - left
 							score += outside[rule.lhs, left, right, 0]
-							if score > 300.0:
+							if score > MAX_LOGPROB:
 								continue
 						elif estimatetype == SXlrgaps:
 							if LCFRSItem_fused is SmallChartItem:
@@ -527,7 +527,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 							right = lensent - length - left - gaps
 							score += outside[rule.lhs, length,
 									left + right, gaps]
-							if score > 300.0:
+							if score > MAX_LOGPROB:
 								continue
 						if process_edge(newitem, score, newitemprob,
 								rule, item, agenda, chart, whitelist,
@@ -556,6 +556,7 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist,
 		bint splitprune, bint markorigin):
 	"""Decide what to do with a newly derived edge.
+
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
 		blocked. When ``False``, ``newitem`` may be reused."""
 	cdef UInt a, b, n, cnt, label
@@ -583,7 +584,7 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 						COMPONENT.vec = (1ULL << b) - (1ULL << a)
 					elif LCFRSItem_fused is FatChartItem:
 						b = anextunset(newitem.vec, a, SLOTS)
-						#given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+						# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
 						memset(<void *>FATCOMPONENT.vec, 0, SLOTS * sizeof(ULong))
 						for n in range(a, b):
 							SETBIT(FATCOMPONENT.vec, n)
@@ -614,8 +615,8 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 		chart.addedge(newitem, left, rule)
 	# not in agenda => must be in chart
 	elif not inagenda and prob < chart._subtreeprob(newitem):
-		#re-add to agenda because we found a better score.
-		#should not happen without estimates!
+		# re-add to agenda because we found a better score.
+		# should not happen without estimates!
 		agenda.setitem(newitem, score)
 		chart.addedge(newitem, left, rule)
 		logging.warning('WARN: updating score in agenda: %r', newitem)
@@ -726,7 +727,7 @@ cdef inline bint concat(Rule *rule,
 				return False
 		lpos = anextset(alvec, 0, SLOTS)
 		rpos = anextset(arvec, 0, SLOTS)
-		#this algorithm was adapted from rparse, FastYFComposer.
+		# this algorithm was adapted from rparse, FastYFComposer.
 		for n in range(bitlength(rule.lengths)):
 			if testbit(rule.args, n):
 				# check if there are any bits left, and
@@ -900,63 +901,63 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		msg = 'no parse ' + msg
 	return chart, msg
 
-#def newparser(sent, Grammar grammar, tags=None, start=1, bint exhaustive=True,
-#		list whitelist=None, bint splitprune=False, bint markorigin=False,
-#		estimates=None, int beamwidth=0):
-#	# assign POS tags, unaries on POS tags
-#	for length in range(2, len(sent) + 1):
-#		for leftlength in range(1, length):
-#			for left in chart[leftlength]
-#				for right in chart[length - leftlength]:
-#					# find rules with ... => left right
-#					# can left + right concatenate?
+# def newparser(sent, Grammar grammar, tags=None, start=1,
+# 		bint exhaustive=True, list whitelist=None, bint splitprune=False,
+# 		bint markorigin=False, estimates=None, int beamwidth=0):
+# 	# assign POS tags, unaries on POS tags
+# 	for length in range(2, len(sent) + 1):
+# 		for leftlength in range(1, length):
+# 			for left in chart[leftlength]
+# 				for right in chart[length - leftlength]:
+# 					# find rules with ... => left right
+# 					# can left + right concatenate?
 #
-#cdef inline set candidateitems(Rule rule, ChartItem item, dict chart,
-#		bint left=True):
-#	"""Find all compatible siblings for an item given a rule.
+# cdef inline set candidateitems(Rule rule, ChartItem item, dict chart,
+# 		bint left=True):
+# 	"""Find all compatible siblings for an item given a rule.
 #
-#	Uses lookup tables with set of items for every start/end point of
-#	components in items."""
-#	cdef size_t n
-#	cdef short pos = nextset(item.vec, 0), prevpos, x, y
-#	cdef set candidates = None, temp
-#	for n in range(bitlength(rule.lengths)):
-#		if (testbit(rule.args, n) == 0) == left: # the given item
-#			if pos == -1:
-#				return False
-#			prevpos = nextunset(item.vec, pos)
-#			pos = nextset(item.vec, prevpos)
-#		else: # the other item for which to find candidates
-#			if n and testbit(rule.lengths, n - 1): # start gap?
-#				temp = set()
-#				if testbit(rule.lengths, n): # & end gap?
-#					for x in range(prevpos + 1, pos):
-#						for y in range(x + 1, pos):
-#							temp.update(chart.bystart[x] & chart.byend[y])
-#				else:
-#					for x in range(prevpos + 1, pos):
-#						temp.update(chart.bystart[x] & chart.byend[pos])
-#				if candidates is None:
-#					candidates = set(temp)
-#				else:
-#					candidates &= temp
-#			elif testbit(rule.lengths, n): # end gap?
-#				temp = set()
-#				for x in range(prevpos + 1, pos):
-#					temp.update(chart.bystart[prevpos] & chart.byend[x])
-#				if candidates is None:
-#					candidates = set(temp)
-#				else:
-#					candidates &= temp
-#			else: # no gaps
-#				if candidates is None:
-#					candidates = chart.bystart[prevpos] & chart.byend[pos]
-#				else:
-#					candidates &= chart.bystart[prevpos]
-#					candidates &= chart.byend[pos]
-#		if not candidates:
-#			break
-#	return candidates if pos == -1 else set()
+# 	Uses lookup tables with set of items for every start/end point of
+# 	components in items."""
+# 	cdef size_t n
+# 	cdef short pos = nextset(item.vec, 0), prevpos, x, y
+# 	cdef set candidates = None, temp
+# 	for n in range(bitlength(rule.lengths)):
+# 		if (testbit(rule.args, n) == 0) == left: # the given item
+# 			if pos == -1:
+# 				return False
+# 			prevpos = nextunset(item.vec, pos)
+# 			pos = nextset(item.vec, prevpos)
+# 		else: # the other item for which to find candidates
+# 			if n and testbit(rule.lengths, n - 1): # start gap?
+# 				temp = set()
+# 				if testbit(rule.lengths, n): # & end gap?
+# 					for x in range(prevpos + 1, pos):
+# 						for y in range(x + 1, pos):
+# 							temp.update(chart.bystart[x] & chart.byend[y])
+# 				else:
+# 					for x in range(prevpos + 1, pos):
+# 						temp.update(chart.bystart[x] & chart.byend[pos])
+# 				if candidates is None:
+# 					candidates = set(temp)
+# 				else:
+# 					candidates &= temp
+# 			elif testbit(rule.lengths, n): # end gap?
+# 				temp = set()
+# 				for x in range(prevpos + 1, pos):
+# 					temp.update(chart.bystart[prevpos] & chart.byend[x])
+# 				if candidates is None:
+# 					candidates = set(temp)
+# 				else:
+# 					candidates &= temp
+# 			else: # no gaps
+# 				if candidates is None:
+# 					candidates = chart.bystart[prevpos] & chart.byend[pos]
+# 				else:
+# 					candidates &= chart.bystart[prevpos]
+# 					candidates &= chart.byend[pos]
+# 		if not candidates:
+# 			break
+# 	return candidates if pos == -1 else set()
 
 
 def do(sent, grammar):

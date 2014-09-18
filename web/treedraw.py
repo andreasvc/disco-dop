@@ -159,11 +159,11 @@ def drawtrees(form, dts):
 				/tmp/dtree.png'.split(),  # -trim
 				stdin=None, stdout=PIPE, stderr=PIPE, shell=False)
 		proc.wait()
-		#set Expires one day ahead (according to server time)
-		#req.headers_out['Expires'] = (
-		#	datetime.utcnow() + timedelta( 1, 0 )
-		#	).strftime('%a, %d %b %Y %H:%M:%S UTC')
-		#req.headers_out['Cache-Control'] = 'max-age=604800, public'
+		# set Expires one day ahead (according to server time)
+		# req.headers_out['Expires'] = (
+		# 	datetime.utcnow() + timedelta( 1, 0 )
+		# 	).strftime('%a, %d %b %Y %H:%M:%S UTC')
+		# req.headers_out['Cache-Control'] = 'max-age=604800, public'
 		try:
 			return send_from_directory('/tmp', 'dtree.png',
 					mimetype='image/png')

@@ -178,7 +178,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
 	"""
 	# assume all nodes have homogeneous children, terminals have no siblings
-	assert factor in ('left', 'right')
+	if factor not in ('left', 'right'):
+		raise ValueError("factor should be 'left' or 'right'.")
 	treeclass = tree.__class__
 	leftmostunary = 1 if leftmostunary else 0
 
@@ -899,8 +900,9 @@ def main():
 			'markorigin= maxlen= fmt= enc= transforms=').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
-		assert 1 <= len(args) <= 3, 'expected 1, 2, or 3 positional arguments'
-	except (GetoptError, AssertionError) as err:
+		if not 1 <= len(args) <= 3:
+			raise GetoptError('error: expected 1, 2, or 3 positional arguments')
+	except GetoptError as err:
 		print('error: %r\n%s' % (err, USAGE), file=sys.stderr)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
@@ -968,8 +970,8 @@ def main():
 	# read, transform, & write trees
 	headrules = None
 	if opts.get('--outputfmt') in ('mst', 'conll'):
-		assert opts.get('--headrules'), (
-				'need head rules for dependency conversion')
+		if not opts.get('--headrules'):
+			raise ValueError('need head rules for dependency conversion')
 		headrules = treebanktransforms.readheadrules(opts.get('--headrules'))
 	cnt = 0
 	if opts.get('--outputfmt') == 'dact':

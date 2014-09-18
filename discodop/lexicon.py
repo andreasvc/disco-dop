@@ -38,6 +38,18 @@ from fractions import Fraction
 import discodop.eval
 
 UNK = '_UNK'
+TREETAGGERHELP = '''tree tagger not found. commands to install:
+mkdir tree-tagger && cd tree-tagger
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
+tar -xzf tree-tagger-linux-3.2.tar.gz
+wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
+mkdir lib && cd lib && wget \
+ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
+gunzip german-par-linux-3.2-utf8.bin.gz'''
+STANFORDTAGGERHELP = '''Stanford tagger not found. Commands to install:
+wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
+tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 
 
 def getunknownwordmodel(tagged_sents, unknownword,
@@ -135,7 +147,7 @@ def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 			# needs to be normalized later
 			newrules.append((((tag, 'Epsilon'), (word, )),
 					(wordtags[word, tag], tags[tag])))
-			#print(>> sys.stderr, newrules[-1])
+			# print(newrules[-1], file=sys.stderr)
 	for tag in openclasstags:  # open class tag-word pairs
 		for word in openclasswords - wordsfortag[tag] - {UNK}:
 			newrules.append((((tag, 'Epsilon'), (word, )), (epsilon, tags[tag])))
@@ -175,27 +187,27 @@ def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 	for sig in sigs:
 		P_tagsig[tag, sig] = Fraction(P_tag[tag],
 				Fraction(sigs[sig], sigstotal))
-		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		tag, sig, P_tagsig[tag, sig])
+		# print("P(%s | %s) = %s " % ()
+		# 		tag, sig, P_tagsig[tag, sig], file=sys.stderr)
 	# Klein & Manning (2003) Accurate unlexicalized parsing
 	# P(tag|word) = [count(tag, word) + kappa * P(tag|sig)]
-	#		/ [count(word) + kappa]
+	# 		/ [count(word) + kappa]
 	P_tagword = defaultdict(int)
 	for word, tag in wordtags:
 		P_tagword[tag, word] = Fraction(wordtags[word, tag]
 				+ kappa * P_tagsig[tag, wordsig[word]],
 				words[word] + kappa)
-		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		tag, word, P_tagword[tag, word])
+		# print("P(%s | %s) = %s " % ()
+		# 		tag, word, P_tagword[tag, word], file=sys.stderr)
 	# invert with Bayes theorem to get P(word|tag)
 	P_wordtag = defaultdict(int)
 	for tag, word in P_tagword:
-		#wordorsig = word if word in lexicon else wordsig[word]
+		# wordorsig = word if word in lexicon else wordsig[word]
 		wordorsig = word
 		P_wordtag[wordorsig, tag] += Fraction((P_tagword[tag, word]
 				* P_word[word]), P_tag[tag])
-		#print(>> sys.stderr, "P(%s | %s) = %s " % ()
-		#		word, tag, P_wordtag[wordorsig, tag])
+		# print("P(%s | %s) = %s " % ()
+		# 		word, tag, P_wordtag[wordorsig, tag], file=sys.stderr)
 	msg = "(word, tag) pairs in model: %d" % len(P_tagword)
 	return P_wordtag, msg
 
@@ -221,7 +233,7 @@ def smoothlexicon(grammar, P_wordtag):
 
 HASDIGIT = re.compile(r"\d", re.UNICODE)
 HASNONDIGIT = re.compile(r"\D", re.UNICODE)
-#NB: includes '-', hyphen, non-breaking hyphen
+# NB: includes '-', hyphen, non-breaking hyphen
 # does NOT include: figure-dash, em-dash, en-dash (these are punctuation,
 # not word-combining) u2012-u2015; nb: these are hex values.
 HASDASH = re.compile(u"[-\u2010\u2011]", re.UNICODE)
@@ -407,16 +419,8 @@ def externaltagging(usetagger, model, sents, overridetag, tagmap):
 	logging.info('Start tagging.')
 	goldtags = [t for sent in sents.values() for _, t in sent]
 	if usetagger == 'treetagger':  # Tree-tagger
-		assert os.path.exists('tree-tagger/bin/tree-tagger'), '''\
-tree tagger not found. commands to install:
-mkdir tree-tagger && cd tree-tagger
-wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
-tar -xzf tree-tagger-linux-3.2.tar.gz
-wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
-tar -xzf ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tagger-scripts.tar.gz
-mkdir lib && cd lib && wget \
-ftp://ftp.ims.uni-stuttgart.de/pub/corpora/german-par-linux-3.2-utf8.bin.gz
-gunzip german-par-linux-3.2-utf8.bin.gz'''
+		if not os.path.exists('tree-tagger/bin/tree-tagger'):
+			raise ValueError(TREETAGGERHELP)
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
@@ -437,10 +441,8 @@ gunzip german-par-linux-3.2-utf8.bin.gz'''
 					for a in tags.splitlines() if a.strip()])
 					for n, tags in zip(sents, tagout))
 	elif usetagger == 'stanford':  # Stanford Tagger
-		assert os.path.exists('stanford-postagger-full-2012-07-09'), '''\
-Stanford tagger not found. Commands to install:
-wget http://nlp.stanford.edu/software/stanford-postagger-full-2012-07-09.tgz
-tar -xzf stanford-postagger-full-2012-07-09.tgz'''
+		if not os.path.exists('stanford-postagger-full-2012-07-09'):
+			raise ValueError(STANFORDTAGGERHELP)
 		infile, inname = tempfile.mkstemp(text=True)
 		with os.fdopen(infile, 'w') as infile:
 			for tagsent in sents.values():
@@ -475,11 +477,11 @@ tar -xzf stanford-postagger-full-2012-07-09.tgz'''
 					line.split()[3].replace('(', '[').replace(')', ']'))
 					for line in lines.splitlines()]) for n, lines
 				in zip(sents, tagout.decode('utf-8').split('\n\n')))
-	assert len(taggedsents) == len(sents), (
-			'mismatch in number of sentences after tagging.')
+	if len(taggedsents) != len(sents):
+		raise ValueError('mismatch in number of sentences after tagging.')
 	for n, tags in taggedsents.items():
-		assert len(sents[n]) == len(tags), (
-				'mismatch in number of tokens after tagging.\n'
+		if len(sents[n]) != len(tags):
+			raise ValueError('mismatch in number of tokens after tagging.\n'
 				'before: %r\nafter: %r' % (sents[n], tags))
 	newtags = [t for sent in taggedsents.values() for _, t in sent]
 	logging.info('Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r',

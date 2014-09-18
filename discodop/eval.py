@@ -341,19 +341,20 @@ class TreePairResult(object):
 				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
 		self.lengpos = sum(1 for _, b in self.gpos
 				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
-		assert self.lencpos == self.lengpos, ('sentence length mismatch. '
-				'sents:\n%s\n%s' % (' '.join(self.csent), ' '.join(self.gsent)))
+		if self.lencpos != self.lengpos:
+			raise ValueError('sentence length mismatch. sents:\n%s\n%s' % (
+					' '.join(self.csent), ' '.join(self.gsent)))
 		grootpos = {child[0] for child in gtree if isinstance(child[0], int)}
 		# massage the data (in-place modifications)
 		transform(self.ctree, self.csent, self.cpos, dict(self.gpos),
 				self.param, grootpos)
 		transform(self.gtree, self.gsent, self.gpos, dict(self.gpos),
 				self.param, grootpos)
-		#if not gtree or not ctree:
-		#	return dict(LP=0, LR=0, LF=0)
-		assert self.csent == self.gsent, (
-				'candidate & gold sentences do not match:\n'
-				'%r // %r' % (' '.join(csent), ' '.join(gsent)))
+		# if not gtree or not ctree:
+		# 	return dict(LP=0, LR=0, LF=0)
+		if self.csent != self.gsent:
+			raise ValueError('candidate & gold sentences do not match:\n'
+					'%r // %r' % (' '.join(csent), ' '.join(gsent)))
 		self.cbrack = bracketings(ctree, self.param['LABELED'],
 				self.param['DELETE_LABEL'], self.param['DISC_ONLY'])
 		self.gbrack = bracketings(gtree, self.param['LABELED'],
@@ -575,8 +576,10 @@ def main():
 			morphology=opts.get('--morphology'))
 	goldtrees, goldsents = gold.trees(), gold.sents()
 	candtrees, candsents = parses.trees(), parses.sents()
-	assert goldtrees, 'no trees in gold file'
-	assert candtrees, 'no trees in parses file'
+	if not goldtrees:
+		raise ValueError('no trees in gold file')
+	if not candtrees:
+		raise ValueError('no trees in parses file')
 	evaluator = Evaluator(param, max(len(str(x)) for x in candtrees))
 	for n, ctree in candtrees.items():
 		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
@@ -602,7 +605,8 @@ def readparam(filename):
 		if line and not line.startswith('#'):
 			key, val = line.split(None, 1)
 			if key in validkeysonce:
-				assert key not in seen, 'cannot declare %s twice' % key
+				if key in seen:
+					raise ValueError('cannot declare %s twice' % key)
 				seen.add(key)
 				param[key] = int(val)
 			elif key in ('DELETE_LABEL', 'DELETE_LABEL_FOR_LENGTH',
@@ -718,8 +722,8 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 			else:
 				raise ValueError('Tree should consist of Tree nodes and '
 						'integer indices:\n%r' % b)
-		assert len(indices) == len(set(indices)), (
-			'duplicate index in tree:\n%s' % tree)
+		if len(indices) != len(set(indices)):
+			raise ValueError('duplicate index in tree:\n%s' % tree)
 		a.indices = tuple(sorted(indices))
 
 
@@ -784,8 +788,8 @@ def strbracketings(brackets):
 
 def leafancestorpaths(tree, dellabel):
 	"""Generate a list of ancestors for each leaf node in a tree."""
-	#uses [] to mark components, and () to mark constituent boundaries
-	#deleted words/tags should not affect boundary detection
+	# uses [] to mark components, and () to mark constituent boundaries
+	# deleted words/tags should not affect boundary detection
 	paths = {a: [] for a in tree.indices}
 	# do a top-down level-order traversal
 	thislevel = [tree]
@@ -879,8 +883,8 @@ def accuracy(reference, candidate):
 
 	In particular, return the fraction of indices
 	``0<i<=len(test)`` such that ``test[i] == reference[i]``."""
-	assert len(reference) == len(candidate), (
-		'Sequences must have the same length.')
+	if len(reference) != len(candidate):
+		raise ValueError('Sequences must have the same length.')
 	return Decimal(sum(1 for a, b in zip(reference, candidate)
 			if a == b)) / len(reference)
 

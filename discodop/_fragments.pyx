@@ -153,7 +153,8 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 	matrix = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
 	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
-	assert matrix is not NULL and scratch is not NULL
+	if matrix is NULL or scratch is NULL:
+		raise MemoryError('allocation error')
 	end2 = trees2.len
 	# loop over tree pairs to extract fragments from
 	for n in range(offset, min(end or trees1.len, trees1.len)):
@@ -411,7 +412,8 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
 		Node *nodes
 		bytearray tmp = bytearray()
-	assert scratch is not NULL
+	if scratch is NULL:
+		raise MemoryError('allocation error')
 	assert SLOTS, SLOTS
 	for p, treeindices in enumerate(trees.treeswithprod):
 		try:  # slightly convoluted way of getting an arbitrary set member:
@@ -476,7 +478,8 @@ cdef inline void extractcompbitsets(ULong *bitset, Node *a,
 		# other fragments may be encountered which should not overwrite
 		# this one
 		scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
-		assert scratch is not NULL
+		if scratch is NULL:
+			raise MemoryError('allocation error')
 		setrootid(scratch, i, n, SLOTS)
 	elif TESTBIT(bitset, i):  # stop extracting for this fragment
 		scratch = NULL
@@ -687,7 +690,8 @@ def tolist(tree, sent):
 	for n in reversed(range(len(result))):
 		a = result[n]
 		a.idx = n
-		assert a.label, ('labels should be non-empty. tree: '
+		if not a.label:
+			raise ValueError('labels should be non-empty. tree: '
 				'%s\nsubtree: %s\nindex %d, label %r' % (tree, a, n, a.label))
 	result[0].rootidx = 0
 	return result
@@ -792,7 +796,8 @@ cdef readnode(bytes label, bytes line, char *cline, short start, short end,
 			binlabel += b',' + labelchild1
 			labelchild2 = binlabel + b'.' + b','.join(childlabels) + b'>'
 		endchild2 = end
-	assert parens == -1, 'unbalanced parentheses: %d\n%r' % (parens, line)
+	if parens != -1:
+		raise ValueError('unbalanced parentheses: %d\n%r' % (parens, line))
 	if startchild2 == 0:
 		prod = (label, labelchild1) if startchild1 else (label, )
 	else:
@@ -863,7 +868,8 @@ def readtreebank(treebankfile, list labels, dict prods,
 		ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
 		binfactor = 2  # conservative estimate to accommodate binarization
 		scratch = <Node *>malloc(maxnodes * binfactor * sizeof(Node))
-		assert scratch is not NULL
+		if scratch is NULL:
+			raise MemoryError('allocation error')
 		if encoding.lower() in ('utf8', 'utf-8'):
 			data = open(treebankfile)
 		else:  # a kludge; better use UTF-8!
@@ -874,7 +880,8 @@ def readtreebank(treebankfile, list labels, dict prods,
 				maxnodes = 2 * line.count(b'(')
 				scratch = <Node *>realloc(scratch,
 						maxnodes * binfactor * sizeof(Node))
-				assert scratch is not NULL
+				if scratch is NULL:
+					raise MemoryError('allocation error')
 			cnt = 0
 			sent = []
 			match = LABEL.match(line)
@@ -885,7 +892,8 @@ def readtreebank(treebankfile, list labels, dict prods,
 					labels, prods, scratch, &cnt, sent, None)
 			ctrees.addnodes(scratch, cnt, 0)
 			sents.append(sent)
-		assert sents, '%r appears to be empty' % treebankfile
+		if not sents:
+			raise ValueError('%r appears to be empty' % treebankfile)
 		free(scratch)
 	return ctrees, sents
 

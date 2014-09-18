@@ -204,13 +204,14 @@ class DrawTree(object):
 				for n, row in enumerate(matrix))
 
 		leaves = tree.leaves()
-		assert all(isinstance(n, int) for n in leaves), (
-				'All leaves must be integer indices.')
-		assert len(leaves) == len(set(leaves)), (
-				'Indices must occur at most once.')
-		assert all(0 <= n < len(sent) for n in leaves), ('All leaves must be '
-				'in the interval 0..n with n=len(sent)\ntokens: %d indices: '
-				'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
+		if not all(isinstance(n, int) for n in leaves):
+			raise ValueError('All leaves must be integer indices.')
+		if len(leaves) != len(set(leaves)):
+			raise ValueError('Indices must occur at most once.')
+		if not all(0 <= n < len(sent) for n in leaves):
+			raise ValueError('All leaves must be in the interval 0..n '
+					'with n=len(sent)\ntokens: %d indices: '
+					'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
 		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)
 		for a in tree.subtrees():
@@ -243,8 +244,7 @@ class DrawTree(object):
 
 		for m in terminals:
 			i = int(tree[m]) * scale
-			assert matrix[0][i] is None, (
-					matrix[0][i], m, i)
+			assert matrix[0][i] is None, (matrix[0][i], m, i)
 			matrix[0][i] = ids[m]
 			nodes[ids[m]] = sent[tree[m]]
 			if nodes[ids[m]] is None:
@@ -276,8 +276,8 @@ class DrawTree(object):
 				# block positions where children of this node branch out
 				for _, x in childcols[m]:
 					matrix[rowidx][x] = corner
-				#assert m == () or matrix[rowidx][i] in (None, corner), (
-				#		matrix[rowidx][i], m, str(tree), ' '.join(sent))
+				# assert m == () or matrix[rowidx][i] in (None, corner), (
+				# 		matrix[rowidx][i], m, str(tree), ' '.join(sent))
 				# node itself
 				matrix[rowidx][i] = ids[m]
 				nodes[ids[m]] = tree[m]
@@ -817,7 +817,7 @@ def main():
 			for trees, sents in corpora:
 				tree, sent = trees[sentid], sents[sentid]
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
-						).text(unicodelines=True, ansi=not '--plain' in opts))
+						).text(unicodelines=True, ansi='--plain' not in opts))
 	else:  # read from stdin + detect format
 		reader = codecs.getreader(opts.get('--encoding', 'utf8'))
 		stdin = (chain.from_iterable(reader(open(a)) for a in args)
@@ -830,7 +830,7 @@ def main():
 			for n, (tree, sent, rest) in enumerate(trees, 1):
 				print('%d. (len=%d): %s' % (n, len(sent), rest))
 				print(DrawTree(tree, sent, abbr='--abbr' in opts).text(
-						unicodelines=True, ansi=not '--plain' in opts))
+						unicodelines=True, ansi='--plain' not in opts))
 		except (IOError, KeyboardInterrupt):
 			pass
 

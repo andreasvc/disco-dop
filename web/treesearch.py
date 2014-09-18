@@ -93,10 +93,10 @@ def main():
 				output=output, results=DISPATCH[output](request.args),
 				havexpath='xpath' in CORPORA, havetgrep='tgrep2' in CORPORA)
 		# To send results incrementally:
-		#return Response(stream_template('searchresults.html',
-		#		form=request.args, texts=TEXTS, selectedtexts=selected,
-		#		output=output, results=DISPATCH[output](request.args),
-		#		havexpath='xpath' in CORPORA))
+		# return Response(stream_template('searchresults.html',
+		# 		form=request.args, texts=TEXTS, selectedtexts=selected,
+		# 		output=output, results=DISPATCH[output](request.args),
+		# 		havexpath='xpath' in CORPORA))
 	return render_template('search.html', form=request.args, output='counts',
 			texts=TEXTS, selectedtexts=selected,
 			havexpath='xpath' in CORPORA, havetgrep='tgrep2' in CORPORA)
@@ -509,7 +509,7 @@ def style():
 				selectedtexts=selectedtexts(request.args), output='style',
 				results=generate(), havexpath='xpath' in CORPORA))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
-	#set Expires one day ahead (according to server time)
+	# set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
 		datetime.utcnow() + timedelta(7, 0)).strftime(
 		'%a, %d %b %Y %H:%M:%S UTC')

@@ -14,7 +14,7 @@ include "_grammar.pxi"
 
 cdef class LexicalRule:
 	"""A weighted rule of the form 'non-terminal --> word'."""
-	def __init__(self, lhs, word, prob):
+	def __init__(self, UInt lhs, unicode word, double prob):
 		self.lhs = lhs
 		self.word = word
 		self.prob = prob
@@ -409,7 +409,9 @@ cdef class Ctrees:
 		self.len = self.max = 0
 		self.numnodes = self.maxnodes = self.nodesleft = 0
 		if trees is not None:
-			assert prods is not None
+			if prods is None:
+				raise ValueError('when initialized with trees, prods argument '
+						'is required.')
 			self.alloc(len(trees), sum(map(len, trees)))
 			for tree in trees:
 				self.add(tree, prods)
@@ -419,7 +421,8 @@ cdef class Ctrees:
 		self.max = numtrees
 		self.trees = <NodeArray *>malloc(numtrees * sizeof(NodeArray))
 		self.nodes = <Node *>malloc(numnodes * sizeof(Node))
-		assert self.trees is not NULL and self.nodes is not NULL
+		if self.trees is NULL or self.nodes is NULL:
+			raise MemoryError('allocation error')
 		self.nodesleft = numnodes
 
 	cdef realloc(self, int numtrees, int extranodes):
@@ -431,16 +434,18 @@ cdef class Ctrees:
 			numtrees += (numtrees >> 3) + (3 if numtrees < 9 else 6)
 			self.trees = <NodeArray *>realloc(self.trees,
 					numtrees * sizeof(NodeArray))
-			assert self.trees is not NULL
+			if self.trees is NULL:
+				raise MemoryError('allocation error')
 			self.max = numtrees
 		if extranodes > self.nodesleft:
 			numnodes = self.numnodes + extranodes
 			# estimate how many new nodes will be needed
-			#self.nodesleft += (self.max - self.len) * (self.numnodes / self.len)
+			# self.nodesleft += (self.max - self.len) * (self.numnodes / self.len)
 			# overallocate to get linear-time amortized behavior
 			numnodes += (numnodes >> 3) + (3 if numnodes < 9 else 6)
 			self.nodes = <Node *>realloc(self.nodes, numnodes * sizeof(Node))
-			assert self.nodes is not NULL
+			if self.nodes is NULL:
+				raise MemoryError('allocation error')
 			self.nodesleft = numnodes - self.numnodes
 
 	cpdef add(self, list tree, dict prods):
@@ -448,7 +453,8 @@ cdef class Ctrees:
 
 		Useful when dealing with large numbers of Tree objects (say 100,000).
 		"""
-		assert self.max, 'alloc() has not been called (max=0).'
+		if not self.max:
+			raise ValueError('alloc() has not been called (max=0).')
 		if self.len >= self.max or self.nodesleft < len(tree):
 			self.realloc(self.len + 1, len(tree))
 		self.trees[self.len].len = len(tree)
@@ -468,7 +474,8 @@ cdef class Ctrees:
 		cdef dict prodsintree, sortidx
 		cdef int n, m
 		cdef Node *dest
-		assert self.max, 'alloc() has not been called (max=0).'
+		if not self.max:
+			raise ValueError('alloc() has not been called (max=0).')
 		if self.len >= self.max or self.nodesleft < cnt:
 			self.realloc(self.len + 1, cnt)
 		prodsintree = {n: source[n].prod for n in range(cnt)}
@@ -524,10 +531,11 @@ cdef inline copynodes(tree, dict prods, Node *result):
 	"""Convert NLTK tree to an array of Node structs."""
 	cdef int n
 	for n, a in enumerate(tree):
-		assert isinstance(a, Tree), (
-				'Expected Tree node, got %s\n%r' % (type(a), a))
-		assert 1 <= len(a) <= 2, (
-				"trees must be non-empty and binarized\n%s\n%s" % (a, tree[0]))
+		if not isinstance(a, Tree):
+			raise ValueError('Expected Tree node, got %s\n%r' % (type(a), a))
+		if not 1 <= len(a) <= 2:
+			raise ValueError('trees must be non-empty and binarized\n%s\n%s' %
+					(a, tree[0]))
 		result[n].prod = prods[a.prod]
 		if isinstance(a[0], int):  # a terminal index
 			result[n].left = -a[0] - 1

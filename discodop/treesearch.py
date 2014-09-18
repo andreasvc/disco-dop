@@ -93,7 +93,8 @@ class CorpusSearcher(object):
 		self.cache = LRU(CACHESIZE)
 		self.pool = concurrent.futures.ThreadPoolExecutor(
 				numthreads or cpu_count())
-		assert self.files, 'no files found matching ' + files
+		if not self.files:
+			raise ValueError('no files found matching ' + files)
 
 	def counts(self, query, subset=None, limit=None, indices=False):
 		"""Run query and return a dict of the form {corpus1: nummatches, ...}.
@@ -316,7 +317,8 @@ class DactSearcher(CorpusSearcher):
 				self.files[filename] = alpinocorpus.CorpusReader(
 					filename, macrosFilename=macros)
 			except TypeError:
-				assert macros is None, 'macros not supported'
+				if macros is not None:
+					raise ValueError('macros not supported')
 				self.files[filename] = alpinocorpus.CorpusReader(filename)
 
 	def counts(self, query, subset=None, limit=None, indices=False):

@@ -81,7 +81,8 @@ cdef class DenseCFGChart(CFGChart):
 		entries = compactcellidx(self.lensent - 1, self.lensent, self.lensent,
 				grammar.nonterminals) + grammar.nonterminals
 		self.probs = <double *>malloc(entries * sizeof(double))
-		assert self.probs is not NULL
+		if self.probs is NULL:
+			raise MemoryError('allocation error')
 		for n in range(entries):
 			self.probs[n] = INFINITY
 		# store parse forest in list instead of dict
@@ -219,9 +220,16 @@ cdef class SparseCFGChart(CFGChart):
 def parse(sent, Grammar grammar, tags=None, start=None, dict whitelist=None):
 	"""A CKY parser modeled after Bodenstab's 'fast grammar loop'.
 
-	If ``whitelist`` is given, the loop is filtered by the allowed items."""
-	assert grammar.maxfanout == 1, 'Not a PCFG! fanout: %d' % grammar.maxfanout
-	assert grammar.logprob, "Expecting grammar with log probabilities."
+	If ``whitelist`` is given, the loop is filtered by the allowed items.
+	The whitelist is of the form: whitelist = {cell: {label: None}};
+	cell is a represenattion of a span as used by the CFGChart, label is an
+	integer for a non-terminal label; the value of the inner dict is not used.
+	The presence of a label means the span with that label will not be pruned.
+	"""
+	if grammar.maxfanout != 1:
+		raise ValueError('Not a PCFG! fanout: %d' % grammar.maxfanout)
+	if not grammar.logprob:
+		raise ValueError('Expected grammar with log probabilities.')
 	if grammar.nonterminals < 20000:
 		chart = DenseCFGChart(grammar, sent, start)
 		return parse_main(sent, <DenseCFGChart>chart, grammar, tags=tags,
@@ -262,7 +270,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 			# apply binary rules
 			# FIXME: if whitelist is given, loop only over whitelisted labels
 			# for cell
-			#for lhs in cellwhitelist:
+			# for lhs in cellwhitelist:
 			# only loop over labels which occur on LHS of a phrasal rule.
 			for lhs in range(1, grammar.phrasalnonterminals):
 				if cellwhitelist is not None and lhs not in cellwhitelist:
@@ -435,7 +443,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 				lhs = rule.lhs
 				item = cellidx(left, right, lensent, grammar.nonterminals) + lhs
 				# FIXME can vit.prob change while entry in agenda?
-				#prob = rule.prob + entry.value
+				# prob = rule.prob + entry.value
 				prob = rule.prob + chart._subtreeprob(cellidx(
 						left, right, lensent, grammar.nonterminals) + rhs1)
 				if (not chart.hasitem(item) or
@@ -457,8 +465,10 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 
 def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
 		tags=None, startid=None):
-	assert grammar.maxfanout == 1, "Not a PCFG! fanout = %d" % grammar.maxfanout
-	assert not grammar.logprob, "Grammar must not have log probabilities."
+	if grammar.maxfanout != 1:
+		raise('Not a PCFG! fanout = %d' % grammar.maxfanout)
+	if grammar.logprob:
+		raise('Grammar must not have log probabilities.')
 	lensent = len(sent)
 	if startid is None:
 		startid = grammar.toid[grammar.start]
@@ -572,7 +582,7 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 				minmid = narrowr if narrowr > widel else widel
 				wider = maxright[rule.rhs1, left]
 				maxmid = wider if wider < narrowl else narrowl
-				#oldscore = inside[left, right, lhs]
+				# oldscore = inside[left, right, lhs]
 				foundbetter = False
 				for split in range(minmid, maxmid + 1):
 					ls = inside[left, split, rule.rhs1]
@@ -583,9 +593,9 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 						continue
 					foundbetter = True
 					inside[left, right, lhs] += rule.prob * ls * rs
-					#assert 0.0 < inside[left, right, lhs] <= 1.0, (
-					#	inside[left, right, lhs],
-					#	left, right, grammar.tolabel[lhs])
+					# assert 0.0 < inside[left, right, lhs] <= 1.0, (
+					# 	inside[left, right, lhs],
+					# 	left, right, grammar.tolabel[lhs])
 				if foundbetter:  # and oldscore == 0.0:
 					if left > minleft[lhs, right]:
 						minleft[lhs, right] = left
@@ -664,12 +674,12 @@ def outsidescores(Grammar grammar, sent, UInt start,
 						unaryagenda.setifbetter(rule.rhs1, -prob)
 						cell[lhs][edge] = edge
 						outside[left, right, rule.rhs1] += prob
-						#assert 0.0 < outside[left, right, rule.rhs1] <= 1.0, (
-						#		'illegal value: outside[%d, %d, %s] = %g' % (
-						#			left, right, grammar.tolabel[rule.rhs1],
-						#			outside[left, right, rule.rhs1]),
-						#		rule.prob, outside[left, right, lhs],
-						#		grammar.tolabel[rule.lhs])
+						# assert 0.0 < outside[left, right, rule.rhs1] <= 1.0, (
+						# 		'illegal value: outside[%d, %d, %s] = %g' % (
+						# 			left, right, grammar.tolabel[rule.rhs1],
+						# 			outside[left, right, rule.rhs1]),
+						# 		rule.prob, outside[left, right, lhs],
+						# 		grammar.tolabel[rule.lhs])
 			for lhs in range(grammar.nonterminals):
 				cell[lhs].clear()
 			# binary rules
@@ -698,15 +708,15 @@ def outsidescores(Grammar grammar, sent, UInt start,
 						continue
 					outside[left, split, rule.rhs1] += rule.prob * rs * os
 					outside[split, right, rule.rhs2] += rule.prob * ls * os
-					#assert 0.0 < outside[left, split, rule.rhs1] <= 1.0, (
-					#		'illegal value: outside[%d, %d, %s] = %g' % (
-					#			left, split, grammar.tolabel[rule.rhs1],
-					#			outside[left, split, rule.rhs1]),
-					#		rule.prob, rs, os, grammar.tolabel[rule.lhs])
-					#assert 0.0 < outside[split, right, rule.rhs2] <= 1.0, (
-					#		'illegal value: outside[%d, %d, %s] = %g' % (
-					#			split, right, grammar.tolabel[rule.rhs2],
-					#			outside[split, right, rule.rhs2]))
+					# assert 0.0 < outside[left, split, rule.rhs1] <= 1.0, (
+					# 		'illegal value: outside[%d, %d, %s] = %g' % (
+					# 			left, split, grammar.tolabel[rule.rhs1],
+					# 			outside[left, split, rule.rhs1]),
+					# 		rule.prob, rs, os, grammar.tolabel[rule.lhs])
+					# assert 0.0 < outside[split, right, rule.rhs2] <= 1.0, (
+					# 		'illegal value: outside[%d, %d, %s] = %g' % (
+					# 			split, right, grammar.tolabel[rule.rhs2],
+					# 			outside[split, right, rule.rhs2]))
 
 
 def minmaxmatrices(nonterminals, lensent):
@@ -744,7 +754,9 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	chart = SparseCFGChart(grammar, sent, start=startlabel,
 			logprob=True, viterbi=True)
 	if n == 0:
-		assert chart.grammar.binarized
+		if not chart.grammar.binarized:
+			raise ValueError('Extracing parse forest, '
+					'expected binarized grammar.')
 	else:
 		chart.rankededges = {chart.root(): []}
 	tmp = None
@@ -798,7 +810,8 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 	cdef UChar left, right, mid
 	cdef size_t ruleno, child1
 	cdef double prob
-	assert chart.grammar.binarized
+	if not chart.grammar.binarized:
+		raise ValueError('Extracing parse forest, expected binarized grammar.')
 	forest = forest.strip().splitlines()
 	midpoints = [int(line.split(None, 3)[2]) for line in forest]
 	for line in forest:
@@ -816,8 +829,8 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 				restsplit = rest.split(None, 2)
 				ruleno = int(restsplit[0])
 				child1 = int(restsplit[1])
-				#ignore second child: (midpoint + end of current node suffices)
-				#child2 = restsplit[2] if len(restsplit) > 2 else None
+				# ignore second child: (midpoint + end of current node suffices)
+				# child2 = restsplit[2] if len(restsplit) > 2 else None
 				mid = midpoints[child1]
 				rule = &(chart.grammar.bylhs[0][chart.grammar.revmap[ruleno]])
 			chart.addedge(lhs, left, right, mid, rule)
@@ -882,8 +895,8 @@ def test():
 	print("pcfg", end='')
 	chart, msg = parse("mary walks".split(), cfg)
 	assert chart, msg
-	#chart, msg = parse_sparse("mary walks".split(), cfg)
-	#assert chart, msg
+	# chart, msg = parse_sparse("mary walks".split(), cfg)
+	# assert chart, msg
 	print(chart)
 	cfg1 = Grammar([
 		((('NP', 'Epsilon'), ('mary', )), 1),
@@ -923,8 +936,8 @@ def test():
 	mpp, _ = marginalize('mpp', derivations, entries, chart)
 	for a, p, _ in sorted(mpp, key=itemgetter(1), reverse=True):
 		print(p, a)
-	#chart1, msg1 = parse_symbolic(sent, cfg2)
-	#print(msg, '\n', msg1)
+	# chart1, msg1 = parse_symbolic(sent, cfg2)
+	# print(msg, '\n', msg1)
 
 __all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'bitpar_nbest',
 		'bitpar_yap_forest', 'chartmatrix', 'doinsideoutside', 'insidescores',

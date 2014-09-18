@@ -12,8 +12,8 @@ from discodop.plcfrs cimport Entry
 import numpy as np
 
 # alternative: take coarse chart, return fine chart w/whitelist.
-#cpdef Chart prunechart(coarsechart, Grammar fine, int k,
-#		bint splitprune, bint markorigin, bint finecfg, bint bitpar):
+# cpdef Chart prunechart(coarsechart, Grammar fine, int k,
+# 		bint splitprune, bint markorigin, bint finecfg, bint bitpar):
 
 
 def prunechart(Chart coarsechart, Grammar fine, k,
@@ -54,10 +54,11 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	"""
 	cdef list whitelist
 	cdef ChartItem chartitem
-	assert fine.mapping is not NULL
+	if fine.mapping is NULL:
+		raise ValueError('need to call fine.getmapping(coarse, ...).')
 	if splitprune and markorigin:
-		assert fine.splitmapping is not NULL
-		assert fine.splitmapping[0] is not NULL
+		if fine.splitmapping is NULL or fine.splitmapping[0] is NULL:
+			raise ValueError('need to call fine.getmapping(coarse, ...).')
 	if 0 < k < 1:  # threshold on posterior probabilities
 		items, msg = posteriorthreshold(coarsechart, k)
 	else:  # construct a list of the k-best nonterminals to prune with
@@ -145,8 +146,8 @@ def whitelistfromposteriors(inside, outside, start,
 	"""Compute posterior probabilities & prune away cells below a threshold."""
 	cdef UInt label
 	cdef short lensent = start[2]
-	assert 0 < threshold < 1, (
-			"threshold should be a cutoff for probabilities between 0 and 1.")
+	if not 0 < threshold < 1:
+		raise ValueError('probability threshold should be between 0 and 1.')
 	sentprob = inside[0, lensent, start[0]]
 	posterior = (inside[:lensent, :lensent + 1]
 		* outside[:lensent, :lensent + 1]) / sentprob
@@ -203,19 +204,19 @@ def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
 	cdef long label
 	cdef short lensent = goal.right
 	sentprob = inside[0, lensent, goal.label]
-	#print >>stderr, "sentprob=%g" % sentprob
+	# print >>stderr, "sentprob=%g" % sentprob
 	posterior = (inside[:lensent, :lensent + 1, :]
 			* outside[:lensent, :lensent + 1, :]) / sentprob
 	inside[:lensent, :lensent + 1, :] = np.NAN
 	inside[posterior > threshold] = np.inf
-	#print >>stderr, ' ', (posterior > threshold).sum(),
-	#print >>stderr, "of", (posterior != 0.0).sum(),
-	#print >>stderr, "nonzero coarse items left",
-	#labels, leftidx, rightidx = (posterior[:lensent, :lensent+1, :]
-	#	> threshold).nonzero()
-	#for left, right, label in zip(leftidx, rightidx, labels):
-	#	for x in mapping[label]:
-	#		finechart[left, right, x] = inside[left, right, label]
+	# print >>stderr, ' ', (posterior > threshold).sum(),
+	# print >>stderr, "of", (posterior != 0.0).sum(),
+	# print >>stderr, "nonzero coarse items left",
+	# labels, leftidx, rightidx = (posterior[:lensent, :lensent+1, :]
+	# 	> threshold).nonzero()
+	# for left, right, label in zip(leftidx, rightidx, labels):
+	# 	for x in mapping[label]:
+	# 		finechart[left, right, x] = inside[left, right, label]
 	for label in range(len(fine.toid)):
 		finechart[:lensent, :lensent + 1, label] = inside[
 				:lensent, :lensent + 1, fine.mapping[label]]
@@ -226,9 +227,10 @@ def posteriorthreshold(Chart chart, double threshold):
 
 	:returns: dictionary of remaining items
 	"""
-	assert 0 < threshold < 1, (
-			'threshold should be a cutoff for probabilities between 0 and 1.')
-	assert chart.itemsinorder, 'need list of chart items in topological order.'
+	if not 0 < threshold < 1:
+		raise ValueError('probability threshold should be between 0 and 1.')
+	if not chart.itemsinorder:
+		raise ValueError('need list of chart items in topological order.')
 	origlogprob = chart.grammar.logprob
 	chart.grammar.switch(
 			chart.grammar.modelnames[chart.grammar.currentmodel],
@@ -239,7 +241,8 @@ def posteriorthreshold(Chart chart, double threshold):
 			chart.grammar.modelnames[chart.grammar.currentmodel],
 			logprob=origlogprob)
 	sentprob = chart.inside[chart.root()]
-	assert sentprob, sentprob
+	if not sentprob:
+		raise ValueError('sentence has zero posterior prob.: %g' % sentprob)
 	posterior = {item: None for item in chart.getitems()
 			if chart.inside[item] * chart.outside[item] / sentprob
 			> threshold}
@@ -293,7 +296,7 @@ def getinside(Chart chart):
 					prob = (edge.rule.prob
 							* chart.inside[leftitem]
 							* chart.inside[rightitem])
-				#chart.addprob(item, prob)
+				# chart.addprob(item, prob)
 				chart.inside[item] += prob
 
 
@@ -303,7 +306,7 @@ def getoutside(Chart chart):
 	cdef Edges edges
 	cdef Edge *edge
 	cdef double outsideprob
-	#cdef double sentprob = chart.inside[chart.root()]
+	# cdef double sentprob = chart.inside[chart.root()]
 	# traverse items in top-down order
 	# could use list with idx of item in itemsinorder
 	chart.outside = dict.fromkeys(chart.getitems(), 0.0)
@@ -356,7 +359,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	else:
 		print("no parse")
 		return
-		#print(chart)
+		# print(chart)
 	l, _ = prunechart(chart, fine, k, split, True, False, False)
 	if verbose:
 		print("\nitems in 50-best of coarse chart")
@@ -382,25 +385,25 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 			t = Tree.parse(t, parse_leaf=int)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))
-			#print(t)
+			# print(t)
 			print("exact match" if t == canonicalize(tree) else "no match", t)
 	else:
 		print("no parse. problem.")
 		return
-		#if verbose:
-		#xp = set((coarse.tolabel[a.label], a.vec) for a in chart.keys()
-		#		if chart[a])
-		#xpp = set((fine.tolabel[a.label], a.vec) for a in chart2.keys()
-		#		if chart2[a])
-		#print("difference:")
-		#for a in xp - xpp:
-		#	if "*" not in a[0]:
-		#		print(a[0], bin(a[1]))
-		#print("\nfine chart:")
-		#for a in xpp:
-		#	if "@" not in a[0]:
-		#		print(a[0], bin(a[1]))
-		#print(chart2)
+		# if verbose:
+		# xp = set((coarse.tolabel[a.label], a.vec) for a in chart.keys()
+		# 		if chart[a])
+		# xpp = set((fine.tolabel[a.label], a.vec) for a in chart2.keys()
+		# 		if chart2[a])
+		# print("difference:")
+		# for a in xp - xpp:
+		# 	if "*" not in a[0]:
+		# 		print(a[0], bin(a[1]))
+		# print("\nfine chart:")
+		# for a in xpp:
+		# 	if "@" not in a[0]:
+		# 		print(a[0], bin(a[1]))
+		# print(chart2)
 
 
 def test():
@@ -410,19 +413,19 @@ def test():
 	from grammar import treebankgrammar, dopreduction, subsetgrammar
 	from time import clock
 	k = 50
-	#corpus = NegraCorpusReader("toytb.export", encoding="iso-8859-1")
-	#corpus = NegraCorpusReader("negraproc.export",
-	#	encoding="utf-8", headrules="negra.headrules", headfinal=True,
-	#   headreverse=False)
-	#train = 400
-	#test = 40
-	#testmaxlen = 999
+	# corpus = NegraCorpusReader("toytb.export", encoding="iso-8859-1")
+	# corpus = NegraCorpusReader("negraproc.export",
+	# 	encoding="utf-8", headrules="negra.headrules", headfinal=True,
+	#    headreverse=False)
+	# train = 400
+	# test = 40
+	# testmaxlen = 999
 	corpus = NegraCorpusReader('alpinosample.export')
 	train = 0
 	test = 3
 	testmaxlen = 999
-	#trees = corpus.trees().values()[:train]
-	#sents = corpus.sents().values()[:train]
+	# trees = corpus.trees().values()[:train]
+	# sents = corpus.sents().values()[:train]
 	trees = list(corpus.trees().values())
 	sents = list(corpus.sents().values())
 

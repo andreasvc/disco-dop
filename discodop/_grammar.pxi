@@ -35,7 +35,7 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 
 
 cdef class Grammar:
-	""" A grammar object which stores rules compactly, indexed in various ways.
+	"""A grammar object which stores rules compactly, indexed in various ways.
 
 	:param rule_tuples_or_bytes: either a sequence of tuples containing both
 		phrasal & lexical rules, or a bytes string containing the phrasal
@@ -72,7 +72,8 @@ cdef class Grammar:
 		self.logprob = False
 
 		if rule_tuples_or_bytes and isinstance(rule_tuples_or_bytes, bytes):
-			assert isinstance(lexicon, unicode), 'expected lexicon'
+			if not isinstance(lexicon, unicode):
+				raise ValueError('expected lexicon argument.')
 			self.origrules = rule_tuples_or_bytes
 			self.origlexicon = lexicon
 		elif rule_tuples_or_bytes and isinstance(
@@ -110,7 +111,7 @@ cdef class Grammar:
 		# normalize them into relative frequencies.
 		nonint = BITPAR_NONINT if self.bitpar else LCFRS_NONINT
 		if not nonint.search(self.origrules):
-			#	or LEXICON_NONINT.search(self.origlexicon)):
+			# 	or LEXICON_NONINT.search(self.origlexicon)):
 			self._normalize()
 		# store 'default' weights
 		weights = self.models[0]
@@ -122,8 +123,8 @@ cdef class Grammar:
 
 	@cython.wraparound(True)
 	def _countrules(self, list rulelines):
-		""" Count unary & binary rules; make a canonical list of all
-		non-terminal labels and assign them unique IDs """
+		"""Count unary & binary rules; make a canonical list of all
+		non-terminal labels and assign them unique IDs."""
 		cdef int numother = 0
 		Epsilon = b'Epsilon'
 		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
@@ -139,18 +140,22 @@ cdef class Grammar:
 			else:
 				rule = fields[:-2]
 				yf = fields[-2]
-			assert Epsilon not in rule, ('Epsilon symbol may only occur '
+			if Epsilon in rule:
+				raise ValueError('Epsilon symbol may only occur '
 						'in RHS of lexical rules.')
-			assert self.start not in rule[1:], (
-					'Start symbol should only occur on LHS.')
+			if self.start in rule[1:]:
+				raise ValueError('Start symbol should only occur on LHS.')
 			if len(rule) == 2:
-				assert YFUNARYRE.match(yf), ('yield function refers to '
-						'non-existent second non-terminal: %r\t%r' % (rule, yf))
+				if not YFUNARYRE.match(yf):
+					raise ValueError('yield function refers to non-existent '
+							'second non-terminal: %r\t%r' % (rule, yf))
 				self.numunary += 1
 			elif len(rule) == 3:
-				assert YFBINARY.match(yf), 'illegal yield function: %s' % yf
-				assert b'0' in yf and b'1' in yf, ('mismatch between '
-						'non-terminals and yield function: %r\t%r' % (rule, yf))
+				if not YFBINARY.match(yf):
+					raise ValueError('illegal yield function: %s' % yf)
+				if b'0' not in yf or b'1' not in yf:
+					raise ValueError('mismatch between non-terminals and '
+							'yield function: %r\t%r' % (rule, yf))
 				self.numbinary += 1
 			elif self.binarized:
 				raise ValueError('grammar not binarized:\n%s' % line)
@@ -163,11 +168,13 @@ cdef class Grammar:
 				if fanout > self.maxfanout:
 					self.maxfanout = fanout
 
-		assert self.start in self.toid, ('Start symbol %r not in set of '
-				'non-terminal labels extracted from grammar rules.' % self.start)
+		if self.start not in self.toid:
+			raise ValueError('Start symbol %r not in set of non-terminal '
+					'labels extracted from grammar rules.' % self.start)
 		self.numrules = self.numunary + self.numbinary + numother
 		self.phrasalnonterminals = len(self.toid)
-		assert self.numrules, 'no rules found'
+		if not self.numrules:
+			raise ValueError('no rules found')
 		return fanoutdict
 
 	def _convertlexicon(self, fanoutdict):
@@ -183,40 +190,43 @@ cdef class Grammar:
 			x = line.index('\t')
 			word = line[:x]
 			fields = line[x + 1:].encode('ascii').split()
-			assert word not in self.lexicalbyword, (
-					'word %r appears more than once in lexicon file' % word)
+			if word in self.lexicalbyword:
+				raise ValueError('word %r appears more than once '
+						'in lexicon file' % word)
 			self.lexicalbyword[word] = []
 			for tag, weight in zip(fields[::2], fields[1::2]):
 				if tag not in self.toid:
 					self.toid[tag] = len(self.toid)
 					fanoutdict[tag] = 1
 					# disabled because we add ids for labels on the fly:
-					#logging.warning('POS tag %r for word %r '
-					#		'not used in any phrasal rule', tag, word)
-					#continue
+					# logging.warning('POS tag %r for word %r '
+					# 		'not used in any phrasal rule', tag, word)
+					# continue
 				else:
-					assert fanoutdict[tag] == 1, (
-							'POS tag %r has fan-out %d, may only be 1.' % (
-							fanoutdict[tag], tag))
+					if fanoutdict[tag] != 1:
+						raise ValueError('POS tag %r has fan-out %d, '
+								'may only be 1.' % (fanoutdict[tag], tag))
 				w = convertweight(weight)
-				assert w > 0, (
-						'weights should be positive and non-zero:\n%r' % line)
+				if w <= 0:
+					raise ValueError('weights should be positive '
+							'and non-zero:\n%r' % line)
 				lexrule = LexicalRule(self.toid[tag], word, w)
 				if lexrule.lhs not in self.lexicalbylhs:
 					self.lexicalbylhs[lexrule.lhs] = {}
 				self.lexical.append(lexrule)
 				self.lexicalbyword[word].append(lexrule)
 				self.lexicalbylhs[lexrule.lhs][word] = lexrule
-			assert self.lexical and self.lexicalbyword and self.lexicalbylhs, (
-					'no lexical rules found.')
+			if not (self.lexical and self.lexicalbyword and self.lexicalbylhs):
+				raise ValueError('no lexical rules found.')
 
 	def _allocate(self):
-		""" Allocate memory to store rules. """
+		"""Allocate memory to store rules."""
 		# store all non-lexical rules in a contiguous array
 		# the other arrays will contain pointers to relevant parts thereof
 		# (indexed on lhs, rhs1, and rhs2 of rules)
 		self.bylhs = <Rule **>malloc(sizeof(Rule *) * self.nonterminals * 4)
-		assert self.bylhs is not NULL
+		if self.bylhs is NULL:
+			raise MemoryError('allocation error')
 		self.bylhs[0] = NULL
 		self.unary = &(self.bylhs[1 * self.nonterminals])
 		self.lbinary = &(self.bylhs[2 * self.nonterminals])
@@ -225,12 +235,14 @@ cdef class Grammar:
 		# (plus sentinels)
 		self.bylhs[0] = <Rule *>malloc(sizeof(Rule) *
 			(self.numrules + (2 * self.numbinary) + self.numunary + 4))
-		assert self.bylhs[0] is not NULL
+		if self.bylhs[0] is NULL:
+			raise MemoryError('allocation error')
 		self.unary[0] = &(self.bylhs[0][self.numrules + 1])
 		self.lbinary[0] = &(self.unary[0][self.numunary + 1])
 		self.rbinary[0] = &(self.lbinary[0][self.numbinary + 1])
 		self.fanout = <UChar *>malloc(sizeof(UChar) * self.nonterminals)
-		assert self.fanout is not NULL
+		if self.fanout is NULL:
+			raise MemoryError('allocation error')
 		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
 		self.revmap = <UInt *>malloc(self.numrules * sizeof(UInt))
 		if self.revmap is NULL:
@@ -238,8 +250,8 @@ cdef class Grammar:
 
 	@cython.wraparound(True)
 	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict):
-		""" Auxiliary function to create Grammar objects. Copies grammar
-		rules from a text file to a contiguous array of structs. """
+		"""Auxiliary function to create Grammar objects. Copies grammar
+		rules from a text file to a contiguous array of structs."""
 		cdef UInt n = 0, m
 		cdef double w
 		cdef Rule *cur
@@ -259,17 +271,20 @@ cdef class Grammar:
 				weight = fields[-1]
 			# check whether RHS labels have been seen as LHS and check fanout
 			for m, nt in enumerate(rule):
-				assert nt in self.toid, ('symbol %r has not been seen as LHS '
+				if nt not in self.toid:
+					raise ValueError('symbol %r has not been seen as LHS '
 						'in any rule: %s' % (nt, line))
 				if self.binarized:
 					fanout = yf.count(b',01'[m]) + (m == 0)
-					assert fanoutdict[nt] == fanout, (
-							"conflicting fanouts for symbol '%s'.\n"
-							"previous: %d; this non-terminal: %d.\n"
+					if fanoutdict[nt] != fanout:
+						raise ValueError("conflicting fanouts for symbol "
+							"'%s'.\nprevious: %d; this non-terminal: %d.\n"
 							"yf: %s; rule: %s" % (
 							nt, fanoutdict[nt], fanout, yf, line))
 			w = convertweight(weight)
-			assert w > 0, 'weights should be positive and non-zero:\n%r' % line
+			if w <= 0:
+				raise ValueError('weights should be positive and non-zero:\n%r'
+						% line)
 			# n is the rule index in the array, and will be the ID for the rule
 			cur = &(self.bylhs[0][n])
 			cur.no = n
@@ -296,8 +311,8 @@ cdef class Grammar:
 		assert n == self.numrules, (n, self.numrules)
 
 	def _normalize(self):
-		""" Optionally normalize frequencies to relative frequencies.
-		Should be run during initialization. """
+		"""Optionally normalize frequencies to relative frequencies.
+		Should be run during initialization."""
 		cdef double mass = 0
 		cdef UInt n = 0, lhs
 		cdef LexicalRule lexrule
@@ -317,16 +332,16 @@ cdef class Grammar:
 				lexrule.prob /= mass
 
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen):
-		""" Auxiliary function to create Grammar objects. Copies certain
+		"""Auxiliary function to create Grammar objects. Copies certain
 		grammar rules and sorts them on the given index.
 		Resulting array is ordered by lhs, rhs1, or rhs2 depending on the value
 		of `idx` (0, 1, or 2); filterlen can be 0, 2, or 3 to get all, only
 		unary, or only binary rules, respectively.
 		A separate array has a pointer for each non-terminal into this array;
-		e.g.: dest[NP][0] == the first rule with an NP in the idx position. """
+		e.g.: dest[NP][0] == the first rule with an NP in the idx position."""
 		cdef UInt prev = self.nonterminals, idxlabel = 0, n, m = 0
 		cdef Rule *cur
-		#need to set dest even when there are no rules for that idx
+		# need to set dest even when there are no rules for that idx
 		for n in range(self.nonterminals):
 			dest[n] = dest[0]
 		if dest is self.bylhs:
@@ -410,12 +425,13 @@ cdef class Grammar:
 		self.currentmodel = m
 
 	def buildchainvec(self):
-		""" Build a boolean matrix representing the unary (chain) rules. """
+		"""Build a boolean matrix representing the unary (chain) rules."""
 		cdef UInt n
 		cdef Rule *rule
 		self.chainvec = <ULong *>calloc(self.nonterminals
 				* BITNSLOTS(self.nonterminals), sizeof(ULong))
-		assert self.chainvec is not NULL
+		if self.chainvec is NULL:
+			raise MemoryError('allocation error')
 		for n in range(self.numunary):
 			rule = self.unary[n]
 			SETBIT(self.chainvec, rule.rhs1 * self.nonterminals + rule.lhs)
@@ -447,7 +463,7 @@ cdef class Grammar:
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
 			neverblockre=None, bint splitprune=False, bint markorigin=False):
-		""" Construct a mapping of fine non-terminal IDs to coarse non-terminal
+		"""Construct a mapping of fine non-terminal IDs to coarse non-terminal
 		IDs, by applying the regex ``striplabelre`` to the fine labels, used
 		for coarse-to-fine pruning. A secondary regex neverblockre is for items
 		that should never be pruned.
@@ -461,7 +477,7 @@ cdef class Grammar:
 			markovization; e.g., ``NP`` and ``VP`` may be blocked,
 			but not ``NP|<DT-NN>``.
 		- ``_[0-9]+`` to ignore discontinuous nodes ``X_n`` where ``X`` is a
-			label and *n* is a fanout. """
+			label and *n* is a fanout."""
 		cdef int n, m, components = 0
 		cdef set seen = {0}
 		if coarse is None:
@@ -588,7 +604,7 @@ cdef class Grammar:
 				self.origrules, self.origlexicon)
 
 	def __reduce__(self):
-		""" Helper function for pickling. """
+		"""Helper function for pickling."""
 		return (Grammar, (self.origrules, self.origlexicon,
 				self.start, self.logprob, self.bitpar))
 
@@ -615,8 +631,8 @@ cdef class Grammar:
 
 
 cdef inline double convertweight(const char *weight):
-	""" Convert weight to double; weight may be a fraction '1/2',
-	decimal float '0.5' or hex float '0x1.0p-1'. Returns 0 on error. """
+	"""Convert weight to double; weight may be a fraction '1/2',
+	decimal float '0.5' or hex float '0x1.0p-1'. Returns 0 on error."""
 	cdef char *endptr = NULL
 	cdef double w = strtod(weight, &endptr)
 	if endptr[0] == b'/':

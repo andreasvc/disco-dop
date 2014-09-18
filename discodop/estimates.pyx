@@ -99,7 +99,7 @@ def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 		# This comparison catches the case when insidescores has a higher
 		# value than x, but also when it is NaN, because all comparisons
 		# against NaN are false.
-		#if not x >= insidescores[I.label, I.vec]:
+		# if not x >= insidescores[I.label, I.vec]:
 		# Mory explicitly:
 		if (isnan(insidescores[I.label, I.vec])
 			or x < insidescores[I.label, I.vec]):
@@ -328,8 +328,8 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 								outside[rule.rhs2, lenA, lr, ga] = score
 			i += 1
 			rule = grammar.bylhs[I.state][i]
-		#end while rule.lhs == I.state:
-	#end while agenda.length:
+		# end while rule.lhs == I.state:
+	# end while agenda.length:
 
 
 def getestimates(Grammar grammar, UInt maxlen, UInt goal):
@@ -501,8 +501,8 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 
 			i += 1
 			rule = grammar.bylhs[state][i]
-		#end while rule.lhs == state:
-	#end while agenda.length:
+		# end while rule.lhs == state:
+	# end while agenda.length:
 	return outside.base
 
 
@@ -549,7 +549,7 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 	outside = np.empty((grammar.nonterminals, maxlen + 1, maxlen + 1, 1),
 			dtype='d')
 	outside[...] = np.inf
-	#convert sparse dictionary to dense numpy array
+	# convert sparse dictionary to dense numpy array
 	for (state, lspan, rspan), prob in outsidescores.items():
 		outside[state, lspan, rspan, 0] = prob
 	return outside
@@ -682,9 +682,9 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 		for b in insidescores[a]:
 			assert 0 <= a < grammar.nonterminals
 			assert 0 <= bitlength(b) <= maxlen
-			#print(a, b)
-			#print("%s[%d] =" % (grammar.tolabel[a].decode('ascii'), b),
-			#		exp(insidescores[a][b]))
+			# print(a, b)
+			# print("%s[%d] =" % (grammar.tolabel[a].decode('ascii'), b),
+			# 		exp(insidescores[a][b]))
 	print(len(insidescores) * sum(map(len, insidescores.values())), '\n')
 	insidescores = np.empty((grammar.nonterminals, (maxlen + 1)), dtype='d')
 	insidescores[...] = np.NAN
@@ -696,16 +696,16 @@ cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
 			if b < np.inf:
 				print("%s len %d = %g" % (grammar.tolabel[an].decode('ascii'),
 						bn, exp(-b)))
-	#print(insidescores)
-	#for a in range(maxlen):
-	#	print(grammar.tolabel[goal].decode('ascii'), "len", a, "=",
-	#			exp(-insidescores[goal, a]))
+	# print(insidescores)
+	# for a in range(maxlen):
+	# 	print(grammar.tolabel[goal].decode('ascii'), "len", a, "=",
+	# 			exp(-insidescores[goal, a]))
 
 	print("getting outside")
 	outside = np.empty((grammar.nonterminals, ) + 3 * (maxlen + 1, ), dtype='d')
 	outside[...] = np.inf
 	outsidelr(grammar, insidescores, maxlen, goal, outside)
-	#print(outside)
+	# print(outside)
 	cnt = 0
 	for an, a in enumerate(outside):
 		for bn, b in enumerate(a):

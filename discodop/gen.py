@@ -204,7 +204,7 @@ def splitgrammar(rules):
 			grammar.bylhs[r.lhs].append(r)
 		else:
 			raise ValueError("grammar not binarized: %s" % repr(r))
-	#assert 0 not in grammar.fanout[1:]
+	# assert 0 not in grammar.fanout[1:]
 	return grammar
 
 
