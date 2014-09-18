@@ -62,19 +62,10 @@ run the following sequence of commands::
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip install --user -r requirements.txt
-    make install
+    make install && make inplace
 
 (the ``--user`` option means the packages will be installed to your home
 directory which does not require root privileges).
-
-To install the latest stable release using `pip <http://www.pip-installer.org>`_,
-issue the following commands::
-
-    sudo apt-get install build-essential python-dev python-numpy python-pip
-    pip install --user cython
-    pip install --user disco-dop
-
-However, note that the stable release may be several months behind the development version.
 
 Other Linux systems
 -------------------
@@ -105,7 +96,7 @@ installation steps are similar to the ones below.
 Check by running ``python`` that version 2.7.6 was installed successfully and
 is the default.
 
-Install pip::
+Install `pip <http://www.pip-installer.org>`_::
 
     wget https://bootstrap.pypa.io/get-pip.py
     python get-pip.py --user
@@ -116,18 +107,19 @@ Install the latest development version of discodop::
     unzip disco-dop-master.zip
     cd disco-dop-master
     pip install --user -r requirements.txt
-    make install
+    make install && make inplace
 
 Mac OS X (untested)
 -------------------
 - Install `Xcode <https://developer.apple.com/>`_ and `Homebrew <http://brew.sh>`_
 - Install dependencies using Homebrew::
 
-    brew install python git
+    brew install gcc python git
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
     pip install --user --install-option="--prefix=" -r requirements.txt
-    make install
+    env CC=gcc python setup.py install --user --prefix=
+    make inplace
 
 Other systems
 -------------
