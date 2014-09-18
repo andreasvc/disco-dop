@@ -123,10 +123,10 @@ cdef class Agenda:
 		while entry.count == 0:
 			if n == 1:
 				raise IndexError("peek at empty heap")
-			#replace first element with last element
+			# replace first element with last element
 			self.heap[0] = self.heap.pop()
-			#and restore heap invariant
-			siftdown(self.heap, 0, cmpfun)
+			# and restore heap invariant
+			siftup(self.heap, 0, cmpfun)
 			n -= 1
 			entry = <Entry>(self.heap[0])
 		return entry
@@ -284,7 +284,7 @@ cdef class DoubleAgenda:
 		entry.count = oldentry.count
 		self.mapping[key] = entry
 		self.heap.append(entry)
-		siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
+		siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
 		oldentry.count = INVALID
 		return PyFloat_AS_DOUBLE(oldentry.value)
 
@@ -309,10 +309,10 @@ cdef class DoubleAgenda:
 		while entry.count == 0:
 			if n == 1:
 				raise IndexError("peek at empty heap")
-			#replace first element with last element
+			# replace first element with last element
 			self.heap[0] = self.heap.pop()
-			#and restore heap invariant
-			siftdown(self.heap, 0, doublecmpfun)
+			# and restore heap invariant
+			siftup(self.heap, 0, doublecmpfun)
 			n -= 1
 			entry = <Entry>(self.heap[0])
 		return entry
@@ -328,7 +328,7 @@ cdef class DoubleAgenda:
 			entry.count = oldentry.count
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
+			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
 			oldentry.count = INVALID
 		else:
 			self.counter += 1
@@ -339,7 +339,7 @@ cdef class DoubleAgenda:
 			entry.count = self.counter
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftup(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
+			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
 
 	# identical to Agenda() methods
 	cdef bint contains(self, key):
@@ -423,7 +423,7 @@ def f(x):
 	return x
 
 
-#A quicksort nsmallest implementation.
+# A quicksort nsmallest implementation.
 cdef list nsmallest(int n, object iterable, key=f):
 	""" Return an _unsorted_ list of the n smallest items in a list. """
 	cdef list items = list(iterable)
@@ -470,17 +470,32 @@ cdef inline Entry heappop(list heap, CmpFun cmpfun):
 	elif n == 1:
 		entry = <Entry>heap.pop()
 	else:
-		#replace first element with last element and restore heap invariant
+		# replace first element with last element and restore heap invariant
 		entry = <Entry>(PyList_GET_ITEM(heap, 0))
 		heap[0] = heap.pop()
-		siftdown(heap, 0, cmpfun)
+		siftup(heap, 0, cmpfun)
 	return entry
 
 
 cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 	# place at the end and swap with parents until heap invariant holds
 	heap.append(entry)
-	siftup(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
+	siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
+
+
+cdef inline Entry heapreplace(list heap, Entry entry, CmpFun cmpfun):
+	"""Pop and return the current smallest value, and add the new item.
+
+	NB: returned item may be larger than new item."""
+	cdef Py_ssize_t n = PyList_GET_SIZE(heap)
+	cdef Entry oldentry
+	if n == 0:
+		raise IndexError("pop from empty heap")
+	else:
+		oldentry = <Entry>(PyList_GET_ITEM(heap, 0))
+		heap[0] = entry
+		siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
+	return oldentry
 
 
 cdef inline void heapify(list heap, CmpFun cmpfun):
@@ -493,18 +508,18 @@ cdef inline void heapify(list heap, CmpFun cmpfun):
 # shifts only apply for binary tree
 cdef inline int _parent(int i):
 	return (i - 1) // HEAP_ARITY
-	#return (i - 1) >> 1
+	# return (i - 1) >> 1
 
 
 cdef inline int _left(int i):
 	return i * HEAP_ARITY + 1
-	#return (i << 1) + 1
+	# return (i << 1) + 1
 
 
 cdef inline int _right(int i):
 	""" for documentation purposes; not used. """
 	return i * HEAP_ARITY + 2
-	#return (i + 1) << 1
+	# return (i + 1) << 1
 
 
 def getparent(i):
@@ -512,7 +527,28 @@ def getparent(i):
 	return (i - 1) // HEAP_ARITY
 
 
-cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
+cdef inline void siftdown(list heap, int startpos, int pos, CmpFun cmpfun):
+	"""`heap` is a heap at all indices >= startpos, except possibly for pos.
+	`pos` is the index of a leaf with a possibly out-of-order value.
+	Restore the heap invariant."""
+	cdef int parentpos
+	cdef Entry parent, newitem = <Entry>PyList_GET_ITEM(heap, pos)
+	while pos > startpos:
+		parentpos = _parent(pos)
+		parent = <Entry>PyList_GET_ITEM(heap, parentpos)
+		if cmpfun(parent, newitem):
+			break
+		heap[pos] = parent
+		pos = parentpos
+	heap[pos] = newitem
+
+
+cdef inline void siftup(list heap, int pos, CmpFun cmpfun):
+	"""The child indices of heap index pos are already heaps, and we want to
+	make a heap at index pos too.  We do this by bubbling the smaller child of
+	pos up (and so on with that child's children, etc) until hitting a leaf,
+	then using `siftdown` to move the oddball originally at index pos into
+	place."""
 	cdef int startpos = pos, childpos = _left(pos), rightpos
 	cdef int endpos = PyList_GET_SIZE(heap)
 	cdef Entry newitem = <Entry>PyList_GET_ITEM(heap, pos)
@@ -526,20 +562,7 @@ cdef inline void siftdown(list heap, int pos, CmpFun cmpfun):
 		pos = childpos
 		childpos = _left(pos)
 	heap[pos] = newitem
-	siftup(heap, startpos, pos, cmpfun)
-
-
-cdef inline void siftup(list heap, int startpos, int pos, CmpFun cmpfun):
-	cdef int parentpos
-	cdef Entry parent, newitem = <Entry>PyList_GET_ITEM(heap, pos)
-	while pos > startpos:
-		parentpos = _parent(pos)
-		parent = <Entry>PyList_GET_ITEM(heap, parentpos)
-		if cmpfun(parent, newitem):
-			break
-		heap[pos] = parent
-		pos = parentpos
-	heap[pos] = newitem
+	siftdown(heap, startpos, pos, cmpfun)
 
 
 def identity(x):
@@ -553,33 +576,40 @@ def nwaymerge(iterables, key=None):
 	already be sorted with this key.
 
 	Algorithm based on:
-	http://stackoverflow.com/questions/5055909/algorithm-for-n-way-merge"""
+	http://stackoverflow.com/questions/5055909/algorithm-for-n-way-merge
+	and the Python heapq module."""
 	cdef list heap = []
-	cdef unsigned long cnt = 1
+	cdef unsigned long cnt
+	cdef Entry entry
 	if key is None:
 		key = identity
-	iterables = [iter(it) for it in iterables]
 
-	for items in iterables:
+	for cnt, it in enumerate(iterables, 1):
+		items = iter(it)
 		try:
 			item = next(items)
 		except StopIteration:
 			pass
 		else:
-			heappush(heap,
-					new_Entry((item, items), key(item), cnt),
-					cmpfun)
-			cnt += 1
+			entry = new_Entry((item, items), key(item), cnt)
+			heap.append(entry)
+	heapify(heap, cmpfun)
 
-	while(heap):
-		smallest = heappop(heap, cmpfun)
-		yield smallest.getkey()[0]
+	while len(heap) > 1:
 		try:
-			item = next(smallest.getkey()[1])
+			while True:
+				entry = heap[0]
+				item, iterable = entry.getkey()
+				yield item
+				item = next(iterable)
+				entry.key = (item, iterable)
+				entry.value = key(item)
+				_ = heapreplace(heap, entry, cmpfun)
 		except StopIteration:
-			pass
-		else:  # add next element from current iterable
-			heappush(heap,
-					new_Entry((item, smallest.getkey()[1]), key(item), cnt),
-					cmpfun)
-			cnt += 1
+			_ = heappop(heap, cmpfun)
+
+	if heap:  # only a single iterator remains, skip heap
+		item, iterable = heappop(heap, cmpfun).getkey()
+		yield item
+		for item in iterable:
+			yield item
