@@ -486,8 +486,8 @@ cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
 cdef inline void heapify(list heap, CmpFun cmpfun):
 	""" Transform list into a heap, in-place, in O(len(heap)) time. """
 	cdef int i
-	for i in range(PyList_GET_SIZE(heap) // HEAP_ARITY, -1, -1):
-		siftdown(heap, i, cmpfun)
+	for i in reversed(range(PyList_GET_SIZE(heap) // HEAP_ARITY)):
+		siftup(heap, i, cmpfun)
 
 
 # shifts only apply for binary tree
