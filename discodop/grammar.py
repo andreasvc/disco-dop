@@ -1041,8 +1041,9 @@ def main():
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
 	if model == 'ptsg':
 		bitpar = not isinstance(next(iter(fragments)), tuple)
-	if '--bitpar' not in opts:
-		assert bitpar
+	if '--bitpar' in opts and not bitpar:
+		raise ValueError('parsing with an unbinarized grammar requires '
+				'a grammar in bitpar format.')
 
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
 	# write output
