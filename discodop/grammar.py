@@ -9,7 +9,7 @@ import logging
 from operator import mul, itemgetter
 from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import count, islice, repeat
-from discodop.tree import ImmutableTree, Tree
+from discodop.tree import Tree, ImmutableTree
 from discodop.treebank import READERS
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=W0622

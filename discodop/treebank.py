@@ -361,7 +361,7 @@ class TigerXMLCorpusReader(CorpusReader):
 				elif edge.tag == 'secedge':
 					nodes[idref].extend((edge.get('label'), ntid))
 				else:
-					raise ValueError
+					raise ValueError("expected 'edge' or 'secedge' tag.")
 		for idref in nodes:
 			if nodes[idref][PARENT] is None:
 				raise ValueError('%s does not have a parent: %r' % (
@@ -792,11 +792,11 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 			' ', '_') or '--')
 	if lemmaaction == 'add':
 		if sent is None:
-			raise ValueError
+			raise ValueError('adding lemmas requires passing sent argument.')
 		sent[preterminal[0]] += '/' + lemma
 	elif lemmaaction == 'replace':
 		if sent is None:
-			raise ValueError
+			raise ValueError('adding lemmas requires passing sent argument.')
 		sent[preterminal[0]] = lemma
 	elif lemmaaction == 'between':
 		preterminal[:] = [preterminal.__class__(lemma, preterminal)]

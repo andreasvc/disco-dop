@@ -464,11 +464,11 @@ class RegexSearcher(CorpusSearcher):
 
 	def trees(self, query, subset=None, maxresults=10,
 			nofunc=False, nomorph=False):
-		raise ValueError
+		raise ValueError('not applicable with plain text corpus.')
 
 	def sents(self, query, subset=None, maxresults=100, brackets=False):
 		if brackets:
-			raise ValueError
+			raise ValueError('not applicable with plain text corpus.')
 		subset = subset or self.files
 		result = []
 		jobs = {}

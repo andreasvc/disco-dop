@@ -66,7 +66,7 @@ def chooserule(rules, discount, prodcounts):
 		position -= w
 		if position < 0:
 			return r
-	raise ValueError
+	raise ValueError('random selection out of range.')
 
 
 def compose(rule, left, right, verbose):

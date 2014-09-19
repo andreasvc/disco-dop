@@ -419,7 +419,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 			prev = node[0]
 			rng = range(1, len(node) - 1)
 		else:
-			raise ValueError
+			raise ValueError("factor should be 'left' or 'right'.")
 		for i in rng:
 			newbitset = node[i].bitset | prev.bitset
 			if factor == 'right' and (ids is None or i > 1):
@@ -697,7 +697,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 				nonterms[p2] = p2nonterms
 				revnonterms[p2nonterms] = p2
 				agenda[p2] = workingset[p2] = x2
-	raise ValueError
+	raise ValueError('agenda exhausted without finding binarization.')
 
 
 def fanout(tree):

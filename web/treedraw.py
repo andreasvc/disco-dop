@@ -62,14 +62,20 @@ def draw():
 	if len(request.args['tree']) > LIMIT:
 		return 'Too much data. Limit: %d bytes' % LIMIT
 	dts = []
-	for tree, sent, _rest in incrementaltreereader(
-			request.args['tree'].splitlines(),
-			morphology='between' if 'morph' in request.args else None,
-			functions='between' if 'func' in request.args else None):
+	try:
+		trees = list(incrementaltreereader(
+				request.args['tree'].splitlines(),
+				morphology='between' if 'morph' in request.args else None,
+				functions='between' if 'func' in request.args else None))
+	except Exception as err:
+		return Response(str(err), mimetype='text/plain')
+	for tree, sent, _rest in trees:
 		try:
 			dts.append(DrawTree(tree, sent, abbr='abbr' in request.args))
 		except Exception as err:
 			return Response(str(err), mimetype='text/plain')
+	if not dts:
+		return Response('No trees!', mimetype='text/plain')
 	return drawtrees(request.args, dts)
 
 

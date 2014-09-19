@@ -52,7 +52,7 @@ cdef class Grammar:
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
 	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict)
 	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
-	cdef rulestr(self, Rule rule)
+	cpdef rulestr(self, int n)
 	cdef yfstr(self, Rule rule)
 
 

@@ -425,9 +425,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 				return chart, 'no parse: %r not in lexicon' % word
 			elif tag is not None and tag not in grammar.toid:
 				return chart, 'no parse: unknown tag %r' % tag
-			elif whitelist is not None:
-				return chart, 'no parse: all tags for %r blocked' % word
-			raise ValueError
+			return chart, 'no parse: all tags for %r blocked' % word
 
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter

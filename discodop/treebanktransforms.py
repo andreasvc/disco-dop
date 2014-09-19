@@ -875,7 +875,7 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		elif lr == 'RIGHT-TO-LEFT':
 			children = tree[::-1]
 		else:
-			raise ValueError
+			raise ValueError('expected RIGHT-TO-LEFT or LEFT-TO-RIGHT.')
 		for head in heads:
 			for child in children:
 				if (isinstance(child, Tree)

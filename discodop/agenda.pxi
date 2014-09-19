@@ -466,7 +466,7 @@ cdef inline Entry heappop(list heap, CmpFun cmpfun):
 	cdef Py_ssize_t n = PyList_GET_SIZE(heap)
 	cdef Entry entry
 	if n == 0:
-		raise IndexError("pop from empty heap")
+		raise IndexError('pop from empty heap')
 	elif n == 1:
 		entry = <Entry>heap.pop()
 	else:

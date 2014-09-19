@@ -383,24 +383,24 @@ cdef class Grammar:
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
 	def register(self, unicode name, weights):
-		""" Register a probabilistic model given a name and a sequence of
-		floats ``weights``, with weights  in the same order as
+		"""Register a probabilistic model given a name and a sequence of
+		floats ``weights``, with weights in the same order as
 		``self.origrules`` and ``self.origlexicon`` (which is an arbitrary
-		order except that tags for each word are clustered together). """
+		order except that tags for each word are clustered together)."""
 		cdef int n, m = len(self.modelnames)
 		cdef double [:] tmp
-		assert name not in self.modelnames, 'model %r already exists' % name
 		assert len(self.modelnames) <= 255, (
 				'256 probabilistic models should be enough for anyone.')
-		assert len(weights) == self.numrules + len(self.lexical), (
-				'length mismatch: %d grammar rules, %d weights given.' % (
+		if name in self.modelnames:
+			raise ValueError('model %r already exists' % name)
+		if len(weights) != self.numrules + len(self.lexical):
+			raise ValueError('length mismatch: %d grammar rules, '
+					'%d weights given.' % (
 					self.numrules + len(self.lexical), len(weights)))
 		self.models.resize(m + 1, self.numrules + len(self.lexical))
 		self.modelnames.append(name)
 		tmp = self.models[m]
-		for n in range(self.numrules):
-			tmp[n] = weights[n]
-		for n in range(self.numrules, self.numrules + len(self.lexical)):
+		for n in range(self.numrules + len(self.lexical)):
 			tmp[n] = weights[n]
 
 	def switch(self, unicode name, bint logprob=True):
@@ -558,7 +558,13 @@ cdef class Grammar:
 			key = striplabelre.sub(b'', key.encode('ascii'))
 			self.rulemapping[coarse.rulenos[key]].append(rule.no)
 
-	cdef rulestr(self, Rule rule):
+	cpdef rulestr(self, int n):
+		"""Return a string representation of a specific rule in this grammar."""
+		cdef Rule rule
+		cdef LexicalRule lexrule
+		if not 0 <= n < self.numrules:
+			raise ValueError('Out of range: %s' % n)
+		rule = self.bylhs[0][n]
 		left = '%.2f %s => %s%s' % (
 			exp(-rule.prob) if self.logprob else rule.prob,
 			self.tolabel[rule.lhs].decode('ascii'),
@@ -586,7 +592,7 @@ cdef class Grammar:
 		cdef LexicalRule lexrule
 		cdef size_t n
 		rules = '\n'.join(filter(None,
-			[self.rulestr(self.bylhs[0][n]) for n in range(self.numrules)]))
+			[self.rulestr(n) for n in range(self.numrules)]))
 		lexical = '\n'.join(['%.2f %s => %s' % (
 				exp(-lexrule.prob) if self.logprob else lexrule.prob,
 				self.tolabel[lexrule.lhs].decode('ascii'),

@@ -469,7 +469,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 	return result
 
 
-cdef inline void extractcompbitsets(ULong *bitset, Node *a,
+cdef extractcompbitsets(ULong *bitset, Node *a,
 		int i, int n, set results, short SLOTS, ULong *scratch):
 	"""Like ``extractbitsets()`` but following complement of ``bitset``."""
 	cdef bint start = scratch is NULL and not TESTBIT(bitset, i)
@@ -660,7 +660,7 @@ def addprods(tree, sent, disc=True):
 			elif len(a) == 2:
 				a.prod = (a.label, a[0].label, a[1].label)
 			else:
-				raise ValueError
+				raise ValueError('tree not binarized.')
 	return tree
 
 

@@ -339,7 +339,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 def gettree(cells, span):
 	"""Extract parse tree from most constituents correct table."""
 	if span not in cells:
-		raise ValueError
+		raise ValueError('MCC: span not in cell: %r' bin(span))
 	label, _score, leftspan = cells[span]
 	if leftspan not in cells:
 		return '(%s %d)' % (label, pyintnextset(span, 0))
@@ -606,7 +606,7 @@ def fragmentsinderiv(deriv, chart, list backtransform):
 		deriv = Tree.parse(deriv, parse_leaf=int)
 		fragmentsinderiv_str(deriv, chart, backtransform, result)
 	else:
-		raise ValueError
+		raise ValueError('deriv should be a RankedEdge or a string.')
 	return [_fragments.pygetsent(frag.encode('utf-8'), chart.sent)
 			for frag in result]
 

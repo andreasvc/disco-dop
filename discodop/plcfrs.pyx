@@ -342,15 +342,13 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 							FatChartItem)
 				recognized = True
 			else:
-				raise ValueError
+				raise ValueError('tag %r is blocked.' % tag)
 		elif not recognized:
 			if tag is None and word not in grammar.lexicalbyword:
 				return chart, 'no parse: %r not in lexicon' % word
 			elif tag is not None and tag not in grammar.toid:
 				return chart, 'no parse: unknown tag %r' % tag
-			elif whitelist is not None:
-				return chart, 'no parse: all tags for %r blocked' % word
-			raise ValueError
+			return chart, 'no parse: all tags for %r blocked' % word
 	while agenda.length:  # main parsing loop
 		entry = agenda.popentry()
 		item = <LCFRSItem_fused>entry.key
@@ -623,9 +621,9 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 	return True
 
 
-cdef inline bint process_lexedge(LCFRSItem_fused newitem,
+cdef inline int process_lexedge(LCFRSItem_fused newitem,
 		double score, double prob, short wordidx,
-		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist):
+		DoubleAgenda agenda, LCFRSChart_fused chart, list whitelist) except -1:
 	"""Decide whether to accept a lexical edge ``(POS, word)``.
 
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
