@@ -339,7 +339,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 def gettree(cells, span):
 	"""Extract parse tree from most constituents correct table."""
 	if span not in cells:
-		raise ValueError('MCC: span not in cell: %r' bin(span))
+		raise ValueError('MCC: span not in cell: %r' % bin(span))
 	label, _score, leftspan = cells[span]
 	if leftspan not in cells:
 		return '(%s %d)' % (label, pyintnextset(span, 0))
