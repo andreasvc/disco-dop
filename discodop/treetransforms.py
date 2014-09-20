@@ -978,7 +978,7 @@ def main():
 		import alpinocorpus
 		outfile = alpinocorpus.CorpusWriter(outfilename)
 		if (action == 'none' and opts.get('--inputfmt') in ('alpino', 'dact')
-				and set(opts) < {'--slice', '--inputfmt', '--outputfmt',
+				and set(opts) <= {'--slice', '--inputfmt', '--outputfmt',
 				'--renumber'}):
 			for n, (key, block) in islice(enumerate(
 					corpus.blocks().items(), 1), start, end):
@@ -993,7 +993,7 @@ def main():
 		outfile = io.open(outfilename, 'w', encoding=encoding)
 		# copy trees verbatim when only taking slice or converting encoding
 		if (action == 'none' and opts.get('--inputfmt') == opts.get(
-				'--outputfmt') and set(opts) < {'--slice', '--inputenc',
+				'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
 				'--outputenc', '--inputfmt', '--outputfmt'}):
 			for block in islice(corpus.blocks().values(), start, end):
 				outfile.write(block)
