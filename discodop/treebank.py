@@ -38,7 +38,7 @@ class CorpusReader(object):
 		:param headreverse: the head is made final/frontal by reversing
 			everything before or after the head. When True, the side on which
 			the head is will be the reversed side.
-		:param markheads: add '^' to phrasal label of heads.
+		:param markheads: add '-HD' to phrasal label of heads.
 		:param punct: one of ...
 
 			:None: leave punctuation as is.

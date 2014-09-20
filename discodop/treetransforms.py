@@ -97,7 +97,7 @@ options may consist of:
                  avoid cyclic rules when --leftunary and --rightunary are used.
   --headrules=x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
-  --markheads    mark heads with '^' in phrasal labels.
+  --markheads    mark heads by adding '-HD' to phrasal labels.
   --reverse      reverse the transformations given by --transform;
   --transforms   specify names of tree transformations to apply; for possible
                  names, cf. treebanktransforms module.
