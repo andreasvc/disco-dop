@@ -930,13 +930,12 @@ def sumfrags(iterable):
 
 def merge(filenames, outfilename, sumfunc, key):
 	"""Interpolate weights of given files."""
-
-	from discodop.plcfrs import nwaymerge
+	from discodop import plcfrs
 	openfiles = [iter((gzip.open if filename.endswith('.gz') else
 			open)(filename)) for filename in filenames]
 	with codecs.getwriter('utf-8')((gzip.open if outfilename.endswith('.gz')
 			else open)(outfilename, 'w')) as out:
-		out.writelines(sumfunc(nwaymerge(openfiles, key=key)))
+		out.writelines(sumfunc(plcfrs.merge(openfiles, key=key)))
 
 
 def main():

@@ -995,4 +995,4 @@ def test():
 	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)
 
 __all__ = ['Agenda', 'DoubleAgenda', 'FatLCFRSChart', 'LCFRSChart',
-		'SmallLCFRSChart', 'getparent', 'nwaymerge', 'parse', 'parse_symbolic']
+		'SmallLCFRSChart', 'getparent', 'merge', 'parse', 'parse_symbolic']

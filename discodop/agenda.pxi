@@ -569,7 +569,7 @@ def identity(x):
 	return x
 
 
-def nwaymerge(iterables, key=None):
+def merge(iterables, key=None):
 	"""Generator that performs an n-way merge of sorted iterables.
 
 	NB: while a sort key may be specified, the individual iterables must
