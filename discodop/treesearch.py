@@ -313,13 +313,12 @@ class DactSearcher(CorpusSearcher):
 	def __init__(self, files, macros=None, numthreads=None):
 		super(DactSearcher, self).__init__(files, macros, numthreads)
 		for filename in self.files:
+			self.files[filename] = alpinocorpus.CorpusReader(filename)
+		if macros is not None:
 			try:
-				self.files[filename] = alpinocorpus.CorpusReader(
-					filename, macrosFilename=macros)
-			except TypeError:
-				if macros is not None:
-					raise ValueError('macros not supported')
-				self.files[filename] = alpinocorpus.CorpusReader(filename)
+				self.macros = alpinocorpus.Macros(macros)
+			except NameError:
+				raise ValueError('macros not supported')
 
 	def counts(self, query, subset=None, limit=None, indices=False):
 		subset = subset or self.files
@@ -415,6 +414,8 @@ class DactSearcher(CorpusSearcher):
 
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
+		if self.macros is not None:
+			query = self.macros.expand(query)
 		results = ((n, entry) for n, entry
 				in ((entry.name(), entry)
 					for entry in self.files[filename].xpath(query))

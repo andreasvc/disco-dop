@@ -40,7 +40,7 @@ python -c 'import alpinocorpus' || (
 	apt-get install -y libalpino-corpus2.0 libalpino-corpus-dev libxslt1-dev \
 		libxml2-dev libdbxml-dev libboost-all-dev
 	if [ ! -d alpinocorpus-python ]; then
-		sudo -u vagrant git clone https://github.com/andreasvc/alpinocorpus-python.git
+		sudo -u vagrant git clone https://github.com/danieldk/alpinocorpus-python.git
 	fi
 	cd alpinocorpus-python
 	sudo -u vagrant sed -i 's/-mt//g' setup.py
