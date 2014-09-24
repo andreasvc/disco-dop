@@ -26,11 +26,11 @@ cdef class LexicalRule:
 
 cdef class SmallChartItem:
 	"""Item with word sized bitvector."""
-	def __init__(SmallChartItem self, label, vec):
+	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
 
-	def __hash__(SmallChartItem self):
+	def __hash__(self):
 		"""Juxtapose bits of label and vec, rotating vec if > 33 words.
 
 		64              32            0
@@ -41,9 +41,9 @@ cdef class SmallChartItem:
 		return (self.label ^ (self.vec << (sizeof(self.vec) / 2 - 1))
 				^ (self.vec >> (sizeof(self.vec) / 2 - 1)))
 
-	def __richcmp__(self, _ob, int op):
+	def __richcmp__(self, other, int op):
 		cdef SmallChartItem me = <SmallChartItem>self
-		cdef SmallChartItem ob = <SmallChartItem>_ob
+		cdef SmallChartItem ob = <SmallChartItem>other
 		if op == 2:
 			return me.label == ob.label and me.vec == ob.vec
 		elif op == 3:
@@ -57,7 +57,7 @@ cdef class SmallChartItem:
 		elif op == 4:
 			return me.label > ob.label or me.vec > ob.vec
 
-	def __nonzero__(SmallChartItem self):
+	def __nonzero__(self):
 		return self.label != 0 and self.vec != 0
 
 	def __repr__(self):
@@ -71,7 +71,7 @@ cdef class SmallChartItem:
 	cdef copy(self):
 		return new_SmallChartItem(self.label, self.vec)
 
-	def binrepr(SmallChartItem self, int lensent=0):
+	def binrepr(self, int lensent=0):
 		return bin(self.vec)[2:].zfill(lensent)[::-1]
 
 
@@ -94,23 +94,25 @@ cdef class FatChartItem:
 			_hash *= 33 ^ (<UChar *>self.vec)[n]
 		return _hash
 
-	def __richcmp__(FatChartItem self, FatChartItem ob, int op):
+	def __richcmp__(self, other, int op):
+		cdef FatChartItem me = <FatChartItem>self
+		cdef FatChartItem ob = <FatChartItem>other
 		cdef int cmp = 0
-		cdef bint labelmatch = self.label == ob.label
-		cmp = memcmp(<UChar *>ob.vec, <UChar *>self.vec, sizeof(self.vec))
+		cdef bint labelmatch = me.label == ob.label
+		cmp = memcmp(<UChar *>ob.vec, <UChar *>me.vec, sizeof(me.vec))
 		if op == 2:
 			return labelmatch and cmp == 0
 		elif op == 3:
 			return not labelmatch or cmp != 0
 		# NB: for a proper ordering, need to reverse memcmp
 		elif op == 5:
-			return self.label >= ob.label or (labelmatch and cmp >= 0)
+			return me.label >= ob.label or (labelmatch and cmp >= 0)
 		elif op == 1:
-			return self.label <= ob.label or (labelmatch and cmp <= 0)
+			return me.label <= ob.label or (labelmatch and cmp <= 0)
 		elif op == 0:
-			return self.label < ob.label or (labelmatch and cmp < 0)
+			return me.label < ob.label or (labelmatch and cmp < 0)
 		elif op == 4:
-			return self.label > ob.label or (labelmatch and cmp > 0)
+			return me.label > ob.label or (labelmatch and cmp > 0)
 
 	def __nonzero__(self):
 		cdef int n
@@ -135,7 +137,7 @@ cdef class FatChartItem:
 			a.vec[n] = self.vec[n]
 		return a
 
-	def binrepr(FatChartItem self, lensent=0):
+	def binrepr(self, lensent=0):
 		cdef int n
 		cdef str result = ''
 		for n in range(SLOTS):
@@ -185,7 +187,7 @@ cdef class RankedEdge:
 		return _hash
 
 	def __richcmp__(RankedEdge self, RankedEdge ob, int op):
-		if op == 2 or op == 3:
+		if op == 2 or op == 3:  # '==' or '!='
 			return (op == 2) == (self.left == ob.left and self.right
 					== ob.right and self.head == ob.head
 					and memcmp(<UChar *>self.edge, <UChar *>ob.edge,
@@ -245,7 +247,7 @@ cdef class Chart:
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
-	cdef edgestr(Chart self, item, Edge *edge):
+	cdef edgestr(self, item, Edge *edge):
 		"""Return string representation of item and edge belonging to it."""
 		if edge.rule is NULL:
 			return self.sent[self.lexidx(edge)]
@@ -515,7 +517,7 @@ cdef class Ctrees:
 				(<set>result[nodes[m].prod]).add(n)
 		self.treeswithprod = result
 
-	def __dealloc__(Ctrees self):
+	def __dealloc__(self):
 		if self.nodes is not NULL:
 			free(self.nodes)
 			self.nodes = NULL

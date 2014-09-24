@@ -50,8 +50,8 @@ cdef class Grammar:
 	cdef readonly unicode origlexicon
 	cdef readonly list tolabel, lexical, modelnames, rulemapping
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
-	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict)
-	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen)
+	cdef _convertrules(self, list rulelines, dict fanoutdict)
+	cdef _indexrules(self, Rule **dest, int idx, int filterlen)
 	cpdef rulestr(self, int n)
 	cdef yfstr(self, Rule rule)
 
