@@ -58,11 +58,11 @@ directives = {
 		'warn.unused_result': False,
 		}
 
-#Options.fast_fail = True
-#Options.extra_compile_args = ["-O3"]
-#Options.extra_link_args = ["-O3"]  #["-g"],
 if __name__ == '__main__':
 	if havecython:
+		Options.fast_fail = True
+		# Options.extra_compile_args = ['-g'],
+		# Options.extra_link_args = ["-O3"]  #["-g"],
 		setup(
 				include_dirs=[numpy.get_include()],
 				cmdclass=dict(build_ext=build_ext),
@@ -70,10 +70,10 @@ if __name__ == '__main__':
 						'discodop/*.pyx',
 						annotate=True,
 						compiler_directives=directives,
-						#nthreads=4,
-						#language_level=3, # FIXME make this work ...
+						# nthreads=4,
+						# language_level=3, # FIXME make this work ...
 				),
-				#test_suite = 'tests'
+				# test_suite = 'tests'
 				**metadata)
 	else:
 		setup(**metadata)

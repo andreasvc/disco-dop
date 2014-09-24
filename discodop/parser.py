@@ -526,7 +526,7 @@ class Parser(object):
 							sum((prob[1] if isinstance(prob, tuple) else prob)
 								for _, prob, _ in besttrees))
 				if self.verbosity >= 4:
-					print('Chart:\n', chart)
+					print('Chart:\n%s' % chart)
 			if parsetrees:
 				try:
 					resultstr, prob, fragments = max(
