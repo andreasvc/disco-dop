@@ -605,19 +605,18 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 				newitem.label = label
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem, score)
-		chart.addedge(newitem, left, rule)
 	# in agenda (maybe in chart)
 	elif inagenda:
 		# lower score? => decrease-key in agenda
 		agenda.setifbetter(newitem, score)
-		chart.addedge(newitem, left, rule)
 	# not in agenda => must be in chart
 	elif not inagenda and prob < chart._subtreeprob(newitem):
 		# re-add to agenda because we found a better score.
 		# should not happen without estimates!
 		agenda.setitem(newitem, score)
-		chart.addedge(newitem, left, rule)
 		logging.warning('WARN: updating score in agenda: %r', newitem)
+	# store this edge, regardless of whether the item was new (unary chains)
+	chart.addedge(newitem, left, rule)
 	return True
 
 
