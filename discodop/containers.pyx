@@ -179,9 +179,9 @@ cdef class RankedEdge:
 	def __hash__(self):
 		cdef long _hash = 0x345678UL
 		_hash = (1000003UL * _hash) ^ hash(self.head)
-		_hash = (1000003UL * _hash) ^ hash(-1 if self.edge.rule is NULL
+		_hash = (1000003UL * _hash) ^ (-1 if self.edge.rule is NULL
 				else self.edge.rule.no)
-		_hash = (1000003UL * _hash) ^ hash(self.edge.pos.lvec)
+		_hash = (1000003UL * _hash) ^ self.edge.pos.lvec
 		_hash = (1000003UL * _hash) ^ self.left
 		_hash = (1000003UL * _hash) ^ self.right
 		return _hash
