@@ -495,12 +495,15 @@ class Parser(object):
 									or stage.objective == 'mcc')
 				if self.verbosity >= 3:
 					print('sent: %s\nstage: %s' % (' '.join(sent), stage.name))
-					print('100-best derivations:\n%s\n' % '\n'.join(
-						'%d. %s %s' % (n + 1,
+					print('%d-best derivations:\n%s' % (
+						min(stage.m, 100),
+						'\n'.join('%d. %s %s' % (n + 1,
 							('subtrees=%d' % abs(int(prob / log(0.5))))
 							if stage.objective == 'shortest'
 							else ('p=%g' % exp(-prob)), deriv)
-						for n, (deriv, prob) in enumerate(derivations[:100])))
+						for n, (deriv, prob) in enumerate(derivations[:100]))))
+					print('sum of probabitilies: %g\n' %
+							sum(exp(-prob) for _, prob in derivations[:100]))
 				if stage.objective == 'shortest':
 					stage.grammar.switch(u'ewe' if stage.estimator == 'ewe'
 							else u'default', True)
@@ -515,18 +518,22 @@ class Parser(object):
 				msg += 'disambiguation: %s, %gs\n\t' % (
 						msg1, time.clock() - begindisamb)
 				if self.verbosity >= 3:
-					print('100-best parse trees:\n%s\n' % '\n'.join(
+					besttrees = nlargest(100, parsetrees, key=itemgetter(1))
+					print('100-best parse trees:\n%s' % '\n'.join(
 							'%d. %s %s' % (n + 1, probstr(prob), treestr)
-							for n, (treestr, prob, _) in enumerate(
-								nlargest(100, parsetrees,
-									key=itemgetter(1)))))
+							for n, (treestr, prob, _) in enumerate(besttrees)))
+					print('sum of probabitilies: %g\n' %
+							sum((prob[1] if isinstance(prob, tuple) else prob)
+								for _, prob, _ in besttrees))
+				if self.verbosity >= 4:
+					print('Chart:\n', chart)
 			if parsetrees:
 				try:
 					resultstr, prob, fragments = max(
 							parsetrees, key=itemgetter(1))
 					parsetree, noparse = self.postprocess(resultstr, n)
 					if not all(a for a in parsetree.subtrees()):
-						raise ValueError('tree has empty nodes: %s' % parsetree)
+						raise ValueError('empty nodes in tree: %s' % parsetree)
 					if not len(parsetree.leaves()) == len(sent):
 						raise ValueError('leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))

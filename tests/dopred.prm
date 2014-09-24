@@ -145,5 +145,5 @@ binarization=dict(
 	h=1,
 	v=1,
 ),
-verbosity=3,
+verbosity=2,
 numproc=1,

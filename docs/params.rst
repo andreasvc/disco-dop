@@ -212,6 +212,7 @@ Other options
     :1: summary report
     :2: per sentence results
     :3: dump derivations/parse trees
+    :4: dump chart
 
 :numproc: default 1; increase to use multiple CPUs; None: use all CPUs.
 

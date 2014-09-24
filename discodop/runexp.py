@@ -109,10 +109,10 @@ def startexp(
 		logging.basicConfig(level=logging.INFO, format=formatstr)
 	elif verbosity == 2:
 		logging.basicConfig(level=logging.DEBUG, format=formatstr)
-	elif verbosity == 3:
+	elif 3 <= verbosity <= 4:
 		logging.basicConfig(level=5, format=formatstr)
 	else:
-		raise ValueError('verbosity should be >= 0 and <= 3. ')
+		raise ValueError('verbosity should be >= 0 and <= 4. ')
 
 	# also log to a file
 	fileobj = logging.FileHandler(filename='%s/output.log' % resultdir)
@@ -952,11 +952,14 @@ def main(argv=None):
 	elif '--tepacoc' in argv:
 		parsetepacoc()
 	else:
+		rerun = '--rerun' in argv
+		if rerun:
+			argv.remove('--rerun')
 		params = readparam(argv[1])
 		resultdir = argv[1].rsplit('.', 1)[0]
-		top = startexp(resultdir=resultdir, rerun='--rerun' in argv, **params)
-		if 'rerun' not in argv:  # copy parameter file to result dir
-			open(os.path.join(resultdir, 'params.prm'), "w").write(
+		top = startexp(resultdir=resultdir, rerun=rerun, **params)
+		if not rerun:  # copy parameter file to result dir
+			open(os.path.join(resultdir, 'params.prm'), 'w').write(
 					"top='%s',\n%s" % (top, open(argv[1]).read()))
 
 
