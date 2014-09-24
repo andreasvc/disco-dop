@@ -57,31 +57,41 @@ cdef getcandidates(Chart chart, v, int k):
 @cython.wraparound(True)
 cpdef inline lazykthbest(v, int k, int k1, dict cand, Chart chart,
 		set explored):
+	""""Explore up to *k*-best derivations headed by vertex *v*
+
+	:param k1: the global k, with ``k <= k1``
+	:param cand: contains a queue of edges to consider for each vertex
+	:param explored: a set of all edges already visited."""
 	cdef Entry entry
 	cdef RankedEdge ej
-	# k1 is the global k
+	cdef bint inrankededges = v in chart.rankededges
 	# first visit of vertex v?
 	if v not in cand:
 		# initialize the heap
 		cand[v] = getcandidates(chart, v, k1)
-	while v not in chart.rankededges or len(chart.rankededges[v]) < k:
-		if v in chart.rankededges:
+	while not inrankededges or len(chart.rankededges[v]) < k:
+		inrankededges = inrankededges or v in chart.rankededges
+		if inrankededges:
 			# last derivation
 			entry = chart.rankededges[v][-1]
 			ej = entry.key
 			# update the heap, adding the successors of last derivation
 			lazynext(v, ej, k1, cand, chart, explored)
-		# get the next best derivation and delete it from the heap
-		if cand[v]:
-			chart.rankededges.setdefault(v, []).append(
-					(<Agenda>cand[v]).popentry())
-		else:
+		if not cand[v]:
 			break
+		# get the next best derivation and delete it from the heap
+		entry = (<Agenda>cand[v]).popentry()
+		if inrankededges:
+			chart.rankededges[v].append(entry)
+		else:
+			chart.rankededges[v] = [entry]
 
 
 cdef inline lazynext(v, RankedEdge ej, int k1, dict cand, Chart chart,
 		set explored):
+	"""Given a ranked edge, produce a variant with different subderivations."""
 	cdef RankedEdge ej1
+	cdef int ji
 	# add the |e| neighbors
 	for i in range(2):
 		if i == 0 and ej.left >= 0:
@@ -92,13 +102,12 @@ cdef inline lazynext(v, RankedEdge ej, int k1, dict cand, Chart chart,
 			ej1 = new_RankedEdge(v, ej.edge, ej.left, ej.right + 1)
 		else:
 			break
+		ji = ej1.left if i == 0 else ej1.right
 		# recursively solve a subproblem
-		# NB: increment j1[i] again because j is zero-based and k is not
-		lazykthbest(ei, (ej1.right if i else ej1.left) + 1, k1,
-							cand, chart, explored)
+		# NB: increment j[i] again because j is zero-based and k is not
+		lazykthbest(ei, ji + 1, k1, cand, chart, explored)
 		# if it exists and is not in heap yet
-		if ((ei in chart.rankededges and
-				(ej1.right if i else ej1.left) < len(chart.rankededges[ei]))
+		if (ei in chart.rankededges and ji < len(chart.rankededges[ei])
 				and ej1 not in explored):  # cand[ej1.head]): gives duplicates
 			# add it to the heap
 			cand[v][ej1] = getprob(chart, v, ej1)
