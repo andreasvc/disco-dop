@@ -54,16 +54,16 @@ cdef getcandidates(Chart chart, v, int k):
 	return Agenda(nsmallest(k, results, key=itemgetter(1)))
 
 
-@cython.wraparound(True)
-cpdef inline lazykthbest(v, int k, int k1, dict cand, Chart chart,
-		set explored):
+cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
+		int depthlimit):
 	""""Explore up to *k*-best derivations headed by vertex *v*
 
 	:param k1: the global k, with ``k <= k1``
 	:param cand: contains a queue of edges to consider for each vertex
 	:param explored: a set of all edges already visited."""
 	cdef Entry entry
-	cdef RankedEdge ej
+	cdef RankedEdge ej, ej1
+	cdef int ji
 	cdef bint inrankededges = v in chart.rankededges
 	# first visit of vertex v?
 	if v not in cand:
@@ -72,11 +72,36 @@ cpdef inline lazykthbest(v, int k, int k1, dict cand, Chart chart,
 	while not inrankededges or len(chart.rankededges[v]) < k:
 		inrankededges = inrankededges or v in chart.rankededges
 		if inrankededges:
-			# last derivation
-			entry = chart.rankededges[v][-1]
+			with cython.wraparound(True):
+				# last derivation
+				entry = chart.rankededges[v][-1]
 			ej = entry.key
 			# update the heap, adding the successors of last derivation
-			lazynext(v, ej, k1, cand, chart, explored)
+			# start of inlined lazynext(v, ej, k1, cand, chart, explored)
+			for i in range(2):  # add the |e| neighbors
+				if i == 0 and ej.left >= 0:
+					ei = chart.copy(chart.left(ej))
+					ej1 = new_RankedEdge(v, ej.edge, ej.left + 1, ej.right)
+				elif i == 1 and ej.right >= 0:
+					ei = chart.copy(chart.right(ej))
+					ej1 = new_RankedEdge(v, ej.edge, ej.left, ej.right + 1)
+				else:
+					break
+				ji = ej1.left if i == 0 else ej1.right
+				if depthlimit > 0:
+					# recursively solve a subproblem
+					# NB: increment j[i] again, j is zero-based and k is not
+					lazykthbest(ei, ji + 1, k1, cand, chart, explored,
+							depthlimit - 1)
+					# if it exists and is not in heap yet
+					if (ei in chart.rankededges
+							and ji < len(chart.rankededges[ei])
+							and ej1 not in explored):
+						#	and cand[ej1.head]): gives duplicates
+						# add it to the heap
+						cand[v][ej1] = getprob(chart, v, ej1)
+						explored.add(ej1)
+			# end of lazynext
 		if not cand[v]:
 			break
 		# get the next best derivation and delete it from the heap
@@ -86,32 +111,6 @@ cpdef inline lazykthbest(v, int k, int k1, dict cand, Chart chart,
 		else:
 			chart.rankededges[v] = [entry]
 
-
-cdef inline lazynext(v, RankedEdge ej, int k1, dict cand, Chart chart,
-		set explored):
-	"""Given a ranked edge, produce a variant with different subderivations."""
-	cdef RankedEdge ej1
-	cdef int ji
-	# add the |e| neighbors
-	for i in range(2):
-		if i == 0 and ej.left >= 0:
-			ei = chart.copy(chart.left(ej))
-			ej1 = new_RankedEdge(v, ej.edge, ej.left + 1, ej.right)
-		elif i == 1 and ej.right >= 0:
-			ei = chart.copy(chart.right(ej))
-			ej1 = new_RankedEdge(v, ej.edge, ej.left, ej.right + 1)
-		else:
-			break
-		ji = ej1.left if i == 0 else ej1.right
-		# recursively solve a subproblem
-		# NB: increment j[i] again because j is zero-based and k is not
-		lazykthbest(ei, ji + 1, k1, cand, chart, explored)
-		# if it exists and is not in heap yet
-		if (ei in chart.rankededges and ji < len(chart.rankededges[ei])
-				and ej1 not in explored):  # cand[ej1.head]): gives duplicates
-			# add it to the heap
-			cand[v][ej1] = getprob(chart, v, ej1)
-			explored.add(ej1)
 
 cdef inline double getprob(Chart chart, v, RankedEdge ej) except -1.0:
 	"""Get subtree probability of ``ej``.
@@ -237,7 +236,7 @@ def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
 	derivations = []
 	cand = {}
 	root = chart.root()
-	lazykthbest(root, k, k, cand, chart, explored)
+	lazykthbest(root, k, k, cand, chart, explored, 100)
 	chart.rankededges[root] = [entry for entry
 			in chart.rankededges[root][:k]
 			if explorederivation(root, entry.key, chart, explored, 100)]
@@ -418,4 +417,4 @@ def test():
 			== len(set(flchart.rankededges[flchart.root()])))
 	assert len(derivations) == len(set(derivations))
 
-__all__ = ['getderiv', 'lazykbest', 'lazykthbest']
+__all__ = ['getderiv', 'lazykbest']
