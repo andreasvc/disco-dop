@@ -7,13 +7,13 @@ stages=[  # Double-DOP
   dict(
     name='plcfrs', mode='plcfrs',
     prune=True, splitprune=True,
-    k=10000,
+    k=1000,
   ),
   dict(
     name='dop', mode='plcfrs',
     prune=True, splitprune=True,
     dop=True, usedoubledop=True,
-    k=50, m=10000,
+    k=50, m=1000,
     kbest=True, sample=False,
     estimator="rfe", objective="mpp",
   ),
