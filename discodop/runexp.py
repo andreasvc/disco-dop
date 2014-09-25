@@ -197,7 +197,7 @@ def startexp(
 				testcorpus.skip,  # pylint: disable=E1103
 				testcorpus.skip + testcorpus.numsents)  # pylint: disable=E1103
 			if a in test_tagged_sents and
-				len(test_tagged_sents[a]) <= testcorpus.maxwords)
+				1 <= len(test_tagged_sents[a]) <= testcorpus.maxwords)
 	if not test_tagged_sents:
 		raise ValueError('test corpus should be non-empty.')
 	logging.info('%d test sentences after length restriction <= %d',
@@ -270,7 +270,7 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 		raise ValueError('training corpus should be non-empty.')
 	logging.info('%d training sentences before length restriction', len(trees))
 	trees, sents = zip(*[sent for sent in zip(trees, sents)
-		if len(sent[1]) <= traincorpus.maxwords])
+		if 1 <= len(sent[1]) <= traincorpus.maxwords])
 	logging.info('%d training sentences after length restriction <= %d',
 			len(trees), traincorpus.maxwords)
 	if transformations:

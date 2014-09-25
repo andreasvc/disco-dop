@@ -363,7 +363,7 @@ class TreePairResult(object):
 		self.cdep = self.gdep = ()
 		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
 		if not self.gpos:
-			return  # avoid 'sentences' with only a single punctuation mark.
+			return  # avoid 'sentences' with only punctuation.
 		self.lascore = leafancestor(self.gtree, self.ctree,
 				self.param['DELETE_LABEL'])
 		if self.param['TED']:
