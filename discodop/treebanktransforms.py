@@ -665,7 +665,8 @@ def removeemptynodes(tree, sent):
 # fixme: treebank specific parameters for detecting punctuation.
 PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
-		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]'}  # Alpino/Lassy
+		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]',  # Alpino/Lassy
+		'COMMA', 'PUNCT', 'PAREN'}  # Grammatical Framework
 PUNCTUATION = frozenset(u'.,():-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {u'&bullet;', u'..', u'...', u'....', u'.....', u'......',
 		u'!!', u'!!!', u'??', u'???', u"''", u'``', u',,',
