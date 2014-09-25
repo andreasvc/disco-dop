@@ -400,7 +400,7 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 			treestr = recoverfragments(deriv if bitpar else (<Entry>entry).key,
 					chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
-			result[treestr] = (abs(int(s / log(0.5))), parsetreeprob[treestr])
+			result[treestr] = (-abs(int(s / log(0.5))), parsetreeprob[treestr])
 			derivs[treestr] = fragmentsinderiv(
 					deriv if bitpar or backtransform is None
 					else (<Entry>entry).key,
