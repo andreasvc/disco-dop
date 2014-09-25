@@ -674,7 +674,9 @@ def defaultparse(wordstags, rightbranching=False):
 def printrule(r, yf, w=''):
 	""":returns: a string representation of a rule."""
 	yfstr = ','.join(''.join(map(str, a)) for a in yf)
-	return '%s %s\t%s => %s' % (w, yfstr, r[0], ' '.join(x for x in r[1:]))
+	return '%s %s\t%s => %s' % (
+			('%g/%d' % w) if isinstance(w, tuple) else w,
+			yfstr, r[0], ' '.join(x for x in r[1:]))
 
 
 def cartpi(seq):
@@ -720,9 +722,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 				w = '%g' % w[0]
 			else:
 				w1, w2 = w
-				if w1 == w2:
-					w = '1'
-				elif bitpar:
+				if bitpar:
 					w = '%g' % (w1 / w2)  # .hex()
 				else:
 					w = '%g/%d' % (w1, w2)

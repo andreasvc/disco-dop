@@ -56,9 +56,10 @@ Binarization
 
     :method: Binarization method; choices:
 
-        :default: basic binarization (recommended).
-        :optimal: binarization which optimizes for lowest fan-out or parsing complexity.
-        :optimalhead: like ``optimal``, but only considers head-driven binarizations.
+        :None: Treebank is already binarized.
+        :'default': basic binarization (recommended).
+        :'optimal': binarization which optimizes for lowest fan-out or parsing complexity.
+        :'optimalhead': like ``optimal``, but only considers head-driven binarizations.
     :factor: 'left' or 'right'. The direction of binarization when using ``default``.
     :headrules: file with rules for finding heads of constituents
     :revmarkov: whether to reverse the horizontal markovization context when using ``default``.

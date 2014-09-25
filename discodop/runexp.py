@@ -322,7 +322,9 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 	msg = 'binarization: %s' % binarization.method
 	if binarization.fanout_marks_before_bin:
 		trees = [treetransforms.addfanoutmarkers(t) for t in trees]
-	if binarization.method == 'default':
+	if binarization.method is None:
+		pass
+	elif binarization.method == 'default':
 		msg += ' %s h=%d v=%d %s' % (
 				binarization.factor, binarization.h, binarization.v,
 				'tailmarker' if binarization.tailmarker else '')
@@ -916,7 +918,7 @@ def readparam(filename):
 		assert stage.binarized or stage.mode == 'pcfg-bitpar-nbest', (
 				'non-binarized grammar requires mode "pcfg-bitpar-nbest"')
 	assert params['binarization'].method in (
-			'default', 'optimal', 'optimalhead')
+			None, 'default', 'optimal', 'optimalhead')
 	postagging = params['postagging']
 	if postagging is not None:
 		assert set(postagging).issubset({'method', 'model', 'retag',
