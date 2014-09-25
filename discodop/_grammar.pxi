@@ -303,9 +303,9 @@ cdef class Grammar:
 					raise ValueError('expected: %r; got: %r' % ('0', a))
 				m += 1
 			cur.lengths |= 1 << (m - 1)
-			if self.binarized:
-				assert m < (8 * sizeof(cur.args)), (
-						m, (8 * sizeof(cur.args)), line)
+			if self.binarized and m >= (8 * sizeof(cur.args)):
+				raise ValueError('Parsing complexity (%d) too high (max %d).\n'
+						'Rule: %s' % (m, (8 * sizeof(cur.args)), line))
 			self.rulenos[yf + b' ' + b' '.join(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
