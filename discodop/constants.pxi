@@ -19,5 +19,9 @@ DEF HEAP_ARITY = 4
 DEF SX = 1
 DEF SXlrgaps = 2
 
-# Any logprob above this is considerd 0.0
+# Any logprob above this is considered as infinity and pruned by plcfrs
 DEF MAX_LOGPROB = 300.0
+
+# The maximum length of the path to the root node and any terminal node.
+# Prevents unary cycles from causing stack overflows in k-best extraction.
+DEF MAX_DEPTH = 200

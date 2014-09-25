@@ -7,6 +7,7 @@ from discodop.plcfrs import Agenda
 from discodop.containers import ChartItem, RankedEdge, Grammar
 
 cimport cython
+include "constants.pxi"
 from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
 		Grammar, Rule, Chart, Edges, Edge, RankedEdge, \
@@ -15,7 +16,6 @@ from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
 from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
 from discodop.plcfrs cimport Entry, Agenda, nsmallest, \
 		LCFRSChart, SmallLCFRSChart, FatLCFRSChart
-
 
 cdef getcandidates(Chart chart, v, int k):
 	""":returns: a heap with up to k candidate arcs starting from vertex v."""
@@ -97,7 +97,7 @@ cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
 					if (ei in chart.rankededges
 							and ji < len(chart.rankededges[ei])
 							and ej1 not in explored):
-						#	and cand[ej1.head]): gives duplicates
+						# 	and cand[ej1.head]): gives duplicates
 						# add it to the heap
 						cand[v][ej1] = getprob(chart, v, ej1)
 						explored.add(ej1)
@@ -236,10 +236,10 @@ def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
 	derivations = []
 	cand = {}
 	root = chart.root()
-	lazykthbest(root, k, k, cand, chart, explored, 100)
+	lazykthbest(root, k, k, cand, chart, explored, MAX_DEPTH)
 	chart.rankededges[root] = [entry for entry
 			in chart.rankededges[root][:k]
-			if explorederivation(root, entry.key, chart, explored, 100)]
+			if explorederivation(root, entry.key, chart, explored, MAX_DEPTH)]
 	if derivs:
 		root = chart.root()
 		derivations = [(getderiv(root, entry.key, chart, debin), entry.value)
