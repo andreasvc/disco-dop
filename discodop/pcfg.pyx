@@ -281,7 +281,8 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 				while rule.lhs == lhs:
 					narrowr = minright[rule.rhs1, left]
 					narrowl = minleft[rule.rhs2, right]
-					if rule.rhs2 == 0 or narrowr >= right or narrowl < narrowr:
+					if (rule.rhs2 == 0 or narrowr >= right or narrowl < narrowr
+							or TESTBIT(grammar.mask, rule.no)):
 						n += 1
 						rule = &(grammar.bylhs[lhs][n])
 						continue
@@ -329,7 +330,8 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 					rule = &(grammar.unary[rhs1][n])
 					if rule.rhs1 != rhs1:
 						break
-					elif (cellwhitelist is not None
+					elif TESTBIT(grammar.mask, rule.no) or (
+							cellwhitelist is not None
 							and rule.lhs not in cellwhitelist):
 						continue
 					lhs = rule.lhs
@@ -436,7 +438,9 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 				rule = &(grammar.unary[rhs1][n])
 				if rule.rhs1 != rhs1:
 					break
-				if whitelist is not None and rule.lhs not in whitelist[cell]:
+				elif TESTBIT(grammar.mask, rule.no) or (
+						whitelist is not None
+						and rule.lhs not in whitelist[cell]):
 					continue
 				lhs = rule.lhs
 				item = cellidx(left, right, lensent, grammar.nonterminals) + lhs

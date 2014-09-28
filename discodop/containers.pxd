@@ -41,6 +41,7 @@ cdef class Grammar:
 	cdef UInt **splitmapping
 	cdef UChar *fanout
 	cdef ULong *chainvec
+	cdef ULong *mask
 	cdef readonly int currentmodel
 	cdef readonly size_t nonterminals, phrasalnonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout

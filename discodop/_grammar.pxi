@@ -244,6 +244,10 @@ cdef class Grammar:
 		if self.fanout is NULL:
 			raise MemoryError('allocation error')
 		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
+		self.mask = <ULong *>malloc((self.numrules + len(self.lexical)) / 8 + 1)
+		if self.mask is NULL:
+			raise MemoryError('allocation error')
+		memset(self.mask, 0, (self.numrules + len(self.lexical)) / 8 + 1)
 		self.revmap = <UInt *>malloc(self.numrules * sizeof(UInt))
 		if self.revmap is NULL:
 			raise MemoryError('allocation error')
@@ -423,6 +427,20 @@ cdef class Grammar:
 			lexrule.prob = tmp[n]
 		self.logprob = logprob
 		self.currentmodel = m
+
+	def setmask(self, seq):
+		"""Given a sequence of rule numbers, store a mask so that any rules
+		not in the sequence are deactivated. If sequence is None, the mask is
+		cleared."""
+		cdef int n
+		if seq is None:
+			memset(<void *>self.mask, 0,
+					(self.numrules + len(self.lexical)) / 8 + 1)
+			return
+		memset(<void *>self.mask, 255,
+				(self.numrules + len(self.lexical)) / 8 + 1)
+		for n in seq:
+			CLEARBIT(self.mask, n)
 
 	def buildchainvec(self):
 		"""Build a boolean matrix representing the unary (chain) rules."""
@@ -618,22 +636,19 @@ cdef class Grammar:
 		if self.bylhs is NULL:
 			return
 		free(self.bylhs[0])
-		self.bylhs[0] = NULL
 		free(self.bylhs)
-		self.bylhs = NULL
 		free(self.fanout)
-		self.fanout = NULL
+		free(self.mask)
 		free(self.revmap)
 		if self.chainvec is not NULL:
 			free(self.chainvec)
-			self.chainvec = NULL
 		if self.mapping is not NULL:
 			free(self.mapping)
-			self.mapping = NULL
 		if self.splitmapping is not NULL:
 			free(self.splitmapping[0])
 			free(self.splitmapping)
-			self.splitmapping = NULL
+		self.bylhs = self.fanout = self.mask = self.revmap = NULL
+		self.chainvec = self.mapping = self.splitmapping = NULL
 
 
 cdef inline double convertweight(const char *weight):

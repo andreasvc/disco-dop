@@ -401,6 +401,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.unary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
+				elif TESTBIT(grammar.mask, rule.no):
+					continue
 				score = newitemprob = itemprob + rule.prob
 				if estimatetype == SX:
 					score += outside[rule.lhs, left, right, 0]
@@ -432,6 +434,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.rbinary[item.label][n])
 				if rule.rhs2 != item.label:
 					break
+				elif TESTBIT(grammar.mask, rule.no):
+					continue
 				for sib in <dict>probs[rule.rhs1]:
 					newitem.label = rule.lhs
 					combine_item(newitem, <LCFRSItem_fused>sib, item)
@@ -488,6 +492,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				rule = &(grammar.lbinary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
+				elif TESTBIT(grammar.mask, rule.no):
+					continue
 				# for sib, sibprob in (<dict>probs[rule.rhs2]).iteritems():
 				for sib in <dict>probs[rule.rhs2]:
 					newitem.label = rule.lhs

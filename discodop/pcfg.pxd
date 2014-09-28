@@ -7,6 +7,9 @@ from discodop.plcfrs cimport DoubleAgenda, Entry
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		Edge, Edges, RankedEdge, UChar, UInt, ULong, ULLong, cellidx
 
+cdef extern from "macros.h":
+	ULong TESTBIT(ULong a[], int b)
+
 ctypedef fused CFGChart_fused:
 	DenseCFGChart
 	SparseCFGChart

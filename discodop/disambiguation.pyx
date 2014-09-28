@@ -712,33 +712,49 @@ cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 			result.append('(%s %d)' % (child.label, child[0]))
 
 
-def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
+def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
+		maskrules=False):
 	"""Assign probabilities to a sequence of trees with a DOP grammar.
 
 	Given a sequence of trees (as strings), parse them with a DOP grammar
-	to get parse tree probabilities; will consider multiple derivations."""
+	to get parse tree probabilities; will consider multiple derivations.
+
+	:param maskrules: If True, prune any grammar rule not in the trees.
+		Exploits rulemapping of grammar which should be mapped to itself;
+		e.g., 'NP@2 => DT@3 NN' should be mapped to 'NP => DT NN' in the
+		same grammar."""
 	# Parsing & pruning inside the disambiguation module is rather kludgy,
 	# but the problem is that we need to get probabilities of trees,
 	# not just of derivations. Therefore the coarse-to-fine methods
 	# do not apply directly.
 	cdef FatChartItem fitem
-	cdef int x, lensent
+	cdef int n, lensent = len(sent)
 	whitelist = [{} for _ in grammar.toid]
+	rulenos = []
 	for treestr in trees:
 		tree = Tree.parse(treestr, parse_leaf=int)
-		lensent = len(tree.leaves())
-		for n in tree.subtrees():
-			leaves = n.leaves()
+		for node, (r, yf) in zip(tree.subtrees(),
+				lcfrsproductions(tree, sent)):
+			leaves = node.leaves()
 			if lensent < sizeof(ULLong) * 8:
-				item = SmallChartItem(0, sum([1L << x for x in leaves]))
+				item = SmallChartItem(0, sum([1L << n for n in leaves]))
 			else:
 				fitem = item = FatChartItem(0)
-				for x in leaves:
-					SETBIT(fitem.vec, x)
+				for n in leaves:
+					SETBIT(fitem.vec, n)
 			try:
-				whitelist[grammar.toid[n.label.encode('ascii')]][item] = 0.0
+				whitelist[grammar.toid[node.label.encode('ascii')]][item] = 0.0
 			except KeyError:
-				return [], "'%s' not in grammar" % n.label, None
+				return [], "'%s' not in grammar" % node.label, None
+
+			if maskrules and isinstance(node[0], Tree):
+				yf = ','.join([''.join(map(str, x)) for x in yf])
+				rulestr = ('%s %s' % (yf, ' '.join(r))).encode('ascii')
+				try:
+					ruleno = grammar.rulenos[rulestr]
+				except KeyError:
+					return [], "'%s' not in grammar" % rulestr, None
+				rulenos.extend(grammar.rulemapping[ruleno])
 
 	# Project labels to all possible labels that generate that label. For DOP
 	# reduction, all possible ids; for Double DOP, ignore artificial labels.
@@ -748,12 +764,18 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None):
 		elif b'@' in label or b'}<' in label:
 			whitelist[n] = None  # do not prune item
 
+	if maskrules:
+		grammar.setmask(rulenos)
+
 	# finally, we parse with the small set of allowed labeled spans.
 	# we do not parse with PCFG even if possible, because that requires a
 	# different way of pruning.
 	chart, _ = plcfrs.parse(sent, grammar, tags=tags, whitelist=whitelist)
+
+	if maskrules:
+		grammar.setmask(None)
 	if not chart:
-		return [], "tree parsing failed", None
+		return [], 'tree parsing failed', None
 	return lazykbest(chart, m) + (chart, )
 
 
