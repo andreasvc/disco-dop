@@ -28,6 +28,7 @@ from discodop.tree import Tree, ParentedTree
 from discodop.containers import Grammar
 
 USAGE = '''Usage: %s <parameter file> [--rerun]
+
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
 pass the option --rerun. The directory with the name of the parameter file

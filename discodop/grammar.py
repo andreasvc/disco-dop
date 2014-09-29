@@ -59,7 +59,7 @@ Options:
 
 When a PCFG is requested, or the input format is 'bracket' (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
-Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\n
+Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 RULERE = re.compile(
@@ -950,7 +950,7 @@ def main():
 		model = args[0]
 		if model not in ('info', 'merge'):
 			treebankfile, grammarfile = args[1:]
-	except (GetoptError, ValueError) as err:
+	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r\n%s' % (err, USAGE))
 		sys.exit(2)
 	opts = dict(opts)

@@ -19,7 +19,7 @@ COMMANDS = (
 
 thiscmd = os.path.basename(sys.argv[0])
 if len(sys.argv) <= 1 or sys.argv[1] not in dict(COMMANDS):
-	print('usage: %s <command> [arguments]' % thiscmd)
+	print('Usage: %s <command> [arguments]\n' % thiscmd)
 	print('Command is one of:')
 	for a, b in COMMANDS:
 		print('   %s  %s' % (a.ljust(15), b))
