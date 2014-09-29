@@ -87,6 +87,9 @@ class CorpusSearcher(object):
 		:param macros: a filename with macros that can be used in queries.
 		:param numthreads: the number of concurrent threads to use;
 			None to disable threading."""
+		if not isinstance(files, (list, tuple, set, dict)) or (
+				not all(isinstance(a, str) for a in files)):
+			raise ValueError('"files" argument must be a sequence of filenames.')
 		self.files = OrderedDict.fromkeys(files)
 		self.macros = macros
 		self.numthreads = numthreads
