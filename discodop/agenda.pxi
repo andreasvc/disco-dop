@@ -8,28 +8,21 @@ include "constants.pxi"
 
 DEF INVALID = 0
 
+@cython.final
 cdef class Entry:
-	def getkey(self):
-		return self.key
-
-	def getvalue(self):
-		return self.value
-
-
-cdef inline bint cmpfun(Entry a, Entry b):
-	""" Generic comparison function for Entry objects. """
-	return (a.value < b.value or (a.value == b.value and a.count < b.count))
-
-
-cdef inline bint doublecmpfun(Entry a, Entry b):
-	""" Comparison function for Entry objects containing C doubles.
-	Faster than going through __richcmp__ of Python object. """
-	return (PyFloat_AS_DOUBLE(a.value) < PyFloat_AS_DOUBLE(b.value)
-		or (PyFloat_AS_DOUBLE(a.value) == PyFloat_AS_DOUBLE(b.value)
-		and a.count < b.count))
+	pass
 
 
 @cython.final
+cdef class DoubleEntry:
+	pass
+
+
+cdef inline bint cmpfun(Entry_fused a, Entry_fused b):
+	"""Generic comparison function for Entry objects."""
+	return (a.value < b.value or (a.value == b.value and a.count < b.count))
+
+
 cdef class Agenda:
 	"""Priority Queue implemented with array-based n-ary heap.
 
@@ -37,7 +30,7 @@ cdef class Agenda:
 	invalid. Provides dictionary-like interface.
 
 	Can be initialized with an iterable; order of equivalent values remains and
-	the best priorities are retained on duplicate keys. """
+	the best priorities are retained on duplicate keys."""
 	def __init__(self, iterable=None):
 		cdef Entry entry, oldentry
 		self.counter = 1
@@ -48,7 +41,7 @@ cdef class Agenda:
 			for k, v in iterable:
 				entry = new_Entry(k, v, self.counter)
 				if k in self.mapping:
-					oldentry = <Entry>self.mapping[k]
+					oldentry = self.mapping[k]
 					if cmpfun(entry, oldentry):
 						oldentry.count = INVALID
 						self.mapping[k] = entry
@@ -57,124 +50,50 @@ cdef class Agenda:
 					self.counter += 1
 				self.heap.append(entry)
 			self.length = len(self.mapping)
-			heapify(self.heap, cmpfun)
+			heapify(self.heap, entry)
 
-	cdef void setitem(self, key, value):
-		""" Like agenda[key] = value, but bypass Python API. """
-		cdef Entry oldentry, entry
-		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
-			entry = <Entry>Entry.__new__(Entry)
-			entry.key = key
-			entry.value = value
-			entry.count = oldentry.count
-			self.mapping[key] = entry
-			heappush(self.heap, entry, cmpfun)
-			oldentry.count = INVALID
-		else:
-			self.counter += 1
-			self.length += 1
-			entry = <Entry>Entry.__new__(Entry)
-			entry.key = key
-			entry.value = value
-			entry.count = self.counter
-			self.mapping[key] = entry
-			heappush(self.heap, entry, cmpfun)
-
-	cdef void setifbetter(self, key, value):
-		""" Sets an item, but only if item is new or has lower score.
-		Equivalent to:
-		if if key not in agenda or val < agenda[key]:
-			agenda[key] = val """
-		cdef Entry oldentry
-		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
-			if value >= oldentry.value:
-				return
-		self.setitem(key, value)
-
-	cdef getitem(self, key):
-		""" Like agenda[key], but bypass Python API. """
-		cdef Entry entry
-		entry = <Entry>self.mapping[key]
-		return entry.value
-
-	cdef object replace(self, key, value):
-		""" :returns: current value for key, and also change its value.
-
-		Equivalent to vv = d[k]; d[k] = v; return vv """
-		cdef Entry entry, oldentry = <Entry>self.mapping[key]
-		entry = <Entry>Entry.__new__(Entry)
-		entry.key = key
-		entry.value = value
-		entry.count = oldentry.count
-		self.mapping[key] = entry
-		heappush(self.heap, entry, cmpfun)
-		oldentry.count = INVALID
-		return oldentry.value
-
-	cdef Entry peekentry(self):
-		""" Get the current best entry, while keeping it on the agenda. """
+	def peekitem(self):
+		"""Get the current best (key, value) pair, while keeping it on the
+		agenda."""
 		cdef Entry entry
 		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
 		if n == 0:
 			raise IndexError("peek at empty heap")
-		entry = <Entry>(self.heap[0])
+		entry = self.heap[0]
 		while entry.count == 0:
 			if n == 1:
 				raise IndexError("peek at empty heap")
 			# replace first element with last element
 			self.heap[0] = self.heap.pop()
 			# and restore heap invariant
-			siftup(self.heap, 0, cmpfun)
+			siftup(self.heap, 0, entry)
 			n -= 1
-			entry = <Entry>(self.heap[0])
-		return entry
-
-	cdef Entry popentry(self):
-		""" like popitem(), but avoids tuple construction by returning an Entry
-		object """
-		cdef Entry entry = <Entry>heappop(self.heap, cmpfun)
-		while not entry.count:
-			entry = <Entry>heappop(self.heap, cmpfun)
-		del self.mapping[entry.key]
-		self.length -= 1
-		return entry
-
-	cdef bint contains(self, key):
-		""" Like `key in agenda`, but bypass the Python API. """
-		return key in self.mapping
-
-	def peekitem(self):
-		""" Get the current best (key, value) pair, while keeping it on the
-		agenda. """
-		cdef Entry entry = self.peekentry()
+			entry = self.heap[0]
 		return entry.key, entry.value
 
 	# standard dict() methods
 	def pop(self, key):
-		""" :returns: value for agenda[key] and remove it. """
+		""":returns: value for agenda[key] and remove it."""
 		cdef Entry entry
 		if key is None:
 			return self.popentry().value
-		entry = <Entry>(self.mapping.pop(key))
+		entry = self.mapping.pop(key)
 		entry.count = INVALID
 		self.length -= 1
 		return entry.value
 
 	def popitem(self):
-		""" :returns: best scoring (key, value) pair; removed from agenda. """
-		cdef Entry entry = self.popentry()
+		""":returns: best scoring (key, value) pair; removed from agenda."""
+		cdef Entry entry = None
+		entry = heappop(self.heap, entry)
+		while not entry.count:
+			entry = heappop(self.heap, entry)
+		del self.mapping[entry.key]
+		self.length -= 1
 		return entry.key, entry.value
 
-	def __delitem__(self, key):
-		""" Remove key from heap. """
-		(<Entry>self.mapping[key]).count = INVALID
-		self.length -= 1
-		del self.mapping[key]
-
 	def update(self, *a, **kw):
-		""" Change score of items given a sequence of (key, value) pairs. """
+		"""Change score of items given a sequence of (key, value) pairs."""
 		for b in a:
 			for k, v in b:
 				self[k] = v
@@ -182,24 +101,41 @@ cdef class Agenda:
 			self[k] = v
 
 	def clear(self):
-		""" Remove all items from agenda. """
+		"""Remove all items from agenda."""
 		self.counter = 1
 		del self.heap[:]
 		self.mapping.clear()
-
-	def __repr__(self):
-		return '%s({%s})' % (self.__class__.__name__, ", ".join(
-				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
-				for a in self.heap if (<Entry>a).count]))
 
 	def __contains__(self, key):
 		return key in self.mapping
 
 	def __getitem__(self, key):
-		return self.getitem(key)
+		return self.mapping[key].value
 
 	def __setitem__(self, key, value):
-		self.setitem(key, value)
+		cdef Entry oldentry, entry
+		if key in self.mapping:
+			oldentry = <Entry>self.mapping[key]
+			entry = new_Entry(key, value, oldentry.count)
+			self.mapping[key] = entry
+			heappush(self.heap, entry)
+			oldentry.count = INVALID
+		else:
+			self.counter += 1
+			self.length += 1
+			entry = new_Entry(key, value, self.counter)
+			self.mapping[key] = entry
+			heappush(self.heap, entry)
+
+	def __delitem__(self, key):
+		"""Remove key from heap."""
+		(<Entry>self.mapping[key]).count = INVALID
+		self.length -= 1
+		del self.mapping[key]
+
+	def __repr__(self):
+		return '%s({%s})' % (self.__class__.__name__, ", ".join(
+				['%r: %r' % (a.key, a.value) for a in self.heap if a.count]))
 
 	def __str__(self):
 		return self.__repr__()
@@ -214,42 +150,45 @@ cdef class Agenda:
 		return self.length != 0
 
 	def keys(self):
-		""" :returns: keys in agenda. """
+		""":returns: keys in agenda."""
 		return self.mapping.keys()
 
 	def values(self):
-		""" :returns: values in agenda. """
-		return map(Entry.getvalue, self.mapping.values())
+		""":returns: values in agenda."""
+		return [entry.value for entry in self.mapping.values()]
 
 	def items(self):
-		""" :returns: (key, value) pairs in agenda. """
+		""":returns: (key, value) pairs in agenda."""
 		return zip(self.keys(), self.values())
 
 
+# Unfortunately it seems we cannot template a cdef class with a fused type yet,
+# otherwise Agende[double] would have been possible.
 @cython.final
-cdef class DoubleAgenda:
+cdef class DoubleAgenda(Agenda):
 	"""Priority Queue where priorities are C doubles.
 
 	Implements decrease-key and remove operations by marking entries as
 	invalid. Provides dictionary-like interface.
 
-	Can be initialized with an iterable; order of equivalent values
-	remains and the best priorities are retained on duplicate keys.
+	Can be initialized with an iterable of DoubleEntry objects; order of
+	equivalent values remains and the best priorities are retained on duplicate
+	keys.
 
 	This version is specialized to be used as agenda with C doubles as
 	priorities (values); keys are hashable Python objects."""
 	def __init__(self, iterable=None):
-		cdef Entry entry, oldentry
+		cdef DoubleEntry entry, oldentry
 		self.counter = 1
 		self.length = 0
 		self.heap = []
 		self.mapping = {}
 		if iterable:
 			for k, v in iterable:
-				entry = new_Entry(k, v, self.counter)
+				entry = new_DoubleEntry(k, v, self.counter)
 				if k in self.mapping:
-					oldentry = <Entry>self.mapping[k]
-					if doublecmpfun(entry, oldentry):
+					oldentry = <DoubleEntry>self.mapping[k]
+					if cmpfun(entry, oldentry):
 						oldentry.count = INVALID
 						self.mapping[k] = entry
 				else:
@@ -257,252 +196,237 @@ cdef class DoubleAgenda:
 					self.counter += 1
 				self.heap.append(entry)
 			self.length = len(self.mapping)
-			heapify(self.heap, doublecmpfun)
+			heapify(self.heap, entry)
 
 	cdef double getitem(self, key):
-		""" Like agenda[key], but bypass Python API. """
-		cdef Entry entry
-		entry = <Entry>self.mapping[key]
-		return PyFloat_AS_DOUBLE(entry.value)
+		"""Like agenda[key], but bypass Python API."""
+		return (<DoubleEntry>self.mapping[key]).value
 
 	cdef inline void setifbetter(self, key, double value):
-		""" sets an item, but only if item is new or has lower score """
-		cdef Entry oldentry
+		"""Sets an item, but only if item is new or has lower score."""
+		cdef DoubleEntry oldentry
 		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
-			if value >= PyFloat_AS_DOUBLE(oldentry.value):
+			oldentry = <DoubleEntry>self.mapping[key]
+			if value >= oldentry.value:
 				return
 		self.setitem(key, value)
 
 	cdef double replace(self, key, double value):
-		""" return current value for key, and also change its value.
-		equivalent to vv = d[k]; d[k] = v; return vv """
-		cdef Entry entry, oldentry = <Entry>self.mapping[key]
-		entry = <Entry>Entry.__new__(Entry)
-		entry.key = key
-		entry.value = value
-		entry.count = oldentry.count
+		"""Return current value for key, and also change its value.
+
+		Equivalent to vv = d[k]; d[k] = v; return vv"""
+		cdef DoubleEntry entry, oldentry = <DoubleEntry>self.mapping[key]
+		entry = new_DoubleEntry(key, value, oldentry.count)
 		self.mapping[key] = entry
 		self.heap.append(entry)
-		siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
+		siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, entry)
 		oldentry.count = INVALID
-		return PyFloat_AS_DOUBLE(oldentry.value)
+		return oldentry.value
 
-	# the following are identical except for `doublecmpfun`
-	cdef Entry popentry(self):
-		""" like popitem, but avoids tuple construction by returning an Entry
-		object """
-		cdef Entry entry = <Entry>heappop(self.heap, doublecmpfun)
+	# the following are identical except for `DoubleEntry` occurrences
+	cdef DoubleEntry popentry(self):
+		"""Like popitem, but avoid tuple construction by returning a
+		DoubleEntry object."""
+		cdef DoubleEntry entry = None
+		entry = <DoubleEntry>heappop(self.heap, entry)
 		while not entry.count:
-			entry = <Entry>heappop(self.heap, doublecmpfun)
+			entry = <DoubleEntry>heappop(self.heap, entry)
 		del self.mapping[entry.key]
 		self.length -= 1
 		return entry
 
-	cdef Entry peekentry(self):
-		""" Get the current best entry, while keeping it on the agenda. """
-		cdef Entry entry
+	cdef DoubleEntry peekentry(self):
+		"""Get the current best entry, while keeping it on the agenda."""
+		cdef DoubleEntry entry
 		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
 		if n == 0:
 			raise IndexError("peek at empty heap")
-		entry = <Entry>(self.heap[0])
+		entry = <DoubleEntry>(self.heap[0])
 		while entry.count == 0:
 			if n == 1:
 				raise IndexError("peek at empty heap")
 			# replace first element with last element
 			self.heap[0] = self.heap.pop()
 			# and restore heap invariant
-			siftup(self.heap, 0, doublecmpfun)
+			siftup(self.heap, 0, entry)
 			n -= 1
-			entry = <Entry>(self.heap[0])
+			entry = <DoubleEntry>(self.heap[0])
 		return entry
 
 	cdef inline void setitem(self, key, double value):
-		""" Like agenda[key] = value, but bypass Python API. """
-		cdef Entry oldentry, entry
+		"""Like agenda[key] = value, but bypass Python API."""
+		cdef DoubleEntry oldentry, entry
 		if key in self.mapping:
-			oldentry = <Entry>self.mapping[key]
-			entry = <Entry>Entry.__new__(Entry)
-			entry.key = key
-			entry.value = value
-			entry.count = oldentry.count
+			oldentry = <DoubleEntry>self.mapping[key]
+			entry = new_DoubleEntry(key, value, oldentry.count)
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
+			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, entry)
 			oldentry.count = INVALID
 		else:
 			self.counter += 1
 			self.length += 1
-			entry = <Entry>Entry.__new__(Entry)
-			entry.key = key
-			entry.value = value
-			entry.count = self.counter
+			entry = new_DoubleEntry(key, value, self.counter)
 			self.mapping[key] = entry
 			self.heap.append(entry)
-			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, doublecmpfun)
+			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, entry)
 
-	# identical to Agenda() methods
-	cdef bint contains(self, key):
-		""" Like `key in agenda`, but bypass the Python API. """
-		return key in self.mapping
+	cdef update_entries(self, list entries):
+		"""Like ``update()``, but expects a list of DoubleEntry objects."""
+		cdef DoubleEntry entry = None
+		for entry in entries:
+			entry.count = self.counter
+			if entry.key in self.mapping:
+				oldentry = <DoubleEntry>self.mapping[entry.key]
+				if cmpfun(entry, oldentry):
+					oldentry.count = INVALID
+					self.mapping[entry.key] = entry
+			else:
+				self.mapping[entry.key] = entry
+				self.counter += 1
+			self.heap.append(entry)
+		self.length = len(self.mapping)
+		heapify(self.heap, entry)
+
+	# Override these methods to ensure that only DoubleEntry objects enter heap
+	def __setitem__(self, key, value):
+		cdef DoubleEntry oldentry, entry
+		if key in self.mapping:
+			oldentry = <DoubleEntry>self.mapping[key]
+			entry = new_DoubleEntry(key, value, oldentry.count)
+			self.mapping[key] = entry
+			heappush(self.heap, entry)
+			oldentry.count = INVALID
+		else:
+			self.counter += 1
+			self.length += 1
+			entry = new_DoubleEntry(key, value, self.counter)
+			self.mapping[key] = entry
+			heappush(self.heap, entry)
+
+	def __delitem__(self, key):
+		"""Remove key from heap."""
+		(<DoubleEntry>self.mapping[key]).count = INVALID
+		self.length -= 1
+		del self.mapping[key]
+
+	def popitem(self):
+		cdef DoubleEntry entry = self.popentry()
+		return entry.key, entry.value
 
 	def pop(self, key):
-		""" :returns: value for agenda[key] and remove it. """
-		cdef Entry entry
+		""":returns: value for agenda[key] and remove it."""
+		cdef DoubleEntry entry
 		if key is None:
 			return self.popentry().value
-		entry = <Entry>(self.mapping.pop(key))
+		entry = self.mapping.pop(key)
 		entry.count = INVALID
 		self.length -= 1
 		return entry.value
 
-	def popitem(self):
-		""" :returns: best scoring (key, value) pair, removed from agenda. """
-		cdef Entry entry = self.popentry()
+	def peekitem(self):
+		"""Get the current best (key, value) pair, while keeping it on the
+		agenda."""
+		cdef DoubleEntry entry
+		cdef Py_ssize_t n = PyList_GET_SIZE(self.heap)
+		if n == 0:
+			raise IndexError("peek at empty heap")
+		entry = self.heap[0]
+		while entry.count == 0:
+			if n == 1:
+				raise IndexError("peek at empty heap")
+			# replace first element with last element
+			self.heap[0] = self.heap.pop()
+			# and restore heap invariant
+			siftup(self.heap, 0, entry)
+			n -= 1
+			entry = self.heap[0]
 		return entry.key, entry.value
 
-	def __delitem__(self, key):
-		(<Entry>self.mapping[key]).count = INVALID
-		self.length -= 1
-		del self.mapping[key]
-
-	def update(self, *a, **kw):
-		""" Change score of items given a sequence of (key, value) pairs. """
-		for b in a:
-			for k, v in b:
-				self[k] = v
-		for k, v in kw.items():
-			self[k] = v
-
-	def clear(self):
-		""" Remove all items from agenda. """
-		self.counter = 1
-		del self.heap[:]
-		self.mapping.clear()
-
-	def __repr__(self):
-		return '%s({%s})' % (self.__class__.__name__, ", ".join(
-				['%r: %r' % ((<Entry>a).key, (<Entry>a).value)
-				for a in self.heap if (<Entry>a).count]))
-
-	def __contains__(self, key):
-		return key in self.mapping
-
-	def __getitem__(self, key):
-		return self.getitem(key)
-
-	def __setitem__(self, key, value):
-		self.setitem(key, value)
-
-	def __str__(self):
-		return self.__repr__()
-
-	def __iter__(self):
-		return iter(self.mapping)
-
-	def __len__(self):
-		return self.length
-
-	def __nonzero__(self):
-		return self.length != 0
-
-	def keys(self):
-		""" :returns: keys in agenda. """
-		return self.mapping.keys()
-
-	def values(self):
-		""" :returns: values in agenda. """
-		return map(Entry.getvalue, self.mapping.values())
-
-	def items(self):
-		""" :returns: (key, value) pairs in agenda. """
-		return zip(self.keys(), self.values())
-
-
-def f(x):
-	return x
 
 
 # A quicksort nsmallest implementation.
-cdef list nsmallest(int n, object iterable, key=f):
-	""" Return an _unsorted_ list of the n smallest items in a list. """
-	cdef list items = list(iterable)
-	if len(items) > 1:
-		quickfindfirstk(items, 0, len(items) - 1, n, key)
-	return items[:n]
+cdef list nsmallest(int n, list entries):
+	"""Return an _unsorted_ list of the n smallest DoubleEntry objects.
+
+	``entries`` is modified in-place."""
+	if len(entries) > 1:
+		quickfindfirstk(entries, 0, len(entries) - 1, n)
+	return entries[:n]
 
 
-cdef inline void quickfindfirstk(list items, int left, int right, int k, key):
-	""" quicksort k-best selection """
+cdef inline void quickfindfirstk(list entries, int left, int right, int k):
+	"""Quicksort k-best selection."""
 	# select pivot index between left and right
 	# middle between left & right
 	cdef int pivot = left + (right - left) // 2
-	cdef int pivotnewindex = partition(items, left, right, pivot, key)
+	cdef int pivotnewindex = partition(entries, left, right, pivot)
 	if pivotnewindex > k:
 		if pivotnewindex - 1 > left:
 			# new condition
-			quickfindfirstk(items, left, pivotnewindex - 1, k, key)
+			quickfindfirstk(entries, left, pivotnewindex - 1, k)
 	elif pivotnewindex < k:
 		if right > pivotnewindex + 1:
-			quickfindfirstk(items, pivotnewindex + 1, right, k, key)
+			quickfindfirstk(entries, pivotnewindex + 1, right, k)
 
 
-cdef inline int partition(list items, int left, int right, int pivot, key):
-	pivotvalue = key(items[pivot])
+cdef inline int partition(list entries, int left, int right, int pivot):
+	cdef double pivotvalue = (<DoubleEntry>entries[pivot]).value
 	# Move pivot to end
-	items[pivot], items[right] = items[right], items[pivot]
+	entries[pivot], entries[right] = entries[right], entries[pivot]
 	cdef int i, storeindex = left
 	for i in range(left, right):
-		if key(items[i]) < pivotvalue:
-			items[i], items[storeindex] = items[storeindex], items[i]
+		if (<DoubleEntry>entries[i]).value < pivotvalue:
+			entries[i], entries[storeindex] = entries[storeindex], entries[i]
 			storeindex += 1
 	# Move pivot to its final place
-	items[storeindex], items[right] = items[right], items[storeindex]
+	entries[storeindex], entries[right] = entries[right], entries[storeindex]
 	return storeindex
 
 
 # heap operations (adapted from heapq)
-cdef inline Entry heappop(list heap, CmpFun cmpfun):
+# dummy variables are only used to select the right fused type.
+cdef inline Entry_fused heappop(list heap, Entry_fused dummy):
 	cdef Py_ssize_t n = PyList_GET_SIZE(heap)
-	cdef Entry entry
+	cdef Entry_fused entry
 	if n == 0:
 		raise IndexError('pop from empty heap')
 	elif n == 1:
-		entry = <Entry>heap.pop()
+		entry = <Entry_fused>heap.pop()
 	else:
 		# replace first element with last element and restore heap invariant
-		entry = <Entry>(PyList_GET_ITEM(heap, 0))
+		entry = <Entry_fused>(PyList_GET_ITEM(heap, 0))
 		heap[0] = heap.pop()
-		siftup(heap, 0, cmpfun)
+		siftup(heap, 0, dummy)
 	return entry
 
 
-cdef inline void heappush(list heap, Entry entry, CmpFun cmpfun):
+cdef inline void heappush(list heap, Entry_fused entry):
 	# place at the end and swap with parents until heap invariant holds
 	heap.append(entry)
-	siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
+	siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, entry)
 
 
-cdef inline Entry heapreplace(list heap, Entry entry, CmpFun cmpfun):
+cdef inline Entry_fused heapreplace(list heap, Entry_fused entry):
 	"""Pop and return the current smallest value, and add the new item.
 
 	NB: returned item may be larger than new item."""
 	cdef Py_ssize_t n = PyList_GET_SIZE(heap)
-	cdef Entry oldentry
+	cdef Entry_fused oldentry
 	if n == 0:
 		raise IndexError("pop from empty heap")
 	else:
-		oldentry = <Entry>(PyList_GET_ITEM(heap, 0))
+		oldentry = <Entry_fused>(PyList_GET_ITEM(heap, 0))
 		heap[0] = entry
-		siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, cmpfun)
+		siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, entry)
 	return oldentry
 
 
-cdef inline void heapify(list heap, CmpFun cmpfun):
-	""" Transform list into a heap, in-place, in O(len(heap)) time. """
+cdef inline void heapify(list heap, Entry_fused dummy):
+	"""Transform list into a heap, in-place, in O(len(heap)) time."""
 	cdef int i
 	for i in reversed(range(PyList_GET_SIZE(heap) // HEAP_ARITY)):
-		siftup(heap, i, cmpfun)
+		siftup(heap, i, dummy)
 
 
 # shifts only apply for binary tree
@@ -517,25 +441,25 @@ cdef inline int _left(int i):
 
 
 cdef inline int _right(int i):
-	""" for documentation purposes; not used. """
+	"""For documentation purposes; not used."""
 	return i * HEAP_ARITY + 2
 	# return (i + 1) << 1
 
 
 def getparent(i):
-	""" Python version of Cython-only _parent() function. """
+	"""Python version of Cython-only _parent() function."""
 	return (i - 1) // HEAP_ARITY
 
 
-cdef inline void siftdown(list heap, int startpos, int pos, CmpFun cmpfun):
+cdef inline void siftdown(list heap, int startpos, int pos, Entry_fused dummy):
 	"""`heap` is a heap at all indices >= startpos, except possibly for pos.
 	`pos` is the index of a leaf with a possibly out-of-order value.
 	Restore the heap invariant."""
 	cdef int parentpos
-	cdef Entry parent, newitem = <Entry>PyList_GET_ITEM(heap, pos)
+	cdef Entry_fused parent, newitem = <Entry_fused>PyList_GET_ITEM(heap, pos)
 	while pos > startpos:
 		parentpos = _parent(pos)
-		parent = <Entry>PyList_GET_ITEM(heap, parentpos)
+		parent = <Entry_fused>PyList_GET_ITEM(heap, parentpos)
 		if cmpfun(parent, newitem):
 			break
 		heap[pos] = parent
@@ -543,7 +467,7 @@ cdef inline void siftdown(list heap, int startpos, int pos, CmpFun cmpfun):
 	heap[pos] = newitem
 
 
-cdef inline void siftup(list heap, int pos, CmpFun cmpfun):
+cdef inline void siftup(list heap, int pos, Entry_fused dummy):
 	"""The child indices of heap index pos are already heaps, and we want to
 	make a heap at index pos too.  We do this by bubbling the smaller child of
 	pos up (and so on with that child's children, etc) until hitting a leaf,
@@ -551,18 +475,18 @@ cdef inline void siftup(list heap, int pos, CmpFun cmpfun):
 	place."""
 	cdef int startpos = pos, childpos = _left(pos), rightpos
 	cdef int endpos = PyList_GET_SIZE(heap)
-	cdef Entry newitem = <Entry>PyList_GET_ITEM(heap, pos)
+	cdef Entry_fused newitem = <Entry_fused>PyList_GET_ITEM(heap, pos)
 	while childpos < endpos:
 		for rightpos in range(childpos + 1, childpos + HEAP_ARITY):
 			if (rightpos < endpos and
-				cmpfun(<Entry>(PyList_GET_ITEM(heap, rightpos)),
-					<Entry>(PyList_GET_ITEM(heap, childpos)))):
+				cmpfun(<Entry_fused>(PyList_GET_ITEM(heap, rightpos)),
+					<Entry_fused>(PyList_GET_ITEM(heap, childpos)))):
 				childpos = rightpos
-		heap[pos] = <Entry>PyList_GET_ITEM(heap, childpos)
+		heap[pos] = <Entry_fused>PyList_GET_ITEM(heap, childpos)
 		pos = childpos
 		childpos = _left(pos)
 	heap[pos] = newitem
-	siftdown(heap, startpos, pos, cmpfun)
+	siftdown(heap, startpos, pos, dummy)
 
 
 def identity(x):
@@ -579,7 +503,7 @@ def merge(iterables, key=None):
 	http://stackoverflow.com/questions/5055909/algorithm-for-n-way-merge
 	and the Python heapq module."""
 	cdef list heap = []
-	cdef unsigned long cnt
+	cdef ULong cnt
 	cdef Entry entry
 	if key is None:
 		key = identity
@@ -593,23 +517,23 @@ def merge(iterables, key=None):
 		else:
 			entry = new_Entry((item, items), key(item), cnt)
 			heap.append(entry)
-	heapify(heap, cmpfun)
+	heapify(heap, entry)
 
 	while len(heap) > 1:
 		try:
 			while True:
 				entry = heap[0]
-				item, iterable = entry.getkey()
+				item, iterable = entry.key
 				yield item
 				item = next(iterable)
 				entry.key = (item, iterable)
 				entry.value = key(item)
-				_ = heapreplace(heap, entry, cmpfun)
+				_ = heapreplace(heap, entry)
 		except StopIteration:
-			_ = heappop(heap, cmpfun)
+			_ = heappop(heap, entry)
 
 	if heap:  # only a single iterator remains, skip heap
-		item, iterable = heappop(heap, cmpfun).getkey()
+		item, iterable = heappop(heap, entry).key
 		yield item
 		for item in iterable:
 			yield item

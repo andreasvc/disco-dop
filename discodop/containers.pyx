@@ -12,6 +12,7 @@ cdef double INFINITY = float('infinity')
 
 include "_grammar.pxi"
 
+@cython.final
 cdef class LexicalRule:
 	"""A weighted rule of the form 'non-terminal --> word'."""
 	def __init__(self, UInt lhs, unicode word, double prob):
@@ -24,6 +25,7 @@ cdef class LexicalRule:
 				(self.lhs, self.word, self.prob))
 
 
+@cython.final
 cdef class SmallChartItem:
 	"""Item with word sized bitvector."""
 	def __init__(self, label, vec):
@@ -75,6 +77,7 @@ cdef class SmallChartItem:
 		return bin(self.vec)[2:].zfill(lensent)[::-1]
 
 
+@cython.final
 cdef class FatChartItem:
 	"""Item where bitvector is a fixed-width static array."""
 	def __hash__(self):
@@ -162,6 +165,7 @@ cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
 	return fci
 
 
+@cython.final
 cdef class Edges:
 	"""A static array with a fixed number of Edge structs."""
 	def __cinit__(self):
@@ -171,6 +175,7 @@ cdef class Edges:
 		return '<%d edges>' % self.len
 
 
+@cython.final
 cdef class RankedEdge:
 	"""A derivation with backpointers.
 
@@ -318,10 +323,9 @@ cdef class Chart:
 			for item in sorted(self.rankededges):
 				result.append(self.itemstr(item))
 				for n, entry in enumerate(self.rankededges[item]):
-					rankededge = entry.getkey()
+					rankededge = entry.key
 					result.append('%d: %10g => %s %d %d' % (n,
-							exp(-entry.getvalue()) if self.logprob
-								else entry.getvalue(),
+							exp(-entry.value) if self.logprob else entry.value,
 							self.edgestr(item, rankededge.edge),
 							rankededge.left, rankededge.right))
 				result.append('')
@@ -398,6 +402,7 @@ cdef void _filtersubtree(Chart chart, item, set items):
 				_filtersubtree(chart, rightitem, items)
 
 
+@cython.final
 cdef class Ctrees:
 	"""Auxiliary class to pass around collections of NodeArrays in Python.
 

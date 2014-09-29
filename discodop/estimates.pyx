@@ -12,7 +12,7 @@ import numpy as np
 
 from libc.math cimport isnan, isfinite
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, testbit
-from discodop.plcfrs cimport Agenda, Entry
+from discodop.plcfrs cimport DoubleAgenda, DoubleEntry
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		new_SmallChartItem, SmallChartItem, UInt, ULLong
 
@@ -79,9 +79,9 @@ def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 	insidescores is a 2-dimensional matrix initialized with NaN to indicate
 	values that have yet to be computed."""
 	cdef double x
-	cdef Agenda agenda = Agenda()
+	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef SmallChartItem I
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef LexicalRule lexrule
 	cdef Rule rule
 	cdef size_t i
@@ -144,10 +144,10 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 
 	(not used)."""
 	cdef SmallChartItem I
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef LexicalRule lexrule
 	cdef size_t i
-	agenda = Agenda()
+	agenda = DoubleAgenda()
 
 	for i in grammar.lexicalbylhs:
 		agenda[new_SmallChartItem(i, 1)] = min([lexrule.prob
@@ -225,8 +225,8 @@ cdef inline ULLong insideconcat(ULLong a, ULLong b, Rule rule, Grammar grammar,
 def outsidelr(Grammar grammar, double [:, :] insidescores,
 		UInt maxlen, UInt goal, double [:, :, :, :] outside):
 	"""Compute the outside SX simple LR estimate in top down fashion."""
-	cdef Agenda agenda = Agenda()
-	cdef Entry entry
+	cdef DoubleAgenda agenda = DoubleAgenda()
+	cdef DoubleEntry entry
 	cdef Item I
 	cdef Rule rule
 	cdef double x, insidescore, current, score
@@ -396,10 +396,10 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 	cdef size_t n
 	cdef ULLong vec
 	cdef SmallChartItem I
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef Rule rule
 	cdef LexicalRule lexrule
-	cdef Agenda agenda = Agenda()
+	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef double x
 	cdef list insidescores = [{} for n in range(maxlen + 1)]
 	for n in grammar.lexicalbylhs:
@@ -447,8 +447,8 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 
 cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	"""outsideSX estimate for a PCFG, agenda-based version."""
-	cdef Agenda agenda = Agenda()
-	cdef Entry entry
+	cdef DoubleAgenda agenda = DoubleAgenda()
+	cdef DoubleEntry entry
 	cdef tuple I
 	cdef Rule rule
 	cdef double x, insidescore, current, score

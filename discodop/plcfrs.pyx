@@ -81,6 +81,7 @@ cdef class LCFRSChart(Chart):
 			].decode('ascii'), item.binrepr(self.lensent))
 
 
+@cython.final
 cdef class SmallLCFRSChart(LCFRSChart):
 	"""For sentences that fit into a single machine word."""
 	def __init__(self, Grammar grammar, list sent,
@@ -137,6 +138,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 				(1ULL << self.lensent) - 1)
 
 
+@cython.final
 cdef class FatLCFRSChart(LCFRSChart):
 	"""LCFRS chart that supports longer sentences."""
 	def __init__(self, Grammar grammar, list sent,
@@ -251,7 +253,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		Rule *rule
 		LexicalRule lexrule
 		LCFRSItem_fused item, newitem
-		Entry entry
+		DoubleEntry entry
 		double [:, :, :, :] outside = None  # outside estimates, if provided
 		double itemprob, newitemprob, siblingprob, score
 		short wordidx, lensent = len(sent), estimatetype = 0
@@ -352,7 +354,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 	while agenda.length:  # main parsing loop
 		entry = agenda.popentry()
 		item = <LCFRSItem_fused>entry.key
-		itemprob = PyFloat_AS_DOUBLE(entry.value)
+		itemprob = entry.value
 		if estimates is not None:
 			if LCFRSItem_fused is SmallChartItem:
 				length = bitcount(item.vec)
@@ -564,7 +566,7 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
 		blocked. When ``False``, ``newitem`` may be reused."""
 	cdef UInt a, b, n, cnt, label
-	cdef bint inagenda = agenda.contains(newitem)
+	cdef bint inagenda = newitem in agenda.mapping
 	cdef bint inchart = newitem in chart.parseforest
 	cdef list componentlist = None
 	cdef dict componentdict = None
@@ -634,7 +636,7 @@ cdef inline int process_lexedge(LCFRSItem_fused newitem,
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
 		blocked. When ``False``, ``newitem`` may be reused."""
 	cdef UInt label
-	cdef bint inagenda = agenda.contains(newitem)
+	cdef bint inagenda = newitem in agenda.mapping
 	cdef bint inchart = newitem in chart.parseforest
 	if inagenda:
 		raise ValueError('lexical edge already in agenda: %s' %

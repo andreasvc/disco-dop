@@ -11,6 +11,7 @@ from discodop.tree import Tree
 from discodop.plcfrs import DoubleAgenda
 from discodop.treebank import TERMINALSRE
 
+cimport cython
 include "constants.pxi"
 
 cdef double INFINITY = float('infinity')
@@ -63,6 +64,7 @@ cdef class CFGChart(Chart):
 				self.grammar.tolabel[lhs].decode('ascii'), start, end)
 
 
+@cython.final
 cdef class DenseCFGChart(CFGChart):
 	"""
 	A CFG chart in which edges and probabilities are stored in a dense
@@ -158,6 +160,7 @@ cdef class DenseCFGChart(CFGChart):
 		return self.parseforest[self.root()] is not None
 
 
+@cython.final
 cdef class SparseCFGChart(CFGChart):
 	"""
 	A CFG chart which uses a dictionary for each cell so that grammars
@@ -320,7 +323,8 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 			# unary rules
 			# FIXME: efficiently fetch labels in current cell: getitems(cell)
 			# or: chart.itemsinorder[lastidx:]
-			unaryagenda.update([(rhs1, chart._subtreeprob(cell + rhs1))
+			unaryagenda.update_entries([new_DoubleEntry(
+						rhs1, chart._subtreeprob(cell + rhs1), 0)
 					for rhs1 in range(1, grammar.phrasalnonterminals)
 					if chart.hasitem(cell + rhs1)
 					and grammar.unary[rhs1].rhs1 == rhs1])
@@ -374,7 +378,6 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 	was found for every word in the sentence."""
 	cdef:
 		DoubleAgenda unaryagenda = DoubleAgenda()
-		Entry entry
 		Rule *rule
 		LexicalRule lexrule
 		UInt n, lhs, rhs1
@@ -432,8 +435,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		# unary rules on the span of this POS tag
 		# NB: for this agenda, only the probabilities of the edges matter
 		while unaryagenda.length:
-			entry = unaryagenda.popentry()
-			rhs1 = entry.key
+			rhs1 = unaryagenda.popentry().key
 			for n in range(grammar.numrules):
 				rule = &(grammar.unary[rhs1][n])
 				if rule.rhs1 != rhs1:
@@ -533,7 +535,8 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 			else:
 				raise ValueError("not covered: %r" % (tag or sent[left]), )
 		# unary rules on POS tags (NB: agenda is a min-heap, negate probs)
-		unaryagenda.update([(rhs1, -inside[left, right, rhs1])
+		unaryagenda.update_entries([new_DoubleEntry(
+				rhs1, -inside[left, right, rhs1], 0)
 			for rhs1 in range(grammar.nonterminals)
 			if inside[left, right, rhs1]
 			and grammar.unary[rhs1].rhs1 == rhs1])
@@ -608,7 +611,8 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 					if right > maxright[lhs, left]:
 						maxright[lhs, left] = right
 			# unary rules on this span
-			unaryagenda.update([(rhs1, -inside[left, right, rhs1])
+			unaryagenda.update_entries([new_DoubleEntry(
+						rhs1, -inside[left, right, rhs1], 0)
 					for rhs1 in range(grammar.nonterminals)
 					if inside[left, right, rhs1]
 					and grammar.unary[rhs1].rhs1 == rhs1])
@@ -659,7 +663,8 @@ def outsidescores(Grammar grammar, sent, UInt start,
 		for left in range(1 + lensent - span):
 			right = left + span
 			# unary rules
-			unaryagenda.update([(lhs, -outside[left, right, lhs])
+			unaryagenda.update_entries([new_DoubleEntry(
+					lhs, -outside[left, right, lhs], 0)
 				for lhs in range(grammar.nonterminals)
 				if outside[left, right, lhs]])
 			while unaryagenda.length:

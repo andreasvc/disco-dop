@@ -26,8 +26,6 @@ ctypedef fused LCFRSItem_fused:
 	SmallChartItem
 	FatChartItem
 
-
-
 cdef class LCFRSChart(Chart):
 	cdef readonly dict parseforest # chartitem => [Edge(lvec, rule), ...]
 	cdef list probs
@@ -50,17 +48,27 @@ cdef class FatLCFRSChart(LCFRSChart):
 	cdef void addedge(self, FatChartItem item, FatChartItem left, Rule *rule)
 
 
-# FIXME: Entry is (mis)used by kbest; put in containers?
+# FIXME: Entry/Agenda are used in multiple modules; put in containers?
 @cython.final
 cdef class Entry:
-	cdef object key, value
-	cdef unsigned long count
+	cdef readonly object key
+	cdef readonly object value
+	cdef readonly ULong count
 
 
-ctypedef bint (*CmpFun)(Entry a, Entry b)
+@cython.final
+cdef class DoubleEntry:
+	cdef readonly object key
+	cdef readonly double value
+	cdef readonly ULong count
 
 
-cdef inline Entry new_Entry(object k, object v, unsigned long c):
+ctypedef fused Entry_fused:
+	Entry
+	DoubleEntry
+
+
+cdef inline Entry new_Entry(object k, object v, ULong c):
 	cdef Entry entry = Entry.__new__(Entry)
 	entry.key = k
 	entry.value = v
@@ -68,31 +76,28 @@ cdef inline Entry new_Entry(object k, object v, unsigned long c):
 	return entry
 
 
-@cython.final
+cdef inline DoubleEntry new_DoubleEntry(object k, double v, ULong c):
+	cdef DoubleEntry entry = DoubleEntry.__new__(DoubleEntry)
+	entry.key = k
+	entry.value = v
+	entry.count = c
+	return entry
+
+
 cdef class Agenda:
-	cdef unsigned long length, counter
+	cdef ULong length, counter
 	cdef readonly list heap
 	cdef dict mapping
-	cdef void setitem(self, key, object value)
-	cdef void setifbetter(self, key, object value)
-	cdef object getitem(self, key)
-	cdef object replace(self, object key, object value)
-	cdef Entry popentry(self)
-	cdef Entry peekentry(self)
-	cdef bint contains(self, key)
 
 
 @cython.final
-cdef class DoubleAgenda:
-	cdef unsigned long length, counter
-	cdef list heap
-	cdef dict mapping
+cdef class DoubleAgenda(Agenda):
 	cdef inline void setitem(self, key, double value)
 	cdef inline void setifbetter(self, key, double value)
 	cdef double getitem(self, key)
 	cdef double replace(self, key, double value)
-	cdef Entry popentry(self)
-	cdef Entry peekentry(self)
-	cdef bint contains(self, key)
+	cdef DoubleEntry popentry(self)
+	cdef DoubleEntry peekentry(self)
+	cdef update_entries(self, list entries)
 
-cdef list nsmallest(int n, object iterable, key=*)
+cdef list nsmallest(int n, list entries)

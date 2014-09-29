@@ -213,8 +213,7 @@ class TestHeap(TestCase):
 		from discodop.plcfrs import getparent
 		for i in range(len(h)):
 			if i > 0:
-				self.assertTrue(h.heap[getparent(i)].getvalue()
-						<= h.heap[i].getvalue())
+				self.assertTrue(h.heap[getparent(i)].value <= h.heap[i].value)
 
 	def make_data(self):
 		from random import random
@@ -418,7 +417,7 @@ def test_grammar(debug=False):
 			mpp, parsetrees = {}, {}
 			derivations, _ = lazykbest(chart, 1000, b'}<')
 			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
-				r = Tree(recoverfragments(d.getkey(), chart, backtransform))
+				r = Tree(recoverfragments(d.key, chart, backtransform))
 				r = str(removefanoutmarkers(unbinarize(r)))
 				mpp[r] = mpp.get(r, 0.0) + exp(-p)
 				parsetrees.setdefault(r, []).append((t, p))

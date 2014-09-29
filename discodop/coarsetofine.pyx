@@ -8,7 +8,6 @@ from discodop.containers cimport Grammar, Chart, ChartItem, Edges, Edge, \
 		Rule, LexicalRule, RankedEdge, ULLong, UInt, \
 		cellidx, CFGtoSmallChartItem, CFGtoFatChartItem
 from discodop.kbest import lazykbest
-from discodop.plcfrs cimport Entry
 import numpy as np
 
 # alternative: take coarse chart, return fine chart w/whitelist.

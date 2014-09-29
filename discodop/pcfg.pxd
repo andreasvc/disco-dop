@@ -3,7 +3,7 @@ from libc.stdlib cimport malloc, calloc, free
 from libc.math cimport isinf, isfinite
 from cpython.dict cimport PyDict_Contains, PyDict_GetItem
 from cpython.float cimport PyFloat_AS_DOUBLE
-from discodop.plcfrs cimport DoubleAgenda, Entry
+from discodop.plcfrs cimport DoubleAgenda, new_DoubleEntry
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		Edge, Edges, RankedEdge, UChar, UInt, ULong, ULLong, cellidx
 

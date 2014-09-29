@@ -3,19 +3,18 @@
 Implementation of Huang & Chiang (2005): Better k-best parsing."""
 from __future__ import print_function
 from operator import itemgetter
-from discodop.plcfrs import Agenda
+from discodop.plcfrs import DoubleAgenda
 from discodop.containers import ChartItem, RankedEdge, Grammar
 
 cimport cython
 include "constants.pxi"
-from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
 		Grammar, Rule, Chart, Edges, Edge, RankedEdge, \
 		new_RankedEdge, UInt, UChar, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
 from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
-from discodop.plcfrs cimport Entry, Agenda, nsmallest, \
-		LCFRSChart, SmallLCFRSChart, FatLCFRSChart
+from discodop.plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \
+		LCFRSChart, SmallLCFRSChart, FatLCFRSChart, new_DoubleEntry
 
 cdef getcandidates(Chart chart, v, int k):
 	""":returns: a heap with up to k candidate arcs starting from vertex v."""
@@ -24,12 +23,13 @@ cdef getcandidates(Chart chart, v, int k):
 	# otherwise the sequence (0, 0) -> (1, 0) -> (1, 1) -> (0, 1) -> (1, 1)
 	# can occur (given that the first two have probability x and the latter
 	# three probability y), in which case insertion order should count.
-	# Otherwise (1, 1) ends up in chart.rankededges[v] after which (0. 1)
+	# Otherwise (1, 1) ends up in chart.rankededges[v] after which (0, 1)
 	# generates it as a neighbor and puts it in cand[v] for a second time.
 	cdef Edges edges
 	cdef Edge *e
 	cdef double prob
-	results = []
+	cdef DoubleAgenda agenda = DoubleAgenda()
+	entries = []
 	# loop over blocks of edges
 	# compute viterbi prob from rule.prob + viterbi probs of children
 	for pyedges in chart.getedges(v):
@@ -50,8 +50,9 @@ cdef getcandidates(Chart chart, v, int k):
 				else:
 					right = -1
 			re = new_RankedEdge(v, e, left, right)
-			results.append((re, prob))
-	return Agenda(nsmallest(k, results, key=itemgetter(1)))
+			entries.append(new_DoubleEntry(re, prob, n))
+	agenda.update_entries(nsmallest(k, entries))
+	return agenda
 
 
 cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
@@ -61,7 +62,7 @@ cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
 	:param k1: the global k, with ``k <= k1``
 	:param cand: contains a queue of edges to consider for each vertex
 	:param explored: a set of all edges already visited."""
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef RankedEdge ej, ej1
 	cdef int ji
 	cdef bint inrankededges = v in chart.rankededges
@@ -105,7 +106,7 @@ cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
 		if not cand[v]:
 			break
 		# get the next best derivation and delete it from the heap
-		entry = (<Agenda>cand[v]).popentry()
+		entry = (<DoubleAgenda>cand[v]).popentry()
 		if inrankededges:
 			chart.rankededges[v].append(entry)
 		else:
@@ -121,8 +122,7 @@ cdef inline double getprob(Chart chart, v, RankedEdge ej) except -1.0:
 	if ej.left == 0:
 		prob += chart.subtreeprob(ei)
 	elif ei in chart.rankededges:
-		prob += PyFloat_AS_DOUBLE(
-				(<Entry>(<list>chart.rankededges[ei])[ej.left]).value)
+		prob += (<DoubleEntry>(<list>chart.rankededges[ei])[ej.left]).value
 	else:
 		raise ValueError('non-zero rank vector %d not in explored '
 				'derivations for %s' % (ej.right, chart.itemstr(v)))
@@ -132,8 +132,7 @@ cdef inline double getprob(Chart chart, v, RankedEdge ej) except -1.0:
 	if ej.right == 0:
 		prob += chart.subtreeprob(ei)
 	elif ei in chart.rankededges:
-		prob += PyFloat_AS_DOUBLE(
-				(<Entry>(<list>chart.rankededges[ei])[ej.right]).value)
+		prob += (<DoubleEntry>(<list>chart.rankededges[ei])[ej.right]).value
 	else:
 		raise ValueError('non-zero rank vector %d not in explored '
 				'derivations for %s' % (ej.right, chart.itemstr(v)))
@@ -145,7 +144,7 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 	"""Traverse derivation to ensure all 1-best RankedEdges are present.
 
 	:returns: True when ``ej`` is a valid, complete derivation."""
-	cdef Entry entry
+	cdef DoubleEntry entry
 	if depthlimit <= 0:  # to prevent cycles
 		return False
 	if ej.edge.rule is NULL:
@@ -156,11 +155,11 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 		if leftitem not in chart.rankededges:
 			assert ej.left == 0, '%d-best edge for %s of left item missing' % (
 						ej.left, chart.itemstr(v))
-			entry = (<Agenda>getcandidates(chart, leftitem, 1)).popentry()
+			entry = (<DoubleAgenda>getcandidates(chart, leftitem, 1)).popentry()
 			chart.rankededges[leftitem] = [entry]
 			explored.add(entry.key)
 		if not explorederivation(leftitem,
-				<RankedEdge>(<Entry>chart.rankededges[leftitem][ej.left]).key,
+				<RankedEdge>(<DoubleEntry>chart.rankededges[leftitem][ej.left]).key,
 				chart, explored, depthlimit - 1):
 			return False
 	rightitem = chart.right(ej)
@@ -169,11 +168,11 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 		if rightitem not in chart.rankededges:
 			assert ej.right == 0, '%d-best edge for %s of right item missing' % (
 						ej.right, chart.itemstr(v))
-			entry = (<Agenda>getcandidates(chart, rightitem, 1)).popentry()
+			entry = (<DoubleAgenda>getcandidates(chart, rightitem, 1)).popentry()
 			chart.rankededges[rightitem] = [entry]
 			explored.add(entry.key)
 		return explorederivation(rightitem,
-				<RankedEdge>(<Entry>chart.rankededges[rightitem][ej.right]).key,
+				<RankedEdge>(<DoubleEntry>chart.rankededges[rightitem][ej.right]).key,
 				chart, explored, depthlimit - 1)
 	return True
 
@@ -193,12 +192,12 @@ cpdef inline _getderiv(bytearray result, v, RankedEdge ej, Chart chart,
 		result += str(chart.lexidx(ej.edge)).encode('ascii')
 	else:
 		item = chart.left(ej)
-		rankededge = (<Entry>chart.rankededges[item][ej.left]).key
+		rankededge = (<DoubleEntry>chart.rankededges[item][ej.left]).key
 		_getderiv(result, item, rankededge, chart, debin)
 		if ej.right != -1:
 			item = chart.right(ej)
 			result += b' '
-			rankededge = (<Entry>chart.rankededges[item][ej.right]).key
+			rankededge = (<DoubleEntry>chart.rankededges[item][ej.right]).key
 			_getderiv(result, item, rankededge, chart, debin)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
 		result += b')'
@@ -229,7 +228,7 @@ def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
 
 	:param k: the number of derivations to enumerate.
 	:param debin: debinarize derivations."""
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef set explored = set()
 	# assert not chart.rankededges, 'kbest derivations already extracted?'
 	chart.rankededges = {}

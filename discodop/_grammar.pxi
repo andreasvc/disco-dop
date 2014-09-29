@@ -34,6 +34,7 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 	return (a.rhs2 > b.rhs2) - (a.rhs2 < b.rhs2)
 
 
+@cython.final
 cdef class Grammar:
 	"""A grammar object which stores rules compactly, indexed in various ways.
 
@@ -579,7 +580,6 @@ cdef class Grammar:
 	cpdef rulestr(self, int n):
 		"""Return a string representation of a specific rule in this grammar."""
 		cdef Rule rule
-		cdef LexicalRule lexrule
 		if not 0 <= n < self.numrules:
 			raise ValueError('Out of range: %s' % n)
 		rule = self.bylhs[0][n]

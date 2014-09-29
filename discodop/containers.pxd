@@ -81,7 +81,7 @@ cdef class Grammar:
 #		to pack the parse forest?
 # [ ] is it useful to have a recognition phase before making parse forest?
 cdef class Chart:
-	cdef readonly dict rankededges  # [item][n] => Entry(RankedEdge, prob)
+	cdef readonly dict rankededges  # [item][n] => DoubleEntry(RankedEdge, prob)
 	cdef list itemsinorder
 	cdef Grammar grammar
 	cdef readonly list sent
@@ -163,6 +163,7 @@ cdef class RankedEdge:
 	cdef int left, right  # rank of left / right child
 
 
+@cython.final
 cdef class Edges:
 	cdef short len
 	cdef Edge data[EDGES_SIZE]

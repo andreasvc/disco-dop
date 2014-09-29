@@ -23,7 +23,7 @@ from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
 from discodop.bit import pyintnextset, pyintbitcount
-from discodop.plcfrs cimport Entry, new_Entry
+from discodop.plcfrs cimport DoubleEntry, new_DoubleEntry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
 		SmallChartItem, FatChartItem, Edge, RankedEdge, yieldranges, \
 		new_RankedEdge, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
@@ -32,6 +32,7 @@ cimport cython
 from libc.string cimport memset
 cdef extern from "macros.h":
 	void SETBIT(ULong a[], int b)
+	void CLEARBIT(ULong a[], int b)
 
 REMOVEIDS = re.compile('@[-0-9]+')
 BREMOVEIDS = re.compile(b'@[-0-9]+')
@@ -116,7 +117,7 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 	cdef bint mpd = method == 'mpd'
 	cdef bint shortest = method == 'shortest'
 	cdef bint dopreduction = backtransform is None
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef LexicalRule lexrule
 	cdef dict parsetrees = {}, derivs = {}
 	cdef str treestr, deriv
@@ -376,9 +377,9 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 					backtransform)].add(deriv)
 	else:
 		for entry in entries:
-			deriv = getderiv(chart.root(), (<Entry>entry).key, chart, None)
-			derivations[deriv] = (<Entry>entry).value
-			derivsfortree[recoverfragments((<Entry>entry).key, chart,
+			deriv = getderiv(chart.root(), (<DoubleEntry>entry).key, chart, None)
+			derivations[deriv] = (<DoubleEntry>entry).value
+			derivsfortree[recoverfragments((<DoubleEntry>entry).key, chart,
 					backtransform)].add(deriv)
 	# sum over probs of derivations to get probs of parse trees
 	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
@@ -397,13 +398,13 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
 		else:
-			treestr = recoverfragments(deriv if bitpar else (<Entry>entry).key,
+			treestr = recoverfragments(deriv if bitpar else (<DoubleEntry>entry).key,
 					chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (-abs(int(s / log(0.5))), parsetreeprob[treestr])
 			derivs[treestr] = fragmentsinderiv(
 					deriv if bitpar or backtransform is None
-					else (<Entry>entry).key,
+					else (<DoubleEntry>entry).key,
 					chart2, backtransform)
 			if len(result) > sldop_n:
 				break
@@ -423,7 +424,7 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 	with the shortest derivation is returned. In other words, selects shortest
 	derivation among the list of available derivations, instead of finding the
 	shortest among all possible derivations using Viterbi."""
-	cdef Entry entry
+	cdef DoubleEntry entry
 	cdef dict derivs = {}, keys = {}
 	derivsfortree = defaultdict(set)
 	# collect derivations for each parse tree
@@ -508,20 +509,20 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 		# use the fact that such labels do not have a mapping as proxy.
 		while chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
 			# one of the right children
-			children.append((<Entry>chart.rankededges[
+			children.append((<DoubleEntry>chart.rankededges[
 					chart.right(deriv)][deriv.right]).key)
 			# move on to next node in this binarized constituent
-			deriv = (<Entry>chart.rankededges[
+			deriv = (<DoubleEntry>chart.rankededges[
 					chart.left(deriv)][deriv.left]).key
 		# last right child
 		if deriv.edge.rule.rhs2:  # is there a right child?
-			children.append((<Entry>chart.rankededges[
+			children.append((<DoubleEntry>chart.rankededges[
 					chart.right(deriv)][deriv.right]).key)
 	elif chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
-		deriv = (<Entry>chart.rankededges[
+		deriv = (<DoubleEntry>chart.rankededges[
 				chart.left(deriv)][deriv.left]).key
 	# left-most child
-	children.append((<Entry>chart.rankededges[
+	children.append((<DoubleEntry>chart.rankededges[
 			chart.left(deriv)][deriv.left]).key)
 
 	# recursively expand all substitution sites
@@ -644,20 +645,20 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 		# use the fact that such labels do not have a mapping as proxy.
 		while chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
 			# one of the right children
-			children.append((<Entry>chart.rankededges[
+			children.append((<DoubleEntry>chart.rankededges[
 					chart.right(deriv)][deriv.right]).key)
 			# move on to next node in this binarized constituent
-			deriv = (<Entry>chart.rankededges[
+			deriv = (<DoubleEntry>chart.rankededges[
 					chart.left(deriv)][deriv.left]).key
 		# last right child
 		if deriv.edge.rule.rhs2:  # is there a right child?
-			children.append((<Entry>chart.rankededges[
+			children.append((<DoubleEntry>chart.rankededges[
 					chart.right(deriv)][deriv.right]).key)
 	elif chart.grammar.mapping[deriv.edge.rule.rhs1] == 0:
-		deriv = (<Entry>chart.rankededges[
+		deriv = (<DoubleEntry>chart.rankededges[
 				chart.left(deriv)][deriv.left]).key
 	# left-most child
-	children.append((<Entry>chart.rankededges[
+	children.append((<DoubleEntry>chart.rankededges[
 			chart.left(deriv)][deriv.left]).key)
 
 	result.append(frag.format(*['(%s %s)' % (
@@ -722,7 +723,8 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	:param maskrules: If True, prune any grammar rule not in the trees.
 		Exploits rulemapping of grammar which should be mapped to itself;
 		e.g., 'NP@2 => DT@3 NN' should be mapped to 'NP => DT NN' in the
-		same grammar."""
+		same grammar. To remove the mask, issue ``grammar.setmask(None)``
+	"""
 	# Parsing & pruning inside the disambiguation module is rather kludgy,
 	# but the problem is that we need to get probabilities of trees,
 	# not just of derivations. Therefore the coarse-to-fine methods
@@ -730,7 +732,8 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	cdef FatChartItem fitem
 	cdef int n, lensent = len(sent)
 	whitelist = [{} for _ in grammar.toid]
-	rulenos = []
+	if maskrules:
+		grammar.setmask([])  # block all rules
 	for treestr in trees:
 		tree = Tree.parse(treestr, parse_leaf=int)
 		for node, (r, yf) in zip(tree.subtrees(),
@@ -754,7 +757,8 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 					ruleno = grammar.rulenos[rulestr]
 				except KeyError:
 					return [], "'%s' not in grammar" % rulestr, None
-				rulenos.extend(grammar.rulemapping[ruleno])
+				for n in grammar.rulemapping[ruleno]:
+					CLEARBIT(grammar.mask, n)
 
 	# Project labels to all possible labels that generate that label. For DOP
 	# reduction, all possible ids; for Double DOP, ignore artificial labels.
@@ -764,16 +768,11 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 		elif b'@' in label or b'}<' in label:
 			whitelist[n] = None  # do not prune item
 
-	if maskrules:
-		grammar.setmask(rulenos)
-
 	# finally, we parse with the small set of allowed labeled spans.
-	# we do not parse with PCFG even if possible, because that requires a
-	# different way of pruning.
+	# we do not parse with the PCFG parser even if possible, because that
+	# requires a different way of pruning.
 	chart, _ = plcfrs.parse(sent, grammar, tags=tags, whitelist=whitelist)
 
-	if maskrules:
-		grammar.setmask(None)
 	if not chart:
 		return [], 'tree parsing failed', None
 	return lazykbest(chart, m) + (chart, )
@@ -790,11 +789,11 @@ cdef double getderivprob(RankedEdge deriv, Chart chart, list sent):
 		word = sent[chart.lexidx(deriv.edge)]
 		return (<LexicalRule>chart.grammar.lexicalbylhs[label][word]).prob
 	result = deriv.edge.rule.prob
-	result += getderivprob((<Entry>chart.rankededges[
+	result += getderivprob((<DoubleEntry>chart.rankededges[
 			chart.left(deriv)][deriv.left]).key,
 			chart, sent)
 	if deriv.edge.rule.rhs2:
-		result += getderivprob((<Entry>chart.rankededges[
+		result += getderivprob((<DoubleEntry>chart.rankededges[
 				chart.right(deriv)][deriv.right]).key,
 				chart, sent)
 	return result
@@ -859,7 +858,7 @@ cdef samplechart(item, Chart chart,
 		idx = chart.lexidx(edge)
 		rankededge = new_RankedEdge(item, edge, -1, -1)
 		chart.rankededges.setdefault(item, []).append(
-				new_Entry(rankededge, chart.subtreeprob(item), 0))
+				new_DoubleEntry(rankededge, chart.subtreeprob(item), 0))
 		deriv = "(%s %d)" % (chart.grammar.tolabel[label].decode('ascii'), idx)
 		return deriv, chart.subtreeprob(item)
 	tree, p1 = samplechart(chart.copy(chart._left(item, edge)),
@@ -880,7 +879,7 @@ cdef samplechart(item, Chart chart,
 				if edge.rule.rhs2 else -1)
 	# NB: this is actually 'samplededges', not 'rankededges'
 	chart.rankededges.setdefault(item, []).append(
-			new_Entry(rankededge, prob, 0))
+			new_DoubleEntry(rankededge, prob, 0))
 	return tree, prob
 
 
