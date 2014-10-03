@@ -343,6 +343,18 @@ class TestHeap(TestCase):
 		self.assertEqual(len(h), len(d))
 		self.assertEqual(len(h), 0)
 
+	def test_init_small(self):
+		from discodop.plcfrs import Agenda
+		for data in (
+				[(0, 3), (1, 7), (2, 1)],
+				[(0, 7), (1, 3), (2, 1)],
+				[(0, 7), (1, 3), (2, 7)]):
+			h = Agenda(data)
+			self.assertEqual(
+					[h.popitem(), h.popitem(), h.popitem()],
+					sorted(data, key=itemgetter(1)))
+			self.assertEqual(len(h), 0)
+
 	def test_repr(self):
 		h, _pairs, d = self.make_data()
 		# self.assertEqual(h, eval(repr(h)))
@@ -350,6 +362,13 @@ class TestHeap(TestCase):
 		# strip off class name
 		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
 		self.assertEqual(d, eval(dstr))
+
+	def test_merge(self):
+		from discodop.plcfrs import merge
+		_h, _pairs, d1 = self.make_data()
+		self.assertEqual(
+				list(merge(sorted(d1.keys()), sorted(d1.values()))),
+				sorted(list(d1.keys()) + list(d1.values())))
 
 
 def test_fragments():

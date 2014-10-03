@@ -1,12 +1,17 @@
-"""Priority Queues, quicksort selection and n-way merge based on binary heaps.
+"""Priority Queue, quick select, and n-way merge using D-ary array-based heap.
 
-Based on source and notes in the documentation of ``heapq``, see:
-http://docs.python.org/library/heapq.html"""
+Based on source and notes in:
+
+- http://docs.python.org/library/heapq.html
+- https://en.wikipedia.org/wiki/D-ary_heap
+- https://github.com/valyala/gheap
+- https://en.wikipedia.org/wiki/Quickselect"""
 
 from operator import itemgetter
 include "constants.pxi"
 
 DEF INVALID = 0
+
 
 @cython.final
 cdef class Entry:
@@ -344,7 +349,6 @@ cdef class DoubleAgenda(Agenda):
 		return entry.key, entry.value
 
 
-
 # A quicksort nsmallest implementation.
 cdef list nsmallest(int n, list entries):
 	"""Return an _unsorted_ list of the n smallest DoubleEntry objects.
@@ -418,15 +422,16 @@ cdef inline Entry_fused heapreplace(list heap, Entry_fused entry):
 	else:
 		oldentry = <Entry_fused>(PyList_GET_ITEM(heap, 0))
 		heap[0] = entry
-		siftdown(heap, 0, PyList_GET_SIZE(heap) - 1, entry)
+		siftup(heap, 0, entry)
 	return oldentry
 
 
 cdef inline void heapify(list heap, Entry_fused dummy):
 	"""Transform list into a heap, in-place, in O(len(heap)) time."""
 	cdef int i
-	for i in reversed(range(PyList_GET_SIZE(heap) // HEAP_ARITY)):
-		siftup(heap, i, dummy)
+	if PyList_GET_SIZE(heap) > 1:
+		for i in range((PyList_GET_SIZE(heap) - 2) // HEAP_ARITY, -1, -1):
+			siftup(heap, i, dummy)
 
 
 # shifts only apply for binary tree
@@ -451,6 +456,8 @@ def getparent(i):
 	return (i - 1) // HEAP_ARITY
 
 
+# NB: the naming of siftdown / siftup follows the Python heapq module;
+# gheap reverses this terminology.
 cdef inline void siftdown(list heap, int startpos, int pos, Entry_fused dummy):
 	"""`heap` is a heap at all indices >= startpos, except possibly for pos.
 	`pos` is the index of a leaf with a possibly out-of-order value.
@@ -489,24 +496,20 @@ cdef inline void siftup(list heap, int pos, Entry_fused dummy):
 	siftdown(heap, startpos, pos, dummy)
 
 
-def identity(x):
-	return x
-
-
-def merge(iterables, key=None):
+def merge(*iterables, key=None):
 	"""Generator that performs an n-way merge of sorted iterables.
 
-	NB: while a sort key may be specified, the individual iterables must
-	already be sorted with this key.
+	>>> list(merge([0, 1, 2], [0, 1, 2, 3]))
+	[0, 0, 1, 1, 2, 2, 3]
 
-	Algorithm based on:
-	http://stackoverflow.com/questions/5055909/algorithm-for-n-way-merge
-	and the Python heapq module."""
+	NB: while a sort key may be specified, the individual iterables must
+	already be sorted with this key."""
 	cdef list heap = []
 	cdef ULong cnt
-	cdef Entry entry
+	cdef Entry entry = None
 	if key is None:
-		key = identity
+		def key(x):
+			return x
 
 	for cnt, it in enumerate(iterables, 1):
 		items = iter(it)
@@ -515,8 +518,7 @@ def merge(iterables, key=None):
 		except StopIteration:
 			pass
 		else:
-			entry = new_Entry((item, items), key(item), cnt)
-			heap.append(entry)
+			heap.append(new_Entry((item, items), key(item), cnt))
 	heapify(heap, entry)
 
 	while len(heap) > 1:

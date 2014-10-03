@@ -935,7 +935,8 @@ def merge(filenames, outfilename, sumfunc, key):
 			open)(filename)) for filename in filenames]
 	with codecs.getwriter('utf-8')((gzip.open if outfilename.endswith('.gz')
 			else open)(outfilename, 'w')) as out:
-		out.writelines(sumfunc(plcfrs.merge(openfiles, key=key)))
+		out.writelines(sumfunc(
+				plcfrs.merge(*openfiles, key=key), len(openfiles)))
 
 
 def main():
