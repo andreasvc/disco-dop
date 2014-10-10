@@ -245,10 +245,10 @@ cdef class Grammar:
 		if self.fanout is NULL:
 			raise MemoryError('allocation error')
 		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
-		self.mask = <ULong *>malloc((self.numrules + len(self.lexical)) / 8 + 1)
+		self.mask = <ULong *>malloc(BITNSLOTS(self.numrules) * sizeof(ULong))
 		if self.mask is NULL:
 			raise MemoryError('allocation error')
-		memset(self.mask, 0, (self.numrules + len(self.lexical)) / 8 + 1)
+		self.setmask(None)
 		self.revmap = <UInt *>malloc(self.numrules * sizeof(UInt))
 		if self.revmap is NULL:
 			raise MemoryError('allocation error')
@@ -430,18 +430,21 @@ cdef class Grammar:
 		self.currentmodel = m
 
 	def setmask(self, seq):
-		"""Given a sequence of rule numbers, store a mask so that any rules
-		not in the sequence are deactivated. If sequence is None, the mask is
-		cleared."""
+		"""Given a sequence of rule numbers, store a mask so that any phrasal
+		rules not in the sequence are deactivated. If sequence is None, the
+		mask is cleared."""
 		cdef int n
+		# zero-bit = not blocked or out of range; 1-bit = blocked.
 		if seq is None:
 			memset(<void *>self.mask, 0,
-					(self.numrules + len(self.lexical)) / 8 + 1)
+					BITNSLOTS(self.numrules) * sizeof(ULong))
 			return
 		memset(<void *>self.mask, 255,
-				(self.numrules + len(self.lexical)) / 8 + 1)
+				BITNSLOTS(self.numrules) * sizeof(ULong))
 		for n in seq:
 			CLEARBIT(self.mask, n)
+		# clear out-of-range bits: 000011111 <-- 1-bits up to numrules.
+		self.mask[BITSLOT(self.numrules)] = BITMASK(self.numrules) - 1UL
 
 	def buildchainvec(self):
 		"""Build a boolean matrix representing the unary (chain) rules."""
