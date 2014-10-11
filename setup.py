@@ -4,7 +4,6 @@ try:
 	from Cython.Build import cythonize
 	from Cython.Distutils import build_ext
 	from Cython.Compiler import Options
-	import numpy
 	havecython = True
 except ImportError as err:
 	print(err)
@@ -64,7 +63,6 @@ if __name__ == '__main__':
 		# Options.extra_compile_args = ['-g'],
 		# Options.extra_link_args = ["-O3"]  #["-g"],
 		setup(
-				include_dirs=[numpy.get_include()],
 				cmdclass=dict(build_ext=build_ext),
 				ext_modules=cythonize(
 						'discodop/*.pyx',
