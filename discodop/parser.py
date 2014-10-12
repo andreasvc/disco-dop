@@ -261,8 +261,11 @@ def workerfunc(func):
 	@wraps(func)
 	def wrapper(*args, **kwds):
 		"""Apply decorated function."""
-		import faulthandler
-		faulthandler.enable()  # Dump information on segfault.
+		try:
+			import faulthandler
+			faulthandler.enable()  # Dump information on segfault.
+		except ImportError:
+			pass
 		# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
 		try:
 			return func(*args, **kwds)

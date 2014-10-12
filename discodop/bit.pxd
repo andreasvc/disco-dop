@@ -168,7 +168,7 @@ cdef inline int iteratesetbits(ULong *vec, int slots,
 		``idx`` should be initialized to 0, and ``cur`` to the first element of
 		the bit array ``vec``, i.e., ``cur = vec[idx]``.
 	:returns: the index of a set bit, or -1 if there are no more set
-		bits. The result of calling stopped iterator is undefined.
+		bits. The result of calling a stopped iterator is undefined.
 
 	e.g.::
 
@@ -191,7 +191,7 @@ cdef inline int iteratesetbits(ULong *vec, int slots,
 
 cdef inline int iterateunsetbits(ULong *vec, int slots,
 		ULong *cur, int *idx):
-	""" Like ``iteratesetbits``, but return indices of zero bits. """
+	"""Like ``iteratesetbits``, but return indices of zero bits."""
 	cdef int tmp
 	while not ~cur[0]:
 		idx[0] += 1

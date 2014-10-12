@@ -3,9 +3,7 @@ import os
 import sys
 from doctest import testmod, NORMALIZE_WHITESPACE, REPORT_NDIFF
 from operator import itemgetter
-# do not import from current directory, since our compiled modules will only be
-# installed system-wide or in the user's equivalent.
-sys.path.pop(0)
+
 MODULES = """bit coarsetofine demos disambiguation estimates eval fragments
 		_fragments gen grammar lexicon kbest plcfrs pcfg tree treedist treedraw
 		treebank treebanktransforms treetransforms runexp""".split()

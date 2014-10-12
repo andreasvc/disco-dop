@@ -126,6 +126,9 @@ def startexp(
 				corpusfmt, traincorpus, binarization, punct, functions,
 				morphology, removeempty, transformations,
 				relationalrealizational)
+	elif isinstance(traincorpus.numsents, float):
+		raise ValueError('need to specify number of training set sentences, '
+				'not fraction, in rerun mode.')
 
 	testset = treebank.READERS[corpusfmt](
 			testcorpus.path, encoding=testcorpus.encoding,
@@ -946,8 +949,11 @@ def test():
 
 def main(argv=None):
 	"""Parse command line arguments."""
-	import faulthandler
-	faulthandler.enable()
+	try:
+		import faulthandler
+		faulthandler.enable()
+	except ImportError:
+		pass
 	if argv is None:
 		argv = sys.argv
 	if len(argv) == 1:

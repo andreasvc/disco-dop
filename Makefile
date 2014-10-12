@@ -20,31 +20,36 @@ docs:
 	cd docs && make html
 
 test: all inplace
-	py.test --doctest-modules discodop/ tests/unittests.py && \
-	python -tt -3 tests.py && \
-	cd tests/ && \
-	sh run.sh
+	py.test --doctest-modules discodop/ tests/unittests.py \
+	&& python -tt -3 tests.py \
+	&& cd tests/ \
+	&& sh run.sh
 
-test3:
-	rm -rf sample/
+test3: clean
 	python3 setup.py install --user
+	cp --update build/lib.*/discodop/*.so discodop/
 	PYTHONIOENCODING=utf-8 python3 -bb -tt tests.py
-
-debug:
-	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb
-
-testdebug: debug valgrind-python.supp
-	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
-		--suppressions=valgrind-python.supp python-dbg -tt -3 tests.py
-
-valgrind-python.supp:
-	wget http://svn.python.org/projects/python/trunk/Misc/valgrind-python.supp
 
 inplace: discodop
 	# python setup.py build_ext --inplace
 	cp --update build/lib.*/discodop/*.so discodop/
 
 install: discodop docs
+
+debug:
+	# NB: debug build requires all external modules to be compiled
+	# with debug symbols as well (e.g., install python-numpy-dbg package)
+	python-dbg setup.py build_ext --inplace --debug --pyrex-gdb
+
+debugvalgrind: debug inplace
+	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
+		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
+		python-dbg tests.py
+
+valgrind: inplace
+	valgrind --tool=memcheck --leak-check=full --num-callers=30 \
+		--suppressions=valgrind-python.supp --show-leak-kinds=definite \
+		python tests.py
 
 # pylint: R=refactor, C0103 == Invalid name
 lint: inplace
@@ -53,8 +58,8 @@ lint: inplace
 	# Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^.\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
 	pep8 --ignore=E1,W1 \
-		discodop/*.py web/*.py tests/*.py && \
-	pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
-		discodop/*.pyx discodop/*.pxi && \
-	pylint --indent-string='\t' --disable=R,bad-continuation,invalid-name \
+		discodop/*.py web/*.py tests/*.py \
+	&& pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
+		discodop/*.pyx discodop/*.pxi \
+	&& pylint --indent-string='\t' --disable=R,bad-continuation,invalid-name \
 		discodop/*.py web/*.py tests/*.py

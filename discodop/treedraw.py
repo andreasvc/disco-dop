@@ -533,7 +533,8 @@ class DrawTree(object):
 		PDF can be produced with pdflatex. Uses TiKZ matrices meaning that
 		nodes are put into a fixed grid. Where the cells of each column all
 		have the same width."""
-		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
+		result = ['%% %s\n%% %s' % (
+			self.tree, ' '.join(a or '' for a in self.sent)),
 			r'''\begin{tikzpicture}[scale=1, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
 			inner sep=0mm, node distance=1mm]''',
@@ -579,7 +580,8 @@ class DrawTree(object):
 
 		Nodes are drawn with the \\node command so they can have arbitrary
 		coordinates."""
-		result = ['%% %s\n%% %s' % (self.tree, ' '.join(self.sent)),
+		result = ['%% %s\n%% %s' % (
+			self.tree, ' '.join(a or '' for a in self.sent)),
 			r'''\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
 			text height=1.25ex, text depth=.25ex,
 			inner sep=0mm, node distance=1mm]''',
