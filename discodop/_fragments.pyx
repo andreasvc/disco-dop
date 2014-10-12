@@ -609,10 +609,10 @@ cdef dumpmatrix(ULong *matrix, NodeArray a, NodeArray b, Node *anodes,
 		for m in range(b.len):
 			print('\t', end='')
 			print('1' if TESTBIT(&matrix[m * SLOTS], n) else ' ', end='')
-	print('\ncommon productions:', end='')
+	print('\ncommon productions:', end=' ')
 	print(len({anodes[n].prod for n in range(a.len)} &
 			{bnodes[n].prod for n in range(b.len)}))
-	print('found:', end='')
+	print('found:', end=' ')
 	print('horz', sum([abitcount(&matrix[n * SLOTS], SLOTS) > 0
 			for n in range(b.len)]),
 		'vert', sum([any([TESTBIT(&matrix[n * SLOTS], m)

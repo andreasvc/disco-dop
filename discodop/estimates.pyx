@@ -371,12 +371,12 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 				if v < INFINITY:
 					print("%s[%d] %g" % (grammar.tolabel[k].decode('ascii'),
 						span, exp(-v)))
-		print('infinite:', end='')
+		print('infinite:', end=' ')
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].items()):
 				if v == INFINITY:
 					print("%s[%d]" % (grammar.tolabel[k].decode('ascii'),
-							span), end='')
+							span), end=' ')
 		print('\n\noutside:')
 		for lspan in range(maxlen + 1):
 			for rspan in range(maxlen - lspan + 1):
@@ -527,12 +527,12 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 				if v < INFINITY:
 					print("%s[%d] %g" % (
 							grammar.tolabel[k].decode('ascii'), span, exp(-v)))
-		print('infinite:', end='')
+		print('infinite:', end=' ')
 		for span in range(1, maxlen + 1):
 			for k, v in sorted(insidescores[span].items()):
 				if v == INFINITY:
 					print("%s[%d]" % (
-							grammar.tolabel[k].decode('ascii'), span), end='')
+							grammar.tolabel[k].decode('ascii'), span), end=' ')
 
 		print('\n\noutside:')
 		for k, v in sorted(outsidescores.items()):
@@ -540,12 +540,12 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 				print("%s[%d-%d] %g" % (
 						grammar.tolabel[k[0]].decode('ascii'), k[1], k[2],
 						exp(-v)))
-		print('infinite:', end='')
+		print('infinite:', end=' ')
 		for k, v in sorted(outsidescores.items()):
 			if v == INFINITY:
 				print("%s[%d-%d]" % (
 						grammar.tolabel[k[0]].decode('ascii'), k[1], k[2]),
-						end='')
+						end=' ')
 	outside = np.empty((grammar.nonterminals, maxlen + 1, maxlen + 1, 1),
 			dtype='d')
 	outside[...] = np.inf

@@ -330,7 +330,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 					and grammar.unary[rhs1].rhs1 == rhs1])
 			while unaryagenda.length:
 				rhs1 = unaryagenda.popentry().key
-				for n in range(grammar.numrules):
+				for n in range(grammar.numunary):
 					rule = &(grammar.unary[rhs1][n])
 					if rule.rhs1 != rhs1:
 						break
@@ -436,7 +436,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		# NB: for this agenda, only the probabilities of the edges matter
 		while unaryagenda.length:
 			rhs1 = unaryagenda.popentry().key
-			for n in range(grammar.numrules):
+			for n in range(grammar.numunary):
 				rule = &(grammar.unary[rhs1][n])
 				if rule.rhs1 != rhs1:
 					break
@@ -869,14 +869,14 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 			right = left + span
 			if matrix[left, right].any() or (
 					matrix2 is not None and matrix2[left, right].any()):
-				print("[%d:%d]" % (left, right))
+				print('[%d:%d]' % (left, right))
 				for lhs in range(len(matrix[left, right])):
 					if matrix[left, right, lhs] or (
 							matrix2 is not None and matrix2[left, right, lhs]):
-						print("%20s\t%8.6g" % (tolabel[lhs].decode('ascii'),
+						print('%20s\t%8.6g' % (tolabel[lhs].decode('ascii'),
 								matrix[left, right, lhs]), end='')
 						if matrix2 is not None:
-							print("\t%8.6g" % matrix2[left, right, lhs], end='')
+							print('\t%8.6g' % matrix2[left, right, lhs], end='')
 						print()
 
 
@@ -898,11 +898,11 @@ def test():
 		((('VP', 'Epsilon'), ('walks', )), 1)],
 		start='S')
 	print(cfg)
-	print("cfg parsing; sentence: mary walks")
-	print("pcfg", end='')
-	chart, msg = parse("mary walks".split(), cfg)
+	print('cfg parsing; sentence: mary walks')
+	print('pcfg')
+	chart, msg = parse('mary walks'.split(), cfg)
 	assert chart, msg
-	# chart, msg = parse_sparse("mary walks".split(), cfg)
+	# chart, msg = parse_sparse('mary walks'.split(), cfg)
 	# assert chart, msg
 	print(chart)
 	cfg1 = Grammar([
@@ -910,10 +910,10 @@ def test():
 		((('S', 'NP', 'VP'), ((0, 1), )), 1),
 		((('VP', 'Epsilon'), ('walks', )), 1)], start='S')
 	cfg1.switch(u'default', False)
-	i, o, start, _ = doinsideoutside("mary walks".split(), cfg1)
+	i, o, start, _ = doinsideoutside('mary walks'.split(), cfg1)
 	assert start
 	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
-	i, o, start, _ = doinsideoutside("walks mary".split(), cfg1)
+	i, o, start, _ = doinsideoutside('walks mary'.split(), cfg1)
 	assert not start
 	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
 	rules = [
@@ -931,7 +931,7 @@ def test():
 		((('P', 'Epsilon'), ('with', )), 1)]
 	cfg2 = Grammar(rules, start='S')
 	cfg2.switch(u'default', False)
-	sent = "astronomers saw stars with telescopes".split()
+	sent = 'astronomers saw stars with telescopes'.split()
 	inside, outside, _, msg = doinsideoutside(sent, cfg2)
 	print(msg)
 	pprint_matrix(inside, sent, cfg2.tolabel, outside)

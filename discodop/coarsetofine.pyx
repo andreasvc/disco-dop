@@ -341,13 +341,13 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 	from treetransforms import canonicalize, removefanoutmarkers
 	from math import exp as pyexp
 	sent, tags = zip(*sent)
-	print(" C O A R S E ", end='')
+	print(' C O A R S E ')
 	chart, _ = plcfrs.parse(sent, coarse, tags=tags)
 	if chart:
 		derivations, entries = getderivations(chart, 10, True, False, True)
 		mpp, _ = marginalize("mpp", derivations, entries, chart)
 		for t, p, _ in mpp:
-			print(pyexp(-p), end='')
+			print(pyexp(-p), end=' ')
 			t = Tree.parse(t, parse_leaf=int)
 			if split:
 				unbinarize(t, childchar=":", parentchar="!")
@@ -373,14 +373,14 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 			elif x:
 				for m, y in enumerate(x):
 					print(fine.tolabel[n], m, map(bin, y))
-	print(" F I N E ", end='')
+	print(' F I N E ')
 	chart2, _ = plcfrs.parse(sent, fine, tags=tags, whitelist=l,
 			splitprune=split, markorigin=True)
 	if chart2:
 		derivations, entries = getderivations(chart2, 10, True, False, True)
 		mpp, _ = marginalize("mpp", derivations, entries, chart2)
 		for t, p, _ in mpp:
-			print(pyexp(-p), end='')
+			print(pyexp(-p), end=' ')
 			t = Tree.parse(t, parse_leaf=int)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))
@@ -474,7 +474,7 @@ def test():
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen:
 				continue
-			print(n, end='')
+			print(n, end=' ')
 			doctf(coarse, fine, sent, tree, k, split, verbose=False)
 		print("time elapsed", clock() - begin, "s")
 

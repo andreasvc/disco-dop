@@ -411,27 +411,33 @@ def test_grammar(debug=False):
 	sents = list(corpus.sents().values())
 	trees = [addfanoutmarkers(binarize(a.copy(True), horzmarkov=1))
 			for a in list(corpus.trees().values())[:10]]
-	print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
-	print('dop reduction')
+	if debug:
+		print('plcfrs\n', Grammar(treebankgrammar(trees, sents)))
+		print('dop reduction')
 	grammar = Grammar(dopreduction(trees[:2], sents[:2])[0],
 			start=trees[0].label)
-	print(grammar)
+	if debug:
+		print(grammar)
 	_ = grammar.testgrammar()
 
 	grammarx, backtransform, _, _ = doubledop(trees, sents,
 			debug=debug, numproc=1)
-	print('\ndouble dop grammar')
+	if debug:
+		print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
 			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
 			splitprune=False, markorigin=False)
-	print(grammar)
+	if debug:
+		print(grammar)
 	assert grammar.testgrammar()[0], "RFE should sum to 1."
 	for tree, sent in zip(corpus.trees().values(), sents):
-		print("sentence:", ' '.join(a.encode('unicode-escape').decode()
-				for a in sent))
+		if debug:
+			print("sentence:", ' '.join(a.encode('unicode-escape').decode()
+					for a in sent))
 		chart, msg = plcfrs.parse(sent, grammar, exhaustive=True)
-		print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
+		if debug:
+			print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
 		if chart:
 			mpp, parsetrees = {}, {}
 			derivations, _ = lazykbest(chart, 1000, b'}<')
@@ -440,18 +446,22 @@ def test_grammar(debug=False):
 				r = str(removefanoutmarkers(unbinarize(r)))
 				mpp[r] = mpp.get(r, 0.0) + exp(-p)
 				parsetrees.setdefault(r, []).append((t, p))
-			print(len(mpp), 'parsetrees', end='')
-			print(sum(map(len, parsetrees.values())), 'derivations')
+			if debug:
+				print(len(mpp), 'parsetrees',
+						sum(map(len, parsetrees.values())), 'derivations')
 			for t, tp in sorted(mpp.items(), key=itemgetter(1)):
-				print(tp, '\n', t, end='')
-				print("match:", t == str(tree))
-				assert len(set(parsetrees[t])) == len(parsetrees[t])
+				if debug:
+					print(tp, t, '\nmatch:', t == str(tree))
+				if len(set(parsetrees[t])) != len(parsetrees[t]):
+					print('chart:\n', chart)
+					assert len(set(parsetrees[t])) == len(parsetrees[t])
 				if debug:
 					for deriv, p in sorted(parsetrees[t], key=itemgetter(1)):
 						print(' <= %6g %s' % (exp(-p), deriv))
-		else:
+		elif debug:
 			print('no parse\n', chart)
-		print()
+		if debug:
+			print()
 	tree = Tree.parse("(ROOT (S (F (E (S (C (B (A 0))))))))", parse_leaf=int)
 	Grammar(treebankgrammar([tree], [[str(a) for a in range(10)]]))
 
