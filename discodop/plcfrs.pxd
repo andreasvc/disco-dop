@@ -37,14 +37,14 @@ cdef class LCFRSChart(Chart):
 
 @cython.final
 cdef class SmallLCFRSChart(LCFRSChart):
-	cdef SmallChartItem tmpleft, tmpright
+	cdef SmallChartItem tmpitem
 	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
 			Rule *rule)
 
 
 @cython.final
 cdef class FatLCFRSChart(LCFRSChart):
-	cdef FatChartItem tmpleft, tmpright
+	cdef FatChartItem tmpitem
 	cdef void addedge(self, FatChartItem item, FatChartItem left, Rule *rule)
 
 

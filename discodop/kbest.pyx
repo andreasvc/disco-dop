@@ -16,7 +16,7 @@ from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
 from discodop.plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \
 		LCFRSChart, SmallLCFRSChart, FatLCFRSChart, new_DoubleEntry
 
-cdef getcandidates(Chart chart, v, int k):
+cdef DoubleAgenda getcandidates(Chart chart, v, int k):
 	""":returns: a heap with up to k candidate arcs starting from vertex v."""
 	# NB: the priority queue should either do a stable sort, or should
 	# sort on rank vector as well to have ties resolved in FIFO order;
@@ -81,10 +81,10 @@ cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
 			# start of inlined lazynext(v, ej, k1, cand, chart, explored)
 			for i in range(2):  # add the |e| neighbors
 				if i == 0 and ej.left >= 0:
-					ei = chart.copy(chart.left(ej))
+					ei = chart.left(ej)
 					ej1 = new_RankedEdge(v, ej.edge, ej.left + 1, ej.right)
 				elif i == 1 and ej.right >= 0:
-					ei = chart.copy(chart.right(ej))
+					ei = chart.right(ej)
 					ej1 = new_RankedEdge(v, ej.edge, ej.left, ej.right + 1)
 				else:
 					break
@@ -149,30 +149,30 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 		return False
 	if ej.edge.rule is NULL:
 		return True
-	leftitem = chart.left(ej)
 	if ej.left != -1:
-		leftitem = chart.copy(leftitem)
+		leftitem = chart.left(ej)
 		if leftitem not in chart.rankededges:
 			assert ej.left == 0, '%d-best edge for %s of left item missing' % (
 						ej.left, chart.itemstr(v))
-			entry = (<DoubleAgenda>getcandidates(chart, leftitem, 1)).popentry()
+			entry = getcandidates(chart, leftitem, 1).popentry()
 			chart.rankededges[leftitem] = [entry]
 			explored.add(entry.key)
 		if not explorederivation(leftitem,
-				<RankedEdge>(<DoubleEntry>chart.rankededges[leftitem][ej.left]).key,
+				<RankedEdge>(<DoubleEntry>chart.rankededges[
+					leftitem][ej.left]).key,
 				chart, explored, depthlimit - 1):
 			return False
-	rightitem = chart.right(ej)
 	if ej.right != -1:
-		rightitem = chart.copy(rightitem)
+		rightitem = chart.right(ej)
 		if rightitem not in chart.rankededges:
-			assert ej.right == 0, '%d-best edge for %s of right item missing' % (
-						ej.right, chart.itemstr(v))
-			entry = (<DoubleAgenda>getcandidates(chart, rightitem, 1)).popentry()
+			assert ej.right == 0, (('%d-best edge for right child '
+					'of %s missing') % (ej.right, chart.itemstr(v)))
+			entry = getcandidates(chart, rightitem, 1).popentry()
 			chart.rankededges[rightitem] = [entry]
 			explored.add(entry.key)
 		return explorederivation(rightitem,
-				<RankedEdge>(<DoubleEntry>chart.rankededges[rightitem][ej.right]).key,
+				<RankedEdge>(<DoubleEntry>chart.rankededges[
+					rightitem][ej.right]).key,
 				chart, explored, depthlimit - 1)
 	return True
 

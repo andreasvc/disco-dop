@@ -124,6 +124,7 @@ cdef class LexicalRule:
 @cython.freelist(1000)
 cdef class ChartItem:
 	cdef UInt label
+	cdef double prob
 
 
 @cython.final

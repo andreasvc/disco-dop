@@ -12,6 +12,7 @@ cdef double INFINITY = float('infinity')
 
 include "_grammar.pxi"
 
+
 @cython.final
 cdef class LexicalRule:
 	"""A weighted rule of the form 'non-terminal --> word'."""
@@ -385,7 +386,6 @@ cdef void _filtersubtree(Chart chart, item, set items):
 	"""Recursively filter chart."""
 	cdef Edge *edge
 	cdef Edges edges
-	item = chart.copy(item)
 	items.add(item)
 	for edges in chart.getedges(item):
 		for n in range(edges.len):
