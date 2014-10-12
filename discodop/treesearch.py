@@ -30,7 +30,7 @@ from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 
 USAGE = '''Search through treebanks with queries.
-Usage: %s [--engine=<x>] [-t|-s|-c] <query> <treebank>...
+Usage: %s [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...
 
 Options:
   --engine=<x>, -e <x>

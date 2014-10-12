@@ -53,7 +53,7 @@ General options:
   -b k         Return the k-best parses instead of just 1.
   --prob       Print probabilities as well as parse trees.
   --tags       Tokens are of the form "word/POS"; give both to parser.
-  --fmt=[export|bracket|discbracket|alpino|conll|mst|wordpos]
+  --fmt=(export|bracket|discbracket|alpino|conll|mst|wordpos)
                Format of output [default: discbracket].
   --numproc=k  Launch k processes, to exploit multiple cores.
   --simple     Parse with a single grammar and input file; similar interface
@@ -63,11 +63,10 @@ General options:
 Options for simple mode:
   -s x         Use "x" as start symbol instead of default "TOP".
   --bt=file    Apply backtransform table to recover TSG derivations.
-  --mpp=k      By default, the output consists of derivations, with the most
-               probable derivation (MPD) ranked highest. With a PTSG such as
-               DOP, it is possible to aim for the most probable parse (MPP)
-               instead, whose probability is the sum of any number of the
-               k-best derivations.
+  --obj=(mpd|mpp|mcc|shortest|sl-dop)
+               Objective function to maximize [default: mpd].
+  -m x         Use x derivations to approximate objective functions;
+               mpd and shortest require only 1.
   --bitpar     Use bitpar to parse with an unbinarized grammar.
 ''' % dict(cmd=sys.argv[0], fmt=','.join(WRITERS))
 
@@ -127,9 +126,9 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags bitpar simple mpp= bt= numproc= fmt='.split()
+	options = 'prob tags bitpar simple obj= bt= numproc= fmt='.split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'b:s:x', options)
+		opts, args = gnu_getopt(sys.argv[1:], 'b:s:m:x', options)
 	except GetoptError as err:
 		print(err, USAGE)
 		return
@@ -177,8 +176,9 @@ def main():
 				backtransform=backtransform if len(args) < 4 else None,
 				m=numparses,
 				objective='mpd')
-		if '--mpp' in opts:
-			stage.update(dop=True, objective='mpp', m=int(opts['--mpp']))
+		if '--obj' in opts:
+			stage.update(dop=True, objective=opts['--obj'],
+					m=int(opts.get('-m', 1)))
 		stages.append(DictObj(stage))
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,

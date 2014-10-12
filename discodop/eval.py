@@ -37,10 +37,10 @@ file, and options may consist of:
   --debug          Print debug information with per sentence bracketings etc.
   --disconly       Only evaluate bracketings of discontinuous constituents
                    (only affects Parseval measures).
-  --goldfmt|--parsesfmt=[%s]
+  --goldfmt|--parsesfmt=(%s)
                    Specify corpus format [default: export].
-  --fmt=[...]      Shorthand for setting both --goldfmt and --parsesfmt.
-  --goldenc|--parsesenc=[utf-8|iso-8859-1|...]
+  --fmt=(...)      Shorthand for setting both --goldfmt and --parsesfmt.
+  --goldenc|--parsesenc=(utf-8|iso-8859-1|...)
                    Specify encoding [default: utf-8].
   --ted            Enable tree-edit distance evaluation.
   --headrules=x    Specify file with rules for head assignment of constituents

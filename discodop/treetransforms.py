@@ -51,14 +51,14 @@ action is one of:
     introducepreterminals
     splitdisc [--markorigin]
     mergedisc
-    transform [--reverse] [--transforms=<NAME1,NAME2...>]
+    transform [--reverse] [--transforms=(NAME1,NAME2...)]
 
 options may consist of:
-  --inputfmt=[%s]
-  --outputfmt=[%s]
+  --inputfmt=(%s)
+  --outputfmt=(%s)
                  Treebank format [default: export].
   --fmt=x        Shortcut to specify both input and output formats.
-  --inputenc|--outputenc|--enc=[utf-8|iso-8859-1|...]
+  --inputenc|--outputenc|--enc=(utf-8|iso-8859-1|...)
                  Treebank encoding [default: utf-8].
   --slice=n:m    select a range of sentences from input starting with n,
                  up to but not including m; as in Python, n or m can be left
@@ -87,7 +87,7 @@ options may consist of:
                  'between': insert node with lemma between POS tag and word,
                      e.g., (NN (man men))
   --ensureroot=x add root node labeled 'x' to trees if not already present.
-  --factor=[left|right]
+  --factor=(left|right)
                  specify left- or right-factored binarization [default: right].
   -h n           horizontal markovization. default: infinite (all siblings)
   -v n           vertical markovization. default: 1 (immediate parent only)

@@ -22,13 +22,13 @@ or: %(cmd)s info <rules-file>
 or: %(cmd)s merge (rules|lexicon|fragments) <input1> <input2>... <output>
 
 type is one of:
-   pcfg            Probabilistic Context-Free Grammar (treebank grammar)
+   pcfg            Probabilistic Context-Free Grammar (treebank grammar).
    plcfrs          Probabilistic Linear Context-Free Rewriting System
-                   (discontinuous treebank grammar)
-   ptsg            Probabilistic Tree-Substitution Grammar
-   dopreduction    All-fragments PTSG using Goodman's reduction
-   doubledop       PTSG from recurring fragmensts
-   param           Extract a series of grammars according to parameters
+                   (discontinuous treebank grammar).
+   ptsg            Probabilistic Tree-Substitution Grammar.
+   dopreduction    All-fragments PTSG using Goodman's reduction.
+   doubledop       PTSG from recurring fragmensts.
+   param           Extract a series of grammars according to parameters.
    info            Print statistics for PLCFRS/bitpar rules.
    merge           Interpolate given grammars into a single grammar
                    Input can be a rules, lexicon or fragment file.
@@ -42,14 +42,14 @@ NB: both the info and merge commands expect grammars to be sorted by LHS,
 such as the ones created by this tool.
 
 Options:
-  --inputfmt=[%(fmts)s]
+  --inputfmt=(%(fmts)s)
              Input treebank format [default: export].
-  --inputenc=[utf-8|iso-8859-1|...]
+  --inputenc=(utf-8|iso-8859-1|...)
              Treebank encoding [default: utf-8].
-  --dopestimator=[rfe|ewe|shortest|...]
+  --dopestimator=(rfe|ewe|shortest|...)
              When extracting a DOP grammar, the estimator to use for
              assigning weights.
-  --numproc=[1|2|...]
+  --numproc=(1|2|...)
              Number of processes to start [default: 1].
              Only relevant for double dop fragment extraction.
   --gzip     Compress output with gzip, view with zless &c.
@@ -965,6 +965,8 @@ def main():
 		grammarstats(args[1])
 		return
 	elif model == 'merge':
+		if len(args) < 5:
+			raise ValueError('need at least 2 input and 1 output arguments.')
 		if args[1] == 'rules':
 			merge(args[2:-1], args[-1], sumrules, stripweight)
 		elif args[1] == 'lexicon':

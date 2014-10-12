@@ -40,7 +40,7 @@ Output contains lines of the form "tree<TAB>frequency".
 Frequencies refer to the first treebank by default.
 Output is sent to stdout; to save the results, redirect to a file.
 Options:
-  --fmt=[%(fmts)s]
+  --fmt=(%(fmts)s)
                 when format is not 'bracket', work with discontinuous trees;
                 output is in 'discbracket' format:
                 tree<TAB>sentence<TAB>frequency

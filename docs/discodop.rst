@@ -56,12 +56,13 @@ Output is sent to stdout; to save the results, redirect to a file.
 
 Options:
 
---fmt=<export|bracket|discbracket|tiger|alpino|dact>
+--fmt=(export|bracket|discbracket|tiger|alpino|dact)
               when format is not ``bracket``, work with discontinuous trees;
               output is in ``discbracket`` format:
               tree<TAB>sentence<TAB>frequency
               where ``tree`` has indices as leaves, referring to elements of
               ``sentence``, a space separated list of words.
+
 -o file       Write output to ``file`` instead of stdout.
 --indices     report sets of indices instead of frequencies.
 --cover       include all depth-1 fragments of first treebank corresponding
@@ -102,12 +103,12 @@ file, and options may consist of:
 --disconly       Only evaluate bracketings of discontinuous constituents
                  (only affects Parseval measures).
 
---goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino|dact>
+--goldfmt, --parsesfmt=(export|bracket|discbracket|tiger|alpino|dact)
                  Specify corpus format [default: export].
 
 --fmt=[...]      Shorthand for setting both ``--goldfmt`` and ``--parsesfmt``.
 
---goldenc, --parsesenc=<utf-8|iso-8859-1|...>
+--goldenc, --parsesenc=(utf-8|iso-8859-1|...)
                  Specify encoding [default: utf-8].
 
 --ted            Enable tree-edit distance evaluation.
@@ -165,18 +166,24 @@ action is one of::
 
 options may consist of:
 
---inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
+--inputfmt=(export|bracket|discbracket|tiger|alpino|dact)
                 Input treebank format [default: export].
---outputfmt=<export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
+
+--outputfmt=(export|bracket|discbracket|dact|conll|mst|tokens|wordpos)
                 Output treebank format [default: export].
+
 --fmt=x         Shortcut to specify both input and output format.
---inputenc, --outputenc, --enc=<utf-8|iso-8859-1|...>
+
+--inputenc, --outputenc, --enc=(utf-8|iso-8859-1|...)
                 Treebank encoding [default: utf-8].
+
 --slice=<n:m>   select a range of sentences from input starting with *n*,
                 up to but not including *m*; as in Python, *n* or *m* can be left
                 out or negative, and the first index is 0.
+
 --renumber      Replace sentence IDs with numbers starting from 1,
                 padded with 8 spaces.
+
 --maxlen=n      only select sentences with up to *n* tokens.
 --punct=x       possible options:
 
@@ -200,8 +207,10 @@ options may consist of:
                 :'between': insert node with lemma between POS tag and word,
                     e.g., (NN (man men))
 --ensureroot=x  add root node labeled ``x`` to trees if not already present.
---factor=<left|right>
+
+--factor=(left|right)
                 specify left- or right-factored binarization [default: right].
+
 -h n            horizontal markovization. default: infinite (all siblings)
 -v n            vertical markovization. default: 1 (immediate parent only)
 --leftunary     make initial / final productions of binarized constituents
@@ -234,18 +243,18 @@ Read off grammars from treebanks.
 
 ``type`` is one of:
 
-:pcfg:            Probabilistic Context-Free Grammar (treebank grammar)
+:pcfg:            Probabilistic Context-Free Grammar (treebank grammar).
 :plcfrs:
                   Probabilistic Linear Context-Free Rewriting System
-                  (discontinuous treebank grammar)
+                  (discontinuous treebank grammar).
 
-:ptsg:            Probabilistic Tree-Substitution Grammar
-:dopreduction:    All-fragments PTSG using Goodman's reduction
-:doubledop:       PTSG from recurring fragmensts
-:param:           Extract a series of grammars according to parameters
+:ptsg:            Probabilistic Tree-Substitution Grammar.
+:dopreduction:    All-fragments PTSG using Goodman's reduction.
+:doubledop:       PTSG from recurring fragmensts.
+:param:           Extract a series of grammars according to parameters.
 :info:            Print statistics for PLCFRS/bitpar rules.
 :merge:
-                  Interpolate given grammars into a single grammar
+                  Interpolate given sorted grammars into a single grammar.
                   Input can be a rules, lexicon or fragment file.
 
 ``input`` is a binarized treebank, or in the ``ptsg`` case, weighted fragments
@@ -258,16 +267,16 @@ the ones created by this tool.
 
 Options:
 
---inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
+--inputfmt=(export|bracket|discbracket|tiger|alpino|dact)
           The treebank format [default: export].
 
---inputenc=<utf-8|iso-8859-1|...>
+--inputenc=(utf-8|iso-8859-1|...)
           Treebank encoding [default: utf-8].
 
---dopestimator=<rfe|ewe|shortest|...>
+--dopestimator=(rfe|ewe|shortest|...)
           The DOP estimator to use with dopreduction/doubledop [default: rfe].
 
---numproc=<1|2|...>
+--numproc=(1|2|...)
           Number of processes to start [default: 1].
           Only relevant for double dop fragment extraction.
 
@@ -332,7 +341,7 @@ General options:
 --prob       Print probabilities as well as parse trees.
 --tags       Tokens are of the form ``word/POS``; give both to parser.
 
---fmt=[export|bracket|discbracket|alpino|conll|mst|wordpos]
+--fmt=(export|bracket|discbracket|alpino|conll|mst|wordpos)
              Format of output [default: discbracket].
 
 --numproc=k  Launch k processes, to exploit multiple cores.
@@ -349,6 +358,12 @@ Options for simple mode:
              DOP, it is possible to aim for the most probable parse (MPP)
              instead, whose probability is the sum of any number of the
              k-best derivations.
+
+--obj=(mpd|mpp|mcc|shortest|sl-dop)
+             Objective function to maximize [default: mpd].
+
+-m x         Use x derivations to approximate objective functions;
+             mpd and shortest require only 1.
 --bitpar     Use bitpar to parse with an unbinarized grammar.
 
 
@@ -356,9 +371,7 @@ treedraw
 --------
 Usage: ``discodop treedraw [<treebank>...] [options]``
 
-Options (* marks default option):
-
---fmt=<export|bracket|discbracket|tiger|alpino|dact>
+--fmt=(export|bracket|discbracket|tiger|alpino|dact)
                   Specify corpus format [default: export].
 
 --encoding=enc    Specify a different encoding than the default utf-8.
@@ -367,7 +380,7 @@ Options (* marks default option):
                   :'add': show both syntactic categories and functions,
                   :'replace': only show grammatical functions.
 
---morphology=x    :'no'=default: only show POS tags,
+--morphology=x    :'no': only show POS tags [default],
                   :'add': concatenate morphology tags to POS tags,
                   :'replace': replace POS tags with morphology tags,
                   :'between': add morphological node between POS tag and word.
@@ -384,7 +397,7 @@ treesearch
 ----------
 Search through treebanks with queries.
 
-Usage: ``%(cmd)s [--engine=<x>] [-t|-s|-c] <query> <treebank>...``
+Usage: ``discodop treesearch [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...``
 
 Options:
 
