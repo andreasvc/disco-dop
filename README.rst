@@ -144,7 +144,7 @@ Documentation
 =============
 A manual page for the ``discodop`` command is installed as part of the
 installation: ``man discodop``. Further documentation can be found at
-http://staff.science.uva.nl/~acranenb/discodop/
+http://andreasvc.github.io/discodop/
 To generate a local copy see the ``docs/README`` file.
 
 Acknowledgments
@@ -167,7 +167,7 @@ This work is partly described in the following publications:
   http://www.illc.uva.nl/LaCo/CLS/papers/iwpt2013parser_final.pdf
 - van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
   systems. Proc. of EACL.
-  http://staff.science.uva.nl/~acranenb/eacl2012corrected.pdf
+  http://andreasvc.github.io/eacl2012corrected.pdf
 - van Cranenburgh, Scha, Sangati (2011). Discontinuous Data-Oriented Parsing:
   A mildly context-sensitive all-fragments grammar. Proc. of SPMRL.
   http://www.aclweb.org/anthology/W/W11/W11-3805.pdf
