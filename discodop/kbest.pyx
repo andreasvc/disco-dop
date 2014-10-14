@@ -7,14 +7,14 @@ from discodop.plcfrs import DoubleAgenda
 from discodop.containers import ChartItem, RankedEdge, Grammar
 
 cimport cython
-include "constants.pxi"
+from libc.stdint cimport uint32_t
 from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
-		Grammar, Rule, Chart, Edges, Edge, RankedEdge, \
-		new_RankedEdge, UInt, UChar, \
+		Grammar, Rule, Chart, Edges, Edge, RankedEdge, new_RankedEdge, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
 from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
 from discodop.plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \
 		LCFRSChart, SmallLCFRSChart, FatLCFRSChart, new_DoubleEntry
+include "constants.pxi"
 
 cdef DoubleAgenda getcandidates(Chart chart, v, int k):
 	""":returns: a heap with up to k candidate arcs starting from vertex v."""
@@ -183,7 +183,7 @@ cpdef inline _getderiv(bytearray result, v, RankedEdge ej, Chart chart,
 
 	:param result: provide an empty ``bytearray()`` for the initial call."""
 	cdef RankedEdge rankededge
-	cdef UInt label = chart.label(v)
+	cdef uint32_t label = chart.label(v)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
 		result += b'('
 		result += chart.grammar.tolabel[label]

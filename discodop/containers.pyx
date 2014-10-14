@@ -7,7 +7,7 @@ from discodop.bit cimport nextset, nextunset, anextset, anextunset
 cimport cython
 include "constants.pxi"
 
-maxbitveclen = SLOTS * sizeof(ULong) * 8
+maxbitveclen = SLOTS * sizeof(uint64_t) * 8
 cdef double INFINITY = float('infinity')
 
 include "_grammar.pxi"
@@ -16,7 +16,7 @@ include "_grammar.pxi"
 @cython.final
 cdef class LexicalRule:
 	"""A weighted rule of the form 'non-terminal --> word'."""
-	def __init__(self, UInt lhs, unicode word, double prob):
+	def __init__(self, uint32_t lhs, unicode word, double prob):
 		self.lhs = lhs
 		self.word = word
 		self.prob = prob
@@ -95,7 +95,7 @@ cdef class FatChartItem:
 				^ self.vec[0] >> (8 * sizeof(self.vec[0]) / 2 - 1))
 		# add remaining bits
 		for n in range(sizeof(self.vec[0]), sizeof(self.vec)):
-			_hash *= 33 ^ (<UChar *>self.vec)[n]
+			_hash *= 33 ^ (<uint8_t *>self.vec)[n]
 		return _hash
 
 	def __richcmp__(self, other, int op):
@@ -103,7 +103,7 @@ cdef class FatChartItem:
 		cdef FatChartItem ob = <FatChartItem>other
 		cdef int cmp = 0
 		cdef bint labelmatch = me.label == ob.label
-		cmp = memcmp(<UChar *>ob.vec, <UChar *>me.vec, sizeof(me.vec))
+		cmp = memcmp(<uint8_t *>ob.vec, <uint8_t *>me.vec, sizeof(me.vec))
 		if op == 2:
 			return labelmatch and cmp == 0
 		elif op == 3:
@@ -149,11 +149,11 @@ cdef class FatChartItem:
 		return result[:lensent] if lensent else result.rstrip('0')
 
 
-cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end):
-	return new_SmallChartItem(label, (1ULL << end) - (1ULL << start))
+cdef SmallChartItem CFGtoSmallChartItem(uint32_t label, Idx start, Idx end):
+	return new_SmallChartItem(label, (1UL << end) - (1UL << start))
 
 
-cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end):
+cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end):
 	cdef FatChartItem fci = new_FatChartItem(label)
 	cdef short n
 	if BITSLOT(start) == BITSLOT(end):
@@ -196,7 +196,7 @@ cdef class RankedEdge:
 		if op == 2 or op == 3:  # '==' or '!='
 			return (op == 2) == (self.left == ob.left and self.right
 					== ob.right and self.head == ob.head
-					and memcmp(<UChar *>self.edge, <UChar *>ob.edge,
+					and memcmp(<uint8_t *>self.edge, <uint8_t *>ob.edge,
 						sizeof(ob.edge)) == 0)
 		return NotImplemented
 
@@ -277,7 +277,7 @@ cdef class Chart:
 		itemx //= self.grammar.nonterminals
 		start = itemx // self.lensent
 		end = itemx % self.lensent + 1
-		if self.lensent < 8 * sizeof(ULLong):
+		if self.lensent < 8 * sizeof(uint64_t):
 			return CFGtoSmallChartItem(label, start, end)
 		return CFGtoFatChartItem(label, start, end)
 

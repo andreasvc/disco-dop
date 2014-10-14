@@ -50,7 +50,6 @@ Requirements:
 
 - Python 2.7+/3   http://www.python.org (headers required, e.g. python-dev package)
 - Cython 0.20+    http://www.cython.org
-- GCC             http://gcc.gnu.org/
 - Numpy 1.5+      http://numpy.org/
 
 Debian, Ubuntu based systems
@@ -132,13 +131,6 @@ command prompt (terminal) in this directory, and run the command
 above prerequisites automatically. The command ``vagrant ssh`` can then be used
 to log in to the virtual machine (use ``vagrant halt`` to stop the virtual
 machine).
-
-Compilation requires the GCC compiler. To port the code to another compiler such
-as Visual C, replace the compiler intrinsics in ``macros.h``, ``bit.pyx``, and
-``bit.pxd`` with their equivalents for the compiler in question. This mainly
-concerns operations to scan for bits in integers, for which these compiler
-intrinsics provide the most efficient implementation on a given processor.
-
 
 Documentation
 =============

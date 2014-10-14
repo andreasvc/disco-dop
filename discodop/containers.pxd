@@ -1,33 +1,22 @@
 from math import isinf, exp, log, fsum
 from libc.stdlib cimport malloc, calloc, realloc, free, qsort, atol, strtod
 from libc.string cimport memcmp, memset
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 cimport cython
 include "constants.pxi"
 
-ctypedef unsigned long long ULLong
-ctypedef unsigned long ULong
-ctypedef unsigned int UInt
-ctypedef unsigned short UShort
-ctypedef unsigned char UChar
-
-
-cdef extern:
-	int __builtin_ffsll (ULLong)
-	int __builtin_ctzll (ULLong)
-	int __builtin_clzll (ULLong)
-	int __builtin_popcountll (ULLong)
-	int __builtin_ctzl (ULong)
-	int __builtin_popcountl (ULong)
+# NB: For PCFG parsing sentences longer than 256 words, change this to uint16_t
+ctypedef uint8_t Idx
 
 
 cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
 	int BITNSLOTS(int nb)
-	void SETBIT(ULong a[], int b)
-	void CLEARBIT(ULong a[], int b)
-	ULong TESTBIT(ULong a[], int b)
-	ULong BITMASK(int b)
+	void SETBIT(uint64_t a[], int b)
+	void CLEARBIT(uint64_t a[], int b)
+	uint64_t TESTBIT(uint64_t a[], int b)
+	uint64_t BITMASK(int b)
 
 
 @cython.final
@@ -36,12 +25,12 @@ cdef class Grammar:
 	cdef Rule **unary
 	cdef Rule **lbinary
 	cdef Rule **rbinary
-	cdef UInt *mapping
-	cdef UInt *revmap
-	cdef UInt **splitmapping
-	cdef UChar *fanout
-	cdef ULong *chainvec
-	cdef ULong *mask
+	cdef uint32_t *mapping
+	cdef uint32_t *revmap
+	cdef uint32_t **splitmapping
+	cdef uint8_t *fanout
+	cdef uint64_t *chainvec
+	cdef uint64_t *mask
 	cdef readonly int currentmodel
 	cdef readonly size_t nonterminals, phrasalnonterminals
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
@@ -86,7 +75,7 @@ cdef class Chart:
 	cdef Grammar grammar
 	cdef readonly list sent
 	cdef dict inside, outside
-	cdef UInt start
+	cdef uint32_t start
 	cdef short lensent
 	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
 	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
@@ -106,47 +95,47 @@ cdef class Chart:
 
 cdef struct Rule:  # total: 32 bytes.
 	double prob # 8 bytes
-	UInt lhs # 4 bytes
-	UInt rhs1 # 4 bytes
-	UInt rhs2 # 4 bytes
-	UInt args # 4 bytes => 32 max vars per rule
-	UInt lengths # 4 bytes => same
-	UInt no # 4 bytes
+	uint32_t lhs # 4 bytes
+	uint32_t rhs1 # 4 bytes
+	uint32_t rhs2 # 4 bytes
+	uint32_t args # 4 bytes => 32 max vars per rule
+	uint32_t lengths # 4 bytes => same
+	uint32_t no # 4 bytes
 
 
 @cython.final
 cdef class LexicalRule:
 	cdef readonly double prob
-	cdef readonly UInt lhs
+	cdef readonly uint32_t lhs
 	cdef readonly unicode word
 
 
 @cython.freelist(1000)
 cdef class ChartItem:
-	cdef UInt label
+	cdef uint32_t label
 	cdef double prob
 
 
 @cython.final
 cdef class SmallChartItem(ChartItem):
-	cdef ULLong vec
+	cdef uint64_t vec
 	cdef copy(self)
 
 
 @cython.final
 cdef class FatChartItem(ChartItem):
-	cdef ULong vec[SLOTS]
+	cdef uint64_t vec[SLOTS]
 	cdef copy(self)
 
 
-cdef SmallChartItem CFGtoSmallChartItem(UInt label, UChar start, UChar end)
-cdef FatChartItem CFGtoFatChartItem(UInt label, UChar start, UChar end)
+cdef SmallChartItem CFGtoSmallChartItem(uint32_t label, Idx start, Idx end)
+cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end)
 
 
 cdef union Position: # 8 bytes
 	short mid  # CFG, end index of left child
-	ULLong lvec  # LCFRS, bit vector of left child
-	ULong *lvec_fat  # LCFRS > 64 words, pointer to bit vector of left child;
+	uint64_t lvec  # LCFRS, bit vector of left child
+	uint64_t *lvec_fat  # LCFRS > 64 words, pointer to bit vector of left child;
 	# 		NB: this assumes left child is not garbage collected!
 
 
@@ -174,8 +163,8 @@ cdef class Edges:
 #
 #
 #cdef struct CompactEdge:
-#	UInt ruleno  # => idx to grammar.bylhs; define sentinel.
-#	UInt posno  # => idx to an array of positions
+#	uint32_t ruleno  # => idx to grammar.bylhs; define sentinel.
+#	uint32_t posno  # => idx to an array of positions
 #	# 8 bytes, but more indirection, less convenience
 #
 #
@@ -185,14 +174,14 @@ cdef class Edges:
 #	seems to require parsing in 3 stages: recognizer, enumerate analyses,
 #	get probs. """
 #	#keys
-#	cdef UInt *catnum			# no. of chart item -> lhs
+#	cdef uint32_t *catnum			# no. of chart item -> lhs
 #	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.
 #	# from firstanalysis[n] to firstanalysis[n+1] or end values.
 #	cdef size_t *firstchild     # idx to child array below
 #	cdef double *insideprobs	# no. of edge -> inside prob
-#	cdef UInt *ruleno
+#	cdef uint32_t *ruleno
 #	#positive means index to lists above, negative means terminal index
-#	cdef UInt *child
+#	cdef uint32_t *child
 #
 #
 #cdef class DiscNode:
@@ -239,14 +228,14 @@ cdef class Ctrees:
 # ---------------------------------------------------------------
 
 
-cdef inline FatChartItem new_FatChartItem(UInt label):
+cdef inline FatChartItem new_FatChartItem(uint32_t label):
 	cdef FatChartItem item = FatChartItem.__new__(FatChartItem)
 	item.label = label
 	# NB: since item.vec is a static array, its elements are initialized to 0.
 	return item
 
 
-cdef inline SmallChartItem new_SmallChartItem(UInt label, ULLong vec):
+cdef inline SmallChartItem new_SmallChartItem(uint32_t label, uint64_t vec):
 	cdef SmallChartItem item = SmallChartItem.__new__(SmallChartItem)
 	item.label = label
 	item.vec = vec
@@ -265,7 +254,7 @@ cdef inline RankedEdge new_RankedEdge(
 
 # defined here because circular import.
 cdef inline size_t cellidx(short start, short end, short lensent,
-		UInt nonterminals):
+		uint32_t nonterminals):
 	"""Return an index for a regular three dimensional array.
 
 	``chart[start][end][0] => chart[idx]`` """

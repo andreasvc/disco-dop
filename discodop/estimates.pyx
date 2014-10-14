@@ -11,10 +11,11 @@ from math import exp
 import numpy as np
 
 from libc.math cimport isnan, isfinite
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, testbit
 from discodop.plcfrs cimport DoubleAgenda, DoubleEntry
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
-		new_SmallChartItem, SmallChartItem, UInt, ULLong
+		new_SmallChartItem, SmallChartItem
 
 INFINITY = float('infinity')
 
@@ -57,22 +58,22 @@ cdef inline Item new_Item(int state, int length, int lr, int gaps):
 
 
 cdef inline double getoutside(double [:, :, :, :] outside,
-		UInt maxlen, UInt slen, UInt label, ULLong vec):
+		uint32_t maxlen, uint32_t slen, uint32_t label, uint64_t vec):
 	"""Query for outside estimate.
 
 	NB: if this would be used, it should be in a .pxd with `inline`.
 	However, passing the numpy array may be slow."""
-	cdef UInt length = bitcount(vec)
-	cdef UInt left = nextset(vec, 0)
-	cdef UInt gaps = bitlength(vec) - length - left
-	cdef UInt right = slen - length - left - gaps
-	cdef UInt lr = left + right
+	cdef uint32_t length = bitcount(vec)
+	cdef uint32_t left = nextset(vec, 0)
+	cdef uint32_t gaps = bitlength(vec) - length - left
+	cdef uint32_t right = slen - length - left - gaps
+	cdef uint32_t lr = left + right
 	if slen > maxlen or length + lr + gaps > maxlen:
 		return 0.0
 	return outside[label, length, lr, gaps]
 
 
-def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
+def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 	"""Compute simple inside estimate in bottom-up fashion.
 	Here vec is actually the length (number of terminals in the yield of
 	the constituent)
@@ -85,7 +86,7 @@ def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 	cdef LexicalRule lexrule
 	cdef Rule rule
 	cdef size_t i
-	cdef ULLong vec
+	cdef uint64_t vec
 
 	for i in grammar.lexicalbylhs:
 		agenda[new_SmallChartItem(i, 1)] = min([lexrule.prob
@@ -139,7 +140,7 @@ def simpleinside(Grammar grammar, UInt maxlen, double [:, :] insidescores):
 	insidescores.base[np.isnan(insidescores.base)] = np.inf
 
 
-def inside(Grammar grammar, UInt maxlen, dict insidescores):
+def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 	"""Compute inside estimate in bottom-up fashion, with full bit vectors.
 
 	(not used)."""
@@ -200,30 +201,30 @@ def inside(Grammar grammar, UInt maxlen, dict insidescores):
 	return insidescores
 
 
-cdef inline ULLong insideconcat(ULLong a, ULLong b, Rule rule, Grammar grammar,
-		UInt maxlen):
+cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, Rule rule, Grammar grammar,
+		uint32_t maxlen):
 	if grammar.fanout[rule.lhs] + bitcount(a) + bitcount(b) > maxlen + 1:
 		return 0
 	result = resultpos = l = r = 0
 	for x in range(bitlength(rule.lengths)):
 		if testbit(rule.args, x) == 0:
 			subarg = nextunset(a, l) - l
-			result |= (1ULL << subarg) - 1ULL << resultpos
+			result |= (1UL << subarg) - 1UL << resultpos
 			resultpos += subarg
 			l = subarg + 1
 		else:
 			subarg = nextunset(b, r) - r
-			result |= (1ULL << subarg) - 1ULL << resultpos
+			result |= (1UL << subarg) - 1UL << resultpos
 			resultpos += subarg
 			r = subarg + 1
 		if testbit(rule.lengths, x):
 			resultpos += 1
-			result &= ~(1ULL << resultpos)
+			result &= ~(1UL << resultpos)
 	return result
 
 
 def outsidelr(Grammar grammar, double [:, :] insidescores,
-		UInt maxlen, UInt goal, double [:, :, :, :] outside):
+		uint32_t maxlen, uint32_t goal, double [:, :, :, :] outside):
 	"""Compute the outside SX simple LR estimate in top down fashion."""
 	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef DoubleEntry entry
@@ -332,7 +333,7 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 	# end while agenda.length:
 
 
-def getestimates(Grammar grammar, UInt maxlen, UInt goal):
+def getestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
 	"""Compute table of outside SX simple LR estimates for a PLCFRS."""
 	print("allocating outside matrix:",
 		(8 * grammar.nonterminals * (maxlen + 1) * (maxlen + 1)
@@ -349,17 +350,17 @@ def getestimates(Grammar grammar, UInt maxlen, UInt goal):
 
 
 cdef inline double getpcfgoutside(dict outsidescores,
-		UInt maxlen, UInt slen, UInt label, ULLong vec):
+		uint32_t maxlen, uint32_t slen, uint32_t label, uint64_t vec):
 	"""Query for a PCFG A* estimate. For documentation purposes."""
-	cdef UInt length = bitcount(vec)
-	cdef UInt left = nextset(vec, 0)
-	cdef UInt right = slen - length - left
+	cdef uint32_t length = bitcount(vec)
+	cdef uint32_t left = nextset(vec, 0)
+	cdef uint32_t right = slen - length - left
 	if slen > maxlen or length + left + right > maxlen:
 		return 0.0
 	return outsidescores[label, left, right]
 
 
-cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
+cpdef getpcfgestimates(Grammar grammar, uint32_t maxlen, uint32_t goal,
 		bint debug=False):
 	"""Compute table of outside SX estimates for a PCFG."""
 	insidescores = pcfginsidesx(grammar, maxlen)
@@ -388,13 +389,13 @@ cpdef getpcfgestimates(Grammar grammar, UInt maxlen, UInt goal,
 	return outside
 
 
-cdef pcfginsidesx(Grammar grammar, UInt maxlen):
+cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 	"""Compute insideSX estimate for a PCFG using agenda.
 
 	Adapted from: Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse
 	Selection."""
 	cdef size_t n
-	cdef ULLong vec
+	cdef uint64_t vec
 	cdef SmallChartItem I
 	cdef DoubleEntry entry
 	cdef Rule rule
@@ -445,7 +446,7 @@ cdef pcfginsidesx(Grammar grammar, UInt maxlen):
 	return insidescores
 
 
-cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
+cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal, uint32_t maxlen):
 	"""outsideSX estimate for a PCFG, agenda-based version."""
 	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef DoubleEntry entry
@@ -506,7 +507,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, UInt goal, UInt maxlen):
 	return outside.base
 
 
-cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
+cpdef getpcfgestimatesrec(Grammar grammar, uint32_t maxlen, uint32_t goal,
 	bint debug=False):
 	insidescores = [{} for _ in range(maxlen + 1)]
 	outsidescores = {}
@@ -555,7 +556,7 @@ cpdef getpcfgestimatesrec(Grammar grammar, UInt maxlen, UInt goal,
 	return outside
 
 
-cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
+cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state, int span):
 	"""Compute insideSX estimate for a PCFG.
 
 	Straight from Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse
@@ -607,7 +608,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, UInt state, int span):
 
 
 cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
-		UInt goal, UInt state, int lspan, int rspan):
+		uint32_t goal, uint32_t state, int lspan, int rspan):
 	"""outsideSX estimate for a PCFG."""
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, sibsize
@@ -675,7 +676,7 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 	return score
 
 
-cpdef testestimates(Grammar grammar, UInt maxlen, UInt goal):
+cpdef testestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
 	print("getting inside")
 	insidescores = inside(grammar, maxlen, {})
 	for a in insidescores:

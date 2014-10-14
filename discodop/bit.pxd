@@ -1,36 +1,25 @@
-from discodop.containers cimport ULLong, ULong, UInt, UShort, UChar
+from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
 from libc.string cimport memcpy
-
-# See: http://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html
-cdef extern:
-	int __builtin_ffsll(ULLong)
-	int __builtin_ctzll(ULLong)
-	int __builtin_clzll(ULLong)
-	int __builtin_ctzl(ULong)
-	int __builtin_popcountl(ULong)
-	int __builtin_popcountll(ULLong)
-
-# ctz equivalents:
-# - visual studio 2005:
-#   unsigned long _BitScanForward(&result, unsigned __int64 val)
-# - llvm: llvm.ctlz(i64 val, 1)
-# - POSIX (no 64 bit): ffs(int val)
-# Cf. http://en.wikipedia.org/wiki/Find_first_set
 
 cdef extern from "macros.h":
 	int BITSIZE
 	int BITSLOT(int b)
-	ULong BITMASK(int b)
-	ULong TESTBIT(ULong a[], int b)
-	void CLEARBIT(ULong a[], int b)
+	uint64_t BITMASK(int b)
+	uint64_t TESTBIT(uint64_t a[], int b)
+	void CLEARBIT(uint64_t a[], int b)
+
+
+cdef extern from "bitcount.h":
+	unsigned int bit_clz(uint64_t)
+	unsigned int bit_ctz(uint64_t)
+	unsigned int bit_popcount(uint64_t)
 
 
 ctypedef fused unsigned_fused:
-	UChar
-	UShort
-	UInt
-	ULong
-	ULLong
+	uint8_t
+	uint16_t
+	uint32_t
+	uint64_t
 
 
 # cpdef functions defined in bit.pyx
@@ -38,24 +27,24 @@ ctypedef fused unsigned_fused:
 cpdef int fanout(arg)
 cpdef int pyintnextset(a, int pos)
 #on C integers
-cpdef int bitcount(ULLong vec)
+cpdef int bitcount(uint64_t vec)
 
 # cdef inline functions defined here:
-#on C integers
-#cdef inline bint testbit(unsigned_fused vec, UInt pos)
-#on ULLongs
-#cdef inline int nextset(ULLong vec, UInt pos)
-#cdef inline int nextunset(ULLong vec, UInt pos)
-#cdef inline int bitlength(ULLong vec)
-#on arrays of unsigned long
-#cdef inline int abitcount(ULong *vec, int slots)
-#cdef inline int anextset(ULong *vec, UInt pos, int slots)
-#cdef inline int anextunset(ULong *vec, UInt pos, int slots)
-#cdef inline bint subset(ULong *vec1, ULong *vec2, int slots)
-#cdef inline void setunion(ULong *dest, ULong *src, int slots)
+#on variously sized C integers
+#cdef inline bint testbit(unsigned_fused vec, uint32_t pos)
+#on uint64_t
+#cdef inline int nextset(uint64_t vec, uint32_t pos)
+#cdef inline int nextunset(uint64_t vec, uint32_t pos)
+#cdef inline int bitlength(uint64_t vec)
+#on uint64_t arrays
+#cdef inline int abitcount(uint64_t *vec, int slots)
+#cdef inline int anextset(uint64_t *vec, uint32_t pos, int slots)
+#cdef inline int anextunset(uint64_t *vec, uint32_t pos, int slots)
+#cdef inline bint subset(uint64_t *vec1, uint64_t *vec2, int slots)
+#cdef inline void setunion(uint64_t *dest, uint64_t *src, int slots)
 
 
-cdef inline bint testbit(unsigned_fused vec, UInt pos):
+cdef inline bint testbit(unsigned_fused vec, uint32_t pos):
 	"""Mask a particular bit, return nonzero if set.
 
 	>>> testbit(0b0011101, 0)
@@ -65,30 +54,30 @@ cdef inline bint testbit(unsigned_fused vec, UInt pos):
 	>>> testbit(0b100000000000000000000000000000000, 32) != 0
 	True
 	"""
-	if (unsigned_fused is UChar
-			or unsigned_fused is UShort
-			or unsigned_fused is UInt):
+	if (unsigned_fused is uint8_t
+			or unsigned_fused is uint16_t
+			or unsigned_fused is uint32_t):
 		return vec & (1U << pos)
 	else:
 		return vec & ((<unsigned_fused>1U) << pos) != 0
 
 
-cdef inline int nextset(ULLong vec, UInt pos):
+cdef inline int nextset(uint64_t vec, uint32_t pos):
 	""" Return next set bit starting from pos, -1 if there is none.
 
 	>>> nextset(0b001101, 1)
 	2
 	"""
-	#return (pos + __builtin_ctzll(vec >> pos)) if (vec >> pos) else -1
+	return (pos + bit_ctz(vec >> pos)) if (vec >> pos) else -1
 	# mask instead of shift:
-	return __builtin_ffsll(vec & (~0ULL << pos)) - 1
-	#ULLong x = vec & ~((1 << pos) - 1)
-	#ULLong x = (vec >> pos) << pos
-	#return x ? __builtin_ctzll(x) : -1
-	#return  __builtin_ffsll(x) - 1
+	#return __builtin_ffsl(vec & (~0UL << pos)) - 1
+	#uint64_t x = vec & ~((1 << pos) - 1)
+	#uint64_t x = (vec >> pos) << pos
+	#return x ? bit_ctz(x) : -1
+	#return  __builtin_ffsl(x) - 1
 
 
-cdef inline int nextunset(ULLong vec, UInt pos):
+cdef inline int nextunset(uint64_t vec, uint32_t pos):
 	""" Return next unset bit starting from pos.
 
 	>> nextunset(0b001101, 2)
@@ -96,43 +85,43 @@ cdef inline int nextunset(ULLong vec, UInt pos):
 	>> nextunset((1<<64)-1, 0)
 	64
 	"""
-	cdef ULLong x = ~vec & (~0ULL << pos)
-	return __builtin_ctzll(x) if x else (sizeof(ULLong) * 8)
+	cdef uint64_t x = ~vec & (~0UL << pos)
+	return bit_ctz(x) if x else (sizeof(uint64_t) * 8)
 
 
-cdef inline int bitlength(ULLong vec):
+cdef inline int bitlength(uint64_t vec):
 	"""Return number of bits needed to represent vector.
 
 	(equivalently: index of most significant set bit, plus one)
 
 	>>> bitlength(0b0011101)
 	5"""
-	return sizeof(vec) * 8 - __builtin_clzll(vec)
+	return sizeof(vec) * 8 - bit_clz(vec)
 
 
-cdef inline int abitcount(ULong *vec, int slots):
+cdef inline int abitcount(uint64_t *vec, int slots):
 	""" Return number of set bits in variable length bitvector """
 	cdef int a
 	cdef int result = 0
 	for a in range(slots):
-		result += __builtin_popcountl(vec[a])
+		result += bit_popcount(vec[a])
 	return result
 
 
-cdef inline int abitlength(ULong *vec, int slots):
+cdef inline int abitlength(uint64_t *vec, int slots):
 	"""Return number of bits needed to represent vector.
 
 	(equivalently: index of most significant set bit, plus one)."""
 	cdef int a = slots - 1
 	while a and not vec[a]:
 		a -= 1
-	return (a + 1) * sizeof(ULong) * 8 - __builtin_clzll(vec[a])
+	return (a + 1) * sizeof(uint64_t) * 8 - bit_clz(vec[a])
 
 
-cdef inline int anextset(ULong *vec, UInt pos, int slots):
+cdef inline int anextset(uint64_t *vec, uint32_t pos, int slots):
 	""" Return next set bit starting from pos, -1 if there is none. """
 	cdef int a = BITSLOT(pos)
-	cdef ULong x
+	cdef uint64_t x
 	if a >= slots:
 		return -1
 	x = vec[a] & (~0UL << (pos % BITSIZE))
@@ -141,13 +130,13 @@ cdef inline int anextset(ULong *vec, UInt pos, int slots):
 		if a == slots:
 			return -1
 		x = vec[a]
-	return a * BITSIZE + __builtin_ctzl(x)
+	return a * BITSIZE + bit_ctz(x)
 
 
-cdef inline int anextunset(ULong *vec, UInt pos, int slots):
+cdef inline int anextunset(uint64_t *vec, uint32_t pos, int slots):
 	""" Return next unset bit starting from pos. """
 	cdef int a = BITSLOT(pos)
-	cdef ULong x
+	cdef uint64_t x
 	if a >= slots:
 		return a * BITSIZE
 	x = vec[a] | (BITMASK(pos) - 1)
@@ -156,11 +145,11 @@ cdef inline int anextunset(ULong *vec, UInt pos, int slots):
 		if a == slots:
 			return a * BITSIZE
 		x = vec[a]
-	return a * BITSIZE + __builtin_ctzl(~x)
+	return a * BITSIZE + bit_ctz(~x)
 
 
-cdef inline int iteratesetbits(ULong *vec, int slots,
-		ULong *cur, int *idx):
+cdef inline int iteratesetbits(uint64_t *vec, int slots,
+		uint64_t *cur, int *idx):
 	"""Iterate over set bits in an array of unsigned long.
 
 	:param slots: number of elements in unsigned long array ``vec``.
@@ -172,7 +161,7 @@ cdef inline int iteratesetbits(ULong *vec, int slots,
 
 	e.g.::
 
-		ULong vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
+		uint64_t vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
 		int idx = 0
 		iteratesetbits(vec, 0, 4, &cur, &idx) # returns 0
 		iteratesetbits(vec, 0, 4, &cur, &idx) # returns 4
@@ -184,13 +173,13 @@ cdef inline int iteratesetbits(ULong *vec, int slots,
 		if idx[0] >= slots:
 			return -1
 		cur[0] = vec[idx[0]]
-	tmp = __builtin_ctzl(cur[0])  # index of bit in current slot
+	tmp = bit_ctz(cur[0])  # index of bit in current slot
 	CLEARBIT(cur, tmp)
 	return idx[0] * BITSIZE + tmp
 
 
-cdef inline int iterateunsetbits(ULong *vec, int slots,
-		ULong *cur, int *idx):
+cdef inline int iterateunsetbits(uint64_t *vec, int slots,
+		uint64_t *cur, int *idx):
 	"""Like ``iteratesetbits``, but return indices of zero bits."""
 	cdef int tmp
 	while not ~cur[0]:
@@ -198,12 +187,12 @@ cdef inline int iterateunsetbits(ULong *vec, int slots,
 		if idx[0] >= slots:
 			return -1
 		cur[0] = vec[idx[0]]
-	tmp = __builtin_ctzl(~cur[0])  # index of bit in current slot
+	tmp = bit_ctz(~cur[0])  # index of bit in current slot
 	CLEARBIT(cur, tmp)
 	return idx[0] * BITSIZE + tmp
 
 
-cdef inline void setintersectinplace(ULong *dest, ULong *src, int slots):
+cdef inline void setintersectinplace(uint64_t *dest, uint64_t *src, int slots):
 	"""dest gets the intersection of dest and src.
 
 	both operands must have at least `slots' slots."""
@@ -212,7 +201,7 @@ cdef inline void setintersectinplace(ULong *dest, ULong *src, int slots):
 		dest[a] &= src[a]
 
 
-cdef inline void setunioninplace(ULong *dest, ULong *src, int slots):
+cdef inline void setunioninplace(uint64_t *dest, uint64_t *src, int slots):
 	"""dest gets the union of dest and src.
 
 	Both operands must have at least ``slots`` slots."""
@@ -221,7 +210,7 @@ cdef inline void setunioninplace(ULong *dest, ULong *src, int slots):
 		dest[a] |= src[a]
 
 
-cdef inline void setunion(ULong *dest, ULong *src1, ULong *src2, int slots):
+cdef inline void setunion(uint64_t *dest, uint64_t *src1, uint64_t *src2, int slots):
 	"""dest gets the union of src1 and src2.
 
 	operands must have at least ``slots`` slots."""
@@ -230,7 +219,7 @@ cdef inline void setunion(ULong *dest, ULong *src1, ULong *src2, int slots):
 		dest[a] = src1[a] | src2[a]
 
 
-cdef inline bint subset(ULong *vec1, ULong *vec2, int slots):
+cdef inline bint subset(uint64_t *vec1, uint64_t *vec2, int slots):
 	"""Test whether vec1 is a subset of vec2.
 
 	i.e., all set bits of vec1 should be set in vec2."""

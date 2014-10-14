@@ -1,22 +1,22 @@
 cimport cython
 from libc.string cimport memcmp
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
 from cpython.dict cimport PyDict_Contains
 from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \
-		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem, \
-		UChar, UInt, ULong, ULLong
+		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem
 from discodop.bit cimport nextset, nextunset, bitcount, bitlength, \
 	testbit, anextset, anextunset, abitcount, abitlength, setunion
 from libc.string cimport memset, memcpy
 
 cdef extern from "macros.h":
 	int BITSLOT(int b)
-	ULong BITMASK(int b)
+	uint64_t BITMASK(int b)
 	int BITNSLOTS(int nb)
-	void SETBIT(ULong a[], int b)
-	ULong TESTBIT(ULong a[], int b)
+	void SETBIT(uint64_t a[], int b)
+	uint64_t TESTBIT(uint64_t a[], int b)
 
 ctypedef fused LCFRSChart_fused:
 	SmallLCFRSChart
@@ -53,14 +53,14 @@ cdef class FatLCFRSChart(LCFRSChart):
 cdef class Entry:
 	cdef readonly object key
 	cdef readonly object value
-	cdef readonly ULong count
+	cdef readonly uint64_t count
 
 
 @cython.final
 cdef class DoubleEntry:
 	cdef readonly object key
 	cdef readonly double value
-	cdef readonly ULong count
+	cdef readonly uint64_t count
 
 
 ctypedef fused Entry_fused:
@@ -68,7 +68,7 @@ ctypedef fused Entry_fused:
 	DoubleEntry
 
 
-cdef inline Entry new_Entry(object k, object v, ULong c):
+cdef inline Entry new_Entry(object k, object v, uint64_t c):
 	cdef Entry entry = Entry.__new__(Entry)
 	entry.key = k
 	entry.value = v
@@ -76,7 +76,7 @@ cdef inline Entry new_Entry(object k, object v, ULong c):
 	return entry
 
 
-cdef inline DoubleEntry new_DoubleEntry(object k, double v, ULong c):
+cdef inline DoubleEntry new_DoubleEntry(object k, double v, uint64_t c):
 	cdef DoubleEntry entry = DoubleEntry.__new__(DoubleEntry)
 	entry.key = k
 	entry.value = v
@@ -85,7 +85,7 @@ cdef inline DoubleEntry new_DoubleEntry(object k, double v, ULong c):
 
 
 cdef class Agenda:
-	cdef ULong length, counter
+	cdef uint64_t length, counter
 	cdef readonly list heap
 	cdef dict mapping
 

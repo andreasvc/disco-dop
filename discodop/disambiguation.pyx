@@ -23,16 +23,20 @@ from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
 from discodop.bit import pyintnextset, pyintbitcount
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from discodop.bit cimport abitcount
 from discodop.plcfrs cimport DoubleEntry, new_DoubleEntry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
-		SmallChartItem, FatChartItem, Edge, RankedEdge, yieldranges, \
-		new_RankedEdge, UChar, UInt, ULong, ULLong, logprobadd, logprobsum
+		SmallChartItem, FatChartItem, Edge, RankedEdge, SubsetGrammar, \
+		new_RankedEdge, logprobadd, logprobsum, yieldranges
 cimport cython
 
 from libc.string cimport memset
 cdef extern from "macros.h":
-	void SETBIT(ULong a[], int b)
-	void CLEARBIT(ULong a[], int b)
+	uint64_t TESTBIT(uint64_t a[], int b)
+	void SETBIT(uint64_t a[], int b)
+	void CLEARBIT(uint64_t a[], int b)
+	int BITNSLOTS(int nb)
 
 REMOVEIDS = re.compile('@[-0-9]+')
 BREMOVEIDS = re.compile(b'@[-0-9]+')
@@ -345,7 +349,7 @@ def gettree(cells, span):
 	if leftspan not in cells:
 		return '(%s %d)' % (label, pyintnextset(span, 0))
 	rightspan = span & ~leftspan
-	if label in (NONCONSTLABEL, NEGATIVECONSTLABEL):
+	if label == NONCONSTLABEL or label == NEGATIVECONSTLABEL:
 		return '%s %s' % (gettree(cells, leftspan), gettree(cells, rightspan))
 	return '(%s %s %s)' % (label,
 			gettree(cells, leftspan), gettree(cells, rightspan))
@@ -730,7 +734,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	# not just of derivations. Therefore the coarse-to-fine methods
 	# do not apply directly.
 	cdef FatChartItem fitem
-	cdef int n, lensent = len(sent)
+	cdef int n, selected = 0, lensent = len(sent)
 	whitelist = [{} for _ in grammar.toid]
 	if maskrules:
 		grammar.setmask([])  # block all rules
@@ -739,7 +743,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 		for node, (r, yf) in zip(tree.subtrees(),
 				lcfrsproductions(tree, sent)):
 			leaves = node.leaves()
-			if lensent < sizeof(ULLong) * 8:
+			if lensent < sizeof(uint64_t) * 8:
 				item = SmallChartItem(0, sum([1L << n for n in leaves]))
 			else:
 				fitem = item = FatChartItem(0)
@@ -759,6 +763,11 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 					return [], "'%s' not in grammar" % rulestr, None
 				for n in grammar.rulemapping[ruleno]:
 					CLEARBIT(grammar.mask, n)
+					# if TESTBIT(grammar.mask, n):
+					# 	CLEARBIT(grammar.mask, n)
+					# 	selected += 1
+	# if maskrules:
+	# 	grammar = SubsetGrammar(grammar, selected)
 
 	# Project labels to all possible labels that generate that label. For DOP
 	# reduction, all possible ids; for Double DOP, ignore artificial labels.

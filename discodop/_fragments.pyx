@@ -20,16 +20,16 @@ from discodop.treetransforms import binarize
 
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memset, memcpy
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.array cimport array, clone
-from discodop.containers cimport ULong, UInt, Node, NodeArray, Ctrees, \
-		yieldranges
+from discodop.containers cimport Node, NodeArray, Ctrees, yieldranges
 from discodop.bit cimport iteratesetbits, abitcount, subset, setunioninplace
 
 cdef extern from "macros.h":
 	int BITNSLOTS(int nb)
-	void SETBIT(ULong a[], int b)
-	void CLEARBIT(ULong a[], int b)
-	ULong TESTBIT(ULong a[], int b)
+	void SETBIT(uint64_t a[], int b)
+	void CLEARBIT(uint64_t a[], int b)
+	uint64_t TESTBIT(uint64_t a[], int b)
 	int IDX(int i, int j, int jmax, int kmax)
 
 cdef array uintarray = array('I', ())  # template to create arrays of this type
@@ -41,12 +41,12 @@ FRONTIERRE = re.compile(br' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
 LABEL = re.compile(br' *\( *([^ ()]+) *')
 
 
-# bitsets representing fragments are ULong arrays with the number of elements
+# bitsets representing fragments are uint64_t arrays with the number of elements
 # determined by SLOTS. While SLOTS is not a constant nor a global, it is
 # set just once for a treebank to fit its largest tree.
 # After SLOTS elements, this struct follows:
 cdef packed struct BitsetTail:
-	UInt id  # tree no. of which this fragment was extracted
+	uint32_t id  # tree no. of which this fragment was extracted
 	short root  # index of the root of the fragment in the NodeArray
 
 
@@ -54,30 +54,30 @@ cdef packed struct BitsetTail:
 # dictionaries and (2) passed between processes.
 # we leave one byte for NUL-termination:
 # data (SLOTS * 8), id (4), root (2), NUL (1)
-cdef inline bytes wrap(ULong *data, short SLOTS):
+cdef inline bytes wrap(uint64_t *data, short SLOTS):
 	"""Wrap bitset in bytes object for handling in Python space."""
-	return (<char *>data)[:SLOTS * sizeof(ULong) + sizeof(BitsetTail)]
+	return (<char *>data)[:SLOTS * sizeof(uint64_t) + sizeof(BitsetTail)]
 
 
 # use getters & setters because a cdef class would incur overhead & indirection
 # of a python object, and with a struct the root & id fields must be in front
 # which seems to lead to bad hashing behavior (?)
-cdef inline ULong *getpointer(object wrapper):
+cdef inline uint64_t *getpointer(object wrapper):
 	"""Get pointer to bitset from wrapper."""
-	return <ULong *><char *><bytes>wrapper
+	return <uint64_t *><char *><bytes>wrapper
 
 
-cdef inline UInt getid(ULong *data, short SLOTS):
+cdef inline uint32_t getid(uint64_t *data, short SLOTS):
 	"""Get id of fragment in a bitset."""
 	return (<BitsetTail *>&data[SLOTS]).id
 
 
-cdef inline short getroot(ULong *data, short SLOTS):
+cdef inline short getroot(uint64_t *data, short SLOTS):
 	"""Get root of fragment in a bitset."""
 	return (<BitsetTail *>&data[SLOTS]).root
 
 
-cdef inline void setrootid(ULong *data, short root, UInt id, short SLOTS):
+cdef inline void setrootid(uint64_t *data, short root, uint32_t id, short SLOTS):
 	"""Set root and id of fragment in a bitset."""
 	cdef BitsetTail *tail = <BitsetTail *>&data[SLOTS]
 	tail.id = id
@@ -127,9 +127,9 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 	cdef:
 		int n, m, start = 0, end2
 		short minterms = 2 if twoterms else 0
-		short SLOTS  # the number of UInts needed to cover the largest tree
-		ULong *matrix = NULL  # bit matrix of common productions in tree pair
-		ULong *scratch
+		short SLOTS  # the number of uint32_ts needed to cover the largest tree
+		uint64_t *matrix = NULL  # bit matrix of common productions in tree pair
+		uint64_t *scratch
 		NodeArray a
 		NodeArray *ctrees1
 		Node *anodes
@@ -151,8 +151,8 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		trees2 = trees1
 	ctrees1 = trees1.trees
 	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-	matrix = <ULong *>malloc(trees2.maxnodes * SLOTS * sizeof(ULong))
-	scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
+	matrix = <uint64_t *>malloc(trees2.maxnodes * SLOTS * sizeof(uint64_t))
+	scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 	if matrix is NULL or scratch is NULL:
 		raise MemoryError('allocation error')
 	end2 = trees2.len
@@ -193,13 +193,13 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 
 cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 		int n, int m, bint complement, bint debug, list asent, list sents,
-		list labels, set inter, short minterms, ULong *matrix, ULong *scratch,
+		list labels, set inter, short minterms, uint64_t *matrix, uint64_t *scratch,
 		short SLOTS):
 	"""Extract the bitsets of maximal overlapping fragments for a tree pair."""
 	cdef NodeArray b = trees2.trees[m]
 	cdef Node *bnodes = &trees2.nodes[b.offset]
 	# initialize table
-	memset(<void *>matrix, 0, b.len * SLOTS * sizeof(ULong))
+	memset(<void *>matrix, 0, b.len * SLOTS * sizeof(uint64_t))
 	# fill table
 	fasttreekernel(anodes, bnodes, a.len, b.len, matrix, SLOTS)
 	# dump table
@@ -213,7 +213,7 @@ cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 	# extract complementary fragments?
 	if complement:
 		# combine bitsets of inter together with bitwise or
-		memset(<void *>scratch, 0, SLOTS * sizeof(ULong))
+		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		for wrapper in inter:
 			setunioninplace(scratch, getpointer(wrapper), SLOTS)
 		# extract bitsets in A from result, without regard for B
@@ -225,7 +225,7 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 		list asent, list labels, bint discontinuous, bint approx,
 		bytearray tmp, short SLOTS):
 	"""Collect string representations of fragments given as bitsets."""
-	cdef ULong *bitset
+	cdef uint64_t *bitset
 	for wrapper in inter:
 		bitset = getpointer(wrapper)
 		getsubtree(tmp, anodes, bitset, labels,
@@ -241,7 +241,7 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 
 
 cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
-		ULong *matrix, short SLOTS):
+		uint64_t *matrix, short SLOTS):
 	"""Fast Tree Kernel (average case linear time).
 
 	Expects trees to be sorted according to their productions (in descending
@@ -272,20 +272,20 @@ cdef inline void fasttreekernel(Node *a, Node *b, int alen, int blen,
 					return
 
 
-cdef inline extractbitsets(ULong *matrix, Node *a, Node *b, short j, int n,
-		set results, int minterms, ULong *scratch, short SLOTS):
+cdef inline extractbitsets(uint64_t *matrix, Node *a, Node *b, short j, int n,
+		set results, int minterms, uint64_t *scratch, short SLOTS):
 	"""Visit nodes of ``b`` top-down and store bitsets of common nodes.
 
 	Stores bitsets of connected subsets of ``a`` as they are encountered,
 	following the common nodes specified in bit matrix. ``j`` is the node in
 	``b`` to start with, which changes with each recursive step. ``n`` is the
 	identifier of this tree which is stored with extracted fragments."""
-	cdef ULong *bitset = &matrix[j * SLOTS]
-	cdef ULong cur = bitset[0]
+	cdef uint64_t *bitset = &matrix[j * SLOTS]
+	cdef uint64_t cur = bitset[0]
 	cdef int idx = 0, terms
 	cdef int i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	while i != -1:
-		memset(<void *>scratch, 0, SLOTS * sizeof(ULong))
+		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		terms = extractat(matrix, scratch, a, b, i, j, SLOTS)
 		if terms >= minterms:
 			setrootid(scratch, i, n, SLOTS)
@@ -299,7 +299,7 @@ cdef inline extractbitsets(ULong *matrix, Node *a, Node *b, short j, int n,
 					results, minterms, scratch, SLOTS)
 
 
-cdef inline int extractat(ULong *matrix, ULong *result, Node *a, Node *b,
+cdef inline int extractat(uint64_t *matrix, uint64_t *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
 	"""Traverse tree `a` and `b` in parallel to extract a connected subset."""
 	cdef int terms = 0
@@ -337,13 +337,13 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		object matches = None  # multiset()
 		set candidates
 		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-		UInt n, m
-		UInt *countsp = NULL
+		uint32_t n, m
+		uint32_t *countsp = NULL
 		NodeArray a, b
 		Node *anodes
 		Node *bnodes
-		ULong cur
-		ULong *bitset
+		uint64_t cur
+		uint64_t *bitset
 		int idx
 	if indices:
 		theindices = [multiset() for _ in bitsets]
@@ -382,7 +382,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	return theindices if indices else counts
 
 
-cdef inline int containsbitset(Node *a, Node *b, ULong *bitset,
+cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
 		short i, short j):
 	"""Test whether the fragment ``bitset`` at ``a[i]`` occurs at ``b[j]``."""
 	if a[i].prod != b[j].prod:
@@ -409,7 +409,7 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 		dict result = {}
 		int p, i, n = -1
 		short SLOTS = BITNSLOTS(maxnodes + 1)
-		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
+		uint64_t *scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 		Node *nodes
 		bytearray tmp = bytearray()
 	if scratch is NULL:
@@ -423,7 +423,7 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 			# doesn't occur in this treebank
 			continue
 		nodes = &trees.nodes[trees.trees[n].offset]
-		memset(<void *>scratch, 0, SLOTS * sizeof(ULong))
+		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		for i in range(trees.trees[n].len):
 			if nodes[i].prod == p:
 				SETBIT(scratch, i)
@@ -450,11 +450,11 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		list sent
 		int n, i
 		short SLOTS = BITNSLOTS(maxnodes + 1)
-		ULong *scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
+		uint64_t *scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 		Node *nodes
 		bytearray tmp = bytearray()
 	for n in range(trees.len):
-		memset(<void *>scratch, 0, SLOTS * sizeof(ULong))
+		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		nodes = &trees.nodes[trees.trees[n].offset]
 		sent = sents[n]
 		for i in range(trees.trees[n].len):
@@ -469,15 +469,15 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 	return result
 
 
-cdef extractcompbitsets(ULong *bitset, Node *a,
-		int i, int n, set results, short SLOTS, ULong *scratch):
+cdef extractcompbitsets(uint64_t *bitset, Node *a,
+		int i, int n, set results, short SLOTS, uint64_t *scratch):
 	"""Like ``extractbitsets()`` but following complement of ``bitset``."""
 	cdef bint start = scratch is NULL and not TESTBIT(bitset, i)
 	if start:  # start extracting a fragment
 		# need to create a new array because further down in the recursion
 		# other fragments may be encountered which should not overwrite
 		# this one
-		scratch = <ULong *>malloc((SLOTS + 2) * sizeof(ULong))
+		scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 		if scratch is NULL:
 			raise MemoryError('allocation error')
 		setrootid(scratch, i, n, SLOTS)
@@ -499,7 +499,7 @@ cdef inline short termidx(short x):
 	return -x - 1
 
 
-cdef inline getsubtree(bytearray result, Node *tree, ULong *bitset,
+cdef inline getsubtree(bytearray result, Node *tree, uint64_t *bitset,
 		list labels, list sent, int i):
 	"""Get string of tree fragment denoted by bitset; indices as terminals.
 
@@ -594,8 +594,8 @@ cdef getsent(bytes frag, list sent):
 	return frag, tuple(newsent)
 
 
-cdef dumpmatrix(ULong *matrix, NodeArray a, NodeArray b, Node *anodes,
-		Node *bnodes, list asent, list bsent, list labels, ULong *scratch,
+cdef dumpmatrix(uint64_t *matrix, NodeArray a, NodeArray b, Node *anodes,
+		Node *bnodes, list asent, list bsent, list labels, uint64_t *scratch,
 		short SLOTS):
 	"""Dump a table of the common productions of a tree pair."""
 	dumptree(a, anodes, asent, labels, scratch)
@@ -621,7 +621,7 @@ cdef dumpmatrix(ULong *matrix, NodeArray a, NodeArray b, Node *anodes,
 
 
 cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
-		ULong *scratch):
+		uint64_t *scratch):
 	"""Print debug information of a given tree."""
 	for n in range(a.len):
 		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
@@ -637,7 +637,7 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, list labels,
 		else:
 			print()
 	tmp = bytearray()
-	memset(<void *>scratch, 255, BITNSLOTS(a.len) * sizeof(ULong))
+	memset(<void *>scratch, 255, BITNSLOTS(a.len) * sizeof(uint64_t))
 	getsubtree(tmp, anodes, scratch, labels, None, a.root)
 	print(tmp.decode('utf-8'), '\n', asent, '\n')
 

@@ -57,7 +57,7 @@ cdef class CFGChart(Chart):
 		return list(range(start, end))
 
 	def itemstr(self, item):
-		cdef UInt lhs = self.label(item)
+		cdef uint32_t lhs = self.label(item)
 		cdef short start = (item // self.grammar.nonterminals) // self.lensent
 		cdef short end = (item // self.grammar.nonterminals) % self.lensent + 1
 		return '%s[%d:%d]' % (
@@ -97,7 +97,7 @@ cdef class DenseCFGChart(CFGChart):
 		if self.probs is not NULL:
 			free(self.probs)
 
-	cdef void addedge(self, UInt lhs, UChar start, UChar end, UChar mid,
+	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule):
 		"""Add new edge to parse forest."""
 		cdef Edges edges
@@ -119,7 +119,7 @@ cdef class DenseCFGChart(CFGChart):
 		edge.pos.mid = mid
 		edges.len += 1
 
-	cdef void updateprob(self, UInt lhs, UChar start, UChar end, double prob):
+	cdef void updateprob(self, uint32_t lhs, Idx start, Idx end, double prob):
 		"""Update probability for item if better than current one."""
 		cdef size_t idx = compactcellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
@@ -129,7 +129,7 @@ cdef class DenseCFGChart(CFGChart):
 	cdef double _subtreeprob(self, size_t item):
 		"""Get viterbi / inside probability of a subtree headed by `item`."""
 		cdef short start, end
-		cdef UInt lhs
+		cdef uint32_t lhs
 		cdef size_t idx
 		lhs = item % self.grammar.nonterminals
 		item /= self.grammar.nonterminals
@@ -177,7 +177,7 @@ cdef class SparseCFGChart(CFGChart):
 		self.parseforest = {}  # [None] * entries
 		self.itemsinorder = []
 
-	cdef void addedge(self, UInt lhs, UChar start, UChar end, UChar mid,
+	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule):
 		"""Add new edge to parse forest."""
 		cdef Edges edges
@@ -200,7 +200,7 @@ cdef class SparseCFGChart(CFGChart):
 		edge.pos.mid = mid
 		edges.len += 1
 
-	cdef void updateprob(self, UInt lhs, UChar start, UChar end, double prob):
+	cdef void updateprob(self, uint32_t lhs, Idx start, Idx end, double prob):
 		"""Update probability for item if better than current one."""
 		cdef size_t item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
@@ -253,7 +253,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags=None,
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid
 		double oldscore, prob
-		UInt n, lhs, rhs1
+		uint32_t n, lhs, rhs1
 		size_t cell
 	minleft, maxleft, minright, maxright = minmaxmatrices(
 			grammar.nonterminals, lensent)
@@ -380,7 +380,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		DoubleAgenda unaryagenda = DoubleAgenda()
 		Rule *rule
 		LexicalRule lexrule
-		UInt n, lhs, rhs1
+		uint32_t n, lhs, rhs1
 		short left, right, lensent = len(sent)
 	for left, word in enumerate(sent):
 		tag = tags[left].encode('ascii') if tags else None
@@ -506,7 +506,7 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 		short left, right, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
 		double prob, ls, rs
-		UInt n, lhs, rhs1
+		uint32_t n, lhs, rhs1
 		bint foundbetter = False
 		Rule *rule
 		LexicalRule lexrule
@@ -646,7 +646,7 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 	return minleft, maxleft, minright, maxright
 
 
-def outsidescores(Grammar grammar, sent, UInt start,
+def outsidescores(Grammar grammar, sent, uint32_t start,
 		double [:, :, :] inside, double [:, :, :] outside,
 		short [:, :] minleft, short [:, :] maxleft,
 		short [:, :] minright, short [:, :] maxright):
@@ -654,7 +654,7 @@ def outsidescores(Grammar grammar, sent, UInt start,
 		short left, right, span, lensent = len(sent)
 		short narrowl, narrowr, minmid, maxmid
 		double ls, rs, os
-		UInt n, lhs
+		uint32_t n, lhs
 		Rule *rule
 		DoubleAgenda unaryagenda = DoubleAgenda()
 		list cell = [{} for _ in grammar.toid]
@@ -813,8 +813,8 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 	Assumes binarized grammar. Assumes chart's Grammar object has same order of
 	grammar rules as the grammar that was presented to bitpar."""
 	cdef Rule *rule
-	cdef UInt lhs
-	cdef UChar left, right, mid
+	cdef uint32_t lhs
+	cdef Idx left, right, mid
 	cdef size_t ruleno, child1
 	cdef double prob
 	if not chart.grammar.binarized:

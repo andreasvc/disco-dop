@@ -1,12 +1,13 @@
 """Project selected items from a chart to corresponding items in next grammar.
 """
 from __future__ import print_function
+from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from discodop.tree import Tree
 from discodop.treetransforms import mergediscnodes, unbinarize, fanout, \
 		addbitsets
 from discodop.containers cimport Grammar, Chart, ChartItem, Edges, Edge, \
-		Rule, LexicalRule, RankedEdge, ULLong, UInt, \
-		cellidx, CFGtoSmallChartItem, CFGtoFatChartItem
+		Rule, LexicalRule, RankedEdge, cellidx, \
+		CFGtoSmallChartItem, CFGtoFatChartItem
 from discodop.kbest import lazykbest
 import numpy as np
 
@@ -116,7 +117,7 @@ def bitparkbestitems(Chart chart, int k, bint finecfg):
 	:param chart: a chart where rankededges is a dictionary of CFG derivations.
 	:returns: a dictionary of ChartItems (mapping to None) occurring in the
 		derivations."""
-	cdef bint fatitems = chart.lensent >= (sizeof(ULLong) * 8)
+	cdef bint fatitems = chart.lensent >= (sizeof(uint64_t) * 8)
 	cdef list derivs = chart.rankededges[chart.root()]
 	cdef dict items = {}
 	for deriv, _ in derivs[:k]:
@@ -143,7 +144,7 @@ def whitelistfromposteriors(inside, outside, start,
 		Grammar coarse, Grammar fine, double threshold,
 		bint splitprune, bint markorigin, bint finecfg):
 	"""Compute posterior probabilities & prune away cells below a threshold."""
-	cdef UInt label
+	cdef uint32_t label
 	cdef short lensent = start[2]
 	if not 0 < threshold < 1:
 		raise ValueError('probability threshold should be between 0 and 1.')
@@ -155,7 +156,7 @@ def whitelistfromposteriors(inside, outside, start,
 		> threshold).nonzero()
 
 	kbestspans = [{} for _ in coarse.toid]
-	fatitems = lensent >= (sizeof(ULLong) * 8)
+	fatitems = lensent >= (sizeof(uint64_t) * 8)
 	for label, left, right in zip(labels, leftidx, rightidx):
 		if finecfg:
 			ei = cellidx(left, right, lensent, fine.nonterminals)

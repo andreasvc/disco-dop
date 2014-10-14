@@ -505,7 +505,7 @@ def merge(*iterables, key=None):
 	NB: while a sort key may be specified, the individual iterables must
 	already be sorted with this key."""
 	cdef list heap = []
-	cdef ULong cnt
+	cdef uint64_t cnt
 	cdef Entry entry = None
 	if key is None:
 		def key(x):

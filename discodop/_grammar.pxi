@@ -241,15 +241,15 @@ cdef class Grammar:
 		self.unary[0] = &(self.bylhs[0][self.numrules + 1])
 		self.lbinary[0] = &(self.unary[0][self.numunary + 1])
 		self.rbinary[0] = &(self.lbinary[0][self.numbinary + 1])
-		self.fanout = <UChar *>malloc(sizeof(UChar) * self.nonterminals)
+		self.fanout = <uint8_t *>malloc(sizeof(uint8_t) * self.nonterminals)
 		if self.fanout is NULL:
 			raise MemoryError('allocation error')
 		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
-		self.mask = <ULong *>malloc(BITNSLOTS(self.numrules) * sizeof(ULong))
+		self.mask = <uint64_t *>malloc(BITNSLOTS(self.numrules) * sizeof(uint64_t))
 		if self.mask is NULL:
 			raise MemoryError('allocation error')
 		self.setmask(None)
-		self.revmap = <UInt *>malloc(self.numrules * sizeof(UInt))
+		self.revmap = <uint32_t *>malloc(self.numrules * sizeof(uint32_t))
 		if self.revmap is NULL:
 			raise MemoryError('allocation error')
 
@@ -257,7 +257,7 @@ cdef class Grammar:
 	cdef _convertrules(Grammar self, list rulelines, dict fanoutdict):
 		"""Auxiliary function to create Grammar objects. Copies grammar
 		rules from a text file to a contiguous array of structs."""
-		cdef UInt n = 0, m
+		cdef uint32_t n = 0, m
 		cdef double w
 		cdef Rule *cur
 		self.rulenos = {}
@@ -319,7 +319,7 @@ cdef class Grammar:
 		"""Optionally normalize frequencies to relative frequencies.
 		Should be run during initialization."""
 		cdef double mass = 0
-		cdef UInt n = 0, lhs
+		cdef uint32_t n = 0, lhs
 		cdef LexicalRule lexrule
 		for lhs in range(self.nonterminals):
 			mass = 0
@@ -344,10 +344,10 @@ cdef class Grammar:
 		unary, or only binary rules, respectively.
 		A separate array has a pointer for each non-terminal into this array;
 		e.g.: dest[NP][0] == the first rule with an NP in the idx position."""
-		cdef UInt prev = self.nonterminals, idxlabel = 0, n, m = 0
+		cdef uint32_t prev = self.nonterminals, idxlabel = 0, n, m = 0
 		cdef Rule *cur
 		# need to set dest even when there are no rules for that idx
-		for n in range(self.nonterminals):
+		for n in range(1, self.nonterminals):
 			dest[n] = dest[0]
 		if dest is self.bylhs:
 			m = self.numrules
@@ -437,10 +437,10 @@ cdef class Grammar:
 		# zero-bit = not blocked or out of range; 1-bit = blocked.
 		if seq is None:
 			memset(<void *>self.mask, 0,
-					BITNSLOTS(self.numrules) * sizeof(ULong))
+					BITNSLOTS(self.numrules) * sizeof(uint64_t))
 			return
 		memset(<void *>self.mask, 255,
-				BITNSLOTS(self.numrules) * sizeof(ULong))
+				BITNSLOTS(self.numrules) * sizeof(uint64_t))
 		for n in seq:
 			CLEARBIT(self.mask, n)
 		# clear out-of-range bits: 000011111 <-- 1-bits up to numrules.
@@ -448,10 +448,10 @@ cdef class Grammar:
 
 	def buildchainvec(self):
 		"""Build a boolean matrix representing the unary (chain) rules."""
-		cdef UInt n
+		cdef uint32_t n
 		cdef Rule *rule
-		self.chainvec = <ULong *>calloc(self.nonterminals
-				* BITNSLOTS(self.nonterminals), sizeof(ULong))
+		self.chainvec = <uint64_t *>calloc(self.nonterminals
+				* BITNSLOTS(self.nonterminals), sizeof(uint64_t))
 		if self.chainvec is NULL:
 			raise MemoryError('allocation error')
 		for n in range(self.numunary):
@@ -463,7 +463,7 @@ cdef class Grammar:
 		currently selected weights."""
 		cdef Rule *rule
 		cdef LexicalRule lexrule
-		cdef UInt n
+		cdef uint32_t n
 		cdef list sums = [[] for _ in self.toid]
 		cdef double [:] tmp = self.models[self.currentmodel, :]
 		# We could be strict about separating POS tags and phrasal categories,
@@ -506,17 +506,17 @@ cdef class Grammar:
 			coarse = self
 		if self.mapping is not NULL:
 			free(self.mapping)
-		self.mapping = <UInt *>malloc(sizeof(UInt) * self.nonterminals)
+		self.mapping = <uint32_t *>malloc(sizeof(uint32_t) * self.nonterminals)
 		if splitprune and markorigin:
 			if self.splitmapping is not NULL:
 				if self.splitmapping[0] is not NULL:
 					free(self.splitmapping[0])
 				free(self.splitmapping)
-			self.splitmapping = <UInt **>malloc(sizeof(UInt *)
+			self.splitmapping = <uint32_t **>malloc(sizeof(uint32_t *)
 					* self.nonterminals)
 			for n in range(self.nonterminals):
 				self.splitmapping[n] = NULL
-			self.splitmapping[0] = <UInt *>malloc(sizeof(UInt) *
+			self.splitmapping[0] = <uint32_t *>malloc(sizeof(uint32_t) *
 				sum([self.fanout[n] for n in range(self.nonterminals)
 					if self.fanout[n] > 1]))
 		for n in range(self.nonterminals):
