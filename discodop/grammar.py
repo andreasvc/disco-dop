@@ -1005,7 +1005,7 @@ def main():
 		os.mkdir(resultdir)
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
-				prm.functions, prm.morphology, prm.removeempty,
+				prm.functions, prm.morphology, prm.removeempty, prm.ensureroot,
 				prm.transformations, prm.relationalrealizational)
 		simplelexsmooth = False
 		if prm.postagging and prm.postagging.method == 'unknownword':

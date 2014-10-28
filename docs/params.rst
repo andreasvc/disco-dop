@@ -70,6 +70,8 @@ Binarization
     :rightmostunary: whether to end binarization with unary node
     :tailmarker: with headrules, head is last node and can be marked
     :fanout_marks_before_bin: whether to add fanout markers before binarization
+    :labelfun: specify a function from nodes to labels; can be used to change
+        how labels appear in markovization, e.g., to strip of annotations.
 
 
 Stages
@@ -206,6 +208,7 @@ Other options
     :``None``: ignore lemmas
     :``'between'``: insert lemma as node between POS tag and word.
 :removeempty: ``True`` or ``False``; whether to remove empty terminals from train, test sets.
+:ensureroot: Ensure every tree has a root node with this label
 :transformations: apply treebank transformations;
     see source of :func:`discodop.treebanktransforms.transform`
 :relationalrealizational: apply RR-transform; see :func:`discodop.treebanktransforms.rrtransform`

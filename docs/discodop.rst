@@ -222,7 +222,7 @@ options may consist of:
                 reads rules from file ``x`` (e.g., "negra.headrules").
 --markheads     mark heads with ``^`` in phrasal labels.
 --reverse       reverse the transformations given by ``--transform``
---transforms    specify names of tree transformations to apply; for possible
+--transforms=x  specify names of tree transformations to apply; for possible
                 names, cf. :mod:`discodop.treebanktransforms` module.
 
 .. note::

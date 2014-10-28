@@ -62,6 +62,7 @@ DEFAULTS = dict(
 		rightmostunary=True,  # end binarization with unary node
 		tailmarker='',  # with headrules, head is last node and can be marked
 		revmarkov=True,  # reverse horizontal markovization
+		labelfun=None,
 		fanout_marks_before_bin=False))
 
 
@@ -78,6 +79,7 @@ def startexp(
 		testcorpus=parser.DictObj(DEFAULTS['testcorpus']),
 		binarization=parser.DictObj(DEFAULTS['binarization']),
 		removeempty=False,  # whether to remove empty terminals
+		ensureroot=None,  # ensure every tree has a root node with this label
 		punct=None,  # choices: None, 'move', 'remove', 'root'
 		functions=None,  # choices None, 'add', 'remove', 'replace'
 		morphology=None,  # choices: None, 'add', 'replace', 'between'
@@ -124,7 +126,7 @@ def startexp(
 	if not rerun:
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				corpusfmt, traincorpus, binarization, punct, functions,
-				morphology, removeempty, transformations,
+				morphology, removeempty, ensureroot, transformations,
 				relationalrealizational)
 	elif isinstance(traincorpus.numsents, float):
 		raise ValueError('need to specify number of training set sentences, '
@@ -133,7 +135,7 @@ def startexp(
 	testset = treebank.READERS[corpusfmt](
 			testcorpus.path, encoding=testcorpus.encoding,
 			removeempty=removeempty, morphology=morphology,
-			functions=functions)
+			functions=functions, ensureroot=ensureroot)
 	gold_sents = testset.tagged_sents()
 	test_trees = testset.trees()
 	if testcorpus.skiptrain:
@@ -256,12 +258,14 @@ def startexp(
 
 
 def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
-		morphology, removeempty, transformations, relationalrealizational):
+		morphology, removeempty, ensureroot, transformations,
+		relationalrealizational):
 	"""Load the training corpus."""
 	train = treebank.READERS[corpusfmt](traincorpus.path,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
 			headfinal=True, headreverse=False, removeempty=removeempty,
-			punct=punct, functions=functions, morphology=morphology)
+			ensureroot=ensureroot, punct=punct,
+			functions=functions, morphology=morphology)
 	traintrees = train.trees()
 	trainsents = train.sents()
 	logging.info('%d sentences in training corpus %s',
@@ -342,7 +346,8 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 					headidx=-1 if binarization.markhead else None,
 					filterfuncs=(relationalrealizational['ignorefunctions']
 						+ (relationalrealizational['adjunctionlabel'], ))
-						if relationalrealizational else ())
+						if relationalrealizational else (),
+					labelfun=binarization.labelfun)
 	elif binarization.method == 'optimal':
 		trees = [Tree.convert(treetransforms.optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -557,8 +562,8 @@ def doparsing(**kwds):
 		sentid, sentresults = data
 		sent, goldtree, goldsent, _ = params.testset[sentid]
 		goldsent = [w for w, _t in goldsent]
-		msg = '%d/%d (%s). [len=%d] %s\n' % (nsent,
-				len(params.testset), sentid, len(sent),
+		logging.debug('%d/%d (%s). [len=%d] %s\n',
+				nsent, len(params.testset), sentid, len(sent),
 				' '.join(goldsent))
 		for n, result in enumerate(sentresults):
 			assert (results[n].parsetrees[sentid] is None
@@ -570,7 +575,10 @@ def doparsing(**kwds):
 				results[n].frags[sentid] = [abs(a) for a in result.prob
 						if isinstance(a, int)][0]
 			elif isinstance(result.prob, float):
-				results[n].probs[sentid] = log(result.prob)
+				try:
+					results[n].probs[sentid] = log(result.prob)
+				except ValueError:
+					results[n].probs[sentid] = 300.0
 			if result.fragments is not None:
 				results[n].frags[sentid] = len(result.fragments)
 			results[n].elapsedtime[sentid] = result.elapsedtime
@@ -580,7 +588,7 @@ def doparsing(**kwds):
 			sentmetrics = results[n].evaluator.add(sentid,
 					goldtree.copy(True), goldsent,
 					ParentedTree.convert(result.parsetree), goldsent)
-			msg += result.msg
+			msg = result.msg
 			if sentmetrics.scores()['LF'] == '100.00':
 				msg += '\texact match'
 			else:
@@ -597,10 +605,12 @@ def doparsing(**kwds):
 				except Exception as err:
 					msg += 'PROBLEM drawing tree:\n%s\n%s' % (
 							sentmetrics.ctree, err)
+			logging.debug(msg)
+		msg = ''
 		for n, result in enumerate(sentresults):
 			metrics = results[n].evaluator.acc.scores()
-			msg += ('%(name)s cov %(cov)5.2f tag %(tag)s ex %(ex)s '
-					'lp %(lp)s lr %(lr)s lf %(lf)s\n' % dict(
+			msg += ('%(name)s cov %(cov)5.2f; tag %(tag)s; ex %(ex)s; '
+					'lp %(lp)s; lr %(lr)s; lf %(lf)s\n' % dict(
 					name=result.name.ljust(7),
 					cov=100 * (1 - results[n].noparse / nsent),
 					**metrics))

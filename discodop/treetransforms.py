@@ -99,7 +99,7 @@ options may consist of:
                  reads rules from file "x" (e.g., "negra.headrules").
   --markheads    mark heads by adding '-HD' to phrasal labels.
   --reverse      reverse the transformations given by --transform;
-  --transforms   specify names of tree transformations to apply; for possible
+  --transforms=x specify names of tree transformations to apply; for possible
                  names, cf. treebanktransforms module.
 
 
@@ -116,7 +116,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		childchar='|', parentchar='^', headmarked=None, headidx=None,
 		tailmarker='', leftmostunary=False, rightmostunary=False, threshold=2,
 		artpa=True, reverse=False, ids=None, filterfuncs=(),
-		labelfun=attrgetter('label'), dot=False, abbrrepetition=False):
+		labelfun=None, dot=False, abbrrepetition=False):
 	"""Binarize a Tree object.
 
 	:param factor: "left" or "right". Determines whether binarization proceeds
@@ -180,6 +180,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	# assume all nodes have homogeneous children, terminals have no siblings
 	if factor not in ('left', 'right'):
 		raise ValueError("factor should be 'left' or 'right'.")
+	if labelfun is None:
+		labelfun = attrgetter('label')
 	treeclass = tree.__class__
 	leftmostunary = 1 if leftmostunary else 0
 
@@ -191,7 +193,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			continue
 		# parent annotation
 		parents = ''
-		origlabel = node.label if vertmarkov else ''
+		origlabel = node.label if vertmarkov else '_'
 		if vertmarkov > 1 and node is not tree and isinstance(node[0], Tree):
 			parents = '%s<%s>' % (parentchar, ','.join(parent))
 			node.label += parents
@@ -918,8 +920,8 @@ def main():
 		print('unrecognized output format: %r\navailable formats: %s' % (
 				opts.get('--outputfmt'), ' '.join(WRITERS)), file=sys.stderr)
 		sys.exit(2)
-	infilename = args[1] if len(args) >= 2 else '/dev/stdin'
-	outfilename = args[2] if len(args) == 3 else '/dev/stdout'
+	infilename = args[1] if len(args) >= 2 and args[1] != '-' else '/dev/stdin'
+	outfilename = args[2] if len(args) == 3 and args[2] != '-' else '/dev/stdout'
 
 	# open corpus
 	corpus = READERS[opts.get('--inputfmt', 'export')](
