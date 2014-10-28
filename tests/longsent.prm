@@ -12,7 +12,7 @@ stages=[  # Double-DOP
   dict(
     name='dop', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=True,
+    dop='doubledop',
     k=50, m=1000,
     kbest=True, sample=False,
     estimator="rfe", objective="mpp",

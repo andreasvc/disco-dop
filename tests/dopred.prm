@@ -7,7 +7,7 @@ stages=[  # DOP reduction
   dict(
     name='mpp', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=False,
+    dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
     estimator="rfe", objective="mpp",
@@ -20,7 +20,7 @@ stages=[  # DOP reduction
   dict(
 	name='mpd', mode='plcfrs',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
+	dop='reduction',
 	k=50, m=1000,
 	kbest=True, sample=False,
 	estimator="rfe", objective="mpd",
@@ -33,7 +33,7 @@ stages=[  # DOP reduction
   dict(
 	name='short', mode='plcfrs',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=False,
+	dop='reduction',
 	k=50, m=1000,
 	kbest=True, sample=False,
 	estimator="rfe", objective="shortest",
@@ -46,7 +46,7 @@ stages=[  # DOP reduction
   dict(
     name='sldop', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=False,
+    dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
     estimator="rfe", objective="sl-dop",
@@ -59,7 +59,7 @@ stages=[  # DOP reduction
   dict(
     name='slsimp', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=False,
+    dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
     estimator="rfe", objective="sl-dop-simple",
@@ -72,7 +72,7 @@ stages=[  # DOP reduction
   dict(
     name='bon', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=False,
+    dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
     estimator='bon', objective='mpp',
@@ -86,7 +86,7 @@ stages=[  # DOP reduction
   dict(
     name='etc', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=False,
+    dop='reduction',
     k=1e-5, m=1000,
     kbest=True, sample=False,
     estimator="ewe", objective="mpp",
@@ -97,7 +97,7 @@ stages=[  # DOP reduction
   ),
   dict(
     name='rerank', mode='dop-rerank',
-    dop=True, usedoubledop=False,
+    dop='reduction',
     prune=True, k=50,
     kbest=True, sample=False,
     estimator="rfe", objective="mpp",
@@ -110,7 +110,7 @@ stages=[  # DOP reduction
   dict(
     name='packed', mode='plcfrs',
     prune=True, splitprune=True,
-    dop=True, usedoubledop=False,
+    dop='reduction',
     packedgraph=True,
     k=50, m=1000,
     kbest=True, sample=False,

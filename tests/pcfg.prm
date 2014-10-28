@@ -7,11 +7,11 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   dict(
 	name='mpp', mode='pcfg',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=True,
+	dop='doubledop',
 	iterate=False, complement=False,
 	k=50, m=1000,
 	kbest=True, sample=False,
-	estimator="rfe", objective="mpp",
+	estimator='rfe', objective='mpp',
   ),
 
   dict(
@@ -21,7 +21,7 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   dict(
 	name='mpd', mode='pcfg',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=True,
+	dop='doubledop',
 	iterate=False, complement=False,
 	k=50, m=1000,
 	kbest=True, sample=False,
@@ -35,11 +35,11 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   dict(
 	name='short', mode='pcfg',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=True,
+	dop='doubledop',
 	iterate=False, complement=False,
 	k=50, m=1000,
 	kbest=True, sample=False,
-	estimator="rfe", objective="shortest",
+	estimator='rfe', objective='shortest',
   ),
 
   dict(
@@ -49,13 +49,13 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   dict(
 	name='sldop', mode='pcfg',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=True,
+	dop='doubledop',
 	iterate=False, complement=False,
 	k=50, m=1000,
 	kbest=True, sample=False,
-	estimator="rfe", objective="sl-dop",
+	estimator='rfe', objective='sl-dop',
   ),
-  
+
   dict(
 	name='pcfg', mode='pcfg',
 	split=True, markorigin=True,
@@ -63,11 +63,11 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   dict(
 	name='slsimp', mode='pcfg',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=True,
+	dop='doubledop',
 	iterate=False, complement=False,
 	k=50, m=1000,
 	kbest=True, sample=False,
-	estimator="rfe", objective="sl-dop-simple",
+	estimator='rfe', objective='sl-dop-simple',
   ),
 
   # test rest of parameters together:
@@ -78,23 +78,23 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
   dict(
 	name='etc', mode='pcfg',
 	prune=True, splitprune=True,
-	dop=True, usedoubledop=True,
+	dop='doubledop',
 	iterate=True, complement=False,
 	k=1e-5, m=1000,
 	kbest=True, sample=False,
-	estimator="ewe", objective="mpp",
+	estimator='ewe', objective='mpp',
   ),
 ],
 
 evalparam=None, # EVALB-style parameter file
-corpusfmt="bracket", # choices: export, bracket, discbracket
+corpusfmt='bracket', # choices: export, bracket, discbracket
 traincorpus=dict(
-	path="t1.mrg",
+	path='t1.mrg',
 	maxwords=100,
 	numsents=3,
 ),
 testcorpus=dict(
-	path="t1.mrg",
+	path='t1.mrg',
 	maxwords=100,
 	numsents=1,
 	skiptrain=True,
@@ -107,8 +107,8 @@ transformations=None,
 relationalrealizational=None,
 postagging=None,
 binarization=dict(
-	method="default",
-	factor="right",
+	method='default',
+	factor='right',
 	headrules=None,
 	h=1,
 	v=1,

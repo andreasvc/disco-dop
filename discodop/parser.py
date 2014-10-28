@@ -79,17 +79,9 @@ DEFAULTSTAGE = dict(
 		markorigin=False,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
 		collapselabels=None,  # options: None, 'head', 'all'. TODO: implement.
 		k=50,  # no. of coarse pcfg derivations to prune with; k=0: filter only
-		neverblockre=None,  # do not prune nodes with label that match regex
-		getestimates=None,  # compute & store estimates
-		useestimates=None,  # load & use estimates
-		dop=False,  # enable DOP mode (DOP reduction / double DOP)
-		packedgraph=False,  # use packed graph encoding for DOP reduction
-		usedoubledop=False,  # when False, use DOP reduction instead
+		dop=None,  # DOP mode (DOP reduction / double DOP)
 		binarized=True,  # for double dop, whether to binarize extracted grammar
 			# (False requires use of bitpar)
-		iterate=False,  # for double dop, whether to add fragments of fragments
-		complement=False,  # for double dop, whether to include fragments which
-			# form the complement of the maximal recurring fragments extracted
 		sample=False, kbest=True,
 		m=10,  # number of derivations to sample/enumerate
 		estimator='rfe',  # choices: rfe, ewe
@@ -98,6 +90,13 @@ DEFAULTSTAGE = dict(
 		sldop_n=7,  # number of trees to consider when using sl-dop[-simple]
 		mcc_labda=1.0,  # weight to assign to recall vs. mistake rate with mcc
 		mcc_labels=None,  # optionally, set of labels to optimize for with mcc
+		packedgraph=False,  # use packed graph encoding for DOP reduction
+		iterate=False,  # for double dop, whether to add fragments of fragments
+		complement=False,  # for double dop, whether to include fragments which
+			# form the complement of the maximal recurring fragments extracted
+		neverblockre=None,  # do not prune nodes with label that match regex
+		getestimates=None,  # compute & store estimates
+		useestimates=None,  # load & use estimates
 		)
 
 
@@ -177,7 +176,9 @@ def main():
 				m=numparses,
 				objective='mpd')
 		if '--obj' in opts:
-			stage.update(dop=True, objective=opts['--obj'],
+			stage.update(
+					dop='reduction' if backtransform is None else 'doubledop',
+					objective=opts['--obj'],
 					m=int(opts.get('-m', 1)))
 		stages.append(DictObj(stage))
 		if backtransform:
@@ -493,7 +494,7 @@ class Parser(object):
 				else:
 					derivations, entries = getderivations(chart, stage.m,
 							kbest=stage.kbest, sample=stage.sample,
-							derivstrings=not stage.usedoubledop
+							derivstrings=stage.dop != 'doubledop'
 									or self.verbosity >= 3
 									or stage.objective == 'mcc')
 				if self.verbosity >= 3:
@@ -541,7 +542,8 @@ class Parser(object):
 						raise ValueError('leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception as err:  # pylint: disable=W0703
-					logging.error("something's amiss. %s", err)
+					logging.error("something's amiss. %s", ''.join(
+								traceback.format_exception(*sys.exc_info())))
 					parsetree, prob, noparse = self.noparse(
 							stage, sent, tags, lastsuccessfulparse)
 				else:
@@ -605,7 +607,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		if stage.dop:
 			if stage.useestimates is not None:
 				raise ValueError('not supported')
-			if stage.usedoubledop:
+			if stage.dop == 'doubledop':
 				backtransform = gzip.open('%s/%s.backtransform.gz' % (
 						resultdir, stage.name)).read().splitlines()
 				if n and stage.prune:

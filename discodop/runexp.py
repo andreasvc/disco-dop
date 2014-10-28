@@ -380,7 +380,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						'with discontinuities.')
 		backtransform = None
 		if stage.dop:
-			if stage.usedoubledop:
+			if stage.dop == 'doubledop':
 				(xgrammar, backtransform, altweights, fragments
 					) = grammar.doubledop(
 						traintrees, sents, binarized=stage.binarized,
@@ -393,9 +393,11 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 							'bracket' if stage.mode.startswith('pcfg')
 							else 'discbracket').rstrip(), sum(c.values()))
 							for (a, b), c in fragments.items())
-			else:  # DOP reduction
+			elif stage.dop == 'reduction':
 				xgrammar, altweights = grammar.dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph)
+			else:
+				raise ValueError('unrecognized DOP model: %r' % stage.dop)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
 			if lexmodel and simplelexsmooth:
 				newrules = lexicon.simplesmoothlexicon(lexmodel)
@@ -428,7 +430,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			if stage.estimator != 'rfe':
 				gram.switch(u'%s' % stage.estimator)
 			logging.info(gram.testgrammar()[1])
-			if stage.usedoubledop:
+			if stage.dop == 'doubledop':
 				# backtransform keys are line numbers to rules file;
 				# to see them together do:
 				# $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
@@ -454,7 +456,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			elif n and stage.prune:  # dop reduction
 				msg = gram.getmapping(stages[n - 1].grammar,
 					striplabelre=None if stages[n - 1].dop
-						and not stages[n - 1].usedoubledop
+						and stages[n - 1].dop != 'doubledop'
 						else re.compile(b'@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
@@ -503,8 +505,9 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 				logging.info(msg)
-		logging.info('wrote grammar to %s/%s.{rules,lex%s}.gz', resultdir,
-				stage.name, ',backtransform' if stage.usedoubledop else '')
+		logging.info('wrote grammar to %s/%s.{rules,lex%s}.gz',
+				resultdir, stage.name,
+				',backtransform' if stage.dop == 'doubledop' else '')
 
 		outside = None
 		if 'SX' in (stage.getestimates, stage.useestimates):
@@ -669,14 +672,14 @@ def writeresults(results, params):
 				'\t'.join(str(res.probs[n]) for res in results))
 				for n in params.testset)
 	names = [res.name for res, stage in zip(results, params.parser.stages)
-			if stage.usedoubledop]
+			if stage.dop == 'doubledop']
 	if names:
 		with open('%s/numfrags.txt' % params.resultdir, 'w') as out:
 			out.write('#id\tlen\t%s\n' % '\t'.join(names))
 			out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
 					'\t'.join(str(res.frags[n]) for res, stage
 						in zip(results, params.parser.stages)
-						if stage.usedoubledop))
+						if stage.dop == 'doubledop'))
 					for n in params.testset)
 	logging.info('wrote results to %s/%s%s.%s', params.resultdir, category,
 			(('{%s}' % ','.join(res.name for res in results))
@@ -727,8 +730,8 @@ def readtepacoc():
 def parsetepacoc(
 		stages=(dict(mode='pcfg', split=True, markorigin=True),
 				dict(mode='plcfrs', prune=True, k=10000, splitprune=True),
-				dict(mode='plcfrs', prune=True, k=5000, dop=True,
-					usedoubledop=True, estimator='rfe', objective='mpp',
+				dict(mode='plcfrs', prune=True, k=5000, dop='doubledop',
+					estimator='rfe', objective='mpp',
 					sample=False, kbest=True)),
 		trainmaxwords=999, trainnumsents=25005, testmaxwords=999,
 		binarization=parser.DictObj(
@@ -913,7 +916,7 @@ def readparam(filename):
 					'but this stage is first.')
 		if stage.mode == 'dop-rerank':
 			assert stage.prune and not stage.splitprune and stage.k > 1
-			assert (stage.dop and not stage.usedoubledop
+			assert (stage.dop and stage.dop != 'doubledop'
 					and stage.objective == 'mpp')
 		if stage.dop:
 			assert stage.estimator in ('rfe', 'ewe', 'bon')
