@@ -541,7 +541,7 @@ class Parser(object):
 					if not len(parsetree.leaves()) == len(sent):
 						raise ValueError('leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))
-				except Exception as err:  # pylint: disable=W0703
+				except Exception:  # pylint: disable=W0703
 					logging.error("something's amiss. %s", ''.join(
 								traceback.format_exception(*sys.exc_info())))
 					parsetree, prob, noparse = self.noparse(
@@ -597,12 +597,12 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	the parameter file ``params.prm``, as produced by ``runexp``."""
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
-		rules = gzip.open('%s/%s.rules.gz' % (resultdir, stage.name))
+		rules = gzip.open('%s/%s.rules.gz' % (resultdir, stage.name)).read()
 		lexicon = codecs.getreader('utf-8')(gzip.open('%s/%s.lex.gz' % (
 				resultdir, stage.name)))
-		grammar = Grammar(rules.read(), lexicon.read(),
-				start=top, bitpar=stage.mode.startswith('pcfg'),
-				binarized=stage.binarized)
+		grammar = Grammar(rules, lexicon.read(),
+				start=top, bitpar=stage.mode.startswith('pcfg')
+				or re.match(r'[-.e0-9]+\b', rules), binarized=stage.binarized)
 		backtransform = None
 		if stage.dop:
 			if stage.useestimates is not None:
