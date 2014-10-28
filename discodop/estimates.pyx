@@ -201,8 +201,8 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 	return insidescores
 
 
-cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, Rule rule, Grammar grammar,
-		uint32_t maxlen):
+cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, Rule rule,
+		Grammar grammar, uint32_t maxlen):
 	if grammar.fanout[rule.lhs] + bitcount(a) + bitcount(b) > maxlen + 1:
 		return 0
 	result = resultpos = l = r = 0
@@ -446,7 +446,8 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 	return insidescores
 
 
-cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal, uint32_t maxlen):
+cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
+		uint32_t maxlen):
 	"""outsideSX estimate for a PCFG, agenda-based version."""
 	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef DoubleEntry entry
@@ -556,7 +557,8 @@ cpdef getpcfgestimatesrec(Grammar grammar, uint32_t maxlen, uint32_t goal,
 	return outside
 
 
-cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state, int span):
+cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
+		int span):
 	"""Compute insideSX estimate for a PCFG.
 
 	Straight from Klein & Manning (2003), A* parsing: Fast Exact Viterbi Parse

@@ -63,7 +63,7 @@ cpdef getderivations(Chart chart, int k, bint kbest=True, bint sample=False,
 		raise ValueError('at least one of kbest or sample needs to be True.')
 	chart.rankededges = {}
 	if kbest:
-		derivations, _ = lazykbest(chart, k, derivs=derivstrings)
+		derivations, unused_explored = lazykbest(chart, k, derivs=derivstrings)
 		entries = chart.rankededges[chart.root()]
 	if sample:
 		derivations.extend(
@@ -345,7 +345,7 @@ def gettree(cells, span):
 	"""Extract parse tree from most constituents correct table."""
 	if span not in cells:
 		raise ValueError('MCC: span not in cell: %r' % bin(span))
-	label, _score, leftspan = cells[span]
+	label, unused_score, leftspan = cells[span]
 	if leftspan not in cells:
 		return '(%s %d)' % (label, pyintnextset(span, 0))
 	rightspan = span & ~leftspan
@@ -392,7 +392,7 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
 	chart.grammar.switch(u'shortest', True)
-	shortestderivations, _explored, chart2 = treeparsing(
+	shortestderivations, unused_explored, chart2 = treeparsing(
 			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
 	if not chart2.rankededges.get(chart2.root()):
 		return [], 'SL-DOP couldn\'t find parse for tree'
@@ -989,7 +989,7 @@ def test():
 
 	def e(x):
 		a, b, _ = max(x, key=itemgetter(1))
-		return (a, (int(abs(b[0])), b[1])) if isinstance(b, tuple) else a, b
+		return (a, (int(abs(b[0])), b[1])) if isinstance(b, tuple) else (a, b)
 
 	trees = [Tree.parse(t, parse_leaf=int) for t in
 		'''(ROOT (A (A 0) (B 1)) (C 2))

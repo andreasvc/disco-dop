@@ -41,9 +41,9 @@ FRONTIERRE = re.compile(br' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
 LABEL = re.compile(br' *\( *([^ ()]+) *')
 
 
-# bitsets representing fragments are uint64_t arrays with the number of elements
-# determined by SLOTS. While SLOTS is not a constant nor a global, it is
-# set just once for a treebank to fit its largest tree.
+# bitsets representing fragments are uint64_t arrays with the number of
+# elements determined by SLOTS. While SLOTS is not a constant nor a global,
+# it is set just once for a treebank to fit its largest tree.
 # After SLOTS elements, this struct follows:
 cdef packed struct BitsetTail:
 	uint32_t id  # tree no. of which this fragment was extracted
@@ -77,7 +77,8 @@ cdef inline short getroot(uint64_t *data, short SLOTS):
 	return (<BitsetTail *>&data[SLOTS]).root
 
 
-cdef inline void setrootid(uint64_t *data, short root, uint32_t id, short SLOTS):
+cdef inline void setrootid(uint64_t *data, short root, uint32_t id,
+		short SLOTS):
 	"""Set root and id of fragment in a bitset."""
 	cdef BitsetTail *tail = <BitsetTail *>&data[SLOTS]
 	tail.id = id

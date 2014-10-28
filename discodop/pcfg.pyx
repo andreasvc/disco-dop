@@ -174,7 +174,7 @@ cdef class SparseCFGChart(CFGChart):
 		self.logprob = logprob
 		self.viterbi = viterbi
 		self.probs = {}
-		self.parseforest = {}  # [None] * entries
+		self.parseforest = {}
 		self.itemsinorder = []
 
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
@@ -828,7 +828,7 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 		prob = -pylog(float(fields.split(None, 1)[0]))
 		chart.updateprob(lhs, left, right, prob)
 		for edge in fields.split(' % '):
-			_prob, rest = edge.split(None, 1)
+			unused_prob, rest = edge.split(None, 1)
 			if rest.startswith('"'):
 				mid = right
 				rule = NULL

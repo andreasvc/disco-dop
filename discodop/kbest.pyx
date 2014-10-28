@@ -57,7 +57,7 @@ cdef DoubleAgenda getcandidates(Chart chart, v, int k):
 
 cdef lazykthbest(v, int k, int k1, dict cand, Chart chart, set explored,
 		int depthlimit):
-	""""Explore up to *k*-best derivations headed by vertex *v*
+	""""Explore up to *k*-best derivations headed by vertex *v*.
 
 	:param k1: the global k, with ``k <= k1``
 	:param cand: contains a queue of edges to consider for each vertex
