@@ -132,22 +132,34 @@ def startexp(
 		raise ValueError('need to specify number of training set sentences, '
 				'not fraction, in rerun mode.')
 
-	testset = treebank.READERS[corpusfmt](
+	testsettb = treebank.READERS[corpusfmt](
 			testcorpus.path, encoding=testcorpus.encoding,
 			removeempty=removeempty, morphology=morphology,
 			functions=functions, ensureroot=ensureroot)
-	gold_sents = testset.tagged_sents()
-	test_trees = testset.trees()
+	if isinstance(testcorpus.numsents, float):
+		testcorpus.numsents = int(testcorpus.numsents
+				* len(testsettb.blocks()))
 	if testcorpus.skiptrain:
-		testcorpus.skip += traincorpus.numsents  # pylint: disable=E1103
-	logging.info('%d sentences in test corpus %s',
-			len(test_trees), testcorpus.path)
-	logging.info('%d test sentences before length restriction',
-			len(list(gold_sents)[testcorpus.skip:  # pylint: disable=E1103
-				testcorpus.skip + testcorpus.numsents]))  # pylint: disable=E1103
+		testcorpus.skip += (  # pylint: disable=maybe-no-member
+				traincorpus.numsents)  # pylint: disable=maybe-no-member
+
+	test_blocks = OrderedDict()
+	test_trees = OrderedDict()
+	test_tagged_sents = OrderedDict()
+	for n, a in islice(testsettb._read_blocks(),
+			testcorpus.skip, testcorpus.skip  # pylint: disable=maybe-no-member
+				+ testcorpus.numsents):
+		tree, sent = testsettb._parsetree(a)
+		if 1 <= len(sent) <= testcorpus.maxwords:
+			test_blocks[n] = testsettb._strblock(n, a)
+			test_trees[n] = tree
+			test_tagged_sents[n] = [(word, tag) for word, (_, tag)
+					in zip(sent, sorted(tree.pos()))]
+	logging.info('%d test sentences after length restriction <= %d',
+			len(test_trees), testcorpus.maxwords)
 	lexmodel = None
 	simplelexsmooth = False
-	test_tagged_sents = gold_sents
+	test_tagged_sents_mangled = test_tagged_sents
 	if postagging and postagging.method in ('treetagger', 'stanford', 'frog'):
 		if postagging.method == 'treetagger':
 			# these two tags are never given by tree-tagger,
@@ -165,15 +177,9 @@ def startexp(
 			{word for word, tags in taglex.items() if tags == {tag}}
 			for tag in overridetags}
 		tagmap = {'$(': '$[', 'PAV': 'PROAV'}
-		sents_to_tag = OrderedDict((a, b) for a, b
-				in islice(gold_sents.items(),
-					testcorpus.skip,  # pylint: disable=E1103
-					testcorpus.skip  # pylint: disable=E1103
-						+ testcorpus.numsents)
-				if len(b) <= testcorpus.maxwords)
-		test_tagged_sents = lexicon.externaltagging(postagging.method,
-				postagging.model, sents_to_tag, overridetagdict, tagmap)
-		if postagging.retag:
+		test_tagged_sents_mangled = lexicon.externaltagging(postagging.method,
+				postagging.model, test_tagged_sents, overridetagdict, tagmap)
+		if postagging.retag and not rerun:
 			logging.info('re-tagging training corpus')
 			sents_to_tag = OrderedDict(enumerate(train_tagged_sents))
 			train_tagged_sents = lexicon.externaltagging(postagging.method,
@@ -197,17 +203,14 @@ def startexp(
 	# 2: gold sents because test sentences may be mangled by unknown word model
 	# 3: blocks from treebank file to reproduce the relevant part of the
 	#   original treebank verbatim.
-	testset = OrderedDict((a, (test_tagged_sents[a], test_trees[a],
-			gold_sents[a], block)) for a, block
-			in islice(testset.blocks().items(),
-				testcorpus.skip,  # pylint: disable=E1103
-				testcorpus.skip + testcorpus.numsents)  # pylint: disable=E1103
-			if a in test_tagged_sents and
-				1 <= len(test_tagged_sents[a]) <= testcorpus.maxwords)
+	testset = OrderedDict((n, (
+				test_tagged_sents_mangled[n],
+				test_trees[n],
+				test_tagged_sents[n],
+				block))
+			for n, block in test_blocks.items())
 	if not test_tagged_sents:
-		raise ValueError('test corpus should be non-empty.')
-	logging.info('%d test sentences after length restriction <= %d',
-			len(testset), testcorpus.maxwords)
+		raise ValueError('test corpus (selection) should be non-empty.')
 
 	if rerun:
 		trees, sents = [], []
@@ -245,7 +248,7 @@ def startexp(
 	for result in results:
 		nsent = len(result.parsetrees)
 		overcutoff = any(len(a) > evalparam['CUTOFF_LEN']
-				for a in gold_sents.values())
+				for a in test_tagged_sents.values())
 		header = (' ' + result.name.upper() + ' ').center(
 				44 if overcutoff else 35, '=')
 		evalsummary = result.evaluator.summary()
@@ -266,21 +269,15 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 			headfinal=True, headreverse=False, removeempty=removeempty,
 			ensureroot=ensureroot, punct=punct,
 			functions=functions, morphology=morphology)
-	traintrees = train.trees()
-	trainsents = train.sents()
-	logging.info('%d sentences in training corpus %s',
-			len(traintrees), traincorpus.path)
 	if isinstance(traincorpus.numsents, float):
-		traincorpus.numsents = int(traincorpus.numsents * len(trainsents))
-	trees = list(traintrees.values())[:traincorpus.numsents]
-	sents = list(trainsents.values())[:traincorpus.numsents]
-	if not trees:
-		raise ValueError('training corpus should be non-empty.')
-	logging.info('%d training sentences before length restriction', len(trees))
-	trees, sents = zip(*[sent for sent in zip(trees, sents)
-		if 1 <= len(sent[1]) <= traincorpus.maxwords])
+		traincorpus.numsents = int(traincorpus.numsents * len(train.sents()))
+	traintrees = train.itertrees(None, traincorpus.numsents)
+	trees, sents = zip(*[treesent for _, treesent in traintrees
+			if 1 <= len(treesent[1]) <= traincorpus.maxwords])
 	logging.info('%d training sentences after length restriction <= %d',
 			len(trees), traincorpus.maxwords)
+	if not trees:
+		raise ValueError('training corpus (selection) should be non-empty.')
 	if transformations:
 		trees = [treebanktransforms.transform(tree, sent, transformations)
 				for tree, sent in zip(trees, sents)]

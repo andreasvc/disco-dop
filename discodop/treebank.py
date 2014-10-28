@@ -142,6 +142,10 @@ class CorpusReader(object):
 	def _read_blocks(self):
 		"""Iterate over blocks in corpus file corresponding to parse trees."""
 
+	def _strblock(self, n, block):
+		"""Convert a value returned by _read_blocks() to a string."""
+		return block
+
 	def _parse(self, block):
 		""":returns: a parse tree given a string from the treebank file."""
 
@@ -260,7 +264,7 @@ class NegraCorpusReader(CorpusReader):
 	def blocks(self):
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((a, "#BOS %s\n%s\n#EOS %s\n" % (a,
+		return OrderedDict((a, '#BOS %s\n%s\n#EOS %s\n' % (a,
 				'\n'.join(b), a))
 				for a, b in self._block_cache.items())
 
@@ -293,6 +297,9 @@ class NegraCorpusReader(CorpusReader):
 				elif started:
 					lines.append(line.strip())
 				# other lines are ignored, such as #FORMAT x, %% comments, ...
+
+	def _strblock(self, n, block):
+		return '#BOS %s\n%s\n#EOS %s\n' % (n, '\n'.join(block), n)
 
 	def _parse(self, block):
 		return exporttree(block, self.functions, self.morphology, self.lemmas)
@@ -327,6 +334,9 @@ class TigerXMLCorpusReader(CorpusReader):
 				if event == 'end' and elem.tag == 's':
 					yield elem.get('id'), elem
 				root.clear()
+
+	def _strblock(self, n, block):
+		return ElementTree.tostring(block)
 
 	def _parse(self, block):
 		"""Translate Tiger XML structure to the fields of export format."""
