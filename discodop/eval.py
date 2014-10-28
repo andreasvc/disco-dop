@@ -408,23 +408,26 @@ class TreePairResult(object):
 		print('Sentence:', ' '.join(self.gsent))
 		print('Gold tree:\n%s\nCandidate tree:\n%s' % (
 				self.visualize(gold=True), self.visualize(gold=False)))
-		print('Gold brackets:      %s\nCandidate brackets: %s' % (
-				strbracketings(self.gbrack), strbracketings(self.cbrack)))
-		print('Matched brackets:      %s\nUnmatched brackets: %s' % (
-				strbracketings(self.gbrack & self.cbrack),
-				strbracketings((self.cbrack - self.gbrack)
-					| (self.gbrack - self.cbrack))))
+		print('Gold brackets:      ', strbracketings(self.gbrack))
+		print('Candidate brackets: ', strbracketings(self.cbrack))
+		print('Matched brackets:   ',
+				strbracketings(self.gbrack & self.cbrack))
+		print('Unmatched brackets: ', strbracketings(
+				(self.cbrack - self.gbrack) | (self.gbrack - self.cbrack)))
 		goldpaths = leafancestorpaths(self.gtree, self.param['DELETE_LABEL'])
 		candpaths = leafancestorpaths(self.ctree, self.param['DELETE_LABEL'])
+		print('%15s %8s %8s | %10s %36s : %s' % (
+				'word', 'gold POS', 'cand POS',
+				'path score', 'gold path', 'cand path'))
 		for leaf in goldpaths:
-			print('%6.3g  %s     %s : %s' % (
+			print('%15s %8s %8s   %6.3g %40s : %s' % (
+					self.gsent[leaf],
+					self.gpos[leaf][1],
+					self.cpos[leaf][1],
 					pathscore(goldpaths[leaf], candpaths[leaf]),
-					self.gsent[leaf].ljust(15),
-					' '.join(goldpaths[leaf][::-1]).rjust(20),
+					' '.join(goldpaths[leaf][::-1]),
 					' '.join(candpaths[leaf][::-1])))
-		print('%6.3g  average = leaf-ancestor score' % self.lascore)
-		print('POS: ', ' '.join('%s/%s' % (a[1], b[1])
-				for a, b in zip(self.cpos, self.gpos)))
+		print('leaf-ancestor score: %6.3g' % self.lascore)
 		if self.param['TED']:
 			print('Tree-dist: %g / %g = %g' % (
 				self.ted, self.denom, 1 - self.ted / Decimal(self.denom)))
@@ -463,16 +466,16 @@ class TreePairResult(object):
 		tree, brack, pos = self.ctree, self.gbrack, self.gpos
 		if gold:
 			tree, brack, pos = self.gtree, self.cbrack, self.cpos
-		if tree:  # avoid empty trees with just punctuation
-			highlight = [a for a in tree.subtrees()
-						if bracketing(a) in brack]
-			highlight.extend(a for a in tree.subtrees()
-						if isinstance(a[0], int)
-						and a.label == pos[a[0]])
-			highlight.extend(range(len(pos)))
-			return DrawTree(tree, self.csent, highlight=highlight
-					).text(unicodelines=True, ansi=True)
-		return ''
+		if not tree:  # avoid empty trees with just punctuation
+			return ''
+		highlight = [a for a in tree.subtrees()
+					if bracketing(a) in brack]
+		highlight.extend(a for a in tree.subtrees()
+					if isinstance(a[0], int)
+					and a.label == pos[a[0]][1])
+		highlight.extend(range(len(pos)))
+		return DrawTree(tree, self.csent, highlight=highlight
+				).text(unicodelines=True, ansi=True)
 
 
 class EvalAccumulator(object):
