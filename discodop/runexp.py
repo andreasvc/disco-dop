@@ -378,14 +378,16 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			if tbfanout != 1 and not stage.split:
 				raise ValueError('Cannot extract PCFG from treebank '
 						'with discontinuities.')
-		backtransform = None
+		backtransform = extrarules = None
+		if lexmodel and simplelexsmooth:
+			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.dop:
 			if stage.dop == 'doubledop':
 				(xgrammar, backtransform, altweights, fragments
 					) = grammar.doubledop(
 						traintrees, sents, binarized=stage.binarized,
 						iterate=stage.iterate, complement=stage.complement,
-						numproc=numproc)
+						numproc=numproc, extrarules=extrarules)
 				# dump fragments
 				with codecs.getwriter('utf-8')(gzip.open('%s/%s.fragments.gz' %
 						(resultdir, stage.name), 'w')) as out:
@@ -395,20 +397,12 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 							for (a, b), c in fragments.items())
 			elif stage.dop == 'reduction':
 				xgrammar, altweights = grammar.dopreduction(
-						traintrees, sents, packedgraph=stage.packedgraph)
+						traintrees, sents, packedgraph=stage.packedgraph,
+						extrarules=extrarules)
 			else:
 				raise ValueError('unrecognized DOP model: %r' % stage.dop)
 			nodes = sum(len(list(a.subtrees())) for a in traintrees)
-			if lexmodel and simplelexsmooth:
-				newrules = lexicon.simplesmoothlexicon(lexmodel)
-				xgrammar.extend(newrules)
-				for model, weights in altweights.items():
-					if model == u'shortest':
-						weights.extend(0.5 for _ in newrules)
-					else:
-						weights.extend(w1 / w2 for _, (w1, w2) in newrules)
-				grammar.sortgrammar(xgrammar, altweights)
-			elif lexmodel:
+			if lexmodel and not simplelexsmooth:  # FIXME: altweights?
 				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			msg = grammar.grammarinfo(xgrammar)
 			rules, lex = grammar.write_lcfrs_grammar(
@@ -472,7 +466,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					**{name: mod for name, mod
 						in zip(gram.modelnames, gram.models)})
 		else:  # not stage.dop
-			xgrammar = grammar.treebankgrammar(traintrees, sents)
+			xgrammar = grammar.treebankgrammar(traintrees, sents,
+					extrarules=extrarules)
 			logging.info('induced %s based on %d sentences',
 				('PCFG' if tbfanout == 1 or stage.split else 'PLCFRS'),
 				len(traintrees))
@@ -481,10 +476,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			else:
 				logging.info(grammar.grammarinfo(xgrammar,
 						dump='%s/pcdist.txt' % resultdir))
-			if lexmodel and simplelexsmooth:
-				newrules = lexicon.simplesmoothlexicon(lexmodel)
-				xgrammar.extend(newrules)  # pylint: disable=E1103
-			elif lexmodel:
+			if lexmodel and not simplelexsmooth:
 				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			rules, lex = grammar.write_lcfrs_grammar(
 					xgrammar, bitpar=stage.mode.startswith('pcfg'))

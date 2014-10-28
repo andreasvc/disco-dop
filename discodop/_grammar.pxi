@@ -463,24 +463,29 @@ cdef class Grammar:
 		currently selected weights."""
 		cdef Rule *rule
 		cdef LexicalRule lexrule
-		cdef uint32_t n
-		cdef list sums = [[] for _ in self.toid]
+		cdef uint32_t n, maxlabel = 0
+		cdef list weights = [[] for _ in self.toid]
 		cdef double [:] tmp = self.models[self.currentmodel, :]
 		# We could be strict about separating POS tags and phrasal categories,
 		# but Negra contains at least one tag (--) used for both.
 		for n in range(self.numrules):
 			rule = &(self.bylhs[0][n])
-			sums[rule.lhs].append(tmp[rule.no])
+			weights[rule.lhs].append(tmp[rule.no])
 		for n, lexrule in enumerate(self.lexical, self.numrules):
-			sums[lexrule.lhs].append(tmp[n])
-		for lhs, weights in enumerate(sums[1:], 1):
-			mass = fsum(weights)
-			if abs(mass - 1.0) > epsilon:
-				msg = ("Weights of rules with LHS '%s' "
-						"do not sum to 1 +/- %g: sum = %g; diff = %g" % (
-						self.tolabel[lhs].decode('ascii'),
-						epsilon, mass, mass - 1.0))
-				return False, msg
+			weights[lexrule.lhs].append(tmp[n])
+		maxdiff = epsilon
+		for lhs, lhsweights in enumerate(weights[1:], 1):
+			mass = fsum(lhsweights)
+			if abs(mass - 1.0) > maxdiff:
+				maxdiff = abs(mass - 1.0)
+				maxlabel = lhs
+		if maxdiff > epsilon:
+			msg = ('Weights do not sum to 1 +/- %g.\n'
+					'Largest difference with rules for LHS \'%s\': '
+					'sum = %g; diff = %g' % (
+					epsilon, self.tolabel[maxlabel].decode('ascii'),
+					fsum(weights[maxlabel]), maxdiff))
+			return False, msg
 		return True, 'All left hand sides sum to 1 +/- epsilon=%s' % epsilon
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
@@ -660,7 +665,7 @@ cdef inline double convertweight(const char *weight):
 	cdef char *endptr = NULL
 	cdef double w = strtod(weight, &endptr)
 	if endptr[0] == b'/':
-		w /= atol(&endptr[1])
+		w /= strtod(&endptr[1], NULL)
 	elif endptr[0]:
 		return 0
 	return w

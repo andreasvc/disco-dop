@@ -98,11 +98,11 @@ def getunknownwordmodel(tagged_sents, unknownword,
 			if word not in lexicon:
 				sig = unknownword(word, n, lexicon)
 				sigs[sig] += 1
-	msg = "known words: %d, signature types seen: %d\n" % (
+	msg = 'known words: %d, signature types seen: %d\n' % (
 			len(lexicon), len(sigs))
-	msg += "open class tags: {%s}\n" % ", ".join(
+	msg += 'open class tags: %s\n' % ' '.join(
 			"%s:%d" % a for a in openclasstags.items())
-	msg += "closed class tags: {%s}" % ", ".join(a for a in closedclasstags)
+	msg += 'closed class tags: %s' % ' '.join(a for a in closedclasstags)
 	return (sigs, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags,
 			wordsig, sigtag), msg
@@ -137,22 +137,23 @@ def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	- unobserved combinations of tags with known open class words.
 	- unobserved signatures which are mapped to ``'_UNK'``.
 
-	:param epsilon: 'frequency' of productions for unseen tag, word pair."""
+	:param epsilon: 'frequency' of productions for unseen tag, word pair.
+	:returns: a dictionary of lexical rules, with pseudofrequencies as values.
+	"""
 	(lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags) = lexmodel
-	newrules = []
+	newrules = {}
 	# rare words as signature AND as word:
 	for word, tag in wordtags:
 		if word not in lexicon:  # and word in openclasswords:
 			# needs to be normalized later
-			newrules.append((((tag, 'Epsilon'), (word, )),
-					(wordtags[word, tag], tags[tag])))
-			# print(newrules[-1], file=sys.stderr)
+			newrules[(tag, 'Epsilon'), (word, )] = wordtags[word, tag]
+			# print(tag, '=>', word, wordstags[word, tag], file=sys.stderr)
 	for tag in openclasstags:  # open class tag-word pairs
 		for word in openclasswords - wordsfortag[tag] - {UNK}:
-			newrules.append((((tag, 'Epsilon'), (word, )), (epsilon, tags[tag])))
+			newrules[(tag, 'Epsilon'), (word, )] = epsilon
 	for tag in tags:  # catch all unknown signature
-		newrules.append((((tag, 'Epsilon'), (UNK, )), (epsilon, tags[tag])))
+		newrules[(tag, 'Epsilon'), (UNK, )] = epsilon
 	return newrules
 
 

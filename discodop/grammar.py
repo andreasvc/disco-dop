@@ -143,13 +143,19 @@ def lcfrsproductions(tree, sent, frontiers=False):
 	return rules
 
 
-def treebankgrammar(trees, sents):
+def treebankgrammar(trees, sents, extrarules=None):
 	"""Induce a probabilistic LCFRS with relative frequencies of productions.
 
 	When trees contain no discontinuities, the result is equivalent to a
-	treebank PCFG."""
+	treebank PCFG.
+
+	:param extarules: A dictionary of productions that will be merged with the
+		grammar, with (pseudo)frequencies as values."""
 	grammar = multiset(rule for tree, sent in zip(trees, sents)
 			for rule in lcfrsproductions(tree, sent))
+	if extrarules is not None:
+		for rule in extrarules:
+			grammar[rule] += extrarules[rule]
 	lhsfd = multiset()
 	for rule, freq in grammar.items():
 		lhsfd[rule[0][0]] += freq
@@ -157,7 +163,8 @@ def treebankgrammar(trees, sents):
 			for rule, freq in grammar.items())
 
 
-def dopreduction(trees, sents, packedgraph=False, decorater=None):
+def dopreduction(trees, sents, packedgraph=False, decorater=None,
+		extrarules=None):
 	"""Induce a reduction of DOP to an LCFRS.
 
 	Similar to how Goodman (1996, 2003) reduces DOP to a PCFG.
@@ -186,6 +193,9 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None):
 			assert avar == bvar
 			for c in cartpi([(x, ) if x == y else (x, y) for x, y in zip(a, b)]):
 				rules[c, avar] += 1
+	if extrarules is not None:
+		for rule in extrarules:
+			rules[rule] += extrarules[rule]
 
 	def weights(rule):
 		""":returns: rule with RFE and EWE probability."""
@@ -214,7 +224,7 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None):
 
 
 def doubledop(trees, sents, debug=False, binarized=True,
-		complement=False, iterate=False, numproc=None):
+		complement=False, iterate=False, numproc=None, extrarules=None):
 	"""Extract a Double-DOP grammar from a treebank.
 
 	That is, a fragment grammar containing fragments that occur at least twice,
@@ -289,6 +299,14 @@ def doubledop(trees, sents, debug=False, binarized=True,
 		print("backtransform:")
 		for a, b in backtransform.items():
 			print(a, b)
+
+	if extrarules is not None:
+		for rule in extrarules:
+			x = extrarules[rule]
+			a = b = c = 0
+			if rule in grammar:
+				a, b, c, _ = grammar[rule]
+			grammar[rule] = (a + x, b + x, c + x, 0.5)
 	# fix order of grammar rules
 	grammar = sortgrammar(grammar.items())
 	# align fragments and backtransform with corresponding grammar rules
@@ -673,7 +691,7 @@ def defaultparse(wordstags, rightbranching=False):
 
 def printrule(r, yf, w=''):
 	""":returns: a string representation of a rule."""
-	yfstr = ','.join(''.join(map(str, a)) for a in yf)
+	yfstr = ','.join(''.join(map(unicode, a)) for a in yf)
 	return '%s %s\t%s => %s' % (
 			('%g/%d' % w) if isinstance(w, tuple) else w,
 			yfstr, r[0], ' '.join(x for x in r[1:]))
@@ -723,9 +741,9 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 			else:
 				w1, w2 = w
 				if bitpar:
-					w = '%g' % (w1 / w2)  # .hex()
+					w = '%s' % (w1 / w2)  # .hex()
 				else:
-					w = '%g/%d' % (w1, w2)
+					w = '%s/%s' % (w1, w2)
 		elif isinstance(w, float):
 			w = w.hex()
 		if len(r) == 2 and r[1] == 'Epsilon':
