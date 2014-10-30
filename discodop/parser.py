@@ -48,26 +48,27 @@ with space-delimited tokens. Output consists of bracketed trees in
 selected format. Files must be encoded in UTF-8.
 
 General options:
-  -x           Input is one token per line, sentences separated by two
-               newlines (like bitpar).
-  -b k         Return the k-best parses instead of just 1.
-  --prob       Print probabilities as well as parse trees.
-  --tags       Tokens are of the form "word/POS"; give both to parser.
+  -x             Input is one token per line, sentences separated by two
+                 newlines (like bitpar).
+  -b k           Return the k-best parses instead of just 1.
+  --prob         Print probabilities as well as parse trees.
+  --tags         Tokens are of the form "word/POS"; give both to parser.
   --fmt=(export|bracket|discbracket|alpino|conll|mst|wordpos)
-               Format of output [default: discbracket].
-  --numproc=k  Launch k processes, to exploit multiple cores.
-  --simple     Parse with a single grammar and input file; similar interface
-               to bitpar. The files 'rules' and 'lexicon' define a binarized
-               grammar in bitpar or PLCFRS format.
+                 Format of output [default: discbracket].
+  --numproc=k    Launch k processes, to exploit multiple cores.
+  --simple       Parse with a single grammar and input file; similar interface
+                 to bitpar. The files 'rules' and 'lexicon' define a binarized
+                 grammar in bitpar or PLCFRS format.
+  --verbosity=x  0 <= x <= 4. Same effect as verbosity in parameter file.
 
 Options for simple mode:
-  -s x         Use "x" as start symbol instead of default "TOP".
-  --bt=file    Apply backtransform table to recover TSG derivations.
-  --obj=(mpd|mpp|mcc|shortest|sl-dop)
-               Objective function to maximize [default: mpd].
-  -m x         Use x derivations to approximate objective functions;
-               mpd and shortest require only 1.
-  --bitpar     Use bitpar to parse with an unbinarized grammar.
+  -s x           Use "x" as start symbol instead of default "TOP".
+  --bt=file      Apply backtransform table to recover TSG derivations.
+  --obj=(mpd|mpp|mrp|mcc|shortest|sl-dop)
+                 Objective function to maximize [default: mpd].
+  -m x           Use x derivations to approximate objective functions;
+                 mpd and shortest require only 1.
+  --bitpar       Use bitpar to parse with an unbinarized grammar.
 ''' % dict(cmd=sys.argv[0], fmt=','.join(WRITERS))
 
 DEFAULTSTAGE = dict(
@@ -125,7 +126,8 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	options = 'prob tags bitpar simple obj= bt= numproc= fmt='.split()
+	flags = 'prob tags bitpar simple'.split()
+	options = flags + 'obj= bt= numproc= fmt= verbosity='.split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'b:s:m:x', options)
 	except GetoptError as err:
@@ -184,8 +186,9 @@ def main():
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile(b'.+}<'))
-		parser = Parser(stages)
+		parser = Parser(stages, verbosity=int(opts.get('--verbosity', 2)))
 		morph = None
+		del args[:2]
 	else:
 		from discodop.runexp import readparam
 		directory = args[0]
@@ -201,14 +204,16 @@ def main():
 				transformations=params.get('transformations'),
 				binarization=params['binarization'],
 				postagging=postagging if postagging and
-				postagging.method == 'unknownword' else None,
+					postagging.method == 'unknownword' else None,
 				relationalrealizational=params.get('relationalrealizational'),
-				verbosity=params.get('verbosity', 2))
+				verbosity=int(opts.get('--verbosity',
+						params.get('verbosity', 2))))
 		morph = params['morphology']
-	infile = (io.open(args[2], encoding='utf-8')
-			if len(args) >= 3 else sys.stdin)
-	out = (io.open(args[3], 'w', encoding='utf-8')
-			if len(args) == 4 else sys.stdout)
+		del args[:1]
+	infile = (io.open(args[0], encoding='utf-8')
+			if len(args) >= 1 else sys.stdin)
+	out = (io.open(args[1], 'w', encoding='utf-8')
+			if len(args) == 2 else sys.stdout)
 	doparsing(parser, infile, out, prob, oneline, tags, numparses,
 			int(opts.get('--numproc', 1)), opts.get('--fmt', 'discbracket'),
 			morph)
@@ -289,11 +294,6 @@ def worker(args):
 	tags = None
 	if PARAMS.usetags:
 		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
-	lexicon = PARAMS.parser.stages[0].grammar.lexicalbyword
-	if not PARAMS.usetags and set(sent) - set(lexicon):
-		raise ValueError('unknown words and no tags or unknown word model '
-				'supplied.\nsentence: %r\nunknown words:%r' % (
-				sent, list(set(sent) - set(lexicon))))
 	msg = 'parsing %d: %s' % (n, ' '.join(sent))
 	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
 	output = ''
@@ -529,8 +529,8 @@ class Parser(object):
 					print('sum of probabitilies: %g\n' %
 							sum((prob[1] if isinstance(prob, tuple) else prob)
 								for _, prob, _ in besttrees))
-				if self.verbosity >= 4:
-					print('Chart:\n%s' % chart)
+			if self.verbosity >= 4:
+				print('Chart:\n%s' % chart)
 			if parsetrees:
 				try:
 					resultstr, prob, fragments = max(

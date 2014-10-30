@@ -349,6 +349,10 @@ General options:
              to bitpar. The files ``rules`` and ``lexicon`` define a binarized
              grammar in bitpar or PLCFRS format.
 
+--verbosity=x
+             0 <= x <= 4. Same effect as verbosity in parameter file.
+
+
 Options for simple mode:
 
 -s x         Use ``x`` as start symbol instead of default ``TOP``.
