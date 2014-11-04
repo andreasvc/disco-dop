@@ -448,6 +448,12 @@ class Tree(list):
 		from discodop.treedraw import DrawTree
 		return DrawTree(self, [str(a) for a in self.leaves()]).text()
 
+	def _repr_svg_(self):
+		"""Return a rich representation for IPython notebook."""
+		from discodop.treedraw import DrawTree
+		return DrawTree(self, [str(a) for a in self.leaves()]).svg()
+
+
 
 class ImmutableTree(Tree):
 	"""A tree which may not be modified.; has a hash() value."""

@@ -122,6 +122,10 @@ class DrawTree(object):
 						n, self.coords[n], self.edges.get(n), self.nodes[n])
 					for n in sorted(self.nodes))
 
+	def _repr_svg_(self):
+		"""Return a rich representation for IPython notebook."""
+		return self.svg()
+
 	def nodecoords(self, tree, sent, highlight):
 		"""Produce coordinates of nodes on a grid.
 
