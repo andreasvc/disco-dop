@@ -96,8 +96,7 @@ DEFAULTSTAGE = dict(
 		complement=False,  # for double dop, whether to include fragments which
 			# form the complement of the maximal recurring fragments extracted
 		neverblockre=None,  # do not prune nodes with label that match regex
-		getestimates=None,  # compute & store estimates
-		useestimates=None,  # load & use estimates
+		estimates=None,  # compute, store & use outside estimates
 		)
 
 
@@ -459,14 +458,15 @@ class Parser(object):
 				elif stage.mode == 'plcfrs':
 					chart, msg1 = plcfrs.parse(
 							sent, stage.grammar, tags=tags,
-							exhaustive=stage.dop or (n + 1 != len(self.stages)
+							exhaustive=stage.dop or (
+								n + 1 != len(self.stages)
 								and self.stages[n + 1].prune),
 							whitelist=whitelist,
 							splitprune=stage.splitprune
 								and self.stages[n - 1].split,
 							markorigin=self.stages[n - 1].markorigin,
-							estimates=(stage.useestimates, stage.outside)
-								if stage.useestimates in ('SX', 'SXlrgaps')
+							estimates=(stage.estimates, stage.outside)
+								if stage.estimates in ('SX', 'SXlrgaps')
 								else None)
 				elif stage.mode == 'dop-rerank':
 					if chart:
@@ -603,9 +603,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		grammar = Grammar(rules, lexicon.read(),
 				start=top, bitpar=stage.mode.startswith('pcfg')
 				or re.match(r'[-.e0-9]+\b', rules), binarized=stage.binarized)
-		backtransform = None
+		backtransform = outside = None
 		if stage.dop:
-			if stage.useestimates is not None:
+			if stage.estimates is not None:
 				raise ValueError('not supported')
 			if stage.dop == 'doubledop':
 				backtransform = gzip.open('%s/%s.backtransform.gz' % (
@@ -644,12 +644,25 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
+			if stage.estimates in ('SX', 'SXlrgaps'):
+				if stage.estimates == 'SX' and grammar.maxfanout != 1:
+					raise ValueError('SX estimate requires PCFG.')
+				if stage.mode != 'plcfrs':
+					raise ValueError('estimates require parser w/agenda.')
+				outside = np.load(  # pylint: disable=no-member
+						'%s/%s.outside.npz' % (resultdir, stage.name))['outside']
+				logging.info('loaded %s estimates', stage.estimates)
+			elif stage.estimates:
+				raise ValueError('unrecognized value; specify SX or SXlrgaps.')
+
 		if stage.mode.startswith('pcfg-bitpar'):
 			if grammar.maxfanout != 1:
 				raise ValueError('bitpar requires a PCFG.')
+
 		_sumsto1, msg = grammar.testgrammar()
 		logging.info('%s: %s', stage.name, msg)
-		stage.update(grammar=grammar, backtransform=backtransform, outside=None)
+		stage.update(grammar=grammar, backtransform=backtransform,
+				outside=outside)
 	if postagging and postagging.method == 'unknownword':
 		postagging.unknownwordfun = UNKNOWNWORDFUNC[postagging.model]
 		postagging.lexicon = {w for w in stages[0].grammar.lexicalbyword

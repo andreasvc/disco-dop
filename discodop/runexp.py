@@ -504,18 +504,17 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				',backtransform' if stage.dop == 'doubledop' else '')
 
 		outside = None
-		if 'SX' in (stage.getestimates, stage.useestimates):
-			if tbfanout != 1 and not stage.split:
+		if stage.estimates in ('SX', 'SXlrgaps'):
+			if stage.estimates == 'SX' and tbfanout != 1 and not stage.split:
 				raise ValueError('SX estimate requires PCFG.')
-			if stage.mode != 'plcfrs':
+			elif stage.mode != 'plcfrs':
 				raise ValueError('estimates require parser w/agenda.')
-		if stage.getestimates in ('SX', 'SXlrgaps'):
 			begin = time.clock()
-			logging.info('computing %s estimates', stage.getestimates)
-			if stage.getestimates == 'SX':
+			logging.info('computing %s estimates', stage.estimates)
+			if stage.estimates == 'SX':
 				outside = estimates.getpcfgestimates(gram, testmaxwords,
 						gram.toid[trees[0].label])
-			elif stage.getestimates == 'SXlrgaps':
+			elif stage.estimates == 'SXlrgaps':
 				outside = estimates.getestimates(gram, testmaxwords,
 						gram.toid[trees[0].label])
 			logging.info('estimates done. cpu time elapsed: %gs',
@@ -523,11 +522,9 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			np.savez_compressed(  # pylint: disable=no-member
 					'%s/%s.outside.npz' % (resultdir, stage.name),
 					outside=outside)
-			logging.info('saved %s estimates', stage.getestimates)
-		elif stage.useestimates in ('SX', 'SXlrgaps'):
-			outside = np.load(  # pylint: disable=no-member
-					'%s/%s.outside.npz' % (resultdir, stage.name))['outside']
-			logging.info('loaded %s estimates', stage.useestimates)
+			logging.info('saved %s estimates', stage.estimates)
+		elif stage.estimates:
+			raise ValueError('unrecognized value; specify SX or SXlrgaps.')
 
 		stage.update(grammar=gram, backtransform=backtransform,
 				outside=outside)

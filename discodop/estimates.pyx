@@ -245,7 +245,7 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 		entry = agenda.popentry()
 		I = entry.key
 		x = entry.value
-		if agenda.length % 1000 == 0:
+		if agenda.length % 10000 == 0:
 			print("agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x),
 				grammar.tolabel[I.state].decode('ascii')))
@@ -466,7 +466,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
 		I = entry.key
 		x = entry.value
 		state, left, right = I
-		if agenda.length % 1000 == 0:
+		if agenda.length % 10000 == 0:
 			print("agenda size: %dk top: %r, %g %s" % (
 				agenda.length / 1000, I, exp(-x),
 				grammar.tolabel[state].decode('ascii')))

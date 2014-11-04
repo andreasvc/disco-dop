@@ -148,8 +148,7 @@ Where the keys and values are:
 :complement: for Double-DOP, whether to include fragments which
     form the complement of the maximal recurring fragments extracted
 :neverblockre: do not prune nodes with label that match this regex
-:getestimates: compute & store context-summary (outside) estimates
-:useestimates: load & use estimates
+:estimates: compute, store & use context-summary (outside) estimates
 
 Other options
 --------------
