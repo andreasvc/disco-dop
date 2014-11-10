@@ -15,12 +15,18 @@ DEF INVALID = 0
 
 @cython.final
 cdef class Entry:
-	pass
+	def __repr__(self):
+		return '%s(%r, %r, %r)' % (
+				self.__class__.__name__, self.key, self.value, self.count)
 
 
 @cython.final
 cdef class DoubleEntry:
-	pass
+	def __repr__(self):
+		return '%s(%r, %r, %r)' % (
+				self.__class__.__name__, self.key, self.value, self.count)
+
+
 
 
 cdef inline bint cmpfun(Entry_fused a, Entry_fused b):
@@ -34,10 +40,10 @@ cdef class Agenda:
 	Implements decrease-key and remove operations by marking entries as
 	invalid. Provides dictionary-like interface.
 
-	Can be initialized with an iterable; order of equivalent values remains and
-	the best priorities are retained on duplicate keys."""
+	Can be initialized with an iterable; equivalent values are preserved in
+	insertion order and the best priorities are retained on duplicate keys."""
 	def __init__(self, iterable=None):
-		cdef Entry entry, oldentry
+		cdef Entry entry = None, oldentry
 		self.counter = 1
 		self.length = 0
 		self.heap = []
@@ -48,12 +54,14 @@ cdef class Agenda:
 				if k in self.mapping:
 					oldentry = self.mapping[k]
 					if cmpfun(entry, oldentry):
+						entry.count = oldentry.count
 						oldentry.count = INVALID
 						self.mapping[k] = entry
+						self.heap.append(entry)
 				else:
 					self.mapping[k] = entry
+					self.heap.append(entry)
 					self.counter += 1
-				self.heap.append(entry)
 			self.length = len(self.mapping)
 			heapify(self.heap, entry)
 
@@ -81,7 +89,7 @@ cdef class Agenda:
 		""":returns: value for agenda[key] and remove it."""
 		cdef Entry entry
 		if key is None:
-			return self.popentry().value
+			return self.popitem()[1]
 		entry = self.mapping.pop(key)
 		entry.count = INVALID
 		self.length -= 1
@@ -118,19 +126,16 @@ cdef class Agenda:
 		return self.mapping[key].value
 
 	def __setitem__(self, key, value):
-		cdef Entry oldentry, entry
+		cdef Entry oldentry, entry = new_Entry(key, value, self.counter)
 		if key in self.mapping:
 			oldentry = <Entry>self.mapping[key]
-			entry = new_Entry(key, value, oldentry.count)
-			self.mapping[key] = entry
-			heappush(self.heap, entry)
+			entry.count = oldentry.count
 			oldentry.count = INVALID
 		else:
-			self.counter += 1
 			self.length += 1
-			entry = new_Entry(key, value, self.counter)
-			self.mapping[key] = entry
-			heappush(self.heap, entry)
+			self.counter += 1
+		self.mapping[key] = entry
+		heappush(self.heap, entry)
 
 	def __delitem__(self, key):
 		"""Remove key from heap."""
@@ -168,7 +173,7 @@ cdef class Agenda:
 
 
 # Unfortunately it seems we cannot template a cdef class with a fused type yet,
-# otherwise Agende[double] would have been possible.
+# otherwise Agenda[double] would have been possible.
 @cython.final
 cdef class DoubleAgenda(Agenda):
 	"""Priority Queue where priorities are C doubles.
@@ -183,7 +188,7 @@ cdef class DoubleAgenda(Agenda):
 	This version is specialized to be used as agenda with C doubles as
 	priorities (values); keys are hashable Python objects."""
 	def __init__(self, iterable=None):
-		cdef DoubleEntry entry, oldentry
+		cdef DoubleEntry entry = None, oldentry
 		self.counter = 1
 		self.length = 0
 		self.heap = []
@@ -194,12 +199,14 @@ cdef class DoubleAgenda(Agenda):
 				if k in self.mapping:
 					oldentry = <DoubleEntry>self.mapping[k]
 					if cmpfun(entry, oldentry):
+						entry.count = oldentry.count
 						oldentry.count = INVALID
 						self.mapping[k] = entry
+						self.heap.append(entry)
 				else:
 					self.mapping[k] = entry
+					self.heap.append(entry)
 					self.counter += 1
-				self.heap.append(entry)
 			self.length = len(self.mapping)
 			heapify(self.heap, entry)
 
@@ -228,7 +235,7 @@ cdef class DoubleAgenda(Agenda):
 		oldentry.count = INVALID
 		return oldentry.value
 
-	# the following are identical except for `DoubleEntry` occurrences
+	# the following are methods specialized for `DoubleEntry` objects
 	cdef DoubleEntry popentry(self):
 		"""Like popitem, but avoid tuple construction by returning a
 		DoubleEntry object."""
@@ -260,21 +267,18 @@ cdef class DoubleAgenda(Agenda):
 
 	cdef inline void setitem(self, key, double value):
 		"""Like agenda[key] = value, but bypass Python API."""
-		cdef DoubleEntry oldentry, entry
+		cdef DoubleEntry oldentry
+		cdef DoubleEntry entry = new_DoubleEntry(key, value, self.counter)
 		if key in self.mapping:
 			oldentry = <DoubleEntry>self.mapping[key]
-			entry = new_DoubleEntry(key, value, oldentry.count)
-			self.mapping[key] = entry
-			self.heap.append(entry)
-			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, entry)
+			entry.count = oldentry.count
 			oldentry.count = INVALID
 		else:
-			self.counter += 1
 			self.length += 1
-			entry = new_DoubleEntry(key, value, self.counter)
-			self.mapping[key] = entry
-			self.heap.append(entry)
-			siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, entry)
+			self.counter += 1
+		self.mapping[key] = entry
+		self.heap.append(entry)
+		siftdown(self.heap, 0, PyList_GET_SIZE(self.heap) - 1, entry)
 
 	cdef update_entries(self, list entries):
 		"""Like ``update()``, but expects a list of DoubleEntry objects."""
@@ -284,30 +288,30 @@ cdef class DoubleAgenda(Agenda):
 			if entry.key in self.mapping:
 				oldentry = <DoubleEntry>self.mapping[entry.key]
 				if cmpfun(entry, oldentry):
+					entry.count = oldentry.count
 					oldentry.count = INVALID
 					self.mapping[entry.key] = entry
+					self.heap.append(entry)
 			else:
 				self.mapping[entry.key] = entry
+				self.heap.append(entry)
 				self.counter += 1
-			self.heap.append(entry)
 		self.length = len(self.mapping)
 		heapify(self.heap, entry)
 
 	# Override these methods to ensure that only DoubleEntry objects enter heap
 	def __setitem__(self, key, value):
-		cdef DoubleEntry oldentry, entry
+		cdef DoubleEntry oldentry
+		cdef DoubleEntry entry = new_DoubleEntry(key, value, self.counter)
 		if key in self.mapping:
 			oldentry = <DoubleEntry>self.mapping[key]
-			entry = new_DoubleEntry(key, value, oldentry.count)
-			self.mapping[key] = entry
-			heappush(self.heap, entry)
+			entry.count = oldentry.count
 			oldentry.count = INVALID
 		else:
-			self.counter += 1
 			self.length += 1
-			entry = new_DoubleEntry(key, value, self.counter)
-			self.mapping[key] = entry
-			heappush(self.heap, entry)
+			self.counter += 1
+		self.mapping[key] = entry
+		heappush(self.heap, entry)
 
 	def __delitem__(self, key):
 		"""Remove key from heap."""
