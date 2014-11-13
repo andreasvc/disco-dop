@@ -269,7 +269,7 @@ def workerfunc(func):
 		try:
 			import faulthandler
 			faulthandler.enable()  # Dump information on segfault.
-		except ImportError:
+		except (ImportError, io.UnsupportedOperation):
 			pass
 		# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
 		try:
