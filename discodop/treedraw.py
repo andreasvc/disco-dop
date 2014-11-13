@@ -386,7 +386,11 @@ class DrawTree(object):
 			y = row * vscale + vstart
 			if n in self.highlight:
 				color = nodecolor if isinstance(node, Tree) else leafcolor
-				if isinstance(node, Tree) and node.label.startswith('-'):
+				if (isinstance(node, Tree) and node.label.startswith('-')
+						and node.label not in {
+							'-LRB-', '-RRB-',
+							'-LCB-', '-RCB-',
+							'-LSB-', '-RSB-', '-NONE-'}):
 					color = funccolor
 			else:
 				color = 'black'
