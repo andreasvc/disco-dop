@@ -61,5 +61,6 @@ lint: inplace
 		discodop/*.py web/*.py tests/*.py \
 	&& pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi \
-	&& pylint --indent-string='\t' --disable=R,bad-continuation,invalid-name \
+	&& pylint --indent-string='\t' \
+		--disable=R,bad-continuation,invalid-name,star-args \
 		discodop/*.py web/*.py tests/*.py
