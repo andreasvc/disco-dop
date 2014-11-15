@@ -641,6 +641,55 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 	return result
 
 
+def rindex(l, v):
+	"""Like list.index(), but go from right to left."""
+	return len(l) - 1 - l[::-1].index(v)
+
+
+def labels(tree):
+	""":returns: the labels of the children of this node."""
+	return [a.label for a in tree if isinstance(a, Tree)]
+
+
+def pop(a):
+	"""Remove this node from its parent node, if it has one.
+
+	Convenience function for ParentedTrees."""
+	try:
+		return a.parent.pop(a.parent_index)
+	except AttributeError:
+		return a
+
+
+def base(node, match):
+	"""Test whether ``node.label`` equals ``match' after stripping features."""
+	return (node.label == match
+			or node.label.startswith(match + STATESPLIT)
+			or node.label.startswith(match + '-'))
+
+
+def strip(label):
+	"""Equivalent to the effect of the @ operator in tregex."""
+	if STATESPLIT in label:
+		return label[:label.index(STATESPLIT)]
+	elif '-' in label:
+		return label[:label.index('-')]
+	return label
+
+
+def ancestors(node):
+	"""Yield ancestors of node from direct parent to root node."""
+	while node:
+		node = node.parent
+		yield node
+
+
+def bracketings(tree):
+	"""Labeled bracketings of a tree."""
+	return [(a.label, tuple(sorted(a.leaves())))
+		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
+
+
 def removeterminals(tree, sent, func):
 	"""Remove any terminals for which func is True, and any empty ancestors."""
 	for a in reversed(tree.treepositions('leaves')):
@@ -662,6 +711,7 @@ def removeemptynodes(tree, sent):
 	removeterminals(tree, sent, lambda x, _: x in (None, '', '-NONE-'))
 
 
+# Punctuation
 # fixme: treebank specific parameters for detecting punctuation.
 PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
@@ -790,56 +840,12 @@ def balancedpunctraise(tree, sent):
 			punctmap[BALANCEDPUNCTMATCH[sent[terminal]]] = terminal
 
 
-def function(tree):
-	""":returns: grammatical function for node, or an empty string."""
-	if getattr(tree, 'source', None):
-		return tree.source[FUNC].split('-')[0]
-	return ''
-
-
+# Heads
 def ishead(tree):
 	"""Test whether this node is the head of the parent constituent."""
-	if getattr(tree, 'source', None):
-		return 'HD' in tree.source[FUNC].upper().split('-')
-	return False
+	return getattr(tree, 'head', False)
 
 
-def rindex(l, v):
-	"""Like list.index(), but go from right to left."""
-	return len(l) - 1 - l[::-1].index(v)
-
-
-def labels(tree):
-	""":returns: the labels of the children of this node."""
-	return [a.label for a in tree if isinstance(a, Tree)]
-
-
-def pop(a):
-	"""Remove this node from its parent node, if it has one.
-
-	Convenience function for ParentedTrees."""
-	try:
-		return a.parent.pop(a.parent_index)
-	except AttributeError:
-		return a
-
-
-def strip(label):
-	"""Equivalent to the effect of the @ operator in tregex."""
-	return label[:label.index("^")] if "^" in label else label
-
-
-def ancestors(node):
-	"""Yield ancestors of node from direct parent to root node."""
-	while node:
-		node = node.parent
-		yield node
-
-
-def bracketings(tree):
-	"""Labeled bracketings of a tree."""
-	return [(a.label, tuple(sorted(a.leaves())))
-		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
 
 
 def readheadrules(filename):
@@ -890,59 +896,20 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 
 def sethead(child):
 	"""Mark node as head in an auxiliary field."""
-	child.source = getattr(child, "source")
-	if child.source is None:
-		child.source = 6 * ['']
-		child.source[TAG] = child.label
-	if 'HD' not in child.source[FUNC].upper().split("-"):
-		x = list(child.source)
-		if child.source[FUNC] in (None, '', '--'):
-			x[FUNC] = '-HD'
-		else:
-			x[FUNC] = x[FUNC] + '-HD'
-		child.source = tuple(x)
-
-
-def headmark(tree):
-	"""Add marker to label of head node."""
-	head = [a for a in tree if getattr(a, 'source', None)
-			and 'HD' in a.source[FUNC].upper().split('-')]
-	if not head:
-		return
-	head[-1].label += '-HD'
-
-
-def headorder(tree, headfinal, reverse):
-	"""Order constituents based on head (identified with function tag)."""
-	head = [n for n, a in enumerate(tree)
-		if getattr(a, 'source', None)
-		and 'HD' in a.source[FUNC].upper().split("-")]
-	if not head:
-		return
-	headidx = head.pop()
-	# everything until the head is reversed and prepended to the rest,
-	# leaving the head as the first element
-	nodes = tree[:]
-	tree[:] = []
-	if headfinal:
-		if reverse:  # head final, reverse rhs: A B C^ D E => A B E D C^
-			tree[:] = nodes[:headidx] + nodes[headidx:][::-1]
-		else:  # head final, reverse lhs:  A B C^ D E => E D A B C^
-			tree[:] = nodes[headidx + 1:][::-1] + nodes[:headidx + 1]
-	else:
-		if reverse:  # head first, reverse lhs: A B C^ D E => C^ B A D E
-			tree[:] = nodes[:headidx + 1][::-1] + nodes[headidx + 1:]
-		else:  # head first, reverse rhs: A B C^ D E => C^ D E B A
-			tree[:] = nodes[headidx:] + nodes[:headidx][::-1]
+	child.head = True
 
 
 def saveheads(tree, tailmarker):
 	"""Store head as grammatical function when inferrable from binarization."""
-	if not tailmarker:
-		return
-	for node in tree.subtrees(lambda n: tailmarker in n.label):
-		node.source = ['--'] * 6
-		node.source[FUNC] = 'HD'
+	if tailmarker:
+		for node in tree.subtrees(lambda n: tailmarker in n.label):
+			sethead(node)
+	# assume head-outward binarization; the last binarized node has the head.
+	for node in tree.subtrees(lambda n: '|<' in n.label
+			and not any(child.label.startswith(
+				n.label[:n.label.index('|<') + 2])
+				for child in n)):
+		sethead(node[-1])
 
 
 def headstats(trees):
@@ -968,10 +935,25 @@ def headstats(trees):
 	return heads, unknown, pos1, pos2
 
 
+# Function tags
+def function(tree):
+	""":returns: The first function tag for node, or the empty string."""
+	if getattr(tree, 'source', None):
+		return tree.source[FUNC].split('-')[0]
+	return ''
+
+
+def functions(tree):
+	""":returns: list of function tags for node, or an empty list."""
+	if getattr(tree, 'source', None) and tree.source[FUNC] != '--':
+		return tree.source[FUNC].split('-')
+	return []
+
+
 __all__ = ['transform', 'negratransforms', 'wsjtransforms', 'ftbtransforms',
 		'reversetransform', 'collapselabels', 'unifymorphfeat', 'rrtransform',
 		'rrbacktransform', 'removeterminals', 'removeemptynodes', 'ispunct',
 		'punctremove', 'punctremove', 'punctlower', 'punctraise',
 		'balancedpunctraise', 'function', 'ishead', 'rindex', 'labels', 'pop',
 		'strip', 'ancestors', 'bracketings', 'readheadrules', 'headfinder',
-		'sethead', 'headmark', 'headorder', 'saveheads', 'headstats']
+		'sethead', 'saveheads', 'headstats']

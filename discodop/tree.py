@@ -72,6 +72,7 @@ class Tree(list):
 		list.__init__(self, children)
 		self.label = label_or_str
 		self.source = self.bitset = None
+		self.head = False
 
 	# === Comparison operators ==================================
 	def __eq__(self, other):
@@ -264,7 +265,11 @@ class Tree(list):
 		:param val: The tree that should be converted."""
 		if isinstance(val, Tree):
 			children = [cls.convert(child) for child in val]
-			return cls(val.label, children)
+			tree = cls(val.label, children)
+			tree.source = val.source
+			tree.bitset = val.bitset
+			tree.head = val.head
+			return tree
 		return val
 
 	def copy(self, deep=False):
@@ -292,7 +297,7 @@ class Tree(list):
 
 	# === Parsing ===============================================
 	@classmethod
-	def parse(cls, s, brackets='()', parse_label=None, parse_leaf=None,
+	def parse(cls, s, brackets='()', parse_label=None, parse_leaf=int,
 			label_pattern=None, leaf_pattern=None):
 		"""Parse a bracketed tree string and return the resulting tree.
 		Trees are represented as nested brackettings, such as:
@@ -452,7 +457,6 @@ class Tree(list):
 		"""Return a rich representation for IPython notebook."""
 		from discodop.treedraw import DrawTree
 		return DrawTree(self, [str(a) for a in self.leaves()]).svg()
-
 
 
 class ImmutableTree(Tree):
