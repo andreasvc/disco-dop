@@ -752,7 +752,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	The argument ``dellabel`` is only used to exclude the ROOT node from the
 	results (because it cannot be deleted by ``transform()`` when non-unary).
 
-	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
+	>>> tree = Tree('(S (NP 1) (VP (VB 0) (JJ 2)))')
 	>>> params = {'DELETE_LABEL': set(), 'DELETE_WORD': set(),
 	... 'EQ_LABEL': {}, 'EQ_WORD': {},
 	... 'DELETE_ROOT_PRETERMS': 0}
@@ -760,7 +760,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	... params, set())
 	>>> sorted(bracketings(tree).items())
 	[(('S', (0, 1, 2)), 1), (('VP', (0, 2)), 1)]
-	>>> tree = Tree.parse('(S (NP 1) (VP (VB 0) (JJ 2)))', parse_leaf=int)
+	>>> tree = Tree('(S (NP 1) (VP (VB 0) (JJ 2)))')
 	>>> params['DELETE_LABEL'] = {'VP'}
 	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
 	... params, set())

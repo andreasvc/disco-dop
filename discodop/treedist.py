@@ -302,16 +302,16 @@ geteditstats.mem = {}
 
 def test():
 	"""Tree edit distance demonstration."""
-	a = Tree.parse("(f (d (a 0) (c (b 1))) (e 2))", parse_leaf=int)
-	b = Tree.parse("(f (c (d (a 0) (b 1)) (e 2)))", parse_leaf=int)
+	a = Tree('(f (d (a 0) (c (b 1))) (e 2))')
+	b = Tree('(f (c (d (a 0) (b 1)) (e 2)))')
 	result1 = treedist(a, b, debug=True)
 	assert result1 == 2
 	print('%s\n%s\ndistance: %d' % (a, b, result1))
 	result2 = newtreedist(a, b, debug=True)
 	assert result2 == 2
 	print('%s\n%s\ndistance: %d' % (a, b, result2))
-	a = Tree.parse("(f (d (x (a 0)) (b 1) (c 2)) (z 3))", parse_leaf=int)
-	b = Tree.parse("(f (c (d (a 0) (x (b 1)) (c 2)) (z 3)))", parse_leaf=int)
+	a = Tree('(f (d (x (a 0)) (b 1) (c 2)) (z 3))')
+	b = Tree('(f (c (d (a 0) (x (b 1)) (c 2)) (z 3)))')
 	result1 = treedist(a, b, debug=True)
 	assert result1 == 3
 	print('%s\n%s\ndistance: %d' % (a, b, result1))

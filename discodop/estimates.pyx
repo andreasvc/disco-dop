@@ -738,11 +738,10 @@ def test():
 		binarize(a, vertmarkov=1, horzmarkov=1)
 		addfanoutmarkers(a)
 	grammar = Grammar(treebankgrammar(trees, list(corpus.sents().values())))
-	trees = [Tree.parse("(ROOT (A (a 0) (b 1)))", parse_leaf=int),
-			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
-			Tree.parse("(ROOT (B (a 0) (c 2)) (b 1))", parse_leaf=int),
-			Tree.parse("(ROOT (C (a 0) (c 2)) (b 1))", parse_leaf=int),
-			]
+	trees = [Tree('(ROOT (A (a 0) (b 1)))'),
+			Tree('(ROOT (B (a 0) (c 2)) (b 1))'),
+			Tree('(ROOT (B (a 0) (c 2)) (b 1))'),
+			Tree('(ROOT (C (a 0) (c 2)) (b 1))')]
 	sents =[["a", "b"],
 			["a", "b", "c"],
 			["a", "b", "c"],
@@ -773,7 +772,7 @@ def test():
 		print(item)
 	print()
 
-	trees = [Tree.parse(a, parse_leaf=int) for a in '''\
+	trees = [Tree(a) for a in '''\
 			(ROOT (A (a 0) (b 1)))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))
 			(ROOT (A (B (A (B (a 0) (b 1))))) (c 2))

@@ -561,7 +561,7 @@ class Parser(object):
 
 	def postprocess(self, treestr, stage=-1):
 		"""Take parse tree and apply postprocessing."""
-		parsetree = Tree.parse(treestr, parse_leaf=int)
+		parsetree = ParentedTree(treestr)
 		if self.stages[stage].split:
 			mergediscnodes(unbinarize(parsetree, childchar=':',
 					expandunary=False))
@@ -583,8 +583,7 @@ class Parser(object):
 		else:  # Produce a dummy parse for evaluation purposes.
 			default = defaultparse([(n, t) for n, t
 					in enumerate(tags or (len(sent) * ['NONE']))])
-			parsetree = Tree.parse('(%s %s)' % (stage.grammar.start,
-					default), parse_leaf=int)
+			parsetree = ParentedTree('(%s %s)' % (stage.grammar.start, default))
 		noparse = True
 		prob = 1.0
 		return parsetree, prob, noparse

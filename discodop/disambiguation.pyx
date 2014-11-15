@@ -181,7 +181,7 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 				if bitpar:
 					# because with bitpar we don't know which rules have been
 					# used, read off the rules from the derivation ...
-					tree = canonicalize(Tree.parse(deriv, parse_leaf=int))
+					tree = canonicalize(Tree(deriv))
 					newprob = 0.0
 					for t in tree.subtrees():
 						if isinstance(t[0], Tree):
@@ -277,7 +277,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 				binarize(
 				collapseunary(unbinarize(
 					mergediscnodes(unbinarize(
-						Tree.parse(treestr, parse_leaf=int),
+						Tree(treestr),
 						childchar=':', expandunary=False)),
 					expandunary=False),
 					joinchar='++'),
@@ -332,7 +332,7 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 	tmp = ''
 	try:
 		tmp = gettree(cells, tree.bitset)
-		result = unbinarize(Tree.parse(tmp, parse_leaf=int),
+		result = unbinarize(Tree(tmp),
 				childchar='NONE', unarychar='++')
 	except (ValueError, AttributeError):
 		return [], 'MCC failed. %s' % tmp
@@ -492,7 +492,7 @@ cpdef str recoverfragments(deriv, Chart chart, list backtransform):
 	if isinstance(deriv, RankedEdge):
 		result = recoverfragments_(deriv, chart, backtransform)
 	elif isinstance(deriv, basestring):
-		deriv = Tree.parse(deriv, parse_leaf=int)
+		deriv = Tree(deriv)
 		result = recoverfragments_str(deriv, chart, backtransform)
 	else:
 		raise ValueError('derivation has unexpected type %r.' % type(deriv))
@@ -604,11 +604,11 @@ def fragmentsinderiv(deriv, chart, list backtransform):
 	if isinstance(deriv, RankedEdge):
 		fragmentsinderiv_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, basestring) and backtransform is None:
-		deriv = Tree.parse(deriv, parse_leaf=int)
+		deriv = Tree(deriv)
 		result = [REMOVEIDS.sub('', str(splitfrag(node)))
 				for node in deriv.subtrees(frontiernt)]
 	elif isinstance(deriv, basestring):
-		deriv = Tree.parse(deriv, parse_leaf=int)
+		deriv = Tree(deriv)
 		fragmentsinderiv_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError('deriv should be a RankedEdge or a string.')
@@ -739,7 +739,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	if maskrules:
 		grammar.setmask([])  # block all rules
 	for treestr in trees:
-		tree = Tree.parse(treestr, parse_leaf=int)
+		tree = Tree(treestr)
 		for node, (r, yf) in zip(tree.subtrees(),
 				lcfrsproductions(tree, sent)):
 			leaves = node.leaves()
@@ -991,7 +991,7 @@ def test():
 		a, b, _ = max(x, key=itemgetter(1))
 		return (a, (int(abs(b[0])), b[1])) if isinstance(b, tuple) else (a, b)
 
-	trees = [Tree.parse(t, parse_leaf=int) for t in
+	trees = [Tree(t) for t in
 		'''(ROOT (A (A 0) (B 1)) (C 2))
 		(ROOT (C 0) (A (A 1) (B 2)))
 		(ROOT (A 0) (C (B 1) (C 2)))

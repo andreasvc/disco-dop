@@ -142,7 +142,7 @@ def bitext():
 	Translation would require a special decoder (instead of normal kbest
 	derivations where the whole sentence is given)."""
 	print("bitext parsing with a synchronous CFG")
-	trees = [Tree.parse(a, parse_leaf=int) for a in '''\
+	trees = [Tree(a) for a in '''\
 	(ROOT (S (NP (NNP (John 0) (John 7))) (VP (VB (misses 1) (manque 5))\
 		(PP (IN (a` 6)) (NP (NNP (Mary 2) (Mary 4)))))) (SEP (| 3)))
 	(ROOT (S (NP (NNP (Mary 0) (Mary 4))) (VP (VB (likes 1) (aimes 5))\

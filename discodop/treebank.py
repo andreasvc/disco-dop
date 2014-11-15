@@ -204,8 +204,7 @@ class BracketCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		c = count()
-		tree = ParentedTree.parse(LEAVESRE.sub(lambda _: ' %d)' % next(c),
-				block), parse_leaf=int)
+		tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d)' % next(c), block))
 		# TODO: parse Penn TB functions and traces, put into .source attribute
 		if self.functions == 'remove':
 			handlefunctions(self.functions, tree)
@@ -243,7 +242,7 @@ class DiscBracketCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		treestr = block.split("\t", 1)[0]
-		tree = ParentedTree.parse(treestr, parse_leaf=int)
+		tree = ParentedTree(treestr)
 		sent = self._word(block, orig=True)
 		if not all(0 <= n < len(sent) for n in tree.leaves()):
 			raise ValueError('All leaves must be in the interval 0..n with '
@@ -467,8 +466,7 @@ def brackettree(treestr, sent, brackets, strtermre):
 		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)', treestr),
 				parse_leaf=substleaf, brackets=brackets)
 	else:  # disc. trees with integer indices as terminals
-		tree = ParentedTree.parse(treestr, parse_leaf=int,
-			brackets=brackets)
+		tree = ParentedTree.parse(treestr, parse_leaf=int, brackets=brackets)
 		if sent.strip():
 			maxleaf = max(tree.leaves())
 			sent, rest = sent.strip('\n\r\t').split(' ', maxleaf), ''

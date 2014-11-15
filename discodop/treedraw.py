@@ -774,7 +774,7 @@ def test():
 			0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
 			Mit einer Messe in der Sixtinischen Kapelle ist das Konklave \
 				offiziell zu Ende gegangen .'''
-	trees = [Tree.parse(a, parse_leaf=int) for a in trees.splitlines()]
+	trees = [Tree(a) for a in trees.splitlines()]
 	sents = [a.split() for a in sents.splitlines()]
 	sents.extend([['Wake', None, 'up'],
 		[None, 'your', 'friend', None]])

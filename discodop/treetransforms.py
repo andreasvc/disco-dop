@@ -294,18 +294,18 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	return tree
 
 
-def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
-		unarychar='+'):
+def unbinarize(tree, _sent=None, expandunary=True,
+		childchar='|', parentchar='^', unarychar='+'):
 	"""Restore a binarized tree to the original n-ary tree.
 
-	Modifies tree in-place. Tree should not be a ParentedTree.
+	Modifies tree in-place.
 	NB: a malformed node such as ``(X|<Y> )`` which is not supposed to be empty
 	will be silently discarded."""
 	# increase robustness
 	childchar += '<'
 	parentchar += '<'
 	treeclass = tree.__class__
-	# Traverse the tree-depth first keeping a pointer to the parent for
+	# Traverse the tree depth-first keeping a pointer to the parent for
 	# modification purposes.
 	agenda = [(tree, [])]
 	while agenda:
@@ -317,8 +317,17 @@ def unbinarize(tree, expandunary=True, childchar='|', parentchar='^',
 			childindex = node.label.find(childchar)
 			if childindex != -1:
 				# go by identity instead of equality
-				n = [id(a) for a in parent].index(id(node))
-				parent[n:n + 1] = node
+				for n, a in enumerate(parent):
+					if a is node:
+						# convert node to list so that its children may
+						# get new parents.
+						tmp = node[:]
+						node[:] = []
+						node = tmp
+						parent[n:n + 1] = node
+						break
+				else:
+					raise IndexError
 			else:
 				parentindex = node.label.find(parentchar)
 				if parentindex != -1:
@@ -366,12 +375,12 @@ def collapseunary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 	return tree
 
 
-def introducepreterminals(tree, ids=None):
+def introducepreterminals(tree, sent, ids=None):
 	"""Add preterminals with artificial POS-tags for terminals with siblings.
 
-	>>> tree = Tree('(S (X a b (CD c d) e))')
-	>>> print(introducepreterminals(tree))
-	(S (X (X/a a) (X/b b) (CD (CD/c c) (CD/d d)) (X/e e)))"""
+	>>> tree = Tree('(S (X 0 1 (CD 2 3) 4))')
+	>>> print(introducepreterminals(tree, ['a', 'b', 'c', 'd', 'e']))
+	(S (X (X/a 0) (X/b 1) (CD (CD/c 2) (CD/d 3)) (X/e 4)))"""
 	assert isinstance(tree, Tree)
 	treeclass = tree.__class__
 	agenda = [tree]
@@ -383,7 +392,9 @@ def introducepreterminals(tree, ids=None):
 				agenda.append(child)
 			elif hassiblings:
 				node[n] = treeclass('%s/%s' % (
-					node.label if ids is None else next(ids), child), [child])
+							node.label if ids is None else next(ids),
+							sent[child]),
+						[child])
 	return tree
 
 
@@ -462,8 +473,8 @@ def splitdiscnodes(tree, markorigin=False):
 	:markorigin=False: VP* (bare label)
 	:markorigin=True: VP*1 (add index)
 
-	>>> tree = Tree.parse('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
-	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))', parse_leaf=int)
+	>>> tree = Tree('(S (VP (VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4)'
+	... '(VVPP 5)) (VAINF 6)) (VMFIN 3))')
 	>>> print(splitdiscnodes(tree.copy(True)))
 	...  # doctest: +NORMALIZE_WHITESPACE
 	(S (VP* (VP* (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP* (VP* (CARD 4)
@@ -550,9 +561,7 @@ def optimalbinarize(tree, sep='|', headdriven=False,
 	``v=0`` is not implemented. Setting h to a nonzero integer restricts the
 	possible binarizations to head driven binarizations."""
 	if h is None:
-		tree = Tree.convert(tree)
-		for a in list(tree.subtrees(lambda x: len(x) > 1))[::-1]:
-			a.sort(key=lambda x: x.leaves())
+		tree = canonicalize(Tree.convert(tree))
 	return optimalbinarize_(addbitsets(tree), fun or complexityfanout, sep,
 			headdriven, h or 999, v, ())
 
@@ -585,7 +594,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 		head-driven binarization (which constrains the possible binarizations).
 
 	>>> tree = '(X (A 0) (B 1) (C 2) (D 3) (E 4))'
-	>>> tree2 = binarize(Tree.parse(tree, parse_leaf=int))
+	>>> tree2 = binarize(Tree(tree))
 	>>> minimalbinarization(addbitsets(tree), complexityfanout, head=2) == tree2
 	True
 	>>> tree = addbitsets('(A (B1 (t 6) (t 13)) (B2 (t 3) (t 7) (t 10)) '
@@ -726,8 +735,7 @@ def fanoutcomplexity(tree):
 def contsets(nodes):
 	"""Partition children into continuous subsets.
 
-	>>> tree = Tree.parse(
-	... "(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))", parse_leaf=int)
+	>>> tree = Tree('(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))')
 	>>> print(list(contsets(tree)))  # doctest: +NORMALIZE_WHITESPACE
 	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])],
 	[Tree('CARD', [4]), Tree('VVPP', [5])]]"""
@@ -790,7 +798,7 @@ def addbitsets(tree):
 	The bitset attribute is a Python integer corresponding to the information
 	that leaves() would return for that node."""
 	if isinstance(tree, basestring):
-		result = ImmutableTree.parse(tree, parse_leaf=int)
+		result = ImmutableTree(tree)
 	elif isinstance(tree, ImmutableTree):
 		result = tree
 	elif isinstance(tree, Tree):

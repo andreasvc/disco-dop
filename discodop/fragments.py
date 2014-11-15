@@ -488,8 +488,8 @@ def getfragments(trees, sents, numproc=1, disc=True,
 		ids = count()
 		for _ in range(10):  # up to 10 iterations
 			newtrees = [binarize(
-					introducepreterminals(Tree.parse(tree, parse_leaf=int),
-					ids=ids), childchar="}") for tree, _ in newfrags]
+					introducepreterminals(Tree(tree),
+					sent, ids=ids), childchar="}") for tree, sent in newfrags]
 			newsents = [["#%d" % next(ids) if word is None else word
 					for word in sent] for _, sent in newfrags]
 			newfrags, newcounts = iteratefragments(
@@ -574,7 +574,7 @@ def debinarize(fragments):
 			frag = origfrag
 		try:
 			frag = str(unbinarize(Tree(frag)))
-		except:
+		except Exception:
 			result.append(origfrag)
 		else:
 			result.append((frag, sent) if PARAMS['disc'] else frag)

@@ -121,7 +121,7 @@ def bitparkbestitems(Chart chart, int k, bint finecfg):
 	cdef list derivs = chart.rankededges[chart.root()]
 	cdef dict items = {}
 	for deriv, _ in derivs[:k]:
-		t = Tree.parse(deriv, parse_leaf=int)
+		t = Tree(deriv)
 		for n in t.subtrees():
 			label = chart.grammar.toid[n.label]
 			leaves = n.leaves()
@@ -349,7 +349,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 		mpp, _ = marginalize("mpp", derivations, entries, chart)
 		for t, p, _ in mpp:
 			print(pyexp(-p), end=' ')
-			t = Tree.parse(t, parse_leaf=int)
+			t = Tree(t)
 			if split:
 				unbinarize(t, childchar=":", parentchar="!")
 				mergediscnodes(t)
@@ -382,7 +382,7 @@ def doctf(coarse, fine, sent, tree, k, split, verbose=False):
 		mpp, _ = marginalize("mpp", derivations, entries, chart2)
 		for t, p, _ in mpp:
 			print(pyexp(-p), end=' ')
-			t = Tree.parse(t, parse_leaf=int)
+			t = Tree(t)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))
 			# print(t)

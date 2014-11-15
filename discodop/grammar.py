@@ -77,7 +77,7 @@ def lcfrsproductions(tree, sent, frontiers=False):
 	is ``True``, frontier nodes will generate empty productions, by default
 	they are ignored.
 
-	>>> tree = Tree.parse("(S (VP_2 (V 0) (ADJ 2)) (NP 1))", parse_leaf=int)
+	>>> tree = Tree("(S (VP_2 (V 0) (ADJ 2)) (NP 1))")
 	>>> sent = "is Mary happy".split()
 	>>> for p in lcfrsproductions(tree, sent): print(p)
 	(('S', 'VP_2', 'NP'), ((0, 1, 0),))
@@ -472,7 +472,7 @@ def nodefreq(tree, dectree, subtreefd, nonterminalfd):
 
 	>>> fd = multiset()
 	>>> d = TreeDecorator()
-	>>> tree = Tree("(S (NP mary) (VP walks))")
+	>>> tree = Tree("(S (NP 0) (VP 1))")
 	>>> dectree = d.decorate(tree, ['mary', 'walks'])
 	>>> nodefreq(tree, dectree, fd, multiset())
 	4
@@ -514,17 +514,17 @@ class TreeDecorator(object):
 		"""Return a copy of tree with labels decorated with IDs.
 
 		>>> d = TreeDecorator()
-		>>> tree = Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))", parse_leaf=int)
+		>>> tree = Tree('(S (NP (DT 0) (N 1)) (VP 2))')
 		>>> d.decorate(tree, ['the', 'dog', 'walks'])
 		... # doctest: +NORMALIZE_WHITESPACE
 		Tree('S', [Tree('NP@1-0', [Tree('DT@1-1', [0]),
 			Tree('N@1-2', [1])]), Tree('VP@1-3', [2])])
 		>>> d = TreeDecorator(memoize=True)
-		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
-		...		parse_leaf=int), ['the', 'dog', 'walks']))
+		>>> print(d.decorate(Tree('(S (NP (DT 0) (N 1)) (VP 2))'),
+		...		['the', 'dog', 'walks']))
 		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@1-4 2))
-		>>> print(d.decorate(Tree.parse("(S (NP (DT 0) (N 1)) (VP 2))",
-		...		parse_leaf=int), ['the', 'dog', 'barks']))
+		>>> print(d.decorate(Tree('(S (NP (DT 0) (N 1)) (VP 2))'),
+		...		['the', 'dog', 'barks']))
 		(S (NP@1-1 (DT@1-2 0) (N@1-3 1)) (VP@2-4 2))"""
 		if self.memoize:
 			self.ids = 0
@@ -535,7 +535,7 @@ class TreeDecorator(object):
 			dectree = Tree.convert(tree.copy(True))
 			# skip top node, should not get an ID
 			for m, a in enumerate(islice(dectree.subtrees(), 1, None)):
-				a.label = "%s@%d-%d" % (a.label, self.n, m)
+				a.label = '%s@%d-%d' % (a.label, self.n, m)
 		self.n += 1
 		return dectree
 
