@@ -6,7 +6,7 @@
 - reattaching punctuation"""
 from __future__ import division, print_function
 import re
-from itertools import islice, repeat
+from itertools import islice
 from collections import defaultdict, Counter as multiset
 from discodop.tree import Tree, ParentedTree
 
@@ -15,10 +15,8 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
 HEADRULERE = re.compile(r'^(\S+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
-NEGRATAGUNARY = dict(zip(
-		'NN NNE PNC PRF PDS PIS PPER PPOS PRELS PWS'.split(), repeat('NP')))
-NEGRACONSTUNARY = dict(zip('CNP NM PN'.split(), repeat('NP')))
 NUMBERRE = re.compile('^[0-9]+(?:[,.][0-9]+)*$')
+CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
 
@@ -36,20 +34,30 @@ def transform(tree, sent, transformations):
 	:ftb:
 			``transformations=('markinf markpart de2 markp1 mwadvs mwadvsel1 '
 			'mwadvsel2 mwnsel1 mwnsel2 PUNCT tagpa').split()``"""
+	# unfreeze attributes so that they can be modified
+	for a in tree.subtrees():
+		if isinstance(getattr(a, 'source', None), tuple):
+			a.source = list(a.source)
 	for name in transformations:
 		if name == 'APPEND-FUNC':  # add function to phrasal label
 			for a in tree.subtrees():
-				func = function(a)
-				if func and func != '--':
-					a.label += '-' + func
+				func = functions(a)
+				if func:
+					a.label += '-' + '-'.join(func)
 		elif name == 'FUNC-NODE':  # insert node w/function above phrasal label
 			from discodop.treetransforms import postorder
 			for a in postorder(tree):
-				func = function(a)
-				if func and func != '--':
+				func = functions(a)
+				if func:
 					a[:] = [a.__class__(a.label,
 							[a.pop() for _ in range(len(a))][::-1])]
-					a.label = '-' + func
+					a.label = '-' + '-'.join(func)
+		elif name == 'APPEND-MORPH':  # Append morph. features to POS tag
+			for a in tree.subtree(lambda n: n and isinstance(n[0], int)):
+				morph = '--'
+				if getattr(a, 'source', None):
+					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
+				a.label += STATESPLIT + morph
 		elif name == 'MORPH-NODE':  # insert node w/morph. features above POS
 			from discodop.treetransforms import postorder
 			for a in postorder(tree, lambda n: n and isinstance(n[0], int)):
@@ -80,6 +88,18 @@ def transform(tree, sent, transformations):
 		elif name == 'FANOUT':  # add fan-out markers
 			from discodop.treetransforms import addfanoutmarkers
 			addfanoutmarkers(tree)
+		elif name == 'PARENT':  # add one level of parent annotation
+			# Useful to do here to add the parent annotations before
+			# adding any other annotations to the labels.
+			# Skips preterminals.
+			for node in islice(tree.subtrees(
+					lambda n: isinstance(n[0], Tree)), 1, None):
+				node.label += STATESPLIT + strip(node.parent.label)
+		elif name == 'TAGPA':  # Add parent annotation to non-punct. POS tags
+			for node in tree.subtrees(lambda n:
+					not isinstance(n[0], Tree)
+					and sent[n[0]] not in PUNCTUATION):
+				node.label += STATESPLIT + strip(node.parent.label)
 		elif (negratransforms(name, tree, sent)
 				or wsjtransforms(name, tree, sent)
 				or ftbtransforms(name, tree, sent)):
@@ -91,9 +111,9 @@ def transform(tree, sent, transformations):
 	return tree
 
 
-def negratransforms(name, tree, _sent):
+def negratransforms(name, tree, sent):
 	"""Negra / Tiger transforms."""
-	if name == 'S-RC':  # relative clause => S becomes SRC
+	if name == 'S-RC':  # relative clause => S becomes S^RC
 		for s in tree.subtrees(lambda n: n.label == 'S'
 				and function(n) == 'RC'):
 			s.label += STATESPLIT + 'RC'
@@ -107,14 +127,14 @@ def negratransforms(name, tree, _sent):
 			# anything before an initial preposition goes to the PP
 			# (modifiers, punctuation), otherwise it goes to the NP;
 			# mutatis mutandis for postpositions.
-			functions = [function(x) for x in pp]
-			if 'AC' in functions and 'NK' in functions:
-				if functions.index('AC') < functions.index('NK'):
-					ac[:0] = pp[:functions.index('AC')]
-				if rindex(functions, 'AC') > rindex(functions, 'NK'):
-					ac += pp[rindex(functions, 'AC') + 1:]
+			funcs = [function(x) for x in pp]
+			if 'AC' in funcs and 'NK' in funcs:
+				if funcs.index('AC') < funcs.index('NK'):
+					ac[:0] = pp[:funcs.index('AC')]
+				if rindex(funcs, 'AC') > rindex(funcs, 'NK'):
+					ac += pp[rindex(funcs, 'AC') + 1:]
 			# else:
-			# 	print('PP but no AC or NK', ' '.join(functions))
+			# 	print('PP but no AC or NK', ' '.join(funcs))
 			nk = [a for a in pp if a not in ac]
 			# introduce a PP unless there is already an NP in the PP
 			# (annotation mistake?), or there is a PN and we want to avoid
@@ -124,8 +144,8 @@ def negratransforms(name, tree, _sent):
 				pp[:] = []
 				pp[:] = ac + [ParentedTree('NP', nk)]
 	elif name == 'DP':  # introduce determiner phrases (DPs)
-		# determiners = set('ART PDS PDAT PIS PIAT PPOSAT PRELS PRELAT '
-		# 	'PWS PWAT PWAV'.split())
+		# determiners = {'ART', 'PDS', 'PDAT', 'PIS', 'PIAT', 'PPOSAT',
+		# 	'PRELS', 'PRELAT', 'PWS', 'PWAT', 'PWAV'}
 		determiners = {'ART'}
 		for np in list(tree.subtrees(lambda n: n.label == 'NP')):
 			if np[0].label in determiners:
@@ -189,7 +209,7 @@ def negratransforms(name, tree, _sent):
 			s[:] = [s[0], ParentedTree('S', s[1:])]
 	elif name == 'NEST':  # introduce nested structures for modifiers
 		# (iterated adjunction instead of sister adjunction)
-		adjunctable = set('NP'.split())  # PP AP VP
+		adjunctable = {'NP'}  # PP AP VP
 		for a in list(tree.subtrees(lambda n: n.label in adjunctable
 				and any(function(x) == 'MO' for x in n))):
 			modifiers = [x for x in a if function(x) == 'MO']
@@ -200,20 +220,128 @@ def negratransforms(name, tree, _sent):
 				a[:] = [ParentedTree(a.label,
 						[x for x in a if x != modifier]), modifier]
 				a = a[0]
-	elif name == 'UNARY':  # introduce phrasal projections for single tokens
-		# currently only adds NPs.
-		for a in tree.treepositions('leaves'):
-			tag = tree[a[:-1]]   # e.g. NN
-			const = tree[a[:-2]]  # e.g. S
-			if (tag.label in NEGRATAGUNARY
-					and const.label != NEGRATAGUNARY[tag.label]):
-				# NN -> NN -> word
-				tag[:] = [ParentedTree(tag.label, [tag[0]])]
-				# NP -> NN -> word
-				tag.source = 8 * ['--']
-				tag.source[TAG] = tag.label = NEGRATAGUNARY[tag.label]
-				tag.source[FUNC] = function(tag[0])
-				# tag[0].source[FUNC] = 'NK'
+	# The following transformations as described in Fraser et al (CL, 2013)
+	elif name == 'addUnary':  # introduce unary NPs
+		from discodop.treetransforms import postorder
+		for node in postorder(tree, lambda n: strip(n.label) in
+					{'NN', 'PPER', 'PDS', 'PIS', 'PRELS', 'CARD', 'PN'}
+					and strip(n.parent.label) in {'S', 'VP', 'ROOT', 'DL'}):
+			# if node.label == 'PN' and len(node) == 1: continue
+			children = node[:]
+			node[:] = []
+			tag = ParentedTree(node.label, children)
+			tag.source = node.source[:]
+			node[:] = [tag]
+			node.source[TAG] = node.label = 'NP'
+			node.source[FUNC] = tag.source[FUNC]
+			tag.source[FUNC] = 'HD'
+	elif name == 'addCase':  # add case features to POS tags
+		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
+			case = CASERE.match(node.source[MORPH])
+			if case:
+				node.label += STATESPLIT + case.group(1)
+	elif name == 'elimNKCJ':  # eliminate NK and CJ functions
+		for node in tree.subtrees(lambda n: function(n) in {'NK', 'CJ'}):
+			if function(node) == 'NK':
+				node.source[FUNC] = 'HD'
+			else:
+				node.source[FUNC] = function(node.parent)
+	elif name == 'lexPrep':  # lexicalize frequent prepositions/conjuctions
+		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
+			word = sent[node[0]].lower()
+			if base(node, 'APPR') and word in {
+					'in', 'von', 'auf', 'durch', 'um',
+					'unter', 'unters', 'unterm'}:
+				node.label += STATESPLIT + word
+			elif base(node, 'KON') and function(node) == 'CD' and (word in {
+					'sowohl', 'als', 'weder', 'entweder', 'noch'}
+					or (word == 'oder'  # 'oder' if preceded by entweder
+						and any(a.lower() == 'entweder'
+							for a in sent[:node[0]]))):
+				node.label += STATESPLIT + word
+	elif name == 'adjAttach':  # annotate attachments of adjuncts
+		for node in tree.subtrees(
+				lambda n: strip(n.label) in {'PP', 'AVP', 'ADV', 'ADJD'}):
+			if strip(node.parent.label) in {'S', 'VP'}:
+				annot = 'V'
+			elif strip(node.parent.label) in {'NP', 'PP'}:
+				annot = 'N'
+			else:
+				annot = '0'
+			node.label += STATESPLIT + annot
+			if strip(node.label) == 'AVP':  # propagate to head child
+				child = getheadpos(node)
+				while child is not None and child is not node:
+					child.label += STATESPLIT + annot
+					child = child.parent
+	elif name == 'relPath':  # mark path from relative clause to rel. pronoun
+		for node in tree.subtrees(lambda n: base(n, 'S')
+				and function(n) == 'RC'):
+			for child in node.subtrees(lambda n: strip(n.label) in
+					{'PRELS', 'PRELAT', 'PWAV', 'PWS'}):
+				while child is not node:
+					child.label += STATESPLIT + 'rel'
+					child = child.parent
+				node.label += STATESPLIT + 'rel'
+				break
+			else:  # no rel. pronoun found
+				node.label += STATESPLIT + 'norel'
+	elif name == 'whFeat':  # mark NP/PP that immediately dominates WH-pronoun
+		for node in tree.subtrees(lambda n: strip(n.label) in {'NP', 'PP'} and
+				any(strip(a.label) in {'PWAT', 'PWS', 'PWAV'} for a in n)):
+			node.label += STATESPLIT + 'wh'
+	elif name == 'nounSeq':  # consecutive nouns in NP
+		for node in tree.subtrees(lambda n: base(n, 'NP')):
+			for n, a in enumerate(node[:-1]):
+				if base(a, 'NN') and base(node[n + 1], 'NN'):
+					a.label += STATESPLIT + 'seq'
+					break
+	elif name == 'properChunks':  # mark POS tags in proper noun chunks
+		for node in tree.subtrees(lambda n: base(n, 'NP')
+				and function(n) == 'PNC'):
+			for tag in node:
+				tag.label += STATESPLIT + 'name'
+	elif name == 'markAP':  # mark predicative APs, APs with nominal head
+		for node in tree.subtrees(lambda n: base(n, 'AP')):
+			if any(base(a, 'ADJD') for a in node.subtrees()):
+				node.label += STATESPLIT + 'pred'
+			if any(ishead(child) and strip(child.label) in {'NN', 'NP'}
+					for child in node):
+				node.label += STATESPLIT + 'nom'
+	elif name == 'yearNumbers':  # distinguish years from other numbers
+		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
+			word = sent[node[0]]
+			if re.match('^[0-9]{4}$', word) and 1900 <= int(word) <= 2040:
+				node.label += STATESPLIT + 'year'
+	elif name == 'subConjType':  # mark type of subordinating conj.
+		for node in tree.subtrees(lambda n: base(n, 'S')
+				and function(n) in {'SB', 'OC', 'MO', 'RE'}):
+			for child in node:
+				if base(child, 'KOUS'):
+					child.label += STATESPLIT + function(node)
+					break
+	elif name == 'VPfeat':  # mark object VPs with head label
+		for node in tree.subtrees(lambda n: base(n, 'VP')
+				and function(n) == 'OC'):
+			for child in node:
+				if ishead(child):
+					node.label += STATESPLIT + strip(child.label)
+					break
+	elif name == 'noHead':  # constituents without head child
+		for node in tree.subtrees(lambda n: n is not tree
+				and isinstance(n[0], Tree)):
+			# The heuristically found heads do not count.
+			if not any(function(child) in {'HD', 'PNC', 'AC', 'AVC', 'NMC',
+					'PH', 'PD', 'ADC', 'UC', 'DH'}
+					for child in node):
+				node.label += STATESPLIT + 'nohead'
+	elif name == 'noSubj':  # conjunct clauses without subject
+		for node in tree.subtrees(lambda n: isinstance(n[0], Tree)
+				and base(n, 'S') and function(n) == 'CJ'):
+			if not any(function(child) in {'SB', 'EP'}
+					or strip(child.label) in {'VVIMP', 'VAIMP'}
+					for child in node):
+				node.label += STATESPLIT + 'nosubj'
 	else:
 		return False
 	return True
@@ -265,31 +393,26 @@ def ftbtransforms(name, tree, sent):
 				and isinstance(n.parent.parent, Tree)
 				and strip(n.parent.label) == "VN"
 				and strip(n.parent.parent.label) == "VPinf"):
-			t.label += "^infinitive"
+			t.label += STATESPLIT + "infinitive"
 	elif name == 'markpart':
 		for t in tree.subtrees(lambda n: strip(n.label) == "V"
 				and isinstance(n.parent, Tree)
 				and isinstance(n.parent.parent, Tree)
 				and strip(n.parent.label) == "VN"
 				and strip(n.parent.parent.label) == "VPpart"):
-			t.label += "^participle"
+			t.label += STATESPLIT + "participle"
 	elif name == 'markvn':
 		for t in tree.subtrees(lambda n: strip(n.label) == "VN"):
 			for sub in islice(t.subtrees(), 1, None):
-				sub.label += "^withVN"
-	elif name == 'tagpa':  # Add parent annotation to POS tags
-		for t in tree.subtrees(lambda n:
-				not isinstance(n[0], Tree)
-				and strip(n.label) != "PUNC"):
-			t.label += "^" + t.parent.label
+				sub.label += STATESPLIT + "withVN"
 	elif name == 'coord1':
 		for t in tree.subtrees(lambda n: strip(n.label) == 'COORD'
 				and len(n) >= 2):
-			t.label += "^" + t[1].label
+			t.label += STATESPLIT + strip(t[1].label)
 	elif name == 'de2':
 		for t in tree.subtrees(lambda n: strip(n.label) == 'P'
 				and DERE.match(sent[n[0]])):
-			t.label += "^de2"
+			t.label += STATESPLIT + "de2"
 	elif name == 'de3':
 		# @NP|PP|COORD >+(@NP|PP) (@PP <, (@P < /^([Dd]es?|du|d')$/))
 		for t in tree.subtrees(lambda n:
@@ -299,50 +422,50 @@ def ftbtransforms(name, tree, sent):
 				if PPORNP.match("".join(strip(x.label) for x in a[:n])):
 					if (strip(a[n - 1][0].label) == "P"
 							and DERE.match(sent[a[n - 1][0][0]])):
-						t.label += "^de3"
+						t.label += STATESPLIT + "de3"
 						break
 	elif name == 'markp1':
 		for t in tree.subtrees(lambda n: strip(n.label) == "P"
 				and strip(n.parent.label) == "PP"
 				and strip(n.parent.parent.label) == "NP"):
-			t.label += "^n"
+			t.label += STATESPLIT + "n"
 	elif name == 'mwadvs':
 		for t in tree.subtrees(lambda n: strip(n.label) == "MWADV"
 				and "S" in n.parent.label):
-			t.label += "^mwadv-s"
+			t.label += STATESPLIT + "mwadv-s"
 	elif name == 'mwadvsel1':
 		for t in tree.subtrees(lambda n: strip(n.label) == "MWADV"
 				and len(n) == 2
 				and strip(n[0].label) == "P"
 				and strip(n[1].label) == "N"):
-			t.label += "^mwadv1"
+			t.label += STATESPLIT + "mwadv1"
 	elif name == 'mwadvsel2':
 		for t in tree.subtrees(lambda n: strip(n.label) == "MWADV"
 				and len(n) == 3
 				and strip(n[0].label) == "P"
 				and strip(n[1].label) == "D"
 				and strip(n[2].label) == "N"):
-			t.label += "^mwadv2"
+			t.label += STATESPLIT + "mwadv2"
 	elif name == 'mwnsel1':
 		for t in tree.subtrees(lambda n: strip(n.label) == "MWN"
 				and len(n) == 2
 				and strip(n[0].label) == "N"
 				and strip(n[1].label) == "A"):
-			t.label += "^mwn1"
+			t.label += STATESPLIT + "mwn1"
 	elif name == 'mwnsel2':
 		for t in tree.subtrees(lambda n: strip(n.label) == "MWN"
 				and len(n) == 3
 				and strip(n[0].label) == "N"
 				and strip(n[1].label) == "P"
 				and strip(n[2].label) == "N"):
-			t.label += "^mwn2"
+			t.label += STATESPLIT + "mwn2"
 	elif name == 'mwnsel3':  # noun-noun compound joined with dash.
 		for t in tree.subtrees(lambda n: strip(n.label) == "MWN"
 				and len(n) == 3
 				and strip(n[0].label) == "N"
 				and sent[n[1][0]] == "-"
 				and strip(n[2].label) == "N"):
-			t.label += "^mwn3"
+			t.label += STATESPLIT + "mwn3"
 	else:
 		return False
 	return True
@@ -355,10 +478,14 @@ def reversetransform(tree, transformations):
 	# Generic state-split removal
 	for node in tree.subtrees(lambda n: STATESPLIT in n.label[1:]):
 		node.label = node.label[:node.label.index(STATESPLIT, 1)]
-
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.sort(key=lambda n: n.leaves())
+	# unfreeze attributes so that they can be modified
+	for a in tree.subtrees():
+		if isinstance(getattr(a, 'source', None), tuple):
+			a.source = list(a.source)
+
 	for name in reversed(transformations):
 		if name == 'FANOUT':
 			from discodop.treetransforms import removefanoutmarkers
@@ -372,10 +499,11 @@ def reversetransform(tree, transformations):
 					# dp[1:] = dp1
 					dp[1][:], dp[1:] = [], dp[1][:]
 		elif name == 'NEST':  # flatten adjunctions
-			nkonly = set('PDAT CAP PPOSS PPOSAT ADJA FM PRF NM NN NE PIAT '
-					'PRELS PN TRUNC CH CNP PWAT PDS VP CS CARD ART PWS PPER'
-					''.split())
-			probably_nk = set('AP PIS'.split()) | nkonly
+			nkonly = {'PDAT', 'CAP', 'PPOSS', 'PPOSAT', 'ADJA', 'FM', 'PRF',
+					'NM', 'NN', 'NE', 'PIAT', 'PRELS', 'PN', 'TRUNC', 'CH',
+					'CNP', 'PWAT', 'PDS', 'VP', 'CS', 'CARD', 'ART', 'PWS',
+					'PPER'}
+			probably_nk = {'AP', 'PIS'} | nkonly
 			for np in tree.subtrees(lambda n: len(n) == 2
 					and n.label == 'NP'
 					and [x.label for x in n].count('NP') == 1
@@ -423,23 +551,50 @@ def reversetransform(tree, transformations):
 							if isinstance(c, Tree))
 						and any(c.label == b.label for c in b)):
 						a[n:n + 1] = b[:]
-		elif name == 'UNARY':
+		elif name == 'addUnary':
 			# remove phrasal projections for single tokens
-			for a in tree.treepositions('leaves'):
-				tag = tree[a[:-1]]    # NN
-				const = tree[a[:-2]]  # NP
-				parent = tree[a[:-3]]  # PP
-				if (len(const) == 1 and tag.label in NEGRATAGUNARY
-						and const.label == NEGRATAGUNARY[tag.label]):
-					parent[a[-3]] = const.pop(0)
-					del const
+			# e.g. S => NP => NN becomes S => NN
+			for node in tree.subtrees(lambda n:
+					strip(n.label) in {'S', 'VP', 'ROOT', 'DL'}):
+				for child in node:
+					if (len(child) == 1 and base(child, 'NP')
+							and strip(child[0].label) in {'NN', 'PPER', 'PDS',
+								'PIS', 'PRELS', 'CARD', 'PN'}):
+						child.label = child[0].label
+						child.source = getattr(child[0], 'source', None)
+						children = child[0][:]
+						child[0][:] = []
+						child[:] = children
+		elif name == 'elimNKCJ':  # restore NK and CJ functions
+			for node in tree.subtrees(lambda n: strip(n.label)
+					in {'NP', 'PP'}):
+				for child in node:
+					if not getattr(child, 'source', None):
+						child.source = ['--'] * 8
+					if function(child) == 'HD':
+						child.source[FUNC] = 'NK'
+			for node in tree.subtrees(lambda n: strip(n.label)
+					in {'CS', 'CNP', 'CVP', 'CAP', 'CAVP', 'CAC'}):
+				for child in node:
+					if not getattr(child, 'source', None):
+						child.source = ['--'] * 8
+					if function(child) != 'CD':
+						child.source[FUNC] = 'CJ'
 		elif name == 'APPEND-FUNC':  # functions appended to phrasal labels
-			for a in tree.subtrees():
-				if '-' in a.label:
-					label, func = a.label.split('-', 1)
+			for a in tree.subtrees(lambda n: '-' in n.label):
+				label, func = a.label.split('-', 1)
+				if not getattr(a, 'source', None):
 					a.source = ['--'] * 8
+				a.source[TAG] = a.label = label
+				a.source[FUNC] = func
+		elif name == 'APPEND-MORPH':  # morphology appended to phrasal labels
+			for a in tree.subtrees(lambda n: n and isinstance(n[0], int)):
+				if '/' in a.label:
+					label, morph = a.label.split('/', 1)
+					if not getattr(a, 'source', None):
+						a.source = ['--'] * 8
 					a.source[TAG] = a.label = label
-					a.source[FUNC] = func
+					a.source[MORPH] = morph
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
 			from discodop.treetransforms import postorder
 			for a in postorder(tree, lambda n: n.label.startswith('-')
