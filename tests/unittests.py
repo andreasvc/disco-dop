@@ -10,44 +10,46 @@ from discodop.treebank import incrementaltreereader
 from discodop.treetransforms import binarize, unbinarize, \
 		splitdiscnodes, mergediscnodes, \
 		addbitsets, fanout, canonicalize
-from discodop.treebanktransforms import punctraise, balancedpunctraise
+from discodop.treebanktransforms import punctraise, balancedpunctraise, sethead
 from discodop.grammar import flatten, UniqueIDs
 
 
 class Test_treetransforms(object):
 	def test_binarize(self):
-		treestr = '(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))'
+		treestr = '(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))'
 		origtree = Tree(treestr)
 		tree = Tree(treestr)
-		assert str(binarize(tree, horzmarkov=0, tailmarker='')) == (
-				'(S (VP (PDS 0) (VP|<> (ADV 3) (VVINF 4))) (S|<> (PIS 2) '
-				'(VMFIN 1)))')
+		sethead(tree[1])  # set VMFIN as head
+		assert str(binarize(tree, horzmarkov=0)) == (
+				'(S (VP (PDS 0) (VP|<> (ADV 3) (VVINF 4))) (S|<> (VMFIN 1)'
+				' (PIS 2)))')
 		assert unbinarize(tree) == origtree
 
-		assert str(binarize(tree, horzmarkov=1, tailmarker='')) == (
-				'(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> '
-				'(PIS 2) (VMFIN 1)))')
+		assert str(binarize(tree, horzmarkov=1)) == (
+				'(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<VMFIN> '
+				'(VMFIN 1) (PIS 2)))')
 		assert unbinarize(tree) == origtree
 
 		assert str(binarize(tree, horzmarkov=1, leftmostunary=False,
-				rightmostunary=True, tailmarker='')) == (
+				rightmostunary=True, headoutward=True)) == (
 				'(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VP|<VVINF> (VVINF 4)))) '
-				'(S|<PIS> (PIS 2) (S|<VMFIN> (VMFIN 1))))')
+				'(S|<VMFIN> (S|<VMFIN> (VMFIN 1)) (PIS 2)))')
 		assert unbinarize(tree) == origtree
 
 		assert str(binarize(tree, horzmarkov=1, leftmostunary=True,
-		rightmostunary=False, tailmarker='')) == (
+		rightmostunary=False, headoutward=True)) == (
 				'(S (S|<VP> (VP (VP|<PDS> (PDS 0) (VP|<ADV> (ADV 3) '
-				'(VVINF 4)))) (S|<PIS> (PIS 2) (VMFIN 1))))')
+				'(VVINF 4)))) (S|<VMFIN> (VMFIN 1) (PIS 2))))')
 		assert unbinarize(tree) == origtree
 
-		assert str(binarize(tree, factor='left', horzmarkov=2, tailmarker='')
-				) == ('(S (S|<PIS,VMFIN> (VP (VP|<ADV,VVINF> (PDS 0) (ADV 3)) '
-				'(VVINF 4)) (PIS 2)) (VMFIN 1))')
+		assert str(binarize(tree, factor='left', horzmarkov=2,
+				headoutward=True)
+				) == ('(S (S|<VMFIN,PIS> (VP (VP|<PDS,ADV> (PDS 0) (ADV 3)) '
+				'(VVINF 4)) (VMFIN 1)) (PIS 2))')
 		assert unbinarize(tree) == origtree
 
 		tree = Tree('(S (A 0) (B 1) (C 2) (D 3) (E 4) (F 5))')
-		assert str(binarize(tree, tailmarker='', reverse=False)) == (
+		assert str(binarize(tree, headoutward=True)) == (
 				'(S (A 0) (S|<B,C,D,E,F> (B 1) (S|<C,D,E,F> (C 2) (S|<D,E,F> '
 				'(D 3) (S|<E,F> (E 4) (F 5))))))')
 
@@ -361,7 +363,7 @@ class TestHeap(TestCase):
 		tmp = repr(h)  # 'Agenda({....})'
 		# strip off class name
 		dstr = tmp[tmp.index('(') + 1:tmp.rindex(')')]
-		self.assertEqual(d, eval(dstr))
+		self.assertEqual(d, eval(dstr))  # pylint: disable=eval-used
 
 	def test_merge(self):
 		from discodop.plcfrs import merge
@@ -373,20 +375,27 @@ class TestHeap(TestCase):
 
 def test_fragments():
 	from discodop._fragments import getctrees, extractfragments, exactcounts
-	treebank = [binarize(Tree(x)) for x in """\
-(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (JJ hungry) (NN dog))))
-(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT the) (NN dog))))
-(S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
-(S (NP (DT The) (NN mouse)) (VP (VBP saw) (NP (DT the) (JJ yellow) (NN cat))))
-(S (NP (DT The) (JJ little) (NN mouse)) (VP (VBP saw) (NP (DT the) (NN cat))))
-(S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
-(S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))\
-		""".splitlines()]
-	sents = [tree.leaves() for tree in treebank]
-	for tree in treebank:
+	treebank = """\
+(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (JJ 4) (NN 5))))\
+	The cat saw the hungry dog
+(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NN 4))))\
+	The cat saw the dog
+(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NN 4))))\
+	The mouse saw the cat
+(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (JJ 4) (NN 5))))\
+	The mouse saw the yellow cat
+(S (NP (DT 0) (JJ 1) (NN 2)) (VP (VBP 3) (NP (DT 4) (NN 5))))\
+	The little mouse saw the cat
+(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NN 4))))\
+	The cat ate the dog
+(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NN 4))))\
+	The mouse ate the cat""".splitlines()
+	trees = [binarize(Tree(line.split('\t')[0])) for line in treebank]
+	sents = [line.split('\t')[1].split() for line in treebank]
+	for tree in trees:
 		for n, idx in enumerate(tree.treepositions('leaves')):
 			tree[idx] = n
-	params = getctrees(treebank, sents)
+	params = getctrees(trees, sents)
 	fragments = extractfragments(params['trees1'], params['sents1'],
 			0, 0, params['labels'], discontinuous=True, approx=False)
 	counts = exactcounts(params['trees1'], params['trees1'],

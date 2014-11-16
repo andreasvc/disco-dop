@@ -429,9 +429,12 @@ def getfragments(trees, sents, numproc=1, disc=True,
 		is a list of words as unicode strings; when ``disc`` is ``False``, keys
 		are of the form ``frag`` where ``frag`` is a unicode string.
 	:param trees: a sequence of binarized Tree objects.
+	:param sents: the corresponding sentences (lists of strings).
 	:param numproc: number of processes to use; pass 0 to use detected # CPUs.
 	:param disc: when disc=True, assume trees with discontinuous constituents.
-	:param iterate, complement: see :func:`_fragments.extractfragments`"""
+	:param iterate, complement: see :func:`_fragments.extractfragments`
+	:param cover: add 'cover' fragments to result, corresponding to single
+		grammar productions."""
 	if numproc == 0:
 		numproc = cpu_count()
 	numtrees = len(trees)

@@ -705,11 +705,10 @@ def getprodid(prods, node):
 
 def getctrees(trees, sents, disc=True, trees2=None, sents2=None):
 	""":returns: Ctrees object for disc. binary trees and sentences."""
-	# make deep copies to avoid side effects.
-	trees12 = trees = [tolist(addprods(Tree.convert(a), b, disc), b)
+	trees12 = trees = [tolist(addprods(a, b, disc), b)
 			for a, b in zip(trees, sents)]
 	if trees2:
-		trees2 = [tolist(addprods(Tree.convert(a), b, disc), b)
+		trees2 = [tolist(addprods(a, b, disc), b)
 					for a, b in zip(trees2, sents2)]
 		trees12 = trees + trees2
 	labels = []
