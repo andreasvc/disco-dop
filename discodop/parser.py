@@ -29,13 +29,13 @@ from discodop.grammar import defaultparse
 from discodop.containers import Grammar
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import getderivations, marginalize, doprerank
-from discodop.tree import Tree
+from discodop.tree import ParentedTree
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebank import WRITERS, writetree
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
-		saveheads, NUMBERRE, readheadrules
+		saveheads, NUMBERRE, readheadrules, applyfunctionclassifier
 from discodop.treetransforms import mergediscnodes, unbinarize, \
-		removefanoutmarkers
+		removefanoutmarkers, canonicalize
 
 USAGE = '''
 usage: %(cmd)s [options] <grammar/> [input [output]]
@@ -304,7 +304,7 @@ def worker(args):
 	else:
 		output += ''.join(
 				writetree(
-					PARAMS.parser.postprocess(tree)[0], sent,
+					PARAMS.parser.postprocess(tree, sent, -1)[0], sent,
 					n if PARAMS.numparses == 1 else ('%d-%d' % (n, k)),
 					PARAMS.fmt, headrules=PARAMS.headrules,
 					morphology=PARAMS.morphology,
@@ -349,12 +349,13 @@ class Parser(object):
 	:param relationalrealizational: whether to reverse the RR-transform."""
 	def __init__(self, stages, transformations=None, postagging=None,
 			binarization=DictObj(tailmarker=None),
-			relationalrealizational=None, verbosity=2):
+			relationalrealizational=None, funcclassifier=None, verbosity=2):
 		self.stages = stages
 		self.transformations = transformations
 		self.binarization = binarization
 		self.postagging = postagging
 		self.relationalrealizational = relationalrealizational
+		self.funcclassifier = funcclassifier
 		self.verbosity = verbosity
 		for stage in stages:
 			if stage.mode.startswith('pcfg-bitpar'):
@@ -414,7 +415,7 @@ class Parser(object):
 			if not stage.binarized and not stage.mode.startswith('pcfg-bitpar'):
 				raise ValueError('non-binarized grammar requires use of bitpar')
 			if not stage.prune or chart:
-				if n != 0 and stage.prune and stage.mode != 'dop-rerank':
+				if n > 0 and stage.prune and stage.mode != 'dop-rerank':
 					beginprune = time.clock()
 					if self.stages[n - 1].mode == 'pcfg-posterior':
 						whitelist, msg1 = whitelistfromposteriors(
@@ -476,7 +477,7 @@ class Parser(object):
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
-				if (n != 0 and not chart and not noparse
+				if (n > 0 and not chart and not noparse
 						and stage.split == self.stages[n - 1].split):
 					logging.error('ERROR: expected successful parse. '
 							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
@@ -535,7 +536,7 @@ class Parser(object):
 				try:
 					resultstr, prob, fragments = max(
 							parsetrees, key=itemgetter(1))
-					parsetree, noparse = self.postprocess(resultstr, n)
+					parsetree, noparse = self.postprocess(resultstr, sent, n)
 					if not all(a for a in parsetree.subtrees()):
 						raise ValueError('empty nodes in tree: %s' % parsetree)
 					if not len(parsetree.leaves()) == len(sent):
@@ -559,20 +560,25 @@ class Parser(object):
 					parsetrees=parsetrees, fragments=fragments,
 					noparse=noparse, elapsedtime=elapsedtime, msg=msg)
 
-	def postprocess(self, treestr, stage=-1):
+	def postprocess(self, treestr, sent, stage):
 		"""Take parse tree and apply postprocessing."""
 		parsetree = ParentedTree(treestr)
 		if self.stages[stage].split:
 			mergediscnodes(unbinarize(parsetree, childchar=':',
 					expandunary=False))
-		saveheads(parsetree, self.binarization.tailmarker)
+		if self.binarization.tailmarker or self.binarization.headrules:
+			saveheads(parsetree, self.binarization.tailmarker)
 		unbinarize(parsetree, expandunary=False)
 		removefanoutmarkers(parsetree)
 		if self.relationalrealizational:
 			parsetree = rrbacktransform(parsetree,
 					self.relationalrealizational['adjunctionlabel'])
+		if self.funcclassifier is not None:
+			applyfunctionclassifier(self.funcclassifier, parsetree, sent)
 		if self.transformations:
 			reversetransform(parsetree, self.transformations)
+		else:
+			canonicalize(parsetree)
 		return parsetree, False
 
 	def noparse(self, stage, sent, tags, lastsuccessfulparse):

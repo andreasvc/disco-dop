@@ -1208,6 +1208,19 @@ def ishead(tree):
 	return getattr(tree, 'head', False)
 
 
+def getheadpos(node):
+	"""Get head word dominated by this node."""
+	child = node
+	while True:
+		if not child:
+			break
+		if not isinstance(child[0], Tree):
+			return child
+		try:
+			child = next(a for a in child if ishead(a))
+		except StopIteration:
+			break
+	return None
 
 
 def readheadrules(filename):
@@ -1310,6 +1323,111 @@ def functions(tree):
 	if getattr(tree, 'source', None) and tree.source[FUNC] != '--':
 		return tree.source[FUNC].split('-')
 	return []
+
+
+def trainfunctionclassifier(trees, sents, numproc):
+	"""Train a classifier to predict functions tags in trees."""
+	from sklearn import linear_model, multiclass
+	from sklearn import preprocessing, feature_extraction
+	vectorizer = feature_extraction.DictVectorizer(sparse=True)
+	encoder = preprocessing.MultiLabelBinarizer()
+	# binarize features (output is a sparse array)
+	X = vectorizer.fit_transform(
+			functionfeatures(node, sent) for tree, sent in zip(trees, sents)
+				for node in islice(tree.subtrees(), 1, None))
+	y = encoder.fit_transform(
+			[functions(node) for tree in trees
+					for node in islice(tree.subtrees(), 1, None)])
+	# train classifier
+	classifier = multiclass.OneVsRestClassifier(
+			linear_model.SGDClassifier(loss='hinge', penalty='elasticnet'),
+			n_jobs=numproc or -1)
+	classifier.fit(X, y)
+	msg = ('trained classifier; score on training set: %g %%\n'
+			'function tags: %s' % (
+			100.0 * sum((a == b).all() for a, b
+				in zip(y, classifier.predict(X))) / len(y),
+			' '.join(encoder.classes_)))
+	return (classifier, vectorizer, encoder), msg
+
+
+def applyfunctionclassifier(funcclassifier, tree, sent):
+	"""Add predicted function tags to tree using classifier."""
+	classifier, vectorizer, encoder = funcclassifier
+	# get features and use classifier
+	funclabels = encoder.inverse_transform(classifier.predict(
+			vectorizer.transform(functionfeatures(node, sent)
+			for node in islice(tree.subtrees(), 1, None))))
+	# store labels in tree
+	for node, funcs in zip(islice(tree.subtrees(), 1, None), funclabels):
+		if not getattr(node, 'source', None):
+			node.source = ['--'] * 8
+		elif isinstance(node.source, tuple):
+			node.source = list(node.source)
+		node.source[FUNC] = '-'.join(funcs)
+
+
+def functionfeatures(node, sent):
+	"""Return a list of features for node to predict its function tag.
+
+	The node must be a ParentedTree, with head information.
+
+	The features are based on Blaheta & Charniak (2000),
+	Assigning Function Tags to Parsed Text."""
+	def basefeatures(node, prefix=''):
+		"""A set features describing this particular node."""
+		headpos = getheadpos(node)
+		if base(node, 'PP'):
+			# NB: we skip the preposition here; need way to identify it.
+			altheadpos = getheadpos(node[1:])
+		else:
+			altheadpos = None
+		return {
+				# 1. syntactic category
+				prefix + 'cat': node.label,
+				# 2. head POS
+				prefix + 'hwp': headpos and headpos.label,
+				# 3. head word
+				prefix + 'hwf': headpos and sent[headpos[0]],
+				# 7. alt (for PPs, non-prep. node) head POS
+				prefix + 'ahc': altheadpos.label if altheadpos else '',
+				# 8. alt head word
+				prefix + 'ahf': sent[altheadpos[0]] if altheadpos else '',
+				# 9 yield length
+				prefix + 'yis': len(node.leaves()),
+				}
+
+	headsib = headsibpos = None
+	for sib in node.parent:
+		if ishead(sib):
+			headsib = sib
+			headsibpos = getheadpos(headsib)
+			break
+	result = {
+			# 4. head sister const label
+			'hsc': headsib.label if headsib else '',
+			# 5. head sister head word POS
+			'hsp': headsibpos.label if headsibpos else '',
+			# 6. head sister head word
+			'hsf': sent[headsibpos[0]] if headsibpos else '',
+			# 10. parent label
+			'moc': node.parent.label,
+			# 11. grandparent label
+			'grc': node.parent.parent.label
+					if node.parent.parent else '',
+			# 12. Offset of this node to head sister
+			'ohs': (node.parent_index - headsib.parent_index)
+					if headsib is not None else -1,
+			}
+	result.update(basefeatures(node))
+	# add similar features for neighbors
+	if node.parent_index > 0:
+		result.update(basefeatures(
+				node.parent[node.parent_index - 1], prefix='p'))
+	if node.parent_index + 1 < len(node.parent):
+		result.update(basefeatures(
+				node.parent[node.parent_index + 1], prefix='n'))
+	return result
 
 
 __all__ = ['transform', 'negratransforms', 'ptbtransforms', 'ftbtransforms',

@@ -85,6 +85,8 @@ def startexp(
 		transformations=None,  # apply treebank transformations
 		postagging=None,  # postagging: pass None to use tags from treebank.
 		relationalrealizational=None,  # do not apply RR-transform
+		predictfunctions=False,  # use discriminative classifier to add
+				# grammatical functions in postprocessing step
 		evalparam='proper.prm',  # EVALB-style parameter file
 		verbosity=2,
 		numproc=1,  # increase to use multiple CPUs; None: use all CPUs.
@@ -217,11 +219,23 @@ def startexp(
 	if len(roots) != 1:
 		raise ValueError('expected unique ROOT label: %r' % roots)
 	top = roots.pop()
+	classifier = None
 
 	if rerun:
 		parser.readgrammars(resultdir, stages, postagging, top)
+		if predictfunctions:
+			from sklearn.externals import joblib
+			classifier = joblib.load('%s/funcclassifier.pickle' % resultdir)
 	else:
 		logging.info('read training & test corpus')
+		if predictfunctions:
+			from sklearn.externals import joblib
+			logging.info('training function tag classifier')
+			classifier, msg = treebanktransforms.trainfunctionclassifier(
+					trees, sents, numproc)
+			joblib.dump(classifier, '%s/funcclassifier.pickle' % resultdir,
+					compress=3)
+			logging.info(msg)
 		getgrammars(dobinarization(trees, sents, binarization,
 					relationalrealizational),
 				sents, stages, testcorpus.maxwords, resultdir, numproc,
@@ -237,7 +251,7 @@ def startexp(
 			binarization=binarization, postagging=postagging if postagging
 				and postagging.method == 'unknownword' else None,
 			relationalrealizational=relationalrealizational,
-			verbosity=verbosity)
+			funcclassifier=classifier, verbosity=verbosity)
 	results = doparsing(parser=theparser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=corpusfmt, morphology=morphology,
