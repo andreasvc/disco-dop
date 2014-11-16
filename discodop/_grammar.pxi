@@ -554,12 +554,12 @@ cdef class Grammar:
 			diff = ', '.join(l[:10]) + (', ...' if len(l) > 10 else '')
 			if coarse.nonterminals > self.nonterminals:
 				msg = ('grammar is not a superset of coarse grammar:\n'
-						'coarse labels without mapping: {%s}' % diff)
+						'coarse labels without mapping: { %s }' % diff)
 			elif coarse.nonterminals < self.nonterminals:
 				msg = 'grammar is a proper superset of coarse grammar.'
 			else:
 				msg = ('equal number of nodes, but not equivalent:\n'
-						'coarse labels without mapping: {%s}' % diff)
+						'coarse labels without mapping: { %s }' % diff)
 		return msg
 
 	def getrulemapping(Grammar self, Grammar coarse, striplabelre):

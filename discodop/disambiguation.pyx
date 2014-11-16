@@ -112,10 +112,10 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 		``(parses, msg)``.
 
 		:parses: a list of tuples ``(parsetree, probability, fragments)``
-			where ``parsetree`` is a string, probabilities is a float
-			(0 < p <= 1), or a tuple for shortest derivation parsing, and
-			fragments is a list of fragments in the most probable derivation
-			for this parse.
+			where ``parsetree`` is a string, ``probability`` is a float
+			(0 < p <= 1), or a tuple ``(numfrags, p)`` for shortest derivation
+			parsing, and ``fragments`` is a list of fragments in the most
+			probable derivation for this parse.
 		:msg: a message reporting the number of derivations / parses.
 	"""
 	cdef bint mpd = method == 'mpd'
@@ -734,8 +734,9 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	# not just of derivations. Therefore the coarse-to-fine methods
 	# do not apply directly.
 	cdef FatChartItem fitem
-	cdef int n, selected = 0, lensent = len(sent)
-	whitelist = [{} for _ in grammar.toid]
+	cdef int n, lensent = len(sent)
+	# cdef int selected = 0
+	whitelist = [set() for _ in grammar.toid]
 	if maskrules:
 		grammar.setmask([])  # block all rules
 	for treestr in trees:
@@ -750,7 +751,7 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 				for n in leaves:
 					SETBIT(fitem.vec, n)
 			try:
-				whitelist[grammar.toid[node.label.encode('ascii')]][item] = 0.0
+				whitelist[grammar.toid[node.label.encode('ascii')]].add(item)
 			except KeyError:
 				return [], "'%s' not in grammar" % node.label, None
 
