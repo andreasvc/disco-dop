@@ -30,8 +30,13 @@ type is one of:
    doubledop       PTSG from recurring fragmensts.
    param           Extract a series of grammars according to parameters.
    info            Print statistics for PLCFRS/bitpar rules.
-   merge           Interpolate given grammars into a single grammar
+   merge           Interpolate given sorted grammars into a single grammar.
                    Input can be a rules, lexicon or fragment file.
+                   To ensure properly sorted input with GNU sort,
+                   disable locale specific settings:
+                   $ discodop grammar merge rules
+                     <(zcat plcfrs.rules.gz | LC_ALL=C sort)
+                     <(zcat dop.rules.gz | LC_ALL=C sort)
 
 input is a binarized treebank, or in the 'ptsg' case, weighted fragments in the
 same format as the output of the discodop fragments command;
@@ -63,8 +68,9 @@ Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 RULERE = re.compile(
-		r'(?P<RULE1>(?P<LHS1>[^ \t]+).*)\t(?P<FREQ1>[0-9]+)(?:\/(?P<DENOM>[0-9]+))?$'
-		r'|(?P<FREQ2>[0-9]+)\t(?P<RULE2>(?P<LHS2>[^ \t]+).*)$')
+		r'(?P<RULE1>(?P<LHS1>[^ \t]+).*)\t'
+		r'(?P<WEIGHT1>(?P<FREQ1>[-.e0-9]+)(?:\/[0-9]+)?)$'
+		r'|(?P<FREQ2>[-.e0-9]+)\t(?P<RULE2>(?P<LHS2>[^ \t]+).*)$')
 FRONTIERORTERM = re.compile(r"\(([^ ]+)( [0-9]+)(?: [0-9]+)*\)")
 
 
@@ -833,19 +839,6 @@ def grammarinfo(grammar, dump=None):
 	return result
 
 
-def convertweight(weight):
-	"""Convert a weight in a string to a float.
-
-	>>> [convertweight(a) for a in ('0.5', '0x1.0000000000000p-1', '1/2')]
-	[0.5, 0.5, (1.0, 2.0)]"""
-	if '/' in weight:
-		a, b = weight.split('/')
-		return (float(a), float(b))
-	elif weight.startswith('0x'):
-		return float.fromhex(weight)
-	return float(weight)
-
-
 def grammarstats(filename):
 	"""Print statistics for PLCFRS/bitpar grammar (sorted by LHS)."""
 	print('LHS\t# rules\tfreq. mass')
@@ -858,48 +851,72 @@ def grammarstats(filename):
 			cnt = freq = 0
 			label = (match.group('LHS1') or match.group('LHS2'))
 		cnt += 1
-		freq += int((match.group('FREQ1') or match.group('FREQ2')))
+		freq += float((match.group('FREQ1') or match.group('FREQ2')))
 	if label is not None:
-		print('%s\t%d\t%d\n' % (label, cnt, freq))
+		print('%s\t%d\t%g' % (label, cnt, freq))
+
+
+def splitweight(weight):
+	"""Convert a weight / fraction in a string to a float / tuple.
+
+	>>> [splitweight(a) for a in ('0.5', '0x1.0000000000000p-1', '1/2')]
+	[0.5, 0.5, (1.0, 2.0)]"""
+	if '/' in weight:
+		a, b = weight.split('/')
+		return (float(a), float(b))
+	elif weight.startswith('0x'):
+		return float.fromhex(weight)
+	return float(weight)
+
+
+def convertweight(weight):
+	"""Convert a weight in a string to a float.
+
+	>>> [convertweight(a) for a in ('0.5', '0x1.0000000000000p-1', '1/2')]
+	[0.5, 0.5, 0.5]"""
+	if '/' in weight:
+		a, b = weight.split('/')
+		return float(a) / float(b)
+	elif weight.startswith('0x'):
+		return float.fromhex(weight)
+	return float(weight)
 
 
 def stripweight(line):
 	"""Extract rule without weight."""
-	match = RULERE.match(line)
+	match = RULERE.match(line.strip())
+	if match is None:
+		raise ValueError('Malformed rule:\n%s' % line)
 	return match.group('RULE1') or match.group('RULE2')
 
 
-def sumrules(iterable):
+def sumrules(iterable, n):
 	"""Given a sorted iterable of rules, sum weights of identical rules."""
-	prev = num = denom = None
+	prev = None
+	w1 = 0.0
 	for line in iterable:
 		match = RULERE.match(line)
 		rule = match.group('RULE1') or match.group('RULE2')
 		if rule != prev:
 			if prev is not None:
-				if match.group('RULE1') is not None:
-					if num == denom:
-						yield '%s\t1\n' % prev
-					else:
-						yield '%s\t%d/%d\n' % (prev, num, denom)
+				if match.group('RULE1') is None:
+					yield '%g\t%s\n' % (w1 / n, rule)
 				else:
-					yield '%d\n%s\n' % (num, prev)
+					yield '%s\t%g\n' % (rule, w1 / n)
 			prev = rule
-			num = denom = 0
-		num += int(match.group('FREQ1') or match.group('FREQ2'))
-		if match.group('RULE1') is not None:
-			denom += int(match.group('DENOM') or 1)
-	if match.group('RULE1') is not None:
-		if num == denom:
-			yield '%s\t1\n' % rule
+			w1 = 0.0
+		if match.group('RULE1') is None:
+			w1 += convertweight(match.group('FREQ2'))
 		else:
-			yield '%s\t%d/%d\n' % (rule, num, denom)
+			w1 += convertweight(match.group('WEIGHT1'))
+	if match.group('RULE1') is None:
+		yield '%g\t%s\n' % (w1 / n, rule)
 	else:
-		yield '%d\n%s\n' % (num, rule)
+		yield '%s\t%g\n' % (rule, w1 / n)
 
 
-def sumlex(iterable):
-	"""Given a sorted iterable of rules, sum weights of identical rules."""
+def sumlex(iterable, n):
+	"""Given a sorted lexicon iterable, sum weights of word/tag pairs."""
 	prev = tags = None
 	for line in iterable:
 		word, rest = line.split(None, 1)
@@ -907,43 +924,32 @@ def sumlex(iterable):
 		if word != prev:
 			if tags:
 				yield '%s\t%s\n' % (prev, '\t'.join(
-						'%s %s' % (a, '%g/%d' % (b, c)
-						if c else str(b)) for a, (b, c) in tags.items()))
+						'%s %g' % (a, w1 / n) for a, w1 in tags.items()))
 			prev = word
 			tags = {}
-		for tag, weight in zip(rest[::2], rest[1::2]):
+		for tag, w2 in zip(rest[::2], rest[1::2]):
 			if tag not in tags:
-				tags[tag] = [0, 0]
-			for n, a in enumerate(weight.split('/')):
-				tags[tag][n] += float(a)
+				tags[tag] = 0.0
+			tags[tag] += convertweight(w2)
 	if tags:
 		yield '%s\t%s\n' % (prev, '\t'.join(
-				'%s %s' % (a, '%g/%d' % (b, c)
-				if c else str(b)) for a, (b, c) in tags.items()))
+				'%s %g' % (a, w1 / n) for a, w1 in tags.items()))
 
 
-def sumfrags(iterable):
+def sumfrags(iterable, n):
 	"""Sum weights for runs of identical fragments."""
-	prev = num = denom = None
+	prev = None
+	w1 = 0.0
 	for line in iterable:
-		frag, weight = line.rsplit('\t', 1)
+		frag, w2 = line.rsplit('\t', 1)
 		if frag != prev:
 			if prev is not None:
-				if denom:
-					yield '%s\t%g/%d\n' % (prev, num, denom)
-				else:
-					yield '%s\t%g\n' % (prev, num)
+				yield '%s\t%g\n' % (prev, w1 / n)
 			prev = frag
-			num = denom = 0
-		weight = weight.split('/')
-		num += int(weight[0])
-		if len(weight) == 2:
-			denom += int(weight[1])
+			w1 = 0.0
+		w1 += convertweight(w2)
 	if prev is not None:
-		if denom:
-			yield '%s\t%g/%d\n' % (prev, num, denom)
-		else:
-			yield '%s\t%g\n' % (prev, num)
+		yield '%s\t%g\n' % (prev, w1 / n)
 
 
 def merge(filenames, outfilename, sumfunc, key):
@@ -1016,7 +1022,7 @@ def main():
 					encoding=opts.get('--inputenc', 'utf8')))
 		fragments = {(fields[0] if len(fields) == 2 else
 				(fields[0], [a or None for a in fields[1].split(' ')])):
-					convertweight(fields[-1]) for fields in splittedlines}
+					splitweight(fields[-1]) for fields in splittedlines}
 	else:  # read treebank
 		corpus = READERS[opts.get('--inputfmt', 'export')](
 				treebankfile,
@@ -1099,8 +1105,8 @@ __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'DiscTree', 'eqtree', 'quotelabel', 'UniqueIDs', 'rangeheads',
 		'ranges', 'defaultparse', 'printrule', 'cartpi', 'write_lcfrs_grammar',
 		'write_lncky_grammar', 'subsetgrammar', 'grammarinfo', 'convertweight',
-		'grammarstats', 'stripweight', 'sumrules', 'sumlex', 'sumfrags',
-		'merge']
+		'splitweight', 'grammarstats', 'stripweight', 'sumrules', 'sumlex',
+		'sumfrags', 'merge']
 
 if __name__ == '__main__':
 	main()
