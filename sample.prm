@@ -50,6 +50,7 @@ testcorpus=dict(
 	skip=0,  # skip (additional) sentences between train & test set
 ),
 
+predictfunctions=True,
 punct='move',  # options:
 #	None: leave punctuation as-is
 #	'move': re-attach punctuation to appropriate constituents

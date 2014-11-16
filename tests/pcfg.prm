@@ -84,6 +84,22 @@ stages=[  # Double-DOP without discontinuity (both coarse and fine are PCFG)
 	kbest=True, sample=False,
 	estimator='ewe', objective='mpp',
   ),
+
+  # A* estimates
+  dict(
+	name='pcfg', mode='plcfrs',
+	split=True, markorigin=True,
+	estimates='SX',
+  ),
+  dict(
+	name='mpp', mode='pcfg',
+	prune=True, splitprune=True,
+	dop='doubledop',
+	iterate=False, complement=False,
+	k=50, m=1000,
+	kbest=True, sample=False,
+	estimator='rfe', objective='mpp',
+  ),
 ],
 
 evalparam=None, # EVALB-style parameter file
