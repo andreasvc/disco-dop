@@ -6,7 +6,7 @@ from cpython.dict cimport PyDict_Contains, PyDict_GetItem
 from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.plcfrs cimport DoubleAgenda, new_DoubleEntry
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
-		Edge, Edges, RankedEdge, Idx, cellidx
+		Edge, Edges, RankedEdge, Idx, cellidx, compactcellidx
 
 cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b)
@@ -26,7 +26,8 @@ cdef class DenseCFGChart(CFGChart):
 	cdef double *probs
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule)
-	cdef void updateprob(self, uint32_t lhs, Idx start, Idx end, double prob)
+	cdef bint updateprob(self, uint32_t lhs, Idx start, Idx end, double prob,
+			double beam)
 	cdef double _subtreeprob(self, size_t item)
 	cdef bint hasitem(self, size_t item)
 
@@ -37,14 +38,7 @@ cdef class SparseCFGChart(CFGChart):
 	cdef dict probs
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule)
-	cdef void updateprob(self, uint32_t lhs, Idx start, Idx end, double prob)
+	cdef bint updateprob(self, uint32_t lhs, Idx start, Idx end, double prob,
+			double beam)
 	cdef double _subtreeprob(self, size_t item)
 	cdef bint hasitem(self, size_t item)
-
-
-cdef inline size_t compactcellidx(short start, short end, short lensent,
-		uint32_t nonterminals):
-	""" Return an index to a triangular array, given start < end.
-	The result of this function is the index to chart[start][end][0]. """
-	return nonterminals * (lensent * start
-			- ((start - 1) * start / 2) + end - start - 1)

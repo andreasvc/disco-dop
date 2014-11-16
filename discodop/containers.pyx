@@ -72,7 +72,9 @@ cdef class SmallChartItem:
 		return self.vec
 
 	cdef copy(self):
-		return new_SmallChartItem(self.label, self.vec)
+		cdef SmallChartItem ob = new_SmallChartItem(self.label, self.vec)
+		ob.prob = self.prob
+		return ob
 
 	def binrepr(self, int lensent=0):
 		return bin(self.vec)[2:].zfill(lensent)[::-1]
@@ -136,10 +138,11 @@ cdef class FatChartItem:
 
 	cdef copy(self):
 		cdef int n
-		cdef FatChartItem a = new_FatChartItem(self.label)
+		cdef FatChartItem ob = new_FatChartItem(self.label)
 		for n in range(SLOTS):
-			a.vec[n] = self.vec[n]
-		return a
+			ob.vec[n] = self.vec[n]
+		ob.prob = self.prob
+		return ob
 
 	def binrepr(self, lensent=0):
 		cdef int n
@@ -193,16 +196,26 @@ cdef class RankedEdge:
 		return _hash
 
 	def __richcmp__(RankedEdge self, RankedEdge ob, int op):
-		if op == 2 or op == 3:  # '==' or '!='
-			return (op == 2) == (self.left == ob.left and self.right
-					== ob.right and self.head == ob.head
+		cdef bint result = (self.left == ob.left
+					and self.right == ob.right and self.head == ob.head
 					and memcmp(<uint8_t *>self.edge, <uint8_t *>ob.edge,
 						sizeof(ob.edge)) == 0)
+		if op == 2:  # '=='
+			return result
+		elif op == 3:  # '!='
+			return not result
 		return NotImplemented
 
 	def __repr__(self):
-		return "%s(%r, %d, %d)" % (self.__class__.__name__,
-			self.head, self.left, self.right)
+		if self.edge.rule is NULL:
+			return '%s(%r, NULL, %d, %d)' % (self.__class__.__name__,
+				self.head, self.left, self.right)
+		return '%s(%r, Edge(%d/%s, Rule(%d, %d, %d, %g)), %d, %d)' % (
+				self.__class__.__name__, self.head,
+				self.edge.pos.mid, bin(self.edge.pos.lvec)[2:][::-1],
+				self.edge.rule.lhs, self.edge.rule.rhs1,
+				self.edge.rule.rhs2, self.edge.rule.prob,
+				self.left, self.right)
 
 
 cdef class Chart:
@@ -243,6 +256,9 @@ cdef class Chart:
 	cdef copy(self, item):
 		return item
 
+	cdef uint32_t label(self, item):
+		raise NotImplementedError
+
 	def indices(self, item):
 		"""Return a list of indices dominated by ``item``."""
 		raise NotImplementedError
@@ -253,17 +269,11 @@ cdef class Chart:
 		assert 0 <= result < self.lensent, (result, self.lensent)
 		return result
 
-	cdef edgestr(self, item, Edge *edge):
-		"""Return string representation of item and edge belonging to it."""
-		if edge.rule is NULL:
-			return self.sent[self.lexidx(edge)]
-		else:
-			return ('%g %s %s' % (
-					exp(-edge.rule.prob) if self.grammar.logprob
-					else edge.rule.prob,
-					self.itemstr(self._left(item, edge)),
-					self.itemstr(self._right(item, edge))
-						if edge.rule.rhs2 else ''))
+	cdef double lexprob(self, item, Edge *edge):
+		"""Return lexical probability given a lexical edge."""
+		label = self.label(item)
+		word = self.sent[self.lexidx(edge)]
+		return (<LexicalRule>self.grammar.lexicalbylhs[label][word]).prob
 
 	cdef ChartItem asChartItem(self, item):
 		"""Convert/copy item to ChartItem instance."""
@@ -282,7 +292,7 @@ cdef class Chart:
 		return CFGtoFatChartItem(label, start, end)
 
 	cdef size_t asCFGspan(self, item, size_t nonterminals):
-		"""Convert item for chart with different number of non-terminals."""
+		"""Convert item for chart to compact span."""
 		cdef size_t itemx
 		if isinstance(item, SmallChartItem):
 			start = nextset((<SmallChartItem>item).vec, 0)
@@ -297,7 +307,20 @@ cdef class Chart:
 			itemx //= self.grammar.nonterminals
 			start = itemx // self.lensent
 			end = itemx % self.lensent + 1
-		return cellidx(start, end, self.lensent, nonterminals)
+		return compactcellidx(start, end, self.lensent, 1)
+
+	cdef edgestr(self, item, Edge *edge):
+		"""Return string representation of item and edge belonging to it."""
+		if edge.rule is NULL:
+			return "%g '%s'" % (self.lexprob(item, edge),
+					self.sent[self.lexidx(edge)])
+		else:
+			return ('%g %s %s' % (
+					exp(-edge.rule.prob) if self.grammar.logprob
+					else edge.rule.prob,
+					self.itemstr(self._left(item, edge)),
+					self.itemstr(self._right(item, edge))
+						if edge.rule.rhs2 else ''))
 
 	def __str__(self):
 		"""Pretty-print chart and *k*-best derivations."""

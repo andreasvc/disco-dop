@@ -81,12 +81,14 @@ cdef class Chart:
 	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
 	cdef double subtreeprob(self, item)
 	cdef lexidx(self, Edge *edge)
+	cdef double lexprob(self, item, Edge *edge)
 	cdef edgestr(self, item, Edge *edge)
 	cdef _left(self, item, Edge *edge)
 	cdef _right(self, item, Edge *edge)
 	cdef left(self, RankedEdge edge)
 	cdef right(self, RankedEdge edge)
 	cdef copy(self, item)
+	cdef uint32_t label(self, item)
 	cdef ChartItem asChartItem(self, item)
 	cdef size_t asCFGspan(self, item, size_t nonterminals)
 	cdef getitems(self)
@@ -259,6 +261,14 @@ cdef inline size_t cellidx(short start, short end, short lensent,
 
 	``chart[start][end][0] => chart[idx]`` """
 	return (start * lensent + (end - 1)) * nonterminals
+
+
+cdef inline size_t compactcellidx(short start, short end, short lensent,
+		uint32_t nonterminals):
+	"""Return an index to a triangular array, given start < end.
+	The result of this function is the index to chart[start][end][0]."""
+	return nonterminals * (lensent * start
+			- ((start - 1) * start / 2) + end - start - 1)
 
 
 cdef object log1e200 = log(1e200)

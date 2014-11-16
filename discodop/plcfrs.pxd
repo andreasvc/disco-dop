@@ -2,7 +2,7 @@ cimport cython
 from libc.string cimport memcmp
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
-from cpython.dict cimport PyDict_Contains
+from cpython.set cimport PySet_Contains
 from cpython.float cimport PyFloat_AS_DOUBLE
 from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \

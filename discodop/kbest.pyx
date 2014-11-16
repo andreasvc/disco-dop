@@ -285,19 +285,19 @@ def test():
 	dcchart.addedge(1, 2, 3, 3, NULL)
 	dcchart.addedge(6, 3, 4, 4, NULL)
 	dcchart.addedge(1, 4, 5, 5, NULL)
-	dcchart.updateprob(3, 0, 3, -log(0.0126000))
-	dcchart.updateprob(3, 0, 5, -log(0.0005040))
-	dcchart.updateprob(4, 1, 3, -log(0.1260000))
-	dcchart.updateprob(4, 1, 5, -log(0.0050400))
-	dcchart.updateprob(4, 1, 5, -log(0.0037800))
-	dcchart.updateprob(1, 2, 5, -log(0.0072000))
-	dcchart.updateprob(2, 3, 5, -log(0.1000000))
-	dcchart.updateprob(1, 0, 1, -log(0.1))   # 'astronomers'
-	dcchart.updateprob(1, 1, 2, -log(0.04))  # NP => 'saw'
-	dcchart.updateprob(5, 1, 2, -log(1))     # V => 'saw'
-	dcchart.updateprob(1, 2, 3, -log(0.18))  # 'stars'
-	dcchart.updateprob(6, 3, 4, -log(1))     # 'with'
-	dcchart.updateprob(1, 4, 5, -log(0.1))   # 'telescopes'
+	dcchart.updateprob(3, 0, 3, -log(0.0126000), 0.0)
+	dcchart.updateprob(3, 0, 5, -log(0.0005040), 0.0)
+	dcchart.updateprob(4, 1, 3, -log(0.1260000), 0.0)
+	dcchart.updateprob(4, 1, 5, -log(0.0050400), 0.0)
+	dcchart.updateprob(4, 1, 5, -log(0.0037800), 0.0)
+	dcchart.updateprob(1, 2, 5, -log(0.0072000), 0.0)
+	dcchart.updateprob(2, 3, 5, -log(0.1000000), 0.0)
+	dcchart.updateprob(1, 0, 1, -log(0.1), 0.0)   # 'astronomers'
+	dcchart.updateprob(1, 1, 2, -log(0.04), 0.0)  # NP => 'saw'
+	dcchart.updateprob(5, 1, 2, -log(1), 0.0)     # V => 'saw'
+	dcchart.updateprob(1, 2, 3, -log(0.18), 0.0)  # 'stars'
+	dcchart.updateprob(6, 3, 4, -log(1), 0.0)     # 'with'
+	dcchart.updateprob(1, 4, 5, -log(0.1), 0.0)   # 'telescopes'
 	derivations = lazykbest(dcchart, k)[0]
 	print(dcchart)
 	for a, p in derivations:
@@ -318,19 +318,19 @@ def test():
 	scchart.addedge(1, 2, 3, 3, NULL)
 	scchart.addedge(6, 3, 4, 4, NULL)
 	scchart.addedge(1, 4, 5, 5, NULL)
-	scchart.updateprob(3, 0, 3, -log(0.0126000))
-	scchart.updateprob(3, 0, 5, -log(0.0005040))
-	scchart.updateprob(4, 1, 3, -log(0.1260000))
-	scchart.updateprob(4, 1, 5, -log(0.0050400))
-	scchart.updateprob(4, 1, 5, -log(0.0037800))
-	scchart.updateprob(1, 2, 5, -log(0.0072000))
-	scchart.updateprob(2, 3, 5, -log(0.1000000))
-	scchart.updateprob(1, 0, 1, -log(0.1))   # 'astronomers'
-	scchart.updateprob(1, 1, 2, -log(0.04))  # NP => 'saw'
-	scchart.updateprob(5, 1, 2, -log(1))     # V => 'saw'
-	scchart.updateprob(1, 2, 3, -log(0.18))  # 'stars'
-	scchart.updateprob(6, 3, 4, -log(1))     # 'with'
-	scchart.updateprob(1, 4, 5, -log(0.1))   # 'telescopes'
+	scchart.updateprob(3, 0, 3, -log(0.0126000), 0.0)
+	scchart.updateprob(3, 0, 5, -log(0.0005040), 0.0)
+	scchart.updateprob(4, 1, 3, -log(0.1260000), 0.0)
+	scchart.updateprob(4, 1, 5, -log(0.0050400), 0.0)
+	scchart.updateprob(4, 1, 5, -log(0.0037800), 0.0)
+	scchart.updateprob(1, 2, 5, -log(0.0072000), 0.0)
+	scchart.updateprob(2, 3, 5, -log(0.1000000), 0.0)
+	scchart.updateprob(1, 0, 1, -log(0.1), 0.0)   # 'astronomers'
+	scchart.updateprob(1, 1, 2, -log(0.04), 0.0)  # NP => 'saw'
+	scchart.updateprob(5, 1, 2, -log(1), 0.0)     # V => 'saw'
+	scchart.updateprob(1, 2, 3, -log(0.18), 0.0)  # 'stars'
+	scchart.updateprob(6, 3, 4, -log(1), 0.0)     # 'with'
+	scchart.updateprob(1, 4, 5, -log(0.1), 0.0)   # 'telescopes'
 	derivations = lazykbest(scchart, k)[0]
 	# print(scchart)
 	for a, p in derivations:

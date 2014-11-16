@@ -6,7 +6,7 @@ from discodop.tree import Tree
 from discodop.treetransforms import mergediscnodes, unbinarize, fanout, \
 		addbitsets
 from discodop.containers cimport Grammar, Chart, ChartItem, Edges, Edge, \
-		Rule, LexicalRule, RankedEdge, cellidx, \
+		Rule, LexicalRule, RankedEdge, cellidx, compactcellidx, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
 from discodop.kbest import lazykbest
 import numpy as np
@@ -52,6 +52,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		:whitelisted: ``whitelist[span][label] == None``
 		:blocked: ``label not in whitelist[cell]``
 	"""
+	cdef set items
 	cdef list whitelist
 	cdef ChartItem chartitem
 	if fine.mapping is NULL:
@@ -64,32 +65,31 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	else:  # construct a list of the k-best nonterminals to prune with
 		if bitpar:
 			items = bitparkbestitems(coarsechart, k, finecfg)
+		elif k == 0:
+			coarsechart.filter()
+			items = set(coarsechart.getitems())
 		else:
-			if k == 0:
-				coarsechart.filter()
-				items = dict.fromkeys(coarsechart.getitems(), None)
-			else:
-				_ = lazykbest(coarsechart, k, derivs=False)
-				items = dict.fromkeys(coarsechart.rankededges, None)
+			_ = lazykbest(coarsechart, k, derivs=False)
+			items = set(coarsechart.rankededges)
 		msg = ('coarse items before pruning: %d; after: %d, '
 				'based on %d/%d derivations' % (
 				len(coarsechart.getitems()), len(items),
 				len(coarsechart.rankededges[coarsechart.root()][:k]), k))
 	if finecfg:
-		cfgwhitelist = {}
+		cfgwhitelist = [set() for _ in range(compactcellidx(
+				coarsechart.lensent - 1, coarsechart.lensent,
+				coarsechart.lensent, 1) + 1)]
 		for item in items:
 			label = coarsechart.label(item)
 			finespan = coarsechart.asCFGspan(item, fine.nonterminals)
-			if finespan not in cfgwhitelist:
-				cfgwhitelist[finespan] = {}
 			for finelabel in range(1, fine.nonterminals):
 				if (fine.mapping[finelabel] == 0
 						or fine.mapping[finelabel] == label):
-					cfgwhitelist[finespan][finelabel] = None
-		return cfgwhitelist, len(items)
+					cfgwhitelist[finespan].add(finelabel)
+		return cfgwhitelist, msg
 	else:
 		whitelist = [None] * fine.nonterminals
-		kbestspans = [{} for _ in coarsechart.grammar.toid]
+		kbestspans = [set() for _ in coarsechart.grammar.toid]
 		kbestspans[0] = None
 		# uses ids of labels in coarse chart
 		for item in items:
@@ -98,7 +98,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 			chartitem = coarsechart.asChartItem(item)
 			label = chartitem.label
 			chartitem.label = 0
-			kbestspans[label][chartitem] = None
+			kbestspans[label].add(chartitem)
 		# now construct a list which references these coarse items:
 		for label in range(fine.nonterminals):
 			if splitprune and markorigin and fine.fanout[label] != 1:
@@ -119,7 +119,7 @@ def bitparkbestitems(Chart chart, int k, bint finecfg):
 		derivations."""
 	cdef bint fatitems = chart.lensent >= (sizeof(uint64_t) * 8)
 	cdef list derivs = chart.rankededges[chart.root()]
-	cdef dict items = {}
+	cdef set items = set()
 	for deriv, _ in derivs[:k]:
 		t = Tree(deriv)
 		for n in t.subtrees():
@@ -136,7 +136,7 @@ def bitparkbestitems(Chart chart, int k, bint finecfg):
 				item = CFGtoFatChartItem(label, start, end)
 			else:
 				item = CFGtoSmallChartItem(label, start, end)
-			items[item] = None
+			items.add(item)
 	return items
 
 
@@ -155,27 +155,28 @@ def whitelistfromposteriors(inside, outside, start,
 	leftidx, rightidx, labels = (posterior[:lensent, :lensent + 1]
 		> threshold).nonzero()
 
-	kbestspans = [{} for _ in coarse.toid]
+	kbestspans = [set() for _ in coarse.toid]
 	fatitems = lensent >= (sizeof(uint64_t) * 8)
 	for label, left, right in zip(labels, leftidx, rightidx):
 		if finecfg:
-			ei = cellidx(left, right, lensent, fine.nonterminals)
+			ei = compactcellidx(left, right, lensent, 1)
 		elif fatitems:
 			ei = CFGtoFatChartItem(0, left, right)
 		else:
 			ei = CFGtoSmallChartItem(0, left, right)
-		kbestspans[label][ei] = None
+		kbestspans[label].add(ei)
 
 	if finecfg:
-		whitelist = {}
+		whitelist = [set() for _ in range(compactcellidx(
+				lensent - 1, lensent, lensent, 1) + 1)]
 		for left in range(start[2]):
 			for right in range(left + 1, start[2] + 1):
-				span = cellidx(left, right, lensent, fine.nonterminals)
-				cell = whitelist[span] = {}
+				span = compactcellidx(left, right, lensent, 1)
+				cell = whitelist[span]
 				for label in range(1, fine.nonterminals):
 					if (fine.mapping[label] == 0
 							or span in kbestspans[fine.mapping[label]]):
-						cell[label] = None
+						cell.add(label)
 	else:
 		whitelist = [None] * fine.nonterminals
 		for label in range(fine.nonterminals):
@@ -223,10 +224,9 @@ def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
 
 
 def posteriorthreshold(Chart chart, double threshold):
-	"""Get posterior prob. for parse forest & prune away cells below threshold.
+	"""Prune labeled spans from chart below given posterior threshold.
 
-	:returns: dictionary of remaining items
-	"""
+	:returns: dictionary of remaining items."""
 	if not 0 < threshold < 1:
 		raise ValueError('probability threshold should be between 0 and 1.')
 	if not chart.itemsinorder:
@@ -241,11 +241,11 @@ def posteriorthreshold(Chart chart, double threshold):
 			chart.grammar.modelnames[chart.grammar.currentmodel],
 			logprob=origlogprob)
 	sentprob = chart.inside[chart.root()]
+	threshold *= sentprob
 	if not sentprob:
 		raise ValueError('sentence has zero posterior prob.: %g' % sentprob)
-	posterior = {item: None for item in chart.getitems()
-			if chart.inside[item] * chart.outside[item] / sentprob
-			> threshold}
+	posterior = {item for item in chart.getitems()
+			if chart.inside[item] * chart.outside[item] > threshold}
 
 	unfiltered = len(chart.getitems())
 	numitems = len(chart.outside)
@@ -335,7 +335,7 @@ def getoutside(Chart chart):
 							* outsideprob)
 
 
-def doctf(coarse, fine, sent, tree, k, split, verbose=False):
+def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 	"""Test coarse-to-fine methods on a sentence."""
 	import plcfrs
 	from disambiguation import getderivations, marginalize
@@ -476,9 +476,9 @@ def test():
 			if len(sent) > testmaxlen:
 				continue
 			print(n, end=' ')
-			doctf(coarse, fine, sent, tree, k, split, verbose=False)
+			doctftest(coarse, fine, sent, tree, k, split, verbose=False)
 		print("time elapsed", clock() - begin, "s")
 
-__all__ = ['bitparkbestitems', 'doctf', 'getinside', 'getoutside',
-		'posteriorthreshold', 'prunechart', 'whitelistfromposteriors',
+__all__ = ['prunechart', 'bitparkbestitems', 'getinside', 'getoutside',
+		'posteriorthreshold', 'whitelistfromposteriors',
 		'whitelistfromposteriors_matrix']

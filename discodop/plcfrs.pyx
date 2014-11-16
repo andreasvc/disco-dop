@@ -81,7 +81,7 @@ cdef class LCFRSChart(Chart):
 		cdef dict probs = <dict>self.probs[(<ChartItem>item).label]
 		return self._subtreeprob(<ChartItem>probs[item])
 
-	def label(self, item):
+	cdef uint32_t label(self, item):
 		return (<ChartItem>item).label
 
 	def itemstr(self, item):
@@ -215,17 +215,19 @@ cdef class FatLCFRSChart(LCFRSChart):
 
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		start=None, list whitelist=None, bint splitprune=False,
-		bint markorigin=False, estimates=None, int beamwidth=0):
+		bint markorigin=False, estimates=None, bint symbolic=False,
+		int beamwidth=0, double beam_beta=0.0, int beam_delta=50):
 	"""Parse sentence and produce a chart.
 
-	:param sent: a sequence of tokens
-	:param grammar: a ``Grammar`` object.
+	:param sent: A sequence of tokens that will be parsed.
+	:param grammar: A ``Grammar`` object.
 	:returns: a ``Chart`` object.
-	:param tags: optionally, a sequence of gold tags, which will be used
-		instead of trying all possible tags.
+	:param tags: Optionally, a sequence of POS tags to use instead of
+		attempting to apply all possible POS tags.
 	:param exhaustive: don't stop at viterbi parse, return a full chart
-	:param start: integer corresponding to the start symbol that analyses
-		should have, e.g., grammar.toid[b'ROOT']
+	:param start: integer corresponding to the start symbol that complete
+		derivations should be headed by; e.g., ``grammar.toid[b'ROOT']``.
+		If not given, the default specified by ``grammar`` is used.
 	:param whitelist: a whitelist of allowed ChartItems. Anything else is not
 		added to the agenda.
 	:param splitprune: coarse stage used a split-PCFG where discontinuous node
@@ -241,24 +243,40 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		4-dimensional numpy matrix. If estimates are not consistent, it is
 		no longer guaranteed that the optimal parse will be found.
 		experimental.
+	:param symbolic: If True, only compute parse forest, disregard
+		probabilities. The agenda is an O(1) queue instead of a O(log n)
+		priority queue.
 	:param beamwidth: specify the maximum number of items that will be explored
 		for each particular span, on a first-come-first-served basis.
-		setting to 0 disables this feature. experimental."""
+		setting to 0 disables this feature. experimental.
+	:param beam_beta: keep track of the best score in each cell and only allow
+		items which are within a multiple of ``beam_beta`` of the best score.
+		Should be a negative log probability. Pass ``0.0`` to disable.
+	:param beam_delta: the maximum span length to which beam search is applied.
+	"""
 	if len(sent) < sizeof(COMPONENT.vec) * 8:
 		chart = SmallLCFRSChart(grammar, list(sent), start)
+		if symbolic:
+			return parse_symbolic(<SmallLCFRSChart>chart,
+					<SmallChartItem>chart.root(), sent, grammar, tags, start,
+					whitelist, splitprune, markorigin)
 		return parse_main(<SmallLCFRSChart>chart, <SmallChartItem>chart.root(),
 				sent, grammar, tags, exhaustive, start, whitelist, splitprune,
-				markorigin, estimates, beamwidth)
+				markorigin, estimates, beamwidth, beam_beta, beam_delta)
 	chart = FatLCFRSChart(grammar, list(sent), start)
+	if symbolic:
+		return parse_symbolic(<FatLCFRSChart>chart,
+				<FatChartItem>chart.root(), sent, grammar, tags, start,
+				whitelist, splitprune, markorigin)
 	return parse_main(<FatLCFRSChart>chart, <FatChartItem>chart.root(),
 			sent, grammar, tags, exhaustive, start, whitelist, splitprune,
-			markorigin, estimates, beamwidth)
+			markorigin, estimates, beamwidth, beam_beta, beam_delta)
 
 
 cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
-		Grammar grammar, tags=None, bint exhaustive=True, start=None,
-		list whitelist=None, bint splitprune=False, bint markorigin=False,
-		estimates=None, int beamwidth=0):
+		Grammar grammar, tags, bint exhaustive, start, list whitelist,
+		bint splitprune, bint markorigin, estimates,
+		int beamwidth, double beam_beta, int beam_delta):
 	cdef:
 		DoubleAgenda agenda = DoubleAgenda()  # the agenda
 		list probs = chart.probs  # viterbi probabilities for items
@@ -425,7 +443,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				if process_edge(newitem, score, rule, item,
 						agenda, chart, estimatetype, whitelist,
 						splitprune and grammar.fanout[rule.lhs] != 1,
-						markorigin):
+						markorigin, 0.0):
 					if LCFRSItem_fused is SmallChartItem:
 						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 								SmallChartItem)
@@ -491,7 +509,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 								rule, <LCFRSItem_fused>sib, agenda, chart,
 								estimatetype, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
-								markorigin):
+								markorigin,
+								beam_beta if length <= beam_delta else 0.0):
 							if LCFRSItem_fused is SmallChartItem:
 								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 										SmallChartItem)
@@ -553,7 +572,8 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 						if process_edge(newitem, score, rule, item,
 								agenda, chart, estimatetype, whitelist,
 								splitprune and grammar.fanout[rule.lhs] != 1,
-								markorigin):
+								markorigin,
+								beam_beta if length <= beam_delta else 0.0):
 							if LCFRSItem_fused is SmallChartItem:
 								newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 										SmallChartItem)
@@ -575,57 +595,31 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 cdef inline bint process_edge(LCFRSItem_fused newitem,
 		double score, Rule *rule, LCFRSItem_fused left,
 		DoubleAgenda agenda, LCFRSChart_fused chart, int estimatetype,
-		list whitelist, bint splitprune, bint markorigin):
+		list whitelist, bint splitprune, bint markorigin, double beam_beta):
 	"""Decide what to do with a newly derived edge.
 
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
 		blocked. When ``False``, ``newitem`` may be reused."""
-	cdef uint32_t a, b, n, cnt, label
+	cdef uint32_t label
 	cdef bint inagenda = newitem in agenda.mapping
 	cdef bint inchart = newitem in chart.parseforest
-	cdef list componentlist = None
-	cdef dict componentdict = None
 	if not inagenda and not inchart:
 		# check if we need to prune this item
-		if whitelist is not None and whitelist[newitem.label] is not None:
-			if splitprune:  # disc. item to be treated as several split items?
-				if markorigin:
-					componentlist = <list>(whitelist[newitem.label])
-				else:
-					componentdict = <dict>(whitelist[newitem.label])
-				b = cnt = 0
-				if LCFRSItem_fused is SmallChartItem:
-					a = nextset(newitem.vec, b)
-				elif LCFRSItem_fused is FatChartItem:
-					a = anextset(newitem.vec, b, SLOTS)
-				while a != -1:
-					if LCFRSItem_fused is SmallChartItem:
-						b = nextunset(newitem.vec, a)
-						# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-						COMPONENT.vec = (1UL << b) - (1UL << a)
-					elif LCFRSItem_fused is FatChartItem:
-						b = anextunset(newitem.vec, a, SLOTS)
-						# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
-						memset(<void *>FATCOMPONENT.vec, 0, SLOTS * sizeof(uint64_t))
-						for n in range(a, b):
-							SETBIT(FATCOMPONENT.vec, n)
-					if markorigin:
-						componentdict = <dict>(componentlist[cnt])
-					if LCFRSItem_fused is SmallChartItem:
-						if PyDict_Contains(componentdict, COMPONENT) != 1:
-							return False
-						a = nextset(newitem.vec, b)
-					elif LCFRSItem_fused is FatChartItem:
-						if PyDict_Contains(componentdict, FATCOMPONENT) != 1:
-							return False
-						a = anextset(newitem.vec, b, SLOTS)
-					cnt += 1
-			else:
-				label = newitem.label
-				newitem.label = 0
-				if PyDict_Contains(whitelist[label], newitem) != 1:
-					return False
-				newitem.label = label
+		if whitelist is not None and not checkwhitelist(
+				newitem, whitelist, splitprune, markorigin):
+			return False
+		elif beam_beta:
+			label = newitem.label
+			newitem.label = 0
+			if newitem not in chart.probs:
+				itemcopy = newitem.copy()
+				chart.updateprob(itemcopy, newitem.prob)
+			elif newitem.prob > chart.probs[newitem].prob + beam_beta:
+				return False
+			elif newitem.prob < chart.probs[newitem].prob:
+				itemcopy = newitem.copy()
+				chart.updateprob(itemcopy, newitem.prob)
+			newitem.label = label
 		# haven't seen this item before, won't prune, add to agenda
 		agenda.setitem(newitem, score)
 	# in agenda (maybe in chart)
@@ -647,15 +641,19 @@ cdef inline bint process_edge(LCFRSItem_fused newitem,
 
 
 cdef inline int process_lexedge(LCFRSItem_fused newitem,
-		double score, short wordidx, DoubleAgenda agenda,
+		double score, short wordidx, agenda,
 		LCFRSChart_fused chart, list whitelist) except -1:
 	"""Decide whether to accept a lexical edge ``(POS, word)``.
 
+	:param score: if -1, agenda is non-probabilistic
 	:returns: ``True`` when edge is accepted in the chart, ``False`` when
 		blocked. When ``False``, ``newitem`` may be reused."""
-	cdef uint32_t label
-	cdef bint inagenda = newitem in agenda.mapping
+	cdef bint inagenda
 	cdef bint inchart = newitem in chart.parseforest
+	if score == -1:
+		inagenda = newitem in agenda[0]
+	else:
+		inagenda = newitem in (<DoubleAgenda>agenda).mapping
 	if inagenda:
 		raise ValueError('lexical edge already in agenda: %s' %
 				chart.itemstr(newitem))
@@ -663,15 +661,64 @@ cdef inline int process_lexedge(LCFRSItem_fused newitem,
 		raise ValueError('lexical edge already in chart: %s' %
 				chart.itemstr(newitem))
 	# check if we need to prune this item
-	elif whitelist is not None and whitelist[newitem.label] is not None:
-		label = newitem.label
-		newitem.label = 0
-		if PyDict_Contains(whitelist[label], newitem) != 1:
-			return False
-		newitem.label = label
-	# haven't seen this item before, won't prune, add to agenda
-	agenda.setitem(newitem, score)
+	elif whitelist is not None and not checkwhitelist(
+			newitem, whitelist, False, False):
+		return False
+	# haven't seen this item before, won't prune
+	if score == -1:
+		agenda[0].add(newitem)
+	else:
+		(<DoubleAgenda>agenda).setitem(newitem, score)
 	chart.addlexedge(newitem, wordidx)
+	return True
+
+
+cdef inline bint checkwhitelist(LCFRSItem_fused newitem, list whitelist,
+		bint splitprune, bint markorigin):
+	"""Return False if item is not on whitelist."""
+	cdef uint32_t a, b, n, cnt, label
+	cdef list componentlist = None
+	cdef set componentset = None
+	if whitelist is not None and whitelist[newitem.label] is not None:
+		if splitprune:  # disc. item to be treated as several split items?
+			if markorigin:
+				componentlist = <list>(whitelist[newitem.label])
+			else:
+				componentset = <set>(whitelist[newitem.label])
+			b = cnt = 0
+			if LCFRSItem_fused is SmallChartItem:
+				a = nextset(newitem.vec, b)
+			elif LCFRSItem_fused is FatChartItem:
+				a = anextset(newitem.vec, b, SLOTS)
+			while a != -1:
+				if LCFRSItem_fused is SmallChartItem:
+					b = nextunset(newitem.vec, a)
+					# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+					COMPONENT.vec = (1UL << b) - (1UL << a)
+				elif LCFRSItem_fused is FatChartItem:
+					b = anextunset(newitem.vec, a, SLOTS)
+					# given a=3, b=6, make bitvector: 1000000 - 1000 = 111000
+					memset(<void *>FATCOMPONENT.vec, 0,
+							SLOTS * sizeof(uint64_t))
+					for n in range(a, b):
+						SETBIT(FATCOMPONENT.vec, n)
+				if markorigin:
+					componentset = <set>(componentlist[cnt])
+				if LCFRSItem_fused is SmallChartItem:
+					if PySet_Contains(componentset, COMPONENT) != 1:
+						return False
+					a = nextset(newitem.vec, b)
+				elif LCFRSItem_fused is FatChartItem:
+					if PySet_Contains(componentset, FATCOMPONENT) != 1:
+						return False
+					a = anextset(newitem.vec, b, SLOTS)
+				cnt += 1
+		else:
+			label = newitem.label
+			newitem.label = 0
+			if PySet_Contains(whitelist[label], newitem) != 1:
+				return False
+			newitem.label = label
 	return True
 
 
@@ -786,42 +833,31 @@ cdef inline bint concat(Rule *rule,
 		return lpos == rpos == -1
 
 
-def parse_symbolic(sent, Grammar grammar, tags=None, start=None):
-	"""Like parse(), but only compute parse forest, disregard probabilities.
-
-	The agenda is a O(1) queue instead of a O(log n) priority queue."""
-	if len(sent) < sizeof(COMPONENT.vec) * 8:
-		chart = SmallLCFRSChart(grammar, list(sent))
-		return parse_symbolic_main(<SmallLCFRSChart>chart,
-				<SmallChartItem>chart.root(), sent, grammar, tags, start)
-	chart = FatLCFRSChart(grammar, list(sent))
-	return parse_symbolic_main(<FatLCFRSChart>chart,
-			<FatChartItem>chart.root(), sent, grammar, tags, start)
-
-
-def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
-		sent, Grammar grammar, tags=None, start=None):
+def parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
+		sent, Grammar grammar, tags, start,
+		list whitelist, bint splitprune, bint markorigin):
 	cdef:
-		object agenda = deque()  # the agenda
-		list items = [deque() for _ in grammar.toid]  # items for each label
+		list agenda = [set() for _ in sent]  # an agenda for each span length
+		list items = chart.probs  # tracks items for each label
 		Rule *rule
 		LexicalRule lexrule
 		LCFRSItem_fused item, sibling, newitem
-		uint32_t i, blocked = 0, maxA = 0
+		short wordidx
+		size_t n, blocked = 0, maxA = 0
 	if start is None:
 		start = grammar.toid[grammar.start]
 	if LCFRSItem_fused is SmallChartItem:
 		newitem = new_SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
 		newitem = new_FatChartItem(0)
-	for i, word in enumerate(sent):
+	for wordidx, word in enumerate(sent):
 		recognized = False
-		tag = tags[i].encode('ascii') if tags else None
+		tag = tags[wordidx].encode('ascii') if tags else None
 		if LCFRSItem_fused is SmallChartItem:
-			item = new_SmallChartItem(0, i)
+			item = new_SmallChartItem(0, wordidx)
 		elif LCFRSItem_fused is FatChartItem:
 			item = new_FatChartItem(0)
-			item.vec[0] = i
+			item.vec[0] = wordidx
 		for lexrule in grammar.lexicalbyword.get(word, ()):
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
@@ -829,39 +865,46 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 				or grammar.tolabel[lexrule.lhs].startswith(tag + b'@')):
 				newitem.label = lexrule.lhs
 				if LCFRSItem_fused is SmallChartItem:
-					newitem.vec = 1UL << i
+					newitem.vec = 1UL << wordidx
 				elif LCFRSItem_fused is FatChartItem:
-					SETBIT(newitem.vec, i)
-				agenda.append(newitem)
-				chart.addedge(newitem, item, NULL)
-				items[newitem.label].append(newitem)
-				if LCFRSItem_fused is SmallChartItem:
-					newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-							SmallChartItem)
-				elif LCFRSItem_fused is FatChartItem:
-					newitem = <LCFRSItem_fused>FatChartItem.__new__(
-							FatChartItem)
+					SETBIT(newitem.vec, wordidx)
+				if process_lexedge(newitem, -1, wordidx,
+						agenda, chart, whitelist):
+					if LCFRSItem_fused is SmallChartItem:
+						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
+								SmallChartItem)
+					elif LCFRSItem_fused is FatChartItem:
+						newitem = <LCFRSItem_fused>FatChartItem.__new__(
+								FatChartItem)
+					recognized = True
+				else:
+					blocked += 1
 		if not recognized and tags and tag in grammar.toid:
 			newitem.label = grammar.toid[tag]
 			if LCFRSItem_fused is SmallChartItem:
-				newitem.vec = 1UL << i
+				newitem.vec = 1UL << wordidx
 			elif LCFRSItem_fused is FatChartItem:
-				SETBIT(newitem.vec, i)
-			agenda.append(newitem)
-			chart.addedge(newitem, item, NULL)
-			items[newitem.label].append(newitem)
-			newitem = SmallChartItem.__new__(SmallChartItem)
-			recognized = True
+				SETBIT(newitem.vec, wordidx)
+			if process_lexedge(newitem, -1, wordidx,
+					agenda, chart, None):
+				newitem = SmallChartItem.__new__(SmallChartItem)
+				recognized = True
 		elif not recognized:
 			return chart, 'not covered: %r' % (tag or word, )
-	while agenda:
-		item = agenda.pop()
-		if item in chart.parseforest:
-			continue
-		items[item.label].append(item)
+	item = None
+	curlen = 0
+	while any(agenda):
+		for a in agenda:
+			if a:
+				item = a.pop()
+				break
+		if items[item.label] is None:
+			items[item.label] = {item: item}
+		elif item not in items[item.label]:
+			items[item.label][item] = item
 		if not equalitems(item, goal):
-			for i in range(grammar.numunary):  # unary
-				rule = &(grammar.unary[item.label][i])
+			for n in range(grammar.numunary):  # unary
+				rule = &(grammar.unary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
 				newitem.label = rule.lhs
@@ -870,58 +913,101 @@ def parse_symbolic_main(LCFRSChart_fused chart, LCFRSItem_fused goal,
 				elif LCFRSItem_fused is FatChartItem:
 					memcpy(<void *>newitem.vec, <void *>item.vec,
 							SLOTS * sizeof(uint64_t))
-				chart.addedge(newitem, item, rule)
-				if newitem not in chart.parseforest:
-					agenda.append(newitem)
+				if process_edge_symbolic(newitem, rule, item, agenda,
+						chart, whitelist,
+						splitprune and grammar.fanout[rule.lhs] != 1,
+						markorigin):
 					if LCFRSItem_fused is SmallChartItem:
 						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
 								SmallChartItem)
 					elif LCFRSItem_fused is FatChartItem:
 						newitem = <LCFRSItem_fused>FatChartItem.__new__(
 								FatChartItem)
-			for i in range(grammar.numbinary):  # binary, item on right
-				rule = &(grammar.rbinary[item.label][i])
+				else:
+					blocked += 1
+			for n in range(grammar.numbinary):  # binary, item on right
+				rule = &(grammar.rbinary[item.label][n])
 				if rule.rhs2 != item.label:
 					break
-				for sib in items[rule.rhs1]:
+				elif items[rule.rhs1] is None:
+					continue
+				for sib in <dict>items[rule.rhs1]:
 					sibling = <LCFRSItem_fused>sib
 					if concat(rule, sibling, item):
 						newitem.label = rule.lhs
 						combine_item(newitem, sibling, item)
-						chart.addedge(newitem, sibling, rule)
-						if newitem not in chart.parseforest:
-							agenda.append(newitem)
+						if process_edge_symbolic(newitem, rule, sibling,
+								agenda, chart, whitelist,
+								splitprune and grammar.fanout[rule.lhs] != 1,
+								markorigin):
 							if LCFRSItem_fused is SmallChartItem:
 								newitem = (<LCFRSItem_fused>
 										SmallChartItem.__new__(SmallChartItem))
 							elif LCFRSItem_fused is FatChartItem:
 								newitem = (<LCFRSItem_fused>
 										FatChartItem.__new__(FatChartItem))
-			for i in range(grammar.numbinary):  # binary, item on left
-				rule = &(grammar.lbinary[item.label][i])
+						else:
+							blocked += 1
+			for n in range(grammar.numbinary):  # binary, item on left
+				rule = &(grammar.lbinary[item.label][n])
 				if rule.rhs1 != item.label:
 					break
-				for sib in items[rule.rhs2]:
+				elif items[rule.rhs2] is None:
+					continue
+				for sib in <dict>items[rule.rhs2]:
 					sibling = <LCFRSItem_fused>sib
 					if concat(rule, item, sibling):
 						newitem.label = rule.lhs
 						combine_item(newitem, item, sibling)
-						chart.addedge(newitem, item, rule)
-						if newitem not in chart.parseforest:
-							agenda.append(newitem)
+						if process_edge_symbolic(newitem, rule, item, agenda,
+								chart, whitelist,
+								splitprune and grammar.fanout[rule.lhs] != 1,
+								markorigin):
 							if LCFRSItem_fused is SmallChartItem:
 								newitem = (<LCFRSItem_fused>
 										SmallChartItem.__new__(SmallChartItem))
 							elif LCFRSItem_fused is FatChartItem:
 								newitem = (<LCFRSItem_fused>
 										FatChartItem.__new__(FatChartItem))
-		if agenda.length > maxA:
-			maxA = agenda.length
+						else:
+							blocked += 1
+		curlen = sum(len(a) for a in agenda)
+		if curlen > maxA:
+			maxA = curlen
 	msg = ('agenda max %d, now %d, %s, blocked %d' % (
-			maxA, len(agenda), chart.stats(), blocked))
-	if goal not in chart:
+			maxA, curlen, chart.stats(), blocked))
+	if not chart:
 		msg = 'no parse ' + msg
 	return chart, msg
+
+
+cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, Rule *rule,
+		LCFRSItem_fused left, list agenda, LCFRSChart_fused chart,
+		list whitelist, bint splitprune, bint markorigin):
+	"""Decide what to do with a newly derived edge.
+
+	:returns: ``True`` when edge is accepted in the chart, ``False`` when
+		blocked. When ``False``, ``newitem`` may be reused."""
+	cdef bint inagenda
+	cdef bint inchart = (chart.probs[newitem.label] is not None
+			and newitem in chart.probs[newitem.label])
+	cdef int length
+	if LCFRSItem_fused is SmallChartItem:
+		length = bitcount(newitem.vec)
+	elif LCFRSItem_fused is FatChartItem:
+		length = abitcount(newitem.vec, SLOTS)
+	inagenda = newitem in agenda[length - 1]
+	if not inagenda and not inchart:
+		if whitelist is not None and not checkwhitelist(
+				newitem, whitelist, splitprune, markorigin):
+			return False
+		newitem.prob = 0.0
+		# haven't seen this item before, won't prune, add to agenda
+		agenda[length - 1].add(newitem)
+	# store this edge, regardless of whether the item was new (unary chains)
+	chart.addedge(newitem, left, rule)
+	return True
+
 
 # def newparser(sent, Grammar grammar, tags=None, start=1,
 # 		bint exhaustive=True, list whitelist=None, bint splitprune=False,
@@ -1019,4 +1105,4 @@ def test():
 	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)
 
 __all__ = ['Agenda', 'DoubleAgenda', 'FatLCFRSChart', 'LCFRSChart',
-		'SmallLCFRSChart', 'getparent', 'merge', 'parse', 'parse_symbolic']
+		'SmallLCFRSChart', 'getparent', 'merge', 'parse']
