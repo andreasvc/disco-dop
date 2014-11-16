@@ -585,14 +585,18 @@ def doparsing(**kwds):
 			if result.noparse:
 				results[n].noparse += 1
 
-			sentmetrics = results[n].evaluator.add(sentid,
-					goldtree.copy(True), goldsent,
-					ParentedTree.convert(result.parsetree), goldsent)
+			sentmetrics = results[n].evaluator.add(
+					sentid, goldtree.copy(True), goldsent,
+					result.parsetree.copy(True), goldsent)
 			msg = result.msg
-			if sentmetrics.scores()['LF'] == '100.00':
-				msg += '\texact match'
+			scores = sentmetrics.scores()
+			msg += '\tTAG %(TAG)s ' % scores
+			if not scores['GF'].endswith('nan'):
+				msg += 'GF %(GF)s ' % scores
+			if scores['LF'] == '100.00':
+				msg += 'LF exact match'
 			else:
-				msg += '\tLP %(LP)s LR %(LR)s LF %(LF)s' % sentmetrics.scores()
+				msg += 'LF %(LF)s' % scores
 				try:
 					msg += '\n\t' + sentmetrics.bracketings()
 				except Exception as err:
@@ -609,10 +613,12 @@ def doparsing(**kwds):
 		msg = ''
 		for n, result in enumerate(sentresults):
 			metrics = results[n].evaluator.acc.scores()
-			msg += ('%(name)s cov %(cov)5.2f; tag %(tag)s; ex %(ex)s; '
-					'lp %(lp)s; lr %(lr)s; lf %(lf)s\n' % dict(
+			msg += ('%(name)s cov %(cov)5.2f; tag %(tag)s; %(gf1)s'
+					'ex %(ex)s; lp %(lp)s; lr %(lr)s; lf %(lf)s\n' % dict(
 					name=result.name.ljust(7),
 					cov=100 * (1 - results[n].noparse / nsent),
+					gf1='' if metrics['gf'].endswith('nan') else
+						('gf %(gf)s; ' % metrics),
 					**metrics))
 		logging.debug(msg)
 	if params.numproc != 1:
