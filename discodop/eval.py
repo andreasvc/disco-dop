@@ -18,7 +18,7 @@ from discodop import grammar
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.treebank import READERS, dependencies
-from discodop.treebanktransforms import readheadrules
+from discodop.treebanktransforms import readheadrules, functions
 try:
 	from discodop.treedist import treedist, newtreedist
 except ImportError:
@@ -49,7 +49,7 @@ file, and options may consist of:
   --functions=x    'remove'=default: strip functions off labels,
                    'leave': leave syntactic labels as is,
                    'add': evaluate both syntactic categories and functions,
-                   'replace': only evaluate grammatical functions.
+                   'replace': only evaluate function tags.
   --morphology=x   'no'=default: only evaluate POS tags,
                    'add': concatenate morphology tags to POS tags,
                    'replace': replace POS tags with morphology tags,
@@ -122,8 +122,13 @@ class Evaluator(object):
 		limit = 10 if self.param['DEBUG'] <= 0 else None
 		self.rulebreakdowns(limit)
 		self.catbreakdown(limit)
-		if accuracy(self.acc.goldpos, self.acc.candpos) != 1:
-			self.tagbreakdown(limit)
+		try:
+			acc = accuracy(self.acc.goldpos, self.acc.candpos)
+		except InvalidOperation:
+			pass
+		else:
+			if acc != 1:
+				self.tagbreakdown(limit)
 		print()
 
 	def rulebreakdowns(self, limit=10):
@@ -172,7 +177,7 @@ class Evaluator(object):
 			print('%s  %s  %s  %7d' % (cat.rjust(7), gparent.rjust(7),
 					cparent.rjust(7), cnt))
 		print('\n Category Statistics (%s categories / errors)' % (
-				('%d most frequent ' % limit) if limit else 'all'))
+				('%d most frequent' % limit) if limit else 'all'))
 		print('  label  % gold  recall    prec.     F1',
 				'          cand gold       count')
 		print(' ' + 38 * '_' + 7 * ' ' + 24 * '_')
@@ -206,8 +211,8 @@ class Evaluator(object):
 	def tagbreakdown(self, limit=10):
 		"""Print breakdowns for the most frequent tags."""
 		acc = self.acc
-		print('\n Tag Statistics (%s tags / errors)' % (
-			('%d most frequent ' % limit) if limit else 'all'), end='')
+		print('\n POS Statistics (%s tags / errors)' % (
+			('%d most frequent' % limit) if limit else 'all'), end='')
 		print('\n    tag  % gold  recall   prec.      F1',
 				'          cand gold   count')
 		print(' ' + 38 * '_' + 7 * ' ' + 20 * '_')
@@ -273,7 +278,10 @@ class Evaluator(object):
 			if self.param['DEP']:
 				msg.append('unlabeled dependencies:    %s' % (
 						nozerodiv(lambda: accuracy(acc.golddep, acc.canddep))))
-			msg.append('tagging accuracy:          %s' % (
+			if acc.candgf:
+				msg.append('function tags:             %s' %
+						nozerodiv(lambda: f_measure(acc.goldgf, acc.candgf)))
+			msg.append('pos accuracy:              %s' % (
 					nozerodiv(lambda: accuracy(acc.goldpos, acc.candpos))))
 			return '\n'.join(msg)
 
@@ -321,7 +329,11 @@ class Evaluator(object):
 					nozerodiv(lambda: accuracy(acc.golddep, acc.canddep)),
 					sum(a[0] == a[1] for a in zip(acc.golddep, acc.canddep)),
 					len(acc.golddep)))
-		msg.append('tagging accuracy:          %s     %s' % (
+		if acc.candgf:
+			msg.append('function tags:             %s     %s' % (
+					nozerodiv(lambda: f_measure(acc40.goldgf, acc40.candgf)),
+					nozerodiv(lambda: f_measure(acc.goldgf, acc.candgf))))
+		msg.append('pos accuracy:              %s     %s' % (
 				nozerodiv(lambda: accuracy(acc40.goldpos, acc40.candpos)),
 				nozerodiv(lambda: accuracy(acc.goldpos, acc.candpos))))
 		return '\n'.join(msg)
@@ -350,8 +362,6 @@ class TreePairResult(object):
 				self.param, grootpos)
 		transform(self.gtree, self.gsent, self.gpos, dict(self.gpos),
 				self.param, grootpos)
-		# if not gtree or not ctree:
-		# 	return dict(LP=0, LR=0, LF=0)
 		if self.csent != self.gsent:
 			raise ValueError('candidate & gold sentences do not match:\n'
 					'%r // %r' % (' '.join(csent), ' '.join(gsent)))
@@ -362,6 +372,15 @@ class TreePairResult(object):
 		self.lascore = self.ted = self.denom = Decimal('nan')
 		self.cdep = self.gdep = ()
 		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
+		# collect the function tags for correct bracketings
+		self.goldgf = multiset((bracketing(a), b)
+				for a in ctree.subtrees()
+					for b in functions(a)
+					if bracketing(a) in self.gbrack)
+		self.candgf = multiset((bracketing(a), b)
+				for a in gtree.subtrees()
+					for b in functions(a)
+					if bracketing(a) in self.cbrack)
 		if not self.gpos:
 			return  # avoid 'sentences' with only punctuation.
 		self.lascore = leafancestor(self.gtree, self.ctree,
@@ -447,7 +466,9 @@ class TreePairResult(object):
 		"""Return precision, recall, f-measure for sentence pair."""
 		return dict(LP=nozerodiv(lambda: precision(self.gbrack, self.cbrack)),
 				LR=nozerodiv(lambda: recall(self.gbrack, self.cbrack)),
-				LF=nozerodiv(lambda: f_measure(self.gbrack, self.cbrack)))
+				LF=nozerodiv(lambda: f_measure(self.gbrack, self.cbrack)),
+				TAG=nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
+				GF=nozerodiv(lambda: f_measure(self.goldgf, self.candgf)))
 
 	def bracketings(self):
 		"""Return a string representation of bracketing errors."""
@@ -487,6 +508,7 @@ class EvalAccumulator(object):
 		self.exact = Decimal(0)
 		self.dicenoms, self.dicedenoms = Decimal(0), Decimal(0)
 		self.goldb, self.candb = multiset(), multiset()  # all brackets
+		self.goldgf, self.candgf = multiset(), multiset()
 		self.lascores = []
 		self.golddep, self.canddep = [], []
 		self.goldpos, self.candpos = [], []
@@ -509,6 +531,8 @@ class EvalAccumulator(object):
 				self.exact += 1
 		self.goldpos.extend(pair.gpos)
 		self.candpos.extend(pair.cpos)
+		self.goldgf.update((pair.n, a) for a in pair.goldgf.elements())
+		self.candgf.update((pair.n, a) for a in pair.candgf.elements())
 		if pair.lascore is not None:
 			self.lascores.append(pair.lascore)
 		if pair.ted is not None:
@@ -537,7 +561,8 @@ class EvalAccumulator(object):
 				lp=nozerodiv(lambda: precision(self.goldb, self.candb)),
 				lf=nozerodiv(lambda: f_measure(self.goldb, self.candb)),
 				ex=nozerodiv(lambda: self.exact / self.sentcount),
-				tag=nozerodiv(lambda: accuracy(self.goldpos, self.candpos)))
+				tag=nozerodiv(lambda: accuracy(self.goldpos, self.candpos)),
+				gf=nozerodiv(lambda: f_measure(self.goldgf, self.candgf)))
 
 
 def main():
