@@ -941,6 +941,9 @@ def readparam(filename):
 			assert postagging.openclassthreshold >= 0
 		else:
 			assert postagging.method in ('treetagger', 'stanford', 'frog')
+	if params['transformations']:
+		params['transformations'] = treebanktransforms.expandpresets(
+				params['transformations'])
 	return params
 
 

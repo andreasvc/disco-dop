@@ -26,7 +26,7 @@ if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
 from discodop.treebank import READERS, WRITERS, writetree
-from discodop.treebanktransforms import ishead
+from discodop.treebanktransforms import ishead, expandpresets
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -1039,7 +1039,7 @@ def main():
 	elif action == 'splitdisc':
 		transform = lambda t, _: splitdiscnodes(t, '--markorigin' in opts)
 	elif action == 'transform':
-		tfs = opts['--transforms'].split(',')
+		tfs = expandpresets(opts['--transforms'].split(','))
 		transform = lambda t, s: (treebanktransforms.reversetransform(t, tfs)
 				if '--reverse' in opts
 				else treebanktransforms.transform(t, s, tfs))

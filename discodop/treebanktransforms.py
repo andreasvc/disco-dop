@@ -19,6 +19,30 @@ NUMBERRE = re.compile('^[0-9]+(?:[,.][0-9]+)*$')
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
+PRESETS = {
+		# basic state splits:
+		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT'),
+		'wsj': ('S-WH', 'VP-HD', 'S-INF'),
+		'alpino': ('PUNCT', ),
+		# extensive state splits following particular papers:
+		'green2013ftb': ('markinf,markpart,de2,markp1,mwadvs,mwadvsel1,'
+			'mwadvsel2,mwnsel1,mwnsel2,PUNCT,TAGPA').split(','),
+		# These are the "-goodPCFG" options of the Stanford Parser
+		'km2003wsj': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
+			'unaryRB,splitAux2,splitVP3,splitSGapped,splitTMP,splitBaseNP,'
+			'dominatesV,splitNPADV,markDitransV').split(','),
+		'km2003simple': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
+			'unaryRB,splitAux2,splitSGapped,splitBaseNP,dominatesV,'
+			'splitNPADV,markDitransV').split(','),
+		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
+			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
+			'yearNumbers,subConjType,VPfeat,noHead,noSubj').split(','),
+		}
+
+def expandpresets(transformations):
+	"""Expand aliases for presets."""
+	return [a for name in transformations
+			for a in PRESETS.get(name, [name])]
 
 
 def transform(tree, sent, transformations):
@@ -26,14 +50,9 @@ def transform(tree, sent, transformations):
 
 	State-splits are preceded by '^'. ``transformations`` is a sequence of
 	transformation names that will be performed on the given tree (in-place).
-	Presets for particular treebanks:
-
-	:negra:  ``transformations=('S-RC', 'VP-GF', 'NP', 'PUNCT')``
-	:wsj:    ``transformations=('S-WH', 'VP-HD', 'S-INF')``
-	:alpino: ``transformations=('PUNCT', )``
-	:ftb:
-			``transformations=('markinf markpart de2 markp1 mwadvs mwadvsel1 '
-			'mwadvsel2 mwnsel1 mwnsel2 PUNCT tagpa').split()``"""
+	There are presets for particular treebanks. The name of a preset can be
+	used as an alias that expands to a sequence of transformations; see
+	the variable ``PRESETS``."""
 	# unfreeze attributes so that they can be modified
 	for a in tree.subtrees():
 		if isinstance(getattr(a, 'source', None), tuple):
@@ -101,7 +120,7 @@ def transform(tree, sent, transformations):
 					and sent[n[0]] not in PUNCTUATION):
 				node.label += STATESPLIT + strip(node.parent.label)
 		elif (negratransforms(name, tree, sent)
-				or wsjtransforms(name, tree, sent)
+				or ptbtransforms(name, tree, sent)
 				or ftbtransforms(name, tree, sent)):
 			pass
 		else:
@@ -347,7 +366,7 @@ def negratransforms(name, tree, sent):
 	return True
 
 
-def wsjtransforms(name, tree, _sent):
+def ptbtransforms(name, tree, sent):
 	"""Transforms for WSJ section of Penn treebank."""
 	if name == 'S-WH':
 		for sbar in tree.subtrees(lambda n: n.label == 'SBAR'):
@@ -371,13 +390,201 @@ def wsjtransforms(name, tree, _sent):
 					'VP' + STATESPLIT + 'HTO'):
 				s.label += STATESPLIT + 'INF'
 	elif name == 'VP-FIN_WSJ':  # add disc. finite VP when verb is under S
-		for s in tree.subtrees(lambda n: n.label == 'S'):
+		# this counters the flattening when a VP is not possible because of
+		# non-standard word order; e.g. is John happy
+		from discodop.treetransforms import postorder
+		for s in postorder(tree, lambda n: n.label == 'S'):
 			if not any(a.label.startswith('VP') for a in s):
-				raise NotImplementedError
+				vp = ParentedTree('VP', [])
+				for child in list(s):
+					# FIXME: check which functions should not go in the VP
+					# (pre)modifiers unclear.
+					if 'SBJ' not in functions(child):
+						vp.append(s.pop(child))
+				s.append(vp)
 	elif name == 'MARK-UNARY':  # add -U to unary nodes to avoid cycles
 		for unary in tree.subtrees(lambda n: len(n) == 1
 				and isinstance(n[0], Tree)):
 			unary.label += STATESPLIT + 'U'
+	# The following transformations are translations of
+	# the Stanford Parser state splits described in
+	# Accurate Unlexicalized Parsing (ACL 2003)
+	elif name == 'splitIN':  # Stanford Parser splitIN=3
+		for node in tree.subtrees(lambda n: base(n, 'IN')):
+			if base(node.parent.parent, 'N') and (
+					base(node.parent, 'P') or
+					base(node.parent, 'A')):
+				node.label += STATESPLIT + 'N'
+			elif base(node.parent, 'Q') and (
+					base(node.parent.parent, 'N') or
+					base(node.parent.parent, 'ADJP')):
+				node.label += STATESPLIT + 'Q'
+			elif base(node.parent.parent, 'S'):
+				if base(node.parent, 'SBAR'):
+					node.label += STATESPLIT + 'SCC'
+				else:
+					node.label += STATESPLIT + 'SC'
+			elif base(node.parent, 'SBAR') or base(
+					node.parent, 'WHNP'):
+				node.label += STATESPLIT + 'T'
+	elif name == 'splitIN4':  # Stanford Parser splitIN=4
+		for node in tree.subtrees(lambda n: base(n, 'IN')):
+			if base(node.parent.parent, 'N') and (
+					base(node.parent, 'P') or
+					base(node.parent, 'A')):
+				node.label += STATESPLIT + 'N'
+			elif base(node.parent, 'Q') and (
+					base(node.parent.parent, 'N') or
+					base(node.parent.parent, 'ADJP')):
+				node.label += STATESPLIT + 'Q'
+			elif node.parent.parent.label[0] == 'S' and not base(
+					node.parent.parent, 'SBAR'):
+				if base(node.parent, 'SBAR'):
+					node.label += STATESPLIT + 'SCC'
+				elif not base(node.parent, 'NP') and not base(
+						node.parent, 'ADJP'):
+					node.label += STATESPLIT + 'SC'
+			elif base(node.parent, 'SBAR') or base(
+					node.parent, 'WHNP') or base(node.parent, 'WHADVP'):
+				node.label += STATESPLIT + 'T'
+	elif name == 'splitPercent':  # Stanford Parser splitPercent=1
+		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)
+				and sent[n[0]] == '%'):
+			node.label += STATESPLIT + r'%'
+	elif name == 'splitPoss':  # Stanford Parser splitPoss=1
+		for node in tree.subtrees(lambda n: base(n, 'NP')
+				and n[-1].label.startswith('POS')):
+			node.label += STATESPLIT + 'P'
+	elif name == 'splitCC':  # Stanford Parser splitCC=2
+		for node in tree.subtrees(lambda n: base(n, 'CC')):
+			if sent[node[0]].lower() == 'but':
+				node.label += STATESPLIT + 'B'
+			elif sent[node[0]] == '&':
+				node.label += STATESPLIT + 'A'
+	elif name == 'unaryDT':  # Stanford Parser unaryDT=true
+		for node in tree.subtrees(lambda n: base(n, 'DT')
+				and len(n.parent) == 1):
+			node.label += STATESPLIT + 'U'
+	elif name == 'unaryRB':  # Stanford Parser unaryRB=true
+		for node in tree.subtrees(lambda n: base(n, 'RB')
+				and len(n.parent) == 1):
+			node.label += STATESPLIT + 'U'
+	elif name == 'splitAux':  # Stanford Parser splitAux=1
+		for node in tree.subtrees(lambda n: strip(n.label)
+				in {'VBZ', 'VBP', 'VBD', 'VBN', 'VBG', 'VB'}):
+			if sent[node[0]].lower() in {
+					'is', 'am', 'are', 'was', 'were', "'m", "'re", "'s",
+					'being', 'be', 'been'}:
+				node.label += STATESPLIT + 'BE'
+			elif sent[node[0]].lower() in {
+					'have', "'ve", 'having', 'has', 'had', "'d"}:
+				node.label += STATESPLIT + 'HV'
+	elif name == 'splitAux2':  # Stanford Parser splitAux=2
+		for node in tree.subtrees(lambda n: strip(n.label)
+				in {'VBZ', 'VBP', 'VBD', 'VBN', 'VBG', 'VB'}):
+			if sent[node[0]].lower() in {"'s", "s"}:
+				# 's can be a contraction of both "is" and "have"
+				foundAux = False
+				for sibling in node.parent:
+					if foundAux:
+						if base(sibling, 'VP') and any(strip(a.label)
+								in {'VBD', 'VBN'} for a in sibling):
+							node.label += STATESPLIT + 'HV'
+							break
+					elif sibling.label.startswith('VBZ'):
+						foundAux = True
+				else:
+					node.label += STATESPLIT + 'BE'
+			if sent[node[0]].lower() in {'am', 'is', 'are', 'was', 'were',
+					"'m", "'re", 'be', 'being', 'been', 'ai'}:
+				node.label += STATESPLIT + 'BE'
+			elif sent[node[0]].lower() in {
+					'have', "'ve", 'having', 'has', 'had', "'d"}:
+				node.label += STATESPLIT + 'HV'
+	elif name == 'splitVP':  # Stanford Parser splitVP=2
+		for node in tree.subtrees(lambda n: base(n, 'VP')):
+			for child in node:
+				if ishead(child):
+					if strip(child.label) in {'VBZ', 'VBP', 'VBD', 'MD'}:
+						node.label += STATESPLIT + 'VBF'
+					else:
+						node.label += STATESPLIT + strip(child.label)
+					break
+	elif name == 'splitVP3':  # Stanford Parser splitVP=3
+		for node in tree.subtrees(lambda n: base(n, 'VP')):
+			for child in node:
+				if ishead(child):
+					if strip(child.label) in {'VBZ', 'VBP', 'VBD', 'MD'}:
+						node.label += STATESPLIT + 'VBF'
+					elif strip(child.label) in {'TO', 'VBG', 'VBN', 'VB'}:
+						node.label += STATESPLIT + strip(child.label)
+					break
+	elif name == 'splitSGapped':  # Stanford Parser splitSGapped=3
+		seenPredCat = seenCC = seenS = False
+		seenNP = 0
+		for node in tree.subtrees(lambda n: base(n, 'S')):
+			for child in node:
+				cat2 = child.label
+				if cat2.startswith('NP'):
+					seenNP += 1
+				elif strip(cat2) in {'VP', 'ADJP', 'PP', 'UCP'}:
+					seenPredCat = True
+				elif cat2.startswith('CC'):
+					seenCC = True
+				elif cat2.startswith('S'):
+					seenS = True
+			if (not (seenCC and seenS)) and (
+					seenNP == 0 or (seenNP == 1 and not seenPredCat)):
+				node.label += STATESPLIT + 'G'
+	elif name == 'splitTMP':  # Stanford Parser splitTMP=TEMPORAL_ACL03PCFG
+		from discodop.treetransforms import postorder
+		for node in postorder(tree, lambda n: 'TMP' in functions(n)):
+			child = node
+			hd = None
+			while node and isinstance(node[0], Tree):
+				try:
+					i, hd = next(a for a in enumerate(child) if ishead(a[1]))
+				except StopIteration:
+					break
+				if strip(hd) == 'POS' and i > 0:
+					hd = child[i - 1]
+				child = hd
+			if 'TMP' in functions(node):
+				node.label += STATESPLIT + 'TMP'
+			if hd and hd.label.startswith('N'):
+				hd.label += STATESPLIT + 'TMP'
+	elif name == 'splitBaseNP':  # Stanford Parser splitBaseNP=1
+		# Mark NPs that only dominate preterminals
+		for node in tree.subtrees(lambda n: base(n, 'NP')):
+			if all(a and isinstance(a[0], int) for a in node):
+				node.label += STATESPLIT + 'B'
+	elif name == 'dominatesV':  # Stanford Parser dominatesV=1
+		for node in tree.subtrees(lambda n: base(n, 'VP')):
+			if any(tag.startswith('V') or tag.startswith('MD')
+					for _, tag in node.pos()):
+				node.label += STATESPLIT + 'v'
+	elif name == 'splitNPADV':  # Stanford Parser splitNPADV=1
+		for node in tree.subtrees(lambda n:
+				base(n, 'NP') and 'ADV' in functions(n)):
+			node.label += STATESPLIT + 'ADV'
+			try:
+				hd = next(a for a in node if ishead(a))
+			except StopIteration:
+				continue
+			if base(hd, 'POS') and hd.parent_index > 0:
+				hd = node[hd.parent_index - 1]
+			while base(hd, 'NP'):
+				hd.label += STATESPLIT + 'ADV'
+				try:
+					hd = next(a for a in hd if ishead(a))
+				except StopIteration:
+					break
+	elif name == 'markDitransV':  # Stanford Parser markDitransV=2
+		for node in tree.subtrees(lambda n: n.label.startswith('VB')):
+			npargs = sum(1 for a in node.parent if base(a, 'NP')
+					and 'TMP' not in functions(a))
+			if npargs >= 2:
+				node.label += STATESPLIT + '2Arg'
 	else:
 		return False
 	return True
@@ -1105,7 +1312,7 @@ def functions(tree):
 	return []
 
 
-__all__ = ['transform', 'negratransforms', 'wsjtransforms', 'ftbtransforms',
+__all__ = ['transform', 'negratransforms', 'ptbtransforms', 'ftbtransforms',
 		'reversetransform', 'collapselabels', 'unifymorphfeat', 'rrtransform',
 		'rrbacktransform', 'removeterminals', 'removeemptynodes', 'ispunct',
 		'punctremove', 'punctremove', 'punctlower', 'punctraise',
