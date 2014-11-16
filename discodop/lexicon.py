@@ -354,7 +354,7 @@ def unknownwordbase(word, _loc, _lexicon):
 		sig += "-C"
 	if len(word) > 3:
 		if word[-1] in LOWERUPPER:
-			sig += "-%s" % word[-2].lower()
+			sig += "-%s" % word[-2:].lower()
 	return sig
 
 NOUNSUFFIX = re.compile(u"(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
