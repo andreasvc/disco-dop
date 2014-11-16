@@ -55,13 +55,12 @@ DEFAULTS = dict(
 		method='default',  # choices: default, optimal, optimalhead
 		factor='right',
 		headrules=None,  # rules for finding heads of constituents
-		v=1,
-		h=2,
+		v=1, h=2, revh=0,
 		markhead=False,  # prepend head to siblings
-		leftmostunary=True,  # start binarization with unary node
-		rightmostunary=True,  # end binarization with unary node
+		leftmostunary=False,  # start binarization with unary node
+		rightmostunary=False,  # end binarization with unary node
 		tailmarker='',  # with headrules, head is last node and can be marked
-		revmarkov=True,  # reverse horizontal markovization
+		markovthreshold=None,
 		labelfun=None,
 		fanout_marks_before_bin=False))
 
@@ -126,8 +125,8 @@ def startexp(
 	if not rerun:
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				corpusfmt, traincorpus, binarization, punct, functions,
-				morphology, removeempty, ensureroot, transformations,
-				relationalrealizational)
+				morphology, removeempty, ensureroot,
+				transformations, relationalrealizational)
 	elif isinstance(traincorpus.numsents, float):
 		raise ValueError('need to specify number of training set sentences, '
 				'not fraction, in rerun mode.')
@@ -266,8 +265,7 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	"""Load the training corpus."""
 	train = treebank.READERS[corpusfmt](traincorpus.path,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
-			headfinal=True, headreverse=False, removeempty=removeempty,
-			ensureroot=ensureroot, punct=punct,
+			removeempty=removeempty, ensureroot=ensureroot, punct=punct,
 			functions=functions, morphology=morphology)
 	if isinstance(traincorpus.numsents, float):
 		traincorpus.numsents = int(traincorpus.numsents * len(train.sents()))
@@ -279,8 +277,8 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	if not trees:
 		raise ValueError('training corpus (selection) should be non-empty.')
 	if transformations:
-		trees = [treebanktransforms.transform(tree, sent, transformations)
-				for tree, sent in zip(trees, sents)]
+		for tree, sent in zip(trees, sents):
+			treebanktransforms.transform(tree, sent, transformations)
 	if relationalrealizational:
 		trees = [treebanktransforms.rrtransform(
 				tree, **relationalrealizational)[0] for tree in trees]
@@ -337,14 +335,22 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 			treetransforms.binarize(a, factor=binarization.factor,
 					tailmarker=binarization.tailmarker,
 					horzmarkov=binarization.h, vertmarkov=binarization.v,
+					revhorzmarkov=binarization.revh,
 					leftmostunary=binarization.leftmostunary,
 					rightmostunary=binarization.rightmostunary,
-					reverse=binarization.revmarkov,
-					headidx=-1 if binarization.markhead else None,
+					markhead=binarization.markhead,
+					headoutward=binarization.headrules is not None,
+					direction=binarization.headrules is not None,
 					filterfuncs=(relationalrealizational['ignorefunctions']
 						+ (relationalrealizational['adjunctionlabel'], ))
 						if relationalrealizational else (),
 					labelfun=binarization.labelfun)
+		if binarization.markovthreshold:
+			msg1 = treetransforms.markovthreshold(trees,
+					binarization.markovthreshold,
+					binarization.h + binarization.revh - 1,
+					max(binarization.v - 1, 1))
+			logging.info(msg1)
 	elif binarization.method == 'optimal':
 		trees = [Tree.convert(treetransforms.optimalbinarize(tree))
 						for n, tree in enumerate(trees)]
@@ -357,7 +363,6 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 	trees = [treetransforms.addfanoutmarkers(t) for t in trees]
 	logging.info('%s; cpu time elapsed: %gs',
 			msg, time.clock() - begin)
-	trees = [treetransforms.canonicalize(a).freeze() for a in trees]
 	return trees
 
 
@@ -370,8 +375,9 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		if stage.split:
 			traintrees = [treetransforms.binarize(
 					treetransforms.splitdiscnodes(
-						Tree.convert(a), stage.markorigin),
-					childchar=':', dot=True, ids=grammar.UniqueIDs()).freeze()
+						a.copy(True),
+						stage.markorigin),
+					childchar=':', dot=True, ids=grammar.UniqueIDs())
 					for a in trees]
 			logging.info('splitted discontinuous nodes')
 		else:
@@ -385,8 +391,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.dop:
 			if stage.dop == 'doubledop':
-				(xgrammar, backtransform, altweights, fragments
-					) = grammar.doubledop(
+				(xgrammar, backtransform,
+						altweights, fragments) = grammar.doubledop(
 						traintrees, sents, binarized=stage.binarized,
 						iterate=stage.iterate, complement=stage.complement,
 						numproc=numproc, extrarules=extrarules)
@@ -734,7 +740,7 @@ def parsetepacoc(
 			method='default', h=1, v=1, factor='right', tailmarker='',
 			headrules='negra.headrules',
 			leftmostunary=True, rightmostunary=True,
-			markhead=False, revmarkov=False, fanout_marks_before_bin=False),
+			markhead=False, fanout_marks_before_bin=False),
 		transformations=None, usetagger='stanford', resultdir='tepacoc',
 		numproc=1):
 	"""Parse the tepacoc test set."""
@@ -887,7 +893,8 @@ def readparam(filename):
 
 	The file should contain a list of comma-separated ``attribute=value`` pairs
 	and will be read using ``eval('dict(%s)' % open(file).read())``."""
-	params = eval('dict(%s)' % open(filename).read())
+	with open(filename) as fileobj:
+		params = eval('dict(%s)' % fileobj.read())  # pylint: disable=eval-used
 	for key in DEFAULTS:
 		if key not in params:
 			raise ValueError('%r not in parameters.' % key)

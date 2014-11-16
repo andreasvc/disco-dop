@@ -62,13 +62,15 @@ Binarization
         :``'optimalhead'``: like ``optimal``, but only considers head-driven binarizations.
     :factor: ``'left'`` or ``'right'``. The direction of binarization when using ``default``.
     :headrules: file with rules for finding heads of constituents
-    :revmarkov: whether to reverse the horizontal markovization context when using ``default``.
+    :markhead: whether to prepend head to siblings labels
     :v: vertical markovization context; default 1; 2 means 1 extra level of parent annotation.
     :h: horizontal markovization context
-    :markhead: whether to prepend head to siblings labels
+    :revh: horizontal markovization context preceding child being generated
     :leftmostunary: whether to start binarization with unary node
     :rightmostunary: whether to end binarization with unary node
     :tailmarker: with headrules, head is last node and can be marked
+    :markovthreshold: reduce horizontal markovization threshold of auxiliary
+        labels with a frequency lower than this threshold.
     :fanout_marks_before_bin: whether to add fanout markers before binarization
     :labelfun: specify a function from nodes to labels; can be used to change
         how labels appear in markovization, e.g., to strip of annotations.

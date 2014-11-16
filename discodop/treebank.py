@@ -10,7 +10,7 @@ from collections import defaultdict, OrderedDict
 from discodop.tree import Tree, ParentedTree
 from discodop.treebanktransforms import punctremove, punctraise, \
 		balancedpunctraise, punctroot, ispunct, readheadrules, headfinder, \
-		sethead, headmark, headorder, removeemptynodes
+		sethead, removeemptynodes
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -25,8 +25,8 @@ INDEXRE = re.compile(r" [0-9]+\)")
 class CorpusReader(object):
 	"""Abstract corpus reader."""
 	def __init__(self, path, encoding='utf-8', ensureroot=None, punct=None,
-			headrules=None, headfinal=True, headreverse=False, markheads=False,
-			removeempty=False, functions=None, morphology=None, lemmas=None):
+			headrules=None, removeempty=False, functions=None,
+			morphology=None, lemmas=None):
 		"""
 		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
 		:param ensureroot: add root node with given label if necessary.
@@ -34,11 +34,6 @@ class CorpusReader(object):
 			terminal is empty if it is equal to None, '', or '-NONE-'.
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads.
-		:param headfinal: put head in final position (default: frontal).
-		:param headreverse: the head is made final/frontal by reversing
-			everything before or after the head. When True, the side on which
-			the head is will be the reversed side.
-		:param markheads: add '-HD' to phrasal label of heads.
 		:param punct: one of ...
 
 			:None: leave punctuation as is.
@@ -74,9 +69,6 @@ class CorpusReader(object):
 			:'between': insert lemma as node between POS tag and word."""
 		self.removeempty = removeempty
 		self.ensureroot = ensureroot
-		self.reverse = headreverse
-		self.headfinal = headfinal
-		self.markheads = markheads
 		self.functions = functions
 		self.punct = punct
 		self.morphology = morphology
@@ -142,7 +134,7 @@ class CorpusReader(object):
 	def _read_blocks(self):
 		"""Iterate over blocks in corpus file corresponding to parse trees."""
 
-	def _strblock(self, n, block):
+	def _strblock(self, _n, block):
 		"""Convert a value returned by _read_blocks() to a string."""
 		return block
 
@@ -175,9 +167,6 @@ class CorpusReader(object):
 		if self.headrules:
 			for node in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
 				sethead(headfinder(node, self.headrules))
-				headorder(node, self.headfinal, self.reverse)
-				if self.markheads:
-					headmark(node)
 		return tree, sent
 
 	def _word(self, block, orig=False):
@@ -334,7 +323,7 @@ class TigerXMLCorpusReader(CorpusReader):
 					yield elem.get('id'), elem
 				root.clear()
 
-	def _strblock(self, n, block):
+	def _strblock(self, _n, block):
 		return ElementTree.tostring(block)
 
 	def _parse(self, block):
@@ -587,6 +576,7 @@ def writetree(tree, sent, n, fmt,
 		conversion into ``mst`` or ``conll`` format (requires head rules).
 		The formats ``tokens`` and ``wordpos`` are to strip away tree structure
 		and leave only lines with tokens or ``token/POS``.
+		When using ``bracket``, make sure tree is canonicalized.
 	:param comment: optionally, a string that will go in the format's comment
 		field (supported by ``export`` and ``alpino``), at the end of the line
 		preceded by a tab (``bracket`` and ``discbracket``), or that will be
@@ -776,17 +766,15 @@ def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 			func = None
 			if (getattr(a, 'source', None)
 					and a.source[FUNC] and a.source[FUNC] != '--'):
-				func = a.source[FUNC].split('-')[0]
+				func = a.source[FUNC]
 			if func and action == 'add':
 				a.label += '-%s' % func
-			elif func and action == 'replace':
-				a.label = func
+			elif action == 'replace':
+				a.label = func or '--'
 			elif action == 'between':
 				parent, idx = a.parent, a.parent_index
 				newnode = ParentedTree('-' + (func or '--'), [parent.pop(idx)])
 				parent.insert(idx, newnode)
-			elif func:
-				raise ValueError('unrecognized action: %r' % action)
 
 
 def handlemorphology(action, lemmaaction, preterminal, source, sent=None):

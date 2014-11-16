@@ -21,11 +21,12 @@ import re
 import sys
 from operator import attrgetter
 from itertools import islice
-from collections import defaultdict, Set, Iterable
+from collections import defaultdict, Set, Iterable, Counter
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
 from discodop.treebank import READERS, WRITERS, writetree
+from discodop.treebanktransforms import ishead
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -87,17 +88,17 @@ options may consist of:
                  'between': insert node with lemma between POS tag and word,
                      e.g., (NN (man men))
   --ensureroot=x add root node labeled 'x' to trees if not already present.
+  --headrules=x  turn on head finding; affects binarization.
+                 reads rules from file "x" (e.g., "negra.headrules").
   --factor=(left|right)
                  specify left- or right-factored binarization [default: right].
   -h n           horizontal markovization. default: infinite (all siblings)
   -v n           vertical markovization. default: 1 (immediate parent only)
+  --markhead     prepend head to markovized labels.
   --leftunary    make initial / final productions of binarized constituents
   --rightunary   ... unary productions.
   --tailmarker   mark rightmost child (the head if headrules are applied), to
                  avoid cyclic rules when --leftunary and --rightunary are used.
-  --headrules=x  turn on head finding; affects binarization.
-                 reads rules from file "x" (e.g., "negra.headrules").
-  --markheads    mark heads by adding '-HD' to phrasal labels.
   --reverse      reverse the transformations given by --transform;
   --transforms=x specify names of tree transformations to apply; for possible
                  names, cf. treebanktransforms module.
@@ -110,13 +111,16 @@ Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
+MARKOVRE = re.compile(r'^(.*)\|<(.*;)?(.*)>(\^<.*>)?(.*)?$')
 
 
 def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
-		childchar='|', parentchar='^', headmarked=None, headidx=None,
-		tailmarker='', leftmostunary=False, rightmostunary=False, threshold=2,
-		artpa=True, reverse=False, ids=None, filterfuncs=(),
-		labelfun=None, dot=False, abbrrepetition=False):
+		revhorzmarkov=0, markhead=False, headoutward=False,
+		childchar='|', parentchar='^', tailmarker='',
+		leftmostunary=False, rightmostunary=False, threshold=2,
+		artpa=True, ids=None, filterfuncs=(),
+		labelfun=None, dot=False, abbrrepetition=False,
+		direction=False):
 	"""Binarize a Tree object.
 
 	:param factor: "left" or "right". Determines whether binarization proceeds
@@ -126,15 +130,11 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			binarization.
 	:param vertmarkov: number of ancestors to include in labels.
 			NB: 1 means only the direct parent, as in a normal tree.
-	:param headidx: if specified, the label of the head node is always included
-			as an additional horizontal sibling; use 0 or -1 for first or last
-			node respectively.
-	:param headmarked: when given a string, the occurrence of this string in a
-			label signifies that thte node is the head; the direction of
-			binarization will be switched when it is encountered, to enable a
-			head-outward binarization. NB: for discontinuous trees this is not
-			necessary, as the order of children can be freely adjusted to
-			achieve the same effect.
+	:param revhorzmarkov: like ``horzmarkov``, but looks backwards.
+	:param headoutward: nodes are marked as head in their function tags;
+			the direction of binarization will be switched when it is
+			encountered, to enable a head-outward binarization.
+`	:param markhead: include label of the head child in all auxiliary labels.
 	:param leftmostunary, rightmostunary: introduce a unary production for the
 			first/last child. When h=1, this enables the same generalizations
 			for the first & last non-terminals as for other siblings.
@@ -142,15 +142,6 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			nodes introducing the last symbol. This is useful when the last
 			symbol is the head node, ensuring that it is not exchangeable with
 			other non-terminals.
-	:param reverse: reverse direction of the horizontal markovization; e.g.:
-			``(A (B ) (C ) (D ))`` ...becomes:
-
-			:left:  ``(A (A|<D> (A|<C-D> (A|<B-C> (B )) (C )) (D )))``
-			:right: ``(A (A|<B> (B ) (A|<B-C> (C ) (A|<C-D> (D )))))``
-
-			in this way the markovization represents the history of the
-			nonterminals that have *already* been parsed, instead of those
-			still to come (assuming bottom-up parsing).
 	:param dot: if True, horizontal context will include all siblings not yet
 			generated, separated with a dot from the siblings that have been.
 	:param artpa: whether to add parent annotation to the artificial nodes
@@ -172,18 +163,26 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	:param abbrrepetition: in horizontal context, reduce sequences of
 			identical labels: e.g., <mwp,mwp,mwp,mwp> becomes <mwp+>
 
-	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (PIS 2) (VMFIN 1))')
+	>>> from discodop.treebanktransforms import sethead
+	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))')
+	>>> sethead(tree[1])
 	>>> sent = 'das muss man jetzt machen'.split()
-	>>> print(binarize(tree, horzmarkov=1, tailmarker=''))
-	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<PIS> (PIS 2) (VMFIN 1)))
-	"""
+	>>> print(binarize(tree, horzmarkov=1, headoutward=True))
+	(S (VP (PDS 0) (VP|<ADV> (ADV 3) (VVINF 4))) (S|<VMFIN> (VMFIN 1) (PIS 2)))
+	>>> tree = Tree('(S (X (A 0) (B 3) (C 4)) (D 1) (E 2))')
+	>>> sethead(tree[1])
+	>>> print(binarize(tree, headoutward=True, leftmostunary=True,
+	... rightmostunary=True))
+	(S (S|<X,D,E> (X (X|<A,B,C> (A 0) (X|<B,C> (B 3) (X|<C> (C 4))))) \
+(S|<D,E> (S|<D> (D 1)) (E 2))))"""
+	# FIXME: combination of factor='left' and headoutward=True is broken.
 	# assume all nodes have homogeneous children, terminals have no siblings
 	if factor not in ('left', 'right'):
 		raise ValueError("factor should be 'left' or 'right'.")
 	if labelfun is None:
 		labelfun = attrgetter('label')
 	treeclass = tree.__class__
-	leftmostunary = 1 if leftmostunary else 0
+	origfactor = factor
 
 	# Traverse tree depth-first keeping a list of ancestor nodes to the root.
 	agenda = [(tree, [tree.label])]
@@ -194,6 +193,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		# parent annotation
 		parents = ''
 		origlabel = node.label if vertmarkov else '_'
+		factor = origfactor
 		if vertmarkov > 1 and node is not tree and isinstance(node[0], Tree):
 			parents = '%s<%s>' % (parentchar, ','.join(parent))
 			node.label += parents
@@ -202,6 +202,12 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 				parents = ''
 		# add children to the agenda before we mess with them
 		agenda.extend((child, parent) for child in node)
+		headidx = None
+		if headoutward or markhead:
+			for i, child in enumerate(node):
+				if isinstance(child, Tree) and ishead(child):
+					headidx = i
+					break
 		# binary form factorization
 		if len(node) <= threshold:
 			continue
@@ -209,7 +215,13 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 			if not isinstance(node[0], Tree):
 				continue
 			# insert an initial artificial nonterminal
-			siblings = '' if headidx is None else node[headidx].label + ';'
+			siblings = ''
+			if direction and factor == 'left':
+				siblings += 'r:'
+			elif direction and factor == 'right':
+				siblings += 'l:'
+			if markhead and headidx is not None:
+				siblings += node[headidx] + ';'
 			siblings += ','.join(labelfun(child) for child in node[:horzmarkov]
 					if labelfun(child).split('/', 1)[0] not in filterfuncs)
 			if dot:
@@ -231,20 +243,27 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 				childlabels = []
 			childnodes = list(node)
 			numchildren = len(childnodes)
-			assert not headmarked or headidx is None
-			headmarkedidx = 0
 
 			# insert an initial artificial nonterminal
 			node[:] = []
+			i = 0
+			if headoutward and i == headidx:
+				factor = 'right' if factor == 'left' else 'left'
 			if leftmostunary:
 				if factor == 'right':
-					start = 0
-					end = min(1, horzmarkov) if reverse else horzmarkov
+					start = i
+					end = i + horzmarkov
 				else:  # factor == 'left'
-					start = ((numchildren - min(1, horzmarkov))
-							if reverse else horzmarkov)
-					end = numchildren
-				siblings = '' if headidx is None else childlabels[headidx] + ';'
+					start = max(numchildren - i - horzmarkov + (headidx or 0),
+							0)
+					end = min(numchildren - i + (headidx or 0), numchildren)
+				siblings = ''
+				if direction and factor == 'left':
+					siblings += 'r:'
+				elif direction and factor == 'right':
+					siblings += 'l:'
+				if markhead and headidx is not None:
+					siblings += childlabels[headidx] + ';'
 				siblings += ','.join(childlabels[start:end])
 				if dot:
 					siblings += '.'
@@ -260,35 +279,54 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 				marktail = tailmarker if i + 1 == numchildren else ''
 				newnode = treeclass('', [])
 				if factor == 'right':
-					if reverse:
-						start = max(i - horzmarkov + 1, 0)
-						end = i + 1
-					else:
-						start = i
-						end = i + horzmarkov
+					start = i
+					end = i + horzmarkov
+				else:  # factor == 'left':
+					start = max(numchildren - i - horzmarkov + (headidx or 0),
+							(headidx or 0))
+					end = min(numchildren - i + (headidx or 0),
+							numchildren)
+				if factor == 'right':
 					curnode[:] = [childnodes.pop(0), newnode]
 				else:  # factor == 'left':
-					start = headmarkedidx + numchildren - i - 1
-					end = start + horzmarkov
 					curnode[:] = [newnode, childnodes.pop()]
-				# switch direction upon encountering the head
-				if headmarked and headmarked in childlabels[i]:
-					headmarkedidx = i
-					factor = 'right' if factor == 'left' else 'left'
-					start = headmarkedidx + numchildren - i - 1
-					end = start + horzmarkov
-				siblings = ('' if headidx is None
-						else childlabels[headidx] + ';')
-				if dot and not reverse:
+				siblings = ''
+				if direction and factor == 'left':
+					siblings += 'r:'
+				elif direction and factor == 'right':
+					siblings += 'l:'
+				if markhead and headidx is not None:
+					siblings += childlabels[headidx] + ';'
+				if dot:
 					siblings += ','.join(childlabels[:start]) + '.'
+				if revhorzmarkov:
+					if factor == 'right':
+						siblings += ','.join(childlabels[
+								max(start - revhorzmarkov, 0):start]) + ';'
+					else:  # factor == 'left':
+						siblings += ','.join(childlabels[
+								end:end + revhorzmarkov]) + ';'
 				siblings += ','.join(childlabels[start:end])
-				if dot and reverse:
-					siblings += '.' + ','.join(childlabels[end:])
 				mark = '<%s>%s' % (siblings, parents)
 				if ids is not None:  # numeric identifier
 					mark = '<%s>' % ids[mark]
 				newnode.label = ''.join((origlabel, childchar, marktail, mark))
 				curnode = newnode
+				# switch direction upon encountering the head
+				if headoutward and i == headidx:
+					factor = 'right' if factor == 'left' else 'left'
+				if (headoutward and direction and i == headidx
+						and i + 1 != numchildren):
+					# insert unary for switch of direction
+					newnode = treeclass(curnode.label, curnode[:])
+					curnode[:] = [newnode]
+					# direction is 'm', no horz. markovization
+					newnode.label = ''.join((origlabel, childchar, '<',
+							'm:' if direction else '',
+							childlabels[headidx] + ';'
+								if markhead and headidx is not None else '',
+							'>', parents))
+					curnode = newnode
 			assert len(childnodes) == 1 + (not rightmostunary)
 			curnode.extend(childnodes)
 	return tree
@@ -467,6 +505,34 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 	return result
 
 
+def markovthreshold(trees, n, horzmarkov, vertmarkov):
+	"""Reduce Markov order of binarization labels occurring < n times."""
+	freqs = Counter(node.label for tree in trees
+			for node in tree.subtrees()
+			if MARKOVRE.match(node.label))
+	newlabels = {}
+	for label, freq in freqs.items():
+		if freq < n:
+			match = MARKOVRE.match(label)
+			if not match:
+				continue
+			newlabel = '%s|<%s%s,>' % (
+					match.group(1),
+					match.group(2) or '',
+					','.join(match.group(3).split(',')[:horzmarkov]))
+			if match.group(4):
+				newlabel += '^<%s>' % ','.join(
+						match.group(4).split(',')[:vertmarkov])
+			newlabels[label] = newlabel + match.group(5)
+	for tree in trees:
+		for node in tree.subtrees(lambda n: n.label in newlabels):
+			node.label = newlabels[node.label]
+	return ('markovization for labels with freq < %d reduced to h=%d v=%d.\n'
+			'# labels before %d, after %d. %s' % (n, horzmarkov, vertmarkov,
+			len(newlabels), len(set(newlabels.values())),
+			', '.join('%s -> %s' % a for a in islice(newlabels.items(), 5))))
+
+
 def splitdiscnodes(tree, markorigin=False):
 	"""Boyd (2007): Discontinuity revisited.
 
@@ -499,7 +565,7 @@ def splitdiscnodes(tree, markorigin=False):
 	return canonicalize(tree)
 
 
-def mergediscnodes(tree):
+def mergediscnodes(tree, _sent=None):
 	"""Reverse transformation of ``splitdiscnodes()``."""
 	treeclass = tree.__class__
 	for node in tree.subtrees():
@@ -903,13 +969,13 @@ def main():
 	actions = {'none': None, 'introducepreterminals': introducepreterminals,
 			'splitdisc': None, 'mergedisc': mergediscnodes, 'transform': None,
 			'unbinarize': unbinarize, 'binarize': None, 'optimalbinarize': None}
-	flags = ('markorigin markheads leftunary rightunary tailmarker '
-			'renumber reverse'.split())
+	flags = ('markorigin markhead leftunary rightunary tailmarker '
+			'renumber reverse direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
-			'punct= headrules= functions= morphology= lemmas= factor= '
-			'markorigin= maxlen= fmt= enc= transforms=').split()
+			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
+			'markorigin= maxlen= enc= transforms= markovthreshold= ').split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'h:v:', flags + options)
+		opts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
 		if not 1 <= len(args) <= 3:
 			raise GetoptError('error: expected 1, 2, or 3 positional arguments')
 	except GetoptError as err:
@@ -935,7 +1001,7 @@ def main():
 	corpus = READERS[opts.get('--inputfmt', 'export')](
 			infilename,
 			encoding=opts.get('--inputenc', 'utf-8'),
-			headrules=opts.get('--headrules'), markheads='--markheads' in opts,
+			headrules=opts.get('--headrules'),
 			ensureroot=opts.get('--ensureroot'), punct=opts.get('--punct'),
 			functions=opts.get('--functions'),
 			morphology=opts.get('--morphology'),
@@ -956,26 +1022,36 @@ def main():
 	if action in ('binarize', 'optimalbinarize'):
 		h = int(opts.get('-h', 999))
 		v = int(opts.get('-v', 1))
+		revh = int(opts.get('-H', 0))
 		if action == 'binarize':
 			factor = opts.get('--factor', 'right')
 			transform = lambda t, _: binarize(t, factor, h, v,
+					revhorzmarkov=revh,
 					leftmostunary='--leftunary' in opts,
 					rightmostunary='--rightunary' in opts,
-					tailmarker='$' if '--tailmarker' in opts else '')
+					tailmarker='$' if '--tailmarker' in opts else '',
+					direction='--direction' in opts,
+					headoutward='--headrules' in opts,
+					markhead='--markhead' in opts)
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
 			transform = lambda t, _: optimalbinarize(t, '|', headdriven, h, v)
 	elif action == 'splitdisc':
 		transform = lambda t, _: splitdiscnodes(t, '--markorigin' in opts)
-	elif action == 'unbinarize':
-		transform = lambda t, _: unbinarize(Tree.convert(t))
 	elif action == 'transform':
 		tfs = opts['--transforms'].split(',')
 		transform = lambda t, s: (treebanktransforms.reversetransform(t, tfs)
 				if '--reverse' in opts
 				else treebanktransforms.transform(t, s, tfs))
 	if transform is not None:  # NB: transform cannot affect (no. of) terminals
-		trees = ((key, (transform(tree, sent), sent)) for key, (tree, sent) in trees)
+		trees = ((key, (transform(tree, sent), sent))
+				for key, (tree, sent) in trees)
+		if action == 'binarize' and '--markovthreshold' in opts:
+			trees = list(trees)
+			markovthreshold([t for _, (t, _) in trees],
+					int(opts['--markovthreshold']),
+					revh + h - 1,
+					v - 1 if v > 1 else 1)
 
 	# read, transform, & write trees
 	headrules = None
@@ -1009,6 +1085,9 @@ def main():
 				outfile.write(block)
 				cnt += 1
 		else:
+			if opts.get('--outputfmt', 'export') == 'bracket':
+				trees = ((key, (canonicalize(tree), sent))
+						for key, (tree, sent) in trees)
 			for key, (tree, sent) in trees:
 				outfile.write(writetree(tree, sent, key,
 						opts.get('--outputfmt', 'export'), headrules))
