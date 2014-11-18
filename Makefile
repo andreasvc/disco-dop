@@ -27,12 +27,12 @@ test: all inplace
 
 test3: clean
 	python3 setup.py install --user
-	cp --update build/lib.*/discodop/*.so discodop/
+	cp build/lib.*/discodop/*.so discodop/
 	PYTHONIOENCODING=utf-8 python3 -bb -tt tests.py
 
 inplace: discodop
 	# python setup.py build_ext --inplace
-	cp --update build/lib.*/discodop/*.so discodop/
+	cp build/lib.*/discodop/*.so discodop/
 
 install: discodop docs
 
