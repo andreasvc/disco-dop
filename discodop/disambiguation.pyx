@@ -27,7 +27,7 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from discodop.bit cimport abitcount
 from discodop.plcfrs cimport DoubleEntry, new_DoubleEntry
 from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
-		SmallChartItem, FatChartItem, Edge, RankedEdge, SubsetGrammar, \
+		SmallChartItem, FatChartItem, Edge, RankedEdge, \
 		new_RankedEdge, logprobadd, logprobsum, yieldranges
 cimport cython
 
