@@ -657,7 +657,8 @@ def addprods(tree, sent, disc=True):
 				a.prod = (a.label, )
 			elif len(a) == 1:
 				a.prod = (a.label,
-						a[0].label if isinstance(a[0], Tree) else a[0])
+						a[0].label if isinstance(a[0], Tree)
+						else sent[a[0]])
 			elif len(a) == 2:
 				a.prod = (a.label, a[0].label, a[1].label)
 			else:
