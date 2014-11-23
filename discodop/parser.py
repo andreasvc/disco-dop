@@ -97,8 +97,8 @@ DEFAULTSTAGE = dict(
 			# form the complement of the maximal recurring fragments extracted
 		neverblockre=None,  # do not prune nodes with label that match regex
 		estimates=None,  # compute, store & use outside estimates
-		beam_beta=0.0,  # negative log of beam pruning factor
-		beam_delta=50,  # maximum span length to which beam_beta is applied
+		beam_beta=1.0,  # beam pruning factor, between 0 and 1; 1 to disable.
+		beam_delta=40,  # maximum span length to which beam_beta is applied
 		)
 
 
@@ -441,7 +441,7 @@ class Parser(object):
 							sent, stage.grammar, tags=tags,
 							whitelist=whitelist if stage.prune else None,
 							symbolic=False,
-							beam_beta=stage.beam_beta,
+							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta)
 				elif stage.mode == 'pcfg-posterior':
 					inside, outside, start, msg1 = pcfg.doinsideoutside(
@@ -475,7 +475,7 @@ class Parser(object):
 								if stage.estimates in ('SX', 'SXlrgaps')
 								else None,
 							symbolic=False,
-							beam_beta=stage.beam_beta,
+							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta)
 				elif stage.mode == 'dop-rerank':
 					if chart:

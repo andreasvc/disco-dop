@@ -151,6 +151,12 @@ Where the keys and values are:
     form the complement of the maximal recurring fragments extracted
 :neverblockre: do not prune nodes with label that match this regex
 :estimates: compute, store & use context-summary (outside) estimates
+:beam_beta: beam pruning factor, between 0 and 1; 1 to disable.
+    if enabled, new constituents must have a larger probability
+    than the probability of the best constituent in a cell multiplied by this
+    factor; i.e., a smaller value implies less pruning. Suggested value: ``0.005``.
+:beam_delta: if beam pruning is enabled, only apply it to spans up to this length.
+
 
 Other options
 --------------

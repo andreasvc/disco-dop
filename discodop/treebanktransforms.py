@@ -21,9 +21,9 @@ DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
 PRESETS = {
 		# basic state splits:
-		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT'),
-		'wsj': ('S-WH', 'VP-HD', 'S-INF'),
-		'alpino': ('PUNCT', ),
+		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT', 'FOLD-NUMBERS'),
+		'wsj': ('S-WH', 'VP-HD', 'S-INF', 'FOLD-NUMBERS'),
+		'alpino': ('PUNCT', 'FOLD-NUMBERS'),
 		# extensive state splits following particular papers:
 		'green2013ftb': ('markinf,markpart,de2,markp1,mwadvs,mwadvsel1,'
 			'mwadvsel2,mwnsel1,mwnsel2,PUNCT,TAGPA').split(','),
@@ -38,6 +38,7 @@ PRESETS = {
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
 			'yearNumbers,subConjType,VPfeat,noHead,noSubj').split(','),
 		}
+
 
 def expandpresets(transformations):
 	"""Expand aliases for presets."""
@@ -54,9 +55,9 @@ def transform(tree, sent, transformations):
 	used as an alias that expands to a sequence of transformations; see
 	the variable ``PRESETS``."""
 	# unfreeze attributes so that they can be modified
-	for a in tree.subtrees():
-		if isinstance(getattr(a, 'source', None), tuple):
-			a.source = list(a.source)
+	for a in tree.subtrees(lambda n: isinstance(
+			getattr(n, 'source', None), tuple)):
+		a.source = list(a.source)
 	for name in transformations:
 		if name == 'APPEND-FUNC':  # add function to phrasal label
 			for a in tree.subtrees():
@@ -858,28 +859,6 @@ def collapselabels(trees, _sents, mapping=None):
 	return [collapse(tree) for tree in trees]
 
 
-def unifymorphfeat(feats, percolatefeatures=None):
-	"""Get the sorted union of features for a sequence of feature vectors.
-
-	:param feats: a sequence of strings of comma/dot separated feature vectors.
-	:param percolatefeatures: if a set is given, select only these features;
-		by default all features are used.
-
-	>>> print(unifymorphfeat({'Def.*.*', '*.Sg.*', '*.*.Akk'}))
-	Akk.Def.Sg
-	>>> print(unifymorphfeat({'LID[bep,stan,rest]', 'N[soort,ev,zijd,stan]'}))
-	bep,ev,rest,soort,stan,zijd"""
-	sep = '.' if any('.' in a for a in feats) else ','
-	result = set()
-	for a in feats:
-		if '[' in a:
-			a = a[a.index('[') + 1:a.index(']')]
-		result.update(a.split(sep))
-	if percolatefeatures:
-		result.intersection_update(percolatefeatures)
-	return sep.join(sorted(result - {'*', '--'}))
-
-
 def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 		adjunctionlabel=None, ignorefunctions=None, ignorecategories=None,
 		adjleft=True, adjright=True):
@@ -1300,7 +1279,7 @@ def headstats(trees):
 	for tree in trees:
 		for a in tree.subtrees(lambda x: len(x) > 1):
 			for n, b in enumerate(a):
-				if 'hd' in b.source[FUNC].lower():
+				if ishead(b):
 					heads[a.label][b.label] += 1
 					pos1[a.label][n] += 1
 					pos2[a.label][len(a) - (n + 2)] += 1
@@ -1310,19 +1289,53 @@ def headstats(trees):
 	return heads, unknown, pos1, pos2
 
 
+# morphological features
+def morphfeats(node):
+	"""Return the set of morphological features for a POS node from a tree."""
+	morph = node.source[MORPH].replace('(', '[').replace(')', ']')
+	try:
+		morph = morph[morph.index('[') + 1:morph.index(']')]
+	except ValueError:
+		print(node, '\n', morph)
+		raise
+	return set(morph.replace('.', ',').split(','))
+
+
+def unifymorphfeat(feats, percolatefeatures=None):
+	"""Get the sorted union of features for a sequence of feature vectors.
+
+	:param feats: a sequence of strings of comma/dot separated feature vectors.
+	:param percolatefeatures: if a set is given, select only these features;
+		by default all features are used.
+
+	>>> print(unifymorphfeat({'Def.*.*', '*.Sg.*', '*.*.Akk'}))
+	Akk.Def.Sg
+	>>> print(unifymorphfeat({'LID[bep,stan,rest]', 'N[soort,ev,zijd,stan]'}))
+	bep,ev,rest,soort,stan,zijd"""
+	sep = '.' if any('.' in a for a in feats) else ','
+	result = set()
+	for a in feats:
+		if '[' in a:
+			a = a[a.index('[') + 1:a.index(']')]
+		result.update(a.split(sep))
+	if percolatefeatures:
+		result.intersection_update(percolatefeatures)
+	return sep.join(sorted(result - {'*', '--'}))
+
+
 # Function tags
 def function(tree):
 	""":returns: The first function tag for node, or the empty string."""
-	if getattr(tree, 'source', None):
-		return tree.source[FUNC].split('-')[0]
-	return ''
+	if getattr(tree, 'source', None) is None:
+		return ''
+	return tree.source[FUNC].split('-')[0]
 
 
 def functions(tree):
 	""":returns: list of function tags for node, or an empty list."""
-	if getattr(tree, 'source', None) and tree.source[FUNC] != '--':
-		return tree.source[FUNC].split('-')
-	return []
+	if getattr(tree, 'source', None) is None or tree.source[FUNC] == '--':
+		return []
+	return tree.source[FUNC].split('-')
 
 
 def trainfunctionclassifier(trees, sents, numproc):
@@ -1364,7 +1377,7 @@ def applyfunctionclassifier(funcclassifier, tree, sent):
 			node.source = ['--'] * 8
 		elif isinstance(node.source, tuple):
 			node.source = list(node.source)
-		node.source[FUNC] = '-'.join(funcs)
+		node.source[FUNC] = '-'.join(funcs) if funcs else '--'
 
 
 def functionfeatures(node, sent):
