@@ -35,13 +35,14 @@ file, and options may consist of:
   --cutofflen=n    Overrides the sentence length cutoff of the parameter file.
   --verbose        Print table with per sentence information.
   --debug          Print debug information with per sentence bracketings etc.
-  --disconly       Only evaluate bracketings of discontinuous constituents
-                   (only affects Parseval measures).
+  --disconly       Only evaluate discontinuous bracketings (affects bracketing
+                   scores: precision, recall, f-measure, exact match).
   --goldfmt|--parsesfmt=(%s)
                    Specify corpus format [default: export].
   --fmt=(...)      Shorthand for setting both --goldfmt and --parsesfmt.
   --goldenc|--parsesenc=(utf-8|iso-8859-1|...)
                    Specify encoding [default: utf-8].
+  --la             Enable leaf-ancestor evaluation.
   --ted            Enable tree-edit distance evaluation.
   --headrules=x    Specify file with rules for head assignment of constituents
                    that do not already have a child marked as head; this
@@ -58,10 +59,12 @@ file, and options may consist of:
 The parameter file should be encoded in UTF-8 and supports the following
 options (in addition to those described in the README of EVALB):
   DELETE_ROOT_PRETERMS
-                   when enabled, preterminals directly under the root in
-                   gold trees are ignored for scoring purposes.
-  DISC_ONLY        only consider discontinuous constituents for F-scores.
-  TED              when enabled, give tree-edit distance scores; disabled by
+                   if nonzero, ignore preterminals directly under the root in
+                   gold trees for scoring purposes.
+  DISC_ONLY        if nonzero, only consider discontinuous bracketings
+                   (affects precision, recall, f-measure, exact match).
+  LA               if nonzero, report leaf-ancestor scores [default: disabled].
+  TED              if nonzero, report tree-edit distance scores; disabled by
                    default as these are slow to compute.
   DEBUG            -1 only print summary table
                    0 additionally, print category / tag breakdowns (default)
@@ -73,8 +76,8 @@ options (in addition to those described in the README of EVALB):
                    EVALB parameter files. ''' % (USAGE, '|'.join(READERS))
 
 HEADER = '''
-   Sentence                 Matched   Brackets            Corr      Tag
-  ID Length  Recall  Precis Bracket   gold   cand  Words  Tags Accuracy    LA\
+   Sentence                 Matched   Brackets            Corr   POS  Func.
+  ID Length  Recall  Precis Bracket   gold   cand  Words  POS  Accur. Tags\
 '''.splitlines()
 
 
@@ -269,9 +272,10 @@ class Evaluator(object):
 					'labeled f-measure:         %s' % (
 						nozerodiv(lambda: f_measure(acc.goldb, acc.candb))),
 					'exact match:               %s' % (
-						nozerodiv(lambda: acc.exact / acc.sentcount)),
-					'leaf-ancestor:             %s' % (
-						nozerodiv(lambda: mean(acc.lascores)))])
+						nozerodiv(lambda: acc.exact / acc.sentcount))])
+			if self.param['LA']:
+				msg.append('leaf-ancestor:             %s' % (
+						nozerodiv(lambda: mean(acc.lascores))))
 			if self.param['TED']:
 				msg.append('tree-dist (Dice micro avg) %s' % (
 						nozerodiv(lambda: 1 - acc.dicenoms / acc.dicedenoms)))
@@ -315,10 +319,11 @@ class Evaluator(object):
 				nozerodiv(lambda: f_measure(acc.goldb, acc.candb))),
 			'exact match:               %s     %s' % (
 				nozerodiv(lambda: acc40.exact / acc40.sentcount),
-				nozerodiv(lambda: acc.exact / acc.sentcount)),
-			'leaf-ancestor:             %s     %s' % (
+				nozerodiv(lambda: acc.exact / acc.sentcount))])
+		if self.param['LA']:
+			msg.append('leaf-ancestor:             %s     %s' % (
 				nozerodiv(lambda: mean(acc40.lascores)),
-				nozerodiv(lambda: mean(acc.lascores)))])
+				nozerodiv(lambda: mean(acc.lascores))))
 		if self.param['TED']:
 			msg.append('tree-dist (Dice micro avg) %s     %s' % (
 				nozerodiv(lambda: (1 - acc40.dicenoms / acc40.dicedenoms)),
@@ -385,8 +390,9 @@ class TreePairResult(object):
 						and self.cpos[a[0]][1] == a.label))
 		if not self.gpos:
 			return  # avoid 'sentences' with only punctuation.
-		self.lascore = leafancestor(self.gtree, self.ctree,
-				self.param['DELETE_LABEL'])
+		if self.param['LA']:
+			self.lascore = leafancestor(self.gtree, self.ctree,
+					self.param['DELETE_LABEL'])
 		if self.param['TED']:
 			self.ted, self.denom = treedisteval(self.gtree, self.ctree,
 				includeroot=self.gtree.label not in self.param['DELETE_LABEL'])
@@ -410,7 +416,7 @@ class TreePairResult(object):
 
 	def info(self, fmt='%8s  '):
 		"""Print one line with evaluation results."""
-		print((fmt + '%5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %6.2f%s%s') % (
+		print((fmt + '%5d  %s  %s   %5d  %5d  %5d  %5d  %4d  %s %s%s%s%s') % (
 				self.n, self.lengpos,
 				nozerodiv(lambda: recall(self.gbrack, self.cbrack)),
 				nozerodiv(lambda: precision(self.gbrack, self.cbrack)),
@@ -419,8 +425,10 @@ class TreePairResult(object):
 				len(self.gpos),
 				sum(1 for a, b in zip(self.gpos, self.cpos) if a == b),
 				nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
-				100 * self.lascore,
-				str(self.ted).rjust(3) if self.param['TED'] else '',
+				nozerodiv(lambda: f_measure(self.goldgf, self.candgf)),
+				nozerodev(lambda: 100 * self.lascore)
+						if self.param['LA'] else '',
+				nozerodiv(lambda: self.ted) if self.param['TED'] else '',
 				nozerodiv(lambda: accuracy(self.gdep, self.cdep))
 						if self.param['DEP'] else ''))
 
@@ -460,7 +468,8 @@ class TreePairResult(object):
 					pathscore(goldpaths[leaf], candpaths[leaf]),
 					' '.join(goldpaths[leaf][::-1]),
 					' '.join(candpaths[leaf][::-1])))
-		print('leaf-ancestor score: %6.3g' % self.lascore)
+		if self.param['LA']:
+			print('leaf-ancestor score: %6.3g' % self.lascore)
 		if self.param['TED']:
 			print('Tree-dist: %g / %g = %g' % (
 				self.ted, self.denom, 1 - self.ted / Decimal(self.denom)))
@@ -592,7 +601,7 @@ class EvalAccumulator(object):
 
 def main():
 	"""Command line interface for evaluation."""
-	flags = {'verbose', 'debug', 'disconly', 'ted'}
+	flags = {'verbose', 'debug', 'disconly', 'ted', 'la'}
 	options = {'goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'fmt=',
 			'cutofflen=', 'headrules=', 'functions=', 'morphology='}
 	try:
@@ -612,6 +621,7 @@ def main():
 	param['DEBUG'] = max(param['DEBUG'],
 			'--verbose' in opts, 2 * ('--debug' in opts))
 	param['TED'] |= '--ted' in opts
+	param['LA'] |= '--la' in opts
 	param['DEP'] = '--headrules' in opts
 	if '--headrules' in opts:
 		param['HEADRULES'] = readheadrules(opts['--headrules'])
@@ -646,12 +656,13 @@ def readparam(filename):
 	param = defaultdict(list)
 	# NB: we ignore MAX_ERROR, we abort immediately on error.
 	validkeysonce = ('DEBUG', 'MAX_ERROR', 'CUTOFF_LEN', 'LABELED',
-			'DISC_ONLY', 'TED', 'DEP', 'DELETE_ROOT_PRETERMS')
+			'DISC_ONLY', 'LA', 'TED', 'DEP', 'DELETE_ROOT_PRETERMS')
 	param = {'DEBUG': 0, 'MAX_ERROR': 10, 'CUTOFF_LEN': 40,
 				'LABELED': 1, 'DELETE_LABEL_FOR_LENGTH': set(),
 				'DELETE_LABEL': set(), 'DELETE_WORD': set(),
 				'EQ_LABEL': set(), 'EQ_WORD': set(),
-				'DISC_ONLY': 0, 'TED': 0, 'DEP': 0, 'DELETE_ROOT_PRETERMS': 0}
+				'DISC_ONLY': 0, 'LA': 0, 'TED': 0, 'DEP': 0,
+				'DELETE_ROOT_PRETERMS': 0}
 	seen = set()
 	for a in io.open(filename, encoding='utf8') if filename else ():
 		line = a.strip()
