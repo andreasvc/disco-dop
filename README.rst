@@ -108,15 +108,15 @@ Install the latest development version of discodop::
     pip install --user -r requirements.txt
     make install && make inplace
 
-Mac OS X (untested)
--------------------
+Mac OS X
+--------
 - Install `Xcode <https://developer.apple.com/>`_ and `Homebrew <http://brew.sh>`_
 - Install dependencies using Homebrew::
 
     brew install gcc python git
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
-    pip install --user --install-option="--prefix=" -r requirements.txt
+    sudo pip install -r requirements.txt
     env CC=gcc python setup.py install --user --prefix=
     make inplace
 
