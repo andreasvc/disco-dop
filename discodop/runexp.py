@@ -24,7 +24,7 @@ import numpy as np
 from discodop import eval as evalmod
 from discodop import treebank, treebanktransforms, treetransforms, \
 		grammar, lexicon, parser, estimates
-from discodop.tree import Tree, ParentedTree
+from discodop.tree import Tree
 from discodop.containers import Grammar
 
 USAGE = '''Usage: %s <parameter file> [--rerun]

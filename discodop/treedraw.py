@@ -51,6 +51,7 @@ ANSICOLOR = {
 		'cyan': 36,
 		'white': 37,
 }
+PTBPUNC = {'-LRB-', '-RRB-', '-LCB-', '-RCB-', '-LSB-', '-RSB-', '-NONE-'}
 
 
 class DrawTree(object):
@@ -64,11 +65,12 @@ class DrawTree(object):
 		contains non-integers as leaves, a continuous phrase-structure tree
 		is assumed. If sent is not given and the tree contains only indices
 		as leaves, the indices are displayed as placeholder terminals.
+	:param abbr: when True, abbreviate labels longer than 5 characters.
 	:param highlight: Optionally, a sequence of Tree objects in `tree` which
 		should be highlighted. Has the effect of only applying colors to nodes
 		in this sequence (nodes should be given as Tree objects, terminals as
 		indices).
-	:param abbr: when True, abbreviate labels longer than 5 characters.
+	:param highlightfunc: Similar to ``highlight``, but affects function tags.
 
 	>>> print(DrawTree('(S (NP Mary) (VP walks))').text())
 	... # doctest: +NORMALIZE_WHITESPACE
@@ -78,7 +80,8 @@ class DrawTree(object):
 	 |         |
 	Mary     walks
 	"""
-	def __init__(self, tree, sent=None, highlight=(), abbr=False):
+	def __init__(self, tree, sent=None, abbr=False, highlight=(),
+			highlightfunc=()):
 		self.tree = tree
 		self.sent = sent
 		if isinstance(tree, basestring):
@@ -108,9 +111,9 @@ class DrawTree(object):
 				self.tree = self.tree.copy(True)
 			for n in self.tree.subtrees(lambda x: len(x.label) > 5):
 				n.label = n.label[:4] + u'\u2026'  # unicode '...' ellipsis
-		self.highlight = set()
+		self.highlight = self.highlightfunc = None
 		self.nodes, self.coords, self.edges = self.nodecoords(
-				self.tree, self.sent, highlight)
+				self.tree, self.sent, highlight, highlightfunc)
 
 	def __str__(self):
 		if sys.version[0] >= '3':
@@ -126,7 +129,7 @@ class DrawTree(object):
 		"""Return a rich representation for IPython notebook."""
 		return self.svg()
 
-	def nodecoords(self, tree, sent, highlight):
+	def nodecoords(self, tree, sent, highlight, highlightfunc):
 		"""Produce coordinates of nodes on a grid.
 
 		Objective:
@@ -229,8 +232,11 @@ class DrawTree(object):
 		matrix = [[None] * (len(sent) * scale)]
 		nodes = {}
 		ids = {a: n for n, a in enumerate(positions)}
-		self.highlight.update(n for a, n in ids.items()
-				if not highlight or tree[a] in highlight)
+		self.highlight = {n for a, n in ids.items()
+				if not highlight or tree[a] in highlight}
+		self.highlightfunc = {n for a, n in ids.items()
+				if (tree[a] in highlightfunc
+				if highlightfunc else n in self.highlight)}
 		levels = {n: [] for n in range(maxdepth - 1)}
 		terminals = []
 		for a in positions:
@@ -254,6 +260,7 @@ class DrawTree(object):
 			if nodes[ids[m]] is None:
 				nodes[ids[m]] = '...'
 				self.highlight.discard(ids[m])
+				self.highlightfunc.discard(ids[m])
 			positions.remove(m)
 			childcols[m[:-1]].add((0, i))
 
@@ -320,20 +327,20 @@ class DrawTree(object):
 
 		return nodes, coords, edges
 
-	def svg(self, nodecolor='blue', leafcolor='red', funccolor='green'):
+	def svg(self, hscale=40, hmult=3, nodecolor='blue', leafcolor='red',
+			funccolor='green', funcsep=None):
 		""":returns: SVG representation of a discontinuous tree."""
 		fontsize = 12
-		hscale = 40
 		vscale = 25
 		hstart = vstart = 20
 		width = max(col for _, col in self.coords.values())
 		height = max(row for row, _ in self.coords.values())
 		result = ['<svg version="1.1" xmlns="http://www.w3.org/2000/svg" '
 				'width="%dem" height="%dem" viewBox="%d %d %d %d">' % (
-						width * 3,
+						width * hmult,
 						height * 2.5,
 						-hstart, -vstart,
-						width * hscale + 3 * hstart,
+						width * hscale + hmult * hstart,
 						height * vscale + 3 * vstart)]
 
 		children = defaultdict(set)
@@ -384,29 +391,34 @@ class DrawTree(object):
 			node = self.nodes[n]
 			x = column * hscale + hstart
 			y = row * vscale + vstart
+			color = 'black'
 			if n in self.highlight:
 				color = nodecolor if isinstance(node, Tree) else leafcolor
-				if (isinstance(node, Tree) and node.label.startswith('-')
-						and node.label not in {
-							'-LRB-', '-RRB-',
-							'-LCB-', '-RCB-',
-							'-LSB-', '-RSB-', '-NONE-'}):
-					color = funccolor
+			if (funcsep and isinstance(node, Tree) and funcsep in node.label
+					and node.label not in PTBPUNC):
+				cat, func = node.label.split(funcsep, 1)
 			else:
-				color = 'black'
-			result.append('\t<text style="text-anchor: middle; fill: %s; '
-					'font-size: %dpx;" x="%g" y="%g">%s</text>' % (
-					color, fontsize, x, y,
-					escape(node.label if isinstance(node, Tree) else node)))
-
+				cat = node.label if isinstance(node, Tree) else node
+				func = None
+			result.append('\t<text x="%g" y="%g" '
+					'style="text-anchor: middle; font-size: %dpx;" >'
+					'<tspan style="fill: %s; ">%s</tspan>' % (
+					x, y, fontsize,
+					color, escape(cat)))
+			if func:
+				result[-1] += '%s<tspan style="fill: %s; ">%s</tspan>' % (
+							funcsep, funccolor if n in self.highlightfunc
+							else 'black', func)
+			result[-1] += '</text>'
 		result += ['</svg>']
 		return '\n'.join(result)
 
 	def text(self, nodedist=1, unicodelines=False, html=False, ansi=False,
 				nodecolor='blue', leafcolor='red', funccolor='green',
-				maxwidth=16):
+				funcsep=None, maxwidth=16):
 		""":returns: ASCII art for a discontinuous tree.
 
+		:param nodedist: minimum number of horiziontal spaces between nodes
 		:param unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
 		:param html: whether to wrap output in html code (default plain text).
@@ -414,8 +426,11 @@ class DrawTree(object):
 			(only effective when html==False).
 		:param leafcolor, nodecolor: specify colors of leaves and phrasal
 			nodes; effective when either html or ansi is True.
+		:param funccolor, funcsep: if ``funcsep`` is a string, it is taken as a
+			separator for function tags, which will be drawn with
+			``funccolor``.
 		:param maxwidth: maximum number of characters before a label starts to
-			wrap; pass None to disable."""
+			wrap across multiple lines; pass None to disable."""
 		if unicodelines:
 			horzline = u'\u2500'
 			leftcorner = u'\u250c'
@@ -501,16 +516,43 @@ class DrawTree(object):
 						branchrow[col] = crosscell(branchrow[col])
 				text = [a.center(maxnodewith[col]) for a in text]
 				color = nodecolor if isinstance(node, Tree) else leafcolor
-				if isinstance(node, Tree) and node.label.startswith('-'):
-					color = funccolor
 				if html:
 					text = [escape(a) for a in text]
-					if n in self.highlight:
-						text = ['<font color=%s>%s</font>' % (
-								color, a) for a in text]
-				elif ansi and n in self.highlight:
-					text = ['\x1b[%d;1m%s\x1b[0m' % (
-							ANSICOLOR[color], a) for a in text]
+				if (n in self.highlight or n in self.highlightfunc) and (
+						html or ansi):
+					newtext = []
+					seensep = False
+					# everything before dash in nodecolor,
+					# after dash use funccolor
+					for line in text:
+						if (funcsep and not seensep and isinstance(node, Tree)
+								and node.label not in PTBPUNC
+								and funcsep in line):
+							cat, func = line.split(funcsep, 1)
+						elif seensep:
+							cat, func = None, line
+						else:
+							cat, func = line, None
+						if cat and (html or ansi) and n in self.highlight:
+							if html:
+								newtext.append('<font color=%s>%s</font>' % (
+										color, cat))
+							elif ansi:
+								newtext.append('\x1b[%d;1m%s\x1b[0m' % (
+										ANSICOLOR[color], cat))
+						elif cat:
+							newtext.append(cat)
+						if func:
+							seensep = True
+							if html and n in self.highlightfunc:
+								newtext[-1] += '%s<font color=%s>%s</font>' % (
+										funcsep, funccolor, func)
+							elif ansi and n in self.highlightfunc:
+								newtext[-1] += '%s\x1b[%d;1m%s\x1b[0m' % (
+										funcsep, ANSICOLOR[funccolor], func)
+							else:
+								newtext[-1] += funcsep + func
+					text = newtext
 				for x in range(maxnodeheight[row]):
 					# draw vertical lines in partially filled multiline node
 					# labels, but only if it's not a frontier node.
@@ -535,19 +577,18 @@ class DrawTree(object):
 		return '\n'.join(reversed(result)) + '\n'
 
 	def tikzmatrix(self, nodecolor='blue', leafcolor='red',
-			funccolor='green'):
+			funccolor='green', funcsep=None):
 		"""Produce TiKZ code for use with LaTeX.
 
 		PDF can be produced with pdflatex. Uses TiKZ matrices meaning that
 		nodes are put into a fixed grid. Where the cells of each column all
 		have the same width."""
 		result = ['%% %s\n%% %s' % (
-			self.tree, ' '.join(a or '' for a in self.sent)),
-			r'''\begin{tikzpicture}[scale=1, minimum height=1.25em,
-			text height=1.25ex, text depth=.25ex,
-			inner sep=0mm, node distance=1mm]''',
-		r'\footnotesize\sffamily',
-		r'\matrix[row sep=0.5cm,column sep=0.1cm] {']
+				self.tree, ' '.join(a or '' for a in self.sent)),
+				r'''\begin{tikzpicture}[scale=0.75, align=center,
+				inner sep=0mm, node distance=1mm]''',
+				r'\footnotesize\sffamily',
+				r'\matrix[row sep=0.5cm,column sep=0.1cm] {']
 
 		# write matrix with nodes
 		matrix = defaultdict(dict)
@@ -563,19 +604,22 @@ class DrawTree(object):
 				if col in matrix[row]:
 					n = matrix[row][col]
 					node = self.nodes[n]
+					cat, func = node.label, ''
 					if isinstance(node, Tree):
-						if node.label.startswith('-'):
-							color = funccolor
-						else:
-							color = nodecolor
-						label = latexlabel(node.label)
+						color = nodecolor
+						if (funcsep and funcsep in node.label
+								and node.label not in PTBPUNC):
+							cat, func = node.label.split(funcsep)
+							func = r'%s\textcolor{%s}{%s}' % (
+									funcsep, funccolor, func)
+						label = latexlabel(cat)
 					else:
 						color = leafcolor
 						label = node
 					if n not in self.highlight:
 						color = 'black'
-					line.append(r'\node [%s] (n%d) { %s };' % (
-							color, n, label))
+					line.append(r'\node (n%d) { \textcolor{%s}{%s}%s };' % (
+							n, color, label, func))
 				line.append('&')
 			# new row: skip last column char '&', add newline
 			result.append(' '.join(line[:-1]) + r' \\')
@@ -583,36 +627,39 @@ class DrawTree(object):
 		result.extend(self._tikzedges())
 		return '\n'.join(result)
 
-	def tikznode(self, nodecolor='blue', leafcolor='red', funccolor='green'):
+	def tikznode(self, nodecolor='blue', leafcolor='red',
+			funccolor='green', funcsep=None):
 		"""Produce TiKZ code to draw a tree.
 
 		Nodes are drawn with the \\node command so they can have arbitrary
 		coordinates."""
 		result = ['%% %s\n%% %s' % (
-			self.tree, ' '.join(a or '' for a in self.sent)),
-			r'''\begin{tikzpicture}[scale=0.75, minimum height=1.25em,
-			text height=1.25ex, text depth=.25ex,
-			inner sep=0mm, node distance=1mm]''',
-		r'\footnotesize\sffamily',
-		r'\path']
+				self.tree, ' '.join(a or '' for a in self.sent)),
+				r'''\begin{tikzpicture}[scale=0.75, align=center,
+				inner sep=0mm, node distance=1mm]''',
+				r'\footnotesize\sffamily',
+				r'\path']
 
 		bottom = max(row for row, _ in self.coords.values())
 		# write nodes with coordinates
 		for n, (row, column) in self.coords.items():
 			node = self.nodes[n]
+			cat, func = node.label, ''
 			if isinstance(node, Tree):
-				if node.label.startswith('-'):
-					color = funccolor
-				else:
-					color = nodecolor
-				label = latexlabel(node.label)
+				color = nodecolor
+				if (funcsep and funcsep in node.label
+						and node.label not in PTBPUNC):
+					cat, func = node.label.split(funcsep)
+					func = r'%s\textcolor{%s}{%s}' % (
+							funcsep, funccolor, func)
+				label = latexlabel(cat)
 			else:
 				color = leafcolor
 				label = node
 			if n not in self.highlight:
 				color = 'black'
-			result.append('\t(%d, %d) node [%s] (n%d) {%s}'
-					% (column, bottom - row, color, n, label))
+			result.append(r'	(%d, %d) node (n%d) { \textcolor{%s}{%s}%s }'
+					% (column, bottom - row, n, color, label, func))
 		result += [';']
 		result.extend(self._tikzedges())
 		return '\n'.join(result)
@@ -827,7 +874,9 @@ def main():
 			for trees, sents in corpora:
 				tree, sent = trees[sentid], sents[sentid]
 				print(DrawTree(tree, sent, abbr='--abbr' in opts
-						).text(unicodelines=True, ansi='--plain' not in opts))
+						).text(unicodelines=True, ansi='--plain' not in opts,
+						funcsep='-' if opts.get('--functions')
+							in ('add', 'between') else None))
 	else:  # read from stdin + detect format
 		reader = codecs.getreader(opts.get('--encoding', 'utf8'))
 		stdin = (chain.from_iterable(reader(open(a)) for a in args)
@@ -840,7 +889,9 @@ def main():
 			for n, (tree, sent, rest) in enumerate(trees, 1):
 				print('%d. (len=%d): %s' % (n, len(sent), rest))
 				print(DrawTree(tree, sent, abbr='--abbr' in opts).text(
-						unicodelines=True, ansi='--plain' not in opts))
+						unicodelines=True, ansi='--plain' not in opts,
+						funcsep='-' if opts.get('--functions')
+							in ('add', 'between') else None))
 		except (IOError, KeyboardInterrupt):
 			pass
 

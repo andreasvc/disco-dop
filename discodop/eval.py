@@ -17,7 +17,7 @@ else:
 from discodop import grammar
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
-from discodop.treebank import READERS, dependencies
+from discodop.treebank import READERS, dependencies, handlefunctions
 from discodop.treebanktransforms import readheadrules, functions
 try:
 	from discodop.treedist import treedist, newtreedist
@@ -372,15 +372,17 @@ class TreePairResult(object):
 		self.lascore = self.ted = self.denom = Decimal('nan')
 		self.cdep = self.gdep = ()
 		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
-		# collect the function tags for correct bracketings
-		self.goldgf = multiset((bracketing(a), b)
+		# collect the function tags for correct bracketings & POS tags
+		self.candgf = multiset((bracketing(a), b)
 				for a in ctree.subtrees()
 					for b in functions(a)
-					if bracketing(a) in self.gbrack)
-		self.candgf = multiset((bracketing(a), b)
+					if bracketing(a) in self.gbrack or (isinstance(a[0], int)
+						and self.gpos[a[0]][1] == a.label))
+		self.goldgf = multiset((bracketing(a), b)
 				for a in gtree.subtrees()
 					for b in functions(a)
-					if bracketing(a) in self.cbrack)
+					if bracketing(a) in self.cbrack or (isinstance(a[0], int)
+						and self.cpos[a[0]][1] == a.label))
 		if not self.gpos:
 			return  # avoid 'sentences' with only punctuation.
 		self.lascore = leafancestor(self.gtree, self.ctree,
@@ -435,6 +437,18 @@ class TreePairResult(object):
 				(self.cbrack - self.gbrack) | (self.gbrack - self.cbrack)))
 		goldpaths = leafancestorpaths(self.gtree, self.param['DELETE_LABEL'])
 		candpaths = leafancestorpaths(self.ctree, self.param['DELETE_LABEL'])
+		if self.candgf:
+			print('Function tags')
+			print('gold:               ', strbracketings(
+					(a, b) for (_, b), a in self.goldgf))
+			print('candidate:          ', strbracketings(
+					(a, b) for (_, b), a in self.candgf))
+			print('matched:            ', strbracketings(
+					(a, b) for (_, b), a in self.candgf & self.goldgf))
+			print('unmatched:          ', strbracketings(
+					(a, b) for (_, b), a in (self.candgf - self.goldgf)
+					| (self.goldgf - self.candgf)))
+
 		print('%15s %8s %8s | %10s %36s : %s' % (
 				'word', 'gold POS', 'cand POS',
 				'path score', 'gold path', 'cand path'))
@@ -489,14 +503,25 @@ class TreePairResult(object):
 			tree, brack, pos = self.gtree, self.cbrack, self.cpos
 		if not tree:  # avoid empty trees with just punctuation
 			return ''
-		highlight = [a for a in tree.subtrees()
-					if bracketing(a) in brack]
-		highlight.extend(a for a in tree.subtrees()
-					if isinstance(a[0], int)
-					and a.label == pos[a[0]][1])
+		origtree = tree
+		if self.candgf:
+			tree = tree.copy(True)
+			for a, b in zip(tree.subtrees(), origtree.subtrees()):
+				a.indices = b.indices
+		highlight = list(tree.subtrees(lambda n: bracketing(n) in brack))
+		highlight.extend(tree.subtrees(lambda n: n and isinstance(n[0], int)
+				and n.label == pos[n[0]][1]))
 		highlight.extend(range(len(pos)))
-		return DrawTree(tree, self.csent, highlight=highlight
-				).text(unicodelines=True, ansi=True)
+		highlightfunc = ()
+		if self.candgf:
+			highlightfunc = [a for a in tree.subtrees()
+					if all((bracketing(a), b) in self.candgf & self.goldgf
+						for b in functions(a))]
+			handlefunctions('add', tree)
+		return DrawTree(tree, self.csent, highlight=highlight,
+				highlightfunc=highlightfunc).text(
+				unicodelines=True, ansi=True,
+				funcsep='-' if self.candgf else None)
 
 
 class EvalAccumulator(object):
@@ -968,7 +993,7 @@ def intervals(seq):
 
 
 def disc(node):
-	"""Evaluate whether a particular node is locally discontinuous.
+	"""Test whether a particular node is locally discontinuous.
 
 	The root node of a complete tree will, by definition, be continuous. Nodes
 	can be continuous even if some of their children are discontinuous."""
