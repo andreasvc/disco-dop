@@ -27,8 +27,6 @@ cdef class DoubleEntry:
 				self.__class__.__name__, self.key, self.value, self.count)
 
 
-
-
 cdef inline bint cmpfun(Entry_fused a, Entry_fused b):
 	"""Generic comparison function for Entry objects."""
 	return (a.value < b.value or (a.value == b.value and a.count < b.count))

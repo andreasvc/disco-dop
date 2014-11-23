@@ -556,7 +556,7 @@ def test_punct():
 	for n, mangled, sent, nopunct, original in zip(count(),
 			mangledtrees.trees().values(),
 			mangledtrees.sents().values(), nopunct, originals):
-		print(n, end='')
+		print(n, end='. ')
 		for a, b in zip(sorted(addbitsets(mangled).subtrees(phrasal),
 				key=lambda n: min(n.leaves())),
 				sorted(addbitsets(nopunct).subtrees(phrasal),

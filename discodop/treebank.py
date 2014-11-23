@@ -511,10 +511,7 @@ def exportsplit(line):
 		raise ValueError(
 				'expected at least 5 columns: %r' % fields)
 	elif fieldlen & 1:  # odd number of fields?
-		fields[1:1] = ['']  # add empty lemma field
-	if fieldlen <= 6:
-		# NB: zero or more sec. edges come in pairs of parent id and label
-		fields.extend(['', ''])  # add empty sec. edge
+		fields[1:1] = ['--']  # add empty lemma field
 	return fields
 
 
@@ -748,7 +745,8 @@ def handlefunctions(action, tree, pos=True, top=False, morphology=None):
 
 	:param action: one of {None, 'add', 'replace', 'remove'}
 	:param pos: whether to add function tags to POS tags.
-	:param top: whether to add function tags to the top node."""
+	:param top: whether to add function tags to the top node.
+	:param morphology: if morphology='between', skip those nodes."""
 	if action in (None, 'leave'):
 		return
 	for a in tree.subtrees():

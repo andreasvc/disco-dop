@@ -428,7 +428,7 @@ def getfragments(trees, sents, numproc=1, disc=True,
 		``(frag, sent)`` where ``frag`` is a unicode string, and ``sent``
 		is a list of words as unicode strings; when ``disc`` is ``False``, keys
 		are of the form ``frag`` where ``frag`` is a unicode string.
-	:param trees: a sequence of binarized Tree objects.
+	:param trees: a sequence of binarized Tree objects, with indices as leaves.
 	:param sents: the corresponding sentences (lists of strings).
 	:param numproc: number of processes to use; pass 0 to use detected # CPUs.
 	:param disc: when disc=True, assume trees with discontinuous constituents.
@@ -654,7 +654,7 @@ def printfragments(fragments, counts, out=None):
 
 def test():
 	"""Demonstration of fragment extractor."""
-	main("fragments.py --disc alpinosample.export".split())
+	main("fragments.py --fmt=export alpinosample.export".split())
 
 
 __all__ = ['altrepr', 'batch', 'coverfragworker', 'debinarize',
