@@ -397,8 +397,8 @@ class TreePairResult(object):
 			self.ted, self.denom = treedisteval(self.gtree, self.ctree,
 				includeroot=self.gtree.label not in self.param['DELETE_LABEL'])
 		if self.param['DEP']:
-			self.cdep = dependencies(self.ctree, self.param['HEADRULES'])
-			self.gdep = dependencies(self.gtree, self.param['HEADRULES'])
+			self.cdep = dependencies(self.ctree)
+			self.gdep = dependencies(self.gtree)
 		assert self.lascore != 1 or self.gbrack == self.cbrack, (
 				'leaf ancestor score 1.0 but no exact match: (bug?)')
 		self.pgbrack = parentedbracketings(self.gtree, labeled=True,
@@ -627,8 +627,6 @@ def main():
 	param['TED'] |= '--ted' in opts
 	param['LA'] |= '--la' in opts
 	param['DEP'] = '--headrules' in opts
-	if '--headrules' in opts:
-		param['HEADRULES'] = readheadrules(opts['--headrules'])
 	if '--fmt' in opts:
 		opts['--goldfmt'] = opts['--parsesfmt'] = opts['--fmt']
 	goldreader = READERS[opts.get('--goldfmt', 'export')]
@@ -636,11 +634,13 @@ def main():
 	gold = goldreader(goldfile,
 			encoding=opts.get('--goldenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
-			morphology=opts.get('--morphology'))
+			morphology=opts.get('--morphology'),
+			headrules=opts.get('--headrules'))
 	parses = parsesreader(parsesfile,
 			encoding=opts.get('--parsesenc', 'utf-8'),
 			functions=opts.get('--functions', 'remove'),
-			morphology=opts.get('--morphology'))
+			morphology=opts.get('--morphology'),
+			headrules=opts.get('--headrules'))
 	goldtrees, goldsents = gold.trees(), gold.sents()
 	candtrees, candsents = parses.trees(), parses.sents()
 	if not goldtrees:

@@ -1058,11 +1058,9 @@ def main():
 					v - 1 if v > 1 else 1)
 
 	# read, transform, & write trees
-	headrules = None
 	if opts.get('--outputfmt') in ('mst', 'conll'):
 		if not opts.get('--headrules'):
 			raise ValueError('need head rules for dependency conversion')
-		headrules = treebanktransforms.readheadrules(opts.get('--headrules'))
 	cnt = 0
 	if opts.get('--outputfmt') == 'dact':
 		import alpinocorpus
@@ -1094,7 +1092,7 @@ def main():
 						for key, (tree, sent) in trees)
 			for key, (tree, sent) in trees:
 				outfile.write(writetree(tree, sent, key,
-						opts.get('--outputfmt', 'export'), headrules))
+						opts.get('--outputfmt', 'export')))
 				cnt += 1
 	print('%sed %d trees with action %r' % ('convert' if action == 'none'
 			else 'transform', cnt, action), file=sys.stderr)

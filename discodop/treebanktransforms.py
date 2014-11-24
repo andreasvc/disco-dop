@@ -1224,7 +1224,7 @@ def readheadrules(filename):
 
 
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
-	"""Use head finding rules to select one child of tree as head."""
+	"""Use head finding rules to select one child of tree node as head."""
 	candidates = [a for a in tree if getattr(a, 'source', None)
 			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
@@ -1246,6 +1246,40 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	for child in children:
 		if isinstance(child, Tree):
 			return child
+
+
+def ptbheadfinder(tree, headrules, headlabels=frozenset({'HD'}), dptb=False):
+	"""PTB-specific head rules for co-ordination, NPs and WH elements."""
+	head = None
+	if tree.label == 'NP':
+		if tree[-1].label == 'POS':
+			head = tree[-1]
+		else:
+			for rhslabels in (
+					{'NN', 'NNP', 'NNPS', 'NNS', 'NX', 'POS', 'JR'},
+					{'NP'},
+					{'$.', 'ADJP', 'PRN'},
+					{'CD'},
+					{'JJ', 'JJS', 'RB', 'QP'}):
+				for a in reversed(tree):
+					if a.label in rhslabels or (dptb
+							and a.label.startswith('WH')
+							and a.label[2:] in rhslabels):
+						head = a
+						break
+				if head:
+					break
+			if head is None:
+				head = tree[-1]
+	else:
+		head = headfinder(tree, headrules, headlabels)
+	i = tree.index(head)
+	if i >= 2:
+		if tree[i - 1].label in {'CC', 'CONJP'}:
+			for althead in tree[i - 2::-1]:
+				if not ispunct(althead.label, althead.label):
+					return althead
+	return head
 
 
 def sethead(child):

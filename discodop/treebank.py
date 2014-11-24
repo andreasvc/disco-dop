@@ -9,8 +9,8 @@ from itertools import count, chain, islice
 from collections import defaultdict, OrderedDict
 from discodop.tree import Tree, ParentedTree
 from discodop.treebanktransforms import punctremove, punctraise, \
-		balancedpunctraise, punctroot, ispunct, readheadrules, headfinder, \
-		sethead, removeemptynodes
+		balancedpunctraise, punctroot, ispunct, ishead, readheadrules, \
+		headfinder, ptbheadfinder, sethead, removeemptynodes
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -25,8 +25,8 @@ INDEXRE = re.compile(r" [0-9]+\)")
 class CorpusReader(object):
 	"""Abstract corpus reader."""
 	def __init__(self, path, encoding='utf-8', ensureroot=None, punct=None,
-			headrules=None, removeempty=False, functions=None,
-			morphology=None, lemmas=None):
+			headrules=None, extraheadrules=None, removeempty=False,
+			functions=None, morphology=None, lemmas=None):
 		"""
 		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
 		:param ensureroot: add root node with given label if necessary.
@@ -34,9 +34,14 @@ class CorpusReader(object):
 			terminal is empty if it is equal to None, '', or '-NONE-'.
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads.
+		:param extraheadrules: one of ...
+
+			:None: no additional head rules [default]
+			:'ptb': use additional PTB-specific head rules.
+			:'dptb': use PTB head rules with discontinuous WH rules
 		:param punct: one of ...
 
-			:None: leave punctuation as is.
+			:None: leave punctuation as is [default].
 			:'move': move punctuation to appropriate constituents
 					using heuristics.
 			:'moveall': same as 'move', but moves all preterminals under root,
@@ -46,26 +51,26 @@ class CorpusReader(object):
 					(as in original Negra/Tiger treebanks).
 		:param functions: one of ...
 
-			:None, 'leave': leave syntactic labels as is.
+			:None, 'leave': leave syntactic labels as is [default].
 			:'add': concatenate grammatical function to syntactic label,
-				separated by a hypen: e.g., NP => NP-SBJ
+				separated by a hypen: e.g., ``NP => NP-SBJ``.
 			:'remove': strip away hyphen-separated grammatical function,
-				e.g., NP-SBJ => NP
+				e.g., ``NP-SBJ => NP``.
 			:'replace': replace syntactic label with grammatical function,
-				e.g., NP => SBJ
+				e.g., ``NP => SBJ``.
 		:param morphology: one of ...
 
-			:None, 'no': use POS tags as preterminals
+			:None, 'no': use POS tags as preterminals [default].
 			:'add': concatenate morphological information to POS tags,
-				e.g., DET/sg.def
+				e.g., ``DET/sg.def``.
 			:'replace': use morphological information as preterminal label
 			:'between': add node with morphological information between
-				POS tag and word, e.g., (DET (sg.def the))
+				POS tag and word, e.g., ``(DET (sg.def the))``.
 		:param lemmas: one of ...
 
-			:None: ignore lemmas
-			:'add': concatenate lemma to terminals, e.g., men/man
-			:'replace': use lemmas as terminals
+			:None: ignore lemmas [default].
+			:'add': concatenate lemma to terminals, e.g., men/man.
+			:'replace': use lemmas as terminals.
 			:'between': insert lemma as node between POS tag and word."""
 		self.removeempty = removeempty
 		self.ensureroot = ensureroot
@@ -74,6 +79,7 @@ class CorpusReader(object):
 		self.morphology = morphology
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
+		self.extraheadrules = extraheadrules
 		self._encoding = encoding
 		self._filenames = sorted(glob(path), key=numbase)
 		for opts, opt in (
@@ -81,7 +87,8 @@ class CorpusReader(object):
 					functions),
 				((None, 'no', 'add', 'replace', 'between'), morphology),
 				((None, 'no', 'move', 'moveall', 'remove', 'root'), punct),
-				((None, 'no', 'add', 'replace', 'between'), lemmas)):
+				((None, 'no', 'add', 'replace', 'between'), lemmas),
+				((None, 'ptb', 'dptb'), extraheadrules)):
 			if opt not in opts:
 				raise ValueError('Expected one of %r. Got: %r' % (opts, opt))
 		if not self._filenames:
@@ -166,7 +173,12 @@ class CorpusReader(object):
 			punctroot(tree, sent)
 		if self.headrules:
 			for node in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
-				sethead(headfinder(node, self.headrules))
+				if self.extraheadrules == 'ptb':
+					sethead(ptbheadfinder(node, self.headrules))
+				elif self.extraheadrules == 'dptb':
+					sethead(ptbheadfinder(node, self.headrules, dptb=True))
+				else:
+					sethead(headfinder(node, self.headrules))
 		return tree, sent
 
 	def _word(self, block, orig=False):
@@ -561,8 +573,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	return tree, sent
 
 
-def writetree(tree, sent, n, fmt,
-		comment=None, headrules=None, morphology=None):
+def writetree(tree, sent, n, fmt, comment=None, morphology=None):
 	"""Convert a tree to a string representation in the given treebank format.
 
 	:param tree: should have indices as terminals
@@ -597,9 +608,7 @@ def writetree(tree, sent, n, fmt,
 	elif fmt == 'alpino':
 		return writealpinotree(tree, sent, n, comment)
 	elif fmt in ('conll', 'mst'):
-		if not headrules:
-			raise ValueError('dependency conversion requires head rules.')
-		result = writedependencies(tree, sent, fmt, headrules)
+		result = writedependencies(tree, sent, fmt)
 	else:
 		raise ValueError('unrecognized format: %r' % fmt)
 	if comment and fmt in ('bracket', 'discbracket'):
@@ -703,9 +712,9 @@ def writealpinotree(tree, sent, n, commentstr):
 	return ElementTree.tostring(result).decode('utf-8')  # hack
 
 
-def writedependencies(tree, sent, fmt, headrules):
+def writedependencies(tree, sent, fmt):
 	"""Convert tree to unlabeled dependencies in `mst` or `conll` format."""
-	deps = dependencies(tree, headrules)
+	deps = dependencies(tree)
 	if fmt == 'mst':  # MST parser can read this format
 		# fourth line with function tags is left empty.
 		return "\n".join((
@@ -719,23 +728,23 @@ def writedependencies(tree, sent, fmt, headrules):
 			in zip(sent, sorted(tree.pos()), deps)) + '\n\n'
 
 
-def dependencies(root, headrules):
+def dependencies(root):
 	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers."""
 	deps = []
-	deps.append((makedep(root, deps, headrules), 'ROOT', 0))
+	deps.append((makedep(root, deps), 'ROOT', 0))
 	return sorted(deps)
 
 
-def makedep(root, deps, headrules):
-	"""Traverse a tree marking heads and extracting dependencies."""
+def makedep(root, deps):
+	"""Traverse a head-marked tree and extract dependencies."""
 	if not isinstance(root[0], Tree):
 		return root[0] + 1
-	headchild = headfinder(root, headrules)
-	lexhead = makedep(headchild, deps, headrules)
+	headchild = next(iter(a for a in root if ishead(a)))
+	lexhead = makedep(headchild, deps)
 	for child in root:
 		if child is headchild:
 			continue
-		lexheadofchild = makedep(child, deps, headrules)
+		lexheadofchild = makedep(child, deps)
 		deps.append((lexheadofchild, 'NONE', lexhead))
 	return lexhead
 
@@ -1004,6 +1013,6 @@ __all__ = ['CorpusReader', 'BracketCorpusReader', 'DiscBracketCorpusReader',
 		'NegraCorpusReader', 'AlpinoCorpusReader', 'TigerXMLCorpusReader',
 		'DactCorpusReader', 'brackettree', 'exporttree', 'exportsplit',
 		'alpinotree', 'writetree', 'writeexporttree', 'writealpinotree',
-		'writedependencies', 'dependencies', 'makedep', 'handlefunctions',
+		'writedependencies', 'dependencies', 'handlefunctions',
 		'handlemorphology', 'incrementaltreereader', 'segmentbrackets',
 		'segmentexport', 'quote', 'unquote', 'treebankfanout', 'numbase']

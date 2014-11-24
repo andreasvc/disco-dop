@@ -62,6 +62,11 @@ Binarization
         :``'optimalhead'``: like ``optimal``, but only considers head-driven binarizations.
     :factor: ``'left'`` or ``'right'``. The direction of binarization when using ``default``.
     :headrules: file with rules for finding heads of constituents
+    :extraheadrules: requires ``headrules`` option. One of ...
+
+        :None: no additional head rules [default]
+        :'ptb': use additional PTB-specific head rules.
+        :'dptb': use PTB head rules with discontinuous WH rules
     :markhead: whether to prepend head to siblings labels
     :v: vertical markovization context; default 1; 2 means 1 extra level of parent annotation.
     :h: horizontal markovization context

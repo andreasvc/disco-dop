@@ -312,8 +312,7 @@ def worker(args):
 				writetree(
 					PARAMS.parser.postprocess(tree, sent, -1)[0], sent,
 					n if PARAMS.numparses == 1 else ('%d-%d' % (n, k)),
-					PARAMS.fmt, headrules=PARAMS.headrules,
-					morphology=PARAMS.morphology,
+					PARAMS.fmt, morphology=PARAMS.morphology,
 					comment=('prob=%.16g' % prob) if PARAMS.printprob else None)
 				for k, (tree, prob, _) in enumerate(nlargest(
 					PARAMS.numparses, result.parsetrees, key=itemgetter(1))))

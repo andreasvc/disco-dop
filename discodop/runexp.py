@@ -55,6 +55,7 @@ DEFAULTS = dict(
 		method='default',  # choices: default, optimal, optimalhead
 		factor='right',
 		headrules=None,  # rules for finding heads of constituents
+		extraheadrules=None,  # additional PTB-specific rules
 		v=1, h=2, revh=0,
 		markhead=False,  # prepend head to siblings
 		leftmostunary=False,  # start binarization with unary node
