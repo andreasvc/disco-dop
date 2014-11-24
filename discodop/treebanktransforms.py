@@ -1412,41 +1412,62 @@ def trainfunctionclassifier(trees, sents, numproc):
 	from sklearn import linear_model, multiclass
 	from sklearn import preprocessing, feature_extraction
 	vectorizer = feature_extraction.DictVectorizer(sparse=True)
-	encoder = preprocessing.MultiLabelBinarizer()
+	# PTB has no function tags on pretermintals, Negra etc. do.
+	posfunc = any(functions(node) for tree in trees
+			for node in tree.subtrees(lambda n: n is not tree and n
+				and isinstance(n[0], int)))
+	target = [functions(node) for tree in trees
+			for node in tree.subtrees(lambda n: n is not tree and n
+				and (posfunc or isinstance(n[0], Tree)))]
+	# PTB may have multiple tags (or 0) per node.
+	# Negra etc. have exactly 1 tag for every node.
+	multi = any(len(a) > 1 for a in target)
+	if multi:
+		encoder = preprocessing.MultiLabelBinarizer()
+	else:
+		encoder = preprocessing.LabelEncoder()
+		target = [a[0] if a else '--' for a in target]
 	# binarize features (output is a sparse array)
-	X = vectorizer.fit_transform(
-			functionfeatures(node, sent) for tree, sent in zip(trees, sents)
-				for node in islice(tree.subtrees(), 1, None))
-	y = encoder.fit_transform(
-			[functions(node) for tree in trees
-					for node in islice(tree.subtrees(), 1, None)])
+	X = vectorizer.fit_transform(functionfeatures(node, sent)
+			for tree, sent in zip(trees, sents)
+				for node in tree.subtrees(lambda n: n is not tree and n
+					and (posfunc or isinstance(n[0], Tree))))
+	y = encoder.fit_transform(target)
+	classifier = linear_model.SGDClassifier(loss='hinge', penalty='elasticnet')
+	if multi:
+		classifier = multiclass.OneVsRestClassifier(
+				classifier, n_jobs=numproc or -1)
 	# train classifier
-	classifier = multiclass.OneVsRestClassifier(
-			linear_model.SGDClassifier(loss='hinge', penalty='elasticnet'),
-			n_jobs=numproc or -1)
 	classifier.fit(X, y)
-	msg = ('trained classifier; score on training set: %g %%\n'
-			'function tags: %s' % (
+	msg = ('trained classifier; multi=%r, posfunc=%r; score on training set: '
+			'%g %%\nfunction tags: %s' % (multi, posfunc,
 			100.0 * sum((a == b).all() for a, b
 				in zip(y, classifier.predict(X))) / len(y),
-			' '.join(encoder.classes_)))
-	return (classifier, vectorizer, encoder), msg
+			' '.join(str(a) for a in encoder.classes_)))
+	return (classifier, vectorizer, encoder, posfunc, multi), msg
 
 
 def applyfunctionclassifier(funcclassifier, tree, sent):
 	"""Add predicted function tags to tree using classifier."""
-	classifier, vectorizer, encoder = funcclassifier
+	classifier, vectorizer, encoder, posfunc, multi = funcclassifier
 	# get features and use classifier
 	funclabels = encoder.inverse_transform(classifier.predict(
 			vectorizer.transform(functionfeatures(node, sent)
-			for node in islice(tree.subtrees(), 1, None))))
+			for node in tree.subtrees(lambda n: n is not tree and n
+				and (posfunc or isinstance(n[0], Tree))))))
 	# store labels in tree
-	for node, funcs in zip(islice(tree.subtrees(), 1, None), funclabels):
+	for node, func in zip(tree.subtrees(lambda n: n is not tree and n
+			and (posfunc or isinstance(n[0], Tree))), funclabels):
 		if not getattr(node, 'source', None):
 			node.source = ['--'] * 8
 		elif isinstance(node.source, tuple):
 			node.source = list(node.source)
-		node.source[FUNC] = '-'.join(funcs) if funcs else '--'
+		if not func:
+			node.source[FUNC] = '--'
+		elif multi:
+			node.source[FUNC] = '-'.join(func)
+		else:
+			node.source[FUNC] = func
 
 
 def functionfeatures(node, sent):
