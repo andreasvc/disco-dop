@@ -426,7 +426,7 @@ class TreePairResult(object):
 				sum(1 for a, b in zip(self.gpos, self.cpos) if a == b),
 				nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
 				nozerodiv(lambda: f_measure(self.goldgf, self.candgf)),
-				nozerodev(lambda: 100 * self.lascore)
+				nozerodiv(lambda: 100 * self.lascore)
 						if self.param['LA'] else '',
 				nozerodiv(lambda: self.ted) if self.param['TED'] else '',
 				nozerodiv(lambda: accuracy(self.gdep, self.cdep))
