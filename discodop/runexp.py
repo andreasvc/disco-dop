@@ -220,21 +220,21 @@ def startexp(
 	if len(roots) != 1:
 		raise ValueError('expected unique ROOT label: %r' % roots)
 	top = roots.pop()
-	classifier = None
+	funcclassifier = None
 
 	if rerun:
 		parser.readgrammars(resultdir, stages, postagging, top)
 		if predictfunctions:
 			from sklearn.externals import joblib
-			classifier = joblib.load('%s/funcclassifier.pickle' % resultdir)
+			funcclassifier = joblib.load('%s/funcclassifier.pickle' % resultdir)
 	else:
 		logging.info('read training & test corpus')
 		if predictfunctions:
 			from sklearn.externals import joblib
 			logging.info('training function tag classifier')
-			classifier, msg = treebanktransforms.trainfunctionclassifier(
+			funcclassifier, msg = treebanktransforms.trainfunctionclassifier(
 					trees, sents, numproc)
-			joblib.dump(classifier, '%s/funcclassifier.pickle' % resultdir,
+			joblib.dump(funcclassifier, '%s/funcclassifier.pickle' % resultdir,
 					compress=3)
 			logging.info(msg)
 		getgrammars(dobinarization(trees, sents, binarization,
@@ -252,7 +252,7 @@ def startexp(
 			binarization=binarization, postagging=postagging if postagging
 				and postagging.method == 'unknownword' else None,
 			relationalrealizational=relationalrealizational,
-			funcclassifier=classifier, verbosity=verbosity)
+			funcclassifier=funcclassifier, verbosity=verbosity)
 	results = doparsing(parser=theparser, testset=testset, resultdir=resultdir,
 			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
 			deleteword=deleteword, corpusfmt=corpusfmt, morphology=morphology,

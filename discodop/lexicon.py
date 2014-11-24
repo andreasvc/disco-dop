@@ -101,8 +101,10 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	msg = 'known words: %d, signature types seen: %d\n' % (
 			len(lexicon), len(sigs))
 	msg += 'open class tags: %s\n' % ' '.join(
-			"%s:%d" % a for a in openclasstags.items())
-	msg += 'closed class tags: %s' % ' '.join(a for a in closedclasstags)
+			'%s:%d' % a for a in openclasstags.items())
+	msg += 'closed class tags: %s' % ' '.join(
+			'%s:%d' % (a, len({w.lower() for w in wordsfortag[a]}))
+			for a in closedclasstags)
 	return (sigs, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags,
 			wordsig, sigtag), msg

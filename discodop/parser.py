@@ -351,7 +351,10 @@ class Parser(object):
 		- unknownwordfun: function to produces signatures for unknown words.
 		- lexicon: the set of known words in the grammar.
 		- sigs: the set of word signatures occurring in the grammar.
-	:param relationalrealizational: whether to reverse the RR-transform."""
+	:param relationalrealizational: whether to reverse the RR-transform.
+	:param funcclassifier: function tag classifier trained by
+		``treebanktransforms.trainfunctionclassifier``.
+	:param verbosity: see ``runexp`` parameter."""
 	def __init__(self, stages, transformations=None, postagging=None,
 			binarization=DictObj(tailmarker=None),
 			relationalrealizational=None, funcclassifier=None, verbosity=2):

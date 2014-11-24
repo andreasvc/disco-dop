@@ -582,7 +582,7 @@ def debinarize(fragments):
 			frag = origfrag
 		try:
 			frag = str(unbinarize(Tree(frag)))
-		except Exception:
+		except Exception:  # pylint: disable=broad-except
 			result.append(origfrag)
 		else:
 			result.append((frag, sent) if PARAMS['disc'] else frag)
