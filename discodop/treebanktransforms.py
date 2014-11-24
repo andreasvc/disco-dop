@@ -37,6 +37,8 @@ PRESETS = {
 		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
 			'yearNumbers,subConjType,VPfeat,noHead,noSubj').split(','),
+		'lassy': ('APPEND-FUNC', 'PUNCT', 'FOLD-NUMBERS',
+			'nlselectmorph', 'nlpercolatemorph', 'nlhorzcontext')
 		}
 
 
@@ -50,10 +52,10 @@ def transform(tree, sent, transformations):
 	"""Perform specified sequence of transformations on a tree.
 
 	State-splits are preceded by '^'. ``transformations`` is a sequence of
-	transformation names that will be performed on the given tree (in-place).
-	There are presets for particular treebanks. The name of a preset can be
-	used as an alias that expands to a sequence of transformations; see
-	the variable ``PRESETS``."""
+	transformation names (order matters) that will be performed on the given
+	tree (in-place). There are presets for particular treebanks. The name of a
+	preset can be used as an alias that expands to a sequence of
+	transformations; see the variable ``PRESETS``."""
 	# unfreeze attributes so that they can be modified
 	for a in tree.subtrees(lambda n: isinstance(
 			getattr(n, 'source', None), tuple)):
@@ -121,6 +123,7 @@ def transform(tree, sent, transformations):
 					and sent[n[0]] not in PUNCTUATION):
 				node.label += STATESPLIT + strip(node.parent.label)
 		elif (negratransforms(name, tree, sent)
+				or lassytransforms(name, tree, sent)
 				or ptbtransforms(name, tree, sent)
 				or ftbtransforms(name, tree, sent)):
 			pass
@@ -299,6 +302,7 @@ def negratransforms(name, tree, sent):
 				and function(n) == 'RC'):
 			for child in node.subtrees(lambda n: strip(n.label) in
 					{'PRELS', 'PRELAT', 'PWAV', 'PWS'}):
+				child = child.parent
 				while child is not node:
 					child.label += STATESPLIT + 'rel'
 					child = child.parent
@@ -674,6 +678,37 @@ def ftbtransforms(name, tree, sent):
 				and sent[n[1][0]] == "-"
 				and strip(n[2].label) == "N"):
 			t.label += STATESPLIT + "mwn3"
+	else:
+		return False
+	return True
+
+
+def lassytransforms(name, tree, _sent):
+	"""Transformations for the Dutch Lassy & Alpino treebanks."""
+	if name == 'nlselectmorph':  # add select morph. feats to coarse POS tags
+		SELECTMORPH = {'eigen', 'det', 'pron', 'init', 'fin', 'neven', 'onder',
+				'prenom', 'nom', 'vrij', 'pv', 'inf', 'vd', 'od'}
+		for pos in tree.subtrees(lambda n: isinstance(n[0], int)):
+			selected = sorted(morphfeats(pos).intersection(SELECTMORPH))
+			pos.label += '%s[%s]' % (STATESPLIT, ','.join(selected))
+	elif name == 'nlpercolatemorph':  # percolate select morph tags upwards
+		PERCOLATE = {'pv': 2, 'inf': 2}
+		for feat, lvl in PERCOLATE.items():
+			for pos in tree.subtrees(lambda n: isinstance(n[0], int)
+					and feat in morphfeats(n)):
+				cnt = 0
+				node = pos.parent
+				while (cnt < lvl and node is not None
+						and node.parent is not None):
+					node.label += STATESPLIT + feat
+					node = node.parent
+					cnt += 1
+	elif name == 'nlhorzcontext':  # override horiz markov for select func tags
+		EXPANDCAT = {'MWU'}
+		EXPANDFUNC = {'mod'}
+		for node in tree.subtrees(lambda n: (n.label in EXPANDCAT
+				or function(n) in EXPANDFUNC) and len(n) > 2):
+			node.label += STATESPLIT + ','.join(labels(node))
 	else:
 		return False
 	return True
