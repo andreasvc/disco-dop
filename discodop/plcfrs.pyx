@@ -216,7 +216,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		start=None, list whitelist=None, bint splitprune=False,
 		bint markorigin=False, estimates=None, bint symbolic=False,
-		int beamwidth=0, double beam_beta=0.0, int beam_delta=50):
+		double beam_beta=0.0, int beam_delta=50):
 	"""Parse sentence and produce a chart.
 
 	:param sent: A sequence of tokens that will be parsed.
@@ -246,9 +246,6 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 	:param symbolic: If True, only compute parse forest, disregard
 		probabilities. The agenda is an O(1) queue instead of a O(log n)
 		priority queue.
-	:param beamwidth: specify the maximum number of items that will be explored
-		for each particular span, on a first-come-first-served basis.
-		setting to 0 disables this feature. experimental.
 	:param beam_beta: keep track of the best score in each cell and only allow
 		items which are within a multiple of ``beam_beta`` of the best score.
 		Should be a negative log probability. Pass ``0.0`` to disable.
@@ -262,7 +259,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 					whitelist, splitprune, markorigin)
 		return parse_main(<SmallLCFRSChart>chart, <SmallChartItem>chart.root(),
 				sent, grammar, tags, exhaustive, start, whitelist, splitprune,
-				markorigin, estimates, beamwidth, beam_beta, beam_delta)
+				markorigin, estimates, beam_beta, beam_delta)
 	chart = FatLCFRSChart(grammar, list(sent), start)
 	if symbolic:
 		return parse_symbolic(<FatLCFRSChart>chart,
@@ -270,17 +267,16 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 				whitelist, splitprune, markorigin)
 	return parse_main(<FatLCFRSChart>chart, <FatChartItem>chart.root(),
 			sent, grammar, tags, exhaustive, start, whitelist, splitprune,
-			markorigin, estimates, beamwidth, beam_beta, beam_delta)
+			markorigin, estimates, beam_beta, beam_delta)
 
 
 cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		Grammar grammar, tags, bint exhaustive, start, list whitelist,
 		bint splitprune, bint markorigin, estimates,
-		int beamwidth, double beam_beta, int beam_delta):
+		double beam_beta, int beam_delta):
 	cdef:
 		DoubleAgenda agenda = DoubleAgenda()  # the agenda
 		list probs = chart.probs  # viterbi probabilities for items
-		dict beam = <dict>defaultdict(int)  # histogram of spans
 		Rule *rule
 		LexicalRule lexrule
 		LCFRSItem_fused item, newitem
@@ -412,13 +408,6 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 					left = anextset(item.vec, 0, SLOTS)
 					gaps = abitlength(item.vec, SLOTS) - length - left
 					right = lensent - length - left - gaps
-			if beamwidth:
-				lhs = item.label
-				item.label = 0
-				if beam[item] > beamwidth:
-					continue
-				beam[item] += 1
-				item.label = lhs
 			for n in range(grammar.numunary):
 				rule = &(grammar.unary[item.label][n])
 				if rule.rhs1 != item.label:
@@ -467,14 +456,6 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				for sib in <dict>probs[rule.rhs1]:
 					newitem.label = rule.lhs
 					combine_item(newitem, <LCFRSItem_fused>sib, item)
-					if beamwidth:
-						lhs = item.label
-						item.label = 0
-						if beam[newitem] > beamwidth:
-							item.label = lhs
-							continue
-						beam[newitem] += 1
-						item.label = lhs
 					if concat(rule, <LCFRSItem_fused>sib, item):
 						siblingprob = (<LCFRSItem_fused>sib).prob
 						score = newitem.prob = item.prob + siblingprob + rule.prob
@@ -531,14 +512,6 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 				for sib in <dict>probs[rule.rhs2]:
 					newitem.label = rule.lhs
 					combine_item(newitem, item, <LCFRSItem_fused>sib)
-					if beamwidth:
-						lhs = item.label
-						item.label = 0
-						if beam[newitem] > beamwidth:
-							item.label = lhs
-							continue
-						beam[newitem] += 1
-						item.label = lhs
 					if concat(rule, item, <LCFRSItem_fused>sib):
 						siblingprob = (<LCFRSItem_fused>sib).prob
 						score = newitem.prob = item.prob + siblingprob + rule.prob
@@ -1011,7 +984,7 @@ cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, Rule *rule,
 
 # def newparser(sent, Grammar grammar, tags=None, start=1,
 # 		bint exhaustive=True, list whitelist=None, bint splitprune=False,
-# 		bint markorigin=False, estimates=None, int beamwidth=0):
+# 		bint markorigin=False, estimates=None):
 # 	# assign POS tags, unaries on POS tags
 # 	for length in range(2, len(sent) + 1):
 # 		for leftlength in range(1, length):

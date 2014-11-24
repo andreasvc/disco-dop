@@ -124,20 +124,18 @@ cdef class DenseCFGChart(CFGChart):
 		"""Update probability for item if better than current one."""
 		cdef size_t idx = compactcellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
-		if prob < self.probs[idx]:
-			self.probs[idx] = prob
 		cdef size_t beamitem
 		if beam:
 			# the item with label 0 for a cell holds the best score in a cell
 			beamitem = compactcellidx(
 					start, end, self.lensent, self.grammar.nonterminals)
-			if prob < self.probs[beamitem] + beam:
-				if prob < self.probs[idx]:
-					self.probs[idx] = prob
-					if prob < self.probs[beamitem]:
-						self.probs[beamitem] = prob
-				return True
-			return False
+			if prob > self.probs[beamitem] + beam:
+				return False
+			elif prob < self.probs[beamitem]:
+				self.probs[beamitem] = self.probs[idx] = prob
+			elif prob < self.probs[idx]:
+				self.probs[idx] = prob
+			return True
 		elif prob < self.probs[idx]:
 			self.probs[idx] = prob
 		return True
@@ -239,16 +237,13 @@ cdef class SparseCFGChart(CFGChart):
 			# the item with label 0 for a cell holds the best score in a cell
 			beamitem = cellidx(
 					start, end, self.lensent, self.grammar.nonterminals)
-			if prob < self.probs[beamitem] + beam:
-				if item not in self.probs:
-					self.probs[item] = prob
-					self.probs[beamitem] = prob
-				elif prob < self.probs[item]:
-					self.probs[item] = prob
-					if prob < self.probs[beamitem]:
-						self.probs[beamitem] = prob
-				return True
-			return False
+			if beamitem not in self.probs or prob < self.probs[beamitem]:
+				self.probs[item] = self.probs[beamitem] = prob
+			elif prob > self.probs[beamitem] + beam:
+				return False
+			elif prob < self.probs[item]:
+				self.probs[item] = prob
+			return True
 		elif item not in self.probs or prob < self.probs[item]:
 			self.probs[item] = prob
 		return True
