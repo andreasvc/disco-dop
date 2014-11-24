@@ -968,17 +968,22 @@ def main():
 	from getopt import gnu_getopt, GetoptError
 	from discodop.treetransforms import addfanoutmarkers, canonicalize
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	shortoptions = 's:'
-	options = 'gzip packed bitpar inputfmt= inputenc= dopestimator= numproc='
+	shortoptions = 'hs:'
+	options = ('help', 'gzip', 'packed', 'bitpar', 'inputfmt=', 'inputenc=',
+			'dopestimator=', 'numproc=')
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
+		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options)
 		model = args[0]
 		if model not in ('info', 'merge'):
 			treebankfile, grammarfile = args[1:]
 	except (GetoptError, IndexError, ValueError) as err:
-		print('error: %r\n%s' % (err, USAGE))
+		print('error: %r' % err, file=sys.stderr)
+		print(USAGE)
 		sys.exit(2)
 	opts = dict(opts)
+	if '--help' in opts or '-h' in opts:
+		print(USAGE)
+		return
 	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
 			'param', 'info', 'merge'):
 		raise ValueError('unrecognized model: %r' % model)

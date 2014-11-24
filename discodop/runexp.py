@@ -985,8 +985,13 @@ def main(argv=None):
 		pass
 	if argv is None:
 		argv = sys.argv
-	if len(argv) == 1:
+	if '--help' in argv or '-h' in argv:
 		print(USAGE)
+		return
+	if len(argv) == 1:
+		print('error: incorrect number of arguments', file=sys.stderr)
+		print(USAGE)
+		sys.exit(2)
 	elif '--tepacoc' in argv:
 		parsetepacoc()
 	else:

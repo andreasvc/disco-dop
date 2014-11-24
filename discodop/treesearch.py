@@ -544,7 +544,8 @@ def main():
 		if not corpora:
 			raise ValueError('enter one or more corpus files')
 	except (GetoptError, IndexError, ValueError) as err:
-		print('error: %r\n%s' % (err, USAGE))
+		print('error: %r' % err, file=sys.stderr)
+		print(USAGE)
 		sys.exit(2)
 	opts = dict(opts)
 	if '--help' in opts or '-h' in opts:

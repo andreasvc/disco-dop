@@ -127,17 +127,21 @@ PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 def main():
 	"""Handle command line arguments."""
-	flags = 'prob tags bitpar simple'.split()
+	flags = 'help prob tags bitpar simple'.split()
 	options = flags + 'obj= bt= numproc= fmt= verbosity='.split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'b:s:m:x', options)
+		opts, args = gnu_getopt(sys.argv[1:], 'hb:s:m:x', options)
 	except GetoptError as err:
-		print(err, USAGE)
-		return
-	if not 1 <= len(args) <= 4:
-		print('ERROR: incorrect number of arguments')
+		print('error:', err, file=sys.stderr)
+		print(USAGE)
+		sys.exit(2)
+	if '--help' in opts or '-h' in opts:
 		print(USAGE)
 		return
+	if not 1 <= len(args) <= 4:
+		print('error: incorrect number of arguments', file=sys.stderr)
+		print(USAGE)
+		sys.exit(2)
 	for n, filename in enumerate(args):
 		if not os.path.exists(filename):
 			raise ValueError('file %d not found: %r' % (n + 1, filename))
@@ -149,9 +153,9 @@ def main():
 	oneline = '-x' not in opts
 	if '--simple' in opts:
 		if not 2 <= len(args) <= 4:
-			print('ERROR: incorrect number of arguments')
+			print('error: incorrect number of arguments', file=sys.stderr)
 			print(USAGE)
-			return
+			sys.exit(2)
 		rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
 		lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
 				else open)(args[1])).read()

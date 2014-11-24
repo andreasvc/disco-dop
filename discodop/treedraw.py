@@ -843,15 +843,16 @@ def main():
 	flags = ('test', 'help', 'abbr', 'plain')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=')
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'n:', flags + options)
+		opts, args = gnu_getopt(sys.argv[1:], 'hn:', flags + options)
 	except GetoptError as err:
-		print('error: %s\n%s' % (err, USAGE))
+		print('error:', err, file=sys.stderr)
+		print(USAGE)
 		sys.exit(2)
 	opts = dict(opts)
 	if '--test' in opts:
 		test()
 		return
-	elif '--help' in opts:
+	elif '--help' in opts or '-h' in opts:
 		print(USAGE)
 		return
 	limit = opts.get('--numtrees', opts.get('-n'))

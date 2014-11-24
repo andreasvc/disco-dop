@@ -969,7 +969,7 @@ def main():
 	actions = {'none': None, 'introducepreterminals': introducepreterminals,
 			'splitdisc': None, 'mergedisc': mergediscnodes, 'transform': None,
 			'unbinarize': unbinarize, 'binarize': None, 'optimalbinarize': None}
-	flags = ('markorigin markhead leftunary rightunary tailmarker '
+	flags = ('help markorigin markhead leftunary rightunary tailmarker '
 			'renumber reverse direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
@@ -979,9 +979,13 @@ def main():
 		if not 1 <= len(args) <= 3:
 			raise GetoptError('error: expected 1, 2, or 3 positional arguments')
 	except GetoptError as err:
-		print('error: %r\n%s' % (err, USAGE), file=sys.stderr)
+		print('error: %r' % err, file=sys.stderr)
+		print(USAGE)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
+	if '--help' in opts:  # -h is already used but will print help w/o argument
+		print(USAGE)
+		return
 	if action not in actions:
 		print('unrecognized action: %r\navailable actions: %s' % (
 				action, ', '.join(actions)), file=sys.stderr)

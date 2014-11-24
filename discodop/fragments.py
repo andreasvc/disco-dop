@@ -72,7 +72,8 @@ Options:
 ''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
 
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'cover',
-		'alt', 'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet')
+		'alt', 'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet',
+		'help')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -85,11 +86,15 @@ def main(argv=None):
 	if argv is None:
 		argv = sys.argv
 	try:
-		opts, args = gnu_getopt(argv[1:], 'o:', FLAGS + OPTIONS)
+		opts, args = gnu_getopt(argv[1:], 'ho:', FLAGS + OPTIONS)
 	except GetoptError as err:
-		print("%s\n%s" % (err, USAGE))
-		return
+		print('error:', err, file=sys.stderr)
+		print(USAGE)
+		sys.exit(2)
 	opts = dict(opts)
+	if '--help' in opts or '-h' in opts:
+		print(USAGE)
+		return
 
 	for flag in FLAGS:
 		PARAMS[flag] = '--' + flag in opts
@@ -107,9 +112,9 @@ def main(argv=None):
 	if len(args) < 1:
 		print("missing treebank argument")
 	if batchdir is None and len(args) not in (1, 2):
-		print("incorrect number of arguments:", args)
+		print("incorrect number of arguments:", args, file=sys.stderr)
 		print(USAGE)
-		return
+		sys.exit(2)
 	if batchdir:
 		if numproc != 1:
 			raise ValueError('Batch mode only supported in single-process '

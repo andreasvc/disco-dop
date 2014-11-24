@@ -18,14 +18,14 @@ from discodop import grammar
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.treebank import READERS, dependencies, handlefunctions
-from discodop.treebanktransforms import readheadrules, functions
+from discodop.treebanktransforms import functions
 try:
 	from discodop.treedist import treedist, newtreedist
 except ImportError:
 	from discodop.treedist import newtreedist as newtreedist, newtreedist
 
-USAGE = 'Usage: %s <gold> <parses> [param] [options]' % sys.argv[0]
-HELP = '''\
+SHORTUSAGE = 'Usage: %s <gold> <parses> [param] [options]' % sys.argv[0]
+USAGE = '''\
 Evaluation of (discontinuous) parse trees, following EVALB as much as possible.
 
 %s
@@ -73,7 +73,7 @@ options (in addition to those described in the README of EVALB):
                    2 give detailed information for each sentence ('--debug')
   MAX_ERROR        this value is ignored, no errors are tolerated.
                    the parameter is accepted to support usage of unmodified
-                   EVALB parameter files. ''' % (USAGE, '|'.join(READERS))
+                   EVALB parameter files. ''' % (SHORTUSAGE, '|'.join(READERS))
 
 HEADER = '''
    Sentence                 Matched   Brackets            Corr   POS  Func.
@@ -601,18 +601,22 @@ class EvalAccumulator(object):
 
 def main():
 	"""Command line interface for evaluation."""
-	flags = {'verbose', 'debug', 'disconly', 'ted', 'la'}
+	flags = {'help', 'verbose', 'debug', 'disconly', 'ted', 'la'}
 	options = {'goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'fmt=',
 			'cutofflen=', 'headrules=', 'functions=', 'morphology='}
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], '', flags | options)
+		opts, args = gnu_getopt(sys.argv[1:], 'h', flags | options)
 	except GetoptError as err:
-		print('error: %s\n%s' % (err, HELP))
+		print('error:', err, file=sys.stderr)
+		print(USAGE)
 		sys.exit(2)
 	opts = dict(opts)
-	if len(args) < 2 or len(args) > 3:
-		print('error: Wrong number of arguments.\n%s' % (
-			USAGE if len(args) else HELP))
+	if '--help' in opts or '-h' in opts:
+		print(USAGE)
+		return
+	elif len(args) < 2 or len(args) > 3:
+		print('error: Wrong number of arguments.', file=sys.stderr)
+		print(SHORTUSAGE if len(args) else USAGE)
 		sys.exit(2)
 	goldfile, parsesfile = args[:2]
 	param = readparam(args[2] if len(args) == 3 else None)

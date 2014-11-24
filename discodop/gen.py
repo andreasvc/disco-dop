@@ -258,9 +258,13 @@ def main():
 	verbose = "--verbose" in sys.argv
 	if verbose:
 		sys.argv.remove('--verbose')
-	if len(sys.argv) != 3:
+	if '--help' in sys.argv or '-h' in sys.argv:
 		print(USAGE)
 		return
+	if len(sys.argv) != 3:
+		print("incorrect number of arguments:", sys.argv[1:], file=sys.stderr)
+		print(USAGE)
+		sys.exit(2)
 	rules = (gzip.open if sys.argv[1].endswith(".gz") else open)(sys.argv[1])
 	lexicon = codecs.getreader('utf-8')((gzip.open
 			if sys.argv[2].endswith(".gz") else open)(sys.argv[2]))
