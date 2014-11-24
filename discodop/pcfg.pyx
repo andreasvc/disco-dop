@@ -135,7 +135,6 @@ cdef class DenseCFGChart(CFGChart):
 				self.probs[beamitem] = self.probs[idx] = prob
 			elif prob < self.probs[idx]:
 				self.probs[idx] = prob
-			return True
 		elif prob < self.probs[idx]:
 			self.probs[idx] = prob
 		return True
@@ -241,9 +240,8 @@ cdef class SparseCFGChart(CFGChart):
 				self.probs[item] = self.probs[beamitem] = prob
 			elif prob > self.probs[beamitem] + beam:
 				return False
-			elif prob < self.probs[item]:
+			elif item not in self.probs or prob < self.probs[item]:
 				self.probs[item] = prob
-			return True
 		elif item not in self.probs or prob < self.probs[item]:
 			self.probs[item] = prob
 		return True
