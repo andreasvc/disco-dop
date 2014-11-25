@@ -35,7 +35,8 @@ Corpora
     :``'tiger'``: Tiger XML format
 :traincorpus: a dictionary with the following keys:
 
-    :path: filename of training corpus; may include globbing characters \* and ?.
+    :path: filename of training corpus; may include wildcards / globbing
+        characters ``\*`` and ``?``.
     :encoding: encoding of training corpus (defaults to ``'utf-8'``)
     :maxwords: maximum sentence length to base grammar on
     :numsents: number of sentence to use from training corpus
@@ -58,9 +59,12 @@ Binarization
 
         :``None``: Treebank is already binarized.
         :``'default'``: basic binarization (recommended).
-        :``'optimal'``: binarization which optimizes for lowest fan-out or parsing complexity.
-        :``'optimalhead'``: like ``optimal``, but only considers head-driven binarizations.
-    :factor: ``'left'`` or ``'right'``. The direction of binarization when using ``default``.
+        :``'optimal'``: binarization which optimizes for lowest fan-out or
+            parsing complexity.
+        :``'optimalhead'``: like ``optimal``, but only considers head-driven
+            binarizations.
+    :factor: ``'left'`` or ``'right'``. The direction of binarization when
+        using ``default``.
     :headrules: file with rules for finding heads of constituents
     :extraheadrules: requires ``headrules`` option. One of ...
 
@@ -68,7 +72,8 @@ Binarization
         :'ptb': use additional PTB-specific head rules.
         :'dptb': use PTB head rules with discontinuous WH rules
     :markhead: whether to prepend head to siblings labels
-    :v: vertical markovization context; default 1; 2 means 1 extra level of parent annotation.
+    :v: vertical markovization context; default 1; 2 means 1 extra level of
+        parent annotation.
     :h: horizontal markovization context
     :revh: horizontal markovization context preceding child being generated
     :leftmostunary: whether to start binarization with unary node
@@ -104,27 +109,30 @@ Where the keys and values are:
 
     :``'pcfg'``: CKY parser
     :``'plcfrs'``: use the agenda-based PLCFRS parser
-    :``'pcfg-posterior'``: Compute inside-outside probabilities (does not produce
-        parse trees, can only be used for pruning of next stage).
+    :``'pcfg-posterior'``: Compute inside-outside probabilities (does not
+        produce parse trees, can only be used for pruning of next stage).
     :``'pcfg-bitpar-nbest'``: Use external bitpar parser. Produces n-best list
         (up to n=1000) without producing a parse forest; works with
         non-binarized grammars (experimental).
     :``'pcfg-bitpar-forest'``: Use external bitpar parser (experimental).
-    :``'dop-rerank'``: Rerank parse trees from previous stage with DOP reduction (experimental).
+    :``'dop-rerank'``: Rerank parse trees from previous stage with DOP
+        reduction (experimental).
 :prune: whether to use previous chart to prune this stage
 :split: split disc. nodes ``VP_2[101]`` as ``{ VP*[100], VP*[001] }``
 :splitprune: treat ``VP_2[101]`` as ``{VP*[100], VP*[001]}`` for pruning
 :markorigin: mark origin of split nodes: ``VP_2 => {VP*1, VP*2}``
 :k: pruning parameter:
 
-    :k=0: filter only (only prune items that do not lead to a complete derivation)
+    :k=0: filter only (only prune items that do not lead to a complete
+        derivation)
     :0 < k < 1: posterior threshold for inside-outside probabilities
     :k > 1: no. of coarse pcfg derivations to prune with
 :kbest: extract *m*-best derivations from chart
 :sample: sample *m* derivations from chart
 :m: number of derivations to sample / enumerate.
 :binarized: when using ``mode='pcfg-bitpar-nbest'``, this option can be set to
-    ``False``, to disable the two auxiliary binarizations needed for Double-DOP.
+    ``False``, to disable the two auxiliary binarizations needed for
+    Double-DOP.
 :dop: enable DOP mode:
 
     :``None``: Extract treebank grammar
@@ -133,8 +141,8 @@ Where the keys and values are:
 :estimator: DOP estimator. Choices:
 
     :``'rfe'``: relative frequencies.
-    :``'ewe'``: equal weights estimate; relative frequencies with correction factor
-        to remove bias for larger fragments; useful with DOP reduction.
+    :``'ewe'``: equal weights estimate; relative frequencies with correction
+        factor to remove bias for larger fragments; useful with DOP reduction.
     :``'bon'``: Bonnema estimator; another correction factor approach.
 :objective: Objective function to choose DOP parse tree. Choices:
 
@@ -143,11 +151,13 @@ Where the keys and values are:
     :``'mcc'``:
         Maximum Constituents Parse (Goodman 1996);
         approximation as in Sangati & Zuidema (2011); experimental.
-    :``'shortest'``: Most Probable Shortest Derivation; i.e., shortest derivation
-        (with minimal number of fragments), where ties are broken using
-        probabilities specified by ``estimator``.
-    :``'sl-dop'``: Simplicity-Likelihood. Simplest Tree from the n most Likely trees.
-    :``'sl-dop-simple'``: An approximation which does not require parsing the sentence twice.
+    :``'shortest'``: Most Probable Shortest Derivation;
+        i.e., shortest derivation (with minimal number of fragments), where
+        ties are broken using probabilities specified by ``estimator``.
+    :``'sl-dop'``: Simplicity-Likelihood. Simplest Tree from
+        the *n* most Likely trees.
+    :``'sl-dop-simple'``: An approximation which does not require parsing the
+        sentence twice.
 :sldop_n: When using sl-dop or sl-dop-simple,
     number of most likely parse trees to consider.
 :packedgraph: use packed graph encoding for DOP reduction
@@ -159,23 +169,28 @@ Where the keys and values are:
 :beam_beta: beam pruning factor, between 0 and 1; 1 to disable.
     if enabled, new constituents must have a larger probability
     than the probability of the best constituent in a cell multiplied by this
-    factor; i.e., a smaller value implies less pruning. Suggested value: ``0.005``.
-:beam_delta: if beam pruning is enabled, only apply it to spans up to this length.
+    factor; i.e., a smaller value implies less pruning.
+    Suggested value: ``1e-4``.
+:beam_delta: if beam pruning is enabled, only apply it to spans up to this
+    length.
 
 
 Other options
 --------------
 
 :evalparam: EVALB-style parameter file to use for reporting F-scores
-:postagging: To disable POS tagging and use the gold POS tags from the test set, set this to ``None``.
-    Otherwise, pass a dictionary with the keys below; for details, see :mod:`discodop.lexicon`
+:postagging: To disable POS tagging and use the gold POS tags from the
+    test set, set this to ``None``.
+    Otherwise, pass a dictionary with the keys below; for details,
+    see :mod:`discodop.lexicon`
 
     :method: one of:
 
         :``'unknownword'``: incorporate unknown word model in grammar
         :``'stanford'``: use external Stanford tagger
         :``'treetagger'``: use external tagger ``'treetagger'``
-        :``'frog'``: use external tagger 'frog' for Dutch; produces CGN tags, use morphology='replace'.
+        :``'frog'``: use external tagger 'frog' for Dutch; produces CGN tags,
+            use morphology='replace'.
     :model:
 
         :with 'unknownword', one of:
@@ -183,9 +198,11 @@ Other options
             :``'6'``: Stanford model 6, for the English Penn treebank
             :``'base'``: Stanford 'base' model; language agnostic
             :``'ftb'``: Stanford model 2 for French treebank
-        :with external taggers: filename of tagger model (not applicable to 'frog')
+        :with external taggers: filename of tagger model (not applicable to
+            'frog')
     :retag: if ``True``, re-tag the training corpus using the external tagger.
-    :unknownthreshold: use probabilities of words that occur this number of times or less for unknown words
+    :unknownthreshold: use probabilities of words that occur this number of
+        times or less for unknown words
     :openclassthreshold: add unseen tags for known words when tag rewrites
         at least this number of words. 0 to disable.
     :simplelexsmooth: enable/disable sophisticated smoothing (untested)
@@ -195,9 +212,10 @@ Other options
     :``'move'``: move punctuation to appropriate constituents using heuristics.
     :``'moveall'``: same as 'move', but moves all preterminals under root,
         instead of only recognized punctuation.
+    :``'prune'``: prune away leading & ending quotes & periods, then move.
     :``'remove'``: eliminate punctuation.
-    :``'root'``: attach punctuation directly to root (as in original Negra/Tiger
-        treebanks).
+    :``'root'``: attach punctuation directly to root (as in original
+        Negra/Tiger treebanks).
 :functions: one of ...
 
     :``None``: leave syntactic labels as is.
@@ -219,11 +237,13 @@ Other options
 
     :``None``: ignore lemmas
     :``'between'``: insert lemma as node between POS tag and word.
-:removeempty: ``True`` or ``False``; whether to remove empty terminals from train, test sets.
+:removeempty: ``True`` or ``False``; whether to remove empty terminals from
+    train, test sets.
 :ensureroot: Ensure every tree has a root node with this label
 :transformations: apply treebank transformations;
     see source of :func:`discodop.treebanktransforms.transform`
-:relationalrealizational: apply RR-transform; see :func:`discodop.treebanktransforms.rrtransform`
+:relationalrealizational: apply RR-transform;
+    see :func:`discodop.treebanktransforms.rrtransform`
 :verbosity: control the amount of output to console;
     a logfile ``output.log`` is also kept with a fixed log level of 2.
 

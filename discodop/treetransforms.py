@@ -121,47 +121,49 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		artpa=True, ids=None, filterfuncs=(),
 		labelfun=None, dot=False, abbrrepetition=False,
 		direction=False):
-	"""Binarize a Tree object.
+	"""
+	Binarize a Tree object.
 
 	:param factor: "left" or "right". Determines whether binarization proceeds
-			from left to right or vice versa.
+		from left to right or vice versa.
 	:param horzmarkov: amount of horizontal context in labels. Default is
-			infinity, such that now new generalization are introduced by the
-			binarization.
+		infinity, such that now new generalization are introduced by the
+		binarization.
 	:param vertmarkov: number of ancestors to include in labels.
-			NB: 1 means only the direct parent, as in a normal tree.
+		NB: 1 means only the direct parent, as in a normal tree.
 	:param revhorzmarkov: like ``horzmarkov``, but looks backwards.
 	:param headoutward: nodes are marked as head in their function tags;
-			the direction of binarization will be switched when it is
-			encountered, to enable a head-outward binarization.
+		the direction of binarization will be switched when it is
+		encountered, to enable a head-outward binarization.
+
 `	:param markhead: include label of the head child in all auxiliary labels.
 	:param leftmostunary, rightmostunary: introduce a unary production for the
-			first/last child. When h=1, this enables the same generalizations
-			for the first & last non-terminals as for other siblings.
+		first/last child. When h=1, this enables the same generalizations
+		for the first & last non-terminals as for other siblings.
 	:param tailmarker: when given a non-empty string, add this to artificial
-			nodes introducing the last symbol. This is useful when the last
-			symbol is the head node, ensuring that it is not exchangeable with
-			other non-terminals.
+		nodes introducing the last symbol. This is useful when the last
+		symbol is the head node, ensuring that it is not exchangeable with
+		other non-terminals.
 	:param dot: if True, horizontal context will include all siblings not yet
-			generated, separated with a dot from the siblings that have been.
+		generated, separated with a dot from the siblings that have been.
 	:param artpa: whether to add parent annotation to the artificial nodes
-			introduced by the binarization.
+		introduced by the binarization.
 	:param ids: abbreviate artificial node labels using numeric IDs from this
-			object; must have dictionary-like interface.
+		object; must have dictionary-like interface.
 	:param threshold: constituents with more than this number of children are
-			factored; i.e., for a value of 2, do a normal binarization; for a
-			value of 1, also factor binary productions to include an artificial
-			node, etc.
+		factored; i.e., for a value of 2, do a normal binarization; for a
+		value of 1, also factor binary productions to include an artificial
+		node, etc.
 	:param filterfuncs: n-ary branches contain children with grammatical
-			functions for labels (optionally with parent annotation of the form
-			``FUNC/PARENT``). Any function in the sequence ``filterfuncs`` will
-			not become part of the horizontal context of the labels. Can be
-			used to filter out adjunctions from this context.
+		functions for labels (optionally with parent annotation of the form
+		``FUNC/PARENT``). Any function in the sequence ``filterfuncs`` will
+		not become part of the horizontal context of the labels. Can be
+		used to filter out adjunctions from this context.
 	:param labelfun: a function to derive a label from a node to be used for
-			the horizontal markovization context; the default is to use
-			``child.label`` for a given child node.
+		the horizontal markovization context; the default is to use
+		``child.label`` for a given child node.
 	:param abbrrepetition: in horizontal context, reduce sequences of
-			identical labels: e.g., <mwp,mwp,mwp,mwp> becomes <mwp+>
+		identical labels: e.g., ``<mwp,mwp,mwp,mwp>`` becomes ``<mwp+>``
 
 	>>> from discodop.treebanktransforms import sethead
 	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))')
@@ -174,7 +176,8 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	>>> print(binarize(tree, headoutward=True, leftmostunary=True,
 	... rightmostunary=True))
 	(S (S|<X,D,E> (X (X|<A,B,C> (A 0) (X|<B,C> (B 3) (X|<C> (C 4))))) \
-(S|<D,E> (S|<D> (D 1)) (E 2))))"""
+(S|<D,E> (S|<D> (D 1)) (E 2))))
+	"""
 	# FIXME: combination of factor='left' and headoutward=True is broken.
 	# assume all nodes have homogeneous children, terminals have no siblings
 	if factor not in ('left', 'right'):
