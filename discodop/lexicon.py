@@ -325,7 +325,7 @@ def unknownword4(word, loc, _):
 		sig += "-C"
 	if len(word) > 3:
 		if word[-1] in LOWERUPPER:
-			sig += "-%s" % word[-1].lower()
+			sig += "-%s" % word[-2:].lower()
 	return sig
 
 

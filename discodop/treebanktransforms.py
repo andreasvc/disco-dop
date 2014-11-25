@@ -251,7 +251,8 @@ def negratransforms(name, tree, sent):
 		for node in postorder(tree, lambda n: strip(n.label) in
 					{'NN', 'PPER', 'PDS', 'PIS', 'PRELS', 'CARD', 'PN'}
 					and strip(n.parent.label) in {'S', 'VP', 'ROOT', 'DL'}):
-			# if node.label == 'PN' and len(node) == 1: continue
+			if node.label == 'PN' and len(node) == 1:  # only complex PNs
+				continue
 			children = node[:]
 			node[:] = []
 			tag = ParentedTree(node.label, children)
@@ -295,10 +296,10 @@ def negratransforms(name, tree, sent):
 				annot = '0'
 			node.label += STATESPLIT + annot
 			if strip(node.label) == 'AVP':  # propagate to head child
-				child = getheadpos(node)
-				while child is not None and child is not node:
-					child.label += STATESPLIT + annot
-					child = child.parent
+				for child in node:
+					if ishead(child):
+						child.label += STATESPLIT + annot
+						break
 	elif name == 'relPath':  # mark path from relative clause to rel. pronoun
 		for node in tree.subtrees(lambda n: base(n, 'S')
 				and function(n) == 'RC'):
