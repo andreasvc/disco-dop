@@ -146,7 +146,7 @@ class Test_treebanktransforms(object):
 			trees = [transform(tree, sent, transformations)
 					for tree, sent in zip(nn.trees().values(),
 						nn.sents().values())]
-			for a, b in islice(zip(n.trees().values(), trees), 100):
+			for a, (b, _) in islice(zip(n.trees().values(), trees), 100):
 				before = bracketings(canonicalize(a))
 				transformb = reversetransform(b.copy(True), transformations)
 				after = bracketings(canonicalize(transformb))
@@ -584,24 +584,24 @@ def test_transforms():
 			for tree, sent in zip(nn.trees().values(),
 				nn.sents().values())]
 	print('\ntransformed')
-	correct = exact = d = 0
-	for a, b, c in islice(zip(n.trees().values(),
-			trees, n.sents().values()), 100):
-		transformb = reversetransform(b.copy(True), transformations)
-		b1 = bracketings(canonicalize(a))
-		b2 = bracketings(canonicalize(transformb))
+	correct = exact = e = 0
+	for a, b, (c, d) in islice(zip(n.trees().values(),
+			n.sents().values(), trees), 100):
+		transformc = reversetransform(c.copy(True), transformations)
+		c1 = bracketings(canonicalize(a))
+		c2 = bracketings(canonicalize(transformc))
 		z = -1  # 825
-		if b1 != b2 or d == z:
-			precision = len(set(b1) & set(b2)) / len(set(b1))
-			recall = len(set(b1) & set(b2)) / len(set(b2))
+		if c1 != c2 or e == z:
+			precision = len(set(c1) & set(c2)) / len(set(c1))
+			recall = len(set(c1) & set(c2)) / len(set(c2))
 			if precision != 1.0 or recall != 1.0 or d == z:
 				print(d, ' '.join(':'.join((str(n),
-					a.encode('unicode-escape'))) for n, a in enumerate(c)))
+					a.encode('unicode-escape'))) for n, a in enumerate(b)))
 				print('no match', precision, recall)
-				print(len(b1), len(b2), 'gold-transformed', set(b2) - set(b1),
-						'transformed-gold', set(b1) - set(b2))
+				print(len(c1), len(c2), 'gold-transformed', set(c2) - set(c1),
+						'transformed-gold', set(c1) - set(c2))
 				print(a)
-				print(transformb)
+				print(transformc)
 				handlefunctions('add', a)
 				print(a, '\n', b, '\n\n')
 			else:
@@ -609,6 +609,6 @@ def test_transforms():
 		else:
 			exact += 1
 			correct += 1
-		d += 1
-	print('matches', correct, '/', d, 100 * correct / d, '%')
+		e += 1
+	print('matches', correct, '/', e, 100 * correct / e, '%')
 	print('exact', exact)

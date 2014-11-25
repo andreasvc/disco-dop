@@ -33,7 +33,7 @@ from discodop.tree import ParentedTree
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebank import WRITERS, writetree
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
-		saveheads, NUMBERRE, readheadrules, applyfunctionclassifier
+		saveheads, NUMBERRE, readheadrules, applyfunctionclassifier, punctprune
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers, canonicalize
 
@@ -393,6 +393,8 @@ class Parser(object):
 		if self.postagging:
 			if self.transformations and 'FOLD-NUMBERS' in self.transformations:
 				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
+			if self.transformations and 'PUNCT-PRUNE' in self.transformations:
+				punctprune(None, sent)
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
 					self.postagging.lexicon, self.postagging.sigs)

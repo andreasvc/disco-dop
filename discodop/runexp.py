@@ -795,9 +795,8 @@ def parsetepacoc(
 		corpus_taggedsents = list(corpus.tagged_sents().values())
 		corpus_trees = list(corpus.trees().values())
 		if transformations:
-			corpus_trees = [treebanktransforms.transform(
-					tree, sent, transformations) for tree, sent
-					in zip(corpus_trees, corpus_sents)]
+			for tree, sent in zip(corpus_trees, corpus_sents):
+				treebanktransforms.transform(tree, sent, transformations)
 		corpus_blocks = list(corpus.blocks().values())
 		pickle.dump((corpus_sents, corpus_taggedsents, corpus_trees,
 			corpus_blocks), gzip.open('tiger.pickle.gz', 'wb'), protocol=-1)

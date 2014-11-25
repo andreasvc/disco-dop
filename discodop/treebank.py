@@ -8,7 +8,7 @@ from glob import glob
 from itertools import count, chain, islice
 from collections import defaultdict, OrderedDict
 from discodop.tree import Tree, ParentedTree
-from discodop.treebanktransforms import punctremove, punctraise, \
+from discodop.treebanktransforms import punctremove, punctprune, punctraise, \
 		balancedpunctraise, punctroot, ispunct, ishead, readheadrules, \
 		headfinder, ptbheadfinder, sethead, removeemptynodes
 
@@ -46,6 +46,7 @@ class CorpusReader(object):
 					using heuristics.
 			:'moveall': same as 'move', but moves all preterminals under root,
 					instead of only recognized punctuation.
+			:'prune': prune away leading & ending quotes & periods, then move.
 			:'remove': eliminate punctuation.
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
@@ -86,7 +87,8 @@ class CorpusReader(object):
 				((None, 'leave', 'add', 'replace', 'remove', 'between'),
 					functions),
 				((None, 'no', 'add', 'replace', 'between'), morphology),
-				((None, 'no', 'move', 'moveall', 'remove', 'root'), punct),
+				((None, 'no', 'move', 'moveall', 'remove', 'prune', 'root'),
+					punct),
 				((None, 'no', 'add', 'replace', 'between'), lemmas),
 				((None, 'ptb', 'dptb'), extraheadrules)):
 			if opt not in opts:
@@ -163,7 +165,9 @@ class CorpusReader(object):
 				a.sort(key=Tree.leaves)
 		if self.punct == 'remove':
 			punctremove(tree, sent)
-		elif self.punct == 'move' or self.punct == 'moveall':
+		elif self.punct in ('move', 'moveall', 'prune'):
+			if self.punct == 'prune':
+				punctprune(tree, sent)
 			punctraise(tree, sent, self.punct == 'moveall')
 			balancedpunctraise(tree, sent)
 			# restore order
@@ -181,11 +185,11 @@ class CorpusReader(object):
 					sethead(headfinder(node, self.headrules))
 		return tree, sent
 
-	def _word(self, block, orig=False):
-		""":returns: a list of words given a string.
-
-		When orig is True, return original sentence verbatim;
-		otherwise it will follow parameters for punctuation."""
+	def _word(self, block):
+		""":returns: a list of words given a string."""
+		if self.punct in {'remove', 'prune'}:
+			return self._parsetree(block)[1]
+		return self._parse(block)[1]
 
 
 class BracketCorpusReader(CorpusReader):
@@ -209,14 +213,8 @@ class BracketCorpusReader(CorpusReader):
 		# TODO: parse Penn TB functions and traces, put into .source attribute
 		if self.functions == 'remove':
 			handlefunctions(self.functions, tree)
-		sent = self._word(block, orig=True)
-		return tree, sent
-
-	def _word(self, block, orig=False):
 		sent = [a or None for a in LEAVESRE.findall(block)]
-		if orig or self.punct != "remove":
-			return sent
-		return [a for a in sent if not ispunct(a, None)]
+		return tree, sent
 
 
 class DiscBracketCorpusReader(CorpusReader):
@@ -244,19 +242,13 @@ class DiscBracketCorpusReader(CorpusReader):
 	def _parse(self, block):
 		treestr = block.split("\t", 1)[0]
 		tree = ParentedTree(treestr)
-		sent = self._word(block, orig=True)
+		sent = block.split("\t", 1)[1].rstrip("\n\r").split(' ')
+		sent = [unquote(word) for word in sent]
 		if not all(0 <= n < len(sent) for n in tree.leaves()):
 			raise ValueError('All leaves must be in the interval 0..n with '
 					'n=len(sent)\ntokens: %d indices: %r\nsent: %s' % (
 					len(sent), tree.leaves(), sent))
 		return tree, sent
-
-	def _word(self, block, orig=False):
-		sent = block.split("\t", 1)[1].rstrip("\n\r").split(' ')
-		sent = [unquote(word) for word in sent]
-		if orig or self.punct != "remove":
-			return sent
-		return [a for a in sent if not ispunct(a, None)]
 
 
 class NegraCorpusReader(CorpusReader):
@@ -303,14 +295,6 @@ class NegraCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		return exporttree(block, self.functions, self.morphology, self.lemmas)
-
-	def _word(self, block, orig=False):
-		if orig or self.punct != "remove":
-			return [a.split(None, 1)[0] for a in block
-					if not EXPORTNONTERMINAL.match(a)]
-		return [a[WORD] for a in (exportsplit(x) for x in block)
-				if not EXPORTNONTERMINAL.match(a[WORD])
-				and not ispunct(a[WORD], a[TAG])]
 
 
 class TigerXMLCorpusReader(CorpusReader):
@@ -382,14 +366,6 @@ class TigerXMLCorpusReader(CorpusReader):
 		tree.label = nodes[root][TAG]
 		return tree, sent
 
-	def _word(self, block, orig=False):
-		if orig or self.punct != "remove":
-			return [term.get('word')
-				for term in block.find('graph').find('terminals')]
-		return [term.get('word')
-			for term in block.find('graph').find('terminals')
-			if not ispunct(term.get('word'), term.get('pos'))]
-
 
 class AlpinoCorpusReader(CorpusReader):
 	"""Corpus reader for the Dutch Alpino treebank in XML format.
@@ -425,17 +401,6 @@ class AlpinoCorpusReader(CorpusReader):
 			xmlblock = ElementTree.fromstring(block)
 		return alpinotree(
 				xmlblock, self.functions, self.morphology, self.lemmas)
-
-	def _word(self, block, orig=False):
-		if ElementTree.iselement(block):
-			xmlblock = block
-		else:
-			xmlblock = ElementTree.fromstring(block)
-		sent = xmlblock.find('sentence').text.split(' ')
-		if orig or self.punct != "remove":
-			return sent
-		return [word for word in sent
-				if not ispunct(word, None)]  # fixme: don't have tag
 
 
 class DactCorpusReader(AlpinoCorpusReader):
@@ -629,8 +594,10 @@ def writeexporttree(tree, sent, n, comment, morphology):
 	phrasalnodes = [a for a in tree.treepositions('postorder')
 			if a not in wordsandpreterminals and a != ()]
 	wordids = {tree[a]: a for a in indices}
-	assert len(sent) == len(indices) == len(wordids), (
-			n, str(tree), sent, wordids.keys())
+	if not (len(sent) == len(indices) == len(wordids)):
+		raise ValueError('sentence and terminals length mismatch:  '
+				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
+				% (n, tree, len(sent), sent, len(wordids), wordids.keys()))
 	for i, word in enumerate(sent):
 		if not word:
 			raise ValueError('empty word in sentence: %r' % sent)

@@ -999,7 +999,8 @@ def main():
 				opts.get('--outputfmt'), ' '.join(WRITERS)), file=sys.stderr)
 		sys.exit(2)
 	infilename = args[1] if len(args) >= 2 and args[1] != '-' else '/dev/stdin'
-	outfilename = args[2] if len(args) == 3 and args[2] != '-' else '/dev/stdout'
+	outfilename = (args[2] if len(args) == 3 and args[2] != '-'
+			else '/dev/stdout')
 
 	# open corpus
 	corpus = READERS[opts.get('--inputfmt', 'export')](
@@ -1047,8 +1048,8 @@ def main():
 		transform = lambda t, s: (treebanktransforms.reversetransform(t, tfs)
 				if '--reverse' in opts
 				else treebanktransforms.transform(t, s, tfs))
-	if transform is not None:  # NB: transform cannot affect (no. of) terminals
-		trees = ((key, (transform(tree, sent), sent))
+	if transform is not None:
+		trees = ((key, transform(tree, sent))
 				for key, (tree, sent) in trees)
 		if action == 'binarize' and '--markovthreshold' in opts:
 			trees = list(trees)

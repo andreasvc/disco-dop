@@ -107,6 +107,8 @@ def transform(tree, sent, transformations):
 			for punct in tree.subtrees(lambda n: isinstance(n[0], int)
 					and sent[n[0]] in '.?!'):
 				punct.label += STATESPLIT + sent[punct[0]]
+		elif name == 'PUNCT-PRUNE':  # remove initial/ending quotes & period
+			punctprune(tree, sent)
 		elif name == 'FANOUT':  # add fan-out markers
 			from discodop.treetransforms import addfanoutmarkers
 			addfanoutmarkers(tree)
@@ -131,7 +133,7 @@ def transform(tree, sent, transformations):
 			raise ValueError('unrecognized transformation %r' % name)
 	for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
 		a.sort(key=Tree.leaves)
-	return tree
+	return tree, sent
 
 
 def negratransforms(name, tree, sent):
@@ -1068,8 +1070,10 @@ def bracketings(tree):
 
 def removeterminals(tree, sent, func):
 	"""Remove any terminals for which func is True, and any empty ancestors."""
+	delete = set()
 	for a in reversed(tree.treepositions('leaves')):
 		if func(sent[tree[a]], tree[a[:-1]].label):
+			delete.add(tree[a])
 			for n in range(1, len(a)):
 				del tree[a[:-n]]
 				if tree[a[:-(n + 1)]]:
@@ -1079,6 +1083,7 @@ def removeterminals(tree, sent, func):
 	newleaves = {a: n for n, a in enumerate(oldleaves)}
 	for a in tree.treepositions('leaves'):
 		tree[a] = newleaves[tree[a]]
+	sent[:] = [a for n, a in enumerate(sent) if n not in delete]
 	assert sorted(tree.leaves()) == list(range(len(tree.leaves()))), tree
 
 
@@ -1107,6 +1112,23 @@ def ispunct(word, tag):
 def punctremove(tree, sent):
 	"""Remove any punctuation nodes, and any empty ancestors."""
 	removeterminals(tree, sent, ispunct)
+
+
+def punctprune(tree, sent):
+	"""Remove quotes and period at sentence beginning and end."""
+	PRUNEPUNCT = {'``', "''", '"', "'", '.'}
+	i = 0
+	while sent[i] in PRUNEPUNCT:
+		sent[i] = None
+		i += 1
+	i = len(sent) - 1
+	while sent[i] in PRUNEPUNCT:
+		sent[i] = None
+		i -= 1
+	if tree is None:
+		sent[:] = [a for a in sent if a is not None]
+	else:
+		removeterminals(tree, sent, lambda a, _b: a is None)
 
 
 def punctroot(tree, sent):
@@ -1182,8 +1204,9 @@ def punctraise(tree, sent, rootpreterms=False):
 		else:
 			tree.append(node)
 
-BALANCEDPUNCTMATCH = {'"': '"', '[': ']', '(': ')', '-LRB-': '-RRB-',
-		'-': '-', "'": "'", '\xc2\xab': '\xc2\xbb'}  # unicode << and >>
+BALANCEDPUNCTMATCH = {'"': '"', "'": "'", '``': "''",
+		'[': ']', '(': ')', '-LRB-': '-RRB-', '-LSB-': '-RSB-',
+		'-': '-', '\xc2\xab': '\xc2\xbb'}  # unicode << and >>
 
 
 def balancedpunctraise(tree, sent):
