@@ -9,7 +9,7 @@ from itertools import count, chain, islice
 from collections import defaultdict, OrderedDict
 from discodop.tree import Tree, ParentedTree
 from discodop.treebanktransforms import punctremove, punctprune, punctraise, \
-		balancedpunctraise, punctroot, ispunct, ishead, readheadrules, \
+		balancedpunctraise, punctroot, ishead, readheadrules, \
 		headfinder, ptbheadfinder, sethead, removeemptynodes
 
 FIELDS = tuple(range(6))
@@ -594,7 +594,7 @@ def writeexporttree(tree, sent, n, comment, morphology):
 	phrasalnodes = [a for a in tree.treepositions('postorder')
 			if a not in wordsandpreterminals and a != ()]
 	wordids = {tree[a]: a for a in indices}
-	if not (len(sent) == len(indices) == len(wordids)):
+	if not len(sent) == len(indices) == len(wordids):
 		raise ValueError('sentence and terminals length mismatch:  '
 				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
 				% (n, tree, len(sent), sent, len(wordids), wordids.keys()))
