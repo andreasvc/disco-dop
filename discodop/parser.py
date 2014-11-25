@@ -390,11 +390,11 @@ class Parser(object):
 		:param sent: a sequence of tokens.
 		:param tags: if given, will be given to the parser instead of trying
 			all possible tags."""
+		if self.transformations and 'PUNCT-PRUNE' in self.transformations:
+			punctprune(None, sent)
 		if self.postagging:
 			if self.transformations and 'FOLD-NUMBERS' in self.transformations:
 				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
-			if self.transformations and 'PUNCT-PRUNE' in self.transformations:
-				punctprune(None, sent)
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
 					self.postagging.lexicon, self.postagging.sigs)

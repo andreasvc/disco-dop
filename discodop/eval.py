@@ -109,7 +109,7 @@ class Evaluator(object):
 		treepair = TreePairResult(n, gtree, gsent, ctree, csent, self.param)
 		self.acc.add(treepair)
 		if (self.param['CUTOFF_LEN'] is not None
-				and treepair.lencpos <= self.param['CUTOFF_LEN']):
+				and treepair.lengpos <= self.param['CUTOFF_LEN']):
 			self.acc40.add(treepair)
 		if self.param['DEBUG'] > 1:
 			treepair.debug()
@@ -354,19 +354,17 @@ class TreePairResult(object):
 		self.csentorig, self.gsentorig = csent, gsent
 		self.csent, self.gsent = csent[:], gsent[:]
 		self.cpos, self.gpos = sorted(ctree.pos()), sorted(gtree.pos())
-		self.lencpos = sum(1 for _, b in self.cpos
-				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
 		self.lengpos = sum(1 for _, b in self.gpos
 				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
-		if self.lencpos != self.lengpos:
-			raise ValueError('sentence length mismatch. sents:\n%s\n%s' % (
-					' '.join(self.csent), ' '.join(self.gsent)))
 		grootpos = {child[0] for child in gtree if isinstance(child[0], int)}
 		# massage the data (in-place modifications)
 		transform(self.ctree, self.csent, self.cpos, dict(self.gpos),
 				self.param, grootpos)
 		transform(self.gtree, self.gsent, self.gpos, dict(self.gpos),
 				self.param, grootpos)
+		if len(self.csent) != len(self.gsent):
+			raise ValueError('sentence length mismatch. sents:\n%s\n%s' % (
+					' '.join(self.csent), ' '.join(self.gsent)))
 		if self.csent != self.gsent:
 			raise ValueError('candidate & gold sentences do not match:\n'
 					'%r // %r' % (' '.join(csent), ' '.join(gsent)))
@@ -556,8 +554,8 @@ class EvalAccumulator(object):
 		"""Add scores from given TreePairResult object."""
 		if not self.disconly or pair.cbrack or pair.gbrack:
 			self.sentcount += 1
-		if self.maxlenseen < pair.lencpos:
-			self.maxlenseen = pair.lencpos
+		if self.maxlenseen < pair.lengpos:
+			self.maxlenseen = pair.lengpos
 		self.candb.update((pair.n, a) for a in pair.cbrack.elements())
 		self.goldb.update((pair.n, a) for a in pair.gbrack.elements())
 		if pair.cbrack == pair.gbrack:

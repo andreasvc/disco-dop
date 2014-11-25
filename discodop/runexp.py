@@ -559,7 +559,9 @@ def doparsing(**kwds):
 	results = [parser.DictObj(name=stage.name)
 			for stage in params.parser.stages]
 	for result in results:
-		result.update(parsetrees=dict.fromkeys(params.testset),
+		result.update(
+				parsetrees=dict.fromkeys(params.testset),
+				sents=dict.fromkeys(params.testset),
 				probs=dict.fromkeys(params.testset, float('nan')),
 				frags=dict.fromkeys(params.testset, 0),
 				elapsedtime=dict.fromkeys(params.testset),
@@ -574,8 +576,8 @@ def doparsing(**kwds):
 	logging.info('going to parse %d sentences.', len(params.testset))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
-		sentid, sentresults = data
-		sent, goldtree, goldsent, _ = params.testset[sentid]
+		sentid, sent, sentresults = data
+		_sent, goldtree, goldsent, _ = params.testset[sentid]
 		goldsent = [w for w, _t in goldsent]
 		logging.debug('%d/%d (%s). [len=%d] %s\n',
 				nsent, len(params.testset), sentid, len(sent),
@@ -584,6 +586,7 @@ def doparsing(**kwds):
 			assert (results[n].parsetrees[sentid] is None
 					and results[n].elapsedtime[sentid] is None)
 			results[n].parsetrees[sentid] = result.parsetree
+			results[n].sents[sentid] = sent
 			if isinstance(result.prob, tuple):
 				results[n].probs[sentid] = [log(a) for a in result.prob
 						if isinstance(a, float)][0]
@@ -602,7 +605,7 @@ def doparsing(**kwds):
 
 			sentmetrics = results[n].evaluator.add(
 					sentid, goldtree.copy(True), goldsent,
-					result.parsetree.copy(True), goldsent)
+					result.parsetree.copy(True), sent)
 			msg = result.msg
 			scores = sentmetrics.scores()
 			msg += '\tTAG %(TAG)s ' % scores
@@ -651,11 +654,12 @@ def worker(args):
 
 	:returns: a string with diagnostic information, as well as a list of
 		DictObj instances with the results for each stage."""
-	nsent, (sent, _, _, _) = args
+	nsent, (tagged_sent, _, _, _) = args
+	sent = [w for w, _ in tagged_sent]
 	prm = INTERNALPARAMS
-	results = list(prm.parser.parse([w for w, _ in sent],
-			tags=[t for _, t in sent] if prm.usetags else None))
-	return (nsent, results)
+	results = list(prm.parser.parse(sent,
+			tags=[t for _, t in tagged_sent] if prm.usetags else None))
+	return (nsent, sent, results)
 
 
 def writeresults(results, params):
@@ -680,10 +684,10 @@ def writeresults(results, params):
 	for res in results:
 		io.open('%s/%s%s.%s' % (params.resultdir, category, res.name,
 				ext[corpusfmt]), 'w', encoding='utf-8').writelines(
-					treebank.writetree(res.parsetrees[n],
-						[w for w, _ in goldsent], n, corpusfmt,
+					treebank.writetree(
+						res.parsetrees[n], res.sents[n], n, corpusfmt,
 						morphology=params.morphology)
-				for n, (_, _, goldsent, _) in params.testset.items())
+				for n in params.testset)
 	with open('%s/parsetimes.txt' % params.resultdir, 'w') as out:
 		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
 		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
