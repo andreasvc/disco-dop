@@ -84,7 +84,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 		openclasstags = {tag: len({w.lower() for w in ws})
 				for tag, ws in wordsfortag.items()
 				if len({w.lower() for w in ws}) >= openclassthreshold}
-		closedclasstags = set(tags) - set(openclasstags)
+		closedclasstags = {tag: len({w.lower() for w in wordsfortag[tag]})
+				for tag in tags if tag not in openclasstags}
 		closedclasswords = {word for tag in closedclasstags
 				for word in wordsfortag[tag]}
 		openclasswords = lexicon - closedclasswords
@@ -100,11 +101,10 @@ def getunknownwordmodel(tagged_sents, unknownword,
 				sigs[sig] += 1
 	msg = 'known words: %d, signature types seen: %d\n' % (
 			len(lexicon), len(sigs))
-	msg += 'open class tags: %s\n' % ' '.join(
-			'%s:%d' % a for a in openclasstags.items())
-	msg += 'closed class tags: %s' % ' '.join(
-			'%s:%d' % (a, len({w.lower() for w in wordsfortag[a]}))
-			for a in closedclasstags)
+	msg += 'open class tags: %s\n\n' % ' '.join(sorted(
+			'%s:%d' % a for a in openclasstags.items()))
+	msg += 'closed class tags: %s' % ' '.join(sorted(
+			'%s:%d' % a for a in closedclasstags.items()))
 	return (sigs, words, lexicon, wordsfortag, openclasstags,
 			openclasswords, tags, wordtags,
 			wordsig, sigtag), msg
