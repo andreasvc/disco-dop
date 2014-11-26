@@ -1099,7 +1099,10 @@ PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]',  # Alpino/Lassy
 		'COMMA', 'PUNCT', 'PAREN'}  # Grammatical Framework
-PUNCTUATION = frozenset(u'.,():-";?/!*&`[]<>{}|=\'\xc2\xab\xc2\xbb\xb7\xad\\'
+# NB: ' is not in this list of tokens, because if it occurs as a possesive
+# marker it should be left alone; occurrences of ' as quotation marker may
+# still be identified using tags.
+PUNCTUATION = frozenset(u'.,():-";?/!*&`[]<>{}|=\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {u'&bullet;', u'..', u'...', u'....', u'.....', u'......',
 		u'!!', u'!!!', u'??', u'???', u"''", u'``', u',,',
 		u'--', u'---', u'----', u'-LRB-', u'-RRB-', u'-LCB-', u'-RCB-'}
@@ -1117,7 +1120,7 @@ def punctremove(tree, sent):
 
 def punctprune(tree, sent):
 	"""Remove quotes and period at sentence beginning and end."""
-	PRUNEPUNCT = {'``', "''", '"', "'", '.'}
+	PRUNEPUNCT = {'``', "''", '"', '.'}
 	i = 0
 	while sent[i] in PRUNEPUNCT:
 		sent[i] = None
@@ -1223,7 +1226,7 @@ def balancedpunctraise(tree, sent):
 	for terminal in sorted(termparent):
 		preterminal = termparent[terminal]
 		# do we know the matching punctuation mark for this one?
-		if sent[terminal] in punctmap:
+		if preterminal.label in PUNCTTAGS and sent[terminal] in punctmap:
 			right = terminal
 			left = punctmap[sent[right]]
 			rightparent = preterminal.parent
@@ -1236,7 +1239,8 @@ def balancedpunctraise(tree, sent):
 				rightparent.insert(0, node.parent.pop(node.parent_index))
 			if sent[right] in punctmap:
 				del punctmap[sent[right]]
-		elif sent[terminal] in BALANCEDPUNCTMATCH:
+		elif (sent[terminal] in BALANCEDPUNCTMATCH
+				and preterminal.label in PUNCTTAGS):
 			punctmap[BALANCEDPUNCTMATCH[sent[terminal]]] = terminal
 
 
