@@ -784,13 +784,11 @@ class ParentedTree(AbstractParentedTree):
 				(self._get_parent_index(), ))
 
 	def _get_root(self):
-		"""The root of this tree.
-
-		i.e., the unique ancestor of this tree whose parent is None.
-		If ptree.parent is None, then ptree is its own root."""
-		if self._parent is None:
-			return self
-		return self._parent._get_root()
+		""":returns: the root of this tree."""
+		node = self
+		while node.parent is not None:
+			node = node.parent
+		return node
 
 	parent = property(lambda self: self._parent,
 			doc="""The parent of this tree, or None if it has no parent.""")
