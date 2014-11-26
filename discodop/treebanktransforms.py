@@ -30,15 +30,17 @@ PRESETS = {
 		# These are the "-goodPCFG" options of the Stanford Parser
 		'km2003wsj': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
 			'unaryRB,splitAux2,splitVP3,splitSGapped,splitTMP,splitBaseNP,'
-			'dominatesV,splitNPADV,markDitransV').split(','),
+			'dominatesV,splitNPADV,markDitransV,'
+			'yearNumbers,FOLD-NUMBERS').split(','),
 		'km2003simple': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
 			'unaryRB,splitAux2,splitSGapped,splitBaseNP,dominatesV,'
-			'splitNPADV,markDitransV').split(','),
+			'splitNPADV,markDitransV,yearNumbers,FOLD-NUMBERS').split(','),
 		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
-			'yearNumbers,subConjType,VPfeat,noHead,noSubj').split(','),
-		'lassy': ('APPEND-FUNC', 'PUNCT', 'FOLD-NUMBERS',
-			'nlselectmorph', 'nlpercolatemorph', 'nlhorzcontext')
+			'yearNumbers,subConjType,VPfeat,noHead,noSubj,'
+			'FOLD-NUMBERS').split(','),
+		'lassy': ('PUNCT', 'yearNumbers', 'FOLD-NUMBERS',
+			'nlselectmorph', 'nlpercolatemorph', 'nlmwuhead')
 		}
 
 
@@ -693,7 +695,8 @@ def lassytransforms(name, tree, _sent):
 				'prenom', 'nom', 'vrij', 'pv', 'inf', 'vd', 'od'}
 		for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 			selected = sorted(morphfeats(pos).intersection(SELECTMORPH))
-			pos.label += '%s[%s]' % (STATESPLIT, ','.join(selected))
+			if selected:
+				pos.label += '%s[%s]' % (STATESPLIT, ','.join(selected))
 	elif name == 'nlpercolatemorph':  # percolate select morph tags upwards
 		PERCOLATE = {'pv': 2, 'inf': 2}
 		for feat, lvl in PERCOLATE.items():
@@ -706,12 +709,11 @@ def lassytransforms(name, tree, _sent):
 					node.label += STATESPLIT + feat
 					node = node.parent
 					cnt += 1
-	elif name == 'nlhorzcontext':  # override horiz markov for select func tags
+	elif name == 'nlmwuhead':  # add label of head child to MWU nodes
 		EXPANDCAT = {'MWU'}
-		EXPANDFUNC = {'mod'}
-		for node in tree.subtrees(lambda n: (n.label in EXPANDCAT
-				or function(n) in EXPANDFUNC) and len(n) > 2):
-			node.label += STATESPLIT + ','.join(labels(node))
+		for node in tree.subtrees(lambda n: strip(n.label) in EXPANDCAT):
+			node.label += STATESPLIT + next(
+					iter(strip(a.label) for a in node if ishead(a) or a is node[-1]))
 	else:
 		return False
 	return True
@@ -1049,10 +1051,10 @@ def base(node, match):
 
 def strip(label):
 	"""Equivalent to the effect of the @ operator in tregex."""
-	if STATESPLIT in label:
-		return label[:label.index(STATESPLIT)]
-	elif '-' in label:
+	if '-' in label:
 		return label[:label.index('-')]
+	elif STATESPLIT in label:
+		return label[:label.index(STATESPLIT)]
 	return label
 
 
