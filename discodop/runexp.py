@@ -292,8 +292,13 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	if not trees:
 		raise ValueError('training corpus (selection) should be non-empty.')
 	if transformations:
+		newtrees, newsents = [], []
 		for tree, sent in zip(trees, sents):
 			treebanktransforms.transform(tree, sent, transformations)
+			if sent:
+				newtrees.append(tree)
+				newsents.append(sent)
+		trees, sents = newtrees, newsents
 	if relationalrealizational:
 		trees = [treebanktransforms.rrtransform(
 				tree, **relationalrealizational)[0] for tree in trees]

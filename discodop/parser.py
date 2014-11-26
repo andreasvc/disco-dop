@@ -30,6 +30,7 @@ from discodop.containers import Grammar
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import ParentedTree
+from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebank import WRITERS, writetree
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
@@ -391,7 +392,11 @@ class Parser(object):
 		:param tags: if given, will be given to the parser instead of trying
 			all possible tags."""
 		if self.transformations and 'PUNCT-PRUNE' in self.transformations:
+			origsent = sent[:]
 			punctprune(None, sent)
+			if tags:
+				newtags = alignsent(sent, origsent, dict(enumerate(tags)))
+				tags = [newtags[n] for n, _ in enumerate(sent)]
 		if self.postagging:
 			if self.transformations and 'FOLD-NUMBERS' in self.transformations:
 				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
@@ -401,6 +406,8 @@ class Parser(object):
 		sent = list(sent)
 		if tags is not None:
 			tags = list(tags)
+
+		# parse with each coarse-to-fine stage
 		chart = start = inside = outside = lastsuccessfulparse = None
 		for n, stage in enumerate(self.stages):
 			begin = time.clock()
@@ -424,7 +431,10 @@ class Parser(object):
 				exportbitpargrammar(stage)
 			if not stage.binarized and not stage.mode.startswith('pcfg-bitpar'):
 				raise ValueError('non-binarized grammar requires use of bitpar')
-			if not stage.prune or chart:
+
+			# do parsing; if CTF pruning enabled, require previous stage to
+			# be successful.
+			if sent and (not stage.prune or chart):
 				if n > 0 and stage.prune and stage.mode != 'dop-rerank':
 					beginprune = time.clock()
 					if self.stages[n - 1].mode == 'pcfg-posterior':
@@ -444,7 +454,9 @@ class Parser(object):
 					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
-				if stage.mode == 'pcfg':
+				if not sent:
+					pass
+				elif stage.mode == 'pcfg':
 					chart, msg1 = pcfg.parse(
 							sent, stage.grammar, tags=tags,
 							whitelist=whitelist if stage.prune else None,
@@ -499,8 +511,11 @@ class Parser(object):
 							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
 					# raise ValueError('ERROR: expected successful parse. '
 					# 		'sent %s, %s.' % (nsent, stage.name))
-			if chart and stage.mode not in ('pcfg-posterior', 'dop-rerank'
-					) and not (self.relationalrealizational and stage.split):
+
+			# do disambiguation of resulting parse forest
+			if sent and chart and stage.mode not in (
+					'pcfg-posterior', 'dop-rerank') and not (
+					self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
 				if stage.mode == 'pcfg-bitpar-nbest':
 					if not stage.kbest or stage.sample:
@@ -548,6 +563,8 @@ class Parser(object):
 								for _, prob, _ in besttrees))
 			if self.verbosity >= 4:
 				print('Chart:\n%s' % chart)
+
+			# postprocess, yield result
 			if parsetrees:
 				try:
 					resultstr, prob, fragments = max(

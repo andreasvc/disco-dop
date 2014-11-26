@@ -104,7 +104,7 @@ def transform(tree, sent, transformations):
 		elif name == 'FOLD-NUMBERS':
 			sent[:] = ['000' if NUMBERRE.match(a) else a for a in sent]
 		elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
-			for punct in tree.subtrees(lambda n: isinstance(n[0], int)
+			for punct in tree.subtrees(lambda n: n and isinstance(n[0], int)
 					and sent[n[0]] in '.?!'):
 				punct.label += STATESPLIT + sent[punct[0]]
 		elif name == 'PUNCT-PRUNE':  # remove initial/ending quotes & period
@@ -117,11 +117,11 @@ def transform(tree, sent, transformations):
 			# adding any other annotations to the labels.
 			# Skips preterminals.
 			for node in islice(tree.subtrees(
-					lambda n: isinstance(n[0], Tree)), 1, None):
+					lambda n: n and isinstance(n[0], Tree)), 1, None):
 				node.label += STATESPLIT + strip(node.parent.label)
 		elif name == 'TAGPA':  # Add parent annotation to non-punct. POS tags
 			for node in tree.subtrees(lambda n:
-					not isinstance(n[0], Tree)
+					n and isinstance(n[0], int)
 					and sent[n[0]] not in PUNCTUATION):
 				node.label += STATESPLIT + strip(node.parent.label)
 		elif (negratransforms(name, tree, sent)
@@ -356,14 +356,14 @@ def negratransforms(name, tree, sent):
 					break
 	elif name == 'noHead':  # constituents without head child
 		for node in tree.subtrees(lambda n: n is not tree
-				and isinstance(n[0], Tree)):
+				and n and isinstance(n[0], Tree)):
 			# The heuristically found heads do not count.
 			if not any(function(child) in {'HD', 'PNC', 'AC', 'AVC', 'NMC',
 					'PH', 'PD', 'ADC', 'UC', 'DH'}
 					for child in node):
 				node.label += STATESPLIT + 'nohead'
 	elif name == 'noSubj':  # conjunct clauses without subject
-		for node in tree.subtrees(lambda n: isinstance(n[0], Tree)
+		for node in tree.subtrees(lambda n: n and isinstance(n[0], Tree)
 				and base(n, 'S') and function(n) == 'CJ'):
 			if not any(function(child) in {'SB', 'EP'}
 					or strip(child.label) in {'VVIMP', 'VAIMP'}
@@ -691,13 +691,13 @@ def lassytransforms(name, tree, _sent):
 	if name == 'nlselectmorph':  # add select morph. feats to coarse POS tags
 		SELECTMORPH = {'eigen', 'det', 'pron', 'init', 'fin', 'neven', 'onder',
 				'prenom', 'nom', 'vrij', 'pv', 'inf', 'vd', 'od'}
-		for pos in tree.subtrees(lambda n: isinstance(n[0], int)):
+		for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 			selected = sorted(morphfeats(pos).intersection(SELECTMORPH))
 			pos.label += '%s[%s]' % (STATESPLIT, ','.join(selected))
 	elif name == 'nlpercolatemorph':  # percolate select morph tags upwards
 		PERCOLATE = {'pv': 2, 'inf': 2}
 		for feat, lvl in PERCOLATE.items():
-			for pos in tree.subtrees(lambda n: isinstance(n[0], int)
+			for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)
 					and feat in morphfeats(n)):
 				cnt = 0
 				node = pos.parent
@@ -888,9 +888,9 @@ def collapselabels(trees, _sents, mapping=None):
 	def collapse(orig):
 		"""Collapse labels of a single tree; returns a new Tree object."""
 		tree = orig.copy(True)
-		for subtree in tree.subtrees():
-			if subtree.label != "ROOT" and isinstance(subtree[0], Tree):
-				subtree.label = LABELRE.sub(revmapping.get, subtree.label)
+		for node in tree.subtrees():
+			if node.label != "ROOT" and node and isinstance(node[0], Tree):
+				node.label = LABELRE.sub(revmapping.get, node.label)
 
 	revmapping = {finelabel: coarselabel for coarselabel in mapping
 			for finelabel in mapping[coarselabel]}
@@ -941,7 +941,7 @@ def rrtransform(tree, morphlevels=0, percolatefeatures=None,
 				else child.source[FUNC]), tree.label), [newchild])
 		return result, morph, lvl
 
-	if not isinstance(tree[0], Tree):
+	if isinstance(tree[0], int):
 		morph = tree.source[MORPH].replace('(', '[').replace(')', ']')
 		preterminal = tree.__class__('%s/%s' % (tree.label, morph), tree)
 		if morphlevels:
@@ -996,7 +996,7 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 	:param func: used internally to percolate functional labels.
 	:returns: a new tree."""
 	morph = None
-	if not isinstance(tree[0], Tree):
+	if isinstance(tree[0], int):
 		tag, morph = tree.label.split('/')
 		result = tree.__class__(tag, tree)
 	elif '/' not in tree[0].label:
@@ -1122,11 +1122,11 @@ def punctprune(tree, sent):
 	"""Remove quotes and period at sentence beginning and end."""
 	PRUNEPUNCT = {'``', "''", '"', '.'}
 	i = 0
-	while sent[i] in PRUNEPUNCT:
+	while i < len(sent) and sent[i] in PRUNEPUNCT:
 		sent[i] = None
 		i += 1
 	i = len(sent) - 1
-	while sent[i] in PRUNEPUNCT:
+	while i < len(sent) and sent[i] in PRUNEPUNCT:
 		sent[i] = None
 		i -= 1
 	if tree is None:
@@ -1161,7 +1161,7 @@ def punctlower(tree, sent):
 		Recurses top-down on suitable candidates."""
 		num = node.leaves()[0]
 		for i, child in enumerate(sorted(candidate, key=lambda x: x.leaves())):
-			if not isinstance(child[0], Tree):
+			if not child or isinstance(child[0], int):
 				continue
 			termdom = child.leaves()
 			if num < min(termdom):
@@ -1189,7 +1189,7 @@ def punctraise(tree, sent, rootpreterms=False):
 	:param rootpreterms: if True, move all preterminals under root,
 		instead of only recognized punctuation."""
 	# punct = [node for node in tree.subtrees() if isinstance(node[0], int)
-	punct = [node for node in tree if isinstance(node[0], int)
+	punct = [node for node in tree if node and isinstance(node[0], int)
 			and (rootpreterms or ispunct(sent[node[0]], node.label))]
 	while punct:
 		node = punct.pop()
@@ -1198,7 +1198,7 @@ def punctraise(tree, sent, rootpreterms=False):
 		if node is tree:
 			continue
 		node.parent.pop(node.parent_index)
-		phrasalnode = lambda x: len(x) and isinstance(x[0], Tree)
+		phrasalnode = lambda n: n and isinstance(n[0], Tree)
 		for candidate in tree.subtrees(phrasalnode):
 			# add punctuation mark to highest left/right neighbor
 			# if any(node[0] - 1 == max(a.leaves()) for a in candidate):
@@ -1256,7 +1256,7 @@ def getheadpos(node):
 	while True:
 		if not child:
 			break
-		if not isinstance(child[0], Tree):
+		if not child or not isinstance(child[0], Tree):
 			return child
 		try:
 			child = next(a for a in child if ishead(a))

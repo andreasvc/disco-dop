@@ -356,7 +356,8 @@ class TreePairResult(object):
 		self.cpos, self.gpos = sorted(ctree.pos()), sorted(gtree.pos())
 		self.lengpos = sum(1 for _, b in self.gpos
 				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
-		grootpos = {child[0] for child in gtree if isinstance(child[0], int)}
+		grootpos = {child[0] for child in gtree
+				if child and isinstance(child[0], int)}
 		# massage the data (in-place modifications)
 		transform(self.ctree, self.csent, self.cpos,
 				alignsent(self.csent, self.gsent, dict(self.gpos)),
@@ -380,12 +381,14 @@ class TreePairResult(object):
 		self.candgf = multiset((bracketing(a), b)
 				for a in ctree.subtrees()
 					for b in functions(a)
-					if bracketing(a) in self.gbrack or (isinstance(a[0], int)
+					if bracketing(a) in self.gbrack or (
+						a and isinstance(a[0], int)
 						and self.gpos[a[0]][1] == a.label))
 		self.goldgf = multiset((bracketing(a), b)
 				for a in gtree.subtrees()
 					for b in functions(a)
-					if bracketing(a) in self.cbrack or (isinstance(a[0], int)
+					if bracketing(a) in self.cbrack or (
+						a and isinstance(a[0], int)
 						and self.cpos[a[0]][1] == a.label))
 		if not self.gpos:
 			return  # avoid 'sentences' with only punctuation.
@@ -768,7 +771,8 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 		root node of the gold tree."""
 	leaves = list(range(len(sent)))
 	posnodes = []
-	for a in reversed(list(tree.subtrees(lambda n: isinstance(n[0], Tree)))):
+	for a in reversed(list(tree.subtrees(
+			lambda n: n and isinstance(n[0], Tree)))):
 		for n, b in list(zip(count(), a))[::-1]:
 			b.label = param['EQ_LABEL'].get(b.label, b.label)
 			if not b:
@@ -887,7 +891,7 @@ def leafancestorpaths(tree, dellabel):
 		for n in thislevel:
 			leaves = sorted(n.indices)
 			# skip empty nodes and POS tags
-			if not leaves or not isinstance(n[0], Tree):
+			if not leaves or (not n or not isinstance(n[0], Tree)):
 				continue
 			first, last = min(leaves), max(leaves)
 			# skip root node if it is to be deleted
