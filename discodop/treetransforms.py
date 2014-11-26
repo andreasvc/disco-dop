@@ -969,9 +969,12 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from discodop import treebanktransforms
-	actions = {'none': None, 'introducepreterminals': introducepreterminals,
-			'splitdisc': None, 'mergedisc': mergediscnodes, 'transform': None,
-			'unbinarize': unbinarize, 'binarize': None, 'optimalbinarize': None}
+	actions = {'none': None, 'transform': None, 'splitdisc': None,
+			'binarize': None, 'optimalbinarize': None,
+			'unbinarize': lambda t, s: (unbinarize(t), s),
+			'mergedisc': lambda t, s: (mergediscnodes(t), s),
+			'introducepreterminals': lambda t, s: (
+				introducepreterminals(t), s)}
 	flags = ('help markorigin markhead leftunary rightunary tailmarker '
 			'renumber reverse direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
@@ -1033,22 +1036,24 @@ def main():
 		revh = int(opts.get('-H', 0))
 		if action == 'binarize':
 			factor = opts.get('--factor', 'right')
-			transform = lambda t, _: binarize(t, factor, h, v,
+			transform = lambda t, s: (binarize(t, factor, h, v,
 					revhorzmarkov=revh,
 					leftmostunary='--leftunary' in opts,
 					rightmostunary='--rightunary' in opts,
 					tailmarker='$' if '--tailmarker' in opts else '',
 					direction='--direction' in opts,
 					headoutward='--headrules' in opts,
-					markhead='--markhead' in opts)
+					markhead='--markhead' in opts), s)
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
-			transform = lambda t, _: optimalbinarize(t, '|', headdriven, h, v)
+			transform = lambda t, s: (optimalbinarize(t,
+					'|', headdriven, h, v), s)
 	elif action == 'splitdisc':
-		transform = lambda t, _: splitdiscnodes(t, '--markorigin' in opts)
+		transform = lambda t, s: (splitdiscnodes(t, '--markorigin' in opts), s)
 	elif action == 'transform':
 		tfs = expandpresets(opts['--transforms'].split(','))
-		transform = lambda t, s: (treebanktransforms.reversetransform(t, tfs)
+		transform = lambda t, s: (
+				(treebanktransforms.reversetransform(t, tfs), s)
 				if '--reverse' in opts
 				else treebanktransforms.transform(t, s, tfs))
 	if transform is not None:
