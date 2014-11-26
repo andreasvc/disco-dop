@@ -358,7 +358,8 @@ class TreePairResult(object):
 				if b not in self.param['DELETE_LABEL_FOR_LENGTH'])
 		grootpos = {child[0] for child in gtree if isinstance(child[0], int)}
 		# massage the data (in-place modifications)
-		transform(self.ctree, self.csent, self.cpos, dict(self.gpos),
+		transform(self.ctree, self.csent, self.cpos,
+				alignsent(self.csent, self.gsent, dict(self.gpos)),
 				self.param, grootpos)
 		transform(self.gtree, self.gsent, self.gpos, dict(self.gpos),
 				self.param, grootpos)
@@ -731,6 +732,28 @@ def transitiveclosure(eqpairs):
 	return eqclasses
 
 
+def alignsent(csent, gsent, gpos):
+	"""Map tokens of ``csent`` onto those of ``gsent``, and translate indices.
+
+	:returns: a copy of ``gpos`` with indices of ``csent`` as keys,
+		but tags from ``gpos``.
+
+	>>> gpos = {0: "``", 1: 'RB', 2: '.', 3: "''"}
+	>>> alignsent(['No'], ['``', 'No', '.', "''"], gpos)
+	{0: 'RB'}
+	"""
+	n = m = 0
+	result = {}
+	while n < len(csent) and m < len(gsent):
+		if csent[n] == gsent[m]:
+			result[n] = gpos[m]
+			n += 1
+			m += 1
+		else:
+			m += 1
+	return result
+
+
 def transform(tree, sent, pos, gpos, param, grootpos):
 	"""Apply the transformations according to the parameter file.
 
@@ -740,7 +763,7 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 	:param pos: a list with the contents of tree.pos(); modified in-place.
 	:param gpos: a dictionary of the POS tags of the original gold tree, before
 		any tags/words have been deleted.
-	:param param: the parameters specifing which labels / words to delete
+	:param param: the parameters specifying which labels / words to delete
 	:param grootpos: the set of indices with preterminals directly under the
 		root node of the gold tree."""
 	leaves = list(range(len(sent)))
