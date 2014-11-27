@@ -183,7 +183,7 @@ class Evaluator(object):
 				('%d most frequent' % limit) if limit else 'all'))
 		print('  label  % gold  recall    prec.     F1',
 				'          cand gold       count')
-		print(' ' + 38 * '_' + 7 * ' ' + 24 * '_')
+		print(' ' + 38 * '_' + 8 * ' ' + 24 * '_')
 		gmismatch = {(n, indices): label
 					for n, (label, indices) in acc.goldb - acc.candb}
 		wrong = multiset((label, gmismatch[n, indices])
@@ -218,19 +218,21 @@ class Evaluator(object):
 			('%d most frequent' % limit) if limit else 'all'), end='')
 		print('\n    tag  % gold  recall   prec.      F1',
 				'          cand gold   count')
-		print(' ' + 38 * '_' + 7 * ' ' + 20 * '_')
-		tags = multiset(tag for _, tag in acc.goldpos)
-		wrong = multiset((c, g) for (_, g), (_, c)
-				in zip(acc.goldpos, acc.candpos) if g != c)
+		print(' ' + 38 * '_' + 12 * ' ' + 20 * '_')
+		tags = multiset(acc.goldpos)
+		wrong = multiset((c, g) for c, g
+				in zip(acc.candpos, acc.goldpos) if c != g)
 		for tag, mismatch in zip_longest(tags.most_common(limit),
 				wrong.most_common(limit)):
 			if tag is None:
 				print(''.rjust(40), end='')
 			else:
-				goldtag = multiset(n for n, (w, t)
-						in enumerate(acc.goldpos) if t == tag[0])
-				candtag = multiset(n for n, (w, t)
-						in enumerate(acc.candpos) if t == tag[0])
+				# only one tag per index may occur, but multiset is required by
+				# metrics
+				goldtag = multiset(n for n, t in enumerate(acc.goldpos)
+						if t == tag[0])
+				candtag = multiset(n for n, t in enumerate(acc.candpos)
+						if t == tag[0])
 				print('%s  %6.2f  %6.2f  %6.2f  %6.2f' % (
 						tag[0].rjust(7),
 						100 * len(goldtag) / len(acc.goldpos),
