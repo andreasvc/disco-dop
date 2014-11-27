@@ -21,7 +21,7 @@ def getheadpos(node):
 	while True:
 		if not child:
 			break
-		if not child or not isinstance(child[0], Tree):
+		if not isinstance(child[0], Tree):
 			return child
 		try:
 			child = next(a for a in child if ishead(a))
@@ -72,7 +72,8 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 					return child
 	# default head is initial/last nonterminal (depending on direction)
 	for child in children:
-		if isinstance(child, Tree):
+		if (isinstance(child, Tree)
+				and not punctuation.ispunct(None, child.label)):
 			return child
 
 

@@ -180,11 +180,13 @@ class CorpusReader(object):
 		if self.headrules:
 			for node in tree.subtrees(lambda n: n and isinstance(n[0], Tree)):
 				if self.extraheadrules == 'ptb':
-					sethead(ptbheadfinder(node, self.headrules))
+					head = ptbheadfinder(node, self.headrules)
 				elif self.extraheadrules == 'dptb':
-					sethead(ptbheadfinder(node, self.headrules, dptb=True))
+					head = ptbheadfinder(node, self.headrules, dptb=True)
 				else:
-					sethead(headfinder(node, self.headrules))
+					head = headfinder(node, self.headrules)
+				if head is not None:
+					sethead(head)
 		return tree, sent
 
 	def _word(self, block):
