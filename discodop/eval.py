@@ -76,8 +76,8 @@ options (in addition to those described in the README of EVALB):
                    EVALB parameter files. ''' % (SHORTUSAGE, '|'.join(READERS))
 
 HEADER = '''
-   Sentence                 Matched   Brackets            Corr   POS  Func.
-  ID Length  Recall  Precis Bracket   gold   cand  Words  POS  Accur. Tags\
+   Sentence                 Matched   Brackets            Corr   POS
+  ID Length  Recall  Precis Bracket   gold   cand  Words  POS  Accur.\
 '''.splitlines()
 
 
@@ -383,13 +383,13 @@ class TreePairResult(object):
 					for b in functions(a)
 					if bracketing(a) in self.gbrack or (
 						a and isinstance(a[0], int)
-						and self.gpos[a[0]][1] == a.label))
+						and self.gpos[a[0]] == a.label))
 		self.goldgf = multiset((bracketing(a), b)
 				for a in gtree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.cbrack or (
 						a and isinstance(a[0], int)
-						and self.cpos[a[0]][1] == a.label))
+						and self.cpos[a[0]] == a.label))
 		if not self.gpos:
 			return  # avoid 'sentences' with only punctuation.
 		if self.param['LA']:
@@ -427,7 +427,8 @@ class TreePairResult(object):
 				len(self.gpos),
 				sum(1 for a, b in zip(self.gpos, self.cpos) if a == b),
 				nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
-				nozerodiv(lambda: f_measure(self.goldgf, self.candgf)),
+				nozerodiv(lambda: f_measure(self.goldgf, self.candgf))
+						if self.candgf else '',
 				nozerodiv(lambda: 100 * self.lascore)
 						if self.param['LA'] else '',
 				nozerodiv(lambda: self.ted) if self.param['TED'] else '',
@@ -465,8 +466,8 @@ class TreePairResult(object):
 		for leaf in goldpaths:
 			print('%15s %8s %8s   %6.3g %40s : %s' % (
 					self.gsent[leaf],
-					self.gpos[leaf][1],
-					self.cpos[leaf][1],
+					self.gpos[leaf],
+					self.cpos[leaf],
 					pathscore(goldpaths[leaf], candpaths[leaf]),
 					' '.join(goldpaths[leaf][::-1]),
 					' '.join(candpaths[leaf][::-1])))
@@ -492,7 +493,7 @@ class TreePairResult(object):
 		return dict(LP=nozerodiv(lambda: precision(self.gbrack, self.cbrack)),
 				LR=nozerodiv(lambda: recall(self.gbrack, self.cbrack)),
 				LF=nozerodiv(lambda: f_measure(self.gbrack, self.cbrack)),
-				TAG=nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
+				POS=nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
 				GF=nozerodiv(lambda: f_measure(self.goldgf, self.candgf)))
 
 	def bracketings(self):
@@ -521,7 +522,7 @@ class TreePairResult(object):
 				a.indices = b.indices
 		highlight = list(tree.subtrees(lambda n: bracketing(n) in brack))
 		highlight.extend(tree.subtrees(lambda n: n and isinstance(n[0], int)
-				and n.label == pos[n[0]][1]))
+				and n.label == pos[n[0]]))
 		highlight.extend(range(len(pos)))
 		highlightfunc = ()
 		if self.candgf:
@@ -796,7 +797,8 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 				a.indices = b.indices = b[:]
 	# retain words still in tree
 	sent[:] = [sent[n] for n in leaves]
-	pos[:] = [pos[n] for n in leaves]
+	# drop indices from POS tags
+	pos[:] = [pos[n][1] for n in leaves]
 	# removed POS tags cause the numbering to be off, restore.
 	leafmap = {m: n for n, m in enumerate(leaves)}
 	for a in posnodes:
