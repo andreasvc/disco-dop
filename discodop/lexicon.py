@@ -70,7 +70,8 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	sigs = multiset()
 	sigtag = multiset()
 	words = multiset(word for sent in tagged_sents for word, tag in sent)
-	lexicon = {word for word, freq in words.items() if freq > unknownthreshold}
+	lexicon = {word for word, freq in words.items()
+			if freq > unknownthreshold}
 	wordsig = {}
 	for sent in tagged_sents:
 		for n, (word, tag) in enumerate(sent):
@@ -114,7 +115,7 @@ def replaceraretrainwords(tagged_sents, unknownword, lexicon):
 	"""Replace train set words not in lexicon w/signature from unknownword()."""
 	return [[word if word in lexicon else unknownword(word, n, lexicon)
 			for n, (word, _) in enumerate(sent)]
-			for sent in tagged_sents]
+				for sent in tagged_sents]
 
 
 def replaceraretestwords(sent, unknownword, lexicon, sigs):
@@ -125,6 +126,8 @@ def replaceraretestwords(sent, unknownword, lexicon, sigs):
 	for n, word in enumerate(sent):
 		if word in lexicon:
 			yield word
+		elif word.lower() in lexicon:
+			yield word.lower()
 		else:
 			sig = unknownword(word, n, lexicon)
 			if sig in sigs:
@@ -147,7 +150,7 @@ def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	newrules = {}
 	# rare words as signature AND as word:
 	for word, tag in wordtags:
-		if word not in lexicon:  # and word in openclasswords:
+		if word not in lexicon:
 			# needs to be normalized later
 			newrules[(tag, 'Epsilon'), (word, )] = wordtags[word, tag]
 			# print(tag, '=>', word, wordstags[word, tag], file=sys.stderr)
@@ -278,15 +281,16 @@ def unknownword6(word, loc, lexicon):
 		sig += "-NUM"
 	if HASDASH.search(word):
 		sig += "-DASH"
-	if lowered.endswith("s") and wlen >= 3:
-		if lowered[-2] not in "siu":
-			sig += "-s"
+	if lowered.endswith('s') and wlen >= 3:
+		if lowered[-2] not in 'siu':
+			sig += '-s'
 	elif wlen >= 5 and not HASDASH.search(word) and not (
 			HASDIGIT.search(word) and numcaps > 0):
-		suffixes = ("ed", "ing", "ion", "er", "est", "ly", "ity", "y", "al")
+		suffixes = ('ed', 'ing', 'ion', 'er', 'est', 'ly', 'ity', 'y', 'al')
 		for a in suffixes:
 			if lowered.endswith(a):
 				sig += "-%s" % a
+				break
 	return sig
 
 
