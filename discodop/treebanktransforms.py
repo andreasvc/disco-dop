@@ -15,7 +15,8 @@ FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
-NUMBERRE = re.compile('^[0-9]+(?:[,.][0-9]+)*$')
+NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
+YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
@@ -31,15 +32,15 @@ PRESETS = {
 		'km2003wsj': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
 			'unaryRB,splitAux2,splitVP3,splitSGapped,splitTMP,splitBaseNP,'
 			'dominatesV,splitNPADV,markDitransV,'
-			'yearNumbers,FOLD-NUMBERS').split(','),
+			'FOLD-NUMBERS-YEAR').split(','),
 		'km2003simple': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
 			'unaryRB,splitAux2,splitSGapped,splitBaseNP,dominatesV,'
-			'splitNPADV,markDitransV,yearNumbers,FOLD-NUMBERS').split(','),
+			'splitNPADV,markDitransV,FOLD-NUMBERS-YEAR').split(','),
 		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
-			'yearNumbers,subConjType,VPfeat,noHead,noSubj,'
-			'FOLD-NUMBERS').split(','),
-		'lassy': ('PUNCT', 'yearNumbers', 'FOLD-NUMBERS',
+			'subConjType,VPfeat,noHead,noSubj,'
+			'FOLD-NUMBERS-YEAR').split(','),
+		'lassy': ('PUNCT', 'FOLD-NUMBERS-YEAR',
 			'nlselectmorph', 'nlpercolatemorph', 'nlmwuhead')
 		}
 
@@ -105,6 +106,15 @@ def transform(tree, sent, transformations):
 				pp.label += STATESPLIT + 'NP'
 		elif name == 'FOLD-NUMBERS':
 			sent[:] = ['000' if NUMBERRE.match(a) else a for a in sent]
+		elif name == 'FOLD-NUMBERS-YEAR':
+			# avoid folding year numbers, and mark their POS labels.
+			for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
+				word = sent[node[0]]
+				if YEARRE.match(word):
+					node.label += STATESPLIT + 'year'
+					sent[node[0]] = '1970'
+				elif NUMBERRE.match(word):
+					sent[node[0]] = '000'
 		elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
 			for punct in tree.subtrees(lambda n: n and isinstance(n[0], int)
 					and sent[n[0]] in '.?!'):
@@ -337,11 +347,6 @@ def negratransforms(name, tree, sent):
 			if any(ishead(child) and strip(child.label) in {'NN', 'NP'}
 					for child in node):
 				node.label += STATESPLIT + 'nom'
-	elif name == 'yearNumbers':  # distinguish years from other numbers
-		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
-			word = sent[node[0]]
-			if re.match('^[0-9]{4}$', word) and 1900 <= int(word) <= 2040:
-				node.label += STATESPLIT + 'year'
 	elif name == 'subConjType':  # mark type of subordinating conj.
 		for node in tree.subtrees(lambda n: base(n, 'S')
 				and function(n) in {'SB', 'OC', 'MO', 'RE'}):
