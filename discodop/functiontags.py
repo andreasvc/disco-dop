@@ -124,9 +124,9 @@ def basefeatures(node, sent, prefix=''):
 			# 1. syntactic category
 			prefix + 'cat': node.label,
 			# 2. head POS
-			prefix + 'hwp': headpos and headpos.label,
+			prefix + 'hwp': headpos.label if headpos else '',
 			# 3. head word
-			prefix + 'hwf': headpos and sent[headpos[0]],
+			prefix + 'hwf': sent[headpos[0]] if headpos else '',
 			# 7. alt (for PPs, non-prep. node) head POS
 			prefix + 'ahc': altheadpos.label if altheadpos else '',
 			# 8. alt head word
