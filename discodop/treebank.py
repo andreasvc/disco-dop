@@ -8,9 +8,11 @@ from glob import glob
 from itertools import count, chain, islice
 from collections import defaultdict, OrderedDict
 from discodop.tree import Tree, ParentedTree
-from discodop.treebanktransforms import punctremove, punctprune, punctraise, \
-		balancedpunctraise, punctroot, ishead, readheadrules, \
-		headfinder, ptbheadfinder, sethead, removeemptynodes
+from discodop.treebanktransforms import removeemptynodes
+from discodop.punctuation import punctremove, punctprune, punctraise, \
+		balancedpunctraise, punctroot
+from discodop.heads import readheadrules, headfinder, ptbheadfinder, \
+		sethead, ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS

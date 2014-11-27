@@ -14,10 +14,13 @@ Python modules
    demos
    eval
    fragments
+   functiontags
    gen
    grammar
+   heads
    lexicon
    parser
+   punctuation
    runexp
    tree
    treebank

@@ -10,7 +10,8 @@ from discodop.treebank import incrementaltreereader
 from discodop.treetransforms import binarize, unbinarize, \
 		splitdiscnodes, mergediscnodes, \
 		addbitsets, fanout, canonicalize
-from discodop.treebanktransforms import punctraise, balancedpunctraise, sethead
+from discodop.punctuation import punctraise, balancedpunctraise
+from discodop.heads import sethead
 from discodop.grammar import flatten, UniqueIDs
 
 

@@ -23,7 +23,7 @@ else:
 import numpy as np
 from discodop import eval as evalmod
 from discodop import treebank, treebanktransforms, treetransforms, \
-		grammar, lexicon, parser, estimates
+		grammar, lexicon, parser, estimates, functiontags
 from discodop.tree import Tree
 from discodop.containers import Grammar
 
@@ -232,7 +232,7 @@ def startexp(
 		if predictfunctions:
 			from sklearn.externals import joblib
 			logging.info('training function tag classifier')
-			funcclassifier, msg = treebanktransforms.trainfunctionclassifier(
+			funcclassifier, msg = functiontags.trainfunctionclassifier(
 					trees, sents, numproc)
 			joblib.dump(funcclassifier, '%s/funcclassifier.pickle' % resultdir,
 					compress=3)
@@ -613,7 +613,7 @@ def doparsing(**kwds):
 					result.parsetree.copy(True), sent)
 			msg = result.msg
 			scores = sentmetrics.scores()
-			msg += '\tTAG %(TAG)s ' % scores
+			msg += '\tPOS %(POS)s ' % scores
 			if not scores['GF'].endswith('nan'):
 				msg += 'GF %(GF)s ' % scores
 			if scores['LF'] == '100.00':

@@ -34,7 +34,10 @@ from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebank import WRITERS, writetree
 from discodop.treebanktransforms import reversetransform, rrbacktransform, \
-		saveheads, NUMBERRE, readheadrules, applyfunctionclassifier, punctprune
+		NUMBERRE
+from discodop.heads import saveheads, readheadrules
+from discodop.punctuation import punctprune
+from discodop.functiontags import applyfunctionclassifier
 from discodop.treetransforms import mergediscnodes, unbinarize, \
 		removefanoutmarkers, canonicalize
 
@@ -354,7 +357,7 @@ class Parser(object):
 		- sigs: the set of word signatures occurring in the grammar.
 	:param relationalrealizational: whether to reverse the RR-transform.
 	:param funcclassifier: function tag classifier trained by
-		``treebanktransforms.trainfunctionclassifier``.
+		``functiontags.trainfunctionclassifier``.
 	:param verbosity: see ``runexp`` parameter."""
 	def __init__(self, stages, transformations=None, postagging=None,
 			binarization=DictObj(tailmarker=None),

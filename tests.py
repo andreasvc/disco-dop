@@ -5,8 +5,9 @@ from doctest import testmod, NORMALIZE_WHITESPACE, REPORT_NDIFF
 from operator import itemgetter
 
 MODULES = """bit coarsetofine demos disambiguation estimates eval fragments
-		_fragments gen grammar lexicon kbest plcfrs pcfg tree treedist treedraw
-		treebank treebanktransforms treetransforms runexp""".split()
+		_fragments functiontags gen grammar heads lexicon kbest plcfrs pcfg
+		punctuation tree treedist treedraw treebank treebanktransforms
+		treetransforms runexp""".split()
 MODULES = [__import__('discodop.%s' % mod, globals(), locals(), [mod])
 		for mod in MODULES]
 

@@ -26,7 +26,8 @@ if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
 from discodop.tree import Tree, ImmutableTree
 from discodop.treebank import READERS, WRITERS, writetree
-from discodop.treebanktransforms import ishead, expandpresets
+from discodop.treebanktransforms import expandpresets
+from discodop.heads import ishead
 from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
@@ -165,7 +166,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 	:param abbrrepetition: in horizontal context, reduce sequences of
 		identical labels: e.g., ``<mwp,mwp,mwp,mwp>`` becomes ``<mwp+>``
 
-	>>> from discodop.treebanktransforms import sethead
+	>>> from discodop.heads import sethead
 	>>> tree = Tree('(S (VP (PDS 0) (ADV 3) (VVINF 4)) (VMFIN 1) (PIS 2))')
 	>>> sethead(tree[1])
 	>>> sent = 'das muss man jetzt machen'.split()
@@ -568,7 +569,7 @@ def splitdiscnodes(tree, markorigin=False):
 	return canonicalize(tree)
 
 
-def mergediscnodes(tree, _sent=None):
+def mergediscnodes(tree):
 	"""Reverse transformation of ``splitdiscnodes()``."""
 	treeclass = tree.__class__
 	for node in tree.subtrees():
@@ -969,12 +970,8 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from discodop import treebanktransforms
-	actions = {'none': None, 'transform': None, 'splitdisc': None,
-			'binarize': None, 'optimalbinarize': None,
-			'unbinarize': lambda t, s: (unbinarize(t), s),
-			'mergedisc': lambda t, s: (mergediscnodes(t), s),
-			'introducepreterminals': lambda t, s: (
-				introducepreterminals(t), s)}
+	actions = {'none', 'transform', 'splitdisc', 'binarize', 'optimalbinarize',
+			'unbinarize', 'mergedisc', 'introducepreterminals'}
 	flags = ('help markorigin markhead leftunary rightunary tailmarker '
 			'renumber reverse direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
@@ -1029,7 +1026,6 @@ def main():
 				for n, (_, treesent) in enumerate(trees, 1))
 
 	# select transformation
-	transform = actions[action]
 	if action in ('binarize', 'optimalbinarize'):
 		h = int(opts.get('-h', 999))
 		v = int(opts.get('-v', 1))
@@ -1056,6 +1052,12 @@ def main():
 				(treebanktransforms.reversetransform(t, tfs), s)
 				if '--reverse' in opts
 				else treebanktransforms.transform(t, s, tfs))
+	elif action == 'unbinarize':
+		transform = lambda t, s: (unbinarize(t), s)
+	elif action == 'mergediscnodes':
+		transform = lambda t, s: (mergediscnodes(t), s)
+	elif action == 'introducepreterminals':
+		transform = lambda t, s: (introducepreterminals(t, s), s)
 	if transform is not None:
 		trees = ((key, transform(tree, sent))
 				for key, (tree, sent) in trees)
