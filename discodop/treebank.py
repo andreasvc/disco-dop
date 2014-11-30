@@ -156,7 +156,7 @@ class CorpusReader(object):
 		""":returns: a transformed parse tree and sentence."""
 		tree, sent = self._parse(block)
 		if not sent:  # ??3
-			return tree
+			return tree, sent
 		if self.removeempty:
 			removeemptynodes(tree, sent)
 		if self.ensureroot and tree.label != self.ensureroot:
@@ -454,7 +454,7 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 	def getchildren(parent):
 		"""Traverse tree in export format and create Tree object."""
 		results = []
-		for n, source in children[parent]:
+		for n, source in children.get(parent, []):
 			# n is the index in the block to record word indices
 			m = EXPORTNONTERMINAL.match(source[WORD])
 			if m:
