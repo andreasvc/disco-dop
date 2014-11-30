@@ -91,6 +91,9 @@ options may consist of:
   --ensureroot=x add root node labeled 'x' to trees if not already present.
   --headrules=x  turn on head finding; affects binarization.
                  reads rules from file "x" (e.g., "negra.headrules").
+  --extraheadrules=(ptb|dptb)
+                 turn on additional, built-in head rules; requires previous
+                 option; [default: disabled].
   --factor=(left|right)
                  specify left- or right-factored binarization [default: right].
   -h n           horizontal markovization. default: infinite (all siblings)
@@ -975,8 +978,9 @@ def main():
 	flags = ('help markorigin markhead leftunary rightunary tailmarker '
 			'renumber reverse direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
-			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
-			'markorigin= maxlen= enc= transforms= markovthreshold= ').split()
+			'punct= headrules= extreaheadrules= functions= morphology= '
+			'lemmas= factor= fmt= markorigin= maxlen= enc= transforms= '
+			'markovthreshold= ').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
 		if not 1 <= len(args) <= 3:
@@ -1010,6 +1014,7 @@ def main():
 			infilename,
 			encoding=opts.get('--inputenc', 'utf-8'),
 			headrules=opts.get('--headrules'),
+			extraheadrules=opts.get('--extraheadrules'),
 			ensureroot=opts.get('--ensureroot'), punct=opts.get('--punct'),
 			functions=opts.get('--functions'),
 			morphology=opts.get('--morphology'),
@@ -1026,6 +1031,7 @@ def main():
 				for n, (_, treesent) in enumerate(trees, 1))
 
 	# select transformation
+	transform = None
 	if action in ('binarize', 'optimalbinarize'):
 		h = int(opts.get('-h', 999))
 		v = int(opts.get('-v', 1))
