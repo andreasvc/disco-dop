@@ -40,8 +40,8 @@ PRESETS = {
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
 			'subConjType,VPfeat,noHead,noSubj,'
 			'FOLD-NUMBERS-YEAR').split(','),
-		'lassy': ('PUNCT', 'FOLD-NUMBERS-YEAR',
-			'nlselectmorph', 'nlpercolatemorph', 'nlmwuhead')
+		'lassy': ('PUNCT', 'FOLD-NUMBERS-YEAR', 'nlselectmorph',
+			'nlpercolatemorph', 'nlmwuhead', 'nladdunary', 'nlelimcnj')
 		}
 
 
@@ -282,9 +282,9 @@ def negratransforms(name, tree, sent):
 		for node in tree.subtrees(lambda n: function(n) in {'NK', 'CJ'}):
 			if function(node) == 'NK':
 				node.source[FUNC] = 'HD'
-			else:
+			else:  # elif function(node) == 'CJ':
 				node.source[FUNC] = function(node.parent)
-	elif name == 'lexPrep':  # lexicalize frequent prepositions/conjuctions
+	elif name == 'lexPrep':  # lexicalize frequent prepositions/conjunctions
 		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 			word = sent[node[0]].lower()
 			if base(node, 'APPR') and word in {
@@ -720,6 +720,22 @@ def lassytransforms(name, tree, _sent):
 			node.label += STATESPLIT + next(
 					iter(strip(a.label) for a in node
 					if ishead(a) or a is node[-1]))
+	elif name == 'nladdunary':  # introduce unary NPs
+		from discodop.treetransforms import postorder
+		for node in postorder(tree, lambda n: strip(n.label) in {'n', 'vnw'}
+					and strip(n.parent.label)
+					in {'SMAIN', 'PP', 'CONJ', 'INF'}):
+			children = node[:]
+			node[:] = []
+			tag = ParentedTree(node.label, children)
+			tag.source = node.source[:]
+			node[:] = [tag]
+			node.source[TAG] = node.label = 'NP'
+			node.source[FUNC] = tag.source[FUNC]
+			tag.source[FUNC] = 'hd'
+	elif name == 'nlelimcnj':  # assign conjuncts the function of the parent
+		for node in tree.subtrees(lambda n: function(n) == 'cnj'):
+			node.source[FUNC] = function(node.parent)
 	else:
 		return False
 	return True
@@ -834,6 +850,24 @@ def reversetransform(tree, transformations):
 						child.source = ['--'] * 8
 					if function(child) != 'CD':
 						child.source[FUNC] = 'CJ'
+		elif name == 'nladdunary':
+			for node in tree.subtrees(lambda n:
+					strip(n.label) in {'SMAIN', 'PP', 'CONJ', 'INF'}):
+				for child in node:
+					if (len(child) == 1 and base(child, 'NP')
+							and strip(child[0].label) in {'n', 'vnw'}):
+						child.label = child[0].label
+						child.source = getattr(child[0], 'source', None)
+						children = child[0][:]
+						child[0][:] = []
+						child[:] = children
+		elif name == 'nlelimcnj':  # restore cnj function
+			for node in tree.subtrees(lambda n: base(n, 'CONJ')):
+				for child in node:
+					if not getattr(child, 'source', None):
+						child.source = ['--'] * 8
+					if function(child) != 'crd':
+						child.source[FUNC] = 'cnj'
 		elif name == 'APPEND-FUNC':  # functions appended to phrasal labels
 			for a in tree.subtrees(lambda n: '-' in n.label):
 				label, func = a.label.split('-', 1)
