@@ -64,14 +64,15 @@ Options:
               ``sentence``, a space separated list of words.
 
 -o file       Write output to ``file`` instead of stdout.
---indices     report sets of indices instead of frequencies.
+--indices     report sets of 0-based indices instead of frequencies.
 --cover       include all depth-1 fragments of first treebank corresponding
               to single productions.
 --complete    find complete matches of fragments from treebank1 (needle) in
               treebank2 (haystack); frequencies are from haystack.
 --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
-              first treebank will be compared to all others.
+              first treebank (A) will be compared to all others (B).
               Results are written to filenames of the form dir/A_B.
+              Counts/indices are from B.
 --numproc=n   use n independent processes, to enable multi-core usage
               (default: 1); use 0 to detect the number of CPUs.
 --numtrees=n  only read first n trees from first treebank

@@ -47,14 +47,15 @@ Options:
                 where 'tree' has indices as leaves, referring to elements of
                 'sentence', a space separated list of words.
   -o file       Write output to 'file' instead of stdout.
-  --indices     report sets of indices instead of frequencies.
+  --indices     report sets of 0-based indices instead of frequencies.
   --cover       include all depth-1 fragments of first treebank corresponding
                 to single productions.
   --complete    find complete matches of fragments from treebank1 (needle) in
                 treebank2 (haystack); frequencies are from haystack.
   --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
-                first treebank will be compared to all others.
+                first treebank (A) will be compared to all others (B).
                 Results are written to filenames of the form dir/A_B.
+                Counts/indices are from B.
   --numproc=n   use n independent processes, to enable multi-core usage
                 (default: 1); use 0 to detect the number of CPUs.
   --numtrees=n  only read first n trees from first treebank
@@ -125,12 +126,11 @@ def main(argv=None):
 		if not os.path.exists(a):
 			raise ValueError('not found: %r' % a)
 	if PARAMS['complete']:
+		if len(args) < 2:
+			raise ValueError('need at least two treebanks with --complete.')
 		if PARAMS['twoterms'] or PARAMS['adjacent']:
 			raise ValueError('--twoterms and --adjacent are incompatible '
 					'with --complete.')
-	if PARAMS['complete']:
-		if len(args) != 2 and not batchdir:
-			raise ValueError('need at least two treebanks with --complete.')
 		if PARAMS['approx'] or PARAMS['nofreq']:
 			raise ValueError('--complete is incompatible with --nofreq '
 					'and --approx')
@@ -184,8 +184,7 @@ def regular(filenames, numproc, limit, encoding):
 	if PARAMS['complete']:
 		trees1, trees2 = PARAMS['trees1'], PARAMS['trees2']
 		fragments = completebitsets(trees1, PARAMS['sents1'], PARAMS['labels'],
-				max(trees1.maxnodes, (trees2 or trees1).maxnodes),
-				PARAMS['disc'])
+				max(trees1.maxnodes, trees2.maxnodes), PARAMS['disc'])
 	else:
 		if len(filenames) == 1:
 			work = workload(numtrees, mult, numproc)
@@ -237,13 +236,24 @@ def regular(filenames, numproc, limit, encoding):
 
 def batch(outputdir, filenames, limit, encoding, debin):
 	"""batch processing: three or more treebanks specified.
-	The use case for this is when you have one big treebank which you want to
-	compare to lots of smaller sets of trees, and get the results for each
-	comparison in a separate file."""
+
+	Compares the first treebank to all others, and writes the results
+	to ``outputdir/A_B`` where ``A`` and ``B`` are the respective filenames.
+	Counts/indices are from the other (B) treebanks.
+	There are at least 2 use cases for this:
+
+	1. Comparing one treebank to a series of others. The first treebank will
+		only be loaded once.
+	2. In combination with ``--complete``, the first treebank is a set of
+		fragments used as queries on the other treebanks specified."""
 	initworker(filenames[0], None, limit, encoding)
 	trees1 = PARAMS['trees1']
 	sents1 = PARAMS['sents1']
-	if PARAMS['approx']:
+	if PARAMS['complete']:
+		fragments = completebitsets(trees1, sents1, PARAMS['labels'],
+				trees1.maxnodes, PARAMS['disc'])
+		fragmentkeys = list(fragments)
+	elif PARAMS['approx']:
 		fragments = defaultdict(int)
 	else:
 		fragments = {}
@@ -252,19 +262,15 @@ def batch(outputdir, filenames, limit, encoding, debin):
 			PARAMS['prods'], PARAMS['fmt'], limit, encoding))
 		trees2 = PARAMS['trees2']
 		sents2 = PARAMS['sents2']
-		if PARAMS['complete']:
-			fragments = completebitsets(trees2, sents2, PARAMS['labels'],
-					max(trees1.maxnodes, (trees2 or trees1).maxnodes),
-					PARAMS['disc'])
-		else:
-			fragments = extractfragments(trees2, sents2, 0, 0,
-					PARAMS['labels'], trees1, sents1,
+		if not PARAMS['complete']:
+			fragments = extractfragments(trees1, sents1, 0, 0,
+					PARAMS['labels'], trees2, sents2,
 					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
 					approx=PARAMS['approx'],
 					twoterms=PARAMS['twoterms'],
 					adjacent=PARAMS['adjacent'])
+			fragmentkeys = list(fragments)
 		counts = None
-		fragmentkeys = list(fragments)
 		if PARAMS['approx'] or not fragments:
 			counts = fragments.values()
 		elif not PARAMS['nofreq']:
@@ -272,7 +278,7 @@ def batch(outputdir, filenames, limit, encoding, debin):
 			logging.info('getting %s for %d fragments',
 					'indices of occurrence' if PARAMS['indices']
 					else 'exact counts', len(bitsets))
-			counts = exactcounts(trees2, trees1, bitsets,
+			counts = exactcounts(trees1, trees2, bitsets,
 					indices=PARAMS['indices'])
 		outputfilename = '%s/%s_%s' % (outputdir,
 				os.path.basename(filenames[0]), os.path.basename(filename))
@@ -304,6 +310,7 @@ def read2ndtreebank(treebank2, labels, prods, fmt='bracket',
 	"""Read a second treebank."""
 	trees2, sents2 = readtreebank(treebank2, labels, prods,
 			fmt, limit, encoding)
+	trees2.indextrees(prods)
 	logging.info("%r: %d trees; %d nodes (max %d). "
 			"labels: %d, prods: %d",
 			treebank2, len(trees2), trees2.numnodes, trees2.maxnodes,
@@ -599,7 +606,9 @@ def printfragments(fragments, counts, out=None):
 		for n, a in enumerate(fragments):
 			fragments[n] = altrepr(a)
 	if PARAMS['complete']:
-		logging.info("total number of matches: %d", sum(counts))
+		logging.info("total number of matches: %d",
+				sum(sum(a.values()) for a in counts)
+				if PARAMS['indices'] else sum(counts))
 	else:
 		logging.info("number of fragments: %d", len(fragments))
 	if PARAMS['nofreq']:
