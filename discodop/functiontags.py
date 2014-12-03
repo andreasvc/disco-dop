@@ -1,6 +1,6 @@
 """Function tags classifier."""
 from discodop.tree import Tree
-from discodop.treebanktransforms import base, function, functions, FUNC
+from discodop.treebanktransforms import base, functions, FUNC
 from discodop import heads
 
 FIELDS = tuple(range(8))
@@ -11,6 +11,8 @@ def trainfunctionclassifier(trees, sents, numproc):
 	"""Train a classifier to predict functions tags in trees."""
 	from sklearn import linear_model, multiclass
 	from sklearn import preprocessing, feature_extraction
+	from sklearn.grid_search import GridSearchCV
+	from sklearn.metrics import make_scorer, jaccard_similarity_score
 	vectorizer = feature_extraction.DictVectorizer(sparse=True)
 	# PTB has no function tags on pretermintals, Negra etc. do.
 	posfunc = any(functions(node) for tree in trees
@@ -37,13 +39,20 @@ def trainfunctionclassifier(trees, sents, numproc):
 	if multi:
 		classifier = multiclass.OneVsRestClassifier(
 				classifier, n_jobs=numproc or -1)
+		param_grid = dict(
+				estimator__alpha=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
+	else:
+		param_grid = dict(alpha=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
+	classifier = GridSearchCV(estimator=classifier, param_grid=param_grid,
+			scoring=make_scorer(jaccard_similarity_score))
 	# train classifier
 	classifier.fit(trainfeats, trainfuncs)
-	msg = ('trained classifier; multi=%r, posfunc=%r; score on training set: '
-			'%g %%\nfunction tags: %s' % (multi, posfunc,
-			100.0 * sum((a == b).all() for a, b
-				in zip(trainfuncs, classifier.predict(trainfeats)))
-				/ len(trainfuncs),
+	msg = ('trained classifier; grid search results:\n%s\n'
+			'multi=%r, posfunc=%r; best score on training set: %g %%\n'
+			'parameters: %r\nfunction tags: %s' % (
+			'\n'.join(str(a) for a in classifier.grid_scores_),
+			multi, posfunc, 100.0 * classifier.best_score_,
+			classifier.best_estimator_,
 			' '.join(str(a) for a in encoder.classes_)))
 	return (classifier, vectorizer, encoder, posfunc, multi), msg
 
