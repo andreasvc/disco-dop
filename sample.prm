@@ -72,7 +72,7 @@ morphology=None,  # options:
 #	'between': add node with morphological information between
 #		POS tag and word, e.g., (DET (sg.def the))
 
-# apply transformations for Negra/Tiger to make trees less flat
+# apply transformations (state splits) to training set trees
 transformations=None,
 relationalrealizational=None,
 #relationalrealizational=dict(  # Negra/Tiger
@@ -110,6 +110,7 @@ binarization=dict(
 	headrules='alpino.headrules',  # file with rules for head assignment
 	h=1,  # horizontal Markovization: number of siblings of context
 	v=1,  # vertical Markovization; v=1 means no additional parent annotation.
+	revh=0,  # horizontal Markovization: number of siblings of preceding context
 	pospa=False,  # when v > 1, add parent annotation to POS tags?
 	markhead=True,  # prepend label of head node to siblings
 	leftmostunary=False,  # start binarization with unary node
