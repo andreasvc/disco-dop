@@ -1,5 +1,6 @@
 """Generic setup.py for Cython code."""
 from distutils.core import setup
+from distutils.extension import Extension
 try:
 	from Cython.Build import cythonize
 	from Cython.Distutils import build_ext
@@ -10,7 +11,7 @@ except ImportError as err:
 	havecython = False
 
 metadata = dict(name='disco-dop',
-		version='0.4.1pre1',
+		version='0.5pre1',
 		description='Discontinuous Data-Oriented Parsing',
 		long_description=open('README.rst').read(),
 		author='Andreas van Cranenburgh',
@@ -45,6 +46,7 @@ metadata = dict(name='disco-dop',
 directives = {
 		'profile': False,
 		'cdivision': True,
+		'fast_fail': True,
 		'nonecheck': False,
 		'wraparound': False,
 		'boundscheck': False,
@@ -59,13 +61,19 @@ directives = {
 
 if __name__ == '__main__':
 	if havecython:
-		Options.fast_fail = True
-		# Options.extra_compile_args = ['-g'],
-		# Options.extra_link_args = ["-O3"]  #["-g"],
+		extensions = [Extension(
+				'*',
+				['discodop/*.pyx'],
+				extra_compile_args=['-O3'],  # ['-g', '-O0'],
+				# extra_link_args=['-g'],
+				# include_dirs = [...],
+				# libraries = [...],
+				# library_dirs = [...],
+				)]
 		setup(
 				cmdclass=dict(build_ext=build_ext),
 				ext_modules=cythonize(
-						'discodop/*.pyx',
+						extensions,
 						annotate=True,
 						compiler_directives=directives,
 						# nthreads=4,
