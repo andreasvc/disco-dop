@@ -130,6 +130,21 @@ class CorpusSearcher(object):
 			sent is a single string with space-separated tokens;
 			highlight is a set of integer indices."""
 
+	def batchcounts(self, queries, subset=None, limit=None):
+		"""Like counts, but exects a sequence of queries.
+
+		Useful in combination with ``pandas.DataFrame``.
+
+		:returns: a dict of the form
+			``{corpus1: {query1: nummatches, query2: nummatches, ...}, ...}``.
+		"""
+		result = OrderedDict((name, OrderedDict())
+				for name in subset or self.files)
+		for query in queries:
+			for filename, value in self.counts(query, subset, limit).items():
+				result[filename][query] = value
+		return result
+
 	def _submit(self, func, filename):
 		"""Submit a job to the thread pool."""
 		if self.numthreads == 1:
