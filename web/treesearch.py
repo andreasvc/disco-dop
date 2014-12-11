@@ -558,8 +558,8 @@ def browsesents():
 		sentno = min(max(chunk // 2, sentno), NUMSENTS[textno] - chunk // 2)
 		start = max(0, sentno - chunk // 2)
 		maxtree = min(start + chunk, NUMSENTS[textno])
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-		if os.path.exists(filename):
+		if 'tgrep2' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 			results = [' '.join(GETLEAVES.findall(a)) for a
 					in islice(io.open(filename, encoding='utf8'),
 					start, maxtree)]
@@ -569,6 +569,10 @@ def browsesents():
 					CORPORA['xpath'].files[filename].read('%8d' % (n + 1))
 					).find('sentence').text
 					for n in range(start, maxtree)]
+		elif 'regex' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
+			results = islice(io.open(filename, encoding='utf8'),
+					start, maxtree)
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = [('<font color=red>%s</font>' % cgi.escape(a))
@@ -629,7 +633,6 @@ def browse():
 		maxtree = min(start + chunk, NUMSENTS[textno])
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
-		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 		if 'xpath' in CORPORA:
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 			drawntrees = [DrawTree(*treebank.alpinotree(
@@ -639,7 +642,8 @@ def browse():
 					morphology=None if nomorph else 'replace')).text(
 					unicodelines=True, html=True)
 					for n in range(start, maxtree)]
-		elif os.path.exists(filename):
+		elif 'tgrep2' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 			drawntrees = [DrawTree(filterlabels(
 					line.decode('utf8'), nofunc, nomorph)).text(
 					unicodelines=True, html=True)
