@@ -496,6 +496,8 @@ def getfragments(trees, sents, numproc=1, disc=True,
 		pool.join()
 		del pool
 	if iterate:  # optionally collect fragments of fragments
+		if not disc:
+			raise NotImplementedError
 		logging.info("extracting fragments of recurring fragments")
 		PARAMS['complement'] = False  # needs to be turned off if it was on
 		newfrags = fragments

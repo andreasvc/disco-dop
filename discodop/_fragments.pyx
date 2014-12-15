@@ -101,11 +101,11 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 	for i in range(a.len):
 		if anodes[i].left >= 0 or anodes[i].prod not in contentwordprods:
 			continue
-		tmp = <set>(trees2.treeswithprod[anodes[i].prod])
+		tmp = <set>(trees2.prodindex[anodes[i].prod])
 		for j in range(a.len):
 			if (i != j and anodes[j].left < 0 and
 					anodes[j].prod in lexicalprods):
-				candidates |= tmp & <set>(trees2.treeswithprod[anodes[j].prod])
+				candidates |= tmp & <set>(trees2.prodindex[anodes[j].prod])
 	return candidates
 
 
@@ -343,9 +343,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		NodeArray a, b
 		Node *anodes
 		Node *bnodes
-		uint64_t cur
 		uint64_t *bitset
-		int idx
 	if indices:
 		theindices = [multiset() for _ in bitsets]
 	else:
@@ -356,16 +354,8 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		bitset = getpointer(wrapper)
 		a = trees1.trees[getid(bitset, SLOTS)]  # fragment came from this tree
 		anodes = &trees1.nodes[a.offset]
-		cur, idx = bitset[0], 0
-		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
-		assert i != -1
-		candidates = <set>(trees2.treeswithprod[anodes[i].prod]).copy()
-		while True:
-			i = iteratesetbits(bitset, SLOTS, &cur, &idx)
-			if i == -1 or i >= a.len:  # FIXME. why is 2nd condition necessary?
-				break
-			candidates &= <set>(trees2.treeswithprod[anodes[i].prod])
 		i = getroot(bitset, SLOTS)  # root of fragment in tree 'a'
+		candidates = getcandidates(anodes, bitset, i, trees2)
 		if indices:
 			matches = theindices[n]
 		for m in candidates:
@@ -381,6 +371,36 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 				elif anodes[i].prod < bnodes[j].prod:
 					break
 	return theindices if indices else counts
+
+
+cdef set getcandidates(Node *a, uint64_t *bitset, short i, Ctrees trees):
+	"""Traverse fragment ``bitset`` at ``a[i]`` and collect candidates based
+	on its trigrams."""
+	if a[i].left < 0:
+		return trees.prodindex[a[i].prod]
+	elif a[i].right < 0:
+		if TESTBIT(bitset, a[i].left):
+			return (trees.trigramindex[
+					a[i].prod,
+					a[a[i].left].prod,
+					a[i].right]
+					& getcandidates(a, bitset, a[i].left, trees))
+		return trees.prodindex[a[i].prod]
+	elif TESTBIT(bitset, a[i].left):
+		if TESTBIT(bitset, a[i].right):
+			return (trees.trigramindex[
+						a[i].prod,
+						a[a[i].left].prod, a[a[i].right].prod]
+					& getcandidates(a, bitset, a[i].left, trees)
+					& getcandidates(a, bitset, a[i].right, trees))
+		else:
+			return (trees.prodindex[a[i].prod]
+					& getcandidates(a, bitset, a[i].left, trees))
+	elif TESTBIT(bitset, a[i].right):
+		return (trees.prodindex[a[i].prod]
+				& getcandidates(a, bitset, a[i].right, trees))
+	# this is a lexical or frontier node
+	return trees.prodindex[a[i].prod]
 
 
 cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
@@ -416,7 +436,7 @@ cpdef dict coverbitsets(Ctrees trees, list sents, list labels,
 	if scratch is NULL:
 		raise MemoryError('allocation error')
 	assert SLOTS, SLOTS
-	for p, treeindices in enumerate(trees.treeswithprod):
+	for p, treeindices in enumerate(trees.prodindex):
 		try:  # slightly convoluted way of getting an arbitrary set member:
 			n = next(iter(treeindices))
 		except StopIteration:

@@ -534,7 +534,8 @@ cdef class Ctrees:
 		Productions are represented as integer IDs, trees are given as sets of
 		integer indices."""
 		cdef:
-			list result = [set() for _ in prods]
+			list prodindex = [set() for _ in prods]
+			dict trigramindex = {}
 			NodeArray a
 			Node *nodes
 			int n, m
@@ -542,8 +543,27 @@ cdef class Ctrees:
 			a = self.trees[n]
 			nodes = &self.nodes[a.offset]
 			for m in range(a.len):
-				(<set>result[nodes[m].prod]).add(n)
-		self.treeswithprod = result
+				# Add to production index
+				(<set>prodindex[nodes[m].prod]).add(n)
+				# Add to treelet-trigrams
+				if nodes[m].left >= 0:
+					if nodes[m].right < 0:  # unary
+						treegram = (
+								nodes[m].prod,
+								nodes[nodes[m].left].prod,
+								nodes[m].right)
+					else:  # binary
+						treegram = (
+								nodes[m].prod,
+								nodes[nodes[m].left].prod,
+								nodes[nodes[m].right].prod)
+					if treegram in trigramindex:
+						trigramindex[treegram].add(n)
+					else:
+						trigramindex[treegram] = {n}
+
+		self.prodindex = prodindex
+		self.trigramindex = trigramindex
 
 	def __dealloc__(self):
 		if self.nodes is not NULL:
