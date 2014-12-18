@@ -705,7 +705,8 @@ def lassytransforms(name, tree, _sent):
 				node = pos.parent
 				while (cnt < lvl and node is not None
 						and node.parent is not None):
-					node.label += STATESPLIT + feat
+					if not node.label.endswith(STATESPLIT + feat):
+						node.label += STATESPLIT + feat
 					node = node.parent
 					cnt += 1
 	elif name == 'nlmwuhead':  # add label of head child to MWU nodes
