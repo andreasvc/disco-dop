@@ -21,6 +21,7 @@ from operator import itemgetter
 from collections import Counter, OrderedDict, defaultdict
 try:
 	import cPickle as pickle
+	from itertools import ifilter as filter
 except ImportError:
 	import pickle
 import pandas
@@ -263,13 +264,15 @@ def counts(form, doexport=False):
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
 				len(queries) + 2)
 		# collate stats
-		firstletters = {key[0] for key in df.index}
-		if len(firstletters) <= 5:
+		keys = {key.split('_')[0] if '_' in key else key[0]
+				for key in df.index}
+		if len(keys) <= 5:
 			overview = OrderedDict(('%s_%s' % (letter, query),
 					df[query].ix[[key for key in df.index
-						if key[0] == letter]].mean())
+						if letter == (key.split('_')[0] if '_' in key
+							else key[0])]].mean())
 					for query in df.columns
-						for letter in firstletters)
+						for letter in keys)
 			df['category'] = [key[0] for key in df.index]
 			yield '<pre>\n%s\n</pre>' % (
 				df.groupby('category').describe().to_string(
@@ -571,8 +574,8 @@ def browsesents():
 					for n in range(start, maxtree)]
 		elif 'regex' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
-			results = islice(io.open(filename, encoding='utf8'),
-					start, maxtree)
+			results = islice(filter(lambda x: x.strip() != '',
+					io.open(filename, encoding='utf8')), start, maxtree)
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = [('<font color=red>%s</font>' % cgi.escape(a))
@@ -687,16 +690,17 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	result = ['<div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
-	firstletters = {key[0] for key in data}
+	keys = {key.split('_')[0] if '_' in key else key[0] for key in data}
 	color = {}
-	if len(firstletters) <= 5:
-		color.update(zip(firstletters, range(1, 6)))
+	if len(keys) <= 5:
+		color.update(zip(keys, range(1, 6)))
 	keys = sorted(data, key=data.get, reverse=True) if dosort else data
 	for key in keys:
 		result.append('<br><div style="width:%dpx;" class=b%d></div>'
 				'<span>%s: %g %s</span>' % (
-				round(width * data[key] / total) if data[key] else 0,
-				color.get(key[0], 1) if data[key] else 0,
+				int(round(width * data[key] / total)) if data[key] else 0,
+				color.get(key.split('_')[0] if '_' in key else key[0], 1)
+					if data[key] else 0,
 				cgi.escape(key), data[key], unit,))
 	result.append('</div>\n')
 	return '\n'.join(result)
@@ -895,11 +899,12 @@ def getcorpus():
 				numwords.append(words)
 				print(filename)
 		elif corpora.get('regex'):  # only tokenized sentences, no trees
-			numsents = [len(open(filename).readlines())
+			numsents = [sum(1 for line in
+					io.open(filename, encoding='utf8') if line.strip() != '')
 					for filename in tokfiles]
-			numwords = [1 + open(filename).read().count(' ')
-					for filename in tokfiles]
-			numconst = [0 for filename in tokfiles]
+			numwords = [open(filename).read().count(' ') + n
+					for filename, n in zip(tokfiles, numsents)]
+			numconst = [0 for _ in tokfiles]
 		else:
 			raise ValueError('no texts found.')
 		texts = [os.path.splitext(os.path.basename(a))[0]

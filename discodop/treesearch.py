@@ -15,6 +15,7 @@ from collections import Counter, OrderedDict
 from itertools import islice, count, takewhile
 try:
 	from multiprocessing import cpu_count  # pylint: disable=E0611
+	from itertools import ifilter as filter
 except ImportError:
 	from os import cpu_count  # pylint: disable=E0611
 from lru import LRU
@@ -519,7 +520,8 @@ class RegexSearcher(CorpusSearcher):
 		"""Run a query on a single file."""
 		regex = re.compile(query.format(**self.macros))
 		results = ((n, match) for n, match in
-				enumerate((regex.search(a) for a in filter(None,
+				enumerate((regex.search(a) for a
+					in filter(lambda x: x.strip() != '',
 					io.open(filename, encoding='utf-8'))), 1)
 				if match is not None)
 		if limit is not None:
