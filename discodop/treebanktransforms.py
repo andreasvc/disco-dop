@@ -15,33 +15,29 @@ FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
-NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
-YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
 PRESETS = {
 		# basic state splits:
-		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT', 'FOLD-NUMBERS'),
-		'wsj': ('S-WH', 'VP-HD', 'S-INF', 'FOLD-NUMBERS'),
-		'alpino': ('PUNCT', 'FOLD-NUMBERS'),
+		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT'),
+		'wsj': ('S-WH', 'VP-HD', 'S-INF'),
+		'alpino': ('PUNCT', ),
 		# extensive state splits following particular papers:
 		'green2013ftb': ('markinf,markpart,de2,markp1,mwadvs,mwadvsel1,'
 			'mwadvsel2,mwnsel1,mwnsel2,PUNCT,TAGPA').split(','),
 		# These are the "-goodPCFG" options of the Stanford Parser
 		'km2003wsj': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
 			'unaryRB,splitAux2,splitVP3,splitSGapped,splitTMP,splitBaseNP,'
-			'dominatesV,splitNPADV,markDitransV,'
-			'FOLD-NUMBERS-YEAR').split(','),
+			'dominatesV,splitNPADV,markDitransV,MARK-YEAR').split(','),
 		'km2003simple': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
 			'unaryRB,splitAux2,splitSGapped,splitBaseNP,dominatesV,'
-			'splitNPADV,markDitransV,FOLD-NUMBERS-YEAR').split(','),
+			'splitNPADV,markDitransV,MARK-YEAR').split(','),
 		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
-			'subConjType,VPfeat,noHead,noSubj,'
-			'FOLD-NUMBERS-YEAR').split(','),
-		'lassy': ('PUNCT', 'FOLD-NUMBERS-YEAR', 'nlselectmorph',
-			'nlpercolatemorph', 'nlmwuhead', 'nladdunary', 'nlelimcnj')
+			'subConjType,VPfeat,noHead,noSubj,MARK-YEAR').split(','),
+		'lassy': ('PUNCT', 'MARK-YEAR', 'nlselectmorph',
+			'nlpercolatemorph', 'nlmwuhead', 'nladdunary', 'nlelimcnj'),
 		}
 
 
@@ -100,21 +96,11 @@ def transform(tree, sent, transformations):
 					lemma = quote(a.source[LEMMA])
 				a[:] = [a.__class__(lemma,
 						[a.pop() for _ in range(len(a))][::-1])]
-		elif name == 'NP-PP':  # mark PPs under NPs
-			for pp in tree.subtrees(lambda n: n.label == 'PP'
-					and n.parent.label == 'NP'):
-				pp.label += STATESPLIT + 'NP'
-		elif name == 'FOLD-NUMBERS':
-			sent[:] = ['000' if NUMBERRE.match(a) else a for a in sent]
-		elif name == 'FOLD-NUMBERS-YEAR':
-			# avoid folding year numbers, and mark their POS labels.
-			for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
-				word = sent[node[0]]
-				if YEARRE.match(word):
-					node.label += STATESPLIT + 'year'
-					sent[node[0]] = '1970'
-				elif NUMBERRE.match(word):
-					sent[node[0]] = '000'
+		elif name == 'MARK-YEAR':  # mark POS label of year terminals
+			from discodop.lexicon import YEARRE
+			for node in tree.subtrees(lambda n: n and isinstance(n[0], int)
+					and YEARRE.match(sent[n[0]])):
+				node.label += STATESPLIT + 'year'
 		elif name == 'PUNCT':  # distinguish sentence-ending punctuation.
 			for punct in tree.subtrees(lambda n: n and isinstance(n[0], int)
 					and sent[n[0]] in '.?!'):
@@ -136,6 +122,10 @@ def transform(tree, sent, transformations):
 					n and isinstance(n[0], int)
 					and sent[n[0]] not in PUNCTUATION):
 				node.label += STATESPLIT + strip(node.parent.label)
+		elif name == 'NP-PP':  # mark PPs under NPs
+			for pp in tree.subtrees(lambda n: n.label == 'PP'
+					and n.parent.label == 'NP'):
+				pp.label += STATESPLIT + 'NP'
 		elif (negratransforms(name, tree, sent)
 				or lassytransforms(name, tree, sent)
 				or ptbtransforms(name, tree, sent)

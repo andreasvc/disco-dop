@@ -33,8 +33,7 @@ from discodop.tree import ParentedTree
 from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebank import WRITERS, writetree
-from discodop.treebanktransforms import reversetransform, rrbacktransform, \
-		NUMBERRE, YEARRE
+from discodop.treebanktransforms import reversetransform, rrbacktransform
 from discodop.heads import saveheads, readheadrules
 from discodop.punctuation import punctprune
 from discodop.functiontags import applyfunctionclassifier
@@ -400,12 +399,6 @@ class Parser(object):
 			if tags:
 				newtags = alignsent(sent, origsent, dict(enumerate(tags)))
 				tags = [newtags[n] for n, _ in enumerate(sent)]
-		if self.transformations:
-			if 'FOLD-NUMBERS' in self.transformations:
-				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
-			if 'FOLD-NUMBERS-YEAR' in self.transformations:
-				sent = ['1970' if YEARRE.match(a) else a for a in sent]
-				sent = ['000' if NUMBERRE.match(a) else a for a in sent]
 		if self.postagging:
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,

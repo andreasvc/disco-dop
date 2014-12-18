@@ -38,6 +38,8 @@ from fractions import Fraction
 import discodop.eval
 
 UNK = '_UNK'
+NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
+YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 TREETAGGERHELP = '''tree tagger not found. commands to install:
 mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
@@ -113,18 +115,31 @@ def getunknownwordmodel(tagged_sents, unknownword,
 
 def replaceraretrainwords(tagged_sents, unknownword, lexicon):
 	"""Replace train set words not in lexicon w/signature from unknownword()."""
-	return [[word if word in lexicon else unknownword(word, n, lexicon)
-			for n, (word, _) in enumerate(sent)]
+	def repl(n, word):
+		if YEARRE.match(word):
+			return '1970'
+		elif NUMBERRE.match(word):
+			return '000'
+		elif word not in lexicon:
+			return unknownword(word, n, lexicon)
+		return word
+
+	return [[repl(n, word) for n, (word, _) in enumerate(sent)]
 				for sent in tagged_sents]
 
 
 def replaceraretestwords(sent, unknownword, lexicon, sigs):
 	"""Replace test set words not in lexicon w/signature from unknownword().
 
-	If the returned signatured is not part of the grammar, a default one is
-	returnend."""
+	If a lowercase version of a word is in the grammar, that will be used
+	instead. If the returned signature is not part of the grammar, a default
+	one is returned."""
 	for n, word in enumerate(sent):
-		if word in lexicon:
+		if YEARRE.match(word):
+			yield '1970'
+		elif NUMBERRE.match(word):
+			yield '000'
+		elif word in lexicon:
 			yield word
 		elif word.lower() in lexicon:
 			yield word.lower()
@@ -294,7 +309,7 @@ def unknownword6(word, loc, lexicon):
 	return sig
 
 
-def unknownword4(word, loc, _):
+def unknownword4(word, loc, _lexicon):
 	"""Model 4 of the Stanford parser. Relatively language agnostic."""
 	sig = UNK
 
@@ -382,7 +397,7 @@ ISPUNC = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
 		u"\u20A0-\u20B5])+$")
 
 
-def unknownwordftb(word, loc, _):
+def unknownwordftb(word, loc, _lexicon):
 	"""Model 2 for French of the Stanford parser."""
 	sig = UNK
 

@@ -4,7 +4,6 @@ from distutils.extension import Extension
 try:
 	from Cython.Build import cythonize
 	from Cython.Distutils import build_ext
-	from Cython.Compiler import Options
 	havecython = True
 except ImportError as err:
 	print(err)
@@ -66,9 +65,9 @@ if __name__ == '__main__':
 				['discodop/*.pyx'],
 				extra_compile_args=['-O3'],  # ['-g', '-O0'],
 				# extra_link_args=['-g'],
-				# include_dirs = [...],
-				# libraries = [...],
-				# library_dirs = [...],
+				# include_dirs=[...],
+				# libraries=[...],
+				# library_dirs=[...],
 				)]
 		setup(
 				cmdclass=dict(build_ext=build_ext),
