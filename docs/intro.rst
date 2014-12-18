@@ -156,7 +156,7 @@ Aside from the parser there are some standalone tools, invoked as ``discodop <cm
 ``treedraw``
     Visualize (discontinuous) trees. Command-line interface:
 
-    ``$ discodop treedraw < negra-corpus.export | less -R``
+    ``$ discodop treedraw < negra-corpus.export | less -RS``
 
 ``parser``
     A basic command line interface to the parser comparable to bitpar.

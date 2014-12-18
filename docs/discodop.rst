@@ -412,7 +412,7 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
 
 If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
-Pipe the output through ``less -R`` to preserve the colors.
+Pipe the output through ``less -RS`` to preserve the colors.
 
 treesearch
 ----------
