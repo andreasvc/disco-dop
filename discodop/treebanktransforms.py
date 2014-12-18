@@ -38,6 +38,10 @@ PRESETS = {
 			'subConjType,VPfeat,noHead,noSubj,MARK-YEAR').split(','),
 		'lassy': ('PUNCT', 'MARK-YEAR', 'nlselectmorph',
 			'nlpercolatemorph', 'nlmwuhead', 'nladdunary', 'nlelimcnj'),
+		# this variant adds function tags to non-terminal labels
+		'lassy-func': ('nladdunary', 'nlelimcnj', 'APPEND-FUNC',
+			'PUNCT', 'MARK-YEAR', 'nlselectmorph', 'nlpercolatemorph',
+			'nlmwuhead')
 		}
 
 
@@ -714,7 +718,7 @@ def lassytransforms(name, tree, _sent):
 		from discodop.treetransforms import postorder
 		for node in postorder(tree, lambda n: strip(n.label) in {'n', 'vnw'}
 					and strip(n.parent.label)
-					in {'SMAIN', 'PP', 'CONJ', 'INF'}):
+					in {'SMAIN', 'PP', 'INF'}):
 			children = node[:]
 			node[:] = []
 			tag = ParentedTree(node.label, children)
@@ -821,7 +825,10 @@ def reversetransform(tree, transformations):
 							and strip(child[0].label) in {'NN', 'PPER', 'PDS',
 								'PIS', 'PRELS', 'CARD', 'PN'}):
 						child.label = child[0].label
+						origfunc = function(child)
 						child.source = getattr(child[0], 'source', None)
+						if child.source:
+							child.source[FUNC] = origfunc
 						children = child[0][:]
 						child[0][:] = []
 						child[:] = children
@@ -842,12 +849,15 @@ def reversetransform(tree, transformations):
 						child.source[FUNC] = 'CJ'
 		elif name == 'nladdunary':
 			for node in tree.subtrees(lambda n:
-					strip(n.label) in {'SMAIN', 'PP', 'CONJ', 'INF'}):
+					strip(n.label) in {'SMAIN', 'PP', 'INF'}):
 				for child in node:
 					if (len(child) == 1 and base(child, 'NP')
 							and strip(child[0].label) in {'n', 'vnw'}):
 						child.label = child[0].label
+						origfunc = function(child)
 						child.source = getattr(child[0], 'source', None)
+						if child.source:
+							child.source[FUNC] = origfunc
 						children = child[0][:]
 						child[0][:] = []
 						child[:] = children
@@ -856,7 +866,7 @@ def reversetransform(tree, transformations):
 				for child in node:
 					if not getattr(child, 'source', None):
 						child.source = ['--'] * 8
-					if function(child) != 'crd':
+					if function(child) != 'crd' and not base(child, 'let'):
 						child.source[FUNC] = 'cnj'
 		elif name == 'APPEND-FUNC':  # functions appended to phrasal labels
 			for a in tree.subtrees(lambda n: '-' in n.label):
