@@ -614,8 +614,8 @@ def doparsing(**kwds):
 			msg = result.msg
 			scores = sentmetrics.scores()
 			msg += '\tPOS %(POS)s ' % scores
-			if not scores['GF'].endswith('nan'):
-				msg += 'GF %(GF)s ' % scores
+			if not scores['FUN'].endswith('nan'):
+				msg += 'FUN %(FUN)s ' % scores
 			if scores['LF'] == '100.00':
 				msg += 'LF exact match'
 			else:
@@ -636,12 +636,12 @@ def doparsing(**kwds):
 		msg = ''
 		for n, result in enumerate(sentresults):
 			metrics = results[n].evaluator.acc.scores()
-			msg += ('%(name)s cov %(cov)5.2f; tag %(tag)s; %(gf1)s'
+			msg += ('%(name)s cov %(cov)5.2f; tag %(tag)s; %(fun1)s'
 					'ex %(ex)s; lp %(lp)s; lr %(lr)s; lf %(lf)s\n' % dict(
 					name=result.name.ljust(7),
 					cov=100 * (1 - results[n].noparse / nsent),
-					gf1='' if metrics['gf'].endswith('nan') else
-						('gf %(gf)s; ' % metrics),
+					fun1='' if metrics['fun'].endswith('nan') else
+						('fun %(fun)s; ' % metrics),
 					**metrics))
 		logging.debug(msg)
 	if params.numproc != 1:

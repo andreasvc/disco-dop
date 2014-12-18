@@ -284,9 +284,9 @@ class Evaluator(object):
 			if self.param['DEP']:
 				msg.append('unlabeled dependencies:    %s' % (
 						nozerodiv(lambda: accuracy(acc.golddep, acc.canddep))))
-			if acc.candgf:
+			if acc.candfun:
 				msg.append('function tags:             %s' %
-						nozerodiv(lambda: f_measure(acc.goldgf, acc.candgf)))
+						nozerodiv(lambda: f_measure(acc.goldfun, acc.candfun)))
 			msg.append('pos accuracy:              %s' % (
 					nozerodiv(lambda: accuracy(acc.goldpos, acc.candpos))))
 			return '\n'.join(msg)
@@ -336,10 +336,10 @@ class Evaluator(object):
 					nozerodiv(lambda: accuracy(acc.golddep, acc.canddep)),
 					sum(a[0] == a[1] for a in zip(acc.golddep, acc.canddep)),
 					len(acc.golddep)))
-		if acc.candgf:
+		if acc.candfun:
 			msg.append('function tags:             %s     %s' % (
-					nozerodiv(lambda: f_measure(acc40.goldgf, acc40.candgf)),
-					nozerodiv(lambda: f_measure(acc.goldgf, acc.candgf))))
+					nozerodiv(lambda: f_measure(acc40.goldfun, acc40.candfun)),
+					nozerodiv(lambda: f_measure(acc.goldfun, acc.candfun))))
 		msg.append('pos accuracy:              %s     %s' % (
 				nozerodiv(lambda: accuracy(acc40.goldpos, acc40.candpos)),
 				nozerodiv(lambda: accuracy(acc.goldpos, acc.candpos))))
@@ -380,13 +380,13 @@ class TreePairResult(object):
 		self.cdep = self.gdep = ()
 		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
 		# collect the function tags for correct bracketings & POS tags
-		self.candgf = multiset((bracketing(a), b)
+		self.candfun = multiset((bracketing(a), b)
 				for a in ctree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.gbrack or (
 						a and isinstance(a[0], int)
 						and self.gpos[a[0]] == a.label))
-		self.goldgf = multiset((bracketing(a), b)
+		self.goldfun = multiset((bracketing(a), b)
 				for a in gtree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.cbrack or (
@@ -429,8 +429,8 @@ class TreePairResult(object):
 				len(self.gpos),
 				sum(1 for a, b in zip(self.gpos, self.cpos) if a == b),
 				nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
-				nozerodiv(lambda: f_measure(self.goldgf, self.candgf))
-						if self.candgf else '',
+				nozerodiv(lambda: f_measure(self.goldfun, self.candfun))
+						if self.candfun else '',
 				nozerodiv(lambda: 100 * self.lascore)
 						if self.param['LA'] else '',
 				nozerodiv(lambda: self.ted) if self.param['TED'] else '',
@@ -450,17 +450,17 @@ class TreePairResult(object):
 				(self.cbrack - self.gbrack) | (self.gbrack - self.cbrack)))
 		goldpaths = leafancestorpaths(self.gtree, self.param['DELETE_LABEL'])
 		candpaths = leafancestorpaths(self.ctree, self.param['DELETE_LABEL'])
-		if self.candgf:
+		if self.candfun:
 			print('Function tags')
 			print('gold:               ', strbracketings(
-					(a, b) for (_, b), a in self.goldgf))
+					(a, b) for (_, b), a in self.goldfun))
 			print('candidate:          ', strbracketings(
-					(a, b) for (_, b), a in self.candgf))
+					(a, b) for (_, b), a in self.candfun))
 			print('matched:            ', strbracketings(
-					(a, b) for (_, b), a in self.candgf & self.goldgf))
+					(a, b) for (_, b), a in self.candfun & self.goldfun))
 			print('unmatched:          ', strbracketings(
-					(a, b) for (_, b), a in (self.candgf - self.goldgf)
-					| (self.goldgf - self.candgf)))
+					(a, b) for (_, b), a in (self.candfun - self.goldfun)
+					| (self.goldfun - self.candfun)))
 
 		print('%15s %8s %8s | %10s %36s : %s' % (
 				'word', 'gold POS', 'cand POS',
@@ -496,7 +496,7 @@ class TreePairResult(object):
 				LR=nozerodiv(lambda: recall(self.gbrack, self.cbrack)),
 				LF=nozerodiv(lambda: f_measure(self.gbrack, self.cbrack)),
 				POS=nozerodiv(lambda: accuracy(self.gpos, self.cpos)),
-				GF=nozerodiv(lambda: f_measure(self.goldgf, self.candgf)))
+				FUN=nozerodiv(lambda: f_measure(self.goldfun, self.candfun)))
 
 	def bracketings(self):
 		"""Return a string representation of bracketing errors."""
@@ -518,7 +518,7 @@ class TreePairResult(object):
 		if not tree:  # avoid empty trees with just punctuation
 			return ''
 		origtree = tree
-		if self.candgf:
+		if self.candfun:
 			tree = tree.copy(True)
 			for a, b in zip(tree.subtrees(), origtree.subtrees()):
 				a.indices = b.indices
@@ -527,15 +527,15 @@ class TreePairResult(object):
 				and n.label == pos[n[0]]))
 		highlight.extend(range(len(pos)))
 		highlightfunc = ()
-		if self.candgf:
+		if self.candfun:
 			highlightfunc = [a for a in tree.subtrees()
-					if all((bracketing(a), b) in self.candgf & self.goldgf
+					if all((bracketing(a), b) in self.candfun & self.goldfun
 						for b in functions(a))]
 			handlefunctions('add', tree)
 		return DrawTree(tree, self.csent, highlight=highlight,
 				highlightfunc=highlightfunc).text(
 				unicodelines=True, ansi=True,
-				funcsep='-' if self.candgf else None)
+				funcsep='-' if self.candfun else None)
 
 
 class EvalAccumulator(object):
@@ -547,7 +547,7 @@ class EvalAccumulator(object):
 		self.exact = Decimal(0)
 		self.dicenoms, self.dicedenoms = Decimal(0), Decimal(0)
 		self.goldb, self.candb = multiset(), multiset()  # all brackets
-		self.goldgf, self.candgf = multiset(), multiset()
+		self.goldfun, self.candfun = multiset(), multiset()
 		self.lascores = []
 		self.golddep, self.canddep = [], []
 		self.goldpos, self.candpos = [], []
@@ -570,8 +570,8 @@ class EvalAccumulator(object):
 				self.exact += 1
 		self.goldpos.extend(pair.gpos)
 		self.candpos.extend(pair.cpos)
-		self.goldgf.update((pair.n, a) for a in pair.goldgf.elements())
-		self.candgf.update((pair.n, a) for a in pair.candgf.elements())
+		self.goldfun.update((pair.n, a) for a in pair.goldfun.elements())
+		self.candfun.update((pair.n, a) for a in pair.candfun.elements())
 		if pair.lascore is not None:
 			self.lascores.append(pair.lascore)
 		if pair.ted is not None:
@@ -601,7 +601,7 @@ class EvalAccumulator(object):
 				lf=nozerodiv(lambda: f_measure(self.goldb, self.candb)),
 				ex=nozerodiv(lambda: self.exact / self.sentcount),
 				tag=nozerodiv(lambda: accuracy(self.goldpos, self.candpos)),
-				gf=nozerodiv(lambda: f_measure(self.goldgf, self.candgf)))
+				fun=nozerodiv(lambda: f_measure(self.goldfun, self.candfun)))
 
 
 def main():
