@@ -3,5 +3,4 @@ numpy>=1.6.1
 pytest
 sphinx
 futures
-lru-dict
 faulthandler

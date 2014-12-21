@@ -18,7 +18,6 @@ try:
 	from itertools import ifilter as filter
 except ImportError:
 	from os import cpu_count  # pylint: disable=E0611
-from lru import LRU
 try:
 	import alpinocorpus
 	import xml.etree.cElementTree as ElementTree
@@ -94,7 +93,7 @@ class CorpusSearcher(object):
 		self.files = OrderedDict.fromkeys(files)
 		self.macros = macros
 		self.numthreads = numthreads
-		self.cache = LRU(CACHESIZE)
+		self.cache = FIFOOrederedDict(CACHESIZE)
 		self.pool = concurrent.futures.ThreadPoolExecutor(
 				numthreads or cpu_count())
 		if not self.files:
@@ -537,6 +536,20 @@ class NoFuture(object):
 	def result(self, timeout=None):  # pylint: disable=W0613
 		"""Return the precomputed result."""
 		return self._result
+
+
+class FIFOOrederedDict(OrderedDict):
+	"""FIFO cache with maximum number of elements based on OrderedDict."""
+	def __init__(self, limit):
+		super(FIFOOrederedDict, self).__init__()
+		self.limit = limit
+
+	def __setitem__(self, key, value):
+		if key in self:
+			self.pop(key)
+		elif len(self) >= self.limit:
+			self.pop(next(iter(self)))
+		super(FIFOOrederedDict, self).__setitem__(key, value)
 
 
 def filterlabels(line, nofunc, nomorph):
