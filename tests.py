@@ -1,4 +1,4 @@
-""" Run doctests and other tests from all modules. """
+"""Run test() function in all modules and Cython doctests."""
 import os
 import sys
 from doctest import testmod, NORMALIZE_WHITESPACE, REPORT_NDIFF
@@ -14,7 +14,7 @@ MODULES = [__import__('discodop.%s' % mod, globals(), locals(), [mod])
 results = {}
 for mod in MODULES:
 	modname = str(getattr(mod, '__file__', mod))
-	if not modname.endswith('.so'):
+	if not modname.endswith('.so'):  # .py doctests are run by py.test
 		continue
 	print('running doctests of %s' % modname)
 	results[modname] = fail, attempted = testmod(mod, verbose=False,

@@ -1,4 +1,6 @@
 """Punctuation related functions."""
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 from discodop.tree import Tree, ParentedTree
 
 
@@ -11,10 +13,10 @@ PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
 # NB: ' is not in this list of tokens, because if it occurs as a possesive
 # marker it should be left alone; occurrences of ' as quotation marker may
 # still be identified using tags.
-PUNCTUATION = frozenset(u'.,():-";?/!*&`[]<>{}|=\xc2\xab\xc2\xbb\xb7\xad\\'
-		) | {u'&bullet;', u'..', u'...', u'....', u'.....', u'......',
-		u'!!', u'!!!', u'??', u'???', u"''", u'``', u',,',
-		u'--', u'---', u'----', u'-LRB-', u'-RRB-', u'-LCB-', u'-RCB-'}
+PUNCTUATION = frozenset('.,():-";?/!*&`[]<>{}|=\xc2\xab\xc2\xbb\xb7\xad\\'
+		) | {'&bullet;', '..', '...', '....', '.....', '......',
+		'!!', '!!!', '??', '???', "''", '``', ',,',
+		'--', '---', '----', '-LRB-', '-RRB-', '-LCB-', '-RCB-'}
 
 # Punctuation that is pruned if it is leading or ending (as in Collins 1999)
 PRUNEPUNCT = {'``', "''", '"', '.'}
@@ -32,13 +34,13 @@ def ispunct(word, tag):
 
 def punctremove(tree, sent):
 	"""Remove any punctuation nodes, and any empty ancestors."""
-	from discodop.treebanktransforms import removeterminals
+	from discodop.treebank import removeterminals
 	removeterminals(tree, sent, ispunct)
 
 
 def punctprune(tree, sent):
 	"""Remove quotes and period at sentence beginning and end."""
-	from discodop.treebanktransforms import removeterminals
+	from discodop.treebank import removeterminals
 	i = 0
 	while i < len(sent) and sent[i] in PRUNEPUNCT:
 		sent[i] = None
@@ -159,4 +161,4 @@ def balancedpunctraise(tree, sent):
 
 
 __all__ = ['ispunct', 'punctremove', 'punctprune', 'punctroot', 'punctlower',
-		'punctremove', 'balancedpunctraise']
+		'punctraise', 'balancedpunctraise']

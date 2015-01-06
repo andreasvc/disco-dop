@@ -6,7 +6,9 @@ Graph Algorithms and Applications, 10(2) 141--157 (2006)149.
 http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
 """
 
-from __future__ import division, print_function, unicode_literals
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
+import io
 import re
 import sys
 import codecs
@@ -91,7 +93,7 @@ class DrawTree(object):
 			leaves = self.tree.leaves()
 			if (leaves and not any(len(a) == 0 for a in self.tree.subtrees())
 					and all(isinstance(a, int) for a in leaves)):
-				self.sent = [str(a) for a in leaves]
+				self.sent = ['%d' % a for a in leaves]
 			else:
 				# this deals with empty nodes (frontier non-terminals)
 				# and multiple/mixed terminals under non-terminals.
@@ -110,7 +112,7 @@ class DrawTree(object):
 			if self.tree is tree:
 				self.tree = self.tree.copy(True)
 			for n in self.tree.subtrees(lambda x: len(x.label) > 5):
-				n.label = n.label[:4] + u'\u2026'  # unicode '...' ellipsis
+				n.label = n.label[:4] + '\u2026'  # unicode '...' ellipsis
 		self.highlight = self.highlightfunc = None
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				self.tree, self.sent, highlight, highlightfunc)
@@ -222,7 +224,8 @@ class DrawTree(object):
 		vertline, corner = -1, -2  # constants
 		tree = tree.copy(True)
 		for a in tree.subtrees():
-			a.sort(key=lambda n: min(n.leaves()) if isinstance(n, Tree) else n)
+			a.children.sort(key=lambda n: min(n.leaves())
+					if isinstance(n, Tree) else n)
 		scale = 2
 		crossed = set()
 		# internal nodes and lexical nodes (no frontiers)
@@ -432,13 +435,13 @@ class DrawTree(object):
 		:param maxwidth: maximum number of characters before a label starts to
 			wrap across multiple lines; pass None to disable."""
 		if unicodelines:
-			horzline = u'\u2500'
-			leftcorner = u'\u250c'
-			rightcorner = u'\u2510'
-			vertline = u' \u2502 '
-			tee = horzline + u'\u252C' + horzline
-			bottom = horzline + u'\u2534' + horzline
-			cross = horzline + u'\u253c' + horzline
+			horzline = '\u2500'
+			leftcorner = '\u250c'
+			rightcorner = '\u2510'
+			vertline = ' \u2502 '
+			tee = horzline + '\u252C' + horzline
+			bottom = horzline + '\u2534' + horzline
+			cross = horzline + '\u253c' + horzline
 		else:
 			horzline = '_'
 			leftcorner = rightcorner = ' '
@@ -879,9 +882,10 @@ def main():
 						funcsep='-' if opts.get('--functions')
 							in ('add', 'between') else None))
 	else:  # read from stdin + detect format
-		reader = codecs.getreader(opts.get('--encoding', 'utf8'))
-		stdin = (chain.from_iterable(reader(open(a)) for a in args)
-				if args else reader(sys.stdin))
+		encoding = opts.get('--encoding', 'utf8')
+		stdin = (chain.from_iterable(io.open(a, encoding=encoding)
+				for a in args) if args
+				else codecs.getreader(encoding)(sys.stdin))
 		trees = islice(incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),
 				functions=opts.get('--functions')),

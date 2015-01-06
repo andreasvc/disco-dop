@@ -8,9 +8,10 @@ try:
 except ImportError as err:
 	print(err)
 	havecython = False
+from discodop import __version__
 
 metadata = dict(name='disco-dop',
-		version='0.5pre1',
+		version=__version__,
 		description='Discontinuous Data-Oriented Parsing',
 		long_description=open('README.rst').read(),
 		author='Andreas van Cranenburgh',
@@ -76,7 +77,7 @@ if __name__ == '__main__':
 						annotate=True,
 						compiler_directives=directives,
 						# nthreads=4,
-						# language_level=3, # FIXME make this work ...
+						language_level=3,
 				),
 				# test_suite = 'tests'
 				**metadata)

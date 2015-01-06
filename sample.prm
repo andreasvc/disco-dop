@@ -50,7 +50,6 @@ testcorpus=dict(
 	skip=0,  # skip (additional) sentences between train & test set
 ),
 
-predictfunctions=True,
 punct='move',  # options:
 #	None: leave punctuation as-is
 #	'move': re-attach punctuation to appropriate constituents
@@ -73,7 +72,7 @@ morphology=None,  # options:
 #		POS tag and word, e.g., (DET (sg.def the))
 
 # apply transformations (state splits) to training set trees
-transformations=None,
+transformations=('APPEND-FUNC', ),
 relationalrealizational=None,
 #relationalrealizational=dict(  # Negra/Tiger
 #	# the function labels to treat as adjunction

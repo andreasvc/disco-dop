@@ -1,6 +1,7 @@
 """ Web interface to draw trees. Requires Flask.
 Optional: pdflatex, tikz, imagemagick. """
 # stdlib
+from __future__ import absolute_import
 import io
 import os
 import re
@@ -83,7 +84,7 @@ def drawtrees(form, dts):
 	""" Draw trees in the requested format. """
 	if form.get('output', 'text') == 'svg':
 		if len(dts) == 1:
-			return Response(dts[0].svg().encode('utf-8'),
+			return Response(dts[0].svg().encode('utf8'),
 					mimetype='image/svg+xml')
 		else:
 			result = [('<!doctype html>\n<html>\n<head>\n'
@@ -91,12 +92,12 @@ def drawtrees(form, dts):
 				'content="text/html; charset=UTF-8">\n</head>\n<body>')]
 			for dt in dts:
 				result.append(
-						'<div>\n%s\n</div>\n\n' % dt.svg().encode('utf-8'))
+						'<div>\n%s\n</div>\n\n' % dt.svg().encode('utf8'))
 			result.append('</body></html>')
 			return Response('\n'.join(result), mimetype='text/html')
 	elif form.get('output', 'text') == 'text':
 		html = form.get('color', False)
-		ascii = not form.get('unicode', 0)
+		useascii = not form.get('unicode', 0)
 		result = []
 		if html:
 			mimetype = 'text/html'
@@ -107,7 +108,8 @@ def drawtrees(form, dts):
 			mimetype = 'text/plain'
 		for dt in dts:
 			result.append(
-					dt.text(unicodelines=not ascii, html=html).encode('utf-8'))
+					dt.text(unicodelines=not useascii,
+						html=html).encode('utf8'))
 		if html:
 			result.append('</pre></body></html>')
 		return Response('\n'.join(result), mimetype=mimetype)

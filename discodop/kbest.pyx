@@ -177,33 +177,32 @@ cdef int explorederivation(v, RankedEdge ej, Chart chart, set explored,
 	return True
 
 
-cpdef inline _getderiv(bytearray result, v, RankedEdge ej, Chart chart,
-		bytes debin):
+cdef inline _getderiv(list result, v, RankedEdge ej, Chart chart, str debin):
 	"""Auxiliary function for ``getderiv()``.
 
-	:param result: provide an empty ``bytearray()`` for the initial call."""
+	:param result: provide an empty list for the initial call."""
 	cdef RankedEdge rankededge
 	cdef uint32_t label = chart.label(v)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
-		result += b'('
-		result += chart.grammar.tolabel[label]
-		result += b' '
+		result.append('(')
+		result.append(chart.grammar.tolabel[label])
+		result.append(' ')
 	if ej.edge.rule is NULL:  # lexical rule, left child is terminal
-		result += str(chart.lexidx(ej.edge)).encode('ascii')
+		result.append(str(chart.lexidx(ej.edge)))
 	else:
 		item = chart.left(ej)
 		rankededge = (<DoubleEntry>chart.rankededges[item][ej.left]).key
 		_getderiv(result, item, rankededge, chart, debin)
 		if ej.right != -1:
 			item = chart.right(ej)
-			result += b' '
+			result.append(' ')
 			rankededge = (<DoubleEntry>chart.rankededges[item][ej.right]).key
 			_getderiv(result, item, rankededge, chart, debin)
 	if debin is None or debin not in chart.grammar.tolabel[label]:
-		result += b')'
+		result.append(')')
 
 
-def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
+def getderiv(v, RankedEdge ej, Chart chart, str debin):
 	"""Convert a RankedEdge to a string with a tree in bracket notation.
 
 	A RankedEdge consists of an edge and a rank tuple: ``(e, j)`` notation
@@ -213,12 +212,12 @@ def getderiv(v, RankedEdge ej, Chart chart, bytes debin):
 
 	:param debin: perform on-the-fly debinarization, identify intermediate
 		nodes using the substring ``debin``."""
-	cdef bytearray result = bytearray()
+	cdef list result = []
 	_getderiv(result, v, ej, chart, debin)
-	return str(result.decode('ascii'))
+	return ''.join(result)
 
 
-def lazykbest(Chart chart, int k, bytes debin=None, bint derivs=True):
+def lazykbest(Chart chart, int k, str debin=None, bint derivs=True):
 	"""Wrapper function to run ``lazykthbest``.
 
 	Produces the ranked chart, as well as derivations as strings (when

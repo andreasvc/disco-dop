@@ -1,7 +1,8 @@
 """Parser object that performs coarse-to-fine and postprocessing.
 
 Additionally, a simple command line interface similar to bitpar."""
-from __future__ import print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import io
 import os
 import re
@@ -14,10 +15,8 @@ import tempfile
 import traceback
 import string  # pylint: disable=W0402
 import multiprocessing
-if sys.version[0] > '2':
-	imap = map
-else:
-	from itertools import imap
+if sys.version[0] == '2':
+	from itertools import imap as map  # pylint: disable=E0611,W0622
 from math import exp, log
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
@@ -83,9 +82,13 @@ DEFAULTSTAGE = dict(
 		markorigin=False,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
 		collapselabels=None,  # options: None, 'head', 'all'. TODO: implement.
 		k=50,  # no. of coarse pcfg derivations to prune with; k=0: filter only
-		dop=None,  # DOP mode (DOP reduction / double DOP)
-		binarized=True,  # for double dop, whether to binarize extracted grammar
-			# (False requires use of bitpar)
+		dop=None,  # DOP mode: dopreduction, doubledop, dop1
+		binarized=True,  # for doubledop, whether to binarize extracted grammar
+		# (False requires use of bitpar)
+		maxdepth=4,  # for dop1 & doubledop cover fragments,
+		# maximum depth of fragments to extract.
+		maxfrontier=999,  # for dop1 & doubledop cover fragments,
+		# maximum frontier NTs in fragments.
 		sample=False, kbest=True,
 		m=10,  # number of derivations to sample/enumerate
 		estimator='rfe',  # choices: rfe, ewe
@@ -193,7 +196,7 @@ def main():
 		stages.append(DictObj(stage))
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
-				neverblockre=re.compile(b'.+}<'))
+				neverblockre=re.compile('.+}<'))
 		parser = Parser(stages, verbosity=int(opts.get('--verbosity', 2)))
 		morph = None
 		del args[:2]
@@ -237,12 +240,13 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 	infile = (line for line in infile if line.strip())
 	if numproc == 1:
 		initworker(parser, printprob, usetags, numparses, fmt, morphology)
-		mymap = imap
+		mymap = map
 	else:
-		pool = multiprocessing.Pool(processes=numproc, initializer=initworker,
+		pool = multiprocessing.pool.Pool(
+				processes=numproc, initializer=initworker,
 				initargs=(parser, printprob, usetags, numparses, fmt,
 					morphology))
-		mymap = pool.imap
+		mymap = pool.map
 	for output, noparse, sec, msg in mymap(worker, enumerate(infile)):
 		if output:
 			print(msg, file=sys.stderr)
@@ -371,15 +375,15 @@ class Parser(object):
 		for stage in stages:
 			if stage.mode.startswith('pcfg-bitpar'):
 				exportbitpargrammar(stage)
-			model = u'default'
+			model = 'default'
 			if stage.dop:
 				if (stage.estimator == 'ewe'
 						or stage.objective.startswith('sl-dop')):
-					model = u'ewe'
+					model = 'ewe'
 				elif stage.estimator == 'bon':
-					model = u'bon'
+					model = 'bon'
 				if stage.objective == 'shortest':
-					model = u'shortest'
+					model = 'shortest'
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
 			if verbosity >= 3:
 				logging.debug(stage.name)
@@ -414,15 +418,15 @@ class Parser(object):
 			noparse = False
 			parsetrees = fragments = None
 			msg = '%s:\t' % stage.name.upper()
-			model = u'default'
+			model = 'default'
 			if stage.dop:
 				if (stage.estimator == 'ewe'
 						or stage.objective.startswith('sl-dop')):
-					model = u'ewe'
+					model = 'ewe'
 				elif stage.estimator == 'bon':
-					model = u'bon'
+					model = 'bon'
 				if stage.objective == 'shortest':
-					model = u'shortest'
+					model = 'shortest'
 			x = stage.grammar.currentmodel
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
 			if stage.mode.startswith('pcfg-bitpar') and (
@@ -526,7 +530,7 @@ class Parser(object):
 				else:
 					derivations, entries = getderivations(chart, stage.m,
 							kbest=stage.kbest, sample=stage.sample,
-							derivstrings=stage.dop != 'doubledop'
+							derivstrings=stage.dop not in ('doubledop', 'dop1')
 									or self.verbosity >= 3
 									or stage.objective == 'mcc')
 				if self.verbosity >= 3:
@@ -541,8 +545,8 @@ class Parser(object):
 					print('sum of probabitilies: %g\n' %
 							sum(exp(-prob) for _, prob in derivations[:100]))
 				if stage.objective == 'shortest':
-					stage.grammar.switch(u'ewe' if stage.estimator == 'ewe'
-							else u'default', True)
+					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
+							else 'default', True)
 				parsetrees, msg1 = marginalize(
 						stage.objective if stage.dop else 'mpd',
 						derivations, entries, chart,
@@ -622,7 +626,8 @@ class Parser(object):
 		else:  # Produce a dummy parse for evaluation purposes.
 			default = defaultparse([(n, t) for n, t
 					in enumerate(tags or (len(sent) * ['NONE']))])
-			parsetree = ParentedTree('(%s %s)' % (stage.grammar.start, default))
+			parsetree = ParentedTree('(%s %s)' % (
+					stage.grammar.start, default))
 		noparse = True
 		prob = 1.0
 		return parsetree, prob, noparse
@@ -645,36 +650,36 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		if stage.dop:
 			if stage.estimates is not None:
 				raise ValueError('not supported')
-			if stage.dop == 'doubledop':
+			if stage.dop in ('doubledop', 'dop1'):
 				backtransform = gzip.open('%s/%s.backtransform.gz' % (
 						resultdir, stage.name)).read().splitlines()
 				if n and stage.prune:
 					_ = grammar.getmapping(stages[n - 1].grammar,
-						striplabelre=re.compile(b'@.+$'),
-						neverblockre=re.compile(b'^#[0-9]+|.+}<'),
+						striplabelre=re.compile('@.+$'),
+						neverblockre=re.compile('^#[0-9]+|.+}<'),
 						splitprune=stage.splitprune and stages[n - 1].split,
 						markorigin=stages[n - 1].markorigin)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
 					_ = grammar.getmapping(None,
-						neverblockre=re.compile(b'.+}<'))
+						neverblockre=re.compile('.+}<'))
 			elif n and stage.prune:  # dop reduction
 				_ = grammar.getmapping(stages[n - 1].grammar,
-					striplabelre=re.compile(b'@[-0-9]+$'),
+					striplabelre=re.compile('@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 				if stage.mode == 'dop-rerank':
 					grammar.getrulemapping(
-							stages[n - 1].grammar, re.compile(br'@[-0-9]+\b'))
+							stages[n - 1].grammar, re.compile(r'@[-0-9]+\b'))
 			probsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
 			if os.path.exists(probsfile):
-				probmodels = np.load(probsfile)  # pylint: disable=no-member
+				probmodels = np.load(probsfile)
 				for name in probmodels.files:
 					if name != 'default':
-						grammar.register(unicode(name), probmodels[name])
+						grammar.register(name, probmodels[name])
 		else:  # not stage.dop
 			if n and stage.prune:
 				_ = grammar.getmapping(stages[n - 1].grammar,
@@ -687,8 +692,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					raise ValueError('SX estimate requires PCFG.')
 				if stage.mode != 'plcfrs':
 					raise ValueError('estimates require parser w/agenda.')
-				outside = np.load(  # pylint: disable=no-member
-						'%s/%s.outside.npz' % (resultdir, stage.name))['outside']
+				outside = np.load('%s/%s.outside.npz' % (
+						resultdir, stage.name))['outside']
 				logging.info('loaded %s estimates', stage.estimates)
 			elif stage.estimates:
 				raise ValueError('unrecognized value; specify SX or SXlrgaps.')

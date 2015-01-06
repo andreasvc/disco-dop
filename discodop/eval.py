@@ -2,7 +2,8 @@
 
 Follows EVALB as much as possible, and provides some alternative evaluation
 metrics."""
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import io
 import sys
 from getopt import gnu_getopt, GetoptError
@@ -12,12 +13,13 @@ from collections import defaultdict, Counter as multiset
 if sys.version[0] >= '3':
 	from itertools import zip_longest  # pylint: disable=E0611
 else:
-	from itertools import izip_longest as zip_longest
+	from itertools import izip_longest as zip_longest  # pylint: disable=E0611
 
 from discodop import grammar
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.treebank import READERS, dependencies, handlefunctions
+from discodop.treetransforms import disc, getbits, bitfanout
 from discodop.treebanktransforms import functions
 try:
 	from discodop.treedist import treedist, newtreedist
@@ -84,7 +86,11 @@ HEADER = '''
 class Evaluator(object):
 	"""Incremental evaluator for syntactic trees."""
 	def __init__(self, param, keylen=8):
-		"""Initialize evaluator object with given parameters."""
+		"""Initialize evaluator object with given parameters.
+
+		:param param: a dictionary of parameters, as read by ``readparam``.
+		:param keylen: the length of the longest sentence ID, for padding
+			purposes."""
 		self.param = param
 		self.keylen = keylen
 		self.acc = EvalAccumulator(param['DISC_ONLY'])
@@ -142,7 +148,7 @@ class Evaluator(object):
 					for n, indices, rule in acc.goldrule - acc.candrule}
 		wrong = multiset((rule, gmismatch[n, indices]) for n, indices, rule
 				in acc.candrule - acc.goldrule
-				if len(indices) > 1 and (n, indices) in gmismatch)
+				if pyintbitcount(indices) > 1 and (n, indices) in gmismatch)
 		print('\n Rewrite rule mismatches (for given span)')
 		print('   count   cand / gold rules')
 		for (crule, grule), cnt in wrong.most_common(limit):
@@ -151,7 +157,7 @@ class Evaluator(object):
 		gspans = {(n, indices) for n, indices, _ in acc.goldrule}
 		wrong = multiset(rule for n, indices, rule
 				in acc.candrule - acc.goldrule
-				if len(indices) > 1 and (n, indices) not in gspans)
+				if pyintbitcount(indices) > 1 and (n, indices) not in gspans)
 		print('\n Rewrite rules (span not in gold trees)')
 		print('   count   rule in candidate parses')
 		for crule, cnt in wrong.most_common(limit):
@@ -159,7 +165,7 @@ class Evaluator(object):
 		cspans = {(n, indices) for n, indices, _ in acc.candrule}
 		wrong = multiset(rule for n, indices, rule
 				in acc.goldrule - acc.candrule
-				if len(indices) > 1 and (n, indices) not in cspans)
+				if pyintbitcount(indices) > 1 and (n, indices) not in cspans)
 		print('\n Rewrite rules (span missing from candidate parses)')
 		print('   count   rule in gold standard set')
 		for grule, cnt in wrong.most_common(limit):
@@ -250,9 +256,9 @@ class Evaluator(object):
 		acc = self.acc
 		acc40 = self.acc40
 		discbrackets = sum(1 for _, (_, a) in acc.candb.elements()
-				if a != tuple(range(min(a), max(a) + 1)))
+				if bitfanout(a) > 1)
 		gdiscbrackets = sum(1 for _, (_, a) in acc.goldb.elements()
-				if a != tuple(range(min(a), max(a) + 1)))
+				if bitfanout(a) > 1)
 
 		if acc.maxlenseen <= self.param['CUTOFF_LEN']:
 			msg = ['%s' % ' Summary (ALL) '.center(35, '_'),
@@ -292,9 +298,9 @@ class Evaluator(object):
 			return '\n'.join(msg)
 
 		discbrackets40 = sum(1 for _, (_, a) in acc40.candb.elements()
-				if a != tuple(range(min(a), max(a) + 1)))
+				if bitfanout(a) > 1)
 		gdiscbrackets40 = sum(1 for _, (_, a) in acc40.goldb.elements()
-				if a != tuple(range(min(a), max(a) + 1)))
+				if bitfanout(a) > 1)
 		msg = ['%s <= %d ______ ALL' % (
 				' Summary '.center(27, '_'), self.param['CUTOFF_LEN']),
 			'number of sentences:       %6d     %6d' % (
@@ -352,7 +358,6 @@ class TreePairResult(object):
 		"""Construct a pair of gold and candidate trees for evaluation."""
 		self.n = n
 		self.param = param
-		self.gtree, self.ctree = gtree, ctree
 		self.csentorig, self.gsentorig = csent, gsent
 		self.csent, self.gsent = csent[:], gsent[:]
 		self.cpos, self.gpos = sorted(ctree.pos()), sorted(gtree.pos())
@@ -361,33 +366,33 @@ class TreePairResult(object):
 		grootpos = {child[0] for child in gtree
 				if child and isinstance(child[0], int)}
 		# massage the data (in-place modifications)
-		transform(self.ctree, self.csent, self.cpos,
+		self.ctree = transform(ctree, self.csent, self.cpos,
 				alignsent(self.csent, self.gsent, dict(self.gpos)),
 				self.param, grootpos)
-		transform(self.gtree, self.gsent, self.gpos, dict(self.gpos),
-				self.param, grootpos)
+		self.gtree = transform(gtree, self.gsent, self.gpos,
+				dict(self.gpos), self.param, grootpos)
 		if len(self.csent) != len(self.gsent):
 			raise ValueError('sentence length mismatch. sents:\n%s\n%s' % (
 					' '.join(self.csent), ' '.join(self.gsent)))
 		if self.csent != self.gsent:
 			raise ValueError('candidate & gold sentences do not match:\n'
 					'%r // %r' % (' '.join(csent), ' '.join(gsent)))
-		self.cbrack = bracketings(ctree, self.param['LABELED'],
+		self.cbrack = bracketings(self.ctree, self.param['LABELED'],
 				self.param['DELETE_LABEL'], self.param['DISC_ONLY'])
-		self.gbrack = bracketings(gtree, self.param['LABELED'],
+		self.gbrack = bracketings(self.gtree, self.param['LABELED'],
 				self.param['DELETE_LABEL'], self.param['DISC_ONLY'])
 		self.lascore = self.ted = self.denom = Decimal('nan')
 		self.cdep = self.gdep = ()
 		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
 		# collect the function tags for correct bracketings & POS tags
 		self.candfun = multiset((bracketing(a), b)
-				for a in ctree.subtrees()
+				for a in self.ctree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.gbrack or (
 						a and isinstance(a[0], int)
 						and self.gpos[a[0]] == a.label))
 		self.goldfun = multiset((bracketing(a), b)
-				for a in gtree.subtrees()
+				for a in self.gtree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.cbrack or (
 						a and isinstance(a[0], int)
@@ -411,10 +416,10 @@ class TreePairResult(object):
 		self.pcbrack = parentedbracketings(self.ctree, labeled=True,
 				dellabel=self.param['DELETE_LABEL'],
 				disconly=self.param['DISC_ONLY'])
-		self.grule = multiset((node.indices, rule)
+		self.grule = multiset((node.bitset, rule)
 				for node, rule in zip(self.gtree.subtrees(),
 				grammar.lcfrsproductions(self.gtree, self.gsent)))
-		self.crule = multiset((node.indices, rule)
+		self.crule = multiset((node.bitset, rule)
 				for node, rule in zip(self.ctree.subtrees(),
 				grammar.lcfrsproductions(self.ctree, self.csent)))
 
@@ -517,11 +522,8 @@ class TreePairResult(object):
 			tree, brack, pos = self.gtree, self.cbrack, self.cpos
 		if not tree:  # avoid empty trees with just punctuation
 			return ''
-		origtree = tree
 		if self.candfun:
 			tree = tree.copy(True)
-			for a, b in zip(tree.subtrees(), origtree.subtrees()):
-				a.indices = b.indices
 		highlight = list(tree.subtrees(lambda n: bracketing(n) in brack))
 		highlight.extend(tree.subtrees(lambda n: n and isinstance(n[0], int)
 				and n.label == pos[n[0]]))
@@ -637,12 +639,12 @@ def main():
 	goldreader = READERS[opts.get('--goldfmt', 'export')]
 	parsesreader = READERS[opts.get('--parsesfmt', 'export')]
 	gold = goldreader(goldfile,
-			encoding=opts.get('--goldenc', 'utf-8'),
+			encoding=opts.get('--goldenc', 'utf8'),
 			functions=opts.get('--functions', 'remove'),
 			morphology=opts.get('--morphology'),
 			headrules=opts.get('--headrules'))
 	parses = parsesreader(parsesfile,
-			encoding=opts.get('--parsesenc', 'utf-8'),
+			encoding=opts.get('--parsesenc', 'utf8'),
 			functions=opts.get('--functions', 'remove'),
 			morphology=opts.get('--morphology'),
 			headrules=opts.get('--headrules'))
@@ -652,7 +654,7 @@ def main():
 		raise ValueError('no trees in gold file')
 	if not candtrees:
 		raise ValueError('no trees in parses file')
-	evaluator = Evaluator(param, max(len(str(x)) for x in candtrees))
+	evaluator = Evaluator(param, max(len(str(key)) for key in candtrees))
 	for n, ctree in candtrees.items():
 		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
 	if param['LABELED'] and param['DEBUG'] != -1:
@@ -745,9 +747,8 @@ def alignsent(csent, gsent, gpos):
 		but tags from ``gpos``.
 
 	>>> gpos = {0: "``", 1: 'RB', 2: '.', 3: "''"}
-	>>> alignsent(['No'], ['``', 'No', '.', "''"], gpos)
-	{0: 'RB'}
-	"""
+	>>> alignsent(['No'], ['``', 'No', '.', "''"], gpos) == {0: 'RB'}
+	True"""
 	n = m = 0
 	result = {}
 	while n < len(csent) and m < len(gsent):
@@ -771,7 +772,8 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 		any tags/words have been deleted.
 	:param param: the parameters specifying which labels / words to delete
 	:param grootpos: the set of indices with preterminals directly under the
-		root node of the gold tree."""
+		root node of the gold tree.
+	:returns: an immutable, transformed copy of ``tree``."""
 	leaves = list(range(len(sent)))
 	posnodes = []
 	for a in reversed(list(tree.subtrees(
@@ -796,7 +798,6 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 				del a[n]
 			else:
 				posnodes.append(b)
-				a.indices = b.indices = b[:]
 	# retain words still in tree
 	sent[:] = [sent[n] for n in leaves]
 	# drop indices from POS tags
@@ -805,23 +806,9 @@ def transform(tree, sent, pos, gpos, param, grootpos):
 	leafmap = {m: n for n, m in enumerate(leaves)}
 	for a in posnodes:
 		a[0] = leafmap[a[0]]
-		a.indices = [a[0]]
 		if sent[a[0]] in param['EQ_WORD']:
 			sent[a[0]] = param['EQ_WORD'][sent[a[0]]]
-	# cache spans
-	for a in reversed(list(tree.subtrees())):
-		indices = []
-		for b in a:
-			if isinstance(b, Tree):
-				indices.extend(b.indices)
-			elif isinstance(b, int):
-				indices.append(b)
-			else:
-				raise ValueError('Tree should consist of Tree nodes and '
-						'integer indices:\n%r' % b)
-		if len(indices) != len(set(indices)):
-			raise ValueError('duplicate index in tree:\n%s' % tree)
-		a.indices = tuple(sorted(indices))
+	return tree.freeze()
 
 
 def parentedbracketings(tree, labeled=True, dellabel=(), disconly=False):
@@ -850,16 +837,19 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> params = {'DELETE_LABEL': set(), 'DELETE_WORD': set(),
 	... 'EQ_LABEL': {}, 'EQ_WORD': {},
 	... 'DELETE_ROOT_PRETERMS': 0}
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
+	>>> tree = transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
 	... params, set())
-	>>> sorted(bracketings(tree).items())
-	[(('S', (0, 1, 2)), 1), (('VP', (0, 2)), 1)]
+	>>> for (label, span), cnt in sorted(bracketings(tree).items()):
+	...		print(label, bin(span), cnt)
+	S 0b111 1
+	VP 0b101 1
 	>>> tree = Tree('(S (NP 1) (VP (VB 0) (JJ 2)))')
 	>>> params['DELETE_LABEL'] = {'VP'}
-	>>> transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
+	>>> tree = transform(tree, tree.leaves(), tree.pos(), dict(tree.pos()),
 	... params, set())
-	>>> bracketings(tree)
-	Counter({('S', (0, 1, 2)): 1})"""
+	>>> for (label, span), cnt in sorted(bracketings(tree).items()):
+	...		print(label, bin(span), cnt)
+	S 0b111 1"""
 	return multiset(bracketing(a, labeled) for a in tree.subtrees()
 			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
 				and a.label not in dellabel and (not disconly or disc(a)))
@@ -867,33 +857,33 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 
 def bracketing(node, labeled=True):
 	"""Generate bracketing ``(label, indices)`` for a given node."""
-	return (node.label if labeled else '', node.indices)
+	return (node.label if labeled else '', node.bitset)
 
 
 def strbracketings(brackets):
 	"""Return a string with a concise representation of a bracketing.
 
-	>>> strbracketings({('S', (0, 1, 2)), ('VP', (0, 2))})
-	'S[0-2], VP[0,2]'
+	>>> print(strbracketings({('S', 0b111), ('VP', 0b101)}))
+	S[0-2], VP[0,2]
 	"""
 	if not brackets:
 		return '{}'
 	return ', '.join('%s[%s]' % (a, ','.join(
-		'-'.join(str(y) for y in sorted(set(x)))
-		for x in intervals(sorted(b)))) for a, b in sorted(brackets))
+		'-'.join('%d' % y for y in sorted(set(x)))
+		for x in intervals(b))) for a, b in sorted(brackets))
 
 
 def leafancestorpaths(tree, dellabel):
 	"""Generate a list of ancestors for each leaf node in a tree."""
 	# uses [] to mark components, and () to mark constituent boundaries
 	# deleted words/tags should not affect boundary detection
-	paths = {a: [] for a in tree.indices}
+	paths = {a: [] for a in getbits(tree.bitset)}
 	# do a top-down level-order traversal
 	thislevel = [tree]
 	while thislevel:
 		nextlevel = []
 		for n in thislevel:
-			leaves = sorted(n.indices)
+			leaves = list(getbits(n.bitset))
 			# skip empty nodes and POS tags
 			if not leaves or (not n or not isinstance(n[0], Tree)):
 				continue
@@ -1014,17 +1004,17 @@ def mean(seq):
 	return numerator / denominator
 
 
-def intervals(seq):
+def intervals(bitset):
 	"""Return a sequence of intervals corresponding to contiguous ranges.
 
-	``seq`` is a sorted list of integers. An interval is a pair ``(a, b)``,
-	with ``a <= b`` denoting indices ``x`` in ``seq``
-	such that ``a <= x <= b``.
+	``seq`` is an integer representing a bitvector. An interval is a pair
+	``(a, b)``, with ``a <= b`` denoting a contiguous range of one bits ``x``
+	in ``seq`` such that ``a <= x <= b``.
 
-	>>> list(intervals((0, 1, 3, 4, 6, 7, 8)))
+	>>> list(intervals(0b111011011))  # NB: read from right to left
 	[(0, 1), (3, 4), (6, 8)]"""
 	start = prev = None
-	for a in seq:
+	for a in getbits(bitset):
 		if start is None:
 			start = prev = a
 		elif a == prev + 1:
@@ -1034,24 +1024,6 @@ def intervals(seq):
 			start = prev = a
 	if start is not None:
 		yield start, prev
-
-
-def disc(node):
-	"""Test whether a particular node is locally discontinuous.
-
-	The root node of a complete tree will, by definition, be continuous. Nodes
-	can be continuous even if some of their children are discontinuous."""
-	if not isinstance(node, Tree):
-		return False
-	start = prev = None
-	for a in sorted(node.indices):
-		if start is None:
-			start = prev = a
-		elif a == prev + 1:
-			prev = a
-		else:
-			return True
-	return False
 
 
 def nozerodiv(func):
@@ -1089,12 +1061,24 @@ def editdistance(seq1, seq2):
 	return lev[len1][len2]
 
 
-__all__ = ['EvalAccumulator', 'Evaluator', 'TreePairResult', 'accuracy',
-		'bracketings', 'bracketing', 'disc', 'editdistance', 'f_measure',
-		'harmean', 'intervals', 'leafancestor', 'leafancestorpaths', 'mean',
-		'nozerodiv', 'parentedbracketings', 'pathscore', 'precision',
-		'readparam', 'recall', 'strbracketings', 'transform',
-		'transitiveclosure', 'treedisteval']
+def pyintbitcount(a):
+	"""Return number of set bits (1s) in a Python integer.
+
+	>>> pyintbitcount(0b0011101)
+	4"""
+	cnt = 0
+	while a:
+		a &= a - 1
+		cnt += 1
+	return cnt
+
+
+__all__ = ['Evaluator', 'TreePairResult', 'EvalAccumulator', 'main',
+		'readparam', 'transitiveclosure', 'alignsent', 'transform',
+		'parentedbracketings', 'bracketings', 'bracketing', 'strbracketings',
+		'leafancestorpaths', 'pathscore', 'leafancestor', 'treedisteval',
+		'recall', 'precision', 'f_measure', 'accuracy', 'harmean', 'mean',
+		'intervals', 'disc', 'nozerodiv', 'editdistance']
 
 if __name__ == '__main__':
 	main()

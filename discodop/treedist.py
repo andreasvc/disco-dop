@@ -35,7 +35,7 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import
 from collections import deque
 from discodop.tree import Tree
 
@@ -76,7 +76,7 @@ def prepare(tree, includeterms=False):
 	tree = tree.copy(True)
 	# canonical order of children
 	for a in tree.subtrees(lambda n: isinstance(n[0], Tree)):
-		a.sort(key=lambda n: min(n.leaves()))
+		a.children.sort(key=lambda n: min(n.leaves()))
 	if includeterms:
 		for a in tree.treepositions('leaves'):
 			tree[a] = Terminal(tree[a])
@@ -104,10 +104,11 @@ class AnnotatedTree(object):
 		j = 0
 		while stack:
 			n, anc = stack.pop()
-			n.id = j
+			# hack; this is actually an ID but can't add new attributes
+			n.head = j
 			for c in n:
 				a = deque(anc)
-				a.appendleft(n.id)
+				a.appendleft(n.head)
 				stack.append((c, a))
 			pstack.append((n, anc))
 			j += 1
@@ -125,7 +126,7 @@ class AnnotatedTree(object):
 					else:
 						leftmostdescendents[a] = i
 			else:
-				lmd = leftmostdescendents[n.id]
+				lmd = leftmostdescendents[n.head]
 			self.leftmostdescendents.append(lmd)
 			keyroots[lmd] = i
 			i += 1
@@ -146,13 +147,12 @@ def treedist(tree1, tree2, debug=False):
 	tree1nodes = tree1.nodes
 	tree2nodes = tree2.nodes
 	import numpy
-	treedists = numpy.zeros(  # pylint: disable=no-member
-			(len(tree1.nodes), len(tree2.nodes)), int)
+	treedists = numpy.zeros((len(tree1.nodes), len(tree2.nodes)), int)
 	for i in tree1.keyroots:
 		for j in tree2.keyroots:
 			m = i - tree1lmd[i] + 2
 			n = j - tree2lmd[j] + 2
-			table = numpy.zeros((m, n), int)  # pylint: disable=no-member
+			table = numpy.zeros((m, n), int)
 			ioff = tree1lmd[i] - 1
 			joff = tree2lmd[j] - 1
 
@@ -215,9 +215,10 @@ def newtreedist(tree1, tree2, debug=False):
 	tree1 = prepare(tree1).freeze()
 	tree2 = prepare(tree2).freeze()
 	for n, a in enumerate(tree1.subtrees()):
-		a.idx = n
+		# hack; this is actually an ID but can't add new attributes
+		a.head = n
 	for n, a in enumerate(tree2.subtrees()):
-		a.idx = n
+		a.head = n
 	result = geteditstats((tree1,), (tree2,))
 	geteditstats.mem.clear()
 	if debug:
@@ -248,9 +249,9 @@ class EditStats(object):
 		return "%s(distance=%d, matched=%d, [\n\t%s])" % (
 				self.__class__.__name__, self.distance, self.matched,
 				",\n\t".join("%s(%s, %s)" % (a[0],
-					"%s[%d]" % (a[1].label, a[1].idx)
+					"%s[%d]" % (a[1].label, a[1].head)
 						if isinstance(a[1], Tree) else a[1],
-					"%s[%d]" % (a[2].label, a[2].idx)
+					"%s[%d]" % (a[2].label, a[2].head)
 						if isinstance(a[2], Tree) else a[2])
 					for a in self.editscript))
 

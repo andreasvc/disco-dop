@@ -1,7 +1,8 @@
 """Run an experiment given a parameter file.
 
 Does grammar extraction, parsing, and evaluation."""
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import io
 import os
 import re
@@ -12,18 +13,18 @@ import codecs
 import logging
 import multiprocessing
 from math import log
-from itertools import islice
 from collections import defaultdict, OrderedDict, Counter as multiset
 if sys.version[0] >= '3':
 	import pickle
 	from itertools import zip_longest  # pylint: disable=E0611
 else:
-	import cPickle as pickle
-	from itertools import izip_longest as zip_longest
+	import cPickle as pickle  # pylint: disable=import-error
+	from itertools import izip_longest as zip_longest  # pylint: disable=E0611
 import numpy as np
+from discodop import __version__
 from discodop import eval as evalmod
 from discodop import treebank, treebanktransforms, treetransforms, \
-		grammar, lexicon, parser, estimates, functiontags
+		grammar, lexicon, parser, estimates
 from discodop.tree import Tree
 from discodop.containers import Grammar
 
@@ -40,12 +41,12 @@ DEFAULTS = dict(
 	traincorpus=dict(
 		# filenames may include globbing characters '*' and '?'.
 		path='alpinosample.export',
-		encoding='utf-8',
+		encoding='utf8',
 		maxwords=40,  # limit on train set sentences
 		numsents=2),  # size of train set (before applying maxwords)
 	testcorpus=dict(
 		path='alpinosample.export',
-		encoding='utf-8',
+		encoding='utf8',
 		maxwords=40,  # test set length limit
 		numsents=1,  # size of test set (before length limit)
 		skiptrain=True,  # test set starts after training set
@@ -124,7 +125,8 @@ def startexp(
 	fileobj.setLevel(logging.DEBUG)
 	fileobj.setFormatter(logging.Formatter(formatstr))
 	logging.getLogger('').addHandler(fileobj)
-
+	logging.info('Disco-DOP %s, running on Python %s',
+			__version__, sys.version.split()[0])
 	if not rerun:
 		trees, sents, train_tagged_sents = loadtraincorpus(
 				corpusfmt, traincorpus, binarization, punct, functions,
@@ -148,15 +150,14 @@ def startexp(
 	test_blocks = OrderedDict()
 	test_trees = OrderedDict()
 	test_tagged_sents = OrderedDict()
-	for n, a in islice(testsettb._read_blocks(),
-			testcorpus.skip, testcorpus.skip  # pylint: disable=maybe-no-member
-				+ testcorpus.numsents):
-		tree, sent = testsettb._parsetree(a)
-		if 1 <= len(sent) <= testcorpus.maxwords:
-			test_blocks[n] = testsettb._strblock(n, a)
-			test_trees[n] = tree
+	for n, item in testsettb.itertrees(
+			testcorpus.skip, testcorpus.skip  # pylint: disable=no-member
+			+ testcorpus.numsents):
+		if 1 <= len(item.sent) <= testcorpus.maxwords:
+			test_blocks[n] = item.block
+			test_trees[n] = item.tree
 			test_tagged_sents[n] = [(word, tag) for word, (_, tag)
-					in zip(sent, sorted(tree.pos()))]
+					in zip(item.sent, sorted(item.tree.pos()))]
 	logging.info('%d test sentences after length restriction <= %d',
 			len(test_trees), testcorpus.maxwords)
 	lexmodel = None
@@ -231,6 +232,7 @@ def startexp(
 		logging.info('read training & test corpus')
 		if predictfunctions:
 			from sklearn.externals import joblib
+			from discodop import functiontags
 			logging.info('training function tag classifier')
 			funcclassifier, msg = functiontags.trainfunctionclassifier(
 					trees, sents, numproc)
@@ -284,9 +286,10 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 			functions=functions, morphology=morphology)
 	if isinstance(traincorpus.numsents, float):
 		traincorpus.numsents = int(traincorpus.numsents * len(train.sents()))
-	traintrees = train.itertrees(None, traincorpus.numsents)
-	trees, sents = zip(*[treesent for _, treesent in traintrees
-			if 1 <= len(treesent[1]) <= traincorpus.maxwords])
+	trainset = [item for _, item in train.itertrees(None, traincorpus.numsents)
+			if 1 <= len(item.sent) <= traincorpus.maxwords]
+	trees = [item.tree for item in trainset]
+	sents = [item.sent for item in trainset]
 	logging.info('%d training sentences after length restriction <= %d',
 			len(trees), traincorpus.maxwords)
 	if not trees:
@@ -337,7 +340,7 @@ def getposmodel(postagging, train_tagged_sents):
 def dobinarization(trees, sents, binarization, relationalrealizational):
 	"""Apply binarization."""
 	# fixme: this n should correspond to sentence id
-	tbfanout, n = treebank.treebankfanout(trees)
+	tbfanout, n = treetransforms.treebankfanout(trees)
 	logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
 			tbfanout, n, trees[n], ' '.join(sents[n]))
 	# binarization
@@ -389,16 +392,16 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		numproc, lexmodel, simplelexsmooth, top):
 	"""Read off the requested grammars."""
-	tbfanout, n = treebank.treebankfanout(trees)
+	tbfanout, n = treetransforms.treebankfanout(trees)
 	logging.info('binarized treebank fan-out: %d #%d', tbfanout, n)
 	for n, stage in enumerate(stages):
 		if stage.split:
 			traintrees = [treetransforms.binarize(
 					treetransforms.splitdiscnodes(
-						a.copy(True),
+						tree.copy(True),
 						stage.markorigin),
 					childchar=':', dot=True, ids=grammar.UniqueIDs())
-					for a in trees]
+					for tree in trees]
 			logging.info('splitted discontinuous nodes')
 		else:
 			traintrees = trees
@@ -410,18 +413,28 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		if lexmodel and simplelexsmooth:
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.dop:
-			if stage.dop == 'doubledop':
-				(xgrammar, backtransform,
-						altweights, fragments) = grammar.doubledop(
-						traintrees, sents, binarized=stage.binarized,
-						iterate=stage.iterate, complement=stage.complement,
-						numproc=numproc, extrarules=extrarules)
+			if stage.dop in ('doubledop', 'dop1'):
+				if stage.dop == 'doubledop':
+					(xgrammar, backtransform,
+							altweights, fragments) = grammar.doubledop(
+							traintrees, sents, binarized=stage.binarized,
+							iterate=stage.iterate, complement=stage.complement,
+							numproc=numproc, maxdepth=stage.maxdepth,
+							maxfrontier=stage.maxfrontier,
+							extrarules=extrarules)
+				elif stage.dop == 'dop1':
+					(xgrammar, backtransform,
+							altweights, fragments) = grammar.dop1(
+							traintrees, sents, binarized=stage.binarized,
+							maxdepth=stage.maxdepth,
+							maxfrontier=stage.maxfrontier,
+							extrarules=extrarules)
 				# dump fragments
-				with codecs.getwriter('utf-8')(gzip.open('%s/%s.fragments.gz' %
+				with codecs.getwriter('utf8')(gzip.open('%s/%s.fragments.gz' %
 						(resultdir, stage.name), 'w')) as out:
 					out.writelines('%s\t%d\n' % (treebank.writetree(a, b, 0,
 							'bracket' if stage.mode.startswith('pcfg')
-							else 'discbracket').rstrip(), sum(c.values()))
+							else 'discbracket').rstrip('\n'), sum(c.values()))
 							for (a, b), c in fragments.items())
 			elif stage.dop == 'reduction':
 				xgrammar, altweights = grammar.dopreduction(
@@ -439,32 +452,32 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					bitpar=stage.mode.startswith('pcfg'),
 					binarized=stage.binarized)
 			for name in altweights:
-				gram.register(u'%s' % name, altweights[name])
-			with gzip.open('%s/%s.rules.gz' % (
-					resultdir, stage.name), 'wb') as rulesfile:
+				gram.register('%s' % name, altweights[name])
+			with codecs.getwriter('utf8')(gzip.open('%s/%s.rules.gz' % (
+					resultdir, stage.name), 'wb')) as rulesfile:
 				rulesfile.write(rules)
-			with codecs.getwriter('utf-8')(gzip.open('%s/%s.lex.gz' % (
+			with codecs.getwriter('utf8')(gzip.open('%s/%s.lex.gz' % (
 					resultdir, stage.name), 'wb')) as lexiconfile:
 				lexiconfile.write(lex)
 			logging.info('DOP model based on %d sentences, %d nodes, '
 				'%d nonterminals', len(traintrees), nodes, len(gram.toid))
 			logging.info(msg)
 			if stage.estimator != 'rfe':
-				gram.switch(u'%s' % stage.estimator)
+				gram.switch('%s' % stage.estimator)
 			logging.info(gram.testgrammar()[1])
-			if stage.dop == 'doubledop':
+			if stage.dop in ('doubledop', 'dop1'):
 				# backtransform keys are line numbers to rules file;
 				# to see them together do:
 				# $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
-				with codecs.getwriter('ascii')(gzip.open(
+				with codecs.getwriter('utf8')(gzip.open(
 						'%s/%s.backtransform.gz' % (resultdir, stage.name),
 						'w')) as out:
 					out.writelines('%s\n' % a for a in backtransform)
 				if n and stage.prune:
 					msg = gram.getmapping(stages[n - 1].grammar,
 						striplabelre=None if stages[n - 1].dop
-							else re.compile(b'@.+$'),
-						neverblockre=re.compile(b'.+}<'),
+							else re.compile('@.+$'),
+						neverblockre=re.compile('.+}<'),
 						splitprune=stage.splitprune and stages[n - 1].split,
 						markorigin=stages[n - 1].markorigin)
 				else:
@@ -472,25 +485,24 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					# binarization nodes
 					msg = gram.getmapping(None,
 						striplabelre=None,
-						neverblockre=re.compile(b'.+}<'),
+						neverblockre=re.compile('.+}<'),
 						splitprune=False, markorigin=False)
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
 				msg = gram.getmapping(stages[n - 1].grammar,
 					striplabelre=None if stages[n - 1].dop
-						and stages[n - 1].dop != 'doubledop'
-						else re.compile(b'@[-0-9]+$'),
+						and stages[n - 1].dop not in ('doubledop', 'dop1')
+						else re.compile('@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
 					markorigin=stages[n - 1].markorigin)
 				if stage.mode == 'dop-rerank':
 					gram.getrulemapping(
-							stages[n - 1].grammar, re.compile(br'@[-0-9]+\b'))
+							stages[n - 1].grammar, re.compile(r'@[-0-9]+\b'))
 				logging.info(msg)
 			# write prob models
-			np.savez_compressed(  # pylint: disable=no-member
-					'%s/%s.probs.npz' % (resultdir, stage.name),
+			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
 					**{name: mod for name, mod
 						in zip(gram.modelnames, gram.models)})
 		else:  # not stage.dop
@@ -510,10 +522,10 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					xgrammar, bitpar=stage.mode.startswith('pcfg'))
 			gram = Grammar(rules, lex, start=top,
 					bitpar=stage.mode.startswith('pcfg'))
-			with gzip.open('%s/%s.rules.gz' % (
-					resultdir, stage.name), 'wb') as rulesfile:
+			with codecs.getwriter('utf8')(gzip.open('%s/%s.rules.gz' % (
+					resultdir, stage.name), 'wb')) as rulesfile:
 				rulesfile.write(rules)
-			with codecs.getwriter('utf-8')(gzip.open('%s/%s.lex.gz' % (
+			with codecs.getwriter('utf8')(gzip.open('%s/%s.lex.gz' % (
 					resultdir, stage.name), 'wb')) as lexiconfile:
 				lexiconfile.write(lex)
 			logging.info(gram.testgrammar()[1])
@@ -527,7 +539,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				logging.info(msg)
 		logging.info('wrote grammar to %s/%s.{rules,lex%s}.gz',
 				resultdir, stage.name,
-				',backtransform' if stage.dop == 'doubledop' else '')
+				',backtransform' if stage.dop in ('doubledop', 'dop1') else '')
 
 		outside = None
 		if stage.estimates in ('SX', 'SXlrgaps'):
@@ -545,9 +557,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						gram.toid[trees[0].label])
 			logging.info('estimates done. cpu time elapsed: %gs',
 					time.clock() - begin)
-			np.savez_compressed(  # pylint: disable=no-member
-					'%s/%s.outside.npz' % (resultdir, stage.name),
-					outside=outside)
+			np.savez_compressed('%s/%s.outside.npz' % (
+					resultdir, stage.name), outside=outside)
 			logging.info('saved %s estimates', stage.estimates)
 		elif stage.estimates:
 			raise ValueError('unrecognized value; specify SX or SXlrgaps.')
@@ -575,7 +586,7 @@ def doparsing(**kwds):
 		initworker(params)
 		dowork = (worker(a) for a in params.testset.items())
 	else:
-		pool = multiprocessing.Pool(processes=params.numproc,
+		pool = multiprocessing.pool.Pool(processes=params.numproc,
 				initializer=initworker, initargs=(params,))
 		dowork = pool.imap_unordered(worker, params.testset.items())
 	logging.info('going to parse %d sentences.', len(params.testset))
@@ -677,41 +688,44 @@ def writeresults(results, params):
 		# convert gold corpus because writing these formats is unsupported
 		corpusfmt = 'export'
 		io.open('%s/%sgold.%s' % (params.resultdir, category, ext[corpusfmt]),
-				'w', encoding='utf-8').writelines(
+				'w', encoding='utf8').writelines(
 				treebank.writetree(goldtree, [w for w, _ in goldsent], n,
 					corpusfmt, morphology=params.morphology)
 			for n, (_, goldtree, goldsent, _) in params.testset.items())
 	else:
 		corpusfmt = params.corpusfmt
 		io.open('%s/%sgold.%s' % (params.resultdir, category, ext[corpusfmt]),
-				'w', encoding='utf-8').writelines(
+				'w', encoding='utf8').writelines(
 				a for _, _, _, a in params.testset.values())
 	for res in results:
 		io.open('%s/%s%s.%s' % (params.resultdir, category, res.name,
-				ext[corpusfmt]), 'w', encoding='utf-8').writelines(
+				ext[corpusfmt]), 'w', encoding='utf8').writelines(
 					treebank.writetree(
 						res.parsetrees[n], res.sents[n], n, corpusfmt,
 						morphology=params.morphology)
 				for n in params.testset)
-	with open('%s/parsetimes.txt' % params.resultdir, 'w') as out:
+	with io.open('%s/parsetimes.txt' % params.resultdir, 'w',
+			encoding='utf8') as out:
 		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
 		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
 				'\t'.join(str(res.elapsedtime[n]) for res in results))
 				for n in params.testset)
-	with open('%s/logprobs.txt' % params.resultdir, 'w') as out:
+	with io.open('%s/logprobs.txt' % params.resultdir, 'w',
+			encoding='utf8') as out:
 		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
 		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
 				'\t'.join(str(res.probs[n]) for res in results))
 				for n in params.testset)
 	names = [res.name for res, stage in zip(results, params.parser.stages)
-			if stage.dop == 'doubledop']
+			if stage.dop in ('doubledop', 'dop1')]
 	if names:
-		with open('%s/numfrags.txt' % params.resultdir, 'w') as out:
+		with io.open('%s/numfrags.txt' % params.resultdir, 'w',
+				encoding='utf8') as out:
 			out.write('#id\tlen\t%s\n' % '\t'.join(names))
 			out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
 					'\t'.join(str(res.frags[n]) for res, stage
 						in zip(results, params.parser.stages)
-						if stage.dop == 'doubledop'))
+						if stage.dop in ('doubledop', 'dop1')))
 					for n in params.testset)
 	logging.info('wrote results to %s/%s%s.%s', params.resultdir, category,
 			(('{%s}' % ','.join(res.name for res in results))
@@ -907,9 +921,9 @@ def parsetepacoc(
 	oldeval(totresults, goldbrackets)
 	# write TOTAL results file with all tepacoc sentences (not the baseline)
 	for stage in stages:
-		open('TOTAL.%s.export' % stage.name, 'w').writelines(
-				open('%s.%s.export' % (cat, stage.name)).read()
-				for cat in list(results) + ['gold'])
+		io.open('TOTAL.%s.export' % stage.name, 'w', encoding='utf8'
+				).writelines(io.open('%s.%s.export' % (cat, stage.name),
+				encoding='utf8').read() for cat in list(results) + ['gold'])
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'
 	logging.info('category: %s', cat)
@@ -922,7 +936,7 @@ def readparam(filename):
 
 	The file should contain a list of comma-separated ``attribute=value`` pairs
 	and will be read using ``eval('dict(%s)' % open(file).read())``."""
-	with open(filename) as fileobj:
+	with io.open(filename, encoding='utf8') as fileobj:
 		params = eval('dict(%s)' % fileobj.read())  # pylint: disable=eval-used
 	for key in DEFAULTS:
 		if key not in params:
@@ -948,7 +962,7 @@ def readparam(filename):
 					'but this stage is first.')
 		if stage.mode == 'dop-rerank':
 			assert stage.prune and not stage.splitprune and stage.k > 1
-			assert (stage.dop and stage.dop != 'doubledop'
+			assert (stage.dop and stage.dop not in ('doubledop', 'dop1')
 					and stage.objective == 'mpp')
 		if stage.dop:
 			assert stage.estimator in ('rfe', 'ewe', 'bon')
@@ -1011,8 +1025,13 @@ def main(argv=None):
 		resultdir = argv[1].rsplit('.', 1)[0]
 		top = startexp(resultdir=resultdir, rerun=rerun, **params)
 		if not rerun:  # copy parameter file to result dir
-			open(os.path.join(resultdir, 'params.prm'), 'w').write(
-					"top='%s',\n%s" % (top, open(argv[1]).read()))
+			paramlines = io.open(argv[1], encoding='utf8').readlines()
+			if paramlines[0].startswith("top='"):
+				paramlines = paramlines[1:]
+			outfile = os.path.join(resultdir, 'params.prm')
+			with io.open(outfile, 'w', encoding='utf8') as out:
+				out.write("top='%s',\n" % top)
+				out.writelines(paramlines)
 
 
 __all__ = ['initworker', 'startexp', 'loadtraincorpus', 'getposmodel',

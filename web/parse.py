@@ -6,6 +6,7 @@ subdirectories of ``grammar/``
 Also usable from the command line:
 $ curl http://localhost:5000/parser/parse -G --data-urlencode "sent=What's up?"
 """
+from __future__ import absolute_import
 import os
 import re
 import glob
@@ -92,7 +93,7 @@ def parse():
 		parsetrees = results[-1].parsetrees or []
 		parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
 		fragments = results[-1].fragments or ()
-		APP.logger.info('[%s] %s' % (probstr(prob), tree))
+		APP.logger.info('[%s] %s', probstr(prob), tree)
 		tree = Tree.parse(tree, parse_leaf=int)
 		result = Markup(DrawTree(tree, senttok).text(
 				unicodelines=True, html=html))
@@ -166,7 +167,7 @@ def loadparsers():
 					postagging.method == 'unknownword' else None,
 					relationalrealizational=params.get(
 						'relationalrealizational'))
-			APP.logger.info('Grammar for %s loaded.' % lang)
+			APP.logger.info('Grammar for %s loaded.', lang)
 	assert PARSERS, 'no grammars found!'
 
 
@@ -228,7 +229,7 @@ def unigramprob(model, sent, smooth=1e-20):
 def guesslang(sent):
 	"""Heuristic: pick language that contains most words from input."""
 	probs = {lang: unigramprob(PARSERS[lang], sent) for lang in PARSERS}
-	APP.logger.info('Lang: %r; Sent: %s' % (probs, ' '.join(sent)))
+	APP.logger.info('Lang: %r; Sent: %s', probs, ' '.join(sent))
 	return max(probs, key=probs.get)
 
 

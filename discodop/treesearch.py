@@ -4,20 +4,19 @@
 # - cache raw results from _query() before conversion?
 # - return/cache trees as strings?
 
-from __future__ import print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import io
 import os
 import re
 import sys
 import concurrent.futures
+import multiprocessing
 import subprocess
 from collections import Counter, OrderedDict
-from itertools import islice, count, takewhile
-try:
-	from multiprocessing import cpu_count  # pylint: disable=E0611
-	from itertools import ifilter as filter
-except ImportError:
-	from os import cpu_count  # pylint: disable=E0611
+from itertools import islice, takewhile
+if sys.version[0] == '2':
+	from itertools import ifilter as filter  # pylint: disable=E0611,W0622
 try:
 	import alpinocorpus
 	import xml.etree.cElementTree as ElementTree
@@ -227,15 +226,14 @@ class TgrepSearcher(CorpusSearcher):
 				treestr, match = line.split(':::')
 				treestr = filterlabels(treestr, nofunc, nomorph)
 				treestr = treestr.replace(" )", " -NONE-)")
-				cnt = count()
 				if match.startswith('('):
 					treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
 							match.split(None, 1)), 1)
 				else:
 					match = ' %s)' % match
 					treestr = treestr.replace(match, '_HIGH%s' % match)
-				tree = Tree.parse(treestr, parse_leaf=lambda _: next(cnt))
-				sent = re.findall(r" +([^ ()]+)(?=[ )])", treestr)
+				tree, sent = treebank.termindices(treestr)
+				tree = Tree(tree)
 				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
 				if high:
 					high = high.pop()
@@ -315,8 +313,8 @@ class TgrepSearcher(CorpusSearcher):
 				proc.stderr.close()
 		else:
 			out, err = proc.communicate()
-			out = out.decode('utf8')  # pylint: disable=E1103
-			err = err.decode('utf8')  # pylint: disable=E1103
+			out = out.decode('utf8')
+			err = err.decode('utf8')
 			proc.stdout.close()
 			proc.stderr.close()
 			results = ((int(match.group(1)), match.group(2)) for match
@@ -383,18 +381,18 @@ class DactSearcher(CorpusSearcher):
 			for sentno, match in future.result():
 				treestr = self.files[filename].read(match.name())
 				match = match.contents().decode('utf8')
-				tree, sent = treebank.alpinotree(
+				item = treebank.alpinotree(
 						ElementTree.fromstring(treestr),
 						functions=None if nofunc else 'add',
 						morphology=None if nomorph else 'replace')
 				highwords = re.findall('<node[^>]*begin="([0-9]+)"[^>]*/>',
 						match)
 				high = set(re.findall(r'\bid="(.+?)"', match))
-				high = list(tree.subtrees(lambda n:
-						n.source[treebank.PARENT] in high or
-						n.source[treebank.WORD].lstrip('#') in high))
+				high = [node for node in item.tree.subtrees()
+						if node.source[treebank.PARENT] in high
+						or node.source[treebank.WORD].lstrip('#') in high]
 				high += [int(a) for a in highwords]
-				x.append((filename, sentno, tree, sent, high))
+				x.append((filename, sentno, item.tree, item.sent, high))
 			self.cache['trees', query, filename,
 					nofunc, nomorph] = x, maxresults
 			result.extend(x)
@@ -533,7 +531,7 @@ class NoFuture(object):
 	def __init__(self, func, arg):
 		self._result = func(arg)
 
-	def result(self, timeout=None):  # pylint: disable=W0613
+	def result(self, timeout=None):  # pylint: disable=unused-argument
 		"""Return the precomputed result."""
 		return self._result
 
@@ -544,7 +542,7 @@ class FIFOOrederedDict(OrderedDict):
 		super(FIFOOrederedDict, self).__init__()
 		self.limit = limit
 
-	def __setitem__(self, key, value):
+	def __setitem__(self, key, value):  # pylint: disable=arguments-differ
 		if key in self:
 			self.pop(key)
 		elif len(self) >= self.limit:
@@ -560,6 +558,14 @@ def filterlabels(line, nofunc, nomorph):
 		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
 				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
 	return line
+
+
+def cpu_count():
+	"""Return number of CPUs or 1."""
+	try:
+		return multiprocessing.cpu_count()
+	except NotImplementedError:
+		return 1
 
 
 def main():
@@ -643,7 +649,7 @@ def main():
 
 
 __all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',
-		'NoFuture', 'filterlabels']
+		'NoFuture', 'FIFOOrederedDict', 'filterlabels', 'cpu_count']
 
 if __name__ == '__main__':
 	main()

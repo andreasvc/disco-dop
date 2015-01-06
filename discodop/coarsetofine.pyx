@@ -337,9 +337,9 @@ def getoutside(Chart chart):
 
 def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 	"""Test coarse-to-fine methods on a sentence."""
-	import plcfrs
-	from disambiguation import getderivations, marginalize
-	from treetransforms import canonicalize, removefanoutmarkers
+	from discodop import plcfrs
+	from discodop.disambiguation import getderivations, marginalize
+	from discodop.treetransforms import canonicalize, removefanoutmarkers
 	from math import exp as pyexp
 	sent, tags = zip(*sent)
 	print(' C O A R S E ')
@@ -349,7 +349,7 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 		mpp, _ = marginalize("mpp", derivations, entries, chart)
 		for t, p, _ in mpp:
 			print(pyexp(-p), end=' ')
-			t = Tree(t)
+			t = Tree.parse(t)
 			if split:
 				unbinarize(t, childchar=":", parentchar="!")
 				mergediscnodes(t)
@@ -382,7 +382,7 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 		mpp, _ = marginalize("mpp", derivations, entries, chart2)
 		for t, p, _ in mpp:
 			print(pyexp(-p), end=' ')
-			t = Tree(t)
+			t = Tree.parse(t)
 			unbinarize(t)
 			t = canonicalize(removefanoutmarkers(t))
 			# print(t)
@@ -408,10 +408,11 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 
 def test():
 	import re
-	from treetransforms import splitdiscnodes, binarize, addfanoutmarkers
-	from treebank import NegraCorpusReader
-	from grammar import treebankgrammar, dopreduction, subsetgrammar
 	from time import clock
+	from discodop.treetransforms import splitdiscnodes, binarize, \
+			addfanoutmarkers
+	from discodop.treebank import NegraCorpusReader
+	from discodop.grammar import treebankgrammar, dopreduction, subsetgrammar
 	k = 50
 	# corpus = NegraCorpusReader("toytb.export", encoding="iso-8859-1")
 	# corpus = NegraCorpusReader("negraproc.export",
@@ -462,15 +463,15 @@ def test():
 	else:
 		print("DOP grammar is NOT a superset!")
 	for msg, coarse, fine, split, enabled in zip(
-		"normal parentannot cf-split".split(),
-		(normal, parent, splitg),
-		(fine999, fine1, fine1),
-		(False, False, True),
-		(True, False, True)):
+			('normal', 'parentannot', 'cf-split'),
+			(normal, parent, splitg),
+			(fine999, fine1, fine1),
+			(False, False, True),
+			(True, False, True)):
 		if not enabled:
 			continue
 		print("coarse grammar:", msg)
-		fine.getmapping(coarse, re.compile(b'@[-0-9]+$'), None, split, True)
+		fine.getmapping(coarse, re.compile('@[-0-9]+$'), None, split, True)
 		begin = clock()
 		for n, (sent, tree) in enumerate(zip(sents, trees)):
 			if len(sent) > testmaxlen:
@@ -479,6 +480,6 @@ def test():
 			doctftest(coarse, fine, sent, tree, k, split, verbose=False)
 		print("time elapsed", clock() - begin, "s")
 
-__all__ = ['prunechart', 'bitparkbestitems', 'getinside', 'getoutside',
-		'posteriorthreshold', 'whitelistfromposteriors',
-		'whitelistfromposteriors_matrix']
+__all__ = ['prunechart', 'bitparkbestitems', 'whitelistfromposteriors',
+		'whitelistfromposteriors_matrix', 'posteriorthreshold',
+		'getinside', 'getoutside']

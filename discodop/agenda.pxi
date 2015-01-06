@@ -154,7 +154,7 @@ cdef class Agenda:
 	def __len__(self):
 		return self.length
 
-	def __nonzero__(self):
+	def __bool__(self):
 		return self.length != 0
 
 	def keys(self):

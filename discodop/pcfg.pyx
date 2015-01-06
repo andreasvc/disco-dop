@@ -61,7 +61,7 @@ cdef class CFGChart(Chart):
 		cdef short start = (item // self.grammar.nonterminals) // self.lensent
 		cdef short end = (item // self.grammar.nonterminals) % self.lensent + 1
 		return '%s[%d:%d]' % (
-				self.grammar.tolabel[lhs].decode('ascii'), start, end)
+				self.grammar.tolabel[lhs], start, end)
 
 
 @cython.final
@@ -179,7 +179,7 @@ cdef class DenseCFGChart(CFGChart):
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
 		self.probs[idx] = prob
 
-	def __nonzero__(self):
+	def __bool__(self):
 		"""Return true when the root item is in the chart.
 
 		i.e., test whether sentence has been parsed successfully."""
@@ -273,7 +273,7 @@ def parse(sent, Grammar grammar, tags=None, start=None, list whitelist=None,
 	:param tags: Optionally, a sequence of POS tags to use instead of
 		attempting to apply all possible POS tags.
 	:param start: integer corresponding to the start symbol that complete
-		derivations should be headed by; e.g., ``grammar.toid[b'ROOT']``.
+		derivations should be headed by; e.g., ``grammar.toid['ROOT']``.
 		If not given, the default specified by ``grammar`` is used.
 	:param whitelist: a list of items that may enter the chart.
 		The whitelist is a list of cells consisting of sets of labels:
@@ -564,7 +564,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		uint32_t n, lhs, rhs1
 		short left, right, lensent = len(sent)
 	for left, word in enumerate(sent):
-		tag = tags[left].encode('ascii') if tags else None
+		tag = tags[left] if tags else None
 		right = left + 1
 		recognized = False
 		for lexrule in grammar.lexicalbyword.get(word, ()):
@@ -576,7 +576,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (tag is None or grammar.tolabel[lhs] == tag
-					or grammar.tolabel[lhs].startswith(tag + b'@')):
+					or grammar.tolabel[lhs].startswith(tag + '@')):
 				chart.addedge(lhs, left, right, right, NULL)
 				chart.updateprob(lhs, left, right,
 						0.0 if symbolic else lexrule.prob, 0.0)
@@ -700,20 +700,20 @@ def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
 	minleft, maxleft, minright, maxright = minmaxmatrices(
 			grammar.nonterminals, lensent)
 	for left in range(lensent):  # assign POS tags
-		tag = tags[left].encode('ascii') if tags else None
+		tag = tags[left] if tags else None
 		right = left + 1
 		for lexrule in grammar.lexicalbyword.get(sent[left], []):
 			lhs = lexrule.lhs
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if not tags or (grammar.tolabel[lhs] == tag
-					or grammar.tolabel[lhs].startswith(tag + b'@')):
+					or grammar.tolabel[lhs].startswith(tag + '@')):
 				inside[left, right, lhs] = lexrule.prob
 		if not inside.base[left, right].any():
 			if tags is not None:
 				lhs = grammar.toid[tag]
 				if not tags or (grammar.tolabel[lhs] == tag
-						or grammar.tolabel[lhs].startswith(tag + b'@')):
+						or grammar.tolabel[lhs].startswith(tag + '@')):
 					inside[left, right, lhs] = 1.
 			else:
 				raise ValueError("not covered: %r" % (tag or sent[left]), )
@@ -1056,7 +1056,7 @@ def pprint_matrix(matrix, sent, tolabel, matrix2=None):
 				for lhs in range(len(matrix[left, right])):
 					if matrix[left, right, lhs] or (
 							matrix2 is not None and matrix2[left, right, lhs]):
-						print('%20s\t%8.6g' % (tolabel[lhs].decode('ascii'),
+						print('%20s\t%8.6g' % (tolabel[lhs],
 								matrix[left, right, lhs]), end='')
 						if matrix2 is not None:
 							print('\t%8.6g' % matrix2[left, right, lhs], end='')
@@ -1095,10 +1095,10 @@ def test():
 	cfg1.switch(u'default', False)
 	i, o, start, _ = doinsideoutside('mary walks'.split(), cfg1)
 	assert start
-	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
+	print(i[0, 2, cfg1.toid['S']], o[0, 2, cfg1.toid['S']])
 	i, o, start, _ = doinsideoutside('walks mary'.split(), cfg1)
 	assert not start
-	print(i[0, 2, cfg1.toid[b'S']], o[0, 2, cfg1.toid[b'S']])
+	print(i[0, 2, cfg1.toid['S']], o[0, 2, cfg1.toid['S']])
 	rules = [
 		((('NP', 'NP', 'PP'), ((0, 1), )), 0.4),
 		((('PP', 'P', 'NP'), ((0, 1), )), 1),
@@ -1129,7 +1129,7 @@ def test():
 	# chart1, msg1 = parse(sent, cfg2, symbolic=True)
 	# print(msg, '\n', msg1)
 
-__all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'bitpar_nbest',
-		'bitpar_yap_forest', 'chartmatrix', 'doinsideoutside', 'insidescores',
-		'minmaxmatrices', 'outsidescores', 'parse', 'parse_bitpar',
-		'pprint_matrix', 'renumber']
+__all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'parse',
+		'doinsideoutside', 'insidescores', 'outsidescores', 'minmaxmatrices',
+		'chartmatrix', 'parse_bitpar', 'bitpar_yap_forest', 'bitpar_nbest',
+		'renumber', 'pprint_matrix']

@@ -7,7 +7,7 @@ from __future__ import print_function
 def pyintbitcount(a):
 	"""Return number of set bits (1s) in a Python integer.
 
-	>>> bitcount(0b0011101)
+	>>> pyintbitcount(0b0011101)
 	4"""
 	count = 0
 	while a:

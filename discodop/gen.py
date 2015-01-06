@@ -1,7 +1,7 @@
 """Generate random sentences with an LCFRS.
 
 Reads grammar from a text file."""
-from __future__ import print_function
+from __future__ import division, print_function, absolute_import
 import sys
 import gzip
 import codecs
@@ -278,9 +278,9 @@ def main():
 		print("[%g] %s" % (p, ' '.join(sent.pop())))
 
 
-__all__ = ['Grammar', 'LexicalRule', 'Rule', 'arraytoyf', 'chooserule',
-		'compose', 'gen', 'parsefrac', 'read_bitpar_grammar',
-		'read_lcfrs_grammar', 'splitgrammar', 'yfarray']
+__all__ = ['Grammar', 'LexicalRule', 'Rule', 'gen', 'chooserule', 'compose',
+		'parsefrac', 'read_lcfrs_grammar', 'read_bitpar_grammar',
+		'splitgrammar', 'yfarray', 'arraytoyf']
 
 if __name__ == '__main__':
 	main()

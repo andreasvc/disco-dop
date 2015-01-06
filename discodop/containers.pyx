@@ -16,7 +16,7 @@ include "_grammar.pxi"
 @cython.final
 cdef class LexicalRule:
 	"""A weighted rule of the form 'non-terminal --> word'."""
-	def __init__(self, uint32_t lhs, unicode word, double prob):
+	def __init__(self, uint32_t lhs, str word, double prob):
 		self.lhs = lhs
 		self.word = word
 		self.prob = prob
@@ -60,7 +60,7 @@ cdef class SmallChartItem:
 		elif op == 4:
 			return me.label > ob.label or me.vec > ob.vec
 
-	def __nonzero__(self):
+	def __bool__(self):
 		return self.label != 0 and self.vec != 0
 
 	def __repr__(self):
@@ -120,7 +120,7 @@ cdef class FatChartItem:
 		elif op == 4:
 			return me.label > ob.label or (labelmatch and cmp > 0)
 
-	def __nonzero__(self):
+	def __bool__(self):
 		cdef int n
 		if self.label:
 			for n in range(SLOTS):
@@ -263,7 +263,7 @@ cdef class Chart:
 		"""Return a list of indices dominated by ``item``."""
 		raise NotImplementedError
 
-	cdef lexidx(self, Edge *edge):
+	cdef int lexidx(self, Edge *edge):
 		"""Return sentence index of the terminal child given a lexical edge."""
 		cdef short result = edge.pos.mid - 1
 		assert 0 <= result < self.lensent, (result, self.lensent)
@@ -355,7 +355,7 @@ cdef class Chart:
 				result.append('')
 		return '\n'.join(result)
 
-	def __nonzero__(self):
+	def __bool__(self):
 		"""Return true when the root item is in the chart.
 
 		i.e., test whether sentence has been parsed successfully."""
@@ -513,7 +513,7 @@ cdef class Ctrees:
 				sorted(range(cnt), key=prodsintree.get))}
 		# copy nodes to allocated array, while translating indices
 		dest = &self.nodes[self.numnodes]
-		for n, m in sortidx.iteritems():
+		for n, m in sortidx.items():
 			dest[m] = source[n]
 			if dest[m].left >= 0:
 				dest[m].left = sortidx[source[n].left]
@@ -596,5 +596,5 @@ cdef inline copynodes(tree, dict prods, Node *result):
 			else:  # unary node
 				result[n].right = -1
 
-__all__ = ['Chart', 'Ctrees', 'Edges', 'FatChartItem', 'Grammar',
-		'LexicalRule', 'RankedEdge', 'SmallChartItem', 'numedges']
+__all__ = ['Grammar', 'Chart', 'Ctrees', 'LexicalRule', 'SmallChartItem',
+		'FatChartItem', 'Edges', 'RankedEdge', 'numedges']

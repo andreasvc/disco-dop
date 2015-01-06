@@ -6,11 +6,11 @@ import numpy as np
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},
 YFBINARY = re.compile(
-		br'^(?:0|1|1?(?:01)+|0?(?:10)+)(?:,(?:0|1|1?(?:01)+|0?(?:10)+))*$')
-YFUNARYRE = re.compile(br'^0(?:,0)*$')
+		r'^(?:0|1|1?(?:01)+|0?(?:10)+)(?:,(?:0|1|1?(?:01)+|0?(?:10)+))*$')
+YFUNARYRE = re.compile(r'^0(?:,0)*$')
 # Match when non-integral weights are present
-LCFRS_NONINT = re.compile(b'\t[0-9]+[./][0-9]+\n')
-BITPAR_NONINT = re.compile(b'(?:^|\n)[0-9]+\.[0-9]+[ \t]')
+LCFRS_NONINT = re.compile('\t[0-9]+[./][0-9]+\n')
+BITPAR_NONINT = re.compile('(?:^|\n)[0-9]+\.[0-9]+[ \t]')
 LEXICON_NONINT = re.compile('[ \t][0-9]+[./][0-9]+[ \t\n]')
 
 # comparison functions for sorting rules on LHS/RHS labels.
@@ -38,8 +38,8 @@ cdef int cmp2(const void *p1, const void *p2) nogil:
 cdef class Grammar:
 	"""A grammar object which stores rules compactly, indexed in various ways.
 
-	:param rule_tuples_or_bytes: either a sequence of tuples containing both
-		phrasal & lexical rules, or a bytes string containing the phrasal
+	:param rule_tuples_or_str: either a sequence of tuples containing both
+		phrasal & lexical rules, or a string containing the phrasal
 		rules in text format; in the latter case ``lexicon`` should be given.
 		The text format allows for more efficient loading and is used
 		internally.
@@ -50,42 +50,40 @@ cdef class Grammar:
 		a non-binarized grammar can only be used by bitpar.
 
 	By default the grammar is in logprob mode;
-	invoke ``grammar.switch(u'default', logprob=False)`` to switch.
+	invoke ``grammar.switch('default', logprob=False)`` to switch.
 	If the grammar only contains integral weights (frequencies), they will
 	be normalized into relative frequencies; if the grammar contains any
 	non-integral weights, weights will be left unchanged."""
 	def __cinit__(self):
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
-	def __init__(self, rule_tuples_or_bytes, lexicon=None, start=b'ROOT',
+	def __init__(self, rule_tuples_or_str, lexicon=None, start='ROOT',
 			bitpar=False, binarized=True):
 		cdef LexicalRule lexrule
 		cdef double [:] weights
 		cdef int n
 		self.mapping = self.splitmapping = self.bylhs = NULL
-		if not isinstance(start, bytes):
-			start = start.encode('ascii')
 		self.start = start
 		self.bitpar = bitpar
 		self.binarized = binarized
 		self.numunary = self.numbinary = self.currentmodel = 0
-		self.modelnames = [u'default']
+		self.modelnames = ['default']
 		self.logprob = False
 
-		if rule_tuples_or_bytes and isinstance(rule_tuples_or_bytes, bytes):
-			if not isinstance(lexicon, unicode):
+		if rule_tuples_or_str and isinstance(rule_tuples_or_str, str):
+			if not isinstance(lexicon, str):
 				raise ValueError('expected lexicon argument.')
-			self.origrules = rule_tuples_or_bytes
+			self.origrules = rule_tuples_or_str
 			self.origlexicon = lexicon
-		elif rule_tuples_or_bytes and isinstance(
-				rule_tuples_or_bytes[0], tuple):
+		elif rule_tuples_or_str and isinstance(
+				rule_tuples_or_str[0], tuple):
 			# convert tuples to strings with text format
 			from discodop.grammar import write_lcfrs_grammar
 			self.origrules, self.origlexicon = write_lcfrs_grammar(
-					rule_tuples_or_bytes, bitpar=bitpar)
+					rule_tuples_or_str, bitpar=bitpar)
 		else:
 			raise ValueError(
-					'expected non-empty sequence of tuples or bytes string.')
+					'expected non-empty sequence of tuples or string.')
 
 		# collect non-terminal labels; count number of rules in each category
 		# for allocation purposes.
@@ -127,7 +125,7 @@ cdef class Grammar:
 		"""Count unary & binary rules; make a canonical list of all
 		non-terminal labels and assign them unique IDs."""
 		cdef int numother = 0
-		Epsilon = b'Epsilon'
+		Epsilon = 'Epsilon'
 		# Epsilon gets ID 0, only occurs implicitly in RHS of lexical rules.
 		self.toid = {Epsilon: 0}
 		fanoutdict = {Epsilon: 0}  # temporary mapping of labels to fan-outs
@@ -137,7 +135,7 @@ cdef class Grammar:
 			fields = line.split()
 			if self.bitpar:
 				rule = fields[1:]
-				yf = b'0' if len(rule) == 2 else b'01'
+				yf = '0' if len(rule) == 2 else '01'
 			else:
 				rule = fields[:-2]
 				yf = fields[-2]
@@ -154,7 +152,7 @@ cdef class Grammar:
 			elif len(rule) == 3:
 				if not YFBINARY.match(yf):
 					raise ValueError('illegal yield function: %s' % yf)
-				if b'0' not in yf or b'1' not in yf:
+				if '0' not in yf or '1' not in yf:
 					raise ValueError('mismatch between non-terminals and '
 							'yield function: %r\t%r' % (rule, yf))
 				self.numbinary += 1
@@ -164,7 +162,7 @@ cdef class Grammar:
 				numother += 1
 			if rule[0] not in self.toid:
 				self.toid[rule[0]] = len(self.toid)
-				fanout = yf.count(b',') + 1
+				fanout = yf.count(',') + 1
 				fanoutdict[rule[0]] = fanout
 				if fanout > self.maxfanout:
 					self.maxfanout = fanout
@@ -190,7 +188,7 @@ cdef class Grammar:
 				continue
 			x = line.index('\t')
 			word = line[:x]
-			fields = line[x + 1:].encode('ascii').split()
+			fields = line[x + 1:].split()
 			if word in self.lexicalbyword:
 				raise ValueError('word %r appears more than once '
 						'in lexicon file' % word)
@@ -207,7 +205,7 @@ cdef class Grammar:
 					if fanoutdict[tag] != 1:
 						raise ValueError('POS tag %r has fan-out %d, '
 								'may only be 1.' % (fanoutdict[tag], tag))
-				w = convertweight(weight)
+				w = convertweight(weight.encode('ascii'))
 				if w <= 0:
 					raise ValueError('weights should be positive '
 							'and non-zero:\n%r' % line)
@@ -268,7 +266,7 @@ cdef class Grammar:
 			if self.bitpar:
 				rule = fields[1:]
 				# NB: this is wrong when len(rule) > 10
-				yf = ''.join(map(str, range(len(rule) - 1))).encode('ascii')
+				yf = ''.join(map(str, range(len(rule) - 1)))
 				weight = fields[0]
 			else:
 				rule = fields[:-2]
@@ -280,13 +278,13 @@ cdef class Grammar:
 					raise ValueError('symbol %r has not been seen as LHS '
 						'in any rule: %s' % (nt, line))
 				if self.binarized:
-					fanout = yf.count(b',01'[m]) + (m == 0)
+					fanout = yf.count(',01'[m]) + (m == 0)
 					if fanoutdict[nt] != fanout:
 						raise ValueError("conflicting fanouts for symbol "
 							"'%s'.\nprevious: %d; this non-terminal: %d.\n"
 							"yf: %s; rule: %s" % (
 							nt, fanoutdict[nt], fanout, yf, line))
-			w = convertweight(weight)
+			w = convertweight(weight.encode('ascii'))
 			if w <= 0:
 				raise ValueError('weights should be positive and non-zero:\n%r'
 						% line)
@@ -298,7 +296,7 @@ cdef class Grammar:
 			cur.rhs2 = 0 if len(rule) == 2 else self.toid[rule[2]]
 			cur.prob = w
 			cur.lengths = cur.args = m = 0
-			for a in yf.decode('ascii'):  # required for 2/3 compatibility
+			for a in yf:
 				if a == ',':
 					cur.lengths |= 1 << (m - 1)
 					continue
@@ -311,7 +309,7 @@ cdef class Grammar:
 			if self.binarized and m >= (8 * sizeof(cur.args)):
 				raise ValueError('Parsing complexity (%d) too high (max %d).\n'
 						'Rule: %s' % (m, (8 * sizeof(cur.args)), line))
-			self.rulenos[yf + b' ' + b' '.join(rule)] = n
+			self.rulenos[yf + ' ' + ' '.join(rule)] = n
 			n += 1
 		assert n == self.numrules, (n, self.numrules)
 
@@ -387,7 +385,7 @@ cdef class Grammar:
 		# sentinel rule
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
-	def register(self, unicode name, weights):
+	def register(self, str name, weights):
 		"""Register a probabilistic model given a name and a sequence of
 		floats ``weights``, with weights in the same order as
 		``self.origrules`` and ``self.origlexicon`` (which is an arbitrary
@@ -408,7 +406,7 @@ cdef class Grammar:
 		for n in range(self.numrules + len(self.lexical)):
 			tmp[n] = weights[n]
 
-	def switch(self, unicode name, bint logprob=True):
+	def switch(self, str name, bint logprob=True):
 		"""Switch to a different probabilistic model;
 		use u'default' to swith back to model given during initialization."""
 		cdef int n, m = self.modelnames.index(name)
@@ -483,7 +481,7 @@ cdef class Grammar:
 			msg = ('Weights do not sum to 1 +/- %g.\n'
 					'Largest difference with rules for LHS \'%s\': '
 					'sum = %g; diff = %g' % (
-					epsilon, self.tolabel[maxlabel].decode('ascii'),
+					epsilon, self.tolabel[maxlabel],
 					fsum(weights[maxlabel]), maxdiff))
 			return False, msg
 		return True, 'All left hand sides sum to 1 +/- epsilon=%s' % epsilon
@@ -528,20 +526,19 @@ cdef class Grammar:
 			if not neverblockre or neverblockre.search(self.tolabel[n]) is None:
 				strlabel = self.tolabel[n]
 				if striplabelre is not None:
-					strlabel = striplabelre.sub(b'', strlabel, 1)
+					strlabel = striplabelre.sub('', strlabel, 1)
 				if self.fanout[n] > 1 and splitprune:
-					strlabel += b'*'
+					strlabel += '*'
 				if self.fanout[n] > 1 and splitprune and markorigin:
 					self.mapping[n] = self.nonterminals  # sentinel value
 					self.splitmapping[n] = &(self.splitmapping[0][components])
 					components += self.fanout[n]
 					for m in range(self.fanout[n]):
 						self.splitmapping[n][m] = coarse.toid[
-								strlabel + str(m).encode('ascii')]
+								strlabel + str(m)]
 						seen.add(self.splitmapping[n][m])
 				else:
 					self.mapping[n] = coarse.toid[strlabel]
-					seen.add(self.mapping[n])
 			else:
 				self.mapping[n] = 0
 		if seen == set(range(coarse.nonterminals)):
@@ -549,7 +546,7 @@ cdef class Grammar:
 		else:
 			# NB: ALL fine symbols are mapped to some coarse symbol;
 			# we only check if all coarse symbols have received a mapping.
-			l = sorted([coarse.tolabel[a].decode('ascii') for a in
+			l = sorted([coarse.tolabel[a] for a in
 					set(range(coarse.nonterminals)) - seen])
 			diff = ', '.join(l[:10]) + (', ...' if len(l) > 10 else '')
 			if coarse.nonterminals > self.nonterminals:
@@ -582,7 +579,7 @@ cdef class Grammar:
 					self.tolabel[rule.lhs], self.tolabel[rule.rhs1])
 			if rule.rhs2:
 				key += ' ' + self.tolabel[rule.rhs2]
-			key = striplabelre.sub(b'', key.encode('ascii'))
+			key = striplabelre.sub('', key)
 			self.rulemapping[coarse.rulenos[key]].append(rule.no)
 
 	cpdef rulestr(self, int n):
@@ -593,9 +590,9 @@ cdef class Grammar:
 		rule = self.bylhs[0][n]
 		left = '%.2f %s => %s%s' % (
 			exp(-rule.prob) if self.logprob else rule.prob,
-			self.tolabel[rule.lhs].decode('ascii'),
-			self.tolabel[rule.rhs1].decode('ascii'),
-			' %s' % self.tolabel[rule.rhs2].decode('ascii')
+			self.tolabel[rule.lhs],
+			self.tolabel[rule.rhs1],
+			' %s' % self.tolabel[rule.rhs2]
 				if rule.rhs2 else '')
 		return '%s %s [%d]' % (left.ljust(40), self.yfstr(rule), rule.no)
 
@@ -615,18 +612,16 @@ cdef class Grammar:
 				bin(rule.args), bin(rule.lengths)))
 
 	def __str__(self):
-		cdef LexicalRule lexrule
-		cdef size_t n
 		rules = '\n'.join(filter(None,
 			[self.rulestr(n) for n in range(self.numrules)]))
 		lexical = '\n'.join(['%.2f %s => %s' % (
 				exp(-lexrule.prob) if self.logprob else lexrule.prob,
-				self.tolabel[lexrule.lhs].decode('ascii'),
+				self.tolabel[lexrule.lhs],
 				lexrule.word.encode('unicode-escape').decode('ascii'))
 			for word in sorted(self.lexicalbyword)
 			for lexrule in sorted(self.lexicalbyword[word],
 			key=lambda lexrule: (<LexicalRule>lexrule).lhs)])
-		labels = ', '.join(['%s=%d' % (a.decode('ascii'), b)
+		labels = ', '.join(['%s=%d' % (a, b)
 				for a, b in sorted(self.toid.items())])
 		return 'rules:\n%s\nlexicon:\n%s\nlabels:\n%s' % (
 				rules, lexical, labels)

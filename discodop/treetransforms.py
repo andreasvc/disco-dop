@@ -16,7 +16,8 @@ This file contains three main transformations:
 # Author: Nathan Bodenstab <bodenstab@cslu.ogi.edu>
 # URL: <http://www.nltk.org/>
 # For license information, see LICENSE.TXT
-from __future__ import print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import re
 import sys
 from operator import attrgetter
@@ -24,11 +25,9 @@ from itertools import islice
 from collections import defaultdict, Set, Iterable, Counter
 if sys.version[0] >= '3':
 	basestring = str  # pylint: disable=W0622,C0103
+from discodop import treebank
 from discodop.tree import Tree, ImmutableTree
-from discodop.treebank import READERS, WRITERS, writetree
-from discodop.treebanktransforms import expandpresets
 from discodop.heads import ishead
-from discodop.grammar import ranges
 try:
 	from discodop.bit import fanout as bitfanout
 except ImportError:
@@ -59,6 +58,9 @@ options may consist of:
   --inputfmt=(%s)
   --outputfmt=(%s)
                  Treebank format [default: export].
+                 Selecting the formats 'conll' or 'mst' results in an unlabeled
+                 dependency conversion and requires the use of heuristic head
+                 rules (--headrules).
   --fmt=x        Shortcut to specify both input and output formats.
   --inputenc|--outputenc|--enc=(utf-8|iso-8859-1|...)
                  Treebank encoding [default: utf-8].
@@ -68,22 +70,22 @@ options may consist of:
   --renumber     Replace sentence IDs with numbers starting from 1,
                  padded with 8 spaces.
   --maxlen=n     only select sentences with up to n tokens.
-  --punct=x      possible options:
-                 'remove': remove any punctuation.
+  --punct=x      'leave': (default): leave punctuation as is
+                 'remove': remove any punctuation
                  'move': re-attach punctuation to nearest constituent
-                       to minimize discontinuity.
-                 'restore': attach punctuation under root node.
-  --functions=x  'leave': (default): leave syntactic labels as is,
+                       to minimize discontinuity
+                 'restore': attach punctuation under root node
+  --functions=x  'leave': (default): leave syntactic labels as is
                  'remove': strip away hyphen-separated function labels
-                 'add': concatenate syntactic categories with functions,
-                 'replace': replace syntactic labels w/grammatical functions.
+                 'add': concatenate syntactic categories with functions
+                 'replace': replace syntactic labels w/grammatical functions
   --morphology=x 'no' (default): use POS tags as preterminals
                  'add': concatenate morphological information to POS tags,
                      e.g., DET/sg.def
                  'replace': use morphological information as preterminal label
                  'between': insert node with morphological information between
                      POS tag and word, e.g., (DET (sg.def the))
-  --lemmas=x     'no' (default): do not use lemmas.
+  --lemmas=x     'no' (default): do not use lemmas
                  'add': concatenate lemmas to terminals, e.g., word/lemma
                  'replace': use lemma instead of terminals
                  'between': insert node with lemma between POS tag and word,
@@ -103,15 +105,10 @@ options may consist of:
   --rightunary   ... unary productions.
   --tailmarker   mark rightmost child (the head if headrules are applied), to
                  avoid cyclic rules when --leftunary and --rightunary are used.
-  --reverse      reverse the transformations given by --transform;
   --transforms=x specify names of tree transformations to apply; for possible
                  names, cf. treebanktransforms module.
-
-
-Note: selecting the formats 'conll' or 'mst' results in an unlabeled dependency
-    conversion and requires the use of heuristic head rules (--headrules),
-    to ensure that all constituents have a child marked as head.''' % (
-			sys.argv[0], '|'.join(READERS), '|'.join(WRITERS))
+  --reverse      reverse the transformations given by --transforms''' % (
+			sys.argv[0], '|'.join(treebank.READERS), '|'.join(treebank.WRITERS))
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
@@ -140,7 +137,7 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		the direction of binarization will be switched when it is
 		encountered, to enable a head-outward binarization.
 
-`	:param markhead: include label of the head child in all auxiliary labels.
+	:param markhead: include label of the head child in all auxiliary labels.
 	:param leftmostunary, rightmostunary: introduce a unary production for the
 		first/last child. When h=1, this enables the same generalizations
 		for the first & last non-terminals as for other siblings.
@@ -501,7 +498,7 @@ def factorconstituent(node, sep='|', h=999, factor='right',
 			if markfanout:
 				nodefanout = bitfanout(newbitset)
 				if nodefanout > 1:
-					newlabel += '_' + str(nodefanout)
+					newlabel += '_%d' % nodefanout
 			prev = ImmutableTree(newlabel,
 					[node[i], prev] if factor == 'right' else [prev, node[i]])
 			prev.bitset = newbitset
@@ -557,7 +554,7 @@ def splitdiscnodes(tree, markorigin=False):
 	(S (VP*0 (VP*0 (PP (APPR 0) (ART 1) (NN 2)))) (VMFIN 3) (VP*1 (VP*1
 		(CARD 4) (VVPP 5)) (VAINF 6)))"""
 	treeclass = tree.__class__
-	for node in postorder(tree):
+	for node in tree.postorder():
 		nodes = list(node)
 		node[:] = []
 		for child in nodes:
@@ -620,10 +617,19 @@ def removefanoutmarkers(tree):
 	return tree
 
 
+def treebankfanout(trees):
+	"""Get maximal fan-out of a list of trees."""
+	try:  # avoid max over empty sequence: 'treebank' may only have unary prods
+		return max((fanout(a), n) for n, tree in enumerate(trees)
+				for a in addbitsets(tree).subtrees(lambda x: len(x) > 1))
+	except ValueError:
+		return 1, 0
+
+
 def canonicalize(tree):
 	"""Restore canonical linear precedence order; tree is modified in-place."""
-	for a in postorder(tree, lambda n: len(n) > 1):
-		a.sort(key=lambda n: n.leaves())
+	for a in tree.postorder(lambda n: len(n) > 1):
+		a.children.sort(key=lambda n: n.leaves())
 	return tree
 
 
@@ -809,9 +815,10 @@ def contsets(nodes):
 	"""Partition children into continuous subsets.
 
 	>>> tree = Tree('(VP (PP (APPR 0) (ART 1) (NN 2)) (CARD 4) (VVPP 5))')
-	>>> print(list(contsets(tree)))  # doctest: +NORMALIZE_WHITESPACE
-	[[Tree('PP', [Tree('APPR', [0]), Tree('ART', [1]), Tree('NN', [2])])],
-	[Tree('CARD', [4]), Tree('VVPP', [5])]]"""
+	>>> for a in contsets(tree):
+	...		print(' / '.join('%s' % b for b in a))
+	(PP (APPR 0) (ART 1) (NN 2))
+	(CARD 4) / (VVPP 5)"""
 	rng, subset = -1, []
 	mins = {min(a.leaves()) if isinstance(a, Tree) else a: a for a in nodes}
 	leaves = [a for child in nodes for a in child.leaves()]
@@ -826,23 +833,11 @@ def contsets(nodes):
 		yield subset
 
 
-def postorder(tree, f=lambda _: True):
-	"""A generator that does a postorder traversal of tree.
-
-	Similar to Tree.subtrees() which does a preorder traversal."""
-	for child in tree:
-		if isinstance(child, Tree):
-			for a in filter(f, postorder(child)):
-				yield a
-	if f(tree):
-		yield tree
-
-
 def abbr(childlabels):
 	"""Reduce sequences of identical labels.
 
-	>>> abbr(['mwp', 'mwp', 'mwp', 'mwp'])
-	['mwp+']"""
+	>>> print(' '.join(abbr(['mwp', 'mwp', 'mwp', 'mwp'])))
+	mwp+"""
 	result, inrun = [], ''
 	for a, b in zip(childlabels, childlabels[1:] + [None]):
 		if a == b:
@@ -876,9 +871,6 @@ def addbitsets(tree):
 		result = tree
 	elif isinstance(tree, Tree):
 		result = tree.freeze()
-		for a, b in zip(result.subtrees(), tree.subtrees()):
-			if hasattr(b, 'source'):
-				a.source = b.source
 	else:
 		raise ValueError('expected string or tree object')
 	for a in result.subtrees():
@@ -912,14 +904,24 @@ def getyf(left, right):
 
 
 def disc(node):
-	"""Test whether a particular node is discontinuous.
+	"""Test whether a particular node has a discontinuous yield.
 
-	i.e., test whether its yield contains two or more non-adjacent strings."""
+	i.e., test whether its yield contains two or more non-adjacent strings.
+	Nodes can be continuous even if some of their children are
+	discontinuous."""
 	if not isinstance(node, Tree):
 		return False
-	elif getattr(node, 'bitset'):
+	elif isinstance(node, ImmutableTree):
 		return bitfanout(node.bitset) > 1
-	return len(list(ranges(sorted(node.leaves())))) > 1
+	start = prev = None
+	for a in sorted(node.leaves()):
+		if start is None:
+			start = prev = a
+		elif a == prev + 1:
+			prev = a
+		else:
+			return True
+	return False
 
 
 class OrderedSet(Set):
@@ -984,9 +986,9 @@ def main():
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
 		if not 1 <= len(args) <= 3:
-			raise GetoptError('error: expected 1, 2, or 3 positional arguments')
+			raise GetoptError('expected 1, 2, or 3 positional arguments')
 	except GetoptError as err:
-		print('error: %r' % err, file=sys.stderr)
+		print('error:', err, file=sys.stderr)
 		print(USAGE)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
@@ -1001,18 +1003,19 @@ def main():
 		opts['--inputfmt'] = opts['--outputfmt'] = opts['--fmt']
 	if '--enc' in opts:
 		opts['--inputenc'] = opts['--outputenc'] = opts['--enc']
-	if opts.get('--outputfmt', WRITERS[0]) not in WRITERS:
-		print('unrecognized output format: %r\navailable formats: %s' % (
-				opts.get('--outputfmt'), ' '.join(WRITERS)), file=sys.stderr)
+	if opts.get('--outputfmt', treebank.WRITERS[0]) not in treebank.WRITERS:
+		print('error: unrecognized output format: %r\navailable formats: %s'
+				% (opts.get('--outputfmt'), ' '.join(treebank.WRITERS)),
+				file=sys.stderr)
 		sys.exit(2)
 	infilename = args[1] if len(args) >= 2 and args[1] != '-' else '/dev/stdin'
 	outfilename = (args[2] if len(args) == 3 and args[2] != '-'
 			else '/dev/stdout')
 
 	# open corpus
-	corpus = READERS[opts.get('--inputfmt', 'export')](
+	corpus = treebank.READERS[opts.get('--inputfmt', 'export')](
 			infilename,
-			encoding=opts.get('--inputenc', 'utf-8'),
+			encoding=opts.get('--inputenc', 'utf8'),
 			headrules=opts.get('--headrules'),
 			extraheadrules=opts.get('--extraheadrules'),
 			ensureroot=opts.get('--ensureroot'), punct=opts.get('--punct'),
@@ -1024,11 +1027,10 @@ def main():
 	trees = corpus.itertrees(start, end)
 	if '--maxlen' in opts:
 		maxlen = int(opts['--maxlen'])
-		trees = ((key, (tree, sent)) for key, (tree, sent) in trees
-				if len(sent) <= maxlen)
+		trees = ((key, item) for key, item in trees
+				if len(item.sent) <= maxlen)
 	if '--renumber' in opts:
-		trees = (('%8d' % n, treesent)
-				for n, (_, treesent) in enumerate(trees, 1))
+		trees = (('%8d' % n, item) for n, (_key, item) in enumerate(trees, 1))
 
 	# select transformation
 	transform = None
@@ -1038,38 +1040,44 @@ def main():
 		revh = int(opts.get('-H', 0))
 		if action == 'binarize':
 			factor = opts.get('--factor', 'right')
-			transform = lambda t, s: (binarize(t, factor, h, v,
-					revhorzmarkov=revh,
-					leftmostunary='--leftunary' in opts,
-					rightmostunary='--rightunary' in opts,
-					tailmarker='$' if '--tailmarker' in opts else '',
-					direction='--direction' in opts,
-					headoutward='--headrules' in opts,
-					markhead='--markhead' in opts), s)
+			transform = lambda item: binarize(item.tree, factor, h, v,
+						revhorzmarkov=revh,
+						leftmostunary='--leftunary' in opts,
+						rightmostunary='--rightunary' in opts,
+						tailmarker='$' if '--tailmarker' in opts else '',
+						direction='--direction' in opts,
+						headoutward='--headrules' in opts,
+						markhead='--markhead' in opts)
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
-			transform = lambda t, s: (optimalbinarize(t,
-					'|', headdriven, h, v), s)
+			transform = lambda item: optimalbinarize(item.tree,
+					'|', headdriven, h, v)
 	elif action == 'splitdisc':
-		transform = lambda t, s: (splitdiscnodes(t, '--markorigin' in opts), s)
+		transform = lambda item: splitdiscnodes(
+				item.tree, '--markorigin' in opts)
 	elif action == 'transform':
-		tfs = expandpresets(opts['--transforms'].split(','))
-		transform = lambda t, s: (
-				(treebanktransforms.reversetransform(t, tfs), s)
+		tfs = treebanktransforms.expandpresets(opts['--transforms'].split(','))
+		transform = lambda item: (
+				treebanktransforms.reversetransform(item.tree, tfs)
 				if '--reverse' in opts
-				else treebanktransforms.transform(t, s, tfs))
+				else treebanktransforms.transform(item.tree, item.sent, tfs))
 	elif action == 'unbinarize':
-		transform = lambda t, s: (unbinarize(t), s)
+		transform = lambda item: unbinarize(item.tree)
 	elif action == 'mergediscnodes':
-		transform = lambda t, s: (mergediscnodes(t), s)
+		transform = lambda item: mergediscnodes(item.tree)
 	elif action == 'introducepreterminals':
-		transform = lambda t, s: (introducepreterminals(t, s), s)
+		transform = lambda item: introducepreterminals(item.tree, item.sent)
 	if transform is not None:
-		trees = ((key, transform(tree, sent))
-				for key, (tree, sent) in trees)
+		def applytransform(trees):
+			"""Apply transform and yield modified items."""
+			for key, item in trees:
+				item.tree = transform(item)
+				yield key, item
+
+		trees = applytransform(trees)
 		if action == 'binarize' and '--markovthreshold' in opts:
 			trees = list(trees)
-			markovthreshold([t for _, (t, _) in trees],
+			markovthreshold([item.tree for _, item in trees],
 					int(opts['--markovthreshold']),
 					revh + h - 1,
 					v - 1 if v > 1 else 1)
@@ -1087,41 +1095,47 @@ def main():
 				'--renumber'}):
 			for n, (key, block) in islice(enumerate(
 					corpus.blocks().items(), 1), start, end):
-				outfile.write('%8d' % n if '--renumber' in opts else key, block)
+				outfile.write((('%8d' % n) if '--renumber' in opts
+						else key).encode('utf8'), block)
 				cnt += 1
 		else:
-			for key, (tree, sent) in trees:
-				outfile.write(str(key), writetree(tree, sent, key, 'alpino'))
+			for key, item in trees:
+				outfile.write(key.encode('utf8'), treebank.writetree(
+						item.tree, item.sent, key, 'alpino',
+						comment=item.comment).encode('utf8'))
 				cnt += 1
 	else:
-		encoding = opts.get('outputenc', 'utf-8')
-		outfile = io.open(outfilename, 'w', encoding=encoding)
-		# copy trees verbatim when only taking slice or converting encoding
-		if (action == 'none' and opts.get('--inputfmt') == opts.get(
-				'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
-				'--outputenc', '--inputfmt', '--outputfmt'}):
-			for block in islice(corpus.blocks().values(), start, end):
-				outfile.write(block)
-				cnt += 1
-		else:
-			if opts.get('--outputfmt', 'export') == 'bracket':
-				trees = ((key, (canonicalize(tree), sent))
-						for key, (tree, sent) in trees)
-			for key, (tree, sent) in trees:
-				outfile.write(writetree(tree, sent, key,
-						opts.get('--outputfmt', 'export')))
-				cnt += 1
+		encoding = opts.get('outputenc', 'utf8')
+		with io.open(outfilename, 'w', encoding=encoding) as outfile:
+			# copy trees verbatim when only taking slice or converting encoding
+			if (action == 'none' and opts.get('--inputfmt') == opts.get(
+					'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
+					'--outputenc', '--inputfmt', '--outputfmt'}):
+				for block in islice(corpus.blocks().values(), start, end):
+					outfile.write(block)
+					cnt += 1
+			else:
+				if opts.get('--outputfmt', 'export') == 'bracket':
+					trees = ((key, canonicalize(item.tree) and item)
+							for key, item in trees)
+				if opts.get('--outputfmt', 'export') == 'export':
+					outfile.write(treebank.EXPORTHEADER)
+				for key, item in trees:
+					outfile.write(treebank.writetree(item.tree, item.sent, key,
+							opts.get('--outputfmt', 'export'),
+							comment=item.comment))
+					cnt += 1
 	print('%sed %d trees with action %r' % ('convert' if action == 'none'
 			else 'transform', cnt, action), file=sys.stderr)
 
 
-__all__ = ['OrderedSet', 'abbr', 'addbitsets', 'addfanoutmarkers', 'binarize',
-		'unbinarize', 'canonicalize', 'collapseunary', 'complexity',
-		'complexityfanout', 'contsets', 'disc', 'factorconstituent',
-		'fanout', 'fanoutcomplexity', 'getbits', 'getyf',
-		'introducepreterminals', 'mergediscnodes', 'minimalbinarization',
-		'optimalbinarize', 'postorder', 'removefanoutmarkers',
-		'splitdiscnodes']
+__all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
+		'factorconstituent', 'markovthreshold', 'splitdiscnodes',
+		'mergediscnodes', 'addfanoutmarkers', 'removefanoutmarkers',
+		'canonicalize', 'optimalbinarize', 'minimalbinarization',
+		'fanout', 'complexity', 'complexityfanout', 'fanoutcomplexity',
+		'contsets', 'abbr', 'getbits', 'addbitsets', 'getyf', 'disc',
+		'treebankfanout', 'OrderedSet']
 
 if __name__ == '__main__':
 	main()

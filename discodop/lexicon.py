@@ -26,7 +26,9 @@ signatures from words, the flow is as follows:
   #. restore original words in derivations
 
 """
-from __future__ import division, print_function, unicode_literals
+# pylint: disable=abstract-class-instantiated
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import os
 import re
 import logging
@@ -36,10 +38,10 @@ from subprocess import Popen, PIPE
 from collections import defaultdict, OrderedDict, Counter as multiset
 from fractions import Fraction
 import discodop.eval
+from discodop.treebanktransforms import YEARRE
 
 UNK = '_UNK'
 NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
-YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 TREETAGGERHELP = '''tree tagger not found. commands to install:
 mkdir tree-tagger && cd tree-tagger
 wget ftp://ftp.ims.uni-stuttgart.de/pub/corpora/tree-tagger-linux-3.2.tar.gz
@@ -116,6 +118,7 @@ def getunknownwordmodel(tagged_sents, unknownword,
 def replaceraretrainwords(tagged_sents, unknownword, lexicon):
 	"""Replace train set words not in lexicon w/signature from unknownword()."""
 	def repl(n, word):
+		"""Replace word w/signature if needed."""
 		if YEARRE.match(word):
 			return '1970'
 		elif NUMBERRE.match(word):
@@ -257,20 +260,20 @@ HASNONDIGIT = re.compile(r"\D", re.UNICODE)
 # NB: includes '-', hyphen, non-breaking hyphen
 # does NOT include: figure-dash, em-dash, en-dash (these are punctuation,
 # not word-combining) u2012-u2015; nb: these are hex values.
-HASDASH = re.compile(u"[-\u2010\u2011]", re.UNICODE)
+HASDASH = re.compile("[-\u2010\u2011]")
 # FIXME: exclude accented characters for model 6?
-HASLOWER = re.compile(u'[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
-		u'\xef\xfc\xff\u0153\xe6]', re.UNICODE)
-HASUPPER = re.compile(u'[A-Z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
-		u'\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
-HASLETTER = re.compile(u'[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
-		u'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
-		u'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]', re.UNICODE)
+HASLOWER = re.compile('[a-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb\xeb'
+		'\xef\xfc\xff\u0153\xe6]')
+HASUPPER = re.compile('[A-Z\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb\xcb'
+		'\xcf\xdc\u0178\u0152\xc6]')
+HASLETTER = re.compile('[A-Za-z\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
+		'\xeb\xef\xfc\xff\u0153\xe6\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4'
+		'\xdb\xcb\xcf\xdc\u0178\u0152\xc6]')
 # Cf. http://en.wikipedia.org/wiki/French_alphabet
-LOWER = (u'abcdefghijklmnopqrstuvwxyz\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
-		u'\xeb\xef\xfc\xff\u0153\xe6')
-UPPER = (u'ABCDEFGHIJKLMNOPQRSTUVWXYZ\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb'
-		u'\xcb\xcf\xdc\u0178\u0152\xc6')
+LOWER = ('abcdefghijklmnopqrstuvwxyz\xe7\xe9\xe0\xec\xf9\xe2\xea\xee\xf4\xfb'
+		'\xeb\xef\xfc\xff\u0153\xe6')
+UPPER = ('ABCDEFGHIJKLMNOPQRSTUVWXYZ\xc7\xc9\xc0\xcc\xd9\xc2\xca\xce\xd4\xdb'
+		'\xcb\xcf\xdc\u0178\u0152\xc6')
 LOWERUPPER = LOWER + UPPER
 
 
@@ -378,23 +381,23 @@ def unknownwordbase(word, _loc, _lexicon):
 			sig += "-%s" % word[-2:].lower()
 	return sig
 
-NOUNSUFFIX = re.compile(u"(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
-		u"|ence|eau|erie|ng|ette|age|ade|ance|ude|ogue|aphe|ate|duc|anthe"
-		u"|archie|coque|érèse|ergie|ogie|lithe|mètre|métrie|odie|pathie|phie"
-		u"|phone|phore|onyme|thèque|scope|some|pole|ôme|chromie|pie)s?$")
-ADJSUFFIX = re.compile(u"(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
-		u"|ible|atif|ique|if|ive|eux|aise|ent|ois|oise|ante|el|elle|ente|oire"
-		u"|ain|aine)s?$")
-POSSIBLEPLURAL = re.compile(u"(s|ux)$")
-VERBSUFFIX = re.compile(u"(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras"
-		u"|é|és|ées|isse|it)$")
+NOUNSUFFIX = re.compile("(ier|ière|ité|ion|ison|isme|ysme|iste|esse|eur|euse"
+		"|ence|eau|erie|ng|ette|age|ade|ance|ude|ogue|aphe|ate|duc|anthe"
+		"|archie|coque|érèse|ergie|ogie|lithe|mètre|métrie|odie|pathie|phie"
+		"|phone|phore|onyme|thèque|scope|some|pole|ôme|chromie|pie)s?$")
+ADJSUFFIX = re.compile("(iste|ième|uple|issime|aire|esque|atoire|ale|al|able"
+		"|ible|atif|ique|if|ive|eux|aise|ent|ois|oise|ante|el|elle|ente|oire"
+		"|ain|aine)s?$")
+POSSIBLEPLURAL = re.compile("(s|ux)$")
+VERBSUFFIX = re.compile("(ir|er|re|ez|ont|ent|ant|ais|ait|ra|era|eras"
+		"|é|és|ées|isse|it)$")
 ADVSUFFIX = re.compile("(iment|ement|emment|amment)$")
-HASPUNC = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
-		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
-		u"\u20A0-\u20B5])+")
-ISPUNC = re.compile(u"([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
-		u"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
-		u"\u20A0-\u20B5])+$")
+HASPUNC = re.compile("([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
+		"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
+		"\u20A0-\u20B5])+")
+ISPUNC = re.compile("([\u0021-\u002F\u003A-\u0040\u005B\u005C\u005D"
+		"\u005E-\u0060\u007B-\u007E\u00A1-\u00BF\u2010-\u2027\u2030-\u205E"
+		"\u20A0-\u20B5])+$")
 
 
 def unknownwordftb(word, loc, _lexicon):

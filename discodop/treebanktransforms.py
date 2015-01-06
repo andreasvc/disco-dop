@@ -4,10 +4,13 @@
 - Transforms (primarily state splits) listed by name
 - Relational-realizational transform
 """
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import re
 from itertools import islice
 from discodop.tree import Tree, ParentedTree
+from discodop.treebank import quote, unquote
+from discodop.treetransforms import addfanoutmarkers, removefanoutmarkers
 from discodop.heads import ishead
 from discodop.punctuation import punctprune, PUNCTUATION
 
@@ -18,6 +21,7 @@ LABELRE = re.compile("[^^|<>-]+")
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
+YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 PRESETS = {
 		# basic state splits:
 		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT'),
@@ -70,8 +74,7 @@ def transform(tree, sent, transformations):
 				if func:
 					a.label += '-' + '-'.join(func)
 		elif name == 'FUNC-NODE':  # insert node w/function above phrasal label
-			from discodop.treetransforms import postorder
-			for a in postorder(tree):
+			for a in tree.postorder():
 				func = functions(a)
 				if func:
 					a[:] = [a.__class__(a.label,
@@ -84,24 +87,20 @@ def transform(tree, sent, transformations):
 					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
 				a.label += STATESPLIT + morph
 		elif name == 'MORPH-NODE':  # insert node w/morph. features above POS
-			from discodop.treetransforms import postorder
-			for a in postorder(tree, lambda n: n and isinstance(n[0], int)):
+			for a in tree.postorder(lambda n: n and isinstance(n[0], int)):
 				morph = '--'
 				if getattr(a, 'source', None):
 					morph = a.source[MORPH].replace('(', '[').replace(')', ']')
 				a[:] = [a.__class__(morph,
 						[a.pop() for _ in range(len(a))][::-1])]
 		elif name == 'LEMMA-NODE':  # insert node w/lemma above terminal
-			from discodop.treetransforms import postorder
-			from discodop.treebank import quote
-			for a in postorder(tree, lambda n: n and isinstance(n[0], int)):
+			for a in tree.postorder(lambda n: n and isinstance(n[0], int)):
 				lemma = '--'
 				if getattr(a, 'source', None):
 					lemma = quote(a.source[LEMMA])
 				a[:] = [a.__class__(lemma,
 						[a.pop() for _ in range(len(a))][::-1])]
 		elif name == 'MARK-YEAR':  # mark POS label of year terminals
-			from discodop.lexicon import YEARRE
 			for node in tree.subtrees(lambda n: n and isinstance(n[0], int)
 					and YEARRE.match(sent[n[0]])):
 				node.label += STATESPLIT + 'year'
@@ -112,7 +111,6 @@ def transform(tree, sent, transformations):
 		elif name == 'PUNCT-PRUNE':  # remove initial/ending quotes & period
 			punctprune(tree, sent)
 		elif name == 'FANOUT':  # add fan-out markers
-			from discodop.treetransforms import addfanoutmarkers
 			addfanoutmarkers(tree)
 		elif name == 'PARENT':  # add one level of parent annotation
 			# Useful to do here to add the parent annotations before
@@ -138,8 +136,8 @@ def transform(tree, sent, transformations):
 		else:
 			raise ValueError('unrecognized transformation %r' % name)
 	for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
-		a.sort(key=Tree.leaves)
-	return tree, sent
+		a.children.sort(key=Tree.leaves)
+	return tree
 
 
 def negratransforms(name, tree, sent):
@@ -253,8 +251,7 @@ def negratransforms(name, tree, sent):
 				a = a[0]
 	# The following transformations as described in Fraser et al (CL, 2013)
 	elif name == 'addUnary':  # introduce unary NPs
-		from discodop.treetransforms import postorder
-		for node in postorder(tree, lambda n: strip(n.label) in
+		for node in tree.postorder(lambda n: strip(n.label) in
 					{'NN', 'PPER', 'PDS', 'PIS', 'PRELS', 'CARD', 'PN'}
 					and strip(n.parent.label) in {'S', 'VP', 'ROOT', 'DL'}):
 			if node.label == 'PN' and len(node) == 1:  # only complex PNs
@@ -401,8 +398,7 @@ def ptbtransforms(name, tree, sent):
 	elif name == 'VP-FIN_WSJ':  # add disc. finite VP when verb is under S
 		# this counters the flattening when a VP is not possible because of
 		# non-standard word order; e.g. is John happy
-		from discodop.treetransforms import postorder
-		for s in postorder(tree, lambda n: n.label == 'S'):
+		for s in tree.postorder(lambda n: n.label == 'S'):
 			if not any(a.label.startswith('VP') for a in s):
 				vp = ParentedTree('VP', [])
 				for child in list(s):
@@ -546,8 +542,7 @@ def ptbtransforms(name, tree, sent):
 					seenNP == 0 or (seenNP == 1 and not seenPredCat)):
 				node.label += STATESPLIT + 'G'
 	elif name == 'splitTMP':  # Stanford Parser splitTMP=TEMPORAL_ACL03PCFG
-		from discodop.treetransforms import postorder
-		for node in postorder(tree, lambda n: 'TMP' in functions(n)):
+		for node in tree.postorder(lambda n: 'TMP' in functions(n)):
 			child = node
 			hd = None
 			while node and isinstance(node[0], Tree):
@@ -699,8 +694,8 @@ def lassytransforms(name, tree, _sent):
 	elif name == 'nlpercolatemorph':  # percolate select morph tags upwards
 		PERCOLATE = {'pv': 2, 'inf': 2}
 		for feat, lvl in PERCOLATE.items():
-			for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)
-					and feat in morphfeats(n)):
+			for pos in tree.subtrees(lambda n, f=feat: n
+					and isinstance(n[0], int) and f in morphfeats(n)):
 				cnt = 0
 				node = pos.parent
 				while (cnt < lvl and node is not None
@@ -716,10 +711,8 @@ def lassytransforms(name, tree, _sent):
 					iter(strip(a.label) for a in node
 					if ishead(a) or a is node[-1]))
 	elif name == 'nladdunary':  # introduce unary NPs
-		from discodop.treetransforms import postorder
-		for node in postorder(tree, lambda n: strip(n.label) in {'n', 'vnw'}
-					and strip(n.parent.label)
-					in {'SMAIN', 'PP', 'INF'}):
+		for node in tree.postorder(lambda n: strip(n.label) in {'n', 'vnw'}
+				and strip(n.parent.label) in {'SMAIN', 'PP', 'INF'}):
 			children = node[:]
 			node[:] = []
 			tag = ParentedTree(node.label, children)
@@ -727,7 +720,10 @@ def lassytransforms(name, tree, _sent):
 			node[:] = [tag]
 			node.source[TAG] = node.label = 'NP'
 			node.source[FUNC] = tag.source[FUNC]
-			tag.source[FUNC] = 'hd'
+			if node.source[FUNC] and node.source[FUNC][0].isupper():
+				tag.source[FUNC] = 'HD'
+			else:
+				tag.source[FUNC] = 'hd'
 	elif name == 'nlelimcnj':  # assign conjuncts the function of the parent
 		for node in tree.subtrees(lambda n: function(n) == 'cnj'):
 			node.source[FUNC] = function(node.parent)
@@ -745,7 +741,7 @@ def reversetransform(tree, transformations):
 		node.label = node.label[:node.label.index(STATESPLIT, 1)]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
-		a.sort(key=lambda n: n.leaves())
+		a.children.sort(key=lambda n: n.leaves())
 	# unfreeze attributes so that they can be modified
 	for a in tree.subtrees():
 		if isinstance(getattr(a, 'source', None), tuple):
@@ -753,7 +749,6 @@ def reversetransform(tree, transformations):
 
 	for name in reversed(transformations):
 		if name == 'FANOUT':
-			from discodop.treetransforms import removefanoutmarkers
 			removefanoutmarkers(tree)
 		elif name == 'DP':  # remove DPs
 			for dp in tree.subtrees(lambda n: n.label == 'DP'):
@@ -769,17 +764,17 @@ def reversetransform(tree, transformations):
 					'CNP', 'PWAT', 'PDS', 'VP', 'CS', 'CARD', 'ART', 'PWS',
 					'PPER'}
 			probably_nk = {'AP', 'PIS'} | nkonly
-			for np in tree.subtrees(lambda n: len(n) == 2
-					and n.label == 'NP'
-					and [x.label for x in n].count('NP') == 1
-					and not set(labels(n)) & probably_nk):
-				np.sort(key=lambda n: n.label == 'NP')
-				np[:] = np[:1] + np[1][:]
+			for n in tree.subtrees():
+				if (len(n) == 2 and n.label == 'NP'
+						and [x.label for x in n].count('NP') == 1
+						and not set(labels(n)) & probably_nk):
+					n.children.sort(key=lambda n: n.label == 'NP')
+					n[:] = n[:1] + n[1][:]
 		elif name == 'PP-NP':  # flatten PPs
 			for pp in tree.subtrees(lambda n: n.label == 'PP'):
 				if 'NP' in labels(pp) and 'NN' not in labels(pp):
 					# ensure NP is in last position
-					pp.sort(key=lambda n: n.label == 'NP')
+					pp.children.sort(key=lambda n: n.label == 'NP')
 					pp[-1][:], pp[-1:] = [], pp[-1][:]
 		elif name == 'SBAR':  # merge extra S level
 			for sbar in list(tree.subtrees(lambda n: n.label == 'SBAR'
@@ -848,7 +843,7 @@ def reversetransform(tree, transformations):
 						child.source = ['--'] * 8
 					if function(child) != 'CD':
 						child.source[FUNC] = 'CJ'
-		elif name == 'nladdunary':
+		elif name == 'nladdunary':  # remove unary node
 			for node in tree.subtrees(lambda n:
 					strip(n.label) in {'SMAIN', 'PP', 'INF'}):
 				for child in node:
@@ -885,33 +880,29 @@ def reversetransform(tree, transformations):
 					a.source[TAG] = a.label = label
 					a.source[MORPH] = morph
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
-			from discodop.treetransforms import postorder
-			for a in postorder(tree, lambda n: n.label.startswith('-')
-					and n and isinstance(n[0], Tree)):
+			for a in list(tree.postorder(lambda n: n.label.startswith('-')
+					and n and isinstance(n[0], Tree))):
 				a.source = ['--'] * 8
 				a.source[FUNC] = a.label[1:]
 				a.source[TAG] = a.label = a[0].label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 		elif name == 'MORPH-NODE':  # nodes with morph. above preterminals
-			from discodop.treetransforms import postorder
-			for a in postorder(tree, lambda n: n and isinstance(n[0], Tree)
-					and n[0] and isinstance(n[0][0], int)):
+			for a in list(tree.postorder(lambda n: n and isinstance(n[0], Tree)
+					and n[0] and isinstance(n[0][0], int))):
 				a.source = ['--'] * 8
 				a.source[MORPH] = a.label
 				a.source[TAG] = a.label = a[0].label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 		elif name == 'LEMMA-NODE':  # nodes with lemmas above words
-			from discodop.treetransforms import postorder
-			from discodop.treebank import unquote
-			for a in postorder(tree, lambda n: n and isinstance(n[0], Tree)
-					and n[0] and isinstance(n[0][0], int)):
+			for a in list(tree.postorder(lambda n: n and isinstance(n[0], Tree)
+					and n[0] and isinstance(n[0][0], int))):
 				a.source = ['--'] * 8
 				a.source[LEMMA] = unquote(a[0].label)
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
-		a.sort(key=lambda n: n.leaves())
+		a.children.sort(key=lambda n: n.leaves())
 	return tree
 
 
@@ -1112,30 +1103,6 @@ def bracketings(tree):
 		for a in tree.subtrees(lambda t: t and isinstance(t[0], Tree))]
 
 
-def removeterminals(tree, sent, func):
-	"""Remove any terminals for which func is True, and any empty ancestors."""
-	delete = set()
-	for a in reversed(tree.treepositions('leaves')):
-		if func(sent[tree[a]], tree[a[:-1]].label):
-			delete.add(tree[a])
-			for n in range(1, len(a)):
-				del tree[a[:-n]]
-				if tree[a[:-(n + 1)]]:
-					break
-	# renumber
-	oldleaves = sorted(tree.leaves())
-	newleaves = {a: n for n, a in enumerate(oldleaves)}
-	for a in tree.treepositions('leaves'):
-		tree[a] = newleaves[tree[a]]
-	sent[:] = [a for n, a in enumerate(sent) if n not in delete]
-	assert sorted(tree.leaves()) == list(range(len(tree.leaves()))), tree
-
-
-def removeemptynodes(tree, sent):
-	"""Remove any empty nodes, and any empty ancestors."""
-	removeterminals(tree, sent, lambda x, _: x in (None, '', '-NONE-'))
-
-
 # morphological features
 def morphfeats(node):
 	"""Return the set of morphological features for a POS node from a tree."""
@@ -1143,8 +1110,7 @@ def morphfeats(node):
 	try:
 		morph = morph[morph.index('[') + 1:morph.index(']')]
 	except ValueError:
-		print(node, '\n', morph)
-		raise
+		return {}
 	return set(morph.replace('.', ',').split(','))
 
 
@@ -1185,7 +1151,7 @@ def functions(tree):
 	return tree.source[FUNC].split('-')
 
 
-__all__ = ['transform', 'reversetransform', 'collapselabels', 'morphfeats',
-		'unifymorphfeat', 'rrtransform', 'rrbacktransform', 'removeterminals',
-		'removeemptynodes', 'function', 'functions', 'rindex', 'labels', 'pop',
-		'strip', 'ancestors', 'bracketings']
+__all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',
+		'rrtransform', 'rrbacktransform', 'rindex', 'labels', 'pop', 'strip',
+		'ancestors', 'bracketings', 'morphfeats', 'unifymorphfeat', 'function',
+		'functions']

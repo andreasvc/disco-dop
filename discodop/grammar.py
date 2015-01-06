@@ -1,5 +1,6 @@
 """Assorted functions to read off grammars from treebanks."""
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import io
 import re
 import sys
@@ -9,11 +10,10 @@ import logging
 from operator import mul, itemgetter
 from collections import defaultdict, OrderedDict, Counter as multiset
 from itertools import count, islice, repeat
-from discodop.tree import Tree, ImmutableTree
-from discodop.treebank import READERS
+from discodop.tree import Tree, ImmutableTree, DiscTree
+from discodop.treebank import READERS, termindices
 if sys.version[0] >= '3':
-	from functools import reduce  # pylint: disable=W0622
-	unicode = str  # pylint: disable=redefined-builtin
+	from functools import reduce  # pylint: disable=redefined-builtin
 
 USAGE = '''Read off grammars from treebanks.
 Usage: %(cmd)s <type> <input> <output> [options]
@@ -85,12 +85,13 @@ def lcfrsproductions(tree, sent, frontiers=False):
 
 	>>> tree = Tree("(S (VP_2 (V 0) (ADJ 2)) (NP 1))")
 	>>> sent = "is Mary happy".split()
-	>>> for p in lcfrsproductions(tree, sent): print(p)
-	(('S', 'VP_2', 'NP'), ((0, 1, 0),))
-	(('VP_2', 'V', 'ADJ'), ((0,), (1,)))
-	(('V', 'Epsilon'), ('is',))
-	(('ADJ', 'Epsilon'), ('happy',))
-	(('NP', 'Epsilon'), ('Mary',))"""
+	>>> print('\\n'.join(printrule(r, yf)  # doctest: +NORMALIZE_WHITESPACE
+	...		for r, yf in lcfrsproductions(tree, sent)))
+	010	S => VP_2 NP
+	0,1	VP_2 => V ADJ
+	is	V => Epsilon
+	happy	ADJ => Epsilon
+	Mary	NP => Epsilon"""
 	leaves = tree.leaves()
 	if len(set(leaves)) != len(leaves):
 		raise ValueError('indices should be unique. indices: %r\ntree: %s'
@@ -229,21 +230,63 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None,
 			ewe=list(ewe), shortest=list(shortest), bon=list(bon))
 
 
-def doubledop(trees, sents, debug=False, binarized=True,
-		complement=False, iterate=False, numproc=None, extrarules=None):
+def doubledop(trees, sents, debug=False, binarized=True, maxdepth=1,
+		maxfrontier=999, complement=False, iterate=False, numproc=None,
+		extrarules=None):
 	"""Extract a Double-DOP grammar from a treebank.
 
 	That is, a fragment grammar containing fragments that occur at least twice,
 	plus all individual productions needed to obtain full coverage.
-	Input trees need to be binarized. A second level of binarization (a normal
-	form) is needed when fragments are converted to individual grammar rules,
-	which occurs through the removal of internal nodes. The binarization adds
-	unique identifiers so that each grammar rule can be mapped back to its
-	fragment. In fragments with terminals, we replace their POS tags with a tag
-	uniquely identifying that terminal and tag: ``tag@word``.
+	Input trees need to be binarized.
 
-	:param binarized: Whether the resulting grammar should be binarized.
-	:param iterate, complement, numproc: cf. fragments.getfragments()
+	:param binarized: Whether the resulting grammar should be binarized;
+		this may be False when bitpar is used which applies its own
+		binarization.
+	:param maxdepth: add non-maximal/non-recurring fragments with depth
+		`1 < depth < maxdepth`.
+	:param maxfrontier: limit number of frontier non-terminals; not yet
+		implemented.
+	:param iterate, complement, numproc: cf. fragments.recurringfragments()
+	:returns: a tuple (grammar, altweights, backtransform)
+		altweights is a dictionary containing alternate weights."""
+
+	from discodop.fragments import recurringfragments
+	fragments = recurringfragments(trees, sents, numproc,
+			maxdepth=maxdepth, maxfrontier=maxfrontier, iterate=iterate,
+			complement=complement)
+	return dopgrammar(trees, fragments, debug=debug, binarized=binarized,
+			extrarules=extrarules)
+
+
+def dop1(trees, sents, maxdepth=4, maxfrontier=999, binarized=True,
+		extrarules=None):
+	"""Return an all-fragments DOP1 model with relative frequencies.
+
+	:param maxdepth: restrict fragments to `1 < depth < maxdepth`.
+	:param maxfrontier: limit number of frontier non-terminals; not yet
+		implemented."""
+	from discodop.fragments import allfragments
+	fragments = allfragments(trees, sents, maxdepth, maxfrontier)
+	return dopgrammar(trees, fragments, binarized=binarized,
+			extrarules=extrarules)
+
+
+def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
+	"""Create a DOP grammar from a set of fragments and occurrences.
+
+	A second level of binarization (a normal form) is needed when fragments are
+	converted to individual grammar rules, which occurs through the removal of
+	internal nodes. The binarization adds unique identifiers so that each
+	grammar rule can be mapped back to its fragment. In fragments with
+	terminals, we replace their POS tags with a tag uniquely identifying that
+	terminal and tag: ``tag@word``.
+
+	:param fragments: a dictionary of fragments from binarized trees, with
+		occurrences as values (a mapping of sentence number to counts).
+	:param binarized: Whether the resulting grammar should be binarized;
+		this may be False when bitpar is used which applies its own
+		binarization.
+	:param extrarules: Additional rules to add to the grammar.
 	:returns: a tuple (grammar, altweights, backtransform)
 		altweights is a dictionary containing alternate weights."""
 	def getweight(frag, terminals):
@@ -260,13 +303,10 @@ def doubledop(trees, sents, debug=False, binarized=True,
 		short = 0.5
 		return freq, ewe, bon, short
 
-	from discodop.fragments import getfragments
 	uniformweight = (1, 1, 1, 1)
 	grammar = {}
 	backtransform = {}
 	ids = UniqueIDs()
-	fragments = getfragments(trees, sents, numproc,
-			iterate=iterate, complement=complement)
 	# build index of the number of fragments extracted from a tree for ewe
 	fragmentcount = defaultdict(int)
 	for indices in fragments.values():
@@ -340,13 +380,14 @@ def doubledop(trees, sents, debug=False, binarized=True,
 def compiletsg(fragments, binarized=True):
 	"""Compile a set of weighted fragments (i.e., a TSG) into a grammar.
 
+	Similar to dopgrammar(), only the values are weights instead of counts.
+
 	:param fragments: a dictionary of fragments mapped to weights. The
 		fragments may either consist of bracketed strings, or discontinuous
 		bracketed strings as tuples of the form ``(frag, terminals)``.
 	:param binarized: Whether the resulting grammar should be binarized.
 	:returns: a ``(grammar, backtransform, altweights)`` tuple similar to what
 		``doubledop()`` returns; altweights will be empty."""
-	from discodop.treebank import LEAVESRE
 	grammar = {}
 	backtransform = {}
 	ids = UniqueIDs()
@@ -354,9 +395,7 @@ def compiletsg(fragments, binarized=True):
 		if isinstance(frag, tuple):
 			frag, terminals = frag
 		else:  # convert to frag, terminal notation on the fly.
-			cnt = count()
-			terminals = [a or None for a in LEAVESRE.findall(frag)]
-			frag = LEAVESRE.sub(lambda _: ' %d)' % next(cnt), frag)
+			frag, terminals = termindices(frag)
 		prods, newfrag = flatten(frag, terminals, ids, backtransform, binarized)
 		if prods[0][0][1] == 'Epsilon':  # lexical production
 			grammar[prods[0]] = weight
@@ -407,15 +446,23 @@ def flatten(tree, sent, ids, backtransform, binarized):
 	>>> ids = UniqueIDs()
 	>>> sent = [None, ',', None, '.']
 	>>> tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-	>>> flatten(tree, sent, ids, {}, True)  # doctest: +NORMALIZE_WHITESPACE
-	([(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
-	(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
-	(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
-	>>> flatten(tree, sent, ids, {}, False)  # doctest: +NORMALIZE_WHITESPACE
-	([(('ROOT', 'S_2', '$,@,', '$.@.'), ((0, 1, 0, 2),)),
-		 (('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
-	'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')"""
+	>>> prods, template = flatten(tree, sent, ids, {}, True)
+	>>> print('\\n'.join(printrule(r, yf) for r, yf in prods))
+	... # doctest: +NORMALIZE_WHITESPACE
+	01	ROOT => ROOT}<0> $.@.
+	010	ROOT}<0> => S_2 $,@,
+	,	$,@, => Epsilon
+	.	$.@. => Epsilon
+	>>> print(template)
+	(ROOT {0} (ROOT|<$,>_2 {1} {2}))
+	>>> prods, template = flatten(tree, sent, ids, {}, False)
+	>>> print('\\n'.join(printrule(r, yf) for r, yf in prods))
+	... # doctest: +NORMALIZE_WHITESPACE
+	0102	ROOT => S_2 $,@, $.@.
+	,	$,@, => Epsilon
+	.	$.@. => Epsilon
+	>>> print(template)
+	(ROOT {0} (ROOT|<$,>_2 {1} {2}))"""
 	from discodop.treetransforms import factorconstituent, addbitsets
 
 	def repl(x):
@@ -432,7 +479,7 @@ def flatten(tree, sent, ids, backtransform, binarized):
 		return "(%s@%s%s)" % (x.group(1), word, n)
 
 	if tree.count(' ') == 1:
-		return lcfrsproductions(addbitsets(tree), sent), str(tree)
+		return lcfrsproductions(addbitsets(tree), sent), tree
 	# give terminals unique POS tags
 	prod = FRONTIERORTERM.sub(repl, tree)
 	# remove internal nodes, reorder
@@ -463,7 +510,7 @@ def flatten(tree, sent, ids, backtransform, binarized):
 			tuple((0,) for component in prod[1]
 			for a in component if a == 0))
 		prods[:1] = [prod1, prod2]
-	return prods, str(newtree)
+	return prods, newtree
 
 
 def nodefreq(tree, dectree, subtreefd, nonterminalfd):
@@ -521,10 +568,8 @@ class TreeDecorator(object):
 
 		>>> d = TreeDecorator()
 		>>> tree = Tree('(S (NP (DT 0) (N 1)) (VP 2))')
-		>>> d.decorate(tree, ['the', 'dog', 'walks'])
-		... # doctest: +NORMALIZE_WHITESPACE
-		Tree('S', [Tree('NP@1-0', [Tree('DT@1-1', [0]),
-			Tree('N@1-2', [1])]), Tree('VP@1-3', [2])])
+		>>> print(d.decorate(tree, ['the', 'dog', 'walks']))
+		(S (NP@1-0 (DT@1-1 0) (N@1-2 1)) (VP@1-3 2))
 		>>> d = TreeDecorator(memoize=True)
 		>>> print(d.decorate(Tree('(S (NP (DT 0) (N 1)) (VP 2))'),
 		...		['the', 'dog', 'walks']))
@@ -566,68 +611,26 @@ class TreeDecorator(object):
 			[self._copyexceptindices(a, b) for a, b in zip(tree1, tree2)])
 
 
-class DiscTree(ImmutableTree):
-	"""Wrap an immutable tree with indices as leaves and a sentence.
-
-	Provides hash & equality."""
-	def __init__(self, tree, sent):
-		self.sent = tuple(sent)
-		super(DiscTree, self).__init__(tree.label, tuple(
-				DiscTree(child, sent) if isinstance(child, Tree) else child
-				for child in tree))
-
-	def __eq__(self, other):
-		return isinstance(other, Tree) and eqtree(self, self.sent,
-				other, other.sent)
-
-	def __hash__(self):
-		return hash((self.label, ) + tuple(child.__hash__()
-				if isinstance(child, Tree) else self.sent[child]
-				for child in self))
-
-	def __repr__(self):
-		return "DisctTree(%r, %r)" % (
-				super(DiscTree, self).__repr__(), self.sent)
-
-
-def eqtree(tree1, sent1, tree2, sent2):
-	"""Test whether two discontinuous trees are equivalent.
-
-	Assumes canonicalized() ordering."""
-	if tree1.label != tree2.label or len(tree1) != len(tree2):
-		return False
-	for a, b in zip(tree1, tree2):
-		istree = isinstance(a, Tree)
-		if istree != isinstance(b, Tree):
-			return False
-		elif not istree:
-			return sent1[a] == sent2[b]
-		elif not a.__eq__(b):
-			return False
-	return True
-
-
 def quotelabel(label):
 	"""Escapes two things: parentheses and non-ascii characters.
 
 	Parentheses are replaced by square brackets. Also escapes non-ascii
 	characters, so that phrasal labels can remain ascii-only."""
 	newlabel = label.replace('(', '[').replace(')', ']')
-	# juggling to get str in both Python 2 and Python 3.
-	return str(newlabel.encode('unicode-escape').decode('ascii'))
+	return newlabel.encode('unicode-escape').decode('ascii')
 
 
 class UniqueIDs(object):
-	"""Produce numeric IDs.
+	"""Produce strings with numeric IDs.
 
-	Can be used as iterator (ID will not be re-used) and dictionary (ID will be
-	re-used for same key).
+	Can be used as iterator (IDs will never be re-used) and dictionary (IDs
+	will be re-used for same key).
 
 	>>> ids = UniqueIDs()
-	>>> next(ids)
-	'0'
-	>>> ids['foo'], ids['bar'], ids['foo']
-	('1', '2', '1')"""
+	>>> print(next(ids))
+	0
+	>>> print(ids['foo'], ids['bar'], ids['foo'])
+	1 2 1"""
 	def __init__(self):
 		self.cnt = 0  # next available ID
 		self.ids = {}  # IDs for labels seen
@@ -635,13 +638,13 @@ class UniqueIDs(object):
 	def __getitem__(self, key):
 		val = self.ids.get(key)
 		if val is None:
-			val = self.ids[key] = str(self.cnt)
+			val = self.ids[key] = '%d' % self.cnt
 			self.cnt += 1
 		return val
 
 	def __next__(self):
 		self.cnt += 1
-		return str(self.cnt - 1)
+		return '%d' % (self.cnt - 1)
 
 	def __iter__(self):
 		return self
@@ -681,12 +684,12 @@ def defaultparse(wordstags, rightbranching=False):
 		when True, return a right branching tree with NPs,
 		otherwise return all words under a single constituent 'NOPARSE'.
 
-	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
-	... ('here','X')])
-	'(NOPARSE (X like) (X this) (NN example) (X here))'
-	>>> defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
-	... ('here','X')], True)
-	'(NP (X like) (NP (X this) (NP (NN example) (NP (X here)))))'"""
+	>>> print(defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
+	... ('here','X')]))
+	(NOPARSE (X like) (X this) (NN example) (X here))
+	>>> print(defaultparse([('like','X'), ('this','X'), ('example', 'NN'),
+	... ('here','X')], True))
+	(NP (X like) (NP (X this) (NP (NN example) (NP (X here)))))"""
 	if rightbranching:
 		if wordstags[1:]:
 			return "(NP (%s %s) %s)" % (wordstags[0][1],
@@ -697,7 +700,7 @@ def defaultparse(wordstags, rightbranching=False):
 
 def printrule(r, yf, w=''):
 	""":returns: a string representation of a rule."""
-	yfstr = ','.join(''.join(map(unicode, a)) for a in yf)
+	yfstr = ','.join(''.join(map(str, a)) for a in yf)
 	return '%s %s\t%s => %s' % (
 			('%g/%d' % w) if isinstance(w, tuple) else w,
 			yfstr, r[0], ' '.join(x for x in r[1:]))
@@ -727,8 +730,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 		``treebankgrammar()``, ``dopreduction()``, or ``doubledop()``.
 	:param bitpar: when ``True``, use bitpar format: for rules, put weight
 		first and leave out the yield function.
-	:returns: tuple ``(rules, lexicon)``; bytes object & a unicode string,
-		respectively.
+	:returns: tuple of strings``(rules, lexicon)``
 
 	Weights are written in the following format:
 
@@ -753,7 +755,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 		elif isinstance(w, float):
 			w = w.hex()
 		if len(r) == 2 and r[1] == 'Epsilon':
-			lexical.setdefault(unicode(yf[0]), []).append((r[0], w))
+			lexical.setdefault(yf[0], []).append((r[0], w))
 			continue
 		elif bitpar:
 			rules.append(('%s\t%s\n' % (w, '\t'.join(x for x in r))))
@@ -764,9 +766,9 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	for word in lexical:
 		lexicon.append(word)
 		for tag, w in lexical[word]:
-			lexicon.append(unicode('\t%s %s' % (tag, w)))
-		lexicon.append(unicode('\n'))
-	return ''.join(rules).encode('ascii'), u''.join(lexicon)
+			lexicon.append('\t%s %s' % (tag, w))
+		lexicon.append('\n')
+	return ''.join(rules), ''.join(lexicon)
 
 
 def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
@@ -835,7 +837,8 @@ def grammarinfo(grammar, dump=None):
 	result += " average %g" % mean(pc.values())
 	if dump:
 		pcdist = multiset(pc.values())
-		open(dump, "w").writelines("%d\t%d\n" % x for x in pcdist.items())
+		with io.open(dump, 'w', encoding='utf8') as out:
+			out.writelines('%d\t%d\n' % x for x in pcdist.items())
 	return result
 
 
@@ -843,7 +846,8 @@ def grammarstats(filename):
 	"""Print statistics for PLCFRS/bitpar grammar (sorted by LHS)."""
 	print('LHS\t# rules\tfreq. mass')
 	label = cnt = freq = None
-	for line in (gzip.open if filename.endswith('.gz') else open)(filename):
+	for line in codecs.getreader('utf8')((gzip.open if filename.endswith('.gz')
+			else open)(filename)):
 		match = RULERE.match(line)
 		if (match.group('LHS1') or match.group('LHS2')) != label:
 			if label is not None:
@@ -955,9 +959,10 @@ def sumfrags(iterable, n):
 def merge(filenames, outfilename, sumfunc, key):
 	"""Interpolate weights of given files."""
 	from discodop import plcfrs
-	openfiles = [iter((gzip.open if filename.endswith('.gz') else
-			open)(filename)) for filename in filenames]
-	with codecs.getwriter('utf-8')((gzip.open if outfilename.endswith('.gz')
+	openfiles = [iter(codecs.getreader('utf8')((gzip.open
+			if filename.endswith('.gz') else open)(filename)))
+			for filename in filenames]
+	with codecs.getwriter('utf8')((gzip.open if outfilename.endswith('.gz')
 			else open)(outfilename, 'w')) as out:
 		out.writelines(sumfunc(
 				plcfrs.merge(*openfiles, key=key), len(openfiles)))
@@ -1059,8 +1064,10 @@ def main():
 				prm.relationalrealizational),
 				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
 				prm.numproc, lexmodel, simplelexsmooth, trees[0].label)
-		open(os.path.join(resultdir, 'params.prm'), "w").write(
-				"top='%s',\n%s" % (trees[0].label, open(args[1]).read()))
+		paramfile = os.path.join(resultdir, 'params.prm')
+		with io.open(paramfile, 'w', encoding='utf8') as out:
+			out.write("top='%s',\n%s" % (
+					trees[0].label, io.open(args[1], encoding='utf8').read()))
 		return  # grammars have already been written
 	if opts.get('--dopestimator', 'rfe') != 'rfe':
 		grammar = [(rule, w) for (rule, _), w in
@@ -1082,15 +1089,15 @@ def main():
 
 	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
 	# write output
-	with myopen(rulesname, 'w') as rulesfile:
+	with codecs.getwriter('utf8')(myopen(rulesname, 'w')) as rulesfile:
 		rulesfile.write(rules)
-	with codecs.getwriter('utf-8')(myopen(lexiconname, 'w')) as lexiconfile:
+	with codecs.getwriter('utf8')(myopen(lexiconname, 'w')) as lexiconfile:
 		lexiconfile.write(lexicon)
 	if model in ('doubledop', 'ptsg'):
 		backtransformfile = '%s.backtransform%s' % (grammarfile,
 			'.gz' if '--gzip' in opts else '')
-		myopen(backtransformfile, 'w').writelines(
-				'%s\n' % a for a in backtransform)
+		with codecs.getwriter('utf8')(myopen(backtransformfile, 'w')) as bt:
+			bt.writelines('%s\n' % a for a in backtransform)
 		print('wrote backtransform to', backtransformfile)
 	print('wrote grammar to %s and %s.' % (rulesname, lexiconname))
 	if len(grammar) < 10000:  # this is very slow so skip with large grammars
@@ -1106,12 +1113,12 @@ def main():
 
 
 __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
-		'compiletsg', 'sortgrammar', 'flatten', 'nodefreq', 'TreeDecorator',
-		'DiscTree', 'eqtree', 'quotelabel', 'UniqueIDs', 'rangeheads',
-		'ranges', 'defaultparse', 'printrule', 'cartpi', 'write_lcfrs_grammar',
-		'write_lncky_grammar', 'subsetgrammar', 'grammarinfo', 'convertweight',
-		'splitweight', 'grammarstats', 'stripweight', 'sumrules', 'sumlex',
-		'sumfrags', 'merge']
+		'dop1', 'dopgrammar', 'compiletsg', 'sortgrammar', 'flatten',
+		'nodefreq', 'TreeDecorator', 'DiscTree', 'quotelabel', 'UniqueIDs',
+		'rangeheads', 'ranges', 'defaultparse', 'printrule', 'cartpi',
+		'write_lcfrs_grammar', 'write_lncky_grammar', 'subsetgrammar',
+		'grammarinfo', 'grammarstats', 'splitweight', 'convertweight',
+		'stripweight', 'sumrules', 'sumlex', 'sumfrags', 'merge']
 
 if __name__ == '__main__':
 	main()

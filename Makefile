@@ -25,10 +25,10 @@ test: all inplace
 	&& cd tests/ \
 	&& sh run.sh
 
-test3: clean
+test3:
 	python3 setup.py install --user
 	cp build/lib.*/discodop/*.so discodop/
-	PYTHONIOENCODING=utf-8 python3 -bb -tt tests.py
+	PYTHONIOENCODING=utf-8 PYTHONHASHSEED=42 python3 -bb -tt tests.py
 
 inplace: discodop
 	# python setup.py build_ext --inplace
@@ -54,13 +54,20 @@ valgrind: inplace
 # pylint: R=refactor, C0103 == Invalid name
 lint: inplace
 	# Any files with more than 999 lines?
-	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}'
+	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}' | sort -n
 	# Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^.\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py tests/*.py \
 	&& pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
 		discodop/*.pyx discodop/*.pxi \
-	&& pylint --indent-string='\t' \
+	&& pylint --indent-string='\t' --max-line-length=80 \
 		--disable=R,bad-continuation,invalid-name,star-args \
+		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus \
+		discodop/*.py web/*.py tests/*.py
+
+lint3:
+	python3 `which pylint` --indent-string='\t' --max-line-length=80 \
+		--disable=R,bad-continuation,invalid-name,star-args \
+		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus \
 		discodop/*.py web/*.py tests/*.py

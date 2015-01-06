@@ -1,6 +1,7 @@
 """Unit tests for discodop modules."""
 # pylint: disable=C0111,W0232
-from __future__ import print_function
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 import re
 from unittest import TestCase
 from itertools import count, islice
@@ -147,7 +148,7 @@ class Test_treebanktransforms(object):
 			trees = [transform(tree, sent, transformations)
 					for tree, sent in zip(nn.trees().values(),
 						nn.sents().values())]
-			for a, (b, _) in islice(zip(n.trees().values(), trees), 100):
+			for a, b in islice(zip(n.trees().values(), trees), 100):
 				before = bracketings(canonicalize(a))
 				transformb = reversetransform(b.copy(True), transformations)
 				after = bracketings(canonicalize(transformb))
@@ -403,8 +404,80 @@ def test_fragments():
 			list(fragments.values()))
 	assert len(fragments) == 25
 	assert sum(counts) == 100
-	for (a, b), c in sorted(zip(fragments, counts), key=repr):
-		print("%s\t%d" % (re.sub("[0-9]+", lambda x: b[int(x.group())], a), c))
+
+
+def test_allfragments():
+	from discodop.fragments import recurringfragments
+	model = """\
+(DT the)	1
+(DT The)	1
+(JJ hungry)	1
+(NN cat)	1
+(NN dog)	1
+(NP|<DT.JJ,NN> (JJ hungry) (NN ))	1
+(NP|<DT.JJ,NN> (JJ hungry) (NN dog))	1
+(NP|<DT.JJ,NN> (JJ ) (NN ))	1
+(NP|<DT.JJ,NN> (JJ ) (NN dog))	1
+(NP (DT ) (NN ))	1
+(NP (DT ) (NN cat))	1
+(NP (DT ) (NP|<DT.JJ,NN> ))	1
+(NP (DT ) (NP|<DT.JJ,NN> (JJ hungry) (NN )))	1
+(NP (DT ) (NP|<DT.JJ,NN> (JJ hungry) (NN dog)))	1
+(NP (DT ) (NP|<DT.JJ,NN> (JJ ) (NN )))	1
+(NP (DT ) (NP|<DT.JJ,NN> (JJ ) (NN dog)))	1
+(NP (DT The) (NN ))	1
+(NP (DT The) (NN cat))	1
+(NP (DT the) (NP|<DT.JJ,NN> ))	1
+(NP (DT the) (NP|<DT.JJ,NN> (JJ hungry) (NN )))	1
+(NP (DT the) (NP|<DT.JJ,NN> (JJ hungry) (NN dog)))	1
+(NP (DT the) (NP|<DT.JJ,NN> (JJ ) (NN )))	1
+(NP (DT the) (NP|<DT.JJ,NN> (JJ ) (NN dog)))	1
+(S (NP (DT ) (NN cat)) (VP ))	1
+(S (NP (DT ) (NN cat)) (VP (VBP ) (NP )))	1
+(S (NP (DT ) (NN cat)) (VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT ) (NN cat)) (VP (VBP saw) (NP )))	1
+(S (NP (DT ) (NN cat)) (VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT ) (NN )) (VP ))	1
+(S (NP (DT ) (NN )) (VP (VBP ) (NP )))	1
+(S (NP (DT ) (NN )) (VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT ) (NN )) (VP (VBP saw) (NP )))	1
+(S (NP (DT ) (NN )) (VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT The) (NN cat)) (VP ))	1
+(S (NP (DT The) (NN cat)) (VP (VBP ) (NP )))	1
+(S (NP (DT The) (NN cat)) (VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP )))	1
+(S (NP (DT The) (NN cat)) (VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT The) (NN )) (VP ))	1
+(S (NP (DT The) (NN )) (VP (VBP ) (NP )))	1
+(S (NP (DT The) (NN )) (VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP (DT The) (NN )) (VP (VBP saw) (NP )))	1
+(S (NP (DT The) (NN )) (VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP ) (VP ))	1
+(S (NP ) (VP (VBP ) (NP )))	1
+(S (NP ) (VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(S (NP ) (VP (VBP saw) (NP )))	1
+(S (NP ) (VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> ))))	1
+(VBP saw)	1
+(VP (VBP ) (NP ))	1
+(VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> )))	1
+(VP (VBP ) (NP (DT ) (NP|<DT.JJ,NN> (JJ ) (NN ))))	1
+(VP (VBP ) (NP (DT the) (NP|<DT.JJ,NN> )))	1
+(VP (VBP ) (NP (DT the) (NP|<DT.JJ,NN> (JJ ) (NN ))))	1
+(VP (VBP saw) (NP ))	1
+(VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> )))	1
+(VP (VBP saw) (NP (DT ) (NP|<DT.JJ,NN> (JJ ) (NN ))))	1
+(VP (VBP saw) (NP (DT the) (NP|<DT.JJ,NN> )))	1
+(VP (VBP saw) (NP (DT the) (NP|<DT.JJ,NN> (JJ ) (NN ))))	1"""
+	model = {a.split('\t')[0]: int(a.split('\t')[1])
+			for a in model.splitlines()}
+	answers = recurringfragments(
+			[Tree('(S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) '
+				'(NP|<DT.JJ,NN> (JJ 4) (NN 5)))))')],
+			[['The', 'cat', 'saw', 'the', 'hungry', 'dog']],
+			disc=False, indices=False, maxdepth=3, maxfrontier=999)
+	assert len(model) > 0
+	assert len(answers) > 0
+	assert answers == model
 
 
 def test_grammar(debug=False):
@@ -436,7 +509,7 @@ def test_grammar(debug=False):
 		print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)
 	grammar.getmapping(grammar, striplabelre=None,
-			neverblockre=re.compile(b'^#[0-9]+|.+}<'),
+			neverblockre=re.compile('^#[0-9]+|.+}<'),
 			splitprune=False, markorigin=False)
 	if debug:
 		print(grammar)
@@ -450,7 +523,7 @@ def test_grammar(debug=False):
 			print('\n', msg, '\ngold ', tree, '\n', 'double dop', end='')
 		if chart:
 			mpp, parsetrees = {}, {}
-			derivations, _ = lazykbest(chart, 1000, b'}<')
+			derivations, _ = lazykbest(chart, 1000, '}<')
 			for d, (t, p) in zip(chart.rankededges[chart.root()], derivations):
 				r = Tree(recoverfragments(d.key, chart, backtransform))
 				r = str(removefanoutmarkers(unbinarize(r)))
@@ -586,8 +659,8 @@ def test_transforms():
 				nn.sents().values())]
 	print('\ntransformed')
 	correct = exact = e = 0
-	for a, b, (c, d) in islice(zip(n.trees().values(),
-			n.sents().values(), trees), 100):
+	for a, b, c, d in islice(zip(n.trees().values(),
+			n.sents().values(), trees, count()), 100):
 		transformc = reversetransform(c.copy(True), transformations)
 		c1 = bracketings(canonicalize(a))
 		c2 = bracketings(canonicalize(transformc))

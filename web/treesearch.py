@@ -1,29 +1,31 @@
 """Web interface to search a treebank. Requires Flask, tgrep2
 or alpinocorpus-python (for xpath queries), style. Expects one or more
 treebanks with .mrg or .dact extension in the directory corpus/"""
-from __future__ import print_function
 # stdlib
+from __future__ import print_function, absolute_import
 import io
 import os
 import re
 import cgi
 import csv
+import sys
 import json
 import glob
 import logging
 import tempfile
 import subprocess
 from heapq import nlargest
-from urllib import quote
 from datetime import datetime, timedelta
 from itertools import islice, groupby
-from operator import itemgetter
+from operator import itemgetter, attrgetter
 from collections import Counter, OrderedDict, defaultdict
-try:
-	import cPickle as pickle
-	from itertools import ifilter as filter
-except ImportError:
+if sys.version[0] == '2':
+	import cPickle as pickle  # pylint: disable=import-error
+	from itertools import ifilter as filter  # pylint: disable=E0611,W0622
+	from urllib import quote  # pylint: disable=no-name-in-module
+else:
 	import pickle
+	from urllib.parse import quote  # pylint: disable=F0401,E0611
 import pandas
 # Flask & co
 from flask import Flask, Response
@@ -172,7 +174,7 @@ def counts(form, doexport=False):
 				for n, query in enumerate(list(queries)
 				+ ['Combined results', 'Overview'], 1))
 	for n, (name, (normquery, query)) in enumerate(
-			list(queries.iteritems()) + [('Combined results', ('', None))], 1):
+			list(queries.items()) + [('Combined results', ('', None))], 1):
 		cnts = Counter()
 		sumtotal = 0
 		relfreq = {}
@@ -408,9 +410,9 @@ def fragmentsinresults(form, doexport=False):
 		if n == 0:
 			gotresults = True
 		if disc:
-			tree, sent = treebank.alpinotree(
+			item = treebank.alpinotree(
 					ElementTree.fromstring(treestr.encode('utf-8')))
-			line = '%s\t%s\n' % (str(tree), ' '.join(sent))
+			line = '%s\t%s\n' % (str(item.tree), ' '.join(item.sent))
 		else:
 			line = treestr.replace(" )", " -NONE-)") + '\n'
 		uniquetrees.add(line.encode('utf8'))
@@ -540,11 +542,12 @@ def draw():
 		filename = CORPUS_DIR + TEXTS[textno] + '.dact'
 		sentid = '%d' % sentno
 		treestr = CORPORA['xpath'].files[filename].read(sentid)
-		tree, sent = treebank.alpinotree(
+		item = treebank.alpinotree(
 				ElementTree.fromstring(treestr),
 				functions=None if nofunc else 'add',
 				morphology=None if nomorph else 'replace')
-		result = DrawTree(tree, sent).text(unicodelines=True, html=True)
+		result = DrawTree(item.tree, item.sent).text(
+				unicodelines=True, html=True)
 	else:
 		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 	return '<pre id="t%s">%s</pre>' % (sentno, result)
@@ -638,12 +641,13 @@ def browse():
 		nomorph = 'nomorph' in request.args
 		if 'xpath' in CORPORA:
 			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
-			drawntrees = [DrawTree(*treebank.alpinotree(
+			args = attrgetter('tree', 'sent')
+			drawntrees = [DrawTree(*args(treebank.alpinotree(
 					ElementTree.fromstring(CORPORA['xpath'].files[
 						filename].read('%8d' % (n + 1))),
 					functions=None if nofunc else 'add',
-					morphology=None if nomorph else 'replace')).text(
-					unicodelines=True, html=True)
+					morphology=None if nomorph else 'replace'))).text(
+						unicodelines=True, html=True)
 					for n in range(start, maxtree)]
 		elif 'tgrep2' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')

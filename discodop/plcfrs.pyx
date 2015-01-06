@@ -85,8 +85,8 @@ cdef class LCFRSChart(Chart):
 		return (<ChartItem>item).label
 
 	def itemstr(self, item):
-		return '%s[%s]' % (self.grammar.tolabel[self.label(item)
-			].decode('ascii'), item.binrepr(self.lensent))
+		return '%s[%s]' % (self.grammar.tolabel[self.label(item)],
+				item.binrepr(self.lensent))
 
 
 @cython.final
@@ -226,7 +226,7 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		attempting to apply all possible POS tags.
 	:param exhaustive: don't stop at viterbi parse, return a full chart
 	:param start: integer corresponding to the start symbol that complete
-		derivations should be headed by; e.g., ``grammar.toid[b'ROOT']``.
+		derivations should be headed by; e.g., ``grammar.toid['ROOT']``.
 		If not given, the default specified by ``grammar`` is used.
 	:param whitelist: a whitelist of allowed ChartItems. Anything else is not
 		added to the agenda.
@@ -305,7 +305,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		elif LCFRSItem_fused is FatChartItem:
 			item = new_FatChartItem(0)
 			item.vec[0] = wordidx
-		tag = tags[wordidx].encode('ascii') if tags else None
+		tag = tags[wordidx] if tags else None
 		if estimates is not None:
 			left = wordidx
 			gaps = 0
@@ -314,7 +314,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[lexrule.lhs] == tag
-					or grammar.tolabel[lexrule.lhs].startswith(tag + b'@')):
+					or grammar.tolabel[lexrule.lhs].startswith(tag + '@')):
 				score = lexrule.prob
 				if estimatetype == SX:
 					score += outside[lexrule.lhs, left, right, 0]
@@ -806,7 +806,7 @@ cdef inline bint concat(Rule *rule,
 		return lpos == rpos == -1
 
 
-def parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
+cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		sent, Grammar grammar, tags, start,
 		list whitelist, bint splitprune, bint markorigin):
 	cdef:
@@ -825,7 +825,7 @@ def parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		newitem = new_FatChartItem(0)
 	for wordidx, word in enumerate(sent):
 		recognized = False
-		tag = tags[wordidx].encode('ascii') if tags else None
+		tag = tags[wordidx] if tags else None
 		if LCFRSItem_fused is SmallChartItem:
 			item = new_SmallChartItem(0, wordidx)
 		elif LCFRSItem_fused is FatChartItem:
@@ -835,7 +835,7 @@ def parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 			# if we are given gold tags, make sure we only allow matching
 			# tags - after removing addresses introduced by the DOP reduction
 			if (not tags or grammar.tolabel[lexrule.lhs] == tag
-				or grammar.tolabel[lexrule.lhs].startswith(tag + b'@')):
+				or grammar.tolabel[lexrule.lhs].startswith(tag + '@')):
 				newitem.label = lexrule.lhs
 				if LCFRSItem_fused is SmallChartItem:
 					newitem.vec = 1UL << wordidx
@@ -944,7 +944,7 @@ def parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 										FatChartItem.__new__(FatChartItem))
 						else:
 							blocked += 1
-		curlen = sum(len(a) for a in agenda)
+		curlen = sum([len(a) for a in agenda])
 		if curlen > maxA:
 			maxA = curlen
 	msg = ('agenda max %d, now %d, %s, blocked %d' % (
@@ -1044,7 +1044,7 @@ cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, Rule *rule,
 def do(sent, grammar):
 	"""Parse sentence with grammar and print 10 best derivations."""
 	from math import exp
-	from kbest import lazykbest
+	from discodop.kbest import lazykbest
 	print('len', len(sent.split()), 'sentence:', sent)
 	sent = sent.split()
 	chart, _ = parse(sent, grammar)
@@ -1077,5 +1077,5 @@ def test():
 	assert do('Daruber muss nachgedacht ' + ' '.join(32 * ['werden']), grammar)
 	assert do('Daruber muss nachgedacht ' + ' '.join(64 * ['werden']), grammar)
 
-__all__ = ['Agenda', 'DoubleAgenda', 'FatLCFRSChart', 'LCFRSChart',
-		'SmallLCFRSChart', 'getparent', 'merge', 'parse']
+__all__ = ['Agenda', 'DoubleAgenda', 'LCFRSChart', 'SmallLCFRSChart',
+		'FatLCFRSChart', 'getparent', 'merge', 'parse']

@@ -65,8 +65,12 @@ Options:
 
 -o file       Write output to ``file`` instead of stdout.
 --indices     report sets of 0-based indices instead of frequencies.
---cover       include all depth-1 fragments of first treebank corresponding
-              to single productions.
+
+--cover=n[,m]
+              include all non-maximal/non-recurring fragments up to depth ``n``
+              of first treebank; optionally, limit number of substitution
+              sites to ``m``.
+
 --complete    find complete matches of fragments from treebank1 (needle) in
               treebank2 (haystack); frequencies are from haystack.
 --batch=dir   enable batch mode; any number of treebanks > 1 can be given;
@@ -188,6 +192,12 @@ options may consist of:
 
 --outputfmt=(export|bracket|discbracket|dact|conll|mst|tokens|wordpos)
                 Output treebank format [default: export].
+                Selecting the formats ``conll`` or ``mst`` results in an
+                unlabeled dependency conversion and requires the use of
+                heuristic head rules (``--headrules``), to ensure that all
+                constituents have a child marked as head. A command line
+                interface to perform transformations on treebanks such as
+                binarization.
 
 --fmt=x         Shortcut to specify both input and output format.
 
@@ -238,16 +248,10 @@ options may consist of:
 --headrules=x   turn on head finding; affects binarization.
                 reads rules from file ``x`` (e.g., "negra.headrules").
 --markheads     mark heads with ``^`` in phrasal labels.
---reverse       reverse the transformations given by ``--transform``
 --transforms=x  specify names of tree transformations to apply; for possible
                 names, cf. :mod:`discodop.treebanktransforms` module.
+--reverse       reverse the transformations given by ``--transform``
 
-.. note::
-    selecting the formats ``conll`` or ``mst`` results in an unlabeled
-    dependency conversion and requires the use of heuristic head rules
-    (``--headrules``), to ensure that all constituents have a child marked as
-    head. A command line interface to perform transformations on treebanks such
-    as binarization.
 
 grammar
 -------

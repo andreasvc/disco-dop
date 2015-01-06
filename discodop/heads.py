@@ -1,4 +1,7 @@
 """Functions related to finding the linguistic head of a constituent."""
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
+import io
 import re
 from collections import defaultdict
 from collections import Counter as multiset
@@ -37,7 +40,7 @@ def readheadrules(filename):
 	traverse siblings of an S constituent from right to left, the first child
 	with a label of vmfin, vafin, or vaimp will be marked as head."""
 	headrules = {}
-	for line in open(filename):
+	for line in io.open(filename, encoding='utf8'):
 		line = line.strip().upper()
 		if line and not line.startswith("%") and len(line.split()) > 2:
 			try:
@@ -152,5 +155,5 @@ def headstats(trees):
 	return heads, unknown, pos1, pos2
 
 
-__all__ = ['readheadrules', 'headfinder', 'ptbheadfinder', 'ishead', 'sethead',
-		'saveheads', 'getheadpos', 'headstats']
+__all__ = ['ishead', 'getheadpos', 'readheadrules', 'headfinder',
+		'ptbheadfinder', 'sethead', 'saveheads', 'headstats']

@@ -1,4 +1,6 @@
 """Function tags classifier."""
+from __future__ import division, print_function, absolute_import, \
+		unicode_literals
 from discodop.tree import Tree
 from discodop.treebanktransforms import base, functions, FUNC
 from discodop import heads
@@ -16,11 +18,12 @@ def trainfunctionclassifier(trees, sents, numproc):
 	vectorizer = feature_extraction.DictVectorizer(sparse=True)
 	# PTB has no function tags on pretermintals, Negra etc. do.
 	posfunc = any(functions(node) for tree in trees
-			for node in tree.subtrees(lambda n: n is not tree and n
-				and isinstance(n[0], int)))
+			for node in tree.subtrees()
+			if node and isinstance(node[0], int))
 	target = [functions(node) for tree in trees
-			for node in tree.subtrees(lambda n: n is not tree and n
-				and (posfunc or isinstance(n[0], Tree)))]
+			for node in tree.subtrees()
+			if tree is not node and node
+				and (posfunc or isinstance(node[0], Tree))]
 	# PTB may have multiple tags (or 0) per node.
 	# Negra etc. have exactly 1 tag for every node.
 	multi = any(len(a) > 1 for a in target)
@@ -32,8 +35,9 @@ def trainfunctionclassifier(trees, sents, numproc):
 	# binarize features (output is a sparse array)
 	trainfeats = vectorizer.fit_transform(functionfeatures(node, sent)
 			for tree, sent in zip(trees, sents)
-				for node in tree.subtrees(lambda n: n is not tree and n
-					and (posfunc or isinstance(n[0], Tree))))
+				for node in tree.subtrees()
+				if tree is not node
+				and node and (posfunc or isinstance(node[0], Tree)))
 	trainfuncs = encoder.fit_transform(target)
 	classifier = linear_model.SGDClassifier(loss='hinge', penalty='elasticnet')
 	if multi:
@@ -145,5 +149,5 @@ def basefeatures(node, sent, prefix=''):
 			}
 
 
-__all__ = ['applyfunctionclassifier', 'trainfunctionclassifier',
+__all__ = ['trainfunctionclassifier', 'applyfunctionclassifier',
 		'functionfeatures']

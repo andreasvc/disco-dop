@@ -3,7 +3,7 @@
 Use as follows:
 
 >>> derivs, entries = getderivations(chart, 1000)  # doctest: +SKIP
->>> parses, msg = marginalize("mpp", derivs, entries, chart)  # doctest: +SKIP
+>>> parses, msg = marginalize('mpp', derivs, entries, chart)  # doctest: +SKIP
 """
 
 from __future__ import print_function
@@ -39,7 +39,6 @@ cdef extern from "macros.h":
 	int BITNSLOTS(int nb)
 
 REMOVEIDS = re.compile('@[-0-9]+')
-BREMOVEIDS = re.compile(b'@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
 cdef str NONCONSTLABEL = ''
 cdef str NEGATIVECONSTLABEL = '-#-'
@@ -187,16 +186,14 @@ cpdef marginalize(method, list derivations, list entries, Chart chart,
 						if isinstance(t[0], Tree):
 							if not 1 <= len(t) <= 2:
 								raise ValueError('expected binarized tree.')
-							r = (('0 %s %s' % (t.label, t[0].label))
-								if len(t) == 1 else ('01 %s %s %s' % (
-									t.label, t[0].label, t[1].label)))
-							m = chart.grammar.rulenos[r.encode('ascii')]
+							m = chart.grammar.rulenos[nodeprod(t)]
 							newprob += chart.grammar.bylhs[0][
 									chart.grammar.revmap[m]].prob
 						else:
 							m = chart.grammar.toid[t.label]
 							try:
-								lexrule = chart.grammar.lexicalbylhs[m][sent[t[0]]]
+								lexrule = chart.grammar.lexicalbylhs[
+										m][sent[t[0]]]
 							except KeyError:
 								newprob += 30.0
 							else:
@@ -338,7 +335,8 @@ cdef maxconstituentscorrect(list derivations, Chart chart,
 		return [], 'MCC failed. %s' % tmp
 	else:
 		result.label = tree.label  # fix root label
-		return [(str(result), maxscore, None)], 'sentprob: %g' % sentprob
+		return [(str(result), maxscore,
+				None)], 'sentprob: %g' % sentprob
 
 
 def gettree(cells, span):
@@ -381,7 +379,8 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 					backtransform)].add(deriv)
 	else:
 		for entry in entries:
-			deriv = getderiv(chart.root(), (<DoubleEntry>entry).key, chart, None)
+			deriv = getderiv(chart.root(), (<DoubleEntry>entry).key, chart,
+					None)
 			derivations[deriv] = (<DoubleEntry>entry).value
 			derivsfortree[recoverfragments((<DoubleEntry>entry).key, chart,
 					backtransform)].add(deriv)
@@ -402,7 +401,8 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 		if backtransform is None:
 			treestr = REMOVEIDS.sub('', deriv)
 		else:
-			treestr = recoverfragments(deriv if bitpar else (<DoubleEntry>entry).key,
+			treestr = recoverfragments(
+					deriv if bitpar else (<DoubleEntry>entry).key,
 					chart2, backtransform)
 		if treestr in nmostlikelytrees and treestr not in result:
 			result[treestr] = (-abs(int(s / log(0.5))), parsetreeprob[treestr])
@@ -491,7 +491,7 @@ cpdef str recoverfragments(deriv, Chart chart, list backtransform):
 	parsing."""
 	if isinstance(deriv, RankedEdge):
 		result = recoverfragments_(deriv, chart, backtransform)
-	elif isinstance(deriv, basestring):
+	elif isinstance(deriv, str):
 		deriv = Tree(deriv)
 		result = recoverfragments_str(deriv, chart, backtransform)
 	else:
@@ -530,20 +530,15 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 			chart.left(deriv)][deriv.left]).key)
 
 	# recursively expand all substitution sites
-	# FIXME: to avoid using str + decoding, we could use
-	# PyObject* PyBytes_FromFormat(const char *format, ...)
-	# PyBytes_FromFormat('(%s %d)', <char *>..., ...)
-	children = [('(%s %d)' % (
-		str(chart.grammar.tolabel[chart.label(child.head)].decode('ascii')),
-		chart.lexidx(child.edge)))
-		if child.edge.rule is NULL
-		else recoverfragments_(child, chart, backtransform)
-				for child in reversed(children)]
+	children = ['(%s %d)' % (chart.grammar.tolabel[chart.label(child.head)],
+			chart.lexidx(child.edge)) if child.edge.rule is NULL
+			else recoverfragments_(child, chart, backtransform)
+			for child in reversed(children)]
 
 	# substitute results in template
 	return frag.format(*children)
 
-	# even better: build result incrementally; use bytearray,
+	# even better: build result incrementally; use a list of strings
 	# extended in recursive calls w/strings from backtransform.
 	# step 1: collect RankedEdges in a list (children);
 	# 		i.e., exctract nodes from binarized constituent.
@@ -551,9 +546,9 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 	# 		and making a recursive call to insert the relevant child RankedEdge
 	# new backtransform format:
 	# backtransform[prod] = (list_of_strs, list_of_idx)
-	# backtransform[34] = ([b'(NP (DT ', b') (NN ', b'))'], [0, 1])
+	# backtransform[34] = (['(NP (DT ', ') (NN ', '))'], [0, 1])
 	# alternatively: (better locality?)
-	# frag = backtransform[34] = [b'(NP (DT ', 0, b') (NN ', 1, b'))']
+	# frag = backtransform[34] = ['(NP (DT ', 0, ') (NN ', 1, '))']
 	# result += frag[0]
 	# for n in range(1, len(result), 2):
 	# 	foo(result, children[frag[n]])
@@ -563,10 +558,7 @@ cdef str recoverfragments_(RankedEdge deriv, Chart chart,
 cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	cdef list children = []
 	cdef str frag
-	# e.g.: ('0123', 'X', 'A', 'B', 'C', 'D')
-	prod = '%s %s %s' % (''.join(map(str, range(len(deriv)))),
-			deriv.label, ' '.join([a.label for a in deriv]))
-	frag = backtransform[chart.grammar.rulenos[prod.encode('ascii')]]
+	frag = backtransform[chart.grammar.rulenos[nodeprod(deriv)]]
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -603,37 +595,17 @@ def fragmentsinderiv(deriv, chart, list backtransform):
 	result = []
 	if isinstance(deriv, RankedEdge):
 		fragmentsinderiv_(deriv, chart, backtransform, result)
-	elif isinstance(deriv, basestring) and backtransform is None:
+	elif isinstance(deriv, str) and backtransform is None:
 		deriv = Tree(deriv)
 		result = [REMOVEIDS.sub('', str(splitfrag(node)))
 				for node in deriv.subtrees(frontiernt)]
-	elif isinstance(deriv, basestring):
+	elif isinstance(deriv, str):
 		deriv = Tree(deriv)
 		fragmentsinderiv_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError('deriv should be a RankedEdge or a string.')
-	return [_fragments.pygetsent(frag.encode('utf-8'), chart.sent)
+	return [_fragments.pygetsent(frag, chart.sent)
 			for frag in result]
-
-
-def frontiernt(node):
-	"""Test whether node from a DOP derivation is a frontier nonterminal."""
-	return '@' not in node.label
-
-
-def splitfrag(node):
-	"""Return a copy of a tree with subtrees labeled without '@' removed."""
-	children = []
-	for child in node:
-		if not isinstance(child, Tree):
-			children.append(child)
-		elif '@' in child.label:
-			children.append(child if isinstance(child[0], int)
-					else splitfrag(child))
-		else:
-			children.append(Tree(child.label, ['%d:%d' % (
-					min(child.leaves()), max(child.leaves()))]))
-	return Tree(node.label, children)
 
 
 cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
@@ -666,11 +638,11 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 			chart.left(deriv)][deriv.left]).key)
 
 	result.append(frag.format(*['(%s %s)' % (
-			chart.grammar.tolabel[chart.label(deriv.head)].split('@')[0],
-			(chart.lexidx(deriv.edge)
-				if '@' in chart.grammar.tolabel[chart.label(deriv.head)]
-				else yieldranges(chart.indices(deriv.head))))
-			for deriv in reversed(children)]))
+				chart.grammar.tolabel[chart.label(deriv.head)].split('@')[0],
+				(chart.lexidx(deriv.edge)
+					if '@' in chart.grammar.tolabel[chart.label(deriv.head)]
+					else yieldranges(chart.indices(deriv.head))))
+				for deriv in reversed(children)]))
 	# recursively visit all substitution sites
 	for child in reversed(children):
 		if child.edge.rule is not NULL:
@@ -684,9 +656,7 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 	cdef list children = []
 	cdef str frag
-	prod = '%s %s %s' % (''.join(map(str, range(len(deriv)))),
-			deriv.label, ' '.join([a.label for a in deriv]))
-	frag = backtransform[chart.grammar.rulenos[prod.encode('ascii')]]
+	frag = backtransform[chart.grammar.rulenos[nodeprod(deriv)]]
 	# collect children w/on the fly left-factored debinarization
 	if len(deriv) >= 2:  # is there a right child?
 		# keep going while left child is part of same binarized constituent
@@ -715,6 +685,26 @@ cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 			fragmentsinderiv_str(child, chart, backtransform, result)
 		elif '@' not in child.label:
 			result.append('(%s %d)' % (child.label, child[0]))
+
+
+def frontiernt(node):
+	"""Test whether node from a DOP derivation is a frontier nonterminal."""
+	return '@' not in node.label
+
+
+def splitfrag(node):
+	"""Return a copy of a tree with subtrees labeled without '@' removed."""
+	children = []
+	for child in node:
+		if not isinstance(child, Tree):
+			children.append(child)
+		elif '@' in child.label:
+			children.append(child if isinstance(child[0], int)
+					else splitfrag(child))
+		else:
+			children.append(Tree(child.label,
+					['%d:%d' % (min(child.leaves()), max(child.leaves()))]))
+	return Tree(node.label, children)
 
 
 def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
@@ -751,17 +741,15 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 				for n in leaves:
 					SETBIT(fitem.vec, n)
 			try:
-				whitelist[grammar.toid[node.label.encode('ascii')]].add(item)
+				whitelist[grammar.toid[node.label]].add(item)
 			except KeyError:
 				return [], "'%s' not in grammar" % node.label, None
 
 			if maskrules and isinstance(node[0], Tree):
-				yf = ','.join([''.join(map(str, x)) for x in yf])
-				rulestr = ('%s %s' % (yf, ' '.join(r))).encode('ascii')
 				try:
-					ruleno = grammar.rulenos[rulestr]
+					ruleno = grammar.rulenos[prodrepr(r, yf)]
 				except KeyError:
-					return [], "'%s' not in grammar" % rulestr, None
+					return [], "'%s' not in grammar" % prodrepr(r, yf), None
 				for n in grammar.rulemapping[ruleno]:
 					CLEARBIT(grammar.mask, n)
 					# if TESTBIT(grammar.mask, n):
@@ -774,8 +762,8 @@ def treeparsing(trees, sent, Grammar grammar, int m, backtransform, tags=None,
 	# reduction, all possible ids; for Double DOP, ignore artificial labels.
 	for label, n in grammar.toid.items():
 		if backtransform is None:
-			whitelist[n] = whitelist[grammar.toid[BREMOVEIDS.sub(b'', label)]]
-		elif b'@' in label or b'}<' in label:
+			whitelist[n] = whitelist[grammar.toid[REMOVEIDS.sub('', label)]]
+		elif '@' in label or '}<' in label:
 			whitelist[n] = None  # do not prune item
 
 	# finally, we parse with the small set of allowed labeled spans.
@@ -847,13 +835,13 @@ def getsamples(Chart chart, k, debin=None):
 			tables[item].append(prev)
 	result = []
 	for _ in range(k):
-		treestr, p = samplechart(chart.root(), chart, chartidx, tables, debin)
-		result.append((str(treestr), p))
+		result.append(samplechart(
+				chart.root(), chart, chartidx, tables, debin))
 	return result
 
 
 cdef samplechart(item, Chart chart,
-		dict chartidx, dict tables, bytes debin):
+		dict chartidx, dict tables, str debin):
 	"""Samples a derivation from a chart."""
 	cdef Edge *edge
 	cdef RankedEdge rankededge
@@ -869,7 +857,7 @@ cdef samplechart(item, Chart chart,
 		rankededge = new_RankedEdge(item, edge, -1, -1)
 		chart.rankededges.setdefault(item, []).append(
 				new_DoubleEntry(rankededge, chart.subtreeprob(item), 0))
-		deriv = "(%s %d)" % (chart.grammar.tolabel[label].decode('ascii'), idx)
+		deriv = '(%s %d)' % (chart.grammar.tolabel[label], idx)
 		return deriv, chart.subtreeprob(item)
 	tree, p1 = samplechart(chart.copy(chart._left(item, edge)),
 			chart, chartidx, tables, debin)
@@ -880,7 +868,7 @@ cdef samplechart(item, Chart chart,
 		tree += ' ' + tree2
 		prob += p2
 	if debin is None or debin not in chart.grammar.tolabel[label]:
-		tree = '(%s %s)' % (chart.grammar.tolabel[label].decode('ascii'), tree)
+		tree = '(%s %s)' % (chart.grammar.tolabel[label], tree)
 	# create an edge that has as children the edges that were just created
 	# by our recursive calls
 	rankededge = new_RankedEdge(item, edge,
@@ -923,7 +911,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	known in advance that a small set of trees is of interest.
 
 	Expects a mapping which gives a list of consistent rules from the reduction
-	as produced by ``fine.getrulemapping(coarse, re.compile(b'@[-0-9]+$'))``.
+	as produced by ``fine.getrulemapping(coarse, re.compile('@[-0-9]+$'))``.
 
 	NB: this algorithm could also be used to determine the probability of
 	derivations, but then the input would have to distinguish whether nodes are
@@ -934,6 +922,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	cdef Rule *rule
 	cdef LexicalRule lexrule
 	cdef object n  # pyint
+	cdef str pos
 	if not fine.logprob:
 		raise ValueError('Grammar should have log probabilities.')
 	# Log probabilities are not ideal here because we do lots of additions,
@@ -942,11 +931,10 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 
 	# add all matching POS tags
 	for n, pos in tree.pos():
-		pos = pos.encode('ascii')
 		word = sent[n]
 		for lexrule in fine.lexicalbyword[word]:
 			if (fine.tolabel[lexrule.lhs] == pos
-					or fine.tolabel[lexrule.lhs].startswith(pos + b'@')):
+					or fine.tolabel[lexrule.lhs].startswith(pos + '@')):
 				chart[lexrule.lhs, 1 << n] = -lexrule.prob
 
 	# do post-order traversal (bottom-up)
@@ -954,8 +942,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
-		yf = ','.join([''.join(map(str, x)) for x in yf])
-		prod = coarse.rulenos[('%s %s' % (yf, ' '.join(r))).encode('ascii')]
+		prod = coarse.rulenos[prodrepr(r, yf)]
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
 				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
@@ -983,6 +970,24 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	return chart.get((fine.toid[tree.label], tree.bitset), neginf)
 
 
+cdef str prodrepr(r, yf):
+	"""Produce string repr as in ``Grammar.rulenos[]`` for a rule.
+
+	>>> prodrepr((('X', 'A', '', 'C', 'D'), ((0, 1, 2, 3), )))
+	'0123 X A B C D'"""
+	yf = ','.join([''.join(map(str, component)) for component in yf])
+	return ' '.join([yf, ' '.join(r)])
+
+
+cdef str nodeprod(deriv):
+	"""Produce string repr as in ``Grammar.rulenos[]`` of a non-disc. Tree.
+
+	>>> nodeprod(Tree('(X (A 0) (B 1) (C 2) (D 3))'))
+	'0123 X A B C D'"""
+	return ('%s %s %s' % (''.join(map(str, range(len(deriv)))),
+			deriv.label, ' '.join([a.label for a in deriv])))
+
+
 def test():
 	from discodop.grammar import dopreduction
 	from discodop.containers import Grammar
@@ -990,7 +995,8 @@ def test():
 
 	def e(x):
 		a, b, _ = max(x, key=itemgetter(1))
-		return (a, (int(abs(b[0])), b[1])) if isinstance(b, tuple) else (a, b)
+		return (a, (int(abs(b[0])), b[1])) if isinstance(b, tuple) else (
+				a, b)
 
 	trees = [Tree(t) for t in
 		'''(ROOT (A (A 0) (B 1)) (C 2))
@@ -1021,13 +1027,14 @@ def test():
 	short, _ = marginalize('shortest', derivations, entries, chart, sent=sent)
 	derivations, entries = getderivations(chart, 1000, False, True, True)
 	mppsampled, _ = marginalize('mpp', derivations, entries, chart)
-	print('\nvit:\t\t%s %r' % (REMOVEIDS.sub('', vitderiv), exp(-vitprob)),
+	print('\nvit:\t\t%s %r' % (REMOVEIDS.sub('', vitderiv),
+			exp(-vitprob)),
 		'MPD:\t\t%s %r' % e(mpd), 'MCC:\t\t%s %r' % e(mcc),
 		'MPP:\t\t%s %r' % e(mpp), 'MPP sampled:\t%s %r' % e(mppsampled),
 		'SL-DOP n=7:\t%s %r' % e(sldop_),
 		'simple SL-DOP:\t%s %r' % e(sldopsimple),
 		'shortest:\t%s %r' % e(short), sep='\n')
 
-__all__ = ['dopparseprob', 'doprerank', 'fragmentsinderiv', 'frontiernt',
-		'getderivations', 'getsamples', 'gettree', 'marginalize',
-		'recoverfragments', 'splitfrag', 'treeparsing', 'viterbiderivation']
+__all__ = ['getderivations', 'marginalize', 'gettree', 'recoverfragments',
+		'fragmentsinderiv', 'treeparsing', 'viterbiderivation', 'getsamples',
+		'doprerank', 'dopparseprob', 'frontiernt', 'splitfrag']

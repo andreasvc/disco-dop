@@ -36,8 +36,7 @@ cdef class Grammar:
 	cdef readonly size_t numrules, numunary, numbinary, maxfanout
 	cdef readonly bint logprob, bitpar, binarized
 	cdef readonly object models
-	cdef readonly bytes origrules, start
-	cdef readonly unicode origlexicon
+	cdef readonly str origrules, origlexicon, start
 	cdef readonly list tolabel, lexical, modelnames, rulemapping
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
 	cdef _convertrules(self, list rulelines, dict fanoutdict)
@@ -80,7 +79,7 @@ cdef class Chart:
 	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
 	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
 	cdef double subtreeprob(self, item)
-	cdef lexidx(self, Edge *edge)
+	cdef int lexidx(self, Edge *edge)
 	cdef double lexprob(self, item, Edge *edge)
 	cdef edgestr(self, item, Edge *edge)
 	cdef _left(self, item, Edge *edge)
@@ -109,7 +108,7 @@ cdef struct Rule:  # total: 32 bytes.
 cdef class LexicalRule:
 	cdef readonly double prob
 	cdef readonly uint32_t lhs
-	cdef readonly unicode word
+	cdef readonly str word
 
 
 @cython.freelist(1000)
@@ -320,7 +319,7 @@ cdef inline double logprobsum(list logprobs):
 	return exp(maxprob) * fsum([exp(prob - maxprob) for prob in logprobs])
 
 
-cdef inline yieldranges(list leaves):
+cdef inline str yieldranges(list leaves):
 	"""Convert a sorted list of indices into a string with intervals.
 
 	Intended for discontinuous trees. The intervals are of the form
@@ -333,8 +332,8 @@ cdef inline yieldranges(list leaves):
 	for a in leaves:
 		if a - 1 != prev:
 			if prev != -2:
-				yields.append("%d:%d" % (start, prev))
+				yields.append('%d:%d' % (start, prev))
 			start = a
 		prev = a
-	yields.append("%d:%d" % (start, prev))
+	yields.append('%d:%d' % (start, prev))
 	return ' '.join(yields)

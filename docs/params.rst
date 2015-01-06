@@ -138,6 +138,7 @@ Where the keys and values are:
     :``None``: Extract treebank grammar
     :``'reduction'``: DOP reduction (Goodman 1996, 2003)
     :``'doubledop'``: Double DOP (Sangti & Zuidema 2011)
+    :``'dop1'``: DOP1 (Bod 1992)
 :estimator: DOP estimator. Choices:
 
     :``'rfe'``: relative frequencies.
@@ -160,6 +161,14 @@ Where the keys and values are:
         sentence twice.
 :sldop_n: When using sl-dop or sl-dop-simple,
     number of most likely parse trees to consider.
+:maxdepth: with ``'dop1'``, the maximum depth of fragments to extract;
+           with ``'doubledop'``, likewise but applying to the
+           non-recurring/non-maximal fragments extracted to augment the set of
+           recurring fragments.
+:maxfrontier: with ``'dop1'``, the maximum number of frontier non-terminals in
+              extracted fragments; with ``'doubledop'``, likewise but applying
+              to the non-recurring/non-maximal fragments extracted to augment
+              the set of recurring fragments.
 :packedgraph: use packed graph encoding for DOP reduction
 :iterate: for Double-DOP, whether to add fragments of fragments
 :complement: for Double-DOP, whether to include fragments which
