@@ -9,7 +9,7 @@ import sys
 from getopt import gnu_getopt, GetoptError
 from decimal import Decimal, InvalidOperation
 from itertools import count
-from collections import defaultdict, Counter as multiset
+from collections import defaultdict, Counter  # == multiset
 if sys.version[0] >= '3':
 	from itertools import zip_longest  # pylint: disable=E0611
 else:
@@ -146,7 +146,7 @@ class Evaluator(object):
 		# NB: unary nodes not handled properly
 		gmismatch = {(n, indices): rule
 					for n, indices, rule in acc.goldrule - acc.candrule}
-		wrong = multiset((rule, gmismatch[n, indices]) for n, indices, rule
+		wrong = Counter((rule, gmismatch[n, indices]) for n, indices, rule
 				in acc.candrule - acc.goldrule
 				if pyintbitcount(indices) > 1 and (n, indices) in gmismatch)
 		print('\n Rewrite rule mismatches (for given span)')
@@ -155,7 +155,7 @@ class Evaluator(object):
 			print(' %7d  %s' % (cnt, grammar.printrule(*crule)))
 			print(' %7s  %s' % (' ', grammar.printrule(*grule)))
 		gspans = {(n, indices) for n, indices, _ in acc.goldrule}
-		wrong = multiset(rule for n, indices, rule
+		wrong = Counter(rule for n, indices, rule
 				in acc.candrule - acc.goldrule
 				if pyintbitcount(indices) > 1 and (n, indices) not in gspans)
 		print('\n Rewrite rules (span not in gold trees)')
@@ -163,7 +163,7 @@ class Evaluator(object):
 		for crule, cnt in wrong.most_common(limit):
 			print(' %7d  %s' % (cnt, grammar.printrule(*crule)))
 		cspans = {(n, indices) for n, indices, _ in acc.candrule}
-		wrong = multiset(rule for n, indices, rule
+		wrong = Counter(rule for n, indices, rule
 				in acc.goldrule - acc.candrule
 				if pyintbitcount(indices) > 1 and (n, indices) not in cspans)
 		print('\n Rewrite rules (span missing from candidate parses)')
@@ -178,7 +178,7 @@ class Evaluator(object):
 		print('  label     cand     gold    count')
 		print(' ' + 33 * '_')
 		gmismatch = dict(acc.goldbatt - acc.candbatt)
-		wrong = multiset((label, cparent, gmismatch[n, label, indices])
+		wrong = Counter((label, cparent, gmismatch[n, label, indices])
 					for (n, label, indices), cparent
 					in acc.candbatt - acc.goldbatt
 					if (n, label, indices) in gmismatch)
@@ -192,7 +192,7 @@ class Evaluator(object):
 		print(' ' + 38 * '_' + 8 * ' ' + 24 * '_')
 		gmismatch = {(n, indices): label
 					for n, (label, indices) in acc.goldb - acc.candb}
-		wrong = multiset((label, gmismatch[n, indices])
+		wrong = Counter((label, gmismatch[n, indices])
 					for n, (label, indices) in acc.candb - acc.goldb
 					if (n, indices) in gmismatch)
 		freqcats = sorted(set(acc.goldbcat) | set(acc.candbcat),
@@ -225,8 +225,8 @@ class Evaluator(object):
 		print('\n    tag  % gold  recall   prec.      F1',
 				'          cand gold   count')
 		print(' ' + 38 * '_' + 12 * ' ' + 20 * '_')
-		tags = multiset(acc.goldpos)
-		wrong = multiset((c, g) for c, g
+		tags = Counter(acc.goldpos)
+		wrong = Counter((c, g) for c, g
 				in zip(acc.candpos, acc.goldpos) if c != g)
 		for tag, mismatch in zip_longest(tags.most_common(limit),
 				wrong.most_common(limit)):
@@ -235,9 +235,9 @@ class Evaluator(object):
 			else:
 				# only one tag per index may occur, but multiset is required by
 				# metrics
-				goldtag = multiset(n for n, t in enumerate(acc.goldpos)
+				goldtag = Counter(n for n, t in enumerate(acc.goldpos)
 						if t == tag[0])
-				candtag = multiset(n for n, t in enumerate(acc.candpos)
+				candtag = Counter(n for n, t in enumerate(acc.candpos)
 						if t == tag[0])
 				print('%s  %6.2f  %6.2f  %6.2f  %6.2f' % (
 						tag[0].rjust(7),
@@ -385,13 +385,13 @@ class TreePairResult(object):
 		self.cdep = self.gdep = ()
 		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
 		# collect the function tags for correct bracketings & POS tags
-		self.candfun = multiset((bracketing(a), b)
+		self.candfun = Counter((bracketing(a), b)
 				for a in self.ctree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.gbrack or (
 						a and isinstance(a[0], int)
 						and self.gpos[a[0]] == a.label))
-		self.goldfun = multiset((bracketing(a), b)
+		self.goldfun = Counter((bracketing(a), b)
 				for a in self.gtree.subtrees()
 					for b in functions(a)
 					if bracketing(a) in self.cbrack or (
@@ -416,10 +416,10 @@ class TreePairResult(object):
 		self.pcbrack = parentedbracketings(self.ctree, labeled=True,
 				dellabel=self.param['DELETE_LABEL'],
 				disconly=self.param['DISC_ONLY'])
-		self.grule = multiset((node.bitset, rule)
+		self.grule = Counter((node.bitset, rule)
 				for node, rule in zip(self.gtree.subtrees(),
 				grammar.lcfrsproductions(self.gtree, self.gsent)))
-		self.crule = multiset((node.bitset, rule)
+		self.crule = Counter((node.bitset, rule)
 				for node, rule in zip(self.ctree.subtrees(),
 				grammar.lcfrsproductions(self.ctree, self.csent)))
 
@@ -548,16 +548,16 @@ class EvalAccumulator(object):
 		self.maxlenseen, self.sentcount = Decimal(0), Decimal(0)
 		self.exact = Decimal(0)
 		self.dicenoms, self.dicedenoms = Decimal(0), Decimal(0)
-		self.goldb, self.candb = multiset(), multiset()  # all brackets
-		self.goldfun, self.candfun = multiset(), multiset()
+		self.goldb, self.candb = Counter(), Counter()  # all brackets
+		self.goldfun, self.candfun = Counter(), Counter()
 		self.lascores = []
 		self.golddep, self.canddep = [], []
 		self.goldpos, self.candpos = [], []
 		# extra accounting for breakdowns:
-		self.goldbcat = defaultdict(multiset)  # brackets per category
-		self.candbcat = defaultdict(multiset)
+		self.goldbcat = defaultdict(Counter)  # brackets per category
+		self.candbcat = defaultdict(Counter)
 		self.goldbatt, self.candbatt = set(), set()  # attachments per category
-		self.goldrule, self.candrule = multiset(), multiset()
+		self.goldrule, self.candrule = Counter(), Counter()
 
 	def add(self, pair):
 		"""Add scores from given TreePairResult object."""
@@ -817,7 +817,7 @@ def parentedbracketings(tree, labeled=True, dellabel=(), disconly=False):
 	:returns:
 		multiset with items of the form ``((label, indices), parentlabel)``
 	"""
-	return multiset((bracketing(a, labeled), getattr(a.parent, 'label', ''))
+	return Counter((bracketing(a, labeled), getattr(a.parent, 'label', ''))
 			for a in tree.subtrees()
 			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
 				and a.label not in dellabel
@@ -850,7 +850,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	>>> for (label, span), cnt in sorted(bracketings(tree).items()):
 	...		print(label, bin(span), cnt)
 	S 0b111 1"""
-	return multiset(bracketing(a, labeled) for a in tree.subtrees()
+	return Counter(bracketing(a, labeled) for a in tree.subtrees()
 			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
 				and a.label not in dellabel and (not disconly or disc(a)))
 

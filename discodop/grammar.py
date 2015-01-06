@@ -8,8 +8,12 @@ import gzip
 import codecs
 import logging
 from operator import mul, itemgetter
-from collections import defaultdict, OrderedDict, Counter as multiset
+from collections import defaultdict, Counter
 from itertools import count, islice, repeat
+try:
+	from cyordereddict import OrderedDict
+except ImportError:
+	from collections import OrderedDict
 from discodop.tree import Tree, ImmutableTree, DiscTree
 from discodop.treebank import READERS, termindices
 if sys.version[0] >= '3':
@@ -158,12 +162,12 @@ def treebankgrammar(trees, sents, extrarules=None):
 
 	:param extarules: A dictionary of productions that will be merged with the
 		grammar, with (pseudo)frequencies as values."""
-	grammar = multiset(rule for tree, sent in zip(trees, sents)
+	grammar = Counter(rule for tree, sent in zip(trees, sents)
 			for rule in lcfrsproductions(tree, sent))
 	if extrarules is not None:
 		for rule in extrarules:
 			grammar[rule] += extrarules[rule]
-	lhsfd = multiset()
+	lhsfd = Counter()
 	for rule, freq in grammar.items():
 		lhsfd[rule[0][0]] += freq
 	return sortgrammar((rule, (freq, lhsfd[rule[0][0]]))
@@ -313,7 +317,7 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 		for index, cnt in indices.items():
 			fragmentcount[index] += cnt
 	# ntfd: frequency of a non-terminal node in treebank
-	ntfd = multiset(node.label for tree in trees for node in tree.subtrees())
+	ntfd = Counter(node.label for tree in trees for node in tree.subtrees())
 
 	# binarize, turn into LCFRS productions
 	# use artificial markers of binarization as disambiguation,
@@ -520,16 +524,16 @@ def nodefreq(tree, dectree, subtreefd, nonterminalfd):
 	subtrees headed by each node. updates ``subtreefd`` and ``nonterminalfd``
 	as a side effect. Expects a normal tree and a tree with IDs.
 
-	:param subtreefd: the multiset to store the counts of subtrees
-	:param nonterminalfd: the multiset to store the counts of non-terminals
+	:param subtreefd: the Counter to store the counts of subtrees
+	:param nonterminalfd: the Counter to store the counts of non-terminals
 
-	>>> fd = multiset()
+	>>> fd = Counter()
 	>>> d = TreeDecorator()
 	>>> tree = Tree("(S (NP 0) (VP 1))")
 	>>> dectree = d.decorate(tree, ['mary', 'walks'])
-	>>> nodefreq(tree, dectree, fd, multiset())
+	>>> nodefreq(tree, dectree, fd, Counter())
 	4
-	>>> fd == multiset({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
+	>>> fd == Counter({'S': 4, 'NP': 1, 'VP': 1, 'NP@1-0': 1, 'VP@1-1': 1})
 	True"""
 	nonterminalfd[tree.label] += 1
 	nonterminalfd[dectree.label] += 1
@@ -836,7 +840,7 @@ def grammarinfo(grammar, dump=None):
 			pc[r, yf, w], printrule(r, yf, w))
 	result += " average %g" % mean(pc.values())
 	if dump:
-		pcdist = multiset(pc.values())
+		pcdist = Counter(pc.values())
 		with io.open(dump, 'w', encoding='utf8') as out:
 			out.writelines('%d\t%d\n' % x for x in pcdist.items())
 	return result

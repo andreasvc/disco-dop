@@ -7,7 +7,11 @@ import re
 import xml.etree.cElementTree as ElementTree
 from glob import glob
 from itertools import count, chain, islice
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
+try:
+	from cyordereddict import OrderedDict
+except ImportError:
+	from collections import OrderedDict
 from discodop.tree import Tree, ParentedTree
 from discodop.punctuation import punctremove, punctprune, punctraise, \
 		balancedpunctraise, punctroot

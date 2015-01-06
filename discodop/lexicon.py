@@ -35,7 +35,7 @@ import logging
 import tempfile
 from operator import itemgetter
 from subprocess import Popen, PIPE
-from collections import defaultdict, OrderedDict, Counter as multiset
+from collections import defaultdict, OrderedDict, Counter
 from fractions import Fraction
 import discodop.eval
 from discodop.treebanktransforms import YEARRE
@@ -69,11 +69,11 @@ def getunknownwordmodel(tagged_sents, unknownword,
 	:param openclassthreshold: tags that rewrite to at least this much word
 			types are considered to be open class categories."""
 	wordsfortag = defaultdict(set)
-	tags = multiset()
-	wordtags = multiset()
-	sigs = multiset()
-	sigtag = multiset()
-	words = multiset(word for sent in tagged_sents for word, tag in sent)
+	tags = Counter()
+	wordtags = Counter()
+	sigs = Counter()
+	sigtag = Counter()
+	words = Counter(word for sent in tagged_sents for word, tag in sent)
 	lexicon = {word for word, freq in words.items()
 			if freq > unknownthreshold}
 	wordsig = {}

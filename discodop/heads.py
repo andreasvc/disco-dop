@@ -3,8 +3,7 @@ from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import io
 import re
-from collections import defaultdict
-from collections import Counter as multiset
+from collections import defaultdict, Counter
 from discodop.tree import Tree
 from discodop import punctuation
 
@@ -140,8 +139,8 @@ def headstats(trees):
 	- ``pos2`` is like pos1, but position is from the right.
 	- ``unknown['NP']['NN'] ==`` number of times NP that does not have a head
 		dominates an NN."""
-	heads, unknown = defaultdict(multiset), defaultdict(multiset)
-	pos1, pos2 = defaultdict(multiset), defaultdict(multiset)
+	heads, unknown = defaultdict(Counter), defaultdict(Counter)
+	pos1, pos2 = defaultdict(Counter), defaultdict(Counter)
 	for tree in trees:
 		for a in tree.subtrees(lambda x: len(x) > 1):
 			for n, b in enumerate(a):

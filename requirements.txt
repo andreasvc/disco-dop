@@ -4,3 +4,4 @@ pytest
 sphinx
 futures
 faulthandler
+cyordereddict

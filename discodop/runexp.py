@@ -13,7 +13,11 @@ import codecs
 import logging
 import multiprocessing
 from math import log
-from collections import defaultdict, OrderedDict, Counter as multiset
+from collections import defaultdict, Counter
+try:
+	from cyordereddict import OrderedDict
+except ImportError:
+	from collections import OrderedDict
 if sys.version[0] >= '3':
 	import pickle
 	from itertools import zip_longest  # pylint: disable=E0611
@@ -896,12 +900,12 @@ def parsetepacoc(
 			logging.info('time elapsed during parsing: %g',
 					time.clock() - begin)
 		# else:  # wall clock time here
-	goldbrackets = multiset()
+	goldbrackets = Counter()
 	totresults = [parser.DictObj(name=stage.name) for stage in stages]
 	for result in totresults:
 		result.elapsedtime = [None] * cnt
 		result.parsetrees = [None] * cnt
-		result.brackets = multiset()
+		result.brackets = Counter()
 		result.exact = result.noparse = 0
 	goldblocks = []
 	goldsents = []
