@@ -2,7 +2,6 @@
 
 Expects binarized, epsilon-free, monotone LCFRS grammars."""
 from __future__ import print_function
-from collections import defaultdict, deque
 import logging
 import numpy as np
 cimport cython

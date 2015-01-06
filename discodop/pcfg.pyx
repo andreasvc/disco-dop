@@ -5,7 +5,6 @@ import re
 import subprocess
 from math import exp, log as pylog
 from itertools import count
-from collections import defaultdict, deque
 import numpy as np
 from discodop.tree import Tree
 from discodop.plcfrs import DoubleAgenda

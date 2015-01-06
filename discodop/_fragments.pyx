@@ -11,7 +11,7 @@ from __future__ import print_function
 import re
 import io
 import sys
-from collections import defaultdict, Counter as multiset
+from collections import Counter
 from functools import partial
 from itertools import islice
 from array import array
@@ -123,8 +123,6 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		lexical = re.compile(r'^[A-Z]+$')
 		lexicalprods = {n for n, label in enumerate(labels)
 				if lexical.match(label)}
-	if approx:
-		fragments = <dict>defaultdict(int)
 	if trees2 is None:
 		trees2 = trees1
 	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
@@ -211,8 +209,12 @@ cdef inline collectfragments(dict fragments, set inter, Node *anodes,
 		frag = getsent(''.join(tmp), asent) if discontinuous else ''.join(tmp)
 		del tmp[:]
 		if approx:
+			if frag not in fragments:
+				fragments[frag] = 0
 			fragments[frag] += 1
 		elif indices:
+			if frag not in fragments:
+				fragments[frag] = Counter()
 			fragments[frag][getid(bitset, SLOTS)] += 1
 		elif frag not in fragments:  # FIXME: is this condition useful?
 			fragments[frag] = wrapper
@@ -313,7 +315,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	cdef:
 		array counts = None
 		list theindices = None
-		object matches = None  # multiset()
+		object matches = None  # Counter()
 		set candidates
 		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 		uint32_t n, m
@@ -323,7 +325,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		Node *bnodes
 		uint64_t *bitset
 	if indices:
-		theindices = [multiset() for _ in bitsets]
+		theindices = [Counter() for _ in bitsets]
 	else:
 		counts = clone(uintarray, len(bitsets), True)
 		countsp = counts.data.as_uints
@@ -496,7 +498,7 @@ def allfragments(Ctrees trees, list sents, list labels,
 	cdef int n, SLOTS = BITNSLOTS(trees.maxnodes)
 	cdef list table, tmp = []
 	cdef set inter = set()
-	cdef dict fragments = <dict>defaultdict(multiset if indices else int)
+	cdef dict fragments = {}
 	cdef uint64_t *scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 	if scratch is NULL:
 		raise MemoryError('allocation error')
