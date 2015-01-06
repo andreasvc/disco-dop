@@ -590,7 +590,7 @@ def doparsing(**kwds):
 		initworker(params)
 		dowork = (worker(a) for a in params.testset.items())
 	else:
-		pool = multiprocessing.pool.Pool(processes=params.numproc,
+		pool = multiprocessing.Pool(processes=params.numproc,
 				initializer=initworker, initargs=(params,))
 		dowork = pool.imap_unordered(worker, params.testset.items())
 	logging.info('going to parse %d sentences.', len(params.testset))

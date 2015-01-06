@@ -175,7 +175,7 @@ def regular(filenames, numproc, limit, encoding):
 	if numproc == 1:
 		mymap = map
 	else:  # multiprocessing, start worker processes
-		pool = multiprocessing.pool.Pool(
+		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworker,
 				initargs=(filenames[0], filenames[1] if len(filenames) == 2
 					else None, limit, encoding))
@@ -468,7 +468,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 				for kv in sorted(dict(numchunks=len(work),
 					numproc=numproc).items())))
 		# start worker processes
-		pool = multiprocessing.pool.Pool(
+		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworkersimple,
 				initargs=(trees, list(sents), disc))
 		mymap = pool.map
@@ -551,7 +551,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 		mymap = map
 	else:
 		# since the input trees change, we need a new pool each time
-		pool = multiprocessing.pool.Pool(
+		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworkersimple,
 				initargs=(newtrees, newsents, PARAMS['disc'], trees, sents))
 		mymap = pool.imap

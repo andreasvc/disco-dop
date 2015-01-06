@@ -242,7 +242,7 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 		initworker(parser, printprob, usetags, numparses, fmt, morphology)
 		mymap = map
 	else:
-		pool = multiprocessing.pool.Pool(
+		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworker,
 				initargs=(parser, printprob, usetags, numparses, fmt,
 					morphology))
