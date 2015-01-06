@@ -85,7 +85,7 @@ DEFAULTSTAGE = dict(
 		dop=None,  # DOP mode: dopreduction, doubledop, dop1
 		binarized=True,  # for doubledop, whether to binarize extracted grammar
 		# (False requires use of bitpar)
-		maxdepth=4,  # for dop1 & doubledop cover fragments,
+		maxdepth=1,  # for dop1 & doubledop cover fragments,
 		# maximum depth of fragments to extract.
 		maxfrontier=999,  # for dop1 & doubledop cover fragments,
 		# maximum frontier NTs in fragments.

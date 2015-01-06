@@ -223,16 +223,17 @@ def regular(filenames, numproc, limit, encoding):
 			counts.extend(a)
 	if PARAMS['cover']:
 		maxdepth, maxfrontier = PARAMS['cover']
+		before = len(fragmentkeys)
 		cover = _fragments.allfragments(PARAMS['trees1'], PARAMS['sents1'],
 				PARAMS['labels'], maxdepth, maxfrontier, PARAMS['disc'],
 				PARAMS['indices'])
-		before = len(fragmentkeys)
 		for a in cover:
 			if a not in fragments:
 				fragmentkeys.append(a)
 				counts.append(cover[a])
-		logging.info('merged %d cover fragments',
-				len(fragmentkeys) - before)
+		logging.info('merged %d cover fragments '
+				'up to depth %d with max %d frontier non-terminals.',
+				len(fragmentkeys) - before, maxdepth, maxfrontier)
 	if numproc != 1:
 		pool.close()
 		pool.join()
@@ -444,7 +445,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	:param iterate, complement: see :func:`_fragments.extractfragments`
 	:param indices: when False, return integer counts instead of indices.
 	:param maxdepth: when > 0, add 'cover' fragments to result, corresponding
-		to all fragments up to given depth.
+		to all fragments up to given depth; pass 0 to disable.
 	:param maxfrontier: maximum number of frontier non-terminals (substitution
 		sites) in cover fragments; a limit of 0 only gives fragments that
 		bottom out in terminals; the default 999 is unlimited for practical
@@ -495,8 +496,9 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 			if a not in fragments:
 				fragmentkeys.append(a)
 				counts.append(cover[a])
-		logging.info('merged %d cover fragments',
-				len(fragmentkeys) - before)
+		logging.info('merged %d cover fragments '
+				'up to depth %d with max %d frontier non-terminals.',
+				len(fragmentkeys) - before, maxdepth, maxfrontier)
 	if numproc != 1:
 		pool.close()
 		pool.join()
