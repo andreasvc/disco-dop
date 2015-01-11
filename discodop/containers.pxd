@@ -53,12 +53,13 @@ cdef class Grammar:
 # 		vit. prob for lhs in given cell.
 #     for LCFRS: index vit. probs by [lhs][item]; iterate over items for lhs.
 # [x] pruning: either (1) in probs; return nan for blocked, inf for missing,
-#		or (2) prepopulate parse forest; advantage: non-probabilistic
-#		parsing can be pruned, viterbi probabilities can be obtained in
-#		separate stage.
-#		=> (3) external whitelist (current)
+# 		or (2) prepopulate parse forest; advantage: non-probabilistic
+# 		parsing can be pruned, viterbi probabilities can be obtained in
+# 		separate stage.
+# 		=> (3) external whitelist (current)
 # [x] sampling; not well tested.
-# [x] unroll list of edges in parse forest: list w/blocks of 1000 edges in arrays
+# [x] unroll list of edges in parse forest: list w/blocks of 1000 edges
+#     in arrays
 
 # chart improvements todo:
 # [ ] better to use e.g., C++ vector or other existing dynamic array for edges
@@ -66,7 +67,7 @@ cdef class Grammar:
 # 		indexed arrays, to save 50%, and be consistent with chart API
 # [ ] symbolic parsing; separate viterbi stage
 # [ ] can we exploit bottom-up order of parser or previous ctf stages
-#		to pack the parse forest?
+# 		to pack the parse forest?
 # [ ] is it useful to have a recognition phase before making parse forest?
 cdef class Chart:
 	cdef readonly dict rankededges  # [item][n] => DoubleEntry(RankedEdge, prob)
@@ -95,13 +96,13 @@ cdef class Chart:
 
 
 cdef struct Rule:  # total: 32 bytes.
-	double prob # 8 bytes
-	uint32_t lhs # 4 bytes
-	uint32_t rhs1 # 4 bytes
-	uint32_t rhs2 # 4 bytes
-	uint32_t args # 4 bytes => 32 max vars per rule
-	uint32_t lengths # 4 bytes => same
-	uint32_t no # 4 bytes
+	double prob  # 8 bytes
+	uint32_t lhs  # 4 bytes
+	uint32_t rhs1  # 4 bytes
+	uint32_t rhs2  # 4 bytes
+	uint32_t args  # 4 bytes => 32 max vars per rule
+	uint32_t lengths  # 4 bytes => same
+	uint32_t no  # 4 bytes
 
 
 @cython.final
@@ -133,7 +134,7 @@ cdef SmallChartItem CFGtoSmallChartItem(uint32_t label, Idx start, Idx end)
 cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end)
 
 
-cdef union Position: # 8 bytes
+cdef union Position:  # 8 bytes
 	short mid  # CFG, end index of left child
 	uint64_t lvec  # LCFRS, bit vector of left child
 	uint64_t *lvec_fat  # LCFRS > 64 words, pointer to bit vector of left child;
@@ -163,32 +164,32 @@ cdef class Edges:
 # start scratch
 #
 #
-#cdef struct CompactEdge:
-#	uint32_t ruleno  # => idx to grammar.bylhs; define sentinel.
-#	uint32_t posno  # => idx to an array of positions
-#	# 8 bytes, but more indirection, less convenience
+# cdef struct CompactEdge:
+# 	uint32_t ruleno  # => idx to grammar.bylhs; define sentinel.
+# 	uint32_t posno  # => idx to an array of positions
+# 	# 8 bytes, but more indirection, less convenience
 #
 #
-#cdef class ParseForest:
-#	""" the chart representation of bitpar.
+# cdef class ParseForest:
+# 	""" the chart representation of bitpar.
 #
-#	seems to require parsing in 3 stages: recognizer, enumerate analyses,
-#	get probs. """
-#	#keys
-#	cdef uint32_t *catnum			# no. of chart item -> lhs
-#	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.
-#	# from firstanalysis[n] to firstanalysis[n+1] or end values.
-#	cdef size_t *firstchild     # idx to child array below
-#	cdef double *insideprobs	# no. of edge -> inside prob
-#	cdef uint32_t *ruleno
-#	#positive means index to lists above, negative means terminal index
-#	cdef uint32_t *child
+# 	seems to require parsing in 3 stages: recognizer, enumerate analyses,
+# 	get probs. """
+# 	# keys
+# 	cdef uint32_t *catnum			# no. of chart item -> lhs
+# 	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.
+# 	# from firstanalysis[n] to firstanalysis[n+1] or end values.
+# 	cdef size_t *firstchild     # idx to child array below
+# 	cdef double *insideprobs	# no. of edge -> inside prob
+# 	cdef uint32_t *ruleno
+# 	# positive means index to lists above, negative means terminal index
+# 	cdef uint32_t *child
 #
 #
-#cdef class DiscNode:
-#	cdef int label
-#	cdef tuple children
-#	cdef CBitset leaves
+# cdef class DiscNode:
+# 	cdef int label
+# 	cdef tuple children
+# 	cdef CBitset leaves
 #
 #
 # end scratch
@@ -197,14 +198,14 @@ cdef class Edges:
 # start fragments stuff
 
 cdef struct Node:  # a node of a binary tree
-	int prod # non-negative, ID of a phrasal or lexical production
-	short left # >= 0: array idx to child Node; <0: idx sent[-left - 1];
-	short right # >=0: array idx to child Node; -1: empty (unary Node)
+	int prod  # non-negative, ID of a phrasal or lexical production
+	short left  # >= 0: array idx to child Node; <0: idx sent[-left - 1];
+	short right  # >=0: array idx to child Node; -1: empty (unary Node)
 
 
 cdef struct NodeArray:  # a tree as an array of Node structs
-	size_t offset # index to array of nodes in treebank where this tree starts
-	short len, root # number of nodes, index to root node
+	size_t offset  # index to array of nodes in treebank where this tree starts
+	short len, root  # number of nodes, index to root node
 
 
 @cython.final
@@ -295,7 +296,7 @@ cdef inline logprobadd(x, y):
 		return x
 	diff = y - x
 	assert not isinf(diff)
-	if isinf(exp(diff)):	# difference is too large
+	if isinf(exp(diff)):  # difference is too large
 		return x if x > y else y
 	# otherwise return the sum.
 	return x + log(1.0 + exp(diff))
@@ -311,7 +312,7 @@ cdef inline double logprobsum(list logprobs):
 	:param logprobs: a list of Python floats with negative log probilities,
 		s.t. 0 <= p <= inf for each p in ``logprobs``.
 	:returns: a probability p with 0 < p <= 1.0
-	:source: http://blog.smola.org/post/987977550/log-probabilities-semirings-and-floating-point-numbers
+	:source: http://blog.smola.org/post/987977550/
 
 	Comparison of different methods: https://gist.github.com/andreasvc/6204982
 	"""

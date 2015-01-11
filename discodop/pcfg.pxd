@@ -22,7 +22,7 @@ cdef class CFGChart(Chart):
 
 @cython.final
 cdef class DenseCFGChart(CFGChart):
-	cdef readonly list parseforest # chartitem => [Edge(lvec, rule), ...]
+	cdef readonly list parseforest  # chartitem => [Edge(lvec, rule), ...]
 	cdef double *probs
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule)
@@ -34,7 +34,7 @@ cdef class DenseCFGChart(CFGChart):
 
 @cython.final
 cdef class SparseCFGChart(CFGChart):
-	cdef readonly dict parseforest # chartitem => [Edge(lvec, rule), ...]
+	cdef readonly dict parseforest  # chartitem => [Edge(lvec, rule), ...]
 	cdef dict probs
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule)

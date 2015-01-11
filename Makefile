@@ -60,7 +60,7 @@ lint: inplace
 	pep8 --ignore=E1,W1 \
 		discodop/*.py web/*.py tests/*.py \
 	&& pep8 --ignore=E1,W1,F,E901,E225,E227,E211 \
-		discodop/*.pyx discodop/*.pxi \
+		discodop/*.pyx discodop/*.pxi discodop/*.pxd \
 	&& pylint --indent-string='\t' --max-line-length=80 \
 		--disable=R,bad-continuation,invalid-name,star-args \
 		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus \

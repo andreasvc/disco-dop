@@ -1,5 +1,4 @@
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t
-from libc.string cimport memcpy
 
 cdef extern from "macros.h":
 	int BITSIZE
@@ -23,25 +22,33 @@ ctypedef fused unsigned_fused:
 
 
 # cpdef functions defined in bit.pyx
-#on python integers
+# on python integers
 cpdef int fanout(arg)
 cpdef int pyintnextset(a, int pos)
-#on C integers
+# on C integers
 cpdef int bitcount(uint64_t vec)
 
 # cdef inline functions defined here:
-#on variously sized C integers
-#cdef inline bint testbit(unsigned_fused vec, uint32_t pos)
-#on uint64_t
-#cdef inline int nextset(uint64_t vec, uint32_t pos)
-#cdef inline int nextunset(uint64_t vec, uint32_t pos)
-#cdef inline int bitlength(uint64_t vec)
-#on uint64_t arrays
-#cdef inline int abitcount(uint64_t *vec, int slots)
-#cdef inline int anextset(uint64_t *vec, uint32_t pos, int slots)
-#cdef inline int anextunset(uint64_t *vec, uint32_t pos, int slots)
-#cdef inline bint subset(uint64_t *vec1, uint64_t *vec2, int slots)
-#cdef inline void setunion(uint64_t *dest, uint64_t *src, int slots)
+# ===================================
+# - on variously sized C integers
+# cdef inline bint testbit(unsigned_fused vec, uint32_t pos)
+# - on uint64_t
+# cdef inline int nextset(uint64_t vec, uint32_t pos)
+# cdef inline int nextunset(uint64_t vec, uint32_t pos)
+# cdef inline int bitlength(uint64_t vec)
+# - on uint64_t arrays
+# cdef inline int abitcount(uint64_t *vec, int slots)
+# cdef inline int anextset(uint64_t *vec, uint32_t pos, int slots)
+# cdef inline int anextunset(uint64_t *vec, uint32_t pos, int slots)
+# cdef inline bint subset(uint64_t *vec1, uint64_t *vec2, int slots)
+# cdef inline void setunioninplace(uint64_t *dest, uint64_t *src,
+# 		int slots)
+# cdef inline void setintersectinplace(uint64_t *dest, uint64_t *src,
+# 		int slots)
+# cdef inline void setunion(uint64_t *dest, uint64_t *src1, uint64_t *src2,
+# 		int slots)
+# cdef inline void setintersect(uint64_t *dest, uint64_t *src1, uint64_t *src2,
+# 		int slots)
 
 
 cdef inline bint testbit(unsigned_fused vec, uint32_t pos):
@@ -70,11 +77,11 @@ cdef inline int nextset(uint64_t vec, uint32_t pos):
 	"""
 	return (pos + bit_ctz(vec >> pos)) if (vec >> pos) else -1
 	# mask instead of shift:
-	#return __builtin_ffsl(vec & (~0UL << pos)) - 1
-	#uint64_t x = vec & ~((1 << pos) - 1)
-	#uint64_t x = (vec >> pos) << pos
-	#return x ? bit_ctz(x) : -1
-	#return  __builtin_ffsl(x) - 1
+	# return __builtin_ffsl(vec & (~0UL << pos)) - 1
+	# uint64_t x = vec & ~((1 << pos) - 1)
+	# uint64_t x = (vec >> pos) << pos
+	# return x ? bit_ctz(x) : -1
+	# return  __builtin_ffsl(x) - 1
 
 
 cdef inline int nextunset(uint64_t vec, uint32_t pos):
@@ -154,7 +161,8 @@ cdef inline int iteratesetbits(uint64_t *vec, int slots,
 
 	:param slots: number of elements in unsigned long array ``vec``.
 	:param cur and idx: pointers to variables to maintain state,
-		``idx`` should be initialized to 0, and ``cur`` to the first element of
+		``idx`` should be initialized to 0,
+		and ``cur`` to the first element of
 		the bit array ``vec``, i.e., ``cur = vec[idx]``.
 	:returns: the index of a set bit, or -1 if there are no more set
 		bits. The result of calling a stopped iterator is undefined.
@@ -163,9 +171,9 @@ cdef inline int iteratesetbits(uint64_t *vec, int slots,
 
 		uint64_t vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
 		int idx = 0
-		iteratesetbits(vec, 0, 4, &cur, &idx) # returns 0
-		iteratesetbits(vec, 0, 4, &cur, &idx) # returns 4
-		iteratesetbits(vec, 0, 4, &cur, &idx) # returns -1
+		iteratesetbits(vec, 4, &cur, &idx)  # returns 0
+		iteratesetbits(vec, 4, &cur, &idx)  # returns 4
+		iteratesetbits(vec, 4, &cur, &idx)  # returns -1
 	"""
 	cdef int tmp
 	while not cur[0]:
@@ -210,7 +218,18 @@ cdef inline void setunioninplace(uint64_t *dest, uint64_t *src, int slots):
 		dest[a] |= src[a]
 
 
-cdef inline void setunion(uint64_t *dest, uint64_t *src1, uint64_t *src2, int slots):
+cdef inline void setintersect(uint64_t *dest, uint64_t *src1, uint64_t *src2,
+		int slots):
+	"""dest gets the intersection of src1 and src2.
+
+	operands must have at least ``slots`` slots."""
+	cdef int a
+	for a in range(slots):
+		dest[a] = src1[a] & src2[a]
+
+
+cdef inline void setunion(uint64_t *dest, uint64_t *src1, uint64_t *src2,
+		int slots):
 	"""dest gets the union of src1 and src2.
 
 	operands must have at least ``slots`` slots."""

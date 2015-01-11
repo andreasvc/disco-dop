@@ -27,7 +27,7 @@ ctypedef fused LCFRSItem_fused:
 	FatChartItem
 
 cdef class LCFRSChart(Chart):
-	cdef readonly dict parseforest # chartitem => [Edge(lvec, rule), ...]
+	cdef readonly dict parseforest  # chartitem => [Edge(lvec, rule), ...]
 	cdef list probs
 	cdef void addlexedge(self, item, short wordidx)
 	cdef void updateprob(self, ChartItem item, double prob)
