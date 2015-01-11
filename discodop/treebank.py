@@ -278,7 +278,7 @@ class NegraCorpusReader(CorpusReader):
 	def blocks(self):
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
-		return OrderedDict((a, '\n'.join(b))
+		return OrderedDict((a, '\n'.join(b) + '\n')
 				for a, b in self._block_cache.items())
 
 	def _read_blocks(self):
@@ -292,7 +292,8 @@ class NegraCorpusReader(CorpusReader):
 						raise ValueError('beginning of sentence marker while '
 								'previous one still open: %s' % line)
 					started = True
-					sentid = line.strip().split()[1]
+					line = line.strip()
+					sentid = line.split()[1]
 					lines = [line]
 				elif line.startswith('#EOS '):
 					if not started:
@@ -491,7 +492,7 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 		children.setdefault(source[PARENT], []).append((n, source))
 	tree = ParentedTree('ROOT', getchildren('0'))
 	handlefunctions(functions, tree, morphology=morphology)
-	return Item(tree, sent, comment, '\n'.join(block))
+	return Item(tree, sent, comment, '\n'.join(block) + '\n')
 
 
 def exportsplit(line):

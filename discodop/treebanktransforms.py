@@ -71,12 +71,12 @@ def transform(tree, sent, transformations):
 		if name == 'APPEND-FUNC':  # add function to phrasal label
 			for a in tree.subtrees():
 				func = functions(a)
-				if func:
+				if func and not a.label.endswith('-'):  # -LRB-
 					a.label += '-' + '-'.join(func)
 		elif name == 'FUNC-NODE':  # insert node w/function above phrasal label
 			for a in tree.postorder():
 				func = functions(a)
-				if func:
+				if func and not a.label.endswith('-'):  # -LRB-
 					a[:] = [a.__class__(a.label,
 							[a.pop() for _ in range(len(a))][::-1])]
 					a.label = '-' + '-'.join(func)
@@ -865,7 +865,9 @@ def reversetransform(tree, transformations):
 					if function(child) != 'crd' and not base(child, 'let'):
 						child.source[FUNC] = 'cnj'
 		elif name == 'APPEND-FUNC':  # functions appended to phrasal labels
-			for a in tree.subtrees(lambda n: '-' in n.label):
+			for a in tree.subtrees(lambda n: '-' in n.label
+					and not n.label.startswith('-')
+					and not n.label.endswith('-')):  # -LRB-
 				label, func = a.label.split('-', 1)
 				if not getattr(a, 'source', None):
 					a.source = ['--'] * 8
@@ -881,6 +883,7 @@ def reversetransform(tree, transformations):
 					a.source[MORPH] = morph
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
 			for a in list(tree.postorder(lambda n: n.label.startswith('-')
+					and not n.label.endswith('-')  # -LRB-
 					and n and isinstance(n[0], Tree))):
 				a.source = ['--'] * 8
 				a.source[FUNC] = a.label[1:]

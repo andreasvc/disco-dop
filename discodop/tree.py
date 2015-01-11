@@ -538,7 +538,10 @@ class ImmutableTree(Tree):
 		else:
 			# self._leaves = Tree.leaves(self)
 			self._addleaves()
-			self.bitset = sum(1 << n for n in self._leaves)
+			try:
+				self.bitset = sum(1 << n for n in self._leaves)
+			except TypeError as err:
+				self.bitset = None
 
 	def _addleaves(self):
 		"""Set leaves attribute of this node and its descendants."""
