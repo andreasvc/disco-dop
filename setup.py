@@ -1,4 +1,5 @@
 """Generic setup.py for Cython code."""
+import os
 from distutils.core import setup
 from distutils.extension import Extension
 try:
@@ -35,7 +36,6 @@ metadata = dict(name='disco-dop',
 				'pytest',
 				'sphinx',
 				'futures',
-				'lru_dict',
 		],
 		packages=['discodop'],
 		scripts=['bin/discodop'],
@@ -61,6 +61,7 @@ directives = {
 
 if __name__ == '__main__':
 	if havecython:
+		os.environ['GCC_COLORS'] = 'auto'
 		extensions = [Extension(
 				'*',
 				['discodop/*.pyx'],
@@ -76,8 +77,8 @@ if __name__ == '__main__':
 						extensions,
 						annotate=True,
 						compiler_directives=directives,
-						# nthreads=4,
 						language_level=3,
+						# nthreads=4,
 				),
 				# test_suite = 'tests'
 				**metadata)
