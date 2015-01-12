@@ -72,7 +72,7 @@ morphology=None,  # options:
 #		POS tag and word, e.g., (DET (sg.def the))
 
 # apply transformations (state splits) to training set trees
-transformations=('APPEND-FUNC', ),
+transformations=('lassy-func', ),
 relationalrealizational=None,
 #relationalrealizational=dict(  # Negra/Tiger
 #	# the function labels to treat as adjunction

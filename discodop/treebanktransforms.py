@@ -14,8 +14,8 @@ from discodop.treetransforms import addfanoutmarkers, removefanoutmarkers
 from discodop.heads import ishead
 from discodop.punctuation import punctprune, PUNCTUATION
 
-FIELDS = tuple(range(8))
-WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
+FIELDS = tuple(range(6))
+WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 STATESPLIT = '^'
 LABELRE = re.compile("[^^|<>-]+")
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
@@ -40,11 +40,11 @@ PRESETS = {
 		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
 			'subConjType,VPfeat,noHead,noSubj,MARK-YEAR').split(','),
-		'lassy': ('PUNCT', 'MARK-YEAR', 'nlselectmorph',
-			'nlpercolatemorph', 'nlmwuhead', 'nladdunary', 'nlelimcnj'),
+		'lassy': ('nlselectmorph', 'PUNCT', 'MARK-YEAR', 'nlpercolatemorph',
+			'nlmwuhead', 'nladdunary', 'nlelimcnj'),
 		# this variant adds function tags to non-terminal labels
 		'lassy-func': ('nladdunary', 'nlelimcnj', 'APPEND-FUNC',
-			'PUNCT', 'MARK-YEAR', 'nlselectmorph', 'nlpercolatemorph',
+			'nlselectmorph', 'PUNCT', 'MARK-YEAR', 'nlpercolatemorph',
 			'nlmwuhead')
 		}
 
@@ -268,7 +268,7 @@ def negratransforms(name, tree, sent):
 		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 			case = CASERE.match(node.source[MORPH])
 			if case:
-				node.label += STATESPLIT + case.group(1)
+				node.label += '/' + case.group(1)
 	elif name == 'elimNKCJ':  # eliminate NK and CJ functions
 		for node in tree.subtrees(lambda n: function(n) in {'NK', 'CJ'}):
 			if function(node) == 'NK':
@@ -688,9 +688,10 @@ def lassytransforms(name, tree, _sent):
 		SELECTMORPH = {'eigen', 'det', 'pron', 'init', 'fin', 'neven', 'onder',
 				'prenom', 'nom', 'vrij', 'pv', 'inf', 'vd', 'od'}
 		for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)):
-			selected = sorted(morphfeats(pos).intersection(SELECTMORPH))
-			if selected:
-				pos.label += '%s[%s]' % (STATESPLIT, ','.join(selected))
+			tag = pos.source[MORPH].split('(')[0]
+			selected = [feat for feat in morphfeats(pos)
+					if feat in SELECTMORPH]
+			pos.label += '/%s[%s]' % (tag, ','.join(selected))
 	elif name == 'nlpercolatemorph':  # percolate select morph tags upwards
 		PERCOLATE = {'pv': 2, 'inf': 2}
 		for feat, lvl in PERCOLATE.items():
@@ -873,14 +874,15 @@ def reversetransform(tree, transformations):
 					a.source = ['--'] * 6
 				a.source[TAG] = a.label = label
 				a.source[FUNC] = func
-		elif name == 'APPEND-MORPH':  # morphology appended to phrasal labels
+		# morphological features appended to phrasal labels
+		elif name in {'APPEND-MORPH', 'addCase', 'nlselectmorph'}:
 			for a in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 				if '/' in a.label:
 					label, morph = a.label.split('/', 1)
 					if not getattr(a, 'source', None):
 						a.source = ['--'] * 6
 					a.source[TAG] = a.label = label
-					a.source[MORPH] = morph
+					a.source[MORPH] = morph.replace('[', '(').replace(']', ')')
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
 			for a in list(tree.postorder(lambda n: n.label.startswith('-')
 					and not n.label.endswith('-')  # -LRB-
@@ -903,6 +905,7 @@ def reversetransform(tree, transformations):
 				a.source[LEMMA] = unquote(a[0].label)
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
+
 	# restore linear precedence ordering
 	for a in tree.subtrees(lambda n: len(n) > 1):
 		a.children.sort(key=lambda n: n.leaves())
@@ -1108,13 +1111,15 @@ def bracketings(tree):
 
 # morphological features
 def morphfeats(node):
-	"""Return the set of morphological features for a POS node from a tree."""
+	"""Return the morphological features of a preterminal node.
+
+	Features may be separated by dots or commas."""
 	morph = node.source[MORPH].replace('(', '[').replace(')', ']')
 	try:
 		morph = morph[morph.index('[') + 1:morph.index(']')]
 	except ValueError:
 		return {}
-	return set(morph.replace('.', ',').split(','))
+	return morph.replace('.', ',').split(',')
 
 
 def unifymorphfeat(feats, percolatefeatures=None):
