@@ -97,7 +97,7 @@ class Evaluator(object):
 		self.acc40 = None
 		if param['CUTOFF_LEN'] is not None:
 			self.acc40 = EvalAccumulator(param['DISC_ONLY'])
-		if param['DEBUG'] == 1:
+		if param['DEBUG'] >= 1:
 			print('Parameters:')
 			for a in param:
 				print('%s\t%s' % (a, param[a]))
@@ -131,6 +131,8 @@ class Evaluator(object):
 		limit = 10 if self.param['DEBUG'] <= 0 else None
 		self.rulebreakdowns(limit)
 		self.catbreakdown(limit)
+		if self.acc.candfun:
+			self.funcbreakdown(limit)
 		try:
 			acc = accuracy(self.acc.goldpos, self.acc.candpos)
 		except InvalidOperation:
@@ -211,6 +213,41 @@ class Evaluator(object):
 							acc.goldbcat[cat], acc.candbcat[cat])),
 					nozerodiv(lambda: f_measure(
 							acc.goldbcat[cat], acc.candbcat[cat])),
+					), end='')
+			if mismatch is not None:
+				print('       %s %7d' % (' '.join((mismatch[0][0].rjust(8),
+						mismatch[0][1].ljust(8))), mismatch[1]), end='')
+			print()
+
+	def funcbreakdown(self, limit=10):
+		"""Print breakdowns for the most frequent function tags."""
+		acc = self.acc
+		print('\n Function Tag Statistics (%s tags / errors)' % (
+				('%d most frequent' % limit) if limit else 'all'))
+		print('  func.  % gold  recall    prec.     F1',
+				'          cand gold       count')
+		print(' ' + 38 * '_' + 8 * ' ' + 24 * '_')
+		gmismatch = {(n, span): tag
+					for n, (span, tag) in acc.goldfun - acc.candfun}
+		wrong = Counter((tag, gmismatch[n, span])
+					for n, (span, tag) in acc.candfun - acc.goldfun
+					if (n, span) in gmismatch)
+		freqcats = sorted(set(acc.goldbfunc) | set(acc.candbfunc),
+				key=lambda x: len(acc.goldbfunc[x]), reverse=True)
+		for cat, mismatch in zip_longest(freqcats[:limit],
+				wrong.most_common(limit)):
+			if cat is None:
+				print(39 * ' ', end='')
+			else:
+				print('%s  %6.2f  %s  %s  %s' % (
+					cat.rjust(7),
+					100 * sum(acc.goldbfunc[cat].values()) / len(acc.goldfun),
+					nozerodiv(lambda: recall(
+							acc.goldbfunc[cat], acc.candbfunc[cat])),
+					nozerodiv(lambda: precision(
+							acc.goldbfunc[cat], acc.candbfunc[cat])),
+					nozerodiv(lambda: f_measure(
+							acc.goldbfunc[cat], acc.candbfunc[cat])),
 					), end='')
 			if mismatch is not None:
 				print('       %s %7d' % (' '.join((mismatch[0][0].rjust(8),
@@ -556,6 +593,8 @@ class EvalAccumulator(object):
 		# extra accounting for breakdowns:
 		self.goldbcat = defaultdict(Counter)  # brackets per category
 		self.candbcat = defaultdict(Counter)
+		self.goldbfunc = defaultdict(Counter)  # brackets by function tag
+		self.candbfunc = defaultdict(Counter)
 		self.goldbatt, self.candbatt = set(), set()  # attachments per category
 		self.goldrule, self.candrule = Counter(), Counter()
 
@@ -583,18 +622,22 @@ class EvalAccumulator(object):
 			self.golddep.extend(pair.gdep)
 			self.canddep.extend(pair.cdep)
 		# extra bookkeeping for breakdowns
-		for a in pair.gbrack:
-			self.goldbcat[a[0]][(pair.n, a)] += 1
-		for a in pair.cbrack:
-			self.candbcat[a[0]][(pair.n, a)] += 1
+		for a, n in pair.gbrack.items():
+			self.goldbcat[a[0]][(pair.n, a)] += n
+		for a, n in pair.cbrack.items():
+			self.candbcat[a[0]][(pair.n, a)] += n
+		for a, n in pair.goldfun.items():
+			self.goldbfunc[a[1]][(pair.n, a)] += n
+		for a, n in pair.candfun.items():
+			self.candbfunc[a[1]][(pair.n, a)] += n
 		for (label, indices), parent in pair.pgbrack:
 			self.goldbatt.add(((pair.n, label, indices), parent))
 		for (label, indices), parent in pair.pcbrack:
 			self.candbatt.add(((pair.n, label, indices), parent))
 		self.goldrule.update((pair.n, indices, rule)
-				for indices, rule in pair.grule)
+				for indices, rule in pair.grule.elements())
 		self.candrule.update((pair.n, indices, rule)
-				for indices, rule in pair.crule)
+				for indices, rule in pair.crule.elements())
 
 	def scores(self):
 		"""Return a dictionary with running scores for all added sentences."""
@@ -654,6 +697,9 @@ def main():
 		raise ValueError('no trees in gold file')
 	if not candtrees:
 		raise ValueError('no trees in parses file')
+	if param['DEBUG'] >= 2:
+		print('gold:', goldfile)
+		print('parses:', parsesfile, '\n')
 	evaluator = Evaluator(param, max(len(str(key)) for key in candtrees))
 	for n, ctree in candtrees.items():
 		evaluator.add(n, goldtrees[n], goldsents[n], ctree, candsents[n])
