@@ -76,7 +76,6 @@ Set environment variables so that software can be installed to the home director
     mkdir -p ~/.local
     echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
     echo export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
-    echo export PYTHONPATH=$HOME/.local/lib/python2.7/site-packages >>~/.bashrc
     echo export PYTHONIOENCODING="utf-8" >>~/.bashrc
 
 After this, re-login or restart the shell to activate these settings.
