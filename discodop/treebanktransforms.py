@@ -833,14 +833,14 @@ def reversetransform(tree, transformations):
 					in {'NP', 'PP'}):
 				for child in node:
 					if not getattr(child, 'source', None):
-						child.source = ['--'] * 8
+						child.source = ['--'] * 6
 					if function(child) == 'HD':
 						child.source[FUNC] = 'NK'
 			for node in tree.subtrees(lambda n: strip(n.label)
 					in {'CS', 'CNP', 'CVP', 'CAP', 'CAVP', 'CAC'}):
 				for child in node:
 					if not getattr(child, 'source', None):
-						child.source = ['--'] * 8
+						child.source = ['--'] * 6
 					if function(child) != 'CD':
 						child.source[FUNC] = 'CJ'
 		elif name == 'nladdunary':  # remove unary node
@@ -861,7 +861,7 @@ def reversetransform(tree, transformations):
 			for node in tree.subtrees(lambda n: base(n, 'CONJ')):
 				for child in node:
 					if not getattr(child, 'source', None):
-						child.source = ['--'] * 8
+						child.source = ['--'] * 6
 					if function(child) != 'crd' and not base(child, 'let'):
 						child.source[FUNC] = 'cnj'
 		elif name == 'APPEND-FUNC':  # functions appended to phrasal labels
@@ -870,7 +870,7 @@ def reversetransform(tree, transformations):
 					and not n.label.endswith('-')):  # -LRB-
 				label, func = a.label.split('-', 1)
 				if not getattr(a, 'source', None):
-					a.source = ['--'] * 8
+					a.source = ['--'] * 6
 				a.source[TAG] = a.label = label
 				a.source[FUNC] = func
 		elif name == 'APPEND-MORPH':  # morphology appended to phrasal labels
@@ -878,28 +878,28 @@ def reversetransform(tree, transformations):
 				if '/' in a.label:
 					label, morph = a.label.split('/', 1)
 					if not getattr(a, 'source', None):
-						a.source = ['--'] * 8
+						a.source = ['--'] * 6
 					a.source[TAG] = a.label = label
 					a.source[MORPH] = morph
 		elif name == 'FUNC-NODE':  # nodes with function above phrasal labels
 			for a in list(tree.postorder(lambda n: n.label.startswith('-')
 					and not n.label.endswith('-')  # -LRB-
 					and n and isinstance(n[0], Tree))):
-				a.source = ['--'] * 8
+				a.source = ['--'] * 6
 				a.source[FUNC] = a.label[1:]
 				a.source[TAG] = a.label = a[0].label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 		elif name == 'MORPH-NODE':  # nodes with morph. above preterminals
 			for a in list(tree.postorder(lambda n: n and isinstance(n[0], Tree)
 					and n[0] and isinstance(n[0][0], int))):
-				a.source = ['--'] * 8
+				a.source = ['--'] * 6
 				a.source[MORPH] = a.label
 				a.source[TAG] = a.label = a[0].label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 		elif name == 'LEMMA-NODE':  # nodes with lemmas above words
 			for a in list(tree.postorder(lambda n: n and isinstance(n[0], Tree)
 					and n[0] and isinstance(n[0][0], int))):
-				a.source = ['--'] * 8
+				a.source = ['--'] * 6
 				a.source[LEMMA] = unquote(a[0].label)
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
@@ -1046,7 +1046,7 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 						adjunctionlabel,
 						child.label.split('/')[0])
 					for child in tree[0]])
-	result.source = ['--'] * 8
+	result.source = ['--'] * 6
 	result.source[TAG] = result.label
 	if morph:
 		result.source[MORPH] = morph.replace('[', '(').replace(']', ')')

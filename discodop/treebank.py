@@ -700,7 +700,7 @@ def writealpinotree(tree, sent, n, commentstr):
 	comment.text = ('%s|%s' % (n, commentstr)) if commentstr else str(n)
 	result.text = sentence.tail = '\n  '
 	result.tail = comment.tail = '\n'
-	return ElementTree.tostring(result).decode('utf-8')  # hack
+	return ElementTree.tostring(result).decode('utf8')  # hack
 
 
 def writedependencies(tree, sent, fmt):

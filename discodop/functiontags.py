@@ -73,7 +73,7 @@ def applyfunctionclassifier(funcclassifier, tree, sent):
 	for node, func in zip(tree.subtrees(lambda n: n is not tree and n
 			and (posfunc or isinstance(n[0], Tree))), funclabels):
 		if not getattr(node, 'source', None):
-			node.source = ['--'] * 8
+			node.source = ['--'] * 6
 		elif isinstance(node.source, tuple):
 			node.source = list(node.source)
 		if not func:
