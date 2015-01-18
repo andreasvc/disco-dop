@@ -6,6 +6,7 @@ cdef extern from "macros.h":
 	uint64_t BITMASK(int b)
 	uint64_t TESTBIT(uint64_t a[], int b)
 	void CLEARBIT(uint64_t a[], int b)
+	void SETBIT(uint64_t a[], int b)
 
 
 cdef extern from "bitcount.h":
@@ -49,6 +50,11 @@ cpdef int bitcount(uint64_t vec)
 # 		int slots)
 # cdef inline void setintersect(uint64_t *dest, uint64_t *src1, uint64_t *src2,
 # 		int slots)
+# cdef inline int iteratesetbits(uint64_t *vec, int slots,
+#		uint64_t *cur, int *idx)
+# cdef inline int iterateunsetbits(uint64_t *vec, int slots,
+#		uint64_t *cur, int *idx)
+# cdef inline int reviteratesetbits(uint64_t *vec, uint64_t *cur, int *idx)
 
 
 cdef inline bint testbit(unsigned_fused vec, uint32_t pos):
@@ -169,8 +175,8 @@ cdef inline int iteratesetbits(uint64_t *vec, int slots,
 
 	e.g.::
 
-		uint64_t vec[4] = {0, 0, 0, 0b10001}, cur = vec[0]
 		int idx = 0
+		uint64_t vec[4] = {0, 0, 0, 0b10001}, cur = vec[idx]
 		iteratesetbits(vec, 4, &cur, &idx)  # returns 0
 		iteratesetbits(vec, 4, &cur, &idx)  # returns 4
 		iteratesetbits(vec, 4, &cur, &idx)  # returns -1
@@ -182,21 +188,23 @@ cdef inline int iteratesetbits(uint64_t *vec, int slots,
 			return -1
 		cur[0] = vec[idx[0]]
 	tmp = bit_ctz(cur[0])  # index of bit in current slot
-	CLEARBIT(cur, tmp)
+	cur[0] ^= 1UL << tmp  # TOGGLEBIT(cur, tmp)
 	return idx[0] * BITSIZE + tmp
 
 
 cdef inline int iterateunsetbits(uint64_t *vec, int slots,
 		uint64_t *cur, int *idx):
-	"""Like ``iteratesetbits``, but return indices of zero bits."""
+	"""Like ``iteratesetbits``, but return indices of zero bits.
+
+	:param cur: should be initialized as: ``cur = ~vec[idx]``."""
 	cdef int tmp
-	while not ~cur[0]:
+	while not cur[0]:
 		idx[0] += 1
 		if idx[0] >= slots:
 			return -1
-		cur[0] = vec[idx[0]]
-	tmp = bit_ctz(~cur[0])  # index of bit in current slot
-	CLEARBIT(cur, tmp)
+		cur[0] = ~vec[idx[0]]
+	tmp = bit_ctz(cur[0])  # index of bit in current slot
+	cur[0] ^= 1UL << tmp  # TOGGLEBIT(cur, tmp)
 	return idx[0] * BITSIZE + tmp
 
 
