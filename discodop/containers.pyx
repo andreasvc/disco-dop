@@ -2,6 +2,7 @@
 from __future__ import print_function
 from math import exp, log, fsum
 from libc.math cimport log, exp
+from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
 from discodop.bit cimport nextset, nextunset, anextset, anextunset
 cimport cython
@@ -534,18 +535,18 @@ cdef class Ctrees:
 		Productions are represented as integer IDs, trees are given as sets of
 		integer indices."""
 		cdef:
-			list prodindex = [set() for _ in prods]
+			list prodindex = [RoaringBitmap() for _ in prods]
 			dict trigramindex = {}
-			NodeArray a
+			NodeArray tree
 			Node *nodes
 			int n, m
 		for n in range(self.len):
-			a = self.trees[n]
-			nodes = &self.nodes[a.offset]
-			for m in range(a.len):
+			tree = self.trees[n]
+			nodes = &self.nodes[tree.offset]
+			for m in range(tree.len):
 				# Add to production index
-				(<set>prodindex[nodes[m].prod]).add(n)
-				# Add to treelet-trigrams
+				prodindex[nodes[m].prod].add(n)
+				# Add to production trigram index
 				if nodes[m].left >= 0:
 					if nodes[m].right < 0:  # unary
 						treegram = (
@@ -560,7 +561,7 @@ cdef class Ctrees:
 					if treegram in trigramindex:
 						trigramindex[treegram].add(n)
 					else:
-						trigramindex[treegram] = {n}
+						trigramindex[treegram] = RoaringBitmap([n])
 
 		self.prodindex = prodindex
 		self.trigramindex = trigramindex

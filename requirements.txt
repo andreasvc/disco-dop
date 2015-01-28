@@ -1,7 +1,8 @@
 cython>=0.20
 numpy>=1.6.1
+roaringbitmap
+cyordereddict
+faulthandler
+futures
 pytest
 sphinx
-futures
-faulthandler
-cyordereddict

@@ -15,6 +15,7 @@ from collections import Counter
 from functools import partial
 from itertools import islice
 from array import array
+from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
 from discodop.grammar import lcfrsproductions
 from discodop.treetransforms import binarize
@@ -316,7 +317,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		array counts = None
 		list theindices = None
 		object matches = None  # Counter()
-		set candidates
+		object candidates  # RoaringBitmap()
 		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 		uint32_t n, m
 		uint32_t *countsp = NULL
@@ -336,9 +337,12 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		anodes = &trees1.nodes[a.offset]
 		i = getroot(bitset, SLOTS)  # root of fragment in tree 'a'
 		try:
-			candidates = getcandidates(anodes, bitset, i, trees2)
+			tmp = []
+			getcandidates(anodes, bitset, i, trees2, tmp)
+			candidates = tmp[0].copy()
+			candidates.intersection_update(*tmp[1:])
 		except KeyError:
-			candidates = set()
+			candidates = RoaringBitmap()
 		if indices:
 			matches = theindices[n]
 		for m in candidates:
@@ -356,33 +360,34 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	return theindices if indices else counts
 
 
-cdef set getcandidates(Node *a, uint64_t *bitset, short i, Ctrees trees):
+cdef getcandidates(Node *a, uint64_t *bitset, short i, Ctrees trees,
+		list result):
 	"""Get candidates based on trigrams in fragment ``bitset`` at ``a[i]``."""
 	if a[i].left < 0:
-		return trees.prodindex[a[i].prod]
+		result.append(trees.prodindex[a[i].prod])
 	elif a[i].right < 0:
 		if TESTBIT(bitset, a[i].left):
-			return (trees.trigramindex[
+			result.append(trees.trigramindex[
 					a[i].prod,
 					a[a[i].left].prod,
-					a[i].right]
-					& getcandidates(a, bitset, a[i].left, trees))
-		return trees.prodindex[a[i].prod]
+					a[i].right])
+			getcandidates(a, bitset, a[i].left, trees, result)
+		else:
+			result.append(trees.prodindex[a[i].prod])
 	elif TESTBIT(bitset, a[i].left):
 		if TESTBIT(bitset, a[i].right):
-			return (trees.trigramindex[
-						a[i].prod,
-						a[a[i].left].prod, a[a[i].right].prod]
-					& getcandidates(a, bitset, a[i].left, trees)
-					& getcandidates(a, bitset, a[i].right, trees))
+			result.append(trees.trigramindex[
+					a[i].prod, a[a[i].left].prod, a[a[i].right].prod])
+			getcandidates(a, bitset, a[i].left, trees, result)
+			getcandidates(a, bitset, a[i].right, trees, result)
 		else:
-			return (trees.prodindex[a[i].prod]
-					& getcandidates(a, bitset, a[i].left, trees))
+			result.append(trees.prodindex[a[i].prod])
+			getcandidates(a, bitset, a[i].left, trees, result)
 	elif TESTBIT(bitset, a[i].right):
-		return (trees.prodindex[a[i].prod]
-				& getcandidates(a, bitset, a[i].right, trees))
-	# this is a lexical or frontier node
-	return trees.prodindex[a[i].prod]
+		result.append(trees.prodindex[a[i].prod])
+		getcandidates(a, bitset, a[i].right, trees, result)
+	else:  # this is a lexical or frontier node
+		result.append(trees.prodindex[a[i].prod])
 
 
 cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
@@ -432,7 +437,7 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 	return result
 
 
-cdef set twoterminals(NodeArray a, Node *anodes,
+cdef twoterminals(NodeArray a, Node *anodes,
 		Ctrees trees2, set contentwordprods, set lexicalprods):
 	"""Produce tree pairs that share at least two words.
 
@@ -442,17 +447,17 @@ cdef set twoterminals(NodeArray a, Node *anodes,
 
 	if trees2 is None, pairs (n, m) are such that n < m."""
 	cdef int i, j
-	cdef set tmp, candidates = set()
+	cdef object tmp, candidates = RoaringBitmap()
 	# select candidates from 'trees2' that share productions with tree 'a'
 	# want to select at least 1 content POS tag, 1 other lexical prod
 	for i in range(a.len):
 		if anodes[i].left >= 0 or anodes[i].prod not in contentwordprods:
 			continue
-		tmp = <set>(trees2.prodindex[anodes[i].prod])
+		tmp = trees2.prodindex[anodes[i].prod]
 		for j in range(a.len):
 			if (i != j and anodes[j].left < 0 and
 					anodes[j].prod in lexicalprods):
-				candidates |= tmp & <set>(trees2.prodindex[anodes[j].prod])
+				candidates |= tmp & trees2.prodindex[anodes[j].prod]
 	return candidates
 
 
