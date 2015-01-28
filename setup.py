@@ -65,7 +65,9 @@ if __name__ == '__main__':
 		extensions = [Extension(
 				'*',
 				['discodop/*.pyx'],
-				extra_compile_args=['-O3'],  # ['-g', '-O0'],
+				extra_compile_args=['-O3', '-march=native', '-DNDEBUG'],
+				extra_link_args=['-DNDEBUG'],
+				# extra_compile_args=['-g', '-O0'],
 				# extra_link_args=['-g'],
 				# include_dirs=[...],
 				# libraries=[...],
