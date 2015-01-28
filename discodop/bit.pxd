@@ -51,9 +51,9 @@ cpdef int bitcount(uint64_t vec)
 # cdef inline void setintersect(uint64_t *dest, uint64_t *src1, uint64_t *src2,
 # 		int slots)
 # cdef inline int iteratesetbits(uint64_t *vec, int slots,
-#		uint64_t *cur, int *idx)
+# 		uint64_t *cur, int *idx)
 # cdef inline int iterateunsetbits(uint64_t *vec, int slots,
-#		uint64_t *cur, int *idx)
+# 		uint64_t *cur, int *idx)
 # cdef inline int reviteratesetbits(uint64_t *vec, uint64_t *cur, int *idx)
 
 
@@ -109,7 +109,7 @@ cdef inline int bitlength(uint64_t vec):
 
 	>>> bitlength(0b0011101)
 	5"""
-	return sizeof(vec) * 8 - bit_clz(vec)
+	return sizeof(vec) * 8 - bit_clz(vec) if vec else 0
 
 
 cdef inline int abitcount(uint64_t *vec, int slots):
@@ -126,8 +126,10 @@ cdef inline int abitlength(uint64_t *vec, int slots):
 
 	(equivalently: index of most significant set bit, plus one)."""
 	cdef int a = slots - 1
-	while a and not vec[a]:
+	while not vec[a]:
 		a -= 1
+		if a < 0:
+			return 0
 	return (a + 1) * sizeof(uint64_t) * 8 - bit_clz(vec[a])
 
 
