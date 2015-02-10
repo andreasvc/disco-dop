@@ -79,37 +79,46 @@ The sentence will be parsed and the most probable parse tree will be shown
 </div>
 
 <form name=queryform onSubmit="event.preventDefault(); ajaxFunction(); return false; ">
-Sentence:
-<input type=text size=80 name=sent autofocus />
-<select name=lang>
-	<option value=detect>detect</option>
-{%- for lang in langs %}
-	<option value={{ lang }}>{{ lang }}</option>
-{%- endfor -%}
-</select>
-<select name=objfun>
-	<option value=mpp>MPP</option>
-	<option value=mpd>MPD</option>
-	<option value=shortest>MPSD</option>
-	<option value=sl-dop>SL-DOP</option>
-	<option value=sl-dop-simple>SL-DOP-simple</option>
-</select>
-<select name=est>
-	<option value=rfe>RFE</option>
-	<option value=ewe>EWE</option>
-</select>
-<select name=marg>
-	<option value=nbest>n-best</option>
-	<option value=sample>sample</option>
-	<option value=both>both</option>
-</select>
-<select name=coarse>
-	<option value=pcfg>CKY</option>
-	<option value=pcfg-posterior>posterior</option>
-	<option value=pcfg-bitpar>bitpar</option>
-</select>
-<input type=hidden name=html value=1 />
-<input type=submit value=Parse />
+	<table>
+		<tr>
+			<td>Sentence:</td>
+			<td><input type=text size=80 name=sent autofocus /></td>
+		</tr>
+		<tr>
+			<td>&nbsp;</td>
+			<td>
+				<select name=lang>
+					<option value=detect>detect language</option>
+				{%- for lang in langs %}
+					<option value={{ lang }}>{{ lang }}</option>
+				{%- endfor -%}
+				</select>
+				<select name=objfun>
+					<option value=mpp>MPP</option>
+					<option value=mpd>MPD</option>
+					<option value=shortest>MPSD</option>
+					<option value=sl-dop>SL-DOP</option>
+					<option value=sl-dop-simple>SL-DOP-simple</option>
+				</select>
+				<select name=est>
+					<option value=rfe>RFE</option>
+					<option value=ewe>EWE</option>
+				</select>
+				<select name=marg>
+					<option value=nbest>n-best</option>
+					<option value=sample>sample</option>
+					<option value=both>both</option>
+				</select>
+				<select name=coarse>
+					<option value=pcfg>CKY</option>
+					<option value=pcfg-posterior>posterior</option>
+					<option value=pcfg-bitpar-nbest>bitpar</option>
+				</select>
+				<input type=hidden name=html value=1 />
+				<input type=submit value=Parse />
+			</td>
+		</tr>
+	</table>
 </form>
 
 </body>

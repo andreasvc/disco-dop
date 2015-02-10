@@ -86,8 +86,7 @@ def parse():
 		result = 'no parse!'
 		frags = nbest = ''
 	else:
-		if PARSERS[lang].relationalrealizational:
-			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
+		treebank.handlefunctions('add', results[-1].parsetree, pos=True)
 		tree = str(results[-1].parsetree)
 		prob = results[-1].prob
 		parsetrees = results[-1].parsetrees or []
@@ -96,7 +95,7 @@ def parse():
 		APP.logger.info('[%s] %s', probstr(prob), tree)
 		tree = Tree.parse(tree, parse_leaf=int)
 		result = Markup(DrawTree(tree, senttok).text(
-				unicodelines=True, html=html))
+				unicodelines=True, html=html, funcsep='-'))
 		frags = Markup('Phrasal fragments used in the most probable derivation'
 				' of the highest ranked parse tree:\n'
 				+ '\n\n'.join(
@@ -105,8 +104,8 @@ def parse():
 				for frag, terminals in fragments
 				if frag.count('(') > 1))
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
-					DrawTree(PARSERS[lang].postprocess(tree)[0], senttok).text(
-						unicodelines=True, html=html))
+					DrawTree(PARSERS[lang].postprocess(tree, senttok, -1)[0],
+						senttok).text(unicodelines=True, html=html))
 				for n, (tree, prob, _) in enumerate(parsetrees)))
 	msg = '\n'.join(stage.msg for stage in results)
 	elapsed = [stage.elapsedtime for stage in results]
