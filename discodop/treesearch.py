@@ -14,16 +14,15 @@ import concurrent.futures
 import multiprocessing
 import subprocess
 from collections import Counter, OrderedDict
-from itertools import islice, takewhile
-if sys.version[0] == '2':
-	from itertools import ifilter as filter  # pylint: disable=E0611,W0622
+from itertools import islice
 try:
 	import alpinocorpus
 	import xml.etree.cElementTree as ElementTree
 	ALPINOCORPUSLIB = True
 except ImportError:
 	ALPINOCORPUSLIB = False
-from discodop import treebank
+from roaringbitmap import RoaringBitmap
+from discodop import treebank, treetransforms
 from discodop.tree import Tree
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
@@ -56,9 +55,8 @@ Options:
 CACHESIZE = 1024
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
-MORPH_TAGS = re.compile(
-		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
-FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
+MORPH_TAGS = re.compile(r'([/*\w]+)(?:\[[^ ]*\]\d?)?((?:-\w+)?(?:\*\d+)? )')
+FUNC_TAGS = re.compile(r'-\w+')
 
 # abbreviations for Alpino POS tags
 ABBRPOS = {
@@ -79,7 +77,7 @@ ABBRPOS = {
 
 
 class CorpusSearcher(object):
-	"""Abstract base class to wrap a set of corpus files that can be queried."""
+	"""Abstract base class to wrap corpus files that can be queried."""
 	def __init__(self, files, macros=None, numthreads=None):
 		"""
 		:param files: a sequence of filenames of corpora
@@ -114,23 +112,27 @@ class CorpusSearcher(object):
 		"""Run query and return list of matching trees.
 
 		:param maxresults: the maximum number of matches to return.
+		:param nofunc, nomorph: whether to remove / add function tags and
+			morphological features from trees.
 		:returns: list of tuples of the form
 			``(corpus, sentno, tree, sent, highlight)``
-			highlight is a set of nodes from tree."""
+			highlight is a list of matched Tree nodes from tree."""
 
 	def sents(self, query, subset=None, maxresults=100, brackets=False):
-		"""Run query and yield matching sentences.
+		"""Run query and return matching sentences.
 
 		:param maxresults: the maximum number of matches to return.
-		:param brackets: if True, return trees as they appear in the treebank;
-			by default sentences are returned as a sequence of tokens.
+		:param brackets: if True, return trees as they appear in the treebank,
+			match is the matching substring.
+			If False (default), sentences are returned as a sequence of tokens.
 		:returns: list of tuples of the form
 			``(corpus, sentno, sent, highlight)``
 			sent is a single string with space-separated tokens;
-			highlight is a set of integer indices."""
+			highlight is an iterable of integer indices of tokens matched
+			by the query."""
 
 	def batchcounts(self, queries, subset=None, limit=None):
-		"""Like counts, but exects a sequence of queries.
+		"""Like counts, but executes a sequence of queries.
 
 		Useful in combination with ``pandas.DataFrame``.
 
@@ -143,6 +145,18 @@ class CorpusSearcher(object):
 			for filename, value in self.counts(query, subset, limit).items():
 				result[filename][query] = value
 		return result
+
+	def extract(self, filename, start, end,
+			nofunc=False, nomorph=False, sents=False):
+		"""Extract a range of trees / sentences.
+
+		:param filename: one of the filenames in ``self.files``
+		:param start: start index (0-based, excluding empty lines)
+		:param end: end index (idem)
+		:param sents: if True, return sentences instead of trees.
+			Sentences are strings with space-separated tokens.
+		:param nofunc, nomorph: same as for ``trees()`` method.
+		:returns: a list of Tree objects or sentences."""
 
 	def _submit(self, func, filename):
 		"""Submit a job to the thread pool."""
@@ -233,7 +247,7 @@ class TgrepSearcher(CorpusSearcher):
 					match = ' %s)' % match
 					treestr = treestr.replace(match, '_HIGH%s' % match)
 				tree, sent = treebank.termindices(treestr)
-				tree = Tree(tree)
+				tree = treetransforms.mergediscnodes(Tree(tree))
 				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
 				if high:
 					high = high.pop()
@@ -275,11 +289,40 @@ class TgrepSearcher(CorpusSearcher):
 					sent = ' '.join(GETLEAVES.findall(sent))
 					match = GETLEAVES.findall(
 							match) if '(' in match else [match]
-					match = set(range(prelen, prelen + len(match)))
+					match = range(prelen, prelen + len(match))
 				x.append((filename, sentno, sent, match))
 			self.cache['sents', query, filename, brackets] = x, maxresults
 			result.extend(x)
 		return result
+
+	def extract(self, filename, start, end,
+			nofunc=False, nomorph=False, sents=False):
+		if not filename.endswith('.t2c.gz'):
+			filename += '.t2c.gz'
+		cmd = [which('tgrep2'),
+				'-e', '-',  # extraction mode
+				'-c', filename]
+		if sents:
+			cmd.append('-t')
+		proc = subprocess.Popen(args=cmd,
+				bufsize=0,
+				shell=False,
+				stdin=subprocess.PIPE,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.PIPE)
+		out, err = proc.communicate(''.join('%d:1\n' % n
+				for n in range(start + 1, end + 1)))
+		proc.stdout.close()
+		proc.stderr.close()
+		if proc.returncode != 0:
+			raise ValueError(err.decode('utf8'))
+		result = out.decode('utf8').splitlines()
+		if sents:
+			return result
+		return [(treetransforms.mergediscnodes(Tree(tree)), sent)
+				for tree, sent
+				in (treebank.termindices(filterlabels(
+					treestr, nofunc, nomorph)) for treestr in result)]
 
 	def _query(self, query, filename, fmt, maxresults=None, limit=None):
 		"""Run a query on a single file."""
@@ -328,6 +371,8 @@ class DactSearcher(CorpusSearcher):
 	"""Search a dact corpus with xpath."""
 	def __init__(self, files, macros=None, numthreads=None):
 		super(DactSearcher, self).__init__(files, macros, numthreads)
+		if not ALPINOCORPUSLIB:
+			raise ImportError('Could not import `alpinocorpus` module.')
 		for filename in self.files:
 			self.files[filename] = alpinocorpus.CorpusReader(filename)
 		if macros is not None:
@@ -421,12 +466,27 @@ class DactSearcher(CorpusSearcher):
 				if not brackets:
 					treestr = ALPINOLEAVES.search(treestr).group(1)
 					# extract starting index of highlighted words
-					match = set(int(a) for a in re.findall(
-							'<node[^>]*begin="([0-9]+)"[^>]*/>', match))
+					match = {int(a) for a in re.findall(
+							'<node[^>]*begin="([0-9]+)"[^>]*/>', match)}
 				x.append((filename, sentno, treestr, match))
 			self.cache['sents', query, filename, brackets] = x, maxresults
 			result.extend(x)
 		return result
+
+	def extract(self, filename, start, end,
+			nofunc=False, nomorph=False, sents=False):
+		results = [self.files[filename].read('%8d' % (n + 1))
+					for n in range(start, end)]
+		if sents:
+			return [ElementTree.fromstring(result).find('sentence').text
+					for result in results]
+		else:
+			return [(item.tree, item.sent) for item
+					in (treebank.alpinotree(
+						ElementTree.fromstring(treestr),
+						functions=None if nofunc else 'add',
+						morphology=None if nomorph else 'replace')
+					for treestr in results)]
 
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
@@ -444,17 +504,22 @@ class RegexSearcher(CorpusSearcher):
 
 	Assumes that non-empty lines correspond to sentences.
 
-	:param macros: a file containing lines of the form 'name=regex',
-		and will be substituted when '{name}' appears in a query.
-	"""
+	:param macros: a file containing lines of the form ``'name=regex'``;
+		an occurrence of ``'{name}'`` will be suitably replaced when it
+		appears in a query."""
 	def __init__(self, files, macros=None, numthreads=None):
 		super(RegexSearcher, self).__init__(files, macros, numthreads)
 		self.macros = {}
 		if macros:
-			self.macros = dict(line.split('=', 1) for line
-					in io.open(macros, encoding='utf-8'))
-		for filename in self.files:
-			self.files[filename] = None
+			with io.open(macros, encoding='utf-8') as tmp:
+				self.macros = dict(line.split('=', 1) for line in tmp)
+		self.lineindex = dict.fromkeys(files)
+
+	def _indexfile(self, filename, data):
+		"""Cache locations of non-empty lines."""
+		self.lineindex[filename] = RoaringBitmap(
+				match.end() for match in re.finditer(
+					r'[^ \t\n\r][ \t]*[\r\n]+', data))
 
 	def counts(self, query, subset=None, limit=None, indices=False):
 		subset = subset or self.files
@@ -466,7 +531,7 @@ class RegexSearcher(CorpusSearcher):
 						'counts', query, filename, limit, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(lambda x: Counter(n for n, _
+					jobs[self._submit(lambda x: Counter(y[0] for y
 							in self._query(query, x, None, limit)),
 							filename)] = filename
 				else:
@@ -478,10 +543,6 @@ class RegexSearcher(CorpusSearcher):
 			self.cache['counts', query, filename, limit, indices
 					] = result[filename] = future.result()
 		return result
-
-	def trees(self, query, subset=None, maxresults=10,
-			nofunc=False, nomorph=False):
-		raise ValueError('not applicable with plain text corpus.')
 
 	def sents(self, query, subset=None, maxresults=100, brackets=False):
 		if brackets:
@@ -502,28 +563,54 @@ class RegexSearcher(CorpusSearcher):
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			x = []
-			for sentno, match in future.result():
-				sent = match.string
-				start, end = match.span()
+			for sentno, sent, start, end in future.result():
 				prelen = len(sent[:start].split())
 				matchlen = len(sent[start:end].split())
-				highlight = set(range(prelen, prelen + matchlen))
+				highlight = range(prelen, prelen + matchlen)
 				x.append((filename, sentno, sent.rstrip(), highlight))
 			self.cache['sents', query, filename] = x, maxresults
 			result.extend(x)
 		return result
 
+	def trees(self, query, subset=None, maxresults=10,
+			nofunc=False, nomorph=False):
+		raise ValueError('not applicable with plain text corpus.')
+
+	def extract(self, filename, start, end,
+			nofunc=False, nomorph=False, sents=True):
+		if not sents:
+			raise ValueError('not applicable with plain text corpus.')
+		with io.open(filename, encoding='utf8') as tmp:
+			data = tmp.read()
+		if self.lineindex[filename] is None:
+			self._indexfile(filename, data)
+		a = 0
+		b = next(reversed(self.lineindex[filename]))
+		if 0 < start < len(self.lineindex[filename]):
+			a = self.lineindex[filename].select(start - 1)
+		if 0 <= end < len(self.lineindex[filename]):
+			b = self.lineindex[filename].select(end - 1)
+		return [a for a in data[a:b].splitlines() if a]
+
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
-		regex = re.compile(query.format(**self.macros))
-		results = ((n, match) for n, match in
-				enumerate((regex.search(a) for a
-					in filter(lambda x: x.strip() != '',
-					io.open(filename, encoding='utf-8'))), 1)
-				if match is not None)
-		if limit is not None:
-			results = takewhile(lambda x: x[0] < limit, results)
-		return islice(results, maxresults)
+		with io.open(filename, encoding='utf8') as tmp:
+			data = tmp.read()
+			if self.lineindex[filename] is None:
+				self._indexfile(filename, data)
+			for match in islice(re.finditer(
+					query.format(**self.macros), data), maxresults):
+				start, end = match.span()
+				lineno = self.lineindex[filename].rank(start)
+				if limit and lineno >= limit:
+					break
+				offset, nextoffset = 0, len(match.string)
+				if lineno > 0:
+					offset = self.lineindex[filename].select(lineno - 1)
+				if lineno < len(self.lineindex[filename]):
+					nextoffset = self.lineindex[filename].select(lineno)
+				sent = match.string[offset:nextoffset]
+				yield lineno + 1, sent, start - offset, end - offset
 
 
 class NoFuture(object):

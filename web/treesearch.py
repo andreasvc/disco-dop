@@ -17,7 +17,7 @@ import subprocess
 from heapq import nlargest
 from datetime import datetime, timedelta
 from itertools import islice, groupby
-from operator import itemgetter, attrgetter
+from operator import itemgetter
 from collections import Counter, OrderedDict, defaultdict
 if sys.version[0] == '2':
 	import cPickle as pickle  # pylint: disable=import-error
@@ -42,8 +42,7 @@ except ImportError:
 from discodop.treedraw import DrawTree
 from discodop import treebank, fragments
 from discodop.parser import which
-from discodop.treesearch import TgrepSearcher, DactSearcher, RegexSearcher, \
-		filterlabels
+from discodop.treesearch import TgrepSearcher, DactSearcher, RegexSearcher
 
 MINFREQ = 2  # filter out fragments which occur just once or twice
 MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
@@ -108,7 +107,8 @@ def main():
 def export(form, output):
 	"""Export search results to a file for download."""
 	# NB: no distinction between trees from different texts
-	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+	selected = {os.path.join(CORPUS_DIR,
+			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(request.args)}
 	if output == 'counts':
 		results = counts(form, doexport=True)
@@ -130,9 +130,9 @@ def export(form, output):
 		if form.get('export') == 'json':
 			return Response(json.dumps(results, cls=JsonSetEncoder, indent=2),
 					mimetype='application/json')
-		results = ((fmt % (a[0], a[1], (a[2]))
-				if form.get('linenos') else (a[2] + '\n')).encode('utf-8')
-				for a in results)
+		results = ((fmt % (filename, sentno, sent)
+				if form.get('linenos') else (sent + '\n')).encode('utf8')
+				for filename, sentno, sent, _ in results)
 		filename = output + '.txt'
 	else:
 		raise ValueError('cannot export %s' % output)
@@ -154,7 +154,8 @@ def counts(form, doexport=False):
 	"""
 	# TODO: option to arrange graphs by text instead of by query
 	norm = form.get('norm', 'sents')
-	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+	selected = {os.path.join(CORPUS_DIR,
+			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(form)}
 	if not doexport:
 		url = 'counts?' + url_encode(dict(export='csv', **form))
@@ -266,16 +267,17 @@ def counts(form, doexport=False):
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
 				len(queries) + 2)
 		# collate stats
-		keys = {key.split('_')[0] if '_' in key else key[0]
-				for key in df.index}
-		if len(keys) <= 5:
+		keys = [key.split('_')[0] if '_' in key else key[0]
+				for key in df.index]
+		keyset = set(keys)
+		if len(keyset) <= 5:
 			overview = OrderedDict(('%s_%s' % (letter, query),
 					df[query].ix[[key for key in df.index
 						if letter == (key.split('_')[0] if '_' in key
 							else key[0])]].mean())
 					for query in df.columns
-						for letter in keys)
-			df['category'] = [key[0] for key in df.index]
+						for letter in keyset)
+			df['category'] = keys
 			yield '<pre>\n%s\n</pre>' % (
 				df.groupby('category').describe().to_string(
 				float_format=fmt))
@@ -291,7 +293,8 @@ def counts(form, doexport=False):
 def trees(form):
 	"""Return visualization of parse trees in search results."""
 	gotresults = False
-	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+	selected = {os.path.join(CORPUS_DIR,
+			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(form)}
 	# NB: we do not hide function or morphology tags when exporting
 	url = 'trees?' + url_encode(dict(export='csv', **form))
@@ -335,7 +338,8 @@ def trees(form):
 def sents(form, dobrackets=False):
 	"""Return search results as terminals or in bracket notation."""
 	gotresults = False
-	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+	selected = {os.path.join(CORPUS_DIR,
+			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(form)}
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
 			url_encode(dict(export='csv', **form)))
@@ -382,11 +386,12 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	"""Extract recurring fragments from search results."""
-	if form.get('engine', 'tgrep2') == 'regex':
+	if form.get('engine', 'tgrep2') not in ('tgrep2', 'xpath'):
 		yield "Only implemented for tgrep2 and xpath queries."
 		return
 	gotresults = False
-	selected = {CORPUS_DIR + TEXTS[n] + EXT[form['engine']]: n for n in
+	selected = {os.path.join(CORPUS_DIR,
+			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(form)}
 	uniquetrees = set()
 	if not doexport:
@@ -411,7 +416,7 @@ def fragmentsinresults(form, doexport=False):
 			gotresults = True
 		if disc:
 			item = treebank.alpinotree(
-					ElementTree.fromstring(treestr.encode('utf-8')))
+					ElementTree.fromstring(treestr.encode('utf8')))
 			line = '%s\t%s\n' % (str(item.tree), ' '.join(item.sent))
 		else:
 			line = treestr.replace(" )", " -NONE-)") + '\n'
@@ -532,104 +537,22 @@ def draw():
 	textno, sentno = int(request.args['text']), int(request.args['sent'])
 	nofunc = 'nofunc' in request.args
 	nomorph = 'nomorph' in request.args
-	filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-	if os.path.exists(filename):
-		treestr = next(islice(open(filename),
-				sentno - 1, sentno)).decode('utf8')
-		result = DrawTree(filterlabels(treestr, nofunc, nomorph)).text(
-					unicodelines=True, html=True)
-	elif 'xpath' in CORPORA:
-		filename = CORPUS_DIR + TEXTS[textno] + '.dact'
-		sentid = '%d' % sentno
-		treestr = CORPORA['xpath'].files[filename].read(sentid)
-		item = treebank.alpinotree(
-				ElementTree.fromstring(treestr),
-				functions=None if nofunc else 'add',
-				morphology=None if nomorph else 'replace')
-		result = DrawTree(item.tree, item.sent).text(
-				unicodelines=True, html=True)
+	if 'xpath' in CORPORA:
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
+		tree, sent = CORPORA['xpath'].extract(
+					filename, sentno - 1, sentno, nofunc, nomorph).pop()
+	elif 'tgrep2' in CORPORA:
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+		tree, sent = CORPORA['tgrep2'].extract(
+					filename, sentno - 1, sentno, nofunc, nomorph).pop()
 	else:
 		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
+	result = DrawTree(tree, sent).text(unicodelines=True, html=True)
 	return '<pre id="t%s">%s</pre>' % (sentno, result)
 
 
-@APP.route('/browsesents')
-def browsesents():
-	"""Browse through sentences in a file; optionally highlight matches."""
-	chunk = 20  # number of sentences per page
-	if 'text' in request.args and 'sent' in request.args:
-		textno = int(request.args['text'])
-		sentno = int(request.args['sent']) - 1
-		highlight = int(request.args.get('highlight', 0)) - 1
-		sentno = min(max(chunk // 2, sentno), NUMSENTS[textno] - chunk // 2)
-		start = max(0, sentno - chunk // 2)
-		maxtree = min(start + chunk, NUMSENTS[textno])
-		if 'tgrep2' in CORPORA:
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-			results = [' '.join(GETLEAVES.findall(a)) for a
-					in islice(io.open(filename, encoding='utf8'),
-					start, maxtree)]
-		elif 'xpath' in CORPORA:
-			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
-			results = [ElementTree.fromstring(
-					CORPORA['xpath'].files[filename].read('%8d' % (n + 1))
-					).find('sentence').text
-					for n in range(start, maxtree)]
-		elif 'regex' in CORPORA:
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
-			results = islice(filter(lambda x: x.strip() != '',
-					io.open(filename, encoding='utf8')), start, maxtree)
-		else:
-			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
-		results = [('<font color=red>%s</font>' % cgi.escape(a))
-				if n == highlight else cgi.escape(a)
-				for n, a in enumerate(results, start)]
-		legend = queryparams = ''
-		if request.args.get('query', ''):
-			queryparams = '&' + url_encode(dict(
-					query=request.args['query'],
-					engine=request.args.get('engine', 'tgrep2')))
-			filename = CORPUS_DIR + TEXTS[textno] + EXT[
-					request.args.get('engine', 'tgrep2')]
-			queries = querydict(request.args['query'])
-			legend = 'Legend:\t%s' % ('\t'.join(
-					'<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
-					for n, query in enumerate(queries, 1)))
-			for n, (_, query) in enumerate(queries.values()):
-				matches = CORPORA[request.args['engine']].sents(
-						query, subset=(filename,), maxresults=None)
-				for _, m, sent, high in matches:
-					if start <= m < maxtree:
-						sent = sent.split(' ')
-						match = ' '.join(sent[a] for a in high)
-						results[m - start - 1] = results[m - start - 1].replace(
-								match, '<font color=%s>%s</font>' % (
-								COLORS.get(n + 1, 'gray'), cgi.escape(match)))
-					elif m > maxtree:
-						break
-		prevlink = '<a id=prev>prev</a>'
-		if sentno > chunk:
-			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
-					'prev</a>' % (textno, sentno - chunk + 1, queryparams))
-		nextlink = '<a id=next>next</a>'
-		if sentno < NUMSENTS[textno] - chunk:
-			nextlink = ('<a href="browsesents?text=%d&sent=%d%s" id=next>'
-					'next</a>' % (textno, sentno + chunk + 1, queryparams))
-		return render_template('browsesents.html', textno=textno,
-				sentno=sentno + 1, text=TEXTS[textno],
-				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
-				nextlink=nextlink, chunk=chunk, mintree=start + 1,
-				maxtree=maxtree, legend=legend,
-				query=request.args.get('query', ''),
-				engine=request.args.get('engine', ''))
-	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
-			'(%d sentences)' % (n, text, NUMSENTS[n])
-			for n, text in enumerate(TEXTS))
-
-
 @APP.route('/browse')
-def browse():
+def browsetrees():
 	"""Browse through trees in a file."""
 	chunk = 20  # number of trees to fetch for one request
 	if 'text' in request.args and 'sent' in request.args:
@@ -640,21 +563,17 @@ def browse():
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		if 'xpath' in CORPORA:
-			filename = CORPUS_DIR + TEXTS[textno] + '.dact'
-			args = attrgetter('tree', 'sent')
-			drawntrees = [DrawTree(*args(treebank.alpinotree(
-					ElementTree.fromstring(CORPORA['xpath'].files[
-						filename].read('%8d' % (n + 1))),
-					functions=None if nofunc else 'add',
-					morphology=None if nomorph else 'replace'))).text(
-						unicodelines=True, html=True)
-					for n in range(start, maxtree)]
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
+			drawntrees = [DrawTree(tree, sent).text(
+					unicodelines=True, html=True)
+					for tree, sent in CORPORA['xpath'].extract(
+						filename, start, maxtree, nofunc, nomorph)]
 		elif 'tgrep2' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-			drawntrees = [DrawTree(filterlabels(
-					line.decode('utf8'), nofunc, nomorph)).text(
+			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True)
-					for line in islice(open(filename), start, maxtree)]
+					for tree, sent in CORPORA['tgrep2'].extract(
+						filename, start, maxtree, nofunc, nomorph)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
@@ -678,6 +597,78 @@ def browse():
 				mintree=start + 1, maxtree=maxtree)
 	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
+			'(%d sentences)' % (n, text, NUMSENTS[n])
+			for n, text in enumerate(TEXTS))
+
+
+@APP.route('/browsesents')
+def browsesents():
+	"""Browse through sentences in a file; optionally highlight matches."""
+	chunk = 20  # number of sentences per page
+	if 'text' in request.args and 'sent' in request.args:
+		textno = int(request.args['text'])
+		sentno = int(request.args['sent']) - 1
+		highlight = int(request.args.get('highlight', 0)) - 1
+		sentno = min(max(chunk // 2, sentno), NUMSENTS[textno] - chunk // 2)
+		start = max(0, sentno - chunk // 2)
+		maxsent = min(start + chunk, NUMSENTS[textno])
+		if 'tgrep2' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
+			results = CORPORA['tgrep2'].extract(
+					filename, start, maxsent, sents=True)
+		elif 'xpath' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
+			results = CORPORA['xpath'].extract(
+					filename, start, maxsent, sents=True)
+		elif 'regex' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
+			results = CORPORA['regex'].extract(
+					filename, start, maxsent, sents=True)
+		else:
+			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
+		results = [('<font color=red>%s</font>' % cgi.escape(a))
+				if n == highlight else cgi.escape(a)
+				for n, a in enumerate(results, start)]
+		legend = queryparams = ''
+		if request.args.get('query', ''):
+			queryparams = '&' + url_encode(dict(
+					query=request.args['query'],
+					engine=request.args.get('engine', 'tgrep2')))
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + EXT[
+					request.args.get('engine', 'tgrep2')])
+			queries = querydict(request.args['query'])
+			legend = 'Legend:\t%s' % ('\t'.join(
+					'<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
+					for n, query in enumerate(queries, 1)))
+			for n, (_, query) in enumerate(queries.values()):
+				matches = CORPORA[request.args['engine']].sents(
+						query, subset=(filename,), maxresults=None)
+				for _, m, sent, high in matches:
+					if start <= m < maxsent:
+						sent = sent.split(' ')
+						match = ' '.join(sent[a] for a in high)
+						results[m - start - 1] = results[m - start - 1].replace(
+								match, '<font color=%s>%s</font>' % (
+								COLORS.get(n + 1, 'gray'), cgi.escape(match)))
+					elif m > maxsent:
+						break
+		prevlink = '<a id=prev>prev</a>'
+		if sentno > chunk:
+			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
+					'prev</a>' % (textno, sentno - chunk + 1, queryparams))
+		nextlink = '<a id=next>next</a>'
+		if sentno < NUMSENTS[textno] - chunk:
+			nextlink = ('<a href="browsesents?text=%d&sent=%d%s" id=next>'
+					'next</a>' % (textno, sentno + chunk + 1, queryparams))
+		return render_template('browsesents.html', textno=textno,
+				sentno=sentno + 1, text=TEXTS[textno],
+				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
+				nextlink=nextlink, chunk=chunk, mintree=start + 1,
+				legend=legend,
+				query=request.args.get('query', ''),
+				engine=request.args.get('engine', ''))
+	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
+			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences)' % (n, text, NUMSENTS[n])
 			for n, text in enumerate(TEXTS))
 
@@ -806,7 +797,7 @@ def tokenize(filename):
 				for line in open(base + '.mrg'))
 	elif os.path.exists(base + '.dact'):
 		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
-				'sentence').text.encode('utf-8') + '\n' for entry
+				'sentence').text.encode('utf8') + '\n' for entry
 				in alpinocorpus.CorpusReader(base + '.dact').entries()}
 		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
 	else:
@@ -835,7 +826,7 @@ def getreadabilitymeasures(numsents):
 		# flatten results into a single dictionary of (key, value) pairs.
 		results[name] = {key: value
 				for data in readability.getmeasures(
-						islice(io.open(filename, encoding='utf-8'), cutoff),
+						islice(io.open(filename, encoding='utf8'), cutoff),
 						lang=LANG).values()
 					for key, value in data.items()}
 	return results

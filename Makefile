@@ -63,11 +63,11 @@ lint: inplace
 		discodop/*.pyx discodop/*.pxi discodop/*.pxd \
 	&& pylint --indent-string='\t' --max-line-length=80 \
 		--disable=R,bad-continuation,invalid-name,star-args \
-		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus \
+		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus,roaringbitmap \
 		discodop/*.py web/*.py tests/*.py
 
 lint3:
 	python3 `which pylint` --indent-string='\t' --max-line-length=80 \
 		--disable=R,bad-continuation,invalid-name,star-args \
-		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus \
+		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus,roaringbitmap \
 		discodop/*.py web/*.py tests/*.py
