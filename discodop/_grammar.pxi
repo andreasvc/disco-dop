@@ -83,7 +83,8 @@ cdef class Grammar:
 					rule_tuples_or_str, bitpar=bitpar)
 		else:
 			raise ValueError(
-					'expected non-empty sequence of tuples or string.')
+					'expected non-empty sequence of tuples or unicode string.'
+					'got: %r' % type(rule_tuples_or_str))
 
 		# collect non-terminal labels; count number of rules in each category
 		# for allocation purposes.
@@ -385,7 +386,7 @@ cdef class Grammar:
 		# sentinel rule
 		dest[0][m].lhs = dest[0][m].rhs1 = dest[0][m].rhs2 = self.nonterminals
 
-	def register(self, str name, weights):
+	def register(self, name, weights):
 		"""Register a probabilistic model given a name and a sequence of
 		floats ``weights``, with weights in the same order as
 		``self.origrules`` and ``self.origlexicon`` (which is an arbitrary

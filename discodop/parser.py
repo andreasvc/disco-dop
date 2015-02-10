@@ -162,9 +162,10 @@ def main():
 			print('error: incorrect number of arguments', file=sys.stderr)
 			print(USAGE)
 			sys.exit(2)
-		rules = (gzip.open if args[0].endswith('.gz') else open)(args[0]).read()
-		lexicon = codecs.getreader('utf-8')((gzip.open if args[1].endswith('.gz')
-				else open)(args[1])).read()
+		rules = codecs.getreader('utf8')(gzip.open
+				if args[0].endswith('.gz') else open)(args[0]).read()
+		lexicon = codecs.getreader('utf8')((gzip.open
+				if args[1].endswith('.gz') else open)(args[1])).read()
 		bitpar = rules[0] in string.digits
 		if '--bitpar' in opts:
 			if not bitpar:
@@ -178,8 +179,9 @@ def main():
 		stage = DEFAULTSTAGE.copy()
 		backtransform = None
 		if opts.get('--bt'):
-			backtransform = (gzip.open if opts.get('--bt').endswith('.gz')
-					else open)(opts.get('--bt')).read().splitlines()
+			backtransform = codecs.getreader('utf8')(gzip.open
+					if opts.get('--bt').endswith('.gz') else
+					open)(opts.get('--bt')).read().splitlines()
 		stage.update(
 				name='grammar',
 				mode=mode,
@@ -640,8 +642,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	the parameter file ``params.prm``, as produced by ``runexp``."""
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
-		rules = gzip.open('%s/%s.rules.gz' % (resultdir, stage.name)).read()
-		lexicon = codecs.getreader('utf-8')(gzip.open('%s/%s.lex.gz' % (
+		rules = codecs.getreader('utf8')(gzip.open('%s/%s.rules.gz' % (
+				resultdir, stage.name))).read()
+		lexicon = codecs.getreader('utf8')(gzip.open('%s/%s.lex.gz' % (
 				resultdir, stage.name)))
 		grammar = Grammar(rules, lexicon.read(),
 				start=top, bitpar=stage.mode.startswith('pcfg')
@@ -651,8 +654,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			if stage.estimates is not None:
 				raise ValueError('not supported')
 			if stage.dop in ('doubledop', 'dop1'):
-				backtransform = gzip.open('%s/%s.backtransform.gz' % (
-						resultdir, stage.name)).read().splitlines()
+				backtransform = codecs.getreader('utf8')(
+						gzip.open('%s/%s.backtransform.gz' % (
+						resultdir, stage.name))).read().splitlines()
 				if n and stage.prune:
 					_ = grammar.getmapping(stages[n - 1].grammar,
 						striplabelre=re.compile('@.+$'),
