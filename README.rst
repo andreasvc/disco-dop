@@ -49,7 +49,7 @@ Installation
 Requirements:
 
 - Python 2.7+/3   http://www.python.org (headers required, e.g. python-dev package)
-- Cython 0.20+    http://www.cython.org
+- Cython 0.21+    http://www.cython.org
 - Numpy 1.5+      http://numpy.org/
 
 Debian, Ubuntu based systems
