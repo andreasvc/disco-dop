@@ -537,7 +537,8 @@ def merge(*iterables, key=None):
 			_ = heappop(heap, entry)
 
 	if heap:  # only a single iterator remains, skip heap
-		item, iterable = heappop(heap, entry).key
+		entry = heappop(heap, entry)
+		item, iterable = entry.key
 		yield item
 		for item in iterable:
 			yield item
