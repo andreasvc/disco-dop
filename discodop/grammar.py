@@ -15,7 +15,7 @@ try:
 except ImportError:
 	from collections import OrderedDict
 from discodop.tree import Tree, ImmutableTree, DiscTree
-from discodop.treebank import READERS, termindices
+from discodop.treebank import READERS, termindices, openread
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=redefined-builtin
 
@@ -963,9 +963,7 @@ def sumfrags(iterable, n):
 def merge(filenames, outfilename, sumfunc, key):
 	"""Interpolate weights of given files."""
 	from discodop import plcfrs
-	openfiles = [iter(codecs.getreader('utf8')((gzip.open
-			if filename.endswith('.gz') else open)(filename)))
-			for filename in filenames]
+	openfiles = [iter(openread(filename)) for filename in filenames]
 	with codecs.getwriter('utf8')((gzip.open if outfilename.endswith('.gz')
 			else open)(outfilename, 'w')) as out:
 		out.writelines(sumfunc(
@@ -1032,7 +1030,7 @@ def main():
 			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
 			simplelexsmooth = prm.postagging.simplelexsmooth
 	elif model == 'ptsg':  # read fragments
-		splittedlines = (line.split('\t') for line in io.open(treebankfile,
+		splittedlines = (line.split('\t') for line in openread(treebankfile,
 					encoding=opts.get('--inputenc', 'utf8')))
 		fragments = {(fields[0] if len(fields) == 2 else
 				(fields[0], [a or None for a in fields[1].split(' ')])):

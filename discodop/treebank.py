@@ -4,6 +4,8 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import os
 import re
+import gzip
+import codecs
 import xml.etree.cElementTree as ElementTree
 from glob import glob
 from itertools import count, chain, islice
@@ -220,7 +222,7 @@ class BracketCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		for n, block in enumerate((line for filename in self._filenames
-				for line in io.open(filename, encoding=self._encoding)
+				for line in openread(filename, encoding=self._encoding)
 				if line), 1):
 			yield n, block
 
@@ -252,7 +254,7 @@ class DiscBracketCorpusReader(CorpusReader):
 
 	def _read_blocks(self):
 		for n, block in enumerate((line for filename in self._filenames
-				for line in io.open(filename, encoding=self._encoding)
+				for line in openread(filename, encoding=self._encoding)
 				if line), 1):
 			yield n, block
 
@@ -286,7 +288,7 @@ class NegraCorpusReader(CorpusReader):
 		results = set()
 		started = False
 		for filename in self._filenames:
-			for line in io.open(filename, encoding=self._encoding):
+			for line in openread(filename, encoding=self._encoding):
 				if line.startswith('#BOS '):
 					if started:
 						raise ValueError('beginning of sentence marker while '
@@ -1017,6 +1019,14 @@ def removeterminals(tree, sent, func):
 def removeemptynodes(tree, sent):
 	"""Remove any empty nodes, and any empty ancestors."""
 	removeterminals(tree, sent, lambda x, _: x in (None, '', '-NONE-'))
+
+
+def openread(filename, encoding='utf8'):
+	"""Open file for reading; decompress .gz files on-the-fly."""
+	if filename.endswith('.gz'):
+		return codecs.getreader(encoding)(gzip.open(filename))
+	else:
+		return io.open(filename, encoding=encoding)
 
 
 READERS = OrderedDict((('export', NegraCorpusReader),

@@ -8,7 +8,6 @@ import os
 import re
 import sys
 import time
-import gzip
 import codecs
 import logging
 import tempfile
@@ -31,7 +30,7 @@ from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import ParentedTree
 from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
-from discodop.treebank import WRITERS, writetree
+from discodop.treebank import WRITERS, writetree, openread
 from discodop.treebanktransforms import reversetransform, rrbacktransform
 from discodop.heads import saveheads, readheadrules
 from discodop.punctuation import punctprune
@@ -162,10 +161,8 @@ def main():
 			print('error: incorrect number of arguments', file=sys.stderr)
 			print(USAGE)
 			sys.exit(2)
-		rules = codecs.getreader('utf8')(gzip.open
-				if args[0].endswith('.gz') else open)(args[0]).read()
-		lexicon = codecs.getreader('utf8')((gzip.open
-				if args[1].endswith('.gz') else open)(args[1])).read()
+		rules = openread(args[0]).read()
+		lexicon = openread(args[1]).read()
 		bitpar = rules[0] in string.digits
 		if '--bitpar' in opts:
 			if not bitpar:
@@ -179,9 +176,7 @@ def main():
 		stage = DEFAULTSTAGE.copy()
 		backtransform = None
 		if opts.get('--bt'):
-			backtransform = codecs.getreader('utf8')(gzip.open
-					if opts.get('--bt').endswith('.gz') else
-					open)(opts.get('--bt')).read().splitlines()
+			backtransform = openread(opts.get('--bt')).read().splitlines()
 		stage.update(
 				name='grammar',
 				mode=mode,
@@ -223,9 +218,8 @@ def main():
 						params.get('verbosity', 2))))
 		morph = params['morphology']
 		del args[:1]
-	infile = (io.open(args[0], encoding='utf-8')
-			if len(args) >= 1 else sys.stdin)
-	out = (io.open(args[1], 'w', encoding='utf-8')
+	infile = openread(args[0]) if len(args) >= 1 else sys.stdin
+	out = (io.open(args[1], 'w', encoding='utf8')
 			if len(args) == 2 else sys.stdout)
 	doparsing(parser, infile, out, prob, oneline, tags, numparses,
 			int(opts.get('--numproc', 1)), opts.get('--fmt', 'discbracket'),
@@ -642,10 +636,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 	the parameter file ``params.prm``, as produced by ``runexp``."""
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
-		rules = codecs.getreader('utf8')(gzip.open('%s/%s.rules.gz' % (
-				resultdir, stage.name))).read()
-		lexicon = codecs.getreader('utf8')(gzip.open('%s/%s.lex.gz' % (
-				resultdir, stage.name)))
+		rules = openread('%s/%s.rules.gz' % (resultdir, stage.name)).read()
+		lexicon = openread('%s/%s.lex.gz' % (resultdir, stage.name))
 		grammar = Grammar(rules, lexicon.read(),
 				start=top, bitpar=stage.mode.startswith('pcfg')
 				or re.match(r'[-.e0-9]+\b', rules), binarized=stage.binarized)
@@ -654,9 +646,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			if stage.estimates is not None:
 				raise ValueError('not supported')
 			if stage.dop in ('doubledop', 'dop1'):
-				backtransform = codecs.getreader('utf8')(
-						gzip.open('%s/%s.backtransform.gz' % (
-						resultdir, stage.name))).read().splitlines()
+				backtransform = openread('%s/%s.backtransform.gz' % (
+						resultdir, stage.name)).read().splitlines()
 				if n and stage.prune:
 					_ = grammar.getmapping(stages[n - 1].grammar,
 						striplabelre=re.compile('@.+$'),
