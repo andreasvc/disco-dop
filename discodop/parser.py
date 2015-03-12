@@ -170,7 +170,7 @@ def main():
 			mode = 'pcfg-bitpar-nbest'
 		else:
 			mode = 'pcfg' if bitpar else 'plcfrs'
-		grammar = Grammar(rules, lexicon, start=top, bitpar=bitpar,
+		grammar = Grammar(rules, lexicon, start=top,
 				binarized='--bitpar' not in opts)
 		stages = []
 		stage = DEFAULTSTAGE.copy()
@@ -639,8 +639,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		rules = openread('%s/%s.rules.gz' % (resultdir, stage.name)).read()
 		lexicon = openread('%s/%s.lex.gz' % (resultdir, stage.name))
 		grammar = Grammar(rules, lexicon.read(),
-				start=top, bitpar=stage.mode.startswith('pcfg')
-				or re.match(r'[-.e0-9]+\b', rules), binarized=stage.binarized)
+				start=top, binarized=stage.binarized)
 		backtransform = outside = None
 		if stage.dop:
 			if stage.estimates is not None:

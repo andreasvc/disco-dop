@@ -1106,10 +1106,9 @@ def main():
 		print(grammarinfo(grammar))
 	try:
 		from discodop.containers import Grammar
-		print(Grammar(rules, lexicon, bitpar=bitpar,
-				binarized='--bitpar' not in opts, start=opts.get('-s',
-					next(iter(grammar))[0][0][0] if model == 'ptsg'
-					else trees[0].label)).testgrammar()[1])
+		print(Grammar(rules, lexicon, binarized='--bitpar' not in opts,
+				start=opts.get('-s', next(iter(grammar))[0][0][0]
+				if model == 'ptsg' else trees[0].label)).testgrammar()[1])
 	except (ImportError, AssertionError) as err:
 		print(err)
 

@@ -451,9 +451,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			msg = grammar.grammarinfo(xgrammar)
 			rules, lex = grammar.write_lcfrs_grammar(
-					xgrammar, bitpar=stage.mode.startswith('pcfg'))
+					xgrammar, bitpar=stage.mode.startswith('pcfg-bitpar'))
 			gram = Grammar(rules, lex, start=top,
-					bitpar=stage.mode.startswith('pcfg'),
 					binarized=stage.binarized)
 			for name in altweights:
 				gram.register('%s' % name, altweights[name])
@@ -523,9 +522,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			if lexmodel and not simplelexsmooth:
 				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			rules, lex = grammar.write_lcfrs_grammar(
-					xgrammar, bitpar=stage.mode.startswith('pcfg'))
-			gram = Grammar(rules, lex, start=top,
-					bitpar=stage.mode.startswith('pcfg'))
+					xgrammar, bitpar=stage.mode.startswith('pcfg-bitpar'))
+			gram = Grammar(rules, lex, start=top)
 			with codecs.getwriter('utf8')(gzip.open('%s/%s.rules.gz' % (
 					resultdir, stage.name), 'wb')) as rulesfile:
 				rulesfile.write(rules)

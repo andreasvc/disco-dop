@@ -12,6 +12,8 @@ YFUNARYRE = re.compile(r'^0(?:,0)*$')
 LCFRS_NONINT = re.compile('\t[0-9]+[./][0-9]+\n')
 BITPAR_NONINT = re.compile('(?:^|\n)[0-9]+\.[0-9]+[ \t]')
 LEXICON_NONINT = re.compile('[ \t][0-9]+[./][0-9]+[ \t\n]')
+# Detect rule format of bitpar
+BITPARRE = re.compile(r'^[-.e0-9]+\b')
 
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
@@ -45,7 +47,6 @@ cdef class Grammar:
 		internally.
 	:param start: a string identifying the unique start symbol of this grammar,
 		which will be used by default when parsing with this grammar
-	:param bitpar: whether to expect and use the bitpar grammar format
 	:param binarized: whether to require a binarized grammar;
 		a non-binarized grammar can only be used by bitpar.
 
@@ -58,13 +59,12 @@ cdef class Grammar:
 		self.fanout = self.unary = self.mapping = self.splitmapping = NULL
 
 	def __init__(self, rule_tuples_or_str, lexicon=None, start='ROOT',
-			bitpar=False, binarized=True):
+			binarized=True):
 		cdef LexicalRule lexrule
 		cdef double [:] weights
 		cdef int n
 		self.mapping = self.splitmapping = self.bylhs = NULL
 		self.start = start
-		self.bitpar = bitpar
 		self.binarized = binarized
 		self.numunary = self.numbinary = self.currentmodel = 0
 		self.modelnames = ['default']
@@ -75,12 +75,14 @@ cdef class Grammar:
 				raise ValueError('expected lexicon argument.')
 			self.origrules = rule_tuples_or_str
 			self.origlexicon = lexicon
+			self.bitpar = BITPARRE.match(self.origrules)
 		elif rule_tuples_or_str and isinstance(
 				rule_tuples_or_str[0], tuple):
 			# convert tuples to strings with text format
 			from discodop.grammar import write_lcfrs_grammar
 			self.origrules, self.origlexicon = write_lcfrs_grammar(
-					rule_tuples_or_str, bitpar=bitpar)
+					rule_tuples_or_str, bitpar=False)
+			self.bitpar = False
 		else:
 			raise ValueError(
 					'expected non-empty sequence of tuples or unicode string.'
@@ -634,7 +636,7 @@ cdef class Grammar:
 	def __reduce__(self):
 		"""Helper function for pickling."""
 		return (Grammar, (self.origrules, self.origlexicon,
-				self.start, self.logprob, self.bitpar))
+				self.start, self.logprob))
 
 	def __dealloc__(self):
 		if self.bylhs is NULL:
