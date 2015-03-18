@@ -31,23 +31,26 @@ USAGE = '''Search through treebanks with queries.
 Usage: %s [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...
 
 Options:
-  --engine=<x>, -e <x>
+  -e, --engine=<x>
                   Select query engine; possible options:
                   tgrep2: tgrep2 queries (default); files are bracket corpora
                           (optionally precompiled into tgrep2 format).
                   xpath: arbitrary xpath queries; files are dact XML corpora.
                   regex: search through tokenized sentences with Python regexps
-  --counts, -c    report counts
-  --sents, -s     output sentences (default)
-  --trees, -t     output visualizations of trees
-  --brackets, -b  output raw trees in the original corpus format
-  --only-matching, -o
+  -c, --counts    report counts
+  -s, --sents     output sentences (default)
+  -t, --trees     output visualizations of trees
+  -b, --brackets  output raw trees in the original corpus format
+  -o, --only-matching
                   only output the matching portion
                   with --sents, --trees, and --brackets
-  --line-number, -n
+  -m, --max-count=<n>
+                  with --counts: only consider first n sentences;
+                  otherwise: stop after n matches.
+  -n, --line-number
                   Prefix each line of output with the sentence number within
                   its input file.
-  --macros=<x>, -m <x>
+  -M, --macros=<x>
                   file with macros
   --numthreads=<x>
                   Number of concurrent threads to use.
@@ -658,9 +661,9 @@ def cpu_count():
 def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
-	shortoptions = 'e:m:stcbnoh'
-	options = ('engine= macros= numthreads= trees sents brackets counts '
-			'only-matching line-number help')
+	shortoptions = 'e:m:M:stcbnoh'
+	options = ('engine= macros= numthreads= max-count= '
+			'trees sents brackets counts only-matching line-number help')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
@@ -674,8 +677,9 @@ def main():
 	if '--help' in opts or '-h' in opts:
 		print(USAGE)
 		return
-	macros = opts.get('--macros', opts.get('-m'))
+	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
+	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))
 	if engine == 'tgrep2':
 		searcher = TgrepSearcher(corpora, macros=macros,
 				numthreads=opts.get('--numthreads'))
@@ -688,29 +692,31 @@ def main():
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
 	if '--counts' in opts or '-c' in opts:
-		for filename, cnt in searcher.counts(query).items():
-			print('\x1b[%dm%s\x1b[0m:%s' % (
-				ANSICOLOR['magenta'], filename, cnt))
+		for filename, cnt in searcher.counts(
+				query, limit=maxresults).items():
+			if len(corpora) > 1:
+				print('\x1b[%dm%s\x1b[0m:' % (
+					ANSICOLOR['magenta'], filename), end='')
+			print(cnt)
 	elif '--trees' in opts or '-t' in opts:
-		for filename, sentno, tree, sent, high in searcher.trees(query):
+		for filename, sentno, tree, sent, high in searcher.trees(
+				query, maxresults=maxresults):
 			if '--only-matching' in opts or '-o' in opts:
 				tree = max(high, key=lambda x:
 						len(x.leaves()) if isinstance(x, Tree) else 1)
+			out = DrawTree(tree, sent, highlight=high).text(
+					unicodelines=True, ansi=True)
+			if len(corpora) > 1:
+				print('\x1b[%dm%s\x1b[0m:' % (
+						ANSICOLOR['magenta'], filename), end='')
 			if '--line-number' in opts or '-n' in opts:
-				print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:\n%s' % (
-						ANSICOLOR['magenta'], filename,
-						ANSICOLOR['green'], sentno,
-						DrawTree(tree, sent, highlight=high).text(
-							unicodelines=True, ansi=True)))
-			else:
-				print('\x1b[%dm%s\x1b[0m:\n%s' % (
-						ANSICOLOR['magenta'], filename,
-						DrawTree(tree, sent, highlight=high).text(
-							unicodelines=True, ansi=True)))
+				print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
+						% (ANSICOLOR['green'], sentno), end='')
+			print(out)
 	else:
 		brackets = '--brackets' in opts or '-b' in opts
-		for filename, sentno, sent, high in searcher.sents(query,
-				brackets=brackets):
+		for filename, sentno, sent, high in searcher.sents(
+				query, brackets=brackets, maxresults=maxresults):
 			if brackets:
 				if '--only-matching' in opts or '-o' in opts:
 					out = high
@@ -726,13 +732,13 @@ def main():
 							'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['red'], word)
 							if x in high else word
 							for x, word in enumerate(sent.split()))
+			if len(corpora) > 1:
+				print('\x1b[%dm%s\x1b[0m:' % (
+						ANSICOLOR['magenta'], filename), end='')
 			if '--line-number' in opts or '-n' in opts:
-				print('\x1b[%dm%s\x1b[0m:\x1b[%dm%s\x1b[0m:%s'
-						% (ANSICOLOR['magenta'], filename,
-							ANSICOLOR['green'], sentno, out))
-			else:
-				print('\x1b[%dm%s\x1b[0m:%s' % (
-						ANSICOLOR['magenta'], filename, out))
+				print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
+						% (ANSICOLOR['green'], sentno), end='')
+			print(out)
 
 
 __all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',

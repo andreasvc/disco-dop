@@ -435,17 +435,20 @@ Options:
 
                 :xpath: arbitrary xpath queries; files are dact XML corpora.
                 :regex: search through tokenized sentences with Python regexps
---counts, -c    report counts
---sents, -s     output sentences (default)
---trees, -t     output visualizations of trees
---brackets, -b  output raw trees in the original corpus format
---only-matching, -o
+-c, --counts    report counts
+-s, --sents     output sentences (default)
+-t, --trees     output visualizations of trees
+-b, --brackets  output raw trees in the original corpus format
+-o, --only-matching
                 only output the matching portion
                 with ``--sents``, ``--trees``, and ``--brackets``
---line-number, -n
+-m, --max-count=<n>
+                with ``--counts``: only consider first n sentences;
+                otherwise: stop after n matches.
+-n, --line-number
                 Prefix each line of output with the sentence number within
                 its input file.
---macros=<x>, -m <x>
+-M, --macros=<x>
                 file with macros
 --numthreads=<x>
                 Number of concurrent threads to use.
