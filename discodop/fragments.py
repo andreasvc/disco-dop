@@ -124,7 +124,7 @@ def main(argv=None):
 			raise ValueError('Batch mode only supported in single-process '
 				'mode. Use the xargs command for multi-processing.')
 	if args[0] == '-':
-		args[0] = '/dev/stdin'
+		args[0] = sys.stdin.fileno()
 	for a in args:
 		if not os.path.exists(a):
 			raise ValueError('not found: %r' % a)

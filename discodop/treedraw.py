@@ -883,9 +883,11 @@ def main():
 							in ('add', 'between') else None))
 	else:  # read from stdin + detect format
 		encoding = opts.get('--encoding', 'utf8')
-		stdin = (chain.from_iterable(io.open(a, encoding=encoding)
-				for a in args) if args
-				else codecs.getreader(encoding)(sys.stdin))
+		if not args:
+			args = [sys.stdin.fileno()]
+		stdin = chain.from_iterable(
+				io.open(a, encoding=encoding)
+				for a in args)
 		trees = islice(incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),
 				functions=opts.get('--functions')),

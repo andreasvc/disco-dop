@@ -1008,9 +1008,10 @@ def main():
 				% (opts.get('--outputfmt'), ' '.join(treebank.WRITERS)),
 				file=sys.stderr)
 		sys.exit(2)
-	infilename = args[1] if len(args) >= 2 and args[1] != '-' else '/dev/stdin'
+	infilename = (args[1] if len(args) >= 2 and args[1] != '-'
+			else sys.stdin.fileno())
 	outfilename = (args[2] if len(args) == 3 and args[2] != '-'
-			else '/dev/stdout')
+			else sys.stdin.fileno())
 
 	# open corpus
 	corpus = treebank.READERS[opts.get('--inputfmt', 'export')](

@@ -1022,7 +1022,7 @@ def removeemptynodes(tree, sent):
 
 
 def openread(filename, encoding='utf8'):
-	"""Open file for reading; decompress .gz files on-the-fly."""
+	"""Open text file for reading; decompress .gz files on-the-fly."""
 	if filename.endswith('.gz'):
 		return codecs.getreader(encoding)(gzip.open(filename))
 	else:

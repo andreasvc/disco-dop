@@ -218,7 +218,7 @@ def main():
 						params.get('verbosity', 2))))
 		morph = params['morphology']
 		del args[:1]
-	infile = openread(args[0]) if len(args) >= 1 else sys.stdin
+	infile = openread(args[0] if len(args) >= 1 else sys.stdin.fileno())
 	out = (io.open(args[1], 'w', encoding='utf8')
 			if len(args) == 2 else sys.stdout)
 	doparsing(parser, infile, out, prob, oneline, tags, numparses,
