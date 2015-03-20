@@ -42,6 +42,7 @@ overwritten.''' % sys.argv[0]
 
 INTERNALPARAMS = None
 DEFAULTS = dict(
+	# two-level keys:
 	traincorpus=dict(
 		# filenames may include globbing characters '*' and '?'.
 		path='alpinosample.export',
@@ -68,21 +69,9 @@ DEFAULTS = dict(
 		tailmarker='',  # with headrules, head is last node and can be marked
 		markovthreshold=None,
 		labelfun=None,
-		fanout_marks_before_bin=False))
-
-
-def initworker(params):
-	"""Set global parameter object."""
-	global INTERNALPARAMS
-	INTERNALPARAMS = params
-
-
-def startexp(
-		stages=(parser.DictObj(parser.DEFAULTSTAGE), ),  # see parser module
+		fanout_marks_before_bin=False),
+	# other keys:
 		corpusfmt='export',  # choices: export, (disc)bracket, alpino, tiger
-		traincorpus=parser.DictObj(DEFAULTS['traincorpus']),
-		testcorpus=parser.DictObj(DEFAULTS['testcorpus']),
-		binarization=parser.DictObj(DEFAULTS['binarization']),
 		removeempty=False,  # whether to remove empty terminals
 		ensureroot=None,  # ensure every tree has a root node with this label
 		punct=None,  # choices: None, 'move', 'remove', 'root'
@@ -95,7 +84,17 @@ def startexp(
 				# grammatical functions in postprocessing step
 		evalparam='proper.prm',  # EVALB-style parameter file
 		verbosity=2,
-		numproc=1,  # increase to use multiple CPUs; None: use all CPUs.
+		numproc=1)  # increase to use multiple CPUs; None: use all CPUs.
+
+
+def initworker(params):
+	"""Set global parameter object."""
+	global INTERNALPARAMS
+	INTERNALPARAMS = params
+
+
+def startexp(
+		prm,  # A DictObj with the structure of DEFAULTS
 		resultdir='results',
 		rerun=False):
 	"""Execute an experiment."""
@@ -113,13 +112,13 @@ def startexp(
 
 	# Log everything, and send it to stderr, in a format with just the message.
 	formatstr = '%(message)s'
-	if verbosity == 0:
+	if prm.verbosity == 0:
 		logging.basicConfig(level=logging.WARNING, format=formatstr)
-	elif verbosity == 1:
+	elif prm.verbosity == 1:
 		logging.basicConfig(level=logging.INFO, format=formatstr)
-	elif verbosity == 2:
+	elif prm.verbosity == 2:
 		logging.basicConfig(level=logging.DEBUG, format=formatstr)
-	elif 3 <= verbosity <= 4:
+	elif 3 <= prm.verbosity <= 4:
 		logging.basicConfig(level=5, format=formatstr)
 	else:
 		raise ValueError('verbosity should be >= 0 and <= 4. ')
@@ -133,48 +132,50 @@ def startexp(
 			__version__, sys.version.split()[0])
 	if not rerun:
 		trees, sents, train_tagged_sents = loadtraincorpus(
-				corpusfmt, traincorpus, binarization, punct, functions,
-				morphology, removeempty, ensureroot,
-				transformations, relationalrealizational)
-	elif isinstance(traincorpus.numsents, float):
+				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
+				prm.functions, prm.morphology, prm.removeempty, prm.ensureroot,
+				prm.transformations, prm.relationalrealizational)
+	elif isinstance(prm.traincorpus.numsents, float):
 		raise ValueError('need to specify number of training set sentences, '
 				'not fraction, in rerun mode.')
 
-	testsettb = treebank.READERS[corpusfmt](
-			testcorpus.path, encoding=testcorpus.encoding,
-			removeempty=removeempty, morphology=morphology,
-			functions=functions, ensureroot=ensureroot)
-	if isinstance(testcorpus.numsents, float):
-		testcorpus.numsents = int(testcorpus.numsents
+	testsettb = treebank.READERS[prm.corpusfmt](
+			prm.testcorpus.path, encoding=prm.testcorpus.encoding,
+			removeempty=prm.removeempty, morphology=prm.morphology,
+			functions=prm.functions, ensureroot=prm.ensureroot)
+	if isinstance(prm.testcorpus.numsents, float):
+		prm.testcorpus.numsents = int(prm.testcorpus.numsents
 				* len(testsettb.blocks()))
-	if testcorpus.skiptrain:
-		testcorpus.skip += (  # pylint: disable=maybe-no-member
-				traincorpus.numsents)  # pylint: disable=maybe-no-member
+	if prm.testcorpus.skiptrain:
+		prm.testcorpus.skip += (  # pylint: disable=maybe-no-member
+				prm.traincorpus.numsents)  # pylint: disable=maybe-no-member
 
 	test_blocks = OrderedDict()
 	test_trees = OrderedDict()
 	test_tagged_sents = OrderedDict()
 	for n, item in testsettb.itertrees(
-			testcorpus.skip, testcorpus.skip  # pylint: disable=no-member
-			+ testcorpus.numsents):
-		if 1 <= len(item.sent) <= testcorpus.maxwords:
+			prm.testcorpus.skip,
+			prm.testcorpus.skip  # pylint: disable=no-member
+			+ prm.testcorpus.numsents):
+		if 1 <= len(item.sent) <= prm.testcorpus.maxwords:
 			test_blocks[n] = item.block
 			test_trees[n] = item.tree
 			test_tagged_sents[n] = [(word, tag) for word, (_, tag)
 					in zip(item.sent, sorted(item.tree.pos()))]
 	logging.info('%d test sentences after length restriction <= %d',
-			len(test_trees), testcorpus.maxwords)
+			len(test_trees), prm.testcorpus.maxwords)
 	lexmodel = None
 	simplelexsmooth = False
 	test_tagged_sents_mangled = test_tagged_sents
-	if postagging and postagging.method in ('treetagger', 'stanford', 'frog'):
-		if postagging.method == 'treetagger':
+	if prm.postagging and prm.postagging.method in (
+			'treetagger', 'stanford', 'frog'):
+		if prm.postagging.method == 'treetagger':
 			# these two tags are never given by tree-tagger,
 			# so collect words whose tag needs to be overriden
 			overridetags = ('PTKANT', 'PIDAT')
-		elif postagging.method == 'stanford':
+		elif prm.postagging.method == 'stanford':
 			overridetags = ('PTKANT', )
-		elif postagging.method == 'frog':
+		elif prm.postagging.method == 'frog':
 			overridetags = ()
 		taglex = defaultdict(set)
 		for sent in train_tagged_sents:
@@ -184,23 +185,24 @@ def startexp(
 			{word for word, tags in taglex.items() if tags == {tag}}
 			for tag in overridetags}
 		tagmap = {'$(': '$[', 'PAV': 'PROAV'}
-		test_tagged_sents_mangled = lexicon.externaltagging(postagging.method,
-				postagging.model, test_tagged_sents, overridetagdict, tagmap)
-		if postagging.retag and not rerun:
+		test_tagged_sents_mangled = lexicon.externaltagging(
+				prm.postagging.method, prm.postagging.model, test_tagged_sents,
+				overridetagdict, tagmap)
+		if prm.postagging.retag and not rerun:
 			logging.info('re-tagging training corpus')
 			sents_to_tag = OrderedDict(enumerate(train_tagged_sents))
-			train_tagged_sents = lexicon.externaltagging(postagging.method,
-					postagging.model, sents_to_tag, overridetagdict,
+			train_tagged_sents = lexicon.externaltagging(prm.postagging.method,
+					prm.postagging.model, sents_to_tag, overridetagdict,
 					tagmap).values()
 			for tree, tagged in zip(trees, train_tagged_sents):
 				for node in tree.subtrees(
 						lambda n: len(n) == 1 and isinstance(n[0], int)):
 					node.label = tagged[node[0]][1]
 		usetags = True  # give these tags to parser
-	elif postagging and postagging.method == 'unknownword':
+	elif prm.postagging and prm.postagging.method == 'unknownword':
 		if not rerun:
-			sents, lexmodel = getposmodel(postagging, train_tagged_sents)
-			simplelexsmooth = postagging.simplelexsmooth
+			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
+			simplelexsmooth = prm.postagging.simplelexsmooth
 		usetags = False  # make sure gold POS tags are not given to parser
 	else:
 		usetags = True  # give gold POS tags to parser
@@ -228,42 +230,38 @@ def startexp(
 	funcclassifier = None
 
 	if rerun:
-		parser.readgrammars(resultdir, stages, postagging, top)
-		if predictfunctions:
+		parser.readgrammars(resultdir, prm.stages, prm.postagging, top)
+		if prm.predictfunctions:
 			from sklearn.externals import joblib
 			funcclassifier = joblib.load('%s/funcclassifier.pickle' % resultdir)
 	else:
 		logging.info('read training & test corpus')
-		if predictfunctions:
+		if prm.predictfunctions:
 			from sklearn.externals import joblib
 			from discodop import functiontags
 			logging.info('training function tag classifier')
 			funcclassifier, msg = functiontags.trainfunctionclassifier(
-					trees, sents, numproc)
+					trees, sents, prm.numproc)
 			joblib.dump(funcclassifier, '%s/funcclassifier.pickle' % resultdir,
 					compress=3)
 			logging.info(msg)
-		getgrammars(dobinarization(trees, sents, binarization,
-					relationalrealizational),
-				sents, stages, testcorpus.maxwords, resultdir, numproc,
-				lexmodel, simplelexsmooth, top)
-	evalparam = evalmod.readparam(evalparam)
+		getgrammars(dobinarization(trees, sents, prm.binarization,
+					prm.relationalrealizational),
+				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
+				prm.numproc, lexmodel, simplelexsmooth, top)
+	evalparam = evalmod.readparam(prm.evalparam)
 	evalparam['DEBUG'] = -1
 	evalparam['CUTOFF_LEN'] = 40
 	deletelabel = evalparam.get('DELETE_LABEL', ())
 	deleteword = evalparam.get('DELETE_WORD', ())
 
 	begin = time.clock()
-	theparser = parser.Parser(stages, transformations=transformations,
-			binarization=binarization, postagging=postagging if postagging
-				and postagging.method == 'unknownword' else None,
-			relationalrealizational=relationalrealizational,
-			funcclassifier=funcclassifier, verbosity=verbosity)
+	theparser = parser.Parser(prm, funcclassifier=funcclassifier)
 	results = doparsing(parser=theparser, testset=testset, resultdir=resultdir,
-			usetags=usetags, numproc=numproc, deletelabel=deletelabel,
-			deleteword=deleteword, corpusfmt=corpusfmt, morphology=morphology,
-			evalparam=evalparam)
-	if numproc == 1:
+			usetags=usetags, numproc=prm.numproc, deletelabel=deletelabel,
+			deleteword=deleteword, corpusfmt=prm.corpusfmt,
+			morphology=prm.morphology, evalparam=evalparam)
+	if prm.numproc == 1:
 		logging.info('time elapsed during parsing: %gs', time.clock() - begin)
 	for result in results:
 		nsent = len(result.parsetrees)
@@ -883,8 +881,10 @@ def parsetepacoc(
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
-	theparser = parser.Parser(stages, binarization=binarization,
+	params = parser.DictObj(DEFAULTS)
+	params.update(stages=stages, binarization=binarization,
 			transformations=transformations)
+	theparser = parser.Parser(params)
 	for cat, testset in sorted(testsets.items()):
 		if cat == 'baseline':
 			continue
@@ -936,13 +936,18 @@ def parsetepacoc(
 def readparam(filename):
 	"""Parse a parameter file.
 
-	The file should contain a list of comma-separated ``attribute=value`` pairs
-	and will be read using ``eval('dict(%s)' % open(file).read())``."""
+	:param filename: The file should contain a list of comma-separated
+		``attribute=value`` pairs and will be read using ``eval('dict(%s)' %
+		open(file).read())``.
+	:returns: A DictObj."""
 	with io.open(filename, encoding='utf8') as fileobj:
 		params = eval('dict(%s)' % fileobj.read())  # pylint: disable=eval-used
 	for key in DEFAULTS:
 		if key not in params:
-			raise ValueError('%r not in parameters.' % key)
+			if isinstance(DEFAULTS[key], dict):
+				raise ValueError('%r not in parameters.' % key)
+			else:
+				params[key] = DEFAULTS[key]
 	for stage in params['stages']:
 		for key in stage:
 			if key not in parser.DEFAULTSTAGE:
@@ -951,8 +956,9 @@ def readparam(filename):
 			for k, v in parser.DEFAULTSTAGE.items()})
 				for stage in params['stages']]
 	for key in DEFAULTS:
-		params[key] = parser.DictObj({k: params[key].get(k, v)
-				for k, v in DEFAULTS[key].items()})
+		if isinstance(DEFAULTS[key], dict):
+			params[key] = parser.DictObj({k: params[key].get(k, v)
+					for k, v in DEFAULTS[key].items()})
 	for n, stage in enumerate(params['stages']):
 		if stage.mode not in (
 				'plcfrs', 'pcfg', 'pcfg-posterior',
@@ -989,7 +995,7 @@ def readparam(filename):
 	if params['transformations']:
 		params['transformations'] = treebanktransforms.expandpresets(
 				params['transformations'])
-	return params
+	return parser.DictObj(params)
 
 
 def test():
@@ -1025,7 +1031,8 @@ def main(argv=None):
 			argv.remove('--rerun')
 		params = readparam(argv[1])
 		resultdir = argv[1].rsplit('.', 1)[0]
-		top = startexp(resultdir=resultdir, rerun=rerun, **params)
+		top = startexp(
+				params, resultdir=resultdir, rerun=rerun)
 		if not rerun:  # copy parameter file to result dir
 			paramlines = io.open(argv[1], encoding='utf8').readlines()
 			if paramlines[0].startswith("top='"):

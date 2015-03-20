@@ -154,18 +154,10 @@ def loadparsers():
 			_, lang = os.path.split(os.path.dirname(directory))
 			APP.logger.info('Loading grammar %r', lang)
 			params = readparam(os.path.join(directory, 'params.prm'))
-			params['resultdir'] = directory
-			stages = params['stages']
-			postagging = params['postagging']
-			readgrammars(directory, stages, postagging,
-					top=params.get('top', 'ROOT'))
-			PARSERS[lang] = Parser(stages,
-					transformations=params.get('transformations'),
-					binarization=params['binarization'],
-					postagging=postagging if postagging and
-					postagging.method == 'unknownword' else None,
-					relationalrealizational=params.get(
-						'relationalrealizational'))
+			params.resultdir = directory
+			readgrammars(directory, params.stages, params.postagging,
+					top=getattr(params, 'top', 'ROOT'))
+			PARSERS[lang] = Parser(params)
 			APP.logger.info('Grammar for %s loaded.', lang)
 	assert PARSERS, 'no grammars found!'
 

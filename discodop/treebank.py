@@ -114,7 +114,8 @@ class CorpusReader(object):
 			if opt not in opts:
 				raise ValueError('Expected one of %r. Got: %r' % (opts, opt))
 		if not self._filenames:
-			raise ValueError('no files matched pattern %s' % path)
+			raise ValueError("no files matched pattern '%s' in %s" % (
+					path, os.getcwd()))
 		self._block_cache = None
 		self._trees_cache = None
 

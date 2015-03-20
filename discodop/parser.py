@@ -194,7 +194,8 @@ def main():
 		if backtransform:
 			_ = stages[-1].grammar.getmapping(None,
 				neverblockre=re.compile('.+}<'))
-		parser = Parser(stages, verbosity=int(opts.get('--verbosity', 2)))
+		prm = DictObj(stages=stages, verbosity=int(opts.get('--verbosity', 2)))
+		parser = Parser(prm)
 		morph = None
 		del args[:2]
 	else:
@@ -203,20 +204,12 @@ def main():
 		if not os.path.isdir(directory):
 			raise ValueError('expected directory produced by "discodop runexp"')
 		params = readparam(os.path.join(directory, 'params.prm'))
-		params['resultdir'] = directory
-		stages = params['stages']
-		postagging = params['postagging']
-		readgrammars(directory, stages, postagging,
-				top=params.get('top', top))
-		parser = Parser(stages,
-				transformations=params.get('transformations'),
-				binarization=params['binarization'],
-				postagging=postagging if postagging and
-					postagging.method == 'unknownword' else None,
-				relationalrealizational=params.get('relationalrealizational'),
-				verbosity=int(opts.get('--verbosity',
-						params.get('verbosity', 2))))
-		morph = params['morphology']
+		params.update(resultdir=directory)
+		readgrammars(directory, params.stages, params.postagging,
+				top=getattr(params, 'top', top))
+		params.update(verbosity=int(opts.get('--verbosity', params.verbosity)))
+		parser = Parser(params)
+		morph = params.morphology
 		del args[:1]
 	infile = openread(args[0] if len(args) >= 1 else sys.stdin.fileno())
 	out = (io.open(args[1], 'w', encoding='utf8')
@@ -342,33 +335,20 @@ def readinputbitparstyle(infile):
 class Parser(object):
 	"""A coarse-to-fine parser based on a given set of parameters.
 
-	:param stages: a list of coarse-to-fine stages containing grammars and
-		parameters.
-	:param transformations: treebank transformations to reverse on parses.
-	:param binarization: settings used for binarization; used for the
-		tailmarker attribute which identifies heads in parser output.
-	:param postagging: if given, an unknown word model is used to assign POS
-		tags during parsing. The model consists of a DictObj with (at least)
-		the following attributes:
-
-		- unknownwordfun: function to produces signatures for unknown words.
-		- lexicon: the set of known words in the grammar.
-		- sigs: the set of word signatures occurring in the grammar.
-	:param relationalrealizational: whether to reverse the RR-transform.
-	:param funcclassifier: function tag classifier trained by
-		``functiontags.trainfunctionclassifier``.
-	:param verbosity: see ``runexp`` parameter."""
-	def __init__(self, stages, transformations=None, postagging=None,
-			binarization=DictObj(tailmarker=None),
-			relationalrealizational=None, funcclassifier=None, verbosity=2):
-		self.stages = stages
-		self.transformations = transformations
-		self.binarization = binarization
-		self.postagging = postagging
-		self.relationalrealizational = relationalrealizational
+	:param prm: A DictObj with parameters as returned by
+		:py:func:`runexp.readparam()`.
+	:param funcclassifier: optionally, a function tag classifier trained by
+		:py:func:`functiontags.trainfunctionclassifier`.
+	"""
+	def __init__(self, prm, funcclassifier=None):
+		self.stages = prm.stages
+		self.transformations = prm.transformations
+		self.binarization = prm.binarization
+		self.postagging = prm.postagging
+		self.relationalrealizational = prm.relationalrealizational
+		self.verbosity = prm.verbosity
 		self.funcclassifier = funcclassifier
-		self.verbosity = verbosity
-		for stage in stages:
+		for stage in prm.stages:
 			if stage.mode.startswith('pcfg-bitpar'):
 				exportbitpargrammar(stage)
 			model = 'default'
@@ -381,7 +361,7 @@ class Parser(object):
 				if stage.objective == 'shortest':
 					model = 'shortest'
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
-			if verbosity >= 3:
+			if prm.verbosity >= 3:
 				logging.debug(stage.name)
 				logging.debug(stage.grammar)
 
@@ -399,7 +379,7 @@ class Parser(object):
 			if tags:
 				newtags = alignsent(sent, origsent, dict(enumerate(tags)))
 				tags = [newtags[n] for n, _ in enumerate(sent)]
-		if self.postagging:
+		if self.postagging and self.postagging.method == 'unknownword':
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
 					self.postagging.lexicon, self.postagging.sigs)

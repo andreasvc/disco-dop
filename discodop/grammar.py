@@ -1013,10 +1013,9 @@ def main():
 	elif model == 'param':
 		import os
 		from discodop.runexp import readparam, loadtraincorpus, getposmodel
-		from discodop.parser import DictObj
 		if opts:
 			raise ValueError('all options should be set in parameter file.')
-		prm = DictObj(readparam(args[1]))
+		prm = readparam(args[1])
 		resultdir = args[2]
 		if os.path.exists(resultdir):
 			raise ValueError('Directory %r already exists.\n' % resultdir)
