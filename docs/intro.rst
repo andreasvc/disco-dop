@@ -31,9 +31,13 @@ Suppose we have the following treebank in the file ``treebankExample.mrg``::
     (S (NP (DT The) (NN cat)) (VP (VBP ate) (NP (DT the) (NN dog))))
     (S (NP (DT The) (NN mouse)) (VP (VBP ate) (NP (DT the) (NN cat))))
 
+You can view the trees using the following command::
+
+    $ discodop treedraw < treebankExample.mrg | less -R
+
 Before inducing a grammar, we need to binarize the treebank::
 
-    $ discodop treetransforms binarize --inputfmt=bracket --outputfmt=bracket treebankExample.mrg /tmp/bintrees
+    $ discodop treetransforms binarize --fmt=bracket treebankExample.mrg /tmp/bintrees
     transformed 7 trees with action 'binarize'
 
 We can then induce a Double-DOP grammar with the following command::
@@ -54,6 +58,8 @@ can be used as follows::
     (S (NP (DT 0) (NN 1)) (VP (VBP 2) (NP (DT 3) (NP|<JJ,NN> (JJ 4) (NN 5)))))
     0.0 s
     [...]
+
+Note that the ``-s`` option should specify the root label of the trees in the treebank.
 
 Run an experiment
 -----------------
@@ -122,6 +128,13 @@ Alternatively, it is possible to achieve similar results with separate commands:
     $ discodop none alpinosample.export sentences.txt --inputfmt=export --outputfmt=tokens
     $ discodop parser filename/ sentences.txt --fmt=export >filename/dop.export
     $ discodop eval alpinosample.export filename/dop.export proper.prm
+
+IPython notebooks
+-----------------
+
+- `A tutorial on using tree fragments for text classification <http://nbviewer.ipython.org/gist/andreasvc/9467e27680d8950045b2/treefragments.ipynb>`_
+- `Getting tree fragments from TSG derivations <http://nbviewer.ipython.org/gist/andreasvc/f6f626aadb7fd7fb4954>`_
+
 
 Overview
 ========
