@@ -49,6 +49,8 @@ MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
 TREELIMIT = 10  # max number of trees to draw in search resuluts
 FRAGLIMIT = 250  # max amount of search results for fragment extraction
 SENTLIMIT = 1000  # max number of sents/brackets in search results
+INDICESMAXRESULTS = 1024  # max number of results for which to obtain indices.
+	# Indices are used to display a dispersion plot.
 LANG = 'nl'  # language to use when running style(1) or ucto(1)
 CORPUS_DIR = "corpus/"
 
@@ -64,7 +66,7 @@ EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|txt)$')
 EXT = {
 		'tgrep2': '.mrg.t2c.gz',
 		'xpath': '.dact',
-		'regex': '.tok'
+		'regex': '.tok',
 	}
 COLORS = dict(enumerate(
 		'black red orange blue green turquoise slategray peru teal'.split()))
@@ -76,7 +78,7 @@ COLORS = dict(enumerate(
 @APP.route('/sents')
 @APP.route('/brackets')
 @APP.route('/fragments')
-def main():
+def main(debug=False):
 	"""Main search form & results page."""
 	output = None
 	if request.path != '/':
@@ -89,19 +91,34 @@ def main():
 			return 'Invalid argument', 404
 		elif request.args.get('export'):
 			return export(request.args, output)
-		# For debugging purposes:
-		return render_template('searchresults.html',
-				form=request.args, texts=TEXTS, selectedtexts=selected,
-				output=output, results=DISPATCH[output](request.args),
-				havexpath='xpath' in CORPORA, havetgrep='tgrep2' in CORPORA)
-		# To send results incrementally:
-		# return Response(stream_template('searchresults.html',
-		# 		form=request.args, texts=TEXTS, selectedtexts=selected,
-		# 		output=output, results=DISPATCH[output](request.args),
-		# 		havexpath='xpath' in CORPORA))
-	return render_template('search.html', form=request.args, output='counts',
-			texts=TEXTS, selectedtexts=selected,
-			havexpath='xpath' in CORPORA, havetgrep='tgrep2' in CORPORA)
+		if debug:  # For debugging purposes:
+			return render_template('searchresults.html',
+					form=request.args,
+					texts=TEXTS,
+					selectedtexts=selected,
+					output=output,
+					results=DISPATCH[output](request.args),
+					havexpath='xpath' in CORPORA,
+					havetgrep='tgrep2' in CORPORA,
+					)
+		else:  # send results incrementally:
+			return Response(stream_template('searchresults.html',
+					form=request.args,
+					texts=TEXTS,
+					selectedtexts=selected,
+					output=output,
+					results=DISPATCH[output](request.args),
+					havexpath='xpath' in CORPORA,
+					havetgrep='tgrep2' in CORPORA,
+					))
+	return render_template('search.html',
+			form=request.args,
+			output='counts',
+			texts=TEXTS,
+			selectedtexts=selected,
+			havexpath='xpath' in CORPORA,
+			havetgrep='tgrep2' in CORPORA,
+			)
 
 
 def export(form, output):
@@ -164,8 +181,8 @@ def counts(form, doexport=False):
 	if norm == 'query':
 		normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
 				form['normquery'], selected)
-	combined = defaultdict(Counter)
-	combined1 = defaultdict(list)
+	# Combined results of all queries on each file
+	combined = defaultdict(int)
 	index = [TEXTS[n] for n in selected.values()]
 	df = pandas.DataFrame(index=index)
 	queries = querydict(form['query'])
@@ -179,10 +196,11 @@ def counts(form, doexport=False):
 		cnts = Counter()
 		sumtotal = 0
 		relfreq = {}
+		resultsindices = None
 		if query is None:
 			if len(df.columns) == 1:
 				break
-			results = combined1
+			results = combined
 			legend = '%sLegend:\t%s' % (64 * ' ', '\t'.join(
 					'<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
 					for n, query in enumerate(queries)))
@@ -195,17 +213,20 @@ def counts(form, doexport=False):
 			else:
 				norm = form.get('norm', 'sents')
 			results = CORPORA[form.get('engine', 'tgrep2')].counts(
-					query, selected, indices=True)
+					query, selected, indices=False)
+			if all(results[filename] < INDICESMAXRESULTS for filename
+					in results):
+				resultsindices = CORPORA[form.get('engine', 'tgrep2')].counts(
+						query, selected, indices=True)
 		if not doexport:
 			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (
 					n, name, query or legend)
-		for filename, indices in sorted(results.items()):
+		COLWIDTH = min(40, max(map(len, TEXTS)) + 2)
+		for filename, cnt in sorted(results.items()):
 			if query is None:
-				cnt = sum(combined[filename].values())
+				cnt = combined[filename]
 			else:
-				combined[filename].update(indices)
-				combined1[filename].append(indices)
-				cnt = sum(indices.values())
+				combined[filename] += cnt
 			textno = selected[filename]
 			limit = (int(form.get('limit')) if form.get('limit')
 					else NUMSENTS[textno])
@@ -224,13 +245,17 @@ def counts(form, doexport=False):
 			relfreq[text] = 100.0 * cnt / total
 			sumtotal += total
 			if not doexport:
-				out = '%s (<a href="browsesents?%s">browse</a>)    %5d %5.2f %%' % (
-						text.ljust(40)[:40],
+				out = ('%s (<a href="browsesents?%s">browse</a>)    '
+						'%5d %5.2f %%' % (
+						text.ljust(COLWIDTH)[:COLWIDTH],
 						url_encode(dict(text=textno, sent=1,
 							query=query or form['query'],
 							engine=form.get('engine', 'tgrep2'))),
-						cnt, relfreq[text])
-				plot = dispplot(indices, limit or NUMSENTS[textno])
+						cnt, relfreq[text]))
+				plot = ''
+				if resultsindices is not None:
+					plot = dispplot(resultsindices[filename],
+							limit or NUMSENTS[textno])
 				if cnt:
 					yield out + plot + '\n'
 				else:
@@ -239,8 +264,8 @@ def counts(form, doexport=False):
 		if not doexport or query is not None:
 			df[name] = pandas.Series(relfreq)
 		if not doexport:
-			yield ("%s%6d            %5.2f %%\n</span>\n" % (
-					"TOTAL".ljust(40),
+			yield ('%s             %5d %5.2f %%\n</span>\n' % (
+					'TOTAL'.ljust(COLWIDTH),
 					sum(cnts.values()),
 					100.0 * sum(cnts.values()) / sumtotal))
 			yield '</pre>'
@@ -250,10 +275,10 @@ def counts(form, doexport=False):
 				# show absolute counts when all texts have been limited to same
 				# number of sentences
 				yield barplot(cnts, max(cnts.values()),
-						'Absolute counts of %s:' % name, unit='matches')
+						'Absolute counts of \'%s\':' % name, unit='matches')
 			else:
 				yield barplot(relfreq, max(relfreq.values()),
-						'Relative frequency of %s: '
+						'Relative frequency of \'%s\': '
 						'(count / num_%s * 100)' % (name, norm), unit='%')
 	if doexport:
 		if form.get('export') == 'json':
@@ -942,13 +967,15 @@ DISPATCH = {
 	'brackets': brackets,
 	'fragments': fragmentsinresults,
 }
-logging.basicConfig()
-for log in (logging.getLogger(), APP.logger):
-	log.setLevel(logging.DEBUG)
-	log.handlers[0].setFormatter(logging.Formatter(
-			fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
 
+logging.basicConfig()
+log = logging.getLogger()
+log.setLevel(logging.DEBUG)
+log.handlers[0].setFormatter(logging.Formatter(
+		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+log.info('loading corpus.')
+TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
+log.info('corpus loaded.')
 
 if __name__ == '__main__':
 	APP.run(debug=True, host='0.0.0.0')

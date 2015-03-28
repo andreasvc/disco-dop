@@ -49,14 +49,21 @@ div.barplot span {
     A web-interface to query a corpus of parse trees.
     Enter a <a href="http://tedlab.mit.edu/~dr/Tgrep2/">TGrep2</a>
     (<a href="javascript: toggle('tgrephelp'); ">toggle TGrep overview</a>)
-	or <a href="http://rug-compling.github.io/dact/cookbook/">XPath</a> query
-	to search through the parse trees. Alternatively, enter a
-	<a href="http://docs.python.org/2/library/re.html#regular-expression-syntax">regex</a> query
-	to search through the tokenized sentences. Results can be displayed in various ways or
-	exported to a file. There is a list of available macros
-	(<a href="static/tgrepmacros.txt">TGrep2</a>,
+    or <a href="http://rug-compling.github.io/dact/cookbook/">XPath</a> query
+    to search through the parse trees. Alternatively, enter a
+    <a href="http://docs.python.org/2/library/re.html#regular-expression-syntax">regex</a> query
+    to search through the tokenized sentences. Results can be displayed in various ways or
+    exported to a file.</p>
+
+    <p>Available macros:
+    {% if havetgrep %}
+    <a href="static/tgrepmacros.txt">TGrep2</a>,
+    {% endif %}
+    {% if havexpath %}
     <a href="static/xpathmacros.txt">XPath</a>,
-    <a href="static/regexmacros.txt">regex</a>).</p>
+    {% endif %}
+    <a href="static/regexmacros.txt">regex</a>.
+    </p>
 
 	<p>Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
 	| <a href="/style">Statistics &amp; readability measures</a> from
