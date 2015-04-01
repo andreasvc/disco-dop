@@ -490,22 +490,32 @@ cdef class Grammar:
 		return True, 'All left hand sides sum to 1 +/- epsilon=%s' % epsilon
 
 	def getmapping(Grammar self, Grammar coarse, striplabelre=None,
-			neverblockre=None, bint splitprune=False, bint markorigin=False):
-		"""Construct a mapping of fine non-terminal IDs to coarse non-terminal
-		IDs, by applying the regex ``striplabelre`` to the fine labels, used
-		for coarse-to-fine pruning. A secondary regex neverblockre is for items
-		that should never be pruned.
-		The regexes should be compiled objects, i.e., ``re.compile(regex)``,
-		or ``None`` to leave labels unchanged. ``coarse`` may be ``None``, in
-		which case only ``neverblockre`` is effective, which is also used for
-		non-pruning purposes.
+			neverblockre=None, bint splitprune=False, bint markorigin=False,
+			dict mapping=None):
+		"""Construct mapping of this grammar's non-terminal labels to another.
 
-		- use ``|<`` to ignore nodes introduced by binarization;
-			useful if coarse and fine stages employ different kinds of
-			markovization; e.g., ``NP`` and ``VP`` may be blocked,
-			but not ``NP|<DT-NN>``.
-		- ``_[0-9]+`` to ignore discontinuous nodes ``X_n`` where ``X`` is a
-			label and *n* is a fanout."""
+		:param coarse: the grammar to which this grammar's labels will be
+			mapped. May be ``None``; useful when ``neverblockre`` needs to be
+			applied.
+		:param striplabelre: if not None, a compiled regex used to form
+			the coarse label for a given fine label. This regex is applied
+			with a substitution to the empty string.
+		:param neverblockre: labels that match this regex will never be pruned.
+			Also used to identify auxiliary labels of Double-DOP grammars.
+
+			- use ``|<`` to ignore nodes introduced by binarization;
+				useful if coarse and fine stages employ different kinds of
+				markovization; e.g., ``NP`` and ``VP`` may be blocked,
+				but not ``NP|<DT-NN>``.
+			- ``_[0-9]+`` to ignore discontinuous nodes ``X_n`` where ``X`` is
+				a label and *n* is a fanout.
+
+		:param mapping: a dictionary with strings of fine labels mapped to
+			coarse labels. striplabelre, if given, is applied first.
+
+		The regexes should be compiled objects, i.e., ``re.compile(regex)``,
+		or ``None`` to leave labels unchanged.
+		"""
 		cdef int n, m, components = 0
 		cdef set seen = {0}
 		if coarse is None:
@@ -530,6 +540,8 @@ cdef class Grammar:
 				strlabel = self.tolabel[n]
 				if striplabelre is not None:
 					strlabel = striplabelre.sub('', strlabel, 1)
+				if mapping is not None:
+					strlabel = mapping[strlabel]
 				if self.fanout[n] > 1 and splitprune:
 					strlabel += '*'
 				if self.fanout[n] > 1 and splitprune and markorigin:

@@ -7,8 +7,9 @@ import io
 import os
 import re
 import sys
-import time
+import json
 import gzip
+import time
 import codecs
 import logging
 import multiprocessing
@@ -396,17 +397,34 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 	"""Read off the requested grammars."""
 	tbfanout, n = treetransforms.treebankfanout(trees)
 	logging.info('binarized treebank fan-out: %d #%d', tbfanout, n)
+	mappings = [None for _ in stages]
 	for n, stage in enumerate(stages):
+		traintrees = trees
+		stage.mapping = None
 		if stage.split:
 			traintrees = [treetransforms.binarize(
 					treetransforms.splitdiscnodes(
 						tree.copy(True),
 						stage.markorigin),
 					childchar=':', dot=True, ids=grammar.UniqueIDs())
-					for tree in trees]
+					for tree in traintrees]
 			logging.info('splitted discontinuous nodes')
-		else:
-			traintrees = trees
+		if stage.collapse:
+			traintrees, mappings[n] = treebanktransforms.collapselabels(
+					[tree.copy(True) for tree in traintrees],
+					tbmapping=treebanktransforms.MAPPINGS[
+						stage.collapse[0]][stage.collapse[1]])
+			logging.info('collapsed phrase labels for multilevel '
+					'coarse-to-fine parsing to %s level %d',
+					*stage.collapse)
+		if n and mappings[n - 1] is not None:
+			# Given original labels A, convert CTF mapping1 A => C,
+			# and mapping2 A => B to a mapping B => C.
+			mapping1, mapping2 = mappings[n - 1], mappings[n]
+			if mappings[n] is None:
+				stage.mapping = {a: mapping1[a] for a in mapping1}
+			else:
+				stage.mapping = {mapping2[a]: mapping1[a] for a in mapping2}
 		if stage.mode.startswith('pcfg'):
 			if tbfanout != 1 and not stage.split:
 				raise ValueError('Cannot extract PCFG from treebank '
@@ -476,28 +494,31 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					out.writelines('%s\n' % a for a in backtransform)
 				if n and stage.prune:
 					msg = gram.getmapping(stages[n - 1].grammar,
-						striplabelre=None if stages[n - 1].dop
-							else re.compile('@.+$'),
-						neverblockre=re.compile('.+}<'),
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin)
+							striplabelre=None if stages[n - 1].dop
+								else re.compile('@.+$'),
+							neverblockre=re.compile('.+}<'),
+							splitprune=stage.splitprune and stages[n - 1].split,
+							markorigin=stages[n - 1].markorigin,
+							mapping=stage.mapping)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
 					msg = gram.getmapping(None,
-						striplabelre=None,
-						neverblockre=re.compile('.+}<'),
-						splitprune=False, markorigin=False)
+							striplabelre=None,
+							neverblockre=re.compile('.+}<'),
+							splitprune=False, markorigin=False,
+							mapping=stage.mapping)
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
 				msg = gram.getmapping(stages[n - 1].grammar,
-					striplabelre=None if stages[n - 1].dop
-						and stages[n - 1].dop not in ('doubledop', 'dop1')
-						else re.compile('@[-0-9]+$'),
-					neverblockre=re.compile(stage.neverblockre)
-						if stage.neverblockre else None,
-					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin)
+						striplabelre=None if stages[n - 1].dop
+							and stages[n - 1].dop not in ('doubledop', 'dop1')
+							else re.compile('@[-0-9]+$'),
+						neverblockre=re.compile(stage.neverblockre)
+							if stage.neverblockre else None,
+						splitprune=stage.splitprune and stages[n - 1].split,
+						markorigin=stages[n - 1].markorigin,
+						mapping=stage.mapping)
 				if stage.mode == 'dop-rerank':
 					gram.getrulemapping(
 							stages[n - 1].grammar, re.compile(r'@[-0-9]+\b'))
@@ -535,7 +556,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin)
+					markorigin=stages[n - 1].markorigin,
+					mapping=stage.mapping)
 				logging.info(msg)
 		logging.info('wrote grammar to %s/%s.{rules,lex%s}.gz',
 				resultdir, stage.name,
@@ -565,6 +587,11 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 
 		stage.update(grammar=gram, backtransform=backtransform,
 				outside=outside)
+
+	if any(stage.mapping is not None for stage in stages):
+		with codecs.getwriter('utf8')(gzip.open('%s/mapping.json.gz' % (
+				resultdir), 'wb')) as mappingfile:
+			mappingfile.write(json.dumps([stage.mapping for stage in stages]))
 
 
 def doparsing(**kwds):

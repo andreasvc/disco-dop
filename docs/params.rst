@@ -169,6 +169,13 @@ Where the keys and values are:
               extracted fragments; with ``'doubledop'``, likewise but applying
               to the non-recurring/non-maximal fragments extracted to augment
               the set of recurring fragments.
+:collapse: apply a multilevel coarse-to-fine preset. values are of the form
+           ``('treebank', level)``; e.g., ``('ptb', 0)`` for the coarsest level
+           of the Penn treebank. For the presets,
+           see source of :py:data:`discodop.treebanktransforms.MAPPINGS`.
+           Including a stage for each of the collapse-levels in ascending
+           order (0, 1, and 2 in the current presets), and then add a stage
+           where labels are not collapsed.
 :packedgraph: use packed graph encoding for DOP reduction
 :iterate: for Double-DOP, whether to add fragments of fragments
 :complement: for Double-DOP, whether to include fragments which
@@ -191,7 +198,7 @@ Other options
 :postagging: To disable POS tagging and use the gold POS tags from the
     test set, set this to ``None``.
     Otherwise, pass a dictionary with the keys below; for details,
-    see :mod:`discodop.lexicon`
+    see :py:mod:`discodop.lexicon`
 
     :method: one of:
 
@@ -250,9 +257,9 @@ Other options
     train, test sets.
 :ensureroot: Ensure every tree has a root node with this label
 :transformations: apply treebank transformations;
-    see source of :func:`discodop.treebanktransforms.transform`
+    see source of :py:func:`discodop.treebanktransforms.transform`
 :relationalrealizational: apply RR-transform;
-    see :func:`discodop.treebanktransforms.rrtransform`
+    see :py:func:`discodop.treebanktransforms.rrtransform`
 :verbosity: control the amount of output to console;
     a logfile ``output.log`` is also kept with a fixed log level of 2.
 

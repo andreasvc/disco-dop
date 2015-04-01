@@ -11,7 +11,6 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import re
 import sys
-import codecs
 from cgi import escape
 from collections import defaultdict, OrderedDict
 from operator import itemgetter
@@ -647,8 +646,9 @@ class DrawTree(object):
 		# write nodes with coordinates
 		for n, (row, column) in self.coords.items():
 			node = self.nodes[n]
-			cat, func = node.label, ''
+			func = ''
 			if isinstance(node, Tree):
+				cat = node.label
 				color = nodecolor
 				if (funcsep and funcsep in node.label
 						and node.label not in PTBPUNC):

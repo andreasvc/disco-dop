@@ -17,7 +17,7 @@ from discodop.punctuation import punctprune, PUNCTUATION
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 STATESPLIT = '^'
-LABELRE = re.compile("[^^|<>-]+")
+LABELRE = re.compile("[^^|<>,;:_-]+")
 CASERE = re.compile(r'\b(Nom|Acc|Gen|Dat)\b')
 DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
@@ -47,6 +47,72 @@ PRESETS = {
 			'nlselectmorph', 'PUNCT', 'MARK-YEAR', 'nlpercolatemorph',
 			'nlmwuhead')
 		}
+
+# Mappings for multi-level coarse-to-fine parsing
+# following Charniak et al. (2006), multi-level coarse-to-fine parsing.
+MAPPINGS = {
+		'ptb': {
+			# level 0: P (all phrase labels)
+			0: {'P': {'S', 'VP', 'UCP', 'SQ', 'SBAR', 'SBARQ', 'SINV',
+					'NP', 'NAC', 'NX', 'LST', 'X', 'FRAG', 'PRT|ADVP',
+					'ADJP', 'QP', 'CONJP', 'ADVP', 'INTJ', 'PRN', 'PRT',
+					'PP', 'RRC', 'WHADJP', 'WHADVP', 'WHNP', 'WHPP'}},
+			# level 1: HP (arguments), MP (modifiers)
+			1: {'HP': {'S', 'VP', 'UCP', 'SQ', 'SBAR', 'SBARQ', 'SINV',
+					'NP', 'NAC', 'NX', 'LST', 'X', 'FRAG'},
+				'MP': {'ADJP', 'QP', 'CONJP', 'ADVP', 'INTJ', 'PRN', 'PRT',
+					'PRT|ADVP', 'PP', 'RRC', 'WHADJP', 'WHADVP', 'WHNP',
+					'WHPP'}},
+			# level 2: S (verbal), N (nominal), A (adjectival),
+			# 	P (prepositional)
+			# note: PRT is part of both A_ and P_ in the paper;
+			# UCP is part of both S_ and N_
+			2: {'S_': {'S', 'VP', 'SQ', 'SBAR', 'SBARQ', 'SINV'},
+				'N_': {'NP', 'NAC', 'NX', 'LST', 'X', 'UCP', 'FRAG'},
+				'A_': {'ADJP', 'QP', 'CONJP', 'ADVP', 'INTJ', 'PRN', 'PRT',
+					'PRT|ADVP'},
+				'P_': {'PP', 'RRC', 'WHADJP', 'WHADVP', 'WHNP', 'WHPP'}},
+			# level 3: no-op, return original treebank labels
+		},
+		'negra': {
+			# level 0: P (all phrase labels)
+			0: {'P': {'--', 'AA', 'AP', 'AVP', 'CAC', 'CAP', 'CAVP', 'CCP',
+				'CH', 'CNP', 'CO', 'CPP', 'CS', 'CVP', 'CVZ', 'DL', 'ISU',
+				'MPN', 'MTA', 'NM', 'NP', 'PN', 'PP', 'QL', 'S', 'VP', 'VZ'}},
+			# level 1: HP (arguments), MP (modifiers)
+			1: {'HP': {'NP', 'S', 'VP', 'VZ', 'CO', 'AA', 'CNP', 'CS', 'CVP',
+					'CVZ', 'PN', 'MPN', 'NM', 'CH', 'CCP', 'DL', 'ISU', 'QL'},
+				'MP': {'--', 'AP', 'PP', 'AVP', 'CAP', 'CPP', 'CAVP', 'CAC',
+					'MTA'}},
+			# level 2: S (verbal), N (nominal), A (adjectival),
+			# 	P (prepositional)
+			2: {'S_': {'S', 'VP', 'VZ', 'CO', 'AA', 'CS', 'CVP',
+					'CVZ', 'CCP', 'DL', 'ISU', 'QL'},
+				'N_': {'NP', 'CNP', 'PN', 'MPN', 'NM', 'CH'},
+				'A_': {'--', 'AP', 'AVP', 'CAP', 'CAVP', 'MTA'}},
+				'P_': {'PP', 'CPP', 'CAC'}
+			# level 3: no-op, return original treebank labels
+		},
+		'alpino': {
+			# level 0: P (all phrase labels)
+			0: {'P': {'ADVP', 'AHI', 'AP', 'CONJ', 'CP', 'DETP', 'DU', 'INF',
+					'MWU', 'NP', 'OTI', 'PP', 'PPART', 'PPRES', 'REL', 'SMAIN',
+					'SSUB', 'SV1', 'SVAN', 'TI', 'WHQ', 'WHREL', 'WHSUB'}},
+			# level 1: HP (arguments), MP (modifiers)
+			1: {'HP': {'AHI', 'CONJ', 'CP', 'DETP', 'DU', 'INF', 'MWU', 'NP',
+					'OTI', 'PPART', 'PPRES', 'REL', 'SMAIN', 'SSUB', 'SVAN',
+					'SV1', 'TI', 'WHSUB', 'WHQ'},
+				'MP': {'AP', 'ADVP', 'PP', 'REL', 'WHREL'}},
+			# level 2: S (verbal), N (nominal), A (adjectival),
+			# 	P (prepositional)
+			2: {'S_': {'AHI', 'CP', 'DU', 'INF', 'OTI', 'PPART', 'PPRES',
+					'SMAIN', 'SSUB', 'SVAN', 'SV1', 'TI', 'WHSUB', 'WHQ'},
+				'N_': {'CONJ', 'DETP', 'MWU', 'NP'},
+				'A_': {'AP', 'ADVP', 'REL', 'WHREL'},
+				'P_': {'PP'}},
+			# level 3: no-op, return original treebank labels
+		},
+	}
 
 
 def expandpresets(transformations):
@@ -912,29 +978,46 @@ def reversetransform(tree, transformations):
 	return tree
 
 
-def collapselabels(trees, _sents, mapping=None):
+def collapselabels(trees, _sents=None, tbmapping=None):
 	"""Collapse non-root phrasal labels with specified mapping.
 
-	The mapping is of the form::
+	Trees are modified in-place.
 
-		{coarselabel1: {finelabel1, finelabel2, ...}, ...}
+	:param tbmapping: a mapping of treebank labels of the form::
 
-	For example following Charniak et al. (2006),
-	multi-level coarse-to-fine parsing:
-	:level 0: single label P
-	:level 1: HP, MP (arguments, modifiers)
-	:level 2: S, N, A, P (verbal, nominal, adjectival, prepositional)
-	:level 3: no-op, return original treebank labels"""
-	def collapse(orig):
-		"""Collapse labels of a single tree; returns a new Tree object."""
-		tree = orig.copy(True)
-		for node in tree.subtrees():
-			if node.label != "ROOT" and node and isinstance(node[0], Tree):
-				node.label = LABELRE.sub(revmapping.get, node.label)
+			{coarselabel1: {finelabel1, finelabel2, ...}, ...}
 
-	revmapping = {finelabel: coarselabel for coarselabel in mapping
-			for finelabel in mapping[coarselabel]}
-	return [collapse(tree) for tree in trees]
+		Cf. ``treebanktransforms.MAPPINGS``
+	:returns: a tuple ``(trees, mapping)`` with the transformed trees
+		and a mapping of their original labels to the collapsed labels.
+	"""
+	def collapse(tree):
+		"""Collapse labels of a single tree."""
+		for node in islice(tree.subtrees(), 1, None):
+			if node and isinstance(node[0], Tree):
+				# anything not part of the mapping is stripped
+				# (state splits, function tags, &c.)
+				mapping[node.label] = LABELRE.sub(
+						lambda x: revmapping.get(x.group(), ''),
+						# lambda x: revmapping[x.group()],
+						node.label).replace('-', '').rstrip('^')
+				assert mapping[node.label] and mapping[node.label][0].isalpha(), node.label
+				node.label = mapping[node.label]
+
+	# maps original treebank labels to coarser labels; e.g. NP => X
+	revmapping = {finelabel: coarselabel for coarselabel in tbmapping
+			for finelabel in tbmapping[coarselabel]}
+	# maps labels after binarization and other transformations,
+	# e.g., NP<DT,JJ,NN> => X<X,X,X>
+	mapping = {'Epsilon': 'Epsilon', trees[0].label: trees[0].label}
+	# collect POS tags, will not be changed
+	for tree in trees:
+		for node in tree.subtrees(lambda n: not isinstance(n[0], Tree)):
+			mapping[node.label] = node.label
+			revmapping[node.label] = node.label
+	for tree in trees:
+		collapse(tree)
+	return trees, mapping
 
 
 def rrtransform(tree, morphlevels=0, percolatefeatures=None,

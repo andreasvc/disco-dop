@@ -7,6 +7,7 @@ import io
 import os
 import re
 import sys
+import json
 import time
 import codecs
 import logging
@@ -24,7 +25,7 @@ from functools import wraps
 import numpy as np
 from discodop import plcfrs, pcfg
 from discodop.grammar import defaultparse
-from discodop.containers import Grammar
+from discodop.containers import Grammar, BITPARRE
 from discodop.coarsetofine import prunechart, whitelistfromposteriors
 from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import ParentedTree
@@ -104,6 +105,7 @@ DEFAULTSTAGE = dict(
 		estimates=None,  # compute, store & use outside estimates
 		beam_beta=1.0,  # beam pruning factor, between 0 and 1; 1 to disable.
 		beam_delta=40,  # maximum span length to which beam_beta is applied
+		collapse=None,  # optionally, collapse phrase labels for multilevel CTF
 		)
 
 
@@ -349,8 +351,6 @@ class Parser(object):
 		self.verbosity = prm.verbosity
 		self.funcclassifier = funcclassifier
 		for stage in prm.stages:
-			if stage.mode.startswith('pcfg-bitpar'):
-				exportbitpargrammar(stage)
 			model = 'default'
 			if stage.dop:
 				if (stage.estimator == 'ewe'
@@ -405,10 +405,12 @@ class Parser(object):
 					model = 'shortest'
 			x = stage.grammar.currentmodel
 			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
-			if stage.mode.startswith('pcfg-bitpar') and (
-					not hasattr(stage, 'rulesfile')
-					or x != stage.grammar.currentmodel):
-				exportbitpargrammar(stage)
+			if stage.mode.startswith('pcfg-bitpar'):
+				if (not hasattr(stage, 'rulesfile')
+						or x != stage.grammar.currentmodel):
+					exportbitpargrammar(stage)
+			elif hasattr(stage, 'rulesfile'):
+				del stage.rulesfile, stage.lexiconfile
 			if not stage.binarized and not stage.mode.startswith('pcfg-bitpar'):
 				raise ValueError('non-binarized grammar requires use of bitpar')
 
@@ -614,6 +616,13 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 
 	Expects a directory ``resultdir`` which contains the relevant grammars and
 	the parameter file ``params.prm``, as produced by ``runexp``."""
+	if os.path.exists('%s/mapping.json.gz' % resultdir):
+		mappings = json.load(openread('%s/mapping.json.gz' % resultdir))
+		for stage, mapping in zip(stages, mappings):
+			stage.mapping = mapping
+	else:
+		for stage in stages:
+			stage.mapping = None
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
 		rules = openread('%s/%s.rules.gz' % (resultdir, stage.name)).read()
@@ -632,7 +641,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						striplabelre=re.compile('@.+$'),
 						neverblockre=re.compile('^#[0-9]+|.+}<'),
 						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin)
+						markorigin=stages[n - 1].markorigin,
+						mapping=stage.mapping)
 				else:
 					# recoverfragments() relies on this mapping to identify
 					# binarization nodes
@@ -644,7 +654,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin)
+					markorigin=stages[n - 1].markorigin,
+					mapping=stage.mapping)
 				if stage.mode == 'dop-rerank':
 					grammar.getrulemapping(
 							stages[n - 1].grammar, re.compile(r'@[-0-9]+\b'))
@@ -660,7 +671,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
 					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin)
+					markorigin=stages[n - 1].markorigin,
+					mapping=stage.mapping)
 			if stage.estimates in ('SX', 'SXlrgaps'):
 				if stage.estimates == 'SX' and grammar.maxfanout != 1:
 					raise ValueError('SX estimate requires PCFG.')
@@ -695,14 +707,22 @@ def exportbitpargrammar(stage):
 		stage.lexiconfile = tempfile.NamedTemporaryFile()
 	stage.rulesfile.seek(0)
 	stage.rulesfile.truncate()
-	if stage.grammar.currentmodel == 0:
-		stage.rulesfile.write(stage.grammar.origrules)
-	else:
+	if not BITPARRE.match(stage.grammar.origrules):
+		# convert to bitpar format
+		stage.rulesfile.writelines(
+				'%g\t%s\n' % (weight, line.rsplit('\t', 2)[0])
+				for weight, line in
+				zip(stage.grammar.models[stage.grammar.currentmodel],
+					stage.grammar.origrules.splitlines()))
+	elif stage.grammar.currentmodel != 0:
+		# merge current weights
 		stage.rulesfile.writelines(
 				'%g\t%s\n' % (weight, line.split(None, 1)[1])
 				for weight, line in
 				zip(stage.grammar.models[stage.grammar.currentmodel],
 					stage.grammar.origrules.splitlines()))
+	else:
+		stage.rulesfile.write(stage.grammar.origrules)
 	stage.rulesfile.flush()
 
 	stage.lexiconfile.seek(0)
