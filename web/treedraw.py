@@ -126,14 +126,16 @@ def drawtrees(form, dts):
 				for dt in dts),
 				POSTAMBLE))
 	elif form.get('type', None) == 'qtree':
-		result = [PREAMBLE % r'\usepackage{helvet,tikz,tikz-qtree}']
+		result = [PREAMBLE % '\n'.join((
+			r'\usepackage{helvet,tikz,tikz-qtree}',
+			r'\tikzset{edge from parent/.style={draw, edge from parent path={',
+			r'	(\tikzparentnode.south) -- +(0,-3pt) -| (\tikzchildnode)}}}'))]
 		for dt in dts:
 			for pos, word in zip(
 					dt.tree.subtrees(lambda n: n and isinstance(n[0], int)),
 					dt.sent):
 				pos[0] = word
-			result.append('\n\n'.join(dt.tree.pprint_latex_qtree()
-					for dt in dts))
+			result.append('\n\n'.join(dt.latexqtree() for dt in dts))
 		result.append(POSTAMBLE)
 		latexcode = ''.join(result)
 	else:

@@ -606,8 +606,9 @@ class DrawTree(object):
 				if col in matrix[row]:
 					n = matrix[row][col]
 					node = self.nodes[n]
-					cat, func = node.label, ''
+					func = ''
 					if isinstance(node, Tree):
+						cat = node.label
 						color = nodecolor
 						if (funcsep and funcsep in node.label
 								and node.label not in PTBPUNC):
@@ -683,6 +684,25 @@ class DrawTree(object):
 
 		result += [r'\end{tikzpicture}']
 		return result
+
+	def latexqtree(self, nodecolor='blue', leafcolor='red'):
+		r"""Produce TiKZ-qtree code to draw a continuous tree.
+
+		To get trees with straight edges, add this in the preamble::
+
+			\tikzset{edge from parent/.style={draw, edge from parent path={
+				(\tikzparentnode.south) -- +(0,-3pt) -| (\tikzchildnode)}}}
+		"""
+		reserved_chars = re.compile('([#\$%&~_\{\}])')
+
+		pprint = self.tree.pprint(indent=6, brackets=('[.', ' ]'))
+		escaped = re.sub(reserved_chars, r'\\\1', pprint)
+		return '\n'.join([
+			'\\begin{tikzpicture}',
+			'  \\tikzset{every node/.style={color=%s}, font=\\sf}' % nodecolor,
+			'  \\tikzset{every leaf node/.style={color=%s}}' % leafcolor,
+			'  \\Tree %s' % escaped,
+			'\\end{tikzpicture}'])
 
 
 def latexlabel(label):

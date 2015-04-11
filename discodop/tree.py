@@ -494,8 +494,8 @@ class Tree(object):
 		for child in self.children:
 			if isinstance(child, Tree):
 				childstrs.append(child._pprint_flat(brackets))
-			elif isinstance(child, basestring):
-				childstrs.append(child)
+			elif isinstance(child, basestring) or child is None:
+				childstrs.append(child or '')
 			else:
 				childstrs.append(repr(child))
 		if isinstance(self.label, basestring):
