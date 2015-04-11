@@ -685,7 +685,7 @@ class DrawTree(object):
 		result += [r'\end{tikzpicture}']
 		return result
 
-	def latexqtree(self, nodecolor='blue', leafcolor='red'):
+	def tikzqtree(self, nodecolor='blue', leafcolor='red'):
 		r"""Produce TiKZ-qtree code to draw a continuous tree.
 
 		To get trees with straight edges, add this in the preamble::

@@ -135,7 +135,7 @@ def drawtrees(form, dts):
 					dt.tree.subtrees(lambda n: n and isinstance(n[0], int)),
 					dt.sent):
 				pos[0] = word
-			result.append('\n\n'.join(dt.latexqtree() for dt in dts))
+			result.append('\n\n'.join(dt.tikzqtree() for dt in dts))
 		result.append(POSTAMBLE)
 		latexcode = ''.join(result)
 	else:
