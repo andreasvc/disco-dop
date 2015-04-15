@@ -27,7 +27,6 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 
 	:param coarsechart: a Chart object produced by the PCFG or PLCFRS parser,
 		or derivations from bitpar.
-	:param coarse: the grammar with which ``chart`` was produced.
 	:param fine: the grammar to map labels to after pruning. must have a
 		mapping to the coarse grammar established by ``fine.getmapping()``.
 	:param k: when ``k >= 1``: number of `k`-best derivations to consider;
@@ -43,6 +42,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 		map to the discontinuous node NP_2.
 	:param bitpar: prune from bitpar derivations instead of actual chart
+	:returns: ``(whitelist, msg)``
 
 	For LCFRS, the white list is indexed as follows:
 			:whitelisted: ``whitelist[label][item] == None``
@@ -60,6 +60,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 	if splitprune and markorigin:
 		if fine.splitmapping is NULL or fine.splitmapping[0] is NULL:
 			raise ValueError('need to call fine.getmapping(coarse, ...).')
+	# prune coarse chart and collect items
 	if 0 < k < 1:  # threshold on posterior probabilities
 		items, msg = posteriorthreshold(coarsechart, k)
 	else:  # construct a list of the k-best nonterminals to prune with
@@ -75,6 +76,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 				'based on %d/%d derivations' % (
 				len(coarsechart.getitems()), len(items),
 				len(coarsechart.rankededges[coarsechart.root()][:k]), k))
+	# project items to fine grammar
 	if finecfg:
 		cfgwhitelist = [set() for _ in range(compactcellidx(
 				coarsechart.lensent - 1, coarsechart.lensent,

@@ -1,4 +1,4 @@
-""" Web interface to the disco-dop parser.
+"""Web interface to the disco-dop parser.
 
 Requires Flask. Expects a series of grammars produced by runexp in
 subdirectories of ``grammar/``
