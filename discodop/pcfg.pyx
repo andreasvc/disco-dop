@@ -62,6 +62,9 @@ cdef class CFGChart(Chart):
 		return '%s[%d:%d]' % (
 				self.grammar.tolabel[lhs], start, end)
 
+	def getitems(self):
+		return self.parseforest
+
 
 @cython.final
 cdef class DenseCFGChart(CFGChart):
@@ -154,7 +157,7 @@ cdef class DenseCFGChart(CFGChart):
 	cdef double subtreeprob(self, item):
 		return self._subtreeprob(<size_t>item)
 
-	cdef getitems(self):
+	def getitems(self):
 		return [n for n, a in enumerate(self.parseforest) if a is not None]
 
 	cdef list getedges(self, item):

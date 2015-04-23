@@ -310,6 +310,31 @@ cdef class Chart:
 			end = itemx % self.lensent + 1
 		return compactcellidx(start, end, self.lensent, 1)
 
+	def toitem(self, node, item):
+		"""Convert Tree node with integer indices as terminals to a ChartItem.
+
+		Return type is determined by ``item``."""
+		try:
+			label = self.grammar.toid[node.label]
+		except KeyError:
+			return None
+		if isinstance(item, SmallChartItem):
+			vec = sum(1 << n for n in node.leaves())
+			return new_SmallChartItem(label, vec)
+		elif isinstance(item, FatChartItem):
+			tmp = new_FatChartItem(label)
+			for n in node.leaves():
+				if n >= SLOTS * sizeof(unsigned long) * 8:
+					return None
+				SETBIT(tmp.vec, n)
+			return tmp
+		else:
+			return cellidx(
+					min(node.leaves()),
+					max(node.leaves()) + 1,
+					self.lensent,
+					self.grammar.nonterminals) + label
+
 	cdef edgestr(self, item, Edge *edge):
 		"""Return string representation of item and edge belonging to it."""
 		if edge.rule is NULL:
@@ -362,8 +387,11 @@ cdef class Chart:
 		i.e., test whether sentence has been parsed successfully."""
 		return self.root() in self.parseforest
 
-	cdef getitems(self):
-		return self.parseforest
+	def __contains__(self, item):
+		return item in self.getitems()
+		if isinstance(item, ChartItem):
+			return item in self.parseforest
+		return self.hasitem(item)
 
 	cdef list getedges(self, item):
 		"""Get edges for item."""

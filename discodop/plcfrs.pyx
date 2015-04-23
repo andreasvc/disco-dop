@@ -87,6 +87,9 @@ cdef class LCFRSChart(Chart):
 		return '%s[%s]' % (self.grammar.tolabel[self.label(item)],
 				item.binrepr(self.lensent))
 
+	def getitems(self):
+		return self.parseforest
+
 
 @cython.final
 cdef class SmallLCFRSChart(LCFRSChart):

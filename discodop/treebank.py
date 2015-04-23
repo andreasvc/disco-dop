@@ -15,10 +15,8 @@ try:
 except ImportError:
 	from collections import OrderedDict
 from discodop.tree import Tree, ParentedTree
-from discodop.punctuation import punctremove, punctprune, punctraise, \
-		balancedpunctraise, punctroot
-from discodop.heads import readheadrules, headfinder, ptbheadfinder, \
-		sethead, ishead
+from discodop.punctuation import applypunct
+from discodop.heads import applyheadrules, readheadrules, ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -180,29 +178,10 @@ class CorpusReader(object):
 			# roughly order constituents by order in sentence
 			for a in reversed(list(item.tree.subtrees(lambda x: len(x) > 1))):
 				a.children.sort(key=Tree.leaves)
-		if self.punct == 'remove':
-			punctremove(item.tree, item.sent)
-		elif self.punct in ('move', 'moveall', 'prune'):
-			if self.punct == 'prune':
-				punctprune(item.tree, item.sent)
-			punctraise(item.tree, item.sent, self.punct == 'moveall')
-			balancedpunctraise(item.tree, item.sent)
-			# restore order
-			for a in reversed(list(item.tree.subtrees(lambda x: len(x) > 1))):
-				a.children.sort(key=Tree.leaves)
-		elif self.punct == 'root':
-			punctroot(item.tree, item.sent)
+		if self.punct:
+			applypunct(self.punct, item.tree, item.sent)
 		if self.headrules:
-			for node in item.tree.subtrees(
-					lambda n: n and isinstance(n[0], Tree)):
-				if self.extraheadrules == 'ptb':
-					head = ptbheadfinder(node, self.headrules)
-				elif self.extraheadrules == 'dptb':
-					head = ptbheadfinder(node, self.headrules, dptb=True)
-				else:
-					head = headfinder(node, self.headrules)
-				if head is not None:
-					sethead(head)
+			applyheadrules(item.tree, self.headrules, self.extraheadrules)
 		return item
 
 	def _word(self, block):

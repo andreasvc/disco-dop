@@ -42,7 +42,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 		integer to distinguish components; e.g., CFG nodes NP*0 and NP*1
 		map to the discontinuous node NP_2.
 	:param bitpar: prune from bitpar derivations instead of actual chart
-	:returns: ``(whitelist, msg)``
+	:returns: ``(whitelist, items, msg)``
 
 	For LCFRS, the white list is indexed as follows:
 			:whitelisted: ``whitelist[label][item] == None``
@@ -88,7 +88,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 				if (fine.mapping[finelabel] == 0
 						or fine.mapping[finelabel] == label):
 					cfgwhitelist[finespan].add(finelabel)
-		return cfgwhitelist, msg
+		return cfgwhitelist, None, msg
 	else:
 		whitelist = [None] * fine.nonterminals
 		kbestspans = [set() for _ in coarsechart.grammar.toid]
@@ -110,7 +110,7 @@ def prunechart(Chart coarsechart, Grammar fine, k,
 			else:
 				if fine.mapping[label] != 0:
 					whitelist[label] = kbestspans[fine.mapping[label]]
-		return whitelist, msg
+		return whitelist, items, msg
 
 
 def bitparkbestitems(Chart chart, int k, bint finecfg):
@@ -362,7 +362,7 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 		print("no parse")
 		return
 		# print(chart)
-	l, _ = prunechart(chart, fine, k, split, True, False, False)
+	l, _, _ = prunechart(chart, fine, k, split, True, False, False)
 	if verbose:
 		print("\nitems in 50-best of coarse chart")
 		_ = lazykbest(chart, k, derivs=False)

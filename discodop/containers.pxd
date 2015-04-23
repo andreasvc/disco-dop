@@ -91,7 +91,6 @@ cdef class Chart:
 	cdef uint32_t label(self, item)
 	cdef ChartItem asChartItem(self, item)
 	cdef size_t asCFGspan(self, item, size_t nonterminals)
-	cdef getitems(self)
 	cdef list getedges(self, item)
 
 

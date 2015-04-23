@@ -12,6 +12,20 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 HEADRULERE = re.compile(r'^(\S+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
 
 
+def applyheadrules(tree, headrules, extraheadrules):
+	"""Apply head rules and set head attribute of nodes."""
+	for node in tree.subtrees(
+			lambda n: n and isinstance(n[0], Tree)):
+		if extraheadrules == 'ptb':
+			head = ptbheadfinder(node, headrules)
+		elif extraheadrules == 'dptb':
+			head = ptbheadfinder(node, headrules, dptb=True)
+		else:
+			head = headfinder(node, headrules)
+		if head is not None:
+			sethead(head)
+
+
 def ishead(tree):
 	"""Test whether this node is the head of the parent constituent."""
 	return getattr(tree, 'head', False)

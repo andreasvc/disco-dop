@@ -693,7 +693,7 @@ class DrawTree(object):
 			\tikzset{edge from parent/.style={draw, edge from parent path={
 				(\tikzparentnode.south) -- +(0,-3pt) -| (\tikzchildnode)}}}
 		"""
-		reserved_chars = re.compile('([#\$%&~_\{\}])')
+		reserved_chars = re.compile('([#$%&~_{}])')
 
 		pprint = self.tree.pprint(indent=6, brackets=('[.', ' ]'))
 		escaped = re.sub(reserved_chars, r'\\\1', pprint)

@@ -6,6 +6,7 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import os
 import re
+import csv
 import sys
 import json
 import gzip
@@ -142,6 +143,8 @@ def startexp(
 
 	testsettb = treebank.READERS[prm.corpusfmt](
 			prm.testcorpus.path, encoding=prm.testcorpus.encoding,
+			headrules=prm.binarization.headrules,
+			extraheadrules=prm.binarization.extraheadrules,
 			removeempty=prm.removeempty, morphology=prm.morphology,
 			functions=prm.functions, ensureroot=prm.ensureroot)
 	if isinstance(prm.testcorpus.numsents, float):
@@ -285,6 +288,7 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	"""Load the training corpus."""
 	train = treebank.READERS[corpusfmt](traincorpus.path,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
+			extraheadrules=binarization.extraheadrules,
 			removeempty=removeempty, ensureroot=ensureroot, punct=punct,
 			functions=functions, morphology=morphology)
 	if isinstance(traincorpus.numsents, float):
@@ -341,7 +345,7 @@ def getposmodel(postagging, train_tagged_sents):
 
 
 def dobinarization(trees, sents, binarization, relationalrealizational):
-	"""Apply binarization."""
+	"""Apply binarization to treebank."""
 	# fixme: this n should correspond to sentence id
 	tbfanout, n = treetransforms.treebankfanout(trees)
 	logging.info('treebank fan-out before binarization: %d #%d\n%s\n%s',
@@ -351,45 +355,50 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 	msg = 'binarization: %s' % binarization.method
 	if binarization.fanout_marks_before_bin:
 		trees = [treetransforms.addfanoutmarkers(t) for t in trees]
-	if binarization.method is None:
-		pass
-	elif binarization.method == 'default':
+	if binarization.method == 'default':
 		msg += ' %s h=%d v=%d %s' % (
 				binarization.factor, binarization.h, binarization.v,
 				'tailmarker' if binarization.tailmarker else '')
-		for a in trees:
-			treetransforms.binarize(a, factor=binarization.factor,
-					tailmarker=binarization.tailmarker,
-					horzmarkov=binarization.h, vertmarkov=binarization.v,
-					revhorzmarkov=binarization.revh,
-					leftmostunary=binarization.leftmostunary,
-					rightmostunary=binarization.rightmostunary,
-					markhead=binarization.markhead,
-					headoutward=binarization.headrules is not None,
-					direction=binarization.headrules is not None,
-					filterfuncs=(relationalrealizational['ignorefunctions']
-						+ (relationalrealizational['adjunctionlabel'], ))
-						if relationalrealizational else (),
-					labelfun=binarization.labelfun)
-		if binarization.markovthreshold:
-			msg1 = treetransforms.markovthreshold(trees,
-					binarization.markovthreshold,
-					binarization.h + binarization.revh - 1,
-					max(binarization.v - 1, 1))
-			logging.info(msg1)
-	elif binarization.method == 'optimal':
-		trees = [Tree.convert(treetransforms.optimalbinarize(tree))
-						for n, tree in enumerate(trees)]
 	elif binarization.method == 'optimalhead':
 		msg += ' h=%d v=%d' % (
 				binarization.h, binarization.v)
-		trees = [Tree.convert(treetransforms.optimalbinarize(
-				tree, headdriven=True, h=binarization.h, v=binarization.v))
-				for n, tree in enumerate(trees)]
+	if binarization.method is not None:
+		trees = [binarizetree(t, binarization, relationalrealizational)
+				for t in trees]
+	if binarization.markovthreshold:
+		msg1 = treetransforms.markovthreshold(trees,
+				binarization.markovthreshold,
+				binarization.h + binarization.revh - 1,
+				max(binarization.v - 1, 1))
+		logging.info(msg1)
 	trees = [treetransforms.addfanoutmarkers(t) for t in trees]
 	logging.info('%s; cpu time elapsed: %gs',
 			msg, time.clock() - begin)
 	return trees
+
+
+def binarizetree(tree, binarization, relationalrealizational):
+	"""Binarize a single tree."""
+	if binarization.method == 'default':
+		return treetransforms.binarize(tree, factor=binarization.factor,
+				tailmarker=binarization.tailmarker,
+				horzmarkov=binarization.h, vertmarkov=binarization.v,
+				revhorzmarkov=binarization.revh,
+				leftmostunary=binarization.leftmostunary,
+				rightmostunary=binarization.rightmostunary,
+				markhead=binarization.markhead,
+				headoutward=binarization.headrules is not None,
+				direction=binarization.headrules is not None,
+				filterfuncs=(relationalrealizational['ignorefunctions']
+					+ (relationalrealizational['adjunctionlabel'], ))
+					if relationalrealizational else (),
+				labelfun=binarization.labelfun)
+	elif binarization.method == 'optimal':
+		return Tree.convert(treetransforms.optimalbinarize(tree))
+	elif binarization.method == 'optimalhead':
+		return Tree.convert(treetransforms.optimalbinarize(
+				tree, headdriven=True, h=binarization.h, v=binarization.v))
+	return tree
 
 
 def getgrammars(trees, sents, stages, testmaxwords, resultdir,
@@ -605,8 +614,11 @@ def doparsing(**kwds):
 		result.update(
 				parsetrees=dict.fromkeys(params.testset),
 				sents=dict.fromkeys(params.testset),
-				probs=dict.fromkeys(params.testset, float('nan')),
+				logprob=dict.fromkeys(params.testset, float('nan')),
 				frags=dict.fromkeys(params.testset, 0),
+				numitems=dict.fromkeys(params.testset, 0),
+				golditems=dict.fromkeys(params.testset, 0),
+				totalgolditems=dict.fromkeys(params.testset, 0),
 				elapsedtime=dict.fromkeys(params.testset),
 				evaluator=evalmod.Evaluator(params.evalparam), noparse=0)
 	if params.numproc == 1:
@@ -631,17 +643,20 @@ def doparsing(**kwds):
 			results[n].parsetrees[sentid] = result.parsetree
 			results[n].sents[sentid] = sent
 			if isinstance(result.prob, tuple):
-				results[n].probs[sentid] = [log(a) for a in result.prob
+				results[n].logprob[sentid] = [log(a) for a in result.prob
 						if isinstance(a, float)][0]
 				results[n].frags[sentid] = [abs(a) for a in result.prob
 						if isinstance(a, int)][0]
 			elif isinstance(result.prob, float):
 				try:
-					results[n].probs[sentid] = log(result.prob)
+					results[n].logprob[sentid] = log(result.prob)
 				except ValueError:
-					results[n].probs[sentid] = 300.0
+					results[n].logprob[sentid] = 300.0
 			if result.fragments is not None:
 				results[n].frags[sentid] = len(result.fragments)
+			results[n].numitems[sentid] = result.numitems
+			results[n].golditems[sentid] = result.golditems
+			results[n].totalgolditems[sentid] = result.totalgolditems
 			results[n].elapsedtime[sentid] = result.elapsedtime
 			if result.noparse:
 				results[n].noparse += 1
@@ -697,11 +712,12 @@ def worker(args):
 
 	:returns: a string with diagnostic information, as well as a list of
 		DictObj instances with the results for each stage."""
-	nsent, (tagged_sent, _, _, _) = args
+	nsent, (tagged_sent, goldtree, _, _) = args
 	sent = [w for w, _ in tagged_sent]
 	prm = INTERNALPARAMS
 	results = list(prm.parser.parse(sent,
-			tags=[t for _, t in tagged_sent] if prm.usetags else None))
+			tags=[t for _, t in tagged_sent] if prm.usetags else None,
+			goldtree=goldtree))  # only used to determine quality of pruning
 	return (nsent, sent, results)
 
 
@@ -731,29 +747,22 @@ def writeresults(results, params):
 						res.parsetrees[n], res.sents[n], n, corpusfmt,
 						morphology=params.morphology)
 				for n in params.testset)
-	with io.open('%s/parsetimes.txt' % params.resultdir, 'w',
-			encoding='utf8') as out:
-		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
-		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
-				'\t'.join(str(res.elapsedtime[n]) for res in results))
-				for n in params.testset)
-	with io.open('%s/logprobs.txt' % params.resultdir, 'w',
-			encoding='utf8') as out:
-		out.write('#id\tlen\t%s\n' % '\t'.join(res.name for res in results))
-		out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
-				'\t'.join(str(res.probs[n]) for res in results))
-				for n in params.testset)
-	names = [res.name for res, stage in zip(results, params.parser.stages)
-			if stage.dop in ('doubledop', 'dop1')]
-	if names:
-		with io.open('%s/numfrags.txt' % params.resultdir, 'w',
-				encoding='utf8') as out:
-			out.write('#id\tlen\t%s\n' % '\t'.join(names))
-			out.writelines('%s\t%d\t%s\n' % (n, len(params.testset[n][2]),
-					'\t'.join(str(res.frags[n]) for res, stage
-						in zip(results, params.parser.stages)
-						if stage.dop in ('doubledop', 'dop1')))
-					for n in params.testset)
+
+	if sys.version[0] < '3':
+		fileobj = open('%s/stats.tsv' % params.resultdir, 'wb')
+	else:
+		fileobj = open('%s/stats.tsv' % params.resultdir, 'w',
+				encoding='utf8', newline='')
+	with fileobj as out:
+		fields = ['sentid', 'len', 'stage', 'elapsedtime', 'logprob', 'frags',
+				'numitems', 'golditems', 'totalgolditems']
+		writer = csv.writer(out, dialect='excel-tab')
+		writer.writerow(fields)
+		writer.writerows([n, len(params.testset[n][2]), res.name]
+				+ [getattr(res, field)[n] for field in fields[3:]]
+				for n in params.testset
+					for res in results)
+
 	logging.info('wrote results to %s/%s%s.%s', params.resultdir, category,
 			(('{%s}' % ','.join(res.name for res in results))
 			if len(results) > 1 else results[0].name),

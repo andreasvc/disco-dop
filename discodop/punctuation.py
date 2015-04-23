@@ -27,9 +27,22 @@ BALANCEDPUNCTMATCH = {'"': '"', "'": "'", '``': "''",
 		'-': '-', '\xc2\xab': '\xc2\xbb'}  # unicode << and >>
 
 
-def ispunct(word, tag):
-	"""Test whether a word and/or tag is punctuation."""
-	return tag in PUNCTTAGS or word in PUNCTUATION
+def applypunct(method, tree, sent):
+	"""Apply ``remove, move, moveall, prune, or root`` punctuation strategy."""
+	if method == 'remove':
+		punctremove(tree, sent)
+	elif method in ('move', 'moveall', 'prune'):
+		if method == 'prune':
+			punctprune(tree, sent)
+		punctraise(tree, sent, method == 'moveall')
+		balancedpunctraise(tree, sent)
+		# restore order
+		for a in tree.postorder(lambda n: len(n) > 1):
+			a.children.sort(key=lambda n: n.leaves())
+		for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
+			a.children.sort(key=Tree.leaves)
+	elif method == 'root':
+		punctroot(tree, sent)
 
 
 def punctremove(tree, sent):
@@ -158,6 +171,11 @@ def balancedpunctraise(tree, sent):
 		elif (sent[terminal] in BALANCEDPUNCTMATCH
 				and preterminal.label in PUNCTTAGS):
 			punctmap[BALANCEDPUNCTMATCH[sent[terminal]]] = terminal
+
+
+def ispunct(word, tag):
+	"""Test whether a word and/or tag is punctuation."""
+	return tag in PUNCTTAGS or word in PUNCTUATION
 
 
 __all__ = ['ispunct', 'punctremove', 'punctprune', 'punctroot', 'punctlower',
