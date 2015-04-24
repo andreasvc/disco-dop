@@ -92,6 +92,8 @@ DEFAULTS = dict(
 def initworker(params):
 	"""Set global parameter object."""
 	global INTERNALPARAMS
+	# this variable is global because we want to pass it to the fork through
+	# inheritance from its parent, instead of through serialization.
 	INTERNALPARAMS = params
 
 
@@ -675,14 +677,14 @@ def doparsing(**kwds):
 				msg += 'LF %(LF)s' % scores
 				try:
 					msg += '\n\t' + sentmetrics.bracketings()
-				except Exception as err:
+				except Exception as err:  # pylint: disable=broad-except
 					msg += 'PROBLEM bracketings:\n%s\n%s' % (
 							result.parsetree, err)
 			msg += '\n'
 			if n + 1 == len(sentresults):
 				try:
 					msg += sentmetrics.visualize()
-				except Exception as err:
+				except Exception as err:  # pylint: disable=broad-except
 					msg += 'PROBLEM drawing tree:\n%s\n%s' % (
 							sentmetrics.ctree, err)
 			logging.debug(msg)

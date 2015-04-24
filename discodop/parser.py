@@ -31,7 +31,7 @@ from discodop.tree import ParentedTree
 from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from discodop.treebank import WRITERS, writetree, openread
-from discodop.heads import saveheads, readheadrules, applyheadrules
+from discodop.heads import saveheads, readheadrules
 from discodop.punctuation import punctprune, applypunct
 from discodop.functiontags import applyfunctionclassifier
 

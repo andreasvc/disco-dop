@@ -68,12 +68,12 @@ def draw():
 				request.args['tree'].splitlines(),
 				morphology='between' if 'morph' in request.args else None,
 				functions='between' if 'func' in request.args else None))
-	except Exception as err:
+	except Exception as err:  # pylint: disable=broad-except
 		return Response(str(err), mimetype='text/plain')
 	for tree, sent, _rest in trees:
 		try:
 			dts.append(DrawTree(tree, sent, abbr='abbr' in request.args))
-		except Exception as err:
+		except Exception as err:  # pylint: disable=broad-except
 			return Response(str(err), mimetype='text/plain')
 	if not dts:
 		return Response('No trees!', mimetype='text/plain')

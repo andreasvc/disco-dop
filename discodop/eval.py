@@ -2,6 +2,7 @@
 
 Follows EVALB as much as possible, and provides some alternative evaluation
 metrics."""
+# pylint: disable=cell-var-from-loop
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import io
