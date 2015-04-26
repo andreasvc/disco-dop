@@ -91,6 +91,7 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		if (isinstance(child, Tree)
 				and not punctuation.ispunct(None, child.label)):
 			return child
+	return children[0]
 
 
 def ptbheadfinder(tree, headrules, headlabels=frozenset({'HD'}), dptb=False):
