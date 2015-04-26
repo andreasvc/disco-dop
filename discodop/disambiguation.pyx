@@ -891,7 +891,10 @@ def doprerank(chart, sent, k, Grammar coarse, Grammar fine):
 		deriv = addbitsets(derivstr)
 		results.append((derivstr, exp(dopparseprob(deriv, sent, coarse, fine)),
 				None))
-	return results
+	msg = 're-ranked %d parse trees; best tree at %d. ' % (
+			len(results),
+			max(range(len(results)), key=lambda x: results[x][1]) + 1)
+	return results, msg
 
 
 def dopparseprob(tree, sent, Grammar coarse, Grammar fine):

@@ -459,8 +459,8 @@ class Parser(object):
 									golditems += (int(fanout.group(1))
 											if fanout and not stage.split
 											else 1)
-							msg1 += '; %d / %d gold items remain after pruning' % (
-									golditems, totalgolditems)
+							msg1 += (';\n\t%d/%d gold items remain after '
+									'pruning' % (golditems, totalgolditems))
 					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
@@ -509,9 +509,8 @@ class Parser(object):
 							beam_delta=stage.beam_delta)
 				elif stage.mode == 'dop-rerank':
 					if chart:
-						parsetrees = doprerank(chart, sent, stage.k,
+						parsetrees, msg1 = doprerank(chart, sent, stage.k,
 								self.stages[n - 1].grammar, stage.grammar)
-						msg1 = 're-ranked %d parse trees. ' % len(parsetrees)
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
@@ -521,7 +520,8 @@ class Parser(object):
 							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
 					# raise ValueError('ERROR: expected successful parse. '
 					# 		'sent %s, %s.' % (nsent, stage.name))
-			numitems = len(chart.getitems()) if hasattr(chart, 'getitems') else 0
+			numitems = (len(chart.getitems())
+					if hasattr(chart, 'getitems') else 0)
 
 			# do disambiguation of resulting parse forest
 			if sent and chart and stage.mode not in (
@@ -572,12 +572,14 @@ class Parser(object):
 					print('sum of probabitilies: %g\n' %
 							sum((prob[1] if isinstance(prob, tuple) else prob)
 								for _, prob, _ in besttrees))
-				if n == 0:
+				if not stage.prune:
 					item = next(iter(chart.rankededges))
 					totalgolditems = sum(1 for node in tree.subtrees())
 					golditems = sum(
 							1 for node in tree.subtrees()
 							if chart.toitem(node, item) in chart)
+					msg += ('%d/%d gold items in derivations\n\t' % (
+							golditems, totalgolditems))
 			if self.verbosity >= 4:
 				print('Chart:\n%s' % chart)
 
