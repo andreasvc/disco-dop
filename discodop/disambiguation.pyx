@@ -919,9 +919,8 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	NB: this algorithm could also be used to determine the probability of
 	derivations, but then the input would have to distinguish whether nodes are
 	internal nodes of fragments, or whether they join two fragments."""
-	neginf = float('-inf')
-	cdef dict chart = {}  # chart[label, bitset] = prob
-	cdef tuple a, b, c
+	cdef dict chart = {}  # chart[bitset][label] = prob
+	cdef dict cell  # chart[bitset] = cell; cell[label] = prob
 	cdef Rule *rule
 	cdef LexicalRule lexrule
 	cdef object n  # pyint
@@ -935,42 +934,43 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	# add all matching POS tags
 	for n, pos in tree.pos():
 		word = sent[n]
+		chart[1 << n] = cell = {}
 		for lexrule in fine.lexicalbyword[word]:
 			if (fine.tolabel[lexrule.lhs] == pos
 					or fine.tolabel[lexrule.lhs].startswith(pos + '@')):
-				chart[lexrule.lhs, 1 << n] = -lexrule.prob
+				cell[lexrule.lhs] = -lexrule.prob
 
 	# do post-order traversal (bottom-up)
 	for node, (r, yf) in list(zip(tree.subtrees(),
 			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
+		chart[node.bitset] = cell = {}
 		prod = coarse.rulenos[prodrepr(r, yf)]
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
 				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
-				b = (rule.rhs1, node.bitset)
-				if b in chart:
-					a = (rule.lhs, node.bitset)
-					if a in chart:
-						chart[a] = logprobadd(chart[a], -rule.prob + chart[b])
+				if rule.rhs1 in cell:
+					if rule.lhs in cell:
+						cell[rule.lhs] = logprobadd(cell[rule.lhs],
+								-rule.prob + cell[rule.rhs1])
 					else:
-						chart[a] = (-rule.prob + chart[b])
+						cell[rule.lhs] = (-rule.prob + cell[rule.rhs1])
 		elif len(node) == 2:  # binary node
+			leftcell = chart[node[0].bitset]
+			rightcell = chart[node[1].bitset]
 			for ruleno in fine.rulemapping[prod]:
 				rule = &(fine.bylhs[0][fine.revmap[ruleno]])
-				b = (rule.rhs1, node[0].bitset)
-				c = (rule.rhs2, node[1].bitset)
-				if b in chart and c in chart:
-					a = (rule.lhs, node.bitset)
-					if a in chart:
-						chart[a] = logprobadd(chart[a],
-							(-rule.prob + chart[b] + chart[c]))
+				if (rule.rhs1 in leftcell and rule.rhs2 in rightcell):
+					newprob = (-rule.prob
+							+ leftcell[rule.rhs1] + rightcell[rule.rhs2])
+					if rule.lhs in cell:
+						cell[rule.lhs] = logprobadd(cell[rule.lhs], newprob)
 					else:
-						chart[a] = -rule.prob + chart[b] + chart[c]
+						cell[rule.lhs] = newprob
 		else:
 			raise ValueError('expected binary tree without empty nodes.')
-	return chart.get((fine.toid[tree.label], tree.bitset), neginf)
+	return chart[tree.bitset].get(fine.toid[tree.label], float('-inf'))
 
 
 cdef str prodrepr(r, yf):
