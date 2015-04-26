@@ -1011,7 +1011,7 @@ def main():
 	infilename = (args[1] if len(args) >= 2 and args[1] != '-'
 			else sys.stdin.fileno())
 	outfilename = (args[2] if len(args) == 3 and args[2] != '-'
-			else sys.stdin.fileno())
+			else sys.stdout.fileno())
 
 	# open corpus
 	corpus = treebank.READERS[opts.get('--inputfmt', 'export')](
