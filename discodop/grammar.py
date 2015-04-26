@@ -202,11 +202,13 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None,
 		nodefreq(tree, dectree, fd, ntfd)
 		for (a, avar), (b, bvar) in zip(prods, uprods):
 			assert avar == bvar
-			for c in cartpi([(x, ) if x == y else (x, y) for x, y in zip(a, b)]):
+			for c in cartpi([(x, ) if x == y else (x, y)
+					for x, y in zip(a, b)]):
 				rules[c, avar] += 1
 	if extrarules is not None:
 		for rule in extrarules:
 			rules[rule] += extrarules[rule]
+			fd[rule[0]] += extrarules[rule]
 
 	def weights(rule):
 		""":returns: rule with RFE and EWE probability."""
