@@ -16,7 +16,7 @@ discodop:
 
 docs:
 	mkdir -p ~/.local/man/man1
-	cd docs && make man && cp _build/man/discodop.1 ~/.local/man/man1/
+	cd docs && make man && cp _build/man/* ~/.local/man/man1/
 	cd docs && make html
 
 test: all inplace

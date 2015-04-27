@@ -19,57 +19,12 @@ from discodop.treebank import READERS, termindices, openread
 if sys.version[0] >= '3':
 	from functools import reduce  # pylint: disable=redefined-builtin
 
-USAGE = '''Read off grammars from treebanks.
+SHORTUSAGE = '''Read off grammars from treebanks.
 Usage: %(cmd)s <type> <input> <output> [options]
 or: %(cmd)s param <parameter-file> <output-directory>
 or: %(cmd)s info <rules-file>
-or: %(cmd)s merge (rules|lexicon|fragments) <input1> <input2>... <output>
-
-type is one of:
-   pcfg            Probabilistic Context-Free Grammar (treebank grammar).
-   plcfrs          Probabilistic Linear Context-Free Rewriting System
-                   (discontinuous treebank grammar).
-   ptsg            Probabilistic Tree-Substitution Grammar.
-   dopreduction    All-fragments PTSG using Goodman's reduction.
-   doubledop       PTSG from recurring fragmensts.
-   param           Extract a series of grammars according to parameters.
-   info            Print statistics for PLCFRS/bitpar rules.
-   merge           Interpolate given sorted grammars into a single grammar.
-                   Input can be a rules, lexicon or fragment file.
-                   To ensure properly sorted input with GNU sort,
-                   disable locale specific settings:
-                   $ discodop grammar merge rules
-                     <(zcat plcfrs.rules.gz | LC_ALL=C sort)
-                     <(zcat dop.rules.gz | LC_ALL=C sort)
-
-input is a binarized treebank, or in the 'ptsg' case, weighted fragments in the
-same format as the output of the discodop fragments command;
-input may contain discontinuous constituents, except for the 'pcfg' case.
-output is the base name for the filenames to write the grammar to;
-the filenames will be '<output>.rules' and '<output>.lex'.
-NB: both the info and merge commands expect grammars to be sorted by LHS,
-such as the ones created by this tool.
-
-Options:
-  --inputfmt=(%(fmts)s)
-             Input treebank format [default: export].
-  --inputenc=(utf-8|iso-8859-1|...)
-             Treebank encoding [default: utf-8].
-  --dopestimator=(rfe|ewe|shortest|...)
-             When extracting a DOP grammar, the estimator to use for
-             assigning weights.
-  --numproc=(1|2|...)
-             Number of processes to start [default: 1].
-             Only relevant for double dop fragment extraction.
-  --gzip     Compress output with gzip, view with zless &c.
-  --packed   Use packed graph encoding for DOP reduction
-  --bitpar   Produce an unbinarized grammar for use with bitpar
-  -s X       Start symbol to use for PTSG.
-
-When a PCFG is requested, or the input format is 'bracket' (Penn format), the
-output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
-Output encoding will be ASCII for the rules, and utf-8 for the lexicon.\
-''' % dict(cmd=sys.argv[0], fmts='|'.join(READERS))
+or: %(cmd)s merge (rules|lexicon|fragments) <input1> <input2>... <output>\
+''' % dict(cmd=sys.argv[0])
 
 RULERE = re.compile(
 		r'(?P<RULE1>(?P<LHS1>[^ \t]+).*)\t'
@@ -208,7 +163,7 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None,
 	if extrarules is not None:
 		for rule in extrarules:
 			rules[rule] += extrarules[rule]
-			fd[rule[0]] += extrarules[rule]
+			fd[rule[0][0]] += extrarules[rule]
 
 	def weights(rule):
 		""":returns: rule with RFE and EWE probability."""
@@ -987,12 +942,9 @@ def main():
 			treebankfile, grammarfile = args[1:]
 	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r' % err, file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
-	if '--help' in opts or '-h' in opts:
-		print(USAGE)
-		return
 	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
 			'param', 'info', 'merge'):
 		raise ValueError('unrecognized model: %r' % model)

@@ -28,55 +28,6 @@ except ImportError:
 	from discodop.treedist import newtreedist as newtreedist, newtreedist
 
 SHORTUSAGE = 'Usage: %s <gold> <parses> [param] [options]' % sys.argv[0]
-USAGE = '''\
-Evaluation of (discontinuous) parse trees, following EVALB as much as possible.
-
-%s
-where gold and parses are files with parse trees, param is an EVALB parameter
-file, and options may consist of:
-
-  --cutofflen=n    Overrides the sentence length cutoff of the parameter file.
-  --verbose        Print table with per sentence information.
-  --debug          Print debug information with per sentence bracketings etc.
-  --disconly       Only evaluate discontinuous bracketings (affects bracketing
-                   scores: precision, recall, f-measure, exact match).
-  --goldfmt|--parsesfmt=(%s)
-                   Specify corpus format [default: export].
-  --fmt=(...)      Shorthand for setting both --goldfmt and --parsesfmt.
-  --goldenc|--parsesenc=(utf-8|iso-8859-1|...)
-                   Specify encoding [default: utf-8].
-  --la             Enable leaf-ancestor evaluation.
-  --ted            Enable tree-edit distance evaluation.
-  --headrules=x    Specify file with rules for head assignment of constituents
-                   that do not already have a child marked as head; this
-                   enables dependency evaluation.
-  --functions=x    'remove'=default: strip functions off labels,
-                   'leave': leave syntactic labels as is,
-                   'add': evaluate both syntactic categories and functions,
-                   'replace': only evaluate function tags.
-  --morphology=x   'no'=default: only evaluate POS tags,
-                   'add': concatenate morphology tags to POS tags,
-                   'replace': replace POS tags with morphology tags,
-                   'between': add morphological node between POS tag and word.
-
-The parameter file should be encoded in UTF-8 and supports the following
-options (in addition to those described in the README of EVALB):
-  DELETE_ROOT_PRETERMS
-                   if nonzero, ignore preterminals directly under the root in
-                   gold trees for scoring purposes.
-  DISC_ONLY        if nonzero, only consider discontinuous bracketings
-                   (affects precision, recall, f-measure, exact match).
-  LA               if nonzero, report leaf-ancestor scores [default: disabled].
-  TED              if nonzero, report tree-edit distance scores; disabled by
-                   default as these are slow to compute.
-  DEBUG            -1 only print summary table
-                   0 additionally, print category / tag breakdowns (default)
-                     (after application of cutoff length).
-                   1 give per-sentence results ('--verbose')
-                   2 give detailed information for each sentence ('--debug')
-  MAX_ERROR        this value is ignored, no errors are tolerated.
-                   the parameter is accepted to support usage of unmodified
-                   EVALB parameter files. ''' % (SHORTUSAGE, '|'.join(READERS))
 
 HEADER = '''
    Sentence                 Matched   Brackets            Corr   POS
@@ -659,15 +610,12 @@ def main():
 		opts, args = gnu_getopt(sys.argv[1:], 'h', flags | options)
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
-	if '--help' in opts or '-h' in opts:
-		print(USAGE)
-		return
-	elif len(args) < 2 or len(args) > 3:
+	if len(args) < 2 or len(args) > 3:
 		print('error: Wrong number of arguments.', file=sys.stderr)
-		print(SHORTUSAGE if len(args) else USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	goldfile, parsesfile = args[:2]
 	param = readparam(args[2] if len(args) == 3 else None)

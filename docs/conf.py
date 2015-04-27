@@ -42,7 +42,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Disco-DOP'
-copyright = u'2014, Andreas van Cranenburgh'
+copyright = u'2015, Andreas van Cranenburgh'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -221,13 +221,16 @@ latex_documents = [
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
-man_pages = [
-    ('discodop', 'discodop', u'Disco-DOP Documentation',
-     [u'Andreas van Cranenburgh'], 1)
-]
+
+description = u'Disco-DOP Documentation'
+authors = [u'Andreas van Cranenburgh']
+man_pages = [('discodop', 'discodop', description, authors, 1)] + [
+		('cli/' + sub, 'discodop-' + sub, description, authors, 1)
+		for sub in ('eval fragments gen grammar parser runexp '
+			'treedraw treesearch treetransforms').split()]
 
 # If true, show URL addresses after external links.
-#man_show_urls = False
+man_show_urls = True
 
 
 # -- Options for Texinfo output -----------------------------------------------
@@ -257,7 +260,7 @@ texinfo_documents = [
 epub_title = u'Disco-DOP'
 epub_author = u'Andreas van Cranenburgh'
 epub_publisher = u'Andreas van Cranenburgh'
-epub_copyright = u'2014, Andreas van Cranenburgh'
+epub_copyright = u'2015, Andreas van Cranenburgh'
 
 # The language of the text. It defaults to the language option
 # or en if the language is not set.

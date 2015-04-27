@@ -35,39 +35,10 @@ from discodop.heads import saveheads, readheadrules
 from discodop.punctuation import punctprune, applypunct
 from discodop.functiontags import applyfunctionclassifier
 
-USAGE = '''
+SHORTUSAGE = '''
 usage: %(cmd)s [options] <grammar/> [input [output]]
-or:    %(cmd)s --simple [options] <rules> <lexicon> [input [output]]
-
-'grammar/' is a directory with a model produced by "discodop runexp".
-When no filename is given, input is read from standard input and the results
-are written to standard output. Input should contain one sentence per line
-with space-delimited tokens. Output consists of bracketed trees in
-selected format. Files must be encoded in UTF-8.
-
-General options:
-  -x             Input is one token per line, sentences separated by two
-                 newlines (like bitpar).
-  -b k           Return the k-best parses instead of just 1.
-  --prob         Print probabilities as well as parse trees.
-  --tags         Tokens are of the form "word/POS"; give both to parser.
-  --fmt=(export|bracket|discbracket|alpino|conll|mst|wordpos)
-                 Format of output [default: discbracket].
-  --numproc=k    Launch k processes, to exploit multiple cores.
-  --simple       Parse with a single grammar and input file; similar interface
-                 to bitpar. The files 'rules' and 'lexicon' define a binarized
-                 grammar in bitpar or PLCFRS format.
-  --verbosity=x  0 <= x <= 4. Same effect as verbosity in parameter file.
-
-Options for simple mode:
-  -s x           Use "x" as start symbol instead of default "TOP".
-  --bt=file      Apply backtransform table to recover TSG derivations.
-  --obj=(mpd|mpp|mrp|mcc|shortest|sl-dop)
-                 Objective function to maximize [default: mpd].
-  -m x           Use x derivations to approximate objective functions;
-                 mpd and shortest require only 1.
-  --bitpar       Use bitpar to parse with an unbinarized grammar.
-''' % dict(cmd=sys.argv[0], fmt=','.join(WRITERS))
+or:    %(cmd)s --simple [options] <rules> <lexicon> [input [output]]\
+		''' % dict(cmd=sys.argv[0])
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames
@@ -137,14 +108,11 @@ def main():
 		opts, args = gnu_getopt(sys.argv[1:], 'hb:s:m:x', options)
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
-	if '--help' in opts or '-h' in opts:
-		print(USAGE)
-		return
 	if not 1 <= len(args) <= 4:
 		print('error: incorrect number of arguments', file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	for n, filename in enumerate(args):
 		if not os.path.exists(filename):
@@ -158,7 +126,7 @@ def main():
 	if '--simple' in opts:
 		if not 2 <= len(args) <= 4:
 			print('error: incorrect number of arguments', file=sys.stderr)
-			print(USAGE)
+			print(SHORTUSAGE)
 			sys.exit(2)
 		rules = openread(args[0]).read()
 		lexicon = openread(args[1]).read()
@@ -514,10 +482,11 @@ class Parser(object):
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
-				if (n > 0 and not chart and not noparse
+				if (n > 0 and stage.prune and not chart and not noparse
 						and stage.split == self.stages[n - 1].split):
 					logging.error('ERROR: expected successful parse. '
-							'sent: %s\nstage: %s.', ' '.join(sent), stage.name)
+							'sent: %s\nstage %d: %s.',
+							' '.join(sent), n, stage.name)
 					# raise ValueError('ERROR: expected successful parse. '
 					# 		'sent %s, %s.' % (nsent, stage.name))
 			numitems = (len(chart.getitems())

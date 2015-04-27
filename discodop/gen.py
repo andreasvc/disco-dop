@@ -9,8 +9,7 @@ from collections import namedtuple, defaultdict
 from array import array
 from random import random
 
-USAGE = '''\
-Generate random sentences with a PLCFRS or PCFG.
+SHORTUSAGE = '''Generate random sentences with a PLCFRS or PCFG.
 Reads grammar from a text file in PLCFRS or bitpar format.
 Usage: %(cmd)s [--verbose] <rules> <lexicon>
 or: %(cmd)s --test
@@ -258,12 +257,9 @@ def main():
 	verbose = "--verbose" in sys.argv
 	if verbose:
 		sys.argv.remove('--verbose')
-	if '--help' in sys.argv or '-h' in sys.argv:
-		print(USAGE)
-		return
 	if len(sys.argv) != 3:
 		print("incorrect number of arguments:", sys.argv[1:], file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	rules = (gzip.open if sys.argv[1].endswith(".gz") else open)(sys.argv[1])
 	lexicon = codecs.getreader('utf-8')((gzip.open

@@ -34,7 +34,7 @@ from discodop import treebank, treebanktransforms, treetransforms, \
 from discodop.tree import Tree
 from discodop.containers import Grammar
 
-USAGE = '''Usage: %s <parameter file> [--rerun]
+SHORTUSAGE = '''Usage: %s <parameter file> [--rerun]
 
 If a parameter file is given, an experiment is run. See the file sample.prm for
 an example parameter file. To repeat an experiment with an existing grammar,
@@ -1054,12 +1054,9 @@ def main(argv=None):
 		pass
 	if argv is None:
 		argv = sys.argv
-	if '--help' in argv or '-h' in argv:
-		print(USAGE)
-		return
 	if len(argv) == 1:
 		print('error: incorrect number of arguments', file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	elif '--tepacoc' in argv:
 		parsetepacoc()

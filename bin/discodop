@@ -25,7 +25,9 @@ if len(sys.argv) <= 1 or sys.argv[1] not in dict(COMMANDS):
 	for a, b in COMMANDS:
 		print('   %s  %s' % (a.ljust(15), b))
 	print('for additional instructions issue: %s <command> --help' % thiscmd,
-                file=sys.stderr)
+		file=sys.stderr)
+elif len(sys.argv) == 3 and sys.argv[2] in ('-h', '--help'):
+	os.execlp('man', 'man', 'discodop-%s' % sys.argv[1])
 else:
 	cmd = sys.argv[1]
 	sys.argv[0] = os.path.basename(sys.argv.pop(0)) + ' ' + cmd

@@ -80,7 +80,7 @@ example:
             prune=True, splitprune=True, k=1000),
         dict(name='dop', mode='plcfrs',
             prune=True, k=50, m=1000,
-            dop=True, usedoubledop=False,
+            dop='doubledop',
             estimator='rfe', objective = 'mpp')
     ],
     traincorpus=dict(
@@ -97,7 +97,7 @@ example:
         method='default', factor='right',
         h=1, v=1),
 
-See the documentation on the available :ref:`parameters <params>`.
+See the documentation on the available :doc:`parameters <params>`.
 These parameters can be invoked by executing::
 
     $ discodop runexp filename.prm

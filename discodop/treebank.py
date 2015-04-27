@@ -4,6 +4,7 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import os
 import re
+import sys
 import gzip
 import codecs
 import xml.etree.cElementTree as ElementTree
@@ -20,13 +21,14 @@ from discodop.heads import applyheadrules, readheadrules, ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
-EXPORTHEADER = '''%% word\tlemma\ttag\tmorph\tedge\tparent\tsecedge\n'''
-POSRE = re.compile(r"\(([^() ]+) [^ ()]+\)")
-TERMINALSRE = re.compile(r" ([^ ()]+)\)")
-EXPORTNONTERMINAL = re.compile(r"^#([0-9]+)$")
-LEAVESRE = re.compile(r" ([^ ()]*)\)")
-FRONTIERNTRE = re.compile(r" \)")
-INDEXRE = re.compile(r" [0-9]+\)")
+EXPORTHEADER = '%% word\tlemma\ttag\tmorph\tedge\tparent\tsecedge\n'
+EXPORTNONTERMINAL = re.compile(r'^#([0-9]+)$')
+POSRE = re.compile(r'\(([^() ]+) [^ ()]+\)')
+TERMINALSRE = re.compile(r' ([^ ()]+)\)')
+LEAVESRE = re.compile(r' ([^ ()]*)\)')
+FRONTIERNTRE = re.compile(r' \)')
+INDEXRE = re.compile(r' [0-9]+\)')
+SUPERFLUOUSSPACERE = re.compile(r'\)\s+(?=\))')
 
 
 class Item(object):
@@ -100,7 +102,8 @@ class CorpusReader(object):
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self.extraheadrules = extraheadrules
 		self._encoding = encoding
-		self._filenames = sorted(glob(path), key=numbase)
+		self._filenames = (sorted(glob(path), key=numbase)
+				if path != '-' else ['-'])
 		for opts, opt in (
 				((None, 'leave', 'add', 'replace', 'remove', 'between'),
 					functions),
@@ -208,10 +211,18 @@ class BracketCorpusReader(CorpusReader):
 
 	def _parse(self, block):
 		c = count()
+		block = SUPERFLUOUSSPACERE.sub(')', block)
 		tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d)' % next(c), block))
-		# TODO: parse Penn TB functions and traces, put into .source attribute
-		if self.functions == 'remove':
-			handlefunctions(self.functions, tree)
+		for a in tree.subtrees():
+			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
+				x = a.label.find(char)
+				if x > 0:
+					if char == '-' and not a.label[x + 1:].isdigit():
+						if a.source is None:
+							a.source = [None] * len(FIELDS)
+						a.source[FUNC] = a.label[x + 1:].rstrip('=0123456789')
+					if self.functions == 'remove':
+						a.label = a.label[:x]
 		sent = [a or None for a in LEAVESRE.findall(block)]
 		return Item(tree, sent, None, block)
 
@@ -429,7 +440,8 @@ def brackettree(treestr, sent, brackets, strtermre):
 			sent.append(x)
 			return next(cnt)
 
-		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)', treestr),
+		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)',
+				SUPERFLUOUSSPACERE.sub(')', treestr)),
 				parse_leaf=substleaf, brackets=brackets)
 	else:  # disc. trees with integer indices as terminals
 		tree = ParentedTree.parse(treestr, parse_leaf=int, brackets=brackets)
@@ -961,6 +973,7 @@ def termindices(treestr):
 	>>> print(' '.join(sent))
 	Mary walks"""
 	cnt = count()
+	treestr = SUPERFLUOUSSPACERE.sub(')', treestr)
 	tree = LEAVESRE.sub(lambda _: ' %d)' % next(cnt), treestr)
 	sent = [a or None for a in LEAVESRE.findall(treestr)]
 	return tree, sent
@@ -998,11 +1011,13 @@ def removeterminals(tree, sent, func):
 
 def removeemptynodes(tree, sent):
 	"""Remove any empty nodes, and any empty ancestors."""
-	removeterminals(tree, sent, lambda x, _: x in (None, '', '-NONE-'))
+	removeterminals(tree, sent, lambda x, y: x in (None, '') or y == '-NONE-')
 
 
 def openread(filename, encoding='utf8'):
 	"""Open text file for reading; decompress .gz files on-the-fly."""
+	if filename == '-':
+		return io.open(sys.stdin.fileno(), encoding=encoding)
 	if filename.endswith('.gz'):
 		return codecs.getreader(encoding)(gzip.open(filename))
 	else:

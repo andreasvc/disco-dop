@@ -1,5 +1,3 @@
-.. _params:
-
 Parser parameters
 =================
 

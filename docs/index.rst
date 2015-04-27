@@ -21,3 +21,8 @@ sentences using Tree-Substitution Grammar (TSG).
 
    intro
    ref
+
+.. toctree::
+   :glob:
+
+   cli/*

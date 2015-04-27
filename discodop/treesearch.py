@@ -27,33 +27,8 @@ from discodop.tree import Tree
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 
-USAGE = '''Search through treebanks with queries.
-Usage: %s [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...
-
-Options:
-  -e, --engine=<x>
-                  Select query engine; possible options:
-                  tgrep2: tgrep2 queries (default); files are bracket corpora
-                          (optionally precompiled into tgrep2 format).
-                  xpath: arbitrary xpath queries; files are dact XML corpora.
-                  regex: search through tokenized sentences with Python regexps
-  -c, --counts    report counts
-  -s, --sents     output sentences (default)
-  -t, --trees     output visualizations of trees
-  -b, --brackets  output raw trees in the original corpus format
-  -o, --only-matching
-                  only output the matching portion
-                  with --sents, --trees, and --brackets
-  -m, --max-count=<n>
-                  with --counts: only consider first n sentences;
-                  otherwise: stop after n matches.
-  -n, --line-number
-                  Prefix each line of output with the sentence number within
-                  its input file.
-  -M, --macros=<x>
-                  file with macros
-  --numthreads=<x>
-                  Number of concurrent threads to use.
+SHORTUSAGE = '''Search through treebanks with queries.
+Usage: %s [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...\
 ''' % sys.argv[0]
 CACHESIZE = 1024
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
@@ -671,12 +646,9 @@ def main():
 			raise ValueError('enter one or more corpus files')
 	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r' % err, file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
-	if '--help' in opts or '-h' in opts:
-		print(USAGE)
-		return
 	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
 	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))

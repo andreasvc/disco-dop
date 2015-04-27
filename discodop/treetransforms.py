@@ -41,74 +41,11 @@ except ImportError:
 			prev = arg
 		return result
 
-USAGE = '''Treebank binarization and conversion.
+SHORTUSAGE = '''Treebank binarization and conversion.
 Usage: %s [options] <action> [input [output]]
 where input and output are treebanks; standard in/output is used if not given.
-action is one of:
-    none
-    binarize [-h x] [-v x] [--factor=left|right]
-    optimalbinarize [-h x] [-v x]
-    unbinarize
-    introducepreterminals
-    splitdisc [--markorigin]
-    mergedisc
-    transform [--reverse] [--transforms=(NAME1,NAME2...)]
-
-options may consist of:
-  --inputfmt=(%s)
-  --outputfmt=(%s)
-                 Treebank format [default: export].
-                 Selecting the formats 'conll' or 'mst' results in an unlabeled
-                 dependency conversion and requires the use of heuristic head
-                 rules (--headrules).
-  --fmt=x        Shortcut to specify both input and output formats.
-  --inputenc|--outputenc|--enc=(utf-8|iso-8859-1|...)
-                 Treebank encoding [default: utf-8].
-  --slice=n:m    select a range of sentences from input starting with n,
-                 up to but not including m; as in Python, n or m can be left
-                 out or negative, and the first index is 0.
-  --renumber     Replace sentence IDs with numbers starting from 1,
-                 padded with 8 spaces.
-  --maxlen=n     only select sentences with up to n tokens.
-  --punct=x      'leave': (default): leave punctuation as is
-                 'remove': remove any punctuation
-                 'move': re-attach punctuation to nearest constituent
-                       to minimize discontinuity
-                 'restore': attach punctuation under root node
-  --functions=x  'leave': (default): leave syntactic labels as is
-                 'remove': strip away hyphen-separated function labels
-                 'add': concatenate syntactic categories with functions
-                 'replace': replace syntactic labels w/grammatical functions
-  --morphology=x 'no' (default): use POS tags as preterminals
-                 'add': concatenate morphological information to POS tags,
-                     e.g., DET/sg.def
-                 'replace': use morphological information as preterminal label
-                 'between': insert node with morphological information between
-                     POS tag and word, e.g., (DET (sg.def the))
-  --lemmas=x     'no' (default): do not use lemmas
-                 'add': concatenate lemmas to terminals, e.g., word/lemma
-                 'replace': use lemma instead of terminals
-                 'between': insert node with lemma between POS tag and word,
-                     e.g., (NN (man men))
-  --ensureroot=x add root node labeled 'x' to trees if not already present.
-  --headrules=x  turn on head finding; affects binarization.
-                 reads rules from file "x" (e.g., "negra.headrules").
-  --extraheadrules=(ptb|dptb)
-                 turn on additional, built-in head rules; requires previous
-                 option; [default: disabled].
-  --factor=(left|right)
-                 specify left- or right-factored binarization [default: right].
-  -h n           horizontal markovization. default: infinite (all siblings)
-  -v n           vertical markovization. default: 1 (immediate parent only)
-  --markhead     prepend head to markovized labels.
-  --leftunary    make initial / final productions of binarized constituents
-  --rightunary   ... unary productions.
-  --tailmarker   mark rightmost child (the head if headrules are applied), to
-                 avoid cyclic rules when --leftunary and --rightunary are used.
-  --transforms=x specify names of tree transformations to apply; for possible
-                 names, cf. treebanktransforms module.
-  --reverse      reverse the transformations given by --transforms''' % (
-			sys.argv[0], '|'.join(treebank.READERS), '|'.join(treebank.WRITERS))
+action is one of: none binarize optimalbinarize unbinarize
+	introducepreterminals splitdisc mergedisc transform''' % sys.argv[0]
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
@@ -978,7 +915,7 @@ def main():
 	actions = {'none', 'transform', 'splitdisc', 'binarize', 'optimalbinarize',
 			'unbinarize', 'mergedisc', 'introducepreterminals'}
 	flags = ('help markorigin markhead leftunary rightunary tailmarker '
-			'renumber reverse direction').split()
+			'renumber reverse removeempty direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= extreaheadrules= functions= morphology= '
 			'lemmas= factor= fmt= markorigin= maxlen= enc= transforms= '
@@ -989,12 +926,9 @@ def main():
 			raise GetoptError('expected 1, 2, or 3 positional arguments')
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
-		print(USAGE)
+		print(SHORTUSAGE)
 		sys.exit(2)
 	opts, action = dict(opts), args[0]
-	if '--help' in opts:  # -h is already used but will print help w/o argument
-		print(USAGE)
-		return
 	if action not in actions:
 		print('unrecognized action: %r\navailable actions: %s' % (
 				action, ', '.join(actions)), file=sys.stderr)
@@ -1009,7 +943,7 @@ def main():
 				file=sys.stderr)
 		sys.exit(2)
 	infilename = (args[1] if len(args) >= 2 and args[1] != '-'
-			else sys.stdin.fileno())
+			else '-')
 	outfilename = (args[2] if len(args) == 3 and args[2] != '-'
 			else sys.stdout.fileno())
 
@@ -1019,7 +953,9 @@ def main():
 			encoding=opts.get('--inputenc', 'utf8'),
 			headrules=opts.get('--headrules'),
 			extraheadrules=opts.get('--extraheadrules'),
-			ensureroot=opts.get('--ensureroot'), punct=opts.get('--punct'),
+			ensureroot=opts.get('--ensureroot'),
+			removeempty='--removeempty' in opts,
+			punct=opts.get('--punct'),
 			functions=opts.get('--functions'),
 			morphology=opts.get('--morphology'),
 			lemmas=opts.get('--lemmas'))

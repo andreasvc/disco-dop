@@ -945,7 +945,9 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 			lcfrsproductions(tree, sent)))[::-1]:
 		if not isinstance(node[0], Tree):
 			continue
-		chart[node.bitset] = cell = {}
+		if node.bitset not in chart:
+			chart[node.bitset] = {}
+		cell = chart[node.bitset]
 		prod = coarse.rulenos[prodrepr(r, yf)]
 		if len(node) == 1:  # unary node
 			for ruleno in fine.rulemapping[prod]:
