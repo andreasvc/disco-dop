@@ -30,7 +30,7 @@ from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import ParentedTree
 from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
-from discodop.treebank import WRITERS, writetree, openread
+from discodop.treebank import writetree, openread
 from discodop.heads import saveheads, readheadrules
 from discodop.punctuation import punctprune, applypunct
 from discodop.functiontags import applyfunctionclassifier
@@ -47,7 +47,7 @@ DEFAULTSTAGE = dict(
 		split=False,  # split disc. nodes VP_2[101] as { VP*[100], VP*[001] }
 		splitprune=False,  # treat VP_2[101] as {VP*[100], VP*[001]} for pruning
 		markorigin=False,  # mark origin of split nodes: VP_2 => {VP*1, VP*2}
-		collapselabels=None,  # options: None, 'head', 'all'. TODO: implement.
+		collapselabels=None,  # options: None, 'head', 'all'.
 		k=50,  # no. of coarse pcfg derivations to prune with; k=0: filter only
 		dop=None,  # DOP mode: dopreduction, doubledop, dop1
 		binarized=True,  # for doubledop, whether to binarize extracted grammar

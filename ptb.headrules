@@ -1,51 +1,66 @@
- %/*******************************************************************************
- %* File ptb.headrules
- %* 
- %* Authors:
- %*    Kilian Evang
- %*    
- %* Copyright:
- %*    Kilian Evang, 2011
- %* 
- %* This file is part of rparse, see <www.wolfgang-maier.net/rparse>.
- %* 
- %* TuLiPA is free software; you can redistribute it and/or modify it under
- %* the terms of the GNU General Public License as published by the Free 
- %* Software Foundation; either version 2 of the License, or (at your option) 
- %* any later version.
- %* 
- %* TuLiPA is distributed in the hope that it will be useful, but WITHOUT ANY 
- %* WARRANTY; without even the implied warranty of MERCHANTABILITY 
- %* or FITNESS FOR A PARTICULAR PURPOSE.  See the  GNU General Public 
- %* License for more details.
- %* 
- %* You should have received a copy of the GNU General Public License along 
- %* with this program.  If not, see <http://www.gnu.org/licenses/>.
- %******************************************************************************/
- 
- % Head rules for PTB (WSJ) from Collins (1999, p. 240)
+% Head rules for PTB (WSJ) based on Collins (1999 p. 240);
+% modifications from Stanford Parser: trees/ModCollinsHeadFinder.java
 
-adjp left-to-right nns qp nn $ advp jj vbn vbg adjp jjr np jjs dt fw rbr rbs sbar rb
-advp right-to-left rb rbr rbs fw advp to cd jjr jj in np jjs nn
-conjp right-to-left cc rb in
-frag right-to-left
-intj left-to-right
-lst right-to-left ls :
-nac left-to-right nn nns nnp nnps np nac ex $ cd qp prp vbg jj jjs jjr adjp fw
-np right-to-left nn nns nnp nnps np nac ex $ cd qp prp vbg jj jjs jjr adjp dt fw rb sym prp$
-pp right-to-left in to vbg vbn rp fw
-prn left-to-right
-prt right-to-left rp
-qp left-to-right $ in nns nn jj rb dt cd ncd qp jjr jjs
-rrc right-to-left vp np advp adjp pp
-s left-to-right to in vp s sbar adjp ucp np
-sbar left-to-right whnp whpp whadvp whadjp in dt s sq sinv sbar frag
-sbarq left-to-right sq s sinv sbarq frag
-sinv left-to-right vbz vbd vbp vb md vp s sinv adjp np
-sq left-to-right vbz vbd vbp vb md vp sq
-ucp right-to-left
-vp left-to-right to vbd vbn md vbz vb vbg vbp vp adjp nn nns np
-whadjp left-to-right cc wrb jj adjp
-whadvp right-to-left cc wrb
-whnp left-to-right wdt wp wp$ whadjp whpp whnp
-whpp right-to-left in to fw
+ADJP left $
+ADJP rightdis NNS NN JJ QP VBN VBG
+ADJP left ADJP
+ADJP rightdis JJP JJR JJS DT RB RBR CD IN VBD
+ADJP left ADVP NP
+
+JJP left NNS NN $ QP JJ VBN VBG ADJP JJP JJR NP JJS DT FW RBR RBS SBAR RB
+
+ADVP left ADVP IN
+ADVP rightdis RB RBR RBS JJ JJR JJS
+ADVP rightdis RP DT NN CD NP VBN NNP CC FW NNS ADJP NML
+
+CONJP right CC RB IN
+FRAG right
+INTJ left
+LST right LS :
+
+NAC left NN NNS NML NNP NNPS NP NAC EX $ CD QP PRP VBG JJ JJS JJR ADJP JJP FW
+
+PP right IN TO VBG VBN RP FW JJ SYM
+PP left PP
+
+PRN left VP NP PP SQ S SINV SBAR ADJP JJP ADVP INTJ WHNP NAC VBP JJ NN NNP
+PRT right RP
+QP left $ IN NNS NN JJ CD PDT DT RB NCD QP JJR JJS
+
+RRC left RRC
+RRC right VP ADJP JJP NP PP ADVP
+
+S left TO VP S FRAG SBAR ADJP JJP UCP NP
+SBAR left WHNP WHPP WHADVP WHADJP IN DT S SQ SINV SBAR FRAG
+SBARQ left SQ S SINV SBARQ FRAG SBAR
+
+SINV left VBZ VBD VBP VB MD VBN VP S SINV ADJP JJP NP
+SQ left VBZ VBD VBP VB MD AUX AUXG VP SQ
+UCP right
+
+VP left TO VBD VBN MD VBZ VB VBG VBP VP AUX AUXG ADJP JJP NN NNS JJ NP NNP
+
+WHADJP left WRB WHADVP RB JJ ADJP JJP JJR
+WHADVP right WRB WHADVP
+WHNP left WDT WP WP$ WHADJP WHPP WHNP
+WHPP right IN TO FW
+
+X right S VP ADJP JJP NP SBAR PP X
+
+% Added WHNP and WHADJP for disc. PTB
+NP rightdis NN NNP NNPS NNS NML NX POS JJR
+NP left NP WHNP PRP
+NP rightdis $ ADJP WHADJP JJP PRN FW
+NP right CD
+NP rightdis JJ JJS RB QP DT WDT RBR ADVP WHADVP
+NX like NP
+
+NML like NP
+
+POSSP right POS
+
+ROOT left S SQ SINV SBAR FRAG
+TOP like ROOT
+
+ADV right RB RBR RBS FW ADVP TO CD JJR JJ IN NP NML JJS NN
+

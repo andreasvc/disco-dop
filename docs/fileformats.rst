@@ -181,16 +181,20 @@ syntactic categories.
 The file is case insensitive. Lines starting with ``%`` are treated as comments
 and ignored. Each line specifies a rule of the form::
 
-    CAT left-to-right child1 child2...
+    CAT direction child1 child2...
 
-Or::
 
-    CAT right-to-left child1 child2...
-
-This rule specifies how a head is assigned for a constituent labeled as ``CAT``.
+This rule specifies how a head child is assigned for a constituent labeled as ``CAT``.
 The second argument specifies whether the children of the constituent should
 be considered starting from the left or from the right (corresponding to whether
-a category is head-first head-final).
+a category is head-first head-final):
+
+    :left: (or left-to-right) for each of the possible heads, try all children from left to right
+    :right: (or right-to-left) for each of the possible heads, try all children from right to left
+    :leftdis: go from left to right and try each possible head.
+    :rightdis: go from right to left and try each possible head.
+    :like: treat this label as if it were another label; e.g. 'TOP like ROOT'.
+
 There may be multiple rules for a category, for example if they go in opposite
 directions. The rules are applied in the order as they appear in the file.
 

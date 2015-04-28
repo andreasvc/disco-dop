@@ -3,7 +3,7 @@ treetransforms
 --------------
 Treebank binarization and conversion
 
-Usage: ``discodop treetransforms [options] <action> [input [output]]``
+Usage: ``discodop treetransforms <action> [input [output]] [options]``
 
 where input and output are treebanks; standard in/output is used if not given.
 action is one of::
@@ -73,14 +73,15 @@ options may consist of:
 
 -h n            horizontal markovization. default: infinite (all siblings)
 -v n            vertical markovization. default: 1 (immediate parent only)
+--headrules=x   turn on head finding; affects binarization.
+                reads rules from file ``x`` (e.g., "negra.headrules").
+--markhead      include label of the head child in all auxiliary labels
+                of binarization.
 --leftunary     make initial / final productions of binarized constituents
 --rightunary    ... unary productions.
 --tailmarker    mark rightmost child (the head if headrules are applied), to
                 avoid cyclic rules when ``--leftunary`` and ``--rightunary``
                 are used.
---headrules=x   turn on head finding; affects binarization.
-                reads rules from file ``x`` (e.g., "negra.headrules").
---markheads     mark heads with ``^`` in phrasal labels.
 --transforms=x  specify names of tree transformations to apply; for possible
                 names, cf. :mod:`discodop.treebanktransforms` module.
 --reverse       reverse the transformations given by ``--transform``

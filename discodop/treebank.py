@@ -45,7 +45,7 @@ class Item(object):
 class CorpusReader(object):
 	"""Abstract corpus reader."""
 	def __init__(self, path, encoding='utf8', ensureroot=None, punct=None,
-			headrules=None, extraheadrules=None, removeempty=False,
+			headrules=None, removeempty=False,
 			functions=None, morphology=None, lemmas=None):
 		"""
 		:param path: filename or pattern of corpus files; e.g., ``wsj*.mrg``.
@@ -54,11 +54,6 @@ class CorpusReader(object):
 			terminal is empty if it is equal to None, '', or '-NONE-'.
 		:param headrules: if given, read rules for assigning heads and apply
 			them by ordering constituents according to their heads.
-		:param extraheadrules: one of ...
-
-			:None: no additional head rules [default]
-			:'ptb': use additional PTB-specific head rules.
-			:'dptb': use PTB head rules with discontinuous WH rules
 		:param punct: one of ...
 
 			:None: leave punctuation as is [default].
@@ -100,7 +95,6 @@ class CorpusReader(object):
 		self.morphology = morphology
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
-		self.extraheadrules = extraheadrules
 		self._encoding = encoding
 		self._filenames = (sorted(glob(path), key=numbase)
 				if path != '-' else ['-'])
@@ -111,7 +105,7 @@ class CorpusReader(object):
 				((None, 'no', 'move', 'moveall', 'remove', 'prune', 'root'),
 					punct),
 				((None, 'no', 'add', 'replace', 'between'), lemmas),
-				((None, 'ptb', 'dptb'), extraheadrules)):
+				):
 			if opt not in opts:
 				raise ValueError('Expected one of %r. Got: %r' % (opts, opt))
 		if not self._filenames:
@@ -184,7 +178,7 @@ class CorpusReader(object):
 		if self.punct:
 			applypunct(self.punct, item.tree, item.sent)
 		if self.headrules:
-			applyheadrules(item.tree, self.headrules, self.extraheadrules)
+			applyheadrules(item.tree, self.headrules)
 		return item
 
 	def _word(self, block):

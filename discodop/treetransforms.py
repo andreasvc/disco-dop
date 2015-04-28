@@ -42,7 +42,7 @@ except ImportError:
 		return result
 
 SHORTUSAGE = '''Treebank binarization and conversion.
-Usage: %s [options] <action> [input [output]]
+Usage: %s <action> [input [output]] [options]
 where input and output are treebanks; standard in/output is used if not given.
 action is one of: none binarize optimalbinarize unbinarize
 	introducepreterminals splitdisc mergedisc transform''' % sys.argv[0]
@@ -917,9 +917,8 @@ def main():
 	flags = ('help markorigin markhead leftunary rightunary tailmarker '
 			'renumber reverse removeempty direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
-			'punct= headrules= extreaheadrules= functions= morphology= '
-			'lemmas= factor= fmt= markorigin= maxlen= enc= transforms= '
-			'markovthreshold= ').split()
+			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
+			'markorigin= maxlen= enc= transforms= markovthreshold= ').split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
 		if not 1 <= len(args) <= 3:
@@ -952,7 +951,6 @@ def main():
 			infilename,
 			encoding=opts.get('--inputenc', 'utf8'),
 			headrules=opts.get('--headrules'),
-			extraheadrules=opts.get('--extraheadrules'),
 			ensureroot=opts.get('--ensureroot'),
 			removeempty='--removeempty' in opts,
 			punct=opts.get('--punct'),

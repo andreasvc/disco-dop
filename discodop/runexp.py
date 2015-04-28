@@ -63,7 +63,6 @@ DEFAULTS = dict(
 		method='default',  # choices: default, optimal, optimalhead
 		factor='right',
 		headrules=None,  # rules for finding heads of constituents
-		extraheadrules=None,  # additional PTB-specific rules
 		v=1, h=2, revh=0,
 		markhead=False,  # prepend head to siblings
 		leftmostunary=False,  # start binarization with unary node
@@ -146,7 +145,6 @@ def startexp(
 	testsettb = treebank.READERS[prm.corpusfmt](
 			prm.testcorpus.path, encoding=prm.testcorpus.encoding,
 			headrules=prm.binarization.headrules,
-			extraheadrules=prm.binarization.extraheadrules,
 			removeempty=prm.removeempty, morphology=prm.morphology,
 			functions=prm.functions, ensureroot=prm.ensureroot)
 	if isinstance(prm.testcorpus.numsents, float):
@@ -290,7 +288,6 @@ def loadtraincorpus(corpusfmt, traincorpus, binarization, punct, functions,
 	"""Load the training corpus."""
 	train = treebank.READERS[corpusfmt](traincorpus.path,
 			encoding=traincorpus.encoding, headrules=binarization.headrules,
-			extraheadrules=binarization.extraheadrules,
 			removeempty=removeempty, ensureroot=ensureroot, punct=punct,
 			functions=functions, morphology=morphology)
 	if isinstance(traincorpus.numsents, float):

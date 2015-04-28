@@ -9,19 +9,15 @@ from discodop import punctuation
 
 FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
-HEADRULERE = re.compile(r'^(\S+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT)(?:\s+(.*))?$')
+HEADRULERE = re.compile(r'^(\S+)\s+(LEFT-TO-RIGHT|RIGHT-TO-LEFT'
+		r'|LEFT|RIGHT|LEFTDIS|RIGHTDIS|LIKE)(?:\s+(.*))?$')
 
 
-def applyheadrules(tree, headrules, extraheadrules):
+def applyheadrules(tree, headrules):
 	"""Apply head rules and set head attribute of nodes."""
 	for node in tree.subtrees(
 			lambda n: n and isinstance(n[0], Tree)):
-		if extraheadrules == 'ptb':
-			head = ptbheadfinder(node, headrules)
-		elif extraheadrules == 'dptb':
-			head = ptbheadfinder(node, headrules, dptb=True)
-		else:
-			head = headfinder(node, headrules)
+		head = headfinder(node, headrules)
 		if head is not None:
 			sethead(head)
 
@@ -63,7 +59,11 @@ def readheadrules(filename):
 				raise
 			if heads is None:
 				heads = ''
-			headrules.setdefault(label, []).append((direction, heads.split()))
+			headrules.setdefault(label, [])
+			if direction == 'LIKE':
+				headrules[label].extend(headrules[heads])
+			else:
+				headrules[label].append((direction, heads.split()))
 	return headrules
 
 
@@ -75,57 +75,30 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		return candidates[0]
 	children = tree
 	for direction, heads in headrules.get(tree.label, []):
-		if direction == 'LEFT-TO-RIGHT':
+		if direction.startswith('LEFT'):
 			children = tree
-		elif direction == 'RIGHT-TO-LEFT':
+		elif direction.startswith('RIGHT'):
 			children = tree[::-1]
 		else:
-			raise ValueError('expected RIGHT-TO-LEFT or LEFT-TO-RIGHT.')
-		for head in heads:
+			raise ValueError('expected RIGHT or LEFT.')
+		if direction in ('LEFTDIS', 'RIGHTDIS'):
 			for child in children:
-				if (isinstance(child, Tree)
-						and child.label.split('[')[0] == head):
-					return child
+				for head in heads:
+					if (isinstance(child, Tree)
+							and child.label.split('[')[0] == head):
+						return child
+		else:
+			for head in heads:
+				for child in children:
+					if (isinstance(child, Tree)
+							and child.label.split('[')[0] == head):
+						return child
 	# default head is initial/last nonterminal (depending on direction)
 	for child in children:
 		if (isinstance(child, Tree)
 				and not punctuation.ispunct(None, child.label)):
 			return child
 	return children[0]
-
-
-def ptbheadfinder(tree, headrules, headlabels=frozenset({'HD'}), dptb=False):
-	"""PTB-specific head rules for co-ordination, NPs and WH elements."""
-	head = None
-	if tree.label == 'NP':
-		if tree[-1].label == 'POS':
-			head = tree[-1]
-		else:
-			for rhslabels in (
-					{'NN', 'NNP', 'NNPS', 'NNS', 'NX', 'POS', 'JR'},
-					{'NP'},
-					{'$.', 'ADJP', 'PRN'},
-					{'CD'},
-					{'JJ', 'JJS', 'RB', 'QP'}):
-				for a in reversed(tree):
-					if a.label in rhslabels or (dptb
-							and a.label.startswith('WH')
-							and a.label[2:] in rhslabels):
-						head = a
-						break
-				if head:
-					break
-			if head is None:
-				head = tree[-1]
-	else:
-		head = headfinder(tree, headrules, headlabels)
-	i = tree.index(head)
-	if i >= 2:
-		if tree[i - 1].label in {'CC', 'CONJP'}:
-			for althead in tree[i - 2::-1]:
-				if not punctuation.ispunct(althead.label, althead.label):
-					return althead
-	return head
 
 
 def sethead(child):
@@ -170,4 +143,4 @@ def headstats(trees):
 
 
 __all__ = ['ishead', 'getheadpos', 'readheadrules', 'headfinder',
-		'ptbheadfinder', 'sethead', 'saveheads', 'headstats']
+		'sethead', 'saveheads', 'headstats']

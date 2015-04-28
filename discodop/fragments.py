@@ -22,7 +22,6 @@ from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
 from discodop.tree import Tree
-from discodop.treebank import READERS
 from discodop.treetransforms import binarize, introducepreterminals, unbinarize
 from discodop import _fragments
 from discodop.parser import workerfunc
