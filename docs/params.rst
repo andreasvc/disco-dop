@@ -102,15 +102,13 @@ Where the keys and values are:
 
     :``'pcfg'``: CKY parser
     :``'plcfrs'``: use the agenda-based PLCFRS parser
-    :``'pcfg-posterior'``: Compute inside-outside probabilities (does not
-        produce parse trees, can only be used for pruning of next stage).
     :``'pcfg-bitpar-nbest'``: Use external bitpar parser. Produces n-best list
         (up to n=1000) without producing a parse forest; works with
         non-binarized grammars (experimental).
     :``'pcfg-bitpar-forest'``: Use external bitpar parser (experimental).
     :``'dop-rerank'``: Rerank parse trees from previous stage with DOP
         reduction (experimental).
-:prune: whether to use previous chart to prune this stage
+:prune: specify the name of a previous stage to enable coarse-to-fine pruning.
 :split: split disc. nodes ``VP_2[101]`` as ``{ VP*[100], VP*[001] }``
 :splitprune: treat ``VP_2[101]`` as ``{VP*[100], VP*[001]}`` for pruning
 :markorigin: mark origin of split nodes: ``VP_2 => {VP*1, VP*2}``
@@ -125,7 +123,8 @@ Where the keys and values are:
 :m: number of derivations to sample / enumerate.
 :binarized: when using ``mode='pcfg-bitpar-nbest'``, this option can be set to
     ``False``, to disable the two auxiliary binarizations needed for
-    Double-DOP.
+    Double-DOP. This enables bitpar to do the binarization internally, which is
+    more efficient.
 :dop: enable DOP mode:
 
     :``None``: Extract treebank grammar
@@ -166,7 +165,7 @@ Where the keys and values are:
            ``('treebank', level)``; e.g., ``('ptb', 0)`` for the coarsest level
            of the Penn treebank. For the presets,
            see source of :py:data:`discodop.treebanktransforms.MAPPINGS`.
-           Including a stage for each of the collapse-levels in ascending
+           Include a stage for each of the collapse-levels in ascending
            order (0, 1, and 2 in the current presets), and then add a stage
            where labels are not collapsed.
 :packedgraph: use packed graph encoding for DOP reduction

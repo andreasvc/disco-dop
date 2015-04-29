@@ -25,7 +25,7 @@ from functools import wraps
 import numpy as np
 from discodop import plcfrs, pcfg, grammar, treetransforms, treebanktransforms
 from discodop.containers import Grammar, BITPARRE
-from discodop.coarsetofine import prunechart, whitelistfromposteriors
+from discodop.coarsetofine import prunechart
 from discodop.disambiguation import getderivations, marginalize, doprerank
 from discodop.tree import ParentedTree
 from discodop.eval import alignsent
@@ -319,14 +319,11 @@ class Parser(object):
 		for stage in prm.stages:
 			model = 'default'
 			if stage.dop:
-				if (stage.estimator == 'ewe'
-						or stage.objective.startswith('sl-dop')):
-					model = 'ewe'
-				elif stage.estimator == 'bon':
-					model = 'bon'
 				if stage.objective == 'shortest':
 					model = 'shortest'
-			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
+				elif stage.estimator != 'rfe':
+					model = stage.estimator
+			stage.grammar.switch(model, logprob=True)
 			if prm.verbosity >= 3:
 				logging.debug(stage.name)
 				logging.debug(stage.grammar)
@@ -355,9 +352,22 @@ class Parser(object):
 		if tags is not None:
 			tags = list(tags)
 
-		# parse with each coarse-to-fine stage
-		chart = start = inside = outside = lastsuccessfulparse = None
+		if goldtree is not None:
+			# reproduce preprocessing so that gold items can be counted
+			goldtree = goldtree.copy(True)
+			applypunct(self.prm.punct, goldtree, sent[:])
+			if self.prm.transformations:
+				treebanktransforms.transform(goldtree, sent,
+						self.prm.transformations)
+			from discodop.runexp import binarizetree
+			binarizetree(goldtree, self.prm.binarization,
+					self.relationalrealizational)
+			treetransforms.addfanoutmarkers(goldtree)
+
+		charts = {}  # stage.name => chart
+		chart = lastsuccessfulparse = None
 		totalgolditems = 0
+		# parse with each coarse-to-fine stage
 		for n, stage in enumerate(self.stages):
 			begin = time.clock()
 			noparse = False
@@ -366,15 +376,12 @@ class Parser(object):
 			msg = '%s:\t' % stage.name.upper()
 			model = 'default'
 			if stage.dop:
-				if (stage.estimator == 'ewe'
-						or stage.objective.startswith('sl-dop')):
-					model = 'ewe'
-				elif stage.estimator == 'bon':
-					model = 'bon'
 				if stage.objective == 'shortest':
 					model = 'shortest'
+				elif stage.estimator != 'rfe':
+					model = stage.estimator
 			x = stage.grammar.currentmodel
-			stage.grammar.switch(model, logprob=stage.mode != 'pcfg-posterior')
+			stage.grammar.switch(model, logprob=True)
 			if stage.mode.startswith('pcfg-bitpar'):
 				if (not hasattr(stage, 'rulesfile')
 						or x != stage.grammar.currentmodel):
@@ -384,51 +391,37 @@ class Parser(object):
 			if not stage.binarized and not stage.mode.startswith('pcfg-bitpar'):
 				raise ValueError('non-binarized grammar requires use of bitpar')
 
-			# do parsing; if CTF pruning enabled, require previous stage to
+			# do parsing; if CTF pruning enabled, require parent stage to
 			# be successful.
-			if sent and (not stage.prune or chart):
-				if goldtree is not None:
-					# reproduce preprocessing so that gold items can be counted
-					tree = goldtree.copy(True)
-					applypunct(self.prm.punct, tree, sent[:])
-					if self.prm.transformations:
-						treebanktransforms.transform(tree, sent,
-								self.prm.transformations)
-					from discodop.runexp import binarizetree
-					binarizetree(tree, self.prm.binarization,
-							self.relationalrealizational)
-					treetransforms.addfanoutmarkers(tree)
-					if self.stages[max(0, n - 1)].split:
-						treetransforms.splitdiscnodes(
-								tree, self.stages[n - 1].markorigin)
+			if sent and (not stage.prune or charts[stage.prune]):
+				prevn = 0
+				if stage.prune:
+					prevn = [a.name for a in self.stages].index(stage.prune)
+				tree = goldtree
+				if goldtree is not None and self.stages[prevn].split:
+					tree = treetransforms.splitdiscnodes(
+							goldtree.copy(True), self.stages[prevn].markorigin)
 				if n > 0 and stage.prune and stage.mode != 'dop-rerank':
 					beginprune = time.clock()
-					if self.stages[n - 1].mode == 'pcfg-posterior':
-						whitelist, msg1 = whitelistfromposteriors(
-								inside, outside, start,
-								self.stages[n - 1].grammar, stage.grammar,
-								stage.k, stage.splitprune,
-								self.stages[n - 1].markorigin,
-								stage.mode.startswith('pcfg'))
-						items = None
-					else:
-						whitelist, items, msg1 = prunechart(
-								chart, stage.grammar, stage.k,
-								stage.splitprune,
-								self.stages[n - 1].markorigin,
-								stage.mode.startswith('pcfg'),
-								self.stages[n - 1].mode == 'pcfg-bitpar-nbest')
-						# count number of gold bracketings in pruned chart
-						if goldtree is not None and items:
-							item = next(iter(items))
-							for node in tree.subtrees():
-								if chart.toitem(node, item) in items:
-									fanout = re.search('_([0-9]+)$', node.label)
-									golditems += (int(fanout.group(1))
-											if fanout and not stage.split
-											else 1)
-							msg1 += (';\n\t%d/%d gold items remain after '
-									'pruning' % (golditems, totalgolditems))
+					whitelist, items, msg1 = prunechart(
+							charts[stage.prune], stage.grammar, stage.k,
+							stage.splitprune,
+							self.stages[prevn].markorigin,
+							stage.mode.startswith('pcfg'),
+							self.stages[prevn].mode == 'pcfg-bitpar-nbest')
+					# count number of gold bracketings in pruned chart
+					if goldtree is not None and items:
+						item = next(iter(items))
+						for node in tree.subtrees():
+							if (charts[stage.prune].toitem(node, item)
+									in items):
+								fanout = re.search('_([0-9]+)$',
+										node.label)
+								golditems += (int(fanout.group(1))
+										if fanout and not stage.split
+										else 1)
+						msg1 += (';\n\t%d/%d gold items remain after '
+								'pruning' % (golditems, totalgolditems))
 					msg += '%s; %gs\n\t' % (msg1, time.clock() - beginprune)
 				else:
 					whitelist = None
@@ -441,10 +434,6 @@ class Parser(object):
 							symbolic=False,
 							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta)
-				elif stage.mode == 'pcfg-posterior':
-					inside, outside, start, msg1 = pcfg.doinsideoutside(
-							sent, stage.grammar, tags=tags)
-					chart = start
 				elif stage.mode.startswith('pcfg-bitpar'):
 					if stage.mode == 'pcfg-bitpar-forest':
 						numderivs = 0
@@ -455,8 +444,7 @@ class Parser(object):
 						numderivs = 1000
 					chart, cputime, msg1 = pcfg.parse_bitpar(stage.grammar,
 							stage.rulesfile.name, stage.lexiconfile.name,
-							sent, numderivs,
-							stage.grammar.start,
+							sent, numderivs, stage.grammar.start,
 							stage.grammar.toid[stage.grammar.start], tags=tags)
 					begin -= cputime
 				elif stage.mode == 'plcfrs':
@@ -467,8 +455,8 @@ class Parser(object):
 								and self.stages[n + 1].prune),
 							whitelist=whitelist,
 							splitprune=stage.splitprune
-								and self.stages[n - 1].split,
-							markorigin=self.stages[n - 1].markorigin,
+								and self.stages[prevn].split,
+							markorigin=self.stages[prevn].markorigin,
 							estimates=(stage.estimates, stage.outside)
 								if stage.estimates in ('SX', 'SXlrgaps')
 								else None,
@@ -476,14 +464,15 @@ class Parser(object):
 							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta)
 				elif stage.mode == 'dop-rerank':
-					if chart:
-						parsetrees, msg1 = doprerank(chart, sent, stage.k,
-								self.stages[n - 1].grammar, stage.grammar)
+					if charts[stage.prune]:
+						parsetrees, msg1 = doprerank(charts[stage.prune], sent,
+								stage.k, self.stages[prevn].grammar,
+								stage.grammar)
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
 				if (n > 0 and stage.prune and not chart and not noparse
-						and stage.split == self.stages[n - 1].split):
+						and stage.split == self.stages[prevn].split):
 					logging.error('ERROR: expected successful parse. '
 							'sent: %s\nstage %d: %s.',
 							' '.join(sent), n, stage.name)
@@ -493,8 +482,7 @@ class Parser(object):
 					if hasattr(chart, 'getitems') else 0)
 
 			# do disambiguation of resulting parse forest
-			if sent and chart and stage.mode not in (
-					'pcfg-posterior', 'dop-rerank') and not (
+			if sent and chart and stage.mode != 'dop-rerank' and not (
 					self.relationalrealizational and stage.split):
 				begindisamb = time.clock()
 				if stage.mode == 'pcfg-bitpar-nbest':
@@ -521,8 +509,8 @@ class Parser(object):
 					print('sum of probabitilies: %g\n' %
 							sum(exp(-prob) for _, prob in derivations[:100]))
 				if stage.objective == 'shortest':
-					stage.grammar.switch('ewe' if stage.estimator == 'ewe'
-							else 'default', True)
+					stage.grammar.switch('default' if stage.estimator == 'rfe'
+							else stage.estimator, True)
 				parsetrees, msg1 = marginalize(
 						stage.objective if stage.dop else 'mpd',
 						derivations, entries, chart,
@@ -551,6 +539,8 @@ class Parser(object):
 							golditems, totalgolditems))
 			if self.verbosity >= 4:
 				print('Chart:\n%s' % chart)
+			if stage.name in (stage.prune for stage in self.stages):
+				charts[stage.name] = chart
 
 			# postprocess, yield result
 			if parsetrees:
@@ -582,6 +572,7 @@ class Parser(object):
 					noparse=noparse, elapsedtime=elapsedtime,
 					numitems=numitems, golditems=golditems,
 					totalgolditems=totalgolditems, msg=msg)
+		del charts
 
 	def postprocess(self, treestr, sent, stage):
 		"""Take parse tree and apply postprocessing."""
@@ -638,6 +629,9 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		xgrammar = Grammar(rules, lexicon.read(),
 				start=top, binarized=stage.binarized)
 		backtransform = outside = None
+		prevn = 0
+		if n and stage.prune:
+			prevn = [a.name for a in stages].index(stage.prune)
 		if stage.dop:
 			if stage.estimates is not None:
 				raise ValueError('not supported')
@@ -645,11 +639,11 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 				backtransform = openread('%s/%s.backtransform.gz' % (
 						resultdir, stage.name)).read().splitlines()
 				if n and stage.prune:
-					_ = xgrammar.getmapping(stages[n - 1].grammar,
+					_ = xgrammar.getmapping(stages[prevn].grammar,
 						striplabelre=re.compile('@.+$'),
 						neverblockre=re.compile('^#[0-9]+|.+}<'),
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin,
+						splitprune=stage.splitprune and stages[prevn].split,
+						markorigin=stages[prevn].markorigin,
 						mapping=stage.mapping)
 				else:
 					# recoverfragments() relies on this mapping to identify
@@ -657,16 +651,16 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 					_ = xgrammar.getmapping(None,
 						neverblockre=re.compile('.+}<'))
 			elif n and stage.prune:  # dop reduction
-				_ = xgrammar.getmapping(stages[n - 1].grammar,
+				_ = xgrammar.getmapping(stages[prevn].grammar,
 					striplabelre=re.compile('@[-0-9]+$'),
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
-					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin,
+					splitprune=stage.splitprune and stages[prevn].split,
+					markorigin=stages[prevn].markorigin,
 					mapping=stage.mapping)
 				if stage.mode == 'dop-rerank':
 					xgrammar.getrulemapping(
-							stages[n - 1].grammar, re.compile(r'@[-0-9]+\b'))
+							stages[prevn].grammar, re.compile(r'@[-0-9]+\b'))
 			probsfile = '%s/%s.probs.npz' % (resultdir, stage.name)
 			if os.path.exists(probsfile):
 				probmodels = np.load(probsfile)
@@ -675,11 +669,11 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 						xgrammar.register(name, probmodels[name])
 		else:  # not stage.dop
 			if n and stage.prune:
-				_ = xgrammar.getmapping(stages[n - 1].grammar,
+				_ = xgrammar.getmapping(stages[prevn].grammar,
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
-					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin,
+					splitprune=stage.splitprune and stages[prevn].split,
+					markorigin=stages[prevn].markorigin,
 					mapping=stage.mapping)
 			if stage.estimates in ('SX', 'SXlrgaps'):
 				if stage.estimates == 'SX' and xgrammar.maxfanout != 1:

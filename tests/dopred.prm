@@ -1,12 +1,12 @@
 stages=[  # DOP reduction
-  # test each objective function separately:
   dict(
     name='pcfg', mode='pcfg',
     split=True, markorigin=True,
   ),
+  # test each objective function separately:
   dict(
     name='mpp', mode='plcfrs',
-    prune=True, splitprune=True,
+    prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
@@ -14,12 +14,8 @@ stages=[  # DOP reduction
   ),
 
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
-  ),
-  dict(
 	name='mpd', mode='plcfrs',
-	prune=True, splitprune=True,
+	prune='pcfg', splitprune=True,
 	dop='reduction',
 	k=50, m=1000,
 	kbest=True, sample=False,
@@ -27,12 +23,8 @@ stages=[  # DOP reduction
   ),
 
   dict(
-	name='pcfg', mode='pcfg',
-	split=True, markorigin=True,
-  ),
-  dict(
 	name='short', mode='plcfrs',
-	prune=True, splitprune=True,
+	prune='pcfg', splitprune=True,
 	dop='reduction',
 	k=50, m=1000,
 	kbest=True, sample=False,
@@ -40,12 +32,8 @@ stages=[  # DOP reduction
   ),
 
   dict(
-    name='pcfg', mode='pcfg',
-    split=True, markorigin=True,
-  ),
-  dict(
     name='sldop', mode='plcfrs',
-    prune=True, splitprune=True,
+    prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
@@ -53,12 +41,8 @@ stages=[  # DOP reduction
   ),
   
   dict(
-    name='pcfg', mode='pcfg',
-    split=True, markorigin=True,
-  ),
-  dict(
     name='slsimp', mode='plcfrs',
-    prune=True, splitprune=True,
+    prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
@@ -66,12 +50,8 @@ stages=[  # DOP reduction
   ),
 
   dict(
-    name='pcfg', mode='pcfg',
-    split=True, markorigin=True,
-  ),
-  dict(
     name='bon', mode='plcfrs',
-    prune=True, splitprune=True,
+    prune='pcfg', splitprune=True,
     dop='reduction',
     k=50, m=1000,
     kbest=True, sample=False,
@@ -80,16 +60,22 @@ stages=[  # DOP reduction
 
   # test rest of parameters together:
   dict(
-    name='post', mode='pcfg-posterior',
-    split=True, markorigin=True,
-  ),
-  dict(
-    name='etc', mode='plcfrs',
-    prune=True, splitprune=True,
+    name='post', mode='plcfrs',
+    prune='pcfg', splitprune=True,
     dop='reduction',
     k=1e-5, m=1000,
     kbest=True, sample=False,
     estimator="ewe", objective="mpp",
+  ),
+
+  dict(
+    name='packed', mode='plcfrs',
+    prune='pcfg', splitprune=True,
+    dop='reduction',
+    packedgraph=True,
+    k=50, m=1000,
+    kbest=True, sample=False,
+    estimator="rfe", objective="mpp",
   ),
 
   dict(
@@ -98,21 +84,7 @@ stages=[  # DOP reduction
   dict(
     name='rerank', mode='dop-rerank',
     dop='reduction',
-    prune=True, k=50,
-    kbest=True, sample=False,
-    estimator="rfe", objective="mpp",
-  ),
-
-  dict(
-    name='pcfg', mode='pcfg',
-    split=True, markorigin=True,
-  ),
-  dict(
-    name='packed', mode='plcfrs',
-    prune=True, splitprune=True,
-    dop='reduction',
-    packedgraph=True,
-    k=50, m=1000,
+    prune='plcfrs', k=50,
     kbest=True, sample=False,
     estimator="rfe", objective="mpp",
   ),

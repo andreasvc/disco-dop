@@ -8,7 +8,7 @@ stages=[
   dict(
     name='plcfrs',
     mode='plcfrs',  # use the agenda-based PLCFRS parser
-    prune=True,  # whether to use previous chart to prune parsing of this stage
+    prune='pcfg',  # which previous chart to use to prune parsing of this stage
     splitprune=True,  # VP_2[101] is treated as { VP*[100], VP*[001] } during parsing
     k=1000,  # number of coarse pcfg derivations to prune with; k=0 => filter only
     estimates=None,  # compute, store & use estimates; choices: 'SX', 'SXlrgaps'
@@ -17,7 +17,7 @@ stages=[
   dict(
     name='dop',
     mode='plcfrs',
-    prune=True,  # whether to use previous chart to prune parsing of this stage
+    prune='plcfrs',  # which previous chart to use to prune parsing of this stage
     k=50,  # number of coarse plcfrs derivations to prune with; k=0 => filter only
     dop='doubledop',  # enable DOP mode
     m=1000,  # number of derivations to sample/enumerate

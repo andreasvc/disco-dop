@@ -387,10 +387,11 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 	# sum over probs of derivations to get probs of parse trees
 	parsetreeprob = {tree: logprobsum([-derivations[d] for d in ds])
 			for tree, ds in derivsfortree.items()}
-
 	nmostlikelytrees = set(nlargest(sldop_n, parsetreeprob,
 			key=parsetreeprob.get))
-	chart.grammar.switch(u'shortest', True)
+
+	model = chart.grammar.modelnames[chart.grammar.currentmodel]
+	chart.grammar.switch(u'shortest', logprob=True)
 	shortestderivations, unused_explored, chart2 = treeparsing(
 			nmostlikelytrees, sent, chart.grammar, m, backtransform, tags)
 	if not chart2.rankededges.get(chart2.root()):
@@ -412,6 +413,7 @@ cdef sldop(dict derivations, Chart chart, list sent, list tags,
 					chart2, backtransform)
 			if len(result) > sldop_n:
 				break
+	chart.grammar.switch(model, logprob=True)
 	if not len(result):
 		return [], 'no matching derivation found'
 	msg = '(%d derivations, %d of %d parsetrees)' % (

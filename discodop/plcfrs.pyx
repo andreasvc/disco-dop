@@ -144,8 +144,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 
 	def root(self):
 		cdef SmallChartItem item = new_SmallChartItem(
-				self.grammar.toid[self.grammar.start],
-				(1UL << self.lensent) - 1)
+				self.start, (1UL << self.lensent) - 1)
 		if self.probs[item.label] is None:
 			return item
 		return self.probs[item.label].get(item, item)
@@ -209,7 +208,7 @@ cdef class FatLCFRSChart(LCFRSChart):
 
 	def root(self):
 		cdef FatChartItem item = CFGtoFatChartItem(
-				self.grammar.toid[self.grammar.start], 0, self.lensent)
+				self.start, 0, self.lensent)
 		if self.probs[item.label] is None:
 			return item
 		return self.probs[item.label].get(item, item)
@@ -257,23 +256,23 @@ def parse(sent, Grammar grammar, tags=None, bint exhaustive=True,
 		chart = SmallLCFRSChart(grammar, list(sent), start)
 		if symbolic:
 			return parse_symbolic(<SmallLCFRSChart>chart,
-					<SmallChartItem>chart.root(), sent, grammar, tags, start,
+					<SmallChartItem>chart.root(), sent, grammar, tags,
 					whitelist, splitprune, markorigin)
 		return parse_main(<SmallLCFRSChart>chart, <SmallChartItem>chart.root(),
-				sent, grammar, tags, exhaustive, start, whitelist, splitprune,
+				sent, grammar, tags, exhaustive, whitelist, splitprune,
 				markorigin, estimates, beam_beta, beam_delta)
 	chart = FatLCFRSChart(grammar, list(sent), start)
 	if symbolic:
 		return parse_symbolic(<FatLCFRSChart>chart,
-				<FatChartItem>chart.root(), sent, grammar, tags, start,
+				<FatChartItem>chart.root(), sent, grammar, tags,
 				whitelist, splitprune, markorigin)
 	return parse_main(<FatLCFRSChart>chart, <FatChartItem>chart.root(),
-			sent, grammar, tags, exhaustive, start, whitelist, splitprune,
+			sent, grammar, tags, exhaustive, whitelist, splitprune,
 			markorigin, estimates, beam_beta, beam_delta)
 
 
 cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
-		Grammar grammar, tags, bint exhaustive, start, list whitelist,
+		Grammar grammar, tags, bint exhaustive, list whitelist,
 		bint splitprune, bint markorigin, estimates,
 		double beam_beta, int beam_delta):
 	cdef:
@@ -290,8 +289,6 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		uint32_t lhs
 		size_t blocked = 0, maxA = 0, n
 		bint recognized
-	if start is None:
-		start = grammar.toid[grammar.start]
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
@@ -809,7 +806,7 @@ cdef inline bint concat(Rule *rule,
 
 
 cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
-		sent, Grammar grammar, tags, start,
+		sent, Grammar grammar, tags,
 		list whitelist, bint splitprune, bint markorigin):
 	cdef:
 		list agenda = [set() for _ in sent]  # an agenda for each span length
@@ -819,8 +816,6 @@ cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		LCFRSItem_fused item, sibling, newitem
 		short wordidx
 		size_t n, blocked = 0, maxA = 0
-	if start is None:
-		start = grammar.toid[grammar.start]
 	if LCFRSItem_fused is SmallChartItem:
 		newitem = new_SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:

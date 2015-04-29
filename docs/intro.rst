@@ -77,9 +77,9 @@ example:
         dict(name='pcfg', mode='pcfg',
             split=True, markorigin=True),
         dict(name='plcfrs', mode='plcfrs',
-            prune=True, splitprune=True, k=1000),
+            prune='pcfg', splitprune=True, k=1000),
         dict(name='dop', mode='plcfrs',
-            prune=True, k=50, m=1000,
+            prune='plcfrs', k=50, m=1000,
             dop='doubledop',
             estimator='rfe', objective = 'mpp')
     ],

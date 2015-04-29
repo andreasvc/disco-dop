@@ -72,11 +72,11 @@ cdef class Grammar:
 cdef class Chart:
 	cdef readonly dict rankededges  # [item][n] => DoubleEntry(RankedEdge, prob)
 	cdef list itemsinorder
+	cdef dict inside, outside
 	cdef Grammar grammar
 	cdef readonly list sent
-	cdef dict inside, outside
-	cdef uint32_t start
 	cdef short lensent
+	cdef uint32_t start
 	cdef readonly bint logprob  # False: 0 < p <= 1; True: 0 <= -log(p) < inf
 	cdef readonly bint viterbi  # False: inside probs; True: viterbi 1-best
 	cdef double subtreeprob(self, item)

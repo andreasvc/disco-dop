@@ -409,6 +409,9 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 	for n, stage in enumerate(stages):
 		traintrees = trees
 		stage.mapping = None
+		prevn = 0
+		if n and stage.prune:
+			prevn = [a.name for a in stages].index(stage.prune)
 		if stage.split:
 			traintrees = [treetransforms.binarize(
 					treetransforms.splitdiscnodes(
@@ -425,10 +428,10 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			logging.info('collapsed phrase labels for multilevel '
 					'coarse-to-fine parsing to %s level %d',
 					*stage.collapse)
-		if n and mappings[n - 1] is not None:
+		if n and mappings[prevn] is not None:
 			# Given original labels A, convert CTF mapping1 A => C,
 			# and mapping2 A => B to a mapping B => C.
-			mapping1, mapping2 = mappings[n - 1], mappings[n]
+			mapping1, mapping2 = mappings[prevn], mappings[n]
 			if mappings[n] is None:
 				stage.mapping = {a: mapping1[a] for a in mapping1}
 			else:
@@ -501,12 +504,12 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						'w')) as out:
 					out.writelines('%s\n' % a for a in backtransform)
 				if n and stage.prune:
-					msg = gram.getmapping(stages[n - 1].grammar,
-							striplabelre=None if stages[n - 1].dop
+					msg = gram.getmapping(stages[prevn].grammar,
+							striplabelre=None if stages[prevn].dop
 								else re.compile('@.+$'),
 							neverblockre=re.compile('.+}<'),
-							splitprune=stage.splitprune and stages[n - 1].split,
-							markorigin=stages[n - 1].markorigin,
+							splitprune=stage.splitprune and stages[prevn].split,
+							markorigin=stages[prevn].markorigin,
 							mapping=stage.mapping)
 				else:
 					# recoverfragments() relies on this mapping to identify
@@ -518,18 +521,18 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 							mapping=stage.mapping)
 				logging.info(msg)
 			elif n and stage.prune:  # dop reduction
-				msg = gram.getmapping(stages[n - 1].grammar,
-						striplabelre=None if stages[n - 1].dop
-							and stages[n - 1].dop not in ('doubledop', 'dop1')
+				msg = gram.getmapping(stages[prevn].grammar,
+						striplabelre=None if stages[prevn].dop
+							and stages[prevn].dop not in ('doubledop', 'dop1')
 							else re.compile('@[-0-9]+$'),
 						neverblockre=re.compile(stage.neverblockre)
 							if stage.neverblockre else None,
-						splitprune=stage.splitprune and stages[n - 1].split,
-						markorigin=stages[n - 1].markorigin,
+						splitprune=stage.splitprune and stages[prevn].split,
+						markorigin=stages[prevn].markorigin,
 						mapping=stage.mapping)
 				if stage.mode == 'dop-rerank':
 					gram.getrulemapping(
-							stages[n - 1].grammar, re.compile(r'@[-0-9]+\b'))
+							stages[prevn].grammar, re.compile(r'@[-0-9]+\b'))
 				logging.info(msg)
 			# write prob models
 			np.savez_compressed('%s/%s.probs.npz' % (resultdir, stage.name),
@@ -559,12 +562,12 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				lexiconfile.write(lex)
 			logging.info(gram.testgrammar()[1])
 			if n and stage.prune:
-				msg = gram.getmapping(stages[n - 1].grammar,
+				msg = gram.getmapping(stages[prevn].grammar,
 					striplabelre=None,
 					neverblockre=re.compile(stage.neverblockre)
 						if stage.neverblockre else None,
-					splitprune=stage.splitprune and stages[n - 1].split,
-					markorigin=stages[n - 1].markorigin,
+					splitprune=stage.splitprune and stages[prevn].split,
+					markorigin=stages[prevn].markorigin,
 					mapping=stage.mapping)
 				logging.info(msg)
 		logging.info('wrote grammar to %s/%s.{rules,lex%s}.gz',
@@ -996,13 +999,14 @@ def readparam(filename):
 					for k, v in DEFAULTS[key].items()})
 	for n, stage in enumerate(params['stages']):
 		if stage.mode not in (
-				'plcfrs', 'pcfg', 'pcfg-posterior',
-				'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
+				'plcfrs', 'pcfg', 'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
 				'dop-rerank'):
 			raise ValueError('unrecognized mode argument.')
 		if n == 0 and stage.prune:
 			raise ValueError('need previous stage to prune, '
 					'but this stage is first.')
+		if stage.prune is True:  # for compatibility
+			stage.prune = params['stages'][n - 1].name
 		if stage.mode == 'dop-rerank':
 			assert stage.prune and not stage.splitprune and stage.k > 1
 			assert (stage.dop and stage.dop not in ('doubledop', 'dop1')

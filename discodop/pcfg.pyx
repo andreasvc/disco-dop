@@ -44,8 +44,7 @@ cdef class CFGChart(Chart):
 
 	def root(self):
 		return cellidx(0, self.lensent,
-				self.lensent, self.grammar.nonterminals
-				) + self.grammar.toid[self.grammar.start]
+				self.lensent, self.grammar.nonterminals) + self.start
 
 	cdef uint32_t label(self, item):
 		return <size_t>item % self.grammar.nonterminals
@@ -652,265 +651,6 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 	return True, ''
 
 
-def doinsideoutside(sent, Grammar grammar, inside=None, outside=None,
-		tags=None, startid=None):
-	if grammar.maxfanout != 1:
-		raise('Not a PCFG! fanout = %d' % grammar.maxfanout)
-	if grammar.logprob:
-		raise('Grammar must not have log probabilities.')
-	lensent = len(sent)
-	if startid is None:
-		startid = grammar.toid[grammar.start]
-	if inside is None:
-		inside = np.zeros((lensent, lensent + 1,
-				grammar.nonterminals), dtype='d')
-	else:
-		inside[:len(sent), :len(sent) + 1, :] = 0.0
-	if outside is None:
-		outside = np.zeros((lensent, lensent + 1,
-				grammar.nonterminals), dtype='d')
-	else:
-		outside[:len(sent), :len(sent) + 1, :] = 0.0
-	minmaxlr = insidescores(sent, grammar, inside, tags)
-	if inside[0, len(sent), startid]:
-		outsidescores(grammar, sent, startid, inside, outside, *minmaxlr)
-		msg = 'inside prob=%g' % inside[0, len(sent), startid]
-		start = (startid, 0, len(sent))
-	else:
-		start = None
-		msg = "no parse"
-	return inside, outside, start, msg
-
-
-def insidescores(sent, Grammar grammar, double [:, :, :] inside, tags=None):
-	"""Compute inside scores.
-
-	NB: These are not Viterbi scores, but sums of all derivations headed by a
-	certain ``(label, span)``."""
-	cdef:
-		short left, right, span, lensent = len(sent)
-		short narrowl, narrowr, minmid, maxmid
-		double prob, ls, rs
-		uint32_t n, lhs, rhs1
-		bint foundbetter = False
-		Rule *rule
-		LexicalRule lexrule
-		list cell = [{} for _ in grammar.toid]
-		DoubleAgenda unaryagenda = DoubleAgenda()
-		short [:, :] minleft, maxleft, minright, maxright
-		double [:] unaryscores = np.empty(grammar.nonterminals, dtype='d')
-	minleft, maxleft, minright, maxright = minmaxmatrices(
-			grammar.nonterminals, lensent)
-	for left in range(lensent):  # assign POS tags
-		tag = tags[left] if tags else None
-		right = left + 1
-		for lexrule in grammar.lexicalbyword.get(sent[left], []):
-			lhs = lexrule.lhs
-			# if we are given gold tags, make sure we only allow matching
-			# tags - after removing addresses introduced by the DOP reduction
-			if not tags or (grammar.tolabel[lhs] == tag
-					or grammar.tolabel[lhs].startswith(tag + '@')):
-				inside[left, right, lhs] = lexrule.prob
-		if not inside.base[left, right].any():
-			if tags is not None:
-				lhs = grammar.toid[tag]
-				if not tags or (grammar.tolabel[lhs] == tag
-						or grammar.tolabel[lhs].startswith(tag + '@')):
-					inside[left, right, lhs] = 1.
-			else:
-				raise ValueError("not covered: %r" % (tag or sent[left]), )
-		# unary rules on POS tags (NB: agenda is a min-heap, negate probs)
-		unaryagenda.update_entries([new_DoubleEntry(
-				rhs1, -inside[left, right, rhs1], 0)
-			for rhs1 in range(grammar.nonterminals)
-			if inside[left, right, rhs1]
-			and grammar.unary[rhs1].rhs1 == rhs1])
-		unaryscores[:] = 0.0
-		while unaryagenda.length:
-			rhs1 = unaryagenda.popentry().key
-			for n in range(grammar.numrules):
-				rule = &(grammar.unary[rhs1][n])
-				if rule.rhs1 != rhs1:
-					break
-				prob = rule.prob * inside[left, right, rhs1]
-				lhs = rule.lhs
-				edge = (rule.no, right)
-				if edge not in cell[lhs]:
-					unaryagenda.setifbetter(lhs, -prob)
-					inside[left, right, lhs] += prob
-					cell[lhs][edge] = edge
-		for a in cell:
-			a.clear()
-		for lhs in range(grammar.nonterminals):
-			if inside[left, right, lhs]:
-				# update filter
-				if left > minleft[lhs, right]:
-					minleft[lhs, right] = left
-				if left < maxleft[lhs, right]:
-					maxleft[lhs, right] = left
-				if right < minright[lhs, left]:
-					minright[lhs, left] = right
-				if right > maxright[lhs, left]:
-					maxright[lhs, left] = right
-	for span in range(2, lensent + 1):
-		# constituents from left to right
-		for left in range(lensent - span + 1):
-			right = left + span
-			# binary rules
-			for n in range(grammar.numrules):
-				rule = &(grammar.bylhs[0][n])
-				lhs = rule.lhs
-				if lhs == grammar.nonterminals:
-					break
-				elif not rule.rhs2:
-					continue
-				narrowr = minright[rule.rhs1, left]
-				narrowl = minleft[rule.rhs2, right]
-				if narrowr >= right or narrowl < narrowr:
-					continue
-				widel = maxleft[rule.rhs2, right]
-				minmid = narrowr if narrowr > widel else widel
-				wider = maxright[rule.rhs1, left]
-				maxmid = wider if wider < narrowl else narrowl
-				# oldscore = inside[left, right, lhs]
-				foundbetter = False
-				for split in range(minmid, maxmid + 1):
-					ls = inside[left, split, rule.rhs1]
-					if ls == 0.0:
-						continue
-					rs = inside[split, right, rule.rhs2]
-					if rs == 0.0:
-						continue
-					foundbetter = True
-					inside[left, right, lhs] += rule.prob * ls * rs
-					# assert 0.0 < inside[left, right, lhs] <= 1.0, (
-					# 	inside[left, right, lhs],
-					# 	left, right, grammar.tolabel[lhs])
-				if foundbetter:  # and oldscore == 0.0:
-					if left > minleft[lhs, right]:
-						minleft[lhs, right] = left
-					if left < maxleft[lhs, right]:
-						maxleft[lhs, right] = left
-					if right < minright[lhs, left]:
-						minright[lhs, left] = right
-					if right > maxright[lhs, left]:
-						maxright[lhs, left] = right
-			# unary rules on this span
-			unaryagenda.update_entries([new_DoubleEntry(
-						rhs1, -inside[left, right, rhs1], 0)
-					for rhs1 in range(grammar.nonterminals)
-					if inside[left, right, rhs1]
-					and grammar.unary[rhs1].rhs1 == rhs1])
-			unaryscores[:] = 0.0
-			while unaryagenda.length:
-				rhs1 = unaryagenda.popentry().key
-				for n in range(grammar.numrules):
-					rule = &(grammar.unary[rhs1][n])
-					if rule.rhs1 != rhs1:
-						break
-					prob = rule.prob * inside[left, right, rhs1]
-					lhs = rule.lhs
-					edge = (rule.no, right)
-					if edge not in cell[lhs]:
-						unaryagenda.setifbetter(lhs, -prob)
-						inside[left, right, lhs] += prob
-						cell[lhs][edge] = edge
-			for a in cell:
-				a.clear()
-			for lhs in range(grammar.nonterminals):
-				# update filter
-				if inside[left, right, lhs]:
-					if left > minleft[lhs, right]:
-						minleft[lhs, right] = left
-					if left < maxleft[lhs, right]:
-						maxleft[lhs, right] = left
-					if right < minright[lhs, left]:
-						minright[lhs, left] = right
-					if right > maxright[lhs, left]:
-						maxright[lhs, left] = right
-	return minleft, maxleft, minright, maxright
-
-
-def outsidescores(Grammar grammar, sent, uint32_t start,
-		double [:, :, :] inside, double [:, :, :] outside,
-		short [:, :] minleft, short [:, :] maxleft,
-		short [:, :] minright, short [:, :] maxright):
-	cdef:
-		short left, right, span, lensent = len(sent)
-		short narrowl, narrowr, minmid, maxmid
-		double ls, rs, os
-		uint32_t n, lhs
-		Rule *rule
-		DoubleAgenda unaryagenda = DoubleAgenda()
-		list cell = [{} for _ in grammar.toid]
-	outside[0, lensent, start] = 1.0
-	for span in range(lensent, 0, -1):
-		for left in range(1 + lensent - span):
-			right = left + span
-			# unary rules
-			unaryagenda.update_entries([new_DoubleEntry(
-					lhs, -outside[left, right, lhs], 0)
-				for lhs in range(grammar.nonterminals)
-				if outside[left, right, lhs]])
-			while unaryagenda.length:
-				lhs = unaryagenda.popentry().key
-				for n in range(grammar.numrules):
-					rule = &(grammar.bylhs[lhs][n])
-					if rule.lhs != lhs:
-						break
-					elif rule.rhs2:
-						continue
-					prob = rule.prob * outside[left, right, lhs]
-					edge = (rule.no, right)
-					if edge not in cell[lhs]:
-						unaryagenda.setifbetter(rule.rhs1, -prob)
-						cell[lhs][edge] = edge
-						outside[left, right, rule.rhs1] += prob
-						# assert 0.0 < outside[left, right, rule.rhs1] <= 1.0, (
-						# 		'illegal value: outside[%d, %d, %s] = %g' % (
-						# 			left, right, grammar.tolabel[rule.rhs1],
-						# 			outside[left, right, rule.rhs1]),
-						# 		rule.prob, outside[left, right, lhs],
-						# 		grammar.tolabel[rule.lhs])
-			for lhs in range(grammar.nonterminals):
-				cell[lhs].clear()
-			# binary rules
-			for n in range(grammar.numrules):
-				rule = &(grammar.bylhs[0][n])
-				lhs = rule.lhs
-				if lhs == grammar.nonterminals:
-					break
-				elif not rule.rhs2 or outside[left, right, lhs] == 0.0:
-					continue
-				os = outside[left, right, lhs]
-				narrowr = minright[rule.rhs1, left]
-				narrowl = minleft[rule.rhs2, right]
-				if narrowr >= right or narrowl < narrowr:
-					continue
-				widel = maxleft[rule.rhs2, right]
-				minmid = narrowr if narrowr > widel else widel
-				wider = maxright[rule.rhs1, left]
-				maxmid = wider if wider < narrowl else narrowl
-				for split in range(minmid, maxmid + 1):
-					ls = inside[left, split, rule.rhs1]
-					if ls == 0.0:
-						continue
-					rs = inside[split, right, rule.rhs2]
-					if rs == 0.0:
-						continue
-					outside[left, split, rule.rhs1] += rule.prob * rs * os
-					outside[split, right, rule.rhs2] += rule.prob * ls * os
-					# assert 0.0 < outside[left, split, rule.rhs1] <= 1.0, (
-					# 		'illegal value: outside[%d, %d, %s] = %g' % (
-					# 			left, split, grammar.tolabel[rule.rhs1],
-					# 			outside[left, split, rule.rhs1]),
-					# 		rule.prob, rs, os, grammar.tolabel[rule.lhs])
-					# assert 0.0 < outside[split, right, rule.rhs2] <= 1.0, (
-					# 		'illegal value: outside[%d, %d, %s] = %g' % (
-					# 			split, right, grammar.tolabel[rule.rhs2],
-					# 			outside[split, right, rule.rhs2]))
-
-
 def minmaxmatrices(nonterminals, lensent):
 	"""Create matrices to track minima and maxima for binary splits."""
 	minleft = np.empty((nonterminals, lensent + 1), dtype='int16')
@@ -919,11 +659,6 @@ def minmaxmatrices(nonterminals, lensent):
 	minright, maxright = maxleft.copy(), minleft.copy()
 	return minleft, maxleft, minright, maxright
 
-
-def chartmatrix(nonterminals, lensent):
-	viterbi = np.empty((nonterminals, lensent, lensent + 1), dtype='d')
-	viterbi[...] = np.inf
-	return viterbi
 
 BITPARUNESCAPE = re.compile(r"\\([\"\\ $\^'()\[\]{}=<>#])")
 BITPARPARSES = re.compile(r'^vitprob=(.*)\n(\(.*\))\n', re.MULTILINE)
@@ -1047,24 +782,6 @@ def renumber(deriv):
 	return TERMINALSRE.sub(lambda _: ' %s)' % next(it), deriv)
 
 
-def pprint_matrix(matrix, sent, tolabel, matrix2=None):
-	"""Print a numpy matrix chart; optionally in parallel with another."""
-	for span in range(1, len(sent) + 1):
-		for left in range(len(sent) - span + 1):
-			right = left + span
-			if matrix[left, right].any() or (
-					matrix2 is not None and matrix2[left, right].any()):
-				print('[%d:%d]' % (left, right))
-				for lhs in range(len(matrix[left, right])):
-					if matrix[left, right, lhs] or (
-							matrix2 is not None and matrix2[left, right, lhs]):
-						print('%20s\t%8.6g' % (tolabel[lhs],
-								matrix[left, right, lhs]), end='')
-						if matrix2 is not None:
-							print('\t%8.6g' % matrix2[left, right, lhs], end='')
-						print()
-
-
 def test():
 	from discodop.containers import Grammar
 	from discodop.disambiguation import getderivations, marginalize
@@ -1090,17 +807,6 @@ def test():
 	# chart, msg = parse_sparse('mary walks'.split(), cfg)
 	# assert chart, msg
 	print(chart)
-	cfg1 = Grammar([
-		((('NP', 'Epsilon'), ('mary', )), 1),
-		((('S', 'NP', 'VP'), ((0, 1), )), 1),
-		((('VP', 'Epsilon'), ('walks', )), 1)], start='S')
-	cfg1.switch(u'default', False)
-	i, o, start, _ = doinsideoutside('mary walks'.split(), cfg1)
-	assert start
-	print(i[0, 2, cfg1.toid['S']], o[0, 2, cfg1.toid['S']])
-	i, o, start, _ = doinsideoutside('walks mary'.split(), cfg1)
-	assert not start
-	print(i[0, 2, cfg1.toid['S']], o[0, 2, cfg1.toid['S']])
 	rules = [
 		((('NP', 'NP', 'PP'), ((0, 1), )), 0.4),
 		((('PP', 'P', 'NP'), ((0, 1), )), 1),
@@ -1115,11 +821,7 @@ def test():
 		((('NP', 'Epsilon'), ('telescopes', )), 0.1),
 		((('P', 'Epsilon'), ('with', )), 1)]
 	cfg2 = Grammar(rules, start='S')
-	cfg2.switch(u'default', False)
 	sent = 'astronomers saw stars with telescopes'.split()
-	inside, outside, _, msg = doinsideoutside(sent, cfg2)
-	print(msg)
-	pprint_matrix(inside, sent, cfg2.tolabel, outside)
 	cfg2.switch(u'default', True)
 	chart, msg = parse(sent, cfg2)
 	print(msg)
@@ -1131,7 +833,5 @@ def test():
 	# chart1, msg1 = parse(sent, cfg2, symbolic=True)
 	# print(msg, '\n', msg1)
 
-__all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'parse',
-		'doinsideoutside', 'insidescores', 'outsidescores', 'minmaxmatrices',
-		'chartmatrix', 'parse_bitpar', 'bitpar_yap_forest', 'bitpar_nbest',
-		'renumber', 'pprint_matrix']
+__all__ = ['CFGChart', 'DenseCFGChart', 'SparseCFGChart', 'parse', 'renumber',
+		'minmaxmatrices', 'parse_bitpar', 'bitpar_yap_forest', 'bitpar_nbest']

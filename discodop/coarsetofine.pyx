@@ -142,89 +142,6 @@ def bitparkbestitems(Chart chart, int k, bint finecfg):
 	return items
 
 
-def whitelistfromposteriors(inside, outside, start,
-		Grammar coarse, Grammar fine, double threshold,
-		bint splitprune, bint markorigin, bint finecfg):
-	"""Compute posterior probabilities & prune away cells below a threshold."""
-	cdef uint32_t label
-	cdef short lensent = start[2]
-	if not 0 < threshold < 1:
-		raise ValueError('probability threshold should be between 0 and 1.')
-	sentprob = inside[0, lensent, start[0]]
-	posterior = (inside[:lensent, :lensent + 1]
-		* outside[:lensent, :lensent + 1]) / sentprob
-
-	leftidx, rightidx, labels = (posterior[:lensent, :lensent + 1]
-		> threshold).nonzero()
-
-	kbestspans = [set() for _ in coarse.toid]
-	fatitems = lensent >= (sizeof(uint64_t) * 8)
-	for label, left, right in zip(labels, leftidx, rightidx):
-		if finecfg:
-			ei = compactcellidx(left, right, lensent, 1)
-		elif fatitems:
-			ei = CFGtoFatChartItem(0, left, right)
-		else:
-			ei = CFGtoSmallChartItem(0, left, right)
-		kbestspans[label].add(ei)
-
-	if finecfg:
-		whitelist = [set() for _ in range(compactcellidx(
-				lensent - 1, lensent, lensent, 1) + 1)]
-		for left in range(start[2]):
-			for right in range(left + 1, start[2] + 1):
-				span = compactcellidx(left, right, lensent, 1)
-				cell = whitelist[span]
-				for label in range(1, fine.nonterminals):
-					if (fine.mapping[label] == 0
-							or span in kbestspans[fine.mapping[label]]):
-						cell.add(label)
-	else:
-		whitelist = [None] * fine.nonterminals
-		for label in range(fine.nonterminals):
-			if splitprune and markorigin and fine.fanout[label] != 1:
-				if fine.splitmapping[label] is not NULL:
-					whitelist[label] = [kbestspans[fine.splitmapping[label][n]]
-						for n in range(fine.fanout[label])]
-			else:
-				if fine.mapping[label] != 0:
-					whitelist[label] = kbestspans[fine.mapping[label]]
-	unfiltered = (outside != 0.0).sum()
-	numitems = (posterior != 0.0).sum()
-	numremain = (posterior > threshold).sum()
-	msg = ('coarse items before pruning=%d; filtered: %d;'
-			' pruned: %d; sentprob=%g' % (
-			unfiltered, numitems, numremain, sentprob))
-	return whitelist, msg
-
-
-def whitelistfromposteriors_matrix(inside, outside, ChartItem goal,
-		Grammar coarse, Grammar fine, finechart, short maxlen,
-		double threshold):
-	"""Compute posterior probabilities & prune away cells below a threshold.
-
-	This version produces a matrix with pruned spans having NaN as value."""
-	cdef long label
-	cdef short lensent = goal.right
-	sentprob = inside[0, lensent, goal.label]
-	# print >>stderr, "sentprob=%g" % sentprob
-	posterior = (inside[:lensent, :lensent + 1, :]
-			* outside[:lensent, :lensent + 1, :]) / sentprob
-	inside[:lensent, :lensent + 1, :] = np.NAN
-	inside[posterior > threshold] = np.inf
-	# print >>stderr, ' ', (posterior > threshold).sum(),
-	# print >>stderr, "of", (posterior != 0.0).sum(),
-	# print >>stderr, "nonzero coarse items left",
-	# labels, leftidx, rightidx = (posterior[:lensent, :lensent+1, :]
-	# 	> threshold).nonzero()
-	# for left, right, label in zip(leftidx, rightidx, labels):
-	# 	for x in mapping[label]:
-	# 		finechart[left, right, x] = inside[left, right, label]
-	for label in range(len(fine.toid)):
-		finechart[:lensent, :lensent + 1, label] = inside[
-				:lensent, :lensent + 1, fine.mapping[label]]
-
-
 def posteriorthreshold(Chart chart, double threshold):
 	"""Prune labeled spans from chart below given posterior threshold.
 
@@ -270,11 +187,11 @@ def getinside(Chart chart):
 
 	# choices for probs:
 	# - normal => underflow (current)
-	# - logprobs => loss of precision
+	# - logprobs => loss of precision w/addition
 	# - normal, scaled => how?
 
 	# packing parse forest:
-	# revitems = {item: n for n, item in self.itemsinorder}
+	# revitems = {item: n for n, item in enumerate(self.itemsinorder)}
 	# now self.inside[n] and self.outside[n] can be double arrays.
 	chart.inside = dict.fromkeys(chart.getitems(), 0.0)
 
@@ -482,6 +399,5 @@ def test():
 			doctftest(coarse, fine, sent, tree, k, split, verbose=False)
 		print("time elapsed", clock() - begin, "s")
 
-__all__ = ['prunechart', 'bitparkbestitems', 'whitelistfromposteriors',
-		'whitelistfromposteriors_matrix', 'posteriorthreshold',
+__all__ = ['prunechart', 'bitparkbestitems', 'posteriorthreshold',
 		'getinside', 'getoutside']
