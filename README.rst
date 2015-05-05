@@ -28,12 +28,12 @@ General statistical parsing:
 - extract treebank grammar: trees decomposed into productions, relative
   frequencies as probabilities
 - exact *k*-best list of derivations
-- coarse-to-fine pruning: posterior pruning (PCFG only),
+- coarse-to-fine pruning: posterior threshold,
   *k*-best coarse-to-fine
 
 DOP specific (parsing with tree fragments):
 
-- implementations: Goodman's DOP reduction, Double-DOP.
+- implementations: Goodman's DOP reduction, Double-DOP, DOP1.
 - estimators: relative frequency estimate (RFE), equal weights estimate (EWE).
 - objective functions: most probable parse (MPP),
   most probable derivation (MPD), most probable shortest derivation (MPSD),

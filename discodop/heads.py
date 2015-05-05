@@ -69,10 +69,27 @@ def readheadrules(filename):
 
 def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	"""Use head finding rules to select one child of tree node as head."""
+	def find(heads, children):
+		"""Match children with possible heads."""
+		for head in heads:
+			for child in children:
+				if (isinstance(child, Tree)
+						and child.label.split('[')[0] == head):
+					return child
+
+	def invfind(heads, children):
+		"""Inverted version of find()."""
+		for child in children:
+			for head in heads:
+				if (isinstance(child, Tree)
+						and child.label.split('[')[0] == head):
+					return child
+
 	candidates = [a for a in tree if getattr(a, 'source', None)
 			and headlabels.intersection(a.source[FUNC].upper().split('-'))]
 	if candidates:
 		return candidates[0]
+	head = None
 	children = tree
 	for direction, heads in headrules.get(tree.label, []):
 		if direction.startswith('LEFT'):
@@ -82,23 +99,23 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		else:
 			raise ValueError('expected RIGHT or LEFT.')
 		if direction in ('LEFTDIS', 'RIGHTDIS'):
-			for child in children:
-				for head in heads:
-					if (isinstance(child, Tree)
-							and child.label.split('[')[0] == head):
-						return child
+			head = invfind(heads, children)
 		else:
-			for head in heads:
-				for child in children:
-					if (isinstance(child, Tree)
-							and child.label.split('[')[0] == head):
-						return child
-	# default head is initial/last nonterminal (depending on direction)
-	for child in children:
-		if (isinstance(child, Tree)
-				and not punctuation.ispunct(None, child.label)):
-			return child
-	return children[0]
+			head = find(heads, children)
+	if head is None:
+		# default head is initial/last nonterminal (depending on direction)
+		for child in children:
+			if (isinstance(child, Tree)
+					and not punctuation.ispunct(None, child.label)):
+				return child
+		return children[0]
+	else:  # PTB-specific
+		i = tree.index(head)
+		if i >= 2 and tree[i - 1].label in {'CC', 'CONJP'}:
+				for althead in tree[i - 2::-1]:
+					if not punctuation.ispunct(althead.label, althead.label):
+						return althead
+		return head
 
 
 def sethead(child):
