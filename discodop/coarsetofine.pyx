@@ -204,7 +204,7 @@ def getinside(Chart chart):
 					label = chart.label(item)
 					word = chart.sent[chart.lexidx(edge)]
 					prob = (<LexicalRule>chart.grammar.lexicalbylhs[
-							label][word]).prob
+							label].get(word, 1.0)).prob
 				elif edge.rule.rhs2 == 0:
 					leftitem = chart._left(item, edge)
 					prob = (edge.rule.prob

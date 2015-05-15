@@ -937,6 +937,9 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	for n, pos in tree.pos():
 		word = sent[n]
 		chart[1 << n] = cell = {}
+		if word not in fine.lexicalbyword:
+			cell[fine.toid[pos]] = -0.0
+			continue
 		for lexrule in fine.lexicalbyword[word]:
 			if (fine.tolabel[lexrule.lhs] == pos
 					or fine.tolabel[lexrule.lhs].startswith(pos + '@')):
