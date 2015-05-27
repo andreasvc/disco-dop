@@ -94,16 +94,26 @@ cpdef extractfragments(Ctrees trees1, list sents1, int offset, int end,
 		bint twoterms=False, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
-	- scenario 1: recurring fragments in single treebank, use:
-		``extractfragments(trees1, sents1, offset, end, labels)``
-	- scenario 2: common fragments in two treebanks:
-		``extractfragments(trees1, sents1, offset, end, labels, trees2, sents2)``
+	- scenario 1: recurring fragments in single treebank, use::
+		extractfragments(trees1, sents1, offset, end, labels)
+	- scenario 2: common fragments in two treebanks::
+		extractfragments(trees1, sents1, offset, end, labels, trees2, sents2)
 
-	``offset`` and ``end`` can be used to divide the work over multiple
-	processes; they are indices of ``trees1`` to work on (default is all);
-	when ``debug`` is enabled a table of common productions is shown for each
-	pair of trees; when ``complement`` is true, the complement of the recurring
-	fragments in each pair of trees is extracted as well."""
+	:param offset, end: can be used to divide the work over multiple
+		processes; they are indices of ``trees1`` to work on (pass 0 for both
+		to use all);
+	:param approx: return approximate counts instead of bitsets.
+	:param debug: if True, a table of common productions is printed for each
+		pair of trees
+	:param discontinuous: if True, return trees with indices as leaves.
+	:param complement: if True, the complement of the recurring
+		fragments in each pair of trees is extracted as well.
+	:param twoterms: only return fragments with at least two terminals.
+	:param adjacent: only extract fragments from sentences with adjacent
+		indices.
+	:returns: a dictionary; keys are fragments as strings; values are
+		either counts (if approx=True), or bitsets.
+	"""
 	cdef:
 		int n, m, start = 0, end2
 		short minterms = 2 if twoterms else 0
@@ -304,6 +314,8 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 
 	Given a set of fragments from ``trees1`` as bitsets, find all occurrences
 	of those fragments in ``trees2`` (which may be equal to ``trees1``).
+
+	:returns: an array of counts, or a list of indices (Counter objects).
 
 	By default, exact counts are collected. When ``indices`` is ``True``, a
 	multiset of indices is returned for each fragment; the indices point to the
@@ -782,7 +794,8 @@ def getprods(tree, sent, disc=True):
 			if len(a) == 0:
 				result.append((a.label, ))
 			elif len(a) == 1:
-				result.append((a.label,
+				result.append((
+						a.label,
 						a[0].label if isinstance(a[0], Tree)
 						else sent[a[0]]))
 			elif len(a) == 2:
