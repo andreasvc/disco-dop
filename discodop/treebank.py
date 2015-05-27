@@ -511,8 +511,6 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
 		source[LEMMA] = node.get('lemma') or node.get('root')
 		source[MORPH] = node.get('postag') or node.get('frame')
-		if source[MORPH]:
-			source[MORPH] = source[MORPH].replace(' ', '_')
 		source[FUNC] = node.get('rel')
 		if 'cat' in node.keys():
 			source[TAG] = node.get('cat')
@@ -539,6 +537,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 			coindexation[node.get('index')].extend(
 					(node.get('rel'), parent))
 			return None
+		source[:] = [a.replace(' ', '_') if a else a for a in source]
 		result.source = source
 		return result
 
