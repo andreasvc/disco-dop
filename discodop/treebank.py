@@ -96,8 +96,13 @@ class CorpusReader(object):
 		self.lemmas = lemmas
 		self.headrules = readheadrules(headrules) if headrules else {}
 		self._encoding = encoding
-		self._filenames = (sorted(glob(path), key=numbase)
-				if path != '-' else ['-'])
+		try:
+			self._filenames = (sorted(glob(path), key=numbase)
+					if path != '-' else ['-'])
+		except TypeError:
+			print('all sentence IDs must have the same type signature '
+					'(number, string)')
+			raise
 		for opts, opt in (
 				((None, 'leave', 'add', 'replace', 'remove', 'between'),
 					functions),
@@ -506,6 +511,8 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
 		source[LEMMA] = node.get('lemma') or node.get('root')
 		source[MORPH] = node.get('postag') or node.get('frame')
+		if source[MORPH]:
+			source[MORPH] = source[MORPH].replace(' ', '_')
 		source[FUNC] = node.get('rel')
 		if 'cat' in node.keys():
 			source[TAG] = node.get('cat')
@@ -974,14 +981,11 @@ def termindices(treestr):
 
 
 def numbase(key):
-	"""Turn a file name into a numeric sorting key if possible."""
+	"""Split file name in numeric and string components to use as sort key."""
 	path, base = os.path.split(key)
-	base = base.split('.', 1)
-	try:
-		base[0] = int(base[0])
-	except ValueError:
-		pass
-	return [path] + base
+	components = re.split(r'[-.,_ ]', os.path.splitext(base)[0])
+	components = [int(a) if re.match(r'[0-9]+', a) else a for a in components]
+	return [path] + components
 
 
 def removeterminals(tree, sent, func):
