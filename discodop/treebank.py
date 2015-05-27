@@ -22,7 +22,7 @@ from discodop.heads import applyheadrules, readheadrules, ishead
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 EXPORTHEADER = '%% word\tlemma\ttag\tmorph\tedge\tparent\tsecedge\n'
-EXPORTNONTERMINAL = re.compile(r'^#([0-9]+)$')
+EXPORTNONTERMINAL = re.compile(r'^#([5-9][0-9][0-9])$')
 POSRE = re.compile(r'\(([^() ]+) [^ ()]+\)')
 TERMINALSRE = re.compile(r' ([^ ()]+)\)')
 LEAVESRE = re.compile(r' ([^ ()]*)\)')
