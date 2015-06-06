@@ -73,7 +73,7 @@ def prepare(tree, includeterms=False):
 	- sort children to have canonical order
 	- merge preterminals and terminals in single nodes
 		(unless ``includeterms=True``)."""
-	tree = tree.copy(True)
+	tree = Tree.convert(tree)
 	# canonical order of children
 	for a in tree.subtrees(lambda n: isinstance(n[0], Tree)):
 		a.children.sort(key=lambda n: min(n.leaves()))
