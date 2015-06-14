@@ -112,9 +112,9 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 	else:  # PTB-specific
 		i = tree.index(head)
 		if i >= 2 and tree[i - 1].label in {'CC', 'CONJP'}:
-				for althead in tree[i - 2::-1]:
-					if not punctuation.ispunct(althead.label, althead.label):
-						return althead
+			for althead in tree[i - 2::-1]:
+				if not punctuation.ispunct(althead.label, althead.label):
+					return althead
 		return head
 
 
