@@ -41,6 +41,7 @@ except ImportError:
 # disco-dop
 from discodop.treedraw import DrawTree
 from discodop import treebank, fragments
+from discodop.tree import Tree, DiscTree
 from discodop.parser import which
 from discodop.treesearch import TgrepSearcher, DactSearcher, RegexSearcher
 
@@ -318,6 +319,7 @@ def counts(form, doexport=False):
 def trees(form):
 	"""Return visualization of parse trees in search results."""
 	gotresults = False
+	maxresults = min(TREELIMIT, int(form.get('limit') or TREELIMIT))
 	selected = {os.path.join(CORPUS_DIR,
 			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(form)}
@@ -329,13 +331,24 @@ def trees(form):
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				TREELIMIT, url, url + '&linenos=1'))
+				maxresults, url, url + '&linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
 			CORPORA[form.get('engine', 'tgrep2')].trees(form['query'],
-			selected, maxresults=TREELIMIT, nomorph='nomorph' in form,
+			selected, maxresults=maxresults, nomorph='nomorph' in form,
 			nofunc='nofunc' in form)), itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
+		if 'breakdown' in form:
+			breakdown = Counter(DiscTree(
+						max(high, key=lambda x: len(x.leaves())
+							if isinstance(x, Tree) else 1).freeze(), sent)
+					for _, _, _, sent, high in results)
+			for match, cnt in breakdown.most_common():
+				gotresults = True
+				yield 'count: %5d\n%s\n\n' % (
+						cnt, DrawTree(match, match.sent).text(
+							unicodelines=True, html=True))
+			continue
 		for m, (filename, sentno, tree, sent, high) in enumerate(results):
 			if m == 0:
 				gotresults = True
@@ -363,6 +376,7 @@ def trees(form):
 def sents(form, dobrackets=False):
 	"""Return search results as terminals or in bracket notation."""
 	gotresults = False
+	maxresults = min(SENTLIMIT, int(form.get('limit') or SENTLIMIT))
 	selected = {os.path.join(CORPUS_DIR,
 			TEXTS[n] + EXT[form['engine']]): n for n in
 			selectedtexts(form)}
@@ -374,13 +388,26 @@ def sents(form, dobrackets=False):
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				SENTLIMIT, url, url + '&linenos=1'))
+				maxresults, url, url + '&linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
 			CORPORA[form.get('engine', 'tgrep2')].sents(form['query'],
-				selected, maxresults=SENTLIMIT, brackets=dobrackets)),
+				selected, maxresults=maxresults, brackets=dobrackets)),
 			itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
+		if 'breakdown' in form:
+			if dobrackets:
+				breakdown = Counter(high for _, _, _, high in results)
+			else:
+				breakdown = Counter(re.sub(
+					' {2,}', ' ... ',
+					' '.join(word if n in high else ' '
+						for n, word in enumerate(sent.split())))
+					for _, _, sent, high in results)
+			for match, cnt in breakdown.most_common():
+				gotresults = True
+				yield '%5d  %s\n' % (cnt, match)
+			continue
 		for m, (filename, sentno, sent, high) in enumerate(results):
 			if m == 0:
 				gotresults = True
@@ -805,6 +832,21 @@ def tokenize(filename):
 		ucto = None
 	if os.path.exists(base + '.tok'):
 		return
+	elif os.path.exists(base + '.mrg.t2c.gz'):
+		tgrep = subprocess.Popen(
+				args=[which('tgrep2'), '-t', '-c', base + '.mrg.t2c.gz', '*'],
+				shell=False, bufsize=-1, stdout=subprocess.PIPE)
+		converted = (a.replace('-LRB-', '(').replace('-RRB-', ')')
+				for a in tgrep.stdout)
+	elif os.path.exists(base + '.mrg'):
+		converted = (' '.join(GETLEAVES.findall(line)
+				).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
+				for line in open(base + '.mrg'))
+	elif os.path.exists(base + '.dact'):
+		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
+				'sentence').text.encode('utf8') + '\n' for entry
+				in alpinocorpus.CorpusReader(base + '.dact').entries()}
+		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
 	elif ucto and filename.endswith('.txt'):
 		newfile = base + '.tok'
 		proc = subprocess.Popen(args=[which('ucto'),
@@ -812,19 +854,6 @@ def tokenize(filename):
 				filename, newfile], shell=False)
 		proc.wait()
 		return
-	elif os.path.exists(base + '.mrg.t2c.gz'):
-		tgrep = subprocess.Popen(
-				args=[which('tgrep2'), '-t', '-c', base + '.mrg.t2c.gz', '*'],
-				shell=False, bufsize=-1, stdout=subprocess.PIPE)
-		converted = tgrep.stdout
-	elif os.path.exists(base + '.mrg'):
-		converted = (' '.join(GETLEAVES.findall(line)) + '\n'
-				for line in open(base + '.mrg'))
-	elif os.path.exists(base + '.dact'):
-		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
-				'sentence').text.encode('utf8') + '\n' for entry
-				in alpinocorpus.CorpusReader(base + '.dact').entries()}
-		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
 	else:
 		raise ValueError('no file found for "%s" and ucto not installed.'
 				% filename)

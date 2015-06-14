@@ -196,8 +196,8 @@ class TgrepSearcher(CorpusSearcher):
 		subset = subset or self.files
 		# %s the sentence number
 		# %w complete tree in bracket notation
-		# %h the matched subtree in bracket notation
-		fmt = r'%s:::%w:::%h\n'
+		# %m all marked nodes, or the head node if none are marked
+		fmt = r'%s:::%w:::%m\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -241,8 +241,8 @@ class TgrepSearcher(CorpusSearcher):
 		subset = subset or self.files
 		# %s the sentence number
 		# %w complete tree in bracket notation
-		# %h the matched subtree in bracket notation
-		fmt = r'%s:::%w:::%h\n'
+		# %m all marked nodes, or the head node if none are marked
+		fmt = r'%s:::%w:::%m\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -685,7 +685,7 @@ def main():
 				print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
 						% (ANSICOLOR['green'], sentno), end='')
 			print(out)
-	else:
+	else:  # sentences or brackets
 		brackets = '--brackets' in opts or '-b' in opts
 		for filename, sentno, sent, high in searcher.sents(
 				query, brackets=brackets, maxresults=maxresults):

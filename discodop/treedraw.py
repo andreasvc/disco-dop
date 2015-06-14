@@ -205,7 +205,7 @@ class DrawTree(object):
 					'with n=len(sent)\ntokens: %d indices: '
 					'%r\nsent: %s' % (len(sent), tree.leaves(), sent))
 		vertline, corner = -1, -2  # constants
-		tree = tree.copy(True)
+		tree = Tree.convert(tree)
 		for a in tree.subtrees():
 			a.children.sort(key=lambda n: min(n.leaves())
 					if isinstance(n, Tree) else n)

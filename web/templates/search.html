@@ -115,8 +115,12 @@ div.barplot span {
     {% endfor -%}
     </div>
 	<br>
-	<label>Limit number of sentences (leave empty for no limit):
-		<input type=text name=limit value="{{ form['limit'] }}" size=10></label><br>
+	<label>Limit:
+		<input type=text name=limit value="{{ form['limit'] }}" size=10>
+		(with counts: only consider first n sentences;
+			otherwise: return up to n results;
+			leave empty for no limit)
+	</label><br>
     </td><td></td></tr>
     <tr>
 	<td style="vertical-align:top;">Output:</td>
@@ -159,11 +163,14 @@ div.barplot span {
 				form['normquery'] }}"></span></label>
     </td><td></td></tr>
     <tr id=labelrow>
-    <td>Labels</td><td>
+    <td>Options</td><td>
 	<label><input type=checkbox name=nomorph{{ ' checked' if 'nomorph' in form }}>
         Hide morphology tags</label>
     <label><input type=checkbox name=nofunc{{ ' checked' if 'nofunc' in form }}>
-        Hide function tags</label><br>
+        Hide function tags</label>
+	<label><input type=checkbox name=breakdown{{ ' checked' if 'breakdown' in form }}>
+        Breakdown</label>
+	<br>
     </td><td></td></tr>
 </table></form>
 <div id=tgrephelp style="display: none; "><pre>{{ """
