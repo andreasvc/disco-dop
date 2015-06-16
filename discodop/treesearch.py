@@ -226,6 +226,8 @@ class TgrepSearcher(CorpusSearcher):
 					treestr = treestr.replace(match, '_HIGH%s' % match)
 				tree, sent = treebank.termindices(treestr)
 				tree = treetransforms.mergediscnodes(Tree(tree))
+				sent = [word.replace('-LRB-', '(').replace('-RRB-', ')')
+						for word in sent]
 				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
 				if high:
 					high = high.pop()
@@ -264,7 +266,9 @@ class TgrepSearcher(CorpusSearcher):
 					idx = sent.index(match if match.startswith('(')
 							else ' %s)' % match)
 					prelen = len(GETLEAVES.findall(sent[:idx]))
-					sent = ' '.join(GETLEAVES.findall(sent))
+					sent = ' '.join(
+							word.replace('-LRB-', '(').replace('-RRB-', ')')
+							for word in GETLEAVES.findall(sent))
 					match = GETLEAVES.findall(
 							match) if '(' in match else [match]
 					match = range(prelen, prelen + len(match))
@@ -297,7 +301,9 @@ class TgrepSearcher(CorpusSearcher):
 		result = out.decode('utf8').splitlines()
 		if sents:
 			return result
-		return [(treetransforms.mergediscnodes(Tree(tree)), sent)
+		return [(treetransforms.mergediscnodes(Tree(tree)),
+				[word.replace('-LRB-', '(').replace('-RRB-', ')')
+					for word in sent])
 				for tree, sent
 				in (treebank.termindices(filterlabels(
 					treestr, nofunc, nomorph)) for treestr in result)]
@@ -311,11 +317,9 @@ class TgrepSearcher(CorpusSearcher):
 		if self.macros:
 			cmd.append(self.macros)
 		cmd.append(query)
-		proc = subprocess.Popen(args=cmd,
-				bufsize=0,
-				shell=False,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.PIPE)
+		proc = subprocess.Popen(
+				args=cmd, shell=False, bufsize=0,
+				stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		linere = re.compile(r'([0-9]+):::([^\n]*)')
 		if limit or maxresults:
 			results = []
