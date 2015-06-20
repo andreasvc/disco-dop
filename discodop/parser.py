@@ -529,7 +529,7 @@ class Parser(object):
 					print('sum of probabitilies: %g\n' %
 							sum((prob[1] if isinstance(prob, tuple) else prob)
 								for _, prob, _ in besttrees))
-				if not stage.prune:
+				if not stage.prune and tree is not None:
 					item = next(iter(chart.rankededges))
 					totalgolditems = sum(1 for node in tree.subtrees())
 					golditems = sum(
