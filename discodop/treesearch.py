@@ -22,7 +22,7 @@ try:
 except ImportError:
 	ALPINOCORPUSLIB = False
 from roaringbitmap import RoaringBitmap
-from discodop import treebank, treetransforms
+from discodop import treebank, treetransforms, _fragments
 from discodop.tree import Tree
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
@@ -61,7 +61,7 @@ class CorpusSearcher(object):
 		:param files: a sequence of filenames of corpora
 		:param macros: a filename with macros that can be used in queries.
 		:param numthreads: the number of concurrent threads to use;
-			None to disable threading."""
+			pass 1 to disable threading."""
 		if not isinstance(files, (list, tuple, set, dict)) or (
 				not all(isinstance(a, str) for a in files)):
 			raise ValueError('"files" argument must be a sequence of filenames.')
@@ -101,12 +101,12 @@ class CorpusSearcher(object):
 
 		:param maxresults: the maximum number of matches to return.
 		:param brackets: if True, return trees as they appear in the treebank,
-			match is the matching substring.
+			match is a string with the matching subtree.
 			If False (default), sentences are returned as a sequence of tokens.
 		:returns: list of tuples of the form
-			``(corpus, sentno, sent, highlight)``
+			``(corpus, sentno, sent, match)``
 			sent is a single string with space-separated tokens;
-			highlight is an iterable of integer indices of tokens matched
+			match is an iterable of integer indices of tokens matched
 			by the query."""
 
 	def batchcounts(self, queries, subset=None, limit=None):
@@ -324,7 +324,7 @@ class TgrepSearcher(CorpusSearcher):
 		if limit or maxresults:
 			results = []
 			for n, line in enumerate(iter(proc.stdout.readline, b'')):
-				match = linere.match(line.decode('utf-8'))
+				match = linere.match(line.decode('utf8'))
 				m, a = int(match.group(1)), match.group(2)
 				if (limit and m >= limit) or (maxresults and n >= maxresults):
 					proc.stdout.close()
@@ -334,7 +334,7 @@ class TgrepSearcher(CorpusSearcher):
 				results.append((m, a))
 			if proc.wait() != 0:
 				proc.stdout.close()
-				err = proc.stderr.read().decode('utf-8')
+				err = proc.stderr.read().decode('utf8')
 				proc.stderr.close()
 		else:
 			out, err = proc.communicate()
@@ -481,10 +481,210 @@ class DactSearcher(CorpusSearcher):
 		return islice(results, maxresults)
 
 
+class FragmentSearcher(CorpusSearcher):
+	"""Search for fragments in a bracket treebank.
+
+	Format of treebanks and queries can be bracket, discbracket, or
+	export (autodetected).
+	Each query consists of one or more tree fragments, and the results
+	will be merged together, except with batchcounts(), which returns
+	the results for each fragment separately."""
+	def __init__(self, files, macros=None, numthreads=None):
+		super(FragmentSearcher, self).__init__(files, macros, numthreads)
+		self.prods = {}
+		self.labels = []
+		for filename in self.files:
+			# problem: won't convert bracket to disc. trees
+			# self.files[filename] = _fragments.readtreebank(
+			# 		filename, self.labels, self.prods, fmt=fmt)
+			# get format from extension
+			ext = {'export': 'export', 'mrg': 'bracket', 'dbr': 'discbracket'}
+			trees, sents = [], []
+			for _, item in treebank.READERS[ext[filename.split('.')[-1]]](
+					filename).itertrees():
+				trees.append(treetransforms.binarize(item.tree, dot=True))
+				sents.append(item.sent)
+			# result = list(treebank.incrementaltreereader(
+			# 			io.open(filename, encoding='utf8')))
+			# trees = [treetransforms.binarize(a, dot=True)
+			# 		for a, _, _ in result]
+			# sents = [b for _, b, _ in result]
+			result = _fragments.getctrees(trees, sents,
+					labels=self.labels, prods=self.prods)
+			self.files[filename] = (result['trees1'], result['sents1'])
+			# keep track of maxnodes?
+		for filename in self.files:
+			self.files[filename][0].indextrees(self.prods)
+		self.macros = {}
+		if macros:
+			with io.open(macros, encoding='utf8') as tmp:
+				self.macros = dict(line.split('=', 1) for line in tmp)
+
+	def counts(self, query, subset=None, limit=None, indices=False):
+		subset = subset or self.files
+		result = OrderedDict()
+		jobs = {}
+		for filename in subset:
+			try:
+				result[filename] = self.cache[
+						'counts', query, filename, limit, indices]
+			except KeyError:
+				if indices:
+					jobs[self._submit(
+							lambda x: self._query(query, x, None, limit),
+							filename)] = filename
+				else:
+					jobs[self._submit(lambda x:
+						self._query(query, x, None, limit, indices=indices),
+						filename)] = filename
+		for future in self._as_completed(jobs):
+			filename = jobs[future]
+			if indices:
+				result[filename] = Counter()
+				for _, b in future.result():
+					result[filename].update(b)
+			else:
+				result[filename] = sum(b for _, b in future.result())
+			self.cache['counts', query, filename, limit, indices
+					] = result[filename]
+		return result
+
+	def batchcounts(self, queries, subset=None, limit=None):
+		subset = subset or self.files
+		result = OrderedDict()
+		jobs = {}
+		query = '\n'.join(queries) + '\n'
+		for filename in subset:
+			# try:
+			# 	result[filename] = self.cache[
+			# 			'counts', query, filename, limit, indices]
+			# except KeyError:
+			jobs[self._submit(lambda x:
+				self._query(query, x, None, limit, indices=False),
+				filename)] = filename
+		for future in self._as_completed(jobs):
+			filename = jobs[future]
+			# self.cache['counts', query, filename, limit, False] =
+			result[filename] = OrderedDict(future.result())
+		return result
+
+	def trees(self, query, subset=None, maxresults=10,
+			nofunc=False, nomorph=False):
+		if nofunc or nomorph:
+			raise NotImplementedError
+		subset = subset or self.files
+		result = []
+		jobs = {}
+		for filename in subset:
+			try:
+				x, maxresults2 = self.cache['trees', query, filename,
+						nofunc, nomorph]
+			except KeyError:
+				maxresults2 = 0
+			if not maxresults or maxresults > maxresults2:
+				jobs[self._submit(lambda x: list(self._query(
+						query, x, maxresults)), filename)] = filename
+			else:
+				result.extend(x[:maxresults])
+		for future in self._as_completed(jobs):
+			filename = jobs[future]
+			x = []
+			for frag, multiset in future.result():
+				for sentno in multiset:
+					tree, sent = self.extract(
+							filename, sentno, sentno + 1).pop()
+					high = []  # FIXME matching subtree not returned
+					x.append((filename, sentno, tree, sent, high))
+			self.cache['trees', query, filename,
+					nofunc, nomorph] = x, maxresults
+			result.extend(x)
+		return result
+
+	def sents(self, query, subset=None, maxresults=100, brackets=False):
+		subset = subset or self.files
+		result = []
+		jobs = {}
+		for filename in subset:
+			try:
+				x, maxresults2 = self.cache['sents', query, filename, brackets]
+			except KeyError:
+				maxresults2 = 0
+			if not maxresults or maxresults > maxresults2:
+				jobs[self._submit(lambda x: list(self._query(
+						query, x, maxresults)), filename)] = filename
+			else:
+				result.extend(x[:maxresults])
+		for future in self._as_completed(jobs):
+			filename = jobs[future]
+			x = []
+			for frag, multiset in future.result():
+				for sentno in multiset:
+					tree, sent = self.extract(
+							filename, sentno, sentno + 1).pop()
+					sent = ' '.join(sent)
+					if brackets:
+						sent = str(tree) + '\t' + sent
+						match = '\t'.join((
+							str(frag[0]),
+							' '.join(a or '' for a in frag[1])))
+					else:
+						xsent = sent.split(' ')
+						match = {xsent.index(a) for a in frag[1]
+								if a is not None}
+					x.append((filename, sentno, sent, match))
+			self.cache['sents', query, filename, brackets] = x, maxresults
+			result.extend(x)
+		return result
+
+	def extract(self, filename, start, end,
+			nofunc=False, nomorph=False, sents=False):
+		if nofunc or nomorph:
+			raise NotImplementedError
+		trees, xsents = self.files[filename]
+		results = list(_fragments.completebitsets(
+			trees, xsents, self.labels,
+			self.files[filename][0].maxnodes, discontinuous=True,
+			start=start, end=end).keys())
+		if sents:
+			return [' '.join(sent) for _, sent in results]
+		else:
+			return [(treetransforms.mergediscnodes(Tree(treestr)), sent)
+					for treestr, sent in results]
+
+	def _query(self, query, filename, maxresults=None, limit=None,
+			indices=True):
+		"""Run a query on a single file."""
+		if self.macros is not None:
+			query = query.format(**self.macros)
+		trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
+				for a, b, _ in treebank.incrementaltreereader(
+					io.StringIO(query))])
+		queries = _fragments.getctrees(
+				list(trees), list(sents), labels=self.labels, prods=self.prods)
+		maxnodes = max(queries['trees1'].maxnodes,
+					max(self.files[filename][0].maxnodes for filename
+						in self.files))
+		fragments = _fragments.completebitsets(
+				queries['trees1'], queries['sents1'],
+				self.labels, maxnodes, discontinuous=True)
+		results = ((frag, multiset) for frag, multiset in zip(
+					fragments.keys(),
+					_fragments.exactcounts(
+						queries['trees1'],
+						self.files[filename][0],
+						list(fragments.values()),
+						indices=1 if indices else 0,
+						maxnodes=maxnodes, limit=limit)))
+		if maxresults:
+			results = ((a, islice(b, maxresults)) for a, b in results)
+		return results
+
+
 class RegexSearcher(CorpusSearcher):
 	"""Search a plain text file in UTF-8 with regular expressions.
 
-	Assumes that non-empty lines correspond to sentences.
+	Assumes that non-empty lines correspond to sentences; empty lines
+	do not count towards line numbers (e.g., when used as paragraph breaks).
 
 	:param macros: a file containing lines of the form ``'name=regex'``;
 		an occurrence of ``'{name}'`` will be suitably replaced when it
@@ -493,7 +693,7 @@ class RegexSearcher(CorpusSearcher):
 		super(RegexSearcher, self).__init__(files, macros, numthreads)
 		self.macros = {}
 		if macros:
-			with io.open(macros, encoding='utf-8') as tmp:
+			with io.open(macros, encoding='utf8') as tmp:
 				self.macros = dict(line.split('=', 1) for line in tmp)
 		self.lineindex = dict.fromkeys(files)
 
@@ -640,12 +840,14 @@ def cpu_count():
 def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
-	shortoptions = 'e:m:M:stcbnoh'
+	shortoptions = 'e:m:M:stcbnofh'
 	options = ('engine= macros= numthreads= max-count= '
-			'trees sents brackets counts only-matching line-number help')
+			'trees sents brackets counts only-matching line-number file help')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
+		if isinstance(query, bytes):
+			query = query.decode('utf8')
 		if not corpora:
 			raise ValueError('enter one or more corpus files')
 	except (GetoptError, IndexError, ValueError) as err:
@@ -653,18 +855,21 @@ def main():
 		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
+	if '--file' in opts or '-f' in opts:
+		query = io.open(query, encoding='utf8').read()
 	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
 	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))
+	numthreads = opts.get('--numthreads')
 	if engine == 'tgrep2':
-		searcher = TgrepSearcher(corpora, macros=macros,
-				numthreads=opts.get('--numthreads'))
+		searcher = TgrepSearcher(corpora, macros=macros, numthreads=numthreads)
 	elif engine == 'xpath':
-		searcher = DactSearcher(corpora, macros=macros,
-				numthreads=opts.get('--numthreads'))
+		searcher = DactSearcher(corpora, macros=macros, numthreads=numthreads)
 	elif engine == 'regex':
-		searcher = RegexSearcher(corpora, macros=macros,
-				numthreads=opts.get('--numthreads'))
+		searcher = RegexSearcher(corpora, macros=macros, numthreads=numthreads)
+	elif engine == 'frag':
+		searcher = FragmentSearcher(
+				corpora, macros=macros, numthreads=numthreads)
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
 	if '--counts' in opts or '-c' in opts:

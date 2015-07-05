@@ -212,15 +212,15 @@ cdef class Ctrees:
 	cdef Node *nodes
 	cdef NodeArray *trees
 	cdef long nodesleft, max
-	cdef readonly size_t numnodes
+	cdef readonly size_t numnodes, numwords
 	cdef readonly short maxnodes
 	cdef readonly int len
 	cdef list prodindex
 	cdef dict trigramindex
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int numtrees, int extranodes)
-	cpdef add(self, list tree, dict prods)
-	cdef addnodes(self, Node *source, int cnt, int root)
+	cpdef add(self, list tree, dict prods, int lensent)
+	cdef addnodes(self, Node *source, int cnt, int root, int lensent)
 
 # end fragments stuff
 

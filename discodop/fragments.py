@@ -31,7 +31,7 @@ Usage: %(cmd)s <treebank1> [treebank2] [options]
   or: %(cmd)s --batch=<dir> <treebank1> <treebank2>... [options]''' % dict(
 		cmd=sys.argv[0])
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'alt',
-'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet', 'help')
+		'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet', 'help')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=')
 PARAMS = {}
 FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
@@ -244,7 +244,8 @@ def batch(outputdir, filenames, limit, encoding, debin):
 					'indices of occurrence' if PARAMS['indices']
 					else 'exact counts', len(bitsets))
 			counts = _fragments.exactcounts(trees1, trees2, bitsets,
-					indices=PARAMS['indices'])
+					indices=PARAMS['indices'],
+					maxnodes=max(trees1.maxnodes, trees2.maxnodes))
 		outputfilename = '%s/%s_%s' % (outputdir,
 				os.path.basename(filenames[0]), os.path.basename(filename))
 		out = io.open(outputfilename, 'w', encoding=encoding)
@@ -254,14 +255,14 @@ def batch(outputdir, filenames, limit, encoding, debin):
 		logging.info('wrote to %s', outputfilename)
 
 
-def readtreebanks(treebank1, treebank2=None, fmt='bracket',
+def readtreebanks(filename1, filename2=None, fmt='bracket',
 		limit=None, encoding='utf-8'):
 	"""Read one or two treebanks."""
 	labels = []
 	prods = {}
-	trees1, sents1 = _fragments.readtreebank(treebank1, labels, prods,
+	trees1, sents1 = _fragments.readtreebank(filename1, labels, prods,
 			fmt, limit, encoding)
-	trees2, sents2 = _fragments.readtreebank(treebank2, labels, prods,
+	trees2, sents2 = _fragments.readtreebank(filename2, labels, prods,
 			fmt, limit, encoding)
 	trees1.indextrees(prods)
 	if trees2:
@@ -270,25 +271,25 @@ def readtreebanks(treebank1, treebank2=None, fmt='bracket',
 			prods=prods, labels=labels)
 
 
-def read2ndtreebank(treebank2, labels, prods, fmt='bracket',
+def read2ndtreebank(filename2, labels, prods, fmt='bracket',
 		limit=None, encoding='utf-8'):
 	"""Read a second treebank."""
-	trees2, sents2 = _fragments.readtreebank(treebank2, labels, prods,
+	trees2, sents2 = _fragments.readtreebank(filename2, labels, prods,
 			fmt, limit, encoding)
 	trees2.indextrees(prods)
 	logging.info("%r: %d trees; %d nodes (max %d). "
-			"labels: %d, prods: %d",
-			treebank2, len(trees2), trees2.numnodes, trees2.maxnodes,
-			len(set(PARAMS['labels'])), len(PARAMS['prods']))
+			"words: %d, labels: %d, prods: %d",
+			filename2, len(trees2), trees2.numnodes, trees2.maxnodes,
+			trees2.numwords, len(set(PARAMS['labels'])), len(PARAMS['prods']))
 	return dict(trees2=trees2, sents2=sents2, prods=prods, labels=labels)
 
 
-def initworker(treebank1, treebank2, limit, encoding):
+def initworker(filename1, filename2, limit, encoding):
 	"""Read treebanks for this worker.
 
 	We do this separately for each process under the assumption that this is
 	advantageous with a NUMA architecture."""
-	PARAMS.update(readtreebanks(treebank1, treebank2,
+	PARAMS.update(readtreebanks(filename1, filename2,
 			limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
 	if PARAMS['debug']:
 		print("\nproductions:")
@@ -297,14 +298,14 @@ def initworker(treebank1, treebank2, limit, encoding):
 	trees1 = PARAMS['trees1']
 	if not trees1:
 		raise ValueError('treebank1 empty.')
-	m = "treebank1: %d trees; %d nodes (max: %d);" % (
-			trees1.len, trees1.numnodes, trees1.maxnodes)
-	if treebank2:
+	m = 'treebank1: %d trees; %d nodes (max: %d); %d words;' % (
+			trees1.len, trees1.numnodes, trees1.maxnodes, trees1.numwords)
+	if filename2:
 		trees2 = PARAMS['trees2']
 		if not trees2:
 			raise ValueError('treebank2 empty.')
-		m += " treebank2: %d trees; %d nodes (max %d);" % (
-				trees2.len, trees2.numnodes, trees2.maxnodes)
+		m += ' treebank2: %d trees; %d nodes (max %d); %d words' % (
+				trees2.len, trees2.numnodes, trees2.maxnodes, trees2.numwords)
 	logging.info("%s labels: %d, prods: %d", m, len(set(PARAMS['labels'])),
 			len(PARAMS['prods']))
 
@@ -357,7 +358,7 @@ def workload(numtrees, mult, numproc):
 	"""Calculate an even workload.
 
 	When *n* trees are compared against themselves, ``n * (n - 1)`` total
-	comparisons are made. Each tree *m* has to be compared to all trees *x*
+	comparisons are made. Each tree ``m`` has to be compared to all trees ``x``
 	such that ``m < x <= n``
 	(meaning there are more comparisons for lower *n*).
 

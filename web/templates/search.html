@@ -90,7 +90,7 @@ div.barplot span {
             <a href="javascript: toggletextbox(); ">the textbox is too damn <span id=smallbig>{{ 'big' if 'textarea' in form else 'small' }}</span>!</a></td>
     </tr>
     <tr><td style="vertical-align: text-top; ">
-    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>
+    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>;
     Query engine:
     {% if havetgrep %}
     <label><input type=radio name=engine value=tgrep2{{
@@ -101,6 +101,11 @@ div.barplot span {
     <label><input type=radio name=engine value=xpath{{
         ' checked' if form.get('engine', 'tgrep2' if havetgrep else 'xpath') == 'xpath'
 		}} onChange="show('treesoutput', '');">XPath</label>
+    {% endif %}
+    {% if havefrag %}
+    <label><input type=radio name=engine value=frag{{
+        ' checked' if form.get('engine', 'tgrep2') == 'frag'
+		}} onChange="show('treesoutput', '');">fragments</label>
     {% endif %}
     <label><input type=radio name=engine value=regex{{
         ' checked' if form.get('engine') == 'regex' or (not havetgrep and not havexpath)

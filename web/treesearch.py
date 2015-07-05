@@ -40,11 +40,11 @@ except ImportError:
 	ALPINOCORPUSLIB = False
 # disco-dop
 from discodop.treedraw import DrawTree
-from discodop import treebank, fragments
+from discodop import treebank, fragments, treesearch
 from discodop.tree import Tree, DiscTree
 from discodop.parser import which
-from discodop.treesearch import TgrepSearcher, DactSearcher, RegexSearcher
 
+DEBUG = True
 MINFREQ = 2  # filter out fragments which occur just once or twice
 MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
 TREELIMIT = 10  # max number of trees to draw in search resuluts
@@ -63,12 +63,7 @@ FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 # the extensions for corpus files for each query engine:
-EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|txt)$')
-EXT = {
-		'tgrep2': '.mrg.t2c.gz',
-		'xpath': '.dact',
-		'regex': '.tok',
-	}
+EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt)$')
 COLORS = dict(enumerate(
 		'black red orange blue green turquoise slategray peru teal'.split()))
 
@@ -79,7 +74,7 @@ COLORS = dict(enumerate(
 @APP.route('/sents')
 @APP.route('/brackets')
 @APP.route('/fragments')
-def main(debug=False):
+def main(debug=DEBUG):
 	"""Main search form & results page."""
 	output = None
 	if request.path != '/':
@@ -87,47 +82,35 @@ def main(debug=False):
 	elif 'output' in request.args:
 		output = request.args['output']
 	selected = selectedtexts(request.args)
+	args = dict(
+			form=request.args,
+			texts=TEXTS,
+			selectedtexts=selected,
+			output='counts',
+			havetgrep='tgrep2' in CORPORA,
+			havexpath='xpath' in CORPORA,
+			havefrag='frag' in CORPORA,
+			)
 	if output:
 		if output not in DISPATCH:
 			return 'Invalid argument', 404
 		elif request.args.get('export'):
 			return export(request.args, output)
+		args['output'] = output
+		args['results'] = DISPATCH[output](request.args)
 		if debug:  # For debugging purposes:
-			return render_template('searchresults.html',
-					form=request.args,
-					texts=TEXTS,
-					selectedtexts=selected,
-					output=output,
-					results=DISPATCH[output](request.args),
-					havexpath='xpath' in CORPORA,
-					havetgrep='tgrep2' in CORPORA,
-					)
+			return render_template('searchresults.html', **args)
 		else:  # send results incrementally:
-			return Response(stream_template('searchresults.html',
-					form=request.args,
-					texts=TEXTS,
-					selectedtexts=selected,
-					output=output,
-					results=DISPATCH[output](request.args),
-					havexpath='xpath' in CORPORA,
-					havetgrep='tgrep2' in CORPORA,
-					))
-	return render_template('search.html',
-			form=request.args,
-			output='counts',
-			texts=TEXTS,
-			selectedtexts=selected,
-			havexpath='xpath' in CORPORA,
-			havetgrep='tgrep2' in CORPORA,
-			)
+			return Response(stream_template('searchresults.html', **args))
+	return render_template('search.html', **args)
 
 
 def export(form, output):
 	"""Export search results to a file for download."""
 	# NB: no distinction between trees from different texts
-	selected = {os.path.join(CORPUS_DIR,
-			TEXTS[n] + EXT[form['engine']]): n for n in
-			selectedtexts(request.args)}
+	filenames = {EXTRE.sub('', os.path.basename(a)): a
+			for a in CORPORA[form['engine']].files}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
 	if output == 'counts':
 		results = counts(form, doexport=True)
 		if form.get('export') == 'json':
@@ -172,9 +155,9 @@ def counts(form, doexport=False):
 	"""
 	# TODO: option to arrange graphs by text instead of by query
 	norm = form.get('norm', 'sents')
-	selected = {os.path.join(CORPUS_DIR,
-			TEXTS[n] + EXT[form['engine']]): n for n in
-			selectedtexts(form)}
+	filenames = {EXTRE.sub('', os.path.basename(a)): a
+			for a in CORPORA[form['engine']].files}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
 	if not doexport:
 		url = 'counts?' + url_encode(dict(export='csv', **form))
 		yield ('Counts from queries '
@@ -320,9 +303,9 @@ def trees(form):
 	"""Return visualization of parse trees in search results."""
 	gotresults = False
 	maxresults = min(TREELIMIT, int(form.get('limit') or TREELIMIT))
-	selected = {os.path.join(CORPUS_DIR,
-			TEXTS[n] + EXT[form['engine']]): n for n in
-			selectedtexts(form)}
+	filenames = {EXTRE.sub('', os.path.basename(a)): a
+			for a in CORPORA[form['engine']].files}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
 	# NB: we do not hide function or morphology tags when exporting
 	url = 'trees?' + url_encode(dict(export='csv', **form))
 	yield ('<pre>Query: %s\n'
@@ -377,9 +360,9 @@ def sents(form, dobrackets=False):
 	"""Return search results as terminals or in bracket notation."""
 	gotresults = False
 	maxresults = min(SENTLIMIT, int(form.get('limit') or SENTLIMIT))
-	selected = {os.path.join(CORPUS_DIR,
-			TEXTS[n] + EXT[form['engine']]): n for n in
-			selectedtexts(form)}
+	filenames = {EXTRE.sub('', os.path.basename(a)): a
+			for a in CORPORA[form['engine']].files}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
 			url_encode(dict(export='csv', **form)))
 	yield ('<pre>Query: %s\n'
@@ -413,7 +396,7 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			link = ('<a href="/browse?text=%d&sent=%s%s%s">draw</a>'
+			link = ('<a href="/browse?text=%d&sent=%s%s%s">tree</a>'
 					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
 					'context</a>' % (textno, sentno,
 					'&nofunc' if 'nofunc' in form else '',
@@ -438,13 +421,13 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	"""Extract recurring fragments from search results."""
-	if form.get('engine', 'tgrep2') not in ('tgrep2', 'xpath'):
-		yield "Only implemented for tgrep2 and xpath queries."
+	if form.get('engine', 'tgrep2') not in ('tgrep2', 'xpath', 'frag'):
+		yield "Only applicable to treebanks."
 		return
 	gotresults = False
-	selected = {os.path.join(CORPUS_DIR,
-			TEXTS[n] + EXT[form['engine']]): n for n in
-			selectedtexts(form)}
+	filenames = {EXTRE.sub('', os.path.basename(a)): a
+			for a in CORPORA[form['engine']].files}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
 	uniquetrees = set()
 	if not doexport:
 		url = 'fragments?' + url_encode(dict(export='csv', **form))
@@ -456,7 +439,7 @@ def fragmentsinresults(form, doexport=False):
 				% (form['query'] if len(form['query']) < 128
 					else form['query'][:128] + '...',
 					FRAGLIMIT, SENTLIMIT, url))
-	disc = form.get('engine', 'tgrep2') == 'xpath'
+	disc = form.get('engine', 'tgrep2') != 'tgrep2'
 	if disc:
 		fragments.PARAMS.update(disc=True, fmt='discbracket')
 	else:
@@ -466,12 +449,16 @@ def fragmentsinresults(form, doexport=False):
 			maxresults=SENTLIMIT, brackets=True)):
 		if n == 0:
 			gotresults = True
-		if disc:
+		if form.get('engine', 'tgrep2') == 'tgrep2':
+			line = treestr.replace(" )", " -NONE-)") + '\n'
+		elif form.get('engine', 'tgrep2') == 'xpath':
 			item = treebank.alpinotree(
 					ElementTree.fromstring(treestr.encode('utf8')))
 			line = '%s\t%s\n' % (str(item.tree), ' '.join(item.sent))
+		elif form.get('engine', 'tgrep2') == 'frag':
+			line = treestr + '\n'
 		else:
-			line = treestr.replace(" )", " -NONE-)") + '\n'
+			raise ValueError
 		uniquetrees.add(line.encode('utf8'))
 	if not gotresults and not doexport:
 		yield "No matches."
@@ -649,7 +636,7 @@ def browsetrees():
 				mintree=start + 1, maxtree=maxtree)
 	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
-			'(%d sentences)' % (n, text, NUMSENTS[n])
+			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
 			for n, text in enumerate(TEXTS))
 
 
@@ -686,8 +673,9 @@ def browsesents():
 			queryparams = '&' + url_encode(dict(
 					query=request.args['query'],
 					engine=request.args.get('engine', 'tgrep2')))
-			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + EXT[
-					request.args.get('engine', 'tgrep2')])
+			filenames = {EXTRE.sub('', os.path.basename(a)): a
+					for a in CORPORA[form['engine']].files}
+			filename = filenames[TEXTS[textno]]
 			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s' % ('\t'.join(
 					'<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
@@ -721,7 +709,7 @@ def browsesents():
 				engine=request.args.get('engine', ''))
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
-			'(%d sentences)' % (n, text, NUMSENTS[n])
+			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
 			for n, text in enumerate(TEXTS))
 
 
@@ -898,6 +886,10 @@ def getcorpus():
 		except ValueError:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	ffiles = sorted(
+			glob.glob(os.path.join(CORPUS_DIR, '*.export'))
+			or glob.glob(os.path.join(CORPUS_DIR, '*.dbr'))
+			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
 	txtfiles = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	# get tokenized sents from trees or ucto
@@ -905,21 +897,26 @@ def getcorpus():
 		tokenize(filename)
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
-		corpora['tgrep2'] = TgrepSearcher(tfiles, 'static/tgrepmacros.txt')
+		corpora['tgrep2'] = treesearch.TgrepSearcher(
+				tfiles, macros='static/tgrepmacros.txt')
+	if ffiles and set(ffiles) != set(corpora.get('frag', ())):
+		corpora['frag'] = treesearch.FragmentSearcher(
+				ffiles)  # macros='static/fragmacros.txt'
 	if afiles and ALPINOCORPUSLIB and set(afiles) != set(
 			corpora.get('xpath', ())):
-		corpora['xpath'] = DactSearcher(afiles, 'static/xpathmacros.txt')
+		corpora['xpath'] = treesearch.DactSearcher(
+				afiles, macros='static/xpathmacros.txt')
 	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
-		corpora['regex'] = RegexSearcher(tokfiles, 'static/regexmacros.txt')
+		corpora['regex'] = treesearch.RegexSearcher(
+				tokfiles, macros='static/regexmacros.txt')
 
-	assert tfiles or afiles or tokfiles, ('no files with extension '
-			'.mrg, .dact, or .txt found in %s' % CORPUS_DIR)
-	if tfiles and afiles:
-		assert len(tfiles) == len(afiles) and all(
-				t.rsplit('.', 1)[0] == a.rsplit('.', 1)[0]
-				for a, t in zip(tfiles, afiles)), (
-				'expected either .mrg or .dact files, '
-				'or corresponding .mrg and .dact files')
+	assert tfiles or afiles or ffiles or tokfiles, (
+			'no corpus files with extension .mrg, .dbr, .export, .dact, '
+			'or .txt found in %s' % CORPUS_DIR)
+	assert len(set(
+			frozenset(b.rsplit('.', 1)[0] for b in files)
+			for files in (tfiles, afiles, ffiles) if files)) == 1, (
+			'files in different formats do not match.')
 	picklemtime = 0
 	if os.path.exists(picklefile):
 		picklemtime = os.stat(picklefile).st_mtime
@@ -927,13 +924,20 @@ def getcorpus():
 		for filename in tfiles + afiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
 				for a in tfiles + afiles + tokfiles)):
-		if corpora.get('tgrep2'):
+		if corpora.get('frag'):
+			numsents = [corpora['frag'].files[filename][0].len
+					for filename in ffiles]
+			numconst = [corpora['frag'].files[filename][0].numnodes
+					for filename in ffiles]
+			numwords = [corpora['frag'].files[filename][0].numwords
+					for filename in ffiles]
+		elif corpora.get('tgrep2'):
 			numsents = [len(open(filename).readlines())
-					for filename in tfiles if filename.endswith('.mrg')]
+					for filename in tfiles]
 			numconst = [open(filename).read().count('(')
-					for filename in tfiles if filename.endswith('.mrg')]
+					for filename in tfiles]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
-					for filename in tfiles if filename.endswith('.mrg')]
+					for filename in tfiles]
 		elif corpora.get('xpath'):
 			numsents = [corpus.size() for corpus
 					in corpora['xpath'].files.values()]
@@ -1007,4 +1011,4 @@ TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
 log.info('corpus loaded.')
 
 if __name__ == '__main__':
-	APP.run(debug=True, host='0.0.0.0')
+	APP.run(debug=DEBUG, use_reloader=False, host='0.0.0.0')

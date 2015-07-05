@@ -466,14 +466,14 @@ cdef class Ctrees:
 
 	def __init__(self, list trees=None, dict prods=None):
 		self.len = self.max = 0
-		self.numnodes = self.maxnodes = self.nodesleft = 0
+		self.numnodes = self.maxnodes = self.nodesleft = self.numwords = 0
 		if trees is not None:
 			if prods is None:
 				raise ValueError('when initialized with trees, prods argument '
 						'is required.')
 			self.alloc(len(trees), sum(map(len, trees)))
 			for tree in trees:
-				self.add(tree, prods)
+				self.add(tree, prods, len(tree.leaves()))
 
 	cpdef alloc(self, int numtrees, long numnodes):
 		"""Initialize an array of trees of nodes structs."""
@@ -507,7 +507,7 @@ cdef class Ctrees:
 				raise MemoryError('allocation error')
 			self.nodesleft = numnodes - self.numnodes
 
-	cpdef add(self, list tree, dict prods):
+	cpdef add(self, list tree, dict prods, int lensent):
 		"""Incrementally add tree to the node array.
 
 		Useful when dealing with large numbers of Tree objects (say 100,000).
@@ -524,8 +524,9 @@ cdef class Ctrees:
 		self.nodesleft -= len(tree)
 		self.numnodes += len(tree)
 		self.maxnodes = max(self.maxnodes, len(tree))
+		self.numwords += lensent
 
-	cdef addnodes(self, Node *source, int cnt, int root):
+	cdef addnodes(self, Node *source, int cnt, int root, int lensent):
 		"""Incrementally add tree to the node array.
 
 		This version copies a tree that has already been converted to an array
@@ -556,6 +557,7 @@ cdef class Ctrees:
 		self.numnodes += cnt
 		if cnt > self.maxnodes:
 			self.maxnodes = cnt
+		self.numwords += lensent
 
 	def indextrees(self, dict prods):
 		"""Create index from productions to trees containing that production.

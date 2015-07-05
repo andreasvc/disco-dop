@@ -808,10 +808,12 @@ def handlemorphology(action, lemmaaction, preterminal, source, sent=None):
 def incrementaltreereader(treeinput, morphology=None, functions=None):
 	"""Incremental corpus reader.
 
-	Supports brackets, discbrackets, and export format. The format is
-	autodetected. Expects an iterator giving one line at a time. Yields tuples
-	with a Tree object, a separate lists of terminals, and a string with any
-	other data following the tree."""
+	:param treeinput: an iterator giving one line at a time.
+		Supports brackets, discbrackets, and export format. The format is
+		autodetected.
+	:yields: tuples ``(tree, sent, comment)`` with a Tree object, a separate
+		lists of terminals, and a string with any other data following the
+		tree."""
 	treeinput = chain(iter(treeinput), ('(', None, None))  # hack
 	line = next(treeinput)
 	# try the following readers on each line in this order
@@ -965,7 +967,10 @@ def unquote(word):
 def termindices(treestr):
 	"""Replace terminals in a tree string with consecutive indices.
 
-	Only applicable to trees without discontinuity.
+	Only applicable to phrase-structure trees without discontinuity.
+
+	:returns: tuple ``(tree, sent)`` with Tree object and sentence as list of
+		strings.
 
 	>>> tree, sent = termindices('(S (NP Mary) (VP walks))')
 	>>> print(tree)

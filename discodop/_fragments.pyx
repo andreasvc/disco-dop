@@ -309,34 +309,45 @@ cdef inline int extractat(uint64_t *matrix, uint64_t *result, Node *a, Node *b,
 
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
-		bint indices=False):
+		int indices=False, maxnodes=None, limit=None):
 	"""Get exact counts or indices of occurrence for fragments.
 
-	Given a set of fragments from ``trees1`` as bitsets, find all occurrences
-	of those fragments in ``trees2`` (which may be equal to ``trees1``).
+	:param trees1, bitsets: ``bitsets`` defines fragments of trees in
+		``trees1`` to search for (the needles).
+	:param trees2: the trees to search in (haystack); may be equal
+		to ``trees2``.
+	:param indices: whether to collect indices or counts.
+		:0: return a single count per fragment.
+		:1: return a Counter object for each fragment with sentence numbers
+			and a count per sentence.
+		:2: return a Counter object for each fragment with sentence numbers as
+			keys and a node number where the fragment occurs in the
+			corresponding tree; when a fragment occurs multiple times in a
+			tree, only a single occurrence is recorded.
 
-	:returns: an array of counts, or a list of indices (Counter objects).
-
-	By default, exact counts are collected. When ``indices`` is ``True``, a
-	multiset of indices is returned for each fragment; the indices point to the
-	trees where the fragments (described by the bitsets) occur. This is useful
-	to look up the contexts of fragments, or when the order of sentences has
-	significance which makes it possible to interpret the set of indices as
-	time-series data. The reason we need to do this separately from extracting
-	maximal fragments is that a fragment can occur in other trees where it was
-	not a maximal."""
+	:param maxnodes: when searching in multiple treebanks, supply the
+		largest number of nodes in a single tree to fix the bitset size;
+		can be left out when searching in 1 or 2 treebanks.
+	:param limit: only search through first N number of trees from trees2
+		(defaults to all trees).
+	:returns: an array of counts, or a list of indices (Counter objects)."""
 	cdef:
 		array counts = None
 		list theindices = None
 		object matches = None  # Counter()
 		object candidates  # RoaringBitmap()
-		short i, j, SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-		uint32_t n, m
+		short i, j, SLOTS
+		uint32_t n, m, limit_
 		uint32_t *countsp = NULL
 		NodeArray a, b
 		Node *anodes
 		Node *bnodes
 		uint64_t *bitset
+	limit_ = limit if limit else trees2.len
+	if maxnodes:
+		SLOTS = BITNSLOTS(maxnodes + 1)
+	else:
+		SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
 	if indices:
 		theindices = [Counter() for _ in bitsets]
 	else:
@@ -353,20 +364,24 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 			getcandidates(anodes, bitset, i, trees2, tmp)
 			candidates = tmp[0].copy()
 			candidates.intersection_update(*tmp[1:])
-		except KeyError:
+		except (KeyError, IndexError):  # ran across unseen production
 			candidates = RoaringBitmap()
 		if indices:
 			matches = theindices[n]
 		for m in candidates:
+			if m >= limit_:
+				continue
 			b = trees2.trees[m]
 			bnodes = &trees2.nodes[b.offset]
 			for j in range(b.len):
 				if anodes[i].prod == bnodes[j].prod:
 					if containsbitset(anodes, bnodes, bitset, i, j):
-						if indices:
-							matches[m] += 1
-						else:
+						if indices == 0:
 							countsp[n] += 1
+						elif indices == 1:
+							matches[m] += 1
+						elif indices == 2:
+							matches[m] = j
 				elif anodes[i].prod < bnodes[j].prod:
 					break
 	return theindices if indices else counts
@@ -420,8 +435,11 @@ cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
 
 
 cpdef dict completebitsets(Ctrees trees, list sents, list labels,
-		short maxnodes, bint discontinuous=False):
+		short maxnodes, bint discontinuous=False,
+		start=None, end=None):
 	"""Generate bitsets corresponding to whole trees in the input.
+
+	:returns: dictionary of trees as strings mapped to their bitsets.
 
 	Important: if multiple treebanks are used, maxnodes should equal
 	``max(trees1.maxnodes, trees2.maxnodes)``"""
@@ -433,7 +451,8 @@ cpdef dict completebitsets(Ctrees trees, list sents, list labels,
 		uint64_t *scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 		Node *nodes
 		list tmp = []
-	for n in range(trees.len):
+	start, end, unused_step = slice(start, end).indices(trees.len)
+	for n in range(<int>start, <int>end):
 		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		nodes = &trees.nodes[trees.trees[n].offset]
 		sent = sents[n]
@@ -623,7 +642,10 @@ cdef inline getsubtree(list result, Node *tree, uint64_t *bitset,
 		list labels, list sent, int i):
 	"""Get string of tree fragment denoted by bitset; indices as terminals.
 
-	:param result: provide an empty list for the initial call."""
+	:param result: provide an empty list for the initial call.
+	:param sent: pass None to get a tree with indices as leaves
+		(discontinuous trees); pass a list of words to get a
+		continuous tree with words as leaves."""
 	result.append('(')
 	result.append(labels[tree[i].prod])
 	result.append(' ')
@@ -934,8 +956,12 @@ cdef inline copynodes(tree, list prodsintree, dict prods,
 			copynodes(tree[1], prodsintree, prods, result, idx)
 
 
-def getctrees(trees1, sents1, disc=True, trees2=None, sents2=None):
-	""":returns: Ctrees object for disc. binary trees and sentences."""
+def getctrees(trees1, sents1, disc=True, trees2=None, sents2=None,
+		labels=None, prods=None):
+	"""Convert binarized Tree objects to Ctrees object.
+
+	:returns: dictionary with same keys as arguments, where trees1 and
+		trees2 are Ctrees object for (disc.) binary trees and sentences."""
 	cdef Ctrees ctrees, ctrees1, ctrees2 = None
 	cdef Node *scratch
 	cdef size_t cnt
@@ -943,8 +969,9 @@ def getctrees(trees1, sents1, disc=True, trees2=None, sents2=None):
 	scratch = <Node *>malloc(maxnodes * sizeof(Node))
 	if scratch is NULL:
 		raise MemoryError('allocation error')
-	labels = []
-	prods = {}
+	if prods is None:
+		labels = []
+		prods = {}
 	ctrees = ctrees1 = Ctrees()
 	ctrees.alloc(512, 512 * 512)
 	for m, (trees, sents) in enumerate(((trees1, sents1), (trees2, sents2))):
@@ -967,17 +994,19 @@ def getctrees(trees1, sents1, disc=True, trees2=None, sents2=None):
 					raise MemoryError('allocation error')
 			cnt = 0
 			copynodes(tree, prodsintree, prods, scratch, &cnt)
-			ctrees.addnodes(scratch, cnt, 0)
+			ctrees.addnodes(scratch, cnt, 0, len(sent))
 		ctrees.indextrees(prods)
 	return dict(trees1=ctrees1, sents1=sents1, trees2=ctrees2, sents2=sents2,
-			prods=prods, labels=labels)
+			labels=labels, prods=prods)
 
 
 def readtreebank(treebankfile, list labels, dict prods,
 		fmt='bracket', limit=None, encoding='utf-8'):
 	"""Read a treebank from a given filename.
 
-	labels and prods should be re-used when reading multiple treebanks."""
+	labels and prods should be re-used when reading multiple treebanks.
+
+	:returns: tuple of Ctrees object and list of sentences."""
 	cdef Ctrees ctrees
 	cdef Node *scratch
 	cdef size_t cnt, n
@@ -1011,7 +1040,7 @@ def readtreebank(treebankfile, list labels, dict prods,
 					raise MemoryError('allocation error')
 			cnt = 0
 			copynodes(tree, prodsintree, prods, scratch, &cnt)
-			ctrees.addnodes(scratch, cnt, 0)
+			ctrees.addnodes(scratch, cnt, 0, len(item.sent))
 			sents.append(item.sent)
 	else:  # do incremental reading of bracket trees
 		# could use BracketCorpusReader or expect trees/sents as input, but
@@ -1032,7 +1061,7 @@ def readtreebank(treebankfile, list labels, dict prods,
 						treebankfile, n, line))
 			readnode(match.group(1), line, match.end(), len(line),
 					labels, prods, scratch, &cnt, sent, None)
-			ctrees.addnodes(scratch, cnt, 0)
+			ctrees.addnodes(scratch, cnt, 0, len(sent))
 			sents.append(sent)
 		if not sents:
 			raise ValueError('%r appears to be empty' % treebankfile)
