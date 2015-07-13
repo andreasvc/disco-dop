@@ -1039,7 +1039,8 @@ def getctrees(trees1, sents1, trees2=None, sents2=None,
 				if prod not in vocab.prods:
 					vocab.labels.append(r[0])
 					vocab.prods[prod] = len(vocab.prods)
-					vocab.words.append(yf[0] if r[1] == 'Epsilon' else None)
+					vocab.words.append(yf[0]
+							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
 				maxnodes = cnt
 				scratch = <Node *>realloc(scratch,
@@ -1088,7 +1089,8 @@ def readtreebank(treebankfile, Vocabulary vocab,
 				if prod not in vocab.prods:
 					vocab.labels.append(r[0])
 					vocab.prods[prod] = len(vocab.prods)
-					vocab.words.append(yf[0] if r[1] == 'Epsilon' else None)
+					vocab.words.append(yf[0]
+							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
 				maxnodes = len(cnt)
 				scratch = <Node *>realloc(scratch,
