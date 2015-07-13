@@ -216,11 +216,16 @@ cdef class Ctrees:
 	cdef readonly short maxnodes
 	cdef readonly int len
 	cdef list prodindex
-	cdef dict trigramindex
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int numtrees, int extranodes)
-	cpdef add(self, list tree, dict prods, int lensent)
-	cdef addnodes(self, Node *source, int cnt, int root, int lensent)
+	cdef addnodes(self, Node *source, int cnt, int root)
+
+
+@cython.final
+cdef class Vocabulary:
+	cdef readonly dict prods  # production str. => int
+	cdef readonly list labels  # int => lhs of production
+	cdef readonly list words  # int => rhs of lex. production
 
 # end fragments stuff
 
@@ -337,3 +342,8 @@ cdef inline str yieldranges(list leaves):
 		prev = a
 	yields.append('%d:%d' % (start, prev))
 	return ' '.join(yields)
+
+
+cdef inline short termidx(short x):
+	"""Translate representation for terminal indices."""
+	return -x - 1

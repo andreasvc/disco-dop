@@ -25,6 +25,7 @@ from discodop.tree import Tree
 from discodop.treetransforms import binarize, introducepreterminals, unbinarize
 from discodop import _fragments
 from discodop.parser import workerfunc
+from discodop.containers import Vocabulary
 
 SHORTUSAGE = '''\
 Usage: %(cmd)s <treebank1> [treebank2] [options]
@@ -143,7 +144,7 @@ def regular(filenames, numproc, limit, encoding):
 	if PARAMS['complete']:
 		trees1, trees2 = PARAMS['trees1'], PARAMS['trees2']
 		fragments = _fragments.completebitsets(
-				trees1, PARAMS['sents1'], PARAMS['labels'],
+				trees1, PARAMS['vocab'],
 				max(trees1.maxnodes, trees2.maxnodes), PARAMS['disc'])
 	else:
 		if len(filenames) == 1:
@@ -181,9 +182,8 @@ def regular(filenames, numproc, limit, encoding):
 	if PARAMS['cover']:
 		maxdepth, maxfrontier = PARAMS['cover']
 		before = len(fragmentkeys)
-		cover = _fragments.allfragments(PARAMS['trees1'], PARAMS['sents1'],
-				PARAMS['labels'], maxdepth, maxfrontier, PARAMS['disc'],
-				PARAMS['indices'])
+		cover = _fragments.allfragments(PARAMS['trees1'], PARAMS['vocab'],
+				maxdepth, maxfrontier, PARAMS['disc'], PARAMS['indices'])
 		for a in cover:
 			if a not in fragments:
 				fragmentkeys.append(a)
@@ -212,10 +212,9 @@ def batch(outputdir, filenames, limit, encoding, debin):
 		fragments used as queries on the other treebanks specified."""
 	initworker(filenames[0], None, limit, encoding)
 	trees1 = PARAMS['trees1']
-	sents1 = PARAMS['sents1']
 	if PARAMS['complete']:
 		fragments = _fragments.completebitsets(
-				trees1, sents1, PARAMS['labels'],
+				trees1, PARAMS['vocab'],
 				trees1.maxnodes, PARAMS['disc'])
 		fragmentkeys = list(fragments)
 	elif PARAMS['approx']:
@@ -223,17 +222,14 @@ def batch(outputdir, filenames, limit, encoding, debin):
 	else:
 		fragments = {}
 	for filename in filenames[1:]:
-		PARAMS.update(read2ndtreebank(filename, PARAMS['labels'],
-			PARAMS['prods'], PARAMS['fmt'], limit, encoding))
+		PARAMS.update(read2ndtreebank(filename, PARAMS['vocab'],
+			PARAMS['fmt'], limit, encoding))
 		trees2 = PARAMS['trees2']
-		sents2 = PARAMS['sents2']
 		if not PARAMS['complete']:
-			fragments = _fragments.extractfragments(trees1, sents1, 0, 0,
-					PARAMS['labels'], trees2, sents2,
-					discontinuous=PARAMS['disc'], debug=PARAMS['debug'],
-					approx=PARAMS['approx'],
-					twoterms=PARAMS['twoterms'],
-					adjacent=PARAMS['adjacent'])
+			fragments = _fragments.extractfragments(trees1, 0, 0,
+					PARAMS['vocab'], trees2, discontinuous=PARAMS['disc'],
+					debug=PARAMS['debug'], approx=PARAMS['approx'],
+					twoterms=PARAMS['twoterms'], adjacent=PARAMS['adjacent'])
 			fragmentkeys = list(fragments)
 		counts = None
 		if PARAMS['approx'] or not fragments:
@@ -256,32 +252,30 @@ def batch(outputdir, filenames, limit, encoding, debin):
 
 
 def readtreebanks(filename1, filename2=None, fmt='bracket',
-		limit=None, encoding='utf-8'):
+		limit=None, encoding='utf8'):
 	"""Read one or two treebanks."""
-	labels = []
-	prods = {}
-	trees1, sents1 = _fragments.readtreebank(filename1, labels, prods,
+	vocab = Vocabulary()
+	trees1 = _fragments.readtreebank(filename1, vocab,
 			fmt, limit, encoding)
-	trees2, sents2 = _fragments.readtreebank(filename2, labels, prods,
+	trees2 = _fragments.readtreebank(filename2, vocab,
 			fmt, limit, encoding)
-	trees1.indextrees(prods)
+	trees1.indextrees(vocab)
 	if trees2:
-		trees2.indextrees(prods)
-	return dict(trees1=trees1, sents1=sents1, trees2=trees2, sents2=sents2,
-			prods=prods, labels=labels)
+		trees2.indextrees(vocab)
+	return dict(trees1=trees1, trees2=trees2, vocab=vocab)
 
 
-def read2ndtreebank(filename2, labels, prods, fmt='bracket',
-		limit=None, encoding='utf-8'):
+def read2ndtreebank(filename2, vocab, fmt='bracket',
+		limit=None, encoding='utf8'):
 	"""Read a second treebank."""
-	trees2, sents2 = _fragments.readtreebank(filename2, labels, prods,
+	trees2 = _fragments.readtreebank(filename2, vocab,
 			fmt, limit, encoding)
-	trees2.indextrees(prods)
+	trees2.indextrees(vocab)
 	logging.info("%r: %d trees; %d nodes (max %d). "
-			"words: %d, labels: %d, prods: %d",
+			"word tokens: %d, %r",
 			filename2, len(trees2), trees2.numnodes, trees2.maxnodes,
-			trees2.numwords, len(set(PARAMS['labels'])), len(PARAMS['prods']))
-	return dict(trees2=trees2, sents2=sents2, prods=prods, labels=labels)
+			trees2.numwords, PARAMS['vocab'])
+	return dict(trees2=trees2, vocab=vocab)
 
 
 def initworker(filename1, filename2, limit, encoding):
@@ -293,26 +287,25 @@ def initworker(filename1, filename2, limit, encoding):
 			limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
 	if PARAMS['debug']:
 		print("\nproductions:")
-		for a, b in sorted(PARAMS['prods'].items(), key=lambda x: x[1]):
-			print(b, *a)
+		for a, b in sorted(PARAMS['vocab'].prods.items(), key=lambda x: x[1]):
+			print(b, a)
 	trees1 = PARAMS['trees1']
 	if not trees1:
 		raise ValueError('treebank1 empty.')
-	m = 'treebank1: %d trees; %d nodes (max: %d); %d words;' % (
+	m = 'treebank1: %d trees; %d nodes (max: %d); %d word tokens;' % (
 			trees1.len, trees1.numnodes, trees1.maxnodes, trees1.numwords)
 	if filename2:
 		trees2 = PARAMS['trees2']
 		if not trees2:
 			raise ValueError('treebank2 empty.')
-		m += ' treebank2: %d trees; %d nodes (max %d); %d words' % (
+		m += ' treebank2: %d trees; %d nodes (max %d); %d word tokens' % (
 				trees2.len, trees2.numnodes, trees2.maxnodes, trees2.numwords)
-	logging.info("%s labels: %d, prods: %d", m, len(set(PARAMS['labels'])),
-			len(PARAMS['prods']))
+	logging.info("%s %r", m, PARAMS['vocab'])
 
 
-def initworkersimple(trees, sents, disc, trees2=None, sents2=None):
+def initworkersimple(trees, sents, trees2=None, sents2=None):
 	"""Initialization for a worker in which a treebank was already loaded."""
-	PARAMS.update(_fragments.getctrees(trees, sents, disc, trees2, sents2))
+	PARAMS.update(_fragments.getctrees(trees, sents, trees2, sents2))
 	assert PARAMS['trees1']
 
 
@@ -322,12 +315,10 @@ def worker(interval):
 	offset, end = interval
 	trees1 = PARAMS['trees1']
 	trees2 = PARAMS['trees2']
-	sents1 = PARAMS['sents1']
-	sents2 = PARAMS['sents2']
 	assert offset < trees1.len
 	result = {}
-	result = _fragments.extractfragments(trees1, sents1, offset, end,
-			PARAMS['labels'], trees2, sents2, approx=PARAMS['approx'],
+	result = _fragments.extractfragments(trees1, offset, end,
+			PARAMS['vocab'], trees2, approx=PARAMS['approx'],
 			discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
 			debug=PARAMS['debug'], twoterms=PARAMS['twoterms'],
 			adjacent=PARAMS['adjacent'])
@@ -343,14 +334,14 @@ def exactcountworker(args):
 	if PARAMS['complete']:
 		results = _fragments.exactcounts(trees1, PARAMS['trees2'], bitsets,
 				indices=PARAMS['indices'])
-		logging.debug("complete matches %d of %d", n + 1, m)
+		logging.debug("complete matches chunk %d of %d", n + 1, m)
 		return results
 	results = _fragments.exactcounts(
 			trees1, trees1, bitsets, indices=PARAMS['indices'])
 	if PARAMS['indices']:
-		logging.debug("exact indices %d of %d", n + 1, m)
+		logging.debug("exact indices chunk %d of %d", n + 1, m)
 	else:
-		logging.debug("exact counts %d of %d", n + 1, m)
+		logging.debug("exact counts chunk %d of %d", n + 1, m)
 	return results
 
 
@@ -419,7 +410,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	work = workload(numtrees, mult, numproc)
 	PARAMS.update(disc=disc, indices=indices, approx=False, complete=False,
 			complement=complement, debug=False, adjacent=False, twoterms=False)
-	initworkersimple(trees, list(sents), disc)
+	initworkersimple(trees, list(sents))
 	if numproc == 1:
 		mymap = map
 	else:
@@ -429,7 +420,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 		# start worker processes
 		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworkersimple,
-				initargs=(trees, list(sents), disc))
+				initargs=(trees, list(sents)))
 		mymap = pool.map
 	# collect recurring fragments
 	logging.info("extracting recurring fragments")
@@ -447,8 +438,8 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 		counts.extend(a)
 	# add all fragments up to a given depth
 	if maxdepth:
-		cover = _fragments.allfragments(PARAMS['trees1'], PARAMS['sents1'],
-				PARAMS['labels'], maxdepth, maxfrontier, disc, indices)
+		cover = _fragments.allfragments(PARAMS['trees1'], PARAMS['vocab'],
+				maxdepth, maxfrontier, disc, indices)
 		before = len(fragmentkeys)
 		for a in cover:
 			if a not in fragments:
@@ -495,9 +486,9 @@ def allfragments(trees, sents, maxdepth, maxfrontier=999):
 	"""Return all fragments up to a certain depth, # frontiers."""
 	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
 			complement=False, debug=False, adjacent=False, twoterms=False)
-	initworkersimple(trees, list(sents), PARAMS['disc'])
-	return _fragments.allfragments(PARAMS['trees1'], PARAMS['sents1'],
-			PARAMS['labels'], maxdepth, maxfrontier,
+	initworkersimple(trees, list(sents))
+	return _fragments.allfragments(PARAMS['trees1'],
+			PARAMS['vocab'], maxdepth, maxfrontier,
 			discontinuous=PARAMS['disc'], indices=PARAMS['indices'])
 
 
@@ -507,13 +498,13 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	if not numtrees:
 		raise ValueError('no trees.')
 	if numproc == 1:  # set fragments as input
-		initworkersimple(newtrees, newsents, PARAMS['disc'], trees, sents)
+		initworkersimple(newtrees, newsents, trees, sents)
 		mymap = map
 	else:
 		# since the input trees change, we need a new pool each time
 		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworkersimple,
-				initargs=(newtrees, newsents, PARAMS['disc'], trees, sents))
+				initargs=(newtrees, newsents, trees, sents))
 		mymap = pool.imap
 	newfragments = {}
 	for a in mymap(worker, workload(numtrees, 1, numproc)):

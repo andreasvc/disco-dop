@@ -11,6 +11,8 @@ except ImportError as err:
 	havecython = False
 from discodop import __version__
 
+DEBUG = False
+
 metadata = dict(name='disco-dop',
 		version=__version__,
 		description='Discontinuous Data-Oriented Parsing',
@@ -62,17 +64,24 @@ directives = {
 if __name__ == '__main__':
 	if havecython:
 		os.environ['GCC_COLORS'] = 'auto'
-		extensions = [Extension(
-				'*',
-				['discodop/*.pyx'],
-				extra_compile_args=['-O3', '-march=native', '-DNDEBUG'],
-				extra_link_args=['-DNDEBUG'],
-				# extra_compile_args=['-g', '-O0'],
-				# extra_link_args=['-g'],
-				# include_dirs=[...],
-				# libraries=[...],
-				# library_dirs=[...],
-				)]
+		if DEBUG:
+			directives.update(wraparound=True, boundscheck=True)
+			extensions = [Extension(
+					'*',
+					['discodop/*.pyx'],
+					extra_compile_args=['-g', '-O0'],
+					extra_link_args=['-g'],
+					)]
+		else:
+			extensions = [Extension(
+					'*',
+					['discodop/*.pyx'],
+					extra_compile_args=['-O3', '-march=native', '-DNDEBUG'],
+					extra_link_args=['-DNDEBUG'],
+					# include_dirs=[...],
+					# libraries=[...],
+					# library_dirs=[...],
+					)]
 		setup(
 				cmdclass=dict(build_ext=build_ext),
 				ext_modules=cythonize(

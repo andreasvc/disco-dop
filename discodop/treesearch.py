@@ -26,6 +26,7 @@ from discodop import treebank, treetransforms, _fragments
 from discodop.tree import Tree
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
+from discodop.containers import Vocabulary
 
 SHORTUSAGE = '''Search through treebanks with queries.
 Usage: %s [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...\
@@ -491,30 +492,15 @@ class FragmentSearcher(CorpusSearcher):
 	the results for each fragment separately."""
 	def __init__(self, files, macros=None, numthreads=None):
 		super(FragmentSearcher, self).__init__(files, macros, numthreads)
-		self.prods = {}
-		self.labels = []
+		self.vocab = Vocabulary()
 		for filename in self.files:
-			# problem: won't convert bracket to disc. trees
-			# self.files[filename] = _fragments.readtreebank(
-			# 		filename, self.labels, self.prods, fmt=fmt)
 			# get format from extension
 			ext = {'export': 'export', 'mrg': 'bracket', 'dbr': 'discbracket'}
-			trees, sents = [], []
-			for _, item in treebank.READERS[ext[filename.split('.')[-1]]](
-					filename).itertrees():
-				trees.append(treetransforms.binarize(item.tree, dot=True))
-				sents.append(item.sent)
-			# result = list(treebank.incrementaltreereader(
-			# 			io.open(filename, encoding='utf8')))
-			# trees = [treetransforms.binarize(a, dot=True)
-			# 		for a, _, _ in result]
-			# sents = [b for _, b, _ in result]
-			result = _fragments.getctrees(trees, sents,
-					labels=self.labels, prods=self.prods)
-			self.files[filename] = (result['trees1'], result['sents1'])
-			# keep track of maxnodes?
+			fmt = ext[filename.split('.')[-1]]
+			self.files[filename] = _fragments.readtreebank(
+					filename, self.vocab, fmt=fmt)
 		for filename in self.files:
-			self.files[filename][0].indextrees(self.prods)
+			self.files[filename].indextrees(self.vocab)
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
@@ -640,16 +626,13 @@ class FragmentSearcher(CorpusSearcher):
 			nofunc=False, nomorph=False, sents=False):
 		if nofunc or nomorph:
 			raise NotImplementedError
-		trees, xsents = self.files[filename]
-		results = list(_fragments.completebitsets(
-			trees, xsents, self.labels,
-			self.files[filename][0].maxnodes, discontinuous=True,
-			start=start, end=end).keys())
 		if sents:
-			return [' '.join(sent) for _, sent in results]
-		else:
-			return [(treetransforms.mergediscnodes(Tree(treestr)), sent)
-					for treestr, sent in results]
+			return [' '.join(self.files[filename].extractsent(n, self.vocab))
+					for n in range(start, end)]
+		return [(treetransforms.mergediscnodes(Tree(treestr)), sent)
+				for treestr, sent
+				in (self.files[filename].extract(n, self.vocab)
+					for n in range(start, end)) ]
 
 	def _query(self, query, filename, maxresults=None, limit=None,
 			indices=True):
@@ -660,18 +643,17 @@ class FragmentSearcher(CorpusSearcher):
 				for a, b, _ in treebank.incrementaltreereader(
 					io.StringIO(query))])
 		queries = _fragments.getctrees(
-				list(trees), list(sents), labels=self.labels, prods=self.prods)
+				list(trees), list(sents), vocab=self.vocab)
 		maxnodes = max(queries['trees1'].maxnodes,
-					max(self.files[filename][0].maxnodes for filename
+					max(self.files[filename].maxnodes for filename
 						in self.files))
 		fragments = _fragments.completebitsets(
-				queries['trees1'], queries['sents1'],
-				self.labels, maxnodes, discontinuous=True)
+				queries['trees1'], self.vocab, maxnodes, discontinuous=True)
 		results = ((frag, multiset) for frag, multiset in zip(
 					fragments.keys(),
 					_fragments.exactcounts(
 						queries['trees1'],
-						self.files[filename][0],
+						self.files[filename],
 						list(fragments.values()),
 						indices=1 if indices else 0,
 						maxnodes=maxnodes, limit=limit)))
@@ -860,7 +842,7 @@ def main():
 	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
 	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))
-	numthreads = opts.get('--numthreads')
+	numthreads = int(opts.get('--numthreads', 0)) or None
 	if engine == 'tgrep2':
 		searcher = TgrepSearcher(corpora, macros=macros, numthreads=numthreads)
 	elif engine == 'xpath':

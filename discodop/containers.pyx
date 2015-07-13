@@ -2,6 +2,7 @@
 from __future__ import print_function
 from math import exp, log, fsum
 from libc.math cimport log, exp
+from libc.string cimport memcpy
 from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
 from discodop.bit cimport nextset, nextunset, anextset, anextunset
@@ -389,9 +390,9 @@ cdef class Chart:
 
 	def __contains__(self, item):
 		return item in self.getitems()
-		if isinstance(item, ChartItem):
-			return item in self.parseforest
-		return self.hasitem(item)
+		# if isinstance(item, ChartItem):
+		# 	return item in self.parseforest
+		# return self.hasitem(item)
 
 	cdef list getedges(self, item):
 		"""Get edges for item."""
@@ -456,24 +457,18 @@ cdef void _filtersubtree(Chart chart, item, set items):
 
 @cython.final
 cdef class Ctrees:
-	"""Auxiliary class to pass around collections of NodeArrays in Python.
+	"""An indexed, binarized treebank stored as array.
 
-	When trees is given, prods should be given as well.
-	When trees is not given, the alloc() method should be called and
-	trees added one by one using the add() or addnodes() methods."""
+	Indexing depends on an external Vocabulary object that maps
+	productions and labels to unique integers across different sets of trees.
+	First call the alloc() method with (estimated) number of nodes & trees.
+	Then add trees one by one using the addnodes() method."""
 	def __cinit__(self):
 		self.trees = self.nodes = NULL
 
-	def __init__(self, list trees=None, dict prods=None):
+	def __init__(self):
 		self.len = self.max = 0
 		self.numnodes = self.maxnodes = self.nodesleft = self.numwords = 0
-		if trees is not None:
-			if prods is None:
-				raise ValueError('when initialized with trees, prods argument '
-						'is required.')
-			self.alloc(len(trees), sum(map(len, trees)))
-			for tree in trees:
-				self.add(tree, prods, len(tree.leaves()))
 
 	cpdef alloc(self, int numtrees, long numnodes):
 		"""Initialize an array of trees of nodes structs."""
@@ -507,32 +502,12 @@ cdef class Ctrees:
 				raise MemoryError('allocation error')
 			self.nodesleft = numnodes - self.numnodes
 
-	cpdef add(self, list tree, dict prods, int lensent):
+	cdef addnodes(self, Node *source, int cnt, int root):
 		"""Incrementally add tree to the node array.
 
-		Useful when dealing with large numbers of Tree objects (say 100,000).
-		"""
-		if not self.max:
-			raise ValueError('alloc() has not been called (max=0).')
-		if self.len >= self.max or self.nodesleft < len(tree):
-			self.realloc(self.len + 1, len(tree))
-		self.trees[self.len].len = len(tree)
-		self.trees[self.len].offset = self.numnodes
-		copynodes(tree, prods, &self.nodes[self.numnodes])
-		self.trees[self.len].root = tree[0].rootidx
-		self.len += 1
-		self.nodesleft -= len(tree)
-		self.numnodes += len(tree)
-		self.maxnodes = max(self.maxnodes, len(tree))
-		self.numwords += lensent
-
-	cdef addnodes(self, Node *source, int cnt, int root, int lensent):
-		"""Incrementally add tree to the node array.
-
-		This version copies a tree that has already been converted to an array
-		of nodes."""
+		Copies a tree that has already been converted to an array of nodes."""
 		cdef dict prodsintree, sortidx
-		cdef int n, m
+		cdef int n, m, lensent = 0
 		cdef Node *dest
 		if not self.max:
 			raise ValueError('alloc() has not been called (max=0).')
@@ -549,6 +524,8 @@ cdef class Ctrees:
 				dest[m].left = sortidx[source[n].left]
 				if dest[m].right >= 0:
 					dest[m].right = sortidx[source[n].right]
+			else:
+				lensent += 1
 		self.trees[self.len].offset = self.numnodes
 		self.trees[self.len].root = sortidx[root]
 		self.trees[self.len].len = cnt
@@ -559,14 +536,13 @@ cdef class Ctrees:
 			self.maxnodes = cnt
 		self.numwords += lensent
 
-	def indextrees(self, dict prods):
+	def indextrees(self, Vocabulary vocab):
 		"""Create index from productions to trees containing that production.
 
 		Productions are represented as integer IDs, trees are given as sets of
 		integer indices."""
 		cdef:
-			list prodindex = [RoaringBitmap() for _ in prods]
-			dict trigramindex = {}
+			list prodindex = [RoaringBitmap() for _ in vocab.prods]
 			NodeArray tree
 			Node *nodes
 			int n, m
@@ -576,25 +552,29 @@ cdef class Ctrees:
 			for m in range(tree.len):
 				# Add to production index
 				prodindex[nodes[m].prod].add(n)
-				# Add to production trigram index
-				if nodes[m].left >= 0:
-					if nodes[m].right < 0:  # unary
-						treegram = (
-								nodes[m].prod,
-								nodes[nodes[m].left].prod,
-								nodes[m].right)
-					else:  # binary
-						treegram = (
-								nodes[m].prod,
-								nodes[nodes[m].left].prod,
-								nodes[nodes[m].right].prod)
-					if treegram in trigramindex:
-						trigramindex[treegram].add(n)
-					else:
-						trigramindex[treegram] = RoaringBitmap([n])
 
 		self.prodindex = prodindex
-		self.trigramindex = trigramindex
+
+	def extract(self, int n, Vocabulary vocab, disc=True):
+		"""Return (tree, sent) tuple for given tree."""
+		result = []
+		sent = []
+		if n < 0 or n > self.len:
+			raise IndexError
+		gettree(result, sent, &(self.nodes[self.trees[n].offset]),
+				vocab, self.trees[n].root, disc)
+		return ''.join(result), sent
+
+	def extractsent(self, int n, Vocabulary vocab):
+		"""Return sentence as a list of strings for given tree."""
+		cdef int m
+		if n < 0 or n > self.len:
+			raise IndexError
+		sent = {termidx(self.nodes[m].left): vocab.words[self.nodes[m].prod]
+			for m in range(
+				self.trees[n].offset, self.trees[n].offset + self.trees[n].len)
+			if self.nodes[m].left < 0}
+		return [sent[m] for m in sorted(sent)]
 
 	def __dealloc__(self):
 		if self.nodes is not NULL:
@@ -607,25 +587,71 @@ cdef class Ctrees:
 	def __len__(self):
 		return self.len
 
+	def __reduce__(self):
+		"""Helper function for pickling."""
+		return (
+				Ctrees, (),
+				dict(
+					nodes=<bytes>(<char *>self.nodes)[
+						:self.numnodes * sizeof(self.nodes[0])],
+					trees=<bytes>(<char *>self.trees)[
+						:self.len * sizeof(self.trees[0])],
+					max=self.max, len=self.len,
+					numnodes=self.numnodes,
+					numwords=self.numwords,
+					maxnodes=self.maxnodes,
+					prodindex=self.prodindex))
 
-cdef inline copynodes(tree, dict prods, Node *result):
-	"""Convert NLTK tree to an array of Node structs."""
-	cdef int n
-	for n, a in enumerate(tree):
-		if not isinstance(a, Tree):
-			raise ValueError('Expected Tree node, got %s\n%r' % (type(a), a))
-		if not 1 <= len(a) <= 2:
-			raise ValueError('trees must be non-empty and binarized\n%s\n%s' %
-					(a, tree[0]))
-		result[n].prod = prods[a.prod]
-		if isinstance(a[0], int):  # a terminal index
-			result[n].left = -a[0] - 1
+	def __setstate__(self, state):
+		self.len = state['len']
+		self.max = state['max']
+		self.numnodes = state['numnodes']
+		self.numwords = state['numwords']
+		self.maxnodes = state['maxnodes']
+		self.prodindex = state['prodindex']
+		self.alloc(self.len, self.numnodes)
+		memcpy(self.nodes, <char *><bytes>state['nodes'], len(state['nodes']))
+		memcpy(self.trees, <char *><bytes>state['trees'], len(state['trees']))
+
+
+@cython.final
+cdef class Vocabulary:
+	"""A mapping of productions, labels, words to integers."""
+	def __init__(self):
+		self.prods = {}
+		self.labels = []
+		self.words = []
+
+	def __repr__(self):
+		return 'labels: %d, prods: %d, word types: %d' % (
+				len(set(self.labels)), len(self.prods),
+				len(set(self.words)) - 1)
+
+
+cdef inline gettree(list result, list sent, Node *tree,
+		Vocabulary vocab, int i, bint disc):
+	"""Collect string of tree and sentence for a tree.
+
+	:param result: provide an empty list for the initial call.
+	:param sent: pass empty list.
+	:param i: node number to start with."""
+	result.append('(')
+	result.append(vocab.labels[tree[i].prod])
+	result.append(' ')
+	if tree[i].left >= 0:
+		gettree(result, sent, tree, vocab, tree[i].left, disc)
+		if tree[i].right >= 0:
+			result.append(' ')
+			gettree(result, sent, tree, vocab, tree[i].right, disc)
+	else:
+		if disc:
+			result.append(str(termidx(tree[i].left)))
 		else:
-			result[n].left = a[0].idx
-			if len(a) == 2:
-				result[n].right = a[1].idx
-			else:  # unary node
-				result[n].right = -1
+			result.append(vocab.words[tree[i].prod] or '')
+		if len(sent) < termidx(tree[i].left) + 1:
+			sent.extend([None] * (termidx(tree[i].left) + 1 - len(sent)))
+		sent[termidx(tree[i].left)] = vocab.words[tree[i].prod]
+	result.append(')')
 
 __all__ = ['Grammar', 'Chart', 'Ctrees', 'LexicalRule', 'SmallChartItem',
 		'FatChartItem', 'Edges', 'RankedEdge', 'numedges']

@@ -648,7 +648,7 @@ cdef class Grammar:
 	def __reduce__(self):
 		"""Helper function for pickling."""
 		return (Grammar, (self.origrules, self.origlexicon,
-				self.start, self.logprob))
+				self.start, self.binarized))
 
 	def __dealloc__(self):
 		if self.bylhs is NULL:
