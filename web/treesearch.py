@@ -325,7 +325,7 @@ def trees(form):
 			breakdown = Counter(DiscTree(
 						max(high, key=lambda x: len(x.leaves())
 							if isinstance(x, Tree) else 1).freeze(), sent)
-					for _, _, _, sent, high in results)
+					for _, _, _, sent, high in results if high)
 			for match, cnt in breakdown.most_common():
 				gotresults = True
 				yield 'count: %5d\n%s\n\n' % (
@@ -579,11 +579,12 @@ def draw():
 	if 'xpath' in CORPORA:
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
 		tree, sent = CORPORA['xpath'].extract(
-					filename, sentno - 1, sentno, nofunc, nomorph).pop()
+					filename, [sentno], nofunc, nomorph).pop()
 	elif 'tgrep2' in CORPORA:
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 		tree, sent = CORPORA['tgrep2'].extract(
-					filename, sentno - 1, sentno, nofunc, nomorph).pop()
+					filename, [sentno], nofunc, nomorph).pop()
+	# FIXME: elif 'frag' in CORPORA:
 	else:
 		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 	result = DrawTree(tree, sent).text(unicodelines=True, html=True)
@@ -596,9 +597,9 @@ def browsetrees():
 	chunk = 20  # number of trees to fetch for one request
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
-		sentno = int(request.args['sent']) - 1
-		start = max(0, sentno - sentno % chunk)
-		maxtree = min(start + chunk, NUMSENTS[textno])
+		sentno = int(request.args['sent'])
+		start = max(1, sentno - sentno % chunk)
+		maxtree = min(start + chunk, NUMSENTS[textno] + 1)
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		if 'xpath' in CORPORA:
@@ -606,16 +607,16 @@ def browsetrees():
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True)
 					for tree, sent in CORPORA['xpath'].extract(
-						filename, start, maxtree, nofunc, nomorph)]
+						filename, range(start, maxtree), nofunc, nomorph)]
 		elif 'tgrep2' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True)
 					for tree, sent in CORPORA['tgrep2'].extract(
-						filename, start, maxtree, nofunc, nomorph)]
+						filename, range(start, maxtree), nofunc, nomorph)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
-		results = ['<pre id="t%s"%s>%s</pre>' % (n + 1,
+		results = ['<pre id="t%s"%s>%s</pre>' % (n,
 				' style="display: none; "' if 'ajax' in request.args else '',
 				tree) for n, tree in enumerate(drawntrees, start)]
 		if 'ajax' in request.args:
@@ -629,11 +630,11 @@ def browsetrees():
 		if sentno < NUMSENTS[textno] - chunk:
 			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
 					textno, sentno + chunk + 1)
-		return render_template('browse.html', textno=textno, sentno=sentno + 1,
+		return render_template('browse.html', textno=textno, sentno=sentno,
 				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=results,
 				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
 				nofunc=nofunc, nomorph=nomorph,
-				mintree=start + 1, maxtree=maxtree)
+				mintree=start, maxtree=maxtree)
 	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
 			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
@@ -646,23 +647,24 @@ def browsesents():
 	chunk = 20  # number of sentences per page
 	if 'text' in request.args and 'sent' in request.args:
 		textno = int(request.args['text'])
-		sentno = int(request.args['sent']) - 1
-		highlight = int(request.args.get('highlight', 0)) - 1
-		sentno = min(max(chunk // 2, sentno), NUMSENTS[textno] - chunk // 2)
-		start = max(0, sentno - chunk // 2)
-		maxsent = min(start + chunk, NUMSENTS[textno])
+		sentno = int(request.args['sent'])
+		highlight = int(request.args.get('highlight', 0))
+		sentno = min(max(chunk // 2 + 1, sentno),
+				NUMSENTS[textno] - chunk // 2)
+		start = max(1, sentno - chunk // 2)
+		maxsent = min(start + chunk, NUMSENTS[textno] + 1)
 		if 'tgrep2' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 			results = CORPORA['tgrep2'].extract(
-					filename, start, maxsent, sents=True)
+					filename, range(start, maxsent), sents=True)
 		elif 'xpath' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
 			results = CORPORA['xpath'].extract(
-					filename, start, maxsent, sents=True)
+					filename, range(start, maxsent), sents=True)
 		elif 'regex' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
 			results = CORPORA['regex'].extract(
-					filename, start, maxsent, sents=True)
+					filename, range(start, maxsent), sents=True)
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = [('<font color=red>%s</font>' % cgi.escape(a))
@@ -687,23 +689,23 @@ def browsesents():
 					if start <= m < maxsent:
 						sent = sent.split(' ')
 						match = ' '.join(sent[a] for a in high)
-						results[m - start - 1] = results[m - start - 1].replace(
+						results[m - start] = results[m - start].replace(
 								match, '<font color=%s>%s</font>' % (
 								COLORS.get(n + 1, 'gray'), cgi.escape(match)))
-					elif m > maxsent:
+					elif m >= maxsent:
 						break
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
-					'prev</a>' % (textno, sentno - chunk + 1, queryparams))
+					'prev</a>' % (textno, sentno - chunk, queryparams))
 		nextlink = '<a id=next>next</a>'
 		if sentno < NUMSENTS[textno] - chunk:
 			nextlink = ('<a href="browsesents?text=%d&sent=%d%s" id=next>'
-					'next</a>' % (textno, sentno + chunk + 1, queryparams))
+					'next</a>' % (textno, sentno + chunk, queryparams))
 		return render_template('browsesents.html', textno=textno,
-				sentno=sentno + 1, text=TEXTS[textno],
+				sentno=sentno, text=TEXTS[textno],
 				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
-				nextlink=nextlink, chunk=chunk, mintree=start + 1,
+				nextlink=nextlink, chunk=chunk, mintree=start,
 				legend=legend,
 				query=request.args.get('query', ''),
 				engine=request.args.get('engine', ''))

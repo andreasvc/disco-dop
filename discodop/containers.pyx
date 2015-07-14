@@ -622,6 +622,16 @@ cdef class Vocabulary:
 		self.labels = []
 		self.words = []
 
+	def __reduce__(self):
+		"""Helper function for pickling."""
+		return (Vocabulary, (), dict(
+				prods=self.prods, labels=self.labels, words=self.words))
+
+	def __setstate__(self, state):
+		self.prods = state['prods']
+		self.labels = state['labels']
+		self.words = state['words']
+
 	def __repr__(self):
 		return 'labels: %d, prods: %d, word types: %d' % (
 				len(set(self.labels)), len(self.prods),
