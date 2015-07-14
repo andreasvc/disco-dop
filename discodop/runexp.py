@@ -443,7 +443,15 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		backtransform = extrarules = None
 		if lexmodel and simplelexsmooth:
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
-		if stage.dop:
+		if stage.mode == 'mc-rerank':
+			from discodop import _fragments
+			gram = _fragments.getctrees(trees, sents)
+			with codecs.getwriter('utf8')(gzip.open('%s/%s.train.gz' % (
+					resultdir, stage.name), 'wb')) as tbfile:
+				tbfile.writelines(treebank.writetree(
+						tree, sent, 0, 'discbracket')
+						for tree, sent in zip(trees, sents))
+		elif stage.dop:
 			if stage.dop in ('doubledop', 'dop1'):
 				if stage.dop == 'doubledop':
 					(xgrammar, backtransform,
@@ -646,9 +654,9 @@ def doparsing(**kwds):
 			results[n].sents[sentid] = sent
 			if isinstance(result.prob, tuple):
 				results[n].logprob[sentid] = [log(a) for a in result.prob
-						if isinstance(a, float)][0]
-				results[n].frags[sentid] = [abs(a) for a in result.prob
-						if isinstance(a, int)][0]
+						if isinstance(a, float) and 0 < a <= 1][0]
+				results[n].frags[sentid] = ([abs(a) for a in result.prob
+						if isinstance(a, int)] or [None])[0]
 			elif isinstance(result.prob, float):
 				try:
 					results[n].logprob[sentid] = log(result.prob)
@@ -1000,12 +1008,12 @@ def readparam(filename):
 	for n, stage in enumerate(params['stages']):
 		if stage.mode not in (
 				'plcfrs', 'pcfg', 'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
-				'dop-rerank'):
-			raise ValueError('unrecognized mode argument.')
+				'dop-rerank', 'mc-rerank'):
+			raise ValueError('unrecognized mode argument: %r.' % stage.mode)
 		if n == 0 and stage.prune:
 			raise ValueError('need previous stage to prune, '
 					'but this stage is first.')
-		if stage.prune is True:  # for compatibility
+		if stage.prune is True:  # for backwards compatibility
 			stage.prune = params['stages'][n - 1].name
 		if stage.mode == 'dop-rerank':
 			assert stage.prune and not stage.splitprune and stage.k > 1

@@ -28,7 +28,8 @@ stages=[
     iterate=False,  # for double dop, whether to include fragments of fragments
     complement=False,  # for double dop, whether to include fragments which form
         # the complement of the maximal recurring fragments extracted
-  )
+  ),
+  dict(name='mcdop', mode='mc-rerank', prune=True, k=50)
 ],
 
 evalparam='proper.prm',  # EVALB-style parameter file

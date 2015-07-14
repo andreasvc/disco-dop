@@ -674,10 +674,10 @@ class FragmentSearcher(CorpusSearcher):
 						maxnodes=maxnodes, limit=limit)))
 		if maxresults:
 			results = ((a, list(islice(b, maxresults))) for a, b in results)
-		if trees:
+		if indices and trees:
 			results = ((a, {n + 1: corpus.extract(n, vocab) for n in b})
 					for a, b in results)
-		else:
+		elif indices:
 			results = ((a, {n + 1: m for n, m in b.items()})
 					for a, b in results)
 		return results

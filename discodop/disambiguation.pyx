@@ -883,13 +883,12 @@ cdef samplechart(item, Chart chart,
 	return tree, prob
 
 
-def doprerank(chart, sent, k, Grammar coarse, Grammar fine):
+def doprerank(parsetrees, sent, k, Grammar coarse, Grammar fine):
 	"""Rerank *k*-best coarse trees w/parse probabilities of DOP reduction.
 
 	cf. ``dopparseprob()``."""
 	cdef list results = []
-	derivations, _ = lazykbest(chart, k, derivs=True)
-	for derivstr, _ in derivations:
+	for derivstr, _, _ in nlargest(k, parsetrees, key=itemgetter(1)):
 		deriv = addbitsets(derivstr)
 		results.append((derivstr, exp(dopparseprob(deriv, sent, coarse, fine)),
 				None))
@@ -978,6 +977,44 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 		else:
 			raise ValueError('expected binary tree without empty nodes.')
 	return chart[tree.bitset].get(fine.toid[tree.label], float('-inf'))
+
+
+def mcrerank(parsetrees, sent, k, trees, vocab):
+	"""Rerank *k*-best trees using tree fragments from training treebank.
+
+	Searches for trees that share multiple fragments (multi component)."""
+	cdef list results = []
+	for derivstr, prob, _ in nlargest(k, parsetrees, key=itemgetter(1)):
+		tmp = _fragments.getctrees(
+				[addbitsets(derivstr)], [sent] * len(parsetrees),
+				vocab=vocab)
+		frags = _fragments.extractfragments(
+				tmp['trees1'], 0, 0, vocab, trees,
+				discontinuous=True, approx=False)
+		frags = {frag: bitset for frag, bitset in frags.items()
+				if frag[0].count('(') > 3}
+		indices = _fragments.exactcounts(
+				tmp['trees1'], trees, list(frags.values()), indices=True)
+		score = 0
+		rev = defaultdict(set)
+		for n, (frag, idx) in enumerate(zip(frags, indices)):
+			# from: frag => (tree idx, freq)...
+			# to: tree idx => frags...
+			for i in idx:
+				rev[i].add(frag)
+		for i in rev:
+			if len(rev[i]) > 1:
+				# score is the total number of nodes
+				# of the common fragments consisting of at least 2 parts
+				score += sum(frag[0].count('(') for frag in rev[i])
+		# divide by number of nodes in derivation to avoid preferring
+		# larger derivations
+		score = float(score) / (derivstr.count('(') + len(sent))
+		results.append((derivstr, (score, prob), None))
+	msg = 're-ranked %d parse trees; best tree at %d. ' % (
+			len(results),
+			max(range(len(results)), key=lambda x: results[x][1]) + 1)
+	return results, msg
 
 
 cdef str prodrepr(r, yf):

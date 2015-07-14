@@ -26,7 +26,7 @@ import numpy as np
 from discodop import plcfrs, pcfg, grammar, treetransforms, treebanktransforms
 from discodop.containers import Grammar, BITPARRE
 from discodop.coarsetofine import prunechart
-from discodop.disambiguation import getderivations, marginalize, doprerank
+from discodop import disambiguation
 from discodop.tree import ParentedTree
 from discodop.eval import alignsent
 from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
@@ -323,7 +323,8 @@ class Parser(object):
 					model = 'shortest'
 				elif stage.estimator != 'rfe':
 					model = stage.estimator
-			stage.grammar.switch(model, logprob=True)
+			if stage.mode != 'mc-rerank':
+				stage.grammar.switch(model, logprob=True)
 			if prm.verbosity >= 3:
 				logging.debug(stage.name)
 				logging.debug(stage.grammar)
@@ -365,6 +366,7 @@ class Parser(object):
 			treetransforms.addfanoutmarkers(goldtree)
 
 		charts = {}  # stage.name => chart
+		prevparsetrees = {}  # stage.name => parsetrees
 		chart = lastsuccessfulparse = None
 		totalgolditems = 0
 		# parse with each coarse-to-fine stage
@@ -380,8 +382,9 @@ class Parser(object):
 					model = 'shortest'
 				elif stage.estimator != 'rfe':
 					model = stage.estimator
-			x = stage.grammar.currentmodel
-			stage.grammar.switch(model, logprob=True)
+			if stage.mode != 'mc-rerank':
+				x = stage.grammar.currentmodel
+				stage.grammar.switch(model, logprob=True)
 			if stage.mode.startswith('pcfg-bitpar'):
 				if (not hasattr(stage, 'rulesfile')
 						or x != stage.grammar.currentmodel):
@@ -401,7 +404,8 @@ class Parser(object):
 				if goldtree is not None and self.stages[prevn].split:
 					tree = treetransforms.splitdiscnodes(
 							goldtree.copy(True), self.stages[prevn].markorigin)
-				if n > 0 and stage.prune and stage.mode != 'dop-rerank':
+				if n > 0 and stage.prune and stage.mode not in (
+						'dop-rerank', 'mc-rerank'):
 					beginprune = time.clock()
 					whitelist, items, msg1 = prunechart(
 							charts[stage.prune], stage.grammar, stage.k,
@@ -464,10 +468,16 @@ class Parser(object):
 							beam_beta=-log(stage.beam_beta),
 							beam_delta=stage.beam_delta)
 				elif stage.mode == 'dop-rerank':
-					if charts[stage.prune]:
-						parsetrees, msg1 = doprerank(charts[stage.prune], sent,
-								stage.k, self.stages[prevn].grammar,
-								stage.grammar)
+					if prevparsetrees[stage.prune]:
+						parsetrees, msg1 = disambiguation.doprerank(
+								prevparsetrees[stage.prune], sent, stage.k,
+								self.stages[prevn].grammar, stage.grammar)
+				elif stage.mode == 'mc-rerank':
+					if prevparsetrees[stage.prune]:
+						parsetrees, msg1 = disambiguation.mcrerank(
+								prevparsetrees[stage.prune], sent, stage.k,
+								stage.grammar['trees1'],
+								stage.grammar['vocab'])
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
@@ -482,8 +492,8 @@ class Parser(object):
 					if hasattr(chart, 'getitems') else 0)
 
 			# do disambiguation of resulting parse forest
-			if sent and chart and stage.mode != 'dop-rerank' and not (
-					self.relationalrealizational and stage.split):
+			if (sent and chart and stage.mode not in ('dop-rerank', 'mc-rerank')
+					and not (self.relationalrealizational and stage.split)):
 				begindisamb = time.clock()
 				if stage.mode == 'pcfg-bitpar-nbest':
 					if not stage.kbest or stage.sample:
@@ -492,8 +502,9 @@ class Parser(object):
 					derivations = chart.rankededges[chart.root()]
 					entries = [None] * len(derivations)
 				else:
-					derivations, entries = getderivations(chart, stage.m,
-							kbest=stage.kbest, sample=stage.sample,
+					derivations, entries = disambiguation.getderivations(
+							chart, stage.m, kbest=stage.kbest,
+							sample=stage.sample,
 							derivstrings=stage.dop not in ('doubledop', 'dop1')
 									or self.verbosity >= 3
 									or stage.objective == 'mcc')
@@ -511,7 +522,7 @@ class Parser(object):
 				if stage.objective == 'shortest':
 					stage.grammar.switch('default' if stage.estimator == 'rfe'
 							else stage.estimator, True)
-				parsetrees, msg1 = marginalize(
+				parsetrees, msg1 = disambiguation.marginalize(
 						stage.objective if stage.dop else 'mpd',
 						derivations, entries, chart,
 						sent=sent, tags=tags,
@@ -541,6 +552,7 @@ class Parser(object):
 				print('Chart:\n%s' % chart)
 			if stage.name in (stage.prune for stage in self.stages):
 				charts[stage.name] = chart
+				prevparsetrees[stage.name] = parsetrees
 
 			# postprocess, yield result
 			if parsetrees:
@@ -572,7 +584,7 @@ class Parser(object):
 					noparse=noparse, elapsedtime=elapsedtime,
 					numitems=numitems, golditems=golditems,
 					totalgolditems=totalgolditems, msg=msg)
-		del charts
+		del charts, prevparsetrees
 
 	def postprocess(self, treestr, sent, stage):
 		"""Take parse tree and apply postprocessing."""
@@ -604,7 +616,8 @@ class Parser(object):
 			default = grammar.defaultparse([(n, t) for n, t
 					in enumerate(tags or (len(sent) * ['NONE']))])
 			parsetree = ParentedTree('(%s %s)' % (
-					stage.grammar.start, default))
+					'TOP' if stage.mode == 'mc-rerank'  # FIXME
+					else stage.grammar.start, default))
 		noparse = True
 		prob = 1.0
 		return parsetree, prob, noparse
@@ -624,15 +637,23 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			stage.mapping = None
 	for n, stage in enumerate(stages):
 		logging.info('reading: %s', stage.name)
-		rules = openread('%s/%s.rules.gz' % (resultdir, stage.name)).read()
-		lexicon = openread('%s/%s.lex.gz' % (resultdir, stage.name))
-		xgrammar = Grammar(rules, lexicon.read(),
-				start=top, binarized=stage.binarized)
+		if stage.mode != 'mc-rerank':
+			rules = openread('%s/%s.rules.gz' % (resultdir, stage.name)).read()
+			lexicon = openread('%s/%s.lex.gz' % (resultdir, stage.name))
+			xgrammar = Grammar(rules, lexicon.read(),
+					start=top, binarized=stage.binarized)
 		backtransform = outside = None
 		prevn = 0
 		if n and stage.prune:
 			prevn = [a.name for a in stages].index(stage.prune)
-		if stage.dop:
+		if stage.mode == 'mc-rerank':
+			xgrammar = dict(labels=[], prods={})
+			from discodop._fragments import readtreebank
+			xgrammar['trees1'] = readtreebank(
+					'%s/%s.train.gz' % (resultdir, stage.name),
+					xgrammar['vocab'], fmt='discbracket')
+			xgrammar['trees1'].indextrees(xgrammar['vocab'])
+		elif stage.dop:
 			if stage.estimates is not None:
 				raise ValueError('not supported')
 			if stage.dop in ('doubledop', 'dop1'):
@@ -690,7 +711,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			if xgrammar.maxfanout != 1:
 				raise ValueError('bitpar requires a PCFG.')
 
-		_sumsto1, msg = xgrammar.testgrammar()
+		if stage.mode != 'mc-rerank':
+			_sumsto1, msg = xgrammar.testgrammar()
 		logging.info('%s: %s', stage.name, msg)
 		stage.update(grammar=xgrammar, backtransform=backtransform,
 				outside=outside)
