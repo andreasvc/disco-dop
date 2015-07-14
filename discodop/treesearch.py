@@ -504,18 +504,34 @@ class FragmentSearcher(CorpusSearcher):
 		super(FragmentSearcher, self).__init__(files, macros, numthreads)
 		self.pool = concurrent.futures.ProcessPoolExecutor(
 				numthreads or cpu_count())
+		path = os.path.dirname(next(iter(files)))
+		newvocab = True
+		vocabpath = os.path.join(path, 'treesearchvocab.pkl.gz')
+		if os.path.exists(vocabpath):
+			mtime = os.stat(vocabpath).st_mtime
+			if all(mtime > os.stat(a).st_mtime for a in files):
+				self.vocab = pickle.loads(
+						gzip.open(vocabpath).read())
+				newvocab = False
+		if newvocab:
+			self.vocab = Vocabulary()
 		for filename in self.files:
-			if not os.path.exists('%s.pkl.gz' % filename):
+			if (newvocab or not os.path.exists('%s.pkl.gz' % filename)
+					or os.stat('%s.pkl.gz' % filename).st_mtime
+					< os.stat(filename).st_mtime):
 				# get format from extension
 				ext = {'export': 'export', 'mrg': 'bracket',
 						'dbr': 'discbracket'}
 				fmt = ext[filename.split('.')[-1]]
-				vocab = Vocabulary()
 				corpus = _fragments.readtreebank(
-						filename, vocab, fmt=fmt)
-				corpus.indextrees(vocab)
+						filename, self.vocab, fmt=fmt)
+				corpus.indextrees(self.vocab)
 				gzip.open('%s.pkl.gz' % filename, 'w').write(
-						pickle.dumps((corpus, vocab), protocol=-1))
+						pickle.dumps(corpus, protocol=-1))
+				newvocab = True
+		if newvocab:
+			gzip.open(vocabpath, 'w').write(
+					pickle.dumps(self.vocab, protocol=-1))
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
@@ -531,11 +547,11 @@ class FragmentSearcher(CorpusSearcher):
 						'counts', query, filename, limit, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(_frag_query, query, filename,
+					jobs[self._submit(_frag_query, query, filename, self.vocab,
 							maxresults=None, limit=limit, indices=True,
 							trees=False, macros=self.macros)] = filename
 				else:
-					jobs[self._submit(_frag_query, query, filename,
+					jobs[self._submit(_frag_query, query, filename, self.vocab,
 							maxresults=None, limit=limit, indices=indices,
 							trees=False, macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
@@ -560,7 +576,7 @@ class FragmentSearcher(CorpusSearcher):
 			# 	result[filename] = self.cache[
 			# 			'counts', query, filename, limit, indices]
 			# except KeyError:
-			jobs[self._submit(_frag_query, query, filename,
+			jobs[self._submit(_frag_query, query, filename, self.vocab,
 					maxresults=None, limit=limit, indices=False, trees=False,
 					macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
@@ -583,8 +599,8 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query,
-						query, filename, maxresults=maxresults, indices=True,
+				jobs[self._submit(_frag_query, query, filename, self.vocab,
+						maxresults=maxresults, indices=True,
 						trees=True, macros=self.macros)] = filename
 			else:
 				result.extend(x[:maxresults])
@@ -610,7 +626,7 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename,
+				jobs[self._submit(_frag_query, query, filename, self.vocab,
 						maxresults=maxresults, indices=True, trees=True,
 						macros=self.macros)] = filename
 			else:
@@ -639,12 +655,13 @@ class FragmentSearcher(CorpusSearcher):
 			nofunc=False, nomorph=False, sents=False):
 		if nofunc or nomorph:
 			raise NotImplementedError
-		corpus, vocab = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
 		if sents:
-			return [' '.join(corpus.extractsent(n - 1, vocab)) for n in indices]
+			return [' '.join(corpus.extractsent(n - 1, self.vocab))
+					for n in indices]
 		return [(treetransforms.mergediscnodes(Tree(treestr)), sent)
 				for treestr, sent
-				in (corpus.extract(n - 1, vocab) for n in indices)]
+				in (corpus.extract(n - 1, self.vocab) for n in indices)]
 
 	def getinfo(self, filename):
 		"""Return named tuple with members len, numnodes, and numwords."""
@@ -654,12 +671,12 @@ class FragmentSearcher(CorpusSearcher):
 
 
 @workerfunc
-def _frag_query(query, filename, maxresults=None, limit=None,
+def _frag_query(query, filename, vocab, maxresults=None, limit=None,
 		indices=True, trees=False, macros=None):
 	"""Run a fragment query on a single file."""
 	if macros is not None:
 		query = query.format(**macros)
-	corpus, vocab = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+	corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
 	trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
 			for a, b, _ in treebank.incrementaltreereader(
 				io.StringIO(query))])

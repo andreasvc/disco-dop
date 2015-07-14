@@ -203,7 +203,7 @@ cdef struct Node:  # a node of a binary tree
 
 
 cdef struct NodeArray:  # a tree as an array of Node structs
-	size_t offset  # index to array of nodes in treebank where this tree starts
+	unsigned int offset  # index to Node array where this tree starts
 	short len, root  # number of nodes, index to root node
 
 
