@@ -529,7 +529,7 @@ class FragmentSearcher(CorpusSearcher):
 						pickle.dumps(corpus, protocol=-1))
 				newvocab = True
 		if newvocab:
-			pickle.dump(self.vocab, open(vocabpath, 'wb'), protocol=-1))
+			pickle.dump(self.vocab, open(vocabpath, 'wb'), protocol=-1)
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
