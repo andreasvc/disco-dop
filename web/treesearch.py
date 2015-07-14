@@ -929,7 +929,7 @@ def getcorpus():
 		if corpora.get('frag'):
 			numsents, numconst, numwords = [], [], []
 			for filename in ffiles:
-				info = corpus['frag'].getinfo(filename)
+				info = corpora['frag'].getinfo(filename)
 				numsents.append(info.len)
 				numconst.append(info.numnodes)
 				numwords.append(info.numwords)
@@ -1013,4 +1013,4 @@ TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
 log.info('corpus loaded.')
 
 if __name__ == '__main__':
-	APP.run(debug=DEBUG, use_reloader=False, host='0.0.0.0')
+	APP.run(debug=DEBUG, use_reloader=False, host='0.0.0.0', port=5001)

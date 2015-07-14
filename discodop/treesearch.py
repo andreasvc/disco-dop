@@ -506,12 +506,11 @@ class FragmentSearcher(CorpusSearcher):
 				numthreads or cpu_count())
 		path = os.path.dirname(next(iter(files)))
 		newvocab = True
-		vocabpath = os.path.join(path, 'treesearchvocab.pkl.gz')
+		vocabpath = os.path.join(path, 'treesearchvocab.pkl')
 		if os.path.exists(vocabpath):
 			mtime = os.stat(vocabpath).st_mtime
 			if all(mtime > os.stat(a).st_mtime for a in files):
-				self.vocab = pickle.loads(
-						gzip.open(vocabpath).read())
+				self.vocab = pickle.load(open(vocabpath, 'rb'))
 				newvocab = False
 		if newvocab:
 			self.vocab = Vocabulary()
@@ -530,8 +529,7 @@ class FragmentSearcher(CorpusSearcher):
 						pickle.dumps(corpus, protocol=-1))
 				newvocab = True
 		if newvocab:
-			gzip.open(vocabpath, 'w', compresslevel=1).write(
-					pickle.dumps(self.vocab, protocol=-1))
+			pickle.dump(self.vocab, open(vocabpath, 'wb'), protocol=-1))
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
@@ -665,7 +663,7 @@ class FragmentSearcher(CorpusSearcher):
 
 	def getinfo(self, filename):
 		"""Return named tuple with members len, numnodes, and numwords."""
-		corpus, _vocab = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
 		return CorpusInfo(len=corpus.len, numwords=corpus.numwords,
 				numnodes=corpus.numnodes, maxnodes=corpus.maxnodes)
 
