@@ -927,12 +927,12 @@ def getcorpus():
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
 				for a in tfiles + afiles + tokfiles)):
 		if corpora.get('frag'):
-			numsents = [corpora['frag'].files[filename].len
-					for filename in ffiles]
-			numconst = [corpora['frag'].files[filename].numnodes
-					for filename in ffiles]
-			numwords = [corpora['frag'].files[filename].numwords
-					for filename in ffiles]
+			numsents, numconst, numwords = [], [], []
+			for filename in ffiles:
+				info = corpus['frag'].getinfo(filename)
+				numsents.append(info.len)
+				numconst.append(info.numnodes)
+				numwords.append(info.numwords)
 		elif corpora.get('tgrep2'):
 			numsents = [len(open(filename).readlines())
 					for filename in tfiles]

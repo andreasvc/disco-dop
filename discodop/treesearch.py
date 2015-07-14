@@ -145,11 +145,11 @@ class CorpusSearcher(object):
 		:param nofunc, nomorph: same as for ``trees()`` method.
 		:returns: a list of Tree objects or sentences."""
 
-	def _submit(self, func, filename):
+	def _submit(self, func, *args, **kwargs):
 		"""Submit a job to the thread pool."""
 		if self.numthreads == 1:
-			return NoFuture(func, filename)
-		return self.pool.submit(workerfunc(func), filename)
+			return NoFuture(func, *args, **kwargs)
+		return self.pool.submit(func, *args, **kwargs)
 
 	def _as_completed(self, jobs):
 		"""Return jobs as they are completed."""
@@ -317,6 +317,7 @@ class TgrepSearcher(CorpusSearcher):
 				in (treebank.termindices(filterlabels(
 					treestr, nofunc, nomorph)) for treestr in result)]
 
+	@workerfunc
 	def _query(self, query, filename, fmt, maxresults=None, limit=None):
 		"""Run a query on a single file."""
 		cmd = [which('tgrep2'), '-a',  # print all matches for each sentence
@@ -479,6 +480,7 @@ class DactSearcher(CorpusSearcher):
 						morphology=None if nomorph else 'replace')
 					for treestr in results)]
 
+	@workerfunc
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
 		if self.macros is not None:
@@ -500,11 +502,10 @@ class FragmentSearcher(CorpusSearcher):
 	the results for each fragment separately."""
 	def __init__(self, files, macros=None, numthreads=None):
 		super(FragmentSearcher, self).__init__(files, macros, numthreads)
+		self.pool = concurrent.futures.ProcessPoolExecutor(
+				numthreads or cpu_count())
 		for filename in self.files:
-			if os.path.exists('%s.pkl.gz' % filename):
-				corpus, vocab = pickle.loads(
-						gzip.open('%s.pkl.gz' % filename).read())
-			else:
+			if not os.path.exists('%s.pkl.gz' % filename):
 				# get format from extension
 				ext = {'export': 'export', 'mrg': 'bracket',
 						'dbr': 'discbracket'}
@@ -515,9 +516,6 @@ class FragmentSearcher(CorpusSearcher):
 				corpus.indextrees(vocab)
 				gzip.open('%s.pkl.gz' % filename, 'w').write(
 						pickle.dumps((corpus, vocab), protocol=-1))
-			self.files[filename] = CorpusInfo(
-					len=corpus.len, numwords=corpus.numwords,
-					numnodes=corpus.numnodes, maxnodes=corpus.maxnodes)
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
@@ -533,13 +531,13 @@ class FragmentSearcher(CorpusSearcher):
 						'counts', query, filename, limit, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(lambda x: self._query(
-							query, x, None, limit, indices=True, trees=False),
-							filename)] = filename
+					jobs[self._submit(_frag_query, query, filename,
+							maxresults=None, limit=limit, indices=True,
+							trees=False, macros=self.macros)] = filename
 				else:
-					jobs[self._submit(lambda x: self._query(
-							query, x, None, limit, indices=indices,
-							trees=False), filename)] = filename
+					jobs[self._submit(_frag_query, query, filename,
+							maxresults=None, limit=limit, indices=indices,
+							trees=False, macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			if indices:
@@ -562,9 +560,9 @@ class FragmentSearcher(CorpusSearcher):
 			# 	result[filename] = self.cache[
 			# 			'counts', query, filename, limit, indices]
 			# except KeyError:
-			jobs[self._submit(lambda x:
-				self._query(query, x, None, limit, indices=False, trees=False),
-				filename)] = filename
+			jobs[self._submit(_frag_query, query, filename,
+					maxresults=None, limit=limit, indices=False, trees=False,
+					macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			# self.cache['counts', query, filename, limit, False] =
@@ -585,9 +583,9 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						query, x, maxresults, trees=True)),
-						filename)] = filename
+				jobs[self._submit(_frag_query,
+						query, filename, maxresults=maxresults, indices=True,
+						trees=True, macros=self.macros)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -612,9 +610,9 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						query, x, maxresults, trees=True)),
-						filename)] = filename
+				jobs[self._submit(_frag_query, query, filename,
+						maxresults=maxresults, indices=True, trees=True,
+						macros=self.macros)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -648,39 +646,44 @@ class FragmentSearcher(CorpusSearcher):
 				for treestr, sent
 				in (corpus.extract(n - 1, vocab) for n in indices)]
 
-	def _query(self, query, filename, maxresults=None, limit=None,
-			indices=True, trees=False):
-		"""Run a query on a single file."""
-		if self.macros is not None:
-			query = query.format(**self.macros)
-		corpus, vocab = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
-		trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
-				for a, b, _ in treebank.incrementaltreereader(
-					io.StringIO(query))])
-		queries = _fragments.getctrees(
-				list(trees), list(sents), vocab=vocab)
-		maxnodes = max(queries['trees1'].maxnodes,
-					max(self.files[filename].maxnodes for filename
-						in self.files))
-		fragments = _fragments.completebitsets(
-				queries['trees1'], vocab, maxnodes, discontinuous=True)
-		results = ((frag, multiset) for frag, multiset in zip(
-					fragments.keys(),
-					_fragments.exactcounts(
-						queries['trees1'],
-						corpus,
-						list(fragments.values()),
-						indices=1 if indices else 0,
-						maxnodes=maxnodes, limit=limit)))
-		if maxresults:
-			results = ((a, list(islice(b, maxresults))) for a, b in results)
-		if indices and trees:
-			results = ((a, {n + 1: corpus.extract(n, vocab) for n in b})
-					for a, b in results)
-		elif indices:
-			results = ((a, {n + 1: m for n, m in b.items()})
-					for a, b in results)
-		return results
+	def getinfo(self, filename):
+		"""Return named tuple with members len, numnodes, and numwords."""
+		corpus, _vocab = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		return CorpusInfo(len=corpus.len, numwords=corpus.numwords,
+				numnodes=corpus.numnodes, maxnodes=corpus.maxnodes)
+
+
+@workerfunc
+def _frag_query(query, filename, maxresults=None, limit=None,
+		indices=True, trees=False, macros=None):
+	"""Run a fragment query on a single file."""
+	if macros is not None:
+		query = query.format(**macros)
+	corpus, vocab = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+	trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
+			for a, b, _ in treebank.incrementaltreereader(
+				io.StringIO(query))])
+	queries = _fragments.getctrees(
+			list(trees), list(sents), vocab=vocab)
+	maxnodes = max(queries['trees1'].maxnodes, corpus.maxnodes)
+	fragments = _fragments.completebitsets(
+			queries['trees1'], vocab, maxnodes, discontinuous=True)
+	fragmentkeys = list(fragments)
+	bitsets = [fragments[a] for a in fragmentkeys]
+	results = ((frag, multiset) for frag, multiset in zip(
+				fragmentkeys,
+				_fragments.exactcounts(queries['trees1'], corpus, bitsets,
+					indices=1 if indices else 0,
+					maxnodes=maxnodes, limit=limit)))
+	if maxresults:
+		results = ((a, list(islice(b, maxresults))) for a, b in results)
+	if indices and trees:
+		results = ((a, {n + 1: corpus.extract(n, vocab) for n in b})
+				for a, b in results)
+	elif indices:
+		results = ((a, {n + 1: m for n, m in b.items()})
+				for a, b in results)
+	return list(results)
 
 
 class RegexSearcher(CorpusSearcher):
@@ -781,6 +784,7 @@ class RegexSearcher(CorpusSearcher):
 			result.append(data[a:b])
 		return result
 
+	@workerfunc
 	def _query(self, query, filename, maxresults=None, limit=None):
 		"""Run a query on a single file."""
 		with io.open(filename, encoding='utf8') as tmp:
@@ -804,8 +808,8 @@ class RegexSearcher(CorpusSearcher):
 
 class NoFuture(object):
 	"""A non-asynchronous version of concurrent.futures.Future."""
-	def __init__(self, func, arg):
-		self._result = func(arg)
+	def __init__(self, func, *args, **kwargs):
+		self._result = func(*args, **kwargs)
 
 	def result(self, timeout=None):  # pylint: disable=unused-argument
 		"""Return the precomputed result."""
