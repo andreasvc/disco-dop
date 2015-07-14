@@ -926,20 +926,20 @@ def getcorpus():
 		for filename in tfiles + afiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
 				for a in tfiles + afiles + tokfiles)):
-		if corpora.get('frag'):
-			numsents, numconst, numwords = [], [], []
-			for filename in ffiles:
-				info = corpora['frag'].getinfo(filename)
-				numsents.append(info.len)
-				numconst.append(info.numnodes)
-				numwords.append(info.numwords)
-		elif corpora.get('tgrep2'):
+		if corpora.get('tgrep2'):
 			numsents = [len(open(filename).readlines())
 					for filename in tfiles]
 			numconst = [open(filename).read().count('(')
 					for filename in tfiles]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
 					for filename in tfiles]
+		elif corpora.get('frag'):
+			numsents, numconst, numwords = [], [], []
+			for filename in ffiles:
+				info = corpora['frag'].getinfo(filename)
+				numsents.append(info.len)
+				numconst.append(info.numnodes)
+				numwords.append(info.numwords)
 		elif corpora.get('xpath'):
 			numsents = [corpus.size() for corpus
 					in corpora['xpath'].files.values()]

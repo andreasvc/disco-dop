@@ -59,6 +59,7 @@ ABBRPOS = {
 	'NOUN': 'NN',
 	'VERB': 'VB'}
 
+VOCAB = None
 CorpusInfo = namedtuple('CorpusInfo',
 		['len', 'numwords', 'numnodes', 'maxnodes'])
 
@@ -501,6 +502,7 @@ class FragmentSearcher(CorpusSearcher):
 	will be merged together, except with batchcounts(), which returns
 	the results for each fragment separately."""
 	def __init__(self, files, macros=None, numthreads=None):
+		global VOCAB
 		super(FragmentSearcher, self).__init__(files, macros, numthreads)
 		self.pool = concurrent.futures.ProcessPoolExecutor(
 				numthreads or cpu_count())
@@ -530,6 +532,7 @@ class FragmentSearcher(CorpusSearcher):
 				newvocab = True
 		if newvocab:
 			pickle.dump(self.vocab, open(vocabpath, 'wb'), protocol=-1)
+		VOCAB = self.vocab
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
@@ -545,11 +548,11 @@ class FragmentSearcher(CorpusSearcher):
 						'counts', query, filename, limit, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(_frag_query, query, filename, self.vocab,
+					jobs[self._submit(_frag_query, query, filename,
 							maxresults=None, limit=limit, indices=True,
 							trees=False, macros=self.macros)] = filename
 				else:
-					jobs[self._submit(_frag_query, query, filename, self.vocab,
+					jobs[self._submit(_frag_query, query, filename,
 							maxresults=None, limit=limit, indices=indices,
 							trees=False, macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
@@ -574,7 +577,7 @@ class FragmentSearcher(CorpusSearcher):
 			# 	result[filename] = self.cache[
 			# 			'counts', query, filename, limit, indices]
 			# except KeyError:
-			jobs[self._submit(_frag_query, query, filename, self.vocab,
+			jobs[self._submit(_frag_query, query, filename,
 					maxresults=None, limit=limit, indices=False, trees=False,
 					macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
@@ -597,7 +600,7 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename, self.vocab,
+				jobs[self._submit(_frag_query, query, filename,
 						maxresults=maxresults, indices=True,
 						trees=True, macros=self.macros)] = filename
 			else:
@@ -624,7 +627,7 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename, self.vocab,
+				jobs[self._submit(_frag_query, query, filename,
 						maxresults=maxresults, indices=True, trees=True,
 						macros=self.macros)] = filename
 			else:
@@ -669,7 +672,7 @@ class FragmentSearcher(CorpusSearcher):
 
 
 @workerfunc
-def _frag_query(query, filename, vocab, maxresults=None, limit=None,
+def _frag_query(query, filename, maxresults=None, limit=None,
 		indices=True, trees=False, macros=None):
 	"""Run a fragment query on a single file."""
 	if macros is not None:
@@ -679,10 +682,10 @@ def _frag_query(query, filename, vocab, maxresults=None, limit=None,
 			for a, b, _ in treebank.incrementaltreereader(
 				io.StringIO(query))])
 	queries = _fragments.getctrees(
-			list(trees), list(sents), vocab=vocab)
+			list(trees), list(sents), vocab=VOCAB)
 	maxnodes = max(queries['trees1'].maxnodes, corpus.maxnodes)
 	fragments = _fragments.completebitsets(
-			queries['trees1'], vocab, maxnodes, discontinuous=True)
+			queries['trees1'], VOCAB, maxnodes, discontinuous=True)
 	fragmentkeys = list(fragments)
 	bitsets = [fragments[a] for a in fragmentkeys]
 	results = ((frag, multiset) for frag, multiset in zip(
@@ -693,7 +696,7 @@ def _frag_query(query, filename, vocab, maxresults=None, limit=None,
 	if maxresults:
 		results = ((a, list(islice(b, maxresults))) for a, b in results)
 	if indices and trees:
-		results = ((a, {n + 1: corpus.extract(n, vocab) for n in b})
+		results = ((a, {n + 1: corpus.extract(n, VOCAB) for n in b})
 				for a, b in results)
 	elif indices:
 		results = ((a, {n + 1: m for n, m in b.items()})
