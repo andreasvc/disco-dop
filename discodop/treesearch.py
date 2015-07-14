@@ -526,11 +526,11 @@ class FragmentSearcher(CorpusSearcher):
 				corpus = _fragments.readtreebank(
 						filename, self.vocab, fmt=fmt)
 				corpus.indextrees(self.vocab)
-				gzip.open('%s.pkl.gz' % filename, 'w').write(
+				gzip.open('%s.pkl.gz' % filename, 'w', compresslevel=1).write(
 						pickle.dumps(corpus, protocol=-1))
 				newvocab = True
 		if newvocab:
-			gzip.open(vocabpath, 'w').write(
+			gzip.open(vocabpath, 'w', compresslevel=1).write(
 					pickle.dumps(self.vocab, protocol=-1))
 		self.macros = {}
 		if macros:
