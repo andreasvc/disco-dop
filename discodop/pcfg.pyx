@@ -705,7 +705,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	proc = subprocess.Popen([which('bitpar')] + args,
 			shell=False, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
 			stderr=subprocess.PIPE)
-	results, msg = proc.communicate('\n'.join(tokens) + '\n')
+	results, msg = proc.communicate(('\n'.join(tokens) + '\n').encode('utf8'))
 	msg = msg.replace('Warning: Word class 0 did not occur!\n',
 			'').decode('utf8').strip()
 	match = CPUTIME.search(msg)

@@ -63,9 +63,8 @@ div.barplot span {
     <a href="static/xpathmacros.txt">XPath</a>,
     {% endif %}
     <a href="static/regexmacros.txt">regex</a>.
-    </p>
-
-	<p>Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
+	<br>
+	Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
 	| <a href="/style">Statistics &amp; readability measures</a> from
     <span class=tt><a href="http://manpages.ubuntu.com/manpages/precise/en/man1/style.1.html">style(1)</a></span>
 </p></blockquote>
@@ -120,11 +119,10 @@ div.barplot span {
     {% endfor -%}
     </div>
 	<br>
-	<label>Limit:
-		<input type=text name=limit value="{{ form['limit'] }}" size=10>
-		(with counts: only consider first n sentences;
-			otherwise: return up to n results;
-			leave empty for no limit)
+	<label>Slice:
+		<input type=text name=slice value="{{ form['slice'] }}" size=10>
+		(optionally, enter slice of the form "n-m" to only search sentences n to m
+		of each text)
 	</label><br>
     </td><td></td></tr>
     <tr>

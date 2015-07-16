@@ -36,6 +36,7 @@ Options:
                 its input file.
 -M X, --macros=X
                 file with macros
+--slice=N:M     only search in sentences N to M of each file.
 --numthreads=X
                 Number of concurrent threads to use.
 

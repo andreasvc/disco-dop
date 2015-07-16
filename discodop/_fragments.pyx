@@ -317,7 +317,7 @@ cdef inline int extractat(uint64_t *matrix, uint64_t *result, Node *a, Node *b,
 
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
-		int indices=False, maxnodes=None, limit=None):
+		int indices=False, maxnodes=None, start=None, end=None):
 	"""Get exact counts or indices of occurrence for fragments.
 
 	:param trees1, bitsets: ``bitsets`` defines fragments of trees in
@@ -336,7 +336,7 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	:param maxnodes: when searching in multiple treebanks, supply the
 		largest number of nodes in a single tree to fix the bitset size;
 		can be left out when searching in 1 or 2 treebanks.
-	:param limit: only search through first N number of trees from trees2
+	:param start, end: only search through this interval of trees from trees2
 		(defaults to all trees).
 	:returns: an array of counts, or a list of indices (Counter objects)."""
 	cdef:
@@ -345,13 +345,12 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		object matches = None  # Counter()
 		object candidates  # RoaringBitmap()
 		short i, j, SLOTS
-		uint32_t n, m, limit_
+		uint32_t n, m
 		uint32_t *countsp = NULL
 		NodeArray a, b
 		Node *anodes
 		Node *bnodes
 		uint64_t *bitset
-	limit_ = limit if limit else trees2.len
 	if maxnodes:
 		SLOTS = BITNSLOTS(maxnodes + 1)
 	else:
@@ -370,12 +369,12 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 			candidates = getcandidates(anodes, bitset, trees2, a.len, SLOTS)
 		except IndexError:  # ran across unseen production
 			candidates = []
+		if (start or end) and candidates:
+			candidates &= range(start or 0, end or trees2.len)
 		if indices:
 			matches = theindices[n]
 		i = getroot(bitset, SLOTS)  # root of fragment in tree 'a'
 		for m in candidates:
-			if m >= limit_:
-				continue
 			b = trees2.trees[m]
 			bnodes = &trees2.nodes[b.offset]
 			for j in range(b.len):
@@ -400,12 +399,18 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 	cdef int idx = 0
 	cdef short i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	assert i != -1
-	candidates = trees.prodindex[a[i].prod].copy()
+	rb = trees.prodindex[a[i].prod]
+	if rb is None:
+		raise IndexError
+	candidates = rb.copy()
 	while True:
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
-		if i == -1 or i >= alen: # FIXME. why is 2nd condition necessary?
+		if i == -1 or i >= alen:  # FIXME. why is 2nd condition necessary?
 			break
-		candidates &= trees.prodindex[a[i].prod]
+		rb = trees.prodindex[a[i].prod]
+		if rb is None:
+			raise IndexError
+		candidates &= rb
 	return candidates
 
 
@@ -793,9 +798,6 @@ def nonfrontier(sent):
 	return nonfrontierfun
 
 
-# [ ] insert pre-terminals
-# [ ] labels as IDs?
-#     or store idx to label and collect prods in second pass
 cdef int readnode(
 		str line, Vocabulary vocab, Node *nodes) except -9:
 	"""Parse tree in bracket format into pre-allocated array of Node structs.
@@ -810,9 +812,11 @@ cdef int readnode(
 	:parem nodes: primary result."""
 	cdef short idx = 0, n = 0, m, parent = -1, lenline = len(line), lensent = 0
 	cdef array stack = clone(shortarray, 0, False)
-	children = []  # list of lists
-	labels = []  # strings
-	terminal = label = prod = None
+	cdef list children = []  # list of lists
+	cdef list labels = []  # list of str
+	cdef str terminal = None, label = None, prod = None
+	cdef str binlabel, binlabel2
+	cdef list binchildren, binlabels
 	while n < lenline:
 		while n < lenline and line[n] in ' \t\n':
 			n += 1
@@ -823,12 +827,12 @@ cdef int readnode(
 			while n < lenline and line[n] in ' \t\n':
 				n += 1
 			if n >= lenline:
-				return -2
+				return -1  # unexpected end of string after opening paren
 			startlabel = n
 			while n + 1 < lenline and line[n + 1] not in ' \t\n()':
 				n += 1
 			if n + 1>= lenline:
-				return -2
+				return -2  # unexpected end of string after label
 			label = line[startlabel:n + 1]
 			parent = stack.data.as_shorts[len(stack) - 1] if stack else -1
 			stack.append(idx)
@@ -836,8 +840,7 @@ cdef int readnode(
 			nodes[idx].left = nodes[idx].right = nodes[idx].prod = -1
 			idx += 1
 			if parent >= 0 and nodes[parent].right >= 0:
-				children.append([
-						nodes[parent].left, nodes[parent].right,
+				children.append([nodes[parent].left, nodes[parent].right,
 						stack.data.as_shorts[len(stack) - 1]])
 				nodes[parent].right = -2
 			elif parent >= 0 and nodes[parent].right == -2:
@@ -852,37 +855,36 @@ cdef int readnode(
 				while n + 1 < lenline and line[n + 1] in ' \t\n':
 					n += 1
 				if n + 1 >= lenline:
-					return -3
+					return -3  # unexpected end of string after closing paren
 				if nodes[cur].prod == -1:  # frontier non-terminal?
 					nodes[cur].left = termidx(lensent)
 					lensent += 1
-					prod = ' \t%s => ' % labels[cur]
+					prod = ' \t%s ' % labels[cur]
 					if prod in vocab.prods:  # assign new ID?
 						nodes[cur].prod = vocab.prods[prod]
 					else:
 						nodes[cur].prod = len(vocab.prods)
 						vocab.prods[prod] = nodes[cur].prod
 						vocab.labels.append(labels[cur])
-						vocab.words.append('')  # not None!
+						vocab.words.append(None)
 				if nodes[parent].left == -1:
 					nodes[parent].left = cur
 					if line[n + 1] == ')':  # first and only child, unary node
-						prod = '0\t%s => %s' %(labels[parent], labels[cur])
+						prod = '0\t%s %s' %(labels[parent], labels[cur])
 				elif nodes[parent].right == -1:
 					nodes[parent].right = cur
 					if line[n + 1] == ')':  # 2nd and last child, binary node
-						prod = '01\t%s => %s %s' % (
+						prod = '01\t%s %s %s' % (
 								labels[parent], labels[parent + 1], labels[cur])
 				elif line[n + 1] == ')':  # last of > 2 children
 					# collect labels
 					binchildren = children.pop()
 					binlabels = [labels[m] for m in binchildren]
 					binlabel = '%s|<%s.%s>' % (
-							labels[parent],
-							','.join([labels[x] for x in binchildren[:1]]),
-							','.join([labels[x] for x in binchildren[1:]]))
+							labels[parent], binlabels[0],
+							','.join(binlabels[1:]))
 					nodes[parent].right = idx
-					prod = '01\t%s => %s %s' % (
+					prod = '01\t%s %s %s' % (
 							labels[parent], labels[parent + 1], binlabel)
 					# add intermediate nodes
 					for m, y in enumerate(
@@ -895,10 +897,8 @@ cdef int readnode(
 							nodes[idx].right = idx + 1
 							binlabel2 = '%s|<%s.%s>' % (
 									labels[parent],
-									','.join([labels[x] for x
-										in binchildren[:m + 1]]),
-									','.join([labels[x] for x
-										in binchildren[m + 1:]]))
+									','.join(binlabels[:m + 1]),
+									','.join(binlabels[m + 1:]))
 						if prod in vocab.prods:  # assign new ID?
 							nodes[parent].prod = vocab.prods[prod]
 						else:
@@ -908,7 +908,7 @@ cdef int readnode(
 							vocab.words.append(None)
 						parent = idx
 						label, binlabel = binlabel, binlabel2
-						prod = '01\t%s => %s %s' % (
+						prod = '01\t%s %s %s' % (
 								label, labels[y], binlabel2)
 						idx += 1
 						labels.append(label)
@@ -918,7 +918,7 @@ cdef int readnode(
 				while n < lenline and line[n] in ' \t\n':
 					n += 1
 				if n < lenline:
-					return -5
+					return -4  # unexpected data after end of tree
 		else:  # terminal
 			start = n
 			while n < lenline and line[n] not in ') \t\n':
@@ -927,32 +927,12 @@ cdef int readnode(
 			while n < lenline and line[n] in ' \t\n':
 				n += 1
 			if line[n] != ')':
-				return -4
+				return -5  # unexpected data after terminal
 			n -= 1
 			parent = stack.data.as_shorts[len(stack) - 1]
 			nodes[parent].left = termidx(lensent)
 			lensent += 1
-			prod = '%s\t%s => Epsilon' % (terminal, labels[parent])
-			# # add new preterminal (broken)
-			# if line[n] in ' \t\n' or nodes[parent].left != -1:
-			# 	label = labels[parent] + '/' + terminal
-			# 	if nodes[parent].left == -1:
-			# 		nodes[parent].left = idx
-			# 	elif nodes[parent].right == -2:
-			# 		children[len(children) - 1].append(idx)
-			# 	elif nodes[parent].right == -1 and line[n] in ' \t\n':
-			# 		children.append([nodes[parent].left, idx])
-			# 		nodes[parent].right = -2
-			# 	elif nodes[parent].right == -1 and line[n] == ')':
-			# 		nodes[parent].right = idx
-			# 		nodes[parent].prod = (labels[parent],
-			# 				labels[nodes[parent].left], label)
-			# 	nodes[idx].prod = (label, terminal)
-			#	nodes[idx].left = nodes[idx].right = -1
-			#	idx += 1
-			# 	labels.append(label)
-			# else:
-			# 	nodes[parent].prod = (labels[parent], terminal)
+			prod = '%s\t%s Epsilon' % (terminal, labels[parent])
 		if prod is None:
 			pass
 		elif prod in vocab.prods:  # assign new ID?
@@ -961,25 +941,11 @@ cdef int readnode(
 			nodes[parent].prod = len(vocab.prods)
 			vocab.prods[prod] = nodes[parent].prod
 			vocab.labels.append(labels[parent])
-			vocab.words.append(None if terminal is None else terminal)
+			vocab.words.append(terminal)
 		n += 1
 
 	if len(stack) != 0 or len(children) != 0:
-		return -1
-
-	# # Debugging code
-	# print(line, end='')
-	# print(sent)
-	# for n in range(idx):
-	# 	print('%2d. %2d %2d %2d %2s %s' % (
-	# 			n, nodes[n].left, nodes[n].right, nodes[n].prod, labels[n],
-	# 			'; '.join([a for a, b in vocab.prods.items()
-	# 				if b == nodes[n].prod])))
-	# print()
-	# for a, n in sorted(vocab.prods.items(), key=lambda x: x[1]):
-	# 	print("%d. '%s' '%s' '%s'" % (n, vocab.labels[n], vocab.words[n], a))
-	# print(children)
-	# print()
+		return -6  # stack / children not empty after end of string
 	return idx
 
 

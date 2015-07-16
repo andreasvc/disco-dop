@@ -46,11 +46,11 @@ def lcfrsproductions(tree, sent, frontiers=False):
 	>>> sent = "is Mary happy".split()
 	>>> print('\\n'.join(printrule(r, yf)  # doctest: +NORMALIZE_WHITESPACE
 	...		for r, yf in lcfrsproductions(tree, sent)))
-	010	S => VP_2 NP
-	0,1	VP_2 => V ADJ
-	is	V => Epsilon
-	happy	ADJ => Epsilon
-	Mary	NP => Epsilon"""
+	010	S VP_2 NP
+	0,1	VP_2 V ADJ
+	is	V Epsilon
+	happy	ADJ Epsilon
+	Mary	NP Epsilon"""
 	leaves = tree.leaves()
 	if len(set(leaves)) != len(leaves):
 		raise ValueError('indices should be unique. indices: %r\ntree: %s'
@@ -662,7 +662,7 @@ def defaultparse(wordstags, rightbranching=False):
 def printrule(r, yf, w=None):
 	""":returns: a string representation of a rule."""
 	yfstr = ','.join(''.join(map(str, a)) for a in yf)
-	result = '%s\t%s => %s' % (
+	result = '%s\t%s %s' % (
 			yfstr, r[0], ' '.join(x for x in r[1:]))
 	if w is None:
 		return result

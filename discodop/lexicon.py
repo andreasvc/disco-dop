@@ -494,7 +494,7 @@ def externaltagging(usetagger, model, sents, overridetag, tagmap):
 				shell=False, stdin=PIPE, stdout=PIPE)
 		tagout, stderr = tagger.communicate(''.join(
 				' '.join(w for w in map(itemgetter(0), tagsent)) + '\n'
-				for tagsent in sents.values()).encode('utf-8'))
+				for tagsent in sents.values()).encode('utf8'))
 		logging.info(stderr)
 		# lines consist of: 'idx token lemma POS score'
 		taggedsents = OrderedDict((n,

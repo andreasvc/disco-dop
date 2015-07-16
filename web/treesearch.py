@@ -158,6 +158,7 @@ def counts(form, doexport=False):
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	start, end = getslice(form.get('slice'))
 	if not doexport:
 		url = 'counts?' + url_encode(dict(export='csv', **form))
 		yield ('Counts from queries '
@@ -193,15 +194,15 @@ def counts(form, doexport=False):
 			if normquery:
 				norm = 'query'
 				normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
-						normquery, selected)
+						normquery, selected, start, end)
 			else:
 				norm = form.get('norm', 'sents')
 			results = CORPORA[form.get('engine', 'tgrep2')].counts(
-					query, selected, indices=False)
+					query, selected, start, end, indices=False)
 			if all(results[filename] < INDICESMAXRESULTS for filename
 					in results):
 				resultsindices = CORPORA[form.get('engine', 'tgrep2')].counts(
-						query, selected, indices=True)
+						query, selected, start, end, indices=True)
 		if not doexport:
 			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (
 					n, name, query or legend)
@@ -212,8 +213,6 @@ def counts(form, doexport=False):
 			else:
 				combined[filename] += cnt
 			textno = selected[filename]
-			limit = (int(form.get('limit')) if form.get('limit')
-					else NUMSENTS[textno])
 			text = TEXTS[textno]
 			cnts[text] = cnt
 			if norm == 'consts':
@@ -239,7 +238,7 @@ def counts(form, doexport=False):
 				plot = ''
 				if resultsindices is not None:
 					plot = dispplot(resultsindices[filename],
-							limit or NUMSENTS[textno])
+							start or 1, end or NUMSENTS[textno])
 				if cnt:
 					yield out + plot + '\n'
 				else:
@@ -255,7 +254,7 @@ def counts(form, doexport=False):
 			yield '</pre>'
 			if max(cnts.values()) == 0:
 				continue
-			elif form.get('limit'):
+			elif form.get('slice'):
 				# show absolute counts when all texts have been limited to same
 				# number of sentences
 				yield barplot(cnts, max(cnts.values()),
@@ -302,10 +301,10 @@ def counts(form, doexport=False):
 def trees(form):
 	"""Return visualization of parse trees in search results."""
 	gotresults = False
-	maxresults = min(TREELIMIT, int(form.get('limit') or TREELIMIT))
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	start, end = getslice(form.get('slice'))
 	# NB: we do not hide function or morphology tags when exporting
 	url = 'trees?' + url_encode(dict(export='csv', **form))
 	yield ('<pre>Query: %s\n'
@@ -314,11 +313,12 @@ def trees(form):
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				maxresults, url, url + '&linenos=1'))
+				TREELIMIT, url, url + '&linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
 			CORPORA[form.get('engine', 'tgrep2')].trees(form['query'],
-			selected, maxresults=maxresults, nomorph='nomorph' in form,
-			nofunc='nofunc' in form)), itemgetter(0))):
+			selected, start, end, maxresults=TREELIMIT,
+			nomorph='nomorph' in form, nofunc='nofunc' in form),
+			key=itemgetter(0)), itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
 		if 'breakdown' in form:
@@ -359,10 +359,10 @@ def trees(form):
 def sents(form, dobrackets=False):
 	"""Return search results as terminals or in bracket notation."""
 	gotresults = False
-	maxresults = min(SENTLIMIT, int(form.get('limit') or SENTLIMIT))
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	start, end = getslice(form.get('slice'))
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
 			url_encode(dict(export='csv', **form)))
 	yield ('<pre>Query: %s\n'
@@ -371,10 +371,11 @@ def sents(form, dobrackets=False):
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				maxresults, url, url + '&linenos=1'))
+				SENTLIMIT, url, url + '&linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
 			CORPORA[form.get('engine', 'tgrep2')].sents(form['query'],
-				selected, maxresults=maxresults, brackets=dobrackets)),
+				selected, start, end, maxresults=SENTLIMIT,
+				brackets=dobrackets), key=itemgetter(0)),
 			itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
@@ -428,6 +429,7 @@ def fragmentsinresults(form, doexport=False):
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	start, end = getslice(form.get('slice'))
 	uniquetrees = set()
 	if not doexport:
 		url = 'fragments?' + url_encode(dict(export='csv', **form))
@@ -445,7 +447,7 @@ def fragmentsinresults(form, doexport=False):
 	else:
 		fragments.PARAMS.update(disc=False, fmt='bracket')
 	for n, (_, _, treestr, _) in enumerate(CORPORA[form.get(
-			'engine', 'tgrep2')].sents(form['query'], selected,
+			'engine', 'tgrep2')].sents(form['query'], selected, start, end,
 			maxresults=SENTLIMIT, brackets=True)):
 		if n == 0:
 			gotresults = True
@@ -676,7 +678,7 @@ def browsesents():
 					query=request.args['query'],
 					engine=request.args.get('engine', 'tgrep2')))
 			filenames = {EXTRE.sub('', os.path.basename(a)): a
-					for a in CORPORA[form['engine']].files}
+					for a in CORPORA[request.args['engine']].files}
 			filename = filenames[TEXTS[textno]]
 			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s' % ('\t'.join(
@@ -684,7 +686,8 @@ def browsesents():
 					for n, query in enumerate(queries, 1)))
 			for n, (_, query) in enumerate(queries.values()):
 				matches = CORPORA[request.args['engine']].sents(
-						query, subset=(filename,), maxresults=None)
+						query, subset=(filename,), start=start, end=maxsent,
+						maxresults=2 * chunk)
 				for _, m, sent, high in matches:
 					if start <= m < maxsent:
 						sent = sent.split(' ')
@@ -743,13 +746,13 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	return '\n'.join(result)
 
 
-def dispplot(indices, total, width=800.0, runle=False):
+def dispplot(indices, start, end, width=800.0, runle=False):
 	"""Draw a dispersion plot from a list of indices.
 
 	:param indices: a list of sets or Counter objects, where each element is
 		a sentence number. Each element of indices will be drawn in a
-		different color.
-	:param total: the total number of sentences.
+		different color to represent a different query.
+	:param start, end: the range of sentences numbers.
 	:param runle: use a more compact, run-length encoded representation."""
 	result = ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
 			' width="%dpx" height="10px" >\n'
@@ -758,24 +761,25 @@ def dispplot(indices, total, width=800.0, runle=False):
 	for n, a in enumerate(indices if isinstance(indices, list) else [indices]):
 		if not a:
 			continue
-		if runle:
+		if runle:  # FIXME: use start
 			strokes = []
-			start = 0
+			idx0 = 0
 			seq = [-1] + sorted(a) + [-1]
 			for prev, idx, nextidx in zip(seq, seq[1:], seq[2:]):
 				if idx != prev + 1 and idx != nextidx - 1:
 					strokes.append('M %d 0v 10' % idx)
 				elif idx != prev + 1:
-					start = idx
+					idx0 = idx
 				elif idx != nextidx - 1:
-					strokes.append(  # draw a rectangle covering start:idx
+					strokes.append(  # draw a rectangle covering idx0:idx
 							'M %d 0l 0 10 %d 0 0 -10' % (
-								start - 1, idx - start - 1))
+								idx0 - 1, idx - idx0 - 1))
 		else:
-			strokes = ['M %d 0v 10' % (idx - 1) for idx in sorted(a)]
+			strokes = ['M %d 0v 10' % (idx - start) for idx in sorted(a)]
 		result += ('<g transform="scale(%g, 1)">\n'
 				'<path stroke=%s d="%s" /></g>' % (
-				width / total, COLORS.get(n, 'black'), ''.join(strokes)))
+				width / (end - start), COLORS.get(n, 'black'),
+				''.join(strokes)))
 	return result + '</svg>'
 
 
@@ -792,6 +796,17 @@ def selectedtexts(form):
 	else:
 		selected.update(range(len(TEXTS)))
 	return selected
+
+
+def getslice(a):
+	"""Parse slice argument of the form n-m, where n and m are optional."""
+	if not a:
+		return None, None
+	elif '-' in a:
+		start, end = a.split('-')
+	else:
+		start, end = None, a
+	return (int(start) if start else None), (int(end) if end else None)
 
 
 def querydict(queries):

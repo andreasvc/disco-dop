@@ -216,6 +216,7 @@ cdef class Ctrees:
 	cdef readonly short maxnodes
 	cdef readonly int len
 	cdef list prodindex
+	cdef object _state
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int numtrees, int extranodes)
 	cdef addnodes(self, Node *source, int cnt, int root)

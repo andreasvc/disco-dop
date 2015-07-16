@@ -271,8 +271,8 @@ def read2ndtreebank(filename2, vocab, fmt='bracket',
 	trees2 = _fragments.readtreebank(filename2, vocab,
 			fmt, limit, encoding)
 	trees2.indextrees(vocab)
-	logging.info("%r: %d trees; %d nodes (max %d). "
-			"word tokens: %d, %r",
+	logging.info("%r: %d trees; %d nodes (max %d); "
+			"word tokens: %d\n%r",
 			filename2, len(trees2), trees2.numnodes, trees2.maxnodes,
 			trees2.numwords, PARAMS['vocab'])
 	return dict(trees2=trees2, vocab=vocab)
@@ -285,22 +285,29 @@ def initworker(filename1, filename2, limit, encoding):
 	advantageous with a NUMA architecture."""
 	PARAMS.update(readtreebanks(filename1, filename2,
 			limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
+	trees1 = PARAMS['trees1']
 	if PARAMS['debug']:
 		print("\nproductions:")
 		for a, b in sorted(PARAMS['vocab'].prods.items(), key=lambda x: x[1]):
 			print(b, a)
-	trees1 = PARAMS['trees1']
+		print('treebank 1:')
+		for n in range(trees1.len):
+			trees1.printrepr(n, PARAMS['vocab'])
 	if not trees1:
 		raise ValueError('treebank1 empty.')
-	m = 'treebank1: %d trees; %d nodes (max: %d); %d word tokens;' % (
+	m = 'treebank1: %d trees; %d nodes (max: %d); %d word tokens.\n' % (
 			trees1.len, trees1.numnodes, trees1.maxnodes, trees1.numwords)
 	if filename2:
 		trees2 = PARAMS['trees2']
+		if PARAMS['debug']:
+			print('treebank 2:')
+			for n in range(trees2.len):
+				trees2.printrepr(n, PARAMS['vocab'])
 		if not trees2:
 			raise ValueError('treebank2 empty.')
-		m += ' treebank2: %d trees; %d nodes (max %d); %d word tokens' % (
+		m += 'treebank2: %d trees; %d nodes (max %d); %d word tokens.\n' % (
 				trees2.len, trees2.numnodes, trees2.maxnodes, trees2.numwords)
-	logging.info("%s %r", m, PARAMS['vocab'])
+	logging.info("%s%r", m, PARAMS['vocab'])
 
 
 def initworkersimple(trees, sents, trees2=None, sents2=None):

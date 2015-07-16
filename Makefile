@@ -19,6 +19,12 @@ docs:
 	cd docs && make man && cp _build/man/* ~/.local/man/man1/
 	cd docs && make html
 
+install: discodop docs
+
+inplace: discodop
+	# python setup.py build_ext --inplace
+	cp build/lib.*/discodop/*.so discodop/
+
 test: all inplace
 	py.test --doctest-modules discodop/ tests/unittests.py \
 	&& python -tt -3 tests.py \
@@ -30,11 +36,9 @@ test3:
 	cp build/lib.*/discodop/*.so discodop/
 	PYTHONIOENCODING=utf-8 PYTHONHASHSEED=42 python3 -bb -tt tests.py
 
-inplace: discodop
-	# python setup.py build_ext --inplace
+py3:
+	python3 setup.py install --user
 	cp build/lib.*/discodop/*.so discodop/
-
-install: discodop docs
 
 debug:
 	# NB: debug build requires all external modules to be compiled

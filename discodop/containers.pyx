@@ -2,7 +2,6 @@
 from __future__ import print_function
 from math import exp, log, fsum
 from libc.math cimport log, exp
-from libc.string cimport memcpy
 from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
 from discodop.bit cimport nextset, nextunset, anextset, anextunset
@@ -542,17 +541,17 @@ cdef class Ctrees:
 		Productions are represented as integer IDs, trees are given as sets of
 		integer indices."""
 		cdef:
-			list prodindex = [RoaringBitmap() for _ in vocab.prods]
-			NodeArray tree
+			list prodindex = [None for _ in vocab.prods]
 			Node *nodes
 			int n, m
 		for n in range(self.len):
-			tree = self.trees[n]
-			nodes = &self.nodes[tree.offset]
-			for m in range(tree.len):
+			nodes = &self.nodes[self.trees[n].offset]
+			for m in range(self.trees[n].len):
 				# Add to production index
-				prodindex[nodes[m].prod].add(n)
-
+				rb = prodindex[nodes[m].prod]
+				if rb is None:
+					rb = prodindex[nodes[m].prod] = RoaringBitmap()
+				rb.add(n)
 		self.prodindex = prodindex
 
 	def extract(self, int n, Vocabulary vocab, disc=True):
@@ -576,7 +575,29 @@ cdef class Ctrees:
 			if self.nodes[m].left < 0}
 		return [sent[m] for m in sorted(sent)]
 
+	def printrepr(self, int n, Vocabulary vocab):
+		"""Print repr of a tree for debugging purposes."""
+		tree, sent = self.extract(n, vocab)
+		print(n)
+		print(tree)
+		print(sent)
+		offset = self.trees[n].offset
+		for m in range(self.trees[n].len):
+			print('%2d. %2d %2d %2d %2s %s' % (
+					m, self.nodes[offset + m].left,
+					self.nodes[offset + m].right,
+					self.nodes[offset + m].prod,
+					vocab.labels[self.nodes[offset + m].prod],
+					'; '.join([a for a, b in vocab.prods.items()
+					if b == self.nodes[offset + m].prod])))
+		print()
+		# for a, m in sorted(vocab.prods.items(), key=lambda x: x[1]):
+		# 	print("%d. '%s' '%s' '%s'" % (m, vocab.labels[m], vocab.words[m], a))
+		# print()
+
 	def __dealloc__(self):
+		if self._state is not None:
+			return
 		if self.nodes is not NULL:
 			free(self.nodes)
 			self.nodes = NULL
@@ -589,10 +610,8 @@ cdef class Ctrees:
 
 	def __reduce__(self):
 		"""Helper function for pickling."""
-		return (
-				Ctrees, (),
-				dict(
-					nodes=<bytes>(<char *>self.nodes)[
+		return (Ctrees, (),
+				dict(nodes=<bytes>(<char *>self.nodes)[
 						:self.numnodes * sizeof(self.nodes[0])],
 					trees=<bytes>(<char *>self.trees)[
 						:self.len * sizeof(self.trees[0])],
@@ -610,8 +629,9 @@ cdef class Ctrees:
 		self.maxnodes = state['maxnodes']
 		self.prodindex = state['prodindex']
 		self.alloc(self.len, self.numnodes)
-		memcpy(self.nodes, <char *><bytes>state['nodes'], len(state['nodes']))
-		memcpy(self.trees, <char *><bytes>state['trees'], len(state['trees']))
+		self.nodes = <Node *><char *><bytes>state['nodes']
+		self.trees = <NodeArray *><char *><bytes>state['trees']
+		self._state = state  # keep reference alive
 
 
 @cython.final
