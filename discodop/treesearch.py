@@ -59,7 +59,6 @@ ABBRPOS = {
 	'NOUN': 'NN',
 	'VERB': 'VB'}
 
-VOCAB = None
 CorpusInfo = namedtuple('CorpusInfo',
 		['len', 'numwords', 'numnodes', 'maxnodes'])
 
@@ -92,7 +91,7 @@ class CorpusSearcher(object):
 			all filenames are used.
 		:param start, end: the interval of sentences to query in each corpus;
 			by default, all sentences are queried. 1-based, inclusive.
-		:param indices: if True, return a multiset of indices of matching
+		:param indices: if True, return a sequence of indices of matching
 			occurrences, instead of an integer count."""
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
@@ -132,13 +131,13 @@ class CorpusSearcher(object):
 		:param start, end: the interval of sentences to query in each corpus;
 			by default, all sentences are queried. 1-based, inclusive.
 		:returns: a dict of the form
-			``{corpus1: {query1: nummatches, query2: nummatches, ...}, ...}``.
+			``{corpus1: {query1: count1, query2: count2, ...}, ...}``.
 		"""
 		result = OrderedDict((name, OrderedDict())
 				for name in subset or self.files)
 		for query in queries:
-			for filename, value in self.counts(query, subset,
-					start, end).items():
+			for filename, value in self.counts(
+					query, subset, start, end).items():
 				result[filename][query] = value
 		return result
 
@@ -196,8 +195,8 @@ class TgrepSearcher(CorpusSearcher):
 						'counts', query, filename, start, end, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(lambda x: Counter(n for n, _
-							in self._query(query, x, fmt, start, end, None)),
+					jobs[self._submit(lambda x: [n for n, _
+							in self._query(query, x, fmt, start, end, None)],
 							filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
@@ -401,8 +400,8 @@ class DactSearcher(CorpusSearcher):
 						'counts', query, filename, start, end, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(lambda x: Counter(n for n, _
-							in self._query(query, x, start, end, None)),
+					jobs[self._submit(lambda x: [n for n, _
+							in self._query(query, x, start, end, None)],
 							filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
@@ -524,13 +523,18 @@ class FragmentSearcher(CorpusSearcher):
 	export (autodetected).
 	Each query consists of one or more tree fragments, and the results
 	will be merged together, except with batchcounts(), which returns
-	the results for each fragment separately."""
+	the results for each fragment separately.
+
+	Example queries::
+		(S (NP (DT The) (NN )) (VP ))
+		(NP (DT 0) (NN 1))\tThe queen
+
+	:param inmemory: if True, keep all corpora in memory; otherwise, use
+		pickle to load them from disk with each query.
+	"""
 	# NB: pickling arrays is efficient in Python 3
-	def __init__(self, files, macros=None, numthreads=None):
-		global VOCAB
+	def __init__(self, files, macros=None, numthreads=None, inmemory=True):
 		super(FragmentSearcher, self).__init__(files, macros, numthreads)
-		self.pool = concurrent.futures.ProcessPoolExecutor(
-				numthreads or cpu_count())
 		path = os.path.dirname(next(iter(files)))
 		newvocab = True
 		vocabpath = os.path.join(path, 'treesearchvocab.pkl')
@@ -554,11 +558,15 @@ class FragmentSearcher(CorpusSearcher):
 				corpus.indextrees(self.vocab)
 				gzip.open('%s.pkl.gz' % filename, 'w', compresslevel=1).write(
 						pickle.dumps(corpus, protocol=-1))
+				if inmemory:
+					self.files[filename] = corpus
 				newvocab = True
+			elif inmemory:
+				corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+				self.files[filename] = corpus
 		if newvocab:
 			with open(vocabpath, 'wb') as out:
 				pickle.dump(self.vocab, out, protocol=-1)
-		VOCAB = self.vocab
 		self.macros = {}
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
@@ -573,7 +581,7 @@ class FragmentSearcher(CorpusSearcher):
 				result[filename] = self.cache[
 						'counts', query, filename, start, end, indices]
 			except KeyError:
-				jobs[self._submit(_frag_query, query, filename,
+				jobs[self._submit(self._query, query, filename,
 						start, end, None, indices=indices, trees=False,
 						macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
@@ -595,7 +603,7 @@ class FragmentSearcher(CorpusSearcher):
 		query = '\n'.join(queries) + '\n'
 		for filename in subset:
 			# nb: batchcounts not cached
-			jobs[self._submit(_frag_query, query, filename,
+			jobs[self._submit(self._query, query, filename,
 					start, end, None, indices=False, trees=False,
 					macros=self.macros)] = filename
 		for future in self._as_completed(jobs):
@@ -605,8 +613,6 @@ class FragmentSearcher(CorpusSearcher):
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
 			nofunc=False, nomorph=False):
-		if nofunc or nomorph:
-			raise NotImplementedError
 		subset = subset or self.files
 		result = []
 		jobs = {}
@@ -617,7 +623,7 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename,
+				jobs[self._submit(self._query, query, filename,
 						start, end, maxresults, indices=True, trees=True,
 						macros=self.macros)] = filename
 			else:
@@ -626,8 +632,13 @@ class FragmentSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for frag, matches in future.result():
-				for sentno, (tree, sent) in matches.items():
-					high = []  # FIXME matching subtree not returned
+				for sentno, (treestr, sent) in matches.items():
+					tree = Tree(filterlabels(treestr, nofunc, nomorph))
+					sent = [word.replace('-LRB-', '(').replace('-RRB-', ')')
+							for word in sent]
+					# FIXME nodes of matching subtree not returned
+					high = [sent.index(a) for a in frag[1]
+							if a is not None]
 					x.append((filename, sentno, tree, sent, high))
 			self.cache['trees', query, filename, start, end,
 					nofunc, nomorph] = x, maxresults
@@ -646,7 +657,7 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename,
+				jobs[self._submit(self._query, query, filename,
 						start, end, maxresults, indices=True, trees=True,
 						macros=self.macros)] = filename
 			else:
@@ -655,15 +666,15 @@ class FragmentSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for frag, matches in future.result():
-				for sentno, (tree, sent) in matches.items():
-					sent = ' '.join(sent)
+				for sentno, (treestr, xsent) in matches.items():
+					xsent = [word.replace('-LRB-', '(').replace('-RRB-', ')')
+							for word in xsent]
+					sent = ' '.join(xsent)
 					if brackets:
-						sent = str(tree) + '\t' + sent
-						match = '\t'.join((
-							str(frag[0]),
-							' '.join(a or '' for a in frag[1])))
+						sent = treestr + '\t' + sent
+						match = frag[0] + '\t' + ' '.join(
+								a or '' for a in frag[1])
 					else:
-						xsent = sent.split(' ')
 						match = {xsent.index(a) for a in frag[1]
 								if a is not None}
 					x.append((filename, sentno, sent, match))
@@ -674,56 +685,64 @@ class FragmentSearcher(CorpusSearcher):
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):
-		if nofunc or nomorph:
-			raise NotImplementedError
-		corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		if self.files[filename] is not None:
+			corpus = self.files[filename]
+		else:
+			corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
 		if sents:
-			return [' '.join(corpus.extractsent(n - 1, self.vocab))
+			return [' '.join(word.replace('-LRB-', '(').replace('-RRB-', ')')
+					for word in corpus.extractsent(n - 1, self.vocab))
 					for n in indices]
-		return [(treetransforms.mergediscnodes(Tree(treestr)), sent)
+		return [(treetransforms.mergediscnodes(Tree(
+					filterlabels(treestr, nofunc, nomorph))),
+				[word.replace('-LRB-', '(').replace('-RRB-', ')')
+					for word in sent])
 				for treestr, sent
 				in (corpus.extract(n - 1, self.vocab) for n in indices)]
 
 	def getinfo(self, filename):
 		"""Return named tuple with members len, numnodes, and numwords."""
-		corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		if self.files[filename] is not None:
+			corpus = self.files[filename]
+		else:
+			corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
 		return CorpusInfo(len=corpus.len, numwords=corpus.numwords,
 				numnodes=corpus.numnodes, maxnodes=corpus.maxnodes)
 
-
-@workerfunc
-def _frag_query(query, filename, start=None, end=None, maxresults=None,
-		indices=True, trees=False, macros=None):
-	"""Run a fragment query on a single file."""
-	if macros is not None:
-		query = query.format(**macros)
-	corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
-	if start is not None:
-		start -= 1
-	trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
-			for a, b, _ in treebank.incrementaltreereader(
-				io.StringIO(query))])
-	queries = _fragments.getctrees(
-			list(trees), list(sents), vocab=VOCAB)
-	maxnodes = max(queries['trees1'].maxnodes, corpus.maxnodes)
-	fragments = _fragments.completebitsets(
-			queries['trees1'], VOCAB, maxnodes, discontinuous=True)
-	fragmentkeys = list(fragments)
-	bitsets = [fragments[a] for a in fragmentkeys]
-	results = ((frag, multiset) for frag, multiset in zip(
-				fragmentkeys,
-				_fragments.exactcounts(queries['trees1'], corpus, bitsets,
-					indices=1 if indices else 0,
-					maxnodes=maxnodes, start=start, end=end)))
-	if maxresults:
-		results = ((a, list(islice(b, maxresults))) for a, b in results)
-	if indices and trees:
-		results = ((a, {n + 1: corpus.extract(n, VOCAB) for n in b})
-				for a, b in results)
-	elif indices:
-		results = ((a, {n + 1: m for n, m in b.items()})
-				for a, b in results)
-	return list(results)
+	# @workerfunc
+	def _query(self, query, filename, start=None, end=None, maxresults=None,
+			indices=True, trees=False, macros=None):
+		"""Run a fragment query on a single file."""
+		if macros is not None:
+			query = query.format(**macros)
+		if self.files[filename] is not None:
+			corpus = self.files[filename]
+		else:
+			corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		if start is not None:
+			start -= 1
+		# NB: queries currently need to have at least 2 levels of parens
+		trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
+				for a, b, _ in treebank.incrementaltreereader(
+					io.StringIO(query))])
+		queries = _fragments.getctrees(
+				list(trees), list(sents), vocab=self.vocab)
+		maxnodes = max(queries['trees1'].maxnodes, corpus.maxnodes)
+		fragments = _fragments.completebitsets(
+				queries['trees1'], self.vocab, maxnodes, discontinuous=True)
+		fragmentkeys = list(fragments)
+		bitsets = [fragments[a] for a in fragmentkeys]
+		results = _fragments.exactcountssubset(queries['trees1'], corpus,
+						bitsets, indices=1 if indices else 0,
+						maxnodes=maxnodes, start=start, end=end,
+						maxresults=maxresults)
+		results = zip(fragmentkeys, results)
+		if indices and trees:
+			results = [(a, {n + 1: corpus.extract(n, self.vocab) for n in b})
+					for a, b in results]
+		elif indices:
+			results = [(a, [n + 1 for n in b]) for a, b in results]
+		return list(results)
 
 
 class RegexSearcher(CorpusSearcher):
@@ -759,8 +778,8 @@ class RegexSearcher(CorpusSearcher):
 						'counts', query, filename, start, end, indices]
 			except KeyError:
 				if indices:
-					jobs[self._submit(lambda x: Counter(y[0] for y
-							in self._query(query, x, start, end, None)),
+					jobs[self._submit(lambda x: [y[0] for y
+							in self._query(query, x, start, end, None)],
 							filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
@@ -831,7 +850,7 @@ class RegexSearcher(CorpusSearcher):
 	def _query(self, query, filename, start=None, end=None, maxresults=None):
 		"""Run a query on a single file."""
 		with io.open(filename, encoding='utf8') as tmp:
-			data = tmp.read()
+			data = tmp.read()  # could use mmap but not with unicode
 			if self.lineindex[filename] is None:
 				self._indexfile(filename, data)
 			startidx = (self.lineindex[filename].select(start - 1)

@@ -208,13 +208,16 @@ def doubledop(trees, sents, debug=False, binarized=True, maxdepth=1,
 	:param maxfrontier: limit number of frontier non-terminals; not yet
 		implemented.
 	:param iterate, complement, numproc: cf. fragments.recurringfragments()
-	:returns: a tuple (grammar, altweights, backtransform)
-		altweights is a dictionary containing alternate weights."""
-
+	:returns: a tuple (grammar, altweights, backtransform, fragments)
+		:grammar: a sequence of productions.
+		:altweights: a dictionary containing alternate weights.
+		:backtransform: needed to recover trees from compressed derivations.
+		:fragments: a sequence of the fragments used to build the grammar,
+		in the same order as they appear in ``grammar``."""
 	from discodop.fragments import recurringfragments
-	fragments = recurringfragments(trees, sents, numproc,
-			maxdepth=maxdepth, maxfrontier=maxfrontier, iterate=iterate,
-			complement=complement)
+	fragments = recurringfragments(trees, sents, numproc, disc=True,
+			indices=True, maxdepth=maxdepth, maxfrontier=maxfrontier,
+			iterate=iterate, complement=complement)
 	return dopgrammar(trees, fragments, debug=debug, binarized=binarized,
 			extrarules=extrarules)
 
@@ -225,7 +228,13 @@ def dop1(trees, sents, maxdepth=4, maxfrontier=999, binarized=True,
 
 	:param maxdepth: restrict fragments to `1 < depth < maxdepth`.
 	:param maxfrontier: limit number of frontier non-terminals; not yet
-		implemented."""
+		implemented.
+	:returns: a tuple (grammar, altweights, backtransform, fragments)
+		:grammar: a sequence of productions.
+		:altweights: a dictionary containing alternate weights.
+		:backtransform: needed to recover trees from compressed derivations.
+		:fragments: a sequence of the fragments used to build the grammar,
+		in the same order as they appear in ``grammar``."""
 	from discodop.fragments import allfragments
 	fragments = allfragments(trees, sents, maxdepth, maxfrontier)
 	return dopgrammar(trees, fragments, binarized=binarized,
@@ -243,22 +252,22 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 	terminal and tag: ``tag@word``.
 
 	:param fragments: a dictionary of fragments from binarized trees, with
-		occurrences as values (a mapping of sentence number to counts).
+		occurrences as values (a mapping of sentence numbers to counts).
 	:param binarized: Whether the resulting grammar should be binarized;
 		this may be False when bitpar is used which applies its own
 		binarization.
 	:param extrarules: Additional rules to add to the grammar.
-	:returns: a tuple (grammar, altweights, backtransform)
+	:returns: a tuple (grammar, altweights, backtransform, fragments)
 		altweights is a dictionary containing alternate weights."""
 	def getweight(frag, terminals):
 		""":returns: frequency, EWE, and other weights for fragment."""
-		freq = sum(fragments[frag, terminals].values())
+		freq = len(fragments[frag, terminals])
 		root = frag[1:frag.index(' ')]
 		nonterms = frag.count('(') - 1
 		# Sangati & Zuidema (2011, eq. 5)
 		# FIXME: verify that this formula is equivalent to Bod (2003).
-		ewe = sum(v / fragmentcount[k]
-				for k, v in fragments[frag, terminals].items())
+		ewe = sum(1 / fragmentcount[idx]
+				for idx in fragments[frag, terminals])
 		# Bonnema (2003, p. 34)
 		bon = 2 ** -nonterms * (freq / ntfd[root])
 		short = 0.5
@@ -271,8 +280,8 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 	# build index of the number of fragments extracted from a tree for ewe
 	fragmentcount = defaultdict(int)
 	for indices in fragments.values():
-		for index, cnt in indices.items():
-			fragmentcount[index] += cnt
+		for idx in indices:
+			fragmentcount[idx] += 1
 	# ntfd: frequency of a non-terminal node in treebank
 	ntfd = Counter(node.label for tree in trees for node in tree.subtrees())
 
@@ -317,9 +326,9 @@ def dopgrammar(trees, fragments, binarized=True, extrarules=None, debug=False):
 	# fix order of grammar rules
 	grammar = sortgrammar(grammar.items())
 	# align fragments and backtransform with corresponding grammar rules
-	fragments = OrderedDict((frag, fragments[frag]) for frag in
+	fragments = [(frag, fragments[frag]) for frag in
 			(backtransform[rule][0] for rule, _ in grammar if rule in
-				backtransform))
+				backtransform)]
 	backtransform = [backtransform[rule][1] for rule, _ in grammar
 			if rule in backtransform]
 	# relative frequences as probabilities (don't normalize shortest & bon)
@@ -410,18 +419,18 @@ def flatten(tree, sent, ids, backtransform, binarized):
 	>>> prods, template = flatten(tree, sent, ids, {}, True)
 	>>> print('\\n'.join(printrule(r, yf) for r, yf in prods))
 	... # doctest: +NORMALIZE_WHITESPACE
-	01	ROOT => ROOT}<0> $.@.
-	010	ROOT}<0> => S_2 $,@,
-	,	$,@, => Epsilon
-	.	$.@. => Epsilon
+	01	ROOT ROOT}<0> $.@.
+	010	ROOT}<0> S_2 $,@,
+	,	$,@, Epsilon
+	.	$.@. Epsilon
 	>>> print(template)
 	(ROOT {0} (ROOT|<$,>_2 {1} {2}))
 	>>> prods, template = flatten(tree, sent, ids, {}, False)
 	>>> print('\\n'.join(printrule(r, yf) for r, yf in prods))
 	... # doctest: +NORMALIZE_WHITESPACE
-	0102	ROOT => S_2 $,@, $.@.
-	,	$,@, => Epsilon
-	.	$.@. => Epsilon
+	0102	ROOT S_2 $,@, $.@.
+	,	$,@, Epsilon
+	.	$.@. Epsilon
 	>>> print(template)
 	(ROOT {0} (ROOT|<$,>_2 {1} {2}))"""
 	from discodop.treetransforms import factorconstituent, addbitsets
@@ -736,22 +745,6 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	return ''.join(rules), ''.join(lexicon)
 
 
-def write_lncky_grammar(rules, lexicon, out, encoding='utf-8'):
-	"""Convert a bitpar grammar to the format of Mark Jonhson's cky parser."""
-	grammar = []
-	for a in io.open(rules, encoding=encoding):
-		a = a.split()
-		p, rule = a[0], a[1:]
-		grammar.append('%s %s --> %s\n' % (p, rule[0], ' '.join(rule[1:])))
-	for a in io.open(lexicon, encoding=encoding):
-		a = a.split()
-		word, tags = a[0], a[1:]
-		tags = zip(tags[::2], tags[1::2])
-		grammar.extend('%s %s --> %s\n' % (p, t, word) for t, p in tags)
-	assert 'VROOT' in grammar[0]
-	io.open(out, 'w', encoding=encoding).writelines(grammar)
-
-
 def subsetgrammar(a, b):
 	"""Test whether grammar a is a subset of b."""
 	difference = set(map(itemgetter(0), a)) - set(map(itemgetter(0), b))
@@ -938,7 +931,7 @@ def main():
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 'hs:'
 	options = ('help', 'gzip', 'packed', 'bitpar', 'inputfmt=', 'inputenc=',
-			'dopestimator=', 'numproc=')
+			'dopestimator=', 'maxdepth=', 'maxfrontier=', 'numproc=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options)
 		model = args[0]
@@ -949,8 +942,8 @@ def main():
 		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
-	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'ptsg',
-			'param', 'info', 'merge'):
+	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'dop1',
+			'ptsg', 'param', 'info', 'merge'):
 		raise ValueError('unrecognized model: %r' % model)
 	if opts.get('dopestimator', 'rfe') not in ('rfe', 'ewe', 'shortest'):
 		raise ValueError('unrecognized estimator: %r' % opts['dopestimator'])
@@ -1014,6 +1007,11 @@ def main():
 		grammar, backtransform, altweights, _ = doubledop(trees, sents,
 				numproc=int(opts.get('--numproc', 1)),
 				binarized='--bitpar' not in opts)
+	elif model == 'dop1':
+		grammar, backtransform, altweights, _ = dop1(trees, sents,
+				maxdepth=int(opts.get('--maxdepth', 3)),
+				maxfrontier=int(opts.get('--maxfrontier', 999)),
+				binarized='--bitpar' not in opts)
 	elif model == 'ptsg':
 		grammar, backtransform, altweights = compiletsg(fragments,
 				binarized='--bitpar' not in opts)
@@ -1074,9 +1072,9 @@ __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'dop1', 'dopgrammar', 'compiletsg', 'sortgrammar', 'flatten',
 		'nodefreq', 'TreeDecorator', 'DiscTree', 'quotelabel', 'UniqueIDs',
 		'rangeheads', 'ranges', 'defaultparse', 'printrule', 'cartpi',
-		'write_lcfrs_grammar', 'write_lncky_grammar', 'subsetgrammar',
-		'grammarinfo', 'grammarstats', 'splitweight', 'convertweight',
-		'stripweight', 'sumrules', 'sumlex', 'sumfrags', 'merge']
+		'write_lcfrs_grammar', 'subsetgrammar', 'grammarinfo', 'grammarstats',
+		'splitweight', 'convertweight', 'stripweight', 'sumrules', 'sumlex',
+		'sumfrags', 'merge']
 
 if __name__ == '__main__':
 	main()

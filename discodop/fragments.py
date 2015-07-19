@@ -611,10 +611,10 @@ def printfragments(fragments, counts, out=None):
 				out.write('%s\t%r\n' % (('%s\t%s' % (a[0],
 					' '.join('%s' % x if x else '' for x in a[1])))
 					if PARAMS['disc'] else a,
-					[n for n in sorted(theindices.elements())
+					[n for n in theindices
 						if n - 1 in theindices or n + 1 in theindices]
 					if PARAMS['adjacent'] else
-					list(sorted(theindices.elements()))))
+					list(theindices)))
 			elif zeroinvalid:
 				raise ValueError('invalid fragment--frequency=1: %r' % a)
 	elif PARAMS['relfreq']:

@@ -1164,7 +1164,7 @@ def pop(a):
 
 
 def base(node, match):
-	"""Test whether ``node.label`` equals ``match' after stripping features."""
+	"""Test whether ``node.label`` equals ``match`` after stripping features."""
 	return (node.label == match
 			or node.label.startswith(match + STATESPLIT)
 			or node.label.startswith(match + '-'))

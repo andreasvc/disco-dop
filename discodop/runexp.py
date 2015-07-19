@@ -473,8 +473,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 						(resultdir, stage.name), 'w')) as out:
 					out.writelines('%s\t%d\n' % (treebank.writetree(a, b, 0,
 							'bracket' if stage.mode.startswith('pcfg')
-							else 'discbracket').rstrip('\n'), sum(c.values()))
-							for (a, b), c in fragments.items())
+							else 'discbracket').rstrip('\n'), len(c))
+							for (a, b), c in fragments)
 			elif stage.dop == 'reduction':
 				xgrammar, altweights = grammar.dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph,

@@ -581,12 +581,16 @@ def draw():
 	if 'xpath' in CORPORA:
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
 		tree, sent = CORPORA['xpath'].extract(
-					filename, [sentno], nofunc, nomorph).pop()
+				filename, [sentno], nofunc, nomorph).pop()
 	elif 'tgrep2' in CORPORA:
 		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
 		tree, sent = CORPORA['tgrep2'].extract(
-					filename, [sentno], nofunc, nomorph).pop()
-	# FIXME: elif 'frag' in CORPORA:
+				filename, [sentno], nofunc, nomorph).pop()
+	elif 'frag' in CORPORA:
+		filename = [a for a in CORPORA['frag'].files
+				if a.startswith(TEXTS[textno])].pop()
+		tree, sent = CORPORA['frag'].extract(
+				filename, [sentno], nofunc, nomorph).pop()
 	else:
 		raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 	result = DrawTree(tree, sent).text(unicodelines=True, html=True)
@@ -615,6 +619,13 @@ def browsetrees():
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True)
 					for tree, sent in CORPORA['tgrep2'].extract(
+						filename, range(start, maxtree), nofunc, nomorph)]
+		elif 'frag' in CORPORA:
+			filename = [a for a in CORPORA['frag'].files
+					if a.startswith(TEXTS[textno])].pop()
+			drawntrees = [DrawTree(tree, sent).text(
+					unicodelines=True, html=True)
+					for tree, sent in CORPORA['frag'].extract(
 						filename, range(start, maxtree), nofunc, nomorph)]
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
@@ -749,16 +760,16 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 def dispplot(indices, start, end, width=800.0, runle=False):
 	"""Draw a dispersion plot from a list of indices.
 
-	:param indices: a list of sets or Counter objects, where each element is
-		a sentence number. Each element of indices will be drawn in a
-		different color to represent a different query.
+	:param indices: a tuple of lists where each element is a sentence number.
+		Each element of indices will be drawn in a different color to represent
+		a different query.
 	:param start, end: the range of sentences numbers.
 	:param runle: use a more compact, run-length encoded representation."""
 	result = ('\t<svg version="1.1" xmlns="http://www.w3.org/2000/svg"'
 			' width="%dpx" height="10px" >\n'
 			'<rect x=0 y=0 width="%dpx" height=10 '
 			'fill=white stroke=black />\n' % (width, width))
-	for n, a in enumerate(indices if isinstance(indices, list) else [indices]):
+	for n, a in enumerate(indices if isinstance(indices, tuple) else [indices]):
 		if not a:
 			continue
 		if runle:  # FIXME: use start

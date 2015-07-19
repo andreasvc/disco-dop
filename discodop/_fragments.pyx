@@ -26,17 +26,16 @@ cimport cython
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memset, memcpy
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
-from cpython.array cimport array, clone
+from cpython.array cimport array, clone, extend_buffer
 from discodop.containers cimport Node, NodeArray, Ctrees, Vocabulary, \
 		yieldranges, termidx
 from discodop.bit cimport iteratesetbits, abitcount, subset, setunioninplace
 
 cdef extern from "macros.h":
-	int BITNSLOTS(int nb)
-	void SETBIT(uint64_t a[], int b)
-	void CLEARBIT(uint64_t a[], int b)
-	uint64_t TESTBIT(uint64_t a[], int b)
-	int IDX(int i, int j, int jmax, int kmax)
+	int BITNSLOTS(int nb) nogil
+	void SETBIT(uint64_t a[], int b) nogil
+	void CLEARBIT(uint64_t a[], int b) nogil
+	uint64_t TESTBIT(uint64_t a[], int b) nogil
 
 # a template to create arrays of this type
 cdef array uintarray = array('I' if sys.version[0] >= '3' else b'I', ())
@@ -317,37 +316,40 @@ cdef inline int extractat(uint64_t *matrix, uint64_t *result, Node *a, Node *b,
 
 
 cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
-		int indices=False, maxnodes=None, start=None, end=None):
+		int indices=False, maxnodes=None):
 	"""Get exact counts or indices of occurrence for fragments.
 
 	:param trees1, bitsets: ``bitsets`` defines fragments of trees in
 		``trees1`` to search for (the needles).
 	:param trees2: the trees to search in (haystack); may be equal
 		to ``trees2``.
-	:param indices: whether to collect indices or counts.
+	:param indices: whether to collect indices or counts of fragments.
 		:0: return a single count per fragment.
-		:1: return a Counter object for each fragment with sentence numbers
-			and a count per sentence.
-		:2: return a Counter object for each fragment with sentence numbers as
-			keys and a node number where the fragment occurs in the
-			corresponding tree; when a fragment occurs multiple times in a
-			tree, only a single occurrence is recorded.
+		:1: collect the indices (sentence numbers) in which fragments occur.
+		:2: collect both sentence numbers, and node numbers of fragments.
 
 	:param maxnodes: when searching in multiple treebanks, supply the
 		largest number of nodes in a single tree to fix the bitset size;
 		can be left out when searching in 1 or 2 treebanks.
-	:param start, end: only search through this interval of trees from trees2
-		(defaults to all trees).
-	:returns: an array of counts, or a list of indices (Counter objects)."""
+	:returns: depending on ``indices``:
+		:0: an array of counts, corresponding to ``bitsets``.
+		:1: a list of arrays, each array being a sorted sequence of indices
+		for the corresponding bitset; multiple occurrences of a fragment
+		in the same tree are reflected as multiple occurrences of the same
+		index.
+		:2: a list of pairs of arrays, tree indices paired with node numbers.
+	"""
 	cdef:
 		array counts = None
+		array treenums = None
+		array nodenums = None
 		list theindices = None
-		object matches = None  # Counter()
 		object candidates  # RoaringBitmap()
 		short i, j, SLOTS
 		uint32_t n, m
 		uint32_t *countsp = NULL
-		NodeArray a, b
+		NodeArray *a
+		NodeArray *b
 		Node *anodes
 		Node *bnodes
 		uint64_t *bitset
@@ -355,27 +357,31 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 		SLOTS = BITNSLOTS(maxnodes + 1)
 	else:
 		SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
-	if indices:
-		theindices = [Counter() for _ in bitsets]
-	else:
+	if indices == 0:
 		counts = clone(uintarray, len(bitsets), True)
 		countsp = counts.data.as_uints
+	elif indices == 1:
+		theindices = [clone(uintarray, 0, False) for _ in bitsets]
+	elif indices == 2:
+		theindices = [(clone(uintarray, 0, False), clone(shortarray, 0, False))
+				for _ in bitsets]
 	# compare one bitset to each tree for each unique fragment.
 	for n, wrapper in enumerate(bitsets):
 		bitset = getpointer(wrapper)
-		a = trees1.trees[getid(bitset, SLOTS)]  # fragment came from this tree
+		a = &(trees1.trees[getid(bitset, SLOTS)])  # fragment is from this tree
 		anodes = &trees1.nodes[a.offset]
 		try:
-			candidates = getcandidates(anodes, bitset, trees2, a.len, SLOTS)
+			candidates = getcandidates(anodes, bitset, trees2, a.len,
+					None, None, SLOTS)
 		except IndexError:  # ran across unseen production
 			candidates = []
-		if (start or end) and candidates:
-			candidates &= range(start or 0, end or trees2.len)
-		if indices:
-			matches = theindices[n]
+		if indices == 1:
+			treenums = theindices[n]
+		elif indices == 2:
+			treenums, nodenums = theindices[n]
 		i = getroot(bitset, SLOTS)  # root of fragment in tree 'a'
 		for m in candidates:
-			b = trees2.trees[m]
+			b = &(trees2.trees[m])
 			bnodes = &trees2.nodes[b.offset]
 			for j in range(b.len):
 				if anodes[i].prod == bnodes[j].prod:
@@ -383,17 +389,152 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 						if indices == 0:
 							countsp[n] += 1
 						elif indices == 1:
-							matches[m] += 1
+							treenums.append(m)
 						elif indices == 2:
-							matches[m] = j
+							treenums.append(m)
+							nodenums.append(j)
 				elif anodes[i].prod < bnodes[j].prod:
 					break
 	return theindices if indices else counts
 
 
+cpdef exactcountssubset(Ctrees trees1, Ctrees trees2, list bitsets,
+		int indices=False, maxnodes=None, start=None, end=None,
+		maxresults=None):
+	"""Get exact counts or indices of occurrence for fragments.
+
+	Variant of exactcounts() that releases the GIL in the inner loop and is
+	intended for searching in subsets of ``trees2``.
+
+	:param start, end: only search through this interval of trees from trees2
+		(defaults to all trees).
+	:param maxresults: stop searching after this number of matchs.
+	:returns: depending on ``indices``:
+		:0: an array of counts, corresponding to ``bitsets``.
+		:1: a list of arrays, each array being a sequence of indices
+		for the corresponding bitset.
+		:2: a list of pairs of arrays, tree indices paired with node numbers.
+	"""
+	cdef:
+		array counts = None
+		array candidatesarray = None
+		array tmp = None, tmp2 = None
+		list theindices = None
+		object candidates  # RoaringBitmap
+		short i, SLOTS
+		size_t nummatches = 0, cnt = 0, allocated = 1024
+		size_t maxresults_ = maxresults or -1
+		uint32_t n, numcandidates
+		uint32_t *countsp = NULL
+		uint32_t *treenums = NULL
+		short *nodenums = NULL
+		NodeArray *a
+		Node *anodes
+		uint64_t *bitset
+	if maxnodes:
+		SLOTS = BITNSLOTS(maxnodes + 1)
+	else:
+		SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
+	if indices:
+		theindices = [None for _ in bitsets]
+		treenums = <uint32_t *>malloc(allocated * sizeof(int))
+		if treenums is NULL:
+			raise MemoryError
+		if indices == 2:
+			nodenums = <short *>malloc(allocated * sizeof(int))
+			if nodenums is NULL:
+				raise MemoryError
+	else:
+		counts = clone(uintarray, len(bitsets), True)
+		countsp = counts.data.as_uints
+	# compare one bitset to each tree for each unique fragment.
+	for n, wrapper in enumerate(bitsets):
+		bitset = getpointer(wrapper)
+		a = &(trees1.trees[getid(bitset, SLOTS)])  # fragment is from this tree
+		anodes = &trees1.nodes[a.offset]
+		try:
+			candidates = getcandidates(anodes, bitset, trees2, a.len,
+					start, end, SLOTS)
+		except IndexError:  # ran across unseen production
+			theindices[n] = {}
+			continue
+		candidatesarray = clone(uintarray, 0, False)
+		candidatesarray.extend(candidates)
+		numcandidates = len(candidatesarray)
+		i = getroot(bitset, SLOTS)  # root of fragment in tree 'a'
+		with nogil:
+			cnt = countbitset(bitset, anodes, i, n,
+					candidatesarray.data.as_uints,
+					numcandidates, indices, trees2.trees, trees2.nodes,
+					maxresults_, &nummatches, &allocated,
+					countsp, &treenums, &nodenums)
+		if cnt == -1:
+			raise MemoryError
+		if indices == 1:
+			# theindices[n] = Counter([treenums[x] for x in range(cnt)])
+			tmp = clone(uintarray, 0, False)
+			extend_buffer(tmp, <char *>treenums, cnt)
+			theindices[n] = tmp
+		elif indices == 2:
+			# theindices[n] = {treenums[x]: nodenums[x] for x in range(cnt)}
+			tmp = clone(uintarray, 0, False)
+			extend_buffer(tmp, <char *>treenums, cnt)
+			tmp2 = clone(shortarray, 0, False)
+			extend_buffer(tmp2, <char *>nodenums, cnt)
+			theindices[n] = tmp, tmp2
+	if indices > 0:
+		free(treenums)
+		if indices == 2:
+			free(nodenums)
+	return theindices if indices else counts
+
+
+cdef int countbitset(uint64_t *bitset, Node *anodes, int i, int n,
+		uint32_t *candidatesarrayp, int numcandidates, int indices,
+		NodeArray *trees, Node *nodes, size_t maxresults, size_t *nummatches,
+		size_t *allocated, uint32_t *countsp, uint32_t **treenums,
+		short **nodenums) nogil:
+	"""Internal function to process a single fragment."""
+	cdef int cnt = 0
+	cdef NodeArray b
+	cdef Node *bnodes
+	for x in range(numcandidates):
+		m = candidatesarrayp[x]
+		b = trees[m]
+		bnodes = &nodes[b.offset]
+		for j in range(b.len):
+			if anodes[i].prod == bnodes[j].prod:
+				if containsbitset(anodes, bnodes, bitset, i, j):
+					if indices == 0:
+						countsp[n] += 1
+					elif indices == 1:
+						treenums[0][cnt] = m
+					elif indices == 2:
+						treenums[0][cnt] = m
+						nodenums[0][cnt] = j
+					nummatches[0] += 1
+					cnt += 1
+					if nummatches[0] >= maxresults:
+						return cnt
+					elif cnt >= allocated[0]:
+						allocated[0] = cnt * 2
+						treenums[0] = <uint32_t *>realloc(
+								treenums[0], 2 * cnt * sizeof(int))
+						if treenums[0] is NULL:
+							return -1
+						if indices == 2:
+							nodenums[0] = <short *>realloc(
+									nodenums[0], 2 * cnt * sizeof(int))
+							if nodenums[0] is NULL:
+								return -1
+			elif anodes[i].prod < bnodes[j].prod:
+				break
+	return cnt
+
+
 @cython.boundscheck(True)
 cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
-		short SLOTS):
+		start, end, short SLOTS):
 	"""Get candidates from productions in fragment ``bitset`` at ``a[i]``."""
 	cdef uint64_t cur = bitset[0]
 	cdef int idx = 0
@@ -402,7 +543,11 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 	rb = trees.prodindex[a[i].prod]
 	if rb is None:
 		raise IndexError
-	candidates = rb.copy()
+	if (start or end):
+		candidates = RoaringBitmap(range(start or 0, end or trees.len))
+		candidates &= rb
+	else:
+		candidates = rb.copy()
 	while True:
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 		if i == -1 or i >= alen:  # FIXME. why is 2nd condition necessary?
@@ -415,7 +560,7 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 
 
 cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
-		short i, short j):
+		short i, short j) nogil:
 	"""Test whether the fragment ``bitset`` at ``a[i]`` occurs at ``b[j]``."""
 	if a[i].prod != b[j].prod:
 		return 0
@@ -1089,4 +1234,4 @@ def readtreebank(treebankfile, Vocabulary vocab,
 
 __all__ = ['extractfragments', 'exactcounts', 'completebitsets',
 		'allfragments', 'repl', 'pygetsent', 'nonfrontier', 'getctrees',
-		'readtreebank']
+		'readtreebank', 'exactcountssubset']

@@ -1,6 +1,12 @@
 Command line options
 ====================
 
+.. toctree::
+    :hidden:
+    :glob:
+
+    cli/*
+
 A parser for Probalistic Linear Context-Free Rewriting Systems (LCFRS) and
 Probabilistic Context-Free Grammars (PCFG), as well as facilities to extract
 and parse with data-oriented parsing (DOP) grammars.
@@ -32,4 +38,3 @@ demos:
 
 for additional instructions issue: ``discodop <command> --help``
 or refer to the man page ``discodop-<command>``.
-
