@@ -3,7 +3,7 @@ treedraw
 --------
 Usage: ``discodop treedraw [<treebank>...] [options]``
 
---fmt=(export|bracket|discbracket|tiger|alpino|dact)
+--fmt=<export|bracket|discbracket|tiger|alpino|dact>
                   Specify corpus format [default: export].
 
 --encoding=enc    Specify a different encoding than the default utf-8.

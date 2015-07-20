@@ -20,7 +20,7 @@ General options:
 --prob       Print probabilities as well as parse trees.
 --tags       Tokens are of the form ``word/POS``; give both to parser.
 
---fmt=(export|bracket|discbracket|alpino|conll|mst|wordpos)
+--fmt=<export|bracket|discbracket|alpino|conll|mst|wordpos>
              Format of output [default: discbracket].
 
 --numproc=k  Launch k processes, to exploit multiple cores.
@@ -42,7 +42,7 @@ Options for simple mode:
              instead, whose probability is the sum of any number of the
              k-best derivations.
 
---obj=(mpd|mpp|mcc|shortest|sl-dop)
+--obj=<mpd|mpp|mcc|shortest|sl-dop>
              Objective function to maximize [default: mpd].
 
 -m x         Use x derivations to approximate objective functions;

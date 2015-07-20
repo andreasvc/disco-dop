@@ -19,10 +19,10 @@ action is one of::
 
 options may consist of:
 
---inputfmt=(export|bracket|discbracket|tiger|alpino|dact)
+--inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
                 Input treebank format [default: export].
 
---outputfmt=(export|bracket|discbracket|dact|conll|mst|tokens|wordpos)
+--outputfmt=<export|bracket|discbracket|dact|conll|mst|tokens|wordpos>
                 Output treebank format [default: export].
                 Selecting the formats ``conll`` or ``mst`` results in an
                 unlabeled dependency conversion and requires the use of
@@ -33,7 +33,7 @@ options may consist of:
 
 --fmt=x         Shortcut to specify both input and output format.
 
---inputenc, --outputenc, --enc=(utf-8|iso-8859-1|...)
+--inputenc, --outputenc, --enc=<utf-8|iso-8859-1|...>
                 Treebank encoding [default: utf-8].
 
 --slice=<n:m>   select a range of sentences from input starting with *n*,
@@ -68,7 +68,7 @@ options may consist of:
 --ensureroot=x  add root node labeled ``x`` to trees if not already present.
 --removeempty   remove empty / -NONE- terminals.
 
---factor=(left|right)
+--factor=<left|right>
                 specify left- or right-factored binarization [default: right].
 
 -h n            horizontal markovization. default: infinite (all siblings)

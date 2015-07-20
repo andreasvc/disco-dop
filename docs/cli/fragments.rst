@@ -13,7 +13,7 @@ Output is sent to stdout; to save the results, redirect to a file.
 
 Options:
 
---fmt=(export|bracket|discbracket|tiger|alpino|dact)
+--fmt=<export|bracket|discbracket|tiger|alpino|dact>
               when format is not ``bracket``, work with discontinuous trees;
               output is in ``discbracket`` format:
               tree<TAB>sentence<TAB>frequency
@@ -23,7 +23,7 @@ Options:
 -o file       Write output to ``file`` instead of stdout.
 --indices     report sets of 0-based indices instead of frequencies.
 
---cover=n[,m]
+--cover=<n[,m]>
               include all non-maximal/non-recurring fragments up to depth ``n``
               of first treebank; optionally, limit number of substitution
               sites to ``m``.
@@ -48,5 +48,4 @@ Options:
               default: (NP (DT a) (NN ))
 --debug       extra debug information, ignored when numproc > 1.
 --quiet       disable all messages.
-
 

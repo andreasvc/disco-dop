@@ -44,13 +44,13 @@ LHS, such as the ones created by this tool.
 
 Options:
 
---inputfmt=(export|bracket|discbracket|tiger|alpino|dact)
+--inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
           The treebank format [default: export].
 
---inputenc=(utf-8|iso-8859-1|...)
+--inputenc=<utf-8|iso-8859-1|...>
           Treebank encoding [default: utf-8].
 
---numproc=(1|2|...)
+--numproc=<1|2|...>
           Number of processes to start [default: 1].
           Only relevant for double dop fragment extraction.
 
@@ -66,7 +66,7 @@ Options:
 -s X
           start symbol to use for PTSG.
 
---dopestimator=(rfe|ewe|shortest|...)
+--dopestimator=<rfe|ewe|shortest|...>
           The DOP estimator to use with dopreduction/doubledop [default: rfe].
 
 --maxdepth=N, --maxfrontier=N

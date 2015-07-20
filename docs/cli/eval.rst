@@ -15,12 +15,12 @@ an ``EVALB`` parameter file, and options may consist of:
 --disconly       Only evaluate discontinuous bracketings (affects bracketing
                  scores: precision, recall, f-measure, exact match).
 
---goldfmt, --parsesfmt=(export|bracket|discbracket|tiger|alpino|dact)
+--goldfmt, --parsesfmt=<export|bracket|discbracket|tiger|alpino|dact>
                  Specify corpus format [default: export].
 
---fmt=[...]      Shorthand for setting both ``--goldfmt`` and ``--parsesfmt``.
+--fmt=<...>      Shorthand for setting both ``--goldfmt`` and ``--parsesfmt``.
 
---goldenc, --parsesenc=(utf-8|iso-8859-1|...)
+--goldenc, --parsesenc=<utf-8|iso-8859-1|...>
                  Specify encoding [default: utf-8].
 
 --la             Enable leaf-ancestor evaluation.
