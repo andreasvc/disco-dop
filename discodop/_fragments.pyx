@@ -452,15 +452,15 @@ cpdef exactcountssubset(Ctrees trees1, Ctrees trees2, list bitsets,
 		bitset = getpointer(wrapper)
 		a = &(trees1.trees[getid(bitset, SLOTS)])  # fragment is from this tree
 		anodes = &trees1.nodes[a.offset]
+		if indices == 1:
+			theindices[n] = tmp = clone(uintarray, 0, False)
+		elif indices == 1:
+			theindices[n] = tmp, tmp2 = (clone(uintarray, 0, False),
+					clone(shortarray, 0, False))
 		try:
 			candidates = getcandidates(anodes, bitset, trees2, a.len,
 					start, end, SLOTS)
 		except IndexError:  # ran across unseen production
-			if indices == 1:
-				theindices[n] = clone(uintarray, 0, False)
-			elif indices == 1:
-				theindices[n] = (clone(uintarray, 0, False),
-						clone(shortarray, 0, False))
 			continue
 		candidatesarray = clone(uintarray, 0, False)
 		candidatesarray.extend(candidates)
@@ -475,15 +475,10 @@ cpdef exactcountssubset(Ctrees trees1, Ctrees trees2, list bitsets,
 		if cnt == -1:
 			raise MemoryError
 		if indices == 1:
-			tmp = clone(uintarray, 0, False)
 			extend_buffer(tmp, <char *>treenums, cnt)
-			theindices[n] = tmp
 		elif indices == 2:
-			tmp = clone(uintarray, 0, False)
 			extend_buffer(tmp, <char *>treenums, cnt)
-			tmp2 = clone(shortarray, 0, False)
 			extend_buffer(tmp2, <char *>nodenums, cnt)
-			theindices[n] = tmp, tmp2
 	if indices > 0:
 		free(treenums)
 		if indices == 2:
