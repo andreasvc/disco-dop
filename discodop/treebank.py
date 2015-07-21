@@ -408,7 +408,13 @@ class AlpinoCorpusReader(CorpusReader):
 		if ElementTree.iselement(block):
 			xmlblock = block
 		else:  # NB: parse because raw XML might contain entities etc.
-			xmlblock = ElementTree.fromstring(block)
+			try:
+				xmlblock = ElementTree.fromstring(block)
+			except ElementTree.ParseError:
+				print('Problem with:\n%s' %
+						block.decode('utf8', errors='replace'),
+						file=sys.stderr)
+				raise
 		return alpinotree(
 				xmlblock, self.functions, self.morphology, self.lemmas)
 
