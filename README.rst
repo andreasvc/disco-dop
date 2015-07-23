@@ -138,6 +138,16 @@ installation: ``man discodop``. Further documentation can be found at
 http://andreasvc.github.io/discodop/
 To generate a local copy see the ``docs/README`` file.
 
+Grammars
+========
+Cf. https://staff.fnwi.uva.nl/a.w.vancranenburgh/grammars/
+
+The English, German, and Dutch grammars are described in a forthcoming paper
+(van Cranenburgh et al., to appear); the French grammar appears in `Sangati &
+van Cranenburgh (2015) <http://aclweb.org/anthology/W15-0902>`_.
+For comparison, there is also an English grammar without discontinuous
+constituents (``ptb-nodisc``).
+
 Acknowledgments
 ===============
 

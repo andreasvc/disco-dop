@@ -481,7 +481,6 @@ cpdef exactcountssubset(Ctrees trees1, Ctrees trees2, list bitsets,
 		elif indices == 2:
 			extend_buffer(tmp, <char *>treenums, cnt)
 			extend_buffer(tmp2, <char *>nodenums, cnt)
-		# candidatesarray.resize(0)
 		resize(candidatesarray, 0)
 	if indices:
 		free(treenums)

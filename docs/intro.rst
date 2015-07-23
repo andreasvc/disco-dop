@@ -6,9 +6,10 @@ Getting started
 Parsing a text
 --------------
 The parser can be used as an off-the-shelf parser using an existing grammar model,
-either one of the `grammars used in the 2013 IWPT paper
-<http://staff.science.uva.nl/~acranenb/grammars/>`_ for English, German, and
-Dutch, or a model produced by ``discodop runexp`` or ``discodop grammar param``.
+either one of the `grammars used in publications
+<https://staff.fnwi.uva.nl/a.w.vancranenburgh/grammars/>`_ for English, German,
+Dutch, and French, or a new model produced by ``discodop runexp``
+or ``discodop grammar param``.
 The text needs to be tokenized, for example using `ucto
 <http://ilk.uvt.nl/ucto>`_, the output of which can be passed to the parser::
 
@@ -194,8 +195,8 @@ Flask & pandas to be installed::
     A web interface to the parser. Expects a series of grammars
     in subdirectories of ``web/grammars/``, each containing grammar files
     as produced by running ``discodop runexp``.
-    `Download grammars <http://staff.science.uva.nl/~acranenb/grammars/>`_
-    for English, German, and Dutch, as used in the 2013 IWPT paper.
+    `Download grammars <https://staff.fnwi.uva.nl/a.w.vancranenburgh/grammars/>`_
+    for English, German, Dutch, and French, as used in a forthcoming paper.
 
 ``treesearch.py``
     A web interface for searching through treebanks. Expects
