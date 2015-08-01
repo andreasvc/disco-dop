@@ -3,7 +3,7 @@ treesearch
 ----------
 Search through treebanks with queries.
 
-Usage: ``discodop treesearch [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...``
+Usage: ``discodop treesearch [--engine=X] [-t|-s|-c] <query> <treebank>...``
 
 Options:
 
@@ -25,19 +25,20 @@ Options:
 -t, --trees     Output visualizations of trees.
 -b, --brackets  Output raw trees in the original corpus format.
 -f, --file      Read query from filename given as first argument.
--m N, --max-count=N
-                Stop after finding n matches.
 --slice=<N:M>
                 Only search in sentences N to M of each file; either N or
                 M may be left out; slice indexing is 1-based and inclusive.
--o, --only-matching
-                Only output the matching portion
-                with ``--sents``, ``--trees``, and ``--brackets``.
+-m N, --max-count=N
+                Stop after finding N matches.
 -n, --line-number
                 Prefix each line of output with the sentence number within
                 its input file.
+-o, --only-matching
+                Only output the matching portion
+                with ``--sents``, ``--trees``, and ``--brackets``.
 -M X, --macros=X
                 A file with macros.
---numthreads=X
-                Number of concurrent threads to use.
+--numproc=N
+                Use N independent processes, to enable multi-core usage
+                (default: use all detected cores).
 

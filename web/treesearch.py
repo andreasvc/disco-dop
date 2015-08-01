@@ -63,7 +63,7 @@ FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 # the extensions for corpus files for each query engine:
-EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt)$')
+EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt|tok)$')
 COLORS = dict(enumerate(
 		'black red orange blue green turquoise slategray peru teal'.split()))
 
@@ -110,7 +110,7 @@ def export(form, output):
 	# NB: no distinction between trees from different texts
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
-	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	if output == 'counts':
 		results = counts(form, doexport=True)
 		if form.get('export') == 'json':
@@ -157,7 +157,7 @@ def counts(form, doexport=False):
 	norm = form.get('norm', 'sents')
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
-	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	if not doexport:
 		url = 'counts?' + url_encode(dict(export='csv', **form))
@@ -267,9 +267,7 @@ def counts(form, doexport=False):
 		if form.get('export') == 'json':
 			yield json.dumps(df.to_dict(), indent=2)
 		else:
-			with io.BytesIO() as tmp:
-				df.to_csv(tmp)
-				yield tmp.getvalue()
+			yield df.to_csv(None)
 	else:
 		fmt = lambda x: '%g' % round(x, 1)
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
@@ -303,7 +301,7 @@ def trees(form):
 	gotresults = False
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
-	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	# NB: we do not hide function or morphology tags when exporting
 	url = 'trees?' + url_encode(dict(export='csv', **form))
@@ -326,6 +324,7 @@ def trees(form):
 						max(high, key=lambda x: len(x.leaves())
 							if isinstance(x, Tree) else 1).freeze(), sent)
 					for _, _, _, sent, high in results if high)
+			yield '\n%s\n' % text
 			for match, cnt in breakdown.most_common():
 				gotresults = True
 				yield 'count: %5d\n%s\n\n' % (
@@ -361,7 +360,7 @@ def sents(form, dobrackets=False):
 	gotresults = False
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
-	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
 			url_encode(dict(export='csv', **form)))
@@ -388,6 +387,7 @@ def sents(form, dobrackets=False):
 					' '.join(word if n in high else ' '
 						for n, word in enumerate(sent.split())))
 					for _, _, sent, high in results)
+			yield '\n%s\n' % text
 			for match, cnt in breakdown.most_common():
 				gotresults = True
 				yield '%5d  %s\n' % (cnt, match)
@@ -428,7 +428,7 @@ def fragmentsinresults(form, doexport=False):
 	gotresults = False
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[form['engine']].files}
-	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(request.args)}
+	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	uniquetrees = set()
 	if not doexport:
@@ -910,8 +910,8 @@ def getcorpus():
 	if os.path.exists(picklefile):
 		try:
 			texts, numsents, numconst, numwords, styletable = pickle.load(
-					open(picklefile))
-		except ValueError:
+					open(picklefile, 'rb'))
+		except ValueError as err:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	ffiles = sorted(
@@ -943,7 +943,7 @@ def getcorpus():
 			'or .txt found in %s' % CORPUS_DIR)
 	assert len(set(
 			frozenset(b.rsplit('.', 1)[0] for b in files)
-			for files in (tfiles, afiles, ffiles) if files)) == 1, (
+			for files in (tfiles, afiles, ffiles, tokfiles) if files)) == 1, (
 			'files in different formats do not match.')
 	picklemtime = 0
 	if os.path.exists(picklefile):
@@ -980,9 +980,7 @@ def getcorpus():
 				numwords.append(words)
 				print(filename)
 		elif corpora.get('regex'):  # only tokenized sentences, no trees
-			numsents = [sum(1 for line in
-					io.open(filename, encoding='utf8') if line.strip() != '')
-					for filename in tokfiles]
+			numsents = [len(corpora['regex'].lineindex[a]) for a in tokfiles]
 			numwords = [open(filename).read().count(' ') + n
 					for filename, n in zip(tokfiles, numsents)]
 			numconst = [0 for _ in tokfiles]

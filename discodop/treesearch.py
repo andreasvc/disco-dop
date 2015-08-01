@@ -9,8 +9,11 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import os
 import re
+import re2
 import sys
 import gzip
+import mmap
+import array
 import concurrent.futures
 import multiprocessing
 import subprocess
@@ -34,9 +37,9 @@ from discodop.treedraw import ANSICOLOR, DrawTree
 from discodop.containers import Vocabulary
 
 SHORTUSAGE = '''Search through treebanks with queries.
-Usage: %s [--engine=(tgrep2|xpath|regex)] [-t|-s|-c] <query> <treebank>...\
+Usage: %s [--engine=(tgrep2|xpath|frag|regex)] [-t|-s|-c] <query> <treebank>...
 ''' % sys.argv[0]
-CACHESIZE = 1024
+CACHESIZE = 32767
 GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 MORPH_TAGS = re.compile(r'([/*\w]+)(?:\[[^ ]*\]\d?)?((?:-\w+)?(?:\*\d+)? )')
@@ -60,28 +63,31 @@ ABBRPOS = {
 	'VERB': 'VB'}
 
 FRAG_FILES = None
+FRAG_MACROS = None
 VOCAB = None
+REGEX_LINEINDEX = None
+REGEX_MACROS = None
 CorpusInfo = namedtuple('CorpusInfo',
 		['len', 'numwords', 'numnodes', 'maxnodes'])
 
 
 class CorpusSearcher(object):
 	"""Abstract base class to wrap corpus files that can be queried."""
-	def __init__(self, files, macros=None, numthreads=None):
+	def __init__(self, files, macros=None, numproc=None):
 		"""
 		:param files: a sequence of filenames of corpora
 		:param macros: a filename with macros that can be used in queries.
-		:param numthreads: the number of concurrent threads to use;
-			pass 1 to disable threading."""
+		:param numproc: the number of concurrent threads / processes to use;
+			pass 1 to use a single core."""
 		if not isinstance(files, (list, tuple, set, dict)) or (
 				not all(isinstance(a, str) for a in files)):
 			raise ValueError('"files" argument must be a sequence of filenames.')
 		self.files = OrderedDict.fromkeys(files)
 		self.macros = macros
-		self.numthreads = numthreads
+		self.numproc = numproc
 		self.cache = FIFOOrederedDict(CACHESIZE)
 		self.pool = concurrent.futures.ThreadPoolExecutor(
-				numthreads or cpu_count())
+				numproc or cpu_count())
 		if not self.files:
 			raise ValueError('no files found matching ' + files)
 
@@ -157,20 +163,20 @@ class CorpusSearcher(object):
 
 	def _submit(self, func, *args, **kwargs):
 		"""Submit a job to the thread pool."""
-		if self.numthreads == 1:
+		if self.numproc == 1:
 			return NoFuture(func, *args, **kwargs)
 		return self.pool.submit(func, *args, **kwargs)
 
 	def _as_completed(self, jobs):
 		"""Return jobs as they are completed."""
-		if self.numthreads == 1:
+		if self.numproc == 1:
 			return jobs
 		return concurrent.futures.as_completed(jobs)
 
 
 class TgrepSearcher(CorpusSearcher):
 	"""Search a corpus with tgrep2."""
-	def __init__(self, files, macros=None, numthreads=None):
+	def __init__(self, files, macros=None, numproc=None):
 		def convert(filename):
 			"""Convert files not ending in .t2c.gz to tgrep2 format."""
 			if filename.endswith('.t2c.gz'):
@@ -182,7 +188,7 @@ class TgrepSearcher(CorpusSearcher):
 						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			return filename + '.t2c.gz'
 
-		super(TgrepSearcher, self).__init__(files, macros, numthreads)
+		super(TgrepSearcher, self).__init__(files, macros, numproc)
 		self.files = {convert(filename): None for filename in self.files}
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False):
@@ -380,8 +386,8 @@ class TgrepSearcher(CorpusSearcher):
 
 class DactSearcher(CorpusSearcher):
 	"""Search a dact corpus with xpath."""
-	def __init__(self, files, macros=None, numthreads=None):
-		super(DactSearcher, self).__init__(files, macros, numthreads)
+	def __init__(self, files, macros=None, numproc=None):
+		super(DactSearcher, self).__init__(files, macros, numproc)
 		if not ALPINOCORPUSLIB:
 			raise ImportError('Could not import `alpinocorpus` module.')
 		for filename in self.files:
@@ -535,9 +541,9 @@ class FragmentSearcher(CorpusSearcher):
 		pickle to load them from disk with each query.
 	"""
 	# NB: pickling arrays is efficient in Python 3
-	def __init__(self, files, macros=None, numthreads=None, inmemory=True):
+	def __init__(self, files, macros=None, numproc=None, inmemory=True):
 		global FRAG_FILES, VOCAB
-		super(FragmentSearcher, self).__init__(files, macros, numthreads)
+		super(FragmentSearcher, self).__init__(files, macros, numproc)
 		path = os.path.dirname(next(iter(files)))
 		newvocab = True
 		vocabpath = os.path.join(path, 'treesearchvocab.pkl')
@@ -565,21 +571,23 @@ class FragmentSearcher(CorpusSearcher):
 					self.files[filename] = corpus
 				newvocab = True
 			elif inmemory:
-				corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+				corpus = pickle.loads(gzip.open(
+						'%s.pkl.gz' % filename, 'rb').read())
 				self.files[filename] = corpus
 		if newvocab:
 			with open(vocabpath, 'wb') as out:
 				pickle.dump(self.vocab, out, protocol=-1)
-		self.macros = {}
+		self.macros = None
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
-				self.macros = dict(line.split('=', 1) for line in tmp)
+				self.macros = dict(line.strip().split('=', 1) for line in tmp)
 		if VOCAB is not None:
 			raise ValueError('only one instance possible.')
 		VOCAB = self.vocab
 		FRAG_FILES = self.files
+		FRAG_MACROS = self.macros
 		self.pool = concurrent.futures.ProcessPoolExecutor(
-				numthreads or cpu_count())
+				numproc or cpu_count())
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False):
 		subset = subset or self.files
@@ -595,8 +603,8 @@ class FragmentSearcher(CorpusSearcher):
 					result[filename] = sum(tmp.values())
 			except KeyError:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, None, indices=indices, trees=False,
-						macros=self.macros)] = filename
+						start, end, None, indices=indices, trees=False)
+						] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			self.cache['counts', query, filename, start, end, indices,
@@ -620,8 +628,8 @@ class FragmentSearcher(CorpusSearcher):
 						'counts', query, filename, start, end, False]
 			except KeyError:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, None, indices=False, trees=False,
-						macros=self.macros)] = filename
+						start, end, None, indices=False, trees=False)
+						] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = OrderedDict(future.result())
@@ -640,8 +648,8 @@ class FragmentSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, maxresults, indices=True, trees=True,
-						macros=self.macros)] = filename
+						start, end, maxresults, indices=True, trees=True)
+						] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -674,8 +682,8 @@ class FragmentSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, maxresults, indices=True, trees=True,
-						macros=self.macros)] = filename
+						start, end, maxresults, indices=True, trees=True)
+						] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -704,7 +712,8 @@ class FragmentSearcher(CorpusSearcher):
 		if self.files[filename] is not None:
 			corpus = self.files[filename]
 		else:
-			corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+			corpus = pickle.loads(gzip.open(
+					'%s.pkl.gz' % filename, 'rb').read())
 		if sents:
 			return [' '.join(word.replace('-LRB-', '(').replace('-RRB-', ')')
 					for word in corpus.extractsent(n - 1, self.vocab))
@@ -721,21 +730,23 @@ class FragmentSearcher(CorpusSearcher):
 		if self.files[filename] is not None:
 			corpus = self.files[filename]
 		else:
-			corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+			corpus = pickle.loads(gzip.open(
+					'%s.pkl.gz' % filename, 'rb').read())
 		return CorpusInfo(len=corpus.len, numwords=corpus.numwords,
 				numnodes=corpus.numnodes, maxnodes=corpus.maxnodes)
 
 
 @workerfunc
 def _frag_query(query, filename, start=None, end=None, maxresults=None,
-		indices=True, trees=False, macros=None):
+		indices=True, trees=False):
 	"""Run a fragment query on a single file."""
-	if macros is not None:
-		query = query.format(**macros)
+	if FRAG_MACROS is not None:
+		query = query.format(**FRAG_MACROS)
 	if FRAG_FILES[filename] is not None:
 		corpus = FRAG_FILES[filename]
 	else:
-		corpus = pickle.loads(gzip.open('%s.pkl.gz' % filename).read())
+		corpus = pickle.loads(gzip.open(
+				'%s.pkl.gz' % filename, 'rb').read())
 	if start is not None:
 		start -= 1
 	# NB: queries currently need to have at least 2 levels of parens
@@ -771,19 +782,35 @@ class RegexSearcher(CorpusSearcher):
 	:param macros: a file containing lines of the form ``'name=regex'``;
 		an occurrence of ``'{name}'`` will be suitably replaced when it
 		appears in a query."""
-	def __init__(self, files, macros=None, numthreads=None):
-		super(RegexSearcher, self).__init__(files, macros, numthreads)
-		self.macros = {}
+	def __init__(self, files, macros=None, numproc=None):
+		global REGEX_LINEINDEX, REGEX_MACROS
+		super(RegexSearcher, self).__init__(files, macros, numproc)
+		self.macros = None
 		if macros:
 			with io.open(macros, encoding='utf8') as tmp:
-				self.macros = dict(line.split('=', 1) for line in tmp)
-		self.lineindex = dict.fromkeys(files)
-
-	def _indexfile(self, filename, data):
-		"""Cache locations of non-empty lines."""
-		self.lineindex[filename] = RoaringBitmap(
-				match.end() for match in re.finditer(
-					r'[^ \t\n\r][ \t]*[\r\n]+', data))
+				self.macros = dict(line.strip().split('=', 1) for line in tmp)
+		path = os.path.dirname(next(iter(files)))
+		lineidxpath = os.path.join(path, 'treesearchlineidx.pkl')
+		self.lineindex = {}
+		self.wordcount = {}
+		if os.path.exists(lineidxpath):
+			mtime = os.stat(lineidxpath).st_mtime
+			if all(mtime > os.stat(a).st_mtime for a in files):
+				(self.lineindex, self.wordcount) = pickle.load(
+						open(lineidxpath, 'rb'))
+		newindex = False
+		for name in set(files) - set(self.lineindex):
+			self.lineindex[name], self.wordcount[name] = _indexfile(name)
+			newindex = True
+		if newindex:
+			with open(lineidxpath, 'wb') as out:
+				pickle.dump((self.lineindex, self.wordcount), out, protocol=-1)
+		if REGEX_LINEINDEX is not None:
+			raise ValueError('only one instance possible.')
+		REGEX_LINEINDEX = self.lineindex
+		REGEX_MACROS = self.macros
+		self.pool = concurrent.futures.ProcessPoolExecutor(
+				numproc or cpu_count())
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False):
 		subset = subset or self.files
@@ -792,19 +819,13 @@ class RegexSearcher(CorpusSearcher):
 		for filename in subset:
 			try:
 				result[filename] = self.cache[
-						'counts', query, filename, start, end, indices]
+						'counts', query, filename, start, end, indices, False]
 			except KeyError:
-				if indices:
-					jobs[self._submit(lambda x: [y[0] for y
-							in self._query(query, x, start, end, None)],
-							filename)] = filename
-				else:
-					jobs[self._submit(lambda x: sum(1 for _
-						in self._query(query, x, start, end, None)),
-						filename)] = filename
+				jobs[self._submit(_regex_query, query, filename, start, end,
+						None, indices, False)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
-			self.cache['counts', query, filename, start, end, indices
+			self.cache['counts', query, filename, start, end, indices, False
 					] = result[filename] = future.result()
 		return result
 
@@ -818,24 +839,28 @@ class RegexSearcher(CorpusSearcher):
 		for filename in subset:
 			try:
 				x, maxresults2 = self.cache['sents', query, filename,
-						start, end]
+						start, end, True, True]
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(lambda x: list(self._query(
-						query, x, start, end, maxresults)),
-						filename)] = filename
+				jobs[self._submit(_regex_query,
+						query, filename, start, end, maxresults,
+						True, True)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			x = []
 			for sentno, sent, start, end in future.result():
+				# turn matching character into token indices
 				prelen = len(sent[:start].split())
+				if prelen and not sent[start - 1].isspace():
+					prelen -= 1
 				matchlen = len(sent[start:end].split())
 				highlight = range(prelen, prelen + matchlen)
 				x.append((filename, sentno, sent.rstrip(), highlight))
-			self.cache['sents', query, filename, start, end] = x, maxresults
+			self.cache['sents', query, filename, start, end, True, True
+					] = x, maxresults
 			result.extend(x)
 		return result
 
@@ -847,46 +872,81 @@ class RegexSearcher(CorpusSearcher):
 			nofunc=False, nomorph=False, sents=True):
 		if not sents:
 			raise ValueError('not applicable with plain text corpus.')
-		with io.open(filename, encoding='utf8') as tmp:
-			data = tmp.read()
-		if self.lineindex[filename] is None:
-			self._indexfile(filename, data)
-
-		end = next(reversed(self.lineindex[filename]))
 		result = []
-		for n in indices:
-			a, b = 0, end
-			if 1 < n < len(self.lineindex[filename]):
-				a = self.lineindex[filename].select(n - 1)
-			if 1 <= n < len(self.lineindex[filename]):
-				b = self.lineindex[filename].select(n)
-			result.append(data[a:b])
+		end = next(reversed(self.lineindex[filename]))
+		with open(filename, 'r+b') as tmp:
+			data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
+			for n in indices:
+				a, b = 0, end
+				if 1 <= n < len(self.lineindex[filename]):
+					a = self.lineindex[filename].select(n - 1)
+				if 1 <= n < len(self.lineindex[filename]):
+					b = self.lineindex[filename].select(n)
+				result.append(data[a:b].decode('utf8'))
+			data.close()
 		return result
 
-	@workerfunc
-	def _query(self, query, filename, start=None, end=None, maxresults=None):
-		"""Run a query on a single file."""
-		with io.open(filename, encoding='utf8') as tmp:
-			data = tmp.read()  # could use mmap but not with unicode
-			if self.lineindex[filename] is None:
-				self._indexfile(filename, data)
-			startidx = (self.lineindex[filename].select(start - 1)
-					if start else 0)
-			for match in islice(
-					re.finditer(query.format(**self.macros), data[startidx:]),
-					maxresults):
-				mstart, mend = match.span()
-				mstart += startidx
-				lineno = self.lineindex[filename].rank(mstart)
-				if end and lineno > end:
-					break
-				offset, nextoffset = 0, len(match.string)
-				if lineno > 0:
-					offset = self.lineindex[filename].select(lineno - 1)
-				if lineno < len(self.lineindex[filename]):
-					nextoffset = self.lineindex[filename].select(lineno)
-				sent = match.string[offset:nextoffset]
-				yield lineno + 1, sent, mstart - offset, mend - offset
+
+def _regex_query(query, filename, start=None, end=None, maxresults=None,
+		indices=False, sents=False):
+	"""Run a query on a single file."""
+	if REGEX_MACROS is not None:
+		query = query.format(**REGEX_MACROS)
+	lineindex = REGEX_LINEINDEX[filename]
+	if indices and sents:
+		result = []
+	elif indices:
+		result = array.array('I', [])
+	else:
+		result = 0
+	# TODO: is it advantageous to keep mmap'ed files open?
+	with open(filename, 'r+b') as tmp:
+		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
+		startidx = lineindex.select(start - 1 if start else 0)
+		endidx = (lineindex.select(end) if end is not None
+				and end < len(lineindex) else len(data))
+		# could use .find() with plain queries
+		# pattern = re.compile(query.encode('utf8'))
+		pattern = re2.compile(query.encode('utf8'))
+		for match in islice(
+				pattern.finditer(data, startidx, endidx),
+				maxresults):
+			if not indices:
+				result += 1
+				continue
+			mstart, mend = match.span()
+			mstart += startidx
+			mend += startidx
+			lineno = lineindex.rank(mstart)
+			offset, nextoffset = 0, len(data)
+			if lineno > 0:
+				offset = lineindex.select(lineno - 1)
+			if lineno <= len(lineindex):
+				nextoffset = lineindex.select(lineno)
+			if sents:
+				sent = data[offset:nextoffset].decode('utf8')
+				# (lineno, sent, startspan, endspan)
+				result.append(
+						(lineno, sent, mstart - offset, mend - offset))
+			else:
+				result.append(lineno)
+		data.close()
+	return result
+
+
+def _indexfile(filename):
+	"""Get bitmap with locations of non-empty lines."""
+	result = array.array('I', [])
+	offset = 0
+	wordcount = 0
+	with open(filename, 'rb') as tmp:
+		for line in tmp:
+			if not line.isspace():
+				result.append(offset)
+			offset += len(line)
+			wordcount += line.count(b' ') + 1
+	result.append(offset)
+	return RoaringBitmap(result), wordcount
 
 
 class NoFuture(object):
@@ -935,7 +995,7 @@ def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
 	shortoptions = 'e:m:M:stcbnofh'
-	options = ('engine= macros= numthreads= max-count= slice= '
+	options = ('engine= macros= numproc= max-count= slice= '
 			'trees sents brackets counts only-matching line-number file help')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
@@ -946,7 +1006,7 @@ def main():
 			raise ValueError('enter one or more corpus files')
 	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r' % err, file=sys.stderr)
-		print(SHORTUSAGE)
+		print(SHORTUSAGE, end='')
 		sys.exit(2)
 	opts = dict(opts)
 	if '--file' in opts or '-f' in opts:
@@ -954,18 +1014,20 @@ def main():
 	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
 	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))
-	numthreads = int(opts.get('--numthreads', 0)) or None
+	numproc = int(opts.get('--numproc', 0)) or None
+	if len(corpora) == 1:
+		numproc = 1
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
 	if engine == 'tgrep2':
-		searcher = TgrepSearcher(corpora, macros=macros, numthreads=numthreads)
+		searcher = TgrepSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'xpath':
-		searcher = DactSearcher(corpora, macros=macros, numthreads=numthreads)
+		searcher = DactSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'regex':
-		searcher = RegexSearcher(corpora, macros=macros, numthreads=numthreads)
+		searcher = RegexSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'frag':
 		searcher = FragmentSearcher(
-				corpora, macros=macros, numthreads=numthreads)
+				corpora, macros=macros, numproc=numproc)
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
 	if '--counts' in opts or '-c' in opts:
