@@ -64,8 +64,16 @@ GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
 GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 # the extensions for corpus files for each query engine:
 EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt|tok)$')
-COLORS = dict(enumerate(
-		'black red orange blue green turquoise slategray peru teal'.split()))
+
+COLORS = dict(enumerate('''\
+		Black Red Orange Blue Green Turquoise SlateGray Peru Teal Aqua
+		Aquamarine BlanchedAlmond Brown Burlywood CadetBlue Chartreuse
+		Chocolate Coral Crimson Cyan Firebrick ForestGreen Fuchsia Gainsboro
+		Gold Goldenrod Gray GreenYellow HotPink IndianRed Indigo Khaki Lime
+		YellowGreen Magenta Maroon Yellow MidnightBlue Moccasin NavyBlue Olive
+		OliveDrab Orchid PapayaWhip Pink Plum PowderBlue Purple RebeccaPurple
+		RoyalBlue SaddleBrown Salmon SandyBrown SeaGreen Sienna Silver SkyBlue
+		SlateBlue Tan Thistle Tomato Violet Wheat'''.split()))
 
 
 @APP.route('/')
@@ -186,8 +194,8 @@ def counts(form, doexport=False):
 			if len(df.columns) == 1:
 				break
 			results = combined
-			legend = '%sLegend:\t%s' % (64 * ' ', '\t'.join(
-					'<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
+			legend = '%sLegend:\t%s\n' % (64 * ' ', '\t'.join(
+					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
 					for n, query in enumerate(queries)))
 		else:
 			legend = ''
@@ -692,20 +700,23 @@ def browsesents():
 					for a in CORPORA[request.args['engine']].files}
 			filename = filenames[TEXTS[textno]]
 			queries = querydict(request.args['query'])
-			legend = 'Legend:\t%s' % ('\t'.join(
-					'<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
+			legend = 'Legend:\t%s\n' % ('\t'.join(
+					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
 					for n, query in enumerate(queries, 1)))
 			for n, (_, query) in enumerate(queries.values()):
 				matches = CORPORA[request.args['engine']].sents(
-						query, subset=(filename,), start=start, end=maxsent,
+						query, subset=(filename, ), start=start, end=maxsent,
 						maxresults=2 * chunk)
 				for _, m, sent, high in matches:
 					if start <= m < maxsent:
 						sent = sent.split(' ')
 						match = ' '.join(sent[a] for a in high)
-						results[m - start] = results[m - start].replace(
-								match, '<font color=%s>%s</font>' % (
-								COLORS.get(n + 1, 'gray'), cgi.escape(match)))
+						results[m - start] = re.sub(
+								'(^| )(%s)( |$)' % re.escape(match),
+								lambda x: '%s<font color=%s>%s</font>%s' % (
+									x.group(1), COLORS.get(n + 1, 'gray'),
+									cgi.escape(x.group(2)), x.group(3)),
+								results[m - start], 1)
 					elif m >= maxsent:
 						break
 		prevlink = '<a id=prev>prev</a>'

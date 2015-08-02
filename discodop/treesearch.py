@@ -9,7 +9,6 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import os
 import re
-import re2
 import sys
 import gzip
 import mmap
@@ -23,6 +22,11 @@ try:
 	import cPickle as pickle
 except ImportError:
 	import pickle
+try:
+	import re2
+	RE2LIB = True
+except ImportError:
+	RE2LIB = False
 try:
 	import alpinocorpus
 	import xml.etree.cElementTree as ElementTree
@@ -906,8 +910,10 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 		endidx = (lineindex.select(end) if end is not None
 				and end < len(lineindex) else len(data))
 		# could use .find() with plain queries
-		# pattern = re.compile(query.encode('utf8'))
-		pattern = re2.compile(query.encode('utf8'))
+		if RE2LIB:
+			pattern = re2.compile(query.encode('utf8'))
+		else:
+			pattern = re.compile(query.encode('utf8'))
 		for match in islice(
 				pattern.finditer(data, startidx, endidx),
 				maxresults):
