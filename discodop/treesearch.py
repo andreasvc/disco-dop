@@ -95,7 +95,8 @@ class CorpusSearcher(object):
 		if not self.files:
 			raise ValueError('no files found matching ' + files)
 
-	def counts(self, query, subset=None, start=None, end=None, indices=False):
+	def counts(self, query, subset=None, start=None, end=None, indices=False,
+			breakdown=False):
 		"""Run query and return a dict of the form {corpus1: nummatches, ...}.
 
 		:param query: the search query
@@ -104,7 +105,9 @@ class CorpusSearcher(object):
 		:param start, end: the interval of sentences to query in each corpus;
 			by default, all sentences are queried. 1-based, inclusive.
 		:param indices: if True, return a sequence of indices of matching
-			occurrences, instead of an integer count."""
+			occurrences, instead of an integer count.
+		:param breakdown: if True, return a Counter mapping matches to counts.
+		"""
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
 			nofunc=False, nomorph=False):
@@ -195,7 +198,10 @@ class TgrepSearcher(CorpusSearcher):
 		super(TgrepSearcher, self).__init__(files, macros, numproc)
 		self.files = {convert(filename): None for filename in self.files}
 
-	def counts(self, query, subset=None, start=None, end=None, indices=False):
+	def counts(self, query, subset=None, start=None, end=None, indices=False,
+			breakdown=False):
+		if breakdown and indices:
+			raise NotImplementedError
 		subset = subset or self.files
 		result = OrderedDict()
 		jobs = {}
@@ -204,20 +210,25 @@ class TgrepSearcher(CorpusSearcher):
 		for filename in subset:
 			try:
 				result[filename] = self.cache[
-						'counts', query, filename, start, end, indices]
+						'counts', query, filename, start, end, indices,
+						breakdown]
 			except KeyError:
 				if indices:
 					jobs[self._submit(lambda x: [n for n, _
 							in self._query(query, x, fmt, start, end, None)],
 							filename)] = filename
+				elif breakdown:
+					jobs[self._submit(lambda x: Counter(match for _, match
+							in self._query(query, x, r'%s:::%m\n', start, end,
+							None)), filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
 						in self._query(query, x, fmt, start, end, None)),
 						filename)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
-			self.cache['counts', query, filename, indices, start, end
-					] = result[filename] = future.result()
+			self.cache['counts', query, filename, start, end, indices,
+					breakdown] = result[filename] = future.result()
 		return result
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
@@ -402,7 +413,10 @@ class DactSearcher(CorpusSearcher):
 			except NameError:
 				raise ValueError('macros not supported')
 
-	def counts(self, query, subset=None, start=None, end=None, indices=False):
+	def counts(self, query, subset=None, start=None, end=None, indices=False,
+			breakdown=False):
+		if breakdown and indices:
+			raise NotImplementedError
 		subset = subset or self.files
 		result = OrderedDict()
 		jobs = {}
@@ -415,6 +429,11 @@ class DactSearcher(CorpusSearcher):
 					jobs[self._submit(lambda x: [n for n, _
 							in self._query(query, x, start, end, None)],
 							filename)] = filename
+				elif breakdown:
+					jobs[self._submit(lambda x: Counter(
+						match.contents().decode('utf8')
+						for _, match in self._query(
+							query, x, start, end, None)), filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
 						in self._query(query, x, start, end, None)),
@@ -593,7 +612,12 @@ class FragmentSearcher(CorpusSearcher):
 		self.pool = concurrent.futures.ProcessPoolExecutor(
 				numproc or cpu_count())
 
-	def counts(self, query, subset=None, start=None, end=None, indices=False):
+	def counts(self, query, subset=None, start=None, end=None, indices=False,
+			breakdown=False):
+		if breakdown:
+			if indices:
+				raise NotImplementedError
+			return self.batchcounts(query.splitlines(), subset, start, end)
 		subset = subset or self.files
 		result = OrderedDict()
 		jobs = {}
@@ -816,21 +840,25 @@ class RegexSearcher(CorpusSearcher):
 		self.pool = concurrent.futures.ProcessPoolExecutor(
 				numproc or cpu_count())
 
-	def counts(self, query, subset=None, start=None, end=None, indices=False):
+	def counts(self, query, subset=None, start=None, end=None, indices=False,
+			breakdown=False):
+		if breakdown and indices:
+			raise NotImplementedError
 		subset = subset or self.files
 		result = OrderedDict()
 		jobs = {}
 		for filename in subset:
 			try:
 				result[filename] = self.cache[
-						'counts', query, filename, start, end, indices, False]
+						'counts', query, filename, start, end, indices, False,
+						breakdown]
 			except KeyError:
 				jobs[self._submit(_regex_query, query, filename, start, end,
-						None, indices, False)] = filename
+						None, indices, False, breakdown)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
-			self.cache['counts', query, filename, start, end, indices, False
-					] = result[filename] = future.result()
+			self.cache['counts', query, filename, start, end, indices, False,
+					breakdown] = result[filename] = future.result()
 		return result
 
 	def sents(self, query, subset=None, start=None, end=None, maxresults=100,
@@ -891,8 +919,9 @@ class RegexSearcher(CorpusSearcher):
 		return result
 
 
+@workerfunc
 def _regex_query(query, filename, start=None, end=None, maxresults=None,
-		indices=False, sents=False):
+		indices=False, sents=False, breakdown=False):
 	"""Run a query on a single file."""
 	if REGEX_MACROS is not None:
 		query = query.format(**REGEX_MACROS)
@@ -901,6 +930,8 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 		result = []
 	elif indices:
 		result = array.array('I', [])
+	elif breakdown:
+		result = Counter()
 	else:
 		result = 0
 	# TODO: is it advantageous to keep mmap'ed files open?
@@ -915,28 +946,32 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 			pattern = re2.compile(query.encode('utf8'), flags=flags)
 		else:
 			pattern = re.compile(query.encode('utf8'), flags=flags)
-		for match in islice(
-				pattern.finditer(data, startidx, endidx),
-				maxresults):
-			if not indices:
-				result += 1
-				continue
-			mstart, mend = match.span()
-			mstart += startidx
-			mend += startidx
-			lineno = lineindex.rank(mstart)
-			offset, nextoffset = 0, len(data)
-			if lineno > 0:
-				offset = lineindex.select(lineno - 1)
-			if lineno <= len(lineindex):
-				nextoffset = lineindex.select(lineno)
-			if sents:
-				sent = data[offset:nextoffset].decode('utf8')
-				# (lineno, sent, startspan, endspan)
-				result.append(
-						(lineno, sent, mstart - offset, mend - offset))
+		if indices or sents:
+			for match in islice(
+					pattern.finditer(data, startidx, endidx),
+					maxresults):
+				mstart, mend = match.span()
+				mstart += startidx
+				mend += startidx
+				lineno = lineindex.rank(mstart)
+				offset, nextoffset = 0, len(data)
+				if lineno > 0:
+					offset = lineindex.select(lineno - 1)
+				if lineno <= len(lineindex):
+					nextoffset = lineindex.select(lineno)
+				if sents:
+					sent = data[offset:nextoffset].decode('utf8')
+					# (lineno, sent, startspan, endspan)
+					result.append(
+							(lineno, sent, mstart - offset, mend - offset))
+				else:
+					result.append(lineno)
+		else:
+			matches = pattern.findall(data, startidx, endidx)[:maxresults]
+			if breakdown:
+				result.update(a.decode('utf8') for a in matches)
 			else:
-				result.append(lineno)
+				result = len(matches)
 		data.close()
 	return result
 
@@ -1003,7 +1038,8 @@ def main():
 	from getopt import gnu_getopt, GetoptError
 	shortoptions = 'e:m:M:stcbnofh'
 	options = ('engine= macros= numproc= max-count= slice= '
-			'trees sents brackets counts only-matching line-number file help')
+			'trees sents brackets counts indices breakdown only-matching '
+			'line-number file help')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
@@ -1037,13 +1073,27 @@ def main():
 				corpora, macros=macros, numproc=numproc)
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
-	if '--counts' in opts or '-c' in opts:
-		for filename, cnt in searcher.counts(
-				query, start=start, end=end).items():
-			if len(corpora) > 1:
-				print('\x1b[%dm%s\x1b[0m:' % (
-					ANSICOLOR['magenta'], filename), end='')
-			print(cnt)
+	if ('--counts' in opts or '-c' in opts
+		or '--breakdown' in opts or '--indices' in opts):
+		indices = '--indices' in opts
+		queries = query.splitlines()
+		if '--breakdown' in opts:
+			import pandas
+			results = searcher.counts(
+					query, start=start, end=end, breakdown=True)
+			print(pandas.DataFrame(results).T.to_csv(None))
+		elif len(queries) > 1:
+			import pandas
+			results = searcher.batchcounts(
+					queries, start=start, end=end)
+			print(pandas.DataFrame(results).T.to_csv(None))
+		else:
+			for filename, cnt in searcher.counts(
+					query, start=start, end=end, indices=indices).items():
+				if len(corpora) > 1:
+					print('\x1b[%dm%s\x1b[0m:' % (
+						ANSICOLOR['magenta'], filename), end='')
+				print(str(cnt).strip("array('I', )") if indices else cnt)
 	elif '--trees' in opts or '-t' in opts:
 		for filename, sentno, tree, sent, high in searcher.trees(
 				query, start=start, end=end, maxresults=maxresults):

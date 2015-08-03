@@ -14,6 +14,8 @@
 !docs/
 !docs/*.rst
 !docs/*.py
+!docs/cli
+!docs/cli/*.rst
 !tests.py
 !setup.py
 !LICENSE

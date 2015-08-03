@@ -20,11 +20,13 @@ Options:
 
                 :xpath: arbitrary xpath queries; files are dact XML corpora.
                 :regex: search through tokenized sentences with Python regexps.
--c, --counts    Report counts.
+-c, --counts    Report counts; if more than one query is given, output is CSV.
 -s, --sents     Output sentences (default).
 -t, --trees     Output visualizations of trees.
 -b, --brackets  Output raw trees in the original corpus format.
--f, --file      Read query from filename given as first argument.
+--indices       Report a sentence numebers of matches for each corpus
+--breakdown     Report counts of types that match query; output is CSV.
+-f, --file      Read queries from filename given as first argument.
 --slice=<N:M>
                 Only search in sentences N to M of each file; either N or
                 M may be left out; slice indexing is 1-based and inclusive.
