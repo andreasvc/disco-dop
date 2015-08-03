@@ -910,10 +910,11 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 		endidx = (lineindex.select(end) if end is not None
 				and end < len(lineindex) else len(data))
 		# could use .find() with plain queries
+		flags = re.UNICODE | re.MULTILINE
 		if RE2LIB:
-			pattern = re2.compile(query.encode('utf8'))
+			pattern = re2.compile(query.encode('utf8'), flags=flags)
 		else:
-			pattern = re.compile(query.encode('utf8'))
+			pattern = re.compile(query.encode('utf8'), flags=flags)
 		for match in islice(
 				pattern.finditer(data, startidx, endidx),
 				maxresults):
