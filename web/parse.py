@@ -91,6 +91,7 @@ def parse():
 		prob = results[-1].prob
 		parsetrees = results[-1].parsetrees or []
 		parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
+		parsetrees_ = []
 		fragments = results[-1].fragments or ()
 		APP.logger.info('[%s] %s', probstr(prob), tree)
 		tree = Tree.parse(tree, parse_leaf=int)
@@ -103,10 +104,14 @@ def parse():
 						unicodelines=True, html=html)
 				for frag, terminals in fragments
 				if frag.count('(') > 1))
+		for tree, prob, x in parsetrees:
+			tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
+			treebank.handlefunctions('add', tree, pos=True)
+			parsetrees_.append((tree, prob, x))
 		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
-					DrawTree(PARSERS[lang].postprocess(tree, senttok, -1)[0],
-						senttok).text(unicodelines=True, html=html))
-				for n, (tree, prob, _) in enumerate(parsetrees)))
+					DrawTree(tree, senttok).text(
+						unicodelines=True, html=html, funcsep='-'))
+				for n, (tree, prob, _) in enumerate(parsetrees_)))
 	msg = '\n'.join(stage.msg for stage in results)
 	elapsed = [stage.elapsedtime for stage in results]
 	elapsed = 'CPU time elapsed: %s => %gs' % (
