@@ -994,7 +994,7 @@ def numbase(key):
 	"""Split file name in numeric and string components to use as sort key."""
 	path, base = os.path.split(key)
 	components = re.split(r'[-.,_ ]', os.path.splitext(base)[0])
-	components = [int(a) if re.match(r'[0-9]+', a) else a for a in components]
+	components = [int(a) if re.match(r'[0-9]+$', a) else a for a in components]
 	return [path] + components
 
 

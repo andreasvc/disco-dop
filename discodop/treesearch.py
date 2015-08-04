@@ -565,7 +565,7 @@ class FragmentSearcher(CorpusSearcher):
 	"""
 	# NB: pickling arrays is efficient in Python 3
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
-		global FRAG_FILES, VOCAB
+		global FRAG_FILES, FRAG_MACROS, VOCAB
 		super(FragmentSearcher, self).__init__(files, macros, numproc)
 		path = os.path.dirname(next(iter(files)))
 		newvocab = True

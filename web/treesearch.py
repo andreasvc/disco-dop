@@ -566,7 +566,11 @@ def style():
 		resp = Response(stream_template('searchresults.html',
 				form=request.args, texts=TEXTS,
 				selectedtexts=selectedtexts(request.args), output='style',
-				results=generate(), havexpath='xpath' in CORPORA))
+				results=generate(),
+				havetgrep='tgrep2' in CORPORA,
+				havexpath='xpath' in CORPORA,
+				havefrag='frag' in CORPORA,
+				))
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	# set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (

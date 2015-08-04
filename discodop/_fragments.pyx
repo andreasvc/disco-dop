@@ -1208,7 +1208,7 @@ def readtreebank(treebankfile, Vocabulary vocab,
 					vocab.words.append(yf[0]
 							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
-				maxnodes = len(cnt)
+				maxnodes = cnt
 				scratch = <Node *>realloc(scratch,
 						maxnodes * binfactor * sizeof(Node))
 				if scratch is NULL:
