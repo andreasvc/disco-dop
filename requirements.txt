@@ -4,5 +4,6 @@ roaringbitmap
 cyordereddict
 faulthandler
 futures
+pandas
 pytest
 sphinx

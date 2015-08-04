@@ -373,6 +373,8 @@ class TgrepSearcher(CorpusSearcher):
 			results = []
 			for n, line in enumerate(iter(proc.stdout.readline, b'')):
 				match = linere.match(line.decode('utf8'))
+				if match is None:
+					raise ValueError(line.decode('utf8'))
 				m, a = int(match.group(1)), match.group(2)
 				if m < start:
 					continue

@@ -14,6 +14,7 @@ which discodop || (
 	sudo -u vagrant git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
 	pip install -r requirements.txt
+	pip install -r web/requirements.txt
 	sudo -u vagrant python setup.py install --user
 )
 
@@ -23,14 +24,6 @@ which tgrep2 || (
 	sudo -u vagrant git clone --depth 1 git://github.com/andreasvc/tgrep2.git
 	cd tgrep2
 	sudo -u vagrant make && make install
-)
-
-# install style (part of diction)
-which diction || (
-	cd /home/vagrant
-	sudo -u vagrant git clone --depth 1 git://github.com/andreasvc/diction.git
-	cd diction
-	sudo -u vagrant ./configure && sudo -u vagrant make && make install
 )
 
 # install alpinocorpus library
