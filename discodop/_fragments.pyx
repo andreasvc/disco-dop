@@ -38,8 +38,8 @@ cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b) nogil
 
 # a template to create arrays of this type
-cdef array uintarray = array('I' if sys.version[0] >= '3' else b'I', ())
-cdef array shortarray = array('h' if sys.version[0] >= '3' else b'h', ())
+cdef array uintarray = array(b'I' if sys.version[0] == '2' else 'I')
+cdef array shortarray = array(b'h' if sys.version[0] == '2' else 'h')
 
 # NB: (?: ) is a non-grouping operator; the second ':' is part of what we match
 FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes

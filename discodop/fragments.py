@@ -614,7 +614,7 @@ def printfragments(fragments, counts, out=None):
 					[n for n in theindices
 						if n - 1 in theindices or n + 1 in theindices]
 					if PARAMS['adjacent'] else
-					repr(theindices).strip("array('I', )")))
+					str(theindices)[len("array('I', "):-len(')')]))
 			elif zeroinvalid:
 				raise ValueError('invalid fragment--frequency=1: %r' % a)
 	elif PARAMS['relfreq']:

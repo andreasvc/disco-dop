@@ -18,6 +18,7 @@ import multiprocessing
 import subprocess
 from collections import Counter, OrderedDict, namedtuple
 from itertools import islice
+PY2 = sys.version[0] == '2'
 try:
 	import cPickle as pickle
 except ImportError:
@@ -287,6 +288,7 @@ class TgrepSearcher(CorpusSearcher):
 		# %w complete tree in bracket notation
 		# %m all marked nodes, or the head node if none are marked
 		fmt = r'%s:::%w:::%m\n'
+		# FIXME support multiple marked nodes: fmt = r'%s:::%w:::%m\n\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -931,7 +933,7 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 	if indices and sents:
 		result = []
 	elif indices:
-		result = array.array('I', [])
+		result = array.array(b'I' if PY2 else 'I')
 	elif breakdown:
 		result = Counter()
 	else:
@@ -945,7 +947,8 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 		# could use .find() with plain queries
 		flags = re.UNICODE | re.MULTILINE
 		if RE2LIB:
-			pattern = re2.compile(query.encode('utf8'), flags=flags)
+			pattern = re2.compile(  # pylint: disable=no-member
+					query.encode('utf8'), flags=flags)
 		else:
 			pattern = re.compile(query.encode('utf8'), flags=flags)
 		if indices or sents:
@@ -953,8 +956,6 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 					pattern.finditer(data, startidx, endidx),
 					maxresults):
 				mstart, mend = match.span()
-				mstart += startidx
-				mend += startidx
 				lineno = lineindex.rank(mstart)
 				offset, nextoffset = 0, len(data)
 				if lineno > 0:
@@ -980,7 +981,7 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 
 def _indexfile(filename):
 	"""Get bitmap with locations of non-empty lines."""
-	result = array.array('I', [])
+	result = array.array(b'I' if PY2 else 'I')
 	offset = 0
 	wordcount = 0
 	with open(filename, 'rb') as tmp:
@@ -1095,7 +1096,8 @@ def main():
 				if len(corpora) > 1:
 					print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')
-				print(str(cnt).strip("array('I', )") if indices else cnt)
+				print(str(cnt)[len("array('I', "):-len(')')]
+						if indices else cnt)
 	elif '--trees' in opts or '-t' in opts:
 		for filename, sentno, tree, sent, high in searcher.trees(
 				query, start=start, end=end, maxresults=maxresults):

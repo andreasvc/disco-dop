@@ -926,7 +926,7 @@ def getcorpus():
 		try:
 			texts, numsents, numconst, numwords, styletable = pickle.load(
 					open(picklefile, 'rb'))
-		except ValueError as err:
+		except ValueError:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
 	ffiles = sorted(
