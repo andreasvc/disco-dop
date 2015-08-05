@@ -28,6 +28,9 @@ standard input with the ``treedraw`` and ``treetransforms`` commands.
 
 Cf. http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/exformat3.ps
 
+
+.. _bracket-format:
+
 bracket
 ^^^^^^^
 Penn treebank style bracketed trees, one tree per line.
@@ -38,6 +41,12 @@ For example::
 
 This format is supported when input is read incrementally from
 standard input with the ``treedraw`` and ``treetransforms`` commands.
+
+Tree fragments can be represented by leaving out the children of
+any non-terminal, e.g.::
+
+    (VP (VB is) (JJ ))
+    (S (NP John) (VP )) (. .))
 
 discbracket
 ^^^^^^^^^^^
@@ -56,6 +65,21 @@ internal representation employed here, so it can be read efficiently.
 
 This format is supported when input is read incrementally from
 standard input with the ``treedraw`` and ``treetransforms`` commands.
+
+Tree fragments can be formed as with bracket trees, by leaving out terminals or whole subtrees::
+
+    (S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is John rich ?
+    (S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is   ?
+
+The sentence on the right must still contain the right amount of spaces
+corresponding to the indices in the tree, but terminals can have a length of 0.
+
+There is an extra case that should be handled, which is how to represent a discontinuous frontier non-terminal. This requires
+expressing how the spans of the discontinuous node relate to the other spans in the tree::
+
+    (S (VP 0 2) (NP 1) (? 3))	   ?
+
+While the VP node does not dominate any terminals, if they were to be added, they would end up before and after the NP node.
 
 alpino
 ^^^^^^

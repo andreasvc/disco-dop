@@ -532,18 +532,25 @@ def style():
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
 		yield '<a href="style?export=csv">Export to CSV</a><br>'
-		yield 'Results based on first %d sentences.' % min(NUMSENTS)
+		shortest = min(NUMSENTS)
+		yield ('Results based on first %d sentences (=shortest text %s).'
+				% (shortest, TEXTS[NUMSENTS.index(shortest)]))
 
 		# produce a plot for each field
 		fields = ()
 		for a in STYLETABLE:
 			fields = sorted(STYLETABLE[a].keys())
 			break
+		yield '<ol>\n'
+		for field in fields:
+			yield '<li><a href="#%s">%s</a>\n' % (field, field)
+		yield '</ol>\n'
 		for field in fields:
 			data = {a: STYLETABLE[a].get(field, 0) for a in STYLETABLE}
 			total = max(data.values())
 			if total > 0:
-				yield barplot(data, total, field + ':',
+				yield barplot(data, total,
+						'<a name="%s">%s:</a>' % (field, field),
 						unit='%' if '%' in field else '')
 
 	def generatecsv():
@@ -712,17 +719,14 @@ def browsesents():
 						query, subset=(filename, ), start=start, end=maxsent,
 						maxresults=2 * chunk)
 				for _, m, sent, high in matches:
-					if start <= m < maxsent:
-						sent = sent.split(' ')
-						match = ' '.join(sent[a] for a in high)
-						results[m - start] = re.sub(
-								'(^| )(%s)( |$)' % re.escape(match),
-								lambda x: '%s<font color=%s>%s</font>%s' % (
-									x.group(1), COLORS.get(n + 1, 'gray'),
-									cgi.escape(x.group(2)), x.group(3)),
-								results[m - start], 1)
-					elif m >= maxsent:
-						break
+					sent = sent.split(' ')
+					match = ' '.join(sent[a] for a in high)
+					results[m - start] = re.sub(
+							'(^| )(%s)( |$)' % re.escape(match),
+							lambda x: '%s<font color=%s>%s</font>%s' % (
+								x.group(1), COLORS.get(n + 1, 'gray'),
+								cgi.escape(x.group(2)), x.group(3)),
+							results[m - start], 1)
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
@@ -942,16 +946,20 @@ def getcorpus():
 	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
 		corpora['tgrep2'] = treesearch.TgrepSearcher(
 				tfiles, macros='static/tgrepmacros.txt')
+		log.info('tgrep2 corpus loaded.')
 	if ffiles and set(ffiles) != set(corpora.get('frag', ())):
 		corpora['frag'] = treesearch.FragmentSearcher(
-				ffiles)  # macros='static/fragmacros.txt'
+				ffiles, macros='static/fragmacros.txt', inmemory=False)
+		log.info('frag corpus loaded.')
 	if afiles and ALPINOCORPUSLIB and set(afiles) != set(
 			corpora.get('xpath', ())):
 		corpora['xpath'] = treesearch.DactSearcher(
 				afiles, macros='static/xpathmacros.txt')
+		log.info('xpath corpus loaded.')
 	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
 		corpora['regex'] = treesearch.RegexSearcher(
 				tokfiles, macros='static/regexmacros.txt')
+		log.info('regex corpus loaded.')
 
 	assert tfiles or afiles or ffiles or tokfiles, (
 			'no corpus files with extension .mrg, .dbr, .export, .dact, '
