@@ -91,7 +91,7 @@ Find a particular word::
 //node[@word='loopt']
 
 This is case-sensitive.
-If you want to find all inflectional variants of the verb 'lopen', do::
+If you want to find all inflectional variants of the verb ``lopen``, do::
 
 //node[@lemma='lopen']
 
@@ -103,9 +103,11 @@ Finite subordinate clauses::
 
 //node[@cat="cp" and node[@rel="body" and @cat="ssub"]]
 
-This locates "cp" nodes with an "ssub" child that has "body" as function tag (relation).
+This locates ``cp`` nodes with an ``ssub`` child that has ``body`` as function
+tag (relation).
 
-More information: http://rug-compling.github.io/dact/cookbook/
+General XPath overview: https://en.wikipedia.org/wiki/XPath
+Using XPath on Alpino treebanks: http://rug-compling.github.io/dact/cookbook/
 
 Tree fragments
 ^^^^^^^^^^^^^^
@@ -120,8 +122,7 @@ discontinuous trees::
 (S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is John rich ?
 (S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is   ?
 
-See :ref:`bracket-format`
-
+More information: :ref:`file format documentation <bracket-format>`
 
 Regular expressions
 ^^^^^^^^^^^^^^^^^^^
