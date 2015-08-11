@@ -135,7 +135,7 @@ Documentation
 =============
 A manual page for the ``discodop`` command is installed as part of the
 installation: ``man discodop``. Further documentation can be found at
-http://andreasvc.github.io/discodop/
+http://discodop.readthedocs.org
 To generate a local copy see the ``docs/README`` file.
 
 Grammars
