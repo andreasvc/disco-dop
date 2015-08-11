@@ -1,5 +1,6 @@
 """Generic setup.py for Cython code."""
 import os
+import sys
 from distutils.core import setup
 from distutils.extension import Extension
 try:
@@ -13,6 +14,19 @@ from discodop import __version__
 
 DEBUG = False
 
+requires = [
+		'cython (>=0.21)',
+		'numpy (>=1.6.1)',
+		'roaringbitmap',
+		'cyordereddict',
+		'pytest',
+		'sphinx',
+		]
+if sys.version_info[0] == 2:
+	requires.extend([
+		'futures',
+		'faulthandler',
+		])
 metadata = dict(name='disco-dop',
 		version=__version__,
 		description='Discontinuous Data-Oriented Parsing',
@@ -32,13 +46,7 @@ metadata = dict(name='disco-dop',
 				'Programming Language :: Cython',
 				'Topic :: Text Processing :: Linguistic',
 		],
-		requires=[
-				'cython (>=0.20)',
-				'numpy (>=1.5)',
-				'pytest',
-				'sphinx',
-				'futures',
-		],
+		requires=requires,
 		packages=['discodop'],
 		scripts=['bin/discodop'],
 )

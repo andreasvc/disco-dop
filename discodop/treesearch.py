@@ -9,6 +9,7 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import os
 import re
+import csv
 import sys
 import gzip
 import mmap
@@ -1036,6 +1037,16 @@ def cpu_count():
 		return 1
 
 
+def writecsv(results):
+	"""Write a dictionary of dictionaries as CSV to stdout."""
+	writer = csv.writer(sys.stdout)
+	writer.writerow(['filename']
+			+ list(next(iter(results.values())).keys()))
+	writer.writerows(
+			[filename] + list(results[filename].values())
+			for filename in results)
+
+
 def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
@@ -1081,15 +1092,13 @@ def main():
 		indices = '--indices' in opts
 		queries = query.splitlines()
 		if '--breakdown' in opts:
-			import pandas
 			results = searcher.counts(
 					query, start=start, end=end, breakdown=True)
-			print(pandas.DataFrame(results).T.to_csv(None))
+			writecsv(results)
 		elif len(queries) > 1:
-			import pandas
 			results = searcher.batchcounts(
 					queries, start=start, end=end)
-			print(pandas.DataFrame(results).T.to_csv(None))
+			writecsv(results)
 		else:
 			for filename, cnt in searcher.counts(
 					query, start=start, end=end, indices=indices).items():
