@@ -100,10 +100,8 @@ def parse():
 		frags = Markup('Phrasal fragments used in the most probable derivation'
 				' of the highest ranked parse tree:\n'
 				+ '\n\n'.join(
-				DrawTree(Tree.parse(frag, parse_leaf=int), terminals).text(
-						unicodelines=True, html=html)
-				for frag, terminals in fragments
-				if frag.count('(') > 1))
+				DrawTree(frag).text(unicodelines=True, html=html)
+				for frag in fragments if frag.count('(') > 1))
 		for tree, prob, x in parsetrees:
 			tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
 			treebank.handlefunctions('add', tree, pos=True)

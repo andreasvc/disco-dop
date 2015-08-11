@@ -11,10 +11,10 @@ from getopt import gnu_getopt, GetoptError
 from decimal import Decimal, InvalidOperation
 from itertools import count
 from collections import defaultdict, Counter  # == multiset
-if sys.version[0] >= '3':
-	from itertools import zip_longest  # pylint: disable=E0611
-else:
+if sys.version_info[0] == 2:
 	from itertools import izip_longest as zip_longest  # pylint: disable=E0611
+else:
+	from itertools import zip_longest  # pylint: disable=E0611
 
 from discodop import grammar
 from discodop.tree import Tree

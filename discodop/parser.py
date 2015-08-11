@@ -15,7 +15,7 @@ import tempfile
 import traceback
 import string  # pylint: disable=W0402
 import multiprocessing
-if sys.version[0] == '2':
+if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
 from math import exp, log
 from heapq import nlargest

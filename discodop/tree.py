@@ -15,8 +15,8 @@ from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
 import sys
-if sys.version[0] >= '3':
-	basestring = str  # pylint: disable=W0622,C0103
+if sys.version_info[0] > 2:
+	unicode = str  # pylint: disable=redefined-builtin
 
 
 class Tree(object):
@@ -59,12 +59,12 @@ class Tree(object):
 		if label_or_str is None:
 			return object.__new__(cls)  # used by copy.deepcopy
 		if children is None:
-			if not isinstance(label_or_str, basestring):
+			if not isinstance(label_or_str, (str, unicode)):
 				raise TypeError("%s: Expected a label and child list "
 						"or a single string; got: %s" % (
 						cls.__name__, type(label_or_str)))
 			return cls.parse(label_or_str)
-		if (isinstance(children, basestring) or
+		if (isinstance(children, (str, unicode)) or
 				not hasattr(children, '__iter__')):
 			raise TypeError("%s() argument 2 should be a list, not a "
 					"string" % cls.__name__)
@@ -380,7 +380,7 @@ class Tree(object):
 		:returns: A tree corresponding to the string representation s.
 			If this class method is called using a subclass of Tree, then it
 			will return a tree of that type."""
-		if not isinstance(brackets, basestring) or len(brackets) != 2:
+		if not isinstance(brackets, (str, unicode)) or len(brackets) != 2:
 			raise TypeError('brackets must be a length-2 string')
 		if re.search(r'\s', brackets):
 			raise TypeError('whitespace brackets not allowed')
@@ -472,7 +472,7 @@ class Tree(object):
 		if len(s) + indent < margin:
 			return s
 		# If it doesn't fit on one line, then write it on multi-lines.
-		if isinstance(self.label, basestring):
+		if isinstance(self.label, (str, unicode)):
 			s = '%s%s' % (brackets[0], self.label)
 		else:
 			s = '%s%r' % (brackets[0], self.label)
@@ -482,7 +482,7 @@ class Tree(object):
 						indent + 2, brackets)
 			elif isinstance(child, tuple):
 				s += '\n' + ' ' * (indent + 2) + '/'.join(child)
-			elif isinstance(child, basestring):
+			elif isinstance(child, (str, unicode)):
 				s += '\n' + ' ' * (indent + 2) + '%s' % child
 			else:
 				s += '\n' + ' ' * (indent + 2) + '%r' % child
@@ -494,11 +494,11 @@ class Tree(object):
 		for child in self.children:
 			if isinstance(child, Tree):
 				childstrs.append(child._pprint_flat(brackets))
-			elif isinstance(child, basestring) or child is None:
+			elif isinstance(child, (str, unicode)) or child is None:
 				childstrs.append(child or '')
 			else:
 				childstrs.append(repr(child))
-		if isinstance(self.label, basestring):
+		if isinstance(self.label, (str, unicode)):
 			return '%s%s %s%s' % (brackets[0], self.label,
 									' '.join(childstrs), brackets[1])
 		else:

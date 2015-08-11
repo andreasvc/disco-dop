@@ -82,15 +82,17 @@ class Test_treetransforms(object):
 class Test_treebank(object):
 	def test_incrementaltreereader(self):
 		data = '''
-		(top (smain (noun 0) (verb 1) (inf (verb 5) (inf (np (det 2)
-				(adj 3) (noun 4)) (verb 6) (pp (prep 7) (noun 8))))) (punct 9))
-		Het had een prachtige dag kunnen zijn in Londen .
+		(top (smain (noun 0=Het) (verb 1=had) (inf (verb 5=kunnen)
+				(inf (np (det 2=een) (adj 3=prachtige) (noun 4=dag))
+				(verb 6=zijn) (pp (prep 7=in) (noun 8=Londen))))) (punct 9=.))
 		'''
 		result = list(incrementaltreereader([data]))
 		assert len(result) == 1
 		_tree, sent, _rest = result[0]
 		assert sent[0] == u'Het', sent[0]
 		assert len(sent) == 10
+		assert sent == (
+				u'Het had een prachtige dag kunnen zijn in Londen .'.split())
 
 		data = '''
 #BOS 0
@@ -160,24 +162,24 @@ class Test_treebanktransforms(object):
 class Test_grammar(object):
 	def test_flatten(self):
 		ids = UniqueIDs()
-		sent = [None, ',', None, '.']
-		tree = "(ROOT (S_2 0 2) (ROOT|<$,>_2 ($, 1) ($. 3)))"
-		assert flatten(tree, sent, ids, {}, True) == (
+		assert flatten(
+				'(ROOT (S_2 0= 2=) (ROOT|<$,>_2 ($, 1=,) ($. 3=.)))',
+				ids, {}, True) == (
 				[(('ROOT', 'ROOT}<0>', '$.@.'), ((0, 1),)),
 				(('ROOT}<0>', 'S_2', '$,@,'), ((0, 1, 0),)),
 				(('$,@,', 'Epsilon'), (',',)), (('$.@.', 'Epsilon'), ('.',))],
 				'(ROOT {0} (ROOT|<$,>_2 {1} {2}))')
 
-		assert flatten("(NN 0)", ["foo"], ids, {}, True) == (
+		assert flatten("(NN 0=foo)", ids, {}, True) == (
 				[(('NN', 'Epsilon'), ('foo',))], '(NN 0)')
 
-		prods, frag = flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0) (CNP "
-				"(CNP|<TRUNC> (TRUNC 1) (CNP|<KON> (KON 2) (CNP|<NN> "
-				"(NN 3)))))) (S|<VAFIN> (VAFIN 4))) (VP (VP|<ADV> (ADV 5) "
-				"(VP|<NP> (NP (ART 6) (NN 7)) (VP|<NP> (NP_2 8 10) (VP|<VVPP> "
-				"(VVPP 9))))))))",
-				['Das', 'Garten-', 'und', 'Friedhofsamt', 'hatte', 'kuerzlich',
-				'dem', 'Ortsbeirat', None, None, None], ids, {}, True)
+		prods, frag = flatten(r"(S (S|<VP> (S|<NP> (NP (ART 0=Das) (CNP "
+				"(CNP|<TRUNC> (TRUNC 1=Garten-) (CNP|<KON> (KON 2=und) "
+				"(CNP|<NN> (NN 3=Friedhofsamt)))))) (S|<VAFIN> "
+				"(VAFIN 4=hatte))) (VP (VP|<ADV> (ADV 5=kuerzlich) "
+				"(VP|<NP> (NP (ART 6=dem) (NN 7=Ortsbeirat)) (VP|<NP> "
+				"(NP_2 8= 10=) (VP|<VVPP> (VVPP 9=))))))))",
+				ids, {}, True)
 		assert prods == [(('S', 'S}<8>_2', 'VVPP'), ((0, 1, 0),)),
 				(('S}<8>_2', 'S}<7>', 'NP_2'), ((0, 1), (1,))),
 				(('S}<7>', 'S}<6>', 'NN@Ortsbeirat'), ((0, 1),)),
@@ -200,9 +202,9 @@ class Test_grammar(object):
 				'{2} (CNP|<NN> {3}))))) (S|<VAFIN> {4})) (VP (VP|<ADV> {5} '
 				'(VP|<NP> (NP {6} {7}) (VP|<NP> {8} (VP|<VVPP> {9})))))))')
 
-		assert flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0) (VP|<ADV>_2 "
-				"(ADV 2) (VP|<VVPP> (VVPP 4))))) (S|<VAFIN> (VAFIN 1)))",
-				(None, None, None, None, None), ids, {}, True) == (
+		assert flatten("(S|<VP>_2 (VP_3 (VP|<NP>_3 (NP 0=) (VP|<ADV>_2 "
+				"(ADV 2=) (VP|<VVPP> (VVPP 4=))))) (S|<VAFIN> (VAFIN 1=)))",
+				ids, {}, True) == (
 				[(('S|<VP>_2', 'S|<VP>_2}<10>', 'VVPP'), ((0,), (1,))),
 				(('S|<VP>_2}<10>', 'S|<VP>_2}<9>', 'ADV'), ((0, 1),)),
 				(('S|<VP>_2}<9>', 'NP', 'VAFIN'), ((0, 1),))],
@@ -399,7 +401,7 @@ def test_fragments():
 			tree[idx] = n
 	params = getctrees(trees, sents)
 	fragments = extractfragments(params['trees1'],
-			0, 0, params['vocab'], discontinuous=True, approx=False)
+			0, 0, params['vocab'], disc=True, approx=False)
 	counts = exactcounts(params['trees1'], params['trees1'],
 			list(fragments.values()))
 	assert len(fragments) == 25
@@ -504,7 +506,7 @@ def test_grammar(debug=False):
 	_ = grammar.testgrammar()
 
 	grammarx, backtransform, _, _ = doubledop(trees, sents,
-			debug=debug, numproc=1)
+			debug=False, numproc=1)
 	if debug:
 		print('\ndouble dop grammar')
 	grammar = Grammar(grammarx, start=trees[0].label)

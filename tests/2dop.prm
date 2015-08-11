@@ -66,13 +66,13 @@ stages=[  # Double-DOP
 
   # test rest of parameters together:
   dict(
-	name='post', mode='plcfrs',
-	prune='pcfg', splitprune=True,
-	dop='doubledop',
-	iterate=True, complement=False,
-	k=1e-5, m=1000,
-	kbest=True, sample=False,
-	estimator='ewe', objective='mpp',
+    name='post', mode='plcfrs',
+    prune='pcfg', splitprune=True,
+    dop='doubledop',
+    iterate=True, complement=False,
+    k=1e-5, m=1000,
+    kbest=True, sample=False,
+    estimator='ewe', objective='mpp',
   ),
 
 ],

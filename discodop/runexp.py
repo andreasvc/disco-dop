@@ -20,12 +20,12 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-if sys.version[0] >= '3':
-	import pickle
-	from itertools import zip_longest  # pylint: disable=E0611
-else:
+if sys.version_info[0] == 2:
 	import cPickle as pickle  # pylint: disable=import-error
 	from itertools import izip_longest as zip_longest  # pylint: disable=E0611
+else:
+	import pickle
+	from itertools import zip_longest  # pylint: disable=E0611
 import numpy as np
 from discodop import __version__
 from discodop import eval as evalmod
@@ -471,10 +471,8 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				# dump fragments
 				with codecs.getwriter('utf8')(gzip.open('%s/%s.fragments.gz' %
 						(resultdir, stage.name), 'w')) as out:
-					out.writelines('%s\t%d\n' % (treebank.writetree(a, b, 0,
-							'bracket' if stage.mode.startswith('pcfg')
-							else 'discbracket').rstrip('\n'), len(c))
-							for (a, b), c in fragments)
+					out.writelines('%s\t%d\n' % (a, len(b))
+							for a, b in fragments)
 			elif stage.dop == 'reduction':
 				xgrammar, altweights = grammar.dopreduction(
 						traintrees, sents, packedgraph=stage.packedgraph,
@@ -758,7 +756,7 @@ def writeresults(results, params):
 						morphology=params.morphology)
 				for n in params.testset)
 
-	if sys.version[0] < '3':
+	if sys.version_info[0] < 3:
 		fileobj = open('%s/stats.tsv' % params.resultdir, 'wb')
 	else:
 		fileobj = open('%s/stats.tsv' % params.resultdir, 'w',

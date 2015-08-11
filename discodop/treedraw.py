@@ -12,15 +12,15 @@ import io
 import re
 import sys
 from cgi import escape
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 from operator import itemgetter
 from itertools import chain, islice
+from cyordereddict import OrderedDict
 from discodop.tree import Tree
-from discodop.treebank import READERS, incrementaltreereader
+from discodop.treebank import READERS, incrementaltreereader, brackettree
 from discodop.treetransforms import disc
-if sys.version[0] >= '3':
-	basestring = str  # pylint: disable=W0622,C0103
-
+if sys.version_info[0] > 2:
+	unicode = str  # pylint: disable=redefined-builtin
 
 SHORTUSAGE = '''\
 Usage: %s [<treebank>...] [options]
@@ -69,9 +69,12 @@ class DrawTree(object):
 			highlightfunc=()):
 		self.tree = tree
 		self.sent = sent
-		if isinstance(tree, basestring):
-			self.tree = Tree.parse(tree,
-					parse_leaf=None if sent is None else int)
+		if isinstance(tree, (str, unicode)):
+			if sent is None:
+				self.tree, sent = brackettree(tree)
+				self.sent = sent
+			else:
+				self.tree = Tree.parse(tree, parse_leaf=int)
 		if sent is None:
 			leaves = self.tree.leaves()
 			if (leaves and not any(len(a) == 0 for a in self.tree.subtrees())
@@ -101,7 +104,7 @@ class DrawTree(object):
 				self.tree, self.sent, highlight, highlightfunc)
 
 	def __str__(self):
-		if sys.version[0] >= '3':
+		if sys.version_info[0] >= 3:
 			return self.text(unicodelines=True)
 		return self.text(unicodelines=True).encode('utf8')
 

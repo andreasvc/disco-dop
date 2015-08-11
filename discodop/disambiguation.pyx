@@ -20,6 +20,7 @@ from discodop import plcfrs, _fragments
 from discodop.tree import Tree
 from discodop.kbest import lazykbest, getderiv
 from discodop.grammar import lcfrsproductions
+from discodop.treebank import INDEXRE, quote
 from discodop.treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
 from discodop.bit import pyintnextset, pyintbitcount
@@ -466,8 +467,8 @@ cdef sldop_simple(dict derivations, list entries, int sldop_n,
 				for deriv in derivsfortree[tree]])
 		result[tree] = (-score, parsetreeprob[tree])
 		derivs[tree] = fragmentsinderiv(
-				deriv if bitpar or backtransform is None
-				else keys[deriv], chart, backtransform)
+				deriv if bitpar or backtransform is None else keys[deriv],
+				chart, backtransform)
 	msg = '(%d derivations, %d of %d parsetrees)' % (
 			len(derivations), len(result), len(parsetreeprob))
 	return [(tree, result[tree], derivs[tree]) for tree in result], msg
@@ -588,6 +589,14 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	return frag.format(*children)
 
 
+def addwords(tree, sent):
+	"""Produce a tree in discbracket format from a Tree object and sentence."""
+	return INDEXRE.sub(lambda x: '%s=%s)' % (
+			x.group().rstrip(')'),
+			quote(sent[int(x.group()[1:].rstrip(')'))])),
+			str(tree))
+
+
 def fragmentsinderiv(deriv, chart, list backtransform):
 	"""Extract the list of fragments that were used in a given derivation.
 
@@ -599,15 +608,14 @@ def fragmentsinderiv(deriv, chart, list backtransform):
 		fragmentsinderiv_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, str) and backtransform is None:
 		deriv = Tree(deriv)
-		result = [REMOVEIDS.sub('', str(splitfrag(node)))
+		result = [REMOVEIDS.sub('', addwords(str(splitfrag(node)), chart.sent))
 				for node in deriv.subtrees(frontiernt)]
 	elif isinstance(deriv, str):
 		deriv = Tree(deriv)
 		fragmentsinderiv_str(deriv, chart, backtransform, result)
 	else:
 		raise ValueError('deriv should be a RankedEdge or a string.')
-	return [_fragments.pygetsent(frag, chart.sent)
-			for frag in result]
+	return [_fragments.pygetsent(frag) for frag in result]
 
 
 cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
@@ -641,7 +649,8 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 
 	result.append(frag.format(*['(%s %s)' % (
 				chart.grammar.tolabel[chart.label(deriv.head)].split('@')[0],
-				(chart.lexidx(deriv.edge)
+				('%d=%s' % (chart.lexidx(deriv.edge),
+					chart.sent[chart.lexidx(deriv.edge)])
 					if '@' in chart.grammar.tolabel[chart.label(deriv.head)]
 					else yieldranges(chart.indices(deriv.head))))
 				for deriv in reversed(children)]))
@@ -650,9 +659,10 @@ cdef fragmentsinderiv_(RankedEdge deriv, Chart chart,
 		if child.edge.rule is not NULL:
 			fragmentsinderiv_(child, chart, backtransform, result)
 		elif '@' not in chart.grammar.tolabel[chart.label(child.head)]:
-			result.append('(%s %d)' % (
+			result.append('(%s %d=%s)' % (
 					chart.grammar.tolabel[chart.label(child.head)],
-					chart.lexidx(child.edge)))
+					chart.lexidx(child.edge),
+					chart.sent[chart.lexidx(child.edge)]))
 
 
 cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
@@ -678,7 +688,7 @@ cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 
 	result.append(frag.format(*['(%s %s)' % (
 			child.label.split('@')[0],
-			(child[0] if '@' in child.label
+			('%d=%s' % (child[0], chart.sent[child[0]]) if '@' in child.label
 				else yieldranges(sorted(child.leaves()))))
 			for child in reversed(children)]))
 	# recursively visit all substitution sites
@@ -686,7 +696,8 @@ cdef fragmentsinderiv_str(deriv, Chart chart, list backtransform, list result):
 		if isinstance(child[0], Tree):
 			fragmentsinderiv_str(child, chart, backtransform, result)
 		elif '@' not in child.label:
-			result.append('(%s %d)' % (child.label, child[0]))
+			result.append('(%s %d=%s)' % (child.label, child[0],
+					chart.sent[child[0]]))
 
 
 def frontiernt(node):
@@ -990,7 +1001,7 @@ def mcrerank(parsetrees, sent, k, trees, vocab):
 				vocab=vocab)
 		frags = _fragments.extractfragments(
 				tmp['trees1'], 0, 0, vocab, trees,
-				discontinuous=True, approx=False)
+				disc=True, approx=False)
 		frags = {frag: bitset for frag, bitset in frags.items()
 				if frag[0].count('(') > 3}
 		indices = _fragments.exactcounts(

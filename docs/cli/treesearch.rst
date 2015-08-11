@@ -119,8 +119,8 @@ regular bracket trees::
 
 discontinuous trees::
 
-(S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is John rich ?
-(S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is   ?
+(S (VP (VB 0=is) (JJ 2=)) (NP 1=) (? 3=?))
+(VP (VB 0=is) (JJ 2=rich))
 
 More information: :ref:`file format documentation <bracket-format>`
 

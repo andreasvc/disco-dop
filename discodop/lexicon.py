@@ -35,8 +35,9 @@ import logging
 import tempfile
 from operator import itemgetter
 from subprocess import Popen, PIPE
-from collections import defaultdict, OrderedDict, Counter
+from collections import defaultdict, Counter
 from fractions import Fraction
+from cyordereddict import OrderedDict
 import discodop.eval
 from discodop.treebanktransforms import YEARRE
 

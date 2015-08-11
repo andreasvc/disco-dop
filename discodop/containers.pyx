@@ -554,19 +554,20 @@ cdef class Ctrees:
 				rb.add(n)
 		self.prodindex = prodindex
 
-	def extract(self, int n, Vocabulary vocab, disc=True):
-		"""Return (tree, sent) tuple for given tree."""
+	def extract(self, int n, Vocabulary vocab, bint disc=True, int node=-1):
+		"""Return given tree in discbracket format.
+
+		:param node: if given, extract specific subtree instead of whole tree.
+		"""
 		result = []
-		sent = []
 		if n < 0 or n > self.len:
 			raise IndexError
-		gettree(result, sent, &(self.nodes[self.trees[n].offset]),
-				vocab, self.trees[n].root, disc)
-		return ''.join(result), sent
+		gettree(result, &(self.nodes[self.trees[n].offset]),
+				vocab, self.trees[n].root if node == -1 else node, disc)
+		return ''.join(result)
 
 	def extractsent(self, int n, Vocabulary vocab):
-		"""Return sentence as a list of strings for given tree."""
-		cdef int m
+		"""Return sentence as a list for given tree."""
 		if n < 0 or n > self.len:
 			raise IndexError
 		sent = {termidx(self.nodes[m].left): vocab.words[self.nodes[m].prod]
@@ -577,10 +578,9 @@ cdef class Ctrees:
 
 	def printrepr(self, int n, Vocabulary vocab):
 		"""Print repr of a tree for debugging purposes."""
-		tree, sent = self.extract(n, vocab)
+		tree = self.extract(n, vocab, disc=True)
 		print(n)
 		print(tree)
-		print(sent)
 		offset = self.trees[n].offset
 		for m in range(self.trees[n].len):
 			print('%2d. %2d %2d %2d %2s %s' % (
@@ -658,29 +658,27 @@ cdef class Vocabulary:
 				len(set(self.words)) - 1)
 
 
-cdef inline gettree(list result, list sent, Node *tree,
-		Vocabulary vocab, int i, bint disc):
+cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
+		bint disc):
 	"""Collect string of tree and sentence for a tree.
 
 	:param result: provide an empty list for the initial call.
-	:param sent: pass empty list.
 	:param i: node number to start with."""
 	result.append('(')
 	result.append(vocab.labels[tree[i].prod])
 	result.append(' ')
 	if tree[i].left >= 0:
-		gettree(result, sent, tree, vocab, tree[i].left, disc)
+		gettree(result, tree, vocab, tree[i].left, disc)
 		if tree[i].right >= 0:
 			result.append(' ')
-			gettree(result, sent, tree, vocab, tree[i].right, disc)
+			gettree(result, tree, vocab, tree[i].right, disc)
 	else:
 		if disc:
-			result.append(str(termidx(tree[i].left)))
+			result.append('%d=%s' % (
+					termidx(tree[i].left),
+					vocab.words[tree[i].prod] or ''))
 		else:
 			result.append(vocab.words[tree[i].prod] or '')
-		if len(sent) < termidx(tree[i].left) + 1:
-			sent.extend([None] * (termidx(tree[i].left) + 1 - len(sent)))
-		sent[termidx(tree[i].left)] = vocab.words[tree[i].prod]
 	result.append(')')
 
 __all__ = ['Grammar', 'Chart', 'Ctrees', 'LexicalRule', 'SmallChartItem',

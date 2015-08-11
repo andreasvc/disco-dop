@@ -195,7 +195,8 @@ def counts(form, doexport=False):
 				break
 			results = combined
 			legend = '%sLegend:\t%s\n' % (64 * ' ', '\t'.join(
-					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'black'), query)
+					'\n<font color=%s>%s</font>' % (
+						COLORS.get(n, 'black'), query)
 					for n, query in enumerate(queries)))
 		else:
 			legend = ''
@@ -207,8 +208,9 @@ def counts(form, doexport=False):
 				norm = form.get('norm', 'sents')
 			results = CORPORA[form.get('engine', 'tgrep2')].counts(
 					query, selected, start, end, indices=False)
-			if all(results[filename] < INDICESMAXRESULTS for filename
-					in results):
+			if len(results) <= 32 and all(
+					results[filename] < INDICESMAXRESULTS
+					for filename in results):
 				resultsindices = CORPORA[form.get('engine', 'tgrep2')].counts(
 						query, selected, start, end, indices=True)
 		if not doexport:
@@ -388,19 +390,19 @@ def sents(form, dobrackets=False):
 		text = TEXTS[textno]
 		if 'breakdown' in form:
 			if dobrackets:
-				breakdown = Counter(high for _, _, _, high in results)
+				breakdown = Counter(high for _, _, _, high, _ in results)
 			else:
 				breakdown = Counter(re.sub(
 					' {2,}', ' ... ',
-					' '.join(word if n in high else ' '
+					' '.join(word if n in high1 or n in high2 else ' '
 						for n, word in enumerate(sent.split())))
-					for _, _, sent, high in results)
+					for _, _, sent, high1, high2 in results)
 			yield '\n%s\n' % text
 			for match, cnt in breakdown.most_common():
 				gotresults = True
 				yield '%5d  %s\n' % (cnt, match)
 			continue
-		for m, (filename, sentno, sent, high) in enumerate(results):
+		for m, (filename, sentno, sent, high1, high2) in enumerate(results):
 			if m == 0:
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
@@ -413,11 +415,13 @@ def sents(form, dobrackets=False):
 					textno, sentno, sentno))
 			if dobrackets:
 				sent = cgi.escape(sent.replace(" )", " -NONE-)"))
-				out = sent.replace(high, "<span class=r>%s</span>" % high)
+				out = sent.replace(high1, "<span class=r>%s</span>" % high1)
 			else:
 				out = ' '.join('<span class=r>%s</span>' % word
-						if x in high else word
-						for x, word in enumerate(sent.split(' ')))
+						if x in high1 else
+						('<span class=b>%s</span>' % word
+						if x in high2 else word)
+						for x, word in enumerate(sent.split()))
 			yield "<li>#%s [%s] %s" % (str(sentno).rjust(6), link, out)
 		yield "</ol>"
 	yield '</pre>' if gotresults else 'No matches.'
@@ -718,7 +722,7 @@ def browsesents():
 				matches = CORPORA[request.args['engine']].sents(
 						query, subset=(filename, ), start=start, end=maxsent,
 						maxresults=2 * chunk)
-				for _, m, sent, high in matches:
+				for _, m, sent, high, _ in matches:
 					sent = sent.split(' ')
 					match = ' '.join(sent[a] for a in high)
 					results[m - start] = re.sub(

@@ -332,7 +332,7 @@ cdef inline str yieldranges(list leaves):
 	``start:end``, where ``end`` is part of the interval. e.g.:
 
 	>>> yieldranges([0, 1, 2, 3, 4])
-	'0:1 2:4'"""
+	'0:1= 2:4='"""
 	cdef list yields = []
 	cdef int a, start = -2, prev = -2
 	for a in leaves:

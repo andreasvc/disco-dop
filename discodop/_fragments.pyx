@@ -19,6 +19,7 @@ from itertools import islice
 from array import array
 from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
+from discodop.treebank import quote
 from discodop.grammar import lcfrsproductions, printrule
 from discodop.treetransforms import binarize
 
@@ -38,14 +39,22 @@ cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b) nogil
 
 # a template to create arrays of this type
-cdef array uintarray = array(b'I' if sys.version[0] == '2' else 'I')
-cdef array shortarray = array(b'h' if sys.version[0] == '2' else 'h')
+cdef array uintarray = array(b'I' if sys.version_info[0] == 2 else 'I')
+cdef array shortarray = array(b'h' if sys.version_info[0] == 2 else 'h')
 
-# NB: (?: ) is a non-grouping operator; the second ':' is part of what we match
-FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?::[0-9]+)?\b')  # all leaf nodes
-TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)\)')  # leaf nodes w/term.indices
+FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?:=|:[0-9]+\b)')  # all leaves
+TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)=[^ ()]+\)')  # term. indices
 FRONTIERRE = re.compile(r' ([0-9]+):([0-9]+)\b')  # non-terminal frontiers
-LABEL = re.compile(r' *\( *([^ ()]+) *')
+TREEPARSEMSG = [
+		'0 nodes found',  # 0
+		'unexpected end of string after opening paren',  # 1
+		'unexpected end of string after label',  # 2
+		'unexpected end of string after closing paren',  # 3
+		'unexpected data after end of tree',  # 4
+		'unexpected data after terminal',  # 5
+		'missing terminal index',  # 6
+		'stack not empty after end of string',  # 7
+		]
 
 
 # bitsets representing fragments are uint64_t arrays with the number of
@@ -94,7 +103,7 @@ cdef inline void setrootid(uint64_t *data, short root, uint32_t id,
 
 cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 		Ctrees trees2=None, bint approx=True, bint debug=False,
-		bint discontinuous=False, bint complement=False,
+		bint disc=False, bint complement=False,
 		bint twoterms=False, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
@@ -109,7 +118,7 @@ cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 	:param approx: return approximate counts instead of bitsets.
 	:param debug: if True, a table of common productions is printed for each
 		pair of trees
-	:param discontinuous: if True, return trees with indices as leaves.
+	:param disc: if True, return trees with indices as leaves.
 	:param complement: if True, the complement of the recurring
 		fragments in each pair of trees is extracted as well.
 	:param twoterms: only return fragments with at least two terminals.
@@ -173,7 +182,7 @@ cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 						complement, debug, vocab, inter, minterms, matrix,
 						scratch, SLOTS)
 		collectfragments(fragments, inter, anodes, asent, vocab,
-				discontinuous, approx, False, tmp, SLOTS)
+				disc, approx, False, tmp, SLOTS)
 	free(matrix)
 	free(scratch)
 	return fragments
@@ -208,19 +217,16 @@ cdef inline extractfrompair(NodeArray a, Node *anodes, Ctrees trees2,
 
 
 cdef inline collectfragments(dict fragments, set inter, Node *anodes,
-		list asent, Vocabulary vocab, bint discontinuous, bint approx,
+		list asent, Vocabulary vocab, bint disc, bint approx,
 		bint indices, list tmp, short SLOTS):
 	"""Collect string representations of fragments given as bitsets."""
 	cdef uint64_t *bitset
 	for wrapper in inter:
 		bitset = getpointer(wrapper)
 		getsubtree(tmp, anodes, bitset, vocab,
-				discontinuous, getroot(bitset, SLOTS))
+				disc, getroot(bitset, SLOTS))
 		try:
-			if discontinuous:
-				frag = getsent(''.join(tmp), asent)
-			else:
-				frag = ''.join(tmp)
+			frag = getsent(''.join(tmp)) if disc else ''.join(tmp)
 		except:
 			print(asent)
 			print(tmp)
@@ -397,10 +403,9 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	return theindices if indices else counts
 
 
-cpdef exactcountssubset(Ctrees trees1, Ctrees trees2, list bitsets,
-		int indices=False, maxnodes=None, start=None, end=None,
-		maxresults=None):
-	"""Get exact counts or indices of occurrence for fragments.
+cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
+		int indices=0, maxnodes=None, start=None, end=None, maxresults=None):
+	"""Get counts of fragments in a slice of the treebank.
 
 	Variant of exactcounts() that releases the GIL in the inner loop and is
 	intended for searching in subsets of ``trees2``.
@@ -411,7 +416,7 @@ cpdef exactcountssubset(Ctrees trees1, Ctrees trees2, list bitsets,
 	:returns: depending on ``indices``:
 		:0: an array of counts, corresponding to ``bitsets``.
 		:1: a list of arrays, each array being a sequence of indices
-		for the corresponding bitset.
+			for the corresponding bitset.
 		:2: a list of pairs of arrays, tree indices paired with node numbers.
 	"""
 	cdef:
@@ -581,16 +586,17 @@ cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
 	return 1
 
 
-cpdef dict completebitsets(Ctrees trees, Vocabulary vocab,
-		short maxnodes, bint discontinuous=False, start=None, end=None):
+cpdef completebitsets(Ctrees trees, Vocabulary vocab,
+		short maxnodes, bint disc=False, start=None, end=None):
 	"""Generate bitsets corresponding to whole trees in the input.
 
-	:returns: dictionary of trees as strings mapped to their bitsets.
+	:returns: a pair of lists with trees as strings and their bitsets,
+		respectively.
 
 	Important: if multiple treebanks are used, maxnodes should equal
 	``max(trees1.maxnodes, trees2.maxnodes)``"""
 	cdef:
-		dict result = {}
+		list result = [], bitsets = []
 		list sent
 		int n, i
 		short SLOTS = BITNSLOTS(maxnodes + 1)
@@ -600,14 +606,15 @@ cpdef dict completebitsets(Ctrees trees, Vocabulary vocab,
 	for n in range(<int>start, <int>end):
 		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		nodes = &trees.nodes[trees.trees[n].offset]
-		tree, sent = trees.extract(n, vocab, disc=discontinuous)
+		tree = trees.extract(n, vocab, disc=disc)
+		sent = trees.extractsent(n, vocab)
 		for i in range(trees.trees[n].len):
 			if nodes[i].left >= 0 or sent[termidx(nodes[i].left)] is not None:
 				SETBIT(scratch, i)
 		setrootid(scratch, trees.trees[n].root, n, SLOTS)
-		frag = (tree, tuple(sent)) if discontinuous else tree
-		result[frag] = wrap(scratch, SLOTS)
-	return result
+		result.append(tree)
+		bitsets.append(wrap(scratch, SLOTS))
+	return result, bitsets
 
 
 cdef twoterminals(NodeArray a, Node *anodes,
@@ -660,7 +667,7 @@ cdef extractcompbitsets(uint64_t *bitset, Node *a,
 
 
 def allfragments(Ctrees trees, Vocabulary vocab,
-		int maxdepth, int maxfrontier=999, bint discontinuous=True,
+		int maxdepth, int maxfrontier=999, bint disc=True,
 		bint indices=False):
 	"""Return all fragments of trees up to maxdepth.
 
@@ -701,7 +708,7 @@ def allfragments(Ctrees trees, Vocabulary vocab,
 				setrootid(scratch, i, n, SLOTS)
 				inter.add(wrap(scratch, SLOTS))
 		collectfragments(fragments, inter, nodes, sent, vocab,
-				discontinuous, not indices, indices, tmp, SLOTS)
+				disc, not indices, indices, tmp, SLOTS)
 		del table[:]
 	return fragments
 
@@ -794,7 +801,8 @@ cdef inline getsubtree(list result, Node *tree, uint64_t *bitset,
 				result.append(' ')
 				getsubtree(result, tree, bitset, vocab, disc, tree[i].right)
 		elif disc:
-			result.append(str(termidx(tree[i].left)))
+			result.append('%d=%s' % (termidx(tree[i].left),
+					vocab.words[tree[i].prod]))
 		else:
 			result.append(vocab.words[tree[i].prod])
 	elif disc:  # node not in bitset, frontier non-terminal
@@ -811,87 +819,52 @@ cdef inline list getyield(Node *tree, int i):
 	return getyield(tree, tree[i].left) + getyield(tree, tree[i].right)
 
 
-def repl(d):
-	"""A function for use with re.sub that looks up numeric IDs in a dict.
-	"""
-	def f(x):
-		return d[int(x.group(1))]
-	return f
-
-
-def pygetsent(str frag, list sent):
+def pygetsent(str frag):
 	"""Wrapper of ``getsent()`` to make doctests possible.
 
-	>>> frag, sent = pygetsent(u'(S (NP 2) (VP 4))',
-	... [u'The', u'tall', u'man', u'there', u'walks'])
-	>>> print(frag)
-	(S (NP 0) (VP 2))
-	>>> print(repr(sent).replace("u'", "'"))
-	('man', None, 'walks')
-	>>> frag, sent = pygetsent(u'(VP (VB 0) (PRT 3))',
-	...	[u'Wake', u'your', u'friend', u'up'])
-	>>> print(frag)
-	(VP (VB 0) (PRT 2))
-	>>> print(repr(sent).replace("u'", "'"))
-	('Wake', None, 'up')
-	>>> frag, sent = pygetsent(u'(S (NP 2:2 4:4) (VP 1:1 3:3))',
-	... [u'Walks',u'the',u'quickly',u'man'])
-	>>> print(frag)
-	(S (NP 1 3) (VP 0 2))
-	>>> print(sent)
-	(None, None, None, None)
-	>>> frag, sent = pygetsent(u'(ROOT (S 0:2) ($. 3))',
-	... [u'Foo', u'bar', u'zed', u'.'])
-	>>> print(frag)
-	(ROOT (S 0) ($. 1))
-	>>> print(repr(sent).replace("u'", "'"))
-	(None, '.')
-	>>> frag, sent = pygetsent(u'(ROOT (S 0) ($. 3))',
-	... [u'Foo', u'bar', u'zed',u'.'])
-	>>> print(frag)
-	(ROOT (S 0) ($. 2))
-	>>> print(repr(sent).replace("u'", "'"))
-	('Foo', None, '.')
-	>>> frag, sent = pygetsent(u'(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2))',
-	... u'''In Japan wird offenbar die Fusion der Geldkonzerne Daiwa und
-	...  Sumitomo zur gr\\xf6\\xdften Bank der Welt vorbereitet .'''.split())
-	>>> print(frag)
-	(S|<VP>_2 (VP_3 0 2 4) (VAFIN 1))
-	>>> print(repr(sent).replace("u'", "'"))
-	(None, 'wird', None, None, None)"""
+	>>> print(pygetsent(u'(S (NP 2=man) (VP 4=walks))'))
+	(S (NP 0=man) (VP 2=walks))
+	>>> print(pygetsent(u'(VP (VB 0=Wake) (PRT 3=up))'))
+	(VP (VB 0=Wake) (PRT 2=up))
+	>>> print(pygetsent(u'(S (NP 2:2 4:4) (VP 1:1 3:3))'))
+	(S (NP 1= 3=) (VP 0= 2=))
+	>>> print(pygetsent(u'(ROOT (S 0:2) ($. 3=.))'))
+	(ROOT (S 0=) ($. 1=.))
+	>>> print(pygetsent(u'(ROOT (S 0=Foo) ($. 3=.))'))
+	(ROOT (S 0=Foo) ($. 2=.))
+	>>> print(pygetsent(
+	... u'(S|<VP>_2 (VP_3 0:1 3:3 16:16) (VAFIN 2=wird))'))
+	(S|<VP>_2 (VP_3 0= 2= 4=) (VAFIN 1=wird))
+	"""
 	try:
-		return getsent(frag, sent)
+		return getsent(frag)
 	except:
-		print(frag, '\n', sent)
+		print(frag)
 		raise
 
 
-cdef getsent(str frag, list sent):
+cdef getsent(str frag):
 	"""Renumber indices in fragment and select terminals it contains.
 
 	Returns a transformed copy of fragment and sentence. Replace words that do
 	not occur in the fragment with None and renumber terminals in fragment such
 	that the first index is 0 and any gaps have a width of 1. Expects a tree as
 	string where frontier nodes are marked with intervals."""
-	cdef:
-		int n, m = 0, maxl
-		list newsent = []
-		dict leafmap = {}
-		dict spans = {int(start): int(end) + 1
-				for start, end in FRONTIERRE.findall(frag)}
-		list leaves = list(map(int, TERMINDICESRE.findall(frag)))
+	cdef int n, m = 0, maxl
+	cdef dict leafmap = {}
+	cdef dict spans = {int(start): int(end) + 1
+			for start, end in FRONTIERRE.findall(frag)}
+	cdef list leaves = [int(a) for a in TERMINDICESRE.findall(frag)]
 	for n in leaves:
 		spans[n] = n + 1
 	maxl = max(spans)
 	for n in sorted(spans):
-		newsent.append(sent[n] if n in leaves else None)
-		leafmap[n] = ' %d' % m
+		leafmap[n] = ' %d=' % m
 		m += 1
 		if spans[n] not in spans and n != maxl:  # a gap
-			newsent.append(None)
 			m += 1
 	frag = FRONTIERORTERMRE.sub(repl(leafmap), frag)
-	return frag, tuple(newsent)
+	return frag
 
 
 cdef dumpmatrix(uint64_t *matrix, NodeArray a, NodeArray b, Node *anodes,
@@ -942,14 +915,23 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, Vocabulary vocab,
 	print(''.join(tmp), '\n', asent, '\n')
 
 
+def repl(d):
+	"""A function for use with re.sub that looks up numeric IDs in a dict.
+	"""
+	def f(x):
+		return d[int(x.group(1))]
+	return f
+
+
 def nonfrontier(sent):
 	def nonfrontierfun(x):
 		return isinstance(x[0], Tree) or sent[x[0]] is not None
 	return nonfrontierfun
 
 
-cdef int readnode(
-		str line, Vocabulary vocab, Node *nodes) except -9:
+cdef int readtree(
+		str line, Vocabulary vocab, Node *nodes, array stack,
+		list children, list labels) except -9:
 	"""Parse tree in bracket format into pre-allocated array of Node structs.
 
 	Tree will be binarized on the fly, equivalent to
@@ -959,11 +941,12 @@ cdef int readnode(
 
 	:param line: a complete bracketed tree.
 	:param vocab: collects productions, labels, and words.
-	:parem nodes: primary result."""
+	:parem nodes: primary result.
+	:param stack: provide an empty ``array.array('h')``.
+	:param children, labels: provide empty lists.
+	"""
+	# :param disc: whether to expect discbracket format.
 	cdef short idx = 0, n = 0, m, parent = -1, lenline = len(line), lensent = 0
-	cdef array stack = clone(shortarray, 0, False)
-	cdef list children = []  # list of lists
-	cdef list labels = []  # list of str
 	cdef str terminal = None, label = None, prod = None
 	cdef str binlabel, binlabel2
 	cdef list binchildren, binlabels
@@ -1080,6 +1063,14 @@ cdef int readnode(
 				return -5  # unexpected data after terminal
 			n -= 1
 			parent = stack.data.as_shorts[len(stack) - 1]
+			# if disc:
+			# 	m = terminal.find('=')
+			# 	if m <= 0:
+			# 		return -6  # missing terminal index
+			# 	m, terminal = int(terminal[:m]), terminal[m + 1:]
+			# 	nodes[parent].left = termidx(m)
+			# else:
+			# 	nodes[parent].left = termidx(lensent)
 			nodes[parent].left = termidx(lensent)
 			lensent += 1
 			prod = '%s\t%s Epsilon' % (terminal, labels[parent])
@@ -1095,7 +1086,7 @@ cdef int readnode(
 		n += 1
 
 	if len(stack) != 0 or len(children) != 0:
-		return -6  # stack / children not empty after end of string
+		return -7  # stack / children not empty after end of string
 	return idx
 
 
@@ -1155,7 +1146,7 @@ def getctrees(trees1, sents1, trees2=None, sents2=None,
 				if prod not in vocab.prods:
 					vocab.labels.append(r[0])
 					vocab.prods[prod] = len(vocab.prods)
-					vocab.words.append(yf[0]
+					vocab.words.append(quote(yf[0])
 							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
 				maxnodes = cnt
@@ -1181,6 +1172,8 @@ def readtreebank(treebankfile, Vocabulary vocab,
 	cdef Node *scratch
 	cdef int cnt, n
 	cdef str line
+	cdef array stack
+	cdef list children, labels
 	if treebankfile is None:
 		return None
 	ctrees = Ctrees()
@@ -1205,7 +1198,7 @@ def readtreebank(treebankfile, Vocabulary vocab,
 				if prod not in vocab.prods:
 					vocab.labels.append(r[0])
 					vocab.prods[prod] = len(vocab.prods)
-					vocab.words.append(yf[0]
+					vocab.words.append(quote(yf[0])
 							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
 				maxnodes = cnt
@@ -1217,8 +1210,9 @@ def readtreebank(treebankfile, Vocabulary vocab,
 			copynodes(tree, prodsintree, vocab, scratch, &cnt)
 			ctrees.addnodes(scratch, cnt, 0)
 	else:  # do incremental reading of bracket trees
-		# could use BracketCorpusReader or expect trees/sents as input, but
-		# incremental reading reduces memory requirements.
+		stack = clone(shortarray, 0, False)
+		children = []  # list of lists
+		labels = []  # list of str
 		data = io.open(treebankfile, encoding=encoding)
 		for n, line in enumerate(islice(data, limit), 1):
 			if line.count('(') > maxnodes:
@@ -1227,9 +1221,10 @@ def readtreebank(treebankfile, Vocabulary vocab,
 						maxnodes * binfactor * sizeof(Node))
 				if scratch is NULL:
 					raise MemoryError('allocation error')
-			cnt = readnode(line, vocab, scratch)
+			cnt = readtree(line, vocab, scratch, stack, children, labels)
 			if cnt <= 0:
-				raise ValueError('error %d in line %d' % (cnt, n))
+				raise ValueError('error %d in line %d: %s\n%s' % (
+						cnt, n, TREEPARSEMSG[-cnt], line))
 			ctrees.addnodes(scratch, cnt, 0)
 		if not ctrees.len:
 			raise ValueError('%r appears to be empty' % treebankfile)
@@ -1239,4 +1234,4 @@ def readtreebank(treebankfile, Vocabulary vocab,
 
 __all__ = ['extractfragments', 'exactcounts', 'completebitsets',
 		'allfragments', 'repl', 'pygetsent', 'nonfrontier', 'getctrees',
-		'readtreebank', 'exactcountssubset']
+		'readtreebank', 'exactcountsslice']

@@ -1,6 +1,6 @@
-(S (WRONG (X (A 0) (B 1)) (C 2) (X (Z (D 3) (E 4)))))	a b c d e
-(S (WRONG2 (X (A 0) (B 1)) (C 2) (X (Z (D 3) (E 4)))))	a b c e f
-(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
-(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
-(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
-(S (RIGHT (X (A 0) (C 2)) (B 1) (X (D 3) (E 4))))	a b c d e
+(S (WRONG (X (A 0=a) (B 1=b)) (C 2=c) (X (Z (D 3=e) (E 4=e)))))
+(S (WRONG2 (X (A 0=a) (B 1=b)) (C 2=c) (X (Z (D 3=e) (E 4=f)))))
+(S (RIGHT (X (A 0=a) (C 2=c)) (B 1=b) (X (D 3=d) (E 4=e))))
+(S (RIGHT (X (A 0=a) (C 2=c)) (B 1=b) (X (D 3=d) (E 4=e))))
+(S (RIGHT (X (A 0=a) (C 2=c)) (B 1=b) (X (D 3=d) (E 4=e))))
+(S (RIGHT (X (A 0=a) (C 2=c)) (B 1=b) (X (D 3=d) (E 4=e))))

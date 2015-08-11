@@ -23,8 +23,8 @@ import sys
 from operator import attrgetter
 from itertools import islice
 from collections import defaultdict, Set, Iterable, Counter
-if sys.version[0] >= '3':
-	basestring = str  # pylint: disable=W0622,C0103
+if sys.version_info[0] > 2:
+	unicode = str  # pylint: disable=redefined-builtin
 from discodop import treebank
 from discodop.tree import Tree, ImmutableTree
 from discodop.heads import ishead
@@ -802,7 +802,7 @@ def addbitsets(tree):
 
 	The bitset attribute is a Python integer corresponding to the information
 	that leaves() would return for that node."""
-	if isinstance(tree, basestring):
+	if isinstance(tree, (str, unicode)):
 		result = ImmutableTree(tree)
 	elif isinstance(tree, ImmutableTree):
 		result = tree

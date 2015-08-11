@@ -51,16 +51,17 @@ any non-terminal, e.g.::
 discbracket
 ^^^^^^^^^^^
 A corpus format for discontinuous trees in bracket notation, where the
-leaves are indices pointing to words in a separately specified sentence.
+leaves are prefixed with indices indicating word order.
 
 For example::
 
-    (S (NP 1) (VP (VB 0) (JJ 2)) (? 3)) is John rich ?
+    (S (VP (VB 0=is) (JJ 2=rich)) (NP 1=John) (? 3=?))
+    (sentence: is John rich ?)
 
-Note that the tree and the sentence are separated by a tab, while the words
-in the sentence are separated by spaces. There is one tree and sentence
-per line. Compared to Negra's export format, this format lacks morphology,
-lemmas and functional edges. On the other hand, it is very close to the
+Note that the leaves are not in the same order as in the sentence. The leaves
+must be sorted by the indices to get the right order.
+There is one parse tree line. Compared to Negra's export format, this format lacks morphology,
+lemmas and functional edges. On the other hand, it is close to the
 internal representation employed here, so it can be read efficiently.
 
 This format is supported when input is read incrementally from
@@ -68,18 +69,20 @@ standard input with the ``treedraw`` and ``treetransforms`` commands.
 
 Tree fragments can be formed as with bracket trees, by leaving out terminals or whole subtrees::
 
-    (S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is John rich ?
-    (S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is   ?
+    (S (VP (VB 0=is) (JJ 2=)) (NP 1=) (? 3=?))
+    (VP (VB 0=is) (JJ 2=rich))
 
 The sentence on the right must still contain the right amount of spaces
 corresponding to the indices in the tree, but terminals can have a length of 0.
 
-There is an extra case that should be handled, which is how to represent a discontinuous frontier non-terminal. This requires
-expressing how the spans of the discontinuous node relate to the other spans in the tree::
+There is an extra case that should be handled, which is how to represent a
+discontinuous frontier non-terminal. This requires expressing how the spans of
+the discontinuous node relate to the other spans in the tree::
 
-    (S (VP 0 2) (NP 1) (? 3))	   ?
+    (S (VP 0= 2=) (NP 1=) (? 3=?))
 
-While the VP node does not dominate any terminals, if they were to be added, they would end up before and after the NP node.
+While the VP node does not dominate any terminals, if they were to be added,
+they would end up before and after the NP node.
 
 alpino
 ^^^^^^

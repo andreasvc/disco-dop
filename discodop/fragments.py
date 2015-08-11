@@ -15,13 +15,14 @@ import re
 import sys
 import codecs
 import logging
-if sys.version[0] == '2':
+if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
 import multiprocessing
 from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
 from discodop.tree import Tree
+from discodop.treebank import brackettree
 from discodop.treetransforms import binarize, introducepreterminals, unbinarize
 from discodop import _fragments
 from discodop.parser import workerfunc
@@ -35,8 +36,8 @@ FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'alt',
 		'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet', 'help')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=')
 PARAMS = {}
-FRONTIERRE = re.compile(r"\(([^ ()]+) \)")
-TERMRE = re.compile(r"\(([^ ()]+) ([^ ()]+)\)")
+FRONTIERRE = re.compile(r'\(([^ ()]+) \)')  # for altrepr()
+TERMRE = re.compile(r'\(([^ ()]+) ([^ ()]+)\)')  # for altrepr()
 APPLY = lambda x, _y: x()
 
 
@@ -143,7 +144,7 @@ def regular(filenames, numproc, limit, encoding):
 
 	if PARAMS['complete']:
 		trees1, trees2 = PARAMS['trees1'], PARAMS['trees2']
-		fragments = _fragments.completebitsets(
+		fragmentkeys, bitsets = _fragments.completebitsets(
 				trees1, PARAMS['vocab'],
 				max(trees1.maxnodes, trees2.maxnodes), PARAMS['disc'])
 	else:
@@ -162,7 +163,8 @@ def regular(filenames, numproc, limit, encoding):
 					fragments[frag] += x
 			else:
 				fragments.update(results)
-	fragmentkeys = list(fragments)
+		fragmentkeys = list(fragments)
+		bitsets = [fragments[a] for a in fragmentkeys]
 	if PARAMS['nofreq']:
 		counts = None
 	elif PARAMS['approx']:
@@ -170,7 +172,6 @@ def regular(filenames, numproc, limit, encoding):
 	else:
 		task = 'indices' if PARAMS['indices'] else 'counts'
 		logging.info('dividing work for exact %s', task)
-		bitsets = [fragments[a] for a in fragmentkeys]
 		countchunk = len(bitsets) // numproc + 1
 		work = list(range(0, len(bitsets), countchunk))
 		work = [(n, len(work), bitsets[a:a + countchunk])
@@ -213,10 +214,10 @@ def batch(outputdir, filenames, limit, encoding, debin):
 	initworker(filenames[0], None, limit, encoding)
 	trees1 = PARAMS['trees1']
 	if PARAMS['complete']:
-		fragments = _fragments.completebitsets(
+		fragmentkeys, bitsets = _fragments.completebitsets(
 				trees1, PARAMS['vocab'],
 				trees1.maxnodes, PARAMS['disc'])
-		fragmentkeys = list(fragments)
+		fragments = True
 	elif PARAMS['approx']:
 		fragments = defaultdict(int)
 	else:
@@ -227,15 +228,15 @@ def batch(outputdir, filenames, limit, encoding, debin):
 		trees2 = PARAMS['trees2']
 		if not PARAMS['complete']:
 			fragments = _fragments.extractfragments(trees1, 0, 0,
-					PARAMS['vocab'], trees2, discontinuous=PARAMS['disc'],
+					PARAMS['vocab'], trees2, disc=PARAMS['disc'],
 					debug=PARAMS['debug'], approx=PARAMS['approx'],
 					twoterms=PARAMS['twoterms'], adjacent=PARAMS['adjacent'])
 			fragmentkeys = list(fragments)
+			bitsets = [fragments[a] for a in fragmentkeys]
 		counts = None
 		if PARAMS['approx'] or not fragments:
 			counts = fragments.values()
 		elif not PARAMS['nofreq']:
-			bitsets = [fragments[a] for a in fragmentkeys]
 			logging.info('getting %s for %d fragments',
 					'indices of occurrence' if PARAMS['indices']
 					else 'exact counts', len(bitsets))
@@ -271,8 +272,8 @@ def read2ndtreebank(filename2, vocab, fmt='bracket',
 	trees2 = _fragments.readtreebank(filename2, vocab,
 			fmt, limit, encoding)
 	trees2.indextrees(vocab)
-	logging.info("%r: %d trees; %d nodes (max %d); "
-			"word tokens: %d\n%r",
+	logging.info('%r: %d trees; %d nodes (max %d); '
+			'word tokens: %d\n%r',
 			filename2, len(trees2), trees2.numnodes, trees2.maxnodes,
 			trees2.numwords, PARAMS['vocab'])
 	return dict(trees2=trees2, vocab=vocab)
@@ -287,7 +288,7 @@ def initworker(filename1, filename2, limit, encoding):
 			limit=limit, fmt=PARAMS['fmt'], encoding=encoding))
 	trees1 = PARAMS['trees1']
 	if PARAMS['debug']:
-		print("\nproductions:")
+		print('\nproductions:')
 		for a, b in sorted(PARAMS['vocab'].prods.items(), key=lambda x: x[1]):
 			print(b, a)
 		print('treebank 1:')
@@ -307,7 +308,7 @@ def initworker(filename1, filename2, limit, encoding):
 			raise ValueError('treebank2 empty.')
 		m += 'treebank2: %d trees; %d nodes (max %d); %d word tokens.\n' % (
 				trees2.len, trees2.numnodes, trees2.maxnodes, trees2.numwords)
-	logging.info("%s%r", m, PARAMS['vocab'])
+	logging.info('%s%r', m, PARAMS['vocab'])
 
 
 def initworkersimple(trees, sents, trees2=None, sents2=None):
@@ -326,10 +327,10 @@ def worker(interval):
 	result = {}
 	result = _fragments.extractfragments(trees1, offset, end,
 			PARAMS['vocab'], trees2, approx=PARAMS['approx'],
-			discontinuous=PARAMS['disc'], complement=PARAMS['complement'],
+			disc=PARAMS['disc'], complement=PARAMS['complement'],
 			debug=PARAMS['debug'], twoterms=PARAMS['twoterms'],
 			adjacent=PARAMS['adjacent'])
-	logging.debug("finished %d--%d", offset, end)
+	logging.debug('finished %d--%d', offset, end)
 	return result
 
 
@@ -341,14 +342,14 @@ def exactcountworker(args):
 	if PARAMS['complete']:
 		results = _fragments.exactcounts(trees1, PARAMS['trees2'], bitsets,
 				indices=PARAMS['indices'])
-		logging.debug("complete matches chunk %d of %d", n + 1, m)
+		logging.debug('complete matches chunk %d of %d', n + 1, m)
 		return results
 	results = _fragments.exactcounts(
 			trees1, trees1, bitsets, indices=PARAMS['indices'])
 	if PARAMS['indices']:
-		logging.debug("exact indices chunk %d of %d", n + 1, m)
+		logging.debug('exact indices chunk %d of %d', n + 1, m)
 	else:
-		logging.debug("exact counts chunk %d of %d", n + 1, m)
+		logging.debug('exact counts chunk %d of %d', n + 1, m)
 	return results
 
 
@@ -421,7 +422,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	if numproc == 1:
 		mymap = map
 	else:
-		logging.info("work division:\n%s", "\n".join("    %s: %r" % kv
+		logging.info('work division:\n%s', '\n'.join('    %s: %r' % kv
 				for kv in sorted(dict(numchunks=len(work),
 					numproc=numproc).items())))
 		# start worker processes
@@ -430,7 +431,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 				initargs=(trees, list(sents)))
 		mymap = pool.map
 	# collect recurring fragments
-	logging.info("extracting recurring fragments")
+	logging.info('extracting recurring fragments')
 	for a in mymap(worker, work):
 		fragments.update(a)
 	fragmentkeys = list(fragments)
@@ -439,7 +440,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	work = list(range(0, len(bitsets), countchunk))
 	work = [(n, len(work), bitsets[a:a + countchunk])
 			for n, a in enumerate(work)]
-	logging.info("getting exact counts for %d fragments", len(bitsets))
+	logging.info('getting exact counts for %d fragments', len(bitsets))
 	counts = []
 	for a in mymap(exactcountworker, work):
 		counts.extend(a)
@@ -460,18 +461,17 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 		pool.join()
 		del pool
 	if iterate:  # optionally collect fragments of fragments
-		if not disc:
-			raise NotImplementedError
-		logging.info("extracting fragments of recurring fragments")
+		logging.info('extracting fragments of recurring fragments')
 		PARAMS['complement'] = False  # needs to be turned off if it was on
 		newfrags = fragments
 		trees, sents = None, None
 		ids = count()
 		for _ in range(10):  # up to 10 iterations
+			newfrags = [brackettree(tree) for tree in newfrags]
 			newtrees = [binarize(
-					introducepreterminals(Tree(tree),
-					sent, ids=ids), childchar="}") for tree, sent in newfrags]
-			newsents = [["#%d" % next(ids) if word is None else word
+					introducepreterminals(tree, sent, ids=ids),
+					childchar='}') for tree, sent in newfrags]
+			newsents = [['#%d' % next(ids) if word is None else word
 					for word in sent] for _, sent in newfrags]
 			newfrags, newcounts = iteratefragments(
 					fragments, newtrees, newsents, trees, sents, numproc)
@@ -485,7 +485,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 			fragmentkeys.extend(newfrags)
 			counts.extend(newcounts)
 			fragments.update(zip(newfrags, newcounts))
-	logging.info("found %d fragments", len(fragmentkeys))
+	logging.info('found %d fragments', len(fragmentkeys))
 	return dict(zip(fragmentkeys, counts))
 
 
@@ -496,7 +496,7 @@ def allfragments(trees, sents, maxdepth, maxfrontier=999):
 	initworkersimple(trees, list(sents))
 	return _fragments.allfragments(PARAMS['trees1'],
 			PARAMS['vocab'], maxdepth, maxfrontier,
-			discontinuous=PARAMS['disc'], indices=PARAMS['indices'])
+			disc=PARAMS['disc'], indices=PARAMS['indices'])
 
 
 def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
@@ -516,7 +516,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	newfragments = {}
 	for a in mymap(worker, workload(numtrees, 1, numproc)):
 		newfragments.update(a)
-	logging.info("before: %d, after: %d, difference: %d",
+	logging.info('before: %d, after: %d, difference: %d',
 		len(fragments), len(set(fragments) | set(newfragments)),
 		len(set(newfragments) - set(fragments)))
 	# we have to get counts for these separately because they're not coming
@@ -529,7 +529,7 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 	work = list(range(0, len(bitsets), countchunk))
 	work = [(n, len(work), bitsets[a:a + countchunk])
 			for n, a in enumerate(work)]
-	logging.info("getting exact counts for %d fragments", len(bitsets))
+	logging.info('getting exact counts for %d fragments', len(bitsets))
 	counts = []
 	for a in mymap(exactcountworker, work):
 		counts.extend(a)
@@ -587,9 +587,7 @@ def printfragments(fragments, counts, out=None):
 		logging.info('number of fragments: %d', len(fragments))
 	if PARAMS['nofreq']:
 		for a in fragments:
-			out.write('%s\n' % (('%s\t%s' % (a[0],
-					' '.join('%s' % x if x else '' for x in a[1])))
-					if PARAMS['disc'] else a))
+			out.write(a + '\n')
 		return
 	# a frequency of 0 is normal when counting occurrences of given fragments
 	# in a second treebank
@@ -608,9 +606,7 @@ def printfragments(fragments, counts, out=None):
 	if PARAMS['indices']:
 		for a, theindices in zip(fragments, counts):
 			if len(theindices) > threshold:
-				out.write('%s\t%s\n' % (
-					('%s\t%s' % (a[0], ' '.join('%s' % x if x else ''
-						for x in a[1]))) if PARAMS['disc'] else a,
+				out.write('%s\t%s\n' % (a,
 					[n for n in theindices
 						if n - 1 in theindices or n + 1 in theindices]
 					if PARAMS['adjacent'] else
@@ -626,16 +622,12 @@ def printfragments(fragments, counts, out=None):
 				raise ValueError('invalid fragment--frequency=%d: %r' % (
 					freq, a))
 		for a, freq in zip(fragments, counts):
-			out.write('%s\t%d/%d\n' % (('%s\t%s' % (a[0],
-				' '.join('%s' % x if x else '' for x in a[1])))
-				if PARAMS['disc'] else a,
-				freq, sums[a[1:a.index(' ')]]))
+			out.write('%s\t%d/%d\n' % (
+				a, freq, sums[a[1:a.index(' ')]]))
 	else:
 		for a, freq in zip(fragments, counts):
 			if freq > threshold:
-				out.write('%s\t%d\n' % (('%s\t%s' % (a[0],
-					' '.join('%s' % x if x else '' for x in a[1])))
-					if PARAMS['disc'] else a, freq))
+				out.write('%s\t%d\n' % (a, freq))
 			elif zeroinvalid:
 				raise ValueError('invalid fragment--frequency=1: %r' % a)
 

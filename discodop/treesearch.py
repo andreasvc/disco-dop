@@ -17,9 +17,10 @@ import array
 import concurrent.futures
 import multiprocessing
 import subprocess
-from collections import Counter, OrderedDict, namedtuple
+from collections import Counter, namedtuple
+import collections
 from itertools import islice
-PY2 = sys.version[0] == '2'
+PY2 = sys.version_info[0] == 2
 try:
 	import cPickle as pickle
 except ImportError:
@@ -35,9 +36,11 @@ try:
 	ALPINOCORPUSLIB = True
 except ImportError:
 	ALPINOCORPUSLIB = False
+from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
 from discodop import treebank, treetransforms, _fragments
 from discodop.tree import Tree
+from discodop.treebank import unquote
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 from discodop.containers import Vocabulary
@@ -46,7 +49,9 @@ SHORTUSAGE = '''Search through treebanks with queries.
 Usage: %s [--engine=(tgrep2|xpath|frag|regex)] [-t|-s|-c] <query> <treebank>...
 ''' % sys.argv[0]
 CACHESIZE = 32767
-GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
+GETLEAVES = re.compile(r' (?:[0-9]+=)?([^ ()]+)(?=[ )])')
+LEAFINDICES = re.compile(r' ([0-9]+)=')
+LEAFINDICESWORDS = re.compile(r' ([0-9]+)=([^ ()]+)\)')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 MORPH_TAGS = re.compile(r'([/*\w]+)(?:\[[^ ]*\]\d?)?((?:-\w+)?(?:\*\d+)? )')
 FUNC_TAGS = re.compile(r'-\w+')
@@ -85,9 +90,10 @@ class CorpusSearcher(object):
 		:param macros: a filename with macros that can be used in queries.
 		:param numproc: the number of concurrent threads / processes to use;
 			pass 1 to use a single core."""
-		if not isinstance(files, (list, tuple, set, dict)) or (
-				not all(isinstance(a, str) for a in files)):
-			raise ValueError('"files" argument must be a sequence of filenames.')
+		if not isinstance(files, (list, tuple, set, dict)):
+			raise ValueError('"files" argument must be a sequence.')
+		elif not all(os.path.isfile(a) for a in files):
+			raise ValueError('filenames in "files" argument must exist.')
 		self.files = OrderedDict.fromkeys(files)
 		self.macros = macros
 		self.numproc = numproc
@@ -132,13 +138,14 @@ class CorpusSearcher(object):
 			by default, all sentences are queried. 1-based, inclusive.
 		:param maxresults: the maximum number of matches to return.
 		:param brackets: if True, return trees as they appear in the treebank,
-			match is a string with the matching subtree.
+			match1 and match2 are strings with the matching subtree.
 			If False (default), sentences are returned as a sequence of tokens.
 		:returns: list of tuples of the form
-			``(corpus, sentno, sent, match)``
+			``(corpus, sentno, sent, match1, match2)``
 			sent is a single string with space-separated tokens;
-			match is an iterable of integer indices of tokens matched
-			by the query."""
+			match1 and match2 are iterables of integer indices of tokens
+			matched by the query. If the distinction is applicable, match2
+			contains the complete subtree, of which match1 is a subset."""
 
 	def batchcounts(self, queries, subset=None, start=None, end=None):
 		"""Like counts, but executes a sequence of queries.
@@ -220,8 +227,8 @@ class TgrepSearcher(CorpusSearcher):
 							in self._query(query, x, fmt, start, end, None)],
 							filename)] = filename
 				elif breakdown:
-					jobs[self._submit(lambda x: Counter(match for _, match
-							in self._query(query, x, r'%s:::%m\n', start, end,
+					jobs[self._submit(lambda x: Counter(match for _, match in
+							self._query(query, x, r'%s\n%m:::\n', start, end,
 							None)), filename)] = filename
 				else:
 					jobs[self._submit(lambda x: sum(1 for _
@@ -239,7 +246,7 @@ class TgrepSearcher(CorpusSearcher):
 		# %s the sentence number
 		# %w complete tree in bracket notation
 		# %m all marked nodes, or the head node if none are marked
-		fmt = r'%s:::%w:::%m\n'
+		fmt = r'%s\n%w\n%m:::\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -258,25 +265,28 @@ class TgrepSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for sentno, line in future.result():
-				treestr, match = line.split(':::')
+				lines = line.splitlines()
+				treestr, matches = lines[0], lines[1:]
 				treestr = filterlabels(treestr, nofunc, nomorph)
 				treestr = treestr.replace(" )", " -NONE-)")
-				if match.startswith('('):
-					treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
-							match.split(None, 1)), 1)
-				else:
-					match = ' %s)' % match
-					treestr = treestr.replace(match, '_HIGH%s' % match)
-				tree, sent = treebank.termindices(treestr)
-				tree = treetransforms.mergediscnodes(Tree(tree))
-				sent = [word.replace('-LRB-', '(').replace('-RRB-', ')')
-						for word in sent]
+				for match in matches:
+					if match.startswith('('):
+						treestr = treestr.replace(match, '%s_HIGH %s' % tuple(
+								match.split(None, 1)), 1)
+					else:
+						match = ' %s)' % match
+						treestr = treestr.replace(match, '_HIGH%s' % match)
+
+				tree, sent = treebank.brackettree(treestr)
+				tree = treetransforms.mergediscnodes(tree)
 				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
-				if high:
-					high = high.pop()
-					high.label = high.label.rsplit("_", 1)[0]
-					high = list(high.subtrees()) + high.leaves()
-				x.append((filename, sentno, tree, sent, high))
+				tmp = {}
+				for marked in high:
+					marked.label = marked.label.rsplit("_", 1)[0]
+					for node in marked.subtrees():
+						tmp[id(node)] = node
+					tmp.update((id(a), a) for a in marked.leaves())
+				x.append((filename, sentno, tree, sent, list(tmp.values())))
 			self.cache['trees', query, filename, start, end,
 					nofunc, nomorph] = x, maxresults
 			result.extend(x)
@@ -288,8 +298,7 @@ class TgrepSearcher(CorpusSearcher):
 		# %s the sentence number
 		# %w complete tree in bracket notation
 		# %m all marked nodes, or the head node if none are marked
-		fmt = r'%s:::%w:::%m\n'
-		# FIXME support multiple marked nodes: fmt = r'%s:::%w:::%m\n\n'
+		fmt = r'%s\n%w\n%m:::\n'
 		result = []
 		jobs = {}
 		for filename in subset:
@@ -308,18 +317,25 @@ class TgrepSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for sentno, line in future.result():
-				sent, match = line.split(':::')
-				if not brackets:
-					idx = sent.index(match if match.startswith('(')
-							else ' %s)' % match)
-					prelen = len(GETLEAVES.findall(sent[:idx]))
-					sent = ' '.join(
-							word.replace('-LRB-', '(').replace('-RRB-', ')')
+				lines = line.splitlines()
+				sent, matches = lines[0], lines[1:]
+				if brackets:
+					match1 = matches[0]
+					match2 = ''
+				else:
+					tmp = set()
+					for match in matches:
+						idx = sent.index(match if match.startswith('(')
+								else ' %s)' % match)
+						prelen = len(GETLEAVES.findall(sent[:idx]))
+						match = GETLEAVES.findall(
+								match) if '(' in match else [match]
+						tmp.update(range(prelen, prelen + len(match)))
+					sent = ' '.join(unquote(word)
 							for word in GETLEAVES.findall(sent))
-					match = GETLEAVES.findall(
-							match) if '(' in match else [match]
-					match = range(prelen, prelen + len(match))
-				x.append((filename, sentno, sent, match))
+					match1 = tmp
+					match2 = set()
+				x.append((filename, sentno, sent, match1, match2))
 			self.cache['sents', query, filename,
 					start, end, brackets] = x, maxresults
 			result.extend(x)
@@ -349,11 +365,9 @@ class TgrepSearcher(CorpusSearcher):
 		result = out.decode('utf8').splitlines()
 		if sents:
 			return result
-		return [(treetransforms.mergediscnodes(Tree(tree)),
-				[word.replace('-LRB-', '(').replace('-RRB-', ')')
-					for word in sent])
+		return [(treetransforms.mergediscnodes(tree), sent)
 				for tree, sent
-				in (treebank.termindices(filterlabels(
+				in (treebank.brackettree(filterlabels(
 					treestr, nofunc, nomorph)) for treestr in result)]
 
 	@workerfunc
@@ -370,14 +384,12 @@ class TgrepSearcher(CorpusSearcher):
 		proc = subprocess.Popen(
 				args=cmd, shell=False, bufsize=0,
 				stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		linere = re.compile(r'([0-9]+):::([^\n]*)\n')
+		linere = re.compile(r'([0-9]+)\n(.*?):::\n', flags=re.DOTALL)
 		if start or end or maxresults:
 			start = start or 1
 			results = []
-			for n, line in enumerate(iter(proc.stdout.readline, b'')):
-				match = linere.match(line.decode('utf8'))
-				if match is None:
-					raise ValueError(line.decode('utf8'))
+			for n, match in enumerate(linere.finditer(
+					proc.stdout.read().decode('utf8'))):
 				m, a = int(match.group(1)), match.group(2)
 				if m < start:
 					continue
@@ -517,7 +529,7 @@ class DactSearcher(CorpusSearcher):
 					# extract starting index of highlighted words
 					match = {int(a) for a in re.findall(
 							'<node[^>]*begin="([0-9]+)"[^>]*/>', match)}
-				x.append((filename, sentno, treestr, match))
+				x.append((filename, sentno, treestr, match, set()))
 			self.cache['sents', query, filename,
 					start, end, brackets] = x, maxresults
 			result.extend(x)
@@ -563,7 +575,7 @@ class FragmentSearcher(CorpusSearcher):
 
 	Example queries::
 		(S (NP (DT The) (NN )) (VP ))
-		(NP (DT 0) (NN 1))\tThe queen
+		(NP (DT 0=The) (NN 1=queen))
 
 	:param inmemory: if True, keep all corpora in memory; otherwise, use
 		pickle to load them from disk with each query.
@@ -574,12 +586,17 @@ class FragmentSearcher(CorpusSearcher):
 		super(FragmentSearcher, self).__init__(files, macros, numproc)
 		path = os.path.dirname(next(iter(files)))
 		newvocab = True
+		self.disc = False
 		vocabpath = os.path.join(path, 'treesearchvocab.pkl')
 		if os.path.exists(vocabpath):
 			mtime = os.stat(vocabpath).st_mtime
 			if all(mtime > os.stat(a).st_mtime for a in files):
-				self.vocab = pickle.load(open(vocabpath, 'rb'))
-				newvocab = False
+				try:
+					self.vocab = pickle.load(open(vocabpath, 'rb'))
+				except ValueError:  # e.g., unsupported pickle protocol
+					pass
+				else:
+					newvocab = False
 		if newvocab:
 			self.vocab = Vocabulary()
 		for filename in self.files:
@@ -590,6 +607,7 @@ class FragmentSearcher(CorpusSearcher):
 				ext = {'export': 'export', 'mrg': 'bracket',
 						'dbr': 'discbracket'}
 				fmt = ext[filename.split('.')[-1]]
+				self.disc = fmt != 'bracket'
 				corpus = _fragments.readtreebank(
 						filename, self.vocab, fmt=fmt)
 				corpus.indextrees(self.vocab)
@@ -617,6 +635,12 @@ class FragmentSearcher(CorpusSearcher):
 		self.pool = concurrent.futures.ProcessPoolExecutor(
 				numproc or cpu_count())
 
+	def __del__(self):
+		global FRAG_FILES, FRAG_MACROS, VOCAB
+		VOCAB = None
+		FRAG_FILES = None
+		FRAG_MACROS = None
+
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
 			breakdown=False):
 		if breakdown:
@@ -636,8 +660,8 @@ class FragmentSearcher(CorpusSearcher):
 					result[filename] = sum(tmp.values())
 			except KeyError:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, None, indices=indices, trees=False)
-						] = filename
+						start, end, None, indices=indices, trees=False,
+						disc=self.disc)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			self.cache['counts', query, filename, start, end, indices,
@@ -661,8 +685,8 @@ class FragmentSearcher(CorpusSearcher):
 						'counts', query, filename, start, end, False]
 			except KeyError:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, None, indices=False, trees=False)
-						] = filename
+						start, end, None, indices=False, trees=False,
+						disc=self.disc)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			result[filename] = OrderedDict(future.result())
@@ -681,21 +705,30 @@ class FragmentSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, maxresults, indices=True, trees=True)
-						] = filename
+						start, end, maxresults, indices=True, trees=True,
+						disc=self.disc)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			x = []
-			for frag, matches in future.result():
-				for sentno, (treestr, sent) in matches.items():
-					tree = Tree(filterlabels(treestr, nofunc, nomorph))
-					sent = [word.replace('-LRB-', '(').replace('-RRB-', ')')
-							for word in sent]
-					# FIXME nodes of matching subtree not returned
-					high = [sent.index(a) for a in frag[1]
-							if a is not None]
+			for _frag, matches in future.result():
+				for sentno, treestr, match in matches:
+					treestr = filterlabels(treestr, nofunc, nomorph)
+					# NB: this highlights the whole subtree, of which
+					# frag may be a subgraph.
+					treestr = treestr.replace(
+							match,
+							'%s_HIGH %s' % tuple(match.split(None, 1)),
+							1)
+					tree, sent = treebank.brackettree(treestr)
+					tree = treetransforms.mergediscnodes(tree)
+					high = list(tree.subtrees(
+							lambda n: n.label.endswith("_HIGH")))
+					if high:
+						high = high.pop()
+						high.label = high.label.rsplit("_", 1)[0]
+						high = list(high.subtrees()) + high.leaves()
 					x.append((filename, sentno, tree, sent, high))
 			self.cache['trees', query, filename, start, end,
 					nofunc, nomorph] = x, maxresults
@@ -715,26 +748,31 @@ class FragmentSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(_frag_query, query, filename,
-						start, end, maxresults, indices=True, trees=True)
-						] = filename
+						start, end, maxresults, indices=True, trees=True,
+						disc=self.disc)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			x = []
 			for frag, matches in future.result():
-				for sentno, (treestr, xsent) in matches.items():
-					xsent = [word.replace('-LRB-', '(').replace('-RRB-', ')')
-							for word in xsent]
-					sent = ' '.join(xsent)
+				for sentno, treestr, match in matches:
 					if brackets:
-						sent = treestr + '\t' + sent
-						match = frag[0] + '\t' + ' '.join(
-								a or '' for a in frag[1])
+						sent = treestr
+						if not self.disc:
+							sent = LEAFINDICES.sub(' ', sent)
+							match = LEAFINDICES.sub(' ', match)
+						match1, match2 = match, ''
 					else:
-						match = {xsent.index(a) for a in frag[1]
-								if a is not None}
-					x.append((filename, sentno, sent, match))
+						_, xsent = treebank.brackettree(treestr)
+						sent = ' '.join(xsent)
+						fragwords = set(GETLEAVES.findall(frag))
+						match1 = {int(a) for a, b
+								in LEAFINDICESWORDS.findall(match)
+								if b in fragwords}
+						match2 = {int(a) for a, _
+								in LEAFINDICESWORDS.findall(match)}
+					x.append((filename, sentno, sent, match1, match2))
 			self.cache['sents', query, filename,
 					start, end, brackets] = x, maxresults
 			result.extend(x)
@@ -748,15 +786,16 @@ class FragmentSearcher(CorpusSearcher):
 			corpus = pickle.loads(gzip.open(
 					'%s.pkl.gz' % filename, 'rb').read())
 		if sents:
-			return [' '.join(word.replace('-LRB-', '(').replace('-RRB-', ')')
+			return [' '.join(unquote(word)
 					for word in corpus.extractsent(n - 1, self.vocab))
 					for n in indices]
-		return [(treetransforms.mergediscnodes(Tree(
-					filterlabels(treestr, nofunc, nomorph))),
-				[word.replace('-LRB-', '(').replace('-RRB-', ')')
-					for word in sent])
-				for treestr, sent
-				in (corpus.extract(n - 1, self.vocab) for n in indices)]
+		result = []
+		for n in indices:
+			treestr = corpus.extract(n - 1, self.vocab)
+			tree, sent = treebank.brackettree(
+					filterlabels(treestr, nofunc, nomorph))
+			result.append((treetransforms.mergediscnodes(tree), sent))
+		return result
 
 	def getinfo(self, filename):
 		"""Return named tuple with members len, numnodes, and numwords."""
@@ -771,7 +810,7 @@ class FragmentSearcher(CorpusSearcher):
 
 @workerfunc
 def _frag_query(query, filename, start=None, end=None, maxresults=None,
-		indices=True, trees=False):
+		indices=True, trees=False, disc=False):
 	"""Run a fragment query on a single file."""
 	if FRAG_MACROS is not None:
 		query = query.format(**FRAG_MACROS)
@@ -782,25 +821,29 @@ def _frag_query(query, filename, start=None, end=None, maxresults=None,
 				'%s.pkl.gz' % filename, 'rb').read())
 	if start is not None:
 		start -= 1
-	# NB: queries currently need to have at least 2 levels of parens
-	trees, sents = zip(*[(treetransforms.binarize(a, dot=True), b)
-			for a, b, _ in treebank.incrementaltreereader(
-				io.StringIO(query))])
+	qtrees = treebank.incrementaltreereader(
+			io.StringIO(query), strict=True, robust=False)
+	if not qtrees:
+		raise ValueError('no valid fragments found.')
+	qtrees, qsents = zip(*[(treetransforms.binarize(a, dot=True), b)
+			for a, b, _ in qtrees])
 	queries = _fragments.getctrees(
-			list(trees), list(sents), vocab=VOCAB)
+			list(qtrees), list(qsents), vocab=VOCAB)
 	maxnodes = max(queries['trees1'].maxnodes, corpus.maxnodes)
-	fragments = _fragments.completebitsets(
-			queries['trees1'], VOCAB, maxnodes, discontinuous=True)
-	fragmentkeys = list(fragments)
-	bitsets = [fragments[a] for a in fragmentkeys]
-	results = _fragments.exactcountssubset(queries['trees1'], corpus,
-			bitsets, indices=1 if indices else 0,
+	fragmentkeys, bitsets = _fragments.completebitsets(
+			queries['trees1'], VOCAB, maxnodes,
+			disc=disc)
+	results = _fragments.exactcountsslice(queries['trees1'], corpus,
+			bitsets, indices=indices + trees if indices else 0,
 			maxnodes=maxnodes, start=start, end=end,
 			maxresults=maxresults)
 	results = zip(fragmentkeys, results)
 	if indices and trees:
-		results = [(a, {n + 1: corpus.extract(n, VOCAB) for n in b})
-				for a, b in results]
+		results = [(a, [(n + 1,
+					corpus.extract(n, VOCAB, disc=True),
+					corpus.extract(n, VOCAB, disc=True, node=m))
+				for n, m in zip(b, c)])
+					for a, (b, c) in results]
 	elif indices:
 		results = [(a, [n + 1 for n in b]) for a, b in results]
 	return list(results)
@@ -829,8 +872,11 @@ class RegexSearcher(CorpusSearcher):
 		if os.path.exists(lineidxpath):
 			mtime = os.stat(lineidxpath).st_mtime
 			if all(mtime > os.stat(a).st_mtime for a in files):
-				(self.lineindex, self.wordcount) = pickle.load(
-						open(lineidxpath, 'rb'))
+				try:
+					(self.lineindex, self.wordcount) = pickle.load(
+							open(lineidxpath, 'rb'))
+				except ValueError:  # e.g., unsupported pickle protocol
+					pass
 		newindex = False
 		for name in set(files) - set(self.lineindex):
 			self.lineindex[name], self.wordcount[name] = _indexfile(name)
@@ -844,6 +890,11 @@ class RegexSearcher(CorpusSearcher):
 		REGEX_MACROS = self.macros
 		self.pool = concurrent.futures.ProcessPoolExecutor(
 				numproc or cpu_count())
+
+	def __del__(self):
+		global REGEX_LINEINDEX, REGEX_MACROS
+		REGEX_LINEINDEX = None
+		REGEX_MACROS = None
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
 			breakdown=False):
@@ -895,7 +946,7 @@ class RegexSearcher(CorpusSearcher):
 					prelen -= 1
 				matchlen = len(sent[start:end].split())
 				highlight = range(prelen, prelen + matchlen)
-				x.append((filename, sentno, sent.rstrip(), highlight))
+				x.append((filename, sentno, sent.rstrip(), highlight, []))
 			self.cache['sents', query, filename, start, end, True, True
 					] = x, maxresults
 			result.extend(x)
@@ -981,7 +1032,7 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 
 
 def _indexfile(filename):
-	"""Get bitmap with locations of non-empty lines."""
+	"""Create bitmap with locations of non-empty lines."""
 	result = array.array(b'I' if PY2 else 'I')
 	offset = 0
 	wordcount = 0
@@ -1005,7 +1056,7 @@ class NoFuture(object):
 		return self._result
 
 
-class FIFOOrederedDict(OrderedDict):
+class FIFOOrederedDict(collections.OrderedDict):
 	"""FIFO cache with maximum number of elements based on OrderedDict."""
 	def __init__(self, limit):
 		super(FIFOOrederedDict, self).__init__()
@@ -1124,23 +1175,25 @@ def main():
 			print(out)
 	else:  # sentences or brackets
 		brackets = '--brackets' in opts or '-b' in opts
-		for filename, sentno, sent, high in searcher.sents(
+		for filename, sentno, sent, high1, high2 in searcher.sents(
 				query, start=start, end=end, maxresults=maxresults,
 				brackets=brackets):
 			if brackets:
 				if '--only-matching' in opts or '-o' in opts:
-					out = high
+					out = high1
 				else:
-					out = sent.replace(high, "\x1b[%d;1m%s\x1b[0m" % (
-							ANSICOLOR['red'], high))
+					out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
+							ANSICOLOR['red'], high1))
 			else:
 				if '--only-matching' in opts or '-o' in opts:
-					out = ' '.join(word if n in high else ''
+					out = ' '.join(word if n in (high2 or high1) else ''
 							for n, word in enumerate(sent.split())).strip()
 				else:
 					out = ' '.join(
 							'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['red'], word)
-							if x in high else word
+							if x in high1 else
+							('\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['blue'], word)
+							if x in high2 else word)
 							for x, word in enumerate(sent.split()))
 			if len(corpora) > 1:
 				print('\x1b[%dm%s\x1b[0m:' % (
