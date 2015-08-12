@@ -720,7 +720,7 @@ def browsesents():
 					for n, query in enumerate(queries, 1)))
 			for n, (_, query) in enumerate(queries.values()):
 				matches = CORPORA[request.args['engine']].sents(
-						query, subset=(filename, ), start=start, end=maxsent,
+						query, subset=(filename, ), start=start, end=maxsent - 1,
 						maxresults=2 * chunk)
 				for _, m, sent, high, _ in matches:
 					sent = sent.split(' ')
