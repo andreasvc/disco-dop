@@ -19,6 +19,7 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
 
 --abbr            abbreviate labels longer than 5 characters.
 --plain           disable ANSI colors.
+--frontier        only show terminal and non-terminal leaves.
 -n, --numtrees=x  only display the first x trees from the input.
 
 If no treebank is given, input is read from standard input; format is detected.

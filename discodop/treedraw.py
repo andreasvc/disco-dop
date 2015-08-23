@@ -847,10 +847,19 @@ def test():
 			print(drawtree.text(unicodelines=False, ansi=False), sep='\n')
 
 
+def frontier(tree, sent, nodecolor='blue', leafcolor='red'):
+	"""Return a representation of the frontier of a tree with ANSI colors."""
+	return ' '.join(
+			'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR[nodecolor], pos)
+			if sent[idx] is None else
+			'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR[leafcolor], sent[idx])
+			for idx, pos in sorted(tree.pos()))
+
+
 def main():
 	"""Text-based tree viewer."""
 	from getopt import gnu_getopt, GetoptError
-	flags = ('test', 'help', 'abbr', 'plain')
+	flags = ('test', 'help', 'abbr', 'plain', 'frontier')
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=')
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'hn:', flags + options)
@@ -894,15 +903,25 @@ def main():
 				for a in args)
 		trees = islice(incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),
-				functions=opts.get('--functions')),
+				functions=opts.get('--functions'),
+				othertext=True),
 				0, limit)
 		try:
-			for n, (tree, sent, rest) in enumerate(trees, 1):
-				print('%d. (len=%d): %s' % (n, len(sent), rest))
-				print(DrawTree(tree, sent, abbr='--abbr' in opts).text(
-						unicodelines=True, ansi='--plain' not in opts,
-						funcsep='-' if opts.get('--functions')
-							in ('add', 'between') else None))
+			n = 1
+			for tree, sent, rest in trees:
+				if tree is None:
+					print(rest)
+					continue
+				print('%d. (len=%d):' % (n, len(sent)), end=' ')
+				if '--frontier' in opts:
+					print('%s %s' % (frontier(tree, sent), rest))
+				else:
+					print(rest)
+					print(DrawTree(tree, sent, abbr='--abbr' in opts).text(
+							unicodelines=True, ansi='--plain' not in opts,
+							funcsep='-' if opts.get('--functions')
+								in ('add', 'between') else None))
+				n += 1
 		except (IOError, KeyboardInterrupt):
 			pass
 

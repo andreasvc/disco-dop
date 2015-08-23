@@ -825,14 +825,17 @@ NEWLB = re.compile(r'(?:.*[\n\r])?\s*')
 
 
 def incrementaltreereader(treeinput, morphology=None, functions=None,
-		strict=False, robust=True):
+		strict=False, robust=True, othertext=False):
 	"""Incremental corpus reader.
 
 	:param treeinput: an iterator giving one line at a time.
 		Supports brackets, discbrackets, and export format. The format is
 		autodetected.
+	:param strict: if True, raise ValueError on malformed data.
 	:param robust: if True, only return trees with at least 2 brackets;
 		e.g., (DT the) is not recognized as a tree.
+	:param othertext: if True, yield non-tree data as ``(None, None, line)``.
+		By default, text in lines without trees is ignored.
 	:yields: tuples ``(tree, sent, comment)`` with a Tree object, a separate
 		lists of terminals, and a string with any other data following the
 		tree."""
@@ -854,10 +857,17 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 					break  # there was no tree, or a complete tree was read
 				line = next(treeinput)
 			if res is not None:
-				for tree in res:
-					yield tree
+				for tree, sent, rest in res:
+					x = rest.find('\n')
+					if othertext and x != -1:
+						yield tree, sent, rest[:x]
+						yield None, None, rest[x:]
+					else:
+						yield tree, sent, rest
 				break
 		if res is None:  # none of the readers accepted this line
+			if othertext:
+				yield None, None, line.rstrip()
 			line = next(treeinput)
 
 
@@ -870,7 +880,7 @@ def segmentbrackets(strict=False, robust=True):
 		tuples (tree, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0.
-	:param strict: if True, raise error for improperly nested brackets.
+	:param strict: if True, raise ValueError for improperly nested brackets.
 	:param robust: if True, only return trees with at least 2 brackets;
 		e.g., (DT the) is not recognized as a tree.
 	"""
@@ -883,7 +893,7 @@ def segmentbrackets(strict=False, robust=True):
 					err, dict(result=result, rest=rest, parens=parens,
 						depth=depth, prev=prev)))
 		else:
-			results.append((tree, sent, rest.strip()))
+			results.append((tree, sent, rest.rstrip()))
 
 	lb, rb = '()'
 	parens = 0  # number of open parens
