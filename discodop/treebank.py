@@ -123,9 +123,11 @@ class CorpusReader(object):
 
 	def itertrees(self, start=None, end=None):
 		"""
-		:returns: an iterator returning tuples ``(key, (tree, sent, comment))``
-			of sentences in corpus. Useful when the dictionary of all trees in
-			corpus would not fit in memory."""
+		:returns: an iterator returning tuples ``(key, item)``
+			of sentences in corpus, where ``item`` is an :py:class:Item
+			instance with ``tree``, ``sent``, and ``comment`` attributes.
+			Useful when the dictionary of all trees in corpus would not fit in
+			memory."""
 		for n, a in islice(self._read_blocks(), start, end):
 			yield n, self._parsetree(a)
 
@@ -874,12 +876,13 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 def segmentbrackets(strict=False, robust=True):
 	"""Co-routine that accepts one line at a time.
 
-	Yields tuples (result, status) where ...
+	Yields tuples ``(result, status)`` where ...
 
 	- result is None or one or more S-expressions as a list of
-		tuples (tree, rest), where rest is the string outside of brackets
+		tuples (tree, sent, rest), where rest is the string outside of brackets
 		between this S-expression and the next.
 	- status is 1 if the line was consumed, else 0.
+
 	:param strict: if True, raise ValueError for improperly nested brackets.
 	:param robust: if True, only return trees with at least 2 brackets;
 		e.g., (DT the) is not recognized as a tree.

@@ -416,7 +416,7 @@ cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
 	:returns: depending on ``indices``:
 		:0: an array of counts, corresponding to ``bitsets``.
 		:1: a list of arrays, each array being a sequence of indices
-			for the corresponding bitset.
+		for the corresponding bitset.
 		:2: a list of pairs of arrays, tree indices paired with node numbers.
 	"""
 	cdef:

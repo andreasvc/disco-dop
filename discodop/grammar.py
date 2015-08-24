@@ -680,7 +680,7 @@ def defaultparse(wordstags, rightbranching=False):
 
 def printrule(r, yf, w=None):
 	""":returns: a string representation of a rule."""
-	yfstr = ','.join(''.join(map(str, a)) for a in yf)
+	yfstr = ','.join(''.join('%s' % b for b in a) for a in yf)
 	result = '%s\t%s %s' % (
 			yfstr, r[0], ' '.join(x for x in r[1:]))
 	if w is None:
