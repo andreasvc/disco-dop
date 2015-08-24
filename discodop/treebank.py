@@ -860,7 +860,7 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 				line = next(treeinput)
 			if res is not None:
 				for tree, sent, rest in res:
-					x = rest.find('\n')
+					x = -1 if rest is None else rest.find('\n')
 					if othertext and x != -1:
 						yield tree, sent, rest[:x]
 						yield None, None, rest[x:]
