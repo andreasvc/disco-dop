@@ -125,7 +125,8 @@ cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 	:param adjacent: only extract fragments from sentences with adjacent
 		indices.
 	:returns: a dictionary; keys are fragments as strings; values are
-		either counts (if approx=True), or bitsets.
+		either counts (if approx=True), or bitsets describing fragments of
+		``trees1``.
 	"""
 	cdef:
 		int n, m, start = 0, end2
@@ -330,19 +331,22 @@ cpdef exactcounts(Ctrees trees1, Ctrees trees2, list bitsets,
 	:param trees2: the trees to search in (haystack); may be equal
 		to ``trees2``.
 	:param indices: whether to collect indices or counts of fragments.
+
 		:0: return a single count per fragment.
 		:1: collect the indices (sentence numbers) in which fragments occur.
 		:2: collect both sentence numbers, and node numbers of fragments.
 
-	:param maxnodes: when searching in multiple treebanks, supply the
-		largest number of nodes in a single tree to fix the bitset size;
-		can be left out when searching in 1 or 2 treebanks.
+	:param maxnodes: the maximum number of nodes in a single tree to fix the
+		bitset size; use the same value as the function that generated these
+		bitsets. For ``extractfragments``, it is the maximum value across both
+		treebanks, which is also the default here.
 	:returns: depending on ``indices``:
+
 		:0: an array of counts, corresponding to ``bitsets``.
 		:1: a list of arrays, each array being a sorted sequence of indices
-		for the corresponding bitset; multiple occurrences of a fragment
-		in the same tree are reflected as multiple occurrences of the same
-		index.
+			for the corresponding bitset; multiple occurrences of a fragment in
+			the same tree are reflected as multiple occurrences of the same
+			index.
 		:2: a list of pairs of arrays, tree indices paired with node numbers.
 	"""
 	cdef:
@@ -414,9 +418,10 @@ cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
 		(defaults to all trees).
 	:param maxresults: stop searching after this number of matchs.
 	:returns: depending on ``indices``:
+
 		:0: an array of counts, corresponding to ``bitsets``.
 		:1: a list of arrays, each array being a sequence of indices
-		for the corresponding bitset.
+			for the corresponding bitset.
 		:2: a list of pairs of arrays, tree indices paired with node numbers.
 	"""
 	cdef:
@@ -592,9 +597,7 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 
 	:returns: a pair of lists with trees as strings and their bitsets,
 		respectively.
-
-	Important: if multiple treebanks are used, maxnodes should equal
-	``max(trees1.maxnodes, trees2.maxnodes)``"""
+	"""
 	cdef:
 		list result = [], bitsets = []
 		list sent

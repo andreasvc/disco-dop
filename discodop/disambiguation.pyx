@@ -997,8 +997,7 @@ def mcrerank(parsetrees, sent, k, trees, vocab):
 	cdef list results = []
 	for derivstr, prob, _ in nlargest(k, parsetrees, key=itemgetter(1)):
 		tmp = _fragments.getctrees(
-				[addbitsets(derivstr)], [sent] * len(parsetrees),
-				vocab=vocab)
+				[addbitsets(derivstr)], [sent], vocab=vocab)
 		frags = _fragments.extractfragments(
 				tmp['trees1'], 0, 0, vocab, trees,
 				disc=True, approx=False)

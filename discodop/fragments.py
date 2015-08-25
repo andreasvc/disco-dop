@@ -213,10 +213,11 @@ def batch(outputdir, filenames, limit, encoding, debin):
 		fragments used as queries on the other treebanks specified."""
 	initworker(filenames[0], None, limit, encoding)
 	trees1 = PARAMS['trees1']
+	maxnodes = trees1.maxnodes
 	if PARAMS['complete']:
 		fragmentkeys, bitsets = _fragments.completebitsets(
 				trees1, PARAMS['vocab'],
-				trees1.maxnodes, PARAMS['disc'])
+				maxnodes, PARAMS['disc'])
 		fragments = True
 	elif PARAMS['approx']:
 		fragments = defaultdict(int)
@@ -233,6 +234,7 @@ def batch(outputdir, filenames, limit, encoding, debin):
 					twoterms=PARAMS['twoterms'], adjacent=PARAMS['adjacent'])
 			fragmentkeys = list(fragments)
 			bitsets = [fragments[a] for a in fragmentkeys]
+			maxnodes = max(trees1.maxnodes, trees2.maxnodes)
 		counts = None
 		if PARAMS['approx'] or not fragments:
 			counts = fragments.values()
@@ -242,7 +244,7 @@ def batch(outputdir, filenames, limit, encoding, debin):
 					else 'exact counts', len(bitsets))
 			counts = _fragments.exactcounts(trees1, trees2, bitsets,
 					indices=PARAMS['indices'],
-					maxnodes=max(trees1.maxnodes, trees2.maxnodes))
+					maxnodes=maxnodes)
 		outputfilename = '%s/%s_%s' % (outputdir,
 				os.path.basename(filenames[0]), os.path.basename(filename))
 		out = io.open(outputfilename, 'w', encoding=encoding)

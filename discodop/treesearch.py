@@ -829,7 +829,7 @@ def _frag_query(query, filename, start=None, end=None, maxresults=None,
 			for a, b, _ in qtrees])
 	queries = _fragments.getctrees(
 			list(qtrees), list(qsents), vocab=VOCAB)
-	maxnodes = max(queries['trees1'].maxnodes, corpus.maxnodes)
+	maxnodes = queries['trees1'].maxnodes
 	fragmentkeys, bitsets = _fragments.completebitsets(
 			queries['trees1'], VOCAB, maxnodes,
 			disc=disc)
