@@ -17,7 +17,8 @@ from operator import itemgetter
 from itertools import chain, islice
 from cyordereddict import OrderedDict
 from discodop.tree import Tree
-from discodop.treebank import READERS, incrementaltreereader, brackettree
+from discodop.treebank import READERS, incrementaltreereader, brackettree, \
+		openread
 from discodop.treetransforms import disc
 if sys.version_info[0] > 2:
 	unicode = str  # pylint: disable=redefined-builtin
@@ -899,7 +900,7 @@ def main():
 		if not args:
 			args = [sys.stdin.fileno()]
 		stdin = chain.from_iterable(
-				io.open(a, encoding=encoding)
+				openread(a, encoding=encoding)
 				for a in args)
 		trees = islice(incrementaltreereader(stdin,
 				morphology=opts.get('--morphology'),

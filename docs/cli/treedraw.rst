@@ -1,6 +1,8 @@
 
 treedraw
 --------
+Visualize parse trees with ASCII art.
+
 Usage: ``discodop treedraw [<treebank>...] [options]``
 
 --fmt=<export|bracket|discbracket|tiger|alpino|dact>

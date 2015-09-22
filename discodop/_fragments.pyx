@@ -19,7 +19,7 @@ from itertools import islice
 from array import array
 from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
-from discodop.treebank import quote
+from discodop.treebank import quote, openread
 from discodop.grammar import lcfrsproductions, printrule
 from discodop.treetransforms import binarize
 
@@ -1216,7 +1216,7 @@ def readtreebank(treebankfile, Vocabulary vocab,
 		stack = clone(shortarray, 0, False)
 		children = []  # list of lists
 		labels = []  # list of str
-		data = io.open(treebankfile, encoding=encoding)
+		data = openread(treebankfile, encoding=encoding)
 		for n, line in enumerate(islice(data, limit), 1):
 			if line.count('(') > maxnodes:
 				maxnodes = 2 * line.count('(')

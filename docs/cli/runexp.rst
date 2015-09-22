@@ -1,6 +1,8 @@
 
 runexp
 ------
+Run an experiment given a parameter file. Does grammar extraction, parsing, and evaluation.
+
 Usage: ``discodop runexp <parameter file> [--rerun]``
 
 If a parameter file is given, an experiment is run. See the file sample.prm for

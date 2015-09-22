@@ -1038,7 +1038,7 @@ def removeemptynodes(tree, sent):
 
 
 def openread(filename, encoding='utf8'):
-	"""Open text file for reading; decompress .gz files on-the-fly."""
+	"""Open stdin/text file for reading; decompress .gz files on-the-fly."""
 	if filename == '-':
 		return io.open(sys.stdin.fileno(), encoding=encoding)
 	if not isinstance(filename, int) and filename.endswith('.gz'):

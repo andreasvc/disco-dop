@@ -1,7 +1,7 @@
 
 parser
 ------
-A command line interface for parsing new texts with an existing grammar.
+A command line interface for parsing sentences with an existing grammar.
 
 | Usage: ``discodop parser [options] <grammar/> [input files]``
 | or:    ``discodop parser --simple [options] <rules> <lexicon> [input [output]]``

@@ -58,10 +58,10 @@ Options:
           compress output with gzip, view with ``zless`` &c.
 
 --packed
-          use packed graph encoding for DOP reduction
+          use packed graph encoding for DOP reduction.
 
 --bitpar
-          produce an unbinarized grammar for use with bitpar
+          produce an unbinarized grammar for use with bitpar.
 
 -s X
           start symbol to use for PTSG.
@@ -76,7 +76,7 @@ Options:
 When a PCFG is requested, or the input format is ``bracket`` (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
-ASCII for the rules, and utf-8 for the lexicon.
+ASCII for the rules, and UTF-8 for the lexicon.
 
 The PLCFRS format is as follows. Rules are delimited by newlines.
 Fields are separated by tabs. The fields are::

@@ -1039,9 +1039,9 @@ def main():
 				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
 				prm.numproc, lexmodel, simplelexsmooth, trees[0].label)
 		paramfile = os.path.join(resultdir, 'params.prm')
-		with io.open(paramfile, 'w', encoding='utf8') as out:
-			out.write("top='%s',\n%s" % (
-					trees[0].label, io.open(args[1], encoding='utf8').read()))
+		with openread(args[1]) as inp:
+			with io.open(paramfile, 'w', encoding='utf8') as out:
+				out.write("top='%s',\n%s" % (trees[0].label, inp.read()))
 		return  # grammars have already been written
 	if opts.get('--dopestimator', 'rfe') != 'rfe':
 		grammar = [(rule, w) for (rule, _), w in

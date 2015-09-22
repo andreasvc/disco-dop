@@ -40,7 +40,7 @@ from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
 from discodop import treebank, treetransforms, _fragments
 from discodop.tree import Tree
-from discodop.treebank import unquote
+from discodop.treebank import unquote, openread
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 from discodop.containers import Vocabulary
@@ -148,7 +148,7 @@ class CorpusSearcher(object):
 			contains the complete subtree, of which match1 is a subset."""
 
 	def batchcounts(self, queries, subset=None, start=None, end=None):
-		"""Like counts, but executes a sequence of queries.
+		"""Like ``counts()``, but executes a sequence of queries.
 
 		Useful in combination with ``pandas.DataFrame``.
 
@@ -625,7 +625,7 @@ class FragmentSearcher(CorpusSearcher):
 				pickle.dump(self.vocab, out, protocol=-1)
 		self.macros = None
 		if macros:
-			with io.open(macros, encoding='utf8') as tmp:
+			with openread(macros) as tmp:
 				self.macros = dict(line.strip().split('=', 1) for line in tmp)
 		if VOCAB is not None:
 			raise ValueError('only one instance possible.')
@@ -863,7 +863,7 @@ class RegexSearcher(CorpusSearcher):
 		super(RegexSearcher, self).__init__(files, macros, numproc)
 		self.macros = None
 		if macros:
-			with io.open(macros, encoding='utf8') as tmp:
+			with openread(macros) as tmp:
 				self.macros = dict(line.strip().split('=', 1) for line in tmp)
 		path = os.path.dirname(next(iter(files)))
 		lineidxpath = os.path.join(path, 'treesearchlineidx.pkl')
@@ -1118,7 +1118,8 @@ def main():
 		sys.exit(2)
 	opts = dict(opts)
 	if '--file' in opts or '-f' in opts:
-		query = io.open(query, encoding='utf8').read()
+		with openread(query) as tmp:
+			query = tmp.read()
 	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
 	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))

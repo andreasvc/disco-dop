@@ -5,8 +5,8 @@ Treebank binarization and conversion
 
 Usage: ``discodop treetransforms <action> [input [output]] [options]``
 
-where input and output are treebanks; standard in/output is used if not given.
-action is one of::
+where ``input`` and ``output`` are treebanks; standard in/output is used if not given.
+``action`` is one of::
 
     none
     binarize [-h x] [-v x] [--factor=left|right]
