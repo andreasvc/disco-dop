@@ -82,11 +82,9 @@ def main(argv=None):
 		if numproc != 1:
 			raise ValueError('Batch mode only supported in single-process '
 				'mode. Use the xargs command for multi-processing.')
-	if args[0] == '-':
-		args[0] = sys.stdin.fileno()
-	for a in args:
-		if not os.path.exists(a):
-			raise ValueError('not found: %r' % a)
+	for fname in args:
+		if fname != '-' and not os.path.exists(fname):
+			raise ValueError('not found: %r' % fname)
 	if PARAMS['complete']:
 		if len(args) < 2:
 			raise ValueError('need at least two treebanks with --complete.')

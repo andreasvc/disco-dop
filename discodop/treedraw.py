@@ -8,7 +8,6 @@ http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
 
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
-import io
 import re
 import sys
 from cgi import escape
@@ -898,11 +897,11 @@ def main():
 	else:  # read from stdin + detect format
 		encoding = opts.get('--encoding', 'utf8')
 		if not args:
-			args = [sys.stdin.fileno()]
-		stdin = chain.from_iterable(
-				openread(a, encoding=encoding)
-				for a in args)
-		trees = islice(incrementaltreereader(stdin,
+			args = ['-']
+		stream = chain.from_iterable(
+				openread(fname, encoding=encoding)
+				for fname in args)
+		trees = islice(incrementaltreereader(stream,
 				morphology=opts.get('--morphology'),
 				functions=opts.get('--functions'),
 				othertext=True),

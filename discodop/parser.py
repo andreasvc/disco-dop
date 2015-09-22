@@ -178,7 +178,7 @@ def main():
 		parser = Parser(params)
 		morph = params.morphology
 		del args[:1]
-	infile = openread(args[0] if len(args) >= 1 else sys.stdin.fileno())
+	infile = openread(args[0] if len(args) >= 1 else '-')
 	out = (io.open(args[1], 'w', encoding='utf8')
 			if len(args) == 2 else sys.stdout)
 	doparsing(parser, infile, out, prob, oneline, tags, numparses,
