@@ -15,6 +15,7 @@ import re
 import sys
 import codecs
 import logging
+import tempfile
 if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
 import multiprocessing
@@ -82,8 +83,19 @@ def main(argv=None):
 		if numproc != 1:
 			raise ValueError('Batch mode only supported in single-process '
 				'mode. Use the xargs command for multi-processing.')
-	for fname in args:
-		if fname != '-' and not os.path.exists(fname):
+	tmp = None
+	for n, fname in enumerate(args):
+		if fname == '-':
+			if numproc != 1:
+				# write to temp file so that contents can be read
+				# in multiple processes
+				if tmp is not None:
+					raise ValueError('can only read from stdin once.')
+				tmp = tempfile.NamedTemporaryFile()
+				tmp.write(open(sys.stdin.fileno(), 'rb').read())
+				tmp.flush()
+				args[n] = tmp.name
+		elif not os.path.exists(fname):
 			raise ValueError('not found: %r' % fname)
 	if PARAMS['complete']:
 		if len(args) < 2:
@@ -117,6 +129,8 @@ def main(argv=None):
 		if '--debin' in opts:
 			fragmentkeys = debinarize(fragmentkeys)
 		printfragments(fragmentkeys, counts, out=out)
+	if tmp is not None:
+		del tmp
 
 
 def regular(filenames, numproc, limit, encoding):
