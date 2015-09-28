@@ -101,7 +101,7 @@ class CorpusSearcher(object):
 		self.pool = concurrent.futures.ThreadPoolExecutor(
 				numproc or cpu_count())
 		if not self.files:
-			raise ValueError('no files found matching ' + files)
+			raise ValueError('no files found: %s' % files)
 
 	def counts(self, query, subset=None, start=None, end=None, indices=False,
 			breakdown=False):
@@ -152,18 +152,22 @@ class CorpusSearcher(object):
 
 		Useful in combination with ``pandas.DataFrame``.
 
+		:param queries: an iterable of strings.
 		:param start, end: the interval of sentences to query in each corpus;
 			by default, all sentences are queried. 1-based, inclusive.
-		:returns: a dict of the form
-			``{corpus1: {query1: count1, query2: count2, ...}, ...}``.
+		:yields: tuples of the form
+			``(corpus1, [count1, count2, ...])``.
+			where ``count1, count2, ...`` corresponds to ``queries``.
+			Order of queries is preserved; order of corpora is not.
 		"""
-		result = OrderedDict((name, OrderedDict())
+		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		for query in queries:
 			for filename, value in self.counts(
 					query, subset, start, end).items():
-				result[filename][query] = value
-		return result
+				result[filename].append(value)
+		for key, val in result.items():
+			yield key, val
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):
@@ -646,7 +650,12 @@ class FragmentSearcher(CorpusSearcher):
 		if breakdown:
 			if indices:
 				raise NotImplementedError
-			return self.batchcounts(query.splitlines(), subset, start, end)
+			queries = query.splitlines()
+			result = self.batchcounts(queries, subset, start, end)
+			return OrderedDict(
+					(filename, OrderedDict(
+						(query, a) for query, a in zip(queries, values)))
+					for filename, values in result)
 		subset = subset or self.files
 		result = OrderedDict()
 		jobs = {}
@@ -655,42 +664,35 @@ class FragmentSearcher(CorpusSearcher):
 				tmp = self.cache[
 						'counts', query, filename, start, end, indices]
 				if indices:
-					result[filename] = [b for a in tmp.values() for b in a]
+					result[filename] = [b for a in tmp for b in a]
 				else:
-					result[filename] = sum(tmp.values())
+					result[filename] = sum(tmp)
 			except KeyError:
 				jobs[self._submit(_frag_query, query, filename,
 						start, end, None, indices=indices, trees=False,
 						disc=self.disc)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
-			self.cache['counts', query, filename, start, end, indices,
-					] = OrderedDict(future.result())
+			tmp = future.result()
+			self.cache['counts', query, filename, start, end, indices] = tmp
 			if indices:
-				result[filename] = Counter()
-				for _, b in future.result():
-					result[filename].update(b)
+				result[filename] = [b for a in tmp for b in a]
 			else:
-				result[filename] = sum(b for _, b in future.result())
+				result[filename] = sum(tmp)
 		return result
 
 	def batchcounts(self, queries, subset=None, start=None, end=None):
 		subset = subset or self.files
-		result = OrderedDict()
 		jobs = {}
-		query = '\n'.join(queries) + '\n'
+		queries, bitsets, maxnodes = _frag_parse_query(queries, disc=self.disc)
 		for filename in subset:
-			try:
-				result[filename] = self.cache[
-						'counts', query, filename, start, end, False]
-			except KeyError:
-				jobs[self._submit(_frag_query, query, filename,
-						start, end, None, indices=False, trees=False,
-						disc=self.disc)] = filename
+			# NB: not using cache.
+			jobs[self._submit(_frag_run_query, queries, bitsets, maxnodes,
+					filename, start, end, None, indices=False, trees=False,
+					)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
-			result[filename] = OrderedDict(future.result())
-		return result
+			yield filename, future.result()
 
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
 			nofunc=False, nomorph=False):
@@ -712,7 +714,7 @@ class FragmentSearcher(CorpusSearcher):
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			x = []
-			for _frag, matches in future.result():
+			for matches in future.result():
 				for sentno, treestr, match in matches:
 					treestr = filterlabels(treestr, nofunc, nomorph)
 					# NB: this highlights the whole subtree, of which
@@ -755,7 +757,7 @@ class FragmentSearcher(CorpusSearcher):
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			x = []
-			for frag, matches in future.result():
+			for frag, matches in zip(query.splitlines(), future.result()):
 				for sentno, treestr, match in matches:
 					if brackets:
 						sent = treestr
@@ -812,8 +814,37 @@ class FragmentSearcher(CorpusSearcher):
 def _frag_query(query, filename, start=None, end=None, maxresults=None,
 		indices=True, trees=False, disc=False):
 	"""Run a fragment query on a single file."""
+	queries, bitsets, maxnodes = _frag_parse_query(query, disc=disc)
+	return _frag_run_query(queries, bitsets, maxnodes, filename,
+			start=start, end=end, maxresults=maxresults, indices=indices,
+			trees=trees)
+
+
+def _frag_parse_query(query, disc=False):
+	"""Prepare fragment query."""
 	if FRAG_MACROS is not None:
 		query = query.format(**FRAG_MACROS)
+	if isinstance(query, list):
+		qtrees = (treebank.brackettree(a) for a in query)
+	else:
+		qtrees = treebank.incrementaltreereader(
+				io.StringIO(query), strict=True, robust=False)
+	qtrees, qsents = zip(*[(treetransforms.binarize(a[0], dot=True), a[1])
+			for a in qtrees])
+	if not qtrees:
+		raise ValueError('no valid fragments found.')
+	queries = _fragments.getctrees(
+			list(qtrees), list(qsents), vocab=VOCAB)
+	maxnodes = queries['trees1'].maxnodes
+	_fragmentkeys, bitsets = _fragments.completebitsets(
+			queries['trees1'], VOCAB, maxnodes,
+			disc=disc)
+	return queries, bitsets, maxnodes
+
+
+def _frag_run_query(queries, bitsets, maxnodes, filename, start=None, end=None,
+		maxresults=None, indices=True, trees=False):
+	"""Run a prepared fragment query on a single file."""
 	if FRAG_FILES[filename] is not None:
 		corpus = FRAG_FILES[filename]
 	else:
@@ -821,32 +852,20 @@ def _frag_query(query, filename, start=None, end=None, maxresults=None,
 				'%s.pkl.gz' % filename, 'rb').read())
 	if start is not None:
 		start -= 1
-	qtrees = treebank.incrementaltreereader(
-			io.StringIO(query), strict=True, robust=False)
-	if not qtrees:
-		raise ValueError('no valid fragments found.')
-	qtrees, qsents = zip(*[(treetransforms.binarize(a, dot=True), b)
-			for a, b, _ in qtrees])
-	queries = _fragments.getctrees(
-			list(qtrees), list(qsents), vocab=VOCAB)
-	maxnodes = queries['trees1'].maxnodes
-	fragmentkeys, bitsets = _fragments.completebitsets(
-			queries['trees1'], VOCAB, maxnodes,
-			disc=disc)
 	results = _fragments.exactcountsslice(queries['trees1'], corpus,
 			bitsets, indices=indices + trees if indices else 0,
 			maxnodes=maxnodes, start=start, end=end,
 			maxresults=maxresults)
-	results = zip(fragmentkeys, results)
+	# results = zip(fragmentkeys, results)
 	if indices and trees:
-		results = [(a, [(n + 1,
+		results = [[(n + 1,
 					corpus.extract(n, VOCAB, disc=True),
 					corpus.extract(n, VOCAB, disc=True, node=m))
-				for n, m in zip(b, c)])
-					for a, (b, c) in results]
+					for n, m in zip(b, c)]
+				for b, c in results]
 	elif indices:
-		results = [(a, [n + 1 for n in b]) for a, b in results]
-	return list(results)
+		results = [[n + 1 for n in b] for b in results]
+	return results  # return list(results)
 
 
 class RegexSearcher(CorpusSearcher):
@@ -1088,14 +1107,24 @@ def cpu_count():
 		return 1
 
 
-def writecsv(results):
-	"""Write a dictionary of dictionaries as CSV to stdout."""
+def writecsv(results, columns=None):
+	"""Write a dictionary of dictionaries as CSV to stdout.
+
+	:param data: a dictionary of dictionaries.
+	:param columns: if given, data is an iterable of (filename, list/array)
+		tuples, with columns being a list specifying the column names."""
 	writer = csv.writer(sys.stdout)
-	writer.writerow(['filename']
-			+ list(next(iter(results.values())).keys()))
-	writer.writerows(
-			[filename] + list(results[filename].values())
-			for filename in results)
+	if columns is None:
+		writer.writerow(['filename']
+				+ list(next(iter(results.values())).keys()))
+		writer.writerows(
+				[filename] + list(results[filename].values())
+				for filename in results)
+	else:
+		writer.writerow(['filename'] + list(columns))
+		writer.writerows(
+				[filename] + list(values)
+				for filename, values in results)
 
 
 def main():
@@ -1150,15 +1179,14 @@ def main():
 		elif len(queries) > 1:
 			results = searcher.batchcounts(
 					queries, start=start, end=end)
-			writecsv(results)
+			writecsv(results, columns=queries)
 		else:
 			for filename, cnt in searcher.counts(
 					query, start=start, end=end, indices=indices).items():
 				if len(corpora) > 1:
 					print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')
-				print(str(cnt)[len("array('I', "):-len(')')]
-						if indices else cnt)
+				print(cnt)
 	elif '--trees' in opts or '-t' in opts:
 		for filename, sentno, tree, sent, high in searcher.trees(
 				query, start=start, end=end, maxresults=maxresults):

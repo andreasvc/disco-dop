@@ -595,7 +595,7 @@ def printfragments(fragments, counts, out=None):
 			fragments[n] = altrepr(a)
 	if PARAMS['complete']:
 		logging.info('total number of matches: %d',
-				sum(sum(a.values()) for a in counts)
+				sum(sum(a) for a in counts)
 				if PARAMS['indices'] else sum(counts))
 	else:
 		logging.info('number of fragments: %d', len(fragments))

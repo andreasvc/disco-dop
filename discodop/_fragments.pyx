@@ -1229,6 +1229,8 @@ def readtreebank(treebankfile, Vocabulary vocab,
 				raise ValueError('error %d in line %d: %s\n%s' % (
 						cnt, n, TREEPARSEMSG[-cnt], line))
 			ctrees.addnodes(scratch, cnt, 0)
+			children[:] = []
+			labels[:] = []
 		if not ctrees.len:
 			raise ValueError('%r appears to be empty' % treebankfile)
 		free(scratch)
