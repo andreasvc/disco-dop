@@ -294,7 +294,7 @@ def unbinarize(tree, _sent=None, expandunary=True,
 			# is an artificial node and can be removed, although we still
 			# need to move its children to its parent
 			childindex = node.label.find(childchar)
-			if childindex != -1:
+			if childindex != -1 and node is not tree:
 				# go by identity instead of equality
 				for n, a in enumerate(parent):
 					if a is node:

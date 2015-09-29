@@ -856,7 +856,6 @@ def _frag_run_query(queries, bitsets, maxnodes, filename, start=None, end=None,
 			bitsets, indices=indices + trees if indices else 0,
 			maxnodes=maxnodes, start=start, end=end,
 			maxresults=maxresults)
-	# results = zip(fragmentkeys, results)
 	if indices and trees:
 		results = [[(n + 1,
 					corpus.extract(n, VOCAB, disc=True),
@@ -865,7 +864,7 @@ def _frag_run_query(queries, bitsets, maxnodes, filename, start=None, end=None,
 				for b, c in results]
 	elif indices:
 		results = [[n + 1 for n in b] for b in results]
-	return results  # return list(results)
+	return results
 
 
 class RegexSearcher(CorpusSearcher):
