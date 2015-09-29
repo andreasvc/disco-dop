@@ -27,7 +27,7 @@ POSRE = re.compile(r'\(([^() ]+) [^ ()]+\)')
 TERMINALSRE = re.compile(r' ([^ ()]+)\)')
 LEAVESRE = re.compile(r' ([^ ()]*)\)')
 FRONTIERNTRE = re.compile(r' \)')
-INDEXRE = re.compile(r' [0-9]+\)')
+INDEXRE = re.compile(r' [0-9]+\b')
 SUPERFLUOUSSPACERE = re.compile(r'\)\s+(?=\))')
 # regex to check if the tree contains any terminals not prefixed by indices
 STRTERMRE = re.compile(r' (?![0-9]+=)[^()]*\s*\)')
@@ -605,7 +605,7 @@ def writetree(tree, sent, n, fmt, comment=None, morphology=None):
 
 def writebrackettree(tree, sent):
 	"""Return a tree in bracket notation with words as terminals."""
-	return INDEXRE.sub(lambda x: ' %s)' % quote(sent[int(x.group()[1:-1])]),
+	return INDEXRE.sub(lambda x: ' %s' % quote(sent[int(x.group()[1:])]),
 			str(tree)) + '\n'
 
 
@@ -613,9 +613,9 @@ def writediscbrackettree(tree, sent):
 	"""Return tree in bracket notation with terminals of the form 'index:word'.
 	"""
 	return INDEXRE.sub(
-			lambda x: '%s=%s)' % (
-				x.group()[:-1],
-				quote(sent[int(x.group()[1:-1])])),
+			lambda x: '%s=%s' % (
+				x.group(),
+				quote(sent[int(x.group()[1:])])),
 			str(tree)) + '\n'
 
 

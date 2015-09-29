@@ -22,8 +22,7 @@ import multiprocessing
 from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
-from discodop.tree import Tree
-from discodop.treebank import brackettree
+from discodop.treebank import brackettree, writetree
 from discodop.treetransforms import binarize, introducepreterminals, unbinarize
 from discodop import _fragments
 from discodop.parser import workerfunc
@@ -571,16 +570,14 @@ def debinarize(fragments):
 	"""Debinarize fragments; fragments that fail to debinarize left as-is."""
 	result = []
 	for origfrag in fragments:
-		if PARAMS['disc']:
-			frag, sent = origfrag
-		else:
-			frag = origfrag
+		frag, sent = brackettree(origfrag)
 		try:
-			frag = '%s' % unbinarize(Tree(frag))
+			frag = writetree(unbinarize(frag), sent, 0,
+					'discbracket' if PARAMS['disc'] else 'bracket').strip()
 		except Exception:  # pylint: disable=broad-except
 			result.append(origfrag)
 		else:
-			result.append((frag, sent) if PARAMS['disc'] else frag)
+			result.append(frag)
 	return result
 
 
