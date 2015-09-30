@@ -918,7 +918,8 @@ def main():
 			'renumber reverse removeempty direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
-			'markorigin= maxlen= enc= transforms= markovthreshold= ').split()
+			'markorigin= maxlen= enc= transforms= markovthreshold= labelfun= '
+			).split()
 	try:
 		opts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
 		if not 1 <= len(args) <= 3:
@@ -973,6 +974,7 @@ def main():
 		h = int(opts.get('-h', 999))
 		v = int(opts.get('-v', 1))
 		revh = int(opts.get('-H', 0))
+		labelfun = eval(opts['--labelfun']) if '--labelfun' in opts else None
 		if action == 'binarize':
 			factor = opts.get('--factor', 'right')
 			transform = lambda item: binarize(item.tree, factor, h, v,
@@ -982,7 +984,8 @@ def main():
 						tailmarker='$' if '--tailmarker' in opts else '',
 						direction='--direction' in opts,
 						headoutward='--headrules' in opts,
-						markhead='--markhead' in opts)
+						markhead='--markhead' in opts,
+						labelfun=labelfun)
 		elif action == 'optimalbinarize':
 			headdriven = '--headrules' in opts
 			transform = lambda item: optimalbinarize(item.tree,

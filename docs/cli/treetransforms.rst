@@ -73,10 +73,15 @@ options may consist of:
 
 -h n            horizontal markovization. default: infinite (all siblings)
 -v n            vertical markovization. default: 1 (immediate parent only)
---headrules=x   turn on head finding; affects binarization.
+--headrules=x   turn on head finding; turns on head-outward binarization.
                 reads rules from file ``x`` (e.g., "negra.headrules").
 --markhead      include label of the head child in all auxiliary labels
                 of binarization.
+--direction     mark direction when using head-outward binarization.
+--labelfun=x    x is a Python lambda function that takes a node and returns
+                a label to be used for markovization purposes. For example,
+                to get labels without state splits, pass this function:
+                ``'lambda n: n.label.split("^")[0]'``
 --leftunary     make initial / final productions of binarized constituents
 --rightunary    ... unary productions.
 --tailmarker    mark rightmost child (the head if headrules are applied), to
