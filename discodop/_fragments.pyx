@@ -101,20 +101,22 @@ cdef inline void setrootid(uint64_t *data, short root, uint32_t id,
 	tail.root = root
 
 
-cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
-		Ctrees trees2=None, bint approx=True, bint debug=False,
+cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
+		Ctrees trees2=None, int start2=0, int end2=0,
+		bint approx=True, bint debug=False,
 		bint disc=False, bint complement=False,
 		bint twoterms=False, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use::
-		extractfragments(trees1, offset, end, vocab)
+		extractfragments(trees1, start1, end1, vocab)
 	- scenario 2: common fragments in two treebanks::
-		extractfragments(trees1, offset, end, vocab, trees2)
+		extractfragments(trees1, start1, end1, vocab, trees2)
 
-	:param offset, end: can be used to divide the work over multiple
-		processes; they are indices of ``trees1`` to work on (pass 0 for both
-		to use all);
+	:param start1, end1: specify slice of treebank to be used; can be used to
+		divide the work over multiple processes; they are indices of ``trees1``
+		to work on (pass 0 for both to use all trees).
+	:param start2, end2: idem for trees2.
 	:param approx: return approximate counts instead of bitsets.
 	:param debug: if True, a table of common productions is printed for each
 		pair of trees
@@ -129,7 +131,7 @@ cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 		``trees1``.
 	"""
 	cdef:
-		int n, m, start = 0, end2
+		int n, m
 		short minterms = 2 if twoterms else 0
 		short SLOTS  # the number of uint32_ts needed to cover the largest tree
 		uint64_t *matrix = NULL  # bit matrix of common productions in tree pair
@@ -155,9 +157,9 @@ cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 	scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
 	if matrix is NULL or scratch is NULL:
 		raise MemoryError('allocation error')
-	end2 = trees2.len
+	end2 = min(end2 or trees2.len, trees2.len)
 	# loop over tree pairs to extract fragments from
-	for n in range(offset, min(end or trees1.len, trees1.len)):
+	for n in range(start1, min(end1 or trees1.len, trees1.len)):
 		a = trees1.trees[n]
 		asent = trees1.extractsent(n, vocab)
 		anodes = &trees1.nodes[a.offset]
@@ -171,14 +173,16 @@ cpdef extractfragments(Ctrees trees1, int offset, int end, Vocabulary vocab,
 					contentwordprods, lexicalprods):
 				if trees1 is trees2 and m <= n:
 					continue
+				elif start2 > m or m > end2:
+					continue
 				elif m < 0 or m >= trees2.len:
 					raise ValueError('illegal index %d' % m)
 				extractfrompair(a, anodes, trees2, n, m, complement, debug,
 						vocab, inter, minterms, matrix, scratch, SLOTS)
 		else:  # all pairs
 			if trees1 is trees2:
-				start = n + 1
-			for m in range(start, end2):
+				start2 = max(n + 1, start2)
+			for m in range(start2, end2):
 				extractfrompair(a, anodes, trees2, n, m,
 						complement, debug, vocab, inter, minterms, matrix,
 						scratch, SLOTS)
@@ -414,8 +418,8 @@ cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
 	Variant of exactcounts() that releases the GIL in the inner loop and is
 	intended for searching in subsets of ``trees2``.
 
-	:param start, end: only search through this interval of trees from trees2
-		(defaults to all trees).
+	:param start, end: only search through this interval of trees from
+		``trees2`` (defaults to all trees).
 	:param maxresults: stop searching after this number of matchs.
 	:returns: depending on ``indices``:
 
