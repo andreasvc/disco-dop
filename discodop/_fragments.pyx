@@ -601,10 +601,25 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 
 	:returns: a pair of lists with trees as strings and their bitsets,
 		respectively.
+
+	A tree with a discontinuous substitution site is expected to be binarized
+	with ``rightmostunary=True``:
+
+	>>> from discodop.treebank import brackettree
+	>>> tree, sent = brackettree('(S (X 0= 2= 4=))')
+	>>> print(binarize(tree, dot=True, rightmostunary=True))
+	(S (X 0 (X|<.> 2 (X|<.> 4))))
+
+	These auxiliary nodes will not be part of the returned tree / bitset:
+
+	>>> tmp = getctrees([tree], [sent])
+	>>> print(completebitsets(tmp['trees1'], tmp['vocab'], 2, disc=True)[0][0])
+	(S (X 0= 2= 4=))
 	"""
 	cdef:
 		list result = [], bitsets = []
 		list sent
+		list tmp = []
 		int n, i
 		short SLOTS = BITNSLOTS(maxnodes + 1)
 		uint64_t *scratch = <uint64_t *>malloc((SLOTS + 2) * sizeof(uint64_t))
@@ -613,12 +628,15 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 	for n in range(<int>start, <int>end):
 		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		nodes = &trees.nodes[trees.trees[n].offset]
-		tree = trees.extract(n, vocab, disc=disc)
 		sent = trees.extractsent(n, vocab)
 		for i in range(trees.trees[n].len):
 			if nodes[i].left >= 0 or sent[termidx(nodes[i].left)] is not None:
 				SETBIT(scratch, i)
 		setrootid(scratch, trees.trees[n].root, n, SLOTS)
+		tmp[:] = []
+		getsubtree(tmp, nodes, scratch, vocab,
+				disc, trees.trees[n].root)
+		tree = getsent(''.join(tmp)) if disc else ''.join(tmp)
 		result.append(tree)
 		bitsets.append(wrap(scratch, SLOTS))
 	return result, bitsets
@@ -819,10 +837,13 @@ cdef inline getsubtree(list result, Node *tree, uint64_t *bitset,
 
 cdef inline list getyield(Node *tree, int i):
 	"""Recursively collect indices of terminals under a node."""
-	if tree[i].left < 0:
+	if tree[i].left < 0:  # terminal / substitution site
+		if tree[i].right >= 0:  # substitution site with more indices
+			return [termidx(tree[i].left)] + getyield(tree, tree[i].right)
 		return [termidx(tree[i].left)]
-	elif tree[i].right < 0:
+	elif tree[i].right < 0:  # unary node
 		return getyield(tree, tree[i].left)
+	# binary node
 	return getyield(tree, tree[i].left) + getyield(tree, tree[i].right)
 
 
@@ -1109,15 +1130,16 @@ cdef inline copynodes(tree, list prodsintree, Vocabulary vocab,
 	idx[0] += 1
 	if isinstance(tree[0], int):  # a terminal index
 		result[n].left = -tree[0] - 1
-		result[n].right = -1
-	else:
+	else:  # non-terminal
 		result[n].left = idx[0]
 		copynodes(tree[0], prodsintree, vocab, result, idx)
-		if len(tree) == 1:  # unary node
-			result[n].right = -1
-		else:  # binary node
-			result[n].right = idx[0]
-			copynodes(tree[1], prodsintree, vocab, result, idx)
+	if len(tree) == 1:  # unary node
+		result[n].right = -1
+	elif isinstance(tree[1], int):  # a terminal index
+		raise ValueError('right child can only be non-terminal.')
+	else:  # binary node
+		result[n].right = idx[0]
+		copynodes(tree[1], prodsintree, vocab, result, idx)
 
 
 def getctrees(trees1, sents1, trees2=None, sents2=None,
@@ -1125,7 +1147,7 @@ def getctrees(trees1, sents1, trees2=None, sents2=None,
 	"""Convert binarized Tree objects to Ctrees object.
 
 	:returns: dictionary with same keys as arguments, where trees1 and
-		trees2 are Ctrees object for disc. binary trees and sentences."""
+		trees2 are Ctrees objects for disc. binary trees and sentences."""
 	cdef Ctrees ctrees, ctrees1, ctrees2 = None
 	cdef Node *scratch
 	cdef int cnt
@@ -1192,10 +1214,10 @@ def readtreebank(treebankfile, Vocabulary vocab,
 		raise MemoryError('allocation error')
 	if fmt != 'bracket':
 		from discodop.treebank import READERS
-		from discodop.treetransforms import canonicalize
 		corpus = READERS[fmt](treebankfile, encoding=encoding)
 		for _, item in corpus.itertrees(0, limit):
-			tree = canonicalize(binarize(item.tree, dot=True))
+			# handle disc. substitution sites
+			tree = binarize(item.tree, dot=True, rightmostunary=True)
 			prodsintree = []
 			cnt = 0
 			for r, yf in lcfrsproductions(tree, item.sent, frontiers=True):

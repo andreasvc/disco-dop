@@ -574,22 +574,23 @@ cdef class Ctrees:
 			for m in range(
 				self.trees[n].offset, self.trees[n].offset + self.trees[n].len)
 			if self.nodes[m].left < 0}
-		return [sent[m] for m in sorted(sent)]
+		return [sent.get(m, None) for m in range(max(sent) + 1)]
 
 	def printrepr(self, int n, Vocabulary vocab):
 		"""Print repr of a tree for debugging purposes."""
 		tree = self.extract(n, vocab, disc=True)
-		print(n)
-		print(tree)
+		print('tree no.:', n)
+		print('complete tree:', tree)
 		offset = self.trees[n].offset
+		print('nodeno leftidx rightidx prodno lhslabel     prod')
 		for m in range(self.trees[n].len):
-			print('%2d. %2d %2d %2d %2s %s' % (
+			print('%2d. %2d %2d %2d %s %s' % (
 					m, self.nodes[offset + m].left,
 					self.nodes[offset + m].right,
 					self.nodes[offset + m].prod,
-					vocab.labels[self.nodes[offset + m].prod],
+					vocab.labels[self.nodes[offset + m].prod].ljust(30),
 					'; '.join([a for a, b in vocab.prods.items()
-					if b == self.nodes[offset + m].prod])))
+						if b == self.nodes[offset + m].prod])))
 		print()
 		# for a, m in sorted(vocab.prods.items(), key=lambda x: x[1]):
 		# 	print("%d. '%s' '%s' '%s'" % (m, vocab.labels[m], vocab.words[m], a))
@@ -677,6 +678,7 @@ cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
 			result.append('%d=%s' % (
 					termidx(tree[i].left),
 					vocab.words[tree[i].prod] or ''))
+			# FIXME: append more indices for disc. substitution site
 		else:
 			result.append(vocab.words[tree[i].prod] or '')
 	result.append(')')

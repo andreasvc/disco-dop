@@ -17,7 +17,7 @@ The text needs to be tokenized, for example using `ucto
 
 To parse sentences in bracketed format::
 
-    $ discodop treetransforms none treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser wsj/
+    $ discodop treetransforms treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser wsj/
 
 Inducing a simple grammar
 -------------------------
@@ -38,7 +38,7 @@ You can view the trees using the following command::
 
 Before inducing a grammar, we need to binarize the treebank::
 
-    $ discodop treetransforms binarize --fmt=bracket treebankExample.mrg /tmp/bintrees
+    $ discodop treetransforms --binarize --fmt=bracket treebankExample.mrg /tmp/bintrees
     transformed 7 trees with action 'binarize'
 
 We can then induce a Double-DOP grammar with the following command::

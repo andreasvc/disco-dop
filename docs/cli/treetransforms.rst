@@ -3,21 +3,38 @@ treetransforms
 --------------
 Treebank binarization and conversion
 
-Usage: ``discodop treetransforms <action> [input [output]] [options]``
+Usage: ``discodop treetransforms [input [output]] [options]``
 
 where ``input`` and ``output`` are treebanks; standard in/output is used if not given.
-``action`` is one of::
 
-    none
-    binarize [-h x] [-v x] [--factor=left|right]
-    optimalbinarize [-h x] [-v x]
-    unbinarize
-    introducepreterminals
-    splitdisc [--markorigin]
-    mergedisc
-    transform [--reverse] [--transforms=<NAME1,NAME2...>]
+Main transformation options:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The following transforms are applied in the order given on the command line.
 
-options may consist of:
+--introducepreterminals
+                Add preterminals to terminals without a dedicated preterminal.
+--transforms=<NAME1,NAME2...>
+                Apply specific treebank transforms; for possible names, cf.
+                source of :mod:`discodop.treebanktransforms` module.
+
+--reversetransforms=<NAME1,NAME2,...>
+                Undo specified transforms; specify transforms in original order.
+
+--binarize [-h x] [-v x] [--factor=<left|right>] [...]
+                Markovized binarization; also see --headrules and other options below.
+
+--optimalbinarize [-h x] [-v x]
+                Binarization that minimizes fan-out/complexity.
+
+--unbinarize    Restore original n-ary trees.
+
+--splitdisc [--markorigin]
+                Split discontinuous nodes into several continuous nodes.
+
+--mergedisc     Reverse the node splitting operation.
+
+Other options:
+~~~~~~~~~~~~~~
 
 --inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
                 Input treebank format [default: export].
@@ -44,9 +61,7 @@ options may consist of:
                 padded with 8 spaces.
 
 --maxlen=n      only select sentences with up to *n* tokens.
---punct=x       possible options:
-
-                :'remove': remove any punctuation.
+--punct=x       :'remove': remove any punctuation.
                 :'move': re-attach punctuation to nearest constituent
                       to minimize discontinuity.
                 :'restore': attach punctuation under root node.
@@ -87,7 +102,3 @@ options may consist of:
 --tailmarker    mark rightmost child (the head if headrules are applied), to
                 avoid cyclic rules when ``--leftunary`` and ``--rightunary``
                 are used.
---transforms=x  specify names of tree transformations to apply; for possible
-                names, cf. :mod:`discodop.treebanktransforms` module.
---reverse       reverse the transformations given by ``--transform``
-

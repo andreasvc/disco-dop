@@ -245,7 +245,7 @@ class DiscBracketCorpusReader(BracketCorpusReader):
 	efficiently."""
 	def _parse(self, block):
 		treestr, comment = block, None
-		if block.count('\t'):
+		if '\t' in block:
 			treestr, comment = block.rstrip('\n\r').split('\t', 1)
 
 		sent = {}
@@ -636,7 +636,8 @@ def writeexporttree(tree, sent, n, comment, morphology):
 				% (n, tree, len(sent), sent, len(wordids), wordids.keys()))
 	for i, word in enumerate(sent):
 		if not word:
-			raise ValueError('empty word in sentence: %r' % sent)
+			# raise ValueError('empty word in sentence: %r' % sent)
+			word = '...'
 		idx = wordids[i]
 		node = tree[idx[:-1]]
 		lemma = '--'

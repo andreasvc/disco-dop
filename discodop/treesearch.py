@@ -38,15 +38,16 @@ except ImportError:
 	ALPINOCORPUSLIB = False
 from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
-from discodop import treebank, treetransforms, _fragments
+from discodop import treebank, _fragments
 from discodop.tree import Tree
 from discodop.treebank import unquote, openread
+from discodop.treetransforms import binarize, mergediscnodes
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 from discodop.containers import Vocabulary
 
 SHORTUSAGE = '''Search through treebanks with queries.
-Usage: %s [--engine=(tgrep2|xpath|frag|regex)] [-t|-s|-c] <query> <treebank>...
+Usage: %s [-e (tgrep2|xpath|frag|regex)] [-t|-s|-c] <query> <treebank1>...
 ''' % sys.argv[0]
 CACHESIZE = 32767
 GETLEAVES = re.compile(r' (?:[0-9]+=)?([^ ()]+)(?=[ )])')
@@ -282,7 +283,7 @@ class TgrepSearcher(CorpusSearcher):
 						treestr = treestr.replace(match, '_HIGH%s' % match)
 
 				tree, sent = treebank.brackettree(treestr)
-				tree = treetransforms.mergediscnodes(tree)
+				tree = mergediscnodes(tree)
 				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
 				tmp = {}
 				for marked in high:
@@ -369,7 +370,7 @@ class TgrepSearcher(CorpusSearcher):
 		result = out.decode('utf8').splitlines()
 		if sents:
 			return result
-		return [(treetransforms.mergediscnodes(tree), sent)
+		return [(mergediscnodes(tree), sent)
 				for tree, sent
 				in (treebank.brackettree(filterlabels(
 					treestr, nofunc, nomorph)) for treestr in result)]
@@ -604,14 +605,15 @@ class FragmentSearcher(CorpusSearcher):
 		if newvocab:
 			self.vocab = Vocabulary()
 		for filename in self.files:
+			self.disc = self.disc or not filename.endswith('.mrg')
 			if (newvocab or not os.path.exists('%s.pkl.gz' % filename)
 					or os.stat('%s.pkl.gz' % filename).st_mtime
 					< os.stat(filename).st_mtime):
 				# get format from extension
-				ext = {'export': 'export', 'mrg': 'bracket',
+				ext = {'export': 'export',
+						'mrg': 'bracket',
 						'dbr': 'discbracket'}
-				fmt = ext[filename.split('.')[-1]]
-				self.disc = fmt != 'bracket'
+				fmt = ext[filename.split('.', 1)[-1]]
 				corpus = _fragments.readtreebank(
 						filename, self.vocab, fmt=fmt)
 				corpus.indextrees(self.vocab)
@@ -724,7 +726,7 @@ class FragmentSearcher(CorpusSearcher):
 							'%s_HIGH %s' % tuple(match.split(None, 1)),
 							1)
 					tree, sent = treebank.brackettree(treestr)
-					tree = treetransforms.mergediscnodes(tree)
+					tree = mergediscnodes(tree)
 					high = list(tree.subtrees(
 							lambda n: n.label.endswith("_HIGH")))
 					if high:
@@ -796,7 +798,7 @@ class FragmentSearcher(CorpusSearcher):
 			treestr = corpus.extract(n - 1, self.vocab)
 			tree, sent = treebank.brackettree(
 					filterlabels(treestr, nofunc, nomorph))
-			result.append((treetransforms.mergediscnodes(tree), sent))
+			result.append((mergediscnodes(tree), sent))
 		return result
 
 	def getinfo(self, filename):
@@ -824,21 +826,23 @@ def _frag_parse_query(query, disc=False):
 	"""Prepare fragment query."""
 	if FRAG_MACROS is not None:
 		query = query.format(**FRAG_MACROS)
-	if isinstance(query, list):
-		qtrees = (treebank.brackettree(a) for a in query)
-	else:
-		qtrees = treebank.incrementaltreereader(
+	if isinstance(query, str):
+		qitems = treebank.incrementaltreereader(
 				io.StringIO(query), strict=True, robust=False)
-	qtrees, qsents = zip(*[(treetransforms.binarize(a[0], dot=True), a[1])
-			for a in qtrees])
+	else:
+		qitems = (treebank.brackettree(a) for a in query)
+	qtrees, qsents = [], []
+	for tree, sent in qitems:
+		# rightmostunary necessary to handle discontinuous substitution sites
+		qtrees.append(binarize(tree, dot=True, rightmostunary=disc))
+		qsents.append(sent)
 	if not qtrees:
 		raise ValueError('no valid fragments found.')
 	queries = _fragments.getctrees(
 			list(qtrees), list(qsents), vocab=VOCAB)
 	maxnodes = queries['trees1'].maxnodes
 	_fragmentkeys, bitsets = _fragments.completebitsets(
-			queries['trees1'], VOCAB, maxnodes,
-			disc=disc)
+			queries['trees1'], VOCAB, maxnodes, disc=disc)
 	return queries, bitsets, maxnodes
 
 
@@ -1164,7 +1168,7 @@ def main():
 		searcher = RegexSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'frag':
 		searcher = FragmentSearcher(
-				corpora, macros=macros, numproc=numproc)
+				corpora, macros=macros, numproc=numproc, inmemory=False)
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
 	if ('--counts' in opts or '-c' in opts

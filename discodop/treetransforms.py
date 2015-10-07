@@ -42,10 +42,9 @@ except ImportError:
 		return result
 
 SHORTUSAGE = '''Treebank binarization and conversion.
-Usage: %s <action> [input [output]] [options]
+Usage: %s [input [output]] [options]
 where input and output are treebanks; standard in/output is used if not given.
-action is one of: none binarize optimalbinarize unbinarize
-	introducepreterminals splitdisc mergedisc transform''' % sys.argv[0]
+''' % sys.argv[0]
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
@@ -357,9 +356,17 @@ def collapseunary(tree, collapsepos=False, collapseroot=False, joinchar='+'):
 def introducepreterminals(tree, sent, ids=None):
 	"""Add preterminals with artificial POS-tags for terminals with siblings.
 
+	:param ids: by default, artificial labels have the form
+		``parent_label/terminal``. When an iterator is passed, its values are
+		used in place of ``terminal``.
+
 	>>> tree = Tree('(S (X 0 1 (CD 2 3) 4))')
 	>>> print(introducepreterminals(tree, ['a', 'b', 'c', 'd', 'e']))
-	(S (X (X/a 0) (X/b 1) (CD (CD/c 2) (CD/d 3)) (X/e 4)))"""
+	(S (X (X/a 0) (X/b 1) (CD (CD/c 2) (CD/d 3)) (X/e 4)))
+	>>> tree = Tree('(S (X 0 1 2))')
+	>>> print(introducepreterminals(tree, [None, None, None], ids=iter('abc')))
+	(S (X (X/a 0) (X/b 1) (X/c 2)))
+	"""
 	assert isinstance(tree, Tree)
 	treeclass = tree.__class__
 	agenda = [tree]
@@ -371,8 +378,8 @@ def introducepreterminals(tree, sent, ids=None):
 				agenda.append(child)
 			elif hassiblings:
 				node[n] = treeclass('%s/%s' % (
-							node.label if ids is None else next(ids),
-							sent[child]),
+							node.label,
+							(sent[child] or '') if ids is None else next(ids)),
 						[child])
 	return tree
 
@@ -495,7 +502,7 @@ def splitdiscnodes(tree, markorigin=False):
 		nodes = list(node)
 		node[:] = []
 		for child in nodes:
-			if disc(child):
+			if isdisc(child):
 				childnodes = list(child)
 				child[:] = []
 				node.extend(treeclass(('%s*%d' % (child.label, n)
@@ -565,7 +572,7 @@ def treebankfanout(trees):
 
 def canonicalize(tree):
 	"""Restore canonical linear precedence order; tree is modified in-place."""
-	for a in tree.postorder(lambda n: len(n) > 1):
+	for a in tree.postorder(lambda n: len(n) > 1 and isinstance(n[0], Tree)):
 		a.children.sort(key=lambda n: n.leaves())
 	return tree
 
@@ -840,7 +847,7 @@ def getyf(left, right):
 	return ''.join(result)
 
 
-def disc(node):
+def isdisc(node):
 	"""Test whether a particular node has a discontinuous yield.
 
 	i.e., test whether its yield contains two or more non-adjacent strings.
@@ -912,27 +919,23 @@ def main():
 	import io
 	from getopt import gnu_getopt, GetoptError
 	from discodop import treebanktransforms
-	actions = {'none', 'transform', 'splitdisc', 'binarize', 'optimalbinarize',
-			'unbinarize', 'mergedisc', 'introducepreterminals'}
-	flags = ('help markorigin markhead leftunary rightunary tailmarker '
-			'renumber reverse removeempty direction').split()
+	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
+			'introducepreterminals renumber removeempty '
+			'help markorigin markhead leftunary rightunary '
+			'tailmarker direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
 			'punct= headrules= functions= morphology= lemmas= factor= fmt= '
 			'markorigin= maxlen= enc= transforms= markovthreshold= labelfun= '
-			).split()
+			'transforms= reversetransforms= ').split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
-		if not 1 <= len(args) <= 3:
-			raise GetoptError('expected 1, 2, or 3 positional arguments')
+		origopts, args = gnu_getopt(sys.argv[1:], 'h:v:H:', flags + options)
+		if len(args) > 2:
+			raise GetoptError('expected 0, 1, or 2 positional arguments')
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
 		print(SHORTUSAGE)
 		sys.exit(2)
-	opts, action = dict(opts), args[0]
-	if action not in actions:
-		print('unrecognized action: %r\navailable actions: %s' % (
-				action, ', '.join(actions)), file=sys.stderr)
-		sys.exit(2)
+	opts = dict(origopts)
 	if '--fmt' in opts:
 		opts['--inputfmt'] = opts['--outputfmt'] = opts['--fmt']
 	if '--enc' in opts:
@@ -942,9 +945,8 @@ def main():
 				% (opts.get('--outputfmt'), ' '.join(treebank.WRITERS)),
 				file=sys.stderr)
 		sys.exit(2)
-	infilename = (args[1] if len(args) >= 2 and args[1] != '-'
-			else '-')
-	outfilename = (args[2] if len(args) == 3 and args[2] != '-'
+	infilename = (args[0] if len(args) >= 1 else '-')
+	outfilename = (args[1] if len(args) == 2 and args[1] != '-'
 			else sys.stdout.fileno())
 
 	# open corpus
@@ -968,59 +970,75 @@ def main():
 	if '--renumber' in opts:
 		trees = (('%8d' % n, item) for n, (_key, item) in enumerate(trees, 1))
 
-	# select transformation
-	transform = None
-	if action in ('binarize', 'optimalbinarize'):
-		h = int(opts.get('-h', 999))
-		v = int(opts.get('-v', 1))
-		revh = int(opts.get('-H', 0))
-		labelfun = eval(opts['--labelfun']) if '--labelfun' in opts else None
-		if action == 'binarize':
-			factor = opts.get('--factor', 'right')
-			transform = lambda item: binarize(item.tree, factor, h, v,
-						revhorzmarkov=revh,
-						leftmostunary='--leftunary' in opts,
-						rightmostunary='--rightunary' in opts,
-						tailmarker='$' if '--tailmarker' in opts else '',
-						direction='--direction' in opts,
-						headoutward='--headrules' in opts,
-						markhead='--markhead' in opts,
-						labelfun=labelfun)
-		elif action == 'optimalbinarize':
-			headdriven = '--headrules' in opts
-			transform = lambda item: optimalbinarize(item.tree,
-					'|', headdriven, h, v)
-	elif action == 'splitdisc':
-		transform = lambda item: splitdiscnodes(
-				item.tree, '--markorigin' in opts)
-	elif action == 'transform':
-		tfs = treebanktransforms.expandpresets(opts['--transforms'].split(','))
-		transform = lambda item: (
-				treebanktransforms.reversetransform(item.tree, tfs)
-				if '--reverse' in opts
-				else treebanktransforms.transform(item.tree, item.sent, tfs))
-	elif action == 'unbinarize':
-		transform = lambda item: unbinarize(item.tree)
-	elif action == 'mergediscnodes':
-		transform = lambda item: mergediscnodes(item.tree)
-	elif action == 'introducepreterminals':
-		transform = lambda item: introducepreterminals(item.tree, item.sent)
-	if transform is not None:
-		def applytransform(trees):
-			"""Apply transform and yield modified items."""
+	# select transformations
+	actions = []
+	for key, value in origopts:
+		if key == '--introducepreterminals':
+			actions.append(lambda tree, sent:
+					(introducepreterminals(tree, sent), sent))
+		if key == '--transforms':
+			actions.append(lambda tree, sent:
+					(treebanktransforms.transform(tree, sent,
+						treebanktransforms.expandpresets(value.split(','))),
+					sent))
+		if key in ('--binarize', '--optimalbinarize'):
+			if key == '--binarize':
+				actions.append(lambda tree, sent:
+						(binarize(
+							tree,
+							opts.get('--factor', 'right'),
+							int(opts.get('-h', 999)),
+							int(opts.get('-v', 1)),
+							revhorzmarkov=int(opts.get('-H', 0)),
+							leftmostunary='--leftunary' in opts,
+							rightmostunary='--rightunary' in opts,
+							tailmarker='$' if '--tailmarker' in opts else '',
+							direction='--direction' in opts,
+							headoutward='--headrules' in opts,
+							markhead='--markhead' in opts,
+							labelfun=eval(opts['--labelfun'])
+								if '--labelfun' in opts else None),
+						sent))
+			elif key == '--optimalbinarize':
+				actions.append(lambda tree, sent:
+						(optimalbinarize(
+							tree, '|',
+							'--headrules' in opts,
+							int(opts.get('-h', 999)),
+							int(opts.get('-v', 1))),
+						sent))
+		if key == '--splitdisc':
+			actions.append(lambda tree, sent:
+					(splitdiscnodes(tree, '--markorigin' in opts), sent))
+		if key == '--mergediscnodes':
+			actions.append(lambda tree, sent: (mergediscnodes(tree), sent))
+		if key == '--unbinarize':
+			actions.append(lambda tree, sent: (unbinarize(tree, sent), sent))
+		if key == '--reversetransforms':
+			actions.append(lambda tree, sent:
+					(treebanktransforms.reversetransform(tree,
+						treebanktransforms.expandpresets(value.split(','))),
+					sent))
+
+	# read, transform, & write trees
+	if actions:
+		def applytransforms(trees):
+			"""Apply transforms and yield modified items."""
 			for key, item in trees:
-				item.tree = transform(item)
+				for action in actions:
+					item.tree, item.sent = action(item.tree, item.sent)
 				yield key, item
 
-		trees = applytransform(trees)
-		if action == 'binarize' and '--markovthreshold' in opts:
+		trees = applytransforms(trees)
+		if 'binarize' in opts and '--markovthreshold' in opts:
 			trees = list(trees)
+			h, v = int(opts.get('-h', 999)), int(opts.get('-v', 1))
+			revh = int(opts.get('-H', 0))
 			markovthreshold([item.tree for _, item in trees],
 					int(opts['--markovthreshold']),
 					revh + h - 1,
 					v - 1 if v > 1 else 1)
 
-	# read, transform, & write trees
 	if opts.get('--outputfmt') in ('mst', 'conll'):
 		if not opts.get('--headrules'):
 			raise ValueError('need head rules for dependency conversion')
@@ -1028,7 +1046,7 @@ def main():
 	if opts.get('--outputfmt') == 'dact':
 		import alpinocorpus
 		outfile = alpinocorpus.CorpusWriter(outfilename)
-		if (action == 'none' and opts.get('--inputfmt') in ('alpino', 'dact')
+		if (not actions and opts.get('--inputfmt') in ('alpino', 'dact')
 				and set(opts) <= {'--slice', '--inputfmt', '--outputfmt',
 				'--renumber'}):
 			for n, (key, block) in islice(enumerate(
@@ -1046,7 +1064,7 @@ def main():
 		encoding = opts.get('outputenc', 'utf8')
 		with io.open(outfilename, 'w', encoding=encoding) as outfile:
 			# copy trees verbatim when only taking slice or converting encoding
-			if (action == 'none' and opts.get('--inputfmt') == opts.get(
+			if (not actions and opts.get('--inputfmt') == opts.get(
 					'--outputfmt') and set(opts) <= {'--slice', '--inputenc',
 					'--outputenc', '--inputfmt', '--outputfmt'}):
 				for block in islice(corpus.blocks().values(), start, end):
@@ -1063,8 +1081,8 @@ def main():
 							opts.get('--outputfmt', 'export'),
 							comment=item.comment))
 					cnt += 1
-	print('%sed %d trees with action %r' % ('convert' if action == 'none'
-			else 'transform', cnt, action), file=sys.stderr)
+	print('%s: transformed %d trees' % (args[0] if args else 'stdin', cnt),
+			file=sys.stderr)
 
 
 __all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
@@ -1072,7 +1090,7 @@ __all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
 		'mergediscnodes', 'addfanoutmarkers', 'removefanoutmarkers',
 		'canonicalize', 'optimalbinarize', 'minimalbinarization',
 		'fanout', 'complexity', 'complexityfanout', 'fanoutcomplexity',
-		'contsets', 'abbr', 'getbits', 'addbitsets', 'getyf', 'disc',
+		'contsets', 'abbr', 'getbits', 'addbitsets', 'getyf', 'isdisc',
 		'treebankfanout', 'OrderedSet']
 
 if __name__ == '__main__':

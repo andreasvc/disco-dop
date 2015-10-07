@@ -36,11 +36,10 @@ def applypunct(method, tree, sent):
 			punctprune(tree, sent)
 		punctraise(tree, sent, method == 'moveall')
 		balancedpunctraise(tree, sent)
-		# restore order
-		for a in tree.postorder(lambda n: len(n) > 1):
+		# restore linear precedence order
+		for a in tree.postorder(
+				lambda n: len(n) > 1 and isinstance(n[0], Tree)):
 			a.children.sort(key=lambda n: n.leaves())
-		for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
-			a.children.sort(key=Tree.leaves)
 	elif method == 'root':
 		punctroot(tree, sent)
 

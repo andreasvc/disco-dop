@@ -806,8 +806,8 @@ def reversetransform(tree, transformations):
 	# Generic state-split removal
 	for node in tree.subtrees(lambda n: STATESPLIT in n.label[1:]):
 		node.label = node.label[:node.label.index(STATESPLIT, 1)]
-	# restore linear precedence ordering
-	for a in tree.subtrees(lambda n: len(n) > 1):
+	# restore linear precedence order
+	for a in tree.subtrees(lambda n: len(n) > 1 and isinstance(n[0], Tree)):
 		a.children.sort(key=lambda n: n.leaves())
 	# unfreeze attributes so that they can be modified
 	for a in tree.subtrees():
@@ -914,7 +914,8 @@ def reversetransform(tree, transformations):
 			for node in tree.subtrees(lambda n:
 					strip(n.label) in {'SMAIN', 'PP', 'INF'}):
 				for child in node:
-					if (len(child) == 1 and base(child, 'NP')
+					if (len(child) == 1 and isinstance(child[0], Tree)
+							and base(child, 'NP')
 							and strip(child[0].label) in {'n', 'vnw'}):
 						child.label = child[0].label
 						origfunc = function(child)
@@ -972,8 +973,8 @@ def reversetransform(tree, transformations):
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 
-	# restore linear precedence ordering
-	for a in tree.subtrees(lambda n: len(n) > 1):
+	# restore linear precedence order
+	for a in tree.subtrees(lambda n: len(n) > 1 and isinstance(n[0], Tree)):
 		a.children.sort(key=lambda n: n.leaves())
 	return tree
 

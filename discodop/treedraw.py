@@ -18,7 +18,7 @@ from cyordereddict import OrderedDict
 from discodop.tree import Tree
 from discodop.treebank import READERS, incrementaltreereader, brackettree, \
 		openread
-from discodop.treetransforms import disc
+from discodop.treetransforms import isdisc
 if sys.version_info[0] > 2:
 	unicode = str  # pylint: disable=redefined-builtin
 
@@ -661,7 +661,7 @@ class DrawTree(object):
 		shift = -0.5
 		# write branches from node to node
 		for child, parent in self.edges.items():
-			if disc(self.nodes[parent]):
+			if isdisc(self.nodes[parent]):
 				result.append(
 						'\\draw [white, -, line width=6pt] '
 						'(n%d)  +(0, %g) -| (n%d);' % (parent, shift, child))

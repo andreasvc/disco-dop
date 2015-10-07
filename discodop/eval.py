@@ -20,7 +20,7 @@ from discodop import grammar
 from discodop.tree import Tree
 from discodop.treedraw import DrawTree
 from discodop.treebank import READERS, dependencies, handlefunctions
-from discodop.treetransforms import disc, getbits, bitfanout
+from discodop.treetransforms import isdisc, getbits, bitfanout
 from discodop.treebanktransforms import functions
 try:
 	from discodop.treedist import treedist, newtreedist
@@ -816,7 +816,7 @@ def parentedbracketings(tree, labeled=True, dellabel=(), disconly=False):
 			for a in tree.subtrees()
 			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
 				and a.label not in dellabel
-				and (not disconly or disc(a)))
+				and (not disconly or isdisc(a)))
 
 
 def bracketings(tree, labeled=True, dellabel=(), disconly=False):
@@ -847,7 +847,7 @@ def bracketings(tree, labeled=True, dellabel=(), disconly=False):
 	S 0b111 1"""
 	return Counter(bracketing(a, labeled) for a in tree.subtrees()
 			if a and isinstance(a[0], Tree)  # nonempty, not a preterminal
-				and a.label not in dellabel and (not disconly or disc(a)))
+				and a.label not in dellabel and (not disconly or isdisc(a)))
 
 
 def bracketing(node, labeled=True):
@@ -1073,7 +1073,7 @@ __all__ = ['Evaluator', 'TreePairResult', 'EvalAccumulator', 'main',
 		'parentedbracketings', 'bracketings', 'bracketing', 'strbracketings',
 		'leafancestorpaths', 'pathscore', 'leafancestor', 'treedisteval',
 		'recall', 'precision', 'f_measure', 'accuracy', 'harmean', 'mean',
-		'intervals', 'disc', 'nozerodiv', 'editdistance']
+		'intervals', 'nozerodiv', 'editdistance']
 
 if __name__ == '__main__':
 	main()

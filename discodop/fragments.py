@@ -140,7 +140,9 @@ def regular(filenames, numproc, limit, encoding):
 	else:
 		fragments = {}
 	# detect corpus reading errors in this process (e.g., wrong encoding)
-	initworker(filenames[0], filenames[1] if len(filenames) == 2 else None,
+	initworker(
+			filenames[0],
+			filenames[1] if len(filenames) == 2 else None,
 			limit, encoding)
 	if numproc == 1:
 		mymap = map
