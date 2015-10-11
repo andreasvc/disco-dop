@@ -11,11 +11,13 @@ WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
 
 def trainfunctionclassifier(trees, sents, numproc):
 	"""Train a classifier to predict functions tags in trees."""
-	from sklearn import linear_model, multiclass
+	from sklearn import linear_model, multiclass, pipeline
 	from sklearn import preprocessing, feature_extraction
 	from sklearn.grid_search import GridSearchCV
 	from sklearn.metrics import make_scorer, jaccard_similarity_score
-	vectorizer = feature_extraction.DictVectorizer(sparse=True)
+	vectorizer = pipeline.Pipeline([
+			feature_extraction.DictVectorizer(sparse=True),
+			preprocessing.StandardScaler(copy=False)])
 	# PTB has no function tags on pretermintals, Negra etc. do.
 	posfunc = any(functions(node) for tree in trees
 			for node in tree.subtrees()
@@ -39,14 +41,18 @@ def trainfunctionclassifier(trees, sents, numproc):
 				if tree is not node
 				and node and (posfunc or isinstance(node[0], Tree)))
 	trainfuncs = encoder.fit_transform(target)
-	classifier = linear_model.SGDClassifier(loss='hinge', penalty='elasticnet')
+	classifier = linear_model.SGDClassifier(
+			loss='hinge',
+			penalty='elasticnet',
+			n_iter=np.ceil(10 ** 6 / len(trees)))
+	alphas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
 	if multi:
 		classifier = multiclass.OneVsRestClassifier(
 				classifier, n_jobs=numproc or -1)
 		param_grid = dict(
-				estimator__alpha=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
+				estimator__alpha=alphas)
 	else:
-		param_grid = dict(alpha=[1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6])
+		param_grid = dict(alpha=alphas)
 	classifier = GridSearchCV(estimator=classifier, param_grid=param_grid,
 			scoring=make_scorer(jaccard_similarity_score))
 	# train classifier
