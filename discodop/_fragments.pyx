@@ -607,7 +607,7 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 
 	>>> from discodop.treebank import brackettree
 	>>> tree, sent = brackettree('(S (X 0= 2= 4=))')
-	>>> print(binarize(tree, dot=True, rightmostunary=True))
+	>>> print(binarize(tree, dot=True, rightmostunary=True, threshold=1))
 	(S (X 0 (X|<.> 2 (X|<.> 4))))
 
 	These auxiliary nodes will not be part of the returned tree / bitset:
@@ -1217,7 +1217,8 @@ def readtreebank(treebankfile, Vocabulary vocab,
 		corpus = READERS[fmt](treebankfile, encoding=encoding)
 		for _, item in corpus.itertrees(0, limit):
 			# handle disc. substitution sites
-			tree = binarize(item.tree, dot=True, rightmostunary=True)
+			tree = binarize(item.tree, dot=True, rightmostunary=True,
+					threshold=1)
 			prodsintree = []
 			cnt = 0
 			for r, yf in lcfrsproductions(tree, item.sent, frontiers=True):

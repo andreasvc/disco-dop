@@ -832,10 +832,11 @@ def _frag_parse_query(query, disc=False):
 	else:
 		qitems = (treebank.brackettree(a) for a in query)
 	qtrees, qsents = [], []
-	for tree, sent in qitems:
+	for item in qitems:
 		# rightmostunary necessary to handle discontinuous substitution sites
-		qtrees.append(binarize(tree, dot=True, rightmostunary=disc))
-		qsents.append(sent)
+		qtrees.append(binarize(item[0],
+				dot=True, rightmostunary=disc, threshold=1 if disc else 2))
+		qsents.append(item[1])
 	if not qtrees:
 		raise ValueError('no valid fragments found.')
 	queries = _fragments.getctrees(

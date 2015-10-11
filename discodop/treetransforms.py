@@ -152,25 +152,30 @@ def binarize(tree, factor='right', horzmarkov=999, vertmarkov=1,
 		if len(node) <= threshold:
 			continue
 		elif 1 <= len(node) <= 2:
-			if not isinstance(node[0], Tree):
-				continue
 			# insert an initial artificial nonterminal
 			siblings = ''
-			if direction and factor == 'left':
-				siblings += 'r:'
-			elif direction and factor == 'right':
-				siblings += 'l:'
-			if markhead and headidx is not None:
-				siblings += node[headidx] + ';'
-			siblings += ','.join(labelfun(child) for child in node[:horzmarkov]
-					if labelfun(child).split('/', 1)[0] not in filterfuncs)
+			if isinstance(node[0], Tree):
+				if direction and factor == 'left':
+					siblings += 'r:'
+				elif direction and factor == 'right':
+					siblings += 'l:'
+				if markhead and headidx is not None:
+					siblings += node[headidx].label + ';'
+				siblings += ','.join(labelfun(child)
+						for child in node[:horzmarkov]
+						if labelfun(child).split('/', 1)[0] not in filterfuncs)
 			if dot:
 				siblings += '.'
 			mark = '<%s>%s' % (siblings, parents)
 			if ids is not None:  # numeric identifier
 				mark = '<%s>' % ids[mark]
-			newnode = treeclass('%s%s%s' % (origlabel, childchar, mark), node)
-			node[:] = [newnode]
+			offset = 0 if factor == 'left' else 1
+			childnodes = list(node[offset:offset + 1])
+			node[offset:offset + 1] = []
+			newnode = treeclass(
+					'%s%s%s' % (origlabel, childchar, mark), childnodes)
+			offset = -1 if factor == 'left' else 1
+			node[offset:offset] = [newnode]
 		else:
 			if isinstance(node[0], Tree):
 				childlabels = [labelfun(child) for child in node]
