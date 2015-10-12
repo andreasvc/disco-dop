@@ -41,7 +41,7 @@ from roaringbitmap import RoaringBitmap
 from discodop import treebank, _fragments
 from discodop.tree import Tree
 from discodop.treebank import unquote, openread
-from discodop.treetransforms import binarize, mergediscnodes
+from discodop.treetransforms import binarize, mergediscnodes, handledisc
 from discodop.parser import workerfunc, which
 from discodop.treedraw import ANSICOLOR, DrawTree
 from discodop.containers import Vocabulary
@@ -834,8 +834,8 @@ def _frag_parse_query(query, disc=False):
 	qtrees, qsents = [], []
 	for item in qitems:
 		# rightmostunary necessary to handle discontinuous substitution sites
-		qtrees.append(binarize(item[0],
-				dot=True, rightmostunary=disc, threshold=1 if disc else 2))
+		qtrees.append(binarize(
+				handledisc(item[0]) if disc else item[0], dot=True))
 		qsents.append(item[1])
 	if not qtrees:
 		raise ValueError('no valid fragments found.')

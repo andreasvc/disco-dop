@@ -21,7 +21,7 @@ from roaringbitmap import RoaringBitmap
 from discodop.tree import Tree
 from discodop.treebank import quote, openread
 from discodop.grammar import lcfrsproductions, printrule
-from discodop.treetransforms import binarize
+from discodop.treetransforms import binarize, handledisc
 
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
@@ -607,8 +607,8 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 
 	>>> from discodop.treebank import brackettree
 	>>> tree, sent = brackettree('(S (X 0= 2= 4=))')
-	>>> print(binarize(tree, dot=True, rightmostunary=True, threshold=1))
-	(S (X 0 (X|<.> 2 (X|<.> 4))))
+	>>> print(handledisc(tree))
+	(S (X 0 (X|<> 2 (X|<> 4))))
 
 	These auxiliary nodes will not be part of the returned tree / bitset:
 
@@ -1216,9 +1216,7 @@ def readtreebank(treebankfile, Vocabulary vocab,
 		from discodop.treebank import READERS
 		corpus = READERS[fmt](treebankfile, encoding=encoding)
 		for _, item in corpus.itertrees(0, limit):
-			# handle disc. substitution sites
-			tree = binarize(item.tree, dot=True, rightmostunary=True,
-					threshold=1)
+			tree = binarize(handledisc(item.tree), dot=True)
 			prodsintree = []
 			cnt = 0
 			for r, yf in lcfrsproductions(tree, item.sent, frontiers=True):
@@ -1266,4 +1264,4 @@ def readtreebank(treebankfile, Vocabulary vocab,
 
 __all__ = ['extractfragments', 'exactcounts', 'completebitsets',
 		'allfragments', 'repl', 'pygetsent', 'nonfrontier', 'getctrees',
-		'readtreebank', 'exactcountsslice']
+		'readtreebank', 'exactcountsslice', 'handledisc']

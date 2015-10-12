@@ -389,6 +389,19 @@ def introducepreterminals(tree, sent, ids=None):
 	return tree
 
 
+def handledisc(tree):
+	"""Binarize discontinuous substitution sites.
+
+	>>> print(handledisc(Tree('(S (X 0 2 4))')))
+	(S (X 0 (X|<> 2 (X|<> 4))))
+	>>> print(handledisc(Tree('(S (X 0 2))')))
+	(S (X 0 (X|<> 2)))
+	"""
+	for a in tree.postorder(lambda n: len(n) > 1 and isinstance(n[0], int)):
+		binarize(a, rightmostunary=True, threshold=1)
+	return tree
+
+
 def factorconstituent(node, sep='|', h=999, factor='right',
 		markfanout=False, markyf=False, ids=None, threshold=2,
 		filterfuncs=(), labelfun=attrgetter('label')):
