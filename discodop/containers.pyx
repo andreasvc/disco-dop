@@ -521,10 +521,10 @@ cdef class Ctrees:
 			dest[m] = source[n]
 			if dest[m].left >= 0:
 				dest[m].left = sortidx[source[n].left]
-				if dest[m].right >= 0:
-					dest[m].right = sortidx[source[n].right]
 			else:
 				lensent += 1
+			if dest[m].right >= 0:
+				dest[m].right = sortidx[source[n].right]
 		self.trees[self.len].offset = self.numnodes
 		self.trees[self.len].root = sortidx[root]
 		self.trees[self.len].len = cnt
@@ -665,6 +665,7 @@ cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
 
 	:param result: provide an empty list for the initial call.
 	:param i: node number to start with."""
+	cdef int j = tree[i].right
 	result.append('(')
 	result.append(vocab.labels[tree[i].prod])
 	result.append(' ')
@@ -673,14 +674,16 @@ cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
 		if tree[i].right >= 0:
 			result.append(' ')
 			gettree(result, tree, vocab, tree[i].right, disc)
+	elif disc:
+		result.append('%d=%s' % (
+				termidx(tree[i].left),
+				vocab.words[tree[i].prod] or ''))
+		# append rest of indices in case of disc. substitution site
+		while j >= 0:
+			result.append(' %d=' % termidx(tree[j].left))
+			j = tree[j].right
 	else:
-		if disc:
-			result.append('%d=%s' % (
-					termidx(tree[i].left),
-					vocab.words[tree[i].prod] or ''))
-			# FIXME: append more indices for disc. substitution site
-		else:
-			result.append(vocab.words[tree[i].prod] or '')
+		result.append(vocab.words[tree[i].prod] or '')
 	result.append(')')
 
 __all__ = ['Grammar', 'Chart', 'Ctrees', 'LexicalRule', 'SmallChartItem',
