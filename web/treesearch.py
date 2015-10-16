@@ -610,8 +610,7 @@ def draw():
 		tree, sent = CORPORA['tgrep2'].extract(
 				filename, [sentno], nofunc, nomorph).pop()
 	elif 'frag' in CORPORA:
-		filename = [a for a in CORPORA['frag'].files
-				if a.startswith(TEXTS[textno])].pop()
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
 		tree, sent = CORPORA['frag'].extract(
 				filename, [sentno], nofunc, nomorph).pop()
 	else:
@@ -644,8 +643,7 @@ def browsetrees():
 					for tree, sent in CORPORA['tgrep2'].extract(
 						filename, range(start, maxtree), nofunc, nomorph)]
 		elif 'frag' in CORPORA:
-			filename = [a for a in CORPORA['frag'].files
-					if a.startswith(TEXTS[textno])].pop()
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
 			drawntrees = [DrawTree(tree, sent).text(
 					unicodelines=True, html=True)
 					for tree, sent in CORPORA['frag'].extract(
@@ -700,6 +698,10 @@ def browsesents():
 		elif 'regex' in CORPORA:
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
 			results = CORPORA['regex'].extract(
+					filename, range(start, maxsent), sents=True)
+		elif 'frag' in CORPORA:
+			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
+			results = CORPORA['frag'].extract(
 					filename, range(start, maxsent), sents=True)
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
@@ -976,9 +978,9 @@ def getcorpus():
 	if os.path.exists(picklefile):
 		picklemtime = os.stat(picklefile).st_mtime
 	currentfiles = {os.path.splitext(os.path.basename(filename))[0]
-		for filename in tfiles + afiles + tokfiles}
+		for filename in tfiles + afiles + ffiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
-				for a in tfiles + afiles + tokfiles)):
+				for a in tfiles + afiles + ffiles + tokfiles)):
 		if corpora.get('tgrep2'):
 			numsents = [len(open(filename).readlines())
 					for filename in tfiles]
@@ -1014,7 +1016,7 @@ def getcorpus():
 		else:
 			raise ValueError('no texts found.')
 		texts = [os.path.splitext(os.path.basename(a))[0]
-				for a in tfiles or afiles or tokfiles]
+				for a in tfiles or afiles or ffiles or tokfiles]
 		styletable = getreadabilitymeasures(numsents)
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open(picklefile, 'wb'), protocol=-1)

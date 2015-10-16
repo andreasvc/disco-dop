@@ -9,7 +9,7 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
                   Specify corpus format [default: export].
 
 --encoding=enc    Specify a different encoding than the default utf-8.
---functions=x     :'leave'=default: leave syntactic labels as is,
+--functions=x     :'leave': leave syntactic labels as is [default],
                   :'remove': strip functions off labels,
                   :'add': show both syntactic categories and functions,
                   :'replace': only show grammatical functions.

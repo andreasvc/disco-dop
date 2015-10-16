@@ -531,6 +531,8 @@ class DrawTree(object):
 										ANSICOLOR[color], cat))
 						elif cat:
 							newtext.append(cat)
+						else:
+							newtext.append('')
 						if func:
 							seensep = True
 							if html and n in self.highlightfunc:
