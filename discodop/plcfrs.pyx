@@ -1041,7 +1041,7 @@ cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, Rule *rule,
 def do(sent, grammar):
 	"""Parse sentence with grammar and print 10 best derivations."""
 	from math import exp
-	from discodop.kbest import lazykbest
+	from .kbest import lazykbest
 	print('len', len(sent.split()), 'sentence:', sent)
 	sent = sent.split()
 	chart, _ = parse(sent, grammar)

@@ -12,9 +12,9 @@ import numpy as np
 
 from libc.math cimport isnan, isfinite
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
-from discodop.bit cimport nextset, nextunset, bitcount, bitlength, testbit
-from discodop.plcfrs cimport DoubleAgenda, DoubleEntry
-from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
+from .bit cimport nextset, nextunset, bitcount, bitlength, testbit
+from .plcfrs cimport DoubleAgenda, DoubleEntry
+from .containers cimport Chart, Grammar, Rule, LexicalRule, \
 		new_SmallChartItem, SmallChartItem
 
 INFINITY = float('infinity')
@@ -726,12 +726,12 @@ cpdef testestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
 
 def test():
 	cdef Chart chart, estchart
-	from discodop import plcfrs
-	from discodop.grammar import treebankgrammar
-	from discodop.containers import Grammar
-	from discodop.tree import Tree
-	from discodop.treebank import NegraCorpusReader
-	from discodop.treetransforms import addfanoutmarkers, binarize
+	from . import plcfrs
+	from .grammar import treebankgrammar
+	from .containers import Grammar
+	from .tree import Tree
+	from .treebank import NegraCorpusReader
+	from .treetransforms import addfanoutmarkers, binarize
 	corpus = NegraCorpusReader('alpinosample.export')
 	trees = list(corpus.trees().values())
 	for a in trees:

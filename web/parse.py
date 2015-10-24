@@ -21,10 +21,8 @@ from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 from werkzeug.urls import url_encode
 from discodop import treebank
-from discodop.tree import Tree
-from discodop.treedraw import DrawTree
-from discodop.runexp import readparam
-from discodop.parser import Parser, readgrammars, probstr
+from discodop.tree import Tree, DrawTree
+from discodop.parser import Parser, readparam, readgrammars, probstr
 
 LIMIT = 40  # maximum sentence length
 APP = Flask(__name__)

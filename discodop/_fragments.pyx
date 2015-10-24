@@ -18,19 +18,19 @@ from functools import partial
 from itertools import islice
 from array import array
 from roaringbitmap import RoaringBitmap
-from discodop.tree import Tree
-from discodop.treebank import quote, openread
-from discodop.grammar import lcfrsproductions, printrule
-from discodop.treetransforms import binarize, handledisc
+from .tree import Tree, quote
+from .util import openread
+from .grammar import lcfrsproductions, printrule
+from .treetransforms import binarize, handledisc
 
 cimport cython
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memset, memcpy
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.array cimport array, clone, extend_buffer, resize
-from discodop.containers cimport Node, NodeArray, Ctrees, Vocabulary, \
+from .containers cimport Node, NodeArray, Ctrees, Vocabulary, \
 		yieldranges, termidx
-from discodop.bit cimport iteratesetbits, abitcount, subset, setunioninplace
+from .bit cimport iteratesetbits, abitcount, subset, setunioninplace
 
 cdef extern from "macros.h":
 	int BITNSLOTS(int nb) nogil
@@ -1213,7 +1213,7 @@ def readtreebank(treebankfile, Vocabulary vocab,
 	if scratch is NULL:
 		raise MemoryError('allocation error')
 	if fmt != 'bracket':
-		from discodop.treebank import READERS
+		from .treebank import READERS
 		corpus = READERS[fmt](treebankfile, encoding=encoding)
 		for _, item in corpus.itertrees(0, limit):
 			tree = binarize(handledisc(item.tree), dot=True)

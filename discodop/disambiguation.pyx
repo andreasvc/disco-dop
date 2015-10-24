@@ -16,18 +16,18 @@ from operator import itemgetter, attrgetter
 from itertools import count
 from functools import partial
 from collections import defaultdict
-from discodop import plcfrs, _fragments
-from discodop.tree import Tree
-from discodop.kbest import lazykbest, getderiv
-from discodop.grammar import lcfrsproductions
-from discodop.treebank import INDEXRE, quote
-from discodop.treetransforms import addbitsets, unbinarize, canonicalize, \
+from . import plcfrs, _fragments
+from .tree import Tree, quote
+from .kbest import lazykbest, getderiv
+from .grammar import lcfrsproductions
+from .treebank import INDEXRE
+from .treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
-from discodop.bit import pyintnextset, pyintbitcount
+from .bit import pyintnextset, pyintbitcount
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
-from discodop.bit cimport abitcount
-from discodop.plcfrs cimport DoubleEntry, new_DoubleEntry
-from discodop.containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
+from .bit cimport abitcount
+from .plcfrs cimport DoubleEntry, new_DoubleEntry
+from .containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
 		SmallChartItem, FatChartItem, Edge, RankedEdge, \
 		new_RankedEdge, logprobadd, logprobsum, yieldranges
 cimport cython
@@ -1046,9 +1046,9 @@ cdef str nodeprod(deriv):
 
 
 def test():
-	from discodop.grammar import dopreduction
-	from discodop.containers import Grammar
-	from discodop import plcfrs
+	from .grammar import dopreduction
+	from .containers import Grammar
+	from . import plcfrs
 
 	def e(x):
 		a, b, _ = max(x, key=itemgetter(1))

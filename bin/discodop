@@ -30,5 +30,4 @@ elif len(sys.argv) == 3 and sys.argv[2] in ('-h', '--help'):
 	os.execlp('man', 'man', 'discodop-%s' % sys.argv[1])
 else:
 	cmd = sys.argv[1]
-	sys.argv[0] = os.path.basename(sys.argv.pop(0)) + ' ' + cmd
-	__import__('discodop.%s' % cmd, globals(), locals(), ['main']).main()
+	getattr(__import__('discodop.cli', fromlist=[cmd]), cmd)()

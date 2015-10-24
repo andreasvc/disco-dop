@@ -16,18 +16,17 @@ if sys.version_info[0] == 2:
 else:
 	from itertools import zip_longest  # pylint: disable=E0611
 
-from discodop import grammar
-from discodop.tree import Tree
-from discodop.treedraw import DrawTree
-from discodop.treebank import READERS, dependencies, handlefunctions
-from discodop.treetransforms import isdisc, getbits, bitfanout
-from discodop.treebanktransforms import functions
+from . import grammar
+from .tree import Tree, DrawTree, isdisc, bitfanout
+from .treebank import READERS, dependencies, handlefunctions
+from .treetransforms import getbits
+from .treebanktransforms import functions
 try:
-	from discodop.treedist import treedist, newtreedist
+	from .treedist import treedist, newtreedist
 except ImportError:
-	from discodop.treedist import newtreedist as newtreedist, newtreedist
+	from .treedist import newtreedist as newtreedist, newtreedist
 
-SHORTUSAGE = 'Usage: %s <gold> <parses> [param] [options]' % sys.argv[0]
+SHORTUSAGE = 'Usage: discodop eval <gold> <parses> [param] [options]'
 
 HEADER = '''
    Sentence                 Matched   Brackets            Corr   POS
@@ -607,7 +606,7 @@ def main():
 	options = {'goldenc=', 'parsesenc=', 'goldfmt=', 'parsesfmt=', 'fmt=',
 			'cutofflen=', 'headrules=', 'functions=', 'morphology='}
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'h', flags | options)
+		opts, args = gnu_getopt(sys.argv[2:], 'h', flags | options)
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
 		print(SHORTUSAGE)
@@ -967,8 +966,8 @@ def accuracy(reference, candidate):
 	``0<i<=len(test)`` such that ``test[i] == reference[i]``."""
 	if len(reference) != len(candidate):
 		raise ValueError('Sequences must have the same length.')
-	return Decimal(sum(1 for a, b in zip(reference, candidate)
-			if a == b)) / len(reference)
+	return Decimal(sum(a == b for a, b in zip(reference, candidate))
+			) / len(reference)
 
 
 def harmean(seq):
@@ -1074,6 +1073,3 @@ __all__ = ['Evaluator', 'TreePairResult', 'EvalAccumulator', 'main',
 		'leafancestorpaths', 'pathscore', 'leafancestor', 'treedisteval',
 		'recall', 'precision', 'f_measure', 'accuracy', 'harmean', 'mean',
 		'intervals', 'nozerodiv', 'editdistance']
-
-if __name__ == '__main__':
-	main()

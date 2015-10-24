@@ -67,6 +67,7 @@ lint: inplace
 		discodop/*.pyx discodop/*.pxi discodop/*.pxd \
 	&& pylint --indent-string='\t' --max-line-length=80 \
 		--disable=I,R,bad-continuation,invalid-name,star-args \
+		--enable=cyclic-import \
 		--extension-pkg-whitelist=discodop,faulthandler,alpinocorpus,roaringbitmap \
 		discodop/*.py web/*.py tests/*.py
 

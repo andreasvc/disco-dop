@@ -39,10 +39,9 @@ try:
 except ImportError:
 	ALPINOCORPUSLIB = False
 # disco-dop
-from discodop.treedraw import DrawTree
 from discodop import treebank, fragments, treesearch
-from discodop.tree import Tree, DiscTree
-from discodop.parser import which
+from discodop.tree import Tree, DiscTree, DrawTree
+from discodop.util import which
 
 DEBUG = True
 MINFREQ = 2  # filter out fragments which occur just once or twice
@@ -168,7 +167,8 @@ def counts(form, doexport=False):
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	if not doexport:
-		url = 'counts?' + url_encode(dict(export='csv', **form))
+		url = 'counts?' + url_encode(dict(export='csv', **form),
+				separator=b';')
 		yield ('Counts from queries '
 				'(<a href="%s">export to CSV</a>):\n' % url)
 	if norm == 'query':
@@ -241,9 +241,11 @@ def counts(form, doexport=False):
 				out = ('%s (<a href="browsesents?%s">browse</a>)    '
 						'%5d %5.2f %%' % (
 						text.ljust(COLWIDTH)[:COLWIDTH],
-						url_encode(dict(text=textno, sent=1,
-							query=query or form['query'],
-							engine=form.get('engine', 'tgrep2'))),
+						url_encode(
+							dict(text=textno, sent=1,
+								query=query or form['query'],
+								engine=form.get('engine', 'tgrep2')),
+							separator=b';'),
 						cnt, relfreq[text]))
 				plot = ''
 				if resultsindices is not None:
@@ -314,14 +316,14 @@ def trees(form):
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	# NB: we do not hide function or morphology tags when exporting
-	url = 'trees?' + url_encode(dict(export='csv', **form))
+	url = 'trees?' + url_encode(dict(export='csv', **form), separator=b';')
 	yield ('<pre>Query: %s\n'
 			'Trees (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				TREELIMIT, url, url + '&linenos=1'))
+				TREELIMIT, url, url + ';linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
 			CORPORA[form.get('engine', 'tgrep2')].trees(form['query'],
 			selected, start, end, maxresults=TREELIMIT,
@@ -346,11 +348,11 @@ def trees(form):
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			link = ('<a href="/browse?text=%d&sent=%s%s%s">browse</a>'
-					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
+			link = ('<a href="/browse?text=%d;sent=%s%s%s">browse</a>'
+					'|<a href="/browsesents?text=%d;sent=%s;highlight=%s">'
 					'context</a>' % (textno, sentno,
-					'&nofunc' if 'nofunc' in form else '',
-					'&nomorph' if 'nomorph' in form else '',
+					';nofunc' if 'nofunc' in form else '',
+					';nomorph' if 'nomorph' in form else '',
 					textno, sentno, sentno))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
@@ -373,14 +375,14 @@ def sents(form, dobrackets=False):
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
-			url_encode(dict(export='csv', **form)))
+			url_encode(dict(export='csv', **form), separator=b';'))
 	yield ('<pre>Query: %s\n'
 			'Sentences (showing up to %d per text; '
 			'export: <a href="%s">plain</a>, '
 			'<a href="%s">with line numbers</a>):\n' % (
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
-				SENTLIMIT, url, url + '&linenos=1'))
+				SENTLIMIT, url, url + ';linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
 			CORPORA[form.get('engine', 'tgrep2')].sents(form['query'],
 				selected, start, end, maxresults=SENTLIMIT,
@@ -394,8 +396,8 @@ def sents(form, dobrackets=False):
 			else:
 				breakdown = Counter(re.sub(
 					' {2,}', ' ... ',
-					' '.join(word if n in high1 or n in high2 else ' '
-						for n, word in enumerate(sent.split())))
+					' '.join(char if n in high1 or n in high2 else ' '
+						for n, char in enumerate(sent.split())))
 					for _, _, sent, high1, high2 in results)
 			yield '\n%s\n' % text
 			for match, cnt in breakdown.most_common():
@@ -407,24 +409,67 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			link = ('<a href="/browse?text=%d&sent=%s%s%s">tree</a>'
-					'|<a href="/browsesents?text=%d&sent=%s&highlight=%s">'
+			link = ('<a href="/browse?text=%d;sent=%s%s%s">tree</a>'
+					'|<a href="/browsesents?text=%d;sent=%s;highlight=%s">'
 					'context</a>' % (textno, sentno,
-					'&nofunc' if 'nofunc' in form else '',
-					'&nomorph' if 'nomorph' in form else '',
+					';nofunc' if 'nofunc' in form else '',
+					';nomorph' if 'nomorph' in form else '',
 					textno, sentno, sentno))
 			if dobrackets:
 				sent = cgi.escape(sent.replace(" )", " -NONE-)"))
 				out = sent.replace(high1, "<span class=r>%s</span>" % high1)
 			else:
-				out = ' '.join('<span class=r>%s</span>' % word
-						if x in high1 else
-						('<span class=b>%s</span>' % word
-						if x in high2 else word)
-						for x, word in enumerate(sent.split()))
-			yield "<li>#%s [%s] %s" % (str(sentno).rjust(6), link, out)
+				out = applyhighlight(sent, high1, high2)
+			yield "<li>#%s [%s] %s\n" % (str(sentno).rjust(6), link, out)
 		yield "</ol>"
 	yield '</pre>' if gotresults else 'No matches.'
+
+
+def applyhighlight(sent, high1, high2, colorvec=None):
+	"""Return a version of sent where given char. indices are highlighted."""
+	cur = None
+	start = 0
+	out = []
+	if colorvec is None:
+		for n, _ in enumerate(sent):
+			if n in high1:
+				if cur != 'red':
+					out.append(sent[start:n])
+					if cur is not None:
+						out.append('</span>')
+					out.append('<span class=r>')
+					start = n
+					cur = 'red'
+			elif n in high2:
+				if cur != 'blue':
+					out.append(sent[start:n])
+					if cur is not None:
+						out.append('</span>')
+					out.append('<span class=b>')
+					start = n
+					cur = 'blue'
+			else:
+				if cur is not None:
+					out.append(sent[start:n])
+					out.append('</span>')
+					start = n
+					cur = None
+		out.append(sent[start:])
+		if cur is not None:
+			out.append('</span>')
+	else:
+		for n, _ in enumerate(sent):
+			if cur != COLORS.get(colorvec[n], 'gray'):
+				out.append(sent[start:n])
+				if cur is not None:
+					out.append('</font>')
+				out.append('<font color=%s>' % COLORS.get(colorvec[n], 'gray'))
+				start = n
+				cur = COLORS.get(colorvec[n], 'gray')
+		out.append(sent[start:])
+		if cur is not None:
+			out.append('</font>')
+	return ''.join(out)
 
 
 def brackets(form):
@@ -444,7 +489,8 @@ def fragmentsinresults(form, doexport=False):
 	start, end = getslice(form.get('slice'))
 	uniquetrees = set()
 	if not doexport:
-		url = 'fragments?' + url_encode(dict(export='csv', **form))
+		url = 'fragments?' + url_encode(dict(export='csv', **form),
+				separator=b';')
 		yield ('<pre>Query: %s\n'
 				'Fragments (showing up to %d fragments '
 				'in the first %d search results from selected texts;\n'
@@ -504,7 +550,7 @@ def fragmentsinresults(form, doexport=False):
 				yield '%s\t%s\n' % (tree, freq)
 		else:
 			if disc:
-				link = "<a href='/draw?tree=%s&sent=%s'>draw</a>" % (
+				link = "<a href='/draw?tree=%s;sent=%s'>draw</a>" % (
 						quote(tree.encode('utf8')), quote(sent.encode('utf8')))
 				sent = GETLEAVES.sub(' <font color=red>\\1</font>',
 						cgi.escape(' ' + sent + ' '))
@@ -658,11 +704,11 @@ def browsetrees():
 
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
-			prevlink = '<a href="browse?text=%d&sent=%d" id=prev>prev</a>' % (
+			prevlink = '<a href="browse?text=%d;sent=%d" id=prev>prev</a>' % (
 					textno, sentno - chunk + 1)
 		nextlink = '<a id=next>next</a>'
 		if sentno < NUMSENTS[textno] - chunk:
-			nextlink = '<a href="browse?text=%d&sent=%d" id=next>next</a>' % (
+			nextlink = '<a href="browse?text=%d;sent=%d" id=next>next</a>' % (
 					textno, sentno + chunk + 1)
 		return render_template('browse.html', textno=textno, sentno=sentno,
 				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=results,
@@ -670,7 +716,7 @@ def browsetrees():
 				nofunc=nofunc, nomorph=nomorph,
 				mintree=start, maxtree=maxtree)
 	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browse?text=%d&sent=1&nomorph">%s</a> '
+			'<li><a href="browse?text=%d;sent=1;nomorph">%s</a> '
 			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
 			for n, text in enumerate(TEXTS))
 
@@ -710,46 +756,48 @@ def browsesents():
 				for n, a in enumerate(results, start)]
 		legend = queryparams = ''
 		if request.args.get('query', ''):
-			queryparams = '&' + url_encode(dict(
+			queryparams = ';' + url_encode(dict(
 					query=request.args['query'],
-					engine=request.args.get('engine', 'tgrep2')))
+					engine=request.args.get('engine', 'tgrep2')),
+					separator=b';')
 			filenames = {EXTRE.sub('', os.path.basename(a)): a
 					for a in CORPORA[request.args['engine']].files}
 			filename = filenames[TEXTS[textno]]
 			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s\n' % ('\t'.join(
-					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'gray'), query)
+					'\n<font color=%s>%s</font>' % (COLORS.get(n, 'gray'),
+						query)
 					for n, query in enumerate(queries, 1)))
+			resultshighlight = {}
 			for n, (_, query) in enumerate(queries.values()):
 				matches = CORPORA[request.args['engine']].sents(
-						query, subset=(filename, ), start=start, end=maxsent - 1,
+						query, subset=(filename, ),
+						start=start, end=maxsent - 1,
 						maxresults=2 * chunk)
 				for _, m, sent, high, _ in matches:
-					sent = sent.split(' ')
-					match = ' '.join(sent[a] for a in high)
-					results[m - start] = re.sub(
-							'(^| )(%s)( |$)' % re.escape(match),
-							lambda x: '%s<font color=%s>%s</font>%s' % (
-								x.group(1), COLORS.get(n + 1, 'gray'),
-								cgi.escape(x.group(2)), x.group(3)),
-							results[m - start], 1)
+					if m - start not in resultshighlight:
+						resultshighlight[m - start] = [0] * len(sent)
+					for x in high:
+						resultshighlight[m - start][x] = n + 1
+			for m, high in resultshighlight.items():
+				results[m] = applyhighlight(
+						results[m], set(), set(), colorvec=high)
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
-			prevlink = ('<a href="browsesents?text=%d&sent=%d%s" id=prev>'
+			prevlink = ('<a href="browsesents?text=%d;sent=%d%s" id=prev>'
 					'prev</a>' % (textno, sentno - chunk, queryparams))
 		nextlink = '<a id=next>next</a>'
 		if sentno < NUMSENTS[textno] - chunk:
-			nextlink = ('<a href="browsesents?text=%d&sent=%d%s" id=next>'
+			nextlink = ('<a href="browsesents?text=%d;sent=%d%s" id=next>'
 					'next</a>' % (textno, sentno + chunk, queryparams))
 		return render_template('browsesents.html', textno=textno,
-				sentno=sentno, text=TEXTS[textno],
-				totalsents=NUMSENTS[textno], sents=results, prevlink=prevlink,
-				nextlink=nextlink, chunk=chunk, mintree=start,
-				legend=legend,
+				sentno=sentno, text=TEXTS[textno], totalsents=NUMSENTS[textno],
+				sents=results, prevlink=prevlink, nextlink=nextlink,
+				chunk=chunk, mintree=start, legend=legend,
 				query=request.args.get('query', ''),
 				engine=request.args.get('engine', ''))
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
-			'<li><a href="browsesents?text=%d&sent=1&nomorph">%s</a> '
+			'<li><a href="browsesents?text=%d;sent=1;nomorph">%s</a> '
 			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
 			for n, text in enumerate(TEXTS))
 
@@ -1041,6 +1089,21 @@ class JsonSetEncoder(json.JSONEncoder):
 		return json.JSONEncoder.default(self, obj)
 
 
+class QueryStringRedirectMiddleware(object):
+	"""Support ; as query delimiter.
+
+	http://flask.pocoo.org/snippets/43/"""
+	def __init__(self, application):
+		self.application = application
+
+	def __call__(self, environ, start_response):
+		qs = environ.get('QUERY_STRING', '')
+		environ['QUERY_STRING'] = qs.replace(';', '&')
+		return self.application(environ, start_response)
+
+
+APP.wsgi_app = QueryStringRedirectMiddleware(APP.wsgi_app)
+
 fragments.PARAMS.update(quiet=True, debug=False, disc=False, complete=False,
 		cover=False, quadratic=False, complement=False, adjacent=False,
 		twoterms=False, nofreq=False, approx=True, indices=False,
@@ -1066,4 +1129,13 @@ TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
 log.info('corpus loaded.')
 
 if __name__ == '__main__':
-	APP.run(debug=DEBUG, use_reloader=False, host='0.0.0.0', port=5001)
+	from getopt import gnu_getopt, GetoptError
+	try:
+		opts, _args = gnu_getopt(sys.argv[1:], '', ['port=', 'ip='])
+		opts = dict(opts)
+	except GetoptError as err:
+		print('error: %r' % err, file=sys.stderr)
+		sys.exit(2)
+	APP.run(debug=DEBUG, use_reloader=False,
+			host=opts.get('--ip', '0.0.0.0'),
+			port=int(opts.get('--port', 5001)))

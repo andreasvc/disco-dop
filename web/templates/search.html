@@ -113,7 +113,7 @@ div.barplot span {
 		}} onChange="show('treesoutput', '');">fragments</label>
     {% endif %}
     <label><input type=radio name=engine value=regex{{
-        ' checked' if form.get('engine') == 'regex' or (not havetgrep and not havexpath)
+        ' checked' if form.get('engine') == 'regex' or (not havetgrep and not havexpath and not havefrag)
 		}} onChange="hide('treesoutput', '');">regex</label>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
 	(Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;

@@ -1,9 +1,11 @@
 """Function tags classifier."""
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
-from discodop.tree import Tree
-from discodop.treebanktransforms import base, functions, FUNC
-from discodop import heads
+from .tree import Tree
+from .treebanktransforms import base, functions, FUNC
+from .heads import getheadpos
+from .util import ishead
+
 
 FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
@@ -44,7 +46,7 @@ def trainfunctionclassifier(trees, sents, numproc):
 	classifier = linear_model.SGDClassifier(
 			loss='hinge',
 			penalty='elasticnet',
-			n_iter=np.ceil(10 ** 6 / len(trees)))
+			n_iter=int(10 ** 6 / len(trees)))
 	alphas = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6]
 	if multi:
 		classifier = multiclass.OneVsRestClassifier(
@@ -100,9 +102,9 @@ def functionfeatures(node, sent):
 
 	headsib = headsibpos = None
 	for sib in node.parent:
-		if heads.ishead(sib):
+		if ishead(sib):
 			headsib = sib
-			headsibpos = heads.getheadpos(headsib)
+			headsibpos = getheadpos(headsib)
 			break
 	result = {
 			# 4. head sister const label
@@ -133,10 +135,10 @@ def functionfeatures(node, sent):
 
 def basefeatures(node, sent, prefix=''):
 	"""A set features describing this particular node."""
-	headpos = heads.getheadpos(node)
+	headpos = getheadpos(node)
 	if base(node, 'PP'):
 		# NB: we skip the preposition here; need way to identify it.
-		altheadpos = heads.getheadpos(node[1:])
+		altheadpos = getheadpos(node[1:])
 	else:
 		altheadpos = None
 	return {

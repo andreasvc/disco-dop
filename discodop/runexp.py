@@ -27,65 +27,14 @@ else:
 	import pickle
 	from itertools import zip_longest  # pylint: disable=E0611
 import numpy as np
-from discodop import __version__
-from discodop import eval as evalmod
-from discodop import treebank, treebanktransforms, treetransforms, \
+from . import eval as evalmod
+from . import __version__, treebank, treebanktransforms, treetransforms, \
 		grammar, lexicon, parser, estimates
-from discodop.tree import Tree
-from discodop.containers import Grammar
-
-SHORTUSAGE = '''Usage: %s <parameter file> [--rerun]
-
-If a parameter file is given, an experiment is run. See the file sample.prm for
-an example parameter file. To repeat an experiment with an existing grammar,
-pass the option --rerun. The directory with the name of the parameter file
-without extension must exist in the current path; its results will be
-overwritten.''' % sys.argv[0]
+from .treetransforms import binarizetree
+from .util import workerfunc
+from .containers import Grammar
 
 INTERNALPARAMS = None
-DEFAULTS = dict(
-	# two-level keys:
-	traincorpus=dict(
-		# filenames may include globbing characters '*' and '?'.
-		path='alpinosample.export',
-		encoding='utf8',
-		maxwords=40,  # limit on train set sentences
-		numsents=2),  # size of train set (before applying maxwords)
-	testcorpus=dict(
-		path='alpinosample.export',
-		encoding='utf8',
-		maxwords=40,  # test set length limit
-		numsents=1,  # size of test set (before length limit)
-		skiptrain=True,  # test set starts after training set
-		# (useful when they are in the same file)
-		skip=0),  # number of sentences to skip from test corpus
-	binarization=dict(
-		method='default',  # choices: default, optimal, optimalhead
-		factor='right',
-		headrules=None,  # rules for finding heads of constituents
-		v=1, h=2, revh=0,
-		markhead=False,  # prepend head to siblings
-		leftmostunary=False,  # start binarization with unary node
-		rightmostunary=False,  # end binarization with unary node
-		tailmarker='',  # with headrules, head is last node and can be marked
-		markovthreshold=None,
-		labelfun=None,
-		fanout_marks_before_bin=False),
-	# other keys:
-		corpusfmt='export',  # choices: export, (disc)bracket, alpino, tiger
-		removeempty=False,  # whether to remove empty terminals
-		ensureroot=None,  # ensure every tree has a root node with this label
-		punct=None,  # choices: None, 'move', 'remove', 'root'
-		functions=None,  # choices None, 'add', 'remove', 'replace'
-		morphology=None,  # choices: None, 'add', 'replace', 'between'
-		transformations=None,  # apply treebank transformations
-		postagging=None,  # postagging: pass None to use tags from treebank.
-		relationalrealizational=None,  # do not apply RR-transform
-		predictfunctions=False,  # use discriminative classifier to add
-				# grammatical functions in postprocessing step
-		evalparam='proper.prm',  # EVALB-style parameter file
-		verbosity=2,
-		numproc=1)  # increase to use multiple CPUs; None: use all CPUs.
 
 
 def initworker(params):
@@ -97,7 +46,7 @@ def initworker(params):
 
 
 def startexp(
-		prm,  # A DictObj with the structure of DEFAULTS
+		prm,  # A DictObj with the structure of parser.DEFAULTS
 		resultdir='results',
 		rerun=False):
 	"""Execute an experiment."""
@@ -242,7 +191,7 @@ def startexp(
 		logging.info('read training & test corpus')
 		if prm.predictfunctions:
 			from sklearn.externals import joblib
-			from discodop import functiontags
+			from . import functiontags
 			logging.info('training function tag classifier')
 			funcclassifier, msg = functiontags.trainfunctionclassifier(
 					trees, sents, prm.numproc)
@@ -376,30 +325,6 @@ def dobinarization(trees, sents, binarization, relationalrealizational):
 	return trees
 
 
-def binarizetree(tree, binarization, relationalrealizational):
-	"""Binarize a single tree."""
-	if binarization.method == 'default':
-		return treetransforms.binarize(tree, factor=binarization.factor,
-				tailmarker=binarization.tailmarker,
-				horzmarkov=binarization.h, vertmarkov=binarization.v,
-				revhorzmarkov=binarization.revh,
-				leftmostunary=binarization.leftmostunary,
-				rightmostunary=binarization.rightmostunary,
-				markhead=binarization.markhead,
-				headoutward=binarization.headrules is not None,
-				direction=binarization.headrules is not None,
-				filterfuncs=(relationalrealizational['ignorefunctions']
-					+ (relationalrealizational['adjunctionlabel'], ))
-					if relationalrealizational else (),
-				labelfun=binarization.labelfun)
-	elif binarization.method == 'optimal':
-		return Tree.convert(treetransforms.optimalbinarize(tree))
-	elif binarization.method == 'optimalhead':
-		return Tree.convert(treetransforms.optimalbinarize(
-				tree, headdriven=True, h=binarization.h, v=binarization.v))
-	return tree
-
-
 def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		numproc, lexmodel, simplelexsmooth, top):
 	"""Read off the requested grammars."""
@@ -444,7 +369,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 		if lexmodel and simplelexsmooth:
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.mode == 'mc-rerank':
-			from discodop import _fragments
+			from . import _fragments
 			gram = _fragments.getctrees(trees, sents)
 			with codecs.getwriter('utf8')(gzip.open('%s/%s.train.gz' % (
 					resultdir, stage.name), 'wb')) as tbfile:
@@ -714,7 +639,7 @@ def doparsing(**kwds):
 	return results
 
 
-@parser.workerfunc
+@workerfunc
 def worker(args):
 	"""Parse a sentence using global Parser object, and evaluate incrementally.
 
@@ -925,7 +850,7 @@ def parsetepacoc(
 	del corpus_sents, corpus_taggedsents, corpus_trees, corpus_blocks
 	results = {}
 	cnt = 0
-	params = parser.DictObj(DEFAULTS)
+	params = parser.DictObj(parser.DEFAULTS)
 	params.update(stages=stages, binarization=binarization,
 			transformations=transformations)
 	theparser = parser.Parser(params)
@@ -977,117 +902,6 @@ def parsetepacoc(
 			resultdir=resultdir, usetags=True, numproc=numproc, category=cat))
 
 
-def readparam(filename):
-	"""Parse a parameter file.
-
-	:param filename: The file should contain a list of comma-separated
-		``attribute=value`` pairs and will be read using ``eval('dict(%s)' %
-		open(file).read())``.
-	:returns: A DictObj."""
-	with io.open(filename, encoding='utf8') as fileobj:
-		params = eval('dict(%s)' % fileobj.read())  # pylint: disable=eval-used
-	for key in DEFAULTS:
-		if key not in params:
-			if isinstance(DEFAULTS[key], dict):
-				raise ValueError('%r not in parameters.' % key)
-			else:
-				params[key] = DEFAULTS[key]
-	for stage in params['stages']:
-		for key in stage:
-			if key not in parser.DEFAULTSTAGE:
-				raise ValueError('unrecognized option: %r' % key)
-	params['stages'] = [parser.DictObj({k: stage.get(k, v)
-			for k, v in parser.DEFAULTSTAGE.items()})
-				for stage in params['stages']]
-	for key in DEFAULTS:
-		if isinstance(DEFAULTS[key], dict):
-			params[key] = parser.DictObj({k: params[key].get(k, v)
-					for k, v in DEFAULTS[key].items()})
-	for n, stage in enumerate(params['stages']):
-		if stage.mode not in (
-				'plcfrs', 'pcfg', 'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
-				'dop-rerank', 'mc-rerank'):
-			raise ValueError('unrecognized mode argument: %r.' % stage.mode)
-		if n == 0 and stage.prune:
-			raise ValueError('need previous stage to prune, '
-					'but this stage is first.')
-		if stage.prune is True:  # for backwards compatibility
-			stage.prune = params['stages'][n - 1].name
-		if stage.mode == 'dop-rerank':
-			assert stage.prune and not stage.splitprune and stage.k > 1
-			assert (stage.dop and stage.dop not in ('doubledop', 'dop1')
-					and stage.objective == 'mpp')
-		if stage.dop:
-			assert stage.estimator in ('rfe', 'ewe', 'bon')
-			assert stage.objective in ('mpp', 'mpd', 'mcc', 'shortest',
-					'sl-dop', 'sl-dop-simple')
-		assert stage.binarized or stage.mode == 'pcfg-bitpar-nbest', (
-				'non-binarized grammar requires mode "pcfg-bitpar-nbest"')
-	assert params['binarization'].method in (
-			None, 'default', 'optimal', 'optimalhead')
-	postagging = params['postagging']
-	if postagging is not None:
-		assert set(postagging).issubset({'method', 'model', 'retag',
-				'unknownthreshold', 'openclassthreshold', 'simplelexsmooth'})
-		postagging.setdefault('retag', False)
-		postagging = params['postagging'] = parser.DictObj(postagging)
-		if postagging.method == 'unknownword':
-			assert postagging.model in lexicon.UNKNOWNWORDFUNC
-			assert postagging.unknownthreshold >= 1
-			assert postagging.openclassthreshold >= 0
-		else:
-			assert postagging.method in ('treetagger', 'stanford', 'frog')
-	if params['transformations']:
-		params['transformations'] = treebanktransforms.expandpresets(
-				params['transformations'])
-	return parser.DictObj(params)
-
-
-def test():
-	"""Run ``sample.prm``."""
-	if os.path.exists('sample.prm') and os.path.exists('sample/'):
-		for path in os.listdir('sample/'):
-			os.remove('sample/' + path)
-		os.rmdir('sample/')
-	main(['runexp.py', 'sample.prm'])
-
-
-def main(argv=None):
-	"""Parse command line arguments."""
-	try:
-		import faulthandler
-		faulthandler.enable()
-	except ImportError:
-		pass
-	if argv is None:
-		argv = sys.argv
-	if len(argv) == 1:
-		print('error: incorrect number of arguments', file=sys.stderr)
-		print(SHORTUSAGE)
-		sys.exit(2)
-	elif '--tepacoc' in argv:
-		parsetepacoc()
-	else:
-		rerun = '--rerun' in argv
-		if rerun:
-			argv.remove('--rerun')
-		params = readparam(argv[1])
-		resultdir = argv[1].rsplit('.', 1)[0]
-		top = startexp(
-				params, resultdir=resultdir, rerun=rerun)
-		if not rerun:  # copy parameter file to result dir
-			paramlines = io.open(argv[1], encoding='utf8').readlines()
-			if paramlines[0].startswith("top='"):
-				paramlines = paramlines[1:]
-			outfile = os.path.join(resultdir, 'params.prm')
-			with io.open(outfile, 'w', encoding='utf8') as out:
-				out.write("top='%s',\n" % top)
-				out.writelines(paramlines)
-
-
 __all__ = ['initworker', 'startexp', 'loadtraincorpus', 'getposmodel',
 		'dobinarization', 'getgrammars', 'doparsing', 'worker', 'writeresults',
-		'oldeval', 'readtepacoc', 'parsetepacoc', 'readparam']
-
-if __name__ == '__main__':
-	main()
+		'oldeval', 'readtepacoc', 'parsetepacoc']

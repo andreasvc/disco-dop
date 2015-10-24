@@ -4,8 +4,8 @@ from libc.math cimport isinf, isfinite
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.dict cimport PyDict_Contains, PyDict_GetItem
 from cpython.float cimport PyFloat_AS_DOUBLE
-from discodop.plcfrs cimport DoubleAgenda, new_DoubleEntry
-from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
+from .plcfrs cimport DoubleAgenda, new_DoubleEntry
+from .containers cimport Chart, Grammar, Rule, LexicalRule, \
 		Edge, Edges, RankedEdge, Idx, cellidx, compactcellidx
 
 cdef extern from "macros.h":

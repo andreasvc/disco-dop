@@ -1,7 +1,8 @@
 """Punctuation related functions."""
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
-from discodop.tree import Tree, ParentedTree
+from .tree import Tree, ParentedTree
+from .treetransforms import removeterminals
 
 
 # fixme: treebank specific parameters for detecting punctuation.
@@ -46,13 +47,11 @@ def applypunct(method, tree, sent):
 
 def punctremove(tree, sent):
 	"""Remove any punctuation nodes, and any empty ancestors."""
-	from discodop.treebank import removeterminals
 	removeterminals(tree, sent, ispunct)
 
 
 def punctprune(tree, sent):
 	"""Remove quotes and period at sentence beginning and end."""
-	from discodop.treebank import removeterminals
 	i = 0
 	while i < len(sent) and sent[i] in PRUNEPUNCT:
 		sent[i] = None

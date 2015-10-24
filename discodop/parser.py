@@ -21,24 +21,68 @@ from math import exp, log
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
 from operator import itemgetter
-from functools import wraps
 import numpy as np
-from discodop import plcfrs, pcfg, grammar, treetransforms, treebanktransforms
-from discodop.containers import Grammar, BITPARRE
-from discodop.coarsetofine import prunechart
-from discodop import disambiguation
-from discodop.tree import ParentedTree
-from discodop.eval import alignsent
-from discodop.lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
-from discodop.treebank import writetree, openread
-from discodop.heads import saveheads, readheadrules
-from discodop.punctuation import punctprune, applypunct
-from discodop.functiontags import applyfunctionclassifier
+from . import plcfrs, pcfg, disambiguation
+from . import grammar, treetransforms, treebanktransforms
+from .containers import Grammar, BITPARRE
+from .coarsetofine import prunechart
+from .tree import ParentedTree
+from .eval import alignsent
+from .lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
+from .treebank import writetree
+from .heads import saveheads, readheadrules
+from .punctuation import punctprune, applypunct
+from .functiontags import applyfunctionclassifier
+from .util import workerfunc, openread
+from .treetransforms import binarizetree
 
 SHORTUSAGE = '''
-usage: %(cmd)s [options] <grammar/> [input [output]]
-or:    %(cmd)s --simple [options] <rules> <lexicon> [input [output]]\
-		''' % dict(cmd=sys.argv[0])
+usage: discodop parser [options] <grammar/> [input [output]]
+or:    discodop parser --simple [options] <rules> <lexicon> [input [output]]'''
+
+DEFAULTS = dict(
+	# two-level keys:
+	traincorpus=dict(
+		# filenames may include globbing characters '*' and '?'.
+		path='alpinosample.export',
+		encoding='utf8',
+		maxwords=40,  # limit on train set sentences
+		numsents=2),  # size of train set (before applying maxwords)
+	testcorpus=dict(
+		path='alpinosample.export',
+		encoding='utf8',
+		maxwords=40,  # test set length limit
+		numsents=1,  # size of test set (before length limit)
+		skiptrain=True,  # test set starts after training set
+		# (useful when they are in the same file)
+		skip=0),  # number of sentences to skip from test corpus
+	binarization=dict(
+		method='default',  # choices: default, optimal, optimalhead
+		factor='right',
+		headrules=None,  # rules for finding heads of constituents
+		v=1, h=2, revh=0,
+		markhead=False,  # prepend head to siblings
+		leftmostunary=False,  # start binarization with unary node
+		rightmostunary=False,  # end binarization with unary node
+		tailmarker='',  # with headrules, head is last node and can be marked
+		markovthreshold=None,
+		labelfun=None,
+		fanout_marks_before_bin=False),
+	# other keys:
+		corpusfmt='export',  # choices: export, (disc)bracket, alpino, tiger
+		removeempty=False,  # whether to remove empty terminals
+		ensureroot=None,  # ensure every tree has a root node with this label
+		punct=None,  # choices: None, 'move', 'remove', 'root'
+		functions=None,  # choices None, 'add', 'remove', 'replace'
+		morphology=None,  # choices: None, 'add', 'replace', 'between'
+		transformations=None,  # apply treebank transformations
+		postagging=None,  # postagging: pass None to use tags from treebank.
+		relationalrealizational=None,  # do not apply RR-transform
+		predictfunctions=False,  # use discriminative classifier to add
+				# grammatical functions in postprocessing step
+		evalparam='proper.prm',  # EVALB-style parameter file
+		verbosity=2,
+		numproc=1)  # increase to use multiple CPUs; None: use all CPUs.
 
 DEFAULTSTAGE = dict(
 		name='stage1',  # identifier, used for filenames
@@ -105,7 +149,7 @@ def main():
 	flags = 'help prob tags bitpar simple'.split()
 	options = flags + 'obj= bt= numproc= fmt= verbosity='.split()
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], 'hb:s:m:x', options)
+		opts, args = gnu_getopt(sys.argv[2:], 'hb:s:m:x', options)
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
 		print(SHORTUSAGE)
@@ -166,7 +210,6 @@ def main():
 		morph = None
 		del args[:2]
 	else:
-		from discodop.runexp import readparam
 		directory = args[0]
 		if not os.path.isdir(directory):
 			raise ValueError('expected directory produced by "discodop runexp"')
@@ -230,26 +273,6 @@ def initworker(parser, printprob, usetags, numparses,
 			morphology=morphology, headrules=headrules)
 
 
-def workerfunc(func):
-	"""Wrap a multiprocessing worker function to produce a full traceback."""
-	@wraps(func)
-	def wrapper(*args, **kwds):
-		"""Apply decorated function."""
-		try:
-			import faulthandler
-			faulthandler.enable()  # Dump information on segfault.
-		except (ImportError, io.UnsupportedOperation):
-			pass
-		# NB: only concurrent.futures on Python 3.3+ will exit gracefully.
-		try:
-			return func(*args, **kwds)
-		except Exception:  # pylint: disable=W0703
-			# Put traceback as string into an exception and raise that
-			raise Exception('in worker process\n%s' %
-					''.join(traceback.format_exception(*sys.exc_info())))
-	return wrapper
-
-
 @workerfunc
 def worker(args):
 	"""Parse a single sentence."""
@@ -303,7 +326,7 @@ class Parser(object):
 	"""A coarse-to-fine parser based on a given set of parameters.
 
 	:param prm: A DictObj with parameters as returned by
-		:py:func:`runexp.readparam()`.
+		:py:func:`parser.readparam()`.
 	:param funcclassifier: optionally, a function tag classifier trained by
 		:py:func:`functiontags.trainfunctionclassifier`.
 	"""
@@ -360,7 +383,6 @@ class Parser(object):
 			if self.prm.transformations:
 				treebanktransforms.transform(goldtree, sent,
 						self.prm.transformations)
-			from discodop.runexp import binarizetree
 			binarizetree(goldtree, self.prm.binarization,
 					self.relationalrealizational)
 			treetransforms.addfanoutmarkers(goldtree)
@@ -648,7 +670,7 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 			prevn = [a.name for a in stages].index(stage.prune)
 		if stage.mode == 'mc-rerank':
 			xgrammar = dict(labels=[], prods={})
-			from discodop._fragments import readtreebank
+			from ._fragments import readtreebank
 			xgrammar['trees1'] = readtreebank(
 					'%s/%s.train.gz' % (resultdir, stage.name),
 					xgrammar['vocab'], fmt='discbracket')
@@ -773,17 +795,72 @@ def probstr(prob):
 	return 'p=%.4g' % prob
 
 
-def which(program):
-	"""Return first match for program in search path."""
-	for path in os.environ.get('PATH', os.defpath).split(":"):
-		if path and os.path.exists(os.path.join(path, program)):
-			return os.path.join(path, program)
-	raise ValueError('%r not found in path; please install it.' % program)
+def readparam(filename):
+	"""Parse a parameter file.
+
+	:param filename: The file should contain a list of comma-separated
+		``attribute=value`` pairs and will be read using ``eval('dict(%s)' %
+		open(file).read())``.
+	:returns: A DictObj."""
+	with io.open(filename, encoding='utf8') as fileobj:
+		params = eval('dict(%s)' % fileobj.read())  # pylint: disable=eval-used
+	for key in DEFAULTS:
+		if key not in params:
+			if isinstance(DEFAULTS[key], dict):
+				raise ValueError('%r not in parameters.' % key)
+			else:
+				params[key] = DEFAULTS[key]
+	for stage in params['stages']:
+		for key in stage:
+			if key not in DEFAULTSTAGE:
+				raise ValueError('unrecognized option: %r' % key)
+	params['stages'] = [DictObj({k: stage.get(k, v)
+			for k, v in DEFAULTSTAGE.items()})
+				for stage in params['stages']]
+	for key in DEFAULTS:
+		if isinstance(DEFAULTS[key], dict):
+			params[key] = DictObj({k: params[key].get(k, v)
+					for k, v in DEFAULTS[key].items()})
+	for n, stage in enumerate(params['stages']):
+		if stage.mode not in (
+				'plcfrs', 'pcfg', 'pcfg-bitpar-nbest', 'pcfg-bitpar-forest',
+				'dop-rerank', 'mc-rerank'):
+			raise ValueError('unrecognized mode argument: %r.' % stage.mode)
+		if n == 0 and stage.prune:
+			raise ValueError('need previous stage to prune, '
+					'but this stage is first.')
+		if stage.prune is True:  # for backwards compatibility
+			stage.prune = params['stages'][n - 1].name
+		if stage.mode == 'dop-rerank':
+			assert stage.prune and not stage.splitprune and stage.k > 1
+			assert (stage.dop and stage.dop not in ('doubledop', 'dop1')
+					and stage.objective == 'mpp')
+		if stage.dop:
+			assert stage.estimator in ('rfe', 'ewe', 'bon')
+			assert stage.objective in ('mpp', 'mpd', 'mcc', 'shortest',
+					'sl-dop', 'sl-dop-simple')
+		assert stage.binarized or stage.mode == 'pcfg-bitpar-nbest', (
+				'non-binarized grammar requires mode "pcfg-bitpar-nbest"')
+	assert params['binarization'].method in (
+			None, 'default', 'optimal', 'optimalhead')
+	postagging = params['postagging']
+	if postagging is not None:
+		assert set(postagging).issubset({'method', 'model', 'retag',
+				'unknownthreshold', 'openclassthreshold', 'simplelexsmooth'})
+		postagging.setdefault('retag', False)
+		postagging = params['postagging'] = DictObj(postagging)
+		if postagging.method == 'unknownword':
+			assert postagging.model in UNKNOWNWORDFUNC
+			assert postagging.unknownthreshold >= 1
+			assert postagging.openclassthreshold >= 0
+		else:
+			assert postagging.method in ('treetagger', 'stanford', 'frog')
+	if params['transformations']:
+		params['transformations'] = treebanktransforms.expandpresets(
+				params['transformations'])
+	return DictObj(params)
 
 
 __all__ = ['DictObj', 'Parser', 'doparsing', 'exportbitpargrammar',
 		'initworker', 'probstr', 'readgrammars', 'readinputbitparstyle',
-		'which', 'worker', 'workerfunc']
-
-if __name__ == '__main__':
-	main()
+		'worker', 'readparam']

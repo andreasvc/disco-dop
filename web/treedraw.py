@@ -12,7 +12,7 @@ from flask import request, render_template, redirect, url_for
 from flask import send_from_directory
 # disco-dop
 from discodop.treebank import incrementaltreereader
-from discodop.treedraw import DrawTree
+from discodop.tree import DrawTree
 
 
 LIMIT = 1024 * 10  # ~10KB

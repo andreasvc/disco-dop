@@ -1,12 +1,9 @@
 """Read and write treebanks."""
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
-import io
 import os
 import re
 import sys
-import gzip
-import codecs
 import xml.etree.cElementTree as ElementTree
 from glob import glob
 from itertools import count, chain, islice
@@ -15,9 +12,12 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-from discodop.tree import Tree, ParentedTree
-from discodop.punctuation import applypunct
-from discodop.heads import applyheadrules, readheadrules, ishead
+from .tree import Tree, ParentedTree, brackettree, quote, unquote, \
+		SUPERFLUOUSSPACERE
+from .treetransforms import removeemptynodes
+from .punctuation import applypunct
+from .heads import applyheadrules, readheadrules
+from .util import openread, ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
@@ -26,11 +26,7 @@ EXPORTNONTERMINAL = re.compile(r'^#([5-9][0-9][0-9])$')
 POSRE = re.compile(r'\(([^() ]+) [^ ()]+\)')
 TERMINALSRE = re.compile(r' ([^ ()]+)\)')
 LEAVESRE = re.compile(r' ([^ ()]*)\)')
-FRONTIERNTRE = re.compile(r' \)')
 INDEXRE = re.compile(r' [0-9]+\b')
-SUPERFLUOUSSPACERE = re.compile(r'\)\s+(?=\))')
-# regex to check if the tree contains any terminals not prefixed by indices
-STRTERMRE = re.compile(r' (?![0-9]+=)[^()]*\s*\)')
 
 
 class Item(object):
@@ -432,36 +428,6 @@ class DactCorpusReader(AlpinoCorpusReader):
 			corpus = alpinocorpus.CorpusReader(filename)
 			for entry in corpus.entries():
 				yield entry.name(), entry.contents()
-
-
-def brackettree(treestr):
-	"""Parse a single tree presented in (disc)bracket format."""
-	if STRTERMRE.search(treestr):  # terminals are not all indices
-		sent, cnt = [], count()
-
-		def substleaf(x):
-			"""Collect word and return index."""
-			sent.append(unquote(x))
-			return next(cnt)
-
-		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)',
-				SUPERFLUOUSSPACERE.sub(')', treestr)),
-				parse_leaf=substleaf)
-	else:
-		sent = {}
-
-		def substleaf(x):
-			"""Collect word and return index."""
-			idx, word = x.split('=', 1)
-			idx = int(idx)
-			sent[idx] = unquote(word)
-			return idx
-
-		tree = ParentedTree.parse(
-				SUPERFLUOUSSPACERE.sub(')', treestr),
-				parse_leaf=substleaf)
-		sent = [sent.get(n, None) for n in range(max(sent) + 1)]
-	return tree, sent
 
 
 def exporttree(block, functions=None, morphology=None, lemmas=None):
@@ -992,60 +958,12 @@ def segmentexport(morphology, functions, strict=False):
 			line = (yield None, not CONSUMED)
 
 
-def quote(word):
-	"""Quote parentheses and replace None with ''."""
-	if word is None:
-		return ''
-	return word.replace('(', '-LRB-').replace(')', '-RRB-')
-
-
-def unquote(word):
-	"""Reverse quoting of parentheses, frontier spans."""
-	if word in ('', '-FRONTIER-'):
-		return None
-	return word.replace('-LRB-', '(').replace('-RRB-', ')')
-
-
 def numbase(key):
 	"""Split file name in numeric and string components to use as sort key."""
 	path, base = os.path.split(key)
 	components = re.split(r'[-.,_ ]', os.path.splitext(base)[0])
 	components = [int(a) if re.match(r'[0-9]+$', a) else a for a in components]
 	return [path] + components
-
-
-def removeterminals(tree, sent, func):
-	"""Remove any terminals for which func is True, and any empty ancestors."""
-	delete = set()
-	for a in reversed(tree.treepositions('leaves')):
-		if func(sent[tree[a]], tree[a[:-1]].label):
-			delete.add(tree[a])
-			for n in range(1, len(a)):
-				del tree[a[:-n]]
-				if tree[a[:-(n + 1)]]:
-					break
-	# renumber
-	oldleaves = sorted(tree.leaves())
-	newleaves = {a: n for n, a in enumerate(oldleaves)}
-	for a in tree.treepositions('leaves'):
-		tree[a] = newleaves[tree[a]]
-	sent[:] = [a for n, a in enumerate(sent) if n not in delete]
-	assert sorted(tree.leaves()) == list(range(len(tree.leaves()))), tree
-
-
-def removeemptynodes(tree, sent):
-	"""Remove any empty nodes, and any empty ancestors."""
-	removeterminals(tree, sent, lambda x, y: x in (None, '') or y == '-NONE-')
-
-
-def openread(filename, encoding='utf8'):
-	"""Open stdin/text file for reading; decompress .gz files on-the-fly."""
-	if filename == '-':
-		return io.open(sys.stdin.fileno(), encoding=encoding)
-	if not isinstance(filename, int) and filename.endswith('.gz'):
-		return codecs.getreader(encoding)(gzip.open(filename))
-	else:
-		return io.open(filename, encoding=encoding)
 
 
 READERS = OrderedDict((('export', NegraCorpusReader),
@@ -1058,10 +976,9 @@ WRITERS = ('export', 'bracket', 'discbracket', 'dact',
 
 __all__ = ['Item', 'CorpusReader', 'BracketCorpusReader',
 		'DiscBracketCorpusReader', 'NegraCorpusReader', 'AlpinoCorpusReader',
-		'TigerXMLCorpusReader', 'DactCorpusReader', 'brackettree',
-		'exporttree', 'exportsplit', 'alpinotree', 'writetree',
-		'writebrackettree', 'writeexporttree', 'writealpinotree',
-		'writedependencies', 'dependencies', 'handlefunctions',
-		'handlemorphology', 'incrementaltreereader', 'segmentbrackets',
-		'segmentexport', 'quote', 'unquote', 'numbase', 'removeterminals',
-		'removeemptynodes']
+		'TigerXMLCorpusReader', 'DactCorpusReader', 'exporttree',
+		'exportsplit', 'alpinotree', 'writetree', 'writebrackettree',
+		'writeexporttree', 'writealpinotree', 'writedependencies',
+		'dependencies', 'handlefunctions', 'handlemorphology',
+		'incrementaltreereader', 'segmentbrackets', 'segmentexport',
+		'numbase']

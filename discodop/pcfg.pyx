@@ -6,9 +6,10 @@ import subprocess
 from math import exp, log as pylog
 from itertools import count
 import numpy as np
-from discodop.tree import Tree
-from discodop.plcfrs import DoubleAgenda
-from discodop.treebank import TERMINALSRE
+from .tree import Tree
+from .util import which
+from .plcfrs import DoubleAgenda
+from .treebank import TERMINALSRE
 
 cimport cython
 include "constants.pxi"
@@ -674,7 +675,6 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 	:param n: the number of derivations to return (max 1000); if n == 0, return
 		parse forest instead of n-best list (requires binarized grammar).
 	:returns: a dictionary of derivations with their probabilities."""
-	from discodop.parser import which
 	if n < 1 or n > 1000:
 		raise ValueError('with bitpar number of derivations n should be '
 				'1 <= n <= 1000. got: n = %d' % n)
@@ -783,8 +783,8 @@ def renumber(deriv):
 
 
 def test():
-	from discodop.containers import Grammar
-	from discodop.disambiguation import getderivations, marginalize
+	from .containers import Grammar
+	from .disambiguation import getderivations, marginalize
 	from operator import itemgetter
 	cfg = Grammar([
 		((('A', 'A'), ((0, ), )), 0.7), ((('A', 'B'), ((0, ), )), 0.6),

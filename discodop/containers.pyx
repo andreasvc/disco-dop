@@ -3,8 +3,8 @@ from __future__ import print_function
 from math import exp, log, fsum
 from libc.math cimport log, exp
 from roaringbitmap import RoaringBitmap
-from discodop.tree import Tree
-from discodop.bit cimport nextset, nextunset, anextset, anextunset
+from .tree import Tree
+from .bit cimport nextset, nextunset, anextset, anextunset
 cimport cython
 include "constants.pxi"
 

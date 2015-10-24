@@ -2,13 +2,12 @@
 """
 from __future__ import print_function
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
-from discodop.tree import Tree
-from discodop.treetransforms import mergediscnodes, unbinarize, fanout, \
-		addbitsets
-from discodop.containers cimport Grammar, Chart, ChartItem, Edges, Edge, \
+from .tree import Tree
+from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
+from .containers cimport Grammar, Chart, ChartItem, Edges, Edge, \
 		Rule, LexicalRule, RankedEdge, cellidx, compactcellidx, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
-from discodop.kbest import lazykbest
+from .kbest import lazykbest
 import numpy as np
 
 # alternative: take coarse chart, return fine chart w/whitelist.
@@ -256,9 +255,9 @@ def getoutside(Chart chart):
 
 def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 	"""Test coarse-to-fine methods on a sentence."""
-	from discodop import plcfrs
-	from discodop.disambiguation import getderivations, marginalize
-	from discodop.treetransforms import canonicalize, removefanoutmarkers
+	from . import plcfrs
+	from .disambiguation import getderivations, marginalize
+	from .treetransforms import canonicalize, removefanoutmarkers
 	from math import exp as pyexp
 	sent, tags = zip(*sent)
 	print(' C O A R S E ')
@@ -328,10 +327,9 @@ def doctftest(coarse, fine, sent, tree, k, split, verbose=False):
 def test():
 	import re
 	from time import clock
-	from discodop.treetransforms import splitdiscnodes, binarize, \
-			addfanoutmarkers
-	from discodop.treebank import NegraCorpusReader
-	from discodop.grammar import treebankgrammar, dopreduction, subsetgrammar
+	from .treetransforms import splitdiscnodes, binarize, addfanoutmarkers
+	from .treebank import NegraCorpusReader
+	from .grammar import treebankgrammar, dopreduction, subsetgrammar
 	k = 50
 	# corpus = NegraCorpusReader("toytb.export", encoding="iso-8859-1")
 	# corpus = NegraCorpusReader("negraproc.export",

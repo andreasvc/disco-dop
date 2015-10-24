@@ -277,6 +277,3 @@ def main():
 __all__ = ['Grammar', 'LexicalRule', 'Rule', 'gen', 'chooserule', 'compose',
 		'parsefrac', 'read_lcfrs_grammar', 'read_bitpar_grammar',
 		'splitgrammar', 'yfarray', 'arraytoyf']
-
-if __name__ == '__main__':
-	main()

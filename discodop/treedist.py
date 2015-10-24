@@ -37,7 +37,7 @@
 
 from __future__ import division, print_function, absolute_import
 from collections import deque
-from discodop.tree import Tree
+from .tree import Tree
 
 
 class Terminal(object):
@@ -323,6 +323,3 @@ def test():
 
 __all__ = ['Terminal', 'prepare', 'AnnotatedTree', 'strdist', 'treedist',
 		'newtreedist', 'EditStats', 'geteditstats']
-
-if __name__ == '__main__':
-	test()

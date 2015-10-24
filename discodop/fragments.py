@@ -22,16 +22,16 @@ import multiprocessing
 from collections import defaultdict
 from itertools import count
 from getopt import gnu_getopt, GetoptError
-from discodop.treebank import brackettree, writetree
-from discodop.treetransforms import binarize, introducepreterminals, unbinarize
-from discodop import _fragments
-from discodop.parser import workerfunc
-from discodop.containers import Vocabulary
+from .tree import brackettree
+from .treebank import writetree
+from .treetransforms import binarize, introducepreterminals, unbinarize
+from . import _fragments
+from .util import workerfunc
+from .containers import Vocabulary
 
 SHORTUSAGE = '''\
-Usage: %(cmd)s <treebank1> [treebank2] [options]
-  or: %(cmd)s --batch=<dir> <treebank1> <treebank2>... [options]''' % dict(
-		cmd=sys.argv[0])
+Usage: discodop fragments <treebank1> [treebank2] [options]
+  or: discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]'''
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'alt',
 		'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet', 'help')
 OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=')
@@ -44,9 +44,9 @@ APPLY = lambda x, _y: x()
 def main(argv=None):
 	"""Command line interface to fragment extraction."""
 	if argv is None:
-		argv = sys.argv
+		argv = sys.argv[2:]
 	try:
-		opts, args = gnu_getopt(argv[1:], 'ho:', FLAGS + OPTIONS)
+		opts, args = gnu_getopt(argv, 'ho:', FLAGS + OPTIONS)
 	except GetoptError as err:
 		print('error:', err, file=sys.stderr)
 		print(SHORTUSAGE)
@@ -655,13 +655,10 @@ def cpu_count():
 
 def test():
 	"""Demonstration of fragment extractor."""
-	main('fragments.py --fmt=export alpinosample.export'.split())
+	main('--fmt=export alpinosample.export'.split())
 
 
 __all__ = ['main', 'regular', 'batch', 'readtreebanks', 'read2ndtreebank',
 		'initworker', 'initworkersimple', 'worker', 'exactcountworker',
 		'workload', 'recurringfragments', 'iteratefragments', 'allfragments',
 		'debinarize', 'printfragments', 'altrepr', 'cpu_count']
-
-if __name__ == '__main__':
-	main()

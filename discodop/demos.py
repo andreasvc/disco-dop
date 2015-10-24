@@ -1,10 +1,10 @@
 """Examples of various formalisms encoded in LCFRS grammars."""
 from __future__ import print_function, absolute_import
 from math import exp
-from discodop import treetransforms, plcfrs, kbest
-from discodop.tree import Tree
-from discodop.grammar import treebankgrammar
-from discodop.containers import Grammar
+from . import treetransforms, plcfrs, kbest
+from .tree import Tree
+from .grammar import treebankgrammar
+from .containers import Grammar
 
 
 def tree_adjoining_grammar():
@@ -241,6 +241,3 @@ def main():
 
 
 __all__ = ['tree_adjoining_grammar', 'dependencygrammar', 'bitext']
-
-if __name__ == '__main__':
-	test()

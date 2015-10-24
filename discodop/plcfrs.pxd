@@ -4,10 +4,10 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
 from cpython.set cimport PySet_Contains
 from cpython.float cimport PyFloat_AS_DOUBLE
-from discodop.containers cimport Chart, Grammar, Rule, LexicalRule, \
+from .containers cimport Chart, Grammar, Rule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \
 		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem
-from discodop.bit cimport nextset, nextunset, bitcount, bitlength, \
+from .bit cimport nextset, nextunset, bitcount, bitlength, \
 	testbit, anextset, anextunset, abitcount, abitlength, setunion
 from libc.string cimport memset, memcpy
 

@@ -3,16 +3,16 @@
 Implementation of Huang & Chiang (2005): Better k-best parsing."""
 from __future__ import print_function
 from operator import itemgetter
-from discodop.plcfrs import DoubleAgenda
-from discodop.containers import ChartItem, RankedEdge, Grammar
+from .plcfrs import DoubleAgenda
+from .containers import ChartItem, RankedEdge, Grammar
 
 cimport cython
 from libc.stdint cimport uint32_t
-from discodop.containers cimport ChartItem, SmallChartItem, FatChartItem, \
+from .containers cimport ChartItem, SmallChartItem, FatChartItem, \
 		Grammar, Rule, Chart, Edges, Edge, RankedEdge, new_RankedEdge, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
-from discodop.pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
-from discodop.plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \
+from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
+from .plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \
 		LCFRSChart, SmallLCFRSChart, FatLCFRSChart, new_DoubleEntry
 include "constants.pxi"
 

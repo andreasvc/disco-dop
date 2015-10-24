@@ -38,8 +38,8 @@ from subprocess import Popen, PIPE
 from collections import defaultdict, Counter
 from fractions import Fraction
 from cyordereddict import OrderedDict
-import discodop.eval
-from discodop.treebanktransforms import YEARRE
+from .treebanktransforms import YEARRE
+from .util import which
 
 UNK = '_UNK'
 NUMBERRE = re.compile('^(?:[0-9]*[,.\'])?[0-9]+$')
@@ -441,7 +441,6 @@ UNKNOWNWORDFUNC = {
 # === Performing POS tagging with external tools ============
 def externaltagging(usetagger, model, sents, overridetag, tagmap):
 	"""Use an external tool to tag a list of sentences."""
-	from discodop.parser import which
 	logging.info('Start tagging.')
 	goldtags = [t for sent in sents.values() for _, t in sent]
 	if usetagger == 'treetagger':  # Tree-tagger
@@ -511,9 +510,14 @@ def externaltagging(usetagger, model, sents, overridetag, tagmap):
 				'before: %r\nafter: %r' % (sents[n], tags))
 	newtags = [t for sent in taggedsents.values() for _, t in sent]
 	logging.info('Tag accuracy: %5.2f\ngold - cand: %r\ncand - gold %r',
-		(100 * discodop.eval.accuracy(goldtags, newtags)),
+		(100 * accuracy(goldtags, newtags)),
 		set(goldtags) - set(newtags), set(newtags) - set(goldtags))
 	return taggedsents
+
+
+def accuracy(gold, cand):
+	"""Compute fraction of equivalent pairs in two sequences."""
+	return sum(a == b for a, b in zip(gold, cand)) / len(gold)
 
 
 def tagmangle(a, splitchar, overridetag, tagmap):

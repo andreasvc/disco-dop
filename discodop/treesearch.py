@@ -38,17 +38,15 @@ except ImportError:
 	ALPINOCORPUSLIB = False
 from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
-from discodop import treebank, _fragments
-from discodop.tree import Tree
-from discodop.treebank import unquote, openread
-from discodop.treetransforms import binarize, mergediscnodes, handledisc
-from discodop.parser import workerfunc, which
-from discodop.treedraw import ANSICOLOR, DrawTree
-from discodop.containers import Vocabulary
+from . import treebank, _fragments
+from .tree import Tree, DrawTree, brackettree, unquote
+from .treetransforms import binarize, mergediscnodes, handledisc
+from .util import which, workerfunc, openread, ANSICOLOR
+from .containers import Vocabulary
 
 SHORTUSAGE = '''Search through treebanks with queries.
-Usage: %s [-e (tgrep2|xpath|frag|regex)] [-t|-s|-c] <query> <treebank1>...
-''' % sys.argv[0]
+Usage: discodop treesearch [-e (tgrep2|xpath|frag|regex)] [-t|-s|-c] \
+<query> <treebank1>...'''
 CACHESIZE = 32767
 GETLEAVES = re.compile(r' (?:[0-9]+=)?([^ ()]+)(?=[ )])')
 LEAFINDICES = re.compile(r' ([0-9]+)=')
@@ -56,23 +54,6 @@ LEAFINDICESWORDS = re.compile(r' ([0-9]+)=([^ ()]+)\)')
 ALPINOLEAVES = re.compile('<sentence>(.*)</sentence>')
 MORPH_TAGS = re.compile(r'([/*\w]+)(?:\[[^ ]*\]\d?)?((?:-\w+)?(?:\*\d+)? )')
 FUNC_TAGS = re.compile(r'-\w+')
-
-# abbreviations for Alpino POS tags
-ABBRPOS = {
-	'PUNCT': 'PUNCT',
-	'COMPLEMENTIZER': 'COMP',
-	'PROPER_NAME': 'NAME',
-	'PREPOSITION': 'PREP',
-	'PRONOUN': 'PRON',
-	'DETERMINER': 'DET',
-	'ADJECTIVE': 'ADJ',
-	'ADVERB': 'ADV',
-	'HET_NOUN': 'HET',
-	'NUMBER': 'NUM',
-	'PARTICLE': 'PRT',
-	'ARTICLE': 'ART',
-	'NOUN': 'NN',
-	'VERB': 'VB'}
 
 FRAG_FILES = None
 FRAG_MACROS = None
@@ -93,8 +74,10 @@ class CorpusSearcher(object):
 			pass 1 to use a single core."""
 		if not isinstance(files, (list, tuple, set, dict)):
 			raise ValueError('"files" argument must be a sequence.')
-		elif not all(os.path.isfile(a) for a in files):
-			raise ValueError('filenames in "files" argument must exist.')
+		for a in files:
+			if not os.path.isfile(a):
+				raise ValueError('filenames in "files" argument must exist. '
+						'%r not found.' % a)
 		self.files = OrderedDict.fromkeys(files)
 		self.macros = macros
 		self.numproc = numproc
@@ -144,14 +127,19 @@ class CorpusSearcher(object):
 		:returns: list of tuples of the form
 			``(corpus, sentno, sent, match1, match2)``
 			sent is a single string with space-separated tokens;
-			match1 and match2 are iterables of integer indices of tokens
+			match1 and match2 are iterables of integer indices of characters
 			matched by the query. If the distinction is applicable, match2
 			contains the complete subtree, of which match1 is a subset."""
 
 	def batchcounts(self, queries, subset=None, start=None, end=None):
 		"""Like ``counts()``, but executes a sequence of queries.
 
-		Useful in combination with ``pandas.DataFrame``.
+		Useful in combination with ``pandas.DataFrame``; e.g.::
+
+			queries = ['NP < PP', 'VP < PP']
+			corpus = treesearch.TgrepSearcher(glob.glob('*.mrg'))
+			pandas.DataFrame.from_items(list(corpus.batchcounts(queries)),
+					orient='index', columns=queries)
 
 		:param queries: an iterable of strings.
 		:param start, end: the interval of sentences to query in each corpus;
@@ -220,7 +208,7 @@ class TgrepSearcher(CorpusSearcher):
 		result = OrderedDict()
 		jobs = {}
 		# %s the sentence number
-		fmt = r'%s:::\n'
+		fmt = r'%s\n:::\n'
 		for filename in subset:
 			try:
 				result[filename] = self.cache[
@@ -282,7 +270,7 @@ class TgrepSearcher(CorpusSearcher):
 						match = ' %s)' % match
 						treestr = treestr.replace(match, '_HIGH%s' % match)
 
-				tree, sent = treebank.brackettree(treestr)
+				tree, sent = brackettree(treestr)
 				tree = mergediscnodes(tree)
 				high = list(tree.subtrees(lambda n: n.label.endswith("_HIGH")))
 				tmp = {}
@@ -332,10 +320,12 @@ class TgrepSearcher(CorpusSearcher):
 					for match in matches:
 						idx = sent.index(match if match.startswith('(')
 								else ' %s)' % match)
-						prelen = len(GETLEAVES.findall(sent[:idx]))
-						match = GETLEAVES.findall(
-								match) if '(' in match else [match]
-						tmp.update(range(prelen, prelen + len(match)))
+						prelen = len(' '.join(unquote(word) for word
+								in GETLEAVES.findall(sent[:idx])))
+						match = (' '.join(unquote(word) for word
+								in GETLEAVES.findall(match))
+								if '(' in match else unquote(match))
+						tmp.update(range(prelen, prelen + len(match) + 1))
 					sent = ' '.join(unquote(word)
 							for word in GETLEAVES.findall(sent))
 					match1 = tmp
@@ -372,7 +362,7 @@ class TgrepSearcher(CorpusSearcher):
 			return result
 		return [(mergediscnodes(tree), sent)
 				for tree, sent
-				in (treebank.brackettree(filterlabels(
+				in (brackettree(filterlabels(
 					treestr, nofunc, nomorph)) for treestr in result)]
 
 	@workerfunc
@@ -534,6 +524,7 @@ class DactSearcher(CorpusSearcher):
 					# extract starting index of highlighted words
 					match = {int(a) for a in re.findall(
 							'<node[^>]*begin="([0-9]+)"[^>]*/>', match)}
+					match = charindices(treestr.split(), match)
 				x.append((filename, sentno, treestr, match, set()))
 			self.cache['sents', query, filename,
 					start, end, brackets] = x, maxresults
@@ -725,7 +716,7 @@ class FragmentSearcher(CorpusSearcher):
 							match,
 							'%s_HIGH %s' % tuple(match.split(None, 1)),
 							1)
-					tree, sent = treebank.brackettree(treestr)
+					tree, sent = brackettree(treestr)
 					tree = mergediscnodes(tree)
 					high = list(tree.subtrees(
 							lambda n: n.label.endswith("_HIGH")))
@@ -768,7 +759,7 @@ class FragmentSearcher(CorpusSearcher):
 							match = LEAFINDICES.sub(' ', match)
 						match1, match2 = match, ''
 					else:
-						_, xsent = treebank.brackettree(treestr)
+						_, xsent = brackettree(treestr)
 						sent = ' '.join(xsent)
 						fragwords = set(GETLEAVES.findall(frag))
 						match1 = {int(a) for a, b
@@ -776,6 +767,7 @@ class FragmentSearcher(CorpusSearcher):
 								if b in fragwords}
 						match2 = {int(a) for a, _
 								in LEAFINDICESWORDS.findall(match)}
+						match1, match2 = charindices(xsent, match1, match2)
 					x.append((filename, sentno, sent, match1, match2))
 			self.cache['sents', query, filename,
 					start, end, brackets] = x, maxresults
@@ -796,7 +788,7 @@ class FragmentSearcher(CorpusSearcher):
 		result = []
 		for n in indices:
 			treestr = corpus.extract(n - 1, self.vocab)
-			tree, sent = treebank.brackettree(
+			tree, sent = brackettree(
 					filterlabels(treestr, nofunc, nomorph))
 			result.append((mergediscnodes(tree), sent))
 		return result
@@ -830,7 +822,7 @@ def _frag_parse_query(query, disc=False):
 		qitems = treebank.incrementaltreereader(
 				io.StringIO(query), strict=True, robust=False)
 	else:
-		qitems = (treebank.brackettree(a) for a in query)
+		qitems = (brackettree(a) for a in query)
 	qtrees, qsents = [], []
 	for item in qitems:
 		# rightmostunary necessary to handle discontinuous substitution sites
@@ -880,11 +872,15 @@ class RegexSearcher(CorpusSearcher):
 
 	:param macros: a file containing lines of the form ``'name=regex'``;
 		an occurrence of ``'{name}'`` will be suitably replaced when it
-		appears in a query."""
-	def __init__(self, files, macros=None, numproc=None):
+		appears in a query.
+	:param ignorecase: ignore case in all queries."""
+	def __init__(self, files, macros=None, numproc=None, ignorecase=False):
 		global REGEX_LINEINDEX, REGEX_MACROS
 		super(RegexSearcher, self).__init__(files, macros, numproc)
 		self.macros = None
+		self.flags = re.MULTILINE
+		if ignorecase:
+			self.flags |= re.IGNORECASE
 		if macros:
 			with openread(macros) as tmp:
 				self.macros = dict(line.strip().split('=', 1) for line in tmp)
@@ -926,14 +922,16 @@ class RegexSearcher(CorpusSearcher):
 		subset = subset or self.files
 		result = OrderedDict()
 		jobs = {}
+		pattern = _regex_parse_query(query, self.flags)
 		for filename in subset:
 			try:
 				result[filename] = self.cache[
 						'counts', query, filename, start, end, indices, False,
 						breakdown]
 			except KeyError:
-				jobs[self._submit(_regex_query, query, filename, start, end,
-						None, indices, False, breakdown)] = filename
+				jobs[self._submit(_regex_run_query, pattern, filename,
+						start, end, None, indices, False, breakdown)
+						] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			self.cache['counts', query, filename, start, end, indices, False,
@@ -955,7 +953,7 @@ class RegexSearcher(CorpusSearcher):
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
 				jobs[self._submit(_regex_query,
-						query, filename, start, end, maxresults,
+						query, filename, self.flags, start, end, maxresults,
 						True, True)] = filename
 			else:
 				result.extend(x[:maxresults])
@@ -963,12 +961,7 @@ class RegexSearcher(CorpusSearcher):
 			filename = jobs[future]
 			x = []
 			for sentno, sent, start, end in future.result():
-				# turn matching character into token indices
-				prelen = len(sent[:start].split())
-				if prelen and not sent[start - 1].isspace():
-					prelen -= 1
-				matchlen = len(sent[start:end].split())
-				highlight = range(prelen, prelen + matchlen)
+				highlight = range(start, end)
 				x.append((filename, sentno, sent.rstrip(), highlight, []))
 			self.cache['sents', query, filename, start, end, True, True
 					] = x, maxresults
@@ -999,11 +992,40 @@ class RegexSearcher(CorpusSearcher):
 
 
 @workerfunc
-def _regex_query(query, filename, start=None, end=None, maxresults=None,
-		indices=False, sents=False, breakdown=False):
+def _regex_query(query, filename, flags, start=None, end=None, maxresults=None,
+		indices=True, sents=False, breakdown=False):
 	"""Run a query on a single file."""
+	pattern = _regex_parse_query(query, flags)
+	return _regex_run_query(pattern, filename, start=start, end=end,
+			maxresults=maxresults, indices=indices, sents=sents,
+			breakdown=breakdown)
+
+
+def _regex_parse_query(query, flags):
+	"""Prepare regex query."""
 	if REGEX_MACROS is not None:
 		query = query.format(**REGEX_MACROS)
+	pattern = None
+	# could use .find() / .count() with plain queries
+	try:
+		if RE2LIB:
+			try:
+				pattern = re2.compile(  # pylint: disable=no-member
+						query.encode('utf8'), flags=flags | re.UNICODE,
+						max_mem=8 << 26)  # 500 MB
+			except ValueError:
+				pass
+		if pattern is None:
+			pattern = re.compile(query.encode('utf8'), flags=flags)
+	except re.error:
+		print('problem compiling query:', query)
+		raise
+	return pattern
+
+
+def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
+		indices=True, sents=False, breakdown=False):
+	"""Run a prepared query on a single file."""
 	lineindex = REGEX_LINEINDEX[filename]
 	if indices and sents:
 		result = []
@@ -1019,18 +1041,12 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 		startidx = lineindex.select(start - 1 if start else 0)
 		endidx = (lineindex.select(end) if end is not None
 				and end < len(lineindex) else len(data))
-		# could use .find() with plain queries
-		flags = re.UNICODE | re.MULTILINE
-		if RE2LIB:
-			pattern = re2.compile(  # pylint: disable=no-member
-					query.encode('utf8'), flags=flags)
-		else:
-			pattern = re.compile(query.encode('utf8'), flags=flags)
 		if indices or sents:
 			for match in islice(
 					pattern.finditer(data, startidx, endidx),
 					maxresults):
-				mstart, mend = match.span()
+				mstart = match.start()
+				mend = match.end()
 				lineno = lineindex.rank(mstart)
 				offset, nextoffset = 0, len(data)
 				if lineno > 0:
@@ -1049,7 +1065,7 @@ def _regex_query(query, filename, start=None, end=None, maxresults=None,
 			if breakdown:
 				result.update(a.decode('utf8') for a in matches)
 			else:
-				result = len(matches)
+				result = len(matches)  # FIXME: add .count() to re2
 		data.close()
 	return result
 
@@ -1098,9 +1114,25 @@ def filterlabels(line, nofunc, nomorph):
 	if nofunc:
 		line = FUNC_TAGS.sub('', line)
 	if nomorph:
-		line = MORPH_TAGS.sub(lambda g: '%s%s' % (
-				ABBRPOS.get(g.group(1), g.group(1)), g.group(2)), line)
+		line = MORPH_TAGS.sub(lambda g: g.group(1) + g.group(2), line)
 	return line
+
+
+def charindices(sent, indices, indices2=None):
+	"""Project token indices to character indices.
+
+	>>> sorted(charindices(['The', 'cat', 'is', 'on', 'the', 'mat'], {0, 2, 4}))
+	[0, 1, 2, 3, 8, 9, 10, 14, 15, 16, 17]"""
+	cur = 0
+	ind = {}
+	for n, a in enumerate(sent):
+		ind[n] = range(cur, cur + len(a)
+				+ (n != len(sent) - 1))
+		cur += len(a) + 1
+	result = {a for n in indices for a in ind[n]}
+	if indices2 is not None:
+		return result, {a for n in indices2 for a in ind[n]}
+	return result
 
 
 def cpu_count():
@@ -1111,12 +1143,58 @@ def cpu_count():
 		return 1
 
 
-def writecsv(results, columns=None):
-	"""Write a dictionary of dictionaries as CSV to stdout.
+def applyhighlight(sent, high1, high2):
+	"""Highlight character indices high1 & high2 in sent with ANSI colors."""
+	cur = None
+	start = 0
+	out = []
+	for n, _ in enumerate(sent):
+		if n in high1:
+			if cur != 'red':
+				cur = 'red'
+				out.append(sent[start:n]
+						+ '\x1b[%d;1m' % ANSICOLOR[cur])
+				start = n
+		elif n in high2:
+			if cur != 'blue':
+				cur = 'blue'
+				out.append(sent[start:n]
+						+ '\x1b[%d;1m' % ANSICOLOR[cur])
+				start = n
+		else:
+			if cur is not None:
+				out.append(sent[start:n])
+				start = n
+				cur = None
+				out.append('\x1b[0m')
+	out.append(sent[start:])
+	return ''.join(out)
+
+
+def writecounts(results, flat=False, columns=None):
+	"""Write a dictionary of dictionaries to stdout as CSV or in a flat format.
 
 	:param data: a dictionary of dictionaries.
+	:param flat: if True, do not write CSV but a simple a flat format,
+		skipping zero counts.
 	:param columns: if given, data is an iterable of (filename, list/array)
 		tuples, with columns being a list specifying the column names."""
+	if flat:
+		if columns is None:
+			for filename in results:
+				print(filename)
+				for match, value in results[filename].items():
+					if value:
+						print('%s\t%s' % (match, value))
+				print()
+		else:
+			for filename, values in results:
+				print(filename)
+				for query, value in zip(columns, values):
+					if value:
+						print('%s\t%s' % (query, value))
+				print()
+		return
 	writer = csv.writer(sys.stdout)
 	if columns is None:
 		writer.writerow(['filename']
@@ -1134,12 +1212,12 @@ def writecsv(results, columns=None):
 def main():
 	"""CLI."""
 	from getopt import gnu_getopt, GetoptError
-	shortoptions = 'e:m:M:stcbnofh'
+	shortoptions = 'e:m:M:stcbnofih'
 	options = ('engine= macros= numproc= max-count= slice= '
 			'trees sents brackets counts indices breakdown only-matching '
-			'line-number file help')
+			'line-number file ignore-case csv help')
 	try:
-		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options.split())
+		opts, args = gnu_getopt(sys.argv[2:], shortoptions, options.split())
 		query, corpora = args[0], args[1:]
 		if isinstance(query, bytes):
 			query = query.decode('utf8')
@@ -1147,7 +1225,7 @@ def main():
 			raise ValueError('enter one or more corpus files')
 	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r' % err, file=sys.stderr)
-		print(SHORTUSAGE, end='')
+		print(SHORTUSAGE)
 		sys.exit(2)
 	opts = dict(opts)
 	if '--file' in opts or '-f' in opts:
@@ -1161,12 +1239,16 @@ def main():
 		numproc = 1
 	start, end = opts.get('--slice', ':').split(':')
 	start, end = (int(start) if start else None), (int(end) if end else None)
+	ignorecase = '--ignore-case' in opts or '-i' in opts
+	if ignorecase and engine != 'regex':
+		raise ValueError('--ignore-case is only supported with --engine=regex')
 	if engine == 'tgrep2':
 		searcher = TgrepSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'xpath':
 		searcher = DactSearcher(corpora, macros=macros, numproc=numproc)
 	elif engine == 'regex':
-		searcher = RegexSearcher(corpora, macros=macros, numproc=numproc)
+		searcher = RegexSearcher(corpora, macros=macros, numproc=numproc,
+				ignorecase=ignorecase)
 	elif engine == 'frag':
 		searcher = FragmentSearcher(
 				corpora, macros=macros, numproc=numproc, inmemory=False)
@@ -1179,11 +1261,11 @@ def main():
 		if '--breakdown' in opts:
 			results = searcher.counts(
 					query, start=start, end=end, breakdown=True)
-			writecsv(results)
+			writecounts(results, flat='--csv' not in opts)
 		elif len(queries) > 1:
 			results = searcher.batchcounts(
 					queries, start=start, end=end)
-			writecsv(results, columns=queries)
+			writecounts(results, flat='--csv' not in opts, columns=queries)
 		else:
 			for filename, cnt in searcher.counts(
 					query, start=start, end=end, indices=indices).items():
@@ -1208,37 +1290,36 @@ def main():
 			print(out)
 	else:  # sentences or brackets
 		brackets = '--brackets' in opts or '-b' in opts
-		for filename, sentno, sent, high1, high2 in searcher.sents(
-				query, start=start, end=end, maxresults=maxresults,
-				brackets=brackets):
-			if brackets:
-				if '--only-matching' in opts or '-o' in opts:
-					out = high1
+		queries = query.splitlines()
+		for query in queries:
+			if len(queries) > 1:
+				print(query)
+			for filename, sentno, sent, high1, high2 in searcher.sents(
+					query, start=start, end=end, maxresults=maxresults,
+					brackets=brackets):
+				if brackets:
+					if '--only-matching' in opts or '-o' in opts:
+						out = high1
+					else:
+						out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
+								ANSICOLOR['red'], high1))
 				else:
-					out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
-							ANSICOLOR['red'], high1))
-			else:
-				if '--only-matching' in opts or '-o' in opts:
-					out = ' '.join(word if n in (high2 or high1) else ''
-							for n, word in enumerate(sent.split())).strip()
-				else:
-					out = ' '.join(
-							'\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['red'], word)
-							if x in high1 else
-							('\x1b[%d;1m%s\x1b[0m' % (ANSICOLOR['blue'], word)
-							if x in high2 else word)
-							for x, word in enumerate(sent.split()))
-			if len(corpora) > 1:
-				print('\x1b[%dm%s\x1b[0m:' % (
-						ANSICOLOR['magenta'], filename), end='')
-			if '--line-number' in opts or '-n' in opts:
-				print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
-						% (ANSICOLOR['green'], sentno), end='')
-			print(out)
+					if '--only-matching' in opts or '-o' in opts:
+						out = ''.join(char if n in (high2 or high1) else ''
+								for n, char in enumerate(sent)).strip()
+					else:
+						out = applyhighlight(sent, high1, high2)
+				if len(corpora) > 1:
+					print('\x1b[%dm%s\x1b[0m:' % (
+							ANSICOLOR['magenta'], filename), end='')
+				if '--line-number' in opts or '-n' in opts:
+					print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
+							% (ANSICOLOR['green'], sentno), end='')
+				print(out)
+			if len(queries) > 1:
+				print()
 
 
 __all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',
-		'NoFuture', 'FIFOOrederedDict', 'filterlabels', 'cpu_count']
-
-if __name__ == '__main__':
-	main()
+		'FragmentSearcher', 'NoFuture', 'FIFOOrederedDict', 'filterlabels',
+		'cpu_count']

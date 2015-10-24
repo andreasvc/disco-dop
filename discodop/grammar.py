@@ -3,10 +3,8 @@ from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import io
 import re
-import sys
 import gzip
 import codecs
-import logging
 from operator import mul, itemgetter
 from collections import defaultdict, Counter
 from itertools import count, islice, repeat
@@ -14,16 +12,10 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-from discodop.tree import Tree, ImmutableTree, DiscTree
-from discodop.treebank import READERS, STRTERMRE, LEAVESRE, openread, unquote
+from .tree import Tree, ImmutableTree, DiscTree, unquote
+from .treebank import LEAVESRE
+from .util import openread
 from functools import reduce  # pylint: disable=redefined-builtin
-
-SHORTUSAGE = '''Read off grammars from treebanks.
-Usage: %(cmd)s <type> <input> <output> [options]
-or: %(cmd)s param <parameter-file> <output-directory>
-or: %(cmd)s info <rules-file>
-or: %(cmd)s merge (rules|lexicon|fragments) <input1> <input2>... <output>\
-''' % dict(cmd=sys.argv[0])
 
 RULERE = re.compile(
 		r'(?P<RULE1>(?P<LHS1>[^ \t]+).*)\t'
@@ -213,7 +205,7 @@ def doubledop(trees, sents, debug=False, binarized=True, maxdepth=1,
 		:backtransform: needed to recover trees from compressed derivations.
 		:fragments: a sequence of the fragments used to build the grammar,
 		in the same order as they appear in ``grammar``."""
-	from discodop.fragments import recurringfragments
+	from .fragments import recurringfragments
 	fragments = recurringfragments(trees, sents, numproc, disc=True,
 			indices=True, maxdepth=maxdepth, maxfrontier=maxfrontier,
 			iterate=iterate, complement=complement)
@@ -234,7 +226,7 @@ def dop1(trees, sents, maxdepth=4, maxfrontier=999, binarized=True,
 		:backtransform: needed to recover trees from compressed derivations.
 		:fragments: a sequence of the fragments used to build the grammar,
 		in the same order as they appear in ``grammar``."""
-	from discodop.fragments import allfragments
+	from .fragments import allfragments
 	fragments = allfragments(trees, sents, maxdepth, maxfrontier)
 	return dopgrammar(trees, fragments, binarized=binarized,
 			extrarules=extrarules)
@@ -426,7 +418,7 @@ def flatten(frag, ids, backtransform, binarized):
 	.	$.@. Epsilon
 	>>> print(template)
 	(ROOT {0} (ROOT|<$,>_2 {1} {2}))"""
-	from discodop.treetransforms import factorconstituent, addbitsets
+	from .treetransforms import factorconstituent, addbitsets
 	sent = {}
 
 	def repl(x):
@@ -766,13 +758,17 @@ def subsetgrammar(a, b):
 	return False
 
 
+def mean(seq):
+	"""Arithmetic mean."""
+	return sum(seq) / len(seq)
+
+
 def grammarinfo(grammar, dump=None):
 	"""Print some statistics on a grammar, before it goes through Grammar().
 
 	:param dump: if given a filename, will dump distribution of parsing
 		complexity to a file (i.e., p.c. 3 occurs 234 times, 4 occurs 120
 		times, etc.)"""
-	from discodop.eval import mean
 	lhs = {rule[0] for (rule, yf), w in grammar}
 	l = len(grammar)
 	result = "labels: %d" % len({rule[a] for (rule, yf), w in grammar
@@ -787,7 +783,7 @@ def grammarinfo(grammar, dump=None):
 	n, r, yf, w = max((len(yf), rule, yf, w) for (rule, yf), w in grammar)
 	result += "max fan-out: %d in " % n
 	result += printrule(r, yf, w)
-	result += " average: %g\n" % mean([len(yf) for (_, yf), _, in grammar])
+	result += " mean: %g\n" % mean([len(yf) for (_, yf), _, in grammar])
 	n, r, yf, w = max((sum(map(len, yf)), rule, yf, w)
 				for (rule, yf), w in grammar if rule[1] != 'Epsilon')
 	result += "max variables: %d in %s\n" % (n, printrule(r, yf, w))
@@ -802,7 +798,7 @@ def grammarinfo(grammar, dump=None):
 	r, yf, w = max(pc, key=pc.get)
 	result += "max parsing complexity: %d in %s" % (
 			pc[r, yf, w], printrule(r, yf, w))
-	result += " average %g" % mean(pc.values())
+	result += " mean %g" % mean(pc.values())
 	if dump:
 		pcdist = Counter(pc.values())
 		with io.open(dump, 'w', encoding='utf8') as out:
@@ -926,7 +922,7 @@ def sumfrags(iterable, n):
 
 def merge(filenames, outfilename, sumfunc, key):
 	"""Interpolate weights of given files."""
-	from discodop import plcfrs
+	from . import plcfrs
 	openfiles = [iter(openread(filename)) for filename in filenames]
 	with codecs.getwriter('utf8')((gzip.open if outfilename.endswith('.gz')
 			else open)(outfilename, 'w')) as out:
@@ -940,154 +936,6 @@ def addindices(frag):
 	return LEAVESRE.sub(lambda m: ' %d=%s)' % (next(cnt), m.group(1)), frag)
 
 
-def main():
-	"""Command line interface to create grammars from treebanks."""
-	from getopt import gnu_getopt, GetoptError
-	from discodop.treetransforms import addfanoutmarkers, canonicalize
-	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
-	shortoptions = 'hs:'
-	options = ('help', 'gzip', 'packed', 'bitpar', 'inputfmt=', 'inputenc=',
-			'dopestimator=', 'maxdepth=', 'maxfrontier=', 'numproc=')
-	try:
-		opts, args = gnu_getopt(sys.argv[1:], shortoptions, options)
-		model = args[0]
-		if model not in ('info', 'merge'):
-			treebankfile, grammarfile = args[1:]
-	except (GetoptError, IndexError, ValueError) as err:
-		print('error: %r' % err, file=sys.stderr)
-		print(SHORTUSAGE)
-		sys.exit(2)
-	opts = dict(opts)
-	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'dop1',
-			'ptsg', 'param', 'info', 'merge'):
-		raise ValueError('unrecognized model: %r' % model)
-	if opts.get('dopestimator', 'rfe') not in ('rfe', 'ewe', 'shortest'):
-		raise ValueError('unrecognized estimator: %r' % opts['dopestimator'])
-
-	if model == 'info':
-		grammarstats(args[1])
-		return
-	elif model == 'merge':
-		if len(args) < 5:
-			raise ValueError('need at least 2 input and 1 output arguments.')
-		if args[1] == 'rules':
-			merge(args[2:-1], args[-1], sumrules, stripweight)
-		elif args[1] == 'lexicon':
-			merge(args[2:-1], args[-1], sumlex, lambda x: x.split(None, 1)[0])
-		elif args[1] == 'fragments':
-			merge(args[2:-1], args[-1], sumfrags, lambda x: x.rsplit('\t', 1)[0])
-		return
-	elif model == 'param':
-		import os
-		from discodop.runexp import readparam, loadtraincorpus, getposmodel
-		if opts:
-			raise ValueError('all options should be set in parameter file.')
-		prm = readparam(args[1])
-		resultdir = args[2]
-		if os.path.exists(resultdir):
-			raise ValueError('Directory %r already exists.\n' % resultdir)
-		os.mkdir(resultdir)
-		trees, sents, train_tagged_sents = loadtraincorpus(
-				prm.corpusfmt, prm.traincorpus, prm.binarization, prm.punct,
-				prm.functions, prm.morphology, prm.removeempty, prm.ensureroot,
-				prm.transformations, prm.relationalrealizational)
-		simplelexsmooth = False
-		if prm.postagging and prm.postagging.method == 'unknownword':
-			sents, lexmodel = getposmodel(prm.postagging, train_tagged_sents)
-			simplelexsmooth = prm.postagging.simplelexsmooth
-	elif model == 'ptsg':  # read fragments
-		fragments = {frag: splitweight(weight) for frag, weight
-				in (line.split('\t') for line in openread(treebankfile,
-					encoding=opts.get('--inputenc', 'utf8')))}
-		if STRTERMRE.search(next(iter(fragments))) is not None:
-			fragments = {addindices(frag): splitweight(weight) for frag, weight
-					in fragments.items()}
-	else:  # read treebank
-		corpus = READERS[opts.get('--inputfmt', 'export')](
-				treebankfile,
-				encoding=opts.get('--inputenc', 'utf8'))
-		trees = list(corpus.trees().values())
-		sents = list(corpus.sents().values())
-		if not trees:
-			raise ValueError('no trees; is --inputfmt correct?')
-		for a in trees:
-			canonicalize(a)
-			addfanoutmarkers(a)
-
-	# read off grammar
-	if model in ('pcfg', 'plcfrs'):
-		grammar = treebankgrammar(trees, sents)
-	elif model == 'dopreduction':
-		grammar, altweights = dopreduction(trees, sents,
-				packedgraph='--packed' in opts)
-	elif model == 'doubledop':
-		grammar, backtransform, altweights, _ = doubledop(trees, sents,
-				numproc=int(opts.get('--numproc', 1)),
-				binarized='--bitpar' not in opts)
-	elif model == 'dop1':
-		grammar, backtransform, altweights, _ = dop1(trees, sents,
-				maxdepth=int(opts.get('--maxdepth', 3)),
-				maxfrontier=int(opts.get('--maxfrontier', 999)),
-				binarized='--bitpar' not in opts)
-	elif model == 'ptsg':
-		grammar, backtransform, altweights = compiletsg(fragments,
-				binarized='--bitpar' not in opts)
-	elif model == 'param':
-		from discodop.runexp import dobinarization, getgrammars
-		getgrammars(dobinarization(trees, sents, prm.binarization,
-				prm.relationalrealizational),
-				sents, prm.stages, prm.testcorpus.maxwords, resultdir,
-				prm.numproc, lexmodel, simplelexsmooth, trees[0].label)
-		paramfile = os.path.join(resultdir, 'params.prm')
-		with openread(args[1]) as inp:
-			with io.open(paramfile, 'w', encoding='utf8') as out:
-				out.write("top='%s',\n%s" % (trees[0].label, inp.read()))
-		return  # grammars have already been written
-	if opts.get('--dopestimator', 'rfe') != 'rfe':
-		grammar = [(rule, w) for (rule, _), w in
-				zip(grammar, altweights[opts['--dopestimator']])]
-
-	rulesname = grammarfile + '.rules'
-	lexiconname = grammarfile + '.lex'
-	myopen = open
-	if '--gzip' in opts:
-		myopen = gzip.open
-		rulesname += '.gz'
-		lexiconname += '.gz'
-	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
-	if model == 'ptsg':
-		bitpar = STRTERMRE.search(next(iter(fragments))) is not None
-	if '--bitpar' in opts and not bitpar:
-		raise ValueError('parsing with an unbinarized grammar requires '
-				'a grammar in bitpar format.')
-
-	rules, lexicon = write_lcfrs_grammar(grammar, bitpar=bitpar)
-	# write output
-	with codecs.getwriter('utf8')(myopen(rulesname, 'w')) as rulesfile:
-		rulesfile.write(rules)
-	with codecs.getwriter('utf8')(myopen(lexiconname, 'w')) as lexiconfile:
-		lexiconfile.write(lexicon)
-	if model in ('doubledop', 'ptsg'):
-		backtransformfile = '%s.backtransform%s' % (grammarfile,
-			'.gz' if '--gzip' in opts else '')
-		with codecs.getwriter('utf8')(myopen(backtransformfile, 'w')) as bt:
-			bt.writelines('%s\n' % a for a in backtransform)
-		print('wrote backtransform to', backtransformfile)
-	print('wrote grammar to %s and %s.' % (rulesname, lexiconname))
-	start = opts.get('-s', next(iter(grammar))[0][0][0]
-			if model == 'ptsg' else trees[0].label)
-	if sys.version_info[0] == 2:
-		start = start.decode('utf8')
-	if len(grammar) < 10000:  # this is very slow so skip with large grammars
-		print(grammarinfo(grammar))
-	try:
-		from discodop.containers import Grammar
-		print(Grammar(rules, lexicon, binarized='--bitpar' not in opts,
-				start=start).testgrammar()[1])
-	except (ImportError, AssertionError) as err:
-		print(err)
-
-
 __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'dop1', 'dopgrammar', 'compiletsg', 'sortgrammar', 'flatten',
 		'nodefreq', 'TreeDecorator', 'DiscTree', 'quotelabel', 'UniqueIDs',
@@ -1095,6 +943,3 @@ __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'write_lcfrs_grammar', 'subsetgrammar', 'grammarinfo', 'grammarstats',
 		'splitweight', 'convertweight', 'stripweight', 'sumrules', 'sumlex',
 		'sumfrags', 'merge']
-
-if __name__ == '__main__':
-	main()

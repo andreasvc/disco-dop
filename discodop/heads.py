@@ -4,8 +4,9 @@ from __future__ import division, print_function, absolute_import, \
 import io
 import re
 from collections import defaultdict, Counter
-from discodop.tree import Tree
-from discodop import punctuation
+from .tree import Tree
+from .util import ishead
+from .punctuation import ispunct
 
 FIELDS = tuple(range(8))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT, SECEDGETAG, SECEDGEPARENT = FIELDS
@@ -20,11 +21,6 @@ def applyheadrules(tree, headrules):
 		head = headfinder(node, headrules)
 		if head is not None:
 			sethead(head)
-
-
-def ishead(tree):
-	"""Test whether this node is the head of the parent constituent."""
-	return getattr(tree, 'head', False)
 
 
 def getheadpos(node):
@@ -106,14 +102,14 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		# default head is initial/last nonterminal (depending on direction)
 		for child in children:
 			if (isinstance(child, Tree)
-					and not punctuation.ispunct(None, child.label)):
+					and not ispunct(None, child.label)):
 				return child
 		return children[0]
 	else:  # PTB-specific
 		i = tree.index(head)
 		if i >= 2 and tree[i - 1].label in {'CC', 'CONJP'}:
 			for althead in tree[i - 2::-1]:
-				if not punctuation.ispunct(althead.label, althead.label):
+				if not ispunct(althead.label, althead.label):
 					return althead
 		return head
 
@@ -159,5 +155,5 @@ def headstats(trees):
 	return heads, unknown, pos1, pos2
 
 
-__all__ = ['ishead', 'getheadpos', 'readheadrules', 'headfinder',
-		'sethead', 'saveheads', 'headstats']
+__all__ = ['getheadpos', 'readheadrules', 'headfinder', 'sethead', 'saveheads',
+		'headstats']

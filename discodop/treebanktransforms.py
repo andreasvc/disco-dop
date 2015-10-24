@@ -8,11 +8,10 @@ from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
 from itertools import islice
-from discodop.tree import Tree, ParentedTree
-from discodop.treebank import quote, unquote
-from discodop.treetransforms import addfanoutmarkers, removefanoutmarkers
-from discodop.heads import ishead
-from discodop.punctuation import punctprune, PUNCTUATION
+from .tree import Tree, ParentedTree, quote, unquote
+from .treetransforms import addfanoutmarkers, removefanoutmarkers
+from .punctuation import punctprune, PUNCTUATION
+from .util import ishead
 
 FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
