@@ -1061,11 +1061,15 @@ def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 				else:
 					result.append(lineno)
 		else:
-			matches = pattern.findall(data, startidx, endidx)[:maxresults]
 			if breakdown:
+				matches = pattern.findall(data, startidx, endidx)[:maxresults]
 				result.update(a.decode('utf8') for a in matches)
 			else:
-				result = len(matches)  # FIXME: add .count() to re2
+				try:
+					result = pattern.count(data, startidx, endidx)
+				except AttributeError:
+					result = len(pattern.findall(data, startidx, endidx))
+				result = max(result, maxresults or 0)
 		data.close()
 	return result
 
