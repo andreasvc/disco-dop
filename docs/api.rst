@@ -11,6 +11,7 @@ Python modules
 .. autosummary::
    :toctree: api/
 
+   cli
    demos
    eval
    fragments
@@ -26,9 +27,9 @@ Python modules
    treebank
    treebanktransforms
    treedist
-   treedraw
    treesearch
    treetransforms
+   util
 
 Cython modules
 --------------

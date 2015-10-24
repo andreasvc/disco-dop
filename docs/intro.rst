@@ -120,7 +120,7 @@ Corpora can be read in Negra's export format, or in the bracketed Penn
 treebank format. Access to the
 `Negra corpus <http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/>`_
 can be requested for non-commercial purposes, while the
-`Tiger corpus <http://www.ims.uni-stuttgart.de/projekte/TIGER/TIGERCorpus/>`_
+`Tiger corpus <http://www.ims.uni-stuttgart.de/forschung/ressourcen/korpora/tiger.html>`_
 is freely available for download for research purposes.
 
 Alternatively, it is possible to achieve similar results with separate commands::

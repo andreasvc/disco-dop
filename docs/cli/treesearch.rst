@@ -172,4 +172,4 @@ resulting RE will match the second character::
     \W       Matches the complement of \w.
     \\       Matches a literal backslash.
 
-More information: http://docs.python.org/3/library/re.html#regular-expression-syntax
+More information: https://docs.python.org/3/library/re.html#regular-expression-syntax
