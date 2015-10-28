@@ -430,35 +430,8 @@ def applyhighlight(sent, high1, high2, colorvec=None):
 	cur = None
 	start = 0
 	out = []
-	if colorvec is None:
-		for n, _ in enumerate(sent):
-			if n in high1:
-				if cur != 'red':
-					out.append(sent[start:n])
-					if cur is not None:
-						out.append('</span>')
-					out.append('<span class=r>')
-					start = n
-					cur = 'red'
-			elif n in high2:
-				if cur != 'blue':
-					out.append(sent[start:n])
-					if cur is not None:
-						out.append('</span>')
-					out.append('<span class=b>')
-					start = n
-					cur = 'blue'
-			else:
-				if cur is not None:
-					out.append(sent[start:n])
-					out.append('</span>')
-					start = n
-					cur = None
-		out.append(sent[start:])
-		if cur is not None:
-			out.append('</span>')
-	else:
-		for n, _ in enumerate(sent):
+	for n, _ in enumerate(sent):
+		if colorvec is not None:
 			if cur != COLORS.get(colorvec[n], 'gray'):
 				out.append(sent[start:n])
 				if cur is not None:
@@ -466,9 +439,31 @@ def applyhighlight(sent, high1, high2, colorvec=None):
 				out.append('<font color=%s>' % COLORS.get(colorvec[n], 'gray'))
 				start = n
 				cur = COLORS.get(colorvec[n], 'gray')
-		out.append(sent[start:])
-		if cur is not None:
-			out.append('</font>')
+		elif n in high1:
+			if cur != 'red':
+				out.append(sent[start:n])
+				if cur is not None:
+					out.append('</span>')
+				out.append('<span class=r>')
+				start = n
+				cur = 'red'
+		elif n in high2:
+			if cur != 'blue':
+				out.append(sent[start:n])
+				if cur is not None:
+					out.append('</span>')
+				out.append('<span class=b>')
+				start = n
+				cur = 'blue'
+		else:
+			if cur is not None:
+				out.append(sent[start:n])
+				out.append('</span>')
+				start = n
+				cur = None
+	out.append(sent[start:])
+	if cur is not None:
+		out.append('</font>')
 	return ''.join(out)
 
 

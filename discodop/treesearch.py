@@ -132,7 +132,7 @@ class CorpusSearcher(object):
 			contains the complete subtree, of which match1 is a subset."""
 
 	def batchcounts(self, queries, subset=None, start=None, end=None):
-		"""Like ``counts()``, but executes a sequence of queries.
+		"""Like ``counts()``, but executes multiple queries on multiple files.
 
 		Useful in combination with ``pandas.DataFrame``; e.g.::
 
@@ -147,7 +147,7 @@ class CorpusSearcher(object):
 		:yields: tuples of the form
 			``(corpus1, [count1, count2, ...])``.
 			where ``count1, count2, ...`` corresponds to ``queries``.
-			Order of queries is preserved; order of corpora is not.
+			Order of queries and corpora is preserved.
 		"""
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
@@ -155,8 +155,8 @@ class CorpusSearcher(object):
 			for filename, value in self.counts(
 					query, subset, start, end).items():
 				result[filename].append(value)
-		for key, val in result.items():
-			yield key, val
+		for filename, counts in result.items():
+			yield filename, counts
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):
@@ -171,9 +171,15 @@ class CorpusSearcher(object):
 		:returns: a list of Tree objects or sentences."""
 
 	def _submit(self, func, *args, **kwargs):
-		"""Submit a job to the thread pool."""
+		"""Submit a job to the thread/process pool."""
 		if self.numproc == 1:
 			return NoFuture(func, *args, **kwargs)
+		return self.pool.submit(func, *args, **kwargs)
+
+	def _map(self, func, *args):
+		"""Map with thread/process pool."""
+		if self.numproc == 1:
+			return (func(*a) for a in zip(*args))
 		return self.pool.submit(func, *args, **kwargs)
 
 	def _as_completed(self, jobs):
@@ -938,6 +944,26 @@ class RegexSearcher(CorpusSearcher):
 					breakdown] = result[filename] = future.result()
 		return result
 
+	def batchcounts(self, queries, subset=None, start=None, end=None):
+		patterns = [_regex_parse_query(query, self.flags) for query in queries]
+		result = OrderedDict((name, [])
+				for name in subset or self.files)
+		jobs = {}
+		chunksize = int(len(patterns) / (self.numproc * 4))
+		chunkedqueries = [queries[n:n + chunksize]
+				for n in range(0, len(patterns), chunksize)]
+		patterns = [[_regex_parse_query(query, self.flags) for query in a]
+				for a in chunkedqueries]
+		for filename in subset or self.files:
+			result = array.array(
+					b'I' if PY2 else 'I')
+			for tmp in self._map(_regex_run_batch, patterns,
+						[filename] * len(patterns),
+						[start] * len(patterns),
+						[end] * len(patterns)):
+				result.extend(tmp)
+			yield filename, result
+
 	def sents(self, query, subset=None, start=None, end=None, maxresults=100,
 			brackets=False):
 		if brackets:
@@ -1023,8 +1049,26 @@ def _regex_parse_query(query, flags):
 	return pattern
 
 
+def _regex_run_batch(patterns, filename, start=None, end=None):
+	"""Run a batch of counts queries on a single file."""
+	lineindex = REGEX_LINEINDEX[filename]
+	result = array.array(b'I' if PY2 else 'I')
+	with open(filename, 'r+b') as tmp:
+		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
+		startidx = lineindex.select(start - 1 if start else 0)
+		endidx = (lineindex.select(end) if end is not None
+				and end < len(lineindex) else len(data))
+		for pattern in patterns:
+			try:
+				result.append(pattern.count(data, startidx, endidx))
+			except AttributeError:
+				result.append(len(pattern.findall(data, startidx, endidx)))
+		data.close()
+	return result
+
+
 def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
-		indices=True, sents=False, breakdown=False):
+		indices=False, sents=False, breakdown=False):
 	"""Run a prepared query on a single file."""
 	lineindex = REGEX_LINEINDEX[filename]
 	if indices and sents:
@@ -1172,6 +1216,8 @@ def applyhighlight(sent, high1, high2):
 				cur = None
 				out.append('\x1b[0m')
 	out.append(sent[start:])
+	if cur is not None:
+		out.append('\x1b[0m')
 	return ''.join(out)
 
 
