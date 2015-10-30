@@ -80,10 +80,10 @@ class CorpusSearcher(object):
 						'%r not found.' % a)
 		self.files = OrderedDict.fromkeys(files)
 		self.macros = macros
-		self.numproc = numproc
+		self.numproc = numproc or cpu_count()
 		self.cache = FIFOOrederedDict(CACHESIZE)
 		self.pool = concurrent.futures.ThreadPoolExecutor(
-				numproc or cpu_count())
+				self.numproc)
 		if not self.files:
 			raise ValueError('no files found: %s' % files)
 
@@ -161,12 +161,12 @@ class CorpusSearcher(object):
 	def batchsents(self, queries, subset=None, start=None, end=None,
 			maxresults=100, brackets=False):
 		"""Variant of sents() to run a batch of queries."""
-		result = OrderedDict((name, [[] for _ in queries])
+		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		for n, query in enumerate(queries):
 			for value in self.sents(
 					query, subset, start, end, maxresults, brackets):
-				result[value[0]][n].append(value[1:])
+				result[value[0]].append(value[1:])
 		for filename, values in result.items():
 			yield filename, values
 
@@ -659,8 +659,7 @@ class FragmentSearcher(CorpusSearcher):
 		VOCAB = self.vocab
 		FRAG_FILES = self.files
 		FRAG_MACROS = self.macros
-		self.pool = concurrent.futures.ProcessPoolExecutor(
-				numproc or cpu_count())
+		self.pool = concurrent.futures.ProcessPoolExecutor(self.numproc)
 
 	def __del__(self):
 		global FRAG_FILES, FRAG_MACROS, VOCAB
@@ -937,8 +936,7 @@ class RegexSearcher(CorpusSearcher):
 			raise ValueError('only one instance possible.')
 		REGEX_LINEINDEX = self.lineindex
 		REGEX_MACROS = self.macros
-		self.pool = concurrent.futures.ProcessPoolExecutor(
-				numproc or cpu_count())
+		self.pool = concurrent.futures.ProcessPoolExecutor(self.numproc)
 
 	def __del__(self):
 		global REGEX_LINEINDEX, REGEX_MACROS
@@ -1105,7 +1103,6 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 		if sents:
 			result = []
 			for pattern in patterns:
-				tmp = []
 				for match in islice(
 						pattern.finditer(data, startidx, endidx),
 						maxresults):
@@ -1120,9 +1117,8 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 					if sents:
 						sent = data[offset:nextoffset].decode('utf8')
 						#  sentno, sent, high1, high2
-						tmp.append((lineno, sent, range(mstart - offset,
+						result.append((lineno, sent, range(mstart - offset,
 								mend - offset), ()))
-				result.append(tmp if tmp else None)
 		else:
 			result = array.array(b'I' if PY2 else 'I')
 			for pattern in patterns:
@@ -1402,7 +1398,7 @@ def main():
 				print('\x1b[%dm%s\x1b[0m:' % (
 						ANSICOLOR['magenta'], filename), end='')
 			if '--line-number' in opts or '-n' in opts:
-				print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
+				print('\x1b[%dm%s\x1b[0m:'
 						% (ANSICOLOR['green'], sentno), end='')
 			print(out)
 	else:  # sentences or brackets
@@ -1411,31 +1407,26 @@ def main():
 		for filename, result in searcher.batchsents(
 				queries, start=start, end=end, maxresults=maxresults,
 				brackets=brackets):
-			for query, tmp in zip(queries, result):
-				if len(queries) > 1:
-					print(query)
-				for sentno, sent, high1, high2 in tmp if tmp else ():
-					if brackets:
-						if '--only-matching' in opts or '-o' in opts:
-							out = high1
-						else:
-							out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
-									ANSICOLOR['red'], high1))
+			for sentno, sent, high1, high2 in result:
+				if brackets:
+					if '--only-matching' in opts or '-o' in opts:
+						out = high1
 					else:
-						if '--only-matching' in opts or '-o' in opts:
-							out = ''.join(char if n in (high2 or high1) else ''
-									for n, char in enumerate(sent)).strip()
-						else:
-							out = applyhighlight(sent, high1, high2)
-					if len(corpora) > 1:
-						print('\x1b[%dm%s\x1b[0m:' % (
-								ANSICOLOR['magenta'], filename), end='')
-					if '--line-number' in opts or '-n' in opts:
-						print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
-								% (ANSICOLOR['green'], sentno), end='')
-					print(out)
-				if len(queries) > 1:
-					print()
+						out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
+								ANSICOLOR['red'], high1))
+				else:
+					if '--only-matching' in opts or '-o' in opts:
+						out = ''.join(char if n in (high2 or high1) else ''
+								for n, char in enumerate(sent)).strip()
+					else:
+						out = applyhighlight(sent.strip(), high1, high2)
+				if len(corpora) > 1:
+					print('\x1b[%dm%s\x1b[0m:' % (
+							ANSICOLOR['magenta'], filename), end='')
+				if '--line-number' in opts or '-n' in opts:
+					print('\x1b[%dm%s\x1b[0m:'
+							% (ANSICOLOR['green'], sentno), end='')
+				print(out)
 
 
 __all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',
