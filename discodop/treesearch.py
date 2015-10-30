@@ -158,6 +158,18 @@ class CorpusSearcher(object):
 		for filename, counts in result.items():
 			yield filename, counts
 
+	def batchsents(self, queries, subset=None, start=None, end=None,
+			maxresults=100, brackets=False):
+		"""Variant of sents() to run a batch of queries."""
+		result = OrderedDict((name, [[] for _ in queries])
+				for name in subset or self.files)
+		for n, query in enumerate(queries):
+			for value in self.sents(
+					query, subset, start, end, maxresults, brackets):
+				result[value[0]][n].append(value[1:])
+		for filename, values in result.items():
+			yield filename, values
+
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=False):
 		"""Extract a range of trees / sentences.
@@ -176,11 +188,23 @@ class CorpusSearcher(object):
 			return NoFuture(func, *args, **kwargs)
 		return self.pool.submit(func, *args, **kwargs)
 
-	def _map(self, func, *args):
-		"""Map with thread/process pool."""
+	def _map(self, func, *args, **kwargs):
+		"""Map with thread/process pool.
+
+		args is a sequence of iterables to map over; the same kwargs are passed
+		for each iteration."""
 		if self.numproc == 1:
-			return (func(*a) for a in zip(*args))
-		return self.pool.submit(func, *args, **kwargs)
+			return (func(*a, **kwargs) for a in zip(*args))
+		fs = [self.submit(fn, *args, **kwargs) for args in zip(*args)]
+
+		def result_iterator():
+			try:
+				for future in fs:
+					yield future.result()
+			finally:
+				for future in fs:
+					future.cancel()
+		return result_iterator()
 
 	def _as_completed(self, jobs):
 		"""Return jobs as they are completed."""
@@ -944,26 +968,6 @@ class RegexSearcher(CorpusSearcher):
 					breakdown] = result[filename] = future.result()
 		return result
 
-	def batchcounts(self, queries, subset=None, start=None, end=None):
-		patterns = [_regex_parse_query(query, self.flags) for query in queries]
-		result = OrderedDict((name, [])
-				for name in subset or self.files)
-		jobs = {}
-		chunksize = int(len(patterns) / (self.numproc * 4))
-		chunkedqueries = [queries[n:n + chunksize]
-				for n in range(0, len(patterns), chunksize)]
-		patterns = [[_regex_parse_query(query, self.flags) for query in a]
-				for a in chunkedqueries]
-		for filename in subset or self.files:
-			result = array.array(
-					b'I' if PY2 else 'I')
-			for tmp in self._map(_regex_run_batch, patterns,
-						[filename] * len(patterns),
-						[start] * len(patterns),
-						[end] * len(patterns)):
-				result.extend(tmp)
-			yield filename, result
-
 	def sents(self, query, subset=None, start=None, end=None, maxresults=100,
 			brackets=False):
 		if brackets:
@@ -988,7 +992,7 @@ class RegexSearcher(CorpusSearcher):
 			x = []
 			for sentno, sent, start, end in future.result():
 				highlight = range(start, end)
-				x.append((filename, sentno, sent.rstrip(), highlight, []))
+				x.append((filename, sentno, sent.rstrip(), highlight, ()))
 			self.cache['sents', query, filename, start, end, True, True
 					] = x, maxresults
 			result.extend(x)
@@ -997,6 +1001,46 @@ class RegexSearcher(CorpusSearcher):
 	def trees(self, query, subset=None, start=None, end=None, maxresults=10,
 			nofunc=False, nomorph=False):
 		raise ValueError('not applicable with plain text corpus.')
+
+	def batchcounts(self, queries, subset=None, start=None, end=None):
+		patterns = [_regex_parse_query(query, self.flags) for query in queries]
+		result = OrderedDict((name, [])
+				for name in subset or self.files)
+		jobs = {}
+		chunksize = int(len(patterns) / (self.numproc * 4))
+		chunkedqueries = [queries[n:n + chunksize]
+				for n in range(0, len(patterns), chunksize)]
+		patterns = [[_regex_parse_query(query, self.flags) for query in a]
+				for a in chunkedqueries]
+		for filename in subset or self.files:
+			result = array.array(
+					b'I' if PY2 else 'I')
+			for tmp in self._map(_regex_run_batch, patterns,
+					filename=filename, start=start, end=end):
+				result.extend(tmp)
+			yield filename, result
+
+	def batchsents(self, queries, subset=None, start=None, end=None,
+			maxresults=100, brackets=False):
+		"""Variant of sents() to run a batch of queries."""
+		if brackets:
+			raise ValueError('not applicable with plain text corpus.')
+		patterns = [_regex_parse_query(query, self.flags) for query in queries]
+		result = OrderedDict((name, [])
+				for name in subset or self.files)
+		jobs = {}
+		chunksize = int(len(patterns) / (self.numproc * 4))
+		chunkedqueries = [queries[n:n + chunksize]
+				for n in range(0, len(patterns), chunksize)]
+		patterns = [[_regex_parse_query(query, self.flags) for query in a]
+				for a in chunkedqueries]
+		for filename in subset or self.files:
+			result = []
+			for tmp in self._map(_regex_run_batch, patterns,
+					filename=filename, start=start, end=end,
+					maxresults=maxresults, sents=True):
+				result.extend(tmp)
+			yield filename, result
 
 	def extract(self, filename, indices,
 			nofunc=False, nomorph=False, sents=True):
@@ -1049,20 +1093,44 @@ def _regex_parse_query(query, flags):
 	return pattern
 
 
-def _regex_run_batch(patterns, filename, start=None, end=None):
-	"""Run a batch of counts queries on a single file."""
+def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
+		sents=False):
+	"""Run a batch of queries on a single file."""
 	lineindex = REGEX_LINEINDEX[filename]
-	result = array.array(b'I' if PY2 else 'I')
 	with open(filename, 'r+b') as tmp:
 		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
 		startidx = lineindex.select(start - 1 if start else 0)
 		endidx = (lineindex.select(end) if end is not None
 				and end < len(lineindex) else len(data))
-		for pattern in patterns:
-			try:
-				result.append(pattern.count(data, startidx, endidx))
-			except AttributeError:
-				result.append(len(pattern.findall(data, startidx, endidx)))
+		if sents:
+			result = []
+			for pattern in patterns:
+				tmp = []
+				for match in islice(
+						pattern.finditer(data, startidx, endidx),
+						maxresults):
+					mstart = match.start()
+					mend = match.end()
+					lineno = lineindex.rank(mstart)
+					offset, nextoffset = 0, len(data)
+					if lineno > 0:
+						offset = lineindex.select(lineno - 1)
+					if lineno <= len(lineindex):
+						nextoffset = lineindex.select(lineno)
+					if sents:
+						sent = data[offset:nextoffset].decode('utf8')
+						#  sentno, sent, high1, high2
+						tmp.append((lineno, sent, range(mstart - offset,
+								mend - offset), ()))
+				result.append(tmp if tmp else None)
+		else:
+			result = array.array(b'I' if PY2 else 'I')
+			if hasattr(patterns[0], 'count'):
+				for pattern in patterns:
+					result.append(pattern.count(data, startidx, endidx))
+			else:
+				for pattern in patterns:
+					result.append(len(pattern.findall(data, startidx, endidx)))
 		data.close()
 	return result
 
@@ -1341,33 +1409,34 @@ def main():
 	else:  # sentences or brackets
 		brackets = '--brackets' in opts or '-b' in opts
 		queries = query.splitlines()
-		for query in queries:
-			if len(queries) > 1:
-				print(query)
-			for filename, sentno, sent, high1, high2 in searcher.sents(
-					query, start=start, end=end, maxresults=maxresults,
-					brackets=brackets):
-				if brackets:
-					if '--only-matching' in opts or '-o' in opts:
-						out = high1
+		for filename, result in searcher.batchsents(
+				queries, start=start, end=end, maxresults=maxresults,
+				brackets=brackets):
+			for query, tmp in zip(queries, result):
+				if len(queries) > 1:
+					print(query)
+				for sentno, sent, high1, high2 in tmp if tmp else ():
+					if brackets:
+						if '--only-matching' in opts or '-o' in opts:
+							out = high1
+						else:
+							out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
+									ANSICOLOR['red'], high1))
 					else:
-						out = sent.replace(high1, "\x1b[%d;1m%s\x1b[0m" % (
-								ANSICOLOR['red'], high1))
-				else:
-					if '--only-matching' in opts or '-o' in opts:
-						out = ''.join(char if n in (high2 or high1) else ''
-								for n, char in enumerate(sent)).strip()
-					else:
-						out = applyhighlight(sent, high1, high2)
-				if len(corpora) > 1:
-					print('\x1b[%dm%s\x1b[0m:' % (
-							ANSICOLOR['magenta'], filename), end='')
-				if '--line-number' in opts or '-n' in opts:
-					print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
-							% (ANSICOLOR['green'], sentno), end='')
-				print(out)
-			if len(queries) > 1:
-				print()
+						if '--only-matching' in opts or '-o' in opts:
+							out = ''.join(char if n in (high2 or high1) else ''
+									for n, char in enumerate(sent)).strip()
+						else:
+							out = applyhighlight(sent, high1, high2)
+					if len(corpora) > 1:
+						print('\x1b[%dm%s\x1b[0m:' % (
+								ANSICOLOR['magenta'], filename), end='')
+					if '--line-number' in opts or '-n' in opts:
+						print('\x1b[0m:\x1b[%dm%s\x1b[0m:'
+								% (ANSICOLOR['green'], sentno), end='')
+					print(out)
+				if len(queries) > 1:
+					print()
 
 
 __all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',
