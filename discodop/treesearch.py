@@ -195,7 +195,7 @@ class CorpusSearcher(object):
 		for each iteration."""
 		if self.numproc == 1:
 			return (func(*a, **kwargs) for a in zip(*args))
-		fs = [self.submit(fn, *args, **kwargs) for args in zip(*args)]
+		fs = [self.pool.submit(func, *args, **kwargs) for args in zip(*args)]
 
 		def result_iterator():
 			try:
@@ -1125,11 +1125,10 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 				result.append(tmp if tmp else None)
 		else:
 			result = array.array(b'I' if PY2 else 'I')
-			if hasattr(patterns[0], 'count'):
-				for pattern in patterns:
+			for pattern in patterns:
+				try:
 					result.append(pattern.count(data, startidx, endidx))
-			else:
-				for pattern in patterns:
+				except AttributeError:
 					result.append(len(pattern.findall(data, startidx, endidx)))
 		data.close()
 	return result
