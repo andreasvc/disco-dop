@@ -120,7 +120,8 @@ class CorpusSearcher(object):
 
 		:param start, end: the interval of sentences to query in each corpus;
 			by default, all sentences are queried. 1-based, inclusive.
-		:param maxresults: the maximum number of matches to return.
+		:param maxresults: the maximum number of matches to return;
+			pass ``None`` for no limit.
 		:param brackets: if True, return trees as they appear in the treebank,
 			match1 and match2 are strings with the matching subtree.
 			If False (default), sentences are returned as a sequence of tokens.
@@ -1346,7 +1347,7 @@ def main():
 			query = tmp.read()
 	macros = opts.get('--macros', opts.get('-M'))
 	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
-	maxresults = int(opts.get('--max-count', opts.get('-m', 100)))
+	maxresults = int(opts.get('--max-count', opts.get('-m', 100))) or None
 	numproc = int(opts.get('--numproc', 0)) or None
 	if len(corpora) == 1:
 		numproc = 1

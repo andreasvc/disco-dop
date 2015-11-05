@@ -32,7 +32,7 @@ Options:
                 Only search in sentences N to M of each file; either N or
                 M may be left out; slice indexing is 1-based and inclusive.
 -m N, --max-count=N
-                Stop after finding N matches.
+                Stop after finding N matches; 0 for no limit.
 -n, --line-number
                 Prefix each line of output with the sentence number within
                 its input file.
