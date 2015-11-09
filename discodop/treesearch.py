@@ -1006,7 +1006,7 @@ class RegexSearcher(CorpusSearcher):
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		jobs = {}
-		chunksize = int(len(patterns) / (self.numproc * 4))
+		chunksize = max(int(len(patterns) / (self.numproc * 4)), 1)
 		chunkedqueries = [queries[n:n + chunksize]
 				for n in range(0, len(patterns), chunksize)]
 		patterns = [[_regex_parse_query(query, self.flags) for query in a]
@@ -1028,7 +1028,7 @@ class RegexSearcher(CorpusSearcher):
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		jobs = {}
-		chunksize = int(len(patterns) / (self.numproc * 4))
+		chunksize = max(int(len(patterns) / (self.numproc * 4)), 1)
 		chunkedqueries = [queries[n:n + chunksize]
 				for n in range(0, len(patterns), chunksize)]
 		patterns = [[_regex_parse_query(query, self.flags) for query in a]
