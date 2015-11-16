@@ -39,7 +39,7 @@ except ImportError:
 from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
 from . import treebank, _fragments
-from .tree import Tree, DrawTree, brackettree, unquote
+from .tree import Tree, DrawTree, DiscTree, brackettree, unquote
 from .treetransforms import binarize, mergediscnodes, handledisc
 from .util import which, workerfunc, openread, ANSICOLOR
 from .containers import Vocabulary
@@ -162,12 +162,12 @@ class CorpusSearcher(object):
 	def batchsents(self, queries, subset=None, start=None, end=None,
 			maxresults=100, brackets=False):
 		"""Variant of sents() to run a batch of queries."""
-		result = OrderedDict((name, [])
+		result = OrderedDict((name, [None] * len(queries))
 				for name in subset or self.files)
 		for n, query in enumerate(queries):
 			for value in self.sents(
 					query, subset, start, end, maxresults, brackets):
-				result[value[0]].append(value[1:])
+				result[value[0]][n] = value[1:]
 		for filename, values in result.items():
 			yield filename, values
 
@@ -195,16 +195,18 @@ class CorpusSearcher(object):
 		args is a sequence of iterables to map over; the same kwargs are passed
 		for each iteration."""
 		if self.numproc == 1:
-			return (func(*a, **kwargs) for a in zip(*args))
-		fs = [self.pool.submit(func, *args, **kwargs) for args in zip(*args)]
+			return (func(*xargs, **kwargs) for xargs in zip(*args))
+		fs = [self.pool.submit(func, *xargs, **kwargs) for xargs in zip(*args)]
 
 		def result_iterator():
+			"""Yield results one by one."""
 			try:
 				for future in fs:
 					yield future.result()
 			finally:
 				for future in fs:
 					future.cancel()
+
 		return result_iterator()
 
 	def _as_completed(self, jobs):
@@ -908,6 +910,8 @@ class RegexSearcher(CorpusSearcher):
 		global REGEX_LINEINDEX, REGEX_MACROS
 		super(RegexSearcher, self).__init__(files, macros, numproc)
 		self.macros = None
+		self.lineindex = {}
+		self.wordcount = {}
 		self.flags = re.MULTILINE
 		if ignorecase:
 			self.flags |= re.IGNORECASE
@@ -916,8 +920,6 @@ class RegexSearcher(CorpusSearcher):
 				self.macros = dict(line.strip().split('=', 1) for line in tmp)
 		path = os.path.dirname(next(iter(files)))
 		lineidxpath = os.path.join(path, 'treesearchlineidx.pkl')
-		self.lineindex = {}
-		self.wordcount = {}
 		if os.path.exists(lineidxpath):
 			mtime = os.stat(lineidxpath).st_mtime
 			if all(mtime > os.stat(a).st_mtime for a in files):
@@ -934,7 +936,7 @@ class RegexSearcher(CorpusSearcher):
 			with open(lineidxpath, 'wb') as out:
 				pickle.dump((self.lineindex, self.wordcount), out, protocol=-1)
 		if REGEX_LINEINDEX is not None:
-			raise ValueError('only one instance possible.')
+			raise ValueError('only one instance possible.')  # FIXME
 		REGEX_LINEINDEX = self.lineindex
 		REGEX_MACROS = self.macros
 		self.pool = concurrent.futures.ProcessPoolExecutor(self.numproc)
@@ -1005,7 +1007,6 @@ class RegexSearcher(CorpusSearcher):
 		patterns = [_regex_parse_query(query, self.flags) for query in queries]
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
-		jobs = {}
 		chunksize = max(int(len(patterns) / (self.numproc * 4)), 1)
 		chunkedqueries = [queries[n:n + chunksize]
 				for n in range(0, len(patterns), chunksize)]
@@ -1027,7 +1028,6 @@ class RegexSearcher(CorpusSearcher):
 		patterns = [_regex_parse_query(query, self.flags) for query in queries]
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
-		jobs = {}
 		chunksize = max(int(len(patterns) / (self.numproc * 4)), 1)
 		chunkedqueries = [queries[n:n + chunksize]
 				for n in range(0, len(patterns), chunksize)]
@@ -1368,8 +1368,7 @@ def main():
 				corpora, macros=macros, numproc=numproc, inmemory=False)
 	else:
 		raise ValueError('incorrect --engine value: %r' % engine)
-	if ('--counts' in opts or '-c' in opts
-		or '--breakdown' in opts or '--indices' in opts):
+	if '--counts' in opts or '-c' in opts or '--indices' in opts:
 		indices = '--indices' in opts
 		queries = query.splitlines()
 		if '--breakdown' in opts:
@@ -1388,8 +1387,19 @@ def main():
 						ANSICOLOR['magenta'], filename), end='')
 				print(cnt)
 	elif '--trees' in opts or '-t' in opts:
-		for filename, sentno, tree, sent, high in searcher.trees(
-				query, start=start, end=end, maxresults=maxresults):
+		results = searcher.trees(
+				query, start=start, end=end, maxresults=maxresults)
+		if '--breakdown' in opts:
+			breakdown = Counter(DiscTree(
+				max(high, key=lambda x: len(x.leaves())
+					if isinstance(x, Tree) else 1).freeze(), sent)
+				for _, _, _, sent, high in results if high)
+			for match, cnt in breakdown.most_common():
+				print('count: %5d\n%s\n\n' % (
+						cnt, DrawTree(match, match.sent).text(
+							unicodelines=True, ansi=True)))
+			return
+		for filename, sentno, tree, sent, high in results:
 			if '--only-matching' in opts or '-o' in opts:
 				tree = max(high, key=lambda x:
 						len(x.leaves()) if isinstance(x, Tree) else 1)
@@ -1405,9 +1415,20 @@ def main():
 	else:  # sentences or brackets
 		brackets = '--brackets' in opts or '-b' in opts
 		queries = query.splitlines()
+		breakdown = Counter()
 		for filename, result in searcher.batchsents(
 				queries, start=start, end=end, maxresults=maxresults,
 				brackets=brackets):
+			if '--breakdown' in opts:
+				if brackets:
+					breakdown.update(high for _, _, high, _ in result)
+				else:
+					breakdown.update(re.sub(
+						' {2,}', ' ... ',
+						''.join(char if n in high1 or n in high2 else ' '
+							for n, char in enumerate(sent)))
+						for _, sent, high1, high2 in result)
+				continue
 			for sentno, sent, high1, high2 in result:
 				if brackets:
 					if '--only-matching' in opts or '-o' in opts:
@@ -1428,6 +1449,9 @@ def main():
 					print('\x1b[%dm%s\x1b[0m:'
 							% (ANSICOLOR['green'], sentno), end='')
 				print(out)
+		if '--breakdown' in opts:
+			for match, cnt in breakdown.most_common():
+				print('%5d %s' % (cnt, match))
 
 
 __all__ = ['CorpusSearcher', 'TgrepSearcher', 'DactSearcher', 'RegexSearcher',

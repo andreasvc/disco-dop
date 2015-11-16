@@ -397,7 +397,7 @@ def sents(form, dobrackets=False):
 				breakdown = Counter(re.sub(
 					' {2,}', ' ... ',
 					' '.join(char if n in high1 or n in high2 else ' '
-						for n, char in enumerate(sent.split())))
+						for n, char in enumerate(sent)))
 					for _, _, sent, high1, high2 in results)
 			yield '\n%s\n' % text
 			for match, cnt in breakdown.most_common():
