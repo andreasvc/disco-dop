@@ -3,19 +3,55 @@ Getting started
 
 .. contents::
 
-Parsing a text
---------------
+Parsing a single sentence
+-------------------------
 The parser can be used as an off-the-shelf parser using an existing grammar model,
 either one of the `grammars used in publications
 <https://staff.fnwi.uva.nl/a.w.vancranenburgh/grammars/>`_ for English, German,
 Dutch, and French, or a new model produced by ``discodop runexp``
-or ``discodop grammar param``.
-The text needs to be tokenized, for example using `ucto
-<http://ilk.uvt.nl/ucto>`_, the output of which can be passed to the parser::
+or ``discodop grammar param`` (more on that below).
+To download and extract a grammar::
 
-    $  ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser wsj/
+    $ curl -Ssl https://staff.fnwi.uva.nl/a.w.vancranenburgh/grammars/en_ptb.tar | tar -xf -
 
-To parse sentences in bracketed format::
+To parse a single sentence::
+
+    $ echo 'Why did the chicken cross the road ?' | discodop parser en_ptb/
+    parsing 0: Why did the chicken cross the road ?
+    0.078917 s
+    (ROOT (SBARQ (SQ (VP (WHADVP (WRB 0=Why)) (VB 4=cross) (NP (DT 5=the) (NN 6=road))) (VBD 1=did) (NP (DT 2=the) (NN 3=chicken))) (. 7=?)))
+    average time per sentence 0.0789169999999999
+    unparsed sentences: 0
+    finished
+
+We can add an extra command to visualize the tree::
+
+    $ echo 'Why did the chicken cross the road ?' | discodop parser en_ptb/ | discodop treedraw
+    [...]
+    1. (len=8):
+                         ROOT
+                          │
+                        SBARQ
+                ┌─────────┴────────────────────────┐
+                SQ                                 │
+            ┌───┴───┬─────┐                        │
+            │       │     VP                       │
+      ┌──── │ ───── │ ────┴──────┬────────┐        │
+    WHADVP  │       NP           │        NP       │
+      │     │   ┌───┴─────┐      │    ┌───┴───┐    │
+     WRB   VBD  DT        NN     VB   DT      NN   .
+      │     │   │         │      │    │       │    │
+     Why   did the     chicken cross the     road  ?
+
+Parsing a text
+--------------
+Similarly we can parse a whole document. The text needs to be tokenized, for
+example using `ucto <http://ilk.uvt.nl/ucto>`_, the output of which can be
+passed to the parser::
+
+    $  ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser en_ptb/
+
+To parse sentences from a treebank in bracketed format::
 
     $ discodop treetransforms treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser wsj/
 
