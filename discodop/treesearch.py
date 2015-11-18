@@ -850,11 +850,11 @@ def _frag_parse_query(query, disc=False):
 	"""Prepare fragment query."""
 	if FRAG_MACROS is not None:
 		query = query.format(**FRAG_MACROS)
-	if isinstance(query, str):
+	if isinstance(query, list):
+		qitems = (brackettree(a) for a in query)
+	else:
 		qitems = treebank.incrementaltreereader(
 				io.StringIO(query), strict=True, robust=False)
-	else:
-		qitems = (brackettree(a) for a in query)
 	qtrees, qsents = [], []
 	for item in qitems:
 		# rightmostunary necessary to handle discontinuous substitution sites
