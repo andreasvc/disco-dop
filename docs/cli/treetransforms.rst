@@ -7,8 +7,8 @@ Usage: ``discodop treetransforms [input [output]] [options]``
 
 where ``input`` and ``output`` are treebanks; standard in/output is used if not given.
 
-Main transformation options:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Main transformation options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The following transforms are applied in the order given on the command line.
 
 --introducepreterminals
@@ -33,9 +33,8 @@ The following transforms are applied in the order given on the command line.
 
 --mergedisc     Reverse the node splitting operation.
 
-Other options:
-~~~~~~~~~~~~~~
-
+Other options
+^^^^^^^^^^^^^
 --inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
                 Input treebank format [default: export].
 
@@ -102,3 +101,10 @@ Other options:
 --tailmarker    mark rightmost child (the head if headrules are applied), to
                 avoid cyclic rules when ``--leftunary`` and ``--rightunary``
                 are used.
+
+Example
+^^^^^^^
+Binarize a treebank::
+
+      $ discodop treetransforms --binarize --fmt=bracket treebankExample.mrg /tmp/bintrees
+

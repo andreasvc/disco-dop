@@ -12,8 +12,8 @@ are written to standard output. Input should contain one sentence per line
 with space-delimited tokens. Output consists of bracketed trees in
 selected format. Files must be encoded in UTF-8.
 
-General options:
-
+General options
+^^^^^^^^^^^^^^^
 -x           Input is one token per line, sentences separated by two
              newlines (like bitpar).
 -b k         Return the k-best parses instead of just 1.
@@ -32,8 +32,8 @@ General options:
              0 <= x <= 4. Same effect as verbosity in parameter file.
 
 
-Options for simple mode:
-
+Options for simple mode
+^^^^^^^^^^^^^^^^^^^^^^^
 -s x         Use ``x`` as start symbol instead of default ``TOP``.
 --bt=file    Apply backtransform table to recover TSG derivations.
 --mpp=k      By default, the output consists of derivations, with the most
@@ -49,4 +49,16 @@ Options for simple mode:
              mpd and shortest require only 1.
 --bitpar     Use bitpar to parse with an unbinarized grammar.
 
+Examples
+^^^^^^^^
+To parse a single sentence::
 
+    $ echo 'Why did the chicken cross the road ?' | discodop parser en_ptb/
+
+Tokenize and parse a text::
+
+    $ ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser en_ptb/
+
+Parse sentences from a treebank in bracketed format::
+
+    $ discodop treetransforms treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser en_ptb/

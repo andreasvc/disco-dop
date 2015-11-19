@@ -49,11 +49,11 @@ Similarly we can parse a whole document. The text needs to be tokenized, for
 example using `ucto <http://ilk.uvt.nl/ucto>`_, the output of which can be
 passed to the parser::
 
-    $  ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser en_ptb/
+    $ ucto -L en -n "CONRAD, Joseph - Lord Jim.txt" | discodop parser en_ptb/
 
 To parse sentences from a treebank in bracketed format::
 
-    $ discodop treetransforms treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser wsj/
+    $ discodop treetransforms treebankExample.mrg --inputfmt=bracket --outputfmt=tokens | discodop parser en_ptb/
 
 Inducing a simple grammar
 -------------------------
@@ -101,8 +101,9 @@ Note that the ``-s`` option should specify the root label of the trees in the tr
 Run an experiment
 -----------------
 To parse with large treebanks, it may be necessary to apply pruning, and it
-is useful to specify the configuration for an experiment in a single file.
-This can be done with the ``discodop runexp`` command.
+is useful to specify all the preprocessing steps and other configuration for an
+experiment in a single file. This can be done with the ``discodop runexp``
+command.
 
 To run an end-to-end experiment from grammar extraction to evaluation on a test
 set, make a copy of the file ``sample.prm`` and edit its parameters. For
@@ -135,7 +136,7 @@ example:
         h=1, v=1),
 
 See the documentation on the available :doc:`parameters <params>`.
-These parameters can be invoked by executing::
+This parameter file can be invoked by executing::
 
     $ discodop runexp filename.prm
 
@@ -162,7 +163,7 @@ is freely available for download for research purposes.
 Alternatively, it is possible to achieve similar results with separate commands::
 
     $ discodop grammar param filename.prm filename/
-    $ discodop none alpinosample.export sentences.txt --inputfmt=export --outputfmt=tokens
+    $ discodop alpinosample.export sentences.txt --inputfmt=export --outputfmt=tokens
     $ discodop parser filename/ sentences.txt --fmt=export >filename/dop.export
     $ discodop eval alpinosample.export filename/dop.export proper.prm
 
@@ -180,7 +181,7 @@ Command-line tools
 ------------------
 Aside from the parser there are some standalone tools, invoked as ``discodop <cmd>``:
 
-``fragments``
+:doc:`fragments <cli/fragments>`
     Finds recurring or common fragments in one or more treebanks.
     It can be used with discontinuous as well as Penn-style bracketed treebanks.
     Example::
@@ -189,36 +190,40 @@ Aside from the parser there are some standalone tools, invoked as ``discodop <cm
 
     Specify the option ``--numproc n`` to use multiple processes, as with ``runexp``.
 
-``eval``
+:doc:`eval <cli/eval>`
     Discontinuous evaluation. Reports F-scores and other metrics.
     Accepts ``EVALB`` parameter files:
 
     ``$ discodop eval sample/gold.export sample/dop.export proper.prm``
 
-``treetransforms``
+:doc:`treetransforms <cli/treetransforms>`
     A command line interface to perform transformations on
     treebanks such as binarization.
 
-``grammar``
+:doc:`grammar <cli/grammar>`
     A command line interface to read off grammars from (binarized)
     treebanks.
 
-``treedraw``
+:doc:`treedraw <cli/treedraw>`
     Visualize (discontinuous) trees. Command-line interface:
 
     ``$ discodop treedraw < negra-corpus.export | less -RS``
 
-``parser``
+:doc:`treesearch <cli/treesearch>`
+    Search through treebanks with queries.
+
+:doc:`parser <cli/parser>`
     A basic command line interface to the parser comparable to bitpar.
     Reads grammars from text files.
 
 ``demos``
     Contains examples of various formalisms encoded in LCFRS grammars.
 
-``gen``
+:doc:`gen <cli/gen>`
     An experiment in generation with LCFRS.
 
-For instructions, pass the ``--help`` option to a command.
+For instructions, pass the ``--help`` option to a command
+or the links above.
 
 Web interfaces
 --------------

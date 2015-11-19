@@ -28,3 +28,13 @@ If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through ``less -RS`` to preserve the colors.
 
+Example
+^^^^^^^
+View trees in a treebank::
+
+    $ discodop treedraw < wsj-02-21.mrg | less -RS
+
+Apply a transformation and view the result::
+
+    $ discodop treetransforms --binarize --fmt=bracket wsj-02-21.mrg | discodop treedraw | less -RS
+

@@ -42,8 +42,8 @@ Other subcommands:
 NB: both the ``info`` and ``merge`` commands expect grammars to be sorted by
 LHS, such as the ones created by this tool.
 
-Options:
-
+Options
+^^^^^^^
 --inputfmt=<export|bracket|discbracket|tiger|alpino|dact>
           The treebank format [default: export].
 
@@ -73,6 +73,8 @@ Options:
           When extracting a 'dop1' grammar, the limit on what fragments are
           extracted; 3 or 4 is a reasonable depth limit.
 
+Grammar formats
+^^^^^^^^^^^^^^^
 When a PCFG is requested, or the input format is ``bracket`` (Penn format), the
 output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
@@ -99,4 +101,14 @@ Example::
              VP_2	VB	NP	0,1	2/3
              NP	NN	0	1/4
     lexicon: Haus	NN	3/10	JJ	1/9
+
+Examples
+^^^^^^^^
+Extract a Double-DOP grammar given binarized trees::
+
+    $ discodop grammar doubledop --inputfmt=bracket /tmp/bintrees /tmp/example
+
+Extract grammars specified in a parameter file::
+
+    $ discodop grammar param filename.prm /tmp/example
 

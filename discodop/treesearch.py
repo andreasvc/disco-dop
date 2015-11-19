@@ -162,12 +162,12 @@ class CorpusSearcher(object):
 	def batchsents(self, queries, subset=None, start=None, end=None,
 			maxresults=100, brackets=False):
 		"""Variant of sents() to run a batch of queries."""
-		result = OrderedDict((name, [None] * len(queries))
+		result = OrderedDict((name, [])
 				for name in subset or self.files)
 		for n, query in enumerate(queries):
 			for value in self.sents(
 					query, subset, start, end, maxresults, brackets):
-				result[value[0]][n] = value[1:]
+				result[value[0]].append(value[1:])
 		for filename, values in result.items():
 			yield filename, values
 
@@ -1346,7 +1346,7 @@ def main():
 		with openread(query) as tmp:
 			query = tmp.read()
 	macros = opts.get('--macros', opts.get('-M'))
-	engine = opts.get('--engine', opts.get('-e', 'tgrep2'))
+	engine = opts.get('--engine', opts.get('-e', 'frag'))
 	maxresults = int(opts.get('--max-count', opts.get('-m', 100))) or None
 	numproc = int(opts.get('--numproc', 0)) or None
 	if len(corpora) == 1:

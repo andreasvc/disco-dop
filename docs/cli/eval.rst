@@ -7,8 +7,10 @@ as possible.
 Usage: ``discodop eval <gold> <parses> [param] [options]``
 
 where `gold`` and ``parses`` are files with parse trees, ``param`` is
-an ``EVALB`` parameter file, and options may consist of:
+an ``EVALB`` parameter file.
 
+options
+^^^^^^^
 --cutofflen=n    Overrides the sentence length cutoff of the parameter file.
 --verbose        Print table with per sentence information.
 --debug          Print debug information with per sentence bracketings etc.
@@ -40,6 +42,8 @@ an ``EVALB`` parameter file, and options may consist of:
                  'between': add morphological node between POS tag and word.
 
 
+function tags
+^^^^^^^^^^^^^
 If the ``parses`` file contains function tags, these are evaluated with the
 non-null metric of Blaheta & Charniak (2000), which scores function tags of
 correctly parsed bracketings. Multiple tags on a constituent are scored
@@ -49,6 +53,8 @@ tags on preterminals. A more stringent metric is to combine phrasal & function
 tags with the option ``--functions=add``, which incorporates function tags in
 the bracketing scores.
 
+parameter file
+^^^^^^^^^^^^^^
 The parameter file should be encoded in ``UTF-8`` and supports the following
 options (in addition to those described in the ``README`` of ``EVALB``):
 
@@ -72,3 +78,7 @@ options (in addition to those described in the ``README`` of ``EVALB``):
                  the parameter is accepted to support usage of unmodified
                  EVALB parameter files.
 
+example
+^^^^^^^
+::
+    $ discodop eval wsj-24.mrg parses.mrg COLLINS.prm --fmt=bracket
