@@ -295,6 +295,7 @@ cdef class Chart:
 	cdef size_t asCFGspan(self, item, size_t nonterminals):
 		"""Convert item for chart to compact span."""
 		cdef size_t itemx
+		cdef int start, end
 		if isinstance(item, SmallChartItem):
 			start = nextset((<SmallChartItem>item).vec, 0)
 			end = nextunset((<SmallChartItem>item).vec, start)

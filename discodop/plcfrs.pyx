@@ -648,7 +648,8 @@ cdef inline int process_lexedge(LCFRSItem_fused newitem,
 cdef inline bint checkwhitelist(LCFRSItem_fused newitem, list whitelist,
 		bint splitprune, bint markorigin):
 	"""Return False if item is not on whitelist."""
-	cdef uint32_t a, b, n, cnt, label
+	cdef uint32_t n, cnt, label
+	cdef int a, b
 	cdef list componentlist = None
 	cdef set componentset = None
 	if whitelist is not None and whitelist[newitem.label] is not None:

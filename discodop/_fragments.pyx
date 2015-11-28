@@ -551,7 +551,7 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 	"""Get candidates from productions in fragment ``bitset`` at ``a[i]``."""
 	cdef uint64_t cur = bitset[0]
 	cdef int idx = 0
-	cdef short i = iteratesetbits(bitset, SLOTS, &cur, &idx)
+	cdef int i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 	assert i != -1
 	if 0 <= a[i].prod < len(trees.prodindex):
 		rb = trees.prodindex[a[i].prod]

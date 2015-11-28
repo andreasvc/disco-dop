@@ -63,11 +63,11 @@ cdef inline double getoutside(double [:, :, :, :] outside,
 
 	NB: if this would be used, it should be in a .pxd with `inline`.
 	However, passing the numpy array may be slow."""
-	cdef uint32_t length = bitcount(vec)
-	cdef uint32_t left = nextset(vec, 0)
-	cdef uint32_t gaps = bitlength(vec) - length - left
-	cdef uint32_t right = slen - length - left - gaps
-	cdef uint32_t lr = left + right
+	cdef int length = bitcount(vec)
+	cdef int left = nextset(vec, 0)
+	cdef int gaps = bitlength(vec) - length - left
+	cdef int right = slen - length - left - gaps
+	cdef int lr = left + right
 	if slen > maxlen or length + lr + gaps > maxlen:
 		return 0.0
 	return outside[label, length, lr, gaps]
@@ -203,6 +203,8 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 
 cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, Rule rule,
 		Grammar grammar, uint32_t maxlen):
+	cdef int subarg, resultpos
+	cdef uint64_t result
 	if grammar.fanout[rule.lhs] + bitcount(a) + bitcount(b) > maxlen + 1:
 		return 0
 	result = resultpos = l = r = 0
@@ -352,9 +354,9 @@ def getestimates(Grammar grammar, uint32_t maxlen, uint32_t goal):
 cdef inline double getpcfgoutside(dict outsidescores,
 		uint32_t maxlen, uint32_t slen, uint32_t label, uint64_t vec):
 	"""Query for a PCFG A* estimate. For documentation purposes."""
-	cdef uint32_t length = bitcount(vec)
-	cdef uint32_t left = nextset(vec, 0)
-	cdef uint32_t right = slen - length - left
+	cdef int length = bitcount(vec)
+	cdef int left = nextset(vec, 0)
+	cdef int right = slen - length - left
 	if slen > maxlen or length + left + right > maxlen:
 		return 0.0
 	return outsidescores[label, left, right]
