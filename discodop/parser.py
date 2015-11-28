@@ -29,7 +29,7 @@ from .coarsetofine import prunechart
 from .tree import ParentedTree
 from .eval import alignsent
 from .lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
-from .treebank import writetree
+from .treebank import writetree, handlefunctions
 from .heads import saveheads, readheadrules
 from .punctuation import punctprune, applypunct
 from .functiontags import applyfunctionclassifier
@@ -294,14 +294,19 @@ def worker(args):
 			output += 'prob=%.16g\n' % result.prob
 		output += '%s\t%s\n' % (result.parsetree, ' '.join(sent))
 	else:
-		output += ''.join(
-				writetree(
-					PARAMS.parser.postprocess(tree, sent, -1)[0], sent,
+		tmp = []
+		for k, (tree, prob, _) in enumerate(nlargest(
+				PARAMS.numparses, result.parsetrees, key=itemgetter(1))):
+			tree, _ = PARAMS.parser.postprocess(tree, sent, -1)
+			if 'bracket' in PARAMS.fmt:
+				handlefunctions('add', tree)
+			tmp.append(writetree(
+					tree, sent,
 					n if PARAMS.numparses == 1 else ('%d-%d' % (n, k)),
 					PARAMS.fmt, morphology=PARAMS.morphology,
-					comment=('prob=%.16g' % prob) if PARAMS.printprob else None)
-				for k, (tree, prob, _) in enumerate(nlargest(
-					PARAMS.numparses, result.parsetrees, key=itemgetter(1))))
+					comment=('prob=%.16g' % prob)
+						if PARAMS.printprob else None))
+		output += ''.join(tmp)
 	sec = time.clock() - begin
 	msg += '\n%g s' % sec
 	return output, result.noparse, sec, msg
