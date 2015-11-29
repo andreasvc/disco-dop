@@ -370,12 +370,12 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.mode == 'mc-rerank':
 			from . import _fragments
-			gram = _fragments.getctrees(trees, sents)
-			with codecs.getwriter('utf8')(gzip.open('%s/%s.train.gz' % (
-					resultdir, stage.name), 'wb')) as tbfile:
-				tbfile.writelines(treebank.writetree(
-						tree, sent, 0, 'discbracket')
-						for tree, sent in zip(trees, sents))
+			gram = parser.DictObj(_fragments.getctrees(trees, sents))
+			tree = gram.trees1.extract(0, gram.vocab)
+			gram.start = tree[:tree.index(' ')].lstrip('(')
+			with gzip.open('%s/%s.train.pickle.gz' % (resultdir, stage.name),
+					'wb') as out:
+				out.write(pickle.dumps(gram, protocol=-1))
 		elif stage.dop:
 			if stage.dop in ('doubledop', 'dop1'):
 				if stage.dop == 'doubledop':
@@ -790,8 +790,9 @@ def parsetepacoc(
 			for tree, sent in zip(corpus_trees, corpus_sents):
 				treebanktransforms.transform(tree, sent, transformations)
 		corpus_blocks = list(corpus.blocks().values())
-		pickle.dump((corpus_sents, corpus_taggedsents, corpus_trees,
-			corpus_blocks), gzip.open('tiger.pickle.gz', 'wb'), protocol=-1)
+		with gzip.open('tiger.pickle.gz', 'wb') as out:
+			pickle.dump((corpus_sents, corpus_taggedsents, corpus_trees,
+					corpus_blocks), out, protocol=-1)
 
 	# test sets (one for each category)
 	testsets = {}
@@ -892,8 +893,9 @@ def parsetepacoc(
 	oldeval(totresults, goldbrackets)
 	# write TOTAL results file with all tepacoc sentences (not the baseline)
 	for stage in stages:
-		io.open('TOTAL.%s.export' % stage.name, 'w', encoding='utf8'
-				).writelines(io.open('%s.%s.export' % (cat, stage.name),
+		with io.open('TOTAL.%s.export' % stage.name,
+				'w', encoding='utf8') as tmp:
+			tmp.writelines(io.open('%s.%s.export' % (cat, stage.name),
 				encoding='utf8').read() for cat in list(results) + ['gold'])
 	# do baseline separately because it shouldn't count towards the total score
 	cat = 'baseline'

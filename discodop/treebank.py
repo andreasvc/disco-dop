@@ -450,13 +450,15 @@ def exporttree(block, functions=None, morphology=None, lemmas=None):
 	comment = block[0].split('%%')[1].strip() if '%%' in block[0] else None
 	table = [exportsplit(x) for x in block[1:-1]]
 	sent = []
-	for a in table:
-		if EXPORTNONTERMINAL.match(a[WORD]):
-			break
-		sent.append(a[WORD])
-	children = {}
+	children = {'0': []}
+	for source in table:
+		m = EXPORTNONTERMINAL.match(source[WORD])
+		if m:
+			children[m.group(1)] = []
+		else:
+			sent.append(source[WORD])
 	for n, source in enumerate(table):
-		children.setdefault(source[PARENT], []).append((n, source))
+		children[source[PARENT]].append((n, source))
 	tree = ParentedTree('ROOT', getchildren('0'))
 	handlefunctions(functions, tree, morphology=morphology)
 	return Item(tree, sent, comment, '\n'.join(block) + '\n')

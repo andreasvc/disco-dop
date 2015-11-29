@@ -339,7 +339,7 @@ def negratransforms(name, tree, sent):
 			if function(node) == 'NK':
 				node.source[FUNC] = 'HD'
 			else:  # elif function(node) == 'CJ':
-				node.source[FUNC] = function(node.parent)
+				node.source[FUNC] = function(node.parent) or '--'
 	elif name == 'lexPrep':  # lexicalize frequent prepositions/conjunctions
 		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 			word = sent[node[0]].lower()
@@ -792,7 +792,7 @@ def lassytransforms(name, tree, _sent):
 				tag.source[FUNC] = 'hd'
 	elif name == 'nlelimcnj':  # assign conjuncts the function of the parent
 		for node in tree.subtrees(lambda n: function(n) == 'cnj'):
-			node.source[FUNC] = function(node.parent)
+			node.source[FUNC] = function(node.parent) or '--'
 	else:
 		return False
 	return True
@@ -891,7 +891,7 @@ def reversetransform(tree, transformations):
 						origfunc = function(child)
 						child.source = getattr(child[0], 'source', None)
 						if child.source:
-							child.source[FUNC] = origfunc
+							child.source[FUNC] = origfunc or '--'
 						children = child[0][:]
 						child[0][:] = []
 						child[:] = children
@@ -921,7 +921,7 @@ def reversetransform(tree, transformations):
 						origfunc = function(child)
 						child.source = getattr(child[0], 'source', None)
 						if child.source:
-							child.source[FUNC] = origfunc
+							child.source[FUNC] = origfunc or '--'
 						children = child[0][:]
 						child[0][:] = []
 						child[:] = children
@@ -1239,9 +1239,12 @@ def function(tree):
 
 def functions(tree):
 	""":returns: list of function tags for node, or an empty list."""
-	if getattr(tree, 'source', None) is None or tree.source[FUNC] == '--':
+	if getattr(tree, 'source', None) is None:
 		return []
-	return tree.source[FUNC].split('-')
+	a = tree.source[FUNC]
+	if a == '--' or a == '' or a is None:
+		return []
+	return a.split('-')
 
 
 __all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',

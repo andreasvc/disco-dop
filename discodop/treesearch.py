@@ -164,7 +164,7 @@ class CorpusSearcher(object):
 		"""Variant of sents() to run a batch of queries."""
 		result = OrderedDict((name, [])
 				for name in subset or self.files)
-		for n, query in enumerate(queries):
+		for query in queries:
 			for value in self.sents(
 					query, subset, start, end, maxresults, brackets):
 				result[value[0]].append(value[1:])
@@ -641,8 +641,9 @@ class FragmentSearcher(CorpusSearcher):
 				corpus = _fragments.readtreebank(
 						filename, self.vocab, fmt=fmt)
 				corpus.indextrees(self.vocab)
-				gzip.open('%s.pkl.gz' % filename, 'w', compresslevel=1).write(
-						pickle.dumps(corpus, protocol=-1))
+				with gzip.open('%s.pkl.gz' % filename, 'w', compresslevel=1
+						) as out:
+					out.write(pickle.dumps(corpus, protocol=-1))
 				if inmemory:
 					self.files[filename] = corpus
 				newvocab = True

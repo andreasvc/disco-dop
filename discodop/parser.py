@@ -7,6 +7,7 @@ import io
 import os
 import re
 import sys
+import gzip
 import json
 import time
 import codecs
@@ -17,6 +18,9 @@ import string  # pylint: disable=W0402
 import multiprocessing
 if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
+	import cPickle as pickle  # pylint: disable=import-error
+else:
+	import pickle
 from math import exp, log
 from heapq import nlargest
 from getopt import gnu_getopt, GetoptError
@@ -123,12 +127,12 @@ DEFAULTSTAGE = dict(
 class DictObj(object):
 	"""Trivial class to wrap a dictionary for reasons of syntactic sugar."""
 
-	def __init__(self, *a, **kw):
-		self.__dict__.update(*a, **kw)
+	def __init__(self, *args, **kwds):
+		self.__dict__.update(*args, **kwds)
 
-	def update(self, *a, **kw):
+	def update(self, *args, **kwds):
 		"""Update/add more attributes."""
-		self.__dict__.update(*a, **kw)
+		self.__dict__.update(*args, **kwds)
 
 	def __getattr__(self, name):
 		"""Dummy function for suppressing pylint E1101 errors."""
@@ -503,8 +507,7 @@ class Parser(object):
 					if prevparsetrees[stage.prune]:
 						parsetrees, msg1 = disambiguation.mcrerank(
 								prevparsetrees[stage.prune], sent, stage.k,
-								stage.grammar['trees1'],
-								stage.grammar['vocab'])
+								stage.grammar.trees1, stage.grammar.vocab)
 				else:
 					raise ValueError('unknown mode specified.')
 				msg += '%s\n\t' % msg1
@@ -642,9 +645,8 @@ class Parser(object):
 		else:  # Produce a dummy parse for evaluation purposes.
 			default = grammar.defaultparse([(n, t) for n, t
 					in enumerate(tags or (len(sent) * ['NONE']))])
-			parsetree = ParentedTree('(%s %s)' % (
-					'TOP' if stage.mode == 'mc-rerank'  # FIXME
-					else stage.grammar.start, default))
+			parsetree = ParentedTree(
+					'(%s %s)' % (stage.grammar.start, default))
 		noparse = True
 		prob = 1.0
 		return parsetree, prob, noparse
@@ -674,12 +676,8 @@ def readgrammars(resultdir, stages, postagging=None, top='ROOT'):
 		if n and stage.prune:
 			prevn = [a.name for a in stages].index(stage.prune)
 		if stage.mode == 'mc-rerank':
-			xgrammar = dict(labels=[], prods={})
-			from ._fragments import readtreebank
-			xgrammar['trees1'] = readtreebank(
-					'%s/%s.train.gz' % (resultdir, stage.name),
-					xgrammar['vocab'], fmt='discbracket')
-			xgrammar['trees1'].indextrees(xgrammar['vocab'])
+			xgrammar = pickle.loads(gzip.open('%s/%s.train.pickle.gz' % (
+					resultdir, stage.name), 'rb').read())
 		elif stage.dop:
 			if stage.estimates is not None:
 				raise ValueError('not supported')

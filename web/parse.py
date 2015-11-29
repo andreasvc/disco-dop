@@ -65,66 +65,71 @@ def parse():
 		lang = guesslang(senttok)
 	elif lang not in PARSERS:
 		return 'unknown language %r; languages: %r' % (lang, PARSERS.keys())
-	key = (senttok, est, marg, objfun, coarse, lang, html)
-	if CACHE.get(key) is not None:
-		return CACHE.get(key)
-	link = 'parse?' + url_encode(dict(sent=sent, est=est, marg=marg,
-			objfun=objfun, coarse=coarse, html=html))
-	PARSERS[lang].stages[-1].estimator = est
-	PARSERS[lang].stages[-1].objective = objfun
-	PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
-	PARSERS[lang].stages[-1].sample = marg in ('sample', 'both')
-	if PARSERS[lang].stages[0].mode.startswith('pcfg') and coarse:
-		PARSERS[lang].stages[0].mode = coarse
-		PARSERS[lang].stages[1].k = 1e-5 if coarse == 'pcfg-posterior' else 50
+	key = (senttok, est, marg, objfun, coarse, lang)
+	resp = CACHE.get(key)
+	if resp is None:
+		link = 'parse?' + url_encode(dict(sent=sent, est=est, marg=marg,
+				objfun=objfun, coarse=coarse, html=html))
+		PARSERS[lang].stages[-1].estimator = est
+		PARSERS[lang].stages[-1].objective = objfun
+		PARSERS[lang].stages[-1].kbest = marg in ('nbest', 'both')
+		PARSERS[lang].stages[-1].sample = marg in ('sample', 'both')
+		if PARSERS[lang].stages[0].mode.startswith('pcfg') and coarse:
+			PARSERS[lang].stages[0].mode = coarse
+			PARSERS[lang].stages[1].k = (1e-5
+					if coarse == 'pcfg-posterior' else 50)
 
-	results = list(PARSERS[lang].parse(senttok))
-	if results[-1].noparse:
-		parsetrees = []
-		result = 'no parse!'
-		frags = nbest = ''
+		results = list(PARSERS[lang].parse(senttok))
+		if results[-1].noparse:
+			parsetrees = []
+			result = 'no parse!'
+			frags = nbest = ''
+		else:
+			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
+			tree = str(results[-1].parsetree)
+			prob = results[-1].prob
+			parsetrees = results[-1].parsetrees or []
+			parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
+			parsetrees_ = []
+			fragments = results[-1].fragments or ()
+			APP.logger.info('[%s] %s', probstr(prob), tree)
+			tree = Tree.parse(tree, parse_leaf=int)
+			result = Markup(DrawTree(tree, senttok).text(
+					unicodelines=True, html=html, funcsep='-'))
+			frags = Markup('Phrasal fragments used in the most probable '
+					'derivation of the highest ranked parse tree:\n'
+					+ '\n\n'.join(
+					DrawTree(frag).text(unicodelines=True, html=html)
+					for frag in fragments if frag.count('(') > 1))
+			for tree, prob, x in parsetrees:
+				tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
+				treebank.handlefunctions('add', tree, pos=True)
+				parsetrees_.append((tree, prob, x))
+			nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
+						DrawTree(tree, senttok).text(
+							unicodelines=True, html=html, funcsep='-'))
+					for n, (tree, prob, _) in enumerate(parsetrees_)))
+		msg = '\n'.join(stage.msg for stage in results)
+		elapsed = [stage.elapsedtime for stage in results]
+		elapsed = 'CPU time elapsed: %s => %gs' % (
+				' '.join('%gs' % a for a in elapsed), sum(elapsed))
+		info = '\n'.join(('length: %d; lang=%s; est=%s; objfun=%s; marg=%s' % (
+				len(senttok), lang, est, objfun, marg), msg, elapsed,
+				'10 most probable parse trees:',
+				'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
+						for n, (tree, prob, _) in enumerate(parsetrees))
+				+ '\n'))
+		CACHE.set(key, (sent, result, frags, nbest, info, link), timeout=5000)
 	else:
-		treebank.handlefunctions('add', results[-1].parsetree, pos=True)
-		tree = str(results[-1].parsetree)
-		prob = results[-1].prob
-		parsetrees = results[-1].parsetrees or []
-		parsetrees = heapq.nlargest(10, parsetrees, key=itemgetter(1))
-		parsetrees_ = []
-		fragments = results[-1].fragments or ()
-		APP.logger.info('[%s] %s', probstr(prob), tree)
-		tree = Tree.parse(tree, parse_leaf=int)
-		result = Markup(DrawTree(tree, senttok).text(
-				unicodelines=True, html=html, funcsep='-'))
-		frags = Markup('Phrasal fragments used in the most probable derivation'
-				' of the highest ranked parse tree:\n'
-				+ '\n\n'.join(
-				DrawTree(frag).text(unicodelines=True, html=html)
-				for frag in fragments if frag.count('(') > 1))
-		for tree, prob, x in parsetrees:
-			tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
-			treebank.handlefunctions('add', tree, pos=True)
-			parsetrees_.append((tree, prob, x))
-		nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
-					DrawTree(tree, senttok).text(
-						unicodelines=True, html=html, funcsep='-'))
-				for n, (tree, prob, _) in enumerate(parsetrees_)))
-	msg = '\n'.join(stage.msg for stage in results)
-	elapsed = [stage.elapsedtime for stage in results]
-	elapsed = 'CPU time elapsed: %s => %gs' % (
-			' '.join('%gs' % a for a in elapsed), sum(elapsed))
-	info = '\n'.join(('length: %d; lang=%s; est=%s; objfun=%s; marg=%s' % (
-			len(senttok), lang, est, objfun, marg), msg, elapsed,
-			'10 most probable parse trees:',
-			'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
-					for n, (tree, prob, _) in enumerate(parsetrees)) + '\n'))
+		(sent, result, frags, nbest,  # pylint: disable=unpacking-non-sequence
+				info, link) = resp  # pylint: disable=unpacking-non-sequence
 	if html:
-		CACHE.set(key, render_template('parsetree.html', sent=sent,
-				result=result, frags=frags, nbest=nbest, info=info, link=link,
-				randid=randid()), timeout=5000)
+		return render_template('parsetree.html', sent=sent, result=result,
+				frags=frags, nbest=nbest, info=info, link=link,
+				randid=randid())
 	else:
-		CACHE.set(key, Response('\n'.join((nbest, frags, info, result)),
-				mimetype='text/plain'), timeout=5000)
-	return CACHE.get(key)
+		return Response('\n'.join((nbest, frags, info, result)),
+				mimetype='text/plain')
 
 
 @APP.route('/parser/favicon.ico')
