@@ -250,7 +250,7 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 				initargs=(parser, printprob, usetags, numparses, fmt,
 					morphology))
 		mymap = pool.map
-	for output, noparse, sec, msg in mymap(worker, enumerate(infile)):
+	for output, noparse, sec, msg in mymap(worker, enumerate(infile, 1)):
 		if output:
 			print(msg, file=sys.stderr)
 			out.write(output)
@@ -296,7 +296,12 @@ def worker(args):
 		msg += '\nNo parse for "%s"' % ' '.join(sent)
 		if PARAMS.printprob:
 			output += 'prob=%.16g\n' % result.prob
-		output += '%s\t%s\n' % (result.parsetree, ' '.join(sent))
+		output += writetree(
+				result.parsetree, sent,
+				n if PARAMS.numparses == 1 else ('%d-1' % n),
+				PARAMS.fmt, morphology=PARAMS.morphology,
+				comment=('prob=%.16g' % result.prob)
+					if PARAMS.printprob else None)
 	else:
 		tmp = []
 		for k, (tree, prob, _) in enumerate(nlargest(

@@ -24,12 +24,14 @@ General options
              Format of output [default: discbracket].
 
 --numproc=k  Launch k processes, to exploit multiple cores.
+
+--verbosity=x
+             0 <= x <= 4. Same effect as verbosity in parameter file.
+
 --simple     Parse with a single grammar and input file; similar interface
              to bitpar. The files ``rules`` and ``lexicon`` define a binarized
              grammar in bitpar or PLCFRS format.
 
---verbosity=x
-             0 <= x <= 4. Same effect as verbosity in parameter file.
 
 
 Options for simple mode

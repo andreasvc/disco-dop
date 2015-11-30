@@ -66,8 +66,8 @@ def draw():
 	try:
 		trees = list(incrementaltreereader(
 				request.args['tree'].splitlines(),
-				morphology='between' if 'morph' in request.args else None,
-				functions='between' if 'func' in request.args else None))
+				morphology='add' if 'morph' in request.args else None,
+				functions='add' if 'func' in request.args else None))
 	except Exception as err:  # pylint: disable=broad-except
 		return Response(str(err), mimetype='text/plain')
 	for tree, sent, _rest in trees:
