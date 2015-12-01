@@ -1,10 +1,9 @@
-""" Web interface to draw trees. Requires Flask.
-Optional: pdflatex, tikz, imagemagick. """
+"""Web interface to draw trees. Requires Flask.
+Optional: pdflatex, tikz, imagemagick."""
 # stdlib
 from __future__ import absolute_import
 import io
 import os
-import re
 from subprocess import Popen, PIPE
 # Flask & co
 from flask import Flask, Response
@@ -14,27 +13,7 @@ from flask import send_from_directory
 from discodop.treebank import incrementaltreereader
 from discodop.tree import DrawTree
 
-
 LIMIT = 1024 * 10  # ~10KB
-MORPH_TAGS = re.compile(
-		r'\(([_*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
-FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
-GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
-PREAMBLE = r"""\documentclass{article}
-\usepackage[landscape]{geometry}
-\usepackage[utf8]{inputenc}
-%s
-%% NB: preview is optional, to make a cropped pdf
-\usepackage[active, tightpage]{preview} \setlength{\PreviewBorder}{0.2cm}
-\begin{document}
-\pagestyle{empty}
-\fontfamily{phv}\selectfont
-\begin{preview}
-"""
-POSTAMBLE = r"""
-\end{preview}
-\end{document}
-"""
 APP = Flask(__name__)
 
 
@@ -84,68 +63,62 @@ def drawtrees(form, dts):
 	""" Draw trees in the requested format. """
 	if form.get('output', 'text') == 'svg':
 		if len(dts) == 1:
-			return Response(dts[0].svg().encode('utf8'),
-					mimetype='image/svg+xml')
+			return Response(dts[0].svg(
+						funcsep='-' if 'func' in request.args else None,
+						).encode('utf8'), mimetype='image/svg+xml')
 		else:
-			result = [('<!doctype html>\n<html>\n<head>\n'
-				'\t<meta http-equiv="Content-Type" '
-				'content="text/html; charset=UTF-8">\n</head>\n<body>')]
+			preamble, postamble = DrawTree.templates['svg']
+			result = [preamble]
 			for dt in dts:
 				result.append(
-						'<div>\n%s\n</div>\n\n' % dt.svg().encode('utf8'))
-			result.append('</body></html>')
+						'<div>\n%s\n</div>\n\n' % dt.svg(
+						funcsep='-' if 'func' in request.args else None,
+							).encode('utf8'))
+			result.append(postamble)
 			return Response('\n'.join(result), mimetype='text/html')
 	elif form.get('output', 'text') == 'text':
 		html = form.get('color', False)
 		useascii = not form.get('unicode', 0)
+		preamble, postamble = DrawTree.templates['html']
 		result = []
 		if html:
 			mimetype = 'text/html'
-			result.append('<!doctype html>\n<html>\n<head>\n'
-				'\t<meta http-equiv="Content-Type" '
-				'content="text/html; charset=UTF-8">\n</head>\n<body>\n<pre>')
+			result.append(preamble)
 		else:
 			mimetype = 'text/plain'
 		for dt in dts:
 			result.append(
-					dt.text(unicodelines=not useascii,
-						html=html).encode('utf8'))
+					dt.text(unicodelines=not useascii, html=html,
+						funcsep='-' if 'func' in request.args else None,
+						).encode('utf8'))
 		if html:
-			result.append('</pre></body></html>')
+			result.append(postamble)
 		return Response('\n'.join(result), mimetype=mimetype)
 
 	# LaTeX based output
-	if form.get('type', 'matrix') == 'matrix':
-		latexcode = ''.join((PREAMBLE % (
-			'\\usepackage{helvet,tikz}\n'
-			'\\usetikzlibrary{matrix,positioning}'),
-			'\n\n'.join(
-				dt.tikzmatrix(
-						leafcolor=('blue' if form.get('color', '') else ''),
-						nodecolor=('red' if form.get('color', '') else ''))
-				for dt in dts),
-				POSTAMBLE))
-	elif form.get('type', None) == 'qtree':
-		result = [PREAMBLE % '\n'.join((
-			r'\usepackage{helvet,tikz,tikz-qtree}',
-			r'\tikzset{edge from parent/.style={draw, edge from parent path={',
-			r'	(\tikzparentnode.south) -- +(0,-3pt) -| (\tikzchildnode)}}}'))]
+	if form.get('type', None) == 'qtree':
+		preamble, postamble = DrawTree.templates['latex']
 		for dt in dts:
 			for pos in dt.tree.subtrees(lambda n: n and isinstance(n[0], int)):
 				pos[0] = dt.sent[pos[0]]
-			result.append('\n\n'.join(dt.tikzqtree() for dt in dts))
-		result.append(POSTAMBLE)
-		latexcode = ''.join(result)
+		latexcode = (preamble + '\n\n'.join(dt.tikzqtree() for dt in dts)
+				+ postamble)
+	elif form.get('type', 'matrix') == 'matrix':
+		preamble, postamble = DrawTree.templates['latex']
+		latexcode = (preamble + '\n\n'.join(
+				dt.tikzmatrix(
+						leafcolor=('blue' if form.get('color', '') else ''),
+						nodecolor=('red' if form.get('color', '') else ''),
+						funcsep='-' if 'func' in request.args else None)
+				for dt in dts) + postamble)
 	else:
-		latexcode = ''.join((PREAMBLE % (
-			'\\usepackage{helvet,tikz}\n'
-			'\\usetikzlibrary{positioning}'),
-			'\n\n'.join(
+		preamble, postamble = DrawTree.templates['latex']
+		latexcode = (preamble + '\n\n'.join(
 				dt.tikznode(
 						leafcolor='blue' if form.get('color', '') else '',
-						nodecolor='red' if form.get('color', '') else '')
-				for dt in dts),
-				POSTAMBLE))
+						nodecolor='red' if form.get('color', '') else '',
+						funcsep='-' if 'func' in request.args else None)
+				for dt in dts) + postamble)
 	if form.get('output', 'text') == 'latex':
 		return Response(latexcode, mimetype='text/plain')
 	with io.open('/tmp/dtree.tex', 'w', encoding='utf8') as tex:

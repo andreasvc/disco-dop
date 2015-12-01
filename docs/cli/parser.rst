@@ -19,6 +19,7 @@ General options
 -b k         Return the k-best parses instead of just 1.
 --prob       Print probabilities as well as parse trees.
 --tags       Tokens are of the form ``word/POS``; give both to parser.
+--sentid     Sentences in input are prefixed by IDs, delimited by ``|``.
 
 --fmt=<export|bracket|discbracket|alpino|conll|mst|wordpos>
              Format of output [default: discbracket].

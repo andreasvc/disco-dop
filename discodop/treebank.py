@@ -528,22 +528,25 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	return Item(tree, sent, comment, ElementTree.tostring(block))
 
 
-def writetree(tree, sent, n, fmt, comment=None, morphology=None):
+def writetree(tree, sent, key, fmt, comment=None, morphology=None,
+		sentid=False):
 	"""Convert a tree to a string representation in the given treebank format.
 
 	:param tree: should have indices as terminals
 	:param sent: contains the words corresponding to the indices in ``tree``
-	:param n: an identifier for this tree; part of the output with some formats
+	:param key: an identifier for this tree; part of the output with some
+		formats or when ``sentid`` is True.
 	:param fmt: Formats are ``bracket``, ``discbracket``, Negra's ``export``
 		format, and ``alpino`` XML format, as well unlabeled dependency
 		conversion into ``mst`` or ``conll`` format (requires head rules).
 		The formats ``tokens`` and ``wordpos`` are to strip away tree structure
-		and leave only lines with tokens or ``token/POS``.
+		and leave only lines with space-separated tokens or ``token/POS``.
 		When using ``bracket``, make sure tree is canonicalized.
 	:param comment: optionally, a string that will go in the format's comment
-		field (supported by ``export`` and ``alpino``), at the end of the line
-		preceded by a tab (``discbracket``); ignored by other formats. Should
-		be a single line.
+		field (supported by ``export`` and ``alpino``), or at the end of the
+		line preceded by a tab (``discbracket``); ignored by other formats.
+		Should be a single line.
+	:param sentid: for line-based formats, prefix output by ``key|``.
 
 	Lemmas, functions, and morphology information will be empty unless nodes
 	contain a 'source' attribute with such information."""
@@ -561,13 +564,15 @@ def writetree(tree, sent, n, fmt, comment=None, morphology=None):
 		result = '%s\n' % ' '.join('%s/%s' % (word, pos) for word, (_, pos)
 				in zip(sent, sorted(tree.pos())))
 	elif fmt == 'export':
-		result = writeexporttree(tree, sent, n, comment, morphology)
+		result = writeexporttree(tree, sent, key, comment, morphology)
 	elif fmt == 'alpino':
-		result = writealpinotree(tree, sent, n, comment)
+		result = writealpinotree(tree, sent, key, comment)
 	elif fmt in ('conll', 'mst'):
 		result = writedependencies(tree, sent, fmt)
 	else:
 		raise ValueError('unrecognized format: %r' % fmt)
+	if sentid and fmt in ('tokens', 'wordpos', 'bracket', 'discbracket'):
+		return '%s|%s' % (key, result)
 	return result
 
 
@@ -587,12 +592,12 @@ def writediscbrackettree(tree, sent):
 			str(tree)) + '\n'
 
 
-def writeexporttree(tree, sent, n, comment, morphology):
+def writeexporttree(tree, sent, key, comment, morphology):
 	"""Return string with given tree in Negra's export format."""
 	result = []
-	if n is not None:
+	if key is not None:
 		cmt = (' %% ' + comment) if comment else ''
-		result.append('#BOS %s%s' % (n, cmt))
+		result.append('#BOS %s%s' % (key, cmt))
 	indices = tree.treepositions('leaves')
 	wordsandpreterminals = indices + [a[:-1] for a in indices]
 	phrasalnodes = [a for a in tree.treepositions('postorder')
@@ -601,7 +606,7 @@ def writeexporttree(tree, sent, n, comment, morphology):
 	if not len(sent) == len(indices) == len(wordids):
 		raise ValueError('sentence and terminals length mismatch:  '
 				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
-				% (n, tree, len(sent), sent, len(wordids), wordids.keys()))
+				% (key, tree, len(sent), sent, len(wordids), wordids.keys()))
 	for i, word in enumerate(sent):
 		if not word:
 			# raise ValueError('empty word in sentence: %r' % sent)
@@ -640,12 +645,12 @@ def writeexporttree(tree, sent, n, comment, morphology):
 				if len(idx) > 1 else 0)
 		result.append('\t'.join((parent, lemma, label, morphtag, func,
 				nodeid) + tuple(secedges)))
-	if n is not None:
-		result.append("#EOS %s" % n)
+	if key is not None:
+		result.append("#EOS %s" % key)
 	return "%s\n" % "\n".join(result)
 
 
-def writealpinotree(tree, sent, n, commentstr):
+def writealpinotree(tree, sent, key, commentstr):
 	"""Return XML string with tree in AlpinoXML format."""
 	def addchildren(tree, sent, parent, cnt, depth=1, last=False):
 		"""Recursively add children of ``tree`` to XML object ``node``"""
@@ -678,7 +683,7 @@ def writealpinotree(tree, sent, n, commentstr):
 	sentence = ElementTree.SubElement(result, 'sentence')
 	sentence.text = ' '.join(sent)
 	comment = ElementTree.SubElement(result, 'comment')
-	comment.text = ('%s|%s' % (n, commentstr)) if commentstr else str(n)
+	comment.text = ('%s|%s' % (key, commentstr)) if commentstr else str(key)
 	result.text = sentence.tail = '\n  '
 	result.tail = comment.tail = '\n'
 	return ElementTree.tostring(result).decode('utf8')  # hack

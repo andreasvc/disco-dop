@@ -22,6 +22,13 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
 --abbr            abbreviate labels longer than 5 characters.
 --plain           disable ANSI colors.
 --frontier        only show terminal and non-terminal leaves.
+--output=x        :'text': (default) output in ASCII/ANSI art format.
+                  :'html': similar to 'text', but wrap output in HTML.
+                  :'svg': SVG wrappend in HTML.
+                  :'tikznode': generate LaTeX code using TiKZ.
+                  :'tikzmatrix': generate LaTeX code using TiKZ.
+                  :'tikzqtree': generate LaTeX code using TiKZ-qtree, only applicable to continuous trees.
+
 -n, --numtrees=x  only display the first x trees from the input.
 
 If no treebank is given, input is read from standard input; format is detected.

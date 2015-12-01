@@ -943,6 +943,31 @@ class DrawTree(object):
 	Graph Algorithms and Applications, 10(2) 141--157 (2006)149.
 	http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
 	"""
+	# each template is a tuple of strings ``(preamble, postamble)``.
+	templates = dict(
+			latex=(
+				'''\\documentclass{article}
+\\usepackage[landscape]{geometry}
+\\usepackage[utf8]{inputenc}
+\\usepackage{helvet,tikz,tikz-qtree}
+\\usetikzlibrary{matrix,positioning}
+\\tikzset{edge from parent/.style={draw, edge from parent path={
+	(\\tikzparentnode.south) -- +(0,-3pt) -| (\\tikzchildnode)}}}
+%% NB: preview is optional, to make a cropped pdf
+\\usepackage[active,tightpage]{preview} \\setlength{\\PreviewBorder}{0.2cm}
+\\begin{document}
+\\pagestyle{empty}\\fontfamily{phv}\\selectfont
+\\begin{preview}''',
+				'\\end{preview}\n\\end{document}'),
+			svg=(('<!doctype html>\n<html>\n<head>\n'
+					'\t<meta http-equiv="Content-Type" '
+					'content="text/html; charset=UTF-8">\n</head>\n<body>'),
+					'</body></html>'),
+			html=(('<!doctype html>\n<html>\n<head>\n'
+					'\t<meta http-equiv="Content-Type" content="text/html; '
+					'charset=UTF-8">\n</head>\n<body>\n<pre>'),
+					'</pre></body></html>'))
+
 	def __init__(self, tree, sent=None, abbr=False, highlight=(),
 			highlightfunc=()):
 		self.tree = tree

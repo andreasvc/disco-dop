@@ -38,8 +38,27 @@ def treedraw():
 	"""Usage: discodop treedraw [<treebank>...] [options]
 If no treebank is given, input is read from standard input; format is detected.
 Pipe the output through 'less -R' to preserve the colors."""
+	def processtree(tree, sent):
+		"""Produced output for a single tree."""
+		if output == 'frontier':
+			return frontier(tree, sent)
+		dt = DrawTree(tree, sent, abbr='--abbr' in opts)
+		if output == 'text' or output == 'html':
+			return dt.text(unicodelines=True, ansi=ansi, html=html,
+					funcsep=funcsep)
+		elif output == 'svg':
+			return dt.svg(funcsep=funcsep)
+		elif output == 'tikznode':
+			return dt.tikznode(funcsep=funcsep) + '\n'
+		elif output == 'tikzmatrix':
+			return dt.tikzmatrix(funcsep=funcsep) + '\n'
+		elif output == 'tikzqtree':
+			return dt.tikzqtree() + '\n'
+		raise ValueError('unrecognized --output format')
+
 	flags = ('test', 'help', 'abbr', 'plain', 'frontier')
-	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=')
+	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=',
+			'output=')
 	try:
 		opts, args = gnu_getopt(sys.argv[2:], 'hn:', flags + options)
 	except GetoptError as err:
@@ -49,6 +68,15 @@ Pipe the output through 'less -R' to preserve the colors."""
 	opts = dict(opts)
 	limit = opts.get('--numtrees', opts.get('-n'))
 	limit = int(limit) if limit else None
+	output = opts.get('--output', 'text')
+	funcsep = ('-' if opts.get('--functions')
+		in ('add', 'between') else None)
+	ansi = output == 'text' and '--plain' not in opts
+	html = output == 'html' and '--plain' not in opts
+	if output in ('html', 'svg'):
+		print(DrawTree.templates[output][0])  # preamble
+	elif output in ('tikznode', 'tikzmatrix', 'tikzqtree'):
+		print(DrawTree.templates['latex'][0])  # preamble
 	if args and opts.get('--fmt', 'export') != 'auto':
 		reader = READERS[opts.get('--fmt', 'export')]
 		corpora = []
@@ -66,10 +94,7 @@ Pipe the output through 'less -R' to preserve the colors."""
 					n, numsents, sentid, len(corpora[0][1][sentid])))
 			for trees, sents in corpora:
 				tree, sent = trees[sentid], sents[sentid]
-				print(DrawTree(tree, sent, abbr='--abbr' in opts
-						).text(unicodelines=True, ansi='--plain' not in opts,
-						funcsep='-' if opts.get('--functions')
-							in ('add', 'between') else None))
+				print(processtree(tree, sent))
 	else:  # read from stdin + detect format
 		encoding = opts.get('--encoding', 'utf8')
 		if not args:
@@ -93,13 +118,14 @@ Pipe the output through 'less -R' to preserve the colors."""
 					print('%s %s' % (frontier(tree, sent), rest))
 				else:
 					print(rest)
-					print(DrawTree(tree, sent, abbr='--abbr' in opts).text(
-							unicodelines=True, ansi='--plain' not in opts,
-							funcsep='-' if opts.get('--functions')
-								in ('add', 'between') else None))
+					print(processtree(tree, sent))
 				n += 1
 		except (IOError, KeyboardInterrupt):
 			pass
+	if output in ('html', 'svg'):
+		print(DrawTree.templates[output][1])  # postamble
+	elif output in ('tikznode', 'tikzmatrix', 'tikzqtree'):
+		print(DrawTree.templates['latex'][1])  # postamble
 
 
 def runexp(argv=None):
@@ -142,7 +168,7 @@ Usage: discodop treetransforms [input [output]] [options]
 where input and output are treebanks; standard in/output is used if not given.
 """
 	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
-			'introducepreterminals renumber removeempty '
+			'introducepreterminals renumber sentid removeempty '
 			'help markorigin markhead leftunary rightunary '
 			'tailmarker direction').split()
 	options = ('inputfmt= outputfmt= inputenc= outputenc= slice= ensureroot= '
@@ -299,10 +325,11 @@ where input and output are treebanks; standard in/output is used if not given.
 							for key, item in trees)
 				if opts.get('--outputfmt', 'export') == 'export':
 					outfile.write(treebank.EXPORTHEADER)
+				fmt = opts.get('--outputfmt', 'export')
+				sentid = '--sentid' in opts
 				for key, item in trees:
 					outfile.write(treebank.writetree(item.tree, item.sent, key,
-							opts.get('--outputfmt', 'export'),
-							comment=item.comment))
+							fmt, comment=item.comment, sentid=sentid))
 					cnt += 1
 	print('%s: transformed %d trees' % (args[0] if args else 'stdin', cnt),
 			file=sys.stderr)

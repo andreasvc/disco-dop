@@ -59,6 +59,7 @@ Other options
 --renumber      Replace sentence IDs with numbers starting from 1,
                 padded with 8 spaces.
 
+--sentid        With 'tokens' or 'wordpos' output, prefix lines with identifiers of the form ``ID|``.
 --maxlen=n      only select sentences with up to *n* tokens.
 --punct=x       :'remove': remove any punctuation.
                 :'move': re-attach punctuation to nearest constituent

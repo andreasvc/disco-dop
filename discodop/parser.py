@@ -148,194 +148,6 @@ class DictObj(object):
 PARAMS = DictObj()  # used for multiprocessing when using CLI of this module
 
 
-def main():
-	"""Handle command line arguments."""
-	flags = 'help prob tags bitpar simple'.split()
-	options = flags + 'obj= bt= numproc= fmt= verbosity='.split()
-	try:
-		opts, args = gnu_getopt(sys.argv[2:], 'hb:s:m:x', options)
-	except GetoptError as err:
-		print('error:', err, file=sys.stderr)
-		print(SHORTUSAGE)
-		sys.exit(2)
-	if not 1 <= len(args) <= 4:
-		print('error: incorrect number of arguments', file=sys.stderr)
-		print(SHORTUSAGE)
-		sys.exit(2)
-	for n, filename in enumerate(args):
-		if not os.path.exists(filename):
-			raise ValueError('file %d not found: %r' % (n + 1, filename))
-	opts = dict(opts)
-	numparses = int(opts.get('-b', 1))
-	top = opts.get('-s', 'TOP')
-	prob = '--prob' in opts
-	tags = '--tags' in opts
-	oneline = '-x' not in opts
-	if '--simple' in opts:
-		if not 2 <= len(args) <= 4:
-			print('error: incorrect number of arguments', file=sys.stderr)
-			print(SHORTUSAGE)
-			sys.exit(2)
-		rules = openread(args[0]).read()
-		lexicon = openread(args[1]).read()
-		bitpar = rules[0] in string.digits
-		if '--bitpar' in opts:
-			if not bitpar:
-				raise ValueError('bitpar requires bitpar grammar format.')
-			mode = 'pcfg-bitpar-nbest'
-		else:
-			mode = 'pcfg' if bitpar else 'plcfrs'
-		xgrammar = Grammar(rules, lexicon, start=top,
-				binarized='--bitpar' not in opts)
-		stages = []
-		stage = DEFAULTSTAGE.copy()
-		backtransform = None
-		if opts.get('--bt'):
-			backtransform = openread(opts.get('--bt')).read().splitlines()
-		stage.update(
-				name='grammar',
-				mode=mode,
-				grammar=xgrammar,
-				binarized='--bitpar' not in opts,
-				backtransform=backtransform if len(args) < 4 else None,
-				m=numparses,
-				objective='mpd')
-		if '--obj' in opts:
-			stage.update(
-					dop='reduction' if backtransform is None else 'doubledop',
-					objective=opts['--obj'],
-					m=int(opts.get('-m', 1)))
-		stages.append(DictObj(stage))
-		if backtransform:
-			_ = stages[-1].grammar.getmapping(None,
-				neverblockre=re.compile('.+}<'))
-		prm = DictObj(stages=stages, verbosity=int(opts.get('--verbosity', 2)))
-		parser = Parser(prm)
-		morph = None
-		del args[:2]
-	else:
-		directory = args[0]
-		if not os.path.isdir(directory):
-			raise ValueError('expected directory produced by "discodop runexp"')
-		params = readparam(os.path.join(directory, 'params.prm'))
-		params.update(resultdir=directory)
-		readgrammars(directory, params.stages, params.postagging,
-				top=getattr(params, 'top', top))
-		params.update(verbosity=int(opts.get('--verbosity', params.verbosity)))
-		parser = Parser(params)
-		morph = params.morphology
-		del args[:1]
-	infile = openread(args[0] if len(args) >= 1 else '-')
-	out = (io.open(args[1], 'w', encoding='utf8')
-			if len(args) == 2 else sys.stdout)
-	doparsing(parser, infile, out, prob, oneline, tags, numparses,
-			int(opts.get('--numproc', 1)), opts.get('--fmt', 'discbracket'),
-			morph)
-
-
-def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
-		numproc, fmt, morphology):
-	"""Parse sentences from file and write results to file, log to stdout."""
-	times = []
-	unparsed = 0
-	if not oneline:
-		infile = readinputbitparstyle(infile)
-	infile = (line for line in infile if line.strip())
-	if numproc == 1:
-		initworker(parser, printprob, usetags, numparses, fmt, morphology)
-		mymap = map
-	else:
-		pool = multiprocessing.Pool(
-				processes=numproc, initializer=initworker,
-				initargs=(parser, printprob, usetags, numparses, fmt,
-					morphology))
-		mymap = pool.map
-	for output, noparse, sec, msg in mymap(worker, enumerate(infile, 1)):
-		if output:
-			print(msg, file=sys.stderr)
-			out.write(output)
-			if noparse:
-				unparsed += 1
-			times.append(sec)
-			sys.stderr.flush()
-			out.flush()
-	print('average time per sentence', sum(times) / len(times),
-			'\nunparsed sentences:', unparsed,
-			'\nfinished',
-			file=sys.stderr)
-	out.close()
-
-
-def initworker(parser, printprob, usetags, numparses,
-		fmt, morphology):
-	"""Load parser for a worker process."""
-	headrules = None
-	if fmt in ('mst', 'conll'):
-		headrules = readheadrules(parser.binarization.headrules)
-	PARAMS.update(parser=parser, printprob=printprob,
-			usetags=usetags, numparses=numparses, fmt=fmt,
-			morphology=morphology, headrules=headrules)
-
-
-@workerfunc
-def worker(args):
-	"""Parse a single sentence."""
-	n, line = args
-	line = line.strip()
-	if not line:
-		return '', True, 0, ''
-	begin = time.clock()
-	sent = line.split(' ')
-	tags = None
-	if PARAMS.usetags:
-		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
-	msg = 'parsing %d: %s' % (n, ' '.join(sent))
-	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
-	output = ''
-	if result.noparse:
-		msg += '\nNo parse for "%s"' % ' '.join(sent)
-		if PARAMS.printprob:
-			output += 'prob=%.16g\n' % result.prob
-		output += writetree(
-				result.parsetree, sent,
-				n if PARAMS.numparses == 1 else ('%d-1' % n),
-				PARAMS.fmt, morphology=PARAMS.morphology,
-				comment=('prob=%.16g' % result.prob)
-					if PARAMS.printprob else None)
-	else:
-		tmp = []
-		for k, (tree, prob, _) in enumerate(nlargest(
-				PARAMS.numparses, result.parsetrees, key=itemgetter(1))):
-			tree, _ = PARAMS.parser.postprocess(tree, sent, -1)
-			if 'bracket' in PARAMS.fmt:
-				handlefunctions('add', tree)
-			tmp.append(writetree(
-					tree, sent,
-					n if PARAMS.numparses == 1 else ('%d-%d' % (n, k)),
-					PARAMS.fmt, morphology=PARAMS.morphology,
-					comment=('prob=%.16g' % prob)
-						if PARAMS.printprob else None))
-		output += ''.join(tmp)
-	sec = time.clock() - begin
-	msg += '\n%g s' % sec
-	return output, result.noparse, sec, msg
-
-
-def readinputbitparstyle(infile):
-	"""Yields lists of tokens, where '\\n\\n' identifies a sentence break.
-
-	Lazy version of ``infile.read().split('\\n\\n')``."""
-	sent = []
-	for line in infile:
-		line = line.strip()
-		if not line:
-			yield ' '.join(sent)
-			sent = []
-		sent.append(line)
-	if sent:
-		yield ' '.join(sent)
-
-
 class Parser(object):
 	"""A coarse-to-fine parser based on a given set of parameters.
 
@@ -867,6 +679,198 @@ def readparam(filename):
 		params['transformations'] = treebanktransforms.expandpresets(
 				params['transformations'])
 	return DictObj(params)
+
+
+def readinputbitparstyle(infile):
+	"""Yields lists of tokens, where '\\n\\n' identifies a sentence break.
+
+	Lazy version of ``infile.read().split('\\n\\n')``."""
+	sent = []
+	for line in infile:
+		line = line.strip()
+		if not line:
+			yield ' '.join(sent)
+			sent = []
+		sent.append(line)
+	if sent:
+		yield ' '.join(sent)
+
+
+def initworker(parser, printprob, usetags, numparses,
+		fmt, morphology):
+	"""Load parser for a worker process."""
+	headrules = None
+	if fmt in ('mst', 'conll'):
+		headrules = readheadrules(parser.binarization.headrules)
+	PARAMS.update(parser=parser, printprob=printprob,
+			usetags=usetags, numparses=numparses, fmt=fmt,
+			morphology=morphology, headrules=headrules)
+
+
+@workerfunc
+def worker(args):
+	"""Parse a single sentence."""
+	key, line = args
+	line = line.strip()
+	if not line:
+		return '', True, 0, ''
+	begin = time.clock()
+	sent = line.split(' ')
+	tags = None
+	if PARAMS.usetags:
+		sent, tags = zip(*(a.rsplit('/', 1) for a in sent))
+	msg = 'parsing %s: %s' % (key, ' '.join(sent))
+	result = list(PARAMS.parser.parse(sent, tags=tags))[-1]
+	output = ''
+	if result.noparse:
+		msg += '\nNo parse for "%s"' % ' '.join(sent)
+		if PARAMS.printprob:
+			output += 'prob=%.16g\n' % result.prob
+		output += writetree(
+				result.parsetree, sent,
+				key if PARAMS.numparses == 1 else ('%s-1' % key),
+				PARAMS.fmt, morphology=PARAMS.morphology,
+				comment=('prob=%.16g' % result.prob)
+					if PARAMS.printprob else None)
+	else:
+		tmp = []
+		for k, (tree, prob, _) in enumerate(nlargest(
+				PARAMS.numparses, result.parsetrees, key=itemgetter(1))):
+			tree, _ = PARAMS.parser.postprocess(tree, sent, -1)
+			if 'bracket' in PARAMS.fmt:
+				handlefunctions('add', tree)
+			tmp.append(writetree(
+					tree, sent,
+					key if PARAMS.numparses == 1 else ('%s-%d' % (key, k)),
+					PARAMS.fmt, morphology=PARAMS.morphology,
+					comment=('prob=%.16g' % prob)
+						if PARAMS.printprob else None))
+		output += ''.join(tmp)
+	sec = time.clock() - begin
+	msg += '\n%g s' % sec
+	return output, result.noparse, sec, msg
+
+
+def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
+		numproc, fmt, morphology, sentid):
+	"""Parse sentences from file and write results to file, log to stdout."""
+	times = []
+	unparsed = 0
+	if not oneline:
+		infile = readinputbitparstyle(infile)
+	if sentid:
+		infile = (line.split('|', 1) for line in infile if line.strip())
+	else:
+		infile = enumerate((line for line in infile if line.strip()), 1)
+	if numproc == 1:
+		initworker(parser, printprob, usetags, numparses, fmt, morphology)
+		mymap = map
+	else:
+		pool = multiprocessing.Pool(
+				processes=numproc, initializer=initworker,
+				initargs=(parser, printprob, usetags, numparses, fmt,
+					morphology))
+		mymap = pool.map
+	for output, noparse, sec, msg in mymap(worker, infile):
+		if output:
+			print(msg, file=sys.stderr)
+			out.write(output)
+			if noparse:
+				unparsed += 1
+			times.append(sec)
+			sys.stderr.flush()
+			out.flush()
+	print('average time per sentence', sum(times) / len(times),
+			'\nunparsed sentences:', unparsed,
+			'\nfinished',
+			file=sys.stderr)
+	out.close()
+
+
+def main():
+	"""Handle command line arguments."""
+	flags = 'help prob tags bitpar sentid simple'.split()
+	options = flags + 'obj= bt= numproc= fmt= verbosity='.split()
+	try:
+		opts, args = gnu_getopt(sys.argv[2:], 'hb:s:m:x', options)
+	except GetoptError as err:
+		print('error:', err, file=sys.stderr)
+		print(SHORTUSAGE)
+		sys.exit(2)
+	if not 1 <= len(args) <= 4:
+		print('error: incorrect number of arguments', file=sys.stderr)
+		print(SHORTUSAGE)
+		sys.exit(2)
+	for n, filename in enumerate(args):
+		if not os.path.exists(filename):
+			raise ValueError('file %d not found: %r' % (n + 1, filename))
+	opts = dict(opts)
+	numparses = int(opts.get('-b', 1))
+	top = opts.get('-s', 'TOP')
+	prob = '--prob' in opts
+	tags = '--tags' in opts
+	oneline = '-x' not in opts
+	sentid = '--sentid' in opts
+	if '--simple' in opts:
+		if not 2 <= len(args) <= 4:
+			print('error: incorrect number of arguments', file=sys.stderr)
+			print(SHORTUSAGE)
+			sys.exit(2)
+		rules = openread(args[0]).read()
+		lexicon = openread(args[1]).read()
+		bitpar = rules[0] in string.digits
+		if '--bitpar' in opts:
+			if not bitpar:
+				raise ValueError('bitpar requires bitpar grammar format.')
+			mode = 'pcfg-bitpar-nbest'
+		else:
+			mode = 'pcfg' if bitpar else 'plcfrs'
+		xgrammar = Grammar(rules, lexicon, start=top,
+				binarized='--bitpar' not in opts)
+		stages = []
+		stage = DEFAULTSTAGE.copy()
+		backtransform = None
+		if opts.get('--bt'):
+			backtransform = openread(opts.get('--bt')).read().splitlines()
+		stage.update(
+				name='grammar',
+				mode=mode,
+				grammar=xgrammar,
+				binarized='--bitpar' not in opts,
+				backtransform=backtransform if len(args) < 4 else None,
+				m=numparses,
+				objective='mpd')
+		if '--obj' in opts:
+			stage.update(
+					dop='reduction' if backtransform is None else 'doubledop',
+					objective=opts['--obj'],
+					m=int(opts.get('-m', 1)))
+		stages.append(DictObj(stage))
+		if backtransform:
+			_ = stages[-1].grammar.getmapping(None,
+				neverblockre=re.compile('.+}<'))
+		prm = DictObj(stages=stages, verbosity=int(opts.get('--verbosity', 2)))
+		parser = Parser(prm)
+		morph = None
+		del args[:2]
+	else:
+		directory = args[0]
+		if not os.path.isdir(directory):
+			raise ValueError('expected directory produced by "discodop runexp"')
+		params = readparam(os.path.join(directory, 'params.prm'))
+		params.update(resultdir=directory)
+		readgrammars(directory, params.stages, params.postagging,
+				top=getattr(params, 'top', top))
+		params.update(verbosity=int(opts.get('--verbosity', params.verbosity)))
+		parser = Parser(params)
+		morph = params.morphology
+		del args[:1]
+	infile = openread(args[0] if len(args) >= 1 else '-')
+	out = (io.open(args[1], 'w', encoding='utf8')
+			if len(args) == 2 else sys.stdout)
+	doparsing(parser, infile, out, prob, oneline, tags, numparses,
+			int(opts.get('--numproc', 1)), opts.get('--fmt', 'discbracket'),
+			morph, sentid)
 
 
 __all__ = ['DictObj', 'Parser', 'doparsing', 'exportbitpargrammar',
