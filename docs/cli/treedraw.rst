@@ -6,9 +6,9 @@ Visualize parse trees with ASCII art.
 Usage: ``discodop treedraw [<treebank>...] [options]``
 
 --fmt=<export|bracket|discbracket|tiger|alpino|dact>
-                  Specify corpus format [default: export].
+                  Specify input format [default: export].
 
---encoding=enc    Specify a different encoding than the default utf-8.
+--encoding=enc    Specify input encoding [default: utf-8].
 --functions=x     :'leave': leave syntactic labels as is [default],
                   :'remove': strip functions off labels,
                   :'add': show both syntactic categories and functions,
@@ -20,7 +20,7 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
                   :'between': add morphological node between POS tag and word.
 
 --abbr            abbreviate labels longer than 5 characters.
---plain           disable ANSI colors.
+--plain           disable ANSI/HTML colors.
 --frontier        only show terminal and non-terminal leaves.
 --output=x        :'text': (default) output in ASCII/ANSI art format.
                   :'html': similar to 'text', but wrap output in HTML.
@@ -35,8 +35,8 @@ If no treebank is given, input is read from standard input; format is detected.
 If more than one treebank is specified, trees will be displayed in parallel.
 Pipe the output through ``less -RS`` to preserve the colors.
 
-Example
-^^^^^^^
+Examples
+^^^^^^^^
 View trees in a treebank::
 
     $ discodop treedraw < wsj-02-21.mrg | less -RS

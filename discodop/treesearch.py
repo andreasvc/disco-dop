@@ -1373,10 +1373,14 @@ def main():
 		indices = '--indices' in opts
 		queries = query.splitlines()
 		if '--breakdown' in opts:
+			if indices:
+				raise ValueError('--indices only supported with single query.')
 			results = searcher.counts(
 					query, start=start, end=end, breakdown=True)
 			writecounts(results, flat='--csv' not in opts)
 		elif len(queries) > 1:
+			if indices:
+				raise ValueError('--indices only supported with single query.')
 			results = searcher.batchcounts(
 					queries, start=start, end=end)
 			writecounts(results, flat='--csv' not in opts, columns=queries)

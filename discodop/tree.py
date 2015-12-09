@@ -1313,14 +1313,14 @@ class DrawTree(object):
 		:param nodedist: minimum number of horiziontal spaces between nodes
 		:param unicodelines: whether to use Unicode line drawing characters
 			instead of plain (7-bit) ASCII.
-		:param html: whether to wrap output in html code (default plain text).
+		:param html: whether to wrap output in HTML code (default plain text).
 		:param ansi: whether to produce colors with ANSI escape sequences
 			(only effective when html==False).
 		:param leafcolor, nodecolor: specify colors of leaves and phrasal
 			nodes; effective when either html or ansi is True.
 		:param funccolor, funcsep: if ``funcsep`` is a string, it is taken as a
-			separator for function tags, which will be drawn with
-			``funccolor``.
+			separator for function tags; when it occurs, the rest of the label
+			is drawn with ``funccolor``.
 		:param maxwidth: maximum number of characters before a label starts to
 			wrap across multiple lines; pass None to disable."""
 		if unicodelines:
@@ -1414,8 +1414,8 @@ class DrawTree(object):
 						html or ansi):
 					newtext = []
 					seensep = False
-					# everything before dash in nodecolor,
-					# after dash use funccolor
+					# everything before funcsep in nodecolor,
+					# after funcsep use funccolor.
 					for line in text:
 						if (funcsep and not seensep and isinstance(node, Tree)
 								and node.label not in PTBPUNC
@@ -1437,15 +1437,17 @@ class DrawTree(object):
 						else:
 							newtext.append('')
 						if func:
-							seensep = True
+							if not seensep:
+								newtext[-1] += funcsep
+								seensep = True
 							if html and n in self.highlightfunc:
-								newtext[-1] += '%s<font color=%s>%s</font>' % (
-										funcsep, funccolor, func)
+								newtext[-1] += '<font color=%s>%s</font>' % (
+										funccolor, func)
 							elif ansi and n in self.highlightfunc:
-								newtext[-1] += '%s\x1b[%d;1m%s\x1b[0m' % (
-										funcsep, ANSICOLOR[funccolor], func)
+								newtext[-1] += '\x1b[%d;1m%s\x1b[0m' % (
+										ANSICOLOR[funccolor], func)
 							else:
-								newtext[-1] += funcsep + func
+								newtext[-1] += func
 					text = newtext
 				for x in range(maxnodeheight[row]):
 					# draw vertical lines in partially filled multiline node

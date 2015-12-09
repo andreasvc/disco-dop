@@ -6,7 +6,7 @@ as possible.
 
 Usage: ``discodop eval <gold> <parses> [param] [options]``
 
-where `gold`` and ``parses`` are files with parse trees, ``param`` is
+where ``gold`` and ``parses`` are files with parse trees, ``param`` is
 an ``EVALB`` parameter file.
 
 options
