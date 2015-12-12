@@ -432,7 +432,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				# $ paste <(zcat dop.rules.gz) <(zcat dop.backtransform.gz)
 				with codecs.getwriter('utf8')(gzip.open(
 						'%s/%s.backtransform.gz' % (resultdir, stage.name),
-						'w')) as out:
+						'wb')) as out:
 					out.writelines('%s\n' % a for a in backtransform)
 				if n and stage.prune:
 					msg = gram.getmapping(stages[prevn].grammar,

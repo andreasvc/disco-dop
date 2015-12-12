@@ -826,10 +826,14 @@ cdef inline getsubtree(list result, Node *tree, uint64_t *bitset,
 				result.append(' ')
 				getsubtree(result, tree, bitset, vocab, disc, tree[i].right)
 		elif disc:
-			result.append('%d=%s' % (termidx(tree[i].left),
-					vocab.words[tree[i].prod]))
+			if vocab.words[tree[i].prod] is None:
+				result.append('%d:%d' % (termidx(tree[i].left),
+						termidx(tree[i].left)))
+			else:
+				result.append('%d=%s' % (termidx(tree[i].left),
+						vocab.words[tree[i].prod]))
 		else:
-			result.append(vocab.words[tree[i].prod])
+			result.append(vocab.words[tree[i].prod] or '')
 	elif disc:  # node not in bitset, frontier non-terminal
 		result.append(yieldranges(sorted(getyield(tree, i))))
 	result.append(')')

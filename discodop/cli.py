@@ -458,14 +458,14 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 
 	rules, lexicon = write_lcfrs_grammar(xgrammar, bitpar=bitpar)
 	# write output
-	with codecs.getwriter('utf8')(myopen(rulesname, 'w')) as rulesfile:
+	with codecs.getwriter('utf8')(myopen(rulesname, 'wb')) as rulesfile:
 		rulesfile.write(rules)
-	with codecs.getwriter('utf8')(myopen(lexiconname, 'w')) as lexiconfile:
+	with codecs.getwriter('utf8')(myopen(lexiconname, 'wb')) as lexiconfile:
 		lexiconfile.write(lexicon)
 	if model in ('doubledop', 'ptsg'):
 		backtransformfile = '%s.backtransform%s' % (grammarfile,
 			'.gz' if '--gzip' in opts else '')
-		with codecs.getwriter('utf8')(myopen(backtransformfile, 'w')) as bt:
+		with codecs.getwriter('utf8')(myopen(backtransformfile, 'wb')) as bt:
 			bt.writelines('%s\n' % a for a in backtransform)
 		print('wrote backtransform to', backtransformfile)
 	print('wrote grammar to %s and %s.' % (rulesname, lexiconname))

@@ -28,7 +28,8 @@ After running ``discodop runexp``, a number of files are produced with parsing s
 :``pcdist.txt``: shows the distribution of parsing complexity (cf.
                  `Gildea, NAACL 2010 <http://aclweb.org/anthology/N10-1118>`_
                  for the definition) among the grammar rules.
-:``stats.tsv``: is a tab-separated file with additional information. For each
+:``stats.tsv``:
+                is a tab-separated file with additional information. For each
                 tuple of ``sentid, len, stage``, the following columns are
                 given:
 

@@ -23,9 +23,9 @@ FIELDS = tuple(range(6))
 WORD, LEMMA, TAG, MORPH, FUNC, PARENT = FIELDS
 EXPORTHEADER = '%% word\tlemma\ttag\tmorph\tedge\tparent\tsecedge\n'
 EXPORTNONTERMINAL = re.compile(r'^#([5-9][0-9][0-9])$')
-POSRE = re.compile(r'\(([^() ]+) [^ ()]+\)')
-TERMINALSRE = re.compile(r' ([^ ()]+)\)')
-LEAVESRE = re.compile(r' ([^ ()]*)\)')
+POSRE = re.compile(r'\(([^() ]+)\s+[^ ()]+\s*\)')
+TERMINALSRE = re.compile(r' ([^ ()]+)\s*\)')
+LEAVESRE = re.compile(r' ([^ ()]*)\s*\)')
 INDEXRE = re.compile(r' [0-9]+\b')
 
 

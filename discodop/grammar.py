@@ -440,7 +440,7 @@ def flatten(frag, ids, backtransform, binarized):
 		"""Collect word and return index."""
 		idx, word = x.split('=', 1)
 		idx = int(idx)
-		sent[idx] = unquote(word)
+		sent[idx] = word or None
 		return int(idx)
 
 	if frag.count(' ') == 1:
@@ -925,7 +925,7 @@ def merge(filenames, outfilename, sumfunc, key):
 	from . import plcfrs
 	openfiles = [iter(openread(filename)) for filename in filenames]
 	with codecs.getwriter('utf8')((gzip.open if outfilename.endswith('.gz')
-			else open)(outfilename, 'w')) as out:
+			else open)(outfilename, 'wb')) as out:
 		out.writelines(sumfunc(
 				plcfrs.merge(*openfiles, key=key), len(openfiles)))
 
