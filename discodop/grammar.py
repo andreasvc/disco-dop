@@ -12,7 +12,7 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-from .tree import Tree, ImmutableTree, DiscTree, unquote
+from .tree import Tree, ImmutableTree, DiscTree
 from .treebank import LEAVESRE
 from .util import openread
 from functools import reduce  # pylint: disable=redefined-builtin
@@ -583,15 +583,6 @@ class TreeDecorator(object):
 			[self._copyexceptindices(a, b) for a, b in zip(tree1, tree2)])
 
 
-def quotelabel(label):
-	"""Escapes two things: parentheses and non-ascii characters.
-
-	Parentheses are replaced by square brackets. Also escapes non-ascii
-	characters, so that phrasal labels can remain ascii-only."""
-	newlabel = label.replace('(', '[').replace(')', ']')
-	return newlabel.encode('unicode-escape').decode('ascii')
-
-
 class UniqueIDs(object):
 	"""Produce strings with numeric IDs.
 
@@ -938,7 +929,7 @@ def addindices(frag):
 
 __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'dop1', 'dopgrammar', 'compiletsg', 'sortgrammar', 'flatten',
-		'nodefreq', 'TreeDecorator', 'DiscTree', 'quotelabel', 'UniqueIDs',
+		'nodefreq', 'TreeDecorator', 'DiscTree', 'UniqueIDs',
 		'rangeheads', 'ranges', 'defaultparse', 'printrule', 'cartpi',
 		'write_lcfrs_grammar', 'subsetgrammar', 'grammarinfo', 'grammarstats',
 		'splitweight', 'convertweight', 'stripweight', 'sumrules', 'sumlex',

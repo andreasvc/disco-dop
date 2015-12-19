@@ -135,7 +135,7 @@ def replaceraretrainwords(tagged_sents, unknownword, lexicon):
 def replaceraretestwords(sent, unknownword, lexicon, sigs):
 	"""Replace test set words not in lexicon w/signature from unknownword().
 
-	If a lowercase version of a word is in the grammar, that will be used
+	If only a lowercase version of a word is in the grammar, that will be used
 	instead. If the returned signature is not part of the grammar, a default
 	one is returned."""
 	for n, word in enumerate(sent):

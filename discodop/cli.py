@@ -36,6 +36,7 @@ except ImportError:
 
 def treedraw():
 	"""Usage: discodop treedraw [<treebank>...] [options]
+
 If no treebank is given, input is read from standard input; format is detected.
 Pipe the output through 'less -R' to preserve the colors."""
 	def processtree(tree, sent):

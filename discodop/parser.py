@@ -30,7 +30,7 @@ from . import plcfrs, pcfg, disambiguation
 from . import grammar, treetransforms, treebanktransforms
 from .containers import Grammar, BITPARRE
 from .coarsetofine import prunechart
-from .tree import ParentedTree
+from .tree import ParentedTree, escape, ptbescape
 from .eval import alignsent
 from .lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from .treebank import writetree, handlefunctions
@@ -188,12 +188,14 @@ class Parser(object):
 			to the parser instead of trying all possible tags.
 		:param goldtree: if given, will be used to evaluate pruned parse
 			forests."""
-		if self.transformations and 'PUNCT-PRUNE' in self.transformations:
+		if 'PUNCT-PRUNE' in (self.transformations or ()):
 			origsent = sent[:]
 			punctprune(None, sent)
 			if tags:
 				newtags = alignsent(sent, origsent, dict(enumerate(tags)))
 				tags = [newtags[n] for n, _ in enumerate(sent)]
+		if 'PTBbrackets' in (self.transformations or ()):
+			sent[:] = [ptbescape(token) for token in sent]
 		if self.postagging and self.postagging.method == 'unknownword':
 			sent = replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
@@ -593,8 +595,7 @@ def exportbitpargrammar(stage):
 
 	stage.lexiconfile.seek(0)
 	stage.lexiconfile.truncate()
-	lexicon = stage.grammar.origlexicon.replace(
-			'(', '-LRB-').replace(')', '-RRB-')
+	lexicon = escape(stage.grammar.origlexicon)  # escape brackets
 	lexiconfile = codecs.getwriter('utf-8')(stage.lexiconfile)
 	if stage.grammar.currentmodel == 0:
 		lexiconfile.write(lexicon)

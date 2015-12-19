@@ -6,7 +6,8 @@ from .treetransforms import removeterminals
 
 
 # fixme: treebank specific parameters for detecting punctuation.
-PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
+PUNCTTAGS = {'.', ',', ':', "'", "''", '`', '``', '"',  # General
+		'-LRB-', '-RRB-', '-LSB-', '-RSB-', '-LCB-', '-RCB-',  # PTB
 		'$,', '$.', '$[', '$(',  # Negra/Tiger
 		'let', 'LET[]', 'SPEC[symb]', 'TW[hoofd,vrij]',  # Alpino/Lassy
 		'COMMA', 'PUNCT', 'PAREN'}  # Grammatical Framework
@@ -17,7 +18,8 @@ PUNCTTAGS = {"''", '``', '-LRB-', '-RRB-', '.', ':', ',',  # PTB
 PUNCTUATION = frozenset('.,():-";?/!*&`[]<>{}|=\xc2\xab\xc2\xbb\xb7\xad\\'
 		) | {'&bullet;', '..', '...', '....', '.....', '......',
 		'!!', '!!!', '??', '???', "''", '``', ',,',
-		'--', '---', '----', '-LRB-', '-RRB-', '-LCB-', '-RCB-'}
+		'--', '---', '----', '-LRB-', '-RRB-', '-LCB-', '-RCB-',
+		'-LSB-', '-RSB-', '#LRB#', '#RRB#'}
 
 # Punctuation that is pruned if it is leading or ending (as in Collins 1999)
 PRUNEPUNCT = {'``', "''", '"', '.'}

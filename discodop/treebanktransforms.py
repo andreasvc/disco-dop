@@ -8,7 +8,7 @@ from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
 from itertools import islice
-from .tree import Tree, ParentedTree, quote, unquote
+from .tree import Tree, ParentedTree, escape, unescape, ptbescape
 from .treetransforms import addfanoutmarkers, removefanoutmarkers
 from .punctuation import punctprune, PUNCTUATION
 from .util import ishead
@@ -22,29 +22,34 @@ DERE = re.compile("^([Dd]es?|du|d')$")
 PPORNP = re.compile('^(NP|PP)+PP$')
 YEARRE = re.compile('^(?:19|20)[0-9]{2}$')
 PRESETS = {
-		# basic state splits:
+		# basic state splits, German, English, Dutch:
 		'negra': ('S-RC', 'VP-GF', 'NP', 'PUNCT'),
-		'wsj': ('S-WH', 'VP-HD', 'S-INF'),
+		'wsj': ('PTBbrackets', 'S-WH', 'VP-HD', 'S-INF'),
 		'alpino': ('PUNCT', ),
 		# extensive state splits following particular papers:
+		# French
 		'green2013ftb': ('markinf,markpart,de2,markp1,mwadvs,mwadvsel1,'
 			'mwadvsel2,mwnsel1,mwnsel2,PUNCT,TAGPA').split(','),
+		# English
 		# These are the "-goodPCFG" options of the Stanford Parser
-		'km2003wsj': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
-			'unaryRB,splitAux2,splitVP3,splitSGapped,splitTMP,splitBaseNP,'
-			'dominatesV,splitNPADV,markDitransV,MARK-YEAR').split(','),
-		'km2003simple': ('splitIN4,splitPercent,splitPoss,splitCC,unaryDT,'
-			'unaryRB,splitAux2,splitSGapped,splitBaseNP,dominatesV,'
+		'km2003wsj': ('PTBbrackets,splitIN4,splitPercent,splitPoss,splitCC,'
+			'unaryDT,unaryRB,splitAux2,splitVP3,splitSGapped,splitTMP,'
+			'splitBaseNP,dominatesV,splitNPADV,markDitransV,MARK-YEAR'
+			).split(','),
+		# a simpler variant mentioned in Bansal & Klein 2010
+		'km2003simple': ('PTBbrackets,splitIN4,splitPercent,splitPoss,splitCC,'
+			'unaryDT,unaryRB,splitAux2,splitSGapped,splitBaseNP,dominatesV,'
 			'splitNPADV,markDitransV,MARK-YEAR').split(','),
+		# German
 		'fraser2013tiger': ('elimNKCJ,addUnary,APPEND-FUNC,addCase,lexPrep,'
 			'PUNCT,adjAttach,relPath,whFeat,nounSeq,properChunks,markAP,'
 			'subConjType,VPfeat,noHead,noSubj,MARK-YEAR').split(','),
-		'lassy': ('nlselectmorph', 'PUNCT', 'MARK-YEAR', 'nlpercolatemorph',
-			'nlmwuhead', 'nladdunary', 'nlelimcnj'),
+		# Dutch
+		'lassy': ('nladdunary,nlelimcnj,nlselectmorph,PUNCT,'
+			'MARK-YEAR,nlpercolatemorph,nlmwuhead').split(','),
 		# this variant adds function tags to non-terminal labels
-		'lassy-func': ('nladdunary', 'nlelimcnj', 'APPEND-FUNC',
-			'nlselectmorph', 'PUNCT', 'MARK-YEAR', 'nlpercolatemorph',
-			'nlmwuhead')
+		'lassy-func': ('nladdunary,nlelimcnj,APPEND-FUNC,nlselectmorph,PUNCT,'
+			'MARK-YEAR,nlpercolatemorph,nlmwuhead').split(','),
 		}
 
 # Mappings for multi-level coarse-to-fine parsing
@@ -162,7 +167,7 @@ def transform(tree, sent, transformations):
 			for a in tree.postorder(lambda n: n and isinstance(n[0], int)):
 				lemma = '--'
 				if getattr(a, 'source', None):
-					lemma = quote(a.source[LEMMA])
+					lemma = escape(a.source[LEMMA])
 				a[:] = [a.__class__(lemma,
 						[a.pop() for _ in range(len(a))][::-1])]
 		elif name == 'MARK-YEAR':  # mark POS label of year terminals
@@ -654,6 +659,8 @@ def ptbtransforms(name, tree, sent):
 					and 'TMP' not in functions(a))
 			if npargs >= 2:
 				node.label += STATESPLIT + '2Arg'
+	elif name == 'PTBbrackets':  # ensure that brackets are in PTB format
+		sent[:] = [ptbescape(token) for token in sent]
 	else:
 		return False
 	return True
@@ -969,7 +976,7 @@ def reversetransform(tree, transformations):
 			for a in list(tree.postorder(lambda n: n and isinstance(n[0], Tree)
 					and n[0] and isinstance(n[0][0], int))):
 				a.source = ['--'] * 6
-				a.source[LEMMA] = unquote(a[0].label)
+				a.source[LEMMA] = unescape(a[0].label)
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 

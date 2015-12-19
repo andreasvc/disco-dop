@@ -12,7 +12,7 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-from .tree import Tree, ParentedTree, brackettree, quote, unquote, \
+from .tree import Tree, ParentedTree, brackettree, escape, unescape, \
 		SUPERFLUOUSSPACERE
 from .treetransforms import removeemptynodes
 from .punctuation import applypunct
@@ -247,10 +247,10 @@ class DiscBracketCorpusReader(BracketCorpusReader):
 		sent = {}
 
 		def substleaf(x):
-			"""Collect word and return index."""
-			idx, word = x.split('=', 1)
+			"""Collect token and return index."""
+			idx, token = x.split('=', 1)
 			idx = int(idx)
-			sent[idx] = unquote(word)
+			sent[idx] = unescape(token)
 			return int(idx)
 
 		tree = ParentedTree.parse(treestr, parse_leaf=substleaf)
@@ -578,7 +578,8 @@ def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 
 def writebrackettree(tree, sent):
 	"""Return a tree in bracket notation with words as terminals."""
-	return INDEXRE.sub(lambda x: ' %s' % quote(sent[int(x.group()[1:])]),
+	return INDEXRE.sub(
+			lambda x: ' %s' % escape(sent[int(x.group()[1:])]),
 			str(tree)) + '\n'
 
 
@@ -588,7 +589,7 @@ def writediscbrackettree(tree, sent):
 	return INDEXRE.sub(
 			lambda x: '%s=%s' % (
 				x.group(),
-				quote(sent[int(x.group()[1:])])),
+				escape(sent[int(x.group()[1:])])),
 			str(tree)) + '\n'
 
 

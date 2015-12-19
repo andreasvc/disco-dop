@@ -14,12 +14,12 @@
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
+import cgi
 import sys
 from itertools import count
 from .util import slice_bounds, ANSICOLOR
 if sys.version_info[0] > 2:
 	unicode = str  # pylint: disable=redefined-builtin
-from cgi import escape
 from operator import itemgetter
 from collections import defaultdict, OrderedDict
 
@@ -1002,6 +1002,7 @@ class DrawTree(object):
 				self.tree = self.tree.copy(True)
 			for n in self.tree.subtrees(lambda x: len(x.label) > 5):
 				n.label = n.label[:4] + '\u2026'  # unicode '...' ellipsis
+		self.sent = [ptbunescape(token) for token in self.sent]
 		self.highlight = self.highlightfunc = None
 		self.nodes, self.coords, self.edges = self.nodecoords(
 				self.tree, self.sent, highlight, highlightfunc)
@@ -1296,7 +1297,7 @@ class DrawTree(object):
 					'style="text-anchor: middle; font-size: %dpx;" >'
 					'<tspan style="fill: %s; ">%s</tspan>' % (
 					x, y, fontsize,
-					color, escape(cat)))
+					color, cgi.escape(cat)))
 			if func:
 				result[-1] += '%s<tspan style="fill: %s; ">%s</tspan>' % (
 							funcsep, funccolor if n in self.highlightfunc
@@ -1409,7 +1410,7 @@ class DrawTree(object):
 				text = [a.center(maxnodewith[col]) for a in text]
 				color = nodecolor if isinstance(node, Tree) else leafcolor
 				if html:
-					text = [escape(a) for a in text]
+					text = [cgi.escape(a) for a in text]
 				if (n in self.highlight or n in self.highlightfunc) and (
 						html or ansi):
 					newtext = []
@@ -1629,25 +1630,25 @@ def frontier(tree, sent, nodecolor='blue', leafcolor='red'):
 
 def brackettree(treestr):
 	"""Parse a single tree presented in (disc)bracket format."""
-	if STRTERMRE.search(treestr):  # terminals are not all indices
+	if STRTERMRE.search(treestr):  # bracket: terminals are not all indices
 		sent, cnt = [], count()
 
 		def substleaf(x):
 			"""Collect word and return index."""
-			sent.append(unquote(x))
+			sent.append(unescape(x))
 			return next(cnt)
 
-		tree = ParentedTree.parse(FRONTIERNTRE.sub(' -FRONTIER-)',
+		tree = ParentedTree.parse(FRONTIERNTRE.sub(' #FRONTIER#)',
 				SUPERFLUOUSSPACERE.sub(')', treestr)),
 				parse_leaf=substleaf)
-	else:
+	else:  # discbracket: terminals have indices
 		sent = {}
 
 		def substleaf(x):
 			"""Collect word and return index."""
 			idx, word = x.split('=', 1)
 			idx = int(idx)
-			sent[idx] = unquote(word)
+			sent[idx] = unescape(word)
 			return idx
 
 		tree = ParentedTree.parse(
@@ -1678,20 +1679,48 @@ def isdisc(node):
 	return False
 
 
-def quote(word):
-	"""Quote parentheses and replace None with ''."""
-	if word is None:
+def escape(text):
+	"""Escape all occurrences of parentheses and replace None with ''."""
+	return '' if text is None else text.replace(
+			'(', '#LRB#').replace(')', '#RRB#')
+
+
+def unescape(text):
+	"""Reverse escaping of parentheses, frontier spans."""
+	return None if text in ('', '#FRONTIER#') else text.replace(
+			'#LRB#', '(').replace('#RRB#', ')')
+
+
+def ptbescape(token):
+	"""Escape brackets according to PTB convention in a single token."""
+	if token is None:
 		return ''
-	return word.replace('(', '-LRB-').replace(')', '-RRB-')
+	elif token == '{':
+		return '-LCB-'
+	elif token == '}':
+		return '-RCB-'
+	elif token == '[':
+		return '-LSB-'
+	elif token == ']':
+		return '-RSB-'
+	return token.replace('(', '-LRB-').replace(')', '-RRB-')
 
 
-def unquote(word):
-	"""Reverse quoting of parentheses, frontier spans."""
-	if word in ('', '-FRONTIER-'):
+def ptbunescape(token):
+	"""Unescape brackets in a single token, including PTB notation."""
+	if token in ('', '#FRONTIER#'):
 		return None
-	return word.replace('-LRB-', '(').replace('-RRB-', ')')
-
+	elif token == '-LCB-':
+		return '{'
+	elif token == '-RCB-':
+		return '}'
+	elif token == '-LSB-':
+		return '['
+	elif token == '-RSB-':
+		return ']'
+	return token.replace('-LRB-', '(').replace('-RRB-', ')').replace(
+			'#LRB#', '(').replace('#RRB#', ')')
 
 __all__ = ['Tree', 'ImmutableTree', 'ParentedTree', 'ImmutableParentedTree',
 		'DrawTree', 'latexlabel', 'frontier', 'brackettree', 'isdisc',
-		'bitfanout', 'quote', 'unquote']
+		'bitfanout', 'escape', 'unescape', 'ptbescape', 'ptbunescape']

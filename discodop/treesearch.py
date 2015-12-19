@@ -39,7 +39,7 @@ except ImportError:
 from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
 from . import treebank, _fragments
-from .tree import Tree, DrawTree, DiscTree, brackettree, unquote
+from .tree import Tree, DrawTree, DiscTree, brackettree, ptbunescape
 from .treetransforms import binarize, mergediscnodes, handledisc
 from .util import which, workerfunc, openread, ANSICOLOR
 from .containers import Vocabulary
@@ -353,14 +353,14 @@ class TgrepSearcher(CorpusSearcher):
 					for match in matches:
 						idx = sent.index(match if match.startswith('(')
 								else ' %s)' % match)
-						prelen = len(' '.join(unquote(word) for word
+						prelen = len(' '.join(ptbunescape(token) for token
 								in GETLEAVES.findall(sent[:idx])))
-						match = (' '.join(unquote(word) for word
+						match = (' '.join(ptbunescape(token) for token
 								in GETLEAVES.findall(match))
-								if '(' in match else unquote(match))
+								if '(' in match else ptbunescape(match))
 						tmp.update(range(prelen, prelen + len(match) + 1))
-					sent = ' '.join(unquote(word)
-							for word in GETLEAVES.findall(sent))
+					sent = ' '.join(ptbunescape(token)
+							for token in GETLEAVES.findall(sent))
 					match1 = tmp
 					match2 = set()
 				x.append((filename, sentno, sent, match1, match2))
@@ -815,8 +815,8 @@ class FragmentSearcher(CorpusSearcher):
 			corpus = pickle.loads(gzip.open(
 					'%s.pkl.gz' % filename, 'rb').read())
 		if sents:
-			return [' '.join(unquote(word)
-					for word in corpus.extractsent(n - 1, self.vocab))
+			return [' '.join(ptbunescape(token)
+					for token in corpus.extractsent(n - 1, self.vocab))
 					for n in indices]
 		result = []
 		for n in indices:
