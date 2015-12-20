@@ -61,6 +61,7 @@ class CorpusReader(object):
 					instead of only recognized punctuation.
 			:'prune': prune away leading & ending quotes & periods, then move.
 			:'remove': eliminate punctuation.
+			:'removeall': eliminate all preterminals directly under root.
 			:'root': attach punctuation directly to root
 					(as in original Negra/Tiger treebanks).
 		:param functions: one of ...
@@ -105,8 +106,8 @@ class CorpusReader(object):
 				((None, 'leave', 'add', 'replace', 'remove', 'between'),
 					functions),
 				((None, 'no', 'add', 'replace', 'between'), morphology),
-				((None, 'no', 'move', 'moveall', 'remove', 'prune', 'root'),
-					punct),
+				((None, 'no', 'move', 'moveall', 'remove', 'removeall',
+					'prune', 'root'), punct),
 				((None, 'no', 'add', 'replace', 'between'), lemmas),
 				):
 			if opt not in opts:
@@ -599,21 +600,28 @@ def writeexporttree(tree, sent, key, comment, morphology):
 	if key is not None:
 		cmt = (' %% ' + comment) if comment else ''
 		result.append('#BOS %s%s' % (key, cmt))
-	indices = tree.treepositions('leaves')
-	wordsandpreterminals = indices + [a[:-1] for a in indices]
-	phrasalnodes = [a for a in tree.treepositions('postorder')
-			if a not in wordsandpreterminals and a != ()]
-	wordids = {tree[a]: a for a in indices}
-	if not len(sent) == len(indices) == len(wordids):
+	# visit nodes in post-order traversal
+	preterms, phrasalnodes = {}, []
+	agenda = list(tree)
+	while agenda:
+		node = agenda.pop()
+		if not node or isinstance(node[0], Tree):
+			# NB: to get a proper post-order traversal, children need to be
+			# reversed, but for the assignment of IDs this does not matter.
+			agenda.extend(node)
+			phrasalnodes.append(node)
+		else:
+			preterms[node[0]] = node
+	phrasalnodes.reverse()
+	if not len(sent) == len(preterms):
 		raise ValueError('sentence and terminals length mismatch:  '
 				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
-				% (key, tree, len(sent), sent, len(wordids), wordids.keys()))
-	for i, word in enumerate(sent):
+				% (key, tree, len(sent), sent, len(preterms), preterms))
+	for n, word in enumerate(sent):
 		if not word:
 			# raise ValueError('empty word in sentence: %r' % sent)
 			word = '...'
-		idx = wordids[i]
-		node = tree[idx[:-1]]
+		node = preterms[n]
 		lemma = '--'
 		postag = node.label.replace('$[', '$(') or '--'
 		func = morphtag = '--'
@@ -627,13 +635,12 @@ def writeexporttree(tree, sent, key, comment, morphology):
 			morphtag = postag
 		elif morphtag == '--' and morphology == 'add' and '/' in postag:
 			postag, morphtag = postag.split('/', 1)
-		nodeid = '%d' % (500 + phrasalnodes.index(idx[:-2])
-				if len(idx) > 2 else 0)
+		parentid = '%d' % (0 if node.parent is tree
+				else 500 + idindex(phrasalnodes, node.parent))
 		result.append("\t".join((word, lemma, postag, morphtag, func,
-				nodeid) + tuple(secedges)))
-	for idx in phrasalnodes:
-		node = tree[idx]
-		parent = '#%d' % (500 + phrasalnodes.index(idx))
+				parentid) + tuple(secedges)))
+	for n, node in enumerate(phrasalnodes):
+		nodeid = '#%d' % (500 + n)
 		lemma = '--'
 		label = node.label or '--'
 		func = morphtag = '--'
@@ -642,10 +649,10 @@ def writeexporttree(tree, sent, key, comment, morphology):
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
 			secedges = node.source[6:]
-		nodeid = '%d' % (500 + phrasalnodes.index(idx[:-1])
-				if len(idx) > 1 else 0)
-		result.append('\t'.join((parent, lemma, label, morphtag, func,
-				nodeid) + tuple(secedges)))
+		parentid = '%d' % (0 if node.parent is tree
+				else 500 + idindex(phrasalnodes, node.parent))
+		result.append('\t'.join((nodeid, lemma, label, morphtag, func,
+				parentid) + tuple(secedges)))
 	if key is not None:
 		result.append("#EOS %s" % key)
 	return "%s\n" % "\n".join(result)
@@ -973,6 +980,13 @@ def numbase(key):
 	components = [int(a) if re.match(r'[0-9]+$', a) else a for a in components]
 	return [path] + components
 
+
+def idindex(seq, elem):
+	"""Like list.index(elem), but only tests for identity."""
+	for n, a in enumerate(seq):
+		if a is elem:
+			return n
+	raise ValueError('Item not in sequence: %r' % elem)
 
 READERS = OrderedDict((('export', NegraCorpusReader),
 		('bracket', BracketCorpusReader),

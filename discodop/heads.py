@@ -102,14 +102,14 @@ def headfinder(tree, headrules, headlabels=frozenset({'HD'})):
 		# default head is initial/last nonterminal (depending on direction)
 		for child in children:
 			if (isinstance(child, Tree)
-					and not ispunct(None, child.label)):
+					and not ispunct(None, child)):
 				return child
 		return children[0]
 	else:  # PTB-specific
 		i = tree.index(head)
 		if i >= 2 and tree[i - 1].label in {'CC', 'CONJP'}:
 			for althead in tree[i - 2::-1]:
-				if not ispunct(althead.label, althead.label):
+				if not ispunct(althead.label, althead):
 					return althead
 		return head
 

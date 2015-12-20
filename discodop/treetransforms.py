@@ -562,27 +562,42 @@ def removefanoutmarkers(tree):
 
 
 def removeterminals(tree, sent, func):
-	"""Remove any terminals for which func is True, and any empty ancestors."""
-	delete = set()
-	for a in reversed(tree.treepositions('leaves')):
-		if func(sent[tree[a]], tree[a[:-1]].label):
-			delete.add(tree[a])
-			for n in range(1, len(a)):
-				del tree[a[:-n]]
-				if tree[a[:-(n + 1)]]:
-					break
+	"""Remove any terminal for which ``func`` is True, and any empty ancestors.
+
+	:param tree: a ParentedTree.
+	:param func: a function with the signature (word, node) -> bool."""
+	agenda = [tree]
+	preterms = {}  # index => Tree object
+	while agenda:
+		node = agenda.pop()
+		if not node:
+			continue
+		for n in range(len(node) - 1, -1, -1):
+			child = node[n]
+			if not child:
+				continue
+			elif isinstance(child[0], Tree):
+				agenda.append(child)
+			elif func(sent[child[0]], child):
+				del node[n]
+				# delete empty ancestors
+				while not node and node is not tree:
+					node, child = node.parent, node
+					del node[child._get_parent_index()]
+			else:
+				preterms[child[0]] = child
 	# renumber
-	oldleaves = sorted(tree.leaves())
-	newleaves = {a: n for n, a in enumerate(oldleaves)}
-	for a in tree.treepositions('leaves'):
-		tree[a] = newleaves[tree[a]]
-	sent[:] = [a for n, a in enumerate(sent) if n not in delete]
-	assert sorted(tree.leaves()) == list(range(len(tree.leaves()))), tree
+	oldindices = sorted(preterms)
+	newindices = {a: n for n, a in enumerate(oldindices)}
+	for a, node in preterms.items():
+		node[0] = newindices[a]
+	sent[:] = [sent[a] for a in oldindices]
 
 
 def removeemptynodes(tree, sent):
 	"""Remove any empty nodes, and any empty ancestors."""
-	removeterminals(tree, sent, lambda x, y: x in (None, '') or y == '-NONE-')
+	removeterminals(tree, sent,
+			lambda word, node: word in (None, '') or node.label == '-NONE-')
 
 
 def treebankfanout(trees):

@@ -118,7 +118,7 @@ Pipe the output through 'less -R' to preserve the colors."""
 				if '--frontier' in opts:
 					print('%s %s' % (frontier(tree, sent), rest))
 				else:
-					print(rest)
+					print(rest or '')
 					print(processtree(tree, sent))
 				n += 1
 		except (IOError, KeyboardInterrupt):

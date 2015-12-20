@@ -249,6 +249,68 @@ class Tree(object):
 				max_child_height = max(max_child_height, 1)
 		return 1 + max_child_height
 
+	def subtrees(self, condition=None):
+		"""Yield subtrees of this tree in depth-first, pre-order traversal.
+
+		:param condition: a function ``Tree -> bool`` to filter which nodes are
+			yielded (does not affect whether children are visited).
+
+		NB: store traversal as list before any structural modifications."""
+		# Non-recursive version
+		agenda = [self]
+		while agenda:
+			node = agenda.pop()
+			if isinstance(node, Tree):
+				if condition is None or condition(node):
+					yield node
+				agenda.extend(node[::-1])
+
+	def postorder(self, condition=None):
+		"""A generator that does a post-order traversal of this tree.
+
+		Similar to Tree.subtrees() which does a pre-order traversal.
+		NB: store traversal as list before any structural modifications.
+
+		:yields: Tree objects."""
+		# Non-recursive; requires no parent pointers but uses O(n) space.
+		stack = [self]
+		visited = set()  # FIXME: eliminate this
+		while stack:
+			node = stack.pop()
+			if id(node) not in visited:
+				visited.add(id(node))
+				stack.append(node)
+				if node and isinstance(node[0], Tree):
+					stack.extend(node[::-1])
+			# either a leaf or a parent whose children have all been visited
+			elif condition is None or condition(node):
+				yield node
+
+	def pos(self, nodes=False):
+		"""Collect preterminals (part-of-speech nodes).
+
+		:param nodes: if True, return a sequence of preterminal Tree objects
+			instead of tuples. NB: a preterminal that dominates multiple
+			terminals is returned once.
+		:returns: a list of tuples containing leaves and pre-terminals
+			(part-of-speech tags). The order reflects the order of the tree's
+			hierarchical structure. A preterminal that dominates multiple
+			terminals generates a tuple for each terminal."""
+		agenda = list(self[::-1])
+		result = []
+		while agenda:
+			node = agenda.pop()
+			if not isinstance(node, Tree):
+				continue
+			agenda.extend(node[::-1])
+			for child in node:
+				if not isinstance(child, Tree):
+					if nodes:
+						result.append(node)
+						break
+					result.append((child, node.label))
+		return result
+
 	def treepositions(self, order='preorder'):
 		""":param order: One of preorder, postorder, bothorder, leaves."""
 		positions = []
@@ -263,44 +325,6 @@ class Tree(object):
 		if order in ('postorder', 'bothorder'):
 			positions.append(())
 		return positions
-
-	def subtrees(self, condition=None):
-		"""Traverse and generate subtrees of this tree in depth-first order.
-
-		:param condition: a function to filter which nodes are generated.
-
-		NB: store traversal as list before any structural modifications."""
-		if condition is None or condition(self):
-			yield self
-		for child in self.children:
-			if isinstance(child, Tree):
-				for subtree in child.subtrees(condition):
-					yield subtree
-
-	def postorder(self, condition=None):
-		"""A generator that does a postorder traversal of this tree.
-
-		Similar to Tree.subtrees() which does a preorder traversal.
-		NB: store traversal as list before any structural modifications."""
-		for child in self.children:
-			if isinstance(child, Tree):
-				for subtree in child.postorder(condition):
-					yield subtree
-		if condition is None or condition(self):
-			yield self
-
-	def pos(self):
-		"""
-		:returns: a list of tuples containing leaves and pre-terminals
-			(part-of-speech tags). The order reflects the order of the tree's
-			hierarchical structure."""
-		pos = []
-		for child in self.children:
-			if isinstance(child, Tree):
-				pos.extend(child.pos())
-			else:
-				pos.append((child, self.label))
-		return pos
 
 	def leaf_treeposition(self, index):
 		"""
@@ -542,7 +566,13 @@ class ImmutableTree(Tree):
 	"""A tree which may not be modified.; has a hash() value.
 
 	NB: the ``label`` and ``children`` attributes should not be modified, but
-	this is not enforced."""
+	this is not enforced.
+
+	This class has the following optimizations compared to Tree objects:
+		- precomputed ``hash()`` value
+		- precomputed ``leaves()`` value of each node
+		- a bitset attribute recording the leaf indices dominated by each node
+	"""
 	__slots__ = ('_hash', '_leaves', 'bitset')
 
 	def __init__(self, label_or_str, children=None):
@@ -860,6 +890,38 @@ class ParentedTree(Tree):
 		if isinstance(self[index], Tree):
 			self._delparent(self[index], index)
 		super(ParentedTree, self).remove(child)
+
+	def postorder(self, condition=None):
+		"""A generator that does a postorder traversal of this tree.
+
+		Similar to Tree.subtrees() which does a preorder traversal.
+		NB: store traversal as list before any structural modifications.
+
+		:yields: Tree objects."""
+		# Non-recursive; requires parent pointers and uses O(1) space.
+		current = self
+		idx = -1
+		while current:
+			# Move down to first child
+			if isinstance(current[0], Tree):
+				current = current[0]
+				idx = 0
+				continue
+			while current:  # No child nodes, so walk tree
+				if condition is None or condition(current):
+					yield current
+				# Move to sibling if possible.
+				if current is not self and idx + 1 < len(current.parent):
+					idx += 1
+					current = current.parent[idx]
+					break
+				if current is self:
+					current = None
+					idx = -1
+				else:  # Move up
+					current = current.parent
+					# FIXME avoid computing parent idx
+					idx = current._get_parent_index()
 
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):

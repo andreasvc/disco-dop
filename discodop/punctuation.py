@@ -31,9 +31,10 @@ BALANCEDPUNCTMATCH = {'"': '"', "'": "'", '``': "''",
 
 
 def applypunct(method, tree, sent):
-	"""Apply ``remove, move, moveall, prune, or root`` punctuation strategy."""
-	if method == 'remove':
-		punctremove(tree, sent)
+	"""Apply ``remove, removeall, move, moveall, prune, or root`` punctuation
+	strategy."""
+	if method == 'remove' or method == 'removeall':
+		punctremove(tree, sent, method == 'removeall')
 	elif method in ('move', 'moveall', 'prune'):
 		if method == 'prune':
 			punctprune(tree, sent)
@@ -47,9 +48,13 @@ def applypunct(method, tree, sent):
 		punctroot(tree, sent)
 
 
-def punctremove(tree, sent):
+def punctremove(tree, sent, rootpreterms=False):
 	"""Remove any punctuation nodes, and any empty ancestors."""
-	removeterminals(tree, sent, ispunct)
+	if rootpreterms:  # remove all preterminals under root indiscriminately.
+		preterms = [node for node in tree if node and isinstance(node[0], int)]
+		removeterminals(tree, sent, lambda _word, node: node in preterms)
+	else:  # remove all punctuation preterminals anywhere in tree.
+		removeterminals(tree, sent, ispunct)
 
 
 def punctprune(tree, sent):
@@ -72,7 +77,7 @@ def punctroot(tree, sent):
 	"""Move punctuation directly under ROOT, as in the Negra annotation."""
 	punct = []
 	for a in reversed(tree.treepositions('leaves')):
-		if ispunct(sent[tree[a]], tree[a[:-1]].label):
+		if ispunct(sent[tree[a]], tree[a[:-1]]):
 			# store punctuation node
 			punct.append(tree[a[:-1]])
 			# remove this punctuation node and any empty ancestors
@@ -105,7 +110,7 @@ def punctlower(tree, sent):
 				break
 
 	for a in tree.treepositions('leaves'):
-		if ispunct(sent[tree[a]], tree[a[:-1]].label):
+		if ispunct(sent[tree[a]], tree[a[:-1]]):
 			b = tree[a[:-1]]
 			del tree[a[:-1]]
 			lower(b, tree)
@@ -123,7 +128,7 @@ def punctraise(tree, sent, rootpreterms=False):
 		instead of only recognized punctuation."""
 	# punct = [node for node in tree.subtrees() if isinstance(node[0], int)
 	punct = [node for node in tree if node and isinstance(node[0], int)
-			and (rootpreterms or ispunct(sent[node[0]], node.label))]
+			and (rootpreterms or ispunct(sent[node[0]], node))]
 	while punct:
 		node = punct.pop()
 		while node is not tree and len(node.parent) == 1:
@@ -151,7 +156,7 @@ def balancedpunctraise(tree, sent):
 	punctmap = {}
 	# punctuation indices mapped to preterminal nodes
 	termparent = {a[0]: a for a in tree.subtrees()
-			if a and isinstance(a[0], int) and ispunct(sent[a[0]], a.label)}
+			if a and isinstance(a[0], int) and ispunct(sent[a[0]], a)}
 	for terminal in sorted(termparent):
 		preterminal = termparent[terminal]
 		# do we know the matching punctuation mark for this one?
@@ -175,7 +180,7 @@ def balancedpunctraise(tree, sent):
 
 def ispunct(word, tag):
 	"""Test whether a word and/or tag is punctuation."""
-	return tag in PUNCTTAGS or word in PUNCTUATION
+	return tag.label in PUNCTTAGS or word in PUNCTUATION
 
 
 __all__ = ['ispunct', 'punctremove', 'punctprune', 'punctroot', 'punctlower',
