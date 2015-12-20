@@ -12,7 +12,7 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-from .tree import Tree, ImmutableTree, DiscTree
+from .tree import Tree, ImmutableTree, DiscTree, unescape
 from .treebank import LEAVESRE
 from .util import openread
 from functools import reduce  # pylint: disable=redefined-builtin
@@ -440,7 +440,7 @@ def flatten(frag, ids, backtransform, binarized):
 		"""Collect word and return index."""
 		idx, word = x.split('=', 1)
 		idx = int(idx)
-		sent[idx] = word or None
+		sent[idx] = unescape(word)
 		return int(idx)
 
 	if frag.count(' ') == 1:
