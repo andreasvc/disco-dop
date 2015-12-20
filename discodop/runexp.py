@@ -410,16 +410,16 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			msg = grammar.grammarinfo(xgrammar)
 			rules, lex = grammar.writegrammar(
 					xgrammar, bitpar=stage.mode.startswith('pcfg-bitpar'))
-			gram = Grammar(rules, lex, start=top,
-					binarized=stage.binarized)
-			for name in altweights:
-				gram.register('%s' % name, altweights[name])
 			with codecs.getwriter('utf8')(gzip.open('%s/%s.rules.gz' % (
 					resultdir, stage.name), 'wb')) as rulesfile:
 				rulesfile.write(rules)
 			with codecs.getwriter('utf8')(gzip.open('%s/%s.lex.gz' % (
 					resultdir, stage.name), 'wb')) as lexiconfile:
 				lexiconfile.write(lex)
+			gram = Grammar(rules, lex, start=top,
+					binarized=stage.binarized)
+			for name in altweights:
+				gram.register('%s' % name, altweights[name])
 			logging.info('DOP model based on %d sentences, %d nodes, '
 				'%d nonterminals', len(traintrees), nodes, len(gram.toid))
 			logging.info(msg)
@@ -484,13 +484,13 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 				xgrammar = lexicon.smoothlexicon(xgrammar, lexmodel)
 			rules, lex = grammar.writegrammar(
 					xgrammar, bitpar=stage.mode.startswith('pcfg-bitpar'))
-			gram = Grammar(rules, lex, start=top)
 			with codecs.getwriter('utf8')(gzip.open('%s/%s.rules.gz' % (
 					resultdir, stage.name), 'wb')) as rulesfile:
 				rulesfile.write(rules)
 			with codecs.getwriter('utf8')(gzip.open('%s/%s.lex.gz' % (
 					resultdir, stage.name), 'wb')) as lexiconfile:
 				lexiconfile.write(lex)
+			gram = Grammar(rules, lex, start=top)
 			logging.info(gram.testgrammar()[1])
 			if n and stage.prune:
 				msg = gram.getmapping(stages[prevn].grammar,
@@ -560,7 +560,8 @@ def doparsing(**kwds):
 	else:
 		pool = multiprocessing.Pool(processes=params.numproc,
 				initializer=initworker, initargs=(params,))
-		dowork = pool.imap_unordered(worker, params.testset.items())
+		dowork = pool.imap_unordered(
+				mpworker, params.testset.items())
 	logging.info('going to parse %d sentences.', len(params.testset))
 	# main parse loop over each sentence in test corpus
 	for nsent, data in enumerate(dowork, 1):
@@ -640,6 +641,11 @@ def doparsing(**kwds):
 
 
 @workerfunc
+def mpworker(args):
+	"""Multiprocessing wrapper of ``worker``."""
+	return worker(args)
+
+
 def worker(args):
 	"""Parse a sentence using global Parser object, and evaluate incrementally.
 

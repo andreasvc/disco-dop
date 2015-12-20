@@ -29,8 +29,8 @@ from .runexp import loadtraincorpus, getposmodel, startexp, \
 from .util import openread
 try:
 	import faulthandler
-	faulthandler.enable()
-except ImportError:
+	faulthandler.enable()  # Dump information on segfault.
+except (ImportError, io.UnsupportedOperation):
 	pass
 
 

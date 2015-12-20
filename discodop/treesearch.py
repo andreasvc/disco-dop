@@ -610,6 +610,10 @@ class FragmentSearcher(CorpusSearcher):
 		pickle to load them from disk with each query.
 	"""
 	# NB: pickling arrays is efficient in Python 3
+	# TODO: allow single terminals as queries: word
+	#	alternatively, allow wildcard: (* word)
+	# TODO: interpret multiple fragments in a single query as AND query,
+	#	optionally with order constraint: (NN cat) (NN dog)
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
 		global FRAG_FILES, FRAG_MACROS, VOCAB
 		super(FragmentSearcher, self).__init__(files, macros, numproc)
@@ -694,9 +698,10 @@ class FragmentSearcher(CorpusSearcher):
 				else:
 					result[filename] = sum(tmp)
 			except KeyError:
-				jobs[self._submit(_frag_query, query, filename,
-						start, end, None, indices=indices, trees=False,
-						disc=self.disc)] = filename
+				jobs[self._submit(
+						_frag_query if self.numproc == 1 else _frag_query_mp,
+						query, filename, start, end, None, indices=indices,
+						trees=False, disc=self.disc)] = filename
 		for future in self._as_completed(jobs):
 			filename = jobs[future]
 			tmp = future.result()
@@ -732,9 +737,10 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename,
-						start, end, maxresults, indices=True, trees=True,
-						disc=self.disc)] = filename
+				jobs[self._submit(
+						_frag_query if self.numproc == 1 else _frag_query_mp,
+						query, filename, start, end, maxresults, indices=True,
+						trees=True, disc=self.disc)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -775,9 +781,10 @@ class FragmentSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_frag_query, query, filename,
-						start, end, maxresults, indices=True, trees=True,
-						disc=self.disc)] = filename
+				jobs[self._submit(
+						_frag_query if self.numproc == 1 else _frag_query_mp,
+						query, filename, start, end, maxresults, indices=True,
+						trees=True, disc=self.disc)] = filename
 			else:
 				result.extend(x[:maxresults])
 		for future in self._as_completed(jobs):
@@ -838,6 +845,13 @@ class FragmentSearcher(CorpusSearcher):
 
 
 @workerfunc
+def _frag_query_mp(query, filename, start=None, end=None, maxresults=None,
+		indices=True, trees=False, disc=False):
+	"""Multiprocessing wrapper."""
+	return _frag_query(
+			query, filename, start, end, maxresults, indices, trees, disc)
+
+
 def _frag_query(query, filename, start=None, end=None, maxresults=None,
 		indices=True, trees=False, disc=False):
 	"""Run a fragment query on a single file."""
@@ -863,7 +877,7 @@ def _frag_parse_query(query, disc=False):
 				handledisc(item[0]) if disc else item[0], dot=True))
 		qsents.append(item[1])
 	if not qtrees:
-		raise ValueError('no valid fragments found.')
+		raise ValueError('no valid fragments in query.')
 	queries = _fragments.getctrees(
 			list(qtrees), list(qsents), vocab=VOCAB)
 	maxnodes = queries['trees1'].maxnodes
@@ -984,7 +998,8 @@ class RegexSearcher(CorpusSearcher):
 			except KeyError:
 				maxresults2 = 0
 			if not maxresults or maxresults > maxresults2:
-				jobs[self._submit(_regex_query,
+				jobs[self._submit(
+						_regex_query if self.numproc == 1 else _regex_query_mp,
 						query, filename, self.flags, start, end, maxresults,
 						True, True)] = filename
 			else:
@@ -1062,6 +1077,13 @@ class RegexSearcher(CorpusSearcher):
 
 
 @workerfunc
+def _regex_query_mp(query, filename, flags, start=None, end=None,
+		maxresults=None, indices=True, sents=False, breakdown=False):
+	"""Multiprocessing wrapper."""
+	return _regex_query(query, filename, flags, start, end, maxresults,
+				indices, sents, breakdown)
+
+
 def _regex_query(query, filename, flags, start=None, end=None, maxresults=None,
 		indices=True, sents=False, breakdown=False):
 	"""Run a query on a single file."""

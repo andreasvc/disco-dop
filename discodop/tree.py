@@ -273,18 +273,19 @@ class Tree(object):
 
 		:yields: Tree objects."""
 		# Non-recursive; requires no parent pointers but uses O(n) space.
-		stack = [self]
-		visited = set()  # FIXME: eliminate this
-		while stack:
-			node = stack.pop()
-			if id(node) not in visited:
+		agenda = [self]
+		visited = set()
+		while agenda:
+			node = agenda[-1]
+			if not isinstance(node, Tree):
+				agenda.pop()
+			elif id(node) in visited:
+				agenda.pop()
+				if condition is None or condition(node):
+					yield node
+			else:
+				agenda.extend(node[::-1])
 				visited.add(id(node))
-				stack.append(node)
-				if node and isinstance(node[0], Tree):
-					stack.extend(node[::-1])
-			# either a leaf or a parent whose children have all been visited
-			elif condition is None or condition(node):
-				yield node
 
 	def pos(self, nodes=False):
 		"""Collect preterminals (part-of-speech nodes).
@@ -648,7 +649,7 @@ class ParentedTree(Tree):
 	"""A Tree that maintains parent pointers for single-parented trees.
 
 	The parent pointers are updated whenever any change is made to a tree's
-	structure. Two subclasses are defined: ParentedTree, MultiParentedTree
+	structure.
 
 	The following read-only property values are automatically updated
 	whenever the structure of a parented tree is modified: parent,
@@ -726,8 +727,8 @@ class ParentedTree(Tree):
 	def _get_root(self):
 		""":returns: the root of this tree."""
 		node = self
-		while node.parent is not None:
-			node = node.parent
+		while node._parent is not None:
+			node = node._parent
 		return node
 
 	parent = property(lambda self: self._parent,
@@ -890,38 +891,6 @@ class ParentedTree(Tree):
 		if isinstance(self[index], Tree):
 			self._delparent(self[index], index)
 		super(ParentedTree, self).remove(child)
-
-	def postorder(self, condition=None):
-		"""A generator that does a postorder traversal of this tree.
-
-		Similar to Tree.subtrees() which does a preorder traversal.
-		NB: store traversal as list before any structural modifications.
-
-		:yields: Tree objects."""
-		# Non-recursive; requires parent pointers and uses O(1) space.
-		current = self
-		idx = -1
-		while current:
-			# Move down to first child
-			if isinstance(current[0], Tree):
-				current = current[0]
-				idx = 0
-				continue
-			while current:  # No child nodes, so walk tree
-				if condition is None or condition(current):
-					yield current
-				# Move to sibling if possible.
-				if current is not self and idx + 1 < len(current.parent):
-					idx += 1
-					current = current.parent[idx]
-					break
-				if current is self:
-					current = None
-					idx = -1
-				else:  # Move up
-					current = current.parent
-					# FIXME avoid computing parent idx
-					idx = current._get_parent_index()
 
 
 class ImmutableParentedTree(ImmutableTree, ParentedTree):

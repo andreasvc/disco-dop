@@ -371,7 +371,10 @@ class TreePairResult(object):
 				self.param['DELETE_LABEL'], self.param['DISC_ONLY'])
 		self.lascore = self.ted = self.denom = Decimal('nan')
 		self.cdep = self.gdep = ()
-		self.pgbrack = self.pcbrack = self.grule = self.crule = ()
+		self.pgbrack = Counter()
+		self.pcbrack = Counter()
+		self.grule = Counter()
+		self.crule = Counter()
 		# collect the function tags for correct bracketings & POS tags
 		self.candfun = Counter((bracketing(a), b)
 				for a in self.ctree.subtrees()

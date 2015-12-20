@@ -145,13 +145,13 @@ def regular(filenames, numproc, limit, encoding):
 			filenames[1] if len(filenames) == 2 else None,
 			limit, encoding)
 	if numproc == 1:
-		mymap = map
+		mymap, myworker = map, worker
 	else:  # multiprocessing, start worker processes
 		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworker,
 				initargs=(filenames[0], filenames[1] if len(filenames) == 2
 					else None, limit, encoding))
-		mymap = pool.imap
+		mymap, myworker = pool.imap, mpworker
 	numtrees = (PARAMS['trees1'].len if limit is None
 			else min(PARAMS['trees1'].len, limit))
 
@@ -169,7 +169,7 @@ def regular(filenames, numproc, limit, encoding):
 		if numproc != 1:
 			logging.info('work division:\n%s', '\n'.join('    %s:\t%r' % kv
 				for kv in sorted(dict(numchunks=len(work), mult=mult).items())))
-		dowork = mymap(worker, work)
+		dowork = mymap(myworker, work)
 		for results in dowork:
 			if PARAMS['approx']:
 				for frag, x in results.items():
@@ -333,6 +333,11 @@ def initworkersimple(trees, sents, trees2=None, sents2=None):
 
 
 @workerfunc
+def mpworker(interval):
+	"""Worker function for fragment extraction (multiprocessing wrapper)."""
+	return worker(interval)
+
+
 def worker(interval):
 	"""Worker function for fragment extraction."""
 	offset, end = interval
@@ -435,7 +440,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 			complement=complement, debug=False, adjacent=False, twoterms=False)
 	initworkersimple(trees, list(sents))
 	if numproc == 1:
-		mymap = map
+		mymap, myworker = map, worker
 	else:
 		logging.info('work division:\n%s', '\n'.join('    %s: %r' % kv
 				for kv in sorted(dict(numchunks=len(work),
@@ -444,7 +449,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworkersimple,
 				initargs=(trees, list(sents)))
-		mymap = pool.map
+		mymap, myworker = pool.map, mpworker
 	# collect recurring fragments
 	logging.info('extracting recurring fragments')
 	for a in mymap(worker, work):
@@ -521,15 +526,15 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 		raise ValueError('no trees.')
 	if numproc == 1:  # set fragments as input
 		initworkersimple(newtrees, newsents, trees, sents)
-		mymap = map
+		mymap, myworker = map, worker
 	else:
 		# since the input trees change, we need a new pool each time
 		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworkersimple,
 				initargs=(newtrees, newsents, trees, sents))
-		mymap = pool.imap
+		mymap, myworker = pool.imap, mpworker
 	newfragments = {}
-	for a in mymap(worker, workload(numtrees, 1, numproc)):
+	for a in mymap(myworker, workload(numtrees, 1, numproc)):
 		newfragments.update(a)
 	logging.info('before: %d, after: %d, difference: %d',
 		len(fragments), len(set(fragments) | set(newfragments)),

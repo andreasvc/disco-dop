@@ -711,6 +711,11 @@ def initworker(parser, printprob, usetags, numparses,
 
 
 @workerfunc
+def mpworker(args):
+	"""Parse a single sentence (multiprocessing wrapper)."""
+	return worker(args)
+
+
 def worker(args):
 	"""Parse a single sentence."""
 	key, line = args
@@ -767,14 +772,14 @@ def doparsing(parser, infile, out, printprob, oneline, usetags, numparses,
 		infile = enumerate((line for line in infile if line.strip()), 1)
 	if numproc == 1:
 		initworker(parser, printprob, usetags, numparses, fmt, morphology)
-		mymap = map
+		mymap, myworker = map, worker
 	else:
 		pool = multiprocessing.Pool(
 				processes=numproc, initializer=initworker,
 				initargs=(parser, printprob, usetags, numparses, fmt,
 					morphology))
-		mymap = pool.map
-	for output, noparse, sec, msg in mymap(worker, infile):
+		mymap, myworker = pool.map, mpworker
+	for output, noparse, sec, msg in mymap(myworker, infile):
 		if output:
 			print(msg, file=sys.stderr)
 			out.write(output)
