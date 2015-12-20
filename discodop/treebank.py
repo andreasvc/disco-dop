@@ -213,17 +213,18 @@ class BracketCorpusReader(CorpusReader):
 		c = count()
 		block = SUPERFLUOUSSPACERE.sub(')', block)
 		tree = ParentedTree(LEAVESRE.sub(lambda _: ' %d)' % next(c), block))
-		for a in tree.subtrees():
+		for node in tree.subtrees():
 			for char in '-=':  # map NP-SUBJ and NP=2 to NP; don't touch -NONE-
-				x = a.label.find(char)
+				x = node.label.find(char)
 				if x > 0:
-					if char == '-' and not a.label[x + 1:].isdigit():
-						if a.source is None:
-							a.source = [None] * len(FIELDS)
-						a.source[FUNC] = a.label[x + 1:].rstrip('=0123456789')
+					if char == '-' and not node.label[x + 1:].isdigit():
+						if node.source is None:
+							node.source = [None] * len(FIELDS)
+						node.source[FUNC] = node.label[x + 1:].rstrip(
+								'=0123456789')
 					if self.functions == 'remove':
-						a.label = a.label[:x]
-		sent = [a or None for a in LEAVESRE.findall(block)]
+						node.label = node.label[:x]
+		sent = [escape(token) for token in LEAVESRE.findall(block)]
 		return Item(tree, sent, None, block)
 
 

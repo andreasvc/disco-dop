@@ -30,7 +30,7 @@ from . import plcfrs, pcfg, disambiguation
 from . import grammar, treetransforms, treebanktransforms
 from .containers import Grammar, BITPARRE
 from .coarsetofine import prunechart
-from .tree import ParentedTree, escape, ptbescape
+from .tree import ParentedTree, escape, ptbescape, unescape
 from .eval import alignsent
 from .lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from .treebank import writetree, handlefunctions
@@ -195,12 +195,14 @@ class Parser(object):
 				newtags = alignsent(sent, origsent, dict(enumerate(tags)))
 				tags = [newtags[n] for n, _ in enumerate(sent)]
 		if 'PTBbrackets' in (self.transformations or ()):
-			sent[:] = [ptbescape(token) for token in sent]
+			sent = xsent = [ptbescape(token) for token in sent]
+		else:
+			xsent = list(sent)
+			sent = [escape(token) for token in sent]
 		if self.postagging and self.postagging.method == 'unknownword':
-			sent = replaceraretestwords(sent,
+			sent = list(replaceraretestwords(sent,
 					self.postagging.unknownwordfun,
-					self.postagging.lexicon, self.postagging.sigs)
-		sent = list(sent)
+					self.postagging.lexicon, self.postagging.sigs))
 		if tags is not None:
 			tags = list(tags)
 
@@ -408,7 +410,7 @@ class Parser(object):
 				try:
 					resultstr, prob, fragments = max(
 							parsetrees, key=itemgetter(1))
-					parsetree, noparse = self.postprocess(resultstr, sent, n)
+					parsetree, noparse = self.postprocess(resultstr, xsent, n)
 					if not all(a for a in parsetree.subtrees()):
 						raise ValueError('empty nodes in tree: %s' % parsetree)
 					if not len(parsetree.leaves()) == len(sent):
@@ -418,14 +420,14 @@ class Parser(object):
 					logging.error("something's amiss. %s", ''.join(
 								traceback.format_exception(*sys.exc_info())))
 					parsetree, prob, noparse = self.noparse(
-							stage, sent, tags, lastsuccessfulparse)
+							stage, xsent, tags, lastsuccessfulparse)
 				else:
 					lastsuccessfulparse = parsetree
 				msg += probstr(prob) + ' '
 			else:
 				fragments = None
 				parsetree, prob, noparse = self.noparse(
-						stage, sent, tags, lastsuccessfulparse)
+						stage, xsent, tags, lastsuccessfulparse)
 			elapsedtime = time.clock() - begin
 			msg += '%.2fs cpu time elapsed\n' % (elapsedtime)
 			yield DictObj(name=stage.name, parsetree=parsetree, prob=prob,

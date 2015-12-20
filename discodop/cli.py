@@ -20,7 +20,7 @@ from .treetransforms import addfanoutmarkers, canonicalize, binarize, \
 		unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes, \
 		introducepreterminals, markovthreshold
 from .grammar import treebankgrammar, dopreduction, doubledop, dop1, \
-		compiletsg, write_lcfrs_grammar, grammarinfo, grammarstats, \
+		compiletsg, writegrammar, grammarinfo, grammarstats, \
 		splitweight, merge, sumfrags, sumrules, sumlex, stripweight, \
 		addindices
 from .parser import readparam
@@ -457,7 +457,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		raise ValueError('parsing with an unbinarized grammar requires '
 				'a grammar in bitpar format.')
 
-	rules, lexicon = write_lcfrs_grammar(xgrammar, bitpar=bitpar)
+	rules, lexicon = writegrammar(xgrammar, bitpar=bitpar)
 	# write output
 	with codecs.getwriter('utf8')(myopen(rulesname, 'wb')) as rulesfile:
 		rulesfile.write(rules)

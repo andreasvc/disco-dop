@@ -98,7 +98,7 @@ def parsefrac(a):
 
 
 def read_lcfrs_grammar(rules, lexicon):
-	"""Read a grammar produced by write_lcfrs_grammar from two file objects."""
+	"""Read a grammar produced by grammar.writegrammar from two file objects."""
 	rules = (a.strip().split('\t') for a in rules)
 	grammar = [((tuple(a[:-2]), tuple(tuple(map(int, b))
 			for b in a[-2].split(","))), parsefrac(a[-1])) for a in rules]

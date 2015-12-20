@@ -12,7 +12,7 @@ try:
 	from cyordereddict import OrderedDict
 except ImportError:
 	from collections import OrderedDict
-from .tree import Tree, ImmutableTree, DiscTree, unescape
+from .tree import Tree, ImmutableTree, DiscTree, escape, unescape
 from .treebank import LEAVESRE
 from .util import openread
 from functools import reduce  # pylint: disable=redefined-builtin
@@ -64,7 +64,7 @@ def lcfrsproductions(tree, sent, frontiers=False):
 		# elif all(isinstance(a, int) for a in st):
 		elif isinstance(st[0], int):
 			if len(st) == 1 and sent[st[0]] is not None:  # terminal node
-				rule = ((st.label, 'Epsilon'), (sent[st[0]], ))
+				rule = ((st.label, 'Epsilon'), (escape(sent[st[0]]), ))
 			elif frontiers:
 				rule = ((st.label, ), ())
 			else:
@@ -440,7 +440,7 @@ def flatten(frag, ids, backtransform, binarized):
 		"""Collect word and return index."""
 		idx, word = x.split('=', 1)
 		idx = int(idx)
-		sent[idx] = unescape(word)
+		sent[idx] = word or None
 		return int(idx)
 
 	if frag.count(' ') == 1:
@@ -685,7 +685,7 @@ def cartpi(seq):
 	return ((), )
 
 
-def write_lcfrs_grammar(grammar, bitpar=False):
+def writegrammar(grammar, bitpar=False):
 	"""Write a grammar in a simple text file format.
 
 	Rules are written in the order as they appear in the sequence `grammar`,
@@ -696,7 +696,8 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 	:param grammar:  a sequence of rule tuples, as produced by
 		``treebankgrammar()``, ``dopreduction()``, or ``doubledop()``.
 	:param bitpar: when ``True``, use bitpar format: for rules, put weight
-		first and leave out the yield function.
+		first and leave out the yield function. By default, a format that
+		supports LCFRS is used.
 	:returns: tuple of strings``(rules, lexicon)``
 
 	Weights are written in the following format:
@@ -731,7 +732,7 @@ def write_lcfrs_grammar(grammar, bitpar=False):
 			rules.append(('%s\t%s\t%s\n' % (
 					'\t'.join(x for x in r), yfstr, w)))
 	for word in lexical:
-		lexicon.append(word)
+		lexicon.append(unescape(word))
 		for tag, w in lexical[word]:
 			lexicon.append('\t%s %s' % (tag, w))
 		lexicon.append('\n')
@@ -931,6 +932,6 @@ __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'dop1', 'dopgrammar', 'compiletsg', 'sortgrammar', 'flatten',
 		'nodefreq', 'TreeDecorator', 'DiscTree', 'UniqueIDs',
 		'rangeheads', 'ranges', 'defaultparse', 'printrule', 'cartpi',
-		'write_lcfrs_grammar', 'subsetgrammar', 'grammarinfo', 'grammarstats',
+		'writegrammar', 'subsetgrammar', 'grammarinfo', 'grammarstats',
 		'splitweight', 'convertweight', 'stripweight', 'sumrules', 'sumlex',
 		'sumfrags', 'merge']

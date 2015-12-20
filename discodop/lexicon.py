@@ -39,6 +39,7 @@ from collections import defaultdict, Counter
 from fractions import Fraction
 from cyordereddict import OrderedDict
 from .treebanktransforms import YEARRE
+from .tree import escape
 from .util import which
 
 UNK = '_UNK'
@@ -171,11 +172,11 @@ def simplesmoothlexicon(lexmodel, epsilon=1. / 100):
 	for word, tag in wordtags:
 		if word not in lexicon:
 			# needs to be normalized later
-			newrules[(tag, 'Epsilon'), (word, )] = wordtags[word, tag]
+			newrules[(tag, 'Epsilon'), (escape(word), )] = wordtags[word, tag]
 			# print(tag, '=>', word, wordstags[word, tag], file=sys.stderr)
 	for tag in openclasstags:  # open class tag-word pairs
 		for word in openclasswords - wordsfortag[tag] - {UNK}:
-			newrules[(tag, 'Epsilon'), (word, )] = epsilon
+			newrules[(tag, 'Epsilon'), (escape(word), )] = epsilon
 	for tag in tags:  # catch all unknown signature
 		newrules[(tag, 'Epsilon'), (UNK, )] = epsilon
 	return newrules

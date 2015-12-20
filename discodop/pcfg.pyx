@@ -6,7 +6,7 @@ import subprocess
 from math import exp, log as pylog
 from itertools import count
 import numpy as np
-from .tree import Tree, escape
+from .tree import Tree
 from .util import which
 from .plcfrs import DoubleAgenda
 from .treebank import TERMINALSRE
@@ -695,7 +695,7 @@ def parse_bitpar(grammar, rulesfile, lexiconfile, sent, n,
 				for t, w in zip(tags, sent)]))
 		tmp.close()
 		lexiconfile = tmp.name
-	tokens = [escape(token).encode('utf8') for token in sent]
+	tokens = [token.encode('utf8') for token in sent]
 	if tags:
 		tokens = ['%s@%s' % (tag, token) for tag, token in zip(tags, tokens)]
 	# pass empty 'unkwown word file' to disable bitpar's smoothing

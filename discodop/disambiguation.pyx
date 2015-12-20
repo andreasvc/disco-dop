@@ -17,7 +17,7 @@ from itertools import count
 from functools import partial
 from collections import defaultdict
 from . import plcfrs, _fragments
-from .tree import Tree, escape
+from .tree import Tree
 from .kbest import lazykbest, getderiv
 from .grammar import lcfrsproductions
 from .treebank import INDEXRE
@@ -593,7 +593,7 @@ def addwords(tree, sent):
 	"""Produce a tree in discbracket format from a Tree object and sentence."""
 	return INDEXRE.sub(lambda x: '%s=%s)' % (
 			x.group().rstrip(')'),
-			escape(sent[int(x.group()[1:].rstrip(')'))])),
+			sent[int(x.group()[1:].rstrip(')'))]),
 			str(tree))
 
 

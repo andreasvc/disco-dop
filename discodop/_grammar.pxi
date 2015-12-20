@@ -2,6 +2,7 @@
 import re
 import logging
 import numpy as np
+from .tree import escape, unescape
 
 # This regex should match exactly the set of valid yield functions,
 # i.e., comma-separated strings of alternating occurrences from the set {0,1},
@@ -79,8 +80,8 @@ cdef class Grammar:
 		elif rule_tuples_or_str and isinstance(
 				rule_tuples_or_str[0], tuple):
 			# convert tuples to strings with text format
-			from .grammar import write_lcfrs_grammar
-			self.origrules, self.origlexicon = write_lcfrs_grammar(
+			from .grammar import writegrammar
+			self.origrules, self.origlexicon = writegrammar(
 					rule_tuples_or_str, bitpar=False)
 			self.bitpar = False
 		else:
@@ -190,11 +191,11 @@ cdef class Grammar:
 			if not line.strip():
 				continue
 			x = line.index('\t')
-			word = line[:x]
+			word = escape(line[:x])
 			fields = line[x + 1:].split()
 			if word in self.lexicalbyword:
 				raise ValueError('word %r appears more than once '
-						'in lexicon file' % word)
+						'in lexicon file' % unescape(word))
 			self.lexicalbyword[word] = []
 			for tag, weight in zip(fields[::2], fields[1::2]):
 				if tag not in self.toid:
@@ -245,8 +246,10 @@ cdef class Grammar:
 		self.fanout = <uint8_t *>malloc(sizeof(uint8_t) * self.nonterminals)
 		if self.fanout is NULL:
 			raise MemoryError('allocation error')
-		self.models = np.empty((1, self.numrules + len(self.lexical)), dtype='d')
-		self.mask = <uint64_t *>malloc(BITNSLOTS(self.numrules) * sizeof(uint64_t))
+		self.models = np.empty(
+				(1, self.numrules + len(self.lexical)), dtype='d')
+		self.mask = <uint64_t *>malloc(
+				BITNSLOTS(self.numrules) * sizeof(uint64_t))
 		if self.mask is NULL:
 			raise MemoryError('allocation error')
 		self.setmask(None)
