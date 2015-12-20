@@ -1093,45 +1093,6 @@ def _regex_parse_query(query, flags):
 	return pattern
 
 
-def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
-		sents=False):
-	"""Run a batch of queries on a single file."""
-	lineindex = REGEX_LINEINDEX[filename]
-	with open(filename, 'r+b') as tmp:
-		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
-		startidx = lineindex.select(start - 1 if start else 0)
-		endidx = (lineindex.select(end) if end is not None
-				and end < len(lineindex) else len(data))
-		if sents:
-			result = []
-			for pattern in patterns:
-				for match in islice(
-						pattern.finditer(data, startidx, endidx),
-						maxresults):
-					mstart = match.start()
-					mend = match.end()
-					lineno = lineindex.rank(mstart)
-					offset, nextoffset = 0, len(data)
-					if lineno > 0:
-						offset = lineindex.select(lineno - 1)
-					if lineno <= len(lineindex):
-						nextoffset = lineindex.select(lineno)
-					if sents:
-						sent = data[offset:nextoffset].decode('utf8')
-						#  sentno, sent, high1, high2
-						result.append((lineno, sent, range(mstart - offset,
-								mend - offset), ()))
-		else:
-			result = array.array(b'I' if PY2 else 'I')
-			for pattern in patterns:
-				try:
-					result.append(pattern.count(data, startidx, endidx))
-				except AttributeError:
-					result.append(len(pattern.findall(data, startidx, endidx)))
-		data.close()
-	return result
-
-
 def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 		indices=False, sents=False, breakdown=False):
 	"""Run a prepared query on a single file."""
@@ -1164,9 +1125,10 @@ def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 					nextoffset = lineindex.select(lineno)
 				if sents:
 					sent = data[offset:nextoffset].decode('utf8')
+					mstart = len(data[offset:mstart].decode('utf8'))
+					mend = len(data[offset:mend].decode('utf8'))
 					# (lineno, sent, startspan, endspan)
-					result.append(
-							(lineno, sent, mstart - offset, mend - offset))
+					result.append((lineno, sent, mstart, mend))
 				else:
 					result.append(lineno)
 		else:
@@ -1179,6 +1141,46 @@ def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 				except AttributeError:
 					result = len(pattern.findall(data, startidx, endidx))
 				result = max(result, maxresults or 0)
+		data.close()
+	return result
+
+
+def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
+		sents=False):
+	"""Run a batch of queries on a single file."""
+	lineindex = REGEX_LINEINDEX[filename]
+	with open(filename, 'r+b') as tmp:
+		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
+		startidx = lineindex.select(start - 1 if start else 0)
+		endidx = (lineindex.select(end) if end is not None
+				and end < len(lineindex) else len(data))
+		if sents:
+			result = []
+			for pattern in patterns:
+				for match in islice(
+						pattern.finditer(data, startidx, endidx),
+						maxresults):
+					mstart = match.start()
+					mend = match.end()
+					lineno = lineindex.rank(mstart)
+					offset, nextoffset = 0, len(data)
+					if lineno > 0:
+						offset = lineindex.select(lineno - 1)
+					if lineno <= len(lineindex):
+						nextoffset = lineindex.select(lineno)
+					if sents:
+						sent = data[offset:nextoffset].decode('utf8')
+						mstart = len(data[offset:mstart].decode('utf8'))
+						mend = len(data[offset:mend].decode('utf8'))
+						#  sentno, sent, high1, high2
+						result.append((lineno, sent, range(mstart, mend), ()))
+		else:
+			result = array.array(b'I' if PY2 else 'I')
+			for pattern in patterns:
+				try:
+					result.append(pattern.count(data, startidx, endidx))
+				except AttributeError:
+					result.append(len(pattern.findall(data, startidx, endidx)))
 		data.close()
 	return result
 
@@ -1215,7 +1217,9 @@ class FIFOOrederedDict(collections.OrderedDict):
 		self.limit = limit
 
 	def __setitem__(self, key, value):  # pylint: disable=arguments-differ
-		if key in self:
+		if self.limit == 0:
+			return
+		elif key in self:
 			self.pop(key)
 		elif len(self) >= self.limit:
 			self.pop(next(iter(self)))
@@ -1326,6 +1330,8 @@ def writecounts(results, flat=False, columns=None):
 
 def main():
 	"""CLI."""
+	global CACHESIZE
+	CACHESIZE = 0
 	from getopt import gnu_getopt, GetoptError
 	shortoptions = 'e:m:M:stcbnofih'
 	options = ('engine= macros= numproc= max-count= slice= '
