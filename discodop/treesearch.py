@@ -873,7 +873,7 @@ def _frag_parse_query(query, disc=False):
 	qitems = (
 		(binarize(handledisc(item[0]) if disc else item[0], dot=True),
 		item[1]) for item in qitems)
-	queries = _fragments.getctrees(qtrees, qsents, vocab=VOCAB)
+	queries = _fragments.getctrees(qitems, vocab=VOCAB)
 	if not queries['trees1']:
 		raise ValueError('no valid fragments in query.')
 	maxnodes = queries['trees1'].maxnodes
