@@ -623,10 +623,10 @@ class ImmutableTree(Tree):
 	def __delslice__(self, _start, _stop):
 		raise ValueError('ImmutableTrees may not be modified')
 
-	def __iadd__(self):
+	def __iadd__(self, _):
 		raise ValueError('ImmutableTrees may not be modified')
 
-	def __imul__(self):
+	def __imul__(self, _):
 		raise ValueError('ImmutableTrees may not be modified')
 
 	def append(self, _):

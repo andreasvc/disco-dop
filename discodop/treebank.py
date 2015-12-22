@@ -614,7 +614,7 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		else:
 			preterms[node[0]] = node
 	phrasalnodes.reverse()
-	if not len(sent) == len(preterms):
+	if len(sent) != len(preterms):
 		raise ValueError('sentence and terminals length mismatch:  '
 				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
 				% (key, tree, len(sent), sent, len(preterms), preterms))

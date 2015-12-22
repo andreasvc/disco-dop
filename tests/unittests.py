@@ -401,7 +401,7 @@ def test_fragments():
 	for tree in trees:
 		for n, idx in enumerate(tree.treepositions('leaves')):
 			tree[idx] = n
-	params = getctrees(trees, sents)
+	params = getctrees(zip(trees, sents))
 	fragments = extractfragments(params['trees1'],
 			0, 0, params['vocab'], disc=True, approx=False)
 	counts = exactcounts(params['trees1'], params['trees1'],

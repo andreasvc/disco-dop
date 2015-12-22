@@ -191,7 +191,8 @@ def regular(filenames, numproc, limit, encoding):
 				for n, a in enumerate(work)]
 		counts = []
 		logging.info('getting exact %s', task)
-		for a in mymap(exactcountworker, work):
+		for a in mymap(
+				exactcountworker if numproc == 1 else mpexactcountworker, work):
 			counts.extend(a)
 	if PARAMS['cover']:
 		maxdepth, maxfrontier = PARAMS['cover']
@@ -328,8 +329,9 @@ def initworker(filename1, filename2, limit, encoding):
 
 def initworkersimple(trees, sents, trees2=None, sents2=None):
 	"""Initialization for a worker in which a treebank was already loaded."""
-	PARAMS.update(_fragments.getctrees(trees, sents, trees2, sents2))
-	assert PARAMS['trees1']
+	PARAMS.update(_fragments.getctrees(zip(trees, sents),
+			None if trees2 is None else zip(trees2, sents2)))
+	assert PARAMS['trees1'], PARAMS['trees1']
 
 
 @workerfunc
@@ -355,6 +357,11 @@ def worker(interval):
 
 
 @workerfunc
+def mpexactcountworker(args):
+	"""Worker function for counts (multiprocessing wrapper)."""
+	return exactcountworker(args)
+
+
 def exactcountworker(args):
 	"""Worker function for counting of fragments."""
 	n, m, bitsets = args
@@ -452,7 +459,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 		mymap, myworker = pool.map, mpworker
 	# collect recurring fragments
 	logging.info('extracting recurring fragments')
-	for a in mymap(worker, work):
+	for a in mymap(myworker, work):
 		fragments.update(a)
 	fragmentkeys = list(fragments)
 	bitsets = [fragments[a] for a in fragmentkeys]
@@ -462,7 +469,8 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 			for n, a in enumerate(work)]
 	logging.info('getting exact counts for %d fragments', len(bitsets))
 	counts = []
-	for a in mymap(exactcountworker, work):
+	for a in mymap(
+			exactcountworker if numproc == 1 else mpexactcountworker, work):
 		counts.extend(a)
 	# add all fragments up to a given depth
 	if maxdepth:
@@ -551,7 +559,8 @@ def iteratefragments(fragments, newtrees, newsents, trees, sents, numproc):
 			for n, a in enumerate(work)]
 	logging.info('getting exact counts for %d fragments', len(bitsets))
 	counts = []
-	for a in mymap(exactcountworker, work):
+	for a in mymap(
+			exactcountworker if numproc == 1 else mpexactcountworker, work):
 		counts.extend(a)
 	if numproc != 1:
 		pool.close()

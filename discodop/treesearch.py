@@ -611,9 +611,9 @@ class FragmentSearcher(CorpusSearcher):
 	"""
 	# NB: pickling arrays is efficient in Python 3
 	# TODO: allow single terminals as queries: word
-	#	alternatively, allow wildcard: (* word)
+	#       alternatively, allow wildcard: (* word)
 	# TODO: interpret multiple fragments in a single query as AND query,
-	#	optionally with order constraint: (NN cat) (NN dog)
+	#       optionally with order constraint: (NN cat) (NN dog)
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
 		global FRAG_FILES, FRAG_MACROS, VOCAB
 		super(FragmentSearcher, self).__init__(files, macros, numproc)
@@ -870,16 +870,12 @@ def _frag_parse_query(query, disc=False):
 	else:
 		qitems = treebank.incrementaltreereader(
 				io.StringIO(query), strict=True, robust=False)
-	qtrees, qsents = [], []
-	for item in qitems:
-		# rightmostunary necessary to handle discontinuous substitution sites
-		qtrees.append(binarize(
-				handledisc(item[0]) if disc else item[0], dot=True))
-		qsents.append(item[1])
-	if not qtrees:
+	qitems = (
+		(binarize(handledisc(item[0]) if disc else item[0], dot=True),
+		item[1]) for item in qitems)
+	queries = _fragments.getctrees(qtrees, qsents, vocab=VOCAB)
+	if not queries['trees1']:
 		raise ValueError('no valid fragments in query.')
-	queries = _fragments.getctrees(
-			list(qtrees), list(qsents), vocab=VOCAB)
 	maxnodes = queries['trees1'].maxnodes
 	_fragmentkeys, bitsets = _fragments.completebitsets(
 			queries['trees1'], VOCAB, maxnodes, disc=disc)

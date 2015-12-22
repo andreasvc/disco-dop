@@ -612,7 +612,7 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 
 	These auxiliary nodes will not be part of the returned tree / bitset:
 
-	>>> tmp = getctrees([tree], [sent])
+	>>> tmp = getctrees([(tree, sent)])
 	>>> print(completebitsets(tmp['trees1'], tmp['vocab'], 2, disc=True)[0][0])
 	(S (X 0= 2= 4=))
 	"""
@@ -1146,10 +1146,11 @@ cdef inline copynodes(tree, list prodsintree, Vocabulary vocab,
 		copynodes(tree[1], prodsintree, vocab, result, idx)
 
 
-def getctrees(trees1, sents1, trees2=None, sents2=None,
-		vocab=None):
+def getctrees(items1, items2=None, vocab=None):
 	"""Convert binarized Tree objects to Ctrees object.
 
+	:param items1: an iterable with tuples of the form ``(tree, sent)``.
+	:param items2: optionally, a second iterable of trees.
 	:returns: dictionary with same keys as arguments, where trees1 and
 		trees2 are Ctrees objects for disc. binary trees and sentences."""
 	cdef Ctrees ctrees, ctrees1, ctrees2 = None
@@ -1163,13 +1164,13 @@ def getctrees(trees1, sents1, trees2=None, sents2=None,
 		vocab = Vocabulary()
 	ctrees = ctrees1 = Ctrees()
 	ctrees.alloc(512, 512 * 512)
-	for m, (trees, sents) in enumerate(((trees1, sents1), (trees2, sents2))):
-		if trees is None or sents is None:
+	for m, items in enumerate((items1, items2)):
+		if items is None:
 			break
-		if m == 1:
+		elif m == 1:
 			ctrees = ctrees2 = Ctrees()
 			ctrees.alloc(512, 512 * 512)
-		for tree, sent in zip(trees, sents):
+		for tree, sent in items:
 			cnt = 0
 			prodsintree = []
 			for r, yf in lcfrsproductions(tree, sent, frontiers=True):

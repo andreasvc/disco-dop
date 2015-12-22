@@ -370,7 +370,7 @@ def getgrammars(trees, sents, stages, testmaxwords, resultdir,
 			extrarules = lexicon.simplesmoothlexicon(lexmodel)
 		if stage.mode == 'mc-rerank':
 			from . import _fragments
-			gram = parser.DictObj(_fragments.getctrees(trees, sents))
+			gram = parser.DictObj(_fragments.getctrees(zip(trees, sents)))
 			tree = gram.trees1.extract(0, gram.vocab)
 			gram.start = tree[:tree.index(' ')].lstrip('(')
 			with gzip.open('%s/%s.train.pickle.gz' % (resultdir, stage.name),

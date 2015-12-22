@@ -30,7 +30,7 @@ from . import plcfrs, pcfg, disambiguation
 from . import grammar, treetransforms, treebanktransforms
 from .containers import Grammar, BITPARRE
 from .coarsetofine import prunechart
-from .tree import ParentedTree, escape, ptbescape, unescape
+from .tree import ParentedTree, escape, ptbescape
 from .eval import alignsent
 from .lexicon import replaceraretestwords, UNKNOWNWORDFUNC, UNK
 from .treebank import writetree, handlefunctions
