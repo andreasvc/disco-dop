@@ -1739,7 +1739,7 @@ def ptbescape(token):
 
 def ptbunescape(token):
 	"""Unescape brackets in a single token, including PTB notation."""
-	if token in ('', '#FRONTIER#'):
+	if token in ('', '#FRONTIER#', None):
 		return None
 	elif token == '-LCB-':
 		return '{'
