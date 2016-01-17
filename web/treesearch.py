@@ -6,7 +6,6 @@ from __future__ import print_function, absolute_import
 import io
 import os
 import re
-import cgi
 import csv
 import sys
 import json
@@ -16,16 +15,18 @@ import tempfile
 import subprocess
 from heapq import nlargest
 from datetime import datetime, timedelta
-from itertools import islice, groupby
 from operator import itemgetter
 from collections import Counter, OrderedDict, defaultdict
-if sys.version[0] == '2':
-	import cPickle as pickle  # pylint: disable=import-error
+from itertools import islice, groupby
+if sys.version_info[0] == 2:
 	from itertools import ifilter as filter  # pylint: disable=E0611,W0622
+	import cPickle as pickle  # pylint: disable=import-error
 	from urllib import quote  # pylint: disable=no-name-in-module
+	from cgi import escape as htmlescape
 else:
 	import pickle
 	from urllib.parse import quote  # pylint: disable=F0401,E0611
+	from html import escape as htmlescape
 import pandas
 # Flask & co
 from flask import Flask, Response
@@ -416,7 +417,7 @@ def sents(form, dobrackets=False):
 					';nomorph' if 'nomorph' in form else '',
 					textno, sentno, sentno))
 			if dobrackets:
-				sent = cgi.escape(sent.replace(" )", " -NONE-)"))
+				sent = htmlescape(sent.replace(" )", " -NONE-)"))
 				out = sent.replace(high1, "<span class=r>%s</span>" % high1)
 			else:
 				out = applyhighlight(sent, high1, high2)
@@ -548,13 +549,13 @@ def fragmentsinresults(form, doexport=False):
 				link = "<a href='/draw?tree=%s;sent=%s'>draw</a>" % (
 						quote(tree.encode('utf8')), quote(sent.encode('utf8')))
 				sent = GETLEAVES.sub(' <font color=red>\\1</font>',
-						cgi.escape(' ' + sent + ' '))
-				tree = cgi.escape(tree) + ' ' + sent
+						htmlescape(' ' + sent + ' '))
+				tree = htmlescape(tree) + ' ' + sent
 			else:
 				link = "<a href='/draw?tree=%s'>draw</a>" % (
 						quote(tree.encode('utf8')))
 				tree = GETLEAVES.sub(' <font color=red>\\1</font>',
-						cgi.escape(tree))
+						htmlescape(tree))
 			tree = GETFRONTIERNTS.sub('(<font color=blue>\\1</font> )', tree)
 			yield "<li>freq=%3d [%s] %s" % (freq, link, tree)
 	if not doexport:
@@ -746,8 +747,8 @@ def browsesents():
 					filename, range(start, maxsent), sents=True)
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
-		results = [('<font color=red>%s</font>' % cgi.escape(a))
-				if n == highlight else cgi.escape(a)
+		results = [('<font color=red>%s</font>' % htmlescape(a))
+				if n == highlight else htmlescape(a)
 				for n, a in enumerate(results, start)]
 		legend = queryparams = ''
 		if request.args.get('query', ''):
@@ -820,7 +821,7 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 				int(round(width * data[key] / total)) if data[key] else 0,
 				color.get(key.split('_')[0] if '_' in key else key[0], 1)
 					if data[key] else 0,
-				cgi.escape(key), data[key], unit,))
+				htmlescape(key), data[key], unit,))
 	result.append('</div>\n')
 	return '\n'.join(result)
 

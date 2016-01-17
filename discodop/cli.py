@@ -7,12 +7,17 @@ import sys
 import gzip
 import codecs
 import logging
-if sys.version_info[0] < 3:
+from itertools import islice, chain
+from getopt import gnu_getopt, GetoptError
+if sys.version_info[0] == 2:
 	import __builtin__ as builtins  # pylint: disable=import-error
 else:
 	import builtins  # pylint: disable=import-error
-from itertools import islice, chain
-from getopt import gnu_getopt, GetoptError
+try:
+	import faulthandler
+	faulthandler.enable()  # Dump information on segfault.
+except (ImportError, io.UnsupportedOperation):
+	pass
 from . import treebank, treebanktransforms
 from .tree import DrawTree, frontier, STRTERMRE
 from .treebank import READERS, incrementaltreereader
@@ -27,11 +32,6 @@ from .parser import readparam
 from .runexp import loadtraincorpus, getposmodel, startexp, \
 		dobinarization, getgrammars, parsetepacoc
 from .util import openread
-try:
-	import faulthandler
-	faulthandler.enable()  # Dump information on segfault.
-except (ImportError, io.UnsupportedOperation):
-	pass
 
 
 def treedraw():

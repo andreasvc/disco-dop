@@ -18,9 +18,9 @@ import logging
 import tempfile
 if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
+from itertools import count
 import multiprocessing
 from collections import defaultdict
-from itertools import count
 from getopt import gnu_getopt, GetoptError
 from .tree import brackettree
 from .treebank import writetree

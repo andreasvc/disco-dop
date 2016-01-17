@@ -4,7 +4,10 @@ from __future__ import division, print_function, absolute_import, \
 import os
 import re
 import sys
-import xml.etree.cElementTree as ElementTree
+if sys.version_info[0] == 2:
+	import xml.etree.cElementTree as ElementTree
+else:
+	import xml.etree.ElementTree as ElementTree
 from glob import glob
 from itertools import count, chain, islice
 from collections import defaultdict
@@ -13,7 +16,7 @@ try:
 except ImportError:
 	from collections import OrderedDict
 from .tree import Tree, ParentedTree, brackettree, escape, unescape, \
-		SUPERFLUOUSSPACERE
+		writebrackettree, writediscbrackettree, SUPERFLUOUSSPACERE
 from .treetransforms import removeemptynodes
 from .punctuation import applypunct
 from .heads import applyheadrules, readheadrules
@@ -26,7 +29,6 @@ EXPORTNONTERMINAL = re.compile(r'^#([5-9][0-9][0-9])$')
 POSRE = re.compile(r'\(([^() ]+)\s+[^ ()]+\s*\)')
 TERMINALSRE = re.compile(r' ([^ ()]+)\s*\)')
 LEAVESRE = re.compile(r' ([^ ()]*)\s*\)')
-INDEXRE = re.compile(r' [0-9]+\b')
 
 
 class Item(object):
@@ -576,23 +578,6 @@ def writetree(tree, sent, key, fmt, comment=None, morphology=None,
 	if sentid and fmt in ('tokens', 'wordpos', 'bracket', 'discbracket'):
 		return '%s|%s' % (key, result)
 	return result
-
-
-def writebrackettree(tree, sent):
-	"""Return a tree in bracket notation with words as terminals."""
-	return INDEXRE.sub(
-			lambda x: ' %s' % escape(sent[int(x.group()[1:])]),
-			str(tree)) + '\n'
-
-
-def writediscbrackettree(tree, sent):
-	"""Return tree in bracket notation with terminals of the form 'index:word'.
-	"""
-	return INDEXRE.sub(
-			lambda x: '%s=%s' % (
-				x.group(),
-				escape(sent[int(x.group()[1:])])),
-			str(tree)) + '\n'
 
 
 def writeexporttree(tree, sent, key, comment, morphology):

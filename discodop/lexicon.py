@@ -36,8 +36,11 @@ import tempfile
 from operator import itemgetter
 from subprocess import Popen, PIPE
 from collections import defaultdict, Counter
+try:
+	from cyordereddict import OrderedDict
+except ImportError:
+	from collections import OrderedDict
 from fractions import Fraction
-from cyordereddict import OrderedDict
 from .treebanktransforms import YEARRE
 from .tree import escape
 from .util import which

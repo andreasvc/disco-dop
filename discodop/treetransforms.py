@@ -505,9 +505,12 @@ def splitdiscnodes(tree, markorigin=False):
 			if isdisc(child):
 				childnodes = list(child)
 				child[:] = []
-				node.extend(treeclass(('%s*%d' % (child.label, n)
-						if markorigin else '%s*' % child.label), childsubset)
-						for n, childsubset in enumerate(contsets(childnodes)))
+				for n, childsubset in enumerate(contsets(childnodes)):
+					newlabel = ('%s*%d' % (child.label, n) if markorigin
+							else '%s*' % child.label)
+					newchild = treeclass(newlabel, childsubset)
+					newchild.source = child.source
+					node.append(newchild)
 			else:
 				node.append(child)
 	return canonicalize(tree)

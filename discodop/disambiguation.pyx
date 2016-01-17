@@ -17,10 +17,9 @@ from itertools import count
 from functools import partial
 from collections import defaultdict
 from . import plcfrs, _fragments
-from .tree import Tree
+from .tree import Tree, writediscbrackettree
 from .kbest import lazykbest, getderiv
 from .grammar import lcfrsproductions
-from .treebank import INDEXRE
 from .treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
 from .bit import pyintnextset, pyintbitcount
@@ -589,14 +588,6 @@ cdef str recoverfragments_str(deriv, Chart chart, list backtransform):
 	return frag.format(*children)
 
 
-def addwords(tree, sent):
-	"""Produce a tree in discbracket format from a Tree object and sentence."""
-	return INDEXRE.sub(lambda x: '%s=%s)' % (
-			x.group().rstrip(')'),
-			sent[int(x.group()[1:].rstrip(')'))]),
-			str(tree))
-
-
 def fragmentsinderiv(deriv, chart, list backtransform):
 	"""Extract the list of fragments that were used in a given derivation.
 
@@ -608,7 +599,9 @@ def fragmentsinderiv(deriv, chart, list backtransform):
 		fragmentsinderiv_(deriv, chart, backtransform, result)
 	elif isinstance(deriv, str) and backtransform is None:
 		deriv = Tree(deriv)
-		result = [REMOVEIDS.sub('', addwords(str(splitfrag(node)), chart.sent))
+		result = [writediscbrackettree(
+				REMOVEIDS.sub('', str(splitfrag(node))),
+				chart.sent).rstrip()
 				for node in deriv.subtrees(frontiernt)]
 	elif isinstance(deriv, str):
 		deriv = Tree(deriv)

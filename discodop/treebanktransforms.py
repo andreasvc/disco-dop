@@ -766,7 +766,8 @@ def lassytransforms(name, tree, _sent):
 			pos.label += '/%s[%s]' % (tag, ','.join(selected))
 	elif name == 'nlpercolatemorph':  # percolate select morph tags upwards
 		PERCOLATE = {'pv': 2, 'inf': 2}
-		for feat, lvl in PERCOLATE.items():
+		for feat in sorted(PERCOLATE):
+			lvl = PERCOLATE[feat]
 			for pos in tree.subtrees(lambda n, f=feat: n
 					and isinstance(n[0], int) and f in morphfeats(n)):
 				cnt = 0

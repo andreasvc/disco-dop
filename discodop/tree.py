@@ -14,18 +14,21 @@
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
 import re
-import cgi
 import sys
 from itertools import count
-from .util import slice_bounds, ANSICOLOR
-if sys.version_info[0] > 2:
-	unicode = str  # pylint: disable=redefined-builtin
 from operator import itemgetter
 from collections import defaultdict, OrderedDict
+if sys.version_info[0] == 2:
+	from cgi import escape as htmlescape
+else:
+	from html import escape as htmlescape
+	unicode = str  # pylint: disable=redefined-builtin
+from .util import slice_bounds, ANSICOLOR
 
 PTBPUNC = {'-LRB-', '-RRB-', '-LCB-', '-RCB-', '-LSB-', '-RSB-', '-NONE-'}
 FRONTIERNTRE = re.compile(r' \)')
 SUPERFLUOUSSPACERE = re.compile(r'\)\s+(?=\))')
+INDEXRE = re.compile(r' ([0-9]+)\b')
 # regex to check if the tree contains any terminals not prefixed by indices
 STRTERMRE = re.compile(r' (?![0-9]+=)[^()]*\s*\)')
 
@@ -117,7 +120,7 @@ class Tree(object):
 				and self.children == other.children)
 
 	def __ne__(self, other):
-		return not self == other
+		return not self.__eq__(other)
 
 	def __lt__(self, other):
 		if not isinstance(other, Tree):
@@ -361,8 +364,8 @@ class Tree(object):
 		start_treepos = self.leaf_treeposition(start)
 		end_treepos = self.leaf_treeposition(end - 1)
 		# Find the first index where they mismatch:
-		for i in range(len(start_treepos)):
-			if i == len(end_treepos) or start_treepos[i] != end_treepos[i]:
+		for i, a in enumerate(start_treepos):
+			if i == len(end_treepos) or a != end_treepos[i]:
 				return start_treepos[:i]
 		return start_treepos
 
@@ -1039,9 +1042,9 @@ class DrawTree(object):
 				self.tree, self.sent, highlight, highlightfunc)
 
 	def __str__(self):
-		if sys.version_info[0] >= 3:
-			return self.text(unicodelines=True)
-		return self.text(unicodelines=True).encode('utf8')
+		if sys.version_info[0] == 2:
+			return self.text(unicodelines=True).encode('utf8')
+		return self.text(unicodelines=True)
 
 	def __repr__(self):
 		return '\n'.join('%d: coord=%r, parent=%r, node=%s' % (
@@ -1328,7 +1331,7 @@ class DrawTree(object):
 					'style="text-anchor: middle; font-size: %dpx;" >'
 					'<tspan style="fill: %s; ">%s</tspan>' % (
 					x, y, fontsize,
-					color, cgi.escape(cat)))
+					color, htmlescape(cat)))
 			if func:
 				result[-1] += '%s<tspan style="fill: %s; ">%s</tspan>' % (
 							funcsep, funccolor if n in self.highlightfunc
@@ -1441,7 +1444,7 @@ class DrawTree(object):
 				text = [a.center(maxnodewith[col]) for a in text]
 				color = nodecolor if isinstance(node, Tree) else leafcolor
 				if html:
-					text = [cgi.escape(a) for a in text]
+					text = [htmlescape(a) for a in text]
 				if (n in self.highlight or n in self.highlightfunc) and (
 						html or ansi):
 					newtext = []
@@ -1511,10 +1514,9 @@ class DrawTree(object):
 		PDF can be produced with pdflatex. Uses TiKZ matrices meaning that
 		nodes are put into a fixed grid. Where the cells of each column all
 		have the same width."""
-		result = ['%% %s\n%% %s' % (
-				self.tree, ' '.join(a or '' for a in self.sent)),
+		result = [writediscbrackettree(self.tree, self.sent).rstrip(),
 				r'''\begin{tikzpicture}[scale=0.75, align=center,
-				inner sep=0mm, node distance=1mm]''',
+				text width=1.5cm, inner sep=0mm, node distance=1mm]''',
 				r'\footnotesize\sffamily',
 				r'\matrix[row sep=0.5cm,column sep=0.1cm] {']
 
@@ -1538,7 +1540,7 @@ class DrawTree(object):
 						color = nodecolor
 						if (funcsep and funcsep in node.label
 								and node.label not in PTBPUNC):
-							cat, func = node.label.split(funcsep)
+							cat, func = node.label.split(funcsep, 1)
 							func = r'%s\textcolor{%s}{%s}' % (
 									funcsep, funccolor, func)
 						label = latexlabel(cat)
@@ -1562,10 +1564,9 @@ class DrawTree(object):
 
 		Nodes are drawn with the \\node command so they can have arbitrary
 		coordinates."""
-		result = ['%% %s\n%% %s' % (
-				self.tree, ' '.join(a or '' for a in self.sent)),
+		result = [writediscbrackettree(self.tree, self.sent).rstrip(),
 				r'''\begin{tikzpicture}[scale=0.75, align=center,
-				inner sep=0mm, node distance=1mm]''',
+				text width=1.5cm, inner sep=0mm, node distance=1mm]''',
 				r'\footnotesize\sffamily',
 				r'\path']
 
@@ -1579,7 +1580,7 @@ class DrawTree(object):
 				color = nodecolor
 				if (funcsep and funcsep in node.label
 						and node.label not in PTBPUNC):
-					cat, func = node.label.split(funcsep)
+					cat, func = node.label.split(funcsep, 1)
 					func = r'%s\textcolor{%s}{%s}' % (
 							funcsep, funccolor, func)
 				label = latexlabel(cat)
@@ -1624,6 +1625,7 @@ class DrawTree(object):
 		pprint = self.tree.pprint(indent=6, brackets=('[.', ' ]'))
 		escaped = re.sub(reserved_chars, r'\\\1', pprint)
 		return '\n'.join([
+			writebrackettree(self.tree, self.sent).rstrip(),
 			'\\begin{tikzpicture}',
 			'  \\tikzset{every node/.style={color=%s}, font=\\sf}' % nodecolor,
 			'  \\tikzset{every leaf node/.style={color=%s}}' % leafcolor,
@@ -1687,6 +1689,21 @@ def brackettree(treestr):
 				parse_leaf=substleaf)
 		sent = [sent.get(n, None) for n in range(max(sent) + 1)]
 	return tree, sent
+
+
+def writebrackettree(tree, sent):
+	"""Return a tree in bracket notation with words as terminals."""
+	return INDEXRE.sub(
+			lambda x: ' %s' % escape(sent[int(x.group(1))]),
+			str(tree)) + '\n'
+
+
+def writediscbrackettree(tree, sent):
+	"""Return tree in bracket notation with terminals of the form 'index=word'.
+	"""
+	return INDEXRE.sub(
+			lambda x: ' %s=%s' % (x.group(1), escape(sent[int(x.group(1))])),
+			str(tree)) + '\n'
 
 
 def isdisc(node):

@@ -9,22 +9,18 @@ import io
 import sys
 from getopt import gnu_getopt, GetoptError
 from decimal import Decimal, InvalidOperation
-from itertools import count
 from collections import defaultdict, Counter  # == multiset
 if sys.version_info[0] == 2:
-	from itertools import izip_longest as zip_longest  # pylint: disable=E0611
+	from itertools import count, \
+			izip_longest as zip_longest  # pylint: disable=E0611
 else:
-	from itertools import zip_longest  # pylint: disable=E0611
-
+	from itertools import count, zip_longest  # pylint: disable=E0611
 from . import grammar
 from .tree import Tree, DrawTree, isdisc, bitfanout
 from .treebank import READERS, dependencies, handlefunctions
 from .treetransforms import getbits
 from .treebanktransforms import functions
-try:
-	from .treedist import treedist, newtreedist
-except ImportError:
-	from .treedist import newtreedist as newtreedist, newtreedist
+from .treedist import treedist, newtreedist
 
 SHORTUSAGE = 'Usage: discodop eval <gold> <parses> [param] [options]'
 

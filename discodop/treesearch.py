@@ -18,12 +18,18 @@ import concurrent.futures
 import multiprocessing
 import subprocess
 from collections import Counter, namedtuple
+try:
+	from cyordereddict import OrderedDict
+except ImportError:
+	from collections import OrderedDict
 import collections
 from itertools import islice
 PY2 = sys.version_info[0] == 2
-try:
+if PY2:
+	import xml.etree.cElementTree as ElementTree
 	import cPickle as pickle
-except ImportError:
+else:
+	import xml.etree.ElementTree as ElementTree
 	import pickle
 try:
 	import re2
@@ -32,11 +38,9 @@ except ImportError:
 	RE2LIB = False
 try:
 	import alpinocorpus
-	import xml.etree.cElementTree as ElementTree
 	ALPINOCORPUSLIB = True
 except ImportError:
 	ALPINOCORPUSLIB = False
-from cyordereddict import OrderedDict
 from roaringbitmap import RoaringBitmap
 from . import treebank, _fragments
 from .tree import Tree, DrawTree, DiscTree, brackettree, ptbunescape
@@ -204,8 +208,8 @@ class CorpusSearcher(object):
 				for future in fs:
 					yield future.result()
 			finally:
-				for future in fs:
-					future.cancel()
+				for future_ in fs:
+					future_.cancel()
 
 		return result_iterator()
 
@@ -614,6 +618,7 @@ class FragmentSearcher(CorpusSearcher):
 	#       alternatively, allow wildcard: (* word)
 	# TODO: interpret multiple fragments in a single query as AND query,
 	#       optionally with order constraint: (NN cat) (NN dog)
+	# TODO: compiled query set, re-usable on new documents.
 	def __init__(self, files, macros=None, numproc=None, inmemory=True):
 		global FRAG_FILES, FRAG_MACROS, VOCAB
 		super(FragmentSearcher, self).__init__(files, macros, numproc)
@@ -1025,8 +1030,7 @@ class RegexSearcher(CorpusSearcher):
 		patterns = [[_regex_parse_query(query, self.flags) for query in a]
 				for a in chunkedqueries]
 		for filename in subset or self.files:
-			result = array.array(
-					b'I' if PY2 else 'I')
+			result = array.array(b'I' if PY2 else 'I')
 			for tmp in self._map(_regex_run_batch, patterns,
 					filename=filename, start=start, end=end):
 				result.extend(tmp)
@@ -1126,6 +1130,8 @@ def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 	# TODO: is it advantageous to keep mmap'ed files open?
 	with open(filename, 'r+b') as tmp:
 		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
+		if start >= len(lineindex):
+			return result
 		startidx = lineindex.select(start - 1 if start else 0)
 		endidx = (lineindex.select(end) if end is not None
 				and end < len(lineindex) else len(data))
@@ -1167,13 +1173,18 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 		sents=False):
 	"""Run a batch of queries on a single file."""
 	lineindex = REGEX_LINEINDEX[filename]
+	if sents:
+		result = []
+	else:
+		result = array.array(b'I' if PY2 else 'I')
 	with open(filename, 'r+b') as tmp:
 		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
+		if start >= len(lineindex):
+			return result
 		startidx = lineindex.select(start - 1 if start else 0)
 		endidx = (lineindex.select(end) if end is not None
 				and end < len(lineindex) else len(data))
 		if sents:
-			result = []
 			for pattern in patterns:
 				for match in islice(
 						pattern.finditer(data, startidx, endidx),
@@ -1193,7 +1204,6 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 						#  sentno, sent, high1, high2
 						result.append((lineno, sent, range(mstart, mend), ()))
 		else:
-			result = array.array(b'I' if PY2 else 'I')
 			for pattern in patterns:
 				try:
 					result.append(pattern.count(data, startidx, endidx))
@@ -1278,23 +1288,28 @@ def cpu_count():
 		return 1
 
 
-def applyhighlight(sent, high1, high2):
-	"""Highlight character indices high1 & high2 in sent with ANSI colors."""
+def applyhighlight(sent, high1, high2, reset=False,
+		high1color='red', high2color='blue'):
+	"""Highlight character indices high1 & high2 in sent with ANSI colors.
+
+	:param reset: if True, reset to normal color before every change
+		(useful in IPython notebook)."""
 	cur = None
 	start = 0
 	out = []
+	reset = '\x1b[0m' if reset else ''
+	high1color = ANSICOLOR[high1color]
+	high2color = ANSICOLOR[high2color]
 	for n, _ in enumerate(sent):
 		if n in high1:
-			if cur != 'red':
-				cur = 'red'
-				out.append(sent[start:n]
-						+ '\x1b[%d;1m' % ANSICOLOR[cur])
+			if cur != high1color:
+				cur = high1color
+				out.append('%s%s\x1b[%d;1m' % (sent[start:n], reset, cur))
 				start = n
 		elif n in high2:
-			if cur != 'blue':
-				cur = 'blue'
-				out.append(sent[start:n]
-						+ '\x1b[%d;1m' % ANSICOLOR[cur])
+			if cur != high2color:
+				cur = high2color
+				out.append('%s%s\x1b[%d;1m' % (sent[start:n], reset, cur))
 				start = n
 		else:
 			if cur is not None:

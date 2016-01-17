@@ -16,15 +16,15 @@ import tempfile
 import traceback
 import string  # pylint: disable=W0402
 import multiprocessing
+from math import exp, log
+from heapq import nlargest
+from getopt import gnu_getopt, GetoptError
+from operator import itemgetter
 if sys.version_info[0] == 2:
 	from itertools import imap as map  # pylint: disable=E0611,W0622
 	import cPickle as pickle  # pylint: disable=import-error
 else:
 	import pickle
-from math import exp, log
-from heapq import nlargest
-from getopt import gnu_getopt, GetoptError
-from operator import itemgetter
 import numpy as np
 from . import plcfrs, pcfg, disambiguation
 from . import grammar, treetransforms, treebanktransforms
@@ -413,7 +413,7 @@ class Parser(object):
 					parsetree, noparse = self.postprocess(resultstr, xsent, n)
 					if not all(a for a in parsetree.subtrees()):
 						raise ValueError('empty nodes in tree: %s' % parsetree)
-					if not len(parsetree.leaves()) == len(sent):
+					if len(parsetree.leaves()) != len(sent):
 						raise ValueError('leaves missing. original tree: %s\n'
 							'postprocessed: %r' % (resultstr, parsetree))
 				except Exception:  # pylint: disable=W0703

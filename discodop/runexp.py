@@ -687,7 +687,7 @@ def writeresults(results, params):
 						morphology=params.morphology)
 				for n in params.testset)
 
-	if sys.version_info[0] < 3:
+	if sys.version_info[0] == 2:
 		fileobj = open('%s/stats.tsv' % params.resultdir, 'wb')
 	else:
 		fileobj = open('%s/stats.tsv' % params.resultdir, 'w',

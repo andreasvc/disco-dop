@@ -48,23 +48,28 @@ Installation
 
 Requirements:
 
-- Python 2.7+/3   http://www.python.org (headers required, e.g. python-dev package)
+- Python 3.3+     http://www.python.org (headers required, e.g. python3-dev package)
 - Cython 0.21+    http://www.cython.org
 - Numpy 1.5+      http://numpy.org/
+
+Python 2.7 is supported, but Python 3 is recommended.
 
 Debian, Ubuntu based systems
 ----------------------------
 To compile the latest development version on an `Ubuntu <http://www.ubuntu.com>`_ system,
 run the following sequence of commands::
 
-    sudo apt-get install build-essential python-dev python-numpy python-pip git
+    sudo apt-get install build-essential python3-dev python3-numpy python3-pip git
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
-    pip install --user -r requirements.txt
-    make install && make inplace
+    pip3 install --user -r requirements.txt
+    make install
 
-(the ``--user`` option means the packages will be installed to your home
-directory which does not require root privileges).
+The ``--user`` option means the packages will be installed to your home
+directory which does not require root privileges. Make sure that
+``~/.local/bin`` directory is in your PATH, or add it as follows::
+
+    echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
 
 Other Linux systems
 -------------------
@@ -79,25 +84,18 @@ Set environment variables so that software can be installed to the home director
     echo export PYTHONIOENCODING="utf-8" >>~/.bashrc
 
 After this, re-login or restart the shell to activate these settings.
-Install Python 2.7 from source, if not installed already.
+Install Python 3.4 from source, if not installed already.
 Python may require some libraries such as ``zlib`` and ``readline``;
-installation steps are similar to the ones below.
+installation steps are similar to the ones below::
 
-::
-
-    wget http://www.python.org/ftp/python/2.7.6/Python-2.7.6.tgz
-    tar -xzf Python-2.7.6.tgz
-    cd Python-2.7.6
+    wget http://www.python.org/ftp/python/3.5.1/Python-3.5.1.tgz
+    tar -xzf Python-*.tgz
+    cd Python-*
     ./configure --prefix=$HOME/.local --enable-shared
-    make && make install && cd ..
+    make install && cd ..
 
-Check by running ``python`` that version 2.7.6 was installed successfully and
+Check by running ``python3`` that version 3.5.1 was installed successfully and
 is the default.
-
-Install `pip <http://www.pip-installer.org>`_::
-
-    wget https://bootstrap.pypa.io/get-pip.py
-    python get-pip.py --user
 
 Install the latest development version of discodop::
 
@@ -105,31 +103,27 @@ Install the latest development version of discodop::
     unzip disco-dop-master.zip
     cd disco-dop-master
     pip install --user -r requirements.txt
-    make install && make inplace
+    make install
 
 Mac OS X
 --------
 - Install `Xcode <https://developer.apple.com/>`_ and `Homebrew <http://brew.sh>`_
 - Install dependencies using Homebrew::
 
-    brew install gcc python git
+    brew install gcc python3 git
     git clone --depth 1 git://github.com/andreasvc/disco-dop.git
     cd disco-dop
-    sudo pip install -r requirements.txt
-    env CC=gcc python setup.py install --user --prefix=
-    make inplace
+    sudo pip3 install -r requirements.txt
+    env CC=gcc sudo python setup.py install
+    sudo make
 
 Other systems
 -------------
 If you do not run Linux, it is possible to run the code inside a virtual machine.
 To do that, install `Virtualbox <https://www.virtualbox.org/wiki/Downloads>`_
-and `Vagrant <http://docs.vagrantup.com/v2/installation/>`_,
-and copy ``Vagrantfile`` from this repository to a new directory. Open a
-command prompt (terminal) in this directory, and run the command
-``vagrant up``. The virtual machine will boot and run a script to install the
-above prerequisites automatically. The command ``vagrant ssh`` can then be used
-to log in to the virtual machine (use ``vagrant halt`` to stop the virtual
-machine).
+and download the virtual machine imagine with disco-dop pre-installed:
+http://illc-lil0.science.uva.nl/VMs/discodop-vboximage.zip
+
 
 Documentation
 =============

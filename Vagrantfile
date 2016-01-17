@@ -5,7 +5,7 @@ $script = <<SCRIPT
 # install prerequisites
 which cython || (
 	apt-get update
-	apt-get install -y build-essential git python-dev python-pip python-numpy python-pandas
+	apt-get install -y build-essential git python3-dev python3-pip python3-numpy python3-pandas
 )
 
 # install disco-dop
@@ -13,9 +13,9 @@ which discodop || (
 	cd /home/vagrant
 	sudo -u vagrant git clone --depth 1 git://github.com/andreasvc/disco-dop.git
 	cd disco-dop
-	pip install -r requirements.txt
-	pip install -r web/requirements.txt
-	sudo -u vagrant python setup.py install --user
+	pip3 install -r requirements.txt
+	pip3 install -r web/requirements.txt
+	sudo -u vagrant python3 setup.py install --user
 )
 
 # install tgrep2
@@ -37,7 +37,9 @@ python -c 'import alpinocorpus' || (
 	fi
 	cd alpinocorpus-python
 	sudo -u vagrant sed -i 's/-mt//g' setup.py
-	sudo -u vagrant python setup.py config && sudo -u vagrant python setup.py build && python setup.py install
+	sudo -u vagrant python3 setup.py config && \
+		sudo -u vagrant python3 setup.py build && \
+		python3 setup.py install
 )
 SCRIPT
 
