@@ -12,18 +12,18 @@ clean:
 	cd docs && make clean
 
 discodop:
-	python3 setup.py build
+	python3 setup.py build --with-cython
 	cp build/lib.*/discodop/*.so discodop/
 
 py3install: discodop
-	python3 setup.py install --user
+	python3 setup.py install --user --with-cython
 
 py2:
-	python2 setup.py install --user
+	python2 setup.py install --user --with-cython
 	cp build/lib.*/discodop/*.so discodop/
 
 py2install: py2
-	python2 setup.py install --user
+	python2 setup.py install --user --with-cython
 
 docs:
 	mkdir -p ~/.local/man/man1
@@ -53,7 +53,7 @@ test: py3install
 	&& cd tests/ && sh run.sh
 
 test2: py2install
-	python2 setup.py install --user
+	python2 setup.py install --user --with-cython
 	cp build/lib.*/discodop/*.so discodop/
 	PYTHONIOENCODING=utf-8 PYTHONHASHSEED=42 python2 -bb -tt -3 tests.py
 

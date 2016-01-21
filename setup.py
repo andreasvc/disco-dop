@@ -1,33 +1,49 @@
 """Generic setup.py for Cython code."""
 import os
 import sys
-from distutils.core import setup
-from distutils.extension import Extension
+# from distutils.core import setup
+# from distutils.extension import Extension
 try:
-	from Cython.Build import cythonize
-	from Cython.Distutils import build_ext
-	havecython = True
-except ImportError as err:
-	print(err)
-	havecython = False
+	from setuptools import Extension, setup
+except ImportError:
+	from distutils.core import Extension, setup
+
 from discodop import __version__
 
-DEBUG = False
+USE_CYTHON = '--with-cython' in sys.argv or not os.path.exists(
+		'src/containers.c')
 
-requires = [
-		'cython (>=0.21)',
-		'numpy (>=1.6.1)',
-		'roaringbitmap',
-		'cyordereddict',
+if USE_CYTHON:
+	if '--with-cython' in sys.argv:
+		sys.argv.remove('--with-cython')
+	try:
+		from Cython.Build import cythonize
+		from Cython.Distutils import build_ext
+	except ImportError as err:
+		raise RuntimeError('could not import Cython.')
+	cmdclass = dict(build_ext=build_ext)
+else:
+	cmdclass = dict()
+
+DEBUG = '--debug' in sys.argv
+if DEBUG:
+	sys.argv.remove('--debug')
+
+REQUIRES = [
+		'cython',  # '>=0.21',
+		'numpy',  # '>=1.6.1',
+		'roaringbitmap',  # '>=0.3',
 		'pytest',
 		'sphinx',
 		]
 if sys.version_info[0] == 2:
-	requires.extend([
+	REQUIRES.extend([
 		'futures',
 		'faulthandler',
 		])
-metadata = dict(name='disco-dop',
+if sys.version_info[:2] < (3, 5):
+	REQUIRES.append('cyordereddict')
+METADATA = dict(name='disco-dop',
 		version=__version__,
 		description='Discontinuous Data-Oriented Parsing',
 		long_description=open('README.rst').read(),
@@ -46,7 +62,8 @@ metadata = dict(name='disco-dop',
 				'Programming Language :: Cython',
 				'Topic :: Text Processing :: Linguistic',
 		],
-		requires=requires,
+		requires=REQUIRES,
+		install_requires=REQUIRES,
 		packages=['discodop'],
 		scripts=['bin/discodop'],
 )
@@ -70,37 +87,41 @@ directives = {
 		}
 
 if __name__ == '__main__':
-	if havecython:
-		os.environ['GCC_COLORS'] = 'auto'
+	if sys.version_info[:2] < (2, 7) or (3, 0) <= sys.version_info[:2] < (3, 3):
+		raise RuntimeError('Python version 2.7 or >= 3.3 required.')
+	os.environ['GCC_COLORS'] = 'auto'
+	extra_compile_args = ['-O3', '-march=native', '-DNDEBUG',
+			'-Wno-strict-prototypes', '-Wno-unused-function']
+	extra_link_args = ['-DNDEBUG']
+	if USE_CYTHON:
 		if DEBUG:
 			directives.update(wraparound=True, boundscheck=True)
-			extensions = [Extension(
+			extra_compile_args = ['-g', '-O0',
+					'-Wno-strict-prototypes', '-Wno-unused-function']
+			extra_link_args = ['-g']
+		ext_modules = cythonize(
+				[Extension(
 					'*',
 					['discodop/*.pyx'],
-					extra_compile_args=['-g', '-O0'],
-					extra_link_args=['-g'],
-					)]
-		else:
-			extensions = [Extension(
-					'*',
-					['discodop/*.pyx'],
-					extra_compile_args=['-O3', '-march=native', '-DNDEBUG'],
-					extra_link_args=['-DNDEBUG'],
+					extra_compile_args=extra_compile_args,
+					extra_link_args=extra_link_args,
 					# include_dirs=[...],
 					# libraries=[...],
 					# library_dirs=[...],
-					)]
-		setup(
-				cmdclass=dict(build_ext=build_ext),
-				ext_modules=cythonize(
-						extensions,
-						annotate=True,
-						compiler_directives=directives,
-						language_level=3,
-						# nthreads=4,
-				),
-				# test_suite = 'tests'
-				**metadata)
+					)],
+				annotate=True,
+				compiler_directives=directives,
+				language_level=3,
+				# nthreads=4,
+				)
 	else:
-		setup(**metadata)
-		print('\nWarning: Cython not found.\n')
+		ext_modules = [Extension(
+				'*',
+				sources=['discodop/*.c'],
+				extra_compile_args=extra_compile_args,
+				extra_link_args=extra_link_args,
+				)]
+	setup(
+			cmdclass=cmdclass,
+			ext_modules=ext_modules,
+			**METADATA)
