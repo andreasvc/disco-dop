@@ -2,8 +2,10 @@
 from __future__ import print_function
 from os import unlink
 import re
+import sys
 import subprocess
 from math import exp, log as pylog
+from array import array
 from itertools import count
 import numpy as np
 from .tree import Tree
@@ -89,34 +91,56 @@ cdef class DenseCFGChart(CFGChart):
 			raise MemoryError('allocation error')
 		for n in range(entries):
 			self.probs[n] = INFINITY
-		# store parse forest in list instead of dict
+		# store parse forest in array instead of dict
+		# FIXME: use compactcellidx?
 		entries = cellidx(self.lensent - 1, self.lensent, self.lensent,
 				grammar.nonterminals) + grammar.nonterminals
-		self.parseforest = [None] * entries
-		self.itemsinorder = []
+		self.parseforest = <EdgesStruct *>calloc(entries, sizeof(EdgesStruct))
+		if self.parseforest is NULL:
+			raise MemoryError('allocation error')
+		self.itemsinorder = array(b'L' if sys.version_info[0] == 2 else 'L')
 
 	def __dealloc__(self):
+		cdef size_t n, entries = cellidx(
+				self.lensent - 1, self.lensent, self.lensent,
+				self.grammar.nonterminals) + self.grammar.nonterminals
+		cdef MoreEdges *cur
+		cdef MoreEdges *tmp
 		if self.probs is not NULL:
 			free(self.probs)
+		for n in range(entries):
+			cur = self.parseforest[n].head
+			while cur is not NULL:
+				tmp = cur
+				cur = cur.prev
+				free(tmp)
+		free(self.parseforest)
 
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule):
 		"""Add new edge to parse forest."""
-		cdef Edges edges
-		cdef Edge *edge
-		cdef size_t block, item = cellidx(
+		cdef size_t item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
-		if self.parseforest[item] is None:
-			edges = Edges()
-			self.parseforest[item] = [edges]
+		cdef Edge *edge
+		cdef EdgesStruct *edges = &(self.parseforest[item])
+		cdef MoreEdges *edgelist
+		if edges.head is NULL:
+			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+			if edgelist is NULL:
+				abort()
+			edgelist.prev = NULL
+			edges.head = edgelist
 			self.itemsinorder.append(item)
 		else:
-			block = len(<list>self.parseforest[item]) - 1
-			edges = self.parseforest[item][block]
+			edgelist = edges.head
 			if edges.len == EDGES_SIZE:
-				edges = Edges()
-				self.parseforest[item].append(edges)
-		edge = &(edges.data[edges.len])
+				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+				if edgelist is NULL:
+					abort()
+				edgelist.prev = edges.head
+				edges.head = edgelist
+				edges.len = 0
+		edge = &(edgelist.data[edges.len])
 		edge.rule = rule
 		edge.pos.mid = mid
 		edges.len += 1
@@ -158,15 +182,21 @@ cdef class DenseCFGChart(CFGChart):
 		return self._subtreeprob(<size_t>item)
 
 	def getitems(self):
-		return [n for n, a in enumerate(self.parseforest) if a is not None]
+		return self.itemsinorder
+		# return [n for n, a in enumerate(self.parseforest) if a is not None]
 
-	cdef list getedges(self, item):
+	cdef Edges getedges(self, item):
 		"""Get edges for item."""
-		return self.parseforest[item] if item is not None else []
+		if item is None:
+			return None
+		result = Edges()
+		result.len = self.parseforest[item].len
+		result.head = self.parseforest[item].head
+		return result
 
-	cdef bint hasitem(self, size_t item):
+	cpdef bint hasitem(self, size_t item):
 		"""Test if item is in chart."""
-		return self.parseforest[item] is not None
+		return self.parseforest[item].head is not NULL
 
 	def setprob(self, item, double prob):
 		"""Set probability for item (unconditionally)."""
@@ -185,7 +215,7 @@ cdef class DenseCFGChart(CFGChart):
 		"""Return true when the root item is in the chart.
 
 		i.e., test whether sentence has been parsed successfully."""
-		return self.parseforest[self.root()] is not None
+		return self.parseforest[self.root()].head is not NULL
 
 
 @cython.final
@@ -203,27 +233,45 @@ cdef class SparseCFGChart(CFGChart):
 		self.viterbi = viterbi
 		self.probs = {}
 		self.parseforest = {}
-		self.itemsinorder = []
+		self.itemsinorder = array(b'L' if sys.version_info[0] == 2 else 'L')
+
+	def __dealloc__(self):
+		cdef MoreEdges *cur
+		cdef MoreEdges *tmp
+		for item in self.parseforest:
+			cur = (<Edges>self.parseforest[item]).head
+			while cur is not NULL:
+				tmp = cur
+				cur = cur.prev
+				free(tmp)
 
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
 			Rule *rule):
 		"""Add new edge to parse forest."""
 		cdef Edges edges
+		cdef MoreEdges *edgelist
 		cdef Edge *edge
 		cdef size_t item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
-		cdef size_t block
 		if item in self.parseforest:
-			block = len(<list>self.parseforest[item]) - 1
-			edges = self.parseforest[item][block]
+			edges = self.parseforest[item]
+			edgelist = edges.head
 			if edges.len == EDGES_SIZE:
-				edges = Edges()
-				self.parseforest[item].append(edges)
+				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+				if edgelist is NULL:
+					abort()
+				edgelist.prev = edges.head
+				edges.head = edgelist
+				edges.len = 0
 		else:
 			edges = Edges()
-			self.parseforest[item] = [edges]
+			self.parseforest[item] = edges
+			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+			if edgelist is NULL:
+				abort()
+			edges.head = edgelist
 			self.itemsinorder.append(item)
-		edge = &(edges.data[edges.len])
+		edge = &(edgelist.data[edges.len])
 		edge.rule = rule
 		edge.pos.mid = mid
 		edges.len += 1
@@ -256,7 +304,7 @@ cdef class SparseCFGChart(CFGChart):
 	cdef double subtreeprob(self, item):
 		return self._subtreeprob(item)
 
-	cdef bint hasitem(self, size_t item):
+	cpdef bint hasitem(self, size_t item):
 		"""Test if item is in chart."""
 		return item in self.parseforest
 

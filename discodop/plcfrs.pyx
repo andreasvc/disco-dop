@@ -37,21 +37,29 @@ cdef class LCFRSChart(Chart):
 
 	cdef void addlexedge(self, item, short wordidx):
 		"""Add lexical edge."""
-		cdef Edges edges
 		cdef Edge *edge
-		cdef size_t block
+		cdef Edges edges
+		cdef MoreEdges *edgelist
 		# NB: lexical edges should always be unique, but just in case ...
 		if item in self.parseforest:
-			block = len(self.parseforest[item]) - 1
-			edges = self.parseforest[item][block]
+			edges = self.parseforest[item]
+			edgelist = edges.head
 			if edges.len == EDGES_SIZE:
-				edges = Edges()
-				self.parseforest[item].append(edges)
+				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+				if edgelist is NULL:
+					abort()
+				edgelist.prev = edges.head
+				edges.head = edgelist
+				edges.len = 0
 		else:
 			edges = Edges()
-			self.parseforest[item] = [edges]
+			self.parseforest[item] = edges
+			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+			if edgelist is NULL:
+				abort()
+			edges.head = edgelist
 			self.itemsinorder.append(item)
-		edge = &(edges.data[edges.len])
+		edge = &(edgelist.data[edges.len])
 		edge.rule = NULL
 		edge.pos.mid = wordidx + 1
 		edges.len += 1
@@ -90,6 +98,9 @@ cdef class LCFRSChart(Chart):
 	def getitems(self):
 		return self.parseforest
 
+	cpdef hasitem(self, ChartItem item):
+		return item in self.parseforest
+
 
 @cython.final
 cdef class SmallLCFRSChart(LCFRSChart):
@@ -103,20 +114,28 @@ cdef class SmallLCFRSChart(LCFRSChart):
 	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
 			Rule *rule):
 		"""Add new edge."""
-		cdef Edges edges
 		cdef Edge *edge
-		cdef size_t block
+		cdef Edges edges
+		cdef MoreEdges *edgelist
 		if item in self.parseforest:
-			block = len(self.parseforest[item]) - 1
-			edges = self.parseforest[item][block]
+			edges = self.parseforest[item]
+			edgelist = edges.head
 			if edges.len == EDGES_SIZE:
-				edges = Edges()
-				self.parseforest[item].append(edges)
+				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+				if edgelist is NULL:
+					abort()
+				edgelist.prev = edges.head
+				edges.head = edgelist
+				edges.len = 0
 		else:
 			edges = Edges()
-			self.parseforest[item] = [edges]
+			self.parseforest[item] = edges
+			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+			if edgelist is NULL:
+				abort()
+			edges.head = edgelist
 			self.itemsinorder.append(item)
-		edge = &(edges.data[edges.len])
+		edge = &(edgelist.data[edges.len])
 		edge.rule = rule
 		edge.pos.lvec = left.vec
 		edges.len += 1
@@ -161,20 +180,28 @@ cdef class FatLCFRSChart(LCFRSChart):
 
 	cdef void addedge(self, FatChartItem item, FatChartItem left, Rule *rule):
 		"""Add new edge and update viterbi probability."""
-		cdef Edges edges
 		cdef Edge *edge
-		cdef size_t block
+		cdef Edges edges
+		cdef MoreEdges *edgelist
 		if item in self.parseforest:
-			block = len(self.parseforest[item]) - 1
-			edges = self.parseforest[item][block]
+			edges = self.parseforest[item]
+			edgelist = edges.head
 			if edges.len == EDGES_SIZE:
-				edges = Edges()
-				self.parseforest[item].append(edges)
+				edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+				if edgelist is NULL:
+					abort()
+				edgelist.prev = edges.head
+				edges.head = edgelist
+				edges.len = 0
 		else:
 			edges = Edges()
-			self.parseforest[item] = [edges]
+			self.parseforest[item] = edges
+			edgelist = <MoreEdges *>calloc(1, sizeof(MoreEdges))
+			if edgelist is NULL:
+				abort()
+			edges.head = edgelist
 			self.itemsinorder.append(item)
-		edge = &(edges.data[edges.len])
+		edge = &(edgelist.data[edges.len])
 		edge.rule = rule
 		# NB: store pointer; breaks when `left` is garbage collected!
 		edge.pos.lvec_fat = left.vec

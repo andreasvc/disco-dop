@@ -23,10 +23,10 @@ from .grammar import lcfrsproductions
 from .treetransforms import addbitsets, unbinarize, canonicalize, \
 		collapseunary, mergediscnodes, binarize
 from .bit import pyintnextset, pyintbitcount
-from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from libc.stdint cimport uint8_t, uint32_t, uint64_t, intptr_t
 from .bit cimport abitcount
 from .plcfrs cimport DoubleEntry, new_DoubleEntry
-from .containers cimport Grammar, Rule, LexicalRule, Chart, Edges, \
+from .containers cimport Grammar, Rule, LexicalRule, Chart, Edges, MoreEdges, \
 		SmallChartItem, FatChartItem, Edge, RankedEdge, \
 		new_RankedEdge, logprobadd, logprobsum, yieldranges
 cimport cython
@@ -37,6 +37,8 @@ cdef extern from "macros.h":
 	void SETBIT(uint64_t a[], int b)
 	void CLEARBIT(uint64_t a[], int b)
 	int BITNSLOTS(int nb)
+
+include "constants.pxi"
 
 REMOVEIDS = re.compile('@[-0-9]+')
 REMOVEWORDTAGS = re.compile('@[^ )]+')
@@ -812,31 +814,38 @@ cpdef viterbiderivation(Chart chart):
 def getsamples(Chart chart, k, debin=None):
 	"""Samples *k* derivations from a chart."""
 	cdef dict tables = {}
-	cdef Edges edges
 	cdef Edge *edge
+	cdef Edges edges
+	cdef MoreEdges *edgelist
 	cdef double prob, prev
-	cdef size_t n, m
+	cdef size_t n
 	chartidx = {}
 	for item in chart.getitems():
 		chartidx[item] = []
-		for n, edges in enumerate(chart.parseforest[item]):
-			for m in range(edges.len):
-				edge = &(edges.data[m])
+		edges = chart.getedges(item)
+		edgelist = edges.head if edges is not None else NULL
+		while edgelist is not NULL:
+			for n in range(edges.len if edgelist is edges.head
+					else EDGES_SIZE):
+				edge = &(edgelist.data[n])
+				# HACK: store pointer to edge as Python int
 				if edge.rule is NULL:
-					chartidx[item].append((chart.subtreeprob(item), n, m))
+					chartidx[item].append(
+							(chart.subtreeprob(item), <intptr_t>edge))
 				else:
 					prob = edge.rule.prob
 					# FIXME: work w/inside prob?
 					# prob += chart.subtreeprob(chart._left(item, edge))
 					# if edge.rule.rhs2:
 					# 	prob += chart.subtreeprob(chart._right(item, edge))
-					chartidx[item].append((prob, n, m))
+					chartidx[item].append((prob, <intptr_t>edge))
+			edgelist = edgelist.prev
 		# sort edges so that highest prob (=lowest neglogprob) comes first
 		chartidx[item].sort()
 	for item in chartidx:
 		tables[item] = []
 		prev = 0.0
-		for prob, _, _ in chartidx[item]:
+		for prob, _ in chartidx[item]:
 			prev += exp(-prob)
 			tables[item].append(prev)
 	result = []
@@ -855,8 +864,8 @@ cdef samplechart(item, Chart chart,
 	cdef list lst = tables[item]
 	rnd = random() * lst[len(lst) - 1]
 	idx = bisect_right(lst, rnd)
-	_, n, m = chartidx[item][idx]
-	edge = &((<Edges>chart.parseforest[item][n]).data[m])
+	_, ptr = chartidx[item][idx]
+	edge = <Edge *><intptr_t>ptr  # hack: convert Python int into pointer
 	label = chart.label(item)
 	if edge.rule is NULL:  # terminal
 		idx = chart.lexidx(edge)

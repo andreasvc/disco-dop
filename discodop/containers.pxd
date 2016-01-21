@@ -71,7 +71,7 @@ cdef class Grammar:
 # [ ] is it useful to have a recognition phase before making parse forest?
 cdef class Chart:
 	cdef readonly dict rankededges  # [item][n] => DoubleEntry(RankedEdge, prob)
-	cdef list itemsinorder
+	cdef object itemsinorder  # array or list
 	cdef dict inside, outside
 	cdef Grammar grammar
 	cdef readonly list sent
@@ -91,7 +91,7 @@ cdef class Chart:
 	cdef uint32_t label(self, item)
 	cdef ChartItem asChartItem(self, item)
 	cdef size_t asCFGspan(self, item, size_t nonterminals)
-	cdef list getedges(self, item)
+	cdef Edges getedges(self, item)
 
 
 cdef struct Rule:  # total: 32 bytes.
@@ -156,9 +156,20 @@ cdef class RankedEdge:
 
 @cython.final
 cdef class Edges:
-	cdef short len
-	cdef Edge data[EDGES_SIZE]
+	cdef short len  # the number of edges in the head of the linked list
+	cdef MoreEdges *head  # head of linked list
 
+
+cdef struct EdgesStruct:
+	short len  # the number of edges in the head of the linked list
+	MoreEdges *head  # head of linked list
+
+
+cdef struct MoreEdges:  # An unrolled linked list
+	MoreEdges *prev
+	Edge data[EDGES_SIZE]
+	# this array is always full, unless this is the head of
+	# the linked list
 
 # start scratch
 #
@@ -170,10 +181,13 @@ cdef class Edges:
 #
 #
 # cdef class ParseForest:
-# 	""" the chart representation of bitpar.
+# 	"""Chart representation used by bitpar.
 #
-# 	seems to require parsing in 3 stages: recognizer, enumerate analyses,
-# 	get probs. """
+# 	Seems to require parsing in 3 stages:
+#   1. recognizer: determine which triples <lhs, start, end> are possible
+#   2. enumerate analyses: determine edges for each <lhs, start, end>
+# 	3. get probabilities: Viterbi/inside probability for each <lhs, start, end>
+#   """
 # 	# keys
 # 	cdef uint32_t *catnum			# no. of chart item -> lhs
 # 	cdef size_t *firstanalysis	# no. of chart item -> idx to arrays below.

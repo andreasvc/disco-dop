@@ -9,8 +9,8 @@ from .containers import ChartItem, RankedEdge, Grammar
 cimport cython
 from libc.stdint cimport uint32_t
 from .containers cimport ChartItem, SmallChartItem, FatChartItem, \
-		Grammar, Rule, Chart, Edges, Edge, RankedEdge, new_RankedEdge, \
-		CFGtoSmallChartItem, CFGtoFatChartItem
+		Grammar, Rule, Chart, Edge, Edges, MoreEdges, RankedEdge, \
+		new_RankedEdge, CFGtoSmallChartItem, CFGtoFatChartItem
 from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
 from .plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \
 		LCFRSChart, SmallLCFRSChart, FatLCFRSChart, new_DoubleEntry
@@ -25,17 +25,21 @@ cdef DoubleAgenda getcandidates(Chart chart, v, int k):
 	# three probability y), in which case insertion order should count.
 	# Otherwise (1, 1) ends up in chart.rankededges[v] after which (0, 1)
 	# generates it as a neighbor and puts it in cand[v] for a second time.
-	cdef Edges edges
 	cdef Edge *e
+	cdef Edges edges
+	cdef MoreEdges *edgelist
 	cdef double prob
 	cdef DoubleAgenda agenda = DoubleAgenda()
+	cdef size_t n
 	entries = []
 	# loop over blocks of edges
 	# compute viterbi prob from rule.prob + viterbi probs of children
-	for pyedges in chart.getedges(v):
-		edges = <Edges>pyedges
-		for n in range(edges.len):
-			e = &(edges.data[n])
+	edges = chart.getedges(v)
+	edgelist = edges.head if edges is not None else NULL
+	while edgelist is not NULL:
+		for n in range(edges.len if edgelist is edges.head
+				else EDGES_SIZE):
+			e = &(edgelist.data[n])
 			if e.rule is NULL:
 				# there can only be one lexical edge for this combination of
 				# POS tag and terminal, use viterbi probability directly
@@ -51,6 +55,7 @@ cdef DoubleAgenda getcandidates(Chart chart, v, int k):
 					right = -1
 			re = new_RankedEdge(v, e, left, right)
 			entries.append(new_DoubleEntry(re, prob, n))
+		edgelist = edgelist.prev
 	agenda.update_entries(nsmallest(k, entries))
 	return agenda
 

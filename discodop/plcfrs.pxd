@@ -1,12 +1,13 @@
 cimport cython
 from libc.string cimport memcmp
+from libc.stdlib cimport malloc, calloc, free, abort
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
 from cpython.set cimport PySet_Contains
 from cpython.float cimport PyFloat_AS_DOUBLE
 from .containers cimport Chart, Grammar, Rule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \
-		new_FatChartItem, Edge, Edges, Chart, CFGtoFatChartItem
+		new_FatChartItem, Edge, Edges, MoreEdges, Chart, CFGtoFatChartItem
 from .bit cimport nextset, nextunset, bitcount, bitlength, \
 	testbit, anextset, anextunset, abitcount, abitlength, setunion
 from libc.string cimport memset, memcpy
@@ -27,12 +28,13 @@ ctypedef fused LCFRSItem_fused:
 	FatChartItem
 
 cdef class LCFRSChart(Chart):
-	cdef readonly dict parseforest  # chartitem => [Edge(lvec, rule), ...]
+	cdef readonly dict parseforest  # chartitem => Edges(...)
 	cdef list probs
 	cdef void addlexedge(self, item, short wordidx)
 	cdef void updateprob(self, ChartItem item, double prob)
 	cdef void addprob(self, ChartItem item, double prob)
 	cdef double _subtreeprob(self, ChartItem item)
+	cpdef hasitem(self, ChartItem item)
 
 
 @cython.final

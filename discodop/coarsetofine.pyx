@@ -4,11 +4,13 @@ from __future__ import print_function
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
-from .containers cimport Grammar, Chart, ChartItem, Edges, Edge, \
+from .containers cimport Grammar, Chart, ChartItem, Edge, Edges, MoreEdges, \
 		Rule, LexicalRule, RankedEdge, cellidx, compactcellidx, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
 from .kbest import lazykbest
 import numpy as np
+
+include "constants.pxi"
 
 # alternative: take coarse chart, return fine chart w/whitelist.
 # cpdef Chart prunechart(coarsechart, Grammar fine, int k,
@@ -177,8 +179,9 @@ def posteriorthreshold(Chart chart, double threshold):
 def getinside(Chart chart):
 	"""Compute inside probabilities for a chart given its parse forest."""
 	cdef size_t n
-	cdef Edges edges
 	cdef Edge *edge
+	cdef Edges edges
+	cdef MoreEdges *edgelist
 	# this needs to be bottom up, so need order in which items were added
 	# currently separate list, chart.itemsinorder
 	# NB: sorting items by length is not enough,
@@ -196,9 +199,12 @@ def getinside(Chart chart):
 
 	# traverse items in bottom-up order
 	for item in chart.itemsinorder:
-		for edges in chart.getedges(item):
-			for n in range(edges.len):
-				edge = &(edges.data[n])
+		edges = chart.getedges(item)
+		edgelist = edges.head if edges is not None else NULL
+		while edgelist is not NULL:
+			for n in range(edges.len if edgelist is edges.head
+					else EDGES_SIZE):
+				edge = &(edgelist.data[n])
 				if edge.rule is NULL:
 					label = chart.label(item)
 					word = chart.sent[chart.lexidx(edge)]
@@ -216,13 +222,15 @@ def getinside(Chart chart):
 							* chart.inside[rightitem])
 				# chart.addprob(item, prob)
 				chart.inside[item] += prob
+			edgelist = edgelist.prev
 
 
 def getoutside(Chart chart):
 	"""Compute outside probabilities for a chart given its parse forest."""
 	cdef size_t n
-	cdef Edges edges
 	cdef Edge *edge
+	cdef Edges edges
+	cdef MoreEdges *edgelist
 	cdef double outsideprob
 	# cdef double sentprob = chart.inside[chart.root()]
 	# traverse items in top-down order
@@ -232,9 +240,12 @@ def getoutside(Chart chart):
 	for item in reversed(chart.itemsinorder):
 		# can we define outside[item] simply as sentprob - inside[item] ?
 		# chart.outside[item] = sentprob - chart.inside[item]
-		for edges in chart.getedges(item):
-			for n in range(edges.len):
-				edge = &(edges.data[n])
+		edges = chart.getedges(item)
+		edgelist = edges.head if edges is not None else NULL
+		while edgelist is not NULL:
+			for n in range(edges.len if edgelist is edges.head
+					else EDGES_SIZE):
+				edge = &(edgelist.data[n])
 				if edge.rule is NULL:
 					pass
 				elif edge.rule.rhs2 == 0:
@@ -251,6 +262,7 @@ def getoutside(Chart chart):
 					chart.outside[rightitem] += (edge.rule.prob
 							* chart.inside[leftitem]
 							* outsideprob)
+			edgelist = edgelist.prev
 
 
 def doctftest(coarse, fine, sent, tree, k, split, verbose=False):

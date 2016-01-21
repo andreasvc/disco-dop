@@ -172,7 +172,7 @@ cdef FatChartItem CFGtoFatChartItem(uint32_t label, Idx start, Idx end):
 
 @cython.final
 cdef class Edges:
-	"""A static array with a fixed number of Edge structs."""
+	"""Object with a linked list of Edges."""
 	def __cinit__(self):
 		self.len = 0
 
@@ -349,9 +349,49 @@ cdef class Chart:
 					self.itemstr(self._right(item, edge))
 						if edge.rule.rhs2 else ''))
 
+	def __bool__(self):
+		"""Return true when the root item is in the chart.
+
+		i.e., test whether sentence has been parsed successfully."""
+		return self.root() in self
+
+	def __contains__(self, item):
+		return self.hasitem(item)
+
+	cdef Edges getedges(self, item):
+		"""Get edges for item. NB: may return ``None``."""
+		return self.parseforest[item] if item in self.parseforest else None
+
+	def filter(self):
+		"""Drop entries not part of a derivation headed by root of chart."""
+		cdef MoreEdges *edgelist
+		cdef MoreEdges *tmp
+
+		items = set()
+		_filtersubtree(self, self.root(), items)
+		if hasattr(self, 'parseforest') and isinstance(self.parseforest, dict):
+			for item in set(self.getitems()) - items:
+				edgelist = (<Edges>(self.parseforest[item])).head
+				while edgelist is not NULL:
+					tmp = edgelist
+					edgelist = edgelist.prev
+					free(tmp)
+				del self.parseforest[item]
+		else:
+			# FIXME: maybe better as method in DenseCFGChart
+			for item in set(self.getitems()) - items:
+				edgelist = (<EdgesStruct *>self.parseforest)[item].head
+				while edgelist is not NULL:
+					tmp = edgelist
+					edgelist = edgelist.prev
+					free(tmp)
+				(<EdgesStruct *>self.parseforest)[item].len = 0
+				(<EdgesStruct *>self.parseforest)[item].head = NULL
+
 	def __str__(self):
 		"""Pretty-print chart and *k*-best derivations."""
 		cdef Edges edges
+		cdef MoreEdges *edgelist
 		cdef RankedEdge rankededge
 		result = []
 		for item in sorted(self.getitems()):
@@ -364,10 +404,14 @@ cdef class Chart:
 						if self.inside else ''),
 					((' out=%g' % self.outside[item]).ljust(14)
 						if self.outside else ''))))
-			for edges in self.parseforest[item]:
-				for n in range(edges.len):
+			edges = self.getedges(item)
+			edgelist = edges.head if edges is not None else NULL
+			while edgelist is not NULL:
+				for n in range(edges.len if edgelist is edges.head
+						else EDGES_SIZE):
 					result.append('\t=> %s'
-							% self.edgestr(item, &(edges.data[n])))
+							% self.edgestr(item, &(edgelist.data[n])))
+				edgelist = edgelist.prev
 			result.append('')
 		if self.rankededges:
 			result.append('ranked edges:')
@@ -382,56 +426,28 @@ cdef class Chart:
 				result.append('')
 		return '\n'.join(result)
 
-	def __bool__(self):
-		"""Return true when the root item is in the chart.
-
-		i.e., test whether sentence has been parsed successfully."""
-		return self.root() in self.parseforest
-
-	def __contains__(self, item):
-		return item in self.getitems()
-		# if isinstance(item, ChartItem):
-		# 	return item in self.parseforest
-		# return self.hasitem(item)
-
-	cdef list getedges(self, item):
-		"""Get edges for item."""
-		return self.parseforest[item] if item in self.parseforest else []
-
-	def filter(self):
-		"""Drop entries not part of a derivation headed by root of chart."""
-		items = set()
-		_filtersubtree(self, self.root(), items)
-		if isinstance(self.parseforest, dict):
-			for item in set(self.getitems()) - items:
-				del self.parseforest[item]
-		elif isinstance(self.parseforest, list):
-			for item in set(self.getitems()) - items:
-				self.parseforest[item] = None
-		else:
-			raise ValueError('parseforest: expected list or dict')
-
 	def stats(self):
 		"""Return a short string with counts of items, edges."""
-		if isinstance(self.parseforest, dict):
-			alledges = self.parseforest.values()
-		elif isinstance(self.parseforest, list):
-			alledges = filter(None, self.parseforest)
-		else:
-			raise ValueError('parseforest: expected list or dict')
+		items = self.getitems()
+		alledges = [self.getedges(item) for item in items]
 		return 'items %d, edges %d' % (
-				len(self.getitems()),
+				len(items),
 				sum(map(numedges, alledges)))
 		# more stats:
 		# labels: len({self.label(item) for item in self.getitems()}),
 		# spans: ...
 
 
-def numedges(list edgeslist):
-	cdef Edges edges
-	cdef size_t result = 0
-	for edges in edgeslist:
-		result += edges.len
+def numedges(Edges edges):
+	cdef MoreEdges *edgelist
+	cdef size_t result
+	if edges is None:
+		return 0
+	result = edges.len
+	edgelist = edges.head.prev
+	while edgelist is not NULL:
+		result += EDGES_SIZE
+		edgelist = edgelist.prev
 	return result
 
 
@@ -439,10 +455,14 @@ cdef void _filtersubtree(Chart chart, item, set items):
 	"""Recursively filter chart."""
 	cdef Edge *edge
 	cdef Edges edges
+	cdef MoreEdges *edgelist
 	items.add(item)
-	for edges in chart.getedges(item):
-		for n in range(edges.len):
-			edge = &(edges.data[n])
+	edges = chart.getedges(item)
+	edgelist = edges.head if edges is not None else NULL
+	while edgelist is not NULL:
+		for n in range(edges.len if edgelist is edges.head
+				else EDGES_SIZE):
+			edge = &(edgelist.data[n])
 			if edge.rule is NULL:
 				continue
 			leftitem = chart._left(item, edge)
@@ -453,6 +473,7 @@ cdef void _filtersubtree(Chart chart, item, set items):
 			rightitem = chart._right(item, edge)
 			if rightitem not in items:
 				_filtersubtree(chart, rightitem, items)
+		edgelist = edgelist.prev
 
 
 @cython.final
