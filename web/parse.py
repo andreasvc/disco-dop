@@ -21,13 +21,15 @@ from flask import request, render_template, send_from_directory
 from werkzeug.contrib.cache import SimpleCache
 from werkzeug.urls import url_encode
 from discodop import treebank
-from discodop.tree import Tree, DrawTree
+from discodop.tree import Tree, DrawTree, writediscbrackettree
 from discodop.parser import Parser, readparam, readgrammars, probstr
 
 LIMIT = 40  # maximum sentence length
 APP = Flask(__name__)
 CACHE = SimpleCache()
 PARSERS = {}
+SHOWFUNC = True  # show function tags in results
+SHOWMORPH = True  # show morphological features in results
 
 
 @APP.route('/')
@@ -85,7 +87,14 @@ def parse():
 			result = 'no parse!'
 			frags = nbest = ''
 		else:
-			treebank.handlefunctions('add', results[-1].parsetree, pos=True)
+			if SHOWMORPH:
+				for node in results[-1].parsetree.subtrees(
+						lambda n: n and not isinstance(n[0], Tree)):
+					treebank.handlemorphology(
+							'replace', None, node, node.source)
+					node.label = node.label.replace('[]', '')
+			if SHOWFUNC:
+				treebank.handlefunctions('add', results[-1].parsetree, pos=True)
 			tree = str(results[-1].parsetree)
 			prob = results[-1].prob
 			parsetrees = results[-1].parsetrees or []
@@ -103,7 +112,13 @@ def parse():
 					for frag in fragments if frag.count('(') > 1))
 			for tree, prob, x in parsetrees:
 				tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
-				treebank.handlefunctions('add', tree, pos=True)
+				if SHOWMORPH:
+					for node in tree.subtrees(
+							lambda n: n and not isinstance(n[0], Tree)):
+						treebank.handlemorphology(
+								'replace', None, node, node.source)
+				if SHOWFUNC:
+					treebank.handlefunctions('add', tree, pos=True)
 				parsetrees_.append((tree, prob, x))
 			nbest = Markup('\n\n'.join('%d. [%s]\n%s' % (n + 1, probstr(prob),
 						DrawTree(tree, senttok).text(
@@ -116,7 +131,8 @@ def parse():
 		info = '\n'.join(('length: %d; lang=%s; est=%s; objfun=%s; marg=%s' % (
 				len(senttok), lang, est, objfun, marg), msg, elapsed,
 				'10 most probable parse trees:',
-				'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob), tree)
+				'\n'.join('%d. [%s] %s' % (n + 1, probstr(prob),
+						writediscbrackettree(tree, senttok))
 						for n, (tree, prob, _) in enumerate(parsetrees))
 				+ '\n'))
 		CACHE.set(key, (sent, result, frags, nbest, info, link), timeout=5000)
