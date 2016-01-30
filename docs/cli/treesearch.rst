@@ -50,8 +50,8 @@ Options:
 Tree fragments
 ^^^^^^^^^^^^^^
 Search for literal matches of tree fragments, i.e., one or more connected grammar productions.
-The treebanks being searched will be binarized if they are not already binarized;
-treebanks may be discontinuous.
+Supports (binarized, optionally discontinuous) treebanks with the extensions
+``.mrg`` (bracket format), ``.dbr`` (discbracket format), and ``.export`` (export format).
 
 regular bracket trees::
 
@@ -63,12 +63,29 @@ discontinuous trees::
 (S (VP (VB 0=is) (JJ 2=)) (NP 1=) (? 3=?))
 (VP (VB 0=is) (JJ 2=rich))
 
-More information: :ref:`file format documentation <bracket-format>`
+More information on the format of fragments: :ref:`file format documentation <bracket-format>`
+
+This query engine only works on binarized trees, and each node only has a single label
+that is matched on an all-or-nothing basis.
+Treebanks will be automatically binarized if they are not already binarized;
+treebanks may be discontinuous. It is useful to perform the binarization in
+advance, so that specific options and tree transformations can be applied;
+e.g., to handle punctuation, and include functional or morphological tags.
+
+A cached copy of the treebank is created in an indexed format; given ``filename.mrg``,
+this indexed version is stored as ``filename.mrg.pkl.gz`` (in the same directory).
+Another file, ``treesearchvocab.pkl``, contains a global index of productions;
+this index should automatically be recreated when the list of files changes or
+any file is updated.
+For the treesearch web interface, these indexed files need to be created in advance.
+This can be done by running a dummy query on a set of files::
+
+    $ discodop treesearch -e frag prepare_corpus *.dbr
 
 Regular expressions
 ^^^^^^^^^^^^^^^^^^^
 In contrast with the other engines, regular expressions treat the input as
-plain text files, one sentence per line. The options --trees and --brackets are
+plain text files, one sentence per line. The options ``--trees`` and ``--brackets`` are
 not applicable. The syntax is Python's ``re`` syntax.
 
 Regular expressions can contain both special and ordinary characters.
@@ -115,10 +132,15 @@ resulting RE will match the second character::
 
 More information: https://docs.python.org/3/library/re.html#regular-expression-syntax
 
+This query engine creates a cached index of line numbers in all files
+``treesearchlineidx.pkl``; this index should automatically be recreated when
+the list of files changes or any file is updated.
+
 TGrep2 syntax overview
 ^^^^^^^^^^^^^^^^^^^^^^
 Only treebanks in bracket format ary supported, but trees can be n-ary.
 Note that the tgrep2 command needs to be installed.
+A version with small improvements is available from https://github.com/andreasvc/tgrep2
 
 TGrep2 operators::
 
@@ -157,10 +179,15 @@ TGrep2 operators::
 
 More information: http://tedlab.mit.edu/~dr/Tgrep2/
 
+TGrep2 uses its own indexed file format. These files are automatically created
+when using this query engine. Given a file ``example.mrg``, the file ``example.mrg.t2c.gz``
+is created (in the same directory).
+
 XPath syntax examples
 ^^^^^^^^^^^^^^^^^^^^^
 Search through treebanks in XML format with XPath; treebanks must be in
-``dact`` format. Note: XPath support depends on the ``alpinocorpus`` library.
+``dact`` format. Note: XPath support depends on the ``alpinocorpus`` library;
+see https://github.com/rug-compling/alpinocorpus-python
 
 Find a particular word::
 
@@ -184,6 +211,11 @@ tag (relation).
 
 General XPath overview: https://en.wikipedia.org/wiki/XPath
 Using XPath on Alpino treebanks: http://rug-compling.github.io/dact/cookbook/
+
+To create files in ``dact`` format, the alpinocorpus tools may be used.
+Alternatively, ``discodop treetransforms`` can be used::
+
+    $ discodop treetransforms --input=alpino --output=dact 'mycorpus/*.xml' mycorpus.dact
 
 Examples
 ^^^^^^^^

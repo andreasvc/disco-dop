@@ -228,7 +228,7 @@ or the links above.
 Web interfaces
 --------------
 There are three web based tools in the ``web/`` directory. These require
-Flask & pandas to be installed::
+some extra libraries such as Flask and pandas to be installed::
 
     pip install --user -r web/requirements.txt
 
@@ -241,11 +241,9 @@ Flask & pandas to be installed::
 
 ``treesearch.py``
     A web interface for searching through treebanks. Expects
-    one or more treebanks with the ``.mrg`` or ``.dact`` extension in the
-    directory ``web/corpus/`` (sample included). Depends on
-    `tgrep2 <http://tedlab.mit.edu/~dr/Tgrep2/>`_,
-    `alpinocorpus <https://github.com/rug-compling/alpinocorpus-python>`_, and
-    `readability <https://github.com/andreasvc/readability>`_.
+    one or more treebanks in the directory ``web/corpus/`` (sample included).
+    See `the treesearch manual <cli/treesearch>` for instructions on corpus
+    preperation.
 
 ``treedraw.py``
     A web interface for drawing discontinuous trees in various

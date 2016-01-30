@@ -983,10 +983,11 @@ def getcorpus():
 		except ValueError:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	ffiles = sorted(
-			glob.glob(os.path.join(CORPUS_DIR, '*.export'))
-			or glob.glob(os.path.join(CORPUS_DIR, '*.dbr'))
-			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
+	ffiles = [a.replace('.pkl.gz', '') for a in sorted(
+			glob.glob(os.path.join(CORPUS_DIR, '*.dbr.pkl.gz'))
+			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.pkl.gz'))
+			or glob.glob(os.path.join(CORPUS_DIR, '*.export.pkl.gz'))
+			)]
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
 	txtfiles = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
 	# get tokenized sents from trees or ucto
