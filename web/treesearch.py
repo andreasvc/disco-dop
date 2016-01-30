@@ -98,6 +98,7 @@ def main(debug=DEBUG):
 			havetgrep='tgrep2' in CORPORA,
 			havexpath='xpath' in CORPORA,
 			havefrag='frag' in CORPORA,
+			metadata=METADATA,
 			)
 	if output:
 		if output not in DISPATCH:
@@ -270,12 +271,20 @@ def counts(form, doexport=False):
 			elif form.get('slice'):
 				# show absolute counts when all texts have been limited to same
 				# number of sentences
+				if form['target']:
+					cnts = OrderedDict([(key, cnts[key]) for key in
+						METADATA[form['target']].sort_values().index])
 				yield barplot(cnts, max(cnts.values()),
-						'Absolute counts of \'%s\':' % name, unit='matches')
+						'Absolute counts of \'%s\':' % name, unit='matches',
+						dosort=False)
 			else:
+				if form['target']:
+					relfreq = OrderedDict([(key, relfreq[key]) for key in
+						METADATA[form['target']].sort_values().index])
 				yield barplot(relfreq, max(relfreq.values()),
 						'Relative frequency of \'%s\': '
-						'(count / num_%s * 100)' % (name, norm), unit='%')
+						'(count / num_%s * 100)' % (name, norm), unit='%',
+						sortby=lambda x: METADATA[form['target']][x])
 	if doexport:
 		if form.get('export') == 'json':
 			yield json.dumps(df.to_dict(), indent=2)
@@ -286,24 +295,26 @@ def counts(form, doexport=False):
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
 				len(queries) + 2)
 		# collate stats
-		keys = [key.split('_')[0] if '_' in key else key[0]
-				for key in df.index]
-		keyset = set(keys)
+		if form['target']:
+			keys = METADATA[form['target']]
+		else:
+			keys = pandas.Series([key.split('_')[0] if '_' in key else key[0]
+					for key in df.index], index=df.index)
+		keyset = keys.unique()
 		if len(keyset) <= 5:
-			overview = OrderedDict(('%s_%s' % (letter, query),
-					df[query].ix[[key for key in df.index
-						if letter == (key.split('_')[0] if '_' in key
-							else key[0])]].mean())
+			overview = OrderedDict(('%s_%s' % (cat, query),
+					df[query].ix[keys == cat].mean())
 					for query in df.columns
-						for letter in keyset)
+						for cat in keyset)
 			df['category'] = keys
 			yield '<pre>\n%s\n</pre>' % (
-				df.groupby('category').describe().to_string(
-				float_format=fmt))
+					df.groupby('category').describe().to_string(
+					float_format=fmt))
 		else:
 			overview = OrderedDict((query, df[query].mean())
 				for query in df.columns)
-			yield '<pre>\n%s\n</pre>' % df.describe().to_string(float_format=fmt)
+			yield '<pre>\n%s\n</pre>' % df.describe().to_string(
+					float_format=fmt)
 		yield barplot(overview, max(overview.values()),
 				'Relative frequencies of patterns: '
 				'(count / num_%s * 100)' % norm, unit='%', dosort=False)
@@ -525,8 +536,8 @@ def fragmentsinresults(form, doexport=False):
 		tmp.flush()
 		results, approxcounts = fragments.regular([tmp.name], 1, None, 'utf8')
 	if disc:
-		results = nlargest(FRAGLIMIT, zip(results, approxcounts), key=lambda ff:
-				sum(1 for a in ff[0][1] if a) ** 2 * ff[1] ** 0.5)
+		results = nlargest(FRAGLIMIT, zip(results, approxcounts),
+			key=lambda ff: sum(1 for a in ff[0][1] if a) ** 2 * ff[1] ** 0.5)
 	else:
 		results = nlargest(FRAGLIMIT, zip(results, approxcounts),
 				key=lambda ff: sum(1 for _
@@ -805,7 +816,8 @@ def favicon():
 			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
-def barplot(data, total, title, width=800.0, unit='', dosort=True):
+def barplot(data, total, title, width=800.0, unit='',
+		dosort=True, sortby=None):
 	"""A HTML bar plot given a dictionary and max value."""
 	result = ['<div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
@@ -814,7 +826,9 @@ def barplot(data, total, title, width=800.0, unit='', dosort=True):
 	color = {}
 	if len(keys) <= 5:
 		color.update(zip(keys, range(1, 6)))
-	keys = sorted(data, key=data.get, reverse=True) if dosort else data
+	keys = list(data)
+	if dosort:
+		keys.sort(key=sortby or data.get, reverse=True)
 	for key in keys:
 		result.append('<br><div style="width:%dpx;" class=b%d></div>'
 				'<span>%s: %g %s</span>' % (
@@ -1065,7 +1079,17 @@ def getcorpus():
 		styletable = getreadabilitymeasures(numsents)
 	pickle.dump((texts, numsents, numconst, numwords, styletable),
 			open(picklefile, 'wb'), protocol=-1)
-	return texts, numsents, numconst, numwords, styletable, corpora
+	if os.path.exists(os.path.join(CORPUS_DIR, 'metadata.csv')):
+		metadata = pandas.read_csv(
+				os.path.join(CORPUS_DIR, 'metadata.csv'), index_col=0)
+		assert set(metadata.index) == set(texts), (
+				'metadata.csv does not match list of files.\n'
+				'only in metadata: %s\nonly in files: %s' % (
+				set(metadata.index) - set(texts),
+				set(texts) - set(metadata.index)))
+	else:
+		metadata = None
+	return texts, numsents, numconst, numwords, styletable, corpora, metadata
 
 
 def stream_template(template_name, **context):
@@ -1122,7 +1146,8 @@ log.setLevel(logging.DEBUG)
 log.handlers[0].setFormatter(logging.Formatter(
 		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 log.info('loading corpus.')
-TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE, CORPORA = getcorpus()
+(TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE,
+		CORPORA, METADATA) = getcorpus()
 log.info('corpus loaded.')
 
 if __name__ == '__main__':

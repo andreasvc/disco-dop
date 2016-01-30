@@ -127,8 +127,8 @@ div.barplot span {
 	<br>
 	<label>Slice:
 		<input type=text name=slice value="{{ form['slice'] }}" size=10>
-		(optionally, enter slice of the form "n-m" to only search sentences n to m
-		of each text)
+		(optionally, enter slice <em>n-m</em> to restrict the range of
+		sentences searched of each text)
 	</label><br>
     </td><td></td></tr>
     <tr>
@@ -170,6 +170,14 @@ div.barplot span {
         custom query:
 			<span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
 				form['normquery'] }}"></span></label>
+	{% if metadata is not none %}
+	<br><label>Target: <select name=target>
+			<option value="">(none)</option>
+    		{% for cat in metadata.columns -%}
+				<option value={{ cat }}>{{ cat }}</option>
+			{% endfor -%}
+	 </select></label>
+	{% endif %}
     </td><td></td></tr>
     <tr id=labelrow>
     <td>Options</td><td>
