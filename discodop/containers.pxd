@@ -146,15 +146,6 @@ cdef struct Edge:  # 16 bytes
 
 
 @cython.final
-cdef class RankedEdge:
-	# NB: 'head' is unnecessary because the head will also be the dictionary
-	# key for a ranked edge, but having it as part of the object is convenient.
-	cdef Edge *edge  # rule / spans of children
-	cdef object head  # span / label of this node
-	cdef int left, right  # rank of left / right child
-
-
-@cython.final
 cdef class Edges:
 	cdef short len  # the number of edges in the head of the linked list
 	cdef MoreEdges *head  # head of linked list
@@ -170,6 +161,16 @@ cdef struct MoreEdges:  # An unrolled linked list
 	Edge data[EDGES_SIZE]
 	# this array is always full, unless this is the head of
 	# the linked list
+
+
+@cython.final
+cdef class RankedEdge:
+	# NB: 'head' is unnecessary because the head will also be the dictionary
+	# key for a ranked edge, but having it as part of the object is convenient.
+	cdef Edge *edge  # rule / spans of children
+	cdef object head  # span / label of this node
+	cdef int left, right  # rank of left / right child
+
 
 # start scratch
 #

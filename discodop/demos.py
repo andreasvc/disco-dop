@@ -9,6 +9,7 @@ from .containers import Grammar
 
 def tree_adjoining_grammar():
 	"""Example of a tree-adjoining grammar (TAG) encoded as an LCFRS.
+
 	Taken from: Chen & Vijay-Shanker (2000), Automated extraction of TAGs
 	from the Penn treebank.
 	Limitations:

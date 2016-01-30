@@ -390,7 +390,7 @@ cdef inline int partition(list entries, int left, int right, int pivot):
 	return storeindex
 
 
-# heap operations (adapted from heapq)
+# heap operations (adapted from Python heapq module)
 # dummy variables are only used to select the right fused type.
 cdef inline Entry_fused heappop(list heap, Entry_fused dummy):
 	cdef Py_ssize_t n = PyList_GET_SIZE(heap)

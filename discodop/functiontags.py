@@ -99,7 +99,6 @@ def functionfeatures(node, sent):
 
 	The features are based on Blaheta & Charniak (2000),
 	Assigning Function Tags to Parsed Text."""
-
 	headsib = headsibpos = None
 	for sib in node.parent:
 		if ishead(sib):

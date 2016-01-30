@@ -32,6 +32,7 @@ HEADER = '''
 
 class Evaluator(object):
 	"""Incremental evaluator for syntactic trees."""
+
 	def __init__(self, param, keylen=8):
 		"""Initialize evaluator object with given parameters.
 
@@ -338,6 +339,7 @@ class Evaluator(object):
 
 class TreePairResult(object):
 	"""Holds the evaluation result of a pair of trees."""
+
 	def __init__(self, n, gtree, gsent, ctree, csent, param):
 		"""Construct a pair of gold and candidate trees for evaluation."""
 		self.n = n
@@ -529,6 +531,7 @@ class TreePairResult(object):
 
 class EvalAccumulator(object):
 	"""Collect scores of evaluation."""
+
 	def __init__(self, disconly=False):
 		""":param disconly: if True, only collect discontinuous bracketings."""
 		self.disconly = disconly

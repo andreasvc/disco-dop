@@ -25,7 +25,7 @@ FRONTIERORTERM = re.compile(r"\(([^ ]+) (([0-9]+)=([^ ()]*)(?: [0-9]+=)*)\)")
 
 
 def lcfrsproductions(tree, sent, frontiers=False):
-	"""Read off LCFRS productions from a tree with indices and a sentence.
+	r"""Read off LCFRS productions from a tree with indices and a sentence.
 
 	Tree should contain integer indices as terminals, and a sentence with the
 	corresponding words for these indices. Always produces monotone LCFRS
@@ -35,7 +35,7 @@ def lcfrsproductions(tree, sent, frontiers=False):
 
 	>>> tree = Tree("(S (VP_2 (V 0) (ADJ 2)) (NP 1))")
 	>>> sent = "is Mary happy".split()
-	>>> print('\\n'.join(printrule(r, yf)  # doctest: +NORMALIZE_WHITESPACE
+	>>> print('\n'.join(printrule(r, yf)  # doctest: +NORMALIZE_WHITESPACE
 	...		for r, yf in lcfrsproductions(tree, sent)))
 	010	S VP_2 NP
 	0,1	VP_2 V ADJ
@@ -386,7 +386,7 @@ def sortgrammar(grammar, altweights=None):
 
 
 def flatten(frag, ids, backtransform, binarized):
-	"""Auxiliary function for Double-DOP.
+	r"""Auxiliary function for Double-DOP.
 
 	Remove internal nodes from a fragment and read off the (binarized)
 	productions of the resulting flattened fragment. Aside from returning
@@ -402,7 +402,7 @@ def flatten(frag, ids, backtransform, binarized):
 	>>> ids = UniqueIDs()
 	>>> frag = "(ROOT (S_2 0= 2=) (ROOT|<$,>_2 ($, 1=,) ($. 3=.)))"
 	>>> prods, template = flatten(frag, ids, {}, True)
-	>>> print('\\n'.join(printrule(r, yf) for r, yf in prods))
+	>>> print('\n'.join(printrule(r, yf) for r, yf in prods))
 	... # doctest: +NORMALIZE_WHITESPACE
 	01	ROOT ROOT}<0> $.@.
 	010	ROOT}<0> S_2 $,@,
@@ -411,7 +411,7 @@ def flatten(frag, ids, backtransform, binarized):
 	>>> print(template)
 	(ROOT {0} (ROOT|<$,>_2 {1} {2}))
 	>>> prods, template = flatten(frag, ids, {}, False)
-	>>> print('\\n'.join(printrule(r, yf) for r, yf in prods))
+	>>> print('\n'.join(printrule(r, yf) for r, yf in prods))
 	... # doctest: +NORMALIZE_WHITESPACE
 	0102	ROOT S_2 $,@, $.@.
 	,	$,@, Epsilon
@@ -529,6 +529,7 @@ class TreeDecorator(object):
 		subtrees (including all terminals).
 	:param n: the initial sentence number.
 	"""
+
 	def __init__(self, memoize=False, n=1):
 		self.n = n  # sentence number
 		self.ids = 0  # node number
@@ -594,6 +595,7 @@ class UniqueIDs(object):
 	0
 	>>> print(ids['foo'], ids['bar'], ids['foo'])
 	1 2 1"""
+
 	def __init__(self):
 		self.cnt = 0  # next available ID
 		self.ids = {}  # IDs for labels seen

@@ -70,6 +70,7 @@ CorpusInfo = namedtuple('CorpusInfo',
 
 class CorpusSearcher(object):
 	"""Abstract base class to wrap corpus files that can be queried."""
+
 	def __init__(self, files, macros=None, numproc=None):
 		"""
 		:param files: a sequence of filenames of corpora
@@ -222,6 +223,7 @@ class CorpusSearcher(object):
 
 class TgrepSearcher(CorpusSearcher):
 	"""Search a corpus with tgrep2."""
+
 	def __init__(self, files, macros=None, numproc=None):
 		def convert(filename):
 			"""Convert files not ending in .t2c.gz to tgrep2 format."""
@@ -450,6 +452,7 @@ class TgrepSearcher(CorpusSearcher):
 
 class DactSearcher(CorpusSearcher):
 	"""Search a dact corpus with xpath."""
+
 	def __init__(self, files, macros=None, numproc=None):
 		super(DactSearcher, self).__init__(files, macros, numproc)
 		if not ALPINOCORPUSLIB:
@@ -613,6 +616,7 @@ class FragmentSearcher(CorpusSearcher):
 	:param inmemory: if True, keep all corpora in memory; otherwise, use
 		pickle to load them from disk with each query.
 	"""
+
 	# NB: pickling arrays is efficient in Python 3
 	# TODO: allow single terminals as queries: word
 	#       alternatively, allow wildcard: (* word)
@@ -922,6 +926,7 @@ class RegexSearcher(CorpusSearcher):
 		an occurrence of ``'{name}'`` will be suitably replaced when it
 		appears in a query.
 	:param ignorecase: ignore case in all queries."""
+
 	def __init__(self, files, macros=None, numproc=None, ignorecase=False):
 		global REGEX_LINEINDEX, REGEX_MACROS
 		super(RegexSearcher, self).__init__(files, macros, numproc)
@@ -1230,6 +1235,7 @@ def _indexfile(filename):
 
 class NoFuture(object):
 	"""A non-asynchronous version of concurrent.futures.Future."""
+
 	def __init__(self, func, *args, **kwargs):
 		self._result = func(*args, **kwargs)
 
@@ -1240,6 +1246,7 @@ class NoFuture(object):
 
 class FIFOOrederedDict(collections.OrderedDict):
 	"""FIFO cache with maximum number of elements based on OrderedDict."""
+
 	def __init__(self, limit):
 		super(FIFOOrederedDict, self).__init__()
 		self.limit = limit

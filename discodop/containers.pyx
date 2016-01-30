@@ -29,7 +29,7 @@ cdef class LexicalRule:
 
 @cython.final
 cdef class SmallChartItem:
-	"""Item with word sized bitvector."""
+	"""Item with word-sized bitvector."""
 	def __init__(self, label, vec):
 		self.label = label
 		self.vec = vec
@@ -85,7 +85,6 @@ cdef class SmallChartItem:
 cdef class FatChartItem:
 	"""Item where bitvector is a fixed-width static array."""
 	def __hash__(self):
-		cdef long n, _hash
 		"""Juxtapose bits of label and vec.
 
 		64              32            0
@@ -94,6 +93,7 @@ cdef class FatChartItem:
 		|               vec[0] 2nd half
 		|........ rest of vec .........
 		------------------------------- XOR"""
+		cdef long n, _hash
 		_hash = (self.label ^ self.vec[0] << (8 * sizeof(self.vec[0]) / 2 - 1)
 				^ self.vec[0] >> (8 * sizeof(self.vec[0]) / 2 - 1))
 		# add remaining bits

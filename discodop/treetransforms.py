@@ -807,6 +807,7 @@ def fanout(tree):
 
 def complexity(tree):
 	"""The degree of the time complexity of parsing with this rule.
+
 	Cf. Gildea (2010)."""
 	return fanout(tree) + sum(map(fanout, tree))
 
@@ -917,6 +918,7 @@ class OrderedSet(Set):
 	"""A frozen, ordered set which maintains a regular list/tuple and set.
 
 	The set is indexable. Equality is defined _without_ regard for order."""
+
 	def __init__(self, iterable=None):
 		if iterable:
 			self.seq = tuple(iterable)

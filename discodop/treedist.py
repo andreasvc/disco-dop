@@ -42,6 +42,7 @@ from .tree import Tree
 
 class Terminal(object):
 	"""Auxiliary class to add indices to terminal nodes of Tree objects."""
+
 	def __init__(self, node):
 		self.prod = self.label = node
 
@@ -90,6 +91,7 @@ def prepare(tree, includeterms=False):
 # begin Zhang-Shasha Tree Edit Distance Implementation.
 class AnnotatedTree(object):
 	"""Wrap a tree to add some extra information."""
+
 	def __init__(self, root):
 		self.root = root
 		self.nodes = []  # a pre-order enumeration of the nodes in the tree

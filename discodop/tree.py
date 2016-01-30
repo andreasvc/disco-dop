@@ -77,6 +77,7 @@ class Tree(object):
 		NB: expects integers as leaves by default;
 		use ``Tree.parse(s, parse_leaf=None)`` to interpret leaves as strings.
 	"""
+
 	# NB: _parent is only used by ParentedTree subclass, but __slots__
 	# does not work with multiple inheritance.
 	# pylint believes unicode strings in slots attributes are illegal
@@ -977,6 +978,7 @@ class DrawTree(object):
 	Graph Algorithms and Applications, 10(2) 141--157 (2006)149.
 	http://jgaa.info/accepted/2006/EschbachGuentherBecker2006.10.2.pdf
 	"""
+
 	# each template is a tuple of strings ``(preamble, postamble)``.
 	templates = dict(
 			latex=(
@@ -1692,15 +1694,14 @@ def brackettree(treestr):
 
 
 def writebrackettree(tree, sent):
-	"""Return a tree in bracket notation with words as terminals."""
+	"""Return a tree in bracket notation with words as leaves."""
 	return INDEXRE.sub(
 			lambda x: ' %s' % escape(sent[int(x.group(1))]),
 			str(tree)) + '\n'
 
 
 def writediscbrackettree(tree, sent):
-	"""Return tree in bracket notation with terminals of the form 'index=word'.
-	"""
+	"""Return tree in bracket notation with leaves as ``index=word``."""
 	return INDEXRE.sub(
 			lambda x: ' %s=%s' % (x.group(1), escape(sent[int(x.group(1))])),
 			str(tree)) + '\n'

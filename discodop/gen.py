@@ -208,8 +208,7 @@ def splitgrammar(rules):
 
 
 def yfarray(yf):
-	"""Convert yield function represented as a 2D sequence to an array object.
-	"""
+	"""Convert yield function represented as 2D sequence to an array object."""
 	# I for 32 bits (int), H for 16 bits (short), B for 8 bits (char)
 	# obviously, all related static declarations should match these types
 	lentype = 'H'

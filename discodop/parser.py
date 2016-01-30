@@ -156,6 +156,7 @@ class Parser(object):
 	:param funcclassifier: optionally, a function tag classifier trained by
 		:py:func:`functiontags.trainfunctionclassifier`.
 	"""
+
 	def __init__(self, prm, funcclassifier=None):
 		self.prm = prm
 		self.stages = prm.stages

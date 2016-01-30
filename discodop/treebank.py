@@ -44,6 +44,7 @@ class Item(object):
 
 class CorpusReader(object):
 	"""Abstract corpus reader."""
+
 	def __init__(self, path, encoding='utf8', ensureroot=None, punct=None,
 			headrules=None, removeempty=False,
 			functions=None, morphology=None, lemmas=None):
@@ -202,6 +203,7 @@ class BracketCorpusReader(CorpusReader):
 	For example::
 
 		(S (NP John) (VP (VB is) (JJ rich)) (. .))"""
+
 	def blocks(self):
 		return OrderedDict(self._read_blocks())
 
@@ -243,6 +245,7 @@ class DiscBracketCorpusReader(BracketCorpusReader):
 	lacks morphology, lemmas and functional edges. On the other hand, it is
 	close to the internal representation employed here, so it can be read
 	efficiently."""
+
 	def _parse(self, block):
 		treestr, comment = block, None
 		if '\t' in block:
@@ -269,6 +272,7 @@ class DiscBracketCorpusReader(BracketCorpusReader):
 
 class NegraCorpusReader(CorpusReader):
 	"""Read a corpus in the Negra export format."""
+
 	def blocks(self):
 		if self._block_cache is None:
 			self._block_cache = OrderedDict(self._read_blocks())
@@ -313,6 +317,7 @@ class NegraCorpusReader(CorpusReader):
 
 class TigerXMLCorpusReader(CorpusReader):
 	"""Corpus reader for the Tiger XML format."""
+
 	def blocks(self):
 		"""
 		:returns: a list of strings containing the raw representation of
@@ -384,6 +389,7 @@ class AlpinoCorpusReader(CorpusReader):
 
 	Expects a corpus in directory format, where every sentence is in a single
 	``.xml`` file."""
+
 	def blocks(self):
 		"""
 		:returns: a list of strings containing the raw representation of
@@ -423,6 +429,7 @@ class AlpinoCorpusReader(CorpusReader):
 
 class DactCorpusReader(AlpinoCorpusReader):
 	"""Corpus reader for Alpino trees in Dact format (DB XML)."""
+
 	def _read_blocks(self):
 		import alpinocorpus
 		if self._encoding not in (None, 'utf8', 'utf-8'):
