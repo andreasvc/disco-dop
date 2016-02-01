@@ -35,22 +35,22 @@ div.barplot span {
 .b4 { background-color: khaki; }
 .b5 { background-color: lightpink; }
 :root { /* include the colored bars in plots when printing (to pdf) with Chrome */
-	-webkit-print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
 }
 </style>
 
 <body onLoad="triggerForm('output', '{{ output }}'); triggerForm('norm', '{{
-	form.get('norm', 'sents') }}'); triggerForm('engine', '{{ form.get('engine',
-	'xpath' if havexpath else 'tgrep2') }}'); " >
+    form.get('norm', 'sents') }}'); triggerForm('engine', '{{ form.get('engine',
+    'xpath' if havexpath else 'tgrep2') }}'); " >
 <div class="content">
 <h3>Treebank Search</h3>
 
 <blockquote class=intro><p>
     A web-interface to query a corpus of parse trees or tokenized sentences.
-	Results can be displayed in various ways or exported to a file.</p>
+    Results can be displayed in various ways or exported to a file.</p>
 
-	<p>
-	Query languages (click to toggle help):
+    <p>
+    Query languages (click to toggle help):
     {% if havetgrep %}
     <a href="javascript: toggle('tgrephelp'); ">TGrep2</a>,
     {% endif %}
@@ -59,9 +59,9 @@ div.barplot span {
     {% endif %}
     <a href="javascript: toggle('fraghelp'); ">fragment</a>,
     <a href="javascript: toggle('regexhelp'); ">regex</a>.
-	<br>
+    <br>
 
-	Available macros:
+    Available macros:
     {% if havetgrep %}
     <a href="static/tgrepmacros.txt">TGrep2</a>,
     {% endif %}
@@ -69,9 +69,9 @@ div.barplot span {
     <a href="static/xpathmacros.txt">XPath</a>,
     {% endif %}
     <a href="static/regexmacros.txt">regex</a>.
-	<br>
-	Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
-	| <a href="/style">Statistics &amp; readability measures</a> from
+    <br>
+    Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
+    | <a href="/style">Statistics &amp; readability measures</a> from
     <span class=tt><a href="http://manpages.ubuntu.com/manpages/precise/en/man1/style.1.html">style(1)</a></span>
 </p></blockquote>
 
@@ -100,23 +100,23 @@ div.barplot span {
     {% if havetgrep %}
     <label><input type=radio name=engine value=tgrep2{{
         ' checked' if form.get('engine', 'tgrep2') == 'tgrep2'
-		}} onChange="show('treesoutput', '');">TGrep2</label>
+        }} onChange="show('treesoutput', '');">TGrep2</label>
     {% endif %}
     {% if havexpath %}
     <label><input type=radio name=engine value=xpath{{
         ' checked' if form.get('engine', 'tgrep2' if havetgrep else 'xpath') == 'xpath'
-		}} onChange="show('treesoutput', '');">XPath</label>
+        }} onChange="show('treesoutput', '');">XPath</label>
     {% endif %}
     {% if havefrag %}
     <label><input type=radio name=engine value=frag{{
         ' checked' if form.get('engine', 'tgrep2') == 'frag'
-		}} onChange="show('treesoutput', '');">fragments</label>
+        }} onChange="show('treesoutput', '');">fragments</label>
     {% endif %}
     <label><input type=radio name=engine value=regex{{
         ' checked' if form.get('engine') == 'regex' or (not havetgrep and not havexpath and not havefrag)
-		}} onChange="hide('treesoutput', '');">regex</label>
+        }} onChange="hide('treesoutput', '');">regex</label>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
-	(Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
+    (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
     <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)<br>
     <input type=hidden name=texts value="">
     {% for text in texts -%}
@@ -124,34 +124,34 @@ div.barplot span {
         ' checked' if loop.index0 in selectedtexts }} onChange="numchecked(); ">{{ text }}</label><br>
     {% endfor -%}
     </div>
-	<br>
-	<label>Slice:
-		<input type=text name=slice value="{{ form['slice'] }}" size=10>
-		(optionally, enter slice <em>n-m</em> to restrict the range of
-		sentences searched of each text)
-	</label><br>
+    <br>
+    <label>Slice:
+        <input type=text name=slice value="{{ form['slice'] }}" size=10>
+        (optionally, enter slice <em>n-m</em> to restrict the range of
+        sentences searched of each text)
+    </label><br>
     </td><td></td></tr>
     <tr>
-	<td style="vertical-align:top;">Output:</td>
+    <td style="vertical-align:top;">Output:</td>
     <td>
-	<label><input type=radio name=output value=counts{{ ' checked' if output == 'counts'
-		}} onChange="show('normrow', 'norm'); hide('labelrow', 'nomorph'); " >
+    <label><input type=radio name=output value=counts{{ ' checked' if output == 'counts'
+        }} onChange="show('normrow', 'norm'); hide('labelrow', 'nomorph'); " >
         Counts;</label>
     <label><input type=radio name=output value=sents{{ ' checked' if output == 'sents'
-		}} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
+        }} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
         Sentences;</label>
-	<span id=treesoutput>
-	<label><input type=radio name=output value=trees{{ ' checked' if output == 'trees'
-		}} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
-		Trees;</label>
-	<br>
-	<label><input type=radio name=output value=brackets{{ ' checked' if output == 'brackets'
-		}}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
+    <span id=treesoutput>
+    <label><input type=radio name=output value=trees{{ ' checked' if output == 'trees'
+        }} onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
+        Trees;</label>
+    <br>
+    <label><input type=radio name=output value=brackets{{ ' checked' if output == 'brackets'
+        }}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
         Raw trees;</label>
     <label><input type=radio name=output value=fragments{{ ' checked' if output == 'fragments'
-		}}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
+        }}  onChange="hide('normrow', 'norm'); show('labelrow', 'nomorph'); ">
         Extract fragments from matches;</label>
-	</span>
+    </span>
     </td><td></td></tr>
     <tr id=normrow>
     <td style="vertical-align:top;">Normalization:</td>
@@ -168,26 +168,33 @@ div.barplot span {
     <label><input type=radio name=norm value=query{{
         ' checked' if form.get('norm') == 'query' }} onChange="show('nqid', 'normquery');">
         custom query:
-			<span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
-				form['normquery'] }}"></span></label>
-	{% if metadata is not none %}
-	<br><label>Target: <select name=target>
-			<option value="">(none)</option>
-    		{% for cat in metadata.columns -%}
-				<option value={{ cat }}>{{ cat }}</option>
-			{% endfor -%}
-	 </select></label>
-	{% endif %}
+            <span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
+                form['normquery'] }}"></span></label>
+    {% if metadata is not none %}
+    <br>
+    <label>Correlate with (continuous) or break down by (categorical): <select name=target>
+            <option value="">(none)</option>
+            {% for cat in metadata.columns -%}
+                <option value="{{ cat }}"{{ ' selected' if form.get('target') == cat }}>{{ cat }}</option>
+            {% endfor -%}
+     </select></label>
+    <label>Distinguish subsets by color (categorical): <select name=target2>
+            <option value="">(none)</option>
+            {% for cat in metadata.columns -%}
+                <option value="{{ cat }}"{{ ' selected' if form.get('target2') == cat }}>{{ cat }}</option>
+            {% endfor -%}
+     </select></label>
+    {% endif %}
     </td><td></td></tr>
     <tr id=labelrow>
     <td>Options</td><td>
-	<label><input type=checkbox name=nomorph{{ ' checked' if 'nomorph' in form }}>
+    <label><input type=checkbox name=nomorph{{ ' checked' if 'nomorph' in form }}>
         Hide morphology tags</label>
     <label><input type=checkbox name=nofunc{{ ' checked' if 'nofunc' in form }}>
         Hide function tags</label>
-	<label><input type=checkbox name=breakdown{{ ' checked' if 'breakdown' in form }}>
+    <label><input type=checkbox name=breakdown{{ ' checked' if 'breakdown' in form }}>
         Breakdown</label>
-	<br>
+    <br>
     </td><td></td></tr>
 </table></form>
 <div id=tgrephelp style="display: none; "><pre>{{ """TGrep2 operators:
@@ -256,8 +263,8 @@ regular bracket trees:
 (S (NP ) (VP (VB is) (JJ )) (. .))
 
 discontinuous trees:
-(S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is John rich ?
-(S (VP (VB 0) (JJ 2)) (NP 1) (? 3))	is   ?
+(S (VP (VB 0) (JJ 2)) (NP 1) (? 3)) is John rich ?
+(S (VP (VB 0) (JJ 2)) (NP 1) (? 3)) is   ?
 """|e }}</pre>
 See <a href="http://andreasvc.github.io/discodop/fileformats.html#bracket">
 http://andreasvc.github.io/discodop/fileformats.html#bracket</a>

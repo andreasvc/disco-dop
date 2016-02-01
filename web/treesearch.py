@@ -10,6 +10,7 @@ import csv
 import sys
 import json
 import glob
+import base64
 import logging
 import tempfile
 import subprocess
@@ -27,7 +28,14 @@ else:
 	import pickle
 	from urllib.parse import quote  # pylint: disable=F0401,E0611
 	from html import escape as htmlescape
+import matplotlib
+matplotlib.use('AGG')
+import matplotlib.pyplot as plt
+import numpy
 import pandas
+import seaborn
+import mpld3
+seaborn.set_style('ticks')
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
@@ -66,7 +74,7 @@ GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
 EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt|tok)$')
 
 COLORS = dict(enumerate('''\
-		Black Red Orange Blue Green Turquoise SlateGray Peru Teal Aqua
+		Black Red Green Orange Blue Turquoise SlateGray Peru Teal Aqua
 		Aquamarine BlanchedAlmond Brown Burlywood CadetBlue Chartreuse
 		Chocolate Coral Crimson Cyan Firebrick ForestGreen Fuchsia Gainsboro
 		Gold Goldenrod Gray GreenYellow HotPink IndianRed Indigo Khaki Lime
@@ -168,6 +176,8 @@ def counts(form, doexport=False):
 			for a in CORPORA[form['engine']].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
+	target = METADATA[form['target']] if form['target'] else None
+	target2 = METADATA[form['target2']] if form['target2'] else None
 	if not doexport:
 		url = 'counts?' + url_encode(dict(export='csv', **form),
 				separator=b';')
@@ -216,8 +226,12 @@ def counts(form, doexport=False):
 				resultsindices = CORPORA[form.get('engine', 'tgrep2')].counts(
 						query, selected, start, end, indices=True)
 		if not doexport:
-			yield '<a name=q%d><h3>%s</h3></a>\n<pre>\n%s\n' % (
-					n, name, query or legend)
+			yield ('<a name=q%d><h3>%s</h3></a>\n<tt>%s</tt> '
+					'[<a href="javascript: toggle(\'n%d\'); ">'
+					'toggle results per text</a>]\n'
+					'<div id=n%d style="display: none;"><pre>\n' % (n, name,
+					htmlescape(query) if query is not None else legend,
+					n, n))
 		COLWIDTH = min(40, max(map(len, TEXTS)) + 2)
 		for filename, cnt in sorted(results.items()):
 			if query is None:
@@ -249,42 +263,35 @@ def counts(form, doexport=False):
 								engine=form.get('engine', 'tgrep2')),
 							separator=b';'),
 						cnt, relfreq[text]))
-				plot = ''
+				barcode = ''
 				if resultsindices is not None:
-					plot = dispplot(resultsindices[filename],
+					barcode = dispplot(resultsindices[filename],
 							start or 1, end or NUMSENTS[textno])
 				if cnt:
-					yield out + plot + '\n'
+					yield out + barcode + '\n'
 				else:
 					yield '<span style="color: gray; ">%s%s</span>\n' % (
-							out, plot)
+							out, barcode)
 		if not doexport or query is not None:
 			df[name] = pandas.Series(relfreq)
 		if not doexport:
-			yield ('%s             %5d %5.2f %%\n</span>\n' % (
+			yield ('%s             %5d %5.2f %%\n\n' % (
 					'TOTAL'.ljust(COLWIDTH),
 					sum(cnts.values()),
 					100.0 * sum(cnts.values()) / sumtotal))
-			yield '</pre>'
+			yield '</pre></div>'
 			if max(cnts.values()) == 0:
 				continue
 			elif form.get('slice'):
 				# show absolute counts when all texts have been limited to same
 				# number of sentences
-				if form['target']:
-					cnts = OrderedDict([(key, cnts[key]) for key in
-						METADATA[form['target']].sort_values().index])
-				yield barplot(cnts, max(cnts.values()),
-						'Absolute counts of \'%s\':' % name, unit='matches',
-						dosort=False)
+				yield plot(cnts, max(cnts.values()),
+						'Absolute counts of \'%s\'' % name, unit='matches',
+						dosort=False, target=target, target2=target2)
 			else:
-				if form['target']:
-					relfreq = OrderedDict([(key, relfreq[key]) for key in
-						METADATA[form['target']].sort_values().index])
-				yield barplot(relfreq, max(relfreq.values()),
-						'Relative frequency of \'%s\': '
-						'(count / num_%s * 100)' % (name, norm), unit='%',
-						sortby=lambda x: METADATA[form['target']][x])
+				yield plot(relfreq, max(relfreq.values()),
+						'Relative frequency of \'%s\'; norm=%s' % (name, norm),
+						unit='%', dosort=False, target=target, target2=target2)
 	if doexport:
 		if form.get('export') == 'json':
 			yield json.dumps(df.to_dict(), indent=2)
@@ -312,12 +319,13 @@ def counts(form, doexport=False):
 					float_format=fmt))
 		else:
 			overview = OrderedDict((query, df[query].mean())
-				for query in df.columns)
+					for query in df.columns)
 			yield '<pre>\n%s\n</pre>' % df.describe().to_string(
 					float_format=fmt)
-		yield barplot(overview, max(overview.values()),
-				'Relative frequencies of patterns: '
-				'(count / num_%s * 100)' % norm, unit='%', dosort=False)
+		yield plot(overview, max(overview.values()),
+				'Relative frequencies of patterns'
+				'(count / num_%s * 100)' % norm, unit='%',
+				dosort=False, target=target, target2=target2)
 
 
 def trees(form):
@@ -606,9 +614,8 @@ def style():
 			data = {a: STYLETABLE[a].get(field, 0) for a in STYLETABLE}
 			total = max(data.values())
 			if total > 0:
-				yield barplot(data, total,
-						'<a name="%s">%s:</a>' % (field, field),
-						unit='%' if '%' in field else '')
+				yield '<a name="%s">%s:</a>' % (field,
+						plot(data, total, unit='%' if '%' in field else ''))
 
 	def generatecsv():
 		"""Generate CSV file."""
@@ -759,7 +766,7 @@ def browsesents():
 		else:
 			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
 		results = [('<font color=red>%s</font>' % htmlescape(a))
-				if n == highlight else htmlescape(a)
+				if n == highlight else a  # htmlescape(a)  # FIXME conflicts w/highlighting
 				for n, a in enumerate(results, start)]
 		legend = queryparams = ''
 		if request.args.get('query', ''):
@@ -816,19 +823,53 @@ def favicon():
 			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
 
 
-def barplot(data, total, title, width=800.0, unit='',
-		dosort=True, sortby=None):
+def plot(data, total, title, width=800.0, unit='', dosort=True,
+		target=None, target2=None):
 	"""A HTML bar plot given a dictionary and max value."""
+	if len(data) > 30 and target is not None:
+		df = pandas.DataFrame(index=data)
+		df[title] = pandas.Series(data, index=df.index)
+		df[target.name] = target.ix[df.index]
+		if target2 is not None:
+			df[target2.name] = target2.ix[df.index]
+		if target.dtype == numpy.number:
+			if target2 is None:
+				seaborn.jointplot(target.name, title, data=df, kind='reg')
+			else:
+				seaborn.lmplot(target.name, title, data=df, hue=target2.name)
+		else:  # X-axis is categorical
+			df.sort_values(by=target.name, inplace=True)
+			if target2 is None:
+				seaborn.barplot(target.name, title, data=df)
+			else:
+				seaborn.barplot(target.name, title, data=df, hue=target2.name)
+			fig = plt.gcf()
+			fig.autofmt_xdate()
+		# Convert to D3, SVG, javascript etc.
+		# result = mpld3.fig_to_html(plt.gcf(), template_type='general',
+		# 		use_http=True)
+
+		# Convert to PNG
+		figfile = io.BytesIO()
+		plt.savefig(figfile, format='png')
+		result = '<div><img src="data:image/png;base64, %s"/></div>' % (
+				base64.b64encode(figfile.getvalue()).decode('utf8'))
+		plt.clf()
+		return result
+
 	result = ['<div class=barplot>',
 			('<text style="font-family: sans-serif; font-size: 16px; ">'
 			'%s</text>' % title)]
+	if target is not None:
+		data = OrderedDict([(key, data[key]) for key in
+				target.sort_values().index if key in data])
 	keys = {key.split('_')[0] if '_' in key else key[0] for key in data}
 	color = {}
 	if len(keys) <= 5:
 		color.update(zip(keys, range(1, 6)))
 	keys = list(data)
 	if dosort:
-		keys.sort(key=sortby or data.get, reverse=True)
+		keys.sort(key=data.get, reverse=True)
 	for key in keys:
 		result.append('<br><div style="width:%dpx;" class=b%d></div>'
 				'<span>%s: %g %s</span>' % (
@@ -935,15 +976,15 @@ def tokenize(filename):
 		tgrep = subprocess.Popen(
 				args=[which('tgrep2'), '-t', '-c', base + '.mrg.t2c.gz', '*'],
 				shell=False, bufsize=-1, stdout=subprocess.PIPE)
-		converted = (a.replace('-LRB-', '(').replace('-RRB-', ')')
+		converted = (a.decode('utf8').replace('-LRB-', '(').replace('-RRB-', ')')
 				for a in tgrep.stdout)
 	elif os.path.exists(base + '.mrg'):
 		converted = (' '.join(GETLEAVES.findall(line)
 				).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
-				for line in open(base + '.mrg'))
+				for line in io.open(base + '.mrg', encoding='utf8'))
 	elif os.path.exists(base + '.dact'):
 		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
-				'sentence').text.encode('utf8') + '\n' for entry
+				'sentence').text + '\n' for entry
 				in alpinocorpus.CorpusReader(base + '.dact').entries()}
 		converted = [result[a] for a in sorted(result, key=treebank.numbase)]
 	elif ucto and filename.endswith('.txt'):
@@ -957,7 +998,7 @@ def tokenize(filename):
 		raise ValueError('no file found for "%s" and ucto not installed.'
 				% filename)
 	newfile = EXTRE.sub('.tok', filename)
-	with open(newfile, 'w') as out:
+	with io.open(newfile, 'w', encoding='utf8') as out:
 		out.writelines(converted)
 
 
@@ -1043,6 +1084,7 @@ def getcorpus():
 		if corpora.get('tgrep2'):
 			numsents = [len(open(filename).readlines())
 					for filename in tfiles]
+			# FIXME: may be different number than for other formats
 			numconst = [open(filename).read().count('(')
 					for filename in tfiles]
 			numwords = [len(GETLEAVES.findall(open(filename).read()))
