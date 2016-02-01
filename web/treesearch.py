@@ -950,7 +950,7 @@ def querydict(queries):
 	name is abbreviated query if not given."""
 	result = OrderedDict()
 	for line in (x for x in queries.splitlines() if x.strip()):
-		if ':' in line:
+		if ':' in line and line[:line.index(':')].isalnum():
 			name, query = line.split(':', 1)
 		else:
 			name = line[:100] + ('' if len(line) < 100 else '...')

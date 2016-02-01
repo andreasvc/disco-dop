@@ -1135,7 +1135,7 @@ def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 	# TODO: is it advantageous to keep mmap'ed files open?
 	with open(filename, 'r+b') as tmp:
 		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
-		if start >= len(lineindex):
+		if (start or 0) >= len(lineindex):
 			return result
 		startidx = lineindex.select(start - 1 if start else 0)
 		endidx = (lineindex.select(end) if end is not None

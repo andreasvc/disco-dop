@@ -177,7 +177,7 @@ div.barplot span {
             {% for cat in metadata.columns -%}
                 <option value="{{ cat }}"{{ ' selected' if form.get('target') == cat }}>{{ cat }}</option>
             {% endfor -%}
-     </select></label>
+	</select></label><br>
     <label>Distinguish subsets by color (categorical): <select name=target2>
             <option value="">(none)</option>
             {% for cat in metadata.columns -%}
