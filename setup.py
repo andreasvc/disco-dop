@@ -1,8 +1,6 @@
 """Generic setup.py for Cython code."""
 import os
 import sys
-# from distutils.core import setup
-# from distutils.extension import Extension
 try:
 	from setuptools import Extension, setup
 except ImportError:

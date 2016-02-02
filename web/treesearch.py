@@ -747,27 +747,26 @@ def browsesents():
 				NUMSENTS[textno] - chunk // 2)
 		start = max(1, sentno - chunk // 2)
 		maxsent = min(start + chunk, NUMSENTS[textno] + 1)
-		if 'tgrep2' in CORPORA:
+		engine = request.args.get('engine', None)
+		if engine is None:
+			try:
+				engine = [a for a in ['tgrep2', 'xpath', 'regex', 'frag']
+						if a in CORPORA][0]
+			except IndexError:
+				raise ValueError(
+						'no treebank available for "%s".' % TEXTS[textno])
+		if engine == 'tgrep2':
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.mrg')
-			results = CORPORA['tgrep2'].extract(
-					filename, range(start, maxsent), sents=True)
-		elif 'xpath' in CORPORA:
+		elif engine == 'xpath':
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dact')
-			results = CORPORA['xpath'].extract(
-					filename, range(start, maxsent), sents=True)
-		elif 'regex' in CORPORA:
+		elif engine == 'regex':
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.tok')
-			results = CORPORA['regex'].extract(
-					filename, range(start, maxsent), sents=True)
-		elif 'frag' in CORPORA:
+		elif engine == 'frag':
 			filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.dbr')
-			results = CORPORA['frag'].extract(
-					filename, range(start, maxsent), sents=True)
-		else:
-			raise ValueError('no treebank available for "%s".' % TEXTS[textno])
-		results = [('<font color=red>%s</font>' % htmlescape(a))
-				if n == highlight else a  # htmlescape(a)  # FIXME conflicts w/highlighting
-				for n, a in enumerate(results, start)]
+		results = CORPORA[engine].extract(
+				filename, range(start, maxsent), sents=True)
+		# FIXME conflicts w/highlighting
+		# results = [htmlescape(a) for a in results]
 		legend = queryparams = ''
 		if request.args.get('query', ''):
 			queryparams = ';' + url_encode(dict(
@@ -796,6 +795,8 @@ def browsesents():
 			for m, high in resultshighlight.items():
 				results[m] = applyhighlight(
 						results[m], set(), set(), colorvec=high)
+		results = ['<font color=red>%s</font>' % a
+				if n == highlight else a for n, a in enumerate(results, start)]
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = ('<a href="browsesents?text=%d;sent=%d%s" id=prev>'

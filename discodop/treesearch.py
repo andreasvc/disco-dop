@@ -1076,7 +1076,7 @@ class RegexSearcher(CorpusSearcher):
 					a = self.lineindex[filename].select(n - 1)
 				if 1 <= n < len(self.lineindex[filename]):
 					b = self.lineindex[filename].select(n)
-				result.append(data[a:b].decode('utf8'))
+				result.append(data[a:b - 1].decode('utf8'))
 			data.close()
 		return result
 
