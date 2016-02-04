@@ -188,6 +188,9 @@ class CorpusSearcher(object):
 		:param nofunc, nomorph: same as for ``trees()`` method.
 		:returns: a list of Tree objects or sentences."""
 
+	def getinfo(self, filename):
+		"""Return named tuple with members len, numnodes, and numwords."""
+
 	def _submit(self, func, *args, **kwargs):
 		"""Submit a job to the thread/process pool."""
 		if self.numproc == 1:
@@ -404,6 +407,17 @@ class TgrepSearcher(CorpusSearcher):
 				in (brackettree(filterlabels(
 					treestr, nofunc, nomorph)) for treestr in result)]
 
+	def getinfo(self, filename):
+		if filename.endswith('.t2c.gz'):
+			filename = filename[:-len('.t2c.gz')]
+		with openread(filename) as inp:
+			data = inp.read()
+		return CorpusInfo(
+				len=data.count('\n'),
+				numwords=len(GETLEAVES.findall(data)),
+				numnodes=data.count('('),
+				maxnodes=None)
+
 	@workerfunc
 	def _query(self, query, filename, fmt, start=None, end=None,
 			maxresults=None):
@@ -585,6 +599,19 @@ class DactSearcher(CorpusSearcher):
 						functions=None if nofunc else 'add',
 						morphology=None if nomorph else 'replace')
 					for treestr in results)]
+
+	def getinfo(self, filename):
+		# use a temporary instance because going over the whole
+		# file leaks memory.
+		tmp = alpinocorpus.CorpusReader(filename)
+		const = words = 0
+		for entry in tmp.entries():
+			const += entry.contents().count('<node ')
+			words += entry.contents().count('word=')
+		sents = tmp.size()
+		del tmp
+		return CorpusInfo(len=sents, numwords=words,
+				numnodes=const, maxnodes=None)
 
 	@workerfunc
 	def _query(self, query, filename, start=None, end=None,
@@ -843,7 +870,6 @@ class FragmentSearcher(CorpusSearcher):
 		return result
 
 	def getinfo(self, filename):
-		"""Return named tuple with members len, numnodes, and numwords."""
 		if self.files[filename] is not None:
 			corpus = self.files[filename]
 		else:
@@ -1079,6 +1105,14 @@ class RegexSearcher(CorpusSearcher):
 				result.append(data[a:b - 1].decode('utf8'))
 			data.close()
 		return result
+
+	def getinfo(self, filename):
+		n = len(self.lineindex[filename])
+		with openread(filename) as inp:
+			data = inp.read()
+		return CorpusInfo(
+				len=n, numwords=data.count(' ') + n,
+				numnodes=0, maxnodes=None)
 
 
 @workerfunc

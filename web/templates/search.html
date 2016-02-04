@@ -71,8 +71,7 @@ div.barplot span {
     <a href="static/regexmacros.txt">regex</a>.
     <br>
     Browse through <a href="/browse">trees</a>, <a href="/browsesents">sentences</a>
-    | <a href="/style">Statistics &amp; readability measures</a> from
-    <span class=tt><a href="http://manpages.ubuntu.com/manpages/precise/en/man1/style.1.html">style(1)</a></span>
+    | <a href="/style">Statistics &amp; readability measures</a>
 </p></blockquote>
 
 <form action="/" method=get name=queryform onSubmit="mergecheckboxes(); "><table>
@@ -95,7 +94,7 @@ div.barplot span {
             <a href="javascript: toggletextbox(); ">the textbox is too damn <span id=smallbig>{{ 'big' if 'textarea' in form else 'small' }}</span>!</a></td>
     </tr>
     <tr><td style="vertical-align: text-top; ">
-    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">show/hide selection</a>;
+    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">toggle selection</a>;
     Query engine:
     {% if havetgrep %}
     <label><input type=radio name=engine value=tgrep2{{
@@ -117,7 +116,19 @@ div.barplot span {
         }} onChange="hide('treesoutput', '');">regex</label>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
     (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
-    <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)<br>
+    <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)
+    {% if metadata is not none %}
+    <label>Select subset from metadata:
+        <select name=subset>
+            <option value="">(none)</option>
+            {% for cat in categoricalcolumns -%}
+				{% for val in metadata[cat].unique() -%}
+					<option value="{{ cat }}={{ val }}">{{ cat }}={{ val }}</option>
+				{% endfor -%}
+            {% endfor -%}
+    </select></label>
+    {% endif %}
+    <br>
     <input type=hidden name=texts value="">
     {% for text in texts -%}
     <label><input type=checkbox name=textcheck value={{ loop.index0 }}{{
@@ -177,13 +188,14 @@ div.barplot span {
             {% for cat in metadata.columns -%}
                 <option value="{{ cat }}"{{ ' selected' if form.get('target') == cat }}>{{ cat }}</option>
             {% endfor -%}
-	</select></label><br>
+    </select></label><br>
     <label>Distinguish subsets by color (categorical): <select name=target2>
             <option value="">(none)</option>
-            {% for cat in metadata.columns -%}
+            {% for cat in categoricalcolumns -%}
                 <option value="{{ cat }}"{{ ' selected' if form.get('target2') == cat }}>{{ cat }}</option>
             {% endfor -%}
-     </select></label>
+    </select></label>
+    <br><a href="metadata">view metadata</a>
     {% endif %}
     </td><td></td></tr>
     <tr id=labelrow>

@@ -107,6 +107,10 @@ def main(debug=DEBUG):
 			havexpath='xpath' in CORPORA,
 			havefrag='frag' in CORPORA,
 			metadata=METADATA,
+			categoricalcolumns=None if METADATA is None else
+					[col for col in METADATA.columns
+					if METADATA[col].dtype != numpy.number
+					and METADATA[col].nunique() <= 30]
 			)
 	if output:
 		if output not in DISPATCH:
@@ -143,8 +147,8 @@ def export(form, output):
 		else:
 			fmt = '%s:%s|%s\n'
 		results = CORPORA[form.get('engine', 'tgrep2')].sents(
-					form['query'], selected, maxresults=SENTLIMIT,
-					brackets=output in ('brackets', 'trees'))
+				form['query'], selected, maxresults=SENTLIMIT,
+				brackets=output in ('brackets', 'trees'))
 		if form.get('export') == 'json':
 			return Response(json.dumps(results, cls=JsonSetEncoder, indent=2),
 					mimetype='application/json')
@@ -172,8 +176,9 @@ def counts(form, doexport=False):
 	"""
 	# TODO: option to arrange graphs by text instead of by query
 	norm = form.get('norm', 'sents')
+	engine = form['engine']
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
-			for a in CORPORA[form['engine']].files}
+			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	target = METADATA[form['target']] if form['target'] else None
@@ -184,7 +189,7 @@ def counts(form, doexport=False):
 		yield ('Counts from queries '
 				'(<a href="%s">export to CSV</a>):\n' % url)
 	if norm == 'query':
-		normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
+		normresults = CORPORA[engine].counts(
 				form['normquery'], selected)
 	# Combined results of all queries on each file
 	combined = defaultdict(int)
@@ -214,24 +219,24 @@ def counts(form, doexport=False):
 			legend = ''
 			if normquery:
 				norm = 'query'
-				normresults = CORPORA[form.get('engine', 'tgrep2')].counts(
+				normresults = CORPORA[engine].counts(
 						normquery, selected, start, end)
 			else:
 				norm = form.get('norm', 'sents')
-			results = CORPORA[form.get('engine', 'tgrep2')].counts(
+			results = CORPORA[engine].counts(
 					query, selected, start, end, indices=False)
 			if len(results) <= 32 and all(
 					results[filename] < INDICESMAXRESULTS
 					for filename in results):
-				resultsindices = CORPORA[form.get('engine', 'tgrep2')].counts(
+				resultsindices = CORPORA[engine].counts(
 						query, selected, start, end, indices=True)
 		if not doexport:
 			yield ('<a name=q%d><h3>%s</h3></a>\n<tt>%s</tt> '
 					'[<a href="javascript: toggle(\'n%d\'); ">'
 					'toggle results per text</a>]\n'
-					'<div id=n%d style="display: none;"><pre>\n' % (n, name,
-					htmlescape(query) if query is not None else legend,
-					n, n))
+					'<div id=n%d style="display: none;"><pre>\n' % (
+						n, name, htmlescape(query) if query is not None
+						else legend, n, n))
 		COLWIDTH = min(40, max(map(len, TEXTS)) + 2)
 		for filename, cnt in sorted(results.items()):
 			if query is None:
@@ -242,11 +247,11 @@ def counts(form, doexport=False):
 			text = TEXTS[textno]
 			cnts[text] = cnt
 			if norm == 'consts':
-				total = NUMCONST[textno]
+				total = CORPUSINFO[engine][textno].numnodes
 			elif norm == 'words':
-				total = NUMWORDS[textno]
+				total = CORPUSINFO[engine][textno].numwords
 			elif norm == 'sents':
-				total = NUMSENTS[textno]
+				total = CORPUSINFO[engine][textno].len
 			elif norm == 'query':
 				total = normresults[filename] or 1
 			else:
@@ -260,13 +265,13 @@ def counts(form, doexport=False):
 						url_encode(
 							dict(text=textno, sent=1,
 								query=query or form['query'],
-								engine=form.get('engine', 'tgrep2')),
+								engine=engine),
 							separator=b';'),
 						cnt, relfreq[text]))
 				barcode = ''
 				if resultsindices is not None:
 					barcode = dispplot(resultsindices[filename],
-							start or 1, end or NUMSENTS[textno])
+							start or 1, end or CORPUSINFO[engine][textno].len)
 				if cnt:
 					yield out + barcode + '\n'
 				else:
@@ -287,11 +292,11 @@ def counts(form, doexport=False):
 				# number of sentences
 				yield plot(cnts, max(cnts.values()),
 						'Absolute counts of \'%s\'' % name, unit='matches',
-						dosort=False, target=target, target2=target2)
+						target=target, target2=target2)
 			else:
 				yield plot(relfreq, max(relfreq.values()),
 						'Relative frequency of \'%s\'; norm=%s' % (name, norm),
-						unit='%', dosort=False, target=target, target2=target2)
+						unit='%', target=target, target2=target2)
 	if doexport:
 		if form.get('export') == 'json':
 			yield json.dumps(df.to_dict(), indent=2)
@@ -309,14 +314,14 @@ def counts(form, doexport=False):
 					for key in df.index], index=df.index)
 		keyset = keys.unique()
 		if len(keyset) <= 5:
-			overview = OrderedDict(('%s_%s' % (cat, query),
-					df[query].ix[keys == cat].mean())
+			overview = OrderedDict(
+					('%s_%s' % (cat, query), df[query].ix[keys == cat].mean())
 					for query in df.columns
 						for cat in keyset)
 			df['category'] = keys
 			yield '<pre>\n%s\n</pre>' % (
 					df.groupby('category').describe().to_string(
-					float_format=fmt))
+						float_format=fmt))
 		else:
 			overview = OrderedDict((query, df[query].mean())
 					for query in df.columns)
@@ -332,7 +337,7 @@ def trees(form):
 	"""Return visualization of parse trees in search results."""
 	gotresults = False
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
-			for a in CORPORA[form['engine']].files}
+			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	# NB: we do not hide function or morphology tags when exporting
@@ -345,7 +350,7 @@ def trees(form):
 				else form['query'][:128] + '...',
 				TREELIMIT, url, url + ';linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
-			CORPORA[form.get('engine', 'tgrep2')].trees(form['query'],
+			CORPORA[engine].trees(form['query'],
 			selected, start, end, maxresults=TREELIMIT,
 			nomorph='nomorph' in form, nofunc='nofunc' in form),
 			key=itemgetter(0)), itemgetter(0))):
@@ -353,8 +358,8 @@ def trees(form):
 		text = TEXTS[textno]
 		if 'breakdown' in form:
 			breakdown = Counter(DiscTree(
-						max(high, key=lambda x: len(x.leaves())
-							if isinstance(x, Tree) else 1).freeze(), sent)
+					max(high, key=lambda x: len(x.leaves())
+						if isinstance(x, Tree) else 1).freeze(), sent)
 					for _, _, _, sent, high in results if high)
 			yield '\n%s\n' % text
 			for match, cnt in breakdown.most_common():
@@ -545,7 +550,7 @@ def fragmentsinresults(form, doexport=False):
 		results, approxcounts = fragments.regular([tmp.name], 1, None, 'utf8')
 	if disc:
 		results = nlargest(FRAGLIMIT, zip(results, approxcounts),
-			key=lambda ff: sum(1 for a in ff[0][1] if a) ** 2 * ff[1] ** 0.5)
+				key=lambda ff: sum(1 for a in ff[0][1] if a) ** 2 * ff[1] ** 0.5)
 	else:
 		results = nlargest(FRAGLIMIT, zip(results, approxcounts),
 				key=lambda ff: sum(1 for _
@@ -597,9 +602,10 @@ def style():
 					"Supply text files with original formatting\n"
 					"to get meaningful paragraph information.\n\n")
 		yield '<a href="style?export=csv">Export to CSV</a><br>'
-		shortest = min(NUMSENTS)
+		n, shortest = min(enumerate(next(iter(CORPUSINFO.values()))),
+				key=lambda x: x[1].len)
 		yield ('Results based on first %d sentences (=shortest text %s).'
-				% (shortest, TEXTS[NUMSENTS.index(shortest)]))
+				% (shortest, TEXTS[n]))
 
 		# produce a plot for each field
 		fields = ()
@@ -645,8 +651,8 @@ def style():
 	resp.headers['Cache-Control'] = 'max-age=604800, public'
 	# set Expires one day ahead (according to server time)
 	resp.headers['Expires'] = (
-		datetime.utcnow() + timedelta(7, 0)).strftime(
-		'%a, %d %b %Y %H:%M:%S UTC')
+			datetime.utcnow() + timedelta(7, 0)).strftime(
+					'%a, %d %b %Y %H:%M:%S UTC')
 	return resp
 
 
@@ -684,10 +690,11 @@ def browsetrees():
 	"""Browse through trees in a file."""
 	chunk = 20  # number of trees to fetch for one request
 	if 'text' in request.args and 'sent' in request.args:
+		engine = request.args.get('engine') or next(iter(CORPORA))
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent'])
 		start = max(1, sentno - sentno % chunk)
-		maxtree = min(start + chunk, NUMSENTS[textno] + 1)
+		maxtree = min(start + chunk, CORPUSINFO[engine][textno].len + 1)
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
 		if 'xpath' in CORPORA:
@@ -721,17 +728,18 @@ def browsetrees():
 			prevlink = '<a href="browse?text=%d;sent=%d" id=prev>prev</a>' % (
 					textno, sentno - chunk + 1)
 		nextlink = '<a id=next>next</a>'
-		if sentno < NUMSENTS[textno] - chunk:
+		if sentno < CORPUSINFO[engine][textno].len - chunk:
 			nextlink = '<a href="browse?text=%d;sent=%d" id=next>next</a>' % (
 					textno, sentno + chunk + 1)
 		return render_template('browse.html', textno=textno, sentno=sentno,
-				text=TEXTS[textno], totalsents=NUMSENTS[textno], trees=results,
-				prevlink=prevlink, nextlink=nextlink, chunk=chunk,
-				nofunc=nofunc, nomorph=nomorph,
+				text=TEXTS[textno], totalsents=CORPUSINFO[engine][textno].len,
+				trees=results, prevlink=prevlink, nextlink=nextlink,
+				chunk=chunk, nofunc=nofunc, nomorph=nomorph,
 				mintree=start, maxtree=maxtree)
 	return '<h1>Browse through trees</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browse?text=%d;sent=1;nomorph">%s</a> '
-			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
+			'(%d sentences; %d words)' % (
+			n, text, CORPUSINFO[engine][n].len, CORPUSINFO[engine][n].numwords)
 			for n, text in enumerate(TEXTS))
 
 
@@ -740,14 +748,14 @@ def browsesents():
 	"""Browse through sentences in a file; optionally highlight matches."""
 	chunk = 20  # number of sentences per page
 	if 'text' in request.args and 'sent' in request.args:
+		engine = request.args.get('engine') or next(iter(CORPORA))
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent'])
 		highlight = int(request.args.get('highlight', 0))
 		sentno = min(max(chunk // 2 + 1, sentno),
-				NUMSENTS[textno] - chunk // 2)
+				CORPUSINFO[engine][textno].len - chunk // 2)
 		start = max(1, sentno - chunk // 2)
-		maxsent = min(start + chunk, NUMSENTS[textno] + 1)
-		engine = request.args.get('engine', None)
+		maxsent = min(start + chunk, CORPUSINFO[engine][textno].len + 1)
 		if engine is None:
 			try:
 				engine = [a for a in ['tgrep2', 'xpath', 'regex', 'frag']
@@ -802,18 +810,20 @@ def browsesents():
 			prevlink = ('<a href="browsesents?text=%d;sent=%d%s" id=prev>'
 					'prev</a>' % (textno, sentno - chunk, queryparams))
 		nextlink = '<a id=next>next</a>'
-		if sentno < NUMSENTS[textno] - chunk:
+		if sentno < CORPUSINFO[engine][textno].len - chunk:
 			nextlink = ('<a href="browsesents?text=%d;sent=%d%s" id=next>'
 					'next</a>' % (textno, sentno + chunk, queryparams))
 		return render_template('browsesents.html', textno=textno,
-				sentno=sentno, text=TEXTS[textno], totalsents=NUMSENTS[textno],
+				sentno=sentno, text=TEXTS[textno],
+				totalsents=CORPUSINFO[engine][textno].len,
 				sents=results, prevlink=prevlink, nextlink=nextlink,
 				chunk=chunk, mintree=start, legend=legend,
 				query=request.args.get('query', ''),
 				engine=request.args.get('engine', ''))
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browsesents?text=%d;sent=1;nomorph">%s</a> '
-			'(%d sentences; %d words)' % (n, text, NUMSENTS[n], NUMWORDS[n])
+			'(%d sentences; %d words)' % (
+			n, text, CORPUSINFO[engine][n].len, CORPUSINFO[engine][n].numwords)
 			for n, text in enumerate(TEXTS))
 
 
@@ -822,6 +832,12 @@ def favicon():
 	"""Serve the favicon."""
 	return send_from_directory(os.path.join(APP.root_path, 'static'),
 			'treesearch.ico', mimetype='image/vnd.microsoft.icon')
+
+
+@APP.route('/metadata')
+def metadata():
+	"""Show metadata."""
+	return METADATA.to_html()
 
 
 def plot(data, total, title, width=800.0, unit='', dosort=True,
@@ -931,6 +947,9 @@ def selectedtexts(form):
 				selected.add(int(a))
 	else:
 		selected.update(range(len(TEXTS)))
+	if 'subset' in form and METADATA is not None:
+		key, val = form['subset'].split('=')
+		selected &= set((METADATA[key] == val).nonzero()[0])
 	return selected
 
 
@@ -1034,7 +1053,7 @@ def getcorpus():
 	picklefile = os.path.join(CORPUS_DIR, 'treesearchcorpus.pickle')
 	if os.path.exists(picklefile):
 		try:
-			texts, numsents, numconst, numwords, styletable = pickle.load(
+			texts, corpusinfo, styletable = pickle.load(
 					open(picklefile, 'rb'))
 		except ValueError:
 			pass
@@ -1045,7 +1064,7 @@ def getcorpus():
 			or glob.glob(os.path.join(CORPUS_DIR, '*.export.pkl.gz'))
 			)]
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
-	txtfiles = glob.glob(os.path.join(CORPUS_DIR, '*.txt'))
+	txtfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.txt')))
 	# get tokenized sents from trees or ucto
 	for filename in tfiles or afiles or txtfiles:
 		tokenize(filename)
@@ -1082,45 +1101,18 @@ def getcorpus():
 		for filename in tfiles + afiles + ffiles + tokfiles}
 	if (set(texts) != currentfiles or any(os.stat(a).st_mtime > picklemtime
 				for a in tfiles + afiles + ffiles + tokfiles)):
-		if corpora.get('tgrep2'):
-			numsents = [len(open(filename).readlines())
-					for filename in tfiles]
-			# FIXME: may be different number than for other formats
-			numconst = [open(filename).read().count('(')
-					for filename in tfiles]
-			numwords = [len(GETLEAVES.findall(open(filename).read()))
-					for filename in tfiles]
-		elif corpora.get('frag'):
-			numsents, numconst, numwords = [], [], []
-			for filename in ffiles:
-				info = corpora['frag'].getinfo(filename)
-				numsents.append(info.len)
-				numconst.append(info.numnodes)
-				numwords.append(info.numwords)
-		elif corpora.get('xpath'):
-			numsents = [corpus.size() for corpus
-					in corpora['xpath'].files.values()]
-			numconst, numwords = [], []
-			for filename in afiles:
-				tmp = alpinocorpus.CorpusReader(filename)
-				const = words = 0
-				for entry in tmp.entries():
-					const += entry.contents().count('<node ')
-					words += entry.contents().count('word=')
-				numconst.append(const)
-				numwords.append(words)
-				print(filename)
-		elif corpora.get('regex'):  # only tokenized sentences, no trees
-			numsents = [len(corpora['regex'].lineindex[a]) for a in tokfiles]
-			numwords = [open(filename).read().count(' ') + n
-					for filename, n in zip(tokfiles, numsents)]
-			numconst = [0 for _ in tokfiles]
-		else:
+		corpusinfo = {}
+		for engine in corpora:
+			corpusinfo[engine] = []
+			for filename in sorted(corpora[engine].files):
+				corpusinfo[engine].append(corpora[engine].getinfo(filename))
+		if not corpusinfo:
 			raise ValueError('no texts found.')
 		texts = [os.path.splitext(os.path.basename(a))[0]
 				for a in tfiles or afiles or ffiles or tokfiles]
-		styletable = getreadabilitymeasures(numsents)
-	pickle.dump((texts, numsents, numconst, numwords, styletable),
+		styletable = getreadabilitymeasures(
+				[a.len for a in next(iter(corpusinfo.values()))])
+	pickle.dump((texts, corpusinfo, styletable),
 			open(picklefile, 'wb'), protocol=-1)
 	if os.path.exists(os.path.join(CORPUS_DIR, 'metadata.csv')):
 		metadata = pandas.read_csv(
@@ -1130,9 +1122,10 @@ def getcorpus():
 				'only in metadata: %s\nonly in files: %s' % (
 				set(metadata.index) - set(texts),
 				set(texts) - set(metadata.index)))
+		metadata = metadata.ix[texts]
 	else:
 		metadata = None
-	return texts, numsents, numconst, numwords, styletable, corpora, metadata
+	return texts, corpusinfo, styletable, corpora, metadata
 
 
 def stream_template(template_name, **context):
@@ -1189,8 +1182,7 @@ log.setLevel(logging.DEBUG)
 log.handlers[0].setFormatter(logging.Formatter(
 		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 log.info('loading corpus.')
-(TEXTS, NUMSENTS, NUMCONST, NUMWORDS, STYLETABLE,
-		CORPORA, METADATA) = getcorpus()
+(TEXTS, CORPUSINFO, STYLETABLE, CORPORA, METADATA) = getcorpus()
 log.info('corpus loaded.')
 
 if __name__ == '__main__':
