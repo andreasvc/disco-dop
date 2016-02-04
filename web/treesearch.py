@@ -689,8 +689,8 @@ def draw():
 def browsetrees():
 	"""Browse through trees in a file."""
 	chunk = 20  # number of trees to fetch for one request
+	engine = request.args.get('engine') or next(iter(CORPORA))
 	if 'text' in request.args and 'sent' in request.args:
-		engine = request.args.get('engine') or next(iter(CORPORA))
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent'])
 		start = max(1, sentno - sentno % chunk)
@@ -747,8 +747,8 @@ def browsetrees():
 def browsesents():
 	"""Browse through sentences in a file; optionally highlight matches."""
 	chunk = 20  # number of sentences per page
+	engine = request.args.get('engine') or next(iter(CORPORA))
 	if 'text' in request.args and 'sent' in request.args:
-		engine = request.args.get('engine') or next(iter(CORPORA))
 		textno = int(request.args['text'])
 		sentno = int(request.args['sent'])
 		highlight = int(request.args.get('highlight', 0))
