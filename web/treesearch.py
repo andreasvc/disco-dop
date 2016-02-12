@@ -34,7 +34,6 @@ import matplotlib.pyplot as plt
 import numpy
 import pandas
 import seaborn
-import mpld3
 seaborn.set_style('ticks')
 # Flask & co
 from flask import Flask, Response
@@ -129,8 +128,9 @@ def main(debug=DEBUG):
 def export(form, output):
 	"""Export search results to a file for download."""
 	# NB: no distinction between trees from different texts
+	engine = form.get('engine', 'tgrep2')
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
-			for a in CORPORA[form['engine']].files}
+			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	if output == 'counts':
 		results = counts(form, doexport=True)
@@ -142,11 +142,11 @@ def export(form, output):
 		results = fragmentsinresults(form, doexport=True)
 		filename = 'fragments.txt'
 	elif output in ('sents', 'brackets', 'trees'):
-		if form.get('engine') == 'xpath' and output != 'sents':
+		if engine == 'xpath' and output != 'sents':
 			fmt = '<!-- %s:%s -->\n%s\n\n'  # hack
 		else:
 			fmt = '%s:%s|%s\n'
-		results = CORPORA[form.get('engine', 'tgrep2')].sents(
+		results = CORPORA[engine].sents(
 				form['query'], selected, maxresults=SENTLIMIT,
 				brackets=output in ('brackets', 'trees'))
 		if form.get('export') == 'json':
@@ -176,13 +176,13 @@ def counts(form, doexport=False):
 	"""
 	# TODO: option to arrange graphs by text instead of by query
 	norm = form.get('norm', 'sents')
-	engine = form['engine']
+	engine = form.get('engine', 'tgrep2')
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
-	target = METADATA[form['target']] if form['target'] else None
-	target2 = METADATA[form['target2']] if form['target2'] else None
+	target = METADATA[form['target']] if form.get('target') else None
+	target2 = METADATA[form['target2']] if form.get('target2') else None
 	if not doexport:
 		url = 'counts?' + url_encode(dict(export='csv', **form),
 				separator=b';')
@@ -307,7 +307,7 @@ def counts(form, doexport=False):
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
 				len(queries) + 2)
 		# collate stats
-		if form['target']:
+		if form.get('target'):
 			keys = METADATA[form['target']]
 		else:
 			keys = pandas.Series([key.split('_')[0] if '_' in key else key[0]
@@ -336,6 +336,7 @@ def counts(form, doexport=False):
 def trees(form):
 	"""Return visualization of parse trees in search results."""
 	gotresults = False
+	engine = form.get('engine', 'tgrep2')
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
@@ -395,8 +396,9 @@ def trees(form):
 def sents(form, dobrackets=False):
 	"""Return search results as terminals or in bracket notation."""
 	gotresults = False
+	engine = form.get('engine', 'tgrep2')
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
-			for a in CORPORA[form['engine']].files}
+			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	url = '%s?%s' % ('trees' if dobrackets else 'sents',
@@ -409,7 +411,7 @@ def sents(form, dobrackets=False):
 				else form['query'][:128] + '...',
 				SENTLIMIT, url, url + ';linenos=1'))
 	for n, (filename, results) in enumerate(groupby(sorted(
-			CORPORA[form.get('engine', 'tgrep2')].sents(form['query'],
+			CORPORA[engine].sents(form['query'],
 				selected, start, end, maxresults=SENTLIMIT,
 				brackets=dobrackets), key=itemgetter(0)),
 			itemgetter(0))):
@@ -499,12 +501,13 @@ def brackets(form):
 
 def fragmentsinresults(form, doexport=False):
 	"""Extract recurring fragments from search results."""
-	if form.get('engine', 'tgrep2') not in ('tgrep2', 'xpath', 'frag'):
+	engine = form.get('engine', 'tgrep2')
+	if engine not in ('tgrep2', 'xpath', 'frag'):
 		yield "Only applicable to treebanks."
 		return
 	gotresults = False
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
-			for a in CORPORA[form['engine']].files}
+			for a in CORPORA[engine].files}
 	selected = {filenames[TEXTS[n]]: n for n in selectedtexts(form)}
 	start, end = getslice(form.get('slice'))
 	uniquetrees = set()
@@ -519,23 +522,23 @@ def fragmentsinresults(form, doexport=False):
 				% (form['query'] if len(form['query']) < 128
 					else form['query'][:128] + '...',
 					FRAGLIMIT, SENTLIMIT, url))
-	disc = form.get('engine', 'tgrep2') != 'tgrep2'
+	disc = engine != 'tgrep2'
 	if disc:
 		fragments.PARAMS.update(disc=True, fmt='discbracket')
 	else:
 		fragments.PARAMS.update(disc=False, fmt='bracket')
-	for n, (_, _, treestr, _) in enumerate(CORPORA[form.get(
-			'engine', 'tgrep2')].sents(form['query'], selected, start, end,
+	for n, (_, _, treestr, _) in enumerate(CORPORA[engine].sents(
+			form['query'], selected, start, end,
 			maxresults=SENTLIMIT, brackets=True)):
 		if n == 0:
 			gotresults = True
-		if form.get('engine', 'tgrep2') == 'tgrep2':
+		if engine == 'tgrep2':
 			line = treestr.replace(" )", " -NONE-)") + '\n'
-		elif form.get('engine', 'tgrep2') == 'xpath':
+		elif engine == 'xpath':
 			item = treebank.alpinotree(
 					ElementTree.fromstring(treestr.encode('utf8')))
 			line = '%s\t%s\n' % (str(item.tree), ' '.join(item.sent))
-		elif form.get('engine', 'tgrep2') == 'frag':
+		elif engine == 'frag':
 			line = treestr + '\n'
 		else:
 			raise ValueError
@@ -621,7 +624,8 @@ def style():
 			total = max(data.values())
 			if total > 0:
 				yield '<a name="%s">%s:</a>' % (field,
-						plot(data, total, unit='%' if '%' in field else ''))
+						plot(data, total, field,
+							unit='%' if '%' in field else ''))
 
 	def generatecsv():
 		"""Generate CSV file."""
@@ -779,10 +783,10 @@ def browsesents():
 		if request.args.get('query', ''):
 			queryparams = ';' + url_encode(dict(
 					query=request.args['query'],
-					engine=request.args.get('engine', 'tgrep2')),
+					engine=engine),
 					separator=b';')
 			filenames = {EXTRE.sub('', os.path.basename(a)): a
-					for a in CORPORA[request.args['engine']].files}
+					for a in CORPORA[engine].files}
 			filename = filenames[TEXTS[textno]]
 			queries = querydict(request.args['query'])
 			legend = 'Legend:\t%s\n' % ('\t'.join(
@@ -791,7 +795,7 @@ def browsesents():
 					for n, query in enumerate(queries, 1)))
 			resultshighlight = {}
 			for n, (_, query) in enumerate(queries.values()):
-				matches = CORPORA[request.args['engine']].sents(
+				matches = CORPORA[engine].sents(
 						query, subset=(filename, ),
 						start=start, end=maxsent - 1,
 						maxresults=2 * chunk)
@@ -819,7 +823,7 @@ def browsesents():
 				sents=results, prevlink=prevlink, nextlink=nextlink,
 				chunk=chunk, mintree=start, legend=legend,
 				query=request.args.get('query', ''),
-				engine=request.args.get('engine', ''))
+				engine=engine)
 	return '<h1>Browse through sentences</h1>\n<ol>\n%s</ol>\n' % '\n'.join(
 			'<li><a href="browsesents?text=%d;sent=1;nomorph">%s</a> '
 			'(%d sentences; %d words)' % (
@@ -835,7 +839,7 @@ def favicon():
 
 
 @APP.route('/metadata')
-def metadata():
+def show_metadata():
 	"""Show metadata."""
 	return METADATA.to_html()
 
@@ -863,6 +867,7 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 			fig = plt.gcf()
 			fig.autofmt_xdate()
 		# Convert to D3, SVG, javascript etc.
+		# import mpld3
 		# result = mpld3.fig_to_html(plt.gcf(), template_type='general',
 		# 		use_http=True)
 
@@ -947,7 +952,7 @@ def selectedtexts(form):
 				selected.add(int(a))
 	else:
 		selected.update(range(len(TEXTS)))
-	if 'subset' in form and METADATA is not None:
+	if METADATA is not None and form.get('subset'):
 		key, val = form['subset'].split('=')
 		selected &= set((METADATA[key] == val).nonzero()[0])
 	return selected

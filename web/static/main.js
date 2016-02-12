@@ -195,7 +195,9 @@ function mergecheckboxes() {
 			break;
 		}
 	}
-	limit = document.getElementsByName('limit');
-	if (!limit.value)
-		limit.disabled == true;
+	/* do not send empty query parameters to make URLs nicer. */
+	for (name in ['limit', 'subset', 'target', 'target2']) {
+		elem = document.getElementsByName(name);
+		if (!elem.value) elem.disabled = true;
+	}
 }
