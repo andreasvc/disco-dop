@@ -1218,7 +1218,7 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 		result = array.array(b'I' if PY2 else 'I')
 	with open(filename, 'r+b') as tmp:
 		data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
-		if start >= len(lineindex):
+		if start and start >= len(lineindex):
 			return result
 		startidx = lineindex.select(start - 1 if start else 0)
 		endidx = (lineindex.select(end) if end is not None
