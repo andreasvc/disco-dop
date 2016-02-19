@@ -1041,7 +1041,7 @@ class RegexSearcher(CorpusSearcher):
 			x = []
 			for sentno, sent, start, end in future.result():
 				highlight = range(start, end)
-				x.append((filename, sentno, sent.rstrip(), highlight, ()))
+				x.append((filename, sentno, sent, highlight, ()))
 			self.cache['sents', query, filename, start, end, True, True
 					] = x, maxresults
 			result.extend(x)
@@ -1096,13 +1096,10 @@ class RegexSearcher(CorpusSearcher):
 		end = next(reversed(self.lineindex[filename]))
 		with open(filename, 'r+b') as tmp:
 			data = mmap.mmap(tmp.fileno(), 0, access=mmap.ACCESS_READ)
-			for n in indices:
-				a, b = 0, end
-				if 1 <= n < len(self.lineindex[filename]):
-					a = self.lineindex[filename].select(n - 1)
-				if 1 <= n < len(self.lineindex[filename]):
-					b = self.lineindex[filename].select(n)
-				result.append(data[a:b - 1].decode('utf8'))
+			for lineno in indices:
+				offset, nextoffset = _getoffsets(
+						lineno, self.lineindex[filename], data)
+				result.append(data[offset:nextoffset].decode('utf8'))
 			data.close()
 		return result
 
@@ -1178,22 +1175,18 @@ def _regex_run_query(pattern, filename, start=None, end=None, maxresults=None,
 			for match in islice(
 					pattern.finditer(data, startidx, endidx),
 					maxresults):
+				if not sents:
+					result.append(lineno)
+					continue
 				mstart = match.start()
 				mend = match.end()
 				lineno = lineindex.rank(mstart)
-				offset, nextoffset = 0, len(data)
-				if lineno > 0:
-					offset = lineindex.select(lineno - 1)
-				if lineno <= len(lineindex):
-					nextoffset = lineindex.select(lineno)
-				if sents:
-					sent = data[offset:nextoffset].decode('utf8')
-					mstart = len(data[offset:mstart].decode('utf8'))
-					mend = len(data[offset:mend].decode('utf8'))
-					# (lineno, sent, startspan, endspan)
-					result.append((lineno, sent, mstart, mend))
-				else:
-					result.append(lineno)
+				offset, nextoffset = _getoffsets(lineno, lineindex, data)
+				sent = data[offset:nextoffset].decode('utf8')
+				mstart = len(data[offset:mstart].decode('utf8'))
+				mend = len(data[offset:mend].decode('utf8'))
+				# (lineno, sent, startspan, endspan)
+				result.append((lineno, sent, mstart, mend))
 		else:
 			if breakdown:
 				matches = pattern.findall(data, startidx, endidx)[:maxresults]
@@ -1231,17 +1224,12 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 					mstart = match.start()
 					mend = match.end()
 					lineno = lineindex.rank(mstart)
-					offset, nextoffset = 0, len(data)
-					if lineno > 0:
-						offset = lineindex.select(lineno - 1)
-					if lineno <= len(lineindex):
-						nextoffset = lineindex.select(lineno)
-					if sents:
-						sent = data[offset:nextoffset].decode('utf8')
-						mstart = len(data[offset:mstart].decode('utf8'))
-						mend = len(data[offset:mend].decode('utf8'))
-						#  sentno, sent, high1, high2
-						result.append((lineno, sent, range(mstart, mend), ()))
+					offset, nextoffset = _getoffsets(lineno, lineindex, data)
+					sent = data[offset:nextoffset].decode('utf8')
+					mstart = len(data[offset:mstart].decode('utf8'))
+					mend = len(data[offset:mend].decode('utf8'))
+					#  sentno, sent, high1, high2
+					result.append((lineno, sent, range(mstart, mend), ()))
 		else:
 			for pattern in patterns:
 				try:
@@ -1250,6 +1238,22 @@ def _regex_run_batch(patterns, filename, start=None, end=None, maxresults=None,
 					result.append(len(pattern.findall(data, startidx, endidx)))
 		data.close()
 	return result
+
+
+def _getoffsets(lineno, lineindex, data):
+	"""Return the (start, end) byte offsets for a given 1-based line number."""
+	offset, nextoffset = 0, len(data)
+	if 1 <= lineno <= len(lineindex):
+		offset = lineindex.select(lineno - 1)
+	else:
+		raise IndexError
+	if lineno < len(lineindex):
+		nextoffset = lineindex.select(lineno)
+	# there is at least one newline, but there may be more
+	# because empty lines are not indexed.
+	while data[nextoffset - 1] == 10:  # b'\n':
+		nextoffset -= 1
+	return offset, nextoffset
 
 
 def _indexfile(filename):
@@ -1524,9 +1528,9 @@ def main():
 				else:
 					if '--only-matching' in opts or '-o' in opts:
 						out = ''.join(char if n in (high2 or high1) else ''
-								for n, char in enumerate(sent)).strip()
+								for n, char in enumerate(sent))
 					else:
-						out = applyhighlight(sent.strip(), high1, high2)
+						out = applyhighlight(sent, high1, high2)
 				if len(corpora) > 1:
 					print('\x1b[%dm%s\x1b[0m:' % (
 							ANSICOLOR['magenta'], filename), end='')

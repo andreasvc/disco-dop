@@ -311,7 +311,8 @@ cdef inline extractbitsets(uint64_t *matrix, Node *a, Node *b, short j, int n,
 
 cdef inline int extractat(uint64_t *matrix, uint64_t *result, Node *a, Node *b,
 		short i, short j, short SLOTS):
-	"""Traverse tree `a` and `b` in parallel to extract a connected subset."""
+	"""Traverse tree ``a`` and ``b`` in parallel to extract a connected subset.
+	"""
 	cdef int terms = 0
 	SETBIT(result, i)
 	CLEARBIT(&matrix[j * SLOTS], i)
