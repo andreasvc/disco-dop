@@ -30,7 +30,7 @@ cdef class DenseCFGChart(CFGChart):
 	cdef bint updateprob(self, uint32_t lhs, Idx start, Idx end, double prob,
 			double beam)
 	cdef double _subtreeprob(self, size_t item)
-	cpdef bint hasitem(self, size_t item)
+	cpdef bint hasitem(self, item)
 
 
 @cython.final
@@ -42,4 +42,4 @@ cdef class SparseCFGChart(CFGChart):
 	cdef bint updateprob(self, uint32_t lhs, Idx start, Idx end, double prob,
 			double beam)
 	cdef double _subtreeprob(self, size_t item)
-	cpdef bint hasitem(self, size_t item)
+	cpdef bint hasitem(self, item)

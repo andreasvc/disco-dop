@@ -305,7 +305,7 @@ cdef class SparseCFGChart(CFGChart):
 	cdef double subtreeprob(self, item):
 		return self._subtreeprob(item)
 
-	cpdef bint hasitem(self, size_t item):
+	cpdef bint hasitem(self, item):
 		"""Test if item is in chart."""
 		return item in self.parseforest
 
