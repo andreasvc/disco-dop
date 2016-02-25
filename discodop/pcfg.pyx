@@ -194,9 +194,10 @@ cdef class DenseCFGChart(CFGChart):
 		result.head = self.parseforest[item].head
 		return result
 
-	cpdef bint hasitem(self, size_t item):
+	cpdef bint hasitem(self, item):
 		"""Test if item is in chart."""
-		return item is not None and self.parseforest[item].head is not NULL
+		return (item is not None
+				and self.parseforest[<size_t>item].head is not NULL)
 
 	def setprob(self, item, double prob):
 		"""Set probability for item (unconditionally)."""
