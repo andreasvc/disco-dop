@@ -72,8 +72,9 @@ morphology=None,  # options:
 #	'between': add node with morphological information between
 #		POS tag and word, e.g., (DET (sg.def the))
 
-# apply transformations (state splits) to training set trees
-transformations=('lassy-func', ),
+# apply treebank-specific transformations (state splits) to training set trees
+# see source of `discodop.treebanktransforms.transform`
+# transformations=('lassy-func', ),
 relationalrealizational=None,
 #relationalrealizational=dict(  # Negra/Tiger
 #	# the function labels to treat as adjunction

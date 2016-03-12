@@ -1516,7 +1516,7 @@ class DrawTree(object):
 		PDF can be produced with pdflatex. Uses TiKZ matrices meaning that
 		nodes are put into a fixed grid. Where the cells of each column all
 		have the same width."""
-		result = [writediscbrackettree(self.tree, self.sent).rstrip(),
+		result = ['% ' + writediscbrackettree(self.tree, self.sent).rstrip(),
 				r'''\begin{tikzpicture}[scale=0.75, align=center,
 				text width=1.5cm, inner sep=0mm, node distance=1mm]''',
 				r'\footnotesize\sffamily',
@@ -1566,7 +1566,7 @@ class DrawTree(object):
 
 		Nodes are drawn with the \\node command so they can have arbitrary
 		coordinates."""
-		result = [writediscbrackettree(self.tree, self.sent).rstrip(),
+		result = ['% ' + writediscbrackettree(self.tree, self.sent).rstrip(),
 				r'''\begin{tikzpicture}[scale=0.75, align=center,
 				text width=1.5cm, inner sep=0mm, node distance=1mm]''',
 				r'\footnotesize\sffamily',
@@ -1627,7 +1627,7 @@ class DrawTree(object):
 		pprint = self.tree.pprint(indent=6, brackets=('[.', ' ]'))
 		escaped = re.sub(reserved_chars, r'\\\1', pprint)
 		return '\n'.join([
-			writebrackettree(self.tree, self.sent).rstrip(),
+			'% ' + writebrackettree(self.tree, self.sent).rstrip(),
 			'\\begin{tikzpicture}',
 			'  \\tikzset{every node/.style={color=%s}, font=\\sf}' % nodecolor,
 			'  \\tikzset{every leaf node/.style={color=%s}}' % leafcolor,

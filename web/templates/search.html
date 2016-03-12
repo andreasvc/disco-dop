@@ -109,7 +109,7 @@ div.barplot span {
     {% if havefrag %}
     <label><input type=radio name=engine value=frag{{
         ' checked' if form.get('engine', 'tgrep2') == 'frag'
-        }} onChange="show('treesoutput', '');">fragments</label>
+        }} onChange="show('treesoutput', '');">fragment</label>
     {% endif %}
     <label><input type=radio name=engine value=regex{{
         ' checked' if form.get('engine') == 'regex' or (not havetgrep and not havexpath and not havefrag)

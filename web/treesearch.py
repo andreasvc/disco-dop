@@ -154,7 +154,7 @@ def export(form, output):
 					mimetype='application/json')
 		results = ((fmt % (filename, sentno, sent)
 				if form.get('linenos') else (sent + '\n')).encode('utf8')
-				for filename, sentno, sent, _ in results)
+				for filename, sentno, sent, _, _ in results)
 		filename = output + '.txt'
 	else:
 		raise ValueError('cannot export %s' % output)
@@ -313,9 +313,10 @@ def counts(form, doexport=False):
 			keys = pandas.Series([key.split('_')[0] if '_' in key else key[0]
 					for key in df.index], index=df.index)
 		keyset = keys.unique()
-		if len(keyset) <= 5:
+		if len(keyset) * len(queries) <= 30:
 			overview = OrderedDict(
-					('%s_%s' % (cat, query), df[query].ix[keys == cat].mean())
+					('%s_%s' % (cat, query),
+						df[query].ix[keys == cat].mean() or 0)
 					for query in df.columns
 						for cat in keyset)
 			df['category'] = keys
@@ -423,7 +424,7 @@ def sents(form, dobrackets=False):
 			else:
 				breakdown = Counter(re.sub(
 					' {2,}', ' ... ',
-					' '.join(char if n in high1 or n in high2 else ' '
+					''.join(char if n in high1 or n in high2 else ' '
 						for n, char in enumerate(sent)))
 					for _, _, sent, high1, high2 in results)
 			yield '\n%s\n' % text
@@ -849,6 +850,8 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 	"""A HTML bar plot given a dictionary and max value."""
 	if len(data) > 30 and target is not None:
 		df = pandas.DataFrame(index=data)
+		if len(title) > 50:
+			title = title[:50] + '...'
 		df[title] = pandas.Series(data, index=df.index)
 		df[target.name] = target.ix[df.index]
 		if target2 is not None:
@@ -857,13 +860,17 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 			if target2 is None:
 				seaborn.jointplot(target.name, title, data=df, kind='reg')
 			else:
-				seaborn.lmplot(target.name, title, data=df, hue=target2.name)
+				seaborn.lmplot(target.name, title, data=df,
+						hue=target2.name, palette='Set1')
 		else:  # X-axis is categorical
 			df.sort_values(by=target.name, inplace=True)
 			if target2 is None:
-				seaborn.barplot(target.name, title, data=df)
+				# seaborn.barplot(target.name, title, data=df)
+				seaborn.violinplot(x=target.name, y=title, data=df,
+						split=True, inner="stick", palette='Set1');
 			else:
-				seaborn.barplot(target.name, title, data=df, hue=target2.name)
+				seaborn.barplot(target.name, title, data=df, hue=target2.name,
+						palette='Set1')
 			fig = plt.gcf()
 			fig.autofmt_xdate()
 		# Convert to D3, SVG, javascript etc.

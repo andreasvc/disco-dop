@@ -1,9 +1,6 @@
 <!doctype html>
 <title>Browsing sentences of {{ text }}</title>
 <link type="text/css" rel="stylesheet" href="static/style.css">
-<style>
-#sents { margin: 1em; }
-</style>
 <body>
 <form name=frm><tt>
 	<input type=hidden name=text value={{ textno }}>
@@ -16,7 +13,7 @@
 	| {{ text }} 
 </tt></form>
 
-<div id=sents>
+<div id=sents style="margin: 1em">
 {{ legend|safe }}
 <ol start={{ mintree }}>
 {% for sent in sents %}
