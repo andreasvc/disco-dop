@@ -508,7 +508,7 @@ def merge(*iterables, key=None):
 	already be sorted with this key."""
 	cdef list heap = []
 	cdef uint64_t cnt
-	cdef Entry entry = None
+	cdef Entry entry = None, dummy = None
 	if key is None:
 		def key(x):
 			return x
@@ -532,9 +532,9 @@ def merge(*iterables, key=None):
 				item = next(iterable)
 				entry.key = (item, iterable)
 				entry.value = key(item)
-				_ = heapreplace(heap, entry)
+				dummy = heapreplace(heap, entry)
 		except StopIteration:
-			_ = heappop(heap, entry)
+			dummy = heappop(heap, entry)
 
 	if heap:  # only a single iterator remains, skip heap
 		entry = heappop(heap, entry)
