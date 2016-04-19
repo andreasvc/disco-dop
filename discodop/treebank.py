@@ -707,7 +707,9 @@ def writedependencies(tree, sent, fmt):
 
 
 def dependencies(root):
-	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers."""
+	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers.
+
+	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
 	deps.append((makedep(root, deps), 'ROOT', 0))
 	return sorted(deps)
@@ -723,8 +725,21 @@ def makedep(root, deps):
 		if child is headchild:
 			continue
 		lexheadofchild = makedep(child, deps)
-		deps.append((lexheadofchild, 'NONE', lexhead))
+		func = '-'
+		if (getattr(child, 'source', None)
+				and child.source[FUNC] and child.source[FUNC] != '--'):
+			func = child.source[FUNC]
+		deps.append((lexheadofchild, func, lexhead))
 	return lexhead
+
+
+def deplen(deps):
+	"""Compute dependency length from result of ``dependencies()``
+
+	:returns: tuple ``(totaldeplen, numdeps)``."""
+	total = sum(abs(a - b) for a, label, b in deps
+			if label != 'ROOT')
+	return (total, float(len(deps) - 1))  # discount ROOT
 
 
 def handlefunctions(action, tree, pos=True, top=False, morphology=None):
