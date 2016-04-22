@@ -1011,7 +1011,8 @@ def collapselabels(trees, _sents=None, tbmapping=None):
 						lambda x: revmapping.get(x.group(), ''),
 						# lambda x: revmapping[x.group()],
 						node.label).replace('-', '').rstrip('^')
-				assert mapping[node.label] and mapping[node.label][0].isalpha(), node.label
+				assert (mapping[node.label]
+						and mapping[node.label][0].isalpha()), node.label
 				node.label = mapping[node.label]
 
 	# maps original treebank labels to coarser labels; e.g. NP => X
@@ -1153,6 +1154,81 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 	return result
 
 
+def dlevel(tree, sent):
+	"""Return the D-level measure of syntactic complexity.
+
+	Original version: Rosenberg & Abbeduto (1987); Covington et al. (2006);
+	Dutch version implemented here: Appendix A of T-Scan manual.
+
+	:returns: integer 0-7; 7 is most complex."""
+	poslist = []
+	wordlist = sent
+	pv_counter = neven_counter = 0
+	for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)):
+		poslist.append(pos)
+		if strip(pos.label) == 'ww' and 'pv' in morphfeats(pos):
+			pv_counter += 1
+		elif strip(pos.label) == 'vg' and 'neven' in morphfeats(pos):
+			neven_counter += 1
+
+	# 7:  sentence with multiple subordinate clauses
+	# (disregarding clauses in conjunctions)
+	if pv_counter - neven_counter > 2:
+		return 7
+	# 6: a subordinate clause modifying the subject
+	for node in tree.subtrees():
+		if (strip(node.label) == 'REL' and function(node) == 'mod'
+				and function(node.parent) == 'su'):
+			return 6
+		elif (strip(node.label) in ('CP', 'WHSUB', 'WHREL', 'TI', 'OTI', 'INF')
+				and function(node) == 'su'):
+			return 6
+		elif (strip(node.label) == 'ww' and function(node.parent) == 'su'
+				and strip(node.parent.label) == 'NP'):
+			return 6
+	# 5: subordinate clause
+	for pos in poslist:
+		if (strip(pos.label) == 'vg' and 'onder' in morphfeats(pos)
+				and sent[pos[0]].lower() != 'dat'):
+			return 5
+	# 4: non-finite clause as object with overt subject
+	for node in tree.subtrees():
+		if function(node) == 'obcomp':
+			return 4
+	for node in tree.subtrees(lambda n: function(n) == 'vc'):
+		if strip(node.label) in ('TI', 'OTI', 'INF'):
+			vcid = node.source[WORD].lstrip('#')
+			for sib in node.parent:
+				if function(sib) == 'obj1' and hassecedge(sib, 'su', vcid):
+					return 4
+	# 3: finite clause as objects (and equivalents)
+	for node in tree.subtrees():
+		if strip(node.label) == 'REL' and function(node) == 'mod':
+			if function(node.parent) == 'obj1':
+				return 3
+		elif strip(node.label) == 'ww':
+			if strip(node.parent.label) == 'NP' and function(
+					node.parent) == 'obj1':
+				return 3
+		elif strip(node.label) in ('CP', 'WHSUB') and function(node) == 'vc':
+			return 3
+		elif function(node) == 'sup':
+			return 3
+	# 2: coordinated structure
+	for pos in poslist:
+		if strip(pos.label) == 'vg' and 'neven' in morphfeats(pos):
+			return 2
+	# 1: non-finite clause with subject coindexed from main clause
+	for node in tree.subtrees(lambda n: function(n) == 'vc'):
+		if strip(node.label) in ('TI', 'OTI', 'INF'):
+			vcid = node.source[WORD].lstrip('#')
+			for sib in node.parent:
+				if function(sib) == 'su' and hassecedge(sib, 'su', vcid):
+					return 2
+	# 0: simple sentence
+	return 0
+
+
 def rindex(l, v):
 	"""Like list.index(), but go from right to left."""
 	return len(l) - 1 - l[::-1].index(v)
@@ -1163,14 +1239,14 @@ def labels(tree):
 	return [a.label for a in tree if isinstance(a, Tree)]
 
 
-def pop(a):
+def pop(node):
 	"""Remove this node from its parent node, if it has one.
 
 	Convenience function for ParentedTrees."""
 	try:
-		return a.parent.pop(a.parent_index)
+		return node.parent.pop(node.parent_index)
 	except AttributeError:
-		return a
+		return node
 
 
 def base(node, match):
@@ -1238,21 +1314,30 @@ def unifymorphfeat(feats, percolatefeatures=None):
 
 
 # Function tags
-def function(tree):
+def function(node):
 	""":returns: The first function tag for node, or the empty string."""
-	if getattr(tree, 'source', None) is None:
+	if getattr(node, 'source', None) is None:
 		return ''
-	return tree.source[FUNC].split('-')[0]
+	return node.source[FUNC].split('-')[0]
 
 
-def functions(tree):
+def functions(node):
 	""":returns: list of function tags for node, or an empty list."""
-	if getattr(tree, 'source', None) is None:
+	if getattr(node, 'source', None) is None:
 		return []
-	a = tree.source[FUNC]
+	a = node.source[FUNC]
 	if a == '--' or a == '' or a is None:
 		return []
 	return a.split('-')
+
+
+# Secondary edges
+def hassecedge(node, func, parentid):
+	"""Test whether this node has a secondary edge ``(func, parentid)``."""
+	if getattr(node, 'source', None) is None:
+		return False
+	return any(func == 'su' and pid == parentid
+			for func, pid in zip(node.source[6::2], node.source[7::2]))
 
 
 __all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',
