@@ -492,7 +492,7 @@ def exportsplit(line):
 
 def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sent from tree in Alpino format given as etree XML object."""
-	def getsubtree(node, parent, morphology, lemmas):
+	def getsubtree(node, parent, parentid, morphology, lemmas):
 		"""Parse a subtree of an Alpino tree."""
 		source = [''] * len(FIELDS)
 		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
@@ -506,7 +506,8 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 			label = node.get('cat')
 			result = ParentedTree(label.upper(), [])
 			for child in node:
-				subtree = getsubtree(child, result, morphology, lemmas)
+				subtree = getsubtree(child, result, node.get('id'),
+						morphology, lemmas)
 				if subtree and (
 						'word' in child.keys() or 'cat' in child.keys()):
 					subtree.source[PARENT] = node.get('id')
@@ -521,8 +522,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 					range(int(node.get('begin')), int(node.get('end')))))
 			handlemorphology(morphology, lemmas, result, source, sent)
 		elif 'index' in node.keys():
-			coindexation[node.get('index')].extend(
-					(node.get('rel'), parent))
+			coindexation[node.get('index')].extend([node.get('rel'), parentid])
 			return None
 		source[:] = [a.replace(' ', '_') if a else a for a in source]
 		result.source = source
@@ -531,7 +531,9 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	coindexed = {}
 	coindexation = defaultdict(list)
 	sent = block.find('sentence').text.split(' ')
-	tree = getsubtree(block.find('node'), None, morphology, lemmas)
+	tree = getsubtree(block.find('node'), None, 0, morphology, lemmas)
+	for i in coindexation:
+		coindexed[i].extend(coindexation[i])
 	comment = block.find('comments/comment')  # NB: only use first comment
 	if comment is not None:
 		comment = comment.text
@@ -610,6 +612,9 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		raise ValueError('sentence and terminals length mismatch:  '
 				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
 				% (key, tree, len(sent), sent, len(preterms), preterms))
+	idindex = [id(node) for node in phrasalnodes]
+	nodeidindex = [int(node.source[WORD].lstrip('#')) if node.source else 0
+			for node in phrasalnodes]
 	for n, word in enumerate(sent):
 		if not word:
 			# raise ValueError('empty word in sentence: %r' % sent)
@@ -623,13 +628,15 @@ def writeexporttree(tree, sent, key, comment, morphology):
 			lemma = node.source[LEMMA] or '--'
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
-			secedges = node.source[6:]
+			for rel, pid in zip(node.source[6::2], node.source[7::2]):
+				secedges.append(rel)
+				secedges.append('%d' % (500 + nodeidindex.index(int(pid))))
 		if morphtag == '--' and morphology == 'replace':
 			morphtag = postag
 		elif morphtag == '--' and morphology == 'add' and '/' in postag:
 			postag, morphtag = postag.split('/', 1)
 		parentid = '%d' % (0 if node.parent is tree
-				else 500 + idindex(phrasalnodes, node.parent))
+				else 500 + idindex.index(id(node.parent)))
 		result.append("\t".join((word, lemma, postag, morphtag, func,
 				parentid) + tuple(secedges)))
 	for n, node in enumerate(phrasalnodes):
@@ -641,9 +648,13 @@ def writeexporttree(tree, sent, key, comment, morphology):
 		if getattr(node, 'source', None):
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
-			secedges = node.source[6:]
+			for rel, pid in zip(node.source[6::2], node.source[7::2]):
+				newpid = [a.source[WORD] if a.source else '#0'
+						for a in phrasalnodes].index('#' + pid)
+				secedges.append(rel)
+				secedges.append('%d' % (500 + nodeidindex.index(int(pid))))
 		parentid = '%d' % (0 if node.parent is tree
-				else 500 + idindex(phrasalnodes, node.parent))
+				else 500 + idindex.index(id(node.parent)))
 		result.append('\t'.join((nodeid, lemma, label, morphtag, func,
 				parentid) + tuple(secedges)))
 	if key is not None:
@@ -711,17 +722,18 @@ def dependencies(root):
 
 	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
-	deps.append((makedep(root, deps), 'ROOT', 0))
+	if root:
+		deps.append((makedep(root, deps), 'ROOT', 0))
 	return sorted(deps)
 
 
-def makedep(root, deps):
+def makedep(node, deps):
 	"""Traverse a head-marked tree and extract dependencies."""
-	if not isinstance(root[0], Tree):
-		return root[0] + 1
-	headchild = next(iter(a for a in root if ishead(a)))
+	if isinstance(node[0], int):
+		return node[0] + 1
+	headchild = next(iter(a for a in node if ishead(a)))
 	lexhead = makedep(headchild, deps)
-	for child in root:
+	for child in node:
 		if child is headchild:
 			continue
 		lexheadofchild = makedep(child, deps)
@@ -820,11 +832,11 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 		strict=False, robust=True, othertext=False):
 	"""Incremental corpus reader.
 
+	Supports brackets, discbrackets, export and alpino-xml format.
+	The format is autodetected.
 	:param treeinput: an iterator giving one line at a time.
-		Supports brackets, discbrackets, and export format. The format is
-		autodetected.
 	:param strict: if True, raise ValueError on malformed data.
-	:param robust: if True, only return trees with at least 2 brackets;
+	:param robust: if True, only return trees with more than 2 brackets;
 		e.g., (DT the) is not recognized as a tree.
 	:param othertext: if True, yield non-tree data as ``(None, None, line)``.
 		By default, text in lines without trees is ignored.
@@ -835,6 +847,7 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 	line = next(treeinput)
 	# try the following readers on each line in this order
 	readers = [segmentexport(morphology, functions, strict),
+			segmentalpino(morphology, functions),
 			segmentbrackets(strict, robust)]
 	for reader in readers:
 		reader.send(None)
@@ -944,6 +957,39 @@ def segmentbrackets(strict=False, robust=True):
 			prev = ''
 
 
+def segmentalpino(morphology, functions):
+	"""Co-routine that accepts one line at a time.
+	Yields tuples ``(result, status)`` where ...
+
+	- result is ``None`` or a segment delimited by
+		``<alpino_ds>`` and ``</alpino_ds>`` as a list of lines;
+	- status is 1 if the line was consumed, else 0."""
+	cur = []
+	inblock = 0
+	line = (yield None, CONSUMED)
+	while line is not None:
+		if line.startswith('<alpino_ds'):
+			cur = ['<?xml version="1.0" encoding="UTF-8"?>', line]
+			inblock = 1
+			line = (yield None, CONSUMED)
+		elif line.startswith('</alpino_ds>'):
+			cur.append(line)
+			block = ElementTree.fromstring('\n'.join(cur).encode('utf8'))
+			item = alpinotree(block, functions, morphology)
+			line = (yield ((item.tree, item.sent, item.comment), ), CONSUMED)
+			inblock = 0
+			cur = []
+		elif line.strip():
+			if inblock == 1:
+				cur.append(line)
+			line = line.lstrip()
+			line = (yield None, (CONSUMED if inblock
+						or line.startswith('<?xml')
+					else not CONSUMED))
+		else:
+			line = (yield None, not CONSUMED)
+
+
 def segmentexport(morphology, functions, strict=False):
 	"""Co-routine that accepts one line at a time.
 	Yields tuples ``(result, status)`` where ...
@@ -988,13 +1034,6 @@ def numbase(key):
 	components = [int(a) if re.match(r'[0-9]+$', a) else a for a in components]
 	return [path] + components
 
-
-def idindex(seq, elem):
-	"""Like list.index(elem), but only tests for identity."""
-	for n, a in enumerate(seq):
-		if a is elem:
-			return n
-	raise ValueError('Item not in sequence: %r' % elem)
 
 READERS = OrderedDict((('export', NegraCorpusReader),
 		('bracket', BracketCorpusReader),

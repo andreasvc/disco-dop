@@ -1,3 +1,4 @@
+%% word	lemma	tag	morph	edge	parent	secedge
 #BOS RSTCode_EE01/4
 Ter	te	vz	VZ(versm)	hd	500
 vergelijking	vergelijking	n	N(soort,ev,basis,zijd,stan)	obj1	500
@@ -18,7 +19,7 @@ staat	staan	ww	WW(pv,tgw,met-t)	hd	515
 op	op	vz	VZ(init)	hd	514
 een	een	lid	LID(onbep,stan,agr)	det	513
 afstand	afstand	n	N(soort,ev,basis,zijd,stan)	hd	513
-waar	waar	vnw	VNW(vb,adv-pron,obl,vol,3o,getal)	rhd	512
+waar	waar	vnw	VNW(vb,adv-pron,obl,vol,3o,getal)	rhd	512	obj1	510
 het	het	lid	LID(bep,stan,evon)	det	506
 licht	licht	n	N(soort,ev,basis,onz,stan)	hd	506
 vier	vier	tw	TW(hoofd,prenom,stan)	det	507
@@ -79,7 +80,7 @@ dwergster	dwergster	n	N(soort,ev,basis,zijd,stan)	hd	506
 #508	--	NP	--	obj1	509
 #509	--	PP	--	pc	510
 #510	--	PPART	--	vc	512
-#511	--	NP	--	su	512
+#511	--	NP	--	su	512	su	510
 #512	--	SMAIN	--	--	0
 #EOS RSTCode_EE01/5
 #BOS RSTCode_EE01/6
@@ -95,7 +96,7 @@ zon	zon	n	N(soort,ev,basis,zijd,stan)	hd	500
 wordt	worden	ww	WW(pv,tgw,met-t)	hd	516
 de	de	lid	LID(bep,stan,rest)	det	515
 energie	energie	n	N(soort,ev,basis,zijd,stan)	hd	515
-die	die	vnw	VNW(betr,pron,stan,vol,persoon,getal)	rhd	514
+die	die	vnw	VNW(betr,pron,stan,vol,persoon,getal)	rhd	514	obj1	513
 ze	ze	vnw	VNW(pers,pron,stan,red,3,ev,fem)	su	513
 uitstraalt	uitstralen	ww	WW(pv,tgw,met-t)	hd	513
 in	in	vz	VZ(init)	hd	507
@@ -124,6 +125,6 @@ helium	helium	n	N(soort,ev,basis,onz,stan)	obj1	509
 #512	--	PPART	--	vc	516
 #513	--	SSUB	--	body	514
 #514	--	REL	--	mod	515
-#515	--	NP	--	su	516
+#515	--	NP	--	su	516	obj1	512
 #516	--	SMAIN	--	--	0
 #EOS RSTCode_EE01/6
