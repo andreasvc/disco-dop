@@ -31,8 +31,10 @@ BALANCEDPUNCTMATCH = {'"': '"', "'": "'", '``': "''",
 
 
 def applypunct(method, tree, sent):
-	"""Apply ``remove, removeall, move, moveall, prune, or root`` punctuation
-	strategy."""
+	"""Apply punctuation strategy to tree (in-place).
+
+	:param method: one of ``remove, removeall, move, moveall, prune,``
+	or ``root``."""
 	if method == 'remove' or method == 'removeall':
 		punctremove(tree, sent, method == 'removeall')
 	elif method in ('move', 'moveall', 'prune'):
@@ -184,4 +186,4 @@ def ispunct(word, tag):
 
 
 __all__ = ['ispunct', 'punctremove', 'punctprune', 'punctroot', 'punctlower',
-		'punctraise', 'balancedpunctraise']
+		'punctraise', 'balancedpunctraise', 'applypunct']

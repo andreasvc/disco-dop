@@ -13,11 +13,6 @@ if sys.version_info[0] == 2:
 	import __builtin__ as builtins  # pylint: disable=import-error
 else:
 	import builtins  # pylint: disable=import-error
-try:
-	import faulthandler
-	faulthandler.enable()  # Dump information on segfault.
-except (ImportError, io.UnsupportedOperation):
-	pass
 from . import treebank, treebanktransforms
 from .tree import DrawTree, frontier, STRTERMRE
 from .treebank import READERS, incrementaltreereader
@@ -351,7 +346,8 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		opts, args = gnu_getopt(sys.argv[2:], shortoptions, options)
 		model = args[0]
 		if model not in ('info', 'merge'):
-			treebankfile, grammarfile = args[1:]
+			treebankfile, grammarfile = args[1:
+					]  # pylint: disable=unbalanced-tuple-unpacking
 	except (GetoptError, IndexError, ValueError) as err:
 		print('error: %r' % err, file=sys.stderr)
 		print(grammar.__doc__)

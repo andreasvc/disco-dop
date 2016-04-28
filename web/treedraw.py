@@ -68,14 +68,14 @@ def drawtrees(form, dts):
 						).encode('utf8'), mimetype='image/svg+xml')
 		else:
 			preamble, postamble = DrawTree.templates['svg']
-			result = [preamble]
+			result = [preamble.encode('utf8')]
 			for dt in dts:
 				result.append(
-						'<div>\n%s\n</div>\n\n' % dt.svg(
+						('<div>\n%s\n</div>\n\n' % dt.svg(
 						funcsep='-' if 'func' in request.args else None,
-							).encode('utf8'))
-			result.append(postamble)
-			return Response('\n'.join(result), mimetype='text/html')
+							)).encode('utf8'))
+			result.append(postamble.encode('utf8'))
+			return Response(b'\n'.join(result), mimetype='text/html')
 	elif form.get('output', 'text') == 'text':
 		html = form.get('color', False)
 		useascii = not form.get('unicode', 0)
@@ -83,7 +83,7 @@ def drawtrees(form, dts):
 		result = []
 		if html:
 			mimetype = 'text/html'
-			result.append(preamble)
+			result.append(preamble.encode('utf8'))
 		else:
 			mimetype = 'text/plain'
 		for dt in dts:
@@ -92,8 +92,8 @@ def drawtrees(form, dts):
 						funcsep='-' if 'func' in request.args else None,
 						).encode('utf8'))
 		if html:
-			result.append(postamble)
-		return Response('\n'.join(result), mimetype=mimetype)
+			result.append(postamble.encode('utf8'))
+		return Response(b'\n'.join(result), mimetype=mimetype)
 
 	# LaTeX based output
 	if form.get('type', None) == 'qtree':

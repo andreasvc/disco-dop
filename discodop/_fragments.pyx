@@ -12,6 +12,7 @@ Implements:
 from __future__ import print_function
 import re
 import io
+import os
 import sys
 from collections import Counter
 from functools import partial
@@ -28,8 +29,8 @@ from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport memset, memcpy
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.array cimport array, clone, extend_buffer, resize
-from .containers cimport Node, NodeArray, Ctrees, Vocabulary, \
-		yieldranges, termidx
+from .containers cimport Node, NodeArray, Ctrees, Vocabulary, Rule, \
+		yieldranges, termidx, PY2
 from .bit cimport iteratesetbits, abitcount, subset, setunioninplace
 
 cdef extern from "macros.h":
@@ -39,8 +40,10 @@ cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b) nogil
 
 # a template to create arrays of this type
-cdef array uintarray = array(b'I' if sys.version_info[0] == 2 else 'I')
-cdef array shortarray = array(b'h' if sys.version_info[0] == 2 else 'h')
+cdef array ulongarray = array(b'L' if PY2 else 'L')
+cdef array uintarray = array(b'I' if PY2 else 'I')
+cdef array intarray = array(b'i' if PY2 else 'i')
+cdef array shortarray = array(b'h' if PY2 else 'h')
 
 FRONTIERORTERMRE = re.compile(r' ([0-9]+)(?:=|:[0-9]+\b)')  # all leaves
 TERMINDICESRE = re.compile(r'\([^(]+ ([0-9]+)=[^ ()]+\)')  # term. indices
@@ -105,7 +108,7 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		Ctrees trees2=None, int start2=0, int end2=0,
 		bint approx=True, bint debug=False,
 		bint disc=False, bint complement=False,
-		bint twoterms=False, bint adjacent=False):
+		str twoterms=None, bint adjacent=False):
 	"""Find the largest fragments in treebank(s) with the fast tree kernel.
 
 	- scenario 1: recurring fragments in single treebank, use::
@@ -123,7 +126,8 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 	:param disc: if True, return trees with indices as leaves.
 	:param complement: if True, the complement of the recurring
 		fragments in each pair of trees is extracted as well.
-	:param twoterms: only return fragments with at least two terminals.
+	:param twoterms: only return fragments with at least two terminals,
+		one of which has a POS tag matching the given regex.
 	:param adjacent: only extract fragments from sentences with adjacent
 		indices.
 	:returns: a dictionary; keys are fragments as strings; values are
@@ -143,13 +147,11 @@ cpdef extractfragments(Ctrees trees1, int start1, int end1, Vocabulary vocab,
 		set inter = set(), contentwordprods = None, lexicalprods = None
 		list tmp = []
 	if twoterms:
-		contentword = re.compile(
-				r'^(?:NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ])$')
-		contentwordprods = {n for n, label in enumerate(vocab.labels)
-				if contentword.match(label)}
-		lexical = re.compile(r'^[A-Z]+$')
-		lexicalprods = {n for n, label in enumerate(vocab.labels)
-				if lexical.match(label)}
+		contentword = re.compile(twoterms)
+		contentwordprods = {n for n in range(len(vocab.prods))
+				if contentword.match(vocab.getlabel(n))}
+		lexicalprods = {n for n in range(len(vocab.prods))
+				if vocab.islexical(n)}
 	if trees2 is None:
 		trees2 = trees1
 	SLOTS = BITNSLOTS(max(trees1.maxnodes, trees2.maxnodes) + 1)
@@ -445,7 +447,7 @@ cpdef exactcountsslice(Ctrees trees1, Ctrees trees2, list bitsets,
 		NodeArray *a
 		Node *anodes
 		uint64_t *bitset
-		int start_ = start or 0, end_ = end or 0
+		int start_ = start or 0, end_ = end or trees2.len
 	if maxnodes:
 		SLOTS = BITNSLOTS(maxnodes + 1)
 	else:
@@ -551,32 +553,15 @@ cdef getcandidates(Node *a, uint64_t *bitset, Ctrees trees, short alen,
 		int start, int end, short SLOTS):
 	"""Get candidates from productions in fragment ``bitset`` at ``a[i]``."""
 	cdef uint64_t cur = bitset[0]
-	cdef int idx = 0
-	cdef int i = iteratesetbits(bitset, SLOTS, &cur, &idx)
-	assert i != -1
-	if 0 <= a[i].prod < len(trees.prodindex):
-		rb = trees.prodindex[a[i].prod]
-	else:
-		return None
-	if rb is None:
-		return None
-	if (start or end):
-		candidates = RoaringBitmap(range(start, end or trees.len))
-		candidates &= rb
-	else:
-		candidates = rb.copy()
+	cdef int i, idx = 0
+	cdef list tmp = []
 	while True:
 		i = iteratesetbits(bitset, SLOTS, &cur, &idx)
 		if i == -1 or i >= alen:  # FIXME. why is 2nd condition necessary?
 			break
-		if 0 <= a[i].prod < len(trees.prodindex):
-			rb = trees.prodindex[a[i].prod]
-		else:
-			return None
-		if rb is None:
-			return None
-		candidates &= rb
-	return candidates
+		tmp.append(a[i].prod)
+	return trees.prodindex.intersection(
+			tmp, start=start, stop=end or trees.len)
 
 
 cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
@@ -597,9 +582,10 @@ cdef inline int containsbitset(Node *a, Node *b, uint64_t *bitset,
 
 
 cpdef completebitsets(Ctrees trees, Vocabulary vocab,
-		short maxnodes, bint disc=False, start=None, end=None):
+		short maxnodes, bint disc=False, start=None, end=None, tostring=True):
 	"""Generate bitsets corresponding to whole trees in the input.
 
+	:param tostring: do not create list of trees as strings
 	:returns: a pair of lists with trees as strings and their bitsets,
 		respectively.
 
@@ -607,7 +593,7 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 	with ``rightmostunary=True``:
 
 	>>> from discodop.treebank import brackettree
-	>>> tree, sent = brackettree('(S (X 0= 2= 4=))')
+	>>> tree, sent = brackettree(u'(S (X 0= 2= 4=))')
 	>>> print(handledisc(tree))
 	(S (X 0 (X|<> 2 (X|<> 4))))
 
@@ -618,8 +604,8 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 	(S (X 0= 2= 4=))
 	"""
 	cdef:
-		list result = [], bitsets = []
-		list sent
+		list result = [] if tostring else None
+		list bitsets = []
 		list tmp = []
 		int n, i
 		short SLOTS = BITNSLOTS(maxnodes + 1)
@@ -629,17 +615,22 @@ cpdef completebitsets(Ctrees trees, Vocabulary vocab,
 	for n in range(<int>start, <int>end):
 		memset(<void *>scratch, 0, SLOTS * sizeof(uint64_t))
 		nodes = &trees.nodes[trees.trees[n].offset]
-		sent = trees.extractsent(n, vocab)
+		# The set of terminal indices (i.e., minus frontier non-terminals)
+		termindices = {termidx(nodes[m].left)
+				for m in range(trees.trees[n].len)
+				if nodes[m].left < 0 and vocab.islexical(nodes[m].prod)}
 		for i in range(trees.trees[n].len):
-			if nodes[i].left >= 0 or sent[termidx(nodes[i].left)] is not None:
+			if nodes[i].left >= 0 or termidx(nodes[i].left) in termindices:
 				SETBIT(scratch, i)
 		setrootid(scratch, trees.trees[n].root, n, SLOTS)
-		tmp[:] = []
-		getsubtree(tmp, nodes, scratch, vocab,
-				disc, trees.trees[n].root)
-		tree = getsent(''.join(tmp)) if disc else ''.join(tmp)
-		result.append(tree)
+		if tostring:
+			tmp[:] = []
+			getsubtree(tmp, nodes, scratch, vocab,
+					disc, trees.trees[n].root)
+			tree = getsent(''.join(tmp)) if disc else ''.join(tmp)
+			result.append(tree)
 		bitsets.append(wrap(scratch, SLOTS))
+	free(scratch)
 	return result, bitsets
 
 
@@ -736,6 +727,7 @@ def allfragments(Ctrees trees, Vocabulary vocab,
 		collectfragments(fragments, inter, nodes, sent, vocab,
 				disc, not indices, indices, tmp, SLOTS)
 		del table[:]
+	free(scratch)
 	return fragments
 
 
@@ -818,7 +810,7 @@ cdef inline getsubtree(list result, Node *tree, uint64_t *bitset,
 		(discontinuous trees); otherwise the result will be a
 		continuous tree with words as leaves."""
 	result.append('(')
-	result.append(vocab.labels[tree[i].prod])
+	result.append(vocab.getlabel(tree[i].prod))
 	result.append(' ')
 	if TESTBIT(bitset, i):
 		if tree[i].left >= 0:
@@ -827,14 +819,14 @@ cdef inline getsubtree(list result, Node *tree, uint64_t *bitset,
 				result.append(' ')
 				getsubtree(result, tree, bitset, vocab, disc, tree[i].right)
 		elif disc:
-			if vocab.words[tree[i].prod] is None:
-				result.append('%d:%d' % (termidx(tree[i].left),
-						termidx(tree[i].left)))
+			if vocab.islexical(tree[i].prod):
+				result.append('%d=%s' % (
+						termidx(tree[i].left), vocab.getword(tree[i].prod)))
 			else:
-				result.append('%d=%s' % (termidx(tree[i].left),
-						vocab.words[tree[i].prod]))
+				result.append('%d:%d' % (
+						termidx(tree[i].left), termidx(tree[i].left)))
 		else:
-			result.append(vocab.words[tree[i].prod] or '')
+			result.append(vocab.getword(tree[i].prod) or '')
 	elif disc:  # node not in bitset, frontier non-terminal
 		result.append(yieldranges(sorted(getyield(tree, i))))
 	result.append(')')
@@ -909,9 +901,9 @@ cdef dumpmatrix(uint64_t *matrix, NodeArray a, NodeArray b, Node *anodes,
 	print('\t'.join([''] + ['%2d' % x for x in range(b.len)
 		if bnodes[x].prod != -1]))
 	for m in range(b.len):
-		print('\t', vocab.labels[(<Node>bnodes[m]).prod][:3], end='')
+		print('\t', vocab.getlabel((<Node>bnodes[m]).prod)[:3], end='')
 	for n in range(a.len):
-		print('\n%2d' % n, vocab.labels[(<Node>anodes[n]).prod][:3], end='')
+		print('\n%2d' % n, vocab.getlabel((<Node>anodes[n]).prod)[:3], end='')
 		for m in range(b.len):
 			print('\t', end='')
 			print('1' if TESTBIT(&matrix[m * SLOTS], n) else ' ', end='')
@@ -933,11 +925,12 @@ cdef dumptree(NodeArray a, Node *anodes, list asent, Vocabulary vocab,
 		print('idx=%2d\tleft=%2d\tright=%2d\tprod=%2d\tlabel=%s' % (n,
 				termidx(anodes[n].left) if anodes[n].left < 0
 				else anodes[n].left,
-				anodes[n].right, anodes[n].prod, vocab.labels[anodes[n].prod]),
+				anodes[n].right, anodes[n].prod,
+				vocab.getlabel(anodes[n].prod)),
 				end='')
 		if anodes[n].left < 0:
-			if vocab.words[anodes[n].prod]:
-				print('\t%s=%s' % ('terminal', vocab.words[anodes[n].prod]))
+			if vocab.islexical(anodes[n].prod):
+				print('\t%s=%s' % ('terminal', vocab.getword(anodes[n].prod)))
 			else:
 				print('\tfrontier non-terminal')
 		else:
@@ -964,7 +957,7 @@ def nonfrontier(sent):
 
 cdef int readtree(
 		str line, Vocabulary vocab, Node *nodes, array stack,
-		list children, list labels) except -9:
+		array labels, list children) except -9:
 	"""Parse tree in bracket format into pre-allocated array of Node structs.
 
 	Tree will be binarized on the fly, equivalent to
@@ -976,13 +969,17 @@ cdef int readtree(
 	:param vocab: collects productions, labels, and words.
 	:parem nodes: primary result.
 	:param stack: provide an empty ``array.array('h')``.
-	:param children, labels: provide empty lists.
+	:param labels: provide empty ``array.array('i')``.
+	:param children: provide empty list.
 	"""
 	# :param disc: whether to expect discbracket format.
-	cdef short idx = 0, n = 0, m, parent = -1, lenline = len(line), lensent = 0
-	cdef str terminal = None, label = None, prod = None
-	cdef str binlabel, binlabel2
+	cdef short idx = 0, n = 0, m, y, cur, parent = -1
+	cdef short lenline = len(line), lensent = 0
+	cdef int label, binlabel, binlabel2
+	cdef str terminal = None
+	cdef bytes prod = None
 	cdef list binchildren, binlabels
+	cdef Rule rule
 	while n < lenline:
 		while n < lenline and line[n] in ' \t\n':
 			n += 1
@@ -999,7 +996,7 @@ cdef int readtree(
 				n += 1
 			if n + 1>= lenline:
 				return -2  # unexpected end of string after label
-			label = line[startlabel:n + 1]
+			label = vocab._getlabelid(line[startlabel:n + 1])
 			parent = stack.data.as_shorts[len(stack) - 1] if stack else -1
 			stack.append(idx)
 			labels.append(label)
@@ -1025,33 +1022,41 @@ cdef int readtree(
 				if nodes[cur].prod == -1:  # frontier non-terminal?
 					nodes[cur].left = termidx(lensent)
 					lensent += 1
-					prod = ' \t%s ' % labels[cur]
-					if prod in vocab.prods:  # assign new ID?
-						nodes[cur].prod = vocab.prods[prod]
-					else:
-						nodes[cur].prod = len(vocab.prods)
-						vocab.prods[prod] = nodes[cur].prod
-						vocab.labels.append(labels[cur])
-						vocab.words.append(None)
+					rule.lhs = labels.data.as_ints[cur]
+					rule.rhs1 = rule.rhs2 = rule.args = rule.lengths = 0
+					prod = (<char *>&rule)[:sizeof(Rule)]
+					nodes[cur].prod = vocab._getprodid(prod)
 				if nodes[parent].left == -1:
 					nodes[parent].left = cur
 					if line[n + 1] == ')':  # first and only child, unary node
-						prod = '0\t%s %s' %(labels[parent], labels[cur])
+						rule.lhs = labels.data.as_ints[parent]
+						rule.rhs1 = labels.data.as_ints[cur]
+						rule.rhs2 = rule.args = 0
+						rule.lengths = 1
+						prod = (<char *>&rule)[:sizeof(Rule)]
 				elif nodes[parent].right == -1:
 					nodes[parent].right = cur
 					if line[n + 1] == ')':  # 2nd and last child, binary node
-						prod = '01\t%s %s %s' % (
-								labels[parent], labels[parent + 1], labels[cur])
+						rule.lhs = labels.data.as_ints[parent]
+						rule.rhs1 = labels.data.as_ints[parent + 1]
+						rule.rhs2 = labels.data.as_ints[cur]
+						rule.args = rule.lengths = 0b10
+						prod = (<char *>&rule)[:sizeof(Rule)]
 				elif line[n + 1] == ')':  # last of > 2 children
 					# collect labels
 					binchildren = children.pop()
-					binlabels = [labels[m] for m in binchildren]
-					binlabel = '%s|<%s.%s>' % (
-							labels[parent], binlabels[0],
-							','.join(binlabels[1:]))
+					binlabels = [labels.data.as_ints[m] for m in binchildren]
+					binlabel = vocab._getlabelid('%s|<%s.%s>' % (
+							vocab.idtolabel(labels.data.as_ints[parent]),
+							vocab.idtolabel(binlabels[0]),
+							','.join(vocab.idtolabel(x)
+								for x in binlabels[1:])))
 					nodes[parent].right = idx
-					prod = '01\t%s %s %s' % (
-							labels[parent], labels[parent + 1], binlabel)
+					rule.lhs = labels.data.as_ints[parent]
+					rule.rhs1 = labels.data.as_ints[parent + 1]
+					rule.rhs2 = binlabel
+					rule.args = rule.lengths = 0b10
+					prod = (<char *>&rule)[:sizeof(Rule)]
 					# add intermediate nodes
 					for m, y in enumerate(
 							binchildren[1:len(binchildren) - 1], 1):
@@ -1061,21 +1066,20 @@ cdef int readtree(
 							binlabel2 = binlabels[len(binlabels) - 1]
 						else:
 							nodes[idx].right = idx + 1
-							binlabel2 = '%s|<%s.%s>' % (
-									labels[parent],
-									','.join(binlabels[:m + 1]),
-									','.join(binlabels[m + 1:]))
-						if prod in vocab.prods:  # assign new ID?
-							nodes[parent].prod = vocab.prods[prod]
-						else:
-							nodes[parent].prod = len(vocab.prods)
-							vocab.prods[prod] = nodes[parent].prod
-							vocab.labels.append(labels[parent])
-							vocab.words.append(None)
+							binlabel2 = vocab._getlabelid('%s|<%s.%s>' % (
+									vocab.idtolabel(
+										labels.data.as_ints[parent]),
+									','.join(vocab.idtolabel(x)
+										for x in binlabels[:m + 1]),
+									','.join(vocab.idtolabel(x)
+										for x in binlabels[m + 1:])))
+						nodes[parent].prod = vocab._getprodid(prod)
 						parent = idx
 						label, binlabel = binlabel, binlabel2
-						prod = '01\t%s %s %s' % (
-								label, labels[y], binlabel2)
+						rule.lhs, rule.rhs1, rule.rhs2 = (
+								label, labels.data.as_ints[y], binlabel)
+						rule.args = rule.lengths = 0b10
+						prod = (<char *>&rule)[:sizeof(Rule)]
 						idx += 1
 						labels.append(label)
 				# else:  # there is no else.
@@ -1106,16 +1110,14 @@ cdef int readtree(
 			# 	nodes[parent].left = termidx(lensent)
 			nodes[parent].left = termidx(lensent)
 			lensent += 1
-			prod = '%s\t%s Epsilon' % (terminal, labels[parent])
+			rule.lhs = labels.data.as_ints[parent]
+			rule.rhs1 = rule.rhs2 = rule.lengths = 0
+			rule.args = vocab._getlabelid(terminal)
+			prod = (<char *>&rule)[:sizeof(Rule)]
 		if prod is None:
 			pass
-		elif prod in vocab.prods:  # assign new ID?
-			nodes[parent].prod = vocab.prods[prod]
 		else:
-			nodes[parent].prod = len(vocab.prods)
-			vocab.prods[prod] = nodes[parent].prod
-			vocab.labels.append(labels[parent])
-			vocab.words.append(terminal)
+			nodes[parent].prod = vocab._getprodid(prod)
 		n += 1
 
 	if len(stack) != 0 or len(children) != 0:
@@ -1123,35 +1125,37 @@ cdef int readtree(
 	return idx
 
 
-cdef inline copynodes(tree, list prodsintree, Vocabulary vocab,
-		Node *result, int *idx):
+cdef inline copynodes(tree, list prodsintree, Node *result, int *idx):
 	"""Convert a binarized Tree object to an array of Node structs."""
 	cdef size_t n = idx[0]
 	if not isinstance(tree, Tree):
 		raise ValueError('Expected Tree node, got %s\n%r' % (type(tree), tree))
 	elif not 1 <= len(tree) <= 2:
 		raise ValueError('trees must be non-empty and binarized\n%s' % tree)
-	result[n].prod = vocab.prods[prodsintree[n]]
+	result[n].prod = prodsintree[n]
 	idx[0] += 1
 	if isinstance(tree[0], int):  # a terminal index
 		result[n].left = -tree[0] - 1
 	else:  # non-terminal
 		result[n].left = idx[0]
-		copynodes(tree[0], prodsintree, vocab, result, idx)
+		copynodes(tree[0], prodsintree, result, idx)
 	if len(tree) == 1:  # unary node
 		result[n].right = -1
 	elif isinstance(tree[1], int):  # a terminal index
 		raise ValueError('right child can only be non-terminal.')
 	else:  # binary node
 		result[n].right = idx[0]
-		copynodes(tree[1], prodsintree, vocab, result, idx)
+		copynodes(tree[1], prodsintree, result, idx)
 
 
-def getctrees(items1, items2=None, vocab=None):
+def getctrees(items1, items2=None, Vocabulary vocab=None, bint index=True):
 	"""Convert binarized Tree objects to Ctrees object.
 
 	:param items1: an iterable with tuples of the form ``(tree, sent)``.
 	:param items2: optionally, a second iterable of trees.
+	:param update: if False, do not update ``vocab``; unseen productions are
+		assigned a sentinel that never matches.
+	:param index: whether to create production index of trees.
 	:returns: dictionary with same keys as arguments, where trees1 and
 		trees2 are Ctrees objects for disc. binary trees and sentences."""
 	cdef Ctrees ctrees, ctrees1, ctrees2 = None
@@ -1175,24 +1179,19 @@ def getctrees(items1, items2=None, vocab=None):
 			cnt = 0
 			prodsintree = []
 			for r, yf in lcfrsproductions(tree, sent, frontiers=True):
-				prod = printrule(r, yf)
-				prodsintree.append(prod)
+				prodsintree.append(vocab.getprod(r, yf))
 				cnt += 1
-				if prod not in vocab.prods:
-					vocab.labels.append(r[0])
-					vocab.prods[prod] = len(vocab.prods)
-					vocab.words.append(escape(yf[0])
-							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
 				maxnodes = cnt
-				scratch = <Node *>realloc(scratch,
-						maxnodes * sizeof(Node))
+				scratch = <Node *>realloc(scratch, maxnodes * sizeof(Node))
 				if scratch is NULL:
 					raise MemoryError('allocation error')
 			cnt = 0
-			copynodes(tree, prodsintree, vocab, scratch, &cnt)
+			copynodes(tree, prodsintree, scratch, &cnt)
 			ctrees.addnodes(scratch, cnt, 0)
-		ctrees.indextrees(vocab)
+		if index:
+			ctrees.indextrees(vocab)
+	free(scratch)
 	return dict(trees1=ctrees1, trees2=ctrees2, vocab=vocab)
 
 
@@ -1205,16 +1204,16 @@ def readtreebank(treebankfile, Vocabulary vocab,
 	:returns: tuple of Ctrees object and list of sentences."""
 	cdef Ctrees ctrees
 	cdef Node *scratch
+	cdef short maxnodes = 512
+	cdef short binfactor = 2  # conservative estimate to accommodate binarization
 	cdef int cnt, n
 	cdef str line
-	cdef array stack
-	cdef list children, labels
+	cdef array stack, labels
+	cdef list children
 	if treebankfile is None:
 		return None
 	ctrees = Ctrees()
 	ctrees.alloc(512, 512 * 512)  # dummy values, array will be realloc'd
-	maxnodes = 512
-	binfactor = 2  # conservative estimate to accommodate binarization
 	scratch = <Node *>malloc(maxnodes * binfactor * sizeof(Node))
 	if scratch is NULL:
 		raise MemoryError('allocation error')
@@ -1226,14 +1225,8 @@ def readtreebank(treebankfile, Vocabulary vocab,
 			prodsintree = []
 			cnt = 0
 			for r, yf in lcfrsproductions(tree, item.sent, frontiers=True):
-				prod = printrule(r, yf)
+				prodsintree.append(vocab.getprod(r, yf))
 				cnt += 1
-				prodsintree.append(prod)
-				if prod not in vocab.prods:
-					vocab.labels.append(r[0])
-					vocab.prods[prod] = len(vocab.prods)
-					vocab.words.append(escape(yf[0])
-							if len(r) > 1 and r[1] == 'Epsilon' else None)
 			if cnt > maxnodes:
 				maxnodes = cnt
 				scratch = <Node *>realloc(scratch,
@@ -1241,33 +1234,33 @@ def readtreebank(treebankfile, Vocabulary vocab,
 				if scratch is NULL:
 					raise MemoryError('allocation error')
 			cnt = 0
-			copynodes(tree, prodsintree, vocab, scratch, &cnt)
+			copynodes(tree, prodsintree, scratch, &cnt)
 			ctrees.addnodes(scratch, cnt, 0)
 	else:  # do incremental reading of bracket trees
 		stack = clone(shortarray, 0, False)
+		labels = clone(intarray, 0, False)
 		children = []  # list of lists
-		labels = []  # list of str
 		data = openread(treebankfile, encoding=encoding)
 		for n, line in enumerate(islice(data, limit), 1):
-			if line.count('(') > maxnodes:
-				maxnodes = 2 * line.count('(')
+			cnt = line.count('(')
+			if cnt > maxnodes:
+				maxnodes = 2 * cnt
 				scratch = <Node *>realloc(scratch,
 						maxnodes * binfactor * sizeof(Node))
 				if scratch is NULL:
 					raise MemoryError('allocation error')
-			cnt = readtree(line, vocab, scratch, stack, children, labels)
+			cnt = readtree(line, vocab, scratch, stack, labels, children)
 			if cnt <= 0:
 				raise ValueError('error %d in line %d: %s\n%s' % (
 						cnt, n, TREEPARSEMSG[-cnt], line))
 			ctrees.addnodes(scratch, cnt, 0)
-			children[:] = []
-			labels[:] = []
+			del labels[:], children[:]
 		if not ctrees.len:
 			raise ValueError('%r appears to be empty' % treebankfile)
-		free(scratch)
+	free(scratch)
 	return ctrees
 
 
 __all__ = ['extractfragments', 'exactcounts', 'completebitsets',
 		'allfragments', 'repl', 'pygetsent', 'nonfrontier', 'getctrees',
-		'readtreebank', 'exactcountsslice', 'handledisc']
+		'readtreebank', 'exactcountsslice']

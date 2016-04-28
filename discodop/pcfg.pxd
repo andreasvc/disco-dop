@@ -5,9 +5,9 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.dict cimport PyDict_Contains, PyDict_GetItem
 from cpython.float cimport PyFloat_AS_DOUBLE
 from .plcfrs cimport DoubleAgenda, new_DoubleEntry
-from .containers cimport Chart, Grammar, Rule, LexicalRule, \
+from .containers cimport Chart, Grammar, ProbRule, LexicalRule, \
 		Edge, Edges, EdgesStruct, MoreEdges, RankedEdge, Idx, \
-		cellidx, compactcellidx
+		cellidx, compactcellidx, PY2
 
 cdef extern from "macros.h":
 	uint64_t TESTBIT(uint64_t a[], int b)
@@ -26,7 +26,7 @@ cdef class DenseCFGChart(CFGChart):
 	cdef EdgesStruct *parseforest  # chartitem => EdgesStruct(...)
 	cdef double *probs
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
-			Rule *rule)
+			ProbRule *rule)
 	cdef bint updateprob(self, uint32_t lhs, Idx start, Idx end, double prob,
 			double beam)
 	cdef double _subtreeprob(self, size_t item)
@@ -38,7 +38,7 @@ cdef class SparseCFGChart(CFGChart):
 	cdef readonly dict parseforest  # chartitem => Edges(...)
 	cdef dict probs
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
-			Rule *rule)
+			ProbRule *rule)
 	cdef bint updateprob(self, uint32_t lhs, Idx start, Idx end, double prob,
 			double beam)
 	cdef double _subtreeprob(self, size_t item)

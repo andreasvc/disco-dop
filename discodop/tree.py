@@ -1457,7 +1457,7 @@ class DrawTree(object):
 						if (funcsep and not seensep and isinstance(node, Tree)
 								and node.label not in PTBPUNC
 								and funcsep in line):
-							cat, func = line.split(funcsep, 1)
+							cat, func = line.rsplit(funcsep, 1)
 						elif seensep:
 							cat, func = None, line
 						else:
@@ -1771,5 +1771,6 @@ def ptbunescape(token):
 			'#LRB#', '(').replace('#RRB#', ')')
 
 __all__ = ['Tree', 'ImmutableTree', 'ParentedTree', 'ImmutableParentedTree',
-		'DrawTree', 'latexlabel', 'frontier', 'brackettree', 'isdisc',
-		'bitfanout', 'escape', 'unescape', 'ptbescape', 'ptbunescape']
+		'DiscTree', 'DrawTree', 'latexlabel', 'frontier', 'brackettree',
+		'isdisc', 'escape', 'unescape', 'ptbescape', 'ptbunescape',
+		'writebrackettree', 'writediscbrackettree']

@@ -8,7 +8,8 @@ ELSE:
 
 # The number of edges allocated at once
 # (higher number means less overhead during allocation, but more space wasted)
-DEF EDGES_SIZE = 100
+# reserve 8 bytes for linked list pointer; 16 bytes per edge.
+DEF EDGES_SIZE = (256 - 8) // 16
 
 # The arity of the heap. A typical heap is binary (2).
 # Higher values result in a heap with a smaller depth,

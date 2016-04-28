@@ -98,22 +98,22 @@ div.barplot span {
     Query engine:
     {% if havetgrep %}
     <label><input type=radio name=engine value=tgrep2{{
-        ' checked' if form.get('engine', 'tgrep2') == 'tgrep2'
+        ' checked' if form.get('engine', default) == 'tgrep2'
         }} onChange="show('treesoutput', '');">TGrep2</label>
     {% endif %}
     {% if havexpath %}
     <label><input type=radio name=engine value=xpath{{
-        ' checked' if form.get('engine', 'tgrep2' if havetgrep else 'xpath') == 'xpath'
+        ' checked' if form.get('engine', default) == 'xpath'
         }} onChange="show('treesoutput', '');">XPath</label>
     {% endif %}
     {% if havefrag %}
     <label><input type=radio name=engine value=frag{{
-        ' checked' if form.get('engine', 'tgrep2') == 'frag'
+        ' checked' if form.get('engine', default) == 'frag'
         }} onChange="show('treesoutput', '');">fragment</label>
     {% endif %}
     <label><input type=radio name=engine value=regex{{
-        ' checked' if form.get('engine') == 'regex' or (not havetgrep and not havexpath and not havefrag)
-        }} onChange="hide('treesoutput', '');">regex</label>
+        ' checked' if form.get('engine', default) == 'regex'
+		}} onChange="hide('treesoutput', '');">regex</label>
     <div id=selecttexts style="display: {{ 'none' if form.get('query') or output == 'style' else 'block' }}; ">
     (Select <a href="javascript: checkall('textcheck', true); numchecked(); ">all</a>;
     <a href="javascript: checkall('textcheck', false); numchecked(); ">none</a>)

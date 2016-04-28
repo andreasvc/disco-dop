@@ -73,14 +73,14 @@ advance, so that specific options and tree transformations can be applied;
 e.g., to handle punctuation, and include functional or morphological tags.
 
 A cached copy of the treebank is created in an indexed format; given ``filename.mrg``,
-this indexed version is stored as ``filename.mrg.pkl.gz`` (in the same directory).
-Another file, ``treesearchvocab.pkl``, contains a global index of productions;
+this indexed version is stored as ``filename.mrg.ct`` (in the same directory).
+Another file, ``treesearchvocab.idx``, contains a global index of productions;
 this index should automatically be recreated when the list of files changes or
 any file is updated.
 For the treesearch web interface, these indexed files need to be created in advance.
 This can be done by running a dummy query on a set of files::
 
-    $ discodop treesearch -e frag prepare_corpus *.dbr
+    $ discodop treesearch -e frag '(prepare corpus)' *.dbr
 
 Regular expressions
 ^^^^^^^^^^^^^^^^^^^
@@ -133,7 +133,7 @@ resulting RE will match the second character::
 More information: https://docs.python.org/3/library/re.html#regular-expression-syntax
 
 This query engine creates a cached index of line numbers in all files
-``treesearchlineidx.pkl``; this index should automatically be recreated when
+``treesearchline.idx``; this index should automatically be recreated when
 the list of files changes or any file is updated.
 
 TGrep2 syntax overview

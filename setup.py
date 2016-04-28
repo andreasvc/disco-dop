@@ -27,6 +27,10 @@ DEBUG = '--debug' in sys.argv
 if DEBUG:
 	sys.argv.remove('--debug')
 
+with open('README.rst') as inp:
+	README = inp.read()
+
+PY2 = sys.version_info[0] == 2
 REQUIRES = [
 		'cython',  # '>=0.21',
 		'numpy',  # '>=1.6.1',
@@ -44,10 +48,10 @@ if sys.version_info[:2] < (3, 5):
 METADATA = dict(name='disco-dop',
 		version=__version__,
 		description='Discontinuous Data-Oriented Parsing',
-		long_description=open('README.rst').read(),
+		long_description=README,
 		author='Andreas van Cranenburgh',
 		author_email='A.W.vanCranenburgh@uva.nl',
-		url='https://github.com/andreasvc/disco-dop/',
+		url='http://discodop.readthedocs.io',
 		classifiers=[
 				'Development Status :: 4 - Beta',
 				'Environment :: Console',
@@ -89,13 +93,16 @@ if __name__ == '__main__':
 		raise RuntimeError('Python version 2.7 or >= 3.3 required.')
 	os.environ['GCC_COLORS'] = 'auto'
 	extra_compile_args = ['-O3', '-march=native', '-DNDEBUG',
-			'-Wno-strict-prototypes', '-Wno-unused-function']
+			'-Wno-strict-prototypes', '-Wno-unused-function',
+			'-DPY2=%d' % PY2]
 	extra_link_args = ['-DNDEBUG']
 	if USE_CYTHON:
 		if DEBUG:
 			directives.update(wraparound=True, boundscheck=True)
-			extra_compile_args = ['-g', '-O0',
-					'-Wno-strict-prototypes', '-Wno-unused-function']
+			extra_compile_args = ['-g', '-O0', '-DPY2=%d' % PY2,
+					'-Wno-strict-prototypes', '-Wno-unused-function',
+					# '-fsanitize=address', '-fsanitize=undefined',
+					'-fno-omit-frame-pointer']
 			extra_link_args = ['-g']
 		ext_modules = cythonize(
 				[Extension(

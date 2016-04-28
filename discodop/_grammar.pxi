@@ -18,20 +18,20 @@ BITPARRE = re.compile(r'^[-.e0-9]+\b')
 
 # comparison functions for sorting rules on LHS/RHS labels.
 cdef int cmp0(const void *p1, const void *p2) nogil:
-	cdef Rule *a = <Rule *>p1
-	cdef Rule *b = <Rule *>p2
+	cdef ProbRule *a = <ProbRule *>p1
+	cdef ProbRule *b = <ProbRule *>p2
 	if a.lhs == b.lhs:
 		return (a.no > b.no) - (a.no < b.no)
 	return (a.lhs > b.lhs) - (a.lhs < b.lhs)
 cdef int cmp1(const void *p1, const void *p2) nogil:
-	cdef Rule *a = <Rule *>p1
-	cdef Rule *b = <Rule *>p2
+	cdef ProbRule *a = <ProbRule *>p1
+	cdef ProbRule *b = <ProbRule *>p2
 	if a.rhs1 == b.rhs1:
 		return (a.prob < b.prob) - (a.prob > b.prob)
 	return (a.rhs1 > b.rhs1) - (a.rhs1 < b.rhs1)
 cdef int cmp2(const void *p1, const void *p2) nogil:
-	cdef Rule *a = <Rule *>p1
-	cdef Rule *b = <Rule *>p2
+	cdef ProbRule *a = <ProbRule *>p1
+	cdef ProbRule *b = <ProbRule *>p2
 	if a.rhs2 == b.rhs2:
 		return (a.prob < b.prob) - (a.prob > b.prob)
 	return (a.rhs2 > b.rhs2) - (a.rhs2 < b.rhs2)
@@ -227,7 +227,8 @@ cdef class Grammar:
 		# store all non-lexical rules in a contiguous array
 		# the other arrays will contain pointers to relevant parts thereof
 		# (indexed on lhs, rhs1, and rhs2 of rules)
-		self.bylhs = <Rule **>malloc(sizeof(Rule *) * self.nonterminals * 4)
+		self.bylhs = <ProbRule **>malloc(sizeof(ProbRule *)
+				* self.nonterminals * 4)
 		if self.bylhs is NULL:
 			raise MemoryError('allocation error')
 		self.bylhs[0] = NULL
@@ -236,7 +237,7 @@ cdef class Grammar:
 		self.rbinary = &(self.bylhs[3 * self.nonterminals])
 		# allocate the actual contiguous array that will contain the rules
 		# (plus sentinels)
-		self.bylhs[0] = <Rule *>malloc(sizeof(Rule) *
+		self.bylhs[0] = <ProbRule *>malloc(sizeof(ProbRule) *
 			(self.numrules + (2 * self.numbinary) + self.numunary + 4))
 		if self.bylhs[0] is NULL:
 			raise MemoryError('allocation error')
@@ -263,7 +264,7 @@ cdef class Grammar:
 		rules from a text file to a contiguous array of structs."""
 		cdef uint32_t n = 0, m
 		cdef double w
-		cdef Rule *cur
+		cdef ProbRule *cur
 		self.rulenos = {}
 		for line in rulelines:
 			if not line.strip():
@@ -340,7 +341,7 @@ cdef class Grammar:
 			for lexrule in self.lexicalbylhs.get(lhs, {}).values():
 				lexrule.prob /= mass
 
-	cdef _indexrules(Grammar self, Rule **dest, int idx, int filterlen):
+	cdef _indexrules(Grammar self, ProbRule **dest, int idx, int filterlen):
 		"""Auxiliary function to create Grammar objects. Copies certain
 		grammar rules and sorts them on the given index.
 		Resulting array is ordered by lhs, rhs1, or rhs2 depending on the value
@@ -349,7 +350,7 @@ cdef class Grammar:
 		A separate array has a pointer for each non-terminal into this array;
 		e.g.: dest[NP][0] == the first rule with an NP in the idx position."""
 		cdef uint32_t prev = self.nonterminals, idxlabel = 0, n, m = 0
-		cdef Rule *cur
+		cdef ProbRule *cur
 		# need to set dest even when there are no rules for that idx
 		for n in range(1, self.nonterminals):
 			dest[n] = dest[0]
@@ -370,11 +371,11 @@ cdef class Grammar:
 			assert m == self.numbinary, (m, self.numbinary)
 		# sort rules by idx (NB: qsort is not stable, use appropriate cmp func)
 		if idx == 0:
-			qsort(dest[0], m, sizeof(Rule), &cmp0)
+			qsort(dest[0], m, sizeof(ProbRule), &cmp0)
 		elif idx == 1:
-			qsort(dest[0], m, sizeof(Rule), &cmp1)
+			qsort(dest[0], m, sizeof(ProbRule), &cmp1)
 		elif idx == 2:
-			qsort(dest[0], m, sizeof(Rule), &cmp2)
+			qsort(dest[0], m, sizeof(ProbRule), &cmp2)
 		# make index: dest[NP] points to first rule with NP in index position
 		for n in range(m):
 			cur = &(dest[0][n])
@@ -453,7 +454,7 @@ cdef class Grammar:
 	def buildchainvec(self):
 		"""Build a boolean matrix representing the unary (chain) rules."""
 		cdef uint32_t n
-		cdef Rule *rule
+		cdef ProbRule *rule
 		self.chainvec = <uint64_t *>calloc(self.nonterminals
 				* BITNSLOTS(self.nonterminals), sizeof(uint64_t))
 		if self.chainvec is NULL:
@@ -465,7 +466,7 @@ cdef class Grammar:
 	def testgrammar(self, epsilon=np.finfo(np.double).eps):  # machine epsilon
 		"""Test whether all left-hand sides sum to 1 +/-epsilon for the
 		currently selected weights."""
-		cdef Rule *rule
+		cdef ProbRule *rule
 		cdef LexicalRule lexrule
 		cdef uint32_t n, maxlabel = 0
 		cdef list weights = [[] for _ in self.toid]
@@ -589,7 +590,7 @@ cdef class Grammar:
 		where 12 refers to a rule in the given coarse grammar, and the other
 		IDs to rules in this grammar."""
 		cdef int n
-		cdef Rule *rule
+		cdef ProbRule *rule
 		self.rulemapping = [[] for _ in range(coarse.numrules)]
 		for n in range(self.numrules):
 			rule = &(self.bylhs[0][n])
@@ -602,7 +603,7 @@ cdef class Grammar:
 
 	cpdef rulestr(self, int n):
 		"""Return a string representation of a specific rule in this grammar."""
-		cdef Rule rule
+		cdef ProbRule rule
 		if not 0 <= n < self.numrules:
 			raise ValueError('Out of range: %s' % n)
 		rule = self.bylhs[0][n]
@@ -614,9 +615,9 @@ cdef class Grammar:
 				if rule.rhs2 else '')
 		return '%s %s [%d]' % (left.ljust(40), self.yfstr(rule), rule.no)
 
-	cdef yfstr(self, Rule rule):
+	cdef yfstr(self, ProbRule rule):
 		cdef int n, m = 0
-		cdef result = ''
+		cdef str result = ''
 		for n in range(8 * sizeof(rule.args)):
 			result += '1' if (rule.args >> n) & 1 else '0'
 			if (rule.lengths >> n) & 1:

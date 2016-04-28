@@ -492,7 +492,7 @@ def exportsplit(line):
 
 def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	"""Get tree, sent from tree in Alpino format given as etree XML object."""
-	def getsubtree(node, parent, parentid, morphology, lemmas):
+	def getsubtree(node, parentid, morphology, lemmas):
 		"""Parse a subtree of an Alpino tree."""
 		source = [''] * len(FIELDS)
 		source[WORD] = node.get('word') or ("#%s" % node.get('id'))
@@ -506,8 +506,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 			label = node.get('cat')
 			result = ParentedTree(label.upper(), [])
 			for child in node:
-				subtree = getsubtree(child, result, node.get('id'),
-						morphology, lemmas)
+				subtree = getsubtree(child, node.get('id'), morphology, lemmas)
 				if subtree and (
 						'word' in child.keys() or 'cat' in child.keys()):
 					subtree.source[PARENT] = node.get('id')
@@ -531,7 +530,7 @@ def alpinotree(block, functions=None, morphology=None, lemmas=None):
 	coindexed = {}
 	coindexation = defaultdict(list)
 	sent = block.find('sentence').text.split(' ')
-	tree = getsubtree(block.find('node'), None, 0, morphology, lemmas)
+	tree = getsubtree(block.find('node'), 0, morphology, lemmas)
 	for i in coindexation:
 		coindexed[i].extend(coindexation[i])
 	comment = block.find('comments/comment')  # NB: only use first comment
@@ -649,8 +648,6 @@ def writeexporttree(tree, sent, key, comment, morphology):
 			morphtag = node.source[MORPH] or '--'
 			func = node.source[FUNC] or '--'
 			for rel, pid in zip(node.source[6::2], node.source[7::2]):
-				newpid = [a.source[WORD] if a.source else '#0'
-						for a in phrasalnodes].index('#' + pid)
 				secedges.append(rel)
 				secedges.append('%d' % (500 + nodeidindex.index(int(pid))))
 		parentid = '%d' % (0 if node.parent is tree
@@ -679,11 +676,13 @@ def writealpinotree(tree, sent, key, commentstr):
 			assert isinstance(tree[0], int)
 			node.set('pos', tree.label.lower())
 			node.set('word', sent[tree[0]])
-			node.set('lemma', '--')
-			node.set('postag', '--')
 			if getattr(tree, 'source', None):
 				node.set('lemma', tree.source[LEMMA] or '--')
 				node.set('postag', tree.source[MORPH] or '--')
+				# FIXME: split features in multiple attributes
+			else:
+				node.set('lemma', '--')
+				node.set('postag', '--')
 		node.tail = '\n' + '  ' * (depth - last)
 		for x, child in enumerate(tree, 1):
 			if isinstance(child, Tree):
@@ -691,6 +690,7 @@ def writealpinotree(tree, sent, key, commentstr):
 
 	result = ElementTree.Element('alpino_ds')
 	result.set('version', '1.3')
+	# FIXME: add coindexed nodes
 	addchildren(tree, sent, result, count())
 	sentence = ElementTree.SubElement(result, 'sentence')
 	sentence.text = ' '.join(sent)
@@ -723,20 +723,20 @@ def dependencies(root):
 	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
 	if root:
-		deps.append((makedep(root, deps), 'ROOT', 0))
+		deps.append((_makedep(root, deps), 'ROOT', 0))
 	return sorted(deps)
 
 
-def makedep(node, deps):
+def _makedep(node, deps):
 	"""Traverse a head-marked tree and extract dependencies."""
 	if isinstance(node[0], int):
 		return node[0] + 1
 	headchild = next(iter(a for a in node if ishead(a)))
-	lexhead = makedep(headchild, deps)
+	lexhead = _makedep(headchild, deps)
 	for child in node:
 		if child is headchild:
 			continue
-		lexheadofchild = makedep(child, deps)
+		lexheadofchild = _makedep(child, deps)
 		func = '-'
 		if (getattr(child, 'source', None)
 				and child.source[FUNC] and child.source[FUNC] != '--'):
@@ -746,7 +746,7 @@ def makedep(node, deps):
 
 
 def deplen(deps):
-	"""Compute dependency length from result of ``dependencies()``
+	"""Compute dependency length from result of ``dependencies()``.
 
 	:returns: tuple ``(totaldeplen, numdeps)``."""
 	total = sum(abs(a - b) for a, label, b in deps
@@ -1046,8 +1046,7 @@ WRITERS = ('export', 'bracket', 'discbracket', 'dact',
 __all__ = ['Item', 'CorpusReader', 'BracketCorpusReader',
 		'DiscBracketCorpusReader', 'NegraCorpusReader', 'AlpinoCorpusReader',
 		'TigerXMLCorpusReader', 'DactCorpusReader', 'exporttree',
-		'exportsplit', 'alpinotree', 'writetree', 'writebrackettree',
-		'writeexporttree', 'writealpinotree', 'writedependencies',
-		'dependencies', 'handlefunctions', 'handlemorphology',
-		'incrementaltreereader', 'segmentbrackets', 'segmentexport',
-		'numbase']
+		'exportsplit', 'alpinotree', 'writetree', 'writeexporttree',
+		'writealpinotree', 'writedependencies', 'dependencies', 'deplen',
+		'handlefunctions', 'handlemorphology', 'incrementaltreereader',
+		'segmentbrackets', 'segmentexport', 'segmentalpino', 'numbase']

@@ -33,8 +33,9 @@ SHORTUSAGE = '''\
 Usage: discodop fragments <treebank1> [treebank2] [options]
   or: discodop fragments --batch=<dir> <treebank1> <treebank2>... [options]'''
 FLAGS = ('approx', 'indices', 'nofreq', 'complete', 'complement', 'alt',
-		'relfreq', 'twoterms', 'adjacent', 'debin', 'debug', 'quiet', 'help')
-OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=')
+		'relfreq', 'adjacent', 'debin', 'debug', 'quiet', 'help')
+OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=',
+		'twoterms=')
 PARAMS = {}
 FRONTIERRE = re.compile(r'\(([^ ()]+) \)')  # for altrepr()
 TERMRE = re.compile(r'\(([^ ()]+) ([^ ()]+)\)')  # for altrepr()
@@ -69,6 +70,7 @@ def main(argv=None):
 		PARAMS['cover'] = int(a), int(b)
 	elif '--cover' in opts:
 		PARAMS['cover'] = int(opts.get('--cover', 0)), 999
+	PARAMS['twoterms'] = opts.get('--twoterms')
 	encoding = opts.get('--encoding', 'utf8')
 	batchdir = opts.get('--batch')
 
@@ -305,8 +307,10 @@ def initworker(filename1, filename2, limit, encoding):
 	trees1 = PARAMS['trees1']
 	if PARAMS['debug']:
 		print('\nproductions:')
-		for a, b in sorted(PARAMS['vocab'].prods.items(), key=lambda x: x[1]):
-			print(b, a)
+		for a, b in sorted([(PARAMS['vocab'].prodrepr(n), n)
+				for n in range(len(PARAMS['vocab'].prods))],
+				key=lambda x: x[1]):
+			print('%d. %s' % (b, a))
 		print('treebank 1:')
 		for n in range(trees1.len):
 			trees1.printrepr(n, PARAMS['vocab'])
@@ -444,7 +448,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 	trees = trees[:]
 	work = workload(numtrees, mult, numproc)
 	PARAMS.update(disc=disc, indices=indices, approx=False, complete=False,
-			complement=complement, debug=False, adjacent=False, twoterms=False)
+			complement=complement, debug=False, adjacent=False, twoterms=None)
 	initworkersimple(trees, list(sents))
 	if numproc == 1:
 		mymap, myworker = map, worker
@@ -520,7 +524,7 @@ def recurringfragments(trees, sents, numproc=1, disc=True,
 def allfragments(trees, sents, maxdepth, maxfrontier=999):
 	"""Return all fragments up to a certain depth, # frontiers."""
 	PARAMS.update(disc=True, indices=True, approx=False, complete=False,
-			complement=False, debug=False, adjacent=False, twoterms=False)
+			complement=False, debug=False, adjacent=False, twoterms=None)
 	initworkersimple(trees, list(sents))
 	return _fragments.allfragments(PARAMS['trees1'],
 			PARAMS['vocab'], maxdepth, maxfrontier,

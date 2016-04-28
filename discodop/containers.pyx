@@ -1,15 +1,26 @@
 """Data types for chart items, edges, &c."""
 from __future__ import print_function
+import os
+import mmap
+from array import array
 from math import exp, log, fsum
 from libc.math cimport log, exp
-from roaringbitmap import RoaringBitmap
+from libc.stdio cimport FILE, fopen, fwrite, fclose
+from cpython.buffer cimport PyBUF_SIMPLE, Py_buffer, PyObject_CheckBuffer, \
+		PyObject_GetBuffer, PyBuffer_Release
+from roaringbitmap import RoaringBitmap, MultiRoaringBitmap
 from .tree import Tree
-from .bit cimport nextset, nextunset, anextset, anextunset
+from cpython.array cimport array, clone
+from .bit cimport nextset, nextunset, anextset, anextunset, bit_popcount
 cimport cython
+cdef extern from "Python.h":
+	int PyObject_CheckReadBuffer(object)
+	int PyObject_AsReadBuffer(object, const void **, Py_ssize_t *)
 include "constants.pxi"
 
-maxbitveclen = SLOTS * sizeof(uint64_t) * 8
 cdef double INFINITY = float('infinity')
+maxbitveclen = SLOTS * sizeof(uint64_t) * 8
+chararray = array(b'b' if PY2 else 'b')
 
 include "_grammar.pxi"
 
@@ -211,7 +222,7 @@ cdef class RankedEdge:
 		if self.edge.rule is NULL:
 			return '%s(%r, NULL, %d, %d)' % (self.__class__.__name__,
 				self.head, self.left, self.right)
-		return '%s(%r, Edge(%d/%s, Rule(%d, %d, %d, %g)), %d, %d)' % (
+		return '%s(%r, Edge(%d/%s, ProbRule(%d, %d, %d, %g)), %d, %d)' % (
 				self.__class__.__name__, self.head,
 				self.edge.pos.mid, bin(self.edge.pos.lvec)[2:][::-1],
 				self.edge.rule.lhs, self.edge.rule.rhs1,
@@ -490,6 +501,7 @@ cdef class Ctrees:
 	def __init__(self):
 		self.len = self.max = 0
 		self.numnodes = self.maxnodes = self.nodesleft = self.numwords = 0
+		self._state = None
 
 	cpdef alloc(self, int numtrees, long numnodes):
 		"""Initialize an array of trees of nodes structs."""
@@ -563,18 +575,19 @@ cdef class Ctrees:
 		Productions are represented as integer IDs, trees are given as sets of
 		integer indices."""
 		cdef:
-			list prodindex = [None for _ in vocab.prods]
+			list prodindex = [None] * len(vocab.prods)
 			Node *nodes
 			int n, m
 		for n in range(self.len):
 			nodes = &self.nodes[self.trees[n].offset]
 			for m in range(self.trees[n].len):
-				# Add to production index
-				rb = prodindex[nodes[m].prod]
-				if rb is None:
-					rb = prodindex[nodes[m].prod] = RoaringBitmap()
-				rb.add(n)
-		self.prodindex = prodindex
+				if nodes[m].prod >= 0:
+					# Add to production index
+					rb = prodindex[nodes[m].prod]
+					if rb is None:
+						rb = prodindex[nodes[m].prod] = RoaringBitmap()
+					rb.add(n)
+		self.prodindex = MultiRoaringBitmap(prodindex)
 
 	def extract(self, int n, Vocabulary vocab, bint disc=True, int node=-1):
 		"""Return given tree in discbracket format.
@@ -582,7 +595,7 @@ cdef class Ctrees:
 		:param node: if given, extract specific subtree instead of whole tree.
 		"""
 		result = []
-		if n < 0 or n > self.len:
+		if n < 0 or n >= self.len:
 			raise IndexError
 		gettree(result, &(self.nodes[self.trees[n].offset]),
 				vocab, self.trees[n].root if node == -1 else node, disc)
@@ -590,12 +603,12 @@ cdef class Ctrees:
 
 	def extractsent(self, int n, Vocabulary vocab):
 		"""Return sentence as a list for given tree."""
-		if n < 0 or n > self.len:
+		if n < 0 or n >= self.len:
 			raise IndexError
-		sent = {termidx(self.nodes[m].left): vocab.words[self.nodes[m].prod]
-			for m in range(
-				self.trees[n].offset, self.trees[n].offset + self.trees[n].len)
-			if self.nodes[m].left < 0}
+		sent = {termidx(self.nodes[m].left): vocab.getword(self.nodes[m].prod)
+				for m in range(self.trees[n].offset,
+					self.trees[n].offset + self.trees[n].len)
+				if self.nodes[m].left < 0}
 		return [sent.get(m, None) for m in range(max(sent) + 1)]
 
 	def printrepr(self, int n, Vocabulary vocab):
@@ -604,22 +617,26 @@ cdef class Ctrees:
 		print('tree no.:', n)
 		print('complete tree:', tree)
 		offset = self.trees[n].offset
-		print('nodeno leftidx rightidx prodno lhslabel     prod')
+		print('no. leftidx rightidx prodno        lhslabel     prod')
 		for m in range(self.trees[n].len):
-			print('%2d. %2d %2d %2d %s %s' % (
+			print('%2d. %7d %8d %6d %15s     %s' % (
 					m, self.nodes[offset + m].left,
 					self.nodes[offset + m].right,
 					self.nodes[offset + m].prod,
-					vocab.labels[self.nodes[offset + m].prod].ljust(30),
-					'; '.join([a for a, b in vocab.prods.items()
-						if b == self.nodes[offset + m].prod])))
+					vocab.getlabel(self.nodes[offset + m].prod),
+					vocab.prodrepr(self.nodes[offset + m].prod)))
 		print()
 		# for a, m in sorted(vocab.prods.items(), key=lambda x: x[1]):
 		# 	print("%d. '%s' '%s' '%s'" % (m, vocab.labels[m], vocab.words[m], a))
 		# print()
 
 	def __dealloc__(self):
-		if self._state is not None:
+		if isinstance(self._state, tuple):
+			self._state[1].close()
+			os.close(self._state[0])
+			self._state = None
+			return
+		elif isinstance(self._state, dict):
 			return
 		if self.nodes is not NULL:
 			free(self.nodes)
@@ -638,47 +655,344 @@ cdef class Ctrees:
 						:self.numnodes * sizeof(self.nodes[0])],
 					trees=<bytes>(<char *>self.trees)[
 						:self.len * sizeof(self.trees[0])],
-					max=self.max, len=self.len,
+					len=self.len,
 					numnodes=self.numnodes,
 					numwords=self.numwords,
 					maxnodes=self.maxnodes,
 					prodindex=self.prodindex))
 
 	def __setstate__(self, state):
-		self.len = state['len']
-		self.max = state['max']
+		self.len = self.max = state['len']
 		self.numnodes = state['numnodes']
 		self.numwords = state['numwords']
 		self.maxnodes = state['maxnodes']
 		self.prodindex = state['prodindex']
-		self.alloc(self.len, self.numnodes)
+		# self.alloc(self.len, self.numnodes)
+		self.nodesleft = 0
 		self.nodes = <Node *><char *><bytes>state['nodes']
 		self.trees = <NodeArray *><char *><bytes>state['trees']
 		self._state = state  # keep reference alive
 
+	def tofile(self, filename):
+		cdef array out
+		cdef uint64_t *ptr
+		cdef int offset
+		cdef bytes tmp = self.prodindex.__getstate__()
+		out = clone(chararray,
+				4 * sizeof(uint64_t)
+				+ len(tmp)
+				+ self.len * sizeof(NodeArray)
+				+ self.numnodes * sizeof(Node),
+				False)
+		ptr = <uint64_t *>out.data.as_chars
+		ptr[0] = self.len
+		ptr[1] = self.numnodes
+		ptr[2] = self.numwords
+		ptr[3] = self.maxnodes
+		offset = 4 * sizeof(uint64_t)
+		memcpy(&(out.data.as_chars[offset]), <char *>tmp, len(tmp))
+		offset += len(tmp)
+		memcpy(&(out.data.as_chars[offset]), <char *>self.trees,
+				self.len * sizeof(NodeArray))
+		offset += self.len * sizeof(NodeArray)
+		memcpy(&(out.data.as_chars[offset]), <char *>self.nodes,
+				self.numnodes * sizeof(Node))
+		with open(filename, 'wb') as outfile:
+			out.tofile(outfile)
 
-@cython.final
+	@classmethod
+	def fromfile(cls, filename):
+		cdef Ctrees ob = Ctrees.__new__(Ctrees)
+		cdef size_t prodidxsize
+		cdef Py_buffer buffer
+		cdef Py_ssize_t size = 0
+		cdef char *ptr = NULL
+		cdef uint64_t *header = NULL
+		cdef int result
+		fileno = os.open(filename, os.O_RDONLY)
+		buf = mmap.mmap(fileno, 0, access=mmap.ACCESS_READ)
+		ob._state = (fileno, buf)
+		result = getbufptr(buf, &ptr, &size, &buffer)
+		if result != 0:
+			raise ValueError('could not get buffer from mmap.')
+		header = <uint64_t *>ptr
+		ob.len = ob.max = header[0]
+		ob.numnodes, ob.numwords, ob.maxnodes = header[1], header[2], header[3]
+		ob.nodesleft = 0
+		ob.prodindex = MultiRoaringBitmap.frombuffer(buf, 4 * sizeof(uint64_t))
+		prodidxsize = ob.prodindex.bufsize()
+		ob.trees = <NodeArray *>&(ptr[4 * sizeof(uint64_t) + prodidxsize])
+		ob.nodes = <Node *>&ob.trees[ob.len]
+		releasebuf(&buffer)
+		return ob
+
+
+cdef inline getyf(tuple yf, uint32_t *args, uint32_t *lengths):
+	cdef int m = 0
+	for part in yf:
+		for a in part:
+			if a == 1:
+				args[0] += 1 << m
+			elif a != 0:
+				raise ValueError('expected: %r; got: %r' % ('0', a))
+			m += 1
+		lengths[0] |= 1 << (m - 1)
+
+
+cdef inline darray_init(DArray *self, uint8_t itemsize):
+	self.len = 0
+	self.capacity = 4
+	self.itemsize = itemsize
+	self.d.ptr = malloc(self.capacity * itemsize)
+	if self.d.ptr is NULL:
+		raise MemoryError
+
+
+cdef inline darray_append_uint32(DArray *self, uint32_t elem):
+	cdef void *tmp
+	if self.len == self.capacity:
+		self.capacity *= 2
+		tmp = realloc(self.d.ptr, self.capacity * self.itemsize)
+		if tmp is NULL:
+			raise MemoryError
+		self.d.ptr = tmp
+	self.d.asint[self.len] = elem
+	self.len += 1
+
+
+cdef inline darray_extend(DArray *self, bytes data):
+	cdef void *tmp
+	cdef int n = len(data)
+	if self.len + n >= self.capacity:
+		self.capacity = 2 * (self.capacity + n)
+		tmp = realloc(self.d.ptr, self.capacity * self.itemsize)
+		if tmp is NULL:
+			raise MemoryError
+		self.d.ptr = tmp
+	memcpy(&(self.d.aschar[self.len]), <char *>data, n)
+	self.len += n
+
+
 cdef class Vocabulary:
-	"""A mapping of productions, labels, words to integers."""
+	"""A mapping of productions, labels, words to integers.
+
+	- Vocabulary.getprod(): get prod no and add to index (mutating).
+	- FixedVocabulary.getprod(): lookup prod no given labels/words.
+		(no mutation, but requires makeindex())
+	- .getlabel(): lookup label/word given prod no (no mutation, arrays only)
+	"""
 	def __init__(self):
-		self.prods = {}
-		self.labels = []
-		self.words = []
+		self.prods = {}  # bytes objects => prodno
+		self.labels = {'Epsilon': 0}  # str => labelno
+		darray_init(&self.prodbuf, sizeof(char))
+		darray_init(&self.labelbuf, sizeof(char))
+		darray_init(&self.labelidx, sizeof(uint32_t))
+		darray_append_uint32(&self.labelidx, 0)
+		darray_append_uint32(&self.labelidx, 7)
+		darray_extend(&self.labelbuf, b'Epsilon')
 
-	def __reduce__(self):
-		"""Helper function for pickling."""
-		return (Vocabulary, (), dict(
-				prods=self.prods, labels=self.labels, words=self.words))
+	def __dealloc__(self):
+		if self.prodbuf.capacity == 0:  # FixedVocabulary object
+			return
+		free(self.prodbuf.d.ptr)
+		free(self.labelbuf.d.ptr)
+		free(self.labelidx.d.ptr)
+		self.prodbuf.d.ptr = self.labelbuf.d.ptr = self.labelidx.d.ptr = NULL
 
-	def __setstate__(self, state):
-		self.prods = state['prods']
-		self.labels = state['labels']
-		self.words = state['words']
+	cdef int getprod(self, tuple r, tuple yf) except -2:
+		"""Lookup/assign production ID. Add IDs for labels/words."""
+		cdef Rule rule
+		cdef char *tmp = <char *>&rule
+		rule.lhs = self._getlabelid(r[0])
+		rule.rhs1 = self._getlabelid(r[1]) if len(r) > 1 else 0
+		rule.rhs2 = self._getlabelid(r[2]) if len(r) > 2 else 0
+		rule.lengths = rule.args = 0
+		if rule.rhs1 == 0 and len(r) > 1:
+			rule.args = self._getlabelid(yf[0])
+		else:
+			getyf(yf, &rule.args, &rule.lengths)
+		prod = <bytes>tmp[:sizeof(Rule)]
+		return self._getprodid(prod)
+
+	cdef int _getprodid(self, bytes prod) except -2:
+		cdef uint32_t n
+		if prod not in self.prods:
+			n = len(self.prods)
+			self.prods[prod] = n
+			darray_extend(&self.prodbuf, prod)
+			return n
+		return self.prods[prod]
+
+	cdef int _getlabelid(self, str label) except -1:
+		if label not in self.labels:
+			self.labels[label] = len(self.labels)
+			darray_extend(&self.labelbuf, label.encode('utf8'))
+			darray_append_uint32(&self.labelidx, self.labelbuf.len)
+		return self.labels[label]
+
+	cdef str idtolabel(self, uint32_t i):
+		return self.labelbuf.d.aschar[self.labelidx.d.asint[i]:
+				self.labelidx.d.asint[i + 1]].decode('utf8')
+
+	cdef str getlabel(self, int prodno):
+		cdef Rule *rule
+		if prodno < 0:
+			return '<UNKNOWN>'
+		rule = <Rule *>(&self.prodbuf.d.aschar[
+				prodno * sizeof(Rule)])
+		return self.labelbuf.d.aschar[self.labelidx.d.asint[rule.lhs]:
+				self.labelidx.d.asint[rule.lhs + 1]].decode('utf8')
+
+	cdef str getword(self, int prodno):
+		cdef Rule *rule
+		if prodno < 0:
+			return '<UNKNOWN>'
+		rule = <Rule *>(&self.prodbuf.d.aschar[
+				prodno * sizeof(Rule)])
+		if rule.args == 0:
+			return None
+		return self.labelbuf.d.aschar[self.labelidx.d.asint[rule.args]:
+				self.labelidx.d.asint[rule.args + 1]].decode('utf8')
+
+	cdef bint islexical(self, int prodno):
+		cdef Rule *rule
+		if prodno < 0:
+			return False
+		rule = <Rule *>(&self.prodbuf.d.aschar[
+				prodno * sizeof(Rule)])
+		return rule.args != 0 and rule.lengths == 0
+
+	def prodrepr(self, int prodno):
+		cdef Rule *rule
+		cdef int fanout, n, m = 0
+		cdef str yf = ''
+		if prodno < 0:
+			return '<UNKNOWN>'
+		rule = <Rule *>(&self.prodbuf.d.aschar[
+				prodno * sizeof(Rule)])
+		fanout = bit_popcount(<uint64_t>rule.lengths)
+		for n in range(8 * sizeof(rule.args)):
+			yf += '1' if (rule.args >> n) & 1 else '0'
+			if (rule.lengths >> n) & 1:
+				m += 1
+				if m == fanout:
+					break
+				else:
+					yf += ','
+		rhs1 = rhs2 = word = ''
+		lhs = self.idtolabel(rule.lhs)
+		if rule.rhs1 == 0:
+			word = repr(self.idtolabel(rule.args) if rule.args else None)
+		else:
+			rhs1 = self.idtolabel(rule.rhs1)
+		if rule.rhs2 != 0:
+			rhs2 = self.idtolabel(rule.rhs2)
+		return '%s %s %s %s' % (yf if rhs1 else '',
+				lhs, rhs1 or word, rhs2)
 
 	def __repr__(self):
-		return 'labels: %d, prods: %d, word types: %d' % (
-				len(set(self.labels)), len(self.prods),
-				len(set(self.words)) - 1)
+		if self.prods is None:
+			return '<Vocabulary object>'
+		return 'labels: %d, prods: %d' % (len(set(self.labels)), len(self.prods))
+
+	def tofile(self, str filename):
+		"""Helper function for pickling."""
+		cdef FILE *out = fopen(filename.encode('utf8'), b'wb')
+		cdef array header = array(b'I' if PY2 else 'I', [
+				len(self.prods), len(self.labels) + 1, self.labelbuf.len])
+		cdef size_t written = 0
+		if out is NULL:
+			raise ValueError('could not open file.')
+		try:
+			written += fwrite(header.data.as_voidptr, sizeof(uint32_t),
+					len(header), out)
+			written += fwrite(self.prodbuf.d.ptr, 1, self.prodbuf.len, out)
+			written += fwrite(self.labelidx.d.ptr, sizeof(uint32_t),
+					self.labelidx.len, out)
+			written += fwrite(self.labelbuf.d.ptr, 1, self.labelbuf.len, out)
+			if (written != len(header) + self.prodbuf.len
+					+ self.labelidx.len + self.labelbuf.len):
+				raise ValueError('error writing to file.')
+		finally:
+			fclose(out)
+
+
+@cython.final
+cdef class FixedVocabulary(Vocabulary):
+	@classmethod
+	def fromfile(cls, filename):
+		cdef FixedVocabulary ob = FixedVocabulary.__new__(FixedVocabulary)
+		cdef size_t offset = 3 * sizeof(uint32_t)
+		cdef Py_buffer buffer
+		cdef Py_ssize_t size = 0
+		cdef char *ptr = NULL
+		cdef uint32_t *header
+		cdef int result
+		fileno = os.open(filename, os.O_RDONLY)
+		buf = mmap.mmap(fileno, 0, access=mmap.ACCESS_READ)
+		ob.state = (fileno, buf)
+		result = getbufptr(buf, &ptr, &size, &buffer)
+		if result != 0:
+			raise ValueError('could not get buffer from mmap.')
+		header = <uint32_t *>ptr
+		ob.prodbuf.d.aschar = &(ptr[offset])
+		ob.prodbuf.len = header[0]
+		ob.prodbuf.capacity = 0
+		offset += header[0] * sizeof(Rule)
+		ob.labelidx.d.aschar = &(ptr[offset])
+		ob.labelidx.len = header[1]
+		ob.labelidx.capacity = 0
+		offset += header[1] * sizeof(uint32_t)
+		ob.labelbuf.d.aschar = &(ptr[offset])
+		ob.labelbuf.len = header[2]
+		ob.labelbuf.capacity = 0
+		releasebuf(&buffer)
+		return ob
+
+	def __dealloc__(self):
+		if self.state:
+			self.state[1].close()
+			os.close(self.state[0])
+			self.state = None
+
+	def makeindex(self):
+		"""Build dictionaries; necessary for getprod()."""
+		self.prods = {<bytes>self.prodbuf.d.aschar[n * sizeof(Rule):
+				(n + 1) * sizeof(Rule)]: n
+				for n in range(self.prodbuf.len // sizeof(Rule))}
+		self.labels = {self.labelbuf.d.aschar[self.labelidx.d.asint[n]:
+				self.labelidx.d.asint[n + 1]].decode('utf8'): n
+				for n in range(self.labelidx.len - 1)}
+
+	cdef int getprod(self, tuple r, tuple yf) except -2:
+		"""Lookup production ID. Return -1 when not seen before."""
+		cdef Rule rule
+		cdef char *tmp = <char *>&rule
+		res = self.labels.get(r[0], None)
+		if res is None:
+			return None
+		rule.lhs = res
+		res = self.labels.get(r[1], None) if len(r) > 1 else 0
+		if res is None:
+			return None
+		rule.rhs1 = res
+		if len(r) > 2:
+			res = self.labels.get(r[2], None)
+			if res is None:
+				return None
+			rule.rhs2 = res
+		else:
+			rule.rhs2 = 0
+		rule.lengths = rule.args = 0
+		if rule.rhs1 == 0 and len(r) > 1:
+			res = self.labels.get(yf[0], None)
+			if res is None:
+				return None
+			rule.args = res
+		else:
+			getyf(yf, &rule.args, &rule.lengths)
+		prod = <bytes>tmp[:sizeof(Rule)]
+		return self.prods.get(prod, -1)
 
 
 cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
@@ -689,7 +1003,7 @@ cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
 	:param i: node number to start with."""
 	cdef int j = tree[i].right
 	result.append('(')
-	result.append(vocab.labels[tree[i].prod])
+	result.append(vocab.getlabel(tree[i].prod))
 	result.append(' ')
 	if tree[i].left >= 0:
 		gettree(result, tree, vocab, tree[i].left, disc)
@@ -699,14 +1013,44 @@ cdef inline gettree(list result, Node *tree, Vocabulary vocab, int i,
 	elif disc:
 		result.append('%d=%s' % (
 				termidx(tree[i].left),
-				vocab.words[tree[i].prod] or ''))
+				vocab.getword(tree[i].prod) or ''))
 		# append rest of indices in case of disc. substitution site
 		while j >= 0:
 			result.append(' %d=' % termidx(tree[j].left))
 			j = tree[j].right
 	else:
-		result.append(vocab.words[tree[i].prod] or '')
+		result.append(vocab.getword(tree[i].prod) or '')
 	result.append(')')
 
+
+cdef inline int getbufptr(
+		object obj, char ** ptr, Py_ssize_t * size, Py_buffer * buf):
+	"""Get a pointer from bytes/buffer object ``obj``.
+
+	On success, return 0, and set ``ptr``, ``size``, and possibly ``buf``."""
+	cdef int result = -1
+	ptr[0] = NULL
+	size[0] = 0
+	if PY2:
+		# Although the new-style buffer interface was backported to Python 2.6,
+		# some modules, notably mmap, only support the old buffer interface.
+		# Cf. http://bugs.python.org/issue9229
+		if PyObject_CheckReadBuffer(obj) == 1:
+			result = PyObject_AsReadBuffer(
+					obj, <const void **>ptr, size)
+	elif PyObject_CheckBuffer(obj) == 1:  # new-style Buffer interface
+		result = PyObject_GetBuffer(obj, buf, PyBUF_SIMPLE)
+		if result == 0:
+			ptr[0] = <char *>buf.buf
+			size[0] = buf.len
+	return result
+
+
+cdef inline void releasebuf(Py_buffer *buf):
+	"""Release buffer if necessary."""
+	if not PY2:
+		PyBuffer_Release(buf)
+
 __all__ = ['Grammar', 'Chart', 'Ctrees', 'LexicalRule', 'SmallChartItem',
-		'FatChartItem', 'Edges', 'RankedEdge', 'numedges']
+		'FatChartItem', 'Edges', 'RankedEdge', 'Vocabulary', 'FixedVocabulary',
+		'numedges']

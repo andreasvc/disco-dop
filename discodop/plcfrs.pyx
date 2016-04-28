@@ -112,7 +112,7 @@ cdef class SmallLCFRSChart(LCFRSChart):
 		self.tmpitem = new_SmallChartItem(0, 0)
 
 	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
-			Rule *rule):
+			ProbRule *rule):
 		"""Add new edge."""
 		cdef Edge *edge
 		cdef Edges edges
@@ -178,7 +178,8 @@ cdef class FatLCFRSChart(LCFRSChart):
 				grammar, sent, start, logprob, viterbi)
 		self.tmpitem = new_FatChartItem(0)
 
-	cdef void addedge(self, FatChartItem item, FatChartItem left, Rule *rule):
+	cdef void addedge(self, FatChartItem item, FatChartItem left,
+			ProbRule *rule):
 		"""Add new edge and update viterbi probability."""
 		cdef Edge *edge
 		cdef Edges edges
@@ -305,7 +306,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 	cdef:
 		DoubleAgenda agenda = DoubleAgenda()  # the agenda
 		list probs = chart.probs  # viterbi probabilities for items
-		Rule *rule
+		ProbRule *rule
 		LexicalRule lexrule
 		LCFRSItem_fused item, newitem
 		DoubleEntry entry
@@ -592,7 +593,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 
 
 cdef inline bint process_edge(LCFRSItem_fused newitem,
-		double score, Rule *rule, LCFRSItem_fused left,
+		double score, ProbRule *rule, LCFRSItem_fused left,
 		DoubleAgenda agenda, LCFRSChart_fused chart, int estimatetype,
 		list whitelist, bint splitprune, bint markorigin, double beam_beta):
 	"""Decide what to do with a newly derived edge.
@@ -730,7 +731,7 @@ cdef inline void combine_item(LCFRSItem_fused newitem,
 		setunion(newitem.vec, left.vec, right.vec, SLOTS)
 
 
-cdef inline bint concat(Rule *rule,
+cdef inline bint concat(ProbRule *rule,
 		LCFRSItem_fused left, LCFRSItem_fused right):
 	"""Test whether two bitvectors combine according to a given rule.
 
@@ -839,7 +840,7 @@ cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 	cdef:
 		list agenda = [set() for _ in sent]  # an agenda for each span length
 		list items = chart.probs  # tracks items for each label
-		Rule *rule
+		ProbRule *rule
 		LexicalRule lexrule
 		LCFRSItem_fused item, sibling, newitem
 		short wordidx
@@ -979,7 +980,7 @@ cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 	return chart, msg
 
 
-cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, Rule *rule,
+cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, ProbRule *rule,
 		LCFRSItem_fused left, list agenda, LCFRSChart_fused chart,
 		list whitelist, bint splitprune, bint markorigin):
 	"""Decide what to do with a newly derived edge.
@@ -1018,7 +1019,7 @@ cdef inline bint process_edge_symbolic(LCFRSItem_fused newitem, Rule *rule,
 # 					# find rules with ... => left right
 # 					# can left + right concatenate?
 #
-# cdef inline set candidateitems(Rule rule, ChartItem item, dict chart,
+# cdef inline set candidateitems(ProbRule rule, ChartItem item, dict chart,
 # 		bint left=True):
 # 	"""Find all compatible siblings for an item given a rule.
 #

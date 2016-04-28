@@ -932,7 +932,7 @@ def addindices(frag):
 
 __all__ = ['lcfrsproductions', 'treebankgrammar', 'dopreduction', 'doubledop',
 		'dop1', 'dopgrammar', 'compiletsg', 'sortgrammar', 'flatten',
-		'nodefreq', 'TreeDecorator', 'DiscTree', 'UniqueIDs',
+		'nodefreq', 'TreeDecorator', 'UniqueIDs', 'mean', 'addindices',
 		'rangeheads', 'ranges', 'defaultparse', 'printrule', 'cartpi',
 		'writegrammar', 'subsetgrammar', 'grammarinfo', 'grammarstats',
 		'splitweight', 'convertweight', 'stripweight', 'sumrules', 'sumlex',

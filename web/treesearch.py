@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from operator import itemgetter
 from collections import Counter, OrderedDict, defaultdict
 from itertools import islice, groupby
+from functools import wraps
 if sys.version_info[0] == 2:
 	from itertools import ifilter as filter  # pylint: disable=E0611,W0622
 	import cPickle as pickle  # pylint: disable=import-error
@@ -28,13 +29,16 @@ else:
 	import pickle
 	from urllib.parse import quote  # pylint: disable=F0401,E0611
 	from html import escape as htmlescape
-import matplotlib
-matplotlib.use('AGG')
-import matplotlib.pyplot as plt
-import numpy
-import pandas
-import seaborn
-seaborn.set_style('ticks')
+try:
+	import matplotlib
+	matplotlib.use('AGG')
+	import matplotlib.pyplot as plt
+	import numpy
+	import pandas
+	import seaborn
+	seaborn.set_style('ticks')
+except ImportError:
+	pass
 # Flask & co
 from flask import Flask, Response
 from flask import request, render_template, send_from_directory
@@ -51,7 +55,9 @@ from discodop import treebank, fragments, treesearch
 from discodop.tree import Tree, DiscTree, DrawTree
 from discodop.util import which
 
-DEBUG = True
+DEBUG = False  # when True: enable debugging interface, disable multiprocessing
+INMEMORY = False  # keep corpora in memory
+NUMPROC = None  # None==use all cores
 MINFREQ = 2  # filter out fragments which occur just once or twice
 MINNODES = 3  # filter out fragments with only three nodes (CFG productions)
 TREELIMIT = 10  # max number of trees to draw in search resuluts
@@ -61,8 +67,10 @@ INDICESMAXRESULTS = 1024  # max number of results for which to obtain indices.
 	# Indices are used to display a dispersion plot.
 LANG = 'nl'  # language to use when running style(1) or ucto(1)
 CORPUS_DIR = "corpus/"
+PASSWD = None  # optionally, dict with user=>pass strings
 
 APP = Flask(__name__)
+STANDALONE = __name__ == '__main__'
 
 MORPH_TAGS = re.compile(
 		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
@@ -83,12 +91,41 @@ COLORS = dict(enumerate('''\
 		SlateBlue Tan Thistle Tomato Violet Wheat'''.split()))
 
 
+# http://flask.pocoo.org/snippets/8/
+def check_auth(username, password):
+	"""This function is called to check if a username / password
+	combination is valid."""
+	return username in PASSWD and password == PASSWD[username]
+
+
+def authenticate():
+	"""Sends a 401 response that enables basic auth."""
+	return Response(
+			'Could not verify your access level for that URL.\n'
+			'You have to login with proper credentials', 401,
+			{'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+
+def requires_auth(f):
+	"""Decorator to require basic authentication for route."""
+	@wraps(f)
+	def decorated(*args, **kwargs):
+		"""This docstring intentionally left blank."""
+		auth = request.authorization
+		if not auth or not check_auth(auth.username, auth.password):
+			return authenticate()
+		return f(*args, **kwargs)
+	return decorated
+# end snipppet
+
+
 @APP.route('/')
 @APP.route('/counts')
 @APP.route('/trees')
 @APP.route('/sents')
 @APP.route('/brackets')
 @APP.route('/fragments')
+@requires_auth
 def main(debug=DEBUG):
 	"""Main search form & results page."""
 	output = None
@@ -105,6 +142,8 @@ def main(debug=DEBUG):
 			havetgrep='tgrep2' in CORPORA,
 			havexpath='xpath' in CORPORA,
 			havefrag='frag' in CORPORA,
+			default=[a for a in ['tgrep2', 'xpath', 'frag', 'regex']
+					if a in CORPORA][0],
 			metadata=METADATA,
 			categoricalcolumns=None if METADATA is None else
 					[col for col in METADATA.columns
@@ -175,7 +214,6 @@ def counts(form, doexport=False):
 	per category, if the first letters of each corpus name form a small set);
 	"""
 	# TODO: option to arrange graphs by text instead of by query
-	norm = form.get('norm', 'sents')
 	engine = form.get('engine', 'tgrep2')
 	filenames = {EXTRE.sub('', os.path.basename(a)): a
 			for a in CORPORA[engine].files}
@@ -188,9 +226,6 @@ def counts(form, doexport=False):
 				separator=b';')
 		yield ('Counts from queries '
 				'(<a href="%s">export to CSV</a>):\n' % url)
-	if norm == 'query':
-		normresults = CORPORA[engine].counts(
-				form['normquery'], selected)
 	# Combined results of all queries on each file
 	combined = defaultdict(int)
 	index = [TEXTS[n] for n in selected.values()]
@@ -223,8 +258,13 @@ def counts(form, doexport=False):
 						normquery, selected, start, end)
 			else:
 				norm = form.get('norm', 'sents')
-			results = CORPORA[engine].counts(
-					query, selected, start, end, indices=False)
+			try:
+				results = CORPORA[engine].counts(
+						query, selected, start, end, indices=False)
+			except Exception as err:
+				yield '<span class=r>%s</span>' % htmlescape(
+						str(err).splitlines()[-1])
+				return
 			if len(results) <= 32 and all(
 					results[filename] < INDICESMAXRESULTS
 					for filename in results):
@@ -351,11 +391,14 @@ def trees(form):
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
 				TREELIMIT, url, url + ';linenos=1'))
-	for n, (filename, results) in enumerate(groupby(sorted(
-			CORPORA[engine].trees(form['query'],
-			selected, start, end, maxresults=TREELIMIT,
-			nomorph='nomorph' in form, nofunc='nofunc' in form),
-			key=itemgetter(0)), itemgetter(0))):
+	try:
+		tmp = CORPORA[engine].trees(form['query'],
+				selected, start, end, maxresults=TREELIMIT,
+				nomorph='nomorph' in form, nofunc='nofunc' in form)
+	except Exception as err:
+		yield '<span class=r>%s</span>' % htmlescape(str(err).splitlines()[-1])
+		return
+	for n, (filename, results) in enumerate(groupby(tmp, itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
 		if 'breakdown' in form:
@@ -375,12 +418,12 @@ def trees(form):
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			link = ('<a href="/browse?text=%d;sent=%s%s%s">browse</a>'
-					'|<a href="/browsesents?text=%d;sent=%s;highlight=%s">'
-					'context</a>' % (textno, sentno,
-					';nofunc' if 'nofunc' in form else '',
+			link = ('<a href="/browse?text=%d;sent=%d%s%s">browse</a>'
+					'|<a href="/browsesents?%s">context</a>' % (
+					textno, sentno, ';nofunc' if 'nofunc' in form else '',
 					';nomorph' if 'nomorph' in form else '',
-					textno, sentno, sentno))
+					url_encode(dict(text=textno, sent=sentno,
+						query=form['query'], engine=engine), separator=b';')))
 			try:
 				treerepr = DrawTree(tree, sent, highlight=high).text(
 						unicodelines=True, html=True)
@@ -411,11 +454,17 @@ def sents(form, dobrackets=False):
 				form['query'] if len(form['query']) < 128
 				else form['query'][:128] + '...',
 				SENTLIMIT, url, url + ';linenos=1'))
-	for n, (filename, results) in enumerate(groupby(sorted(
-			CORPORA[engine].sents(form['query'],
-				selected, start, end, maxresults=SENTLIMIT,
-				brackets=dobrackets), key=itemgetter(0)),
-			itemgetter(0))):
+	try:
+		tmp = CORPORA[engine].sents(form['query'],
+					selected, start, end, maxresults=SENTLIMIT,
+					brackets=dobrackets)
+	except Exception as err:
+		yield '<span class=r>%s</span>' % htmlescape(str(err).splitlines()[-1])
+		return
+	# NB: avoid sorting; rely on the fact that matches for each filename are
+	# already contiguous. filenames will be in arbitrary order due to
+	# multiprocessing
+	for n, (filename, results) in enumerate(groupby(tmp, itemgetter(0))):
 		textno = selected[filename]
 		text = TEXTS[textno]
 		if 'breakdown' in form:
@@ -437,12 +486,12 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			link = ('<a href="/browse?text=%d;sent=%s%s%s">tree</a>'
-					'|<a href="/browsesents?text=%d;sent=%s;highlight=%s">'
-					'context</a>' % (textno, sentno,
-					';nofunc' if 'nofunc' in form else '',
+			link = ('<a href="/browse?text=%d;sent=%d%s%s">tree</a>'
+					'|<a href="/browsesents?%s">context</a>' % (
+					textno, sentno, ';nofunc' if 'nofunc' in form else '',
 					';nomorph' if 'nomorph' in form else '',
-					textno, sentno, sentno))
+					url_encode(dict(text=textno, sent=sentno, highlight=sentno,
+						query=form['query'], engine=engine), separator=b';')))
 			if dobrackets:
 				sent = htmlescape(sent.replace(" )", " -NONE-)"))
 				out = sent.replace(high1, "<span class=r>%s</span>" % high1)
@@ -596,6 +645,7 @@ def fragmentsinresults(form, doexport=False):
 
 
 @APP.route('/style')
+@requires_auth
 def style():
 	"""Show simple surface characteristics of texts."""
 	def generate():
@@ -662,6 +712,7 @@ def style():
 
 
 @APP.route('/draw')
+@requires_auth
 def draw():
 	"""Produce a visualization of a tree on a separate page."""
 	if 'tree' in request.args:
@@ -691,6 +742,7 @@ def draw():
 
 
 @APP.route('/browse')
+@requires_auth
 def browsetrees():
 	"""Browse through trees in a file."""
 	chunk = 20  # number of trees to fetch for one request
@@ -749,6 +801,7 @@ def browsetrees():
 
 
 @APP.route('/browsesents')
+@requires_auth
 def browsesents():
 	"""Browse through sentences in a file; optionally highlight matches."""
 	chunk = 20  # number of sentences per page
@@ -808,8 +861,8 @@ def browsesents():
 			for m, high in resultshighlight.items():
 				results[m] = applyhighlight(
 						results[m], set(), set(), colorvec=high)
-		results = ['<font color=red>%s</font>' % a
-				if n == highlight else a for n, a in enumerate(results, start)]
+		results = ['<b>%s</b>' % a if n == highlight else a
+				for n, a in enumerate(results, start)]
 		prevlink = '<a id=prev>prev</a>'
 		if sentno > chunk:
 			prevlink = ('<a href="browsesents?text=%d;sent=%d%s" id=prev>'
@@ -840,6 +893,7 @@ def favicon():
 
 
 @APP.route('/metadata')
+@requires_auth
 def show_metadata():
 	"""Show metadata."""
 	return METADATA.to_html()
@@ -867,7 +921,7 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 			if target2 is None:
 				# seaborn.barplot(target.name, title, data=df)
 				seaborn.violinplot(x=target.name, y=title, data=df,
-						split=True, inner="stick", palette='Set1');
+						split=True, inner="stick", palette='Set1')
 			else:
 				seaborn.barplot(target.name, title, data=df, hue=target2.name,
 						palette='Set1')
@@ -1011,9 +1065,10 @@ def tokenize(filename):
 		converted = (a.decode('utf8').replace('-LRB-', '(').replace('-RRB-', ')')
 				for a in tgrep.stdout)
 	elif os.path.exists(base + '.mrg'):
-		converted = (' '.join(GETLEAVES.findall(line)
-				).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
-				for line in io.open(base + '.mrg', encoding='utf8'))
+		with io.open(base + '.mrg', encoding='utf8') as inp:
+			converted = (' '.join(GETLEAVES.findall(line)
+					).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
+					for line in inp)
 	elif os.path.exists(base + '.dact'):
 		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
 				'sentence').text + '\n' for entry
@@ -1049,12 +1104,12 @@ def getreadabilitymeasures(numsents):
 	cutoff = min(numsents)
 	for filename in sorted(files):
 		name = os.path.basename(filename)
-		# flatten results into a single dictionary of (key, value) pairs.
-		results[name] = {key: value
-				for data in readability.getmeasures(
-						islice(io.open(filename, encoding='utf8'), cutoff),
-						lang=LANG).values()
-					for key, value in data.items()}
+		with io.open(filename, encoding='utf8') as inp:
+			# flatten results into a single dictionary of (key, value) pairs.
+			results[name] = {key: value
+					for data in readability.getmeasures(
+							islice(inp, cutoff), lang=LANG).values()
+						for key, value in data.items()}
 	return results
 
 
@@ -1065,15 +1120,15 @@ def getcorpus():
 	picklefile = os.path.join(CORPUS_DIR, 'treesearchcorpus.pickle')
 	if os.path.exists(picklefile):
 		try:
-			texts, corpusinfo, styletable = pickle.load(
-					open(picklefile, 'rb'))
+			with open(picklefile, 'rb') as inp:
+				texts, corpusinfo, styletable = pickle.load(inp)
 		except ValueError:
 			pass
 	tfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.mrg')))
-	ffiles = [a.replace('.pkl.gz', '') for a in sorted(
-			glob.glob(os.path.join(CORPUS_DIR, '*.dbr.pkl.gz'))
-			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.pkl.gz'))
-			or glob.glob(os.path.join(CORPUS_DIR, '*.export.pkl.gz'))
+	ffiles = [a.replace('.ct', '') for a in sorted(
+			glob.glob(os.path.join(CORPUS_DIR, '*.dbr.ct'))
+			or glob.glob(os.path.join(CORPUS_DIR, '*.mrg.ct'))
+			or glob.glob(os.path.join(CORPUS_DIR, '*.export.ct'))
 			)]
 	afiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.dact')))
 	txtfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.txt')))
@@ -1083,20 +1138,22 @@ def getcorpus():
 	tokfiles = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.tok')))
 	if tfiles and set(tfiles) != set(corpora.get('tgrep2', ())):
 		corpora['tgrep2'] = treesearch.TgrepSearcher(
-				tfiles, macros='static/tgrepmacros.txt')
+				tfiles, macros='static/tgrepmacros.txt', numproc=NUMPROC)
 		log.info('tgrep2 corpus loaded.')
 	if ffiles and set(ffiles) != set(corpora.get('frag', ())):
 		corpora['frag'] = treesearch.FragmentSearcher(
-				ffiles, macros='static/fragmacros.txt', inmemory=False)
+				ffiles, macros='static/fragmacros.txt',
+				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
 		log.info('frag corpus loaded.')
 	if afiles and ALPINOCORPUSLIB and set(afiles) != set(
 			corpora.get('xpath', ())):
 		corpora['xpath'] = treesearch.DactSearcher(
-				afiles, macros='static/xpathmacros.txt')
+				afiles, macros='static/xpathmacros.txt', numproc=NUMPROC)
 		log.info('xpath corpus loaded.')
 	if tokfiles and set(tokfiles) != set(corpora.get('regex', ())):
 		corpora['regex'] = treesearch.RegexSearcher(
-				tokfiles, macros='static/regexmacros.txt')
+				tokfiles, macros='static/regexmacros.txt',
+				inmemory=INMEMORY, numproc=1 if DEBUG else NUMPROC)
 		log.info('regex corpus loaded.')
 
 	assert tfiles or afiles or ffiles or tokfiles, (
@@ -1124,8 +1181,9 @@ def getcorpus():
 				for a in tfiles or afiles or ffiles or tokfiles]
 		styletable = getreadabilitymeasures(
 				[a.len for a in next(iter(corpusinfo.values()))])
-	pickle.dump((texts, corpusinfo, styletable),
-			open(picklefile, 'wb'), protocol=-1)
+	with open(picklefile, 'wb') as out:
+		pickle.dump((texts, corpusinfo, styletable),
+				out, protocol=-1)
 	if os.path.exists(os.path.join(CORPUS_DIR, 'metadata.csv')):
 		metadata = pandas.read_csv(
 				os.path.join(CORPUS_DIR, 'metadata.csv'), index_col=0)
@@ -1194,17 +1252,31 @@ log.setLevel(logging.DEBUG)
 log.handlers[0].setFormatter(logging.Formatter(
 		fmt='%(asctime)s %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
 log.info('loading corpus.')
-(TEXTS, CORPUSINFO, STYLETABLE, CORPORA, METADATA) = getcorpus()
-log.info('corpus loaded.')
-
-if __name__ == '__main__':
+if STANDALONE:
 	from getopt import gnu_getopt, GetoptError
 	try:
-		opts, _args = gnu_getopt(sys.argv[1:], '', ['port=', 'ip='])
+		opts, _args = gnu_getopt(sys.argv[1:], '',
+				['port=', 'ip=', 'numproc=', 'debug', 'inmemory'])
 		opts = dict(opts)
 	except GetoptError as err:
 		print('error: %r' % err, file=sys.stderr)
 		sys.exit(2)
-	APP.run(debug=DEBUG, use_reloader=False,
+	INMEMORY = '--inmemory' in opts
+	DEBUG = '--debug' in opts
+	if '--numproc' in opts:
+		NUMPROC = int(opts['--numproc'])
+# NB: load corpus regardless of whether running standalone:
+(TEXTS, CORPUSINFO, STYLETABLE, CORPORA, METADATA) = getcorpus()
+log.info('corpus loaded.')
+try:
+	with open('treesearchpasswd.txt', 'rt') as fileobj:
+		PASSWD = {a.strip(): b.strip() for a, b
+				in (line.split(':', 1) for line in fileobj)}
+	log.info('password protection enabled.')
+except FileNotFoundError:
+	log.info('no password protection.')
+if STANDALONE:
+	APP.run(use_reloader=False,
 			host=opts.get('--ip', '0.0.0.0'),
-			port=int(opts.get('--port', 5001)))
+			port=int(opts.get('--port', 5001)),
+			debug=DEBUG)

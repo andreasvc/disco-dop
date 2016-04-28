@@ -1154,15 +1154,15 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 	return result
 
 
-def dlevel(tree, sent):
+def dlevel(tree):
 	"""Return the D-level measure of syntactic complexity.
 
 	Original version: Rosenberg & Abbeduto (1987); Covington et al. (2006);
 	Dutch version implemented here: Appendix A of T-Scan manual.
 
+	:param tree: A tree from the Alpino parser.
 	:returns: integer 0-7; 7 is most complex."""
 	poslist = []
-	wordlist = sent
 	pv_counter = neven_counter = 0
 	for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)):
 		poslist.append(pos)
@@ -1189,7 +1189,7 @@ def dlevel(tree, sent):
 	# 5: subordinate clause
 	for pos in poslist:
 		if (strip(pos.label) == 'vg' and 'onder' in morphfeats(pos)
-				and sent[pos[0]].lower() != 'dat'):
+				and pos.source[LEMMA] != 'dat'):
 			return 5
 	# 4: non-finite clause as object with overt subject
 	for node in tree.subtrees():
@@ -1336,11 +1336,11 @@ def hassecedge(node, func, parentid):
 	"""Test whether this node has a secondary edge ``(func, parentid)``."""
 	if getattr(node, 'source', None) is None:
 		return False
-	return any(func == 'su' and pid == parentid
-			for func, pid in zip(node.source[6::2], node.source[7::2]))
+	return any(f == func and pid == parentid
+			for f, pid in zip(node.source[6::2], node.source[7::2]))
 
 
 __all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',
-		'rrtransform', 'rrbacktransform', 'rindex', 'labels', 'pop', 'strip',
-		'ancestors', 'bracketings', 'morphfeats', 'unifymorphfeat', 'function',
-		'functions']
+		'dlevel', 'rrtransform', 'rrbacktransform', 'rindex', 'labels', 'pop',
+		'strip', 'ancestors', 'bracketings', 'morphfeats', 'unifymorphfeat',
+		'function', 'functions', 'hassecedge']

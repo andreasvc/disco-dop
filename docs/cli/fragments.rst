@@ -43,7 +43,10 @@ Options:
               of first treebank; optionally, limit number of substitution
               sites to ``m`` (default is unlimited).
 
---twoterms    only extract fragments with at least two lexical terminals.
+--twoterms=x  only extract fragments with at least two lexical terminals,
+              one of which has a POS tag which matches the given regex.
+              For example, to match POS tags of content words in the
+              Penn treebank: ``^(?:NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ])$``
 --adjacent    only consider pairs of adjacent trees (i.e., sent no. ``n, n + 1``).
 --debin       debinarize fragments.
 --alt         alternative output format: ``(NP (DT "a") NN)``

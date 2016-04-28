@@ -98,7 +98,7 @@ cdef class DenseCFGChart(CFGChart):
 		self.parseforest = <EdgesStruct *>calloc(entries, sizeof(EdgesStruct))
 		if self.parseforest is NULL:
 			raise MemoryError('allocation error')
-		self.itemsinorder = array(b'L' if sys.version_info[0] == 2 else 'L')
+		self.itemsinorder = array(b'L' if PY2 else 'L')
 
 	def __dealloc__(self):
 		cdef size_t n, entries = cellidx(
@@ -117,7 +117,7 @@ cdef class DenseCFGChart(CFGChart):
 		free(self.parseforest)
 
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
-			Rule *rule):
+			ProbRule *rule):
 		"""Add new edge to parse forest."""
 		cdef size_t item = cellidx(
 				start, end, self.lensent, self.grammar.nonterminals) + lhs
@@ -234,7 +234,7 @@ cdef class SparseCFGChart(CFGChart):
 		self.viterbi = viterbi
 		self.probs = {}
 		self.parseforest = {}
-		self.itemsinorder = array(b'L' if sys.version_info[0] == 2 else 'L')
+		self.itemsinorder = array(b'L' if PY2 else 'L')
 
 	def __dealloc__(self):
 		cdef MoreEdges *cur
@@ -247,7 +247,7 @@ cdef class SparseCFGChart(CFGChart):
 				free(tmp)
 
 	cdef void addedge(self, uint32_t lhs, Idx start, Idx end, Idx mid,
-			Rule *rule):
+			ProbRule *rule):
 		"""Add new edge to parse forest."""
 		cdef Edges edges
 		cdef MoreEdges *edgelist
@@ -364,7 +364,7 @@ cdef parse_main(sent, CFGChart_fused chart, Grammar grammar, tags,
 		short [:, :] minleft, maxleft, minright, maxright
 		DoubleAgenda unaryagenda = DoubleAgenda()
 		set cellwhitelist = None
-		Rule *rule
+		ProbRule *rule
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid
 		double oldscore, prob
@@ -491,7 +491,7 @@ cdef parse_symbolic(sent, CFGChart_fused chart, Grammar grammar,
 		list unaryagenda
 		set cellwhitelist = None
 		object it = None
-		Rule *rule
+		ProbRule *rule
 		short left, right, mid, span, lensent = len(sent)
 		short narrowl, narrowr, widel, wider, minmid, maxmid
 		uint32_t n, lhs = 0, rhs1
@@ -610,7 +610,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 	was found for every word in the sentence."""
 	cdef:
 		DoubleAgenda unaryagenda = DoubleAgenda()
-		Rule *rule
+		ProbRule *rule
 		LexicalRule lexrule
 		uint32_t n, lhs, rhs1
 		short left, right, lensent = len(sent)
@@ -780,7 +780,7 @@ def bitpar_yap_forest(forest, SparseCFGChart chart):
 	line numbers in the parse forest referring to children.
 	Assumes binarized grammar. Assumes chart's Grammar object has same order of
 	grammar rules as the grammar that was presented to bitpar."""
-	cdef Rule *rule
+	cdef ProbRule *rule
 	cdef uint32_t lhs
 	cdef Idx left, right, mid
 	cdef size_t ruleno, child1

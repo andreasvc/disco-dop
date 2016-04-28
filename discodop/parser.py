@@ -884,4 +884,4 @@ def main():
 
 __all__ = ['DictObj', 'Parser', 'doparsing', 'exportbitpargrammar',
 		'initworker', 'probstr', 'readgrammars', 'readinputbitparstyle',
-		'worker', 'readparam']
+		'readparam']

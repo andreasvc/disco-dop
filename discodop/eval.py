@@ -1074,4 +1074,4 @@ __all__ = ['Evaluator', 'TreePairResult', 'EvalAccumulator', 'main',
 		'parentedbracketings', 'bracketings', 'bracketing', 'strbracketings',
 		'leafancestorpaths', 'pathscore', 'leafancestor', 'treedisteval',
 		'recall', 'precision', 'f_measure', 'accuracy', 'harmean', 'mean',
-		'intervals', 'nozerodiv', 'editdistance']
+		'intervals', 'nozerodiv', 'editdistance', 'pyintbitcount']

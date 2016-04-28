@@ -3,6 +3,7 @@ blockquote.intro { width: 600px; text-align: justify;  }
 span.r { color: red; }
 span.b { color: blue; }
 span.tt { font-family: monospace; }
+.m { background: #ffe96c; }
 
 tt, pre {
 	font-family:

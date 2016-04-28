@@ -22,11 +22,11 @@ import re
 import sys
 from operator import attrgetter
 from itertools import islice
-from collections import defaultdict, Set, Iterable, Counter
+from collections import defaultdict, Counter
 if sys.version_info[0] > 2:
 	unicode = str  # pylint: disable=redefined-builtin
 from .tree import Tree, ImmutableTree, isdisc, bitfanout
-from .util import ishead
+from .util import ishead, OrderedSet
 
 # e.g., 'VP_2*0' group 1: 'VP_2'; group 2: '0'; group 3: ''
 SPLITLABELRE = re.compile(r'(.*)\*(?:([0-9]+)([^!]+![^!]+)?)?$')
@@ -651,17 +651,17 @@ def optimalbinarize(tree, sep='|', headdriven=False,
 	possible binarizations to head driven binarizations."""
 	if h is None:
 		tree = canonicalize(Tree.convert(tree))
-	return optimalbinarize_(addbitsets(tree), fun or complexityfanout, sep,
+	return _optimalbinarize(addbitsets(tree), fun or complexityfanout, sep,
 			headdriven, h or 999, v, ())
 
 
-def optimalbinarize_(tree, fun, sep, headdriven, h, v, ancestors):
+def _optimalbinarize(tree, fun, sep, headdriven, h, v, ancestors):
 	"""Helper function for postorder / bottom-up binarization."""
 	if not isinstance(tree, Tree):
 		return tree
 	parentstr = '^<%s>' % (','.join(ancestors[:v - 1])) if v > 1 else ''
 	newtree = ImmutableTree(tree.label + parentstr,
-		[optimalbinarize_(t, fun, sep, headdriven, h, v,
+		[_optimalbinarize(t, fun, sep, headdriven, h, v,
 			(tree.label,) + ancestors) for t in tree])
 	newtree.bitset = tree.bitset
 	return minimalbinarization(newtree, fun, sep, parentstr=parentstr, h=h,
@@ -914,57 +914,11 @@ def getyf(left, right):
 	return ''.join(result)
 
 
-class OrderedSet(Set):
-	"""A frozen, ordered set which maintains a regular list/tuple and set.
-
-	The set is indexable. Equality is defined _without_ regard for order."""
-
-	def __init__(self, iterable=None):
-		if iterable:
-			self.seq = tuple(iterable)
-			self.theset = frozenset(self.seq)
-		else:
-			self.seq = ()
-			self.theset = frozenset()
-
-	def __hash__(self):
-		return hash(self.theset)
-
-	def __contains__(self, value):
-		return value in self.theset
-
-	def __len__(self):
-		return len(self.theset)
-
-	def __iter__(self):
-		return iter(self.seq)
-
-	def __getitem__(self, n):
-		return self.seq[n]
-
-	def __reversed__(self):
-		return reversed(self.seq)
-
-	def __repr__(self):
-		if not self.seq:
-			return '%s()' % self.__class__.__name__
-		return '%s(%r)' % (self.__class__.__name__, self.seq)
-
-	def __eq__(self, other):
-		"""equality is defined _without_ regard for order."""
-		return self.theset == set(other)
-
-	def __and__(self, other):
-		"""maintain the order of the left operand."""
-		if not isinstance(other, Iterable):
-			return NotImplemented
-		return self._from_iterable(value for value in self if value in other)
-
-
 __all__ = ['binarize', 'unbinarize', 'collapseunary', 'introducepreterminals',
 		'factorconstituent', 'markovthreshold', 'splitdiscnodes',
 		'mergediscnodes', 'addfanoutmarkers', 'removefanoutmarkers',
 		'canonicalize', 'optimalbinarize', 'minimalbinarization',
 		'fanout', 'complexity', 'complexityfanout', 'fanoutcomplexity',
 		'contsets', 'abbr', 'getbits', 'addbitsets', 'getyf',
-		'treebankfanout', 'OrderedSet']
+		'treebankfanout', 'handledisc', 'removeemptynodes', 'removeterminals',
+		'binarizetree']

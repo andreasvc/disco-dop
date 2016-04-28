@@ -34,11 +34,6 @@ extern "C" {
 #include <stdint.h>
 #define BITCOUNT_BITS (sizeof(uint64_t) * CHAR_BIT)
 
-/* General implementations for systems without intrinsics */
-unsigned int bit_clz_general(uint64_t);
-unsigned int bit_ctz_general(uint64_t);
-unsigned int bit_popcount_general(uint64_t);
-
 /* Returns the number of leading 0-bits in x, starting at the most significant
    bit position. If v is 0, the result is undefined. */
 BITCOUNT_INLINE unsigned int bit_clz(uint64_t v) {
@@ -78,7 +73,8 @@ BITCOUNT_INLINE unsigned int bit_popcount(uint64_t v) {
 	#endif
 }
 
-unsigned int bit_clz_general(uint64_t v) {
+/* General implementations for systems without intrinsics */
+BITCOUNT_INLINE unsigned int bit_clz_general(uint64_t v) {
 	// From http://www.codeproject.com/Tips/784635/UInt-Bit-Operations
     uint64_t i;
     unsigned int c;
@@ -111,7 +107,7 @@ unsigned int bit_clz_general(uint64_t v) {
     return c;
 }
 
-unsigned int bit_ctz_general(uint64_t v) {
+BITCOUNT_INLINE unsigned int bit_ctz_general(uint64_t v) {
 	// From http://www.codeproject.com/Tips/784635/UInt-Bit-Operations
     uint64_t i = ~v;
     unsigned int c = ((i ^ (i + 1)) & i) >> 63;
@@ -141,12 +137,12 @@ unsigned int bit_ctz_general(uint64_t v) {
     return c;
 }
 
-unsigned int bit_popcount_general(uint64_t v) {
-	// see http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
-    v -= ((v >> 1) & 0x5555555555555555);
-    v = (v & 0x3333333333333333) + ((v >> 2) & 0x3333333333333333);
-    // return ((v + (v >> 4) & 0xF0F0F0F0F0F0F0F) * 0x101010101010101) >> 56;
-    return (((v + (v >> 4)) & 0xF0F0F0F0F0F0F0F) * 0x101010101010101) >> 56;
+BITCOUNT_INLINE unsigned int bit_popcount_general(uint64_t v) {
+	/* see http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel */
+    v -= (v >> 1) & 0x5555555555555555ULL;
+    v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
+    v = (v + (v >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return (v * 0x0101010101010101ULL) >> 56;
 }
 
 #ifdef __cplusplus

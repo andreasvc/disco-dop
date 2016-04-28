@@ -5,7 +5,7 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from .tree import Tree
 from .treetransforms import mergediscnodes, unbinarize, fanout, addbitsets
 from .containers cimport Grammar, Chart, ChartItem, Edge, Edges, MoreEdges, \
-		Rule, LexicalRule, RankedEdge, cellidx, compactcellidx, \
+		LexicalRule, RankedEdge, cellidx, compactcellidx, \
 		CFGtoSmallChartItem, CFGtoFatChartItem
 from .kbest import lazykbest
 import numpy as np

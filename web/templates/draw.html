@@ -16,6 +16,8 @@ function show(fmt) {
 		tree.value = '(S (VP (VB 0=is) (JJ 2=rich)) (NP 1=John) (? 3=?))';
 	} else if (fmt == 'export') {
 		tree.value = '#BOS 0\nis\tVB\tpres\tHD\t500\nJohn\tNP\t--\tSBJ\t0\nrich\tJJ\t--\tPRED\t500\n?\t?\t--\tPUNC\t0\n#500\tVP\t--\t--\t0\n#EOS 0\n';
+	} else if (fmt == 'alpino') {
+		tree.value = '<alpino_ds version="1.3">\n  <node begin="0" cat="s" end="4" id="0">\n    <node begin="0" cat="vp" end="3" id="1">\n      <node begin="0" end="1" id="2" lemma="--" rel="hd" pos="vb" postag="--" word="is" />\n      <node begin="2" end="3" id="3" lemma="--" rel="pred" pos="jj" postag="--" word="rich" />\n    </' + 'node>\n    <node begin="1" end="2" id="4" lemma="--" rel="sbj" pos="np" postag="--" word="John" />\n    <node begin="3" end="4" id="5" lemma="--" rel="punc" pos="?" postag="--" word="?" />\n  </' + 'node>\n  <sentence>is John rich ?</' + 'sentence>\n  <comment>ex1</' + 'comment>\n</' + 'alpino_ds>\n';
 	}
 };
 function switchopt(n) {
@@ -48,7 +50,6 @@ function switchopt(n) {
 			<textarea name=tree rows=12 cols=60 id=treefield style="width: 90%; "></textarea>
 		</td>
 		<td style="width: 50%; ">
-			<p>
 			Output:
 			<div class=item><label><input type="radio" name="output" value="text" checked onClick="javascript:switchopt(1); "> ASCII art</label></div>
 			<div class=item><label><input type="radio" name="output" value="svg" onClick="javascript:switchopt(1); "> SVG</label></div>
@@ -57,19 +58,18 @@ function switchopt(n) {
 			<div class=item><label><input type="radio" name="output" value="latex" onClick="javascript:switchopt(0); "> LaTeX</label></div><br>
 			Options:
 			<div class=item><label><input type="checkbox" name="color" value="1" checked> colors</label></div>
-			<span id=asciioptions>
+			<div id=asciioptions class=item>
 				<div class=item><label><input type="checkbox" name="unicode" value="1" checked> unicode</label></div>
-			</span>
+			</div>
 			<div class=item><label><input type="checkbox" name="abbr" value="1"> abbr. labels</label></div>
 			<div class=item><label><input type="checkbox" name="morph" value="1"> morphology</label></div>
-			<div class=item><label><input type="checkbox" name="func" value="1"> functions</label></div>
-			<span id=tikzoptions style="display: none; ">
+			<div class=item><label><input type="checkbox" name="func" value="1" checked> functions</label></div>
+			<div id=tikzoptions class=item style="display: none; ">
 				<div class=item><label><input type="radio" name="type" value="matrix" checked> TiKZ matrix</label></div>
 				<div class=item><label><input type="radio" name="type" value="nodes"> TiKZ nodes (easier to tweak manually)</label></div>
 				<div class=item><label><input type="radio" name="type" value="qtree"> TiKZ-qtree (no discontinuity)</label></div>
-			</span>
+			</div>
 			<br>
-			</p>
 			<p><input type=submit></p>
 		</td>
 	</tr>
@@ -77,17 +77,17 @@ function switchopt(n) {
 		<td style="width: 50%; ">
 			<p>Notations accepted:</p>
 			<ul>
-			<li>Regular tree(s) in bracket notation (<a href="javascript: show('bracket'); ">example</a>)
+			<li>Regular tree(s) in bracket notation (<a href="javascript:void('bracket example'); " onClick="show('bracket'); ">example</a>)
 			<li>Discontinuous tree(s) in bracket notation.
 				Represent terminals with integer indices,
-				sentence on next line (<a href="javascript: show('discbracket'); ">example</a>).
-			<li>Negra export format tree (<a href="javascript: show('export'); ">example</a>);
-				optionally shows function &amp; morphology tags; trees need to be wrapped in:
-			<blockquote><code>
-					#BOS [number]<br>
-					[...]<br>
-					#EOS [number]<br>
-			</code></blockquote>
+				sentence on next line (<a href="javascript:void('discbracket example'); " onClick="show('discbracket'); ">example</a>).
+			<li>Negra export format tree (<a href="javascript:void('export example'); " onClick="show('export'); ">example</a>);
+				optionally shows function &amp; morphology tags; trees need to be wrapped in:<br>
+				<code>#BOS [number]<br>
+				...<br>
+				#EOS [number]</code>
+			<li>Alpino XML: <code>&lt;alpino_ds&gt; ... &lt;/alpino_ds&gt;</code>
+				(<a href="javascript:void('alpino example'); " onClick="show('alpino'); ">example</a>)
 			</ul>
 		</td>
 		<td style="padding: 2%;">

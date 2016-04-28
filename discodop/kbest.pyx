@@ -9,7 +9,7 @@ from .containers import ChartItem, RankedEdge, Grammar
 cimport cython
 from libc.stdint cimport uint32_t
 from .containers cimport ChartItem, SmallChartItem, FatChartItem, \
-		Grammar, Rule, Chart, Edge, Edges, MoreEdges, RankedEdge, \
+		Grammar, ProbRule, Chart, Edge, Edges, MoreEdges, RankedEdge, \
 		new_RankedEdge, CFGtoSmallChartItem, CFGtoFatChartItem
 from .pcfg cimport CFGChart, DenseCFGChart, SparseCFGChart
 from .plcfrs cimport DoubleEntry, DoubleAgenda, nsmallest, \

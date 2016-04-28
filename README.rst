@@ -84,7 +84,7 @@ Set environment variables so that software can be installed to the home director
     echo export PYTHONIOENCODING="utf-8" >>~/.bashrc
 
 After this, re-login or restart the shell to activate these settings.
-Install Python 3.4 from source, if not installed already.
+Install Python 3 from source, if not installed already.
 Python may require some libraries such as ``zlib`` and ``readline``;
 installation steps are similar to the ones below::
 
@@ -122,48 +122,51 @@ Other systems
 If you do not run Linux, it is possible to run the code inside a virtual machine.
 To do that, install `Virtualbox <https://www.virtualbox.org/wiki/Downloads>`_
 and download the virtual machine imagine with disco-dop pre-installed:
-http://illc-lil0.science.uva.nl/VMs/discodop-vboximage.zip
+http://lang.science.uva.nl/VMs/discodop-vboximage.zip
 
 
 Documentation
 =============
-A manual page for the ``discodop`` command is installed as part of the
+Manual pages for the ``discodop`` command is installed as part of the
 installation: ``man discodop``. Further documentation can be found at
-http://discodop.readthedocs.org
-To generate a local copy see the ``docs/README`` file.
+http://discodop.readthedocs.io
 
 Grammars
 ========
-Cf. https://staff.fnwi.uva.nl/a.w.vancranenburgh/grammars/
+Cf. https://lang.science.uva.nl/grammars/
 
-The English, German, and Dutch grammars are described in a forthcoming paper
-(van Cranenburgh et al., to appear); the French grammar appears in `Sangati &
-van Cranenburgh (2015) <http://aclweb.org/anthology/W15-0902>`_.
+The English, German, and Dutch grammars are described in
+`van Cranenburgh et al., (2016) <http://dx.doi.org/10.15398/jlm.v4i1.100>`_;
+the French grammar appears in `Sangati & van Cranenburgh (2015)
+<http://aclweb.org/anthology/W15-0902>`_.
 For comparison, there is also an English grammar without discontinuous
 constituents (``ptb-nodisc``).
 
 Acknowledgments
 ===============
 
-The Tree data structures in ``tree.py`` and the simple binarization algorithm in
-``treetransforms.py`` was taken from `NLTK <http://www.nltk.org>`_.
+The Tree data structures in ``tree.py`` and the simple binarization algorithm
+in ``treetransforms.py`` were taken from `NLTK <http://www.nltk.org>`_.
 The Zhang-Shasha tree-edit distance algorithm in ``treedist.py`` was taken from
 https://github.com/timtadh/zhang-shasha
-Elements of the PLCFRS parser and punctuation re-attachment are based on code from
-`rparse <http://wolfgang-maier.de/rparse>`_. Various other bits from the
-Stanford parser, Berkeley parser, Bubs parser, &c.
+Elements of the PLCFRS parser and punctuation re-attachment are based on code
+from `rparse <http://wolfgang-maier.de/rparse>`_. Various other bits inspired
+by the Stanford parser, Berkeley parser, Bubs parser, &c.
 
 References
 ==========
-This work is partly described in the following publications:
+Please cite the following paper if you use this code in the context of a
+publication:
 
-- van Cranenburgh, Bod (2013). Discontinuous Parsing with an Efficient and Accurate
-  DOP Model. Proc. of IWPT.
-  http://www.illc.uva.nl/LaCo/CLS/papers/iwpt2013parser_final.pdf
-- van Cranenburgh (2012). Efficient parsing with linear context-free rewriting
-  systems. Proc. of EACL.
-  http://andreasvc.github.io/eacl2012corrected.pdf
-- van Cranenburgh, Scha, Sangati (2011). Discontinuous Data-Oriented Parsing:
-  A mildly context-sensitive all-fragments grammar. Proc. of SPMRL.
-  http://www.aclweb.org/anthology/W/W11/W11-3805.pdf
-
+```
+@article{vancranenburgh2016disc,
+    title={Data-Oriented Parsing with discontinuous constituents and function tags},
+    author={van Cranenburgh, Andreas and Remko Scha and Rens Bod},
+    journal={Journal of Language Modelling},
+    year={2016},
+    volume={4},
+    number={1},
+    pages={57--111},
+    url={http://dx.doi.org/10.15398/jlm.v4i1.100}
+}
+```

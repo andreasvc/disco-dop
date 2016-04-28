@@ -26,8 +26,8 @@ from .bit import pyintnextset, pyintbitcount
 from libc.stdint cimport uint8_t, uint32_t, uint64_t, intptr_t
 from .bit cimport abitcount
 from .plcfrs cimport DoubleEntry, new_DoubleEntry
-from .containers cimport Grammar, Rule, LexicalRule, Chart, Edges, MoreEdges, \
-		SmallChartItem, FatChartItem, Edge, RankedEdge, \
+from .containers cimport Grammar, ProbRule, LexicalRule, Chart, Edges, \
+		MoreEdges, SmallChartItem, FatChartItem, Edge, RankedEdge, \
 		new_RankedEdge, logprobadd, logprobsum, yieldranges
 cimport cython
 
@@ -935,7 +935,7 @@ def dopparseprob(tree, sent, Grammar coarse, Grammar fine):
 	internal nodes of fragments, or whether they join two fragments."""
 	cdef dict chart = {}  # chart[bitset][label] = prob
 	cdef dict cell  # chart[bitset] = cell; cell[label] = prob
-	cdef Rule *rule
+	cdef ProbRule *rule
 	cdef LexicalRule lexrule
 	cdef object n  # pyint
 	cdef str pos

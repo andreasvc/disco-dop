@@ -156,4 +156,4 @@ def headstats(trees):
 
 
 __all__ = ['getheadpos', 'readheadrules', 'headfinder', 'sethead', 'saveheads',
-		'headstats']
+		'headstats', 'applyheadrules']

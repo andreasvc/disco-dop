@@ -6,6 +6,7 @@ import gzip
 import codecs
 import traceback
 from functools import wraps
+from collections import Set, Iterable
 
 
 def ishead(tree):
@@ -87,6 +88,53 @@ def slice_bounds(seq, slice_obj, allow_step=False):
 	return start, stop, 1
 
 
+class OrderedSet(Set):
+	"""A frozen, ordered set which maintains a regular list/tuple and set.
+
+	The set is indexable. Equality is defined _without_ regard for order."""
+
+	def __init__(self, iterable=None):
+		if iterable:
+			self.seq = tuple(iterable)
+			self.theset = frozenset(self.seq)
+		else:
+			self.seq = ()
+			self.theset = frozenset()
+
+	def __hash__(self):
+		return hash(self.theset)
+
+	def __contains__(self, value):
+		return value in self.theset
+
+	def __len__(self):
+		return len(self.theset)
+
+	def __iter__(self):
+		return iter(self.seq)
+
+	def __getitem__(self, n):
+		return self.seq[n]
+
+	def __reversed__(self):
+		return reversed(self.seq)
+
+	def __repr__(self):
+		if not self.seq:
+			return '%s()' % self.__class__.__name__
+		return '%s(%r)' % (self.__class__.__name__, self.seq)
+
+	def __eq__(self, other):
+		"""equality is defined _without_ regard for order."""
+		return self.theset == set(other)
+
+	def __and__(self, other):
+		"""maintain the order of the left operand."""
+		if not isinstance(other, Iterable):
+			return NotImplemented
+		return self._from_iterable(value for value in self if value in other)
+
+
 ANSICOLOR = {
 		'black': 30,
 		'red': 31,
@@ -99,4 +147,4 @@ ANSICOLOR = {
 }
 
 __all__ = ['ishead', 'which', 'workerfunc', 'openread', 'slice_bounds',
-		'ANSICOLOR']
+		'OrderedSet', 'ANSICOLOR']

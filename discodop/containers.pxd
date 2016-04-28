@@ -1,12 +1,18 @@
 from math import isinf, exp, log, fsum
-from libc.stdlib cimport malloc, calloc, realloc, free, qsort, atol, strtod
-from libc.string cimport memcmp, memset
+from libc.stdlib cimport malloc, calloc, realloc, free, abort, \
+		qsort, atol, strtod
+from libc.string cimport memcmp, memset, memcpy
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
+from cpython.array cimport array
 cimport cython
 include "constants.pxi"
 
 # NB: For PCFG parsing sentences longer than 256 words, change this to uint16_t
 ctypedef uint8_t Idx
+
+
+cdef extern from *:
+	cdef bint PY2
 
 
 cdef extern from "macros.h":
@@ -21,10 +27,10 @@ cdef extern from "macros.h":
 
 @cython.final
 cdef class Grammar:
-	cdef Rule **bylhs
-	cdef Rule **unary
-	cdef Rule **lbinary
-	cdef Rule **rbinary
+	cdef ProbRule **bylhs
+	cdef ProbRule **unary
+	cdef ProbRule **lbinary
+	cdef ProbRule **rbinary
 	cdef uint32_t *mapping
 	cdef uint32_t *revmap
 	cdef uint32_t **splitmapping
@@ -40,9 +46,9 @@ cdef class Grammar:
 	cdef readonly list tolabel, lexical, modelnames, rulemapping
 	cdef readonly dict toid, lexicalbyword, lexicalbylhs, lexicalbynum, rulenos
 	cdef _convertrules(self, list rulelines, dict fanoutdict)
-	cdef _indexrules(self, Rule **dest, int idx, int filterlen)
+	cdef _indexrules(self, ProbRule **dest, int idx, int filterlen)
 	cpdef rulestr(self, int n)
-	cdef yfstr(self, Rule rule)
+	cdef yfstr(self, ProbRule rule)
 
 
 # chart improvements done:
@@ -94,7 +100,7 @@ cdef class Chart:
 	cdef Edges getedges(self, item)
 
 
-cdef struct Rule:  # total: 32 bytes.
+cdef struct ProbRule:  # total: 32 bytes.
 	double prob  # 8 bytes
 	uint32_t lhs  # 4 bytes
 	uint32_t rhs1  # 4 bytes
@@ -141,7 +147,7 @@ cdef union Position:  # 8 bytes
 
 
 cdef struct Edge:  # 16 bytes
-	Rule *rule  # ruleno may take less space than pointer, but not convenient
+	ProbRule *rule  # ruleno may take less space than pointer, but not convenient
 	Position pos
 
 
@@ -230,18 +236,50 @@ cdef class Ctrees:
 	cdef readonly size_t numnodes, numwords
 	cdef readonly short maxnodes
 	cdef readonly int len
-	cdef list prodindex
+	cdef readonly object prodindex
 	cdef object _state
 	cpdef alloc(self, int numtrees, long numnodes)
 	cdef realloc(self, int numtrees, int extranodes)
 	cdef addnodes(self, Node *source, int cnt, int root)
 
 
-@cython.final
+cdef struct Rule:
+	uint32_t lhs, rhs1, rhs2, lengths, args
+
+
+cdef union ItemType:
+	void *ptr
+	char *aschar
+	uint32_t *asint
+
+
+cdef struct DArray:
+	uint8_t itemsize
+	uint32_t len
+	uint32_t capacity
+	ItemType d
+
+
 cdef class Vocabulary:
 	cdef readonly dict prods  # production str. => int
-	cdef readonly list labels  # int => lhs of production
-	cdef readonly list words  # int => rhs of lex. production
+	cdef readonly dict labels  # label/word str => int
+	#
+	cdef DArray prodbuf  # single string with all productions concatented
+	cdef DArray labelbuf  # single string with all labels/words concatented
+	cdef DArray labelidx  # label id => offset in labelbuf
+	#
+	cdef str idtolabel(self, uint32_t i)
+	cdef str getlabel(self, int prodno)
+	cdef str getword(self, int prodno)
+	cdef bint islexical(self, int prodno)
+	cdef int getprod(self, tuple r, tuple yf) except -2
+	cdef int _getprodid(self, bytes prod) except -2
+	cdef int _getlabelid(self, str label) except -1
+
+
+cdef class FixedVocabulary(Vocabulary):
+	cdef object state  # to keep buffer alive
+
 
 # end fragments stuff
 

@@ -5,7 +5,7 @@ from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from cpython.list cimport PyList_GET_ITEM, PyList_GET_SIZE
 from cpython.set cimport PySet_Contains
 from cpython.float cimport PyFloat_AS_DOUBLE
-from .containers cimport Chart, Grammar, Rule, LexicalRule, \
+from .containers cimport Chart, Grammar, ProbRule, LexicalRule, \
 		ChartItem, SmallChartItem, FatChartItem, new_SmallChartItem, \
 		new_FatChartItem, Edge, Edges, MoreEdges, Chart, CFGtoFatChartItem
 from .bit cimport nextset, nextunset, bitcount, bitlength, \
@@ -41,13 +41,14 @@ cdef class LCFRSChart(Chart):
 cdef class SmallLCFRSChart(LCFRSChart):
 	cdef SmallChartItem tmpitem
 	cdef void addedge(self, SmallChartItem item, SmallChartItem left,
-			Rule *rule)
+			ProbRule *rule)
 
 
 @cython.final
 cdef class FatLCFRSChart(LCFRSChart):
 	cdef FatChartItem tmpitem
-	cdef void addedge(self, FatChartItem item, FatChartItem left, Rule *rule)
+	cdef void addedge(self, FatChartItem item, FatChartItem left,
+			ProbRule *rule)
 
 
 # FIXME: Entry/Agenda are used in multiple modules; put in containers?

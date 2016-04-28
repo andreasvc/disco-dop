@@ -14,7 +14,7 @@ from libc.math cimport isnan, isfinite
 from libc.stdint cimport uint8_t, uint32_t, uint64_t
 from .bit cimport nextset, nextunset, bitcount, bitlength, testbit
 from .plcfrs cimport DoubleAgenda, DoubleEntry
-from .containers cimport Chart, Grammar, Rule, LexicalRule, \
+from .containers cimport Chart, Grammar, ProbRule, LexicalRule, \
 		new_SmallChartItem, SmallChartItem
 
 INFINITY = float('infinity')
@@ -84,7 +84,7 @@ def simpleinside(Grammar grammar, uint32_t maxlen, double [:, :] insidescores):
 	cdef SmallChartItem I
 	cdef DoubleEntry entry
 	cdef LexicalRule lexrule
-	cdef Rule rule
+	cdef ProbRule rule
 	cdef size_t i
 	cdef uint64_t vec
 
@@ -201,7 +201,7 @@ def inside(Grammar grammar, uint32_t maxlen, dict insidescores):
 	return insidescores
 
 
-cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, Rule rule,
+cdef inline uint64_t insideconcat(uint64_t a, uint64_t b, ProbRule rule,
 		Grammar grammar, uint32_t maxlen):
 	cdef int subarg, resultpos
 	cdef uint64_t result
@@ -231,7 +231,7 @@ def outsidelr(Grammar grammar, double [:, :] insidescores,
 	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef DoubleEntry entry
 	cdef Item I
-	cdef Rule rule
+	cdef ProbRule rule
 	cdef double x, insidescore, current, score
 	cdef int n, totlen, addgaps, addright, leftfanout, rightfanout
 	cdef int lenA, lenB, lr, ga
@@ -400,7 +400,7 @@ cdef pcfginsidesx(Grammar grammar, uint32_t maxlen):
 	cdef uint64_t vec
 	cdef SmallChartItem I
 	cdef DoubleEntry entry
-	cdef Rule rule
+	cdef ProbRule rule
 	cdef LexicalRule lexrule
 	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef double x
@@ -454,7 +454,7 @@ cdef pcfgoutsidesx(Grammar grammar, list insidescores, uint32_t goal,
 	cdef DoubleAgenda agenda = DoubleAgenda()
 	cdef DoubleEntry entry
 	cdef tuple I
-	cdef Rule rule
+	cdef ProbRule rule
 	cdef double x, insidescore, current, score
 	cdef int state, left, right
 	cdef size_t i, sibsize
@@ -567,7 +567,7 @@ cdef pcfginsidesxrec(Grammar grammar, list insidescores, uint32_t state,
 	Selection."""
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, split
-	cdef Rule rule
+	cdef ProbRule rule
 	cdef LexicalRule lexrule
 	if span == 0:
 		return 0 if state == 0 else INFINITY
@@ -616,7 +616,7 @@ cdef pcfgoutsidesxrec(Grammar grammar, list insidescores, dict outsidescores,
 	"""outsideSX estimate for a PCFG."""
 	# NB: does not deal correctly with unary rules.
 	cdef size_t n, sibsize
-	cdef Rule rule
+	cdef ProbRule rule
 	cdef tuple item
 	if lspan + rspan == 0:
 		return 0 if state == goal else INFINITY
@@ -809,5 +809,5 @@ def test():
 	for item in set(chart.getitems()) - set(estchart.getitems()):
 		print(item)
 
-__all__ = ['Item', 'getestimates', 'getpcfgestimates', 'getpcfgestimates',
-		'inside', 'outsidelr', 'simpleinside']
+__all__ = ['Item', 'getestimates', 'getpcfgestimates', 'inside', 'outsidelr',
+		'simpleinside']
