@@ -156,17 +156,16 @@ by the Stanford parser, Berkeley parser, Bubs parser, &c.
 References
 ==========
 Please cite the following paper if you use this code in the context of a
-publication:
+publication::
 
-```
-@article{vancranenburgh2016disc,
-    title={Data-Oriented Parsing with discontinuous constituents and function tags},
-    author={van Cranenburgh, Andreas and Remko Scha and Rens Bod},
-    journal={Journal of Language Modelling},
-    year={2016},
-    volume={4},
-    number={1},
-    pages={57--111},
-    url={http://dx.doi.org/10.15398/jlm.v4i1.100}
-}
-```
+    @article{vancranenburgh2016disc,
+        title={Data-Oriented Parsing with discontinuous constituents and function tags},
+        author={van Cranenburgh, Andreas and Remko Scha and Rens Bod},
+        journal={Journal of Language Modelling},
+        year={2016},
+        volume={4},
+        number={1},
+        pages={57--111},
+        url={http://dx.doi.org/10.15398/jlm.v4i1.100}
+    }
+
