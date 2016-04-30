@@ -1191,6 +1191,8 @@ def _regex_run_query(pattern, filename, fileno, lineidxpath,
 	lastline = end is None or end > len(lineindex) - 1
 	if lastline:
 		end = len(lineindex) - 1
+	if start and start > len(lineindex):
+		return result
 	startidx = lineindex.select(start - 1 if start else 0)
 	endidx = lineindex.select(end)
 	with open(filename, 'rb') as tmp:

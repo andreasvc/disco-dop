@@ -95,7 +95,7 @@ COLORS = dict(enumerate('''\
 def check_auth(username, password):
 	"""This function is called to check if a username / password
 	combination is valid."""
-	return username in PASSWD and password == PASSWD[username]
+	return PASSWD is None or (username in PASSWD and password == PASSWD[username])
 
 
 def authenticate():
