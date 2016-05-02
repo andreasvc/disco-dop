@@ -75,6 +75,7 @@ div.barplot span {
 </p></blockquote>
 
 <form action="/" method=get name=queryform onSubmit="mergecheckboxes(); "><table>
+	<tbody>
     <tr valign=top><td><label for=f1>Query:</label></td>
         <td>
             <input type=text
@@ -164,7 +165,9 @@ div.barplot span {
         Extract fragments from matches;</label>
     </span>
     </td><td></td></tr>
-    <tr id=normrow>
+	</tbody>
+    <tbody id=normrow>
+    <tr>
     <td style="vertical-align:top;">Normalization:</td>
     <td><label><input type=radio name=norm value=sents{{
         ' checked' if form.get('norm', 'sents') == 'sents' }} onChange="hide('nqid', 'normquery');">
@@ -181,9 +184,11 @@ div.barplot span {
         custom query:
             <span id=nqid> <input type=text name=normquery id=f3 size=60 value="{{
                 form['normquery'] }}"></span></label>
+	</td><td></td></tr>
     {% if metadata is not none %}
-    <br>
-    <label>Correlate with (continuous) or break down by (categorical): <select name=target>
+	<tr id=variables>
+    <td style="vertical-align:top;">Variables:</td>
+	<td><label>Correlate with (continuous) or break down by (categorical): <select name=target>
             <option value="">(none)</option>
             {% for cat in metadata.columns -%}
                 <option value="{{ cat }}"{{ ' selected' if form.get('target') == cat }}>{{ cat }}</option>
@@ -196,8 +201,10 @@ div.barplot span {
             {% endfor -%}
     </select></label>
     <br><a href="metadata">view metadata</a>
-    {% endif %}
     </td><td></td></tr>
+    {% endif %}
+	</tbody>
+	<tbody>
     <tr id=labelrow>
     <td>Options</td><td>
     <label><input type=checkbox name=nomorph{{ ' checked' if 'nomorph' in form }}>
@@ -208,6 +215,7 @@ div.barplot span {
         Breakdown</label>
     <br>
     </td><td></td></tr>
+	</tbody>
 </table></form>
 <div id=tgrephelp style="display: none; "><pre>{{ """TGrep2 operators:
   A < B       A is the parent of (immediately dominates) B.

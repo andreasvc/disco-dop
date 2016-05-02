@@ -119,6 +119,11 @@ def requires_auth(f):
 # end snipppet
 
 
+def iscategorical(vec):
+	return (not numpy.issubdtype(vec.dtype, numpy.number)
+			and vec.nunique() <= 30)
+
+
 @APP.route('/')
 @APP.route('/counts')
 @APP.route('/trees')
@@ -126,7 +131,7 @@ def requires_auth(f):
 @APP.route('/brackets')
 @APP.route('/fragments')
 @requires_auth
-def main(debug=DEBUG):
+def main():
 	"""Main search form & results page."""
 	output = None
 	if request.path != '/':
@@ -147,8 +152,7 @@ def main(debug=DEBUG):
 			metadata=METADATA,
 			categoricalcolumns=None if METADATA is None else
 					[col for col in METADATA.columns
-					if METADATA[col].dtype != numpy.number
-					and METADATA[col].nunique() <= 30]
+					if iscategorical(METADATA[col])]
 			)
 	if output:
 		if output not in DISPATCH:
@@ -157,7 +161,7 @@ def main(debug=DEBUG):
 			return export(request.args, output)
 		args['output'] = output
 		args['results'] = DISPATCH[output](request.args)
-		if debug:  # For debugging purposes:
+		if DEBUG:  # Disable streaming for debugging purposes:
 			return render_template('searchresults.html', **args)
 		else:  # send results incrementally:
 			return Response(stream_template('searchresults.html', **args))
@@ -910,13 +914,7 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 		df[target.name] = target.ix[df.index]
 		if target2 is not None:
 			df[target2.name] = target2.ix[df.index]
-		if target.dtype == numpy.number:
-			if target2 is None:
-				seaborn.jointplot(target.name, title, data=df, kind='reg')
-			else:
-				seaborn.lmplot(target.name, title, data=df,
-						hue=target2.name, palette='Set1')
-		else:  # X-axis is categorical
+		if iscategorical(target):
 			df.sort_values(by=target.name, inplace=True)
 			if target2 is None:
 				# seaborn.barplot(target.name, title, data=df)
@@ -927,6 +925,12 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 						palette='Set1')
 			fig = plt.gcf()
 			fig.autofmt_xdate()
+		else:  # treat X-axis as continuous
+			if target2 is None:
+				seaborn.jointplot(target.name, title, data=df, kind='reg')
+			else:
+				seaborn.lmplot(target.name, title, data=df,
+						hue=target2.name, palette='Set1')
 		# Convert to D3, SVG, javascript etc.
 		# import mpld3
 		# result = mpld3.fig_to_html(plt.gcf(), template_type='general',
