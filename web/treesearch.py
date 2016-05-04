@@ -256,6 +256,7 @@ def counts(form, doexport=False):
 					for n, query in enumerate(queries)))
 		else:
 			legend = ''
+			normquery = normquery or form.get('normquery')
 			if normquery:
 				norm = 'query'
 				normresults = CORPORA[engine].counts(
@@ -422,8 +423,8 @@ def trees(form):
 				gotresults = True
 				yield ("==&gt; %s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>]\n<span id=n%d>" % (text, n + 1, n + 1))
-			link = ('<a href="/browse?text=%d;sent=%d%s%s">browse</a>'
-					'|<a href="/browsesents?%s">context</a>' % (
+			link = ('<a href="browse?text=%d;sent=%d%s%s">browse</a>'
+					'|<a href="browsesents?%s">context</a>' % (
 					textno, sentno, ';nofunc' if 'nofunc' in form else '',
 					';nomorph' if 'nomorph' in form else '',
 					url_encode(dict(text=textno, sent=sentno,
@@ -490,8 +491,8 @@ def sents(form, dobrackets=False):
 				gotresults = True
 				yield ("\n%s: [<a href=\"javascript: toggle('n%d'); \">"
 						"toggle</a>] <ol id=n%d>" % (text, n, n))
-			link = ('<a href="/browse?text=%d;sent=%d%s%s">tree</a>'
-					'|<a href="/browsesents?%s">context</a>' % (
+			link = ('<a href="browse?text=%d;sent=%d%s%s">tree</a>'
+					'|<a href="browsesents?%s">context</a>' % (
 					textno, sentno, ';nofunc' if 'nofunc' in form else '',
 					';nomorph' if 'nomorph' in form else '',
 					url_encode(dict(text=textno, sent=sentno, highlight=sentno,
@@ -627,13 +628,13 @@ def fragmentsinresults(form, doexport=False):
 				yield '%s\t%s\n' % (tree, freq)
 		else:
 			if disc:
-				link = "<a href='/draw?tree=%s;sent=%s'>draw</a>" % (
+				link = '<a href="draw?tree=%s;sent=%s">draw</a>' % (
 						quote(tree.encode('utf8')), quote(sent.encode('utf8')))
 				sent = GETLEAVES.sub(' <font color=red>\\1</font>',
 						htmlescape(' ' + sent + ' '))
 				tree = htmlescape(tree) + ' ' + sent
 			else:
-				link = "<a href='/draw?tree=%s'>draw</a>" % (
+				link = '<a href="draw?tree=%s">draw</a>' % (
 						quote(tree.encode('utf8')))
 				tree = GETLEAVES.sub(' <font color=red>\\1</font>',
 						htmlescape(tree))
@@ -941,7 +942,7 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 		plt.savefig(figfile, format='png')
 		result = '<div><img src="data:image/png;base64, %s"/></div>' % (
 				base64.b64encode(figfile.getvalue()).decode('utf8'))
-		plt.clf()
+		plt.close()
 		return result
 
 	result = ['<div class=barplot>',
