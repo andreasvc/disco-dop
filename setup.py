@@ -34,7 +34,7 @@ PY2 = sys.version_info[0] == 2
 REQUIRES = [
 		'cython',  # '>=0.21',
 		'numpy',  # '>=1.6.1',
-		'roaringbitmap',  # '>=0.3',
+		'roaringbitmap',  # '>=0.4',
 		'pytest',
 		'sphinx',
 		]

@@ -1,6 +1,6 @@
 cython>=0.21
 numpy>=1.6.1
-roaringbitmap
+roaringbitmap>=0.4
 cyordereddict
 pytest
 sphinx
