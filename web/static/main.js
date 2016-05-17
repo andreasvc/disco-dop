@@ -26,7 +26,7 @@ function toggletextbox() {
 	var state = document.queryform.textarea;
 	var cur = document.queryform.query;
 	var next = document.queryform.notquery;
-	var link = document.getElementById('smallbig');
+	var link = document.getElementById('textboxlink');
 	cur.name = 'notquery';
 	cur.disabled = true;
 	cur.style.display = 'none';
@@ -36,11 +36,11 @@ function toggletextbox() {
 	if(state.disabled) {
 		state.disabled = false;
 		next.innerHTML = cur.value;
-		link.innerHTML = 'big';
+		link.innerHTML = 'small';
 	} else {
 		state.disabled = true;
 		next.value = cur.value;
-		link.innerHTML = 'small';
+		link.innerHTML = 'large';
 	}
 }
 

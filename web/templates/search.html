@@ -92,10 +92,13 @@ div.barplot span {
                 value=on {{ '' if 'textarea' in form else 'disabled' }}>
         </td>
         <td><input type=submit>
-            <a href="javascript: toggletextbox(); ">the textbox is too damn <span id=smallbig>{{ 'big' if 'textarea' in form else 'small' }}</span>!</a></td>
+			<a href="javascript: toggletextbox(); ">switch to
+				<span id=textboxlink>{{ 'small' if 'textarea' in form else 'large' }}</span>
+				textbox</a>
+		</td>
     </tr>
     <tr><td style="vertical-align: text-top; ">
-    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: toggle('selecttexts'); ">toggle selection</a>;
+    Input:</td><td><span id=numchecked>{{ selectedtexts|length }} </span> texts selected; <a href="javascript: togglelink('selecttexts'); " id="linkselecttexts">hide selection</a>;
     Query engine:
     {% if havetgrep %}
     <label><input type=radio name=engine value=tgrep2{{
