@@ -94,6 +94,7 @@ if __name__ == '__main__':
 	os.environ['GCC_COLORS'] = 'auto'
 	extra_compile_args = ['-O3', '-march=native', '-DNDEBUG',
 			'-Wno-strict-prototypes', '-Wno-unused-function',
+			'-Wno-unreachable-code',
 			'-DPY2=%d' % PY2]
 	extra_link_args = ['-DNDEBUG']
 	if USE_CYTHON:
@@ -101,6 +102,7 @@ if __name__ == '__main__':
 			directives.update(wraparound=True, boundscheck=True)
 			extra_compile_args = ['-g', '-O0', '-DPY2=%d' % PY2,
 					'-Wno-strict-prototypes', '-Wno-unused-function',
+					'-Wno-unreachable-code',
 					# '-fsanitize=address', '-fsanitize=undefined',
 					'-fno-omit-frame-pointer']
 			extra_link_args = ['-g']
