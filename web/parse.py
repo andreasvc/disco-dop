@@ -88,11 +88,7 @@ def parse():
 			frags = nbest = ''
 		else:
 			if SHOWMORPH:
-				for node in results[-1].parsetree.subtrees(
-						lambda n: n and not isinstance(n[0], Tree)):
-					treebank.handlemorphology(
-							'replace', None, node, node.source)
-					node.label = node.label.replace('[]', '')
+				replacemorph(results[-1].parsetree)
 			if SHOWFUNC:
 				treebank.handlefunctions('add', results[-1].parsetree, pos=True)
 			tree = str(results[-1].parsetree)
@@ -113,10 +109,7 @@ def parse():
 			for tree, prob, x in parsetrees:
 				tree = PARSERS[lang].postprocess(tree, senttok, -1)[0]
 				if SHOWMORPH:
-					for node in tree.subtrees(
-							lambda n: n and not isinstance(n[0], Tree)):
-						treebank.handlemorphology(
-								'replace', None, node, node.source)
+					replacemorph(tree)
 				if SHOWFUNC:
 					treebank.handlefunctions('add', tree, pos=True)
 				parsetrees_.append((tree, prob, x))
@@ -244,6 +237,16 @@ def guesslang(sent):
 	probs = {lang: unigramprob(PARSERS[lang], sent) for lang in PARSERS}
 	APP.logger.info('Lang: %r; Sent: %s', probs, ' '.join(sent))
 	return max(probs, key=probs.get)
+
+
+def replacemorph(tree):
+	"""Replace POS tags with morphological tags if available."""
+	for node in tree.subtrees(
+			lambda n: n and not isinstance(n[0], Tree)):
+		x = node.source[treebank.MORPH]
+		if x and x != '--':
+			treebank.handlemorphology('replace', None, node, node.source)
+		node.label = node.label.replace('[]', '')
 
 
 logging.basicConfig()
