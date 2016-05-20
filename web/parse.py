@@ -243,7 +243,8 @@ def replacemorph(tree):
 	"""Replace POS tags with morphological tags if available."""
 	for node in tree.subtrees(
 			lambda n: n and not isinstance(n[0], Tree)):
-		x = node.source[treebank.MORPH]
+		x = (node.source[treebank.MORPH]
+				if hasattr(node, 'source') and node.source else None)
 		if x and x != '--':
 			treebank.handlemorphology('replace', None, node, node.source)
 		node.label = node.label.replace('[]', '')
