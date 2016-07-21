@@ -372,7 +372,7 @@ try:
 except IOError:
 	log.info('no password protection.')
 if STANDALONE:
-	APP.run(use_reloader=True,
+	APP.run(use_reloader=False,
 			host=opts.get('--ip', '0.0.0.0'),
 			port=int(opts.get('--port', 5003)),
 			debug=DEBUG)
