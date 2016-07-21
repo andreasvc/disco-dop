@@ -1,0 +1,98 @@
+<!doctype html>
+<title>Sentence complexity visualizer</title>
+<link type="text/css" rel="stylesheet" href="static/style.css">
+<style>
+dt { font-variant: small-caps; }
+</style>
+<body>
+<h1>Sentence complexity visualizer</h1>
+
+<table style="width: 90%; margin-left: 5%; margin-right: 5%;">
+<tr>
+<td style="width: 50%; vertical-align: top;">
+<h3>Texts</h3>
+<ol>
+{% for text in texts %}
+<li><a href="browsesents?text={{ loop.index0 }};sent=1;feat=average dependency length">
+	{{ text }}</a>
+{% endfor %}
+</ol>
+</td>
+
+<td style="width: 50%; vertical-align: top;">
+<h3>Features</h3>
+<dl>
+	<dt>PP/REL modifiers</dt>
+	<dd>Prepositional phrases and relative clauses that are used as
+	modifiers (i.e., grammatically optional).
+		<dl>
+			<dt>Example PP modifier:</dt>
+			<dd>John eats pizza <em>with</em> a fork,
+				Mary eats pizza <em>with</em> broccoli.
+			<dt>Example of non-modifying PP:</dt>
+			<dd>John believes in Mary ("in" is part of verb frame)</dd>
+			<dt>Example REL modifier:</dt>
+			<dd>This is not a book <em>that</em> should be tossed
+				away lightly, it is to be hurled with great force.
+			</dd>
+		</dl>
+	</dd>
+
+	<dt>Average dependency length</dt>
+	<dd>Average distance between words that are dependent on each other.
+	Examples:
+	<dl>
+		<dt>Simple dependency</dt>
+		<dd><em>big apple</em>. big modifies apple (distance 0).</dd>
+		<dt>Longer dependency</dt>
+		<dd><p><em>Ending a sentence with a preposition is the sort of English
+			up with which I will not put.</em> (attributed, probably incorrectly, to Churchill)</p>
+
+		<p>"Ending" is dependent on "is" (distance 6);
+		"sort" is dependent on "put" (distance 9).</p>
+		</dd>
+	</dl>
+	Cf. Gibson (2000), <a href="http://www.bcs.rochester.edu/people/fjaeger/teaching/LabSyntax2006/readings/Gibson_2000.pdf">The dependency locality theory: A distance-based theory of linguistic complexity</a>.
+	</dd>
+
+	<dt>D-level</dt>
+	<dd>A measure of sentence complexity
+	based on work in developmental psychology.
+	<ol start=0>
+        <li>simple sentence
+        <li>non-finite clause with subject coindexed from main clause
+        <li>coordinated structure
+        <li>finite clause as objects (and equivalents)
+        <li>non-finite clause as object with overt subject
+        <li>subordinate clause
+        <li>a subordinate clause modifying the subject
+        <li>sentence with multiple subordinate clauses
+	</ol>
+	See <a href="http://www.personal.psu.edu/xxl13/downloads/d-level.html">http://www.personal.psu.edu/xxl13/downloads/d-level.html</a></dd>
+
+	<dt>Direct speech</dt>
+	<dd>Matches sentences with direct speech punctuation.</dd>
+
+	<dt>Punctuation</dt>
+	<dd>Punctuation tokens; ordered (somewhat arbitrarily) as follows:
+		<ol>
+			<li>period: .
+			<li>comma: ,
+			<li>quotation mark: '
+			<li>double quote: "
+			<li>question mark: ?
+			<li>exclamation mark: !
+			<li>parenthesis: (
+			<li>colon: :
+			<li>semicolon: ;
+		</ol>
+	</dd>
+
+	<dt>Rare words</dt>
+	<dd>Words that are not in the 20,000 most common words of
+	a reference corpus (Sonar 500 million words). Names are not counted.</dd>
+</dl>
+</td>
+</tr></table>
+
+</body>
