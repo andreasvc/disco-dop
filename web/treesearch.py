@@ -1278,7 +1278,7 @@ try:
 		PASSWD = {a.strip(): b.strip() for a, b
 				in (line.split(':', 1) for line in fileobj)}
 	log.info('password protection enabled.')
-except FileNotFoundError:
+except IOError:
 	log.info('no password protection.')
 if STANDALONE:
 	APP.run(use_reloader=False,
