@@ -22,7 +22,7 @@ from discodop.tree import DrawTree
 
 DEBUG = False  # when True: enable debugging interface, disable multiprocessing
 PASSWD = None  # optionally, dict with user=>pass strings
-HEADRULES = '../../disco-dop/alpino.headrules'
+HEADRULES = 'alpino.headrules'
 
 APP = Flask(__name__)
 STANDALONE = __name__ == '__main__'
