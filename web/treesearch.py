@@ -1186,9 +1186,9 @@ def getcorpus():
 				for a in tfiles or afiles or ffiles or tokfiles]
 		styletable = getreadabilitymeasures(
 				[a.len for a in next(iter(corpusinfo.values()))])
-	with open(picklefile, 'wb') as out:
-		pickle.dump((texts, corpusinfo, styletable),
-				out, protocol=-1)
+		with open(picklefile, 'wb') as out:
+			pickle.dump((texts, corpusinfo, styletable),
+					out, protocol=-1)
 	if os.path.exists(os.path.join(CORPUS_DIR, 'metadata.csv')):
 		metadata = pandas.read_csv(
 				os.path.join(CORPUS_DIR, 'metadata.csv'), index_col=0)
