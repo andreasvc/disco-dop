@@ -26,14 +26,7 @@ HEADRULES = 'alpino.headrules'
 
 APP = Flask(__name__)
 STANDALONE = __name__ == '__main__'
-
-MORPH_TAGS = re.compile(
-		r'([_/*A-Z0-9]+)(?:\[[^ ]*\][0-9]?)?((?:-[_A-Z0-9]+)?(?:\*[0-9]+)? )')
-FUNC_TAGS = re.compile(r'-[_A-Z0-9]+')
-GETLEAVES = re.compile(r' ([^ ()]+)(?=[ )])')
-GETFRONTIERNTS = re.compile(r"\(([^ ()]+) \)")
-# the extensions for corpus files for each query engine:
-EXTRE = re.compile(r'\.(?:mrg(?:\.t2c\.gz)?|dact|export|dbr|txt|tok)$')
+CORPUS_DIR = "corpus/"
 
 COLORS = dict(enumerate('''\
 		Black Red Green Orange Blue Turquoise SlateGray Peru Teal Aqua
@@ -201,7 +194,7 @@ def browsetrees():
 		stop = start + chunk
 		nofunc = 'nofunc' in request.args
 		nomorph = 'nomorph' in request.args
-		filename = TEXTS[textno] + '.export'
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.export')
 		trees = CORPORA[filename].itertrees(start, stop)
 		results = ['<pre id="t%s"%s>%s\n%s</pre>' % (n,
 				' style="display: none; "' if 'ajax' in request.args else '',
@@ -242,7 +235,7 @@ def browsesents():
 		sentno = max(chunk // 2 + 1, sentno)
 		start = max(1, sentno - chunk // 2)
 		stop = start + chunk
-		filename = TEXTS[textno] + '.export'
+		filename = os.path.join(CORPUS_DIR, TEXTS[textno] + '.export')
 		feat = request.args.get('feat', next(iter(FILTERS)))
 		trees = list(CORPORA[filename].itertrees(start, stop))
 		results = []
@@ -317,7 +310,7 @@ def querydict(queries):
 
 def getcorpus():
 	"""Get list of files and number of lines in them."""
-	files = sorted(glob.glob('*.export'))
+	files = sorted(glob.glob(os.path.join(CORPUS_DIR, '*.export')))
 	assert files, ('no corpus files with extension .export '
 			'found.')
 	texts = [os.path.splitext(os.path.basename(a))[0] for a in files]
