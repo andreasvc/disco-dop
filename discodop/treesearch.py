@@ -993,9 +993,11 @@ class RegexSearcher(CorpusSearcher):
 	def close(self):
 		if self.files is None:
 			return
-		for fileno, buf in self.files.values():
-			buf.close()
-			os.close(fileno)
+		for val in self.files.values():
+			if val is not None:
+				fileno, buf = val
+				buf.close()
+				os.close(fileno)
 		del self.lineindex
 		self.files = None
 
