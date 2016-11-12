@@ -1154,7 +1154,7 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 	return result
 
 
-def dlevel(tree):
+def dlevel(tree, lang='nl'):
 	"""Return the D-level measure of syntactic complexity.
 
 	Original version: Rosenberg & Abbeduto (1987); Covington et al. (2006);
@@ -1162,6 +1162,8 @@ def dlevel(tree):
 
 	:param tree: A tree from the Alpino parser.
 	:returns: integer 0-7; 7 is most complex."""
+	if lang != 'nl':
+		raise NotImplementedError
 	poslist = []
 	pv_counter = neven_counter = 0
 	for pos in tree.subtrees(lambda n: n and isinstance(n[0], int)):
