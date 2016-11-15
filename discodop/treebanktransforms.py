@@ -1160,7 +1160,8 @@ def dlevel(tree, lang='nl'):
 	Original version: Rosenberg & Abbeduto (1987); Covington et al. (2006);
 	Dutch version implemented here: Appendix A of T-Scan manual.
 
-	:param tree: A tree from the Alpino parser.
+	:param tree: A tree from the Alpino parser (i.e., not binarized, with
+		function and morphological tags).
 	:returns: integer 0-7; 7 is most complex."""
 	if lang != 'nl':
 		raise NotImplementedError
@@ -1173,7 +1174,7 @@ def dlevel(tree, lang='nl'):
 		elif strip(pos.label) == 'vg' and 'neven' in morphfeats(pos):
 			neven_counter += 1
 
-	# 7:  sentence with multiple subordinate clauses
+	# 7: sentence with multiple subordinate clauses
 	# (disregarding clauses in conjunctions)
 	if pv_counter - neven_counter > 2:
 		return 7
@@ -1285,11 +1286,11 @@ def morphfeats(node):
 	"""Return the morphological features of a preterminal node.
 
 	Features may be separated by dots or commas."""
-	morph = node.source[MORPH].replace('(', '[').replace(')', ']')
 	try:
+		morph = node.source[MORPH].replace('(', '[').replace(')', ']')
 		morph = morph[morph.index('[') + 1:morph.index(']')]
-	except ValueError:
-		return {}
+	except (TypeError, ValueError):
+		return ()
 	return morph.replace('.', ',').split(',')
 
 
