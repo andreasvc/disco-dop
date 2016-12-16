@@ -675,7 +675,7 @@ class FragmentSearcher(CorpusSearcher):
 				ext = {'export': 'export',
 						'mrg': 'bracket',
 						'dbr': 'discbracket'}
-				fmt = ext[filename.split('.', 1)[1]]
+				fmt = ext[filename.rsplit('.', 1)[1]]
 				corpus = _fragments.readtreebank(filename, self.vocab, fmt=fmt)
 				corpus.indextrees(self.vocab)
 				corpus.tofile('%s.ct' % filename)

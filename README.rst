@@ -53,6 +53,7 @@ Requirements:
 - Numpy 1.5+      http://numpy.org/
 
 Python 2.7 is supported, but Python 3 is recommended.
+Install the ``futures`` package when running Python 2.7.
 
 Debian, Ubuntu based systems
 ----------------------------
@@ -80,8 +81,8 @@ Set environment variables so that software can be installed to the home director
 
     mkdir -p ~/.local
     echo export PATH=$HOME/.local/bin:$PATH >> ~/.bashrc
-    echo export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >>~/.bashrc
-    echo export PYTHONIOENCODING="utf-8" >>~/.bashrc
+    echo export LD_LIBRARY_PATH=$HOME/.local/lib:/usr/lib64:/usr/lib >> ~/.bashrc
+    echo export PYTHONIOENCODING="utf-8" >> ~/.bashrc
 
 After this, re-login or restart the shell to activate these settings.
 Install Python 3 from source, if not installed already.
@@ -127,7 +128,7 @@ http://lang.science.uva.nl/VMs/discodop-vboximage.zip
 
 Documentation
 =============
-Manual pages for the ``discodop`` command is installed as part of the
+Manual pages for the ``discodop`` command are installed as part of the
 installation: ``man discodop``. Further documentation can be found at
 http://discodop.readthedocs.io
 
