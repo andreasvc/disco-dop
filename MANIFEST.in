@@ -1,5 +1,6 @@
 include README.rst LICENSE setup.py sample.prm proper.prm alpinosample.export
-recursive-include discodop *.py *.pyx *.pxd *.pxi *.h *.c
+recursive-include discodop *.py *.h *.c
+recursive-exclude discodop *.pyx *.pxi *.pxd
 recursive-include web *.py
 recursive-include web/static *
 recursive-include web/templates *

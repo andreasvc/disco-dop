@@ -1,6 +1,7 @@
 """Generic setup.py for Cython code."""
 import os
 import sys
+import glob
 try:
 	from setuptools import Extension, setup
 except ImportError:
@@ -8,12 +9,10 @@ except ImportError:
 
 from discodop import __version__
 
-USE_CYTHON = '--with-cython' in sys.argv or not os.path.exists(
-		'src/containers.c')
-
+# In releases, only include C sources; otherwise, use cython to figure out
+# which files may need to be re-cythonized.
+USE_CYTHON = os.path.exists('discodop/containers.pyx')
 if USE_CYTHON:
-	if '--with-cython' in sys.argv:
-		sys.argv.remove('--with-cython')
 	try:
 		from Cython.Build import cythonize
 		from Cython.Distutils import build_ext
@@ -32,7 +31,7 @@ with open('README.rst') as inp:
 
 PY2 = sys.version_info[0] == 2
 REQUIRES = [
-		'cython',  # '>=0.21',
+		# 'cython',  # '>=0.21',
 		'numpy',  # '>=1.6.1',
 		'roaringbitmap',  # '>=0.4',
 		'pytest',
@@ -123,11 +122,12 @@ if __name__ == '__main__':
 				)
 	else:
 		ext_modules = [Extension(
-				'*',
-				sources=['discodop/*.c'],
+				os.path.splitext(os.path.basename(filename))[0],
+				sources=[filename],
 				extra_compile_args=extra_compile_args,
 				extra_link_args=extra_link_args,
-				)]
+				)
+				for filename in glob.glob('discodop/*.c')]
 	setup(
 			cmdclass=cmdclass,
 			ext_modules=ext_modules,

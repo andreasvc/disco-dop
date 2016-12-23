@@ -12,11 +12,11 @@ clean:
 	cd docs && make clean
 
 discodop:
-	python3 setup.py install --user --with-cython
+	python3 setup.py install --user
 	cp build/lib.*/discodop/*.so discodop/
 
 py2:
-	python2 setup.py install --user --with-cython
+	python2 setup.py install --user
 	cp build/lib.*/discodop/*.so discodop/
 
 docs:
@@ -29,15 +29,15 @@ install: discodop docs
 debug:
 	# NB: debug build requires all external modules to be compiled
 	# with debug symbols as well (e.g., install python-numpy-dbg package)
-	python3-dbg setup.py install --user --debug --with-cython
+	python3-dbg setup.py install --user --debug
 	cp build/lib.*/discodop/*.so discodop/
 
 debug35:
-	python3.5-dbg setup.py install --user --debug --with-cython
+	python3.5-dbg setup.py install --user --debug
 	cp build/lib.*/discodop/*.so discodop/
 
 debug2:
-	python2-dbg setup.py install --user --debug --with-cython
+	python2-dbg setup.py install --user --debug
 	cp build/lib.*/discodop/*.so discodop/
 
 debugvalgrind: debug35

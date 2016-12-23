@@ -7,4 +7,4 @@ Main components:
 - Facilities to extract and parse with tree fragments using data-oriented
   parsing (DOP) grammars.
 """
-__version__ = '0.5'
+__version__ = '0.5.1'
