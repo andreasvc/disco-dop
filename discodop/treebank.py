@@ -349,6 +349,7 @@ class TigerXMLCorpusReader(CorpusReader):
 			fields[TAG] = term.get('pos')
 			fields[MORPH] = term.get('morph')
 			fields[PARENT] = '0' if term.get('id') == root else None
+			fields[FUNC] = '--'
 			nodes[term.get('id')] = fields
 		for nt in block.find('graph').find('nonterminals'):
 			if nt.get('id') == root:
@@ -358,12 +359,12 @@ class TigerXMLCorpusReader(CorpusReader):
 				ntid = nt.get('id').split('_')[-1]
 				fields[WORD] = '#' + ntid
 				fields[TAG] = nt.get('cat')
-				fields[LEMMA] = fields[MORPH] = '--'
+				fields[LEMMA] = fields[MORPH] = fields[FUNC] = '--'
 			for edge in nt:
 				idref = edge.get('idref')
 				nodes.setdefault(idref, 6 * [None])
 				if edge.tag == 'edge':
-					if nodes[idref][FUNC] is not None:
+					if nodes[idref][FUNC] not in (None, '--'):
 						raise ValueError('%s already has a parent: %r'
 								% (idref, nodes[idref]))
 					nodes[idref][FUNC] = edge.get('label')
@@ -377,9 +378,11 @@ class TigerXMLCorpusReader(CorpusReader):
 				raise ValueError('%s does not have a parent: %r' % (
 						idref, nodes[idref]))
 		item = exporttree(
-				['\t'.join(a) for a in nodes.values()],
+				['#BOS ' + block.get('id')]
+				+ ['\t'.join(a) for a in nodes.values()]
+				+ ['#EOS ' + block.get('id')],
 				self.functions, self.morphology, self.lemmas)
-		item.tree.label = nodes[root][TAG]
+		item.tree.label = root.split('_', 1)[1]
 		item.block = ElementTree.tostring(block)
 		return item
 

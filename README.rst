@@ -126,11 +126,20 @@ and download the virtual machine imagine with disco-dop pre-installed:
 http://lang.science.uva.nl/VMs/discodop-vboximage.zip
 
 
-Documentation
-=============
-Manual pages for the ``discodop`` command are installed as part of the
-installation: ``man discodop``. Further documentation can be found at
-http://discodop.readthedocs.io
+Usage, documentation
+====================
+discodop can be used in three ways:
+
+1. through the command line; cf. the manual pages for the ``discodop`` command
+   installed as part of the installation: ``man discodop``.
+2. as a library, cf. the `API reference <http://discodop.readthedocs.io/en/latest/api.html>`_
+   and `example notebooks <http://discodop.readthedocs.io/en/latest/intro.html#ipython-notebooks>`_
+3. `Web interfaces <http://discodop.readthedocs.io/en/latest/intro.html#web-interfaces>`_
+
+NB: avoid running discodop from within the source tree, to ensure that the
+installed versions of modules are imported.
+
+The documentation can be found at http://discodop.readthedocs.io
 
 Grammars
 ========

@@ -19,14 +19,17 @@ COMMANDS = (
 )
 
 thiscmd = os.path.basename(sys.argv[0])
-if len(sys.argv) <= 1 or sys.argv[1] not in dict(COMMANDS):
+if len(sys.argv) == 2 and sys.argv[1] in ('-v', '--version'):
+	from discodop import __version__
+	print(__version__)
+elif len(sys.argv) <= 1 or sys.argv[1] not in dict(COMMANDS):
 	print('Usage: %s <command> [arguments]\n' % thiscmd, file=sys.stderr)
 	print('Command is one of:', file=sys.stderr)
 	for a, b in COMMANDS:
 		print('   %s  %s' % (a.ljust(15), b))
 	print('for additional instructions issue: %s <command> --help' % thiscmd,
 		file=sys.stderr)
-elif len(sys.argv) == 3 and sys.argv[2] in ('-h', '--help'):
+elif len(sys.argv) == 3 and sys.argv[2] in ('-h', '--help'):  # help on subcommand
 	os.execlp('man', 'man', 'discodop-%s' % sys.argv[1])
 else:
 	cmd = sys.argv[1]
