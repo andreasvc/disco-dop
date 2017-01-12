@@ -324,7 +324,7 @@ def getcorpus():
 				'only in metadata: %s\nonly in files: %s' % (
 				set(metadata.index) - set(texts),
 				set(texts) - set(metadata.index)))
-		metadata = metadata.ix[texts]
+		metadata = metadata.loc[texts]
 	else:
 		metadata = None
 	return texts, corpora, metadata

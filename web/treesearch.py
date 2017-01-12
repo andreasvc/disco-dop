@@ -361,7 +361,7 @@ def counts(form, doexport=False):
 		if len(keyset) * len(queries) <= 30:
 			overview = OrderedDict(
 					('%s_%s' % (cat, query),
-						df[query].ix[keys == cat].mean() or 0)
+						df[query].loc[keys == cat].mean() or 0)
 					for query in df.columns
 						for cat in keyset)
 			df['category'] = keys
@@ -912,9 +912,9 @@ def plot(data, total, title, width=800.0, unit='', dosort=True,
 		if len(title) > 50:
 			title = title[:50] + '...'
 		df[title] = pandas.Series(data, index=df.index)
-		df[target.name] = target.ix[df.index]
+		df[target.name] = target.loc[df.index]
 		if target2 is not None:
-			df[target2.name] = target2.ix[df.index]
+			df[target2.name] = target2.loc[df.index]
 		if iscategorical(target):
 			df.sort_values(by=target.name, inplace=True)
 			if target2 is None:
@@ -1197,7 +1197,7 @@ def getcorpus():
 				'only in metadata: %s\nonly in files: %s' % (
 				set(metadata.index) - set(texts),
 				set(texts) - set(metadata.index)))
-		metadata = metadata.ix[texts]
+		metadata = metadata.loc[texts]
 	else:
 		metadata = None
 	return texts, corpusinfo, styletable, corpora, metadata
