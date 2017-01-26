@@ -974,8 +974,7 @@ class RegexSearcher(CorpusSearcher):
 		if len(tmp) == len(files) and mtime > maxmtime:
 			self.lineindex = tmp
 		else:
-			for name in sorted(files):
-				tmp.append(_indexfile(name))
+			tmp = [_indexfile(name) for name in sorted(files)]
 			self.lineindex = MultiRoaringBitmap(tmp, filename=self.lineidxpath)
 		if inmemory:
 			for filename in self.files:
