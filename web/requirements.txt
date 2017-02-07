@@ -1,3 +1,4 @@
 Flask
 readability
 pandas
+seaborn
