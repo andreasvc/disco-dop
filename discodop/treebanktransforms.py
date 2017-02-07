@@ -9,6 +9,7 @@ from __future__ import division, print_function, absolute_import, \
 import re
 from itertools import islice
 from .tree import Tree, ParentedTree, escape, unescape, ptbescape
+from .treebank import EXPORTNONTERMINAL
 from .treetransforms import addfanoutmarkers, removefanoutmarkers
 from .punctuation import punctprune, PUNCTUATION
 from .util import ishead
@@ -321,6 +322,7 @@ def negratransforms(name, tree, sent):
 				a = a[0]
 	# The following transformations as described in Fraser et al (CL, 2013)
 	elif name == 'addUnary':  # introduce unary NPs
+		maxid = getmaxid(tree)
 		for node in tree.postorder(lambda n: strip(n.label) in
 					{'NN', 'PPER', 'PDS', 'PIS', 'PRELS', 'CARD', 'PN'}
 					and strip(n.parent.label) in {'S', 'VP', 'ROOT', 'DL'}):
@@ -333,6 +335,9 @@ def negratransforms(name, tree, sent):
 			node[:] = [tag]
 			node.source[TAG] = node.label = 'NP'
 			node.source[FUNC] = tag.source[FUNC]
+			maxid += 1
+			node.source[WORD] = '#%d' % maxid
+			node.source[LEMMA] = node.source[MORPH] = '--'
 			tag.source[FUNC] = 'HD'
 	elif name == 'addCase':  # add case features to POS tags
 		for node in tree.subtrees(lambda n: n and isinstance(n[0], int)):
@@ -785,6 +790,7 @@ def lassytransforms(name, tree, _sent):
 					iter(strip(a.label) for a in node
 					if ishead(a) or a is node[-1]))
 	elif name == 'nladdunary':  # introduce unary NPs
+		maxid = getmaxid(tree)
 		for node in tree.postorder(lambda n: strip(n.label) in {'n', 'vnw'}
 				and strip(n.parent.label) in {'SMAIN', 'PP', 'INF'}):
 			children = node[:]
@@ -798,6 +804,9 @@ def lassytransforms(name, tree, _sent):
 				tag.source[FUNC] = 'HD'
 			else:
 				tag.source[FUNC] = 'hd'
+			maxid += 1
+			node.source[WORD] = '#%d' % maxid
+			node.source[LEMMA] = node.source[MORPH] = '--'
 	elif name == 'nlelimcnj':  # assign conjuncts the function of the parent
 		for node in tree.subtrees(lambda n: function(n) == 'cnj'):
 			node.source[FUNC] = function(node.parent) or '--'
@@ -1342,6 +1351,15 @@ def hassecedge(node, func, parentid):
 	return any(f == func and pid == parentid
 			for f, pid in zip(node.source[6::2], node.source[7::2]))
 
+
+def getmaxid(tree):
+	"""Return highest export non-terminal ID in tree."""
+	return max((int(node.source[WORD].lstrip('#'))
+			for n, node in enumerate(
+				tree.subtrees(lambda n: n.source
+					and EXPORTNONTERMINAL.match(n.source[WORD])),
+				500)),
+			default=500)
 
 __all__ = ['expandpresets', 'transform', 'reversetransform', 'collapselabels',
 		'dlevel', 'rrtransform', 'rrbacktransform', 'rindex', 'labels', 'pop',

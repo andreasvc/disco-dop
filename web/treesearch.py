@@ -1071,9 +1071,9 @@ def tokenize(filename):
 				for a in tgrep.stdout)
 	elif os.path.exists(base + '.mrg'):
 		with io.open(base + '.mrg', encoding='utf8') as inp:
-			converted = (' '.join(GETLEAVES.findall(line)
+			converted = [' '.join(GETLEAVES.findall(line)
 					).replace('-LRB-', '(').replace('-RRB-', ')') + '\n'
-					for line in inp)
+					for line in inp]
 	elif os.path.exists(base + '.dact'):
 		result = {entry.name(): ElementTree.fromstring(entry.contents()).find(
 				'sentence').text + '\n' for entry
