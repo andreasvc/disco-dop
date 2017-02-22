@@ -34,7 +34,8 @@ def applypunct(method, tree, sent):
 	"""Apply punctuation strategy to tree (in-place).
 
 	:param method: one of ``remove, removeall, move, moveall, prune,``
-	or ``root``."""
+		or ``root``.
+	"""
 	if method == 'remove' or method == 'removeall':
 		punctremove(tree, sent, method == 'removeall')
 	elif method in ('move', 'moveall', 'prune'):

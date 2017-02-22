@@ -42,7 +42,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Disco-DOP'
-copyright = u'2016, Andreas van Cranenburgh'
+copyright = u'2017, Andreas van Cranenburgh'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

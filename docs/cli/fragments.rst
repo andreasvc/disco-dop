@@ -47,8 +47,13 @@ Options:
               one of which has a POS tag which matches the given regex.
               For example, to match POS tags of content words in the
               Penn treebank: ``^(?:NN(?:[PS]|PS)?|(?:JJ|RB)[RS]?|VB[DGNPZ])$``
---adjacent    only consider pairs of adjacent trees (i.e., sent no. ``n, n + 1``).
+--adjacent    only compare pairs of adjacent trees (i.e., sent no. ``n, n + 1``).
 --debin       debinarize fragments.
+              Since fragments may contain incomplete binarized constituents,
+              the result may still contain artificial nodes from the
+              binarization in the root or frontier non-terminals of the
+              fragments.
+
 --alt         alternative output format: ``(NP (DT "a") NN)``
               default: ``(NP (DT a) (NN ))``
 --numproc=n   use ``n`` independent processes, to enable multi-core usage

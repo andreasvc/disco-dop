@@ -514,3 +514,6 @@ def gen():
 	"""gen CLI."""
 	from .gen import main
 	main()
+
+__all__ = ['treedraw', 'runexp', 'treetransforms', 'grammar', 'fragments',
+		'eval', 'treesearch', 'parser', 'demos', 'gen']

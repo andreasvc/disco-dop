@@ -1,7 +1,7 @@
 
 treedraw
 --------
-Visualize parse trees with ASCII art.
+Visualize parse trees with ASCII art or LaTeX/SVG.
 
 Usage: ``discodop treedraw [<treebank>...] [options]``
 
@@ -31,9 +31,10 @@ Usage: ``discodop treedraw [<treebank>...] [options]``
 
 -n, --numtrees=x  only display the first x trees from the input.
 
-If no treebank is given, input is read from standard input; format is detected.
+If no treebank is given, input is read from standard input; format is detected;
+has the advantage of reading the input incrementally.
 If more than one treebank is specified, trees will be displayed in parallel.
-Pipe the output through ``less -RS`` to preserve the colors.
+The ANSI colors can be viewed in a terminal with ``less -RS``.
 
 Examples
 ^^^^^^^^

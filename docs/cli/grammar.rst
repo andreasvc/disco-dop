@@ -3,15 +3,17 @@ grammar
 -------
 Read off grammars from treebanks.
 
-| Usage: ``discodop grammar param <parameter-file> <output-directory>``
-| or: ``discodop grammar <type> <input> <output> [options]``
-| or: ``discodop grammar info <rules-file>``
-| or: ``discodop grammar merge (rules|lexicon|fragments) <input1> <input2>... <output>``
+Usage, one of::
+
+    discodop grammar param <parameter-file> <output-directory>
+    discodop grammar <type> <input> <output> [options]
+    discodop grammar info <rules-file>
+    discodop grammar merge (rules|lexicon|fragments) <input1> <input2>... <output>
 
 The first format extracts a grammar according to a parameter file.
-See :doc:`the documentation on parameter files <../params>`.
+See the :doc:`documentation on parameter files <../params>`.
 
-The second format makes it possible to extract simple grammars
+The second format is for extracting simple grammars
 (e.g., no unknown word handling or coarse-to-fine parsing).
 
 ``type`` is one of:
@@ -80,27 +82,7 @@ output will be in bitpar format. Otherwise the grammar is written as a PLCFRS.
 The encoding of the input treebank may be specified. Output encoding will be
 ASCII for the rules, and UTF-8 for the lexicon.
 
-The PLCFRS format is as follows. Rules are delimited by newlines.
-Fields are separated by tabs. The fields are::
-
-    LHS	RHS1	[RHS2]	yield-function	weight
-
-The yield function defines how the spans of the RHS nonterminals
-are combined to form the spans of the LHS nonterminal. Components of the yield
-function are comma-separated, 0 refers to a component of the first RHS
-nonterminal, and 1 from the second. Weights are expressed as rational
-fractions.
-The lexicon is defined in a separate file. Lines start with a single word,
-followed by pairs of possible tags and their probabilities::
-
-    WORD	TAG1	PROB1	[TAG2	PROB2 ...]
-
-Example::
-
-    rules:   S	NP	VP	010	1/2
-             VP_2	VB	NP	0,1	2/3
-             NP	NN	0	1/4
-    lexicon: Haus	NN	3/10	JJ	1/9
+See the :ref:`documentation on grammar formats <grammar-formats>`.
 
 Examples
 ^^^^^^^^

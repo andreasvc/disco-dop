@@ -3,8 +3,8 @@
 File formats
 ============
 
-Corpora
--------
+Treebanks
+---------
 export
 ^^^^^^
 Negra export format (v3).
@@ -19,9 +19,9 @@ For example::
     #500    VP  --  --  0
     #EOS 0
 
-An optional lemma field is supported. Secondary edges are ignored.
-The preamble listing the tag sets is ignored and not reproduced
-when trees are written in this format.
+An optional lemma field is supported. Secondary edges may or may not be
+preserved but mostly ignored. The preamble listing the tag sets is ignored and
+not reproduced when trees are written in this format.
 
 This format is supported when input is read incrementally from
 standard input with the ``treedraw`` and ``treetransforms`` commands.
@@ -33,7 +33,7 @@ Cf. http://www.coli.uni-saarland.de/projects/sfb378/negra-corpus/exformat3.ps
 
 bracket
 ^^^^^^^
-Penn treebank style bracketed trees, one tree per line.
+Penn-treebank style bracketed trees, one tree per line.
 
 For example::
 
@@ -52,6 +52,8 @@ discbracket
 ^^^^^^^^^^^
 A corpus format for discontinuous trees in bracket notation, where the
 leaves are prefixed with indices indicating word order.
+Each leaf must have at least one index; the indices form an unbroken range
+starting from 0, with each index occurring exactly once.
 
 For example::
 
@@ -59,10 +61,11 @@ For example::
     (sentence: is John rich ?)
 
 Note that the leaves are not in the same order as in the sentence. The leaves
-must be sorted by the indices to get the right order.
-There is one parse tree line. Compared to Negra's export format, this format lacks morphology,
-lemmas and functional edges. On the other hand, it is close to the
-internal representation employed here, so it can be read efficiently.
+must be sorted by the indices to restore the original sentence order.
+There is one parse tree per line. Compared to Negra's export format, this
+format lacks separate fields for morphology, lemmas, and functional edges.
+On the other hand, it is close to the internal representation employed here, so
+it can be read efficiently.
 
 This format is supported when input is read incrementally from
 standard input with the ``treedraw`` and ``treetransforms`` commands.
@@ -71,9 +74,6 @@ Tree fragments can be formed as with bracket trees, by leaving out terminals or 
 
     (S (VP (VB 0=is) (JJ 2=)) (NP 1=) (? 3=?))
     (VP (VB 0=is) (JJ 2=rich))
-
-The sentence on the right must still contain the right amount of spaces
-corresponding to the indices in the tree, but terminals can have a length of 0.
 
 There is an extra case that should be handled, which is how to represent a
 discontinuous frontier non-terminal. This requires expressing how the spans of
@@ -103,11 +103,14 @@ Read-only formats
 :``tiger``: Tiger XML format.
     Cf. http://www.ims.uni-stuttgart.de/forschung/ressourcen/werkzeuge/TIGERSearch/doc/html/TigerXML.html
 
-write-only formats
+Write-only formats
 ^^^^^^^^^^^^^^^^^^
-:``connl``, ``mst``: unlabeled dependencies; relies on head identfication.
+:``connl``, ``mst``: unlabeled dependencies; relies on head identification.
 :``tokens``: one sentence per line, tokens separated by spaces.
 :``wordpos``: similar to ``tokens`` but of the form ``token/POS``.
+
+
+.. _grammar-formats:
 
 Grammars
 --------
@@ -233,6 +236,9 @@ picked as the head.
 
 See also: http://www.cs.columbia.edu/~mcollins/papers/heads
 
+
+.. _evalparam-format:
+
 evaluation parameters
 ^^^^^^^^^^^^^^^^^^^^^
 The format of this file is a superset of the parameters for EVALB,
@@ -242,14 +248,18 @@ The parameter file should be encoded in UTF-8 and supports the following
 options in addition to those supported by EVALB:
 
   :DELETE_ROOT_PRETERMS:
-                     when enabled, preterminals directly under the root in
-                     gold trees are ignored for scoring purposes.
+                     if nonzero, ignore preterminals directly under the root in
+                     gold trees for scoring purposes.
 
-  :DISC_ONLY:        only consider discontinuous constituents for F-scores.
+  :DISC_ONLY:
+                     if nonzero, only consider discontinuous bracketings
+                     (affects precision, recall, f-measure, exact match).
 
+  :LA:               if nonzero, report leaf-ancestor scores [default: disabled].
   :TED:
-                     when enabled, give tree-edit distance scores; disabled by
-                     default as these are slow to compute.
+                     if nonzero, report tree-edit distance scores; disabled by
+                     default as these are slow to compute. NB: it is not clear
+                     whether this score is applicable to discontinuous trees.
 
   :DEBUG:
                      :-1: only print summary table
@@ -265,3 +275,6 @@ options in addition to those supported by EVALB:
                      the parameter is accepted to support usage of unmodified
                      EVALB parameter files.
 
+parser parameters
+^^^^^^^^^^^^^^^^^
+See :doc:`the reference documentation on parser parameter files <../params>`.

@@ -24,7 +24,7 @@ The following transforms are applied in the order given on the command line.
                 Markovized binarization; also see --headrules and other options below.
 
 --optimalbinarize [-h x] [-v x]
-                Binarization that minimizes fan-out/complexity.
+                Binarization that minimizes LCFRS fan-out/complexity.
 
 --unbinarize    Restore original n-ary trees.
 
@@ -59,7 +59,7 @@ Other options
 --renumber      Replace sentence IDs with numbers starting from 1,
                 padded with 8 spaces.
 
---sentid        With 'tokens' or 'wordpos' output, prefix lines with identifiers of the form ``ID|``.
+--sentid        With 'tokens' or 'wordpos' output format, prefix lines with identifiers of the form ``ID|``.
 --maxlen=n      only select sentences with up to *n* tokens.
 --punct=x       :'remove': remove any punctuation.
                 :'move': re-attach punctuation to nearest constituent
@@ -71,17 +71,17 @@ Other options
                 :'replace': replace syntactic labels w/grammatical functions.
 --morphology=x  :'no' (default): use POS tags as preterminals
                 :'add': concatenate morphological information to POS tags,
-                    e.g., DET/sg.def
+                    e.g., ``DET/sg.def``
                 :'replace': use morphological information as preterminal label
                 :'between': insert node with morphological information between
-                    POS tag and word, e.g., (DET (sg.def the))
+                    POS tag and word, e.g., ``(DET (sg.def the))``
 --lemmas=x      :'no' (default): do not use lemmas.
                 :'add': concatenate lemmas to terminals, e.g., word/lemma
                 :'replace': use lemma instead of terminals
                 :'between': insert node with lemma between POS tag and word,
-                    e.g., (NN (man men))
+                    e.g., ``(NN (man men))``
 --ensureroot=x  add root node labeled ``x`` to trees if not already present.
---removeempty   remove empty / -NONE- terminals.
+--removeempty   remove empty / ``-NONE-`` terminals.
 
 --factor=<left|right>
                 specify left- or right-factored binarization [default: right].
@@ -93,7 +93,7 @@ Other options
 --markhead      include label of the head child in all auxiliary labels
                 of binarization.
 --direction     mark direction when using head-outward binarization.
---labelfun=x    x is a Python lambda function that takes a node and returns
+--labelfun=x    ``x`` is a Python lambda function that takes a node and returns
                 a label to be used for markovization purposes. For example,
                 to get labels without state splits, pass this function:
                 ``'lambda n: n.label.split("^")[0]'``

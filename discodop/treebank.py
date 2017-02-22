@@ -837,6 +837,7 @@ def incrementaltreereader(treeinput, morphology=None, functions=None,
 
 	Supports brackets, discbrackets, export and alpino-xml format.
 	The format is autodetected.
+
 	:param treeinput: an iterator giving one line at a time.
 	:param strict: if True, raise ValueError on malformed data.
 	:param robust: if True, only return trees with more than 2 brackets;

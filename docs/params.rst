@@ -18,7 +18,7 @@ global options:
     key2=val2,
 
 The parameters consist of a Python expression surrounded by an implicit
-``'dict('`` and ``')'``. Note that every ``key=value`` is followed by a comma.
+``'dict('`` and ``')'``. Note that each ``key=value`` is separated by a comma.
 
 Corpora
 -------
@@ -34,7 +34,7 @@ Corpora
 :traincorpus: a dictionary with the following keys:
 
     :path: filename of training corpus; may include wildcards / globbing
-        characters ``\*`` and ``?``.
+        characters ``*`` and ``?``.
     :encoding: encoding of training corpus (defaults to ``'utf-8'``)
     :maxwords: maximum sentence length to base grammar on
     :numsents: number of sentence to use from training corpus

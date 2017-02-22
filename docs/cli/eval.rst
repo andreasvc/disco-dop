@@ -9,7 +9,7 @@ Usage: ``discodop eval <gold> <parses> [param] [options]``
 where ``gold`` and ``parses`` are files with parse trees, ``param`` is
 an ``EVALB`` parameter file.
 
-options
+Options
 ^^^^^^^
 --cutofflen=n    Overrides the sentence length cutoff of the parameter file.
 --verbose        Print table with per sentence information.
@@ -27,6 +27,8 @@ options
 
 --la             Enable leaf-ancestor evaluation.
 --ted            Enable tree-edit distance evaluation.
+                 NB: it is not clear whether this score is applicable to
+                 discontinuous trees.
 --headrules=x    Specify file with rules for head assignment of constituents
                  that do not already have a child marked as head; this
                  enables dependency evaluation.
@@ -42,7 +44,7 @@ options
                  'between': add morphological node between POS tag and word.
 
 
-function tags
+Function tags
 ^^^^^^^^^^^^^
 If the ``parses`` file contains function tags, these are evaluated with the
 non-null metric of Blaheta & Charniak (2000), which scores function tags of
@@ -53,32 +55,19 @@ tags on preterminals. A more stringent metric is to combine phrasal & function
 tags with the option ``--functions=add``, which incorporates function tags in
 the bracketing scores.
 
-parameter file
+Parameter file
 ^^^^^^^^^^^^^^
-The parameter file should be encoded in ``UTF-8`` and supports the following
-options (in addition to those described in the ``README`` of ``EVALB``):
+See the :ref:`reference documentation on evaluation parameter files <evalparam-format>`.
 
-:DELETE_ROOT_PRETERMS:
-                 if nonzero, ignore preterminals directly under the root in
-                 gold trees for scoring purposes.
-:DISC_ONLY:      if nonzero, only consider discontinuous bracketings
-                 (affects precision, recall, f-measure, exact match).
-:LA:             if nonzero, report leaf-ancestor scores [default: disabled].
-:TED:
-                 if nonzero, report tree-edit distance scores; disabled by
-                 default as these are slow to compute.
-:DEBUG:
-                 :-1: only print summary table
-                 :0: additionally, print category / tag breakdowns (default)
-                   (after application of cutoff length).
-                 :1: give per-sentence results (``--verbose``)
-                 :2: give detailed information for each sentence (``--debug``)
-:MAX_ERROR:
-                 this value is ignored, no errors are tolerated.
-                 the parameter is accepted to support usage of unmodified
-                 EVALB parameter files.
+The commonly used parameter file for Penn-treebank parsing is ``COLLINS.prm``, distributed as part of ``EVALB``.
+The file ``proper.prm`` in the code repository is a version adapted for discontinuous parsing.
 
-example
-^^^^^^^
-::
+Examples
+^^^^^^^^
+Discontinuous parsing::
+
+    $ discodop eval negra-parses.export negra-dev.export proper.prm
+
+Continuous parsing::
+
     $ discodop eval wsj-24.mrg parses.mrg COLLINS.prm --fmt=bracket

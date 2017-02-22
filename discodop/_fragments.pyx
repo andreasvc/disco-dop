@@ -2,11 +2,13 @@
 
 Implements:
 
-- van Cranenburgh (2014), Extraction of Phrase-Structure Fragments
-  with a Linear Average Time Tree-Kernel
-- Sangati et al. (2010), Efficiently extract recurring tree fragments from
-  large treebanks
-- Moschitti (2006): Making Tree Kernels practical for Natural Language Learning
+- van Cranenburgh. 2014. Extraction of Phrase-Structure Fragments
+  with a Linear Average Time Tree-Kernel.
+  http://www.clinjournal.org/sites/default/files/01-Cranenburgh-CLIN2014.pdf
+- Sangati et al. 2010. Efficiently extract recurring tree fragments from
+  large treebanks. http://lrec-conf.org/proceedings/lrec2010/pdf/613_Paper.pdf
+- Moschitti. 2006. Making Tree Kernels practical for Natural Language Learning.
+  http://aclweb.org/anthology/E06-1015
 """
 
 from __future__ import print_function
@@ -949,12 +951,6 @@ def repl(d):
 	return f
 
 
-def nonfrontier(sent):
-	def nonfrontierfun(x):
-		return isinstance(x[0], Tree) or sent[x[0]] is not None
-	return nonfrontierfun
-
-
 cdef int readtree(
 		str line, Vocabulary vocab, Node *nodes, array stack,
 		array labels, list children) except -9:
@@ -1262,5 +1258,5 @@ def readtreebank(treebankfile, Vocabulary vocab,
 
 
 __all__ = ['extractfragments', 'exactcounts', 'completebitsets',
-		'allfragments', 'repl', 'pygetsent', 'nonfrontier', 'getctrees',
+		'allfragments', 'repl', 'pygetsent', 'getctrees',
 		'readtreebank', 'exactcountsslice']

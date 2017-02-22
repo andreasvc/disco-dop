@@ -2,4 +2,6 @@ cython>=0.21
 numpy>=1.6.1
 roaringbitmap>=0.4
 pytest
-sphinx
+# sphinx>=1.6
+# use latest sphinx because v1.6 with the fix for #1061 is not yet released
+https://github.com/sphinx-doc/sphinx/archive/master.zip
