@@ -1,7 +1,9 @@
 """Computation of outside estimates for best-first or A* parsing.
 
-- PCFG A* estimate (Klein & Manning 2003),
+- PCFG A* estimate (Klein & Manning 2003).
+  http://aclweb.org/anthology/N03-1016
 - PLCFRS LR context-summary estimate (Kallmeyer & Maier 2010).
+  http://aclweb.org/anthology/C10-1061
 
 The latter ported almost directly from rparse
 (except for sign reversal of log probs)."""

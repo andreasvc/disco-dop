@@ -125,8 +125,10 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None,
 	"""Induce a reduction of DOP to an LCFRS.
 
 	Similar to how Goodman (1996, 2003) reduces DOP to a PCFG.
+	http://aclweb.org/anthology/W96-0214
 
-	:param packedgraph: packed graph encoding (Bansal & Klein 2010).
+	:param packedgraph: packed graph encoding (Bansal & Klein 2010, sec 4.2).
+		http://aclweb.org/anthology/P10-1112
 	:param decorator: a TreeDecorator instance (packedgraph is ignored if this
 		is passed) .
 	:returns: a set of rules with the relative frequency estimate as
@@ -159,6 +161,8 @@ def dopreduction(trees, sents, packedgraph=False, decorater=None,
 	def weights(rule):
 		""":returns: rule with RFE and EWE probability."""
 		# relative frequency estimate, aka DOP1 (Bod 1992; Goodman 1996, 2003)
+		# http://aclweb.org/anthology/C92-3126
+		# http://aclweb.org/anthology/W96-0214
 		(r, yf), freq = rule
 		rfe = ((1 if '@' in r[0] else freq) * reduce(mul,
 				(fd[z] for z in r[1:] if '@' in z), 1), fd[r[0]])

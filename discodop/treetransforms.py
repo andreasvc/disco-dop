@@ -6,9 +6,10 @@ This file contains three main transformations:
    Provides some additional Markovization options.
  - An optimal binarization for LCFRS: optimalbinarize()
    Cf. Gildea (2010): Optimal parsing strategies for linear
-   context-free rewriting systems. Proc. of NAACL.
+   context-free rewriting systems. http://aclweb.org/anthology/N10-1118
  - Converting discontinuous trees to continuous trees and back:
-   splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited."""
+   splitdiscnodes(). Cf. Boyd (2007): Discontinuity revisited.
+   http://aclweb.org/anthology/W07-1506"""
 # Original notice:
 # Natural Language Toolkit: Tree Transformations
 #
@@ -482,7 +483,7 @@ def markovthreshold(trees, n, horzmarkov, vertmarkov):
 
 
 def splitdiscnodes(tree, markorigin=False):
-	"""Boyd (2007): Discontinuity revisited.
+	"""Boyd (2007): Discontinuity revisited. http://aclweb.org/anthology/W07-1506
 
 	:markorigin=False: VP* (bare label)
 	:markorigin=True: VP*1 (add index)
@@ -672,7 +673,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 	"""Find optimal binarization according to a scoring function.
 
 	Implementation of Gildea (2010): Optimal parsing strategies for linear
-	context-free rewriting systems.
+	context-free rewriting systems. http://aclweb.org/anthology/N10-1118
 
 	:param tree: ImmutableTree for which the optimal binarization of its top
 		production will be searched. Nodes need to have a .bitset attribute,
@@ -738,6 +739,7 @@ def minimalbinarization(tree, score, sep='|', head=None, parentstr='', h=999):
 		# add all non-head nodes to the working set,
 		# add all combinations of non-head nodes with head to agenda
 		# caveat: Crescenzi et al. (2011) show that this problem is NP hard.
+		# http://aclweb.org/anthology/P11-1046
 		hd = tree[head]
 		goal = OrderedSet(range(len(tree)))
 		for n, a in enumerate(tree):
@@ -808,7 +810,7 @@ def fanout(tree):
 def complexity(tree):
 	"""The degree of the time complexity of parsing with this rule.
 
-	Cf. Gildea (2010)."""
+	Cf. Gildea (2010). http://aclweb.org/anthology/N10-1118"""
 	return fanout(tree) + sum(map(fanout, tree))
 
 

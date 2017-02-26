@@ -267,8 +267,8 @@ options in addition to those supported by EVALB:
                           additionally, print category / tag breakdowns (default)
                           (after application of cutoff length).
 
-                     :1: give per-sentence results ('--verbose')
-                     :2: give detailed information for each sentence ('--debug')
+                     :1: give per-sentence results (``'--verbose'``)
+                     :2: give detailed information for each sentence (``'--debug'``)
 
   :MAX_ERROR:
                      this value is ignored, no errors are tolerated.

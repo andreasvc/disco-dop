@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """Tree edit distance implementations.
 
-- Implementation following Zhang & Shasha (1989);
-  Licensed under a BSD style license.
-- Implementation following Billie (2005); records edit script.
+- Zhang & Shasha (1989) http://epubs.siam.org/doi/abs/10.1137/0218082
+  Implementation licensed under a BSD style license.
+- Billie (2005)
+  http://www.imm.dtu.dk/~phbi/files/publications/2005asotedarpJ.pdf
+  Implementation records edit script.
 """
 
 # Notice for the Zhang-Shasha implementation:

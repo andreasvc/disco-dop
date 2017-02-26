@@ -248,8 +248,10 @@ Other options
 :removeempty: ``True`` or ``False``; whether to remove empty terminals from
     train, test sets.
 :ensureroot: Ensure every tree has a root node with this label
-:transformations: apply treebank transformations;
-    see source of :py:func:`discodop.treebanktransforms.transform`
+:transformations: Apply specific treebank transforms; available presets:
+    ``negra, wsj, alpino, green2013ftb, km2003wsj,
+    km2003simple, fraser2013tiger, lassy, lassy-func``
+    For details cf. source of :mod:`discodop.treebanktransforms` module.
 :relationalrealizational: apply RR-transform;
     see :py:func:`discodop.treebanktransforms.rrtransform`
 :verbosity: control the amount of output to console;

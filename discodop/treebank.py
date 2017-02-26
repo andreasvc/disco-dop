@@ -723,6 +723,8 @@ def writedependencies(tree, sent, fmt):
 def dependencies(root):
 	"""Lin (1995): A Dependency-based Method for Evaluating [...] Parsers.
 
+	http://ijcai.org/Proceedings/95-2/Papers/052.pdf
+
 	:returns: list of tuples of the form ``(headidx, label, depidx)``."""
 	deps = []
 	if root:

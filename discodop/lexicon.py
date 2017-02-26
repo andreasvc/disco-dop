@@ -193,7 +193,8 @@ def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 	:returns: a dictionary giving P(word_or_sig | tag).
 	:param openclassoffset: for words that only appear with open class tags,
 		add unseen combinations of open class (tag, word) with this count.
-	:param kappa: FIXME; cf. Klein & Manning (2003)."""
+	:param kappa: FIXME; cf. Klein & Manning (2003), footnote 5.
+		http://aclweb.org/anthology/P03-1054"""
 	for tag in openclasstags:
 		for word in openclasswords - wordsfortag[tag]:
 			wordtags[word, tag] += openclassoffset
@@ -219,6 +220,7 @@ def getlexmodel(sigs, words, _lexicon, wordsfortag, openclasstags,
 		# print("P(%s | %s) = %s " % ()
 		# 		tag, sig, P_tagsig[tag, sig], file=sys.stderr)
 	# Klein & Manning (2003) Accurate unlexicalized parsing
+	# http://aclweb.org/anthology/P03-1054
 	# P(tag|word) = [count(tag, word) + kappa * P(tag|sig)]
 	# 		/ [count(word) + kappa]
 	P_tagword = defaultdict(int)

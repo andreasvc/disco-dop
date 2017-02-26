@@ -14,8 +14,10 @@ The following transforms are applied in the order given on the command line.
 --introducepreterminals
                 Add preterminals to terminals without a dedicated preterminal.
 --transforms=<NAME1,NAME2...>
-                Apply specific treebank transforms; for possible names, cf.
-                source of :mod:`discodop.treebanktransforms` module.
+                Apply specific treebank transforms; available presets:
+                ``negra, wsj, alpino, green2013ftb, km2003wsj,
+                km2003simple, fraser2013tiger, lassy, lassy-func``
+                For details cf. source of :mod:`discodop.treebanktransforms` module.
 
 --reversetransforms=<NAME1,NAME2,...>
                 Undo specified transforms; specify transforms in original order.

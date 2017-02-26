@@ -21,7 +21,8 @@ PUNCTUATION = frozenset('.,():-";?/!*&`[]<>{}|=\xc2\xab\xc2\xbb\xb7\xad\\'
 		'--', '---', '----', '-LRB-', '-RRB-', '-LCB-', '-RCB-',
 		'-LSB-', '-RSB-', '#LRB#', '#RRB#'}
 
-# Punctuation that is pruned if it is leading or ending (as in Collins 1999)
+# Punctuation that is pruned if it is leading or ending;
+# cf. Collins (2003, sec 4.3). http://anthology.aclweb.org/J03-4003
 PRUNEPUNCT = {'``', "''", '"', '.'}
 
 # Punctuation that come in pairs (left: right).

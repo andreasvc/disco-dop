@@ -1,7 +1,11 @@
 """Evaluation of (discontinuous) parse trees.
 
-Follows EVALB as much as possible, and provides some alternative evaluation
-metrics."""
+Designed to behave like the reference implementation EVALB [1] for regular
+parse trees, with a natural extension to the discontinuous case. Also provides
+additional, alternative parse tree evaluation metrics (leaf ancestor, tree-edit
+distance, unlabeled dependencies), as well as facilities for error analysis.
+
+[1] http://nlp.cs.nyu.edu/evalb/"""
 # pylint: disable=cell-var-from-loop
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
@@ -912,7 +916,10 @@ def pathscore(gold, cand):
 
 
 def leafancestor(goldtree, candtree, dellabel):
-	"""Sampson, Babarcz (2003): A test of the leaf-ancestor metric [...]."""
+	"""Sampson, Babarcz (2002): A test of the leaf-ancestor metric [...].
+
+	http://www.lrec-conf.org/proceedings/lrec2002/pdf/ws20.pdf p. 27;
+	2003 journal paper: https://doi.org/10.1017/S1351324903003243"""
 	gold = leafancestorpaths(goldtree, dellabel)
 	cand = leafancestorpaths(candtree, dellabel)
 	return mean([pathscore(gold[leaf], cand[leaf]) for leaf in gold])

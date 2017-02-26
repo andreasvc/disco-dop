@@ -55,6 +55,7 @@ PRESETS = {
 
 # Mappings for multi-level coarse-to-fine parsing
 # following Charniak et al. (2006), multi-level coarse-to-fine parsing.
+# http://aclweb.org/anthology/N06-1022
 MAPPINGS = {
 		'ptb': {
 			# level 0: P (all phrase labels)
@@ -321,6 +322,7 @@ def negratransforms(name, tree, sent):
 						[x for x in a if x != modifier]), modifier]
 				a = a[0]
 	# The following transformations as described in Fraser et al (CL, 2013)
+	# http://aclweb.org/anthology/J13-1005
 	elif name == 'addUnary':  # introduce unary NPs
 		maxid = getmaxid(tree)
 		for node in tree.postorder(lambda n: strip(n.label) in
@@ -488,7 +490,8 @@ def ptbtransforms(name, tree, sent):
 			unary.label += STATESPLIT + 'U'
 	# The following transformations are translations of
 	# the Stanford Parser state splits described in
-	# Accurate Unlexicalized Parsing (ACL 2003)
+	# Accurate Unlexicalized Parsing (ACL 2003).
+	# http://aclweb.org/anthology/P03-1054
 	elif name == 'splitIN':  # Stanford Parser splitIN=3
 		for node in tree.subtrees(lambda n: base(n, 'IN')):
 			if base(node.parent.parent, 'N') and (
@@ -1166,8 +1169,11 @@ def rrbacktransform(tree, adjunctionlabel=None, func=None):
 def dlevel(tree, lang='nl'):
 	"""Return the D-level measure of syntactic complexity.
 
-	Original version: Rosenberg & Abbeduto (1987); Covington et al. (2006);
-	Dutch version implemented here: Appendix A of T-Scan manual.
+	Original version:
+	Rosenberg & Abbeduto (1987), https://doi.org/10.1017/S0142716400000047
+	Covington et al. (2006), http://ai1.ai.uga.edu/caspr/2006-01-Covington.pdf
+	Dutch version implemented here: Appendix A of T-Scan manual,
+	https://github.com/proycon/tscan/raw/master/docs/tscanhandleiding.pdf
 
 	:param tree: A tree from the Alpino parser (i.e., not binarized, with
 		function and morphological tags).

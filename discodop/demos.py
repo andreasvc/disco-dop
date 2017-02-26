@@ -10,11 +10,12 @@ from .containers import Grammar
 def tree_adjoining_grammar():
 	"""Example of a tree-adjoining grammar (TAG) encoded as an LCFRS.
 
-	Taken from: Chen & Vijay-Shanker (2000), Automated extraction of TAGs
-	from the Penn treebank.
-	Limitations:
+	Taken from: Chen & Vijay-Shanker (IWPT 2000), Automated extraction of TAGs
+	from the Penn treebank. http://nlp.cs.nyu.edu/nycnlp/autoextract.ps
+
 	- no epsilon productions
-	Non-terminals have identifiers to encode elementary trees of depth > 2."""
+	- non-terminals have identifiers to encode elementary trees of depth > 2.
+	"""
 	print("Tree-Adjoining Grammars in LCFRS")
 	print('''initial trees:
 (S (NP ) (VP (V fell)))
@@ -44,6 +45,7 @@ auxiliary trees:
 	# taken from: slides for course Grammar Formalisms, Kallmeyer (2011),
 	# Mildly Context-Sensitive Grammar Formalisms:
 	# LCFRS: Relations to other Formalisms
+	# https://user.phil.hhu.de/~kallmeyer/GrammarFormalisms/4lcfrs-related-formalisms.pdf
 	print("the language {d} + {a**n b**m c**m d **n} with n>0, m>=0")
 	print('''initial trees:
 (S a (S Epsilon) F)
@@ -73,7 +75,7 @@ auxiliary trees:
 	assert not parse(grammar, list("abbbccd"))
 
 	# Taken from: Boullier (1998), Generalization of Mildly
-	# Context-Sensitive Formalisms.
+	# Context-Sensitive Formalisms. http://aclweb.org/anthology/W98-0105
 	# Epsilon replaced with '|', added preterminal rules w/underscores
 	print("the language { ww | w in {a,b}* }")
 	print('''initial trees:
@@ -107,10 +109,11 @@ def dependencygrammar():
 	"""An example dependency structure encoded in an LCFRS grammar.
 
 	Taken from: Gildea (2010, fig. 4), Optimal Parsing Strategies for Linear
-	Context-Free Rewriting Systems.
-	Limitations:
+	Context-Free Rewriting Systems. http://aclweb.org/anthology/N10-1118
+
 	- rules have to be binarized
 	- lexical rules have to be unary
+
 	These have been dealt with by introducing nodes w/underscores."""
 	print("A dependency grammar in an LCFRS:")
 	grammar = Grammar([
@@ -140,7 +143,7 @@ def dependencygrammar():
 def bitext():
 	"""Bitext parsing with a synchronous CFG.
 
-	Translation would require a special decoder (instead of normal kbest
+	Translation would require a special decoder (instead of normal k-best
 	derivations where the whole sentence is given)."""
 	print("bitext parsing with a synchronous CFG")
 	trees = [Tree(a) for a in '''\

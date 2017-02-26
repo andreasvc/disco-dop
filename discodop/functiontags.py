@@ -98,7 +98,8 @@ def functionfeatures(node, sent):
 	The node must be a ParentedTree, with head information.
 
 	The features are based on Blaheta & Charniak (2000),
-	Assigning Function Tags to Parsed Text."""
+	Assigning Function Tags to Parsed Text.
+	http://aclweb.org/anthology/A00-2031"""
 	headsib = headsibpos = None
 	for sib in node.parent:
 		if ishead(sib):
