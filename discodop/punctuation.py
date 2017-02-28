@@ -130,6 +130,10 @@ def punctraise(tree, sent, rootpreterms=False):
 
 	:param rootpreterms: if True, move all preterminals under root,
 		instead of only recognized punctuation."""
+	def phrasalnode(n):
+		"""Test whether node is a phrasal node."""
+		return n and isinstance(n[0], Tree)
+
 	# punct = [node for node in tree.subtrees() if isinstance(node[0], int)
 	punct = [node for node in tree if node and isinstance(node[0], int)
 			and (rootpreterms or ispunct(sent[node[0]], node))]
@@ -140,7 +144,6 @@ def punctraise(tree, sent, rootpreterms=False):
 		if node is tree:
 			continue
 		node.parent.pop(node.parent_index)
-		phrasalnode = lambda n: n and isinstance(n[0], Tree)
 		for candidate in tree.subtrees(phrasalnode):
 			# add punctuation mark to highest left/right neighbor
 			# if any(node[0] - 1 == max(a.leaves()) for a in candidate):

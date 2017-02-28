@@ -4,13 +4,15 @@ import sys
 import glob
 try:
 	from setuptools import Extension, setup
+	SETUPTOOLS = True
 except ImportError:
 	from distutils.core import Extension, setup
+	SETUPTOOLS = False
 
 from discodop import __version__
 
-# In releases, only include C sources; otherwise, use cython to figure out
-# which files may need to be re-cythonized.
+# In releases, include C sources but not Cython sources; otherwise, use cython
+# to figure out which files may need to be re-cythonized.
 USE_CYTHON = os.path.exists('discodop/containers.pyx')
 if USE_CYTHON:
 	try:
@@ -65,10 +67,14 @@ METADATA = dict(name='disco-dop',
 				'Topic :: Text Processing :: Linguistic',
 		],
 		requires=REQUIRES,
-		install_requires=REQUIRES,
 		packages=['discodop'],
-		scripts=['bin/discodop'],
-)
+	)
+if SETUPTOOLS:
+	METADATA['install_requires'] = REQUIRES
+	METADATA['entry_points'] = {
+			'console_scripts': ['discodop = discodop.cli:main']}
+else:
+	METADATA['scripts'] = ['bin/discodop']
 
 # some of these directives increase performance,
 # but at the cost of failing in mysterious ways.
@@ -89,7 +95,7 @@ directives = {
 		}
 
 if __name__ == '__main__':
-	if sys.version_info[:2] < (2, 7) or (3, 0) <= sys.version_info[:2] < (3, 3):
+	if sys.version_info[:2] != (2, 7) and sys.version_info[:2] < (3, 3):
 		raise RuntimeError('Python version 2.7 or >= 3.3 required.')
 	os.environ['GCC_COLORS'] = 'auto'
 	extra_compile_args = ['-O3', '-march=native', '-DNDEBUG',
@@ -123,7 +129,7 @@ if __name__ == '__main__':
 				)
 	else:
 		ext_modules = [Extension(
-				os.path.splitext(os.path.basename(filename))[0],
+				os.path.splitext(filename)[0].replace('/', '.'),
 				sources=[filename],
 				extra_compile_args=extra_compile_args,
 				extra_link_args=extra_link_args,

@@ -7,7 +7,6 @@ import re
 from unittest import TestCase
 from itertools import count, islice
 from operator import itemgetter
-from discodop import cli
 from discodop.tree import Tree, ParentedTree
 from discodop.treebank import incrementaltreereader
 from discodop.treetransforms import binarize, unbinarize, \
@@ -623,6 +622,9 @@ def test_eval():
 
 def test_punct():
 	"""Verify that punctuation movement does not increase fan-out."""
+	def phrasal(x):
+		return x and isinstance(x[0], Tree)
+
 	from discodop.treebank import NegraCorpusReader
 	filename = 'alpinosample.export'
 	mangledtrees = NegraCorpusReader(filename, punct='move')
@@ -630,7 +632,6 @@ def test_punct():
 			punct='remove').trees().values())
 	originals = list(NegraCorpusReader(filename, headrules=None,
 			encoding='iso-8859-1').trees().values())
-	phrasal = lambda x: len(x) and isinstance(x[0], Tree)
 	for n, mangled, sent, nopunct, original in zip(count(),
 			mangledtrees.trees().values(),
 			mangledtrees.sents().values(), nopunct, originals):
@@ -831,6 +832,7 @@ def test_treedraw():
 
 def test_runexp():
 	"""Run ``sample.prm``."""
+	from discodop import cli
 	if os.path.exists('sample.prm') and os.path.exists('sample/'):
 		for path in os.listdir('sample/'):
 			os.remove('sample/' + path)

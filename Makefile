@@ -64,14 +64,15 @@ test2: py2
 	&& cd tests/ && sh run.sh
 
 # pylint: R=refactor, C0103 == Invalid name
+# pep8: W503 line break before binary operator; E402 module level import not at top of file
 lint: discodop
 	# Any files with more than 999 lines?
 	cd discodop; wc -l *.py *.pyx *.pxi *.pxd | egrep '[0-9]{4,}' | sort -n
 	# Docstrings without single line summaries?
 	cd discodop; egrep -n '""".*[^].\"\\)]$$' *.pxd *.pyx *.py || echo 'none!'
-	pep8 --ignore=E1,W1 \
+	pep8 --ignore=E1,W1,E402,W503, \
 		discodop/*.py web/*.py tests/*.py \
-	&& pep8 --ignore=F,W1,E1,E211,E225,E227,E901 \
+	&& pep8 --ignore=F,W1,W503,E1,E211,E225,E227,E402,E901 \
 		discodop/*.pyx discodop/*.pxi discodop/*.pxd \
 	&& python3 `which pylint` --indent-string='\t' --max-line-length=80 \
 		--disable=I,R,bad-continuation,invalid-name,star-args,wrong-import-position,wrong-import-order,ungrouped-imports \

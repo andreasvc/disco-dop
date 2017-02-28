@@ -39,7 +39,6 @@ OPTIONS = ('fmt=', 'numproc=', 'numtrees=', 'encoding=', 'batch=', 'cover=',
 PARAMS = {}
 FRONTIERRE = re.compile(r'\(([^ ()]+) \)')  # for altrepr()
 TERMRE = re.compile(r'\(([^ ()]+) ([^ ()]+)\)')  # for altrepr()
-APPLY = lambda x, _y: x()
 
 
 def main(argv=None):

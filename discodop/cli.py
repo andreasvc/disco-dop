@@ -1,32 +1,50 @@
 """Command-line interfaces to modules."""
 from __future__ import division, print_function, absolute_import, \
 		unicode_literals
-import io
-import os
-import sys
-import gzip
-import codecs
-import logging
-from itertools import islice, chain
-from getopt import gnu_getopt, GetoptError
-if sys.version_info[0] == 2:
-	import __builtin__ as builtins  # pylint: disable=import-error
-else:
-	import builtins  # pylint: disable=import-error
-from . import treebank, treebanktransforms
-from .tree import DrawTree, frontier, STRTERMRE
-from .treebank import READERS, incrementaltreereader
-from .treetransforms import addfanoutmarkers, canonicalize, binarize, \
-		unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes, \
-		introducepreterminals, markovthreshold
-from .grammar import treebankgrammar, dopreduction, doubledop, dop1, \
-		compiletsg, writegrammar, grammarinfo, grammarstats, \
-		splitweight, merge, sumfrags, sumrules, sumlex, stripweight, \
-		addindices
-from .parser import readparam
-from .runexp import loadtraincorpus, getposmodel, startexp, \
-		dobinarization, getgrammars, parsetepacoc
-from .util import openread
+from sys import argv, stdout, stderr, version_info
+from sys import exit as sysexit
+
+COMMANDS = {
+		'runexp': 'Run experiment: grammar extraction, parsing & evaluation.',
+		'fragments': 'Extract recurring fragments from treebanks.',
+		'eval': 'Evaluate discontinuous parse trees; similar to EVALB.',
+		'treetransforms': 'Apply tree transformations '
+			'and convert between formats.',
+		'treedraw': 'Visualize (discontinuous) trees.',
+		'treesearch': 'Query treebanks.',
+		'grammar': 'Read off grammars from treebanks.',
+		'parser': 'Simple command line parser.',
+		'demos': 'Show some demonstrations of formalisms encoded in LCFRS.',
+		'gen': 'Generate sentences from a PLCFRS.',
+	}
+
+
+def main():
+	"""Expose command-line interfaces."""
+	from os import execlp
+	from os.path import basename
+	thiscmd = basename(argv[0])
+	if len(argv) == 2 and argv[1] in ('-v', '--version'):
+		from discodop import __version__
+		print(__version__)
+	elif len(argv) <= 1 or argv[1] not in dict(COMMANDS):
+		print('Usage: %s <command> [arguments]\n' % thiscmd, file=stderr)
+		print('Command is one of:', file=stderr)
+		for a, b in COMMANDS.items():
+			print('   %s  %s' % (a.ljust(15), b))
+		print('for additional instructions issue: %s <command> --help'
+			% thiscmd, file=stderr)
+	elif len(argv) == 3 and argv[2] in ('-h', '--help'):
+		# help on subcommand
+		execlp('man', 'man', 'discodop-%s' % argv[1])
+	else:
+		cmd = argv[1]
+		# use the CLI defined here, or default to the module's main function.
+		try:
+			globals()[cmd]()
+		except KeyError:
+			getattr(__import__('discodop.%s' % cmd,
+					fromlist=['main']), 'main')()
 
 
 def treedraw():
@@ -34,6 +52,12 @@ def treedraw():
 
 If no treebank is given, input is read from standard input; format is detected.
 Pipe the output through 'less -R' to preserve the colors."""
+	from getopt import gnu_getopt, GetoptError
+	from itertools import islice, chain
+	from .treebank import READERS, incrementaltreereader
+	from .tree import DrawTree, frontier
+	from .util import openread
+
 	def processtree(tree, sent):
 		"""Produced output for a single tree."""
 		if output == 'frontier':
@@ -56,11 +80,11 @@ Pipe the output through 'less -R' to preserve the colors."""
 	options = ('fmt=', 'encoding=', 'functions=', 'morphology=', 'numtrees=',
 			'output=')
 	try:
-		opts, args = gnu_getopt(sys.argv[2:], 'hn:', flags + options)
+		opts, args = gnu_getopt(argv[2:], 'hn:', flags + options)
 	except GetoptError as err:
-		print('error:', err, file=sys.stderr)
+		print('error:', err, file=stderr)
 		print(treedraw.__doc__)
-		sys.exit(2)
+		sysexit(2)
 	opts = dict(opts)
 	limit = opts.get('--numtrees', opts.get('-n'))
 	limit = int(limit) if limit else None
@@ -124,7 +148,7 @@ Pipe the output through 'less -R' to preserve the colors."""
 		print(DrawTree.templates['latex'][1])  # postamble
 
 
-def runexp(argv=None):
+def runexp(args=None):
 	"""Usage: discodop runexp <parameter file> [--rerun]
 
 If a parameter file is given, an experiment is run. See the file sample.prm for
@@ -132,24 +156,28 @@ an example parameter file. To repeat an experiment with an existing grammar,
 pass the option --rerun. The directory with the name of the parameter file
 without extension must exist in the current path; its results will be
 overwritten."""
-	if argv is None:
-		argv = sys.argv[2:]
-	if len(argv) == 0:
-		print('error: incorrect number of arguments', file=sys.stderr)
+	import io
+	import os
+	from .parser import readparam
+	from .runexp import startexp, parsetepacoc
+	if args is None:
+		args = argv[2:]
+	if len(args) == 0:
+		print('error: incorrect number of arguments', file=stderr)
 		print(runexp.__doc__)
-		sys.exit(2)
-	elif '--tepacoc' in argv:
+		sysexit(2)
+	elif '--tepacoc' in args:
 		parsetepacoc()
 	else:
-		rerun = '--rerun' in argv
+		rerun = '--rerun' in args
 		if rerun:
-			argv.remove('--rerun')
-		params = readparam(argv[0])
-		resultdir = argv[0].rsplit('.', 1)[0]
+			args.remove('--rerun')
+		params = readparam(args[0])
+		resultdir = args[0].rsplit('.', 1)[0]
 		top = startexp(
 				params, resultdir=resultdir, rerun=rerun)
 		if not rerun:  # copy parameter file to result dir
-			paramlines = io.open(argv[0], encoding='utf8').readlines()
+			paramlines = io.open(args[0], encoding='utf8').readlines()
 			if paramlines[0].startswith("top='"):
 				paramlines = paramlines[1:]
 			outfile = os.path.join(resultdir, 'params.prm')
@@ -163,6 +191,13 @@ def treetransforms():
 Usage: discodop treetransforms [input [output]] [options]
 where input and output are treebanks; standard in/output is used if not given.
 """
+	import io
+	from getopt import gnu_getopt, GetoptError
+	from itertools import islice
+	from . import treebank, treebanktransforms
+	from .treetransforms import canonicalize, binarize, \
+			unbinarize, optimalbinarize, splitdiscnodes, mergediscnodes, \
+			introducepreterminals, markovthreshold
 	flags = ('binarize optimalbinarize unbinarize splitdisc mergedisc '
 			'introducepreterminals renumber sentid removeempty '
 			'help markorigin markhead leftunary rightunary '
@@ -172,13 +207,13 @@ where input and output are treebanks; standard in/output is used if not given.
 			'markorigin= maxlen= enc= transforms= markovthreshold= labelfun= '
 			'transforms= reversetransforms= ').split()
 	try:
-		origopts, args = gnu_getopt(sys.argv[2:], 'h:v:H:', flags + options)
+		origopts, args = gnu_getopt(argv[2:], 'h:v:H:', flags + options)
 		if len(args) > 2:
 			raise GetoptError('expected 0, 1, or 2 positional arguments')
 	except GetoptError as err:
-		print('error:', err, file=sys.stderr)
+		print('error:', err, file=stderr)
 		print(treetransforms.__doc__)
-		sys.exit(2)
+		sysexit(2)
 	opts = dict(origopts)
 	if '--fmt' in opts:
 		opts['--inputfmt'] = opts['--outputfmt'] = opts['--fmt']
@@ -187,11 +222,11 @@ where input and output are treebanks; standard in/output is used if not given.
 	if opts.get('--outputfmt', treebank.WRITERS[0]) not in treebank.WRITERS:
 		print('error: unrecognized output format: %r\navailable formats: %s'
 				% (opts.get('--outputfmt'), ' '.join(treebank.WRITERS)),
-				file=sys.stderr)
-		sys.exit(2)
+				file=stderr)
+		sysexit(2)
 	infilename = (args[0] if len(args) >= 1 else '-')
 	outfilename = (args[1] if len(args) == 2 and args[1] != '-'
-			else sys.stdout.fileno())
+			else stdout.fileno())
 
 	# open corpus
 	corpus = treebank.READERS[opts.get('--inputfmt', 'export')](
@@ -240,7 +275,7 @@ where input and output are treebanks; standard in/output is used if not given.
 							direction='--direction' in opts,
 							headoutward='--headrules' in opts,
 							markhead='--markhead' in opts,
-							labelfun=builtins.eval(  # pylint: disable=eval-used
+							labelfun=eval(  # pylint: disable=eval-used
 								opts['--labelfun'])
 								if '--labelfun' in opts else None),
 						sent))
@@ -328,7 +363,7 @@ where input and output are treebanks; standard in/output is used if not given.
 							fmt, comment=item.comment, sentid=sentid))
 					cnt += 1
 	print('%s: transformed %d trees' % (args[0] if args else 'stdin', cnt),
-			file=sys.stderr)
+			file=stderr)
 
 
 def grammar():
@@ -338,20 +373,37 @@ or: discodop grammar param <parameter-file> <output-directory>
 or: discodop grammar info <rules-file>
 or: discodop grammar merge (rules|lexicon|fragments) \
 <input1> <input2>... <output>"""
+	import io
+	import os
+	import codecs
+	import logging
+	from gzip import open as gzipopen
+	from getopt import gnu_getopt, GetoptError
+	from .tree import STRTERMRE
+	from .util import openread
+	from .treebank import READERS
+	from .treetransforms import addfanoutmarkers, canonicalize
+	from .grammar import treebankgrammar, dopreduction, doubledop, dop1, \
+			compiletsg, writegrammar, grammarinfo, grammarstats, \
+			splitweight, merge, sumfrags, sumrules, sumlex, stripweight, \
+			addindices
+	from .parser import readparam
+	from .runexp import loadtraincorpus, getposmodel, dobinarization, \
+			getgrammars
 	logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 	shortoptions = 'hs:'
 	options = ('help', 'gzip', 'packed', 'bitpar', 'inputfmt=', 'inputenc=',
 			'dopestimator=', 'maxdepth=', 'maxfrontier=', 'numproc=')
 	try:
-		opts, args = gnu_getopt(sys.argv[2:], shortoptions, options)
+		opts, args = gnu_getopt(argv[2:], shortoptions, options)
 		model = args[0]
 		if model not in ('info', 'merge'):
 			treebankfile, grammarfile = args[1:
 					]  # pylint: disable=unbalanced-tuple-unpacking
 	except (GetoptError, IndexError, ValueError) as err:
-		print('error: %r' % err, file=sys.stderr)
+		print('error: %r' % err, file=stderr)
 		print(grammar.__doc__)
-		sys.exit(2)
+		sysexit(2)
 	opts = dict(opts)
 	if model not in ('pcfg', 'plcfrs', 'dopreduction', 'doubledop', 'dop1',
 			'ptsg', 'param', 'info', 'merge'):
@@ -443,7 +495,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 	lexiconname = grammarfile + '.lex'
 	myopen = open
 	if '--gzip' in opts:
-		myopen = gzip.open
+		myopen = gzipopen
 		rulesname += '.gz'
 		lexiconname += '.gz'
 	bitpar = model == 'pcfg' or opts.get('--inputfmt') == 'bracket'
@@ -468,7 +520,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 	print('wrote grammar to %s and %s.' % (rulesname, lexiconname))
 	start = opts.get('-s', next(iter(xgrammar))[0][0][0]
 			if model == 'ptsg' else trees[0].label)
-	if sys.version_info[0] == 2:
+	if version_info[0] == 2:
 		start = start.decode('utf8')
 	if len(xgrammar) < 10000:  # this is very slow so skip with large grammars
 		print(grammarinfo(xgrammar))
@@ -480,40 +532,7 @@ or: discodop grammar merge (rules|lexicon|fragments) \
 		print(err)
 
 
-def fragments():
-	"""fragments CLI."""
-	from .fragments import main
+if __name__ == "__main__":
 	main()
 
-
-def eval():  # pylint: disable=redefined-builtin
-	"""eval CLI."""
-	from .eval import main
-	main()
-
-
-def treesearch():
-	"""treesearch CLI."""
-	from .treesearch import main
-	main()
-
-
-def parser():
-	"""parser CLI."""
-	from .parser import main
-	main()
-
-
-def demos():
-	"""demos CLI."""
-	from .demos import main
-	main()
-
-
-def gen():
-	"""gen CLI."""
-	from .gen import main
-	main()
-
-__all__ = ['treedraw', 'runexp', 'treetransforms', 'grammar', 'fragments',
-		'eval', 'treesearch', 'parser', 'demos', 'gen']
+__all__ = ['treedraw', 'runexp', 'treetransforms', 'grammar', 'main']

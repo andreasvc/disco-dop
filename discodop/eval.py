@@ -16,9 +16,10 @@ from decimal import Decimal, InvalidOperation
 from collections import defaultdict, Counter  # == multiset
 if sys.version_info[0] == 2:
 	from itertools import count, \
-			izip_longest as zip_longest  # pylint: disable=E0611
+			izip_longest as zip_longest  # pylint: disable=no-name-in-module
 else:
-	from itertools import count, zip_longest  # pylint: disable=E0611
+	from itertools import count, \
+			zip_longest  # pylint: disable=no-name-in-module
 from . import grammar
 from .tree import Tree, DrawTree, isdisc, bitfanout
 from .treebank import READERS, dependencies, handlefunctions

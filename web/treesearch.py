@@ -348,7 +348,9 @@ def counts(form, doexport=False):
 		else:
 			yield df.to_csv(None)
 	else:
-		fmt = lambda x: '%g' % round(x, 1)
+		def fmt(x):
+			return '%g' % round(x, 1)
+
 		yield '<h3><a name=q%d>Overview of patterns</a></h3>\n' % (
 				len(queries) + 2)
 		# collate stats

@@ -888,7 +888,9 @@ def reversetransform(tree, transformations):
 		elif name == 'POS-PART':
 			# remove constituents for particle verbs
 			# get the grandfather of each verb particle
-			hasparticle = lambda n: any('PTKVZ' in (x.label
+			def hasparticle(n):
+				"""Test whether node has a PTKVZ node."""
+				return any('PTKVZ' in (x.label
 					for x in m if isinstance(x, Tree)) for m in n
 					if isinstance(m, Tree))
 			for a in list(tree.subtrees(hasparticle)):
