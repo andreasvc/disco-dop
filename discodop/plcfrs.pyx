@@ -2,6 +2,7 @@
 
 Expects binarized, epsilon-free, monotone LCFRS grammars."""
 from __future__ import print_function
+import re
 import logging
 import numpy as np
 cimport cython
@@ -307,107 +308,30 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		DoubleAgenda agenda = DoubleAgenda()  # the agenda
 		list probs = chart.probs  # viterbi probabilities for items
 		ProbRule *rule
-		LexicalRule lexrule
-		LCFRSItem_fused item, newitem
+		LCFRSItem_fused item = None, newitem
 		DoubleEntry entry
 		double [:, :, :, :] outside = None  # outside estimates, if provided
 		double siblingprob, score
-		short wordidx, lensent = len(sent), estimatetype = 0
+		short lensent = len(sent), estimatetype = 0
 		int length = 1, left = 0, right = 0, gaps = 0
-		uint32_t lhs
 		size_t blocked = 0, maxA = 0, n
-		bint recognized
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
+
+	# assign POS tags
+	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
+			grammar, agenda, chart, item,
+			sent, tags, whitelist, estimates, False)
+	if not covered:
+		return chart, msg
+
 	# newitem will be recycled until it is added to the chart
 	if LCFRSItem_fused is SmallChartItem:
 		newitem = new_SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
 		newitem = new_FatChartItem(0)
-	for wordidx, word in enumerate(sent):  # add preterminals to chart
-		recognized = False
-		if LCFRSItem_fused is SmallChartItem:
-			item = new_SmallChartItem(0, wordidx)
-		elif LCFRSItem_fused is FatChartItem:
-			item = new_FatChartItem(0)
-			item.vec[0] = wordidx
-		tag = tags[wordidx] if tags else None
-		if estimates is not None:
-			left = wordidx
-			gaps = 0
-			right = lensent - 1 - wordidx
-		for lexrule in grammar.lexicalbyword.get(word, ()):
-			# if we are given gold tags, make sure we only allow matching
-			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lexrule.lhs] == tag
-					or grammar.tolabel[lexrule.lhs].startswith(tag + '@')):
-				score = lexrule.prob
-				if estimatetype == SX:
-					score += outside[lexrule.lhs, left, right, 0]
-					if score > MAX_LOGPROB:
-						continue
-				elif estimatetype == SXlrgaps:
-					score += outside[
-							lexrule.lhs, length, left + right, gaps]
-					if score > MAX_LOGPROB:
-						continue
-				# NB: do NOT add length of span to score, so that the scores of
-				# POS tags are all strictly smaller than any unaries on them.
-				newitem.label = lexrule.lhs
-				newitem.prob = lexrule.prob
-				if LCFRSItem_fused is SmallChartItem:
-					newitem.vec = 1UL << wordidx
-				elif LCFRSItem_fused is FatChartItem:
-					memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
-					SETBIT(newitem.vec, wordidx)
-				if process_lexedge(newitem, score, wordidx,
-						agenda, chart, whitelist):
-					if LCFRSItem_fused is SmallChartItem:
-						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-								SmallChartItem)
-					elif LCFRSItem_fused is FatChartItem:
-						newitem = <LCFRSItem_fused>FatChartItem.__new__(
-								FatChartItem)
-					recognized = True
-				else:
-					blocked += 1
-		if not recognized and tags and tag in grammar.toid:
-			lhs = grammar.toid[tag]
-			score = 0.0
-			if estimatetype == SX:
-				score += outside[lhs, left, right, 0]
-				if score > MAX_LOGPROB:
-					continue
-			elif estimatetype == SXlrgaps:
-				score += outside[lhs, length, left + right, gaps]
-				if score > MAX_LOGPROB:
-					continue
-			newitem.label = lhs
-			newitem.prob = 0.0
-			if LCFRSItem_fused is SmallChartItem:
-				newitem.vec = 1UL << wordidx
-			elif LCFRSItem_fused is FatChartItem:
-				memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
-				SETBIT(newitem.vec, wordidx)
-			# prevent pruning of provided tags => whitelist == None
-			if process_lexedge(newitem, 0.0, wordidx,
-					agenda, chart, None):
-				if LCFRSItem_fused is SmallChartItem:
-					newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-							SmallChartItem)
-				elif LCFRSItem_fused is FatChartItem:
-					newitem = <LCFRSItem_fused>FatChartItem.__new__(
-							FatChartItem)
-				recognized = True
-			else:
-				raise ValueError('tag %r is blocked.' % tag)
-		elif not recognized:
-			if tag is None and word not in grammar.lexicalbyword:
-				return chart, 'no parse: %r not in lexicon' % word
-			elif tag is not None and tag not in grammar.toid:
-				return chart, 'no parse: unknown tag %r' % tag
-			return chart, 'no parse: all tags for %r blocked' % word
+
 	while agenda.length:  # main parsing loop
 		entry = agenda.popentry()
 		item = <LCFRSItem_fused>entry.key
@@ -590,6 +514,122 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 	if not chart:
 		return chart, 'no parse ' + msg
 	return chart, msg
+
+
+cdef populatepos(Grammar grammar, DoubleAgenda agenda,
+		LCFRSChart_fused chart, LCFRSItem_fused item, sent, tags, whitelist,
+		estimates, bint symbolic):
+	"""Apply all possible lexical and unary rules on each lexical span.
+
+	:returns: a tuple ``(success, msg)`` where ``success`` is True if a POS tag
+		was found for every word in the sentence."""
+	cdef:
+		LexicalRule lexrule
+		LCFRSItem_fused newitem
+		double [:, :, :, :] outside = None  # outside estimates, if provided
+		double score
+		short wordidx, lensent = len(sent), estimatetype = 0
+		int length = 1, left = 0, right = 0, gaps = 0
+		uint32_t lhs
+		size_t blocked = 0
+		bint recognized
+	if estimates is not None:
+		estimatetypestr, outside = estimates
+		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
+	# newitem will be recycled until it is added to the chart
+	if LCFRSItem_fused is SmallChartItem:
+		newitem = new_SmallChartItem(0, 0)
+	elif LCFRSItem_fused is FatChartItem:
+		newitem = new_FatChartItem(0)
+
+	for wordidx, word in enumerate(sent):  # add preterminals to chart
+		recognized = False
+		if LCFRSItem_fused is SmallChartItem:
+			item = new_SmallChartItem(0, wordidx)
+		elif LCFRSItem_fused is FatChartItem:
+			item = new_FatChartItem(0)
+			item.vec[0] = wordidx
+		tag = tags[wordidx] if tags else None
+		# if we are given gold tags, make sure we only allow matching
+		# tags - after removing addresses introduced by the DOP reduction
+		# and other state splits.
+		tagre = re.compile('%s($|@|\\^|/)' % re.escape(tag)) if tags else None
+		if estimates is not None:
+			left = wordidx
+			gaps = 0
+			right = lensent - 1 - wordidx
+		for lexrule in grammar.lexicalbyword.get(word, ()):
+			if not tags or tagre.match(grammar.tolabel[lexrule.lhs]):
+				score = -1 if symbolic else lexrule.prob
+				if estimatetype == SX:
+					score += outside[lexrule.lhs, left, right, 0]
+					if score > MAX_LOGPROB:
+						continue
+				elif estimatetype == SXlrgaps:
+					score += outside[
+							lexrule.lhs, length, left + right, gaps]
+					if score > MAX_LOGPROB:
+						continue
+				# NB: do NOT add length of span to score, so that the scores of
+				# POS tags are all strictly smaller than any unaries on them.
+				newitem.label = lexrule.lhs
+				newitem.prob = 0.0 if symbolic else lexrule.prob
+				if LCFRSItem_fused is SmallChartItem:
+					newitem.vec = 1UL << wordidx
+				elif LCFRSItem_fused is FatChartItem:
+					memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
+					SETBIT(newitem.vec, wordidx)
+				if process_lexedge(newitem, score, wordidx,
+						agenda, chart, whitelist):
+					if LCFRSItem_fused is SmallChartItem:
+						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
+								SmallChartItem)
+					elif LCFRSItem_fused is FatChartItem:
+						newitem = <LCFRSItem_fused>FatChartItem.__new__(
+								FatChartItem)
+					recognized = True
+				else:
+					blocked += 1
+		# NB: use gold tags if given, even if (word, tag) was not part of
+		# training data, modulo state splits etc.
+		if not recognized and tag is not None:
+			for lhs in grammar.lexicalbylhs:
+				if tagre.match(grammar.tolabel[lhs]) is not None:
+					score = -1 if symbolic else 0.0
+					if estimatetype == SX:
+						score += outside[lhs, left, right, 0]
+						if score > MAX_LOGPROB:
+							continue
+					elif estimatetype == SXlrgaps:
+						score += outside[lhs, length, left + right, gaps]
+						if score > MAX_LOGPROB:
+							continue
+					newitem.label = lhs
+					newitem.prob = 0.0
+					if LCFRSItem_fused is SmallChartItem:
+						newitem.vec = 1UL << wordidx
+					elif LCFRSItem_fused is FatChartItem:
+						memset(<void *>newitem.vec, 0, SLOTS * sizeof(uint64_t))
+						SETBIT(newitem.vec, wordidx)
+					# prevent pruning of provided tags => whitelist == None
+					if process_lexedge(newitem, score, wordidx,
+							agenda, chart, None):
+						if LCFRSItem_fused is SmallChartItem:
+							newitem = <LCFRSItem_fused>SmallChartItem.__new__(
+									SmallChartItem)
+						elif LCFRSItem_fused is FatChartItem:
+							newitem = <LCFRSItem_fused>FatChartItem.__new__(
+									FatChartItem)
+						recognized = True
+					else:
+						raise ValueError('tag %r is blocked.' % tag)
+		if not recognized:
+			if tag is None and word not in grammar.lexicalbyword:
+				return False, 'no parse: %r not in lexicon' % word
+			elif tag is not None and tag not in grammar.toid:
+				return False, 'no parse: unknown tag %r' % tag
+			return False, 'no parse: all tags for %r blocked' % word
+	return True, ''
 
 
 cdef inline bint process_edge(LCFRSItem_fused newitem,
@@ -841,55 +881,22 @@ cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		list agenda = [set() for _ in sent]  # an agenda for each span length
 		list items = chart.probs  # tracks items for each label
 		ProbRule *rule
-		LexicalRule lexrule
-		LCFRSItem_fused item, sibling, newitem
-		short wordidx
+		LCFRSItem_fused item = None, sibling, newitem
 		size_t n, blocked = 0, maxA = 0
+
+	# assign POS tags
+	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
+			grammar, agenda, chart, item,
+			sent, tags, whitelist, None, True)
+	if not covered:
+		return chart, msg
+
+	# newitem will be recycled until it is added to the chart
 	if LCFRSItem_fused is SmallChartItem:
 		newitem = new_SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
 		newitem = new_FatChartItem(0)
-	for wordidx, word in enumerate(sent):
-		recognized = False
-		tag = tags[wordidx] if tags else None
-		if LCFRSItem_fused is SmallChartItem:
-			item = new_SmallChartItem(0, wordidx)
-		elif LCFRSItem_fused is FatChartItem:
-			item = new_FatChartItem(0)
-			item.vec[0] = wordidx
-		for lexrule in grammar.lexicalbyword.get(word, ()):
-			# if we are given gold tags, make sure we only allow matching
-			# tags - after removing addresses introduced by the DOP reduction
-			if (not tags or grammar.tolabel[lexrule.lhs] == tag
-				or grammar.tolabel[lexrule.lhs].startswith(tag + '@')):
-				newitem.label = lexrule.lhs
-				if LCFRSItem_fused is SmallChartItem:
-					newitem.vec = 1UL << wordidx
-				elif LCFRSItem_fused is FatChartItem:
-					SETBIT(newitem.vec, wordidx)
-				if process_lexedge(newitem, -1, wordidx,
-						agenda, chart, whitelist):
-					if LCFRSItem_fused is SmallChartItem:
-						newitem = <LCFRSItem_fused>SmallChartItem.__new__(
-								SmallChartItem)
-					elif LCFRSItem_fused is FatChartItem:
-						newitem = <LCFRSItem_fused>FatChartItem.__new__(
-								FatChartItem)
-					recognized = True
-				else:
-					blocked += 1
-		if not recognized and tags and tag in grammar.toid:
-			newitem.label = grammar.toid[tag]
-			if LCFRSItem_fused is SmallChartItem:
-				newitem.vec = 1UL << wordidx
-			elif LCFRSItem_fused is FatChartItem:
-				SETBIT(newitem.vec, wordidx)
-			if process_lexedge(newitem, -1, wordidx,
-					agenda, chart, None):
-				newitem = SmallChartItem.__new__(SmallChartItem)
-				recognized = True
-		elif not recognized:
-			return chart, 'not covered: %r' % (tag or word, )
+
 	item = None
 	curlen = 0
 	while any(agenda):

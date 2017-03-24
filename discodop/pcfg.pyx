@@ -616,6 +616,10 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 		short left, right, lensent = len(sent)
 	for left, word in enumerate(sent):
 		tag = tags[left] if tags else None
+		# if we are given gold tags, make sure we only allow matching
+		# tags - after removing addresses introduced by the DOP reduction
+		# and other state splits.
+		tagre = re.compile('%s($|@|\\^|/)' % re.escape(tag)) if tags else None
 		right = left + 1
 		recognized = False
 		for lexrule in grammar.lexicalbyword.get(word, ()):
@@ -624,10 +628,7 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 					compactcellidx(left, right, lensent, 1)]:
 				continue
 			lhs = lexrule.lhs
-			# if we are given gold tags, make sure we only allow matching
-			# tags - after removing addresses introduced by the DOP reduction
-			if (tag is None or grammar.tolabel[lhs] == tag
-					or grammar.tolabel[lhs].startswith(tag + '@')):
+			if tag is None or tagre.match(grammar.tolabel[lhs]):
 				chart.addedge(lhs, left, right, right, NULL)
 				chart.updateprob(lhs, left, right,
 						0.0 if symbolic else lexrule.prob, 0.0)
@@ -642,23 +643,25 @@ cdef populatepos(Grammar grammar, CFGChart_fused chart, sent, tags, whitelist,
 					minright[lhs, left] = right
 				if right > maxright[lhs, left]:
 					maxright[lhs, left] = right
-		# NB: don't allow blocking of gold tags if given
-		if not recognized and tag is not None and tag in grammar.toid:
-			lhs = grammar.toid[tag]
-			chart.addedge(lhs, left, right, right, NULL)
-			chart.updateprob(lhs, left, right, 0.0, 0.0)
-			unaryagenda.setitem(lhs, 0.0)
-			recognized = True
-			# update filter
-			if left > minleft[lhs, right]:
-				minleft[lhs, right] = left
-			if left < maxleft[lhs, right]:
-				maxleft[lhs, right] = left
-			if right < minright[lhs, left]:
-				minright[lhs, left] = right
-			if right > maxright[lhs, left]:
-				maxright[lhs, left] = right
-		elif not recognized:
+		# NB: use gold tags if given, even if (word, tag) was not part of
+		# training data, modulo state splits etc.
+		if not recognized and tag is not None:
+			for lhs in grammar.lexicalbylhs:
+				if tagre.match(grammar.tolabel[lhs]):
+					chart.addedge(lhs, left, right, right, NULL)
+					chart.updateprob(lhs, left, right, 0.0, 0.0)
+					unaryagenda.setitem(lhs, 0.0)
+					recognized = True
+					# update filter
+					if left > minleft[lhs, right]:
+						minleft[lhs, right] = left
+					if left < maxleft[lhs, right]:
+						maxleft[lhs, right] = left
+					if right < minright[lhs, left]:
+						minright[lhs, left] = right
+					if right > maxright[lhs, left]:
+						maxright[lhs, left] = right
+		if not recognized:
 			if tag is None and word not in grammar.lexicalbyword:
 				return chart, 'no parse: %r not in lexicon' % word
 			elif tag is not None and tag not in grammar.toid:
