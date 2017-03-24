@@ -207,8 +207,17 @@ def transform(tree, sent, transformations):
 			pass
 		else:
 			raise ValueError('unrecognized transformation %r' % name)
-	for a in reversed(list(tree.subtrees(lambda x: len(x) > 1))):
-		a.children.sort(key=Tree.leaves)
+	maxid = getmaxid(tree)
+	for node in reversed(list(tree.subtrees())):
+		# restore linear precedence order
+		if len(node) > 1:
+			node.children.sort(key=lambda n: min(n.leaves())
+					if isinstance(n, Tree) else n)
+		# assign node id to new nodes
+		if (getattr(node, 'source', None) is not None
+				and node.source[WORD] == '--'):
+			maxid += 1
+			node.source[WORD] = '#%d' % maxid
 	return tree
 
 
@@ -324,7 +333,6 @@ def negratransforms(name, tree, sent):
 	# The following transformations as described in Fraser et al (CL, 2013)
 	# http://aclweb.org/anthology/J13-1005
 	elif name == 'addUnary':  # introduce unary NPs
-		maxid = getmaxid(tree)
 		for node in tree.postorder(lambda n: strip(n.label) in
 					{'NN', 'PPER', 'PDS', 'PIS', 'PRELS', 'CARD', 'PN'}
 					and strip(n.parent.label) in {'S', 'VP', 'ROOT', 'DL'}):
@@ -337,8 +345,6 @@ def negratransforms(name, tree, sent):
 			node[:] = [tag]
 			node.source[TAG] = node.label = 'NP'
 			node.source[FUNC] = tag.source[FUNC]
-			maxid += 1
-			node.source[WORD] = '#%d' % maxid
 			node.source[LEMMA] = node.source[MORPH] = '--'
 			tag.source[FUNC] = 'HD'
 	elif name == 'addCase':  # add case features to POS tags
@@ -793,7 +799,6 @@ def lassytransforms(name, tree, _sent):
 					iter(strip(a.label) for a in node
 					if ishead(a) or a is node[-1]))
 	elif name == 'nladdunary':  # introduce unary NPs
-		maxid = getmaxid(tree)
 		for node in tree.postorder(lambda n: strip(n.label) in {'n', 'vnw'}
 				and strip(n.parent.label) in {'SMAIN', 'PP', 'INF'}):
 			children = node[:]
@@ -807,8 +812,6 @@ def lassytransforms(name, tree, _sent):
 				tag.source[FUNC] = 'HD'
 			else:
 				tag.source[FUNC] = 'hd'
-			maxid += 1
-			node.source[WORD] = '#%d' % maxid
 			node.source[LEMMA] = node.source[MORPH] = '--'
 	elif name == 'nlelimcnj':  # assign conjuncts the function of the parent
 		for node in tree.subtrees(lambda n: function(n) == 'cnj'):
@@ -995,10 +998,17 @@ def reversetransform(tree, transformations):
 				a.source[TAG] = a.label
 				a[:] = [a[0].pop() for _ in range(len(a[0]))][::-1]
 
-	# restore linear precedence order
-	for a in tree.subtrees(lambda n: len(n) > 1):
-		a.children.sort(key=lambda n: min(n.leaves())
-				if isinstance(n, Tree) else n)
+	maxid = getmaxid(tree)
+	for node in tree.subtrees():
+		# restore linear precedence order
+		if len(node) > 1:
+			node.children.sort(key=lambda n: min(n.leaves())
+					if isinstance(n, Tree) else n)
+		# assign node id to new nodes
+		if (getattr(node, 'source', None) is not None
+				and node.source[WORD] == '--'):
+			maxid += 1
+			node.source[WORD] = '#%d' % maxid
 	return tree
 
 

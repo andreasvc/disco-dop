@@ -208,10 +208,10 @@ class BracketCorpusReader(CorpusReader):
 		return OrderedDict(self._read_blocks())
 
 	def _read_blocks(self):
-		for n, block in enumerate((line for filename in self._filenames
-				for line in openread(filename, encoding=self._encoding)
-				if line), 1):
-			yield n, block
+		for filename in self._filenames:
+			with openread(filename, encoding=self._encoding) as inp:
+				for n, block in enumerate((line	for line in inp if line), 1):
+					yield n, block
 
 	def _parse(self, block):
 		c = count()
@@ -284,32 +284,33 @@ class NegraCorpusReader(CorpusReader):
 		results = set()
 		started = False
 		for filename in self._filenames:
-			for line in openread(filename, encoding=self._encoding):
-				if line.startswith('#BOS '):
-					if started:
-						raise ValueError('beginning of sentence marker while '
-								'previous one still open: %s' % line)
-					started = True
-					line = line.strip()
-					sentid = line.split()[1]
-					lines = [line]
-				elif line.startswith('#EOS '):
-					if not started:
-						raise ValueError('end of sentence marker while '
-								'none started')
-					thissentid = line.strip().split()[1]
-					if sentid != thissentid:
-						raise ValueError('unexpected sentence id: '
-							'start=%s, end=%s' % (sentid, thissentid))
-					started = False
-					if sentid in results:
-						raise ValueError('duplicate sentence ID: %s' % sentid)
-					results.add(sentid)
-					lines.append(line.strip())
-					yield sentid, lines
-				elif started:
-					lines.append(line.strip())
-				# other lines are ignored, such as #FORMAT x, %% comments, ...
+			with openread(filename, encoding=self._encoding) as inp:
+				for line in inp:
+					if line.startswith('#BOS '):
+						if started:
+							raise ValueError('beginning of sentence marker '
+									'while previous one still open: %s' % line)
+						started = True
+						line = line.strip()
+						sentid = line.split()[1]
+						lines = [line]
+					elif line.startswith('#EOS '):
+						if not started:
+							raise ValueError('end of sentence marker while '
+									'none started')
+						thissentid = line.strip().split()[1]
+						if sentid != thissentid:
+							raise ValueError('unexpected sentence id: '
+								'start=%s, end=%s' % (sentid, thissentid))
+						started = False
+						if sentid in results:
+							raise ValueError('duplicate sentence ID: %s' % sentid)
+						results.add(sentid)
+						lines.append(line.strip())
+						yield sentid, lines
+					elif started:
+						lines.append(line.strip())
+					# other lines are ignored: #FORMAT x, %% comments, ...
 
 	def _parse(self, block):
 		return exporttree(block, self.functions, self.morphology, self.lemmas)
@@ -615,7 +616,8 @@ def writeexporttree(tree, sent, key, comment, morphology):
 				'sentno: %s\ntree: %s\nsent (len=%d): %r\nleaves (len=%d): %r'
 				% (key, tree, len(sent), sent, len(preterms), preterms))
 	idindex = [id(node) for node in phrasalnodes]
-	nodeidindex = [int(node.source[WORD].lstrip('#')) if node.source else 0
+	nodeidindex = [int(node.source[WORD][1:])
+			if node.source and node.source[WORD].startswith('#') else 0
 			for node in phrasalnodes]
 	for n, word in enumerate(sent):
 		if not word:

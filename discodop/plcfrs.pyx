@@ -308,7 +308,7 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 		DoubleAgenda agenda = DoubleAgenda()  # the agenda
 		list probs = chart.probs  # viterbi probabilities for items
 		ProbRule *rule
-		LCFRSItem_fused item = None, newitem
+		LCFRSItem_fused item, newitem
 		DoubleEntry entry
 		double [:, :, :, :] outside = None  # outside estimates, if provided
 		double siblingprob, score
@@ -318,19 +318,18 @@ cdef parse_main(LCFRSChart_fused chart, LCFRSItem_fused goal, sent,
 	if estimates is not None:
 		estimatetypestr, outside = estimates
 		estimatetype = {'SX': SX, 'SXlrgaps': SXlrgaps}[estimatetypestr]
-
-	# assign POS tags
-	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
-			grammar, agenda, chart, item,
-			sent, tags, whitelist, estimates, False)
-	if not covered:
-		return chart, msg
-
 	# newitem will be recycled until it is added to the chart
 	if LCFRSItem_fused is SmallChartItem:
 		newitem = new_SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
 		newitem = new_FatChartItem(0)
+
+	# assign POS tags
+	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
+			grammar, agenda, chart, newitem,
+			sent, tags, whitelist, estimates, False)
+	if not covered:
+		return chart, msg
 
 	while agenda.length:  # main parsing loop
 		entry = agenda.popentry()
@@ -881,21 +880,20 @@ cdef parse_symbolic(LCFRSChart_fused chart, LCFRSItem_fused goal,
 		list agenda = [set() for _ in sent]  # an agenda for each span length
 		list items = chart.probs  # tracks items for each label
 		ProbRule *rule
-		LCFRSItem_fused item = None, sibling, newitem
+		LCFRSItem_fused item, sibling, newitem
 		size_t n, blocked = 0, maxA = 0
-
-	# assign POS tags
-	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
-			grammar, agenda, chart, item,
-			sent, tags, whitelist, None, True)
-	if not covered:
-		return chart, msg
-
 	# newitem will be recycled until it is added to the chart
 	if LCFRSItem_fused is SmallChartItem:
 		newitem = new_SmallChartItem(0, 0)
 	elif LCFRSItem_fused is FatChartItem:
 		newitem = new_FatChartItem(0)
+
+	# assign POS tags
+	covered, msg = populatepos[LCFRSChart_fused, LCFRSItem_fused](
+			grammar, agenda, chart, newitem,
+			sent, tags, whitelist, None, True)
+	if not covered:
+		return chart, msg
 
 	item = None
 	curlen = 0
