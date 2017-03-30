@@ -57,11 +57,13 @@ Pipe the output through 'less -R' to preserve the colors."""
 	from .treebank import READERS, incrementaltreereader
 	from .tree import DrawTree, frontier
 	from .util import openread
+	try:
+		from itertools import izip
+	except ImportError:
+		izip = zip
 
 	def processtree(tree, sent):
 		"""Produced output for a single tree."""
-		if output == 'frontier':
-			return frontier(tree, sent)
 		dt = DrawTree(tree, sent, abbr='--abbr' in opts)
 		if output == 'text' or output == 'html':
 			return dt.text(unicodelines=True, ansi=ansi, html=html,
@@ -106,15 +108,17 @@ Pipe the output through 'less -R' to preserve the colors."""
 					encoding=opts.get('--encoding', 'utf8'),
 					functions=opts.get('--functions'),
 					morphology=opts.get('--morphology'))
-			corpora.append((corpus.trees(), corpus.sents()))
-		numsents = len(corpus.sents())
-		print('Viewing:', ' '.join(args))
-		for n, sentid in enumerate(islice(corpora[0][0], 0, limit), 1):
-			print('%d of %s (sentid=%s; len=%d):' % (
-					n, numsents, sentid, len(corpora[0][1][sentid])))
-			for trees, sents in corpora:
-				tree, sent = trees[sentid], sents[sentid]
-				print(processtree(tree, sent))
+			corpora.append(iter(corpus.itertrees()))
+		for items in islice(izip(*corpora), 0, limit):
+			for arg, (sentid, item) in zip(args, items):
+				if len(args) > 1:
+					print(arg, end=':')
+				print(sentid, end='. ')
+				if '--frontier' in opts:
+					print(frontier(item.tree, item.sent), item.comment)
+				else:
+					print(item.comment)
+					print(processtree(item.tree, item.sent))
 	else:  # read from stdin + detect format
 		encoding = opts.get('--encoding', 'utf8')
 		if not args:
@@ -133,7 +137,7 @@ Pipe the output through 'less -R' to preserve the colors."""
 				if tree is None:
 					print(rest)
 					continue
-				print('%d. (len=%d):' % (n, len(sent)), end=' ')
+				print(n, end='. ')
 				if '--frontier' in opts:
 					print('%s %s' % (frontier(tree, sent), rest))
 				else:
